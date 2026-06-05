@@ -1,0 +1,13 @@
+# Chuẩn hoá EOL — tránh churn CRLF/LF giữa Windows và CI Linux.
+* text=auto eol=lf
+
+# Script shell phải LF (chạy trên Linux/CI).
+*.sh text eol=lf
+*.mjs text eol=lf
+
+# Lockfile + binary giữ nguyên.
+pnpm-lock.yaml -text
+*.png binary
+*.jpg binary
+*.webp binary
+*.ico binary
