@@ -76,7 +76,7 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 | Mã | Giai đoạn | Chế độ chủ đạo | Cỡ | Trạng thái |
 | --- | --- | --- | --- | --- |
 | G0 | Quyết định & Thiết kế | 🧪 (gần xong) | — | 🟡 đang làm |
-| G1 | Bootstrap repo & hạ tầng | 🔧 Setup | L | 🟡 đang làm |
+| G1 | Bootstrap repo & hạ tầng | 🔧 Setup | L | 🟢 gần xong (G1-7 đã wire; chờ push + CI xanh) |
 | G2 | Nền bảo mật & đa-tenant | 🛠️ TDD 🔋 | XL | ☐ |
 | G3 | Permission Engine | 🛠️ TDD 🔋 | L | ☐ |
 | G4 | 🏁 MVP-0 Walking Skeleton | 🤖+🛠️ hỗn hợp | XL | ☐ |
@@ -121,18 +121,18 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 > Cụm 🟢 khởi động nhẹ — scaffold là chính. Đừng cầu toàn, đủ chạy là qua.
 >
-> **Trạng thái thực tế (cập nhật 2026-06-05):** monorepo đã dựng — `apps/api` · `apps/web` · `packages/contracts` (đều có `package.json`) + `turbo.json` + `pnpm-workspace.yaml` + lockfile + TypeScript 5.9 + scripts turbo (`dev/build/lint/typecheck/test`). **Còn thiếu:** docker-compose (G1-2), drizzle config (G1-3), CI (G1-6), backup (G1-8). **Chưa xác minh nội dung** skeleton `apps/api` (NestJS health-check/error filter/validation) và `apps/web` (Vite/shadcn) → để mở G1-4/G1-5.
+> **Trạng thái thực tế (cập nhật 2026-06-05 — nhánh `feat/g1-bootstrap`):** G1 gần xong. Đã verify cục bộ: `pnpm typecheck/build/test/lint` **xanh 4/4** (16 test), API runtime smoke OK (`/health` envelope, `/health/db` fail-soft, 404 qua exception filter). **Docker chưa có ở máy build** → compose/migration verify end-to-end qua **CI** (apply migration lên Postgres ephemeral). **G1-7 đã xong:** wire `anti-bandaid-guard` (PreToolUse) + `format-on-write`/`typecheck-changed` (PostToolUse) vào `settings.json`, smoke-test OK. Còn lại để đóng G1: **push + chạy CI lần đầu xác nhận xanh**.
 
-- [x] **G1-1** 🔧🟢 (S) Monorepo **pnpm + Turborepo**: `apps/api`, `apps/web`, `packages/contracts` (Zod = nguồn sự thật DTO). _(`ecc:project-init`)_ → ✅ 3 workspace + turbo + pnpm-workspace + lockfile đã có (`packages/contracts/src/index.ts` mới tạo, nội dung Zod còn tối thiểu).
-- [ ] **G1-2** 🔧🟢 (S) **Docker Compose**: Postgres 16/17 + Valkey + MinIO + PgBouncer. _(`ecc:docker-patterns`)_
-- [ ] **G1-3** 🔧🔋 (M) **Drizzle** + migration; kết nối qua **PgBouncer transaction-mode**. ⚠️ _PgBouncer × RLS là điểm dễ sai — assert `set_config(...,true)` chạy đúng trong transaction._
-- [ ] **G1-4** 🤖🟢 (S) **NestJS skeleton**: config, health-check, response envelope, global error filter, validation pipe (nestjs-zod). _(`ecc:nestjs-patterns`, `ecc:api-design`)_
-- [ ] **G1-5** 🤖🟢 (S) **Vite + React 19 skeleton**: TanStack Router + Query; init shadcn/ui + Tailwind v4. _(`ecc:frontend-patterns`, `ecc:design-system`)_
-- [ ] **G1-6** 🔧🟢 (S) **CI**: lint + typecheck + test trên Postgres ephemeral.
-- [ ] **G1-7** 🔧🔋 (S) **Hooks guardrail**: `tenant-isolation-guard`, `no-hard-delete`, `secret-scan-gate`. _(`ecc:hookify`)_ — _Làm sớm để guardrail bảo vệ bạn suốt phần còn lại._
-- [ ] **G1-8** 🔧🟢 (S) **Backup**: script `pg_dump` → Backblaze B2/Drive (free).
+- [x] **G1-1** 🔧🟢 (S) Monorepo **pnpm + Turborepo**: `apps/api`, `apps/web`, `packages/contracts` (Zod = nguồn sự thật DTO). → ✅ 3 workspace; `contracts` chuyển **dual-build ESM+CJS** để cả Vite (web) và Nest (api) import được.
+- [x] **G1-2** 🔧🟢 (S) **Docker Compose**: Postgres 17 + Valkey 8 + MinIO + **PgBouncer transaction-mode** + `.env.example` (chỉ placeholder). → `docker-compose.yml` (chưa chạy ở máy build; verify qua CI services).
+- [x] **G1-3** 🔧🔋 (M) **Drizzle** config + db client (pool qua **PgBouncer** + pool **direct**) + migrator + migration baseline (pgcrypto/citext). Để sẵn **seam `withTenant`** cho G2-2. ⚠️ _PgBouncer × RLS assert hoãn tới khi bật RLS (G2)._
+- [x] **G1-4** 🤖🟢 (S) **NestJS skeleton**: zod-env validation (fail-fast, DB optional → boot không cần docker), health-check, response-envelope interceptor, global exception filter (không lộ 5xx), `ZodValidationPipe`. → verify runtime.
+- [x] **G1-5** 🤖🟢 (S) **Vite + React 19 skeleton**: TanStack Router (guarded) + Query + Zustand; shadcn/ui (Button/Input) + Tailwind v4 `@theme`; **login mock** → Home đọc health qua contract envelope.
+- [x] **G1-6** 🔧🟢 (S) **CI** (`.github/workflows/ci.yml`): install → build → lint → typecheck → test → **apply migration trên Postgres ephemeral** (+ Valkey service).
+- [x] **G1-7** 🔧🔋 (S) **Hooks guardrail**: 3 guard bất biến (tenant/immutability/secret) + `anti-bandaid-guard` đã wire vào **PreToolUse**; `format-on-write` + `typecheck-changed` (typecheck đúng 1 workspace qua `pnpm --filter`) wire vào **PostToolUse**. `settings.json` hợp lệ + smoke-test 3 hook OK (BLOCK exit 2 / skip exit 0). _Còn: chạy CI lần đầu xác nhận xanh (cần push)._
+- [x] **G1-8** 🔧🟢 (S) **Backup**: `scripts/backup-db.sh` — `pg_dump -Fc` → mã hoá (age/gpg) → `rclone` offsite + retention GFS (tách khoá khỏi dữ liệu).
 
-✅ **Done khi:** `pnpm dev` chạy; API health-check OK; web mở màn login mock; CI xanh. → **Cập nhật mục 7 CLAUDE.md (lệnh dự án) ngay.**
+✅ **Done khi:** `pnpm dev` chạy; API health-check OK; web mở màn login mock; CI xanh. → _Còn lại để đóng G1: hoàn tất wiring G1-7 + chạy CI lần đầu xác nhận xanh._
 
 ---
 

@@ -86,17 +86,32 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 ## 7. Lệnh dự án
 
-> Cập nhật sau khi bootstrap repo (TASKS.md G1). Placeholder:
+> Cập nhật G1 (đã bootstrap). Node ≥20, pnpm 11. Lần đầu: `cp .env.example .env`.
 
 ```bash
-pnpm install            # cài deps
-pnpm dev                # chạy api + web
-pnpm --filter api test  # test backend
-pnpm --filter web test  # test frontend
-pnpm lint && pnpm typecheck
-docker compose up -d    # Postgres + Valkey + MinIO + PgBouncer
-pnpm db:migrate         # chạy migration Drizzle
+pnpm install                       # cài deps (allowBuilds: esbuild/swc/nest)
+pnpm dev                           # chạy api (:3000) + web (:5173) song song (turbo)
+pnpm build                         # build contracts (dual ESM/CJS) + api (nest) + web (vite)
+pnpm lint                          # eslint flat config toàn workspace
+pnpm typecheck                     # tsc --noEmit (contracts build trước qua turbo)
+pnpm test                          # vitest run mọi package (api dùng swc cho DI)
+pnpm format                        # prettier --write .
+
+# Hạ tầng + DB (cần Docker)
+pnpm db:up                         # docker compose up -d (Postgres/PgBouncer/Valkey/MinIO)
+pnpm db:down                       # docker compose down
+pnpm --filter @mediaos/api db:generate   # drizzle-kit generate (sinh migration từ schema)
+pnpm db:migrate                    # áp migration qua DATABASE_DIRECT_URL
+
+# Lẻ từng app
+pnpm --filter @mediaos/api dev|build|test|typecheck
+pnpm --filter @mediaos/web dev|build|test|typecheck
+
+# Backup (G1-8)
+bash scripts/backup-db.sh          # pg_dump → encrypt → rclone offsite (xem .env BACKUP_*)
 ```
+
+> **Cấu trúc:** `apps/api` (NestJS modular monolith) · `apps/web` (Vite+React19 SPA) · `packages/contracts` (Zod = nguồn sự thật DTO, dual-build). Health: `GET /api/v1/health` + `/health/db` (fail-soft).
 
 ---
 

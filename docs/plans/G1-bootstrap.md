@@ -90,4 +90,17 @@ Self-review (vùng 🟢, low-risk, không chạm 3 bất biến trực tiếp ng
 
 ## 🏁 Kết quả đánh giá hoàn thành (`completion-evaluator`)
 
-_(điền khi đóng G1.)_
+**Self-eval 2026-06-05 (nhánh `feat/g1-bootstrap`) — PASS-with-follow-up.**
+
+| Chiều | Điểm | Ghi chú |
+| --- | --- | --- |
+| Correctness (25%) | 24/25 | typecheck/build/test/lint xanh 4/4 (16 test); API runtime smoke OK (envelope, fail-soft DB, 404 filter). Web build 1741 modules OK. |
+| Bất biến & bảo mật (30%) | 28/30 | secret chỉ ở `.env.example` (placeholder); exception filter không lộ 5xx; db client để seam `withTenant` cho G2. RLS/tenant chưa bật (đúng phạm vi — G2). |
+| Test (25%) | 22/25 | smoke/unit/e2e xanh; chưa ép coverage 80% (skeleton — bật từ G2 vùng đỏ). Migration verify qua CI, chưa chạy local (thiếu Docker). |
+| Sạch sẽ (10%) | 10/10 | không dead-code mới; không vá triệu chứng; file < 800 dòng; bỏ `eslint-disable` thừa ở migrate.ts. |
+| Docs/Audit (10%) | 9/10 | CLAUDE.md §7 + TASKS.md cập nhật; chưa có audit (đúng — audit là G2-4). |
+
+**Tổng ~93/100 → PASS.** Điều kiện đóng G1 hoàn toàn:
+1. **G1-7**: wire `anti-bandaid-guard` + `format-on-write` (+ tuỳ chọn `typecheck-changed`) vào `.claude/settings.json` — cần xác nhận người (self-modification).
+2. **CI lần đầu xanh** trên GitHub (xác nhận compose/migration end-to-end với Postgres ephemeral).
+3. (Khi có Docker) chạy `pnpm db:up && pnpm db:migrate` xác nhận extensions áp đúng.
