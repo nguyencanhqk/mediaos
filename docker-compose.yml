@@ -1,0 +1,101 @@
+# MediaOS — hạ tầng dev local (CLAUDE.md §4 · ADR-0003/0011/0013/0014).
+# Dùng: `cp .env.example .env` rồi `docker compose up -d`.
+# KHÔNG commit `.env` (đã gitignore). Mọi giá trị nhạy cảm chỉ ở `.env`.
+#
+# Service: postgres (RLS sẽ bật ở G2) · pgbouncer (transaction-mode cho set_config tenant)
+#          · valkey (cache/queue/presence) · minio (object storage S3-compatible, artifact nhỏ).
+
+name: mediaos
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: mediaos-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mediaos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-mediaos}
+      # UTC-at-rest (ADR-0008): container chạy UTC, app quy đổi TZ.
+      TZ: UTC
+      PGTZ: UTC
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=256MB
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mediaos} -d ${POSTGRES_DB:-mediaos}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # PgBouncer transaction-mode (ADR-0003): bắt buộc cho RLS — set_config('app.current_company_id',$1,true)
+  # phải sống trong phạm vi transaction. App nghiệp vụ kết nối qua cổng 6432.
+  # LISTEN/NOTIFY + BullMQ dùng pool DIRECT (postgres:5432), KHÔNG qua pgbouncer.
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: mediaos-pgbouncer
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:-mediaos}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      DB_NAME: ${POSTGRES_DB:-mediaos}
+      POOL_MODE: transaction
+      AUTH_TYPE: scram-sha-256
+      MAX_CLIENT_CONN: "1000"
+      DEFAULT_POOL_SIZE: "25"
+      # transaction-mode: server-side prepared statements không an toàn qua pool → tắt.
+      # Drizzle/pg dùng simple/parametrized query nên OK.
+      IGNORE_STARTUP_PARAMETERS: extra_float_digits,options
+    ports:
+      - "${PGBOUNCER_PORT:-6432}:6432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: mediaos-valkey
+    restart: unless-stopped
+    command: ["valkey-server", "--appendonly", "yes", "--save", "60", "1"]
+    ports:
+      - "${VALKEY_PORT:-6379}:6379"
+    volumes:
+      - valkeydata:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: mediaos-minio
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-mediaos}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+  valkeydata:
+  miniodata:
