@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint · Typecheck · Test · Migrate
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: mediaos
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mediaos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mediaos -d mediaos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      valkey:
+        image: valkey/valkey:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      # DB ephemeral của CI — KHÔNG phải secret thật. Migration chạy qua kết nối DIRECT.
+      DATABASE_DIRECT_URL: postgres://mediaos:postgres@localhost:5432/mediaos
+      DATABASE_URL: postgres://mediaos:postgres@localhost:5432/mediaos
+      VALKEY_URL: redis://localhost:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (contracts + apps)
+        run: pnpm build
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Apply migrations (verify baseline on real Postgres)
+        run: pnpm --filter @mediaos/api db:migrate
