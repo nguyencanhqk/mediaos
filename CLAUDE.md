@@ -90,7 +90,7 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 ```bash
 pnpm install                       # cài deps (allowBuilds: esbuild/swc/nest)
-pnpm dev                           # chạy api (:3000) + web (:5173) song song (turbo)
+pnpm dev                           # chạy api (:3100) + web (:5273) song song (turbo)
 pnpm build                         # build contracts (dual ESM/CJS) + api (nest) + web (vite)
 pnpm lint                          # eslint flat config toàn workspace
 pnpm typecheck                     # tsc --noEmit (contracts build trước qua turbo)

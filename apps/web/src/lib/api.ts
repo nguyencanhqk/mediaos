@@ -1,7 +1,7 @@
 import { apiResponseSchema } from "@mediaos/contracts";
 import { z } from "zod";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api/v1";
+const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3100/api/v1";
 
 const healthSchema = z.object({
   status: z.string(),
