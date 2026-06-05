@@ -13,3 +13,4 @@ export * from "./audit";
 export * from "./outbox";
 export * from "./auth";
 export * from "./permissions";
+export * from "./org";
