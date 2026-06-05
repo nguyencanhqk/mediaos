@@ -116,3 +116,21 @@ export class DuplicateWorkflowError extends Error {
     this.name = "DuplicateWorkflowError";
   }
 }
+
+/** ApprovalRequestNotPendingError when trying to act on a non-pending approval request. */
+export class ApprovalRequestNotPendingError extends Error {
+  readonly currentStatus: string;
+  constructor(currentStatus: string) {
+    super(`Approval request is not pending (status=${currentStatus})`);
+    this.name = "ApprovalRequestNotPendingError";
+    this.currentStatus = currentStatus;
+  }
+}
+
+/** NotReviewerError when the actor is not the designated reviewer for this step. */
+export class NotReviewerError extends Error {
+  constructor(reason: string) {
+    super(`Not authorized to review this step: ${reason}`);
+    this.name = "NotReviewerError";
+  }
+}
