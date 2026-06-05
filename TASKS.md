@@ -172,7 +172,7 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 > Dùng **1 workflow hard-coded** (chưa cần Builder). Đây là lúc bạn **lần đầu thấy hệ thống sống** — phần thưởng sau thung lũng. Xen kẽ 🤖 (nhẹ) và 🛠️ (nặng) trong phase này.
 
 - [x] **G4-1** 🤖🟢 (S) Org/Employee tối thiểu — org_units + teams + team_members; RLS+FORCE+CHECK; NestJS OrgModule (7 endpoints); Zod contracts; FE /org/departments + /org/teams + /org/employees; LIGHT gate passed; commit aca6233.
-- [~] **G4-2** 🤖🟢 (M) Channel + Project + Content tối thiểu (project ↔ nhiều kênh; tạo 1 video).
+- [x] **G4-2** 🤖🟢 (M) Channel + Project + Content tối thiểu (project ↔ nhiều kênh; tạo 1 video). BE 9 endpoints + FE 3 trang + sidebar nav; commit 0467216.
 - [~] **G4-3** 🛠️🔋 (M) **1 workflow cứng**: Script → Edit → QA → Upload; auto-sinh task. _(custom `workflow-state-machine-guide`)_ — _Hard-code nên đơn giản hơn G7, nhưng vẫn TDD._ FULL gate passed; deny-path RED→GREEN (23 tests); workflow FSM + 4-step + auto-task + submit; global JWT+Company guards wired; 125 tests green.
 - [ ] **G4-4** 🤖🟢 (M) My Tasks + submit work (file/link) + comment. _(`ecc:tdd-workflow`)_
 - [ ] **G4-5** 🛠️🔋 (M) **Approval 1 cấp** + **return revision** (chọn bước lỗi + người chịu trách nhiệm).
