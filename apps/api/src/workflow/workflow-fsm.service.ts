@@ -3,6 +3,7 @@ import {
   findTransition,
   IllegalTransitionError,
   NotCurrentStepError,
+  NotReviewerError,
   NotStepActorError,
   SERVICE_EVENTS,
   WorkflowInactiveError,
@@ -32,6 +33,14 @@ export interface ValidateTransitionInput {
   instance: FsmInstanceInput;
   event: StepEvent;
   actorId: string;
+}
+
+export interface ValidateConsumerTransitionInput {
+  step: FsmStepInput;
+  instance: FsmInstanceInput;
+  event: "approve" | "request_revision" | "open_next" | "complete_workflow";
+  actorId: string;
+  reviewerUserId: string | null;
 }
 
 export type TransitionResult = (typeof MVP0_TRANSITIONS)[number];
@@ -97,6 +106,52 @@ export class WorkflowFsmService {
     // Guard 6: reject consumer-only events from service layer (D6, ADR-0016)
     if (!SERVICE_EVENTS.has(`${step.status}:${event}`)) {
       throw new IllegalTransitionError(step.status, event);
+    }
+
+    return transition;
+  }
+
+  /**
+   * Validates a consumer-initiated transition (approve / request_revision / open_next / complete_workflow).
+   * Pure logic — no DB access. Guards:
+   *   1. instance.status === 'active'
+   *   2. step.workflowInstanceId === instance.id
+   *   3. (fromState, event) found in allowed transitions
+   *   4. transition.writtenBy === 'consumer'
+   *   5. reviewer check — for approve/request_revision only when reviewerUserId is set
+   */
+  validateConsumerTransition(input: ValidateConsumerTransitionInput): TransitionResult {
+    const { step, instance, event, actorId, reviewerUserId } = input;
+
+    // Guard 1: instance must be active
+    if (instance.status !== "active") {
+      throw new WorkflowInactiveError(instance.status);
+    }
+
+    // Guard 2: step must belong to this instance
+    if (step.workflowInstanceId !== instance.id) {
+      throw new WorkflowNotFoundError("step", step.id);
+    }
+
+    // Guard 3: look up transition
+    const transition = findTransition(step.status, event);
+    if (!transition) {
+      throw new IllegalTransitionError(step.status, event);
+    }
+
+    // Guard 4: must be a consumer event
+    if (transition.writtenBy !== "consumer") {
+      throw new IllegalTransitionError(step.status, event);
+    }
+
+    // Guard 5: reviewer check for approve / request_revision
+    // open_next and complete_workflow are system-triggered (no actor restriction)
+    if (event === "approve" || event === "request_revision") {
+      if (reviewerUserId !== null && reviewerUserId !== actorId) {
+        throw new NotReviewerError(
+          `actorId=${actorId} is not reviewer=${reviewerUserId}`,
+        );
+      }
     }
 
     return transition;

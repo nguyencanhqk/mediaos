@@ -4,12 +4,13 @@ import { EventsModule } from "../events/events.module";
 import { WorkflowFsmService } from "./workflow-fsm.service";
 import { WorkflowRepository } from "./workflow.repository";
 import { WorkflowService } from "./workflow.service";
+import { ApprovalService } from "./approval.service";
 import { WorkflowController } from "./workflow.controller";
 
 @Module({
   imports: [DatabaseModule, EventsModule],
-  providers: [WorkflowFsmService, WorkflowRepository, WorkflowService],
+  providers: [WorkflowFsmService, WorkflowRepository, WorkflowService, ApprovalService],
   controllers: [WorkflowController],
-  exports: [WorkflowService],
+  exports: [WorkflowService, ApprovalService],
 })
 export class WorkflowModule {}

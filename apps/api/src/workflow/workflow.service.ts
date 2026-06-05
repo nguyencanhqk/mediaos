@@ -262,7 +262,12 @@ export class WorkflowService {
    * POST /workflow/steps/:stepId/submit — assignee submits work (T2).
    * Side-effects: step → waiting_review, create approval_request, emit ApprovalRequested.
    */
-  async submitStep(companyId: string, stepId: string, actorId: string) {
+  async submitStep(
+    companyId: string,
+    stepId: string,
+    actorId: string,
+    submission: { submissionUrl?: string | null; submissionNote?: string | null } = {},
+  ) {
     try {
       return await this.db.withTenant(companyId, async (tx) => {
         const [step] = await this.repo.findStepByIdInTx(companyId, stepId, tx);
@@ -282,8 +287,8 @@ export class WorkflowService {
           return mapFsmError(err);
         }
 
-        // Update step status → waiting_review
-        const [updated] = await this.repo.submitStep(companyId, stepId, tx);
+        // Update step status → waiting_review, store submission URL/note
+        const [updated] = await this.repo.submitStep(companyId, stepId, submission, tx);
         if (!updated) throw new InternalServerErrorException(`Failed to update step ${stepId}`);
 
         // Create approval request (reviewer assigned later by PM via G4-5)

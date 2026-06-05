@@ -10,7 +10,9 @@ import {
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
 import { WorkflowService } from "./workflow.service";
+import { ApprovalService } from "./approval.service";
 import { StartWorkflowDto, SubmitStepDto } from "./workflow.dto";
+import { ApproveDto, RequestRevisionDto } from "./approval.dto";
 
 interface AuthenticatedRequest extends Request {
   user: { id: string; companyId: string };
@@ -19,7 +21,10 @@ interface AuthenticatedRequest extends Request {
 @Controller("workflow")
 @UsePipes(ZodValidationPipe)
 export class WorkflowController {
-  constructor(private readonly workflow: WorkflowService) {}
+  constructor(
+    private readonly workflow: WorkflowService,
+    private readonly approval: ApprovalService,
+  ) {}
 
   /** POST /workflow/start — tạo workflow instance cho content item */
   @Post("start")
@@ -44,8 +49,43 @@ export class WorkflowController {
   submitStep(
     @Req() req: AuthenticatedRequest,
     @Param("stepId") stepId: string,
-    @Body() _dto: SubmitStepDto,
+    @Body() dto: SubmitStepDto,
   ) {
-    return this.workflow.submitStep(req.user.companyId, stepId, req.user.id);
+    return this.workflow.submitStep(req.user.companyId, stepId, req.user.id, {
+      submissionUrl: dto.submissionUrl,
+      submissionNote: dto.submissionNote,
+    });
+  }
+
+  /** GET /workflow/approval-requests — hàng chờ duyệt (reviewer queue) */
+  @Get("approval-requests")
+  listApprovalRequests(@Req() req: AuthenticatedRequest) {
+    return this.approval.listPending(req.user.companyId);
+  }
+
+  /** POST /workflow/approval-requests/:requestId/approve — T3: phê duyệt */
+  @Post("approval-requests/:requestId/approve")
+  approve(
+    @Req() req: AuthenticatedRequest,
+    @Param("requestId") requestId: string,
+    @Body() dto: ApproveDto,
+  ) {
+    return this.approval.approve(req.user.companyId, requestId, req.user.id, dto.comment ?? undefined);
+  }
+
+  /** POST /workflow/approval-requests/:requestId/request-revision — T4: trả về sửa */
+  @Post("approval-requests/:requestId/request-revision")
+  requestRevision(
+    @Req() req: AuthenticatedRequest,
+    @Param("requestId") requestId: string,
+    @Body() dto: RequestRevisionDto,
+  ) {
+    return this.approval.requestRevision(
+      req.user.companyId,
+      requestId,
+      req.user.id,
+      dto.description,
+      dto.comment ?? undefined,
+    );
   }
 }

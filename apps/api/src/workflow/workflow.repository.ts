@@ -1,10 +1,12 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, max, sql } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
 import type { TenantTx } from "../db/db.service";
 import {
   approvalRequests,
+  approvalSteps,
   contentItems,
+  defects,
   tasks,
   workflowDefinitionSteps,
   workflowDefinitions,
@@ -192,10 +194,20 @@ export class WorkflowRepository {
       .returning();
   }
 
-  submitStep(companyId: string, stepId: string, tx: TenantTx) {
+  submitStep(
+    companyId: string,
+    stepId: string,
+    data: { submissionUrl?: string | null; submissionNote?: string | null },
+    tx: TenantTx,
+  ) {
     return tx
       .update(workflowSteps)
-      .set({ status: "waiting_review", submittedAt: new Date() })
+      .set({
+        status: "waiting_review",
+        submittedAt: new Date(),
+        submissionUrl: data.submissionUrl ?? null,
+        submissionNote: data.submissionNote ?? null,
+      })
       .where(
         and(eq(workflowSteps.companyId, companyId), eq(workflowSteps.id, stepId)),
       )
@@ -255,6 +267,164 @@ export class WorkflowRepository {
         currentLevel: 1,
         maxLevel: 1,
       })
+      .returning();
+  }
+
+  findApprovalRequestById(companyId: string, requestId: string) {
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .select()
+        .from(approvalRequests)
+        .where(and(eq(approvalRequests.companyId, companyId), eq(approvalRequests.id, requestId)))
+        .limit(1),
+    );
+  }
+
+  findPendingApprovalRequests(companyId: string) {
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .select()
+        .from(approvalRequests)
+        .where(
+          and(eq(approvalRequests.companyId, companyId), eq(approvalRequests.status, "pending")),
+        )
+        .orderBy(approvalRequests.createdAt),
+    );
+  }
+
+  createApprovalStep(
+    companyId: string,
+    data: {
+      approvalRequestId: string;
+      level: number;
+      approverUserId: string;
+      decision: "approved" | "revision_requested";
+      comment: string | null;
+    },
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(approvalSteps)
+      .values({
+        companyId,
+        approvalRequestId: data.approvalRequestId,
+        level: data.level,
+        approverUserId: data.approverUserId,
+        decision: data.decision,
+        comment: data.comment,
+      })
+      .returning();
+  }
+
+  closeApprovalRequest(
+    companyId: string,
+    requestId: string,
+    data: { status: "approved" | "revision_requested"; comment: string | null },
+    tx: TenantTx,
+  ) {
+    return tx
+      .update(approvalRequests)
+      .set({ status: data.status, decidedAt: new Date(), comment: data.comment })
+      .where(and(eq(approvalRequests.companyId, companyId), eq(approvalRequests.id, requestId)))
+      .returning();
+  }
+
+  approveStep(companyId: string, stepId: string, tx: TenantTx) {
+    return tx
+      .update(workflowSteps)
+      .set({ status: "approved", approvedAt: new Date() })
+      .where(and(eq(workflowSteps.companyId, companyId), eq(workflowSteps.id, stepId)))
+      .returning();
+  }
+
+  setStepToRevision(companyId: string, stepId: string, tx: TenantTx) {
+    return tx
+      .update(workflowSteps)
+      .set({ status: "revision" })
+      .where(and(eq(workflowSteps.companyId, companyId), eq(workflowSteps.id, stepId)))
+      .returning();
+  }
+
+  advanceInstanceStepOrder(companyId: string, instanceId: string, newOrder: number, tx: TenantTx) {
+    return tx
+      .update(workflowInstances)
+      .set({ currentStepOrder: newOrder })
+      .where(and(eq(workflowInstances.companyId, companyId), eq(workflowInstances.id, instanceId)))
+      .returning();
+  }
+
+  completeWorkflowInstance(companyId: string, instanceId: string, tx: TenantTx) {
+    return tx
+      .update(workflowInstances)
+      .set({ status: "completed" })
+      .where(and(eq(workflowInstances.companyId, companyId), eq(workflowInstances.id, instanceId)))
+      .returning();
+  }
+
+  findMaxStepOrder(companyId: string, instanceId: string) {
+    return this.db.withTenant(companyId, async (tx) => {
+      const [row] = await tx
+        .select({ maxOrder: max(workflowSteps.stepOrder) })
+        .from(workflowSteps)
+        .where(
+          and(
+            eq(workflowSteps.companyId, companyId),
+            eq(workflowSteps.workflowInstanceId, instanceId),
+          ),
+        );
+      return row?.maxOrder ?? 1;
+    });
+  }
+
+  createDefect(
+    companyId: string,
+    data: {
+      workflowStepId: string;
+      responsibleUserId: string | null;
+      causedByApprovalStepId: string | null;
+      description: string;
+    },
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(defects)
+      .values({
+        companyId,
+        workflowStepId: data.workflowStepId,
+        responsibleUserId: data.responsibleUserId,
+        causedByApprovalStepId: data.causedByApprovalStepId,
+        description: data.description,
+      })
+      .returning();
+  }
+
+  findTaskByStepId(companyId: string, workflowStepId: string) {
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .select()
+        .from(tasks)
+        .where(
+          and(
+            eq(tasks.companyId, companyId),
+            eq(tasks.workflowStepId, workflowStepId),
+            isNull(tasks.deletedAt),
+          ),
+        )
+        .orderBy(sql`revision_round DESC`)
+        .limit(1),
+    );
+  }
+
+  updateTaskStatus(
+    companyId: string,
+    taskId: string,
+    status: string,
+    tx: TenantTx,
+  ) {
+    return tx
+      .update(tasks)
+      .set({ status, updatedAt: new Date() })
+      .where(and(eq(tasks.companyId, companyId), eq(tasks.id, taskId)))
       .returning();
   }
 
