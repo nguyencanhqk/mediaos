@@ -7,6 +7,7 @@ import { PasswordService } from "../../src/auth/password.service";
 import { TokenService } from "../../src/auth/token.service";
 import { AuditService } from "../../src/events/audit.service";
 import { OutboxService } from "../../src/events/outbox.service";
+import { PermissionService } from "../../src/permission/permission.service";
 import { directPool, hasDb } from "../helpers/integration-db";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
 
@@ -42,6 +43,7 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
 
   function newAuth(): AuthService {
     const dbsvc = new DatabaseService();
+    const mockPermissions = { getCapabilities: async () => ({}) } as unknown as PermissionService;
     return new AuthService(
       dbsvc,
       password,
@@ -49,6 +51,7 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
       new LoginRateLimiter(),
       new AuditService(),
       new OutboxService(),
+      mockPermissions,
     );
   }
 

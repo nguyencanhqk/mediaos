@@ -44,5 +44,7 @@ export const meResponseSchema = z.object({
   email: z.string().email(),
   fullName: z.string().nullable(),
   status: z.string(),
+  /** Non-sensitive action:resourceType capabilities keyed for O(1) FE lookup. Wildcards included as-is. */
+  capabilities: z.record(z.boolean()),
 });
 export type MeResponse = z.infer<typeof meResponseSchema>;

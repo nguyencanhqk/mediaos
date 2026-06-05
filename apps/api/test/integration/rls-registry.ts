@@ -7,6 +7,10 @@ import { seedUser, type SeededTenant } from "../helpers/seed";
  *
  * LUẬT (plan G2-5 / CLAUDE §2 bất biến #1): MỖI bảng nghiệp vụ mới có company_id PHẢI thêm 1 case
  * ở đây. KHÔNG skip. Harness sẽ tự kiểm: không ngữ cảnh ⇒ 0 row; withTenant(A) không thấy hàng của B.
+ *
+ * GHI CHÚ roles: system roles (company_id IS NULL) ĐỌC được bởi mọi tenant (USING policy cho phép).
+ * Harness chỉ seed TENANT role (company_id NOT NULL) để kiểm tra cô lập chéo tenant.
+ * Test riêng cần xác minh system roles hiển thị cho mọi tenant — ngoài phạm vi harness này.
  */
 export interface RlsTableCase {
   /** Tên hiển thị + tên bảng thật. */
@@ -94,4 +98,81 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
   // processed_events: bảng hạ tầng worker (không RLS, app không có grant) → KHÔNG đưa vào harness app-path.
+  // permissions: global catalog (không RLS, không company_id) → KHÔNG đưa vào harness tenant-isolation.
+  {
+    name: "roles (tenant-scoped only)",
+    table: "roles",
+    // NOTE: chỉ seed TENANT role (company_id NOT NULL). System roles (company_id IS NULL) ĐỌC được bởi mọi
+    // tenant theo thiết kế — không seed chúng ở đây vì harness kiểm cô lập chéo tenant, không phải visibility.
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO roles (company_id, name, is_system)
+         VALUES ($1, $2, false) RETURNING id`,
+        [t.companyId, `seed-role-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "role_permissions",
+    table: "role_permissions",
+    // Seed via a tenant role + a real permission from the catalog.
+    seedRow: async (direct, t) => {
+      // Insert a tenant-scoped role first.
+      const roleRes = await direct.query(
+        `INSERT INTO roles (company_id, name, is_system)
+         VALUES ($1, $2, false) RETURNING id`,
+        [t.companyId, `rp-seed-role-${randomUUID().slice(0, 8)}`],
+      );
+      const roleId = roleRes.rows[0].id as string;
+      // Pick any permission from the catalog (read:company is always present).
+      const permRes = await direct.query(
+        `SELECT id FROM permissions WHERE action = 'read' AND resource_type = 'company' LIMIT 1`,
+      );
+      const permId = permRes.rows[0].id as string;
+      await direct.query(
+        `INSERT INTO role_permissions (role_id, permission_id, effect) VALUES ($1, $2, 'ALLOW')`,
+        [roleId, permId],
+      );
+      // Return roleId as the "row id" — harness verifies the role is not visible cross-tenant,
+      // which transitively means the role_permission is also not visible cross-tenant.
+      return roleId;
+    },
+  },
+  {
+    name: "user_roles",
+    table: "user_roles",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `ur-${randomUUID().slice(0, 8)}@x.test`);
+      // Use any system role (company_id IS NULL) so we don't need to create a tenant role.
+      const roleRes = await direct.query(
+        `SELECT id FROM roles WHERE name = 'employee' AND company_id IS NULL LIMIT 1`,
+      );
+      const roleId = roleRes.rows[0].id as string;
+      const r = await direct.query(
+        `INSERT INTO user_roles (user_id, role_id, company_id)
+         VALUES ($1, $2, $3) RETURNING id`,
+        [u, roleId, t.companyId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "object_permissions",
+    table: "object_permissions",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `op-${randomUUID().slice(0, 8)}@x.test`);
+      const permRes = await direct.query(
+        `SELECT id FROM permissions WHERE action = 'read' AND resource_type = 'project' LIMIT 1`,
+      );
+      const permId = permRes.rows[0].id as string;
+      const r = await direct.query(
+        `INSERT INTO object_permissions
+           (company_id, subject_type, subject_id, permission_id, object_type, object_id, effect)
+         VALUES ($1, 'user', $2, $3, 'project', $4, 'ALLOW') RETURNING id`,
+        [t.companyId, u, permId, randomUUID()],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 ];

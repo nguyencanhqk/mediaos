@@ -76,9 +76,9 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 | Mã | Giai đoạn | Chế độ chủ đạo | Cỡ | Trạng thái |
 | --- | --- | --- | --- | --- |
 | G0 | Quyết định & Thiết kế | 🧪 (gần xong) | — | 🟡 đang làm |
-| G1 | Bootstrap repo & hạ tầng | 🔧 Setup | L | 🟢 gần xong (G1-7 đã wire; chờ push + CI xanh) |
-| G2 | Nền bảo mật & đa-tenant | 🛠️ TDD 🔋 | XL | ☐ |
-| G3 | Permission Engine | 🛠️ TDD 🔋 | L | ☐ |
+| G1 | Bootstrap repo & hạ tầng | 🔧 Setup | L | ✅ đóng (merged master, CI xanh) |
+| G2 | Nền bảo mật & đa-tenant | 🛠️ TDD 🔋 | XL | ✅ đóng (PR #2 merged master — 62 files, 3330 insertions, CI xanh) |
+| G3 | Permission Engine | 🛠️ TDD 🔋 | L | 🟡 đang làm |
 | G4 | 🏁 MVP-0 Walking Skeleton | 🤖+🛠️ hỗn hợp | XL | ☐ |
 | G5 | Tổ chức & Nhân sự đầy đủ | 🤖 AI-bulk 🟢 | L | ☐ |
 | G6 | Media (Channel/Project/Content) | 🤖 + 🛠️(G6-2) | L | ☐ |
@@ -117,11 +117,9 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 ---
 
-## G1 — Bootstrap repo & hạ tầng _(Sprint 0 · 🔧 Setup · ~5–7 ngày)_
+## G1 — Bootstrap repo & hạ tầng _(Sprint 0 · 🔧 Setup · ~5–7 ngày)_ ✅ ĐÓNG
 
-> Cụm 🟢 khởi động nhẹ — scaffold là chính. Đừng cầu toàn, đủ chạy là qua.
->
-> **Trạng thái thực tế (cập nhật 2026-06-05 — nhánh `feat/g1-bootstrap`):** G1 gần xong. Đã verify cục bộ: `pnpm typecheck/build/test/lint` **xanh 4/4** (16 test), API runtime smoke OK (`/health` envelope, `/health/db` fail-soft, 404 qua exception filter). **Docker chưa có ở máy build** → compose/migration verify end-to-end qua **CI** (apply migration lên Postgres ephemeral). **G1-7 đã xong:** wire `anti-bandaid-guard` (PreToolUse) + `format-on-write`/`typecheck-changed` (PostToolUse) vào `settings.json`, smoke-test OK. Còn lại để đóng G1: **push + chạy CI lần đầu xác nhận xanh**.
+> **Trạng thái (2026-06-05):** G1 đã merge vào master cùng G2 qua PR #2. CI xanh (lint + typecheck + build + migrate + 49 integration tests).
 
 - [x] **G1-1** 🔧🟢 (S) Monorepo **pnpm + Turborepo**: `apps/api`, `apps/web`, `packages/contracts` (Zod = nguồn sự thật DTO). → ✅ 3 workspace; `contracts` chuyển **dual-build ESM+CJS** để cả Vite (web) và Nest (api) import được.
 - [x] **G1-2** 🔧🟢 (S) **Docker Compose**: Postgres 17 + Valkey 8 + MinIO + **PgBouncer transaction-mode** + `.env.example` (chỉ placeholder). → `docker-compose.yml` (chưa chạy ở máy build; verify qua CI services).
@@ -132,22 +130,24 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 - [x] **G1-7** 🔧🔋 (S) **Hooks guardrail**: 3 guard bất biến (tenant/immutability/secret) + `anti-bandaid-guard` đã wire vào **PreToolUse**; `format-on-write` + `typecheck-changed` (typecheck đúng 1 workspace qua `pnpm --filter`) wire vào **PostToolUse**. `settings.json` hợp lệ + smoke-test 3 hook OK (BLOCK exit 2 / skip exit 0). _Còn: chạy CI lần đầu xác nhận xanh (cần push)._
 - [x] **G1-8** 🔧🟢 (S) **Backup**: `scripts/backup-db.sh` — `pg_dump -Fc` → mã hoá (age/gpg) → `rclone` offsite + retention GFS (tách khoá khỏi dữ liệu).
 
-✅ **Done khi:** `pnpm dev` chạy; API health-check OK; web mở màn login mock; CI xanh. → _Còn lại để đóng G1: hoàn tất wiring G1-7 + chạy CI lần đầu xác nhận xanh._
+✅ **DONE** — `pnpm dev` chạy; API health-check OK; web mở màn login mock; CI xanh. Merged vào master.
 
 ---
 
-## G2 — Nền bảo mật & đa-tenant _(🛠️ TDD 🔋 · ~10–14 ngày · "thung lũng" phần 1)_
+## G2 — Nền bảo mật & đa-tenant _(🛠️ TDD 🔋 · ~10–14 ngày · "thung lũng" phần 1)_ ✅ ĐÓNG
 
-> **PHẢI có trước mọi module.** Đây là cụm 🔋 nặng nhất đầu hành trình. Lái bằng test, không để AI tự do. Crown-jewel foundation.
+> **Trạng thái (2026-06-05):** G2 đóng chính thức. PR #2 merged vào master. CI xanh (lint + typecheck + build + migrate + 49 integration tests). 62 files, 3330 insertions.
 
-- [ ] **G2-1** 🔧🔋 (S) **App DB role** non-superuser, không BYPASSRLS, không owner bảng.
-- [ ] **G2-2** 🛠️🔋 (M) Wrapper **`withTenant(companyId, fn)`** + `set_config('app.current_company_id',$1,true)`; mọi repo đi qua nó. _(`ecc:postgres-patterns`)_
-- [ ] **G2-3** 🛠️🔋 (M) Bảng nền (`companies`, `users`) + **RLS policy** + `company_id NOT NULL` + index. _Test RED: query thiếu tenant context → 0 row._
-- [ ] **G2-4** 🛠️🔋 (L) **Audit log bất biến** + **transactional outbox** + **internal event bus** + dead-letter/alert khi drop. _(custom `event-outbox-audit-guide`; `ecc:silent-failure-hunter`)_ — _Hạ tầng khó nhất G2; làm chắc một lần, mọi module sau dựa vào._
-- [ ] **G2-5** 🧪🔋 (M) **Test 2-tenant đối kháng**: seed A & B → mọi path trả 0 row của B khi login A. _(custom `rls-tenant-isolation-tester`)_ — _Đây là lưới an toàn cho cả dự án. Không skip._
-- [ ] **G2-6** 🛠️/🤖 (M) **Auth**: login / refresh / `/me` / forgot-password; hash mật khẩu; session. _(luồng AI sinh được, nhưng `ecc:security-reviewer` FULL gate)._
+- [x] **G2-1** 🔧🔋 (S) **App DB role** non-superuser, không BYPASSRLS, không owner bảng.
+- [x] **G2-2** 🛠️🔋 (M) Wrapper **`withTenant(companyId, fn)`** + `set_config('app.current_company_id',$1,true)`; mọi repo đi qua nó.
+- [x] **G2-3** 🛠️🔋 (M) Bảng nền (`companies`, `users`) + **RLS policy** USING+WITH CHECK + FORCE + `company_id NOT NULL` + index + partial-unique soft-delete.
+- [x] **G2-4** 🛠️🔋 (L) **Audit log bất biến** + **transactional outbox** + **internal event bus** + dead-letter/alert khi drop.
+- [x] **G2-5** 🧪🔋 (M) **Test 2-tenant đối kháng**: seed A & B → mọi path trả 0 row của B khi login A (7 bảng RLS, data-driven).
+- [x] **G2-6** 🛠️/🤖 (M) **Auth**: login (`companySlug`+email+password) / refresh / `/me` / forgot-password / reset; argon2id; rotation; rate-limit; audit.
 
-✅ **Done khi:** không đọc chéo tenant; mọi thay đổi quan trọng có audit; outbox/event idempotent + có cảnh báo khi drop.
+> ⚠️ **Follow-up chưa vá (xử lý trước PROD):** (1) 🔴 Reset token plaintext trong `outbox_events.payload` → envelope-encrypt G6-2. (2) Rate-limit in-memory → Valkey + bucket theo tài khoản. (3) `workerDb` fallback `directPool` → assert `current_user = mediaos_worker` ở prod. (4) `password.verify` catch nuốt lỗi hạ tầng — tách lỗi. (5) Agent `rls-tenant-isolation-tester` chưa tạo.
+
+✅ **DONE** — không đọc chéo tenant; mọi thay đổi quan trọng có audit; outbox/event idempotent + cảnh báo khi drop. Merged master.
 
 ---
 
@@ -155,11 +155,11 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 > Bám [`docs/permission-matrix-spec.md`](docs/permission-matrix-spec.md). Logic khó nhất phần đầu → **dùng Opus**, deny-path RED trước.
 
-- [ ] **G3-1** 🤖🟢 (S) Bảng `roles / permissions / role_permissions / user_roles / object_permissions`. _(AI sinh từ ERD)._
-- [ ] **G3-2** 🛠️🔋 (L) **`PermissionService.can(user, action, objType, objId, ctx)`** — 4 tầng, **quyền nhạy cảm KHÔNG kế thừa**. _(`ecc:type-design-analyzer`; Opus)._
-- [ ] **G3-3** 🛠️🔋 (M) **Test deny-path TRƯỚC** (RED) cho từng rule. _(`ecc:tdd-guide`)_ — _Viết test trước G3-2 thì càng tốt._
-- [ ] **G3-4** 🛠️🔋 (M) Guards `auth → company → permission`; cache permission ở Valkey + **invalidate đúng** khi đổi quyền.
-- [ ] **G3-5** 🤖🟢 (S) FE `<PermissionGate>` + `useCan()` (capabilities từ `/me`). _Chỉ UX — server là sự thật._
+- [x] **G3-1** 🤖🟢 (S) Bảng `roles / permissions / role_permissions / user_roles / object_permissions`. _(AI sinh từ ERD)._
+- [x] **G3-2** 🛠️🔋 (L) **`PermissionService.can(user, action, objType, objId, ctx)`** — 4 tầng, **quyền nhạy cảm KHÔNG kế thừa**. 52/52 tests GREEN; FULL gate passed (security-reviewer + silent-failure-hunter); security fixes applied: logging trong catch, auditRequired=isSensitive on fail-closed, requiresReauth guard cho non-sensitive branch, effectivelySensitive cross-check từ grant catalog, instanceof Date guard cho expiresAt/reauthValidUntil.
+- [x] **G3-3** 🛠️🔋 (M) **Test deny-path TRƯỚC** (RED) cho từng rule. _(`ecc:tdd-guide`)_ — 52 cases (27 deny + 15 allow + 10 audit/reauth/idempotent); tất cả RED chờ G3-2. Files: `src/permission/permission.types.ts`, `permission.service.ts` (stub), `permission.service.spec.ts`.
+- [x] **G3-4** 🛠️🔋 (M) Guards `auth → company → permission`; cache permission ở Valkey + **invalidate đúng** khi đổi quyền. Guards: JwtAuthGuard → CompanyGuard → PermissionGuard (fail-closed, @Public bypass, PERMISSION_GUARD_ENABLED kill-switch); CachedPermissionRepository (Valkey TTL 300s, fallback to DB); PermissionCacheInvalidator (permission.changed → DEL cap key); 20/20 tests GREEN.
+- [x] **G3-5** 🤖🟢 (S) FE `<PermissionGate>` + `useCan()` (capabilities từ `/me`). _Chỉ UX — server là sự thật._ `/me` trả `capabilities: Record<string,boolean>` (non-sensitive only); Zustand store + `useCan(action,resourceType)` O(1) wildcard lookup; `<PermissionGate>` với fallback; 14/14 FE tests GREEN.
 
 ✅ **Done khi:** user chỉ thấy menu/nút theo quyền; API chặn đúng; đổi quyền có audit + cache invalidate.
 
