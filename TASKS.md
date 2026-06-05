@@ -78,8 +78,8 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 | G0 | Quyết định & Thiết kế | 🧪 (gần xong) | — | 🟡 đang làm |
 | G1 | Bootstrap repo & hạ tầng | 🔧 Setup | L | ✅ đóng (merged master, CI xanh) |
 | G2 | Nền bảo mật & đa-tenant | 🛠️ TDD 🔋 | XL | ✅ đóng (PR #2 merged master — 62 files, 3330 insertions, CI xanh) |
-| G3 | Permission Engine | 🛠️ TDD 🔋 | L | 🟡 đang làm |
-| G4 | 🏁 MVP-0 Walking Skeleton | 🤖+🛠️ hỗn hợp | XL | ☐ |
+| G3 | Permission Engine | 🛠️ TDD 🔋 | L | ✅ đóng (merged master — 119 tests, typecheck clean, FULL gate passed) |
+| G4 | 🏁 MVP-0 Walking Skeleton | 🤖+🛠️ hỗn hợp | XL | 🟡 đang làm |
 | G5 | Tổ chức & Nhân sự đầy đủ | 🤖 AI-bulk 🟢 | L | ☐ |
 | G6 | Media (Channel/Project/Content) | 🤖 + 🛠️(G6-2) | L | ☐ |
 | G7 | Workflow Builder | 🛠️ TDD 🔋 | XL | ☐ |
