@@ -1,0 +1,22 @@
+{
+  "name": "@mediaos/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "echo \"[contracts] no lint yet\"",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"[contracts] no tests yet\""
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

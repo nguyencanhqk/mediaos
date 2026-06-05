@@ -1,0 +1,15 @@
+{
+  "name": "@mediaos/api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"[api] TODO G1-4: NestJS skeleton\"",
+    "build": "echo \"[api] TODO G1-4\"",
+    "lint": "echo \"[api] no lint yet\"",
+    "typecheck": "echo \"[api] no typecheck yet\"",
+    "test": "echo \"[api] no tests yet\""
+  },
+  "dependencies": {
+    "@mediaos/contracts": "workspace:*"
+  }
+}

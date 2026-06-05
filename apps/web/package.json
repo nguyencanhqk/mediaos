@@ -1,0 +1,15 @@
+{
+  "name": "@mediaos/web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"[web] TODO G1-5: Vite + React 19 skeleton\"",
+    "build": "echo \"[web] TODO G1-5\"",
+    "lint": "echo \"[web] no lint yet\"",
+    "typecheck": "echo \"[web] no typecheck yet\"",
+    "test": "echo \"[web] no tests yet\""
+  },
+  "dependencies": {
+    "@mediaos/contracts": "workspace:*"
+  }
+}
