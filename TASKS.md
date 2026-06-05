@@ -75,7 +75,7 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 | Mã | Giai đoạn | Chế độ chủ đạo | Cỡ | Trạng thái |
 | --- | --- | --- | --- | --- |
-| G0 | Quyết định & Thiết kế | 🧪 (gần xong) | — | 🟡 đang làm |
+| G0 | Quyết định & Thiết kế | 🧪 | — | ✅ đóng |
 | G1 | Bootstrap repo & hạ tầng | 🔧 Setup | L | ✅ đóng (merged master, CI xanh) |
 | G2 | Nền bảo mật & đa-tenant | 🛠️ TDD 🔋 | XL | ✅ đóng (PR #2 merged master — 62 files, 3330 insertions, CI xanh) |
 | G3 | Permission Engine | 🛠️ TDD 🔋 | L | ✅ đóng (merged master — 119 tests, typecheck clean, FULL gate passed) |
@@ -96,16 +96,18 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 ---
 
-# G0 — Quyết định & Thiết kế _(gần xong — chỉ chốt nốt)_
+# G0 — Quyết định & Thiết kế ✅ ĐÓNG
 
+> **Trạng thái (2026-06-05):** G0 đóng chính thức. Mọi quyết định bất khả nghịch đã thành ADR; scope MVP-0 rõ; harness Claude Code đã wire 6 hook.
+>
 > Phần thiết kế bất khả nghịch. Solo: **đừng mở code khi G0 chưa khoá** — sửa thiết kế lúc đã có code tốn gấp 10.
 
-- [~] **G0-1** 🧪 (S) Chốt phạm vi **MVP-0** (1 video trọn vòng đời) → [`docs/mvp-0-scope.md`](docs/mvp-0-scope.md). _Solo: tự xác nhận, không cần "đội"._
+- [x] **G0-1** 🧪 (S) Chốt phạm vi **MVP-0** (1 video trọn vòng đời) → [`docs/mvp-0-scope.md`](docs/mvp-0-scope.md). _Solo: tự xác nhận ✅_
 - [x] **G0-2** 🧪 ADR (15 file `docs/adr/`) — đã xong.
 - [x] **G0-3** 🧪 Spike **Workflow State Machine** → [`docs/spikes/workflow-state-machine.md`](docs/spikes/workflow-state-machine.md).
 - [x] **G0-4** 🧪 Spike **Permission Matrix** → [`docs/permission-matrix-spec.md`](docs/permission-matrix-spec.md).
 - [x] **G0-5** 🧪 Hạ tầng $0 → [`docs/infra-zero-cost-plan.md`](docs/infra-zero-cost-plan.md).
-- [~] **G0-6** 🔧 (S) Harness Claude Code: [`CLAUDE.md`](CLAUDE.md) + 3 hook guardrail đã wire. _Hoãn `agent-sort` tới G1._
+- [x] **G0-6** 🔧 (S) Harness Claude Code: [`CLAUDE.md`](CLAUDE.md) + 6 hook guardrail wired (PreToolUse: 4 guard · PostToolUse: 2 check). _`agent-sort` → skip (agents: plan-reviewer, completion-evaluator, rls-tenant-isolation-tester đã tạo thủ công)._
 
 ✅ **Done khi:** scope MVP-0 rõ với chính bạn; mọi quyết định bất khả nghịch đã thành ADR; có bảng transition + ma trận quyền làm nguồn sự thật.
 
@@ -171,7 +173,7 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 - [x] **G4-1** 🤖🟢 (S) Org/Employee tối thiểu — org_units + teams + team_members; RLS+FORCE+CHECK; NestJS OrgModule (7 endpoints); Zod contracts; FE /org/departments + /org/teams + /org/employees; LIGHT gate passed; commit aca6233.
 - [~] **G4-2** 🤖🟢 (M) Channel + Project + Content tối thiểu (project ↔ nhiều kênh; tạo 1 video).
-- [ ] **G4-3** 🛠️🔋 (M) **1 workflow cứng**: Script → Edit → QA → Upload; auto-sinh task. _(custom `workflow-state-machine-guide`)_ — _Hard-code nên đơn giản hơn G7, nhưng vẫn TDD._
+- [~] **G4-3** 🛠️🔋 (M) **1 workflow cứng**: Script → Edit → QA → Upload; auto-sinh task. _(custom `workflow-state-machine-guide`)_ — _Hard-code nên đơn giản hơn G7, nhưng vẫn TDD._ FULL gate passed; deny-path RED→GREEN (23 tests); workflow FSM + 4-step + auto-task + submit; global JWT+Company guards wired; 125 tests green.
 - [ ] **G4-4** 🤖🟢 (M) My Tasks + submit work (file/link) + comment. _(`ecc:tdd-workflow`)_
 - [ ] **G4-5** 🛠️🔋 (M) **Approval 1 cấp** + **return revision** (chọn bước lỗi + người chịu trách nhiệm).
 - [ ] **G4-6** 🤖🟢 (M) Notification cơ bản + 1 group chat project (auto-tạo).
