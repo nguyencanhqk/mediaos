@@ -80,7 +80,13 @@ export class CachedPermissionRepository implements IPermissionRepository {
   ): Promise<ObjectGrant[]> {
     const key = this.objKey(companyId, userId, resourceType, resourceId);
 
-    const cached = await this.valkey.get(key);
+    let cached: string | null = null;
+    try {
+      cached = await this.valkey.get(key);
+    } catch {
+      this.logger.warn('Unexpected error reading Valkey — falling back to DB', { key });
+    }
+
     if (cached) {
       try {
         return JSON.parse(cached) as ObjectGrant[];
@@ -101,8 +107,14 @@ export class CachedPermissionRepository implements IPermissionRepository {
     return grants;
   }
 
-  /** Called when permission.changed event fires — DEL cap key (object grants expire via TTL). */
+  /**
+   * Called when permission.changed event fires — DEL cap key (object grants expire via TTL).
+   * Throws if Valkey DEL fails so the event handler can dead-letter / alert.
+   */
   async invalidateUser(companyId: string, userId: string): Promise<void> {
-    await this.valkey.del(this.capKey(companyId, userId));
+    const ok = await this.valkey.del(this.capKey(companyId, userId));
+    if (!ok) {
+      throw new Error(`Valkey DEL failed for permission cache key — stale cache possible for up to ${300}s`);
+    }
   }
 }

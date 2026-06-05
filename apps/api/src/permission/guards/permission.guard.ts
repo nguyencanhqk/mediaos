@@ -39,9 +39,13 @@ export class PermissionGuard implements CanActivate {
 
     // Emergency rollback kill-switch (plan §8): set PERMISSION_GUARD_ENABLED=false to fail-open temporarily.
     if (process.env['PERMISSION_GUARD_ENABLED'] === 'false') {
+      const killMeta = this.reflector.getAllAndOverride<RequirePermissionMeta | undefined>(
+        REQUIRE_PERMISSION,
+        [ctx.getHandler(), ctx.getClass()],
+      );
       this.logger.warn(
         'PermissionGuard disabled via PERMISSION_GUARD_ENABLED=false — fail-open (emergency only)',
-        { handler: ctx.getHandler().name },
+        { handler: ctx.getHandler().name, hasPermissionDecorator: !!killMeta },
       );
       return true;
     }

@@ -156,7 +156,7 @@ export class AuthService {
   }
 
   async me(accessToken: string): Promise<MeResponse> {
-    let claims;
+    let claims: ReturnType<typeof this.tokens.verifyAccessToken>;
     try {
       claims = this.tokens.verifyAccessToken(accessToken);
     } catch {

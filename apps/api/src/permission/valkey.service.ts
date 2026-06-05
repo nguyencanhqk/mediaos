@@ -59,13 +59,19 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** No-op if Valkey is unavailable. Never throws. */
-  async del(...keys: string[]): Promise<void> {
-    if (!this.client) return;
+  /**
+   * Returns true when the DEL succeeds or Valkey is not configured.
+   * Returns false on error (caller can decide whether to retry or surface the failure).
+   * Never throws.
+   */
+  async del(...keys: string[]): Promise<boolean> {
+    if (!this.client) return true;
     try {
       if (keys.length > 0) await this.client.del(...keys);
+      return true;
     } catch (err) {
-      this.logger.warn('Valkey DEL error', { keys, error: (err as Error).message });
+      this.logger.warn('Valkey DEL error', { keys, error: err instanceof Error ? err.message : String(err) });
+      return false;
     }
   }
 }

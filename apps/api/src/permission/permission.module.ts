@@ -1,5 +1,4 @@
 import { Inject, Injectable, Logger, Module, OnModuleInit, forwardRef } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
 import { DatabaseModule } from '../db/db.module';
 import { EventsModule } from '../events/events.module';
 import { EventBus, type EventContext } from '../events/event-bus';
@@ -32,13 +31,28 @@ class PermissionCacheInvalidator implements OnModuleInit {
       consumerName: 'permission-cache-invalidator',
       eventType: 'permission.changed',
       handle: async (ctx: EventContext): Promise<void> => {
-        const { userId, companyId } = ctx.payload as { userId?: string; companyId?: string };
+        const payload = ctx.payload;
+        if (typeof payload !== 'object' || payload === null) {
+          this.logger.warn('permission.changed event has non-object payload', { eventId: ctx.eventId });
+          return;
+        }
+        const { userId, companyId } = payload as { userId?: string; companyId?: string };
         if (!userId || !companyId) {
           this.logger.warn('permission.changed event missing userId/companyId', { eventId: ctx.eventId });
           return;
         }
-        await this.cachedRepo.invalidateUser(companyId, userId);
-        this.logger.debug('Permission cache invalidated', { companyId, userId });
+        try {
+          await this.cachedRepo.invalidateUser(companyId, userId);
+          this.logger.debug('Permission cache invalidated', { companyId, userId });
+        } catch (err) {
+          this.logger.error('Failed to invalidate permission cache — stale grants possible for up to 300s', {
+            companyId,
+            userId,
+            eventId: ctx.eventId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          throw err;
+        }
       },
     });
   }
@@ -69,7 +83,6 @@ class PermissionCacheInvalidator implements OnModuleInit {
       inject: [CACHED_REPO],
     },
     PermissionCacheInvalidator,
-    Reflector,
     JwtAuthGuard,
     CompanyGuard,
     PermissionGuard,

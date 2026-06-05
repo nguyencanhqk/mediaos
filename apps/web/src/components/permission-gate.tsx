@@ -17,7 +17,7 @@ export function PermissionGate({
   resourceType,
   fallback = null,
   children,
-}: PermissionGateProps): React.ReactElement {
+}: PermissionGateProps): React.ReactNode {
   const allowed = useCan(action, resourceType);
   return <>{allowed ? children : fallback}</>;
 }

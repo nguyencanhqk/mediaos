@@ -216,7 +216,7 @@ describe('CachedPermissionRepository', () => {
     mockValkey = {
       get: vi.fn().mockResolvedValue(null),
       set: vi.fn().mockResolvedValue(undefined),
-      del: vi.fn().mockResolvedValue(undefined),
+      del: vi.fn().mockResolvedValue(true), // ValkeyService.del() now returns boolean
     };
   });
 

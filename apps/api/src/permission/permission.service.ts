@@ -10,7 +10,7 @@ import type {
 export class PermissionService {
   private readonly logger = new Logger(PermissionService.name);
 
-  constructor(readonly repo: IPermissionRepository) {}
+  constructor(private readonly repo: IPermissionRepository) {}
 
   /**
    * 4-tier permission check (§3b of G3-permission-engine.md).
@@ -177,11 +177,17 @@ export class PermissionService {
         if (g.effect === 'DENY') denyKeys.add(`${g.action}:${g.resourceType}`);
       }
 
+      // Wildcard-aware deny check: a DENY on *:T or A:* or *:* suppresses matching ALLOW keys.
+      const isDenied = (action: string, resourceType: string): boolean =>
+        denyKeys.has(`${action}:${resourceType}`) ||
+        denyKeys.has(`*:${resourceType}`) ||
+        denyKeys.has(`${action}:*`) ||
+        denyKeys.has('*:*');
+
       const caps: Record<string, boolean> = {};
       for (const g of grants) {
-        if (g.effect === 'ALLOW') {
-          const key = `${g.action}:${g.resourceType}`;
-          if (!denyKeys.has(key)) caps[key] = true;
+        if (g.effect === 'ALLOW' && !isDenied(g.action, g.resourceType)) {
+          caps[`${g.action}:${g.resourceType}`] = true;
         }
       }
       return caps;
