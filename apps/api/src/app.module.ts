@@ -6,6 +6,7 @@ import { DatabaseModule } from "./db/db.module";
 import { EventsModule } from "./events/events.module";
 import { HealthModule } from "./health/health.module";
 import { OrgModule } from "./org/org.module";
+import { MediaModule } from "./media/media.module";
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { OrgModule } from "./org/org.module";
     AuthModule,
     HealthModule,
     OrgModule,
+    MediaModule,
   ],
 })
 export class AppModule {}

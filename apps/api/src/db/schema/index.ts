@@ -14,3 +14,4 @@ export * from "./outbox";
 export * from "./auth";
 export * from "./permissions";
 export * from "./org";
+export * from "./media";
