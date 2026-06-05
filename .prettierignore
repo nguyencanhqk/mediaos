@@ -1,0 +1,7 @@
+**/dist/**
+**/node_modules/**
+**/.turbo/**
+**/coverage/**
+pnpm-lock.yaml
+apps/web/src/routeTree.gen.ts
+apps/api/migrations/**

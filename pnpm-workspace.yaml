@@ -1,3 +1,9 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# Cho phép chạy postinstall của các gói cần binary native (pnpm 10+ chặn mặc định).
+allowBuilds:
+  esbuild: true
+  "@swc/core": true
+  "@nestjs/core": true
