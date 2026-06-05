@@ -41,6 +41,12 @@ export class MediaService {
     return this.repo.listProjects(companyId);
   }
 
+  async getProject(companyId: string, projectId: string) {
+    const project = await this.repo.findProjectById(companyId, projectId);
+    if (!project) throw new NotFoundException(`Project not found: ${projectId}`);
+    return project;
+  }
+
   async createProject(companyId: string, dto: CreateProjectRequest) {
     try {
       const rows = await this.repo.createProject(companyId, {

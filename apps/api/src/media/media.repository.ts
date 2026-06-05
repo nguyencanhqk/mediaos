@@ -57,6 +57,26 @@ export class MediaRepository {
     });
   }
 
+  async findProjectById(companyId: string, projectId: string) {
+    return this.db.withTenant(companyId, async (tx) => {
+      const [project] = await tx
+        .select()
+        .from(projects)
+        .where(and(eq(projects.companyId, companyId), eq(projects.id, projectId), isNull(projects.deletedAt)))
+        .limit(1);
+
+      if (!project) return null;
+
+      const channelRows = await tx
+        .select({ id: channels.id, name: channels.name, platform: channels.platform })
+        .from(projectChannels)
+        .innerJoin(channels, and(eq(projectChannels.channelId, channels.id), isNull(channels.deletedAt)))
+        .where(and(eq(projectChannels.companyId, companyId), eq(projectChannels.projectId, projectId)));
+
+      return { ...project, channels: channelRows };
+    });
+  }
+
   createProject(companyId: string, data: { name: string; orgUnitId?: string | null }) {
     return this.db.withTenant(companyId, (tx) =>
       tx.insert(projects).values({ companyId, ...data, orgUnitId: data.orgUnitId ?? null }).returning(),

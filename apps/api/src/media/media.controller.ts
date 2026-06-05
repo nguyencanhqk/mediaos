@@ -47,6 +47,11 @@ export class MediaController {
     return this.media.listProjects(req.user.companyId);
   }
 
+  @Get('projects/:id')
+  getProject(@Req() req: AuthenticatedRequest, @Param('id') projectId: string) {
+    return this.media.getProject(req.user.companyId, projectId);
+  }
+
   @Post('projects')
   createProject(@Req() req: AuthenticatedRequest, @Body() dto: CreateProjectDto) {
     return this.media.createProject(req.user.companyId, dto);

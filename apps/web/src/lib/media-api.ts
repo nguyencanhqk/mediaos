@@ -33,6 +33,7 @@ export const mediaApi = {
     apiFetch("/channels", channelSchema, { method: "POST", body: JSON.stringify(data) }),
 
   listProjects: () => apiFetch("/projects", z.array(projectSchema)),
+  getProject: (projectId: string) => apiFetch(`/projects/${projectId}`, projectSchema),
   createProject: (data: CreateProjectRequest) =>
     apiFetch("/projects", projectSchema, { method: "POST", body: JSON.stringify(data) }),
 
