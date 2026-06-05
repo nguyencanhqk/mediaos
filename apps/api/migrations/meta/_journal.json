@@ -8,6 +8,34 @@
       "when": 1717500000000,
       "tag": "0000_init_extensions",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1717500001000,
+      "tag": "0001_roles_and_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1717500002000,
+      "tag": "0002_companies_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1717500003000,
+      "tag": "0003_audit_outbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1717500004000,
+      "tag": "0004_auth_tokens",
+      "breakpoints": true
     }
   ]
 }

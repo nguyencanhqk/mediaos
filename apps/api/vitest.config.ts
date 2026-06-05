@@ -7,7 +7,11 @@ export default defineConfig({
     globals: true,
     environment: "node",
     root: ".",
-    include: ["src/**/*.spec.ts", "test/**/*.e2e-spec.ts"],
+    // *.int-spec.ts = integration (Postgres thật) — tự skip khi không có DATABASE_URL (xem helpers/integration-db).
+    include: ["src/**/*.spec.ts", "test/**/*.e2e-spec.ts", "test/**/*.int-spec.ts"],
+    // Integration test mở/đóng pool + chạy DDL → nới timeout mặc định.
+    testTimeout: 20000,
+    hookTimeout: 30000,
   },
   plugins: [swc.vite()],
 });
