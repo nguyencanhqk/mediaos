@@ -5,7 +5,7 @@ describe("loadEnv", () => {
   it("applies defaults when optional vars are absent", () => {
     const env = loadEnv({});
     expect(env.NODE_ENV).toBe("development");
-    expect(env.API_PORT).toBe(3000);
+    expect(env.API_PORT).toBe(3100);
     expect(env.API_PREFIX).toBe("api");
     expect(env.API_VERSION).toBe("v1");
     expect(env.DATABASE_URL).toBeUndefined();

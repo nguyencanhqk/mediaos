@@ -1,7 +1,9 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { loadEnv } from "./config/env.schema";
+import { AuthModule } from "./auth/auth.module";
 import { DatabaseModule } from "./db/db.module";
+import { EventsModule } from "./events/events.module";
 import { HealthModule } from "./health/health.module";
 
 @Module({
@@ -14,6 +16,8 @@ import { HealthModule } from "./health/health.module";
       validate: (config: Record<string, unknown>) => loadEnv(config as NodeJS.ProcessEnv),
     }),
     DatabaseModule,
+    EventsModule,
+    AuthModule,
     HealthModule,
   ],
 })

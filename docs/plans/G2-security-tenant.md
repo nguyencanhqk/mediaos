@@ -123,4 +123,33 @@ _Khuyến nghị: chạy `plan-reviewer` vòng 2 xác nhận PASS sau khi review
 
 ## 🏁 Kết quả đánh giá hoàn thành (`completion-evaluator`)
 
-_(điền khi đóng G2.)_
+**Triển khai (2026-06-05, nhánh `feat/g2-security-tenant` cắt từ HEAD G1 — master chưa merge G1):**
+
+- **G2-1** migration `0001_roles_and_grants.sql`: 3 role (`mediaos_owner/app/worker`) + `pgbouncer_auth` (auth_query pass-through, vá lỗ PgBouncer kết nối superuser → bypass RLS). Mật khẩu tách qua `scripts/setup-db-roles.mjs` (BẤT BIẾN #3). docker-compose PgBouncer chuyển sang pass-through user. **⚠️ pass-through PgBouncer chưa chạy thử (không có Docker ở môi trường code) — cần `docker compose up` kiểm chứng.**
+- **G2-2** `withTenant` (`db.service.ts`): `set_config(...,true)` LOCAL qua bind-param, validate UUID trước khi mở tx.
+- **G2-3** `0002`: `companies`+`users` RLS USING+WITH CHECK+FORCE + partial-unique soft-delete + `resolve_company_by_slug` (SECURITY DEFINER, lỗ RLS có kiểm soát cho login).
+- **G2-4** `0003`: `audit_logs` append-only (grant không UPDATE/DELETE) + outbox + `processed_events` + `dead_letter_events` + EventBus + OutboxWorker (claim CTE SKIP LOCKED, idempotent, dead-letter + alert).
+- **G2-5** harness 2-tenant data-driven (`rls-registry.ts` + `tenant-isolation.int-spec.ts`) phủ 7 bảng RLS. Agent `rls-tenant-isolation-tester` **CHƯA tạo** (harness từ chối tạo file `.claude/agents/` — cần user cho phép).
+- **G2-6** `0004`: auth login/refresh/me/forgot/reset — argon2id (`@node-rs/argon2`, prebuilt → OK Windows/CI), refresh rotation + hash-at-rest, reset single-use, rate-limit (in-memory), audit mọi sự kiện.
+
+**Kiểm thử:** 30 unit test xanh local; 49 integration test (RLS/isolation/outbox/auth) tag `*.int-spec.ts` — TỰ SKIP khi không có DB, **chạy thật trên Postgres ở CI** (CI đã sửa: app kết nối bằng `mediaos_app` để RLS được ép thật; migrate + setup-roles trước test). Lint/typecheck/build toàn workspace xanh.
+
+**FULL gate (security + database + silent-failure reviewer) — đã chạy. Đã VÁ:**
+- 🔴 Interval `(int || ' ms')::interval` ném lỗi runtime → `make_interval(secs=>…)` (reaper + backoff đều hỏng nếu không vá — cả 3 reviewer bắt).
+- Claim outbox đổi sang CTE (atomic, chống double-claim đồng thời).
+- `dead_letter_events` UNIQUE(event_id,consumer_name) + ON CONFLICT (chống dead-letter/alert trùng khi crash giữa chừng).
+- `resolve_company_by_slug` bỏ `public` khỏi search_path (chống schema-shadowing).
+- `current_setting(...)::uuid` → `NULLIF(...,'')::uuid` (deny thay vì throw khi GUC rác).
+- `/me` chọn cột tường minh (loại `password_hash` ở tầng query).
+- Alert dead-letter log kèm stack; payload null → throw thay vì `?? {}`.
+- Drizzle schema khớp SQL: PK composite `processed_events`, self-FK `replaced_by`, partial-index predicate `dead_letter`.
+
+**FOLLOW-UP cần xử lý (chưa vá — quyết định kiến trúc/ops, ghi để không trôi):**
+1. 🔴 **Reset token plaintext trong `outbox_events.payload`** (durable) — cần envelope-encrypt (G6-2) + purge outbox trước PROD. Đã đánh dấu trong code.
+2. **Rate-limit login** in-memory → Valkey + bucket theo tài khoản (không chỉ IP) + backoff luỹ tiến; thêm rate-limit cho `/auth/refresh` + `/auth/reset-password` (chống pool-exhaustion + brute-force).
+3. **`workerDb` fallback `directPool`** (owner/superuser) khi thiếu `DATABASE_WORKER_URL` → bypass RLS thầm lặng; cần assert `current_user = mediaos_worker` ở prod.
+4. **`audit_logs.object_type` CHECK enum đóng** → mỗi module mới phải ALTER; cân nhắc bỏ CHECK, ép ở app, hoặc bảng lookup.
+5. **`password.verify` catch** nuốt lỗi hạ tầng thành "sai mật khẩu" → tách lỗi argon2-mismatch vs lỗi hệ thống (log + rethrow).
+6. Phụ: bỏ `email` khỏi JWT claim; pin image `edoburu/pgbouncer`; bỏ `DELETE` grant trên `companies`/`users` (ép soft-delete ở DB); `NOINHERIT` cho `pgbouncer_auth`; index `audit_logs(actor_user_id)`; `dead_letter` worker WITH CHECK theo company_id.
+
+**Cổng merge còn chờ:** G1 CI xanh + merge master; chạy integration suite trên CI lần đầu (xác nhận RED→GREEN thật); kiểm chứng PgBouncer pass-through bằng Docker; tạo agent `rls-tenant-isolation-tester` (cần user cho phép); xử lý follow-up #1 trước khi auth lên prod.

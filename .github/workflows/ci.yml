@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Lint · Typecheck · Test · Migrate
+    name: Lint · Typecheck · Migrate · RLS Test
     runs-on: ubuntu-latest
 
     services:
@@ -39,10 +39,21 @@ jobs:
           --health-retries 10
 
     env:
-      # DB ephemeral của CI — KHÔNG phải secret thật. Migration chạy qua kết nối DIRECT.
+      # DB ephemeral của CI — KHÔNG phải secret thật.
+      # DIRECT = superuser (migration + bootstrap role + seed test). app/worker = role tách quyền (G2-1):
+      # test integration kết nối DATABASE_URL = mediaos_app (NOSUPERUSER, NOBYPASSRLS) ⇒ RLS ĐƯỢC ÉP thật.
+      # CI không có PgBouncer ⇒ app trỏ thẳng :5432 (RLS vẫn ép trên direct conn). Pass-through PgBouncer
+      # kiểm bằng docker (xem docker-compose), không ở CI.
       DATABASE_DIRECT_URL: postgres://mediaos:postgres@localhost:5432/mediaos
-      DATABASE_URL: postgres://mediaos:postgres@localhost:5432/mediaos
+      DATABASE_URL: postgres://mediaos_app:ci_app_pw@localhost:5432/mediaos
+      DATABASE_WORKER_URL: postgres://mediaos_worker:ci_worker_pw@localhost:5432/mediaos
       VALKEY_URL: redis://localhost:6379
+      # Mật khẩu role (ephemeral CI). Phải KHỚP mật khẩu trong URL ở trên.
+      APP_DB_PASSWORD: ci_app_pw
+      WORKER_DB_PASSWORD: ci_worker_pw
+      PGBOUNCER_AUTH_PASSWORD: ci_pgb_pw
+      # JWT secret ephemeral cho test auth (G2-6).
+      JWT_SECRET: ci-only-jwt-secret-0123456789abcdef
 
     steps:
       - uses: actions/checkout@v4
@@ -68,8 +79,15 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test
-        run: pnpm test
-
-      - name: Apply migrations (verify baseline on real Postgres)
+      # Migration TRƯỚC test: tạo role + bảng + RLS policy + FORCE (GX-4 — policy+FORCE cùng CREATE).
+      - name: Apply migrations (real Postgres)
         run: pnpm --filter @mediaos/api db:migrate
+
+      # Gán mật khẩu cho mediaos_app/worker/pgbouncer_auth (tách secret khỏi migration) → app kết nối được.
+      - name: Setup DB role passwords
+        run: pnpm db:setup-roles
+
+      # Test gồm integration RLS/isolation/outbox/auth chạy THẬT (DATABASE_URL = mediaos_app).
+      # Đây là gate "không rò chéo tenant" của cả dự án (G2-5).
+      - name: Test (unit + integration RLS/auth)
+        run: pnpm test

@@ -23,9 +23,22 @@ export const directPool: Pool | undefined = env.DATABASE_DIRECT_URL
   ? new Pool({ connectionString: env.DATABASE_DIRECT_URL, max: 5 })
   : undefined;
 
+/**
+ * Pool WORKER (direct, role mediaos_worker) — outbox worker (G2-4). Session bền, KHÔNG qua PgBouncer.
+ * Fallback directPool nếu chưa cấu hình DATABASE_WORKER_URL (dev tiện; prod nên tách role).
+ */
+export const workerPool: Pool | undefined = env.DATABASE_WORKER_URL
+  ? new Pool({ connectionString: env.DATABASE_WORKER_URL, max: 4 })
+  : directPool;
+
 export type Database = NodePgDatabase<typeof schema>;
 
 /** Drizzle client trên pool đã pool-hoá. `undefined` khi chưa cấu hình DATABASE_URL. */
 export const db: Database | undefined = pool ? drizzle(pool, { schema }) : undefined;
+
+/** Drizzle client cho worker (đọc/cập nhật outbox qua directPool). */
+export const workerDb: Database | undefined = workerPool
+  ? drizzle(workerPool, { schema })
+  : undefined;
 
 export { schema };

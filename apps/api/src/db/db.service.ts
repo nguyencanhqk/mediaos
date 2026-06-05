@@ -1,5 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { directPool, pool } from "./index";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
+import { db, directPool, pool } from "./index";
 
 export interface DbPingResult {
   ok: boolean;
@@ -7,9 +9,39 @@ export interface DbPingResult {
   error?: string;
 }
 
+/** Transaction-scoped Drizzle client trao cho callback của `withTenant`. */
+export type TenantTx = Parameters<Parameters<NonNullable<typeof db>["transaction"]>[0]>[0];
+
+/** companyId PHẢI là UUID — chặn injection/giá trị rác TRƯỚC khi mở transaction. */
+const companyIdSchema = z.string().uuid();
+
 /**
- * Cổng truy cập hạ tầng DB cho Nest DI. G1: chỉ `ping()` fail-soft cho health-check.
- * G2-2 sẽ bổ sung `withTenant(companyId, fn)` ở đây (set_config trong transaction).
+ * Lỗi khi thiếu cấu hình DB (DATABASE_URL) — fail-fast, không nuốt lỗi (silent-failure-hunter).
+ */
+export class DatabaseNotConfiguredError extends Error {
+  constructor() {
+    super("DATABASE_URL chưa cấu hình — không thể mở withTenant.");
+    this.name = "DatabaseNotConfiguredError";
+  }
+}
+
+/** Lỗi companyId không hợp lệ (không phải UUID) — chặn trước khi chạm DB. */
+export class InvalidCompanyIdError extends Error {
+  constructor() {
+    super("companyId không hợp lệ (phải là UUID).");
+    this.name = "InvalidCompanyIdError";
+  }
+}
+
+/**
+ * Cổng truy cập hạ tầng DB cho Nest DI.
+ *
+ * `withTenant` là CHỐT DUY NHẤT cho mọi data-access nghiệp vụ (ADR-0001, BẤT BIẾN #1):
+ * mở 1 transaction → set `app.current_company_id` LOCAL (transaction-scoped, an toàn PgBouncer
+ * transaction-mode — ADR-0003) → chạy callback → commit. RLS policy (G2-3) đọc GUC này để lọc.
+ *
+ * CẤM query nghiệp vụ thẳng trên `db`/`pool` ngoài `withTenant` (sẽ bị RLS chặn = 0 row, hoặc rò nếu
+ * quên WHERE). Hook `guard-tenant.mjs` canh điều này.
  */
 @Injectable()
 export class DatabaseService {
@@ -30,5 +62,32 @@ export class DatabaseService {
       this.logger.warn(`DB ping failed: ${message}`);
       return { ok: false, latencyMs: null, error: message };
     }
+  }
+
+  /**
+   * Chạy `fn` trong ngữ cảnh tenant `companyId`. Mọi query trong `fn` chỉ thấy dữ liệu của tenant đó
+   * (RLS ép ở DB). Lỗi trong `fn` → rollback toàn bộ transaction (audit không ghi nửa vời).
+   *
+   * @throws InvalidCompanyIdError nếu companyId không phải UUID (KHÔNG mở transaction).
+   * @throws DatabaseNotConfiguredError nếu DATABASE_URL chưa cấu hình.
+   */
+  async withTenant<T>(companyId: string, fn: (tx: TenantTx) => Promise<T>): Promise<T> {
+    const parsed = companyIdSchema.safeParse(companyId);
+    if (!parsed.success) {
+      throw new InvalidCompanyIdError();
+    }
+    if (!db) {
+      throw new DatabaseNotConfiguredError();
+    }
+
+    return db.transaction(async (tx) => {
+      // set_config(..., true) = LOCAL: chỉ sống trong transaction này, tự reset khi commit/rollback
+      // → connection trả về PgBouncer KHÔNG mang GUC sang tenant kế tiếp (chống rò chéo tenant).
+      // ${parsed.data} = bind-param ($1), TUYỆT ĐỐI không string-concat (chống SQL injection).
+      await tx.execute(
+        sql`select set_config('app.current_company_id', ${parsed.data}, true)`,
+      );
+      return fn(tx);
+    });
   }
 }
