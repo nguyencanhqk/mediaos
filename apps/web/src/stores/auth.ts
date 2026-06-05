@@ -1,19 +1,34 @@
 import { create } from "zustand";
 
-/**
- * Auth state — MOCK ở G1 (chưa có backend auth, đó là G2-6).
- * Server là nguồn sự thật về quyền; store này chỉ giữ trạng thái UI tạm cho login mock.
- */
+interface User {
+  id: string;
+  companyId: string;
+  email: string;
+  fullName: string | null;
+  status: string;
+}
+
 interface AuthState {
   isAuthenticated: boolean;
+  user: User | null;
+  /** username kept for G1 mock compatibility */
   username: string | null;
+  /** Non-sensitive action:resourceType capabilities from /me — keyed for O(1) useCan() lookup. */
+  capabilities: Record<string, boolean>;
+  /** G1 mock login — sets username only, no real auth. */
   login: (username: string) => void;
+  /** Called after real /me response to populate user profile + capabilities. */
+  setUser: (user: User, capabilities: Record<string, boolean>) => void;
   logout: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
+  user: null,
   username: null,
+  capabilities: {},
   login: (username) => set({ isAuthenticated: true, username }),
-  logout: () => set({ isAuthenticated: false, username: null }),
+  setUser: (user, capabilities) =>
+    set({ isAuthenticated: true, user, username: user.email, capabilities }),
+  logout: () => set({ isAuthenticated: false, user: null, username: null, capabilities: {} }),
 }));

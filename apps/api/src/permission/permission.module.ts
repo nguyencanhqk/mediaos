@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, Module, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, Module, OnModuleInit, forwardRef } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { DatabaseModule } from '../db/db.module';
 import { EventsModule } from '../events/events.module';
@@ -52,7 +52,7 @@ class PermissionCacheInvalidator implements OnModuleInit {
  * Invalidation: permission.changed event → PermissionCacheInvalidator → DEL cap key (<100ms target).
  */
 @Module({
-  imports: [DatabaseModule, EventsModule, AuthModule],
+  imports: [DatabaseModule, EventsModule, forwardRef(() => AuthModule)],
   providers: [
     ValkeyService,
     PermissionRepository,

@@ -158,6 +158,42 @@ export class PermissionService {
       return { allow: false, reason: 'deny-default', auditRequired: isSensitive };
     }
   }
+
+  /**
+   * Returns a flat map of non-sensitive capabilities for the given user.
+   * Key format: "${action}:${resourceType}" — wildcards included as-is (FE handles multi-key lookup).
+   * Only non-sensitive grants; sensitive permissions require explicit per-resource checks.
+   * Deny-overrides-across-roles applied: any DENY removes the key entirely.
+   * On error → empty map (fail-safe for UI hints, never fail-closed like can()).
+   */
+  async getCapabilities(userId: string, companyId: string): Promise<Record<string, boolean>> {
+    try {
+      const now = new Date();
+      const rawGrants = await this.repo.getCompanyRoleGrants(userId, companyId);
+      const grants = rawGrants.filter((g) => isGrantActive(g.expiresAt, now) && !g.isSensitive);
+
+      const denyKeys = new Set<string>();
+      for (const g of grants) {
+        if (g.effect === 'DENY') denyKeys.add(`${g.action}:${g.resourceType}`);
+      }
+
+      const caps: Record<string, boolean> = {};
+      for (const g of grants) {
+        if (g.effect === 'ALLOW') {
+          const key = `${g.action}:${g.resourceType}`;
+          if (!denyKeys.has(key)) caps[key] = true;
+        }
+      }
+      return caps;
+    } catch (error: unknown) {
+      this.logger.error('getCapabilities() infrastructure error — returning empty map', {
+        error: error instanceof Error ? error.message : String(error),
+        userId,
+        companyId,
+      });
+      return {};
+    }
+  }
 }
 
 /** Returns true when the grant is active (not expired). Treats malformed dates as expired. */

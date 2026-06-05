@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable, UnauthorizedException } from "@nestjs/common";
+import { HttpException, HttpStatus, Inject, Injectable, UnauthorizedException, forwardRef } from "@nestjs/common";
 import type {
   AuthTokens,
   ForgotPasswordRequest,
@@ -13,6 +13,7 @@ import { DatabaseService, type TenantTx } from "../db/db.service";
 import { passwordResetTokens, refreshTokens, users } from "../db/schema";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
+import { PermissionService } from "../permission/permission.service";
 import { LoginRateLimiter } from "./login-rate-limiter";
 import { PasswordService } from "./password.service";
 import { TokenService } from "./token.service";
@@ -36,6 +37,7 @@ export class AuthService {
     private readonly rateLimiter: LoginRateLimiter,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    @Inject(forwardRef(() => PermissionService)) private readonly permissions: PermissionService,
   ) {}
 
   /** Resolve companySlug → companyId qua hàm SECURITY DEFINER (lỗ RLS có kiểm soát, §3b). */
@@ -177,12 +179,14 @@ export class AuthService {
       return row && !row.deletedAt ? row : null;
     });
     if (!user) throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
+    const capabilities = await this.permissions.getCapabilities(user.id, user.companyId);
     return {
       id: user.id,
       companyId: user.companyId,
       email: user.email,
       fullName: user.fullName,
       status: user.status,
+      capabilities,
     };
   }
 
