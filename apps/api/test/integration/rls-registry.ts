@@ -20,11 +20,86 @@ export interface RlsTableCase {
   seedRow(direct: Pool, t: SeededTenant): Promise<string>;
 }
 
+// ─── Helpers dùng chung cho các bảng có FK chain dài ──────────────────────────
+
+async function seedProject(direct: Pool, companyId: string): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO projects (company_id, name, status) VALUES ($1, $2, 'active') RETURNING id`,
+    [companyId, `rls-prj-${randomUUID().slice(0, 8)}`],
+  );
+  return r.rows[0].id as string;
+}
+
+async function seedContentItem(direct: Pool, companyId: string, projectId: string): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO content_items (company_id, project_id, title, content_type, status)
+     VALUES ($1, $2, 'rls-ci', 'video', 'draft') RETURNING id`,
+    [companyId, projectId],
+  );
+  return r.rows[0].id as string;
+}
+
+async function seedWorkflowDefinition(direct: Pool, companyId: string): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO workflow_definitions (company_id, code, name, applies_to, max_approval_level, allow_parallel_steps)
+     VALUES ($1, $2, 'RLS Def', 'content_item', 1, false) RETURNING id`,
+    [companyId, `rls-def-${randomUUID().slice(0, 8)}`],
+  );
+  return r.rows[0].id as string;
+}
+
+async function seedWorkflowInstance(
+  direct: Pool,
+  companyId: string,
+  definitionId: string,
+  contentItemId: string,
+  userId: string,
+): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO workflow_instances
+       (company_id, workflow_definition_id, content_item_id, created_by, current_step_order, status)
+     VALUES ($1, $2, $3, $4, 1, 'active') RETURNING id`,
+    [companyId, definitionId, contentItemId, userId],
+  );
+  return r.rows[0].id as string;
+}
+
+async function seedWorkflowStep(
+  direct: Pool,
+  companyId: string,
+  instanceId: string,
+  stepOrder = 1,
+): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO workflow_steps
+       (company_id, workflow_instance_id, step_order, step_code, step_name, status)
+     VALUES ($1, $2, $3, 'script', 'Viết kịch bản', 'not_started') RETURNING id`,
+    [companyId, instanceId, stepOrder],
+  );
+  return r.rows[0].id as string;
+}
+
+/** Seed toàn bộ chuỗi FK nhỏ nhất cần cho workflow_step trở lên. */
+async function seedWorkflowChain(
+  direct: Pool,
+  t: SeededTenant,
+): Promise<{ userId: string; projectId: string; contentItemId: string; instanceId: string; stepId: string }> {
+  const userId = await seedUser(direct, t.companyId, `rls-chain-${randomUUID().slice(0, 8)}@x.test`);
+  const projectId = await seedProject(direct, t.companyId);
+  const contentItemId = await seedContentItem(direct, t.companyId, projectId);
+  const definitionId = await seedWorkflowDefinition(direct, t.companyId);
+  const instanceId = await seedWorkflowInstance(direct, t.companyId, definitionId, contentItemId, userId);
+  const stepId = await seedWorkflowStep(direct, t.companyId, instanceId);
+  return { userId, projectId, contentItemId, instanceId, stepId };
+}
+
+// ─── Bảng đăng ký ──────────────────────────────────────────────────────────────
+
 export const RLS_TABLES: RlsTableCase[] = [
+  // ── G2 Base ────────────────────────────────────────────────────────────────
   {
     name: "companies",
     table: "companies",
-    // Bản thân company là "hàng" của chính tenant đó (đã tạo bởi seedCompany).
     seedRow: async (_direct, t) => t.companyId,
   },
   {
@@ -102,8 +177,6 @@ export const RLS_TABLES: RlsTableCase[] = [
   {
     name: "roles (tenant-scoped only)",
     table: "roles",
-    // NOTE: chỉ seed TENANT role (company_id NOT NULL). System roles (company_id IS NULL) ĐỌC được bởi mọi
-    // tenant theo thiết kế — không seed chúng ở đây vì harness kiểm cô lập chéo tenant, không phải visibility.
     seedRow: async (direct, t) => {
       const r = await direct.query(
         `INSERT INTO roles (company_id, name, is_system)
@@ -116,16 +189,13 @@ export const RLS_TABLES: RlsTableCase[] = [
   {
     name: "role_permissions",
     table: "role_permissions",
-    // Seed via a tenant role + a real permission from the catalog.
     seedRow: async (direct, t) => {
-      // Insert a tenant-scoped role first.
       const roleRes = await direct.query(
         `INSERT INTO roles (company_id, name, is_system)
          VALUES ($1, $2, false) RETURNING id`,
         [t.companyId, `rp-seed-role-${randomUUID().slice(0, 8)}`],
       );
       const roleId = roleRes.rows[0].id as string;
-      // Pick any permission from the catalog (read:company is always present).
       const permRes = await direct.query(
         `SELECT id FROM permissions WHERE action = 'read' AND resource_type = 'company' LIMIT 1`,
       );
@@ -134,8 +204,6 @@ export const RLS_TABLES: RlsTableCase[] = [
         `INSERT INTO role_permissions (role_id, permission_id, effect) VALUES ($1, $2, 'ALLOW')`,
         [roleId, permId],
       );
-      // Return roleId as the "row id" — harness verifies the role is not visible cross-tenant,
-      // which transitively means the role_permission is also not visible cross-tenant.
       return roleId;
     },
   },
@@ -144,7 +212,6 @@ export const RLS_TABLES: RlsTableCase[] = [
     table: "user_roles",
     seedRow: async (direct, t) => {
       const u = await seedUser(direct, t.companyId, `ur-${randomUUID().slice(0, 8)}@x.test`);
-      // Use any system role (company_id IS NULL) so we don't need to create a tenant role.
       const roleRes = await direct.query(
         `SELECT id FROM roles WHERE name = 'employee' AND company_id IS NULL LIMIT 1`,
       );
@@ -171,6 +238,316 @@ export const RLS_TABLES: RlsTableCase[] = [
            (company_id, subject_type, subject_id, permission_id, object_type, object_id, effect)
          VALUES ($1, 'user', $2, $3, 'project', $4, 'ALLOW') RETURNING id`,
         [t.companyId, u, permId, randomUUID()],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── G4-1 Org ────────────────────────────────────────────────────────────────
+  {
+    name: "org_units",
+    table: "org_units",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO org_units (company_id, name, type) VALUES ($1, $2, 'department') RETURNING id`,
+        [t.companyId, `rls-dept-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "teams",
+    table: "teams",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO teams (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-team-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "team_members",
+    table: "team_members",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `tm-${randomUUID().slice(0, 8)}@x.test`);
+      const teamRes = await direct.query(
+        `INSERT INTO teams (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-tm-team-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO team_members (company_id, team_id, user_id, role_name)
+         VALUES ($1, $2, $3, 'member') RETURNING id`,
+        [t.companyId, teamRes.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── G4-2 Media ──────────────────────────────────────────────────────────────
+  {
+    name: "channels",
+    table: "channels",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO channels (company_id, name, platform, status)
+         VALUES ($1, $2, 'youtube', 'active') RETURNING id`,
+        [t.companyId, `rls-ch-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "projects",
+    table: "projects",
+    seedRow: async (direct, t) => seedProject(direct, t.companyId),
+  },
+  {
+    name: "project_channels",
+    table: "project_channels",
+    seedRow: async (direct, t) => {
+      const projectId = await seedProject(direct, t.companyId);
+      const chRes = await direct.query(
+        `INSERT INTO channels (company_id, name, platform, status)
+         VALUES ($1, $2, 'youtube', 'active') RETURNING id`,
+        [t.companyId, `rls-pch-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO project_channels (company_id, project_id, channel_id)
+         VALUES ($1, $2, $3) RETURNING id`,
+        [t.companyId, projectId, chRes.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "content_items",
+    table: "content_items",
+    seedRow: async (direct, t) => {
+      const projectId = await seedProject(direct, t.companyId);
+      return seedContentItem(direct, t.companyId, projectId);
+    },
+  },
+
+  // ── G4-3 Workflow ────────────────────────────────────────────────────────────
+  {
+    name: "workflow_definitions",
+    table: "workflow_definitions",
+    seedRow: (direct, t) => seedWorkflowDefinition(direct, t.companyId),
+  },
+  {
+    name: "workflow_definition_steps",
+    table: "workflow_definition_steps",
+    seedRow: async (direct, t) => {
+      const defId = await seedWorkflowDefinition(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO workflow_definition_steps
+           (company_id, workflow_definition_id, step_order, code, name, default_task_title)
+         VALUES ($1, $2, 1, 'script', 'Viết kịch bản', 'Viết kịch bản') RETURNING id`,
+        [t.companyId, defId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "step_transitions",
+    table: "step_transitions",
+    seedRow: async (direct, t) => {
+      const defId = await seedWorkflowDefinition(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO step_transitions
+           (company_id, workflow_definition_id, from_state, event, to_state, written_by)
+         VALUES ($1, $2, 'not_started', 'start', 'in_progress', 'service') RETURNING id`,
+        [t.companyId, defId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "workflow_instances",
+    table: "workflow_instances",
+    seedRow: async (direct, t) => {
+      const { instanceId } = await seedWorkflowChain(direct, t);
+      return instanceId;
+    },
+  },
+  {
+    name: "workflow_steps",
+    table: "workflow_steps",
+    seedRow: async (direct, t) => {
+      const { stepId } = await seedWorkflowChain(direct, t);
+      return stepId;
+    },
+  },
+
+  // ── G4-4 Tasks & Comments ───────────────────────────────────────────────────
+  {
+    name: "tasks",
+    table: "tasks",
+    // tasks có thể tồn tại không cần workflow_step (task_type=office, workflow_step_id nullable)
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO tasks (company_id, task_type, title, status, origin, revision_round)
+         VALUES ($1, 'office', 'rls-task', 'not_started', 'initial', 0) RETURNING id`,
+        [t.companyId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "task_comments",
+    table: "task_comments",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `tc-${randomUUID().slice(0, 8)}@x.test`);
+      const taskRes = await direct.query(
+        `INSERT INTO tasks (company_id, task_type, title, status, origin, revision_round)
+         VALUES ($1, 'office', 'rls-task-for-comment', 'not_started', 'initial', 0) RETURNING id`,
+        [t.companyId],
+      );
+      const r = await direct.query(
+        `INSERT INTO task_comments (company_id, task_id, user_id, body)
+         VALUES ($1, $2, $3, 'rls-comment') RETURNING id`,
+        [t.companyId, taskRes.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── G4-5 Approval / Defect ───────────────────────────────────────────────────
+  {
+    name: "approval_requests",
+    table: "approval_requests",
+    seedRow: async (direct, t) => {
+      const { stepId, userId } = await seedWorkflowChain(direct, t);
+      const r = await direct.query(
+        `INSERT INTO approval_requests
+           (company_id, workflow_step_id, requested_by, status, current_level, max_level)
+         VALUES ($1, $2, $3, 'pending', 1, 1) RETURNING id`,
+        [t.companyId, stepId, userId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "approval_steps",
+    table: "approval_steps",
+    seedRow: async (direct, t) => {
+      const { stepId, userId } = await seedWorkflowChain(direct, t);
+      const reqRes = await direct.query(
+        `INSERT INTO approval_requests
+           (company_id, workflow_step_id, requested_by, status, current_level, max_level)
+         VALUES ($1, $2, $3, 'approved', 1, 1) RETURNING id`,
+        [t.companyId, stepId, userId],
+      );
+      const r = await direct.query(
+        `INSERT INTO approval_steps
+           (company_id, approval_request_id, level, approver_user_id, decision)
+         VALUES ($1, $2, 1, $3, 'approved') RETURNING id`,
+        [t.companyId, reqRes.rows[0].id, userId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "defects",
+    table: "defects",
+    seedRow: async (direct, t) => {
+      const { stepId } = await seedWorkflowChain(direct, t);
+      const r = await direct.query(
+        `INSERT INTO defects (company_id, workflow_step_id, description)
+         VALUES ($1, $2, 'rls-defect') RETURNING id`,
+        [t.companyId, stepId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "workflow_step_instance_locks",
+    table: "workflow_step_instance_locks",
+    seedRow: async (direct, t) => {
+      const { instanceId } = await seedWorkflowChain(direct, t);
+      // Cần 2 steps (locked + caused_by); step đầu đã có từ seedWorkflowChain
+      const step2Res = await direct.query(
+        `INSERT INTO workflow_steps
+           (company_id, workflow_instance_id, step_order, step_code, step_name, status)
+         VALUES ($1, $2, 2, 'edit', 'Dựng video', 'not_started') RETURNING id`,
+        [t.companyId, instanceId],
+      );
+      const lockedStepId = step2Res.rows[0].id as string;
+      // step_order=1 từ seedWorkflowChain
+      const step1Res = await direct.query(
+        `SELECT id FROM workflow_steps WHERE workflow_instance_id = $1 AND step_order = 1`,
+        [instanceId],
+      );
+      const causedByStepId = step1Res.rows[0].id as string;
+      const r = await direct.query(
+        `INSERT INTO workflow_step_instance_locks
+           (company_id, locked_step_id, caused_by_step_id, lock_reason)
+         VALUES ($1, $2, $3, 'downstream_blocked_by_revision') RETURNING id`,
+        [t.companyId, lockedStepId, causedByStepId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── G4-6 Communication ────────────────────────────────────────────────────────
+  {
+    name: "notifications",
+    table: "notifications",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `noti-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO notifications (company_id, user_id, type, body)
+         VALUES ($1, $2, 'general', 'rls-noti') RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "chat_rooms",
+    table: "chat_rooms",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO chat_rooms (company_id, room_type, name)
+         VALUES ($1, 'direct', $2) RETURNING id`,
+        [t.companyId, `rls-room-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "chat_room_members",
+    table: "chat_room_members",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `crm-${randomUUID().slice(0, 8)}@x.test`);
+      const roomRes = await direct.query(
+        `INSERT INTO chat_rooms (company_id, room_type, name)
+         VALUES ($1, 'direct', $2) RETURNING id`,
+        [t.companyId, `rls-room-m-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO chat_room_members (company_id, room_id, user_id)
+         VALUES ($1, $2, $3) RETURNING id`,
+        [t.companyId, roomRes.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "chat_messages",
+    table: "chat_messages",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `cm-${randomUUID().slice(0, 8)}@x.test`);
+      const roomRes = await direct.query(
+        `INSERT INTO chat_rooms (company_id, room_type, name)
+         VALUES ($1, 'direct', $2) RETURNING id`,
+        [t.companyId, `rls-room-msg-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO chat_messages (company_id, room_id, sender_id, body)
+         VALUES ($1, $2, $3, 'rls-msg') RETURNING id`,
+        [t.companyId, roomRes.rows[0].id, u],
       );
       return r.rows[0].id as string;
     },

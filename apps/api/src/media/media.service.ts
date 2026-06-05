@@ -6,6 +6,7 @@ import type {
   CreateProjectRequest,
 } from '@mediaos/contracts';
 import { MediaRepository } from './media.repository';
+import { ChatService } from '../chat/chat.service';
 
 const PG_UNIQUE_VIOLATION = '23505';
 
@@ -20,7 +21,10 @@ function isUniqueViolation(err: unknown): boolean {
 
 @Injectable()
 export class MediaService {
-  constructor(private readonly repo: MediaRepository) {}
+  constructor(
+    private readonly repo: MediaRepository,
+    private readonly chat: ChatService,
+  ) {}
 
   listChannels(companyId: string) {
     return this.repo.listChannels(companyId);
@@ -47,18 +51,24 @@ export class MediaService {
     return project;
   }
 
-  async createProject(companyId: string, dto: CreateProjectRequest) {
+  async createProject(companyId: string, dto: CreateProjectRequest, creatorId: string) {
+    let project: Awaited<ReturnType<MediaRepository['createProject']>>[0];
     try {
       const rows = await this.repo.createProject(companyId, {
         name: dto.name,
         orgUnitId: dto.orgUnitId ?? null,
       });
       if (!rows[0]) throw new InternalServerErrorException('Failed to create project');
-      return rows[0];
+      project = rows[0];
     } catch (err) {
       if (isUniqueViolation(err)) throw new ConflictException('Project name already exists');
       throw err;
     }
+
+    // Auto-tạo phòng chat project (non-critical — lỗi không rollback project)
+    await this.chat.ensureProjectRoom(companyId, project.id, project.name, creatorId);
+
+    return project;
   }
 
   async addProjectChannel(companyId: string, projectId: string, dto: AddProjectChannelRequest) {

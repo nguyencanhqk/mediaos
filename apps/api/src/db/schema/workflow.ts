@@ -201,6 +201,8 @@ export const workflowSteps = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }),
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
+    submissionUrl: text("submission_url"),
+    submissionNote: text("submission_note"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -404,3 +406,32 @@ export const workflowStepInstanceLocks = pgTable(
 );
 
 export type WorkflowStepInstanceLock = typeof workflowStepInstanceLocks.$inferSelect;
+
+// ─── task_comments ────────────────────────────────────────────────────────────
+// Thread of comments on a task. Append-only; no edit/delete for audit integrity.
+
+export const taskComments = pgTable(
+  "task_comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("task_comments_task_id_idx").on(t.taskId),
+    index("task_comments_company_id_idx").on(t.companyId),
+  ],
+);
+
+export type TaskComment = typeof taskComments.$inferSelect;
+export type NewTaskComment = typeof taskComments.$inferInsert;

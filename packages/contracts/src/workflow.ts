@@ -64,7 +64,38 @@ export const startWorkflowSchema = z.object({
 export type StartWorkflowRequest = z.infer<typeof startWorkflowSchema>;
 
 export const submitStepSchema = z.object({
-  /** Optional note from assignee. Not stored in G4-3; reserved for G4-4 comments. */
-  note: z.string().max(1000).optional(),
+  submissionUrl: z.string().url().max(2048).optional().nullable(),
+  submissionNote: z.string().max(1000).optional().nullable(),
 });
 export type SubmitStepRequest = z.infer<typeof submitStepSchema>;
+
+// ─── Approval request ─────────────────────────────────────────────────────────
+
+export const approvalRequestStatusSchema = z.enum(["pending", "approved", "revision_requested"]);
+export type ApprovalRequestStatusDto = z.infer<typeof approvalRequestStatusSchema>;
+
+export const approvalRequestSchema = z.object({
+  id: z.string().uuid(),
+  companyId: z.string().uuid(),
+  workflowStepId: z.string().uuid(),
+  requestedBy: z.string().uuid(),
+  assigneeId: z.string().uuid().nullable(),
+  status: approvalRequestStatusSchema,
+  currentLevel: z.number().int().min(1),
+  maxLevel: z.number().int().min(1),
+  decidedAt: z.string().datetime().nullable(),
+  comment: z.string().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type ApprovalRequestDto = z.infer<typeof approvalRequestSchema>;
+
+export const approveRequestSchema = z.object({
+  comment: z.string().max(1000).optional().nullable(),
+});
+export type ApproveRequest = z.infer<typeof approveRequestSchema>;
+
+export const requestRevisionSchema = z.object({
+  description: z.string().min(1).max(2000),
+  comment: z.string().max(1000).optional().nullable(),
+});
+export type RequestRevisionRequest = z.infer<typeof requestRevisionSchema>;

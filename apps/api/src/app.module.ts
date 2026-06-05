@@ -9,6 +9,9 @@ import { HealthModule } from "./health/health.module";
 import { OrgModule } from "./org/org.module";
 import { MediaModule } from "./media/media.module";
 import { WorkflowModule } from "./workflow/workflow.module";
+import { TasksModule } from "./tasks/tasks.module";
+import { NotificationsModule } from "./notifications/notifications.module";
+import { ChatModule } from "./chat/chat.module";
 import { PermissionModule } from "./permission/permission.module";
 import { JwtAuthGuard } from "./permission/guards/jwt-auth.guard";
 import { CompanyGuard } from "./permission/guards/company.guard";
@@ -28,6 +31,9 @@ import { CompanyGuard } from "./permission/guards/company.guard";
     OrgModule,
     MediaModule,
     WorkflowModule,
+    TasksModule,
+    NotificationsModule,
+    ChatModule,
   ],
   providers: [
     // Global guard pipeline: JWT auth → company context extraction.

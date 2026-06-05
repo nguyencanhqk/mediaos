@@ -54,7 +54,7 @@ export class MediaController {
 
   @Post('projects')
   createProject(@Req() req: AuthenticatedRequest, @Body() dto: CreateProjectDto) {
-    return this.media.createProject(req.user.companyId, dto);
+    return this.media.createProject(req.user.companyId, dto, req.user.id);
   }
 
   @Post('projects/:id/channels')

@@ -1,9 +1,11 @@
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/notification-bell";
 import { useAuthStore } from "@/stores/auth";
 
 const NAV = [
   { to: "/", label: "Tổng quan" },
+  { to: "/tasks", label: "Công việc" },
   { to: "/channels", label: "Kênh" },
   { to: "/projects", label: "Dự án" },
   { to: "/org/departments", label: "Phòng ban" },
@@ -24,7 +26,10 @@ export function RootLayout() {
   return (
     <div className="flex min-h-screen">
       <aside className="flex w-52 shrink-0 flex-col border-r border-border bg-muted/40">
-        <div className="flex h-14 items-center px-4 font-semibold">MediaOS</div>
+        <div className="flex h-14 items-center justify-between px-4">
+          <span className="font-semibold">MediaOS</span>
+          <NotificationBell />
+        </div>
         <nav className="flex-1 space-y-0.5 px-2 py-2">
           {NAV.map(({ to, label }) => (
             <Link

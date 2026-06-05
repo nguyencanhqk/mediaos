@@ -36,3 +36,6 @@ export * from "./auth";
 export * from "./org";
 export * from "./media";
 export * from "./workflow";
+export * from "./task";
+export * from "./notification";
+export * from "./chat";

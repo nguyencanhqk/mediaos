@@ -8,6 +8,8 @@ import { EmployeesPage } from "@/routes/org/employees";
 import { ChannelsPage } from "@/routes/media/channels";
 import { ProjectsPage } from "@/routes/media/projects";
 import { ProjectDetailPage } from "@/routes/media/project-detail";
+import { TasksPage } from "@/routes/tasks/index";
+import { ProjectChatPage } from "@/routes/chat/project-chat";
 import { useAuthStore } from "@/stores/auth";
 
 const rootRoute = createRootRoute({ component: RootLayout });
@@ -75,6 +77,20 @@ const projectDetailRoute = createRoute({
   component: ProjectDetailPage,
 });
 
+const tasksRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tasks",
+  beforeLoad: authGuard,
+  component: TasksPage,
+});
+
+const projectChatRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/chat/projects/$projectId",
+  beforeLoad: authGuard,
+  component: ProjectChatPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
@@ -84,6 +100,8 @@ const routeTree = rootRoute.addChildren([
   channelsRoute,
   projectsRoute,
   projectDetailRoute,
+  tasksRoute,
+  projectChatRoute,
 ]);
 
 export const router = createRouter({ routeTree });
