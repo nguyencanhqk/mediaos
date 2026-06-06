@@ -6,17 +6,14 @@ import {
 } from '@nestjs/common';
 import type {
   AddChannelMemberRequest,
-  AddProjectChannelRequest,
   CreateChannelRequest,
   CreateContentItemRequest,
-  CreateProjectRequest,
   UpdateChannelMemberRequest,
   UpdateChannelRequest,
 } from '@mediaos/contracts';
 import { DatabaseService } from '../db/db.service';
 import { AuditService } from '../events/audit.service';
 import { MediaRepository, type ListChannelsFilter } from './media.repository';
-import { ChatService } from '../chat/chat.service';
 
 const PG_UNIQUE_VIOLATION = '23505';
 
@@ -40,7 +37,6 @@ export class MediaService {
     private readonly repo: MediaRepository,
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
-    private readonly chat: ChatService,
   ) {}
 
   // ── Platforms ──────────────────────────────────────────────────────────────
@@ -201,53 +197,7 @@ export class MediaService {
     });
   }
 
-  // ── Projects ──────────────────────────────────────────────────────────────
-
-  listProjects(companyId: string) {
-    return this.repo.listProjects(companyId);
-  }
-
-  async getProject(companyId: string, projectId: string) {
-    const project = await this.repo.findProjectById(companyId, projectId);
-    if (!project) throw new NotFoundException(`Project not found: ${projectId}`);
-    return project;
-  }
-
-  async createProject(companyId: string, dto: CreateProjectRequest, creatorId: string) {
-    let project: Awaited<ReturnType<MediaRepository['createProject']>>[0];
-    try {
-      const rows = await this.repo.createProject(companyId, {
-        name: dto.name,
-        orgUnitId: dto.orgUnitId ?? null,
-      });
-      if (!rows[0]) throw new InternalServerErrorException('Failed to create project');
-      project = rows[0];
-    } catch (err) {
-      if (isUniqueViolation(err)) throw new ConflictException('Project name already exists');
-      throw err;
-    }
-
-    // Auto-tạo phòng chat project (non-critical — lỗi không rollback project)
-    await this.chat.ensureProjectRoom(companyId, project.id, project.name, creatorId);
-
-    return project;
-  }
-
-  async addProjectChannel(companyId: string, projectId: string, dto: AddProjectChannelRequest) {
-    try {
-      const rows = await this.repo.addProjectChannel(companyId, projectId, dto.channelId);
-      if (!rows[0]) throw new InternalServerErrorException('Failed to link channel to project');
-      return rows[0];
-    } catch (err) {
-      if (isUniqueViolation(err)) throw new ConflictException('Channel already linked to this project');
-      throw err;
-    }
-  }
-
-  async removeProjectChannel(companyId: string, projectId: string, channelId: string) {
-    const rows = await this.repo.removeProjectChannel(companyId, projectId, channelId);
-    if (rows.length === 0) throw new NotFoundException('Channel not linked to this project');
-  }
+  // ── Content ──────────────────────────────────────────────────────────────
 
   listContent(companyId: string, projectId: string) {
     return this.repo.listContent(companyId, projectId);

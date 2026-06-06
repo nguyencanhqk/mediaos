@@ -1,67 +1,21 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  Param,
-  Post,
-  Req,
-  UsePipes,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, UsePipes } from '@nestjs/common';
 import { ZodValidationPipe } from 'nestjs-zod';
 import type { Request } from 'express';
 import { MediaService } from './media.service';
-import { AddProjectChannelDto, CreateContentItemDto, CreateProjectDto } from './media.dto';
+import { CreateContentItemDto } from './media.dto';
 
 interface AuthenticatedRequest extends Request {
   user: { id: string; companyId: string };
 }
 
 /**
- * MediaController (G4-2 legacy) — projects + content. Channels chuyển sang ChannelsController (G6-1).
- * Projects/content permission guard retrofit ở G6-3/G6-4.
+ * MediaController (G4-2 legacy) — content items. Channels → ChannelsController (G6-1),
+ * projects + project links → ProjectsController (G6-3). Content guard retrofit ở G6-4.
  */
 @Controller()
 @UsePipes(ZodValidationPipe)
 export class MediaController {
   constructor(private readonly media: MediaService) {}
-
-  // ── Projects ──────────────────────────────────────────────────────────────
-
-  @Get('projects')
-  listProjects(@Req() req: AuthenticatedRequest) {
-    return this.media.listProjects(req.user.companyId);
-  }
-
-  @Get('projects/:id')
-  getProject(@Req() req: AuthenticatedRequest, @Param('id') projectId: string) {
-    return this.media.getProject(req.user.companyId, projectId);
-  }
-
-  @Post('projects')
-  createProject(@Req() req: AuthenticatedRequest, @Body() dto: CreateProjectDto) {
-    return this.media.createProject(req.user.companyId, dto, req.user.id);
-  }
-
-  @Post('projects/:id/channels')
-  addProjectChannel(
-    @Req() req: AuthenticatedRequest,
-    @Param('id') projectId: string,
-    @Body() dto: AddProjectChannelDto,
-  ) {
-    return this.media.addProjectChannel(req.user.companyId, projectId, dto);
-  }
-
-  @Delete('projects/:id/channels/:channelId')
-  @HttpCode(204)
-  removeProjectChannel(
-    @Req() req: AuthenticatedRequest,
-    @Param('id') projectId: string,
-    @Param('channelId') channelId: string,
-  ) {
-    return this.media.removeProjectChannel(req.user.companyId, projectId, channelId);
-  }
 
   // ── Content ───────────────────────────────────────────────────────────────
 

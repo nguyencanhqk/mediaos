@@ -1,14 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { and, eq, ilike, isNull } from 'drizzle-orm';
 import { DatabaseService, type TenantTx } from '../db/db.service';
-import {
-  channelMembers,
-  channels,
-  contentItems,
-  platforms,
-  projectChannels,
-  projects,
-} from '../db/schema';
+import { channelMembers, channels, contentItems, platforms } from '../db/schema';
 
 /** Input tạo kênh (đã validate ở DTO; platform = code khớp catalog). */
 export interface CreateChannelData {
@@ -254,85 +247,6 @@ export class MediaRepository {
         ),
       )
       .returning();
-  }
-
-  // ── Projects ─────────────────────────────────────────────────────────────
-
-  async listProjects(companyId: string) {
-    return this.db.withTenant(companyId, async (tx) => {
-      const projectRows = await tx
-        .select()
-        .from(projects)
-        .where(and(eq(projects.companyId, companyId), isNull(projects.deletedAt)))
-        .orderBy(projects.name);
-
-      const channelRows = await tx
-        .select({
-          projectId: projectChannels.projectId,
-          id: channels.id,
-          name: channels.name,
-          platform: channels.platform,
-        })
-        .from(projectChannels)
-        .innerJoin(channels, and(eq(projectChannels.channelId, channels.id), isNull(channels.deletedAt)))
-        .where(eq(projectChannels.companyId, companyId));
-
-      const channelsByProject = new Map<string, { id: string; name: string; platform: string }[]>();
-      for (const c of channelRows) {
-        const list = channelsByProject.get(c.projectId) ?? [];
-        list.push({ id: c.id, name: c.name, platform: c.platform });
-        channelsByProject.set(c.projectId, list);
-      }
-
-      return projectRows.map((p) => ({ ...p, channels: channelsByProject.get(p.id) ?? [] }));
-    });
-  }
-
-  async findProjectById(companyId: string, projectId: string) {
-    return this.db.withTenant(companyId, async (tx) => {
-      const [project] = await tx
-        .select()
-        .from(projects)
-        .where(and(eq(projects.companyId, companyId), eq(projects.id, projectId), isNull(projects.deletedAt)))
-        .limit(1);
-
-      if (!project) return null;
-
-      const channelRows = await tx
-        .select({ id: channels.id, name: channels.name, platform: channels.platform })
-        .from(projectChannels)
-        .innerJoin(channels, and(eq(projectChannels.channelId, channels.id), isNull(channels.deletedAt)))
-        .where(and(eq(projectChannels.companyId, companyId), eq(projectChannels.projectId, projectId)));
-
-      return { ...project, channels: channelRows };
-    });
-  }
-
-  createProject(companyId: string, data: { name: string; orgUnitId?: string | null }) {
-    return this.db.withTenant(companyId, (tx) =>
-      tx.insert(projects).values({ companyId, ...data, orgUnitId: data.orgUnitId ?? null }).returning(),
-    );
-  }
-
-  addProjectChannel(companyId: string, projectId: string, channelId: string) {
-    return this.db.withTenant(companyId, (tx) =>
-      tx.insert(projectChannels).values({ companyId, projectId, channelId }).returning(),
-    );
-  }
-
-  removeProjectChannel(companyId: string, projectId: string, channelId: string) {
-    return this.db.withTenant(companyId, (tx) =>
-      tx
-        .delete(projectChannels)
-        .where(
-          and(
-            eq(projectChannels.companyId, companyId),
-            eq(projectChannels.projectId, projectId),
-            eq(projectChannels.channelId, channelId),
-          ),
-        )
-        .returning(),
-    );
   }
 
   // ── Content ──────────────────────────────────────────────────────────────
