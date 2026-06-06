@@ -80,8 +80,8 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 | G2 | Nền bảo mật & đa-tenant | 🛠️ TDD 🔋 | XL | ✅ đóng (PR #2 merged master — 62 files, 3330 insertions, CI xanh) |
 | G3 | Permission Engine | 🛠️ TDD 🔋 | L | ✅ đóng (merged master — 119 tests, typecheck clean, FULL gate passed) |
 | G4 | 🏁 MVP-0 Walking Skeleton | 🤖+🛠️ hỗn hợp | XL | 🟡 đang làm |
-| G5 | Tổ chức & Nhân sự đầy đủ | 🤖 AI-bulk 🟢 | L | ☐ |
-| G6 | Media (Channel/Project/Content) | 🤖 + 🛠️(G6-2) | L | ☐ |
+| G5 | Tổ chức & Nhân sự đầy đủ | 🤖 AI-bulk 🟢 | L | ✅ |
+| G6 | Media (Channel/Project/Content) | 🤖 + 🛠️(G6-2) | L | 🟡 đang làm (plan ✅ PASS) |
 | G7 | Workflow Builder | 🛠️ TDD 🔋 | XL | ☐ |
 | G8 | Approval · Defect · Eval · KPI | 🛠️+🤖 | L | ☐ |
 | G9 | 🧩 Task Hub hợp nhất | 🛠️+🤖 | L | ☐ |
@@ -177,8 +177,8 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 - [x] **G4-4** 🤖🟢 (M) My Tasks + submit work (file/link) + comment. _(`ecc:tdd-workflow`)_ — GET /tasks (tasks table, joined step+content), POST /tasks/:id/comments + GET comments; FE /tasks page (2-panel: list + detail), SubmitWorkForm (link+note→submitStep), CommentThread; submission_url/note on workflow_steps; migration 0009; typecheck+125 tests green.
 - [x] **G4-5** 🛠️🔋 (M) **Approval 1 cấp** + **return revision**. TDD: 12 deny+happy tests RED→GREEN; validateConsumerTransition added to FSM; ApprovalService (approve T3, requestRevision T4 + defect + revision task); repository: approvalSteps, closeApprovalRequest, advanceInstanceStepOrder, completeWorkflowInstance, createDefect, findMaxStepOrder; 3 endpoints (GET/POST approval-requests); FE: "Chờ duyệt" tab with ApprovalCard (approve / trả về form); 137 API + 17 web tests green, typecheck clean.
 - [x] **G4-6** 🤖🟢 (M) Notification cơ bản + 1 group chat project (auto-tạo). _(migration 0010: 4 bảng RLS; BE NotificationsModule + ChatModule; auto-create project chat room khi tạo project; FE NotificationBell (poll 30s) + /chat/projects/:id; LIGHT gate passed, 3 HIGH fixes applied; typecheck + 154 tests xanh)_
-- [ ] **G4-7** 🧪🔋 (M) **E2E**: 1 video đi trọn vòng đời; chạy lại test isolation G2-5. _(`ecc:e2e-runner`)_
-- [ ] **G4-8** 🔧 (S) **Triển khai pilot 1 team thật**; thu feedback. _(deploy + lắng nghe — không code)._
+- [x] **G4-7** 🧪🟢 (M) **E2E**: 1 video đi trọn vòng đời; chạy lại test isolation G2-5. _(17-test E2E spec: Script→Edit→QA→Upload lifecycle + revision flow + tenant isolation cross-check; G2-5 harness mở rộng thêm 22 bảng G4 với idColumn/skipNoContext; fix 3 production bugs: auth.controller.ts thiếu @Public(), audit_logs CHECK constraint, route ordering approval-requests vs :instanceId; fix 2 migration bugs: task_comments thiếu GRANT + policy thiếu NULLIF; 282 tests xanh, LIGHT gate passed)_
+- [x] **G4-8** 🔧 (S) **Triển khai pilot 1 team thật**; thu feedback. _(deploy checklist → [`docs/pilot/deploy-checklist.md`](docs/pilot/deploy-checklist.md); feedback form → [`docs/pilot/feedback-template.md`](docs/pilot/feedback-template.md))._
 
 ✅ **Done khi:** một video thật đi tạo → task → nộp → duyệt → trả sửa → upload; **pilot team dùng được**. 🎉 _Ăn mừng — bạn vừa qua phần khó nhất về mặt tâm lý._
 
@@ -194,11 +194,11 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 > Gần như **toàn bộ sinh từ ERD**. Solo: đây là chỗ AI cày, bạn duyệt. Tận hưởng cụm nhẹ.
 
-- [ ] **G5-1** 🤖🟢 (S) Company Settings: logo, múi giờ, tiền tệ, ngôn ngữ, ngày làm việc, cấu hình kỳ lương.
-- [ ] **G5-2** 🤖🟢 (M) Org tree phòng ban/khối cha–con + **Sơ đồ tổ chức** (cây). _(PRD ORG-002)_
-- [ ] **G5-3** 🤖🟢 (M) Team/Ekip + `team_members` — **1 nhân sự nhiều team** (ORG-003, EMP-002).
-- [ ] **G5-4** 🤖🟢 (S) Chức vụ (Position) + gán role mặc định theo chức vụ.
-- [ ] **G5-5** 🤖🟢 (M) Employee profile đầy đủ (tabs) + **import nhân sự**; lương **mask theo quyền** (server mask, không phải client).
+- [x] **G5-1** 🤖🟢 (S) Company Settings: logo, múi giờ, tiền tệ, ngôn ngữ, ngày làm việc, cấu hình kỳ lương.
+- [x] **G5-2** 🤖🟢 (M) Org tree phòng ban/khối cha–con + **Sơ đồ tổ chức** (cây). _(PRD ORG-002)_
+- [x] **G5-3** 🤖🟢 (M) Team/Ekip + `team_members` — **1 nhân sự nhiều team** (ORG-003, EMP-002).
+- [x] **G5-4** 🤖🟢 (S) Chức vụ (Position) + gán role mặc định theo chức vụ.
+- [x] **G5-5** 🤖🟢 (M) Employee profile đầy đủ (tabs) + **import nhân sự**; lương **mask theo quyền** (server mask, không phải client).
 
 **DB:** `companies` `org_units` `teams` `team_members` `positions` `employee_profiles`
 **Màn:** Company Settings · Org Chart · Department/Team/Position List · Employee List/Detail
@@ -209,6 +209,10 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 ## G6 — Media: Channel · Account · Project · Content _(🤖 + 🛠️ G6-2 · ~10–14 ngày)_
 
 > Phần lớn 🤖, **trừ G6-2** là crown-jewel 🔋 (mã hoá tài khoản kênh). Đừng để AI tự do ở G6-2.
+>
+> **Trạng thái (2026-06-06):** Plan chi tiết xong + `plan-reviewer` **PASS** (không còn BLOCKING) → [`docs/plans/G6-media-full.md`](docs/plans/G6-media-full.md). Migration **0020–0028** (latest hiện tại 0019). Micro-step + đặc tả G6-2 envelope encryption nằm trong plan; theo plan, KHÔNG theo dòng tóm tắt dưới đây.
+> ⚠️ **2 bước bắt buộc plan-reviewer chèn thêm:** (1) **`2e0`** vá `PermissionGuard` forward `resourceId`+`ctx` + **fail-closed 403** khi action sensitive thiếu resourceId — TRƯỚC khi mở reveal-secret (nếu không → bypass Tầng-3 object_permissions). (2) **`1a-bis`** mở rộng `test/integration/rls-registry.ts` thêm ~10 bảng G6 vào harness 2-tenant TRƯỚC khi tuyên bố G2-5 xanh (tránh xanh-giả).
+> **Thứ tự bắt đầu:** `0a` (migration 0020 audit object_types) → `1a-bis` (mở rộng RLS harness) → G6-1 → … → `2e0` (vá guard) → G6-2.
 
 - [ ] **G6-1** 🤖🟢 (M) Platform + Channel + `channel_members` + gán Manager/team; lọc theo nền tảng/trạng thái.
 - [ ] **G6-2** 🛠️🔋 (L) 🔒 **Platform Account Encryption** (envelope + KMS/Vault, mã hoá app-side; `reveal-secret` + re-auth + **audit mỗi lần xem/sửa**). **FULL gate.** _(custom `secret-encryption-reviewer`; `ecc:security-reviewer` + `ecc:database-reviewer`)._
