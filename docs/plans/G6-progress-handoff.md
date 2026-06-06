@@ -2,7 +2,7 @@
 
 > Đọc file này + [`G6-media-full.md`](./G6-media-full.md) (kế hoạch gốc, plan-reviewer PASS) TRƯỚC khi code tiếp.
 > Mục tiêu: 1 session mới cầm file này là tiếp tục được ngay, không phải dò lại.
-> Cập nhật lần cuối: 2026-06-06 · Branch: **`feat/g6-media`** · HEAD: **`c5060aa`**
+> Cập nhật lần cuối: 2026-06-06 · Branch: **`feat/g6-media`** · HEAD: **`f4a07d2`**
 
 ---
 
@@ -15,12 +15,14 @@
 | `d246d74` `feat(g6-0)` | **Migration 0020** — `audit_logs_object_type_chk` + `AUDIT_OBJECT_TYPES` (11 type G6, cùng commit) | ✅ |
 | `8a9fbe3` `feat(g6-1)` | **Migration 0021** — `platforms` (catalog global, seed 6) + ALTER `channels` (platform_id FK, reconcile, widen status, health cols, partial-unique code) + `channel_members`; Drizzle schema + contracts + create-path + RLS registry | ✅ |
 | `c5060aa` `feat(g6-1d)` | `ChannelsController` (permission-gated) + channel CRUD/filter/get/update/soft-delete + members CRUD + **audit-in-tx** + `GET /platforms` | ✅ typecheck + regression |
+| `f4a07d2` `feat(g6-1e)` | **FE channels**: `channels-api` client + `ChannelTable` (TanStack Table v8) + `ChannelFilterBar` (platform/status/manager/niche/q) + `CreateChannelDialog`/`EditChannelDialog` + detail `/channels/$id` tabs (Overview/Members) + members CRUD; `Dialog`/`Select` primitives; `<PermissionGate>` create/update/delete | ✅ typecheck(3 pkg)+lint+17 test+vite build |
 
 **Trạng thái DB thực tế (đã verify live):**
 - DB từng kẹt ở **0013** (G5 0014–0019 + G6 0020–0021 CHƯA từng apply). Nay đã migrate sạch tới **0021** (22 record trong `drizzle.__drizzle_migrations`).
 - `platforms` seed 6 code; `channels.platform_id` NOT NULL; `channels_status_check` = 5 value mới; `channel_members` tồn tại; audit CHECK có đủ type G6.
 - **G2-5 2-tenant regression: 100 pass / 2 skip** (đã phủ `channels` + `channel_members`).
 - `pnpm typecheck` xanh cả 3 package.
+- **G6-1e FE (f4a07d2):** typecheck 3 pkg + lint (0 error) + 17 web test + `vite build` xanh. Cài thêm dep `@tanstack/react-table` (data-grid theo CLAUDE.md). KHÔNG migration. ⚠️ Chưa render live với API+DB (mới verify build/type, chưa chạy browser + auth + seed).
 
 ---
 
@@ -64,12 +66,12 @@ pnpm typecheck
 
 ## 4. Còn lại — theo THỨ TỰ (user chốt: làm hết phần 🟢 rồi mới tới G6-2)
 
-### 4.1 — G6-1e (FE channels) · 🟢 · KHÔNG migration
-- `/channels`: `ChannelTable` (TanStack Table v8) + `ChannelFilterBar` (platform/status/manager/niche) + `CreateChannelDialog`.
-- `/channels/$channelId`: tab shell `<Tabs>` → Overview + Members (`AddChannelMemberDialog`).
-- API client: `apps/web/src/lib/` (mẫu `employees-api.ts`). Endpoint đã có: `GET/POST/PATCH/DELETE /channels`, `/channels/:id/members`, `GET /platforms`.
-- Route mới trong `apps/web/src/router.tsx` (beforeLoad: authGuard). Mọi phần nhạy cảm bọc `<PermissionGate action resourceType>`.
-- **DoD**: typecheck FE xanh; list/filter/detail render.
+### 4.1 — G6-1e (FE channels) · 🟢 · KHÔNG migration · ✅ XONG (`f4a07d2`)
+- ✅ `lib/channels-api.ts` (dùng `apiFetch` chung từ `api-client.ts`) — channels CRUD + members + `GET /platforms`. Đã gỡ `listChannels`/`createChannel` trùng khỏi `media-api.ts`.
+- ✅ `components/channels/`: `ChannelTable` (TanStack Table v8, sort + link), `ChannelFilterBar` (platform/status/manager/niche/q), `CreateChannelDialog` + `EditChannelDialog` (dùng chung `channel-form-fields.tsx`), `AddChannelMemberDialog`, `constants.ts` (label VI), `use-channel-options.ts` (employees/teams cho dropdown).
+- ✅ Primitives mới: `components/ui/dialog.tsx` + `components/ui/select.tsx` (house style nhẹ, không kéo shadcn nặng).
+- ✅ `/channels` (rewrite) + `/channels/$channelId` (mới, tab Overview + Members; tab dùng state nội bộ, không cần lib Tabs). Route `channelDetailRoute` trong `router.tsx` (beforeLoad: authGuard). Mọi phần nhạy cảm bọc `<PermissionGate>` create/update/delete.
+- **DoD**: ✅ typecheck FE xanh. ⚠️ list/filter/detail mới verify ở mức build/type — **chưa render live** (cần `db:up` + api + web + login + seed để chốt).
 
 ### 4.2 — G6-3 (Projects full) · 🟢 · plan §4 G6-3 (SQL sẵn)
 - **3a Migration 0023** `g6_projects_full.sql`: ALTER `projects` (code/type/owner/manager/dates/priority/budget + CHECK type+priority) + ALTER `project_channels` (role_in_project, status + **GRANT UPDATE** + **fix-forward `project_channels_uq` dẫn đầu company_id**) + CREATE `project_teams` + `project_members` (RLS+FORCE). → journal 0023 → **migrate + regression + thêm 3 bảng vào rls-registry**.
@@ -100,10 +102,10 @@ pnpm typecheck
 ## 5. Khởi động session mới (copy-paste)
 
 ```
-Tôi tiếp tục G6 trên branch feat/g6-media (HEAD c5060aa).
+Tôi tiếp tục G6 trên branch feat/g6-media (HEAD f4a07d2).
 Đọc: docs/plans/G6-progress-handoff.md + docs/plans/G6-media-full.md.
-Đã xong tới G6-1d (backend channels, đã verify migrate 0014–0021 + 2-tenant regression 100 pass).
-Tiếp theo: [G6-1e FE]  (hoặc nêu bước bạn muốn).
+Đã xong tới G6-1e (FE channels — list/filter/table + detail tabs + members; typecheck/lint/test/build xanh, chưa render live).
+Tiếp theo: [G6-3 Projects full — CÓ migration 0023]  (hoặc nêu bước bạn muốn).
 Trước khi code: pnpm db:up; nếu cần migrate dùng:  set -a && . ./.env && set +a && pnpm --filter @mediaos/api db:migrate
 ```
 
