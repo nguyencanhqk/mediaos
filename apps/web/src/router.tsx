@@ -8,6 +8,7 @@ import { EmployeesPage } from "@/routes/org/employees";
 import { PositionsPage } from "@/routes/org/positions";
 import { CompanySettingsPage } from "@/routes/settings/company";
 import { ChannelsPage } from "@/routes/media/channels";
+import { ChannelDetailPage } from "@/routes/media/channel-detail";
 import { ProjectsPage } from "@/routes/media/projects";
 import { ProjectDetailPage } from "@/routes/media/project-detail";
 import { TasksPage } from "@/routes/tasks/index";
@@ -65,6 +66,13 @@ const channelsRoute = createRoute({
   component: ChannelsPage,
 });
 
+const channelDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/channels/$channelId",
+  beforeLoad: authGuard,
+  component: ChannelDetailPage,
+});
+
 const projectsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects",
@@ -116,6 +124,7 @@ const routeTree = rootRoute.addChildren([
   positionsRoute,
   companySettingsRoute,
   channelsRoute,
+  channelDetailRoute,
   projectsRoute,
   projectDetailRoute,
   tasksRoute,

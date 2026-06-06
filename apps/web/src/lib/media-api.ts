@@ -1,15 +1,10 @@
 import { z } from "zod";
 import type {
-  CreateChannelRequest,
   CreateProjectRequest,
   CreateContentItemRequest,
   AddProjectChannelRequest,
 } from "@mediaos/contracts";
-import {
-  channelSchema,
-  projectSchema,
-  contentItemSchema,
-} from "@mediaos/contracts";
+import { projectSchema, contentItemSchema } from "@mediaos/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3100/api/v1";
 
@@ -28,10 +23,6 @@ async function apiFetch<T>(path: string, schema: z.ZodType<T>, init?: RequestIni
 }
 
 export const mediaApi = {
-  listChannels: () => apiFetch("/channels", z.array(channelSchema)),
-  createChannel: (data: CreateChannelRequest) =>
-    apiFetch("/channels", channelSchema, { method: "POST", body: JSON.stringify(data) }),
-
   listProjects: () => apiFetch("/projects", z.array(projectSchema)),
   getProject: (projectId: string) => apiFetch(`/projects/${projectId}`, projectSchema),
   createProject: (data: CreateProjectRequest) =>

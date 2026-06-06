@@ -1,60 +1,81 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { mediaApi } from "@/lib/media-api";
-import type { ChannelPlatform } from "@mediaos/contracts";
-
-const PLATFORMS: ChannelPlatform[] = ["youtube", "tiktok", "facebook", "instagram"];
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ChannelDto } from "@mediaos/contracts";
+import { channelsApi, type ChannelFilters } from "@/lib/channels-api";
+import { PermissionGate } from "@/components/permission-gate";
+import { useCan } from "@/hooks/use-can";
+import { ChannelFilterBar } from "@/components/channels/channel-filter-bar";
+import { ChannelTable } from "@/components/channels/channel-table";
+import { CreateChannelDialog } from "@/components/channels/create-channel-dialog";
+import { useEmployeeOptions } from "@/components/channels/use-channel-options";
 
 export function ChannelsPage() {
   const qc = useQueryClient();
-  const [name, setName] = useState("");
-  const [platform, setPlatform] = useState<ChannelPlatform>("youtube");
+  const [filters, setFilters] = useState<ChannelFilters>({});
+  const canDelete = useCan("delete", "channel");
+  const employees = useEmployeeOptions();
 
-  const { data: channels = [], isLoading, isError } = useQuery({
-    queryKey: ["channels"],
-    queryFn: mediaApi.listChannels,
+  const {
+    data: channels = [],
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ["channels", filters],
+    queryFn: () => channelsApi.listChannels(filters),
   });
 
-  const create = useMutation({
-    mutationFn: () => mediaApi.createChannel({ name, platform }),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["channels"] }); setName(""); },
+  // Fetch không lọc → suy ra danh sách niche cho dropdown filter.
+  const { data: allChannels = [] } = useQuery({
+    queryKey: ["channels", "all"],
+    queryFn: () => channelsApi.listChannels(),
   });
+
+  const nicheOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of allChannels) if (c.niche) set.add(c.niche);
+    return [...set].sort((a, b) => a.localeCompare(b, "vi"));
+  }, [allChannels]);
+
+  const remove = useMutation({
+    mutationFn: (id: string) => channelsApi.deleteChannel(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["channels"] }),
+  });
+
+  const onDelete = (channel: ChannelDto) => {
+    if (window.confirm(`Xoá kênh "${channel.name}"?`)) remove.mutate(channel.id);
+  };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-8">
-      <h1 className="text-2xl font-semibold">Kênh</h1>
-
-      <div className="flex gap-2">
-        <Input placeholder="Tên kênh…" value={name} onChange={(e) => setName(e.target.value)} className="max-w-xs" />
-        <select
-          value={platform}
-          onChange={(e) => setPlatform(e.target.value as ChannelPlatform)}
-          className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-        >
-          {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
-        <Button onClick={() => create.mutate()} disabled={!name.trim() || create.isPending}>Thêm</Button>
+    <div className="mx-auto max-w-6xl space-y-6 p-8">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Kênh</h1>
+        <PermissionGate action="create" resourceType="channel">
+          <CreateChannelDialog />
+        </PermissionGate>
       </div>
+
+      <ChannelFilterBar
+        filters={filters}
+        onChange={(patch) => setFilters((f) => ({ ...f, ...patch }))}
+        onClear={() => setFilters({})}
+        employees={employees}
+        nicheOptions={nicheOptions}
+      />
 
       {isLoading && <p className="text-sm text-muted-foreground">Đang tải…</p>}
       {isError && <p className="text-sm text-destructive">Không tải được dữ liệu.</p>}
-
-      <ul className="divide-y divide-border rounded-xl border border-border">
-        {channels.map((c) => (
-          <li key={c.id} className="flex items-center justify-between px-4 py-3 text-sm">
-            <span className="font-medium">{c.name}</span>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground capitalize">{c.platform}</span>
-              <span className={`text-xs ${c.status === "active" ? "text-green-600" : "text-muted-foreground"}`}>{c.status}</span>
-            </div>
-          </li>
-        ))}
-        {channels.length === 0 && !isLoading && (
-          <li className="px-4 py-3 text-sm text-muted-foreground">Chưa có kênh nào.</li>
-        )}
-      </ul>
+      {!isLoading && !isError && channels.length === 0 && (
+        <p className="text-sm text-muted-foreground">Không có kênh nào khớp bộ lọc.</p>
+      )}
+      {channels.length > 0 && (
+        <ChannelTable
+          channels={channels}
+          employees={employees}
+          canDelete={canDelete}
+          onDelete={onDelete}
+          deletingId={remove.isPending ? remove.variables : null}
+        />
+      )}
     </div>
   );
 }
