@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, eq, ilike, isNull } from 'drizzle-orm';
+import { and, eq, ilike, inArray, isNull } from 'drizzle-orm';
 import { DatabaseService, type TenantTx } from '../db/db.service';
 import {
   channels,
@@ -8,6 +8,7 @@ import {
   projects,
   projectTeams,
   teams,
+  users,
 } from '../db/schema';
 
 /** Input tạo project (đã validate ở DTO). numeric/date đã chuẩn hoá sang string|null ở service. */
@@ -110,6 +111,9 @@ export class ProjectsRepository {
         .where(and(...conds))
         .orderBy(projects.name);
 
+      const projectIds = projectRows.map((p) => p.id);
+      if (projectIds.length === 0) return [];
+
       const channelRows = await tx
         .select({
           projectId: projectChannels.projectId,
@@ -122,7 +126,12 @@ export class ProjectsRepository {
         })
         .from(projectChannels)
         .innerJoin(channels, and(eq(projectChannels.channelId, channels.id), isNull(channels.deletedAt)))
-        .where(eq(projectChannels.companyId, companyId));
+        .where(
+          and(
+            eq(projectChannels.companyId, companyId),
+            inArray(projectChannels.projectId, projectIds),
+          ),
+        );
 
       const byProject = new Map<string, Omit<(typeof channelRows)[number], 'projectId'>[]>();
       for (const { projectId, ...link } of channelRows) {
@@ -185,15 +194,53 @@ export class ProjectsRepository {
     });
   }
 
-  /** Tồn tại + thuộc tenant + chưa xoá? (guard nhẹ cho link ops, tránh load toàn bộ detail). */
+  /** Tồn tại + thuộc tenant + chưa xoá? (guard nhẹ cho read link ops, tránh load toàn bộ detail). */
   async projectExists(companyId: string, projectId: string): Promise<boolean> {
-    const rows = await this.db.withTenant(companyId, (tx) =>
-      tx
-        .select({ id: projects.id })
-        .from(projects)
-        .where(and(eq(projects.companyId, companyId), eq(projects.id, projectId), isNull(projects.deletedAt)))
-        .limit(1),
-    );
+    const rows = await this.db.withTenant(companyId, (tx) => this.selectProjectId(tx, companyId, projectId));
+    return rows.length > 0;
+  }
+
+  // ── In-tx tenant-scoped existence (guard cross-tenant link + TOCTOU trong CÙNG tx ghi) ──
+
+  private selectProjectId(tx: TenantTx, companyId: string, projectId: string) {
+    return tx
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.companyId, companyId), eq(projects.id, projectId), isNull(projects.deletedAt)))
+      .limit(1);
+  }
+
+  async projectExistsTx(tx: TenantTx, companyId: string, projectId: string): Promise<boolean> {
+    return (await this.selectProjectId(tx, companyId, projectId)).length > 0;
+  }
+
+  /** Kênh thuộc tenant + chưa xoá? (chặn gắn channel chéo tenant). */
+  async channelExistsTx(tx: TenantTx, companyId: string, channelId: string): Promise<boolean> {
+    const rows = await tx
+      .select({ id: channels.id })
+      .from(channels)
+      .where(and(eq(channels.companyId, companyId), eq(channels.id, channelId), isNull(channels.deletedAt)))
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  /** Team thuộc tenant? (chặn gắn team chéo tenant). */
+  async teamExistsTx(tx: TenantTx, companyId: string, teamId: string): Promise<boolean> {
+    const rows = await tx
+      .select({ id: teams.id })
+      .from(teams)
+      .where(and(eq(teams.companyId, companyId), eq(teams.id, teamId)))
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  /** User thuộc tenant? (chặn thêm member chéo tenant). */
+  async userExistsTx(tx: TenantTx, companyId: string, userId: string): Promise<boolean> {
+    const rows = await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.companyId, companyId), eq(users.id, userId)))
+      .limit(1);
     return rows.length > 0;
   }
 

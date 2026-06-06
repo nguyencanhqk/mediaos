@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
@@ -19,11 +20,11 @@ import { ChatService } from '../chat/chat.service';
 import { ProjectsRepository, type ListProjectsFilter } from './projects.repository';
 
 const PG_UNIQUE_VIOLATION = '23505';
-const PG_FK_VIOLATION = '23503';
 
 function pgErrorCode(err: unknown): string | undefined {
   if (typeof err === 'object' && err !== null && 'code' in err) {
-    return (err as Record<string, unknown>)['code'] as string | undefined;
+    const code = (err as Record<string, unknown>)['code'];
+    return typeof code === 'string' ? code : undefined;
   }
   return undefined;
 }
@@ -32,6 +33,7 @@ function pgErrorCode(err: unknown): string | undefined {
 function numToStr(v: number | null | undefined): string | null | undefined {
   if (v === undefined) return undefined;
   if (v === null) return null;
+  if (!Number.isFinite(v)) throw new BadRequestException(`Invalid numeric value: ${v}`);
   return String(v);
 }
 
@@ -161,9 +163,13 @@ export class ProjectsService {
   // ── Project ↔ channels ───────────────────────────────────────────────────
 
   async addProjectChannel(user: RequestUser, projectId: string, dto: AddProjectChannelRequest) {
-    await this.assertProjectExists(user.companyId, projectId);
     try {
       return await this.db.withTenant(user.companyId, async (tx) => {
+        // Guard project + kênh THUỘC tenant trong CÙNG tx (chặn chéo tenant + TOCTOU soft-delete).
+        if (!(await this.repo.projectExistsTx(tx, user.companyId, projectId)))
+          throw new NotFoundException(`Project not found: ${projectId}`);
+        if (!(await this.repo.channelExistsTx(tx, user.companyId, dto.channelId)))
+          throw new NotFoundException(`Channel not found: ${dto.channelId}`);
         const rows = await this.repo.addProjectChannel(
           user.companyId,
           projectId,
@@ -181,9 +187,8 @@ export class ProjectsService {
         return rows[0];
       });
     } catch (err) {
-      const code = pgErrorCode(err);
-      if (code === PG_UNIQUE_VIOLATION) throw new ConflictException('Channel already linked to this project');
-      if (code === PG_FK_VIOLATION) throw new NotFoundException(`Channel not found: ${dto.channelId}`);
+      if (pgErrorCode(err) === PG_UNIQUE_VIOLATION)
+        throw new ConflictException('Channel already linked to this project');
       throw err;
     }
   }
@@ -230,9 +235,12 @@ export class ProjectsService {
   }
 
   async addProjectTeam(user: RequestUser, projectId: string, dto: AddProjectTeamRequest) {
-    await this.assertProjectExists(user.companyId, projectId);
     try {
       return await this.db.withTenant(user.companyId, async (tx) => {
+        if (!(await this.repo.projectExistsTx(tx, user.companyId, projectId)))
+          throw new NotFoundException(`Project not found: ${projectId}`);
+        if (!(await this.repo.teamExistsTx(tx, user.companyId, dto.teamId)))
+          throw new NotFoundException(`Team not found: ${dto.teamId}`);
         const rows = await this.repo.addProjectTeam(
           user.companyId,
           projectId,
@@ -250,9 +258,8 @@ export class ProjectsService {
         return rows[0];
       });
     } catch (err) {
-      const code = pgErrorCode(err);
-      if (code === PG_UNIQUE_VIOLATION) throw new ConflictException('Team already linked to this project');
-      if (code === PG_FK_VIOLATION) throw new NotFoundException(`Team not found: ${dto.teamId}`);
+      if (pgErrorCode(err) === PG_UNIQUE_VIOLATION)
+        throw new ConflictException('Team already linked to this project');
       throw err;
     }
   }
@@ -264,7 +271,8 @@ export class ProjectsService {
       await this.audit.record(tx, {
         action: 'ProjectTeamUnlinked',
         objectType: 'project_team',
-        objectId: rows[0].id,
+        // objectId = teamId (junction-row id bị hard-delete → vô dụng để truy vết).
+        objectId: teamId,
         actorUserId: user.id,
         after: { projectId, teamId },
       });
@@ -279,9 +287,13 @@ export class ProjectsService {
   }
 
   async addProjectMember(user: RequestUser, projectId: string, dto: AddProjectMemberRequest) {
-    await this.assertProjectExists(user.companyId, projectId);
+    const workloadPercent = numToStr(dto.workloadPercent) ?? null;
     try {
       return await this.db.withTenant(user.companyId, async (tx) => {
+        if (!(await this.repo.projectExistsTx(tx, user.companyId, projectId)))
+          throw new NotFoundException(`Project not found: ${projectId}`);
+        if (!(await this.repo.userExistsTx(tx, user.companyId, dto.userId)))
+          throw new NotFoundException(`User not found: ${dto.userId}`);
         const rows = await this.repo.addProjectMember(
           user.companyId,
           projectId,
@@ -289,7 +301,7 @@ export class ProjectsService {
             userId: dto.userId,
             roleInProject: dto.roleInProject ?? null,
             permissionLevel: dto.permissionLevel ?? null,
-            workloadPercent: numToStr(dto.workloadPercent) ?? null,
+            workloadPercent,
             startDate: dto.startDate ?? null,
             endDate: dto.endDate ?? null,
           },
@@ -306,9 +318,8 @@ export class ProjectsService {
         return rows[0];
       });
     } catch (err) {
-      const code = pgErrorCode(err);
-      if (code === PG_UNIQUE_VIOLATION) throw new ConflictException('User already a member of this project');
-      if (code === PG_FK_VIOLATION) throw new NotFoundException(`User not found: ${dto.userId}`);
+      if (pgErrorCode(err) === PG_UNIQUE_VIOLATION)
+        throw new ConflictException('User already a member of this project');
       throw err;
     }
   }
