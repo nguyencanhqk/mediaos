@@ -1,7 +1,27 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { and, eq, isNull } from 'drizzle-orm';
 import { DatabaseService } from '../db/db.service';
-import { channels, contentItems, projectChannels, projects } from '../db/schema';
+import { channels, contentItems, platforms, projectChannels, projects } from '../db/schema';
+
+/** Input tạo kênh (đã validate ở DTO; platform = code khớp catalog). */
+export interface CreateChannelData {
+  name: string;
+  platform: string;
+  code?: string | null;
+  url?: string | null;
+  language?: string | null;
+  targetCountry?: string | null;
+  niche?: string | null;
+  channelManagerId?: string | null;
+  primaryTeamId?: string | null;
+}
+
+/** Normalize '' → NULL ở boundary (partial unique code dùng `code IS NOT NULL`). */
+function normalizeOptional(value: string | null | undefined): string | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}
 
 @Injectable()
 export class MediaRepository {
@@ -19,10 +39,34 @@ export class MediaRepository {
     );
   }
 
-  createChannel(companyId: string, data: { name: string; platform: string }) {
-    return this.db.withTenant(companyId, (tx) =>
-      tx.insert(channels).values({ companyId, ...data }).returning(),
-    );
+  createChannel(companyId: string, data: CreateChannelData) {
+    return this.db.withTenant(companyId, async (tx) => {
+      // Resolve platform_id từ catalog global (platforms không RLS, app có GRANT SELECT).
+      const [platform] = await tx
+        .select({ id: platforms.id })
+        .from(platforms)
+        .where(eq(platforms.code, data.platform))
+        .limit(1);
+      if (!platform) {
+        throw new BadRequestException(`Unknown platform code: ${data.platform}`);
+      }
+      return tx
+        .insert(channels)
+        .values({
+          companyId,
+          name: data.name,
+          platform: data.platform, // legacy text mirror platform_id (DROP ở 0029)
+          platformId: platform.id,
+          code: normalizeOptional(data.code),
+          url: normalizeOptional(data.url),
+          language: normalizeOptional(data.language),
+          targetCountry: normalizeOptional(data.targetCountry),
+          niche: normalizeOptional(data.niche),
+          channelManagerId: data.channelManagerId ?? null,
+          primaryTeamId: data.primaryTeamId ?? null,
+        })
+        .returning();
+    });
   }
 
   // ── Projects ─────────────────────────────────────────────────────────────

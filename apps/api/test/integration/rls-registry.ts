@@ -303,9 +303,27 @@ export const RLS_TABLES: RlsTableCase[] = [
     table: "channels",
     seedRow: async (direct, t) => {
       const r = await direct.query(
-        `INSERT INTO channels (company_id, name, platform, status)
-         VALUES ($1, $2, 'youtube', 'active') RETURNING id`,
+        `INSERT INTO channels (company_id, name, platform, platform_id, status)
+         VALUES ($1, $2, 'youtube', (SELECT id FROM platforms WHERE code = 'youtube'), 'active') RETURNING id`,
         [t.companyId, `rls-ch-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "channel_members",
+    table: "channel_members",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `chm-${randomUUID().slice(0, 8)}@x.test`);
+      const chRes = await direct.query(
+        `INSERT INTO channels (company_id, name, platform, platform_id, status)
+         VALUES ($1, $2, 'youtube', (SELECT id FROM platforms WHERE code = 'youtube'), 'active') RETURNING id`,
+        [t.companyId, `rls-chm-ch-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO channel_members (company_id, channel_id, user_id, role_in_channel, status)
+         VALUES ($1, $2, $3, 'channel_manager', 'active') RETURNING id`,
+        [t.companyId, chRes.rows[0].id, u],
       );
       return r.rows[0].id as string;
     },
@@ -321,8 +339,8 @@ export const RLS_TABLES: RlsTableCase[] = [
     seedRow: async (direct, t) => {
       const projectId = await seedProject(direct, t.companyId);
       const chRes = await direct.query(
-        `INSERT INTO channels (company_id, name, platform, status)
-         VALUES ($1, $2, 'youtube', 'active') RETURNING id`,
+        `INSERT INTO channels (company_id, name, platform, platform_id, status)
+         VALUES ($1, $2, 'youtube', (SELECT id FROM platforms WHERE code = 'youtube'), 'active') RETURNING id`,
         [t.companyId, `rls-pch-${randomUUID().slice(0, 8)}`],
       );
       const r = await direct.query(

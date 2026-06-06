@@ -148,6 +148,13 @@
       "when": 1717500020000,
       "tag": "0020_g6_audit_object_types",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1717500021000,
+      "tag": "0021_g6_platforms_channels",
+      "breakpoints": true
     }
   ]
 }

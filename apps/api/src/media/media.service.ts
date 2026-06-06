@@ -32,7 +32,17 @@ export class MediaService {
 
   async createChannel(companyId: string, dto: CreateChannelRequest) {
     try {
-      const rows = await this.repo.createChannel(companyId, { name: dto.name, platform: dto.platform });
+      const rows = await this.repo.createChannel(companyId, {
+        name: dto.name,
+        platform: dto.platform,
+        code: dto.code ?? null,
+        url: dto.url ?? null,
+        language: dto.language ?? null,
+        targetCountry: dto.targetCountry ?? null,
+        niche: dto.niche ?? null,
+        channelManagerId: dto.channelManagerId ?? null,
+        primaryTeamId: dto.primaryTeamId ?? null,
+      });
       if (!rows[0]) throw new InternalServerErrorException('Failed to create channel');
       return rows[0];
     } catch (err) {
