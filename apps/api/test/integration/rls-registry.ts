@@ -352,6 +352,37 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
   {
+    name: "project_teams",
+    table: "project_teams",
+    seedRow: async (direct, t) => {
+      const projectId = await seedProject(direct, t.companyId);
+      const teamRes = await direct.query(
+        `INSERT INTO teams (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-pt-team-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO project_teams (company_id, project_id, team_id, role_in_project)
+         VALUES ($1, $2, $3, 'production') RETURNING id`,
+        [t.companyId, projectId, teamRes.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "project_members",
+    table: "project_members",
+    seedRow: async (direct, t) => {
+      const projectId = await seedProject(direct, t.companyId);
+      const u = await seedUser(direct, t.companyId, `pm-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO project_members (company_id, project_id, user_id, role_in_project, status)
+         VALUES ($1, $2, $3, 'member', 'active') RETURNING id`,
+        [t.companyId, projectId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
     name: "content_items",
     table: "content_items",
     seedRow: async (direct, t) => {

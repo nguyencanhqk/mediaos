@@ -155,6 +155,13 @@
       "when": 1717500021000,
       "tag": "0021_g6_platforms_channels",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1717500023000,
+      "tag": "0023_g6_projects_full",
+      "breakpoints": true
     }
   ]
 }

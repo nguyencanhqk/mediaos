@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, date, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { currentCompanyDefault } from "./_helpers";
 import { companies } from "./companies";
 import { orgUnits, teams } from "./org";
@@ -149,6 +149,15 @@ export const projects = pgTable(
       .references(() => companies.id, { onDelete: "cascade" }),
     orgUnitId: uuid("org_unit_id").references(() => orgUnits.id, { onDelete: "set null" }),
     name: text("name").notNull(),
+    code: text("code"),
+    projectType: text("project_type"),
+    description: text("description"),
+    ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+    projectManagerId: uuid("project_manager_id").references(() => users.id, { onDelete: "set null" }),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    priority: text("priority"),
+    budget: numeric("budget", { precision: 18, scale: 2 }),
     status: text("status").notNull().default("active"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -157,10 +166,21 @@ export const projects = pgTable(
   (t) => [
     index("projects_company_id_idx").on(t.companyId),
     index("projects_org_unit_id_idx").on(t.orgUnitId),
+    index("projects_company_status_idx").on(t.companyId, t.status),
     uniqueIndex("projects_company_name_active_uq")
       .on(t.companyId, t.name)
       .where(sql`deleted_at IS NULL`),
+    uniqueIndex("projects_company_code_active_uq")
+      .on(t.companyId, t.code)
+      .where(sql`deleted_at IS NULL AND code IS NOT NULL`),
     check("projects_status_check", sql`status IN ('active', 'paused', 'archived')`),
+    check(
+      "projects_type_check",
+      sql`project_type IS NULL OR project_type IN
+    ('content_production','channel_operation','growth_campaign','recruitment',
+     'training','finance','office_internal','equipment')`,
+    ),
+    check("projects_priority_check", sql`priority IS NULL OR priority IN ('low','medium','high','urgent')`),
   ],
 );
 
@@ -169,6 +189,7 @@ export type NewProject = typeof projects.$inferInsert;
 
 /**
  * project_channels — nhiều kênh cho 1 project (M:N). Không có deleted_at — dùng DELETE thuần.
+ * `status`/`role_in_project` mutable (PATCH) → app role có GRANT UPDATE (0023). Unique dẫn đầu company_id (fix-forward 0023).
  */
 export const projectChannels = pgTable(
   "project_channels",
@@ -184,17 +205,94 @@ export const projectChannels = pgTable(
     channelId: uuid("channel_id")
       .notNull()
       .references(() => channels.id, { onDelete: "cascade" }),
+    roleInProject: text("role_in_project"),
+    status: text("status").notNull().default("active"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("project_channels_project_id_idx").on(t.projectId),
     index("project_channels_channel_id_idx").on(t.channelId),
-    uniqueIndex("project_channels_uq").on(t.projectId, t.channelId),
+    uniqueIndex("project_channels_uq").on(t.companyId, t.projectId, t.channelId),
+    check("project_channels_status_check", sql`status IN ('active','inactive')`),
   ],
 );
 
 export type ProjectChannel = typeof projectChannels.$inferSelect;
 export type NewProjectChannel = typeof projectChannels.$inferInsert;
+
+/**
+ * project_teams — team gắn vào project (M:N). Pure hard-DELETE link (role immutable; re-link để đổi) →
+ * KHÔNG status, KHÔNG deleted_at, KHÔNG UPDATE grant. DDL/RLS: 0023.
+ */
+export const projectTeams = pgTable(
+  "project_teams",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    roleInProject: text("role_in_project"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("project_teams_company_id_idx").on(t.companyId),
+    index("project_teams_project_id_idx").on(t.projectId),
+    index("project_teams_team_id_idx").on(t.teamId),
+    uniqueIndex("project_teams_uq").on(t.companyId, t.projectId, t.teamId),
+  ],
+);
+
+export type ProjectTeam = typeof projectTeams.$inferSelect;
+export type NewProjectTeam = typeof projectTeams.$inferInsert;
+
+/**
+ * project_members — user trong project + role + workload (PRJ-003/004). Soft-delete: deleted_at.
+ * `status` mutable + soft-delete → app role có GRANT UPDATE (0023). DDL/RLS: 0023.
+ */
+export const projectMembers = pgTable(
+  "project_members",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    roleInProject: text("role_in_project"),
+    permissionLevel: text("permission_level"),
+    workloadPercent: numeric("workload_percent", { precision: 5, scale: 2 }),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    status: text("status").notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("project_members_company_id_idx").on(t.companyId),
+    index("project_members_project_id_idx").on(t.projectId),
+    index("project_members_user_id_idx").on(t.userId),
+    uniqueIndex("project_members_active_uq")
+      .on(t.companyId, t.projectId, t.userId)
+      .where(sql`deleted_at IS NULL`),
+    check("project_members_status_check", sql`status IN ('active','inactive')`),
+  ],
+);
+
+export type ProjectMember = typeof projectMembers.$inferSelect;
+export type NewProjectMember = typeof projectMembers.$inferInsert;
 
 /**
  * content_items — video / short / reel thuộc 1 project. Soft-delete: deleted_at.
