@@ -141,6 +141,13 @@
       "when": 1717500019000,
       "tag": "0019_g5_permissions_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1717500020000,
+      "tag": "0020_g6_audit_object_types",
+      "breakpoints": true
     }
   ]
 }
