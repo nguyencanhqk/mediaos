@@ -297,6 +297,46 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
 
+  // ── G5 Positions & Employees ─────────────────────────────────────────────────
+  {
+    name: "positions",
+    table: "positions",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO positions (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-pos-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "employee_profiles",
+    table: "employee_profiles",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `emp-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "employee_manager_relations",
+    table: "employee_manager_relations",
+    seedRow: async (direct, t) => {
+      const emp = await seedUser(direct, t.companyId, `emr-emp-${randomUUID().slice(0, 8)}@x.test`);
+      const mgr = await seedUser(direct, t.companyId, `emr-mgr-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO employee_manager_relations
+           (company_id, employee_user_id, manager_user_id, relation_type)
+         VALUES ($1, $2, $3, 'direct_manager') RETURNING id`,
+        [t.companyId, emp, mgr],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
   // ── G4-2 Media ──────────────────────────────────────────────────────────────
   {
     name: "channels",
