@@ -2,7 +2,7 @@
 
 > Đọc file này + [`G6-media-full.md`](./G6-media-full.md) (kế hoạch gốc, plan-reviewer PASS) TRƯỚC khi code tiếp.
 > Mục tiêu: 1 session mới cầm file này là tiếp tục được ngay, không phải dò lại.
-> Cập nhật lần cuối: 2026-06-06 · Branch: **`feat/g6-media`** · HEAD: **`f4a07d2`**
+> Cập nhật lần cuối: 2026-06-06 · Branch: **`feat/g6-media`** · HEAD: **`9e583dc`** (G6-3 done)
 
 ---
 
@@ -16,6 +16,11 @@
 | `8a9fbe3` `feat(g6-1)` | **Migration 0021** — `platforms` (catalog global, seed 6) + ALTER `channels` (platform_id FK, reconcile, widen status, health cols, partial-unique code) + `channel_members`; Drizzle schema + contracts + create-path + RLS registry | ✅ |
 | `c5060aa` `feat(g6-1d)` | `ChannelsController` (permission-gated) + channel CRUD/filter/get/update/soft-delete + members CRUD + **audit-in-tx** + `GET /platforms` | ✅ typecheck + regression |
 | `f4a07d2` `feat(g6-1e)` | **FE channels**: `channels-api` client + `ChannelTable` (TanStack Table v8) + `ChannelFilterBar` (platform/status/manager/niche/q) + `CreateChannelDialog`/`EditChannelDialog` + detail `/channels/$id` tabs (Overview/Members) + members CRUD; `Dialog`/`Select` primitives; `<PermissionGate>` create/update/delete | ✅ typecheck(3 pkg)+lint+17 test+vite build |
+| `6a380a1` `feat(g6-3a)` | **Migration 0023** — ALTER `projects` (code/type/owner/manager/dates/priority/budget + type/priority CHECK + code partial-uq) + ALTER `project_channels` (role/status + GRANT UPDATE + fix-forward uq dẫn đầu company_id) + `project_teams` + `project_members` (RLS+FORCE); Drizzle schema; rls-registry (2 bảng mới) | ✅ migrate + regression |
+| `d5021ba` `test(g2-5)` | **Vá lỗ rls-registry tồn đọng G5** — `positions`/`employee_profiles`/`employee_manager_relations` có company_id nhưng chưa đăng ký → `rls-guards` completeness test đỏ ngầm (gate cũ chỉ chạy tenant-isolation nên không lộ) | ✅ rls-guards 3 pass |
+| `e335795` `feat(g6-3bc)` | **Contracts + BE**: `projectSchema` full + request schemas; `ProjectsRepository`/`Service`/`Controller` (tách khỏi MediaService) — CRUD + attach/detach kênh/team/member + audit-in-tx + `@RequirePermission` gate; gỡ project khỏi MediaController/Service/Repo (giữ content) | ✅ typecheck+lint+app boot |
+| `c41039c` `feat(g6-3d)` | **FE projects**: `projects-api` + `ProjectTable`/`ProjectFilterBar` (status/type/priority/PM/q) + create/edit dialogs + detail `/projects/$id` tabs (Tổng quan/Kênh/Team/Thành viên/Nội dung); `link-dialogs`; media-api thu gọn content-only | ✅ typecheck(3 pkg)+lint+17 test+vite build |
+| `9e583dc` `fix(g6-3)` | **FULL-gate review fix**: in-tx tenant-scoped guard channel/team/user (chặn link chéo tenant + TOCTOU soft-delete); audit objectId removeTeam→teamId; listProjects sub-query scope theo project ids; numToStr finite guard | ✅ typecheck+lint+regression |
 
 **Trạng thái DB thực tế (đã verify live):**
 - DB từng kẹt ở **0013** (G5 0014–0019 + G6 0020–0021 CHƯA từng apply). Nay đã migrate sạch tới **0021** (22 record trong `drizzle.__drizzle_migrations`).
@@ -73,11 +78,14 @@ pnpm typecheck
 - ✅ `/channels` (rewrite) + `/channels/$channelId` (mới, tab Overview + Members; tab dùng state nội bộ, không cần lib Tabs). Route `channelDetailRoute` trong `router.tsx` (beforeLoad: authGuard). Mọi phần nhạy cảm bọc `<PermissionGate>` create/update/delete.
 - **DoD**: ✅ typecheck FE xanh. ⚠️ list/filter/detail mới verify ở mức build/type — **chưa render live** (cần `db:up` + api + web + login + seed để chốt).
 
-### 4.2 — G6-3 (Projects full) · 🟢 · plan §4 G6-3 (SQL sẵn)
-- **3a Migration 0023** `g6_projects_full.sql`: ALTER `projects` (code/type/owner/manager/dates/priority/budget + CHECK type+priority) + ALTER `project_channels` (role_in_project, status + **GRANT UPDATE** + **fix-forward `project_channels_uq` dẫn đầu company_id**) + CREATE `project_teams` + `project_members` (RLS+FORCE). → journal 0023 → **migrate + regression + thêm 3 bảng vào rls-registry**.
-- **3b** schema (`projects` full, `projectTeams`, `projectMembers`) + contracts.
-- **3c** BE: project CRUD full + attach/detach kênh/team/member + audit `project`/`project_team`/`project_member` + permission (`project` đã có ở 0005; cân nhắc seed `project-team`/`project-member` nếu muốn resource riêng).
-- **3d** FE: `/projects` + `/projects/$id` tabs.
+### 4.2 — G6-3 (Projects full) · 🟢 · ✅ XONG (`6a380a1`→`9e583dc`)
+- ✅ **3a Migration 0023** `g6_projects_full.sql`: ALTER `projects` (code/type/owner/manager/dates/priority/budget + CHECK type+priority) + ALTER `project_channels` (role_in_project, status + **GRANT UPDATE** + **fix-forward `project_channels_uq` dẫn đầu company_id**) + CREATE `project_teams` + `project_members` (RLS+FORCE). journal idx 23 (when 1717500023000). migrate sạch tới 0023 (23 record). rls-registry +`project_teams`/`project_members`.
+- ✅ **3b** Drizzle schema (`projects` full + `projectChannels` cols + `projectTeams` + `projectMembers`, CHECK byte-aligned) + contracts (`projectSchema` full + type/priority enum + create/update/listQuery + link request schemas).
+- ✅ **3c** BE: `ProjectsRepository`/`Service`/`Controller` (**tách riêng** khỏi MediaService theo §3.3) — CRUD + attach/detach kênh/team/member + audit-in-tx (`project`/`project_team`/`project_member`) + `@RequirePermission` (link ops dùng `update:project`, mirror §3.1 — KHÔNG seed resource riêng). FULL-gate fix (`9e583dc`): guard chéo tenant + TOCTOU in-tx.
+- ✅ **3d** FE: `/projects` (filter + TanStack Table) + `/projects/$projectId` tabs (Tổng quan/Kênh/Team/Thành viên/Nội dung). `projects-api` (authed apiFetch), detail dùng 1 getProject (embed links).
+- **DoD**: ✅ typecheck 3 pkg + lint 0 error + 17 web test + vite build + app boot (routes `/projects*`) + tenant-isolation 118 pass + rls-guards 3 pass. ⚠️ **chưa render live** (auth header chưa wa FE-wide — pre-existing, mọi trang authed cùng trạng thái).
+
+> ⚠️ **TRAP cho G6-2 (0022) — journal when-ordering:** 0023–0026 được tạo TRƯỚC 0022 (G6-2 làm cuối). `migrate.ts` của Drizzle áp migration có `when` > `when` lớn nhất đã apply. 0022 nếu giữ `when=1717500022000` (< 0023..0026 đã apply) sẽ **bị BỎ QUA**. Khi làm G6-2: đặt `when` của 0022 **LỚN HƠN** 0028 (vd 1717500030000+) HOẶC renumber. KHÔNG dùng công thức `when=base+idx*1000` cho 0022.
 
 ### 4.3 — G6-4 (Content full) · 🟢 · plan §4 G6-4 (SQL sẵn — nhiều cạm bẫy data-migration)
 - **4a Migration 0024** `g6_content_types.sql`: CREATE `content_types` (⚠️ `default_workflow_template_id`/`default_evaluation_template_id` = **uuid TRẦN, KHÔNG FK** — bảng template chưa tồn tại ở M2).
@@ -102,10 +110,10 @@ pnpm typecheck
 ## 5. Khởi động session mới (copy-paste)
 
 ```
-Tôi tiếp tục G6 trên branch feat/g6-media (HEAD f4a07d2).
+Tôi tiếp tục G6 trên branch feat/g6-media (HEAD 9e583dc).
 Đọc: docs/plans/G6-progress-handoff.md + docs/plans/G6-media-full.md.
-Đã xong tới G6-1e (FE channels — list/filter/table + detail tabs + members; typecheck/lint/test/build xanh, chưa render live).
-Tiếp theo: [G6-3 Projects full — CÓ migration 0023]  (hoặc nêu bước bạn muốn).
+Đã xong tới G6-3 (Projects ERD-full — migration 0023 + BE ProjectsController + FE /projects tabs; typecheck/lint/test/build + RLS regression xanh, chưa render live).
+Tiếp theo: [G6-4 Content full — migration 0024/0025/0026, NHIỀU cạm bẫy data-migration §4.3]  (hoặc G6-5 Channel Health — KHÔNG migration; hoặc nêu bước bạn muốn).
 Trước khi code: pnpm db:up; nếu cần migrate dùng:  set -a && . ./.env && set +a && pnpm --filter @mediaos/api db:migrate
 ```
 

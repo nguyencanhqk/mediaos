@@ -216,7 +216,7 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 - [x] **G6-1** 🤖🟢 (M) Platform + Channel + `channel_members` + gán Manager/team; lọc theo nền tảng/trạng thái. _(BE 1a–1d `8a9fbe3`/`c5060aa`; FE 1e `f4a07d2`: list+filter+TanStack Table, detail tabs Overview/Members, members CRUD)._
 - [ ] **G6-2** 🛠️🔋 (L) 🔒 **Platform Account Encryption** (envelope + KMS/Vault, mã hoá app-side; `reveal-secret` + re-auth + **audit mỗi lần xem/sửa**). **FULL gate.** _(custom `secret-encryption-reviewer`; `ecc:security-reviewer` + `ecc:database-reviewer`)._
-- [ ] **G6-3** 🤖🟢 (S) Project: gắn **nhiều kênh · nhiều team · nhiều thành viên** (PRJ-002/003/004, BR-003).
+- [x] **G6-3** 🤖🟢 (S) Project ERD-full: gắn **nhiều kênh · nhiều team · nhiều thành viên** (PRJ-002/003/004, BR-003). _(3a migration 0023 `6a380a1`; 3bc contracts+BE `e335795`; 3d FE `c41039c`; FULL-gate fix `9e583dc`. Migrate→tenant-isolation 118 pass+rls-guards→typecheck/lint/build xanh; app boot routes /projects* OK. ⚠️ chưa render live (auth header chưa wa FE-wide — pre-existing). Bonus: vá lỗ rls-registry G5 `d5021ba`.)_
 - [ ] **G6-4** 🤖🟢 (M) Content/Video: đăng **đa kênh**, content type, asset + version, gợi ý workflow theo content type.
 - [ ] **G6-5** 🤖🟢 (S) Channel Health (score/status, risk note) → feed Dashboard.
 
