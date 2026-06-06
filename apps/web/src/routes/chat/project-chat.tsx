@@ -5,7 +5,7 @@ import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { chatApi } from "@/lib/chat-api";
-import { mediaApi } from "@/lib/media-api";
+import { projectsApi } from "@/lib/projects-api";
 import type { ChatMessageDto } from "@mediaos/contracts";
 
 export function ProjectChatPage() {
@@ -16,7 +16,7 @@ export function ProjectChatPage() {
 
   const { data: project } = useQuery({
     queryKey: ["project", projectId],
-    queryFn: () => mediaApi.getProject(projectId),
+    queryFn: () => projectsApi.getProject(projectId),
   });
 
   const { data: rooms } = useQuery({

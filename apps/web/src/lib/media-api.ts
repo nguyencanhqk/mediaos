@@ -1,41 +1,13 @@
 import { z } from "zod";
-import type {
-  CreateProjectRequest,
-  CreateContentItemRequest,
-  AddProjectChannelRequest,
-} from "@mediaos/contracts";
-import { projectSchema, contentItemSchema } from "@mediaos/contracts";
+import type { CreateContentItemRequest } from "@mediaos/contracts";
+import { contentItemSchema } from "@mediaos/contracts";
+import { apiFetch } from "./api-client";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3100/api/v1";
-
-async function apiFetch<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${path}: ${body}`);
-  }
-  if (res.status === 204) return undefined as T;
-  const json: unknown = await res.json();
-  return schema.parse(json);
-}
-
+/**
+ * Content items (G4-2 legacy). Channels → channels-api, projects → projects-api (G6).
+ * Content guard/ERD-full retrofit ở G6-4.
+ */
 export const mediaApi = {
-  listProjects: () => apiFetch("/projects", z.array(projectSchema)),
-  getProject: (projectId: string) => apiFetch(`/projects/${projectId}`, projectSchema),
-  createProject: (data: CreateProjectRequest) =>
-    apiFetch("/projects", projectSchema, { method: "POST", body: JSON.stringify(data) }),
-
-  addProjectChannel: (projectId: string, data: AddProjectChannelRequest) =>
-    apiFetch(`/projects/${projectId}/channels`, z.unknown(), {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-  removeProjectChannel: (projectId: string, channelId: string) =>
-    apiFetch(`/projects/${projectId}/channels/${channelId}`, z.void(), { method: "DELETE" }),
-
   listContent: (projectId: string) =>
     apiFetch(`/projects/${projectId}/content`, z.array(contentItemSchema)),
   createContent: (projectId: string, data: CreateContentItemRequest) =>
