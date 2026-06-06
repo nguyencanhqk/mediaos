@@ -12,33 +12,20 @@ import {
 import { ZodValidationPipe } from 'nestjs-zod';
 import type { Request } from 'express';
 import { MediaService } from './media.service';
-import {
-  AddProjectChannelDto,
-  CreateChannelDto,
-  CreateContentItemDto,
-  CreateProjectDto,
-} from './media.dto';
+import { AddProjectChannelDto, CreateContentItemDto, CreateProjectDto } from './media.dto';
 
 interface AuthenticatedRequest extends Request {
   user: { id: string; companyId: string };
 }
 
+/**
+ * MediaController (G4-2 legacy) — projects + content. Channels chuyển sang ChannelsController (G6-1).
+ * Projects/content permission guard retrofit ở G6-3/G6-4.
+ */
 @Controller()
 @UsePipes(ZodValidationPipe)
 export class MediaController {
   constructor(private readonly media: MediaService) {}
-
-  // ── Channels ─────────────────────────────────────────────────────────────
-
-  @Get('channels')
-  listChannels(@Req() req: AuthenticatedRequest) {
-    return this.media.listChannels(req.user.companyId);
-  }
-
-  @Post('channels')
-  createChannel(@Req() req: AuthenticatedRequest, @Body() dto: CreateChannelDto) {
-    return this.media.createChannel(req.user.companyId, dto);
-  }
 
   // ── Projects ──────────────────────────────────────────────────────────────
 
