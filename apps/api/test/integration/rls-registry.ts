@@ -16,6 +16,16 @@ export interface RlsTableCase {
   /** Tên hiển thị + tên bảng thật. */
   name: string;
   table: string;
+  /**
+   * Tên cột dùng để identify hàng trong `SELECT`. Mặc định `"id"`.
+   * Junction table không có surrogate key cần ghi rõ cột thay thế (vd: `"role_id"`).
+   */
+  idColumn?: string;
+  /**
+   * Bỏ qua test "ngoài ngữ cảnh tenant → 0 row" nếu bảng có hàng global (system rows).
+   * Dùng cho `roles` và `role_permissions` có system roles (company_id IS NULL) luôn hiển thị.
+   */
+  skipNoContext?: boolean;
   /** Seed 1 hàng thuộc tenant `t`, trả về id của hàng (để khẳng định không lọt sang tenant khác). */
   seedRow(direct: Pool, t: SeededTenant): Promise<string>;
 }
@@ -177,6 +187,7 @@ export const RLS_TABLES: RlsTableCase[] = [
   {
     name: "roles (tenant-scoped only)",
     table: "roles",
+    skipNoContext: true, // system roles (company_id IS NULL) are visible without tenant context by design
     seedRow: async (direct, t) => {
       const r = await direct.query(
         `INSERT INTO roles (company_id, name, is_system)
@@ -189,6 +200,8 @@ export const RLS_TABLES: RlsTableCase[] = [
   {
     name: "role_permissions",
     table: "role_permissions",
+    idColumn: "role_id",
+    skipNoContext: true, // system role_permissions (for system roles) visible without context by design
     seedRow: async (direct, t) => {
       const roleRes = await direct.query(
         `INSERT INTO roles (company_id, name, is_system)

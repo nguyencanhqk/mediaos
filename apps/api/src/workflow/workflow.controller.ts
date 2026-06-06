@@ -32,6 +32,13 @@ export class WorkflowController {
     return this.workflow.startWorkflow(req.user.companyId, dto.contentItemId, req.user.id);
   }
 
+  /** GET /workflow/approval-requests — hàng chờ duyệt (reviewer queue) */
+  // PHẢI đặt trước @Get(":instanceId") để tránh "approval-requests" bị parse thành UUID.
+  @Get("approval-requests")
+  listApprovalRequests(@Req() req: AuthenticatedRequest) {
+    return this.approval.listPending(req.user.companyId);
+  }
+
   /** GET /workflow/:instanceId — lấy workflow + steps */
   @Get(":instanceId")
   getWorkflow(@Req() req: AuthenticatedRequest, @Param("instanceId") instanceId: string) {
@@ -55,12 +62,6 @@ export class WorkflowController {
       submissionUrl: dto.submissionUrl,
       submissionNote: dto.submissionNote,
     });
-  }
-
-  /** GET /workflow/approval-requests — hàng chờ duyệt (reviewer queue) */
-  @Get("approval-requests")
-  listApprovalRequests(@Req() req: AuthenticatedRequest) {
-    return this.approval.listPending(req.user.companyId);
   }
 
   /** POST /workflow/approval-requests/:requestId/approve — T3: phê duyệt */

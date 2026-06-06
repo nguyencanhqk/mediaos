@@ -22,7 +22,7 @@ export function TeamsPage() {
   });
 
   const createTeam = useMutation({
-    mutationFn: () => orgApi.createTeam({ name }),
+    mutationFn: () => orgApi.createTeam({ name, type: "production_team" }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["org", "teams"] });
       setName("");
@@ -30,8 +30,10 @@ export function TeamsPage() {
   });
 
   const addMember = useMutation({
-    mutationFn: () =>
-      orgApi.addTeamMember(selectedTeamId!, { userId: memberUserId, roleName: "member" }),
+    mutationFn: () => {
+      if (!selectedTeamId) throw new Error("No team selected");
+      return orgApi.addTeamMember(selectedTeamId, { userId: memberUserId, roleName: "member" });
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["org", "teams", selectedTeamId, "members"] });
       setMemberUserId("");
@@ -39,9 +41,12 @@ export function TeamsPage() {
   });
 
   const removeMember = useMutation({
-    mutationFn: (userId: string) => orgApi.removeTeamMember(selectedTeamId!, userId),
+    mutationFn: (userId: string) => {
+      if (!selectedTeamId) throw new Error("No team selected");
+      return orgApi.removeTeamMember(selectedTeamId, userId);
+    },
     onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["org", "teams", selectedTeamId, "members"] }),
+      void qc.invalidateQueries({ queryKey: ["org", "teams", selectedTeamId, "members"] }),
   });
 
   return (
@@ -72,7 +77,29 @@ export function TeamsPage() {
             }`}
             onClick={() => setSelectedTeamId(selectedTeamId === t.id ? null : t.id)}
           >
-            <span className="font-medium">{t.name}</span>
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="font-medium">{t.name}</span>
+                {t.code && (
+                  <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                    {t.code}
+                  </span>
+                )}
+                {t.leaderUserName && (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    Leader: {t.leaderUserName}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                {t.capacity != null && <span>cap: {t.capacity}</span>}
+                <span
+                  className={t.status === "active" ? "text-green-600" : "text-muted-foreground"}
+                >
+                  {t.status}
+                </span>
+              </div>
+            </div>
           </li>
         ))}
       </ul>

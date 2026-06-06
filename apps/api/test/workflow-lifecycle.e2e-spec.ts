@@ -44,9 +44,6 @@ async function loginAs(
   const res = await api(app)
     .post("/auth/login")
     .send({ companySlug: slug, email, password: PASSWORD });
-  if (res.status !== 200) {
-    console.error("[loginAs] FAILED body:", JSON.stringify(res.body), "slug:", slug);
-  }
   expect(res.status).toBe(200);
   return res.body.data.accessToken as string;
 }

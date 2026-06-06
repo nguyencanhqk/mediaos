@@ -1,19 +1,35 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /**
  * companies — gốc tenant (ERD §6). DDL/RLS thật ở migration 0002 (hand-written); schema này CHỈ để
  * gõ kiểu cho query. `slug` ở DB là citext (case-insensitive, unique toàn cục khi chưa xoá mềm).
- * Giữ ĐỒNG BỘ với 0002_companies_users.sql khi đổi cột.
+ * G5-1: thêm cột settings — DDL ở migration 0015.
+ * Giữ ĐỒNG BỘ với 0002/0015 khi đổi cột.
  */
-export const companies = pgTable("companies", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  slug: text("slug").notNull(),
-  status: text("status").notNull().default("active"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  deletedAt: timestamp("deleted_at", { withTimezone: true }),
-});
+export const companies = pgTable(
+  "companies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    status: text("status").notNull().default("active"),
+    logoUrl: text("logo_url"),
+    timezone: text("timezone").notNull().default("Asia/Ho_Chi_Minh"),
+    currency: text("currency").notNull().default("VND"),
+    language: text("language").notNull().default("vi"),
+    workingDaysJson: jsonb("working_days_json").notNull().default({ days: [1, 2, 3, 4, 5] }),
+    payrollConfigJson: jsonb("payroll_config_json").notNull().default({ cutoffDay: 25, payDay: 5 }),
+    schemaVersion: integer("schema_version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [
+    check("companies_language_check", sql`language IN ('vi', 'en')`),
+    check("companies_currency_check", sql`currency IN ('VND', 'USD')`),
+  ],
+);
 
 export type Company = typeof companies.$inferSelect;
 export type NewCompany = typeof companies.$inferInsert;

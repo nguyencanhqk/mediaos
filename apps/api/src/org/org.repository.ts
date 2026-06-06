@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { DatabaseService } from '../db/db.service';
 import { orgUnits, teams, teamMembers, users } from '../db/schema';
 
@@ -7,46 +7,227 @@ import { orgUnits, teams, teamMembers, users } from '../db/schema';
 export class OrgRepository {
   constructor(private readonly db: DatabaseService) {}
 
-  listOrgUnits(companyId: string) {
-    return this.db.withTenant(companyId, (tx) =>
-      tx
-        .select()
+  // ── Org Units ────────────────────────────────────────────────────────────────
+
+  listOrgUnits(companyId: string, status?: string) {
+    return this.db.withTenant(companyId, (tx) => {
+      const where =
+        status != null
+          ? and(
+              eq(orgUnits.companyId, companyId),
+              isNull(orgUnits.deletedAt),
+              eq(orgUnits.status, status),
+            )
+          : and(eq(orgUnits.companyId, companyId), isNull(orgUnits.deletedAt));
+      return tx
+        .select({
+          id: orgUnits.id,
+          companyId: orgUnits.companyId,
+          parentId: orgUnits.parentId,
+          name: orgUnits.name,
+          type: orgUnits.type,
+          code: orgUnits.code,
+          description: orgUnits.description,
+          headUserId: orgUnits.headUserId,
+          headUserName: users.fullName,
+          status: orgUnits.status,
+          createdAt: orgUnits.createdAt,
+          updatedAt: orgUnits.updatedAt,
+        })
         .from(orgUnits)
+        .leftJoin(users, eq(orgUnits.headUserId, users.id))
+        .where(where)
+        .orderBy(orgUnits.name);
+    });
+  }
+
+  /** Lấy tất cả node cho buildTree — không filter status vì cần full tree. */
+  async getOrgTree(companyId: string) {
+    const rows = await this.db.withTenant(companyId, (tx) =>
+      tx
+        .select({
+          id: orgUnits.id,
+          parentId: orgUnits.parentId,
+          name: orgUnits.name,
+          type: orgUnits.type,
+          code: orgUnits.code,
+          status: orgUnits.status,
+          headUserName: users.fullName,
+        })
+        .from(orgUnits)
+        .leftJoin(users, eq(orgUnits.headUserId, users.id))
         .where(and(eq(orgUnits.companyId, companyId), isNull(orgUnits.deletedAt)))
         .orderBy(orgUnits.name),
     );
+    return buildTree(rows, null);
   }
 
   createOrgUnit(
     companyId: string,
-    data: { name: string; type: string; parentId?: string | null },
+    data: {
+      name: string;
+      type: string;
+      code?: string | null;
+      description?: string | null;
+      parentId?: string | null;
+      headUserId?: string | null;
+    },
   ) {
     return this.db.withTenant(companyId, (tx) =>
       tx
         .insert(orgUnits)
-        .values({ companyId, ...data, parentId: data.parentId ?? null })
+        .values({
+          companyId,
+          name: data.name,
+          type: data.type,
+          code: data.code ?? null,
+          description: data.description ?? null,
+          parentId: data.parentId ?? null,
+          headUserId: data.headUserId ?? null,
+        })
         .returning(),
     );
   }
 
-  listTeams(companyId: string) {
+  updateOrgUnit(
+    companyId: string,
+    id: string,
+    data: Partial<{
+      name: string;
+      type: string;
+      code: string | null;
+      description: string | null;
+      parentId: string | null;
+      headUserId: string | null;
+      status: string;
+    }>,
+  ) {
     return this.db.withTenant(companyId, (tx) =>
       tx
-        .select()
-        .from(teams)
-        .where(and(eq(teams.companyId, companyId), isNull(teams.deletedAt)))
-        .orderBy(teams.name),
+        .update(orgUnits)
+        .set({ ...data, updatedAt: new Date() })
+        .where(
+          and(eq(orgUnits.companyId, companyId), eq(orgUnits.id, id), isNull(orgUnits.deletedAt)),
+        )
+        .returning(),
     );
   }
 
-  createTeam(companyId: string, data: { name: string; orgUnitId?: string | null }) {
+  softDeleteOrgUnit(companyId: string, id: string) {
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .update(orgUnits)
+        .set({ deletedAt: new Date(), updatedAt: new Date() })
+        .where(
+          and(eq(orgUnits.companyId, companyId), eq(orgUnits.id, id), isNull(orgUnits.deletedAt)),
+        )
+        .returning(),
+    );
+  }
+
+  // ── Teams ────────────────────────────────────────────────────────────────────
+
+  listTeams(companyId: string, status?: string) {
+    return this.db.withTenant(companyId, (tx) => {
+      const where =
+        status != null
+          ? and(
+              eq(teams.companyId, companyId),
+              isNull(teams.deletedAt),
+              eq(teams.status, status),
+            )
+          : and(eq(teams.companyId, companyId), isNull(teams.deletedAt));
+
+      return tx
+        .select({
+          id: teams.id,
+          companyId: teams.companyId,
+          orgUnitId: teams.orgUnitId,
+          name: teams.name,
+          code: teams.code,
+          type: teams.type,
+          leaderUserId: teams.leaderUserId,
+          leaderUserName: users.fullName,
+          description: teams.description,
+          capacity: teams.capacity,
+          status: teams.status,
+          createdAt: teams.createdAt,
+          updatedAt: teams.updatedAt,
+        })
+        .from(teams)
+        .leftJoin(users, eq(teams.leaderUserId, users.id))
+        .where(where)
+        .orderBy(teams.name);
+    });
+  }
+
+  createTeam(
+    companyId: string,
+    data: {
+      name: string;
+      orgUnitId?: string | null;
+      code?: string | null;
+      type?: string;
+      leaderUserId?: string | null;
+      description?: string | null;
+      capacity?: number | null;
+    },
+  ) {
     return this.db.withTenant(companyId, (tx) =>
       tx
         .insert(teams)
-        .values({ companyId, ...data, orgUnitId: data.orgUnitId ?? null })
+        .values({
+          companyId,
+          name: data.name,
+          orgUnitId: data.orgUnitId ?? null,
+          code: data.code ?? null,
+          type: data.type ?? 'production_team',
+          leaderUserId: data.leaderUserId ?? null,
+          description: data.description ?? null,
+          capacity: data.capacity ?? null,
+        })
         .returning(),
     );
   }
+
+  updateTeam(
+    companyId: string,
+    id: string,
+    data: Partial<{
+      name: string;
+      orgUnitId: string | null;
+      code: string | null;
+      type: string;
+      leaderUserId: string | null;
+      description: string | null;
+      capacity: number | null;
+      status: string;
+    }>,
+  ) {
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .update(teams)
+        .set({ ...data, updatedAt: new Date() })
+        .where(
+          and(eq(teams.companyId, companyId), eq(teams.id, id), isNull(teams.deletedAt)),
+        )
+        .returning(),
+    );
+  }
+
+  softDeleteTeam(companyId: string, id: string) {
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .update(teams)
+        .set({ deletedAt: new Date(), updatedAt: new Date() })
+        .where(
+          and(eq(teams.companyId, companyId), eq(teams.id, id), isNull(teams.deletedAt)),
+        )
+        .returning(),
+    );
+  }
+
+  // ── Team Members ──────────────────────────────────────────────────────────────
 
   listTeamMembers(companyId: string, teamId: string) {
     return this.db.withTenant(companyId, (tx) =>
@@ -100,7 +281,7 @@ export class OrgRepository {
     );
   }
 
-  /** List employees (users) với team memberships. */
+  /** List employees (users) với team memberships — legacy endpoint G4-1. */
   async listEmployees(companyId: string) {
     return this.db.withTenant(companyId, async (tx) => {
       const userRows = await tx
@@ -140,4 +321,24 @@ export class OrgRepository {
       }));
     });
   }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+type FlatNode = {
+  id: string;
+  parentId: string | null;
+  name: string;
+  type: string;
+  code: string | null | undefined;
+  status: string;
+  headUserName: string | null | undefined;
+};
+
+type TreeNode = FlatNode & { children: TreeNode[] };
+
+function buildTree(nodes: FlatNode[], parentId: string | null): TreeNode[] {
+  return nodes
+    .filter((n) => n.parentId === parentId)
+    .map((n) => ({ ...n, children: buildTree(nodes, n.id) }));
 }

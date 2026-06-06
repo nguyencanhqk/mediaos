@@ -7,6 +7,9 @@ import { DatabaseModule } from "./db/db.module";
 import { EventsModule } from "./events/events.module";
 import { HealthModule } from "./health/health.module";
 import { OrgModule } from "./org/org.module";
+import { SettingsModule } from "./settings/settings.module";
+import { PositionsModule } from "./positions/positions.module";
+import { EmployeesModule } from "./employees/employees.module";
 import { MediaModule } from "./media/media.module";
 import { WorkflowModule } from "./workflow/workflow.module";
 import { TasksModule } from "./tasks/tasks.module";
@@ -29,6 +32,9 @@ import { CompanyGuard } from "./permission/guards/company.guard";
     PermissionModule,
     HealthModule,
     OrgModule,
+    SettingsModule,
+    PositionsModule,
+    EmployeesModule,
     MediaModule,
     WorkflowModule,
     TasksModule,

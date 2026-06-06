@@ -5,6 +5,8 @@ import { RootLayout } from "@/routes/root-layout";
 import { DepartmentsPage } from "@/routes/org/departments";
 import { TeamsPage } from "@/routes/org/teams";
 import { EmployeesPage } from "@/routes/org/employees";
+import { PositionsPage } from "@/routes/org/positions";
+import { CompanySettingsPage } from "@/routes/settings/company";
 import { ChannelsPage } from "@/routes/media/channels";
 import { ProjectsPage } from "@/routes/media/projects";
 import { ProjectDetailPage } from "@/routes/media/project-detail";
@@ -91,12 +93,28 @@ const projectChatRoute = createRoute({
   component: ProjectChatPage,
 });
 
+const positionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/org/positions",
+  beforeLoad: authGuard,
+  component: PositionsPage,
+});
+
+const companySettingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/company",
+  beforeLoad: authGuard,
+  component: CompanySettingsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   departmentsRoute,
   teamsRoute,
   employeesRoute,
+  positionsRoute,
+  companySettingsRoute,
   channelsRoute,
   projectsRoute,
   projectDetailRoute,

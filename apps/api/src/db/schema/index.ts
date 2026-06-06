@@ -14,6 +14,8 @@ export * from "./outbox";
 export * from "./auth";
 export * from "./permissions";
 export * from "./org";
+export * from "./positions";
+export * from "./employees";
 export * from "./media";
 export * from "./workflow";
 export * from "./communication";
