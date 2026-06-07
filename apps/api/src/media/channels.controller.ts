@@ -22,6 +22,7 @@ import {
   AddChannelMemberDto,
   CreateChannelDto,
   UpdateChannelDto,
+  UpdateChannelHealthDto,
   UpdateChannelMemberDto,
 } from './media.dto';
 
@@ -60,8 +61,16 @@ export class ChannelsController {
     @Query('managerId') managerId?: string,
     @Query('niche') niche?: string,
     @Query('q') q?: string,
+    @Query('risk') risk?: string,
   ) {
-    const filters: ListChannelsFilter = { platform, status, managerId, niche, q };
+    const filters: ListChannelsFilter = {
+      platform,
+      status,
+      managerId,
+      niche,
+      q,
+      risk: risk === 'true' ? true : undefined,
+    };
     return this.media.listChannels(req.user.companyId, filters);
   }
 
@@ -85,6 +94,16 @@ export class ChannelsController {
     @Body() dto: UpdateChannelDto,
   ) {
     return this.media.updateChannel(req.user, id, dto);
+  }
+
+  @Patch('channels/:id/health')
+  @RequirePermission('update', 'channel')
+  updateChannelHealth(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: UpdateChannelHealthDto,
+  ) {
+    return this.media.updateChannelHealth(req.user, id, dto);
   }
 
   @Delete('channels/:id')

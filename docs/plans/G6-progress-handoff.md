@@ -2,7 +2,7 @@
 
 > Đọc file này + [`G6-media-full.md`](./G6-media-full.md) (kế hoạch gốc, plan-reviewer PASS) TRƯỚC khi code tiếp.
 > Mục tiêu: 1 session mới cầm file này là tiếp tục được ngay, không phải dò lại.
-> Cập nhật lần cuối: 2026-06-06 · Branch: **`feat/g6-media`** · HEAD: **`9e583dc`** (G6-3 done)
+> Cập nhật lần cuối: 2026-06-07 · Branch: **`feat/g6-media`** · HEAD: **`1029718`** → +G6-5 (Channel Health done)
 
 ---
 
@@ -94,9 +94,10 @@ pnpm typecheck
 - **4d** schema + contracts. **4e** BE (multi-channel publish + asset version INSERT+flip 1 tx + suggest-workflow). **4f** FE.
 - Mỗi migration: journal → migrate → regression → rls-registry.
 
-### 4.4 — G6-5 (Channel Health) · 🟢 · **KHÔNG migration** (cột health_* đã có ở 0021)
-- **5a** BE: `PATCH /channels/:id/health` (health_status/score/note) — repo đã có `updateChannelHealth`, chỉ cần endpoint trong ChannelsController + service method + audit; filter "kênh rủi ro" (status risk/declining) trong listChannels.
-- **5b** FE: `ChannelHealthTab` + Dashboard widget "kênh rủi ro".
+### 4.4 — G6-5 (Channel Health) · 🟢 · **KHÔNG migration** · ✅ XONG
+- ✅ **5a** BE: `PATCH /channels/:id/health` trong `ChannelsController` (gate `update:channel`) + `MediaService.updateChannelHealth` (audit-in-tx `ChannelHealthUpdated`, objectType `channel`; healthScore numeric(5,2) → `numToStr`). Filter "kênh rủi ro": `ListChannelsFilter.risk` + `listChannels` (`inArray(health_status, ['risk','declining'])`) + `@Query('risk')` (`risk==='true'`). Contracts: `updateChannelHealthSchema` (.partial) + `UpdateChannelHealthRequest` + `risk` vào `listChannelsQuerySchema`. `UpdateChannelHealthDto`.
+- ✅ **5b** FE: `channelsApi.updateChannelHealth` + `risk` trong `ChannelFilters`/`buildChannelQuery`. Tab "Sức khỏe" trong `channel-detail.tsx` (dropdown `HEALTH_OPTIONS`, điểm 0–100 có guard, textarea note; Save bọc `<PermissionGate update channel>`, input disabled khi !canManage). `ChannelFilterBar`: checkbox "Chỉ kênh rủi ro". `home.tsx`: widget "Kênh rủi ro" (`listChannels({risk:true})`, gate `read:channel` qua `enabled`, link `/channels/$channelId`). `HEALTH_OPTIONS` thêm vào constants.
+- **DoD**: ✅ typecheck 3 pkg + api/web lint 0 error + 17 web test + vite build xanh. ⚠️ **chưa render live** (auth header chưa wa FE-wide — pre-existing). KHÔNG migration → KHÔNG đụng journal/rls-registry.
 
 ### 4.5 — G6-2 (🔴 CROWN-JEWEL, LÀM CUỐI, hand-driven) · plan §6 + §4 G6-2
 > ⚠️ TASKS/plan: **đừng để AI tự do**. RED-test-first (14 ca §6e), FULL gate, Opus.

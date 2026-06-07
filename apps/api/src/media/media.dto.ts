@@ -6,6 +6,7 @@ import {
   createChannelSchema,
   createContentItemSchema,
   createProjectSchema,
+  updateChannelHealthSchema,
   updateChannelMemberSchema,
   updateChannelSchema,
   updateProjectChannelSchema,
@@ -16,6 +17,7 @@ import { createZodDto } from "nestjs-zod";
 
 export class CreateChannelDto extends createZodDto(createChannelSchema) {}
 export class UpdateChannelDto extends createZodDto(updateChannelSchema) {}
+export class UpdateChannelHealthDto extends createZodDto(updateChannelHealthSchema) {}
 export class AddChannelMemberDto extends createZodDto(addChannelMemberSchema) {}
 export class UpdateChannelMemberDto extends createZodDto(updateChannelMemberSchema) {}
 export class CreateProjectDto extends createZodDto(createProjectSchema) {}

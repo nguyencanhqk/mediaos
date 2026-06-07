@@ -49,6 +49,15 @@ export const HEALTH_LABELS: Record<ChannelHealthStatus, string> = {
   stopped: "Dừng",
 };
 
+export const HEALTH_OPTIONS: ChannelHealthStatus[] = [
+  "healthy",
+  "watching",
+  "declining",
+  "risk",
+  "paused",
+  "stopped",
+];
+
 export const CHANNEL_ROLE_LABELS: Record<ChannelRole, string> = {
   channel_manager: "Channel Manager",
   seo: "SEO",

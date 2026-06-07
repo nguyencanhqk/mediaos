@@ -19,7 +19,7 @@ interface ChannelFilterBarProps {
 }
 
 const hasAnyFilter = (f: ChannelFilters): boolean =>
-  Boolean(f.platform || f.status || f.managerId || f.niche || f.q);
+  Boolean(f.platform || f.status || f.managerId || f.niche || f.q || f.risk);
 
 export function ChannelFilterBar({
   filters,
@@ -88,6 +88,16 @@ export function ChannelFilterBar({
           </option>
         ))}
       </Select>
+
+      <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={filters.risk ?? false}
+          onChange={(e) => onChange({ risk: e.target.checked || undefined })}
+          className="h-4 w-4 rounded border-border"
+        />
+        Chỉ kênh rủi ro
+      </label>
 
       {hasAnyFilter(filters) && (
         <Button variant="ghost" size="sm" onClick={onClear}>

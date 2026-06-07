@@ -2,6 +2,7 @@ import { z } from "zod";
 import type {
   AddChannelMemberRequest,
   CreateChannelRequest,
+  UpdateChannelHealthRequest,
   UpdateChannelMemberRequest,
   UpdateChannelRequest,
 } from "@mediaos/contracts";
@@ -19,6 +20,8 @@ export interface ChannelFilters {
   managerId?: string;
   niche?: string;
   q?: string;
+  /** Chỉ kênh rủi ro — health_status ∈ {risk, declining} (G6-5). */
+  risk?: boolean;
 }
 
 function buildChannelQuery(filters: ChannelFilters = {}): string {
@@ -28,6 +31,7 @@ function buildChannelQuery(filters: ChannelFilters = {}): string {
   if (filters.managerId) qs.set("managerId", filters.managerId);
   if (filters.niche) qs.set("niche", filters.niche);
   if (filters.q) qs.set("q", filters.q);
+  if (filters.risk) qs.set("risk", "true");
   const suffix = qs.toString();
   return suffix ? `?${suffix}` : "";
 }
@@ -47,6 +51,12 @@ export const channelsApi = {
 
   updateChannel: (id: string, data: UpdateChannelRequest) =>
     apiFetch(`/channels/${id}`, channelSchema, { method: "PATCH", body: JSON.stringify(data) }),
+
+  updateChannelHealth: (id: string, data: UpdateChannelHealthRequest) =>
+    apiFetch(`/channels/${id}/health`, channelSchema, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
 
   deleteChannel: (id: string) =>
     apiFetch(`/channels/${id}`, z.void(), { method: "DELETE" }),

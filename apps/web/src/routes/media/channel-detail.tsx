@@ -1,11 +1,17 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
-import type { ChannelDto, ChannelRole } from "@mediaos/contracts";
+import type {
+  ChannelDto,
+  ChannelHealthStatus,
+  ChannelRole,
+  UpdateChannelHealthRequest,
+} from "@mediaos/contracts";
 import { channelsApi } from "@/lib/channels-api";
 import { PermissionGate } from "@/components/permission-gate";
 import { useCan } from "@/hooks/use-can";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { EditChannelDialog } from "@/components/channels/edit-channel-dialog";
 import { AddChannelMemberDialog } from "@/components/channels/add-channel-member-dialog";
@@ -19,10 +25,11 @@ import {
   CHANNEL_STATUS_LABELS,
   HEALTH_COLORS,
   HEALTH_LABELS,
+  HEALTH_OPTIONS,
   PLATFORM_LABELS,
 } from "@/components/channels/constants";
 
-type Tab = "overview" | "members";
+type Tab = "overview" | "members" | "health";
 
 export function ChannelDetailPage() {
   const { channelId } = useParams({ from: "/channels/$channelId" });
@@ -64,10 +71,14 @@ export function ChannelDetailPage() {
             <TabButton active={tab === "members"} onClick={() => setTab("members")}>
               Thành viên
             </TabButton>
+            <TabButton active={tab === "health"} onClick={() => setTab("health")}>
+              Sức khỏe
+            </TabButton>
           </div>
 
           {tab === "overview" && <OverviewTab channel={channel} />}
           {tab === "members" && <MembersTab channelId={channelId} />}
+          {tab === "health" && <HealthTab channel={channel} />}
         </>
       )}
     </div>
@@ -292,6 +303,136 @@ function MembersTab({ channelId }: { channelId: string }) {
         onClose={() => setAdding(false)}
         excludeUserIds={members.map((m) => m.userId)}
       />
+    </div>
+  );
+}
+
+// ── Health (G6-5) ─────────────────────────────────────────────────────────────
+
+interface HealthFormState {
+  healthStatus: string;
+  healthScore: string;
+  healthNote: string;
+}
+
+function fromChannelHealth(c: ChannelDto): HealthFormState {
+  return {
+    healthStatus: c.healthStatus ?? "",
+    healthScore: c.healthScore ?? "",
+    healthNote: c.healthNote ?? "",
+  };
+}
+
+function toHealthRequest(f: HealthFormState): UpdateChannelHealthRequest {
+  const score = f.healthScore.trim();
+  const note = f.healthNote.trim();
+  return {
+    healthStatus: f.healthStatus === "" ? null : (f.healthStatus as ChannelHealthStatus),
+    healthScore: score === "" ? null : Number(score),
+    healthNote: note === "" ? null : note,
+  };
+}
+
+function HealthTab({ channel }: { channel: ChannelDto }) {
+  const qc = useQueryClient();
+  const canManage = useCan("update", "channel");
+  const [form, setForm] = useState<HealthFormState>(() => fromChannelHealth(channel));
+
+  const score = form.healthScore.trim();
+  const scoreNum = score === "" ? null : Number(score);
+  const scoreInvalid =
+    scoreNum !== null && (!Number.isFinite(scoreNum) || scoreNum < 0 || scoreNum > 100);
+
+  const save = useMutation({
+    mutationFn: () => channelsApi.updateChannelHealth(channel.id, toHealthRequest(form)),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["channels"] });
+      void qc.invalidateQueries({ queryKey: ["channels", channel.id] });
+    },
+  });
+
+  return (
+    <div className="max-w-xl space-y-4">
+      <div className="rounded-xl border border-border p-5">
+        <p className="text-xs text-muted-foreground">Sức khỏe hiện tại</p>
+        <p className="mt-1 text-sm">
+          {channel.healthStatus ? (
+            <span className={HEALTH_COLORS[channel.healthStatus]}>
+              {HEALTH_LABELS[channel.healthStatus]}
+              {channel.healthScore != null ? ` · ${channel.healthScore}` : ""}
+            </span>
+          ) : (
+            "Chưa đánh giá"
+          )}
+        </p>
+        {channel.healthNote && (
+          <p className="mt-2 text-sm text-muted-foreground">{channel.healthNote}</p>
+        )}
+      </div>
+
+      <label className="block space-y-1">
+        <span className="text-xs font-medium text-muted-foreground">Trạng thái sức khỏe</span>
+        <Select
+          value={form.healthStatus}
+          disabled={!canManage}
+          onChange={(e) => setForm((f) => ({ ...f, healthStatus: e.target.value }))}
+        >
+          <option value="">— Chưa đánh giá —</option>
+          {HEALTH_OPTIONS.map((h) => (
+            <option key={h} value={h}>
+              {HEALTH_LABELS[h]}
+            </option>
+          ))}
+        </Select>
+      </label>
+
+      <label className="block space-y-1">
+        <span className="text-xs font-medium text-muted-foreground">Điểm sức khỏe (0–100)</span>
+        <Input
+          type="number"
+          min={0}
+          max={100}
+          step="0.01"
+          value={form.healthScore}
+          disabled={!canManage}
+          onChange={(e) => setForm((f) => ({ ...f, healthScore: e.target.value }))}
+          placeholder="VD: 72.5"
+        />
+        {scoreInvalid && (
+          <span className="text-xs text-destructive">Điểm phải trong khoảng 0–100.</span>
+        )}
+      </label>
+
+      <label className="block space-y-1">
+        <span className="text-xs font-medium text-muted-foreground">Ghi chú rủi ro</span>
+        <textarea
+          value={form.healthNote}
+          disabled={!canManage}
+          onChange={(e) => setForm((f) => ({ ...f, healthNote: e.target.value }))}
+          rows={3}
+          maxLength={1000}
+          placeholder="Lý do cần chú ý, kế hoạch xử lý…"
+          className="flex w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+        />
+      </label>
+
+      {save.isError && (
+        <p className="text-sm text-destructive">
+          Lưu thất bại:{" "}
+          {save.error instanceof Error ? save.error.message : "Lỗi không xác định"}
+        </p>
+      )}
+      {save.isSuccess && !save.isPending && (
+        <p className="text-sm text-green-600">Đã lưu sức khỏe kênh.</p>
+      )}
+
+      <PermissionGate action="update" resourceType="channel">
+        <div className="flex justify-end">
+          <Button onClick={() => save.mutate()} disabled={save.isPending || scoreInvalid}>
+            {save.isPending ? "Đang lưu…" : "Lưu sức khỏe"}
+          </Button>
+        </div>
+      </PermissionGate>
     </div>
   );
 }
