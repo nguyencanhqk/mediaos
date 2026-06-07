@@ -2,7 +2,12 @@
 
 > Đọc file này + [`G6-media-full.md`](./G6-media-full.md) (kế hoạch gốc, plan-reviewer PASS) TRƯỚC khi code tiếp.
 > Mục tiêu: 1 session mới cầm file này là tiếp tục được ngay, không phải dò lại.
-> Cập nhật lần cuối: 2026-06-07 · Branch: **`feat/g6-media`** · HEAD: **`1029718`** → +G6-5 (Channel Health done)
+> Cập nhật lần cuối: 2026-06-07 · Branch: **`feat/g6-media`** · HEAD: **`4e620a0`**
+> ⚠️ **2 session song song chung 1 working tree:** session này làm **G6-5** (Channel Health — commit `4e620a0`);
+> 1 session khác làm **G6-4** (Content full — commits `0041ea4`/`22a3ae2`/`9b2691f` = migration 0024/0025/0026).
+> Do chung working tree, commit `22a3ae2` (g6-4b) đã "nuốt" luôn phần G6-5 ở `media.ts`/`media.repository.ts`/
+> `media.service.ts` — code đủ trên branch, chỉ lệch nhãn commit. §1 table dưới đây CHƯA gộp G6-4; cần 2 session
+> reconcile lại docs.
 
 ---
 
