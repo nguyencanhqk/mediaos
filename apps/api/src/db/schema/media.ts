@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  customType,
   date,
   index,
   integer,
@@ -147,6 +148,137 @@ export const channelMembers = pgTable(
 
 export type ChannelMember = typeof channelMembers.$inferSelect;
 export type NewChannelMember = typeof channelMembers.$inferInsert;
+
+/**
+ * bytea — cột nhị phân (drizzle pg-core không export sẵn). Dùng cho envelope encryption (G6-2).
+ * node-postgres trả/nhận Buffer cho bytea.
+ */
+const bytea = customType<{ data: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
+
+/**
+ * platform_accounts (🔒 G6-2 CROWN-JEWEL) — tài khoản nền tảng + envelope encryption (ADR-0004).
+ * 8 cột envelope (ERD v2 §2.1): secret_ciphertext thay encrypted_password. Mã hoá PHÍA APP (apps/api/src/crypto/),
+ * KHÔNG pgcrypto. RLS+FORCE + worker policy (rotation) + column-grant — DDL ở migration 0022.
+ * secret_ciphertext + recovery_email/phone + two_factor_note KHÔNG vào default DTO (mask query-projection, ép RED 7/10).
+ */
+export const platformAccounts = pgTable(
+  "platform_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    platformId: uuid("platform_id")
+      .notNull()
+      .references(() => platforms.id, { onDelete: "restrict" }),
+    accountName: text("account_name"),
+    accountEmail: text("account_email"),
+    accountIdentifier: text("account_identifier"),
+    recoveryEmail: text("recovery_email"), // ⚠️ PII nhạy — KHÔNG vào DTO role không quyền
+    recoveryPhone: text("recovery_phone"), // ⚠️ PII nhạy
+    twoFactorNote: text("two_factor_note"), // ⚠️ hint nhạy
+    ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+    securityLevel: text("security_level"),
+    status: text("status").notNull().default("active"),
+    // 🔒 ENVELOPE columns (ERD v2 §2.1) — secret_ciphertext thay encrypted_password:
+    secretCiphertext: bytea("secret_ciphertext").notNull(),
+    encryptedDek: bytea("encrypted_dek").notNull(),
+    dekKeyVersion: integer("dek_key_version").notNull(),
+    kmsKeyId: text("kms_key_id").notNull(),
+    ivNonce: bytea("iv_nonce").notNull(),
+    authTag: bytea("auth_tag").notNull(),
+    encAlgo: text("enc_algo").notNull().default("AES-256-GCM"),
+    lastRotatedAt: timestamp("last_rotated_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("platform_accounts_company_id_idx").on(t.companyId),
+    index("platform_accounts_platform_id_idx").on(t.platformId),
+    index("platform_accounts_owner_idx").on(t.companyId, t.ownerUserId),
+    check("platform_accounts_enc_algo_check", sql`enc_algo IN ('AES-256-GCM')`),
+    check("platform_accounts_status_check", sql`status IN ('active','inactive','suspended')`),
+    check("platform_accounts_iv_nonce_len_check", sql`octet_length(iv_nonce) = 12`),
+    check("platform_accounts_auth_tag_len_check", sql`octet_length(auth_tag) = 16`),
+  ],
+);
+
+export type PlatformAccount = typeof platformAccounts.$inferSelect;
+export type NewPlatformAccount = typeof platformAccounts.$inferInsert;
+
+/**
+ * encryption_keys — registry KEK/rotation GLOBAL (KHÔNG company_id, KHÔNG RLS). kms_key_id = Vault key PATH,
+ * KHÔNG phải key material. app chỉ SELECT; worker (rotation) ghi. DDL/seed ở 0022 (+ auth_reset_token ở 0028).
+ */
+export const encryptionKeys = pgTable(
+  "encryption_keys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    keyVersion: integer("key_version").notNull(),
+    kmsKeyId: text("kms_key_id").notNull(),
+    purpose: text("purpose").notNull(),
+    status: text("status").notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    retiredAt: timestamp("retired_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("encryption_keys_purpose_version_uq").on(t.purpose, t.keyVersion),
+    check("encryption_keys_purpose_check", sql`purpose IN ('platform_account','auth_reset_token')`),
+    check("encryption_keys_status_check", sql`status IN ('active','retiring','revoked')`),
+  ],
+);
+
+export type EncryptionKey = typeof encryptionKeys.$inferSelect;
+export type NewEncryptionKey = typeof encryptionKeys.$inferInsert;
+
+/**
+ * channel_accounts — M:N channel ↔ platform_account. Link thuần (phương án A): KHÔNG status,
+ * relation_type immutable, hard-DELETE (KHÔNG UPDATE grant). uq dẫn đầu company_id. DDL/RLS ở 0022.
+ */
+export const channelAccounts = pgTable(
+  "channel_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => channels.id, { onDelete: "cascade" }),
+    platformAccountId: uuid("platform_account_id")
+      .notNull()
+      .references(() => platformAccounts.id, { onDelete: "cascade" }),
+    relationType: text("relation_type").notNull().default("main_google_account"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("channel_accounts_company_id_idx").on(t.companyId),
+    index("channel_accounts_channel_id_idx").on(t.channelId),
+    index("channel_accounts_account_id_idx").on(t.platformAccountId),
+    uniqueIndex("channel_accounts_uq").on(
+      t.companyId,
+      t.channelId,
+      t.platformAccountId,
+      t.relationType,
+    ),
+    check(
+      "channel_accounts_relation_check",
+      sql`relation_type IN
+    ('main_google_account','recovery_email','adsense','analytics',
+     'youtube_channel_account','tiktok_account','facebook_page')`,
+    ),
+  ],
+);
+
+export type ChannelAccount = typeof channelAccounts.$inferSelect;
+export type NewChannelAccount = typeof channelAccounts.$inferInsert;
 
 /**
  * projects — dự án sản xuất, thuộc 1 phòng ban (tuỳ chọn).

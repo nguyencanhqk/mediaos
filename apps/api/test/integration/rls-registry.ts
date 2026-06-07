@@ -50,6 +50,21 @@ async function seedContentItem(direct: Pool, companyId: string, projectId: strin
   return r.rows[0].id as string;
 }
 
+async function seedPlatformAccount(direct: Pool, companyId: string): Promise<string> {
+  // RLS isolation test only — giá trị envelope là DUMMY, KHÔNG phải crypto thật. iv_nonce/auth_tag PHẢI đúng
+  // độ dài (12B/16B) để qua octet_length CHECK; secret_ciphertext/encrypted_dek tuỳ ý. Crypto test riêng ở 2c/2e.
+  const r = await direct.query(
+    `INSERT INTO platform_accounts
+       (company_id, platform_id, secret_ciphertext, encrypted_dek, dek_key_version, kms_key_id, iv_nonce, auth_tag)
+     VALUES ($1, (SELECT id FROM platforms WHERE code = 'youtube'),
+             decode('00','hex'), decode('00','hex'), 1, 'local-dev-kek',
+             decode(repeat('00', 12), 'hex'), decode(repeat('00', 16), 'hex'))
+     RETURNING id`,
+    [companyId],
+  );
+  return r.rows[0].id as string;
+}
+
 async function seedWorkflowDefinition(direct: Pool, companyId: string): Promise<string> {
   const r = await direct.query(
     `INSERT INTO workflow_definitions (company_id, code, name, applies_to, max_approval_level, allow_parallel_steps)
@@ -369,6 +384,32 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+  // ── G6-2 Platform Accounts (🔒 crown-jewel) ─────────────────────────────────
+  // encryption_keys KHÔNG ở đây: registry GLOBAL (không company_id, không RLS) — như `permissions`.
+  {
+    name: "platform_accounts",
+    table: "platform_accounts",
+    seedRow: async (direct, t) => seedPlatformAccount(direct, t.companyId),
+  },
+  {
+    name: "channel_accounts",
+    table: "channel_accounts",
+    seedRow: async (direct, t) => {
+      const chRes = await direct.query(
+        `INSERT INTO channels (company_id, name, platform, platform_id, status)
+         VALUES ($1, $2, 'youtube', (SELECT id FROM platforms WHERE code = 'youtube'), 'active') RETURNING id`,
+        [t.companyId, `rls-ca-ch-${randomUUID().slice(0, 8)}`],
+      );
+      const accountId = await seedPlatformAccount(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO channel_accounts (company_id, channel_id, platform_account_id, relation_type)
+         VALUES ($1, $2, $3, 'main_google_account') RETURNING id`,
+        [t.companyId, chRes.rows[0].id, accountId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
   {
     name: "projects",
     table: "projects",

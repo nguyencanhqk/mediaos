@@ -112,7 +112,12 @@ pnpm typecheck
 
 ### 4.5 — G6-2 (🔴 CROWN-JEWEL, LÀM CUỐI, hand-driven) · plan §6 + §4 G6-2
 > ⚠️ TASKS/plan: **đừng để AI tự do**. RED-test-first (14 ca §6e), FULL gate, Opus.
-- **2a Migration 0022**: `platform_accounts` (8 cột envelope + worker policy + column-grant) + `encryption_keys` + `channel_accounts`.
+- **2a Migration 0022** · ✅ XONG: `platform_accounts` (8 cột envelope ERD v2 §2.1, KHÔNG `encrypted_password`) + worker policy `platform_accounts_worker_all` + column-grant `UPDATE(encrypted_dek,kms_key_id,dek_key_version,last_rotated_at)` + `encryption_keys` (GLOBAL no-RLS, seed key_version 1 `local-dev-kek`) + `channel_accounts` (link thuần A, uq dẫn đầu company_id). **journal idx 27 / when 1717500030000** (> max-applied 26000; KHÔNG dùng base+idx). Drizzle schema (`bytea` customType — bytea đầu tiên repo) + rls-registry (+platform_accounts/+channel_accounts; `encryption_keys` KHÔNG đăng ký vì global). **Hardening sau FULL gate:** gỡ dead `GRANT SELECT channel_accounts→worker` + `CHECK octet_length(iv_nonce)=12 / auth_tag=16`. migrate sạch, tenant-isolation 132 + rls-guards 3 + typecheck XANH. FULL gate (security+database reviewer) = **PASS-WITH-WARNINGS, 0 blocker**.
+  - ⚠️ **CARRY-FORWARD từ FULL gate 2a (xử lý ở bước tương ứng):**
+    - **2c/2e (🔴 nhất):** `platform_accounts.id` có DB default `gen_random_uuid()` nhưng AAD pin theo id → crypto service **PHẢI tự `crypto.randomUUID()` + truyền `id` vào INSERT TRƯỚC encrypt** (KHÔNG để DB sinh → tránh AAD mismatch). RED cover.
+    - **2e:** mask `secret_ciphertext/encrypted_dek/iv_nonce/auth_tag/recovery_*/two_factor_note` khỏi default DTO (RED 7/10); cân nhắc view `platform_accounts_safe` (defense-in-depth, tùy chọn).
+    - **2g:** cân nhắc tách worker policy SELECT/UPDATE + thêm `encryption_keys.revoked_at` (forensics).
+    - **prod cutover:** seed `local-dev-kek` chạy cả prod (ON CONFLICT DO NOTHING) → Vault provisioning thật (2g) phải override; GATE cutover.
 - **2b** 14 RED deny-path tests TRƯỚC.
 - **2c** `apps/api/src/crypto/` (EnvelopeCipher AES-256-GCM + KmsProvider Local/Vault + SecretEncryptionService, AAD pinned, app-gen UUID).
 - **2d Migration 0027** (seed `edit-platform-account` sensitive + grants). **2e0** vá `PermissionGuard` forward `resourceId`+`ctx` + fail-closed (BẮT BUỘC trước 2e). **2e** reveal-secret endpoint. **2f** reset-token envelope + scrub outbox (0028). **2g** rotation job. **2h** FE.
