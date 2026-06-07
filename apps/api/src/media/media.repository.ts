@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { and, eq, ilike, inArray, isNull } from 'drizzle-orm';
 import { DatabaseService, type TenantTx } from '../db/db.service';
-import { channelMembers, channels, contentItems, platforms } from '../db/schema';
+import { channelMembers, channels, platforms } from '../db/schema';
 
 /** Input tạo kênh (đã validate ở DTO; platform = code khớp catalog). */
 export interface CreateChannelData {
@@ -253,41 +253,5 @@ export class MediaRepository {
         ),
       )
       .returning();
-  }
-
-  // ── Content ──────────────────────────────────────────────────────────────
-
-  listContent(companyId: string, projectId: string) {
-    return this.db.withTenant(companyId, (tx) =>
-      tx
-        .select()
-        .from(contentItems)
-        .where(
-          and(
-            eq(contentItems.companyId, companyId),
-            eq(contentItems.projectId, projectId),
-            isNull(contentItems.deletedAt),
-          ),
-        )
-        .orderBy(contentItems.createdAt),
-    );
-  }
-
-  createContent(
-    companyId: string,
-    projectId: string,
-    data: { title: string; contentTypeId?: string | null },
-  ) {
-    return this.db.withTenant(companyId, (tx) =>
-      tx
-        .insert(contentItems)
-        .values({
-          companyId,
-          projectId,
-          title: data.title,
-          contentTypeId: data.contentTypeId ?? null,
-        })
-        .returning(),
-    );
   }
 }

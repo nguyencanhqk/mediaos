@@ -8,7 +8,6 @@ import {
 import type {
   AddChannelMemberRequest,
   CreateChannelRequest,
-  CreateContentItemRequest,
   UpdateChannelHealthRequest,
   UpdateChannelMemberRequest,
   UpdateChannelRequest,
@@ -230,20 +229,5 @@ export class MediaService {
         actorUserId: user.id,
       });
     });
-  }
-
-  // ── Content ──────────────────────────────────────────────────────────────
-
-  listContent(companyId: string, projectId: string) {
-    return this.repo.listContent(companyId, projectId);
-  }
-
-  async createContent(companyId: string, projectId: string, dto: CreateContentItemRequest) {
-    const rows = await this.repo.createContent(companyId, projectId, {
-      title: dto.title,
-      contentTypeId: dto.contentTypeId ?? null,
-    });
-    if (!rows[0]) throw new InternalServerErrorException('Failed to create content item');
-    return rows[0];
   }
 }

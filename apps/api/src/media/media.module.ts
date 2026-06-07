@@ -4,16 +4,25 @@ import { PermissionModule } from '../permission/permission.module';
 import { ChatModule } from '../chat/chat.module';
 import { MediaRepository } from './media.repository';
 import { MediaService } from './media.service';
-import { MediaController } from './media.controller';
 import { ChannelsController } from './channels.controller';
 import { ProjectsRepository } from './projects.repository';
 import { ProjectsService } from './projects.service';
 import { ProjectsController } from './projects.controller';
+import { ContentRepository } from './content.repository';
+import { ContentService } from './content.service';
+import { ContentController } from './content.controller';
 
 @Module({
   imports: [DatabaseModule, PermissionModule, ChatModule],
-  providers: [MediaRepository, MediaService, ProjectsRepository, ProjectsService],
-  controllers: [MediaController, ChannelsController, ProjectsController],
-  exports: [MediaService, ProjectsService],
+  providers: [
+    MediaRepository,
+    MediaService,
+    ProjectsRepository,
+    ProjectsService,
+    ContentRepository,
+    ContentService,
+  ],
+  controllers: [ChannelsController, ProjectsController, ContentController],
+  exports: [MediaService, ProjectsService, ContentService],
 })
 export class MediaModule {}

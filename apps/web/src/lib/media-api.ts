@@ -1,18 +1,18 @@
 import { z } from "zod";
-import type { CreateContentItemRequest } from "@mediaos/contracts";
 import { contentItemSchema } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 
 /**
- * Content items (G4-2 legacy). Channels → channels-api, projects → projects-api (G6).
- * Content guard/ERD-full retrofit ở G6-4.
+ * Content items — thin client cho danh sách/tạo content theo project (dùng trong ProjectDetail tab).
+ * Content ERD-full (publish targets / assets / types) ở `content-api.ts` (G6-4). Channels → channels-api,
+ * projects → projects-api.
  */
 export const mediaApi = {
   listContent: (projectId: string) =>
-    apiFetch(`/projects/${projectId}/content`, z.array(contentItemSchema)),
-  createContent: (projectId: string, data: CreateContentItemRequest) =>
-    apiFetch(`/projects/${projectId}/content`, contentItemSchema, {
+    apiFetch(`/content?projectId=${encodeURIComponent(projectId)}`, z.array(contentItemSchema)),
+  createContent: (projectId: string, data: { title: string; contentTypeId?: string }) =>
+    apiFetch(`/content`, contentItemSchema, {
       method: "POST",
-      body: JSON.stringify(data),
+      body: JSON.stringify({ ...data, projectId }),
     }),
 };

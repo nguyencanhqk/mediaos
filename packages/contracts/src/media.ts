@@ -346,6 +346,118 @@ export type ProductionStatus = z.infer<typeof productionStatusSchema>;
 export const contentPrioritySchema = z.enum(["low", "medium", "high", "urgent"]);
 export type ContentPriority = z.infer<typeof contentPrioritySchema>;
 
+// ── Content channels (đăng đa kênh, CNT-002) ────────────────────────────────
+/** Publish status per-kênh — khớp content_channels_publish_status_check (0026). */
+export const publishStatusSchema = z.enum([
+  "not_scheduled",
+  "scheduled",
+  "publishing",
+  "published",
+  "failed",
+  "removed",
+]);
+export type PublishStatus = z.infer<typeof publishStatusSchema>;
+
+/** 1 publish-target (content ↔ kênh) — embed channelName/platform cho FE (join ở repo). */
+export const contentChannelSchema = z.object({
+  id: z.string().uuid(),
+  contentItemId: z.string().uuid(),
+  channelId: z.string().uuid(),
+  channelName: z.string(),
+  platform: channelPlatformSchema,
+  platformId: z.string().uuid().nullable(),
+  publishStatus: publishStatusSchema.nullable(),
+  publishUrl: z.string().nullable(),
+  plannedPublishAt: z.string().datetime().nullable(),
+  publishedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type ContentChannelDto = z.infer<typeof contentChannelSchema>;
+
+export const addContentChannelSchema = z.object({
+  channelId: z.string().uuid(),
+  publishStatus: publishStatusSchema.optional(),
+  publishUrl: z.string().url().max(1000).optional(),
+  plannedPublishAt: z.string().datetime().optional(),
+});
+export type AddContentChannelRequest = z.infer<typeof addContentChannelSchema>;
+
+export const updateContentChannelSchema = z
+  .object({
+    publishStatus: publishStatusSchema,
+    publishUrl: z.string().url().max(1000).nullable(),
+    plannedPublishAt: z.string().datetime().nullable(),
+    publishedAt: z.string().datetime().nullable(),
+  })
+  .partial();
+export type UpdateContentChannelRequest = z.infer<typeof updateContentChannelSchema>;
+
+// ── Content assets (version chain, CNT-003) ─────────────────────────────────
+export const assetTypeSchema = z.enum([
+  "script",
+  "voice",
+  "raw_video",
+  "edited_video",
+  "thumbnail",
+  "seo_document",
+  "reference",
+  "final_output",
+]);
+export type AssetType = z.infer<typeof assetTypeSchema>;
+
+export const assetStatusSchema = z.enum(["active", "archived"]);
+export type AssetStatus = z.infer<typeof assetStatusSchema>;
+
+export const contentAssetSchema = z.object({
+  id: z.string().uuid(),
+  companyId: z.string().uuid(),
+  contentItemId: z.string().uuid(),
+  assetType: assetTypeSchema.nullable(),
+  name: z.string().nullable(),
+  fileUrl: z.string().nullable(),
+  externalUrl: z.string().nullable(),
+  version: z.number().int(),
+  versionGroupId: z.string().uuid(),
+  parentAssetId: z.string().uuid().nullable(),
+  isCurrent: z.boolean(),
+  supersededBy: z.string().uuid().nullable(),
+  uploadedBy: z.string().uuid().nullable(),
+  status: assetStatusSchema,
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type ContentAssetDto = z.infer<typeof contentAssetSchema>;
+
+/** Tạo asset v1 (anchor group mới). PHẢI có fileUrl HOẶC externalUrl. */
+export const createContentAssetSchema = z
+  .object({
+    assetType: assetTypeSchema.optional(),
+    name: z.string().max(300).optional(),
+    fileUrl: z.string().url().max(1000).optional(),
+    externalUrl: z.string().url().max(1000).optional(),
+  })
+  .refine((d) => Boolean(d.fileUrl ?? d.externalUrl), {
+    message: "Cần fileUrl hoặc externalUrl",
+    path: ["fileUrl"],
+  });
+export type CreateContentAssetRequest = z.infer<typeof createContentAssetSchema>;
+
+/** Tạo version mới cho 1 asset (INSERT + flip is_current bản cũ trong 1 tx, ép ở service). */
+export const createContentAssetVersionSchema = z
+  .object({
+    assetType: assetTypeSchema.optional(),
+    name: z.string().max(300).optional(),
+    fileUrl: z.string().url().max(1000).optional(),
+    externalUrl: z.string().url().max(1000).optional(),
+  })
+  .refine((d) => Boolean(d.fileUrl ?? d.externalUrl), {
+    message: "Cần fileUrl hoặc externalUrl",
+    path: ["fileUrl"],
+  });
+export type CreateContentAssetVersionRequest = z.infer<typeof createContentAssetVersionSchema>;
+
+// ── Content items (ERD-full) ────────────────────────────────────────────────
 export const contentItemSchema = z.object({
   id: z.string().uuid(),
   companyId: z.string().uuid(),
@@ -368,14 +480,67 @@ export const contentItemSchema = z.object({
   priority: contentPrioritySchema.nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
+  /** Populated khi detail. */
+  contentType: contentTypeSchema.nullable().optional(),
+  channels: z.array(contentChannelSchema).optional(),
+  assets: z.array(contentAssetSchema).optional(),
 });
 export type ContentItemDto = z.infer<typeof contentItemSchema>;
 
 export const createContentItemSchema = z.object({
+  projectId: z.string().uuid(),
   title: z.string().min(1).max(300),
   contentTypeId: z.string().uuid().optional(),
+  code: z.string().max(80).optional(),
+  description: z.string().max(2000).optional(),
+  ownerUserId: z.string().uuid().optional(),
+  mainChannelId: z.string().uuid().optional(),
+  language: z.string().max(20).optional(),
+  priority: contentPrioritySchema.optional(),
+  plannedPublishAt: z.string().datetime().optional(),
 });
 export type CreateContentItemRequest = z.infer<typeof createContentItemSchema>;
+
+export const updateContentItemSchema = z
+  .object({
+    title: z.string().min(1).max(300),
+    contentTypeId: z.string().uuid().nullable(),
+    code: z.string().max(80).nullable(),
+    description: z.string().max(2000).nullable(),
+    ownerUserId: z.string().uuid().nullable(),
+    mainChannelId: z.string().uuid().nullable(),
+    language: z.string().max(20).nullable(),
+    status: contentStatusSchema,
+    productionStatus: productionStatusSchema.nullable(),
+    priority: contentPrioritySchema.nullable(),
+    plannedPublishAt: z.string().datetime().nullable(),
+    publishedAt: z.string().datetime().nullable(),
+    finalUrl: z.string().url().max(1000).nullable(),
+    thumbnailUrl: z.string().url().max(1000).nullable(),
+    scriptUrl: z.string().url().max(1000).nullable(),
+    videoFileUrl: z.string().url().max(1000).nullable(),
+  })
+  .partial();
+export type UpdateContentItemRequest = z.infer<typeof updateContentItemSchema>;
+
+/** Filter list content (CNT-001: project/status/production/type/kênh chính/q). */
+export const listContentQuerySchema = z.object({
+  projectId: z.string().uuid().optional(),
+  status: contentStatusSchema.optional(),
+  productionStatus: productionStatusSchema.optional(),
+  contentTypeId: z.string().uuid().optional(),
+  mainChannelId: z.string().uuid().optional(),
+  q: z.string().max(200).optional(),
+});
+export type ListContentQuery = z.infer<typeof listContentQuerySchema>;
+
+/** Gợi ý workflow theo content type (CNT-001) — chỉ trả template id (instance thật ở G7). */
+export const suggestWorkflowSchema = z.object({
+  contentTypeId: z.string().uuid().nullable(),
+  defaultWorkflowTemplateId: z.string().uuid().nullable(),
+  defaultEvaluationTemplateId: z.string().uuid().nullable(),
+});
+export type SuggestWorkflowDto = z.infer<typeof suggestWorkflowSchema>;
 
 // ── Project ↔ channel / team / member links (G6-3) ──────────────────────────
 
