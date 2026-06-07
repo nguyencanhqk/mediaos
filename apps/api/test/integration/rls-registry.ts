@@ -430,6 +430,17 @@ export const RLS_TABLES: RlsTableCase[] = [
       return seedContentItem(direct, t.companyId, projectId);
     },
   },
+  {
+    name: "content_types",
+    table: "content_types",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO content_types (company_id, name, code) VALUES ($1, $2, $3) RETURNING id`,
+        [t.companyId, `rls-ct-${randomUUID().slice(0, 8)}`, `rls-ct-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 
   // ── G4-3 Workflow ────────────────────────────────────────────────────────────
   {

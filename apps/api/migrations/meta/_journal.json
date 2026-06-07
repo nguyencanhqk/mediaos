@@ -162,6 +162,13 @@
       "when": 1717500023000,
       "tag": "0023_g6_projects_full",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1717500024000,
+      "tag": "0024_g6_content_types",
+      "breakpoints": true
     }
   ]
 }

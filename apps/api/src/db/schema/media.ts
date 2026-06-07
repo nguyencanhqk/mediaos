@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, date, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, date, index, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { currentCompanyDefault } from "./_helpers";
 import { companies } from "./companies";
 import { orgUnits, teams } from "./org";
@@ -293,6 +293,45 @@ export const projectMembers = pgTable(
 
 export type ProjectMember = typeof projectMembers.$inferSelect;
 export type NewProjectMember = typeof projectMembers.$inferInsert;
+
+/**
+ * content_types — loại nội dung (video dài / short / social post …) per-tenant. DDL/RLS: 0024. Soft-delete.
+ * `default_workflow_template_id`/`default_evaluation_template_id` = uuid TRẦN (KHÔNG FK ở M2; defer G7/G8).
+ */
+export const contentTypes = pgTable(
+  "content_types",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    code: text("code"),
+    description: text("description"),
+    defaultWorkflowTemplateId: uuid("default_workflow_template_id"), // NO FK (defer G7)
+    defaultEvaluationTemplateId: uuid("default_evaluation_template_id"), // NO FK (defer G8)
+    targetPlatform: text("target_platform"),
+    standardDuration: integer("standard_duration"),
+    status: text("status").notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("content_types_company_id_idx").on(t.companyId),
+    uniqueIndex("content_types_company_name_active_uq")
+      .on(t.companyId, t.name)
+      .where(sql`deleted_at IS NULL`),
+    uniqueIndex("content_types_company_code_active_uq")
+      .on(t.companyId, t.code)
+      .where(sql`deleted_at IS NULL AND code IS NOT NULL`),
+    check("content_types_status_check", sql`status IN ('active','inactive')`),
+  ],
+);
+
+export type ContentType = typeof contentTypes.$inferSelect;
+export type NewContentType = typeof contentTypes.$inferInsert;
 
 /**
  * content_items — video / short / reel thuộc 1 project. Soft-delete: deleted_at.
