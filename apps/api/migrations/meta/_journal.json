@@ -176,6 +176,13 @@
       "when": 1717500025000,
       "tag": "0025_g6_content_items_full",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1717500026000,
+      "tag": "0026_g6_content_channels_assets",
+      "breakpoints": true
     }
   ]
 }

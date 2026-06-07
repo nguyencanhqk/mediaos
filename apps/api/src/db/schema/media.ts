@@ -1,5 +1,17 @@
 import { sql } from "drizzle-orm";
-import { check, date, index, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  check,
+  date,
+  index,
+  integer,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { currentCompanyDefault } from "./_helpers";
 import { companies } from "./companies";
 import { orgUnits, teams } from "./org";
@@ -394,3 +406,93 @@ export const contentItems = pgTable(
 
 export type ContentItem = typeof contentItems.$inferSelect;
 export type NewContentItem = typeof contentItems.$inferInsert;
+
+/**
+ * content_channels — 1 content đăng đa kênh (CNT-002): mỗi kênh có publish status/url/lịch riêng.
+ * DDL/RLS: 0026. Mutable (publish_status/url) → GRANT UPDATE. Unique dẫn đầu company_id.
+ */
+export const contentChannels = pgTable(
+  "content_channels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    contentItemId: uuid("content_item_id")
+      .notNull()
+      .references(() => contentItems.id, { onDelete: "cascade" }),
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => channels.id, { onDelete: "cascade" }),
+    platformId: uuid("platform_id").references(() => platforms.id, { onDelete: "restrict" }),
+    publishStatus: text("publish_status"),
+    publishUrl: text("publish_url"),
+    plannedPublishAt: timestamp("planned_publish_at", { withTimezone: true }),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("content_channels_company_id_idx").on(t.companyId),
+    index("content_channels_content_id_idx").on(t.contentItemId),
+    index("content_channels_publish_idx").on(t.companyId, t.channelId, t.publishStatus),
+    uniqueIndex("content_channels_uq").on(t.companyId, t.contentItemId, t.channelId),
+    check(
+      "content_channels_publish_status_check",
+      sql`publish_status IS NULL OR publish_status IN ('not_scheduled','scheduled','publishing','published','failed','removed')`,
+    ),
+  ],
+);
+
+export type ContentChannel = typeof contentChannels.$inferSelect;
+export type NewContentChannel = typeof contentChannels.$inferInsert;
+
+/**
+ * content_assets — asset + version chain (CNT-003, ERD v2 §11). Cấm hard-delete version cũ (chỉ flip
+ * is_current=false + superseded_by). v1: version_group_id = id, parent_asset_id NULL (anchor, ép ở service).
+ * one-current uq WHERE is_current AND deleted_at IS NULL. Soft-delete bản current PHẢI flip is_current cùng tx.
+ */
+export const contentAssets = pgTable(
+  "content_assets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    contentItemId: uuid("content_item_id")
+      .notNull()
+      .references(() => contentItems.id, { onDelete: "cascade" }),
+    assetType: text("asset_type"),
+    name: text("name"),
+    fileUrl: text("file_url"),
+    externalUrl: text("external_url"),
+    version: integer("version").notNull().default(1),
+    versionGroupId: uuid("version_group_id").notNull(),
+    parentAssetId: uuid("parent_asset_id"),
+    isCurrent: boolean("is_current").notNull().default(true),
+    supersededBy: uuid("superseded_by"),
+    uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
+    status: text("status").notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("content_assets_company_id_idx").on(t.companyId),
+    index("content_assets_content_id_idx").on(t.contentItemId),
+    index("content_assets_version_group_idx").on(t.versionGroupId),
+    uniqueIndex("content_assets_one_current_uq")
+      .on(t.companyId, t.versionGroupId)
+      .where(sql`is_current AND deleted_at IS NULL`),
+    check(
+      "content_assets_type_check",
+      sql`asset_type IS NULL OR asset_type IN ('script','voice','raw_video','edited_video','thumbnail','seo_document','reference','final_output')`,
+    ),
+    check("content_assets_status_check", sql`status IN ('active','archived')`),
+  ],
+);
+
+export type ContentAsset = typeof contentAssets.$inferSelect;
+export type NewContentAsset = typeof contentAssets.$inferInsert;

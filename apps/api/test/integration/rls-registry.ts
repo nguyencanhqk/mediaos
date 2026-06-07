@@ -442,6 +442,39 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+  {
+    name: "content_channels",
+    table: "content_channels",
+    seedRow: async (direct, t) => {
+      const projectId = await seedProject(direct, t.companyId);
+      const contentItemId = await seedContentItem(direct, t.companyId, projectId);
+      const chRes = await direct.query(
+        `INSERT INTO channels (company_id, name, platform, platform_id, status)
+         VALUES ($1, $2, 'youtube', (SELECT id FROM platforms WHERE code = 'youtube'), 'active') RETURNING id`,
+        [t.companyId, `rls-cc-ch-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO content_channels (company_id, content_item_id, channel_id, publish_status)
+         VALUES ($1, $2, $3, 'not_scheduled') RETURNING id`,
+        [t.companyId, contentItemId, chRes.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "content_assets",
+    table: "content_assets",
+    seedRow: async (direct, t) => {
+      const projectId = await seedProject(direct, t.companyId);
+      const contentItemId = await seedContentItem(direct, t.companyId, projectId);
+      const r = await direct.query(
+        `INSERT INTO content_assets (company_id, content_item_id, asset_type, name, version, version_group_id)
+         VALUES ($1, $2, 'script', 'rls-asset', 1, $3) RETURNING id`,
+        [t.companyId, contentItemId, randomUUID()],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 
   // ── G4-3 Workflow ────────────────────────────────────────────────────────────
   {
