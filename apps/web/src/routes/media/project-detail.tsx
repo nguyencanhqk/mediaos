@@ -347,7 +347,7 @@ function ContentTab({ projectId }: { projectId: string }) {
   });
 
   const create = useMutation({
-    mutationFn: () => mediaApi.createContent(projectId, { title, contentType: "video" }),
+    mutationFn: () => mediaApi.createContent(projectId, { title }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["projects", projectId, "content"] });
       setTitle("");
@@ -378,7 +378,7 @@ function ContentTab({ projectId }: { projectId: string }) {
             <li key={item.id} className="flex items-center justify-between px-4 py-3 text-sm">
               <div>
                 <p className="font-medium">{item.title}</p>
-                <p className="text-xs capitalize text-muted-foreground">{item.contentType}</p>
+                <p className="text-xs text-muted-foreground">{item.productionStatus ?? "—"}</p>
               </div>
               <span className="text-xs text-muted-foreground">
                 {CONTENT_STATUS_LABELS[item.status]}

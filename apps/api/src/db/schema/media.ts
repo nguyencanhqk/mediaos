@@ -334,7 +334,9 @@ export type ContentType = typeof contentTypes.$inferSelect;
 export type NewContentType = typeof contentTypes.$inferInsert;
 
 /**
- * content_items — video / short / reel thuộc 1 project. Soft-delete: deleted_at.
+ * content_items — nội dung (video/short/social…) thuộc 1 project. ERD-full sau G6-4 (ALTER 0025).
+ * `content_type` text (0007) ĐÃ DROP → `content_type_id` FK content_types (nullable, ON DELETE SET NULL).
+ * `status` (workflow-lite, 0007) GIỮ NGUYÊN; `production_status` (10-value) TÁCH riêng. Soft-delete.
  */
 export const contentItems = pgTable(
   "content_items",
@@ -348,8 +350,21 @@ export const contentItems = pgTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
-    contentType: text("content_type").notNull().default("video"),
+    contentTypeId: uuid("content_type_id").references(() => contentTypes.id, { onDelete: "set null" }),
+    code: text("code"),
+    description: text("description"),
+    ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+    mainChannelId: uuid("main_channel_id").references(() => channels.id, { onDelete: "set null" }),
+    language: text("language"),
     status: text("status").notNull().default("draft"),
+    productionStatus: text("production_status"),
+    plannedPublishAt: timestamp("planned_publish_at", { withTimezone: true }),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    finalUrl: text("final_url"),
+    thumbnailUrl: text("thumbnail_url"),
+    scriptUrl: text("script_url"),
+    videoFileUrl: text("video_file_url"),
+    priority: text("priority"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -357,11 +372,23 @@ export const contentItems = pgTable(
   (t) => [
     index("content_items_company_id_idx").on(t.companyId),
     index("content_items_project_id_idx").on(t.projectId),
-    check("content_items_type_check", sql`content_type IN ('video', 'short', 'reel')`),
+    index("content_items_content_type_id_idx").on(t.contentTypeId),
+    index("content_items_main_channel_idx").on(t.companyId, t.mainChannelId, t.productionStatus),
+    index("content_items_project_status_idx").on(t.companyId, t.projectId, t.status),
+    uniqueIndex("content_items_company_code_active_uq")
+      .on(t.companyId, t.code)
+      .where(sql`deleted_at IS NULL AND code IS NOT NULL`),
     check(
       "content_items_status_check",
       sql`status IN ('draft', 'in_production', 'review', 'approved', 'published')`,
     ),
+    check(
+      "content_items_production_status_check",
+      sql`production_status IS NULL OR production_status IN
+    ('idea','planning','in_production','waiting_review','revision','approved',
+     'scheduled','published','analyzed','cancelled')`,
+    ),
+    check("content_items_priority_check", sql`priority IS NULL OR priority IN ('low','medium','high','urgent')`),
   ],
 );
 

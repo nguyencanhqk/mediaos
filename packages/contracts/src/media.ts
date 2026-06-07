@@ -87,13 +87,24 @@ export const updateChannelSchema = z
   .partial();
 export type UpdateChannelRequest = z.infer<typeof updateChannelSchema>;
 
-/** Filter list kênh (CH-001: nền tảng/trạng thái/manager/niche/q). */
+/** Cập nhật sức khỏe kênh (G6-5) — health_status/score/note (CH-003). */
+export const updateChannelHealthSchema = z
+  .object({
+    healthStatus: channelHealthStatusSchema.nullable(),
+    healthScore: z.coerce.number().min(0).max(100).nullable(),
+    healthNote: z.string().max(1000).nullable(),
+  })
+  .partial();
+export type UpdateChannelHealthRequest = z.infer<typeof updateChannelHealthSchema>;
+
+/** Filter list kênh (CH-001: nền tảng/trạng thái/manager/niche/q; risk = chỉ kênh rủi ro/đi xuống). */
 export const listChannelsQuerySchema = z.object({
   platform: channelPlatformSchema.optional(),
   status: channelStatusSchema.optional(),
   managerId: z.string().uuid().optional(),
   niche: z.string().max(120).optional(),
   q: z.string().max(200).optional(),
+  risk: z.coerce.boolean().optional(),
 });
 export type ListChannelsQuery = z.infer<typeof listChannelsQuerySchema>;
 
@@ -261,16 +272,100 @@ export const listProjectsQuerySchema = z.object({
 });
 export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
 
-export const contentTypeSchema = z.enum(["video", "short", "reel"]);
+// ── Content types (catalog per-tenant, G6-4) ────────────────────────────────
+export const contentTypeStatusSchema = z.enum(["active", "inactive"]);
+export type ContentTypeStatus = z.infer<typeof contentTypeStatusSchema>;
+
+/**
+ * Content type (0024). `contentTypeSchema` ĐÃ ĐỔI từ enum (video/short/reel) → object —
+ * breaking change G6-4b (content_type text → content_type_id FK).
+ */
+export const contentTypeSchema = z.object({
+  id: z.string().uuid(),
+  companyId: z.string().uuid(),
+  name: z.string(),
+  code: z.string().nullable(),
+  description: z.string().nullable(),
+  /** uuid trần (KHÔNG FK ở M2; defer G7/G8). */
+  defaultWorkflowTemplateId: z.string().uuid().nullable(),
+  defaultEvaluationTemplateId: z.string().uuid().nullable(),
+  targetPlatform: z.string().nullable(),
+  /** integer — Drizzle trả number. */
+  standardDuration: z.number().int().nullable(),
+  status: contentTypeStatusSchema,
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type ContentTypeDto = z.infer<typeof contentTypeSchema>;
+
+export const createContentTypeSchema = z.object({
+  name: z.string().min(1).max(200),
+  code: z.string().max(80).optional(),
+  description: z.string().max(2000).optional(),
+  defaultWorkflowTemplateId: z.string().uuid().optional(),
+  defaultEvaluationTemplateId: z.string().uuid().optional(),
+  targetPlatform: z.string().max(80).optional(),
+  standardDuration: z.coerce.number().int().min(0).max(100000).optional(),
+});
+export type CreateContentTypeRequest = z.infer<typeof createContentTypeSchema>;
+
+export const updateContentTypeSchema = z
+  .object({
+    name: z.string().min(1).max(200),
+    code: z.string().max(80).nullable(),
+    description: z.string().max(2000).nullable(),
+    defaultWorkflowTemplateId: z.string().uuid().nullable(),
+    defaultEvaluationTemplateId: z.string().uuid().nullable(),
+    targetPlatform: z.string().max(80).nullable(),
+    standardDuration: z.coerce.number().int().min(0).max(100000).nullable(),
+    status: contentTypeStatusSchema,
+  })
+  .partial();
+export type UpdateContentTypeRequest = z.infer<typeof updateContentTypeSchema>;
+
+// ── Content items (ERD-full, G6-4) ──────────────────────────────────────────
+/** Workflow-lite status (0007, GIỮ NGUYÊN). */
 export const contentStatusSchema = z.enum(["draft", "in_production", "review", "approved", "published"]);
+export type ContentStatus = z.infer<typeof contentStatusSchema>;
+
+/** Production status (10-value, TÁCH khỏi status) — khớp content_items_production_status_check (0025). */
+export const productionStatusSchema = z.enum([
+  "idea",
+  "planning",
+  "in_production",
+  "waiting_review",
+  "revision",
+  "approved",
+  "scheduled",
+  "published",
+  "analyzed",
+  "cancelled",
+]);
+export type ProductionStatus = z.infer<typeof productionStatusSchema>;
+
+export const contentPrioritySchema = z.enum(["low", "medium", "high", "urgent"]);
+export type ContentPriority = z.infer<typeof contentPrioritySchema>;
 
 export const contentItemSchema = z.object({
   id: z.string().uuid(),
   companyId: z.string().uuid(),
   projectId: z.string().uuid(),
   title: z.string(),
-  contentType: contentTypeSchema,
+  contentTypeId: z.string().uuid().nullable(),
+  code: z.string().nullable(),
+  description: z.string().nullable(),
+  ownerUserId: z.string().uuid().nullable(),
+  mainChannelId: z.string().uuid().nullable(),
+  language: z.string().nullable(),
   status: contentStatusSchema,
+  productionStatus: productionStatusSchema.nullable(),
+  plannedPublishAt: z.string().datetime().nullable(),
+  publishedAt: z.string().datetime().nullable(),
+  finalUrl: z.string().nullable(),
+  thumbnailUrl: z.string().nullable(),
+  scriptUrl: z.string().nullable(),
+  videoFileUrl: z.string().nullable(),
+  priority: contentPrioritySchema.nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -278,7 +373,7 @@ export type ContentItemDto = z.infer<typeof contentItemSchema>;
 
 export const createContentItemSchema = z.object({
   title: z.string().min(1).max(300),
-  contentType: contentTypeSchema.default("video"),
+  contentTypeId: z.string().uuid().optional(),
 });
 export type CreateContentItemRequest = z.infer<typeof createContentItemSchema>;
 

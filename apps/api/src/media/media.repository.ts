@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { and, eq, ilike, isNull } from 'drizzle-orm';
+import { and, eq, ilike, inArray, isNull } from 'drizzle-orm';
 import { DatabaseService, type TenantTx } from '../db/db.service';
 import { channelMembers, channels, contentItems, platforms } from '../db/schema';
 
@@ -36,7 +36,12 @@ export interface ListChannelsFilter {
   managerId?: string;
   niche?: string;
   q?: string;
+  /** Chỉ kênh cần chú ý — health_status ∈ {risk, declining} (G6-5 feed Dashboard). */
+  risk?: boolean;
 }
+
+/** Trạng thái health coi là "kênh rủi ro" (CH-003 surface + filter). */
+const RISK_HEALTH_STATUSES = ['risk', 'declining'] as const;
 
 export interface AddChannelMemberData {
   userId: string;
@@ -93,6 +98,7 @@ export class MediaRepository {
       if (filters.managerId) conds.push(eq(channels.channelManagerId, filters.managerId));
       if (filters.niche) conds.push(eq(channels.niche, filters.niche));
       if (filters.q) conds.push(ilike(channels.name, `%${filters.q}%`));
+      if (filters.risk) conds.push(inArray(channels.healthStatus, [...RISK_HEALTH_STATUSES]));
       return tx.select().from(channels).where(and(...conds)).orderBy(channels.name);
     });
   }
@@ -270,10 +276,18 @@ export class MediaRepository {
   createContent(
     companyId: string,
     projectId: string,
-    data: { title: string; contentType: string },
+    data: { title: string; contentTypeId?: string | null },
   ) {
     return this.db.withTenant(companyId, (tx) =>
-      tx.insert(contentItems).values({ companyId, projectId, ...data }).returning(),
+      tx
+        .insert(contentItems)
+        .values({
+          companyId,
+          projectId,
+          title: data.title,
+          contentTypeId: data.contentTypeId ?? null,
+        })
+        .returning(),
     );
   }
 }

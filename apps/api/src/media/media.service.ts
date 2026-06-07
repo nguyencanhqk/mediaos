@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
@@ -8,6 +9,7 @@ import type {
   AddChannelMemberRequest,
   CreateChannelRequest,
   CreateContentItemRequest,
+  UpdateChannelHealthRequest,
   UpdateChannelMemberRequest,
   UpdateChannelRequest,
 } from '@mediaos/contracts';
@@ -24,6 +26,14 @@ function isUniqueViolation(err: unknown): boolean {
     'code' in err &&
     (err as Record<string, unknown>)['code'] === PG_UNIQUE_VIOLATION
   );
+}
+
+/** numeric/decimal contract (number) → Drizzle numeric (string). undefined → bỏ qua patch; null → clear. */
+function numToStr(v: number | null | undefined): string | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+  if (!Number.isFinite(v)) throw new BadRequestException(`Invalid numeric value: ${v}`);
+  return String(v);
 }
 
 interface RequestUser {
@@ -110,6 +120,31 @@ export class MediaService {
       if (isUniqueViolation(err)) throw new ConflictException('Channel name or code already exists');
       throw err;
     }
+  }
+
+  /** G6-5 — cập nhật sức khỏe kênh (health_status/score/note) + audit cùng tx. healthScore numeric(5,2) → string. */
+  async updateChannelHealth(user: RequestUser, id: string, dto: UpdateChannelHealthRequest) {
+    return this.db.withTenant(user.companyId, async (tx) => {
+      const rows = await this.repo.updateChannelHealth(
+        user.companyId,
+        id,
+        {
+          healthStatus: dto.healthStatus,
+          healthScore: numToStr(dto.healthScore),
+          healthNote: dto.healthNote,
+        },
+        tx,
+      );
+      if (!rows[0]) throw new NotFoundException(`Channel not found: ${id}`);
+      await this.audit.record(tx, {
+        action: 'ChannelHealthUpdated',
+        objectType: 'channel',
+        objectId: id,
+        actorUserId: user.id,
+        after: { changed: Object.keys(dto) },
+      });
+      return rows[0];
+    });
   }
 
   async deleteChannel(user: RequestUser, id: string) {
@@ -206,7 +241,7 @@ export class MediaService {
   async createContent(companyId: string, projectId: string, dto: CreateContentItemRequest) {
     const rows = await this.repo.createContent(companyId, projectId, {
       title: dto.title,
-      contentType: dto.contentType,
+      contentTypeId: dto.contentTypeId ?? null,
     });
     if (!rows[0]) throw new InternalServerErrorException('Failed to create content item');
     return rows[0];

@@ -41,9 +41,10 @@ async function seedProject(direct: Pool, companyId: string): Promise<string> {
 }
 
 async function seedContentItem(direct: Pool, companyId: string, projectId: string): Promise<string> {
+  // 0025 đã DROP cột text `content_type` → content_type_id (FK, nullable) mặc định NULL.
   const r = await direct.query(
-    `INSERT INTO content_items (company_id, project_id, title, content_type, status)
-     VALUES ($1, $2, 'rls-ci', 'video', 'draft') RETURNING id`,
+    `INSERT INTO content_items (company_id, project_id, title, status)
+     VALUES ($1, $2, 'rls-ci', 'draft') RETURNING id`,
     [companyId, projectId],
   );
   return r.rows[0].id as string;
