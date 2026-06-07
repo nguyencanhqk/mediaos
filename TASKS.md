@@ -81,7 +81,7 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 | G3 | Permission Engine | 🛠️ TDD 🔋 | L | ✅ đóng (merged master — 119 tests, typecheck clean, FULL gate passed) |
 | G4 | 🏁 MVP-0 Walking Skeleton | 🤖+🛠️ hỗn hợp | XL | 🟡 đang làm |
 | G5 | Tổ chức & Nhân sự đầy đủ | 🤖 AI-bulk 🟢 | L | ✅ |
-| G6 | Media (Channel/Project/Content) | 🤖 + 🛠️(G6-2) | L | 🟡 đang làm (plan ✅ PASS) |
+| G6 | Media (Channel/Project/Content) | 🤖 + 🛠️(G6-2) | L | 🟡 G6-1/3/4/5 ✅ — chỉ còn **G6-2** (crown-jewel) |
 | G7 | Workflow Builder | 🛠️ TDD 🔋 | XL | ☐ |
 | G8 | Approval · Defect · Eval · KPI | 🛠️+🤖 | L | ☐ |
 | G9 | 🧩 Task Hub hợp nhất | 🛠️+🤖 | L | ☐ |
@@ -217,7 +217,7 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 - [x] **G6-1** 🤖🟢 (M) Platform + Channel + `channel_members` + gán Manager/team; lọc theo nền tảng/trạng thái. _(BE 1a–1d `8a9fbe3`/`c5060aa`; FE 1e `f4a07d2`: list+filter+TanStack Table, detail tabs Overview/Members, members CRUD)._
 - [ ] **G6-2** 🛠️🔋 (L) 🔒 **Platform Account Encryption** (envelope + KMS/Vault, mã hoá app-side; `reveal-secret` + re-auth + **audit mỗi lần xem/sửa**). **FULL gate.** _(custom `secret-encryption-reviewer`; `ecc:security-reviewer` + `ecc:database-reviewer`)._
 - [x] **G6-3** 🤖🟢 (S) Project ERD-full: gắn **nhiều kênh · nhiều team · nhiều thành viên** (PRJ-002/003/004, BR-003). _(3a migration 0023 `6a380a1`; 3bc contracts+BE `e335795`; 3d FE `c41039c`; FULL-gate fix `9e583dc`. Migrate→tenant-isolation 118 pass+rls-guards→typecheck/lint/build xanh; app boot routes /projects* OK. ⚠️ chưa render live (auth header chưa wa FE-wide — pre-existing). Bonus: vá lỗ rls-registry G5 `d5021ba`.)_
-- [ ] **G6-4** 🤖🟢 (M) Content/Video: đăng **đa kênh**, content type, asset + version, gợi ý workflow theo content type.
+- [x] **G6-4** 🤖🟢 (M) Content/Video: đăng **đa kênh**, content type, asset + version, gợi ý workflow theo content type. _(Migration 0024 content_types + 0025 content_items ERD-full (breaking content_type text→content_type_id FK; data-migration NOT EXISTS seed + backfill + GUARD NULL) + 0026 content_channels/content_assets (version chain one-current uq). BE: ContentController/Service/Repository tách (CRUD + đa kênh publish snapshot platform_id + asset version chain demote→insert→supersede 1-tx + soft-delete current flip + suggest-workflow + audit + cross-tenant guard in-tx); gỡ content khỏi Media\*. FE: /content list + /content/$id tabs (Tổng quan/Kênh đăng/Asset version) + content-api + CreateContentDialog. FULL gate (database+security+silent-failure) → fix query validation/version-chain guards/owner chéo tenant `7c008ce`. typecheck 4 + content.int 10 + rls-guards 3 + tenant-isolation 126 + web lint/build xanh. ⚠️ chưa render live.)_
 - [x] **G6-5** 🤖🟢 (S) Channel Health (score/status, risk note) → feed Dashboard. _(KHÔNG migration — cột health_* có sẵn ở 0021. 5a BE: `PATCH /channels/:id/health` + audit `ChannelHealthUpdated` + filter risk (health_status ∈ risk/declining); 5b FE: tab "Sức khỏe" (form gated update:channel) + filter "Chỉ kênh rủi ro" + widget Dashboard "Kênh rủi ro". LIGHT gate: typecheck 3 pkg + lint 0 error + 17 web test + vite build xanh. ⚠️ chưa render live.)_
 
 **DB:** `platforms` `channels` `platform_accounts` `channel_accounts` `channel_members` `projects` `project_channels` `project_teams` `project_members` `content_types` `content_items` `content_channels` `content_assets`

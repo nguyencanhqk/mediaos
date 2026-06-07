@@ -2,12 +2,10 @@
 
 > Đọc file này + [`G6-media-full.md`](./G6-media-full.md) (kế hoạch gốc, plan-reviewer PASS) TRƯỚC khi code tiếp.
 > Mục tiêu: 1 session mới cầm file này là tiếp tục được ngay, không phải dò lại.
-> Cập nhật lần cuối: 2026-06-07 · Branch: **`feat/g6-media`** · HEAD: **`4e620a0`**
-> ⚠️ **2 session song song chung 1 working tree:** session này làm **G6-5** (Channel Health — commit `4e620a0`);
-> 1 session khác làm **G6-4** (Content full — commits `0041ea4`/`22a3ae2`/`9b2691f` = migration 0024/0025/0026).
-> Do chung working tree, commit `22a3ae2` (g6-4b) đã "nuốt" luôn phần G6-5 ở `media.ts`/`media.repository.ts`/
-> `media.service.ts` — code đủ trên branch, chỉ lệch nhãn commit. §1 table dưới đây CHƯA gộp G6-4; cần 2 session
-> reconcile lại docs.
+> Cập nhật lần cuối: 2026-06-07 · Branch: **`feat/g6-media`** · HEAD: **`7c008ce`** (G6-4 done — còn **G6-2**)
+> ✅ **Reconciled:** 2 session song song đã hoàn tất — **G6-5** (Channel Health, `4e620a0` + fix settings.module
+> `421e15c`) và **G6-4** (Content full, `0041ea4`→`7c008ce`). Lịch sử interleave nhưng linear, không conflict;
+> tree cuối nhất quán + xanh. **G6-1/3/4/5 XONG — chỉ còn G6-2 (crown-jewel, hand-driven).**
 
 ---
 
@@ -26,13 +24,21 @@
 | `e335795` `feat(g6-3bc)` | **Contracts + BE**: `projectSchema` full + request schemas; `ProjectsRepository`/`Service`/`Controller` (tách khỏi MediaService) — CRUD + attach/detach kênh/team/member + audit-in-tx + `@RequirePermission` gate; gỡ project khỏi MediaController/Service/Repo (giữ content) | ✅ typecheck+lint+app boot |
 | `c41039c` `feat(g6-3d)` | **FE projects**: `projects-api` + `ProjectTable`/`ProjectFilterBar` (status/type/priority/PM/q) + create/edit dialogs + detail `/projects/$id` tabs (Tổng quan/Kênh/Team/Thành viên/Nội dung); `link-dialogs`; media-api thu gọn content-only | ✅ typecheck(3 pkg)+lint+17 test+vite build |
 | `9e583dc` `fix(g6-3)` | **FULL-gate review fix**: in-tx tenant-scoped guard channel/team/user (chặn link chéo tenant + TOCTOU soft-delete); audit objectId removeTeam→teamId; listProjects sub-query scope theo project ids; numToStr finite guard | ✅ typecheck+lint+regression |
+| `4e620a0` `feat(g6-5)` | **Channel Health** (KHÔNG migration — health_* có ở 0021): `PATCH /channels/:id/health` + audit `ChannelHealthUpdated` + filter risk; FE tab Sức khỏe + filter "kênh rủi ro" + Dashboard widget | ✅ typecheck+lint+build |
+| `421e15c` `fix(api)` | **settings.module import PermissionModule** — unblock e2e bootstrap (pre-existing lỗ G5, ngoài G6) | ✅ |
+| `0041ea4` `feat(g6-4a)` | **Migration 0024** `content_types` (RLS+FORCE; template id = uuid TRẦN không FK, defer G7/G8) + Drizzle + rls-registry | ✅ migrate 24 + regression |
+| `22a3ae2` `feat(g6-4b)` | **Migration 0025** `content_items` ERD-full (🔴 breaking: `content_type` text → `content_type_id` FK; NOT EXISTS seed + backfill + GUARD NULL + production_status) + media.ts + contracts (contentTypeSchema enum→object) + rls-registry seedContentItem + FE default | ✅ migrate 25 + regression |
+| `9b2691f` `feat(g6-4c)` | **Migration 0026** `content_channels` + `content_assets` (version chain, one-current uq WHERE is_current AND deleted_at IS NULL) + Drizzle + rls-registry x2 | ✅ migrate 26 + tenant-isolation 126 |
+| `da67d1a` `feat(g6-4de)` | **Contracts + BE**: content full contracts (publishStatus/contentChannel, assetType/contentAsset+version, suggest); `ContentController`/`Service`/`Repository` tách — CRUD + đa kênh publish (snapshot platform_id) + asset version chain (demote→insert→supersede 1-tx) + soft-delete current flip + suggest-workflow + audit + cross-tenant guard; gỡ content khỏi Media\* (xoá MediaController) | ✅ typecheck + content.int 9 |
+| `b554a27` `feat(g6-4f)` | **FE content**: `content-api` + `/content` list (filter+table+CreateContentDialog gợi ý workflow) + `/content/$id` tabs (Tổng quan/Kênh đăng/Asset version) + constants VI + nav | ✅ typecheck 4 + web lint/build |
+| `7c008ce` `fix(g6-4)` | **FULL-gate review fix**: ListContentQueryDto (q≤200 + filter uuid, chặn DoS); guard ownerUserId chéo tenant; escape ILIKE; guard insert rows + demote/supersede rows; softDelete luôn is_current=false; contentExistsTx cho update/remove channel; join deleted_at | ✅ content.int 10 + regression |
 
 **Trạng thái DB thực tế (đã verify live):**
-- DB từng kẹt ở **0013** (G5 0014–0019 + G6 0020–0021 CHƯA từng apply). Nay đã migrate sạch tới **0021** (22 record trong `drizzle.__drizzle_migrations`).
-- `platforms` seed 6 code; `channels.platform_id` NOT NULL; `channels_status_check` = 5 value mới; `channel_members` tồn tại; audit CHECK có đủ type G6.
-- **G2-5 2-tenant regression: 100 pass / 2 skip** (đã phủ `channels` + `channel_members`).
-- `pnpm typecheck` xanh cả 3 package.
-- **G6-1e FE (f4a07d2):** typecheck 3 pkg + lint (0 error) + 17 web test + `vite build` xanh. Cài thêm dep `@tanstack/react-table` (data-grid theo CLAUDE.md). KHÔNG migration. ⚠️ Chưa render live với API+DB (mới verify build/type, chưa chạy browser + auth + seed).
+- Đã migrate sạch tới **0026** (26 record trong `drizzle.__drizzle_migrations`). `content_items.content_type` text ĐÃ DROP → `content_type_id` FK; `content_types`/`content_channels`/`content_assets` tồn tại (RLS+FORCE).
+- **2-tenant regression: tenant-isolation 126 pass / 2 skip + rls-guards 3 pass** (đã phủ content_types/content_channels/content_assets). `content.int-spec` 10 ca (version chain/đa kênh/cross-tenant/suggest).
+- `pnpm typecheck` xanh cả 3 package; web lint 0 error + vite build xanh.
+- ⚠️ **Chưa render live** với browser+auth+seed (mọi FE G6 cùng trạng thái — auth header chưa wa FE-wide, pre-existing).
+- ✅ G6-5 (Channel Health) + e2e bootstrap fix (`421e15c`) đã xong ở session song song.
 
 ---
 
@@ -92,12 +98,12 @@ pnpm typecheck
 
 > ⚠️ **TRAP cho G6-2 (0022) — journal when-ordering:** 0023–0026 được tạo TRƯỚC 0022 (G6-2 làm cuối). `migrate.ts` của Drizzle áp migration có `when` > `when` lớn nhất đã apply. 0022 nếu giữ `when=1717500022000` (< 0023..0026 đã apply) sẽ **bị BỎ QUA**. Khi làm G6-2: đặt `when` của 0022 **LỚN HƠN** 0028 (vd 1717500030000+) HOẶC renumber. KHÔNG dùng công thức `when=base+idx*1000` cho 0022.
 
-### 4.3 — G6-4 (Content full) · 🟢 · plan §4 G6-4 (SQL sẵn — nhiều cạm bẫy data-migration)
-- **4a Migration 0024** `g6_content_types.sql`: CREATE `content_types` (⚠️ `default_workflow_template_id`/`default_evaluation_template_id` = **uuid TRẦN, KHÔNG FK** — bảng template chưa tồn tại ở M2).
-- **4b Migration 0025** `g6_content_items_full.sql` (🔴 data migration): ALTER `content_items` (content_type_id FK + cols + production_status) + seed content_types (**NOT EXISTS guard**, KHÔNG `ON CONFLICT` vì partial index) + backfill + **DO-block GUARD NULL** + DROP cột text `content_type` (tên CHECK DB thật = `content_items_content_type_check`). ⚠️ Breaking change: đổi đồng bộ SQL + `media.ts` + contracts (`contentTypeSchema` enum→object) + FE default 'video'. ⚠️ Sửa `seedContentItem` trong rls-registry (đang dùng `content_type` text → đổi sang `content_type_id`/NULL).
-- **4c Migration 0026** `g6_content_channels_assets.sql`: `content_channels` + `content_assets` (version chain, one-current uq **WHERE is_current AND deleted_at IS NULL**).
-- **4d** schema + contracts. **4e** BE (multi-channel publish + asset version INSERT+flip 1 tx + suggest-workflow). **4f** FE.
-- Mỗi migration: journal → migrate → regression → rls-registry.
+### 4.3 — G6-4 (Content full) · 🟢 · ✅ XONG (`0041ea4`→`7c008ce`)
+- ✅ **4a Migration 0024** `content_types` (RLS+FORCE; template id uuid trần KHÔNG FK). **4b Migration 0025** `content_items` ERD-full (🔴 breaking `content_type` text→`content_type_id` FK; NOT EXISTS seed + backfill + GUARD NULL + production_status; DROP CHECK `content_items_content_type_check` tên DB thật). **4c Migration 0026** `content_channels` + `content_assets` (one-current uq WHERE is_current AND deleted_at IS NULL). Mỗi migration: journal idx 24/25/26 → migrate → regression → rls-registry (đủ 3 bảng).
+- ✅ **4d/4e BE**: contracts content full (contentTypeSchema enum→**object**); `ContentController`/`Service`/`Repository` **tách riêng** (mirror Projects) — CRUD + đa kênh publish (snapshot platform_id) + **asset version chain** (demote is_current=false → INSERT bản mới → set superseded_by, 3-bước né FK + one-current uq, CÙNG 1 tx) + soft-delete current flip + suggest-workflow (đọc default_workflow_template_id) + audit-in-tx (`content`/`content_channel`/`content_asset`/`content_type`) + cross-tenant guard in-tx. Gated `*:content` (resource content-type/channel/asset DÀNH 0027). Gỡ content khỏi Media\* (xoá `media.controller.ts`).
+- ✅ **4f FE**: `content-api` + `/content` list (filter production/status/q + table + CreateContentDialog gợi ý workflow) + `/content/$contentId` tabs (Tổng quan sửa production/status/priority/urls · Kênh đăng thêm/đổi status/gỡ · Asset nhóm theo version_group + thêm version + badge hiện hành) + constants VI + nav.
+- ✅ **FULL gate** (database+security+silent-failure reviewer) → fix `7c008ce`: ListContentQueryDto (q≤200+uuid), ownerUserId guard chéo tenant, escape ILIKE, guard insert/demote/supersede rows, softDelete luôn is_current=false, contentExistsTx update/remove channel, join deleted_at.
+- **DoD**: ✅ typecheck 4 task + `content.int-spec` 10 ca + rls-guards 3 + tenant-isolation 126 + web lint 0 error + vite build xanh. ⚠️ chưa render live.
 
 ### 4.4 — G6-5 (Channel Health) · 🟢 · **KHÔNG migration** · ✅ XONG
 - ✅ **5a** BE: `PATCH /channels/:id/health` trong `ChannelsController` (gate `update:channel`) + `MediaService.updateChannelHealth` (audit-in-tx `ChannelHealthUpdated`, objectType `channel`; healthScore numeric(5,2) → `numToStr`). Filter "kênh rủi ro": `ListChannelsFilter.risk` + `listChannels` (`inArray(health_status, ['risk','declining'])`) + `@Query('risk')` (`risk==='true'`). Contracts: `updateChannelHealthSchema` (.partial) + `UpdateChannelHealthRequest` + `risk` vào `listChannelsQuerySchema`. `UpdateChannelHealthDto`.
@@ -116,10 +122,13 @@ pnpm typecheck
 ## 5. Khởi động session mới (copy-paste)
 
 ```
-Tôi tiếp tục G6 trên branch feat/g6-media (HEAD 9e583dc).
+Tôi tiếp tục G6 trên branch feat/g6-media (HEAD 7c008ce).
 Đọc: docs/plans/G6-progress-handoff.md + docs/plans/G6-media-full.md.
-Đã xong tới G6-3 (Projects ERD-full — migration 0023 + BE ProjectsController + FE /projects tabs; typecheck/lint/test/build + RLS regression xanh, chưa render live).
-Tiếp theo: [G6-4 Content full — migration 0024/0025/0026, NHIỀU cạm bẫy data-migration §4.3]  (hoặc G6-5 Channel Health — KHÔNG migration; hoặc nêu bước bạn muốn).
+Đã xong G6-1/3/4/5 (Channel/Project/Content ERD-full + Channel Health — migrate tới 0026;
+typecheck/lint/test/build + tenant-isolation 126 + rls-guards 3 + content.int 10 xanh; chưa render live).
+Tiếp theo: G6-2 (🔴 CROWN-JEWEL — Platform Account Encryption, hand-driven, Opus, FULL gate) — §4.5 + plan §6.
+⚠️ TRAP journal: 0022 phải có `when` LỚN HƠN 0028 (vd 1717500030000+) kẻo drizzle bỏ qua (§4.2 + plan §4.2).
+RED-test-first 14 ca §6e; 2e0 (vá PermissionGuard forward resourceId+ctx) BẮT BUỘC trước 2e.
 Trước khi code: pnpm db:up; nếu cần migrate dùng:  set -a && . ./.env && set +a && pnpm --filter @mediaos/api db:migrate
 ```
 
