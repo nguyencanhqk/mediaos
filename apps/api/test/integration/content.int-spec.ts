@@ -19,6 +19,7 @@ describe.skipIf(!hasDb)("G6-4 content service", () => {
   let A: SeededTenant;
   let B: SeededTenant;
   let userA: string;
+  let userB: string;
   let projectA: string;
   let projectB: string;
   let channel1: string;
@@ -41,6 +42,7 @@ describe.skipIf(!hasDb)("G6-4 content service", () => {
     A = await seedCompany(direct, "g64a");
     B = await seedCompany(direct, "g64b");
     userA = await seedUser(direct, A.companyId, `g64-${randomUUID().slice(0, 8)}@a.test`);
+    userB = await seedUser(direct, B.companyId, `g64-${randomUUID().slice(0, 8)}@b.test`);
 
     projectA = (
       await direct.query(
@@ -167,5 +169,12 @@ describe.skipIf(!hasDb)("G6-4 content service", () => {
     const s = await content.suggestWorkflow(A.companyId, c.id);
     expect(s.contentTypeId).toBeNull();
     expect(s.defaultWorkflowTemplateId).toBeNull();
+  });
+
+  it("updateContent gán owner tenant khác → NotFound (FULL-gate guard chéo tenant)", async () => {
+    const c = await content.createContent(user(), { projectId: projectA, title: "Owner" });
+    await expect(content.updateContent(user(), c.id, { ownerUserId: userB })).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });

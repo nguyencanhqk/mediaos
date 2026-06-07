@@ -97,6 +97,11 @@ function normalizeOptional(value: string | null | undefined): string | null {
   return trimmed === '' ? null : trimmed;
 }
 
+/** Escape ký tự pattern ILIKE (\ % _) để `q` là so khớp literal substring (không thành wildcard). */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
 /** Shape join trả về cho FE (content_channel + channel name/platform). Khớp contentChannelSchema. */
 const contentChannelSelection = {
   id: contentChannels.id,
@@ -127,7 +132,7 @@ export class ContentRepository {
       if (filters.productionStatus) conds.push(eq(contentItems.productionStatus, filters.productionStatus));
       if (filters.contentTypeId) conds.push(eq(contentItems.contentTypeId, filters.contentTypeId));
       if (filters.mainChannelId) conds.push(eq(contentItems.mainChannelId, filters.mainChannelId));
-      if (filters.q) conds.push(ilike(contentItems.title, `%${filters.q}%`));
+      if (filters.q) conds.push(ilike(contentItems.title, `%${escapeLike(filters.q)}%`));
       return tx
         .select()
         .from(contentItems)
@@ -286,19 +291,14 @@ export class ContentRepository {
     const [row] = await tx
       .select(contentChannelSelection)
       .from(contentChannels)
-      .innerJoin(channels, eq(contentChannels.channelId, channels.id))
+      .innerJoin(channels, and(eq(contentChannels.channelId, channels.id), isNull(channels.deletedAt)))
       .where(and(eq(contentChannels.companyId, companyId), eq(contentChannels.id, id)))
       .limit(1);
     return row ?? null;
   }
 
-  async addContentChannel(
-    companyId: string,
-    contentItemId: string,
-    data: AddContentChannelData,
-    tx: TenantTx,
-  ): Promise<string> {
-    const [row] = await tx
+  addContentChannel(companyId: string, contentItemId: string, data: AddContentChannelData, tx: TenantTx) {
+    return tx
       .insert(contentChannels)
       .values({
         companyId,
@@ -310,7 +310,6 @@ export class ContentRepository {
         plannedPublishAt: data.plannedPublishAt ?? null,
       })
       .returning({ id: contentChannels.id });
-    return row.id;
   }
 
   updateContentChannel(
@@ -487,11 +486,14 @@ export class ContentRepository {
       .returning();
   }
 
-  /** Soft-delete 1 asset; nếu là bản current PHẢI flip is_current=false (giải phóng one-current slot). */
-  softDeleteAssetTx(companyId: string, assetId: string, wasCurrent: boolean, tx: TenantTx) {
+  /**
+   * Soft-delete 1 asset + LUÔN flip is_current=false (giải phóng one-current slot). Set false vô điều
+   * kiện là an toàn: bản đã xoá không bao giờ được là "hiện hành"; tránh ternary mong manh khi isCurrent null.
+   */
+  softDeleteAssetTx(companyId: string, assetId: string, tx: TenantTx) {
     return tx
       .update(contentAssets)
-      .set({ deletedAt: new Date(), isCurrent: wasCurrent ? false : undefined, updatedAt: new Date() })
+      .set({ deletedAt: new Date(), isCurrent: false, updatedAt: new Date() })
       .where(
         and(
           eq(contentAssets.companyId, companyId),

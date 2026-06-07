@@ -10,6 +10,7 @@ import {
   createContentItemSchema,
   createContentTypeSchema,
   createProjectSchema,
+  listContentQuerySchema,
   updateChannelHealthSchema,
   updateChannelMemberSchema,
   updateChannelSchema,
@@ -36,6 +37,7 @@ export class AddProjectMemberDto extends createZodDto(addProjectMemberSchema) {}
 export class UpdateProjectMemberDto extends createZodDto(updateProjectMemberSchema) {}
 
 // ── Content (G6-4) ──────────────────────────────────────────────────────────
+export class ListContentQueryDto extends createZodDto(listContentQuerySchema) {}
 export class CreateContentItemDto extends createZodDto(createContentItemSchema) {}
 export class UpdateContentItemDto extends createZodDto(updateContentItemSchema) {}
 export class CreateContentTypeDto extends createZodDto(createContentTypeSchema) {}

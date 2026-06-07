@@ -120,6 +120,9 @@ export class ContentService {
           (await this.repo.channelPlatformTx(tx, user.companyId, dto.mainChannelId)) === undefined
         )
           throw new NotFoundException(`Channel not found: ${dto.mainChannelId}`);
+        // Guard owner THUỘC tenant (chặn gán owner chéo tenant — mirror project member guard).
+        if (dto.ownerUserId && !(await this.projectsRepo.userExistsTx(tx, user.companyId, dto.ownerUserId)))
+          throw new NotFoundException(`User not found: ${dto.ownerUserId}`);
 
         const rows = await this.repo.updateContent(
           user.companyId,
@@ -203,7 +206,7 @@ export class ContentService {
         const platformId = await this.repo.channelPlatformTx(tx, user.companyId, dto.channelId);
         if (platformId === undefined) throw new NotFoundException(`Channel not found: ${dto.channelId}`);
 
-        const newId = await this.repo.addContentChannel(
+        const inserted = await this.repo.addContentChannel(
           user.companyId,
           contentId,
           {
@@ -215,6 +218,8 @@ export class ContentService {
           },
           tx,
         );
+        if (!inserted[0]) throw new InternalServerErrorException('Failed to add publish target');
+        const newId = inserted[0].id;
         await this.audit.record(tx, {
           action: 'ContentChannelLinked',
           objectType: 'content_channel',
@@ -240,6 +245,8 @@ export class ContentService {
     dto: UpdateContentChannelRequest,
   ) {
     return this.db.withTenant(user.companyId, async (tx) => {
+      if (!(await this.repo.contentExistsTx(tx, user.companyId, contentId)))
+        throw new NotFoundException(`Content not found: ${contentId}`);
       const rows = await this.repo.updateContentChannel(
         user.companyId,
         contentId,
@@ -268,6 +275,8 @@ export class ContentService {
 
   async removeContentChannel(user: RequestUser, contentId: string, contentChannelId: string) {
     await this.db.withTenant(user.companyId, async (tx) => {
+      if (!(await this.repo.contentExistsTx(tx, user.companyId, contentId)))
+        throw new NotFoundException(`Content not found: ${contentId}`);
       const rows = await this.repo.removeContentChannel(user.companyId, contentId, contentChannelId, tx);
       if (rows.length === 0) throw new NotFoundException('Publish target not found');
       await this.audit.record(tx, {
@@ -334,7 +343,8 @@ export class ContentService {
       // 1) Flip bản current cũ is_current=false TRƯỚC (giải phóng one-current slot; chưa set superseded_by
       //    vì FK content_assets.superseded_by → id của bản mới CHƯA tồn tại).
       if (current) {
-        await this.repo.demoteAssetTx(user.companyId, current.id, tx);
+        const demoted = await this.repo.demoteAssetTx(user.companyId, current.id, tx);
+        if (!demoted[0]) throw new InternalServerErrorException('Failed to demote current asset version');
       }
       // 2) INSERT bản mới is_current=true (slot đã trống → không vỡ one-current uq).
       const nextVersion = (await this.repo.maxVersionInGroupTx(tx, user.companyId, groupId)) + 1;
@@ -354,7 +364,8 @@ export class ContentService {
       if (!rows[0]) throw new InternalServerErrorException('Failed to create asset version');
       // 3) Set superseded_by của bản cũ → bản mới (FK đã thoả vì bản mới đã tồn tại).
       if (current) {
-        await this.repo.setSupersededByTx(user.companyId, current.id, newId, tx);
+        const linked = await this.repo.setSupersededByTx(user.companyId, current.id, newId, tx);
+        if (!linked[0]) throw new InternalServerErrorException('Failed to link superseded_by');
       }
       await this.audit.record(tx, {
         action: 'ContentAssetVersionCreated',
@@ -372,8 +383,8 @@ export class ContentService {
       const target = await this.repo.findAssetByIdTx(tx, user.companyId, assetId);
       if (!target || target.contentItemId !== contentId)
         throw new NotFoundException(`Asset not found: ${assetId}`);
-      // Bản current bị xoá PHẢI flip is_current=false (giải phóng one-current slot cho promote sau).
-      await this.repo.softDeleteAssetTx(user.companyId, assetId, target.isCurrent, tx);
+      // softDeleteAssetTx luôn flip is_current=false (giải phóng one-current slot cho promote sau).
+      await this.repo.softDeleteAssetTx(user.companyId, assetId, tx);
       await this.audit.record(tx, {
         action: 'ContentAssetDeleted',
         objectType: 'content_asset',

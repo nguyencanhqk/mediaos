@@ -24,6 +24,7 @@ import {
   CreateContentAssetVersionDto,
   CreateContentItemDto,
   CreateContentTypeDto,
+  ListContentQueryDto,
   UpdateContentChannelDto,
   UpdateContentItemDto,
   UpdateContentTypeDto,
@@ -81,24 +82,9 @@ export class ContentController {
 
   @Get('content')
   @RequirePermission('read', 'content')
-  listContent(
-    @Req() req: AuthenticatedRequest,
-    @Query('projectId') projectId?: string,
-    @Query('status') status?: string,
-    @Query('productionStatus') productionStatus?: string,
-    @Query('contentTypeId') contentTypeId?: string,
-    @Query('mainChannelId') mainChannelId?: string,
-    @Query('q') q?: string,
-  ) {
-    const filters: ListContentFilter = {
-      projectId,
-      status,
-      productionStatus,
-      contentTypeId,
-      mainChannelId,
-      q,
-    };
-    return this.content.listContent(req.user.companyId, filters);
+  listContent(@Req() req: AuthenticatedRequest, @Query() query: ListContentQueryDto) {
+    // Validate qua Zod (listContentQuerySchema): q ≤ 200, mọi filter id là uuid (chặn DoS pattern + injection).
+    return this.content.listContent(req.user.companyId, query satisfies ListContentFilter);
   }
 
   @Post('content')
