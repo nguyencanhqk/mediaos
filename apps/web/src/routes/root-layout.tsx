@@ -8,6 +8,7 @@ const NAV = [
   { to: "/tasks", label: "Công việc" },
   { to: "/channels", label: "Kênh" },
   { to: "/projects", label: "Dự án" },
+  { to: "/content", label: "Nội dung" },
   { to: "/org/departments", label: "Phòng ban" },
   { to: "/org/teams", label: "Nhóm" },
   { to: "/org/employees", label: "Nhân sự" },

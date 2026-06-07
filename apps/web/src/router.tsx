@@ -11,6 +11,8 @@ import { ChannelsPage } from "@/routes/media/channels";
 import { ChannelDetailPage } from "@/routes/media/channel-detail";
 import { ProjectsPage } from "@/routes/media/projects";
 import { ProjectDetailPage } from "@/routes/media/project-detail";
+import { ContentPage } from "@/routes/media/content";
+import { ContentDetailPage } from "@/routes/media/content-detail";
 import { TasksPage } from "@/routes/tasks/index";
 import { ProjectChatPage } from "@/routes/chat/project-chat";
 import { useAuthStore } from "@/stores/auth";
@@ -87,6 +89,20 @@ const projectDetailRoute = createRoute({
   component: ProjectDetailPage,
 });
 
+const contentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/content",
+  beforeLoad: authGuard,
+  component: ContentPage,
+});
+
+const contentDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/content/$contentId",
+  beforeLoad: authGuard,
+  component: ContentDetailPage,
+});
+
 const tasksRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/tasks",
@@ -127,6 +143,8 @@ const routeTree = rootRoute.addChildren([
   channelDetailRoute,
   projectsRoute,
   projectDetailRoute,
+  contentRoute,
+  contentDetailRoute,
   tasksRoute,
   projectChatRoute,
 ]);
