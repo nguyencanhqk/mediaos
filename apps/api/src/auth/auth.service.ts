@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Inject, Injectable, UnauthorizedException, forwardRef } from "@nestjs/common";
+import { HttpException, HttpStatus, Inject, Injectable, Logger, UnauthorizedException, forwardRef } from "@nestjs/common";
 import type {
   AuthTokens,
   ForgotPasswordRequest,
@@ -70,6 +70,8 @@ function deserializeResetEnvelope(raw: unknown): EncryptedColumns {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly dbsvc: DatabaseService,
     private readonly password: PasswordService,
@@ -236,40 +238,50 @@ export class AuthService {
     const companyId = await this.resolveCompanyId(req.companySlug);
     if (!companyId) return; // im lặng — không lộ tenant
 
-    await this.dbsvc.withTenant(companyId, async (tx) => {
-      const user = await this.findActiveUserByEmail(tx, req.email);
-      if (!user) return; // im lặng — không lộ email
+    try {
+      await this.dbsvc.withTenant(companyId, async (tx) => {
+        const user = await this.findActiveUserByEmail(tx, req.email);
+        if (!user) return; // im lặng — không lộ email
 
-      const plain = this.tokens.generateOpaqueToken();
-      const scoped = this.scopeToken(companyId, plain);
-      const expiresAt = new Date(Date.now() + this.tokens.resetTtlSec * 1000);
-      await tx.insert(passwordResetTokens).values({
-        userId: user.id,
-        tokenHash: this.tokens.hashToken(scoped),
-        expiresAt,
+        const plain = this.tokens.generateOpaqueToken();
+        const scoped = this.scopeToken(companyId, plain);
+        const expiresAt = new Date(Date.now() + this.tokens.resetTtlSec * 1000);
+        await tx.insert(passwordResetTokens).values({
+          userId: user.id,
+          tokenHash: this.tokens.hashToken(scoped),
+          expiresAt,
+        });
+        // G6-2f: reset token được envelope-encrypt (purpose=auth_reset_token) TRƯỚC khi chạm outbox durable.
+        // Payload CHỈ mang envelope (resetTokenEnc) — KHÔNG bao giờ plaintext (BẤT BIẾN #3). recordId=user.id
+        // bind envelope vào user; mail consumer decrypt JIT qua decryptResetToken.
+        const enc = await this.secrets.encryptSecret(scoped, {
+          companyId,
+          recordId: user.id,
+          purpose: "auth_reset_token",
+        });
+        await this.outbox.enqueue(tx, {
+          eventType: "auth.password_reset_requested",
+          payload: { userId: user.id, email: user.email, resetTokenEnc: serializeResetEnvelope(enc) },
+        });
+        await this.audit.record(tx, {
+          action: "auth.password_reset_requested",
+          objectType: "auth",
+          actorUserId: user.id,
+          objectId: user.id,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        });
       });
-      // G6-2f: reset token được envelope-encrypt (purpose=auth_reset_token) TRƯỚC khi chạm outbox durable.
-      // Payload CHỈ mang envelope (resetTokenEnc) — KHÔNG bao giờ plaintext (BẤT BIẾN #3). recordId=user.id
-      // bind envelope vào user; mail consumer decrypt JIT qua decryptResetToken. Fail-closed: encrypt lỗi ⇒
-      // toàn bộ tenant tx rollback (không có outbox row plaintext lọt ra). KHÔNG log token/DEK.
-      const enc = await this.secrets.encryptSecret(scoped, {
-        companyId,
-        recordId: user.id,
-        purpose: "auth_reset_token",
-      });
-      await this.outbox.enqueue(tx, {
-        eventType: "auth.password_reset_requested",
-        payload: { userId: user.id, email: user.email, resetTokenEnc: serializeResetEnvelope(enc) },
-      });
-      await this.audit.record(tx, {
-        action: "auth.password_reset_requested",
-        objectType: "auth",
-        actorUserId: user.id,
-        objectId: user.id,
-        ip: meta.ip,
-        userAgent: meta.userAgent,
-      });
-    });
+    } catch (err) {
+      // Uniform-void (không lộ email tồn tại): mọi lỗi xử lý (vd KMS/encrypt down) ⇒ withTenant tx đã rollback
+      // (fail-closed — không plaintext, không partial), log ERROR phía server (KHÔNG token/DEK/email) rồi TRẢ
+      // VOID như nhánh happy. Đóng oracle 500-vs-200 (FULL-gate 2f silent-failure F3). KHÔNG nuốt im: luôn có
+      // ERROR + stack trong log để quan sát.
+      this.logger.error(
+        "forgotPassword: xử lý reset thất bại (đã rollback, không phát event)",
+        err instanceof Error ? err.stack : String(err),
+      );
+    }
   }
 
   async resetPassword(req: ResetPasswordRequest): Promise<void> {
