@@ -2,7 +2,7 @@
 
 > Đọc file này + [`G6-media-full.md`](./G6-media-full.md) (kế hoạch gốc, plan-reviewer PASS) TRƯỚC khi code tiếp.
 > Mục tiêu: 1 session mới cầm file này là tiếp tục được ngay, không phải dò lại.
-> Cập nhật lần cuối: 2026-06-07 · Branch: **`feat/g6-media`** · HEAD: **`7c008ce`** (G6-4 done — còn **G6-2**)
+> Cập nhật lần cuối: 2026-06-08 · Branch: **`feat/g6-media`** · HEAD: **`95a6130`** (G6-2 đang chạy: **2a–2e XONG**, còn **2d/2f/2g/2h** + FULL gate)
 > ✅ **Reconciled:** 2 session song song đã hoàn tất — **G6-5** (Channel Health, `4e620a0` + fix settings.module
 > `421e15c`) và **G6-4** (Content full, `0041ea4`→`7c008ce`). Lịch sử interleave nhưng linear, không conflict;
 > tree cuối nhất quán + xanh. **G6-1/3/4/5 XONG — chỉ còn G6-2 (crown-jewel, hand-driven).**
@@ -120,24 +120,27 @@ pnpm typecheck
     - **prod cutover:** seed `local-dev-kek` chạy cả prod (ON CONFLICT DO NOTHING) → Vault provisioning thật (2g) phải override; GATE cutover.
 - **2b** · ✅ XONG (RED-first): 6 spec + seed-infra; **39 RED đúng lý do** (NOT_IMPLEMENTED throw / wrong-behavior assertion / current-plaintext drive **real SUT**), typecheck XANH, KHÔNG đỏ vì import/setup. Skeleton throw-only: `crypto/{secret-encryption.types,envelope-cipher,local-kek.provider,secret-encryption.service,secret-rotation.service}.ts` (2c/2g) + `media/platform-accounts.service.ts` (2e). Specs: `crypto/secret-encryption.service.spec.ts`, `permission/guards/permission.guard.reveal.spec.ts`, `permission/permission.service.reveal.spec.ts`, `test/integration/{platform-accounts-reveal,secret-rotation,reset-token-envelope}.int-spec.ts`. `test/helpers/seed.ts` (+seedRole/PermissionCatalog/RolePermission/UserRole/ObjectGrant/PlatformAccount; +cleanup platform_accounts/channel_accounts).
   - 🔒 **RED ghim 2 ràng buộc thiết kế cho 2c/2e0/2e (đừng phá khi GREEN):** **(F2) reveal-secret BẮT BUỘC object-grant per-account** — company-level ALLOW + (resourceId null | no object grant) PHẢI **fail-closed DENY** (RED 14/14b); guard PHẢI forward `resourceId`+`ctx` (2e0; RED 2e0-A/B/D). AAD pinned `companyId‖recordId‖encAlgo‖dekKeyVersion` + **app-gen uuid** (RED 8c/8e/8g). reveal/edit audit-in-tx kể cả deny + `secret_reveal_failed` (RED 4/8). reset-token mục tiêu `payload.resetTokenEnc` + scrub (RED 12).
-  - 5 green còn lại = baseline hợp lệ (2e0-C, 14b-baseline, RED 13c worker-policy SELECT) + 2 deferred-active (RED 13b/13e — rotation invariant chỉ test được sau 2g; 13a/13d đã đỏ-ngay). FULL gate (security+database+silent-failure+santa) để dành sau khi GREEN 2c/2e. CHƯA commit — chờ review.
+  - 5 green còn lại = baseline hợp lệ (2e0-C, 14b-baseline, RED 13c worker-policy SELECT) + 2 deferred-active (RED 13b/13e — rotation invariant chỉ test được sau 2g; 13a/13d đã đỏ-ngay). FULL gate (security+database+silent-failure+santa) để dành sau khi GREEN 2e (toàn diff 2e). ✅ **committed `831b986`** (cùng 2c-core).
 - **2c** `apps/api/src/crypto/` (EnvelopeCipher AES-256-GCM + KmsProvider Local/Vault + SecretEncryptionService, AAD pinned, app-gen UUID).
-  - ⏳ **ĐANG DỞ — core XONG (GREEN), chưa commit:** `NodeEnvelopeCipher` (AES-256-GCM thật: seal random 12B nonce/ghi + 16B tag; open throw generic) ✅ + `SecretEncryptionService` (DEK random 32B/ghi → wrapDek → AAD pinned `companyId‖recordId‖encAlgo‖dekKeyVersion` → seal → cột; decrypt đảo lại, generic error, `dek.fill(0)` finally, KHÔNG log) ✅. **13/13 crypto-spec GREEN + typecheck XANH.** Vá test: RED 9 đổi stub-cipher (iv hằng) → `NodeEnvelopeCipher` thật để assert nonce-uniqueness hợp lệ.
-  - ✅ **2c-CÒN-LẠI HOÀN TẤT (GREEN, chưa commit):**
+  - ✅ **2c-core XONG (committed `831b986`):** `NodeEnvelopeCipher` (AES-256-GCM thật: seal random 12B nonce/ghi + 16B tag; open throw generic) ✅ + `SecretEncryptionService` (DEK random 32B/ghi → wrapDek → AAD pinned `companyId‖recordId‖encAlgo‖dekKeyVersion` → seal → cột; decrypt đảo lại, generic error, `dek.fill(0)` finally, KHÔNG log) ✅. **13/13 crypto-spec GREEN + typecheck XANH.** Vá test: RED 9 đổi stub-cipher (iv hằng) → `NodeEnvelopeCipher` thật để assert nonce-uniqueness hợp lệ.
+  - ✅ **2c-CÒN-LẠI HOÀN TẤT (committed `86c074a`):**
     - `local-kek.provider.ts`: `LocalKekProvider` thật — KEK 32B đọc **lazy** từ `KMS_LOCAL_KEK_PATH` (fail-fast nếu thiếu file/độ dài≠32, KHÔNG log KEK); `wrapDek/unwrapDek` AES-256-GCM trên Buffer DEK, `wrapped = iv(12)‖tag(16)‖ct`, AAD = `kmsKeyId:keyVersion` (dựng lại được lúc unwrap); `currentKey` đọc `encryption_keys` active (`status='active'`, max `key_version`) qua `db.execute` (bảng GLOBAL no-RLS → KHÔNG withTenant; comment giải thích guard-tenant WARN advisory), fail-closed khi không có key.
     - `vault-kek.provider.ts` (mới): `VaultKekProvider` DI-stub (3 method throw `NOT_IMPLEMENTED:2g`, constructor inert) — impl Vault transit thật để 2g/prod.
     - `crypto.module.ts` (mới): DI `ENVELOPE_CIPHER→NodeEnvelopeCipher` (useExisting) + `KMS_PROVIDER→Local|Vault` (useFactory theo `env.KMS_PROVIDER`); export `SecretEncryptionService` + 2 token. **KHÔNG @Global, KHÔNG add vào app.module** (2e import vào PlatformAccountsModule) → app-boot KHÔNG đổi.
     - `env.schema.ts`: thêm `KMS_PROVIDER` (default `'local'`), `KMS_LOCAL_KEK_PATH` (default `.secrets/local-kek.bin`), `KMS_VAULT_ADDR/TOKEN` optional + `.superRefine` fail-fast (vault PHẢI có addr+token). Default 'local' → `loadEnv({})` vẫn pass (spec cũ xanh).
     - **Dev infra:** tạo KEK 32B `.secrets/local-kek.bin` (gitignored) + wire root `.env` (KMS_PROVIDER/KMS_LOCAL_KEK_PATH absolute) + document `.env.example`.
     - **Tests mới:** `local-kek.provider.spec.ts` (7 ca: currentKey active/fail-closed [db mock], wrap↔unwrap round-trip, tamper→throw, wrong keyVersion AAD→throw, KEK missing/wrong-len fail-fast) + `crypto.module.spec.ts` (1 ca: module compile + resolve service/cipher/local-kms) + 3 ca env vault-refine.
-    - **DoD ✅:** crypto-spec **13/13 GREEN** (không đụng); env-spec 7; local-kek 7; crypto.module 1 → **28 passed**; `pnpm typecheck` 4/4 package xanh; app-boot không đổi (CryptoModule ngoài graph). **CHƯA commit — chờ review.**
-  - ✅ **2e0 HOÀN TẤT (GREEN, chưa commit):** vá `PermissionGuard` + luật F2 fail-closed.
+    - **DoD ✅:** crypto-spec **13/13 GREEN** (không đụng); env-spec 7; local-kek 7; crypto.module 1 → **28 passed**; `pnpm typecheck` 4/4 package xanh; app-boot không đổi (CryptoModule ngoài graph). ✅ **committed `86c074a`.**
+  - ✅ **2e0 HOÀN TẤT (committed `61b9197`):** vá `PermissionGuard` + luật F2 fail-closed.
     - `permission.guard.ts`: forward `resourceId` (`req.params.id`) + `ctx {reauthValidUntil, requestId}` vào `can()` — CHỈ cho lớp reveal (`isSensitive && requiresReauth`) → route :id của G6-1/3/4 GIỮ NGUYÊN type-level, ZERO regression. Đọc `req.reauthContext` (populate từ Valkey theo (userId,accountId) là việc ReauthGuard/endpoint của 2e). Thêm type `ReauthAwareRequest`.
     - `permission.service.ts`: khối **F2** sau check company-DENY, trước company-ALLOW: `needsObjectGrant = objectGrantRequired ?? (isSensitive && requiresReauth)` → nếu tới đây (không object ALLOW nào match, hoặc resourceId null) → **fail-closed DENY** `deny-object-required`. Object-tier ALLOW + reauth vẫn return allow TRƯỚC đó (RED 5/baseline); object grant + thiếu/hết reauth → deny-reauth-required (RED 3/4).
     - `permission.types.ts`: thêm reason `'deny-object-required'` + optional `CanInput.objectGrantRequired`.
     - **Reconcile spec cũ (yêu cầu đổi, đã báo+duyệt phương án A):** 3 ca G3-3 reveal-secret (`reauth1/reauth2/allow8`) trong `permission.service.spec.ts` thêm object-grant + `resourceId` → test ĐÚNG mô hình post-F2 (giữ assertion deny-reauth-required/allow).
-    - **DoD ✅:** `permission.guard.reveal.spec` (2e0-A/B/C/D) + `permission.service.reveal.spec` (RED 14b-1/2/3 + baseline) GREEN; regression `permission.g3-4.spec` (20) + `permission.service.spec` (reconciled) GREEN → **80/80 permission**; typecheck api XANH. **CHƯA commit.**
-  - ▶️ **KẾ TIẾP:** 2e (reveal/list/edit endpoint + ReauthGuard Valkey per-(userId,accountId) + mask projection + CryptoModule wire vào PlatformAccountsModule) → 2d(0027) → 2f(0028) → 2g → 2h. **FULL gate sau khi GREEN 2e** (diff đủ chạm secret+permission+audit+RLS+migration).
+    - **DoD ✅:** `permission.guard.reveal.spec` (2e0-A/B/C/D) + `permission.service.reveal.spec` (RED 14b-1/2/3 + baseline) GREEN; regression `permission.g3-4.spec` (20) + `permission.service.spec` (reconciled) GREEN → **80/80 permission**; typecheck api XANH. ✅ **committed `61b9197`.**
+  - ✅ **2e HOÀN TẤT — 2 commit:**
+    - **2e-A (`448b252`):** `platform-accounts.service.ts` reauth/revealSecret/list/get(masked)/createAccount(**app-gen uuid TRƯỚC encrypt**, CARRY-FORWARD 2a)/updateSecret + `platform-accounts.repository.ts` (mask projection) + audit-in-tx **kể cả deny** + `secret_reveal_failed` COMMIT trước rethrow generic. CryptoModule wire vào `PlatformAccountsModule`. reveal int **14/14**.
+    - **2e-B (`95a6130`):** HTTP surface — `PlatformAccountsController` + `ReauthGuard` (Valkey window **per-(userId,accountId)**, reuse reauthKey) + contracts (masked DTO + request/response schemas) + DTOs. Guards **METHOD-LEVEL** (ReauthGuard TRƯỚC PermissionGuard trên `/:id/reveal`); route `/reauth` GLOBAL-GUARDS-ONLY (object-grant persona). Wired qua `MediaModule.imports` — **app.module KHÔNG đụng**. Verify: typecheck 4/4 + nest build + health e2e 2/2 + reveal int 14/14.
+  - ▶️ **KẾ TIẾP:** **FULL gate TOÀN DIFF 2e** (2e0 `61b9197` + 2c `831b986`/`86c074a` + 2e-A `448b252` + 2e-B `95a6130` — chạm secret+permission+audit+RLS) — `ecc:security-reviewer` + `ecc:database-reviewer` + `ecc:silent-failure-hunter` + `ecc:santa-method` (crown-jewel). Fix CRITICAL/HIGH → **2d(0027)** → **2f(0028)** → **2g(rotation)** → **2h(FE)**. (`ecc:harness-audit` + `ecc:security-scan` để dành TRƯỚC merge G6-2.)
 - **2d Migration 0027** (seed `edit-platform-account` sensitive + grants). **2e0** vá `PermissionGuard` forward `resourceId`+`ctx` + fail-closed (BẮT BUỘC trước 2e). **2e** reveal-secret endpoint. **2f** reset-token envelope + scrub outbox (0028). **2g** rotation job. **2h** FE.
 
 ---
@@ -145,71 +148,47 @@ pnpm typecheck
 ## 5. Khởi động session mới (copy-paste)
 
 ```
-Tôi tiếp tục G6-2 (🔴 CROWN-JEWEL Platform Account Encryption) trên branch feat/g6-media, HEAD 831b986.
-Model: Opus. HAND-DRIVEN — KHÔNG tự do, KHÔNG nhảy bước. RED đã có (là spec); đây là pha GREEN.
-Tôi review từng bước. Trước khi code: ĐỌC + trình kế hoạch cho tôi duyệt.
+Tôi tiếp tục G6-2 (🔴 CROWN-JEWEL Platform Account Encryption) trên branch feat/g6-media, HEAD 95a6130 (+ commit refresh handoff này).
+Model: Opus. HAND-DRIVEN — KHÔNG tự do, KHÔNG nhảy bước. Tôi review từng bước. Trước khi code: ĐỌC + trình kế hoạch cho tôi duyệt. Chậm mà chắc.
 
-### ĐÃ XONG (committed):
-- 2a `0022` platform_accounts(envelope)+encryption_keys+channel_accounts (RLS+FORCE+worker policy+column-grant).
-- 2b (commit 831b986): 39 RED deny-path "đỏ đúng lý do" (typecheck xanh, không lỗi setup) + 6 skeleton SUT
-  throw-only + seed-infra. Files spec: src/crypto/secret-encryption.service.spec.ts,
-  src/permission/guards/permission.guard.reveal.spec.ts, src/permission/permission.service.reveal.spec.ts,
-  test/integration/{platform-accounts-reveal,secret-rotation,reset-token-envelope}.int-spec.ts.
-- 2c-core (831b986): NodeEnvelopeCipher (AES-256-GCM thật) + SecretEncryptionService (DEK 32B/ghi → wrapDek
-  → AAD pinned → seal; decrypt đảo, generic error, dek.fill(0), KHÔNG log). 13/13 crypto-spec GREEN.
+### ĐÃ XONG (committed trên feat/g6-media):
+- 2a `17f9722` — migration 0022 platform_accounts(envelope)+encryption_keys+channel_accounts (RLS+FORCE+worker policy+column-grant).
+- 2b+2c-core `831b986` — 39 RED deny-path "đỏ đúng lý do" + NodeEnvelopeCipher (AES-256-GCM) + SecretEncryptionService (DEK 32B/ghi→wrapDek→AAD pinned→seal; dek.fill(0); KHÔNG log). 13/13 crypto-spec.
+- 2c `86c074a` — LocalKekProvider (KEK 32B file lazy) + VaultKekProvider stub + CryptoModule (DI, ngoài app.module) + env KMS_*. 28 passed.
+- 2e0 `61b9197` — PermissionGuard forward resourceId(:id)+ctx CHỈ cho reveal-class + F2 object-grant fail-closed (deny-object-required). 80/80 permission.
+- 2e-A `448b252` — platform-accounts.service: reauth/revealSecret/list/get(masked)/createAccount(app-gen uuid TRƯỚC encrypt)/updateSecret; audit-in-tx; secret_reveal_failed COMMIT trước rethrow. reveal int 14/14.
+- 2e-B `95a6130` — HTTP surface: PlatformAccountsController + ReauthGuard (Valkey window per-(userId,accountId), reuse reauthKey) + contracts (masked DTO + request/response schemas) + DTOs. Guards METHOD-LEVEL (ReauthGuard TRƯỚC PermissionGuard trên /:id/reveal); reauth route GLOBAL-GUARDS-ONLY. Wired qua MediaModule.imports — app.module KHÔNG đụng.
 
-### ĐỌC KỸ TRƯỚC:
-- handoff §4.5 (2a/2b ✅, 2c ⏳ + CÒN-LẠI) + §2 RUNBOOK + §3 (quyết định đã chốt).
-- plan §6b (interface), §6c (reveal flow + window scope B), §6d (KMS/rotation/reset-token), §6e (16 RED — contract), §6f (FULL gate).
-- CLAUDE §2#3 (không secret plaintext) + §3 (permission engine trước module nhạy cảm).
+### VIỆC ĐẦU TIÊN — FULL gate TOÀN DIFF 2e (1 lần, CLAUDE §6 — chạm secret+permission+audit+RLS):
+Scope = 2e0 `61b9197` + 2c `831b986`/`86c074a` (crypto engine) + 2e-A `448b252` + 2e-B `95a6130` (service/HTTP/contracts).
+Reviewer: `ecc:security-reviewer` + `ecc:database-reviewer` + `ecc:silent-failure-hunter` + `ecc:santa-method` (crown-jewel).
+Fix CRITICAL/HIGH TRƯỚC khi sang 2d. `ecc:harness-audit` + `ecc:security-scan` để dành TRƯỚC merge G6-2.
 
-### THỨ TỰ BẮT BUỘC (KHÔNG đảo): 2c-còn-lại → 2e0 → 2e → 2d(0027) → 2f → 2g → 2h.
-Mỗi bước = implement để pha RED tương ứng → GREEN. KHÔNG nới lỏng test để pass — sửa impl, không sửa spec
-(trừ khi spec sai THẬT, báo tôi trước).
+### THỨ TỰ TIẾP (KHÔNG đảo): 2d(0027) → 2f(0028) → 2g(rotation) → 2h(FE).
+- 2d 0027: seed `edit-platform-account` (is_sensitive) + grants per-account; `reveal-secret` KHÔNG vào system role. RED 14/11 enforce object-grant. → migrate → tenant-isolation regression → +rls-registry.
+- 2f 0028 + reset-token (RED reset-token-envelope.int): forgotPassword → encryptSecret(token,{purpose:'auth_reset_token'}) → payload CHỈ resetTokenEnc; mail-consumer decrypt JIT; SCRUB outbox plaintext cũ; gate prod cutover vào scrub.
+- 2g rotation worker (secret-rotation.service.ts đang throw; RED secret-rotation.int 13b/13e deferred-active): reWrapAccount/reWrapAll qua worker direct pool → unwrap(old)→wrap(new)→UPDATE; ciphertext bytes KHÔNG đổi; resumable. Cân nhắc tách worker policy SELECT/UPDATE + thêm encryption_keys.revoked_at.
+- 2h FE: ChannelAccountsTab + SecretField (masked + reveal eye) + ReAuthModal (step-up → POST /reauth → POST /:id/reveal) + <PermissionGate reveal-secret>; KHÔNG cache plaintext.
 
-### BƯỚC KẾ — 2c-CÒN-LẠI (hoàn tất crypto module, KHÔNG migration):
-- local-kek.provider.ts (đang throw): KEK 32B từ file `.secrets/` (env KMS_LOCAL_KEK_PATH; ADR-0004 cấm KEK-in-env-host prod).
-  wrapDek/unwrapDek = AES-256-GCM wrap DEK dưới KEK. currentKey(purpose) = đọc encryption_keys active (max key_version).
-- crypto.module.ts (mới): DI ENVELOPE_CIPHER→NodeEnvelopeCipher; KMS_PROVIDER→Local|Vault theo env KMS_PROVIDER; export SecretEncryptionService.
-- env.schema.ts: KMS_PROVIDER('local'|'vault')/KMS_VAULT_ADDR/KMS_VAULT_TOKEN/KMS_LOCAL_KEK_PATH (fail-fast).
-- DoD 2c: module wireable + 13 crypto-spec vẫn GREEN + typecheck xanh + app-boot OK.
-
-### 2e0 (BẮT BUỘC trước 2e) — vá PermissionGuard + luật F2 fail-closed:
-- Seam permission.guard.ts:73-80 (KHÔNG truyền resourceId/ctx) → forward resourceId (route :id) + ctx
-  {reauthValidUntil đọc Valkey theo (userId,accountId), requestId}. RED 2e0-A/B/D xanh.
-- Luật F2 (RED 14/14b): reveal-secret BẮT BUỘC object-grant per-account — company-level ALLOW KHÔNG đủ; sensitive +
-  resourceId null/unresolvable → fail-closed DENY. Quyết định nơi enforce (cờ can() hay guard/service) — trình tôi duyệt.
-
-### 2e reveal/list/edit (platform-accounts.service.ts đang throw) — RED platform-accounts-reveal.int:
-- createAccount: 🔴 app-gen crypto.randomUUID() TRUYỀN vào INSERT TRƯỚC encrypt (CARRY-FORWARD 2a) → encryptSecret → audit secret_created.
-- revealSecret: object-tier + reauth window scope B per-(userId,accountId) (RED 7b) → decrypt JIT trong try/catch trong
-  withTenant → OK audit secret_revealed / tamper VẪN commit secret_reveal_failed rồi rethrow generic (RED 8). Trả plaintext 1 lần.
-- list/getAccount: mask projection — secret_ciphertext/encrypted_dek/iv_nonce/auth_tag + recovery_*/two_factor_note KHÔNG vào DTO mọi role (RED 7 serialize THẬT).
-- updateSecret: gate edit-platform-account (sensitive) → DEK+nonce mới → audit secret_updated (RED 11). Controller @RequirePermission + reauth endpoint. Wire CryptoModule.
-
-### 2d `0027` + 2f `0028` (migration — TRAP journal: when > max-applied 1717500030000, vd 31000/32000):
-- 0027: seed permissions reveal-secret + edit-platform-account (is_sensitive=true) + grants (KHÔNG seed system role).
-- 2f reset-token (RED reset-token-envelope.int): forgotPassword (auth.service.ts:213-216) → encryptSecret(token,{purpose:'auth_reset_token'})
-  → payload CHỈ resetTokenEnc; mail consumer decrypt JIT; 0028 seed encryption_keys purpose='auth_reset_token' + SCRUB outbox cũ
-  (rows eventType=auth.password_reset_requested còn plaintext) — gate prod cutover vào scrub.
-
-### 2g rotation (RED secret-rotation.int) — secret-rotation.service.ts đang throw:
-- reWrapAccount/reWrapAll: worker direct pool (mediaos_worker) → unwrapDek(old)→wrapDek(new)→UPDATE
-  encrypted_dek/kms_key_id/dek_key_version/last_rotated_at; ciphertext bytes KHÔNG đổi; decrypt vẫn plaintext gốc. Nhờ worker policy + column-grant (0022). Resumable.
+### ⚠️ TRAP & HAZARD:
+- Migration journal: 0027/0028 đặt `when` > 1717500030000 (2d=31000, 2f=32000) — KHÔNG base+idx (0023–0026 tạo trước 0022 đã apply). Quên = drizzle BỎ QUA.
+- Parallel session có thể giữ uncommitted: app.module.ts, config/env.schema.ts, main.ts, config/load-env.ts (+ untracked docs/plans/G7-workflow-builder.md). KHÔNG `git add -A` — commit theo PATH TƯỜNG MINH; KHÔNG đụng app.module.ts.
 
 ### RÀNG BUỘC RED ĐÃ GHIM (đừng phá khi GREEN):
 F2 object-grant per-account + fail-closed · AAD pinned companyId‖recordId‖encAlgo‖dekKeyVersion + app-gen uuid ·
-audit-in-tx kể cả deny + secret_reveal_failed · mask projection · reauth window scope B · reset-token resetTokenEnc + scrub.
+audit-in-tx kể cả deny + secret_reveal_failed · mask projection (secret/envelope/recovery_*/two_factor_note) ·
+reauth window scope B per-(userId,accountId) · KHÔNG log secret/DEK/tag · reset-token resetTokenEnc + scrub.
 
-### RUNBOOK: Docker pnpm db:up. Migrate (migrate.ts KHÔNG tự load .env): set -a && . ./.env && set +a && pnpm --filter @mediaos/api db:migrate.
-Test: pnpm --filter @mediaos/api exec vitest run <path>. Regression sau MỖI migration: tenant-isolation.int-spec.ts + rls-guards (+ thêm bảng vào rls-registry.ts).
-2 e2e suite health/workflow-lifecycle ĐỎ là PRE-EXISTING (SettingsModule DI) — ngoài scope.
+### RUNBOOK:
+- Docker pnpm db:up (thường đã up: postgres/pgbouncer/valkey/minio).
+- Test 1 file: pnpm --filter @mediaos/api exec vitest run <path>. Reveal int + health e2e chạy KHÔNG cần source .env.
+- Build contracts (nguồn DTO) trước api typecheck: pnpm --filter @mediaos/contracts build (hoặc pnpm typecheck qua turbo lo thứ tự). Typecheck toàn: pnpm typecheck.
+- ⚠️ Migrate: KHÔNG `set -a && . ./.env` (VỠ vì path .env có space "dev 2", vd KMS_LOCAL_KEK_PATH). Đặt env tay rồi pnpm --filter @mediaos/api db:migrate. Sau MỖI migration: tenant-isolation.int-spec + rls-guards + thêm bảng vào rls-registry.ts.
 
-### DoD & gate: từng bước → pha RED tương ứng GREEN + typecheck xanh + regression xanh + cập nhật handoff §4.5.
-FULL gate (ecc:security-reviewer + database-reviewer + silent-failure-hunter + santa-method) SAU khi GREEN 2e (+ harness-audit + security-scan trước merge).
-Commit theo PATH TƯỜNG MINH (parallel sessions chia worktree — KHÔNG git add -A).
+### ĐỌC TRƯỚC khi code:
+handoff §4.5 (markers đã đúng) + §2 RUNBOOK + §3 (quyết định đã chốt) · plan G6-media-full.md §6a–f (crypto/reveal/rotation/reset-token/16 RED/FULL gate) · CLAUDE §2#3 + §3.
 
-Bắt đầu bằng ĐỌC handoff §4.5 + plan §6, rồi trình kế hoạch 2c-còn-lại cho tôi duyệt TRƯỚC khi code.
+Bắt đầu bằng: ĐỌC handoff §4.5 + plan §6, rồi trình kế hoạch FULL gate 2e cho tôi duyệt TRƯỚC khi chạy reviewer.
 ```
 
 Mỗi bước có migration → **migrate + chạy tenant-isolation regression + thêm bảng vào rls-registry** rồi mới commit (per-migration gate, plan §8).
