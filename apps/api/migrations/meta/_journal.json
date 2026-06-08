@@ -190,6 +190,13 @@
       "when": 1717500030000,
       "tag": "0022_g6_platform_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1717500031000,
+      "tag": "0027_g6_permissions_seed",
+      "breakpoints": true
     }
   ]
 }
