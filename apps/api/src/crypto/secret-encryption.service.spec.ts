@@ -61,6 +61,10 @@ function makeStubKms(): KmsProvider {
       wrapped.subarray('wrapped:'.length),
     ),
     currentKey: vi.fn(async () => ({ kmsKeyId: 'local-dev-kek', keyVersion: 1 })),
+    // Rotation-only path — never exercised by SecretEncryptionService; present to satisfy the interface.
+    reWrapDek: vi.fn(async (dek: Buffer): Promise<Buffer> =>
+      Buffer.concat([Buffer.from('rewrapped:'), dek]),
+    ),
   };
 }
 

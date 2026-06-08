@@ -47,6 +47,20 @@ export class LocalKekProvider implements KmsProvider, OnApplicationShutdown {
     return { wrapped: Buffer.concat([iv, tag, ciphertext]), kmsKeyId, keyVersion };
   }
 
+  async reWrapDek(dek: Buffer, targetKmsKeyId: string, keyVersion: number): Promise<Buffer> {
+    // Rotation re-wrap (2g): same file KEK material in dev, but bind the wrap-AAD to the NEW key identity
+    // (targetKmsKeyId) while PINNING keyVersion to the row's existing dek_key_version. A fresh GCM IV makes
+    // the wrapped bytes differ even under identical material, so the rotation is observable. The DEK is the
+    // caller's — not zeroized here.
+    const kek = this.loadKek();
+    const iv = randomBytes(WRAP_IV_BYTES);
+    const cipher = createCipheriv(WRAP_ALGO, kek, iv, { authTagLength: WRAP_TAG_BYTES });
+    cipher.setAAD(wrapAad(targetKmsKeyId, keyVersion));
+    const ciphertext = Buffer.concat([cipher.update(dek), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return Buffer.concat([iv, tag, ciphertext]);
+  }
+
   async unwrapDek(wrapped: Buffer, kmsKeyId: string, keyVersion: number): Promise<Buffer> {
     // Local dev has a single KEK file; multi-version KEK selection (rotation) is a 2g/Vault concern.
     const kek = this.loadKek();

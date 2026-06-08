@@ -21,4 +21,8 @@ export class VaultKekProvider implements KmsProvider {
   currentKey(_purpose: KeyPurpose): Promise<{ kmsKeyId: string; keyVersion: number }> {
     throw new Error('NOT_IMPLEMENTED:2g — VaultKekProvider.currentKey (Vault transit)');
   }
+
+  reWrapDek(_dek: Buffer, _targetKmsKeyId: string, _keyVersion: number): Promise<Buffer> {
+    throw new Error('NOT_IMPLEMENTED:2g — VaultKekProvider.reWrapDek (Vault transit)');
+  }
 }

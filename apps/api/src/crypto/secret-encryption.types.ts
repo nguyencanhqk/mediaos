@@ -50,6 +50,14 @@ export interface KmsProvider {
   wrapDek(plaintextDek: Buffer, purpose: KeyPurpose): Promise<WrappedDek>;
   unwrapDek(wrapped: Buffer, kmsKeyId: string, keyVersion: number): Promise<Buffer>;
   currentKey(purpose: KeyPurpose): Promise<{ kmsKeyId: string; keyVersion: number }>;
+  /**
+   * Rotation-only (2g): re-wrap an already-unwrapped DEK under the CURRENT KEK, binding the wrap-AAD to an
+   * EXPLICIT (targetKmsKeyId, keyVersion). Unlike wrapDek (which derives both from currentKey), the caller
+   * pins keyVersion to the row's existing dek_key_version so the FROZEN secret AAD — which binds that
+   * version — keeps reconstructing and the unchanged ciphertext still opens (plan §6d, decision A). Returns
+   * the new wrapped bytes only; the caller owns and zeroizes `dek`.
+   */
+  reWrapDek(dek: Buffer, targetKmsKeyId: string, keyVersion: number): Promise<Buffer>;
 }
 
 /** Pure AEAD — knows nothing about KMS or DB. `open` throws on wrong tag/AAD/key. */

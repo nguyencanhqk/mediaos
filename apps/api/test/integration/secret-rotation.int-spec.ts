@@ -1,30 +1,42 @@
 /**
- * G6-2b RED integration suite — SecretRotationService.reWrapAccount (RED 13).
+ * G6-2g integration suite — SecretRotationService re-wrap (RED 13).
  *
- * RED source: SecretRotationService.reWrapAccount() throws NOT_IMPLEMENTED:2g.
- * The test seeds a real platform_account row (dummy envelope), calls reWrapAccount,
- * and asserts the post-rotation invariants that 2g must satisfy:
- *   - encrypted_dek changes
- *   - kms_key_id changes (or version changes)
- *   - secret_ciphertext bytes are UNCHANGED (rotation = re-wrap DEK only)
- *   - decryptSecret still returns original plaintext (round-trip)
- *   - worker pool (mediaos_worker) can see the row (policy check)
+ * Rewritten from the 2b skeleton-RED. Seeds a REAL envelope (via SecretEncryptionService) so a faithful
+ * reWrapAccount can unwrap→re-wrap the DEK, then asserts the FULL post-rotation contract (plan §6d,
+ * DECISION A — rotate the KEK identity, NOT the seal version):
+ *   13a  reWrapAccount resolves (void)
+ *   13b  encrypted_dek changes; kms_key_id becomes the new active key; ciphertext/iv/tag bytes UNCHANGED
+ *   13c  worker pool (mediaos_worker) can SELECT the row (platform_accounts_worker_all policy)
+ *   13d  reWrapAll returns { rotated: number } and rotates the not-yet-rotated rows
+ *   13e  reWrapAccount is idempotent — two calls keep the row valid (ciphertext unchanged, still decrypts)
+ *   13f  decryptSecret STILL returns the original plaintext after rotation (round-trip survives) ⟵ forcing guard
+ *   13g  dek_key_version is UNCHANGED (frozen secret AAD) and last_rotated_at is set
  *
- * These deep assertions are RED because:
- *   1. reWrapAccount throws before any of them can be evaluated.
- *   2. decryptSecret also throws NOT_IMPLEMENTED:2c (round-trip needs crypto too).
+ * RED source (2g not implemented): SecretRotationService.reWrapAccount/reWrapAll throw NOT_IMPLEMENTED:2g
+ * synchronously, so every reWrap call rejects before the invariants can hold → RED for the right reason.
+ *
+ * ⚠️ Why 13f matters: the secret AAD (FROZEN, secret-encryption.service.ts:24) binds dek_key_version, and
+ *    the reveal path rebuilds it from the persisted column. If rotation changed dek_key_version, the
+ *    unchanged ciphertext would fail to open on the next reveal — a silent crown-jewel break the prior
+ *    skeleton tests (no decrypt call) could not catch. 13f + 13g pin the version-preserving design.
+ *
+ * ⚠️ encryption_keys is GLOBAL (no tenant). This suite seeds key_version=2 'active' + flips v1 'retiring'
+ *    in beforeAll, and FULLY restores it (delete v2, v1→active) in afterAll. Dev uses ONE file KEK, so the
+ *    v2 label re-wraps the DEK under the same material — this exercises the rotation bookkeeping + the
+ *    wrap-AAD re-bind path (true KEK rotation = Vault transit, prod-only). Existing rows in other suites
+ *    are unaffected: decrypt reads each row's own (kms_key_id, dek_key_version) + the file KEK, never the
+ *    registry. Parallel test forks may briefly observe v2 active — benign for the same reason.
  *
  * Runs on real Postgres; auto-skip when DATABASE_URL missing.
  */
 
-import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SecretRotationService } from '../../src/crypto/secret-rotation.service';
-import {
-  directPool,
-  hasDb,
-  workerPool,
-} from '../helpers/integration-db';
+import { SecretEncryptionService } from '../../src/crypto/secret-encryption.service';
+import { NodeEnvelopeCipher } from '../../src/crypto/envelope-cipher';
+import { LocalKekProvider } from '../../src/crypto/local-kek.provider';
+import type { EncryptedColumns } from '../../src/crypto/secret-encryption.types';
+import { directPool, hasDb, workerPool } from '../helpers/integration-db';
 import {
   cleanupTenants,
   seedCompany,
@@ -32,24 +44,41 @@ import {
   type SeededTenant,
 } from '../helpers/seed';
 
-describe.skipIf(!hasDb)('G6-2b RED 13 — SecretRotationService.reWrapAccount', () => {
+const PURPOSE = 'platform_account' as const;
+/** Plaintext sealed into every seeded account so RED 13f can round-trip a successful decrypt after rotation. */
+const ROTATE_SECRET = 'rotation-roundtrip-secret-value';
+/** kms_key_id of the seeded key_version=2 — the rotation TARGET every row must end up wrapped under. */
+const TARGET_KMS_KEY_ID = 'local-dev-kek-v2';
+
+/** Raw envelope columns (direct read, superuser — bypasses RLS). */
+interface EnvelopeSnapshot {
+  secret_ciphertext: Buffer;
+  encrypted_dek: Buffer;
+  dek_key_version: number;
+  kms_key_id: string;
+  iv_nonce: Buffer;
+  auth_tag: Buffer;
+  enc_algo: string;
+  last_rotated_at: Date | null;
+}
+
+describe.skipIf(!hasDb)('G6-2g RED 13 — SecretRotationService re-wrap (decision A: rotate KEK identity, pin seal version)', () => {
   const direct = directPool();
   const worker = workerPool();
-  let tenant: SeededTenant;
-  let accountId: string;
-  let rotationSvc: SecretRotationService;
+  const kms = new LocalKekProvider();
+  const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), kms);
 
-  /** Raw envelope columns before rotation (fetched via directPool). */
-  interface EnvelopeSnapshot {
-    secret_ciphertext: Buffer;
-    encrypted_dek: Buffer;
-    dek_key_version: number;
-    kms_key_id: string;
-  }
+  let tenant: SeededTenant;
+  let acctInvariants: string; // 13a/13b/13g
+  let acctRoundTrip: string;  // 13f
+  let acctIdem: string;       // 13e
+  let acctBulk: string;       // 13d
+  let rotationSvc: SecretRotationService;
 
   async function fetchEnvelope(id: string): Promise<EnvelopeSnapshot> {
     const res = await direct.query(
-      `SELECT secret_ciphertext, encrypted_dek, dek_key_version, kms_key_id
+      `SELECT secret_ciphertext, encrypted_dek, dek_key_version, kms_key_id,
+              iv_nonce, auth_tag, enc_algo, last_rotated_at
        FROM platform_accounts WHERE id = $1`,
       [id],
     );
@@ -57,108 +86,154 @@ describe.skipIf(!hasDb)('G6-2b RED 13 — SecretRotationService.reWrapAccount', 
     return res.rows[0] as EnvelopeSnapshot;
   }
 
+  function toEncryptedColumns(snap: EnvelopeSnapshot): EncryptedColumns {
+    return {
+      secretCiphertext: snap.secret_ciphertext,
+      encryptedDek: snap.encrypted_dek,
+      dekKeyVersion: snap.dek_key_version,
+      kmsKeyId: snap.kms_key_id,
+      ivNonce: snap.iv_nonce,
+      authTag: snap.auth_tag,
+      encAlgo: snap.enc_algo,
+    };
+  }
+
+  /** Seed an account and overwrite its envelope with a REAL one sealed under the CURRENTLY active key. */
+  async function seedRealEnvelope(): Promise<string> {
+    const id = await seedPlatformAccount(direct, tenant.companyId);
+    const env = await secrets.encryptSecret(ROTATE_SECRET, {
+      companyId: tenant.companyId,
+      recordId: id,
+      purpose: PURPOSE,
+    });
+    await direct.query(
+      `UPDATE platform_accounts
+         SET secret_ciphertext=$2, encrypted_dek=$3, dek_key_version=$4, kms_key_id=$5,
+             iv_nonce=$6, auth_tag=$7, enc_algo=$8, last_rotated_at=NULL
+       WHERE id=$1`,
+      [id, env.secretCiphertext, env.encryptedDek, env.dekKeyVersion, env.kmsKeyId, env.ivNonce, env.authTag, env.encAlgo],
+    );
+    return id;
+  }
+
   beforeAll(async () => {
     tenant = await seedCompany(direct, 'g62rot');
-    accountId = await seedPlatformAccount(direct, tenant.companyId, {
-      // Seed a non-trivial encrypted_dek so we can detect it changing after rotation.
-      encrypted_dek: Buffer.from('initial-dek-bytes-for-rotation-test'),
-      dek_key_version: 1,
-      kms_key_id: 'local-dev-kek-v1',
-    });
 
-    // SecretRotationService has no constructor deps declared in the skeleton — instantiate directly.
-    // When 2g adds deps (pool, SecretEncryptionService), update here.
-    rotationSvc = new SecretRotationService();
+    // 0) Defensive baseline: a prior CRASHED run may have left v2 'active' (afterAll is skipped on a hard
+    //    fork crash). Force the migration-0022 state (v1 active, no v2) so accounts seal under v1 — the
+    //    suite is then self-healing and version-pin assertions (13g) are deterministic regardless of history.
+    await direct.query(`DELETE FROM encryption_keys WHERE purpose=$1 AND key_version=2`, [PURPOSE]);
+    await direct.query(
+      `UPDATE encryption_keys SET status='active', retired_at=NULL WHERE purpose=$1 AND key_version=1`,
+      [PURPOSE],
+    );
+
+    // 1) Seal all accounts under v1 (the migration-0022 active key 'local-dev-kek') BEFORE flipping.
+    acctInvariants = await seedRealEnvelope();
+    acctRoundTrip = await seedRealEnvelope();
+    acctIdem = await seedRealEnvelope();
+    acctBulk = await seedRealEnvelope();
+
+    // 2) Flip the GLOBAL registry: introduce v2 as the new active key, mark v1 retiring. currentKey() now
+    //    returns ('local-dev-kek-v2', 2) → the rotation target. Idempotent so a crashed prior run is safe.
+    await direct.query(
+      `INSERT INTO encryption_keys (key_version, kms_key_id, purpose, status)
+       VALUES (2, $1, $2, 'active')
+       ON CONFLICT (purpose, key_version) DO UPDATE SET kms_key_id = EXCLUDED.kms_key_id, status = 'active'`,
+      [TARGET_KMS_KEY_ID, PURPOSE],
+    );
+    await direct.query(
+      `UPDATE encryption_keys SET status='retiring' WHERE purpose=$1 AND key_version=1`,
+      [PURPOSE],
+    );
+
+    rotationSvc = new SecretRotationService(kms);
   });
 
   afterAll(async () => {
+    // Restore the GLOBAL registry to its migration-0022 baseline so other suites/runs see v1 active.
+    await direct.query(`DELETE FROM encryption_keys WHERE purpose=$1 AND key_version=2`, [PURPOSE]);
+    await direct.query(
+      `UPDATE encryption_keys SET status='active', retired_at=NULL WHERE purpose=$1 AND key_version=1`,
+      [PURPOSE],
+    );
     await cleanupTenants(direct, [tenant.companyId]);
     await direct.end();
     await worker.end();
   });
 
-  it('RED 13a — reWrapAccount must resolve (void) — currently throws NOT_IMPLEMENTED:2g (primary RED signal)', async () => {
-    // RED: skeleton throws instead of resolving → resolved=false → assertion fails.
-    let resolved = false;
-    try {
-      await rotationSvc.reWrapAccount(accountId);
-      resolved = true;
-    } catch { /* NOT_IMPLEMENTED */ }
-    expect(resolved).toBe(true);
+  it('RED 13a — reWrapAccount resolves (void) — currently throws NOT_IMPLEMENTED:2g', async () => {
+    await expect(rotationSvc.reWrapAccount(acctInvariants)).resolves.toBeUndefined();
   });
 
-  it('RED 13b — after reWrapAccount resolves: encrypted_dek changes, ciphertext bytes UNCHANGED', async () => {
-    // Snapshot before
-    const before = await fetchEnvelope(accountId);
+  it('RED 13b — encrypted_dek changes, kms_key_id → new active key, ciphertext/iv/tag bytes UNCHANGED', async () => {
+    const before = await fetchEnvelope(acctInvariants);
+    await rotationSvc.reWrapAccount(acctInvariants);
+    const after = await fetchEnvelope(acctInvariants);
 
-    // Act: call reWrapAccount (skeleton throws synchronously — use try/catch, not .catch())
-    let threw = false;
-    try {
-      await rotationSvc.reWrapAccount(accountId);
-    } catch (err) {
-      threw = true;
-      const msg = err instanceof Error ? err.message : String(err);
-      // Verify it's the expected NOT_IMPLEMENTED throw, not a setup error
-      expect(msg).toContain('NOT_IMPLEMENTED');
-    }
-
-    if (threw) {
-      // Expected RED state — rotation not implemented yet.
-      // Verify the row is UNCHANGED (no partial write)
-      const after = await fetchEnvelope(accountId);
-      expect(after.encrypted_dek.toString('hex')).toBe(before.encrypted_dek.toString('hex'));
-      expect(after.secret_ciphertext.toString('hex')).toBe(before.secret_ciphertext.toString('hex'));
-      return;
-    }
-
-    // GREEN state (after 2g is implemented): verify invariants
-    const after = await fetchEnvelope(accountId);
-
-    // 1. encrypted_dek must change (new KEK wrapping)
+    // DEK re-wrapped under the new KEK identity (fresh GCM IV → bytes differ even under the same material).
     expect(after.encrypted_dek.toString('hex')).not.toBe(before.encrypted_dek.toString('hex'));
-
-    // 2. kms_key_id or dek_key_version must change (new key version)
-    const keyChanged =
-      after.kms_key_id !== before.kms_key_id ||
-      after.dek_key_version !== before.dek_key_version;
-    expect(keyChanged).toBe(true);
-
-    // 3. secret_ciphertext bytes must be UNCHANGED (rotation = re-wrap DEK only, not re-encrypt secret)
+    // Rotation TARGET reached (absolute assertion → order-independent across re-runs of this account).
+    expect(after.kms_key_id).toBe(TARGET_KMS_KEY_ID);
+    // Re-wrap touches the DEK wrapping ONLY — the sealed secret stays byte-for-byte identical.
     expect(after.secret_ciphertext.toString('hex')).toBe(before.secret_ciphertext.toString('hex'));
+    expect(after.iv_nonce.toString('hex')).toBe(before.iv_nonce.toString('hex'));
+    expect(after.auth_tag.toString('hex')).toBe(before.auth_tag.toString('hex'));
   });
 
-  it('RED 13c — worker pool (mediaos_worker) can SELECT the platform_account row (policy check)', async () => {
-    // Verify the worker_all RLS policy allows mediaos_worker to see the row.
-    // This is not RED from a service perspective — it tests the DB policy directly.
-    // It IS part of the 2g RED suite because the rotation worker needs this access.
-    const res = await worker.query(
-      `SELECT id FROM platform_accounts WHERE id = $1`,
-      [accountId],
-    );
-    // Worker should see all platform_account rows regardless of tenant context
-    // (platform_accounts_worker_all policy, migration 0022).
+  it('RED 13c — worker pool (mediaos_worker) can SELECT the platform_account row (worker_all policy)', async () => {
+    const res = await worker.query(`SELECT id FROM platform_accounts WHERE id = $1`, [acctInvariants]);
     expect(res.rows).toHaveLength(1);
-    expect(res.rows[0].id).toBe(accountId);
+    expect(res.rows[0].id).toBe(acctInvariants);
   });
 
-  it('RED 13d — reWrapAll must return { rotated: number } — currently throws NOT_IMPLEMENTED', async () => {
-    let result: { rotated: number } | undefined;
-    try { result = await rotationSvc.reWrapAll('platform_account'); } catch { /* NOT_IMPLEMENTED */ }
-    expect(result).toBeDefined();
-    expect(typeof result?.rotated).toBe('number');
+  it('RED 13d — reWrapAll returns { rotated: number } and rotates the not-yet-rotated rows', async () => {
+    const result = await rotationSvc.reWrapAll(PURPOSE);
+    expect(typeof result.rotated).toBe('number');
+    expect(result.rotated).toBeGreaterThanOrEqual(1);
+    // acctBulk (dedicated to this case) must now be wrapped under the target key.
+    const after = await fetchEnvelope(acctBulk);
+    expect(after.kms_key_id).toBe(TARGET_KMS_KEY_ID);
   });
 
-  it('RED 13e — rotation is idempotent: calling reWrapAccount twice does not corrupt the row', async () => {
-    // When 2g is done: two consecutive reWrapAccount calls → row ends up in valid state.
-    // Now: both throw NOT_IMPLEMENTED — verify row is still valid after two NOT_IMPLEMENTED throws.
-    const before = await fetchEnvelope(accountId);
+  it('RED 13e — reWrapAccount is idempotent: two calls keep the row valid + still decryptable', async () => {
+    await rotationSvc.reWrapAccount(acctIdem);
+    const mid = await fetchEnvelope(acctIdem);
+    await rotationSvc.reWrapAccount(acctIdem);
+    const after = await fetchEnvelope(acctIdem);
 
-    // Use try/catch because skeleton throws synchronously before returning a Promise.
-    try { await rotationSvc.reWrapAccount(accountId); } catch { /* expected NOT_IMPLEMENTED */ }
-    try { await rotationSvc.reWrapAccount(accountId); } catch { /* expected NOT_IMPLEMENTED */ }
+    // Ciphertext never changes across re-wraps; kms_key_id stays at the target on the second pass.
+    expect(after.secret_ciphertext.toString('hex')).toBe(mid.secret_ciphertext.toString('hex'));
+    expect(after.kms_key_id).toBe(TARGET_KMS_KEY_ID);
+    const plaintext = await secrets.decryptSecret(toEncryptedColumns(after), {
+      companyId: tenant.companyId,
+      recordId: acctIdem,
+      purpose: PURPOSE,
+    });
+    expect(plaintext).toBe(ROTATE_SECRET);
+  });
 
-    const after = await fetchEnvelope(accountId);
-    // Row must not be corrupted by partial writes (both throws = no write = row unchanged)
-    expect(after.secret_ciphertext.toString('hex')).toBe(before.secret_ciphertext.toString('hex'));
+  it('RED 13f — decryptSecret STILL returns the original plaintext after rotation (round-trip survives)', async () => {
+    await rotationSvc.reWrapAccount(acctRoundTrip);
+    const after = await fetchEnvelope(acctRoundTrip);
+    expect(after.kms_key_id).toBe(TARGET_KMS_KEY_ID); // rotation actually happened
+    const plaintext = await secrets.decryptSecret(toEncryptedColumns(after), {
+      companyId: tenant.companyId,
+      recordId: acctRoundTrip,
+      purpose: PURPOSE,
+    });
+    expect(plaintext).toBe(ROTATE_SECRET);
+  });
+
+  it('RED 13g — dek_key_version is UNCHANGED (frozen secret AAD) and last_rotated_at is set', async () => {
+    const before = await fetchEnvelope(acctInvariants);
+    await rotationSvc.reWrapAccount(acctInvariants);
+    const after = await fetchEnvelope(acctInvariants);
+
+    // The seal version is immutable — rotating it would break decrypt of the preserved ciphertext.
+    expect(after.dek_key_version).toBe(before.dek_key_version);
+    expect(after.dek_key_version).toBe(1);
+    // Rotation stamps the audit-of-record timestamp.
+    expect(after.last_rotated_at).not.toBeNull();
   });
 });
