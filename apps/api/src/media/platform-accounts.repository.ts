@@ -74,6 +74,17 @@ function normalizeOptional(value: string | null | undefined): string | null {
 }
 
 /**
+ * Escape ILIKE pattern metacharacters (\ % _) so `q` matches as a literal substring instead of a
+ * wildcard (F4 — mirrors content.repository): a bare `%` would otherwise scan the whole tenant.
+ */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+/** Hard cap on the masked list (F4) — bounds the result set until cursor pagination lands. */
+const MAX_LIST_ROWS = 500;
+
+/**
  * PlatformAccountsRepository (🔒 G6-2) — every read path filters `deleted_at IS NULL` (§6d lifecycle).
  * Read helpers open their own withTenant; write helpers take a `tx` so the service can commit the
  * business row and its audit row in ONE transaction (audit-in-tx, §4 quyết định 4).
@@ -91,13 +102,14 @@ export class PlatformAccountsRepository {
       const conds = [eq(platformAccounts.companyId, companyId), isNull(platformAccounts.deletedAt)];
       if (filter.platformId) conds.push(eq(platformAccounts.platformId, filter.platformId));
       if (filter.status) conds.push(eq(platformAccounts.status, filter.status));
-      if (filter.q) conds.push(ilike(platformAccounts.accountName, `%${filter.q}%`));
+      if (filter.q) conds.push(ilike(platformAccounts.accountName, `%${escapeLike(filter.q)}%`));
 
       return tx
         .select(SAFE_COLUMNS)
         .from(platformAccounts)
         .where(and(...conds))
-        .orderBy(desc(platformAccounts.createdAt));
+        .orderBy(desc(platformAccounts.createdAt))
+        .limit(MAX_LIST_ROWS);
     });
   }
 

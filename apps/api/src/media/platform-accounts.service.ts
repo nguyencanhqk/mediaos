@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import {
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
@@ -12,6 +15,7 @@ import { users } from '../db/schema';
 import { AuditService } from '../events/audit.service';
 import { PermissionService } from '../permission/permission.service';
 import { ValkeyService } from '../permission/valkey.service';
+import { LoginRateLimiter } from '../auth/login-rate-limiter';
 import { PasswordService } from '../auth/password.service';
 import { SecretEncryptionService } from '../crypto/secret-encryption.service';
 import { PlatformAccountsRepository, type SafePlatformAccountRow } from './platform-accounts.repository';
@@ -121,6 +125,7 @@ export class PlatformAccountsService {
     private readonly audit: AuditService,
     private readonly valkey: ValkeyService,
     private readonly password: PasswordService,
+    private readonly rateLimiter: LoginRateLimiter,
   ) {}
 
   // ── Re-auth (step-up) ────────────────────────────────────────────────────────
@@ -133,6 +138,12 @@ export class PlatformAccountsService {
     if (!factor.password) {
       throw new UnauthorizedException('Re-authentication requires a password.');
     }
+    // F6: throttle step-up per (userId, accountId). The reveal gate rides on THIS password check, so an
+    // unthrottled endpoint is a brute-force path to crown-jewel secrets — reuse the login limiter.
+    const rlKey = `reauth|${user.id}|${accountId}`;
+    if (this.rateLimiter.isLocked(rlKey)) {
+      throw new HttpException('Too many re-authentication attempts. Try again later.', HttpStatus.TOO_MANY_REQUESTS);
+    }
     const verified = await this.db.withTenant(user.companyId, async (tx) => {
       const [row] = await tx
         .select({ passwordHash: users.passwordHash })
@@ -143,10 +154,27 @@ export class PlatformAccountsService {
       return this.password.verify(row.passwordHash, factor.password as string);
     });
     if (!verified) {
+      this.rateLimiter.recordFailure(rlKey);
       throw new UnauthorizedException('Re-authentication failed.');
     }
+    this.rateLimiter.reset(rlKey);
+
     const reauthValidUntil = new Date(Date.now() + REAUTH_TTL_SEC * 1000);
-    await this.valkey.set(reauthKey(user.id, accountId), String(reauthValidUntil.getTime()), REAUTH_TTL_SEC);
+    // F7: surface a window-persist failure instead of a false success — a swallowed Valkey write would
+    // make reauth look OK while every follow-up reveal denies with 'deny-reauth-required'. set() returns
+    // true when the cache is disabled (tests/no-URL) so this only fires on a real outage.
+    const persisted = await this.valkey.set(
+      reauthKey(user.id, accountId),
+      String(reauthValidUntil.getTime()),
+      REAUTH_TTL_SEC,
+    );
+    if (!persisted) {
+      this.logger.warn('Re-auth window failed to persist to Valkey — step-up not durable', {
+        userId: user.id,
+        accountId,
+      });
+      throw new ServiceUnavailableException('Re-authentication temporarily unavailable. Please retry.');
+    }
     return { reauthValidUntil };
   }
 
@@ -165,7 +193,7 @@ export class PlatformAccountsService {
     });
     if (!decision.allow) {
       if (decision.auditRequired) {
-        await this.recordDenyAudit(user, accountId, 'platform_account.secret_reveal_denied', decision.reason, ctx);
+        await this.recordBestEffortAudit(user, accountId, 'platform_account.secret_reveal_denied', decision.reason, ctx);
       }
       throw new ForbiddenException(`Permission denied: ${decision.reason}`);
     }
@@ -178,8 +206,11 @@ export class PlatformAccountsService {
       if (!row) return { kind: 'not_found' as const };
       try {
         const secret = await this.secrets.decryptSecret(row, {
-          companyId: user.companyId,
-          recordId: accountId,
+          // F2: bind the AAD to the PERSISTED row columns (row.companyId/row.id), not the request args.
+          // They coincide today only because of the WHERE company_id/id filter — binding the row makes
+          // AAD integrity independent of the query predicate.
+          companyId: row.companyId,
+          recordId: row.id,
           purpose: SECRET_PURPOSE,
         });
         await this.audit.record(tx, {
@@ -192,21 +223,20 @@ export class PlatformAccountsService {
         });
         return { kind: 'ok' as const, secret };
       } catch {
-        await this.audit.record(tx, {
-          action: 'platform_account.secret_reveal_failed',
-          objectType: 'platform_account',
-          objectId: accountId,
-          actorUserId: user.id,
-          ip: ctx.ip,
-          userAgent: ctx.userAgent,
-          after: { reason: 'decrypt_error' },
-        });
+        // Decrypt threw (tamper/corruption). Do NOT audit inside this tx — a failed audit INSERT would
+        // poison the reveal tx and the failure would go unrecorded, AND the generic error would be
+        // masked by the tx-commit error. Record it in a SEPARATE best-effort tx after this one resolves
+        // (F5), so tamper stays auditable even when this tx is unhealthy.
         return { kind: 'decrypt_failed' as const };
       }
     });
 
     if (outcome.kind === 'not_found') throw new NotFoundException('Platform account not found.');
-    if (outcome.kind === 'decrypt_failed') throw new Error('Secret reveal failed.');
+    if (outcome.kind === 'decrypt_failed') {
+      // Tamper/corruption is auditable — own tx, committed BEFORE the generic rethrow (RED 8).
+      await this.recordBestEffortAudit(user, accountId, 'platform_account.secret_reveal_failed', 'decrypt_error', ctx);
+      throw new Error('Secret reveal failed.');
+    }
     return { secret: outcome.secret };
   }
 
@@ -292,7 +322,7 @@ export class PlatformAccountsService {
     });
     if (!decision.allow) {
       if (decision.auditRequired) {
-        await this.recordDenyAudit(user, accountId, 'platform_account.secret_update_denied', decision.reason);
+        await this.recordBestEffortAudit(user, accountId, 'platform_account.secret_update_denied', decision.reason);
       }
       throw new ForbiddenException(`Permission denied: ${decision.reason}`);
     }
@@ -323,10 +353,11 @@ export class PlatformAccountsService {
   // ── Helpers ────────────────────────────────────────────────────────────────────
 
   /**
-   * Best-effort deny audit (plan §6c "deny vẫn audit"). A failure to write the audit must NOT turn a
-   * security DENY into a 500 — we log it (never silently swallow) and the caller still throws Forbidden.
+   * Best-effort audit in its OWN tx (plan §6c "deny vẫn audit"; also the reveal-failed tamper row, F5).
+   * A failure to write the audit must NOT turn a security DENY (or a tamper rethrow) into a different
+   * error — we log it (never silently swallow) and the caller still throws its intended exception.
    */
-  private async recordDenyAudit(
+  private async recordBestEffortAudit(
     user: RequestUser,
     accountId: string,
     action: string,
@@ -346,11 +377,11 @@ export class PlatformAccountsService {
         });
       });
     } catch (err) {
-      this.logger.error('Failed to write deny audit (access still denied)', {
+      this.logger.error('Failed to write best-effort audit (original outcome unchanged)', {
         userId: user.id,
         accountId,
         action,
-        error: err instanceof Error ? err.message : String(err),
+        error: err instanceof Error ? err.stack ?? err.message : String(err),
       });
     }
   }

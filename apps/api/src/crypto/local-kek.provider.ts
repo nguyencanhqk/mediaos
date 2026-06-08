@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { Injectable } from '@nestjs/common';
+import { Injectable, type OnApplicationShutdown } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { loadEnv } from '../config/env.schema';
 import { db } from '../db';
@@ -17,13 +17,23 @@ const WRAP_TAG_BYTES = 16; // GCM auth tag
  * DI swap). The KEK never leaves this provider — only the WRAPPED DEK touches the DB.
  *
  * - wrapDek/unwrapDek: AES-256-GCM wrap of the DEK under the file KEK. `wrapped` = iv(12)‖tag(16)‖ciphertext.
- *   AAD binds `kmsKeyId:keyVersion` so a wrapped DEK cannot be replayed under a different key identity.
+ *   AAD binds `kmsKeyId‖0x00‖keyVersion` so a wrapped DEK cannot be replayed under a different key identity.
  * - currentKey: reads the active row from `encryption_keys` (GLOBAL registry, migration 0022).
  */
 @Injectable()
-export class LocalKekProvider implements KmsProvider {
-  /** Cached KEK material — loaded lazily on first use so app-boot does not require `.secrets/` to exist. */
+export class LocalKekProvider implements KmsProvider, OnApplicationShutdown {
+  /**
+   * Cached KEK material — loaded lazily on first use so app-boot does not require `.secrets/` to exist.
+   * ⚠️ The cache is NOT invalidated: rotating the KEK file requires a process restart (dev-only — prod
+   * uses Vault transit where rotation/versioning is native). Zeroized on shutdown so it does not linger.
+   */
   private kek?: Buffer;
+
+  /** Zero the cached KEK on graceful shutdown (defense-in-depth — per-op DEKs are already zeroed). */
+  onApplicationShutdown(): void {
+    this.kek?.fill(0);
+    this.kek = undefined;
+  }
 
   async wrapDek(plaintextDek: Buffer, purpose: KeyPurpose): Promise<WrappedDek> {
     // Pin the version the DEK is wrapped under — SecretEncryptionService binds this into the AAD + stores it.
@@ -91,7 +101,11 @@ export class LocalKekProvider implements KmsProvider {
   }
 }
 
-/** AAD for DEK-wrap — reconstructable at unwrap from (kmsKeyId, keyVersion) alone; binds wrap to key identity. */
+/**
+ * AAD for DEK-wrap — reconstructable at unwrap from (kmsKeyId, keyVersion) alone; binds wrap to key identity.
+ * NUL-delimited (F1b) so a kmsKeyId containing ':' or '/' (e.g. a Vault transit path in 2g) cannot
+ * ambiguously re-segment against the version — collision-free by construction, mirror of the envelope AAD.
+ */
 function wrapAad(kmsKeyId: string, keyVersion: number): Buffer {
-  return Buffer.from(`${kmsKeyId}:${keyVersion}`, 'utf8');
+  return Buffer.from(`${kmsKeyId}\x00${keyVersion}`, 'utf8');
 }

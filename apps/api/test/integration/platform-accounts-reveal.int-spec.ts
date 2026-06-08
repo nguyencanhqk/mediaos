@@ -32,6 +32,7 @@ import { LocalKekProvider } from '../../src/crypto/local-kek.provider';
 import { PermissionService } from '../../src/permission/permission.service';
 import { PermissionRepository } from '../../src/permission/permission.repository';
 import { ValkeyService } from '../../src/permission/valkey.service';
+import { LoginRateLimiter } from '../../src/auth/login-rate-limiter';
 import { PasswordService } from '../../src/auth/password.service';
 import { AuditService } from '../../src/events/audit.service';
 import { directPool, hasDb } from '../helpers/integration-db';
@@ -86,6 +87,7 @@ describe.skipIf(!hasDb)('G6-2b platform-accounts reveal / list / edit — RED de
       new AuditService(),
       new ValkeyService(),
       password,
+      new LoginRateLimiter(),
     );
 
     A = await seedCompany(direct, 'g62a');

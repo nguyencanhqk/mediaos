@@ -14,7 +14,7 @@
 import { Logger } from '@nestjs/common';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NodeEnvelopeCipher } from './envelope-cipher';
-import { SecretEncryptionService } from './secret-encryption.service';
+import { SecretEncryptionService, buildAad } from './secret-encryption.service';
 import type {
   EncryptCtx,
   EncryptedColumns,
@@ -242,6 +242,30 @@ describe('RED 9 — SecretEncryptionService.encryptSecret: per-write DEK+nonce u
     try { result = await svc.encryptSecret('new-secret-for-update', ctx); } catch (e) { err = e; }
     expect(result).toBeDefined();
     expect(err).toBeUndefined();
+  });
+});
+
+// ─── F1 — buildAad collision-resistance (NUL-delimited AAD binding) ──────────
+//
+// FULL-gate F1: the AAD pins companyId‖recordId‖encAlgo‖dekKeyVersion with a 0x00 delimiter so the
+// four fields cannot ambiguously re-segment. These guard the delimiter property directly (the cipher
+// round-trip tests above can't, since seal+open share whatever AAD they're given).
+
+describe('F1 — buildAad collision-resistance (NUL-delimited AAD)', () => {
+  it('produces NUL-delimited bytes in the pinned field order', () => {
+    expect(buildAad('co', 'rec', 'AES-256-GCM', 7).toString('utf8')).toBe('co\x00rec\x00AES-256-GCM\x007');
+  });
+
+  it('does not collide on the companyId/recordId boundary (naive concat would: "ab"+"c" == "a"+"bc")', () => {
+    expect(buildAad('ab', 'c', 'AES-256-GCM', 1).equals(buildAad('a', 'bc', 'AES-256-GCM', 1))).toBe(false);
+  });
+
+  it('does not collide on the encAlgo/dekKeyVersion boundary (naive: "AES-256-GCM"+12 == "AES-256-GCM1"+2)', () => {
+    expect(buildAad('co', 'rec', 'AES-256-GCM', 12).equals(buildAad('co', 'rec', 'AES-256-GCM1', 2))).toBe(false);
+  });
+
+  it('is deterministic for identical inputs (seal and open rebuild byte-identical)', () => {
+    expect(buildAad('co', 'rec', 'AES-256-GCM', 1).equals(buildAad('co', 'rec', 'AES-256-GCM', 1))).toBe(true);
   });
 });
 
