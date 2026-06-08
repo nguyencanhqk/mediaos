@@ -26,6 +26,34 @@ export const envSchema = z.object({
   RESET_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(3600), // 1 giờ
   LOGIN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
   LOGIN_LOCKOUT_SEC: z.coerce.number().int().positive().default(900), // khoá tạm 15 phút
+
+  // ── KMS / Envelope encryption (G6-2, plan §6d) ────────────────────────────
+  // KMS_PROVIDER chọn DI provider: 'local' (dev, KEK 32B từ file .secrets/) | 'vault' (prod, Vault transit).
+  // Default 'local' để app vẫn boot/test mà KHÔNG cần Vault (KEK đọc lazy → fail-fast lúc dùng nếu thiếu file).
+  KMS_PROVIDER: z.enum(["local", "vault"]).default("local"),
+  // Đường dẫn file KEK 32-byte (LocalKekProvider). ADR-0004 cấm KEK-in-env-host cho prod → chỉ dùng dev/test.
+  KMS_LOCAL_KEK_PATH: z.string().min(1).default(".secrets/local-kek.bin"),
+  // Vault transit — chỉ bắt buộc khi KMS_PROVIDER='vault' (xem superRefine bên dưới).
+  KMS_VAULT_ADDR: z.string().url().optional(),
+  KMS_VAULT_TOKEN: z.string().min(1).optional(),
+}).superRefine((env, ctx) => {
+  // Fail-fast: chọn Vault thì PHẢI có addr + token (không để provider chết im lúc runtime).
+  if (env.KMS_PROVIDER === "vault") {
+    if (!env.KMS_VAULT_ADDR) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["KMS_VAULT_ADDR"],
+        message: "bắt buộc khi KMS_PROVIDER='vault'",
+      });
+    }
+    if (!env.KMS_VAULT_TOKEN) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["KMS_VAULT_TOKEN"],
+        message: "bắt buộc khi KMS_PROVIDER='vault'",
+      });
+    }
+  }
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -25,4 +25,25 @@ describe("loadEnv", () => {
   it("throws on malformed DATABASE_URL", () => {
     expect(() => loadEnv({ DATABASE_URL: "not-a-url" } as NodeJS.ProcessEnv)).toThrow();
   });
+
+  it("defaults KMS_PROVIDER to local with a KEK path", () => {
+    const env = loadEnv({});
+    expect(env.KMS_PROVIDER).toBe("local");
+    expect(env.KMS_LOCAL_KEK_PATH).toBe(".secrets/local-kek.bin");
+  });
+
+  it("throws when KMS_PROVIDER=vault without addr/token", () => {
+    expect(() => loadEnv({ KMS_PROVIDER: "vault" } as NodeJS.ProcessEnv)).toThrow(
+      /Invalid environment variables/,
+    );
+  });
+
+  it("accepts KMS_PROVIDER=vault with addr+token", () => {
+    const env = loadEnv({
+      KMS_PROVIDER: "vault",
+      KMS_VAULT_ADDR: "http://vault:8200",
+      KMS_VAULT_TOKEN: "dev-token",
+    } as NodeJS.ProcessEnv);
+    expect(env.KMS_PROVIDER).toBe("vault");
+  });
 });
