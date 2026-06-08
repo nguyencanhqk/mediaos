@@ -2,7 +2,7 @@
 
 > Đọc file này + [`G6-media-full.md`](./G6-media-full.md) (kế hoạch gốc, plan-reviewer PASS) TRƯỚC khi code tiếp.
 > Mục tiêu: 1 session mới cầm file này là tiếp tục được ngay, không phải dò lại.
-> Cập nhật lần cuối: 2026-06-08 · Branch: **`feat/g6-media`** · HEAD: **`d8ef592`** (G6-2: **2a–2g XONG** — incl FULL gate 2e, còn **2h(FE)**; gates ĐỂ DÀNH: FULL 2d + security-reviewer độc lập 2f + **FULL 2g**)
+> Cập nhật lần cuối: 2026-06-08 · Branch: **`feat/g6-media`** · HEAD: **`eaf99bf`** (G6-2: **2a–2h XONG** — incl FULL gate 2e + LIGHT gate 2h; gates ĐỂ DÀNH trước merge: FULL 2d + security-reviewer độc lập 2f + **FULL 2g** + harness-audit + security-scan)
 > ✅ **Reconciled:** 2 session song song đã hoàn tất — **G6-5** (Channel Health, `4e620a0` + fix settings.module
 > `421e15c`) và **G6-4** (Content full, `0041ea4`→`7c008ce`). Lịch sử interleave nhưng linear, không conflict;
 > tree cuối nhất quán + xanh. **G6-1/3/4/5 XONG — chỉ còn G6-2 (crown-jewel, hand-driven).**
@@ -151,7 +151,10 @@ pnpm typecheck
     - 🔴 **DECISION A (chốt với user):** `dek_key_version` = **seal version IMMUTABLE** (frozen secret AAD bind nó) → rotation **KHÔNG đổi** version, chỉ đổi `kms_key_id`. Đổi version = vỡ decrypt của ciphertext giữ nguyên. `KmsProvider.reWrapDek(dek,targetKmsKeyId,keyVersion)` mới (bind wrap-AAD identity tường minh; LocalKek impl, Vault stub). **`buildAad`/`decryptSecret` KHÔNG đụng.**
     - ⚠️ **Plan §6d cần đính chính (doc):** bỏ `dek_key_version` khỏi danh sách UPDATE re-wrap (dòng ~1000 ghi sai — nó là seal version, bất biến). Dev rotation story: seed `encryption_keys` v2 (`local-dev-kek-v2`,active)+v1 retiring; rows giữ version riêng. `revoked_at` **DEFER** (dùng status+retired_at). True KEK-rotation = Vault/prod (dev = cùng file KEK).
     - RED 13 viết lại **GREEN 7/7** (incl forcing **13f** decrypt round-trip sống sau rotation + **13g** version-pin+last_rotated_at; self-healing reset registry global trong beforeAll). Regression tenant-isolation+reveal **144/2-skip**, crypto unit 25, typecheck 4/4. ⚠️ **FULL gate 2g ĐỂ DÀNH** (cost — defer cùng 2d/2f-indep).
-  - ▶️ **KẾ TIẾP:** **2h(FE)** — ChannelAccountsTab + SecretField (masked + reveal eye) + ReAuthModal (step-up → POST /reauth → POST /:id/reveal) + `<PermissionGate reveal-secret>`; KHÔNG cache plaintext.
+  - ✅ **2h XONG (`eaf99bf`):** FE crown-jewel, **trang company-wide `/settings/platform-accounts`** (KHÔNG tab-per-channel — `channel_accounts` chưa có read endpoint; plan §6 dòng 861 "grouped by relation_type" DEFER tới khi có `GET /channels/:id/accounts`). `lib/platform-accounts-api.ts` (+`revealWithReauth` gói reauth→reveal) · `secret-field.tsx` (masked; plaintext CHỈ state local, clear khi ẩn/blur/auto-hide60s/unmount) · `reauth-modal.tsx` (gọi reveal trực tiếp, KHÔNG React Query → plaintext không vào cache) · `use-reveal-controller.tsx` (1 modal dùng chung, bridge Promise, cleanup chống treo) · `platform-account-table.tsx` (12 cột masked, `<PermissionGate reveal-secret>`/`edit-platform-account`) · create/update-secret dialog (validate Zod contracts) · route+nav. **31 ca test mới · web 48/48 · typecheck sạch.** LIGHT gate (typescript-reviewer + code-reviewer) **0 CRIT**; fix HIGH (promise-leak unmount, useCallback/useMemo modal, schema-validate update-secret).
+    - ⚠️ **UI-complete, e2e-DEFERRED → G2-6:** FE chưa có auth thật ([login.tsx](../../apps/web/src/routes/login.tsx) mock G1; [api-client.ts](../../apps/web/src/lib/api-client.ts) KHÔNG gửi token/credentials; `auth.ts` `capabilities:{}` rỗng + `setUser`/`/me` chưa wire → `useCan` luôn false). Reveal/reauth chỉ verify bằng unit/RED (mock api+store), CHƯA chạy e2e với BE. Khi G2-6 xong: wire token vào api-client + nạp capabilities từ `/me` → bật e2e.
+    - Lưu ý: CLAUDE §4 ghi RHF nhưng repo KHÔNG có `react-hook-form` → dùng `useState`+Zod safeParse (mirror code thật).
+  - ▶️ **KẾ TIẾP:** G6-2 đã hết micro-step build. Còn lại trước merge: **(1) gates ĐỂ DÀNH** (FULL 2g + 2d + security-reviewer 2f độc lập + harness-audit + security-scan — tốn, HỎI user) · **(2) DoD G6-2** (TASKS.md) · **(3) sửa doc nợ** plan §6d ~dòng 1000 (dek_key_version trong UPDATE re-wrap — SAI theo decision A) · **(4) cân nhắc merge**.
 - **2d Migration 0027** (seed `edit-platform-account` sensitive + grants). **2e0** vá `PermissionGuard` forward `resourceId`+`ctx` + fail-closed (BẮT BUỘC trước 2e). **2e** reveal-secret endpoint. **2f** reset-token envelope + scrub outbox (0028). **2g** rotation job. **2h** FE.
 
 ---
@@ -178,7 +181,7 @@ Model: Opus. HAND-DRIVEN — KHÔNG tự do, KHÔNG nhảy bước. Tôi review 
 - migrate đặt env TAY (`DATABASE_DIRECT_URL`+`DATABASE_URL` inline, KHÔNG source .env) → reset-token-envelope.int GREEN + tenant-isolation regression → commit → FULL gate 2f.
 - ⏳ ĐỂ DÀNH trước merge G6-2: FULL gate 2d (security+database) · `ecc:harness-audit` + `ecc:security-scan`.
 
-### THỨ TỰ TIẾP (KHÔNG đảo): 2d(0027) → 2f(0028) → 2g(rotation) → 2h(FE).
+### THỨ TỰ TIẾP (KHÔNG đảo): 2d(0027) → 2f(0028) → 2g(rotation) → 2h(FE). ✅ **TẤT CẢ XONG.** Còn: gates ĐỂ DÀNH → DoD → merge.
 - 2d 0027: seed `edit-platform-account` (is_sensitive) + grants per-account; `reveal-secret` KHÔNG vào system role. RED 14/11 enforce object-grant. → migrate → tenant-isolation regression → +rls-registry.
 - 2f 0028 + reset-token (RED reset-token-envelope.int): forgotPassword → encryptSecret(token,{purpose:'auth_reset_token'}) → payload CHỈ resetTokenEnc; mail-consumer decrypt JIT; SCRUB outbox plaintext cũ; gate prod cutover vào scrub.
 - 2g rotation worker (secret-rotation.service.ts đang throw; RED secret-rotation.int 13b/13e deferred-active): reWrapAccount/reWrapAll qua worker direct pool → unwrap(old)→wrap(new)→UPDATE; ciphertext bytes KHÔNG đổi; resumable. Cân nhắc tách worker policy SELECT/UPDATE + thêm encryption_keys.revoked_at.
