@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import swc from "unplugin-swc";
 import { defineConfig } from "vitest/config";
 
@@ -21,6 +22,11 @@ export default defineConfig({
       DATABASE_DIRECT_URL: "postgres://mediaos:changeme_dev_only@localhost:5432/mediaos",
       DATABASE_WORKER_URL: "postgres://mediaos_worker:changeme_worker_only@localhost:5432/mediaos",
       JWT_SECRET: "test-secret-test-secret-test-secret-test-secret",
+      // G6-2e: int-specs construct LocalKekProvider for real → must point at the dev KEK.
+      // vitest cwd is apps/api, so the env.schema default '.secrets/local-kek.bin' (relative) would
+      // miss the repo-root file. Resolve an absolute path from this config's location instead.
+      KMS_PROVIDER: "local",
+      KMS_LOCAL_KEK_PATH: fileURLToPath(new URL("../../.secrets/local-kek.bin", import.meta.url)),
     },
   },
   plugins: [swc.vite()],

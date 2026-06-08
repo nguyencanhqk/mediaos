@@ -15,6 +15,6 @@ import { TokenService } from "./token.service";
   imports: [DatabaseModule, forwardRef(() => PermissionModule)],
   controllers: [AuthController],
   providers: [AuthService, PasswordService, TokenService, LoginRateLimiter],
-  exports: [AuthService, TokenService],
+  exports: [AuthService, TokenService, PasswordService],
 })
 export class AuthModule {}

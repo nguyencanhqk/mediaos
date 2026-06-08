@@ -24,6 +24,16 @@ import { ForbiddenException } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PlatformAccountsService } from '../../src/media/platform-accounts.service';
 import type { RequestUser, RevealCtx, SafePlatformAccountDto } from '../../src/media/platform-accounts.service';
+import { PlatformAccountsRepository } from '../../src/media/platform-accounts.repository';
+import { DatabaseService } from '../../src/db/db.service';
+import { SecretEncryptionService } from '../../src/crypto/secret-encryption.service';
+import { NodeEnvelopeCipher } from '../../src/crypto/envelope-cipher';
+import { LocalKekProvider } from '../../src/crypto/local-kek.provider';
+import { PermissionService } from '../../src/permission/permission.service';
+import { PermissionRepository } from '../../src/permission/permission.repository';
+import { ValkeyService } from '../../src/permission/valkey.service';
+import { PasswordService } from '../../src/auth/password.service';
+import { AuditService } from '../../src/events/audit.service';
 import { directPool, hasDb } from '../helpers/integration-db';
 import {
   cleanupTenants,
@@ -43,6 +53,8 @@ import {
 const ACTION_REVEAL = 'reveal-secret';
 const ACTION_EDIT   = 'edit-platform-account';
 const RESOURCE_TYPE = 'platform-account';
+/** Plaintext sealed into accountA's real envelope so RED 5 can round-trip a successful reveal. */
+const REVEAL_SECRET_A = 'super-secret-A-value';
 
 // ─── Suite ────────────────────────────────────────────────────────────────────
 
@@ -54,20 +66,53 @@ describe.skipIf(!hasDb)('G6-2b platform-accounts reveal / list / edit — RED de
   let userB: string;
   let accountA: string;
   let accountB: string;
+  let accountTamper: string;
   let svc: PlatformAccountsService;
   let permRevealId: string;
   let permEditId: string;
 
   beforeAll(async () => {
+    // Real service wired with concrete deps (mirror content.int-spec). Valkey has no URL in tests → its
+    // client stays null and set/get are no-ops; harmless because the reveal window arrives via ctx, not Valkey.
+    const db = new DatabaseService();
+    const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
+    const permissions = new PermissionService(new PermissionRepository(db));
+    const password = new PasswordService();
+    svc = new PlatformAccountsService(
+      db,
+      new PlatformAccountsRepository(db),
+      secrets,
+      permissions,
+      new AuditService(),
+      new ValkeyService(),
+      password,
+    );
+
     A = await seedCompany(direct, 'g62a');
     B = await seedCompany(direct, 'g62b');
-    userA = await seedUser(direct, A.companyId, `g62a-${randomUUID().slice(0, 8)}@test.local`);
+    // userA needs a REAL argon2 hash so reauth() (RED 7b) can verify the 'pw' password.
+    userA = await seedUser(direct, A.companyId, `g62a-${randomUUID().slice(0, 8)}@test.local`, await password.hash('pw'));
     userB = await seedUser(direct, B.companyId, `g62b-${randomUUID().slice(0, 8)}@test.local`);
-    accountA = await seedPlatformAccount(direct, A.companyId);
     accountB = await seedPlatformAccount(direct, B.companyId);
     permRevealId = await seedPermissionCatalog(direct, ACTION_REVEAL, RESOURCE_TYPE, true);
     permEditId   = await seedPermissionCatalog(direct, ACTION_EDIT,   RESOURCE_TYPE, true);
-    svc = new PlatformAccountsService();
+
+    // accountA carries a REAL envelope so RED 5 round-trips (reveal succeeds). accountTamper keeps the
+    // dummy 00-byte envelope so RED 8 exercises the decrypt-failure path. Both seeded AFTER `secrets`.
+    accountA = await seedPlatformAccount(direct, A.companyId);
+    const env = await secrets.encryptSecret(REVEAL_SECRET_A, {
+      companyId: A.companyId,
+      recordId: accountA,
+      purpose: 'platform_account',
+    });
+    await direct.query(
+      `UPDATE platform_accounts
+         SET secret_ciphertext=$2, encrypted_dek=$3, dek_key_version=$4, kms_key_id=$5,
+             iv_nonce=$6, auth_tag=$7, enc_algo=$8
+       WHERE id=$1`,
+      [accountA, env.secretCiphertext, env.encryptedDek, env.dekKeyVersion, env.kmsKeyId, env.ivNonce, env.authTag, env.encAlgo],
+    );
+    accountTamper = await seedPlatformAccount(direct, A.companyId);
   });
 
   afterAll(async () => {
@@ -209,9 +254,12 @@ describe.skipIf(!hasDb)('G6-2b platform-accounts reveal / list / edit — RED de
   // ─── RED 8 (audit) — tampered row → generic throw + audit committed ───────
 
   it('RED 8 (audit) — reveal tampered row must throw generic error + audit secret_reveal_failed committed', async () => {
-    // When 2c+2e done: decryptSecret on tampered ciphertext → generic throw → audit committed before rethrow.
-    // RED: revealSecret throws NOT_IMPLEMENTED → not a ForbiddenException/generic-crypto-error.
-    const { error } = await invoke(() => svc.revealSecret(userCtx(userA, A.companyId), accountA, validRevealCtx()));
+    // accountTamper keeps the dummy 00-byte envelope → decryptSecret throws → generic 'Secret reveal failed.'
+    // and a 'secret_reveal_failed' audit row is committed before the rethrow. userA already holds the
+    // company-level reveal-secret ALLOW (seeded in RED 3); add the per-account object grant so the F2 check
+    // passes and execution reaches the decrypt step.
+    await seedObjectGrant(direct, A.companyId, userA, RESOURCE_TYPE, accountTamper, ACTION_REVEAL, 'ALLOW');
+    const { error } = await invoke(() => svc.revealSecret(userCtx(userA, A.companyId), accountTamper, validRevealCtx()));
     expect(error).toBeInstanceOf(Error);
     expect(error?.message).not.toContain('NOT_IMPLEMENTED');
   });
