@@ -7,6 +7,7 @@ import { TeamsPage } from "@/routes/org/teams";
 import { EmployeesPage } from "@/routes/org/employees";
 import { PositionsPage } from "@/routes/org/positions";
 import { CompanySettingsPage } from "@/routes/settings/company";
+import { PlatformAccountsPage } from "@/routes/settings/platform-accounts";
 import { ChannelsPage } from "@/routes/media/channels";
 import { ChannelDetailPage } from "@/routes/media/channel-detail";
 import { ProjectsPage } from "@/routes/media/projects";
@@ -131,6 +132,13 @@ const companySettingsRoute = createRoute({
   component: CompanySettingsPage,
 });
 
+const platformAccountsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/platform-accounts",
+  beforeLoad: authGuard,
+  component: PlatformAccountsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
@@ -139,6 +147,7 @@ const routeTree = rootRoute.addChildren([
   employeesRoute,
   positionsRoute,
   companySettingsRoute,
+  platformAccountsRoute,
   channelsRoute,
   channelDetailRoute,
   projectsRoute,
