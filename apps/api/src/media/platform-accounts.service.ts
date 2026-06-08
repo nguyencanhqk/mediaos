@@ -88,8 +88,11 @@ const SECRET_PURPOSE = 'platform_account' as const;
 /** Re-auth window TTL (plan §6c: ~5 phút). Per-account scope keyed (userId, accountId). */
 const REAUTH_TTL_SEC = 300;
 
-/** Valkey key for the per-account re-auth window (scope B). reauth(A) cannot authorize reveal(B). */
-function reauthKey(userId: string, accountId: string): string {
+/**
+ * Valkey key for the per-account re-auth window (scope B). reauth(A) cannot authorize reveal(B).
+ * Exported so ReauthGuard reads the SAME key the service writes — single source, no format drift.
+ */
+export function reauthKey(userId: string, accountId: string): string {
   return `reauth:${userId}:${accountId}`;
 }
 

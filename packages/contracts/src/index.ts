@@ -35,6 +35,7 @@ export const CONTRACTS_VERSION = "0.0.0" as const;
 export * from "./auth";
 export * from "./org";
 export * from "./media";
+export * from "./platform-accounts";
 export * from "./workflow";
 export * from "./task";
 export * from "./notification";

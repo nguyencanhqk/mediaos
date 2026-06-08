@@ -5,20 +5,24 @@ import { AuthModule } from '../auth/auth.module';
 import { CryptoModule } from '../crypto/crypto.module';
 import { PlatformAccountsRepository } from './platform-accounts.repository';
 import { PlatformAccountsService } from './platform-accounts.service';
+import { PlatformAccountsController } from './platform-accounts.controller';
+import { ReauthGuard } from './reauth.guard';
 
 /**
  * PlatformAccountsModule (🔒 G6-2e) — crown-jewel reveal/edit flow for platform_accounts.
  *
  * Wires the secret-encryption stack (CryptoModule → SecretEncryptionService), the permission engine +
- * re-auth cache (PermissionModule → PermissionService, ValkeyService), step-up verification
- * (AuthModule → PasswordService) and tenant DB access (DatabaseModule). AuditService is global (EventsModule).
+ * re-auth cache (PermissionModule → PermissionService, ValkeyService, PermissionGuard), step-up
+ * verification (AuthModule → PasswordService) and tenant DB access (DatabaseModule). AuditService is
+ * global (EventsModule). ReauthGuard is a provider so DI can inject ValkeyService into it.
  *
- * 2e-A registers only the service/repository (the RED int-spec drives the service directly). The
- * controller + ReauthGuard land in 2e-B, at which point this module is added to AppModule.
+ * 2e-B adds the controller + ReauthGuard. To avoid colliding with a parallel session editing
+ * app.module, this module is registered transitively via MediaModule.imports (NOT added to AppModule).
  */
 @Module({
   imports: [DatabaseModule, PermissionModule, AuthModule, CryptoModule],
-  providers: [PlatformAccountsRepository, PlatformAccountsService],
+  controllers: [PlatformAccountsController],
+  providers: [PlatformAccountsRepository, PlatformAccountsService, ReauthGuard],
   exports: [PlatformAccountsService],
 })
 export class PlatformAccountsModule {}
