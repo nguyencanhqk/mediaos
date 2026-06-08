@@ -101,6 +101,177 @@ export async function seedWorkflowDefinition(
   return definitionId;
 }
 
+// ─── G6-2b seed helpers ────────────────────────────────────────────────────────
+
+/**
+ * Seed 1 role cho company. Trả về roleId.
+ * is_system=false, không xung đột với system roles (company_id IS NULL).
+ */
+export async function seedRole(
+  direct: Pool,
+  companyId: string,
+  name: string,
+): Promise<string> {
+  const res = await direct.query(
+    `INSERT INTO roles (company_id, name, is_system)
+     VALUES ($1, $2, false)
+     ON CONFLICT DO NOTHING RETURNING id`,
+    [companyId, name],
+  );
+  if (res.rows.length > 0) return res.rows[0].id as string;
+  // Row already existed — fetch it
+  const existing = await direct.query(
+    `SELECT id FROM roles WHERE company_id = $1 AND name = $2 AND deleted_at IS NULL LIMIT 1`,
+    [companyId, name],
+  );
+  return existing.rows[0].id as string;
+}
+
+/**
+ * Seed 1 permission trong catalog (upsert by action+resource_type).
+ * Trả về permissionId.
+ */
+export async function seedPermissionCatalog(
+  direct: Pool,
+  action: string,
+  resourceType: string,
+  isSensitive: boolean,
+): Promise<string> {
+  // Upsert — permissions is a global catalog (no company_id)
+  const res = await direct.query(
+    `INSERT INTO permissions (action, resource_type, is_sensitive)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (action, resource_type) DO UPDATE SET is_sensitive = EXCLUDED.is_sensitive
+     RETURNING id`,
+    [action, resourceType, isSensitive],
+  );
+  return res.rows[0].id as string;
+}
+
+/**
+ * Seed 1 role_permission (role → permission với effect ALLOW/DENY).
+ * ON CONFLICT DO NOTHING để idempotent khi gọi nhiều lần.
+ */
+export async function seedRolePermission(
+  direct: Pool,
+  roleId: string,
+  permissionId: string,
+  effect: 'ALLOW' | 'DENY',
+): Promise<void> {
+  await direct.query(
+    `INSERT INTO role_permissions (role_id, permission_id, effect)
+     VALUES ($1, $2, $3)
+     ON CONFLICT DO NOTHING`,
+    [roleId, permissionId, effect],
+  );
+}
+
+/**
+ * Seed user_role — gắn user vào role trong company.
+ * Trả về user_role id.
+ */
+export async function seedUserRole(
+  direct: Pool,
+  userId: string,
+  roleId: string,
+  companyId: string,
+): Promise<string> {
+  const res = await direct.query(
+    `INSERT INTO user_roles (user_id, role_id, company_id)
+     VALUES ($1, $2, $3)
+     ON CONFLICT DO NOTHING RETURNING id`,
+    [userId, roleId, companyId],
+  );
+  if (res.rows.length > 0) return res.rows[0].id as string;
+  const existing = await direct.query(
+    `SELECT id FROM user_roles WHERE user_id = $1 AND role_id = $2 AND company_id = $3 LIMIT 1`,
+    [userId, roleId, companyId],
+  );
+  return existing.rows[0].id as string;
+}
+
+/**
+ * Seed 1 object_permission cho user trên một resource instance cụ thể.
+ * Trả về object_permission id.
+ * subject_type = 'user'; effect = 'ALLOW' | 'DENY'.
+ */
+export async function seedObjectGrant(
+  direct: Pool,
+  companyId: string,
+  userId: string,
+  resourceType: string,
+  resourceId: string,
+  action: string,
+  effect: 'ALLOW' | 'DENY',
+): Promise<string> {
+  // Tìm permissionId từ catalog
+  const permRes = await direct.query(
+    `SELECT id FROM permissions WHERE action = $1 AND resource_type = $2 LIMIT 1`,
+    [action, resourceType],
+  );
+  if (permRes.rows.length === 0) {
+    throw new Error(`Permission catalog entry not found: action=${action} resourceType=${resourceType}. Call seedPermissionCatalog first.`);
+  }
+  const permissionId = permRes.rows[0].id as string;
+
+  const res = await direct.query(
+    `INSERT INTO object_permissions
+       (company_id, subject_type, subject_id, permission_id, object_type, object_id, effect)
+     VALUES ($1, 'user', $2, $3, $4, $5, $6)
+     ON CONFLICT DO NOTHING RETURNING id`,
+    [companyId, userId, permissionId, resourceType, resourceId, effect],
+  );
+  if (res.rows.length > 0) return res.rows[0].id as string;
+  const existing = await direct.query(
+    `SELECT id FROM object_permissions
+     WHERE company_id=$1 AND subject_type='user' AND subject_id=$2
+       AND permission_id=$3 AND object_type=$4 AND object_id=$5 AND effect=$6 LIMIT 1`,
+    [companyId, userId, permissionId, resourceType, resourceId, effect],
+  );
+  return existing.rows[0].id as string;
+}
+
+/**
+ * Seed 1 platform_account với DUMMY envelope (không phải crypto thật).
+ * iv_nonce=12B / auth_tag=16B để pass octet_length CHECK constraints.
+ * Trả về account id.
+ * opts.id: nếu cung cấp → dùng làm PK (app-gen UUID trước INSERT — CARRY-FORWARD 🔴 AAD bind).
+ */
+export async function seedPlatformAccount(
+  direct: Pool,
+  companyId: string,
+  opts?: {
+    id?: string;
+    secret_ciphertext?: Buffer;
+    encrypted_dek?: Buffer;
+    dek_key_version?: number;
+    kms_key_id?: string;
+  },
+): Promise<string> {
+  const id = opts?.id ?? randomUUID();
+  const res = await direct.query(
+    `INSERT INTO platform_accounts
+       (id, company_id, platform_id,
+        secret_ciphertext, encrypted_dek, dek_key_version, kms_key_id,
+        iv_nonce, auth_tag, enc_algo)
+     VALUES (
+       $1, $2, (SELECT id FROM platforms WHERE code = 'youtube'),
+       $3, $4, $5, $6,
+       decode(repeat('00', 12), 'hex'), decode(repeat('00', 16), 'hex'), 'AES-256-GCM'
+     )
+     RETURNING id`,
+    [
+      id,
+      companyId,
+      opts?.secret_ciphertext ?? Buffer.from('\x00'),
+      opts?.encrypted_dek     ?? Buffer.from('\x00'),
+      opts?.dek_key_version   ?? 1,
+      opts?.kms_key_id        ?? 'local-dev-kek',
+    ],
+  );
+  return res.rows[0].id as string;
+}
+
 /** Dọn dữ liệu test theo companyId — xoá theo THỨ TỰ phụ thuộc FK (con trước, companies sau cùng). */
 export async function cleanupTenants(direct: Pool, companyIds: string[]): Promise<void> {
   if (companyIds.length === 0) return;
@@ -136,6 +307,9 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM content_items WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM project_channels WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM projects WHERE company_id = ANY($1::uuid[])", ids);
+  // G6-2 Platform Accounts: channel_accounts (FK) before platform_accounts, both before channels
+  await direct.query("DELETE FROM channel_accounts WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM platform_accounts WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM channels WHERE company_id = ANY($1::uuid[])", ids);
 
   // ── G4-1 Org ──────────────────────────────────────────────────────────────
