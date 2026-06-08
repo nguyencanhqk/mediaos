@@ -131,51 +131,71 @@ pnpm typecheck
 ## 5. Khởi động session mới (copy-paste)
 
 ```
-Tôi làm G6-2b (14 RED deny-path tests — TDD RED-first) trên branch feat/g6-media (HEAD 17f9722).
-Model: Opus. HAND-DRIVEN — KHÔNG tự do, KHÔNG nhảy bước. Tôi review từng bước. RED TRƯỚC, review nặng.
+Tôi tiếp tục G6-2 (🔴 CROWN-JEWEL Platform Account Encryption) trên branch feat/g6-media, HEAD 831b986.
+Model: Opus. HAND-DRIVEN — KHÔNG tự do, KHÔNG nhảy bước. RED đã có (là spec); đây là pha GREEN.
+Tôi review từng bước. Trước khi code: ĐỌC + trình kế hoạch cho tôi duyệt.
 
-### Bối cảnh: 2a ĐÃ XONG (commit 17f9722) — migration 0022 + FULL gate PASS-WITH-WARNINGS
-- platform_accounts (8 cột envelope, KHÔNG encrypted_password) + worker policy + column-grant
-  UPDATE(encrypted_dek,kms_key_id,dek_key_version,last_rotated_at) + CHECK octet_length(iv_nonce)=12/auth_tag=16.
-- encryption_keys (GLOBAL no-RLS, seed key_version 1 'local-dev-kek') + channel_accounts (link M:N, uq dẫn đầu company_id).
-- Drizzle schema (bytea customType) + rls-registry (+platform_accounts/+channel_accounts). journal idx27/when 1717500030000.
-- migrate tới when=30000; tenant-isolation 132 + rls-guards 3 + typecheck XANH.
+### ĐÃ XONG (committed):
+- 2a `0022` platform_accounts(envelope)+encryption_keys+channel_accounts (RLS+FORCE+worker policy+column-grant).
+- 2b (commit 831b986): 39 RED deny-path "đỏ đúng lý do" (typecheck xanh, không lỗi setup) + 6 skeleton SUT
+  throw-only + seed-infra. Files spec: src/crypto/secret-encryption.service.spec.ts,
+  src/permission/guards/permission.guard.reveal.spec.ts, src/permission/permission.service.reveal.spec.ts,
+  test/integration/{platform-accounts-reveal,secret-rotation,reset-token-envelope}.int-spec.ts.
+- 2c-core (831b986): NodeEnvelopeCipher (AES-256-GCM thật) + SecretEncryptionService (DEK 32B/ghi → wrapDek
+  → AAD pinned → seal; decrypt đảo, generic error, dek.fill(0), KHÔNG log). 13/13 crypto-spec GREEN.
 
-### ĐỌC KỸ TRƯỚC khi gõ test:
-- handoff §4.5 (2a done + CARRY-FORWARD — đặc biệt 🔴 gen_random_uuid/AAD) + §2 RUNBOOK.
-- plan §6e (14 RED), §6b (service interface), §6c (reveal flow: re-auth window scope (B) per-(userId,accountId)
-  + audit MỖI xem/sửa + failed-reveal-audit), §6f (FULL gate), §5 row 2b (chạy ĐỎ trên stub).
-- CLAUDE §2#3 (không secret plaintext) + §3. Tham chiếu pattern G3-3 (đã viết 52 RED deny-path trước).
+### ĐỌC KỸ TRƯỚC:
+- handoff §4.5 (2a/2b ✅, 2c ⏳ + CÒN-LẠI) + §2 RUNBOOK + §3 (quyết định đã chốt).
+- plan §6b (interface), §6c (reveal flow + window scope B), §6d (KMS/rotation/reset-token), §6e (16 RED — contract), §6f (FULL gate).
+- CLAUDE §2#3 (không secret plaintext) + §3 (permission engine trước module nhạy cảm).
 
-### 14 (+14b) ca RED §6e — viết TRƯỚC, ĐỎ ĐÚNG LÝ DO (stub, chưa có 2c/2e/2e0):
-1 no grant → 403 deny-default + audit · 2 chỉ wildcard *:* → 403 deny-sensitive · 3 ALLOW no re-auth → 403 deny-reauth-required
-4 ALLOW re-auth hết hạn → 403 deny-reauth-required + audit (deny vẫn audit) · 5 ALLOW + re-auth hợp lệ → 200 + audit secret_revealed cùng tx
-6 cross-tenant → 0 row/403 (RLS) · 7 list/detail DTO serialize THẬT KHÔNG có secret_ciphertext/encrypted_dek/iv_nonce/auth_tag/plaintext
-+ KHÔNG recovery_*/two_factor_note (mọi role) · 7b re-auth account A KHÔNG authorize reveal account B (per-account window)
-8 tamper ciphertext/tag/AAD → throw generic + audit secret_reveal_failed · 9 PATCH secret → DEK+iv mới, ciphertext khác (cấm tái dùng DEK)
-10 logger-spy KHÔNG log secret/DEK/tag · 11 edit thiếu edit-platform-account → 403; edit OK → audit secret_updated
-12 reset-token outbox KHÔNG plaintext + envelope + consumer round-trip + scrub cũ · 13 rotation worker re-wrap (encrypted_dek/kms_key_id/version đổi,
-plaintext không đổi, ciphertext bytes không đổi, worker thấy row) · 14 company-level ALLOW nhưng KHÔNG object grant account X → 403 deny object-tier
-14b sensitive thiếu resourceId resolvable → 403 FAIL-CLOSED (KHÔNG type-level allow)
+### THỨ TỰ BẮT BUỘC (KHÔNG đảo): 2c-còn-lại → 2e0 → 2e → 2d(0027) → 2f → 2g → 2h.
+Mỗi bước = implement để pha RED tương ứng → GREEN. KHÔNG nới lỏng test để pass — sửa impl, không sửa spec
+(trừ khi spec sai THẬT, báo tôi trước).
 
-### Seams (verify còn đúng): permission.service.ts:55-58 (Tầng-3 skip khi resourceId==null) · permission.guard.ts:73-80
-(can() KHÔNG truyền resourceId/ctx — đk 2e0) · permission.types.ts:24-28 (reauthValidUntil) · auth.service.ts:210-216
-(forgotPassword ghi PLAINTEXT token vào outbox — RED 12).
+### BƯỚC KẾ — 2c-CÒN-LẠI (hoàn tất crypto module, KHÔNG migration):
+- local-kek.provider.ts (đang throw): KEK 32B từ file `.secrets/` (env KMS_LOCAL_KEK_PATH; ADR-0004 cấm KEK-in-env-host prod).
+  wrapDek/unwrapDek = AES-256-GCM wrap DEK dưới KEK. currentKey(purpose) = đọc encryption_keys active (max key_version).
+- crypto.module.ts (mới): DI ENVELOPE_CIPHER→NodeEnvelopeCipher; KMS_PROVIDER→Local|Vault theo env KMS_PROVIDER; export SecretEncryptionService.
+- env.schema.ts: KMS_PROVIDER('local'|'vault')/KMS_VAULT_ADDR/KMS_VAULT_TOKEN/KMS_LOCAL_KEK_PATH (fail-fast).
+- DoD 2c: module wireable + 13 crypto-spec vẫn GREEN + typecheck xanh + app-boot OK.
 
-### CARRY-FORWARD 2a: 🔴 platform_accounts.id DB default gen_random_uuid() NHƯNG AAD pin theo id → crypto (2c) PHẢI tự
-crypto.randomUUID() + truyền id vào INSERT TRƯỚC encrypt (RED 8/9 phản ánh). Mask projection (RED 7/10) là defense THẬT
-(guard-secrets.mjs chỉ literal-scan, KHÔNG bắt runtime leak).
+### 2e0 (BẮT BUỘC trước 2e) — vá PermissionGuard + luật F2 fail-closed:
+- Seam permission.guard.ts:73-80 (KHÔNG truyền resourceId/ctx) → forward resourceId (route :id) + ctx
+  {reauthValidUntil đọc Valkey theo (userId,accountId), requestId}. RED 2e0-A/B/D xanh.
+- Luật F2 (RED 14/14b): reveal-secret BẮT BUỘC object-grant per-account — company-level ALLOW KHÔNG đủ; sensitive +
+  resourceId null/unresolvable → fail-closed DENY. Quyết định nơi enforce (cờ can() hay guard/service) — trình tôi duyệt.
 
-### Thứ tự: 2a ✅ → 2b (RED ĐỎ) → 2c (crypto) → 2e0 (vá guard) → 2e (reveal). 2b CHỈ viết test + chạy đỏ; KHÔNG implement 2c/2e.
-Test đỏ vì THIẾU implementation, KHÔNG vì lỗi import/setup.
+### 2e reveal/list/edit (platform-accounts.service.ts đang throw) — RED platform-accounts-reveal.int:
+- createAccount: 🔴 app-gen crypto.randomUUID() TRUYỀN vào INSERT TRƯỚC encrypt (CARRY-FORWARD 2a) → encryptSecret → audit secret_created.
+- revealSecret: object-tier + reauth window scope B per-(userId,accountId) (RED 7b) → decrypt JIT trong try/catch trong
+  withTenant → OK audit secret_revealed / tamper VẪN commit secret_reveal_failed rồi rethrow generic (RED 8). Trả plaintext 1 lần.
+- list/getAccount: mask projection — secret_ciphertext/encrypted_dek/iv_nonce/auth_tag + recovery_*/two_factor_note KHÔNG vào DTO mọi role (RED 7 serialize THẬT).
+- updateSecret: gate edit-platform-account (sensitive) → DEK+nonce mới → audit secret_updated (RED 11). Controller @RequirePermission + reauth endpoint. Wire CryptoModule.
 
-### RUNBOOK: vitest env baked (vitest.config.ts, app role :5432): pnpm --filter @mediaos/api exec vitest run <file>.
-Migrate (nếu cần): set -a && . ./.env && set +a && pnpm --filter @mediaos/api db:migrate. Docker phải chạy (pnpm db:up).
+### 2d `0027` + 2f `0028` (migration — TRAP journal: when > max-applied 1717500030000, vd 31000/32000):
+- 0027: seed permissions reveal-secret + edit-platform-account (is_sensitive=true) + grants (KHÔNG seed system role).
+- 2f reset-token (RED reset-token-envelope.int): forgotPassword (auth.service.ts:213-216) → encryptSecret(token,{purpose:'auth_reset_token'})
+  → payload CHỈ resetTokenEnc; mail consumer decrypt JIT; 0028 seed encryption_keys purpose='auth_reset_token' + SCRUB outbox cũ
+  (rows eventType=auth.password_reset_requested còn plaintext) — gate prod cutover vào scrub.
+
+### 2g rotation (RED secret-rotation.int) — secret-rotation.service.ts đang throw:
+- reWrapAccount/reWrapAll: worker direct pool (mediaos_worker) → unwrapDek(old)→wrapDek(new)→UPDATE
+  encrypted_dek/kms_key_id/dek_key_version/last_rotated_at; ciphertext bytes KHÔNG đổi; decrypt vẫn plaintext gốc. Nhờ worker policy + column-grant (0022). Resumable.
+
+### RÀNG BUỘC RED ĐÃ GHIM (đừng phá khi GREEN):
+F2 object-grant per-account + fail-closed · AAD pinned companyId‖recordId‖encAlgo‖dekKeyVersion + app-gen uuid ·
+audit-in-tx kể cả deny + secret_reveal_failed · mask projection · reauth window scope B · reset-token resetTokenEnc + scrub.
+
+### RUNBOOK: Docker pnpm db:up. Migrate (migrate.ts KHÔNG tự load .env): set -a && . ./.env && set +a && pnpm --filter @mediaos/api db:migrate.
+Test: pnpm --filter @mediaos/api exec vitest run <path>. Regression sau MỖI migration: tenant-isolation.int-spec.ts + rls-guards (+ thêm bảng vào rls-registry.ts).
 2 e2e suite health/workflow-lifecycle ĐỎ là PRE-EXISTING (SettingsModule DI) — ngoài scope.
 
-### DoD 2b: 14(+14b) ca ĐỎ đúng lý do (deny-sensitive/deny-reauth-required/object-tier/no-leak/failed-reveal-audit),
-KHÔNG đỏ vì setup. Cập nhật handoff §4.5. Agent ecc:tdd-guide (hoặc tự viết tiết kiệm — hỏi trước).
-Bắt đầu bằng ĐỌC → trình kế hoạch 2b cho tôi duyệt TRƯỚC khi viết test.
+### DoD & gate: từng bước → pha RED tương ứng GREEN + typecheck xanh + regression xanh + cập nhật handoff §4.5.
+FULL gate (ecc:security-reviewer + database-reviewer + silent-failure-hunter + santa-method) SAU khi GREEN 2e (+ harness-audit + security-scan trước merge).
+Commit theo PATH TƯỜNG MINH (parallel sessions chia worktree — KHÔNG git add -A).
+
+Bắt đầu bằng ĐỌC handoff §4.5 + plan §6, rồi trình kế hoạch 2c-còn-lại cho tôi duyệt TRƯỚC khi code.
 ```
 
 Mỗi bước có migration → **migrate + chạy tenant-isolation regression + thêm bảng vào rls-registry** rồi mới commit (per-migration gate, plan §8).
