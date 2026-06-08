@@ -5,6 +5,9 @@ import { AuthService } from "../../src/auth/auth.service";
 import { LoginRateLimiter } from "../../src/auth/login-rate-limiter";
 import { PasswordService } from "../../src/auth/password.service";
 import { TokenService } from "../../src/auth/token.service";
+import { SecretEncryptionService } from "../../src/crypto/secret-encryption.service";
+import { NodeEnvelopeCipher } from "../../src/crypto/envelope-cipher";
+import { LocalKekProvider } from "../../src/crypto/local-kek.provider";
 import { AuditService } from "../../src/events/audit.service";
 import { OutboxService } from "../../src/events/outbox.service";
 import { PermissionService } from "../../src/permission/permission.service";
@@ -44,6 +47,7 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
   function newAuth(): AuthService {
     const dbsvc = new DatabaseService();
     const mockPermissions = { getCapabilities: async () => ({}) } as unknown as PermissionService;
+    const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
     return new AuthService(
       dbsvc,
       password,
@@ -52,6 +56,7 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
       new AuditService(),
       new OutboxService(),
       mockPermissions,
+      secrets,
     );
   }
 
@@ -117,7 +122,9 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
        ORDER BY created_at DESC LIMIT 1`,
       [A.companyId],
     );
-    const resetToken = ev.rows[0].payload.resetToken as string;
+    const payload = ev.rows[0].payload as { userId: string; resetTokenEnc: unknown };
+    // Mail consumer JIT decrypt (G6-2f): payload mang envelope, không còn plaintext.
+    const resetToken = await fresh.decryptResetToken(A.companyId, payload.resetTokenEnc, payload.userId);
     expect(resetToken).toContain(`${A.companyId}.`);
 
     const NEW_PW = "BrandNewPw!2026";

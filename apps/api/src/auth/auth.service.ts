@@ -17,6 +17,8 @@ import { PermissionService } from "../permission/permission.service";
 import { LoginRateLimiter } from "./login-rate-limiter";
 import { PasswordService } from "./password.service";
 import { TokenService } from "./token.service";
+import { SecretEncryptionService } from "../crypto/secret-encryption.service";
+import type { EncryptedColumns } from "../crypto/secret-encryption.types";
 
 /** Ngữ cảnh request đưa vào audit (ip/user agent). */
 export interface RequestMeta {
@@ -28,6 +30,44 @@ const uuidSchema = z.string().uuid();
 /** 401 ĐỒNG NHẤT cho mọi lỗi đăng nhập — không lộ user/tenant tồn tại (plan §3b/G2-6). */
 const UNIFORM_LOGIN_ERROR = "Thông tin đăng nhập không hợp lệ.";
 
+/** Hình dạng envelope reset-token lưu trong outbox payload (Buffer → base64 để truyền JSON). */
+const resetEnvelopeSchema = z.object({
+  secretCiphertext: z.string(),
+  encryptedDek: z.string(),
+  dekKeyVersion: z.number().int(),
+  kmsKeyId: z.string(),
+  ivNonce: z.string(),
+  authTag: z.string(),
+  encAlgo: z.string(),
+});
+
+/** EncryptedColumns → shape JSON-safe (base64 cho 4 cột Buffer; scalar giữ nguyên). */
+function serializeResetEnvelope(cols: EncryptedColumns): z.infer<typeof resetEnvelopeSchema> {
+  return {
+    secretCiphertext: cols.secretCiphertext.toString("base64"),
+    encryptedDek: cols.encryptedDek.toString("base64"),
+    dekKeyVersion: cols.dekKeyVersion,
+    kmsKeyId: cols.kmsKeyId,
+    ivNonce: cols.ivNonce.toString("base64"),
+    authTag: cols.authTag.toString("base64"),
+    encAlgo: cols.encAlgo,
+  };
+}
+
+/** Payload không tin cậy (từ outbox durable) → EncryptedColumns đã validate; ném khi shape sai. */
+function deserializeResetEnvelope(raw: unknown): EncryptedColumns {
+  const e = resetEnvelopeSchema.parse(raw);
+  return {
+    secretCiphertext: Buffer.from(e.secretCiphertext, "base64"),
+    encryptedDek: Buffer.from(e.encryptedDek, "base64"),
+    dekKeyVersion: e.dekKeyVersion,
+    kmsKeyId: e.kmsKeyId,
+    ivNonce: Buffer.from(e.ivNonce, "base64"),
+    authTag: Buffer.from(e.authTag, "base64"),
+    encAlgo: e.encAlgo,
+  };
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -38,6 +78,7 @@ export class AuthService {
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
     @Inject(forwardRef(() => PermissionService)) private readonly permissions: PermissionService,
+    private readonly secrets: SecretEncryptionService,
   ) {}
 
   /** Resolve companySlug → companyId qua hàm SECURITY DEFINER (lỗ RLS có kiểm soát, §3b). */
@@ -207,12 +248,18 @@ export class AuthService {
         tokenHash: this.tokens.hashToken(scoped),
         expiresAt,
       });
-      // ⚠️ HARDEN TRƯỚC PROD (review G2 CRITICAL · BẤT BIẾN #3): resetToken plaintext nằm trong
-      // outbox_events.payload (durable). Đường giao token cho mailer là async (chưa có consumer mail ở
-      // G2). PHẢI envelope-encrypt payload (G6-2) + purge outbox đã xử lý trước khi lên prod. KHÔNG log.
+      // G6-2f: reset token được envelope-encrypt (purpose=auth_reset_token) TRƯỚC khi chạm outbox durable.
+      // Payload CHỈ mang envelope (resetTokenEnc) — KHÔNG bao giờ plaintext (BẤT BIẾN #3). recordId=user.id
+      // bind envelope vào user; mail consumer decrypt JIT qua decryptResetToken. Fail-closed: encrypt lỗi ⇒
+      // toàn bộ tenant tx rollback (không có outbox row plaintext lọt ra). KHÔNG log token/DEK.
+      const enc = await this.secrets.encryptSecret(scoped, {
+        companyId,
+        recordId: user.id,
+        purpose: "auth_reset_token",
+      });
       await this.outbox.enqueue(tx, {
         eventType: "auth.password_reset_requested",
-        payload: { userId: user.id, email: user.email, resetToken: scoped },
+        payload: { userId: user.id, email: user.email, resetTokenEnc: serializeResetEnvelope(enc) },
       });
       await this.audit.record(tx, {
         action: "auth.password_reset_requested",
@@ -258,6 +305,19 @@ export class AuthService {
     });
 
     if (!ok) throw new UnauthorizedException("Token không hợp lệ hoặc đã hết hạn.");
+  }
+
+  /**
+   * Giải mã envelope reset-token từ outbox payload — bước JIT của mail consumer (G6-2f). `companyId` lấy
+   * từ outbox row, `userId` từ payload; cùng nhau dựng lại AAD (recordId = userId). Trả scoped token; ném
+   * lỗi generic khi tamper/corruption (decryptSecret KHÔNG lộ nội tại crypto). KHÔNG log token.
+   */
+  async decryptResetToken(companyId: string, resetTokenEnc: unknown, userId: string): Promise<string> {
+    return this.secrets.decryptSecret(deserializeResetEnvelope(resetTokenEnc), {
+      companyId,
+      recordId: userId,
+      purpose: "auth_reset_token",
+    });
   }
 
   // ── helpers ─────────────────────────────────────────────────────────────────

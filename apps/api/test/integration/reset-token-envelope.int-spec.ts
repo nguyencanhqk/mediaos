@@ -20,6 +20,9 @@ import { AuthService } from '../../src/auth/auth.service';
 import { LoginRateLimiter } from '../../src/auth/login-rate-limiter';
 import { PasswordService } from '../../src/auth/password.service';
 import { TokenService } from '../../src/auth/token.service';
+import { SecretEncryptionService } from '../../src/crypto/secret-encryption.service';
+import { NodeEnvelopeCipher } from '../../src/crypto/envelope-cipher';
+import { LocalKekProvider } from '../../src/crypto/local-kek.provider';
 import { AuditService } from '../../src/events/audit.service';
 import { OutboxService } from '../../src/events/outbox.service';
 import type { PermissionService } from '../../src/permission/permission.service';
@@ -40,6 +43,7 @@ describe.skipIf(!hasDb)('G6-2b RED 12 — forgotPassword reset-token must be env
   /** Real AuthService — recipe from auth.int-spec.ts:44-56 (forgotPassword uses dbsvc/tokens/outbox/audit). */
   function newAuth(): AuthService {
     const mockPermissions = { getCapabilities: async () => ({}) } as unknown as PermissionService;
+    const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
     return new AuthService(
       new DatabaseService(),
       password,
@@ -48,6 +52,7 @@ describe.skipIf(!hasDb)('G6-2b RED 12 — forgotPassword reset-token must be env
       new AuditService(),
       new OutboxService(),
       mockPermissions,
+      secrets,
     );
   }
 
