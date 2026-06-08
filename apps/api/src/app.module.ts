@@ -1,7 +1,7 @@
 import { APP_GUARD } from "@nestjs/core";
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
-import { loadEnv } from "./config/env.schema";
+import { ENV_FILE_PATHS, loadEnv } from "./config/env.schema";
 import { AuthModule } from "./auth/auth.module";
 import { DatabaseModule } from "./db/db.module";
 import { EventsModule } from "./events/events.module";
@@ -23,7 +23,7 @@ import { CompanyGuard } from "./permission/guards/company.guard";
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [".env", "../../.env"],
+      envFilePath: [...ENV_FILE_PATHS],
       validate: (config: Record<string, unknown>) => loadEnv(config as NodeJS.ProcessEnv),
     }),
     DatabaseModule,

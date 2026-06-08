@@ -1,6 +1,13 @@
 import { z } from "zod";
 
 /**
+ * Thứ tự file env — DÙNG CHUNG giữa preload (`config/load-env.ts`) và `ConfigModule.forRoot`
+ * (`app.module.ts`) để KHÔNG lệch nguồn. File ĐỨNG TRƯỚC thắng (apps/api/.env override ../../.env),
+ * khớp đúng precedence của @nestjs/config. Đường dẫn resolve theo `process.cwd()` (= apps/api khi chạy).
+ */
+export const ENV_FILE_PATHS = [".env", "../../.env"] as const;
+
+/**
  * Validate biến môi trường tại biên hệ thống (coding-style: fail-fast, không tin dữ liệu ngoài).
  * DB URL để OPTIONAL → API vẫn boot khi DB chưa lên (health/db báo "down"), giúp `pnpm dev` chạy không cần docker.
  */
