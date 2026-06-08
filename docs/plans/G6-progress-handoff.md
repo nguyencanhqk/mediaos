@@ -2,7 +2,7 @@
 
 > Đọc file này + [`G6-media-full.md`](./G6-media-full.md) (kế hoạch gốc, plan-reviewer PASS) TRƯỚC khi code tiếp.
 > Mục tiêu: 1 session mới cầm file này là tiếp tục được ngay, không phải dò lại.
-> Cập nhật lần cuối: 2026-06-08 · Branch: **`feat/g6-media`** · HEAD: **`95a6130`** (G6-2 đang chạy: **2a–2e XONG**, còn **2d/2f/2g/2h** + FULL gate)
+> Cập nhật lần cuối: 2026-06-08 · Branch: **`feat/g6-media`** · HEAD: **`36fbbd9`** (G6-2: **2a–2e + FULL gate 2e XONG** — Santa NICE, còn **2d/2f/2g/2h**)
 > ✅ **Reconciled:** 2 session song song đã hoàn tất — **G6-5** (Channel Health, `4e620a0` + fix settings.module
 > `421e15c`) và **G6-4** (Content full, `0041ea4`→`7c008ce`). Lịch sử interleave nhưng linear, không conflict;
 > tree cuối nhất quán + xanh. **G6-1/3/4/5 XONG — chỉ còn G6-2 (crown-jewel, hand-driven).**
@@ -140,7 +140,9 @@ pnpm typecheck
   - ✅ **2e HOÀN TẤT — 2 commit:**
     - **2e-A (`448b252`):** `platform-accounts.service.ts` reauth/revealSecret/list/get(masked)/createAccount(**app-gen uuid TRƯỚC encrypt**, CARRY-FORWARD 2a)/updateSecret + `platform-accounts.repository.ts` (mask projection) + audit-in-tx **kể cả deny** + `secret_reveal_failed` COMMIT trước rethrow generic. CryptoModule wire vào `PlatformAccountsModule`. reveal int **14/14**.
     - **2e-B (`95a6130`):** HTTP surface — `PlatformAccountsController` + `ReauthGuard` (Valkey window **per-(userId,accountId)**, reuse reauthKey) + contracts (masked DTO + request/response schemas) + DTOs. Guards **METHOD-LEVEL** (ReauthGuard TRƯỚC PermissionGuard trên `/:id/reveal`); route `/reauth` GLOBAL-GUARDS-ONLY (object-grant persona). Wired qua `MediaModule.imports` — **app.module KHÔNG đụng**. Verify: typecheck 4/4 + nest build + health e2e 2/2 + reveal int 14/14.
-  - ▶️ **KẾ TIẾP:** **FULL gate TOÀN DIFF 2e** (2e0 `61b9197` + 2c `831b986`/`86c074a` + 2e-A `448b252` + 2e-B `95a6130` — chạm secret+permission+audit+RLS) — `ecc:security-reviewer` + `ecc:database-reviewer` + `ecc:silent-failure-hunter` + `ecc:santa-method` (crown-jewel). Fix CRITICAL/HIGH → **2d(0027)** → **2f(0028)** → **2g(rotation)** → **2h(FE)**. (`ecc:harness-audit` + `ecc:security-scan` để dành TRƯỚC merge G6-2.)
+  - ✅ **FULL gate 2e XONG (fix `36fbbd9`):** 3 reviewer agent (security/database/silent-failure) = PASS-WITH-WARNINGS, **0 CRITICAL** + `ecc:santa-method` 2-reviewer độc lập → **NICE** (round 3, both PASS). Fix batch: **F1** AAD NUL-delimit (envelope) + **F1b** wrap-AAD NUL + **F2** AAD bind cột row persisted + **F3** ILIKE escape + **F4** list cap (500) + **F5** tamper-audit ra tx best-effort riêng (bền với tx poisoned) + **F6** reauth throttle (reuse `LoginRateLimiter` per-(userId,accountId)→429) + **F7** `valkey.set`→bool surface (→503 khi outage) + KEK zeroize-on-shutdown + buildAad collision test. Re-verify: typecheck 4/4 · crypto **17/17** · local-kek 7/7 · reveal int 14/14 · permission 80/80.
+    - **Residual debt (non-blocking SUGGESTION — defer):** intermediate DEK buffer trong `unwrapDek` chưa zeroize (Node streaming-GCM API limit) · KEK file-integrity/canary (dev-only) · success-`secret_revealed` audit nằm trong cùng `try` decrypt (audit-fail → phân loại nhầm `decrypt_failed`; wrinkle, KHÔNG leak) · **M1** edit-grant per-account *(quyết ở 2d)* · **M3** `lastRotatedAt` trên app-update *(quyết ở 2g)* · **M2** env.schema `PERMISSION_GUARD_ENABLED` · **M4** `deny-infra-error` reason · VaultKekProvider prod boot-guard. `ecc:harness-audit` + `ecc:security-scan` để dành TRƯỚC merge G6-2.
+  - ▶️ **KẾ TIẾP:** **2d migration 0027** — seed `edit-platform-account` (is_sensitive) + grants **per-account**; `reveal-secret` KHÔNG vào system role; RED 14/11 enforce object-grant → migrate → tenant-isolation regression + rls-registry → **2f(0028)** → **2g(rotation)** → **2h(FE)**. ⚠️ journal `when` 0027 = **1717500031000** (> max-applied 30000; KHÔNG base+idx).
 - **2d Migration 0027** (seed `edit-platform-account` sensitive + grants). **2e0** vá `PermissionGuard` forward `resourceId`+`ctx` + fail-closed (BẮT BUỘC trước 2e). **2e** reveal-secret endpoint. **2f** reset-token envelope + scrub outbox (0028). **2g** rotation job. **2h** FE.
 
 ---
@@ -158,11 +160,13 @@ Model: Opus. HAND-DRIVEN — KHÔNG tự do, KHÔNG nhảy bước. Tôi review 
 - 2e0 `61b9197` — PermissionGuard forward resourceId(:id)+ctx CHỈ cho reveal-class + F2 object-grant fail-closed (deny-object-required). 80/80 permission.
 - 2e-A `448b252` — platform-accounts.service: reauth/revealSecret/list/get(masked)/createAccount(app-gen uuid TRƯỚC encrypt)/updateSecret; audit-in-tx; secret_reveal_failed COMMIT trước rethrow. reveal int 14/14.
 - 2e-B `95a6130` — HTTP surface: PlatformAccountsController + ReauthGuard (Valkey window per-(userId,accountId), reuse reauthKey) + contracts (masked DTO + request/response schemas) + DTOs. Guards METHOD-LEVEL (ReauthGuard TRƯỚC PermissionGuard trên /:id/reveal); reauth route GLOBAL-GUARDS-ONLY. Wired qua MediaModule.imports — app.module KHÔNG đụng.
+- FULL gate 2e `36fbbd9` — 3 reviewer (security/database/silent-failure) PASS-WITH-WARNINGS (0 CRIT) + Santa-method 2-reviewer NICE. Fix: F1/F1b AAD NUL-delimit (envelope+wrap), F2 AAD bind cột row, F3 ILIKE escape, F4 list cap, F5 tamper-audit own-tx (bền), F6 reauth throttle, F7 valkey.set→bool surface, KEK zeroize, buildAad collision test. Residual debt ghi §4.5.
 
-### VIỆC ĐẦU TIÊN — FULL gate TOÀN DIFF 2e (1 lần, CLAUDE §6 — chạm secret+permission+audit+RLS):
-Scope = 2e0 `61b9197` + 2c `831b986`/`86c074a` (crypto engine) + 2e-A `448b252` + 2e-B `95a6130` (service/HTTP/contracts).
-Reviewer: `ecc:security-reviewer` + `ecc:database-reviewer` + `ecc:silent-failure-hunter` + `ecc:santa-method` (crown-jewel).
-Fix CRITICAL/HIGH TRƯỚC khi sang 2d. `ecc:harness-audit` + `ecc:security-scan` để dành TRƯỚC merge G6-2.
+### VIỆC ĐẦU TIÊN — 2d migration 0027 (FULL gate 2e ĐÃ XONG: NICE, fix `36fbbd9`):
+- 0027: seed `edit-platform-account` (is_sensitive=true) + grants **per-account**; `reveal-secret` KHÔNG vào system role. RED 14/11 enforce object-grant.
+- ⚠️ Quyết định mở (M1, FULL gate nêu): edit-secret per-account hay company-wide? Chốt khi seed grant.
+- journal `when` 0027 = **1717500031000** (> max-applied 30000; KHÔNG base+idx). → migrate (đặt env TAY, KHÔNG source .env vì path có space) → tenant-isolation regression + rls-registry → commit.
+- `ecc:harness-audit` + `ecc:security-scan` để dành TRƯỚC merge G6-2.
 
 ### THỨ TỰ TIẾP (KHÔNG đảo): 2d(0027) → 2f(0028) → 2g(rotation) → 2h(FE).
 - 2d 0027: seed `edit-platform-account` (is_sensitive) + grants per-account; `reveal-secret` KHÔNG vào system role. RED 14/11 enforce object-grant. → migrate → tenant-isolation regression → +rls-registry.
