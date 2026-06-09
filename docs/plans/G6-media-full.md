@@ -1271,4 +1271,79 @@ DELETE /api/v1/content/:id/assets/:assetId            (soft-delete + flip is_cur
 
 ## 🏁 Kết quả đánh giá hoàn thành (`completion-evaluator`)
 
-_(điền khi đóng phase: điểm rubric + PASS/BLOCK + việc còn nợ.)_
+> Chấm: 2026-06-09 (rubric/spec `completion-evaluator` nguyên văn; read-only, verify bằng bằng chứng file:line + typecheck 4/4 + spec vùng đỏ chạy lại). Bối cảnh: G3–G6 đã merge `--no-ff` vào `master` (`0b062ae`, local, **CHƯA push**) sau khi e2e G4-7 xanh (`259586c`).
+
+### VERDICT: **BLOCK → PASS** (điểm tổng: **86/100**) — *đã mở khoá 2026-06-09, xem §"RE-GATE lần 2" cuối mục*
+
+Chất lượng crown-jewel cao — quy tắc BLOCK cứng *"vùng đỏ thiếu FULL gate"* ép BLOCK bất kể điểm. **Điều kiện
+unlock đã đạt:** FULL gate 2g chạy lại = **0 CRITICAL** (security PASS · silent-failure 0/0 · database PASS),
+1 CRIT + 3 HIGH đã fix + verify (rotation 9/9, tenant-isolation 130/0-fail, typecheck 4/4) → phase **PASS**.
+
+**Điểm theo chiều**
+- **Correctness 23/25** — reveal = object-grant per-account (F2) + re-auth + audit mỗi lần xem (`platform-accounts.service.ts:183-241`); create app-gen uuid TRƯỚC encrypt → AAD bind (`:257-305`); F2 fail-closed kể cả `*:*` (`permission.service.ts:103-111`). test 390 pass/2 skip, typecheck 4/4. Trừ: FE reveal/reauth mới verified-by-mock (e2e BE↔FE deferred → G2-6).
+- **Bất biến & bảo mật 27/30** — #1 RLS+FORCE mọi bảng mới (worker policy mirror outbox); #2 `audit_logs` chỉ GRANT SELECT,INSERT (append-only, 0003:35); #3 envelope AES-256-GCM app-side, fresh DEK + zeroize-in-finally, AAD NUL-delim bind cột row, worker column-grant KHÔNG chạm `secret_ciphertext` (0022:78), decrypt-fail generic throw không leak. tenant-isolation 132 xanh. Trừ: success-audit `secret_revealed` trong cùng `try` decrypt (wrinkle); intermediate DEK buffer chưa zeroize.
+- **Test 22/25** — deny-path RED TRƯỚC, assert thật (reveal 14/14, rotation 7/7, reset-token 4/4, secret-enc 17/17). Trừ: 2 skip rotation invariant 13b/13e (deferred-active); chưa xuất coverage report số.
+- **Sạch sẽ 9/10** — không `catch{}` rỗng/`.skip` né bug/`@ts-ignore`; file/hàm trong ngưỡng; G4-7 fix = 0 dòng production. Trừ: plan §6d cần đính chính (`dek_key_version` — code đúng, doc lệch).
+- **Docs/Audit 8/10** — audit đủ hành động; TASKS+handoff cập nhật. Trừ: **ADR-0004 lệch tooling** (liệt 3 reviewer/hook không tồn tại); §6d.
+
+**BLOCK cứng**
+1. **G6-2g (rotation worker) — vùng đỏ secret CHƯA qua FULL gate.** `secret-rotation.service.ts` unwrap→re-wrap DEK qua worker direct pool (bypass-RLS) = đỏ; FULL gate 2g "để dành" (2e/2d/2f đã 0 CRIT). **Mở khoá:** chạy `ecc:security-reviewer + ecc:database-reviewer + ecc:silent-failure-hunter` trên diff 2g, đạt 0 CRITICAL → chấm lại.
+2. **DoD pre-merge "để dành":** TASKS top-level vốn `[ ]` tới khi xong gates+merge; security-scan (A 96/100) + harness-audit (28/39) đã đạt, chỉ còn FULL gate 2g → đóng nó là đủ.
+
+**Việc còn nợ (không chặn merge — theo dõi sang G2-6/sau)**
+- ADR-0004 sửa khớp thực tế (3 tool ảo) · FE reveal/reauth e2e thật (→ G2-6) · tách success-audit khỏi `try` decrypt · zeroize intermediate DEK · 2g residual (worker policy SELECT/UPDATE tách, `encryption_keys.revoked_at`, VaultKekProvider prod boot-guard) · đính chính §6d · coverage report ≥80% module nhạy cảm · 6 ticket non-blocking (`SECURITY.md`, PR template, Stop hook…).
+
+**Đề xuất đóng phase:** BLOCK. Hành động tối thiểu mở khoá: chạy FULL gate 2g (0 CRITICAL) → ghi kết quả → chấm lại; nếu không phát sinh CRITICAL, phase PASS (~86–90). **KHÔNG push `master` trước khi đóng FULL gate 2g** (merge local nên còn cửa sổ sạch). Không phát hiện vi phạm 3 bất biến / vá triệu chứng / task-hub riêng.
+
+### 🔁 FULL gate 2g đã CHẠY (2026-06-09) — KHÔNG SẠCH, BLOCK vẫn đứng
+
+Diff review: `git diff d8ef592~1 617d985 -- apps/api/src/crypto …`. 3 reviewer: **security = PASS (0 CRIT, 2 HIGH)** · **silent-failure = BLOCK (1 CRITICAL, 3 HIGH)** · **database = CHƯA XONG** (dừng do cost — cần chạy lại ở phiên mới). Gate KHÔNG đạt 0-CRITICAL → phải FIX code rồi re-gate.
+
+**Phải fix (≥2 reviewer hội tụ = chắc chắn thật):**
+1. 🔴 **CRITICAL — `reWrapAll` xử lý lỗi mờ** (`secret-rotation.service.ts:54-73`): row tamper/corrupt DEK rơi `failed[]`, có log/row nhưng **không alert tổng, không ép caller xử lý `failed`, KHÔNG có test path tamper** → catch dark code trong vùng crypto. Fix: log error tổng khi `failed.length>0` (+/− throw theo ngưỡng) + caller bắt buộc check + **RED 13h** seed tamper → assert `failed[]` non-empty & `rotated` không gồm row đó.
+2. 🟠 **HIGH (security+silent-failure hội tụ) — `assertWorkerRoleSafe` warn-only khi `NODE_ENV=test`** (`:154-156`): staging/CI mirror prod + superuser → bypass column-grant chỉ 1 warn. Fix: env-flag tường minh `ALLOW_SUPERUSER_ROTATION` thay `NODE_ENV`.
+3. 🟠 **HIGH — `reWrapAccount` nuốt bool `false`** từ `rewrapRow` (`:35`): account xoá/0-row → caller tưởng đã rotate. Fix: log/throw not-found.
+4. 🟠 **HIGH — DEK intermediate buffer chưa zeroize** (`local-kek.provider.ts:59`, giới hạn Node crypto): prod dùng Vault `transit/rewrap` (DEK không rời HSM). Chấp nhận-kèm-ticket cho dev.
+
+**MED (nên fix):** SELECT/UPDATE non-atomic thiếu `FOR UPDATE SKIP LOCKED` (race double-unwrap) · `err.message` leak chi tiết KMS vào log (sanitize) · reWrapAll nạp toàn bộ id vào RAM (cursor/batch). **LOW:** thiếu deny-path test column-grant chặn ghi `secret_ciphertext` · TOCTOU `currentKey`.
+
+### ✅ RE-GATE lần 2 (2026-06-09) — SẠCH, 0 CRITICAL → phase PASS
+
+Sau khi FIX code 2g. Diff: working-tree trên `feat/g6-media` (HEAD `da9f840`), 6 file
+(`secret-rotation.service.ts`, `local-kek.provider.ts`, `secret-rotation.int-spec.ts`, `env.schema.ts`,
+`.env.example`, `vitest.config.ts`). 3 reviewer chạy song song:
+**security = 0 CRIT / 2 HIGH** · **silent-failure = 0 CRIT / 0 HIGH (4 finding trước CLOSED)** ·
+**database = 1 "CRIT" (FALSE POSITIVE) / 3 HIGH**.
+
+> ⚠️ database "CRITICAL" (harness deadlock vì thiếu `ALLOW_SUPERUSER_ROTATION`) = **suy đoán, bị bác bằng bằng
+> chứng**: suite chạy **9/9 XANH** vì `mediaos_worker` không phải superuser → guard không vào nhánh. Đã hardening
+> thêm (set flag tường minh trong `vitest.config.ts`) cho chắc. ⇒ **0 real CRITICAL.**
+
+**Đã FIX trong lần này (1 CRIT + 3 HIGH gốc + finding hội tụ rẻ):**
+
+1. 🔴→✅ `reWrapAll` — aggregate `logger.error` (`failedIds=[…]`, counts, KHÔNG secret) khi `failed>0` + tag
+   sanitize `safeFailureTag` (DEK_UNWRAP_AUTH_FAILED / DEK_ENVELOPE_INVALID / KMS_CONNECT_ERROR / REWRAP_FAILED,
+   không echo raw KMS message) + siết hợp đồng caller. RED **13h** (seed tamper → `failed[]` non-empty, KHÔNG
+   rotate, log tổng) xanh.
+2. 🟠→✅ `assertWorkerRoleSafe` — fail-closed theo `ALLOW_SUPERUSER_ROTATION==='true'` (bỏ `NODE_ENV`) **+**
+   fail-closed khi `pg_roles` 0-row (vá fail-open) **+** warn-path không in tên role/cờ ra log.
+3. 🟠→✅ `reWrapAccount` — throw khi `rewrapRow` trả 0-row (account biến mất). RED **13i** xanh.
+4. 🟠→✅ DEK intermediate buffer — document LIMITATION (`local-kek.provider.ts`) + ticket; prod = Vault transit.
+5. ✅ phụ: `rewrapRow` UPDATE thêm `AND deleted_at IS NULL` (bất biến #2) · `loadKek` giữ `cause` (ENOENT/EACCES)
+   · 13h cleanup tamper-row + assert 2 log line.
+
+**Verify:** rotation int-spec **9/9** · crypto unit + reveal + reset-token + tenant-isolation **180 pass/2 skip/0
+fail** · `pnpm typecheck` 4/4 sạch.
+
+**Handoff §4.5 — ticket DEFER (MED/LOW, không chặn merge):**
+
+- `G6-2g-DEK-ZEROIZE` — intermediate DEK buffer (Node crypto) → prod Vault `transit/rewrap`.
+- `G6-2g-PROD-FLAG-GUARD` — startup guard ném khi `ALLOW_SUPERUSER_ROTATION='true'` && `NODE_ENV='production'`.
+- `G6-2g-ROT-INDEX` — partial index `platform_accounts(kms_key_id) WHERE deleted_at IS NULL`.
+- `G6-2g-ROT-CONCURRENCY` — `FOR UPDATE SKIP LOCKED` (race double-unwrap) + cursor/batch reWrapAll (RAM).
+- `G6-2g-ROT-TEST-ISOLATION` — cross-tenant: reWrapAll scope `company_id` tùy chọn cho test / serial pool.
+- `G6-2g-ROT-MISC` — `failedIds` cap-N log lớn · validate UUID format `accountId` · deny-path test column-grant
+  chặn ghi `secret_ciphertext` · TOCTOU `currentKey`.
+
+**Còn lại để đóng phase:** push `master` (G3–G6 merge `--no-ff` `0b062ae`, local, ahead origin 73 commit) — chờ
+xác nhận người dùng.

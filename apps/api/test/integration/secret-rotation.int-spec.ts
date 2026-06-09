@@ -30,7 +30,9 @@
  * Runs on real Postgres; auto-skip when DATABASE_URL missing.
  */
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { Logger } from '@nestjs/common';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { SecretRotationService } from '../../src/crypto/secret-rotation.service';
 import { SecretEncryptionService } from '../../src/crypto/secret-encryption.service';
 import { NodeEnvelopeCipher } from '../../src/crypto/envelope-cipher';
@@ -235,5 +237,43 @@ describe.skipIf(!hasDb)('G6-2g RED 13 — SecretRotationService re-wrap (decisio
     expect(after.dek_key_version).toBe(1);
     // Rotation stamps the audit-of-record timestamp.
     expect(after.last_rotated_at).not.toBeNull();
+  });
+
+  it('RED 13h — reWrapAll: a tamper/corrupt row lands in failed[] (NOT rotated) + emits an AGGREGATE error log', async () => {
+    // Silence + capture every logger.error. The PER-ROW dark log already exists; the NEW contract is a single
+    // AGGREGATE summary (`failedIds=…`) so monitoring has one signal to alert on instead of N scattered lines.
+    const errorSpy = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    let tamperedId: string | undefined;
+    try {
+      // Stale v1 row (kms_key_id != target → selected by reWrapAll) whose encrypted_dek is garbage → GCM unwrap
+      // throws → the row must be RECORDED in failed[], skipped, and NEVER counted as rotated.
+      tamperedId = await seedPlatformAccount(direct, tenant.companyId, {
+        encrypted_dek: Buffer.alloc(40, 7),
+        kms_key_id: 'local-dev-kek',
+        dek_key_version: 1,
+      });
+
+      const result = await rotationSvc.reWrapAll(PURPOSE);
+
+      // The corrupt row is surfaced as a failure, not swallowed…
+      expect(result.failed.some((f) => f.id === tamperedId)).toBe(true);
+      // …and was NOT rotated: its envelope is byte-for-byte unchanged (still v1, never stamped).
+      const after = await fetchEnvelope(tamperedId);
+      expect(after.kms_key_id).toBe('local-dev-kek');
+      expect(after.last_rotated_at).toBeNull();
+      // BOTH signals fire: the per-row line AND a single aggregate line — a corrupt row can't fail in the dark.
+      expect(errorSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('failedIds='));
+    } finally {
+      errorSpy.mockRestore();
+      // Remove the tampered row so a crashed/interrupted run can't leave it to contaminate other suites' global
+      // reWrapAll scans on a later run (reWrapAll is cross-tenant by design).
+      if (tamperedId) await direct.query('DELETE FROM platform_accounts WHERE id = $1', [tamperedId]);
+    }
+  });
+
+  it('RED 13i — reWrapAccount THROWS on a missing/vanished account (no silent no-op)', async () => {
+    // A caller naming a specific account expects it to rotate; a 0-row result must fail loud, not resolve void.
+    await expect(rotationSvc.reWrapAccount(randomUUID())).rejects.toThrow(/account không tồn tại.*0 row/);
   });
 });

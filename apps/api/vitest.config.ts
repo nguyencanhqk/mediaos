@@ -21,6 +21,10 @@ export default defineConfig({
       DATABASE_URL: "postgres://mediaos_app:changeme_app_only@localhost:5432/mediaos",
       DATABASE_DIRECT_URL: "postgres://mediaos:changeme_dev_only@localhost:5432/mediaos",
       DATABASE_WORKER_URL: "postgres://mediaos_worker:changeme_worker_only@localhost:5432/mediaos",
+      // G6-2g: int-specs construct SecretRotationService for real. The bypass-RLS guard fail-closes unless this
+      // is exactly 'true'. mediaos_worker is non-superuser so the guard is inert here, but set it explicitly so
+      // the harness is robust if DATABASE_WORKER_URL ever falls back to the superuser direct pool.
+      ALLOW_SUPERUSER_ROTATION: "true",
       JWT_SECRET: "test-secret-test-secret-test-secret-test-secret",
       // G6-2e: int-specs construct LocalKekProvider for real → must point at the dev KEK.
       // vitest cwd is apps/api, so the env.schema default '.secrets/local-kek.bin' (relative) would

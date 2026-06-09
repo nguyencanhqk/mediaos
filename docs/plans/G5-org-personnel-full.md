@@ -7,6 +7,20 @@
 
 ---
 
+> ## 🔴 TRẠNG THÁI 2026-06-09 — RÀ SOÁT LẠI: G5 **CHƯA ĐỦ ĐIỀU KIỆN ĐÓNG**
+>
+> TASKS.md đã tick `[x]` G5-1→G5-5, nhưng đối chiếu code thực tế (BE/FE/test) cho thấy **còn nợ nhiều**:
+> - ✅ **DB/Migration (0014–0019):** ĐỦ — schema, RLS+FORCE, GRANT, seed `view-salary`+`update-salary`, regression 2-tenant đều khớp spec.
+> - 🔴 **Audit lương (crown-jewel):** mask đúng nhưng `AuditService` **không bao giờ được gọi** → không có audit `view-salary`/`update-salary`. Vi phạm Bất biến #3.
+> - 🔴 **Org/Team không có permission guard** → mọi user đăng nhập sửa được phòng ban/team. Vi phạm ORG-002/003.
+> - 🔴 **0 test cho toàn bộ G5** (deny-path RED salary, import, CRUD đều thiếu). Vi phạm GX-2 / plan §9.
+> - ⚠️ **FE mới là list MVP inline:** thiếu hẳn **EmployeeDetailPage + tabs** (EMP-003) và **OrgChart** (ORG-002); nhiều control (toggle status, assign head/leader, role dropdown, filter, drawer, RHF+Zod) chưa làm; salary mask sai chữ.
+> - ⚠️ **BE còn nợ:** position audit/guard-create, EMR sync, import→Valkey, tạo login account, filter `search`.
+>
+> 👉 **Kế hoạch vá đầy đủ + bảng trạng thái chi tiết: [§14 — Remediation Plan (G5-FIX)](#14-remediation-plan-g5-fix).**
+
+---
+
 ## Meta
 
 - **Mã:** G5 · **Phase:** G5 · **Mốc:** M2 (Sản xuất thật)
@@ -613,6 +627,74 @@ POST   /api/v1/employees/import/confirm { sessionId }  (Phase 2: bulk insert)
 - G5-5 (CREATE employee_profiles/relations): rollback **TRƯỚC** G5-4 vì `employee_profiles.position_id` FK → `positions`; `migration down` DROP TABLE theo thứ tự ngược: employee_manager_relations → employee_profiles
 - G5-4 (CREATE positions): chỉ DROP TABLE positions sau khi G5-5 đã rollback xong (FK dependency)
 - Feature-flag: không cần (G5 không phá luồng G4 hiện có; mọi endpoint mới, không sửa endpoint cũ)
+
+---
+
+## 14. Remediation Plan (G5-FIX) — vá để đóng phase
+
+> Bổ sung 2026-06-09 sau rà soát BE/FE/migration+test. Mỗi step theo công thức **CLAUDE-CODE-TOOLKIT §2**: `prp-plan` → **TDD deny-path RED trước** → implement → **review gate phân tầng (§3)** → model routing (§6). Đóng phase = `ecc:harness-audit` + điền completion-evaluator.
+
+### 14.1 Ma trận trạng thái hiện tại
+
+| Hạng mục | PRD/Plan | Trạng thái | Bằng chứng / Gap | Fix |
+|----------|----------|-----------|------------------|-----|
+| Migration 0014–0019 (schema, RLS+FORCE, GRANT, seed perms) | §4 | ✅ ĐỦ | `view-salary`+`update-salary` seed `is_sensitive=true` (0019:24-25,80-86); regression 2-tenant wired (rls-registry.ts:316-354) | — |
+| Company Settings BE (GET/PATCH + guard) | ORG-001 | ✅ ĐỦ | guard `configure-company` (settings.controller.ts:14-26) | — |
+| Org units BE (tree/CRUD/soft-delete) | ORG-002 | 🔴 THIẾU GUARD | `OrgController` không có `PermissionGuard`/`@RequirePermission` (org.controller.ts:30-136) | **F2** |
+| Teams BE (CRUD/leader/members) | ORG-003 | 🔴 THIẾU GUARD | cùng controller — không guard endpoint nào | **F2** |
+| Positions BE (CRUD + default_role_id) | ORG-004 | 🟠 THIẾU AUDIT + BYPASS | `assign-default-role` còn TODO (positions.service.ts:81); `createPosition` set `defaultRoleId` không guard | **F4** |
+| Employee BE CRUD + filter | EMP-001 | 🟠 PARTIAL | không tạo login account (đòi `userId` có sẵn); thiếu filter `search` | F7, F8 |
+| **Salary mask + AUDIT** | §6, BB#3 | 🔴 **THIẾU AUDIT** | mask logic đúng; `AuditService` inject nhưng **không bao giờ gọi** (employees.service.ts:39-55,70). Cần bọc `withTenant` để `record(tx)` commit nguyên tử | **F1** |
+| Import CSV | §7 | 🟠 PARTIAL | session = `Map` in-memory (không Valkey/TTL 5min); thiếu check `text/csv`; validate+insert chưa gói 1 `withTenant` | F6 |
+| `employee_manager_relations` sync | §4 | ❌ KHÔNG IMPLEMENT | EMR chỉ tồn tại trong schema; set `direct_manager_id` không upsert row `relation_type='direct_manager'` | F5 |
+| **Test G5 (deny-path RED, coverage ≥80%)** | §9, GX-2 | 🔴 **0 TEST** | không `.spec.ts` nào cho employees/positions/org/settings; salary mask 0% | **F1, F3** |
+| FE EmployeeDetailPage + tabs | EMP-003, §11 | ❌ THIẾU HẲN | không route `$employeeId`, không `GET /employees/:id`, 0 tab | **F9** |
+| FE OrgChart (@xyflow/react) | ORG-002, §11 | ❌ THIẾU HẲN | package chưa cài, không component, không consume `/org/units/tree` | **F10** |
+| FE salary mask wording | §6/§11 | 🟠 SAI CHỮ | render `"— (lương ẩn)"` thay vì `"— (Không có quyền xem)"` (employees.tsx:181-187) | F9 |
+| FE Department/Team/Position controls + drawers | §11 | 🟠 PARTIAL | thiếu toggle status, assign head/leader, role dropdown, filter, drawer; list là `<ul>` inline | F11 |
+| FE CompanySettings form | §11 | 🟠 PARTIAL | không RHF+Zod; thiếu logo upload, `working_days_json`, `payroll_config_json` | F12 |
+| FE nav / pagination / search / wizard | §11 | 🟡 PARTIAL | nav thiếu link `/org/positions` + `/settings/company`; list chưa paginate; chưa có search UI; import 2-state | F13 |
+
+### 14.2 Micro-step vá
+
+| # | Bước nhỏ | Vùng | Model | Gate / Agent | Test RED TRƯỚC | DoD |
+|---|----------|------|-------|--------------|----------------|-----|
+| **F1** | **Salary audit** — bọc `applySalaryMask` + `updateEmployee` vào `withTenant`; gọi `auditService.record(tx)` khi `decision.auditRequired` (`view-salary`) và khi PATCH `base_salary` (`update-salary`, before/after) | 🔴 | **Opus** | **FULL** + `ecc:santa-method` | 5 ca §9: employee→null, team_leader→null, HR→số, list per-item, AUDIT 1 row/view; PATCH không quyền→403 | RED→GREEN; audit_logs đúng object_type='employee'; FULL gate PASS |
+| **F2** | **Permission guard Org + Team** — `@UseGuards(PermissionGuard)` + `@RequirePermission` cho mọi mutation (create/update/delete/leader/members/status/head). Kiểm tra & seed perm `manage-org-unit` / `manage-team` nếu thiếu | 🔴 | Sonnet | **FULL** + `ecc:security-reviewer` | user thường → 403 cho create/update/delete department + team + đổi leader | deny tests xanh; FULL gate PASS |
+| **F3** | **Test suite G5** — import (10 OK / row-3 invalid / double-submit→409 / stale lookup); happy-path settings/org/team/position/employee; coverage ≥80% (salary 100%) | 🟢 | Sonnet | LIGHT + `ecc:tdd-workflow` + `ecc:test-coverage` | (chính nó là test) | coverage đạt ngưỡng |
+| F4 | **Position audit + guard create** — ghi audit `assign-default-role`; guard `manage.position` cả `createPosition` lẫn PATCH khi set `default_role_id` | 🔴 | Sonnet | **FULL** + `ecc:security-reviewer` | create với `defaultRoleId` không quyền → 403; audit khi gán role | deny test + audit test xanh |
+| F5 | **EMR sync** — set/clear `direct_manager_id` → upsert/soft-delete EMR `relation_type='direct_manager'`; giữ nhất quán 2 nguồn | 🟢 | Sonnet | LIGHT + `ecc:database-reviewer` | set manager → EMR có row; clear → EMR soft-deleted; test nhất quán | 2 nguồn đồng bộ, test xanh |
+| F6 | **Import hardening** — session → `ValkeyService` (key `import:${companyId}:${userId}:${sessionId}`, TTL 5min, DEL-before-insert→409); validate `text/csv`; gói validate+insert trong 1 `withTenant` | 🟢 | Sonnet | LIGHT + `ecc:silent-failure-hunter` | double-submit→409; stale lookup→lỗi rõ; TTL hết hạn→409 | Valkey thật, test xanh |
+| F7 | **Employee create login account** — tạo `users` row khi không truyền `userId` (EMP-001) | 🟢 | Sonnet | LIGHT | tạo employee không userId → user account sinh ra + xuất hiện list | EMP-001 đủ |
+| F8 | **Filter `search`** GET /employees (contracts + repo + controller) | 🟢 | Haiku | LIGHT | search theo tên/email/mã trả đúng subset | filter hoạt động |
+| **F9** | **FE EmployeeDetailPage** — route `/org/employees/$employeeId`; `GET /employees/:id`; tabs (Tổng quan \| Công việc \| Team/Project \| Task \| KPI* \| Lương*); KPI*=placeholder G8, Lương*=placeholder G12 + `base_salary` masked; sửa wording `"— (Không có quyền xem)"` | 🟢 | Sonnet | LIGHT + `ecc:react-review` + `ecc:react-test` | render tabs; null→"Không có quyền xem"; số khi có quyền | 6 tab render, mask đúng |
+| **F10** | **FE OrgChart** — cài `@xyflow/react`; component consume `/org/units/tree`; node=org_unit, edge=parent→child; click node | 🟢 | Sonnet | LIGHT + `ecc:react-review` | chart render cây 3 cấp; click node mở detail | chart tương tác |
+| F11 | **FE controls + drawers** — Department: toggle status + assign head; Team: assign leader + filter status/type + TeamDetailDrawer; Position: Create/Edit drawer + role dropdown + filter org_unit + edit (BE endpoint đã có — bổ sung FE lib + UI) | 🟢 | Sonnet | LIGHT + `ecc:react-review` | mỗi control gọi đúng endpoint; UI cập nhật | các thao tác hoạt động |
+| F12 | **FE CompanySettingsForm** — RHF + `zodResolver`; logo upload (R2/MinIO presigned); fields `working_days_json` + `payroll_config_json` | 🟢 | Sonnet | LIGHT + `ecc:react-review` | submit PATCH đủ field; validate Zod | form đầy đủ |
+| F13 | **FE polish** — nav link `/org/positions` + `/settings/company`; pagination + filter/search UI; import wizard 3-step nhãn rõ; xóa dead code (`orgApi.listEmployees`, wiring `positionsApi.updatePosition`) | 🟡 | Haiku | LIGHT | nav tới được mọi trang; list paginate | sạch, reachable |
+
+### 14.3 Thứ tự thực thi
+
+```
+F1 (salary audit, RED→GREEN)  ── ƯU TIÊN #1 (crown-jewel, FULL gate)
+F2 (guard Org/Team)           ── song song F1 (FULL gate)
+F3 (test suite)               ── mở rộng cùng F1/F2
+F4 (position audit/guard)     ── sau F2 (cùng pattern guard)
+F5,F6,F7,F8 (BE còn lại)      ── song song sau F1/F2
+F9,F10 (FE P0)                ── sau (BE getOne + /units/tree đã có)
+F11,F12 (FE P1)               ── sau F9/F10
+F13 (FE polish)               ── cuối
+ĐÓNG PHASE: ecc:harness-audit + completion-evaluator (§ dưới)
+```
+
+### 14.4 Điều kiện đóng phase (cập nhật — thay §12)
+
+- [ ] F1 + F2 + F4: FULL gate PASS (`security-reviewer` + `database-reviewer` + `silent-failure-hunter`; `santa-method` cho F1)
+- [ ] Salary mask: coverage 100% (mọi ca deny/allow/audit + PATCH→403)
+- [ ] F3: coverage ≥80% cho EmployeeModule/PositionModule/OrgModule/CompanySettingsModule
+- [ ] G2-5 2-tenant regression xanh sau toàn bộ fix
+- [ ] FE: EmployeeDetailPage + OrgChart render thật; salary mask hiển thị đúng chữ
+- [ ] `ecc:harness-audit` PASS → điền completion-evaluator → tick lại TASKS.md G5
 
 ---
 
