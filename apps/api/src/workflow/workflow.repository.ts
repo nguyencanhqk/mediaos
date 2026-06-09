@@ -87,6 +87,23 @@ export class WorkflowRepository {
     );
   }
 
+  /** Tìm workflow instance mới nhất của 1 content item (FE chỉ biết contentId). */
+  findInstanceByContentItemId(companyId: string, contentItemId: string) {
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .select()
+        .from(workflowInstances)
+        .where(
+          and(
+            eq(workflowInstances.companyId, companyId),
+            eq(workflowInstances.contentItemId, contentItemId),
+          ),
+        )
+        .orderBy(sql`created_at DESC`)
+        .limit(1),
+    );
+  }
+
   updateInstanceStepOrder(
     companyId: string,
     instanceId: string,
@@ -182,6 +199,22 @@ export class WorkflowRepository {
         )
         .orderBy(workflowSteps.stepOrder),
     );
+  }
+
+  /** PM gán assignee + reviewer cho 1 bước (không đổi status — chỉ metadata). */
+  assignStep(
+    companyId: string,
+    stepId: string,
+    data: { assigneeUserId: string | null; reviewerUserId: string | null },
+    tx: TenantTx,
+  ) {
+    return tx
+      .update(workflowSteps)
+      .set({ assigneeUserId: data.assigneeUserId, reviewerUserId: data.reviewerUserId })
+      .where(
+        and(eq(workflowSteps.companyId, companyId), eq(workflowSteps.id, stepId)),
+      )
+      .returning();
   }
 
   startStep(companyId: string, stepId: string, tx: TenantTx) {
@@ -424,6 +457,36 @@ export class WorkflowRepository {
     return tx
       .update(tasks)
       .set({ status, updatedAt: new Date() })
+      .where(and(eq(tasks.companyId, companyId), eq(tasks.id, taskId)))
+      .returning();
+  }
+
+  /** tx variant — dùng khi assign bước để đồng bộ assignee của task trong cùng transaction. */
+  findActiveTaskByStepIdInTx(companyId: string, workflowStepId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.companyId, companyId),
+          eq(tasks.workflowStepId, workflowStepId),
+          isNull(tasks.deletedAt),
+        ),
+      )
+      .orderBy(sql`revision_round DESC`)
+      .limit(1);
+  }
+
+  /** Gán assignee cho task (để task hiện trong "Công việc của tôi" của người được giao). */
+  updateTaskAssignee(
+    companyId: string,
+    taskId: string,
+    assigneeUserId: string | null,
+    tx: TenantTx,
+  ) {
+    return tx
+      .update(tasks)
+      .set({ assigneeUserId, updatedAt: new Date() })
       .where(and(eq(tasks.companyId, companyId), eq(tasks.id, taskId)))
       .returning();
   }

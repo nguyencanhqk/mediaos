@@ -206,6 +206,79 @@ export class WorkflowService {
   }
 
   /**
+   * GET /workflow/by-content/:contentItemId — workflow của 1 content item (hoặc null nếu chưa start).
+   * FE content-detail chỉ biết contentId nên cần lookup này để hiển thị board / nút "Bắt đầu".
+   */
+  async getWorkflowByContent(companyId: string, contentItemId: string) {
+    const [instance] = await this.repo.findInstanceByContentItemId(companyId, contentItemId);
+    if (!instance) return null;
+
+    const steps = await this.repo.findStepsByInstanceId(companyId, instance.id);
+    return { instance, steps };
+  }
+
+  /**
+   * POST /workflow/steps/:stepId/assign — PM gán assignee + reviewer cho 1 bước.
+   * Đồng bộ assignee sang task của bước (để task hiện trong "Công việc của tôi").
+   * Guard quyền ở controller (@RequirePermission update content); không phải FSM transition.
+   */
+  async assignStep(
+    companyId: string,
+    stepId: string,
+    actorId: string,
+    data: { assigneeUserId: string | null; reviewerUserId: string | null },
+  ) {
+    try {
+      return await this.db.withTenant(companyId, async (tx) => {
+        const [step] = await this.repo.findStepByIdInTx(companyId, stepId, tx);
+        if (!step) throw new NotFoundException(`Step not found: ${stepId}`);
+
+        const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
+        if (!instance) throw new WorkflowNotFoundError("instance", step.workflowInstanceId);
+        if (instance.status !== "active") {
+          throw new ConflictException(`Workflow is not active (status=${instance.status})`);
+        }
+
+        const [updated] = await this.repo.assignStep(companyId, stepId, data, tx);
+        if (!updated) throw new InternalServerErrorException(`Failed to assign step ${stepId}`);
+
+        // Đồng bộ assignee sang task hiện hành của bước (nếu có).
+        const [task] = await this.repo.findActiveTaskByStepIdInTx(companyId, stepId, tx);
+        if (task) {
+          await this.repo.updateTaskAssignee(companyId, task.id, data.assigneeUserId, tx);
+        }
+
+        await this.audit.record(tx, {
+          action: "StepAssigned",
+          objectType: "workflow_step",
+          objectId: stepId,
+          actorUserId: actorId,
+          after: {
+            assigneeUserId: data.assigneeUserId,
+            reviewerUserId: data.reviewerUserId,
+            stepOrder: step.stepOrder,
+          },
+        });
+
+        return updated;
+      });
+    } catch (err) {
+      if (
+        err instanceof NotFoundException ||
+        err instanceof ConflictException ||
+        err instanceof InternalServerErrorException
+      ) {
+        throw err;
+      }
+      if (err instanceof WorkflowNotFoundError) {
+        throw new NotFoundException(err.message);
+      }
+      this.logger.error("assignStep unexpected error", { err, companyId, stepId, actorId });
+      throw err;
+    }
+  }
+
+  /**
    * POST /workflow/steps/:stepId/start — assignee starts a step (T1 or T5).
    * Guard: actor = assignee, step = current_step_order, instance active.
    */

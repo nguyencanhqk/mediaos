@@ -9,9 +9,12 @@ import type {
   ContentStatus,
   ProductionStatus,
   UpdateContentItemRequest,
+  WorkflowStepDto,
 } from "@mediaos/contracts";
 import { contentApi } from "@/lib/content-api";
 import { channelsApi } from "@/lib/channels-api";
+import { workflowApi } from "@/lib/workflow-api";
+import { employeesApi } from "@/lib/employees-api";
 import { PermissionGate } from "@/components/permission-gate";
 import { useCan } from "@/hooks/use-can";
 import { Button } from "@/components/ui/button";
@@ -31,7 +34,7 @@ import {
   PUBLISH_STATUS_OPTIONS,
 } from "@/components/content/constants";
 
-type Tab = "overview" | "channels" | "assets";
+type Tab = "overview" | "workflow" | "channels" | "assets";
 
 export function ContentDetailPage() {
   const { contentId } = useParams({ from: "/content/$contentId" });
@@ -71,6 +74,9 @@ export function ContentDetailPage() {
             <TabButton active={tab === "overview"} onClick={() => setTab("overview")}>
               Tổng quan
             </TabButton>
+            <TabButton active={tab === "workflow"} onClick={() => setTab("workflow")}>
+              Sản xuất
+            </TabButton>
             <TabButton active={tab === "channels"} onClick={() => setTab("channels")}>
               Kênh đăng ({content.channels?.length ?? 0})
             </TabButton>
@@ -80,6 +86,7 @@ export function ContentDetailPage() {
           </div>
 
           {tab === "overview" && <OverviewTab content={content} />}
+          {tab === "workflow" && <WorkflowTab content={content} />}
           {tab === "channels" && <PublishTargetsTab content={content} />}
           {tab === "assets" && <AssetsTab content={content} />}
         </>
@@ -250,6 +257,191 @@ function UrlInput({
       <span className="text-xs text-muted-foreground">{label}</span>
       <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder="https://…" />
     </label>
+  );
+}
+
+// ── Workflow / Sản xuất (G4-3 board + start + assign) ─────────────────────────
+
+const STEP_STATUS_LABELS: Record<WorkflowStepDto["status"], string> = {
+  not_started: "Chưa bắt đầu",
+  in_progress: "Đang làm",
+  waiting_review: "Chờ duyệt",
+  approved: "Đã duyệt",
+  revision: "Đang sửa",
+  blocked: "Bị chặn",
+};
+
+const STEP_STATUS_COLORS: Record<WorkflowStepDto["status"], string> = {
+  not_started: "bg-muted text-muted-foreground",
+  in_progress: "bg-blue-100 text-blue-700",
+  waiting_review: "bg-yellow-100 text-yellow-700",
+  approved: "bg-green-100 text-green-700",
+  revision: "bg-orange-100 text-orange-700",
+  blocked: "bg-red-100 text-red-700",
+};
+
+function WorkflowTab({ content }: { content: ContentItemDto }) {
+  const qc = useQueryClient();
+  const canUpdate = useCan("update", "content");
+
+  const { data: workflow, isLoading, isError } = useQuery({
+    queryKey: ["workflow", content.id],
+    queryFn: () => workflowApi.getByContent(content.id),
+  });
+
+  const start = useMutation({
+    mutationFn: () => workflowApi.start(content.id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["workflow", content.id] }),
+  });
+
+  if (isLoading) return <p className="text-sm text-muted-foreground">Đang tải…</p>;
+  if (isError) return <p className="text-sm text-destructive">Không tải được quy trình.</p>;
+
+  if (!workflow) {
+    return (
+      <div className="space-y-3 rounded-xl border border-dashed border-border p-6 text-center">
+        <p className="text-sm text-muted-foreground">
+          Nội dung này chưa bắt đầu quy trình sản xuất (Kịch bản → Dựng → QA → Đăng).
+        </p>
+        <PermissionGate
+          action="update"
+          resourceType="content"
+          fallback={<p className="text-xs text-muted-foreground">Bạn không có quyền bắt đầu sản xuất.</p>}
+        >
+          <Button onClick={() => start.mutate()} disabled={start.isPending}>
+            {start.isPending ? "Đang khởi tạo…" : "Bắt đầu sản xuất"}
+          </Button>
+        </PermissionGate>
+        {start.isError && (
+          <p className="text-xs text-destructive">
+            {start.error instanceof Error ? start.error.message : "Không khởi tạo được quy trình."}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  const steps = [...workflow.steps].sort((a, b) => a.stepOrder - b.stepOrder);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-2 text-sm">
+        <span>
+          Trạng thái:{" "}
+          <span className="font-medium">
+            {workflow.instance.status === "completed"
+              ? "Hoàn thành 🎉"
+              : workflow.instance.status === "cancelled"
+                ? "Đã huỷ"
+                : `Đang ở bước ${workflow.instance.currentStepOrder}/${steps.length}`}
+          </span>
+        </span>
+        <Link to="/tasks" className="text-primary hover:underline">
+          Mở "Công việc của tôi" →
+        </Link>
+      </div>
+
+      <ol className="space-y-2">
+        {steps.map((step) => (
+          <StepRow key={step.id} step={step} contentId={content.id} canUpdate={canUpdate} qc={qc} />
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function StepRow({
+  step,
+  contentId,
+  canUpdate,
+  qc,
+}: { step: WorkflowStepDto; contentId: string; canUpdate: boolean } & QcProp) {
+  const [editing, setEditing] = useState(false);
+  const [assigneeUserId, setAssigneeUserId] = useState(step.assigneeUserId ?? "");
+  const [reviewerUserId, setReviewerUserId] = useState(step.reviewerUserId ?? "");
+
+  const { data: employees = [] } = useQuery({
+    queryKey: ["employees"],
+    queryFn: () => employeesApi.listEmployees({ status: "active" }),
+    enabled: canUpdate && editing,
+  });
+
+  const nameById = (userId: string | null) =>
+    userId ? (employees.find((e) => e.userId === userId)?.userFullName ?? "Đã giao") : "—";
+
+  const assign = useMutation({
+    mutationFn: () =>
+      workflowApi.assignStep(step.id, {
+        assigneeUserId: assigneeUserId || null,
+        reviewerUserId: reviewerUserId || null,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["workflow", contentId] });
+      setEditing(false);
+    },
+  });
+
+  return (
+    <li className="rounded-xl border border-border p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">
+            <span className="mr-2 text-muted-foreground">{step.stepOrder}.</span>
+            {step.stepName}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Người làm: {nameById(step.assigneeUserId)} · Người duyệt: {nameById(step.reviewerUserId)}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs font-medium ${STEP_STATUS_COLORS[step.status]}`}
+          >
+            {STEP_STATUS_LABELS[step.status]}
+          </span>
+          {canUpdate && (
+            <Button variant="ghost" size="sm" onClick={() => setEditing((v) => !v)}>
+              {editing ? "Đóng" : "Giao việc"}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {editing && canUpdate && (
+        <div className="mt-3 grid grid-cols-[1fr_1fr_auto] items-end gap-2 border-t border-border pt-3">
+          <label className="space-y-1">
+            <span className="text-xs text-muted-foreground">Người làm</span>
+            <Select value={assigneeUserId} onChange={(e) => setAssigneeUserId(e.target.value)}>
+              <option value="">— Chưa giao —</option>
+              {employees.map((e) => (
+                <option key={e.userId} value={e.userId}>
+                  {e.userFullName ?? e.userEmail ?? e.userId}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs text-muted-foreground">Người duyệt</span>
+            <Select value={reviewerUserId} onChange={(e) => setReviewerUserId(e.target.value)}>
+              <option value="">— Chưa giao —</option>
+              {employees.map((e) => (
+                <option key={e.userId} value={e.userId}>
+                  {e.userFullName ?? e.userEmail ?? e.userId}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <Button size="sm" onClick={() => assign.mutate()} disabled={assign.isPending}>
+            {assign.isPending ? "Đang lưu…" : "Lưu"}
+          </Button>
+          {assign.isError && (
+            <p className="col-span-3 text-xs text-destructive">
+              {assign.error instanceof Error ? assign.error.message : "Giao việc thất bại."}
+            </p>
+          )}
+        </div>
+      )}
+    </li>
   );
 }
 

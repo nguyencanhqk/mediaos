@@ -69,6 +69,13 @@ export const submitStepSchema = z.object({
 });
 export type SubmitStepRequest = z.infer<typeof submitStepSchema>;
 
+/** PM gán người thực hiện (assignee) + người duyệt (reviewer) cho 1 bước. */
+export const assignStepSchema = z.object({
+  assigneeUserId: z.string().uuid().nullable(),
+  reviewerUserId: z.string().uuid().nullable(),
+});
+export type AssignStepRequest = z.infer<typeof assignStepSchema>;
+
 // ─── Approval request ─────────────────────────────────────────────────────────
 
 export const approvalRequestStatusSchema = z.enum(["pending", "approved", "revision_requested"]);

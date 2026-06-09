@@ -6,6 +6,7 @@ import type {
   ApproveRequest,
   RequestRevisionRequest,
 } from "@mediaos/contracts";
+import { unwrapEnvelope } from "./api-client";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3100/api/v1";
 
@@ -20,7 +21,7 @@ async function apiFetch<T>(path: string, schema: z.ZodType<T>, init?: RequestIni
   }
   if (res.status === 204) return undefined as T;
   const json: unknown = await res.json();
-  return schema.parse(json);
+  return schema.parse(unwrapEnvelope(json));
 }
 
 export const tasksApi = {
