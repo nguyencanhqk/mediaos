@@ -530,8 +530,8 @@ export const RLS_TABLES: RlsTableCase[] = [
       const defId = await seedWorkflowDefinition(direct, t.companyId);
       const r = await direct.query(
         `INSERT INTO workflow_definition_steps
-           (company_id, workflow_definition_id, step_order, code, name, default_task_title)
-         VALUES ($1, $2, 1, 'script', 'Viết kịch bản', 'Viết kịch bản') RETURNING id`,
+           (company_id, workflow_definition_id, step_order, code, name, node_key, default_task_title)
+         VALUES ($1, $2, 1, 'script', 'Viết kịch bản', 'script', 'Viết kịch bản') RETURNING id`,
         [t.companyId, defId],
       );
       return r.rows[0].id as string;
@@ -565,6 +565,61 @@ export const RLS_TABLES: RlsTableCase[] = [
     seedRow: async (direct, t) => {
       const { stepId } = await seedWorkflowChain(direct, t);
       return stepId;
+    },
+  },
+
+  // ── G7 Workflow Builder (template DAG + checklist) ───────────────────────────
+  {
+    name: "workflow_step_dependencies",
+    table: "workflow_step_dependencies",
+    seedRow: async (direct, t) => {
+      const defId = await seedWorkflowDefinition(direct, t.companyId);
+      const s1 = await direct.query(
+        `INSERT INTO workflow_definition_steps
+           (company_id, workflow_definition_id, step_order, code, name, node_key, default_task_title)
+         VALUES ($1, $2, 1, 'script', 'Viết kịch bản', 'script', 'Viết kịch bản') RETURNING id`,
+        [t.companyId, defId],
+      );
+      const s2 = await direct.query(
+        `INSERT INTO workflow_definition_steps
+           (company_id, workflow_definition_id, step_order, code, name, node_key, default_task_title)
+         VALUES ($1, $2, 2, 'edit', 'Dựng video', 'edit', 'Dựng video') RETURNING id`,
+        [t.companyId, defId],
+      );
+      const r = await direct.query(
+        `INSERT INTO workflow_step_dependencies
+           (company_id, workflow_definition_id, from_step_id, to_step_id)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [t.companyId, defId, s1.rows[0].id, s2.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "checklists",
+    table: "checklists",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO checklists (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-checklist-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "checklist_items",
+    table: "checklist_items",
+    seedRow: async (direct, t) => {
+      const clRes = await direct.query(
+        `INSERT INTO checklists (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-cl-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO checklist_items (company_id, checklist_id, label, is_required, sort_order)
+         VALUES ($1, $2, 'rls-item', true, 0) RETURNING id`,
+        [t.companyId, clRes.rows[0].id],
+      );
+      return r.rows[0].id as string;
     },
   },
 

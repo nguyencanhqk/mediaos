@@ -225,6 +225,13 @@
       "when": 1717500035000,
       "tag": "0031_g3fix_grant_object_permission_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1717500040000,
+      "tag": "0032_g7_template_dag_checklist",
+      "breakpoints": true
     }
   ]
 }
