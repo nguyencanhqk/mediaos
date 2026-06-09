@@ -183,7 +183,7 @@ export function EmployeesPage() {
                     {e.baseSalary.toLocaleString("vi-VN")} ₫
                   </span>
                 ) : (
-                  <span>— (lương ẩn)</span>
+                  <span>— (Không có quyền xem)</span>
                 )}
               </div>
             </div>
