@@ -743,4 +743,22 @@ F13 (FE polish)               ── cuối
 
 ## 🏁 Kết quả đánh giá hoàn thành (`completion-evaluator`)
 
-_(điền khi đóng phase: điểm rubric + PASS/BLOCK + việc còn nợ.)_
+**VERDICT: PASS (có nợ ghi ticket) — 2026-06-09.** G5 đủ điều kiện đóng; không còn BLOCK.
+
+| Tiêu chí (§14.4) | Kết quả |
+|---|---|
+| FULL gate F1/F2/F4 | ✅ PASS — 0 CRITICAL (security + database + silent-failure reviewer) |
+| Salary mask coverage 100% | ✅ `employees.service.spec` 30/30 (deny/allow/audit + PATCH→403) |
+| F3 coverage module G5 | ✅ breadth specs org/positions/employees/settings; full API 510 pass/2 skip |
+| G2-5 2-tenant regression | ✅ `tenant-isolation.int-spec` 132 pass (toàn bộ bảng G5) |
+| FE EmployeeDetailPage + OrgChart | ✅ route + component + spec (org-chart.spec, employees-detail.spec); web typecheck xanh |
+| harness-audit | 🟡 25/29 (2 fail = `evals/` + `SECURITY.md` — hygiene toàn repo, ngoài scope G5) |
+
+**Điểm rubric ~93/100** (trừ điểm cho 2 MEDIUM residual + harness-hygiene toàn repo).
+
+**Nợ ghi ticket (non-blocking, KHÔNG chặn đóng phase):**
+1. 🟡 F1 — `createEmployee` set `baseSalary` lúc tạo KHÔNG gác `update-salary` + KHÔNG audit (PATCH thì đủ). _Crown-jewel đáng vá nhất._
+2. 🟡 `baseSalary` trong `LIST_COLUMNS` fetch mọi row (mask trước khi rời service — chưa rò; defense-in-depth).
+3. 🟡 kill-switch `PERMISSION_GUARD_ENABLED=false` fail-open (đã document) · ⚪ TOCTOU `manage.position` · ⚪ `createEmployeeTx/updateEmployeeTx` thiếu `async`.
+
+**Hành động đóng còn lại:** merge `feat/g5-fix` (chọn nhánh đích).
