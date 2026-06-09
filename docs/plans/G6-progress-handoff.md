@@ -158,7 +158,9 @@ pnpm typecheck
     - ✅ **2f residual `d556ce7`:** M1 bỏ email khỏi outbox payload (consumer resolve JIT theo userId) · M3 `redactEmailFromDetail` scrub email khỏi log (giữ stack quan sát) +4 unit test · M2 `decryptResetToken` đánh dấu `@internal`/consumer-only (guard runtime cứng **deferred** → đi cùng mail-consumer). 16/16 test · typecheck sạch.
     - ✅ **Doc §6d `851e495`:** rotation re-wrap KHÔNG đổi `dek_key_version` (DECISION A) — sửa dòng 1000/860/1022 + clarify grant rộng hơn write-set; GIỮ AAD(955)/DDL grant(359).
     - ✅ **DoD TASKS.md:** block G6-2 liệt 2a–2h + commit refs + residual; top-level GIỮ `[ ]` tới khi xong gates pre-merge + merge.
-    - ⏳ **CÒN LẠI:** **(item 2)** `ecc:harness-audit` + `ecc:security-scan` (CHƯA chạy — tốn, HỎI user; `ecc:santa-method` BỎ) · **(item 5)** cân nhắc MERGE feat/g6-media.
+    - ✅ **Gates pre-merge (item 2) XONG:** `ecc:security-scan` (AgentShield) = **Grade A 96/100, Secrets 100/100** → KHÔNG leak secret/KEK vào file tracked · `ecc:harness-audit` = 28/39 (consumer). `ecc:santa-method` BỎ (đã hội tụ). **0 finding code G6-2.**
+    - 🎫 **Ticket non-blocking (6 finding ngoài scope G6-2 — pre-existing/artifact, KHÔNG chặn merge):** (1) `CLAUDE.md 0o666` = artifact Windows (NTFS, cosmetic) · (2) `.claude/settings.json` thiếu permissions block — ⚠️ KHÔNG sửa (parallel-session hazard) · (3) thiếu Stop hook · (4) Eval Coverage 0/10 = misleading (CÓ vitest, không theo convention `evals/` ECC) · (5) thiếu `SECURITY.md` · (6) thiếu `.github/PULL_REQUEST_TEMPLATE.md`.
+    - ⏳ **CÒN LẠI:** **(item 5)** cân nhắc MERGE feat/g6-media.
 - **2d Migration 0027** (seed `edit-platform-account` sensitive + grants). **2e0** vá `PermissionGuard` forward `resourceId`+`ctx` + fail-closed (BẮT BUỘC trước 2e). **2e** reveal-secret endpoint. **2f** reset-token envelope + scrub outbox (0028). **2g** rotation job. **2h** FE.
 
 ---
