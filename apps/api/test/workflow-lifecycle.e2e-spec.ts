@@ -24,11 +24,16 @@ import {
   cleanupTenants,
   seedCompany,
   seedUser,
+  seedUserRole,
   seedWorkflowDefinition,
   type SeededTenant,
 } from "./helpers/seed";
 
 const PASSWORD = "Passw0rd!test99";
+
+// System role `project-manager` (migration 0005): có sẵn create:project + create:content
+// → đủ cho user e2e qua PermissionGuard (G6-3/G6-4 gate các route project/content).
+const PROJECT_MANAGER_ROLE_ID = "00000000-0000-0000-0000-000000000002";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -89,11 +94,13 @@ describe.skipIf(!hasDb)("G4-7 workflow full lifecycle (e2e)", () => {
     const password = new PasswordService();
     const hash = await password.hash(PASSWORD);
     userId = await seedUser(direct, tenant.companyId, "worker@wf-e2e.test", hash);
+    await seedUserRole(direct, userId, PROJECT_MANAGER_ROLE_ID, tenant.companyId);
     await seedWorkflowDefinition(direct, tenant.companyId);
 
     // ── Seed tenant B (dùng để kiểm isolation) ──
     tenantB = await seedCompany(direct, "wf-e2e-b");
     const userBId = await seedUser(direct, tenantB.companyId, "worker@wf-e2e-b.test", hash);
+    await seedUserRole(direct, userBId, PROJECT_MANAGER_ROLE_ID, tenantB.companyId);
     await seedWorkflowDefinition(direct, tenantB.companyId);
 
     // ── NestJS app ──
@@ -106,9 +113,6 @@ describe.skipIf(!hasDb)("G4-7 workflow full lifecycle (e2e)", () => {
 
     token = await loginAs(app, tenant.slug, "worker@wf-e2e.test");
     tokenB = await loginAs(app, tenantB.slug, "worker@wf-e2e-b.test");
-
-    // silence unused-var warning
-    void userBId;
   });
 
   afterAll(async () => {
@@ -134,11 +138,11 @@ describe.skipIf(!hasDb)("G4-7 workflow full lifecycle (e2e)", () => {
     expect(projectId).toBeTruthy();
   });
 
-  it("POST /projects/:id/content → tạo content item", async () => {
+  it("POST /content → tạo content item", async () => {
     const res = await api(app)
-      .post(`/projects/${projectId}/content`)
+      .post(`/content`)
       .set(bearer(token))
-      .send({ title: "Video E2E Test", contentType: "video" })
+      .send({ projectId, title: "Video E2E Test" })
       .expect(201);
 
     expect(res.body.success).toBe(true);
@@ -364,9 +368,9 @@ describe.skipIf(!hasDb)("G4-7 workflow full lifecycle (e2e)", () => {
     const projectIdB = projectResB.body.data.id as string;
 
     const contentResB = await api(app)
-      .post(`/projects/${projectIdB}/content`)
+      .post(`/content`)
       .set(bearer(tokenB))
-      .send({ title: "B Video", contentType: "video" })
+      .send({ projectId: projectIdB, title: "B Video" })
       .expect(201);
     const contentItemIdB = contentResB.body.data.id as string;
 
