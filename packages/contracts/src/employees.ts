@@ -50,8 +50,17 @@ export const employeeListItemSchema = z.object({
 });
 export type EmployeeListItemDto = z.infer<typeof employeeListItemSchema>;
 
+/**
+ * Create employee profile.
+ * EMP-001: either link an existing `userId`, OR create a new login account by supplying
+ * `email` + `fullName` (server hashes `password`, or generates a temporary one). The
+ * "userId XOR (email+fullName)" rule is enforced server-side (EmployeesService).
+ */
 export const createEmployeeProfileSchema = z.object({
-  userId: z.string().uuid(),
+  userId: z.string().uuid().optional(),
+  email: z.string().email().optional(),
+  fullName: z.string().min(1).optional(),
+  password: z.string().min(8).optional(),
   employeeCode: z.string().optional(),
   orgUnitId: z.string().uuid().optional(),
   positionId: z.string().uuid().optional(),
@@ -87,7 +96,11 @@ export const updateEmployeeProfileSchema = z.object({
 });
 export type UpdateEmployeeProfileRequest = z.infer<typeof updateEmployeeProfileSchema>;
 
-/** Import CSV employee row schema. */
+/**
+ * Import CSV employee row schema.
+ * NOTE: base_salary is intentionally EXCLUDED — salary is sensitive and changing it requires the
+ * `update-salary` permission + audit (PATCH /employees/:id). Bulk import must never set salaries.
+ */
 export const importEmployeeRowSchema = z.object({
   email: z.string().email(),
   fullName: z.string().min(1),
@@ -116,3 +129,12 @@ export const importEmployeeConfirmSchema = z.object({
   sessionId: z.string().min(1),
 });
 export type ImportEmployeeConfirmRequest = z.infer<typeof importEmployeeConfirmSchema>;
+
+/** GET /employees query filters (F8: free-text `search` over name/email/employee_code). */
+export const employeeListQuerySchema = z.object({
+  orgUnitId: z.string().uuid().optional(),
+  positionId: z.string().uuid().optional(),
+  status: z.string().optional(),
+  search: z.string().trim().min(1).optional(),
+});
+export type EmployeeListQuery = z.infer<typeof employeeListQuerySchema>;
