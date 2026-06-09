@@ -689,12 +689,42 @@ F13 (FE polish)               ── cuối
 
 ### 14.4 Điều kiện đóng phase (cập nhật — thay §12)
 
-- [ ] F1 + F2 + F4: FULL gate PASS (`security-reviewer` + `database-reviewer` + `silent-failure-hunter`; `santa-method` cho F1)
-- [ ] Salary mask: coverage 100% (mọi ca deny/allow/audit + PATCH→403)
+- [x] F1 + F2 + F4: FULL gate PASS (`security-reviewer` + `database-reviewer` + `silent-failure-hunter`) — **2026-06-09, 0 CRITICAL** (xem §14.5). `santa-method` cho F1 chưa chạy (lớp đối kháng tùy chọn — 3 reviewer độc lập + 120 test xanh đã phủ crown-jewel).
+- [x] Salary mask: coverage 100% (mọi ca deny/allow/audit + PATCH→403) — `employees.service.spec.ts` 30/30 xanh
 - [ ] F3: coverage ≥80% cho EmployeeModule/PositionModule/OrgModule/CompanySettingsModule
 - [ ] G2-5 2-tenant regression xanh sau toàn bộ fix
 - [ ] FE: EmployeeDetailPage + OrgChart render thật; salary mask hiển thị đúng chữ
 - [ ] `ecc:harness-audit` PASS → điền completion-evaluator → tick lại TASKS.md G5
+
+### 14.5 — Kết quả FULL gate F1/F2/F4 (2026-06-09)
+
+> Branch `feat/g5-fix` (worktree `mediaos-g5-integration`). Gate chạy 3 reviewer độc lập (CLAUDE §6) + 120 test xanh.
+
+**VERDICT: PASS — 0 CRITICAL.** Mọi reviewer trả PASS cho cả F1/F2/F4. HIGH duy nhất được chính reviewer nêu xác nhận **không block** (mask đặt đúng trước API surface).
+
+| Reviewer | F1 | F2 | F4 |
+|----------|----|----|----|
+| `security-reviewer` | PASS | PASS | PASS |
+| `database-reviewer` | PASS | PASS | PASS |
+| `silent-failure-hunter` | PASS | PASS | PASS |
+
+**Test:** `employees.service.spec` 30 · `org.permissions.spec` 46 · `positions.service.spec` 17 · `org.service.spec` 27 = **120/120 xanh**. Salary mask deny/allow/audit + PATCH→403 phủ 100%; import corrupt-payload hard-fail có test.
+
+**Bằng chứng then chốt đã verify:**
+- F1: `auditService.record(tx,…)` được GỌI + await trên cả view-salary (khi `decision.auditRequired`) và update-salary (before/after); audit + mutation cùng 1 `withTenant` → nguyên tử. Mask cả getOne lẫn list per-item. `reveal = allow && auditRequired` (fail-safe).
+- F2: 10/10 mutation org_unit+team có `@UseGuards(PermissionGuard)+@RequirePermission`; guard fail-closed; migration 0030 idempotent, `resource_type` khớp `audit_logs_object_type_chk` (0014).
+- F4: gán `default_role_id` (create+PATCH, kể cả set null) gác `manage.position` (dạng chấm, khớp catalog 0019/0031) + audit `assign-default-role`; deny→ForbiddenException trước mọi DB write.
+- `GET /org/roles` (F13, uncommitted): RLS `roles_tenant_isolation` (0005:37-44 `OR company_id IS NULL`, FORCE) đã verify — **KHÔNG rò chéo tenant**; chỉ lộ role tenant + system.
+
+**Residual non-blocking (follow-up ticket, KHÔNG chặn đóng phase):**
+- 🟡 MED (F1) — `createEmployee` nhận `baseSalary` mà KHÔNG gác `update-salary` và KHÔNG audit lúc tạo (PATCH thì đủ). Đề xuất: cấm `baseSalary` ở create DTO **hoặc** audit + gác lúc tạo. _(điểm crown-jewel đáng vá nhất)_
+- 🟡 MED (F2) — `listRoles` không guard + không lọc `company_id` ở app-layer (chỉ dựa RLS — đã verify đúng) + chưa nằm trong `OPEN_READS` của spec. Đề xuất: thêm vào `OPEN_READS` + test, cân nhắc lọc app-layer phòng thủ chiều sâu.
+- 🟡 MED (F1 db) — `baseSalary` trong `LIST_COLUMNS` fetch cho mọi row (mask trước khi rời service — chưa rò). Defense-in-depth.
+- 🟡 MED (F2) — kill-switch `PERMISSION_GUARD_ENABLED=false` fail-open toàn bộ guard (đã document; rủi ro vận hành).
+- 🟡 MED (db) — `ON CONFLICT DO NOTHING` trần trên `role_permissions` (không mơ hồ hiện tại; nên ghi rõ tên constraint).
+- ⚪ LOW — TOCTOU `manage.position` ngoài tx (đã document); `createEmployeeTx/updateEmployeeTx` thiếu `async` (caller đã await).
+
+**Còn lại để ĐÓNG PHASE:** G2-5 2-tenant regression (cần DB) · `ecc:harness-audit` · completion-evaluator · tick TASKS.md G5 · merge `feat/g5-fix`.
 
 ---
 

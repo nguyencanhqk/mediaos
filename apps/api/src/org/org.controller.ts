@@ -174,4 +174,13 @@ export class OrgController {
   listEmployees(@Req() req: AuthenticatedRequest) {
     return this.org.listEmployees(req.user.companyId);
   }
+
+  // ── Roles catalog ─────────────────────────────────────────────────────────────
+  // READ mở cho user tenant (như units/teams): danh mục vai trò không nhạy cảm,
+  // dùng cho dropdown "vai trò mặc định" của chức vụ (F4/F11). RLS lộ role tenant +
+  // system (company_id NULL). JwtAuthGuard + CompanyGuard toàn cục vẫn ép đăng nhập + tenant.
+  @Get('roles')
+  listRoles(@Req() req: AuthenticatedRequest) {
+    return this.org.listRoles(req.user.companyId);
+  }
 }

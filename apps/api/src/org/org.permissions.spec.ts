@@ -59,6 +59,7 @@ const OPEN_READS: ReadonlyArray<keyof OrgController> = [
   'listTeams',
   'listTeamMembers',
   'listEmployees',
+  'listRoles',
 ];
 
 function handlerOf(name: keyof OrgController): (...args: unknown[]) => unknown {

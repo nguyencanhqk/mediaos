@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { DatabaseService } from '../db/db.service';
-import { orgUnits, teams, teamMembers, users } from '../db/schema';
+import { orgUnits, teams, teamMembers, users, roles } from '../db/schema';
 
 @Injectable()
 export class OrgRepository {
@@ -278,6 +278,23 @@ export class OrgRepository {
           ),
         )
         .returning(),
+    );
+  }
+
+  // ── Roles ────────────────────────────────────────────────────────────────────
+
+  /**
+   * Roles catalog cho dropdown "vai trò mặc định" của chức vụ (F4/F11).
+   * KHÔNG filter company_id: roles hệ thống có company_id NULL; RLS đã lộ đúng tập
+   * (tenant + system) cho app role. Chỉ lấy bản chưa xoá, sắp theo tên.
+   */
+  listRoles(companyId: string) {
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .select({ id: roles.id, name: roles.name })
+        .from(roles)
+        .where(isNull(roles.deletedAt))
+        .orderBy(roles.name),
     );
   }
 
