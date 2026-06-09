@@ -43,6 +43,10 @@ export const envSchema = z.object({
   // Vault transit — chỉ bắt buộc khi KMS_PROVIDER='vault' (xem superRefine bên dưới).
   KMS_VAULT_ADDR: z.string().url().optional(),
   KMS_VAULT_TOKEN: z.string().min(1).optional(),
+  // ⚠️ ALLOW_SUPERUSER_ROTATION (KHÔNG validate qua zod — CỐ Ý): SecretRotationService đọc THẲNG
+  // `process.env.ALLOW_SUPERUSER_ROTATION === 'true'` để fail-closed tuyệt đối (mọi giá trị ≠ 'true', kể cả
+  // unset → CHẶN rotation bằng role BYPASS RLS). Không dùng z.coerce.boolean() vì nó coi 'false' → true (bẫy).
+  // Chỉ bật ở harness test seed/teardown bằng superuser; KHÔNG đặt ở staging/prod.
 }).superRefine((env, ctx) => {
   // Fail-fast: chọn Vault thì PHẢI có addr + token (không để provider chết im lúc runtime).
   if (env.KMS_PROVIDER === "vault") {

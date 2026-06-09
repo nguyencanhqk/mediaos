@@ -1273,9 +1273,11 @@ DELETE /api/v1/content/:id/assets/:assetId            (soft-delete + flip is_cur
 
 > Chấm: 2026-06-09 (rubric/spec `completion-evaluator` nguyên văn; read-only, verify bằng bằng chứng file:line + typecheck 4/4 + spec vùng đỏ chạy lại). Bối cảnh: G3–G6 đã merge `--no-ff` vào `master` (`0b062ae`, local, **CHƯA push**) sau khi e2e G4-7 xanh (`259586c`).
 
-### VERDICT: **BLOCK** (điểm tổng: **86/100**)
+### VERDICT: **BLOCK → PASS** (điểm tổng: **86/100**) — *đã mở khoá 2026-06-09, xem §"RE-GATE lần 2" cuối mục*
 
-Chất lượng crown-jewel cao — nhưng quy tắc BLOCK cứng *"vùng đỏ thiếu FULL gate"* ép BLOCK bất kể điểm.
+Chất lượng crown-jewel cao — quy tắc BLOCK cứng *"vùng đỏ thiếu FULL gate"* ép BLOCK bất kể điểm. **Điều kiện
+unlock đã đạt:** FULL gate 2g chạy lại = **0 CRITICAL** (security PASS · silent-failure 0/0 · database PASS),
+1 CRIT + 3 HIGH đã fix + verify (rotation 9/9, tenant-isolation 130/0-fail, typecheck 4/4) → phase **PASS**.
 
 **Điểm theo chiều**
 - **Correctness 23/25** — reveal = object-grant per-account (F2) + re-auth + audit mỗi lần xem (`platform-accounts.service.ts:183-241`); create app-gen uuid TRƯỚC encrypt → AAD bind (`:257-305`); F2 fail-closed kể cả `*:*` (`permission.service.ts:103-111`). test 390 pass/2 skip, typecheck 4/4. Trừ: FE reveal/reauth mới verified-by-mock (e2e BE↔FE deferred → G2-6).
@@ -1304,3 +1306,44 @@ Diff review: `git diff d8ef592~1 617d985 -- apps/api/src/crypto …`. 3 reviewer
 4. 🟠 **HIGH — DEK intermediate buffer chưa zeroize** (`local-kek.provider.ts:59`, giới hạn Node crypto): prod dùng Vault `transit/rewrap` (DEK không rời HSM). Chấp nhận-kèm-ticket cho dev.
 
 **MED (nên fix):** SELECT/UPDATE non-atomic thiếu `FOR UPDATE SKIP LOCKED` (race double-unwrap) · `err.message` leak chi tiết KMS vào log (sanitize) · reWrapAll nạp toàn bộ id vào RAM (cursor/batch). **LOW:** thiếu deny-path test column-grant chặn ghi `secret_ciphertext` · TOCTOU `currentKey`.
+
+### ✅ RE-GATE lần 2 (2026-06-09) — SẠCH, 0 CRITICAL → phase PASS
+
+Sau khi FIX code 2g. Diff: working-tree trên `feat/g6-media` (HEAD `da9f840`), 6 file
+(`secret-rotation.service.ts`, `local-kek.provider.ts`, `secret-rotation.int-spec.ts`, `env.schema.ts`,
+`.env.example`, `vitest.config.ts`). 3 reviewer chạy song song:
+**security = 0 CRIT / 2 HIGH** · **silent-failure = 0 CRIT / 0 HIGH (4 finding trước CLOSED)** ·
+**database = 1 "CRIT" (FALSE POSITIVE) / 3 HIGH**.
+
+> ⚠️ database "CRITICAL" (harness deadlock vì thiếu `ALLOW_SUPERUSER_ROTATION`) = **suy đoán, bị bác bằng bằng
+> chứng**: suite chạy **9/9 XANH** vì `mediaos_worker` không phải superuser → guard không vào nhánh. Đã hardening
+> thêm (set flag tường minh trong `vitest.config.ts`) cho chắc. ⇒ **0 real CRITICAL.**
+
+**Đã FIX trong lần này (1 CRIT + 3 HIGH gốc + finding hội tụ rẻ):**
+
+1. 🔴→✅ `reWrapAll` — aggregate `logger.error` (`failedIds=[…]`, counts, KHÔNG secret) khi `failed>0` + tag
+   sanitize `safeFailureTag` (DEK_UNWRAP_AUTH_FAILED / DEK_ENVELOPE_INVALID / KMS_CONNECT_ERROR / REWRAP_FAILED,
+   không echo raw KMS message) + siết hợp đồng caller. RED **13h** (seed tamper → `failed[]` non-empty, KHÔNG
+   rotate, log tổng) xanh.
+2. 🟠→✅ `assertWorkerRoleSafe` — fail-closed theo `ALLOW_SUPERUSER_ROTATION==='true'` (bỏ `NODE_ENV`) **+**
+   fail-closed khi `pg_roles` 0-row (vá fail-open) **+** warn-path không in tên role/cờ ra log.
+3. 🟠→✅ `reWrapAccount` — throw khi `rewrapRow` trả 0-row (account biến mất). RED **13i** xanh.
+4. 🟠→✅ DEK intermediate buffer — document LIMITATION (`local-kek.provider.ts`) + ticket; prod = Vault transit.
+5. ✅ phụ: `rewrapRow` UPDATE thêm `AND deleted_at IS NULL` (bất biến #2) · `loadKek` giữ `cause` (ENOENT/EACCES)
+   · 13h cleanup tamper-row + assert 2 log line.
+
+**Verify:** rotation int-spec **9/9** · crypto unit + reveal + reset-token + tenant-isolation **180 pass/2 skip/0
+fail** · `pnpm typecheck` 4/4 sạch.
+
+**Handoff §4.5 — ticket DEFER (MED/LOW, không chặn merge):**
+
+- `G6-2g-DEK-ZEROIZE` — intermediate DEK buffer (Node crypto) → prod Vault `transit/rewrap`.
+- `G6-2g-PROD-FLAG-GUARD` — startup guard ném khi `ALLOW_SUPERUSER_ROTATION='true'` && `NODE_ENV='production'`.
+- `G6-2g-ROT-INDEX` — partial index `platform_accounts(kms_key_id) WHERE deleted_at IS NULL`.
+- `G6-2g-ROT-CONCURRENCY` — `FOR UPDATE SKIP LOCKED` (race double-unwrap) + cursor/batch reWrapAll (RAM).
+- `G6-2g-ROT-TEST-ISOLATION` — cross-tenant: reWrapAll scope `company_id` tùy chọn cho test / serial pool.
+- `G6-2g-ROT-MISC` — `failedIds` cap-N log lớn · validate UUID format `accountId` · deny-path test column-grant
+  chặn ghi `secret_ciphertext` · TOCTOU `currentKey`.
+
+**Còn lại để đóng phase:** push `master` (G3–G6 merge `--no-ff` `0b062ae`, local, ahead origin 73 commit) — chờ
+xác nhận người dùng.

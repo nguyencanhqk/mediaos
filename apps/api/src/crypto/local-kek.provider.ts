@@ -19,6 +19,13 @@ const WRAP_TAG_BYTES = 16; // GCM auth tag
  * - wrapDek/unwrapDek: AES-256-GCM wrap of the DEK under the file KEK. `wrapped` = iv(12)‖tag(16)‖ciphertext.
  *   AAD binds `kmsKeyId‖0x00‖keyVersion` so a wrapped DEK cannot be replayed under a different key identity.
  * - currentKey: reads the active row from `encryption_keys` (GLOBAL registry, migration 0022).
+ *
+ * ⚠️ KNOWN LIMITATION (DEV-ONLY, accepted — handoff ticket G6-2g-DEK-ZEROIZE): the *intermediate* plaintext
+ * DEK buffers Node's `crypto` allocates inside (de)cipher (`update`/`final` outputs, the returned unwrap
+ * plaintext before the caller's `finally` zeroes it) cannot be reliably wiped from the V8/OpenSSL heap here —
+ * `Buffer.fill(0)` only covers buffers WE own. This is inherent to doing DEK crypto in-process. PROD removes
+ * the exposure entirely via Vault `transit` rewrap (VaultKekProvider, 2g): the DEK is unwrapped/re-wrapped
+ * INSIDE Vault and never materializes in app memory. Local provider is dev/test only (ADR-0004).
  */
 @Injectable()
 export class LocalKekProvider implements KmsProvider, OnApplicationShutdown {
@@ -100,9 +107,11 @@ export class LocalKekProvider implements KmsProvider, OnApplicationShutdown {
     let raw: Buffer;
     try {
       raw = readFileSync(KMS_LOCAL_KEK_PATH);
-    } catch {
+    } catch (err) {
+      // Giữ `cause` để lộ OS code (ENOENT=thiếu file vs EACCES=không có quyền) cho chẩn đoán — vẫn KHÔNG log key bytes.
       throw new Error(
         `LocalKekProvider: không đọc được file KEK tại KMS_LOCAL_KEK_PATH ('${KMS_LOCAL_KEK_PATH}').`,
+        { cause: err },
       );
     }
     if (raw.length !== KEK_BYTES) {
