@@ -1,43 +1,42 @@
 import { z } from "zod";
-import type { CreateOrgUnitRequest, CreateTeamRequest, AddTeamMemberRequest } from "@mediaos/contracts";
-import {
-  orgUnitSchema,
-  teamSchema,
-  teamMemberSchema,
-  employeeSchema,
+import type {
+  AddTeamMemberRequest,
+  CreateOrgUnitRequest,
+  CreateTeamRequest,
+  UpdateOrgUnitRequest,
 } from "@mediaos/contracts";
-
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3100/api/v1";
-
-async function apiFetch<T>(
-  path: string,
-  schema: z.ZodType<T>,
-  init?: RequestInit,
-): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${path}: ${body}`);
-  }
-  const json: unknown = await res.json();
-  return schema.parse(json);
-}
+import {
+  employeeSchema,
+  orgTreeNodeSchema,
+  orgUnitSchema,
+  teamMemberSchema,
+  teamSchema,
+} from "@mediaos/contracts";
+import { apiFetch } from "./api-client";
 
 const voidSchema = z.void();
 
 export const orgApi = {
-  listDepartments: () =>
-    apiFetch("/org/departments", z.array(orgUnitSchema)),
+  // ── Org units (phòng ban / khối) ───────────────────────────────────────────
+  listDepartments: () => apiFetch("/org/departments", z.array(orgUnitSchema)),
   createDepartment: (data: CreateOrgUnitRequest) =>
     apiFetch("/org/departments", orgUnitSchema, { method: "POST", body: JSON.stringify(data) }),
+  /** PATCH /org/units/:id — toggle status, gán trưởng phòng (headUserId), v.v. */
+  updateOrgUnit: (id: string, data: UpdateOrgUnitRequest) =>
+    apiFetch(`/org/units/${id}`, orgUnitSchema, { method: "PATCH", body: JSON.stringify(data) }),
+  /** GET /org/units/tree — cây org_unit lồng nhau cho sơ đồ tổ chức. */
+  getOrgTree: () => apiFetch("/org/units/tree", z.array(orgTreeNodeSchema)),
 
-  listTeams: () =>
-    apiFetch("/org/teams", z.array(teamSchema)),
+  // ── Teams ──────────────────────────────────────────────────────────────────
+  listTeams: () => apiFetch("/org/teams", z.array(teamSchema)),
   createTeam: (data: CreateTeamRequest) =>
     apiFetch("/org/teams", teamSchema, { method: "POST", body: JSON.stringify(data) }),
+  /** PATCH /org/teams/:id/leader — gán team leader. */
+  assignTeamLeader: (teamId: string, leaderId: string) =>
+    apiFetch(`/org/teams/${teamId}/leader`, teamSchema, {
+      method: "PATCH",
+      body: JSON.stringify({ leaderId }),
+    }),
 
   listTeamMembers: (teamId: string) =>
     apiFetch(`/org/teams/${teamId}/members`, z.array(teamMemberSchema)),
@@ -49,6 +48,6 @@ export const orgApi = {
   removeTeamMember: (teamId: string, userId: string) =>
     apiFetch(`/org/teams/${teamId}/members/${userId}`, voidSchema, { method: "DELETE" }),
 
-  listEmployees: () =>
-    apiFetch("/org/employees", z.array(employeeSchema)),
+  // ── Người dùng (picker trưởng phòng / team leader) ───────────────────────────
+  listEmployees: () => apiFetch("/org/employees", z.array(employeeSchema)),
 };

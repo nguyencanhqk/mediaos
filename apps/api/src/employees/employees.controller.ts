@@ -44,8 +44,9 @@ export class EmployeesController {
     @Query('orgUnitId') orgUnitId?: string,
     @Query('positionId') positionId?: string,
     @Query('status') status?: string,
+    @Query('search') search?: string,
   ) {
-    return this.employees.listEmployees(req.user, { orgUnitId, positionId, status });
+    return this.employees.listEmployees(req.user, { orgUnitId, positionId, status, search });
   }
 
   @Post()

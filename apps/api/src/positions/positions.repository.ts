@@ -1,11 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { and, eq, isNull } from 'drizzle-orm';
-import { DatabaseService } from '../db/db.service';
+import { DatabaseService, type TenantTx } from '../db/db.service';
 import { orgUnits, positions, roles } from '../db/schema';
 
 @Injectable()
 export class PositionsRepository {
   constructor(private readonly db: DatabaseService) {}
+
+  /**
+   * Chạy `fn` trong tenant tx: dùng `tx` có sẵn (do Service mở để gói write + audit nguyên tử),
+   * hoặc tự mở `withTenant` khi gọi lẻ. Tránh nested transaction.
+   */
+  private run<T>(companyId: string, fn: (tx: TenantTx) => Promise<T>, tx?: TenantTx): Promise<T> {
+    return tx ? fn(tx) : this.db.withTenant(companyId, fn);
+  }
 
   listPositions(companyId: string, orgUnitId?: string) {
     return this.db.withTenant(companyId, (tx) => {
@@ -41,9 +49,9 @@ export class PositionsRepository {
     });
   }
 
-  findById(companyId: string, id: string) {
-    return this.db.withTenant(companyId, (tx) =>
-      tx
+  findById(companyId: string, id: string, tx?: TenantTx) {
+    return this.run(companyId, (t) =>
+      t
         .select({
           id: positions.id,
           companyId: positions.companyId,
@@ -64,6 +72,7 @@ export class PositionsRepository {
         .leftJoin(roles, eq(positions.defaultRoleId, roles.id))
         .where(and(eq(positions.companyId, companyId), eq(positions.id, id), isNull(positions.deletedAt)))
         .limit(1),
+      tx,
     );
   }
 
@@ -77,12 +86,16 @@ export class PositionsRepository {
       description?: string | null;
       defaultRoleId?: string | null;
     },
+    tx?: TenantTx,
   ) {
-    return this.db.withTenant(companyId, (tx) =>
-      tx
-        .insert(positions)
-        .values({ companyId, ...data })
-        .returning(),
+    return this.run(
+      companyId,
+      (t) =>
+        t
+          .insert(positions)
+          .values({ companyId, ...data })
+          .returning(),
+      tx,
     );
   }
 
@@ -98,13 +111,17 @@ export class PositionsRepository {
       defaultRoleId: string | null;
       status: string;
     }>,
+    tx?: TenantTx,
   ) {
-    return this.db.withTenant(companyId, (tx) =>
-      tx
-        .update(positions)
-        .set({ ...data, updatedAt: new Date() })
-        .where(and(eq(positions.companyId, companyId), eq(positions.id, id), isNull(positions.deletedAt)))
-        .returning(),
+    return this.run(
+      companyId,
+      (t) =>
+        t
+          .update(positions)
+          .set({ ...data, updatedAt: new Date() })
+          .where(and(eq(positions.companyId, companyId), eq(positions.id, id), isNull(positions.deletedAt)))
+          .returning(),
+      tx,
     );
   }
 

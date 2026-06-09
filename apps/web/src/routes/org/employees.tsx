@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { employeesApi } from "@/lib/employees-api";
@@ -165,9 +166,13 @@ export function EmployeesPage() {
           <li key={e.id} className="flex items-center justify-between px-4 py-3">
             <div className="space-y-0.5">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">
+                <Link
+                  to="/org/employees/$employeeId"
+                  params={{ employeeId: e.id }}
+                  className="text-sm font-medium hover:underline"
+                >
                   {e.userFullName ?? e.userEmail ?? e.userId}
-                </span>
+                </Link>
                 {e.employeeCode && (
                   <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                     {e.employeeCode}
@@ -183,7 +188,7 @@ export function EmployeesPage() {
                     {e.baseSalary.toLocaleString("vi-VN")} ₫
                   </span>
                 ) : (
-                  <span>— (lương ẩn)</span>
+                  <span>— (Không có quyền xem)</span>
                 )}
               </div>
             </div>
