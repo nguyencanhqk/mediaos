@@ -211,6 +211,13 @@
       "when": 1717500033000,
       "tag": "0029_g6_reset_token_trigger_warning",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1717500034000,
+      "tag": "0030_g5fix_org_team_permissions_seed",
+      "breakpoints": true
     }
   ]
 }
