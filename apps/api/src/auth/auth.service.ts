@@ -54,6 +54,21 @@ function serializeResetEnvelope(cols: EncryptedColumns): z.infer<typeof resetEnv
   };
 }
 
+/**
+ * G6-2f M3 — redact email người gọi khỏi chuỗi chẩn đoán TRƯỚC khi log. `err.stack`/`message` là
+ * KHÔNG kiểm soát được (downstream có thể nhúng giá trị email) nên ta giữ stack để quan sát
+ * (silent-failure F3) nhưng loại PII. Scrub cả biến lowercase (downstream có thể hạ chữ thường).
+ * Token KHÔNG nằm trong scope catch của forgotPassword nên không cần scrub ở đây.
+ */
+export function redactEmailFromDetail(detail: string, email?: string): string {
+  if (!email) return detail;
+  let out = detail;
+  for (const variant of new Set([email, email.toLowerCase()])) {
+    out = out.split(variant).join("[redacted-email]");
+  }
+  return out;
+}
+
 /** Payload không tin cậy (từ outbox durable) → EncryptedColumns đã validate; ném khi shape sai. */
 function deserializeResetEnvelope(raw: unknown): EncryptedColumns {
   const e = resetEnvelopeSchema.parse(raw);
@@ -259,9 +274,11 @@ export class AuthService {
           recordId: user.id,
           purpose: "auth_reset_token",
         });
+        // G6-2f M3: payload KHÔNG mang email plaintext (outbox durable = data-at-rest). Mail consumer
+        // resolve email JIT theo userId qua withTenant(companyId) — mirror pattern JIT-decrypt resetTokenEnc.
         await this.outbox.enqueue(tx, {
           eventType: "auth.password_reset_requested",
-          payload: { userId: user.id, email: user.email, resetTokenEnc: serializeResetEnvelope(enc) },
+          payload: { userId: user.id, resetTokenEnc: serializeResetEnvelope(enc) },
         });
         await this.audit.record(tx, {
           action: "auth.password_reset_requested",
@@ -276,10 +293,11 @@ export class AuthService {
       // Uniform-void (không lộ email tồn tại): mọi lỗi xử lý (vd KMS/encrypt down) ⇒ withTenant tx đã rollback
       // (fail-closed — không plaintext, không partial), log ERROR phía server (KHÔNG token/DEK/email) rồi TRẢ
       // VOID như nhánh happy. Đóng oracle 500-vs-200 (FULL-gate 2f silent-failure F3). KHÔNG nuốt im: luôn có
-      // ERROR + stack trong log để quan sát.
+      // ERROR + stack trong log để quan sát. M3: redact email khỏi stack (PII, stack uncontrolled).
+      const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
       this.logger.error(
         "forgotPassword: xử lý reset thất bại (đã rollback, không phát event)",
-        err instanceof Error ? err.stack : String(err),
+        redactEmailFromDetail(detail, req.email),
       );
     }
   }
@@ -323,6 +341,12 @@ export class AuthService {
    * Giải mã envelope reset-token từ outbox payload — bước JIT của mail consumer (G6-2f). `companyId` lấy
    * từ outbox row, `userId` từ payload; cùng nhau dựng lại AAD (recordId = userId). Trả scoped token; ném
    * lỗi generic khi tamper/corruption (decryptSecret KHÔNG lộ nội tại crypto). KHÔNG log token.
+   *
+   * @internal CONSUMER-ONLY (G6-2f M2). Method trả plaintext token — chỉ dành cho mail consumer của
+   * `auth.password_reset_requested`. AAD bind companyId‖userId nên KHÔNG phải oracle cross-secret
+   * (platform_account dùng recordId=account.id khác user.id), và token trả ra vẫn single-use+hashed+TTL ở DB.
+   * Khi build mail consumer (deferred — 2f residual), đặt method này SAU boundary của consumer
+   * (worker context), KHÔNG để AuthService phơi capability giải mã rộng cho mọi module inject.
    */
   async decryptResetToken(companyId: string, resetTokenEnc: unknown, userId: string): Promise<string> {
     return this.secrets.decryptSecret(deserializeResetEnvelope(resetTokenEnc), {
