@@ -204,7 +204,7 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 **Màn:** Company Settings · Org Chart · Department/Team/Position List · Employee List/Detail
 ✅ **Done:** cấu trúc công ty đa cấp; 1 nhân sự nhiều team; import nhân sự; nhân viên chỉ xem dữ liệu cá nhân.
 
-> **G5-FIX ĐÓNG (2026-06-09, branch `feat/g5-fix`):** rà soát phát hiện G5 ban đầu nợ (salary audit không gọi, thiếu guard Org/Team, 0 test, FE thiếu) → vá F1–F13 (plan §14). **FULL gate F1/F2/F4 PASS — 0 CRITICAL** (security/database/silent-failure reviewer; commit `a2e2d09`). Test: full API **510 pass/2 skip**, G2-5 2-tenant regression (tenant-isolation.int-spec) **132 pass**, salary mask 100% (30), api+web typecheck xanh. harness-audit 25/29 (2 fail = evals/ + SECURITY.md, hygiene toàn repo ngoài scope G5). Residual: 2 MEDIUM non-blocking (createEmployee chưa audit salary lúc tạo; baseSalary trong LIST_COLUMNS defense-in-depth) → ticket follow-up. **Còn lại:** merge `feat/g5-fix`.
+> **G5-FIX ĐÓNG (2026-06-09, branch `feat/g5-fix`):** rà soát phát hiện G5 ban đầu nợ (salary audit không gọi, thiếu guard Org/Team, 0 test, FE thiếu) → vá F1–F13 (plan §14). **FULL gate F1/F2/F4 PASS — 0 CRITICAL** (security/database/silent-failure reviewer; commit `a2e2d09`). Test: full API **510 pass/2 skip**, G2-5 2-tenant regression (tenant-isolation.int-spec) **132 pass**, salary mask 100% (30), api+web typecheck xanh. harness-audit 25/29 (2 fail = evals/ + SECURITY.md, hygiene toàn repo ngoài scope G5). Residual: createEmployee salary lúc tạo **đã vá** (`d1927d0`, gác update-salary + audit, re-gate PASS); còn 1 MEDIUM non-blocking (baseSalary trong LIST_COLUMNS defense-in-depth) → ticket. **Còn lại:** merge `feat/g5-fix`.
 
 ---
 

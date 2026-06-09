@@ -717,7 +717,7 @@ F13 (FE polish)               ── cuối
 - `GET /org/roles` (F13, uncommitted): RLS `roles_tenant_isolation` (0005:37-44 `OR company_id IS NULL`, FORCE) đã verify — **KHÔNG rò chéo tenant**; chỉ lộ role tenant + system.
 
 **Residual non-blocking (follow-up ticket, KHÔNG chặn đóng phase):**
-- 🟡 MED (F1) — `createEmployee` nhận `baseSalary` mà KHÔNG gác `update-salary` và KHÔNG audit lúc tạo (PATCH thì đủ). Đề xuất: cấm `baseSalary` ở create DTO **hoặc** audit + gác lúc tạo. _(điểm crown-jewel đáng vá nhất)_
+- ✅ **ĐÃ VÁ** (`d1927d0`) MED (F1) — `createEmployee` lúc tạo giờ gác `update-salary` + audit lúc set `baseSalary` (cùng tx, deny→rollback); +3 test; re-gate security-reviewer PASS 0 CRITICAL.
 - 🟡 MED (F2) — `listRoles` không guard + không lọc `company_id` ở app-layer (chỉ dựa RLS — đã verify đúng) + chưa nằm trong `OPEN_READS` của spec. Đề xuất: thêm vào `OPEN_READS` + test, cân nhắc lọc app-layer phòng thủ chiều sâu.
 - 🟡 MED (F1 db) — `baseSalary` trong `LIST_COLUMNS` fetch cho mọi row (mask trước khi rời service — chưa rò). Defense-in-depth.
 - 🟡 MED (F2) — kill-switch `PERMISSION_GUARD_ENABLED=false` fail-open toàn bộ guard (đã document; rủi ro vận hành).
@@ -757,7 +757,7 @@ F13 (FE polish)               ── cuối
 **Điểm rubric ~93/100** (trừ điểm cho 2 MEDIUM residual + harness-hygiene toàn repo).
 
 **Nợ ghi ticket (non-blocking, KHÔNG chặn đóng phase):**
-1. 🟡 F1 — `createEmployee` set `baseSalary` lúc tạo KHÔNG gác `update-salary` + KHÔNG audit (PATCH thì đủ). _Crown-jewel đáng vá nhất._
+1. ✅ **ĐÃ VÁ** (`d1927d0`) — F1 `createEmployee` set `baseSalary` lúc tạo giờ gác `update-salary` + audit (before null/after value) trong cùng tx; +3 test; re-gate PASS 0 CRITICAL.
 2. 🟡 `baseSalary` trong `LIST_COLUMNS` fetch mọi row (mask trước khi rời service — chưa rò; defense-in-depth).
 3. 🟡 kill-switch `PERMISSION_GUARD_ENABLED=false` fail-open (đã document) · ⚪ TOCTOU `manage.position` · ⚪ `createEmployeeTx/updateEmployeeTx` thiếu `async`.
 
