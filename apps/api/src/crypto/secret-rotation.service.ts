@@ -24,7 +24,6 @@ const PURPOSE: KeyPurpose = 'platform_account';
 @Injectable()
 export class SecretRotationService {
   private readonly logger = new Logger(SecretRotationService.name);
-  private roleChecked = false;
 
   constructor(@Inject(KMS_PROVIDER) private readonly kms: KmsProvider) {}
 
@@ -36,8 +35,13 @@ export class SecretRotationService {
     await this.rewrapRow(dbw, kmsKeyId, accountId);
   }
 
-  /** Re-wrap every live platform_account not yet wrapped under the current active KEK. Returns the count rotated. */
-  async reWrapAll(purpose: KeyPurpose): Promise<{ rotated: number }> {
+  /**
+   * Re-wrap every live platform_account not yet wrapped under the current active KEK.
+   * Returns the count rotated + per-account failures (a single corrupt row must not abort the batch).
+   */
+  async reWrapAll(
+    purpose: KeyPurpose,
+  ): Promise<{ rotated: number; failed: Array<{ id: string; error: string }> }> {
     if (purpose !== PURPOSE) {
       // auth_reset_token envelopes live in outbox payloads (short-lived, TTL reset) — they expire naturally
       // and are intentionally NOT rotated here (handoff §2g). Only platform_accounts (durable rows) rotate.
@@ -55,10 +59,20 @@ export class SecretRotationService {
     const ids = res.rows.map((r) => (r as { id: string }).id);
 
     let rotated = 0;
+    const failed: Array<{ id: string; error: string }> = [];
     for (const id of ids) {
-      if (await this.rewrapRow(dbw, kmsKeyId, id)) rotated += 1;
+      try {
+        if (await this.rewrapRow(dbw, kmsKeyId, id)) rotated += 1;
+      } catch (err) {
+        // One corrupt/un-decryptable row must NOT abort the whole batch (a single bad row would otherwise
+        // DoS the rotation). Record the account id (UUID — not secret) + message (never DEK/secret) and
+        // continue; the caller can alert/retry on `failed`.
+        const error = err instanceof Error ? err.message : String(err);
+        this.logger.error(`reWrapAll: account ${id} re-wrap thất bại — bỏ qua, tiếp tục batch. ${error}`);
+        failed.push({ id, error });
+      }
     }
-    return { rotated };
+    return { rotated, failed };
   }
 
   /**
@@ -78,18 +92,36 @@ export class SecretRotationService {
     const row = res.rows[0] as Record<string, unknown> | undefined;
     if (!row) return false;
 
+    // Validate envelope columns BEFORE crypto: a wrong driver type (bytea arriving as hex/base64 string) or a
+    // null/garbage version would otherwise fail deep inside AES-GCM with an error that hides the real cause.
+    const wrappedDek = row.encrypted_dek;
+    if (!Buffer.isBuffer(wrappedDek)) {
+      throw new Error(`rewrapRow(${accountId}): encrypted_dek không phải Buffer (driver trả kiểu lạ).`);
+    }
+    const currentKmsKeyId = row.kms_key_id;
+    if (typeof currentKmsKeyId !== 'string') {
+      throw new Error(`rewrapRow(${accountId}): kms_key_id không hợp lệ.`);
+    }
+    const version = Number(row.dek_key_version);
+    if (!Number.isInteger(version) || version < 0) {
+      throw new Error(`rewrapRow(${accountId}): dek_key_version không hợp lệ.`);
+    }
+
     let dek: Buffer | undefined;
     try {
-      const version = Number(row.dek_key_version);
-      dek = await this.kms.unwrapDek(row.encrypted_dek as Buffer, row.kms_key_id as string, version);
+      dek = await this.kms.unwrapDek(wrappedDek, currentKmsKeyId, version);
       const newWrapped = await this.kms.reWrapDek(dek, targetKmsKeyId, version);
       // UPDATE only the wrap columns in the worker grant — dek_key_version + secret_ciphertext stay untouched.
-      await dbw.execute(sql`
+      // Keep `WHERE id` (NO kms_key_id predicate): re-wrapping an already-target row is intentional (fresh IV +
+      // last_rotated_at bump — RED 13b/13g pin this).
+      const upd = await dbw.execute(sql`
         UPDATE platform_accounts
         SET encrypted_dek = ${newWrapped}, kms_key_id = ${targetKmsKeyId}, last_rotated_at = now()
         WHERE id = ${accountId}
       `);
-      return true;
+      // 0 rows = the row vanished between SELECT and UPDATE (concurrent delete / lost privilege). Report it as
+      // "not rotated" so reWrapAll's count never over-reports a rotation that did not actually land.
+      return (upd.rowCount ?? 0) > 0;
     } finally {
       if (dek) dek.fill(0);
     }
@@ -105,10 +137,10 @@ export class SecretRotationService {
 
   /**
    * Chặn worker chạy bằng role BYPASS RLS (mirror OutboxWorker). Role super/bypassrls bỏ qua CẢ column-grant
-   * → có thể ghi đè secret_ciphertext. Prod: ném; dev: cảnh báo to. Chỉ kiểm 1 lần/instance.
+   * → có thể ghi đè secret_ciphertext. Fail CLOSED ở MỌI env trừ 'test' (staging/CI mirror prod cũng nguy
+   * hiểm). Kiểm mỗi lần gọi (không cache — tránh bỏ sót khi connection/role đổi).
    */
   private async assertWorkerRoleSafe(dbw: NonNullable<typeof workerDb>): Promise<void> {
-    if (this.roleChecked) return;
     const res = await dbw.execute(sql`
       SELECT current_user AS role, rolsuper, rolbypassrls
       FROM pg_roles WHERE rolname = current_user
@@ -119,9 +151,9 @@ export class SecretRotationService {
         `SecretRotationService đang chạy bằng role '${row.role}' có BYPASS RLS ` +
         `(super=${row.rolsuper}, bypassrls=${row.rolbypassrls}) — đặt DATABASE_WORKER_URL trỏ mediaos_worker. ` +
         `Role này bypass cả column-grant → có thể ghi secret_ciphertext.`;
-      if (process.env.NODE_ENV === 'production') throw new Error(msg);
+      // Chỉ 'test' được warn-only (harness có thể chạy bằng superuser cho seed/teardown). Mọi env khác → ném.
+      if (process.env.NODE_ENV !== 'test') throw new Error(msg);
       this.logger.warn(msg);
     }
-    this.roleChecked = true;
   }
 }
