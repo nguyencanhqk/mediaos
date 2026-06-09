@@ -1271,4 +1271,24 @@ DELETE /api/v1/content/:id/assets/:assetId            (soft-delete + flip is_cur
 
 ## 🏁 Kết quả đánh giá hoàn thành (`completion-evaluator`)
 
-_(điền khi đóng phase: điểm rubric + PASS/BLOCK + việc còn nợ.)_
+> Chấm: 2026-06-09 (rubric/spec `completion-evaluator` nguyên văn; read-only, verify bằng bằng chứng file:line + typecheck 4/4 + spec vùng đỏ chạy lại). Bối cảnh: G3–G6 đã merge `--no-ff` vào `master` (`0b062ae`, local, **CHƯA push**) sau khi e2e G4-7 xanh (`259586c`).
+
+### VERDICT: **BLOCK** (điểm tổng: **86/100**)
+
+Chất lượng crown-jewel cao — nhưng quy tắc BLOCK cứng *"vùng đỏ thiếu FULL gate"* ép BLOCK bất kể điểm.
+
+**Điểm theo chiều**
+- **Correctness 23/25** — reveal = object-grant per-account (F2) + re-auth + audit mỗi lần xem (`platform-accounts.service.ts:183-241`); create app-gen uuid TRƯỚC encrypt → AAD bind (`:257-305`); F2 fail-closed kể cả `*:*` (`permission.service.ts:103-111`). test 390 pass/2 skip, typecheck 4/4. Trừ: FE reveal/reauth mới verified-by-mock (e2e BE↔FE deferred → G2-6).
+- **Bất biến & bảo mật 27/30** — #1 RLS+FORCE mọi bảng mới (worker policy mirror outbox); #2 `audit_logs` chỉ GRANT SELECT,INSERT (append-only, 0003:35); #3 envelope AES-256-GCM app-side, fresh DEK + zeroize-in-finally, AAD NUL-delim bind cột row, worker column-grant KHÔNG chạm `secret_ciphertext` (0022:78), decrypt-fail generic throw không leak. tenant-isolation 132 xanh. Trừ: success-audit `secret_revealed` trong cùng `try` decrypt (wrinkle); intermediate DEK buffer chưa zeroize.
+- **Test 22/25** — deny-path RED TRƯỚC, assert thật (reveal 14/14, rotation 7/7, reset-token 4/4, secret-enc 17/17). Trừ: 2 skip rotation invariant 13b/13e (deferred-active); chưa xuất coverage report số.
+- **Sạch sẽ 9/10** — không `catch{}` rỗng/`.skip` né bug/`@ts-ignore`; file/hàm trong ngưỡng; G4-7 fix = 0 dòng production. Trừ: plan §6d cần đính chính (`dek_key_version` — code đúng, doc lệch).
+- **Docs/Audit 8/10** — audit đủ hành động; TASKS+handoff cập nhật. Trừ: **ADR-0004 lệch tooling** (liệt 3 reviewer/hook không tồn tại); §6d.
+
+**BLOCK cứng**
+1. **G6-2g (rotation worker) — vùng đỏ secret CHƯA qua FULL gate.** `secret-rotation.service.ts` unwrap→re-wrap DEK qua worker direct pool (bypass-RLS) = đỏ; FULL gate 2g "để dành" (2e/2d/2f đã 0 CRIT). **Mở khoá:** chạy `ecc:security-reviewer + ecc:database-reviewer + ecc:silent-failure-hunter` trên diff 2g, đạt 0 CRITICAL → chấm lại.
+2. **DoD pre-merge "để dành":** TASKS top-level vốn `[ ]` tới khi xong gates+merge; security-scan (A 96/100) + harness-audit (28/39) đã đạt, chỉ còn FULL gate 2g → đóng nó là đủ.
+
+**Việc còn nợ (không chặn merge — theo dõi sang G2-6/sau)**
+- ADR-0004 sửa khớp thực tế (3 tool ảo) · FE reveal/reauth e2e thật (→ G2-6) · tách success-audit khỏi `try` decrypt · zeroize intermediate DEK · 2g residual (worker policy SELECT/UPDATE tách, `encryption_keys.revoked_at`, VaultKekProvider prod boot-guard) · đính chính §6d · coverage report ≥80% module nhạy cảm · 6 ticket non-blocking (`SECURITY.md`, PR template, Stop hook…).
+
+**Đề xuất đóng phase:** BLOCK. Hành động tối thiểu mở khoá: chạy FULL gate 2g (0 CRITICAL) → ghi kết quả → chấm lại; nếu không phát sinh CRITICAL, phase PASS (~86–90). **KHÔNG push `master` trước khi đóng FULL gate 2g** (merge local nên còn cửa sổ sạch). Không phát hiện vi phạm 3 bất biến / vá triệu chứng / task-hub riêng.
