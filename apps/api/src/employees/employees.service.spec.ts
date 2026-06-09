@@ -256,6 +256,60 @@ describe('EmployeesService — F1 salary mask + audit', () => {
       expect(repo.updateEmployeeTx).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('createEmployee (set-salary)', () => {
+    it('DENY: create with base_salary without update-salary → 403, no salary audit', async () => {
+      const repo = makeRepo();
+      const { svc, audit } = makeService({ perms: { 'update-salary': DENY() }, repo });
+      await expect(
+        svc.createEmployee(actor, {
+          userId: EMP_USER_ID,
+          baseSalary: 9000,
+          workType: 'offline',
+          employmentType: 'full_time',
+          salaryType: 'monthly',
+        } as never),
+      ).rejects.toThrow(ForbiddenException);
+      expect(audit.record).not.toHaveBeenCalled();
+    });
+
+    it('ALLOW: create with base_salary → update-salary audit (before null / after value)', async () => {
+      const repo = makeRepo();
+      const { svc, audit } = makeService({ perms: { 'update-salary': ALLOW() }, repo });
+      await svc.createEmployee(actor, {
+        userId: EMP_USER_ID,
+        baseSalary: 9000,
+        workType: 'offline',
+        employmentType: 'full_time',
+        salaryType: 'monthly',
+      } as never);
+      expect(audit.record).toHaveBeenCalledWith(
+        FAKE_TX,
+        expect.objectContaining({
+          action: 'update-salary',
+          objectType: 'employee',
+          objectId: EMP_ID,
+          before: { base_salary: null },
+          after: { base_salary: 9000 },
+        }),
+      );
+    });
+
+    it('create WITHOUT base_salary does not require update-salary permission', async () => {
+      const repo = makeRepo();
+      const { svc, audit } = makeService({ perms: {}, repo });
+      await expect(
+        svc.createEmployee(actor, {
+          userId: EMP_USER_ID,
+          workType: 'offline',
+          employmentType: 'full_time',
+          salaryType: 'monthly',
+        } as never),
+      ).resolves.toBeDefined();
+      expect(audit.record).not.toHaveBeenCalled();
+      expect(repo.createEmployeeTx).toHaveBeenCalledTimes(1);
+    });
+  });
 });
 
 // ─── F5: EMR direct_manager consistency ─────────────────────────────────────────

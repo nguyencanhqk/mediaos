@@ -149,6 +149,11 @@ export class EmployeesService {
   }
 
   async createEmployee(user: RequestUser, dto: CreateEmployeeProfileRequest) {
+    // BẤT BIẾN #3: setting base_salary at creation is the SAME sensitive write as a PATCH —
+    // it must require update-salary and be audited, otherwise create is a back door around the
+    // PATCH guard. A null/absent salary is not a sensitive write (no salary is being set).
+    const settingSalary = dto.baseSalary != null;
+
     try {
       const created = await this.db.withTenant(user.companyId, async (tx) => {
         const userId = await this.resolveUserId(tx, user.companyId, dto);
@@ -162,7 +167,7 @@ export class EmployeesService {
           employmentType: dto.employmentType,
           startDate: dto.startDate ?? null,
           contractType: dto.contractType ?? null,
-          baseSalary: dto.baseSalary != null ? String(dto.baseSalary) : null,
+          baseSalary: settingSalary ? String(dto.baseSalary) : null,
           salaryType: dto.salaryType,
           phone: dto.phone ?? null,
           avatarUrl: dto.avatarUrl ?? null,
@@ -174,6 +179,23 @@ export class EmployeesService {
         // F5: keep employee_manager_relations consistent with the direct_manager_id shortcut.
         if (dto.directManagerId != null) {
           await this.syncDirectManagerEmr(tx, user.companyId, userId, dto.directManagerId);
+        }
+
+        // F1 (MEDIUM-fix): gate + audit the initial salary. The row exists now so resourceId is the
+        // real profile id (per-object grants honored); a deny throws → the whole create rolls back.
+        if (settingSalary) {
+          const decision = await this.salaryDecision(user, 'update-salary', profile.id);
+          if (!decision.allow) {
+            throw new ForbiddenException('Insufficient permission to set salary');
+          }
+          await this.auditService.record(tx, {
+            action: 'update-salary',
+            objectType: 'employee',
+            objectId: profile.id,
+            actorUserId: user.id,
+            before: { base_salary: null },
+            after: { base_salary: dto.baseSalary ?? null },
+          });
         }
         return profile;
       });
