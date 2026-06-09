@@ -12,6 +12,17 @@ import { PermissionService } from '../permission.service';
 import type { AuthRequest } from './jwt-auth.guard';
 
 /**
+ * Request shape the guard reads: the authenticated user (JwtAuthGuard) plus the route :id param and the
+ * re-auth window populated upstream (ReauthGuard / reauth endpoint, 2e). All optional — the guard only
+ * consumes resourceId/reauthContext for the reveal-secret class.
+ */
+type ReauthAwareRequest = Partial<AuthRequest> & {
+  params?: Record<string, string>;
+  reauthContext?: { reauthValidUntil?: Date | null };
+  requestId?: string;
+};
+
+/**
  * PermissionGuard — checks @RequirePermission metadata and calls PermissionService.can().
  *
  * Fail-closed rules (plan §4 G3-4):
@@ -63,11 +74,21 @@ export class PermissionGuard implements CanActivate {
       throw new ForbiddenException('Route is not decorated with @RequirePermission');
     }
 
-    const req = ctx.switchToHttp().getRequest<Partial<AuthRequest>>();
+    const req = ctx.switchToHttp().getRequest<ReauthAwareRequest>();
     const user = req.user;
     if (!user?.id || !user.companyId) {
       throw new ForbiddenException('User context missing — ensure JwtAuthGuard + CompanyGuard run first');
     }
+
+    // 2e0: forward Tier-3 resource + re-auth window ONLY for the reveal-secret class
+    // (isSensitive && requiresReauth). Other routes stay type-level (resourceId undefined) → no behaviour
+    // change for G6-1/3/4. req.reauthContext is populated upstream (ReauthGuard / reauth endpoint, 2e),
+    // keyed by (userId, platform_account_id) so account A's window cannot authorize account B (RED 7b).
+    const isRevealClass = !!meta.isSensitive && !!meta.requiresReauth;
+    const resourceId = isRevealClass ? (req.params?.id ?? null) : undefined;
+    const reauthCtx = isRevealClass
+      ? { reauthValidUntil: req.reauthContext?.reauthValidUntil ?? null, requestId: req.requestId }
+      : undefined;
 
     try {
       const decision = await this.permission.can({
@@ -75,8 +96,10 @@ export class PermissionGuard implements CanActivate {
         companyId: user.companyId,
         action: meta.action,
         resourceType: meta.resourceType,
+        resourceId,
         isSensitive: meta.isSensitive,
         requiresReauth: meta.requiresReauth,
+        ctx: reauthCtx,
       });
 
       if (!decision.allow) {

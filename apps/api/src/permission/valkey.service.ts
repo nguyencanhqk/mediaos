@@ -49,13 +49,19 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** No-op if Valkey is unavailable. Never throws. */
-  async set(key: string, value: string, ttlSec: number): Promise<void> {
-    if (!this.client) return;
+  /**
+   * Returns true when the SET succeeds or Valkey is not configured (cache disabled is a no-op success).
+   * Returns false on error so callers that NEED the write to be durable (e.g. the re-auth window) can
+   * surface the failure instead of assuming success. Never throws.
+   */
+  async set(key: string, value: string, ttlSec: number): Promise<boolean> {
+    if (!this.client) return true;
     try {
       await this.client.set(key, value, 'EX', ttlSec);
+      return true;
     } catch (err) {
       this.logger.warn('Valkey SET error', { key, error: (err as Error).message });
+      return false;
     }
   }
 

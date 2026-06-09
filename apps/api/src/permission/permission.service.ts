@@ -37,6 +37,7 @@ export class PermissionService {
       resourceId,
       isSensitive = false,
       requiresReauth = false,
+      objectGrantRequired,
       ctx,
     } = input;
 
@@ -97,6 +98,16 @@ export class PermissionService {
       // Wildcard (*:*) DENY also matches — it blocks all actions.
       if (companyGrants.some((g) => matchesCompanyGrant(g) && g.effect === 'DENY')) {
         return { allow: false, reason: 'deny-explicit', auditRequired: isSensitive };
+      }
+
+      // ── F2 object-grant requirement (crown-jewel, ADR-0010) ────────────────
+      // The reveal-secret class needs a per-object (Tier-3) ALLOW. Reaching here means NO object ALLOW
+      // matched (resourceId was null → object-tier skipped above, OR object grants had no ALLOW for this
+      // action). Company-level ALLOW — even an exact non-wildcard grant, even super-admin *:* — is NOT
+      // sufficient. Fail-closed DENY. Derived from (isSensitive && requiresReauth) unless caller overrides.
+      const needsObjectGrant = objectGrantRequired ?? (isSensitive && requiresReauth);
+      if (needsObjectGrant) {
+        return { allow: false, reason: 'deny-object-required', auditRequired: true };
       }
 
       const companyAllows = companyGrants.filter(

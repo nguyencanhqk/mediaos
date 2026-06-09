@@ -486,12 +486,19 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
 
   describe('reauth required for reveal-secret type actions', () => {
     it('reauth1 — reveal-secret with explicit ALLOW but no reauthValidUntil → deny-reauth-required', async () => {
-      repo.setCompanyGrants(U, CO, [
-        rg('reveal-secret', 'platform-account', 'ALLOW', { isSensitive: true }),
-      ]);
+      // F2 (G6-2): reveal-secret needs a per-object ALLOW; with the object grant present but NO reauth
+      // window the denial reason is deny-reauth-required (object-tier reached, reauth missing).
+      repo
+        .setCompanyGrants(U, CO, [
+          rg('reveal-secret', 'platform-account', 'ALLOW', { isSensitive: true }),
+        ])
+        .setObjectGrants(U, CO, 'platform-account', OBJ_A, [
+          og('reveal-secret', 'platform-account', 'ALLOW', true),
+        ]);
       // reauthValidUntil not provided → no reauth
       const d = await can(
         input('reveal-secret', 'platform-account', {
+          resourceId: OBJ_A,
           isSensitive: true,
           requiresReauth: true,
           // reauthValidUntil: omitted
@@ -503,11 +510,17 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
     });
 
     it('reauth2 — reveal-secret with explicit ALLOW + expired reauth → deny-reauth-required', async () => {
-      repo.setCompanyGrants(U, CO, [
-        rg('reveal-secret', 'platform-account', 'ALLOW', { isSensitive: true }),
-      ]);
+      // F2 (G6-2): object grant present + expired reauth → deny-reauth-required.
+      repo
+        .setCompanyGrants(U, CO, [
+          rg('reveal-secret', 'platform-account', 'ALLOW', { isSensitive: true }),
+        ])
+        .setObjectGrants(U, CO, 'platform-account', OBJ_A, [
+          og('reveal-secret', 'platform-account', 'ALLOW', true),
+        ]);
       const d = await can(
         input('reveal-secret', 'platform-account', {
+          resourceId: OBJ_A,
           isSensitive: true,
           requiresReauth: true,
           reauthValidUntil: PAST,
@@ -622,11 +635,17 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
     });
 
     it('allow8 — reveal-secret with explicit ALLOW + valid reauth → allow', async () => {
-      repo.setCompanyGrants(U, CO, [
-        rg('reveal-secret', 'platform-account', 'ALLOW', { isSensitive: true }),
-      ]);
+      // F2 (G6-2): reveal-secret ALLOWs only with a per-object grant; object grant + valid reauth → allow.
+      repo
+        .setCompanyGrants(U, CO, [
+          rg('reveal-secret', 'platform-account', 'ALLOW', { isSensitive: true }),
+        ])
+        .setObjectGrants(U, CO, 'platform-account', OBJ_A, [
+          og('reveal-secret', 'platform-account', 'ALLOW', true),
+        ]);
       const d = await can(
         input('reveal-secret', 'platform-account', {
+          resourceId: OBJ_A,
           isSensitive: true,
           requiresReauth: true,
           reauthValidUntil: FUTURE,

@@ -10,7 +10,8 @@ export type PermissionReason =
   | 'deny-explicit' // explicit DENY in role_permissions or object_permissions
   | 'deny-scope' // action allowed but object is outside user's scope
   | 'deny-sensitive' // sensitive action without explicit non-wildcard ALLOW
-  | 'deny-reauth-required'; // sensitive action requires re-auth, none provided/expired
+  | 'deny-reauth-required' // sensitive action requires re-auth, none provided/expired
+  | 'deny-object-required'; // reveal-secret class: per-object ALLOW mandatory, company-level ALLOW not enough (F2)
 
 export interface PermissionDecision {
   allow: boolean;
@@ -48,6 +49,12 @@ export interface CanInput {
    * Service checks ctx.reauthValidUntil > now() before allowing.
    */
   requiresReauth?: boolean;
+  /**
+   * True when this action requires a per-object (Tier-3) ALLOW — company-level ALLOW is NOT sufficient
+   * (F2 crown-jewel, ADR-0010; reveal-secret). When omitted, the service derives it from
+   * (isSensitive && requiresReauth) — the reveal-secret class (plan §6: only reveal sets requiresReauth).
+   */
+  objectGrantRequired?: boolean;
   ctx?: PermissionContext;
 }
 

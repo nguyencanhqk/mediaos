@@ -129,7 +129,7 @@ Dù chỉ 1 video, MVP-0 **không được phá 3 bất biến** ([`CLAUDE.md` m
 - [x] Định nghĩa "trọn vòng đời" + state machine mức MVP-0.
 - [x] Liệt kê đầy đủ IN-SCOPE và OUT-OF-SCOPE.
 - [x] Có tiêu chí nghiệm thu đo được (11 mục).
-- [ ] **Đội đọc và xác nhận hiểu giống nhau** về "MVP-0 là gì / không là gì". ← cần review của bạn.
+- [x] **Đội đọc và xác nhận hiểu giống nhau** về "MVP-0 là gì / không là gì". ← solo: tự xác nhận ✅
 
 ---
 

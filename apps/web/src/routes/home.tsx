@@ -1,7 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { getHealth } from "@/lib/api";
+import { channelsApi } from "@/lib/channels-api";
+import { useCan } from "@/hooks/use-can";
+import {
+  HEALTH_COLORS,
+  HEALTH_LABELS,
+  PLATFORM_LABELS,
+} from "@/components/channels/constants";
 import { useAuthStore } from "@/stores/auth";
 
 export function HomePage() {
@@ -49,9 +56,60 @@ export function HomePage() {
         )}
       </section>
 
+      <RiskChannelsWidget />
+
       <p className="text-sm text-muted-foreground">
         Walking skeleton G1. Module nghiệp vụ bắt đầu từ G2 (RLS/tenant) → G4 (vòng đời video).
       </p>
     </div>
+  );
+}
+
+/** Widget Dashboard "Kênh rủi ro" (G6-5) — health_status ∈ {risk, declining}. */
+function RiskChannelsWidget() {
+  const canViewChannels = useCan("read", "channel");
+
+  const { data: channels = [], isLoading } = useQuery({
+    queryKey: ["channels", { risk: true }],
+    queryFn: () => channelsApi.listChannels({ risk: true }),
+    enabled: canViewChannels,
+  });
+
+  if (!canViewChannels) return null;
+
+  return (
+    <section className="rounded-xl border border-border p-6">
+      <h2 className="mb-3 text-sm font-medium text-muted-foreground">Kênh rủi ro</h2>
+
+      {isLoading && <p className="text-sm">Đang tải…</p>}
+      {!isLoading && channels.length === 0 && (
+        <p className="text-sm text-muted-foreground">Không có kênh nào cần chú ý.</p>
+      )}
+
+      {channels.length > 0 && (
+        <ul className="divide-y divide-border">
+          {channels.map((c) => (
+            <li key={c.id}>
+              <Link
+                to="/channels/$channelId"
+                params={{ channelId: c.id }}
+                className="flex items-center justify-between py-2.5 text-sm hover:underline"
+              >
+                <span className="font-medium">{c.name}</span>
+                <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>{PLATFORM_LABELS[c.platform]}</span>
+                  {c.healthStatus && (
+                    <span className={HEALTH_COLORS[c.healthStatus]}>
+                      {HEALTH_LABELS[c.healthStatus]}
+                      {c.healthScore != null ? ` · ${c.healthScore}` : ""}
+                    </span>
+                  )}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

@@ -1,4 +1,5 @@
 import { Module, forwardRef } from "@nestjs/common";
+import { CryptoModule } from "../crypto/crypto.module";
 import { DatabaseModule } from "../db/db.module";
 import { PermissionModule } from "../permission/permission.module";
 import { AuthController } from "./auth.controller";
@@ -12,9 +13,9 @@ import { TokenService } from "./token.service";
  * DatabaseModule (withTenant). forwardRef(PermissionModule) vì PermissionModule cần TokenService từ đây.
  */
 @Module({
-  imports: [DatabaseModule, forwardRef(() => PermissionModule)],
+  imports: [DatabaseModule, forwardRef(() => PermissionModule), CryptoModule],
   controllers: [AuthController],
   providers: [AuthService, PasswordService, TokenService, LoginRateLimiter],
-  exports: [AuthService, TokenService],
+  exports: [AuthService, TokenService, PasswordService, LoginRateLimiter],
 })
 export class AuthModule {}

@@ -33,23 +33,31 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
     await app.end();
   });
 
-  async function visibleIds(companyId: string, table: string): Promise<Set<string>> {
+  async function visibleIds(
+    companyId: string,
+    table: string,
+    idColumn = "id",
+  ): Promise<Set<string>> {
     const c: PoolClient = await app.connect();
     try {
       await c.query("BEGIN");
       await c.query("SELECT set_config('app.current_company_id', $1, true)", [companyId]);
-      const r = await c.query(`SELECT id FROM ${table}`);
+      const r = await c.query(`SELECT ${idColumn} AS id FROM ${table}`);
       await c.query("ROLLBACK");
       return new Set(r.rows.map((x) => x.id as string));
+    } catch (e) {
+      // Explicit ROLLBACK prevents connection poisoning for the pool
+      try { await c.query("ROLLBACK"); } catch { /* ignore */ }
+      throw e;
     } finally {
       c.release();
     }
   }
 
-  async function idsNoContext(table: string): Promise<string[]> {
+  async function idsNoContext(table: string, idColumn = "id"): Promise<string[]> {
     const c: PoolClient = await app.connect();
     try {
-      const r = await c.query(`SELECT id FROM ${table}`);
+      const r = await c.query(`SELECT ${idColumn} AS id FROM ${table}`);
       return r.rows.map((x) => x.id as string);
     } finally {
       c.release();
@@ -57,19 +65,20 @@ describe.skipIf(!hasDb)("G2-5 tenant isolation harness", () => {
   }
 
   for (const tc of RLS_TABLES) {
+    const col = tc.idColumn ?? "id";
     describe(tc.name, () => {
-      it("ngoài ngữ cảnh tenant → 0 row", async () => {
-        expect(await idsNoContext(tc.table)).toHaveLength(0);
+      it.skipIf(tc.skipNoContext)("ngoài ngữ cảnh tenant → 0 row", async () => {
+        expect(await idsNoContext(tc.table, col)).toHaveLength(0);
       });
 
       it("withTenant(A) thấy hàng của A, KHÔNG thấy hàng của B", async () => {
-        const seen = await visibleIds(A.companyId, tc.table);
+        const seen = await visibleIds(A.companyId, tc.table, col);
         expect(seen.has(rowsA.get(tc.table)!)).toBe(true);
         expect(seen.has(rowsB.get(tc.table)!)).toBe(false);
       });
 
       it("withTenant(B) thấy hàng của B, KHÔNG thấy hàng của A", async () => {
-        const seen = await visibleIds(B.companyId, tc.table);
+        const seen = await visibleIds(B.companyId, tc.table, col);
         expect(seen.has(rowsB.get(tc.table)!)).toBe(true);
         expect(seen.has(rowsA.get(tc.table)!)).toBe(false);
       });

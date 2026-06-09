@@ -1,4 +1,7 @@
 import "reflect-metadata";
+// PHẢI đứng trước MỌI import kéo theo `db/index.ts` (qua AppModule) — nạp .env vào process.env
+// trước khi pool DB đọc env ở top-level. Xem giải thích chi tiết trong load-env.ts.
+import "./config/load-env";
 import { Logger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { ZodValidationPipe } from "nestjs-zod";

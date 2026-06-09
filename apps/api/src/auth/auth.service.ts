@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Inject, Injectable, UnauthorizedException, forwardRef } from "@nestjs/common";
+import { HttpException, HttpStatus, Inject, Injectable, Logger, UnauthorizedException, forwardRef } from "@nestjs/common";
 import type {
   AuthTokens,
   ForgotPasswordRequest,
@@ -17,6 +17,8 @@ import { PermissionService } from "../permission/permission.service";
 import { LoginRateLimiter } from "./login-rate-limiter";
 import { PasswordService } from "./password.service";
 import { TokenService } from "./token.service";
+import { SecretEncryptionService } from "../crypto/secret-encryption.service";
+import type { EncryptedColumns } from "../crypto/secret-encryption.types";
 
 /** Ngữ cảnh request đưa vào audit (ip/user agent). */
 export interface RequestMeta {
@@ -28,8 +30,63 @@ const uuidSchema = z.string().uuid();
 /** 401 ĐỒNG NHẤT cho mọi lỗi đăng nhập — không lộ user/tenant tồn tại (plan §3b/G2-6). */
 const UNIFORM_LOGIN_ERROR = "Thông tin đăng nhập không hợp lệ.";
 
+/** Hình dạng envelope reset-token lưu trong outbox payload (Buffer → base64 để truyền JSON). */
+const resetEnvelopeSchema = z.object({
+  secretCiphertext: z.string(),
+  encryptedDek: z.string(),
+  dekKeyVersion: z.number().int(),
+  kmsKeyId: z.string(),
+  ivNonce: z.string(),
+  authTag: z.string(),
+  encAlgo: z.string(),
+});
+
+/** EncryptedColumns → shape JSON-safe (base64 cho 4 cột Buffer; scalar giữ nguyên). */
+function serializeResetEnvelope(cols: EncryptedColumns): z.infer<typeof resetEnvelopeSchema> {
+  return {
+    secretCiphertext: cols.secretCiphertext.toString("base64"),
+    encryptedDek: cols.encryptedDek.toString("base64"),
+    dekKeyVersion: cols.dekKeyVersion,
+    kmsKeyId: cols.kmsKeyId,
+    ivNonce: cols.ivNonce.toString("base64"),
+    authTag: cols.authTag.toString("base64"),
+    encAlgo: cols.encAlgo,
+  };
+}
+
+/**
+ * G6-2f M3 — redact email người gọi khỏi chuỗi chẩn đoán TRƯỚC khi log. `err.stack`/`message` là
+ * KHÔNG kiểm soát được (downstream có thể nhúng giá trị email) nên ta giữ stack để quan sát
+ * (silent-failure F3) nhưng loại PII. Scrub cả biến lowercase (downstream có thể hạ chữ thường).
+ * Token KHÔNG nằm trong scope catch của forgotPassword nên không cần scrub ở đây.
+ */
+export function redactEmailFromDetail(detail: string, email?: string): string {
+  if (!email) return detail;
+  let out = detail;
+  for (const variant of new Set([email, email.toLowerCase()])) {
+    out = out.split(variant).join("[redacted-email]");
+  }
+  return out;
+}
+
+/** Payload không tin cậy (từ outbox durable) → EncryptedColumns đã validate; ném khi shape sai. */
+function deserializeResetEnvelope(raw: unknown): EncryptedColumns {
+  const e = resetEnvelopeSchema.parse(raw);
+  return {
+    secretCiphertext: Buffer.from(e.secretCiphertext, "base64"),
+    encryptedDek: Buffer.from(e.encryptedDek, "base64"),
+    dekKeyVersion: e.dekKeyVersion,
+    kmsKeyId: e.kmsKeyId,
+    ivNonce: Buffer.from(e.ivNonce, "base64"),
+    authTag: Buffer.from(e.authTag, "base64"),
+    encAlgo: e.encAlgo,
+  };
+}
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly dbsvc: DatabaseService,
     private readonly password: PasswordService,
@@ -38,6 +95,7 @@ export class AuthService {
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
     @Inject(forwardRef(() => PermissionService)) private readonly permissions: PermissionService,
+    private readonly secrets: SecretEncryptionService,
   ) {}
 
   /** Resolve companySlug → companyId qua hàm SECURITY DEFINER (lỗ RLS có kiểm soát, §3b). */
@@ -195,34 +253,53 @@ export class AuthService {
     const companyId = await this.resolveCompanyId(req.companySlug);
     if (!companyId) return; // im lặng — không lộ tenant
 
-    await this.dbsvc.withTenant(companyId, async (tx) => {
-      const user = await this.findActiveUserByEmail(tx, req.email);
-      if (!user) return; // im lặng — không lộ email
+    try {
+      await this.dbsvc.withTenant(companyId, async (tx) => {
+        const user = await this.findActiveUserByEmail(tx, req.email);
+        if (!user) return; // im lặng — không lộ email
 
-      const plain = this.tokens.generateOpaqueToken();
-      const scoped = this.scopeToken(companyId, plain);
-      const expiresAt = new Date(Date.now() + this.tokens.resetTtlSec * 1000);
-      await tx.insert(passwordResetTokens).values({
-        userId: user.id,
-        tokenHash: this.tokens.hashToken(scoped),
-        expiresAt,
+        const plain = this.tokens.generateOpaqueToken();
+        const scoped = this.scopeToken(companyId, plain);
+        const expiresAt = new Date(Date.now() + this.tokens.resetTtlSec * 1000);
+        await tx.insert(passwordResetTokens).values({
+          userId: user.id,
+          tokenHash: this.tokens.hashToken(scoped),
+          expiresAt,
+        });
+        // G6-2f: reset token được envelope-encrypt (purpose=auth_reset_token) TRƯỚC khi chạm outbox durable.
+        // Payload CHỈ mang envelope (resetTokenEnc) — KHÔNG bao giờ plaintext (BẤT BIẾN #3). recordId=user.id
+        // bind envelope vào user; mail consumer decrypt JIT qua decryptResetToken.
+        const enc = await this.secrets.encryptSecret(scoped, {
+          companyId,
+          recordId: user.id,
+          purpose: "auth_reset_token",
+        });
+        // G6-2f M3: payload KHÔNG mang email plaintext (outbox durable = data-at-rest). Mail consumer
+        // resolve email JIT theo userId qua withTenant(companyId) — mirror pattern JIT-decrypt resetTokenEnc.
+        await this.outbox.enqueue(tx, {
+          eventType: "auth.password_reset_requested",
+          payload: { userId: user.id, resetTokenEnc: serializeResetEnvelope(enc) },
+        });
+        await this.audit.record(tx, {
+          action: "auth.password_reset_requested",
+          objectType: "auth",
+          actorUserId: user.id,
+          objectId: user.id,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        });
       });
-      // ⚠️ HARDEN TRƯỚC PROD (review G2 CRITICAL · BẤT BIẾN #3): resetToken plaintext nằm trong
-      // outbox_events.payload (durable). Đường giao token cho mailer là async (chưa có consumer mail ở
-      // G2). PHẢI envelope-encrypt payload (G6-2) + purge outbox đã xử lý trước khi lên prod. KHÔNG log.
-      await this.outbox.enqueue(tx, {
-        eventType: "auth.password_reset_requested",
-        payload: { userId: user.id, email: user.email, resetToken: scoped },
-      });
-      await this.audit.record(tx, {
-        action: "auth.password_reset_requested",
-        objectType: "auth",
-        actorUserId: user.id,
-        objectId: user.id,
-        ip: meta.ip,
-        userAgent: meta.userAgent,
-      });
-    });
+    } catch (err) {
+      // Uniform-void (không lộ email tồn tại): mọi lỗi xử lý (vd KMS/encrypt down) ⇒ withTenant tx đã rollback
+      // (fail-closed — không plaintext, không partial), log ERROR phía server (KHÔNG token/DEK/email) rồi TRẢ
+      // VOID như nhánh happy. Đóng oracle 500-vs-200 (FULL-gate 2f silent-failure F3). KHÔNG nuốt im: luôn có
+      // ERROR + stack trong log để quan sát. M3: redact email khỏi stack (PII, stack uncontrolled).
+      const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+      this.logger.error(
+        "forgotPassword: xử lý reset thất bại (đã rollback, không phát event)",
+        redactEmailFromDetail(detail, req.email),
+      );
+    }
   }
 
   async resetPassword(req: ResetPasswordRequest): Promise<void> {
@@ -258,6 +335,25 @@ export class AuthService {
     });
 
     if (!ok) throw new UnauthorizedException("Token không hợp lệ hoặc đã hết hạn.");
+  }
+
+  /**
+   * Giải mã envelope reset-token từ outbox payload — bước JIT của mail consumer (G6-2f). `companyId` lấy
+   * từ outbox row, `userId` từ payload; cùng nhau dựng lại AAD (recordId = userId). Trả scoped token; ném
+   * lỗi generic khi tamper/corruption (decryptSecret KHÔNG lộ nội tại crypto). KHÔNG log token.
+   *
+   * @internal CONSUMER-ONLY (G6-2f M2). Method trả plaintext token — chỉ dành cho mail consumer của
+   * `auth.password_reset_requested`. AAD bind companyId‖userId nên KHÔNG phải oracle cross-secret
+   * (platform_account dùng recordId=account.id khác user.id), và token trả ra vẫn single-use+hashed+TTL ở DB.
+   * Khi build mail consumer (deferred — 2f residual), đặt method này SAU boundary của consumer
+   * (worker context), KHÔNG để AuthService phơi capability giải mã rộng cho mọi module inject.
+   */
+  async decryptResetToken(companyId: string, resetTokenEnc: unknown, userId: string): Promise<string> {
+    return this.secrets.decryptSecret(deserializeResetEnvelope(resetTokenEnc), {
+      companyId,
+      recordId: userId,
+      purpose: "auth_reset_token",
+    });
   }
 
   // ── helpers ─────────────────────────────────────────────────────────────────

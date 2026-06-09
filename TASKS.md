@@ -75,13 +75,13 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 | Mã | Giai đoạn | Chế độ chủ đạo | Cỡ | Trạng thái |
 | --- | --- | --- | --- | --- |
-| G0 | Quyết định & Thiết kế | 🧪 (gần xong) | — | 🟡 đang làm |
+| G0 | Quyết định & Thiết kế | 🧪 | — | ✅ đóng |
 | G1 | Bootstrap repo & hạ tầng | 🔧 Setup | L | ✅ đóng (merged master, CI xanh) |
 | G2 | Nền bảo mật & đa-tenant | 🛠️ TDD 🔋 | XL | ✅ đóng (PR #2 merged master — 62 files, 3330 insertions, CI xanh) |
 | G3 | Permission Engine | 🛠️ TDD 🔋 | L | ✅ đóng (merged master — 119 tests, typecheck clean, FULL gate passed) |
 | G4 | 🏁 MVP-0 Walking Skeleton | 🤖+🛠️ hỗn hợp | XL | 🟡 đang làm |
-| G5 | Tổ chức & Nhân sự đầy đủ | 🤖 AI-bulk 🟢 | L | ☐ |
-| G6 | Media (Channel/Project/Content) | 🤖 + 🛠️(G6-2) | L | ☐ |
+| G5 | Tổ chức & Nhân sự đầy đủ | 🤖 AI-bulk 🟢 | L | ✅ |
+| G6 | Media (Channel/Project/Content) | 🤖 + 🛠️(G6-2) | L | 🟡 G6-1/3/4/5 ✅ — chỉ còn **G6-2** (crown-jewel) |
 | G7 | Workflow Builder | 🛠️ TDD 🔋 | XL | ☐ |
 | G8 | Approval · Defect · Eval · KPI | 🛠️+🤖 | L | ☐ |
 | G9 | 🧩 Task Hub hợp nhất | 🛠️+🤖 | L | ☐ |
@@ -96,16 +96,18 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 ---
 
-# G0 — Quyết định & Thiết kế _(gần xong — chỉ chốt nốt)_
+# G0 — Quyết định & Thiết kế ✅ ĐÓNG
 
+> **Trạng thái (2026-06-05):** G0 đóng chính thức. Mọi quyết định bất khả nghịch đã thành ADR; scope MVP-0 rõ; harness Claude Code đã wire 6 hook.
+>
 > Phần thiết kế bất khả nghịch. Solo: **đừng mở code khi G0 chưa khoá** — sửa thiết kế lúc đã có code tốn gấp 10.
 
-- [~] **G0-1** 🧪 (S) Chốt phạm vi **MVP-0** (1 video trọn vòng đời) → [`docs/mvp-0-scope.md`](docs/mvp-0-scope.md). _Solo: tự xác nhận, không cần "đội"._
+- [x] **G0-1** 🧪 (S) Chốt phạm vi **MVP-0** (1 video trọn vòng đời) → [`docs/mvp-0-scope.md`](docs/mvp-0-scope.md). _Solo: tự xác nhận ✅_
 - [x] **G0-2** 🧪 ADR (15 file `docs/adr/`) — đã xong.
 - [x] **G0-3** 🧪 Spike **Workflow State Machine** → [`docs/spikes/workflow-state-machine.md`](docs/spikes/workflow-state-machine.md).
 - [x] **G0-4** 🧪 Spike **Permission Matrix** → [`docs/permission-matrix-spec.md`](docs/permission-matrix-spec.md).
 - [x] **G0-5** 🧪 Hạ tầng $0 → [`docs/infra-zero-cost-plan.md`](docs/infra-zero-cost-plan.md).
-- [~] **G0-6** 🔧 (S) Harness Claude Code: [`CLAUDE.md`](CLAUDE.md) + 3 hook guardrail đã wire. _Hoãn `agent-sort` tới G1._
+- [x] **G0-6** 🔧 (S) Harness Claude Code: [`CLAUDE.md`](CLAUDE.md) + 6 hook guardrail wired (PreToolUse: 4 guard · PostToolUse: 2 check). _`agent-sort` → skip (agents: plan-reviewer, completion-evaluator, rls-tenant-isolation-tester đã tạo thủ công)._
 
 ✅ **Done khi:** scope MVP-0 rõ với chính bạn; mọi quyết định bất khả nghịch đã thành ADR; có bảng transition + ma trận quyền làm nguồn sự thật.
 
@@ -169,14 +171,14 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 > Dùng **1 workflow hard-coded** (chưa cần Builder). Đây là lúc bạn **lần đầu thấy hệ thống sống** — phần thưởng sau thung lũng. Xen kẽ 🤖 (nhẹ) và 🛠️ (nặng) trong phase này.
 
-- [ ] **G4-1** 🤖🟢 (S) Org/Employee tối thiểu (1 công ty, phòng ban, team, gán role).
-- [ ] **G4-2** 🤖🟢 (M) Channel + Project + Content tối thiểu (project ↔ nhiều kênh; tạo 1 video).
-- [ ] **G4-3** 🛠️🔋 (M) **1 workflow cứng**: Script → Edit → QA → Upload; auto-sinh task. _(custom `workflow-state-machine-guide`)_ — _Hard-code nên đơn giản hơn G7, nhưng vẫn TDD._
-- [ ] **G4-4** 🤖🟢 (M) My Tasks + submit work (file/link) + comment. _(`ecc:tdd-workflow`)_
-- [ ] **G4-5** 🛠️🔋 (M) **Approval 1 cấp** + **return revision** (chọn bước lỗi + người chịu trách nhiệm).
-- [ ] **G4-6** 🤖🟢 (M) Notification cơ bản + 1 group chat project (auto-tạo).
-- [ ] **G4-7** 🧪🔋 (M) **E2E**: 1 video đi trọn vòng đời; chạy lại test isolation G2-5. _(`ecc:e2e-runner`)_
-- [ ] **G4-8** 🔧 (S) **Triển khai pilot 1 team thật**; thu feedback. _(deploy + lắng nghe — không code)._
+- [x] **G4-1** 🤖🟢 (S) Org/Employee tối thiểu — org_units + teams + team_members; RLS+FORCE+CHECK; NestJS OrgModule (7 endpoints); Zod contracts; FE /org/departments + /org/teams + /org/employees; LIGHT gate passed; commit aca6233.
+- [x] **G4-2** 🤖🟢 (M) Channel + Project + Content tối thiểu (project ↔ nhiều kênh; tạo 1 video). BE 9 endpoints + FE 3 trang + sidebar nav; commit 0467216.
+- [x] **G4-3** 🛠️🔋 (M) **1 workflow cứng**: Script → Edit → QA → Upload; auto-sinh task. _(custom `workflow-state-machine-guide`)_ — _Hard-code nên đơn giản hơn G7, nhưng vẫn TDD._ FULL gate passed; deny-path RED→GREEN (23 tests); workflow FSM + 4-step + auto-task + submit; global JWT+Company guards wired; 125 tests green.
+- [x] **G4-4** 🤖🟢 (M) My Tasks + submit work (file/link) + comment. _(`ecc:tdd-workflow`)_ — GET /tasks (tasks table, joined step+content), POST /tasks/:id/comments + GET comments; FE /tasks page (2-panel: list + detail), SubmitWorkForm (link+note→submitStep), CommentThread; submission_url/note on workflow_steps; migration 0009; typecheck+125 tests green.
+- [x] **G4-5** 🛠️🔋 (M) **Approval 1 cấp** + **return revision**. TDD: 12 deny+happy tests RED→GREEN; validateConsumerTransition added to FSM; ApprovalService (approve T3, requestRevision T4 + defect + revision task); repository: approvalSteps, closeApprovalRequest, advanceInstanceStepOrder, completeWorkflowInstance, createDefect, findMaxStepOrder; 3 endpoints (GET/POST approval-requests); FE: "Chờ duyệt" tab with ApprovalCard (approve / trả về form); 137 API + 17 web tests green, typecheck clean.
+- [x] **G4-6** 🤖🟢 (M) Notification cơ bản + 1 group chat project (auto-tạo). _(migration 0010: 4 bảng RLS; BE NotificationsModule + ChatModule; auto-create project chat room khi tạo project; FE NotificationBell (poll 30s) + /chat/projects/:id; LIGHT gate passed, 3 HIGH fixes applied; typecheck + 154 tests xanh)_
+- [x] **G4-7** 🧪🟢 (M) **E2E**: 1 video đi trọn vòng đời; chạy lại test isolation G2-5. _(17-test E2E spec: Script→Edit→QA→Upload lifecycle + revision flow + tenant isolation cross-check; G2-5 harness mở rộng thêm 22 bảng G4 với idColumn/skipNoContext; fix 3 production bugs: auth.controller.ts thiếu @Public(), audit_logs CHECK constraint, route ordering approval-requests vs :instanceId; fix 2 migration bugs: task_comments thiếu GRANT + policy thiếu NULLIF; 282 tests xanh, LIGHT gate passed)_
+- [x] **G4-8** 🔧 (S) **Triển khai pilot 1 team thật**; thu feedback. _(deploy checklist → [`docs/pilot/deploy-checklist.md`](docs/pilot/deploy-checklist.md); feedback form → [`docs/pilot/feedback-template.md`](docs/pilot/feedback-template.md))._
 
 ✅ **Done khi:** một video thật đi tạo → task → nộp → duyệt → trả sửa → upload; **pilot team dùng được**. 🎉 _Ăn mừng — bạn vừa qua phần khó nhất về mặt tâm lý._
 
@@ -192,11 +194,11 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 > Gần như **toàn bộ sinh từ ERD**. Solo: đây là chỗ AI cày, bạn duyệt. Tận hưởng cụm nhẹ.
 
-- [ ] **G5-1** 🤖🟢 (S) Company Settings: logo, múi giờ, tiền tệ, ngôn ngữ, ngày làm việc, cấu hình kỳ lương.
-- [ ] **G5-2** 🤖🟢 (M) Org tree phòng ban/khối cha–con + **Sơ đồ tổ chức** (cây). _(PRD ORG-002)_
-- [ ] **G5-3** 🤖🟢 (M) Team/Ekip + `team_members` — **1 nhân sự nhiều team** (ORG-003, EMP-002).
-- [ ] **G5-4** 🤖🟢 (S) Chức vụ (Position) + gán role mặc định theo chức vụ.
-- [ ] **G5-5** 🤖🟢 (M) Employee profile đầy đủ (tabs) + **import nhân sự**; lương **mask theo quyền** (server mask, không phải client).
+- [x] **G5-1** 🤖🟢 (S) Company Settings: logo, múi giờ, tiền tệ, ngôn ngữ, ngày làm việc, cấu hình kỳ lương.
+- [x] **G5-2** 🤖🟢 (M) Org tree phòng ban/khối cha–con + **Sơ đồ tổ chức** (cây). _(PRD ORG-002)_
+- [x] **G5-3** 🤖🟢 (M) Team/Ekip + `team_members` — **1 nhân sự nhiều team** (ORG-003, EMP-002).
+- [x] **G5-4** 🤖🟢 (S) Chức vụ (Position) + gán role mặc định theo chức vụ.
+- [x] **G5-5** 🤖🟢 (M) Employee profile đầy đủ (tabs) + **import nhân sự**; lương **mask theo quyền** (server mask, không phải client).
 
 **DB:** `companies` `org_units` `teams` `team_members` `positions` `employee_profiles`
 **Màn:** Company Settings · Org Chart · Department/Team/Position List · Employee List/Detail
@@ -207,12 +209,26 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 ## G6 — Media: Channel · Account · Project · Content _(🤖 + 🛠️ G6-2 · ~10–14 ngày)_
 
 > Phần lớn 🤖, **trừ G6-2** là crown-jewel 🔋 (mã hoá tài khoản kênh). Đừng để AI tự do ở G6-2.
+>
+> **Trạng thái (2026-06-06):** Plan chi tiết xong + `plan-reviewer` **PASS** (không còn BLOCKING) → [`docs/plans/G6-media-full.md`](docs/plans/G6-media-full.md). Migration **0020–0028** (latest hiện tại 0019). Micro-step + đặc tả G6-2 envelope encryption nằm trong plan; theo plan, KHÔNG theo dòng tóm tắt dưới đây.
+> ⚠️ **2 bước bắt buộc plan-reviewer chèn thêm:** (1) **`2e0`** vá `PermissionGuard` forward `resourceId`+`ctx` + **fail-closed 403** khi action sensitive thiếu resourceId — TRƯỚC khi mở reveal-secret (nếu không → bypass Tầng-3 object_permissions). (2) **`1a-bis`** mở rộng `test/integration/rls-registry.ts` thêm ~10 bảng G6 vào harness 2-tenant TRƯỚC khi tuyên bố G2-5 xanh (tránh xanh-giả).
+> **Thứ tự bắt đầu:** `0a` (migration 0020 audit object_types) → `1a-bis` (mở rộng RLS harness) → G6-1 → … → `2e0` (vá guard) → G6-2.
 
-- [ ] **G6-1** 🤖🟢 (M) Platform + Channel + `channel_members` + gán Manager/team; lọc theo nền tảng/trạng thái.
-- [ ] **G6-2** 🛠️🔋 (L) 🔒 **Platform Account Encryption** (envelope + KMS/Vault, mã hoá app-side; `reveal-secret` + re-auth + **audit mỗi lần xem/sửa**). **FULL gate.** _(custom `secret-encryption-reviewer`; `ecc:security-reviewer` + `ecc:database-reviewer`)._
-- [ ] **G6-3** 🤖🟢 (S) Project: gắn **nhiều kênh · nhiều team · nhiều thành viên** (PRJ-002/003/004, BR-003).
-- [ ] **G6-4** 🤖🟢 (M) Content/Video: đăng **đa kênh**, content type, asset + version, gợi ý workflow theo content type.
-- [ ] **G6-5** 🤖🟢 (S) Channel Health (score/status, risk note) → feed Dashboard.
+- [x] **G6-1** 🤖🟢 (M) Platform + Channel + `channel_members` + gán Manager/team; lọc theo nền tảng/trạng thái. _(BE 1a–1d `8a9fbe3`/`c5060aa`; FE 1e `f4a07d2`: list+filter+TanStack Table, detail tabs Overview/Members, members CRUD)._
+- [x] **G6-2** 🛠️🔋 (L) 🔒 **Platform Account Encryption** (envelope + KMS/Vault, mã hoá app-side; `reveal-secret` + re-auth + **audit mỗi lần xem/sửa**). **FULL gate.** _(custom `secret-encryption-reviewer`; `ecc:security-reviewer` + `ecc:database-reviewer`)._ **✅ gates pre-merge XONG + e2e G4-7 xanh (`259586c`) → merge `--no-ff` local 2026-06-09 (chưa push).**
+  - ✅ **Build 2a–2h XONG** (chi tiết + carry-forward → handoff §4.5; per-step FULL gate đều 0 CRIT):
+    - **2a** `17f9722` migration 0022 (`platform_accounts` 8-cột envelope + worker policy + column-grant · `encryption_keys` global · `channel_accounts`; journal idx27/when30000; +hardening octet_length IV/tag).
+    - **2b+2c** `831b986`/`86c074a` 39 RED deny-path + NodeEnvelopeCipher (AES-256-GCM) + SecretEncryptionService (AAD pinned `companyId‖recordId‖encAlgo‖dekKeyVersion`, app-gen uuid, dek zeroize) + Local/VaultKekProvider + CryptoModule (ngoài app.module).
+    - **2e0** `61b9197` PermissionGuard forward resourceId+ctx + F2 object-grant fail-closed (deny-object-required; 80/80 permission).
+    - **2e** `448b252`/`95a6130` service (reauth/reveal/list/masked + audit-in-tx **kể cả deny** + `secret_reveal_failed`) + HTTP (Controller + ReauthGuard per-(userId,accountId)) · FULL gate `36fbbd9` (security+database+silent-failure + santa) 0 CRIT.
+    - **2d** `13321a6` migration 0027 (`edit-platform-account` sensitive + channel-manager metadata grant; sensitive KHÔNG vào role hệ thống).
+    - **2f** `652c91b`/`cb92ae8` migration 0028/0029 reset-token envelope + scrub outbox + trigger; FULL gate (silent-failure+security) 0 blocker. Residual M1 (bỏ email khỏi outbox payload)/M3 (scrub email khỏi log) FIX + M2 (decryptResetToken `@internal`) `d556ce7`.
+    - **2g** `d8ef592`/`617d985` rotation worker (DECISION A: `dek_key_version` = seal version **bất biến**; rotation chỉ đổi `kms_key_id`/`encrypted_dek`/`last_rotated_at`) + hardening 5 finding; RED 13 7/7. Doc plan §6d đính chính `851e495`.
+    - **2h** `eaf99bf` FE company-wide `/settings/platform-accounts` (reveal+reauth; plaintext CHỈ state local, clear khi ẩn/blur/auto-hide60s/unmount; LIGHT gate 0 CRIT). ⚠️ e2e DEFER→G2-6 (FE chưa auth thật).
+  - ⏳ **Trước merge (nợ):** `ecc:harness-audit` + `ecc:security-scan` (**CHƯA chạy** — kiểm soát cost, HỎI user) · M2 guard runtime cứng deferred → đi cùng mail-consumer · `ecc:santa-method` **BỎ** (2 reviewer đã hội tụ).
+- [x] **G6-3** 🤖🟢 (S) Project ERD-full: gắn **nhiều kênh · nhiều team · nhiều thành viên** (PRJ-002/003/004, BR-003). _(3a migration 0023 `6a380a1`; 3bc contracts+BE `e335795`; 3d FE `c41039c`; FULL-gate fix `9e583dc`. Migrate→tenant-isolation 118 pass+rls-guards→typecheck/lint/build xanh; app boot routes /projects* OK. ⚠️ chưa render live (auth header chưa wa FE-wide — pre-existing). Bonus: vá lỗ rls-registry G5 `d5021ba`.)_
+- [x] **G6-4** 🤖🟢 (M) Content/Video: đăng **đa kênh**, content type, asset + version, gợi ý workflow theo content type. _(Migration 0024 content_types + 0025 content_items ERD-full (breaking content_type text→content_type_id FK; data-migration NOT EXISTS seed + backfill + GUARD NULL) + 0026 content_channels/content_assets (version chain one-current uq). BE: ContentController/Service/Repository tách (CRUD + đa kênh publish snapshot platform_id + asset version chain demote→insert→supersede 1-tx + soft-delete current flip + suggest-workflow + audit + cross-tenant guard in-tx); gỡ content khỏi Media\*. FE: /content list + /content/$id tabs (Tổng quan/Kênh đăng/Asset version) + content-api + CreateContentDialog. FULL gate (database+security+silent-failure) → fix query validation/version-chain guards/owner chéo tenant `7c008ce`. typecheck 4 + content.int 10 + rls-guards 3 + tenant-isolation 126 + web lint/build xanh. ⚠️ chưa render live.)_
+- [x] **G6-5** 🤖🟢 (S) Channel Health (score/status, risk note) → feed Dashboard. _(KHÔNG migration — cột health_* có sẵn ở 0021. 5a BE: `PATCH /channels/:id/health` + audit `ChannelHealthUpdated` + filter risk (health_status ∈ risk/declining); 5b FE: tab "Sức khỏe" (form gated update:channel) + filter "Chỉ kênh rủi ro" + widget Dashboard "Kênh rủi ro". LIGHT gate: typecheck 3 pkg + lint 0 error + 17 web test + vite build xanh. ⚠️ chưa render live.)_
 
 **DB:** `platforms` `channels` `platform_accounts` `channel_accounts` `channel_members` `projects` `project_channels` `project_teams` `project_members` `content_types` `content_items` `content_channels` `content_assets`
 **Màn:** Channel List/Detail · Channel Account Tab · Project List/Detail · Content List/Detail · Asset Manager

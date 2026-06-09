@@ -31,6 +31,33 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003). Mở rộng = thêm ở cả hai nơi. */
-export const AUDIT_OBJECT_TYPES = ["company", "user", "auth", "outbox_event"] as const;
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020). Mở rộng = thêm ở cả hai nơi. */
+export const AUDIT_OBJECT_TYPES = [
+  "company",
+  "user",
+  "auth",
+  "outbox_event",
+  "workflow_instance",
+  "workflow_step",
+  "task",
+  "approval_request",
+  "employee",
+  "position",
+  "org_unit",
+  "team",
+  // G6 media
+  "channel",
+  "platform_account",
+  "channel_account",
+  "channel_member",
+  // G6 project
+  "project",
+  "project_team",
+  "project_member",
+  // G6 content
+  "content",
+  "content_channel",
+  "content_asset",
+  "content_type",
+] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
