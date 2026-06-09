@@ -16,6 +16,17 @@ const CACHED_REPO = 'CACHED_PERMISSION_REPO';
 /**
  * Subscribes to permission.changed events and invalidates Valkey cache for the affected user.
  * Idempotent: DEL is safe to call multiple times.
+ *
+ * ⚠️ CONTRACT (G3-4 DoD — re-review 2026-06-09, docs/reviews/g3-gates.md §4.1):
+ * This invalidator only CONSUMES `permission.changed`. As of MVP-0 NOTHING emits it — there is no
+ * role grant/revoke nor `PATCH /permissions/object` endpoint yet, so the cache relies solely on the
+ * 300s TTL. ANY future code that mutates `user_roles` / `role_permissions` / `object_permissions`
+ * (G5 personnel role assignment, G7 object-permission UI) MUST, in the same transaction/outbox:
+ *   1. write an audit_logs row (CLAUDE.md §8 — "audit log nếu hành động quan trọng"), and
+ *   2. emit a `permission.changed` event with payload `{ userId, companyId }`,
+ * otherwise capabilities stay stale for up to 300s and the privilege change is unaudited.
+ * The `grant-object-permission:permission` guard permission is pre-seeded (migration 0031) so that
+ * endpoint, when added, will not deny company-admin by default (avoids the F2/G4 catalog trap).
  */
 @Injectable()
 class PermissionCacheInvalidator implements OnModuleInit {

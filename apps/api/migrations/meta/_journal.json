@@ -218,6 +218,13 @@
       "when": 1717500034000,
       "tag": "0030_g5fix_org_team_permissions_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1717500035000,
+      "tag": "0031_g3fix_grant_object_permission_seed",
+      "breakpoints": true
     }
   ]
 }
