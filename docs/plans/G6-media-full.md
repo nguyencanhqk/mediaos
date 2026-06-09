@@ -1292,3 +1292,15 @@ Chất lượng crown-jewel cao — nhưng quy tắc BLOCK cứng *"vùng đỏ 
 - ADR-0004 sửa khớp thực tế (3 tool ảo) · FE reveal/reauth e2e thật (→ G2-6) · tách success-audit khỏi `try` decrypt · zeroize intermediate DEK · 2g residual (worker policy SELECT/UPDATE tách, `encryption_keys.revoked_at`, VaultKekProvider prod boot-guard) · đính chính §6d · coverage report ≥80% module nhạy cảm · 6 ticket non-blocking (`SECURITY.md`, PR template, Stop hook…).
 
 **Đề xuất đóng phase:** BLOCK. Hành động tối thiểu mở khoá: chạy FULL gate 2g (0 CRITICAL) → ghi kết quả → chấm lại; nếu không phát sinh CRITICAL, phase PASS (~86–90). **KHÔNG push `master` trước khi đóng FULL gate 2g** (merge local nên còn cửa sổ sạch). Không phát hiện vi phạm 3 bất biến / vá triệu chứng / task-hub riêng.
+
+### 🔁 FULL gate 2g đã CHẠY (2026-06-09) — KHÔNG SẠCH, BLOCK vẫn đứng
+
+Diff review: `git diff d8ef592~1 617d985 -- apps/api/src/crypto …`. 3 reviewer: **security = PASS (0 CRIT, 2 HIGH)** · **silent-failure = BLOCK (1 CRITICAL, 3 HIGH)** · **database = CHƯA XONG** (dừng do cost — cần chạy lại ở phiên mới). Gate KHÔNG đạt 0-CRITICAL → phải FIX code rồi re-gate.
+
+**Phải fix (≥2 reviewer hội tụ = chắc chắn thật):**
+1. 🔴 **CRITICAL — `reWrapAll` xử lý lỗi mờ** (`secret-rotation.service.ts:54-73`): row tamper/corrupt DEK rơi `failed[]`, có log/row nhưng **không alert tổng, không ép caller xử lý `failed`, KHÔNG có test path tamper** → catch dark code trong vùng crypto. Fix: log error tổng khi `failed.length>0` (+/− throw theo ngưỡng) + caller bắt buộc check + **RED 13h** seed tamper → assert `failed[]` non-empty & `rotated` không gồm row đó.
+2. 🟠 **HIGH (security+silent-failure hội tụ) — `assertWorkerRoleSafe` warn-only khi `NODE_ENV=test`** (`:154-156`): staging/CI mirror prod + superuser → bypass column-grant chỉ 1 warn. Fix: env-flag tường minh `ALLOW_SUPERUSER_ROTATION` thay `NODE_ENV`.
+3. 🟠 **HIGH — `reWrapAccount` nuốt bool `false`** từ `rewrapRow` (`:35`): account xoá/0-row → caller tưởng đã rotate. Fix: log/throw not-found.
+4. 🟠 **HIGH — DEK intermediate buffer chưa zeroize** (`local-kek.provider.ts:59`, giới hạn Node crypto): prod dùng Vault `transit/rewrap` (DEK không rời HSM). Chấp nhận-kèm-ticket cho dev.
+
+**MED (nên fix):** SELECT/UPDATE non-atomic thiếu `FOR UPDATE SKIP LOCKED` (race double-unwrap) · `err.message` leak chi tiết KMS vào log (sanitize) · reWrapAll nạp toàn bộ id vào RAM (cursor/batch). **LOW:** thiếu deny-path test column-grant chặn ghi `secret_ciphertext` · TOCTOU `currentKey`.
