@@ -32,6 +32,19 @@ export default defineConfig({
       KMS_PROVIDER: "local",
       KMS_LOCAL_KEK_PATH: fileURLToPath(new URL("../../.secrets/local-kek.bin", import.meta.url)),
     },
+    coverage: {
+      provider: "v8",
+      // Scoped thresholds (CLAUDE.md §6 / plan G4 §8: "coverage ≥80% — ngưỡng riêng cho module nhạy cảm").
+      // Gated ONLY for the two unit-tested crown-jewel files (G4-3 FSM + G4-5 approval). We deliberately do
+      // NOT gate the whole src/workflow/** glob: controller/module/dto + workflow.service + workflow.repository
+      // are exercised by *.int-spec / *.e2e-spec which skipIf(!DATABASE_URL) — under the no-DB unit run they
+      // read as 0–25% and would fail a blanket threshold (false red). Keys are exact paths so per-file vs
+      // aggregate semantics are identical. Only active when --coverage is passed (e.g. `pnpm test:cov`).
+      thresholds: {
+        "src/workflow/workflow-fsm.service.ts": { lines: 80, functions: 80, branches: 80, statements: 80 },
+        "src/workflow/approval.service.ts": { lines: 80, functions: 80, branches: 80, statements: 80 },
+      },
+    },
   },
   plugins: [swc.vite()],
 });

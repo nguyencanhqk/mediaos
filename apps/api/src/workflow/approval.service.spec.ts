@@ -16,7 +16,12 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import { ApprovalService } from "./approval.service";
 import { WorkflowFsmService } from "./workflow-fsm.service";
 import {
@@ -302,6 +307,86 @@ describe("ApprovalService", () => {
       expect(result).toBeDefined();
       expect(repo.setStepToRevision).toHaveBeenCalled();
       expect(repo.createDefect).toHaveBeenCalled();
+    });
+  });
+
+  // ─── Branch coverage: side-effect & error paths ───────────────────────────
+  // The deny/happy suites above always run with findTaskByStepId → [null], no
+  // comment, and never exercise the InternalServerError guards or the unexpected-
+  // error rethrow in withTenant().catch. These cover those remaining branches so
+  // the sensitive-module threshold (≥80% branch) holds on real behaviour.
+  describe("branch coverage — task-linked + comment + failure paths", () => {
+    // Silence the intentional logger.error on the unexpected-error path.
+    beforeEach(() => {
+      vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    });
+
+    it("approve: when a task is linked + comment given → updates task status to approved", async () => {
+      const repo = makeRepo();
+      repo.findTaskByStepId = vi.fn().mockResolvedValue([{ id: "task-1", revisionRound: 0 }]);
+      const db = makeDb(repo);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+
+      const result = await service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID, "LGTM");
+      expect(result).toBeDefined();
+      expect(repo.updateTaskStatus).toHaveBeenCalledWith(COMPANY_ID, "task-1", "approved", expect.anything());
+    });
+
+    it("approve: throws InternalServerError when approveStep returns no row", async () => {
+      const repo = makeRepo();
+      repo.approveStep = vi.fn().mockResolvedValue([undefined]);
+      const db = makeDb(repo);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+
+      await expect(service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID)).rejects.toThrow(InternalServerErrorException);
+    });
+
+    it("approve: rethrows an unexpected (non-HTTP) repo error via withTenant.catch", async () => {
+      const repo = makeRepo();
+      repo.approveStep = vi.fn().mockRejectedValue(new Error("db connection lost"));
+      const db = makeDb(repo);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+
+      await expect(service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID)).rejects.toThrow("db connection lost");
+    });
+
+    it("requestRevision: when a task is linked + comment given → increments revision round and updates task", async () => {
+      const repo = makeRepo();
+      repo.findTaskByStepId = vi.fn().mockResolvedValue([{ id: "task-9", revisionRound: 2 }]);
+      const db = makeDb(repo);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+
+      const result = await service.requestRevision(COMPANY_ID, REQUEST_ID, REVIEWER_ID, "Lỗi nội dung", "xem lại đoạn 2");
+      expect(result).toBeDefined();
+      expect(repo.updateTaskStatus).toHaveBeenCalledWith(COMPANY_ID, "task-9", "revision", expect.anything());
+      // nextRevisionRound = existing(2) + 1 = 3
+      expect(repo.createTask).toHaveBeenCalledWith(
+        COMPANY_ID,
+        expect.objectContaining({ revisionRound: 3, origin: "revision" }),
+        expect.anything(),
+      );
+    });
+
+    it("requestRevision: throws InternalServerError when setStepToRevision returns no row", async () => {
+      const repo = makeRepo();
+      repo.setStepToRevision = vi.fn().mockResolvedValue([undefined]);
+      const db = makeDb(repo);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+
+      await expect(
+        service.requestRevision(COMPANY_ID, REQUEST_ID, REVIEWER_ID, "Lỗi"),
+      ).rejects.toThrow(InternalServerErrorException);
+    });
+
+    it("requestRevision: rethrows an unexpected (non-HTTP) repo error via withTenant.catch", async () => {
+      const repo = makeRepo();
+      repo.createDefect = vi.fn().mockRejectedValue(new Error("outbox down"));
+      const db = makeDb(repo);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+
+      await expect(
+        service.requestRevision(COMPANY_ID, REQUEST_ID, REVIEWER_ID, "Lỗi"),
+      ).rejects.toThrow("outbox down");
     });
   });
 });

@@ -12,7 +12,7 @@
 > TASKS.md đã tick `[x]` G5-1→G5-5, nhưng đối chiếu code thực tế (BE/FE/test) cho thấy **còn nợ nhiều**:
 > - ✅ **DB/Migration (0014–0019):** ĐỦ — schema, RLS+FORCE, GRANT, seed `view-salary`+`update-salary`, regression 2-tenant đều khớp spec.
 > - 🔴 **Audit lương (crown-jewel):** mask đúng nhưng `AuditService` **không bao giờ được gọi** → không có audit `view-salary`/`update-salary`. Vi phạm Bất biến #3.
-> - 🔴 **Org/Team không có permission guard** → mọi user đăng nhập sửa được phòng ban/team. Vi phạm ORG-002/003.
+> - 🟡 **Org/Team permission guard — ĐÃ VÁ** (re-review 2026-06-09, commit `4b23ccd`): mọi mutation org_unit + team gắn `@RequirePermission('manage', <resource>)`; seed+grant ở migration 0030; deny suite `org.permission.spec.ts` 40/40 xanh. **FULL gate F2 còn chờ.** _(trước: thiếu guard → mọi user sửa được phòng ban/team, vi phạm ORG-002/003)_
 > - 🔴 **0 test cho toàn bộ G5** (deny-path RED salary, import, CRUD đều thiếu). Vi phạm GX-2 / plan §9.
 > - ⚠️ **FE mới là list MVP inline:** thiếu hẳn **EmployeeDetailPage + tabs** (EMP-003) và **OrgChart** (ORG-002); nhiều control (toggle status, assign head/leader, role dropdown, filter, drawer, RHF+Zod) chưa làm; salary mask sai chữ.
 > - ⚠️ **BE còn nợ:** position audit/guard-create, EMR sync, import→Valkey, tạo login account, filter `search`.
@@ -640,8 +640,8 @@ POST   /api/v1/employees/import/confirm { sessionId }  (Phase 2: bulk insert)
 |----------|----------|-----------|------------------|-----|
 | Migration 0014–0019 (schema, RLS+FORCE, GRANT, seed perms) | §4 | ✅ ĐỦ | `view-salary`+`update-salary` seed `is_sensitive=true` (0019:24-25,80-86); regression 2-tenant wired (rls-registry.ts:316-354) | — |
 | Company Settings BE (GET/PATCH + guard) | ORG-001 | ✅ ĐỦ | guard `configure-company` (settings.controller.ts:14-26) | — |
-| Org units BE (tree/CRUD/soft-delete) | ORG-002 | 🟡 GUARD XONG (FULL gate chờ) | 4 route org_unit (`POST/PATCH/DELETE units`, `POST departments`) gắn `@UseGuards(PermissionGuard)+@RequirePermission('manage','org_unit')` | **F2** |
-| Teams BE (CRUD/leader/members) | ORG-003 | 🟡 GUARD XONG (FULL gate chờ) | 6 route team (create/update/leader/delete/members±) gắn `('manage','team')`; lỗ hổng "thiếu guard 6 route team" phát hiện re-review 2026-06-09 — đã vá | **F2** |
+| Org units BE (tree/CRUD/soft-delete) | ORG-002 | 🟡 GUARD XONG (commit 4b23ccd; FULL gate chờ) | 4 route org_unit (`POST/PATCH/DELETE units`, `POST departments`) gắn `@UseGuards(PermissionGuard)+@RequirePermission('manage','org_unit')` | **F2** |
+| Teams BE (CRUD/leader/members) | ORG-003 | 🟡 GUARD XONG (commit 4b23ccd; FULL gate chờ) | 6 route team (create/update/leader/delete/members±) gắn `('manage','team')`; lỗ hổng "thiếu guard 6 route team" phát hiện re-review 2026-06-09 — đã vá | **F2** |
 | Positions BE (CRUD + default_role_id) | ORG-004 | 🟠 THIẾU AUDIT + BYPASS | `assign-default-role` còn TODO (positions.service.ts:81); `createPosition` set `defaultRoleId` không guard | **F4** |
 | Employee BE CRUD + filter | EMP-001 | 🟠 PARTIAL | không tạo login account (đòi `userId` có sẵn); thiếu filter `search` | F7, F8 |
 | **Salary mask + AUDIT** | §6, BB#3 | 🔴 **THIẾU AUDIT** | mask logic đúng; `AuditService` inject nhưng **không bao giờ gọi** (employees.service.ts:39-55,70). Cần bọc `withTenant` để `record(tx)` commit nguyên tử | **F1** |
@@ -660,7 +660,7 @@ POST   /api/v1/employees/import/confirm { sessionId }  (Phase 2: bulk insert)
 | # | Bước nhỏ | Vùng | Model | Gate / Agent | Test RED TRƯỚC | DoD |
 |---|----------|------|-------|--------------|----------------|-----|
 | **F1** | **Salary audit** — bọc `applySalaryMask` + `updateEmployee` vào `withTenant`; gọi `auditService.record(tx)` khi `decision.auditRequired` (`view-salary`) và khi PATCH `base_salary` (`update-salary`, before/after) | 🔴 | **Opus** | **FULL** + `ecc:santa-method` | 5 ca §9: employee→null, team_leader→null, HR→số, list per-item, AUDIT 1 row/view; PATCH không quyền→403 | RED→GREEN; audit_logs đúng object_type='employee'; FULL gate PASS |
-| **F2** | **Permission guard Org + Team** — `@UseGuards(PermissionGuard)` + `@RequirePermission` cho mọi mutation. **ĐÃ LÀM (re-review 2026-06-09):** convention **bare-verb** `('manage','org_unit')` / `('manage','team')` (KHÔNG dùng action ghép `manage-org-unit` — lệch catalog); seed + grant company-admin/hr-manager ở **migration 0030**; spec `org.permission.spec.ts` 40/40 xanh. ⚠️ Trước đó fix bị bỏ dở (4 route org_unit có guard, 6 route team thiếu → 24 test ĐỎ) — đã hoàn tất. | 🟡 code xong, **FULL gate chờ** | Sonnet | **FULL** + `ecc:security-reviewer` | user thường → 403 cho create/update/delete department + team + đổi leader | deny tests xanh ✅; **FULL gate PASS chưa chạy** |
+| **F2** | **Permission guard Org + Team** — `@UseGuards(PermissionGuard)` + `@RequirePermission` cho mọi mutation. **ĐÃ LÀM (re-review 2026-06-09):** convention **bare-verb** `('manage','org_unit')` / `('manage','team')` (KHÔNG dùng action ghép `manage-org-unit` — lệch catalog); seed + grant company-admin/hr-manager ở **migration 0030**; spec `org.permission.spec.ts` 40/40 xanh. ⚠️ Trước đó fix bị bỏ dở (4 route org_unit có guard, 6 route team thiếu → 24 test ĐỎ) — đã hoàn tất. | 🟡 code xong (commit 4b23ccd), **FULL gate chờ** | Sonnet | **FULL** + `ecc:security-reviewer` | user thường → 403 cho create/update/delete department + team + đổi leader | deny tests xanh ✅; **FULL gate PASS chưa chạy** |
 | **F3** | **Test suite G5** — import (10 OK / row-3 invalid / double-submit→409 / stale lookup); happy-path settings/org/team/position/employee; coverage ≥80% (salary 100%) | 🟢 | Sonnet | LIGHT + `ecc:tdd-workflow` + `ecc:test-coverage` | (chính nó là test) | coverage đạt ngưỡng |
 | F4 | **Position audit + guard create** — ghi audit `assign-default-role`; guard `manage.position` cả `createPosition` lẫn PATCH khi set `default_role_id` | 🔴 | Sonnet | **FULL** + `ecc:security-reviewer` | create với `defaultRoleId` không quyền → 403; audit khi gán role | deny test + audit test xanh |
 | F5 | **EMR sync** — set/clear `direct_manager_id` → upsert/soft-delete EMR `relation_type='direct_manager'`; giữ nhất quán 2 nguồn | 🟢 | Sonnet | LIGHT + `ecc:database-reviewer` | set manager → EMR có row; clear → EMR soft-deleted; test nhất quán | 2 nguồn đồng bộ, test xanh |
@@ -689,7 +689,7 @@ F13 (FE polish)               ── cuối
 
 ### 14.4 Điều kiện đóng phase (cập nhật — thay §12)
 
-- [ ] F1 + F2 + F4: FULL gate PASS (`security-reviewer` + `database-reviewer` + `silent-failure-hunter`; `santa-method` cho F1)
+- [ ] F1 + F2 + F4: FULL gate PASS (`security-reviewer` + `database-reviewer` + `silent-failure-hunter`; `santa-method` cho F1) — _F2 code + deny-tests XONG (commit `4b23ccd`); FULL gate F1/F2/F4 chưa chạy._
 - [ ] Salary mask: coverage 100% (mọi ca deny/allow/audit + PATCH→403)
 - [ ] F3: coverage ≥80% cho EmployeeModule/PositionModule/OrgModule/CompanySettingsModule
 - [ ] G2-5 2-tenant regression xanh sau toàn bộ fix

@@ -5,6 +5,20 @@
 
 ---
 
+## ⚠️ Close-out review (2026-06-09)
+
+Rà soát toàn bộ G4 trước khi đóng phát hiện 3 lỗ hổng vs plan/CLAUDE.md — **đã sửa**:
+
+1. **FE không khởi tạo / điều khiển được workflow** (chặn tiêu chí "pilot dùng được"). Lifecycle E2E xanh chỉ vì test gọi thẳng API + set `assignee_user_id` bằng SQL. **Sửa:** thêm tab **"Sản xuất"** ở `content-detail` (nút *Bắt đầu sản xuất* → `POST /workflow/start`, board 4 bước, gán việc) — đây là màn G4-3 §5 (gộp vào content-detail thay vì route riêng `/…/workflow`).
+2. **Không có endpoint gán assignee/reviewer** (comment code ghi "set later by PM" nhưng chưa từng build). **Sửa:** `POST /workflow/steps/:id/assign` (FULL: `@RequirePermission update content`, audit `StepAssigned`, đồng bộ assignee sang `tasks`). + lookup `GET /workflow/by-content/:contentItemId`.
+3. **`task_attachments` (§3 G4-4) chưa từng tạo** — MVP chỉ nộp bằng **link** (`workflow_steps.submission_url`). **Quyết định:** descope chính thức — bỏ khỏi phạm vi G4; upload file đính kèm để lại cho phase sau (Task Hub G9 / Media assets).
+
+Phụ (đã sửa luôn): FE↔API **lệch envelope** — client web parse body trần trong khi API luôn bọc `{success,data,error}` (bằng chứng FE chưa từng chạy thật với API). Sửa `api-client.ts` + 2 client trùng → **unwrap envelope tolerant** (chạy đúng cả body trần trong test lẫn enveloped thật).
+
+Còn nợ (quy trình, chưa chặn chạy): coverage ≥80% G4-3/G4-5 **chưa enforce** trong vitest config; review-gate **không có artifact** (chỉ ghi chữ trong TASKS.md).
+
+---
+
 ## Meta
 
 - **Mã:** G4 · **Mốc:** M1 (Lõi sống) — *first time system is alive end-to-end*
@@ -67,11 +81,12 @@ workflow_steps     (id, company_id, instance_id→workflow_instances, step_order
 > `tasks` bảng chung (bất biến #4): `(id, company_id, task_type, ref_id, assignee_id, status, title, due_date, deleted_at)`.
 > `tasks.ref_id` → `workflow_steps.id` khi `task_type = 'workflow_step'`.
 
-### G4-4: Tasks + Comments + Attachments
+### G4-4: Tasks + Comments + ~~Attachments~~
 
 ```
 task_comments   (id, company_id, task_id→tasks, user_id→users, body, created_at)
-task_attachments(id, company_id, task_id→tasks, file_url, file_name, file_size, uploaded_by→users, created_at)
+# task_attachments — DESCOPED (close-out 2026-06-09): MVP nộp bằng link (workflow_steps.submission_url),
+#                    không upload file đính kèm. Để lại cho phase sau.
 ```
 
 ### G4-5: Approval + Defects
