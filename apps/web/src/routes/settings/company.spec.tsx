@@ -1,0 +1,108 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import type { CompanySettingsDto } from "@mediaos/contracts";
+import { CompanySettingsForm } from "./company";
+
+function makeSettings(overrides: Partial<CompanySettingsDto> = {}): CompanySettingsDto {
+  return {
+    id: "11111111-1111-1111-1111-111111111111",
+    name: "MediaOS Co.",
+    slug: "mediaos",
+    status: "active",
+    logoUrl: "https://cdn.example.com/logo.png",
+    timezone: "Asia/Ho_Chi_Minh",
+    currency: "VND",
+    language: "vi",
+    workingDaysJson: { days: [1, 2, 3, 4, 5] },
+    payrollConfigJson: { cutoffDay: 25, payDay: 5 },
+    schemaVersion: 1,
+    ...overrides,
+  };
+}
+
+describe("CompanySettingsForm — submit", () => {
+  it("submits the full payload (timezone, currency, language, logo, working days, payroll)", () => {
+    const onSubmit = vi.fn();
+    render(<CompanySettingsForm initial={makeSettings()} onSubmit={onSubmit} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Lưu/ }));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const payload = onSubmit.mock.calls[0][0];
+    expect(payload).toMatchObject({
+      timezone: "Asia/Ho_Chi_Minh",
+      currency: "VND",
+      language: "vi",
+      logoUrl: "https://cdn.example.com/logo.png",
+      workingDaysJson: { days: [1, 2, 3, 4, 5] },
+      payrollConfigJson: { cutoffDay: 25, payDay: 5 },
+    });
+  });
+
+  it("includes a newly toggled working day in the payload", () => {
+    const onSubmit = vi.fn();
+    render(<CompanySettingsForm initial={makeSettings()} onSubmit={onSubmit} />);
+
+    // Add Saturday (day 6).
+    fireEvent.click(screen.getByRole("checkbox", { name: "T7" }));
+    fireEvent.click(screen.getByRole("button", { name: /Lưu/ }));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0][0].workingDaysJson.days).toContain(6);
+  });
+
+  it("reflects edited payroll config in the payload", () => {
+    const onSubmit = vi.fn();
+    render(<CompanySettingsForm initial={makeSettings()} onSubmit={onSubmit} />);
+
+    fireEvent.change(screen.getByLabelText(/Ngày chốt công/), { target: { value: "20" } });
+    fireEvent.change(screen.getByLabelText(/Ngày trả lương/), { target: { value: "10" } });
+    fireEvent.click(screen.getByRole("button", { name: /Lưu/ }));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0][0].payrollConfigJson).toEqual({ cutoffDay: 20, payDay: 10 });
+  });
+});
+
+describe("CompanySettingsForm — reflects fresh server data on remount", () => {
+  it("seeds from the new `initial` when remounted with a different key", () => {
+    const { rerender } = render(
+      <CompanySettingsForm key="a" initial={makeSettings()} onSubmit={vi.fn()} />,
+    );
+    expect((screen.getByLabelText(/Múi giờ/) as HTMLInputElement).value).toBe("Asia/Ho_Chi_Minh");
+
+    // Parent supplies a new key when server data changes (post-save refetch) → remount.
+    rerender(
+      <CompanySettingsForm
+        key="b"
+        initial={makeSettings({ timezone: "America/New_York" })}
+        onSubmit={vi.fn()}
+      />,
+    );
+    expect((screen.getByLabelText(/Múi giờ/) as HTMLInputElement).value).toBe("America/New_York");
+  });
+});
+
+describe("CompanySettingsForm — Zod validation blocks bad input", () => {
+  it("does NOT submit and shows an error when the logo URL is invalid", () => {
+    const onSubmit = vi.fn();
+    render(<CompanySettingsForm initial={makeSettings()} onSubmit={onSubmit} />);
+
+    fireEvent.change(screen.getByLabelText(/Logo/), { target: { value: "not-a-url" } });
+    fireEvent.click(screen.getByRole("button", { name: /Lưu/ }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+
+  it("does NOT submit when the payroll cutoff day is out of range", () => {
+    const onSubmit = vi.fn();
+    render(<CompanySettingsForm initial={makeSettings()} onSubmit={onSubmit} />);
+
+    fireEvent.change(screen.getByLabelText(/Ngày chốt công/), { target: { value: "40" } });
+    fireEvent.click(screen.getByRole("button", { name: /Lưu/ }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});
