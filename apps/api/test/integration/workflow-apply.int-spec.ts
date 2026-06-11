@@ -7,6 +7,7 @@ import { AuditService } from "../../src/events/audit.service";
 import { OutboxService } from "../../src/events/outbox.service";
 import { WorkflowFsmService } from "../../src/workflow/workflow-fsm.service";
 import { WorkflowRepository } from "../../src/workflow/workflow.repository";
+import { LockPropagationService } from "../../src/workflow/lock-propagation.service";
 import { WorkflowService } from "../../src/workflow/workflow.service";
 import { WorkflowTemplatesRepository } from "../../src/workflow/workflow-templates.repository";
 import { WorkflowTemplatesService } from "../../src/workflow/workflow-templates.service";
@@ -94,12 +95,14 @@ describe.skipIf(!hasDb)("G7-3b applyTemplate", () => {
       new AuditService(),
       new DagValidatorService(),
     );
+    const applyRepo = new WorkflowRepository(db);
     svc = new WorkflowService(
       db,
-      new WorkflowRepository(db),
+      applyRepo,
       new WorkflowFsmService(),
       new AuditService(),
       new OutboxService(),
+      new LockPropagationService(applyRepo),
     );
   });
 

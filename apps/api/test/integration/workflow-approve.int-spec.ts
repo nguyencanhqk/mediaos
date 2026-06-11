@@ -9,6 +9,7 @@ import { WorkflowFsmService } from "../../src/workflow/workflow-fsm.service";
 import { WorkflowRepository } from "../../src/workflow/workflow.repository";
 import { WorkflowService } from "../../src/workflow/workflow.service";
 import { ApprovalService } from "../../src/workflow/approval.service";
+import { LockPropagationService } from "../../src/workflow/lock-propagation.service";
 import { WorkflowTemplatesRepository } from "../../src/workflow/workflow-templates.repository";
 import { WorkflowTemplatesService } from "../../src/workflow/workflow-templates.service";
 import { DagValidatorService } from "../../src/workflow/dag-validator.service";
@@ -139,8 +140,9 @@ describe.skipIf(!hasDb)("G7-3c approve() over DAG (3c-ii fan-out + 3c-iii race-s
     const fsm = new WorkflowFsmService();
     const audit = new AuditService();
     const outbox = new OutboxService();
-    svc = new WorkflowService(db, repo, fsm, audit, outbox);
-    approval = new ApprovalService(db, repo, fsm, audit, outbox);
+    const locks = new LockPropagationService(repo);
+    svc = new WorkflowService(db, repo, fsm, audit, outbox, locks);
+    approval = new ApprovalService(db, repo, fsm, audit, outbox, locks);
   });
 
   afterAll(async () => {

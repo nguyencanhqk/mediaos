@@ -12,12 +12,14 @@ import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { WorkflowFsmService } from "./workflow-fsm.service";
 import { WorkflowRepository } from "./workflow.repository";
+import { LockPropagationService } from "./lock-propagation.service";
 import { allDependenciesApproved } from "./workflow-dag";
 import {
   DependenciesNotMetError,
   IllegalTransitionError,
   NotCurrentStepError,
   NotStepActorError,
+  StepLockedError,
   WorkflowInactiveError,
   WorkflowNotFoundError,
   type InstanceStatus,
@@ -74,6 +76,9 @@ function mapFsmError(err: unknown): never {
   if (err instanceof DependenciesNotMetError) {
     throw new ConflictException(err.message);
   }
+  if (err instanceof StepLockedError) {
+    throw new ConflictException(err.message);
+  }
   if (err instanceof NotStepActorError) {
     throw new ConflictException("Not authorized to act on this step");
   }
@@ -93,6 +98,7 @@ export class WorkflowService {
     private readonly fsm: WorkflowFsmService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    private readonly locks: LockPropagationService,
   ) {}
 
   /**
@@ -489,12 +495,14 @@ export class WorkflowService {
         const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
         if (!instance) throw new WorkflowNotFoundError("instance", step.workflowInstanceId);
 
+        // Sequential awaits (one pg connection per tx): resolve deps, then the revision lock.
         const dependenciesApproved = await this.resolveDependenciesApproved(
           companyId,
           step,
           instance,
           tx,
         );
+        const stepLocked = await this.locks.isStepLocked(companyId, stepId, tx);
         try {
           this.fsm.validateServiceTransition({
             step: toFsmStep(step),
@@ -502,6 +510,7 @@ export class WorkflowService {
             event: "start",
             actorId,
             dependenciesApproved,
+            stepLocked,
           });
         } catch (err) {
           return mapFsmError(err);
@@ -554,12 +563,14 @@ export class WorkflowService {
         const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
         if (!instance) throw new WorkflowNotFoundError("instance", step.workflowInstanceId);
 
+        // Sequential awaits (one pg connection per tx): resolve deps, then the revision lock.
         const dependenciesApproved = await this.resolveDependenciesApproved(
           companyId,
           step,
           instance,
           tx,
         );
+        const stepLocked = await this.locks.isStepLocked(companyId, stepId, tx);
         try {
           this.fsm.validateServiceTransition({
             step: toFsmStep(step),
@@ -567,6 +578,7 @@ export class WorkflowService {
             event: "submit",
             actorId,
             dependenciesApproved,
+            stepLocked,
           });
         } catch (err) {
           return mapFsmError(err);

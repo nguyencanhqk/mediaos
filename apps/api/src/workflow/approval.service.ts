@@ -10,6 +10,7 @@ import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { WorkflowFsmService } from "./workflow-fsm.service";
 import { WorkflowRepository } from "./workflow.repository";
+import { LockPropagationService } from "./lock-propagation.service";
 import {
   computeNewlyUnblockedStepIds,
   isWorkflowComplete,
@@ -81,6 +82,7 @@ export class ApprovalService {
     private readonly fsm: WorkflowFsmService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    private readonly lockPropagation: LockPropagationService,
   ) {}
 
   /** GET /workflow/approval-requests — list all pending requests (reviewer queue). */
@@ -159,6 +161,11 @@ export class ApprovalService {
       const [updatedStep] = await this.repo.approveStep(companyId, step.id, tx);
       if (!updatedStep) throw new InternalServerErrorException("Failed to approve step");
 
+      // 3b. (G7-4a/BR-006) Re-approving this step clears every revision lock it caused. A descendant
+      // re-opens only when NO active lock remains on it (multi-source: LK5) — enforced by the
+      // open-filter below. Soft-release inside the per-instance FOR UPDATE lock → serialized.
+      await this.lockPropagation.releaseLocksForReapproved(companyId, step.id, tx);
+
       // 4. Update task status if exists (read within tx — ready for the 3c-iii FOR UPDATE lock)
       const [task] = await this.repo.findActiveTaskByStepIdInTx(companyId, step.id, tx);
       if (task) {
@@ -194,10 +201,35 @@ export class ApprovalService {
 
       // 6. Fan out: open every step this approval unblocked (0..n). Mirror applyTemplate root-open —
       // idempotent createTask (dedup_key onConflictDoNothing), assignee NULL (PM assigns later).
-      const newlyOpenedStepIds = computeNewlyUnblockedStepIds(
+      // (G7-4a) A candidate with deps approved may STILL carry an active lock from another source in
+      // revision (LK5) — skip it; it opens when that source is re-approved. Sequential await (one tx
+      // connection). In MVP this filter is belt-and-suspenders (the dep-guard already keeps such a
+      // step closed) but it is the explicit BR-006 gate "open only when no active lock remains".
+      const unblockedCandidateIds = computeNewlyUnblockedStepIds(
         { nodeKey: step.nodeKey, stepCode: step.stepCode },
         dagCtx,
       );
+      // One query (no N+1): which candidates still carry an active lock from ANOTHER source in
+      // revision (LK5)? Those are held back; they open when that source is re-approved.
+      const lockedCandidateIds = await this.lockPropagation.findLockedStepIds(
+        companyId,
+        unblockedCandidateIds,
+        tx,
+      );
+      const newlyOpenedStepIds: string[] = [];
+      for (const candidateId of unblockedCandidateIds) {
+        if (lockedCandidateIds.has(candidateId)) {
+          // Deps satisfied but still locked → do NOT open. Log it so an unexpected stall (a step
+          // that should have opened) is observable rather than silently skipped.
+          this.logger.warn("approve fan-out: candidate still locked by another revision — not opening", {
+            candidateId,
+            approvedStepId: step.id,
+            instanceId: instance.id,
+          });
+          continue;
+        }
+        newlyOpenedStepIds.push(candidateId);
+      }
       for (const openStepId of newlyOpenedStepIds) {
         const openStep = instanceStepRows.find((s) => s.id === openStepId);
         if (!openStep) continue;
@@ -349,6 +381,37 @@ export class ApprovalService {
       // 3. Mark step as revision
       const [updatedStep] = await this.repo.setStepToRevision(companyId, step.id, tx);
       if (!updatedStep) throw new InternalServerErrorException("Failed to set step to revision");
+
+      // 3b. (G7-4a/BR-006) Lock every TRANSITIVE descendant of this step in the DAG — independent
+      // branches untouched (LK2). Read the DAG view WITHIN this tx, sequential awaits (one pg
+      // connection per tx). Released when this step is re-approved (approve() step 3b).
+      const defStepRows = await this.repo.findDefinitionStepsInTx(
+        companyId,
+        instance.workflowDefinitionId,
+        tx,
+      );
+      const depRows = await this.repo.findTemplateDependenciesInTx(
+        companyId,
+        instance.workflowDefinitionId,
+        tx,
+      );
+      const instanceStepRows = await this.repo.findStepsByInstanceIdInTx(companyId, instance.id, tx);
+      const dagCtx: DagContext = {
+        defSteps: defStepRows.map((d) => ({ id: d.id, nodeKey: d.nodeKey, isRequired: d.isRequired })),
+        deps: depRows.map((dep) => ({ fromStepId: dep.fromStepId, toStepId: dep.toStepId })),
+        instanceSteps: instanceStepRows.map((s) => ({
+          id: s.id,
+          nodeKey: s.nodeKey,
+          stepCode: s.stepCode,
+          status: s.status,
+        })),
+      };
+      await this.lockPropagation.propagateRevisionLock(
+        companyId,
+        { id: step.id, nodeKey: step.nodeKey, stepCode: step.stepCode },
+        dagCtx,
+        tx,
+      );
 
       // 4. Update existing task status (read WITHIN the tx — F2: was a non-tx self-opened read that
       // escaped this transaction, a TOCTOU on nextRevisionRound. Use the tx variant approve() uses.)

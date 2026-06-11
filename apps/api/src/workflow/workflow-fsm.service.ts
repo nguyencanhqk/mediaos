@@ -5,6 +5,7 @@ import {
   IllegalTransitionError,
   NotReviewerError,
   NotStepActorError,
+  StepLockedError,
   SERVICE_EVENTS,
   WorkflowInactiveError,
   WorkflowNotFoundError,
@@ -39,6 +40,12 @@ export interface ValidateTransitionInput {
    * Undefined = not evaluated (e.g. consumer events) → the dependency guard is skipped.
    */
   dependenciesApproved?: boolean;
+  /**
+   * G7-4a: caller-computed answer to "does this step still carry an active revision lock?"
+   * (a transitive descendant of a step in revision — BR-006). The service resolves it within its
+   * tx and passes the result; true → start/submit is rejected. Undefined/false = not locked.
+   */
+  stepLocked?: boolean;
 }
 
 export interface ValidateConsumerTransitionInput {
@@ -60,12 +67,13 @@ export type TransitionResult = (typeof MVP0_TRANSITIONS)[number];
  *   are rejected — they must go through the event consumer pipeline.
  *
  * Guard order (checked before transition lookup):
- *   1. instance.status === 'active'  (D10 / X7)
- *   2. step.workflowInstanceId === instance.id  (D5)
- *   3. dependenciesApproved !== false  (G7-3c, §1.3) — for 'start'/'submit' (replaces D3 pointer)
- *   4. actor === step.assigneeUserId  (actor check)
- *   5. (fromState, event) found in allowed transitions  (FSM check)
- *   6. event is a SERVICE event (not consumer-only)  (D6 / ADR-0016)
+ *   1.  instance.status === 'active'  (D10 / X7)
+ *   2.  step.workflowInstanceId === instance.id  (D5)
+ *   3a. stepLocked !== true  (G7-4a, BR-006) — for 'start'/'submit' (blocked by upstream revision)
+ *   3b. dependenciesApproved !== false  (G7-3c, §1.3) — for 'start'/'submit' (replaces D3 pointer)
+ *   4.  actor === step.assigneeUserId  (actor check)
+ *   5.  (fromState, event) found in allowed transitions  (FSM check)
+ *   6.  event is a SERVICE event (not consumer-only)  (D6 / ADR-0016)
  */
 @Injectable()
 export class WorkflowFsmService {
@@ -86,7 +94,16 @@ export class WorkflowFsmService {
       throw new WorkflowNotFoundError("step", step.id);
     }
 
-    // Guard 3 (G7-3c): for start/submit, ALL upstream DAG deps must be approved (§1.3).
+    // Guard 3a (G7-4a): for start/submit, a step carrying an active revision lock is blocked
+    // (BR-006). Checked BEFORE the deps guard so a locked descendant reports the specific
+    // "blocked by an upstream revision" reason, and it blocks even when deps happen to be approved.
+    if (event === "start" || event === "submit") {
+      if (input.stepLocked === true) {
+        throw new StepLockedError(step.id);
+      }
+    }
+
+    // Guard 3b (G7-3c): for start/submit, ALL upstream DAG deps must be approved (§1.3).
     // Replaces the linear current_step_order guard (D2 — step_order is now advisory only).
     // The service resolves deps within its tx and passes the result; undefined = not evaluated.
     if (event === "start" || event === "submit") {

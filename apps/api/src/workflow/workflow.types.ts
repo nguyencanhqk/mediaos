@@ -122,6 +122,21 @@ export class DependenciesNotMetError extends Error {
   }
 }
 
+/**
+ * StepLockedError — G7-4a (BR-006/WF-003). A step cannot start/submit because an upstream step is
+ * in revision and propagated a `downstream_blocked_by_revision` lock onto it. Released only when
+ * every locking source is re-approved (multi-source: LK5). Distinct from DependenciesNotMetError so
+ * the UI can show "blocked by an upstream revision" rather than a generic "deps not met".
+ */
+export class StepLockedError extends Error {
+  readonly stepId: string;
+  constructor(stepId: string) {
+    super(`Step ${stepId} is locked: an upstream step is in revision (downstream_blocked_by_revision)`);
+    this.name = "StepLockedError";
+    this.stepId = stepId;
+  }
+}
+
 /** DuplicateWorkflowError when a content item already has an active workflow. */
 export class DuplicateWorkflowError extends Error {
   constructor(contentItemId: string) {

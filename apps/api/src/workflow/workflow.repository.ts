@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
 import type { TenantTx } from "../db/db.service";
 import {
@@ -13,6 +13,7 @@ import {
   workflowDefinitions,
   workflowInstances,
   workflowStepDependencies,
+  workflowStepInstanceLocks,
   workflowSteps,
 } from "../db/schema";
 
@@ -261,6 +262,74 @@ export class WorkflowRepository {
         ),
       )
       .for("update");
+  }
+
+  // ─── Revision locks (G7-4a / BR-006) ──────────────────────────────────────
+  // workflow_step_instance_locks: 1 ACTIVE row = locked_step_id is blocked because caused_by_step_id
+  // is in revision. Soft-release (released_at) — never hard-deleted (audit-friendly + replay-safe).
+
+  /** INSERT a lock; onConflictDoNothing vs wf_step_locks_active_uq → replay of a revision is idempotent. */
+  insertStepLockInTx(
+    companyId: string,
+    data: { lockedStepId: string; causedByStepId: string },
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(workflowStepInstanceLocks)
+      .values({
+        companyId,
+        lockedStepId: data.lockedStepId,
+        causedByStepId: data.causedByStepId,
+      })
+      .onConflictDoNothing()
+      .returning();
+  }
+
+  /** Soft-release EVERY active lock caused by `causedByStepId` (on its re-approve). Idempotent. */
+  releaseStepLocksByCauseInTx(companyId: string, causedByStepId: string, tx: TenantTx) {
+    return tx
+      .update(workflowStepInstanceLocks)
+      .set({ releasedAt: sql`now()` })
+      .where(
+        and(
+          eq(workflowStepInstanceLocks.companyId, companyId),
+          eq(workflowStepInstanceLocks.causedByStepId, causedByStepId),
+          isNull(workflowStepInstanceLocks.releasedAt),
+        ),
+      );
+  }
+
+  /** ACTIVE locks on a single step (released_at IS NULL) — feeds the FSM start/submit lock guard. */
+  findActiveLocksByStepIdInTx(companyId: string, lockedStepId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(workflowStepInstanceLocks)
+      .where(
+        and(
+          eq(workflowStepInstanceLocks.companyId, companyId),
+          eq(workflowStepInstanceLocks.lockedStepId, lockedStepId),
+          isNull(workflowStepInstanceLocks.releasedAt),
+        ),
+      );
+  }
+
+  /**
+   * Distinct step ids (among `lockedStepIds`) that still carry an ACTIVE lock — ONE query for the
+   * approve() fan-out open-filter (avoids an N+1 of findActiveLocksByStepIdInTx per candidate).
+   * Empty input → empty result without hitting the DB.
+   */
+  findActiveLockedStepIdsInTx(companyId: string, lockedStepIds: string[], tx: TenantTx) {
+    if (lockedStepIds.length === 0) return Promise.resolve([] as Array<{ lockedStepId: string }>);
+    return tx
+      .selectDistinct({ lockedStepId: workflowStepInstanceLocks.lockedStepId })
+      .from(workflowStepInstanceLocks)
+      .where(
+        and(
+          eq(workflowStepInstanceLocks.companyId, companyId),
+          inArray(workflowStepInstanceLocks.lockedStepId, lockedStepIds),
+          isNull(workflowStepInstanceLocks.releasedAt),
+        ),
+      );
   }
 
   findStepsByInstanceId(companyId: string, instanceId: string) {

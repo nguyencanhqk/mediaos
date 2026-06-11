@@ -4,6 +4,7 @@ import { EventsModule } from "../events/events.module";
 import { PermissionModule } from "../permission/permission.module";
 import { WorkflowFsmService } from "./workflow-fsm.service";
 import { WorkflowRepository } from "./workflow.repository";
+import { LockPropagationService } from "./lock-propagation.service";
 import { WorkflowService } from "./workflow.service";
 import { ApprovalService } from "./approval.service";
 import { WorkflowController } from "./workflow.controller";
@@ -17,6 +18,7 @@ import { DagValidatorService } from "./dag-validator.service";
   providers: [
     WorkflowFsmService,
     WorkflowRepository,
+    LockPropagationService,
     WorkflowService,
     ApprovalService,
     WorkflowTemplatesRepository,
