@@ -377,6 +377,15 @@ Bắt đầu: sau SYNC GATE, dựng skeleton route /workflows/templates + templa
 - **⚠️ Project-target task thiếu linkage:** `tasks` chưa có cột `project_id` → apply template `appliesTo='project'` tạo task `content_item_id=NULL`, không anchor project. Instance/steps đúng; chỉ task lookup-by-project chưa được (My Tasks G4-4 content-based). **Nợ:** thêm `tasks.project_id` (migration) + query khi G7 dùng project-workflow thật (3c/G8). G7 thực tế đi content_item.
 - **Guard ẩn:** validate `createdSteps.length==defSteps`; throw nếu 0 root task mở (chống instance kẹt). Event `workflow.started` dùng chung start+apply (additive payload).
 
+**Sau 4b (checklist enforcement — `187bb3c`):**
+- **Linkage chốt = ĐƯỜNG A:** `default_checklist_id` LUÔN NULL (3b/clone không set — `workflow-templates.service.ts:324`), nên gate đi `node_key → def-step → checklists.workflow_definition_step_id → checklist_items(is_required)`. Nếu sau này 3b/clone bắt đầu set `default_checklist_id` (nợ "Sau 2b" remap) thì gate VẪN đúng (đi qua checklist gắn step), KHÔNG cần đổi 4b.
+- **Tick authz = assignee-gated (QUYẾT ĐỊNH #2 phương án A):** chỉ `step.assignee_user_id` tick/untick được (`ForbiddenException`). Nếu nghiệp vụ cần PM/reviewer tick hộ → nới guard (thêm permission `update:content` fallback) khi có yêu cầu thật — hiện YAGNI.
+- **`stepId`/`itemId` param chưa validate UUID** (giống toàn controller workflow — defer ParseUUIDPipe đồng bộ; id sai cú pháp → pg uuid-cast 500 generic).
+- **Đa-checklist/def-step = cộng dồn required (cố ý):** không uq trên `checklists.workflow_definition_step_id` → thêm checklist thứ 2 vào 1 bước nâng ngưỡng gate. Muốn ép 1-checklist/bước thì thêm partial-uq (migration sau) — hiện không cần.
+- **Race untick-vs-submit ĐÓNG bằng `FOR UPDATE` step-row** ở submit + tick/untick (self-race vì cả hai assignee-gated; vẫn khoá cho chắc, 1 tài nguyên → không deadlock). Submit KHÔNG khoá instance (chỉ approve khoá — giữ nguyên quyết định 3c-iii).
+- **FE checklist (LUỒNG C):** API tick/untick + contract (`workflowStepChecklistStateSchema`, `toggleChecklistItemResultSchema`) SẴN SÀNG — task detail render checklist + tick là việc của C. `changed` trong toggle-result phân biệt no-op replay.
+- **Audit:** `ChecklistItemChecked`/`ChecklistItemUnchecked` objectType `workflow_step`; chỉ ghi khi đổi thật (tick state là operational, KHÔNG audit-data → untick = DELETE row hợp lệ).
+
 ---
 
 _Liên quan: [`workflow-state-machine.md`](../spikes/workflow-state-machine.md) · [`erd-v2.md`](../erd-v2.md) · [`G6-media-full.md`](./G6-media-full.md) (mẫu plan) · ADR 0009/0010/0016 · [`TASKS.md`](../../TASKS.md) G7._
