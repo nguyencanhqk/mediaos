@@ -2,7 +2,7 @@
 
 > Trạng thái thực thi G7 Workflow Builder. Cập nhật mỗi viên. Nguồn kế hoạch: [`G7-workflow-builder.md`](./G7-workflow-builder.md) (§4 micro-steps, §5 RED suite, §8 luồng, **§10 residual = chi tiết quyết định từng viên**).
 
-**Branch:** `feat/g7-workflow` (main dir `c:/dev 2/MediaOS`) · 1a…3c-ii đã push · **3c-iii `af8f583` CHƯA push** · **DB dev ở migration 0034**.
+**Branch:** `feat/g7-workflow` (main dir `c:/dev 2/MediaOS`) · 1a…3c-iii + ⑥ gate-fix `62b5374` **đã push (origin đồng bộ)** · **DB dev ở migration 0034**.
 
 ---
 
@@ -20,15 +20,16 @@
 | **3b** | `2032894` | **applyTemplate** — instance từ template published, snapshot steps, mở **bước root** (auto-task idempotent); endpoint `POST /workflow-templates/:id/apply` gate `apply:workflow-instance` |
 | **3c-i** | `0d31be6` | **DAG dep-guard** — `workflow-dag.ts` PURE (`allDependenciesApproved`, key=node_key??step_code, root→true, fail-closed); FSM start/submit guard = `dependenciesApproved===false→DependenciesNotMetError` (bỏ guard stepOrder===currentStepOrder); repo `findStepsByInstanceIdInTx`; service `resolveDependenciesApproved` (await tuần tự) |
 | **3c-ii** | `c26eb94` | **approve() fan-out + complete theo DAG** — `computeNewlyUnblockedStepIds` (mở 0..n downstream khi dep đủ → auto-task idempotent) + `isWorkflowComplete` (mọi step required approved, KHÔNG theo order); task read vào tx (`findActiveTaskByStepIdInTx`); giữ alias `isLastStep:isWorkflowComplete` (e2e linear xanh). `findMaxStepOrder`/`advanceInstanceStepOrder` **ngừng dùng** (W2→3c-iii) |
-| **3c-iii** | `af8f583` | **FOR UPDATE race-safety + W2 cleanup + FS5/FS10** — `approve()` chèn `lockInstanceForUpdateInTx` (SELECT…FOR UPDATE per-instance) NGAY sau `findInstanceByIdInTx`, TRƯỚC mọi read dep → 2 approver đóng 2 dep cuối của join serialize (BLOCKING #2; **approve-only**, không deadlock). W2: xoá `findMaxStepOrder`+`advanceInstanceStepOrder`+`updateInstanceStepOrder` (+ bỏ `max` import; `current_step_order` chỉ advisory). FS10 = **probe lock xác định** (giữ khoá → approve() block; bỏ Promise.all timing vì phụ-thuộc-thứ-tự-test). FS5 = `validateConsumerTransition` writer DUY NHẤT của approved/revision (cặp D6). ⑤ FS11 skip (e2e linear che). **Còn ⑥ gate FULL+santa.** |
+| **3c-iii** | `af8f583` | **FOR UPDATE race-safety + W2 cleanup + FS5/FS10** — `approve()` chèn `lockInstanceForUpdateInTx` (SELECT…FOR UPDATE per-instance) NGAY sau `findInstanceByIdInTx`, TRƯỚC mọi read dep → 2 approver đóng 2 dep cuối của join serialize (BLOCKING #2; **approve-only**, không deadlock). W2: xoá `findMaxStepOrder`+`advanceInstanceStepOrder`+`updateInstanceStepOrder` (+ bỏ `max` import; `current_step_order` chỉ advisory). FS10 = **probe lock xác định** (giữ khoá → approve() block; bỏ Promise.all timing vì phụ-thuộc-thứ-tự-test). FS5 = `validateConsumerTransition` writer DUY NHẤT của approved/revision (cặp D6). ⑤ FS11 skip (e2e linear che). **⑥ gate FULL+santa XONG → fix `62b5374`.** |
+| **⑥ gate** | `62b5374` | **FULL+santa gate** trên crown-jewel 3c — security+database+silent-failure (song song) → santa dual-review **NICE**. Vá **F1** (23505→409 ở `approve()`+`requestRevision()`), **F2** (`requestRevision` đọc task in-tx → đóng TOCTOU), **F3** (fan-out no-op `logger.warn`). Chỉ `approval.service.ts`+spec. Verify XANH (fsm 27 · approval 19 · int 5 FS10 3× · e2e 17 · typecheck). |
 
 **Test:** toàn bộ xanh — fsm 27 (+FS5) · approval 19 (A4/A5/A7+branch) · unit dag 9 · int workflow-approve 5 (FS2/FS3/FS7/FS6/**FS10**) · e2e linear 17 · (templates/apply/tenant-isolation/rls-guards… giữ xanh). typecheck sạch.
 
 ---
 
-## ✅ 3c-iii ĐÃ XONG (commit `af8f583`) — chỉ còn ⑥ gate + push
+## ✅ 3c-iii + ⑥ gate ĐÃ XONG — crown-jewel 3c KHÉP (đã push)
 
-> 3c-i + 3c-ii + 3c-iii **code/test XONG**. Crown-jewel 3c hoàn tất phần code; CHỈ còn lớp review gate + push.
+> 3c-i + 3c-ii + 3c-iii + ⑥ FULL+santa gate **XONG**. Crown-jewel 3c hoàn tất — code + gate + push (`62b5374`).
 
 - **① RED FS10 → ② GREEN lock → ③ W2 cleanup → ④ FS5** — xong, commit `af8f583` (5 file, +149/−51), **local, CHƯA push**.
 - **Lock:** `approve()` chèn `lockInstanceForUpdateInTx` (SELECT…FOR UPDATE per-instance) NGAY sau `findInstanceByIdInTx`, TRƯỚC mọi read dep. **approve-only** (start/submit không cần — chỉ ghi step của chính nó; giữ 1 row instance/tx → không deadlock).
@@ -38,17 +39,21 @@
 - **⑤ FS11: SKIP** — e2e linear 17 đã che vòng start/submit/approve (seed `video_standard_v0` không seed deps → mọi bước root, guard `allDependenciesApproved` mới vẫn xanh).
 - **KHÔNG migration** trong 3c. Migration kế = **0035** (4a eval hook), rồi **0036** (4c permissions seed — PHẢI seed hyphen: `create/update/publish/read:workflow-template` + `apply:workflow-instance`).
 
-### ⬜ VIÊN KẾ: ⑥ FULL+santa gate cho crown-jewel 3c (rồi push)
+### ✅ ⑥ FULL+santa gate XONG — fix `62b5374`
 
-- **Scope gate:** review CẢ **3c-i (`0d31be6`) + 3c-ii (`c26eb94`) + 3c-iii (`af8f583`)** — DAG/FSM/lock/auto-task/idempotency = crown-jewel.
-- **Agent (song song):** `ecc:security-reviewer` + `ecc:database-reviewer` + `ecc:silent-failure-hunter`; rồi `ecc:santa-method` (dual-review hội tụ).
-- Sửa CRITICAL/HIGH → re-verify (fsm 27 · approval 19 · int 5 · e2e 17 · typecheck) → commit fix theo PATH → **push `feat/g7-workflow`**.
+- **Scope:** review CẢ 3c-i (`0d31be6`) + 3c-ii (`c26eb94`) + 3c-iii (`af8f583`).
+- **Agent:** `ecc:security-reviewer` + `ecc:database-reviewer` + `ecc:silent-failure-hunter` (song song) → `ecc:santa-method` dual-review **NICE (cả 2 reviewer PASS)**. KHÔNG CRITICAL/HIGH net-new; lock/DAG/FSM/idempotency đúng.
+- **Đã vá (`62b5374` — chỉ `approval.service.ts` + spec, theo PATH, attribution OFF):**
+  - **F1 (HIGH):** `approve()` + `requestRevision()` map `approval_steps_request_level_uq` **23505 → ConflictException(409)** thay raw 500 khi 2 approver đua cùng request. Toàn vẹn vốn AN TOÀN (uq + atomic rollback — santa chứng minh `createApprovalStep` là write ĐẦU TIÊN nên rollback trọn tx); **mapping-only ĐỦ, KHÔNG cần re-read-under-lock** (YAGNI).
+  - **F2 (MED, pre-existing):** `requestRevision()` đọc task qua `findActiveTaskByStepIdInTx(...tx)` thay non-tx `findTaskByStepId` → đóng TOCTOU `nextRevisionRound`.
+  - **F3 (LOW):** fan-out `createTask` no-op nay `logger.warn` (parity `applyTemplate`/`startWorkflow`).
+- **Verify XANH:** typecheck · fsm 27 · approval 19 · int 5 (FS10 deterministic 3×: 862/855/868ms) · e2e 17.
+- **Gate points ĐẠT:** (a) lock TRƯỚC mọi DAG-read ✓; (b) `.for("update")` qua `tx`+`company_id`, RLS còn ép ✓; (c) approve-only KHÔNG tạo race khác (`revision` không bao giờ = `approved`, gating monotonic, X4 chặn approved→revision) ✓; (d) FS10 xanh-xác-định 3× ✓.
 
-### Ghi chú review treo cho ⑥ gate
+### Nợ ghi nhận sau ⑥ gate (KHÔNG chặn — santa nêu)
 
-- **Review C1 (race trên join)** đã được vá ở 3c-iii (FOR UPDATE) — gate xác nhận lock đặt đúng (TRƯỚC mọi read dep) + approve-only đủ an toàn.
-- ⚠️ BẪY pg single-connection: đọc dep TUẦN TỰ (await), KHÔNG `Promise.all` trên CÙNG 1 tx; FS10 test cần 2 connection RIÊNG.
-- Điểm gate nên soi: (a) lock đặt sau `findInstanceByIdInTx` có nằm TRƯỚC mọi DAG-read không (approval.service.ts); (b) `.for("update")` Drizzle sinh đúng SQL trên `workflow_instances` + còn `withTenant`/RLS; (c) start/submit bỏ lock có tạo race khác không (kết luận 3c-iii: không); (d) probe FS10 có còn xanh-xác-định.
+- **Multi-level approvals (forward-looking):** chốt 23505 dựa trên `level=1`/`maxLevel=1`. Duyệt đa-cấp tương lai → 2 approver KHÁC cấp sẽ KHÔNG bị `approval_steps_request_level_uq` chặn; revisit khi làm. MVP-0 single-level → hiện an toàn.
+- **Contract `c26eb94`:** outbox `step.approved` bỏ `nextStepOrder`, thêm `newlyOpenedStepIds` — xác nhận consumer notify đã migrate sang field mới.
 
 ## Bất biến vận hành (giữ cả G7)
 - HAND-DRIVEN: đọc + trình plan từng viên, duyệt rồi mới code. Commit theo PATH tường minh (KHÔNG `git add -A`). Attribution tắt.
