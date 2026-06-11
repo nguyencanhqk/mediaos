@@ -25,6 +25,23 @@ import {
   type StepStatus,
 } from "./workflow.types";
 
+const PG_UNIQUE_VIOLATION = "23505";
+
+/**
+ * True when `err` is a Postgres unique-constraint violation. A concurrent same-request approve()
+ * (or request-revision) loses the per-instance lock race, then its createApprovalStep hits
+ * approval_steps_request_level_uq → 23505 → the whole tx rolls back (integrity safe). Map it to a
+ * 409 instead of leaking a raw 500, mirroring workflow.service.ts startWorkflow/applyTemplate.
+ */
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as Record<string, unknown>)["code"] === PG_UNIQUE_VIOLATION
+  );
+}
+
 function toFsmStep(row: {
   id: string;
   workflowInstanceId: string;
@@ -185,7 +202,7 @@ export class ApprovalService {
         const openStep = instanceStepRows.find((s) => s.id === openStepId);
         if (!openStep) continue;
         const openDef = defStepRows.find((d) => d.nodeKey === (openStep.nodeKey ?? openStep.stepCode));
-        await this.repo.createTask(
+        const [openedTask] = await this.repo.createTask(
           companyId,
           {
             workflowStepId: openStepId,
@@ -197,6 +214,14 @@ export class ApprovalService {
           },
           tx,
         );
+        // No-op = dedup collision (task already exists from a prior open). Mirror applyTemplate's
+        // warn so a genuine under-open is observable instead of silently swallowed.
+        if (!openedTask) {
+          this.logger.warn("approve fan-out createTask no-op (dedup collision)", {
+            openStepId,
+            instanceId: instance.id,
+          });
+        }
       }
 
       // 7. Complete the instance iff every required step is approved (NOT by step_order — §1.3).
@@ -247,6 +272,11 @@ export class ApprovalService {
         err instanceof ConflictException ||
         err instanceof InternalServerErrorException
       ) throw err;
+      // Concurrent same-request approve loses the lock race → 23505 on approval_steps_request_level_uq
+      // (tx already rolled back). Surface a clean 409 instead of a raw 500.
+      if (isUniqueViolation(err)) {
+        throw new ConflictException("Approval request has already been decided");
+      }
       this.logger.error("approve unexpected error", { err, companyId, requestId });
       throw err;
     });
@@ -320,8 +350,9 @@ export class ApprovalService {
       const [updatedStep] = await this.repo.setStepToRevision(companyId, step.id, tx);
       if (!updatedStep) throw new InternalServerErrorException("Failed to set step to revision");
 
-      // 4. Update existing task status
-      const [existingTask] = await this.repo.findTaskByStepId(companyId, step.id);
+      // 4. Update existing task status (read WITHIN the tx — F2: was a non-tx self-opened read that
+      // escaped this transaction, a TOCTOU on nextRevisionRound. Use the tx variant approve() uses.)
+      const [existingTask] = await this.repo.findActiveTaskByStepIdInTx(companyId, step.id, tx);
       const nextRevisionRound = existingTask ? existingTask.revisionRound + 1 : 1;
       if (existingTask) {
         await this.repo.updateTaskStatus(companyId, existingTask.id, "revision", tx);
@@ -384,6 +415,10 @@ export class ApprovalService {
         err instanceof ConflictException ||
         err instanceof InternalServerErrorException
       ) throw err;
+      // Same concurrent-decision race as approve(): map 23505 → 409 instead of a raw 500.
+      if (isUniqueViolation(err)) {
+        throw new ConflictException("Approval request has already been decided");
+      }
       this.logger.error("requestRevision unexpected error", { err, companyId, requestId });
       throw err;
     });

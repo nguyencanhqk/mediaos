@@ -401,7 +401,9 @@ describe("ApprovalService", () => {
 
     it("requestRevision: when a task is linked + comment given → increments revision round and updates task", async () => {
       const repo = makeRepo();
-      repo.findTaskByStepId = vi.fn().mockResolvedValue([{ id: "task-9", revisionRound: 2 }]);
+      // F2: requestRevision now reads the linked task within its tx (findActiveTaskByStepIdInTx),
+      // matching approve(). Previously it read via the non-tx findTaskByStepId.
+      repo.findActiveTaskByStepIdInTx = vi.fn().mockResolvedValue([{ id: "task-9", revisionRound: 2 }]);
       const db = makeDb(repo);
       const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
 
