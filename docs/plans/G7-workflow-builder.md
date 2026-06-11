@@ -336,4 +336,14 @@ Bắt đầu: sau SYNC GATE, dựng skeleton route /workflows/templates + templa
 
 ---
 
+## 10. Residual / nợ kỹ thuật (cập nhật theo tiến độ)
+
+**Sau 1c-i (Template CRUD core):**
+- **Permission seed nợ tới 0036:** endpoint `workflow-templates` gate quyền `workflow-template` (hyphen — đồng bộ `workflow-instance`). Catalog CHƯA seed (dời từ 0035→**0036**, cuối G7-4c) → endpoint **fail-closed 403** cho mọi user tới khi 0036 seed + admin grant qua grant-catalog. FE luồng C dùng mock API nên không kẹt. ⚠️ 0036 PHẢI seed đúng spelling **hyphen** `create/update/read:workflow-template` (KHỚP guard) — nếu seed underscore sẽ lệch → mãi 403.
+- **list() chưa phân trang:** template low-cardinality nên chấp nhận; thêm pagination khi cần (contract `templateDetailSchema`/list đã FROZEN — đổi sau 1b cân nhắc kỹ).
+- **Hard-delete child rows (1c-ii→iv):** schema frozen KHÔNG có `deleted_at` ở `workflow_definition_steps`/`workflow_step_dependencies`/`checklists`/`checklist_items` → remove = hard-delete, **giới hạn template `draft`** (published immutable + instance snapshot riêng ở `workflow_steps` → không mất audit-data). Chốt lại khi tới 1c-ii.
+- **Audit gom aggregate:** mọi thao tác template/step/dep/checklist audit dưới `objectType='workflow_template'`, `objectId=templateId` (1 audit type, thêm ở migration 0033).
+
+---
+
 _Liên quan: [`workflow-state-machine.md`](../spikes/workflow-state-machine.md) · [`erd-v2.md`](../erd-v2.md) · [`G6-media-full.md`](./G6-media-full.md) (mẫu plan) · ADR 0009/0010/0016 · [`TASKS.md`](../../TASKS.md) G7._
