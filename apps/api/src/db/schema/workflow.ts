@@ -113,6 +113,11 @@ export const workflowDefinitionSteps = pgTable(
     defaultChecklistId: uuid("default_checklist_id").references((): AnyPgColumn => checklists.id, {
       onDelete: "set null",
     }),
+    // G7-4 (4a): evaluation hook — POINTER only, no engine in G7. requires_evaluation flags a step
+    // that must emit step.evaluation_required when approved (consumer = G8). evaluation_template_id is
+    // a SOFT ref (real eval table lives in G8) — bare uuid, no FK, deferred like content_types (G6-4).
+    requiresEvaluation: boolean("requires_evaluation").notNull().default(false),
+    evaluationTemplateId: uuid("evaluation_template_id"),
   },
   (t) => [
     index("wf_def_steps_def_id_idx").on(t.workflowDefinitionId),
@@ -558,6 +563,11 @@ export const workflowStepInstanceLocks = pgTable(
   (t) => [
     index("wf_step_locks_locked_step_id_idx").on(t.lockedStepId),
     index("wf_step_locks_caused_by_idx").on(t.causedByStepId),
+    // G7-4 (4a): at most 1 ACTIVE lock per (locked_step, caused_by) source — stops replayed
+    // revisions from piling duplicate active rows. Released locks (released_at set) don't count.
+    uniqueIndex("wf_step_locks_active_uq")
+      .on(t.companyId, t.lockedStepId, t.causedByStepId)
+      .where(sql`released_at IS NULL`),
   ],
 );
 
