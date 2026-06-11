@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, max } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
 import type { TenantTx } from "../db/db.service";
 import {
@@ -151,4 +151,112 @@ export class WorkflowTemplatesRepository {
         ),
       );
   }
+
+  // ─── Template steps (workflow_definition_steps) — 1c-ii ──────────────────────
+
+  createStep(
+    companyId: string,
+    data: {
+      templateId: string;
+      nodeKey: string;
+      code: string;
+      name: string;
+      defaultTaskTitle: string;
+      stepType: string;
+      assigneeRoleCode: string | null;
+      reviewerRoleCode: string | null;
+      isRequired: boolean;
+      stepOrder: number;
+      positionX: number | null;
+      positionY: number | null;
+    },
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(workflowDefinitionSteps)
+      .values({
+        companyId,
+        workflowDefinitionId: data.templateId,
+        nodeKey: data.nodeKey,
+        code: data.code,
+        name: data.name,
+        defaultTaskTitle: data.defaultTaskTitle,
+        stepType: data.stepType,
+        assigneeRoleCode: data.assigneeRoleCode,
+        reviewerRoleCode: data.reviewerRoleCode,
+        isRequired: data.isRequired,
+        stepOrder: data.stepOrder,
+        positionX: data.positionX,
+        positionY: data.positionY,
+      })
+      .returning();
+  }
+
+  /** Lấy step thuộc ĐÚNG template + tenant (scope chống đổi step của template/tenant khác). */
+  findStepByIdInTx(companyId: string, templateId: string, stepId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(workflowDefinitionSteps)
+      .where(
+        and(
+          eq(workflowDefinitionSteps.companyId, companyId),
+          eq(workflowDefinitionSteps.workflowDefinitionId, templateId),
+          eq(workflowDefinitionSteps.id, stepId),
+        ),
+      )
+      .limit(1);
+  }
+
+  updateStep(companyId: string, stepId: string, fields: StepUpdateFields, tx: TenantTx) {
+    return tx
+      .update(workflowDefinitionSteps)
+      .set(fields)
+      .where(
+        and(
+          eq(workflowDefinitionSteps.companyId, companyId),
+          eq(workflowDefinitionSteps.id, stepId),
+        ),
+      )
+      .returning();
+  }
+
+  // Hard-delete (draft-only, ép ở service): schema con không có deleted_at (1b frozen) → config draft
+  // hard-delete được; FK cascade workflow_step_dependencies, SET NULL checklists.workflow_definition_step_id.
+  deleteStep(companyId: string, stepId: string, tx: TenantTx) {
+    return tx
+      .delete(workflowDefinitionSteps)
+      .where(
+        and(
+          eq(workflowDefinitionSteps.companyId, companyId),
+          eq(workflowDefinitionSteps.id, stepId),
+        ),
+      )
+      .returning();
+  }
+
+  maxStepOrderInTx(companyId: string, templateId: string, tx: TenantTx) {
+    return tx
+      .select({ maxOrder: max(workflowDefinitionSteps.stepOrder) })
+      .from(workflowDefinitionSteps)
+      .where(
+        and(
+          eq(workflowDefinitionSteps.companyId, companyId),
+          eq(workflowDefinitionSteps.workflowDefinitionId, templateId),
+        ),
+      );
+  }
 }
+
+/** Field set cho updateStep — nodeKey BẤT BIẾN (không nằm ở đây). null = clear cột nullable. */
+export type StepUpdateFields = Partial<{
+  code: string;
+  name: string;
+  defaultTaskTitle: string;
+  stepType: string;
+  assigneeRoleCode: string | null;
+  reviewerRoleCode: string | null;
+  isRequired: boolean;
+  stepOrder: number;
+  positionX: number | null;
+  positionY: number | null;
+}>;

@@ -13,7 +13,12 @@ import {
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
 import { WorkflowTemplatesService } from "./workflow-templates.service";
-import { CreateTemplateDto, UpdateTemplateDto } from "./workflow-templates.dto";
+import {
+  CreateTemplateDto,
+  CreateTemplateStepDto,
+  UpdateTemplateDto,
+  UpdateTemplateStepDto,
+} from "./workflow-templates.dto";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
 
@@ -66,5 +71,41 @@ export class WorkflowTemplatesController {
   @RequirePermission("update", "workflow-template")
   remove(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
     return this.templates.deleteTemplate(req.user.companyId, req.user.id, id);
+  }
+
+  // ─── Template steps (1c-ii) — tất cả gate update:workflow-template ────────────
+
+  @Post(":id/steps")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "workflow-template")
+  addStep(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Body() dto: CreateTemplateStepDto,
+  ) {
+    return this.templates.addStep(req.user.companyId, req.user.id, id, dto);
+  }
+
+  @Patch(":id/steps/:stepId")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "workflow-template")
+  updateStep(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Param("stepId") stepId: string,
+    @Body() dto: UpdateTemplateStepDto,
+  ) {
+    return this.templates.updateStep(req.user.companyId, req.user.id, id, stepId, dto);
+  }
+
+  @Delete(":id/steps/:stepId")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "workflow-template")
+  removeStep(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Param("stepId") stepId: string,
+  ) {
+    return this.templates.removeStep(req.user.companyId, req.user.id, id, stepId);
   }
 }

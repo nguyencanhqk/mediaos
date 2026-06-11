@@ -149,6 +149,104 @@ describe.skipIf(!hasDb)("G7-1c workflow templates service", () => {
     expect(after.map((x) => x.id)).not.toContain(t.id);
     await expect(svc.getTemplateDetail(A.companyId, t.id)).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  // ─── 1c-ii: template steps ───────────────────────────────────────────────────
+
+  const stepDto = (over: Record<string, unknown> = {}) => ({
+    nodeKey: `nk-${randomUUID().slice(0, 8)}`,
+    code: `sc-${randomUUID().slice(0, 8)}`,
+    name: "Viết kịch bản",
+    defaultTaskTitle: "Viết kịch bản",
+    stepType: "task",
+    isRequired: true,
+    ...over,
+  });
+
+  it("R5 addStep parent tenant khác → NotFound", async () => {
+    const tB = await seedTemplate(B.companyId);
+    await expect(svc.addStep(A.companyId, userA, tB, stepDto())).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it("R6 addStep trên template published → Conflict (draft-only)", async () => {
+    const tA = await seedTemplate(A.companyId, "published");
+    await expect(svc.addStep(A.companyId, userA, tA, stepDto())).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+  });
+
+  it("R7 nodeKey trùng trong template → Conflict", async () => {
+    const t = await svc.createTemplate(A.companyId, userA, {
+      code: `nk-${randomUUID().slice(0, 8)}`,
+      name: "T",
+      appliesTo: "content_item",
+    });
+    const nodeKey = `dup-${randomUUID().slice(0, 8)}`;
+    await svc.addStep(A.companyId, userA, t.id, stepDto({ nodeKey }));
+    await expect(svc.addStep(A.companyId, userA, t.id, stepDto({ nodeKey }))).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+  });
+
+  it("updateStep step tenant khác → NotFound", async () => {
+    const tB = await seedTemplate(B.companyId);
+    await expect(
+      svc.updateStep(A.companyId, userA, tB, randomUUID(), { name: "X" }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("addStep stepOrder auto (max+1) + audit; get-detail thấy step theo thứ tự", async () => {
+    const t = await svc.createTemplate(A.companyId, userA, {
+      code: `as-${randomUUID().slice(0, 8)}`,
+      name: "T",
+      appliesTo: "content_item",
+    });
+    const s1 = await svc.addStep(A.companyId, userA, t.id, stepDto());
+    const s2 = await svc.addStep(A.companyId, userA, t.id, stepDto());
+    expect(s1.stepOrder).toBe(1);
+    expect(s2.stepOrder).toBe(2);
+    expect(await auditCount(A.companyId, t.id, "WorkflowTemplateStepAdded")).toBe(2);
+
+    const detail = await svc.getTemplateDetail(A.companyId, t.id);
+    expect(detail.steps.map((x) => x.id)).toEqual([s1.id, s2.id]);
+  });
+
+  it("updateStep đổi name; nodeKey giữ nguyên (BẤT BIẾN) + audit", async () => {
+    const t = await svc.createTemplate(A.companyId, userA, {
+      code: `us-${randomUUID().slice(0, 8)}`,
+      name: "T",
+      appliesTo: "content_item",
+    });
+    const s = await svc.addStep(A.companyId, userA, t.id, stepDto({ name: "Cũ" }));
+    const u = await svc.updateStep(A.companyId, userA, t.id, s.id, { name: "Mới" });
+    expect(u.name).toBe("Mới");
+    expect(u.nodeKey).toBe(s.nodeKey);
+    expect(await auditCount(A.companyId, t.id, "WorkflowTemplateStepUpdated")).toBe(1);
+  });
+
+  it("removeStep hard-delete + cascade dependency + audit", async () => {
+    const t = await svc.createTemplate(A.companyId, userA, {
+      code: `rm-${randomUUID().slice(0, 8)}`,
+      name: "T",
+      appliesTo: "content_item",
+    });
+    const s1 = await svc.addStep(A.companyId, userA, t.id, stepDto());
+    const s2 = await svc.addStep(A.companyId, userA, t.id, stepDto());
+    // dependency s1→s2 (direct) để kiểm cascade khi hard-delete s1
+    await direct.query(
+      `INSERT INTO workflow_step_dependencies (company_id, workflow_definition_id, from_step_id, to_step_id)
+       VALUES ($1, $2, $3, $4)`,
+      [A.companyId, t.id, s1.id, s2.id],
+    );
+
+    await svc.removeStep(A.companyId, userA, t.id, s1.id);
+    expect(await auditCount(A.companyId, t.id, "WorkflowTemplateStepRemoved")).toBe(1);
+
+    const detail = await svc.getTemplateDetail(A.companyId, t.id);
+    expect(detail.steps.map((x) => x.id)).toEqual([s2.id]);
+    expect(detail.dependencies).toEqual([]); // FK cascade xoá dep
+  });
 });
 
 /**
@@ -157,7 +255,7 @@ describe.skipIf(!hasDb)("G7-1c workflow templates service", () => {
  */
 describe("G7-1c controller permission metadata (PD3)", () => {
   const proto = WorkflowTemplatesController.prototype as unknown as Record<string, object>;
-  it.each([["create"], ["update"], ["remove"]])(
+  it.each([["create"], ["update"], ["remove"], ["addStep"], ["updateStep"], ["removeStep"]])(
     "%s mang @RequirePermission resourceType=workflow-template",
     (method) => {
       const meta = Reflect.getMetadata(REQUIRE_PERMISSION, proto[method]) as

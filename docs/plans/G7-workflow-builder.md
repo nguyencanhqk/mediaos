@@ -344,6 +344,11 @@ Bắt đầu: sau SYNC GATE, dựng skeleton route /workflows/templates + templa
 - **Hard-delete child rows (1c-ii→iv):** schema frozen KHÔNG có `deleted_at` ở `workflow_definition_steps`/`workflow_step_dependencies`/`checklists`/`checklist_items` → remove = hard-delete, **giới hạn template `draft`** (published immutable + instance snapshot riêng ở `workflow_steps` → không mất audit-data). Chốt lại khi tới 1c-ii.
 - **Audit gom aggregate:** mọi thao tác template/step/dep/checklist audit dưới `objectType='workflow_template'`, `objectId=templateId` (1 audit type, thêm ở migration 0033).
 
+**Sau 1c-ii (Template step config):**
+- **stepOrder auto (max+1) có race chấp nhận được:** 2 `addStep` đồng thời cùng template → 1 cái 23505 trên `wf_def_steps_def_order_uq` → 409 (client retry). KHÔNG mất data. Template editing low-concurrency (1 PM/template) → chấp nhận; nâng `SELECT…FOR UPDATE` trên template row nếu sau này cần đa editor đồng thời.
+- **Hard-delete step (draft-only):** đã chốt — `removeStep` hard DELETE, ép draft qua `loadDraftTemplate`; FK cascade `workflow_step_dependencies`, SET NULL `checklists.workflow_definition_step_id`. Áp cùng pattern cho dep (1c-iii) + checklist (1c-iv).
+- **23505 fallback:** mọi unique-violation không khớp constraint cụ thể → 409 chung (chống raw pg-error 500 rò tên bảng/schema).
+
 ---
 
 _Liên quan: [`workflow-state-machine.md`](../spikes/workflow-state-machine.md) · [`erd-v2.md`](../erd-v2.md) · [`G6-media-full.md`](./G6-media-full.md) (mẫu plan) · ADR 0009/0010/0016 · [`TASKS.md`](../../TASKS.md) G7._
