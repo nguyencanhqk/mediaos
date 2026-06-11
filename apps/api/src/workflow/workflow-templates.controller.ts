@@ -13,7 +13,9 @@ import {
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
 import { WorkflowTemplatesService } from "./workflow-templates.service";
+import { WorkflowService } from "./workflow.service";
 import {
+  ApplyTemplateDto,
   CreateChecklistDto,
   CreateChecklistItemDto,
   CreateDependencyDto,
@@ -38,7 +40,10 @@ interface AuthenticatedRequest extends Request {
 @Controller("workflow-templates")
 @UsePipes(ZodValidationPipe)
 export class WorkflowTemplatesController {
-  constructor(private readonly templates: WorkflowTemplatesService) {}
+  constructor(
+    private readonly templates: WorkflowTemplatesService,
+    private readonly workflows: WorkflowService,
+  ) {}
 
   @Post()
   @UseGuards(PermissionGuard)
@@ -92,6 +97,14 @@ export class WorkflowTemplatesController {
   @RequirePermission("create", "workflow-template")
   clone(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
     return this.templates.cloneTemplate(req.user.companyId, req.user.id, id);
+  }
+
+  // Apply = tạo workflow instance từ template published → gate `apply:workflow-instance` (resourceType đã seed).
+  @Post(":id/apply")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("apply", "workflow-instance")
+  apply(@Req() req: AuthenticatedRequest, @Param("id") id: string, @Body() dto: ApplyTemplateDto) {
+    return this.workflows.applyTemplate(req.user.companyId, req.user.id, id, dto);
   }
 
   // ─── Template steps (1c-ii) — tất cả gate update:workflow-template ────────────

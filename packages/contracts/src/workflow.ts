@@ -300,3 +300,15 @@ export const createChecklistItemSchema = z.object({
   sortOrder: z.number().int().min(0).default(0),
 });
 export type CreateChecklistItemRequest = z.infer<typeof createChecklistItemSchema>;
+
+// Áp 1 template (published) lên ĐÚNG-MỘT target: content_item HOẶC project (khớp wf_instances target check).
+// Thêm sau freeze 1b nhưng ADDITIVE (không sửa schema cũ) → không ép B/C rebase.
+export const applyTemplateSchema = z
+  .object({
+    contentItemId: z.string().uuid().optional().nullable(),
+    projectId: z.string().uuid().optional().nullable(),
+  })
+  .refine((d) => (d.contentItemId ? 1 : 0) + (d.projectId ? 1 : 0) === 1, {
+    message: "Provide exactly one target: contentItemId or projectId",
+  });
+export type ApplyTemplateRequest = z.infer<typeof applyTemplateSchema>;

@@ -7,10 +7,12 @@ import {
   approvalSteps,
   contentItems,
   defects,
+  projects,
   tasks,
   workflowDefinitionSteps,
   workflowDefinitions,
   workflowInstances,
+  workflowStepDependencies,
   workflowSteps,
 } from "../db/schema";
 
@@ -48,6 +50,52 @@ export class WorkflowRepository {
       .orderBy(workflowDefinitionSteps.stepOrder);
   }
 
+  // ─── Apply template (3b) ──────────────────────────────────────────────────
+
+  /** Template phải published (D4: chỉ published mới apply được) + cùng tenant + chưa xoá. */
+  findPublishedTemplateInTx(companyId: string, templateId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(workflowDefinitions)
+      .where(
+        and(
+          eq(workflowDefinitions.companyId, companyId),
+          eq(workflowDefinitions.id, templateId),
+          eq(workflowDefinitions.status, "published"),
+          isNull(workflowDefinitions.deletedAt),
+        ),
+      )
+      .limit(1);
+  }
+
+  /** Cạnh DAG của template (để tính bước root = step không xuất hiện ở to_step_id). */
+  findTemplateDependenciesInTx(companyId: string, templateId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(workflowStepDependencies)
+      .where(
+        and(
+          eq(workflowStepDependencies.companyId, companyId),
+          eq(workflowStepDependencies.workflowDefinitionId, templateId),
+        ),
+      );
+  }
+
+  /** Project thuộc tenant (validate target khi appliesTo='project'). */
+  findProjectByIdInTx(companyId: string, projectId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(projects)
+      .where(
+        and(
+          eq(projects.companyId, companyId),
+          eq(projects.id, projectId),
+          isNull(projects.deletedAt),
+        ),
+      )
+      .limit(1);
+  }
+
   // ─── Instances ────────────────────────────────────────────────────────────
 
   createInstance(
@@ -65,6 +113,33 @@ export class WorkflowRepository {
         companyId,
         workflowDefinitionId: data.workflowDefinitionId,
         contentItemId: data.contentItemId,
+        createdBy: data.createdBy,
+        status: "active",
+        currentStepOrder: 1,
+      })
+      .returning();
+  }
+
+  /** 3b: tạo instance đa-target (content_item XOR project) + pin definition_version. */
+  createInstanceForTemplate(
+    companyId: string,
+    data: {
+      workflowDefinitionId: string;
+      contentItemId: string | null;
+      projectId: string | null;
+      definitionVersion: number;
+      createdBy: string | null;
+    },
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(workflowInstances)
+      .values({
+        companyId,
+        workflowDefinitionId: data.workflowDefinitionId,
+        contentItemId: data.contentItemId,
+        projectId: data.projectId,
+        definitionVersion: data.definitionVersion,
         createdBy: data.createdBy,
         status: "active",
         currentStepOrder: 1,
@@ -131,6 +206,7 @@ export class WorkflowRepository {
       stepOrder: number;
       stepCode: string;
       stepName: string;
+      nodeKey?: string | null;
       assigneeUserId: string | null;
       reviewerUserId: string | null;
     }>,
@@ -145,6 +221,7 @@ export class WorkflowRepository {
           stepOrder: s.stepOrder,
           stepCode: s.stepCode,
           stepName: s.stepName,
+          nodeKey: s.nodeKey ?? null,
           status: "not_started" as const,
           assigneeUserId: s.assigneeUserId,
           reviewerUserId: s.reviewerUserId,

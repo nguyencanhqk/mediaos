@@ -1,5 +1,6 @@
 import { createZodDto } from "nestjs-zod";
 import {
+  applyTemplateSchema,
   createChecklistItemSchema,
   createChecklistSchema,
   createDependencySchema,
@@ -20,3 +21,4 @@ const createChecklistBodySchema = createChecklistSchema.omit({ workflowDefinitio
 const createChecklistItemBodySchema = createChecklistItemSchema.omit({ checklistId: true });
 export class CreateChecklistDto extends createZodDto(createChecklistBodySchema) {}
 export class CreateChecklistItemDto extends createZodDto(createChecklistItemBodySchema) {}
+export class ApplyTemplateDto extends createZodDto(applyTemplateSchema) {}

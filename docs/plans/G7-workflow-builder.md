@@ -371,6 +371,12 @@ Bắt đầu: sau SYNC GATE, dựng skeleton route /workflows/templates + templa
 - **`workflow_step_checklist_states`**: 1 row = đã tick, bỏ tick = DELETE, uq (step,item). Enforcement required-item ở **4b** (submit gated). 3b chỉ snapshot step; chưa tick.
 - **definition_version** pin ở instance (đọc deps template theo version) — 3b set từ template published lúc apply; KHÔNG snapshot deps riêng.
 
+**Sau 3b (applyTemplate):**
+- **applyTemplate** (WorkflowService, endpoint `POST /workflow-templates/:id/apply` gate `apply:workflow-instance`): template **published** → snapshot steps (node_key, assignee NULL — PM gán sau qua assignStep), pin definition_version, mở **bước root** (id không là to_step_id) bằng auto-task idempotent (dedup_key). Non-root chờ dep approved (**3c**). Deny FS8a (draft/archived→404), FS8b (target active→409 uq), FS8c (sai appliesTo→400). `applyTemplateSchema` thêm contracts (additive).
+- **Giữ `startWorkflow`** (MVP-0 hard-code) — 3c mới tổng quát hoá FSM (open khi dep approved). `createSteps` extend +nodeKey (startWorkflow truyền null — hợp lệ).
+- **⚠️ Project-target task thiếu linkage:** `tasks` chưa có cột `project_id` → apply template `appliesTo='project'` tạo task `content_item_id=NULL`, không anchor project. Instance/steps đúng; chỉ task lookup-by-project chưa được (My Tasks G4-4 content-based). **Nợ:** thêm `tasks.project_id` (migration) + query khi G7 dùng project-workflow thật (3c/G8). G7 thực tế đi content_item.
+- **Guard ẩn:** validate `createdSteps.length==defSteps`; throw nếu 0 root task mở (chống instance kẹt). Event `workflow.started` dùng chung start+apply (additive payload).
+
 ---
 
 _Liên quan: [`workflow-state-machine.md`](../spikes/workflow-state-machine.md) · [`erd-v2.md`](../erd-v2.md) · [`G6-media-full.md`](./G6-media-full.md) (mẫu plan) · ADR 0009/0010/0016 · [`TASKS.md`](../../TASKS.md) G7._
