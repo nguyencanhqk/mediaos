@@ -125,7 +125,6 @@ function makeRepo(overrides: {
   step?: ReturnType<typeof makeStep>;
   instance?: ReturnType<typeof makeInstance>;
   request?: ReturnType<typeof makeApprovalRequest>;
-  maxStepOrder?: number;
   dag?: DagFixture;
 } = {}) {
   const step = overrides.step ?? makeStep();
@@ -137,7 +136,7 @@ function makeRepo(overrides: {
     findApprovalRequestById: vi.fn().mockResolvedValue([request]),
     findStepByIdInTx: vi.fn().mockResolvedValue([step]),
     findInstanceByIdInTx: vi.fn().mockResolvedValue([instance]),
-    findMaxStepOrder: vi.fn().mockResolvedValue(overrides.maxStepOrder ?? 4),
+    lockInstanceForUpdateInTx: vi.fn().mockResolvedValue([{ id: instance.id }]),
     createApprovalStep: vi.fn().mockResolvedValue([{ id: "new-approval-step" }]),
     closeApprovalRequest: vi.fn().mockResolvedValue([{ ...request, status: "approved" }]),
     approveStep: vi.fn().mockResolvedValue([{ ...step, status: "approved", approvedAt: new Date() }]),
@@ -298,8 +297,6 @@ describe("ApprovalService", () => {
       expect((result as { isLastStep: boolean }).isLastStep).toBe(false);
       expect(repo.approveStep).toHaveBeenCalled();
       expect(repo.completeWorkflowInstance).not.toHaveBeenCalled();
-      // 3c-ii abandons the linear pointer — approve() must never advance current_step_order.
-      expect(repo.advanceInstanceStepOrder).not.toHaveBeenCalled();
     });
   });
 
@@ -317,7 +314,6 @@ describe("ApprovalService", () => {
       expect(result.isWorkflowComplete).toBe(true);
       expect((result as { isLastStep: boolean }).isLastStep).toBe(true);
       expect(repo.completeWorkflowInstance).toHaveBeenCalled();
-      expect(repo.advanceInstanceStepOrder).not.toHaveBeenCalled();
     });
   });
 

@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, isNull, max, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
 import type { TenantTx } from "../db/db.service";
 import {
@@ -179,24 +179,6 @@ export class WorkflowRepository {
     );
   }
 
-  updateInstanceStepOrder(
-    companyId: string,
-    instanceId: string,
-    currentStepOrder: number,
-    tx: TenantTx,
-  ) {
-    return tx
-      .update(workflowInstances)
-      .set({ currentStepOrder })
-      .where(
-        and(
-          eq(workflowInstances.companyId, companyId),
-          eq(workflowInstances.id, instanceId),
-        ),
-      )
-      .returning();
-  }
-
   // ─── Steps ────────────────────────────────────────────────────────────────
 
   createSteps(
@@ -261,6 +243,24 @@ export class WorkflowRepository {
         ),
       )
       .limit(1);
+  }
+
+  /**
+   * G7-3c-iii race-safety (BLOCKING #2 / FS10): take a per-instance row lock so concurrent
+   * approvals of a join's deps serialize. MUST be called inside approve()'s tx, BEFORE any
+   * dep-state read — the lock is held until commit, turning the lost-update race into a queue.
+   */
+  lockInstanceForUpdateInTx(companyId: string, instanceId: string, tx: TenantTx) {
+    return tx
+      .select({ id: workflowInstances.id })
+      .from(workflowInstances)
+      .where(
+        and(
+          eq(workflowInstances.companyId, companyId),
+          eq(workflowInstances.id, instanceId),
+        ),
+      )
+      .for("update");
   }
 
   findStepsByInstanceId(companyId: string, instanceId: string) {
@@ -475,35 +475,12 @@ export class WorkflowRepository {
       .returning();
   }
 
-  advanceInstanceStepOrder(companyId: string, instanceId: string, newOrder: number, tx: TenantTx) {
-    return tx
-      .update(workflowInstances)
-      .set({ currentStepOrder: newOrder })
-      .where(and(eq(workflowInstances.companyId, companyId), eq(workflowInstances.id, instanceId)))
-      .returning();
-  }
-
   completeWorkflowInstance(companyId: string, instanceId: string, tx: TenantTx) {
     return tx
       .update(workflowInstances)
       .set({ status: "completed" })
       .where(and(eq(workflowInstances.companyId, companyId), eq(workflowInstances.id, instanceId)))
       .returning();
-  }
-
-  findMaxStepOrder(companyId: string, instanceId: string) {
-    return this.db.withTenant(companyId, async (tx) => {
-      const [row] = await tx
-        .select({ maxOrder: max(workflowSteps.stepOrder) })
-        .from(workflowSteps)
-        .where(
-          and(
-            eq(workflowSteps.companyId, companyId),
-            eq(workflowSteps.workflowInstanceId, instanceId),
-          ),
-        );
-      return row?.maxOrder ?? 1;
-    });
   }
 
   createDefect(

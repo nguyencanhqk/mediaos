@@ -222,6 +222,69 @@ describe("WorkflowFsmService", () => {
     });
   });
 
+  // ─── FS5: only the consumer path writes approved/revision (invariant §1.4) ──
+  // D6 (above) proves the SERVICE path cannot reach approved/revision. FS5 proves the symmetric
+  // half: validateConsumerTransition IS that path — approve→approved, request_revision→revision,
+  // both writtenBy='consumer'; while start/submit (service) only reach in_progress/waiting_review.
+  // Together they pin §1.4: approved/revision are reachable ONLY through the consumer path.
+  describe("FS5 — only the consumer path writes approved/revision (invariant §1.4)", () => {
+    it("approve (consumer) transitions waiting_review → approved", () => {
+      const step = makeStep({ status: "waiting_review" });
+      const instance = makeInstance({});
+
+      const result = fsm.validateConsumerTransition({
+        step,
+        instance,
+        event: "approve",
+        actorId: ACTOR_ID,
+        reviewerUserId: null,
+      });
+
+      expect(result.toState).toBe("approved");
+      expect(result.writtenBy).toBe("consumer");
+    });
+
+    it("request_revision (consumer) transitions waiting_review → revision", () => {
+      const step = makeStep({ status: "waiting_review" });
+      const instance = makeInstance({});
+
+      const result = fsm.validateConsumerTransition({
+        step,
+        instance,
+        event: "request_revision",
+        actorId: ACTOR_ID,
+        reviewerUserId: null,
+      });
+
+      expect(result.toState).toBe("revision");
+      expect(result.writtenBy).toBe("consumer");
+    });
+
+    it("service events (start/submit) never reach approved/revision", () => {
+      const notStarted = makeStep({ status: "not_started" });
+      const inProgress = makeStep({ status: "in_progress" });
+      const instance = makeInstance({});
+
+      const started = fsm.validateServiceTransition({
+        step: notStarted,
+        instance,
+        event: "start",
+        actorId: ASSIGNEE_ID,
+        dependenciesApproved: true,
+      });
+      const submitted = fsm.validateServiceTransition({
+        step: inProgress,
+        instance,
+        event: "submit",
+        actorId: ASSIGNEE_ID,
+        dependenciesApproved: true,
+      });
+
+      expect(["approved", "revision"]).not.toContain(started.toState);
+      expect(["approved", "revision"]).not.toContain(submitted.toState);
+    });
+  });
+
   // ─── D10: Instance not active ───────────────────────────────────────────────
   describe("D10 — transition when instance is not active", () => {
     it("throws WorkflowInactiveError when instance is completed", () => {

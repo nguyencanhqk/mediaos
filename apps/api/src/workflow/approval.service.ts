@@ -101,6 +101,10 @@ export class ApprovalService {
       const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
       if (!instance) throw new NotFoundException(`Instance not found: ${step.workflowInstanceId}`);
 
+      // 3c-iii race-safety (FS10): serialize per-instance BEFORE any dep-state read. Two approvers
+      // closing a join's last two deps now queue on this row lock instead of lost-updating each other.
+      await this.repo.lockInstanceForUpdateInTx(companyId, instance.id, tx);
+
       try {
         this.fsm.validateConsumerTransition({
           step: toFsmStep(step),

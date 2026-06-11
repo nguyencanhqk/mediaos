@@ -26,11 +26,18 @@ import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../hel
  *        (pure fork; the completing approval is a non-max-order step).
  *   FS6  replay a closed approval request → 409, no duplicate task, no double complete
  *        (regression guard; the 409 path already exists pre-3c-ii).
+ *   FS10 race-safety (3c-iii): approve() must take a per-instance SELECT…FOR UPDATE lock before
+ *        reading dep state (BLOCKING #2), so concurrent approvals of a join's deps serialize and
+ *        cannot lost-update (under-open / under-complete). Natural Promise.all timing is order/pool
+ *        dependent and unreliable as a RED signal, so this is a deterministic probe: a second
+ *        connection HOLDS the instance row lock and we assert a real approve() blocks on it. Pre-
+ *        lock a non-completing approve() never touches the instance row → doesn't block → RED.
+ *        Sequential correctness of open/complete is covered by FS3 / FS7.
  *
  * Helpers (publishedTemplate / seedContentItem / taskCountForStep / stepIdByNodeKey) mirror
  * workflow-apply.int-spec.ts; left local for now — DRY-extract once a 3rd spec needs them.
  */
-describe.skipIf(!hasDb)("G7-3c-ii approve() over DAG", () => {
+describe.skipIf(!hasDb)("G7-3c approve() over DAG (3c-ii fan-out + 3c-iii race-safety)", () => {
   const direct = directPool();
   let A: SeededTenant;
   let userA: string;
@@ -106,11 +113,16 @@ describe.skipIf(!hasDb)("G7-3c-ii approve() over DAG", () => {
     );
   }
 
-  /** start → submit → approve one step; returns the approve() result. */
-  async function drive(stepId: string) {
+  /** start → submit one step; returns the pending approval request id (NOT yet approved). */
+  async function submitFor(stepId: string): Promise<string> {
     await svc.startStep(A.companyId, stepId, userA);
     const sub = await svc.submitStep(A.companyId, stepId, userA, {});
-    return approval.approve(A.companyId, (sub as { approvalRequest: { id: string } }).approvalRequest.id, userA);
+    return (sub as { approvalRequest: { id: string } }).approvalRequest.id;
+  }
+
+  /** start → submit → approve one step; returns the approve() result. */
+  async function drive(stepId: string) {
+    return approval.approve(A.companyId, await submitFor(stepId), userA);
   }
 
   beforeAll(async () => {
@@ -225,5 +237,51 @@ describe.skipIf(!hasDb)("G7-3c-ii approve() over DAG", () => {
 
     expect(await taskCountForStep(idB)).toBe(1); // B opened exactly once
     expect(await instanceStatus(instance.id)).toBe("active"); // not completed (B unapproved)
+  });
+
+  it("FS10 approve() blocks on a held per-instance FOR UPDATE lock (serializes joins)", async () => {
+    // Deterministic probe for BLOCKING #2. A blocker connection holds the instance row lock; a real
+    // approve() of a non-completing step must block on it once 3c-iii adds lockInstanceForUpdateInTx.
+    // Pre-lock approve() never touches the instance row (no completion) → does NOT block → RED.
+    const { t, steps } = await publishedTemplate(3, [
+      [0, 1],
+      [0, 2],
+    ]); // fork A→{B,C}
+    const ci = await seedContentItem();
+    const { instance } = await svc.applyTemplate(A.companyId, userA, t.id, { contentItemId: ci });
+    await assignAll(instance.id);
+
+    const idA = await stepIdByNodeKey(instance.id, steps[0].nodeKey);
+    const idB = await stepIdByNodeKey(instance.id, steps[1].nodeKey);
+
+    await drive(idA); // opens B, C
+    const reqB = await submitFor(idB); // B waiting_review, request pending
+
+    const blocker = await direct.connect();
+    let approvePromise: Promise<unknown> | undefined;
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query(
+        "SELECT id FROM workflow_instances WHERE company_id = $1 AND id = $2 FOR UPDATE",
+        [A.companyId, instance.id],
+      );
+
+      // Fire a real approve() without awaiting; race it against a generous timeout.
+      approvePromise = approval.approve(A.companyId, reqB, userA);
+      const outcome = await Promise.race([
+        approvePromise.then(() => "settled", () => "settled"),
+        new Promise<string>((resolve) => setTimeout(() => resolve("blocked"), 750)),
+      ]);
+
+      // RED until lockInstanceForUpdateInTx exists: approve() settles immediately instead of blocking.
+      expect(outcome).toBe("blocked");
+    } finally {
+      await blocker.query("ROLLBACK").catch(() => undefined);
+      blocker.release();
+    }
+
+    // Lock released → the queued approve() proceeds and commits.
+    await approvePromise;
+    expect(await instanceStatus(instance.id)).toBe("active"); // B approved, C still pending
   });
 });
