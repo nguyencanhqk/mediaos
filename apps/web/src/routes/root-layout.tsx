@@ -10,6 +10,8 @@ const NAV = [
   { to: "/settings/platform-accounts", label: "Tài khoản nền tảng" },
   { to: "/projects", label: "Dự án" },
   { to: "/content", label: "Nội dung" },
+  { to: "/workflows/templates", label: "Quy trình" },
+  { to: "/workflows/instances", label: "Tiến độ quy trình" },
   { to: "/org/departments", label: "Phòng ban" },
   { to: "/org/teams", label: "Nhóm" },
   { to: "/org/employees", label: "Nhân sự" },

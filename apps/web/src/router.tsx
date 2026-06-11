@@ -16,6 +16,10 @@ import { ContentPage } from "@/routes/media/content";
 import { ContentDetailPage } from "@/routes/media/content-detail";
 import { TasksPage } from "@/routes/tasks/index";
 import { ProjectChatPage } from "@/routes/chat/project-chat";
+import { WorkflowTemplatesPage } from "@/routes/workflows/templates";
+import { WorkflowTemplateDetailPage } from "@/routes/workflows/template-detail";
+import { WorkflowInstancesPage } from "@/routes/workflows/instances/instances-list";
+import { WorkflowInstanceDetailPage } from "@/routes/workflows/instances/instance-detail";
 import { useAuthStore } from "@/stores/auth";
 
 const rootRoute = createRootRoute({ component: RootLayout });
@@ -125,6 +129,34 @@ const positionsRoute = createRoute({
   component: PositionsPage,
 });
 
+const workflowTemplatesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/workflows/templates",
+  beforeLoad: authGuard,
+  component: WorkflowTemplatesPage,
+});
+
+const workflowTemplateDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/workflows/templates/$templateId",
+  beforeLoad: authGuard,
+  component: WorkflowTemplateDetailPage,
+});
+
+const workflowInstancesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/workflows/instances",
+  beforeLoad: authGuard,
+  component: WorkflowInstancesPage,
+});
+
+const workflowInstanceDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/workflows/instances/$instanceId",
+  beforeLoad: authGuard,
+  component: WorkflowInstanceDetailPage,
+});
+
 const companySettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings/company",
@@ -156,6 +188,10 @@ const routeTree = rootRoute.addChildren([
   contentDetailRoute,
   tasksRoute,
   projectChatRoute,
+  workflowTemplatesRoute,
+  workflowTemplateDetailRoute,
+  workflowInstancesRoute,
+  workflowInstanceDetailRoute,
 ]);
 
 export const router = createRouter({ routeTree });
