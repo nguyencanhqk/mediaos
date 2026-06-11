@@ -11,6 +11,11 @@ import { OutboxService } from "../events/outbox.service";
 import { WorkflowFsmService } from "./workflow-fsm.service";
 import { WorkflowRepository } from "./workflow.repository";
 import {
+  computeNewlyUnblockedStepIds,
+  isWorkflowComplete,
+  type DagContext,
+} from "./workflow-dag";
+import {
   ApprovalRequestNotPendingError,
   IllegalTransitionError,
   NotReviewerError,
@@ -73,8 +78,8 @@ export class ApprovalService {
    *   - Updates approval_request.status = approved
    *   - Updates workflow_steps.status = approved
    *   - Updates task.status = approved (if exists)
-   *   - If last step → complete workflow instance
-   *   - Else → advance currentStepOrder (open_next)
+   *   - Fans out: opens (auto-task) every downstream step the approval unblocked (DAG, 0..n)
+   *   - Completes the instance iff every required step is approved (G7-3c-ii, NOT by step_order)
    */
   async approve(
     companyId: string,
@@ -133,18 +138,66 @@ export class ApprovalService {
       const [updatedStep] = await this.repo.approveStep(companyId, step.id, tx);
       if (!updatedStep) throw new InternalServerErrorException("Failed to approve step");
 
-      // 4. Update task status if exists
-      const [task] = await this.repo.findTaskByStepId(companyId, step.id);
+      // 4. Update task status if exists (read within tx — ready for the 3c-iii FOR UPDATE lock)
+      const [task] = await this.repo.findActiveTaskByStepIdInTx(companyId, step.id, tx);
       if (task) {
         await this.repo.updateTaskStatus(companyId, task.id, "approved", tx);
       }
 
-      // 5. Determine if last step
-      const maxStepOrder = await this.repo.findMaxStepOrder(companyId, instance.id);
-      const isLastStep = step.stepOrder >= maxStepOrder;
+      // 5. DAG resolution (G7-3c-ii) — replaces the linear current_step_order pointer.
+      // Read the POST-approve DAG view WITHIN this tx. Sequential awaits, NOT Promise.all:
+      // node-postgres cannot run concurrent queries on one tx connection; staying on the
+      // caller's tx keeps these reads inside the per-instance FOR UPDATE lock added in 3c-iii.
+      const defStepRows = await this.repo.findDefinitionStepsInTx(
+        companyId,
+        instance.workflowDefinitionId,
+        tx,
+      );
+      const depRows = await this.repo.findTemplateDependenciesInTx(
+        companyId,
+        instance.workflowDefinitionId,
+        tx,
+      );
+      const instanceStepRows = await this.repo.findStepsByInstanceIdInTx(companyId, instance.id, tx);
 
-      if (isLastStep) {
-        // T7: complete workflow
+      const dagCtx: DagContext = {
+        defSteps: defStepRows.map((d) => ({ id: d.id, nodeKey: d.nodeKey, isRequired: d.isRequired })),
+        deps: depRows.map((dep) => ({ fromStepId: dep.fromStepId, toStepId: dep.toStepId })),
+        instanceSteps: instanceStepRows.map((s) => ({
+          id: s.id,
+          nodeKey: s.nodeKey,
+          stepCode: s.stepCode,
+          status: s.status,
+        })),
+      };
+
+      // 6. Fan out: open every step this approval unblocked (0..n). Mirror applyTemplate root-open —
+      // idempotent createTask (dedup_key onConflictDoNothing), assignee NULL (PM assigns later).
+      const newlyOpenedStepIds = computeNewlyUnblockedStepIds(
+        { nodeKey: step.nodeKey, stepCode: step.stepCode },
+        dagCtx,
+      );
+      for (const openStepId of newlyOpenedStepIds) {
+        const openStep = instanceStepRows.find((s) => s.id === openStepId);
+        if (!openStep) continue;
+        const openDef = defStepRows.find((d) => d.nodeKey === (openStep.nodeKey ?? openStep.stepCode));
+        await this.repo.createTask(
+          companyId,
+          {
+            workflowStepId: openStepId,
+            contentItemId: instance.contentItemId,
+            title: openDef?.defaultTaskTitle ?? openStep.stepName,
+            assigneeUserId: null,
+            origin: "initial",
+            revisionRound: 0,
+          },
+          tx,
+        );
+      }
+
+      // 7. Complete the instance iff every required step is approved (NOT by step_order — §1.3).
+      const workflowComplete = isWorkflowComplete(dagCtx);
+      if (workflowComplete) {
         await this.repo.completeWorkflowInstance(companyId, instance.id, tx);
         await this.audit.record(tx, {
           action: "WorkflowCompleted",
@@ -157,20 +210,18 @@ export class ApprovalService {
           eventType: "workflow.completed",
           payload: { instanceId: instance.id, lastStepId: step.id, approvedBy: actorId },
         });
-      } else {
-        // T6: open next step (advance pointer)
-        const nextOrder = step.stepOrder + 1;
-        await this.repo.advanceInstanceStepOrder(companyId, instance.id, nextOrder, tx);
-        await this.outbox.enqueue(tx, {
-          eventType: "step.approved",
-          payload: {
-            stepId: step.id,
-            instanceId: instance.id,
-            nextStepOrder: nextOrder,
-            approvedBy: actorId,
-          },
-        });
       }
+
+      // step.approved drives notifications whether or not the workflow completed.
+      await this.outbox.enqueue(tx, {
+        eventType: "step.approved",
+        payload: {
+          stepId: step.id,
+          instanceId: instance.id,
+          approvedBy: actorId,
+          newlyOpenedStepIds,
+        },
+      });
 
       await this.audit.record(tx, {
         action: "StepApproved",
@@ -180,11 +231,12 @@ export class ApprovalService {
         after: {
           status: "approved",
           approvalStepId: approvalStepRow?.id,
-          isLastStep,
+          isWorkflowComplete: workflowComplete,
+          newlyOpenedStepIds,
         },
       });
 
-      return { step: updatedStep, isLastStep };
+      return { step: updatedStep, isWorkflowComplete: workflowComplete, isLastStep: workflowComplete };
     }).catch((err: unknown) => {
       if (
         err instanceof NotFoundException ||

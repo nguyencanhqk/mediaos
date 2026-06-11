@@ -464,7 +464,7 @@ export class WorkflowService {
     return allDependenciesApproved(
       { nodeKey: step.nodeKey, stepCode: step.stepCode },
       {
-        defSteps: defSteps.map((d) => ({ id: d.id, nodeKey: d.nodeKey })),
+        defSteps: defSteps.map((d) => ({ id: d.id, nodeKey: d.nodeKey, isRequired: d.isRequired })),
         deps: deps.map((dep) => ({ fromStepId: dep.fromStepId, toStepId: dep.toStepId })),
         instanceSteps: instanceSteps.map((s) => ({
           id: s.id,
