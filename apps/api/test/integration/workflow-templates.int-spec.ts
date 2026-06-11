@@ -1,12 +1,18 @@
 import "reflect-metadata";
 import { randomUUID } from "node:crypto";
-import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DatabaseService } from "../../src/db/db.service";
 import { AuditService } from "../../src/events/audit.service";
 import { WorkflowTemplatesRepository } from "../../src/workflow/workflow-templates.repository";
 import { WorkflowTemplatesService } from "../../src/workflow/workflow-templates.service";
 import { WorkflowTemplatesController } from "../../src/workflow/workflow-templates.controller";
+import { DagValidatorService } from "../../src/workflow/dag-validator.service";
 import { REQUIRE_PERMISSION } from "../../src/permission/require-permission.decorator";
 import { directPool, hasDb } from "../helpers/integration-db";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
@@ -47,7 +53,12 @@ describe.skipIf(!hasDb)("G7-1c workflow templates service", () => {
     B = await seedCompany(direct, "g71cb");
     userA = await seedUser(direct, A.companyId, `g71c-${randomUUID().slice(0, 8)}@a.test`);
     const db = new DatabaseService();
-    svc = new WorkflowTemplatesService(db, new WorkflowTemplatesRepository(db), new AuditService());
+    svc = new WorkflowTemplatesService(
+      db,
+      new WorkflowTemplatesRepository(db),
+      new AuditService(),
+      new DagValidatorService(),
+    );
   });
 
   afterAll(async () => {
@@ -404,6 +415,108 @@ describe.skipIf(!hasDb)("G7-1c workflow templates service", () => {
     const after = await svc.getTemplateDetail(A.companyId, t.id);
     expect(after.checklists).toEqual([]);
   });
+
+  // ─── 2b: publish / clone lifecycle (LC1–LC3) ─────────────────────────────────
+
+  /** Draft template + N steps (returns template + the created steps in order). */
+  async function templateWithSteps(n: number) {
+    const t = await svc.createTemplate(A.companyId, userA, {
+      code: `pub-${randomUUID().slice(0, 8)}`,
+      name: "T",
+      appliesTo: "content_item",
+    });
+    const steps = [];
+    for (let i = 0; i < n; i++) {
+      steps.push(await svc.addStep(A.companyId, userA, t.id, stepDto()));
+    }
+    return { t, steps };
+  }
+
+  async function templateStatus(id: string): Promise<string | undefined> {
+    const r = await direct.query(`SELECT status FROM workflow_definitions WHERE id = $1`, [id]);
+    return r.rows[0]?.status as string | undefined;
+  }
+
+  it("LC1 publish template có chu trình → 422 dagValidation, status vẫn draft", async () => {
+    const { t, steps } = await templateWithSteps(2);
+    await svc.addDependency(A.companyId, userA, t.id, edge(steps[0].id, steps[1].id));
+    await svc.addDependency(A.companyId, userA, t.id, edge(steps[1].id, steps[0].id)); // cycle
+
+    try {
+      await svc.publishTemplate(A.companyId, userA, t.id);
+      throw new Error("expected publishTemplate to reject");
+    } catch (e) {
+      expect(e).toBeInstanceOf(UnprocessableEntityException);
+      const body = (e as UnprocessableEntityException).getResponse() as {
+        dagValidation: { valid: boolean; errors: { code: string }[] };
+      };
+      expect(body.dagValidation.valid).toBe(false);
+      expect(body.dagValidation.errors.some((x) => x.code === "cycle")).toBe(true);
+    }
+    expect(await templateStatus(t.id)).toBe("draft"); // KHÔNG đổi status
+  });
+
+  it("LC2 publish DAG hợp lệ → published + KHÓA sửa (addStep/update → Conflict)", async () => {
+    const { t, steps } = await templateWithSteps(2);
+    await svc.addDependency(A.companyId, userA, t.id, edge(steps[0].id, steps[1].id));
+
+    const published = await svc.publishTemplate(A.companyId, userA, t.id);
+    expect(published.status).toBe("published");
+    expect(published.publishedAt).not.toBeNull();
+    expect(await auditCount(A.companyId, t.id, "WorkflowTemplatePublished")).toBe(1);
+
+    // D4: published immutable — mutations now blocked by loadDraftTemplate.
+    await expect(svc.addStep(A.companyId, userA, t.id, stepDto())).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    await expect(svc.updateTemplate(A.companyId, userA, t.id, { name: "X" })).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+  });
+
+  it("LC3 clone published → draft version+1, copy đủ + node_key giữ + sửa clone OK", async () => {
+    const { t, steps } = await templateWithSteps(2);
+    await svc.addDependency(A.companyId, userA, t.id, edge(steps[0].id, steps[1].id));
+    const cl = await svc.createChecklist(A.companyId, userA, t.id, steps[0].id, { name: "QA" });
+    await svc.addChecklistItem(A.companyId, userA, t.id, cl.id, {
+      label: "Check intro",
+      isRequired: true,
+      sortOrder: 0,
+    });
+    await svc.publishTemplate(A.companyId, userA, t.id);
+
+    const clone = await svc.cloneTemplate(A.companyId, userA, t.id);
+    expect(clone.version).toBe(2);
+    expect(clone.status).toBe("draft");
+    expect(clone.id).not.toBe(t.id);
+    expect(await auditCount(A.companyId, t.id, "WorkflowTemplateCloned")).toBe(1);
+
+    const detail = await svc.getTemplateDetail(A.companyId, clone.id);
+    // node_key giữ nguyên (cùng tập), nhưng step id MỚI.
+    expect(detail.steps.map((s) => s.nodeKey).sort()).toEqual(steps.map((s) => s.nodeKey).sort());
+    expect(detail.steps.map((s) => s.id).sort()).not.toEqual(steps.map((s) => s.id).sort());
+    // dep remap sang step id của clone.
+    expect(detail.dependencies).toHaveLength(1);
+    const cloneStepIds = new Set(detail.steps.map((s) => s.id));
+    expect(cloneStepIds.has(detail.dependencies[0].fromStepId)).toBe(true);
+    expect(cloneStepIds.has(detail.dependencies[0].toStepId)).toBe(true);
+    // checklist + item copy sang checklist id mới.
+    expect(detail.checklists).toHaveLength(1);
+    const newChecklistId = detail.checklists[0].id;
+    expect(newChecklistId).not.toBe(cl.id);
+    expect(await itemCount(newChecklistId)).toBe(1);
+
+    // sửa clone (draft) OK.
+    const renamed = await svc.updateTemplate(A.companyId, userA, clone.id, { name: "Bản nháp sửa" });
+    expect(renamed.name).toBe("Bản nháp sửa");
+  });
+
+  it("clone template draft → BadRequest (chỉ published mới clone được)", async () => {
+    const { t } = await templateWithSteps(1);
+    await expect(svc.cloneTemplate(A.companyId, userA, t.id)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
 });
 
 /**
@@ -416,6 +529,8 @@ describe("G7-1c controller permission metadata (PD3)", () => {
     ["create"],
     ["update"],
     ["remove"],
+    ["publish"],
+    ["clone"],
     ["addStep"],
     ["updateStep"],
     ["removeStep"],

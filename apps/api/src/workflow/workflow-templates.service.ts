@@ -5,6 +5,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  UnprocessableEntityException,
 } from "@nestjs/common";
 import type {
   CreateDependencyRequest,
@@ -20,7 +21,10 @@ import {
   WorkflowTemplatesRepository,
   type StepUpdateFields,
 } from "./workflow-templates.repository";
+import { DagValidatorService } from "./dag-validator.service";
+import { buildDagInput, toDagValidationResultDto } from "./dag-result.adapter";
 import {
+  TemplateDagInvalidError,
   TemplateNotFoundError,
   TemplatePublishedImmutableError,
 } from "./workflow-templates.types";
@@ -100,6 +104,7 @@ export class WorkflowTemplatesService {
     private readonly db: DatabaseService,
     private readonly repo: WorkflowTemplatesRepository,
     private readonly audit: AuditService,
+    private readonly dagValidator: DagValidatorService,
   ) {}
 
   /** POST /workflow-templates — tạo template draft (version 1). */
@@ -228,6 +233,193 @@ export class WorkflowTemplatesService {
       });
     } catch (err) {
       this.mapError(err, "deleteTemplate", { companyId, id });
+    }
+  }
+
+  // ─── Publish / clone lifecycle (2b) — crown-jewel (DAG gate + D4 versioning) ──
+
+  /**
+   * POST /workflow-templates/:id/publish — gate the DAG then lock the template.
+   * Runs DagValidatorService over the persisted graph; if valid: draft→published
+   * (published_at set, edits now blocked by `loadDraftTemplate`). If invalid: throws
+   * TemplateDagInvalidError (→ 422 with the full error list) and the status is unchanged.
+   */
+  async publishTemplate(companyId: string, actorId: string, id: string) {
+    try {
+      return await this.db.withTenant(companyId, async (tx) => {
+        const template = await this.loadDraftTemplate(companyId, id, tx);
+
+        // Reads in the same tx → one snapshot (no graph change between validate and lock).
+        const steps = await this.repo.findStepsInTx(companyId, id, tx);
+        const deps = await this.repo.findDependenciesInTx(companyId, id, tx);
+        const input = buildDagInput(steps, deps);
+        const validation = toDagValidationResultDto(this.dagValidator.validateDag(input.steps, input.deps));
+        if (!validation.valid) {
+          throw new TemplateDagInvalidError(validation);
+        }
+
+        const [published] = await this.repo.publishTemplate(companyId, id, tx);
+        // loadDraftTemplate already confirmed draft → 0 rows means a concurrent publish/delete won the
+        // race (atomic WHERE status='draft'). Surface 409, not a misleading 500.
+        if (!published) {
+          throw new ConflictException(`Template ${id} was published or modified by a concurrent request`);
+        }
+
+        await this.audit.record(tx, {
+          action: "WorkflowTemplatePublished",
+          objectType: "workflow_template",
+          objectId: id,
+          actorUserId: actorId,
+          before: { status: template.status, version: template.version },
+          after: {
+            status: published.status,
+            version: published.version,
+            publishedAt: published.publishedAt,
+          },
+        });
+
+        return published;
+      });
+    } catch (err) {
+      this.mapError(err, "publishTemplate", { companyId, id });
+    }
+  }
+
+  /**
+   * POST /workflow-templates/:id/clone — D4: published is immutable; editing = clone to a
+   * new DRAFT version. Copies steps (new id, node_key PRESERVED), dependencies (remapped
+   * by node_key→new step id), checklists + items (remapped). version = max(code)+1 → never
+   * collides with an existing draft. Source must be `published`.
+   */
+  async cloneTemplate(companyId: string, actorId: string, id: string) {
+    try {
+      return await this.db.withTenant(companyId, async (tx) => {
+        const [source] = await this.repo.findByIdInTx(companyId, id, tx);
+        if (!source) throw new TemplateNotFoundError(id);
+        if (source.status !== "published") {
+          throw new BadRequestException(
+            `Only a published template can be cloned (status: '${source.status}')`,
+          );
+        }
+
+        const versionRows = await this.repo.maxVersionInTx(companyId, source.code, tx);
+        const newVersion = (versionRows[0]?.maxVersion ?? source.version) + 1;
+
+        const [clone] = await this.repo.cloneTemplateRow(
+          companyId,
+          {
+            code: source.code,
+            name: source.name,
+            appliesTo: source.appliesTo,
+            maxApprovalLevel: source.maxApprovalLevel,
+            allowParallelSteps: source.allowParallelSteps,
+            version: newVersion,
+            createdBy: actorId,
+          },
+          tx,
+        );
+        if (!clone) throw new InternalServerErrorException("Failed to clone template");
+
+        // Steps: copy with a fresh id; node_key is the stable DAG identity → preserved.
+        // NOTE: `defaultChecklistId` is intentionally NOT copied — it is always NULL before 3b
+        // (createStep does not set it; 1c-iv deferred it to runtime apply). When 3b starts setting
+        // it, clone must add a second pass remapping it via checklistIdMap (residual, plan §10).
+        const sourceSteps = await this.repo.findStepsInTx(companyId, id, tx);
+        const stepIdMap = new Map<string, string>();
+        for (const step of sourceSteps) {
+          const [newStep] = await this.repo.createStep(
+            companyId,
+            {
+              templateId: clone.id,
+              nodeKey: step.nodeKey,
+              code: step.code,
+              name: step.name,
+              defaultTaskTitle: step.defaultTaskTitle,
+              stepType: step.stepType,
+              assigneeRoleCode: step.assigneeRoleCode,
+              reviewerRoleCode: step.reviewerRoleCode,
+              isRequired: step.isRequired,
+              stepOrder: step.stepOrder,
+              positionX: step.positionX,
+              positionY: step.positionY,
+            },
+            tx,
+          );
+          if (!newStep) throw new InternalServerErrorException("Failed to clone template step");
+          stepIdMap.set(step.id, newStep.id);
+        }
+
+        // Dependencies: remap both endpoints to the cloned step ids.
+        const sourceDeps = await this.repo.findDependenciesInTx(companyId, id, tx);
+        for (const dep of sourceDeps) {
+          const fromStepId = stepIdMap.get(dep.fromStepId);
+          const toStepId = stepIdMap.get(dep.toStepId);
+          if (!fromStepId || !toStepId) {
+            throw new InternalServerErrorException("Dependency references a step missing from the clone");
+          }
+          await this.repo.createDependency(
+            companyId,
+            { templateId: clone.id, fromStepId, toStepId, dependencyType: dep.dependencyType },
+            tx,
+          );
+        }
+
+        // Checklists (attached to a step) → remap step id; track old→new checklist id for items.
+        const sourceChecklists = await this.repo.findChecklistsInTx(companyId, id, tx);
+        const checklistIdMap = new Map<string, string>();
+        for (const checklist of sourceChecklists) {
+          const newStepId = checklist.workflowDefinitionStepId
+            ? stepIdMap.get(checklist.workflowDefinitionStepId)
+            : undefined;
+          // findChecklistsInTx INNER JOINs steps → workflowDefinitionStepId is always a live, mapped step.
+          if (!newStepId) {
+            throw new InternalServerErrorException("Checklist references a step missing from the clone");
+          }
+          const [newChecklist] = await this.repo.createChecklist(
+            companyId,
+            { name: checklist.name, workflowDefinitionStepId: newStepId },
+            tx,
+          );
+          if (!newChecklist) throw new InternalServerErrorException("Failed to clone checklist");
+          checklistIdMap.set(checklist.id, newChecklist.id);
+        }
+
+        // Checklist items → remap checklist id.
+        const sourceItems = await this.repo.findChecklistItemsForTemplateInTx(companyId, id, tx);
+        for (const item of sourceItems) {
+          const newChecklistId = checklistIdMap.get(item.checklistId);
+          if (!newChecklistId) {
+            throw new InternalServerErrorException("Checklist item references a checklist missing from the clone");
+          }
+          const [newItem] = await this.repo.createChecklistItem(
+            companyId,
+            {
+              checklistId: newChecklistId,
+              label: item.label,
+              isRequired: item.isRequired,
+              sortOrder: item.sortOrder,
+            },
+            tx,
+          );
+          if (!newItem) throw new InternalServerErrorException("Failed to clone checklist item");
+        }
+
+        await this.audit.record(tx, {
+          action: "WorkflowTemplateCloned",
+          objectType: "workflow_template",
+          objectId: id,
+          actorUserId: actorId,
+          before: { status: source.status, version: source.version },
+          after: { cloneId: clone.id, version: clone.version, status: clone.status },
+        });
+
+        return clone;
+      });
+    } catch (err) {
+      if (uniqueConstraintName(err) === TEMPLATE_CODE_VERSION_UQ) {
+        throw new ConflictException("A draft of this template version already exists");
+      }
+      this.mapError(err, "cloneTemplate", { companyId, id });
     }
   }
 
@@ -626,10 +818,18 @@ export class WorkflowTemplatesService {
   private mapError(err: unknown, op: string, ctx: { companyId: string; id: string }): never {
     if (err instanceof TemplateNotFoundError) throw new NotFoundException(err.message);
     if (err instanceof TemplatePublishedImmutableError) throw new ConflictException(err.message);
+    // DAG-invalid publish → 422 with the full validation result for the builder to render inline.
+    if (err instanceof TemplateDagInvalidError) {
+      throw new UnprocessableEntityException({
+        message: err.message,
+        dagValidation: err.result,
+      });
+    }
     if (
       err instanceof NotFoundException ||
       err instanceof ConflictException ||
       err instanceof BadRequestException ||
+      err instanceof UnprocessableEntityException ||
       err instanceof InternalServerErrorException
     ) {
       throw err;

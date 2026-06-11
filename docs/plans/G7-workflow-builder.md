@@ -355,6 +355,15 @@ Bắt đầu: sau SYNC GATE, dựng skeleton route /workflows/templates + templa
 - **Checklist gắn-step (1c-iv):** checklist `workflow_definition_step_id` lấy từ URL `:stepId`; item ops scope qua JOIN checklist→step→template; INNER JOIN loại checklist orphaned. **Edit item HOÃN** (chỉ add/remove — như dependency); cần sửa item thì remove+re-add. `step.defaultChecklistId` KHÔNG set ở 1c-iv (không có trong step DTO frozen) → để runtime apply 3b.
 - **Repo delete self-defending:** deleteDependency/deleteChecklist/deleteChecklistItem scope đủ (company + parent + id), không dựa find-trước-đó.
 
+**Sau 2b (publish/clone lifecycle) — ĐÓNG G7-2 spine BE:**
+- **Adapter DAG service↔contract (`dag-result.adapter.ts`):** service `DagErrorCode` (CYCLE/SELF/UNKNOWN/UNREACHABLE/NO_ROOT/DUPLICATE) map sang contract code (`cycle/self_dependency/missing_node/unreachable/no_root`). `DUPLICATE_NODE_KEY` → BẤT KHẢ trên steps persist (uq `wf_def_steps_def_node_key_uq`) → adapter throw 500 (surface nếu DB hỏng). `cross_template` (contract) KHÔNG được service emit (cross-template chặn add-time 1c-iii) → contract là superset, FE nhánh `cross_template` sẽ không bao giờ thấy (chấp nhận).
+- **publish fail → HTTP 422** `{message, dagValidation}` (UnprocessableEntity); `message` LỘ node_key user-input là **cố ý** (field contract frozen, builder render inline; data cùng tenant). Concurrent double-publish (0-row sau CAS `status='draft'`) → **409** (không phải 500).
+- **clone version = max(version ALL rows kể cả soft-deleted)+1** → đơn điệu, không tái dùng số version. 23505 trên uq (company,code,version) → 409.
+- **`defaultChecklistId` clone HOÃN:** clone KHÔNG copy `step.defaultChecklistId` (luôn NULL trước 3b). Khi **3b** set nó → clone PHẢI thêm pass remap qua `checklistIdMap`. Checklist orphaned (workflow_definition_step_id NULL) bị INNER JOIN loại khỏi clone (cố ý — không copy mảnh mồ côi).
+- **`id` param chưa validate UUID** (toàn controller workflow-templates, pre-existing): id sai cú pháp → pg uuid-cast error → 500 generic. Defer fix đồng bộ (ParseUUIDPipe) — không riêng 2b.
+- **Return-type `|undefined` từ `mapError(): never` tail** (toàn service 1c+2b): runtime-safe (mapError luôn throw); cosmetic typing, giữ nhất quán. Nâng đồng bộ sau nếu cần.
+- **Permission catalog vẫn nợ 0036:** publish gate `publish:workflow-template`, clone gate `create:workflow-template` (hyphen) → fail-closed 403 tới khi 0036 seed. 0036 PHẢI seed thêm `publish:workflow-template` (ngoài create/update/read).
+
 ---
 
 _Liên quan: [`workflow-state-machine.md`](../spikes/workflow-state-machine.md) · [`erd-v2.md`](../erd-v2.md) · [`G6-media-full.md`](./G6-media-full.md) (mẫu plan) · ADR 0009/0010/0016 · [`TASKS.md`](../../TASKS.md) G7._

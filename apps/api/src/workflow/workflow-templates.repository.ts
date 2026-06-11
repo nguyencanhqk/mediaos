@@ -101,6 +101,74 @@ export class WorkflowTemplatesRepository {
       .returning();
   }
 
+  // ─── Publish / clone lifecycle (2b) ──────────────────────────────────────────
+
+  // Atomic draft→published: status='draft' in the WHERE makes the transition
+  // TOCTOU-safe (no double-publish race). 0 rows → service throws (returning() empty).
+  publishTemplate(companyId: string, id: string, tx: TenantTx) {
+    return tx
+      .update(workflowDefinitions)
+      .set({ status: "published", publishedAt: new Date() })
+      .where(
+        and(
+          eq(workflowDefinitions.companyId, companyId),
+          eq(workflowDefinitions.id, id),
+          eq(workflowDefinitions.status, "draft"),
+          isNull(workflowDefinitions.deletedAt),
+        ),
+      )
+      .returning();
+  }
+
+  /**
+   * Highest version EVER used for a (company, code) — INCLUDING soft-deleted rows, so a version
+   * number is never reused after a draft is deleted (monotonic versions, clean audit trail).
+   * Clone targets max+1, which also avoids colliding with the partial-unique index on live rows.
+   */
+  maxVersionInTx(companyId: string, code: string, tx: TenantTx) {
+    return tx
+      .select({ maxVersion: max(workflowDefinitions.version) })
+      .from(workflowDefinitions)
+      .where(
+        and(
+          eq(workflowDefinitions.companyId, companyId),
+          eq(workflowDefinitions.code, code),
+        ),
+      );
+  }
+
+  /** Insert a cloned template head row (new id, explicit version, status='draft'). Copies config from the source. */
+  cloneTemplateRow(
+    companyId: string,
+    data: {
+      code: string;
+      name: string;
+      appliesTo: string;
+      maxApprovalLevel: number;
+      allowParallelSteps: boolean;
+      version: number;
+      createdBy: string;
+    },
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(workflowDefinitions)
+      .values({
+        companyId,
+        code: data.code,
+        name: data.name,
+        appliesTo: data.appliesTo,
+        maxApprovalLevel: data.maxApprovalLevel,
+        allowParallelSteps: data.allowParallelSteps,
+        createdBy: data.createdBy,
+        version: data.version,
+        status: "draft",
+        publishedAt: null,
+        isActive: true,
+      })
+      .returning();
+  }
+
   // ─── Detail child reads (InTx — cùng withTenant của getTemplateDetail) ───────
 
   findStepsInTx(companyId: string, templateId: string, tx: TenantTx) {
@@ -404,6 +472,36 @@ export class WorkflowTemplatesRepository {
         ),
       )
       .limit(1);
+  }
+
+  /**
+   * All checklist items belonging to a template's checklists (clone source read). JOIN
+   * items→checklists→steps, lọc company ở cả 3 bảng. INNER JOIN khớp `findChecklistsInTx`
+   * (chỉ checklist gắn step sống của template) → item của checklist orphaned KHÔNG được clone.
+   */
+  findChecklistItemsForTemplateInTx(companyId: string, templateId: string, tx: TenantTx) {
+    return tx
+      .select({
+        id: checklistItems.id,
+        checklistId: checklistItems.checklistId,
+        label: checklistItems.label,
+        isRequired: checklistItems.isRequired,
+        sortOrder: checklistItems.sortOrder,
+      })
+      .from(checklistItems)
+      .innerJoin(checklists, eq(checklistItems.checklistId, checklists.id))
+      .innerJoin(
+        workflowDefinitionSteps,
+        eq(checklists.workflowDefinitionStepId, workflowDefinitionSteps.id),
+      )
+      .where(
+        and(
+          eq(checklistItems.companyId, companyId),
+          eq(checklists.companyId, companyId),
+          eq(workflowDefinitionSteps.companyId, companyId),
+          eq(workflowDefinitionSteps.workflowDefinitionId, templateId),
+        ),
+      );
   }
 
   deleteChecklistItem(companyId: string, checklistId: string, itemId: string, tx: TenantTx) {

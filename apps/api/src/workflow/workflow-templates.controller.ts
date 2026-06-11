@@ -76,6 +76,24 @@ export class WorkflowTemplatesController {
     return this.templates.deleteTemplate(req.user.companyId, req.user.id, id);
   }
 
+  // ─── Publish / clone lifecycle (2b) ──────────────────────────────────────────
+
+  // Publish gate `publish:workflow-template` (riêng — hành động nhạy cảm, KHÔNG gộp update).
+  @Post(":id/publish")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("publish", "workflow-template")
+  publish(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+    return this.templates.publishTemplate(req.user.companyId, req.user.id, id);
+  }
+
+  // Clone tạo template/version MỚI → gate `create:workflow-template` (§3 0036 seed `create:`).
+  @Post(":id/clone")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("create", "workflow-template")
+  clone(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+    return this.templates.cloneTemplate(req.user.companyId, req.user.id, id);
+  }
+
   // ─── Template steps (1c-ii) — tất cả gate update:workflow-template ────────────
 
   @Post(":id/steps")

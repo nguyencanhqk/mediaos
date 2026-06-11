@@ -10,6 +10,7 @@ import { WorkflowController } from "./workflow.controller";
 import { WorkflowTemplatesRepository } from "./workflow-templates.repository";
 import { WorkflowTemplatesService } from "./workflow-templates.service";
 import { WorkflowTemplatesController } from "./workflow-templates.controller";
+import { DagValidatorService } from "./dag-validator.service";
 
 @Module({
   imports: [DatabaseModule, EventsModule, PermissionModule],
@@ -20,6 +21,7 @@ import { WorkflowTemplatesController } from "./workflow-templates.controller";
     ApprovalService,
     WorkflowTemplatesRepository,
     WorkflowTemplatesService,
+    DagValidatorService,
   ],
   controllers: [WorkflowController, WorkflowTemplatesController],
   exports: [WorkflowService, ApprovalService, WorkflowTemplatesService],
