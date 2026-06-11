@@ -278,6 +278,26 @@ export class WorkflowRepository {
     );
   }
 
+  /**
+   * tx variant — read all instance steps inside the caller's transaction.
+   * G7-3c: dependency resolution (allDependenciesApproved) reads step status within the caller's
+   * tx, never via a self-opened withTenant (that would be a different PgBouncer connection). This
+   * keeps the read ready to sit inside the per-instance SELECT…FOR UPDATE lock added in 3c-iii
+   * (plan §3c race-safety/FS10) — a self-opened read would escape that lock and re-introduce the race.
+   */
+  findStepsByInstanceIdInTx(companyId: string, instanceId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(workflowSteps)
+      .where(
+        and(
+          eq(workflowSteps.companyId, companyId),
+          eq(workflowSteps.workflowInstanceId, instanceId),
+        ),
+      )
+      .orderBy(workflowSteps.stepOrder);
+  }
+
   /** PM gán assignee + reviewer cho 1 bước (không đổi status — chỉ metadata). */
   assignStep(
     companyId: string,

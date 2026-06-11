@@ -7,11 +7,14 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { DatabaseService } from "../db/db.service";
+import type { TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { WorkflowFsmService } from "./workflow-fsm.service";
 import { WorkflowRepository } from "./workflow.repository";
+import { allDependenciesApproved } from "./workflow-dag";
 import {
+  DependenciesNotMetError,
   IllegalTransitionError,
   NotCurrentStepError,
   NotStepActorError,
@@ -66,6 +69,9 @@ function mapFsmError(err: unknown): never {
     );
   }
   if (err instanceof NotCurrentStepError) {
+    throw new ConflictException(err.message);
+  }
+  if (err instanceof DependenciesNotMetError) {
     throw new ConflictException(err.message);
   }
   if (err instanceof NotStepActorError) {
@@ -137,6 +143,9 @@ export class WorkflowService {
             stepOrder: s.stepOrder,
             stepCode: s.code,
             stepName: s.name,
+            // G7-3c: carry node_key so DAG dep resolution keys uniformly across MVP-0 + applied
+            // instances (def-step.node_key is NOT NULL; for video_standard_v0 it equals code).
+            nodeKey: s.nodeKey,
             assigneeUserId: null,
             reviewerUserId: null,
           })),
@@ -436,8 +445,40 @@ export class WorkflowService {
   }
 
   /**
+   * G7-3c: resolve "are ALL upstream DAG deps of `step` approved?" within the caller's tx.
+   * Reads def-steps + deps (by the instance's pinned workflow_definition_id) + sibling instance
+   * steps — all tx-scoped (never self-opening withTenant) so they sit inside any row lock.
+   */
+  private async resolveDependenciesApproved(
+    companyId: string,
+    step: { nodeKey: string | null; stepCode: string; workflowInstanceId: string },
+    instance: { workflowDefinitionId: string },
+    tx: TenantTx,
+  ): Promise<boolean> {
+    // Sequential awaits, NOT Promise.all — node-postgres cannot run concurrent queries on one tx
+    // connection (Promise.all triggers a pg deprecation warning and breaks on pg@9). Staying on
+    // the caller's tx keeps these ready for the per-instance FOR UPDATE lock added in 3c-iii.
+    const defSteps = await this.repo.findDefinitionStepsInTx(companyId, instance.workflowDefinitionId, tx);
+    const deps = await this.repo.findTemplateDependenciesInTx(companyId, instance.workflowDefinitionId, tx);
+    const instanceSteps = await this.repo.findStepsByInstanceIdInTx(companyId, step.workflowInstanceId, tx);
+    return allDependenciesApproved(
+      { nodeKey: step.nodeKey, stepCode: step.stepCode },
+      {
+        defSteps: defSteps.map((d) => ({ id: d.id, nodeKey: d.nodeKey })),
+        deps: deps.map((dep) => ({ fromStepId: dep.fromStepId, toStepId: dep.toStepId })),
+        instanceSteps: instanceSteps.map((s) => ({
+          id: s.id,
+          nodeKey: s.nodeKey,
+          stepCode: s.stepCode,
+          status: s.status,
+        })),
+      },
+    );
+  }
+
+  /**
    * POST /workflow/steps/:stepId/start — assignee starts a step (T1 or T5).
-   * Guard: actor = assignee, step = current_step_order, instance active.
+   * Guard: actor = assignee, ALL upstream deps approved (G7-3c), instance active.
    */
   async startStep(companyId: string, stepId: string, actorId: string) {
     try {
@@ -448,12 +489,19 @@ export class WorkflowService {
         const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
         if (!instance) throw new WorkflowNotFoundError("instance", step.workflowInstanceId);
 
+        const dependenciesApproved = await this.resolveDependenciesApproved(
+          companyId,
+          step,
+          instance,
+          tx,
+        );
         try {
           this.fsm.validateServiceTransition({
             step: toFsmStep(step),
             instance: toFsmInstance(instance),
             event: "start",
             actorId,
+            dependenciesApproved,
           });
         } catch (err) {
           return mapFsmError(err);
@@ -506,12 +554,19 @@ export class WorkflowService {
         const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
         if (!instance) throw new WorkflowNotFoundError("instance", step.workflowInstanceId);
 
+        const dependenciesApproved = await this.resolveDependenciesApproved(
+          companyId,
+          step,
+          instance,
+          tx,
+        );
         try {
           this.fsm.validateServiceTransition({
             step: toFsmStep(step),
             instance: toFsmInstance(instance),
             event: "submit",
             actorId,
+            dependenciesApproved,
           });
         } catch (err) {
           return mapFsmError(err);

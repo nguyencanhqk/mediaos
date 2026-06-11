@@ -1,8 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import {
+  DependenciesNotMetError,
   findTransition,
   IllegalTransitionError,
-  NotCurrentStepError,
   NotReviewerError,
   NotStepActorError,
   SERVICE_EVENTS,
@@ -33,6 +33,12 @@ export interface ValidateTransitionInput {
   instance: FsmInstanceInput;
   event: StepEvent;
   actorId: string;
+  /**
+   * G7-3c: caller-computed answer to "are ALL upstream DAG deps of this step approved?".
+   * The FSM stays pure (no DB) — the service resolves deps within its tx and passes the result.
+   * Undefined = not evaluated (e.g. consumer events) → the dependency guard is skipped.
+   */
+  dependenciesApproved?: boolean;
 }
 
 export interface ValidateConsumerTransitionInput {
@@ -56,7 +62,7 @@ export type TransitionResult = (typeof MVP0_TRANSITIONS)[number];
  * Guard order (checked before transition lookup):
  *   1. instance.status === 'active'  (D10 / X7)
  *   2. step.workflowInstanceId === instance.id  (D5)
- *   3. step.stepOrder === instance.currentStepOrder  (D3) — for 'start'/'submit'
+ *   3. dependenciesApproved !== false  (G7-3c, §1.3) — for 'start'/'submit' (replaces D3 pointer)
  *   4. actor === step.assigneeUserId  (actor check)
  *   5. (fromState, event) found in allowed transitions  (FSM check)
  *   6. event is a SERVICE event (not consumer-only)  (D6 / ADR-0016)
@@ -80,11 +86,12 @@ export class WorkflowFsmService {
       throw new WorkflowNotFoundError("step", step.id);
     }
 
-    // Guard 3: for start/submit, step must be the current step (D3, X6)
-    // (revision + start uses same current_step_order since pointer does not advance on revision)
+    // Guard 3 (G7-3c): for start/submit, ALL upstream DAG deps must be approved (§1.3).
+    // Replaces the linear current_step_order guard (D2 — step_order is now advisory only).
+    // The service resolves deps within its tx and passes the result; undefined = not evaluated.
     if (event === "start" || event === "submit") {
-      if (step.stepOrder !== instance.currentStepOrder) {
-        throw new NotCurrentStepError(step.stepOrder, instance.currentStepOrder);
+      if (input.dependenciesApproved === false) {
+        throw new DependenciesNotMetError(step.id);
       }
     }
 

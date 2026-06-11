@@ -1,0 +1,125 @@
+/**
+ * G7-3c-i — RED suite for workflow DAG resolution (pure logic).
+ *
+ * These pin the crown-jewel invariant (§1.3): a step is startable iff ALL its upstream
+ * dependencies are approved. They MUST FAIL until allDependenciesApproved is implemented.
+ *
+ * Maps to plan §5 FS1/FS2/FS3 at the pure-logic level:
+ *   DG1 — root (no deps) → always startable
+ *   DG2 — linear A→B → B startable only when A approved      (FS1 essence)
+ *   DG3 — fork  A→{B,C} → both open when A approved           (FS2 essence)
+ *   DG4 — join  {B,C}→D → D opens only when both approved     (FS3 essence)
+ */
+
+import { describe, expect, it } from "vitest";
+import { allDependenciesApproved, type DagContext } from "./workflow-dag";
+
+// ─── Fixtures ───────────────────────────────────────────────────────────────────
+// node_key == step_code in these fixtures (mirrors video_standard_v0 backfill).
+
+function def(nodeKey: string, isRequired = true) {
+  return { id: `def-${nodeKey}`, nodeKey, isRequired };
+}
+function inst(nodeKey: string, status: string) {
+  return { id: `inst-${nodeKey}`, nodeKey, stepCode: nodeKey, status };
+}
+function edge(from: string, to: string) {
+  return { fromStepId: `def-${from}`, toStepId: `def-${to}` };
+}
+
+// ─── Tests ──────────────────────────────────────────────────────────────────────
+
+describe("allDependenciesApproved", () => {
+  // ─── DG1: root step has no incoming dependency ─────────────────────────────
+  describe("DG1 — root step (no upstream dependency)", () => {
+    it("returns true when the step has no incoming edges", () => {
+      const ctx: DagContext = {
+        defSteps: [def("A")],
+        deps: [],
+        instanceSteps: [inst("A", "not_started")],
+      };
+      expect(allDependenciesApproved(inst("A", "not_started"), ctx)).toBe(true);
+    });
+  });
+
+  // ─── DG2: linear A→B ───────────────────────────────────────────────────────
+  describe("DG2 — linear A→B", () => {
+    const defSteps = [def("A"), def("B")];
+    const deps = [edge("A", "B")];
+
+    it("returns false when upstream A is not yet approved", () => {
+      const instanceSteps = [inst("A", "waiting_review"), inst("B", "not_started")];
+      expect(allDependenciesApproved(inst("B", "not_started"), { defSteps, deps, instanceSteps })).toBe(false);
+    });
+
+    it("returns true when upstream A is approved", () => {
+      const instanceSteps = [inst("A", "approved"), inst("B", "not_started")];
+      expect(allDependenciesApproved(inst("B", "not_started"), { defSteps, deps, instanceSteps })).toBe(true);
+    });
+  });
+
+  // ─── DG3: fork A→{B,C} ─────────────────────────────────────────────────────
+  describe("DG3 — fork A→{B,C}", () => {
+    const defSteps = [def("A"), def("B"), def("C")];
+    const deps = [edge("A", "B"), edge("A", "C")];
+
+    it("opens BOTH B and C once A is approved", () => {
+      const instanceSteps = [inst("A", "approved"), inst("B", "not_started"), inst("C", "not_started")];
+      expect(allDependenciesApproved(inst("B", "not_started"), { defSteps, deps, instanceSteps })).toBe(true);
+      expect(allDependenciesApproved(inst("C", "not_started"), { defSteps, deps, instanceSteps })).toBe(true);
+    });
+  });
+
+  // ─── DG4: join {B,C}→D ─────────────────────────────────────────────────────
+  describe("DG4 — join {B,C}→D", () => {
+    const defSteps = [def("B"), def("C"), def("D")];
+    const deps = [edge("B", "D"), edge("C", "D")];
+
+    it("keeps D blocked when only B is approved (C still pending)", () => {
+      const instanceSteps = [inst("B", "approved"), inst("C", "waiting_review"), inst("D", "not_started")];
+      expect(allDependenciesApproved(inst("D", "not_started"), { defSteps, deps, instanceSteps })).toBe(false);
+    });
+
+    it("opens D only when BOTH B and C are approved", () => {
+      const instanceSteps = [inst("B", "approved"), inst("C", "approved"), inst("D", "not_started")];
+      expect(allDependenciesApproved(inst("D", "not_started"), { defSteps, deps, instanceSteps })).toBe(true);
+    });
+  });
+
+  // ─── Fail-closed defensive branches (crown-jewel safety) ───────────────────
+  describe("fail-closed — never open a step we cannot reason about", () => {
+    it("returns false when the target key matches no def-step", () => {
+      const ctx: DagContext = {
+        defSteps: [def("A")],
+        deps: [],
+        instanceSteps: [inst("A", "approved")],
+      };
+      // "ghost" has no matching def-step → cannot resolve → blocked (not silently opened).
+      expect(allDependenciesApproved({ nodeKey: "ghost", stepCode: "ghost" }, ctx)).toBe(false);
+    });
+
+    it("returns false when an upstream edge is dangling (from references a missing def-step)", () => {
+      const ctx: DagContext = {
+        defSteps: [def("B")], // def-A intentionally missing
+        deps: [{ fromStepId: "def-A", toStepId: "def-B" }],
+        instanceSteps: [inst("B", "not_started")],
+      };
+      expect(allDependenciesApproved(inst("B", "not_started"), { ...ctx })).toBe(false);
+    });
+  });
+
+  // ─── Legacy fallback: instance step with null node_key resolves by step_code ─
+  describe("legacy rows — node_key null falls back to step_code", () => {
+    it("resolves dependency state via step_code when node_key is null", () => {
+      const defSteps = [def("script"), def("edit")];
+      const deps = [edge("script", "edit")];
+      // Instance steps created by the old startWorkflow path: node_key = null.
+      const instanceSteps = [
+        { id: "i1", nodeKey: null, stepCode: "script", status: "approved" },
+        { id: "i2", nodeKey: null, stepCode: "edit", status: "not_started" },
+      ];
+      const target = { id: "i2", nodeKey: null, stepCode: "edit", status: "not_started" };
+      expect(allDependenciesApproved(target, { defSteps, deps, instanceSteps })).toBe(true);
+    });
+  });
+});

@@ -26,8 +26,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { WorkflowFsmService } from "./workflow-fsm.service";
 import {
+  DependenciesNotMetError,
   IllegalTransitionError,
-  NotCurrentStepError,
   NotStepActorError,
   WorkflowInactiveError,
   WorkflowNotFoundError,
@@ -121,24 +121,54 @@ describe("WorkflowFsmService", () => {
     });
   });
 
-  // ─── D3: Start non-current step ────────────────────────────────────────────
-  describe("D3 — start step when it is not current_step_order", () => {
-    it("throws NotCurrentStepError when step_order != current_step_order", () => {
-      const step = makeStep({ status: "not_started", stepOrder: 2 });
-      const instance = makeInstance({ currentStepOrder: 1 });
-
-      expect(() =>
-        fsm.validateServiceTransition({ step, instance, event: "start", actorId: ASSIGNEE_ID }),
-      ).toThrow(NotCurrentStepError);
-    });
-
-    it("throws NotCurrentStepError even when step status is not_started but wrong order", () => {
+  // ─── FS1: start/submit gated by dependency satisfaction (replaces D3 pointer) ─
+  // G7-3c (§1.3): step_order is no longer a guard. A step is startable iff ALL upstream
+  // deps are approved — the service computes that and passes `dependenciesApproved`.
+  describe("FS1 — start/submit gated by allDependenciesApproved (DAG model)", () => {
+    it("throws DependenciesNotMetError on start when dependenciesApproved=false", () => {
       const step = makeStep({ status: "not_started", stepOrder: 3 });
       const instance = makeInstance({ currentStepOrder: 1 });
 
       expect(() =>
-        fsm.validateServiceTransition({ step, instance, event: "start", actorId: ASSIGNEE_ID }),
-      ).toThrow(NotCurrentStepError);
+        fsm.validateServiceTransition({
+          step,
+          instance,
+          event: "start",
+          actorId: ASSIGNEE_ID,
+          dependenciesApproved: false,
+        }),
+      ).toThrow(DependenciesNotMetError);
+    });
+
+    it("throws DependenciesNotMetError on submit when dependenciesApproved=false", () => {
+      const step = makeStep({ status: "in_progress", stepOrder: 2 });
+      const instance = makeInstance({ currentStepOrder: 1 });
+
+      expect(() =>
+        fsm.validateServiceTransition({
+          step,
+          instance,
+          event: "submit",
+          actorId: ASSIGNEE_ID,
+          dependenciesApproved: false,
+        }),
+      ).toThrow(DependenciesNotMetError);
+    });
+
+    it("does NOT throw on a non-sequential step_order when dependenciesApproved=true", () => {
+      // step_order 3 with currentStepOrder 1 used to throw NotCurrentStepError — no longer a guard.
+      const step = makeStep({ status: "not_started", stepOrder: 3 });
+      const instance = makeInstance({ currentStepOrder: 1 });
+
+      expect(() =>
+        fsm.validateServiceTransition({
+          step,
+          instance,
+          event: "start",
+          actorId: ASSIGNEE_ID,
+          dependenciesApproved: true,
+        }),
+      ).not.toThrow();
     });
   });
 

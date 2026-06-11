@@ -109,6 +109,19 @@ export class NotCurrentStepError extends Error {
   }
 }
 
+/**
+ * DependenciesNotMetError — G7-3c. A step cannot start because not all of its upstream DAG
+ * dependencies are approved yet. Replaces the linear `current_step_order` guard (D2/§1.3).
+ */
+export class DependenciesNotMetError extends Error {
+  readonly stepId: string;
+  constructor(stepId: string) {
+    super(`Step ${stepId} cannot start: upstream dependencies are not all approved`);
+    this.name = "DependenciesNotMetError";
+    this.stepId = stepId;
+  }
+}
+
 /** DuplicateWorkflowError when a content item already has an active workflow. */
 export class DuplicateWorkflowError extends Error {
   constructor(contentItemId: string) {
