@@ -3,6 +3,7 @@ import { and, eq, isNull, max } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
 import type { TenantTx } from "../db/db.service";
 import {
+  checklistItems,
   checklists,
   workflowDefinitionSteps,
   workflowDefinitions,
@@ -289,6 +290,130 @@ export class WorkflowTemplatesRepository {
           eq(workflowStepDependencies.companyId, companyId),
           eq(workflowStepDependencies.workflowDefinitionId, templateId),
           eq(workflowStepDependencies.id, depId),
+        ),
+      )
+      .returning();
+  }
+
+  // ─── Checklists + items (gắn step) — 1c-iv ───────────────────────────────────
+
+  createChecklist(
+    companyId: string,
+    data: { name: string; workflowDefinitionStepId: string },
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(checklists)
+      .values({
+        companyId,
+        name: data.name,
+        workflowDefinitionStepId: data.workflowDefinitionStepId,
+      })
+      .returning();
+  }
+
+  /** Checklist thuộc ĐÚNG step (scope cho delete checklist). */
+  findChecklistByStepInTx(companyId: string, stepId: string, checklistId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(checklists)
+      .where(
+        and(
+          eq(checklists.companyId, companyId),
+          eq(checklists.workflowDefinitionStepId, stepId),
+          eq(checklists.id, checklistId),
+        ),
+      )
+      .limit(1);
+  }
+
+  /**
+   * Checklist thuộc 1 step CỦA template (scope cho item ops). JOIN steps, lọc company ở cả hai bảng.
+   * INNER JOIN cố ý loại checklist orphaned (step bị xoá → workflow_definition_step_id NULL) → item op 404.
+   */
+  findChecklistInTemplateInTx(
+    companyId: string,
+    templateId: string,
+    checklistId: string,
+    tx: TenantTx,
+  ) {
+    return tx
+      .select({
+        id: checklists.id,
+        companyId: checklists.companyId,
+        name: checklists.name,
+        workflowDefinitionStepId: checklists.workflowDefinitionStepId,
+        createdAt: checklists.createdAt,
+      })
+      .from(checklists)
+      .innerJoin(
+        workflowDefinitionSteps,
+        eq(checklists.workflowDefinitionStepId, workflowDefinitionSteps.id),
+      )
+      .where(
+        and(
+          eq(checklists.companyId, companyId),
+          eq(workflowDefinitionSteps.companyId, companyId),
+          eq(workflowDefinitionSteps.workflowDefinitionId, templateId),
+          eq(checklists.id, checklistId),
+        ),
+      )
+      .limit(1);
+  }
+
+  // Hard-delete checklist (draft-only, ép ở service); FK cascade checklist_items.
+  deleteChecklist(companyId: string, stepId: string, checklistId: string, tx: TenantTx) {
+    return tx
+      .delete(checklists)
+      .where(
+        and(
+          eq(checklists.companyId, companyId),
+          eq(checklists.workflowDefinitionStepId, stepId),
+          eq(checklists.id, checklistId),
+        ),
+      )
+      .returning();
+  }
+
+  createChecklistItem(
+    companyId: string,
+    data: { checklistId: string; label: string; isRequired: boolean; sortOrder: number },
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(checklistItems)
+      .values({
+        companyId,
+        checklistId: data.checklistId,
+        label: data.label,
+        isRequired: data.isRequired,
+        sortOrder: data.sortOrder,
+      })
+      .returning();
+  }
+
+  findChecklistItemByIdInTx(companyId: string, checklistId: string, itemId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(checklistItems)
+      .where(
+        and(
+          eq(checklistItems.companyId, companyId),
+          eq(checklistItems.checklistId, checklistId),
+          eq(checklistItems.id, itemId),
+        ),
+      )
+      .limit(1);
+  }
+
+  deleteChecklistItem(companyId: string, checklistId: string, itemId: string, tx: TenantTx) {
+    return tx
+      .delete(checklistItems)
+      .where(
+        and(
+          eq(checklistItems.companyId, companyId),
+          eq(checklistItems.checklistId, checklistId),
+          eq(checklistItems.id, itemId),
         ),
       )
       .returning();

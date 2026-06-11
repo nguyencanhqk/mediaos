@@ -317,6 +317,93 @@ describe.skipIf(!hasDb)("G7-1c workflow templates service", () => {
     detail = await svc.getTemplateDetail(A.companyId, t.id);
     expect(detail.dependencies).toEqual([]);
   });
+
+  // ─── 1c-iv: checklists + items ───────────────────────────────────────────────
+
+  async function templateWithStep() {
+    const t = await svc.createTemplate(A.companyId, userA, {
+      code: `cl-${randomUUID().slice(0, 8)}`,
+      name: "T",
+      appliesTo: "content_item",
+    });
+    const s = await svc.addStep(A.companyId, userA, t.id, stepDto());
+    return { t, s };
+  }
+
+  async function itemCount(checklistId: string): Promise<number> {
+    const r = await direct.query(
+      `SELECT count(*)::int AS n FROM checklist_items WHERE checklist_id = $1`,
+      [checklistId],
+    );
+    return r.rows[0].n as number;
+  }
+
+  it("R13 createChecklist parent tenant khác → NotFound", async () => {
+    const tB = await seedTemplate(B.companyId);
+    await expect(
+      svc.createChecklist(A.companyId, userA, tB, randomUUID(), { name: "CL" }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("R14 createChecklist trên template published → Conflict", async () => {
+    const tA = await seedTemplate(A.companyId, "published");
+    await expect(
+      svc.createChecklist(A.companyId, userA, tA, randomUUID(), { name: "CL" }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("R15 createChecklist step không thuộc template → NotFound", async () => {
+    const { t } = await templateWithStep();
+    await expect(
+      svc.createChecklist(A.companyId, userA, t.id, randomUUID(), { name: "CL" }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("R16 addChecklistItem checklist không thuộc template → NotFound", async () => {
+    const { t } = await templateWithStep();
+    await expect(
+      svc.addChecklistItem(A.companyId, userA, t.id, randomUUID(), {
+        label: "x",
+        isRequired: true,
+        sortOrder: 0,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("checklist lifecycle: create→detail→addItem→removeItem→removeChecklist cascade + audit", async () => {
+    const { t, s } = await templateWithStep();
+    const cl = await svc.createChecklist(A.companyId, userA, t.id, s.id, { name: "QA checklist" });
+    expect(cl.workflowDefinitionStepId).toBe(s.id);
+    expect(await auditCount(A.companyId, t.id, "WorkflowTemplateChecklistAdded")).toBe(1);
+
+    const detail = await svc.getTemplateDetail(A.companyId, t.id);
+    expect(detail.checklists.map((c) => c.id)).toEqual([cl.id]);
+
+    const item = await svc.addChecklistItem(A.companyId, userA, t.id, cl.id, {
+      label: "Check intro",
+      isRequired: true,
+      sortOrder: 0,
+    });
+    expect(await auditCount(A.companyId, t.id, "WorkflowTemplateChecklistItemAdded")).toBe(1);
+    expect(await itemCount(cl.id)).toBe(1);
+
+    await svc.removeChecklistItem(A.companyId, userA, t.id, cl.id, item.id);
+    expect(await auditCount(A.companyId, t.id, "WorkflowTemplateChecklistItemRemoved")).toBe(1);
+    expect(await itemCount(cl.id)).toBe(0);
+
+    // re-add 1 item rồi xoá checklist → FK cascade xoá item
+    await svc.addChecklistItem(A.companyId, userA, t.id, cl.id, {
+      label: "x",
+      isRequired: true,
+      sortOrder: 1,
+    });
+    await svc.removeChecklist(A.companyId, userA, t.id, s.id, cl.id);
+    expect(await auditCount(A.companyId, t.id, "WorkflowTemplateChecklistRemoved")).toBe(1);
+    expect(await itemCount(cl.id)).toBe(0); // cascade
+
+    const after = await svc.getTemplateDetail(A.companyId, t.id);
+    expect(after.checklists).toEqual([]);
+  });
 });
 
 /**
@@ -334,6 +421,10 @@ describe("G7-1c controller permission metadata (PD3)", () => {
     ["removeStep"],
     ["addDependency"],
     ["removeDependency"],
+    ["addChecklist"],
+    ["removeChecklist"],
+    ["addChecklistItem"],
+    ["removeChecklistItem"],
   ])(
     "%s mang @RequirePermission resourceType=workflow-template",
     (method) => {

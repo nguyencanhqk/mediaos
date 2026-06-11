@@ -14,6 +14,8 @@ import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
 import { WorkflowTemplatesService } from "./workflow-templates.service";
 import {
+  CreateChecklistDto,
+  CreateChecklistItemDto,
   CreateDependencyDto,
   CreateTemplateDto,
   CreateTemplateStepDto,
@@ -132,5 +134,55 @@ export class WorkflowTemplatesController {
     @Param("depId") depId: string,
   ) {
     return this.templates.removeDependency(req.user.companyId, req.user.id, id, depId);
+  }
+
+  // ─── Checklists + items (1c-iv) — gate update:workflow-template ────────────────
+
+  @Post(":id/steps/:stepId/checklists")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "workflow-template")
+  addChecklist(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Param("stepId") stepId: string,
+    @Body() dto: CreateChecklistDto,
+  ) {
+    return this.templates.createChecklist(req.user.companyId, req.user.id, id, stepId, dto);
+  }
+
+  @Delete(":id/steps/:stepId/checklists/:checklistId")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "workflow-template")
+  removeChecklist(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Param("stepId") stepId: string,
+    @Param("checklistId") checklistId: string,
+  ) {
+    return this.templates.removeChecklist(req.user.companyId, req.user.id, id, stepId, checklistId);
+  }
+
+  @Post(":id/checklists/:checklistId/items")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "workflow-template")
+  addChecklistItem(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Param("checklistId") checklistId: string,
+    @Body() dto: CreateChecklistItemDto,
+  ) {
+    return this.templates.addChecklistItem(req.user.companyId, req.user.id, id, checklistId, dto);
+  }
+
+  @Delete(":id/checklists/:checklistId/items/:itemId")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "workflow-template")
+  removeChecklistItem(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Param("checklistId") checklistId: string,
+    @Param("itemId") itemId: string,
+  ) {
+    return this.templates.removeChecklistItem(req.user.companyId, req.user.id, id, checklistId, itemId);
   }
 }

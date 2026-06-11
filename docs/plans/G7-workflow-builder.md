@@ -349,6 +349,12 @@ Bắt đầu: sau SYNC GATE, dựng skeleton route /workflows/templates + templa
 - **Hard-delete step (draft-only):** đã chốt — `removeStep` hard DELETE, ép draft qua `loadDraftTemplate`; FK cascade `workflow_step_dependencies`, SET NULL `checklists.workflow_definition_step_id`. Áp cùng pattern cho dep (1c-iii) + checklist (1c-iv).
 - **23505 fallback:** mọi unique-violation không khớp constraint cụ thể → 409 chung (chống raw pg-error 500 rò tên bảng/schema).
 
+**Sau 1c-iii (dependency) + 1c-iv (checklist) — ĐÓNG 1c:**
+- **DAG/cycle KHÔNG validate ở 1c-iii:** add edge chỉ ép referential integrity (self-loop→400, cross-template→400, dup→409). Cycle/reachability/unreachable check ở **2b publish** (DagValidator từ luồng B). Draft cho phép tạm sai.
+- **23503 FK fallback:** race xoá step giữa lúc add dependency → FK violation → 400 (chống raw 500).
+- **Checklist gắn-step (1c-iv):** checklist `workflow_definition_step_id` lấy từ URL `:stepId`; item ops scope qua JOIN checklist→step→template; INNER JOIN loại checklist orphaned. **Edit item HOÃN** (chỉ add/remove — như dependency); cần sửa item thì remove+re-add. `step.defaultChecklistId` KHÔNG set ở 1c-iv (không có trong step DTO frozen) → để runtime apply 3b.
+- **Repo delete self-defending:** deleteDependency/deleteChecklist/deleteChecklistItem scope đủ (company + parent + id), không dựa find-trước-đó.
+
 ---
 
 _Liên quan: [`workflow-state-machine.md`](../spikes/workflow-state-machine.md) · [`erd-v2.md`](../erd-v2.md) · [`G6-media-full.md`](./G6-media-full.md) (mẫu plan) · ADR 0009/0010/0016 · [`TASKS.md`](../../TASKS.md) G7._

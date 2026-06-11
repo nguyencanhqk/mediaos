@@ -462,6 +462,163 @@ export class WorkflowTemplatesService {
     }
   }
 
+  // ─── Checklists + items (1c-iv) — gắn step của draft template ─────────────────
+
+  /** POST /workflow-templates/:id/steps/:stepId/checklists — tạo checklist cho step. */
+  async createChecklist(
+    companyId: string,
+    actorId: string,
+    templateId: string,
+    stepId: string,
+    dto: { name: string },
+  ) {
+    try {
+      return await this.db.withTenant(companyId, async (tx) => {
+        await this.loadDraftTemplate(companyId, templateId, tx);
+        const [step] = await this.repo.findStepByIdInTx(companyId, templateId, stepId, tx);
+        if (!step) throw new NotFoundException(`Template step not found: ${stepId}`);
+
+        const [created] = await this.repo.createChecklist(
+          companyId,
+          { name: dto.name, workflowDefinitionStepId: stepId },
+          tx,
+        );
+        if (!created) throw new InternalServerErrorException("Failed to create checklist");
+
+        await this.audit.record(tx, {
+          action: "WorkflowTemplateChecklistAdded",
+          objectType: "workflow_template",
+          objectId: templateId,
+          actorUserId: actorId,
+          after: { checklistId: created.id, stepId, name: created.name },
+        });
+
+        return created;
+      });
+    } catch (err) {
+      this.mapError(err, "createChecklist", { companyId, id: templateId });
+    }
+  }
+
+  /** DELETE /workflow-templates/:id/steps/:stepId/checklists/:checklistId — hard-delete (cascade items). */
+  async removeChecklist(
+    companyId: string,
+    actorId: string,
+    templateId: string,
+    stepId: string,
+    checklistId: string,
+  ) {
+    try {
+      return await this.db.withTenant(companyId, async (tx) => {
+        await this.loadDraftTemplate(companyId, templateId, tx);
+        const [step] = await this.repo.findStepByIdInTx(companyId, templateId, stepId, tx);
+        if (!step) throw new NotFoundException(`Template step not found: ${stepId}`);
+        const [existing] = await this.repo.findChecklistByStepInTx(companyId, stepId, checklistId, tx);
+        if (!existing) throw new NotFoundException(`Checklist not found: ${checklistId}`);
+
+        const [deleted] = await this.repo.deleteChecklist(companyId, stepId, checklistId, tx);
+        // !deleted = race: step bị xoá đồng thời NULL-hoá workflow_definition_step_id → 404 (không phải 500).
+        if (!deleted) throw new NotFoundException(`Checklist not found: ${checklistId}`);
+
+        await this.audit.record(tx, {
+          action: "WorkflowTemplateChecklistRemoved",
+          objectType: "workflow_template",
+          objectId: templateId,
+          actorUserId: actorId,
+          before: { checklistId, stepId, name: existing.name },
+        });
+
+        return { id: checklistId, deleted: true as const };
+      });
+    } catch (err) {
+      this.mapError(err, "removeChecklist", { companyId, id: templateId });
+    }
+  }
+
+  /** POST /workflow-templates/:id/checklists/:checklistId/items — thêm item. */
+  async addChecklistItem(
+    companyId: string,
+    actorId: string,
+    templateId: string,
+    checklistId: string,
+    dto: { label: string; isRequired: boolean; sortOrder: number },
+  ) {
+    try {
+      return await this.db.withTenant(companyId, async (tx) => {
+        await this.loadDraftTemplate(companyId, templateId, tx);
+        const [checklist] = await this.repo.findChecklistInTemplateInTx(
+          companyId,
+          templateId,
+          checklistId,
+          tx,
+        );
+        if (!checklist) {
+          throw new NotFoundException(`Checklist not found in this template: ${checklistId}`);
+        }
+
+        const [created] = await this.repo.createChecklistItem(
+          companyId,
+          { checklistId, label: dto.label, isRequired: dto.isRequired, sortOrder: dto.sortOrder },
+          tx,
+        );
+        if (!created) throw new InternalServerErrorException("Failed to create checklist item");
+
+        await this.audit.record(tx, {
+          action: "WorkflowTemplateChecklistItemAdded",
+          objectType: "workflow_template",
+          objectId: templateId,
+          actorUserId: actorId,
+          after: { itemId: created.id, checklistId, label: created.label, isRequired: created.isRequired },
+        });
+
+        return created;
+      });
+    } catch (err) {
+      this.mapError(err, "addChecklistItem", { companyId, id: templateId });
+    }
+  }
+
+  /** DELETE /workflow-templates/:id/checklists/:checklistId/items/:itemId — hard-delete item. */
+  async removeChecklistItem(
+    companyId: string,
+    actorId: string,
+    templateId: string,
+    checklistId: string,
+    itemId: string,
+  ) {
+    try {
+      return await this.db.withTenant(companyId, async (tx) => {
+        await this.loadDraftTemplate(companyId, templateId, tx);
+        const [checklist] = await this.repo.findChecklistInTemplateInTx(
+          companyId,
+          templateId,
+          checklistId,
+          tx,
+        );
+        if (!checklist) {
+          throw new NotFoundException(`Checklist not found in this template: ${checklistId}`);
+        }
+        const [existing] = await this.repo.findChecklistItemByIdInTx(companyId, checklistId, itemId, tx);
+        if (!existing) throw new NotFoundException(`Checklist item not found: ${itemId}`);
+
+        const [deleted] = await this.repo.deleteChecklistItem(companyId, checklistId, itemId, tx);
+        if (!deleted) throw new InternalServerErrorException(`Failed to delete checklist item ${itemId}`);
+
+        await this.audit.record(tx, {
+          action: "WorkflowTemplateChecklistItemRemoved",
+          objectType: "workflow_template",
+          objectId: templateId,
+          actorUserId: actorId,
+          before: { itemId, checklistId, label: existing.label },
+        });
+
+        return { id: itemId, deleted: true as const };
+      });
+    } catch (err) {
+      this.mapError(err, "removeChecklistItem", { companyId, id: templateId });
+    }
+  }
+
   /**
    * Map domain → HTTP exception; rethrow known HTTP exceptions; log + rethrow unknown (giữ error gốc).
    * `never` để TypeScript ÉP caller phải có `throw`/return path — không thể vô tình nuốt lỗi.
