@@ -2,7 +2,7 @@
 
 > Trạng thái thực thi G7 Workflow Builder. Cập nhật mỗi viên. Nguồn kế hoạch: [`G7-workflow-builder.md`](./G7-workflow-builder.md) (§4 micro-steps, §5 RED suite, §8 luồng, **§10 residual = chi tiết quyết định từng viên**).
 
-**Branch:** `feat/g7-workflow` (main dir `c:/dev 2/MediaOS`) · **đã push hết** lên origin · **DB dev ở migration 0034**.
+**Branch:** `feat/g7-workflow` (main dir `c:/dev 2/MediaOS`) · 1a…3c-ii đã push · **3c-iii `af8f583` CHƯA push** · **DB dev ở migration 0034**.
 
 ---
 
@@ -20,29 +20,35 @@
 | **3b** | `2032894` | **applyTemplate** — instance từ template published, snapshot steps, mở **bước root** (auto-task idempotent); endpoint `POST /workflow-templates/:id/apply` gate `apply:workflow-instance` |
 | **3c-i** | `0d31be6` | **DAG dep-guard** — `workflow-dag.ts` PURE (`allDependenciesApproved`, key=node_key??step_code, root→true, fail-closed); FSM start/submit guard = `dependenciesApproved===false→DependenciesNotMetError` (bỏ guard stepOrder===currentStepOrder); repo `findStepsByInstanceIdInTx`; service `resolveDependenciesApproved` (await tuần tự) |
 | **3c-ii** | `c26eb94` | **approve() fan-out + complete theo DAG** — `computeNewlyUnblockedStepIds` (mở 0..n downstream khi dep đủ → auto-task idempotent) + `isWorkflowComplete` (mọi step required approved, KHÔNG theo order); task read vào tx (`findActiveTaskByStepIdInTx`); giữ alias `isLastStep:isWorkflowComplete` (e2e linear xanh). `findMaxStepOrder`/`advanceInstanceStepOrder` **ngừng dùng** (W2→3c-iii) |
+| **3c-iii** | `af8f583` | **FOR UPDATE race-safety + W2 cleanup + FS5/FS10** — `approve()` chèn `lockInstanceForUpdateInTx` (SELECT…FOR UPDATE per-instance) NGAY sau `findInstanceByIdInTx`, TRƯỚC mọi read dep → 2 approver đóng 2 dep cuối của join serialize (BLOCKING #2; **approve-only**, không deadlock). W2: xoá `findMaxStepOrder`+`advanceInstanceStepOrder`+`updateInstanceStepOrder` (+ bỏ `max` import; `current_step_order` chỉ advisory). FS10 = **probe lock xác định** (giữ khoá → approve() block; bỏ Promise.all timing vì phụ-thuộc-thứ-tự-test). FS5 = `validateConsumerTransition` writer DUY NHẤT của approved/revision (cặp D6). ⑤ FS11 skip (e2e linear che). **Còn ⑥ gate FULL+santa.** |
 
-**Test:** toàn bộ xanh — unit dag 9 · approval 19 (A4/A5/A7+branch) · int workflow-approve 4 (FS2/FS3/FS7/FS6) · e2e linear 17 · (templates/apply/tenant-isolation/rls-guards… giữ xanh). typecheck sạch.
+**Test:** toàn bộ xanh — fsm 27 (+FS5) · approval 19 (A4/A5/A7+branch) · unit dag 9 · int workflow-approve 5 (FS2/FS3/FS7/FS6/**FS10**) · e2e linear 17 · (templates/apply/tenant-isolation/rls-guards… giữ xanh). typecheck sạch.
 
 ---
 
-## ▶️ VIÊN KẾ: 3c-iii — race-safety (FOR UPDATE) + W2 cleanup (crown-jewel, FULL+santa, Opus)
+## ✅ 3c-iii ĐÃ XONG (commit `af8f583`) — chỉ còn ⑥ gate + push
 
-> ĐỌC TRƯỚC: `G7-workflow-builder.md` §1.4 · §3c · §5 (FS5/FS10/FS11) · `apps/api/src/workflow/{approval.service,workflow.service,workflow.repository}.ts` · spike `docs/spikes/workflow-state-machine.md`.
-> **3c-i (dep-gate) + 3c-ii (fan-out/complete) ĐÃ XONG** — 3c-iii chỉ còn lock + dọn + 3 RED còn lại.
+> 3c-i + 3c-ii + 3c-iii **code/test XONG**. Crown-jewel 3c hoàn tất phần code; CHỈ còn lớp review gate + push.
 
-- **KHÔNG migration** (3c thuần code). Migration kế = **0035** (4a eval hook), rồi **0036** (4c permissions seed — PHẢI seed hyphen: `create/update/publish/read:workflow-template` + `apply:workflow-instance`).
-- **Race-safety (BLOCKING #2 / FS10):** thêm `SELECT…FOR UPDATE` per-instance (`workflow_instances`) **TRƯỚC** mọi read dep TRONG `approve()` (và start/submit nếu cần). Repo: thêm `lockInstanceForUpdateInTx(companyId, instanceId, tx)`; gọi ngay sau `findInstanceByIdInTx` trong `approve()`. Mọi read dep của approve đã nằm trong tx sẵn (3c-ii) → chỉ cần chèn lock đầu.
-- **W2 cleanup:** xoá `findMaxStepOrder` + `advanceInstanceStepOrder` khỏi repo (đã ngừng dùng ở 3c-ii); `current_step_order` chỉ còn advisory. Grep xác nhận không còn caller trước khi xoá.
-- **RED-first còn lại (§5):**
-  - **FS10** concurrency join: 2 dep cuối của D approve **gần đồng thời** → D mở **đúng-1 task**, complete **đúng-1 lần** (FOR UPDATE serialize per-instance). ⚠️ `dedup_key` che under-open → test phải tách "under-open" khỏi "task đúng-1" (§5). Khó test: cần 2 tx song song trên 2 connection → dùng `directPool` 2 client hoặc `Promise.all` 2 lời gọi `approve()` riêng connection.
-  - **FS5** `workflow.service` (start/submit) KHÔNG được ghi thẳng `status=approved` → chỉ path approve/revision qua FSM `validateConsumerTransition` ghi approved/revision (invariant §1.4). Test khẳng định guard.
-  - **FS11** instance G4-3 cũ (deps tuyến tính seed) chạy hết vòng start/submit/approve qua guard `allDependenciesApproved` mới + thoả CHECK đúng-một. (e2e linear 17 hiện đã cover phần lớn — FS11 bổ sung nếu §5 yêu cầu ngưỡng riêng.)
-- **CUỐI 3c-iii → gate FULL+santa 1 lần** cho cả crown-jewel (3c-i+ii+iii): `ecc:security-reviewer` + `ecc:database-reviewer` + `ecc:silent-failure-hunter` + `ecc:santa-method`. (Đã hoãn suốt 3c theo cost discipline.)
+- **① RED FS10 → ② GREEN lock → ③ W2 cleanup → ④ FS5** — xong, commit `af8f583` (5 file, +149/−51), **local, CHƯA push**.
+- **Lock:** `approve()` chèn `lockInstanceForUpdateInTx` (SELECT…FOR UPDATE per-instance) NGAY sau `findInstanceByIdInTx`, TRƯỚC mọi read dep. **approve-only** (start/submit không cần — chỉ ghi step của chính nó; giữ 1 row instance/tx → không deadlock).
+- **FS10 (quyết định quan trọng):** `Promise.all` timing tự nhiên **KHÔNG đỏ tin cậy** (phụ thuộc thứ-tự-test/độ-ấm-pool — từng thấy xanh-trong-trạng-thái-lỗi). Đã thay bằng **probe lock xác định**: blocker (`directPool`) giữ `SELECT…FOR UPDATE` trên instance → real `approve()` PHẢI block (chưa-lock=không-block=ĐỎ; có-lock=block→release=XANH). Đúng-tuần-tự open/complete đã có FS3/FS7.
+- **W2:** xoá `findMaxStepOrder`+`advanceInstanceStepOrder`+`updateInstanceStepOrder` (cả 3 dead) + bỏ `max` import; `current_step_order` chỉ advisory. Spec dọn mock + 2 assertion legacy.
+- **FS5:** đặt ở **FSM unit** — `validateConsumerTransition` là writer DUY NHẤT của approved/revision (cặp với **D6** đã có; D6 chứng minh service path KHÔNG ghi được approved/revision).
+- **⑤ FS11: SKIP** — e2e linear 17 đã che vòng start/submit/approve (seed `video_standard_v0` không seed deps → mọi bước root, guard `allDependenciesApproved` mới vẫn xanh).
+- **KHÔNG migration** trong 3c. Migration kế = **0035** (4a eval hook), rồi **0036** (4c permissions seed — PHẢI seed hyphen: `create/update/publish/read:workflow-template` + `apply:workflow-instance`).
 
-### Ghi chú review treo cho 3c-iii
+### ⬜ VIÊN KẾ: ⑥ FULL+santa gate cho crown-jewel 3c (rồi push)
 
-- **Review C1 (race trên join)** chỉ áp dụng cho 3c-iii (FOR UPDATE) — KHÔNG phải defect của 3c-ii.
-- ⚠️ BẪY pg single-connection: đọc dep TUẦN TỰ (await), KHÔNG `Promise.all` trên CÙNG 1 tx (FS10 test cần 2 connection RIÊNG, không phải 2 query 1 tx).
+- **Scope gate:** review CẢ **3c-i (`0d31be6`) + 3c-ii (`c26eb94`) + 3c-iii (`af8f583`)** — DAG/FSM/lock/auto-task/idempotency = crown-jewel.
+- **Agent (song song):** `ecc:security-reviewer` + `ecc:database-reviewer` + `ecc:silent-failure-hunter`; rồi `ecc:santa-method` (dual-review hội tụ).
+- Sửa CRITICAL/HIGH → re-verify (fsm 27 · approval 19 · int 5 · e2e 17 · typecheck) → commit fix theo PATH → **push `feat/g7-workflow`**.
+
+### Ghi chú review treo cho ⑥ gate
+
+- **Review C1 (race trên join)** đã được vá ở 3c-iii (FOR UPDATE) — gate xác nhận lock đặt đúng (TRƯỚC mọi read dep) + approve-only đủ an toàn.
+- ⚠️ BẪY pg single-connection: đọc dep TUẦN TỰ (await), KHÔNG `Promise.all` trên CÙNG 1 tx; FS10 test cần 2 connection RIÊNG.
+- Điểm gate nên soi: (a) lock đặt sau `findInstanceByIdInTx` có nằm TRƯỚC mọi DAG-read không (approval.service.ts); (b) `.for("update")` Drizzle sinh đúng SQL trên `workflow_instances` + còn `withTenant`/RLS; (c) start/submit bỏ lock có tạo race khác không (kết luận 3c-iii: không); (d) probe FS10 có còn xanh-xác-định.
 
 ## Bất biến vận hành (giữ cả G7)
 - HAND-DRIVEN: đọc + trình plan từng viên, duyệt rồi mới code. Commit theo PATH tường minh (KHÔNG `git add -A`). Attribution tắt.
