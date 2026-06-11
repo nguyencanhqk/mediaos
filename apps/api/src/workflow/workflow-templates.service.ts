@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
@@ -6,6 +7,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import type {
+  CreateDependencyRequest,
   CreateTemplateRequest,
   CreateTemplateStepRequest,
   UpdateTemplateRequest,
@@ -24,6 +26,7 @@ import {
 } from "./workflow-templates.types";
 
 const PG_UNIQUE_VIOLATION = "23505";
+const PG_FK_VIOLATION = "23503";
 // Partial-unique index (company_id, code, version) WHERE deleted_at IS NULL — định nghĩa ở schema/0032.
 const TEMPLATE_CODE_VERSION_UQ = "workflow_defs_company_code_version_active_uq";
 
@@ -35,6 +38,7 @@ function isTemplateCodeConflict(err: unknown): boolean {
 // Unique index names cho step (schema/0032) — scope 23505 để báo lỗi đúng nguyên nhân.
 const STEP_NODE_KEY_UQ = "wf_def_steps_def_node_key_uq";
 const STEP_ORDER_UQ = "wf_def_steps_def_order_uq";
+const DEP_EDGE_UQ = "wf_step_deps_edge_uq";
 
 /** Trả tên unique-constraint nếu err là 23505, ngược lại null. */
 function uniqueConstraintName(err: unknown): string | null {
@@ -50,6 +54,15 @@ function isUniqueViolation(err: unknown): boolean {
     typeof err === "object" &&
     err !== null &&
     (err as Record<string, unknown>)["code"] === PG_UNIQUE_VIOLATION
+  );
+}
+
+/** True nếu err là 23503 (FK violation) — vd race xoá step giữa lúc thêm dependency. */
+function isForeignKeyViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as Record<string, unknown>)["code"] === PG_FK_VIOLATION
   );
 }
 
@@ -362,6 +375,93 @@ export class WorkflowTemplatesService {
     }
   }
 
+  // ─── Step dependencies (1c-iii) — KHÔNG validate DAG/cycle ở đây (→ 2b publish) ──
+
+  /** POST /workflow-templates/:id/dependencies — thêm cạnh (chỉ referential integrity, không cycle). */
+  async addDependency(
+    companyId: string,
+    actorId: string,
+    templateId: string,
+    dto: CreateDependencyRequest,
+  ) {
+    try {
+      return await this.db.withTenant(companyId, async (tx) => {
+        await this.loadDraftTemplate(companyId, templateId, tx);
+
+        if (dto.fromStepId === dto.toStepId) {
+          throw new BadRequestException("A step cannot depend on itself (self-dependency)");
+        }
+        // from/to PHẢI thuộc đúng template này (chặn cross-template edge ở add-time — DV3 backstop).
+        const [fromStep] = await this.repo.findStepByIdInTx(companyId, templateId, dto.fromStepId, tx);
+        if (!fromStep) {
+          throw new BadRequestException(`from_step not found in this template: ${dto.fromStepId}`);
+        }
+        const [toStep] = await this.repo.findStepByIdInTx(companyId, templateId, dto.toStepId, tx);
+        if (!toStep) {
+          throw new BadRequestException(`to_step not found in this template: ${dto.toStepId}`);
+        }
+
+        const [created] = await this.repo.createDependency(
+          companyId,
+          {
+            templateId,
+            fromStepId: dto.fromStepId,
+            toStepId: dto.toStepId,
+            dependencyType: dto.dependencyType,
+          },
+          tx,
+        );
+        if (!created) throw new InternalServerErrorException("Failed to create dependency");
+
+        await this.audit.record(tx, {
+          action: "WorkflowTemplateDependencyAdded",
+          objectType: "workflow_template",
+          objectId: templateId,
+          actorUserId: actorId,
+          after: {
+            dependencyId: created.id,
+            fromStepId: created.fromStepId,
+            toStepId: created.toStepId,
+            dependencyType: created.dependencyType,
+          },
+        });
+
+        return created;
+      });
+    } catch (err) {
+      if (uniqueConstraintName(err) === DEP_EDGE_UQ) {
+        throw new ConflictException("This dependency edge already exists");
+      }
+      this.mapError(err, "addDependency", { companyId, id: templateId });
+    }
+  }
+
+  /** DELETE /workflow-templates/:id/dependencies/:depId — hard-delete cạnh (draft-only). */
+  async removeDependency(companyId: string, actorId: string, templateId: string, depId: string) {
+    try {
+      return await this.db.withTenant(companyId, async (tx) => {
+        await this.loadDraftTemplate(companyId, templateId, tx);
+        const [existing] = await this.repo.findDependencyByIdInTx(companyId, templateId, depId, tx);
+        if (!existing) throw new NotFoundException(`Dependency not found: ${depId}`);
+
+        const [deleted] = await this.repo.deleteDependency(companyId, templateId, depId, tx);
+        if (!deleted) throw new InternalServerErrorException(`Failed to delete dependency ${depId}`);
+
+        await this.audit.record(tx, {
+          action: "WorkflowTemplateDependencyRemoved",
+          objectType: "workflow_template",
+          objectId: templateId,
+          actorUserId: actorId,
+          before: { dependencyId: depId, fromStepId: existing.fromStepId, toStepId: existing.toStepId },
+        });
+
+        return { id: depId, deleted: true as const };
+      });
+    } catch (err) {
+      this.mapError(err, "removeDependency", { companyId, id: templateId });
+    }
+  }
+
   /**
    * Map domain → HTTP exception; rethrow known HTTP exceptions; log + rethrow unknown (giữ error gốc).
    * `never` để TypeScript ÉP caller phải có `throw`/return path — không thể vô tình nuốt lỗi.
@@ -372,11 +472,15 @@ export class WorkflowTemplatesService {
     if (
       err instanceof NotFoundException ||
       err instanceof ConflictException ||
+      err instanceof BadRequestException ||
       err instanceof InternalServerErrorException
     ) {
       throw err;
     }
-    // Fallback: 23505 không khớp constraint cụ thể → 409 chung (chống raw pg-error 500 rò tên bảng/schema).
+    // Fallback chống raw pg-error 500 rò tên bảng/schema:
+    if (isForeignKeyViolation(err)) {
+      throw new BadRequestException("A referenced entity no longer exists");
+    }
     if (isUniqueViolation(err)) {
       throw new ConflictException("A unique constraint was violated");
     }

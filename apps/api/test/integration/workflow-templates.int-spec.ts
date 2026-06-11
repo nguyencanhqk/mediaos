@@ -1,6 +1,6 @@
 import "reflect-metadata";
 import { randomUUID } from "node:crypto";
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DatabaseService } from "../../src/db/db.service";
 import { AuditService } from "../../src/events/audit.service";
@@ -247,6 +247,76 @@ describe.skipIf(!hasDb)("G7-1c workflow templates service", () => {
     expect(detail.steps.map((x) => x.id)).toEqual([s2.id]);
     expect(detail.dependencies).toEqual([]); // FK cascade xoá dep
   });
+
+  // ─── 1c-iii: dependencies ────────────────────────────────────────────────────
+
+  async function templateWith2Steps() {
+    const t = await svc.createTemplate(A.companyId, userA, {
+      code: `dep-${randomUUID().slice(0, 8)}`,
+      name: "T",
+      appliesTo: "content_item",
+    });
+    const s1 = await svc.addStep(A.companyId, userA, t.id, stepDto());
+    const s2 = await svc.addStep(A.companyId, userA, t.id, stepDto());
+    return { t, s1, s2 };
+  }
+
+  const edge = (from: string, to: string) => ({
+    fromStepId: from,
+    toStepId: to,
+    dependencyType: "finish_to_start" as const,
+  });
+
+  it("R8 addDependency parent tenant khác → NotFound", async () => {
+    const tB = await seedTemplate(B.companyId);
+    await expect(
+      svc.addDependency(A.companyId, userA, tB, edge(randomUUID(), randomUUID())),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("R9 addDependency trên template published → Conflict", async () => {
+    const tA = await seedTemplate(A.companyId, "published");
+    await expect(
+      svc.addDependency(A.companyId, userA, tA, edge(randomUUID(), randomUUID())),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("R10 self-loop (from === to) → BadRequest", async () => {
+    const { t, s1 } = await templateWith2Steps();
+    await expect(svc.addDependency(A.companyId, userA, t.id, edge(s1.id, s1.id))).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it("R11 from/to step không thuộc template → BadRequest", async () => {
+    const { t, s1 } = await templateWith2Steps();
+    await expect(
+      svc.addDependency(A.companyId, userA, t.id, edge(s1.id, randomUUID())),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("R12 edge trùng → Conflict", async () => {
+    const { t, s1, s2 } = await templateWith2Steps();
+    await svc.addDependency(A.companyId, userA, t.id, edge(s1.id, s2.id));
+    await expect(svc.addDependency(A.companyId, userA, t.id, edge(s1.id, s2.id))).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+  });
+
+  it("addDependency → detail thấy edge + audit; removeDependency → mất edge + audit", async () => {
+    const { t, s1, s2 } = await templateWith2Steps();
+    const dep = await svc.addDependency(A.companyId, userA, t.id, edge(s1.id, s2.id));
+    expect(await auditCount(A.companyId, t.id, "WorkflowTemplateDependencyAdded")).toBe(1);
+
+    let detail = await svc.getTemplateDetail(A.companyId, t.id);
+    expect(detail.dependencies.map((d) => d.id)).toEqual([dep.id]);
+
+    await svc.removeDependency(A.companyId, userA, t.id, dep.id);
+    expect(await auditCount(A.companyId, t.id, "WorkflowTemplateDependencyRemoved")).toBe(1);
+
+    detail = await svc.getTemplateDetail(A.companyId, t.id);
+    expect(detail.dependencies).toEqual([]);
+  });
 });
 
 /**
@@ -255,7 +325,16 @@ describe.skipIf(!hasDb)("G7-1c workflow templates service", () => {
  */
 describe("G7-1c controller permission metadata (PD3)", () => {
   const proto = WorkflowTemplatesController.prototype as unknown as Record<string, object>;
-  it.each([["create"], ["update"], ["remove"], ["addStep"], ["updateStep"], ["removeStep"]])(
+  it.each([
+    ["create"],
+    ["update"],
+    ["remove"],
+    ["addStep"],
+    ["updateStep"],
+    ["removeStep"],
+    ["addDependency"],
+    ["removeDependency"],
+  ])(
     "%s mang @RequirePermission resourceType=workflow-template",
     (method) => {
       const meta = Reflect.getMetadata(REQUIRE_PERMISSION, proto[method]) as

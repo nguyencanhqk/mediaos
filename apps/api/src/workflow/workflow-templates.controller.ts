@@ -14,6 +14,7 @@ import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
 import { WorkflowTemplatesService } from "./workflow-templates.service";
 import {
+  CreateDependencyDto,
   CreateTemplateDto,
   CreateTemplateStepDto,
   UpdateTemplateDto,
@@ -107,5 +108,29 @@ export class WorkflowTemplatesController {
     @Param("stepId") stepId: string,
   ) {
     return this.templates.removeStep(req.user.companyId, req.user.id, id, stepId);
+  }
+
+  // ─── Step dependencies (1c-iii) — gate update:workflow-template ───────────────
+
+  @Post(":id/dependencies")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "workflow-template")
+  addDependency(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Body() dto: CreateDependencyDto,
+  ) {
+    return this.templates.addDependency(req.user.companyId, req.user.id, id, dto);
+  }
+
+  @Delete(":id/dependencies/:depId")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "workflow-template")
+  removeDependency(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Param("depId") depId: string,
+  ) {
+    return this.templates.removeDependency(req.user.companyId, req.user.id, id, depId);
   }
 }

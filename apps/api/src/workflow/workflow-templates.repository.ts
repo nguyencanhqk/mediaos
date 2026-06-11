@@ -245,6 +245,54 @@ export class WorkflowTemplatesRepository {
         ),
       );
   }
+
+  // ─── Step dependencies (workflow_step_dependencies) — 1c-iii ─────────────────
+
+  createDependency(
+    companyId: string,
+    data: { templateId: string; fromStepId: string; toStepId: string; dependencyType: string },
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(workflowStepDependencies)
+      .values({
+        companyId,
+        workflowDefinitionId: data.templateId,
+        fromStepId: data.fromStepId,
+        toStepId: data.toStepId,
+        dependencyType: data.dependencyType,
+      })
+      .returning();
+  }
+
+  findDependencyByIdInTx(companyId: string, templateId: string, depId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(workflowStepDependencies)
+      .where(
+        and(
+          eq(workflowStepDependencies.companyId, companyId),
+          eq(workflowStepDependencies.workflowDefinitionId, templateId),
+          eq(workflowStepDependencies.id, depId),
+        ),
+      )
+      .limit(1);
+  }
+
+  // Hard-delete edge (draft-only, ép ở service). Edge không có deleted_at (1b frozen).
+  // Scope đủ (company, template, id) — self-defending, không dựa vào find trước đó.
+  deleteDependency(companyId: string, templateId: string, depId: string, tx: TenantTx) {
+    return tx
+      .delete(workflowStepDependencies)
+      .where(
+        and(
+          eq(workflowStepDependencies.companyId, companyId),
+          eq(workflowStepDependencies.workflowDefinitionId, templateId),
+          eq(workflowStepDependencies.id, depId),
+        ),
+      )
+      .returning();
+  }
 }
 
 /** Field set cho updateStep — nodeKey BẤT BIẾN (không nằm ở đây). null = clear cột nullable. */
