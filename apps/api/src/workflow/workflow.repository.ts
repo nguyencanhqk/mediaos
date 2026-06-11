@@ -1,10 +1,12 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
 import type { TenantTx } from "../db/db.service";
 import {
   approvalRequests,
   approvalSteps,
+  checklistItems,
+  checklists,
   contentItems,
   defects,
   projects,
@@ -12,6 +14,7 @@ import {
   workflowDefinitionSteps,
   workflowDefinitions,
   workflowInstances,
+  workflowStepChecklistStates,
   workflowStepDependencies,
   workflowStepInstanceLocks,
   workflowSteps,
@@ -231,6 +234,20 @@ export class WorkflowRepository {
       .from(workflowSteps)
       .where(and(eq(workflowSteps.companyId, companyId), eq(workflowSteps.id, stepId)))
       .limit(1);
+  }
+
+  /**
+   * G7-4b: SELECT…FOR UPDATE on a single step row. submitStep and tick/untick both take this lock
+   * before reading/writing checklist state, so a concurrent un-tick cannot slip between the submit
+   * gate-check and the status write (mirrors approve()'s per-instance lock; single resource, same
+   * acquisition order → no deadlock — submit never locks the instance row, approve never locks a step).
+   */
+  findStepByIdForUpdateInTx(companyId: string, stepId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(workflowSteps)
+      .where(and(eq(workflowSteps.companyId, companyId), eq(workflowSteps.id, stepId)))
+      .for("update");
   }
 
   findInstanceByIdInTx(companyId: string, instanceId: string, tx: TenantTx) {
@@ -631,6 +648,123 @@ export class WorkflowRepository {
       .update(tasks)
       .set({ assigneeUserId, updatedAt: new Date() })
       .where(and(eq(tasks.companyId, companyId), eq(tasks.id, taskId)))
+      .returning();
+  }
+
+  // ─── Checklist enforcement (G7-4b) ────────────────────────────────────────
+  // Linkage (QUYẾT ĐỊNH #1 = ĐƯỜNG A): instance-step.node_key → def-step (workflow_definition_id +
+  // node_key, uq → 1 row) → checklists.workflow_definition_step_id → checklist_items. `default_checklist_id`
+  // is always NULL (3b never sets it), so it is NOT used. company_id filtered on every table (defense-in-depth).
+
+  /**
+   * Count REQUIRED checklist items of `stepId`'s def-step that are NOT yet checked (no matching row in
+   * workflow_step_checklist_states for this step). 0 = checklist complete (or no required items → no gate).
+   * One query (NOT EXISTS) — a missing/mismatched def-step matches 0 items → count 0 → allow (no checklist).
+   * A def-step MAY carry >1 checklist (no uq on checklists.workflow_definition_step_id); required items
+   * across ALL of them are counted together — adding a second checklist intentionally raises the bar.
+   */
+  countUnmetRequiredChecklistItemsForStepInTx(
+    companyId: string,
+    args: { workflowDefinitionId: string; nodeKey: string; stepId: string },
+    tx: TenantTx,
+  ) {
+    return tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(checklistItems)
+      .innerJoin(checklists, eq(checklistItems.checklistId, checklists.id))
+      .innerJoin(
+        workflowDefinitionSteps,
+        eq(checklists.workflowDefinitionStepId, workflowDefinitionSteps.id),
+      )
+      .where(
+        and(
+          eq(checklistItems.companyId, companyId),
+          eq(checklists.companyId, companyId),
+          eq(workflowDefinitionSteps.companyId, companyId),
+          eq(workflowDefinitionSteps.workflowDefinitionId, args.workflowDefinitionId),
+          eq(workflowDefinitionSteps.nodeKey, args.nodeKey),
+          eq(checklistItems.isRequired, true),
+          notExists(
+            tx
+              .select({ one: sql`1` })
+              .from(workflowStepChecklistStates)
+              .where(
+                and(
+                  eq(workflowStepChecklistStates.companyId, companyId),
+                  eq(workflowStepChecklistStates.workflowStepId, args.stepId),
+                  eq(workflowStepChecklistStates.checklistItemId, checklistItems.id),
+                ),
+              ),
+          ),
+        ),
+      );
+  }
+
+  /**
+   * The checklist item `itemId` IFF it belongs to a checklist of `stepId`'s def-step (matched by
+   * node_key). Empty = the item is foreign to this step → tick/untick must reject (anti tick-stray-item).
+   */
+  findChecklistItemForStepInTx(
+    companyId: string,
+    args: { workflowDefinitionId: string; nodeKey: string; itemId: string },
+    tx: TenantTx,
+  ) {
+    return tx
+      .select({ id: checklistItems.id, isRequired: checklistItems.isRequired })
+      .from(checklistItems)
+      .innerJoin(checklists, eq(checklistItems.checklistId, checklists.id))
+      .innerJoin(
+        workflowDefinitionSteps,
+        eq(checklists.workflowDefinitionStepId, workflowDefinitionSteps.id),
+      )
+      .where(
+        and(
+          eq(checklistItems.companyId, companyId),
+          eq(checklists.companyId, companyId),
+          eq(workflowDefinitionSteps.companyId, companyId),
+          eq(workflowDefinitionSteps.workflowDefinitionId, args.workflowDefinitionId),
+          eq(workflowDefinitionSteps.nodeKey, args.nodeKey),
+          eq(checklistItems.id, args.itemId),
+        ),
+      )
+      .limit(1);
+  }
+
+  /** Tick = INSERT a state row; onConflictDoNothing on the (step,item) uq → tick is idempotent.
+   * Explicit conflict target so only the intended uniqueness is suppressed (future constraints surface). */
+  insertChecklistStateInTx(
+    companyId: string,
+    data: { workflowStepId: string; checklistItemId: string; checkedBy: string | null },
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(workflowStepChecklistStates)
+      .values({
+        companyId,
+        workflowStepId: data.workflowStepId,
+        checklistItemId: data.checklistItemId,
+        checkedBy: data.checkedBy,
+      })
+      .onConflictDoNothing({
+        target: [
+          workflowStepChecklistStates.workflowStepId,
+          workflowStepChecklistStates.checklistItemId,
+        ],
+      })
+      .returning();
+  }
+
+  /** Un-tick = DELETE the state row (intentional per schema — operational state, not audit-data). Idempotent. */
+  deleteChecklistStateInTx(companyId: string, stepId: string, itemId: string, tx: TenantTx) {
+    return tx
+      .delete(workflowStepChecklistStates)
+      .where(
+        and(
+          eq(workflowStepChecklistStates.companyId, companyId),
+          eq(workflowStepChecklistStates.workflowStepId, stepId),
+          eq(workflowStepChecklistStates.checklistItemId, itemId),
+        ),
+      )
       .returning();
   }
 

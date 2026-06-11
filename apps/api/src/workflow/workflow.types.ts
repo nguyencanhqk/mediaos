@@ -137,6 +137,23 @@ export class StepLockedError extends Error {
   }
 }
 
+/**
+ * ChecklistIncompleteError — G7-4b. A step cannot be submitted (T2) because not every REQUIRED
+ * checklist item of the step has been checked. Required items are resolved from the template's
+ * def-step (matched by node_key) → checklists → checklist_items WHERE is_required; "checked" = a
+ * row in workflow_step_checklist_states. A step with no required items is never blocked (anti
+ * over-gate). Distinct from StepLockedError / DependenciesNotMetError so the UI shows the specific
+ * "checklist incomplete" reason. Submit-only (start is not gated by the checklist).
+ */
+export class ChecklistIncompleteError extends Error {
+  readonly stepId: string;
+  constructor(stepId: string) {
+    super(`Step ${stepId} cannot be submitted: required checklist items are not all checked`);
+    this.name = "ChecklistIncompleteError";
+    this.stepId = stepId;
+  }
+}
+
 /** DuplicateWorkflowError when a content item already has an active workflow. */
 export class DuplicateWorkflowError extends Error {
   constructor(contentItemId: string) {

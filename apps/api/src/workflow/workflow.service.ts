@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -15,6 +16,7 @@ import { WorkflowRepository } from "./workflow.repository";
 import { LockPropagationService } from "./lock-propagation.service";
 import { allDependenciesApproved } from "./workflow-dag";
 import {
+  ChecklistIncompleteError,
   DependenciesNotMetError,
   IllegalTransitionError,
   NotCurrentStepError,
@@ -77,6 +79,9 @@ function mapFsmError(err: unknown): never {
     throw new ConflictException(err.message);
   }
   if (err instanceof StepLockedError) {
+    throw new ConflictException(err.message);
+  }
+  if (err instanceof ChecklistIncompleteError) {
     throw new ConflictException(err.message);
   }
   if (err instanceof NotStepActorError) {
@@ -483,6 +488,39 @@ export class WorkflowService {
   }
 
   /**
+   * G7-4b: resolve "are ALL REQUIRED checklist items of `step` checked?" within the caller's tx.
+   * Linkage = ĐƯỜNG A (QUYẾT ĐỊNH #1): step.nodeKey → def-step (by instance.workflowDefinitionId +
+   * node_key) → checklists → required items, minus the ticked rows in workflow_step_checklist_states.
+   * A step with no node_key or no required items is complete (never over-gated). One NOT EXISTS query.
+   */
+  private async resolveChecklistComplete(
+    companyId: string,
+    step: { id: string; nodeKey: string | null },
+    instance: { workflowDefinitionId: string },
+    tx: TenantTx,
+  ): Promise<boolean> {
+    // No node_key (legacy / un-snapshotted step) → no def-step resolvable → no checklist exists → not
+    // gated (vacuously complete). Log so this rare path is visible if a future spawn skips the snapshot.
+    if (!step.nodeKey) {
+      this.logger.debug(`resolveChecklistComplete: step ${step.id} has no node_key — checklist gate skipped`);
+      return true;
+    }
+    const [row] = await this.repo.countUnmetRequiredChecklistItemsForStepInTx(
+      companyId,
+      { workflowDefinitionId: instance.workflowDefinitionId, nodeKey: step.nodeKey, stepId: step.id },
+      tx,
+    );
+    // count(*) ALWAYS returns one row; a missing row signals a query/driver fault → fail CLOSED
+    // (block submit) rather than silently allowing it (`?? 0` would have been a fail-open gate bypass).
+    if (!row) {
+      throw new InternalServerErrorException(
+        `Checklist completeness query returned no row for step ${step.id}`,
+      );
+    }
+    return row.count === 0;
+  }
+
+  /**
    * POST /workflow/steps/:stepId/start — assignee starts a step (T1 or T5).
    * Guard: actor = assignee, ALL upstream deps approved (G7-3c), instance active.
    */
@@ -557,13 +595,16 @@ export class WorkflowService {
   ) {
     try {
       return await this.db.withTenant(companyId, async (tx) => {
-        const [step] = await this.repo.findStepByIdInTx(companyId, stepId, tx);
+        // FOR UPDATE on the step row: serialize submit against a concurrent un-tick of the same step
+        // so the checklist gate-check and the status write are atomic (G7-4b race-safety).
+        const [step] = await this.repo.findStepByIdForUpdateInTx(companyId, stepId, tx);
         if (!step) throw new NotFoundException(`Step not found: ${stepId}`);
 
         const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
         if (!instance) throw new WorkflowNotFoundError("instance", step.workflowInstanceId);
 
-        // Sequential awaits (one pg connection per tx): resolve deps, then the revision lock.
+        // Sequential awaits (one pg connection per tx): resolve deps, the revision lock, then the
+        // required-checklist completion (G7-4b submit gate).
         const dependenciesApproved = await this.resolveDependenciesApproved(
           companyId,
           step,
@@ -571,6 +612,7 @@ export class WorkflowService {
           tx,
         );
         const stepLocked = await this.locks.isStepLocked(companyId, stepId, tx);
+        const checklistComplete = await this.resolveChecklistComplete(companyId, step, instance, tx);
         try {
           this.fsm.validateServiceTransition({
             step: toFsmStep(step),
@@ -579,6 +621,7 @@ export class WorkflowService {
             actorId,
             dependenciesApproved,
             stepLocked,
+            checklistComplete,
           });
         } catch (err) {
           return mapFsmError(err);
@@ -631,6 +674,109 @@ export class WorkflowService {
         throw new NotFoundException(err.message);
       }
       this.logger.error("submitStep unexpected error", { err, companyId, stepId, actorId });
+      throw err;
+    }
+  }
+
+  /**
+   * POST /workflow/steps/:stepId/checklist-items/:itemId — assignee ticks a checklist item (G7-4b).
+   * Idempotent (uq step+item, onConflictDoNothing). Scope: item must belong to a checklist of this
+   * step's def-step (anti tick-stray-item); DECISION #2(A) only the step assignee may tick.
+   * Audit only on a real state change (replayed tick = no-op, no audit spam).
+   */
+  async checkItem(companyId: string, stepId: string, itemId: string, actorId: string) {
+    return this.toggleChecklistItem(companyId, stepId, itemId, actorId, true);
+  }
+
+  /**
+   * DELETE /workflow/steps/:stepId/checklist-items/:itemId — assignee un-ticks an item (G7-4b).
+   * Un-tick = DELETE the state row (intentional per schema — operational state, not audit-data).
+   * Idempotent (deleting an absent row is a no-op). Same scope/actor guards as checkItem.
+   */
+  async uncheckItem(companyId: string, stepId: string, itemId: string, actorId: string) {
+    return this.toggleChecklistItem(companyId, stepId, itemId, actorId, false);
+  }
+
+  private async toggleChecklistItem(
+    companyId: string,
+    stepId: string,
+    itemId: string,
+    actorId: string,
+    checked: boolean,
+  ) {
+    try {
+      return await this.db.withTenant(companyId, async (tx) => {
+        // FOR UPDATE on the step row: serialize tick/untick against a concurrent submit of the same
+        // step so the gate-check (in submit) cannot race a state change (G7-4b race-safety, pairs with submit).
+        const [step] = await this.repo.findStepByIdForUpdateInTx(companyId, stepId, tx);
+        if (!step) throw new NotFoundException(`Step not found: ${stepId}`);
+
+        const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
+        if (!instance) throw new WorkflowNotFoundError("instance", step.workflowInstanceId);
+        if (instance.status !== "active") {
+          throw new ConflictException(`Workflow is not active (status=${instance.status})`);
+        }
+
+        // DECISION #2(A): only the step assignee may modify its checklist (consistent with submit).
+        if (!step.assigneeUserId || step.assigneeUserId !== actorId) {
+          throw new ForbiddenException("Only the step assignee can modify this checklist");
+        }
+
+        // Cross-item guard: the item must belong to a checklist of this step's def-step (node_key).
+        if (!step.nodeKey) throw new NotFoundException(`Checklist item not found for step: ${itemId}`);
+        const [item] = await this.repo.findChecklistItemForStepInTx(
+          companyId,
+          { workflowDefinitionId: instance.workflowDefinitionId, nodeKey: step.nodeKey, itemId },
+          tx,
+        );
+        if (!item) throw new NotFoundException(`Checklist item not found for step: ${itemId}`);
+
+        const changed = checked
+          ? (
+              await this.repo.insertChecklistStateInTx(
+                companyId,
+                { workflowStepId: stepId, checklistItemId: itemId, checkedBy: actorId },
+                tx,
+              )
+            ).length > 0
+          : (await this.repo.deleteChecklistStateInTx(companyId, stepId, itemId, tx)).length > 0;
+
+        // Audit only when a row actually changed — replayed tick/untick is a true no-op.
+        if (changed) {
+          await this.audit.record(tx, {
+            action: checked ? "ChecklistItemChecked" : "ChecklistItemUnchecked",
+            objectType: "workflow_step",
+            objectId: stepId,
+            actorUserId: actorId,
+            ...(checked
+              ? { after: { checklistItemId: itemId } }
+              : { before: { checklistItemId: itemId } }),
+          });
+        }
+
+        // `changed` lets the caller distinguish a real state change from an idempotent no-op replay.
+        return { stepId, checklistItemId: itemId, checked, changed };
+      });
+    } catch (err) {
+      if (
+        err instanceof NotFoundException ||
+        err instanceof ConflictException ||
+        err instanceof ForbiddenException ||
+        err instanceof InternalServerErrorException
+      ) {
+        throw err;
+      }
+      if (err instanceof WorkflowNotFoundError) {
+        throw new NotFoundException(err.message);
+      }
+      this.logger.error("toggleChecklistItem unexpected error", {
+        err,
+        companyId,
+        stepId,
+        itemId,
+        actorId,
+        checked,
+      });
       throw err;
     }
   }

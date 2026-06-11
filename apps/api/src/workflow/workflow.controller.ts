@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -92,6 +93,27 @@ export class WorkflowController {
       submissionUrl: dto.submissionUrl,
       submissionNote: dto.submissionNote,
     });
+  }
+
+  /** POST /workflow/steps/:stepId/checklist-items/:itemId — tick item (G7-4b submit gate).
+   * Actor = step assignee (enforced in service); no separate permission gate (workflow-internal). */
+  @Post("steps/:stepId/checklist-items/:itemId")
+  checkItem(
+    @Req() req: AuthenticatedRequest,
+    @Param("stepId") stepId: string,
+    @Param("itemId") itemId: string,
+  ) {
+    return this.workflow.checkItem(req.user.companyId, stepId, itemId, req.user.id);
+  }
+
+  /** DELETE /workflow/steps/:stepId/checklist-items/:itemId — un-tick item (G7-4b) */
+  @Delete("steps/:stepId/checklist-items/:itemId")
+  uncheckItem(
+    @Req() req: AuthenticatedRequest,
+    @Param("stepId") stepId: string,
+    @Param("itemId") itemId: string,
+  ) {
+    return this.workflow.uncheckItem(req.user.companyId, stepId, itemId, req.user.id);
   }
 
   /** POST /workflow/approval-requests/:requestId/approve — T3: phê duyệt */
