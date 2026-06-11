@@ -10,9 +10,10 @@
  *   C6  — requestRevision when approval_request is NOT pending → ConflictException
  *
  * Allow cases:
- *   A4  — approve intermediate step → advances currentStepOrder, creates approval_steps record
- *   A5  — approve last step → workflow instance becomes completed
+ *   A4  — approve intermediate step (deps remain) → no completion, no pointer advance (G7-3c-ii)
+ *   A5  — approve final step (all required approved) → workflow instance becomes completed
  *   A6  — requestRevision → creates defect, revision task, updates step status to revision
+ *   A7  — approve a fork step → fans out: createTask for each newly-unblocked downstream (G7-3c-ii)
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -96,23 +97,46 @@ function makeApprovalRequest(overrides: Partial<{ status: string; assigneeId: st
   };
 }
 
+// ─── DAG context fixtures (G7-3c-ii) ────────────────────────────────────────────
+// approve() reads def-steps + deps + instance-steps WITHIN its tx (post-approveStep view)
+// and feeds them to the pure workflow-dag helpers. These fixtures emulate that read.
+
+interface DagFixture {
+  defSteps: Array<Record<string, unknown>>;
+  deps: Array<{ fromStepId: string; toStepId: string }>;
+  instanceSteps: Array<Record<string, unknown>>;
+}
+
+// Current step under approval = "script" (makeStep.stepCode); nodeKey null → key falls back to stepCode.
+const DEF_SCRIPT = { id: "def-script", nodeKey: "script", isRequired: true, defaultTaskTitle: "Viết kịch bản", name: "Viết kịch bản", code: "script", stepOrder: 1 };
+const DEF_EDIT = { id: "def-edit", nodeKey: "edit", isRequired: true, defaultTaskTitle: "Dựng video", name: "Dựng video", code: "edit", stepOrder: 2 };
+const APPROVED_SCRIPT_STEP = { id: STEP_ID, workflowInstanceId: INSTANCE_ID, nodeKey: null, stepCode: "script", stepName: "Viết kịch bản", status: "approved" };
+const NOTSTARTED_EDIT_STEP = { id: "edit-step", workflowInstanceId: INSTANCE_ID, nodeKey: null, stepCode: "edit", stepName: "Dựng video", status: "not_started" };
+
+/** Default DAG: 2-step instance, current(script) approved, edit not_started, NO edges →
+ *  not complete (edit still pending) and nothing to fan out. Matches A4 (intermediate). */
+function defaultDag(): DagFixture {
+  return { defSteps: [DEF_SCRIPT, DEF_EDIT], deps: [], instanceSteps: [APPROVED_SCRIPT_STEP, NOTSTARTED_EDIT_STEP] };
+}
+
 // ─── Mock repo factory ────────────────────────────────────────────────────────
 
 function makeRepo(overrides: {
   step?: ReturnType<typeof makeStep>;
   instance?: ReturnType<typeof makeInstance>;
   request?: ReturnType<typeof makeApprovalRequest>;
-  maxStepOrder?: number;
+  dag?: DagFixture;
 } = {}) {
   const step = overrides.step ?? makeStep();
   const instance = overrides.instance ?? makeInstance();
   const request = overrides.request ?? makeApprovalRequest();
+  const dag = overrides.dag ?? defaultDag();
 
   return {
     findApprovalRequestById: vi.fn().mockResolvedValue([request]),
     findStepByIdInTx: vi.fn().mockResolvedValue([step]),
     findInstanceByIdInTx: vi.fn().mockResolvedValue([instance]),
-    findMaxStepOrder: vi.fn().mockResolvedValue(overrides.maxStepOrder ?? 4),
+    lockInstanceForUpdateInTx: vi.fn().mockResolvedValue([{ id: instance.id }]),
     createApprovalStep: vi.fn().mockResolvedValue([{ id: "new-approval-step" }]),
     closeApprovalRequest: vi.fn().mockResolvedValue([{ ...request, status: "approved" }]),
     approveStep: vi.fn().mockResolvedValue([{ ...step, status: "approved", approvedAt: new Date() }]),
@@ -121,8 +145,13 @@ function makeRepo(overrides: {
     setStepToRevision: vi.fn().mockResolvedValue([{ ...step, status: "revision" }]),
     createDefect: vi.fn().mockResolvedValue([{ id: "new-defect" }]),
     findTaskByStepId: vi.fn().mockResolvedValue([null]),
+    findActiveTaskByStepIdInTx: vi.fn().mockResolvedValue([null]),
     updateTaskStatus: vi.fn().mockResolvedValue([]),
     createTask: vi.fn().mockResolvedValue([{ id: "new-task" }]),
+    // G7-3c-ii: DAG context reads (within tx) used by approve() fan-out + completion.
+    findDefinitionStepsInTx: vi.fn().mockResolvedValue(dag.defSteps),
+    findTemplateDependenciesInTx: vi.fn().mockResolvedValue(dag.deps),
+    findStepsByInstanceIdInTx: vi.fn().mockResolvedValue(dag.instanceSteps),
   };
 }
 
@@ -255,42 +284,61 @@ describe("ApprovalService", () => {
     });
   });
 
-  // ─── A4: Approve intermediate step ────────────────────────────────────────
-  describe("A4 — approve intermediate step", () => {
-    it("resolves and calls approveStep + advanceInstanceStepOrder", async () => {
-      // step 1 of 4 → advance to step 2
-      const repo = makeRepo({
-        step: makeStep({ stepOrder: 1 }),
-        instance: makeInstance({ currentStepOrder: 1 }),
-        maxStepOrder: 4,
-      });
+  // ─── A4: Approve intermediate step (deps remain) ──────────────────────────
+  describe("A4 — approve intermediate step does not complete or advance", () => {
+    it("does NOT complete the workflow and does NOT advance the (legacy) step pointer", async () => {
+      // default DAG: 'edit' still not_started → workflow not complete; no edges → nothing to open.
+      const repo = makeRepo({ step: makeStep({ stepOrder: 1 }) });
       const db = makeDb(repo);
       const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
 
       const result = await service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID);
-      expect(result).toBeDefined();
+      expect(result.isWorkflowComplete).toBe(false);
+      expect((result as { isLastStep: boolean }).isLastStep).toBe(false);
       expect(repo.approveStep).toHaveBeenCalled();
-      expect(repo.advanceInstanceStepOrder).toHaveBeenCalled();
       expect(repo.completeWorkflowInstance).not.toHaveBeenCalled();
     });
   });
 
-  // ─── A5: Approve last step ────────────────────────────────────────────────
-  describe("A5 — approve last step completes workflow", () => {
-    it("calls completeWorkflowInstance and does not advance step order", async () => {
-      // step 4 of 4 → complete workflow
+  // ─── A5: Approve final step (all required approved) ────────────────────────
+  describe("A5 — approve final step completes workflow", () => {
+    it("completes the instance when every required step is approved (not by step_order)", async () => {
       const repo = makeRepo({
         step: makeStep({ stepOrder: 4 }),
-        instance: makeInstance({ currentStepOrder: 4 }),
-        maxStepOrder: 4,
+        dag: { defSteps: [DEF_SCRIPT], deps: [], instanceSteps: [APPROVED_SCRIPT_STEP] },
       });
       const db = makeDb(repo);
       const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
 
       const result = await service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID);
-      expect(result).toBeDefined();
+      expect(result.isWorkflowComplete).toBe(true);
+      expect((result as { isLastStep: boolean }).isLastStep).toBe(true);
       expect(repo.completeWorkflowInstance).toHaveBeenCalled();
-      expect(repo.advanceInstanceStepOrder).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── A7: Approve a fork step → fan out to newly-unblocked downstream ───────
+  describe("A7 — approve fork step opens newly-unblocked downstream steps", () => {
+    it("creates a task for each downstream step whose deps are now all approved", async () => {
+      // script→edit; after script approved, edit's only dep is satisfied → edit opens.
+      const repo = makeRepo({
+        step: makeStep({ stepOrder: 1 }),
+        dag: {
+          defSteps: [DEF_SCRIPT, DEF_EDIT],
+          deps: [{ fromStepId: "def-script", toStepId: "def-edit" }],
+          instanceSteps: [APPROVED_SCRIPT_STEP, NOTSTARTED_EDIT_STEP],
+        },
+      });
+      const db = makeDb(repo);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+
+      const result = await service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID);
+      expect(result.isWorkflowComplete).toBe(false); // 'edit' now open but not yet approved
+      expect(repo.createTask).toHaveBeenCalledWith(
+        COMPANY_ID,
+        expect.objectContaining({ workflowStepId: "edit-step", origin: "initial", revisionRound: 0 }),
+        expect.anything(),
+      );
     });
   });
 
@@ -323,7 +371,8 @@ describe("ApprovalService", () => {
 
     it("approve: when a task is linked + comment given → updates task status to approved", async () => {
       const repo = makeRepo();
-      repo.findTaskByStepId = vi.fn().mockResolvedValue([{ id: "task-1", revisionRound: 0 }]);
+      // 3c-ii: approve() reads the linked task within its tx (findActiveTaskByStepIdInTx).
+      repo.findActiveTaskByStepIdInTx = vi.fn().mockResolvedValue([{ id: "task-1", revisionRound: 0 }]);
       const db = makeDb(repo);
       const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
 
@@ -352,7 +401,9 @@ describe("ApprovalService", () => {
 
     it("requestRevision: when a task is linked + comment given → increments revision round and updates task", async () => {
       const repo = makeRepo();
-      repo.findTaskByStepId = vi.fn().mockResolvedValue([{ id: "task-9", revisionRound: 2 }]);
+      // F2: requestRevision now reads the linked task within its tx (findActiveTaskByStepIdInTx),
+      // matching approve(). Previously it read via the non-tx findTaskByStepId.
+      repo.findActiveTaskByStepIdInTx = vi.fn().mockResolvedValue([{ id: "task-9", revisionRound: 2 }]);
       const db = makeDb(repo);
       const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
 

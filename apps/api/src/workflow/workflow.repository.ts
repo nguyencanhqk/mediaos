@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, isNull, max, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
 import type { TenantTx } from "../db/db.service";
 import {
@@ -7,10 +7,12 @@ import {
   approvalSteps,
   contentItems,
   defects,
+  projects,
   tasks,
   workflowDefinitionSteps,
   workflowDefinitions,
   workflowInstances,
+  workflowStepDependencies,
   workflowSteps,
 } from "../db/schema";
 
@@ -48,6 +50,52 @@ export class WorkflowRepository {
       .orderBy(workflowDefinitionSteps.stepOrder);
   }
 
+  // ─── Apply template (3b) ──────────────────────────────────────────────────
+
+  /** Template phải published (D4: chỉ published mới apply được) + cùng tenant + chưa xoá. */
+  findPublishedTemplateInTx(companyId: string, templateId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(workflowDefinitions)
+      .where(
+        and(
+          eq(workflowDefinitions.companyId, companyId),
+          eq(workflowDefinitions.id, templateId),
+          eq(workflowDefinitions.status, "published"),
+          isNull(workflowDefinitions.deletedAt),
+        ),
+      )
+      .limit(1);
+  }
+
+  /** Cạnh DAG của template (để tính bước root = step không xuất hiện ở to_step_id). */
+  findTemplateDependenciesInTx(companyId: string, templateId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(workflowStepDependencies)
+      .where(
+        and(
+          eq(workflowStepDependencies.companyId, companyId),
+          eq(workflowStepDependencies.workflowDefinitionId, templateId),
+        ),
+      );
+  }
+
+  /** Project thuộc tenant (validate target khi appliesTo='project'). */
+  findProjectByIdInTx(companyId: string, projectId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(projects)
+      .where(
+        and(
+          eq(projects.companyId, companyId),
+          eq(projects.id, projectId),
+          isNull(projects.deletedAt),
+        ),
+      )
+      .limit(1);
+  }
+
   // ─── Instances ────────────────────────────────────────────────────────────
 
   createInstance(
@@ -65,6 +113,33 @@ export class WorkflowRepository {
         companyId,
         workflowDefinitionId: data.workflowDefinitionId,
         contentItemId: data.contentItemId,
+        createdBy: data.createdBy,
+        status: "active",
+        currentStepOrder: 1,
+      })
+      .returning();
+  }
+
+  /** 3b: tạo instance đa-target (content_item XOR project) + pin definition_version. */
+  createInstanceForTemplate(
+    companyId: string,
+    data: {
+      workflowDefinitionId: string;
+      contentItemId: string | null;
+      projectId: string | null;
+      definitionVersion: number;
+      createdBy: string | null;
+    },
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(workflowInstances)
+      .values({
+        companyId,
+        workflowDefinitionId: data.workflowDefinitionId,
+        contentItemId: data.contentItemId,
+        projectId: data.projectId,
+        definitionVersion: data.definitionVersion,
         createdBy: data.createdBy,
         status: "active",
         currentStepOrder: 1,
@@ -104,24 +179,6 @@ export class WorkflowRepository {
     );
   }
 
-  updateInstanceStepOrder(
-    companyId: string,
-    instanceId: string,
-    currentStepOrder: number,
-    tx: TenantTx,
-  ) {
-    return tx
-      .update(workflowInstances)
-      .set({ currentStepOrder })
-      .where(
-        and(
-          eq(workflowInstances.companyId, companyId),
-          eq(workflowInstances.id, instanceId),
-        ),
-      )
-      .returning();
-  }
-
   // ─── Steps ────────────────────────────────────────────────────────────────
 
   createSteps(
@@ -131,6 +188,7 @@ export class WorkflowRepository {
       stepOrder: number;
       stepCode: string;
       stepName: string;
+      nodeKey?: string | null;
       assigneeUserId: string | null;
       reviewerUserId: string | null;
     }>,
@@ -145,6 +203,7 @@ export class WorkflowRepository {
           stepOrder: s.stepOrder,
           stepCode: s.stepCode,
           stepName: s.stepName,
+          nodeKey: s.nodeKey ?? null,
           status: "not_started" as const,
           assigneeUserId: s.assigneeUserId,
           reviewerUserId: s.reviewerUserId,
@@ -186,6 +245,24 @@ export class WorkflowRepository {
       .limit(1);
   }
 
+  /**
+   * G7-3c-iii race-safety (BLOCKING #2 / FS10): take a per-instance row lock so concurrent
+   * approvals of a join's deps serialize. MUST be called inside approve()'s tx, BEFORE any
+   * dep-state read — the lock is held until commit, turning the lost-update race into a queue.
+   */
+  lockInstanceForUpdateInTx(companyId: string, instanceId: string, tx: TenantTx) {
+    return tx
+      .select({ id: workflowInstances.id })
+      .from(workflowInstances)
+      .where(
+        and(
+          eq(workflowInstances.companyId, companyId),
+          eq(workflowInstances.id, instanceId),
+        ),
+      )
+      .for("update");
+  }
+
   findStepsByInstanceId(companyId: string, instanceId: string) {
     return this.db.withTenant(companyId, (tx) =>
       tx
@@ -199,6 +276,26 @@ export class WorkflowRepository {
         )
         .orderBy(workflowSteps.stepOrder),
     );
+  }
+
+  /**
+   * tx variant — read all instance steps inside the caller's transaction.
+   * G7-3c: dependency resolution (allDependenciesApproved) reads step status within the caller's
+   * tx, never via a self-opened withTenant (that would be a different PgBouncer connection). This
+   * keeps the read ready to sit inside the per-instance SELECT…FOR UPDATE lock added in 3c-iii
+   * (plan §3c race-safety/FS10) — a self-opened read would escape that lock and re-introduce the race.
+   */
+  findStepsByInstanceIdInTx(companyId: string, instanceId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(workflowSteps)
+      .where(
+        and(
+          eq(workflowSteps.companyId, companyId),
+          eq(workflowSteps.workflowInstanceId, instanceId),
+        ),
+      )
+      .orderBy(workflowSteps.stepOrder);
   }
 
   /** PM gán assignee + reviewer cho 1 bước (không đổi status — chỉ metadata). */
@@ -378,35 +475,12 @@ export class WorkflowRepository {
       .returning();
   }
 
-  advanceInstanceStepOrder(companyId: string, instanceId: string, newOrder: number, tx: TenantTx) {
-    return tx
-      .update(workflowInstances)
-      .set({ currentStepOrder: newOrder })
-      .where(and(eq(workflowInstances.companyId, companyId), eq(workflowInstances.id, instanceId)))
-      .returning();
-  }
-
   completeWorkflowInstance(companyId: string, instanceId: string, tx: TenantTx) {
     return tx
       .update(workflowInstances)
       .set({ status: "completed" })
       .where(and(eq(workflowInstances.companyId, companyId), eq(workflowInstances.id, instanceId)))
       .returning();
-  }
-
-  findMaxStepOrder(companyId: string, instanceId: string) {
-    return this.db.withTenant(companyId, async (tx) => {
-      const [row] = await tx
-        .select({ maxOrder: max(workflowSteps.stepOrder) })
-        .from(workflowSteps)
-        .where(
-          and(
-            eq(workflowSteps.companyId, companyId),
-            eq(workflowSteps.workflowInstanceId, instanceId),
-          ),
-        );
-      return row?.maxOrder ?? 1;
-    });
   }
 
   createDefect(

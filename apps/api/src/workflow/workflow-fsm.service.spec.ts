@@ -26,8 +26,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { WorkflowFsmService } from "./workflow-fsm.service";
 import {
+  DependenciesNotMetError,
   IllegalTransitionError,
-  NotCurrentStepError,
   NotStepActorError,
   WorkflowInactiveError,
   WorkflowNotFoundError,
@@ -121,24 +121,54 @@ describe("WorkflowFsmService", () => {
     });
   });
 
-  // ─── D3: Start non-current step ────────────────────────────────────────────
-  describe("D3 — start step when it is not current_step_order", () => {
-    it("throws NotCurrentStepError when step_order != current_step_order", () => {
-      const step = makeStep({ status: "not_started", stepOrder: 2 });
-      const instance = makeInstance({ currentStepOrder: 1 });
-
-      expect(() =>
-        fsm.validateServiceTransition({ step, instance, event: "start", actorId: ASSIGNEE_ID }),
-      ).toThrow(NotCurrentStepError);
-    });
-
-    it("throws NotCurrentStepError even when step status is not_started but wrong order", () => {
+  // ─── FS1: start/submit gated by dependency satisfaction (replaces D3 pointer) ─
+  // G7-3c (§1.3): step_order is no longer a guard. A step is startable iff ALL upstream
+  // deps are approved — the service computes that and passes `dependenciesApproved`.
+  describe("FS1 — start/submit gated by allDependenciesApproved (DAG model)", () => {
+    it("throws DependenciesNotMetError on start when dependenciesApproved=false", () => {
       const step = makeStep({ status: "not_started", stepOrder: 3 });
       const instance = makeInstance({ currentStepOrder: 1 });
 
       expect(() =>
-        fsm.validateServiceTransition({ step, instance, event: "start", actorId: ASSIGNEE_ID }),
-      ).toThrow(NotCurrentStepError);
+        fsm.validateServiceTransition({
+          step,
+          instance,
+          event: "start",
+          actorId: ASSIGNEE_ID,
+          dependenciesApproved: false,
+        }),
+      ).toThrow(DependenciesNotMetError);
+    });
+
+    it("throws DependenciesNotMetError on submit when dependenciesApproved=false", () => {
+      const step = makeStep({ status: "in_progress", stepOrder: 2 });
+      const instance = makeInstance({ currentStepOrder: 1 });
+
+      expect(() =>
+        fsm.validateServiceTransition({
+          step,
+          instance,
+          event: "submit",
+          actorId: ASSIGNEE_ID,
+          dependenciesApproved: false,
+        }),
+      ).toThrow(DependenciesNotMetError);
+    });
+
+    it("does NOT throw on a non-sequential step_order when dependenciesApproved=true", () => {
+      // step_order 3 with currentStepOrder 1 used to throw NotCurrentStepError — no longer a guard.
+      const step = makeStep({ status: "not_started", stepOrder: 3 });
+      const instance = makeInstance({ currentStepOrder: 1 });
+
+      expect(() =>
+        fsm.validateServiceTransition({
+          step,
+          instance,
+          event: "start",
+          actorId: ASSIGNEE_ID,
+          dependenciesApproved: true,
+        }),
+      ).not.toThrow();
     });
   });
 
@@ -189,6 +219,69 @@ describe("WorkflowFsmService", () => {
       expect(() =>
         fsm.validateServiceTransition({ step, instance, event: "open_next", actorId: ACTOR_ID }),
       ).toThrow(IllegalTransitionError);
+    });
+  });
+
+  // ─── FS5: only the consumer path writes approved/revision (invariant §1.4) ──
+  // D6 (above) proves the SERVICE path cannot reach approved/revision. FS5 proves the symmetric
+  // half: validateConsumerTransition IS that path — approve→approved, request_revision→revision,
+  // both writtenBy='consumer'; while start/submit (service) only reach in_progress/waiting_review.
+  // Together they pin §1.4: approved/revision are reachable ONLY through the consumer path.
+  describe("FS5 — only the consumer path writes approved/revision (invariant §1.4)", () => {
+    it("approve (consumer) transitions waiting_review → approved", () => {
+      const step = makeStep({ status: "waiting_review" });
+      const instance = makeInstance({});
+
+      const result = fsm.validateConsumerTransition({
+        step,
+        instance,
+        event: "approve",
+        actorId: ACTOR_ID,
+        reviewerUserId: null,
+      });
+
+      expect(result.toState).toBe("approved");
+      expect(result.writtenBy).toBe("consumer");
+    });
+
+    it("request_revision (consumer) transitions waiting_review → revision", () => {
+      const step = makeStep({ status: "waiting_review" });
+      const instance = makeInstance({});
+
+      const result = fsm.validateConsumerTransition({
+        step,
+        instance,
+        event: "request_revision",
+        actorId: ACTOR_ID,
+        reviewerUserId: null,
+      });
+
+      expect(result.toState).toBe("revision");
+      expect(result.writtenBy).toBe("consumer");
+    });
+
+    it("service events (start/submit) never reach approved/revision", () => {
+      const notStarted = makeStep({ status: "not_started" });
+      const inProgress = makeStep({ status: "in_progress" });
+      const instance = makeInstance({});
+
+      const started = fsm.validateServiceTransition({
+        step: notStarted,
+        instance,
+        event: "start",
+        actorId: ASSIGNEE_ID,
+        dependenciesApproved: true,
+      });
+      const submitted = fsm.validateServiceTransition({
+        step: inProgress,
+        instance,
+        event: "submit",
+        actorId: ASSIGNEE_ID,
+        dependenciesApproved: true,
+      });
+
+      expect(["approved", "revision"]).not.toContain(started.toState);
+      expect(["approved", "revision"]).not.toContain(submitted.toState);
     });
   });
 

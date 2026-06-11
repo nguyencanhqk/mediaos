@@ -11,6 +11,11 @@ import { OutboxService } from "../events/outbox.service";
 import { WorkflowFsmService } from "./workflow-fsm.service";
 import { WorkflowRepository } from "./workflow.repository";
 import {
+  computeNewlyUnblockedStepIds,
+  isWorkflowComplete,
+  type DagContext,
+} from "./workflow-dag";
+import {
   ApprovalRequestNotPendingError,
   IllegalTransitionError,
   NotReviewerError,
@@ -19,6 +24,23 @@ import {
   type InstanceStatus,
   type StepStatus,
 } from "./workflow.types";
+
+const PG_UNIQUE_VIOLATION = "23505";
+
+/**
+ * True when `err` is a Postgres unique-constraint violation. A concurrent same-request approve()
+ * (or request-revision) loses the per-instance lock race, then its createApprovalStep hits
+ * approval_steps_request_level_uq → 23505 → the whole tx rolls back (integrity safe). Map it to a
+ * 409 instead of leaking a raw 500, mirroring workflow.service.ts startWorkflow/applyTemplate.
+ */
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as Record<string, unknown>)["code"] === PG_UNIQUE_VIOLATION
+  );
+}
 
 function toFsmStep(row: {
   id: string;
@@ -73,8 +95,8 @@ export class ApprovalService {
    *   - Updates approval_request.status = approved
    *   - Updates workflow_steps.status = approved
    *   - Updates task.status = approved (if exists)
-   *   - If last step → complete workflow instance
-   *   - Else → advance currentStepOrder (open_next)
+   *   - Fans out: opens (auto-task) every downstream step the approval unblocked (DAG, 0..n)
+   *   - Completes the instance iff every required step is approved (G7-3c-ii, NOT by step_order)
    */
   async approve(
     companyId: string,
@@ -95,6 +117,10 @@ export class ApprovalService {
 
       const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
       if (!instance) throw new NotFoundException(`Instance not found: ${step.workflowInstanceId}`);
+
+      // 3c-iii race-safety (FS10): serialize per-instance BEFORE any dep-state read. Two approvers
+      // closing a join's last two deps now queue on this row lock instead of lost-updating each other.
+      await this.repo.lockInstanceForUpdateInTx(companyId, instance.id, tx);
 
       try {
         this.fsm.validateConsumerTransition({
@@ -133,18 +159,74 @@ export class ApprovalService {
       const [updatedStep] = await this.repo.approveStep(companyId, step.id, tx);
       if (!updatedStep) throw new InternalServerErrorException("Failed to approve step");
 
-      // 4. Update task status if exists
-      const [task] = await this.repo.findTaskByStepId(companyId, step.id);
+      // 4. Update task status if exists (read within tx — ready for the 3c-iii FOR UPDATE lock)
+      const [task] = await this.repo.findActiveTaskByStepIdInTx(companyId, step.id, tx);
       if (task) {
         await this.repo.updateTaskStatus(companyId, task.id, "approved", tx);
       }
 
-      // 5. Determine if last step
-      const maxStepOrder = await this.repo.findMaxStepOrder(companyId, instance.id);
-      const isLastStep = step.stepOrder >= maxStepOrder;
+      // 5. DAG resolution (G7-3c-ii) — replaces the linear current_step_order pointer.
+      // Read the POST-approve DAG view WITHIN this tx. Sequential awaits, NOT Promise.all:
+      // node-postgres cannot run concurrent queries on one tx connection; staying on the
+      // caller's tx keeps these reads inside the per-instance FOR UPDATE lock added in 3c-iii.
+      const defStepRows = await this.repo.findDefinitionStepsInTx(
+        companyId,
+        instance.workflowDefinitionId,
+        tx,
+      );
+      const depRows = await this.repo.findTemplateDependenciesInTx(
+        companyId,
+        instance.workflowDefinitionId,
+        tx,
+      );
+      const instanceStepRows = await this.repo.findStepsByInstanceIdInTx(companyId, instance.id, tx);
 
-      if (isLastStep) {
-        // T7: complete workflow
+      const dagCtx: DagContext = {
+        defSteps: defStepRows.map((d) => ({ id: d.id, nodeKey: d.nodeKey, isRequired: d.isRequired })),
+        deps: depRows.map((dep) => ({ fromStepId: dep.fromStepId, toStepId: dep.toStepId })),
+        instanceSteps: instanceStepRows.map((s) => ({
+          id: s.id,
+          nodeKey: s.nodeKey,
+          stepCode: s.stepCode,
+          status: s.status,
+        })),
+      };
+
+      // 6. Fan out: open every step this approval unblocked (0..n). Mirror applyTemplate root-open —
+      // idempotent createTask (dedup_key onConflictDoNothing), assignee NULL (PM assigns later).
+      const newlyOpenedStepIds = computeNewlyUnblockedStepIds(
+        { nodeKey: step.nodeKey, stepCode: step.stepCode },
+        dagCtx,
+      );
+      for (const openStepId of newlyOpenedStepIds) {
+        const openStep = instanceStepRows.find((s) => s.id === openStepId);
+        if (!openStep) continue;
+        const openDef = defStepRows.find((d) => d.nodeKey === (openStep.nodeKey ?? openStep.stepCode));
+        const [openedTask] = await this.repo.createTask(
+          companyId,
+          {
+            workflowStepId: openStepId,
+            contentItemId: instance.contentItemId,
+            title: openDef?.defaultTaskTitle ?? openStep.stepName,
+            assigneeUserId: null,
+            origin: "initial",
+            revisionRound: 0,
+          },
+          tx,
+        );
+        // No-op = dedup collision (task already exists from a prior open). Mirror applyTemplate's
+        // warn so a genuine under-open is observable instead of silently swallowed.
+        if (!openedTask) {
+          this.logger.warn("approve fan-out createTask no-op (dedup collision)", {
+            openStepId,
+            instanceId: instance.id,
+          });
+        }
+      }
+
+      // 7. Complete the instance iff every required step is approved (NOT by step_order — §1.3).
+      const workflowComplete = isWorkflowComplete(dagCtx);
+      if (workflowComplete) {
         await this.repo.completeWorkflowInstance(companyId, instance.id, tx);
         await this.audit.record(tx, {
           action: "WorkflowCompleted",
@@ -157,20 +239,18 @@ export class ApprovalService {
           eventType: "workflow.completed",
           payload: { instanceId: instance.id, lastStepId: step.id, approvedBy: actorId },
         });
-      } else {
-        // T6: open next step (advance pointer)
-        const nextOrder = step.stepOrder + 1;
-        await this.repo.advanceInstanceStepOrder(companyId, instance.id, nextOrder, tx);
-        await this.outbox.enqueue(tx, {
-          eventType: "step.approved",
-          payload: {
-            stepId: step.id,
-            instanceId: instance.id,
-            nextStepOrder: nextOrder,
-            approvedBy: actorId,
-          },
-        });
       }
+
+      // step.approved drives notifications whether or not the workflow completed.
+      await this.outbox.enqueue(tx, {
+        eventType: "step.approved",
+        payload: {
+          stepId: step.id,
+          instanceId: instance.id,
+          approvedBy: actorId,
+          newlyOpenedStepIds,
+        },
+      });
 
       await this.audit.record(tx, {
         action: "StepApproved",
@@ -180,17 +260,23 @@ export class ApprovalService {
         after: {
           status: "approved",
           approvalStepId: approvalStepRow?.id,
-          isLastStep,
+          isWorkflowComplete: workflowComplete,
+          newlyOpenedStepIds,
         },
       });
 
-      return { step: updatedStep, isLastStep };
+      return { step: updatedStep, isWorkflowComplete: workflowComplete, isLastStep: workflowComplete };
     }).catch((err: unknown) => {
       if (
         err instanceof NotFoundException ||
         err instanceof ConflictException ||
         err instanceof InternalServerErrorException
       ) throw err;
+      // Concurrent same-request approve loses the lock race → 23505 on approval_steps_request_level_uq
+      // (tx already rolled back). Surface a clean 409 instead of a raw 500.
+      if (isUniqueViolation(err)) {
+        throw new ConflictException("Approval request has already been decided");
+      }
       this.logger.error("approve unexpected error", { err, companyId, requestId });
       throw err;
     });
@@ -264,8 +350,9 @@ export class ApprovalService {
       const [updatedStep] = await this.repo.setStepToRevision(companyId, step.id, tx);
       if (!updatedStep) throw new InternalServerErrorException("Failed to set step to revision");
 
-      // 4. Update existing task status
-      const [existingTask] = await this.repo.findTaskByStepId(companyId, step.id);
+      // 4. Update existing task status (read WITHIN the tx — F2: was a non-tx self-opened read that
+      // escaped this transaction, a TOCTOU on nextRevisionRound. Use the tx variant approve() uses.)
+      const [existingTask] = await this.repo.findActiveTaskByStepIdInTx(companyId, step.id, tx);
       const nextRevisionRound = existingTask ? existingTask.revisionRound + 1 : 1;
       if (existingTask) {
         await this.repo.updateTaskStatus(companyId, existingTask.id, "revision", tx);
@@ -328,6 +415,10 @@ export class ApprovalService {
         err instanceof ConflictException ||
         err instanceof InternalServerErrorException
       ) throw err;
+      // Same concurrent-decision race as approve(): map 23505 → 409 instead of a raw 500.
+      if (isUniqueViolation(err)) {
+        throw new ConflictException("Approval request has already been decided");
+      }
       this.logger.error("requestRevision unexpected error", { err, companyId, requestId });
       throw err;
     });

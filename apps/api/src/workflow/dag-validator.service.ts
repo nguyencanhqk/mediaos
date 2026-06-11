@@ -1,0 +1,278 @@
+/**
+ * G7-2a — DagValidatorService (PURE logic, no DB, no DB-DI).
+ *
+ * Crown-jewel of G7: validates a workflow template's step-dependency graph BEFORE
+ * publish (Track A 2b `publishTemplate` runs this). A draft may be temporarily
+ * invalid; publish is the gate.
+ *
+ * Source of truth: docs/plans/G7-workflow-builder.md §2(D2/D5)/§4(2a)/§5(DV1–DV6).
+ *
+ * ── PORT TYPES (LUỒNG B owns these — NOT imported from contract) ──────────────
+ * The validator depends only on a narrow structural shape: each step has a stable
+ * `nodeKey`, each dependency is a directed edge `fromNodeKey → toNodeKey`. The
+ * frozen contract DTOs (Track A 1b) satisfy this structurally; on merge, a thin
+ * adapter (contract → port, keyed by node_key) + 1 alignment test wires them up —
+ * the core algorithm below is NOT touched.
+ *
+ * ── EDGE DIRECTION ────────────────────────────────────────────────────────────
+ * `from → to` means `from` is the upstream prerequisite and `to` is the downstream
+ * dependent ("to" waits for "from"). Matches plan §1.3 "A→{B,C}→D":
+ *   - ROOT  = a step with NO incoming edge (never a `to`) → opens with no deps.
+ *   - A step is "openable" only when every upstream dep is approved.
+ *
+ * ── ALGORITHM ─────────────────────────────────────────────────────────────────
+ *   1. duplicate node_key detection (graph identity must be unambiguous)
+ *   2. per-edge structural checks: self-dependency, unknown endpoint
+ *   3. clean subgraph = real edges (no self, both endpoints known), de-duplicated
+ *   4. roots = in-degree-0 nodes; ≥1 required when the graph has nodes
+ *   5. cycle detection via Kahn topological sort (leftover = cyclic / cycle-blocked)
+ *   6. reachability via BFS from roots → unreachable steps can never open (orphans)
+ *
+ * All violations are AGGREGATED (no early return) so the builder can surface every
+ * DAG problem at once. PURE: inputs are never mutated; no I/O.
+ */
+import { Injectable } from "@nestjs/common";
+
+// ─── Port types (scope: one template) ─────────────────────────────────────────
+
+/** A workflow step, identified by its stable node_key within a single template. */
+export interface DagStep {
+  readonly nodeKey: string;
+}
+
+/** A directed dependency edge: `fromNodeKey` (upstream) → `toNodeKey` (downstream). */
+export interface DagDep {
+  readonly fromNodeKey: string;
+  readonly toNodeKey: string;
+}
+
+// ─── Error codes (named constants — no magic strings) ─────────────────────────
+
+export const DAG_ERROR_CODE = {
+  /** DV1 — the graph contains at least one dependency cycle. */
+  CYCLE_DETECTED: "CYCLE_DETECTED",
+  /** DV2 — a dependency points a step at itself. */
+  SELF_DEPENDENCY: "SELF_DEPENDENCY",
+  /** DV3/DV5 — a dependency endpoint is not a live step of this template. */
+  UNKNOWN_NODE: "UNKNOWN_NODE",
+  /** DV4 — a step is not reachable from any root step (can never open). */
+  UNREACHABLE_NODE: "UNREACHABLE_NODE",
+  /** The graph has steps but no root (every step has an incoming dependency). */
+  NO_ROOT: "NO_ROOT",
+  /** Two steps share the same node_key (graph identity is ambiguous). */
+  DUPLICATE_NODE_KEY: "DUPLICATE_NODE_KEY",
+} as const;
+
+export type DagErrorCode = (typeof DAG_ERROR_CODE)[keyof typeof DAG_ERROR_CODE];
+
+export interface DagError {
+  readonly code: DagErrorCode;
+  readonly message: string;
+  /** Offending step node_key(s), sorted for deterministic output. */
+  readonly nodeKeys?: readonly string[];
+  /** Offending edge, when the error is about a specific dependency. */
+  readonly edge?: { readonly fromNodeKey: string; readonly toNodeKey: string };
+}
+
+export interface DagValidationResult {
+  readonly valid: boolean;
+  readonly errors: readonly DagError[];
+}
+
+// ─── Internal graph representation ─────────────────────────────────────────────
+
+interface Graph {
+  /** node_key → downstream node_keys it points to. Every node has an entry. */
+  readonly adjacency: ReadonlyMap<string, readonly string[]>;
+  /** node_key → number of incoming edges. Every node has an entry. */
+  readonly inDegree: ReadonlyMap<string, number>;
+}
+
+/** node_keys that appear more than once in `steps`, sorted. */
+function findDuplicateNodeKeys(steps: readonly DagStep[]): string[] {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const step of steps) {
+    if (seen.has(step.nodeKey)) {
+      duplicates.add(step.nodeKey);
+    } else {
+      seen.add(step.nodeKey);
+    }
+  }
+  return [...duplicates].sort();
+}
+
+/** Drops repeated identical edges; preserves first occurrence order. */
+function dedupeEdges(edges: readonly DagDep[]): DagDep[] {
+  const seen = new Set<string>();
+  const unique: DagDep[] = [];
+  for (const edge of edges) {
+    const key = `${edge.fromNodeKey}\u0000${edge.toNodeKey}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(edge);
+    }
+  }
+  return unique;
+}
+
+/**
+ * Builds adjacency + in-degree maps over `nodes` and `cleanEdges`.
+ * PRECONDITION: every endpoint of every clean edge is a member of `nodes`
+ * (the caller filters out self-edges and unknown endpoints first). That
+ * invariant is what justifies the non-null assertions below — every lookup
+ * key is guaranteed present, so there is no nullish branch to cover.
+ */
+function buildGraph(nodes: readonly string[], cleanEdges: readonly DagDep[]): Graph {
+  const adjacency = new Map<string, string[]>();
+  const inDegree = new Map<string, number>();
+  for (const node of nodes) {
+    adjacency.set(node, []);
+    inDegree.set(node, 0);
+  }
+  for (const edge of cleanEdges) {
+    adjacency.get(edge.fromNodeKey)!.push(edge.toNodeKey);
+    inDegree.set(edge.toNodeKey, inDegree.get(edge.toNodeKey)! + 1);
+  }
+  return { adjacency, inDegree };
+}
+
+/**
+ * Kahn topological sort. Returns the nodes that could NOT be ordered — i.e. those
+ * in a cycle or only reachable through one. Empty result ⇒ acyclic. Sorted.
+ * Operates on a clone of in-degree; does not mutate the graph.
+ */
+function findCyclicNodes(nodes: readonly string[], graph: Graph): string[] {
+  const remaining = new Map(graph.inDegree);
+  const queue: string[] = [];
+  for (const [node, degree] of remaining) {
+    if (degree === 0) {
+      queue.push(node);
+    }
+  }
+  const ordered = new Set<string>();
+  while (queue.length > 0) {
+    const node = queue.shift()!;
+    ordered.add(node);
+    for (const next of graph.adjacency.get(node)!) {
+      const degree = remaining.get(next)! - 1;
+      remaining.set(next, degree);
+      if (degree === 0) {
+        queue.push(next);
+      }
+    }
+  }
+  return nodes.filter((node) => !ordered.has(node)).sort();
+}
+
+/** Breadth-first set of nodes reachable from any root, following `from → to`. */
+function findReachable(roots: readonly string[], graph: Graph): Set<string> {
+  const reachable = new Set<string>(roots);
+  const queue = [...roots];
+  while (queue.length > 0) {
+    const node = queue.shift()!;
+    for (const next of graph.adjacency.get(node)!) {
+      if (!reachable.has(next)) {
+        reachable.add(next);
+        queue.push(next);
+      }
+    }
+  }
+  return reachable;
+}
+
+@Injectable()
+export class DagValidatorService {
+  /**
+   * Validates a template's step-dependency graph.
+   * PURE: does not mutate inputs, performs no I/O. Aggregates ALL violations.
+   */
+  validateDag(steps: readonly DagStep[], deps: readonly DagDep[]): DagValidationResult {
+    const errors: DagError[] = [];
+
+    // 1. Duplicate node_key — ambiguous identity breaks every downstream lookup.
+    for (const nodeKey of findDuplicateNodeKeys(steps)) {
+      errors.push({
+        code: DAG_ERROR_CODE.DUPLICATE_NODE_KEY,
+        message: `Duplicate step node_key: "${nodeKey}"`,
+        nodeKeys: [nodeKey],
+      });
+    }
+
+    const nodeSet = new Set(steps.map((step) => step.nodeKey));
+    const nodes = [...nodeSet].sort();
+
+    // 2. Per-edge structural checks (self-dependency + unknown endpoints).
+    for (const dep of deps) {
+      if (dep.fromNodeKey === dep.toNodeKey) {
+        errors.push({
+          code: DAG_ERROR_CODE.SELF_DEPENDENCY,
+          message: `Step "${dep.fromNodeKey}" cannot depend on itself`,
+          nodeKeys: [dep.fromNodeKey],
+          edge: { fromNodeKey: dep.fromNodeKey, toNodeKey: dep.toNodeKey },
+        });
+        continue;
+      }
+      const missing: string[] = [];
+      if (!nodeSet.has(dep.fromNodeKey)) {
+        missing.push(dep.fromNodeKey);
+      }
+      if (!nodeSet.has(dep.toNodeKey)) {
+        missing.push(dep.toNodeKey);
+      }
+      if (missing.length > 0) {
+        errors.push({
+          code: DAG_ERROR_CODE.UNKNOWN_NODE,
+          message: `Dependency ${dep.fromNodeKey}→${dep.toNodeKey} references unknown step(s): ${missing.join(", ")} (deleted or outside this template)`,
+          nodeKeys: missing,
+          edge: { fromNodeKey: dep.fromNodeKey, toNodeKey: dep.toNodeKey },
+        });
+      }
+    }
+
+    // 3. Clean subgraph: real edges only (no self-loop, both endpoints known), deduped.
+    const cleanEdges = dedupeEdges(
+      deps.filter(
+        (dep) =>
+          dep.fromNodeKey !== dep.toNodeKey &&
+          nodeSet.has(dep.fromNodeKey) &&
+          nodeSet.has(dep.toNodeKey),
+      ),
+    );
+    const graph = buildGraph(nodes, cleanEdges);
+
+    // 4. Roots = in-degree-0 steps; the workflow needs at least one entry point.
+    const roots = nodes.filter((node) => graph.inDegree.get(node) === 0);
+    if (nodes.length > 0 && roots.length === 0) {
+      errors.push({
+        code: DAG_ERROR_CODE.NO_ROOT,
+        message: "Workflow has no root step — every step has an incoming dependency",
+      });
+    }
+
+    // 5. Cycle detection (Kahn). Leftover nodes are cyclic or cycle-blocked.
+    const cyclicNodes = findCyclicNodes(nodes, graph);
+    if (cyclicNodes.length > 0) {
+      errors.push({
+        code: DAG_ERROR_CODE.CYCLE_DETECTED,
+        message: `Dependency cycle detected among steps: ${cyclicNodes.join(", ")}`,
+        nodeKeys: cyclicNodes,
+      });
+    }
+
+    // 6. Reachability — only meaningful with ≥1 root (no root ⇒ NO_ROOT already fired).
+    //    A step unreachable from every root can never open ⇒ orphan (DV4).
+    if (roots.length > 0) {
+      const reachable = findReachable(roots, graph);
+      for (const node of nodes.filter((candidate) => !reachable.has(candidate))) {
+        errors.push({
+          code: DAG_ERROR_CODE.UNREACHABLE_NODE,
+          message: `Step "${node}" is not reachable from any root step (can never open)`,
+          nodeKeys: [node],
+        });
+      }
+    }
+
+    return { valid: errors.length === 0, errors };
+  }
+}

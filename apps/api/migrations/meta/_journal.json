@@ -225,6 +225,34 @@
       "when": 1717500035000,
       "tag": "0031_g3fix_grant_object_permission_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1717500040000,
+      "tag": "0032_g7_template_dag_checklist",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1717500041000,
+      "tag": "0033_g7_audit_object_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1717500042000,
+      "tag": "0034_g7_instance_multitarget_checklist_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1717500043000,
+      "tag": "0035_g7_eval_hook_lock_uq",
+      "breakpoints": true
     }
   ]
 }

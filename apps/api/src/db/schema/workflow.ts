@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   check,
   index,
@@ -13,7 +14,7 @@ import {
 import { currentCompanyDefault } from "./_helpers";
 import { companies } from "./companies";
 import { users } from "./users";
-import { contentItems } from "./media";
+import { contentItems, projects } from "./media";
 
 // ─── Enums (text columns with CHECK) ────────────────────────────────────────
 
@@ -63,14 +64,20 @@ export const workflowDefinitions = pgTable(
     maxApprovalLevel: integer("max_approval_level").notNull().default(1),
     allowParallelSteps: boolean("allow_parallel_steps").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
+    // G7: versioning (D4). Published version is immutable; edits clone to version+1 (status=draft).
+    version: integer("version").notNull().default(1),
+    status: text("status").notNull().default("draft"),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [
     index("workflow_defs_company_id_idx").on(t.companyId),
-    uniqueIndex("workflow_defs_company_code_active_uq")
-      .on(t.companyId, t.code)
+    uniqueIndex("workflow_defs_company_code_version_active_uq")
+      .on(t.companyId, t.code, t.version)
       .where(sql`deleted_at IS NULL`),
+    check("workflow_defs_status_check", sql`status IN ('draft', 'published', 'archived')`),
   ],
 );
 
@@ -96,16 +103,125 @@ export const workflowDefinitionSteps = pgTable(
     reviewerRoleCode: text("reviewer_role_code"),
     isRequired: boolean("is_required").notNull().default(true),
     defaultTaskTitle: text("default_task_title").notNull(),
+    // G7: node_key = stable identity for DAG deps + canvas (decoupled from step_order pointer).
+    nodeKey: text("node_key").notNull(),
+    stepType: text("step_type").notNull().default("task"),
+    positionX: integer("position_x"),
+    positionY: integer("position_y"),
+    // Forward ref to checklists (defined below) — resolved lazily via thunk.
+    // AnyPgColumn return annotation breaks the circular-ref implicit-any (TS7022/7024).
+    defaultChecklistId: uuid("default_checklist_id").references((): AnyPgColumn => checklists.id, {
+      onDelete: "set null",
+    }),
+    // G7-4 (4a): evaluation hook — POINTER only, no engine in G7. requires_evaluation flags a step
+    // that must emit step.evaluation_required when approved (consumer = G8). evaluation_template_id is
+    // a SOFT ref (real eval table lives in G8) — bare uuid, no FK, deferred like content_types (G6-4).
+    requiresEvaluation: boolean("requires_evaluation").notNull().default(false),
+    evaluationTemplateId: uuid("evaluation_template_id"),
   },
   (t) => [
     index("wf_def_steps_def_id_idx").on(t.workflowDefinitionId),
     uniqueIndex("wf_def_steps_def_order_uq")
       .on(t.workflowDefinitionId, t.stepOrder)
       .where(sql`1=1`),
+    uniqueIndex("wf_def_steps_def_node_key_uq").on(t.workflowDefinitionId, t.nodeKey),
+    index("wf_def_steps_default_checklist_id_idx")
+      .on(t.defaultChecklistId)
+      .where(sql`default_checklist_id IS NOT NULL`),
   ],
 );
 
 export type WorkflowDefinitionStep = typeof workflowDefinitionSteps.$inferSelect;
+
+// ─── G7 Workflow Builder: checklists + checklist_items + step dependencies ─────
+// checklists.workflowDefinitionStepId ↔ workflowDefinitionSteps.defaultChecklistId is a circular FK;
+// Drizzle resolves both via lazy thunks. RLS+FORCE for these tables lives in migration 0032.
+
+export const checklists = pgTable(
+  "checklists",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    workflowDefinitionStepId: uuid("workflow_definition_step_id").references(
+      (): AnyPgColumn => workflowDefinitionSteps.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("checklists_company_id_idx").on(t.companyId),
+    index("checklists_def_step_id_idx").on(t.workflowDefinitionStepId),
+  ],
+);
+
+export type Checklist = typeof checklists.$inferSelect;
+
+export const checklistItems = pgTable(
+  "checklist_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    checklistId: uuid("checklist_id")
+      .notNull()
+      .references(() => checklists.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    isRequired: boolean("is_required").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("checklist_items_company_id_idx").on(t.companyId),
+    index("checklist_items_checklist_id_idx").on(t.checklistId),
+  ],
+);
+
+export type ChecklistItem = typeof checklistItems.$inferSelect;
+
+// workflow_step_dependencies — DAG edges at template level (step B waits for step A).
+// DB enforces only no-self-loop; acyclicity is enforced app-side (DagValidatorService, G7-2a).
+
+export const workflowStepDependencies = pgTable(
+  "workflow_step_dependencies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    workflowDefinitionId: uuid("workflow_definition_id")
+      .notNull()
+      .references(() => workflowDefinitions.id, { onDelete: "cascade" }),
+    fromStepId: uuid("from_step_id")
+      .notNull()
+      .references(() => workflowDefinitionSteps.id, { onDelete: "cascade" }),
+    toStepId: uuid("to_step_id")
+      .notNull()
+      .references(() => workflowDefinitionSteps.id, { onDelete: "cascade" }),
+    dependencyType: text("dependency_type").notNull().default("finish_to_start"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("wf_step_deps_company_id_idx").on(t.companyId),
+    index("wf_step_deps_def_id_idx").on(t.workflowDefinitionId),
+    index("wf_step_deps_from_step_id_idx").on(t.fromStepId),
+    index("wf_step_deps_to_step_id_idx").on(t.toStepId),
+    uniqueIndex("wf_step_deps_edge_uq").on(t.workflowDefinitionId, t.fromStepId, t.toStepId),
+    check("wf_step_deps_no_self_loop", sql`from_step_id <> to_step_id`),
+    check(
+      "wf_step_deps_type_check",
+      sql`dependency_type IN ('finish_to_start', 'start_to_start', 'finish_to_finish', 'start_to_finish')`,
+    ),
+  ],
+);
+
+export type WorkflowStepDependency = typeof workflowStepDependencies.$inferSelect;
 
 // ─── step_transitions ─────────────────────────────────────────────────────────
 // Data-driven FSM guard table. Engine rejects any (from_state, event) pair not found here.
@@ -156,22 +272,33 @@ export const workflowInstances = pgTable(
     contentItemId: uuid("content_item_id").references(() => contentItems.id, {
       onDelete: "cascade",
     }),
+    // G7-3: instance can target a content_item OR a project (exactly-one — see target check).
+    projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
     currentStepOrder: integer("current_step_order").notNull().default(1),
     status: text("status").notNull().default("active"),
+    // G7-3 (D4): pin the template version this instance ran against → published version is immutable,
+    // deps are read from the template at this version (no separate per-instance dep snapshot).
+    definitionVersion: integer("definition_version").notNull().default(1),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("wf_instances_company_id_idx").on(t.companyId),
     index("wf_instances_content_item_id_idx").on(t.contentItemId),
+    index("wf_instances_project_id_idx").on(t.projectId),
     // 1 content item → 1 active workflow at a time
     uniqueIndex("wf_instances_content_item_active_uq")
       .on(t.contentItemId)
       .where(sql`status = 'active' AND content_item_id IS NOT NULL`),
+    // 1 project → 1 active workflow at a time
+    uniqueIndex("wf_instances_project_active_uq")
+      .on(t.projectId)
+      .where(sql`status = 'active' AND project_id IS NOT NULL`),
     check("wf_instances_status_check", sql`status IN ('active', 'completed', 'cancelled')`),
+    // Exactly-one target: content_item XOR project (erd §9.1). Byte-identical with migration 0034.
     check(
       "wf_instances_target_check",
-      sql`content_item_id IS NOT NULL`,
+      sql`(content_item_id IS NOT NULL)::int + (project_id IS NOT NULL)::int = 1`,
     ),
   ],
 );
@@ -195,6 +322,9 @@ export const workflowSteps = pgTable(
     stepOrder: integer("step_order").notNull(),
     stepCode: text("step_code").notNull(),
     stepName: text("step_name").notNull(),
+    // G7-3: map back to the template step's node_key (resolve deps by definition_version). Advisory,
+    // nullable; backfilled = step_code for G4-3 rows, set explicitly on apply (3b).
+    nodeKey: text("node_key"),
     status: text("status").notNull().default("not_started"),
     assigneeUserId: uuid("assignee_user_id").references(() => users.id, { onDelete: "set null" }),
     reviewerUserId: uuid("reviewer_user_id").references(() => users.id, { onDelete: "set null" }),
@@ -217,6 +347,37 @@ export const workflowSteps = pgTable(
 );
 
 export type WorkflowStep = typeof workflowSteps.$inferSelect;
+
+// ─── workflow_step_checklist_states ───────────────────────────────────────────
+// G7-3: instance-level checklist tick state. A row = the item is checked; un-check = DELETE.
+// uq (step, item) → an item is checked at most once per step. checklist_item_id → template layer.
+
+export const workflowStepChecklistStates = pgTable(
+  "workflow_step_checklist_states",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    workflowStepId: uuid("workflow_step_id")
+      .notNull()
+      .references(() => workflowSteps.id, { onDelete: "cascade" }),
+    checklistItemId: uuid("checklist_item_id")
+      .notNull()
+      .references(() => checklistItems.id, { onDelete: "cascade" }),
+    checkedBy: uuid("checked_by").references(() => users.id, { onDelete: "set null" }),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("wf_step_checklist_states_company_id_idx").on(t.companyId),
+    index("wf_step_checklist_states_step_id_idx").on(t.workflowStepId),
+    index("wf_step_checklist_states_item_id_idx").on(t.checklistItemId),
+    uniqueIndex("wf_step_checklist_states_step_item_uq").on(t.workflowStepId, t.checklistItemId),
+  ],
+);
+
+export type WorkflowStepChecklistState = typeof workflowStepChecklistStates.$inferSelect;
 
 // ─── tasks (unified hub — BẤT BIẾN #4) ───────────────────────────────────────
 // task_type='workflow_step' links to workflow_steps via ref_id.
@@ -402,6 +563,11 @@ export const workflowStepInstanceLocks = pgTable(
   (t) => [
     index("wf_step_locks_locked_step_id_idx").on(t.lockedStepId),
     index("wf_step_locks_caused_by_idx").on(t.causedByStepId),
+    // G7-4 (4a): at most 1 ACTIVE lock per (locked_step, caused_by) source — stops replayed
+    // revisions from piling duplicate active rows. Released locks (released_at set) don't count.
+    uniqueIndex("wf_step_locks_active_uq")
+      .on(t.companyId, t.lockedStepId, t.causedByStepId)
+      .where(sql`released_at IS NULL`),
   ],
 );
 

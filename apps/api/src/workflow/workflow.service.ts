@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
@@ -6,11 +7,14 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { DatabaseService } from "../db/db.service";
+import type { TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { WorkflowFsmService } from "./workflow-fsm.service";
 import { WorkflowRepository } from "./workflow.repository";
+import { allDependenciesApproved } from "./workflow-dag";
 import {
+  DependenciesNotMetError,
   IllegalTransitionError,
   NotCurrentStepError,
   NotStepActorError,
@@ -65,6 +69,9 @@ function mapFsmError(err: unknown): never {
     );
   }
   if (err instanceof NotCurrentStepError) {
+    throw new ConflictException(err.message);
+  }
+  if (err instanceof DependenciesNotMetError) {
     throw new ConflictException(err.message);
   }
   if (err instanceof NotStepActorError) {
@@ -136,6 +143,9 @@ export class WorkflowService {
             stepOrder: s.stepOrder,
             stepCode: s.code,
             stepName: s.name,
+            // G7-3c: carry node_key so DAG dep resolution keys uniformly across MVP-0 + applied
+            // instances (def-step.node_key is NOT NULL; for video_standard_v0 it equals code).
+            nodeKey: s.nodeKey,
             assigneeUserId: null,
             reviewerUserId: null,
           })),
@@ -190,6 +200,162 @@ export class WorkflowService {
         );
       }
       this.logger.error("startWorkflow unexpected error", { err, companyId, contentItemId });
+      throw err;
+    }
+  }
+
+  /**
+   * POST /workflow-templates/:id/apply — áp 1 template PUBLISHED lên đúng-một target (content_item XOR
+   * project). Snapshot steps (node_key, assignee NULL — PM gán sau), pin definition_version, mở bước ROOT
+   * (không dep upstream) bằng auto-task idempotent. Bước non-root mở khi dep approved (3c).
+   * Deny: template draft/archived (FS8a); target đã có active instance (FS8b, uq→409); sai appliesTo (FS8c).
+   */
+  async applyTemplate(
+    companyId: string,
+    actorId: string,
+    templateId: string,
+    target: { contentItemId?: string | null; projectId?: string | null },
+  ) {
+    // Effective target — null-hoá phía không khớp appliesTo để ÉP đúng-một (khớp DB CHECK, chống 500).
+    let contentItemId: string | null = null;
+    let projectId: string | null = null;
+    try {
+      return await this.db.withTenant(companyId, async (tx) => {
+        const [template] = await this.repo.findPublishedTemplateInTx(companyId, templateId, tx);
+        if (!template) {
+          // Không tồn tại / draft / archived / đã xoá → fail-closed (chỉ published mới apply — D4).
+          throw new NotFoundException(`Published workflow template not found: ${templateId}`);
+        }
+
+        // Validate target khớp appliesTo + tồn tại trong tenant; chỉ giữ target khớp.
+        if (template.appliesTo === "content_item") {
+          if (!target.contentItemId) {
+            throw new BadRequestException("This template applies to a content_item — provide contentItemId");
+          }
+          const [ci] = await this.repo.findContentItemById(companyId, target.contentItemId, tx);
+          if (!ci) throw new NotFoundException(`Content item not found: ${target.contentItemId}`);
+          contentItemId = target.contentItemId;
+        } else if (template.appliesTo === "project") {
+          if (!target.projectId) {
+            throw new BadRequestException("This template applies to a project — provide projectId");
+          }
+          const [prj] = await this.repo.findProjectByIdInTx(companyId, target.projectId, tx);
+          if (!prj) throw new NotFoundException(`Project not found: ${target.projectId}`);
+          projectId = target.projectId;
+        } else {
+          throw new BadRequestException(`Unsupported template appliesTo: '${template.appliesTo}'`);
+        }
+
+        const defSteps = await this.repo.findDefinitionStepsInTx(companyId, templateId, tx);
+        if (defSteps.length === 0) {
+          throw new BadRequestException("Cannot apply a template with no steps");
+        }
+
+        // Bước ROOT = không là `to_step_id` của bất kỳ cạnh nào (không có dep upstream).
+        const deps = await this.repo.findTemplateDependenciesInTx(companyId, templateId, tx);
+        const toStepIds = new Set(deps.map((d) => d.toStepId));
+        const rootNodeKeys = new Set(
+          defSteps.filter((s) => !toStepIds.has(s.id)).map((s) => s.nodeKey),
+        );
+
+        const [instance] = await this.repo.createInstanceForTemplate(
+          companyId,
+          {
+            workflowDefinitionId: templateId,
+            contentItemId,
+            projectId,
+            definitionVersion: template.version,
+            createdBy: actorId,
+          },
+          tx,
+        );
+        if (!instance) throw new InternalServerErrorException("Failed to create workflow instance");
+
+        // Snapshot mọi step (assignee NULL — PM gán sau qua assignStep). node_key giữ để tra deps theo version.
+        const createdSteps = await this.repo.createSteps(
+          companyId,
+          instance.id,
+          defSteps.map((s) => ({
+            stepOrder: s.stepOrder,
+            stepCode: s.code,
+            stepName: s.name,
+            nodeKey: s.nodeKey,
+            assigneeUserId: null,
+            reviewerUserId: null,
+          })),
+          tx,
+        );
+        // Partial insert (Drizzle returning() thiếu hàng) → lỗi to, KHÔNG để instance nửa vời.
+        if (createdSteps.length !== defSteps.length) {
+          throw new InternalServerErrorException(
+            `applyTemplate: snapshot mismatch (${createdSteps.length}/${defSteps.length} steps)`,
+          );
+        }
+
+        // Mở bước ROOT: auto-task (dedup_key idempotent). Non-root chờ dep approved (3c).
+        // step.nodeKey nullable trên workflow_steps, nhưng snapshot copy từ def-step NOT NULL → luôn có giá trị;
+        // bỏ qua null an toàn (không node_key thật nào là "" hay null). contentItemId null cho project-target
+        // là CỐ Ý (tasks chưa có project FK — tra task project qua workflow_step_id; residual 3c, plan §10).
+        let rootTasksSpawned = 0;
+        for (const step of createdSteps) {
+          const nodeKey = step.nodeKey;
+          if (!nodeKey || !rootNodeKeys.has(nodeKey)) continue;
+          const defStep = defSteps.find((d) => d.nodeKey === nodeKey);
+          const [task] = await this.repo.createTask(
+            companyId,
+            {
+              workflowStepId: step.id,
+              contentItemId,
+              title: defStep?.defaultTaskTitle ?? step.stepName,
+              assigneeUserId: null,
+              origin: "initial",
+              revisionRound: 0,
+            },
+            tx,
+          );
+          if (task) rootTasksSpawned++;
+          else this.logger.warn("applyTemplate createTask no-op (dedup collision)", { stepId: step.id, instanceId: instance.id });
+        }
+        // Published template LUÔN có ≥1 root (DagValidator chặn NO_ROOT/cycle ở publish). 0 task mở = instance
+        // kẹt vĩnh viễn → fail to thay vì âm thầm. Rollback toàn bộ tx.
+        if (rootNodeKeys.size > 0 && rootTasksSpawned === 0) {
+          throw new InternalServerErrorException("applyTemplate: no root task opened — workflow would stall");
+        }
+
+        await this.audit.record(tx, {
+          action: "WorkflowApplied",
+          objectType: "workflow_instance",
+          objectId: instance.id,
+          actorUserId: actorId,
+          after: {
+            templateId,
+            definitionVersion: template.version,
+            contentItemId,
+            projectId,
+            rootSteps: [...rootNodeKeys],
+          },
+        });
+
+        await this.outbox.enqueue(tx, {
+          eventType: "workflow.started",
+          payload: { instanceId: instance.id, templateId, contentItemId, projectId, createdBy: actorId },
+        });
+
+        return { instance, steps: createdSteps };
+      });
+    } catch (err) {
+      if (
+        err instanceof NotFoundException ||
+        err instanceof BadRequestException ||
+        err instanceof ConflictException ||
+        err instanceof InternalServerErrorException
+      ) {
+        throw err;
+      }
+      if (isUniqueViolation(err)) {
+        throw new ConflictException("This target already has an active workflow");
+      }
+      this.logger.error("applyTemplate unexpected error", { err, companyId, templateId });
       throw err;
     }
   }
@@ -279,8 +445,40 @@ export class WorkflowService {
   }
 
   /**
+   * G7-3c: resolve "are ALL upstream DAG deps of `step` approved?" within the caller's tx.
+   * Reads def-steps + deps (by the instance's pinned workflow_definition_id) + sibling instance
+   * steps — all tx-scoped (never self-opening withTenant) so they sit inside any row lock.
+   */
+  private async resolveDependenciesApproved(
+    companyId: string,
+    step: { nodeKey: string | null; stepCode: string; workflowInstanceId: string },
+    instance: { workflowDefinitionId: string },
+    tx: TenantTx,
+  ): Promise<boolean> {
+    // Sequential awaits, NOT Promise.all — node-postgres cannot run concurrent queries on one tx
+    // connection (Promise.all triggers a pg deprecation warning and breaks on pg@9). Staying on
+    // the caller's tx keeps these ready for the per-instance FOR UPDATE lock added in 3c-iii.
+    const defSteps = await this.repo.findDefinitionStepsInTx(companyId, instance.workflowDefinitionId, tx);
+    const deps = await this.repo.findTemplateDependenciesInTx(companyId, instance.workflowDefinitionId, tx);
+    const instanceSteps = await this.repo.findStepsByInstanceIdInTx(companyId, step.workflowInstanceId, tx);
+    return allDependenciesApproved(
+      { nodeKey: step.nodeKey, stepCode: step.stepCode },
+      {
+        defSteps: defSteps.map((d) => ({ id: d.id, nodeKey: d.nodeKey, isRequired: d.isRequired })),
+        deps: deps.map((dep) => ({ fromStepId: dep.fromStepId, toStepId: dep.toStepId })),
+        instanceSteps: instanceSteps.map((s) => ({
+          id: s.id,
+          nodeKey: s.nodeKey,
+          stepCode: s.stepCode,
+          status: s.status,
+        })),
+      },
+    );
+  }
+
+  /**
    * POST /workflow/steps/:stepId/start — assignee starts a step (T1 or T5).
-   * Guard: actor = assignee, step = current_step_order, instance active.
+   * Guard: actor = assignee, ALL upstream deps approved (G7-3c), instance active.
    */
   async startStep(companyId: string, stepId: string, actorId: string) {
     try {
@@ -291,12 +489,19 @@ export class WorkflowService {
         const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
         if (!instance) throw new WorkflowNotFoundError("instance", step.workflowInstanceId);
 
+        const dependenciesApproved = await this.resolveDependenciesApproved(
+          companyId,
+          step,
+          instance,
+          tx,
+        );
         try {
           this.fsm.validateServiceTransition({
             step: toFsmStep(step),
             instance: toFsmInstance(instance),
             event: "start",
             actorId,
+            dependenciesApproved,
           });
         } catch (err) {
           return mapFsmError(err);
@@ -349,12 +554,19 @@ export class WorkflowService {
         const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
         if (!instance) throw new WorkflowNotFoundError("instance", step.workflowInstanceId);
 
+        const dependenciesApproved = await this.resolveDependenciesApproved(
+          companyId,
+          step,
+          instance,
+          tx,
+        );
         try {
           this.fsm.validateServiceTransition({
             step: toFsmStep(step),
             instance: toFsmInstance(instance),
             event: "submit",
             actorId,
+            dependenciesApproved,
           });
         } catch (err) {
           return mapFsmError(err);

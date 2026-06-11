@@ -336,4 +336,47 @@ Bắt đầu: sau SYNC GATE, dựng skeleton route /workflows/templates + templa
 
 ---
 
+## 10. Residual / nợ kỹ thuật (cập nhật theo tiến độ)
+
+**Sau 1c-i (Template CRUD core):**
+- **Permission seed nợ tới 0036:** endpoint `workflow-templates` gate quyền `workflow-template` (hyphen — đồng bộ `workflow-instance`). Catalog CHƯA seed (dời từ 0035→**0036**, cuối G7-4c) → endpoint **fail-closed 403** cho mọi user tới khi 0036 seed + admin grant qua grant-catalog. FE luồng C dùng mock API nên không kẹt. ⚠️ 0036 PHẢI seed đúng spelling **hyphen** `create/update/read:workflow-template` (KHỚP guard) — nếu seed underscore sẽ lệch → mãi 403.
+- **list() chưa phân trang:** template low-cardinality nên chấp nhận; thêm pagination khi cần (contract `templateDetailSchema`/list đã FROZEN — đổi sau 1b cân nhắc kỹ).
+- **Hard-delete child rows (1c-ii→iv):** schema frozen KHÔNG có `deleted_at` ở `workflow_definition_steps`/`workflow_step_dependencies`/`checklists`/`checklist_items` → remove = hard-delete, **giới hạn template `draft`** (published immutable + instance snapshot riêng ở `workflow_steps` → không mất audit-data). Chốt lại khi tới 1c-ii.
+- **Audit gom aggregate:** mọi thao tác template/step/dep/checklist audit dưới `objectType='workflow_template'`, `objectId=templateId` (1 audit type, thêm ở migration 0033).
+
+**Sau 1c-ii (Template step config):**
+- **stepOrder auto (max+1) có race chấp nhận được:** 2 `addStep` đồng thời cùng template → 1 cái 23505 trên `wf_def_steps_def_order_uq` → 409 (client retry). KHÔNG mất data. Template editing low-concurrency (1 PM/template) → chấp nhận; nâng `SELECT…FOR UPDATE` trên template row nếu sau này cần đa editor đồng thời.
+- **Hard-delete step (draft-only):** đã chốt — `removeStep` hard DELETE, ép draft qua `loadDraftTemplate`; FK cascade `workflow_step_dependencies`, SET NULL `checklists.workflow_definition_step_id`. Áp cùng pattern cho dep (1c-iii) + checklist (1c-iv).
+- **23505 fallback:** mọi unique-violation không khớp constraint cụ thể → 409 chung (chống raw pg-error 500 rò tên bảng/schema).
+
+**Sau 1c-iii (dependency) + 1c-iv (checklist) — ĐÓNG 1c:**
+- **DAG/cycle KHÔNG validate ở 1c-iii:** add edge chỉ ép referential integrity (self-loop→400, cross-template→400, dup→409). Cycle/reachability/unreachable check ở **2b publish** (DagValidator từ luồng B). Draft cho phép tạm sai.
+- **23503 FK fallback:** race xoá step giữa lúc add dependency → FK violation → 400 (chống raw 500).
+- **Checklist gắn-step (1c-iv):** checklist `workflow_definition_step_id` lấy từ URL `:stepId`; item ops scope qua JOIN checklist→step→template; INNER JOIN loại checklist orphaned. **Edit item HOÃN** (chỉ add/remove — như dependency); cần sửa item thì remove+re-add. `step.defaultChecklistId` KHÔNG set ở 1c-iv (không có trong step DTO frozen) → để runtime apply 3b.
+- **Repo delete self-defending:** deleteDependency/deleteChecklist/deleteChecklistItem scope đủ (company + parent + id), không dựa find-trước-đó.
+
+**Sau 2b (publish/clone lifecycle) — ĐÓNG G7-2 spine BE:**
+- **Adapter DAG service↔contract (`dag-result.adapter.ts`):** service `DagErrorCode` (CYCLE/SELF/UNKNOWN/UNREACHABLE/NO_ROOT/DUPLICATE) map sang contract code (`cycle/self_dependency/missing_node/unreachable/no_root`). `DUPLICATE_NODE_KEY` → BẤT KHẢ trên steps persist (uq `wf_def_steps_def_node_key_uq`) → adapter throw 500 (surface nếu DB hỏng). `cross_template` (contract) KHÔNG được service emit (cross-template chặn add-time 1c-iii) → contract là superset, FE nhánh `cross_template` sẽ không bao giờ thấy (chấp nhận).
+- **publish fail → HTTP 422** `{message, dagValidation}` (UnprocessableEntity); `message` LỘ node_key user-input là **cố ý** (field contract frozen, builder render inline; data cùng tenant). Concurrent double-publish (0-row sau CAS `status='draft'`) → **409** (không phải 500).
+- **clone version = max(version ALL rows kể cả soft-deleted)+1** → đơn điệu, không tái dùng số version. 23505 trên uq (company,code,version) → 409.
+- **`defaultChecklistId` clone HOÃN:** clone KHÔNG copy `step.defaultChecklistId` (luôn NULL trước 3b). Khi **3b** set nó → clone PHẢI thêm pass remap qua `checklistIdMap`. Checklist orphaned (workflow_definition_step_id NULL) bị INNER JOIN loại khỏi clone (cố ý — không copy mảnh mồ côi).
+- **`id` param chưa validate UUID** (toàn controller workflow-templates, pre-existing): id sai cú pháp → pg uuid-cast error → 500 generic. Defer fix đồng bộ (ParseUUIDPipe) — không riêng 2b.
+- **Return-type `|undefined` từ `mapError(): never` tail** (toàn service 1c+2b): runtime-safe (mapError luôn throw); cosmetic typing, giữ nhất quán. Nâng đồng bộ sau nếu cần.
+- **Permission catalog vẫn nợ 0036:** publish gate `publish:workflow-template`, clone gate `create:workflow-template` (hyphen) → fail-closed 403 tới khi 0036 seed. 0036 PHẢI seed thêm `publish:workflow-template` (ngoài create/update/read).
+
+**Sau 3a (migration 0034 — instance đa-target + checklist-state):**
+- **0034 = idx 35, when 1717500042000, tag `0034_g7_instance_multitarget_checklist_state`** (re-baseline 1 lần lúc dev để thêm FK index — file == DB == hash). DB dev đã ở 0034.
+- **CASCADE quyết định (database-reviewer soi, GIỮ có lý do):** `workflow_instances.project_id`→projects CASCADE (khớp content_item_id; project chỉ soft-delete trong vận hành). `workflow_step_checklist_states.checklist_item_id`→checklist_items CASCADE: tick-state là **operational state KHÔNG phải audit** (audit thật ở `audit_logs`); item của template published bất biến → cascade gần như không kích hoạt; CASCADE chống orphan. Nếu sau cần giữ lịch sử tick khi xoá item → đổi RESTRICT + bảng riêng (G8).
+- **`workflow_steps.node_key` nullable, backfill = step_code** cho row G4-3; 3b set tường minh khi applyTemplate (resolve theo `definition_version`).
+- **`workflow_step_checklist_states`**: 1 row = đã tick, bỏ tick = DELETE, uq (step,item). Enforcement required-item ở **4b** (submit gated). 3b chỉ snapshot step; chưa tick.
+- **definition_version** pin ở instance (đọc deps template theo version) — 3b set từ template published lúc apply; KHÔNG snapshot deps riêng.
+
+**Sau 3b (applyTemplate):**
+- **applyTemplate** (WorkflowService, endpoint `POST /workflow-templates/:id/apply` gate `apply:workflow-instance`): template **published** → snapshot steps (node_key, assignee NULL — PM gán sau qua assignStep), pin definition_version, mở **bước root** (id không là to_step_id) bằng auto-task idempotent (dedup_key). Non-root chờ dep approved (**3c**). Deny FS8a (draft/archived→404), FS8b (target active→409 uq), FS8c (sai appliesTo→400). `applyTemplateSchema` thêm contracts (additive).
+- **Giữ `startWorkflow`** (MVP-0 hard-code) — 3c mới tổng quát hoá FSM (open khi dep approved). `createSteps` extend +nodeKey (startWorkflow truyền null — hợp lệ).
+- **⚠️ Project-target task thiếu linkage:** `tasks` chưa có cột `project_id` → apply template `appliesTo='project'` tạo task `content_item_id=NULL`, không anchor project. Instance/steps đúng; chỉ task lookup-by-project chưa được (My Tasks G4-4 content-based). **Nợ:** thêm `tasks.project_id` (migration) + query khi G7 dùng project-workflow thật (3c/G8). G7 thực tế đi content_item.
+- **Guard ẩn:** validate `createdSteps.length==defSteps`; throw nếu 0 root task mở (chống instance kẹt). Event `workflow.started` dùng chung start+apply (additive payload).
+
+---
+
 _Liên quan: [`workflow-state-machine.md`](../spikes/workflow-state-machine.md) · [`erd-v2.md`](../erd-v2.md) · [`G6-media-full.md`](./G6-media-full.md) (mẫu plan) · ADR 0009/0010/0016 · [`TASKS.md`](../../TASKS.md) G7._

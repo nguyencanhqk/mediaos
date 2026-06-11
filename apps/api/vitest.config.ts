@@ -43,6 +43,10 @@ export default defineConfig({
       thresholds: {
         "src/workflow/workflow-fsm.service.ts": { lines: 80, functions: 80, branches: 80, statements: 80 },
         "src/workflow/approval.service.ts": { lines: 80, functions: 80, branches: 80, statements: 80 },
+        // G7-2a: DagValidatorService is pure crown-jewel logic — higher bar (plan §4/§6).
+        "src/workflow/dag-validator.service.ts": { lines: 90, functions: 90, branches: 90, statements: 90 },
+        // G7-2b: DAG adapter (port + code map) is pure + fully unit-tested → crown-jewel bar.
+        "src/workflow/dag-result.adapter.ts": { lines: 90, functions: 90, branches: 90, statements: 90 },
       },
     },
   },
