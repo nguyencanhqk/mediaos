@@ -622,6 +622,27 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+  {
+    name: "workflow_step_checklist_states",
+    table: "workflow_step_checklist_states",
+    seedRow: async (direct, t) => {
+      const { stepId } = await seedWorkflowChain(direct, t);
+      const clRes = await direct.query(
+        `INSERT INTO checklists (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-wscs-cl-${randomUUID().slice(0, 8)}`],
+      );
+      const itemRes = await direct.query(
+        `INSERT INTO checklist_items (company_id, checklist_id, label) VALUES ($1, $2, 'rls-wscs-item') RETURNING id`,
+        [t.companyId, clRes.rows[0].id],
+      );
+      const r = await direct.query(
+        `INSERT INTO workflow_step_checklist_states (company_id, workflow_step_id, checklist_item_id)
+         VALUES ($1, $2, $3) RETURNING id`,
+        [t.companyId, stepId, itemRes.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 
   // ── G4-4 Tasks & Comments ───────────────────────────────────────────────────
   {

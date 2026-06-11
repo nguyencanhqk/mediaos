@@ -14,7 +14,7 @@ import {
 import { currentCompanyDefault } from "./_helpers";
 import { companies } from "./companies";
 import { users } from "./users";
-import { contentItems } from "./media";
+import { contentItems, projects } from "./media";
 
 // ─── Enums (text columns with CHECK) ────────────────────────────────────────
 
@@ -267,22 +267,33 @@ export const workflowInstances = pgTable(
     contentItemId: uuid("content_item_id").references(() => contentItems.id, {
       onDelete: "cascade",
     }),
+    // G7-3: instance can target a content_item OR a project (exactly-one — see target check).
+    projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
     currentStepOrder: integer("current_step_order").notNull().default(1),
     status: text("status").notNull().default("active"),
+    // G7-3 (D4): pin the template version this instance ran against → published version is immutable,
+    // deps are read from the template at this version (no separate per-instance dep snapshot).
+    definitionVersion: integer("definition_version").notNull().default(1),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("wf_instances_company_id_idx").on(t.companyId),
     index("wf_instances_content_item_id_idx").on(t.contentItemId),
+    index("wf_instances_project_id_idx").on(t.projectId),
     // 1 content item → 1 active workflow at a time
     uniqueIndex("wf_instances_content_item_active_uq")
       .on(t.contentItemId)
       .where(sql`status = 'active' AND content_item_id IS NOT NULL`),
+    // 1 project → 1 active workflow at a time
+    uniqueIndex("wf_instances_project_active_uq")
+      .on(t.projectId)
+      .where(sql`status = 'active' AND project_id IS NOT NULL`),
     check("wf_instances_status_check", sql`status IN ('active', 'completed', 'cancelled')`),
+    // Exactly-one target: content_item XOR project (erd §9.1). Byte-identical with migration 0034.
     check(
       "wf_instances_target_check",
-      sql`content_item_id IS NOT NULL`,
+      sql`(content_item_id IS NOT NULL)::int + (project_id IS NOT NULL)::int = 1`,
     ),
   ],
 );
@@ -306,6 +317,9 @@ export const workflowSteps = pgTable(
     stepOrder: integer("step_order").notNull(),
     stepCode: text("step_code").notNull(),
     stepName: text("step_name").notNull(),
+    // G7-3: map back to the template step's node_key (resolve deps by definition_version). Advisory,
+    // nullable; backfilled = step_code for G4-3 rows, set explicitly on apply (3b).
+    nodeKey: text("node_key"),
     status: text("status").notNull().default("not_started"),
     assigneeUserId: uuid("assignee_user_id").references(() => users.id, { onDelete: "set null" }),
     reviewerUserId: uuid("reviewer_user_id").references(() => users.id, { onDelete: "set null" }),
@@ -328,6 +342,37 @@ export const workflowSteps = pgTable(
 );
 
 export type WorkflowStep = typeof workflowSteps.$inferSelect;
+
+// ─── workflow_step_checklist_states ───────────────────────────────────────────
+// G7-3: instance-level checklist tick state. A row = the item is checked; un-check = DELETE.
+// uq (step, item) → an item is checked at most once per step. checklist_item_id → template layer.
+
+export const workflowStepChecklistStates = pgTable(
+  "workflow_step_checklist_states",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    workflowStepId: uuid("workflow_step_id")
+      .notNull()
+      .references(() => workflowSteps.id, { onDelete: "cascade" }),
+    checklistItemId: uuid("checklist_item_id")
+      .notNull()
+      .references(() => checklistItems.id, { onDelete: "cascade" }),
+    checkedBy: uuid("checked_by").references(() => users.id, { onDelete: "set null" }),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("wf_step_checklist_states_company_id_idx").on(t.companyId),
+    index("wf_step_checklist_states_step_id_idx").on(t.workflowStepId),
+    index("wf_step_checklist_states_item_id_idx").on(t.checklistItemId),
+    uniqueIndex("wf_step_checklist_states_step_item_uq").on(t.workflowStepId, t.checklistItemId),
+  ],
+);
+
+export type WorkflowStepChecklistState = typeof workflowStepChecklistStates.$inferSelect;
 
 // ─── tasks (unified hub — BẤT BIẾN #4) ───────────────────────────────────────
 // task_type='workflow_step' links to workflow_steps via ref_id.

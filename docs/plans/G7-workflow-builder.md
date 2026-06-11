@@ -364,6 +364,13 @@ Bắt đầu: sau SYNC GATE, dựng skeleton route /workflows/templates + templa
 - **Return-type `|undefined` từ `mapError(): never` tail** (toàn service 1c+2b): runtime-safe (mapError luôn throw); cosmetic typing, giữ nhất quán. Nâng đồng bộ sau nếu cần.
 - **Permission catalog vẫn nợ 0036:** publish gate `publish:workflow-template`, clone gate `create:workflow-template` (hyphen) → fail-closed 403 tới khi 0036 seed. 0036 PHẢI seed thêm `publish:workflow-template` (ngoài create/update/read).
 
+**Sau 3a (migration 0034 — instance đa-target + checklist-state):**
+- **0034 = idx 35, when 1717500042000, tag `0034_g7_instance_multitarget_checklist_state`** (re-baseline 1 lần lúc dev để thêm FK index — file == DB == hash). DB dev đã ở 0034.
+- **CASCADE quyết định (database-reviewer soi, GIỮ có lý do):** `workflow_instances.project_id`→projects CASCADE (khớp content_item_id; project chỉ soft-delete trong vận hành). `workflow_step_checklist_states.checklist_item_id`→checklist_items CASCADE: tick-state là **operational state KHÔNG phải audit** (audit thật ở `audit_logs`); item của template published bất biến → cascade gần như không kích hoạt; CASCADE chống orphan. Nếu sau cần giữ lịch sử tick khi xoá item → đổi RESTRICT + bảng riêng (G8).
+- **`workflow_steps.node_key` nullable, backfill = step_code** cho row G4-3; 3b set tường minh khi applyTemplate (resolve theo `definition_version`).
+- **`workflow_step_checklist_states`**: 1 row = đã tick, bỏ tick = DELETE, uq (step,item). Enforcement required-item ở **4b** (submit gated). 3b chỉ snapshot step; chưa tick.
+- **definition_version** pin ở instance (đọc deps template theo version) — 3b set từ template published lúc apply; KHÔNG snapshot deps riêng.
+
 ---
 
 _Liên quan: [`workflow-state-machine.md`](../spikes/workflow-state-machine.md) · [`erd-v2.md`](../erd-v2.md) · [`G6-media-full.md`](./G6-media-full.md) (mẫu plan) · ADR 0009/0010/0016 · [`TASKS.md`](../../TASKS.md) G7._

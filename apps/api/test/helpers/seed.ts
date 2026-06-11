@@ -299,6 +299,11 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM tasks WHERE company_id = ANY($1::uuid[])", ids);
 
   // ── G4-3 Workflow ─────────────────────────────────────────────────────────
+  // G7-3: instance checklist tick-state (FK → workflow_steps + checklist_items) — xoá trước workflow_steps.
+  await direct.query(
+    "DELETE FROM workflow_step_checklist_states WHERE company_id = ANY($1::uuid[])",
+    ids,
+  );
   await direct.query("DELETE FROM workflow_steps WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM workflow_instances WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM step_transitions WHERE company_id = ANY($1::uuid[])", ids);

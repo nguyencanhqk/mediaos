@@ -239,6 +239,13 @@
       "when": 1717500041000,
       "tag": "0033_g7_audit_object_types",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1717500042000,
+      "tag": "0034_g7_instance_multitarget_checklist_state",
+      "breakpoints": true
     }
   ]
 }
