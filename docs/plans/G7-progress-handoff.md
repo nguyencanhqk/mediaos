@@ -18,23 +18,31 @@
 | 1a-fix | `8ccec9e` | seed `node_key` (G4-7 e2e xanh) |
 | **3a** | `a4f7b5b` | **migration 0034** — instance đa-target (content XOR project) + `definition_version` + `workflow_steps.node_key` + `workflow_step_checklist_states` (RLS+FORCE) |
 | **3b** | `2032894` | **applyTemplate** — instance từ template published, snapshot steps, mở **bước root** (auto-task idempotent); endpoint `POST /workflow-templates/:id/apply` gate `apply:workflow-instance` |
+| **3c-i** | `0d31be6` | **DAG dep-guard** — `workflow-dag.ts` PURE (`allDependenciesApproved`, key=node_key??step_code, root→true, fail-closed); FSM start/submit guard = `dependenciesApproved===false→DependenciesNotMetError` (bỏ guard stepOrder===currentStepOrder); repo `findStepsByInstanceIdInTx`; service `resolveDependenciesApproved` (await tuần tự) |
+| **3c-ii** | `c26eb94` | **approve() fan-out + complete theo DAG** — `computeNewlyUnblockedStepIds` (mở 0..n downstream khi dep đủ → auto-task idempotent) + `isWorkflowComplete` (mọi step required approved, KHÔNG theo order); task read vào tx (`findActiveTaskByStepIdInTx`); giữ alias `isLastStep:isWorkflowComplete` (e2e linear xanh). `findMaxStepOrder`/`advanceInstanceStepOrder` **ngừng dùng** (W2→3c-iii) |
 
-**Test:** toàn bộ xanh (adapter 13 · templates 45 · apply 6 · CHECK 4 · tenant-isolation 144 · rls-guards 3 · e2e 17 · dag 23 …). typecheck + lint sạch (chỉ warning pre-existing ở file khác).
+**Test:** toàn bộ xanh — unit dag 9 · approval 19 (A4/A5/A7+branch) · int workflow-approve 4 (FS2/FS3/FS7/FS6) · e2e linear 17 · (templates/apply/tenant-isolation/rls-guards… giữ xanh). typecheck sạch.
 
 ---
 
-## ▶️ VIÊN KẾ: 3c — tổng quát hoá FSM (crown-jewel, FULL+santa, Opus)
+## ▶️ VIÊN KẾ: 3c-iii — race-safety (FOR UPDATE) + W2 cleanup (crown-jewel, FULL+santa, Opus)
 
-> ĐỌC TRƯỚC: `G7-workflow-builder.md` §1.4 (invariant single-writer THỰC) · §3c · §5 (FS1/FS2/FS3/FS5/FS6/FS7/FS10/FS11) · §7 · `apps/api/src/workflow/{approval.service,workflow-fsm.service,workflow.repository}.ts` · spike `docs/spikes/workflow-state-machine.md`.
+> ĐỌC TRƯỚC: `G7-workflow-builder.md` §1.4 · §3c · §5 (FS5/FS10/FS11) · `apps/api/src/workflow/{approval.service,workflow.service,workflow.repository}.ts` · spike `docs/spikes/workflow-state-machine.md`.
+> **3c-i (dep-gate) + 3c-ii (fan-out/complete) ĐÃ XONG** — 3c-iii chỉ còn lock + dọn + 3 RED còn lại.
 
 - **KHÔNG migration** (3c thuần code). Migration kế = **0035** (4a eval hook), rồi **0036** (4c permissions seed — PHẢI seed hyphen: `create/update/publish/read:workflow-template` + `apply:workflow-instance`).
-- Thực thi **NGAY TRONG `ApprovalService.approve` cùng tx** (KHÔNG consumer tách rời — §1.4):
-  - FSM: bỏ guard `step.stepOrder === instance.currentStepOrder` → `allDependenciesApproved(step, deps)` (ảnh hưởng CẢ start/submit của `workflow.service`; deps đọc theo `definition_version` qua node_key).
-  - `approve()`: thay `advanceInstanceStepOrder`+`isLastStep` bằng `openNewlyUnblockedSteps` (mở 0..n bước khi mọi dep approved → sinh auto-task) + `isWorkflowComplete = mọi step required approved`.
-  - **Race-safety (BLOCKING #2/FS10):** `SELECT…FOR UPDATE` trên `workflow_instances` TRƯỚC mọi read trạng thái dep; refactor `findTaskByStepId`/`findMaxStepOrder` + mọi read dep sang **nhận `tx`** (bỏ tự-mở-`withTenant` — nếu còn 1 cái → race tái xuất).
-  - Giữ invariant §1.4: chỉ path approve/revision (qua FSM `validateConsumerTransition`) ghi approved/revision; `workflow.service` chỉ ghi in_progress/waiting_review (FS5).
-  - W2: xoá/deprecate `findMaxStepOrder`+`advanceInstanceStepOrder` (con trỏ tuyến tính); `current_step_order` chỉ advisory.
-- **RED-first** (§5): FS1 (start dep chưa approved→reject) · FS2 (A approved→B,C cùng mở, 2 task) · FS3 (join: cả B,C approved mới mở D) · FS6 (replay idempotent) · FS7 (complete khi mọi required approved) · FS10 (concurrency join→D mở đúng-1) · FS11 (instance G4-3 cũ chạy hết vòng). Sửa spec G4-3 hiện có cho khớp mô hình mới.
+- **Race-safety (BLOCKING #2 / FS10):** thêm `SELECT…FOR UPDATE` per-instance (`workflow_instances`) **TRƯỚC** mọi read dep TRONG `approve()` (và start/submit nếu cần). Repo: thêm `lockInstanceForUpdateInTx(companyId, instanceId, tx)`; gọi ngay sau `findInstanceByIdInTx` trong `approve()`. Mọi read dep của approve đã nằm trong tx sẵn (3c-ii) → chỉ cần chèn lock đầu.
+- **W2 cleanup:** xoá `findMaxStepOrder` + `advanceInstanceStepOrder` khỏi repo (đã ngừng dùng ở 3c-ii); `current_step_order` chỉ còn advisory. Grep xác nhận không còn caller trước khi xoá.
+- **RED-first còn lại (§5):**
+  - **FS10** concurrency join: 2 dep cuối của D approve **gần đồng thời** → D mở **đúng-1 task**, complete **đúng-1 lần** (FOR UPDATE serialize per-instance). ⚠️ `dedup_key` che under-open → test phải tách "under-open" khỏi "task đúng-1" (§5). Khó test: cần 2 tx song song trên 2 connection → dùng `directPool` 2 client hoặc `Promise.all` 2 lời gọi `approve()` riêng connection.
+  - **FS5** `workflow.service` (start/submit) KHÔNG được ghi thẳng `status=approved` → chỉ path approve/revision qua FSM `validateConsumerTransition` ghi approved/revision (invariant §1.4). Test khẳng định guard.
+  - **FS11** instance G4-3 cũ (deps tuyến tính seed) chạy hết vòng start/submit/approve qua guard `allDependenciesApproved` mới + thoả CHECK đúng-một. (e2e linear 17 hiện đã cover phần lớn — FS11 bổ sung nếu §5 yêu cầu ngưỡng riêng.)
+- **CUỐI 3c-iii → gate FULL+santa 1 lần** cho cả crown-jewel (3c-i+ii+iii): `ecc:security-reviewer` + `ecc:database-reviewer` + `ecc:silent-failure-hunter` + `ecc:santa-method`. (Đã hoãn suốt 3c theo cost discipline.)
+
+### Ghi chú review treo cho 3c-iii
+
+- **Review C1 (race trên join)** chỉ áp dụng cho 3c-iii (FOR UPDATE) — KHÔNG phải defect của 3c-ii.
+- ⚠️ BẪY pg single-connection: đọc dep TUẦN TỰ (await), KHÔNG `Promise.all` trên CÙNG 1 tx (FS10 test cần 2 connection RIÊNG, không phải 2 query 1 tx).
 
 ## Bất biến vận hành (giữ cả G7)
 - HAND-DRIVEN: đọc + trình plan từng viên, duyệt rồi mới code. Commit theo PATH tường minh (KHÔNG `git add -A`). Attribution tắt.
