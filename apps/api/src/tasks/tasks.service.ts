@@ -4,7 +4,11 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
-import type { CreateTaskRequest } from "@mediaos/contracts";
+import {
+  officeTaskStatusSchema,
+  type CreateTaskRequest,
+  type OfficeTaskStatusDto,
+} from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { TasksRepository, type ListTasksFilter } from "./tasks.repository";
@@ -103,7 +107,18 @@ export class TasksService {
    * Đổi status theo luồng rút gọn (Chưa bắt đầu → Đang làm → Hoàn thành) cho task KHÔNG vòng duyệt.
    * Từ chối task workflow-driven — chúng PHẢI đi qua FSM (submit/approve/return), không sửa status tay.
    */
-  async updateStatus(user: RequestUser, taskId: string, status: string) {
+  async updateStatus(user: RequestUser, taskId: string, status: OfficeTaskStatusDto) {
+    // SEC-2 (defense-in-depth): chỉ chấp nhận status luồng office rút gọn ngay tại biên service,
+    // không dựa duy nhất vào ZodValidationPipe ở controller. Status workflow (waiting_review/approved/
+    // revision) bị từ chối — FSM mới được phép đặt chúng (G7/ADR-0016).
+    const parsedStatus = officeTaskStatusSchema.safeParse(status);
+    if (!parsedStatus.success) {
+      throw new BadRequestException(
+        "Trạng thái không hợp lệ cho luồng rút gọn (chỉ: not_started, in_progress, completed).",
+      );
+    }
+    const nextStatus: OfficeTaskStatusDto = parsedStatus.data;
+
     return this.db.withTenant(user.companyId, async (tx) => {
       const [task] = await this.repo.findRawByIdTx(tx, user.companyId, taskId);
       if (!task) throw new NotFoundException(`Task not found: ${taskId}`);
@@ -114,7 +129,7 @@ export class TasksService {
         );
       }
 
-      const [updated] = await this.repo.updateStatus(user.companyId, taskId, status, tx);
+      const [updated] = await this.repo.updateStatus(user.companyId, taskId, nextStatus, tx);
       if (!updated) throw new NotFoundException(`Task not found: ${taskId}`);
 
       await this.audit.record(tx, {

@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { and, desc, eq, inArray, isNull, type SQL } from "drizzle-orm";
+import type { OfficeTaskStatusDto } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import type { TenantTx } from "../db/db.service";
 import { contentItems, projects } from "../db/schema/media";
@@ -7,8 +8,33 @@ import { teamMembers } from "../db/schema/org";
 import { users } from "../db/schema/users";
 import { taskComments, tasks, workflowSteps } from "../db/schema/workflow";
 
-/** Cap an toàn cho list view (tránh query không giới hạn — common/code-review §performance). */
-const MAX_TASKS = 500;
+// ─── Pagination (G9-2 DB-8/SF-2) ──────────────────────────────────────────────
+// Thay magic-cap `.limit(500)` cũ (silent-truncation: tenant >500 task mất row mà không báo).
+// Board-wide list nhận limit/offset TƯỜNG MINH; G9-3 nối UI phân trang trên cùng method này.
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+/**
+ * My Tasks là per-assignee → bị chặn tự nhiên bởi số task giao cho 1 người; dùng ceiling an toàn,
+ * KHÔNG phân trang ở G9-2 (UI "Công việc của tôi" chưa phân trang — giữ shape array, tránh regression).
+ */
+const MY_TASKS_CAP = MAX_PAGE_SIZE;
+
+export interface Pagination {
+  limit?: number;
+  offset?: number;
+}
+
+/** Kẹp limit về [1, MAX_PAGE_SIZE]; thiếu/không hợp lệ → DEFAULT_PAGE_SIZE. */
+function clampLimit(limit?: number): number {
+  if (!limit || limit <= 0) return DEFAULT_PAGE_SIZE;
+  return Math.min(Math.floor(limit), MAX_PAGE_SIZE);
+}
+
+/** Offset không âm. */
+function safeOffset(offset?: number): number {
+  if (!offset || offset <= 0) return 0;
+  return Math.floor(offset);
+}
 
 /** Cột trả ra cho TaskDto — join workflow_steps / content_items / projects (đều LEFT — null cho task non-video). */
 const TASK_COLUMNS = {
@@ -70,7 +96,7 @@ export class TasksRepository {
 
   // ─── Reads (TaskDto shape) ───────────────────────────────────────────────────
 
-  /** Task được giao cho user hiện tại (My Tasks — gộp MỌI nguồn). */
+  /** Task được giao cho user hiện tại (My Tasks — gộp MỌI nguồn). Per-assignee → bounded (MY_TASKS_CAP). */
   findByAssignee(companyId: string, userId: string) {
     return this.db.withTenant(companyId, (tx) =>
       this.baseQuery(tx)
@@ -82,12 +108,12 @@ export class TasksRepository {
           ),
         )
         .orderBy(desc(tasks.createdAt))
-        .limit(MAX_TASKS),
+        .limit(MY_TASKS_CAP),
     );
   }
 
-  /** Task Board tổng — lọc tuỳ chọn theo task_type / status / project / assignee. */
-  listAll(companyId: string, filters: ListTasksFilter) {
+  /** Task Board tổng — lọc tuỳ chọn theo task_type / status / project / assignee + phân trang (G9-3). */
+  listAll(companyId: string, filters: ListTasksFilter, page?: Pagination) {
     const conditions: (SQL | undefined)[] = [
       eq(tasks.companyId, companyId),
       isNull(tasks.deletedAt),
@@ -101,12 +127,13 @@ export class TasksRepository {
       this.baseQuery(tx)
         .where(and(...conditions))
         .orderBy(desc(tasks.createdAt))
-        .limit(MAX_TASKS),
+        .limit(clampLimit(page?.limit))
+        .offset(safeOffset(page?.offset)),
     );
   }
 
-  /** Project Tasks — mọi task gắn 1 dự án. */
-  listByProject(companyId: string, projectId: string) {
+  /** Project Tasks — mọi task gắn 1 dự án + phân trang (G9-3). */
+  listByProject(companyId: string, projectId: string, page?: Pagination) {
     return this.db.withTenant(companyId, (tx) =>
       this.baseQuery(tx)
         .where(
@@ -117,12 +144,13 @@ export class TasksRepository {
           ),
         )
         .orderBy(desc(tasks.createdAt))
-        .limit(MAX_TASKS),
+        .limit(clampLimit(page?.limit))
+        .offset(safeOffset(page?.offset)),
     );
   }
 
-  /** Team Tasks — task giao cho thành viên của 1 team (subquery cùng tenant tx). */
-  listByTeam(companyId: string, teamId: string) {
+  /** Team Tasks — task giao cho thành viên của 1 team (subquery cùng tenant tx) + phân trang (G9-3). */
+  listByTeam(companyId: string, teamId: string, page?: Pagination) {
     return this.db.withTenant(companyId, (tx) => {
       const memberIds = tx
         .select({ userId: teamMembers.userId })
@@ -145,7 +173,8 @@ export class TasksRepository {
           ),
         )
         .orderBy(desc(tasks.createdAt))
-        .limit(MAX_TASKS);
+        .limit(clampLimit(page?.limit))
+        .offset(safeOffset(page?.offset));
     });
   }
 
@@ -226,7 +255,8 @@ export class TasksRepository {
       .returning({ id: tasks.id });
   }
 
-  updateStatus(companyId: string, taskId: string, status: string, tx: TenantTx) {
+  /** SEC-2: status bị giới hạn về luồng office rút gọn (OfficeTaskStatusDto) — không nhận status workflow. */
+  updateStatus(companyId: string, taskId: string, status: OfficeTaskStatusDto, tx: TenantTx) {
     return tx
       .update(tasks)
       .set({ status, updatedAt: new Date() })
