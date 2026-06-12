@@ -82,7 +82,7 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 | G4 | 🏁 MVP-0 Walking Skeleton | 🤖+🛠️ hỗn hợp | XL | 🟡 đang làm |
 | G5 | Tổ chức & Nhân sự đầy đủ | 🤖 AI-bulk 🟢 | L | ✅ |
 | G6 | Media (Channel/Project/Content) | 🤖 + 🛠️(G6-2) | L | 🟡 G6-1/3/4/5 ✅ — chỉ còn **G6-2** (crown-jewel) |
-| G7 | Workflow Builder | 🛠️ TDD 🔋 | XL | ☐ |
+| G7 | Workflow Builder | 🛠️ TDD 🔋 | XL | 🟡 spine 1a→4c + FE Track C ✅ · gate TỔNG PASS (B1+santa+FE LIGHT) · **PR `feat/g7-workflow`→master chờ merge** |
 | G8 | Approval · Defect · Eval · KPI | 🛠️+🤖 | L | ☐ |
 | G9 | 🧩 Task Hub hợp nhất | 🛠️+🤖 | L | ☐ |
 | G10 | Chat · Notification · Meeting | 🤖 + 🛠️(realtime) | L | ☐ |
@@ -249,14 +249,16 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 > Phần **custom giá trị nhất** — không nền tảng nào thay được. Bám spike [`workflow-state-machine.md`](docs/spikes/workflow-state-machine.md). Cụm 🔋 dài nhất M2 → chia nhỏ, mỗi ngày 1 viên.
 
-- [ ] **G7-1** 🤖🟢 (M) `workflow_templates` + `step_templates` + `step_dependencies` (cấu hình người/role/team/reviewer/checklist/file mặc định). _(BR-004: KHÔNG hard-code workflow)._
-- [ ] **G7-2** 🛠️🔋 (L) **Canvas React Flow**: node/edge, bước **song song & tuần tự**, dependency DAG, nháp/publish/nhân bản. _(custom FSM designer; `ecc:a11y-architect`)_ — _UI nặng + logic; tách "vẽ canvas" (🤖) khỏi "validate DAG" (🛠️)._
-- [ ] **G7-3** 🛠️🔋 (L) Workflow Instance + step instance + **auto-sinh task idempotent** khi áp vào content/project.
-- [ ] **G7-4** 🛠️🔋 (L) **"Khoá phần liên quan"** (lock theo dependency, không khoá toàn workflow) + checklist + evaluation hook. _(WF-003, APR-004, BR-006)._
+- [x] **G7-1** 🤖🟢 (M) `workflow_templates` + `step_templates` + `step_dependencies` (cấu hình người/role/team/reviewer/checklist/file mặc định). _(BR-004: KHÔNG hard-code workflow)._ — 1a (mig 0032 DAG/checklist) + 1c CRUD (mig 0033) + DagValidator (2a).
+- [x] **G7-2** 🛠️🔋 (L) **Canvas React Flow**: node/edge, bước **song song & tuần tự**, dependency DAG, nháp/publish/nhân bản. _(custom FSM designer; `ecc:a11y-architect`)_ — 2b publish/clone lifecycle (DAG gate) + FE Track C canvas/templates.
+- [x] **G7-3** 🛠️🔋 (L) Workflow Instance + step instance + **auto-sinh task idempotent** khi áp vào content/project. — 3a (mig 0034) + 3b applyTemplate + 3c FSM/DAG approve+revision (FOR UPDATE race-safety).
+- [x] **G7-4** 🛠️🔋 (L) **"Khoá phần liên quan"** (lock theo dependency, không khoá toàn workflow) + checklist + evaluation hook. _(WF-003, APR-004, BR-006)._ — 4a LockPropagation (mig 0035) + 4b checklist enforcement + 4c eval-hook (mig 0036) + FE checklist UI.
 
 **DB:** `workflow_templates` `workflow_step_templates` `workflow_step_dependencies` `workflow_instances` `workflow_step_instances` `checklists` `checklist_items`
 **Màn:** Workflow Template List · Workflow Builder · Step Config · Instance View
 ✅ **Done:** builder tạo bước song song/tuần tự + dependency; áp vào content sinh task idempotent; lỗi chỉ khoá phần liên quan.
+
+> **Gate TỔNG + PR (2026-06-12):** spine 1a→4c + FE Track C đã hội tụ trên `feat/g7-workflow`, **merge `master` (G5-fix) + reconcile migration** (drop `0030` redundant, rename g3fix→`0037`, journal đơn điệu; chain `0000→0037` apply sạch). Gate HOLISTIC: **BE B1 FOCUSED** (security+database+silent-failure) → fix **S2** (null-reviewer fail-open→tự duyệt, FAIL-CLOSED) + **D4** (requestRevision race-safety) + SF3/SF5 → **santa dual-review cả 2 PASS**; **FE LIGHT** (checklist mirror fail-closed khi load + canvas a11y). Verify XANH: BE typecheck · unit 427 · int 284+2skip · e2e 17 · FE typecheck/test 133/build. Dấu vết: [`docs/reviews/g7-gates.md`](docs/reviews/g7-gates.md) (+ residual §4: S1 RBAC-layer, TS-HIGH2 editor-gate, FE a11y hardening). **PR `feat/g7-workflow` → `master`** (đã push, branch ahead origin). Commits: `32ac739` merge · `2fbe7d0` S2/D4/SF3/SF5 · `0c0e88d` santa coverage · `e9e93c7` FE · `cff1994` review-log.
 
 ---
 
