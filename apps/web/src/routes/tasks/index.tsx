@@ -1,8 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { tasksApi } from "@/lib/tasks-api";
+import { StepChecklist, stepChecklistQueryKey } from "@/components/tasks/step-checklist";
+import { allRequiredChecked, workflowChecklistApi } from "@/lib/workflow-checklist-api";
 import type { TaskDto, CommentDto, ApprovalRequestDto } from "@mediaos/contracts";
 
 // ─── Status labels ────────────────────────────────────────────────────────────
@@ -24,6 +26,29 @@ const TASK_STATUS_COLORS: Record<TaskDto["status"], string> = {
   approved: "bg-green-100 text-green-700",
   completed: "bg-green-200 text-green-800",
 };
+
+// ─── Grouping (G7-3d: nhiều bước song song → nhiều task cùng 1 nội dung) ────────
+
+interface TaskGroup {
+  key: string;
+  title: string;
+  tasks: TaskDto[];
+}
+
+/** Gom task theo nội dung để các bước chạy song song hiện cùng một cụm. */
+function groupTasksByContent(tasks: TaskDto[]): TaskGroup[] {
+  const groups = new Map<string, TaskGroup>();
+  for (const task of tasks) {
+    const key = task.contentItemId ?? "__none__";
+    const existing = groups.get(key);
+    if (existing) {
+      existing.tasks = [...existing.tasks, task];
+    } else {
+      groups.set(key, { key, title: task.contentTitle ?? "Công việc khác", tasks: [task] });
+    }
+  }
+  return [...groups.values()];
+}
 
 // ─── CommentThread ────────────────────────────────────────────────────────────
 
@@ -109,6 +134,18 @@ function SubmitWorkForm({ task, onDone }: { task: TaskDto; onDone: () => void })
 
   const canSubmit = task.stepStatus === "in_progress" && task.stepId != null;
 
+  // Checklist gate (G7-4b): soi lại submit gate của BE phía client — đọc cùng query key với
+  // <StepChecklist> (react-query dedupe → 1 request). Không in_progress → không gate (xem early return).
+  const { data: checklist, isSuccess: checklistLoaded } = useQuery({
+    queryKey: stepChecklistQueryKey(task.stepId ?? ""),
+    queryFn: () => workflowChecklistApi.getStepChecklist(task.stepId!),
+    enabled: canSubmit,
+  });
+  // Fail-closed mirror of the BE 4b gate: stay disabled until the checklist has actually loaded.
+  // During the fetch window (or on error) `checklist` is undefined → allRequiredChecked([]) would be
+  // vacuously true and open the gate prematurely; require a successful load first.
+  const checklistReady = checklistLoaded && allRequiredChecked(checklist?.items ?? []);
+
   if (!canSubmit) {
     if (task.submissionUrl) {
       return (
@@ -146,9 +183,19 @@ function SubmitWorkForm({ task, onDone }: { task: TaskDto; onDone: () => void })
           onChange={(e) => setNote(e.target.value)}
         />
       </div>
-      <Button onClick={() => submit.mutate()} disabled={submit.isPending} size="sm">
+      <StepChecklist stepId={task.stepId!} editable={canSubmit} />
+      <Button
+        onClick={() => submit.mutate()}
+        disabled={submit.isPending || !checklistReady}
+        size="sm"
+      >
         {submit.isPending ? "Đang gửi…" : "Nộp bài"}
       </Button>
+      {!checklistReady && (
+        <p className="text-xs text-amber-600">
+          Hoàn thành mọi mục bắt buộc trong checklist trước khi nộp.
+        </p>
+      )}
       {submit.isError && (
         <p className="text-xs text-destructive">
           {submit.error instanceof Error ? submit.error.message : "Lỗi khi nộp bài."}
@@ -375,6 +422,7 @@ export function TasksPage() {
   });
 
   const selectedTask = tasks.find((t) => t.id === selectedId) ?? null;
+  const taskGroups = useMemo(() => groupTasksByContent(tasks), [tasks]);
 
   return (
     <div className="flex h-full">
@@ -414,13 +462,27 @@ export function TasksPage() {
               {isError && (
                 <p className="py-6 text-center text-sm text-destructive">Không tải được dữ liệu.</p>
               )}
-              {tasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  isSelected={task.id === selectedId}
-                  onClick={() => setSelectedId(task.id === selectedId ? null : task.id)}
-                />
+              {taskGroups.map((group) => (
+                <div key={group.key} className="space-y-2">
+                  <div className="flex items-center gap-2 px-1 pt-1">
+                    <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {group.title}
+                    </h2>
+                    {group.tasks.length > 1 && (
+                      <span className="shrink-0 rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                        {group.tasks.length} bước song song
+                      </span>
+                    )}
+                  </div>
+                  {group.tasks.map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      isSelected={task.id === selectedId}
+                      onClick={() => setSelectedId(task.id === selectedId ? null : task.id)}
+                    />
+                  ))}
+                </div>
               ))}
               {tasks.length === 0 && !isLoading && (
                 <p className="py-6 text-center text-sm text-muted-foreground">

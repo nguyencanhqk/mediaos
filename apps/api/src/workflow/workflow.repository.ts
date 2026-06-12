@@ -1,16 +1,22 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, isNull, max, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
 import type { TenantTx } from "../db/db.service";
 import {
   approvalRequests,
   approvalSteps,
+  checklistItems,
+  checklists,
   contentItems,
   defects,
+  projects,
   tasks,
   workflowDefinitionSteps,
   workflowDefinitions,
   workflowInstances,
+  workflowStepChecklistStates,
+  workflowStepDependencies,
+  workflowStepInstanceLocks,
   workflowSteps,
 } from "../db/schema";
 
@@ -48,6 +54,52 @@ export class WorkflowRepository {
       .orderBy(workflowDefinitionSteps.stepOrder);
   }
 
+  // ─── Apply template (3b) ──────────────────────────────────────────────────
+
+  /** Template phải published (D4: chỉ published mới apply được) + cùng tenant + chưa xoá. */
+  findPublishedTemplateInTx(companyId: string, templateId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(workflowDefinitions)
+      .where(
+        and(
+          eq(workflowDefinitions.companyId, companyId),
+          eq(workflowDefinitions.id, templateId),
+          eq(workflowDefinitions.status, "published"),
+          isNull(workflowDefinitions.deletedAt),
+        ),
+      )
+      .limit(1);
+  }
+
+  /** Cạnh DAG của template (để tính bước root = step không xuất hiện ở to_step_id). */
+  findTemplateDependenciesInTx(companyId: string, templateId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(workflowStepDependencies)
+      .where(
+        and(
+          eq(workflowStepDependencies.companyId, companyId),
+          eq(workflowStepDependencies.workflowDefinitionId, templateId),
+        ),
+      );
+  }
+
+  /** Project thuộc tenant (validate target khi appliesTo='project'). */
+  findProjectByIdInTx(companyId: string, projectId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(projects)
+      .where(
+        and(
+          eq(projects.companyId, companyId),
+          eq(projects.id, projectId),
+          isNull(projects.deletedAt),
+        ),
+      )
+      .limit(1);
+  }
+
   // ─── Instances ────────────────────────────────────────────────────────────
 
   createInstance(
@@ -72,6 +124,33 @@ export class WorkflowRepository {
       .returning();
   }
 
+  /** 3b: tạo instance đa-target (content_item XOR project) + pin definition_version. */
+  createInstanceForTemplate(
+    companyId: string,
+    data: {
+      workflowDefinitionId: string;
+      contentItemId: string | null;
+      projectId: string | null;
+      definitionVersion: number;
+      createdBy: string | null;
+    },
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(workflowInstances)
+      .values({
+        companyId,
+        workflowDefinitionId: data.workflowDefinitionId,
+        contentItemId: data.contentItemId,
+        projectId: data.projectId,
+        definitionVersion: data.definitionVersion,
+        createdBy: data.createdBy,
+        status: "active",
+        currentStepOrder: 1,
+      })
+      .returning();
+  }
+
   findInstanceById(companyId: string, instanceId: string) {
     return this.db.withTenant(companyId, (tx) =>
       tx
@@ -87,22 +166,21 @@ export class WorkflowRepository {
     );
   }
 
-  updateInstanceStepOrder(
-    companyId: string,
-    instanceId: string,
-    currentStepOrder: number,
-    tx: TenantTx,
-  ) {
-    return tx
-      .update(workflowInstances)
-      .set({ currentStepOrder })
-      .where(
-        and(
-          eq(workflowInstances.companyId, companyId),
-          eq(workflowInstances.id, instanceId),
-        ),
-      )
-      .returning();
+  /** Tìm workflow instance mới nhất của 1 content item (FE chỉ biết contentId). */
+  findInstanceByContentItemId(companyId: string, contentItemId: string) {
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .select()
+        .from(workflowInstances)
+        .where(
+          and(
+            eq(workflowInstances.companyId, companyId),
+            eq(workflowInstances.contentItemId, contentItemId),
+          ),
+        )
+        .orderBy(sql`created_at DESC`)
+        .limit(1),
+    );
   }
 
   // ─── Steps ────────────────────────────────────────────────────────────────
@@ -114,6 +192,7 @@ export class WorkflowRepository {
       stepOrder: number;
       stepCode: string;
       stepName: string;
+      nodeKey?: string | null;
       assigneeUserId: string | null;
       reviewerUserId: string | null;
     }>,
@@ -128,6 +207,7 @@ export class WorkflowRepository {
           stepOrder: s.stepOrder,
           stepCode: s.stepCode,
           stepName: s.stepName,
+          nodeKey: s.nodeKey ?? null,
           status: "not_started" as const,
           assigneeUserId: s.assigneeUserId,
           reviewerUserId: s.reviewerUserId,
@@ -156,6 +236,20 @@ export class WorkflowRepository {
       .limit(1);
   }
 
+  /**
+   * G7-4b: SELECT…FOR UPDATE on a single step row. submitStep and tick/untick both take this lock
+   * before reading/writing checklist state, so a concurrent un-tick cannot slip between the submit
+   * gate-check and the status write (mirrors approve()'s per-instance lock; single resource, same
+   * acquisition order → no deadlock — submit never locks the instance row, approve never locks a step).
+   */
+  findStepByIdForUpdateInTx(companyId: string, stepId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(workflowSteps)
+      .where(and(eq(workflowSteps.companyId, companyId), eq(workflowSteps.id, stepId)))
+      .for("update");
+  }
+
   findInstanceByIdInTx(companyId: string, instanceId: string, tx: TenantTx) {
     return tx
       .select()
@@ -167,6 +261,92 @@ export class WorkflowRepository {
         ),
       )
       .limit(1);
+  }
+
+  /**
+   * G7-3c-iii race-safety (BLOCKING #2 / FS10): take a per-instance row lock so concurrent
+   * approvals of a join's deps serialize. MUST be called inside approve()'s tx, BEFORE any
+   * dep-state read — the lock is held until commit, turning the lost-update race into a queue.
+   */
+  lockInstanceForUpdateInTx(companyId: string, instanceId: string, tx: TenantTx) {
+    return tx
+      .select({ id: workflowInstances.id })
+      .from(workflowInstances)
+      .where(
+        and(
+          eq(workflowInstances.companyId, companyId),
+          eq(workflowInstances.id, instanceId),
+        ),
+      )
+      .for("update");
+  }
+
+  // ─── Revision locks (G7-4a / BR-006) ──────────────────────────────────────
+  // workflow_step_instance_locks: 1 ACTIVE row = locked_step_id is blocked because caused_by_step_id
+  // is in revision. Soft-release (released_at) — never hard-deleted (audit-friendly + replay-safe).
+
+  /** INSERT a lock; onConflictDoNothing vs wf_step_locks_active_uq → replay of a revision is idempotent. */
+  insertStepLockInTx(
+    companyId: string,
+    data: { lockedStepId: string; causedByStepId: string },
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(workflowStepInstanceLocks)
+      .values({
+        companyId,
+        lockedStepId: data.lockedStepId,
+        causedByStepId: data.causedByStepId,
+      })
+      .onConflictDoNothing()
+      .returning();
+  }
+
+  /** Soft-release EVERY active lock caused by `causedByStepId` (on its re-approve). Idempotent. */
+  releaseStepLocksByCauseInTx(companyId: string, causedByStepId: string, tx: TenantTx) {
+    return tx
+      .update(workflowStepInstanceLocks)
+      .set({ releasedAt: sql`now()` })
+      .where(
+        and(
+          eq(workflowStepInstanceLocks.companyId, companyId),
+          eq(workflowStepInstanceLocks.causedByStepId, causedByStepId),
+          isNull(workflowStepInstanceLocks.releasedAt),
+        ),
+      );
+  }
+
+  /** ACTIVE locks on a single step (released_at IS NULL) — feeds the FSM start/submit lock guard. */
+  findActiveLocksByStepIdInTx(companyId: string, lockedStepId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(workflowStepInstanceLocks)
+      .where(
+        and(
+          eq(workflowStepInstanceLocks.companyId, companyId),
+          eq(workflowStepInstanceLocks.lockedStepId, lockedStepId),
+          isNull(workflowStepInstanceLocks.releasedAt),
+        ),
+      );
+  }
+
+  /**
+   * Distinct step ids (among `lockedStepIds`) that still carry an ACTIVE lock — ONE query for the
+   * approve() fan-out open-filter (avoids an N+1 of findActiveLocksByStepIdInTx per candidate).
+   * Empty input → empty result without hitting the DB.
+   */
+  findActiveLockedStepIdsInTx(companyId: string, lockedStepIds: string[], tx: TenantTx) {
+    if (lockedStepIds.length === 0) return Promise.resolve([] as Array<{ lockedStepId: string }>);
+    return tx
+      .selectDistinct({ lockedStepId: workflowStepInstanceLocks.lockedStepId })
+      .from(workflowStepInstanceLocks)
+      .where(
+        and(
+          eq(workflowStepInstanceLocks.companyId, companyId),
+          inArray(workflowStepInstanceLocks.lockedStepId, lockedStepIds),
+          isNull(workflowStepInstanceLocks.releasedAt),
+        ),
+      );
   }
 
   findStepsByInstanceId(companyId: string, instanceId: string) {
@@ -182,6 +362,42 @@ export class WorkflowRepository {
         )
         .orderBy(workflowSteps.stepOrder),
     );
+  }
+
+  /**
+   * tx variant — read all instance steps inside the caller's transaction.
+   * G7-3c: dependency resolution (allDependenciesApproved) reads step status within the caller's
+   * tx, never via a self-opened withTenant (that would be a different PgBouncer connection). This
+   * keeps the read ready to sit inside the per-instance SELECT…FOR UPDATE lock added in 3c-iii
+   * (plan §3c race-safety/FS10) — a self-opened read would escape that lock and re-introduce the race.
+   */
+  findStepsByInstanceIdInTx(companyId: string, instanceId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(workflowSteps)
+      .where(
+        and(
+          eq(workflowSteps.companyId, companyId),
+          eq(workflowSteps.workflowInstanceId, instanceId),
+        ),
+      )
+      .orderBy(workflowSteps.stepOrder);
+  }
+
+  /** PM gán assignee + reviewer cho 1 bước (không đổi status — chỉ metadata). */
+  assignStep(
+    companyId: string,
+    stepId: string,
+    data: { assigneeUserId: string | null; reviewerUserId: string | null },
+    tx: TenantTx,
+  ) {
+    return tx
+      .update(workflowSteps)
+      .set({ assigneeUserId: data.assigneeUserId, reviewerUserId: data.reviewerUserId })
+      .where(
+        and(eq(workflowSteps.companyId, companyId), eq(workflowSteps.id, stepId)),
+      )
+      .returning();
   }
 
   startStep(companyId: string, stepId: string, tx: TenantTx) {
@@ -345,35 +561,12 @@ export class WorkflowRepository {
       .returning();
   }
 
-  advanceInstanceStepOrder(companyId: string, instanceId: string, newOrder: number, tx: TenantTx) {
-    return tx
-      .update(workflowInstances)
-      .set({ currentStepOrder: newOrder })
-      .where(and(eq(workflowInstances.companyId, companyId), eq(workflowInstances.id, instanceId)))
-      .returning();
-  }
-
   completeWorkflowInstance(companyId: string, instanceId: string, tx: TenantTx) {
     return tx
       .update(workflowInstances)
       .set({ status: "completed" })
       .where(and(eq(workflowInstances.companyId, companyId), eq(workflowInstances.id, instanceId)))
       .returning();
-  }
-
-  findMaxStepOrder(companyId: string, instanceId: string) {
-    return this.db.withTenant(companyId, async (tx) => {
-      const [row] = await tx
-        .select({ maxOrder: max(workflowSteps.stepOrder) })
-        .from(workflowSteps)
-        .where(
-          and(
-            eq(workflowSteps.companyId, companyId),
-            eq(workflowSteps.workflowInstanceId, instanceId),
-          ),
-        );
-      return row?.maxOrder ?? 1;
-    });
   }
 
   createDefect(
@@ -425,6 +618,199 @@ export class WorkflowRepository {
       .update(tasks)
       .set({ status, updatedAt: new Date() })
       .where(and(eq(tasks.companyId, companyId), eq(tasks.id, taskId)))
+      .returning();
+  }
+
+  /** tx variant — dùng khi assign bước để đồng bộ assignee của task trong cùng transaction. */
+  findActiveTaskByStepIdInTx(companyId: string, workflowStepId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.companyId, companyId),
+          eq(tasks.workflowStepId, workflowStepId),
+          isNull(tasks.deletedAt),
+        ),
+      )
+      .orderBy(sql`revision_round DESC`)
+      .limit(1);
+  }
+
+  /** Gán assignee cho task (để task hiện trong "Công việc của tôi" của người được giao). */
+  updateTaskAssignee(
+    companyId: string,
+    taskId: string,
+    assigneeUserId: string | null,
+    tx: TenantTx,
+  ) {
+    return tx
+      .update(tasks)
+      .set({ assigneeUserId, updatedAt: new Date() })
+      .where(and(eq(tasks.companyId, companyId), eq(tasks.id, taskId)))
+      .returning();
+  }
+
+  // ─── Checklist enforcement (G7-4b) ────────────────────────────────────────
+  // Linkage (QUYẾT ĐỊNH #1 = ĐƯỜNG A): instance-step.node_key → def-step (workflow_definition_id +
+  // node_key, uq → 1 row) → checklists.workflow_definition_step_id → checklist_items. `default_checklist_id`
+  // is always NULL (3b never sets it), so it is NOT used. company_id filtered on every table (defense-in-depth).
+
+  /**
+   * Count REQUIRED checklist items of `stepId`'s def-step that are NOT yet checked (no matching row in
+   * workflow_step_checklist_states for this step). 0 = checklist complete (or no required items → no gate).
+   * One query (NOT EXISTS) — a missing/mismatched def-step matches 0 items → count 0 → allow (no checklist).
+   * A def-step MAY carry >1 checklist (no uq on checklists.workflow_definition_step_id); required items
+   * across ALL of them are counted together — adding a second checklist intentionally raises the bar.
+   */
+  countUnmetRequiredChecklistItemsForStepInTx(
+    companyId: string,
+    args: { workflowDefinitionId: string; nodeKey: string; stepId: string },
+    tx: TenantTx,
+  ) {
+    return tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(checklistItems)
+      .innerJoin(checklists, eq(checklistItems.checklistId, checklists.id))
+      .innerJoin(
+        workflowDefinitionSteps,
+        eq(checklists.workflowDefinitionStepId, workflowDefinitionSteps.id),
+      )
+      .where(
+        and(
+          eq(checklistItems.companyId, companyId),
+          eq(checklists.companyId, companyId),
+          eq(workflowDefinitionSteps.companyId, companyId),
+          eq(workflowDefinitionSteps.workflowDefinitionId, args.workflowDefinitionId),
+          eq(workflowDefinitionSteps.nodeKey, args.nodeKey),
+          eq(checklistItems.isRequired, true),
+          notExists(
+            tx
+              .select({ one: sql`1` })
+              .from(workflowStepChecklistStates)
+              .where(
+                and(
+                  eq(workflowStepChecklistStates.companyId, companyId),
+                  eq(workflowStepChecklistStates.workflowStepId, args.stepId),
+                  eq(workflowStepChecklistStates.checklistItemId, checklistItems.id),
+                ),
+              ),
+          ),
+        ),
+      );
+  }
+
+  /**
+   * The checklist item `itemId` IFF it belongs to a checklist of `stepId`'s def-step (matched by
+   * node_key). Empty = the item is foreign to this step → tick/untick must reject (anti tick-stray-item).
+   */
+  findChecklistItemForStepInTx(
+    companyId: string,
+    args: { workflowDefinitionId: string; nodeKey: string; itemId: string },
+    tx: TenantTx,
+  ) {
+    return tx
+      .select({ id: checklistItems.id, isRequired: checklistItems.isRequired })
+      .from(checklistItems)
+      .innerJoin(checklists, eq(checklistItems.checklistId, checklists.id))
+      .innerJoin(
+        workflowDefinitionSteps,
+        eq(checklists.workflowDefinitionStepId, workflowDefinitionSteps.id),
+      )
+      .where(
+        and(
+          eq(checklistItems.companyId, companyId),
+          eq(checklists.companyId, companyId),
+          eq(workflowDefinitionSteps.companyId, companyId),
+          eq(workflowDefinitionSteps.workflowDefinitionId, args.workflowDefinitionId),
+          eq(workflowDefinitionSteps.nodeKey, args.nodeKey),
+          eq(checklistItems.id, args.itemId),
+        ),
+      )
+      .limit(1);
+  }
+
+  /**
+   * All checklist items of `stepId`'s def-step (matched by node_key), each with its current tick
+   * state for THIS step (LEFT JOIN workflow_step_checklist_states → checked = a state row exists).
+   * Read-only mirror of countUnmetRequiredChecklistItemsForStepInTx's linkage (G7-4b FE read).
+   * Ordered by sort_order then id for a stable render. Empty = no resolvable checklist → caller
+   * renders nothing and the submit gate is vacuously satisfied. company_id filtered on every table.
+   */
+  findChecklistItemsForStepInTx(
+    companyId: string,
+    args: { workflowDefinitionId: string; nodeKey: string; stepId: string },
+    tx: TenantTx,
+  ) {
+    return tx
+      .select({
+        id: checklistItems.id,
+        label: checklistItems.label,
+        isRequired: checklistItems.isRequired,
+        checked: sql<boolean>`(${workflowStepChecklistStates.id} is not null)`,
+      })
+      .from(checklistItems)
+      .innerJoin(checklists, eq(checklistItems.checklistId, checklists.id))
+      .innerJoin(
+        workflowDefinitionSteps,
+        eq(checklists.workflowDefinitionStepId, workflowDefinitionSteps.id),
+      )
+      // LEFT JOIN scoped to THIS step (+ company) so a missing row = unchecked, not row-loss.
+      .leftJoin(
+        workflowStepChecklistStates,
+        and(
+          eq(workflowStepChecklistStates.companyId, companyId),
+          eq(workflowStepChecklistStates.workflowStepId, args.stepId),
+          eq(workflowStepChecklistStates.checklistItemId, checklistItems.id),
+        ),
+      )
+      .where(
+        and(
+          eq(checklistItems.companyId, companyId),
+          eq(checklists.companyId, companyId),
+          eq(workflowDefinitionSteps.companyId, companyId),
+          eq(workflowDefinitionSteps.workflowDefinitionId, args.workflowDefinitionId),
+          eq(workflowDefinitionSteps.nodeKey, args.nodeKey),
+        ),
+      )
+      .orderBy(checklistItems.sortOrder, checklistItems.id);
+  }
+
+  /** Tick = INSERT a state row; onConflictDoNothing on the (step,item) uq → tick is idempotent.
+   * Explicit conflict target so only the intended uniqueness is suppressed (future constraints surface). */
+  insertChecklistStateInTx(
+    companyId: string,
+    data: { workflowStepId: string; checklistItemId: string; checkedBy: string | null },
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(workflowStepChecklistStates)
+      .values({
+        companyId,
+        workflowStepId: data.workflowStepId,
+        checklistItemId: data.checklistItemId,
+        checkedBy: data.checkedBy,
+      })
+      .onConflictDoNothing({
+        target: [
+          workflowStepChecklistStates.workflowStepId,
+          workflowStepChecklistStates.checklistItemId,
+        ],
+      })
+      .returning();
+  }
+
+  /** Un-tick = DELETE the state row (intentional per schema — operational state, not audit-data). Idempotent. */
+  deleteChecklistStateInTx(companyId: string, stepId: string, itemId: string, tx: TenantTx) {
+    return tx
+      .delete(workflowStepChecklistStates)
+      .where(
+        and(
+          eq(workflowStepChecklistStates.companyId, companyId),
+          eq(workflowStepChecklistStates.workflowStepId, stepId),
+          eq(workflowStepChecklistStates.checklistItemId, itemId),
+        ),
+      )
       .returning();
   }
 

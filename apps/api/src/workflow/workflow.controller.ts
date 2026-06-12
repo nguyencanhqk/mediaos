@@ -1,18 +1,22 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
   Req,
+  UseGuards,
   UsePipes,
 } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
 import { WorkflowService } from "./workflow.service";
 import { ApprovalService } from "./approval.service";
-import { StartWorkflowDto, SubmitStepDto } from "./workflow.dto";
+import { AssignStepDto, StartWorkflowDto, SubmitStepDto } from "./workflow.dto";
 import { ApproveDto, RequestRevisionDto } from "./approval.dto";
+import { PermissionGuard } from "../permission/guards/permission.guard";
+import { RequirePermission } from "../permission/require-permission.decorator";
 
 interface AuthenticatedRequest extends Request {
   user: { id: string; companyId: string };
@@ -39,10 +43,45 @@ export class WorkflowController {
     return this.approval.listPending(req.user.companyId);
   }
 
+  /** GET /workflow/by-content/:contentItemId — workflow của content (null nếu chưa start) */
+  // PHẢI đặt trước @Get(":instanceId") để "by-content" không bị parse thành instanceId.
+  @Get("by-content/:contentItemId")
+  getWorkflowByContent(
+    @Req() req: AuthenticatedRequest,
+    @Param("contentItemId") contentItemId: string,
+  ) {
+    return this.workflow.getWorkflowByContent(req.user.companyId, contentItemId);
+  }
+
+  /** GET /workflow/steps/:stepId/checklist — checklist items + tick state cho 1 instance step (G7-4b FE).
+   * Company-scoped read (no permission gate; workflow-internal) — mirror linkage của submit gate.
+   * Đặt TRƯỚC @Get(":instanceId") cho rõ ràng (multi-segment nên không thực sự đụng :instanceId). */
+  @Get("steps/:stepId/checklist")
+  getStepChecklist(@Req() req: AuthenticatedRequest, @Param("stepId") stepId: string) {
+    return this.workflow.getStepChecklist(req.user.companyId, stepId);
+  }
+
   /** GET /workflow/:instanceId — lấy workflow + steps */
   @Get(":instanceId")
   getWorkflow(@Req() req: AuthenticatedRequest, @Param("instanceId") instanceId: string) {
     return this.workflow.getWorkflow(req.user.companyId, instanceId);
+  }
+
+  /** POST /workflow/steps/:stepId/assign — PM gán assignee + reviewer cho bước.
+   * Method-level @UseGuards(PermissionGuard): các route workflow khác KHÔNG gắn guard này
+   * (PermissionGuard fail-closed 403 nếu thiếu @RequirePermission). */
+  @Post("steps/:stepId/assign")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "content")
+  assignStep(
+    @Req() req: AuthenticatedRequest,
+    @Param("stepId") stepId: string,
+    @Body() dto: AssignStepDto,
+  ) {
+    return this.workflow.assignStep(req.user.companyId, stepId, req.user.id, {
+      assigneeUserId: dto.assigneeUserId,
+      reviewerUserId: dto.reviewerUserId,
+    });
   }
 
   /** POST /workflow/steps/:stepId/start — bắt đầu làm step (T1 / T5) */
@@ -62,6 +101,27 @@ export class WorkflowController {
       submissionUrl: dto.submissionUrl,
       submissionNote: dto.submissionNote,
     });
+  }
+
+  /** POST /workflow/steps/:stepId/checklist-items/:itemId — tick item (G7-4b submit gate).
+   * Actor = step assignee (enforced in service); no separate permission gate (workflow-internal). */
+  @Post("steps/:stepId/checklist-items/:itemId")
+  checkItem(
+    @Req() req: AuthenticatedRequest,
+    @Param("stepId") stepId: string,
+    @Param("itemId") itemId: string,
+  ) {
+    return this.workflow.checkItem(req.user.companyId, stepId, itemId, req.user.id);
+  }
+
+  /** DELETE /workflow/steps/:stepId/checklist-items/:itemId — un-tick item (G7-4b) */
+  @Delete("steps/:stepId/checklist-items/:itemId")
+  uncheckItem(
+    @Req() req: AuthenticatedRequest,
+    @Param("stepId") stepId: string,
+    @Param("itemId") itemId: string,
+  ) {
+    return this.workflow.uncheckItem(req.user.companyId, stepId, itemId, req.user.id);
   }
 
   /** POST /workflow/approval-requests/:requestId/approve — T3: phê duyệt */

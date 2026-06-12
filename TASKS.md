@@ -82,7 +82,7 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 | G4 | 🏁 MVP-0 Walking Skeleton | 🤖+🛠️ hỗn hợp | XL | 🟡 đang làm |
 | G5 | Tổ chức & Nhân sự đầy đủ | 🤖 AI-bulk 🟢 | L | ✅ |
 | G6 | Media (Channel/Project/Content) | 🤖 + 🛠️(G6-2) | L | ✅ đóng (đã land master — migration 0020–0029 + bảng lõi; G6-2 encryption đã merge, verify 2026-06-12) |
-| G7 | Workflow Builder | 🛠️ TDD 🔋 | XL | ☐ |
+| G7 | Workflow Builder | 🛠️ TDD 🔋 | XL | 🟡 spine 1a→4c + FE Track C ✅ · gate TỔNG PASS (B1+santa+FE LIGHT) · **PR `feat/g7-workflow`→master chờ merge** |
 | G8 | Approval · Defect · Eval · KPI | 🛠️+🤖 | L | ☐ |
 | G9 | 🧩 Task Hub hợp nhất | 🛠️+🤖 | L | ☐ |
 | G10 | Chat · Notification · Meeting | 🤖 + 🛠️(realtime) | L | ☐ |
@@ -160,7 +160,7 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 - [x] **G3-1** 🤖🟢 (S) Bảng `roles / permissions / role_permissions / user_roles / object_permissions`. _(AI sinh từ ERD)._
 - [x] **G3-2** 🛠️🔋 (L) **`PermissionService.can(user, action, objType, objId, ctx)`** — 4 tầng, **quyền nhạy cảm KHÔNG kế thừa**. 52/52 tests GREEN; FULL gate passed (security-reviewer + silent-failure-hunter); security fixes applied: logging trong catch, auditRequired=isSensitive on fail-closed, requiresReauth guard cho non-sensitive branch, effectivelySensitive cross-check từ grant catalog, instanceof Date guard cho expiresAt/reauthValidUntil.
 - [x] **G3-3** 🛠️🔋 (M) **Test deny-path TRƯỚC** (RED) cho từng rule. _(`ecc:tdd-guide`)_ — 52 cases (27 deny + 15 allow + 10 audit/reauth/idempotent); tất cả RED chờ G3-2. Files: `src/permission/permission.types.ts`, `permission.service.ts` (stub), `permission.service.spec.ts`.
-- [x] **G3-4** 🛠️🔋 (M) Guards `auth → company → permission`; cache permission ở Valkey + **invalidate đúng** khi đổi quyền. Guards: JwtAuthGuard → CompanyGuard → PermissionGuard (fail-closed, @Public bypass, PERMISSION_GUARD_ENABLED kill-switch); CachedPermissionRepository (Valkey TTL 300s, fallback to DB); PermissionCacheInvalidator (permission.changed → DEL cap key); 20/20 tests GREEN.
+- [x] **G3-4** 🛠️🔋 (M) Guards `auth → company → permission`; cache permission ở Valkey + **invalidate đúng** khi đổi quyền. Guards: JwtAuthGuard → CompanyGuard → PermissionGuard (fail-closed, @Public bypass, PERMISSION_GUARD_ENABLED kill-switch); CachedPermissionRepository (Valkey TTL 300s, fallback to DB); PermissionCacheInvalidator (permission.changed → DEL cap key); 20/20 tests GREEN. ⚠️ **read/decision-path XONG; mutation-path NỢ G5/G7** (re-review 2026-06-09, [`docs/reviews/g3-gates.md`](docs/reviews/g3-gates.md) §4.1): chưa nơi nào _emit_ `permission.changed`, chưa có endpoint grant/revoke role + `PATCH /permissions/object` → "invalidate <100ms" + "audit 100% mutation quyền" chưa hiện thực (infra sẵn, chờ nối). `grant-object-permission:permission` đã seed phòng-bẫy-F2 ở migration 0031.
 - [x] **G3-5** 🤖🟢 (S) FE `<PermissionGate>` + `useCan()` (capabilities từ `/me`). _Chỉ UX — server là sự thật._ `/me` trả `capabilities: Record<string,boolean>` (non-sensitive only); Zustand store + `useCan(action,resourceType)` O(1) wildcard lookup; `<PermissionGate>` với fallback; 14/14 FE tests GREEN.
 
 ✅ **Done khi:** user chỉ thấy menu/nút theo quyền; API chặn đúng; đổi quyền có audit + cache invalidate.
@@ -171,16 +171,23 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 > Dùng **1 workflow hard-coded** (chưa cần Builder). Đây là lúc bạn **lần đầu thấy hệ thống sống** — phần thưởng sau thung lũng. Xen kẽ 🤖 (nhẹ) và 🛠️ (nặng) trong phase này.
 
-- [x] **G4-1** 🤖🟢 (S) Org/Employee tối thiểu — org_units + teams + team_members; RLS+FORCE+CHECK; NestJS OrgModule (7 endpoints); Zod contracts; FE /org/departments + /org/teams + /org/employees; LIGHT gate passed; commit aca6233.
+- [x] **G4-1** 🤖🟢 (S) Org/Employee tối thiểu — org_units + teams + team_members; RLS+FORCE+CHECK; NestJS OrgModule (7 endpoints); Zod contracts; FE /org/departments + /org/teams + /org/employees; LIGHT gate passed; commit aca6233. **Re-review 2026-06-09 (G5-FIX F2):** `OrgController` mutations thiếu permission guard (ORG-002/003) — đã vá: 4 route org_unit + **6 route team** gắn `@RequirePermission('manage', <resource>)`, seed+grant ở migration 0030, deny suite `org.permission.spec.ts` 40/40 xanh (commit `4b23ccd`; FULL gate F2 còn chờ). Xem [`docs/reviews/g4-gates.md`](docs/reviews/g4-gates.md) §5.
 - [x] **G4-2** 🤖🟢 (M) Channel + Project + Content tối thiểu (project ↔ nhiều kênh; tạo 1 video). BE 9 endpoints + FE 3 trang + sidebar nav; commit 0467216.
-- [x] **G4-3** 🛠️🔋 (M) **1 workflow cứng**: Script → Edit → QA → Upload; auto-sinh task. _(custom `workflow-state-machine-guide`)_ — _Hard-code nên đơn giản hơn G7, nhưng vẫn TDD._ FULL gate passed; deny-path RED→GREEN (23 tests); workflow FSM + 4-step + auto-task + submit; global JWT+Company guards wired; 125 tests green.
-- [x] **G4-4** 🤖🟢 (M) My Tasks + submit work (file/link) + comment. _(`ecc:tdd-workflow`)_ — GET /tasks (tasks table, joined step+content), POST /tasks/:id/comments + GET comments; FE /tasks page (2-panel: list + detail), SubmitWorkForm (link+note→submitStep), CommentThread; submission_url/note on workflow_steps; migration 0009; typecheck+125 tests green.
+- [x] **G4-3** 🛠️🔋 (M) **1 workflow cứng**: Script → Edit → QA → Upload; auto-sinh task. _(custom `workflow-state-machine-guide`)_ — _Hard-code nên đơn giản hơn G7, nhưng vẫn TDD._ FULL gate passed; deny-path RED→GREEN (23 tests); workflow FSM + 4-step + auto-task + submit; global JWT+Company guards wired; 125 tests green. **Close-out 2026-06-09:** thêm FE board "Sản xuất" (content-detail) + `POST /workflow/start` từ UI + `POST /workflow/steps/:id/assign` (gán assignee/reviewer, FULL `@RequirePermission update content`) + `GET /workflow/by-content/:id`; trước đó lifecycle chỉ chạy qua API/E2E.
+- [x] **G4-4** 🤖🟢 (M) My Tasks + submit work (**chỉ link**, file đính kèm descoped) + comment. _(`ecc:tdd-workflow`)_ — GET /tasks (tasks table, joined step+content), POST /tasks/:id/comments + GET comments; FE /tasks page (2-panel: list + detail), SubmitWorkForm (link+note→submitStep), CommentThread; submission_url/note on workflow_steps; migration 0009; typecheck+125 tests green. ⚠️ **`task_attachments` descoped** (close-out 2026-06-09) — không upload file, chỉ link.
 - [x] **G4-5** 🛠️🔋 (M) **Approval 1 cấp** + **return revision**. TDD: 12 deny+happy tests RED→GREEN; validateConsumerTransition added to FSM; ApprovalService (approve T3, requestRevision T4 + defect + revision task); repository: approvalSteps, closeApprovalRequest, advanceInstanceStepOrder, completeWorkflowInstance, createDefect, findMaxStepOrder; 3 endpoints (GET/POST approval-requests); FE: "Chờ duyệt" tab with ApprovalCard (approve / trả về form); 137 API + 17 web tests green, typecheck clean.
 - [x] **G4-6** 🤖🟢 (M) Notification cơ bản + 1 group chat project (auto-tạo). _(migration 0010: 4 bảng RLS; BE NotificationsModule + ChatModule; auto-create project chat room khi tạo project; FE NotificationBell (poll 30s) + /chat/projects/:id; LIGHT gate passed, 3 HIGH fixes applied; typecheck + 154 tests xanh)_
 - [x] **G4-7** 🧪🟢 (M) **E2E**: 1 video đi trọn vòng đời; chạy lại test isolation G2-5. _(17-test E2E spec: Script→Edit→QA→Upload lifecycle + revision flow + tenant isolation cross-check; G2-5 harness mở rộng thêm 22 bảng G4 với idColumn/skipNoContext; fix 3 production bugs: auth.controller.ts thiếu @Public(), audit_logs CHECK constraint, route ordering approval-requests vs :instanceId; fix 2 migration bugs: task_comments thiếu GRANT + policy thiếu NULLIF; 282 tests xanh, LIGHT gate passed)_
 - [x] **G4-8** 🔧 (S) **Triển khai pilot 1 team thật**; thu feedback. _(deploy checklist → [`docs/pilot/deploy-checklist.md`](docs/pilot/deploy-checklist.md); feedback form → [`docs/pilot/feedback-template.md`](docs/pilot/feedback-template.md))._
 
 ✅ **Done khi:** một video thật đi tạo → task → nộp → duyệt → trả sửa → upload; **pilot team dùng được**. 🎉 _Ăn mừng — bạn vừa qua phần khó nhất về mặt tâm lý._
+
+> **Process close-out (2026-06-09):** 2 nợ quy trình (CLAUDE.md §6) đã vá:
+>
+> 1. **Coverage ≥80% module nhạy cảm (G4-3 FSM + G4-5 approval) — ĐÃ ENFORCE.** Cài `@vitest/coverage-v8@3`; threshold **scoped per-file** trong `apps/api/vitest.config.ts` cho `workflow-fsm.service.ts` + `approval.service.ts` (KHÔNG phủ cả `src/workflow/**` để tránh đỏ oan các file chỉ có DB-test). Bổ sung 6 test → `approval.service.ts` branch **69.5% → 86.6%** (không hạ ngưỡng). Lệnh gate: `pnpm --filter @mediaos/api test:cov`. FSM 94/90/100/94 · approval 98/86/86/98 — đều ≥80%.
+> 2. **Review-gate artifact — ĐÃ TẠO** → [`docs/reviews/g4-gates.md`](docs/reviews/g4-gates.md) (G4-1..G4-8: gate level, reviewer §7, trạng thái, fix đã áp).
+>
+> ⚠️ _Quan sát (KHÔNG thuộc 2 việc trên):_ `apps/api/test/workflow-lifecycle.e2e-spec.ts` hiện **đỏ ở bootstrap** vì thay đổi **chưa commit** ở working tree — `OrgController` đã thêm `@UseGuards(PermissionGuard)` nhưng `OrgModule` chưa `import PermissionModule` → Nest không resolve được `PermissionService`. 17 test e2e vốn `skipIf(!DATABASE_URL)` nhưng suite compile ném trước. Fix 1 dòng (thêm `PermissionModule` vào `OrgModule.imports`) — để chủ WIP org-permission xử lý, không sửa trong phiên này.
 
 ---
 
@@ -242,14 +249,16 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 > Phần **custom giá trị nhất** — không nền tảng nào thay được. Bám spike [`workflow-state-machine.md`](docs/spikes/workflow-state-machine.md). Cụm 🔋 dài nhất M2 → chia nhỏ, mỗi ngày 1 viên.
 
-- [ ] **G7-1** 🤖🟢 (M) `workflow_templates` + `step_templates` + `step_dependencies` (cấu hình người/role/team/reviewer/checklist/file mặc định). _(BR-004: KHÔNG hard-code workflow)._
-- [ ] **G7-2** 🛠️🔋 (L) **Canvas React Flow**: node/edge, bước **song song & tuần tự**, dependency DAG, nháp/publish/nhân bản. _(custom FSM designer; `ecc:a11y-architect`)_ — _UI nặng + logic; tách "vẽ canvas" (🤖) khỏi "validate DAG" (🛠️)._
-- [ ] **G7-3** 🛠️🔋 (L) Workflow Instance + step instance + **auto-sinh task idempotent** khi áp vào content/project.
-- [ ] **G7-4** 🛠️🔋 (L) **"Khoá phần liên quan"** (lock theo dependency, không khoá toàn workflow) + checklist + evaluation hook. _(WF-003, APR-004, BR-006)._
+- [x] **G7-1** 🤖🟢 (M) `workflow_templates` + `step_templates` + `step_dependencies` (cấu hình người/role/team/reviewer/checklist/file mặc định). _(BR-004: KHÔNG hard-code workflow)._ — 1a (mig 0032 DAG/checklist) + 1c CRUD (mig 0033) + DagValidator (2a).
+- [x] **G7-2** 🛠️🔋 (L) **Canvas React Flow**: node/edge, bước **song song & tuần tự**, dependency DAG, nháp/publish/nhân bản. _(custom FSM designer; `ecc:a11y-architect`)_ — 2b publish/clone lifecycle (DAG gate) + FE Track C canvas/templates.
+- [x] **G7-3** 🛠️🔋 (L) Workflow Instance + step instance + **auto-sinh task idempotent** khi áp vào content/project. — 3a (mig 0034) + 3b applyTemplate + 3c FSM/DAG approve+revision (FOR UPDATE race-safety).
+- [x] **G7-4** 🛠️🔋 (L) **"Khoá phần liên quan"** (lock theo dependency, không khoá toàn workflow) + checklist + evaluation hook. _(WF-003, APR-004, BR-006)._ — 4a LockPropagation (mig 0035) + 4b checklist enforcement + 4c eval-hook (mig 0036) + FE checklist UI.
 
 **DB:** `workflow_templates` `workflow_step_templates` `workflow_step_dependencies` `workflow_instances` `workflow_step_instances` `checklists` `checklist_items`
 **Màn:** Workflow Template List · Workflow Builder · Step Config · Instance View
 ✅ **Done:** builder tạo bước song song/tuần tự + dependency; áp vào content sinh task idempotent; lỗi chỉ khoá phần liên quan.
+
+> **Gate TỔNG + PR (2026-06-12):** spine 1a→4c + FE Track C đã hội tụ trên `feat/g7-workflow`, **merge `master` (G5-fix) + reconcile migration** (drop `0030` redundant, rename g3fix→`0037`, journal đơn điệu; chain `0000→0037` apply sạch). Gate HOLISTIC: **BE B1 FOCUSED** (security+database+silent-failure) → fix **S2** (null-reviewer fail-open→tự duyệt, FAIL-CLOSED) + **D4** (requestRevision race-safety) + SF3/SF5 → **santa dual-review cả 2 PASS**; **FE LIGHT** (checklist mirror fail-closed khi load + canvas a11y). Verify XANH: BE typecheck · unit 427 · int 284+2skip · e2e 17 · FE typecheck/test 133/build. Dấu vết: [`docs/reviews/g7-gates.md`](docs/reviews/g7-gates.md) (+ residual §4: S1 RBAC-layer, TS-HIGH2 editor-gate, FE a11y hardening). **PR `feat/g7-workflow` → `master`** (đã push, branch ahead origin). Commits: `32ac739` merge · `2fbe7d0` S2/D4/SF3/SF5 · `0c0e88d` santa coverage · `e9e93c7` FE · `cff1994` review-log.
 
 ---
 

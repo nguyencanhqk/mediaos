@@ -109,6 +109,51 @@ export class NotCurrentStepError extends Error {
   }
 }
 
+/**
+ * DependenciesNotMetError — G7-3c. A step cannot start because not all of its upstream DAG
+ * dependencies are approved yet. Replaces the linear `current_step_order` guard (D2/§1.3).
+ */
+export class DependenciesNotMetError extends Error {
+  readonly stepId: string;
+  constructor(stepId: string) {
+    super(`Step ${stepId} cannot start: upstream dependencies are not all approved`);
+    this.name = "DependenciesNotMetError";
+    this.stepId = stepId;
+  }
+}
+
+/**
+ * StepLockedError — G7-4a (BR-006/WF-003). A step cannot start/submit because an upstream step is
+ * in revision and propagated a `downstream_blocked_by_revision` lock onto it. Released only when
+ * every locking source is re-approved (multi-source: LK5). Distinct from DependenciesNotMetError so
+ * the UI can show "blocked by an upstream revision" rather than a generic "deps not met".
+ */
+export class StepLockedError extends Error {
+  readonly stepId: string;
+  constructor(stepId: string) {
+    super(`Step ${stepId} is locked: an upstream step is in revision (downstream_blocked_by_revision)`);
+    this.name = "StepLockedError";
+    this.stepId = stepId;
+  }
+}
+
+/**
+ * ChecklistIncompleteError — G7-4b. A step cannot be submitted (T2) because not every REQUIRED
+ * checklist item of the step has been checked. Required items are resolved from the template's
+ * def-step (matched by node_key) → checklists → checklist_items WHERE is_required; "checked" = a
+ * row in workflow_step_checklist_states. A step with no required items is never blocked (anti
+ * over-gate). Distinct from StepLockedError / DependenciesNotMetError so the UI shows the specific
+ * "checklist incomplete" reason. Submit-only (start is not gated by the checklist).
+ */
+export class ChecklistIncompleteError extends Error {
+  readonly stepId: string;
+  constructor(stepId: string) {
+    super(`Step ${stepId} cannot be submitted: required checklist items are not all checked`);
+    this.name = "ChecklistIncompleteError";
+    this.stepId = stepId;
+  }
+}
+
 /** DuplicateWorkflowError when a content item already has an active workflow. */
 export class DuplicateWorkflowError extends Error {
   constructor(contentItemId: string) {

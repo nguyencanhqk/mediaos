@@ -5,6 +5,7 @@ import {
   employeeProfileSchema,
   importEmployeePreviewSchema,
 } from "@mediaos/contracts";
+import { unwrapEnvelope } from "./api-client";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3100/api/v1";
 
@@ -18,7 +19,7 @@ async function apiFetch<T>(path: string, schema: z.ZodType<T>, init?: RequestIni
     throw new Error(`${res.status} ${path}: ${body}`);
   }
   const json: unknown = await res.json();
-  return schema.parse(json);
+  return schema.parse(unwrapEnvelope(json));
 }
 
 const confirmResultSchema = z.object({ inserted: z.number(), failed: z.number() });

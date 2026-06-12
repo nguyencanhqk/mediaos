@@ -63,8 +63,10 @@ async function assignStepsTo(
   instanceId: string,
   userId: string,
 ): Promise<void> {
+  // assignee for start/submit AND reviewer for approve/request_revision (S2 fail-closed: a null
+  // reviewer denies the decision). This single-actor lifecycle uses the same user for both.
   await direct.query(
-    `UPDATE workflow_steps SET assignee_user_id = $1 WHERE workflow_instance_id = $2`,
+    `UPDATE workflow_steps SET assignee_user_id = $1, reviewer_user_id = $1 WHERE workflow_instance_id = $2`,
     [userId, instanceId],
   );
 }

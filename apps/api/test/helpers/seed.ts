@@ -71,12 +71,14 @@ export async function seedWorkflowDefinition(
     [3, "qa",      "Kiểm tra chất lượng",  "qa_reviewer",    "project_manager", "QA nội dung"],
     [4, "upload",  "Upload lên kênh",       "uploader",       "project_manager", "Upload video"],
   ]) {
+    // node_key NOT NULL since 0032 (G7-1a). Seed it = step code (unique per definition → satisfies
+    // the (def, node_key) unique index). Keeps the G4-3 lifecycle e2e green against the G7 schema.
     await direct.query(
       `INSERT INTO workflow_definition_steps
-         (company_id, workflow_definition_id, step_order, code, name, assignee_role_code, reviewer_role_code, default_task_title)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         (company_id, workflow_definition_id, step_order, code, name, assignee_role_code, reviewer_role_code, default_task_title, node_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT DO NOTHING`,
-      [companyId, definitionId, stepOrder, code2, name, assigneeRoleCode, reviewerRoleCode, defaultTaskTitle],
+      [companyId, definitionId, stepOrder, code2, name, assigneeRoleCode, reviewerRoleCode, defaultTaskTitle, code2],
     );
   }
 
@@ -297,6 +299,11 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM tasks WHERE company_id = ANY($1::uuid[])", ids);
 
   // ── G4-3 Workflow ─────────────────────────────────────────────────────────
+  // G7-3: instance checklist tick-state (FK → workflow_steps + checklist_items) — xoá trước workflow_steps.
+  await direct.query(
+    "DELETE FROM workflow_step_checklist_states WHERE company_id = ANY($1::uuid[])",
+    ids,
+  );
   await direct.query("DELETE FROM workflow_steps WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM workflow_instances WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM step_transitions WHERE company_id = ANY($1::uuid[])", ids);

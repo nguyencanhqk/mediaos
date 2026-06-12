@@ -26,9 +26,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { WorkflowFsmService } from "./workflow-fsm.service";
 import {
+  ChecklistIncompleteError,
+  DependenciesNotMetError,
   IllegalTransitionError,
-  NotCurrentStepError,
+  NotReviewerError,
   NotStepActorError,
+  StepLockedError,
   WorkflowInactiveError,
   WorkflowNotFoundError,
   type InstanceStatus,
@@ -121,30 +124,176 @@ describe("WorkflowFsmService", () => {
     });
   });
 
-  // ─── D3: Start non-current step ────────────────────────────────────────────
-  describe("D3 — start step when it is not current_step_order", () => {
-    it("throws NotCurrentStepError when step_order != current_step_order", () => {
-      const step = makeStep({ status: "not_started", stepOrder: 2 });
-      const instance = makeInstance({ currentStepOrder: 1 });
-
-      expect(() =>
-        fsm.validateServiceTransition({ step, instance, event: "start", actorId: ASSIGNEE_ID }),
-      ).toThrow(NotCurrentStepError);
-    });
-
-    it("throws NotCurrentStepError even when step status is not_started but wrong order", () => {
+  // ─── FS1: start/submit gated by dependency satisfaction (replaces D3 pointer) ─
+  // G7-3c (§1.3): step_order is no longer a guard. A step is startable iff ALL upstream
+  // deps are approved — the service computes that and passes `dependenciesApproved`.
+  describe("FS1 — start/submit gated by allDependenciesApproved (DAG model)", () => {
+    it("throws DependenciesNotMetError on start when dependenciesApproved=false", () => {
       const step = makeStep({ status: "not_started", stepOrder: 3 });
       const instance = makeInstance({ currentStepOrder: 1 });
 
       expect(() =>
-        fsm.validateServiceTransition({ step, instance, event: "start", actorId: ASSIGNEE_ID }),
-      ).toThrow(NotCurrentStepError);
+        fsm.validateServiceTransition({
+          step,
+          instance,
+          event: "start",
+          actorId: ASSIGNEE_ID,
+          dependenciesApproved: false,
+        }),
+      ).toThrow(DependenciesNotMetError);
+    });
+
+    it("throws DependenciesNotMetError on submit when dependenciesApproved=false", () => {
+      const step = makeStep({ status: "in_progress", stepOrder: 2 });
+      const instance = makeInstance({ currentStepOrder: 1 });
+
+      expect(() =>
+        fsm.validateServiceTransition({
+          step,
+          instance,
+          event: "submit",
+          actorId: ASSIGNEE_ID,
+          dependenciesApproved: false,
+        }),
+      ).toThrow(DependenciesNotMetError);
+    });
+
+    it("does NOT throw on a non-sequential step_order when dependenciesApproved=true", () => {
+      // step_order 3 with currentStepOrder 1 used to throw NotCurrentStepError — no longer a guard.
+      const step = makeStep({ status: "not_started", stepOrder: 3 });
+      const instance = makeInstance({ currentStepOrder: 1 });
+
+      expect(() =>
+        fsm.validateServiceTransition({
+          step,
+          instance,
+          event: "start",
+          actorId: ASSIGNEE_ID,
+          dependenciesApproved: true,
+        }),
+      ).not.toThrow();
+    });
+  });
+
+  // ─── LK4 (4b): submit gated by required-checklist completion (checklistComplete) ─
+  // The service resolves "are ALL required checklist items checked?" within its tx and passes it.
+  // Submit-only: start is NEVER gated by the checklist. Undefined (no checklist / start) skips the
+  // guard so a step with no required items is not over-gated.
+  describe("LK4 — submit gated by required-checklist completion (checklistComplete)", () => {
+    it("throws ChecklistIncompleteError on submit when checklistComplete=false", () => {
+      const step = makeStep({ status: "in_progress" });
+      const instance = makeInstance({});
+      expect(() =>
+        fsm.validateServiceTransition({
+          step,
+          instance,
+          event: "submit",
+          actorId: ASSIGNEE_ID,
+          dependenciesApproved: true,
+          stepLocked: false,
+          checklistComplete: false,
+        }),
+      ).toThrow(ChecklistIncompleteError);
+    });
+
+    it("does NOT block submit when checklistComplete=true (allow path)", () => {
+      const step = makeStep({ status: "in_progress" });
+      const instance = makeInstance({});
+      const t = fsm.validateServiceTransition({
+        step,
+        instance,
+        event: "submit",
+        actorId: ASSIGNEE_ID,
+        dependenciesApproved: true,
+        stepLocked: false,
+        checklistComplete: true,
+      });
+      expect(t.toState).toBe("waiting_review");
+    });
+
+    it("does NOT block submit when checklistComplete is undefined (no checklist → no over-gate)", () => {
+      const step = makeStep({ status: "in_progress" });
+      const instance = makeInstance({});
+      expect(() =>
+        fsm.validateServiceTransition({
+          step,
+          instance,
+          event: "submit",
+          actorId: ASSIGNEE_ID,
+          dependenciesApproved: true,
+        }),
+      ).not.toThrow();
+    });
+
+    it("does NOT gate start by the checklist even when checklistComplete=false", () => {
+      const step = makeStep({ status: "not_started" });
+      const instance = makeInstance({});
+      const t = fsm.validateServiceTransition({
+        step,
+        instance,
+        event: "start",
+        actorId: ASSIGNEE_ID,
+        dependenciesApproved: true,
+        stepLocked: false,
+        checklistComplete: false,
+      });
+      expect(t.toState).toBe("in_progress");
     });
   });
 
   // ─── D5: Step from wrong instance / non-existent ───────────────────────────
   // D5 is enforced by repository (FK + RLS). FsmService validates the step
   // belongs to the given instance via companyId + workflowInstanceId check.
+  // ─── LK1 (4a): start/submit blocked by an ACTIVE revision lock (stepLocked) ─
+  // The service resolves "is this step locked by an upstream revision?" in its tx and passes it.
+  // Lock guard sits BEFORE the deps guard so a locked step reports the specific reason, and it
+  // blocks EVEN when deps are approved — proving the guard consults the lock independently.
+  describe("LK1 — start/submit blocked by an active revision lock (stepLocked)", () => {
+    it("throws StepLockedError on start when stepLocked=true even though deps are approved", () => {
+      const step = makeStep({ status: "not_started" });
+      const instance = makeInstance({});
+      expect(() =>
+        fsm.validateServiceTransition({
+          step,
+          instance,
+          event: "start",
+          actorId: ASSIGNEE_ID,
+          dependenciesApproved: true,
+          stepLocked: true,
+        }),
+      ).toThrow(StepLockedError);
+    });
+
+    it("throws StepLockedError on submit when stepLocked=true", () => {
+      const step = makeStep({ status: "in_progress" });
+      const instance = makeInstance({});
+      expect(() =>
+        fsm.validateServiceTransition({
+          step,
+          instance,
+          event: "submit",
+          actorId: ASSIGNEE_ID,
+          dependenciesApproved: true,
+          stepLocked: true,
+        }),
+      ).toThrow(StepLockedError);
+    });
+
+    it("does NOT block when stepLocked=false and deps approved (allow path)", () => {
+      const step = makeStep({ status: "not_started" });
+      const instance = makeInstance({});
+      const t = fsm.validateServiceTransition({
+        step,
+        instance,
+        event: "start",
+        actorId: ASSIGNEE_ID,
+        dependenciesApproved: true,
+        stepLocked: false,
+      });
+      expect(t.toState).toBe("in_progress");
+    });
+  });
+
   describe("D5 — step not belonging to the instance", () => {
     it("throws if step workflowInstanceId does not match the supplied instance id", () => {
       const step = { ...makeStep({}), workflowInstanceId: "ffffffff-ffff-ffff-ffff-ffffffffffff" };
@@ -189,6 +338,135 @@ describe("WorkflowFsmService", () => {
       expect(() =>
         fsm.validateServiceTransition({ step, instance, event: "open_next", actorId: ACTOR_ID }),
       ).toThrow(IllegalTransitionError);
+    });
+  });
+
+  // ─── FS5: only the consumer path writes approved/revision (invariant §1.4) ──
+  // D6 (above) proves the SERVICE path cannot reach approved/revision. FS5 proves the symmetric
+  // half: validateConsumerTransition IS that path — approve→approved, request_revision→revision,
+  // both writtenBy='consumer'; while start/submit (service) only reach in_progress/waiting_review.
+  // Together they pin §1.4: approved/revision are reachable ONLY through the consumer path.
+  describe("FS5 — only the consumer path writes approved/revision (invariant §1.4)", () => {
+    it("approve (consumer) transitions waiting_review → approved", () => {
+      const step = makeStep({ status: "waiting_review" });
+      const instance = makeInstance({});
+
+      const result = fsm.validateConsumerTransition({
+        step,
+        instance,
+        event: "approve",
+        actorId: ACTOR_ID,
+        reviewerUserId: ACTOR_ID,
+      });
+
+      expect(result.toState).toBe("approved");
+      expect(result.writtenBy).toBe("consumer");
+    });
+
+    it("request_revision (consumer) transitions waiting_review → revision", () => {
+      const step = makeStep({ status: "waiting_review" });
+      const instance = makeInstance({});
+
+      const result = fsm.validateConsumerTransition({
+        step,
+        instance,
+        event: "request_revision",
+        actorId: ACTOR_ID,
+        reviewerUserId: ACTOR_ID,
+      });
+
+      expect(result.toState).toBe("revision");
+      expect(result.writtenBy).toBe("consumer");
+    });
+
+    it("service events (start/submit) never reach approved/revision", () => {
+      const notStarted = makeStep({ status: "not_started" });
+      const inProgress = makeStep({ status: "in_progress" });
+      const instance = makeInstance({});
+
+      const started = fsm.validateServiceTransition({
+        step: notStarted,
+        instance,
+        event: "start",
+        actorId: ASSIGNEE_ID,
+        dependenciesApproved: true,
+      });
+      const submitted = fsm.validateServiceTransition({
+        step: inProgress,
+        instance,
+        event: "submit",
+        actorId: ASSIGNEE_ID,
+        dependenciesApproved: true,
+      });
+
+      expect(["approved", "revision"]).not.toContain(started.toState);
+      expect(["approved", "revision"]).not.toContain(submitted.toState);
+    });
+  });
+
+  // ─── S2 (G7-merge gate): reviewer authorization is FAIL-CLOSED ───────────────
+  // A step can reach waiting_review with reviewerUserId=null (submitStep creates the approval
+  // request before a PM assigns the reviewer). The consumer guard MUST deny approve/request_revision
+  // when no reviewer is assigned — otherwise ANY tenant member (incl. the assignee) could self-approve.
+  describe("S2 — reviewer must be assigned to approve / request_revision (fail-closed)", () => {
+    it("approve with reviewerUserId=null is denied (no reviewer assigned yet)", () => {
+      const step = makeStep({ status: "waiting_review" });
+      const instance = makeInstance({});
+
+      expect(() =>
+        fsm.validateConsumerTransition({
+          step,
+          instance,
+          event: "approve",
+          actorId: ACTOR_ID,
+          reviewerUserId: null,
+        }),
+      ).toThrow(NotReviewerError);
+    });
+
+    it("request_revision with reviewerUserId=null is denied", () => {
+      const step = makeStep({ status: "waiting_review" });
+      const instance = makeInstance({});
+
+      expect(() =>
+        fsm.validateConsumerTransition({
+          step,
+          instance,
+          event: "request_revision",
+          actorId: ACTOR_ID,
+          reviewerUserId: null,
+        }),
+      ).toThrow(NotReviewerError);
+    });
+
+    it("approve by a non-reviewer actor is denied", () => {
+      const step = makeStep({ status: "waiting_review" });
+      const instance = makeInstance({});
+
+      expect(() =>
+        fsm.validateConsumerTransition({
+          step,
+          instance,
+          event: "approve",
+          actorId: OTHER_USER_ID,
+          reviewerUserId: ACTOR_ID,
+        }),
+      ).toThrow(NotReviewerError);
+    });
+
+    it("approve by the designated reviewer succeeds", () => {
+      const step = makeStep({ status: "waiting_review" });
+      const instance = makeInstance({});
+
+      const result = fsm.validateConsumerTransition({
+        step,
+        instance,
+        event: "approve",
+        actorId: ACTOR_ID,
+        reviewerUserId: ACTOR_ID,
+      });
+
+      expect(result.toState).toBe("approved");
     });
   });
 
