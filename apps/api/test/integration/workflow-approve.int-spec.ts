@@ -9,6 +9,7 @@ import { WorkflowFsmService } from "../../src/workflow/workflow-fsm.service";
 import { WorkflowRepository } from "../../src/workflow/workflow.repository";
 import { WorkflowService } from "../../src/workflow/workflow.service";
 import { ApprovalService } from "../../src/workflow/approval.service";
+import { LockPropagationService } from "../../src/workflow/lock-propagation.service";
 import { WorkflowTemplatesRepository } from "../../src/workflow/workflow-templates.repository";
 import { WorkflowTemplatesService } from "../../src/workflow/workflow-templates.service";
 import { DagValidatorService } from "../../src/workflow/dag-validator.service";
@@ -105,6 +106,17 @@ describe.skipIf(!hasDb)("G7-3c approve() over DAG (3c-ii fan-out + 3c-iii race-s
     const r = await direct.query(`SELECT status FROM workflow_instances WHERE id = $1`, [instanceId]);
     return r.rows[0].status as string;
   }
+  /** Outbox event payloads of a given type for an instance (payload.instanceId match). */
+  async function outboxPayloadsForInstance(
+    instanceId: string,
+    eventType: string,
+  ): Promise<Array<Record<string, unknown>>> {
+    const r = await direct.query(
+      `SELECT payload FROM outbox_events WHERE event_type = $1 AND payload->>'instanceId' = $2`,
+      [eventType, instanceId],
+    );
+    return r.rows.map((row) => row.payload as Record<string, unknown>);
+  }
   /** assignee NULL after applyTemplate (PM assigns later); start/submit need actor===assignee. */
   async function assignAll(instanceId: string): Promise<void> {
     await direct.query(
@@ -139,8 +151,9 @@ describe.skipIf(!hasDb)("G7-3c approve() over DAG (3c-ii fan-out + 3c-iii race-s
     const fsm = new WorkflowFsmService();
     const audit = new AuditService();
     const outbox = new OutboxService();
-    svc = new WorkflowService(db, repo, fsm, audit, outbox);
-    approval = new ApprovalService(db, repo, fsm, audit, outbox);
+    const locks = new LockPropagationService(repo);
+    svc = new WorkflowService(db, repo, fsm, audit, outbox, locks);
+    approval = new ApprovalService(db, repo, fsm, audit, outbox, locks);
   });
 
   afterAll(async () => {
@@ -283,5 +296,59 @@ describe.skipIf(!hasDb)("G7-3c approve() over DAG (3c-ii fan-out + 3c-iii race-s
     // Lock released → the queued approve() proceeds and commits.
     await approvePromise;
     expect(await instanceStatus(instance.id)).toBe("active"); // B approved, C still pending
+  });
+
+  // ─── 4c-i: evaluation hook ───────────────────────────────────────────────────
+  // Bước requires_evaluation=true khi APPROVED → emit step.evaluation_required CÙNG tx approve
+  // (transactional outbox). eval cols thêm INERT ở 0035 → đây là nơi ĐẦU TIÊN dùng. Consumer = G8
+  // (chưa có) → worker xử lý 0-consumer = done, KHÔNG dead-letter. G7 chỉ emit + audit.
+
+  it("EV1 requires_evaluation=true → approve emit step.evaluation_required (payload đủ)", async () => {
+    const { t, steps } = await publishedTemplate(1);
+    const evalTplId = randomUUID();
+    // Set cờ trực tiếp (cols inert; published immutable ở service nhưng đây chỉ là test fixture qua direct).
+    const upd = await direct.query(
+      `UPDATE workflow_definition_steps SET requires_evaluation = true, evaluation_template_id = $1
+       WHERE workflow_definition_id = $2 AND node_key = $3`,
+      [evalTplId, t.id, steps[0].nodeKey],
+    );
+    expect(upd.rowCount).toBe(1); // guard: đổi tên cột / sai target → match 0 row, test sẽ false-pass nếu không chốt
+    const ci = await seedContentItem();
+    const { instance } = await svc.applyTemplate(A.companyId, userA, t.id, { contentItemId: ci });
+    await assignAll(instance.id);
+    const stepId = await stepIdByNodeKey(instance.id, steps[0].nodeKey);
+
+    await drive(stepId);
+
+    const evs = await outboxPayloadsForInstance(instance.id, "step.evaluation_required");
+    expect(evs).toHaveLength(1);
+    expect(evs[0].stepId).toBe(stepId);
+    expect(evs[0].instanceId).toBe(instance.id);
+    expect(evs[0].evaluationTemplateId).toBe(evalTplId);
+    expect(evs[0].approvedBy).toBe(userA);
+
+    // Audit là side-effect hợp đồng (CÙNG tx) — assert riêng để xoá audit.record sẽ vỡ test, không lặng.
+    const audit = await direct.query(
+      `SELECT count(*)::int AS n FROM audit_logs
+       WHERE company_id = $1 AND object_type = 'workflow_step' AND object_id = $2 AND action = 'StepEvaluationRequired'`,
+      [A.companyId, stepId],
+    );
+    expect(audit.rows[0].n).toBe(1);
+  });
+
+  it("EV2 requires_evaluation=false (default) → approve KHÔNG emit step.evaluation_required", async () => {
+    const { t, steps } = await publishedTemplate(1);
+    const ci = await seedContentItem();
+    const { instance } = await svc.applyTemplate(A.companyId, userA, t.id, { contentItemId: ci });
+    await assignAll(instance.id);
+    const stepId = await stepIdByNodeKey(instance.id, steps[0].nodeKey);
+
+    await drive(stepId);
+
+    expect(await outboxPayloadsForInstance(instance.id, "step.evaluation_required")).toHaveLength(0);
+    // Control: step.approved VẪN emit → chứng minh approve() chạy, chỉ eval-event vắng đúng lý do.
+    expect(
+      (await outboxPayloadsForInstance(instance.id, "step.approved")).length,
+    ).toBeGreaterThanOrEqual(1);
   });
 });

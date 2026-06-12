@@ -26,9 +26,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { WorkflowFsmService } from "./workflow-fsm.service";
 import {
+  ChecklistIncompleteError,
   DependenciesNotMetError,
   IllegalTransitionError,
   NotStepActorError,
+  StepLockedError,
   WorkflowInactiveError,
   WorkflowNotFoundError,
   type InstanceStatus,
@@ -172,9 +174,125 @@ describe("WorkflowFsmService", () => {
     });
   });
 
+  // ─── LK4 (4b): submit gated by required-checklist completion (checklistComplete) ─
+  // The service resolves "are ALL required checklist items checked?" within its tx and passes it.
+  // Submit-only: start is NEVER gated by the checklist. Undefined (no checklist / start) skips the
+  // guard so a step with no required items is not over-gated.
+  describe("LK4 — submit gated by required-checklist completion (checklistComplete)", () => {
+    it("throws ChecklistIncompleteError on submit when checklistComplete=false", () => {
+      const step = makeStep({ status: "in_progress" });
+      const instance = makeInstance({});
+      expect(() =>
+        fsm.validateServiceTransition({
+          step,
+          instance,
+          event: "submit",
+          actorId: ASSIGNEE_ID,
+          dependenciesApproved: true,
+          stepLocked: false,
+          checklistComplete: false,
+        }),
+      ).toThrow(ChecklistIncompleteError);
+    });
+
+    it("does NOT block submit when checklistComplete=true (allow path)", () => {
+      const step = makeStep({ status: "in_progress" });
+      const instance = makeInstance({});
+      const t = fsm.validateServiceTransition({
+        step,
+        instance,
+        event: "submit",
+        actorId: ASSIGNEE_ID,
+        dependenciesApproved: true,
+        stepLocked: false,
+        checklistComplete: true,
+      });
+      expect(t.toState).toBe("waiting_review");
+    });
+
+    it("does NOT block submit when checklistComplete is undefined (no checklist → no over-gate)", () => {
+      const step = makeStep({ status: "in_progress" });
+      const instance = makeInstance({});
+      expect(() =>
+        fsm.validateServiceTransition({
+          step,
+          instance,
+          event: "submit",
+          actorId: ASSIGNEE_ID,
+          dependenciesApproved: true,
+        }),
+      ).not.toThrow();
+    });
+
+    it("does NOT gate start by the checklist even when checklistComplete=false", () => {
+      const step = makeStep({ status: "not_started" });
+      const instance = makeInstance({});
+      const t = fsm.validateServiceTransition({
+        step,
+        instance,
+        event: "start",
+        actorId: ASSIGNEE_ID,
+        dependenciesApproved: true,
+        stepLocked: false,
+        checklistComplete: false,
+      });
+      expect(t.toState).toBe("in_progress");
+    });
+  });
+
   // ─── D5: Step from wrong instance / non-existent ───────────────────────────
   // D5 is enforced by repository (FK + RLS). FsmService validates the step
   // belongs to the given instance via companyId + workflowInstanceId check.
+  // ─── LK1 (4a): start/submit blocked by an ACTIVE revision lock (stepLocked) ─
+  // The service resolves "is this step locked by an upstream revision?" in its tx and passes it.
+  // Lock guard sits BEFORE the deps guard so a locked step reports the specific reason, and it
+  // blocks EVEN when deps are approved — proving the guard consults the lock independently.
+  describe("LK1 — start/submit blocked by an active revision lock (stepLocked)", () => {
+    it("throws StepLockedError on start when stepLocked=true even though deps are approved", () => {
+      const step = makeStep({ status: "not_started" });
+      const instance = makeInstance({});
+      expect(() =>
+        fsm.validateServiceTransition({
+          step,
+          instance,
+          event: "start",
+          actorId: ASSIGNEE_ID,
+          dependenciesApproved: true,
+          stepLocked: true,
+        }),
+      ).toThrow(StepLockedError);
+    });
+
+    it("throws StepLockedError on submit when stepLocked=true", () => {
+      const step = makeStep({ status: "in_progress" });
+      const instance = makeInstance({});
+      expect(() =>
+        fsm.validateServiceTransition({
+          step,
+          instance,
+          event: "submit",
+          actorId: ASSIGNEE_ID,
+          dependenciesApproved: true,
+          stepLocked: true,
+        }),
+      ).toThrow(StepLockedError);
+    });
+
+    it("does NOT block when stepLocked=false and deps approved (allow path)", () => {
+      const step = makeStep({ status: "not_started" });
+      const instance = makeInstance({});
+      const t = fsm.validateServiceTransition({
+        step,
+        instance,
+        event: "start",
+        actorId: ASSIGNEE_ID,
+        dependenciesApproved: true,
+        stepLocked: false,
+      });
+      expect(t.toState).toBe("in_progress");
+    });
+  });
+
   describe("D5 — step not belonging to the instance", () => {
     it("throws if step workflowInstanceId does not match the supplied instance id", () => {
       const step = { ...makeStep({}), workflowInstanceId: "ffffffff-ffff-ffff-ffff-ffffffffffff" };

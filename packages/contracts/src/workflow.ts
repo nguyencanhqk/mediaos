@@ -301,6 +301,29 @@ export const createChecklistItemSchema = z.object({
 });
 export type CreateChecklistItemRequest = z.infer<typeof createChecklistItemSchema>;
 
+// ─── G7-4b checklist enforcement (instance tick state) — ADDITIVE (sau freeze 1b) ─────────────
+// Mirror workflow_step_checklist_states (1 row = item đã tick; bỏ tick = DELETE). FE (LUỒNG C) đọc để
+// render checklist trong task detail. Tick/untick KHÔNG có request body (stepId + itemId ở path param).
+export const workflowStepChecklistStateSchema = z.object({
+  id: z.string().uuid(),
+  companyId: z.string().uuid(),
+  workflowStepId: z.string().uuid(),
+  checklistItemId: z.string().uuid(),
+  checkedBy: z.string().uuid().nullable(),
+  checkedAt: z.string().datetime(),
+});
+export type WorkflowStepChecklistStateDto = z.infer<typeof workflowStepChecklistStateSchema>;
+
+/** Kết quả tick/untick (service trả) — phản ánh trạng thái sau thao tác (idempotent).
+ * `changed`=false → no-op replay (đã ở trạng thái đó rồi); =true → vừa đổi thật (có audit). */
+export const toggleChecklistItemResultSchema = z.object({
+  stepId: z.string().uuid(),
+  checklistItemId: z.string().uuid(),
+  checked: z.boolean(),
+  changed: z.boolean(),
+});
+export type ToggleChecklistItemResult = z.infer<typeof toggleChecklistItemResultSchema>;
+
 // Áp 1 template (published) lên ĐÚNG-MỘT target: content_item HOẶC project (khớp wf_instances target check).
 // Thêm sau freeze 1b nhưng ADDITIVE (không sửa schema cũ) → không ép B/C rebase.
 export const applyTemplateSchema = z

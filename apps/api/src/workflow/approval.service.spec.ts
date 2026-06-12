@@ -177,6 +177,18 @@ function makeOutbox() {
   return { enqueue: vi.fn().mockResolvedValue(undefined) };
 }
 
+// G7-4a: lock propagation is mocked here (this spec covers approve/revision FSM behaviour).
+// Real lock logic lives in lock-propagation.service.spec.ts + workflow-lock.int-spec.ts.
+// isStepLocked→false so the approve() open-filter never hides a fan-out target.
+function makeLocks() {
+  return {
+    propagateRevisionLock: vi.fn().mockResolvedValue([]),
+    releaseLocksForReapproved: vi.fn().mockResolvedValue(undefined),
+    isStepLocked: vi.fn().mockResolvedValue(false),
+    findLockedStepIds: vi.fn().mockResolvedValue(new Set<string>()),
+  };
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe("ApprovalService", () => {
@@ -191,7 +203,7 @@ describe("ApprovalService", () => {
     it("throws ConflictException when step is in_progress", async () => {
       const repo = makeRepo({ step: makeStep({ status: "in_progress" }) });
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       await expect(service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID)).rejects.toThrow(ConflictException);
     });
@@ -199,7 +211,7 @@ describe("ApprovalService", () => {
     it("throws ConflictException when step is approved (already done)", async () => {
       const repo = makeRepo({ step: makeStep({ status: "approved" }) });
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       await expect(service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID)).rejects.toThrow(ConflictException);
     });
@@ -210,7 +222,7 @@ describe("ApprovalService", () => {
     it("throws ConflictException when request is already approved", async () => {
       const repo = makeRepo({ request: makeApprovalRequest({ status: "approved" }) });
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       await expect(service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID)).rejects.toThrow(ConflictException);
     });
@@ -218,7 +230,7 @@ describe("ApprovalService", () => {
     it("throws ConflictException when request is revision_requested", async () => {
       const repo = makeRepo({ request: makeApprovalRequest({ status: "revision_requested" }) });
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       await expect(service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID)).rejects.toThrow(ConflictException);
     });
@@ -231,7 +243,7 @@ describe("ApprovalService", () => {
         step: makeStep({ reviewerUserId: REVIEWER_ID }),
       });
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       await expect(service.approve(COMPANY_ID, REQUEST_ID, OTHER_USER_ID)).rejects.toThrow(ConflictException);
     });
@@ -241,7 +253,7 @@ describe("ApprovalService", () => {
         step: makeStep({ reviewerUserId: null }),
       });
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       await expect(service.approve(COMPANY_ID, REQUEST_ID, OTHER_USER_ID)).resolves.toBeDefined();
     });
@@ -252,7 +264,7 @@ describe("ApprovalService", () => {
     it("throws ConflictException when instance is completed", async () => {
       const repo = makeRepo({ instance: makeInstance({ status: "completed" }) });
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       await expect(service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID)).rejects.toThrow(ConflictException);
     });
@@ -263,7 +275,7 @@ describe("ApprovalService", () => {
     it("throws ConflictException when step is in_progress", async () => {
       const repo = makeRepo({ step: makeStep({ status: "in_progress" }) });
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       await expect(
         service.requestRevision(COMPANY_ID, REQUEST_ID, REVIEWER_ID, "Bug in script"),
@@ -276,7 +288,7 @@ describe("ApprovalService", () => {
     it("throws ConflictException when request is already approved", async () => {
       const repo = makeRepo({ request: makeApprovalRequest({ status: "approved" }) });
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       await expect(
         service.requestRevision(COMPANY_ID, REQUEST_ID, REVIEWER_ID, "Bug"),
@@ -290,7 +302,7 @@ describe("ApprovalService", () => {
       // default DAG: 'edit' still not_started → workflow not complete; no edges → nothing to open.
       const repo = makeRepo({ step: makeStep({ stepOrder: 1 }) });
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       const result = await service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID);
       expect(result.isWorkflowComplete).toBe(false);
@@ -308,7 +320,7 @@ describe("ApprovalService", () => {
         dag: { defSteps: [DEF_SCRIPT], deps: [], instanceSteps: [APPROVED_SCRIPT_STEP] },
       });
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       const result = await service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID);
       expect(result.isWorkflowComplete).toBe(true);
@@ -330,7 +342,7 @@ describe("ApprovalService", () => {
         },
       });
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       const result = await service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID);
       expect(result.isWorkflowComplete).toBe(false); // 'edit' now open but not yet approved
@@ -347,7 +359,7 @@ describe("ApprovalService", () => {
     it("calls setStepToRevision and createDefect", async () => {
       const repo = makeRepo();
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       const result = await service.requestRevision(
         COMPANY_ID, REQUEST_ID, REVIEWER_ID, "Script có lỗi nội dung",
@@ -374,7 +386,7 @@ describe("ApprovalService", () => {
       // 3c-ii: approve() reads the linked task within its tx (findActiveTaskByStepIdInTx).
       repo.findActiveTaskByStepIdInTx = vi.fn().mockResolvedValue([{ id: "task-1", revisionRound: 0 }]);
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       const result = await service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID, "LGTM");
       expect(result).toBeDefined();
@@ -385,7 +397,7 @@ describe("ApprovalService", () => {
       const repo = makeRepo();
       repo.approveStep = vi.fn().mockResolvedValue([undefined]);
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       await expect(service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID)).rejects.toThrow(InternalServerErrorException);
     });
@@ -394,7 +406,7 @@ describe("ApprovalService", () => {
       const repo = makeRepo();
       repo.approveStep = vi.fn().mockRejectedValue(new Error("db connection lost"));
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       await expect(service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID)).rejects.toThrow("db connection lost");
     });
@@ -405,7 +417,7 @@ describe("ApprovalService", () => {
       // matching approve(). Previously it read via the non-tx findTaskByStepId.
       repo.findActiveTaskByStepIdInTx = vi.fn().mockResolvedValue([{ id: "task-9", revisionRound: 2 }]);
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       const result = await service.requestRevision(COMPANY_ID, REQUEST_ID, REVIEWER_ID, "Lỗi nội dung", "xem lại đoạn 2");
       expect(result).toBeDefined();
@@ -422,7 +434,7 @@ describe("ApprovalService", () => {
       const repo = makeRepo();
       repo.setStepToRevision = vi.fn().mockResolvedValue([undefined]);
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       await expect(
         service.requestRevision(COMPANY_ID, REQUEST_ID, REVIEWER_ID, "Lỗi"),
@@ -433,7 +445,7 @@ describe("ApprovalService", () => {
       const repo = makeRepo();
       repo.createDefect = vi.fn().mockRejectedValue(new Error("outbox down"));
       const db = makeDb(repo);
-      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
       await expect(
         service.requestRevision(COMPANY_ID, REQUEST_ID, REVIEWER_ID, "Lỗi"),

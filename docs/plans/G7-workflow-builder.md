@@ -339,7 +339,7 @@ Bắt đầu: sau SYNC GATE, dựng skeleton route /workflows/templates + templa
 ## 10. Residual / nợ kỹ thuật (cập nhật theo tiến độ)
 
 **Sau 1c-i (Template CRUD core):**
-- **Permission seed nợ tới 0036:** endpoint `workflow-templates` gate quyền `workflow-template` (hyphen — đồng bộ `workflow-instance`). Catalog CHƯA seed (dời từ 0035→**0036**, cuối G7-4c) → endpoint **fail-closed 403** cho mọi user tới khi 0036 seed + admin grant qua grant-catalog. FE luồng C dùng mock API nên không kẹt. ⚠️ 0036 PHẢI seed đúng spelling **hyphen** `create/update/read:workflow-template` (KHỚP guard) — nếu seed underscore sẽ lệch → mãi 403.
+- ✅ **[GIẢI QUYẾT 4c-ii `119a94a`] Permission seed 0036 ĐÃ seed** (QĐ #A=A2 catalog+grant): catalog HYPHEN `create/update/publish/read:workflow-template` + `apply:workflow-instance` (`is_sensitive=false`) + grant company-admin (001) cả 5 → endpoint hết 403 cho admin. Catalog & grant TÁCH (`can()` đọc `role_permissions`, KHÔNG tra catalog; 0005 admin-grant không hồi tố → grant tay). project-manager + role khác hoãn grant-catalog runtime (G9). _Nguyên văn nợ:_ endpoint `workflow-templates` gate `workflow-template` (hyphen), fail-closed 403 tới khi seed + admin grant; spelling hyphen bắt buộc (underscore → lệch mãi 403).
 - **list() chưa phân trang:** template low-cardinality nên chấp nhận; thêm pagination khi cần (contract `templateDetailSchema`/list đã FROZEN — đổi sau 1b cân nhắc kỹ).
 - **Hard-delete child rows (1c-ii→iv):** schema frozen KHÔNG có `deleted_at` ở `workflow_definition_steps`/`workflow_step_dependencies`/`checklists`/`checklist_items` → remove = hard-delete, **giới hạn template `draft`** (published immutable + instance snapshot riêng ở `workflow_steps` → không mất audit-data). Chốt lại khi tới 1c-ii.
 - **Audit gom aggregate:** mọi thao tác template/step/dep/checklist audit dưới `objectType='workflow_template'`, `objectId=templateId` (1 audit type, thêm ở migration 0033).
@@ -362,7 +362,7 @@ Bắt đầu: sau SYNC GATE, dựng skeleton route /workflows/templates + templa
 - **`defaultChecklistId` clone HOÃN:** clone KHÔNG copy `step.defaultChecklistId` (luôn NULL trước 3b). Khi **3b** set nó → clone PHẢI thêm pass remap qua `checklistIdMap`. Checklist orphaned (workflow_definition_step_id NULL) bị INNER JOIN loại khỏi clone (cố ý — không copy mảnh mồ côi).
 - **`id` param chưa validate UUID** (toàn controller workflow-templates, pre-existing): id sai cú pháp → pg uuid-cast error → 500 generic. Defer fix đồng bộ (ParseUUIDPipe) — không riêng 2b.
 - **Return-type `|undefined` từ `mapError(): never` tail** (toàn service 1c+2b): runtime-safe (mapError luôn throw); cosmetic typing, giữ nhất quán. Nâng đồng bộ sau nếu cần.
-- **Permission catalog vẫn nợ 0036:** publish gate `publish:workflow-template`, clone gate `create:workflow-template` (hyphen) → fail-closed 403 tới khi 0036 seed. 0036 PHẢI seed thêm `publish:workflow-template` (ngoài create/update/read).
+- ✅ **[GIẢI QUYẾT 4c-ii `119a94a`] Permission catalog 0036 ĐÃ seed** — `publish:workflow-template` + `create:workflow-template` (cho clone) + update/read + `apply:workflow-instance` đều có trong catalog & grant admin. _Nguyên văn nợ:_ publish/clone gate fail-closed 403 tới khi 0036 seed `publish:workflow-template` (ngoài create/update/read).
 
 **Sau 3a (migration 0034 — instance đa-target + checklist-state):**
 - **0034 = idx 35, when 1717500042000, tag `0034_g7_instance_multitarget_checklist_state`** (re-baseline 1 lần lúc dev để thêm FK index — file == DB == hash). DB dev đã ở 0034.
@@ -376,6 +376,15 @@ Bắt đầu: sau SYNC GATE, dựng skeleton route /workflows/templates + templa
 - **Giữ `startWorkflow`** (MVP-0 hard-code) — 3c mới tổng quát hoá FSM (open khi dep approved). `createSteps` extend +nodeKey (startWorkflow truyền null — hợp lệ).
 - **⚠️ Project-target task thiếu linkage:** `tasks` chưa có cột `project_id` → apply template `appliesTo='project'` tạo task `content_item_id=NULL`, không anchor project. Instance/steps đúng; chỉ task lookup-by-project chưa được (My Tasks G4-4 content-based). **Nợ:** thêm `tasks.project_id` (migration) + query khi G7 dùng project-workflow thật (3c/G8). G7 thực tế đi content_item.
 - **Guard ẩn:** validate `createdSteps.length==defSteps`; throw nếu 0 root task mở (chống instance kẹt). Event `workflow.started` dùng chung start+apply (additive payload).
+
+**Sau 4b (checklist enforcement — `187bb3c`):**
+- **Linkage chốt = ĐƯỜNG A:** `default_checklist_id` LUÔN NULL (3b/clone không set — `workflow-templates.service.ts:324`), nên gate đi `node_key → def-step → checklists.workflow_definition_step_id → checklist_items(is_required)`. Nếu sau này 3b/clone bắt đầu set `default_checklist_id` (nợ "Sau 2b" remap) thì gate VẪN đúng (đi qua checklist gắn step), KHÔNG cần đổi 4b.
+- **Tick authz = assignee-gated (QUYẾT ĐỊNH #2 phương án A):** chỉ `step.assignee_user_id` tick/untick được (`ForbiddenException`). Nếu nghiệp vụ cần PM/reviewer tick hộ → nới guard (thêm permission `update:content` fallback) khi có yêu cầu thật — hiện YAGNI.
+- **`stepId`/`itemId` param chưa validate UUID** (giống toàn controller workflow — defer ParseUUIDPipe đồng bộ; id sai cú pháp → pg uuid-cast 500 generic).
+- **Đa-checklist/def-step = cộng dồn required (cố ý):** không uq trên `checklists.workflow_definition_step_id` → thêm checklist thứ 2 vào 1 bước nâng ngưỡng gate. Muốn ép 1-checklist/bước thì thêm partial-uq (migration sau) — hiện không cần.
+- **Race untick-vs-submit ĐÓNG bằng `FOR UPDATE` step-row** ở submit + tick/untick (self-race vì cả hai assignee-gated; vẫn khoá cho chắc, 1 tài nguyên → không deadlock). Submit KHÔNG khoá instance (chỉ approve khoá — giữ nguyên quyết định 3c-iii).
+- **FE checklist (LUỒNG C):** API tick/untick + contract (`workflowStepChecklistStateSchema`, `toggleChecklistItemResultSchema`) SẴN SÀNG — task detail render checklist + tick là việc của C. `changed` trong toggle-result phân biệt no-op replay.
+- **Audit:** `ChecklistItemChecked`/`ChecklistItemUnchecked` objectType `workflow_step`; chỉ ghi khi đổi thật (tick state là operational, KHÔNG audit-data → untick = DELETE row hợp lệ).
 
 ---
 

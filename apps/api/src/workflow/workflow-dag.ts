@@ -119,6 +119,45 @@ export function computeNewlyUnblockedStepIds(
 }
 
 /**
+ * Instance-step IDs of ALL transitive descendants of `source` — every step reachable by following
+ * dep edges (from → to) downstream from `source`. Drives revision-lock propagation (G7-4a / BR-006):
+ * revising step N blocks exactly its descendants, never independent branches (LK2).
+ *
+ * BFS over def-step ids; `visitedDefIds` stops a diamond join (D reachable via B and C) from being
+ * walked twice. Fail-closed: an unresolvable `source` returns [] (locks nothing). Dangling downstream
+ * edges and def-steps with no matching instance step are skipped. `source` itself is never included.
+ */
+export function computeTransitiveDescendants(
+  source: { nodeKey: string | null; stepCode: string },
+  ctx: DagContext,
+): string[] {
+  const sourceDef = ctx.defSteps.find((d) => d.nodeKey === instanceStepKey(source));
+  if (!sourceDef) return []; // cannot resolve the source → fail-closed (lock nothing)
+
+  const visitedDefIds = new Set<string>([sourceDef.id]);
+  const queue: string[] = [sourceDef.id];
+  const descendantInstanceIds: string[] = [];
+
+  while (queue.length > 0) {
+    const currentDefId = queue.shift() as string;
+    const downstreamDefIds = ctx.deps
+      .filter((dep) => dep.fromStepId === currentDefId)
+      .map((dep) => dep.toStepId);
+    for (const defId of downstreamDefIds) {
+      if (visitedDefIds.has(defId)) continue; // already walked (diamond join) → skip
+      visitedDefIds.add(defId);
+      queue.push(defId);
+      const downDef = ctx.defSteps.find((d) => d.id === defId);
+      if (!downDef) continue; // dangling edge → skip
+      const instStep = ctx.instanceSteps.find((s) => instanceStepKey(s) === downDef.nodeKey);
+      if (!instStep) continue; // def-step has no instance step (absent) → skip
+      descendantInstanceIds.push(instStep.id);
+    }
+  }
+  return descendantInstanceIds;
+}
+
+/**
  * True when the workflow has nothing left to do: every REQUIRED instance step is `approved`
  * (G7-3c-ii). Completion is driven by all-required-approved, NOT by max step_order — a fork can
  * complete on a non-terminal-order step. Optional steps (is_required=false) never block completion.

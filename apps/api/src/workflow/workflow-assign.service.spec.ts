@@ -100,6 +100,8 @@ function makeService(repo: ReturnType<typeof makeRepo>) {
     new WorkflowFsmService(),
     makeAudit() as never,
     makeOutbox() as never,
+    // assignStep never consults locks; stub isStepLocked so the constructor is satisfied.
+    { isStepLocked: vi.fn().mockResolvedValue(false) } as never,
   );
 }
 

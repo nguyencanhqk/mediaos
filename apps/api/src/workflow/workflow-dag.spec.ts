@@ -12,7 +12,11 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { allDependenciesApproved, type DagContext } from "./workflow-dag";
+import {
+  allDependenciesApproved,
+  computeTransitiveDescendants,
+  type DagContext,
+} from "./workflow-dag";
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────────
 // node_key == step_code in these fixtures (mirrors video_standard_v0 backfill).
@@ -121,5 +125,81 @@ describe("allDependenciesApproved", () => {
       const target = { id: "i2", nodeKey: null, stepCode: "edit", status: "not_started" };
       expect(allDependenciesApproved(target, { defSteps, deps, instanceSteps })).toBe(true);
     });
+  });
+});
+
+// ─── G7-4a: transitive descendants (revision-lock propagation, BR-006) ──────────
+// computeTransitiveDescendants(source, ctx) → instance-step IDs of ALL downstream steps reachable
+// from `source` along dep edges. Independent branches are excluded (LK2). Fail-closed on unresolvable.
+describe("computeTransitiveDescendants", () => {
+  const idsOf = (xs: string[]) => [...xs].sort();
+
+  it("LKpure-1 linear A→B→C: descendants of A are {B, C} (transitive, excludes self)", () => {
+    const ctx: DagContext = {
+      defSteps: [def("A"), def("B"), def("C")],
+      deps: [edge("A", "B"), edge("B", "C")],
+      instanceSteps: [inst("A", "revision"), inst("B", "not_started"), inst("C", "not_started")],
+    };
+    expect(idsOf(computeTransitiveDescendants(inst("A", "revision"), ctx))).toEqual(
+      idsOf(["inst-B", "inst-C"]),
+    );
+  });
+
+  it("LKpure-2 diamond A→{B,C}→D: descendants of B are {D} only (NOT sibling C)", () => {
+    const ctx: DagContext = {
+      defSteps: [def("A"), def("B"), def("C"), def("D")],
+      deps: [edge("A", "B"), edge("A", "C"), edge("B", "D"), edge("C", "D")],
+      instanceSteps: [
+        inst("A", "approved"),
+        inst("B", "revision"),
+        inst("C", "not_started"),
+        inst("D", "not_started"),
+      ],
+    };
+    expect(computeTransitiveDescendants(inst("B", "revision"), ctx)).toEqual(["inst-D"]);
+  });
+
+  it("LKpure-3 independent branch is NOT a descendant (anti over-lock, LK2 essence)", () => {
+    // A→B; C is an independent root. Descendants of A = {B} only.
+    const ctx: DagContext = {
+      defSteps: [def("A"), def("B"), def("C")],
+      deps: [edge("A", "B")],
+      instanceSteps: [inst("A", "revision"), inst("B", "not_started"), inst("C", "not_started")],
+    };
+    expect(computeTransitiveDescendants(inst("A", "revision"), ctx)).toEqual(["inst-B"]);
+  });
+
+  it("LKpure-4 dedups a step reachable by two paths (diamond join counted once)", () => {
+    const ctx: DagContext = {
+      defSteps: [def("A"), def("B"), def("C"), def("D")],
+      deps: [edge("A", "B"), edge("A", "C"), edge("B", "D"), edge("C", "D")],
+      instanceSteps: [
+        inst("A", "revision"),
+        inst("B", "not_started"),
+        inst("C", "not_started"),
+        inst("D", "not_started"),
+      ],
+    };
+    expect(idsOf(computeTransitiveDescendants(inst("A", "revision"), ctx))).toEqual(
+      idsOf(["inst-B", "inst-C", "inst-D"]),
+    );
+  });
+
+  it("LKpure-5 fail-closed: unresolvable source → [] (locks nothing)", () => {
+    const ctx: DagContext = {
+      defSteps: [def("A"), def("B")],
+      deps: [edge("A", "B")],
+      instanceSteps: [inst("A", "revision"), inst("B", "not_started")],
+    };
+    expect(computeTransitiveDescendants({ nodeKey: "ghost", stepCode: "ghost" }, ctx)).toEqual([]);
+  });
+
+  it("LKpure-6 leaf source (no downstream edges) → []", () => {
+    const ctx: DagContext = {
+      defSteps: [def("A"), def("B")],
+      deps: [edge("A", "B")],
+      instanceSteps: [inst("A", "approved"), inst("B", "revision")],
+    };
+    expect(computeTransitiveDescendants(inst("B", "revision"), ctx)).toEqual([]);
   });
 });

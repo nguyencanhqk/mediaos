@@ -253,6 +253,13 @@
       "when": 1717500043000,
       "tag": "0035_g7_eval_hook_lock_uq",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1717500044000,
+      "tag": "0036_g7_permissions_seed",
+      "breakpoints": true
     }
   ]
 }
