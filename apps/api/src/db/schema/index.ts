@@ -19,3 +19,4 @@ export * from "./employees";
 export * from "./media";
 export * from "./workflow";
 export * from "./communication";
+export * from "./finance";
