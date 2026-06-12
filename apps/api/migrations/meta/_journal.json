@@ -269,6 +269,13 @@
       "breakpoints": true
     },
     {
+      "idx": 38,
+      "version": "7",
+      "when": 1717500050000,
+      "tag": "0040_g9_tasks_hub",
+      "breakpoints": true
+    },
+    {
       "idx": 39,
       "version": "7",
       "when": 1717500080000,
