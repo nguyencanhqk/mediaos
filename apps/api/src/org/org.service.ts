@@ -177,4 +177,10 @@ export class OrgService {
   listEmployees(companyId: string) {
     return this.repo.listEmployees(companyId);
   }
+
+  // ── Roles ──────────────────────────────────────────────────────────────────────
+
+  listRoles(companyId: string) {
+    return this.repo.listRoles(companyId);
+  }
 }

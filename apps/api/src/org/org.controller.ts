@@ -31,16 +31,12 @@ interface AuthenticatedRequest extends Request {
 }
 
 /**
- * Permission policy (F2, ORG-002/003):
- *   - MUTATIONS (create/update/delete org_unit + team, status/head/leader, member add/remove) are
- *     fail-closed behind PermissionGuard: org_units require `('manage','org_unit')`, teams require
- *     `('manage','team')` — bare-verb action per the seed catalog convention (0005/0019/0027), NOT a
- *     compound code. Both permissions are seeded + granted to company-admin + hr-manager in migration 0030.
- *   - READS stay on the global JWT + Company pipeline only: org structure is non-sensitive and already
- *     tenant-isolated by RLS, so every authenticated member of the tenant may view it.
+ * OrgController — phòng ban (org_units) + team.
  *
- * ⚠️ Any NEW state-changing route MUST add `@UseGuards(PermissionGuard)` + `@RequirePermission(...)` —
- *    there is no class-level guard to fail-close an undecorated mutation.
+ * Permission (F2, ORG-002/003): MỌI mutation (create/update/delete/leader/head/members) phải qua
+ * PermissionGuard + @RequirePermission. READ (list/tree/members) GIỮ mở cho mọi user tenant — cơ cấu
+ * tổ chức không nhạy cảm; JwtAuthGuard + CompanyGuard toàn cục (app.module) vẫn ép đăng nhập + tenant.
+ * resource_type 'org_unit'/'team' khớp catalog seed (migration 0030) + audit object_type (0014).
  */
 @Controller('org')
 @UsePipes(ZodValidationPipe)
@@ -61,15 +57,14 @@ export class OrgController {
 
   @Post('units')
   @UseGuards(PermissionGuard)
-  @RequirePermission('manage', 'org_unit')
+  @RequirePermission('create', 'org_unit')
   createOrgUnit(@Req() req: AuthenticatedRequest, @Body() dto: CreateOrgUnitDto) {
     return this.org.createOrgUnit(req.user.companyId, dto);
   }
 
-  // Covers both status toggle and head (head_user_id) reassignment — both flow through UpdateOrgUnitDto.
   @Patch('units/:id')
   @UseGuards(PermissionGuard)
-  @RequirePermission('manage', 'org_unit')
+  @RequirePermission('update', 'org_unit')
   updateOrgUnit(
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
@@ -81,20 +76,21 @@ export class OrgController {
   @Delete('units/:id')
   @HttpCode(204)
   @UseGuards(PermissionGuard)
-  @RequirePermission('manage', 'org_unit')
+  @RequirePermission('delete', 'org_unit')
   deleteOrgUnit(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.org.deleteOrgUnit(req.user.companyId, id);
   }
 
-  // Legacy alias for backward compat (G4-1)
+  // Legacy alias for backward compat (G4-1) — read stays open.
   @Get('departments')
   listDepartmentsLegacy(@Req() req: AuthenticatedRequest) {
     return this.org.listOrgUnits(req.user.companyId);
   }
 
+  // Legacy mutation alias — MUST guard too (else a bypass of POST /units).
   @Post('departments')
   @UseGuards(PermissionGuard)
-  @RequirePermission('manage', 'org_unit')
+  @RequirePermission('create', 'org_unit')
   createDepartmentLegacy(@Req() req: AuthenticatedRequest, @Body() dto: CreateOrgUnitDto) {
     return this.org.createOrgUnit(req.user.companyId, dto);
   }
@@ -108,14 +104,14 @@ export class OrgController {
 
   @Post('teams')
   @UseGuards(PermissionGuard)
-  @RequirePermission('manage', 'team')
+  @RequirePermission('create', 'team')
   createTeam(@Req() req: AuthenticatedRequest, @Body() dto: CreateTeamDto) {
     return this.org.createTeam(req.user.companyId, dto);
   }
 
   @Patch('teams/:id')
   @UseGuards(PermissionGuard)
-  @RequirePermission('manage', 'team')
+  @RequirePermission('update', 'team')
   updateTeam(
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
@@ -126,7 +122,7 @@ export class OrgController {
 
   @Patch('teams/:id/leader')
   @UseGuards(PermissionGuard)
-  @RequirePermission('manage', 'team')
+  @RequirePermission('update', 'team')
   assignTeamLeader(
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
@@ -138,11 +134,12 @@ export class OrgController {
   @Delete('teams/:id')
   @HttpCode(204)
   @UseGuards(PermissionGuard)
-  @RequirePermission('manage', 'team')
+  @RequirePermission('delete', 'team')
   deleteTeam(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.org.deleteTeam(req.user.companyId, id);
   }
 
+  // Read stays open.
   @Get('teams/:id/members')
   listTeamMembers(@Req() req: AuthenticatedRequest, @Param('id') teamId: string) {
     return this.org.listTeamMembers(req.user.companyId, teamId);
@@ -150,7 +147,7 @@ export class OrgController {
 
   @Post('teams/:id/members')
   @UseGuards(PermissionGuard)
-  @RequirePermission('manage', 'team')
+  @RequirePermission('update', 'team')
   addTeamMember(
     @Req() req: AuthenticatedRequest,
     @Param('id') teamId: string,
@@ -162,7 +159,7 @@ export class OrgController {
   @Delete('teams/:id/members/:userId')
   @HttpCode(204)
   @UseGuards(PermissionGuard)
-  @RequirePermission('manage', 'team')
+  @RequirePermission('update', 'team')
   removeTeamMember(
     @Req() req: AuthenticatedRequest,
     @Param('id') teamId: string,
@@ -176,5 +173,14 @@ export class OrgController {
   @Get('employees')
   listEmployees(@Req() req: AuthenticatedRequest) {
     return this.org.listEmployees(req.user.companyId);
+  }
+
+  // ── Roles catalog ─────────────────────────────────────────────────────────────
+  // READ mở cho user tenant (như units/teams): danh mục vai trò không nhạy cảm,
+  // dùng cho dropdown "vai trò mặc định" của chức vụ (F4/F11). RLS lộ role tenant +
+  // system (company_id NULL). JwtAuthGuard + CompanyGuard toàn cục vẫn ép đăng nhập + tenant.
+  @Get('roles')
+  listRoles(@Req() req: AuthenticatedRequest) {
+    return this.org.listRoles(req.user.companyId);
   }
 }

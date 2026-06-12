@@ -1,6 +1,10 @@
 import { z } from "zod";
 import type { CreateEmployeeProfileRequest } from "@mediaos/contracts";
-import { employeeListItemSchema, importEmployeePreviewSchema } from "@mediaos/contracts";
+import {
+  employeeListItemSchema,
+  employeeProfileSchema,
+  importEmployeePreviewSchema,
+} from "@mediaos/contracts";
 import { unwrapEnvelope } from "./api-client";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3100/api/v1";
@@ -29,6 +33,8 @@ export const employeesApi = {
     const suffix = qs.toString() ? `?${qs.toString()}` : "";
     return apiFetch(`/employees${suffix}`, z.array(employeeListItemSchema));
   },
+
+  getOne: (id: string) => apiFetch(`/employees/${id}`, employeeProfileSchema),
 
   createEmployee: (data: CreateEmployeeProfileRequest) =>
     apiFetch("/employees", employeeListItemSchema, { method: "POST", body: JSON.stringify(data) }),

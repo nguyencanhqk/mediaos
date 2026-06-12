@@ -157,108 +157,115 @@
       "breakpoints": true
     },
     {
-      "idx": 23,
+      "idx": 22,
       "version": "7",
       "when": 1717500023000,
       "tag": "0023_g6_projects_full",
       "breakpoints": true
     },
     {
-      "idx": 24,
+      "idx": 23,
       "version": "7",
       "when": 1717500024000,
       "tag": "0024_g6_content_types",
       "breakpoints": true
     },
     {
-      "idx": 25,
+      "idx": 24,
       "version": "7",
       "when": 1717500025000,
       "tag": "0025_g6_content_items_full",
       "breakpoints": true
     },
     {
-      "idx": 26,
+      "idx": 25,
       "version": "7",
       "when": 1717500026000,
       "tag": "0026_g6_content_channels_assets",
       "breakpoints": true
     },
     {
-      "idx": 27,
+      "idx": 26,
       "version": "7",
       "when": 1717500030000,
       "tag": "0022_g6_platform_accounts",
       "breakpoints": true
     },
     {
-      "idx": 28,
+      "idx": 27,
       "version": "7",
       "when": 1717500031000,
       "tag": "0027_g6_permissions_seed",
       "breakpoints": true
     },
     {
-      "idx": 29,
+      "idx": 28,
       "version": "7",
       "when": 1717500032000,
       "tag": "0028_g6_reset_token_envelope",
       "breakpoints": true
     },
     {
-      "idx": 30,
+      "idx": 29,
       "version": "7",
       "when": 1717500033000,
       "tag": "0029_g6_reset_token_trigger_warning",
       "breakpoints": true
     },
     {
-      "idx": 31,
+      "idx": 30,
       "version": "7",
       "when": 1717500034000,
-      "tag": "0030_g5fix_org_team_permissions_seed",
+      "tag": "0030_g5fix_org_team_perms",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1717500035000,
+      "tag": "0031_g5fix_position_perm",
       "breakpoints": true
     },
     {
       "idx": 32,
-      "version": "7",
-      "when": 1717500035000,
-      "tag": "0031_g3fix_grant_object_permission_seed",
-      "breakpoints": true
-    },
-    {
-      "idx": 33,
       "version": "7",
       "when": 1717500040000,
       "tag": "0032_g7_template_dag_checklist",
       "breakpoints": true
     },
     {
-      "idx": 34,
+      "idx": 33,
       "version": "7",
       "when": 1717500041000,
       "tag": "0033_g7_audit_object_types",
       "breakpoints": true
     },
     {
-      "idx": 35,
+      "idx": 34,
       "version": "7",
       "when": 1717500042000,
       "tag": "0034_g7_instance_multitarget_checklist_state",
       "breakpoints": true
     },
     {
-      "idx": 36,
+      "idx": 35,
       "version": "7",
       "when": 1717500043000,
       "tag": "0035_g7_eval_hook_lock_uq",
       "breakpoints": true
     },
     {
-      "idx": 37,
+      "idx": 36,
       "version": "7",
       "when": 1717500044000,
       "tag": "0036_g7_permissions_seed",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1717500045000,
+      "tag": "0037_g3fix_grant_object_permission_seed",
       "breakpoints": true
     }
   ]

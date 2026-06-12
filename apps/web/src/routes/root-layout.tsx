@@ -14,7 +14,9 @@ const NAV = [
   { to: "/workflows/instances", label: "Tiến độ quy trình" },
   { to: "/org/departments", label: "Phòng ban" },
   { to: "/org/teams", label: "Nhóm" },
+  { to: "/org/positions", label: "Chức vụ" },
   { to: "/org/employees", label: "Nhân sự" },
+  { to: "/settings/company", label: "Cài đặt công ty" },
 ] as const;
 
 export function RootLayout() {

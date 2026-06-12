@@ -1,4 +1,5 @@
--- Migration 0031: G3-FIX (re-review 2026-06-09) — Seed `grant-object-permission` permission (phòng bẫy F2).
+-- Migration 0037: G3-FIX (re-review 2026-06-09) — Seed `grant-object-permission` permission (phòng bẫy F2).
+-- (Renumber: G7-merge reconcile — đặt SAU 0036_g7 vì master đã chiếm 0031; nội dung độc lập, idempotent ON CONFLICT.)
 --
 -- ⚠️ Vá phòng ngừa (docs/reviews/g3-gates.md §4.1): plan G3-4c yêu cầu guard cho object-permission mutation
 --    `@RequirePermission('grant-object-permission', 'permission', { isSensitive: true })` — chỉ company-admin+
