@@ -118,3 +118,15 @@ bash scripts/backup-db.sh          # pg_dump → encrypt → rclone offsite (xem
 ## 8. Definition of Done
 
 Code xong · migration nếu đổi DB · validation input · permission guard nếu cần · FE xử lý loading/error/empty · có test · **audit log nếu hành động quan trọng** · QA pass · không phá luồng chính · cập nhật `TASKS.md`.
+
+---
+
+## 9. Vận hành SONG SONG (multi-lane) — cập nhật 2026-06-12
+
+> Mô hình mặc định giờ là **fan-out song song**, KHÔNG còn "tuần tự 1 task". Chi tiết đầy đủ: `TASKS.md §5`. Hợp đồng tối thiểu mỗi phiên:
+
+1. **1 worktree / 1 lane.** Làm trong worktree `mediaos-<lane>` của phase đó. **CẤM 2 phiên cùng working tree** (shared git index → hỏng commit chéo).
+2. **Band migration riêng.** Mỗi lane chỉ đánh số migration trong band của mình: G9 `0040s` · G10 `0050s` · G11 `0060s` · G13 `0070s` · G8 `0080s` · G12 `0090s` · G14 `0100s` · G15 `0110s` · G16 `0120s`. Hook `guard-migration-band` **chặn** file ngoài band.
+3. **Hot-file = append, KHÔNG rewrite.** audit `object_types` CHECK = **UNION** mọi lane · permission seed `ON CONFLICT DO NOTHING` · `schema/index.ts`+`app.module.ts` khối additive · `tasks` **chỉ G9** đổi shape.
+4. **Merge theo thứ tự phụ thuộc.** Land **G9-1 trunk** trước → rebase + gate + merge từng lane Wave A → rồi Wave B (G12/G14). Mỗi merge: chain migration `0000→latest` apply sạch + test xanh.
+5. **Vòng tự động mỗi lane:** RED→GREEN→gate→checkpoint. Xanh + non-sensitive → auto-commit `wip(gN): …`; đỏ/CRITICAL/🛠️ → người chốt. Fan-out 1 lượt: Workflow `parallel-lanes`.

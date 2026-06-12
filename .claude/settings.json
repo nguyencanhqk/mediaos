@@ -20,6 +20,10 @@
           {
             "type": "command",
             "command": "node .claude/hooks/anti-bandaid-guard.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/guard-migration-band.mjs"
           }
         ]
       }

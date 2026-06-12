@@ -27,12 +27,14 @@
 
 **Cỡ** (1 mình + AI): **S** ≈ ½–1 ngày · **M** ≈ 1–3 ngày · **L** ≈ 3–6 ngày · **XL** ≈ 1–2 tuần.
 
-### 4 nguyên tắc vận hành solo (QUAN TRỌNG)
+### 4 nguyên tắc vận hành SONG SONG (QUAN TRỌNG)
 
-1. **Tuần tự, không song song.** Một mình thì làm xong-gọn từng task; không mở 3 mặt trận. Mỗi lúc chỉ 1 task `[~]`.
-2. **Xen kẽ 🔋 và 🟢.** Sau mỗi cụm nặng (permission/payroll), thưởng cho mình một cụm 🤖 CRUD nhẹ để hồi sức và thấy tiến độ.
-3. **Đòn bẩy AI đặt đúng chỗ.** 🤖 = nơi bạn thắng đậm (sinh hàng loạt). 🛠️ = nơi AI dễ sai, bạn PHẢI lái bằng test deny-path trước. Đừng để AI tự do ở phần 🛠️.
-4. **Mốc sống còn trước mốc đầy đủ.** Đạt **Mốc 1 (lõi sống)** rồi mới bung. Đừng làm G5 đầy đủ trước khi 1 video chạy trọn vòng (G4).
+> **Đổi mô hình (2026-06-12):** từ "tuần tự solo, 1 task/lúc" → **fan-out song song có rào an toàn**. Lý do an toàn: nền tảng bắt-buộc-tuần-tự (G1·G2·G3·G4 + audit/permission/RLS) **đã land master** → phase sau chỉ phụ thuộc thứ đã land → mở song song được. Chi tiết kỹ thuật: **§5 — Mô hình thực thi song song**.
+
+1. **Song song theo DAG, không tuần tự.** Mở đồng thời MỌI phase mà phụ thuộc đã land master — mỗi phase **1 worktree riêng** + **1 band migration riêng** (§5.2). **CẤM 2 phiên trên cùng working tree** (shared git index → hỏng commit chéo). Phụ thuộc cứng còn lại: trunk **Task Hub G9-1 phải land trước** các lane emit task (G8/G10/G11/G13).
+2. **Xen kẽ 🔋 và 🟢 across lanes.** Mỗi lượt fan-out trộn lane nặng (🛠️ permission/payroll) với lane nhẹ (🤖 CRUD) để không dồn toàn việc nặng một lúc.
+3. **Đòn bẩy AI đặt đúng chỗ.** 🤖 = sinh hàng loạt (xanh → auto-commit checkpoint). 🛠️ = deny-path RED trước, FULL gate, **người chốt khi đỏ/CRITICAL**. Mỗi lane tự chạy vòng micro-step (test→gate→checkpoint) độc lập (§5.5).
+4. **Mốc sống còn trước mốc đầy đủ.** Bám MỐC; trong mỗi mốc fan-out hết lane độc lập, **merge theo thứ tự phụ thuộc** (§5.4).
 
 ---
 
@@ -82,9 +84,9 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 | G4 | 🏁 MVP-0 Walking Skeleton | 🤖+🛠️ hỗn hợp | XL | 🟡 đang làm |
 | G5 | Tổ chức & Nhân sự đầy đủ | 🤖 AI-bulk 🟢 | L | ✅ |
 | G6 | Media (Channel/Project/Content) | 🤖 + 🛠️(G6-2) | L | ✅ đóng (đã land master — migration 0020–0029 + bảng lõi; G6-2 encryption đã merge, verify 2026-06-12) |
-| G7 | Workflow Builder | 🛠️ TDD 🔋 | XL | 🟡 spine 1a→4c + FE Track C ✅ · gate TỔNG PASS (B1+santa+FE LIGHT) · **PR `feat/g7-workflow`→master chờ merge** |
+| G7 | Workflow Builder | 🛠️ TDD 🔋 | XL | ✅ đóng (merged `6a0d4bd` --no-ff) · spine 1a→4c + FE Track C · gate TỔNG PASS (B1+santa+FE LIGHT) |
 | G8 | Approval · Defect · Eval · KPI | 🛠️+🤖 | L | ☐ |
-| G9 | 🧩 Task Hub hợp nhất | 🛠️+🤖 | L | ☐ |
+| G9 | 🧩 Task Hub hợp nhất | 🛠️+🤖 | L | 🟡 G9-1 ✅ (schema + mig 0040, gate FULL PASS, merged `d58d465` --no-ff — land #1) · G9-2→4 ☐ |
 | G10 | Chat · Notification · Meeting | 🤖 + 🛠️(realtime) | L | ☐ |
 | G11 | Attendance · Leave | 🤖 AI-bulk 🟢 | M | ☐ |
 | G12 | Payroll · Bonus/Penalty | 🛠️ TDD 🔋🔋 | XL | ☐ |
@@ -93,6 +95,77 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 | G15 | Mobile App (React Native) | 🤖 AI-bulk | XL | ☐ |
 | G16 | Stabilization & SaaS Prep | 🛠️+🔧 | L | ☐ |
 | GX | Xuyên suốt (mọi sprint) | — | — | ☐ |
+
+---
+
+## 5. Mô hình thực thi SONG SONG (Parallel Execution Playbook)
+
+> Nguồn sự thật cho cách **fan-out nhiều phase cùng lúc** mà merge vẫn **tất định**. Áp dụng từ 2026-06-12. Ép một phần bằng hook `guard-migration-band` + Workflow `parallel-lanes`.
+
+### 5.1 DAG phụ thuộc — cái gì chạy song song được
+
+Nền tảng bắt-buộc-tuần-tự **ĐÃ land master**: G1 bootstrap · G2 audit+outbox+RLS · G3 permission · G4 skeleton · G5 org/nhân sự · G6 media · G7 workflow. → Mọi phase sau **chỉ phụ thuộc thứ đã land**.
+
+```text
+master (G1–G7 ✅, audit/permission/RLS ✅)
+  └─ G9-1 Task Hub schema   ◀── TRUNK: land TRƯỚC mọi lane emit task
+        ├─ G8  Approval/Defect/Eval/KPI   (cần G7 + tasks)
+        ├─ G10 Comms (meeting_action task) (cần tasks)
+        ├─ G11 HR   (hr task)              (cần tasks)
+        └─ G13 Finance (finance task)      (cần tasks)
+  Wave B (sau khi Wave A merge):
+        ├─ G12 Payroll    ◀── cần G8 KPI + G11 attendance
+        └─ G14 Dashboard  ◀── cần các phase sinh dữ liệu
+  Cuối: G15 Mobile · G16 SaaS
+```
+
+**Quy tắc:** mở song song MỌI lane mà mũi tên phụ thuộc đã land. Lane Wave B chờ phụ thuộc Wave A merge xong. Không có giới hạn số lane — chỉ giới hạn bởi phụ thuộc.
+
+### 5.2 Cấp phát band migration (KHÔNG bao giờ dùng chéo band)
+
+Master kết thúc ở `0037`. Mỗi lane sở hữu **1 dải 10 số** riêng:
+
+| Lane | Band | Trạng thái |
+| --- | --- | --- |
+| G9  | `0040–0049` | đang dùng (`0040`) |
+| G10 | `0050–0059` | đang dùng (`0050`) |
+| G11 | `0060–0069` | đang dùng (`0060–0063`) |
+| G13 | `0070–0079` | reserved |
+| G8  | `0080–0089` | reserved |
+| G12 | `0090–0099` | reserved |
+| G14 | `0100–0109` | reserved |
+| G15 | `0110–0119` | reserved |
+| G16 | `0120–0129` | reserved |
+
+`_journal.json`: `idx`/`when` phải **đơn điệu tăng** trong band; khi merge nhiều lane, reconcile journal theo thứ tự merge (idx liên tục, when tăng dần). Hook `guard-migration-band` **chặn (exit 2)** file migration có số ngoài band của branch hiện tại.
+
+### 5.3 Hot-file append protocol (file mọi lane đụng → CẤM rewrite)
+
+| File / đối tượng | Quy tắc merge |
+| --- | --- |
+| audit `object_types` CHECK | Migration audit mỗi lane định nghĩa lại CHECK = **UNION(type master + type của lane)**. Merge = tính lại union đủ mọi lane. _(G11 đã làm: `0060` = 24 type G7 + 7 type HR = 31.)_ |
+| permission seed | `INSERT … ON CONFLICT DO NOTHING` — idempotent, cộng dồn, không sửa hàng có sẵn. |
+| `schema/index.ts` barrel · `app.module.ts` imports | Khối **additive**, sắp alpha; xung đột merge tầm thường (nối 2 phía). |
+| `tasks` (Task Hub) | **Chỉ G9 đổi cấu trúc**; lane khác chỉ INSERT theo `task_type`. Cần đổi shape → đi qua trunk G9-1. |
+
+### 5.4 Thứ tự merge = thứ tự phụ thuộc
+
+1. ✅ **G9-1 trunk đã land master** (`d58d465`, merge --no-ff).
+2. Rebase mỗi lane Wave A lên master mới → chạy lại **gate** (FULL/LIGHT theo diff) → merge lần lượt, **reconcile audit-CHECK + journal** mỗi lần.
+3. Wave A merged xong → mở **Wave B** (G12/G14).
+4. Mỗi lần merge: `pnpm db:migrate` chain `0000→latest` apply **sạch** + `pnpm test` **xanh** trước khi land.
+
+### 5.5 Vòng tự động hoá mỗi lane (autonomous micro-step)
+
+Mỗi lane chạy độc lập trong worktree của nó:
+
+```text
+RED (deny-path/contract test) → GREEN (implement) → gate (FULL/LIGHT) → checkpoint commit
+  ├─ xanh + non-sensitive  → auto-commit "wip(gN): …", sang micro-step kế
+  └─ đỏ / CRITICAL / 🛠️    → DỪNG, người chốt
+```
+
+Fan-out nhiều lane 1 lượt: **Workflow `parallel-lanes`** (`.claude/workflows/parallel-lanes.mjs`) — mỗi lane 1 agent pinned vào worktree+band, chạy 1 round micro-step rồi báo cáo `committed / needs_human`. **Checkpoint commit trước mỗi rebase.**
 
 ---
 
@@ -265,8 +338,10 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 ## G9 — 🧩 Task Hub hợp nhất _(🛠️+🤖 · ~8–12 ngày · bất biến #4)_
 
 > Làm **trước** G8/G10/G11/G13 để các module sau chỉ **emit vào đây**. G9-1 là 🛠️ (contract test), phần còn lại 🤖.
+>
+> **🌳 TRUNK song song (§5.4):** **G9-1 đã land master** (`d58d465`, merge --no-ff; feat `0c5d4b0` + docs `0d5f490`) — đó là điểm các lane G8/G10/G11/G13 branch/rebase lại. G9-2/3/4 (giao việc tay · Task Board · gộp nguồn) chạy song song như lane thường trong band `0040s`.
 
-- [ ] **G9-1** 🛠️🔋 (M) Chuẩn hoá `tasks` nhận đủ **7 `task_type`** (`production·review·revision·meeting_action·office·finance·hr`); `project_id/content_item_id/workflow_instance_id` **nullable**. **Contract-test: task non-video tạo được mà không cần video.**
+- [x] **G9-1** 🛠️🔋 (M) Chuẩn hoá `tasks` nhận đủ **7 `task_type`** (`production·review·revision·meeting_action·office·finance·hr`) + giữ `workflow_step` back-compat (8 loại); `project_id/content_item_id/workflow_instance_id` **nullable**. **Contract-test: task non-video tạo được mà không cần video.** — **mig 0040** (idx 38 / when 1717500050000, ADR-0024 widen-CHECK no-data-migrate); contract 18 test GREEN · typecheck 4/4 · api unit 427/427; **gate FULL PASS** (security+database+silent-failure + adversarial verify, vá SF-1 `listByTeam` lọc soft-deleted member). Tầng repo/service (`createTask`/`list*`/`updateStatus`/`softDelete` + audit + deny-path workflow-task) làm **nền G9-2/3/4 — CHƯA nối controller**. Latent chuyển G9-2: SEC-1 tenant-FK guard · DB-8/SF-2 pagination · SEC-2 status-typing. **Land #1 — merged `d58d465` (PR #4, --no-ff).**
 - [ ] **G9-2** 🤖🟢 (S) **Giao việc tay** (`task_type=office`): tạo task thủ công ngoài workflow (TASK-001).
 - [ ] **G9-3** 🤖🟢 (L) **Task Board tổng**: Kanban/Table/Calendar; **filter theo `task_type`**; view Office Tasks; **luồng rút gọn** (Chưa bắt đầu→Đang làm→Hoàn thành) cho task không có vòng duyệt.
 - [ ] **G9-4** 🤖🟢 (M) My/Team/Project Tasks **gộp tất cả nguồn**; card có badge loại + bối cảnh điều kiện.
@@ -456,7 +531,7 @@ _(custom `react-native-reviewer/patterns/build-fix/push`)_
 
 ## Checklist sức bền cho người làm một mình
 
-- [ ] Mỗi lúc **chỉ 1 task `[~]`**. Đóng gọn rồi mới mở task mới.
+- [ ] **Mỗi lane chỉ 1 task `[~]`** (song song nhiều lane OK — §5); trong 1 worktree đừng mở 2 task chồng nhau.
 - [ ] Sau mỗi cụm 🔋 (G2, G3, G7, G12) → tự thưởng một cụm 🟢 (G5, G11, G14) để hồi sức.
 - [ ] Trước khi vào "thung lũng" G2/G3, nhắc mình: **đỉnh G4 ở ngay sau** — đừng bỏ cuộc giữa dốc.
 - [ ] Demo cho 1 người dùng thật **sau mỗi mốc M1–M5** → dopamine + feedback sớm, tránh build lệch.
