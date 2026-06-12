@@ -6,9 +6,10 @@
  * org_units + teams and reassign leaders (global pipeline is JWT + Company only, app.module.ts:47-48).
  *
  * Expected behaviour (post-F2): every MUTATION carries @UseGuards(PermissionGuard) +
- * @RequirePermission('manage','org_unit') for org_units and ('manage','team') for teams.
- * Action is the bare verb 'manage' (seed catalog convention 0005/0019/0027), not a compound code;
- * the (action, resource_type) pair is what permissions.can() matches. Seeded in migration 0030.
+ * @RequirePermission(<verb>, 'org_unit'|'team') where <verb> is the granular CRUD action of the route
+ * (create/update/delete) — member/leader mutations are 'update' on 'team'. The (action, resource_type)
+ * pair is what permissions.can() matches; the granular catalog (create/read/update/delete/manage for
+ * org_unit + team) is seeded in migration 0030_g5fix_org_team_perms.
  * Reads stay on JWT + Company (non-sensitive, RLS-tenant-isolated) and are intentionally NOT asserted here.
  *
  * Why RED before F2: the controller has no metadata/guard → both the metadata reflection and the
@@ -38,16 +39,16 @@ interface MutationCase {
 
 // Every state-changing route on OrgController and the permission it must demand.
 const ORG_MUTATIONS: MutationCase[] = [
-  { method: 'createOrgUnit', action: 'manage', resourceType: 'org_unit' },
-  { method: 'updateOrgUnit', action: 'manage', resourceType: 'org_unit' },
-  { method: 'deleteOrgUnit', action: 'manage', resourceType: 'org_unit' },
-  { method: 'createDepartmentLegacy', action: 'manage', resourceType: 'org_unit' },
-  { method: 'createTeam', action: 'manage', resourceType: 'team' },
-  { method: 'updateTeam', action: 'manage', resourceType: 'team' },
-  { method: 'assignTeamLeader', action: 'manage', resourceType: 'team' },
-  { method: 'deleteTeam', action: 'manage', resourceType: 'team' },
-  { method: 'addTeamMember', action: 'manage', resourceType: 'team' },
-  { method: 'removeTeamMember', action: 'manage', resourceType: 'team' },
+  { method: 'createOrgUnit', action: 'create', resourceType: 'org_unit' },
+  { method: 'updateOrgUnit', action: 'update', resourceType: 'org_unit' },
+  { method: 'deleteOrgUnit', action: 'delete', resourceType: 'org_unit' },
+  { method: 'createDepartmentLegacy', action: 'create', resourceType: 'org_unit' },
+  { method: 'createTeam', action: 'create', resourceType: 'team' },
+  { method: 'updateTeam', action: 'update', resourceType: 'team' },
+  { method: 'assignTeamLeader', action: 'update', resourceType: 'team' },
+  { method: 'deleteTeam', action: 'delete', resourceType: 'team' },
+  { method: 'addTeamMember', action: 'update', resourceType: 'team' },
+  { method: 'removeTeamMember', action: 'update', resourceType: 'team' },
 ];
 
 function handlerOf(method: keyof OrgController): (...args: unknown[]) => unknown {
