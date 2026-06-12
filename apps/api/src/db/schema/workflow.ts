@@ -395,7 +395,14 @@ export const tasks = pgTable(
     workflowStepId: uuid("workflow_step_id").references(() => workflowSteps.id, {
       onDelete: "set null",
     }),
+    // G9-1: workflow-instance + project context — both nullable (non-video tasks have neither).
+    workflowInstanceId: uuid("workflow_instance_id").references(() => workflowInstances.id, {
+      onDelete: "set null",
+    }),
     contentItemId: uuid("content_item_id").references(() => contentItems.id, {
+      onDelete: "set null",
+    }),
+    projectId: uuid("project_id").references(() => projects.id, {
       onDelete: "set null",
     }),
     title: text("title").notNull(),
@@ -412,6 +419,9 @@ export const tasks = pgTable(
     index("tasks_company_id_idx").on(t.companyId),
     index("tasks_assignee_user_id_idx").on(t.assigneeUserId),
     index("tasks_workflow_step_id_idx").on(t.workflowStepId),
+    // G9-1: filter the unified board by project + workflow-instance context.
+    index("tasks_project_id_idx").on(t.projectId),
+    index("tasks_workflow_instance_id_idx").on(t.workflowInstanceId),
     // Dedup key: chống sinh trùng khi replay outbox (§5.3 spike)
     uniqueIndex("tasks_dedup_key_uq")
       .on(t.companyId, t.workflowStepId, t.revisionRound)
@@ -421,9 +431,10 @@ export const tasks = pgTable(
       sql`status IN ('not_started', 'in_progress', 'waiting_review', 'revision', 'approved', 'completed')`,
     ),
     check("tasks_origin_check", sql`origin IN ('initial', 'revision')`),
+    // G9-1 (ADR-0024): 7 spec types + `workflow_step` kept for backward-compat (G4/G7 emit it).
     check(
       "tasks_task_type_check",
-      sql`task_type IN ('workflow_step', 'office', 'meeting_action', 'hr', 'finance')`,
+      sql`task_type IN ('workflow_step', 'production', 'review', 'revision', 'meeting_action', 'office', 'finance', 'hr')`,
     ),
   ],
 );
