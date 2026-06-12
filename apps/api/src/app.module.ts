@@ -13,6 +13,7 @@ import { EmployeesModule } from "./employees/employees.module";
 import { MediaModule } from "./media/media.module";
 import { WorkflowModule } from "./workflow/workflow.module";
 import { TasksModule } from "./tasks/tasks.module";
+import { AttendanceModule } from "./attendance/attendance.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { ChatModule } from "./chat/chat.module";
 import { PermissionModule } from "./permission/permission.module";
@@ -38,6 +39,7 @@ import { CompanyGuard } from "./permission/guards/company.guard";
     MediaModule,
     WorkflowModule,
     TasksModule,
+    AttendanceModule,
     NotificationsModule,
     ChatModule,
   ],
