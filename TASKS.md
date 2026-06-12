@@ -82,9 +82,9 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 | G4 | 🏁 MVP-0 Walking Skeleton | 🤖+🛠️ hỗn hợp | XL | 🟡 đang làm |
 | G5 | Tổ chức & Nhân sự đầy đủ | 🤖 AI-bulk 🟢 | L | ✅ |
 | G6 | Media (Channel/Project/Content) | 🤖 + 🛠️(G6-2) | L | ✅ đóng (đã land master — migration 0020–0029 + bảng lõi; G6-2 encryption đã merge, verify 2026-06-12) |
-| G7 | Workflow Builder | 🛠️ TDD 🔋 | XL | 🟡 spine 1a→4c + FE Track C ✅ · gate TỔNG PASS (B1+santa+FE LIGHT) · **PR `feat/g7-workflow`→master chờ merge** |
+| G7 | Workflow Builder | 🛠️ TDD 🔋 | XL | ✅ đóng (merged `6a0d4bd` --no-ff) · spine 1a→4c + FE Track C · gate TỔNG PASS (B1+santa+FE LIGHT) |
 | G8 | Approval · Defect · Eval · KPI | 🛠️+🤖 | L | ☐ |
-| G9 | 🧩 Task Hub hợp nhất | 🛠️+🤖 | L | ☐ |
+| G9 | 🧩 Task Hub hợp nhất | 🛠️+🤖 | L | 🟡 G9-1 ✅ (schema + mig 0040, gate FULL PASS, PR `feat/g9-taskhub` chờ merge — land #1) · G9-2→4 ☐ |
 | G10 | Chat · Notification · Meeting | 🤖 + 🛠️(realtime) | L | ☐ |
 | G11 | Attendance · Leave | 🤖 AI-bulk 🟢 | M | ☐ |
 | G12 | Payroll · Bonus/Penalty | 🛠️ TDD 🔋🔋 | XL | ☐ |
@@ -266,7 +266,7 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 > Làm **trước** G8/G10/G11/G13 để các module sau chỉ **emit vào đây**. G9-1 là 🛠️ (contract test), phần còn lại 🤖.
 
-- [ ] **G9-1** 🛠️🔋 (M) Chuẩn hoá `tasks` nhận đủ **7 `task_type`** (`production·review·revision·meeting_action·office·finance·hr`); `project_id/content_item_id/workflow_instance_id` **nullable**. **Contract-test: task non-video tạo được mà không cần video.**
+- [x] **G9-1** 🛠️🔋 (M) Chuẩn hoá `tasks` nhận đủ **7 `task_type`** (`production·review·revision·meeting_action·office·finance·hr`) + giữ `workflow_step` back-compat (8 loại); `project_id/content_item_id/workflow_instance_id` **nullable**. **Contract-test: task non-video tạo được mà không cần video.** — **mig 0040** (idx 38/when 1717500050000, ADR-0024 widen-CHECK no-data-migrate); contract 18 test GREEN · typecheck 4/4 · api unit 427/427; **gate FULL PASS** (security+database+silent-failure + adversarial verify, vá SF-1 `listByTeam` lọc soft-deleted member). Tầng repo/service (`createTask`/`list*`/`updateStatus`/`softDelete` + audit + deny-path workflow-task) làm **nền G9-2/3/4 — CHƯA nối controller**. Latent chuyển G9-2: SEC-1 tenant-FK guard · DB-8/SF-2 pagination · SEC-2 status-typing. **Land #1 — PR `feat/g9-taskhub` chờ merge.**
 - [ ] **G9-2** 🤖🟢 (S) **Giao việc tay** (`task_type=office`): tạo task thủ công ngoài workflow (TASK-001).
 - [ ] **G9-3** 🤖🟢 (L) **Task Board tổng**: Kanban/Table/Calendar; **filter theo `task_type`**; view Office Tasks; **luồng rút gọn** (Chưa bắt đầu→Đang làm→Hoàn thành) cho task không có vòng duyệt.
 - [ ] **G9-4** 🤖🟢 (M) My/Team/Project Tasks **gộp tất cả nguồn**; card có badge loại + bối cảnh điều kiện.
