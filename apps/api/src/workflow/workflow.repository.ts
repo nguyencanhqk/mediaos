@@ -730,6 +730,52 @@ export class WorkflowRepository {
       .limit(1);
   }
 
+  /**
+   * All checklist items of `stepId`'s def-step (matched by node_key), each with its current tick
+   * state for THIS step (LEFT JOIN workflow_step_checklist_states → checked = a state row exists).
+   * Read-only mirror of countUnmetRequiredChecklistItemsForStepInTx's linkage (G7-4b FE read).
+   * Ordered by sort_order then id for a stable render. Empty = no resolvable checklist → caller
+   * renders nothing and the submit gate is vacuously satisfied. company_id filtered on every table.
+   */
+  findChecklistItemsForStepInTx(
+    companyId: string,
+    args: { workflowDefinitionId: string; nodeKey: string; stepId: string },
+    tx: TenantTx,
+  ) {
+    return tx
+      .select({
+        id: checklistItems.id,
+        label: checklistItems.label,
+        isRequired: checklistItems.isRequired,
+        checked: sql<boolean>`(${workflowStepChecklistStates.id} is not null)`,
+      })
+      .from(checklistItems)
+      .innerJoin(checklists, eq(checklistItems.checklistId, checklists.id))
+      .innerJoin(
+        workflowDefinitionSteps,
+        eq(checklists.workflowDefinitionStepId, workflowDefinitionSteps.id),
+      )
+      // LEFT JOIN scoped to THIS step (+ company) so a missing row = unchecked, not row-loss.
+      .leftJoin(
+        workflowStepChecklistStates,
+        and(
+          eq(workflowStepChecklistStates.companyId, companyId),
+          eq(workflowStepChecklistStates.workflowStepId, args.stepId),
+          eq(workflowStepChecklistStates.checklistItemId, checklistItems.id),
+        ),
+      )
+      .where(
+        and(
+          eq(checklistItems.companyId, companyId),
+          eq(checklists.companyId, companyId),
+          eq(workflowDefinitionSteps.companyId, companyId),
+          eq(workflowDefinitionSteps.workflowDefinitionId, args.workflowDefinitionId),
+          eq(workflowDefinitionSteps.nodeKey, args.nodeKey),
+        ),
+      )
+      .orderBy(checklistItems.sortOrder, checklistItems.id);
+  }
+
   /** Tick = INSERT a state row; onConflictDoNothing on the (step,item) uq → tick is idempotent.
    * Explicit conflict target so only the intended uniqueness is suppressed (future constraints surface). */
   insertChecklistStateInTx(

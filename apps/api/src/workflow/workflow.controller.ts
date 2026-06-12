@@ -53,6 +53,14 @@ export class WorkflowController {
     return this.workflow.getWorkflowByContent(req.user.companyId, contentItemId);
   }
 
+  /** GET /workflow/steps/:stepId/checklist — checklist items + tick state cho 1 instance step (G7-4b FE).
+   * Company-scoped read (no permission gate; workflow-internal) — mirror linkage của submit gate.
+   * Đặt TRƯỚC @Get(":instanceId") cho rõ ràng (multi-segment nên không thực sự đụng :instanceId). */
+  @Get("steps/:stepId/checklist")
+  getStepChecklist(@Req() req: AuthenticatedRequest, @Param("stepId") stepId: string) {
+    return this.workflow.getStepChecklist(req.user.companyId, stepId);
+  }
+
   /** GET /workflow/:instanceId — lấy workflow + steps */
   @Get(":instanceId")
   getWorkflow(@Req() req: AuthenticatedRequest, @Param("instanceId") instanceId: string) {

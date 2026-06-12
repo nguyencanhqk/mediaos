@@ -324,6 +324,30 @@ export const toggleChecklistItemResultSchema = z.object({
 });
 export type ToggleChecklistItemResult = z.infer<typeof toggleChecklistItemResultSchema>;
 
+// ─── G7-4b checklist READ (instance step → items + tick state) — ADDITIVE ─────────────────────
+// GET /workflow/steps/:stepId/checklist. Server resolves per ĐƯỜNG A: instance-step.node_key →
+// def-step (workflow_definition_id + node_key) → checklists → items, LEFT JOIN this step's ticked
+// rows (workflow_step_checklist_states). FE (LUỒNG C) reads this to render the checklist and mirror
+// the submit gate. Frozen 1b schemas untouched.
+
+/** One checklist item of an instance step + its current tick state. `checked`=true ⇔ a state row
+ * exists for (step,item). `isRequired` items are what the submit gate enforces. */
+export const stepChecklistItemStateSchema = z.object({
+  id: z.string().uuid(),
+  label: z.string(),
+  isRequired: z.boolean(),
+  checked: z.boolean(),
+});
+export type StepChecklistItemStateDto = z.infer<typeof stepChecklistItemStateSchema>;
+
+/** GET /workflow/steps/:stepId/checklist result. Empty `items` = the step has no resolvable
+ * checklist (no node_key / no def-step items) → submit is never gated by the checklist. */
+export const stepChecklistSchema = z.object({
+  stepId: z.string().uuid(),
+  items: z.array(stepChecklistItemStateSchema),
+});
+export type StepChecklistDto = z.infer<typeof stepChecklistSchema>;
+
 // Áp 1 template (published) lên ĐÚNG-MỘT target: content_item HOẶC project (khớp wf_instances target check).
 // Thêm sau freeze 1b nhưng ADDITIVE (không sửa schema cũ) → không ép B/C rebase.
 export const applyTemplateSchema = z

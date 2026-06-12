@@ -697,6 +697,50 @@ export class WorkflowService {
     return this.toggleChecklistItem(companyId, stepId, itemId, actorId, false);
   }
 
+  /**
+   * GET /workflow/steps/:stepId/checklist — the step's checklist items + current tick state, for the
+   * FE to render the checklist and mirror the submit gate. Company-scoped read (like getWorkflow); no
+   * assignee gate so a reviewer can see progress too. A step with no node_key / no def-step checklist
+   * returns an empty list (submit is then never gated). Same ĐƯỜNG A linkage as resolveChecklistComplete.
+   */
+  async getStepChecklist(companyId: string, stepId: string) {
+    try {
+      return await this.db.withTenant(companyId, async (tx) => {
+        const [step] = await this.repo.findStepByIdInTx(companyId, stepId, tx);
+        if (!step) throw new NotFoundException(`Step not found: ${stepId}`);
+        // No node_key → no resolvable def-step checklist (legacy/un-snapshotted) → empty (not gated).
+        if (!step.nodeKey) return { stepId, items: [] };
+
+        const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
+        if (!instance) throw new WorkflowNotFoundError("instance", step.workflowInstanceId);
+
+        const items = await this.repo.findChecklistItemsForStepInTx(
+          companyId,
+          { workflowDefinitionId: instance.workflowDefinitionId, nodeKey: step.nodeKey, stepId },
+          tx,
+        );
+        return {
+          stepId,
+          items: items.map((i) => ({
+            id: i.id,
+            label: i.label,
+            isRequired: i.isRequired,
+            checked: i.checked,
+          })),
+        };
+      });
+    } catch (err) {
+      if (err instanceof NotFoundException || err instanceof InternalServerErrorException) {
+        throw err;
+      }
+      if (err instanceof WorkflowNotFoundError) {
+        throw new NotFoundException(err.message);
+      }
+      this.logger.error("getStepChecklist unexpected error", { err, companyId, stepId });
+      throw err;
+    }
+  }
+
   private async toggleChecklistItem(
     companyId: string,
     stepId: string,
