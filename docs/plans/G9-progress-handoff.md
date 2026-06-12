@@ -47,7 +47,13 @@ BẤT BIẾN #1/#2 + audit-in-tx + FSM + catalog-match: PASS. Đã vá **H-1** (
 (`WORKFLOW_TASK_TYPES` `satisfies TaskTypeDto[]` — chống divergence khi thêm FSM type; lưu ý: KHÔNG derive
 "all-minus-manual" vì sẽ sai-phân-loại meeting_action/finance/hr), **SF-3** (`page` threaded, tránh kẹp ngầm 50).
 
-**Còn lại G9-2:** **2d FE** — dialog "Giao việc" + `<PermissionGate create task>` (FE chưa làm).
+**2d FE ✅:** `tasksApi.createTask`/`updateTaskStatus`/`deleteTask` (`tasks-api.ts`, parse `taskSchema`, status
+thu hẹp `OfficeTaskStatusDto`) + `CreateTaskDialog` "Giao việc tay" (title/assignee/due, plain useState +
+shadcn Dialog/Input/Select — house style, KHÔNG RHF) bọc `<PermissionGate create task>` ở Tasks page,
+invalidate `["tasks"]`. web typecheck/lint xanh · web test 133/133. _(Không spec riêng — đồng bộ convention:
+`CreateProjectDialog`/`CreateChannelDialog` cũng không có spec; gating phủ bởi `permission-gate.spec`.)_
+
+**G9-2 ĐÓNG.** status-change UI (Kanban luồng rút gọn) + delete UI + attachment → **G9-3** (Task Board).
 
 ---
 
