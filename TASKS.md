@@ -81,7 +81,7 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 | G3 | Permission Engine | 🛠️ TDD 🔋 | L | ✅ đóng (merged master — 119 tests, typecheck clean, FULL gate passed) |
 | G4 | 🏁 MVP-0 Walking Skeleton | 🤖+🛠️ hỗn hợp | XL | 🟡 đang làm |
 | G5 | Tổ chức & Nhân sự đầy đủ | 🤖 AI-bulk 🟢 | L | ✅ |
-| G6 | Media (Channel/Project/Content) | 🤖 + 🛠️(G6-2) | L | 🟡 G6-1/3/4/5 ✅ — chỉ còn **G6-2** (crown-jewel) |
+| G6 | Media (Channel/Project/Content) | 🤖 + 🛠️(G6-2) | L | ✅ đóng (đã land master — migration 0020–0029 + bảng lõi; G6-2 encryption đã merge, verify 2026-06-12) |
 | G7 | Workflow Builder | 🛠️ TDD 🔋 | XL | ☐ |
 | G8 | Approval · Defect · Eval · KPI | 🛠️+🤖 | L | ☐ |
 | G9 | 🧩 Task Hub hợp nhất | 🛠️+🤖 | L | ☐ |
@@ -217,7 +217,7 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 > **Thứ tự bắt đầu:** `0a` (migration 0020 audit object_types) → `1a-bis` (mở rộng RLS harness) → G6-1 → … → `2e0` (vá guard) → G6-2.
 
 - [x] **G6-1** 🤖🟢 (M) Platform + Channel + `channel_members` + gán Manager/team; lọc theo nền tảng/trạng thái. _(BE 1a–1d `8a9fbe3`/`c5060aa`; FE 1e `f4a07d2`: list+filter+TanStack Table, detail tabs Overview/Members, members CRUD)._
-- [x] **G6-2** 🛠️🔋 (L) 🔒 **Platform Account Encryption** (envelope + KMS/Vault, mã hoá app-side; `reveal-secret` + re-auth + **audit mỗi lần xem/sửa**). **FULL gate.** _(custom `secret-encryption-reviewer`; `ecc:security-reviewer` + `ecc:database-reviewer`)._ **✅ gates pre-merge XONG + e2e G4-7 xanh (`259586c`) → merge `--no-ff` local 2026-06-09 (chưa push).**
+- [x] **G6-2** 🛠️🔋 (L) 🔒 **Platform Account Encryption** (envelope + KMS/Vault, mã hoá app-side; `reveal-secret` + re-auth + **audit mỗi lần xem/sửa**). **FULL gate.** _(custom `secret-encryption-reviewer`; `ecc:security-reviewer` + `ecc:database-reviewer`)._ **✅ ĐÃ LAND MASTER** — toàn bộ G6 (migration 0020–0029, gồm 0022 `platform_accounts` envelope) nằm trong master; `bf4362c` là tổ tiên master (verify 2026-06-12). _(gates pre-merge XONG + e2e G4-7 xanh `259586c`.)_
   - ✅ **Build 2a–2h XONG** (chi tiết + carry-forward → handoff §4.5; per-step FULL gate đều 0 CRIT):
     - **2a** `17f9722` migration 0022 (`platform_accounts` 8-cột envelope + worker policy + column-grant · `encryption_keys` global · `channel_accounts`; journal idx27/when30000; +hardening octet_length IV/tag).
     - **2b+2c** `831b986`/`86c074a` 39 RED deny-path + NodeEnvelopeCipher (AES-256-GCM) + SecretEncryptionService (AAD pinned `companyId‖recordId‖encAlgo‖dekKeyVersion`, app-gen uuid, dek zeroize) + Local/VaultKekProvider + CryptoModule (ngoài app.module).
