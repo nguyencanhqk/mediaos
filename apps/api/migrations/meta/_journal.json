@@ -267,6 +267,13 @@
       "when": 1717500045000,
       "tag": "0037_g3fix_grant_object_permission_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1717500050000,
+      "tag": "0040_g9_tasks_hub",
+      "breakpoints": true
     }
   ]
 }
