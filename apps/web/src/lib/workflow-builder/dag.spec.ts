@@ -14,7 +14,8 @@ function step(id: string, nodeKey: string): TemplateStepDto {
     stepType: "task",
     stepOrder: 1,
     code: nodeKey,
-    title: nodeKey,
+    name: nodeKey,
+    defaultTaskTitle: nodeKey,
     assigneeRoleCode: null,
     reviewerRoleCode: null,
     isRequired: true,
@@ -32,6 +33,7 @@ function dep(from: string, to: string): DependencyDto {
     fromStepId: from,
     toStepId: to,
     dependencyType: "finish_to_start",
+    createdAt: "2026-06-01T00:00:00.000Z",
   };
 }
 
@@ -41,10 +43,10 @@ const C = step("c", "c");
 const D = step("d", "d");
 
 describe("validateDag", () => {
-  it("EMPTY: rejects a template with no steps", () => {
+  it("no_root: rejects a template with no steps", () => {
     const result = validateDag([], []);
     expect(result.valid).toBe(false);
-    expect(result.errors[0]?.code).toBe("EMPTY");
+    expect(result.errors[0]?.code).toBe("no_root");
   });
 
   it("DV6: accepts a valid parallel DAG A→{B,C}→D (exercises reachability path)", () => {
@@ -64,25 +66,25 @@ describe("validateDag", () => {
   it("DV1: rejects a cycle A→B→C→A", () => {
     const result = validateDag([A, B, C], [dep("a", "b"), dep("b", "c"), dep("c", "a")]);
     expect(result.valid).toBe(false);
-    expect(result.errors.some((e) => e.code === "CYCLE")).toBe(true);
+    expect(result.errors.some((e) => e.code === "cycle")).toBe(true);
   });
 
   it("DV2: rejects a self-dependency A→A", () => {
     const result = validateDag([A, B], [dep("a", "a"), dep("a", "b")]);
     expect(result.valid).toBe(false);
-    expect(result.errors.some((e) => e.code === "SELF_DEP")).toBe(true);
+    expect(result.errors.some((e) => e.code === "self_dependency")).toBe(true);
   });
 
   it("DV5: rejects a dependency targeting a missing step", () => {
     const result = validateDag([A, B], [dep("a", "b"), dep("b", "zzz")]);
     expect(result.valid).toBe(false);
-    expect(result.errors.some((e) => e.code === "MISSING_DEP_TARGET")).toBe(true);
+    expect(result.errors.some((e) => e.code === "missing_node")).toBe(true);
   });
 
-  it("NO_ROOT/CYCLE: rejects a 2-cycle A↔B (no root + cycle)", () => {
+  it("no_root/cycle: rejects a 2-cycle A↔B (no root + cycle)", () => {
     const result = validateDag([A, B], [dep("a", "b"), dep("b", "a")]);
     expect(result.valid).toBe(false);
-    expect(result.errors.some((e) => e.code === "NO_ROOT" || e.code === "CYCLE")).toBe(true);
+    expect(result.errors.some((e) => e.code === "no_root" || e.code === "cycle")).toBe(true);
   });
 
   it("is pure — does not mutate inputs", () => {

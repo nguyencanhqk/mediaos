@@ -14,7 +14,8 @@ function step(id: string, nodeKey: string, x: number | null, y: number | null): 
     stepType: "task",
     stepOrder: 1,
     code: nodeKey,
-    title: nodeKey,
+    name: nodeKey,
+    defaultTaskTitle: nodeKey,
     assigneeRoleCode: null,
     reviewerRoleCode: null,
     isRequired: true,
@@ -55,6 +56,7 @@ describe("canvas layout", () => {
       fromStepId: "a",
       toStepId: "b",
       dependencyType: "finish_to_start",
+      createdAt: "2026-06-01T00:00:00.000Z",
     };
     const editable = buildEdges([dep], false);
     expect(editable[0]).toMatchObject({ id: "e1", source: "a", target: "b", deletable: true });

@@ -51,6 +51,7 @@ function edge(instanceId: string, from: string, to: string): DependencyDto {
     fromStepId: `${instanceId}-${from}`,
     toStepId: `${instanceId}-${to}`,
     dependencyType: "finish_to_start",
+    createdAt: "2026-06-08T00:00:00.000Z",
   };
 }
 

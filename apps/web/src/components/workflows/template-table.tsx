@@ -11,7 +11,7 @@ import {
 import type { TemplateDto } from "@/lib/workflow-builder/contract";
 import { Button } from "@/components/ui/button";
 import { TemplateStatusBadge } from "./template-status-badge";
-import { TEMPLATE_APPLIES_TO_LABELS } from "./constants";
+import { appliesToLabel } from "./constants";
 
 interface TemplateTableProps {
   templates: TemplateDto[];
@@ -40,14 +40,9 @@ export function TemplateTable({ templates, canDelete, onDelete, deletingId }: Te
         ),
       }),
       columnHelper.accessor("code", { header: "Mã" }),
-      columnHelper.accessor((row) => TEMPLATE_APPLIES_TO_LABELS[row.appliesTo], {
+      columnHelper.accessor((row) => appliesToLabel(row.appliesTo), {
         id: "appliesTo",
         header: "Áp cho",
-      }),
-      columnHelper.accessor((row) => row.stepCount ?? 0, {
-        id: "stepCount",
-        header: "Số bước",
-        cell: (ctx) => ctx.getValue(),
       }),
       columnHelper.accessor("status", {
         header: "Trạng thái",

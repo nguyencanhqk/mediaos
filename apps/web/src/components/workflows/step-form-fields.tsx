@@ -1,12 +1,12 @@
-import type { CreateStepRequest, StepType } from "@/lib/workflow-builder/contract";
+import type { CreateStepRequest, UpdateStepRequest } from "@/lib/workflow-builder/contract";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { STEP_TYPE_LABELS, STEP_TYPE_OPTIONS, WORKFLOW_ROLE_OPTIONS } from "./constants";
+import { STEP_TYPE_OPTIONS, WORKFLOW_ROLE_OPTIONS, stepTypeLabel } from "./constants";
 
 export interface StepFormState {
   code: string;
-  title: string;
-  stepType: StepType;
+  name: string;
+  stepType: string;
   assigneeRoleCode: string;
   reviewerRoleCode: string;
   isRequired: boolean;
@@ -14,18 +14,47 @@ export interface StepFormState {
 
 export const emptyStepForm: StepFormState = {
   code: "",
-  title: "",
+  name: "",
   stepType: "task",
   assigneeRoleCode: "",
   reviewerRoleCode: "",
   isRequired: true,
 };
 
-/** form state → request payload (chuỗi rỗng → null cho role). */
-export function toStepRequest(f: StepFormState): CreateStepRequest {
+/** nodeKey = DAG identity bất biến (gắn cạnh + canvas) — slug ổn định từ code. */
+function toNodeKey(code: string): string {
+  return (
+    code
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "step"
+  );
+}
+
+/** form state → CreateStepRequest (chuỗi rỗng → null cho role; defaultTaskTitle mặc định = tên bước). */
+export function toCreateStepRequest(f: StepFormState): CreateStepRequest {
+  const name = f.name.trim();
+  const code = f.code.trim();
+  return {
+    nodeKey: toNodeKey(code),
+    code,
+    name,
+    defaultTaskTitle: name,
+    stepType: f.stepType,
+    assigneeRoleCode: f.assigneeRoleCode || null,
+    reviewerRoleCode: f.reviewerRoleCode || null,
+    isRequired: f.isRequired,
+  };
+}
+
+/** form state → UpdateStepRequest (nodeKey BẤT BIẾN — contract đã omit, không gửi). */
+export function toUpdateStepRequest(f: StepFormState): UpdateStepRequest {
+  const name = f.name.trim();
   return {
     code: f.code.trim(),
-    title: f.title.trim(),
+    name,
+    defaultTaskTitle: name,
     stepType: f.stepType,
     assigneeRoleCode: f.assigneeRoleCode || null,
     reviewerRoleCode: f.reviewerRoleCode || null,
@@ -54,11 +83,11 @@ export function StepFormFields({ value, onChange }: StepFormFieldsProps) {
           <span className="text-sm font-medium">Loại bước</span>
           <Select
             value={value.stepType}
-            onChange={(e) => onChange({ stepType: e.target.value as StepType })}
+            onChange={(e) => onChange({ stepType: e.target.value })}
           >
             {STEP_TYPE_OPTIONS.map((t) => (
               <option key={t} value={t}>
-                {STEP_TYPE_LABELS[t]}
+                {stepTypeLabel(t)}
               </option>
             ))}
           </Select>
@@ -67,8 +96,8 @@ export function StepFormFields({ value, onChange }: StepFormFieldsProps) {
       <label className="block space-y-1">
         <span className="text-sm font-medium">Tên bước *</span>
         <Input
-          value={value.title}
-          onChange={(e) => onChange({ title: e.target.value })}
+          value={value.name}
+          onChange={(e) => onChange({ name: e.target.value })}
           placeholder="VD: Viết kịch bản"
         />
       </label>

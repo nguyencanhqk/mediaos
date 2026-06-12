@@ -7,9 +7,12 @@ import type {
 
 /**
  * Validator DAG phía client — MIRROR rút gọn của `DagValidatorService` (LUỒNG B, 2a).
- * Dùng cho: (a) phản hồi tức thì khi build (nút Validate, canvas 2c),
- * (b) mock publish gate khi BE chưa ship.
- * Khi BE ship, kết quả từ server là nguồn chuẩn — validator này vẫn hữu ích cho UX tức thì.
+ * Mã lỗi + hình dạng khớp contract FROZEN (`dagValidationResultSchema`): mỗi lỗi có
+ * `code` (lowercase) + `message` + `nodeKeys[]`.
+ *
+ * Dùng cho: (a) phản hồi tức thì khi build (nút Kiểm tra DAG, canvas 2c),
+ * (b) DỰNG LẠI danh sách lỗi inline sau publish 422 — vì AllExceptionsFilter của BE DẸP
+ *     payload `dagValidation`, client chạy lại validator này trên steps/deps đang hiển thị.
  *
  * PURE + immutable: không sửa input, trả về object/mảng mới.
  * Quy ước cạnh: dep.fromStepId = tiền nhiệm (chạy trước), dep.toStepId = phụ thuộc (chạy sau).
@@ -22,7 +25,10 @@ export function validateDag(
   const errors: DagErrorDto[] = [];
 
   if (steps.length === 0) {
-    return { valid: false, errors: [{ code: "EMPTY", message: "Template chưa có bước nào." }] };
+    return {
+      valid: false,
+      errors: [{ code: "no_root", message: "Quy trình chưa có bước nào — thêm ít nhất một bước.", nodeKeys: [] }],
+    };
   }
 
   const stepById = new Map(steps.map((s) => [s.id, s]));
@@ -36,22 +42,20 @@ export function validateDag(
     const toExists = stepById.has(dep.toStepId);
 
     if (dep.fromStepId === dep.toStepId) {
+      const key = nodeKeyById.get(dep.fromStepId);
       errors.push({
-        code: "SELF_DEP",
+        code: "self_dependency",
         message: "Một bước không thể tự phụ thuộc vào chính nó.",
-        nodeKey: nodeKeyById.get(dep.fromStepId) ?? null,
-        fromStepId: dep.fromStepId,
-        toStepId: dep.toStepId,
+        nodeKeys: key ? [key] : [],
       });
       continue;
     }
 
     if (!fromExists || !toExists) {
       errors.push({
-        code: "MISSING_DEP_TARGET",
+        code: "missing_node",
         message: "Phụ thuộc trỏ tới một bước không còn tồn tại.",
-        fromStepId: dep.fromStepId,
-        toStepId: dep.toStepId,
+        nodeKeys: [],
       });
       continue;
     }
@@ -88,12 +92,16 @@ export function validateDag(
   }
   const hasCycle = processed < steps.length;
   if (hasCycle) {
-    errors.push({ code: "CYCLE", message: "Đồ thị có chu trình phụ thuộc (A→…→A)." });
+    errors.push({ code: "cycle", message: "Đồ thị có chu trình phụ thuộc (A→…→A).", nodeKeys: [] });
   }
 
   // ≥1 root (node không có cạnh đi vào).
   if (roots.length === 0 && steps.length > 0) {
-    errors.push({ code: "NO_ROOT", message: "Mọi bước đều phụ thuộc — thiếu bước gốc khởi đầu." });
+    errors.push({
+      code: "no_root",
+      message: "Mọi bước đều phụ thuộc — thiếu bước gốc khởi đầu.",
+      nodeKeys: [],
+    });
   }
 
   // Reachability: mọi node phải reachable từ một root (chỉ kiểm khi không có chu trình).
@@ -109,9 +117,9 @@ export function validateDag(
     for (const s of steps) {
       if (!reachable.has(s.id)) {
         errors.push({
-          code: "ORPHAN",
-          message: `Bước "${s.title}" không nối được tới bước gốc nào.`,
-          nodeKey: s.nodeKey,
+          code: "unreachable",
+          message: `Bước "${s.name}" không nối được tới bước gốc nào.`,
+          nodeKeys: [s.nodeKey],
         });
       }
     }

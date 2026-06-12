@@ -132,6 +132,10 @@ function CanvasInner({ templateId, steps, dependencies, errorNodeKeys, disabled,
         onNodeDragStop={onNodeDragStop}
         nodesConnectable={!disabled}
         nodesDraggable={!disabled}
+        // Published → cấm mọi đường sửa cạnh ở tầng React Flow (không chỉ chặn ở callback):
+        // edgesFocusable=false → bàn phím không Tab vào cạnh; edgesReconnectable=false → không kéo lại cạnh.
+        edgesFocusable={!disabled}
+        edgesReconnectable={!disabled}
         elementsSelectable
         fitView
         proOptions={{ hideAttribution: true }}

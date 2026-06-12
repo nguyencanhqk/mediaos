@@ -3,8 +3,6 @@ import type {
   DependencyType,
   InstanceStatus,
   StepInstanceStatus,
-  StepType,
-  TemplateAppliesTo,
   TemplateStatus,
 } from "@/lib/workflow-builder/contract";
 
@@ -26,23 +24,34 @@ export const TEMPLATE_STATUS_BADGE_CLASSES: Record<TemplateStatus, string> = {
 export const TEMPLATE_STATUS_OPTIONS: TemplateStatus[] = ["draft", "published", "archived"];
 
 // ─── Applies-to (mục tiêu) ────────────────────────────────────────────────────
+// Contract THẬT: appliesTo là chuỗi tự do (default "content_item"). Đây là danh mục giá trị
+// FE biết để render dropdown + nhãn; giá trị lạ rơi về chính chuỗi (appliesToLabel fallback).
 
-export const TEMPLATE_APPLIES_TO_LABELS: Record<TemplateAppliesTo, string> = {
-  content: "Nội dung",
+export const TEMPLATE_APPLIES_TO_OPTIONS = ["content_item", "project"] as const;
+
+const TEMPLATE_APPLIES_TO_LABELS: Record<string, string> = {
+  content_item: "Nội dung",
   project: "Dự án",
 };
 
-export const TEMPLATE_APPLIES_TO_OPTIONS: TemplateAppliesTo[] = ["content", "project"];
+export function appliesToLabel(value: string): string {
+  return TEMPLATE_APPLIES_TO_LABELS[value] ?? value;
+}
 
 // ─── Step type ────────────────────────────────────────────────────────────────
+// Contract THẬT: stepType là chuỗi tự do (default "task"). 'approval'/'evaluation' để dành G8.
 
-export const STEP_TYPE_LABELS: Record<StepType, string> = {
+export const STEP_TYPE_OPTIONS = ["task", "approval", "evaluation"] as const;
+
+const STEP_TYPE_LABELS: Record<string, string> = {
   task: "Tác vụ",
   approval: "Phê duyệt",
   evaluation: "Đánh giá",
 };
 
-export const STEP_TYPE_OPTIONS: StepType[] = ["task", "approval", "evaluation"];
+export function stepTypeLabel(value: string): string {
+  return STEP_TYPE_LABELS[value] ?? value;
+}
 
 // ─── Dependency type ──────────────────────────────────────────────────────────
 
@@ -50,6 +59,7 @@ export const DEPENDENCY_TYPE_LABELS: Record<DependencyType, string> = {
   finish_to_start: "Hoàn thành → Bắt đầu",
   start_to_start: "Bắt đầu → Bắt đầu",
   finish_to_finish: "Hoàn thành → Hoàn thành",
+  start_to_finish: "Bắt đầu → Hoàn thành",
 };
 
 // ─── Role options cho assignee/reviewer (tới khi có endpoint roles thật) ───────
@@ -80,15 +90,15 @@ export function roleLabel(code: string | null | undefined): string {
 }
 
 // ─── DAG error code → nhãn ngắn (message chi tiết lấy từ server/validator) ─────
+// Mã khớp DagValidatorService (LUỒNG B) + contract FROZEN (dagErrorCodeSchema).
 
 export const DAG_ERROR_LABELS: Record<DagErrorCode, string> = {
-  CYCLE: "Chu trình phụ thuộc",
-  SELF_DEP: "Bước tự phụ thuộc",
-  CROSS_TEMPLATE_DEP: "Phụ thuộc khác template",
-  ORPHAN: "Bước không nối với gốc",
-  MISSING_DEP_TARGET: "Phụ thuộc tới bước không tồn tại",
-  NO_ROOT: "Thiếu bước gốc",
-  EMPTY: "Chưa có bước nào",
+  cycle: "Chu trình phụ thuộc",
+  self_dependency: "Bước tự phụ thuộc",
+  cross_template: "Phụ thuộc khác template",
+  unreachable: "Bước không nối với gốc",
+  missing_node: "Phụ thuộc tới bước không tồn tại",
+  no_root: "Thiếu bước gốc",
 };
 
 // ─── Instance step status (3d — canvas read-only tô màu) ──────────────────────

@@ -3,13 +3,14 @@ import { Link, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { DagValidationResultDto } from "@/lib/workflow-builder/contract";
 import { workflowTemplatesApi } from "@/lib/workflow-templates-api";
+import { ApiError } from "@/lib/api-client";
 import { PermissionGate } from "@/components/permission-gate";
 import { Button } from "@/components/ui/button";
 import { TemplateStatusBadge } from "@/components/workflows/template-status-badge";
 import { StepEditor } from "@/components/workflows/step-editor";
 import { DependencyEditor } from "@/components/workflows/dependency-editor";
 import { DagErrorList } from "@/components/workflows/dag-error-list";
-import { TEMPLATE_APPLIES_TO_LABELS } from "@/components/workflows/constants";
+import { appliesToLabel } from "@/components/workflows/constants";
 
 // Canvas React Flow tải lười (chunk riêng + CSS) — chỉ nạp khi mở tab Sơ đồ.
 const TemplateCanvas = lazy(() => import("@/components/workflows/canvas/template-canvas"));
@@ -20,6 +21,7 @@ export function WorkflowTemplateDetailPage() {
   const { templateId } = useParams({ from: "/workflows/templates/$templateId" });
   const qc = useQueryClient();
   const [validation, setValidation] = useState<DagValidationResultDto | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
   const [view, setView] = useState<DetailView>("canvas");
 
   const { data, isLoading, isError } = useQuery({
@@ -41,7 +43,19 @@ export function WorkflowTemplateDetailPage() {
     mutationFn: () => workflowTemplatesApi.publish(templateId),
     onSuccess: () => {
       setValidation(null);
+      setPublishError(null);
       invalidateAll();
+    },
+    onError: (err) => {
+      // BẤT BIẾN BE: AllExceptionsFilter dẹp payload `dagValidation` của 422 → chỉ còn message+status.
+      // 422 = DAG không hợp lệ → chạy lại validator client-side để DỰNG danh sách lỗi inline.
+      // 409 = đã xuất bản / publish đồng thời → chỉ hiển thị message.
+      if (err instanceof ApiError && err.status === 422) {
+        setPublishError("Quy trình chưa hợp lệ để xuất bản — xem chi tiết lỗi bên dưới.");
+        validate.mutate();
+        return;
+      }
+      setPublishError(err instanceof Error ? err.message : "Xuất bản thất bại.");
     },
   });
 
@@ -51,12 +65,10 @@ export function WorkflowTemplateDetailPage() {
   });
 
   // node_key của các bước lỗi DAG → tô đỏ trên canvas. Gọi trước early-return (rules-of-hooks).
-  const errorNodeKeys = useMemo(() => {
-    const keys = (validation?.errors ?? [])
-      .map((e) => e.nodeKey)
-      .filter((k): k is string => typeof k === "string");
-    return new Set(keys);
-  }, [validation]);
+  const errorNodeKeys = useMemo(
+    () => new Set((validation?.errors ?? []).flatMap((e) => e.nodeKeys)),
+    [validation],
+  );
 
   if (isLoading) return <div className="p-8 text-sm text-muted-foreground">Đang tải…</div>;
   if (isError || !data)
@@ -79,11 +91,8 @@ export function WorkflowTemplateDetailPage() {
             <TemplateStatusBadge status={template.status} version={template.version} />
           </div>
           <p className="text-sm text-muted-foreground">
-            Mã: {template.code} · Áp cho: {TEMPLATE_APPLIES_TO_LABELS[template.appliesTo]}
+            Mã: {template.code} · Áp cho: {appliesToLabel(template.appliesTo)}
           </p>
-          {template.description && (
-            <p className="text-sm text-muted-foreground">{template.description}</p>
-          )}
         </div>
 
         <div className="flex shrink-0 gap-2">
@@ -96,13 +105,13 @@ export function WorkflowTemplateDetailPage() {
             {validate.isPending ? "Đang kiểm tra…" : "Kiểm tra DAG"}
           </Button>
           {isDraft && (
-            <PermissionGate action="publish" resourceType="workflow_template">
+            <PermissionGate action="publish" resourceType="workflow-template">
               <Button size="sm" onClick={() => publish.mutate()} disabled={publish.isPending}>
                 {publish.isPending ? "Đang xuất bản…" : "Xuất bản"}
               </Button>
             </PermissionGate>
           )}
-          <PermissionGate action="create" resourceType="workflow_template">
+          <PermissionGate action="create" resourceType="workflow-template">
             <Button size="sm" variant="outline" onClick={() => clone.mutate()} disabled={clone.isPending}>
               {clone.isPending ? "Đang nhân bản…" : "Nhân bản"}
             </Button>
@@ -121,12 +130,8 @@ export function WorkflowTemplateDetailPage() {
         </div>
       )}
 
+      {publishError && <p className="text-sm text-destructive">{publishError}</p>}
       <DagErrorList result={validation} />
-      {publish.isError && (
-        <p className="text-sm text-destructive">
-          {publish.error instanceof Error ? publish.error.message : "Xuất bản thất bại."}
-        </p>
-      )}
 
       {/* View toggle: Sơ đồ (canvas) ↔ Danh sách (fallback bàn phím, a11y 2d) */}
       <div

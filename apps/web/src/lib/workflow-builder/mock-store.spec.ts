@@ -9,16 +9,21 @@ afterEach(() => {
 });
 
 describe("mockTemplatesStore", () => {
-  it("lists seeded templates with a stepCount", async () => {
+  it("lists seeded templates; published video has 4 steps via detail", async () => {
     const list = await mockTemplatesStore.list();
     expect(list.length).toBeGreaterThanOrEqual(2);
     const video = list.find((t) => t.id === VIDEO_PUBLISHED);
-    expect(video?.stepCount).toBe(4);
     expect(video?.status).toBe("published");
+    const detail = await mockTemplatesStore.get(VIDEO_PUBLISHED);
+    expect(detail.steps).toHaveLength(4);
   });
 
   it("creates a new draft template at version 1", async () => {
-    const created = await mockTemplatesStore.create({ name: "Quy trình mới", appliesTo: "content" });
+    const created = await mockTemplatesStore.create({
+      code: "quy_trinh_moi",
+      name: "Quy trình mới",
+      appliesTo: "content_item",
+    });
     expect(created.status).toBe("draft");
     expect(created.version).toBe(1);
     const detail = await mockTemplatesStore.get(created.id);
@@ -27,7 +32,14 @@ describe("mockTemplatesStore", () => {
 
   it("adds a step to a draft and increments the count immutably", async () => {
     const before = await mockTemplatesStore.get(SOCIAL_DRAFT);
-    await mockTemplatesStore.addStep(SOCIAL_DRAFT, { code: "extra", title: "Bước thêm" });
+    await mockTemplatesStore.addStep(SOCIAL_DRAFT, {
+      nodeKey: "extra",
+      code: "extra",
+      name: "Bước thêm",
+      defaultTaskTitle: "Bước thêm",
+      stepType: "task",
+      isRequired: true,
+    });
     const after = await mockTemplatesStore.get(SOCIAL_DRAFT);
     expect(after.steps).toHaveLength(before.steps.length + 1);
     // `before` snapshot is not mutated by the later add.
@@ -36,7 +48,14 @@ describe("mockTemplatesStore", () => {
 
   it("rejects editing a published template (immutable D4)", async () => {
     await expect(
-      mockTemplatesStore.addStep(VIDEO_PUBLISHED, { code: "x", title: "X" }),
+      mockTemplatesStore.addStep(VIDEO_PUBLISHED, {
+        nodeKey: "x",
+        code: "x",
+        name: "X",
+        defaultTaskTitle: "X",
+        stepType: "task",
+        isRequired: true,
+      }),
     ).rejects.toThrow(/xuất bản/i);
   });
 
@@ -44,7 +63,11 @@ describe("mockTemplatesStore", () => {
     const detail = await mockTemplatesStore.get(SOCIAL_DRAFT);
     const stepId = detail.steps[0]!.id;
     await expect(
-      mockTemplatesStore.addDependency(SOCIAL_DRAFT, { fromStepId: stepId, toStepId: stepId }),
+      mockTemplatesStore.addDependency(SOCIAL_DRAFT, {
+        fromStepId: stepId,
+        toStepId: stepId,
+        dependencyType: "finish_to_start",
+      }),
     ).rejects.toThrow(/tự phụ thuộc/i);
   });
 
@@ -61,6 +84,7 @@ describe("mockTemplatesStore", () => {
     await mockTemplatesStore.addDependency(SOCIAL_DRAFT, {
       fromStepId: byKey.get("review")!,
       toStepId: byKey.get("brief")!,
+      dependencyType: "finish_to_start",
     });
     await expect(mockTemplatesStore.publish(SOCIAL_DRAFT)).rejects.toThrow(/DAG/i);
   });

@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { STEP_TYPE_LABELS, roleLabel } from "../constants";
+import { roleLabel, stepTypeLabel } from "../constants";
 import type { StepNode } from "./layout";
 
 /**
@@ -16,16 +16,16 @@ export function StepNodeCard({ data }: NodeProps<StepNode>) {
       }`}
     >
       {!disabled && <Handle type="target" position={Position.Top} className="!bg-primary" />}
-      <p className="flex items-center gap-1 truncate text-sm font-medium" title={step.title}>
+      <p className="flex items-center gap-1 truncate text-sm font-medium" title={step.name}>
         {hasError && (
           <span className="text-destructive" aria-label="Bước có lỗi DAG" title="Bước có lỗi DAG">
             ⚠
           </span>
         )}
-        <span className="truncate">{step.title}</span>
+        <span className="truncate">{step.name}</span>
       </p>
       <p className="mt-0.5 truncate text-xs text-muted-foreground">
-        {STEP_TYPE_LABELS[step.stepType]} · {roleLabel(step.assigneeRoleCode)}
+        {stepTypeLabel(step.stepType)} · {roleLabel(step.assigneeRoleCode)}
       </p>
       {!step.isRequired && (
         <p className="mt-0.5 text-[10px] text-muted-foreground">(không bắt buộc)</p>

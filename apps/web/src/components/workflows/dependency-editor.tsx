@@ -23,7 +23,7 @@ export function DependencyEditor({ templateId, steps, dependencies, disabled }: 
   const [toStepId, setToStepId] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
 
-  const titleById = useMemo(() => new Map(steps.map((s) => [s.id, s.title])), [steps]);
+  const titleById = useMemo(() => new Map(steps.map((s) => [s.id, s.name])), [steps]);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["workflow-template", templateId] });
 
@@ -76,7 +76,7 @@ export function DependencyEditor({ templateId, steps, dependencies, disabled }: 
               <option value="">— Chọn bước —</option>
               {steps.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.title}
+                  {s.name}
                 </option>
               ))}
             </Select>
@@ -92,7 +92,7 @@ export function DependencyEditor({ templateId, steps, dependencies, disabled }: 
               <option value="">— Chọn bước —</option>
               {steps.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.title}
+                  {s.name}
                 </option>
               ))}
             </Select>

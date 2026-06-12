@@ -47,7 +47,9 @@ export function buildEdges(deps: readonly DependencyDto[], disabled: boolean): E
     source: dep.fromStepId,
     target: dep.toStepId,
     markerEnd: { type: MarkerType.ArrowClosed },
+    // Published → read-only: cạnh không xoá được VÀ không focus được (chặn đường bàn phím
+    // focus-cạnh-rồi-Delete chạm callback). Draft → focus được để chọn + Delete.
     deletable: !disabled,
-    focusable: true,
+    focusable: !disabled,
   }));
 }

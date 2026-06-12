@@ -4,36 +4,47 @@ import { useNavigate } from "@tanstack/react-router";
 import {
   createTemplateSchema,
   type CreateTemplateRequest,
-  type TemplateAppliesTo,
 } from "@/lib/workflow-builder/contract";
 import { workflowTemplatesApi } from "@/lib/workflow-templates-api";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { TEMPLATE_APPLIES_TO_LABELS, TEMPLATE_APPLIES_TO_OPTIONS } from "./constants";
+import { TEMPLATE_APPLIES_TO_OPTIONS, appliesToLabel } from "./constants";
 
 interface TemplateFormState {
   name: string;
   code: string;
-  appliesTo: TemplateAppliesTo;
-  description: string;
+  appliesTo: string;
 }
 
 const emptyForm: TemplateFormState = {
   name: "",
   code: "",
-  appliesTo: "content",
-  description: "",
+  appliesTo: "content_item",
 };
 
+/** slug code ổn định từ name khi người dùng bỏ trống (contract yêu cầu code). */
+function deriveCode(name: string): string {
+  return (
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 100) || "workflow"
+  );
+}
+
 /** Parse form → request qua contract Zod (nguồn DTO). Trả lỗi field đầu tiên nếu có. */
-function parseForm(f: TemplateFormState): { ok: true; data: CreateTemplateRequest } | { ok: false; error: string } {
+function parseForm(
+  f: TemplateFormState,
+): { ok: true; data: CreateTemplateRequest } | { ok: false; error: string } {
+  const code = f.code.trim() || deriveCode(f.name);
   const result = createTemplateSchema.safeParse({
     name: f.name.trim(),
-    code: f.code.trim() || undefined,
+    code,
     appliesTo: f.appliesTo,
-    description: f.description.trim() || undefined,
   });
   if (result.success) return { ok: true, data: result.data };
   return { ok: false, error: result.error.issues[0]?.message ?? "Dữ liệu không hợp lệ." };
@@ -103,29 +114,18 @@ export function CreateTemplateDialog() {
             <Input
               value={form.code}
               onChange={(e) => patch({ code: e.target.value })}
-              placeholder="VD: video_standard"
+              placeholder="VD: video_standard (bỏ trống = tạo từ tên)"
             />
           </label>
           <label className="block space-y-1">
             <span className="text-sm font-medium">Áp dụng cho</span>
-            <Select
-              value={form.appliesTo}
-              onChange={(e) => patch({ appliesTo: e.target.value as TemplateAppliesTo })}
-            >
+            <Select value={form.appliesTo} onChange={(e) => patch({ appliesTo: e.target.value })}>
               {TEMPLATE_APPLIES_TO_OPTIONS.map((o) => (
                 <option key={o} value={o}>
-                  {TEMPLATE_APPLIES_TO_LABELS[o]}
+                  {appliesToLabel(o)}
                 </option>
               ))}
             </Select>
-          </label>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">Mô tả (tuỳ chọn)</span>
-            <Input
-              value={form.description}
-              onChange={(e) => patch({ description: e.target.value })}
-              placeholder="Mô tả ngắn về quy trình"
-            />
           </label>
           {validationError && <p className="text-sm text-destructive">{validationError}</p>}
           {create.isError && (

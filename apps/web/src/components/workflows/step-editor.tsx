@@ -4,11 +4,12 @@ import type { TemplateStepDto } from "@/lib/workflow-builder/contract";
 import { workflowTemplatesApi } from "@/lib/workflow-templates-api";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { STEP_TYPE_LABELS, roleLabel } from "./constants";
+import { roleLabel, stepTypeLabel } from "./constants";
 import {
   StepFormFields,
   emptyStepForm,
-  toStepRequest,
+  toCreateStepRequest,
+  toUpdateStepRequest,
   type StepFormState,
 } from "./step-form-fields";
 
@@ -22,7 +23,7 @@ interface StepEditorProps {
 function stepToForm(step: TemplateStepDto): StepFormState {
   return {
     code: step.code,
-    title: step.title,
+    name: step.name,
     stepType: step.stepType,
     assigneeRoleCode: step.assigneeRoleCode ?? "",
     reviewerRoleCode: step.reviewerRoleCode ?? "",
@@ -38,12 +39,14 @@ export function StepEditor({ templateId, steps, disabled }: StepEditorProps) {
   const invalidate = () => qc.invalidateQueries({ queryKey: ["workflow-template", templateId] });
 
   const save = useMutation({
-    mutationFn: () => {
-      const req = toStepRequest(form);
-      return editing === "new"
-        ? workflowTemplatesApi.addStep(templateId, req)
-        : workflowTemplatesApi.updateStep(templateId, (editing as TemplateStepDto).id, req);
-    },
+    mutationFn: () =>
+      editing === "new"
+        ? workflowTemplatesApi.addStep(templateId, toCreateStepRequest(form))
+        : workflowTemplatesApi.updateStep(
+            templateId,
+            (editing as TemplateStepDto).id,
+            toUpdateStepRequest(form),
+          ),
     onSuccess: () => {
       void invalidate();
       setEditing(null);
@@ -88,7 +91,7 @@ export function StepEditor({ templateId, steps, disabled }: StepEditorProps) {
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium">{step.title}</span>
+                  <span className="font-medium">{step.name}</span>
                   <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                     {step.code}
                   </span>
@@ -97,7 +100,7 @@ export function StepEditor({ templateId, steps, disabled }: StepEditorProps) {
                   )}
                 </div>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {STEP_TYPE_LABELS[step.stepType]} · Thực hiện: {roleLabel(step.assigneeRoleCode)} ·
+                  {stepTypeLabel(step.stepType)} · Thực hiện: {roleLabel(step.assigneeRoleCode)} ·
                   Duyệt: {roleLabel(step.reviewerRoleCode)}
                 </p>
               </div>
@@ -134,7 +137,7 @@ export function StepEditor({ templateId, steps, disabled }: StepEditorProps) {
             <Button
               size="sm"
               onClick={() => save.mutate()}
-              disabled={!form.code.trim() || !form.title.trim() || save.isPending}
+              disabled={!form.code.trim() || !form.name.trim() || save.isPending}
             >
               {save.isPending ? "Đang lưu…" : "Lưu"}
             </Button>

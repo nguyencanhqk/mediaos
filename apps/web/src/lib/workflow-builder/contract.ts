@@ -1,190 +1,98 @@
 import { z } from "zod";
+import {
+  workflowTemplateSchema,
+  templateStepSchema as realTemplateStepSchema,
+  stepDependencySchema,
+  checklistSchema as realChecklistSchema,
+  checklistItemSchema as realChecklistItemSchema,
+  templateDetailSchema as realTemplateDetailSchema,
+  dagValidationResultSchema,
+  dagValidationErrorSchema,
+  dagErrorCodeSchema,
+  dependencyTypeSchema as realDependencyTypeSchema,
+  templateStatusSchema as realTemplateStatusSchema,
+  stepStatusSchema,
+  instanceStatusSchema as realInstanceStatusSchema,
+  createTemplateSchema as realCreateTemplateSchema,
+  updateTemplateSchema as realUpdateTemplateSchema,
+  createTemplateStepSchema,
+  updateTemplateStepSchema,
+  createDependencySchema as realCreateDependencySchema,
+  createChecklistSchema as realCreateChecklistSchema,
+  createChecklistItemSchema as realCreateChecklistItemSchema,
+  applyTemplateSchema as realApplyTemplateSchema,
+} from "@mediaos/contracts";
 
 /**
- * Workflow Builder contract — MIRROR cục bộ của `packages/contracts/src/workflow.ts`
- * sau khi LUỒNG A đóng băng (G7-1b: templateSchema/stepSchema+nodeKey/dependencySchema…).
+ * Workflow Builder contract — SEAM ĐỒNG BỘ DUY NHẤT giữa UI builder và `@mediaos/contracts`.
  *
- * ⚠️ ĐÂY LÀ SEAM ĐỒNG BỘ DUY NHẤT. Track C build trước khi A freeze contract → mirror các
- * Zod schema theo plan §3 (0032) + §4 (1b). Khi A push "freeze contracts" và ta `git merge
- * feat/g7-workflow`, thay TOÀN BỘ file này bằng:
- *     export * from "@mediaos/contracts";   // re-export các workflow-builder schema đã freeze
- * (hoặc re-export chọn lọc các tên dưới đây). Mọi UI import từ MODULE NÀY → đổi 1 file là xong.
+ * Sau khi LUỒNG A freeze contract (G7-1b) + merge-forward, file này RE-EXPORT thẳng các schema
+ * FROZEN dưới TÊN ỔN ĐỊNH mà UI đang dùng (vd `templateSchema`, `DependencyDto`). Đổi nguồn DTO
+ * = đổi 1 file. KHÔNG còn mirror tay → không lệch contract.
  *
- * camelCase = DTO convention của repo (DB snake_case map sang camelCase ở serializer).
+ * Ngoại lệ giữ FE-local: các read-view INSTANCE giàu hơn (nodeKey + position trên step, templateName,
+ * dependencies) phục vụ canvas 3d — BE CHƯA ship endpoint instance tương ứng (spine chỉ trả
+ * { instance, steps } phẳng). Khi A ship, thay nốt phần dưới bằng re-export.
  */
 
-// ─── Enums / hằng số ──────────────────────────────────────────────────────────
+// ─── Template / step / dependency / checklist (re-export FROZEN) ──────────────
 
-export const templateStatusSchema = z.enum(["draft", "published", "archived"]);
-export type TemplateStatus = z.infer<typeof templateStatusSchema>;
+export {
+  workflowTemplateSchema as templateSchema,
+  stepDependencySchema as dependencySchema,
+  dagValidationResultSchema,
+  dagValidationErrorSchema as dagErrorSchema,
+  dagErrorCodeSchema,
+  createTemplateStepSchema as createStepSchema,
+  updateTemplateStepSchema as updateStepSchema,
+} from "@mediaos/contracts";
 
-/** Loại mục tiêu áp template (erd §9.1 — content XOR project). */
-export const templateAppliesToSchema = z.enum(["content", "project"]);
-export type TemplateAppliesTo = z.infer<typeof templateAppliesToSchema>;
+export const templateStepSchema = realTemplateStepSchema;
+export const checklistSchema = realChecklistSchema;
+export const checklistItemSchema = realChecklistItemSchema;
+export const templateDetailSchema = realTemplateDetailSchema;
+export const dependencyTypeSchema = realDependencyTypeSchema;
+export const templateStatusSchema = realTemplateStatusSchema;
+export const stepInstanceStatusSchema = stepStatusSchema;
+export const instanceStatusSchema = realInstanceStatusSchema;
 
-/** Loại node bước trên canvas (mặc định 'task'; 'approval'/'evaluation' để dành G8). */
-export const stepTypeSchema = z.enum(["task", "approval", "evaluation"]);
-export type StepType = z.infer<typeof stepTypeSchema>;
+export const createTemplateSchema = realCreateTemplateSchema;
+export const updateTemplateSchema = realUpdateTemplateSchema;
+export const createDependencySchema = realCreateDependencySchema;
+export const createChecklistSchema = realCreateChecklistSchema;
+export const createChecklistItemSchema = realCreateChecklistItemSchema;
+export const applyTemplateSchema = realApplyTemplateSchema;
 
-export const dependencyTypeSchema = z.enum([
-  "finish_to_start",
-  "start_to_start",
-  "finish_to_finish",
-]);
-export type DependencyType = z.infer<typeof dependencyTypeSchema>;
-
-/** Trạng thái bước ở INSTANCE (tái dùng từ workflow.ts đã có — phục vụ 3d read-only). */
-export const stepInstanceStatusSchema = z.enum([
-  "not_started",
-  "in_progress",
-  "waiting_review",
-  "approved",
-  "revision",
-  "blocked",
-]);
-export type StepInstanceStatus = z.infer<typeof stepInstanceStatusSchema>;
-
-// ─── Template (workflow_definitions mở rộng) ──────────────────────────────────
-
-export const templateSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  code: z.string(),
-  name: z.string(),
-  description: z.string().nullable(),
-  version: z.number().int().min(1),
-  status: templateStatusSchema,
-  appliesTo: templateAppliesToSchema,
-  publishedAt: z.string().datetime().nullable(),
-  createdBy: z.string().uuid().nullable(),
-  createdAt: z.string().datetime(),
-  /** Số bước — chỉ có ở list summary (server tính sẵn). */
-  stepCount: z.number().int().nonnegative().optional(),
-});
-export type TemplateDto = z.infer<typeof templateSchema>;
-
-// ─── Step (workflow_definition_steps mở rộng) ─────────────────────────────────
-
-export const templateStepSchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  workflowDefinitionId: z.string().uuid(),
-  /** Khoá ổn định cho deps + canvas (KHÔNG đổi khi reorder). */
-  nodeKey: z.string().min(1),
-  stepType: stepTypeSchema,
-  stepOrder: z.number().int().min(1),
-  code: z.string(),
-  title: z.string(),
-  assigneeRoleCode: z.string().nullable(),
-  reviewerRoleCode: z.string().nullable(),
-  isRequired: z.boolean(),
-  positionX: z.number().nullable(),
-  positionY: z.number().nullable(),
-  defaultChecklistId: z.string().uuid().nullable(),
-});
-export type TemplateStepDto = z.infer<typeof templateStepSchema>;
-
-// ─── Dependency (workflow_step_dependencies — cạnh DAG) ───────────────────────
-// Quy ước: fromStepId = bước CHẠY TRƯỚC (tiền nhiệm), toStepId = bước phụ thuộc (chạy sau).
-// "B chờ A" ⇒ { fromStepId: A, toStepId: B } ⇒ cạnh A→B (source=from, target=to).
-
-export const dependencySchema = z.object({
-  id: z.string().uuid(),
-  companyId: z.string().uuid(),
-  workflowDefinitionId: z.string().uuid(),
-  fromStepId: z.string().uuid(),
-  toStepId: z.string().uuid(),
-  dependencyType: dependencyTypeSchema,
-});
-export type DependencyDto = z.infer<typeof dependencySchema>;
-
-// ─── Template detail (template + steps + deps) ────────────────────────────────
-
-export const templateDetailSchema = z.object({
-  template: templateSchema,
-  steps: z.array(templateStepSchema),
-  dependencies: z.array(dependencySchema),
-});
-export type TemplateDetailDto = z.infer<typeof templateDetailSchema>;
-
-// ─── DAG validation (kết quả của DagValidatorService — Track B 2a) ────────────
-
-export const dagErrorCodeSchema = z.enum([
-  "CYCLE",
-  "SELF_DEP",
-  "CROSS_TEMPLATE_DEP",
-  "ORPHAN",
-  "MISSING_DEP_TARGET",
-  "NO_ROOT",
-  "EMPTY",
-]);
-export type DagErrorCode = z.infer<typeof dagErrorCodeSchema>;
-
-export const dagErrorSchema = z.object({
-  code: dagErrorCodeSchema,
-  message: z.string(),
-  /** node_key liên quan (nếu lỗi gắn 1 bước cụ thể). */
-  nodeKey: z.string().nullable().optional(),
-  fromStepId: z.string().uuid().nullable().optional(),
-  toStepId: z.string().uuid().nullable().optional(),
-});
-export type DagErrorDto = z.infer<typeof dagErrorSchema>;
-
-export const dagValidationResultSchema = z.object({
-  valid: z.boolean(),
-  errors: z.array(dagErrorSchema),
-});
+export type TemplateDto = z.infer<typeof workflowTemplateSchema>;
+export type TemplateStepDto = z.infer<typeof realTemplateStepSchema>;
+export type DependencyDto = z.infer<typeof stepDependencySchema>;
+export type ChecklistDto = z.infer<typeof realChecklistSchema>;
+export type ChecklistItemDto = z.infer<typeof realChecklistItemSchema>;
+export type TemplateDetailDto = z.infer<typeof realTemplateDetailSchema>;
 export type DagValidationResultDto = z.infer<typeof dagValidationResultSchema>;
+export type DagErrorDto = z.infer<typeof dagValidationErrorSchema>;
+export type DagErrorCode = z.infer<typeof dagErrorCodeSchema>;
+export type DependencyType = z.infer<typeof realDependencyTypeSchema>;
+export type TemplateStatus = z.infer<typeof realTemplateStatusSchema>;
+export type StepInstanceStatus = z.infer<typeof stepStatusSchema>;
+export type InstanceStatus = z.infer<typeof realInstanceStatusSchema>;
 
-// ─── Request schemas (RHF/useState → parse trước khi gửi) ─────────────────────
+export type CreateTemplateRequest = z.infer<typeof realCreateTemplateSchema>;
+export type UpdateTemplateRequest = z.infer<typeof realUpdateTemplateSchema>;
+export type CreateStepRequest = z.infer<typeof createTemplateStepSchema>;
+export type UpdateStepRequest = z.infer<typeof updateTemplateStepSchema>;
+export type CreateDependencyRequest = z.infer<typeof realCreateDependencySchema>;
+export type CreateChecklistRequest = z.infer<typeof realCreateChecklistSchema>;
+export type CreateChecklistItemRequest = z.infer<typeof realCreateChecklistItemSchema>;
+export type ApplyTemplateRequest = z.infer<typeof realApplyTemplateSchema>;
 
-export const createTemplateSchema = z.object({
-  name: z.string().min(1).max(200),
-  code: z.string().min(1).max(80).optional(),
-  appliesTo: templateAppliesToSchema.default("content"),
-  description: z.string().max(1000).optional().nullable(),
-});
-export type CreateTemplateRequest = z.infer<typeof createTemplateSchema>;
+/** Lưu vị trí node (kéo-thả canvas 2c) — BE không có endpoint /position riêng; gửi qua PATCH step. */
+export interface UpdateStepPositionRequest {
+  positionX: number;
+  positionY: number;
+}
 
-export const updateTemplateSchema = z.object({
-  name: z.string().min(1).max(200).optional(),
-  description: z.string().max(1000).optional().nullable(),
-});
-export type UpdateTemplateRequest = z.infer<typeof updateTemplateSchema>;
-
-export const createStepSchema = z.object({
-  code: z.string().min(1).max(80),
-  title: z.string().min(1).max(200),
-  stepType: stepTypeSchema.optional(),
-  assigneeRoleCode: z.string().max(80).optional().nullable(),
-  reviewerRoleCode: z.string().max(80).optional().nullable(),
-  isRequired: z.boolean().optional(),
-  positionX: z.number().optional().nullable(),
-  positionY: z.number().optional().nullable(),
-});
-export type CreateStepRequest = z.infer<typeof createStepSchema>;
-
-export const updateStepSchema = createStepSchema.partial();
-export type UpdateStepRequest = z.infer<typeof updateStepSchema>;
-
-/** Lưu vị trí node (kéo-thả canvas — 2c). */
-export const updateStepPositionSchema = z.object({
-  positionX: z.number(),
-  positionY: z.number(),
-});
-export type UpdateStepPositionRequest = z.infer<typeof updateStepPositionSchema>;
-
-export const createDependencySchema = z.object({
-  fromStepId: z.string().uuid(),
-  toStepId: z.string().uuid(),
-  dependencyType: dependencyTypeSchema.optional(),
-});
-export type CreateDependencyRequest = z.infer<typeof createDependencySchema>;
-
-// ─── Instance (3d — read-only canvas tô màu theo status) ──────────────────────
-
-export const instanceStatusSchema = z.enum(["active", "completed", "cancelled"]);
-export type InstanceStatus = z.infer<typeof instanceStatusSchema>;
+// ─── Instance read-views (3d, FE-local — BE chưa ship endpoint instance giàu) ──
 
 export const instanceStepSchema = z.object({
   id: z.string().uuid(),
@@ -194,7 +102,7 @@ export const instanceStepSchema = z.object({
   stepOrder: z.number().int().min(1),
   stepCode: z.string(),
   stepName: z.string(),
-  status: stepInstanceStatusSchema,
+  status: stepStatusSchema,
   assigneeUserId: z.string().uuid().nullable(),
   reviewerUserId: z.string().uuid().nullable(),
   positionX: z.number().nullable(),
@@ -209,7 +117,7 @@ export const instanceSchema = z.object({
   definitionVersion: z.number().int().min(1),
   contentItemId: z.string().uuid().nullable(),
   projectId: z.string().uuid().nullable(),
-  status: instanceStatusSchema,
+  status: realInstanceStatusSchema,
   templateName: z.string(),
   createdAt: z.string().datetime(),
 });
@@ -218,6 +126,6 @@ export type InstanceDto = z.infer<typeof instanceSchema>;
 export const instanceDetailSchema = z.object({
   instance: instanceSchema,
   steps: z.array(instanceStepSchema),
-  dependencies: z.array(dependencySchema),
+  dependencies: z.array(stepDependencySchema),
 });
 export type InstanceDetailDto = z.infer<typeof instanceDetailSchema>;
