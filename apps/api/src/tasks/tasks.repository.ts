@@ -156,6 +156,44 @@ export class TasksRepository {
       .limit(1);
   }
 
+  // ─── Tenant-FK guards (G9-2 SEC-1, in-tx) ─────────────────────────────────────
+  // DB FK (assignee_user_id/project_id) tham chiếu PK toàn cục → giá trị chéo tenant vẫn thoả ràng
+  // buộc DB; RLS chỉ chặn ĐỌC LẠI, KHÔNG chặn GHI giá trị FK của tenant khác. Guard app-side bắt buộc.
+  // Truy vấn đi qua tenant tx (RLS đã set app.current_company_id) + eq(company_id) defense-in-depth.
+
+  /** assignee phải tồn tại, cùng tenant, đang active (status='active') và chưa xoá mềm. */
+  async assigneeActiveTx(tx: TenantTx, companyId: string, userId: string): Promise<boolean> {
+    const [row] = await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(
+          eq(users.companyId, companyId),
+          eq(users.id, userId),
+          eq(users.status, "active"),
+          isNull(users.deletedAt),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
+  /** project_id (nếu có) phải tồn tại, cùng tenant và chưa xoá mềm. */
+  async projectExistsTx(tx: TenantTx, companyId: string, projectId: string): Promise<boolean> {
+    const [row] = await tx
+      .select({ id: projects.id })
+      .from(projects)
+      .where(
+        and(
+          eq(projects.companyId, companyId),
+          eq(projects.id, projectId),
+          isNull(projects.deletedAt),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
   /** Row thô (cho guard nghiệp vụ — phân biệt task workflow vs office). */
   findRawByIdTx(tx: TenantTx, companyId: string, taskId: string) {
     return tx

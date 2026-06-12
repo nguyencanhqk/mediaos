@@ -52,6 +52,21 @@ export class TasksService {
   /** Tạo task tay (office). Không cần content/workflow — bản chất Task Hub hợp nhất (BẤT BIẾN #4). */
   async createTask(user: RequestUser, dto: CreateTaskRequest) {
     return this.db.withTenant(user.companyId, async (tx) => {
+      // SEC-1 tenant-FK guard (TRƯỚC insert/audit): FK trỏ PK toàn cục nên giá trị chéo tenant vẫn
+      // thoả ràng buộc DB — phải chặn app-side. office task cho phép MỌI FK NULL (chỉ guard khi có giá trị).
+      if (dto.assigneeUserId) {
+        const ok = await this.repo.assigneeActiveTx(tx, user.companyId, dto.assigneeUserId);
+        if (!ok) {
+          throw new BadRequestException(
+            "Người nhận việc không hợp lệ (không cùng công ty hoặc đã ngưng hoạt động).",
+          );
+        }
+      }
+      if (dto.projectId) {
+        const ok = await this.repo.projectExistsTx(tx, user.companyId, dto.projectId);
+        if (!ok) throw new NotFoundException(`Project not found: ${dto.projectId}`);
+      }
+
       const [created] = await this.repo.createTask(
         user.companyId,
         {
