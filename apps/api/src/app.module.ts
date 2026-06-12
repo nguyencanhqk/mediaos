@@ -14,6 +14,7 @@ import { MediaModule } from "./media/media.module";
 import { WorkflowModule } from "./workflow/workflow.module";
 import { TasksModule } from "./tasks/tasks.module";
 import { AttendanceModule } from "./attendance/attendance.module";
+import { LeaveModule } from "./leave/leave.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { ChatModule } from "./chat/chat.module";
 import { PermissionModule } from "./permission/permission.module";
@@ -40,6 +41,7 @@ import { CompanyGuard } from "./permission/guards/company.guard";
     WorkflowModule,
     TasksModule,
     AttendanceModule,
+    LeaveModule,
     NotificationsModule,
     ChatModule,
   ],

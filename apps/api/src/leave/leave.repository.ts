@@ -1,13 +1,49 @@
 import { Injectable } from "@nestjs/common";
 import { and, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
-import { leaveBalances, leaveRequests, leaveTypes } from "../db/schema/hr";
+import { employeeProfiles } from "../db/schema/employees";
+import { leaveBalances, leaveRequests, leaveTypes, workSchedules } from "../db/schema/hr";
 import { users } from "../db/schema/users";
 
 /** Persistence for G11-2 leave. Tenant-scoped (RLS + explicit company_id). */
 @Injectable()
 export class LeaveRepository {
   constructor(private readonly db: DatabaseService) {}
+
+  // ─── work_schedules (read-only: resolve working days for the day-count) ──────
+
+  /**
+   * Working-day calendar for a user (ISO weekdays, 1=Mon…7=Sun): the user's assigned schedule,
+   * falling back to the company default, then to Mon–Fri. Read-only — leave never writes schedules.
+   */
+  async resolveWorkingDaysForUserTx(
+    companyId: string,
+    userId: string,
+    tx: TenantTx,
+  ): Promise<number[]> {
+    const [profile] = await tx
+      .select({ workScheduleId: employeeProfiles.workScheduleId })
+      .from(employeeProfiles)
+      .where(and(eq(employeeProfiles.companyId, companyId), eq(employeeProfiles.userId, userId)))
+      .limit(1);
+
+    const conds = profile?.workScheduleId
+      ? and(eq(workSchedules.companyId, companyId), eq(workSchedules.id, profile.workScheduleId), isNull(workSchedules.deletedAt))
+      : and(
+          eq(workSchedules.companyId, companyId),
+          eq(workSchedules.isDefault, true),
+          eq(workSchedules.status, "active"),
+          isNull(workSchedules.deletedAt),
+        );
+
+    const [schedule] = await tx
+      .select({ workingDaysJson: workSchedules.workingDaysJson })
+      .from(workSchedules)
+      .where(conds)
+      .limit(1);
+
+    return schedule?.workingDaysJson ?? [1, 2, 3, 4, 5];
+  }
 
   // ─── leave_types ───────────────────────────────────────────────────────────
 
