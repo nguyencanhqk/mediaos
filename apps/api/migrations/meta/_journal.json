@@ -309,6 +309,13 @@
       "when": 1717500074000,
       "tag": "0064_g11_period_lock_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1717500075000,
+      "tag": "0050_g10_chat_realtime",
+      "breakpoints": true
     }
   ]
 }
