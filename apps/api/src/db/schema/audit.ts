@@ -61,5 +61,13 @@ export const AUDIT_OBJECT_TYPES = [
   "content_type",
   // G7 workflow builder (gom audit step/dep/checklist dưới aggregate template, objectId=templateId)
   "workflow_template",
+  // G10 communication (chat realtime / notification center / meeting)
+  "chat_room",
+  "chat_message",
+  "notification",
+  "notification_rule",
+  "notification_preference",
+  "meeting",
+  "meeting_room",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
