@@ -258,6 +258,18 @@ describe("ApprovalService", () => {
       // Even the assignee (or any user) cannot approve a step that has no assigned reviewer.
       await expect(service.approve(COMPANY_ID, REQUEST_ID, ASSIGNEE_ID)).rejects.toThrow(ConflictException);
     });
+
+    it("requestRevision is FAIL-CLOSED when reviewerUserId is null (S2 parity)", async () => {
+      const repo = makeRepo({
+        step: makeStep({ reviewerUserId: null }),
+      });
+      const db = makeDb(repo);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
+
+      await expect(
+        service.requestRevision(COMPANY_ID, REQUEST_ID, ASSIGNEE_ID, "no reviewer assigned"),
+      ).rejects.toThrow(ConflictException);
+    });
   });
 
   // ─── C4: Approve when instance NOT active ─────────────────────────────────
@@ -403,6 +415,15 @@ describe("ApprovalService", () => {
       await expect(service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID)).rejects.toThrow(InternalServerErrorException);
     });
 
+    it("approve: throws InternalServerError when closeApprovalRequest returns no row (SF3)", async () => {
+      const repo = makeRepo();
+      repo.closeApprovalRequest = vi.fn().mockResolvedValue([]);
+      const db = makeDb(repo);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
+
+      await expect(service.approve(COMPANY_ID, REQUEST_ID, REVIEWER_ID)).rejects.toThrow(InternalServerErrorException);
+    });
+
     it("approve: rethrows an unexpected (non-HTTP) repo error via withTenant.catch", async () => {
       const repo = makeRepo();
       repo.approveStep = vi.fn().mockRejectedValue(new Error("db connection lost"));
@@ -434,6 +455,17 @@ describe("ApprovalService", () => {
     it("requestRevision: throws InternalServerError when setStepToRevision returns no row", async () => {
       const repo = makeRepo();
       repo.setStepToRevision = vi.fn().mockResolvedValue([undefined]);
+      const db = makeDb(repo);
+      const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
+
+      await expect(
+        service.requestRevision(COMPANY_ID, REQUEST_ID, REVIEWER_ID, "Lỗi"),
+      ).rejects.toThrow(InternalServerErrorException);
+    });
+
+    it("requestRevision: throws InternalServerError when closeApprovalRequest returns no row (SF3)", async () => {
+      const repo = makeRepo();
+      repo.closeApprovalRequest = vi.fn().mockResolvedValue([]);
       const db = makeDb(repo);
       const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
