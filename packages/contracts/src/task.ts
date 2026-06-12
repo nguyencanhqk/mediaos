@@ -14,9 +14,19 @@ export type TaskStatusDto = z.infer<typeof taskStatusSchema>;
 
 // ─── Task ─────────────────────────────────────────────────────────────────────
 
+export const taskTypeSchema = z.enum([
+  "workflow_step",
+  "office",
+  "meeting_action",
+  "hr",
+  "finance",
+]);
+export type TaskTypeDto = z.infer<typeof taskTypeSchema>;
+
 export const taskSchema = z.object({
   id: z.string().uuid(),
   companyId: z.string().uuid(),
+  taskType: taskTypeSchema,
   title: z.string(),
   status: taskStatusSchema,
   origin: z.enum(["initial", "revision"]),

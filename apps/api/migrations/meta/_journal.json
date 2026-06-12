@@ -267,6 +267,34 @@
       "when": 1717500045000,
       "tag": "0037_g3fix_grant_object_permission_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1717500036000,
+      "tag": "0060_g11_audit_object_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1717500037000,
+      "tag": "0061_g11_attendance",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1717500038000,
+      "tag": "0062_g11_leave",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1717500039000,
+      "tag": "0063_g11_permissions_seed",
+      "breakpoints": true
     }
   ]
 }
