@@ -187,6 +187,21 @@ describe("AttendanceService — adjustment lifecycle", () => {
     await expect(service.approveAdjustment(actor, REQ_ID)).rejects.toThrow(ConflictException);
   });
 
+  it("blocks approving an adjustment for a month whose period is locked even when the current month is open (cross-month lock)", async () => {
+    // Đơn cho 2024-05; tháng 2024-05 ĐÃ khoá, dù tháng hiện tại (now) có thể open. assertPeriodOpen
+    // của approve dùng monthOfDate(request.workDate) ⇒ phải tra ĐÚNG '2024-05', không phải tháng now.
+    const isPeriodLockedTx = vi.fn().mockImplementation(async (_c: string, month: string) =>
+      month === "2024-05",
+    );
+    const repo = makeRepo({
+      isPeriodLockedTx,
+      findAdjustmentByIdTx: vi.fn().mockResolvedValue([makeAdjustment({ workDate: "2024-05-20" })]),
+    });
+    const { service } = build(repo);
+    await expect(service.approveAdjustment(actor, REQ_ID)).rejects.toThrow(ConflictException);
+    expect(isPeriodLockedTx).toHaveBeenCalledWith(COMPANY_ID, "2024-05", expect.anything());
+  });
+
   it("blocks rejecting an adjustment that is not pending", async () => {
     const repo = makeRepo({
       findAdjustmentByIdTx: vi.fn().mockResolvedValue([makeAdjustment({ status: "cancelled" })]),
@@ -238,5 +253,58 @@ describe("AttendanceService — period lock + scope", () => {
     const { service } = build(repo, false);
     await expect(service.listAdjustments(actor, { scope: "me" })).resolves.toEqual([]);
     expect(repo.findAdjustments).toHaveBeenCalledWith(COMPANY_ID, { userId: ACTOR_ID, status: undefined });
+  });
+});
+
+describe("AttendanceService — audit-on-mutation contract", () => {
+  // BẤT BIẾN audit: mọi ghi/sửa công quan trọng PHẢI ghi audit TRONG cùng tx (mock đếm số lần gọi).
+  it("approveAdjustment records BOTH AdjustmentApproved + RecordAdjusted (2 audit) and enqueues outbox once", async () => {
+    const repo = makeRepo({
+      updateAdjustmentTx: vi
+        .fn()
+        .mockResolvedValue([makeAdjustment({ status: "approved", attendanceRecordId: "rec-1" })]),
+    });
+    const { service, audit, outbox, hrTasks } = build(repo);
+    await service.approveAdjustment(actor, REQ_ID, "ok");
+    expect(audit.record).toHaveBeenCalledTimes(2);
+    const actions = audit.record.mock.calls.map((c) => (c[1] as { action: string }).action);
+    expect(actions).toEqual(["AttendanceAdjustmentApproved", "AttendanceRecordAdjusted"]);
+    expect(outbox.enqueue).toHaveBeenCalledTimes(1);
+    // Đơn duyệt → đóng task Hub (task_type='hr') trong cùng tx.
+    expect(hrTasks.closeTaskTx).toHaveBeenCalledTimes(1);
+  });
+
+  it("lockPeriod records exactly one AttendancePeriodLocked audit + one outbox event", async () => {
+    const repo = makeRepo();
+    const { service, audit, outbox } = build(repo);
+    await service.lockPeriod(actor, "2024-06");
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    expect((audit.record.mock.calls[0][1] as { action: string }).action).toBe(
+      "AttendancePeriodLocked",
+    );
+    expect(outbox.enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it("createAdjustment creates an hr task in the shared tasks table and links task_id", async () => {
+    // BẤT BIẾN #4 Task Hub: đơn → task_type='hr' INSERT vào CHUNG bảng tasks; request.task_id trỏ task.
+    const repo = makeRepo();
+    const { service, hrTasks } = build(repo);
+    await service.createAdjustment(actor, {
+      workDate: "2024-06-03",
+      requestedCheckInAt: "2024-06-03T02:00:00Z",
+      reason: "Quên chấm công",
+    });
+    expect(hrTasks.createApprovalTaskTx).toHaveBeenCalledTimes(1);
+    expect(repo.insertAdjustmentTx).toHaveBeenCalledTimes(1);
+    const insertArgs = repo.insertAdjustmentTx.mock.calls[0][1] as { taskId: string };
+    expect(insertArgs.taskId).toBe("task-1");
+  });
+
+  it("cancelAdjustment soft-deletes the linked hr task (cancelTaskTx, never hard-delete)", async () => {
+    const repo = makeRepo();
+    const { service, hrTasks } = build(repo);
+    await service.cancelAdjustment(actor, REQ_ID);
+    expect(hrTasks.cancelTaskTx).toHaveBeenCalledTimes(1);
+    expect(hrTasks.closeTaskTx).not.toHaveBeenCalled();
   });
 });

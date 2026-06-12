@@ -37,6 +37,23 @@ describe("workDateForCheckIn", () => {
     // 2024-06-02 23:30Z === 2024-06-03 06:30 VN → local date is the 3rd, not the 2nd
     expect(workDateForCheckIn(at("2024-06-02T23:30:00Z"), VN)).toBe("2024-06-03");
   });
+
+  it("snaps the work_date around local midnight Asia/Ho_Chi_Minh (UTC+7) — both sides of the boundary", () => {
+    // Local midnight 2024-06-03 00:00 VN === 2024-06-02 17:00Z.
+    // One minute BEFORE local midnight: 2024-06-02 23:59 VN === 2024-06-02 16:59Z → still the 2nd.
+    expect(workDateForCheckIn(at("2024-06-02T16:59:00Z"), VN)).toBe("2024-06-02");
+    // Exactly at local midnight: 2024-06-02 17:00Z → flips to the 3rd.
+    expect(workDateForCheckIn(at("2024-06-02T17:00:00Z"), VN)).toBe("2024-06-03");
+    // One minute AFTER local midnight: 2024-06-02 17:01Z → the 3rd.
+    expect(workDateForCheckIn(at("2024-06-02T17:01:00Z"), VN)).toBe("2024-06-03");
+  });
+
+  it("crosses the month boundary by tz, not by UTC instant (period_month feed for payroll lock)", () => {
+    // 2024-05-31 23:30 VN === 2024-05-31 16:30Z → local month is May (2024-05), NOT June.
+    expect(workDateForCheckIn(at("2024-05-31T16:30:00Z"), VN)).toBe("2024-05-31");
+    // 2024-05-31 17:00Z === 2024-06-01 00:00 VN → flips into June by wall-clock.
+    expect(workDateForCheckIn(at("2024-05-31T17:00:00Z"), VN)).toBe("2024-06-01");
+  });
 });
 
 describe("lateMinutesFor", () => {
