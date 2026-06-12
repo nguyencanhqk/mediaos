@@ -149,13 +149,15 @@ export class ApprovalService {
         tx,
       );
 
-      // 2. Close approval request
-      await this.repo.closeApprovalRequest(
+      // 2. Close approval request — guard the row count: a 0-row update would leave the request
+      // 'pending' while the step is approved (inconsistent state committed in-tx). Fail-closed.
+      const [closedRequest] = await this.repo.closeApprovalRequest(
         companyId,
         requestId,
         { status: "approved", comment: comment ?? null },
         tx,
       );
+      if (!closedRequest) throw new InternalServerErrorException("Failed to close approval request");
 
       // 3. Mark step approved
       const [updatedStep] = await this.repo.approveStep(companyId, step.id, tx);
@@ -296,7 +298,7 @@ export class ApprovalService {
         // integrity anomaly). Unlike the cosmetic fan-out fallback (line ~236), silently dropping the
         // eval requirement loses a contractual side-effect → make it observable (mirror the locked-
         // candidate warn above) instead of swallowing it.
-        this.logger.warn("approve eval-hook: no def-step matched approved step — eval flag unverifiable", {
+        this.logger.error("approve eval-hook: no def-step matched approved step — eval flag unverifiable", {
           stepId: step.id,
           nodeKey: step.nodeKey,
           stepCode: step.stepCode,
@@ -382,6 +384,11 @@ export class ApprovalService {
       const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
       if (!instance) throw new NotFoundException(`Instance not found: ${step.workflowInstanceId}`);
 
+      // 3c-iii race-safety (parity with approve()): serialize per-instance BEFORE any dep-state read.
+      // requestRevision reads the DAG view + propagates revision locks below; without this FOR UPDATE
+      // a concurrent approve()/requestRevision() on the same instance could interleave on stale state.
+      await this.repo.lockInstanceForUpdateInTx(companyId, instance.id, tx);
+
       try {
         this.fsm.validateConsumerTransition({
           step: toFsmStep(step),
@@ -407,13 +414,15 @@ export class ApprovalService {
         tx,
       );
 
-      // 2. Close approval request
-      await this.repo.closeApprovalRequest(
+      // 2. Close approval request — guard the row count (parity with approve()): a 0-row update would
+      // leave the request 'pending' while the step is set to revision (inconsistent state). Fail-closed.
+      const [closedRequest] = await this.repo.closeApprovalRequest(
         companyId,
         requestId,
         { status: "revision_requested", comment: comment ?? null },
         tx,
       );
+      if (!closedRequest) throw new InternalServerErrorException("Failed to close approval request");
 
       // 3. Mark step as revision
       const [updatedStep] = await this.repo.setStepToRevision(companyId, step.id, tx);

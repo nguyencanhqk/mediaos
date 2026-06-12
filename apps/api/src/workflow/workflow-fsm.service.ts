@@ -158,7 +158,7 @@ export class WorkflowFsmService {
    *   2. step.workflowInstanceId === instance.id
    *   3. (fromState, event) found in allowed transitions
    *   4. transition.writtenBy === 'consumer'
-   *   5. reviewer check — for approve/request_revision only when reviewerUserId is set
+   *   5. reviewer check — approve/request_revision require an ASSIGNED reviewer === actor (fail-closed)
    */
   validateConsumerTransition(input: ValidateConsumerTransitionInput): TransitionResult {
     const { step, instance, event, actorId, reviewerUserId } = input;
@@ -184,10 +184,18 @@ export class WorkflowFsmService {
       throw new IllegalTransitionError(step.status, event);
     }
 
-    // Guard 5: reviewer check for approve / request_revision
-    // open_next and complete_workflow are system-triggered (no actor restriction)
+    // Guard 5: reviewer check for approve / request_revision — FAIL-CLOSED (G7-merge gate S2).
+    // open_next and complete_workflow are system-triggered (no actor restriction).
+    // A null reviewer means the PM has not assigned one yet (submitStep creates the approval request
+    // before assignment). Denying here prevents ANY tenant member — including the assignee — from
+    // self-approving an unassigned step. A reviewer MUST be assigned before the decision is allowed.
     if (event === "approve" || event === "request_revision") {
-      if (reviewerUserId !== null && reviewerUserId !== actorId) {
+      if (reviewerUserId === null) {
+        throw new NotReviewerError(
+          `no reviewer assigned for step=${step.id} — assign a reviewer before ${event}`,
+        );
+      }
+      if (reviewerUserId !== actorId) {
         throw new NotReviewerError(
           `actorId=${actorId} is not reviewer=${reviewerUserId}`,
         );

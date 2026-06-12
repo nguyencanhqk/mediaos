@@ -117,10 +117,11 @@ describe.skipIf(!hasDb)("G7-3c approve() over DAG (3c-ii fan-out + 3c-iii race-s
     );
     return r.rows.map((row) => row.payload as Record<string, unknown>);
   }
-  /** assignee NULL after applyTemplate (PM assigns later); start/submit need actor===assignee. */
+  /** assignee + reviewer NULL after applyTemplate (PM assigns later); start/submit need actor===assignee,
+   * approve/request_revision need actor===reviewer (S2 fail-closed). Single-actor test: userA is both. */
   async function assignAll(instanceId: string): Promise<void> {
     await direct.query(
-      `UPDATE workflow_steps SET assignee_user_id = $1 WHERE workflow_instance_id = $2`,
+      `UPDATE workflow_steps SET assignee_user_id = $1, reviewer_user_id = $1 WHERE workflow_instance_id = $2`,
       [userA, instanceId],
     );
   }

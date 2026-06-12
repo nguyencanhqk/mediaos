@@ -29,6 +29,7 @@ import {
   ChecklistIncompleteError,
   DependenciesNotMetError,
   IllegalTransitionError,
+  NotReviewerError,
   NotStepActorError,
   StepLockedError,
   WorkflowInactiveError,
@@ -355,7 +356,7 @@ describe("WorkflowFsmService", () => {
         instance,
         event: "approve",
         actorId: ACTOR_ID,
-        reviewerUserId: null,
+        reviewerUserId: ACTOR_ID,
       });
 
       expect(result.toState).toBe("approved");
@@ -371,7 +372,7 @@ describe("WorkflowFsmService", () => {
         instance,
         event: "request_revision",
         actorId: ACTOR_ID,
-        reviewerUserId: null,
+        reviewerUserId: ACTOR_ID,
       });
 
       expect(result.toState).toBe("revision");
@@ -400,6 +401,72 @@ describe("WorkflowFsmService", () => {
 
       expect(["approved", "revision"]).not.toContain(started.toState);
       expect(["approved", "revision"]).not.toContain(submitted.toState);
+    });
+  });
+
+  // ─── S2 (G7-merge gate): reviewer authorization is FAIL-CLOSED ───────────────
+  // A step can reach waiting_review with reviewerUserId=null (submitStep creates the approval
+  // request before a PM assigns the reviewer). The consumer guard MUST deny approve/request_revision
+  // when no reviewer is assigned — otherwise ANY tenant member (incl. the assignee) could self-approve.
+  describe("S2 — reviewer must be assigned to approve / request_revision (fail-closed)", () => {
+    it("approve with reviewerUserId=null is denied (no reviewer assigned yet)", () => {
+      const step = makeStep({ status: "waiting_review" });
+      const instance = makeInstance({});
+
+      expect(() =>
+        fsm.validateConsumerTransition({
+          step,
+          instance,
+          event: "approve",
+          actorId: ACTOR_ID,
+          reviewerUserId: null,
+        }),
+      ).toThrow(NotReviewerError);
+    });
+
+    it("request_revision with reviewerUserId=null is denied", () => {
+      const step = makeStep({ status: "waiting_review" });
+      const instance = makeInstance({});
+
+      expect(() =>
+        fsm.validateConsumerTransition({
+          step,
+          instance,
+          event: "request_revision",
+          actorId: ACTOR_ID,
+          reviewerUserId: null,
+        }),
+      ).toThrow(NotReviewerError);
+    });
+
+    it("approve by a non-reviewer actor is denied", () => {
+      const step = makeStep({ status: "waiting_review" });
+      const instance = makeInstance({});
+
+      expect(() =>
+        fsm.validateConsumerTransition({
+          step,
+          instance,
+          event: "approve",
+          actorId: OTHER_USER_ID,
+          reviewerUserId: ACTOR_ID,
+        }),
+      ).toThrow(NotReviewerError);
+    });
+
+    it("approve by the designated reviewer succeeds", () => {
+      const step = makeStep({ status: "waiting_review" });
+      const instance = makeInstance({});
+
+      const result = fsm.validateConsumerTransition({
+        step,
+        instance,
+        event: "approve",
+        actorId: ACTOR_ID,
+        reviewerUserId: ACTOR_ID,
+      });
+
+      expect(result.toState).toBe("approved");
     });
   });
 

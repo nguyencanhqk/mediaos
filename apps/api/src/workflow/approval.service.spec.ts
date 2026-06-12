@@ -58,7 +58,7 @@ function makeStep(overrides: Partial<{
     stepName: "Viết kịch bản",
     status: overrides.status ?? "waiting_review",
     assigneeUserId: overrides.assigneeUserId !== undefined ? overrides.assigneeUserId : ASSIGNEE_ID,
-    reviewerUserId: overrides.reviewerUserId !== undefined ? overrides.reviewerUserId : null,
+    reviewerUserId: overrides.reviewerUserId !== undefined ? overrides.reviewerUserId : REVIEWER_ID,
     startedAt: null,
     submittedAt: new Date(),
     approvedAt: null,
@@ -248,14 +248,15 @@ describe("ApprovalService", () => {
       await expect(service.approve(COMPANY_ID, REQUEST_ID, OTHER_USER_ID)).rejects.toThrow(ConflictException);
     });
 
-    it("does NOT throw when reviewerUserId is null (MVP: any user can approve)", async () => {
+    it("is FAIL-CLOSED when reviewerUserId is null (S2: no reviewer assigned → deny, no self-approval)", async () => {
       const repo = makeRepo({
         step: makeStep({ reviewerUserId: null }),
       });
       const db = makeDb(repo);
       const service = new ApprovalService(db as never, repo as never, fsm, makeAudit() as never, makeOutbox() as never, makeLocks() as never);
 
-      await expect(service.approve(COMPANY_ID, REQUEST_ID, OTHER_USER_ID)).resolves.toBeDefined();
+      // Even the assignee (or any user) cannot approve a step that has no assigned reviewer.
+      await expect(service.approve(COMPANY_ID, REQUEST_ID, ASSIGNEE_ID)).rejects.toThrow(ConflictException);
     });
   });
 
