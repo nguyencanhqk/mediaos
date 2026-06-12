@@ -284,6 +284,43 @@ export class ApprovalService {
         },
       });
 
+      // 4c-i: evaluation hook. A step flagged requires_evaluation emits step.evaluation_required when
+      // approved — IN THIS tx (transactional outbox: rollback ⇒ no ghost event). Match the approved
+      // step's def-step by node_key (same linkage as the fan-out above). Consumer = G8 (not yet built);
+      // the outbox worker treats a zero-consumer event as done (no dead-letter). G7 only emits + audits.
+      const approvedDef = defStepRows.find(
+        (d) => d.nodeKey === (step.nodeKey ?? step.stepCode),
+      );
+      if (!approvedDef) {
+        // No def-step matched the just-approved step (node_key is nullable on legacy G4 rows, or a data
+        // integrity anomaly). Unlike the cosmetic fan-out fallback (line ~236), silently dropping the
+        // eval requirement loses a contractual side-effect → make it observable (mirror the locked-
+        // candidate warn above) instead of swallowing it.
+        this.logger.warn("approve eval-hook: no def-step matched approved step — eval flag unverifiable", {
+          stepId: step.id,
+          nodeKey: step.nodeKey,
+          stepCode: step.stepCode,
+          instanceId: instance.id,
+        });
+      } else if (approvedDef.requiresEvaluation) {
+        await this.outbox.enqueue(tx, {
+          eventType: "step.evaluation_required",
+          payload: {
+            stepId: step.id,
+            instanceId: instance.id,
+            evaluationTemplateId: approvedDef.evaluationTemplateId,
+            approvedBy: actorId,
+          },
+        });
+        await this.audit.record(tx, {
+          action: "StepEvaluationRequired",
+          objectType: "workflow_step",
+          objectId: step.id,
+          actorUserId: actorId,
+          after: { instanceId: instance.id, evaluationTemplateId: approvedDef.evaluationTemplateId },
+        });
+      }
+
       await this.audit.record(tx, {
         action: "StepApproved",
         objectType: "workflow_step",
