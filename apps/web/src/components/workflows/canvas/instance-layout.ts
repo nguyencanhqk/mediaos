@@ -39,5 +39,7 @@ export function buildInstanceEdges(deps: readonly DependencyDto[]): Edge[] {
     markerEnd: { type: MarkerType.ArrowClosed },
     deletable: false,
     selectable: false,
+    // a11y: inert read-only edges must not take keyboard focus (no purpose without selection/delete).
+    focusable: false,
   }));
 }

@@ -38,6 +38,8 @@ export function buildNodes(
     data: { step, hasError: errorNodeKeys.has(step.nodeKey), disabled },
     draggable: !disabled,
     connectable: !disabled,
+    // a11y: keyboard-focusable node wrappers otherwise announce the UUID id; surface the step name.
+    ariaLabel: step.name,
   }));
 }
 

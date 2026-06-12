@@ -16,7 +16,7 @@ export function InstanceStepNodeCard({ data }: NodeProps<InstanceStepNode>) {
     <div
       className={`w-48 rounded-lg border-2 px-3 py-2 shadow-sm ${STEP_INSTANCE_STATUS_NODE_CLASSES[step.status]}`}
     >
-      <Handle type="target" position={Position.Top} isConnectable={false} />
+      <Handle type="target" position={Position.Top} isConnectable={false} aria-hidden="true" />
       <p className="truncate text-sm font-medium" title={step.stepName}>
         {step.stepName}
       </p>
@@ -27,7 +27,7 @@ export function InstanceStepNodeCard({ data }: NodeProps<InstanceStepNode>) {
         />
         {STEP_INSTANCE_STATUS_LABELS[step.status]}
       </p>
-      <Handle type="source" position={Position.Bottom} isConnectable={false} />
+      <Handle type="source" position={Position.Bottom} isConnectable={false} aria-hidden="true" />
     </div>
   );
 }

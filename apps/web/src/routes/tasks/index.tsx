@@ -136,12 +136,15 @@ function SubmitWorkForm({ task, onDone }: { task: TaskDto; onDone: () => void })
 
   // Checklist gate (G7-4b): soi lại submit gate của BE phía client — đọc cùng query key với
   // <StepChecklist> (react-query dedupe → 1 request). Không in_progress → không gate (xem early return).
-  const { data: checklist } = useQuery({
+  const { data: checklist, isSuccess: checklistLoaded } = useQuery({
     queryKey: stepChecklistQueryKey(task.stepId ?? ""),
     queryFn: () => workflowChecklistApi.getStepChecklist(task.stepId!),
     enabled: canSubmit,
   });
-  const checklistReady = allRequiredChecked(checklist?.items ?? []);
+  // Fail-closed mirror of the BE 4b gate: stay disabled until the checklist has actually loaded.
+  // During the fetch window (or on error) `checklist` is undefined → allRequiredChecked([]) would be
+  // vacuously true and open the gate prematurely; require a successful load first.
+  const checklistReady = checklistLoaded && allRequiredChecked(checklist?.items ?? []);
 
   if (!canSubmit) {
     if (task.submissionUrl) {
