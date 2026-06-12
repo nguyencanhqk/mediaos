@@ -91,8 +91,14 @@ export class TasksController {
     return this.tasks.getComments(req.user.companyId, taskId);
   }
 
-  /** POST /tasks/:taskId/comments — thêm bình luận */
+  /**
+   * POST /tasks/:taskId/comments — thêm bình luận.
+   * Là WRITE → gate `comment:comment` (mọi system role cần bình luận đều có sẵn quyền này ở seed 0005,
+   * gồm `employee`). KHÔNG để ngỏ như read — chặn user 0-quyền spam comment/audit (gate G9-2 H-1).
+   */
   @Post(":taskId/comments")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("comment", "comment")
   addComment(
     @Req() req: AuthenticatedRequest,
     @Param("taskId") taskId: string,

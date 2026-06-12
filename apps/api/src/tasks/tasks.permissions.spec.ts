@@ -44,13 +44,14 @@ const GUARDED_MUTATIONS: ReadonlyArray<{
   { handlerName: "createTask", action: "create", resourceType: "task" },
   { handlerName: "updateStatus", action: "update", resourceType: "task" },
   { handlerName: "deleteTask", action: "delete", resourceType: "task" },
+  // addComment là WRITE → gate comment:comment (G9-2 H-1), KHÔNG để ngỏ như read.
+  { handlerName: "addComment", action: "comment", resourceType: "comment" },
 ];
 
-/** Read + comment intentionally open cho mọi user tenant (global JWT+Company guard vẫn ép tenant). */
+/** Read intentionally open cho mọi user tenant (global JWT+Company guard vẫn ép tenant). */
 const OPEN_READS: ReadonlyArray<keyof TasksController> = [
   "getMyTasks",
   "getComments",
-  "addComment",
 ];
 
 function handlerOf(name: keyof TasksController): (...args: unknown[]) => unknown {

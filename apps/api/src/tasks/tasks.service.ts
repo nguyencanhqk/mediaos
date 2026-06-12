@@ -8,10 +8,11 @@ import {
   officeTaskStatusSchema,
   type CreateTaskRequest,
   type OfficeTaskStatusDto,
+  type TaskTypeDto,
 } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
-import { TasksRepository, type ListTasksFilter } from "./tasks.repository";
+import { TasksRepository, type ListTasksFilter, type Pagination } from "./tasks.repository";
 
 interface RequestUser {
   id: string;
@@ -23,7 +24,12 @@ interface RequestUser {
  * the workflow (submit → review → approve/return), NEVER by the manual shortened flow.
  * Manual status-update / delete on these is rejected to protect the FSM invariant (G7/ADR-0016).
  */
-const WORKFLOW_TASK_TYPES = new Set(["workflow_step", "production", "review", "revision"]);
+// `satisfies TaskTypeDto[]` ép kiểm tra compile-time: mỗi literal phải là task_type hợp lệ trong
+// contracts (nguồn sự thật). office/meeting_action/finance/hr KHÔNG thuộc FSM → CỐ Ý loại trừ
+// (status sửa tay được qua luồng rút gọn). Thêm FSM type mới ở contracts → thêm vào đây (tsc bắt typo).
+const WORKFLOW_TASK_TYPES = new Set<string>(
+  ["workflow_step", "production", "review", "revision"] satisfies TaskTypeDto[],
+);
 
 @Injectable()
 export class TasksService {
@@ -39,16 +45,18 @@ export class TasksService {
     return this.repo.findByAssignee(companyId, userId);
   }
 
-  listBoard(companyId: string, filters: ListTasksFilter) {
-    return this.repo.listAll(companyId, filters);
+  // Board reads (G9-3 nối controller + gate read:task). `page` được forward để KHÔNG bị kẹp ngầm ở
+  // DEFAULT_PAGE_SIZE — caller (G9-3) khai báo limit/offset tường minh.
+  listBoard(companyId: string, filters: ListTasksFilter, page?: Pagination) {
+    return this.repo.listAll(companyId, filters, page);
   }
 
-  listByProject(companyId: string, projectId: string) {
-    return this.repo.listByProject(companyId, projectId);
+  listByProject(companyId: string, projectId: string, page?: Pagination) {
+    return this.repo.listByProject(companyId, projectId, page);
   }
 
-  listByTeam(companyId: string, teamId: string) {
-    return this.repo.listByTeam(companyId, teamId);
+  listByTeam(companyId: string, teamId: string, page?: Pagination) {
+    return this.repo.listByTeam(companyId, teamId, page);
   }
 
   // ─── Manual task lifecycle (G9-2 / G9-3) ─────────────────────────────────────
