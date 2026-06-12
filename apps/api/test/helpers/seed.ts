@@ -279,6 +279,17 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   if (companyIds.length === 0) return;
   const ids = [companyIds];
 
+  // ── G13 Finance ────────────────────────────────────────────────────────────
+  // Xoá TRƯỚC projects/channels/content_items/org_units/teams/users (FK target). Thứ tự nội bộ:
+  // cost_allocations → cost_records (FK); expense_approvals → expense_requests; revenue_records;
+  // profit_snapshots. (cost_records.expense_request_id ON DELETE SET NULL → không chặn xoá expense.)
+  await direct.query("DELETE FROM cost_allocations WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM expense_approvals WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM cost_records WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM expense_requests WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM revenue_records WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM profit_snapshots WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G4-6 Communication ───────────────────────────────────────────────────
   await direct.query("DELETE FROM chat_messages WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM chat_room_members WHERE company_id = ANY($1::uuid[])", ids);
