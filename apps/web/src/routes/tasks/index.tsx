@@ -3,6 +3,8 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { tasksApi } from "@/lib/tasks-api";
+import { StepChecklist, stepChecklistQueryKey } from "@/components/tasks/step-checklist";
+import { allRequiredChecked, workflowChecklistApi } from "@/lib/workflow-checklist-api";
 import type { TaskDto, CommentDto, ApprovalRequestDto } from "@mediaos/contracts";
 
 // ─── Status labels ────────────────────────────────────────────────────────────
@@ -132,6 +134,15 @@ function SubmitWorkForm({ task, onDone }: { task: TaskDto; onDone: () => void })
 
   const canSubmit = task.stepStatus === "in_progress" && task.stepId != null;
 
+  // Checklist gate (G7-4b): soi lại submit gate của BE phía client — đọc cùng query key với
+  // <StepChecklist> (react-query dedupe → 1 request). Không in_progress → không gate (xem early return).
+  const { data: checklist } = useQuery({
+    queryKey: stepChecklistQueryKey(task.stepId ?? ""),
+    queryFn: () => workflowChecklistApi.getStepChecklist(task.stepId!),
+    enabled: canSubmit,
+  });
+  const checklistReady = allRequiredChecked(checklist?.items ?? []);
+
   if (!canSubmit) {
     if (task.submissionUrl) {
       return (
@@ -169,9 +180,19 @@ function SubmitWorkForm({ task, onDone }: { task: TaskDto; onDone: () => void })
           onChange={(e) => setNote(e.target.value)}
         />
       </div>
-      <Button onClick={() => submit.mutate()} disabled={submit.isPending} size="sm">
+      <StepChecklist stepId={task.stepId!} editable={canSubmit} />
+      <Button
+        onClick={() => submit.mutate()}
+        disabled={submit.isPending || !checklistReady}
+        size="sm"
+      >
         {submit.isPending ? "Đang gửi…" : "Nộp bài"}
       </Button>
+      {!checklistReady && (
+        <p className="text-xs text-amber-600">
+          Hoàn thành mọi mục bắt buộc trong checklist trước khi nộp.
+        </p>
+      )}
       {submit.isError && (
         <p className="text-xs text-destructive">
           {submit.error instanceof Error ? submit.error.message : "Lỗi khi nộp bài."}
