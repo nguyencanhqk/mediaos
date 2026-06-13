@@ -20,6 +20,7 @@ const NAV = [
   { to: "/hr/attendance", label: "Chấm công" },
   { to: "/hr/adjustments", label: "Bổ sung công" },
   { to: "/hr/leave", label: "Nghỉ phép" },
+  { to: "/payroll/salary-profiles", label: "Hồ sơ lương" },
   { to: "/settings/company", label: "Cài đặt công ty" },
 ] as const;
 

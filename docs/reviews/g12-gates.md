@@ -71,11 +71,44 @@ before/after khi SỬA/XOÁ, mapError generic) → controller (`@RequirePermissi
 **Verdict:** 0 CRITICAL / 0 blocking. Non-sensitive→auto-commit theo §5.5 KHÔNG áp (đây LÀ vùng nhạy cảm
 🛠️ crown-jewel) ⇒ checkpoint commit `wip(g12)` trong lane; **người chốt** trước khi land master (§5.5).
 
+### G12-1 FE — Salary Profile screen (mask-by-default + PermissionGate)
+
+**Phạm vi:** trang `/payroll/salary-profiles` (list + filter trạng thái) · `SalaryProfileTable`
+(mask-by-default) · `CreateSalaryProfileDialog` bọc `<PermissionGate manage-salary-profile>` ·
+`salary-profile-api` client (REST, schema nullable = masked) · router + nav **additive**.
+
+**Bất biến FE (BẤT BIẾN #3 — server là sự thật):**
+- Client KHÔNG BAO GIỜ tự bỏ mask: `formatBaseSalary` trả `•••` khi `baseSalary == null` (server đã
+  mask vì thiếu `view-salary-profile`). Không path nào dựng lại số từ null; không cache số đã reveal.
+- `revealed` suy từ DỮ LIỆU server (`baseSalary != null`), KHÔNG từ `useCan` — client không tự cấp quyền xem.
+- Quyền nhạy cảm (`view/manage-salary-profile` `is_sensitive=true`) bị `getCapabilities` LỌC khỏi `/me`
+  (`!g.isSensitive`) ⇒ `<PermissionGate>` ẩn form sửa **mặc định** (fail-safe). Server `@RequirePermission`
+  (isSensitive) mới là thẩm quyền thật — gửi sai → 403 ở submit.
+- KHÔNG `console.*`, KHÔNG log lương; `onError` hiện message generic, không lộ số.
+
+**RED trước:** `salary-profile-api.spec.ts` (6 — list mask nullable không throw, query userId/status, get reveal,
+create/update payload, delete 204) · `salary-profile-table.spec.tsx` (3 — masked→`•••`+"Không có quyền" KHÔNG
+số; revealed→số KHÔNG hint; empty-state). **9 pass.**
+
+**Verify:** web typecheck **clean** · web suite **184 pass** (+9, từ 175) · lint **0 errors** (constants tách
+file riêng `salary-constants.ts` → 0 warning fast-refresh mới) · prettier **sạch**.
+
+**Gate — santa-method (crown-jewel dual review hội tụ):**
+
+| Reviewer | Trục | Verdict |
+| --- | --- | --- |
+| **B** (security / mask-bypass) | client-never-unmask · masked-DTO no-leak · cap-không-unmask · gate fail-safe · no-log · no-silent-fail | **PASS** (0 CRIT; 1 note non-block: gate ẩn-mặc-định = hướng AN TOÀN, server ép thật) |
+| **C** (correctness / silent-failure / consistency) | mask render · 204 DELETE · type-safety no-any · additive hot-file · query-key nhất quán · completeness · regression | **PASS** (0 CRIT) |
+
+**Verdict:** B PASS ∧ C PASS → **NICE**. 0 CRITICAL / 0 blocking. FE thuần UI + mask (LIGHT gate theo §6,
+nâng santa do chạm dữ liệu lương) ⇒ checkpoint commit `wip(g12)`.
+
 ### Residual / follow-up (non-blocking)
 
 - G12-1 giữ **1 active profile/user**; cột `effective_date` để sẵn cho lịch sử lương **G12-2** (append bản
   hiệu lực mới thay vì sửa thẳng) — KHÔNG over-engineer ở đây (YAGNI).
 - Pagination cho `GET /salary-profiles` (list theo company): theo dõi cùng G12-2 khi dữ liệu lớn.
-- FE Salary Profile screen: lượt sau (G12-1 chỉ BE + contract).
+- FE detail/edit page (sửa hồ sơ + danh sách phụ cấp inline) + reveal-per-row: lượt sau (G12-1 FE = list +
+  create + mask). Edit form (PATCH) client để G12-4 (duyệt/khiếu nại) khi UX lương hoàn chỉnh.
 - Merge: Wave B (§5.1) — cần rebase lên master sau khi Wave A land; reconcile audit-CHECK union +
   journal idx/when khi nhiều lane merge.
