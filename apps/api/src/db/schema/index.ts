@@ -19,5 +19,7 @@ export * from "./employees";
 export * from "./media";
 export * from "./workflow";
 export * from "./communication";
+export * from "./hr";
+export * from "./finance";
 // G8 approval (multi-level rules — approval_requests/_steps live in ./workflow)
 export * from "./approval";

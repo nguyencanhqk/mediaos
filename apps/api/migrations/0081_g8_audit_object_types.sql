@@ -38,5 +38,28 @@ ALTER TABLE audit_logs
     'content_asset',
     'content_type',
     'workflow_template',
+    -- G11 HR attendance/leave — UNION khi land sau g11 (mig 0060). KHÔNG drop type lane khác.
+    'work_schedule',
+    'attendance_record',
+    'attendance_adjustment_request',
+    'attendance_period',
+    'leave_type',
+    'leave_request',
+    'leave_balance',
+    -- G10 communication (chat realtime / notification center / meeting) — UNION khi land sau g10 (mig 0050).
+    'chat_room',
+    'chat_message',
+    'notification',
+    'notification_rule',
+    'notification_preference',
+    'meeting',
+    'meeting_room',
+    -- G13 finance — UNION khi land sau g13 (mig 0070).
+    'revenue_record',
+    'cost_record',
+    'cost_allocation',
+    'profit_snapshot',
+    'expense_request',
+    -- G8 approval (multi-level rules)
     'approval_rule'
   ));

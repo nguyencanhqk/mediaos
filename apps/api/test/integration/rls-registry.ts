@@ -831,4 +831,220 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+
+  // ── G11 HR — Attendance (mig 0061) ───────────────────────────────────────────
+  // Chống XANH-GIẢ (rủi ro #1): 6 bảng HR có company_id ⇒ rls-guards.int-spec sẽ ĐỎ
+  // ("bảng có company_id chưa đăng ký harness") nếu thiếu — và tenant-isolation bỏ sót cô lập chéo
+  // tenant. KHÔNG skipNoContext (mọi hàng đều tenant-scoped, company_id NOT NULL, không hàng global).
+  {
+    name: "work_schedules",
+    table: "work_schedules",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO work_schedules (company_id, name, start_time, end_time)
+         VALUES ($1, $2, '09:00', '18:00') RETURNING id`,
+        [t.companyId, `rls-sched-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "attendance_records",
+    table: "attendance_records",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `att-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO attendance_records (company_id, user_id, work_date, status)
+         VALUES ($1, $2, '2024-06-03', 'missing_checkin') RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "attendance_adjustment_requests",
+    table: "attendance_adjustment_requests",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `adj-${randomUUID().slice(0, 8)}@x.test`);
+      // task_type='hr' INSERT vào CHUNG bảng tasks (BẤT BIẾN #4) — KHÔNG bảng task riêng.
+      const taskRes = await direct.query(
+        `INSERT INTO tasks (company_id, task_type, title, status, origin, revision_round)
+         VALUES ($1, 'hr', 'rls-adj-task', 'not_started', 'initial', 0) RETURNING id`,
+        [t.companyId],
+      );
+      const r = await direct.query(
+        `INSERT INTO attendance_adjustment_requests
+           (company_id, user_id, work_date, requested_check_in_at, reason, status, task_id)
+         VALUES ($1, $2, '2024-06-03', '2024-06-03T02:00:00Z', 'rls-reason', 'pending', $3) RETURNING id`,
+        [t.companyId, u, taskRes.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "attendance_periods",
+    table: "attendance_periods",
+    // KHÔNG có deleted_at (append/update-only). period_month phải khớp CHECK '^\d{4}-(0[1-9]|1[0-2])$'.
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO attendance_periods (company_id, period_month, status)
+         VALUES ($1, '2024-06', 'open') RETURNING id`,
+        [t.companyId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── G11 HR — Leave (mig 0062) ────────────────────────────────────────────────
+  {
+    name: "leave_types",
+    table: "leave_types",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO leave_types (company_id, name, code)
+         VALUES ($1, 'rls-lt', $2) RETURNING id`,
+        [t.companyId, `rls-lt-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "leave_requests",
+    table: "leave_requests",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `lr-${randomUUID().slice(0, 8)}@x.test`);
+      const ltRes = await direct.query(
+        `INSERT INTO leave_types (company_id, name, code)
+         VALUES ($1, 'rls-lr-lt', $2) RETURNING id`,
+        [t.companyId, `rls-lr-lt-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO leave_requests
+           (company_id, user_id, leave_type_id, start_date, end_date, total_days, status)
+         VALUES ($1, $2, $3, '2024-06-03', '2024-06-03', 1, 'pending') RETURNING id`,
+        [t.companyId, u, ltRes.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "leave_balances",
+    table: "leave_balances",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `lb-${randomUUID().slice(0, 8)}@x.test`);
+      const ltRes = await direct.query(
+        `INSERT INTO leave_types (company_id, name, code)
+         VALUES ($1, 'rls-lb-lt', $2) RETURNING id`,
+        [t.companyId, `rls-lb-lt-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO leave_balances (company_id, user_id, leave_type_id, year, total_days)
+         VALUES ($1, $2, $3, 2024, 12) RETURNING id`,
+        [t.companyId, u, ltRes.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  // ── G13 Finance (Revenue/Cost/Profit/Expense) — APPEND-ONLY ledgers + mutable allocation/request ──
+  // Mỗi bảng có company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  {
+    name: "revenue_records",
+    table: "revenue_records",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `rev-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO revenue_records
+           (company_id, amount, currency, revenue_date, source, entered_by, entry_kind)
+         VALUES ($1, 1000.00, 'VND', current_date, 'manual', $2, 'original') RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "cost_records",
+    table: "cost_records",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `cost-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO cost_records
+           (company_id, cost_type, amount, currency, cost_date, entered_by, entry_kind)
+         VALUES ($1, 'other', 500.00, 'VND', current_date, $2, 'original') RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "cost_allocations",
+    table: "cost_allocations",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `alloc-${randomUUID().slice(0, 8)}@x.test`);
+      const costRes = await direct.query(
+        `INSERT INTO cost_records
+           (company_id, cost_type, amount, currency, cost_date, entered_by, entry_kind)
+         VALUES ($1, 'other', 500.00, 'VND', current_date, $2, 'original') RETURNING id`,
+        [t.companyId, u],
+      );
+      const projectId = await seedProject(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO cost_allocations
+           (company_id, cost_record_id, allocation_run_id, allocation_target_type,
+            allocation_target_id, allocation_method, allocated_amount)
+         VALUES ($1, $2, $3, 'project', $4, 'equal_split', 500.00) RETURNING id`,
+        [t.companyId, costRes.rows[0].id, randomUUID(), projectId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "profit_snapshots",
+    table: "profit_snapshots",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `pf-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO profit_snapshots
+           (company_id, target_type, target_id, period_start, period_end,
+            total_revenue, total_direct_cost, total_allocated_cost, total_cost, profit, created_by)
+         VALUES ($1, 'company', NULL, current_date, current_date,
+                 1000.00, 400.00, 100.00, 500.00, 500.00, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "expense_requests",
+    table: "expense_requests",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `exp-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO expense_requests
+           (company_id, requested_by, title, amount, currency, expense_type, status)
+         VALUES ($1, $2, 'rls-expense', 250.00, 'VND', 'other', 'pending') RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "expense_approvals",
+    table: "expense_approvals",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `expa-${randomUUID().slice(0, 8)}@x.test`);
+      const reqRes = await direct.query(
+        `INSERT INTO expense_requests
+           (company_id, requested_by, title, amount, currency, expense_type, status)
+         VALUES ($1, $2, 'rls-expense-for-approval', 250.00, 'VND', 'other', 'approved') RETURNING id`,
+        [t.companyId, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO expense_approvals
+           (company_id, expense_request_id, approval_level, approver_user_id, decision)
+         VALUES ($1, $2, 1, $3, 'approved') RETURNING id`,
+        [t.companyId, reqRes.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 ];

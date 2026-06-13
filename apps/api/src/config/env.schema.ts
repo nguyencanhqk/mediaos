@@ -24,6 +24,10 @@ export const envSchema = z.object({
   // DATABASE_WORKER_URL → mediaos_worker, direct (outbox worker, G2-4). Fallback: DIRECT_URL.
   DATABASE_WORKER_URL: z.string().url().optional(),
   VALKEY_URL: z.string().url().optional(),
+  // ── Realtime (G10-1) ───────────────────────────────────────────────────────
+  // Kill-switch gateway WS: 'false' tắt hẳn Socket.IO (FE còn poll REST fallback). KHÔNG z.coerce.boolean
+  // (bẫy: coi 'false' → true). Default 'true'. VALKEY_URL vắng → adapter fail-soft in-memory (single instance).
+  REALTIME_ENABLED: z.enum(["true", "false"]).default("true"),
 
   // ── Auth (G2-6) ──────────────────────────────────────────────────────────
   // JWT_SECRET optional để API vẫn boot khi chưa cấu hình; AuthModule fail-fast khi dùng mà thiếu.

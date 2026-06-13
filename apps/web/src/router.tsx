@@ -16,11 +16,16 @@ import { ProjectDetailPage } from "@/routes/media/project-detail";
 import { ContentPage } from "@/routes/media/content";
 import { ContentDetailPage } from "@/routes/media/content-detail";
 import { TasksPage } from "@/routes/tasks/index";
+import { TaskBoardPage } from "@/routes/tasks/task-board";
+import { TaskHubPage } from "@/routes/tasks/task-hub";
 import { ProjectChatPage } from "@/routes/chat/project-chat";
 import { WorkflowTemplatesPage } from "@/routes/workflows/templates";
 import { WorkflowTemplateDetailPage } from "@/routes/workflows/template-detail";
 import { WorkflowInstancesPage } from "@/routes/workflows/instances/instances-list";
 import { WorkflowInstanceDetailPage } from "@/routes/workflows/instances/instance-detail";
+import { AttendancePage } from "@/routes/hr/attendance";
+import { AdjustmentsPage } from "@/routes/hr/adjustments";
+import { LeavePage } from "@/routes/hr/leave";
 import { useAuthStore } from "@/stores/auth";
 
 const rootRoute = createRootRoute({ component: RootLayout });
@@ -123,6 +128,22 @@ const tasksRoute = createRoute({
   component: TasksPage,
 });
 
+// G9-3: Task Board tổng (Kanban/Table/Calendar + filter task_type). Static path, không đụng /tasks.
+const taskBoardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tasks/board",
+  beforeLoad: authGuard,
+  component: TaskBoardPage,
+});
+
+// G9-4: Task Hub hợp nhất — My/Team/Project Tasks trên bảng tasks chung (BẤT BIẾN #4).
+const taskHubRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tasks/hub",
+  beforeLoad: authGuard,
+  component: TaskHubPage,
+});
+
 const projectChatRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/chat/projects/$projectId",
@@ -165,6 +186,27 @@ const workflowInstanceDetailRoute = createRoute({
   component: WorkflowInstanceDetailPage,
 });
 
+const attendanceRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/attendance",
+  beforeLoad: authGuard,
+  component: AttendancePage,
+});
+
+const adjustmentsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/adjustments",
+  beforeLoad: authGuard,
+  component: AdjustmentsPage,
+});
+
+const leaveRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/leave",
+  beforeLoad: authGuard,
+  component: LeavePage,
+});
+
 const companySettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings/company",
@@ -196,11 +238,16 @@ const routeTree = rootRoute.addChildren([
   contentRoute,
   contentDetailRoute,
   tasksRoute,
+  taskBoardRoute,
+  taskHubRoute,
   projectChatRoute,
   workflowTemplatesRoute,
   workflowTemplateDetailRoute,
   workflowInstancesRoute,
   workflowInstanceDetailRoute,
+  attendanceRoute,
+  adjustmentsRoute,
+  leaveRoute,
 ]);
 
 export const router = createRouter({ routeTree });
