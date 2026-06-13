@@ -86,62 +86,19 @@ GRANT INSERT, SELECT, UPDATE (enabled, updated_at) ON notification_preferences T
 --> statement-breakpoint
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- audit_logs CHECK — mở rộng bằng DO-block UNION (an toàn song song nhiều lane)
--- Audit types notification/notification_rule/notification_preference đã có trong
--- AUDIT_OBJECT_TYPES (audit.ts) và trong migration 0050 (chat_room/chat_message
--- cùng nhóm). Kiểm tra lại và đảm bảo 3 type mới vào CHECK.
+-- audit_logs CHECK: 'notification' / 'notification_rule' / 'notification_preference'
+-- ĐÃ CÓ SẴN trong union audit_object_types của master (các migration audit g8/g12).
+-- KHÔNG rebuild CHECK ở đây: DROP+ADD động trước đây vừa làm HỎNG CHECK (nuốt cả
+-- constraint def cũ thành 1 phần tử mảng) vừa vi phạm hot-file append-only (TASKS.md §5.3).
 -- ─────────────────────────────────────────────────────────────────────────────
-DO $$
-DECLARE
-  _cur  text;
-  _vals text[];
-  _new  text[] := ARRAY[
-    'notification_rule',
-    'notification_preference'
-  ];
-  _v    text;
-  _sql  text;
-BEGIN
-  -- Đọc CHECK def hiện hành của audit_logs_object_type_chk
-  SELECT pg_get_constraintdef(oid)
-    INTO _cur
-    FROM pg_constraint
-   WHERE conrelid = 'audit_logs'::regclass
-     AND conname  = 'audit_logs_object_type_chk';
-
-  IF _cur IS NULL THEN
-    RETURN; -- constraint chưa tồn tại (môi trường fresh không có 0003) — bỏ qua
-  END IF;
-
-  -- Trích danh sách giá trị hiện tại từ def dạng: CHECK (object_type = ANY (ARRAY['a','b',...]))
-  SELECT array_agg(trim(v, $q$'$q$)) INTO _vals
-    FROM regexp_split_to_table(_cur, ',') AS v
-   WHERE v LIKE $q$%'%$q$;
-
-  -- UNION với _new (dedup)
-  FOREACH _v IN ARRAY _new LOOP
-    IF NOT (_v = ANY(_vals)) THEN
-      _vals := array_append(_vals, _v);
-    END IF;
-  END LOOP;
-
-  -- DROP + ADD với tập đầy đủ
-  ALTER TABLE audit_logs DROP CONSTRAINT audit_logs_object_type_chk;
-
-  _sql := 'ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_object_type_chk CHECK (object_type = ANY (ARRAY['''
-        || array_to_string(_vals, ''',''')
-        || ''']::text[]))';
-  EXECUTE _sql;
-END $$;
---> statement-breakpoint
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Permission seed (ON CONFLICT DO NOTHING — idempotent, không ghi đè)
 -- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO permissions (name, description) VALUES
-  ('notification:read',        'Đọc notification của chính mình'),
-  ('notification:mark_read',   'Đánh dấu đã đọc notification'),
-  ('notification_pref:write',  'Cập nhật notification preference của chính mình'),
-  ('notification_rule:read',   'Đọc notification rule (admin)'),
-  ('notification_rule:write',  'Tạo/sửa notification rule (admin)')
-ON CONFLICT (name) DO NOTHING;
+INSERT INTO permissions (action, resource_type, is_sensitive) VALUES
+  ('read',      'notification',            false),
+  ('mark_read', 'notification',            false),
+  ('write',     'notification_preference', false),
+  ('read',      'notification_rule',       false),
+  ('write',     'notification_rule',       false)
+ON CONFLICT (action, resource_type) DO NOTHING;

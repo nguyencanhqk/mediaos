@@ -16,26 +16,29 @@ BEGIN
   -- ─── Grant to privileged roles ────────────────────────────────────────────
 
   -- finance_report → cfo, finance, leadership, admin
-  INSERT INTO role_permissions (role_name, permission_id)
-  SELECT r.name, p.id
-  FROM (VALUES ('cfo'), ('finance'), ('leadership'), ('admin')) AS r(name)
+  INSERT INTO role_permissions (role_id, permission_id, effect)
+  SELECT r.id, p.id, 'ALLOW'
+  FROM roles r
   CROSS JOIN permissions p
-  WHERE p.action = 'read' AND p.resource_type = 'finance_report'
+  WHERE r.name IN ('cfo', 'finance', 'leadership', 'admin')
+    AND p.action = 'read' AND p.resource_type = 'finance_report'
   ON CONFLICT DO NOTHING;
 
   -- employee_report → hr, leadership, admin, manager
-  INSERT INTO role_permissions (role_name, permission_id)
-  SELECT r.name, p.id
-  FROM (VALUES ('hr'), ('leadership'), ('admin'), ('manager')) AS r(name)
+  INSERT INTO role_permissions (role_id, permission_id, effect)
+  SELECT r.id, p.id, 'ALLOW'
+  FROM roles r
   CROSS JOIN permissions p
-  WHERE p.action = 'read' AND p.resource_type = 'employee_report'
+  WHERE r.name IN ('hr', 'leadership', 'admin', 'manager')
+    AND p.action = 'read' AND p.resource_type = 'employee_report'
   ON CONFLICT DO NOTHING;
 
   -- attendance_report → hr, leadership, admin, manager
-  INSERT INTO role_permissions (role_name, permission_id)
-  SELECT r.name, p.id
-  FROM (VALUES ('hr'), ('leadership'), ('admin'), ('manager')) AS r(name)
+  INSERT INTO role_permissions (role_id, permission_id, effect)
+  SELECT r.id, p.id, 'ALLOW'
+  FROM roles r
   CROSS JOIN permissions p
-  WHERE p.action = 'read' AND p.resource_type = 'attendance_report'
+  WHERE r.name IN ('hr', 'leadership', 'admin', 'manager')
+    AND p.action = 'read' AND p.resource_type = 'attendance_report'
   ON CONFLICT DO NOTHING;
 END $$;
