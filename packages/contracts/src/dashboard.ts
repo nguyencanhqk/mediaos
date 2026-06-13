@@ -51,6 +51,36 @@ export const leaveSummarySchema = z.object({
 });
 export type LeaveSummaryDto = z.infer<typeof leaveSummarySchema>;
 
+// ─── Report aggregate (G14-2) ────────────────────────────────────────────────
+
+/**
+ * Role-filtered report summary. null = caller lacks read:finance_report.
+ * Masking is server-side — FE renders what it receives.
+ */
+export const reportSummarySchema = z.object({
+  /** Total revenue this month (null = no read:finance_report). */
+  revenueThisMonth: z.number().nullable(),
+  /** Total cost this month (null = no read:finance_report). */
+  costThisMonth: z.number().nullable(),
+  /** Net profit this month = revenue - cost (null = no read:finance_report). */
+  profitThisMonth: z.number().nullable(),
+  /** Total active employees in company (null = no read:employee_report). */
+  totalEmployees: z.number().int().nonnegative().nullable(),
+  /** Employees present today as % of total (null = no read:attendance_report). */
+  todayAttendanceRate: z.number().nonnegative().nullable(),
+  /** Revenue breakdown by channel for current month (null = no read:finance_report). */
+  revenueByChannel: z
+    .array(
+      z.object({
+        channelId: z.string(),
+        channelName: z.string(),
+        amount: z.number(),
+      }),
+    )
+    .nullable(),
+});
+export type ReportSummaryDto = z.infer<typeof reportSummarySchema>;
+
 // ─── Combined dashboard response ──────────────────────────────────────────────
 
 export const dashboardSummarySchema = z.object({
@@ -61,3 +91,12 @@ export const dashboardSummarySchema = z.object({
   asOf: z.string(),
 });
 export type DashboardSummaryDto = z.infer<typeof dashboardSummarySchema>;
+
+// ─── Report endpoint response ─────────────────────────────────────────────────
+
+export const reportResponseSchema = z.object({
+  report: reportSummarySchema,
+  /** ISO date of snapshot (server UTC now). */
+  asOf: z.string(),
+});
+export type ReportResponseDto = z.infer<typeof reportResponseSchema>;

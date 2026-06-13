@@ -1,5 +1,5 @@
-import { dashboardSummarySchema } from "@mediaos/contracts";
-import type { DashboardSummaryDto } from "@mediaos/contracts";
+import { dashboardSummarySchema, reportResponseSchema } from "@mediaos/contracts";
+import type { DashboardSummaryDto, ReportResponseDto } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 
 /**
@@ -8,4 +8,12 @@ import { apiFetch } from "./api-client";
  */
 export async function getDashboardSummary(): Promise<DashboardSummaryDto> {
   return apiFetch("/dashboard/summary", dashboardSummarySchema);
+}
+
+/**
+ * GET /dashboard/report — fetch role-filtered report aggregate.
+ * null fields = caller lacks the required permission for that section.
+ */
+export async function getDashboardReport(): Promise<ReportResponseDto> {
+  return apiFetch("/dashboard/report", reportResponseSchema);
 }

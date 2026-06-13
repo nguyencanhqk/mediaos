@@ -5,6 +5,7 @@ import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import { PermissionService } from "../permission/permission.service";
 import { DashboardService } from "./dashboard.service";
+import { ReportService } from "./report.service";
 
 interface AuthenticatedRequest extends Request {
   user: { id: string; companyId: string };
@@ -22,8 +23,54 @@ interface AuthenticatedRequest extends Request {
 export class DashboardController {
   constructor(
     private readonly dashboardService: DashboardService,
+    private readonly reportService: ReportService,
     private readonly permissionService: PermissionService,
   ) {}
+
+  /**
+   * GET /dashboard/report — role-filtered report aggregate.
+   * Granular masking per permission: finance_report / employee_report / attendance_report.
+   * Low-privilege roles receive null fields — not empty objects — for denied sections.
+   */
+  @Get("report")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("read", "dashboard")
+  async getReport(@Req() req: AuthenticatedRequest) {
+    const { id: userId, companyId } = req.user;
+
+    const [canReadFinanceReport, canReadEmployeeReport, canReadAttendanceReport] =
+      await Promise.all([
+        this.permissionService.can({
+          userId,
+          companyId,
+          action: "read",
+          resourceType: "finance_report",
+        }),
+        this.permissionService.can({
+          userId,
+          companyId,
+          action: "read",
+          resourceType: "employee_report",
+        }),
+        this.permissionService.can({
+          userId,
+          companyId,
+          action: "read",
+          resourceType: "attendance_report",
+        }),
+      ]);
+
+    const report = await this.reportService.getReport(
+      { id: userId, companyId },
+      {
+        canReadFinanceReport: canReadFinanceReport.allow,
+        canReadEmployeeReport: canReadEmployeeReport.allow,
+        canReadAttendanceReport: canReadAttendanceReport.allow,
+      },
+    );
+
+    return { report, asOf: new Date().toISOString() };
+  }
 
   @Get("summary")
   @UseGuards(PermissionGuard)

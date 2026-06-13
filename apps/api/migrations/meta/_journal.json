@@ -400,6 +400,13 @@
 			"when": 1717500112000,
 			"tag": "0092_g12_permissions_seed",
 			"breakpoints": true
+		},
+		{
+			"idx": 57,
+			"version": "7",
+			"when": 1717500113000,
+			"tag": "0101_g14_report_permissions_seed",
+			"breakpoints": true
 		}
 	]
 }
