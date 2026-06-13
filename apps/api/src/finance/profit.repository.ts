@@ -116,6 +116,14 @@ export class ProfitRepository {
    * SUM chi phí PHÂN BỔ active (cents) trỏ tới scope con trong kỳ, CÙNG tenant tx.
    * active = deleted_at IS NULL. Lọc theo allocation_target_type/id; kỳ lọc theo cost_date của cost cha
    * (join cost_records). CHỈ scope con — company scope allocated=0 (service KHÔNG gọi method này).
+   *
+   * ⚠️ KHÁC direct-cost sum: allocation KHÔNG dùng "head hiệu lực". `adjust()`/`void()` không đụng
+   * cost_allocations (allocation luôn trỏ record được phân bổ lúc đó). Vì vậy:
+   *  - cost bị VOID ⇒ LOẠI allocation (cost bị huỷ ⇒ phân bổ theo nó cũng huỷ).
+   *  - cost chỉ bị ADJUST ⇒ GIỮ allocation (cost vẫn có thật; phân bổ cũ vẫn hợp lệ tới khi re-allocate
+   *    trên bản mới — snapshot là điểm-thời-gian best-effort). Loại nó đi sẽ thổi phồng profit sub-scope.
+   * `voided_lineage` = đi NGƯỢC chuỗi replaces từ mọi record entry_kind='void' về gốc (bắt cả chuỗi
+   * adjust→void nhiều bước). cost_records có RLS ⇒ CTE chỉ thấy tenant hiện tại.
    */
   async sumAllocatedActiveTx(
     tx: TenantTx,
@@ -123,6 +131,14 @@ export class ProfitRepository {
     scope: { type: SubScope; id: string },
   ): Promise<bigint> {
     const res = await tx.execute(sql`
+      WITH RECURSIVE voided_lineage AS (
+        SELECT replaces_record_id AS id FROM cost_records
+          WHERE entry_kind = 'void' AND replaces_record_id IS NOT NULL
+        UNION ALL
+        SELECT c.replaces_record_id AS id FROM cost_records c
+          JOIN voided_lineage v ON c.id = v.id
+          WHERE c.replaces_record_id IS NOT NULL
+      )
       SELECT COALESCE(SUM(round(ca.allocated_amount * 100))::bigint, 0) AS cents
       FROM cost_allocations ca
       JOIN cost_records cr ON cr.id = ca.cost_record_id
@@ -130,7 +146,7 @@ export class ProfitRepository {
         AND ca.allocation_target_type = ${ALLOCATION_TARGET_TYPE[scope.type]}
         AND ca.allocation_target_id = ${scope.id}
         AND cr.entry_kind <> 'void'
-        AND NOT EXISTS (SELECT 1 FROM cost_records c2 WHERE c2.replaces_record_id = cr.id)
+        AND NOT EXISTS (SELECT 1 FROM voided_lineage vl WHERE vl.id = cr.id)
         AND cr.cost_date >= ${period.from}::date
         AND cr.cost_date <= ${period.to}::date
     `);
@@ -171,7 +187,7 @@ export class ProfitRepository {
         .select()
         .from(profitSnapshots)
         .where(and(...conds))
-        .orderBy(desc(profitSnapshots.calculatedAt));
+        .orderBy(desc(profitSnapshots.calculatedAt), desc(profitSnapshots.id));
     });
   }
 
@@ -191,7 +207,7 @@ export class ProfitRepository {
         .select()
         .from(profitSnapshots)
         .where(and(...conds))
-        .orderBy(desc(profitSnapshots.calculatedAt))
+        .orderBy(desc(profitSnapshots.calculatedAt), desc(profitSnapshots.id))
         .limit(1);
       return row ?? null;
     });
