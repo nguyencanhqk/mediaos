@@ -7,6 +7,8 @@ import { CostService } from "./cost.service";
 import { CostRepository } from "./cost.repository";
 import { CostAllocationService } from "./cost-allocation.service";
 import { CostAllocationRepository } from "./cost-allocation.repository";
+import { ProfitService } from "./profit.service";
+import { ProfitRepository } from "./profit.repository";
 
 /**
  * G13 Finance module — sổ cái doanh thu/chi phí/lợi nhuận (BẤT BIẾN #2: append-only).
@@ -18,6 +20,8 @@ import { CostAllocationRepository } from "./cost-allocation.repository";
  * G13-1: RevenueService/RevenueRepository (revenue_records).
  * G13-2: CostService/CostRepository (cost_records, append-only) + CostAllocationService/Repository
  *        (cost_allocations, FIN-003 phân bổ 5+1 kiểu). Controller wire khi build HTTP layer.
+ * G13-3: ProfitService/ProfitRepository (profit_snapshots, append-only; profit = revenue − direct −
+ *        allocated; mask SERVER-side theo view-finance). Controller wire khi build HTTP layer.
  */
 @Module({
   imports: [EventsModule, PermissionModule],
@@ -28,7 +32,9 @@ import { CostAllocationRepository } from "./cost-allocation.repository";
     CostRepository,
     CostAllocationService,
     CostAllocationRepository,
+    ProfitService,
+    ProfitRepository,
   ],
-  exports: [RevenueService, CostService, CostAllocationService],
+  exports: [RevenueService, CostService, CostAllocationService, ProfitService],
 })
 export class FinanceModule {}
