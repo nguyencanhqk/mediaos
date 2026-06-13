@@ -48,6 +48,9 @@ export const officeTaskStatusSchema = z.enum(["not_started", "in_progress", "com
 export type OfficeTaskStatusDto = z.infer<typeof officeTaskStatusSchema>;
 
 // ─── Task ─────────────────────────────────────────────────────────────────────
+// taskType uses the canonical 8-type `taskTypeSchema` defined above (G9-1 unified hub).
+// (A stale 5-type duplicate from merge 599609e was removed here — it shadowed the canonical
+// schema and broke the contracts build; the 8-type union is the single source of truth.)
 
 export const taskSchema = z.object({
   id: z.string().uuid(),

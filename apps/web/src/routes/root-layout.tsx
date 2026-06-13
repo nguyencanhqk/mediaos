@@ -17,6 +17,9 @@ const NAV = [
   { to: "/org/teams", label: "Nhóm" },
   { to: "/org/positions", label: "Chức vụ" },
   { to: "/org/employees", label: "Nhân sự" },
+  { to: "/hr/attendance", label: "Chấm công" },
+  { to: "/hr/adjustments", label: "Bổ sung công" },
+  { to: "/hr/leave", label: "Nghỉ phép" },
   { to: "/settings/company", label: "Cài đặt công ty" },
 ] as const;
 

@@ -40,6 +40,9 @@ export const employeeProfiles = pgTable(
     avatarUrl: text("avatar_url"),
     notes: text("notes"),
     status: text("status").notNull().default("active"),
+    // G11: ca làm được gán (FK → work_schedules ở migration 0061; không .references() để tránh
+    // import vòng employees ↔ hr). NULL = dùng ca mặc định công ty (is_default).
+    workScheduleId: uuid("work_schedule_id"),
     schemaVersion: integer("schema_version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
