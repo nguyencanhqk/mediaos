@@ -77,5 +77,12 @@ export const AUDIT_OBJECT_TYPES = [
   "notification_preference",
   "meeting",
   "meeting_room",
+  // G13 finance — sổ cái append-only + phân bổ + chốt lợi nhuận + đề xuất chi (xem migration 0070).
+  // Quyết định duyệt chi audit trên `expense_request` (KHÔNG thêm type cho bảng log `expense_approvals`).
+  "revenue_record",
+  "cost_record",
+  "cost_allocation",
+  "profit_snapshot",
+  "expense_request",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

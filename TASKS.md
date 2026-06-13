@@ -453,7 +453,7 @@ Fan-out nhiều lane 1 lượt: **Workflow `parallel-lanes`** (`.claude/workflow
 
 > Append-only (revenue/cost/profit). G13-1/G13-3 là 🛠️, còn lại 🤖.
 
-- [ ] **G13-1** 🛠️🔋 (M) Revenue nhập tay, gắn nền tảng/kênh/project/video, file đính kèm, **audit khi sửa/xoá** (append-only `revenue_records`).
+- [~] **G13-1** 🛠️🔋 (M) Revenue nhập tay, gắn nền tảng/kênh/project/video, file đính kèm, **audit khi sửa/xoá** (append-only `revenue_records`). **Service/repo/module XANH trên DB cô lập `mediaos_g13`** (deny-path 12/12 = RLS 2-tenant + append-only + permission fail-closed + audit-in-tx + 4 boundary; finance 51 · tenant-isolation 160 · e2e 19; typecheck clean). FULL gate (security-review + santa-method **NICE** + db/silent-failure/typescript) **0 CRITICAL/HIGH**; 1 MEDIUM non-blocking (map `revenue_records_replaces_uq` violation→409 ở HTTP layer). Vá DRIFT `vitest.config.ts` (đọc `LANE_DB`/process.env TRƯỚC literal — gốc shared-DB drift). **Nợ:** RevenueController (HTTP layer) chưa build. Artifact: [`docs/reviews/g13-gates.md`](docs/reviews/g13-gates.md). **Chưa land master** (G13 land CUỐI sau G9→G10→G11; reconcile journal idx39-43 + audit-CHECK union lúc merge — MERGE NOTE 0070).
 - [ ] **G13-2** 🤖🟢 (M) Cost + **Cost Allocation** (chia đều / theo video / theo task / % thủ công / theo giờ) — FIN-003.
 - [ ] **G13-3** 🛠️🔋 (M) Profit snapshot **bất biến** theo công ty/kênh/project/video (Doanh thu − CP trực tiếp − CP phân bổ).
 - [ ] **G13-4** 🤖🟢 (S) Expense Request: **đề xuất chi → duyệt qua Task Hub** (`task_type=finance`) → sau duyệt sinh cost record.
