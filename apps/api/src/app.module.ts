@@ -23,6 +23,7 @@ import { RealtimeModule } from "./realtime/realtime.module";
 import { FinanceModule } from "./finance/finance.module";
 import { PermissionModule } from "./permission/permission.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
+import { EvaluationModule } from "./evaluation/evaluation.module";
 import { JwtAuthGuard } from "./permission/guards/jwt-auth.guard";
 import { CompanyGuard } from "./permission/guards/company.guard";
 
@@ -54,6 +55,7 @@ import { CompanyGuard } from "./permission/guards/company.guard";
     RealtimeModule,
     FinanceModule,
     DashboardModule,
+    EvaluationModule,
   ],
   providers: [
     // Global guard pipeline: JWT auth → company context extraction.
