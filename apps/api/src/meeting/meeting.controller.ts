@@ -1,18 +1,15 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Patch,
-  Post,
-  Req,
-  UsePipes,
-} from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UsePipes } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
 import { MeetingService } from "./meeting.service";
-import { CreateMeetingDto, UpdateMeetingDto, CreateMeetingRoomDto } from "./meeting.dto";
+import {
+  CreateMeetingDto,
+  UpdateMeetingDto,
+  CreateMeetingRoomDto,
+  CreateMeetingNoteDto,
+  UpdateMeetingNoteDto,
+  CreateMeetingActionDto,
+} from "./meeting.dto";
 
 interface AuthenticatedRequest extends Request {
   user: { id: string; companyId: string };
@@ -87,5 +84,52 @@ export class MeetingController {
   @Delete(":meetingId")
   cancelMeeting(@Req() req: AuthenticatedRequest, @Param("meetingId") meetingId: string) {
     return this.svc.cancelMeeting(req.user.companyId, req.user.id, meetingId);
+  }
+
+  // ─── Notes / minutes (G10-4 biên bản) ──────────────────────────────────────
+
+  /** GET /meetings/:meetingId/notes */
+  @Get(":meetingId/notes")
+  listNotes(@Req() req: AuthenticatedRequest, @Param("meetingId") meetingId: string) {
+    return this.svc.listNotes(req.user.companyId, meetingId);
+  }
+
+  /** POST /meetings/:meetingId/notes */
+  @Post(":meetingId/notes")
+  addNote(
+    @Req() req: AuthenticatedRequest,
+    @Param("meetingId") meetingId: string,
+    @Body() dto: CreateMeetingNoteDto,
+  ) {
+    return this.svc.addNote(req.user.companyId, req.user.id, meetingId, dto.body);
+  }
+
+  /** PATCH /meetings/:meetingId/notes/:noteId */
+  @Patch(":meetingId/notes/:noteId")
+  updateNote(
+    @Req() req: AuthenticatedRequest,
+    @Param("meetingId") meetingId: string,
+    @Param("noteId") noteId: string,
+    @Body() dto: UpdateMeetingNoteDto,
+  ) {
+    return this.svc.updateNote(req.user.companyId, req.user.id, meetingId, noteId, dto.body);
+  }
+
+  // ─── Action items (G10-4 task sau họp → Task Hub G9) ───────────────────────
+
+  /** GET /meetings/:meetingId/action-items */
+  @Get(":meetingId/action-items")
+  listActionItems(@Req() req: AuthenticatedRequest, @Param("meetingId") meetingId: string) {
+    return this.svc.listActionItems(req.user.companyId, meetingId);
+  }
+
+  /** POST /meetings/:meetingId/action-items */
+  @Post(":meetingId/action-items")
+  createActionItem(
+    @Req() req: AuthenticatedRequest,
+    @Param("meetingId") meetingId: string,
+    @Body() dto: CreateMeetingActionDto,
+  ) {
+    return this.svc.createActionItem(req.user.companyId, req.user.id, meetingId, dto);
   }
 }

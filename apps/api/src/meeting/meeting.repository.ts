@@ -1,8 +1,21 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
-import { meetingRooms, meetings, meetingAttendees } from "../db/schema/meeting";
-import type { NewMeeting, NewMeetingRoom, NewMeetingAttendee } from "../db/schema/meeting";
+import {
+  meetingRooms,
+  meetings,
+  meetingAttendees,
+  meetingNotes,
+  meetingTasks,
+} from "../db/schema/meeting";
+import type {
+  NewMeeting,
+  NewMeetingRoom,
+  NewMeetingAttendee,
+  NewMeetingNote,
+  NewMeetingTask,
+} from "../db/schema/meeting";
+import { tasks } from "../db/schema/workflow";
 
 // ─── Row types returned to service ───────────────────────────────────────────
 
@@ -29,6 +42,25 @@ export interface MeetingRoomRow {
   capacity: number | null;
   isVirtual: boolean;
   createdAt: Date;
+}
+
+export interface MeetingNoteRow {
+  id: string;
+  meetingId: string;
+  authorUserId: string;
+  body: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MeetingActionItemRow {
+  taskId: string;
+  title: string;
+  status: string;
+  taskType: string;
+  assigneeUserId: string | null;
+  dueDate: Date | null;
+  linkedAt: Date;
 }
 
 const meetingRoomColumns = {
@@ -71,7 +103,10 @@ export class MeetingRepository {
     );
   }
 
-  createRoom(companyId: string, data: Omit<NewMeetingRoom, "companyId">): Promise<MeetingRoomRow[]> {
+  createRoom(
+    companyId: string,
+    data: Omit<NewMeetingRoom, "companyId">,
+  ): Promise<MeetingRoomRow[]> {
     return this.db.withTenant(companyId, (tx) =>
       tx
         .insert(meetingRooms)
@@ -125,7 +160,10 @@ export class MeetingRepository {
         isNull(meetings.deletedAt),
         ...(organizerId ? [eq(meetings.organizerId, organizerId)] : []),
       ];
-      return tx.select(meetingColumns).from(meetings).where(and(...conditions));
+      return tx
+        .select(meetingColumns)
+        .from(meetings)
+        .where(and(...conditions));
     });
   }
 
@@ -156,7 +194,12 @@ export class MeetingRepository {
   updateMeeting(
     companyId: string,
     meetingId: string,
-    data: Partial<Pick<NewMeeting, "title" | "description" | "meetingRoomId" | "startsAt" | "endsAt" | "status" | "agenda">>,
+    data: Partial<
+      Pick<
+        NewMeeting,
+        "title" | "description" | "meetingRoomId" | "startsAt" | "endsAt" | "status" | "agenda"
+      >
+    >,
   ): Promise<MeetingRow[]> {
     return this.db.withTenant(companyId, (tx) =>
       tx
@@ -207,9 +250,7 @@ export class MeetingRepository {
     endsAt: Date,
     excludeMeetingId?: string,
   ): Promise<{ count: number }[]> {
-    const excludeClause = excludeMeetingId
-      ? sql`AND id != ${excludeMeetingId}`
-      : sql``;
+    const excludeClause = excludeMeetingId ? sql`AND id != ${excludeMeetingId}` : sql``;
 
     const result = await tx.execute<{ count: number }>(sql`
       SELECT COUNT(*)::int AS count
@@ -232,10 +273,7 @@ export class MeetingRepository {
         .select()
         .from(meetingAttendees)
         .where(
-          and(
-            eq(meetingAttendees.companyId, companyId),
-            eq(meetingAttendees.meetingId, meetingId),
-          ),
+          and(eq(meetingAttendees.companyId, companyId), eq(meetingAttendees.meetingId, meetingId)),
         ),
     );
   }
@@ -245,12 +283,7 @@ export class MeetingRepository {
     return tx.insert(meetingAttendees).values(rows).onConflictDoNothing().returning();
   }
 
-  updateRsvp(
-    companyId: string,
-    meetingId: string,
-    userId: string,
-    rsvp: string,
-  ) {
+  updateRsvp(companyId: string, meetingId: string, userId: string, rsvp: string) {
     return this.db.withTenant(companyId, (tx) =>
       tx
         .update(meetingAttendees)
@@ -265,4 +298,88 @@ export class MeetingRepository {
         .returning(),
     );
   }
+
+  // ─── Notes / minutes (G10-4 biên bản) ──────────────────────────────────────
+
+  listNotes(companyId: string, meetingId: string): Promise<MeetingNoteRow[]> {
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .select(meetingNoteColumns)
+        .from(meetingNotes)
+        .where(and(eq(meetingNotes.companyId, companyId), eq(meetingNotes.meetingId, meetingId)))
+        .orderBy(desc(meetingNotes.createdAt)),
+    );
+  }
+
+  /** INSERT note trong tx cấp trên (caller mở withTenant để insert + audit cùng commit). */
+  insertNote(tx: TenantTx, data: NewMeetingNote): Promise<MeetingNoteRow[]> {
+    return tx.insert(meetingNotes).values(data).returning(meetingNoteColumns);
+  }
+
+  /** Tìm note theo id (tenant-scoped) — dùng để guard tồn tại trước khi UPDATE. */
+  findNoteByIdTx(tx: TenantTx, companyId: string, noteId: string): Promise<MeetingNoteRow[]> {
+    return tx
+      .select(meetingNoteColumns)
+      .from(meetingNotes)
+      .where(and(eq(meetingNotes.companyId, companyId), eq(meetingNotes.id, noteId)));
+  }
+
+  updateNote(
+    tx: TenantTx,
+    companyId: string,
+    noteId: string,
+    body: string,
+  ): Promise<MeetingNoteRow[]> {
+    return tx
+      .update(meetingNotes)
+      .set({ body, updatedAt: new Date() })
+      .where(and(eq(meetingNotes.companyId, companyId), eq(meetingNotes.id, noteId)))
+      .returning(meetingNoteColumns);
+  }
+
+  // ─── Action items link (G10-4 meeting ↔ Task Hub) ──────────────────────────
+
+  /** INSERT link meeting↔task trong tx cấp trên (idempotent qua unique idx — onConflictDoNothing). */
+  insertMeetingTask(tx: TenantTx, data: NewMeetingTask): Promise<{ id: string }[]> {
+    return tx
+      .insert(meetingTasks)
+      .values(data)
+      .onConflictDoNothing()
+      .returning({ id: meetingTasks.id });
+  }
+
+  /** Liệt kê action-item của cuộc họp: join meeting_tasks ⨝ tasks (chỉ task chưa soft-delete). */
+  listActionItems(companyId: string, meetingId: string): Promise<MeetingActionItemRow[]> {
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .select({
+          taskId: meetingTasks.taskId,
+          title: tasks.title,
+          status: tasks.status,
+          taskType: tasks.taskType,
+          assigneeUserId: tasks.assigneeUserId,
+          dueDate: tasks.dueDate,
+          linkedAt: meetingTasks.createdAt,
+        })
+        .from(meetingTasks)
+        .innerJoin(tasks, eq(tasks.id, meetingTasks.taskId))
+        .where(
+          and(
+            eq(meetingTasks.companyId, companyId),
+            eq(meetingTasks.meetingId, meetingId),
+            isNull(tasks.deletedAt),
+          ),
+        )
+        .orderBy(desc(meetingTasks.createdAt)),
+    );
+  }
 }
+
+const meetingNoteColumns = {
+  id: meetingNotes.id,
+  meetingId: meetingNotes.meetingId,
+  authorUserId: meetingNotes.authorUserId,
+  body: meetingNotes.body,
+  createdAt: meetingNotes.createdAt,
+  updatedAt: meetingNotes.updatedAt,
+} as const;

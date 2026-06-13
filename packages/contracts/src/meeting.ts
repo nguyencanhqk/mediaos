@@ -77,3 +77,49 @@ export const meetingAttendeeSchema = z.object({
   joinedAt: z.string().datetime(),
 });
 export type MeetingAttendeeDto = z.infer<typeof meetingAttendeeSchema>;
+
+// ─── Meeting notes / minutes (G10-4 biên bản) ──────────────────────────────────
+// Biên bản cuộc họp. Sửa được (UPDATE) nhưng KHÔNG xoá (append-only-ish — không cấp DELETE).
+
+export const meetingNoteSchema = z.object({
+  id: z.string().uuid(),
+  meetingId: z.string().uuid(),
+  authorUserId: z.string().uuid(),
+  body: z.string(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type MeetingNoteDto = z.infer<typeof meetingNoteSchema>;
+
+export const createMeetingNoteSchema = z.object({
+  body: z.string().min(1).max(20000),
+});
+export type CreateMeetingNoteRequest = z.infer<typeof createMeetingNoteSchema>;
+
+export const updateMeetingNoteSchema = z.object({
+  body: z.string().min(1).max(20000),
+});
+export type UpdateMeetingNoteRequest = z.infer<typeof updateMeetingNoteSchema>;
+
+// ─── Meeting action items (G10-4 task sau họp → Task Hub G9) ────────────────────
+// Action-item sau họp ghi thẳng vào bảng `tasks` (task_type='meeting_action', BẤT BIẾN #4 —
+// KHÔNG bảng riêng). meeting_tasks chỉ là bảng LIÊN KẾT meeting↔task. Phản hồi = TaskDto.
+
+export const createMeetingActionSchema = z.object({
+  title: z.string().min(1).max(200),
+  assigneeUserId: z.string().uuid().nullable().optional(),
+  dueDate: z.string().datetime().nullable().optional(),
+});
+export type CreateMeetingActionRequest = z.infer<typeof createMeetingActionSchema>;
+
+/** Compact view của một action-item gắn cuộc họp (join meeting_tasks ⨝ tasks). */
+export const meetingActionItemSchema = z.object({
+  taskId: z.string().uuid(),
+  title: z.string(),
+  status: z.string(),
+  taskType: z.string(),
+  assigneeUserId: z.string().uuid().nullable(),
+  dueDate: z.string().datetime().nullable(),
+  linkedAt: z.string().datetime(),
+});
+export type MeetingActionItemDto = z.infer<typeof meetingActionItemSchema>;

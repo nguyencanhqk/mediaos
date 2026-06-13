@@ -1202,7 +1202,11 @@ export const RLS_TABLES: RlsTableCase[] = [
     name: "meetings",
     table: "meetings",
     seedRow: async (direct, t) => {
-      const userId = await seedUser(direct, t.companyId, `mtg-org-${randomUUID().slice(0, 8)}@x.test`);
+      const userId = await seedUser(
+        direct,
+        t.companyId,
+        `mtg-org-${randomUUID().slice(0, 8)}@x.test`,
+      );
       const r = await direct.query(
         `INSERT INTO meetings (company_id, title, starts_at, ends_at, organizer_id)
          VALUES ($1, $2, now() + interval '1 hour', now() + interval '2 hours', $3) RETURNING id`,
@@ -1215,7 +1219,11 @@ export const RLS_TABLES: RlsTableCase[] = [
     name: "meeting_attendees",
     table: "meeting_attendees",
     seedRow: async (direct, t) => {
-      const userId = await seedUser(direct, t.companyId, `mtg-att-${randomUUID().slice(0, 8)}@x.test`);
+      const userId = await seedUser(
+        direct,
+        t.companyId,
+        `mtg-att-${randomUUID().slice(0, 8)}@x.test`,
+      );
       const mtgRes = await direct.query(
         `INSERT INTO meetings (company_id, title, starts_at, ends_at, organizer_id)
          VALUES ($1, $2, now() + interval '1 hour', now() + interval '2 hours', $3) RETURNING id`,
@@ -1225,6 +1233,57 @@ export const RLS_TABLES: RlsTableCase[] = [
         `INSERT INTO meeting_attendees (company_id, meeting_id, user_id)
          VALUES ($1, $2, $3) RETURNING id`,
         [t.companyId, mtgRes.rows[0].id, userId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── G10-4 Meeting notes + tasks link (meeting_notes / meeting_tasks — mig 0053) ──
+  {
+    name: "meeting_notes",
+    table: "meeting_notes",
+    seedRow: async (direct, t) => {
+      const userId = await seedUser(
+        direct,
+        t.companyId,
+        `mtg-note-${randomUUID().slice(0, 8)}@x.test`,
+      );
+      const mtgRes = await direct.query(
+        `INSERT INTO meetings (company_id, title, starts_at, ends_at, organizer_id)
+         VALUES ($1, $2, now() + interval '1 hour', now() + interval '2 hours', $3) RETURNING id`,
+        [t.companyId, `rls-note-mtg-${randomUUID().slice(0, 8)}`, userId],
+      );
+      const r = await direct.query(
+        `INSERT INTO meeting_notes (company_id, meeting_id, author_user_id, body)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [t.companyId, mtgRes.rows[0].id, userId, "rls biên bản"],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "meeting_tasks",
+    table: "meeting_tasks",
+    seedRow: async (direct, t) => {
+      const userId = await seedUser(
+        direct,
+        t.companyId,
+        `mtg-mt-${randomUUID().slice(0, 8)}@x.test`,
+      );
+      const mtgRes = await direct.query(
+        `INSERT INTO meetings (company_id, title, starts_at, ends_at, organizer_id)
+         VALUES ($1, $2, now() + interval '1 hour', now() + interval '2 hours', $3) RETURNING id`,
+        [t.companyId, `rls-mt-mtg-${randomUUID().slice(0, 8)}`, userId],
+      );
+      const taskRes = await direct.query(
+        `INSERT INTO tasks (company_id, task_type, title, status, origin, revision_round)
+         VALUES ($1, 'meeting_action', $2, 'not_started', 'initial', 0) RETURNING id`,
+        [t.companyId, `rls-mt-task-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO meeting_tasks (company_id, meeting_id, task_id)
+         VALUES ($1, $2, $3) RETURNING id`,
+        [t.companyId, mtgRes.rows[0].id, taskRes.rows[0].id],
       );
       return r.rows[0].id as string;
     },
