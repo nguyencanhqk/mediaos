@@ -25,6 +25,7 @@ import { PermissionModule } from "./permission/permission.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { EvaluationModule } from "./evaluation/evaluation.module";
 import { DefectModule } from "./defect/defect.module";
+import { MeetingModule } from "./meeting/meeting.module";
 import { JwtAuthGuard } from "./permission/guards/jwt-auth.guard";
 import { CompanyGuard } from "./permission/guards/company.guard";
 
@@ -58,6 +59,7 @@ import { CompanyGuard } from "./permission/guards/company.guard";
     DashboardModule,
     EvaluationModule,
     DefectModule,
+    MeetingModule,
   ],
   providers: [
     // Global guard pipeline: JWT auth → company context extraction.
