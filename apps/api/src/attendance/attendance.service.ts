@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  HttpException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -236,13 +237,14 @@ export class AttendanceService {
     return this.db
       .withTenant(actor.companyId, async (tx) => {
         const schedule = await this.repo.resolveScheduleForUserTx(actor.companyId, actor.id, tx);
-        const tz = schedule?.timezone ?? DEFAULT_TZ;
-        const workDate = localDateOf(now, tz);
-        this.assertPeriodOpen(await this.repo.isPeriodLockedTx(actor.companyId, monthOfDate(workDate), tx), workDate);
 
-        const [existing] = await this.repo.findRecordByUserDateTx(actor.companyId, actor.id, workDate, tx);
-        if (!existing?.checkInAt) throw new ConflictException(`Chưa check-in cho ngày ${workDate}`);
-        if (existing.checkOutAt) throw new ConflictException(`Đã check-out cho ngày ${workDate}`);
+        // F5: resolve the in-progress (open) record by checked-in/not-checked-out, NOT by today's
+        // local date — an overnight shift checks in on day D and out on D+1, so the open record's
+        // own workDate is the anchor for period-lock + early-leave calc.
+        const [existing] = await this.repo.findOpenRecordForUserTx(actor.companyId, actor.id, tx);
+        if (!existing?.checkInAt) throw new ConflictException("Chưa check-in (hoặc đã check-out)");
+        const workDate = existing.workDate;
+        this.assertPeriodOpen(await this.repo.isPeriodLockedTx(actor.companyId, monthOfDate(workDate), tx), workDate);
 
         const calc = schedule ? toScheduleCalc(schedule) : null;
         const earlyLeaveMinutes = calc ? earlyLeaveMinutesFor(now, workDate, calc) : 0;
@@ -346,14 +348,15 @@ export class AttendanceService {
   }
 
   async approveAdjustment(actor: Actor, id: string, note?: string) {
-    const [request] = await this.loadAdjustment(actor.companyId, id);
-    if (!request) throw new NotFoundException(`Adjustment request not found: ${id}`);
-    if (request.status !== "pending") {
-      throw new ConflictException(`Đơn không còn ở trạng thái chờ duyệt (status=${request.status})`);
-    }
-
     return this.db
       .withTenant(actor.companyId, async (tx) => {
+        // Re-read under FOR UPDATE inside the tx so two concurrent approvals serialize (F1 TOCTOU):
+        // the second waits on the row lock, then sees status≠pending and is rejected below.
+        const [request] = await this.repo.findAdjustmentByIdForUpdateTx(actor.companyId, id, tx);
+        if (!request) throw new NotFoundException(`Adjustment request not found: ${id}`);
+        if (request.status !== "pending") {
+          throw new ConflictException(`Đơn không còn ở trạng thái chờ duyệt (status=${request.status})`);
+        }
         this.assertPeriodOpen(
           await this.repo.isPeriodLockedTx(actor.companyId, monthOfDate(request.workDate), tx),
           request.workDate,
@@ -440,14 +443,14 @@ export class AttendanceService {
   }
 
   async rejectAdjustment(actor: Actor, id: string, note?: string) {
-    const [request] = await this.loadAdjustment(actor.companyId, id);
-    if (!request) throw new NotFoundException(`Adjustment request not found: ${id}`);
-    if (request.status !== "pending") {
-      throw new ConflictException(`Đơn không còn ở trạng thái chờ duyệt (status=${request.status})`);
-    }
-
     return this.db
       .withTenant(actor.companyId, async (tx) => {
+        // Re-read under FOR UPDATE inside the tx so two concurrent decisions serialize (F1 TOCTOU).
+        const [request] = await this.repo.findAdjustmentByIdForUpdateTx(actor.companyId, id, tx);
+        if (!request) throw new NotFoundException(`Adjustment request not found: ${id}`);
+        if (request.status !== "pending") {
+          throw new ConflictException(`Đơn không còn ở trạng thái chờ duyệt (status=${request.status})`);
+        }
         const [updated] = await this.repo.updateAdjustmentTx(
           actor.companyId,
           id,
@@ -574,16 +577,12 @@ export class AttendanceService {
   }
 
   private mapError(err: unknown, op: string, ctx: Record<string, unknown>): never {
-    if (
-      err instanceof NotFoundException ||
-      err instanceof ConflictException ||
-      err instanceof ForbiddenException ||
-      err instanceof InternalServerErrorException
-    ) {
-      throw err;
-    }
+    // Known HTTP exceptions (NotFound/Conflict/Forbidden/InternalServerError/…) pass through.
+    if (err instanceof HttpException) throw err;
+    // Unknown infra errors (PG wire, Drizzle) must NOT leak schema/constraint detail to the client:
+    // log the original, surface a generic 500.
     this.logger.error(`${op} unexpected error`, { err, ...ctx });
-    throw err;
+    throw new InternalServerErrorException("Lỗi hệ thống, vui lòng thử lại");
   }
 }
 

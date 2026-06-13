@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, between, desc, eq, isNull } from "drizzle-orm";
+import { and, between, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { employeeProfiles } from "../db/schema/employees";
 import {
@@ -116,6 +116,28 @@ export class AttendanceRepository {
       .limit(1);
   }
 
+  /**
+   * Most recent OPEN record (checked-in, not yet checked-out) for a user. Used by check-out so an
+   * overnight shift (check-in on day D, check-out on D+1 local) resolves the in-progress record
+   * regardless of today's local date — fixes the dropped-checkout bug for cross-midnight shifts.
+   */
+  findOpenRecordForUserTx(companyId: string, userId: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(attendanceRecords)
+      .where(
+        and(
+          eq(attendanceRecords.companyId, companyId),
+          eq(attendanceRecords.userId, userId),
+          isNotNull(attendanceRecords.checkInAt),
+          isNull(attendanceRecords.checkOutAt),
+          isNull(attendanceRecords.deletedAt),
+        ),
+      )
+      .orderBy(desc(attendanceRecords.workDate))
+      .limit(1);
+  }
+
   findRecordsByMonth(
     companyId: string,
     opts: { from: string; toExclusive: string; userId?: string },
@@ -189,6 +211,26 @@ export class AttendanceRepository {
         ),
       )
       .limit(1);
+  }
+
+  /**
+   * Same as findAdjustmentByIdTx but takes a row-level `FOR UPDATE` lock — the caller re-reads
+   * `status` under the lock so two concurrent approve/reject requests serialize (the second blocks,
+   * then sees status≠pending). Closes the TOCTOU double-approval window.
+   */
+  findAdjustmentByIdForUpdateTx(companyId: string, id: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(attendanceAdjustmentRequests)
+      .where(
+        and(
+          eq(attendanceAdjustmentRequests.companyId, companyId),
+          eq(attendanceAdjustmentRequests.id, id),
+          isNull(attendanceAdjustmentRequests.deletedAt),
+        ),
+      )
+      .limit(1)
+      .for("update");
   }
 
   findAdjustments(

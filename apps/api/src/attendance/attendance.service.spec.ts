@@ -67,10 +67,12 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     updateScheduleTx: vi.fn().mockResolvedValue([{ id: "sched" }]),
     isPeriodLockedTx: vi.fn().mockResolvedValue(false),
     findRecordByUserDateTx: vi.fn().mockResolvedValue([]),
+    findOpenRecordForUserTx: vi.fn().mockResolvedValue([]),
     findRecordsByMonth: vi.fn().mockResolvedValue([]),
     insertRecordTx: vi.fn().mockResolvedValue([makeRecord({ checkInAt: new Date(), status: "present" })]),
     updateRecordTx: vi.fn().mockResolvedValue([makeRecord({ checkOutAt: new Date(), status: "present" })]),
     findAdjustmentByIdTx: vi.fn().mockResolvedValue([makeAdjustment()]),
+    findAdjustmentByIdForUpdateTx: vi.fn().mockResolvedValue([makeAdjustment()]),
     findAdjustments: vi.fn().mockResolvedValue([]),
     insertAdjustmentTx: vi.fn().mockResolvedValue([makeAdjustment()]),
     updateAdjustmentTx: vi.fn().mockResolvedValue([makeAdjustment({ status: "approved" })]),
@@ -137,18 +139,16 @@ describe("AttendanceService — check-in/out guards", () => {
     expect(outbox.enqueue).toHaveBeenCalledTimes(1);
   });
 
-  it("blocks check-out when there was no check-in", async () => {
-    const repo = makeRepo({ findRecordByUserDateTx: vi.fn().mockResolvedValue([]) });
+  it("blocks check-out when there is no open (checked-in) record", async () => {
+    const repo = makeRepo({ findOpenRecordForUserTx: vi.fn().mockResolvedValue([]) });
     const { service } = build(repo);
     await expect(service.checkOut(actor, { method: "web" })).rejects.toThrow(ConflictException);
   });
 
-  it("blocks a second check-out on the same day", async () => {
-    const repo = makeRepo({
-      findRecordByUserDateTx: vi
-        .fn()
-        .mockResolvedValue([makeRecord({ checkInAt: new Date(), checkOutAt: new Date() })]),
-    });
+  it("blocks a second check-out (already checked out ⇒ no open record)", async () => {
+    // F5: check-out resolves the OPEN record (checkOutAt IS NULL); an already-closed record is not
+    // returned, so a second check-out finds nothing open and is rejected.
+    const repo = makeRepo({ findOpenRecordForUserTx: vi.fn().mockResolvedValue([]) });
     const { service } = build(repo);
     await expect(service.checkOut(actor, { method: "web" })).rejects.toThrow(ConflictException);
   });
@@ -156,7 +156,7 @@ describe("AttendanceService — check-in/out guards", () => {
   it("blocks check-out when the period is locked", async () => {
     const repo = makeRepo({
       isPeriodLockedTx: vi.fn().mockResolvedValue(true),
-      findRecordByUserDateTx: vi.fn().mockResolvedValue([makeRecord({ checkInAt: new Date() })]),
+      findOpenRecordForUserTx: vi.fn().mockResolvedValue([makeRecord({ checkInAt: new Date() })]),
     });
     const { service } = build(repo);
     await expect(service.checkOut(actor, { method: "web" })).rejects.toThrow(ConflictException);
@@ -175,7 +175,7 @@ describe("AttendanceService — adjustment lifecycle", () => {
 
   it("blocks approving an adjustment that is not pending", async () => {
     const repo = makeRepo({
-      findAdjustmentByIdTx: vi.fn().mockResolvedValue([makeAdjustment({ status: "approved" })]),
+      findAdjustmentByIdForUpdateTx: vi.fn().mockResolvedValue([makeAdjustment({ status: "approved" })]),
     });
     const { service } = build(repo);
     await expect(service.approveAdjustment(actor, REQ_ID)).rejects.toThrow(ConflictException);
@@ -195,7 +195,7 @@ describe("AttendanceService — adjustment lifecycle", () => {
     );
     const repo = makeRepo({
       isPeriodLockedTx,
-      findAdjustmentByIdTx: vi.fn().mockResolvedValue([makeAdjustment({ workDate: "2024-05-20" })]),
+      findAdjustmentByIdForUpdateTx: vi.fn().mockResolvedValue([makeAdjustment({ workDate: "2024-05-20" })]),
     });
     const { service } = build(repo);
     await expect(service.approveAdjustment(actor, REQ_ID)).rejects.toThrow(ConflictException);
@@ -204,7 +204,7 @@ describe("AttendanceService — adjustment lifecycle", () => {
 
   it("blocks rejecting an adjustment that is not pending", async () => {
     const repo = makeRepo({
-      findAdjustmentByIdTx: vi.fn().mockResolvedValue([makeAdjustment({ status: "cancelled" })]),
+      findAdjustmentByIdForUpdateTx: vi.fn().mockResolvedValue([makeAdjustment({ status: "cancelled" })]),
     });
     const { service } = build(repo);
     await expect(service.rejectAdjustment(actor, REQ_ID)).rejects.toThrow(ConflictException);
@@ -266,6 +266,8 @@ describe("AttendanceService — audit-on-mutation contract", () => {
     });
     const { service, audit, outbox, hrTasks } = build(repo);
     await service.approveAdjustment(actor, REQ_ID, "ok");
+    // F1: the request is re-read under FOR UPDATE inside the tx (not the pre-tx unlocked read).
+    expect(repo.findAdjustmentByIdForUpdateTx).toHaveBeenCalledWith(COMPANY_ID, REQ_ID, repo);
     expect(audit.record).toHaveBeenCalledTimes(2);
     const actions = audit.record.mock.calls.map((c) => (c[1] as { action: string }).action);
     expect(actions).toEqual(["AttendanceAdjustmentApproved", "AttendanceRecordAdjusted"]);

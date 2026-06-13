@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, InternalServerErrorException } from "@nestjs/common";
 import { and, eq, isNull } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { tasks } from "../db/schema";
@@ -31,7 +31,7 @@ export class HrTasksService {
         dueDate: data.dueDate ?? null,
       })
       .returning({ id: tasks.id });
-    if (!row) throw new Error("Failed to create HR approval task");
+    if (!row) throw new InternalServerErrorException("Failed to create HR approval task");
     return row;
   }
 

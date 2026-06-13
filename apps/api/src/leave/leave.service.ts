@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  HttpException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -138,14 +139,13 @@ export class LeaveService {
 
   // ─── leave_balances (read own; manage:leave to upsert / view others) ─────────
 
-  async listBalances(actor: Actor, query: { userId?: string; year?: number }) {
-    if (query.userId && query.userId !== actor.id) {
+  async listBalances(actor: Actor, query: { scope: "me" | "all"; year?: number }) {
+    if (query.scope === "all") {
+      // Xem số phép của TẤT CẢ nhân sự cần manage:leave — fail-closed, KHÔNG âm thầm thu hẹp về bản thân.
       await this.assertCan(actor, "manage", "leave", "Không có quyền xem số phép của nhân sự khác");
+      return this.repo.findBalances(actor.companyId, { year: query.year });
     }
-    return this.repo.findBalances(actor.companyId, {
-      userId: query.userId ?? actor.id,
-      year: query.year,
-    });
+    return this.repo.findBalances(actor.companyId, { userId: actor.id, year: query.year });
   }
 
   async upsertBalance(actor: Actor, dto: UpsertLeaveBalanceRequest) {
@@ -252,14 +252,15 @@ export class LeaveService {
   }
 
   async approveRequest(actor: Actor, id: string, note?: string) {
-    const [request] = await this.loadRequest(actor.companyId, id);
-    if (!request) throw new NotFoundException(`Leave request not found: ${id}`);
-    if (request.status !== "pending") {
-      throw new ConflictException(`Đơn không còn ở trạng thái chờ duyệt (status=${request.status})`);
-    }
-
     return this.db
       .withTenant(actor.companyId, async (tx) => {
+        // Re-read under FOR UPDATE inside the tx so two concurrent approvals serialize (F1 TOCTOU):
+        // chặn double status-write + double trừ phép cho cùng một đơn.
+        const [request] = await this.repo.findRequestByIdForUpdateTx(actor.companyId, id, tx);
+        if (!request) throw new NotFoundException(`Leave request not found: ${id}`);
+        if (request.status !== "pending") {
+          throw new ConflictException(`Đơn không còn ở trạng thái chờ duyệt (status=${request.status})`);
+        }
         const year = yearOf(request.startDate);
         // Trừ phép race-safe: chỉ trừ nếu used + delta ≤ total (chốt trong WHERE).
         const [balance] = await this.repo.incrementUsedIfEnoughTx(
@@ -317,14 +318,14 @@ export class LeaveService {
   }
 
   async rejectRequest(actor: Actor, id: string, note?: string) {
-    const [request] = await this.loadRequest(actor.companyId, id);
-    if (!request) throw new NotFoundException(`Leave request not found: ${id}`);
-    if (request.status !== "pending") {
-      throw new ConflictException(`Đơn không còn ở trạng thái chờ duyệt (status=${request.status})`);
-    }
-
     return this.db
       .withTenant(actor.companyId, async (tx) => {
+        // Re-read under FOR UPDATE inside the tx so two concurrent decisions serialize (F1 TOCTOU).
+        const [request] = await this.repo.findRequestByIdForUpdateTx(actor.companyId, id, tx);
+        if (!request) throw new NotFoundException(`Leave request not found: ${id}`);
+        if (request.status !== "pending") {
+          throw new ConflictException(`Đơn không còn ở trạng thái chờ duyệt (status=${request.status})`);
+        }
         const [updated] = await this.repo.updateRequestTx(
           actor.companyId,
           id,
@@ -406,16 +407,11 @@ export class LeaveService {
   }
 
   private mapError(err: unknown, op: string, ctx: Record<string, unknown>): never {
-    if (
-      err instanceof NotFoundException ||
-      err instanceof ConflictException ||
-      err instanceof ForbiddenException ||
-      err instanceof InternalServerErrorException
-    ) {
-      throw err;
-    }
+    // Known HTTP exceptions pass through; unknown infra errors (PG wire, Drizzle) must NOT leak
+    // schema/constraint detail to the client — log the original, surface a generic 500.
+    if (err instanceof HttpException) throw err;
     this.logger.error(`${op} unexpected error`, { err, ...ctx });
-    throw err;
+    throw new InternalServerErrorException("Lỗi hệ thống, vui lòng thử lại");
   }
 }
 

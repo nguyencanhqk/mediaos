@@ -71,6 +71,7 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     incrementUsedIfEnoughTx: vi.fn().mockResolvedValue([makeBalance({ usedDays: "10" })]),
     resolveWorkingDaysForUserTx: vi.fn().mockResolvedValue([1, 2, 3, 4, 5]),
     findRequestByIdTx: vi.fn().mockResolvedValue([makeRequest()]),
+    findRequestByIdForUpdateTx: vi.fn().mockResolvedValue([makeRequest()]),
     findRequests: vi.fn().mockResolvedValue([]),
     insertRequestTx: vi.fn().mockResolvedValue([makeRequest()]),
     updateRequestTx: vi.fn().mockResolvedValue([makeRequest({ status: "approved" })]),
@@ -168,6 +169,8 @@ describe("LeaveService — approve / deduct quota", () => {
       expect.objectContaining({ userId: ACTOR_ID, leaveTypeId: TYPE_ID, year: 2024, delta: "5" }),
       repo,
     );
+    // F1: the request is re-read under FOR UPDATE inside the tx (not the pre-tx unlocked read).
+    expect(repo.findRequestByIdForUpdateTx).toHaveBeenCalledWith(COMPANY_ID, REQ_ID, repo);
     expect(hrTasks.closeTaskTx).toHaveBeenCalledWith(repo, COMPANY_ID, TASK_ID, "approved");
     expect(audit.record).toHaveBeenCalledTimes(2); // LeaveApproved + LeaveBalanceDeducted
     expect(outbox.enqueue).toHaveBeenCalledTimes(1);
@@ -183,13 +186,15 @@ describe("LeaveService — approve / deduct quota", () => {
   });
 
   it("blocks approving a request that is not pending", async () => {
-    const repo = makeRepo({ findRequestByIdTx: vi.fn().mockResolvedValue([makeRequest({ status: "approved" })]) });
+    const repo = makeRepo({
+      findRequestByIdForUpdateTx: vi.fn().mockResolvedValue([makeRequest({ status: "approved" })]),
+    });
     const { service } = build(repo);
     await expect(service.approveRequest(actor, REQ_ID)).rejects.toThrow(ConflictException);
   });
 
   it("404 when approving a missing request", async () => {
-    const repo = makeRepo({ findRequestByIdTx: vi.fn().mockResolvedValue([]) });
+    const repo = makeRepo({ findRequestByIdForUpdateTx: vi.fn().mockResolvedValue([]) });
     const { service } = build(repo);
     await expect(service.approveRequest(actor, REQ_ID)).rejects.toThrow(NotFoundException);
   });
@@ -197,7 +202,9 @@ describe("LeaveService — approve / deduct quota", () => {
 
 describe("LeaveService — reject / cancel", () => {
   it("blocks rejecting a request that is not pending", async () => {
-    const repo = makeRepo({ findRequestByIdTx: vi.fn().mockResolvedValue([makeRequest({ status: "cancelled" })]) });
+    const repo = makeRepo({
+      findRequestByIdForUpdateTx: vi.fn().mockResolvedValue([makeRequest({ status: "cancelled" })]),
+    });
     const { service } = build(repo);
     await expect(service.rejectRequest(actor, REQ_ID)).rejects.toThrow(ConflictException);
   });
@@ -248,9 +255,16 @@ describe("LeaveService — scope + permission", () => {
     });
   });
 
-  it("blocks viewing another user's balance without manage permission", async () => {
+  it("blocks viewing all balances (scope=all) without manage permission", async () => {
     const repo = makeRepo();
     const { service } = build(repo, false);
-    await expect(service.listBalances(actor, { userId: OTHER_ID })).rejects.toThrow(ForbiddenException);
+    await expect(service.listBalances(actor, { scope: "all" })).rejects.toThrow(ForbiddenException);
+  });
+
+  it("scopes balances to self (scope=me) without elevated permission, never leaking others", async () => {
+    const repo = makeRepo();
+    const { service } = build(repo, false);
+    await expect(service.listBalances(actor, { scope: "me" })).resolves.toEqual([]);
+    expect(repo.findBalances).toHaveBeenCalledWith(COMPANY_ID, { userId: ACTOR_ID, year: undefined });
   });
 });

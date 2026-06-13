@@ -58,7 +58,7 @@ export class AttendanceController {
   }
 
   @Post("check-out")
-  @RequirePermission("check-in", "attendance")
+  @RequirePermission("check-out", "attendance")
   checkOut(@Req() req: AuthenticatedRequest, @Body() dto: CheckOutDto) {
     return this.attendance.checkOut(req.user, dto);
   }

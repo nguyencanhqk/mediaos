@@ -5,6 +5,7 @@
 
 INSERT INTO permissions (action, resource_type, is_sensitive) VALUES
   ('check-in',    'attendance', false),
+  ('check-out',   'attendance', false),
   ('read',        'attendance', false),
   ('adjust',      'attendance', false),
   ('approve',     'attendance', false),
@@ -38,13 +39,14 @@ INSERT INTO role_permissions (role_id, permission_id, effect)
 SELECT '00000000-0000-0000-0000-000000000002', p.id, 'ALLOW'
 FROM permissions p
 WHERE (p.action, p.resource_type) IN (
-  ('check-in', 'attendance'),
-  ('read',     'attendance'),
-  ('adjust',   'attendance'),
-  ('approve',  'attendance'),
-  ('read',     'leave'),
-  ('create',   'leave'),
-  ('approve',  'leave')
+  ('check-in',  'attendance'),
+  ('check-out', 'attendance'),
+  ('read',      'attendance'),
+  ('adjust',    'attendance'),
+  ('approve',   'attendance'),
+  ('read',      'leave'),
+  ('create',    'leave'),
+  ('approve',   'leave')
 )
 ON CONFLICT DO NOTHING;
 --> statement-breakpoint
@@ -63,10 +65,11 @@ WHERE r.id IN (
     '00000000-0000-0000-0000-000000000008'
   )
   AND (p.action, p.resource_type) IN (
-    ('check-in', 'attendance'),
-    ('read',     'attendance'),
-    ('adjust',   'attendance'),
-    ('read',     'leave'),
-    ('create',   'leave')
+    ('check-in',  'attendance'),
+    ('check-out', 'attendance'),
+    ('read',      'attendance'),
+    ('adjust',    'attendance'),
+    ('read',      'leave'),
+    ('create',    'leave')
   )
 ON CONFLICT DO NOTHING;

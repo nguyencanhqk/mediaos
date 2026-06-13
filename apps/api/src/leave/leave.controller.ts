@@ -70,10 +70,7 @@ export class LeaveController {
   @Get("balances")
   @RequirePermission("read", "leave")
   listBalances(@Req() req: AuthenticatedRequest, @Query() query: LeaveListQueryDto) {
-    return this.leave.listBalances(req.user, {
-      userId: query.scope === "all" ? undefined : req.user.id,
-      year: query.year,
-    });
+    return this.leave.listBalances(req.user, { scope: query.scope, year: query.year });
   }
 
   @Post("balances")

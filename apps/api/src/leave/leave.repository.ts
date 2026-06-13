@@ -201,6 +201,26 @@ export class LeaveRepository {
       .limit(1);
   }
 
+  /**
+   * Same as findRequestByIdTx but takes a row-level `FOR UPDATE` lock so two concurrent
+   * approve/reject requests serialize on the request row — the second blocks, then sees
+   * status≠pending and is rejected. Closes the TOCTOU double-approval / double-deduction window.
+   */
+  findRequestByIdForUpdateTx(companyId: string, id: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(leaveRequests)
+      .where(
+        and(
+          eq(leaveRequests.companyId, companyId),
+          eq(leaveRequests.id, id),
+          isNull(leaveRequests.deletedAt),
+        ),
+      )
+      .limit(1)
+      .for("update");
+  }
+
   findRequests(companyId: string, opts: { userId?: string; status?: string; year?: number }) {
     return this.db.withTenant(companyId, (tx) => {
       const conds = [eq(leaveRequests.companyId, companyId), isNull(leaveRequests.deletedAt)];
