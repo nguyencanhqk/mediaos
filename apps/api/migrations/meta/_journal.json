@@ -351,6 +351,27 @@
       "when": 1717500084000,
       "tag": "0074_g13_finance_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1717500085000,
+      "tag": "0080_g8_approval_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1717500086000,
+      "tag": "0081_g8_audit_object_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1717500087000,
+      "tag": "0082_g8_permissions_seed",
+      "breakpoints": true
     }
   ]
 }

@@ -725,6 +725,21 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+
+  // ── G8-1 Approval rules (multi-level — migration 0080) ───────────────────────
+  {
+    name: "approval_rules",
+    table: "approval_rules",
+    seedRow: async (direct, t) => {
+      const { stepId, userId } = await seedWorkflowChain(direct, t);
+      const r = await direct.query(
+        `INSERT INTO approval_rules (company_id, workflow_step_id, level, approver_user_id)
+         VALUES ($1, $2, 1, $3) RETURNING id`,
+        [t.companyId, stepId, userId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
   {
     name: "workflow_step_instance_locks",
     table: "workflow_step_instance_locks",
