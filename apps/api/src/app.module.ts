@@ -12,6 +12,7 @@ import { PositionsModule } from "./positions/positions.module";
 import { EmployeesModule } from "./employees/employees.module";
 import { MediaModule } from "./media/media.module";
 import { WorkflowModule } from "./workflow/workflow.module";
+import { ApprovalModule } from "./approval/approval.module";
 import { TasksModule } from "./tasks/tasks.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { ChatModule } from "./chat/chat.module";
@@ -37,6 +38,7 @@ import { CompanyGuard } from "./permission/guards/company.guard";
     EmployeesModule,
     MediaModule,
     WorkflowModule,
+    ApprovalModule,
     TasksModule,
     NotificationsModule,
     ChatModule,

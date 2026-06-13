@@ -37,6 +37,7 @@ export * from "./org";
 export * from "./media";
 export * from "./platform-accounts";
 export * from "./workflow";
+export * from "./approval";
 export * from "./task";
 export * from "./notification";
 export * from "./chat";

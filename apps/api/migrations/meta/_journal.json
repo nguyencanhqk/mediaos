@@ -274,6 +274,27 @@
       "when": 1717500050000,
       "tag": "0040_g9_tasks_hub",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1717500080000,
+      "tag": "0080_g8_approval_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1717500081000,
+      "tag": "0081_g8_audit_object_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1717500082000,
+      "tag": "0082_g8_permissions_seed",
+      "breakpoints": true
     }
   ]
 }
