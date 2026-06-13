@@ -55,7 +55,8 @@ export const salaryProfiles = pgTable(
   },
   (t) => [
     index("salary_profiles_company_id_idx").on(t.companyId),
-    index("salary_profiles_user_id_idx").on(t.userId),
+    // Composite (company_id, user_id) — phải khớp migration 0091 (company_id leading cho lookup tenant-scoped).
+    index("salary_profiles_user_id_idx").on(t.companyId, t.userId),
     // 1 hồ sơ lương ACTIVE / (company, user) khi chưa xoá mềm.
     uniqueIndex("salary_profiles_company_user_active_uq")
       .on(t.companyId, t.userId)

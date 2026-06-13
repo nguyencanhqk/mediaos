@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  HttpException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -260,7 +261,9 @@ export class SalaryProfileService {
    * we still log, we just don't expose).
    */
   private mapError(err: unknown, context: string): Error {
-    if (err instanceof ForbiddenException || err instanceof NotFoundException) {
+    // Domain HttpExceptions (Forbidden/NotFound/Conflict/… thrown inside the tx) pass through
+    // unchanged — don't downgrade a 403/404/409 to a generic 500.
+    if (err instanceof HttpException) {
       return err;
     }
     if (isUniqueViolation(err)) {
