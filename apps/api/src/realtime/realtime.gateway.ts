@@ -70,33 +70,43 @@ export class RealtimeGateway
   afterInit(server: Server): void {
     if (!this.enabled) {
       this.logger.warn("REALTIME_ENABLED=false — gateway từ chối mọi connection (FE poll REST fallback)");
+      // Middleware từ chối ở handshake level → client KHÔNG bao giờ nhận sự kiện `connect`.
+      server.use((_socket, next) => next(new Error("realtime_disabled")));
       return;
     }
+    // Auth middleware — chạy TRƯỚC khi Socket.IO emit `connect` về client (fail-closed tại handshake).
+    // Dùng middleware thay vì handleConnection+disconnect(true) để tránh race:
+    // disconnect(true) gọi sau khi `connect` đã được gửi → client thấy connect rồi mới thấy disconnect.
+    server.use((client, next) => {
+      const token = this.extractToken(client);
+      if (!token) {
+        this.logger.debug("WS handshake thiếu token → từ chối");
+        return next(new Error("unauthorized"));
+      }
+      try {
+        const claims = this.tokens.verifyAccessToken(token);
+        const user: SocketUser = { id: claims.sub, companyId: claims.companyId };
+        (client.data as { user?: SocketUser }).user = user;
+        next();
+      } catch {
+        this.logger.debug("WS handshake token không hợp lệ/hết hạn → từ chối");
+        next(new Error("unauthorized"));
+      }
+    });
     this.emitter.setServer(server);
     this.logger.log(`Realtime gateway sẵn sàng (namespace /${WS_NAMESPACE})`);
   }
 
   handleConnection(client: Socket): void {
-    if (!this.enabled) {
+    // Auth đã xác thực ở middleware trong afterInit → chỉ join user room ở đây.
+    // Nếu REALTIME_ENABLED=false middleware đã chặn → không bao giờ vào đây.
+    const user = getUser(client);
+    if (!user) {
+      // Phòng thủ: không nên xảy ra, nhưng fail-closed.
       client.disconnect(true);
       return;
     }
-    const token = this.extractToken(client);
-    if (!token) {
-      this.logger.debug("WS connect thiếu token → disconnect");
-      client.disconnect(true);
-      return;
-    }
-    try {
-      const claims = this.tokens.verifyAccessToken(token);
-      const user: SocketUser = { id: claims.sub, companyId: claims.companyId };
-      (client.data as { user?: SocketUser }).user = user;
-      // Join room riêng của user → đích của notification:new (đa thiết bị).
-      void client.join(userRoomName(user.companyId, user.id));
-    } catch {
-      this.logger.debug("WS token không hợp lệ/hết hạn → disconnect");
-      client.disconnect(true);
-    }
+    void client.join(userRoomName(user.companyId, user.id));
   }
 
   handleDisconnect(client: Socket): void {
