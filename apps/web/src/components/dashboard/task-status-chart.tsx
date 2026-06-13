@@ -60,8 +60,8 @@ export function TaskStatusChart({ data }: TaskStatusChartProps) {
             contentStyle={{ fontSize: 12 }}
           />
           <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-            {chartData.map((entry, i) => (
-              <Cell key={i} fill={entry.color} />
+            {chartData.map((entry) => (
+              <Cell key={entry.name} fill={entry.color} />
             ))}
           </Bar>
         </BarChart>

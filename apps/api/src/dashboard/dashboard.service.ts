@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, count, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { and, count, eq, gte, isNull, lt, lte, sql } from "drizzle-orm";
 import type { DashboardSummaryDto } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { tasks } from "../db/schema/workflow";
@@ -140,8 +140,8 @@ export class DashboardService {
           .where(
             and(
               userFilter,
-              sql`${attendanceRecords.workDate} >= ${monthPrefix + "-01"}`,
-              sql`${attendanceRecords.workDate} <= ${today}`,
+              gte(attendanceRecords.workDate, monthPrefix + "-01"),
+              lte(attendanceRecords.workDate, today),
               isNull(attendanceRecords.deletedAt),
             ),
           )
@@ -203,7 +203,7 @@ export class DashboardService {
             and(
               leaveFilter,
               eq(leaveRequests.status, "approved"),
-              gt(leaveRequests.startDate, monthStart),
+              gte(leaveRequests.startDate, monthStart),
             ),
           ),
       ),
