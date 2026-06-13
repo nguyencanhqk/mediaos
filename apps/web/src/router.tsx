@@ -21,6 +21,9 @@ import { WorkflowTemplatesPage } from "@/routes/workflows/templates";
 import { WorkflowTemplateDetailPage } from "@/routes/workflows/template-detail";
 import { WorkflowInstancesPage } from "@/routes/workflows/instances/instances-list";
 import { WorkflowInstanceDetailPage } from "@/routes/workflows/instances/instance-detail";
+import { AttendancePage } from "@/routes/hr/attendance";
+import { AdjustmentsPage } from "@/routes/hr/adjustments";
+import { LeavePage } from "@/routes/hr/leave";
 import { useAuthStore } from "@/stores/auth";
 
 const rootRoute = createRootRoute({ component: RootLayout });
@@ -165,6 +168,27 @@ const workflowInstanceDetailRoute = createRoute({
   component: WorkflowInstanceDetailPage,
 });
 
+const attendanceRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/attendance",
+  beforeLoad: authGuard,
+  component: AttendancePage,
+});
+
+const adjustmentsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/adjustments",
+  beforeLoad: authGuard,
+  component: AdjustmentsPage,
+});
+
+const leaveRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/leave",
+  beforeLoad: authGuard,
+  component: LeavePage,
+});
+
 const companySettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings/company",
@@ -201,6 +225,9 @@ const routeTree = rootRoute.addChildren([
   workflowTemplateDetailRoute,
   workflowInstancesRoute,
   workflowInstanceDetailRoute,
+  attendanceRoute,
+  adjustmentsRoute,
+  leaveRoute,
 ]);
 
 export const router = createRouter({ routeTree });
