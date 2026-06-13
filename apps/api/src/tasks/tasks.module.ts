@@ -9,5 +9,6 @@ import { PermissionModule } from "../permission/permission.module";
   imports: [EventsModule, PermissionModule],
   controllers: [TasksController],
   providers: [TasksService, TasksRepository],
+  exports: [TasksService],
 })
 export class TasksModule {}

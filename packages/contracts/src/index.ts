@@ -51,3 +51,5 @@ export * from "./finance";
 export * from "./dashboard";
 export * from "./evaluation";
 export * from "./payroll";
+export * from "./defect";
+export * from "./meeting";

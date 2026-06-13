@@ -91,5 +91,7 @@ export const AUDIT_OBJECT_TYPES = [
   // G8-3 evaluation (chấm điểm gắn workflow step — recordScores ghi 'evaluation_result' cùng tx)
   "evaluation_template",
   "evaluation_result",
+  // G8-2 defect/revision (trả sửa — createDefect ghi 'defect' cùng tx với revision task)
+  "defect",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
