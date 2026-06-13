@@ -945,6 +945,22 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+  // ── G12 Payroll — Salary Profile (mig 0091, 🔒 crown-jewel, lương nhạy cảm) ──────
+  // Chống XANH-GIẢ: salary_profiles có company_id ⇒ rls-guards.int-spec sẽ ĐỎ nếu thiếu đăng ký.
+  // KHÔNG skipNoContext (mọi hàng tenant-scoped, company_id NOT NULL, không hàng global).
+  {
+    name: "salary_profiles",
+    table: "salary_profiles",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `sal-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO salary_profiles (company_id, user_id, effective_date, base_salary)
+         VALUES ($1, $2, '2026-01-01', 5000.00) RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
   // ── G13 Finance (Revenue/Cost/Profit/Expense) — APPEND-ONLY ledgers + mutable allocation/request ──
   // Mỗi bảng có company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
   {

@@ -27,6 +27,7 @@ import { DashboardPage } from "@/routes/dashboard/dashboard";
 import { AttendancePage } from "@/routes/hr/attendance";
 import { AdjustmentsPage } from "@/routes/hr/adjustments";
 import { LeavePage } from "@/routes/hr/leave";
+import { SalaryProfilesPage } from "@/routes/payroll/salary-profiles";
 import { useAuthStore } from "@/stores/auth";
 
 const rootRoute = createRootRoute({ component: RootLayout });
@@ -215,6 +216,13 @@ const leaveRoute = createRoute({
   component: LeavePage,
 });
 
+const salaryProfilesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/payroll/salary-profiles",
+  beforeLoad: authGuard,
+  component: SalaryProfilesPage,
+});
+
 const companySettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings/company",
@@ -257,6 +265,7 @@ const routeTree = rootRoute.addChildren([
   attendanceRoute,
   adjustmentsRoute,
   leaveRoute,
+  salaryProfilesRoute,
 ]);
 
 export const router = createRouter({ routeTree });
