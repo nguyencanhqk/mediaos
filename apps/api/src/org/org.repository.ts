@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
-import { and, eq, isNull, sql } from 'drizzle-orm';
-import { DatabaseService } from '../db/db.service';
-import { orgUnits, teams, teamMembers, users, roles } from '../db/schema';
+import { Injectable } from "@nestjs/common";
+import { and, eq, isNull, sql } from "drizzle-orm";
+import { DatabaseService } from "../db/db.service";
+import { orgUnits, teams, teamMembers, users, roles } from "../db/schema";
+import { employeeProfiles } from "../db/schema/employees";
 
 @Injectable()
 export class OrgRepository {
@@ -125,17 +126,33 @@ export class OrgRepository {
     );
   }
 
+  /**
+   * G10-2 auto-room: user ids của nhân sự đang thuộc 1 phòng ban (employee_profiles.org_unit_id),
+   * chưa nghỉ (deleted_at IS NULL). Qua withTenant(companyId) ⇒ RLS chặn kéo nhân sự tenant khác.
+   */
+  listOrgUnitMemberUserIds(companyId: string, orgUnitId: string): Promise<string[]> {
+    return this.db.withTenant(companyId, async (tx) => {
+      const rows = await tx
+        .select({ userId: employeeProfiles.userId })
+        .from(employeeProfiles)
+        .where(
+          and(
+            eq(employeeProfiles.companyId, companyId),
+            eq(employeeProfiles.orgUnitId, orgUnitId),
+            isNull(employeeProfiles.deletedAt),
+          ),
+        );
+      return rows.map((r) => r.userId);
+    });
+  }
+
   // ── Teams ────────────────────────────────────────────────────────────────────
 
   listTeams(companyId: string, status?: string) {
     return this.db.withTenant(companyId, (tx) => {
       const where =
         status != null
-          ? and(
-              eq(teams.companyId, companyId),
-              isNull(teams.deletedAt),
-              eq(teams.status, status),
-            )
+          ? and(eq(teams.companyId, companyId), isNull(teams.deletedAt), eq(teams.status, status))
           : and(eq(teams.companyId, companyId), isNull(teams.deletedAt));
 
       return tx
@@ -181,7 +198,7 @@ export class OrgRepository {
           name: data.name,
           orgUnitId: data.orgUnitId ?? null,
           code: data.code ?? null,
-          type: data.type ?? 'production_team',
+          type: data.type ?? "production_team",
           leaderUserId: data.leaderUserId ?? null,
           description: data.description ?? null,
           capacity: data.capacity ?? null,
@@ -208,9 +225,7 @@ export class OrgRepository {
       tx
         .update(teams)
         .set({ ...data, updatedAt: new Date() })
-        .where(
-          and(eq(teams.companyId, companyId), eq(teams.id, id), isNull(teams.deletedAt)),
-        )
+        .where(and(eq(teams.companyId, companyId), eq(teams.id, id), isNull(teams.deletedAt)))
         .returning(),
     );
   }
@@ -220,9 +235,7 @@ export class OrgRepository {
       tx
         .update(teams)
         .set({ deletedAt: new Date(), updatedAt: new Date() })
-        .where(
-          and(eq(teams.companyId, companyId), eq(teams.id, id), isNull(teams.deletedAt)),
-        )
+        .where(and(eq(teams.companyId, companyId), eq(teams.id, id), isNull(teams.deletedAt)))
         .returning(),
     );
   }
@@ -254,13 +267,12 @@ export class OrgRepository {
     );
   }
 
-  addTeamMember(
-    companyId: string,
-    teamId: string,
-    data: { userId: string; roleName: string },
-  ) {
+  addTeamMember(companyId: string, teamId: string, data: { userId: string; roleName: string }) {
     return this.db.withTenant(companyId, (tx) =>
-      tx.insert(teamMembers).values({ companyId, teamId, ...data }).returning(),
+      tx
+        .insert(teamMembers)
+        .values({ companyId, teamId, ...data })
+        .returning(),
     );
   }
 
