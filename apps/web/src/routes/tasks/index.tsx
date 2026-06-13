@@ -4,28 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { tasksApi } from "@/lib/tasks-api";
 import { StepChecklist, stepChecklistQueryKey } from "@/components/tasks/step-checklist";
+import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
+import { PermissionGate } from "@/components/permission-gate";
 import { allRequiredChecked, workflowChecklistApi } from "@/lib/workflow-checklist-api";
+import {
+  TASK_STATUS_COLORS,
+  TASK_STATUS_LABELS,
+} from "@/components/tasks/task-status-constants";
 import type { TaskDto, CommentDto, ApprovalRequestDto } from "@mediaos/contracts";
-
-// ─── Status labels ────────────────────────────────────────────────────────────
-
-const TASK_STATUS_LABELS: Record<TaskDto["status"], string> = {
-  not_started: "Chưa bắt đầu",
-  in_progress: "Đang làm",
-  waiting_review: "Chờ duyệt",
-  revision: "Đang sửa",
-  approved: "Đã duyệt",
-  completed: "Hoàn thành",
-};
-
-const TASK_STATUS_COLORS: Record<TaskDto["status"], string> = {
-  not_started: "bg-muted text-muted-foreground",
-  in_progress: "bg-blue-100 text-blue-700",
-  waiting_review: "bg-yellow-100 text-yellow-700",
-  revision: "bg-orange-100 text-orange-700",
-  approved: "bg-green-100 text-green-700",
-  completed: "bg-green-200 text-green-800",
-};
 
 // ─── Grouping (G7-3d: nhiều bước song song → nhiều task cùng 1 nội dung) ────────
 
@@ -456,6 +442,12 @@ export function TasksPage() {
         <div className="flex-1 overflow-y-auto">
           {tab === "my-tasks" ? (
             <div className="space-y-2 p-3">
+              {/* Giao việc tay (G9-2) — ẩn nút nếu không có quyền create:task (BE vẫn gate) */}
+              <PermissionGate action="create" resourceType="task">
+                <div className="flex justify-end pb-1">
+                  <CreateTaskDialog />
+                </div>
+              </PermissionGate>
               {isLoading && (
                 <p className="py-6 text-center text-sm text-muted-foreground">Đang tải…</p>
               )}

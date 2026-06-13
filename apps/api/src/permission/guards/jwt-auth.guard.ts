@@ -32,6 +32,12 @@ export class JwtAuthGuard implements CanActivate {
     ]);
     if (isPublic) return true;
 
+    // WS execution context: guard này là APP_GUARD toàn cục → cũng chạy cho gateway message handler.
+    // WS KHÔNG có HTTP request → switchToHttp().getRequest() undefined sẽ crash. WS tự auth ở handshake
+    // (RealtimeGateway.verify token → socket.data.user) và MỌI handler đọc socket.data.user fail-closed,
+    // nên ở đây trả true cho non-http (không phải free pass — auth đã ép tầng gateway). Xem plan G10-1.
+    if (ctx.getType() !== "http") return true;
+
     const req = ctx.switchToHttp().getRequest<Request>();
     const authHeader = req.headers['authorization'];
     if (!authHeader || !authHeader.startsWith('Bearer ')) {

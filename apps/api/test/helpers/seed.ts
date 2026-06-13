@@ -296,6 +296,21 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM chat_rooms WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM notifications WHERE company_id = ANY($1::uuid[])", ids);
 
+  // ── G11 HR (Attendance + Leave) ──────────────────────────────────────────
+  // adjustment_requests/leave_requests có FK → tasks → xoá TRƯỚC tasks. attendance_records
+  // FK ← adjustment_requests (attendance_record_id) → xoá requests trước records.
+  await direct.query(
+    "DELETE FROM attendance_adjustment_requests WHERE company_id = ANY($1::uuid[])",
+    ids,
+  );
+  await direct.query("DELETE FROM attendance_records WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM attendance_periods WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM leave_requests WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM leave_balances WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM leave_types WHERE company_id = ANY($1::uuid[])", ids);
+  // work_schedules: employee_profiles.work_schedule_id FK (ON DELETE SET NULL) — an toàn xoá sau.
+  await direct.query("DELETE FROM work_schedules WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G4-5 Approval / Defect ───────────────────────────────────────────────
   await direct.query("DELETE FROM defects WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM approval_steps WHERE company_id = ANY($1::uuid[])", ids);

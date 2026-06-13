@@ -86,11 +86,11 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 | G6 | Media (Channel/Project/Content) | 🤖 + 🛠️(G6-2) | L | ✅ đóng (đã land master — migration 0020–0029 + bảng lõi; G6-2 encryption đã merge, verify 2026-06-12) |
 | G7 | Workflow Builder | 🛠️ TDD 🔋 | XL | ✅ đóng (merged `6a0d4bd` --no-ff) · spine 1a→4c + FE Track C · gate TỔNG PASS (B1+santa+FE LIGHT) |
 | G8 | Approval · Defect · Eval · KPI | 🛠️+🤖 | L | ☐ |
-| G9 | 🧩 Task Hub hợp nhất | 🛠️+🤖 | L | 🟡 G9-1 ✅ (schema + mig 0040, gate FULL PASS, merged `d58d465` --no-ff — land #1) · G9-2→4 ☐ |
-| G10 | Chat · Notification · Meeting | 🤖 + 🛠️(realtime) | L | ☐ |
-| G11 | Attendance · Leave | 🤖 AI-bulk 🟢 | M | ☐ |
+| G9 | 🧩 Task Hub hợp nhất | 🛠️+🤖 | L | 🟡 G9-1 ✅ (`d58d465`) · G9-2 BE+FE ✅ (`9ba1eda`, rebase lên master — office endpoints+gates+SEC-1/2+pagination · CreateTaskDialog "Giao việc tay"; api 456/456 · web 133/133 · gate PASS, CRITICAL=0) · G9-3/4 ☐ |
+| G10 | Chat · Notification · Meeting | 🤖 + 🛠️(realtime) | L | 🟠 needs_human — realtime GREEN code xong (typecheck clean) nhưng test chưa verify: **shared dev DB drift** làm migration `0050` bị skip. CHƯA commit (7 file WIP, `feat/g10-comms`). Chờ quyết định DB. |
+| G11 | Attendance · Leave | 🤖 AI-bulk 🟢 | M | 🟡 BE xong (attendance `6181a05` + leave `4b7ea4a`); verify DB cô lập `mediaos_g11` **229 pass** (deny-path 4 + RLS 2-tenant 165 + unit); gate BLOCK→**vá F1–F5** `82fd27f` (TOCTOU FOR UPDATE · check-out perm · mapError leak · scope=all · overnight checkout — [`docs/reviews/g11-gates.md`](docs/reviews/g11-gates.md)); FE xong branch `feat/g11-fe` (167 web test). **✅ MERGED master §5.4** (G11-1/2 `ebce54a`; **F7** `1a05e4f` · **F6/F8** `1e7c5bf`, --no-ff): follow-up **F6 pagination** (limit/offset clamp 1–100 default 50 cho attendance/leave repo) + **F7 period-lock immutability** trước G12 (`0064` trigger BEFORE UPDATE attendance_periods chặn locked→open · RED→GREEN 4/4) + **F8 cleanup DRY** (monthRange→tz.util · between+prevDay→gte/lt) đều land. Merged master xanh: api **895 pass** + web **184 pass**, chain-migrate `0000→0064` sạch, typecheck sạch. |
 | G12 | Payroll · Bonus/Penalty | 🛠️ TDD 🔋🔋 | XL | ☐ |
-| G13 | Finance (Revenue/Cost/Profit) | 🛠️+🤖 | L | ☐ |
+| G13 | Finance (Revenue/Cost/Profit) | 🛠️+🤖 | L | 🟠 needs_human — G13-1 revenue GREEN verify trên Postgres thật (revenue-deny 8/8 · finance 47/47 · tenant-iso 160). CHƯA commit (4 file WIP, `feat/g13-finance`) — 🛠️ finance ledger cần FULL gate người chốt. |
 | G14 | Dashboard & Report | 🤖 AI-bulk 🟢 | M | ☐ |
 | G15 | Mobile App (React Native) | 🤖 AI-bulk | XL | ☐ |
 | G16 | Stabilization & SaaS Prep | 🛠️+🔧 | L | ☐ |
@@ -129,15 +129,17 @@ Master kết thúc ở `0037`. Mỗi lane sở hữu **1 dải 10 số** riêng:
 | --- | --- | --- |
 | G9  | `0040–0049` | đang dùng (`0040`) |
 | G10 | `0050–0059` | đang dùng (`0050`) |
-| G11 | `0060–0069` | đang dùng (`0060–0063`) |
-| G13 | `0070–0079` | reserved |
-| G8  | `0080–0089` | reserved |
+| G11 | `0060–0069` | đang dùng (`0060–0064`) |
+| G13 | `0070–0079` | đang dùng (`0070–0074`) |
+| G8  | `0080–0089` | đang dùng (`0080–0082`) |
 | G12 | `0090–0099` | reserved |
 | G14 | `0100–0109` | reserved |
 | G15 | `0110–0119` | reserved |
 | G16 | `0120–0129` | reserved |
 
 `_journal.json`: `idx`/`when` phải **đơn điệu tăng** trong band; khi merge nhiều lane, reconcile journal theo thứ tự merge (idx liên tục, when tăng dần). Hook `guard-migration-band` **chặn (exit 2)** file migration có số ngoài band của branch hiện tại.
+
+> **⚠️ DB CÔ LẬP mỗi lane (BẮT BUỘC verify):** band riêng KHÔNG đủ chống drift trên **1 DB dùng chung**. drizzle migrator áp migration **đơn điệu theo `when`** ⇒ khi lane band cao (G8 `0080s`) migrate `mediaos` chung, migration band thấp (G10 `0050`, G11 `0060s`, G13 `0070s`) bị **SKIP** vĩnh viễn → bảng vắng, test xanh-giả/đỏ-giả. **Mỗi lane verify trên DB riêng `mediaos_<lane>`:** `bash scripts/lane-db-setup.sh <lane>` (tạo + chain-migrate `0000→latest`, `--reset` để làm lại) → `export LANE_DB=mediaos_<lane>` → `pnpm --filter @mediaos/api test`. `vitest.config.ts` đọc `LANE_DB` (không set → `mediaos` chung cho CI ephemeral/master). Đã verify 2026-06-13: `mediaos_g13` áp sạch 44 migration đủ bảng G13.
 
 ### 5.3 Hot-file append protocol (file mọi lane đụng → CẤM rewrite)
 
@@ -166,6 +168,35 @@ RED (deny-path/contract test) → GREEN (implement) → gate (FULL/LIGHT) → ch
 ```
 
 Fan-out nhiều lane 1 lượt: **Workflow `parallel-lanes`** (`.claude/workflows/parallel-lanes.mjs`) — mỗi lane 1 agent pinned vào worktree+band, chạy 1 round micro-step rồi báo cáo `committed / needs_human`. **Checkpoint commit trước mỗi rebase.**
+
+### 5.6 Model routing & plan-step (tự động)
+
+> Workflow tự chọn model theo độ khó của lane (CLAUDE.md §6). Quyết định 2026-06-12 (**thận trọng chất lượng**): **KHÔNG Haiku · Sonnet mặc định · Opus chỉ crown-jewel**. Crown-jewel còn được **lập micro-plan (Opus) trước khi code** (pipeline `Plan → Implement`); việc thường code thẳng Sonnet.
+
+| Lane | Tier | Model | Plan-step |
+| --- | --- | --- | --- |
+| G12 Payroll · G3 Permission · G6-2 Secret/encrypt · G13 Finance ledger (revenue/cost/profit) · G7 Workflow FSM/DAG · G8 KPI/Eval · ADR | **crown** | **Opus** | ✅ |
+| G9 Task Hub CRUD · G10 Comms · G11 HR (attendance/leave) · G14 Dashboard · G15 Mobile · build-fix/docs/UI | thường | **Sonnet** | ❌ |
+
+- **Tự phát hiện crown** qua `tier:'crown'` hoặc regex trên `task` (lương/permission/RLS/secret/finance/ledger/KPI/FSM/DAG/append-only/ADR…). Không cần khai báo tay nếu task có từ khoá.
+- **Override per-lane:** `model:'opus'|'sonnet'|'haiku'` (ép model), `skipPlan:true` (bỏ plan dù crown), `tier:'crown'` (ép crown).
+- **Xem trước không tốn token:** `args.dryRun:true` → in bảng routing (`lane → model [crown,+plan]`) rồi dừng, không spawn agent.
+- `gate` (FULL/LIGHT) **tách bạch** với model — gate quyết cường độ review (§5.5 / CLAUDE.md §6), không quyết model.
+
+**Agent/skill routing + Review stage (Hybrid).** Mỗi lane còn tự nhận đúng reviewer/skill/build-resolver theo domain `task`:
+
+| Domain trên `task` | Reviewer / skill |
+| --- | --- |
+| DB·migration·RLS·schema·repository | `database-reviewer` |
+| permission·secret·encrypt·payroll·audit·auth · **gate=FULL** | `security-reviewer` + `silent-failure-hunter` |
+| FE·React·`.tsx`·component·form | `react-reviewer` |
+| baseline mọi lane code | `typescript-reviewer` |
+| crown-jewel | + `santa-method` · mọi lane + `quality-gate` |
+| build/typecheck đỏ | FE→`react-build-resolver` · API/TS→`build-error-resolver` |
+
+- Pipeline 3 stage: **Plan → Implement → Review**. Crown-jewel: stage Review **spawn reviewer agent độc lập** (agentType) trên diff worktree → `mergeVerdicts`; verdict `CRITICAL`/`blocking` ép `needs_human`. Việc thường: reviewer/skill **chèn vào prompt** implementer (không spawn riêng).
+- **Auto build-fix:** build/typecheck đỏ → sửa root-cause / route build-resolver TRƯỚC khi báo `needs_human`.
+- Field args mới: `reviewers:[...]` (ép danh sách) · `noReview:true` (tắt). `dryRun:true` in cả reviewers/skills/build.
 
 ---
 
@@ -342,9 +373,9 @@ Fan-out nhiều lane 1 lượt: **Workflow `parallel-lanes`** (`.claude/workflow
 > **🌳 TRUNK song song (§5.4):** **G9-1 đã land master** (`d58d465`, merge --no-ff; feat `0c5d4b0` + docs `0d5f490`) — đó là điểm các lane G8/G10/G11/G13 branch/rebase lại. G9-2/3/4 (giao việc tay · Task Board · gộp nguồn) chạy song song như lane thường trong band `0040s`.
 
 - [x] **G9-1** 🛠️🔋 (M) Chuẩn hoá `tasks` nhận đủ **7 `task_type`** (`production·review·revision·meeting_action·office·finance·hr`) + giữ `workflow_step` back-compat (8 loại); `project_id/content_item_id/workflow_instance_id` **nullable**. **Contract-test: task non-video tạo được mà không cần video.** — **mig 0040** (idx 38 / when 1717500050000, ADR-0024 widen-CHECK no-data-migrate); contract 18 test GREEN · typecheck 4/4 · api unit 427/427; **gate FULL PASS** (security+database+silent-failure + adversarial verify, vá SF-1 `listByTeam` lọc soft-deleted member). Tầng repo/service (`createTask`/`list*`/`updateStatus`/`softDelete` + audit + deny-path workflow-task) làm **nền G9-2/3/4 — CHƯA nối controller**. Latent chuyển G9-2: SEC-1 tenant-FK guard · DB-8/SF-2 pagination · SEC-2 status-typing. **Land #1 — merged `d58d465` (PR #4, --no-ff).**
-- [ ] **G9-2** 🤖🟢 (S) **Giao việc tay** (`task_type=office`): tạo task thủ công ngoài workflow (TASK-001).
-- [ ] **G9-3** 🤖🟢 (L) **Task Board tổng**: Kanban/Table/Calendar; **filter theo `task_type`**; view Office Tasks; **luồng rút gọn** (Chưa bắt đầu→Đang làm→Hoàn thành) cho task không có vòng duyệt.
-- [ ] **G9-4** 🤖🟢 (M) My/Team/Project Tasks **gộp tất cả nguồn**; card có badge loại + bối cảnh điều kiện.
+- [x] **G9-2** 🤖🟢 (S) **Giao việc tay** (`task_type=office`): tạo task thủ công ngoài workflow (TASK-001). — **BE+FE ✅ land #2** (`9ba1eda`, rebase lên master): `POST /tasks` gate `create:task` + **SEC-1** tenant-FK guard in-tx · `PATCH /tasks/:id/status` gate `update:task` + **SEC-2** status thu hẹp `OfficeTaskStatusDto` · `DELETE /tasks/:id` soft-delete gate `delete:task` · `POST .../comments` gate `comment:comment` (vá H-1) · audit-in-tx · **DB-8/SF-2** pagination + `page` threaded · FE 2d `CreateTaskDialog` "Giao việc tay" + `<PermissionGate create:task>`. typecheck sạch · **api 456/456 · web 133/133** · **gate PASS** (security-reviewer + silent-failure-hunter + adversarial verify; CRITICAL=0; defer→handoff). Attachments hoãn (bảng + storage chưa land).
+- [x] **G9-3** 🤖🟢 (L) **Task Board tổng**: Kanban/Table/Calendar; **filter theo `task_type`**; view Office Tasks; **luồng rút gọn** (Chưa bắt đầu→Đang làm→Hoàn thành) cho task không có vòng duyệt. — **BE+FE ✅** (wip checkpoint, lane G9 band 0040s, KHÔNG migration mới): `GET /tasks/board` gate `read:task` (PermissionGuard) + `ListTasksQueryDto`(clamp limit≤200/offset≥0) → `service.listBoard` (đã có nền G9-1; chỉ wire controller, KHÔNG sửa repo). Contracts: `listTasksQuerySchema` (nguồn sự thật DTO). FE: `/tasks/board` (router+nav additive) — 3 view Kanban/Table(TanStack v8)/Calendar + `TaskTypeFilter` (7+1 loại, sub-view Office Tasks) + `OfficeTaskStatus` luồng rút gọn 3-status bọc `<PermissionGate update:task>` (chỉ render cho task workflowStep==null & taskType∉FSM — mirror BE SEC-2). DRY: extract `task-status-constants.ts` (TASK_STATUS_LABELS/COLORS + TASK_TYPE_LABELS). **RED trước**: board deny-path gate (read:task) + listBoard forward-filter + FE filter/luồng-rút-gọn. Verify DB-cô-lập `mediaos_g9`: api tasks 42/42 (board int-spec 7/7 gồm **2-tenant isolation** A/B) · web 141/141 (+8) · typecheck api+web sạch · lint 0 error · prettier sạch. LIGHT gate PASS. ⚠️ 4 fail int-spec G6-2/G2-6 (reset-token-envelope/secret-rotation/platform-reveal/auth) là **baseline môi trường** (KEK/crypto) — fail như nhau trên master sạch, KHÔNG do G9-3 (diff không chạm auth/secret/crypto). _Deviation: date-fns chưa nằm deps web → Calendar dùng Intl `toLocaleDateString("vi-VN")` như phần còn lại codebase (tránh churn lockfile xuyên lane); vẫn UTC-safe qua day-key ổn định._
+- [x] **G9-4** 🤖🟢 (M) My/Team/Project Tasks **gộp tất cả nguồn**; card có badge loại + bối cảnh điều kiện. — **BE+FE ✅ merged `15e8256` (--no-ff)**, lane g9-4 band `0040s`, KHÔNG migration mới: 3 view My/Team/Project trên bảng `tasks` hợp nhất; endpoint `GET /tasks/my|team/:id|project/:id` gate `read:task` + pagination limit/offset (Team/Project); badge `task_type` + ngữ cảnh từ `task-status-constants` (TASK_TYPE_LABELS — không hard-code); `<PermissionGate read:task>` cho Team/Project + loading/error/empty mỗi tab. **RED trước** (BE aggregation + FE gate/tab). Verify DB-cô-lập `mediaos_g94`: api tasks-service 17 + permissions 22 + board int 7 (836 pass) · web 184 (task-hub 9) · typecheck api+web sạch. LIGHT gate PASS.
 
 **DB:** `tasks` `task_comments` `task_attachments`
 **Màn:** Task Board (Kanban/Table/Calendar) · Task Detail Drawer · My/Team/Project/Office Tasks
@@ -394,8 +425,8 @@ Fan-out nhiều lane 1 lượt: **Workflow `parallel-lanes`** (`.claude/workflow
 
 ## G11 — HR: Attendance · Leave _(🤖 AI-bulk 🟢 · ~6–10 ngày · cụm hồi sức)_
 
-- [ ] **G11-1** 🤖🟢 (M) Attendance: check-in/out web+mobile, ca làm, đi muộn/về sớm, **đơn bổ sung công → duyệt qua Task Hub** (`task_type=hr`), khoá kỳ công. **Timezone-correct (ADR 0008).** _(GX-7)._
-- [ ] **G11-2** 🤖🟢 (M) Leave: loại nghỉ, số phép, **đơn nghỉ → duyệt qua Task Hub** (`task_type=hr`), trừ phép, lịch nghỉ team.
+- [x] **G11-1** 🤖🟢 (M) Attendance: check-in/out web+mobile, ca làm, đi muộn/về sớm, **đơn bổ sung công → duyệt qua Task Hub** (`task_type=hr`), khoá kỳ công. **Timezone-correct (ADR 0008).** _(GX-7)._ — **✅ merged `ebce54a`** (BE `6181a05` + FE `feat/g11-fe`); verify DB-cô-lập `mediaos_g11` 229 pass; gate vá F1–F5 `82fd27f`; **hardening F7 period-lock `1a05e4f`** (trigger chặn locked→open trước G12); **F6 pagination + F8 cleanup `1e7c5bf`**.
+- [x] **G11-2** 🤖🟢 (M) Leave: loại nghỉ, số phép, **đơn nghỉ → duyệt qua Task Hub** (`task_type=hr`), trừ phép, lịch nghỉ team. — **✅ merged `ebce54a`** (leave `4b7ea4a` + FE); F6 pagination `findRequests` limit/offset land `1e7c5bf`.
 
 **DB:** `work_schedules` `attendance_records` `attendance_adjustment_requests` `leave_types` `leave_requests` `leave_balances`
 **Màn:** Attendance Dashboard/Monthly · Adjustment Requests · Leave Requests/Calendar

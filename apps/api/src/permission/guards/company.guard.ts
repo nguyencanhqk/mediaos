@@ -18,6 +18,10 @@ export class CompanyGuard implements CanActivate {
     ]);
     if (isPublic) return true;
 
+    // WS execution context: APP_GUARD toàn cục cũng chạy cho gateway handler. WS không có HTTP request
+    // → bỏ qua (company context được ép ở handshake qua socket.data.user.companyId). Xem JwtAuthGuard.
+    if (ctx.getType() !== "http") return true;
+
     const req = ctx.switchToHttp().getRequest<Partial<AuthRequest>>();
     if (!req.user?.companyId) {
       throw new ForbiddenException('Company context missing — ensure JwtAuthGuard runs first');
