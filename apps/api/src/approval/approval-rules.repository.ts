@@ -35,7 +35,13 @@ export class ApprovalRulesRepository {
         .from(approvalRules)
         .innerJoin(
           approvalRequests,
-          eq(approvalRequests.workflowStepId, approvalRules.workflowStepId),
+          // M1 defence-in-depth: pin company_id on both sides of the JOIN (RLS + withTenant are the
+          // primary guards, but an explicit cross-column equality makes cross-tenant impossible even
+          // if withTenant were ever called with a wrong companyId).
+          and(
+            eq(approvalRequests.workflowStepId, approvalRules.workflowStepId),
+            eq(approvalRequests.companyId, approvalRules.companyId),
+          ),
         )
         .where(
           and(

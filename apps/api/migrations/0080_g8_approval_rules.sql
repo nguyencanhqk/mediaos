@@ -33,6 +33,8 @@ CREATE POLICY approval_rules_tenant_isolation ON approval_rules
   USING  (company_id = NULLIF(current_setting('app.current_company_id', true), '')::uuid)
   WITH CHECK (company_id = NULLIF(current_setting('app.current_company_id', true), '')::uuid);
 --> statement-breakpoint
-GRANT SELECT, INSERT, UPDATE ON approval_rules TO mediaos_app;
+-- H1 fix: approval_rules is a level-routing config — UPDATE not needed (least privilege).
+-- A compromised app role with UPDATE could silently redirect approvals without audit trail.
+GRANT SELECT, INSERT ON approval_rules TO mediaos_app;
 --> statement-breakpoint
 GRANT SELECT ON approval_rules TO mediaos_worker;

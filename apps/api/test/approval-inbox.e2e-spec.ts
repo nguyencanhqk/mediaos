@@ -143,6 +143,35 @@ describe.skipIf(!hasDb)("G8-1 Approval Inbox e2e (deny-path)", () => {
     expect(res.status).toBe(403);
   });
 
+  // E2 — audit written on intermediate approve ────────────────────────────────────
+  it("E2 — approving an intermediate level writes exactly one audit_logs row (ApprovalLevelApproved)", async () => {
+    const t = await seedCompany(direct, "g8d");
+    companyIds.push(t.companyId);
+    const l1 = await seedUser(direct, t.companyId, `l1-${randomUUID().slice(0, 6)}@x.test`, await hash());
+    const l2 = await seedUser(direct, t.companyId, `l2-${randomUUID().slice(0, 6)}@x.test`, await hash());
+    const l3 = await seedUser(direct, t.companyId, `l3-${randomUUID().slice(0, 6)}@x.test`, await hash());
+    for (const u of [l1, l2, l3]) await seedUserRole(direct, u, COMPANY_ADMIN_ROLE_ID, t.companyId);
+    const { requestId } = await seedThreeLevelRequest(direct, t.companyId, { l1, l2, l3 });
+
+    const token = await login(app, t.slug, await emailOf(direct, l1));
+    const res = await api(app)
+      .post(`/approval/requests/${requestId}/approve`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+    expect(res.status).toBe(201);
+
+    // Audit row must exist in audit_logs for this approval action (append-only table).
+    const auditRes = await direct.query(
+      `SELECT action, object_type, object_id FROM audit_logs
+       WHERE object_id = $1 AND action = 'ApprovalLevelApproved'
+       ORDER BY created_at DESC LIMIT 5`,
+      [requestId],
+    );
+    expect(auditRes.rows).toHaveLength(1);
+    expect(auditRes.rows[0].object_type).toBe("approval_request");
+    expect(auditRes.rows[0].object_id).toBe(requestId);
+  });
+
   // E3 — inbox isolation ─────────────────────────────────────────────────────────
   it("E3 — inbox returns only requests at the caller's current level; cross-tenant empty", async () => {
     const t = await seedCompany(direct, "g8c");
