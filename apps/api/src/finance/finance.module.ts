@@ -9,6 +9,9 @@ import { CostAllocationService } from "./cost-allocation.service";
 import { CostAllocationRepository } from "./cost-allocation.repository";
 import { ProfitService } from "./profit.service";
 import { ProfitRepository } from "./profit.repository";
+import { ExpenseRequestService } from "./expense.service";
+import { ExpenseRequestRepository } from "./expense.repository";
+import { FinanceTasksService } from "./finance-tasks.service";
 
 /**
  * G13 Finance module — sổ cái doanh thu/chi phí/lợi nhuận (BẤT BIẾN #2: append-only).
@@ -22,6 +25,10 @@ import { ProfitRepository } from "./profit.repository";
  *        (cost_allocations, FIN-003 phân bổ 5+1 kiểu). Controller wire khi build HTTP layer.
  * G13-3: ProfitService/ProfitRepository (profit_snapshots, append-only; profit = revenue − direct −
  *        allocated; mask SERVER-side theo view-finance). Controller wire khi build HTTP layer.
+ * G13-4: ExpenseRequestService/ExpenseRequestRepository (expense_requests mutable + expense_approvals
+ *        log append-only) + FinanceTasksService (cầu nối Task Hub task_type='finance', provide CỤC BỘ —
+ *        KHÔNG import TasksModule). Đề xuất chi → duyệt qua Task Hub → sinh cost_record (lineage). Phân
+ *        quyền create/approve:expense-request (KHÁC create:finance). Controller wire khi build HTTP layer.
  */
 @Module({
   imports: [EventsModule, PermissionModule],
@@ -34,7 +41,16 @@ import { ProfitRepository } from "./profit.repository";
     CostAllocationRepository,
     ProfitService,
     ProfitRepository,
+    ExpenseRequestService,
+    ExpenseRequestRepository,
+    FinanceTasksService,
   ],
-  exports: [RevenueService, CostService, CostAllocationService, ProfitService],
+  exports: [
+    RevenueService,
+    CostService,
+    CostAllocationService,
+    ProfitService,
+    ExpenseRequestService,
+  ],
 })
 export class FinanceModule {}
