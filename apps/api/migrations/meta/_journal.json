@@ -302,6 +302,13 @@
       "when": 1717500073000,
       "tag": "0063_g11_permissions_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1717500100000,
+      "tag": "0100_g14_dashboard_permissions_seed",
+      "breakpoints": true
     }
   ]
 }

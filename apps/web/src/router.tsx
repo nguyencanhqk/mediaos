@@ -22,6 +22,7 @@ import { WorkflowTemplatesPage } from "@/routes/workflows/templates";
 import { WorkflowTemplateDetailPage } from "@/routes/workflows/template-detail";
 import { WorkflowInstancesPage } from "@/routes/workflows/instances/instances-list";
 import { WorkflowInstanceDetailPage } from "@/routes/workflows/instances/instance-detail";
+import { DashboardPage } from "@/routes/dashboard/dashboard";
 import { AttendancePage } from "@/routes/hr/attendance";
 import { AdjustmentsPage } from "@/routes/hr/adjustments";
 import { LeavePage } from "@/routes/hr/leave";
@@ -177,6 +178,13 @@ const workflowInstanceDetailRoute = createRoute({
   component: WorkflowInstanceDetailPage,
 });
 
+const dashboardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/dashboard",
+  beforeLoad: authGuard,
+  component: DashboardPage,
+});
+
 const attendanceRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/hr/attendance",
@@ -235,6 +243,7 @@ const routeTree = rootRoute.addChildren([
   workflowTemplateDetailRoute,
   workflowInstancesRoute,
   workflowInstanceDetailRoute,
+  dashboardRoute,
   attendanceRoute,
   adjustmentsRoute,
   leaveRoute,
