@@ -48,3 +48,4 @@ export * from "./employees";
 export * from "./attendance";
 export * from "./leave";
 export * from "./finance";
+export * from "./dashboard";

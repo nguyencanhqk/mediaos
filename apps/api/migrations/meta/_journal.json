@@ -1,377 +1,384 @@
 {
-  "version": "7",
-  "dialect": "postgresql",
-  "entries": [
-    {
-      "idx": 0,
-      "version": "7",
-      "when": 1717500000000,
-      "tag": "0000_init_extensions",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1717500001000,
-      "tag": "0001_roles_and_grants",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1717500002000,
-      "tag": "0002_companies_users",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1717500003000,
-      "tag": "0003_audit_outbox",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1717500004000,
-      "tag": "0004_auth_tokens",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1717500005000,
-      "tag": "0005_permissions",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1717500006000,
-      "tag": "0006_org",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1717500007000,
-      "tag": "0007_media",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1717500008000,
-      "tag": "0008_workflow",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1717500009000,
-      "tag": "0009_tasks_submission_comments",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1717500010000,
-      "tag": "0010_notifications_chat",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "7",
-      "when": 1717500011000,
-      "tag": "0011_audit_object_types",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "7",
-      "when": 1717500012000,
-      "tag": "0012_task_comments_grants",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "7",
-      "when": 1717500013000,
-      "tag": "0013_task_comments_policy_fix",
-      "breakpoints": true
-    },
-    {
-      "idx": 14,
-      "version": "7",
-      "when": 1717500014000,
-      "tag": "0014_g5_audit_object_types",
-      "breakpoints": true
-    },
-    {
-      "idx": 15,
-      "version": "7",
-      "when": 1717500015000,
-      "tag": "0015_g5_company_settings",
-      "breakpoints": true
-    },
-    {
-      "idx": 16,
-      "version": "7",
-      "when": 1717500016000,
-      "tag": "0016_g5_org_teams_full",
-      "breakpoints": true
-    },
-    {
-      "idx": 17,
-      "version": "7",
-      "when": 1717500017000,
-      "tag": "0017_g5_positions",
-      "breakpoints": true
-    },
-    {
-      "idx": 18,
-      "version": "7",
-      "when": 1717500018000,
-      "tag": "0018_g5_employee_profiles",
-      "breakpoints": true
-    },
-    {
-      "idx": 19,
-      "version": "7",
-      "when": 1717500019000,
-      "tag": "0019_g5_permissions_seed",
-      "breakpoints": true
-    },
-    {
-      "idx": 20,
-      "version": "7",
-      "when": 1717500020000,
-      "tag": "0020_g6_audit_object_types",
-      "breakpoints": true
-    },
-    {
-      "idx": 21,
-      "version": "7",
-      "when": 1717500021000,
-      "tag": "0021_g6_platforms_channels",
-      "breakpoints": true
-    },
-    {
-      "idx": 22,
-      "version": "7",
-      "when": 1717500023000,
-      "tag": "0023_g6_projects_full",
-      "breakpoints": true
-    },
-    {
-      "idx": 23,
-      "version": "7",
-      "when": 1717500024000,
-      "tag": "0024_g6_content_types",
-      "breakpoints": true
-    },
-    {
-      "idx": 24,
-      "version": "7",
-      "when": 1717500025000,
-      "tag": "0025_g6_content_items_full",
-      "breakpoints": true
-    },
-    {
-      "idx": 25,
-      "version": "7",
-      "when": 1717500026000,
-      "tag": "0026_g6_content_channels_assets",
-      "breakpoints": true
-    },
-    {
-      "idx": 26,
-      "version": "7",
-      "when": 1717500030000,
-      "tag": "0022_g6_platform_accounts",
-      "breakpoints": true
-    },
-    {
-      "idx": 27,
-      "version": "7",
-      "when": 1717500031000,
-      "tag": "0027_g6_permissions_seed",
-      "breakpoints": true
-    },
-    {
-      "idx": 28,
-      "version": "7",
-      "when": 1717500032000,
-      "tag": "0028_g6_reset_token_envelope",
-      "breakpoints": true
-    },
-    {
-      "idx": 29,
-      "version": "7",
-      "when": 1717500033000,
-      "tag": "0029_g6_reset_token_trigger_warning",
-      "breakpoints": true
-    },
-    {
-      "idx": 30,
-      "version": "7",
-      "when": 1717500034000,
-      "tag": "0030_g5fix_org_team_perms",
-      "breakpoints": true
-    },
-    {
-      "idx": 31,
-      "version": "7",
-      "when": 1717500035000,
-      "tag": "0031_g5fix_position_perm",
-      "breakpoints": true
-    },
-    {
-      "idx": 32,
-      "version": "7",
-      "when": 1717500040000,
-      "tag": "0032_g7_template_dag_checklist",
-      "breakpoints": true
-    },
-    {
-      "idx": 33,
-      "version": "7",
-      "when": 1717500041000,
-      "tag": "0033_g7_audit_object_types",
-      "breakpoints": true
-    },
-    {
-      "idx": 34,
-      "version": "7",
-      "when": 1717500042000,
-      "tag": "0034_g7_instance_multitarget_checklist_state",
-      "breakpoints": true
-    },
-    {
-      "idx": 35,
-      "version": "7",
-      "when": 1717500043000,
-      "tag": "0035_g7_eval_hook_lock_uq",
-      "breakpoints": true
-    },
-    {
-      "idx": 36,
-      "version": "7",
-      "when": 1717500044000,
-      "tag": "0036_g7_permissions_seed",
-      "breakpoints": true
-    },
-    {
-      "idx": 37,
-      "version": "7",
-      "when": 1717500045000,
-      "tag": "0037_g3fix_grant_object_permission_seed",
-      "breakpoints": true
-    },
-    {
-      "idx": 38,
-      "version": "7",
-      "when": 1717500050000,
-      "tag": "0040_g9_tasks_hub",
-      "breakpoints": true
-    },
-    {
-      "idx": 39,
-      "version": "7",
-      "when": 1717500070000,
-      "tag": "0060_g11_audit_object_types",
-      "breakpoints": true
-    },
-    {
-      "idx": 40,
-      "version": "7",
-      "when": 1717500071000,
-      "tag": "0061_g11_attendance",
-      "breakpoints": true
-    },
-    {
-      "idx": 41,
-      "version": "7",
-      "when": 1717500072000,
-      "tag": "0062_g11_leave",
-      "breakpoints": true
-    },
-    {
-      "idx": 42,
-      "version": "7",
-      "when": 1717500073000,
-      "tag": "0063_g11_permissions_seed",
-      "breakpoints": true
-    },
-    {
-      "idx": 43,
-      "version": "7",
-      "when": 1717500074000,
-      "tag": "0064_g11_period_lock_guard",
-      "breakpoints": true
-    },
-    {
-      "idx": 44,
-      "version": "7",
-      "when": 1717500075000,
-      "tag": "0050_g10_chat_realtime",
-      "breakpoints": true
-    },
-    {
-      "idx": 45,
-      "version": "7",
-      "when": 1717500080000,
-      "tag": "0070_g13_revenue",
-      "breakpoints": true
-    },
-    {
-      "idx": 46,
-      "version": "7",
-      "when": 1717500081000,
-      "tag": "0071_g13_cost",
-      "breakpoints": true
-    },
-    {
-      "idx": 47,
-      "version": "7",
-      "when": 1717500082000,
-      "tag": "0072_g13_profit",
-      "breakpoints": true
-    },
-    {
-      "idx": 48,
-      "version": "7",
-      "when": 1717500083000,
-      "tag": "0073_g13_expense",
-      "breakpoints": true
-    },
-    {
-      "idx": 49,
-      "version": "7",
-      "when": 1717500084000,
-      "tag": "0074_g13_finance_seed",
-      "breakpoints": true
-    },
-    {
-      "idx": 50,
-      "version": "7",
-      "when": 1717500085000,
-      "tag": "0080_g8_approval_rules",
-      "breakpoints": true
-    },
-    {
-      "idx": 51,
-      "version": "7",
-      "when": 1717500086000,
-      "tag": "0081_g8_audit_object_types",
-      "breakpoints": true
-    },
-    {
-      "idx": 52,
-      "version": "7",
-      "when": 1717500087000,
-      "tag": "0082_g8_permissions_seed",
-      "breakpoints": true
-    }
-  ]
+	"version": "7",
+	"dialect": "postgresql",
+	"entries": [
+		{
+			"idx": 0,
+			"version": "7",
+			"when": 1717500000000,
+			"tag": "0000_init_extensions",
+			"breakpoints": true
+		},
+		{
+			"idx": 1,
+			"version": "7",
+			"when": 1717500001000,
+			"tag": "0001_roles_and_grants",
+			"breakpoints": true
+		},
+		{
+			"idx": 2,
+			"version": "7",
+			"when": 1717500002000,
+			"tag": "0002_companies_users",
+			"breakpoints": true
+		},
+		{
+			"idx": 3,
+			"version": "7",
+			"when": 1717500003000,
+			"tag": "0003_audit_outbox",
+			"breakpoints": true
+		},
+		{
+			"idx": 4,
+			"version": "7",
+			"when": 1717500004000,
+			"tag": "0004_auth_tokens",
+			"breakpoints": true
+		},
+		{
+			"idx": 5,
+			"version": "7",
+			"when": 1717500005000,
+			"tag": "0005_permissions",
+			"breakpoints": true
+		},
+		{
+			"idx": 6,
+			"version": "7",
+			"when": 1717500006000,
+			"tag": "0006_org",
+			"breakpoints": true
+		},
+		{
+			"idx": 7,
+			"version": "7",
+			"when": 1717500007000,
+			"tag": "0007_media",
+			"breakpoints": true
+		},
+		{
+			"idx": 8,
+			"version": "7",
+			"when": 1717500008000,
+			"tag": "0008_workflow",
+			"breakpoints": true
+		},
+		{
+			"idx": 9,
+			"version": "7",
+			"when": 1717500009000,
+			"tag": "0009_tasks_submission_comments",
+			"breakpoints": true
+		},
+		{
+			"idx": 10,
+			"version": "7",
+			"when": 1717500010000,
+			"tag": "0010_notifications_chat",
+			"breakpoints": true
+		},
+		{
+			"idx": 11,
+			"version": "7",
+			"when": 1717500011000,
+			"tag": "0011_audit_object_types",
+			"breakpoints": true
+		},
+		{
+			"idx": 12,
+			"version": "7",
+			"when": 1717500012000,
+			"tag": "0012_task_comments_grants",
+			"breakpoints": true
+		},
+		{
+			"idx": 13,
+			"version": "7",
+			"when": 1717500013000,
+			"tag": "0013_task_comments_policy_fix",
+			"breakpoints": true
+		},
+		{
+			"idx": 14,
+			"version": "7",
+			"when": 1717500014000,
+			"tag": "0014_g5_audit_object_types",
+			"breakpoints": true
+		},
+		{
+			"idx": 15,
+			"version": "7",
+			"when": 1717500015000,
+			"tag": "0015_g5_company_settings",
+			"breakpoints": true
+		},
+		{
+			"idx": 16,
+			"version": "7",
+			"when": 1717500016000,
+			"tag": "0016_g5_org_teams_full",
+			"breakpoints": true
+		},
+		{
+			"idx": 17,
+			"version": "7",
+			"when": 1717500017000,
+			"tag": "0017_g5_positions",
+			"breakpoints": true
+		},
+		{
+			"idx": 18,
+			"version": "7",
+			"when": 1717500018000,
+			"tag": "0018_g5_employee_profiles",
+			"breakpoints": true
+		},
+		{
+			"idx": 19,
+			"version": "7",
+			"when": 1717500019000,
+			"tag": "0019_g5_permissions_seed",
+			"breakpoints": true
+		},
+		{
+			"idx": 20,
+			"version": "7",
+			"when": 1717500020000,
+			"tag": "0020_g6_audit_object_types",
+			"breakpoints": true
+		},
+		{
+			"idx": 21,
+			"version": "7",
+			"when": 1717500021000,
+			"tag": "0021_g6_platforms_channels",
+			"breakpoints": true
+		},
+		{
+			"idx": 22,
+			"version": "7",
+			"when": 1717500023000,
+			"tag": "0023_g6_projects_full",
+			"breakpoints": true
+		},
+		{
+			"idx": 23,
+			"version": "7",
+			"when": 1717500024000,
+			"tag": "0024_g6_content_types",
+			"breakpoints": true
+		},
+		{
+			"idx": 24,
+			"version": "7",
+			"when": 1717500025000,
+			"tag": "0025_g6_content_items_full",
+			"breakpoints": true
+		},
+		{
+			"idx": 25,
+			"version": "7",
+			"when": 1717500026000,
+			"tag": "0026_g6_content_channels_assets",
+			"breakpoints": true
+		},
+		{
+			"idx": 26,
+			"version": "7",
+			"when": 1717500030000,
+			"tag": "0022_g6_platform_accounts",
+			"breakpoints": true
+		},
+		{
+			"idx": 27,
+			"version": "7",
+			"when": 1717500031000,
+			"tag": "0027_g6_permissions_seed",
+			"breakpoints": true
+		},
+		{
+			"idx": 28,
+			"version": "7",
+			"when": 1717500032000,
+			"tag": "0028_g6_reset_token_envelope",
+			"breakpoints": true
+		},
+		{
+			"idx": 29,
+			"version": "7",
+			"when": 1717500033000,
+			"tag": "0029_g6_reset_token_trigger_warning",
+			"breakpoints": true
+		},
+		{
+			"idx": 30,
+			"version": "7",
+			"when": 1717500034000,
+			"tag": "0030_g5fix_org_team_perms",
+			"breakpoints": true
+		},
+		{
+			"idx": 31,
+			"version": "7",
+			"when": 1717500035000,
+			"tag": "0031_g5fix_position_perm",
+			"breakpoints": true
+		},
+		{
+			"idx": 32,
+			"version": "7",
+			"when": 1717500040000,
+			"tag": "0032_g7_template_dag_checklist",
+			"breakpoints": true
+		},
+		{
+			"idx": 33,
+			"version": "7",
+			"when": 1717500041000,
+			"tag": "0033_g7_audit_object_types",
+			"breakpoints": true
+		},
+		{
+			"idx": 34,
+			"version": "7",
+			"when": 1717500042000,
+			"tag": "0034_g7_instance_multitarget_checklist_state",
+			"breakpoints": true
+		},
+		{
+			"idx": 35,
+			"version": "7",
+			"when": 1717500043000,
+			"tag": "0035_g7_eval_hook_lock_uq",
+			"breakpoints": true
+		},
+		{
+			"idx": 36,
+			"version": "7",
+			"when": 1717500044000,
+			"tag": "0036_g7_permissions_seed",
+			"breakpoints": true
+		},
+		{
+			"idx": 37,
+			"version": "7",
+			"when": 1717500045000,
+			"tag": "0037_g3fix_grant_object_permission_seed",
+			"breakpoints": true
+		},
+		{
+			"idx": 38,
+			"version": "7",
+			"when": 1717500050000,
+			"tag": "0040_g9_tasks_hub",
+			"breakpoints": true
+		},
+		{
+			"idx": 39,
+			"version": "7",
+			"when": 1717500070000,
+			"tag": "0060_g11_audit_object_types",
+			"breakpoints": true
+		},
+		{
+			"idx": 40,
+			"version": "7",
+			"when": 1717500071000,
+			"tag": "0061_g11_attendance",
+			"breakpoints": true
+		},
+		{
+			"idx": 41,
+			"version": "7",
+			"when": 1717500072000,
+			"tag": "0062_g11_leave",
+			"breakpoints": true
+		},
+		{
+			"idx": 42,
+			"version": "7",
+			"when": 1717500073000,
+			"tag": "0063_g11_permissions_seed",
+			"breakpoints": true
+		},
+		{
+			"idx": 43,
+			"version": "7",
+			"when": 1717500074000,
+			"tag": "0064_g11_period_lock_guard",
+			"breakpoints": true
+		},
+		{
+			"idx": 44,
+			"version": "7",
+			"when": 1717500075000,
+			"tag": "0050_g10_chat_realtime",
+			"breakpoints": true
+		},
+		{
+			"idx": 45,
+			"version": "7",
+			"when": 1717500080000,
+			"tag": "0070_g13_revenue",
+			"breakpoints": true
+		},
+		{
+			"idx": 46,
+			"version": "7",
+			"when": 1717500081000,
+			"tag": "0071_g13_cost",
+			"breakpoints": true
+		},
+		{
+			"idx": 47,
+			"version": "7",
+			"when": 1717500082000,
+			"tag": "0072_g13_profit",
+			"breakpoints": true
+		},
+		{
+			"idx": 48,
+			"version": "7",
+			"when": 1717500083000,
+			"tag": "0073_g13_expense",
+			"breakpoints": true
+		},
+		{
+			"idx": 49,
+			"version": "7",
+			"when": 1717500084000,
+			"tag": "0074_g13_finance_seed",
+			"breakpoints": true
+		},
+		{
+			"idx": 50,
+			"version": "7",
+			"when": 1717500085000,
+			"tag": "0080_g8_approval_rules",
+			"breakpoints": true
+		},
+		{
+			"idx": 51,
+			"version": "7",
+			"when": 1717500086000,
+			"tag": "0081_g8_audit_object_types",
+			"breakpoints": true
+		},
+		{
+			"idx": 52,
+			"version": "7",
+			"when": 1717500087000,
+			"tag": "0082_g8_permissions_seed",
+			"breakpoints": true
+		},
+		{
+			"idx": 53,
+			"version": "7",
+			"when": 1717500100000,
+			"tag": "0100_g14_dashboard_permissions_seed",
+			"breakpoints": true
+		}
+	]
 }
