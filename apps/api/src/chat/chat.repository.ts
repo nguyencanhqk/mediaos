@@ -83,6 +83,28 @@ export class ChatRepository {
     );
   }
 
+  /** G10-2 auto-room: tìm phòng theo channel (idempotent — partial-unique chat_rooms_channel_uq). */
+  findRoomByChannel(companyId: string, channelId: string) {
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .select()
+        .from(chatRooms)
+        .where(and(eq(chatRooms.companyId, companyId), eq(chatRooms.channelId, channelId)))
+        .limit(1),
+    );
+  }
+
+  /** G10-2 auto-room: tìm phòng theo org_unit (idempotent — partial-unique chat_rooms_org_unit_uq). */
+  findRoomByOrgUnit(companyId: string, orgUnitId: string) {
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .select()
+        .from(chatRooms)
+        .where(and(eq(chatRooms.companyId, companyId), eq(chatRooms.orgUnitId, orgUnitId)))
+        .limit(1),
+    );
+  }
+
   createRoom(
     companyId: string,
     data: {
@@ -166,6 +188,23 @@ export class ChatRepository {
         .values({ companyId, roomId, userId, role })
         .onConflictDoNothing()
         .returning(),
+    );
+  }
+
+  /**
+   * G10-2 auto-room: thêm nhiều member 1 lần (bulk) — bỏ qua trùng (onConflictDoNothing) ⇒ idempotent
+   * khi gọi lại. Mọi insert qua withTenant(companyId) ⇒ RLS+FORCE company_id chặn ghi chéo tenant.
+   * userIds rỗng → no-op (không query). Dedupe trước insert để tránh va unique trong cùng 1 batch.
+   */
+  addMembers(companyId: string, roomId: string, userIds: readonly string[]) {
+    const unique = [...new Set(userIds)];
+    if (unique.length === 0) return Promise.resolve([] as { id: string }[]);
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .insert(chatRoomMembers)
+        .values(unique.map((userId) => ({ companyId, roomId, userId })))
+        .onConflictDoNothing()
+        .returning({ id: chatRoomMembers.id }),
     );
   }
 

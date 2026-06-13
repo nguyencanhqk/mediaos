@@ -2,9 +2,9 @@
 --
 -- BAND 0080s (lane G8). Precedent: 0011/0014/0020/0033/0060/0070/0081 (DROP+ADD CHECK via DIRECT_URL).
 --   Append-only (BẤT BIẾN #2) applies to *app-role DML*, NOT to migration DDL → DROP/ADD CONSTRAINT valid.
--- HOT-FILE rule (TASKS §5.3): the CHECK list = UNION(all lanes). Here = full list from 0081 (byte-identical)
---   + 'evaluation_template' + 'evaluation_result' appended. Re-merge across lanes = recompute the full
---   union; never rewrite/shrink/drop another lane's type.
+-- HOT-FILE rule (TASKS §5.3): the CHECK list = UNION(all lanes). After master-merge this = 0090_g12's
+--   full 45-type list (incl 'salary_profile') + 'evaluation_template' + 'evaluation_result' = 47 types.
+--   Re-merge across lanes = recompute the full union; never rewrite/shrink/drop another lane's type.
 -- Sync with AUDIT_OBJECT_TYPES (db/schema/audit.ts) in the SAME commit (TS const + SQL CHECK move together).
 --
 -- Audit on scoring: recordScores() writes audit_logs object_type='evaluation_result' IN THE SAME tx
@@ -62,6 +62,10 @@ ALTER TABLE audit_logs
     'expense_request',
     -- G8 approval (multi-level rules)
     'approval_rule',
+    -- G12 payroll — after master-merge 0090 (when 1717500110000) runs BEFORE 0084 (when 1717500121000):
+    --   0084 is the LAST CHECK re-stamp, so it MUST be a SUPERSET of 0090 or salary_profile is silently
+    --   dropped from the CHECK (CRITICAL class-bug). Union = 0090's 45 types + evaluation_template/result.
+    'salary_profile',
     -- G8-3 evaluation
     'evaluation_template',
     'evaluation_result'

@@ -25,3 +25,5 @@ export * from "./finance";
 export * from "./approval";
 // G8-3 evaluation (template + criteria + results + scores)
 export * from "./evaluation";
+// G12 payroll (salary profile — lương nhạy cảm, ADR-0010)
+export * from "./payroll";
