@@ -36,7 +36,7 @@ export function ProjectChatPage() {
   // Truyền roomId qua variables — tránh non-null assertion trên closure room
   const send = useMutation({
     mutationFn: ({ roomId, text }: { roomId: string; text: string }) =>
-      chatApi.sendMessage(roomId, { body: text }),
+      chatApi.sendMessage(roomId, { body: text, messageType: "text" }),
     onSuccess: (_, { roomId }) => {
       void qc.invalidateQueries({ queryKey: ["chat", "messages", roomId] });
       setBody("");
