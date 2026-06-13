@@ -15,6 +15,7 @@ import { WorkflowModule } from "./workflow/workflow.module";
 import { TasksModule } from "./tasks/tasks.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { ChatModule } from "./chat/chat.module";
+import { FinanceModule } from "./finance/finance.module";
 import { PermissionModule } from "./permission/permission.module";
 import { JwtAuthGuard } from "./permission/guards/jwt-auth.guard";
 import { CompanyGuard } from "./permission/guards/company.guard";
@@ -40,6 +41,7 @@ import { CompanyGuard } from "./permission/guards/company.guard";
     TasksModule,
     NotificationsModule,
     ChatModule,
+    FinanceModule,
   ],
   providers: [
     // Global guard pipeline: JWT auth → company context extraction.

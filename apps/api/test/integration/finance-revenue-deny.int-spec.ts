@@ -1,6 +1,6 @@
 import "reflect-metadata";
 import { randomUUID } from "node:crypto";
-import { ForbiddenException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PoolClient } from "pg";
 import { DatabaseService } from "../../src/db/db.service";
@@ -230,6 +230,66 @@ describe.skipIf(!hasDb)("G13-1 revenue deny-path (RLS 2-tenant + append-only + p
 
       const afterAudit = await countRevenueAudit(A.companyId, "RevenueVoided");
       expect(afterAudit).toBe(beforeAudit + 1);
+    });
+  });
+
+  // ── (e) Boundary validation tại DB (KHÔNG chỉ Zod) — CLAUDE.md §6 ────────────
+  // Chống "Zod-only validation" giả: ngay cả khi app bỏ sót, DB phải từ chối.
+  describe("(e) DB boundary validation (not just Zod)", () => {
+    it("source NGOÀI enum CHECK (revenue_records_source_check) → DB từ chối INSERT", async () => {
+      // INSERT trực tiếp qua APP role (đường ghi thật) với source rác → CHECK constraint chặn.
+      await expect(
+        asApp(A.companyId, (c) =>
+          c.query(
+            `INSERT INTO revenue_records
+               (company_id, amount, currency, revenue_date, source, entered_by, entry_kind)
+             VALUES ($1, 10.00, 'VND', current_date, 'bogus_source_xyz', $2, 'original')`,
+            [A.companyId, financeUserA],
+          ),
+        ),
+      ).rejects.toThrow(/revenue_records_source_check|violates check constraint/i);
+    });
+
+    it("double-adjust cùng original → bản thứ 2 vi phạm revenue_records_replaces_uq (race chống ở DB)", async () => {
+      const original = await seedRevenue(A, financeUserA);
+      // Lần 1 thành công (qua service → ghi adjustment chain).
+      await svc.adjust(A.companyId, financeUserA, original, {
+        amount: 1500.0,
+        reason: "điều chỉnh lần 1",
+      });
+      // Lần 2 cùng original: unique partial index replaces_record_id → DB từ chối (chống race app-check
+      // không bắt được). Service hiện không re-check "đã bị thay thế" → đây là chốt DB cuối cùng.
+      await expect(
+        svc.adjust(A.companyId, financeUserA, original, {
+          amount: 1600.0,
+          reason: "điều chỉnh lần 2 (phải fail ở DB)",
+        }),
+      ).rejects.toThrow(/revenue_records_replaces_uq|duplicate key value/i);
+    });
+
+    it("adjust() trên bản entry_kind='void' → BadRequestException (không tái-điều chỉnh chuỗi đã đóng)", async () => {
+      const original = await seedRevenue(A, financeUserA);
+      const voided = await svc.void(A.companyId, financeUserA, original, {
+        reason: "void để đóng chuỗi",
+      });
+      await expect(
+        svc.adjust(A.companyId, financeUserA, voided.id, {
+          amount: 999.0,
+          reason: "không được điều chỉnh bản void",
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("void() trên bản entry_kind='void' → BadRequestException (không void hai lần)", async () => {
+      const original = await seedRevenue(A, financeUserA);
+      const voided = await svc.void(A.companyId, financeUserA, original, {
+        reason: "void lần 1",
+      });
+      await expect(
+        svc.void(A.companyId, financeUserA, voided.id, {
+          reason: "void lần 2 (phải fail)",
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 });
