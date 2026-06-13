@@ -263,3 +263,64 @@ describe("TasksService.deleteTask — soft-delete (CT11) + reject workflow", () 
     await expect(service.deleteTask(USER, TASK_ID)).rejects.toBeInstanceOf(NotFoundException);
   });
 });
+
+// ─── G9-4: listByProject / listByTeam — SEC-1 tenant-FK guard ────────────────
+
+const TEAM_ID = "66666666-6666-6666-6666-666666666666";
+
+function makeRepoWithHubGuards() {
+  const repo = makeRepo();
+  // G9-4 adds teamExistsTx; default → team exists
+  Object.assign(repo, { teamExistsTx: vi.fn().mockResolvedValue(true) });
+  return repo as ReturnType<typeof makeRepo> & { teamExistsTx: ReturnType<typeof vi.fn> };
+}
+
+describe("TasksService.listByProject — G9-4 SEC-1 guard", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("project hợp lệ cùng tenant → gọi repo.listByProject với companyId + page", async () => {
+    const repo = makeRepoWithHubGuards();
+    repo.listByProject.mockResolvedValue([{ id: TASK_ID, taskType: "office" }]);
+    const { service } = makeService({ repo });
+
+    const result = await service.listByProject(COMPANY_ID, PROJECT_ID, { limit: 50, offset: 0 });
+
+    expect(repo.projectExistsTx).toHaveBeenCalledWith(expect.anything(), COMPANY_ID, PROJECT_ID);
+    expect(repo.listByProject).toHaveBeenCalledWith(COMPANY_ID, PROJECT_ID, { limit: 50, offset: 0 });
+    expect(result).toEqual([{ id: TASK_ID, taskType: "office" }]);
+  });
+
+  it("project KHÔNG cùng tenant / không tồn tại → NotFound, KHÔNG gọi repo.listByProject", async () => {
+    const repo = makeRepoWithHubGuards();
+    repo.projectExistsTx.mockResolvedValueOnce(false);
+    const { service } = makeService({ repo });
+
+    await expect(service.listByProject(COMPANY_ID, PROJECT_ID)).rejects.toBeInstanceOf(NotFoundException);
+    expect(repo.listByProject).not.toHaveBeenCalled();
+  });
+});
+
+describe("TasksService.listByTeam — G9-4 SEC-1 guard", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("team hợp lệ cùng tenant → gọi repo.listByTeam với companyId + page", async () => {
+    const repo = makeRepoWithHubGuards();
+    repo.listByTeam.mockResolvedValue([{ id: TASK_ID, taskType: "hr" }]);
+    const { service } = makeService({ repo });
+
+    const result = await service.listByTeam(COMPANY_ID, TEAM_ID, { limit: 25, offset: 25 });
+
+    expect(repo.teamExistsTx).toHaveBeenCalledWith(expect.anything(), COMPANY_ID, TEAM_ID);
+    expect(repo.listByTeam).toHaveBeenCalledWith(COMPANY_ID, TEAM_ID, { limit: 25, offset: 25 });
+    expect(result).toEqual([{ id: TASK_ID, taskType: "hr" }]);
+  });
+
+  it("team KHÔNG cùng tenant / không tồn tại → NotFound, KHÔNG gọi repo.listByTeam", async () => {
+    const repo = makeRepoWithHubGuards();
+    repo.teamExistsTx.mockResolvedValueOnce(false);
+    const { service } = makeService({ repo });
+
+    await expect(service.listByTeam(COMPANY_ID, TEAM_ID)).rejects.toBeInstanceOf(NotFoundException);
+    expect(repo.listByTeam).not.toHaveBeenCalled();
+  });
+});
