@@ -17,6 +17,7 @@ import { AttendanceModule } from "./attendance/attendance.module";
 import { LeaveModule } from "./leave/leave.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { ChatModule } from "./chat/chat.module";
+import { RealtimeModule } from "./realtime/realtime.module";
 import { PermissionModule } from "./permission/permission.module";
 import { JwtAuthGuard } from "./permission/guards/jwt-auth.guard";
 import { CompanyGuard } from "./permission/guards/company.guard";
@@ -44,6 +45,7 @@ import { CompanyGuard } from "./permission/guards/company.guard";
     LeaveModule,
     NotificationsModule,
     ChatModule,
+    RealtimeModule,
   ],
   providers: [
     // Global guard pipeline: JWT auth → company context extraction.
