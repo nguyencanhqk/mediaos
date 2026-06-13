@@ -302,6 +302,27 @@
       "when": 1717500073000,
       "tag": "0063_g11_permissions_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1717500090000,
+      "tag": "0090_g12_audit_object_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1717500091000,
+      "tag": "0091_g12_salary_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1717500092000,
+      "tag": "0092_g12_permissions_seed",
+      "breakpoints": true
     }
   ]
 }

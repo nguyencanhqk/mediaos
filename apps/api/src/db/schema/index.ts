@@ -20,3 +20,4 @@ export * from "./media";
 export * from "./workflow";
 export * from "./communication";
 export * from "./hr";
+export * from "./payroll";
