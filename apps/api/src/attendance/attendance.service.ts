@@ -19,7 +19,7 @@ import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { PermissionService } from "../permission/permission.service";
 import { HrTasksService } from "../tasks/hr-tasks.service";
-import { assertValidTimezone, localDateOf, monthOfDate } from "../common/tz.util";
+import { assertValidTimezone, localDateOf, monthDateRange, monthOfDate } from "../common/tz.util";
 import { AttendanceRepository } from "./attendance.repository";
 import {
   deriveAttendanceStatus,
@@ -276,8 +276,11 @@ export class AttendanceService {
 
   // ─── Monthly list (read:attendance; others ⇒ manage) ─────────────────────────
 
-  async listMonthly(actor: Actor, query: { month: string; userId?: string }) {
-    const { from, toExclusive } = monthRange(query.month);
+  async listMonthly(
+    actor: Actor,
+    query: { month: string; userId?: string; limit: number; offset: number },
+  ) {
+    const { from, toExclusive } = monthDateRange(query.month);
     if (query.userId && query.userId !== actor.id) {
       await this.assertCanManage(actor, "attendance");
     }
@@ -285,6 +288,8 @@ export class AttendanceService {
       from,
       toExclusive,
       userId: query.userId ?? actor.id,
+      limit: query.limit,
+      offset: query.offset,
     });
   }
 
@@ -339,12 +344,24 @@ export class AttendanceService {
       });
   }
 
-  async listAdjustments(actor: Actor, query: { status?: string; scope: "me" | "all" }) {
+  async listAdjustments(
+    actor: Actor,
+    query: { status?: string; scope: "me" | "all"; limit: number; offset: number },
+  ) {
     if (query.scope === "all") {
       await this.assertCanApprove(actor, "attendance");
-      return this.repo.findAdjustments(actor.companyId, { status: query.status });
+      return this.repo.findAdjustments(actor.companyId, {
+        status: query.status,
+        limit: query.limit,
+        offset: query.offset,
+      });
     }
-    return this.repo.findAdjustments(actor.companyId, { userId: actor.id, status: query.status });
+    return this.repo.findAdjustments(actor.companyId, {
+      userId: actor.id,
+      status: query.status,
+      limit: query.limit,
+      offset: query.offset,
+    });
   }
 
   async approveAdjustment(actor: Actor, id: string, note?: string) {
@@ -510,8 +527,8 @@ export class AttendanceService {
 
   // ─── Period lock (lock-period:attendance) ────────────────────────────────────
 
-  listPeriods(companyId: string) {
-    return this.repo.findPeriods(companyId).then((rows) => rows.map(toPeriodDto));
+  listPeriods(companyId: string, opts: { limit: number; offset: number }) {
+    return this.repo.findPeriods(companyId, opts).then((rows) => rows.map(toPeriodDto));
   }
 
   async lockPeriod(actor: Actor, periodMonth: string) {
@@ -650,7 +667,7 @@ function toAdjustmentDto(row: {
   reviewNote: string | null;
   createdAt: Date;
 }) {
-  return { ...row };
+  return row;
 }
 
 function toPeriodDto(row: {
@@ -669,10 +686,3 @@ function toPeriodDto(row: {
   };
 }
 
-/** [from, toExclusive) for a 'YYYY-MM' period — used by listMonthly. */
-function monthRange(periodMonth: string): { from: string; toExclusive: string } {
-  const [y, m] = periodMonth.split("-").map(Number);
-  const from = `${periodMonth}-01`;
-  const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
-  return { from, toExclusive: `${next}-01` };
-}

@@ -21,6 +21,7 @@ import {
   CreateCommentDto,
   CreateTaskDto,
   ListTasksQueryDto,
+  PageQueryDto,
   UpdateTaskStatusDto,
 } from "./tasks.dto";
 
@@ -59,6 +60,48 @@ export class TasksController {
     const { limit, offset, ...filters } = query;
     const page = limit !== undefined || offset !== undefined ? { limit, offset } : undefined;
     return this.tasks.listBoard(req.user.companyId, filters, page);
+  }
+
+  /**
+   * GET /tasks/by-project/:projectId — Project Tasks (G9-4).
+   * Gated read:task (đọc task của tenant, không chỉ của bản thân → nhạy cảm hơn getMyTasks).
+   * SEC-1: service guard projectExistsTx trước khi list (chặn chéo tenant qua path param).
+   * Phân trang tường minh qua PageQueryDto (limit/offset trong query string).
+   */
+  @Get("by-project/:projectId")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("read", "task")
+  getProjectTasks(
+    @Req() req: AuthenticatedRequest,
+    @Param("projectId") projectId: string,
+    @Query() query: PageQueryDto,
+  ) {
+    const page =
+      query.limit !== undefined || query.offset !== undefined
+        ? { limit: query.limit, offset: query.offset }
+        : undefined;
+    return this.tasks.listByProject(req.user.companyId, projectId, page);
+  }
+
+  /**
+   * GET /tasks/by-team/:teamId — Team Tasks (G9-4).
+   * Gated read:task (đọc task của thành viên team → toàn tenant scope → nhạy cảm).
+   * SEC-1: service guard teamExistsTx trước khi list (chặn chéo tenant qua path param).
+   * Phân trang tường minh qua PageQueryDto (limit/offset trong query string).
+   */
+  @Get("by-team/:teamId")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("read", "task")
+  getTeamTasks(
+    @Req() req: AuthenticatedRequest,
+    @Param("teamId") teamId: string,
+    @Query() query: PageQueryDto,
+  ) {
+    const page =
+      query.limit !== undefined || query.offset !== undefined
+        ? { limit: query.limit, offset: query.offset }
+        : undefined;
+    return this.tasks.listByTeam(req.user.companyId, teamId, page);
   }
 
   /** POST /tasks — giao việc tay (office task ngoài workflow, G9-2 / TASK-001) */

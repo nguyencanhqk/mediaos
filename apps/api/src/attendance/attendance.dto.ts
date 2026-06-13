@@ -7,6 +7,7 @@ import {
   checkOutSchema,
   createAdjustmentRequestSchema,
   createWorkScheduleSchema,
+  listPaginationSchema,
   periodMonthSchema,
   reviewNoteSchema,
   updateWorkScheduleSchema,
@@ -20,6 +21,8 @@ export class CreateAdjustmentDto extends createZodDto(createAdjustmentRequestSch
 export class ReviewNoteDto extends createZodDto(reviewNoteSchema) {}
 export class AttendanceListQueryDto extends createZodDto(attendanceListQuerySchema) {}
 export class AdjustmentListQueryDto extends createZodDto(adjustmentListQuerySchema) {}
+/** GET /attendance/periods — phân trang danh sách kỳ công. */
+export class PeriodListQueryDto extends createZodDto(listPaginationSchema) {}
 
 /** POST /attendance/periods/lock — khoá kỳ công theo tháng. */
 export const lockPeriodSchema = z.object({ periodMonth: periodMonthSchema });

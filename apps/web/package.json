@@ -23,6 +23,7 @@
     "lucide-react": "^0.469.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "socket.io-client": "^4.8.3",
     "tailwind-merge": "^2.6.0",
     "zod": "^3.25.0",
     "zustand": "^5.0.2"

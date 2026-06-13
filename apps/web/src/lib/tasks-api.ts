@@ -10,6 +10,16 @@ import type {
   RequestRevisionRequest,
 } from "@mediaos/contracts";
 
+/** Build query-string từ page params (limit/offset). */
+function pageQuery(page?: { limit?: number; offset?: number }): string {
+  if (!page) return "";
+  const params = new URLSearchParams();
+  if (page.limit !== undefined) params.set("limit", String(page.limit));
+  if (page.offset !== undefined) params.set("offset", String(page.offset));
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
 /** Build query-string từ filter board (chỉ field có giá trị). */
 function boardQuery(filter?: ListTasksQueryRequest): string {
   if (!filter) return "";
@@ -61,6 +71,17 @@ export const tasksApi = {
 
   /** Soft-delete office task (BE trả 204; workflow-driven task bị BE từ chối). */
   deleteTask: (taskId: string) => apiFetch(`/tasks/${taskId}`, z.void(), { method: "DELETE" }),
+
+  // ─── Task Hub views (G9-4) ──────────────────────────────────────────────────
+  // Server gated read:task cho cả hai. Client ẩn nav qua <PermissionGate> nhưng server là sự thật.
+
+  /** Project Tasks — task thuộc 1 dự án. Gated read:task. */
+  getProjectTasks: (projectId: string, page?: { limit?: number; offset?: number }) =>
+    apiFetch(`/tasks/by-project/${projectId}${pageQuery(page)}`, z.array(taskSchema)),
+
+  /** Team Tasks — task giao cho thành viên đang active của 1 team. Gated read:task. */
+  getTeamTasks: (teamId: string, page?: { limit?: number; offset?: number }) =>
+    apiFetch(`/tasks/by-team/${teamId}${pageQuery(page)}`, z.array(taskSchema)),
 
   getComments: (taskId: string) => apiFetch(`/tasks/${taskId}/comments`, z.array(commentSchema)),
 

@@ -31,6 +31,9 @@ function makeCtx(opts: {
   };
   const handler = { name: opts.handler ?? 'testHandler' };
   return {
+    // Guards short-circuit non-http contexts (WS auth enforced at handshake);
+    // these are HTTP guard unit tests so the mock context reports 'http'.
+    getType: () => 'http',
     switchToHttp: () => ({
       getRequest: () => req,
     }),

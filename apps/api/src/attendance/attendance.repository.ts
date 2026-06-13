@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, between, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, isNull, lt } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { employeeProfiles } from "../db/schema/employees";
 import {
@@ -140,15 +140,15 @@ export class AttendanceRepository {
 
   findRecordsByMonth(
     companyId: string,
-    opts: { from: string; toExclusive: string; userId?: string },
+    opts: { from: string; toExclusive: string; userId?: string; limit: number; offset: number },
   ) {
     return this.db.withTenant(companyId, (tx) => {
       const conds = [
         eq(attendanceRecords.companyId, companyId),
         isNull(attendanceRecords.deletedAt),
-        // work_date is a DATE; [from, toExclusive) — `between` is inclusive so the upper bound is
-        // the first day of next month minus nothing; we instead use gte/lt via two comparisons.
-        between(attendanceRecords.workDate, opts.from, prevDay(opts.toExclusive)),
+        // Half-open interval [from, toExclusive) via gte + lt — avoids the prevDay footgun.
+        gte(attendanceRecords.workDate, opts.from),
+        lt(attendanceRecords.workDate, opts.toExclusive),
       ];
       if (opts.userId) conds.push(eq(attendanceRecords.userId, opts.userId));
       return tx
@@ -170,7 +170,9 @@ export class AttendanceRepository {
         .from(attendanceRecords)
         .innerJoin(users, eq(attendanceRecords.userId, users.id))
         .where(and(...conds))
-        .orderBy(attendanceRecords.workDate, users.fullName);
+        .orderBy(attendanceRecords.workDate, users.fullName)
+        .limit(opts.limit)
+        .offset(opts.offset);
     });
   }
 
@@ -235,7 +237,7 @@ export class AttendanceRepository {
 
   findAdjustments(
     companyId: string,
-    opts: { userId?: string; status?: string },
+    opts: { userId?: string; status?: string; limit: number; offset: number },
   ) {
     return this.db.withTenant(companyId, (tx) => {
       const conds = [
@@ -264,7 +266,9 @@ export class AttendanceRepository {
         .from(attendanceAdjustmentRequests)
         .innerJoin(users, eq(attendanceAdjustmentRequests.userId, users.id))
         .where(and(...conds))
-        .orderBy(desc(attendanceAdjustmentRequests.createdAt));
+        .orderBy(desc(attendanceAdjustmentRequests.createdAt))
+        .limit(opts.limit)
+        .offset(opts.offset);
     });
   }
 
@@ -297,13 +301,15 @@ export class AttendanceRepository {
 
   // ─── attendance_periods ──────────────────────────────────────────────────────
 
-  findPeriods(companyId: string) {
+  findPeriods(companyId: string, opts: { limit: number; offset: number }) {
     return this.db.withTenant(companyId, (tx) =>
       tx
         .select()
         .from(attendancePeriods)
         .where(eq(attendancePeriods.companyId, companyId))
-        .orderBy(desc(attendancePeriods.periodMonth)),
+        .orderBy(desc(attendancePeriods.periodMonth))
+        .limit(opts.limit)
+        .offset(opts.offset),
     );
   }
 
@@ -348,9 +354,3 @@ export class AttendanceRepository {
   }
 }
 
-/** DATE arithmetic: first-of-next-month minus one day, as an inclusive upper bound for `between`. */
-function prevDay(isoDate: string): string {
-  const [y, m, d] = isoDate.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d - 1));
-  return dt.toISOString().slice(0, 10);
-}

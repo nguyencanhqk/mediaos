@@ -725,6 +725,21 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+
+  // ── G8-1 Approval rules (multi-level — migration 0080) ───────────────────────
+  {
+    name: "approval_rules",
+    table: "approval_rules",
+    seedRow: async (direct, t) => {
+      const { stepId, userId } = await seedWorkflowChain(direct, t);
+      const r = await direct.query(
+        `INSERT INTO approval_rules (company_id, workflow_step_id, level, approver_user_id)
+         VALUES ($1, $2, 1, $3) RETURNING id`,
+        [t.companyId, stepId, userId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
   {
     name: "workflow_step_instance_locks",
     table: "workflow_step_instance_locks",
@@ -926,6 +941,108 @@ export const RLS_TABLES: RlsTableCase[] = [
         `INSERT INTO leave_balances (company_id, user_id, leave_type_id, year, total_days)
          VALUES ($1, $2, $3, 2024, 12) RETURNING id`,
         [t.companyId, u, ltRes.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  // ── G13 Finance (Revenue/Cost/Profit/Expense) — APPEND-ONLY ledgers + mutable allocation/request ──
+  // Mỗi bảng có company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  {
+    name: "revenue_records",
+    table: "revenue_records",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `rev-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO revenue_records
+           (company_id, amount, currency, revenue_date, source, entered_by, entry_kind)
+         VALUES ($1, 1000.00, 'VND', current_date, 'manual', $2, 'original') RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "cost_records",
+    table: "cost_records",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `cost-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO cost_records
+           (company_id, cost_type, amount, currency, cost_date, entered_by, entry_kind)
+         VALUES ($1, 'other', 500.00, 'VND', current_date, $2, 'original') RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "cost_allocations",
+    table: "cost_allocations",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `alloc-${randomUUID().slice(0, 8)}@x.test`);
+      const costRes = await direct.query(
+        `INSERT INTO cost_records
+           (company_id, cost_type, amount, currency, cost_date, entered_by, entry_kind)
+         VALUES ($1, 'other', 500.00, 'VND', current_date, $2, 'original') RETURNING id`,
+        [t.companyId, u],
+      );
+      const projectId = await seedProject(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO cost_allocations
+           (company_id, cost_record_id, allocation_run_id, allocation_target_type,
+            allocation_target_id, allocation_method, allocated_amount)
+         VALUES ($1, $2, $3, 'project', $4, 'equal_split', 500.00) RETURNING id`,
+        [t.companyId, costRes.rows[0].id, randomUUID(), projectId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "profit_snapshots",
+    table: "profit_snapshots",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `pf-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO profit_snapshots
+           (company_id, target_type, target_id, period_start, period_end,
+            total_revenue, total_direct_cost, total_allocated_cost, total_cost, profit, created_by)
+         VALUES ($1, 'company', NULL, current_date, current_date,
+                 1000.00, 400.00, 100.00, 500.00, 500.00, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "expense_requests",
+    table: "expense_requests",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `exp-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO expense_requests
+           (company_id, requested_by, title, amount, currency, expense_type, status)
+         VALUES ($1, $2, 'rls-expense', 250.00, 'VND', 'other', 'pending') RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "expense_approvals",
+    table: "expense_approvals",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `expa-${randomUUID().slice(0, 8)}@x.test`);
+      const reqRes = await direct.query(
+        `INSERT INTO expense_requests
+           (company_id, requested_by, title, amount, currency, expense_type, status)
+         VALUES ($1, $2, 'rls-expense-for-approval', 250.00, 'VND', 'other', 'approved') RETURNING id`,
+        [t.companyId, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO expense_approvals
+           (company_id, expense_request_id, approval_level, approver_user_id, decision)
+         VALUES ($1, $2, 1, $3, 'approved') RETURNING id`,
+        [t.companyId, reqRes.rows[0].id, u],
       );
       return r.rows[0].id as string;
     },

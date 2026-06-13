@@ -120,9 +120,20 @@ export const attendanceTodaySchema = z.object({
 });
 export type AttendanceTodayDto = z.infer<typeof attendanceTodaySchema>;
 
+/** Generic pagination params: limit (1–100, default 50) + offset (≥0, default 0). */
+export const listPaginationSchema = z.object({
+  /** Số bản ghi tối đa trả về (1–100, mặc định 50). */
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  /** Vị trí bắt đầu (≥0, mặc định 0). */
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type ListPaginationQuery = z.infer<typeof listPaginationSchema>;
+
 export const attendanceListQuerySchema = z.object({
   month: periodMonthSchema,
   userId: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
 });
 export type AttendanceListQuery = z.infer<typeof attendanceListQuerySchema>;
 
@@ -174,6 +185,8 @@ export const adjustmentListQuerySchema = z.object({
   status: hrRequestStatusSchema.optional(),
   /** 'me' (mặc định) = đơn của tôi; 'all' = mọi đơn (cần quyền approve/manage). */
   scope: z.enum(["me", "all"]).default("me"),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
 });
 export type AdjustmentListQuery = z.infer<typeof adjustmentListQuerySchema>;
 
