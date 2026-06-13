@@ -4,10 +4,15 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
-import type { CreateTaskRequest } from "@mediaos/contracts";
+import {
+  officeTaskStatusSchema,
+  type CreateTaskRequest,
+  type OfficeTaskStatusDto,
+  type TaskTypeDto,
+} from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
-import { TasksRepository, type ListTasksFilter } from "./tasks.repository";
+import { TasksRepository, type ListTasksFilter, type Pagination } from "./tasks.repository";
 
 interface RequestUser {
   id: string;
@@ -19,7 +24,12 @@ interface RequestUser {
  * the workflow (submit → review → approve/return), NEVER by the manual shortened flow.
  * Manual status-update / delete on these is rejected to protect the FSM invariant (G7/ADR-0016).
  */
-const WORKFLOW_TASK_TYPES = new Set(["workflow_step", "production", "review", "revision"]);
+// `satisfies TaskTypeDto[]` ép kiểm tra compile-time: mỗi literal phải là task_type hợp lệ trong
+// contracts (nguồn sự thật). office/meeting_action/finance/hr KHÔNG thuộc FSM → CỐ Ý loại trừ
+// (status sửa tay được qua luồng rút gọn). Thêm FSM type mới ở contracts → thêm vào đây (tsc bắt typo).
+const WORKFLOW_TASK_TYPES = new Set<string>(
+  ["workflow_step", "production", "review", "revision"] satisfies TaskTypeDto[],
+);
 
 @Injectable()
 export class TasksService {
@@ -35,16 +45,18 @@ export class TasksService {
     return this.repo.findByAssignee(companyId, userId);
   }
 
-  listBoard(companyId: string, filters: ListTasksFilter) {
-    return this.repo.listAll(companyId, filters);
+  // Board reads (G9-3 nối controller + gate read:task). `page` được forward để KHÔNG bị kẹp ngầm ở
+  // DEFAULT_PAGE_SIZE — caller (G9-3) khai báo limit/offset tường minh.
+  listBoard(companyId: string, filters: ListTasksFilter, page?: Pagination) {
+    return this.repo.listAll(companyId, filters, page);
   }
 
-  listByProject(companyId: string, projectId: string) {
-    return this.repo.listByProject(companyId, projectId);
+  listByProject(companyId: string, projectId: string, page?: Pagination) {
+    return this.repo.listByProject(companyId, projectId, page);
   }
 
-  listByTeam(companyId: string, teamId: string) {
-    return this.repo.listByTeam(companyId, teamId);
+  listByTeam(companyId: string, teamId: string, page?: Pagination) {
+    return this.repo.listByTeam(companyId, teamId, page);
   }
 
   // ─── Manual task lifecycle (G9-2 / G9-3) ─────────────────────────────────────
@@ -52,6 +64,21 @@ export class TasksService {
   /** Tạo task tay (office). Không cần content/workflow — bản chất Task Hub hợp nhất (BẤT BIẾN #4). */
   async createTask(user: RequestUser, dto: CreateTaskRequest) {
     return this.db.withTenant(user.companyId, async (tx) => {
+      // SEC-1 tenant-FK guard (TRƯỚC insert/audit): FK trỏ PK toàn cục nên giá trị chéo tenant vẫn
+      // thoả ràng buộc DB — phải chặn app-side. office task cho phép MỌI FK NULL (chỉ guard khi có giá trị).
+      if (dto.assigneeUserId) {
+        const ok = await this.repo.assigneeActiveTx(tx, user.companyId, dto.assigneeUserId);
+        if (!ok) {
+          throw new BadRequestException(
+            "Người nhận việc không hợp lệ (không cùng công ty hoặc đã ngưng hoạt động).",
+          );
+        }
+      }
+      if (dto.projectId) {
+        const ok = await this.repo.projectExistsTx(tx, user.companyId, dto.projectId);
+        if (!ok) throw new NotFoundException(`Project not found: ${dto.projectId}`);
+      }
+
       const [created] = await this.repo.createTask(
         user.companyId,
         {
@@ -88,7 +115,18 @@ export class TasksService {
    * Đổi status theo luồng rút gọn (Chưa bắt đầu → Đang làm → Hoàn thành) cho task KHÔNG vòng duyệt.
    * Từ chối task workflow-driven — chúng PHẢI đi qua FSM (submit/approve/return), không sửa status tay.
    */
-  async updateStatus(user: RequestUser, taskId: string, status: string) {
+  async updateStatus(user: RequestUser, taskId: string, status: OfficeTaskStatusDto) {
+    // SEC-2 (defense-in-depth): chỉ chấp nhận status luồng office rút gọn ngay tại biên service,
+    // không dựa duy nhất vào ZodValidationPipe ở controller. Status workflow (waiting_review/approved/
+    // revision) bị từ chối — FSM mới được phép đặt chúng (G7/ADR-0016).
+    const parsedStatus = officeTaskStatusSchema.safeParse(status);
+    if (!parsedStatus.success) {
+      throw new BadRequestException(
+        "Trạng thái không hợp lệ cho luồng rút gọn (chỉ: not_started, in_progress, completed).",
+      );
+    }
+    const nextStatus: OfficeTaskStatusDto = parsedStatus.data;
+
     return this.db.withTenant(user.companyId, async (tx) => {
       const [task] = await this.repo.findRawByIdTx(tx, user.companyId, taskId);
       if (!task) throw new NotFoundException(`Task not found: ${taskId}`);
@@ -99,7 +137,7 @@ export class TasksService {
         );
       }
 
-      const [updated] = await this.repo.updateStatus(user.companyId, taskId, status, tx);
+      const [updated] = await this.repo.updateStatus(user.companyId, taskId, nextStatus, tx);
       if (!updated) throw new NotFoundException(`Task not found: ${taskId}`);
 
       await this.audit.record(tx, {

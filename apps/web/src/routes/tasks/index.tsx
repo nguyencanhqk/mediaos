@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { tasksApi } from "@/lib/tasks-api";
 import { StepChecklist, stepChecklistQueryKey } from "@/components/tasks/step-checklist";
+import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
+import { PermissionGate } from "@/components/permission-gate";
 import { allRequiredChecked, workflowChecklistApi } from "@/lib/workflow-checklist-api";
 import type { TaskDto, CommentDto, ApprovalRequestDto } from "@mediaos/contracts";
 
@@ -456,6 +458,12 @@ export function TasksPage() {
         <div className="flex-1 overflow-y-auto">
           {tab === "my-tasks" ? (
             <div className="space-y-2 p-3">
+              {/* Giao việc tay (G9-2) — ẩn nút nếu không có quyền create:task (BE vẫn gate) */}
+              <PermissionGate action="create" resourceType="task">
+                <div className="flex justify-end pb-1">
+                  <CreateTaskDialog />
+                </div>
+              </PermissionGate>
               {isLoading && (
                 <p className="py-6 text-center text-sm text-muted-foreground">Đang tải…</p>
               )}
