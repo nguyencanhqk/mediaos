@@ -80,7 +80,33 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
   `ecc:typescript-reviewer` + `ecc:quality-gate`.
 - **Test deny-path TRƯỚC** (RED) cho permission/workflow/payroll. Coverage ≥80% (ngưỡng riêng cho module nhạy cảm).
 
-**Model routing:** Haiku → build-fix/CRUD/docs; Sonnet → phát triển module; Opus → spike khó (workflow FSM, permission algebra, payroll, ADR).
+**Model routing (tự động trong `parallel-lanes`):** quyết định 2026-06-12 — **thận trọng chất lượng: KHÔNG dùng Haiku.**
+
+| Loại việc | Phát hiện | Model | Plan-step |
+| --- | --- | --- | --- |
+| **Crown-jewel** | `tier:'crown'` HOẶC task khớp: lương/payroll/payslip · permission/RLS/policy · secret/envelope/encrypt/KMS · finance/revenue/cost/profit/ledger · KPI · workflow FSM/DAG · audit append-only · ADR | **Opus** | ✅ planner (Opus) lập micro-plan trước khi code |
+| **Việc thường** (kể cả 🤖 CRUD/UI/docs) | mặc định | **Sonnet** | ❌ code thẳng |
+| **Override tay** | `lane.model` (`'opus'\|'sonnet'\|'haiku'`) · `skipPlan:true` bỏ plan dù crown | dùng đúng giá trị | theo tier |
+
+- Workflow `parallel-lanes` **tự gọi `pickModel()`** — không cần chọn tay. `gate` (FULL/LIGHT) **tách bạch** với model: gate quyết cường độ review, không quyết model.
+- Xem trước quyết định không tốn token: bung `parallel-lanes` với `args.dryRun:true` → in bảng routing rồi dừng.
+- Việc **solo 1 phiên** (không qua workflow): dùng skill `/ecc:model-route`.
+
+**Agent/skill routing (tự động trong `parallel-lanes`) — Hybrid:** lane tự nhận đúng reviewer/skill/build-resolver theo domain của `task`.
+
+| Domain (phát hiện trên `task`) | Reviewer / skill |
+| --- | --- |
+| DB · migration · RLS · schema · repository | `ecc:database-reviewer` |
+| permission · secret · encrypt · payroll · audit · auth · **hoặc gate=FULL** | `ecc:security-reviewer` + `ecc:silent-failure-hunter` |
+| FE · React · `.tsx` · component · form | `ecc:react-reviewer` |
+| mọi lane có code (baseline) | `ecc:typescript-reviewer` |
+| crown-jewel | + `ecc:santa-method` (review kép hội tụ) |
+| mọi lane | + `ecc:quality-gate` |
+| build/typecheck ĐỎ (auto-fix) | FE → `ecc:react-build-resolver` · API/TS → `ecc:build-error-resolver` |
+
+- **Hybrid:** crown-jewel → workflow **spawn reviewer agent ĐỘC LẬP** trên diff (stage Review) + `santa-method`; verdict `CRITICAL`/`blocking` → ép `needs_human`. Việc thường → danh sách reviewer/skill **chèn vào prompt** để implementer tự chạy.
+- **Auto build-fix:** build/typecheck đỏ → ưu tiên sửa root-cause hoặc route build-resolver TRƯỚC khi báo `needs_human` (cấm `@ts-ignore`/`eslint-disable`).
+- **Override per-lane:** `reviewers:[...]` ép danh sách · `noReview:true` tắt. `dryRun:true` in cả reviewers/skills/build.
 
 ---
 
@@ -130,3 +156,4 @@ Code xong · migration nếu đổi DB · validation input · permission guard n
 3. **Hot-file = append, KHÔNG rewrite.** audit `object_types` CHECK = **UNION** mọi lane · permission seed `ON CONFLICT DO NOTHING` · `schema/index.ts`+`app.module.ts` khối additive · `tasks` **chỉ G9** đổi shape.
 4. **Merge theo thứ tự phụ thuộc.** Land **G9-1 trunk** trước → rebase + gate + merge từng lane Wave A → rồi Wave B (G12/G14). Mỗi merge: chain migration `0000→latest` apply sạch + test xanh.
 5. **Vòng tự động mỗi lane:** RED→GREEN→gate→checkpoint. Xanh + non-sensitive → auto-commit `wip(gN): …`; đỏ/CRITICAL/🛠️ → người chốt. Fan-out 1 lượt: Workflow `parallel-lanes`.
+6. **DB CÔ LẬP mỗi lane (BẮT BUỘC khi verify có Postgres).** Mỗi lane chạy test trên DB riêng `mediaos_<lane>`, KHÔNG dùng chung `mediaos`. Lý do: drizzle migrator áp migration **đơn điệu theo `when`** → khi lane band cao (vd G8 `0080s`) đã migrate DB chung, mọi migration band thấp (`0050/0060/0070s`) bị **SKIP** vĩnh viễn ⇒ bảng vắng, test xanh-giả/đỏ-giả. Quy trình: `bash scripts/lane-db-setup.sh <lane>` (tạo + chain-migrate `0000→latest`) → `export LANE_DB=mediaos_<lane>` → `pnpm --filter @mediaos/api test`. `vitest.config.ts` đọc `LANE_DB` (không set → fallback `mediaos` chung cho CI ephemeral/master). `--reset` để làm lại sạch.

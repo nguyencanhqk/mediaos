@@ -86,11 +86,11 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 | G6 | Media (Channel/Project/Content) | 🤖 + 🛠️(G6-2) | L | ✅ đóng (đã land master — migration 0020–0029 + bảng lõi; G6-2 encryption đã merge, verify 2026-06-12) |
 | G7 | Workflow Builder | 🛠️ TDD 🔋 | XL | ✅ đóng (merged `6a0d4bd` --no-ff) · spine 1a→4c + FE Track C · gate TỔNG PASS (B1+santa+FE LIGHT) |
 | G8 | Approval · Defect · Eval · KPI | 🛠️+🤖 | L | ☐ |
-| G9 | 🧩 Task Hub hợp nhất | 🛠️+🤖 | L | 🟡 G9-1 ✅ (schema + mig 0040, gate FULL PASS, merged `d58d465` --no-ff — land #1) · G9-2→4 ☐ |
-| G10 | Chat · Notification · Meeting | 🤖 + 🛠️(realtime) | L | ☐ |
-| G11 | Attendance · Leave | 🤖 AI-bulk 🟢 | M | ☐ |
+| G9 | 🧩 Task Hub hợp nhất | 🛠️+🤖 | L | 🟡 G9-1 ✅ (`d58d465`) · G9-2 ✅ commit `99de2f9` (office endpoints + permission guards + SEC-2 narrow; VÁ lỗ guard mutation; 26/26 unit, full api 728✅) · G9-3/4 ☐ |
+| G10 | Chat · Notification · Meeting | 🤖 + 🛠️(realtime) | L | 🟠 needs_human — realtime GREEN code xong (typecheck clean) nhưng test chưa verify: **shared dev DB drift** làm migration `0050` bị skip. CHƯA commit (7 file WIP, `feat/g10-comms`). Chờ quyết định DB. |
+| G11 | Attendance · Leave | 🤖 AI-bulk 🟢 | M | 🟡 Leave module ✅ commit `4b7ea4a` (8 files +961/-10; emit `task_type=hr`; gỡ stale 5-type taskType shadow; 22/22 leave · 54/54 HR) |
 | G12 | Payroll · Bonus/Penalty | 🛠️ TDD 🔋🔋 | XL | ☐ |
-| G13 | Finance (Revenue/Cost/Profit) | 🛠️+🤖 | L | ☐ |
+| G13 | Finance (Revenue/Cost/Profit) | 🛠️+🤖 | L | 🟠 needs_human — G13-1 revenue GREEN verify trên Postgres thật (revenue-deny 8/8 · finance 47/47 · tenant-iso 160). CHƯA commit (4 file WIP, `feat/g13-finance`) — 🛠️ finance ledger cần FULL gate người chốt. |
 | G14 | Dashboard & Report | 🤖 AI-bulk 🟢 | M | ☐ |
 | G15 | Mobile App (React Native) | 🤖 AI-bulk | XL | ☐ |
 | G16 | Stabilization & SaaS Prep | 🛠️+🔧 | L | ☐ |
@@ -130,14 +130,16 @@ Master kết thúc ở `0037`. Mỗi lane sở hữu **1 dải 10 số** riêng:
 | G9  | `0040–0049` | đang dùng (`0040`) |
 | G10 | `0050–0059` | đang dùng (`0050`) |
 | G11 | `0060–0069` | đang dùng (`0060–0063`) |
-| G13 | `0070–0079` | reserved |
-| G8  | `0080–0089` | reserved |
+| G13 | `0070–0079` | đang dùng (`0070–0074`) |
+| G8  | `0080–0089` | đang dùng (`0080–0082`) |
 | G12 | `0090–0099` | reserved |
 | G14 | `0100–0109` | reserved |
 | G15 | `0110–0119` | reserved |
 | G16 | `0120–0129` | reserved |
 
 `_journal.json`: `idx`/`when` phải **đơn điệu tăng** trong band; khi merge nhiều lane, reconcile journal theo thứ tự merge (idx liên tục, when tăng dần). Hook `guard-migration-band` **chặn (exit 2)** file migration có số ngoài band của branch hiện tại.
+
+> **⚠️ DB CÔ LẬP mỗi lane (BẮT BUỘC verify):** band riêng KHÔNG đủ chống drift trên **1 DB dùng chung**. drizzle migrator áp migration **đơn điệu theo `when`** ⇒ khi lane band cao (G8 `0080s`) migrate `mediaos` chung, migration band thấp (G10 `0050`, G11 `0060s`, G13 `0070s`) bị **SKIP** vĩnh viễn → bảng vắng, test xanh-giả/đỏ-giả. **Mỗi lane verify trên DB riêng `mediaos_<lane>`:** `bash scripts/lane-db-setup.sh <lane>` (tạo + chain-migrate `0000→latest`, `--reset` để làm lại) → `export LANE_DB=mediaos_<lane>` → `pnpm --filter @mediaos/api test`. `vitest.config.ts` đọc `LANE_DB` (không set → `mediaos` chung cho CI ephemeral/master). Đã verify 2026-06-13: `mediaos_g13` áp sạch 44 migration đủ bảng G13.
 
 ### 5.3 Hot-file append protocol (file mọi lane đụng → CẤM rewrite)
 
@@ -166,6 +168,35 @@ RED (deny-path/contract test) → GREEN (implement) → gate (FULL/LIGHT) → ch
 ```
 
 Fan-out nhiều lane 1 lượt: **Workflow `parallel-lanes`** (`.claude/workflows/parallel-lanes.mjs`) — mỗi lane 1 agent pinned vào worktree+band, chạy 1 round micro-step rồi báo cáo `committed / needs_human`. **Checkpoint commit trước mỗi rebase.**
+
+### 5.6 Model routing & plan-step (tự động)
+
+> Workflow tự chọn model theo độ khó của lane (CLAUDE.md §6). Quyết định 2026-06-12 (**thận trọng chất lượng**): **KHÔNG Haiku · Sonnet mặc định · Opus chỉ crown-jewel**. Crown-jewel còn được **lập micro-plan (Opus) trước khi code** (pipeline `Plan → Implement`); việc thường code thẳng Sonnet.
+
+| Lane | Tier | Model | Plan-step |
+| --- | --- | --- | --- |
+| G12 Payroll · G3 Permission · G6-2 Secret/encrypt · G13 Finance ledger (revenue/cost/profit) · G7 Workflow FSM/DAG · G8 KPI/Eval · ADR | **crown** | **Opus** | ✅ |
+| G9 Task Hub CRUD · G10 Comms · G11 HR (attendance/leave) · G14 Dashboard · G15 Mobile · build-fix/docs/UI | thường | **Sonnet** | ❌ |
+
+- **Tự phát hiện crown** qua `tier:'crown'` hoặc regex trên `task` (lương/permission/RLS/secret/finance/ledger/KPI/FSM/DAG/append-only/ADR…). Không cần khai báo tay nếu task có từ khoá.
+- **Override per-lane:** `model:'opus'|'sonnet'|'haiku'` (ép model), `skipPlan:true` (bỏ plan dù crown), `tier:'crown'` (ép crown).
+- **Xem trước không tốn token:** `args.dryRun:true` → in bảng routing (`lane → model [crown,+plan]`) rồi dừng, không spawn agent.
+- `gate` (FULL/LIGHT) **tách bạch** với model — gate quyết cường độ review (§5.5 / CLAUDE.md §6), không quyết model.
+
+**Agent/skill routing + Review stage (Hybrid).** Mỗi lane còn tự nhận đúng reviewer/skill/build-resolver theo domain `task`:
+
+| Domain trên `task` | Reviewer / skill |
+| --- | --- |
+| DB·migration·RLS·schema·repository | `database-reviewer` |
+| permission·secret·encrypt·payroll·audit·auth · **gate=FULL** | `security-reviewer` + `silent-failure-hunter` |
+| FE·React·`.tsx`·component·form | `react-reviewer` |
+| baseline mọi lane code | `typescript-reviewer` |
+| crown-jewel | + `santa-method` · mọi lane + `quality-gate` |
+| build/typecheck đỏ | FE→`react-build-resolver` · API/TS→`build-error-resolver` |
+
+- Pipeline 3 stage: **Plan → Implement → Review**. Crown-jewel: stage Review **spawn reviewer agent độc lập** (agentType) trên diff worktree → `mergeVerdicts`; verdict `CRITICAL`/`blocking` ép `needs_human`. Việc thường: reviewer/skill **chèn vào prompt** implementer (không spawn riêng).
+- **Auto build-fix:** build/typecheck đỏ → sửa root-cause / route build-resolver TRƯỚC khi báo `needs_human`.
+- Field args mới: `reviewers:[...]` (ép danh sách) · `noReview:true` (tắt). `dryRun:true` in cả reviewers/skills/build.
 
 ---
 
