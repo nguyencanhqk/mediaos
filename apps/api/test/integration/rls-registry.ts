@@ -40,7 +40,11 @@ async function seedProject(direct: Pool, companyId: string): Promise<string> {
   return r.rows[0].id as string;
 }
 
-async function seedContentItem(direct: Pool, companyId: string, projectId: string): Promise<string> {
+async function seedContentItem(
+  direct: Pool,
+  companyId: string,
+  projectId: string,
+): Promise<string> {
   // 0025 đã DROP cột text `content_type` → content_type_id (FK, nullable) mặc định NULL.
   const r = await direct.query(
     `INSERT INTO content_items (company_id, project_id, title, status)
@@ -109,12 +113,28 @@ async function seedWorkflowStep(
 async function seedWorkflowChain(
   direct: Pool,
   t: SeededTenant,
-): Promise<{ userId: string; projectId: string; contentItemId: string; instanceId: string; stepId: string }> {
-  const userId = await seedUser(direct, t.companyId, `rls-chain-${randomUUID().slice(0, 8)}@x.test`);
+): Promise<{
+  userId: string;
+  projectId: string;
+  contentItemId: string;
+  instanceId: string;
+  stepId: string;
+}> {
+  const userId = await seedUser(
+    direct,
+    t.companyId,
+    `rls-chain-${randomUUID().slice(0, 8)}@x.test`,
+  );
   const projectId = await seedProject(direct, t.companyId);
   const contentItemId = await seedContentItem(direct, t.companyId, projectId);
   const definitionId = await seedWorkflowDefinition(direct, t.companyId);
-  const instanceId = await seedWorkflowInstance(direct, t.companyId, definitionId, contentItemId, userId);
+  const instanceId = await seedWorkflowInstance(
+    direct,
+    t.companyId,
+    definitionId,
+    contentItemId,
+    userId,
+  );
   const stepId = await seedWorkflowStep(direct, t.companyId, instanceId);
   return { userId, projectId, contentItemId, instanceId, stepId };
 }
@@ -131,8 +151,7 @@ export const RLS_TABLES: RlsTableCase[] = [
   {
     name: "users",
     table: "users",
-    seedRow: (direct, t) =>
-      seedUser(direct, t.companyId, `iso-${randomUUID().slice(0, 8)}@x.test`),
+    seedRow: (direct, t) => seedUser(direct, t.companyId, `iso-${randomUUID().slice(0, 8)}@x.test`),
   },
   {
     name: "audit_logs",
@@ -1043,6 +1062,82 @@ export const RLS_TABLES: RlsTableCase[] = [
            (company_id, expense_request_id, approval_level, approver_user_id, decision)
          VALUES ($1, $2, 1, $3, 'approved') RETURNING id`,
         [t.companyId, reqRes.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── G8-3 Evaluation (template + criteria + results + scores — migration 0083) ──
+  // Mỗi bảng có company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  {
+    name: "evaluation_templates",
+    table: "evaluation_templates",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO evaluation_templates (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-eval-tpl-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "evaluation_criteria",
+    table: "evaluation_criteria",
+    seedRow: async (direct, t) => {
+      const tplRes = await direct.query(
+        `INSERT INTO evaluation_templates (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-eval-crit-tpl-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO evaluation_criteria (company_id, template_id, name, weight, min_score, max_score)
+         VALUES ($1, $2, 'rls-crit', 100, 0, 10) RETURNING id`,
+        [t.companyId, tplRes.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "evaluation_results",
+    table: "evaluation_results",
+    seedRow: async (direct, t) => {
+      const { stepId, userId } = await seedWorkflowChain(direct, t);
+      const tplRes = await direct.query(
+        `INSERT INTO evaluation_templates (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-eval-res-tpl-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO evaluation_results
+           (company_id, template_id, workflow_step_id, evaluator_user_id, total_score)
+         VALUES ($1, $2, $3, $4, 80.00) RETURNING id`,
+        [t.companyId, tplRes.rows[0].id, stepId, userId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "evaluation_scores",
+    table: "evaluation_scores",
+    seedRow: async (direct, t) => {
+      const { stepId, userId } = await seedWorkflowChain(direct, t);
+      const tplRes = await direct.query(
+        `INSERT INTO evaluation_templates (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-eval-score-tpl-${randomUUID().slice(0, 8)}`],
+      );
+      const critRes = await direct.query(
+        `INSERT INTO evaluation_criteria (company_id, template_id, name, weight, min_score, max_score)
+         VALUES ($1, $2, 'rls-score-crit', 100, 0, 10) RETURNING id`,
+        [t.companyId, tplRes.rows[0].id],
+      );
+      const resRes = await direct.query(
+        `INSERT INTO evaluation_results
+           (company_id, template_id, workflow_step_id, evaluator_user_id, total_score)
+         VALUES ($1, $2, $3, $4, 80.00) RETURNING id`,
+        [t.companyId, tplRes.rows[0].id, stepId, userId],
+      );
+      const r = await direct.query(
+        `INSERT INTO evaluation_scores (company_id, result_id, criteria_id, score)
+         VALUES ($1, $2, $3, 8.00) RETURNING id`,
+        [t.companyId, resRes.rows[0].id, critRes.rows[0].id],
       );
       return r.rows[0].id as string;
     },

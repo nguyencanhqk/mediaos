@@ -379,6 +379,27 @@
 			"when": 1717500100000,
 			"tag": "0100_g14_dashboard_permissions_seed",
 			"breakpoints": true
+		},
+		{
+			"idx": 54,
+			"version": "7",
+			"when": 1717500101000,
+			"tag": "0083_g8_evaluation",
+			"breakpoints": true
+		},
+		{
+			"idx": 55,
+			"version": "7",
+			"when": 1717500102000,
+			"tag": "0084_g8_eval_audit_object_types",
+			"breakpoints": true
+		},
+		{
+			"idx": 56,
+			"version": "7",
+			"when": 1717500103000,
+			"tag": "0085_g8_eval_permissions_seed",
+			"breakpoints": true
 		}
 	]
 }

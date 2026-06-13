@@ -86,5 +86,8 @@ export const AUDIT_OBJECT_TYPES = [
   "expense_request",
   // G8 approval (multi-level rules — ApprovalLevelApproved/ApprovalRejected dùng 'approval_request')
   "approval_rule",
+  // G8-3 evaluation (chấm điểm gắn workflow step — recordScores ghi 'evaluation_result' cùng tx)
+  "evaluation_template",
+  "evaluation_result",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
