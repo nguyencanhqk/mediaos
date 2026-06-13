@@ -104,3 +104,10 @@ giữ RevenueService) · 3 test (`finance-cost-deny.int-spec.ts` 13 · `finance-
 - HTTP layer (CostController/CostAllocationController + @RequirePermission) CHƯA build — service/repo/module sẵn sàng.
 - by_video_count/by_task_count/by_revenue_ratio resolve qua repository COUNT/SUM; target team/org_unit/employee không có FK ở content/tasks ⇒ weight 0 (caller xử lý; revenue_ratio chỉ tính bản hiệu lực entry_kind<>void AND NOT replaced).
 - **🛠️ crown-jewel finance ledger — KHÔNG auto-commit. needs_human chốt (TASKS §5.5).** G13 đã land master trước đó (revenue/cost-schema); G13-2 service layer là phần bổ sung — người chốt quyết định land.
+
+### Post-merge re-verify (integrate master `2c79f9e` → lane, 2026-06-13)
+
+- Merge master VÀO lane: `103a59b` (ort, **0 conflict** — g13 chỉ chạm `finance/*`, master chạm `payroll/chat/*`). Reconcile additive XÁC NHẬN: app.module (Finance+Payroll), schema/index (finance+payroll), contracts/index (finance+payroll), rls-registry (cost_records/cost_allocations + salary_profiles) cùng có. Journal = master nguyên bản (57 entry, max_when 1717500112000) — g13 KHÔNG thêm migration.
+- Verify DB cô lập `mediaos_g13` (chain 0000→latest reset sạch, 57 mig): **api 1079 pass / 2 skip · web 199 pass · typecheck 4/4 · build 3/3** xanh. Deny-path: cost append-only 13/13 · cost-allocation 10/10 · allocation 16/16 · allocation-resolve 11/11.
+- Re-gate FULL crown trên diff `master..HEAD` (4 lens độc lập): security **PASS**. Database/silent-failure báo CRITICAL/HIGH → **KIỂM CHỨNG code thật ⇒ REFUTED**: (a) `staticWeight` `?? 0` cho manual_percent/by_work_hours là UNREACHABLE — contract `allocateCostSchema` refine ép `percent != null` + tổng=100 + `hours != null` + targets `.min(1).max(200)` (boundary nestjs-zod, CLAUDE.md §5). (b) `.returning()`/`tx.execute().rows` rỗng/undefined là không xảy ra trên success path — Drizzle+node-postgres NÉM khi vi phạm constraint/RLS (tx rollback), không trả mảng rỗng. Genuine MEDIUM (N+1 ≤200 cap · by_revenue_ratio `Number()` precision >2^53 cents) = đã ghi nợ ở trên, non-blocking.
+- **Verdict re-gate: 0 real CRITICAL/HIGH — lane sẵn sàng land, chờ người chốt (crown, KHÔNG auto-merge).**
