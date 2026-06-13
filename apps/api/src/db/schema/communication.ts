@@ -104,6 +104,67 @@ export const chatRooms = pgTable(
 export type ChatRoom = typeof chatRooms.$inferSelect;
 export type NewChatRoom = typeof chatRooms.$inferInsert;
 
+// ─── notification_rules ───────────────────────────────────────────────────────
+// G10-2: quy tắc phát notification theo loại sự kiện (company-level config).
+// append-only (BẤT BIẾN #2) — app role chỉ INSERT/SELECT, không UPDATE/DELETE.
+
+export const notificationRules = pgTable(
+  "notification_rules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    notificationType: text("notification_type").notNull(),
+    /** true = tự động phát notification khi sự kiện xảy ra (company-wide default). */
+    enabled: boolean("enabled").notNull().default(true),
+    /** Metadata mở rộng (vd: template body, cooldown ms). */
+    config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("notification_rules_company_idx").on(t.companyId),
+    uniqueIndex("notification_rules_company_type_uq").on(t.companyId, t.notificationType),
+  ],
+);
+
+export type NotificationRule = typeof notificationRules.$inferSelect;
+export type NewNotificationRule = typeof notificationRules.$inferInsert;
+
+// ─── notification_preferences ─────────────────────────────────────────────────
+// G10-2: ưu tiên user-level (ghi đè rule company-level). RLS + FORCE.
+
+export const notificationPreferences = pgTable(
+  "notification_preferences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    notificationType: text("notification_type").notNull(),
+    /** true = nhận notification loại này; false = tắt. */
+    enabled: boolean("enabled").notNull().default(true),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("notification_preferences_user_idx").on(t.companyId, t.userId),
+    uniqueIndex("notification_preferences_user_type_uq").on(
+      t.companyId,
+      t.userId,
+      t.notificationType,
+    ),
+  ],
+);
+
+export type NotificationPreference = typeof notificationPreferences.$inferSelect;
+export type NewNotificationPreference = typeof notificationPreferences.$inferInsert;
+
 // ─── chat_room_members ───────────────────────────────────────────────────────
 
 export type ChatMemberRole = "member" | "admin";

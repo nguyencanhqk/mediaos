@@ -428,6 +428,13 @@
 			"when": 1717500123000,
 			"tag": "0101_g14_report_permissions_seed",
 			"breakpoints": true
+		},
+		{
+			"idx": 61,
+			"version": "7",
+			"when": 1717500124000,
+			"tag": "0051_g10_notifications_full",
+			"breakpoints": true
 		}
 	]
 }
