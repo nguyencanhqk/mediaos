@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -51,12 +52,28 @@ export class TasksService {
     return this.repo.listAll(companyId, filters, page);
   }
 
-  listByProject(companyId: string, projectId: string, page?: Pagination) {
-    return this.repo.listByProject(companyId, projectId, page);
+  /**
+   * Project Tasks (G9-4) — SEC-1 guard: projectId phải thuộc cùng tenant trước khi list.
+   * Trả 404 nếu project không tồn tại (không phân biệt not-found / cross-tenant — tránh oracle).
+   */
+  async listByProject(companyId: string, projectId: string, page?: Pagination) {
+    return this.db.withTenant(companyId, async (tx) => {
+      const exists = await this.repo.projectExistsTx(tx, companyId, projectId);
+      if (!exists) throw new NotFoundException(`Project not found: ${projectId}`);
+      return this.repo.listByProject(companyId, projectId, page);
+    });
   }
 
-  listByTeam(companyId: string, teamId: string, page?: Pagination) {
-    return this.repo.listByTeam(companyId, teamId, page);
+  /**
+   * Team Tasks (G9-4) — SEC-1 guard: teamId phải thuộc cùng tenant trước khi list.
+   * Trả 404 nếu team không tồn tại (không phân biệt not-found / cross-tenant — tránh oracle).
+   */
+  async listByTeam(companyId: string, teamId: string, page?: Pagination) {
+    return this.db.withTenant(companyId, async (tx) => {
+      const exists = await this.repo.teamExistsTx(tx, companyId, teamId);
+      if (!exists) throw new NotFoundException(`Team not found: ${teamId}`);
+      return this.repo.listByTeam(companyId, teamId, page);
+    });
   }
 
   // ─── Manual task lifecycle (G9-2 / G9-3) ─────────────────────────────────────

@@ -17,6 +17,7 @@ import { ContentPage } from "@/routes/media/content";
 import { ContentDetailPage } from "@/routes/media/content-detail";
 import { TasksPage } from "@/routes/tasks/index";
 import { TaskBoardPage } from "@/routes/tasks/task-board";
+import { TaskHubPage } from "@/routes/tasks/task-hub";
 import { ProjectChatPage } from "@/routes/chat/project-chat";
 import { WorkflowTemplatesPage } from "@/routes/workflows/templates";
 import { WorkflowTemplateDetailPage } from "@/routes/workflows/template-detail";
@@ -135,6 +136,14 @@ const taskBoardRoute = createRoute({
   component: TaskBoardPage,
 });
 
+// G9-4: Task Hub hợp nhất — My/Team/Project Tasks trên bảng tasks chung (BẤT BIẾN #4).
+const taskHubRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tasks/hub",
+  beforeLoad: authGuard,
+  component: TaskHubPage,
+});
+
 const projectChatRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/chat/projects/$projectId",
@@ -230,6 +239,7 @@ const routeTree = rootRoute.addChildren([
   contentDetailRoute,
   tasksRoute,
   taskBoardRoute,
+  taskHubRoute,
   projectChatRoute,
   workflowTemplatesRoute,
   workflowTemplateDetailRoute,

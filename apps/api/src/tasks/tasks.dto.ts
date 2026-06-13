@@ -1,4 +1,5 @@
 import { createZodDto } from "nestjs-zod";
+import { z } from "zod";
 import {
   createCommentSchema,
   createTaskSchema,
@@ -19,3 +20,13 @@ export class UpdateTaskStatusDto extends createZodDto(updateTaskStatusSchema) {}
  * Nguồn sự thật là listTasksQuerySchema ở contracts (z.coerce parse @Query string thô).
  */
 export class ListTasksQueryDto extends createZodDto(listTasksQuerySchema) {}
+
+/**
+ * Pagination-only query cho by-team / by-project endpoints (G9-4).
+ * Path-param đã chứa teamId/projectId; chỉ cần page{limit,offset} qua query string.
+ */
+export const pageQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+export class PageQueryDto extends createZodDto(pageQuerySchema) {}
