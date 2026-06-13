@@ -57,3 +57,50 @@
 - HTTP layer (RevenueController + @RequirePermission) CHƯA build — service/repo/module sẵn sàng.
 - `lane-db-setup.sh` lấy từ `../MediaOS/scripts/` (shared); `vitest.config.ts` drift đã vá (đọc LANE_DB).
 - Land CUỐI (sau G9→G10→G11): reconcile journal (idx 39-43 / when 1717500080000+) + audit_logs_object_type_chk UNION mọi lane (MERGE NOTE 0070).
+
+---
+
+## G13-2 — Cost + Cost Allocation (FIN-003) — FULL gate (crown-jewel) — 2026-06-13
+
+**Diff scope (additive, KHÔNG hot-file rewrite):** `apps/api/src/finance/cost.service.ts` · `cost.repository.ts`
+· `cost-allocation.service.ts` · `cost-allocation.repository.ts` (TẠO) · `finance.module.ts` (additive: +4 provider,
+giữ RevenueService) · 3 test (`finance-cost-deny.int-spec.ts` 13 · `finance-cost-allocation-deny.int-spec.ts` 10 ·
+`allocation-resolve.spec.ts` 11). KHÔNG migration mới (0071 cost ĐÃ land master qua `2d4533f`; schema/audit-types
+/contracts/_journal đã reconcile ở master `8759e7e`). audit.ts AUDIT_OBJECT_TYPES đã chứa cost_record/cost_allocation
+— KHÔNG sửa.
+
+### Verify (DB cô lập `mediaos_g13`, chain 0000→latest sạch)
+
+- cost-deny 13/13 · cost-allocation-deny 10/10 · allocation-resolve 11/11 XANH. Full suite **1027 pass / 2 skip / 0 fail** (revenue + mọi lane không hồi quy).
+- `pnpm --filter @mediaos/api typecheck` clean · `@mediaos/contracts typecheck` clean · lint finance scope 0 error.
+- Coverage (DB present): `cost.service.ts` 100% line/func, 77% branch (gap = `?? null` defensive defaults; theo precedent G13-1 KHÔNG hard-gate file DB-tested để tránh false-red no-DB run).
+
+### Reviewer / skill
+
+| Lens | Kết quả |
+| --- | --- |
+| `ecc:security-review` (permission / RLS / audit / injection) | PASS — 0 CRITICAL. assertCanWrite create:finance ngoài tx fail-closed; raw `sql.identifier` chỉ nhận literal từ map cố định (TARGET_TABLE/targetColumn) — KHÔNG user input; targetId/period parameterized; cross-tenant polymorphic target guard qua RLS. |
+| `ecc:code-review` (database + silent-failure + typescript, Pattern B inline) | APPROVE — 0 CRITICAL/HIGH. |
+| database | PASS — append-only grant cost_records SELECT,INSERT; cost_allocations SELECT,INSERT,UPDATE (no DELETE); re-allocate soft-delete+insert+audit+outbox CÙNG 1 tx (atomic); active_uq/method_check ở DB. |
+| silent-failure | PASS — không catch rỗng; MoneyError→400, non-MoneyError re-throw; permission infra-error ⇒ deny. |
+| typescript | PASS — không `any`; types từ contracts; immutable; DB_RESOLVED_METHODS `satisfies`. |
+
+### 5+1 invariant — verdict
+
+1. **APPEND-ONLY cost_records** — PASS (grant SELECT,INSERT; CostService không update/delete; sửa/xoá = chain entry_kind+replaces_record_id).
+2. **RLS 2-tenant** — PASS (mọi đọc/ghi qua withTenant; 0 row chéo qua service + APP role; cross-tenant target từ chối).
+3. **Permission fail-closed** — PASS (create/adjust/void/allocate check create:finance ngoài tx → deny ⇒ 0 side-effect, kiểm đếm=0).
+4. **Audit-in-tx** — PASS (CostCreated/CostAdjusted/CostVoided object_type='cost_record'; CostAllocated/CostReallocated object_type='cost_allocation' cùng tx).
+5. **Cents-exact** — PASS (money.ts bigint dồn dư target cuối; SUM(allocated_amount)===amount cost gốc tuyệt đối cho equal/manual/by_work_hours; weight=0 ⇒ MoneyError→400).
+6. **cost_allocations mutable-có-kiểm-soát** — PASS (re-allocate = soft-delete set cũ + insert set mới CÙNG tx; active_uq chặn double-active; app role DELETE bị từ chối).
+
+### Finding
+
+- **CRITICAL/HIGH:** 0.
+- **MEDIUM (non-blocking):** (1) target validation + DB-weight resolve là N tuần tự await (≤200 target theo contract cap — chấp nhận). (2) double-adjust race nổi lên dạng lỗi Postgres thô (cost_records_replaces_uq) — map→409 khi build HTTP layer (nợ G13-2 HTTP, mirror nợ G13-1).
+
+### Residual / nợ
+
+- HTTP layer (CostController/CostAllocationController + @RequirePermission) CHƯA build — service/repo/module sẵn sàng.
+- by_video_count/by_task_count/by_revenue_ratio resolve qua repository COUNT/SUM; target team/org_unit/employee không có FK ở content/tasks ⇒ weight 0 (caller xử lý; revenue_ratio chỉ tính bản hiệu lực entry_kind<>void AND NOT replaced).
+- **🛠️ crown-jewel finance ledger — KHÔNG auto-commit. needs_human chốt (TASKS §5.5).** G13 đã land master trước đó (revenue/cost-schema); G13-2 service layer là phần bổ sung — người chốt quyết định land.
