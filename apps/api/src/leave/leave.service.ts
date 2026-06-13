@@ -239,15 +239,25 @@ export class LeaveService {
       .catch((err: unknown) => this.mapError(err, "createRequest", { companyId: actor.companyId }));
   }
 
-  async listRequests(actor: Actor, query: { status?: string; scope: "me" | "all"; year?: number }) {
+  async listRequests(
+    actor: Actor,
+    query: { status?: string; scope: "me" | "all"; year?: number; limit: number; offset: number },
+  ) {
     if (query.scope === "all") {
       await this.assertCan(actor, "approve", "leave", "Không có quyền xem đơn nghỉ của nhân sự khác");
-      return this.repo.findRequests(actor.companyId, { status: query.status, year: query.year });
+      return this.repo.findRequests(actor.companyId, {
+        status: query.status,
+        year: query.year,
+        limit: query.limit,
+        offset: query.offset,
+      });
     }
     return this.repo.findRequests(actor.companyId, {
       userId: actor.id,
       status: query.status,
       year: query.year,
+      limit: query.limit,
+      offset: query.offset,
     });
   }
 

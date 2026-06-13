@@ -221,7 +221,10 @@ export class LeaveRepository {
       .for("update");
   }
 
-  findRequests(companyId: string, opts: { userId?: string; status?: string; year?: number }) {
+  findRequests(
+    companyId: string,
+    opts: { userId?: string; status?: string; year?: number; limit: number; offset: number },
+  ) {
     return this.db.withTenant(companyId, (tx) => {
       const conds = [eq(leaveRequests.companyId, companyId), isNull(leaveRequests.deletedAt)];
       if (opts.userId) conds.push(eq(leaveRequests.userId, opts.userId));
@@ -252,7 +255,9 @@ export class LeaveRepository {
         .innerJoin(users, eq(leaveRequests.userId, users.id))
         .innerJoin(leaveTypes, eq(leaveRequests.leaveTypeId, leaveTypes.id))
         .where(and(...conds))
-        .orderBy(desc(leaveRequests.createdAt));
+        .orderBy(desc(leaveRequests.createdAt))
+        .limit(opts.limit)
+        .offset(opts.offset);
     });
   }
 

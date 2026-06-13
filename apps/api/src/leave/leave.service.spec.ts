@@ -241,17 +241,19 @@ describe("LeaveService — scope + permission", () => {
   it("blocks listing all requests (scope=all) without approve permission", async () => {
     const repo = makeRepo();
     const { service } = build(repo, /* permissionAllow */ false);
-    await expect(service.listRequests(actor, { scope: "all" })).rejects.toThrow(ForbiddenException);
+    await expect(service.listRequests(actor, { scope: "all", limit: 50, offset: 0 })).rejects.toThrow(ForbiddenException);
   });
 
   it("allows listing my own requests (scope=me) without elevated permission", async () => {
     const repo = makeRepo();
     const { service } = build(repo, false);
-    await expect(service.listRequests(actor, { scope: "me" })).resolves.toEqual([]);
+    await expect(service.listRequests(actor, { scope: "me", limit: 50, offset: 0 })).resolves.toEqual([]);
     expect(repo.findRequests).toHaveBeenCalledWith(COMPANY_ID, {
       userId: ACTOR_ID,
       status: undefined,
       year: undefined,
+      limit: 50,
+      offset: 0,
     });
   });
 
