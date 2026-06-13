@@ -132,7 +132,7 @@ Master kết thúc ở `0037`. Mỗi lane sở hữu **1 dải 10 số** riêng:
 | G11 | `0060–0069` | đang dùng (`0060–0064`) |
 | G13 | `0070–0079` | đang dùng (`0070–0074`) |
 | G8  | `0080–0089` | đang dùng (`0080–0082`) |
-| G12 | `0090–0099` | đang dùng (`0090–0092`, worktree chưa merge) |
+| G12 | `0090–0099` | ✅ đã land master (`0090–0092`, idx 54–56, when 17175001100/111/112) |
 | G14 | `0100–0109` | ✅ đã land master (`0100`, idx 53) |
 | G15 | `0110–0119` | reserved |
 | G16 | `0120–0129` | reserved |
@@ -154,7 +154,7 @@ Master kết thúc ở `0037`. Mỗi lane sở hữu **1 dải 10 số** riêng:
 
 1. ✅ **G9-1 trunk đã land master** (`d58d465`, merge --no-ff).
 2. Rebase mỗi lane Wave A lên master mới → chạy lại **gate** (FULL/LIGHT theo diff) → merge lần lượt, **reconcile audit-CHECK + journal** mỗi lần.
-3. ✅ Wave A (G8/G10/G11/G13) merged master. **Wave B:** G14 Dashboard **✅ MERGED** (`633ba22`, 2026-06-13). G12 Payroll (crown) đã code xong worktree — chờ **rebase + reconcile (audit-CHECK union + journal idx/when) + verify DB cô lập + gate FULL + người chốt**.
+3. ✅ Wave A (G8/G10/G11/G13) merged master. **Wave B ✅ XONG:** G14 Dashboard **✅ MERGED** (`633ba22`, 2026-06-13) · G12 Payroll (crown) **✅ MERGED** (`1ec560e` --no-ff, 2026-06-13): reconcile audit-CHECK union 45-type + journal idx 54–56 (when > master max) + 0090 SQL superset; verify DB cô lập `mediaos_g12` 57 mig/api 1031 pass/web 199 pass; gate FULL (3 reviewer + santa dual-review) 0 CRIT/HIGH + 2 gate fix (`edef897`).
 4. Mỗi lần merge: `pnpm db:migrate` chain `0000→latest` apply **sạch** + `pnpm test` **xanh** trước khi land.
 
 ### 5.5 Vòng tự động hoá mỗi lane (autonomous micro-step)
@@ -407,7 +407,7 @@ Fan-out nhiều lane 1 lượt: **Workflow `parallel-lanes`** (`.claude/workflow
 > G10-1 là 🛠️ (WS phải qua cùng masking như REST). Còn lại 🤖.
 
 - [ ] **G10-1** 🛠️🔋 (L) Chat realtime 1-1 + group (Socket.IO + Valkey adapter, room `co:{companyId}:…`); text/file/mention/ghim. **WS qua cùng DTO/masking như REST — cấm `io.emit` thẳng row.** _(custom `realtime-test-harness`)._
-- [ ] **G10-2** 🤖🟢 (S) Auto group chat theo project/kênh/phòng ban (CHAT-003).
+- [x] **G10-2** 🤖🟢 (S) Auto group chat theo project/kênh/phòng ban (CHAT-003). — **BE ✅** (wip checkpoint, lane g10 band 0050s, KHÔNG migration mới — cột channel_id/org_unit_id + partial-unique `chat_rooms_channel_uq`/`chat_rooms_org_unit_uq` đã land ở 0050). `ChatService.ensureChannelRoom`/`ensureOrgUnitRoom` (mirror `ensureProjectRoom`): check-then-insert idempotent + re-select onConflict (TOCTOU-safe) + `addMembers` bulk dedupe; best-effort try/catch→log→null (KHÔNG throw, parity project). Wiring: `media.createChannel` gọi `ensureChannelRoom` SAU commit tx (non-critical, lỗi room không rollback channel) với member-set = creator + `listChannelMembers`; `org.createOrgUnit` gọi `ensureOrgUnitRoom` với head + `listOrgUnitMemberUserIds` (employee_profiles.org_unit_id). MediaModule/OrgModule imports ChatModule. Mọi truy vấn qua `withTenant(companyId)` → RLS+FORCE company_id. **RED trước**: chat-auto-room.int-spec (idempotent channel+org + member-set + **TENANT ISOLATION A/B** deny-path + best-effort no-rollback) + chat.service.spec unit (idempotent/best-effort/TOCTOU). Verify DB-cô-lập `mediaos_g10`: spec mới 7+7 xanh · **full api 1008 pass/2 skip** (0 fail) · typecheck sạch · lint 0 error · prettier sạch. LIGHT gate PASS (typescript + DB/security/silent-failure self-review: append-only chỉ INSERT room/member, không secret, idempotent partial-unique). ⚠️ Scope: auto-create CHỈ lúc tạo entity; backfill member khi entity thêm member SAU = ngoài scope G10-2. _Auto group chat theo PROJECT đã có sẵn từ G4-6 (`ensureProjectRoom`)._
 - [ ] **G10-3** 🤖🟢 (M) Notification Center + rules + **thông báo bắt buộc không tắt được** (NOTI-001/002).
 - [ ] **G10-4** 🤖🟢 (M) Meeting + biên bản + **task sau họp** → ghi vào **Task Hub G9** (`task_type=meeting_action`), KHÔNG bảng riêng.
 
@@ -438,7 +438,7 @@ Fan-out nhiều lane 1 lượt: **Workflow `parallel-lanes`** (`.claude/workflow
 
 > **FULL gate + `ecc:santa-method`.** Snapshot **bất biến** (ADR 0005); **khoá kỳ KPI trước khi chạy lương**. Đây là phase **rủi ro cao nhất** — sai = mất tiền/mất niềm tin. Đi chậm, test dày.
 
-- [ ] **G12-1** 🛠️🔋 (M) Salary profile (lương cơ bản/loại/chu kỳ/hiệu lực/phụ cấp) — chỉ người có quyền xem/sửa, **audit khi sửa**.
+- [x] **G12-1** 🛠️🔋 (M) Salary profile (lương cơ bản/loại/chu kỳ/hiệu lực/phụ cấp) — chỉ người có quyền xem/sửa, **audit khi sửa**. **✅ MERGED master** (`1ec560e` --no-ff, 2026-06-13; band 0090–0092 idx 54–56; post-merge audit-CHECK = superset 45-type, 2 gate fix `edef897`: schema index drift + HttpException passthrough). **BE ✅** (`7b4d011`): schema 0090–0092 (RLS+FORCE, audit-CHECK superset 32, perms is_sensitive grant TAY admin+hr) · service mask + reveal⟹audit-in-tx + rollback atomic + mapError no-leak · controller `@RequirePermission isSensitive` mỗi route · verify DB cô lập `mediaos_g12` (salary-profile 34 + rls-guards 3 + contracts 14) · FULL gate self-review 0 CRIT. **FE ✅** (wip): trang `/payroll/salary-profiles` mask-by-default (`•••`/"Không có quyền") + `CreateSalaryProfileDialog` bọc `<PermissionGate manage-salary-profile>` + `salary-profile-api` (schema nullable=masked) + router/nav additive; **9 RED→GREEN** (api 6 + table mask 3); web 184 pass · typecheck/lint(0err)/prettier sạch · **santa dual-review B∧C PASS** (client never-unmask · cap không unmask · gate fail-safe). Dấu vết [`docs/reviews/g12-gates.md`](docs/reviews/g12-gates.md). **Còn:** FE detail/edit (PATCH+phụ cấp inline) → G12-4 · merge Wave B (§5.1, chờ G8 KPI + G11 attendance).
 - [ ] **G12-2** 🛠️🔋🔋 (L) Payroll period + payslip: công/KPI/thưởng/phạt → **payslip snapshot append-only** (app role không UPDATE/DELETE). _(custom `payroll-snapshot-immutability-guard`)._
 - [ ] **G12-3** 🛠️🔋 (M) Bonus/Penalty: thủ công + từ KPI/lỗi, gắn reference task/defect/KPI, duyệt.
 - [ ] **G12-4** 🛠️🔋 (M) Duyệt bảng lương (draft→duyệt→phát hành) + nhân viên xác nhận/khiếu nại; **re-auth khi xem payslip**.

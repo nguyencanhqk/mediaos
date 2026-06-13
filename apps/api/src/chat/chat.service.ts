@@ -82,6 +82,72 @@ export class ChatService {
     }
   }
 
+  /**
+   * G10-2 — auto-tạo group chat cho 1 KÊNH (idempotent qua partial-unique chat_rooms_channel_uq).
+   * Best-effort (parity ensureProjectRoom): lỗi room KHÔNG được rollback create channel ⇒ try/catch
+   * log→return null (KHÔNG throw). memberIds = thành viên hiện tại của kênh (creator + channel_members).
+   * Mọi truy vấn qua withTenant(companyId) ⇒ RLS chặn ghi/đọc chéo tenant.
+   */
+  async ensureChannelRoom(
+    companyId: string,
+    channelId: string,
+    name: string,
+    creatorId: string,
+    memberIds: readonly string[] = [],
+  ) {
+    try {
+      const existing = await this.repo.findRoomByChannel(companyId, channelId);
+      if (existing[0]) return existing[0];
+
+      const rows = await this.repo.createRoom(companyId, {
+        name,
+        roomType: "channel",
+        channelId,
+        createdBy: creatorId,
+      });
+      // onConflict (race 2 request cùng tạo) → re-select để lấy phòng đối thủ vừa tạo (chống TOCTOU).
+      const room = rows[0] ?? (await this.repo.findRoomByChannel(companyId, channelId))[0];
+      if (!room) return null;
+
+      await this.repo.addMembers(companyId, room.id, [creatorId, ...memberIds]);
+      return room;
+    } catch (err) {
+      this.logger.error("Failed to ensure channel chat room", err);
+      return null;
+    }
+  }
+
+  /**
+   * G10-2 — auto-tạo group chat cho 1 PHÒNG BAN/org_unit (idempotent qua chat_rooms_org_unit_uq).
+   * Best-effort như ensureChannelRoom. memberIds = thành viên hiện tại của phòng ban (head +
+   * employee_profiles.org_unit_id). Lúc TẠO org_unit thường chưa có nhân sự ⇒ room chỉ có head (hợp lệ).
+   */
+  async ensureOrgUnitRoom(
+    companyId: string,
+    orgUnitId: string,
+    name: string,
+    memberIds: readonly string[] = [],
+  ) {
+    try {
+      const existing = await this.repo.findRoomByOrgUnit(companyId, orgUnitId);
+      if (existing[0]) return existing[0];
+
+      const rows = await this.repo.createRoom(companyId, {
+        name,
+        roomType: "department",
+        orgUnitId,
+      });
+      const room = rows[0] ?? (await this.repo.findRoomByOrgUnit(companyId, orgUnitId))[0];
+      if (!room) return null;
+
+      await this.repo.addMembers(companyId, room.id, memberIds);
+      return room;
+    } catch (err) {
+      this.logger.error("Failed to ensure org unit chat room", err);
+      return null;
+    }
+  }
+
   // ─── Messages ────────────────────────────────────────────────────────────────
 
   /**

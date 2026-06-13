@@ -3,7 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
-} from '@nestjs/common';
+} from "@nestjs/common";
 import type {
   AddTeamMemberRequest,
   AssignTeamLeaderRequest,
@@ -11,23 +11,27 @@ import type {
   CreateTeamRequest,
   UpdateOrgUnitRequest,
   UpdateTeamRequest,
-} from '@mediaos/contracts';
-import { OrgRepository } from './org.repository';
+} from "@mediaos/contracts";
+import { ChatService } from "../chat/chat.service";
+import { OrgRepository } from "./org.repository";
 
-const PG_UNIQUE_VIOLATION = '23505';
+const PG_UNIQUE_VIOLATION = "23505";
 
 function isUniqueViolation(err: unknown): boolean {
   return (
-    typeof err === 'object' &&
+    typeof err === "object" &&
     err !== null &&
-    'code' in err &&
-    (err as Record<string, unknown>)['code'] === PG_UNIQUE_VIOLATION
+    "code" in err &&
+    (err as Record<string, unknown>)["code"] === PG_UNIQUE_VIOLATION
   );
 }
 
 @Injectable()
 export class OrgService {
-  constructor(private readonly repo: OrgRepository) {}
+  constructor(
+    private readonly repo: OrgRepository,
+    private readonly chat: ChatService,
+  ) {}
 
   // ── Org Units ────────────────────────────────────────────────────────────────
 
@@ -40,23 +44,32 @@ export class OrgService {
   }
 
   async createOrgUnit(companyId: string, dto: CreateOrgUnitRequest) {
+    let unit: Awaited<ReturnType<OrgRepository["createOrgUnit"]>>[number];
     try {
       const rows = await this.repo.createOrgUnit(companyId, {
         name: dto.name,
-        type: dto.type ?? 'department',
+        type: dto.type ?? "department",
         code: dto.code ?? null,
         description: dto.description ?? null,
         parentId: dto.parentId ?? null,
         headUserId: dto.headUserId ?? null,
       });
-      if (!rows[0]) throw new InternalServerErrorException('Failed to create department');
-      return rows[0];
+      if (!rows[0]) throw new InternalServerErrorException("Failed to create department");
+      unit = rows[0];
     } catch (err) {
       if (isUniqueViolation(err)) {
-        throw new ConflictException('Department name or code already exists');
+        throw new ConflictException("Department name or code already exists");
       }
       throw err;
     }
+
+    // G10-2 — auto-tạo group chat phòng ban (non-critical, best-effort). members = head + nhân sự
+    // hiện thuộc phòng ban (employee_profiles.org_unit_id). Lúc TẠO thường chưa có nhân sự ⇒ chỉ head.
+    const memberIds = await this.repo.listOrgUnitMemberUserIds(companyId, unit.id);
+    const members = unit.headUserId ? [unit.headUserId, ...memberIds] : memberIds;
+    await this.chat.ensureOrgUnitRoom(companyId, unit.id, unit.name, members);
+
+    return unit;
   }
 
   async updateOrgUnit(companyId: string, id: string, dto: UpdateOrgUnitRequest) {
@@ -70,11 +83,11 @@ export class OrgService {
         headUserId: dto.headUserId,
         status: dto.status,
       });
-      if (!rows[0]) throw new NotFoundException('Department not found');
+      if (!rows[0]) throw new NotFoundException("Department not found");
       return rows[0];
     } catch (err) {
       if (isUniqueViolation(err)) {
-        throw new ConflictException('Department name or code already exists');
+        throw new ConflictException("Department name or code already exists");
       }
       throw err;
     }
@@ -82,7 +95,7 @@ export class OrgService {
 
   async deleteOrgUnit(companyId: string, id: string) {
     const rows = await this.repo.softDeleteOrgUnit(companyId, id);
-    if (rows.length === 0) throw new NotFoundException('Department not found');
+    if (rows.length === 0) throw new NotFoundException("Department not found");
   }
 
   // ── Teams ────────────────────────────────────────────────────────────────────
@@ -97,16 +110,16 @@ export class OrgService {
         name: dto.name,
         orgUnitId: dto.orgUnitId ?? null,
         code: dto.code ?? null,
-        type: dto.type ?? 'production_team',
+        type: dto.type ?? "production_team",
         leaderUserId: dto.leaderUserId ?? null,
         description: dto.description ?? null,
         capacity: dto.capacity ?? null,
       });
-      if (!rows[0]) throw new InternalServerErrorException('Failed to create team');
+      if (!rows[0]) throw new InternalServerErrorException("Failed to create team");
       return rows[0];
     } catch (err) {
       if (isUniqueViolation(err)) {
-        throw new ConflictException('Team name or code already exists');
+        throw new ConflictException("Team name or code already exists");
       }
       throw err;
     }
@@ -124,11 +137,11 @@ export class OrgService {
         capacity: dto.capacity,
         status: dto.status,
       });
-      if (!rows[0]) throw new NotFoundException('Team not found');
+      if (!rows[0]) throw new NotFoundException("Team not found");
       return rows[0];
     } catch (err) {
       if (isUniqueViolation(err)) {
-        throw new ConflictException('Team name or code already exists');
+        throw new ConflictException("Team name or code already exists");
       }
       throw err;
     }
@@ -138,13 +151,13 @@ export class OrgService {
     const rows = await this.repo.updateTeam(companyId, teamId, {
       leaderUserId: dto.leaderId,
     });
-    if (!rows[0]) throw new NotFoundException('Team not found');
+    if (!rows[0]) throw new NotFoundException("Team not found");
     return rows[0];
   }
 
   async deleteTeam(companyId: string, id: string) {
     const rows = await this.repo.softDeleteTeam(companyId, id);
-    if (rows.length === 0) throw new NotFoundException('Team not found');
+    if (rows.length === 0) throw new NotFoundException("Team not found");
   }
 
   // ── Team Members ──────────────────────────────────────────────────────────────
@@ -159,11 +172,11 @@ export class OrgService {
         userId: dto.userId,
         roleName: dto.roleName,
       });
-      if (!rows[0]) throw new InternalServerErrorException('Failed to add team member');
+      if (!rows[0]) throw new InternalServerErrorException("Failed to add team member");
       return rows[0];
     } catch (err) {
       if (isUniqueViolation(err)) {
-        throw new ConflictException('User is already an active member of this team');
+        throw new ConflictException("User is already an active member of this team");
       }
       throw err;
     }
@@ -171,7 +184,7 @@ export class OrgService {
 
   async removeTeamMember(companyId: string, teamId: string, userId: string) {
     const rows = await this.repo.removeTeamMember(companyId, teamId, userId);
-    if (rows.length === 0) throw new NotFoundException('Team member not found');
+    if (rows.length === 0) throw new NotFoundException("Team member not found");
   }
 
   listEmployees(companyId: string) {
