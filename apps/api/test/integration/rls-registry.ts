@@ -802,6 +802,33 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+  // ── G10 Notification — rules + preferences (mig 0051) ────────────────────────
+  // company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  {
+    name: "notification_rules",
+    table: "notification_rules",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO notification_rules (company_id, notification_type, enabled)
+         VALUES ($1, 'general', true) RETURNING id`,
+        [t.companyId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "notification_preferences",
+    table: "notification_preferences",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `npref-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO notification_preferences (company_id, user_id, notification_type, enabled)
+         VALUES ($1, $2, 'general', true) RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
   {
     name: "chat_rooms",
     table: "chat_rooms",
