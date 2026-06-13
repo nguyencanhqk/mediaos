@@ -16,6 +16,7 @@ import { ProjectDetailPage } from "@/routes/media/project-detail";
 import { ContentPage } from "@/routes/media/content";
 import { ContentDetailPage } from "@/routes/media/content-detail";
 import { TasksPage } from "@/routes/tasks/index";
+import { TaskBoardPage } from "@/routes/tasks/task-board";
 import { ProjectChatPage } from "@/routes/chat/project-chat";
 import { WorkflowTemplatesPage } from "@/routes/workflows/templates";
 import { WorkflowTemplateDetailPage } from "@/routes/workflows/template-detail";
@@ -123,6 +124,14 @@ const tasksRoute = createRoute({
   component: TasksPage,
 });
 
+// G9-3: Task Board tổng (Kanban/Table/Calendar + filter task_type). Static path, không đụng /tasks.
+const taskBoardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tasks/board",
+  beforeLoad: authGuard,
+  component: TaskBoardPage,
+});
+
 const projectChatRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/chat/projects/$projectId",
@@ -196,6 +205,7 @@ const routeTree = rootRoute.addChildren([
   contentRoute,
   contentDetailRoute,
   tasksRoute,
+  taskBoardRoute,
   projectChatRoute,
   workflowTemplatesRoute,
   workflowTemplateDetailRoute,

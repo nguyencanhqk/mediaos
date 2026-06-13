@@ -46,9 +46,15 @@ const GUARDED_MUTATIONS: ReadonlyArray<{
   { handlerName: "deleteTask", action: "delete", resourceType: "task" },
   // addComment là WRITE → gate comment:comment (G9-2 H-1), KHÔNG để ngỏ như read.
   { handlerName: "addComment", action: "comment", resourceType: "comment" },
+  // getBoard (G9-3) là READ NHẠY CẢM hơn getMyTasks (xem việc của NGƯỜI KHÁC toàn tenant) →
+  // PHẢI gate read:task (seed 0005, is_sensitive=false). User 0-quyền KHÔNG được đọc board.
+  { handlerName: "getBoard", action: "read", resourceType: "task" },
 ];
 
-/** Read intentionally open cho mọi user tenant (global JWT+Company guard vẫn ép tenant). */
+/**
+ * Read intentionally open cho mọi user tenant (global JWT+Company guard vẫn ép tenant).
+ * CHỈ getMyTasks (việc CỦA MÌNH) + getComments (thread). Board KHÔNG ở đây — nó gate read:task.
+ */
 const OPEN_READS: ReadonlyArray<keyof TasksController> = [
   "getMyTasks",
   "getComments",

@@ -6,6 +6,7 @@ import { useAuthStore } from "@/stores/auth";
 const NAV = [
   { to: "/", label: "Tổng quan" },
   { to: "/tasks", label: "Công việc" },
+  { to: "/tasks/board", label: "Bảng công việc" },
   { to: "/channels", label: "Kênh" },
   { to: "/settings/platform-accounts", label: "Tài khoản nền tảng" },
   { to: "/projects", label: "Dự án" },

@@ -116,3 +116,25 @@ export const updateTaskStatusSchema = z.object({
   status: officeTaskStatusSchema,
 });
 export type UpdateTaskStatusRequest = z.infer<typeof updateTaskStatusSchema>;
+
+// ─── Board list query (G9-3) ────────────────────────────────────────────────────
+/**
+ * Task Board query — source of truth for the GET /tasks/board DTO (BĐ §contracts).
+ * All filters optional (board lists across the tenant); page bounds are CLAMPED here at the
+ * boundary so a malicious/huge limit cannot scan the table (repo also re-clamps to MAX_PAGE_SIZE
+ * = defense-in-depth). `coerce` lets the controller pass raw @Query strings straight through.
+ *
+ * `taskType` accepts ALL 8 accepted types (taskTypeSchema) — board surfaces every source, not just
+ * the hand-created ones. `status` accepts the full task lifecycle (taskStatusSchema) for filtering;
+ * it does NOT loosen the write-side OfficeTaskStatusDto guard (that stays on the PATCH path).
+ */
+export const BOARD_PAGE_LIMIT_MAX = 200;
+export const listTasksQuerySchema = z.object({
+  taskType: taskTypeSchema.optional(),
+  status: taskStatusSchema.optional(),
+  projectId: z.string().uuid().optional(),
+  assigneeUserId: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(BOARD_PAGE_LIMIT_MAX).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+export type ListTasksQueryRequest = z.infer<typeof listTasksQuerySchema>;

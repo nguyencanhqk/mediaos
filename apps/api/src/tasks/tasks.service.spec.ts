@@ -136,6 +136,40 @@ describe("TasksService.createTask — SEC-1 tenant-FK guard + audit", () => {
   });
 });
 
+describe("TasksService.listBoard — forward filter + page (G9-3)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("forward NGUYÊN VẸN filter {taskType/status/projectId/assigneeUserId} + page{limit,offset} xuống repo.listAll — KHÔNG kẹp ngầm", async () => {
+    const repo = makeRepo();
+    repo.listAll.mockResolvedValue([{ id: TASK_ID, taskType: "office" }]);
+    const { service } = makeService({ repo });
+
+    const filters = {
+      taskType: "office",
+      status: "in_progress",
+      projectId: PROJECT_ID,
+      assigneeUserId: ASSIGNEE_ID,
+    };
+    const page = { limit: 25, offset: 50 };
+
+    const result = await service.listBoard(COMPANY_ID, filters, page);
+
+    expect(result).toEqual([{ id: TASK_ID, taskType: "office" }]);
+    // companyId LUÔN truyền + filter/page forward y nguyên (không kẹp/đổi ngầm).
+    expect(repo.listAll).toHaveBeenCalledWith(COMPANY_ID, filters, page);
+  });
+
+  it("filter rỗng vẫn truyền companyId + filter object {} (board toàn tenant)", async () => {
+    const repo = makeRepo();
+    repo.listAll.mockResolvedValue([]);
+    const { service } = makeService({ repo });
+
+    await service.listBoard(COMPANY_ID, {});
+
+    expect(repo.listAll).toHaveBeenCalledWith(COMPANY_ID, {}, undefined);
+  });
+});
+
 describe("TasksService.updateStatus — FSM office rút gọn (D3)", () => {
   beforeEach(() => vi.clearAllMocks());
 

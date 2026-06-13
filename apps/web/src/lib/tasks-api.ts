@@ -3,11 +3,25 @@ import { taskSchema, commentSchema, approvalRequestSchema } from "@mediaos/contr
 import type {
   CreateCommentRequest,
   CreateTaskRequest,
+  ListTasksQueryRequest,
   OfficeTaskStatusDto,
   SubmitStepRequest,
   ApproveRequest,
   RequestRevisionRequest,
 } from "@mediaos/contracts";
+
+/** Build query-string từ filter board (chỉ field có giá trị). */
+function boardQuery(filter?: ListTasksQueryRequest): string {
+  if (!filter) return "";
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filter)) {
+    if (value !== undefined && value !== null && value !== "") {
+      params.set(key, String(value));
+    }
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
 // H-NEW-1 (gate merge-G9): dùng apiFetch CHUNG (api-client.ts) như mọi *-api.ts anh em —
 // ném ApiError có status/code (403 PermissionGuard, 400 SEC-1/SEC-2 phân biệt được ở UI),
 // KHÔNG tự định nghĩa apiFetch local ném Error thường (nuốt mất cấu trúc lỗi).
@@ -15,6 +29,13 @@ import { apiFetch } from "./api-client";
 
 export const tasksApi = {
   getMyTasks: () => apiFetch("/tasks", z.array(taskSchema)),
+
+  // ─── Task Board (G9-3) ──────────────────────────────────────────────────────
+  // Server là nguồn sự thật: GET /tasks/board gated `read:task` (PermissionGuard). Client chỉ ẩn
+  // UX qua <PermissionGate> — KHÔNG tự quyết quyền; row server không trả thì client không render được.
+  /** Board tổng — lọc theo task_type/status/project/assignee + page. Trả mảng TaskDto. */
+  getBoard: (filter?: ListTasksQueryRequest) =>
+    apiFetch(`/tasks/board${boardQuery(filter)}`, z.array(taskSchema)),
 
   // ─── Manual office task (G9-2 / TASK-001) ──────────────────────────────────
   // Server là nguồn sự thật: POST gated `create:task`, PATCH `update:task`, DELETE `delete:task`
@@ -39,11 +60,9 @@ export const tasksApi = {
     }),
 
   /** Soft-delete office task (BE trả 204; workflow-driven task bị BE từ chối). */
-  deleteTask: (taskId: string) =>
-    apiFetch(`/tasks/${taskId}`, z.void(), { method: "DELETE" }),
+  deleteTask: (taskId: string) => apiFetch(`/tasks/${taskId}`, z.void(), { method: "DELETE" }),
 
-  getComments: (taskId: string) =>
-    apiFetch(`/tasks/${taskId}/comments`, z.array(commentSchema)),
+  getComments: (taskId: string) => apiFetch(`/tasks/${taskId}/comments`, z.array(commentSchema)),
 
   addComment: (taskId: string, data: CreateCommentRequest) =>
     apiFetch(`/tasks/${taskId}/comments`, commentSchema, {
