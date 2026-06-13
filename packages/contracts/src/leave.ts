@@ -102,6 +102,8 @@ export const leaveListQuerySchema = z.object({
   /** 'me' (mặc định) = đơn của tôi; 'all' = mọi đơn (cần quyền approve/manage). */
   scope: z.enum(["me", "all"]).default("me"),
   year: z.coerce.number().int().min(2000).max(2100).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
 });
 export type LeaveListQuery = z.infer<typeof leaveListQuerySchema>;
 

@@ -20,4 +20,8 @@ export * from "./media";
 export * from "./workflow";
 export * from "./communication";
 export * from "./hr";
+export * from "./finance";
+// G8 approval (multi-level rules — approval_requests/_steps live in ./workflow)
+export * from "./approval";
+// G12 payroll (salary profile — lương nhạy cảm, ADR-0010)
 export * from "./payroll";

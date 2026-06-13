@@ -17,7 +17,7 @@
 - **F4 scope=all** — `listBalances(actor, {scope})`: `scope='all'` ⇒ bắt buộc `manage:leave` (fail-closed) rồi query toàn bộ; `scope='me'` ⇒ chỉ bản thân. Hết âm thầm thu hẹp.
 - **F5 overnight checkout** — `checkOut` tra **open-record** (`findOpenRecordForUserTx`: checkInAt NOT NULL & checkOutAt NULL) thay vì theo `workDate` của hôm nay; ca qua đêm (D→D+1) check-out đúng record.
 - **Re-verify (mediaos_g11):** typecheck sạch · G11 specs **229 pass / 2 skip** (unit 62 · deny-path int 4 · RLS 2-tenant 165) · full suite **790 pass**, chỉ còn 4 pre-existing fail nêu trên.
-- **F6–F8** chuyển follow-up ticket (xem dưới) — không chặn.
+- **F6–F8** ✅ **ĐÃ ĐÓNG** (merged master §5.4): F6 pagination + F8 cleanup `1e7c5bf` · F7 period-lock `1a05e4f`. Xem bảng dưới.
 
 ## Verdict gốc: 🔴 BLOCK (cả 2 reviewer) — đã vá xong
 
@@ -30,15 +30,15 @@
 | F3 | **HIGH** | TS | `attendance.service.ts` + `leave.service.ts` `mapError`; `hr-tasks.service.ts` raw `Error` | `mapError` re-throw raw infra error (PG wire) → filter trả 500 lộ tên bảng/constraint. Fix: bọc `InternalServerErrorException`. | ❌ cần vá |
 | F4 | **HIGH** | TS | `leave.service.ts` listBalances + `leave.controller.ts` | `scope=all` → `userId=undefined` → bỏ qua permission check **và** `?? actor.id` → âm thầm trả về chỉ bản thân (silent-failure: manager không thấy ai). | ❌ cần vá |
 | F5 | MEDIUM | TS | `attendance.service.ts` checkOut | `workDate = localDateOf(now)` → ca qua đêm (D check-in, D+1 check-out) tra `workDate=D+1` không có record → không check-out được. Fix: tra open-record (`checkInAt NOT NULL AND checkOutAt NULL`) không khoá theo ngày. | ❌ cần vá |
-| F6 | MEDIUM→follow-up | DB | `attendance.repository.ts` findAdjustments/findRequests/findPeriods · `leave.repository.ts` | List query không LIMIT/pagination → unbounded ở tenant lớn. | 🟡 follow-up (cap + ticket) |
-| F7 | MEDIUM→follow-up | DB | `0061` `attendance_periods` | App role có UPDATE → kỳ đã `locked` có thể bị set lại `open` (không guard DB). Feed payroll G12. Fix: trigger chặn `locked→open` hoặc revoke UPDATE + SECURITY DEFINER. | 🟡 follow-up (hardening trước G12) |
-| F8 | LOW | DB+TS | `attendance.service.ts` `monthRange` vs `tz.util.ts` `monthDateRange`; `prevDay` footgun; `toAdjustmentDto` identity-spread; comment `gte/lt` sai | Dọn DRY + comment. | 🟡 cleanup |
+| F6 | MEDIUM→follow-up | DB | `attendance.repository.ts` findAdjustments/findRecordsByMonth/findPeriods · `leave.repository.ts` findRequests | List query không LIMIT/pagination → unbounded ở tenant lớn. | ✅ **DONE `1e7c5bf`** — limit/offset (clamp 1–100, default 50) threaded contracts→dto→service→repo; `attendance.pagination.spec` 28✓ |
+| F7 | MEDIUM→follow-up | DB | `0061` `attendance_periods` | App role có UPDATE → kỳ đã `locked` có thể bị set lại `open` (không guard DB). Feed payroll G12. Fix: trigger chặn `locked→open` hoặc revoke UPDATE + SECURITY DEFINER. | ✅ **DONE `1a05e4f`** — mig `0064` trigger BEFORE UPDATE `enforce_attendance_period_lock` chặn locked→open (RAISE EXCEPTION); RED→GREEN 4/4 (core-deny + 2 allow-sanity + RLS-regression) |
+| F8 | LOW | DB+TS | `attendance.service.ts` `monthRange` vs `tz.util.ts` `monthDateRange`; `prevDay` footgun; `toAdjustmentDto` identity-spread; comment `gte/lt` sai | Dọn DRY + comment. | ✅ **DONE `1e7c5bf`** — monthRange→`monthDateRange`; between+prevDay→gte/lt; bỏ identity-spread; sửa comment (no behaviour change) |
 | ~~Fx~~ | ~~HIGH~~ | ~~DB H-1~~ | ~~RLS `(SELECT current_setting…)` wrapper~~ | **FALSE POSITIVE** — G11 dùng đúng pattern của **cả 22 migration master** (raw `current_setting(...)::uuid`). Reviewer áp Supabase best-practice không khớp repo. **Bác.** | ✅ reject |
 
 ## Invariant check (database-reviewer)
-PASS: tenant isolation (RLS+FORCE+`withTenant`) · no hard-delete/append-only (app role không DELETE) · audit CHECK superset 24+7=31 · Task Hub `task_type='hr'` không bảng riêng · ADR-0008 timezone · `remaining_days` GENERATED · journal idx 39–42 + when tăng dần. PARTIAL: period-lock thiếu guard DB (F7).
+PASS: tenant isolation (RLS+FORCE+`withTenant`) · no hard-delete/append-only (app role không DELETE) · audit CHECK superset 24+7=31 · Task Hub `task_type='hr'` không bảng riêng · ADR-0008 timezone · `remaining_days` GENERATED · journal idx 39–42 + when tăng dần. ✅ period-lock guard DB **đã có** (F7 `0064` trigger, journal idx 43).
 
 ## Hành động
 - **Phải vá trước land:** F1–F5 (surgical). Sau vá → re-run `mediaos_g11` test phải vẫn GREEN + thêm test race cho F1.
-- **Follow-up (ticket, không chặn nếu log rõ):** F6 pagination · F7 period-lock immutability (làm trước khi G12 đọc) · F8 cleanup.
+- **Follow-up ✅ ĐÃ ĐÓNG (merged master §5.4):** F6 pagination + F8 cleanup `1e7c5bf` · F7 period-lock immutability (trước G12) `1a05e4f`. Merged master xanh: api 895 pass + web 184 pass, chain-migrate `0000→0064` sạch.
 - **Reject:** RLS-wrapper (false positive).

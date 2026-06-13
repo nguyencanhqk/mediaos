@@ -223,6 +223,25 @@ export class TasksRepository {
     return row !== undefined;
   }
 
+  /**
+   * team_id phải tồn tại, cùng tenant và chưa xoá mềm (G9-4 SEC-1 mirror projectExistsTx).
+   * Guard bắt buộc trước khi listByTeam — DB FK toàn cục không chặn đọc chéo tenant.
+   */
+  async teamExistsTx(tx: TenantTx, companyId: string, teamId: string): Promise<boolean> {
+    const [row] = await tx
+      .select({ id: teamMembers.teamId })
+      .from(teamMembers)
+      .where(
+        and(
+          eq(teamMembers.companyId, companyId),
+          eq(teamMembers.teamId, teamId),
+          isNull(teamMembers.deletedAt),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
   /** Row thô (cho guard nghiệp vụ — phân biệt task workflow vs office). */
   findRawByIdTx(tx: TenantTx, companyId: string, taskId: string) {
     return tx

@@ -50,6 +50,9 @@ export class ChatController {
     @Param("roomId") roomId: string,
     @Body() dto: SendMessageDto,
   ) {
-    return this.chat.sendMessage(req.user.companyId, roomId, req.user.id, dto.body);
+    return this.chat.sendMessage(req.user.companyId, roomId, req.user.id, {
+      body: dto.body,
+      mentions: dto.mentions,
+    });
   }
 }

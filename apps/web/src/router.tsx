@@ -17,11 +17,13 @@ import { ContentPage } from "@/routes/media/content";
 import { ContentDetailPage } from "@/routes/media/content-detail";
 import { TasksPage } from "@/routes/tasks/index";
 import { TaskBoardPage } from "@/routes/tasks/task-board";
+import { TaskHubPage } from "@/routes/tasks/task-hub";
 import { ProjectChatPage } from "@/routes/chat/project-chat";
 import { WorkflowTemplatesPage } from "@/routes/workflows/templates";
 import { WorkflowTemplateDetailPage } from "@/routes/workflows/template-detail";
 import { WorkflowInstancesPage } from "@/routes/workflows/instances/instances-list";
 import { WorkflowInstanceDetailPage } from "@/routes/workflows/instances/instance-detail";
+import { DashboardPage } from "@/routes/dashboard/dashboard";
 import { AttendancePage } from "@/routes/hr/attendance";
 import { AdjustmentsPage } from "@/routes/hr/adjustments";
 import { LeavePage } from "@/routes/hr/leave";
@@ -136,6 +138,14 @@ const taskBoardRoute = createRoute({
   component: TaskBoardPage,
 });
 
+// G9-4: Task Hub hợp nhất — My/Team/Project Tasks trên bảng tasks chung (BẤT BIẾN #4).
+const taskHubRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tasks/hub",
+  beforeLoad: authGuard,
+  component: TaskHubPage,
+});
+
 const projectChatRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/chat/projects/$projectId",
@@ -176,6 +186,13 @@ const workflowInstanceDetailRoute = createRoute({
   path: "/workflows/instances/$instanceId",
   beforeLoad: authGuard,
   component: WorkflowInstanceDetailPage,
+});
+
+const dashboardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/dashboard",
+  beforeLoad: authGuard,
+  component: DashboardPage,
 });
 
 const attendanceRoute = createRoute({
@@ -238,11 +255,13 @@ const routeTree = rootRoute.addChildren([
   contentDetailRoute,
   tasksRoute,
   taskBoardRoute,
+  taskHubRoute,
   projectChatRoute,
   workflowTemplatesRoute,
   workflowTemplateDetailRoute,
   workflowInstancesRoute,
   workflowInstanceDetailRoute,
+  dashboardRoute,
   attendanceRoute,
   adjustmentsRoute,
   leaveRoute,

@@ -31,7 +31,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0090). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -69,6 +69,23 @@ export const AUDIT_OBJECT_TYPES = [
   "leave_type",
   "leave_request",
   "leave_balance",
+  // G10 communication (chat realtime / notification center / meeting)
+  "chat_room",
+  "chat_message",
+  "notification",
+  "notification_rule",
+  "notification_preference",
+  "meeting",
+  "meeting_room",
+  // G13 finance — sổ cái append-only + phân bổ + chốt lợi nhuận + đề xuất chi (xem migration 0070).
+  // Quyết định duyệt chi audit trên `expense_request` (KHÔNG thêm type cho bảng log `expense_approvals`).
+  "revenue_record",
+  "cost_record",
+  "cost_allocation",
+  "profit_snapshot",
+  "expense_request",
+  // G8 approval (multi-level rules — ApprovalLevelApproved/ApprovalRejected dùng 'approval_request')
+  "approval_rule",
   // G12 payroll (salary profile — lương nhạy cảm, ADR-0010)
   "salary_profile",
 ] as const;

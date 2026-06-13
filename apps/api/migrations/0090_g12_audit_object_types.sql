@@ -3,10 +3,10 @@
 --   Append-only (BẤT BIẾN #2) áp cho *app-role DML*, KHÔNG phải migration DDL → DROP/ADD ở đây hợp lệ.
 -- ⚠️ PHẢI chạy TRƯỚC mọi bước G12 khác — nếu không audit_logs ghi 'salary_profile' (xem/sửa lương)
 --    sẽ vi phạm CHECK constraint → runtime error (class bug G4-7/G6-0/G11-0).
--- ⚠️ SUPERSET (rủi ro #1): danh sách dưới = 31 type của 0060 (24 G7 + 7 HR, đã land master qua G11)
---    + 1 type G12 'salary_profile' = 32 type. 0090 chạy SAU 0060 nên DROP+ADD tại đây PHẢI là superset
---    của 0060 — thiếu type nào là XOÁ type đó khỏi CHECK (CRITICAL class-bug). Nếu lane band giữa
---    (G8 0080s) thêm object type land trước, NGƯỜI MERGE hợp nhất tiếp tại đây (UNION mọi lane).
+-- ⚠️ SUPERSET (rủi ro #1): sau merge master, 0090 được RE-STAMP chạy SAU CÙNG (when > 0100_g14).
+--    CHECK cuối trước 0090 do 0081_g8 set = 44 type master (31 G7+HR + 7 G10 + 5 G13 + 1 G8 approval_rule).
+--    Danh sách dưới = 44 type master + 1 type G12 'salary_profile' = 45 type. DROP+ADD tại đây PHẢI là
+--    SUPERSET của 0081 — thiếu type nào là XOÁ type đó khỏi CHECK (CRITICAL class-bug).
 -- Đồng bộ với AUDIT_OBJECT_TYPES (db/schema/audit.ts) trong CÙNG commit.
 
 ALTER TABLE audit_logs DROP CONSTRAINT audit_logs_object_type_chk;
@@ -44,5 +44,18 @@ ALTER TABLE audit_logs
     'leave_type',
     'leave_request',
     'leave_balance',
+    'chat_room',
+    'chat_message',
+    'notification',
+    'notification_rule',
+    'notification_preference',
+    'meeting',
+    'meeting_room',
+    'revenue_record',
+    'cost_record',
+    'cost_allocation',
+    'profit_snapshot',
+    'expense_request',
+    'approval_rule',
     'salary_profile'
   ));
