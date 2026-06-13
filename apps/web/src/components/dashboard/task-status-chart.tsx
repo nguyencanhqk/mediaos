@@ -56,7 +56,7 @@ export function TaskStatusChart({ data }: TaskStatusChartProps) {
           <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
           <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={96} />
           <Tooltip
-            formatter={(v: number) => [v, "Task"]}
+            formatter={(v) => [v as number, "Task"]}
             contentStyle={{ fontSize: 12 }}
           />
           <Bar dataKey="count" radius={[0, 4, 4, 0]}>
