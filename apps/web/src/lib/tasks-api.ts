@@ -8,23 +8,10 @@ import type {
   ApproveRequest,
   RequestRevisionRequest,
 } from "@mediaos/contracts";
-import { unwrapEnvelope } from "./api-client";
-
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3100/api/v1";
-
-async function apiFetch<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${path}: ${body}`);
-  }
-  if (res.status === 204) return undefined as T;
-  const json: unknown = await res.json();
-  return schema.parse(unwrapEnvelope(json));
-}
+// H-NEW-1 (gate merge-G9): dùng apiFetch CHUNG (api-client.ts) như mọi *-api.ts anh em —
+// ném ApiError có status/code (403 PermissionGuard, 400 SEC-1/SEC-2 phân biệt được ở UI),
+// KHÔNG tự định nghĩa apiFetch local ném Error thường (nuốt mất cấu trúc lỗi).
+import { apiFetch } from "./api-client";
 
 export const tasksApi = {
   getMyTasks: () => apiFetch("/tasks", z.array(taskSchema)),
