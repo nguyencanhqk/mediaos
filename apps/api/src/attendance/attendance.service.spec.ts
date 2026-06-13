@@ -238,21 +238,21 @@ describe("AttendanceService — period lock + scope", () => {
     const repo = makeRepo();
     const { service } = build(repo, /* permissionAllow */ false);
     await expect(
-      service.listMonthly(actor, { month: "2024-06", userId: OTHER_ID }),
+      service.listMonthly(actor, { month: "2024-06", userId: OTHER_ID, limit: 50, offset: 0 }),
     ).rejects.toThrow(ForbiddenException);
   });
 
   it("blocks listing all adjustments (scope=all) without approve permission", async () => {
     const repo = makeRepo();
     const { service } = build(repo, false);
-    await expect(service.listAdjustments(actor, { scope: "all" })).rejects.toThrow(ForbiddenException);
+    await expect(service.listAdjustments(actor, { scope: "all", limit: 50, offset: 0 })).rejects.toThrow(ForbiddenException);
   });
 
   it("allows listing my own adjustments (scope=me) without elevated permission", async () => {
     const repo = makeRepo();
     const { service } = build(repo, false);
-    await expect(service.listAdjustments(actor, { scope: "me" })).resolves.toEqual([]);
-    expect(repo.findAdjustments).toHaveBeenCalledWith(COMPANY_ID, { userId: ACTOR_ID, status: undefined });
+    await expect(service.listAdjustments(actor, { scope: "me", limit: 50, offset: 0 })).resolves.toEqual([]);
+    expect(repo.findAdjustments).toHaveBeenCalledWith(COMPANY_ID, { userId: ACTOR_ID, status: undefined, limit: 50, offset: 0 });
   });
 });
 

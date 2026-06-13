@@ -24,6 +24,7 @@ import {
   CreateAdjustmentDto,
   CreateWorkScheduleDto,
   LockPeriodDto,
+  PeriodListQueryDto,
   ReviewNoteDto,
   UpdateWorkScheduleDto,
 } from "./attendance.dto";
@@ -140,8 +141,8 @@ export class AttendanceController {
 
   @Get("periods")
   @RequirePermission("read", "attendance")
-  listPeriods(@Req() req: AuthenticatedRequest) {
-    return this.attendance.listPeriods(req.user.companyId);
+  listPeriods(@Req() req: AuthenticatedRequest, @Query() query: PeriodListQueryDto) {
+    return this.attendance.listPeriods(req.user.companyId, { limit: query.limit, offset: query.offset });
   }
 
   @Post("periods/lock")
