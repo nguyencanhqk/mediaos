@@ -288,7 +288,7 @@ function mergeVerdicts(impl, verdicts, L) {
 // - Implement: agent theo pickModel(L), nhận plan (nếu có) + gate-injection reviewer/skill + auto build-fix.
 // - Review:    crown-jewel → spawn reviewer agent ĐỘC LẬP (agentType) trên diff → mergeVerdicts;
 //              lane thường → trả nguyên (review đã chạy trong Implement qua gate-injection).
-const results = (
+const rawResults = (
   await pipeline(
     lanes,
     (L) =>
@@ -324,7 +324,23 @@ const results = (
       ).then((verdicts) => mergeVerdicts(impl, verdicts.filter(Boolean), L));
     },
   )
-).filter(Boolean);
+);
+
+// Lane trả null = agent implement chết (terminal API error / rate-limit sau retry) hoặc bị skip
+// giữa chừng. KHÔNG nuốt âm thầm bằng .filter(Boolean) — nếu không, lane chết biến mất khỏi cả
+// committed lẫn needsHuman và người vận hành tưởng "đã xong/sạch". Thay vào đó nổi lên thành
+// status='dropped' kèm lane id: worktree CHƯA đụng lượt này → phải re-run (tránh dồn quá nhiều
+// agent Opus crown cùng lúc gây rate-limit). rawResults[i] khớp lanes[i] theo index (pipeline giữ thứ tự).
+const results = rawResults.map((r, i) =>
+  r || {
+    lane: lanes[i].id,
+    status: 'dropped',
+    summary: `⚠️ Lane ${lanes[i].id} bị DROP — agent trả null (nghi terminal API error / rate-limit sau retry, hoặc skip giữa chừng). Worktree CHƯA đụng lượt này → cần re-run.`,
+    blockers: [
+      `agent implement lane ${lanes[i].id} trả null — không có kết quả (nghi rate-limit/terminal error). Re-run lane này, đừng dồn quá nhiều Opus crown song song.`,
+    ],
+  },
+);
 
 const committed = results.filter((r) => r.status === 'committed');
 const stuck = results.filter((r) => r.status !== 'committed');
