@@ -89,9 +89,9 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 | G9 | 🧩 Task Hub hợp nhất | 🛠️+🤖 | L | 🟡 G9-1 ✅ (`d58d465`) · G9-2 BE+FE ✅ (`9ba1eda`, rebase lên master — office endpoints+gates+SEC-1/2+pagination · CreateTaskDialog "Giao việc tay"; api 456/456 · web 133/133 · gate PASS, CRITICAL=0) · G9-3/4 ☐ |
 | G10 | Chat · Notification · Meeting | 🤖 + 🛠️(realtime) | L | 🟡 G10-1 Chat realtime (Socket.IO + Valkey) **✅ MERGED master** (`7ec6aaa` --no-ff, §5.4): WS handshake fail-closed (middleware) + cross-tenant deny (room `co:{companyId}` 0 row) + masking qua `chatMessageSchema.parse` + append-only. Mig `0050` (idx 44) audit CHECK UNION (DO-block). Verify `mediaos_g10` fresh: **904 pass / 0 fail** (realtime-gateway int 9/9). Notification/Meeting ☐ |
 | G11 | Attendance · Leave | 🤖 AI-bulk 🟢 | M | 🟡 BE xong (attendance `6181a05` + leave `4b7ea4a`); verify DB cô lập `mediaos_g11` **229 pass** (deny-path 4 + RLS 2-tenant 165 + unit); gate BLOCK→**vá F1–F5** `82fd27f` (TOCTOU FOR UPDATE · check-out perm · mapError leak · scope=all · overnight checkout — [`docs/reviews/g11-gates.md`](docs/reviews/g11-gates.md)); FE xong branch `feat/g11-fe` (167 web test). **✅ MERGED master §5.4** (G11-1/2 `ebce54a`; **F7** `1a05e4f` · **F6/F8** `1e7c5bf`, --no-ff): follow-up **F6 pagination** (limit/offset clamp 1–100 default 50 cho attendance/leave repo) + **F7 period-lock immutability** trước G12 (`0064` trigger BEFORE UPDATE attendance_periods chặn locked→open · RED→GREEN 4/4) + **F8 cleanup DRY** (monthRange→tz.util · between+prevDay→gte/lt) đều land. Merged master xanh: api **895 pass** + web **184 pass**, chain-migrate `0000→0064` sạch, typecheck sạch. |
-| G12 | Payroll · Bonus/Penalty | 🛠️ TDD 🔋🔋 | XL | ☐ |
+| G12 | Payroll · Bonus/Penalty | 🛠️ TDD 🔋🔋 | XL | 🟡 G12-1 Salary profile (CROWN-JEWEL) **đã code xong trong worktree `mediaos-g12-payroll`** (`feat/g12-payroll`, ahead 2 / behind 28 — **CHƯA rebase · verify · merge**): BE salary-profile service+repo+controller (RLS+FORCE, mask mặc định, reveal⟹audit-in-tx) + mig band `0090–0092` (audit CHECK + `salary_profiles` + permission seed) + 3 int-spec deny-path (tenant-iso · permission · append-only audit) + contracts `payroll.ts`+spec + FE table/dialog/route + `docs/reviews/g12-gates.md`. **Còn nợ trước khi land:** rebase lên master mới · gate FULL chạy lại · audit CHECK union đang theo master CŨ (thiếu type g8/g10/g13) · journal idx/when reconcile · verify DB cô lập `mediaos_g12`. Bonus/Penalty/Payslip ☐ |
 | G13 | Finance (Revenue/Cost/Profit) | 🛠️+🤖 | L | 🟡 G13-1 Revenue ledger (CROWN-JEWEL) **✅ MERGED master** (`2d4533f` --no-ff, §5.4): revenue/cost append-only + RLS 2-tenant 0 row + permission fail-closed + audit; entry_kind original/adjustment/void (sửa=ghi mới). Reconcile khi land: journal idx 45–49, audit CHECK UNION **43 type**, rls-registry +5 case finance, contracts +finance (dual-build). Verify `mediaos_g13` fresh: chain `0000→0074` sạch, CHECK=43, **973 pass / 0 fail** (revenue-deny 12/12 · tenant-iso 183). Cost/Profit/Expense còn lại ☐ |
-| G14 | Dashboard & Report | 🤖 AI-bulk 🟢 | M | ☐ |
+| G14 | Dashboard & Report | 🤖 AI-bulk 🟢 | M | 🟡 Dashboard module **✅ MERGED master** (`633ba22` --no-ff, §5.4): BE dashboard service (tenant-scoped + permission-masked stats)+spec + controller + mig `0100` permission seed (ON CONFLICT DO NOTHING) + FE stat-card / task-status-chart (recharts `^3.8.1`, React19) / dashboard route+spec server-driven PermissionGate + contracts `dashboard.ts`. Reconcile khi land: journal `0100` idx **53** (when 1717500100000 > master max), audit/app.module/contracts additive union. Gate LIGHT fix: leave count `gt→gte` (day-1 off-by-one) · attendance date `gte/lte` · Cell key by status; mang theo fix nợ master `chat sendMessage messageType`. Verify `mediaos_g14` fresh: chain `0000→latest` sạch, **api 994 pass / web 190 pass**, typecheck 4/4, build 3/3. Report còn lại ☐ |
 | G15 | Mobile App (React Native) | 🤖 AI-bulk | XL | ☐ |
 | G16 | Stabilization & SaaS Prep | 🛠️+🔧 | L | ☐ |
 | GX | Xuyên suốt (mọi sprint) | — | — | ☐ |
@@ -132,8 +132,8 @@ Master kết thúc ở `0037`. Mỗi lane sở hữu **1 dải 10 số** riêng:
 | G11 | `0060–0069` | đang dùng (`0060–0064`) |
 | G13 | `0070–0079` | đang dùng (`0070–0074`) |
 | G8  | `0080–0089` | đang dùng (`0080–0082`) |
-| G12 | `0090–0099` | reserved |
-| G14 | `0100–0109` | reserved |
+| G12 | `0090–0099` | đang dùng (`0090–0092`, worktree chưa merge) |
+| G14 | `0100–0109` | ✅ đã land master (`0100`, idx 53) |
 | G15 | `0110–0119` | reserved |
 | G16 | `0120–0129` | reserved |
 
@@ -154,7 +154,7 @@ Master kết thúc ở `0037`. Mỗi lane sở hữu **1 dải 10 số** riêng:
 
 1. ✅ **G9-1 trunk đã land master** (`d58d465`, merge --no-ff).
 2. Rebase mỗi lane Wave A lên master mới → chạy lại **gate** (FULL/LIGHT theo diff) → merge lần lượt, **reconcile audit-CHECK + journal** mỗi lần.
-3. Wave A merged xong → mở **Wave B** (G12/G14).
+3. ✅ Wave A (G8/G10/G11/G13) merged master. **Wave B:** G14 Dashboard **✅ MERGED** (`633ba22`, 2026-06-13). G12 Payroll (crown) đã code xong worktree — chờ **rebase + reconcile (audit-CHECK union + journal idx/when) + verify DB cô lập + gate FULL + người chốt**.
 4. Mỗi lần merge: `pnpm db:migrate` chain `0000→latest` apply **sạch** + `pnpm test` **xanh** trước khi land.
 
 ### 5.5 Vòng tự động hoá mỗi lane (autonomous micro-step)
