@@ -399,6 +399,9 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   );
   await direct.query("DELETE FROM refresh_tokens WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM password_reset_tokens WHERE company_id = ANY($1::uuid[])", ids);
+  // G16-1 2FA: user_totp + user_recovery_codes FK → users → xoá TRƯỚC users.
+  await direct.query("DELETE FROM user_totp WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM user_recovery_codes WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM object_permissions WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM user_roles WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query(
