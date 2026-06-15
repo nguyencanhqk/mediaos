@@ -1,10 +1,13 @@
 import { HttpException, UnauthorizedException } from "@nestjs/common";
+import type { AuthTokens, LoginResponse } from "@mediaos/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DatabaseService } from "../../src/db/db.service";
 import { AuthService } from "../../src/auth/auth.service";
 import { LoginRateLimiter } from "../../src/auth/login-rate-limiter";
 import { PasswordService } from "../../src/auth/password.service";
 import { TokenService } from "../../src/auth/token.service";
+import { TotpService } from "../../src/auth/totp.service";
+import { TwoFactorService } from "../../src/auth/two-factor.service";
 import { SecretEncryptionService } from "../../src/crypto/secret-encryption.service";
 import { NodeEnvelopeCipher } from "../../src/crypto/envelope-cipher";
 import { LocalKekProvider } from "../../src/crypto/local-kek.provider";
@@ -48,6 +51,13 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
     const dbsvc = new DatabaseService();
     const mockPermissions = { getCapabilities: async () => ({}) } as unknown as PermissionService;
     const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
+    const twoFactor = new TwoFactorService(
+      dbsvc,
+      secrets,
+      new TotpService(),
+      new TokenService(),
+      new AuditService(),
+    );
     return new AuthService(
       dbsvc,
       password,
@@ -57,13 +67,19 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
       new OutboxService(),
       mockPermissions,
       secrets,
+      twoFactor,
     );
   }
 
+  /** Login user không bật 2FA → luôn trả AuthTokens; narrow union (challenge = lỗi test setup). */
+  function expectTokens(r: LoginResponse): AuthTokens {
+    if ("twoFactorRequired" in r) throw new Error("không mong đợi 2FA challenge trong test này");
+    return r;
+  }
+
   it("login đúng → trả token; /me trả user KHÔNG có password_hash", async () => {
-    const tokens = await auth.login(
-      { companySlug: A.slug, email: EMAIL, password: PASSWORD },
-      meta,
+    const tokens = expectTokens(
+      await auth.login({ companySlug: A.slug, email: EMAIL, password: PASSWORD }, meta),
     );
     expect(tokens.accessToken).toBeTruthy();
     expect(tokens.refreshToken).toContain(`${A.companyId}.`);
@@ -92,9 +108,8 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
 
   it("refresh rotation: token cũ bị thu hồi → dùng lại = 401", async () => {
     const fresh = newAuth();
-    const tokens = await fresh.login(
-      { companySlug: A.slug, email: EMAIL, password: PASSWORD },
-      meta,
+    const tokens = expectTokens(
+      await fresh.login({ companySlug: A.slug, email: EMAIL, password: PASSWORD }, meta),
     );
     const rotated = await fresh.refresh(tokens.refreshToken);
     expect(rotated.refreshToken).not.toBe(tokens.refreshToken);
@@ -134,9 +149,8 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
       fresh.resetPassword({ token: resetToken, newPassword: "another!Pw1" }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
     // mật khẩu mới đăng nhập được
-    const logged = await newAuth().login(
-      { companySlug: A.slug, email: EMAIL, password: NEW_PW },
-      meta,
+    const logged = expectTokens(
+      await newAuth().login({ companySlug: A.slug, email: EMAIL, password: NEW_PW }, meta),
     );
     expect(logged.accessToken).toBeTruthy();
   });

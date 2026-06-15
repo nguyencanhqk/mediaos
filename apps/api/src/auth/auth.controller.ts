@@ -1,4 +1,10 @@
-import type { AuthTokens, MeResponse } from "@mediaos/contracts";
+import type {
+  AuthTokens,
+  LoginResponse,
+  MeResponse,
+  TwoFactorEnrollResponse,
+  TwoFactorStatus,
+} from "@mediaos/contracts";
 import {
   Body,
   Controller,
@@ -13,18 +19,35 @@ import {
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
 import { AuthService, type RequestMeta } from "./auth.service";
-import { ForgotPasswordDto, LoginDto, RefreshDto, ResetPasswordDto } from "./auth.dto";
+import {
+  ForgotPasswordDto,
+  LoginDto,
+  RefreshDto,
+  ResetPasswordDto,
+  TwoFactorDisableDto,
+  TwoFactorEnableDto,
+  TwoFactorVerifyDto,
+} from "./auth.dto";
+import { TwoFactorService } from "./two-factor.service";
 import { Public } from "../permission/public.decorator";
+
+/** Request đã qua JwtAuthGuard (global) — user gắn ở req.user. */
+interface AuthenticatedRequest extends Request {
+  user: { id: string; companyId: string; email: string };
+}
 
 @Controller("auth")
 @UsePipes(ZodValidationPipe)
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly twoFactor: TwoFactorService,
+  ) {}
 
   @Public()
   @Post("login")
   @HttpCode(200)
-  login(@Body() dto: LoginDto, @Req() req: Request): Promise<AuthTokens> {
+  login(@Body() dto: LoginDto, @Req() req: Request): Promise<LoginResponse> {
     return this.auth.login(dto, this.meta(req));
   }
 
@@ -58,6 +81,51 @@ export class AuthController {
   async resetPassword(@Body() dto: ResetPasswordDto): Promise<{ ok: true }> {
     await this.auth.resetPassword(dto);
     return { ok: true };
+  }
+
+  // ── 2FA TOTP (G16-1, AUTH-003) ────────────────────────────────────────────────
+
+  /** Bước 2 login khi 2FA bật: challengeToken + mã (TOTP/recovery) → tokens. @Public (chưa có access token). */
+  @Public()
+  @Post("2fa/verify")
+  @HttpCode(200)
+  verifyTwoFactor(@Body() dto: TwoFactorVerifyDto, @Req() req: Request): Promise<AuthTokens> {
+    return this.auth.completeTwoFactorLogin(dto.challengeToken, dto.code, this.meta(req));
+  }
+
+  /** Bắt đầu enroll 2FA cho chính user — trả otpauthUri (QR) + recovery codes (hiển thị 1 LẦN). */
+  @Post("2fa/enroll")
+  @HttpCode(200)
+  enrollTwoFactor(@Req() req: AuthenticatedRequest): Promise<TwoFactorEnrollResponse> {
+    return this.twoFactor.enroll(req.user.id, req.user.companyId);
+  }
+
+  /** Xác nhận bật 2FA: nhập mã TOTP hiện tại. Mã sai → 401. */
+  @Post("2fa/enable")
+  @HttpCode(200)
+  async enableTwoFactor(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: TwoFactorEnableDto,
+  ): Promise<{ ok: true }> {
+    await this.twoFactor.confirmEnable(req.user.id, req.user.companyId, dto.token);
+    return { ok: true };
+  }
+
+  /** Tắt 2FA — re-auth bằng mật khẩu hiện tại. */
+  @Post("2fa/disable")
+  @HttpCode(200)
+  async disableTwoFactor(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: TwoFactorDisableDto,
+  ): Promise<{ ok: true }> {
+    await this.auth.disableTwoFactor(req.user, dto.password);
+    return { ok: true };
+  }
+
+  /** Trạng thái 2FA của user hiện tại (đã bật + có bị ép). */
+  @Get("2fa/status")
+  twoFactorStatus(@Req() req: AuthenticatedRequest): Promise<TwoFactorStatus> {
+    return this.twoFactor.status(req.user.id, req.user.companyId);
   }
 
   private meta(req: Request): RequestMeta {

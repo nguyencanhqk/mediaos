@@ -46,5 +46,7 @@ export const meResponseSchema = z.object({
   status: z.string(),
   /** Non-sensitive action:resourceType capabilities keyed for O(1) FE lookup. Wildcards included as-is. */
   capabilities: z.record(z.boolean()),
+  /** true khi role ép 2FA (requires_two_factor) nhưng user CHƯA bật → FE buộc enroll (G16-1, AUTH-003). */
+  mustSetupTwoFactor: z.boolean(),
 });
 export type MeResponse = z.infer<typeof meResponseSchema>;
