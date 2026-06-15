@@ -144,14 +144,17 @@ export class ProfitRepository {
         SELECT c.replaces_record_id AS id FROM cost_records c
           JOIN voided_lineage v ON c.id = v.id
           WHERE c.replaces_record_id IS NOT NULL
-      ),
+      ) CYCLE id SET is_cycle USING void_path,
       -- Đi NGƯỢC chuỗi replaces để gắn mỗi record với gốc lineage (record có replaces_record_id IS NULL).
+      -- CYCLE = cận-vệ defense-in-depth: chuỗi replaces vốn ACYCLIC (append-only + unique
+      -- cost_records_replaces_uq), nhưng nếu bất biến từng bị phá thì recursion KHÔNG treo connection
+      -- (statement_timeout=0) — dừng tại vòng lặp thay vì chạy vô hạn.
       lineage AS (
         SELECT id AS rec_id, id AS anc_id, replaces_record_id AS anc_parent FROM cost_records
         UNION ALL
         SELECT l.rec_id, p.id AS anc_id, p.replaces_record_id AS anc_parent
           FROM lineage l JOIN cost_records p ON p.id = l.anc_parent
-      ),
+      ) CYCLE anc_id SET is_cycle USING anc_path,
       lineage_root AS (
         SELECT rec_id, anc_id AS root_id FROM lineage WHERE anc_parent IS NULL
       ),
