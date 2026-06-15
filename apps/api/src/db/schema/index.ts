@@ -25,6 +25,8 @@ export * from "./finance";
 export * from "./approval";
 // G8-3 evaluation (template + criteria + results + scores)
 export * from "./evaluation";
+// G8-4 KPI (kpi_definitions mutable + kpi_results SNAPSHOT APPEND-ONLY)
+export * from "./kpi";
 // G12 payroll (salary profile — lương nhạy cảm, ADR-0010)
 export * from "./payroll";
 // G10-4 meeting (meeting_rooms + meetings + meeting_attendees)

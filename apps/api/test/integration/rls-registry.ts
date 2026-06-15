@@ -1186,6 +1186,63 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
 
+  // ── G8-4 KPI (kpi_definitions mutable + kpi_results SNAPSHOT APPEND-ONLY — migration 0088) ──
+  // Mỗi bảng có company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  // KHÔNG skipNoContext (mọi hàng tenant-scoped, company_id NOT NULL, không hàng global).
+  {
+    name: "kpi_definitions",
+    table: "kpi_definitions",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO kpi_definitions (company_id, name, weights)
+         VALUES ($1, $2, $3::jsonb) RETURNING id`,
+        [
+          t.companyId,
+          `rls-kpi-def-${randomUUID().slice(0, 8)}`,
+          JSON.stringify({
+            tasksDone: 20,
+            onTimeRate: 20,
+            evaluationScore: 20,
+            defectScore: 20,
+            firstPassApprovalRate: 20,
+          }),
+        ],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "kpi_results",
+    table: "kpi_results",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `rls-kpi-subj-${randomUUID().slice(0, 8)}@x.test`);
+      const defRes = await direct.query(
+        `INSERT INTO kpi_definitions (company_id, name, weights)
+         VALUES ($1, $2, $3::jsonb) RETURNING id`,
+        [
+          t.companyId,
+          `rls-kpi-res-def-${randomUUID().slice(0, 8)}`,
+          JSON.stringify({
+            tasksDone: 20,
+            onTimeRate: 20,
+            evaluationScore: 20,
+            defectScore: 20,
+            firstPassApprovalRate: 20,
+          }),
+        ],
+      );
+      const r = await direct.query(
+        `INSERT INTO kpi_results
+           (company_id, definition_id, subject_user_id, period_start, period_end,
+            tasks_done, on_time_rate, evaluation_score, defect_score, first_pass_approval_rate,
+            total_score, computed_by)
+         VALUES ($1, $2, $3, '2026-05-01', '2026-06-01', 100, 100, 80, 100, 75, 91, $3) RETURNING id`,
+        [t.companyId, defRes.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
   // ── G10-4 Meeting (meeting_rooms / meetings / meeting_attendees — mig 0052) ──
   {
     name: "meeting_rooms",

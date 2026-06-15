@@ -456,6 +456,20 @@
 			"when": 1717500127000,
 			"tag": "0052_g10_meeting",
 			"breakpoints": true
+		},
+		{
+			"idx": 65,
+			"version": "7",
+			"when": 1717500128000,
+			"tag": "0088_g8_kpi",
+			"breakpoints": true
+		},
+		{
+			"idx": 66,
+			"version": "7",
+			"when": 1717500129000,
+			"tag": "0089_g8_kpi_permissions_seed",
+			"breakpoints": true
 		}
 	]
 }
