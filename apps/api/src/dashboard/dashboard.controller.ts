@@ -1,4 +1,4 @@
-import { Controller, Get, Req, UseGuards, UsePipes } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Post, Query, Req, UseGuards, UsePipes } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
 import { PermissionGuard } from "../permission/guards/permission.guard";
@@ -6,6 +6,10 @@ import { RequirePermission } from "../permission/require-permission.decorator";
 import { PermissionService } from "../permission/permission.service";
 import { DashboardService } from "./dashboard.service";
 import { ReportService } from "./report.service";
+import { MvDashboardService } from "./mv-dashboard.service";
+import { AlertsService } from "./alerts.service";
+import { DashboardRefreshService } from "./dashboard-refresh.service";
+import { mvStatsQuerySchema, type MvStatsQueryDto } from "@mediaos/contracts";
 
 interface AuthenticatedRequest extends Request {
   user: { id: string; companyId: string };
@@ -25,6 +29,9 @@ export class DashboardController {
     private readonly dashboardService: DashboardService,
     private readonly reportService: ReportService,
     private readonly permissionService: PermissionService,
+    private readonly mvDashboardService: MvDashboardService,
+    private readonly alertsService: AlertsService,
+    private readonly refreshService: DashboardRefreshService,
   ) {}
 
   /**
@@ -70,6 +77,52 @@ export class DashboardController {
     );
 
     return { report, asOf: new Date().toISOString() };
+  }
+
+  /**
+   * GET /dashboard/mv-stats — MV-backed task-status + output breakdown with optional filters.
+   * filter: month (YYYY-MM), channelId, projectId, departmentId.
+   * SECURITY: MV does not honor RLS — service always adds WHERE company_id = companyId.
+   */
+  @Get("mv-stats")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("read", "dashboard")
+  async getMvStats(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: MvStatsQueryDto,
+  ) {
+    const { companyId } = req.user;
+    const filter = mvStatsQuerySchema.parse(query);
+    const [taskStatus, output] = await Promise.all([
+      this.mvDashboardService.getTaskStatusStats(companyId),
+      this.mvDashboardService.getOutputStats(companyId, filter),
+    ]);
+    return { taskStatus, output, asOf: new Date().toISOString() };
+  }
+
+  /**
+   * GET /dashboard/alerts — live overdue + channel-risk alerts.
+   * Computed from live tables (not MV) so never stale.
+   */
+  @Get("alerts")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("read", "dashboard")
+  async getAlerts(@Req() req: AuthenticatedRequest) {
+    const { companyId } = req.user;
+    const alerts = await this.alertsService.getAlerts(companyId);
+    return { alerts, asOf: new Date().toISOString() };
+  }
+
+  /**
+   * POST /dashboard/refresh — trigger MV refresh (gated: manage:dashboard).
+   * Runs CONCURRENTLY after initial populate. Uses worker/direct pool, not app-pool.
+   */
+  @Post("refresh")
+  @HttpCode(200)
+  @UseGuards(PermissionGuard)
+  @RequirePermission("manage", "dashboard")
+  async refresh() {
+    return this.refreshService.refresh();
   }
 
   @Get("summary")
