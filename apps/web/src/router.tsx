@@ -28,6 +28,7 @@ import { AttendancePage } from "@/routes/hr/attendance";
 import { AdjustmentsPage } from "@/routes/hr/adjustments";
 import { LeavePage } from "@/routes/hr/leave";
 import { SalaryProfilesPage } from "@/routes/payroll/salary-profiles";
+import { PayrollPeriodsPage } from "@/routes/payroll/periods";
 import { useAuthStore } from "@/stores/auth";
 
 const rootRoute = createRootRoute({ component: RootLayout });
@@ -223,6 +224,14 @@ const salaryProfilesRoute = createRoute({
   component: SalaryProfilesPage,
 });
 
+// G12-FE: payroll periods (draft→approved→published FSM + SoD + re-auth payslip)
+const payrollPeriodsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/payroll/periods",
+  beforeLoad: authGuard,
+  component: PayrollPeriodsPage,
+});
+
 const companySettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings/company",
@@ -266,6 +275,7 @@ const routeTree = rootRoute.addChildren([
   adjustmentsRoute,
   leaveRoute,
   salaryProfilesRoute,
+  payrollPeriodsRoute,
 ]);
 
 export const router = createRouter({ routeTree });
