@@ -558,7 +558,7 @@ _(custom `react-native-reviewer/patterns/build-fix/push`)_
 ## Lỗ hổng phải bù (đừng quên)
 
 - [ ] **Test realtime/WebSocket** (lifecycle, presence cross-tenant, reconnect, ordering) — G10-1.
-- [ ] **i18n + Timezone payroll** (ADR + hook, DST-safe) — GX-7.
+- [x] **i18n + Timezone payroll** (ADR + hook, DST-safe) — GX-7. ✅ API core landed: `tz.util` ruột swap sang `@date-fns/tz` TZDate (date-fns v4), parity byte-identical Intl trên lưới VN + NY(DST), giữ two-pass monotonic resolver canonical cho gap/overlap (ADR-0008 ratify note); `assertValidTimezone` fail-fast khi đổi `company.timezone` (settings). Off-by-one verified ở write-path `localDateOf` (work_date là `date`, suy 1 lần lúc check-in; payslip aggregate trên date đã tz-derived → không slicing UTC ở SQL). FE i18n (react-i18next vi catalog) = follow-up tách lane.
 - [ ] **KMS provisioning/rotation/break-glass** — G6-2.
 - [ ] **Alerting runtime** audit/event-dispatch drop (dead-letter + cảnh báo) — G2-4.
 - [ ] **PgBouncer × RLS** & **thứ tự backfill company_id** — assert trong CI — GX-4.
