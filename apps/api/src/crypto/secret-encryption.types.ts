@@ -10,7 +10,7 @@
  * default (CARRY-FORWARD 🔴 from FULL-gate 2a: id unknown at encrypt time → AAD cannot bind).
  */
 
-export type KeyPurpose = 'platform_account' | 'auth_reset_token';
+export type KeyPurpose = 'platform_account' | 'auth_reset_token' | 'totp_secret';
 
 /** A DEK wrapped by the KEK inside the KMS/Vault. `wrapped` is the only thing that touches the DB. */
 export interface WrappedDek {
