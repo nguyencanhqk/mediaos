@@ -1,39 +1,43 @@
 /**
  * Tiện ích timezone cho chấm công/nghỉ phép (ADR-0008: UTC-at-rest, render theo IANA tz).
  *
- * Dùng Intl.DateTimeFormat (ICU đầy đủ trên Node ≥20) — IANA-aware, DST-correct, KHÔNG dep mới.
- * NOTE(G11, đóng băng deps): ADR-0008 gợi ý date-fns v4 + @date-fns/tz; sau khi mở băng lockfile
- * có thể swap phần ruột các hàm này sang TZDate — chữ ký public giữ nguyên.
+ * GX-7: ruột render/parts dùng `@date-fns/tz` `TZDate` (date-fns v4) — ADR-0008 ratified. TZDate đọc
+ * year/month/day/hour/min/sec theo IANA tz, byte-identical với Intl trên lưới VN + DST tz (xem
+ * tz.util.spec.ts parity grid). KHÔNG đổi chữ ký public — attendance/payroll/dashboard (G11/G12/G14)
+ * phụ thuộc shape trả về.
+ *
+ * GIẢI DST gap/overlap — `wallTimeToInstant`: GIỮ two-pass monotonic resolver (KHÔNG dùng raw
+ * `new TZDate(y,mo,d,…)` constructor). Lý do: constructor TZDate giải GAP-day (giờ không tồn tại) bằng
+ * pre-transition offset → lệch 1 giờ so với two-pass đã ship (G11/G12/G14 dựa vào). Lệch 1 giờ ở biên
+ * = sai lương. VN không DST nên cả hai trùng; nhưng SaaS multi-tz phải nhất quán → khoá canonical =
+ * two-pass (xem ADR-0008 §"Giải DST"). Resolver luôn trả 1 instant ổn định, KHÔNG ném/NaN ở biên.
  *
  * Quy ước: "instant" = Date (UTC). "wall-clock" = chuỗi 'YYYY-MM-DD' + 'HH:MM[:SS]' theo tz.
  */
 
+import { TZDate } from "@date-fns/tz";
+
 const MINUTE_MS = 60_000;
 
-/** Ném RangeError nếu tz không phải IANA hợp lệ — validate ở ranh giới (tạo/sửa ca làm). */
+/** Ném RangeError nếu tz không phải IANA hợp lệ — validate ở ranh giới (tạo/sửa ca làm, đổi tz công ty). */
 export function assertValidTimezone(timeZone: string): void {
-  // Constructor ném RangeError cho tz rác — đây chính là phép kiểm tra.
+  // Constructor Intl ném RangeError cho tz rác — đây chính là phép kiểm tra (đồng nhất với ICU mà
+  // TZDate cũng dùng). Một nguồn validate duy nhất ở biên create/update.
   new Intl.DateTimeFormat("en-US", { timeZone });
 }
 
+/** Đọc các thành phần wall-clock của một instant theo tz qua TZDate (date-fns v4). */
 function formatPartsInTz(instant: Date, timeZone: string): Record<string, number> {
-  const dtf = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-  const out: Record<string, number> = {};
-  for (const p of dtf.formatToParts(instant)) {
-    if (p.type !== "literal") out[p.type] = Number(p.value);
-  }
-  // Intl trả hour=24 cho nửa đêm ở vài ICU version — chuẩn hoá về 0.
-  if (out["hour"] === 24) out["hour"] = 0;
-  return out;
+  const z = new TZDate(instant.getTime(), timeZone);
+  // TZDate trả 0..23 cho giờ (không có biên 24 như vài ICU version) → không cần chuẩn hoá 24→0.
+  return {
+    year: z.getFullYear(),
+    month: z.getMonth() + 1,
+    day: z.getDate(),
+    hour: z.getHours(),
+    minute: z.getMinutes(),
+    second: z.getSeconds(),
+  };
 }
 
 /** Ngày LOCAL 'YYYY-MM-DD' của một instant theo tz. */
@@ -72,8 +76,12 @@ function tzOffsetMsAt(instant: Date, timeZone: string): number {
 
 /**
  * Đổi wall-clock (localDate 'YYYY-MM-DD' + time 'HH:MM[:SS]' theo tz) → instant UTC.
- * Two-pass qua offset thật của tz nên đúng cả ngày chuyển DST (giờ không tồn tại/lặp lại
- * → chọn 1 đáp án ổn định theo offset sau chuyển).
+ *
+ * Two-pass monotonic qua offset thật của tz (CANONICAL, ADR-0008): pass 1 đoán bằng offset tại
+ * wall-as-UTC; pass 2 đọc lại offset tại đáp án đoán rồi hiệu chỉnh. Đúng cả ngày chuyển DST:
+ *   - GAP (giờ không tồn tại, vd NY 2024-03-10 02:30): rơi về offset sau-chuyển (EDT) → 1 instant ổn định.
+ *   - OVERLAP (giờ lặp, vd NY 2024-11-03 01:30): chọn lần đầu (pre-transition, EDT) → ổn định, không ném.
+ * KHÔNG dùng raw `new TZDate(y,mo,d,h,mi,s,tz)` vì nó giải GAP bằng pre-transition offset (lệch 1 giờ).
  */
 export function wallTimeToInstant(localDate: string, time: string, timeZone: string): Date {
   const [y, mo, d] = localDate.split("-").map(Number);
