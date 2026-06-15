@@ -138,6 +138,7 @@ Master kết thúc ở `0037`. Mỗi lane sở hữu **1 dải 10 số** riêng:
 | G16 | `0120–0129` | reserved |
 | G12 (tràn) | `0130–0139` | ✅ **G12-4 Duyệt bảng lương ĐÃ LAND** (`0130–0132` idx 77–79 when 140000/141000/142000). Band gốc `0090–0099` đầy → band tràn riêng (sau G16, không đụng lane khác). Hook `guard-migration-band` cho G12 = `[[90,99],[130,139]]`. |
 | G3 (mutation-path) | `0140–0149` | 🟡 **đang dùng** — runtime permission mgmt (grant/revoke role + object-permission). Nền G3 có trước hệ band (master kết thúc `0037`) → cấp band bổ sung riêng sau G12-tràn. Hook `guard-migration-band` cho G3 = `[[140,149]]`. |
+| G6 (KMS PR-A) | `0150–0159` | 🟡 **đang dùng** — G6-2 PR-A KMS provisioning (`SecretProvisioningService.provisionKeyVersion` worker-pool + version-preserving). Mig `0150` idx 83 when 1717500200000 (audit CHECK +`encryption_key`, DO-block ADD-only). Hook `guard-migration-band` cho g6kms = `[[150,159]]`. |
 
 `_journal.json`: `idx`/`when` phải **đơn điệu tăng** trong band; khi merge nhiều lane, reconcile journal theo thứ tự merge (idx liên tục, when tăng dần). Hook `guard-migration-band` **chặn (exit 2)** file migration có số ngoài band của branch hiện tại.
 

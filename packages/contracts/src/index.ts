@@ -56,3 +56,4 @@ export * from "./payroll";
 export * from "./defect";
 export * from "./meeting";
 export * from "./permission";
+export * from "./crypto";

@@ -3,6 +3,7 @@ import { loadEnv } from '../config/env.schema';
 import { NodeEnvelopeCipher } from './envelope-cipher';
 import { LocalKekProvider } from './local-kek.provider';
 import { SecretEncryptionService } from './secret-encryption.service';
+import { SecretProvisioningService } from './secret-provisioning.service';
 import { SecretRotationService } from './secret-rotation.service';
 import { ENVELOPE_CIPHER, KMS_PROVIDER, type KmsProvider } from './secret-encryption.types';
 import { VaultKekProvider } from './vault-kek.provider';
@@ -22,6 +23,7 @@ import { VaultKekProvider } from './vault-kek.provider';
     VaultKekProvider,
     SecretEncryptionService,
     SecretRotationService,
+    SecretProvisioningService,
     { provide: ENVELOPE_CIPHER, useExisting: NodeEnvelopeCipher },
     {
       provide: KMS_PROVIDER,
@@ -30,6 +32,12 @@ import { VaultKekProvider } from './vault-kek.provider';
       inject: [LocalKekProvider, VaultKekProvider],
     },
   ],
-  exports: [SecretEncryptionService, SecretRotationService, ENVELOPE_CIPHER, KMS_PROVIDER],
+  exports: [
+    SecretEncryptionService,
+    SecretRotationService,
+    SecretProvisioningService,
+    ENVELOPE_CIPHER,
+    KMS_PROVIDER,
+  ],
 })
 export class CryptoModule {}

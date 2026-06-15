@@ -43,6 +43,8 @@ export class SecretRotationService {
         `reWrapAccount(${accountId}): account không tồn tại / đã xoá — không có gì để rotate (0 row).`,
       );
     }
+    // Audit-of-record (append-only): rotation đã land. Chỉ accountId (UUID) + kms path target — KHÔNG DEK/secret.
+    this.logger.log(`audit[encryption_key] rewrap account=${accountId} kmsKeyId=${kmsKeyId}`);
   }
 
   /**
