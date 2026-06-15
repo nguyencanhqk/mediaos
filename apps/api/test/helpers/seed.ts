@@ -389,7 +389,12 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
        (SELECT id FROM outbox_events WHERE company_id = ANY($1::uuid[]))`,
     ids,
   );
+  // G2-4 alerting: xoá dead_letter_events TRƯỚC dead_letter_alerts — gỡ "trigger" để monitor chạy song
+  // song (scan toàn tenant) KHÔNG re-insert alert sau khi đã xoá (chống đua teardown trên DB dùng chung).
+  // dead_letter_alerts chỉ tham chiếu companies → xoá ngay trước companies (ở cuối hàm) cũng được; xoá ở
+  // đây sau khi events đã sạch là an toàn.
   await direct.query("DELETE FROM dead_letter_events WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM dead_letter_alerts WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM outbox_events WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM audit_logs WHERE company_id = ANY($1::uuid[])", ids);
   // refresh_tokens tự tham chiếu (replaced_by) → gỡ liên kết trước khi xoá để tránh vướng FK.
