@@ -319,6 +319,12 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   // work_schedules: employee_profiles.work_schedule_id FK (ON DELETE SET NULL) — an toàn xoá sau.
   await direct.query("DELETE FROM work_schedules WHERE company_id = ANY($1::uuid[])", ids);
 
+  // ── G8-4 KPI ─────────────────────────────────────────────────────────────
+  // kpi_results.computed_by/confirmed_by/subject_user_id → users (NO ACTION) → xoá TRƯỚC users.
+  // kpi_results.definition_id → kpi_definitions (CASCADE) → xoá results trước definitions.
+  await direct.query("DELETE FROM kpi_results WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM kpi_definitions WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G4-5 Approval / Defect ───────────────────────────────────────────────
   await direct.query("DELETE FROM defects WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM approval_steps WHERE company_id = ANY($1::uuid[])", ids);

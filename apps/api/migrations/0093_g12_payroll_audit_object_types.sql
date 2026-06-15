@@ -68,6 +68,9 @@ ALTER TABLE audit_logs
     'evaluation_result',
     -- G8-2 defect/revision
     'defect',
+    -- G8-4 KPI (đã land master g8 trước g12 — giữ trong UNION khi 0093 re-stamp CHECK)
+    'kpi_definition',
+    'kpi_result',
     -- G12-2 payroll period + payslip snapshot (append-only) — NEW
     'payroll_period',
     'payslip',
