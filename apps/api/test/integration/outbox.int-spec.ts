@@ -88,7 +88,10 @@ describe.skipIf(!hasDb)("G2-4 audit + outbox + event bus", () => {
         throw new Error("boom");
       },
     });
-    const alert: AlertSink = { deadLetter: vi.fn(async () => undefined) };
+    const alert: AlertSink = {
+      deadLetter: vi.fn(async () => undefined),
+      thresholdBreached: vi.fn(async () => undefined),
+    };
     const worker = new OutboxWorker(bus, alert);
 
     for (let i = 0; i <= OutboxWorker.MAX_ATTEMPTS; i++) {

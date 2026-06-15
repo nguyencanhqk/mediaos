@@ -1,6 +1,7 @@
 import { Global, Module } from "@nestjs/common";
 import { ALERT_SINK, LoggerAlertSink } from "./alert.service";
 import { AuditService } from "./audit.service";
+import { DeadLetterAlertMonitor } from "./dead-letter-alert.service";
 import { EventBus } from "./event-bus";
 import { OutboxService } from "./outbox.service";
 import { OutboxWorker } from "./outbox-worker";
@@ -13,12 +14,13 @@ import { OutboxWorker } from "./outbox-worker";
 @Module({
   providers: [
     AuditService,
+    DeadLetterAlertMonitor,
     OutboxService,
     EventBus,
     OutboxWorker,
     LoggerAlertSink,
     { provide: ALERT_SINK, useExisting: LoggerAlertSink },
   ],
-  exports: [AuditService, OutboxService, EventBus, OutboxWorker],
+  exports: [AuditService, DeadLetterAlertMonitor, OutboxService, EventBus, OutboxWorker],
 })
 export class EventsModule {}

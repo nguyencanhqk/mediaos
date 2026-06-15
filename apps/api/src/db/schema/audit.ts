@@ -31,7 +31,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0132+0140). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0132+0140+0170). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -108,5 +108,7 @@ export const AUDIT_OBJECT_TYPES = [
   // G3 mutation-path runtime permission mgmt (gán/thu role ghi 'user_role'; set/xoá object-permission ghi 'object_permission')
   "user_role",
   "object_permission",
+  // G2-4 alerting (dead-letter threshold breach — DeadLetterAlertMonitor ghi 'dead_letter_alert' khi vượt ngưỡng)
+  "dead_letter_alert",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

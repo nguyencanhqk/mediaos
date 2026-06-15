@@ -1,8 +1,9 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { sql } from "drizzle-orm";
 import { workerDb } from "../db/index";
 import { assertWorkerRoleSafe } from "../db/worker-role";
 import { ALERT_SINK, type AlertSink } from "./alert.service";
+import { DeadLetterAlertMonitor } from "./dead-letter-alert.service";
 import { EventBus } from "./event-bus";
 
 interface ClaimedEvent {
@@ -28,10 +29,19 @@ export class OutboxWorker {
   /** Đã kiểm role kết nối chưa (chỉ kiểm 1 lần). */
   private roleChecked = false;
 
+  /**
+   * Monitor ngưỡng dead-letter (G2-4). Optional để KHÔNG đổi mọi call-site `new OutboxWorker(bus, alert)`
+   * hiện có (test + outbox.int-spec); khi vắng, tự dựng từ cùng AlertSink. DI prod truyền tường minh qua module.
+   */
+  private readonly monitor: DeadLetterAlertMonitor;
+
   constructor(
     private readonly bus: EventBus,
     @Inject(ALERT_SINK) private readonly alert: AlertSink,
-  ) {}
+    @Optional() monitor?: DeadLetterAlertMonitor,
+  ) {
+    this.monitor = monitor ?? new DeadLetterAlertMonitor(alert);
+  }
 
   /**
    * Chặn worker chạy bằng role BYPASS RLS (review G2 H-1). Khi thiếu DATABASE_WORKER_URL, workerDb
@@ -68,6 +78,18 @@ export class OutboxWorker {
     for (const ev of claimed) {
       deadLettered += await this.processEvent(ev);
     }
+
+    // Sau 1 nhịp: kiểm ngưỡng dead-letter (G2-4). KHÔNG nuốt lỗi — log ERROR có stack; alert ngưỡng KHÔNG
+    // được làm hỏng vòng claim/deadLetter (đã qua FULL gate G2). Idempotency ở chính checkThresholds (1 alert/window).
+    try {
+      await this.monitor.checkThresholds();
+    } catch (monitorErr) {
+      this.logger.error(
+        `checkThresholds THẤT BẠI sau processBatch: ${monitorErr instanceof Error ? monitorErr.message : String(monitorErr)}`,
+        monitorErr instanceof Error ? monitorErr.stack : undefined,
+      );
+    }
+
     return { claimed: claimed.length, deadLettered };
   }
 

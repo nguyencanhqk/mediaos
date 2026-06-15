@@ -192,6 +192,20 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
   {
+    name: "dead_letter_alerts",
+    table: "dead_letter_alerts",
+    // G2-4 alerting (mig 0170) — append-only, company_id NOT NULL + RLS+FORCE. Seed direct (worker-written
+    // fact). KHÔNG skipNoContext (mọi hàng tenant-scoped, không hàng global).
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO dead_letter_alerts (company_id, window_start, dead_letter_count, threshold)
+         VALUES ($1, date_trunc('hour', now()), 9, 5) RETURNING id`,
+        [t.companyId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
     name: "refresh_tokens",
     table: "refresh_tokens",
     seedRow: async (direct, t) => {

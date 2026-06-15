@@ -80,3 +80,31 @@ export const deadLetterEvents = pgTable(
 );
 
 export type DeadLetterEvent = typeof deadLetterEvents.$inferSelect;
+
+/**
+ * dead_letter_alerts — APPEND-ONLY sự thật bất biến: 1 cảnh báo cho mỗi (company, cửa sổ) khi số
+ * dead_letter_events UNRESOLVED vượt ngưỡng (G2-4). unique(company_id, window_start) + ON CONFLICT
+ * DO NOTHING ⇒ chống báo động kép (1 alert/window). KHÔNG lưu payload (chỉ thống kê). Worker INSERT,
+ * app SELECT (tenant-scoped); KHÔNG UPDATE/DELETE (DDL/RLS/grant ở 0170).
+ */
+export const deadLetterAlerts = pgTable(
+  "dead_letter_alerts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    deadLetterCount: integer("dead_letter_count").notNull(),
+    threshold: integer("threshold").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("dead_letter_alert_company_window_uq").on(t.companyId, t.windowStart),
+    index("dead_letter_alerts_company_idx").on(t.companyId, t.windowStart),
+  ],
+);
+
+export type DeadLetterAlertRow = typeof deadLetterAlerts.$inferSelect;
+export type NewDeadLetterAlertRow = typeof deadLetterAlerts.$inferInsert;
