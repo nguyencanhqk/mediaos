@@ -375,9 +375,12 @@ export type PayslipAcknowledgementDto = z.infer<typeof payslipAcknowledgementSch
 export const acknowledgePayslipSchema = z.object({});
 export type AcknowledgePayslipRequest = z.infer<typeof acknowledgePayslipSchema>;
 
-/** Khiếu nại lương — lý do BẮT BUỘC (parity CHECK payslip_ack_dispute_reason_check). */
+/**
+ * Khiếu nại lương — lý do BẮT BUỘC, không rỗng/khoảng trắng (parity CHECK payslip_ack_dispute_reason_check).
+ * .trim() loại lý do toàn khoảng trắng (DB CHECK chỉ chặn NULL — đây là lớp nội dung).
+ */
 export const disputePayslipSchema = z.object({
-  reason: z.string().min(1).max(500),
+  reason: z.string().trim().min(1).max(500),
 });
 export type DisputePayslipRequest = z.infer<typeof disputePayslipSchema>;
 

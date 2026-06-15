@@ -1,6 +1,6 @@
 -- Migration 0130: G12-4 — payroll_periods FSM duyệt bảng lương (draft→approved→published).
 --
--- BAND 0130-0139 (lane G12-approval, band tràn — band gốc 0090-0099 ĐẦY). idx 77, when>0099 (1717500139000).
+-- BAND 0130-0139 (lane G12-approval, band tràn — band gốc 0090-0099 ĐẦY). idx 77, when 1717500140000 (>0099's 1717500139000).
 -- ADR-0005 mở rộng: kỳ lương giờ có VÒNG DUYỆT (draft→approved→published) thay cho draft→locked (G12-2).
 --   - RETIRE 'locked' (G12-2 chưa có dữ liệu thật, chưa test transition lock()) → enum mới {draft,approved,published}.
 --   - DROP locked_by/locked_at (đổi nghĩa rủi ro) → ADD created_by + approved_by/at + published_by/at (vết duyệt).
