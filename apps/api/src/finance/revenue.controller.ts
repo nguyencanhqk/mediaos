@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -11,7 +12,7 @@ import {
   UsePipes,
 } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
-import type { Request } from "express";
+import { ZodError } from "zod";
 import {
   createRevenueSchema,
   adjustRevenueSchema,
@@ -20,17 +21,27 @@ import {
 } from "@mediaos/contracts";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
+import type { AuthRequest } from "../permission/guards/jwt-auth.guard";
 import { RevenueService } from "./revenue.service";
 import { mapReplacesUniqueToConflict } from "./finance-conflict.helper";
 
-interface AuthenticatedRequest extends Request {
-  user: { id: string; companyId: string };
+/** Bọc schema.parse: ZodError → 400 BadRequestException, mọi lỗi khác re-throw. */
+function parseOr400<T>(schema: { parse: (v: unknown) => T }, input: unknown): T {
+  try {
+    return schema.parse(input);
+  } catch (err) {
+    if (err instanceof ZodError) {
+      throw new BadRequestException(err.errors);
+    }
+    throw err;
+  }
 }
 
 /**
  * G13CTL — Revenue HTTP layer. Append-only sổ cái doanh thu (BẤT BIẾN #2).
  *
- * Mọi route đều @RequirePermission('create','finance') — fail-closed, không kế thừa wildcard.
+ * GET  (list)           — @RequirePermission('view-finance','finance'): trả số thô, cần quyền nhạy cảm.
+ * POST (create/adjust/void) — @RequirePermission('create','finance'): ghi sổ cái.
  * companyId lấy từ req.user (JWT) — KHÔNG đọc từ body/param (tránh tenant-leak).
  * controller KHÔNG query DB, KHÔNG business logic — delegated 100% tới RevenueService.
  *
@@ -44,9 +55,9 @@ export class RevenueController {
   constructor(private readonly revenue: RevenueService) {}
 
   @Get()
-  @RequirePermission("create", "finance")
-  list(@Req() req: AuthenticatedRequest, @Query() query: Record<string, string>) {
-    const filter = listRevenueQuerySchema.parse(query);
+  @RequirePermission("view-finance", "finance")
+  list(@Req() req: AuthRequest, @Query() query: Record<string, string>) {
+    const filter = parseOr400(listRevenueQuerySchema, query);
     const { id, companyId } = req.user;
     return this.revenue.list(companyId, id, filter);
   }
@@ -54,8 +65,8 @@ export class RevenueController {
   @Post()
   @HttpCode(201)
   @RequirePermission("create", "finance")
-  async create(@Req() req: AuthenticatedRequest, @Body() body: unknown) {
-    const dto = createRevenueSchema.parse(body);
+  async create(@Req() req: AuthRequest, @Body() body: unknown) {
+    const dto = parseOr400(createRevenueSchema, body);
     const { id, companyId } = req.user;
     return this.revenue.create(companyId, id, dto);
   }
@@ -64,11 +75,11 @@ export class RevenueController {
   @HttpCode(201)
   @RequirePermission("create", "finance")
   async adjust(
-    @Req() req: AuthenticatedRequest,
+    @Req() req: AuthRequest,
     @Param("id") originalId: string,
     @Body() body: unknown,
   ) {
-    const dto = adjustRevenueSchema.parse(body);
+    const dto = parseOr400(adjustRevenueSchema, body);
     const { id, companyId } = req.user;
     try {
       return await this.revenue.adjust(companyId, id, originalId, {
@@ -85,11 +96,11 @@ export class RevenueController {
   @HttpCode(201)
   @RequirePermission("create", "finance")
   async void(
-    @Req() req: AuthenticatedRequest,
+    @Req() req: AuthRequest,
     @Param("id") originalId: string,
     @Body() body: unknown,
   ) {
-    const dto = voidFinanceRecordSchema.parse(body);
+    const dto = parseOr400(voidFinanceRecordSchema, body);
     const { id, companyId } = req.user;
     try {
       return await this.revenue.void(companyId, id, originalId, { reason: dto.reason });

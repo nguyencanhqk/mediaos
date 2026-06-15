@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   HttpCode,
@@ -9,14 +10,23 @@ import {
   UsePipes,
 } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
-import type { Request } from "express";
+import { ZodError } from "zod";
 import { allocateCostSchema } from "@mediaos/contracts";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
+import type { AuthRequest } from "../permission/guards/jwt-auth.guard";
 import { CostAllocationService } from "./cost-allocation.service";
 
-interface AuthenticatedRequest extends Request {
-  user: { id: string; companyId: string };
+/** Bọc schema.parse: ZodError → 400 BadRequestException, mọi lỗi khác re-throw. */
+function parseOr400<T>(schema: { parse: (v: unknown) => T }, input: unknown): T {
+  try {
+    return schema.parse(input);
+  } catch (err) {
+    if (err instanceof ZodError) {
+      throw new BadRequestException(err.errors);
+    }
+    throw err;
+  }
 }
 
 /**
@@ -36,11 +46,11 @@ export class CostAllocationController {
   @HttpCode(201)
   @RequirePermission("create", "finance")
   async allocate(
-    @Req() req: AuthenticatedRequest,
+    @Req() req: AuthRequest,
     @Param("id") costRecordId: string,
     @Body() body: unknown,
   ) {
-    const dto = allocateCostSchema.parse(body);
+    const dto = parseOr400(allocateCostSchema, body);
     const { id, companyId } = req.user;
     return this.allocation.allocate(companyId, id, costRecordId, dto);
   }

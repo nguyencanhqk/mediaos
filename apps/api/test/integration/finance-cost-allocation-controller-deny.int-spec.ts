@@ -124,6 +124,35 @@ describe.skipIf(!hasDb)("G13CTL cost-allocation controller HTTP deny-path", () =
     if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
   });
 
+  // ── §401 — no/invalid Bearer → JwtAuthGuard trả 401 TRƯỚC PermissionGuard ────
+
+  describe("§401 — thiếu/sai Bearer token → 401 (JwtAuthGuard chạy trước PermissionGuard)", () => {
+    it("POST /finance/cost/:id/allocate không có token → 401", async () => {
+      const costId = await seedCost(direct, A.companyId, financeUserId);
+      const res = await api(app)
+        .post(`/finance/cost/${costId}/allocate`)
+        .send({
+          method: "equal_split",
+          targets: [{ targetType: "channel", targetId: channelA }],
+        });
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+    });
+
+    it("POST /finance/cost/:id/allocate với token giả → 401", async () => {
+      const costId = await seedCost(direct, A.companyId, financeUserId);
+      const res = await api(app)
+        .post(`/finance/cost/${costId}/allocate`)
+        .set("Authorization", "Bearer invalid.token.here")
+        .send({
+          method: "equal_split",
+          targets: [{ targetType: "channel", targetId: channelA }],
+        });
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+    });
+  });
+
   // ── §deny — user không quyền → 403, 0 row cost_allocations ──────────────────
 
   describe("§deny — thiếu create:finance → 403 + 0 cost_allocations", () => {
