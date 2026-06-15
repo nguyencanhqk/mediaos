@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { sql } from "drizzle-orm";
 import { workerDb } from "../db/index";
+import { assertWorkerRoleSafe } from "../db/worker-role";
 import { ALERT_SINK, type AlertSink } from "./alert.service";
 import { EventBus } from "./event-bus";
 
@@ -35,22 +36,16 @@ export class OutboxWorker {
   /**
    * Chặn worker chạy bằng role BYPASS RLS (review G2 H-1). Khi thiếu DATABASE_WORKER_URL, workerDb
    * fallback directPool có thể là superuser ⇒ RLS bị vô hiệu, cô lập tenant chỉ còn dựa kỷ luật dev
-   * (vi phạm BẤT BIẾN #1). Prod: ném; dev: cảnh báo to.
+   * (vi phạm BẤT BIẾN #1). Prod: ném; dev: cảnh báo to. Logic gom về `assertWorkerRoleSafe` (G16 #3);
+   * chỉ kiểm 1 lần/instance qua `roleChecked`.
    */
   private async assertWorkerRoleSafe(dbw: NonNullable<typeof workerDb>): Promise<void> {
     if (this.roleChecked) return;
-    const res = await dbw.execute(
-      sql`SELECT current_user AS role, rolsuper, rolbypassrls
-          FROM pg_roles WHERE rolname = current_user`,
-    );
-    const row = res.rows[0] as { role: string; rolsuper: boolean; rolbypassrls: boolean } | undefined;
-    if (row && (row.rolsuper || row.rolbypassrls)) {
-      const msg =
-        `OutboxWorker đang chạy bằng role '${row.role}' có BYPASS RLS ` +
-        `(super=${row.rolsuper}, bypassrls=${row.rolbypassrls}) — đặt DATABASE_WORKER_URL trỏ mediaos_worker.`;
-      if (process.env.NODE_ENV === "production") throw new Error(msg);
-      this.logger.warn(msg);
-    }
+    await assertWorkerRoleSafe(dbw, {
+      context: "OutboxWorker",
+      mode: "prod-only",
+      logger: this.logger,
+    });
     this.roleChecked = true;
   }
 
