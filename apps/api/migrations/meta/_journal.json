@@ -463,6 +463,13 @@
 			"when": 1717500128000,
 			"tag": "0102_g14_dashboard_materialized_views",
 			"breakpoints": true
+		},
+		{
+			"idx": 66,
+			"version": "7",
+			"when": 1717500129000,
+			"tag": "0103_g14_mv_grant_tighten",
+			"breakpoints": true
 		}
 	]
 }

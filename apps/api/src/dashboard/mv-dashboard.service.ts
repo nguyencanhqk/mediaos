@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
 
 export interface MvStatsFilter {
@@ -66,28 +66,23 @@ export class MvDashboardService {
    */
   async getOutputStats(companyId: string, filter: MvStatsFilter = {}): Promise<OutputStat[]> {
     return this.db.withTenant(companyId, async (tx) => {
-      // Build WHERE clauses — company_id is mandatory, others are optional.
-      const conditions: string[] = [`company_id = '${companyId}'`];
-
-      if (filter.channelId) {
-        conditions.push(`channel_id = '${filter.channelId}'`);
-      }
-      if (filter.projectId) {
-        conditions.push(`project_id = '${filter.projectId}'`);
-      }
-      if (filter.departmentId) {
-        conditions.push(`department_id = '${filter.departmentId}'`);
-      }
-      if (filter.month) {
-        // month is YYYY-MM; match DATE_TRUNC result stored as YYYY-MM-01
-        const monthDate = `${filter.month}-01`;
-        conditions.push(`month = '${monthDate}'::date`);
-      }
-
-      const whereClause = conditions.join(" AND ");
+      // All filter values are passed as Drizzle sql template parameters — NEVER interpolated as
+      // raw strings. MV has no RLS, so parameterized company_id is the sole tenant boundary.
+      const channelFilter = filter.channelId
+        ? sql` AND channel_id = ${filter.channelId}`
+        : sql``;
+      const projectFilter = filter.projectId
+        ? sql` AND project_id = ${filter.projectId}`
+        : sql``;
+      const departmentFilter = filter.departmentId
+        ? sql` AND department_id = ${filter.departmentId}`
+        : sql``;
+      const monthFilter = filter.month
+        ? sql` AND month = ${filter.month + "-01"}::date`
+        : sql``;
 
       const rows = await tx.execute(
-        sql.raw(`
+        sql`
           SELECT
             status,
             project_id,
@@ -96,9 +91,10 @@ export class MvDashboardService {
             month::text AS month,
             task_count
           FROM mv_dashboard_output
-          WHERE ${whereClause}
+          WHERE company_id = ${companyId}
+          ${channelFilter}${projectFilter}${departmentFilter}${monthFilter}
           ORDER BY month DESC, channel_id, project_id, department_id, status
-        `),
+        `,
       );
 
       if (!rows.rows.length) return [];

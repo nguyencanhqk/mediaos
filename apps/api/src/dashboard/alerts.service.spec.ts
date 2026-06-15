@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { AlertsService, CHANNEL_RISK_OVERDUE_THRESHOLD, CHANNEL_RISK_MIN_TASKS } from "./alerts.service";
+import { AlertsService, CHANNEL_RISK_OVERDUE_THRESHOLD, CHANNEL_RISK_MIN_TASKS, SEVERE_DEFECT_TYPES } from "./alerts.service";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -128,6 +128,95 @@ describe("AlertsService", () => {
     expect((result[0] as { overdueRate: number }).overdueRate).toBeCloseTo(0.8);
   });
 
+  // ─── defect severity alerts ──────────────────────────────────────────────
+
+  it("SEVERE_DEFECT_TYPES is a non-empty array of strings", () => {
+    expect(Array.isArray(SEVERE_DEFECT_TYPES)).toBe(true);
+    expect(SEVERE_DEFECT_TYPES.length).toBeGreaterThan(0);
+  });
+
+  it("getDefectSeverityAlerts returns [] when no defects exist", async () => {
+    mockWithTenant.mockImplementation((_: string, fn: (tx: unknown) => Promise<unknown>) => {
+      const chain = buildSelectChain([]);
+      return fn(chain);
+    });
+    const result = await service.getDefectSeverityAlerts(COMPANY_A);
+    expect(result).toEqual([]);
+  });
+
+  it("getDefectSeverityAlerts always calls withTenant with companyId", async () => {
+    mockWithTenant.mockImplementation((_: string, fn: (tx: unknown) => Promise<unknown>) => {
+      const chain = buildSelectChain([]);
+      return fn(chain);
+    });
+    await service.getDefectSeverityAlerts(COMPANY_A);
+    expect(mockWithTenant).toHaveBeenCalledWith(COMPANY_A, expect.any(Function));
+  });
+
+  it("getDefectSeverityAlerts maps rows to defect_severity alert type", async () => {
+    const createdAt = new Date("2026-06-01T10:00:00Z");
+    mockWithTenant.mockImplementation((_: string, fn: (tx: unknown) => Promise<unknown>) => {
+      const chain = {
+        select: vi.fn().mockReturnValue({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([
+                {
+                  id: "d1",
+                  description: "Policy violated",
+                  workflowStepId: "ws1",
+                  responsibleUserId: "u1",
+                  createdAt,
+                },
+              ]),
+            }),
+          }),
+        }),
+      };
+      return fn(chain);
+    });
+    const result = await service.getDefectSeverityAlerts(COMPANY_A);
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe("defect_severity");
+    expect(result[0].defectId).toBe("d1");
+    expect(result[0].description).toBe("Policy violated");
+    expect(result[0].workflowStepId).toBe("ws1");
+    expect(result[0].responsibleUserId).toBe("u1");
+    expect(result[0].createdAt).toBe(createdAt.toISOString());
+  });
+
+  it("getAlerts includes defect_severity alerts alongside overdue and channel_risk", async () => {
+    const createdAt = new Date();
+    // Each call to withTenant returns appropriate mock data
+    let callCount = 0;
+    mockWithTenant.mockImplementation((_: string, fn: (tx: unknown) => Promise<unknown>) => {
+      callCount++;
+      if (callCount === 1) {
+        // getOverdueTasks — select chain returning empty
+        return fn(buildSelectChain([]));
+      } else if (callCount === 2) {
+        // getDefectSeverityAlerts — select chain returning 1 defect
+        const chain = {
+          select: vi.fn().mockReturnValue({
+            from: vi.fn().mockReturnValue({
+              where: vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue([
+                  { id: "d2", description: "Quality issue", workflowStepId: "ws2", responsibleUserId: null, createdAt },
+                ]),
+              }),
+            }),
+          }),
+        };
+        return fn(chain);
+      } else {
+        // getChannelRiskAlerts — execute returning empty
+        return fn({ execute: vi.fn().mockResolvedValue({ rows: [] }) });
+      }
+    });
+    const alerts = await service.getAlerts(COMPANY_A);
+    expect(alerts.some((a) => a.type === "defect_severity")).toBe(true);
+  });
+
   // ─── tenant isolation: companyId always present ───────────────────────────
 
   it("getAlerts calls withTenant with correct companyId (no cross-tenant leak)", async () => {
@@ -137,7 +226,7 @@ describe("AlertsService", () => {
       return fn({ ...chain, execute: vi.fn().mockResolvedValue({ rows: [] }) });
     });
     await service.getAlerts(COMPANY_B);
-    // Both internal calls should use COMPANY_B, not COMPANY_A
+    // All internal calls should use COMPANY_B, not COMPANY_A
     for (const call of mockWithTenant.mock.calls) {
       expect(call[0]).toBe(COMPANY_B);
     }

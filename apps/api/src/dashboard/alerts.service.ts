@@ -1,13 +1,16 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, inArray, isNull, lt, notInArray, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, notInArray, sql } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
-import { tasks } from "../db/schema/workflow";
+import { defects, tasks } from "../db/schema/workflow";
 
 /** Percentage threshold above which a channel is considered "at-risk" (high overdue rate). */
 export const CHANNEL_RISK_OVERDUE_THRESHOLD = 0.3; // 30%
 
 /** Minimum number of tasks in a channel before risk calculation is meaningful. */
 export const CHANNEL_RISK_MIN_TASKS = 3;
+
+/** Defect types treated as "severe" — triggers a defect_severity alert. */
+export const SEVERE_DEFECT_TYPES = ["quality_issue", "policy_violation"] as const;
 
 export interface OverdueAlert {
   type: "overdue_task";
@@ -49,12 +52,13 @@ export class AlertsService {
   constructor(private readonly db: DatabaseService) {}
 
   async getAlerts(companyId: string): Promise<DashboardAlert[]> {
-    const [overdue, channelRisk] = await Promise.all([
+    const [overdue, defectSeverity, channelRisk] = await Promise.all([
       this.getOverdueTasks(companyId),
+      this.getDefectSeverityAlerts(companyId),
       this.getChannelRiskAlerts(companyId),
     ]);
 
-    return [...overdue, ...channelRisk];
+    return [...overdue, ...defectSeverity, ...channelRisk];
   }
 
   /**
@@ -89,6 +93,40 @@ export class AlertsService {
         dueDate: r.dueDate?.toISOString() ?? "",
         status: r.status,
         assigneeUserId: r.assigneeUserId,
+      }));
+    });
+  }
+
+  /**
+   * Defect severity alerts: recent defects with severe defect_type (quality_issue, policy_violation).
+   * Only defects from the last 30 days are considered to keep the alert list actionable.
+   */
+  async getDefectSeverityAlerts(companyId: string): Promise<DefectSeverityAlert[]> {
+    return this.db.withTenant(companyId, async (tx) => {
+      const rows = await tx
+        .select({
+          id: defects.id,
+          description: defects.description,
+          workflowStepId: defects.workflowStepId,
+          responsibleUserId: defects.responsibleUserId,
+          createdAt: defects.createdAt,
+        })
+        .from(defects)
+        .where(
+          and(
+            eq(defects.companyId, companyId),
+            sql`${defects.createdAt} >= NOW() - INTERVAL '30 days'`,
+          ),
+        )
+        .limit(50);
+
+      return rows.map((r) => ({
+        type: "defect_severity" as const,
+        defectId: r.id,
+        description: r.description,
+        workflowStepId: r.workflowStepId,
+        responsibleUserId: r.responsibleUserId,
+        createdAt: r.createdAt.toISOString(),
       }));
     });
   }

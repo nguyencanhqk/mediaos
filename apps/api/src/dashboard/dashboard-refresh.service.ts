@@ -28,11 +28,12 @@ export class DashboardRefreshService {
   async refresh(): Promise<{ refreshedAt: string }> {
     const db = this.refreshDb;
     if (!db) {
-      this.logger.warn("DashboardRefreshService: no worker/direct pool configured — skipping refresh");
-      return { refreshedAt: new Date().toISOString() };
+      throw new Error(
+        "DashboardRefreshService: no worker/direct pool configured — cannot refresh materialized views",
+      );
     }
 
-    // Check if MV has been populated (has at least 1 row = was refreshed before)
+    // Determine whether MV already has data. Errors here bubble up (fail-loud).
     const populated = await this.isMvPopulated(db);
 
     if (!populated) {
@@ -51,16 +52,11 @@ export class DashboardRefreshService {
   }
 
   private async isMvPopulated(db: NonNullable<typeof workerDb>): Promise<boolean> {
-    try {
-      const result = await db.execute(
-        sql`SELECT 1 FROM mv_dashboard_task_status LIMIT 1`,
-      );
-      return result.rows.length > 0;
-    } catch (err: unknown) {
-      // If MV doesn't exist yet, treat as not populated
-      this.logger.warn(`isMvPopulated check failed: ${err instanceof Error ? err.message : String(err)}`);
-      return false;
-    }
+    // Errors surface to refresh() caller — no silent fallback.
+    const result = await db.execute(
+      sql`SELECT 1 FROM mv_dashboard_task_status LIMIT 1`,
+    );
+    return result.rows.length > 0;
   }
 
   private async refreshNonConcurrent(db: NonNullable<typeof workerDb>): Promise<void> {
