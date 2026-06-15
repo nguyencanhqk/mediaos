@@ -540,6 +540,27 @@
 			"when": 1717500139000,
 			"tag": "0099_g12_bonus_penalty_audit_perms",
 			"breakpoints": true
+		},
+		{
+			"idx": 77,
+			"version": "7",
+			"when": 1717500140000,
+			"tag": "0130_g12_period_approval_fsm",
+			"breakpoints": true
+		},
+		{
+			"idx": 78,
+			"version": "7",
+			"when": 1717500141000,
+			"tag": "0131_g12_payslip_acknowledgements",
+			"breakpoints": true
+		},
+		{
+			"idx": 79,
+			"version": "7",
+			"when": 1717500142000,
+			"tag": "0132_g12_approval_audit_perms",
+			"breakpoints": true
 		}
 	]
 }

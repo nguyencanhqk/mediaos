@@ -8,17 +8,23 @@
 import process from "node:process";
 import { execSync } from "node:child_process";
 
-// Lane → [min,max] số migration (TASKS.md §5.2). Master kết thúc ở 0037.
+// Lane → danh sách band [min,max] số migration (TASKS.md §5.2). Master kết thúc ở 0037.
+// Mỗi lane có thể có NHIỀU band rời nhau khi band gốc đầy (G12: 0090–0099 đầy → tràn 0130–0139).
 const BANDS = {
-  g8: [80, 89],
-  g9: [40, 49],
-  g10: [50, 59],
-  g11: [60, 69],
-  g12: [90, 99],
-  g13: [70, 79],
-  g14: [100, 109],
-  g15: [110, 119],
-  g16: [120, 129],
+  g8: [[80, 89]],
+  g9: [[40, 49]],
+  g10: [[50, 59]],
+  g11: [[60, 69]],
+  // G12 band gốc 0090–0099 ĐẦY (G12-1..G12-3). G12-4 Duyệt bảng lương tràn sang band riêng
+  // 0130–0139 (sau G16 0120s — KHÔNG đụng band lane khác). TASKS.md §5.2.
+  g12: [
+    [90, 99],
+    [130, 139],
+  ],
+  g13: [[70, 79]],
+  g14: [[100, 109]],
+  g15: [[110, 119]],
+  g16: [[120, 129]],
 };
 
 const MIGRATION_SQL = /[\\/]migrations[\\/](\d{4})_[^\\/]*\.sql$/i;
@@ -67,13 +73,16 @@ try {
   if (!lane || !BANDS[lane]) process.exit(0); // master / branch lạ → fail-open
 
   const num = parseInt(mm[1], 10);
-  const [lo, hi] = BANDS[lane];
-  if (num < lo || num > hi) {
+  const ranges = BANDS[lane];
+  const inBand = ranges.some(([lo, hi]) => num >= lo && num <= hi);
+  if (!inBand) {
+    const bandList = ranges.map(([lo, hi]) => `${pad4(lo)}–${pad4(hi)}`).join(", ");
+    const firstLo = ranges[ranges.length - 1][0]; // band mới nhất (gợi ý đánh số tiếp)
     process.stderr.write(
       `\n⛔ guard-migration-band BLOCK trong ${file}\n` +
-        `   Lane ${lane.toUpperCase()} chỉ được đánh số migration trong band ${pad4(lo)}–${pad4(hi)}.\n` +
+        `   Lane ${lane.toUpperCase()} chỉ được đánh số migration trong band ${bandList}.\n` +
         `   Số ${mm[1]} NGOÀI band → nguy cơ collision với lane khác (TASKS.md §5.2).\n` +
-        `   → Đổi tên file về band của lane này (vd: ${pad4(lo)}_...).\n`,
+        `   → Đổi tên file về band của lane này (vd: ${pad4(firstLo)}_...).\n`,
     );
     process.exit(2);
   }
