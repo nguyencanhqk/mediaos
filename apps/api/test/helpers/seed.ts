@@ -279,6 +279,14 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   if (companyIds.length === 0) return;
   const ids = [companyIds];
 
+  // ── G12-2 Payroll (period + payslip snapshot, append-only) ──────────────────
+  // payslip_items → payslips (FK CASCADE on payslip_id, but delete explicitly for clarity);
+  // payslips → payroll_periods/users/salary_profiles (no cascade) → xoá TRƯỚC users/salary_profiles.
+  // payroll_periods.attendance_period_id ON DELETE SET NULL → an toàn xoá trước attendance_periods.
+  await direct.query("DELETE FROM payslip_items WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM payslips WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM payroll_periods WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G13 Finance ────────────────────────────────────────────────────────────
   // Xoá TRƯỚC projects/channels/content_items/org_units/teams/users (FK target). Thứ tự nội bộ:
   // cost_allocations → cost_records (FK); expense_approvals → expense_requests; revenue_records;
@@ -310,6 +318,12 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM leave_types WHERE company_id = ANY($1::uuid[])", ids);
   // work_schedules: employee_profiles.work_schedule_id FK (ON DELETE SET NULL) — an toàn xoá sau.
   await direct.query("DELETE FROM work_schedules WHERE company_id = ANY($1::uuid[])", ids);
+
+  // ── G8-4 KPI ─────────────────────────────────────────────────────────────
+  // kpi_results.computed_by/confirmed_by/subject_user_id → users (NO ACTION) → xoá TRƯỚC users.
+  // kpi_results.definition_id → kpi_definitions (CASCADE) → xoá results trước definitions.
+  await direct.query("DELETE FROM kpi_results WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM kpi_definitions WHERE company_id = ANY($1::uuid[])", ids);
 
   // ── G4-5 Approval / Defect ───────────────────────────────────────────────
   await direct.query("DELETE FROM defects WHERE company_id = ANY($1::uuid[])", ids);

@@ -1,6 +1,6 @@
 -- Migration 0053: G10-4 — Meeting notes (biên bản) + meeting_tasks (link sang Task Hub G9).
 --
--- LANE: G10 band 0050–0059. Journal: idx=65, when=1717500128000 (> max 1717500127000 idx=64).
+-- LANE: G10 band 0050–0059. Journal: idx=74, when=1717500137000 (re-stamp khi land sau Wave C — > master max idx=73 when=1717500136000).
 -- Phụ thuộc: 0052 (meetings đã land), 0040 (tasks G9-1 mở CHECK task_type → 'meeting_action').
 --
 -- Bất biến (CLAUDE.md §2):

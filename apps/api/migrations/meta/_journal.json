@@ -461,6 +461,69 @@
 			"idx": 65,
 			"version": "7",
 			"when": 1717500128000,
+			"tag": "0102_g14_dashboard_materialized_views",
+			"breakpoints": true
+		},
+		{
+			"idx": 66,
+			"version": "7",
+			"when": 1717500129000,
+			"tag": "0103_g14_mv_grant_tighten",
+			"breakpoints": true
+		},
+		{
+			"idx": 67,
+			"version": "7",
+			"when": 1717500130000,
+			"tag": "0088_g8_kpi",
+			"breakpoints": true
+		},
+		{
+			"idx": 68,
+			"version": "7",
+			"when": 1717500131000,
+			"tag": "0089_g8_kpi_permissions_seed",
+			"breakpoints": true
+		},
+		{
+			"idx": 69,
+			"version": "7",
+			"when": 1717500132000,
+			"tag": "0093_g12_payroll_audit_object_types",
+			"breakpoints": true
+		},
+		{
+			"idx": 70,
+			"version": "7",
+			"when": 1717500133000,
+			"tag": "0094_g12_payroll_periods",
+			"breakpoints": true
+		},
+		{
+			"idx": 71,
+			"version": "7",
+			"when": 1717500134000,
+			"tag": "0095_g12_payslips",
+			"breakpoints": true
+		},
+		{
+			"idx": 72,
+			"version": "7",
+			"when": 1717500135000,
+			"tag": "0096_g12_payslip_items",
+			"breakpoints": true
+		},
+		{
+			"idx": 73,
+			"version": "7",
+			"when": 1717500136000,
+			"tag": "0097_g12_payroll_permissions_seed",
+			"breakpoints": true
+		},
+		{
+			"idx": 74,
+			"version": "7",
+			"when": 1717500137000,
 			"tag": "0053_g10_meeting_notes_tasks",
 			"breakpoints": true
 		}

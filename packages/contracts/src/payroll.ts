@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { periodMonthSchema } from "./attendance";
 
 /**
  * MediaOS — Payroll contracts (G12-1 Salary Profile).
@@ -97,3 +98,115 @@ export const salaryProfileListQuerySchema = z.object({
   status: salaryProfileStatusEnum.optional(),
 });
 export type SalaryProfileListQuery = z.infer<typeof salaryProfileListQuerySchema>;
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// G12-2 — Payroll period + payslip snapshot (append-only, ADR-0005)
+//   - payroll_periods: kỳ lương MUTABLE draft→locked.
+//   - payslips/payslip_items: SNAPSHOT BẤT BIẾN append-only (sửa = ghi mới entry_kind adjustment/void).
+//   - kpi/bonus/penalty NULLABLE = SLOT cho G8-4 — KHÔNG implement logic KPI/thưởng/phạt lượt này.
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+
+// period_month dùng chung periodMonthSchema (DRY — nguồn ở attendance.ts, cùng regex YYYY-MM).
+
+export const payrollPeriodStatusEnum = z.enum(["draft", "locked"]);
+export type PayrollPeriodStatus = z.infer<typeof payrollPeriodStatusEnum>;
+
+/** DTO kỳ lương trả về client. */
+export const payrollPeriodSchema = z.object({
+  id: z.string().uuid(),
+  companyId: z.string().uuid(),
+  periodMonth: periodMonthSchema,
+  status: payrollPeriodStatusEnum,
+  attendancePeriodId: z.string().uuid().nullable(),
+  kpiLocked: z.boolean(),
+  lockedBy: z.string().uuid().nullable(),
+  lockedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type PayrollPeriodDto = z.infer<typeof payrollPeriodSchema>;
+
+/** Create payroll period — chỉ cần kỳ + (tuỳ chọn) gắn attendance_period nguồn công. */
+export const createPayrollPeriodSchema = z.object({
+  periodMonth: periodMonthSchema,
+  attendancePeriodId: z.string().uuid().optional(),
+});
+export type CreatePayrollPeriodRequest = z.infer<typeof createPayrollPeriodSchema>;
+
+export const payslipEntryKindEnum = z.enum(["original", "adjustment", "void"]);
+export type PayslipEntryKind = z.infer<typeof payslipEntryKindEnum>;
+
+/**
+ * DTO payslip (SNAPSHOT). kpi/bonus/penalty NULLABLE (slot G8-4 — null khi chưa nối KPI).
+ * Append-only: KHÔNG có updated_at/deleted_at. "Sửa" = bản ghi mới entry_kind adjustment/void.
+ */
+export const payslipSchema = z.object({
+  id: z.string().uuid(),
+  companyId: z.string().uuid(),
+  payrollPeriodId: z.string().uuid(),
+  userId: z.string().uuid(),
+  salaryProfileId: z.string().uuid().nullable(),
+  baseSalary: z.number(),
+  totalAllowances: z.number(),
+  gross: z.number(),
+  net: z.number(),
+  currency: z.string(),
+  workDays: z.number(),
+  presentDays: z.number(),
+  lateMinutes: z.number().int(),
+  kpiAmount: z.number().nullable(),
+  bonusAmount: z.number().nullable(),
+  penaltyAmount: z.number().nullable(),
+  entryKind: payslipEntryKindEnum,
+  replacesPayslipId: z.string().uuid().nullable(),
+  createdBy: z.string().uuid(),
+  createdAt: z.string().datetime(),
+});
+export type PayslipDto = z.infer<typeof payslipSchema>;
+
+export const payslipItemTypeEnum = z.enum([
+  "earning",
+  "deduction",
+  "allowance",
+  "attendance",
+  "kpi",
+  "bonus",
+  "penalty",
+]);
+export type PayslipItemType = z.infer<typeof payslipItemTypeEnum>;
+
+/** DTO dòng chi tiết payslip (append-only). */
+export const payslipItemSchema = z.object({
+  id: z.string().uuid(),
+  companyId: z.string().uuid(),
+  payslipId: z.string().uuid(),
+  itemType: payslipItemTypeEnum,
+  label: z.string(),
+  amount: z.number(),
+  meta: z.record(z.unknown()).nullable(),
+  createdAt: z.string().datetime(),
+});
+export type PayslipItemDto = z.infer<typeof payslipItemSchema>;
+
+/**
+ * Run payroll — chạy lương cho 1 kỳ. Aggregate công G11 → snapshot payslip.
+ * userIds optional: rỗng/không có ⇒ toàn bộ nhân sự có salary_profile active.
+ */
+export const runPayrollRequestSchema = z.object({
+  payrollPeriodId: z.string().uuid(),
+  userIds: z.array(z.string().uuid()).optional(),
+});
+export type RunPayrollRequest = z.infer<typeof runPayrollRequestSchema>;
+
+/** GET /payroll-periods query filters. */
+export const payrollPeriodListQuerySchema = z.object({
+  status: payrollPeriodStatusEnum.optional(),
+});
+export type PayrollPeriodListQuery = z.infer<typeof payrollPeriodListQuerySchema>;
+
+/** GET /payslips query filters. */
+export const payslipListQuerySchema = z.object({
+  payrollPeriodId: z.string().uuid().optional(),
+  userId: z.string().uuid().optional(),
+});
+export type PayslipListQuery = z.infer<typeof payslipListQuerySchema>;
