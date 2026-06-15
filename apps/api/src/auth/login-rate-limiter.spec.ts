@@ -103,5 +103,23 @@ describe("LoginRateLimiter (brute-force)", () => {
       expect(await rl.isLocked(key, now)).toBe(true); // memory path đã khoá
       expect(valkey.store.size).toBe(0); // KHÔNG chạm Valkey khi disabled
     });
+
+    it("KHÔNG fail-open: Valkey ENABLED nhưng đang rớt (mọi op null) → recordFailure rơi memory, isLocked vẫn TRUE", async () => {
+      // isEnabled=true nhưng incr/get trả null (mô phỏng outage). recordFailure → incr null → recordFailureMem;
+      // isLocked → get null → KHÔNG return false ngay mà rơi xuống kiểm map in-memory → thấy khoá (không bỏ limit).
+      const erroring = {
+        isEnabled: () => true,
+        incr: async () => null,
+        get: async () => null,
+        set: async () => false,
+        del: async () => false,
+      } as unknown as ValkeyService;
+      const rl = new LoginRateLimiter(erroring);
+      const key = LoginRateLimiter.key("acme", "a@b.c", "1.1.1.1");
+      const now = 1_000_000;
+      expect(await rl.isLocked(key, now)).toBe(false);
+      for (let i = 0; i < 5; i++) await rl.recordFailure(key, undefined, now);
+      expect(await rl.isLocked(key, now)).toBe(true);
+    });
   });
 });

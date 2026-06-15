@@ -52,7 +52,7 @@ describe.skipIf(!hasDb)("G16-1 login 2FA flow", () => {
     const dbsvc = new DatabaseService();
     const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
     const mockPermissions = { getCapabilities: async () => ({}) } as unknown as PermissionService;
-    const tf = new TwoFactorService(dbsvc, secrets, totp, new TokenService(), new AuditService());
+    const tf = new TwoFactorService(dbsvc, secrets, totp, new TokenService(), new AuditService(), new LoginRateLimiter());
     const a = new AuthService(
       dbsvc,
       password,

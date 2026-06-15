@@ -47,7 +47,7 @@ describe.skipIf(!hasDb)('G6-2b RED 12 — forgotPassword reset-token must be env
     const mockPermissions = { getCapabilities: async () => ({}) } as unknown as PermissionService;
     const dbsvc = new DatabaseService();
     const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
-    const twoFactor = new TwoFactorService(dbsvc, secrets, new TotpService(), new TokenService(), new AuditService());
+    const twoFactor = new TwoFactorService(dbsvc, secrets, new TotpService(), new TokenService(), new AuditService(), new LoginRateLimiter());
     return new AuthService(
       dbsvc,
       password,

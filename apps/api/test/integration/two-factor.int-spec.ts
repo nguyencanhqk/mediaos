@@ -4,11 +4,12 @@
  * recovery one-time, tenant isolation. Secret TOTP PHẢI envelope-encrypted (không plaintext trong DB).
  */
 import { randomUUID } from "node:crypto";
-import { ConflictException, UnauthorizedException } from "@nestjs/common";
+import { ConflictException, HttpException, UnauthorizedException } from "@nestjs/common";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { TwoFactorService } from "../../src/auth/two-factor.service";
 import { TotpService } from "../../src/auth/totp.service";
 import { TokenService } from "../../src/auth/token.service";
+import { LoginRateLimiter } from "../../src/auth/login-rate-limiter";
 import { DatabaseService } from "../../src/db/db.service";
 import { SecretEncryptionService } from "../../src/crypto/secret-encryption.service";
 import { NodeEnvelopeCipher } from "../../src/crypto/envelope-cipher";
@@ -37,7 +38,7 @@ describe.skipIf(!hasDb)("G16-1 TwoFactorService — 2FA TOTP", () => {
   beforeAll(async () => {
     const db = new DatabaseService();
     const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
-    svc = new TwoFactorService(db, secrets, totp, new TokenService(), new AuditService());
+    svc = new TwoFactorService(db, secrets, totp, new TokenService(), new AuditService(), new LoginRateLimiter());
 
     A = await seedCompany(direct, "g16a");
     B = await seedCompany(direct, "g16b");
@@ -122,6 +123,17 @@ describe.skipIf(!hasDb)("G16-1 TwoFactorService — 2FA TOTP", () => {
     expect(await svc.isEnabled(userA, A.companyId)).toBe(true);
     // Cùng userId nhưng ngữ cảnh tenant B → RLS lọc → 0 row → false (không rò trạng thái chéo tenant).
     expect(await svc.isEnabled(userA, B.companyId)).toBe(false);
+  });
+
+  it("rate-limit confirmEnable: nhiều mã sai → khoá (429) chống brute-force TOTP", async () => {
+    // svc dùng chung 1 LoginRateLimiter; dùng userB (chưa đụng) để key sạch.
+    await svc.enroll(userB, B.companyId);
+    for (let i = 0; i < 5; i++) {
+      await expect(svc.confirmEnable(userB, B.companyId, "000000")).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+    }
+    await expect(svc.confirmEnable(userB, B.companyId, "000000")).rejects.toBeInstanceOf(HttpException);
   });
 
   /** Helper: disable (nếu có) + enroll lại, trả enroll result. Dùng cho các case cần trạng thái pending sạch. */

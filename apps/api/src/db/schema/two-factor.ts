@@ -48,10 +48,14 @@ export const userTotp = pgTable(
     authTag: bytea("auth_tag").notNull(),
     encAlgo: text("enc_algo").notNull().default("AES-256-GCM"),
     enabledAt: timestamp("enabled_at", { withTimezone: true }),
+    lastRotatedAt: timestamp("last_rotated_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("user_totp_user_uq").on(t.userId)],
+  (t) => [
+    uniqueIndex("user_totp_user_uq").on(t.userId),
+    index("user_totp_company_user_idx").on(t.companyId, t.userId),
+  ],
 );
 
 export type UserTotp = typeof userTotp.$inferSelect;
@@ -77,7 +81,7 @@ export const userRecoveryCodes = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("user_recovery_codes_hash_uq").on(t.codeHash),
+    uniqueIndex("user_recovery_codes_hash_uq").on(t.companyId, t.codeHash),
     index("user_recovery_codes_user_idx").on(t.companyId, t.userId),
   ],
 );

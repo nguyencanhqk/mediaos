@@ -57,6 +57,7 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
       new TotpService(),
       new TokenService(),
       new AuditService(),
+      new LoginRateLimiter(),
     );
     return new AuthService(
       dbsvc,

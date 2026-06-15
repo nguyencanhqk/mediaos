@@ -246,8 +246,12 @@ export class AuthService {
     return tokens;
   }
 
-  /** Tắt 2FA của chính user — PHẢI re-auth bằng mật khẩu (chống chiếm phiên gỡ 2FA). */
+  /** Tắt 2FA của chính user — PHẢI re-auth bằng mật khẩu (chống chiếm phiên gỡ 2FA), có rate-limit. */
   async disableTwoFactor(user: { id: string; companyId: string }, password: string): Promise<void> {
+    const rlKey = `2fa-disable|${user.companyId}|${user.id}`;
+    if (await this.rateLimiter.isLocked(rlKey)) {
+      throw new HttpException("Quá nhiều lần thử. Vui lòng thử lại sau.", HttpStatus.TOO_MANY_REQUESTS);
+    }
     const ok = await this.dbsvc.withTenant(user.companyId, async (tx) => {
       const [row] = await tx
         .select({ passwordHash: users.passwordHash })
@@ -257,7 +261,11 @@ export class AuthService {
       if (!row) return false;
       return this.password.verify(row.passwordHash, password);
     });
-    if (!ok) throw new UnauthorizedException("Mật khẩu không đúng.");
+    if (!ok) {
+      await this.rateLimiter.recordFailure(rlKey);
+      throw new UnauthorizedException("Mật khẩu không đúng.");
+    }
+    await this.rateLimiter.reset(rlKey);
     await this.twoFactor.disable(user.id, user.companyId);
   }
 

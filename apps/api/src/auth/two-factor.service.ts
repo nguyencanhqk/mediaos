@@ -1,11 +1,18 @@
 import { randomBytes } from "node:crypto";
-import { ConflictException, Injectable, UnauthorizedException } from "@nestjs/common";
+import {
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { roles, userRecoveryCodes, userRoles, users, userTotp } from "../db/schema";
 import { AuditService } from "../events/audit.service";
 import { SecretEncryptionService } from "../crypto/secret-encryption.service";
 import type { EncryptedColumns } from "../crypto/secret-encryption.types";
+import { LoginRateLimiter } from "./login-rate-limiter";
 import { TokenService } from "./token.service";
 import { TotpService } from "./totp.service";
 
@@ -36,6 +43,7 @@ export class TwoFactorService {
     private readonly totp: TotpService,
     private readonly tokens: TokenService,
     private readonly audit: AuditService,
+    private readonly rateLimiter: LoginRateLimiter,
   ) {}
 
   // ── login-path helpers (chạy TRONG tx của login để cùng 1 transaction) ────────────────────────
@@ -133,15 +141,17 @@ export class TwoFactorService {
     return { otpauthUri: this.totp.keyUri(accountName, secret), recoveryCodes };
   }
 
-  /** Xác nhận bật: verify mã TOTP với secret đã enroll → set enabled_at. Mã sai → 401 (deny-path). */
+  /** Xác nhận bật: verify mã TOTP với secret đã enroll → set enabled_at. Mã sai → 401 (deny-path), rate-limit. */
   async confirmEnable(userId: string, companyId: string, token: string): Promise<void> {
-    await this.dbsvc.withTenant(companyId, async (tx) => {
+    const rlKey = `2fa-enable|${companyId}|${userId}`;
+    if (await this.rateLimiter.isLocked(rlKey)) {
+      throw new HttpException("Quá nhiều lần thử. Vui lòng thử lại sau.", HttpStatus.TOO_MANY_REQUESTS);
+    }
+    const verified = await this.dbsvc.withTenant(companyId, async (tx) => {
       const row = await this.loadTotp(tx, userId);
       if (!row) throw new UnauthorizedException("Chưa đăng ký 2FA.");
       const secret = await this.decryptSecret(row, companyId, userId);
-      if (!this.totp.verify(token, secret)) {
-        throw new UnauthorizedException("Mã xác thực không đúng.");
-      }
+      if (!this.totp.verify(token, secret)) return false;
       await tx
         .update(userTotp)
         .set({ enabledAt: new Date(), updatedAt: new Date() })
@@ -152,7 +162,13 @@ export class TwoFactorService {
         actorUserId: userId,
         objectId: userId,
       });
+      return true;
     });
+    if (!verified) {
+      await this.rateLimiter.recordFailure(rlKey);
+      throw new UnauthorizedException("Mã xác thực không đúng.");
+    }
+    await this.rateLimiter.reset(rlKey);
   }
 
   /** Tắt 2FA: xoá sạch secret + recovery codes. Controller PHẢI re-auth (password) trước khi gọi. */

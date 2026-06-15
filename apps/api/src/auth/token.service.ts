@@ -56,11 +56,17 @@ export class TokenService {
     });
   }
 
-  /** Giải mã + verify chữ ký/hạn. Throw nếu sai (caller map → 401). */
+  /**
+   * Giải mã + verify chữ ký/hạn. Throw nếu sai (caller map → 401). CHẶN token confusion: challenge 2FA
+   * (`tfp:true`, ký cùng secret) KHÔNG được dùng như access token — phải có `email` và KHÔNG có cờ `tfp`,
+   * nếu không JwtAuthGuard sẽ nhận challenge token (phiên chưa qua bước 2) làm phiên đầy đủ.
+   */
   verifyAccessToken(token: string): AccessTokenClaims {
     const decoded = jwt.verify(token, this.secret(), { algorithms: ["HS256"] });
-    if (typeof decoded === "string") throw new Error("token payload không hợp lệ");
-    return { sub: String(decoded.sub), companyId: String(decoded.companyId), email: String(decoded.email) };
+    if (typeof decoded === "string" || decoded.tfp === true || typeof decoded.email !== "string") {
+      throw new Error("token không phải access token hợp lệ");
+    }
+    return { sub: String(decoded.sub), companyId: String(decoded.companyId), email: decoded.email };
   }
 
   /**

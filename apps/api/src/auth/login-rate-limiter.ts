@@ -40,7 +40,9 @@ export class LoginRateLimiter {
 
   async isLocked(key: string, nowMs: number = Date.now()): Promise<boolean> {
     if (this.useValkey()) {
-      return (await this.valkey!.get(this.lockKey(key))) !== null;
+      if ((await this.valkey!.get(this.lockKey(key))) !== null) return true;
+      // Valkey trả null = CHƯA khoá HOẶC Valkey rớt (get nuốt lỗi → null). Khi rớt, recordFailure đã ghi
+      // vào memory (incr null → recordFailureMem) → KHÔNG fail-open: rơi xuống kiểm luôn map in-memory.
     }
     const state = this.attempts.get(key);
     return state !== undefined && state.lockedUntilMs > nowMs;
@@ -69,13 +71,13 @@ export class LoginRateLimiter {
     this.recordFailureMem(key, maxAttempts, nowMs);
   }
 
-  /** Xoá trạng thái sau login thành công (cả counter + lock). */
+  /** Xoá trạng thái sau login thành công (cả counter + lock). Luôn xoá map in-memory (fallback có thể đã
+   *  ghi trong lúc Valkey rớt) để không khoá nhầm sau khi đã đăng nhập thành công. */
   async reset(key: string): Promise<void> {
+    this.attempts.delete(key);
     if (this.useValkey()) {
       await this.valkey!.del(this.countKey(key), this.lockKey(key));
-      return;
     }
-    this.attempts.delete(key);
   }
 
   private recordFailureMem(key: string, maxAttempts: number, nowMs: number): void {

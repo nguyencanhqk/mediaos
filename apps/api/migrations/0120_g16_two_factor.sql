@@ -18,11 +18,15 @@ CREATE TABLE user_totp (
   auth_tag           bytea NOT NULL,
   enc_algo           text  NOT NULL DEFAULT 'AES-256-GCM',
   enabled_at         timestamptz,
+  last_rotated_at    timestamptz,
   created_at         timestamptz NOT NULL DEFAULT now(),
   updated_at         timestamptz NOT NULL DEFAULT now()
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX user_totp_user_uq ON user_totp (user_id);
+--> statement-breakpoint
+-- RLS policy lọc theo company_id mỗi row → index (company_id, user_id) (đồng nhất mọi bảng tenant peer).
+CREATE INDEX user_totp_company_user_idx ON user_totp (company_id, user_id);
 --> statement-breakpoint
 ALTER TABLE user_totp ADD CONSTRAINT user_totp_enc_algo_check CHECK (enc_algo IN ('AES-256-GCM'));
 --> statement-breakpoint
@@ -41,6 +45,10 @@ CREATE POLICY user_totp_tenant_iso ON user_totp
 -- SELECT/INSERT (enroll) + UPDATE (xác nhận enabled_at) + DELETE (disable → xoá sạch secret).
 GRANT SELECT, INSERT, UPDATE, DELETE ON user_totp TO mediaos_app;
 --> statement-breakpoint
+-- Worker re-wrap DEK khi xoay KEK (mirror platform_accounts 0022): column-grant để worker rotate được
+-- mà KHÔNG đọc/ghi secret_ciphertext. Hoàn thiện vòng đời rotation cho secret TOTP (purpose='totp_secret').
+GRANT UPDATE (encrypted_dek, kms_key_id, dek_key_version, last_rotated_at) ON user_totp TO mediaos_worker;
+--> statement-breakpoint
 
 -- ── user_recovery_codes (dùng 1 lần; used_at; hash-at-rest) ────────────────────────────────────────
 CREATE TABLE user_recovery_codes (
@@ -53,7 +61,9 @@ CREATE TABLE user_recovery_codes (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX user_recovery_codes_hash_uq ON user_recovery_codes (code_hash);
+-- Unique theo (company_id, code_hash) — KHÔNG global: tránh ràng buộc/oracle chéo tenant. Lookup vẫn theo
+-- user_id + code_hash trong RLS (company_id) nên ngữ nghĩa "mã 1-lần/tenant" được giữ.
+CREATE UNIQUE INDEX user_recovery_codes_hash_uq ON user_recovery_codes (company_id, code_hash);
 --> statement-breakpoint
 CREATE INDEX user_recovery_codes_user_idx ON user_recovery_codes (company_id, user_id);
 --> statement-breakpoint
@@ -75,6 +85,17 @@ ALTER TABLE roles ADD COLUMN requires_two_factor boolean NOT NULL DEFAULT false;
 -- Seed: company-admin (system role privileged) BẮT BUỘC 2FA. Companies bật thêm cờ cho role tuỳ qua admin UI.
 UPDATE roles SET requires_two_factor = true
   WHERE name = 'company-admin' AND is_system = true AND company_id IS NULL;
+--> statement-breakpoint
+-- Fail-LOUD nếu seed trượt (role bị đổi tên ở migration tương lai) → tránh âm thầm TẮT enforcement AUTH-003.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM roles
+    WHERE name = 'company-admin' AND is_system = true AND company_id IS NULL AND requires_two_factor = true
+  ) THEN
+    RAISE EXCEPTION 'Migration 0120: seed requires_two_factor cho company-admin trượt (0 row) — kiểm tên role.';
+  END IF;
+END $$;
 --> statement-breakpoint
 
 -- ── Seed encryption_keys cho purpose='totp_secret' (encryption_keys GLOBAL — no RLS, migration 0022) ─
