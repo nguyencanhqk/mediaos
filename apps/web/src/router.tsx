@@ -29,6 +29,7 @@ import { AdjustmentsPage } from "@/routes/hr/adjustments";
 import { LeavePage } from "@/routes/hr/leave";
 import { SalaryProfilesPage } from "@/routes/payroll/salary-profiles";
 import { PayrollPeriodsPage } from "@/routes/payroll/periods";
+import { BonusPenaltiesPage } from "@/routes/payroll/bonus-penalties";
 import { useAuthStore } from "@/stores/auth";
 
 const rootRoute = createRootRoute({ component: RootLayout });
@@ -232,6 +233,14 @@ const payrollPeriodsRoute = createRoute({
   component: PayrollPeriodsPage,
 });
 
+// G12-FE: bonus/penalty manage + approve (self-approve UI block, server SoD authoritative)
+const bonusPenaltiesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/payroll/bonus-penalties",
+  beforeLoad: authGuard,
+  component: BonusPenaltiesPage,
+});
+
 const companySettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings/company",
@@ -276,6 +285,7 @@ const routeTree = rootRoute.addChildren([
   leaveRoute,
   salaryProfilesRoute,
   payrollPeriodsRoute,
+  bonusPenaltiesRoute,
 ]);
 
 export const router = createRouter({ routeTree });
