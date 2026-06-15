@@ -136,6 +136,7 @@ Master kết thúc ở `0037`. Mỗi lane sở hữu **1 dải 10 số** riêng:
 | G14 | `0100–0109` | ✅ đã land master (`0100` idx 53, `0101` idx 60) |
 | G15 | `0110–0119` | reserved |
 | G16 | `0120–0129` | reserved |
+| G12 (tràn) | `0130–0139` | **G12-4 Duyệt bảng lương** — band gốc `0090–0099` đầy → cấp band tràn riêng (sau G16, không đụng band lane khác). Hook `guard-migration-band` cho G12 = `[[90,99],[130,139]]`. Bắt đầu `0130`. |
 
 `_journal.json`: `idx`/`when` phải **đơn điệu tăng** trong band; khi merge nhiều lane, reconcile journal theo thứ tự merge (idx liên tục, when tăng dần). Hook `guard-migration-band` **chặn (exit 2)** file migration có số ngoài band của branch hiện tại.
 
