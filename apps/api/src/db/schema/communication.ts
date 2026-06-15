@@ -119,6 +119,8 @@ export const notificationRules = pgTable(
     notificationType: text("notification_type").notNull(),
     /** true = tự động phát notification khi sự kiện xảy ra (company-wide default). */
     enabled: boolean("enabled").notNull().default(true),
+    /** true = notification loại này bắt buộc — user KHÔNG được opt-out (NOTI-002). */
+    mandatory: boolean("mandatory").notNull().default(false),
     /** Metadata mở rộng (vd: template body, cooldown ms). */
     config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
