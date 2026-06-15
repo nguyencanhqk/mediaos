@@ -118,12 +118,18 @@ export class ProfitRepository {
    * (join cost_records). CHỈ scope con — company scope allocated=0 (service KHÔNG gọi method này).
    *
    * ⚠️ KHÁC direct-cost sum: allocation KHÔNG dùng "head hiệu lực". `adjust()`/`void()` không đụng
-   * cost_allocations (allocation luôn trỏ record được phân bổ lúc đó). Vì vậy:
-   *  - cost bị VOID ⇒ LOẠI allocation (cost bị huỷ ⇒ phân bổ theo nó cũng huỷ).
-   *  - cost chỉ bị ADJUST ⇒ GIỮ allocation (cost vẫn có thật; phân bổ cũ vẫn hợp lệ tới khi re-allocate
-   *    trên bản mới — snapshot là điểm-thời-gian best-effort). Loại nó đi sẽ thổi phồng profit sub-scope.
-   * `voided_lineage` = đi NGƯỢC chuỗi replaces từ mọi record entry_kind='void' về gốc (bắt cả chuỗi
-   * adjust→void nhiều bước). cost_records có RLS ⇒ CTE chỉ thấy tenant hiện tại.
+   * cost_allocations (allocation luôn trỏ record được phân bổ lúc đó), và `softDeleteActiveTx` (G13-2)
+   * key theo `cost_record_id` — KHÔNG theo lineage. Hệ quả 2 trạng thái phải phân biệt:
+   *  - cost chỉ bị ADJUST, CHƯA re-allocate ⇒ GIỮ allocation cũ (phân bổ vẫn hợp lệ; loại đi = understate).
+   *  - cost bị ADJUST rồi RE-ALLOCATE trên bản mới ⇒ run cũ (trỏ record bị thay thế) vẫn `deleted_at IS
+   *    NULL` (không bị soft-delete vì khác cost_record_id) → nếu đếm cả 2 run = ĐẾM ĐÔI (HIGH).
+   *
+   * Khử đếm-đôi theo LINEAGE: mỗi lineage (gom mọi record cùng chuỗi `replaces` về 1 root) chỉ TÍNH
+   * allocation của allocation_run MỚI NHẤT còn active (rank theo `calculated_at`, tie-break `id`). Rank
+   * theo LINEAGE rồi MỚI lọc target — KHÔNG rank per-target (nếu không, target bị bỏ ở run mới vẫn "lọt"
+   * từ run cũ = phantom). `voided_lineage` (đi ngược chuỗi replaces từ mọi record 'void' về gốc) vẫn LOẠI
+   * cả lineage bị void — kể cả khi nó là run thắng (void KHÔNG re-allocate). Mọi CTE chạy trong withTenant
+   * ⇒ RLS (cost_records/cost_allocations) chỉ thấy tenant hiện tại.
    */
   async sumAllocatedActiveTx(
     tx: TenantTx,
@@ -138,9 +144,36 @@ export class ProfitRepository {
         SELECT c.replaces_record_id AS id FROM cost_records c
           JOIN voided_lineage v ON c.id = v.id
           WHERE c.replaces_record_id IS NOT NULL
+      ),
+      -- Đi NGƯỢC chuỗi replaces để gắn mỗi record với gốc lineage (record có replaces_record_id IS NULL).
+      lineage AS (
+        SELECT id AS rec_id, id AS anc_id, replaces_record_id AS anc_parent FROM cost_records
+        UNION ALL
+        SELECT l.rec_id, p.id AS anc_id, p.replaces_record_id AS anc_parent
+          FROM lineage l JOIN cost_records p ON p.id = l.anc_parent
+      ),
+      lineage_root AS (
+        SELECT rec_id, anc_id AS root_id FROM lineage WHERE anc_parent IS NULL
+      ),
+      -- Run active của mỗi lineage + mốc thời-gian-run (mọi dòng 1 run cùng cost_record_id ⇒ cùng root).
+      active_runs AS (
+        SELECT ca.allocation_run_id AS run_id, lr.root_id AS root_id,
+               max(ca.calculated_at) AS run_at, max(ca.id::text) AS tie
+          FROM cost_allocations ca
+          JOIN lineage_root lr ON lr.rec_id = ca.cost_record_id
+          WHERE ca.deleted_at IS NULL
+          GROUP BY ca.allocation_run_id, lr.root_id
+      ),
+      -- 1 run thắng / lineage = mới nhất theo calculated_at (tie-break id, deterministic).
+      winner AS (
+        SELECT DISTINCT ON (root_id) root_id, run_id
+          FROM active_runs
+          ORDER BY root_id, run_at DESC, tie DESC
       )
       SELECT COALESCE(SUM(round(ca.allocated_amount * 100))::bigint, 0) AS cents
       FROM cost_allocations ca
+      JOIN lineage_root lr ON lr.rec_id = ca.cost_record_id
+      JOIN winner w ON w.root_id = lr.root_id AND w.run_id = ca.allocation_run_id
       JOIN cost_records cr ON cr.id = ca.cost_record_id
       WHERE ca.deleted_at IS NULL
         AND ca.allocation_target_type = ${ALLOCATION_TARGET_TYPE[scope.type]}

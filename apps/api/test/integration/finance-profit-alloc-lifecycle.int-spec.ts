@@ -23,35 +23,54 @@ describe.skipIf(!hasDb)("G13-3 profit allocation lifecycle (adjust giữ · void
   const direct = directPool();
   let A: SeededTenant;
   let userA: string;
+  let B: SeededTenant;
+  let userB: string;
   let db: DatabaseService;
   let repo: ProfitRepository;
 
   const PERIOD = { from: "2026-06-01", to: "2026-06-30" };
   const COST_DATE = "2026-06-15";
 
-  /** Seed 1 cost_record (entry_kind + replaces tuỳ ý). Trả id. */
+  /** Seed 1 cost_record (entry_kind + replaces tuỳ ý). opts.companyId/userId để seed tenant khác. Trả id. */
   async function seedCost(
     entryKind: "original" | "adjustment" | "void",
     amount: string,
     replacesRecordId: string | null,
+    opts: { companyId?: string; userId?: string } = {},
   ): Promise<string> {
     const r = await direct.query(
       `INSERT INTO cost_records
          (company_id, cost_type, amount, currency, cost_date, entered_by, entry_kind, replaces_record_id)
        VALUES ($1, 'production', $2, 'VND', $3::date, $4, $5, $6) RETURNING id`,
-      [A.companyId, amount, COST_DATE, userA, entryKind, replacesRecordId],
+      [opts.companyId ?? A.companyId, amount, COST_DATE, opts.userId ?? userA, entryKind, replacesRecordId],
     );
     return r.rows[0].id as string;
   }
 
-  /** Seed 1 allocation active trỏ cost → channel. */
-  async function seedAlloc(costRecordId: string, channelId: string, amount: string): Promise<void> {
+  /**
+   * Seed 1 allocation active trỏ cost → channel. opts.runId + opts.calculatedAt để ép cùng-run và thứ
+   * tự thời-gian-run deterministic (dựng đúng trạng thái re-allocate orphaned mà service.allocate chặn).
+   * opts.companyId để seed tenant khác (kiểm RLS).
+   */
+  async function seedAlloc(
+    costRecordId: string,
+    channelId: string,
+    amount: string,
+    opts: { runId?: string; calculatedAt?: string; companyId?: string } = {},
+  ): Promise<void> {
     await direct.query(
       `INSERT INTO cost_allocations
          (company_id, cost_record_id, allocation_run_id, allocation_target_type,
-          allocation_target_id, allocation_method, allocated_amount)
-       VALUES ($1, $2, $3, 'channel', $4, 'equal_split', $5)`,
-      [A.companyId, costRecordId, randomUUID(), channelId, amount],
+          allocation_target_id, allocation_method, allocated_amount, calculated_at)
+       VALUES ($1, $2, $3, 'channel', $4, 'equal_split', $5, COALESCE($6::timestamptz, now()))`,
+      [
+        opts.companyId ?? A.companyId,
+        costRecordId,
+        opts.runId ?? randomUUID(),
+        channelId,
+        amount,
+        opts.calculatedAt ?? null,
+      ],
     );
   }
 
@@ -65,12 +84,14 @@ describe.skipIf(!hasDb)("G13-3 profit allocation lifecycle (adjust giữ · void
   beforeAll(async () => {
     A = await seedCompany(direct, "finProfAlloc");
     userA = await seedUser(direct, A.companyId, `pf-alloc-${randomUUID().slice(0, 8)}@a.test`);
+    B = await seedCompany(direct, "finProfAllocB");
+    userB = await seedUser(direct, B.companyId, `pf-alloc-${randomUUID().slice(0, 8)}@b.test`);
     db = new DatabaseService();
     repo = new ProfitRepository(db);
   });
 
   afterAll(async () => {
-    await cleanupTenants(direct, [A.companyId]);
+    await cleanupTenants(direct, [A.companyId, B.companyId]);
     await direct.end();
   });
 
@@ -105,5 +126,70 @@ describe.skipIf(!hasDb)("G13-3 profit allocation lifecycle (adjust giữ · void
     await seedAlloc(c0, ch, "1000.00");
     await seedCost("void", "1000.00", c0); // V replaces C0 trực tiếp
     expect(await sumAlloc(ch)).toBe(0n);
+  });
+
+  it("allocate → adjust → RE-ALLOCATE: chỉ run mới nhất tính (KB1 — KHÔNG đếm đôi)", async () => {
+    const ch = randomUUID();
+    const c0 = await seedCost("original", "1000.00", null);
+    // R0 trên C0 (mốc cũ).
+    await seedAlloc(c0, ch, "1000.00", { calculatedAt: "2026-06-15T10:00:00+00" });
+    // adjust C0 → C1 (service KHÔNG re-point allocation); re-allocate trên C1 = run R1 mới hơn.
+    const c1 = await seedCost("adjustment", "1000.00", c0);
+    await seedAlloc(c1, ch, "1000.00", { calculatedAt: "2026-06-15T11:00:00+00" });
+    // A0 (C0) còn active + A1 (C1) active. Bug f76f69d đếm CẢ HAI = 200000n.
+    // Đúng: cùng lineage {C0,C1} ⇒ chỉ run mới nhất (R1) tính ⇒ 100000n.
+    expect(await sumAlloc(ch)).toBe(100000n);
+  });
+
+  it("RE-ALLOCATE đổi tập target: target bị bỏ KHÔNG còn tính (chB-drop phantom)", async () => {
+    const chA = randomUUID();
+    const chB = randomUUID();
+    const c0 = await seedCost("original", "1000.00", null);
+    // R0 chia C0 cho {chA:600, chB:400} (cùng allocation_run_id, cùng mốc).
+    const r0 = randomUUID();
+    await seedAlloc(c0, chA, "600.00", { runId: r0, calculatedAt: "2026-06-15T10:00:00+00" });
+    await seedAlloc(c0, chB, "400.00", { runId: r0, calculatedAt: "2026-06-15T10:00:00+00" });
+    // adjust C0 → C1; re-allocate run R1 mới hơn CHỈ chA (bỏ chB).
+    const c1 = await seedCost("adjustment", "1000.00", c0);
+    await seedAlloc(c1, chA, "1000.00", { calculatedAt: "2026-06-15T11:00:00+00" });
+    // chA: chỉ run thắng R1 = 100000n. chB: R0 không phải run thắng của lineage ⇒ 0n.
+    // Bug per-target sẽ trả chB = 40000n (phantom). Bug f76f69d trả chA = 160000n.
+    expect(await sumAlloc(chA)).toBe(100000n);
+    expect(await sumAlloc(chB)).toBe(0n);
+  });
+
+  it("RE-ALLOCATE 3 lần: chỉ run mới nhất (R2) tính, KHÔNG cộng dồn R0+R1+R2", async () => {
+    const ch = randomUUID();
+    const c0 = await seedCost("original", "1000.00", null);
+    await seedAlloc(c0, ch, "1000.00", { calculatedAt: "2026-06-15T08:00:00+00" }); // R0
+    const c1 = await seedCost("adjustment", "1000.00", c0);
+    await seedAlloc(c1, ch, "1000.00", { calculatedAt: "2026-06-15T09:00:00+00" }); // R1
+    const c2 = await seedCost("adjustment", "1000.00", c1);
+    await seedAlloc(c2, ch, "1000.00", { calculatedAt: "2026-06-15T10:00:00+00" }); // R2 mới nhất
+    // 3 run cùng lineage {C0,C1,C2} đều active ⇒ chỉ R2 tính ⇒ 100000n (KHÔNG 300000n).
+    expect(await sumAlloc(ch)).toBe(100000n);
+  });
+
+  it("2 lineage độc lập cùng target: CẢ HAI tính (KHÔNG dedup nhầm xuyên lineage)", async () => {
+    const ch = randomUUID();
+    // Lineage X: cost X0 phân bổ 1000 → ch.
+    const x0 = await seedCost("original", "1000.00", null);
+    await seedAlloc(x0, ch, "1000.00", { calculatedAt: "2026-06-15T10:00:00+00" });
+    // Lineage Y: cost Y0 (độc lập, replaces=null) phân bổ 500 → cùng ch.
+    const y0 = await seedCost("original", "500.00", null);
+    await seedAlloc(y0, ch, "500.00", { calculatedAt: "2026-06-15T11:00:00+00" });
+    // 2 chi phí KHÁC NHAU ⇒ tổng = 1000 + 500 = 1500 ⇒ 150000n (dedup chỉ trong-lineage).
+    expect(await sumAlloc(ch)).toBe(150000n);
+  });
+
+  it("cross-tenant RLS: allocation tenant B KHÔNG lọt vào SUM của tenant A (cùng channel id)", async () => {
+    const ch = randomUUID(); // polymorphic, không FK ⇒ cùng id dùng được ở 2 tenant
+    const a0 = await seedCost("original", "1000.00", null); // tenant A
+    await seedAlloc(a0, ch, "1000.00");
+    // Tenant B: cost + alloc cùng channel id ch.
+    const b0 = await seedCost("original", "9999.00", null, { companyId: B.companyId, userId: userB });
+    await seedAlloc(b0, ch, "9999.00", { companyId: B.companyId });
+    // sumAlloc chạy withTenant(A) ⇒ RLS lọc ⇒ chỉ thấy A = 100000n (KHÔNG kéo 999900n của B).
+    expect(await sumAlloc(ch)).toBe(100000n);
   });
 });
