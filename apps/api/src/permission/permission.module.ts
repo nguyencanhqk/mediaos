@@ -2,11 +2,16 @@ import { Inject, Injectable, Logger, Module, OnModuleInit, forwardRef } from '@n
 import { DatabaseModule } from '../db/db.module';
 import { EventsModule } from '../events/events.module';
 import { EventBus, type EventContext } from '../events/event-bus';
+import { AuditService } from '../events/audit.service';
+import { OutboxService } from '../events/outbox.service';
 import { AuthModule } from '../auth/auth.module';
 import { PermissionService } from './permission.service';
 import { PermissionRepository } from './permission.repository';
 import { CachedPermissionRepository } from './permission.cache';
 import { ValkeyService } from './valkey.service';
+import { PermissionAdminController } from './permission-admin.controller';
+import { PermissionAdminService } from './permission-admin.service';
+import { PermissionAdminRepository } from './permission-admin.repository';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CompanyGuard } from './guards/company.guard';
 import { PermissionGuard } from './guards/permission.guard';
@@ -18,15 +23,14 @@ const CACHED_REPO = 'CACHED_PERMISSION_REPO';
  * Idempotent: DEL is safe to call multiple times.
  *
  * ⚠️ CONTRACT (G3-4 DoD — re-review 2026-06-09, docs/reviews/g3-gates.md §4.1):
- * This invalidator only CONSUMES `permission.changed`. As of MVP-0 NOTHING emits it — there is no
- * role grant/revoke nor `PATCH /permissions/object` endpoint yet, so the cache relies solely on the
- * 300s TTL. ANY future code that mutates `user_roles` / `role_permissions` / `object_permissions`
- * (G5 personnel role assignment, G7 object-permission UI) MUST, in the same transaction/outbox:
- *   1. write an audit_logs row (CLAUDE.md §8 — "audit log nếu hành động quan trọng"), and
- *   2. emit a `permission.changed` event with payload `{ userId, companyId }`,
- * otherwise capabilities stay stale for up to 300s and the privilege change is unaudited.
- * The `grant-object-permission:permission` guard permission is pre-seeded (migration 0031) so that
- * endpoint, when added, will not deny company-admin by default (avoids the F2/G4 catalog trap).
+ * This invalidator only CONSUMES `permission.changed`. As of the G3 mutation-path lane it is EMITTED by
+ * `PermissionAdminService` (assign/revoke role + set/remove object-permission) — each mutation, in the
+ * SAME tx, (1) writes an audit_logs row and (2) enqueues `permission.changed { userId, companyId }`
+ * (role-subject object-grant fans out one event per user holding the role). ANY future code that
+ * mutates `user_roles` / `role_permissions` / `object_permissions` MUST keep the same contract,
+ * otherwise capabilities stay stale for up to 300s (TTL) and the privilege change is unaudited.
+ * The `grant-object-permission:permission` (0037) and `assign-role:user` (0140) guard permissions are
+ * pre-seeded + granted to company-admin so the endpoints don't deny by default (F2/G4 catalog trap).
  */
 @Injectable()
 class PermissionCacheInvalidator implements OnModuleInit {
@@ -78,9 +82,12 @@ class PermissionCacheInvalidator implements OnModuleInit {
  */
 @Module({
   imports: [DatabaseModule, EventsModule, forwardRef(() => AuthModule)],
+  controllers: [PermissionAdminController],
   providers: [
     ValkeyService,
     PermissionRepository,
+    PermissionAdminRepository,
+    PermissionAdminService,
     {
       provide: CACHED_REPO,
       useFactory: (repo: PermissionRepository, valkey: ValkeyService): CachedPermissionRepository =>
