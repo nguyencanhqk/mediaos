@@ -107,6 +107,33 @@ describe("PayslipReauthModal — error flow", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/thất bại|sai mật khẩu/i);
     expect(onRevealed).not.toHaveBeenCalled();
   });
+
+  it("reauth OK but getOne fails → distinct error (not wrong-password), no reveal, stays open", async () => {
+    const reauth = vi.fn(async () => ({ expiresAt: ISO }));
+    const getOne = vi.fn(async () => {
+      throw new Error("network");
+    });
+    const onRevealed = vi.fn();
+    const onClose = vi.fn();
+    wrap(
+      <PayslipReauthModal
+        open
+        payslipId={PAYSLIP_ID}
+        onClose={onClose}
+        onRevealed={onRevealed}
+        reauth={reauth}
+        getOne={getOne}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(/mật khẩu/i), { target: { value: "correct-pw" } });
+    fireEvent.click(screen.getByRole("button", { name: /xác minh/i }));
+
+    // reauth thành công → getOne lỗi: thông báo PHẢI phân biệt với sai mật khẩu, modal KHÔNG đóng.
+    expect(await screen.findByRole("alert")).toHaveTextContent(/không tải được phiếu lương|network/i);
+    expect(reauth).toHaveBeenCalledTimes(1);
+    expect(onRevealed).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });
 
 describe("PayslipReauthModal — clear factor on close/unmount", () => {

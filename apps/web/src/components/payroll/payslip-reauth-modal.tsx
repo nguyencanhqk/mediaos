@@ -55,18 +55,31 @@ export function PayslipReauthModal({
     if (!password.trim() || loading) return;
     setError(null);
     setLoading(true);
+    // Tách 2 bước: lỗi re-auth (sai mật khẩu / cửa sổ từ chối) PHẢI phân biệt với
+    // lỗi tải phiếu lương sau khi đã xác minh — nếu gộp, user không biết đã xác minh hay chưa.
     try {
       await reauth(payslipId, password);
-      const detail = await getOne(payslipId);
-      // Clear factor BEFORE callbacks (callbacks may unmount immediately).
-      setLoading(false);
-      setPassword("");
-      onRevealed(detail);
-      onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Xác minh thất bại.");
       setLoading(false);
+      return;
     }
+    let detail;
+    try {
+      detail = await getOne(payslipId);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Không tải được phiếu lương sau xác minh. Thử lại.",
+      );
+      setLoading(false);
+      return;
+    }
+    // Clear factor nhạy TRƯỚC callbacks; đóng modal TRƯỚC khi bàn giao data
+    // (onRevealed có ném thì modal đã đóng, không kẹt mở im lặng).
+    setLoading(false);
+    setPassword("");
+    onClose();
+    onRevealed(detail);
   };
 
   return (

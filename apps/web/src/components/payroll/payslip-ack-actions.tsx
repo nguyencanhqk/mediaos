@@ -96,7 +96,14 @@ export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: P
 
         {/* HR: resolve disputed */}
         {isHr && ack.status === "disputed" && !showResolveForm && (
-          <Button size="sm" variant="outline" onClick={() => setShowResolveForm(true)}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setError(null);
+              setShowResolveForm(true);
+            }}
+          >
             Xử lý khiếu nại
           </Button>
         )}
@@ -107,12 +114,24 @@ export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: P
               onChange={(e) => setResolutionNote(e.target.value)}
               placeholder="Ghi chú xử lý (tuỳ chọn)"
             />
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
             <div className="flex gap-2">
               <Button type="submit" size="sm" disabled={loading}>
                 {loading ? "Đang xử lý…" : "Xác nhận xử lý"}
               </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setShowResolveForm(false)}>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setShowResolveForm(false);
+                  setError(null);
+                }}
+              >
                 Huỷ
               </Button>
             </div>
@@ -125,14 +144,26 @@ export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: P
   // No ack yet — show acknowledge / dispute actions
   return (
     <div className="space-y-2">
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       {!showDisputeForm && (
         <div className="flex gap-2">
           <Button size="sm" onClick={handleAcknowledge} disabled={loading}>
             {loading ? "Đang xác nhận…" : "Xác nhận"}
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setShowDisputeForm(true)} disabled={loading}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setError(null);
+              setShowDisputeForm(true);
+            }}
+            disabled={loading}
+          >
             Khiếu nại
           </Button>
         </div>
@@ -145,8 +176,13 @@ export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: P
             onChange={(e) => setDisputeReason(e.target.value)}
             placeholder="Lý do khiếu nại (bắt buộc)"
             required
+            maxLength={500}
           />
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
           <div className="flex gap-2">
             <Button type="submit" size="sm" disabled={loading || !disputeReason.trim()}>
               {loading ? "Đang gửi…" : "Gửi khiếu nại"}

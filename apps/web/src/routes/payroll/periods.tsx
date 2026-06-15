@@ -82,13 +82,22 @@ export function PayrollPeriodsPage() {
         <h1 className="text-2xl font-semibold">Kỳ lương</h1>
         {/* manage-payroll-period is non-sensitive → safe to use PermissionGate */}
         <PermissionGate action="manage-payroll-period" resourceType="payroll_period">
-          <Button size="sm">Tạo kỳ lương</Button>
+          {/* Tạo kỳ lương: luồng create chưa nối ở lane này (defer) — disable để không no-op im lặng. */}
+          <Button size="sm" disabled title="Sắp có">
+            Tạo kỳ lương
+          </Button>
         </PermissionGate>
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs uppercase tracking-wide text-muted-foreground">Trạng thái</label>
+        <label
+          htmlFor="period-status-filter"
+          className="text-xs uppercase tracking-wide text-muted-foreground"
+        >
+          Trạng thái
+        </label>
         <Select
+          id="period-status-filter"
           value={status}
           onChange={(e) => setStatus(e.target.value as PayrollPeriodStatus | "")}
           className="w-44"
@@ -103,7 +112,11 @@ export function PayrollPeriodsPage() {
       </div>
 
       {isLoading && <p className="text-sm text-muted-foreground">Đang tải kỳ lương…</p>}
-      {isError && <p className="text-sm text-destructive">Không tải được danh sách kỳ lương.</p>}
+      {isError && (
+        <p role="alert" className="text-sm text-destructive">
+          Không tải được danh sách kỳ lương.
+        </p>
+      )}
       {!isLoading && !isError && (
         <PayrollPeriodTable
           rows={rows}
