@@ -73,11 +73,75 @@ describe("payslipApi.list", () => {
   });
 });
 
+describe("payslipApi.listSummary (money-free projection — BẤT BIẾN #3)", () => {
+  it("GETs /payslips and STRIPS all monetary fields at the boundary", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([PAYSLIP_DTO]));
+    const items = await payslipApi.listSummary();
+    const [url] = lastCall();
+    expect(url).toContain("/payslips");
+
+    const item = items[0];
+    // Keeps only money-free metadata for the list view.
+    expect(item).toMatchObject({
+      id: UUID,
+      payrollPeriodId: PERIOD_ID,
+      entryKind: "original",
+    });
+    expect(typeof item.createdAt).toBe("string");
+
+    // NO monetary fields may survive — list must never carry money (server-masking gap defended at FE boundary).
+    for (const moneyKey of [
+      "baseSalary",
+      "totalAllowances",
+      "gross",
+      "net",
+      "kpiAmount",
+      "bonusAmount",
+      "penaltyAmount",
+      "currency",
+    ]) {
+      expect(item).not.toHaveProperty(moneyKey);
+    }
+  });
+
+  it("forwards userId filter as a query param (self-service scoping)", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+    await payslipApi.listSummary({ userId: UUID });
+    const [url] = lastCall();
+    expect(url).toContain(`userId=${UUID}`);
+  });
+});
+
+describe("payslipApi.listAcknowledgements", () => {
+  it("GETs /payslips/:id/acknowledgements (money-free)", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: UUID,
+          companyId: UUID,
+          payslipId: UUID,
+          userId: UUID,
+          status: "acknowledged",
+          reason: null,
+          resolvedBy: null,
+          resolvedAt: null,
+          resolutionNote: null,
+          createdAt: ISO,
+          updatedAt: ISO,
+        },
+      ]),
+    );
+    const acks = await payslipApi.listAcknowledgements(UUID);
+    const [url, init] = lastCall();
+    expect(url).toContain(`/payslips/${UUID}/acknowledgements`);
+    expect(init?.method ?? "GET").toBe("GET");
+    expect(acks[0].status).toBe("acknowledged");
+  });
+});
+
 describe("payslipApi.reauth then getOne (no cache)", () => {
   it("reauth POSTs /payslips/:id/reauth with password body", async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({ expiresAt: ISO }),
-    );
+    fetchMock.mockResolvedValueOnce(jsonResponse({ expiresAt: ISO }));
     await payslipApi.reauth(UUID, "my-secret-pw");
     const [url, init] = lastCall();
     expect(url).toContain(`/payslips/${UUID}/reauth`);
@@ -96,7 +160,10 @@ describe("payslipApi.reauth then getOne (no cache)", () => {
 
   it("getOne rejects with 403 ApiError if re-auth window expired", async () => {
     fetchMock.mockResolvedValueOnce(
-      jsonResponse({ success: false, error: { code: "REAUTH_REQUIRED", message: "Re-auth window expired" } }, 403),
+      jsonResponse(
+        { success: false, error: { code: "REAUTH_REQUIRED", message: "Re-auth window expired" } },
+        403,
+      ),
     );
     await expect(payslipApi.getOne(UUID)).rejects.toMatchObject({ status: 403 });
   });
@@ -106,10 +173,17 @@ describe("payslipApi.acknowledge", () => {
   it("POSTs /payslips/:id/acknowledge", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
-        id: UUID, companyId: UUID, payslipId: UUID, userId: UUID,
-        status: "acknowledged", reason: null,
-        resolvedBy: null, resolvedAt: null, resolutionNote: null,
-        createdAt: ISO, updatedAt: ISO,
+        id: UUID,
+        companyId: UUID,
+        payslipId: UUID,
+        userId: UUID,
+        status: "acknowledged",
+        reason: null,
+        resolvedBy: null,
+        resolvedAt: null,
+        resolutionNote: null,
+        createdAt: ISO,
+        updatedAt: ISO,
       }),
     );
     await payslipApi.acknowledge(UUID);
@@ -123,10 +197,17 @@ describe("payslipApi.dispute", () => {
   it("POSTs /payslips/:id/dispute with reason", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
-        id: UUID, companyId: UUID, payslipId: UUID, userId: UUID,
-        status: "disputed", reason: "Sai ngày công",
-        resolvedBy: null, resolvedAt: null, resolutionNote: null,
-        createdAt: ISO, updatedAt: ISO,
+        id: UUID,
+        companyId: UUID,
+        payslipId: UUID,
+        userId: UUID,
+        status: "disputed",
+        reason: "Sai ngày công",
+        resolvedBy: null,
+        resolvedAt: null,
+        resolutionNote: null,
+        createdAt: ISO,
+        updatedAt: ISO,
       }),
     );
     await payslipApi.dispute(UUID, "Sai ngày công");
@@ -153,10 +234,17 @@ describe("payslipApi.resolve", () => {
   it("POSTs /payslips/:id/resolve with optional resolutionNote", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
-        id: UUID, companyId: UUID, payslipId: UUID, userId: UUID,
-        status: "resolved", reason: "Sai ngày công",
-        resolvedBy: UUID, resolvedAt: ISO, resolutionNote: "Đã kiểm tra, đúng",
-        createdAt: ISO, updatedAt: ISO,
+        id: UUID,
+        companyId: UUID,
+        payslipId: UUID,
+        userId: UUID,
+        status: "resolved",
+        reason: "Sai ngày công",
+        resolvedBy: UUID,
+        resolvedAt: ISO,
+        resolutionNote: "Đã kiểm tra, đúng",
+        createdAt: ISO,
+        updatedAt: ISO,
       }),
     );
     await payslipApi.resolve(UUID, "Đã kiểm tra, đúng");

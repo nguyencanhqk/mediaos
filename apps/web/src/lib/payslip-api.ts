@@ -1,5 +1,9 @@
 import { z } from "zod";
-import type { PayslipListQuery, ResolvePayslipDisputeRequest } from "@mediaos/contracts";
+import type {
+  PayslipEntryKind,
+  PayslipListQuery,
+  ResolvePayslipDisputeRequest,
+} from "@mediaos/contracts";
 import {
   payslipSchema,
   payslipAcknowledgementSchema,
@@ -8,6 +12,21 @@ import {
 import { apiFetch } from "./api-client";
 
 const reauthWindowSchema = z.object({ expiresAt: z.string().datetime() });
+
+/**
+ * Money-FREE projection of a payslip for the list view (G12-FE employee self-service).
+ *
+ * BẤT BIẾN #3 (a): the list must NOT carry net/gross/base — only kỳ/trạng thái/ngày. The server
+ * `GET /payslips` still returns the full snapshot, so we strip every monetary field at THIS boundary
+ * (in listSummary) before the value can reach component state or the React Query cache. Detailed
+ * money is only ever obtained via reauth → getOne (direct fetch, never cached).
+ */
+export interface PayslipSummary {
+  id: string;
+  payrollPeriodId: string;
+  entryKind: PayslipEntryKind;
+  createdAt: string;
+}
 
 function buildQuery(filters: PayslipListQuery = {}): string {
   const qs = new URLSearchParams();
@@ -30,8 +49,31 @@ export const payslipApi = {
   list: (filters?: PayslipListQuery) =>
     apiFetch(`/payslips${buildQuery(filters)}`, z.array(payslipSchema)),
 
+  /**
+   * Money-FREE list for the self-service page. Fetches the full snapshot then STRIPS every
+   * monetary field at the boundary so net/gross/base never enter component state or the RQ cache
+   * (BẤT BIẾN #3 (a)). Pass `userId` to scope to the caller's own payslips ("Phiếu lương của tôi").
+   */
+  listSummary: async (filters?: PayslipListQuery): Promise<PayslipSummary[]> => {
+    const slips = await apiFetch(`/payslips${buildQuery(filters)}`, z.array(payslipSchema));
+    return slips.map((s) => ({
+      id: s.id,
+      payrollPeriodId: s.payrollPeriodId,
+      entryKind: s.entryKind,
+      createdAt: s.createdAt,
+    }));
+  },
+
   /** Direct fetch — NOT via useQuery. Keep result ephemeral; clear on close/unmount. */
   getOne: (id: string) => apiFetch(`/payslips/${id}`, payslipSchema),
+
+  /**
+   * Acknowledgements for a payslip (money-FREE — only status + reason). The employee sees their own
+   * (ownership enforced server-side via 'acknowledge-own-payslip'); HR sees all. Used to render the
+   * current ack state alongside PayslipAckActions.
+   */
+  listAcknowledgements: (id: string) =>
+    apiFetch(`/payslips/${id}/acknowledgements`, z.array(payslipAcknowledgementSchema)),
 
   /** Step-up: opens a 5-min re-auth window server-side (Valkey). Must precede getOne. */
   reauth: (id: string, password: string) =>
