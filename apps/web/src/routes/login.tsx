@@ -31,18 +31,29 @@ async function finalizeLogin(
   tokens: AuthTokens,
   setTokens: (a: string, r: string) => void,
   setUser: (u: { id: string; companyId: string; email: string; fullName: string | null; status: string }, c: Record<string, boolean>) => void,
+  logout: () => void,
   navigate: ReturnType<typeof useNavigate>,
 ): Promise<void> {
+  // setTokens TRƯỚC: authApi.me() đọc access token từ store (getAccessToken) để gắn Bearer.
   setTokens(tokens.accessToken, tokens.refreshToken);
-  const me = await authApi.me();
-  setUser(me, me.capabilities);
-  await navigate({ to: "/" });
+  try {
+    const me = await authApi.me();
+    setUser(me, me.capabilities);
+    await navigate({ to: "/" });
+  } catch (err) {
+    // /me thất bại sau khi đã lưu token → xoá token mồ côi, tránh half-auth state
+    // (getAccessToken() trả token cho phiên chưa hoàn tất). Re-throw để caller hiển thị lỗi.
+    logout();
+    throw err;
+  }
 }
 
 /** Màn đăng nhập thật (G16-real-login). Hỗ trợ luồng 2FA inline. */
 export function LoginPage() {
   const navigate = useNavigate();
-  const { setTokens, setUser } = useAuthStore();
+  const setTokens = useAuthStore((s) => s.setTokens);
+  const setUser = useAuthStore((s) => s.setUser);
+  const logout = useAuthStore((s) => s.logout);
 
   const [step, setStep] = useState<LoginStep>({ kind: "credentials" });
 
@@ -70,7 +81,7 @@ export function LoginPage() {
         setStep({ kind: "twoFactor", challengeToken: result.challengeToken });
       } else {
         // Đăng nhập thành công, không cần 2FA
-        await finalizeLogin(result, setTokens, setUser, navigate);
+        await finalizeLogin(result, setTokens, setUser, logout, navigate);
       }
     } catch (err) {
       setError(friendlyError(err));
@@ -83,7 +94,7 @@ export function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await finalizeLogin(tokens, setTokens, setUser, navigate);
+      await finalizeLogin(tokens, setTokens, setUser, logout, navigate);
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -103,6 +114,13 @@ export function LoginPage() {
           <h1 className="text-2xl font-semibold">MediaOS</h1>
           <p className="text-sm text-muted-foreground">Đăng nhập vào hệ thống</p>
         </div>
+
+        {/* Lỗi hiển thị ở container — nhìn thấy ở CẢ bước credentials lẫn 2FA. */}
+        {error && (
+          <p role="alert" aria-live="assertive" className="mb-4 text-sm text-destructive">
+            {error}
+          </p>
+        )}
 
         {step.kind === "twoFactor" ? (
           <TwoFactorChallengeForm
@@ -151,7 +169,6 @@ export function LoginPage() {
                 autoComplete="current-password"
               />
             </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
             <Button
               type="submit"
               className="w-full"

@@ -39,6 +39,7 @@ vi.mock("@/components/two-factor/TwoFactorChallengeForm", () => ({
 // --- auth store mock: Zustand hook called with no args in LoginPage ---
 const mockSetTokens = vi.fn();
 const mockSetUser = vi.fn();
+const mockLogout = vi.fn();
 
 const mockStoreState = {
   isAuthenticated: false,
@@ -49,7 +50,7 @@ const mockStoreState = {
   capabilities: {},
   setTokens: mockSetTokens,
   setUser: mockSetUser,
-  logout: vi.fn(),
+  logout: mockLogout,
 };
 
 vi.mock("@/stores/auth", () => ({
@@ -88,6 +89,7 @@ describe("LoginPage — credentials form", () => {
     mockNavigate.mockClear();
     mockSetTokens.mockClear();
     mockSetUser.mockClear();
+    mockLogout.mockClear();
     vi.mocked(authApi.login).mockReset();
     vi.mocked(authApi.me).mockReset();
   });
@@ -116,6 +118,22 @@ describe("LoginPage — credentials form", () => {
     await waitFor(() => expect(mockSetTokens).toHaveBeenCalledWith("access-abc", "refresh-xyz"));
     expect(mockSetUser).toHaveBeenCalledWith(mockMe, mockMe.capabilities);
     expect(mockNavigate).toHaveBeenCalledWith({ to: "/" });
+  });
+
+  it("/me fails after tokens set → clears orphaned tokens (logout) + no navigation", async () => {
+    const { ApiError } = await import("@/lib/api-client");
+    vi.mocked(authApi.login).mockResolvedValueOnce(mockTokens);
+    vi.mocked(authApi.me).mockRejectedValueOnce(new ApiError(500, "INTERNAL", "boom"));
+    render(<LoginPage />);
+
+    fillCredentials();
+    fireEvent.click(screen.getByRole("button", { name: /đăng nhập/i }));
+
+    // setTokens chạy trước (me() đọc token từ store), nhưng me() lỗi → logout xoá token mồ côi.
+    await waitFor(() => expect(mockLogout).toHaveBeenCalled());
+    expect(mockSetTokens).toHaveBeenCalledWith("access-abc", "refresh-xyz");
+    expect(mockSetUser).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   it("login → 2FA challenge → shows TwoFactorChallengeForm", async () => {
