@@ -36,7 +36,9 @@ export const meetingRooms = pgTable(
   },
   (t) => [
     index("meeting_rooms_company_idx").on(t.companyId),
-    index("meeting_rooms_active_idx").on(t.companyId).where(sql`deleted_at IS NULL`),
+    index("meeting_rooms_active_idx")
+      .on(t.companyId)
+      .where(sql`deleted_at IS NULL`),
   ],
 );
 
@@ -114,3 +116,62 @@ export const meetingAttendees = pgTable(
 
 export type MeetingAttendee = typeof meetingAttendees.$inferSelect;
 export type NewMeetingAttendee = typeof meetingAttendees.$inferInsert;
+
+// ─── meeting_notes (G10-4 biên bản) ─────────────────────────────────────────────
+// Biên bản cuộc họp. UPDATE được (sửa nội dung kèm audit). KHÔNG hard-delete (app role không
+// có DELETE grant — bất biến #2). RLS + FORCE tenant-iso.
+
+export const meetingNotes = pgTable(
+  "meeting_notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    meetingId: uuid("meeting_id")
+      .notNull()
+      .references(() => meetings.id, { onDelete: "cascade" }),
+    authorUserId: uuid("author_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("meeting_notes_meeting_idx").on(t.meetingId),
+    index("meeting_notes_company_idx").on(t.companyId),
+  ],
+);
+
+export type MeetingNote = typeof meetingNotes.$inferSelect;
+export type NewMeetingNote = typeof meetingNotes.$inferInsert;
+
+// ─── meeting_tasks (G10-4 link meeting↔task) ────────────────────────────────────
+// CHỈ là bảng liên kết: cuộc họp ↔ action-item trong Task Hub G9 (`tasks`, task_type='meeting_action').
+// Bản thân task sống ở `tasks` (BẤT BIẾN #4 — KHÔNG bảng task riêng). Unique (meeting_id, task_id).
+
+export const meetingTasks = pgTable(
+  "meeting_tasks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    meetingId: uuid("meeting_id")
+      .notNull()
+      .references(() => meetings.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("meeting_tasks_meeting_idx").on(t.meetingId),
+    index("meeting_tasks_company_idx").on(t.companyId),
+    uniqueIndex("meeting_tasks_uq").on(t.meetingId, t.taskId),
+  ],
+);
+
+export type MeetingTask = typeof meetingTasks.$inferSelect;
+export type NewMeetingTask = typeof meetingTasks.$inferInsert;

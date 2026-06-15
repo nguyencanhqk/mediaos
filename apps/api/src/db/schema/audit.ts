@@ -77,6 +77,7 @@ export const AUDIT_OBJECT_TYPES = [
   "notification_preference",
   "meeting",
   "meeting_room",
+  "meeting_note",
   // G13 finance — sổ cái append-only + phân bổ + chốt lợi nhuận + đề xuất chi (xem migration 0070).
   // Quyết định duyệt chi audit trên `expense_request` (KHÔNG thêm type cho bảng log `expense_approvals`).
   "revenue_record",

@@ -519,6 +519,13 @@
 			"when": 1717500136000,
 			"tag": "0097_g12_payroll_permissions_seed",
 			"breakpoints": true
+		},
+		{
+			"idx": 74,
+			"version": "7",
+			"when": 1717500137000,
+			"tag": "0053_g10_meeting_notes_tasks",
+			"breakpoints": true
 		}
 	]
 }

@@ -9,7 +9,7 @@
  *
  * Dùng mock repo + mock db.withTenant (không cần Postgres).
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { meetingSchema } from "@mediaos/contracts";
 import { MeetingService } from "./meeting.service";
@@ -17,6 +17,7 @@ import type { MeetingRepository } from "./meeting.repository";
 import type { AuditService } from "../events/audit.service";
 import type { OutboxService } from "../events/outbox.service";
 import type { DatabaseService } from "../db/db.service";
+import type { TasksService } from "../tasks/tasks.service";
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -28,13 +29,13 @@ const MEETING_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc";
 const ROOM_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd";
 
 const STARTS = "2024-06-01T09:00:00.000Z";
-const ENDS   = "2024-06-01T10:00:00.000Z";
+const ENDS = "2024-06-01T10:00:00.000Z";
 // Overlap: 09:30–10:30 overlaps [09:00,10:00)
 const STARTS_OVERLAP = "2024-06-01T09:30:00.000Z";
-const ENDS_OVERLAP   = "2024-06-01T10:30:00.000Z";
+const ENDS_OVERLAP = "2024-06-01T10:30:00.000Z";
 // Adjacent (non-overlap): 10:00–11:00 does NOT overlap [09:00,10:00) end-exclusive
 const STARTS_ADJACENT = "2024-06-01T10:00:00.000Z";
-const ENDS_ADJACENT   = "2024-06-01T11:00:00.000Z";
+const ENDS_ADJACENT = "2024-06-01T11:00:00.000Z";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -73,6 +74,13 @@ function makeRepo(): MeetingRepository {
     listAttendees: vi.fn().mockResolvedValue([]),
     insertAttendees: vi.fn().mockResolvedValue([]),
     updateRsvp: vi.fn(),
+    // G10-4 notes + action items
+    listNotes: vi.fn().mockResolvedValue([]),
+    insertNote: vi.fn(),
+    findNoteByIdTx: vi.fn().mockResolvedValue([]),
+    updateNote: vi.fn(),
+    insertMeetingTask: vi.fn().mockResolvedValue([{ id: "link-1" }]),
+    listActionItems: vi.fn().mockResolvedValue([]),
   } as unknown as MeetingRepository;
 }
 
@@ -84,18 +92,34 @@ function makeOutbox(): OutboxService {
   return { enqueue: vi.fn().mockResolvedValue(undefined) } as unknown as OutboxService;
 }
 
+const TASK_ID = "77777777-7777-7777-7777-777777777777";
+
+function makeTasks(): TasksService {
+  return {
+    createMeetingActionTask: vi.fn().mockResolvedValue({
+      id: TASK_ID,
+      title: "Follow up",
+      status: "not_started",
+      taskType: "meeting_action",
+      assigneeUserId: null,
+      dueDate: null,
+      createdAt: new Date("2024-06-01T12:00:00.000Z"),
+    }),
+  } as unknown as TasksService;
+}
+
 /** db mock: withTenant calls fn(tx) where tx proxies the repo for mock assertions. */
 function makeDb(repo: MeetingRepository): DatabaseService {
   return {
-    withTenant: vi.fn().mockImplementation((_companyId: string, fn: (tx: unknown) => unknown) =>
-      fn(repo),
-    ),
+    withTenant: vi
+      .fn()
+      .mockImplementation((_companyId: string, fn: (tx: unknown) => unknown) => fn(repo)),
   } as unknown as DatabaseService;
 }
 
-function makeService(repo: MeetingRepository, db?: DatabaseService) {
+function makeService(repo: MeetingRepository, db?: DatabaseService, tasks?: TasksService) {
   const resolvedDb = db ?? makeDb(repo);
-  return new MeetingService(repo, resolvedDb, makeAudit(), makeOutbox());
+  return new MeetingService(repo, resolvedDb, makeAudit(), makeOutbox(), tasks ?? makeTasks());
 }
 
 // ─── A. Double-booking ────────────────────────────────────────────────────────
@@ -123,7 +147,10 @@ describe("A. double-booking guard", () => {
   it("allows booking when room is free (no overlap)", async () => {
     const repo = makeRepo();
     vi.mocked(repo.checkDoubleBooking).mockResolvedValue([{ count: 0 }]);
-    const row = makeMeetingRow({ startsAt: new Date(STARTS_ADJACENT), endsAt: new Date(ENDS_ADJACENT) });
+    const row = makeMeetingRow({
+      startsAt: new Date(STARTS_ADJACENT),
+      endsAt: new Date(ENDS_ADJACENT),
+    });
     vi.mocked(repo.insertMeeting).mockResolvedValue([row]);
 
     const svc = makeService(repo);
@@ -205,10 +232,21 @@ describe("B. cross-tenant isolation", () => {
   it("listRooms for company B returns 0 rooms (company A rooms invisible)", async () => {
     const repo = makeRepo();
     vi.mocked(repo.listRooms).mockImplementation((companyId: string) =>
-      Promise.resolve(companyId === CO_B ? [] : [{
-        id: ROOM_ID, companyId: CO_A, name: "Room A", location: null,
-        capacity: 10, isVirtual: false, createdAt: new Date(),
-      }]),
+      Promise.resolve(
+        companyId === CO_B
+          ? []
+          : [
+              {
+                id: ROOM_ID,
+                companyId: CO_A,
+                name: "Room A",
+                location: null,
+                capacity: 10,
+                isVirtual: false,
+                createdAt: new Date(),
+              },
+            ],
+      ),
     );
 
     const svc = makeService(repo);
@@ -274,9 +312,9 @@ describe("D. cancel and update guards", () => {
     vi.mocked(repo.findMeetingById).mockResolvedValue([makeMeetingRow()]);
 
     const svc = makeService(repo);
-    await expect(
-      svc.updateMeeting(CO_A, USER_B, MEETING_ID, { title: "Hack" }),
-    ).rejects.toThrow(ForbiddenException);
+    await expect(svc.updateMeeting(CO_A, USER_B, MEETING_ID, { title: "Hack" })).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
   it("updateMeeting throws ConflictException when meeting already cancelled", async () => {
@@ -299,5 +337,162 @@ describe("D. cancel and update guards", () => {
     const result = await svc.cancelMeeting(CO_A, USER_A, MEETING_ID);
     expect(result).toBeDefined();
     expect(result.status).toBe("cancelled");
+  });
+});
+
+// ─── E. Notes / minutes (G10-4 biên bản) ──────────────────────────────────────
+
+function makeNoteRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "11111111-2222-3333-4444-555555555555",
+    meetingId: MEETING_ID,
+    authorUserId: USER_A,
+    body: "Quyết định: chốt deadline thứ Sáu.",
+    createdAt: new Date("2024-06-01T11:00:00.000Z"),
+    updatedAt: new Date("2024-06-01T11:00:00.000Z"),
+    // extra internal column — must NOT leak through the DTO
+    __secret_col: "must-be-stripped",
+    ...overrides,
+  };
+}
+
+describe("E. meeting notes / minutes (G10-4)", () => {
+  it("addNote throws ForbiddenException when caller is not organiser", async () => {
+    const repo = makeRepo();
+    vi.mocked(repo.findMeetingById).mockResolvedValue([makeMeetingRow()]);
+
+    const svc = makeService(repo);
+    await expect(svc.addNote(CO_A, USER_B, MEETING_ID, "biên bản")).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(repo.insertNote).not.toHaveBeenCalled();
+  });
+
+  it("addNote throws ConflictException when meeting is cancelled", async () => {
+    const repo = makeRepo();
+    vi.mocked(repo.findMeetingById).mockResolvedValue([makeMeetingRow({ status: "cancelled" })]);
+
+    const svc = makeService(repo);
+    await expect(svc.addNote(CO_A, USER_A, MEETING_ID, "biên bản")).rejects.toThrow(
+      ConflictException,
+    );
+  });
+
+  it("addNote throws NotFoundException when meeting does not exist", async () => {
+    const repo = makeRepo();
+    vi.mocked(repo.findMeetingById).mockResolvedValue([]);
+
+    const svc = makeService(repo);
+    await expect(svc.addNote(CO_A, USER_A, MEETING_ID, "biên bản")).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it("addNote inserts a note + audit 'meeting_note' and returns a masked DTO (organiser)", async () => {
+    const repo = makeRepo();
+    const audit = makeAudit();
+    vi.mocked(repo.findMeetingById).mockResolvedValue([makeMeetingRow()]);
+    vi.mocked(repo.insertNote).mockResolvedValue([makeNoteRow()]);
+    const db = makeDb(repo);
+    const svc = new MeetingService(repo, db, audit, makeOutbox(), makeTasks());
+
+    const dto = await svc.addNote(CO_A, USER_A, MEETING_ID, "Quyết định: chốt deadline thứ Sáu.");
+
+    expect(repo.insertNote).toHaveBeenCalledOnce();
+    expect((dto as Record<string, unknown>)["__secret_col"]).toBeUndefined();
+    expect(dto.body).toBe("Quyết định: chốt deadline thứ Sáu.");
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ objectType: "meeting_note", action: "create" }),
+    );
+  });
+
+  it("updateNote throws NotFoundException when the note belongs to another meeting", async () => {
+    const repo = makeRepo();
+    vi.mocked(repo.findMeetingById).mockResolvedValue([makeMeetingRow()]);
+    vi.mocked(repo.findNoteByIdTx).mockResolvedValue([
+      makeNoteRow({ meetingId: "99999999-9999-9999-9999-999999999999" }),
+    ]);
+
+    const svc = makeService(repo);
+    await expect(
+      svc.updateNote(CO_A, USER_A, MEETING_ID, "11111111-2222-3333-4444-555555555555", "x"),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it("listNotes throws NotFoundException when meeting does not exist", async () => {
+    const repo = makeRepo();
+    vi.mocked(repo.findMeetingById).mockResolvedValue([]);
+
+    const svc = makeService(repo);
+    await expect(svc.listNotes(CO_A, MEETING_ID)).rejects.toThrow(NotFoundException);
+  });
+});
+
+// ─── F. Action items → Task Hub G9 (task_type='meeting_action') ────────────────
+
+describe("F. meeting action items → Task Hub (G10-4)", () => {
+  it("createActionItem throws ForbiddenException when caller is not organiser", async () => {
+    const repo = makeRepo();
+    const tasks = makeTasks();
+    vi.mocked(repo.findMeetingById).mockResolvedValue([makeMeetingRow()]);
+
+    const svc = makeService(repo, undefined, tasks);
+    await expect(
+      svc.createActionItem(CO_A, USER_B, MEETING_ID, { title: "Follow up" }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(tasks.createMeetingActionTask).not.toHaveBeenCalled();
+  });
+
+  it("createActionItem throws NotFoundException when meeting does not exist", async () => {
+    const repo = makeRepo();
+    vi.mocked(repo.findMeetingById).mockResolvedValue([]);
+
+    const svc = makeService(repo);
+    await expect(
+      svc.createActionItem(CO_A, USER_A, MEETING_ID, { title: "Follow up" }),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it("createActionItem throws ConflictException when meeting is cancelled", async () => {
+    const repo = makeRepo();
+    const tasks = makeTasks();
+    vi.mocked(repo.findMeetingById).mockResolvedValue([makeMeetingRow({ status: "cancelled" })]);
+
+    const svc = makeService(repo, undefined, tasks);
+    await expect(
+      svc.createActionItem(CO_A, USER_A, MEETING_ID, { title: "Follow up" }),
+    ).rejects.toThrow(ConflictException);
+    expect(tasks.createMeetingActionTask).not.toHaveBeenCalled();
+  });
+
+  it("createActionItem writes the task into Task Hub as 'meeting_action' + links + audits", async () => {
+    const repo = makeRepo();
+    const tasks = makeTasks();
+    const audit = makeAudit();
+    vi.mocked(repo.findMeetingById).mockResolvedValue([makeMeetingRow()]);
+    const db = makeDb(repo);
+    const svc = new MeetingService(repo, db, audit, makeOutbox(), tasks);
+
+    const result = await svc.createActionItem(CO_A, USER_A, MEETING_ID, {
+      title: "Đặt phòng họp tuần sau",
+      assigneeUserId: USER_B,
+    });
+
+    // task created in the unified hub with the meeting_action type (BẤT BIẾN #4)
+    expect(tasks.createMeetingActionTask).toHaveBeenCalledWith(
+      { id: USER_A, companyId: CO_A },
+      expect.objectContaining({ title: "Đặt phòng họp tuần sau", assigneeUserId: USER_B }),
+    );
+    // link row inserted
+    expect(repo.insertMeetingTask).toHaveBeenCalledOnce();
+    // audited on the meeting object
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ action: "MeetingActionTaskCreated", objectType: "meeting" }),
+    );
+    // response reflects the hub task
+    expect(result.taskId).toBe(TASK_ID);
+    expect(result.taskType).toBe("meeting_action");
   });
 });

@@ -28,9 +28,12 @@ interface RequestUser {
 // `satisfies TaskTypeDto[]` ép kiểm tra compile-time: mỗi literal phải là task_type hợp lệ trong
 // contracts (nguồn sự thật). office/meeting_action/finance/hr KHÔNG thuộc FSM → CỐ Ý loại trừ
 // (status sửa tay được qua luồng rút gọn). Thêm FSM type mới ở contracts → thêm vào đây (tsc bắt typo).
-const WORKFLOW_TASK_TYPES = new Set<string>(
-  ["workflow_step", "production", "review", "revision"] satisfies TaskTypeDto[],
-);
+const WORKFLOW_TASK_TYPES = new Set<string>([
+  "workflow_step",
+  "production",
+  "review",
+  "revision",
+] satisfies TaskTypeDto[]);
 
 @Injectable()
 export class TasksService {
@@ -80,30 +83,70 @@ export class TasksService {
 
   /** Tạo task tay (office). Không cần content/workflow — bản chất Task Hub hợp nhất (BẤT BIẾN #4). */
   async createTask(user: RequestUser, dto: CreateTaskRequest) {
+    return this.createHubTask(user, {
+      taskType: dto.taskType,
+      title: dto.title,
+      assigneeUserId: dto.assigneeUserId ?? null,
+      projectId: dto.projectId ?? null,
+      dueDate: dto.dueDate ?? null,
+    });
+  }
+
+  /**
+   * G10-4 — Tạo action-item sau họp vào Task Hub (`task_type='meeting_action'`, BẤT BIẾN #4: KHÔNG
+   * bảng task riêng). Domain Meeting là writer hợp lệ duy nhất của meeting_action — API tạo tay
+   * (`POST /tasks`) vẫn office-only (`manualTaskTypeSchema`). Guard FK + audit y như createTask.
+   */
+  async createMeetingActionTask(
+    user: RequestUser,
+    input: { title: string; assigneeUserId?: string | null; dueDate?: string | null },
+  ) {
+    return this.createHubTask(user, {
+      taskType: "meeting_action",
+      title: input.title,
+      assigneeUserId: input.assigneeUserId ?? null,
+      projectId: null,
+      dueDate: input.dueDate ?? null,
+    });
+  }
+
+  /**
+   * Lõi tạo task vào Task Hub dùng chung cho mọi nguồn không thuộc FSM (office tay + meeting_action…).
+   * SEC-1 tenant-FK guard TRƯỚC insert/audit: FK trỏ PK toàn cục nên giá trị chéo tenant vẫn thoả ràng
+   * buộc DB — phải chặn app-side. Mọi FK cho phép NULL (chỉ guard khi có giá trị).
+   */
+  private async createHubTask(
+    user: RequestUser,
+    data: {
+      taskType: TaskTypeDto;
+      title: string;
+      assigneeUserId: string | null;
+      projectId: string | null;
+      dueDate: string | null;
+    },
+  ) {
     return this.db.withTenant(user.companyId, async (tx) => {
-      // SEC-1 tenant-FK guard (TRƯỚC insert/audit): FK trỏ PK toàn cục nên giá trị chéo tenant vẫn
-      // thoả ràng buộc DB — phải chặn app-side. office task cho phép MỌI FK NULL (chỉ guard khi có giá trị).
-      if (dto.assigneeUserId) {
-        const ok = await this.repo.assigneeActiveTx(tx, user.companyId, dto.assigneeUserId);
+      if (data.assigneeUserId) {
+        const ok = await this.repo.assigneeActiveTx(tx, user.companyId, data.assigneeUserId);
         if (!ok) {
           throw new BadRequestException(
             "Người nhận việc không hợp lệ (không cùng công ty hoặc đã ngưng hoạt động).",
           );
         }
       }
-      if (dto.projectId) {
-        const ok = await this.repo.projectExistsTx(tx, user.companyId, dto.projectId);
-        if (!ok) throw new NotFoundException(`Project not found: ${dto.projectId}`);
+      if (data.projectId) {
+        const ok = await this.repo.projectExistsTx(tx, user.companyId, data.projectId);
+        if (!ok) throw new NotFoundException(`Project not found: ${data.projectId}`);
       }
 
       const [created] = await this.repo.createTask(
         user.companyId,
         {
-          taskType: dto.taskType,
-          title: dto.title,
-          assigneeUserId: dto.assigneeUserId ?? null,
-          projectId: dto.projectId ?? null,
-          dueDate: dto.dueDate ?? null,
+          taskType: data.taskType,
+          title: data.title,
+          assigneeUserId: data.assigneeUserId,
+          projectId: data.projectId,
+          dueDate: data.dueDate,
         },
         tx,
       );
@@ -115,10 +158,10 @@ export class TasksService {
         objectId: created.id,
         actorUserId: user.id,
         after: {
-          taskType: dto.taskType,
-          title: dto.title,
-          assigneeUserId: dto.assigneeUserId ?? null,
-          projectId: dto.projectId ?? null,
+          taskType: data.taskType,
+          title: data.title,
+          assigneeUserId: data.assigneeUserId,
+          projectId: data.projectId,
         },
       });
 

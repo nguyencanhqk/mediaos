@@ -8,16 +8,28 @@ import {
 import {
   meetingSchema,
   meetingRoomSchema,
+  meetingNoteSchema,
+  meetingActionItemSchema,
   type MeetingDto,
   type MeetingRoomDto,
+  type MeetingNoteDto,
+  type MeetingActionItemDto,
   type CreateMeetingRequest,
   type UpdateMeetingRequest,
   type CreateMeetingRoomRequest,
+  type CreateMeetingActionRequest,
 } from "@mediaos/contracts";
-import { MeetingRepository, type MeetingRow, type MeetingRoomRow } from "./meeting.repository";
+import {
+  MeetingRepository,
+  type MeetingRow,
+  type MeetingRoomRow,
+  type MeetingNoteRow,
+  type MeetingActionItemRow,
+} from "./meeting.repository";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { DatabaseService } from "../db/db.service";
+import { TasksService } from "../tasks/tasks.service";
 
 @Injectable()
 export class MeetingService {
@@ -28,6 +40,7 @@ export class MeetingService {
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    private readonly tasks: TasksService,
   ) {}
 
   // ─── Masking helpers ──────────────────────────────────────────────────────
@@ -48,6 +61,42 @@ export class MeetingService {
       ...row,
       createdAt: row.createdAt.toISOString(),
     });
+  }
+
+  private toNoteDto(row: MeetingNoteRow): MeetingNoteDto {
+    return meetingNoteSchema.parse({
+      ...row,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    });
+  }
+
+  private toActionItemDto(row: MeetingActionItemRow): MeetingActionItemDto {
+    return meetingActionItemSchema.parse({
+      ...row,
+      dueDate: row.dueDate ? row.dueDate.toISOString() : null,
+      linkedAt: row.linkedAt.toISOString(),
+    });
+  }
+
+  /**
+   * Guard chung cho thao tác sửa-cuộc-họp (biên bản / action-item): chỉ organiser, cuộc họp còn sống.
+   * Trả về meeting row đã xác thực. Tách riêng để né lặp giữa addNote/updateNote/createActionItem.
+   */
+  private async assertOrganizerActiveMeeting(
+    companyId: string,
+    userId: string,
+    meetingId: string,
+  ): Promise<MeetingRow> {
+    const existing = await this.repo.findMeetingById(companyId, meetingId);
+    if (!existing[0]) throw new NotFoundException("Meeting not found");
+    if (existing[0].organizerId !== userId) {
+      throw new ForbiddenException("Only the organiser can modify this meeting");
+    }
+    if (existing[0].status === "cancelled") {
+      throw new ConflictException("Cannot modify a cancelled meeting");
+    }
+    return existing[0];
   }
 
   // ─── MeetingRoom CRUD ─────────────────────────────────────────────────────
@@ -150,9 +199,7 @@ export class MeetingService {
         );
         const count = Number(overlap[0]?.count ?? 0);
         if (count > 0) {
-          throw new ConflictException(
-            "Meeting room is already booked for the requested time slot",
-          );
+          throw new ConflictException("Meeting room is already booked for the requested time slot");
         }
       }
 
@@ -231,9 +278,7 @@ export class MeetingService {
       );
       const count = Number(overlap[0]?.count ?? 0);
       if (count > 0) {
-        throw new ConflictException(
-          "Meeting room is already booked for the requested time slot",
-        );
+        throw new ConflictException("Meeting room is already booked for the requested time slot");
       }
     }
 
@@ -261,11 +306,7 @@ export class MeetingService {
     return this.toMeetingDto(rows[0]);
   }
 
-  async cancelMeeting(
-    companyId: string,
-    userId: string,
-    meetingId: string,
-  ): Promise<MeetingDto> {
+  async cancelMeeting(companyId: string, userId: string, meetingId: string): Promise<MeetingDto> {
     const existing = await this.repo.findMeetingById(companyId, meetingId);
     if (!existing[0]) throw new NotFoundException("Meeting not found");
     if (existing[0].organizerId !== userId) {
@@ -292,5 +333,149 @@ export class MeetingService {
     });
 
     return this.toMeetingDto(rows[0]);
+  }
+
+  // ─── Notes / minutes (G10-4 biên bản) ──────────────────────────────────────
+
+  /** Liệt kê biên bản của cuộc họp (tenant-scoped, mới nhất trước). */
+  async listNotes(companyId: string, meetingId: string): Promise<MeetingNoteDto[]> {
+    const meeting = await this.repo.findMeetingById(companyId, meetingId);
+    if (!meeting[0]) throw new NotFoundException("Meeting not found");
+    const rows = await this.repo.listNotes(companyId, meetingId);
+    return rows.map((r) => this.toNoteDto(r));
+  }
+
+  /** Ghi biên bản mới — chỉ organiser, cuộc họp còn sống. INSERT + audit cùng 1 tx. */
+  async addNote(
+    companyId: string,
+    userId: string,
+    meetingId: string,
+    body: string,
+  ): Promise<MeetingNoteDto> {
+    await this.assertOrganizerActiveMeeting(companyId, userId, meetingId);
+
+    const note = await this.db.withTenant(companyId, async (tx) => {
+      const inserted = await this.repo.insertNote(tx, {
+        companyId,
+        meetingId,
+        authorUserId: userId,
+        body,
+      });
+      const row = inserted[0];
+      if (!row) throw new Error("Failed to create meeting note");
+
+      await this.audit.record(tx, {
+        action: "create",
+        objectType: "meeting_note",
+        objectId: row.id,
+        actorUserId: userId,
+        after: { meetingId, body },
+      });
+      return row;
+    });
+
+    return this.toNoteDto(note);
+  }
+
+  /** Sửa biên bản — chỉ organiser, cuộc họp còn sống. UPDATE + audit cùng 1 tx. */
+  async updateNote(
+    companyId: string,
+    userId: string,
+    meetingId: string,
+    noteId: string,
+    body: string,
+  ): Promise<MeetingNoteDto> {
+    await this.assertOrganizerActiveMeeting(companyId, userId, meetingId);
+
+    const note = await this.db.withTenant(companyId, async (tx) => {
+      const existing = await this.repo.findNoteByIdTx(tx, companyId, noteId);
+      if (!existing[0] || existing[0].meetingId !== meetingId) {
+        throw new NotFoundException("Meeting note not found");
+      }
+
+      const updated = await this.repo.updateNote(tx, companyId, noteId, body);
+      const row = updated[0];
+      if (!row) throw new NotFoundException("Meeting note not found");
+
+      await this.audit.record(tx, {
+        action: "update",
+        objectType: "meeting_note",
+        objectId: noteId,
+        actorUserId: userId,
+        before: { body: existing[0].body },
+        after: { body },
+      });
+      return row;
+    });
+
+    return this.toNoteDto(note);
+  }
+
+  // ─── Action items (G10-4 task sau họp → Task Hub G9) ───────────────────────
+
+  /** Liệt kê action-item của cuộc họp (join sang Task Hub). */
+  async listActionItems(companyId: string, meetingId: string): Promise<MeetingActionItemDto[]> {
+    const meeting = await this.repo.findMeetingById(companyId, meetingId);
+    if (!meeting[0]) throw new NotFoundException("Meeting not found");
+    const rows = await this.repo.listActionItems(companyId, meetingId);
+    return rows.map((r) => this.toActionItemDto(r));
+  }
+
+  /**
+   * Tạo action-item sau họp → ghi vào **Task Hub G9** (`task_type='meeting_action'`, BẤT BIẾN #4 —
+   * KHÔNG bảng task riêng) rồi LINK qua meeting_tasks. Chỉ organiser, cuộc họp còn sống.
+   *
+   * Trình tự: (1) guard organiser → (2) TasksService.createMeetingActionTask (tx riêng, có FK-guard +
+   * audit 'task') → (3) INSERT link + audit 'meeting' + outbox cùng 1 tx. Task tạo TRƯỚC link nên nếu
+   * link lỗi thì task vẫn ở hub (recoverable) — KHÔNG để link mồ côi trỏ task không tồn tại.
+   */
+  async createActionItem(
+    companyId: string,
+    userId: string,
+    meetingId: string,
+    data: CreateMeetingActionRequest,
+  ): Promise<MeetingActionItemDto> {
+    await this.assertOrganizerActiveMeeting(companyId, userId, meetingId);
+
+    const task = await this.tasks.createMeetingActionTask(
+      { id: userId, companyId },
+      {
+        title: data.title,
+        assigneeUserId: data.assigneeUserId ?? null,
+        dueDate: data.dueDate ?? null,
+      },
+    );
+
+    await this.db.withTenant(companyId, async (tx) => {
+      await this.repo.insertMeetingTask(tx, { companyId, meetingId, taskId: task.id });
+
+      await this.audit.record(tx, {
+        action: "MeetingActionTaskCreated",
+        objectType: "meeting",
+        objectId: meetingId,
+        actorUserId: userId,
+        after: { taskId: task.id, title: data.title, assigneeUserId: data.assigneeUserId ?? null },
+      });
+
+      await this.outbox.enqueue(tx, {
+        eventType: "meeting.action_task.created",
+        payload: {
+          meetingId,
+          taskId: task.id,
+          assigneeUserId: data.assigneeUserId ?? null,
+          createdBy: userId,
+        },
+      });
+    });
+
+    return this.toActionItemDto({
+      taskId: task.id,
+      title: task.title,
+      status: task.status,
+      taskType: task.taskType,
+      assigneeUserId: task.assigneeUserId,
+      dueDate: task.dueDate ? new Date(task.dueDate) : null,
+      linkedAt: new Date(task.createdAt),
+    });
   }
 }
