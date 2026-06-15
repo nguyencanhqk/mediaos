@@ -217,6 +217,33 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+  {
+    name: "user_totp",
+    table: "user_totp",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `totp-${randomUUID().slice(0, 8)}@x.test`);
+      // Envelope cols là placeholder thoả CHECK (iv 12B, tag 16B) — harness chỉ kiểm RLS, không crypto thật.
+      const r = await direct.query(
+        `INSERT INTO user_totp (company_id, user_id, secret_ciphertext, encrypted_dek, dek_key_version, kms_key_id, iv_nonce, auth_tag)
+         VALUES ($1, $2, $3, $4, 1, 'local-dev-kek', $5, $6) RETURNING id`,
+        [t.companyId, u, Buffer.alloc(8), Buffer.alloc(8), Buffer.alloc(12), Buffer.alloc(16)],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "user_recovery_codes",
+    table: "user_recovery_codes",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `rec-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO user_recovery_codes (company_id, user_id, code_hash)
+         VALUES ($1, $2, $3) RETURNING id`,
+        [t.companyId, u, randomUUID()],
+      );
+      return r.rows[0].id as string;
+    },
+  },
   // processed_events: bảng hạ tầng worker (không RLS, app không có grant) → KHÔNG đưa vào harness app-path.
   // permissions: global catalog (không RLS, không company_id) → KHÔNG đưa vào harness tenant-isolation.
   {

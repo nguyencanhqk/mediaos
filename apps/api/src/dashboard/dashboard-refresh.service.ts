@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { sql } from "drizzle-orm";
 import { workerDb, directPool } from "../db/index";
+import { assertWorkerRoleSafe } from "../db/worker-role";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema";
 
@@ -32,6 +33,14 @@ export class DashboardRefreshService {
         "DashboardRefreshService: no worker/direct pool configured — cannot refresh materialized views",
       );
     }
+
+    // BẤT BIẾN #1 (G16 #3): khi DATABASE_WORKER_URL vắng, refreshDb fallback directPool có thể là role
+    // đặc quyền (bypass RLS) → chặn ở prod, cảnh báo to ở dev. Trước đây path này KHÔNG kiểm role (gap).
+    await assertWorkerRoleSafe(db, {
+      context: "DashboardRefreshService",
+      mode: "prod-only",
+      logger: this.logger,
+    });
 
     // Determine whether MV already has data. Errors here bubble up (fail-loud).
     const populated = await this.isMvPopulated(db);

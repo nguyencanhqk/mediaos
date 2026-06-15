@@ -25,6 +25,18 @@ describe("TokenService", () => {
     expect(() => svc.verifyAccessToken(token + "tamper")).toThrow();
   });
 
+  it("CHẶN token confusion: challenge 2FA (tfp:true) KHÔNG được dùng như access token", () => {
+    const svc = new TokenService();
+    const challenge = svc.signTwoFactorChallenge({ sub: "u1", companyId: "c1" });
+    // Cùng secret/algo nên jwt.verify qua, nhưng verifyAccessToken phải từ chối (thiếu email + có tfp).
+    expect(() => svc.verifyAccessToken(challenge)).toThrow();
+    // Ngược lại: verifyTwoFactorChallenge KHÔNG nhận access token thường (thiếu tfp).
+    const access = svc.signAccessToken({ sub: "u1", companyId: "c1", email: "a@b.c" });
+    expect(() => svc.verifyTwoFactorChallenge(access)).toThrow();
+    // Round-trip challenge hợp lệ.
+    expect(svc.verifyTwoFactorChallenge(challenge)).toMatchObject({ sub: "u1", companyId: "c1" });
+  });
+
   it("hashToken xác định + khác plaintext; generateOpaqueToken ngẫu nhiên", () => {
     const svc = new TokenService();
     const plain = svc.generateOpaqueToken();

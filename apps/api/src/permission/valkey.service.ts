@@ -38,6 +38,31 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * True khi một client Valkey ĐÃ được cấu hình (VALKEY_URL có) — KHÁC với "đang kết nối được". Caller
+   * cần phân biệt "cache tắt" (null mơ hồ giữa lỗi vs thiếu key) với "cache bật" để chọn đường fail-soft
+   * (vd LoginRateLimiter: bật → dùng Valkey; tắt → fallback in-memory single-instance).
+   */
+  isEnabled(): boolean {
+    return this.client !== null;
+  }
+
+  /**
+   * INCR nguyên tử + đặt EXPIRE ở lần tăng đầu (count===1) để counter tự hết hạn theo cửa sổ. Trả số đếm
+   * mới, hoặc `null` khi Valkey chưa cấu hình / lỗi (caller fail-soft). Never throws.
+   */
+  async incr(key: string, ttlSec: number): Promise<number | null> {
+    if (!this.client) return null;
+    try {
+      const n = await this.client.incr(key);
+      if (n === 1) await this.client.expire(key, ttlSec);
+      return n;
+    } catch (err) {
+      this.logger.warn('Valkey INCR error', { key, error: (err as Error).message });
+      return null;
+    }
+  }
+
   /** Returns null if Valkey is unavailable or key missing. Never throws. */
   async get(key: string): Promise<string | null> {
     if (!this.client) return null;

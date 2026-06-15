@@ -33,6 +33,7 @@ export function apiResponseSchema<T extends z.ZodTypeAny>(data: T) {
 export const CONTRACTS_VERSION = "0.0.0" as const;
 
 export * from "./auth";
+export * from "./two-factor";
 export * from "./org";
 export * from "./media";
 export * from "./platform-accounts";

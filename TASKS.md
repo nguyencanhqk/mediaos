@@ -253,7 +253,7 @@ Fan-out nhiều lane 1 lượt: **Workflow `parallel-lanes`** (`.claude/workflow
 - [x] **G2-5** 🧪🔋 (M) **Test 2-tenant đối kháng**: seed A & B → mọi path trả 0 row của B khi login A (7 bảng RLS, data-driven).
 - [x] **G2-6** 🛠️/🤖 (M) **Auth**: login (`companySlug`+email+password) / refresh / `/me` / forgot-password / reset; argon2id; rotation; rate-limit; audit.
 
-> ⚠️ **Follow-up chưa vá (xử lý trước PROD):** (1) 🔴 Reset token plaintext trong `outbox_events.payload` → envelope-encrypt G6-2. (2) Rate-limit in-memory → Valkey + bucket theo tài khoản. (3) `workerDb` fallback `directPool` → assert `current_user = mediaos_worker` ở prod. (4) `password.verify` catch nuốt lỗi hạ tầng — tách lỗi. (5) Agent `rls-tenant-isolation-tester` chưa tạo.
+> ✅ **Follow-up ĐÃ vá (G16-1a, lane `feat/g16-hardening`):** (1) ✅ Reset token envelope-encrypt (đã có từ G6-2f). (2) ✅ Rate-limit → Valkey + bucket theo tài khoản (fail-soft in-memory, KHÔNG fail-open). (3) ✅ `assertWorkerRoleSafe` gom chung (fail-closed) + đóng gap dashboard-refresh. (4) ✅ `password.verify` tách `PasswordVerificationError` (hạ tầng) vs `false` (sai mật khẩu). (5) ⏳ Agent `rls-tenant-isolation-tester` chưa tạo (món nợ riêng, không chặn).
 
 ✅ **DONE** — không đọc chéo tenant; mọi thay đổi quan trọng có audit; outbox/event idempotent + cảnh báo khi drop. Merged master.
 
@@ -498,7 +498,9 @@ _(custom `react-native-reviewer/patterns/build-fix/push`)_
 
 ## G16 — Stabilization & SaaS Preparation _(🛠️+🔧 · ~8–12 ngày)_
 
-- [ ] **G16-1** 🛠️🔋 (M) Hardening: 2FA nâng cao (AUTH-003), log truy cập nhạy cảm, cảnh báo bảo mật, kiểm tra leak theo scope.
+- [~] **G16-1** 🛠️🔋 (M) Hardening: 2FA nâng cao (AUTH-003), log truy cập nhạy cảm, cảnh báo bảo mật, kiểm tra leak theo scope.
+  - [x] **G16-1a** 🛠️🔋 **2FA TOTP (AUTH-003) + 4 món G2 follow-up pre-PROD** — lane `feat/g16-hardening`, FULL gate (4 reviewer + santa dual-verify) **CONFIRMED-SAFE**, full api **1443 pass/0 fail** (DB cô lập). **2FA**: `TotpService` (otplib v12, RFC 6238) + `TwoFactorService` (enroll QR + 10 recovery codes + confirmEnable + disable + verifyChallenge + requiresTwoFactor); secret **envelope-encrypt** (purpose `totp_secret`, BẤT BIẾN #3); login 2-bước (discriminated union `AuthTokens|TwoFactorChallenge` → `/auth/2fa/verify`); 5 endpoint; `roles.requires_two_factor` (seed company-admin); migration **0120** band g16 (user_totp + user_recovery_codes RLS+FORCE, idx, worker re-wrap grant, seed-assert DO-block); FE mỏng ready-to-wire (api client + TwoFactorSettings QR + challenge form). **G2 follow-up đã vá:** (1) reset-token envelope ✅ (đã có G6-2f); (2) rate-limit→Valkey + bucket tài khoản, fail-soft KHÔNG fail-open; (3) `assertWorkerRoleSafe` gom chung + đóng gap dashboard-refresh; (4) `password.verify` tách `PasswordVerificationError` (hạ tầng) vs false (mismatch). Gate-fix: token-confusion (challenge token ≠ access token), rate-limit fail-open, 2FA throttle confirmEnable/disable.
+  - [ ] **G16-1b** (defer) read-path audit (đọc lương/payslip/secret/kênh), security-alerts, leak-by-scope contract-test; **real-login FE** (login hiện mock G1) để kích hoạt 2FA FE; defense-in-depth: challenge single-use jti, TOTP step-replay tracking, `mustSetupTwoFactor` enforcement gate server-side.
 - [ ] **G16-2** 🔧🟢 (M) Tối ưu: query/index, dashboard, notification, mobile; **backup/restore drill** (`ecc:canary-watch`).
 - [ ] **G16-3** 🛠️/🤖 (M) SaaS prep: workspace/company management, subscription/feature-flag/usage-limit (kiến trúc), template workflow/role/dashboard.
 - [ ] **G16-4** 🧪 (S) Integration planning: YouTube/AdSense/TikTok/Facebook/Drive/Email/SSO (**chỉ thiết kế**, chưa build).

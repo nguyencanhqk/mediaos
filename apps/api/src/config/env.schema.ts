@@ -37,6 +37,9 @@ export const envSchema = z.object({
   RESET_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(3600), // 1 giờ
   LOGIN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
   LOGIN_LOCKOUT_SEC: z.coerce.number().int().positive().default(900), // khoá tạm 15 phút
+  // Bucket THEO TÀI KHOẢN (company|email, mọi IP) — bắt credential-stuffing phân tán nhiều IP lên 1 account.
+  // Ngưỡng cao hơn per-IP (mặc định 20) để giảm rủi ro account-lockout DoS; vẫn là backstop, không thay per-IP.
+  LOGIN_ACCOUNT_MAX_ATTEMPTS: z.coerce.number().int().positive().default(20),
 
   // ── KMS / Envelope encryption (G6-2, plan §6d) ────────────────────────────
   // KMS_PROVIDER chọn DI provider: 'local' (dev, KEK 32B từ file .secrets/) | 'vault' (prod, Vault transit).

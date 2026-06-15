@@ -20,6 +20,8 @@ import { AuthService } from '../../src/auth/auth.service';
 import { LoginRateLimiter } from '../../src/auth/login-rate-limiter';
 import { PasswordService } from '../../src/auth/password.service';
 import { TokenService } from '../../src/auth/token.service';
+import { TotpService } from '../../src/auth/totp.service';
+import { TwoFactorService } from '../../src/auth/two-factor.service';
 import { SecretEncryptionService } from '../../src/crypto/secret-encryption.service';
 import { NodeEnvelopeCipher } from '../../src/crypto/envelope-cipher';
 import { LocalKekProvider } from '../../src/crypto/local-kek.provider';
@@ -43,9 +45,11 @@ describe.skipIf(!hasDb)('G6-2b RED 12 — forgotPassword reset-token must be env
   /** Real AuthService — recipe from auth.int-spec.ts:44-56 (forgotPassword uses dbsvc/tokens/outbox/audit). */
   function newAuth(): AuthService {
     const mockPermissions = { getCapabilities: async () => ({}) } as unknown as PermissionService;
+    const dbsvc = new DatabaseService();
     const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
+    const twoFactor = new TwoFactorService(dbsvc, secrets, new TotpService(), new TokenService(), new AuditService(), new LoginRateLimiter());
     return new AuthService(
-      new DatabaseService(),
+      dbsvc,
       password,
       new TokenService(),
       new LoginRateLimiter(),
@@ -53,6 +57,7 @@ describe.skipIf(!hasDb)('G6-2b RED 12 — forgotPassword reset-token must be env
       new OutboxService(),
       mockPermissions,
       secrets,
+      twoFactor,
     );
   }
 

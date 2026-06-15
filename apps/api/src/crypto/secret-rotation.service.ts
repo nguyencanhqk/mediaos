@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { workerDb } from '../db/index';
+import { assertWorkerRoleSafe as assertWorkerRoleSafeShared } from '../db/worker-role';
 import { KMS_PROVIDER, type KeyPurpose, type KmsProvider } from './secret-encryption.types';
 
 const PURPOSE: KeyPurpose = 'platform_account';
@@ -157,37 +158,19 @@ export class SecretRotationService {
   }
 
   /**
-   * Chặn worker chạy bằng role BYPASS RLS (mirror OutboxWorker). Role super/bypassrls bỏ qua CẢ column-grant
-   * → có thể ghi đè secret_ciphertext. FAIL CLOSED mặc định ở MỌI env: chỉ một env-flag TƯỜNG MINH
-   * `ALLOW_SUPERUSER_ROTATION='true'` mới hạ xuống warn-only (cho harness seed/teardown bằng superuser).
-   * KHÔNG dựa `NODE_ENV` — staging/CI cũng mirror prod, không được nới lỏng ngầm theo môi trường. Kiểm mỗi
-   * lần gọi (không cache — tránh bỏ sót khi connection/role đổi).
+   * Chặn worker chạy bằng role BYPASS RLS. Role super/bypassrls bỏ qua CẢ column-grant → có thể ghi đè
+   * secret_ciphertext. FAIL CLOSED ở MỌI env (mode `strict`): chỉ env-flag TƯỜNG MINH
+   * `ALLOW_SUPERUSER_ROTATION='true'` mới hạ xuống warn-only (harness seed/teardown bằng superuser). KHÔNG
+   * dựa `NODE_ENV` — staging/CI cũng mirror prod. Logic gom về `assertWorkerRoleSafe` chung (G16 #3); kiểm
+   * mỗi lần gọi (không cache — tránh bỏ sót khi connection/role đổi).
    */
-  private async assertWorkerRoleSafe(dbw: NonNullable<typeof workerDb>): Promise<void> {
-    const res = await dbw.execute(sql`
-      SELECT current_user AS role, rolsuper, rolbypassrls
-      FROM pg_roles WHERE rolname = current_user
-    `);
-    const row = res.rows[0] as { role: string; rolsuper: boolean; rolbypassrls: boolean } | undefined;
-    if (!row) {
-      // Fail-closed: không xác minh được role (current_user không có trong pg_roles — role bị drop giữa session
-      // / connection lỗi) → KHÔNG cho rotation chạy mù qua một guard bị bỏ qua im lặng. Thà chặn.
-      throw new Error('assertWorkerRoleSafe: không đọc được role của current_user từ pg_roles — chặn rotation.');
-    }
-    if (row.rolsuper || row.rolbypassrls) {
-      // Chi tiết role (tên + cờ super/bypassrls) CHỈ nằm trong message của throw (không bao giờ tới log).
-      const msg =
-        `SecretRotationService đang chạy bằng role '${row.role}' có BYPASS RLS ` +
-        `(super=${row.rolsuper}, bypassrls=${row.rolbypassrls}) — đặt DATABASE_WORKER_URL trỏ mediaos_worker. ` +
-        `Role này bypass cả column-grant → có thể ghi secret_ciphertext.`;
-      // Fail-closed: chỉ chính xác chuỗi 'true' mới warn-only; mọi giá trị khác (kể cả unset) → NÉM.
-      if (process.env.ALLOW_SUPERUSER_ROTATION !== 'true') throw new Error(msg);
-      // Warn-path KHÔNG in tên role / cờ ra log: tránh lộ topology role + quảng cáo bề mặt bypass cho ai đọc log.
-      this.logger.warn(
-        "SecretRotationService: role BYPASS RLS được cho qua vì ALLOW_SUPERUSER_ROTATION='true' — " +
-          'chỉ dùng cho harness seed/teardown, KHÔNG đặt ở staging/prod.',
-      );
-    }
+  private assertWorkerRoleSafe(dbw: NonNullable<typeof workerDb>): Promise<void> {
+    return assertWorkerRoleSafeShared(dbw, {
+      context: 'SecretRotationService',
+      mode: 'strict',
+      overrideEnvVar: 'ALLOW_SUPERUSER_ROTATION',
+      logger: this.logger,
+    });
   }
 }
 

@@ -31,3 +31,5 @@ export * from "./kpi";
 export * from "./payroll";
 // G10-4 meeting (meeting_rooms + meetings + meeting_attendees)
 export * from "./meeting";
+// G16-1 2FA (user_totp envelope-encrypted secret + user_recovery_codes; AUTH-003)
+export * from "./two-factor";

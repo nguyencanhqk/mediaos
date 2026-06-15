@@ -141,7 +141,7 @@ export class PlatformAccountsService {
     // F6: throttle step-up per (userId, accountId). The reveal gate rides on THIS password check, so an
     // unthrottled endpoint is a brute-force path to crown-jewel secrets — reuse the login limiter.
     const rlKey = `reauth|${user.id}|${accountId}`;
-    if (this.rateLimiter.isLocked(rlKey)) {
+    if (await this.rateLimiter.isLocked(rlKey)) {
       throw new HttpException('Too many re-authentication attempts. Try again later.', HttpStatus.TOO_MANY_REQUESTS);
     }
     const verified = await this.db.withTenant(user.companyId, async (tx) => {
@@ -154,10 +154,10 @@ export class PlatformAccountsService {
       return this.password.verify(row.passwordHash, factor.password as string);
     });
     if (!verified) {
-      this.rateLimiter.recordFailure(rlKey);
+      await this.rateLimiter.recordFailure(rlKey);
       throw new UnauthorizedException('Re-authentication failed.');
     }
-    this.rateLimiter.reset(rlKey);
+    await this.rateLimiter.reset(rlKey);
 
     const reauthValidUntil = new Date(Date.now() + REAUTH_TTL_SEC * 1000);
     // F7: surface a window-persist failure instead of a false success — a swallowed Valkey write would

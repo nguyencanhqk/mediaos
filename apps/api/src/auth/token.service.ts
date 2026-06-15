@@ -9,6 +9,15 @@ export interface AccessTokenClaims {
   email: string;
 }
 
+/** Claims của challenge 2FA (bước-1 login đã qua password, chờ verify mã). KHÔNG cấp quyền API. */
+export interface TwoFactorChallengeClaims {
+  sub: string; // user id
+  companyId: string;
+}
+
+/** TTL challenge 2FA — đủ ngắn để hạn chế cửa sổ brute-force mã, đủ dài để user nhập mã. */
+const TWO_FACTOR_CHALLENGE_TTL_SEC = 300; // 5 phút
+
 /** Lỗi khi thiếu JWT_SECRET — fail-fast (không ký token bằng secret rỗng). */
 export class JwtSecretMissingError extends Error {
   constructor() {
@@ -47,11 +56,37 @@ export class TokenService {
     });
   }
 
-  /** Giải mã + verify chữ ký/hạn. Throw nếu sai (caller map → 401). */
+  /**
+   * Giải mã + verify chữ ký/hạn. Throw nếu sai (caller map → 401). CHẶN token confusion: challenge 2FA
+   * (`tfp:true`, ký cùng secret) KHÔNG được dùng như access token — phải có `email` và KHÔNG có cờ `tfp`,
+   * nếu không JwtAuthGuard sẽ nhận challenge token (phiên chưa qua bước 2) làm phiên đầy đủ.
+   */
   verifyAccessToken(token: string): AccessTokenClaims {
     const decoded = jwt.verify(token, this.secret(), { algorithms: ["HS256"] });
-    if (typeof decoded === "string") throw new Error("token payload không hợp lệ");
-    return { sub: String(decoded.sub), companyId: String(decoded.companyId), email: String(decoded.email) };
+    if (typeof decoded === "string" || decoded.tfp === true || typeof decoded.email !== "string") {
+      throw new Error("token không phải access token hợp lệ");
+    }
+    return { sub: String(decoded.sub), companyId: String(decoded.companyId), email: decoded.email };
+  }
+
+  /**
+   * Ký challenge 2FA (bước-1 login OK, chờ verify mã). Marker `tfp:true` để KHÔNG nhầm với access token —
+   * verifyAccessToken sẽ bỏ qua vì thiếu email/khác đường verify. TTL ngắn (5'). KHÔNG cấp quyền API.
+   */
+  signTwoFactorChallenge(claims: TwoFactorChallengeClaims): string {
+    return jwt.sign({ sub: claims.sub, companyId: claims.companyId, tfp: true }, this.secret(), {
+      algorithm: "HS256",
+      expiresIn: TWO_FACTOR_CHALLENGE_TTL_SEC,
+    });
+  }
+
+  /** Verify challenge 2FA. Throw nếu sai chữ ký/hạn HOẶC thiếu marker `tfp` (chống dùng nhầm access token). */
+  verifyTwoFactorChallenge(token: string): TwoFactorChallengeClaims {
+    const decoded = jwt.verify(token, this.secret(), { algorithms: ["HS256"] });
+    if (typeof decoded === "string" || decoded.tfp !== true) {
+      throw new Error("token không phải challenge 2FA hợp lệ");
+    }
+    return { sub: String(decoded.sub), companyId: String(decoded.companyId) };
   }
 
   /** Sinh token ngẫu nhiên (32 byte) — trả plain (cho client) để gọi hàm băm lưu DB. */

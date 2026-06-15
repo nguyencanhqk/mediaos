@@ -24,6 +24,9 @@ export const roles = pgTable(
     name: text("name").notNull(),
     description: text("description"),
     isSystem: boolean("is_system").notNull().default(false),
+    // G16-1 (AUTH-003): role nhạy cảm BẮT BUỘC bật 2FA. Login user giữ bất kỳ role nào cờ này = true
+    // sẽ bị ép enroll/verify TOTP. Seed `company-admin`=true ở migration 0120; companies bật thêm role tuỳ.
+    requiresTwoFactor: boolean("requires_two_factor").notNull().default(false),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [

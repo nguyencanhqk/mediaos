@@ -5,6 +5,7 @@ import type {
   LoginRequest,
   MeResponse,
   ResetPasswordRequest,
+  TwoFactorChallenge,
 } from "@mediaos/contracts";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -17,6 +18,7 @@ import { PermissionService } from "../permission/permission.service";
 import { LoginRateLimiter } from "./login-rate-limiter";
 import { PasswordService } from "./password.service";
 import { TokenService } from "./token.service";
+import { TwoFactorService } from "./two-factor.service";
 import { SecretEncryptionService } from "../crypto/secret-encryption.service";
 import type { EncryptedColumns } from "../crypto/secret-encryption.types";
 
@@ -96,6 +98,7 @@ export class AuthService {
     private readonly outbox: OutboxService,
     @Inject(forwardRef(() => PermissionService)) private readonly permissions: PermissionService,
     private readonly secrets: SecretEncryptionService,
+    private readonly twoFactor: TwoFactorService,
   ) {}
 
   /** Resolve companySlug → companyId qua hàm SECURITY DEFINER (lỗ RLS có kiểm soát, §3b). */
@@ -109,10 +112,9 @@ export class AuthService {
     return row.id;
   }
 
-  async login(req: LoginRequest, meta: RequestMeta): Promise<AuthTokens> {
+  async login(req: LoginRequest, meta: RequestMeta): Promise<AuthTokens | TwoFactorChallenge> {
     const ip = meta.ip ?? "unknown";
-    const rlKey = LoginRateLimiter.key(req.companySlug, req.email, ip);
-    if (this.rateLimiter.isLocked(rlKey)) {
+    if (await this.isLoginRateLimited(req.companySlug, req.email, ip)) {
       throw new HttpException(
         "Quá nhiều lần thử. Vui lòng thử lại sau.",
         HttpStatus.TOO_MANY_REQUESTS,
@@ -123,7 +125,7 @@ export class AuthService {
     if (!companyId) {
       // companySlug sai: burn thời gian băm để cân bằng timing (chống dò tenant), rồi 401 đồng nhất.
       await this.password.hash(req.password);
-      this.rateLimiter.recordFailure(rlKey);
+      await this.recordLoginFailure(req.companySlug, req.email, ip);
       throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
     }
 
@@ -156,6 +158,20 @@ export class AuthService {
         return null;
       }
 
+      // 2FA BẬT → KHÔNG cấp token ở đây; trả sentinel để login() phát hành challenge. Mật khẩu đã đúng nên
+      // ghi audit challenge (KHÔNG phải login_success — phiên chưa thành cho tới khi verify mã bước 2).
+      if (await this.twoFactor.isEnabledTx(tx, user.id)) {
+        await this.audit.record(tx, {
+          action: "auth.login_2fa_challenge",
+          objectType: "auth",
+          actorUserId: user.id,
+          objectId: user.id,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        });
+        return { kind: "2fa" as const, userId: user.id };
+      }
+
       const issued = await this.issueTokens(tx, companyId, user.id, user.email);
       await this.audit.record(tx, {
         action: "auth.login_success",
@@ -165,15 +181,114 @@ export class AuthService {
         ip: meta.ip,
         userAgent: meta.userAgent,
       });
-      return issued.tokens;
+      return { kind: "tokens" as const, tokens: issued.tokens };
     });
 
     if (!result) {
-      this.rateLimiter.recordFailure(rlKey);
+      await this.recordLoginFailure(req.companySlug, req.email, ip);
       throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
     }
-    this.rateLimiter.reset(rlKey);
-    return result;
+    // Mật khẩu đúng (cả nhánh 2FA) → reset bucket login; bước 2 có rate-limit riêng theo user.
+    await this.resetLoginRateLimit(req.companySlug, req.email, ip);
+    if (result.kind === "2fa") {
+      const challengeToken = this.tokens.signTwoFactorChallenge({ sub: result.userId, companyId });
+      return { twoFactorRequired: true, challengeToken };
+    }
+    return result.tokens;
+  }
+
+  /**
+   * Bước 2 login (2FA): verify challengeToken + mã (TOTP hoặc recovery). Rate-limit theo userId để chặn
+   * brute-force mã 6 số. Đúng → cấp tokens (audit login_success). Sai → 401 + ghi nhận để khoá tạm.
+   */
+  async completeTwoFactorLogin(
+    challengeToken: string,
+    code: string,
+    meta: RequestMeta,
+  ): Promise<AuthTokens> {
+    let claims: { sub: string; companyId: string };
+    try {
+      claims = this.tokens.verifyTwoFactorChallenge(challengeToken);
+    } catch {
+      throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
+    }
+    const rlKey = `2fa|${claims.companyId}|${claims.sub}`;
+    if (await this.rateLimiter.isLocked(rlKey)) {
+      throw new HttpException("Quá nhiều lần thử. Vui lòng thử lại sau.", HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    const ok = await this.twoFactor.verifyChallenge(claims.sub, claims.companyId, code);
+    if (!ok) {
+      await this.rateLimiter.recordFailure(rlKey);
+      throw new UnauthorizedException("Mã xác thực không đúng.");
+    }
+    await this.rateLimiter.reset(rlKey);
+
+    const tokens = await this.dbsvc.withTenant(claims.companyId, async (tx) => {
+      const [user] = await tx
+        .select({ id: users.id, email: users.email, deletedAt: users.deletedAt })
+        .from(users)
+        .where(eq(users.id, claims.sub))
+        .limit(1);
+      if (!user || user.deletedAt) throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
+      const issued = await this.issueTokens(tx, claims.companyId, user.id, user.email);
+      await this.audit.record(tx, {
+        action: "auth.login_success",
+        objectType: "auth",
+        actorUserId: user.id,
+        objectId: user.id,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+        after: { via: "2fa" },
+      });
+      return issued.tokens;
+    });
+    return tokens;
+  }
+
+  /** Tắt 2FA của chính user — PHẢI re-auth bằng mật khẩu (chống chiếm phiên gỡ 2FA), có rate-limit. */
+  async disableTwoFactor(user: { id: string; companyId: string }, password: string): Promise<void> {
+    const rlKey = `2fa-disable|${user.companyId}|${user.id}`;
+    if (await this.rateLimiter.isLocked(rlKey)) {
+      throw new HttpException("Quá nhiều lần thử. Vui lòng thử lại sau.", HttpStatus.TOO_MANY_REQUESTS);
+    }
+    const ok = await this.dbsvc.withTenant(user.companyId, async (tx) => {
+      const [row] = await tx
+        .select({ passwordHash: users.passwordHash })
+        .from(users)
+        .where(eq(users.id, user.id))
+        .limit(1);
+      if (!row) return false;
+      return this.password.verify(row.passwordHash, password);
+    });
+    if (!ok) {
+      await this.rateLimiter.recordFailure(rlKey);
+      throw new UnauthorizedException("Mật khẩu không đúng.");
+    }
+    await this.rateLimiter.reset(rlKey);
+    await this.twoFactor.disable(user.id, user.companyId);
+  }
+
+  /** Khoá login khi BẤT KỲ bucket nào (per-IP HOẶC per-account) đã chạm ngưỡng. */
+  private async isLoginRateLimited(companySlug: string, email: string, ip: string): Promise<boolean> {
+    const ipKey = LoginRateLimiter.key(companySlug, email, ip);
+    const acctKey = LoginRateLimiter.accountKey(companySlug, email);
+    return (await this.rateLimiter.isLocked(ipKey)) || (await this.rateLimiter.isLocked(acctKey));
+  }
+
+  /** Ghi 1 lần sai vào CẢ HAI bucket: per-IP (ngưỡng mặc định) + per-account (ngưỡng cao hơn). */
+  private async recordLoginFailure(companySlug: string, email: string, ip: string): Promise<void> {
+    await this.rateLimiter.recordFailure(LoginRateLimiter.key(companySlug, email, ip));
+    await this.rateLimiter.recordFailure(
+      LoginRateLimiter.accountKey(companySlug, email),
+      this.rateLimiter.accountMaxAttempts,
+    );
+  }
+
+  /** Xoá cả hai bucket sau login thành công. */
+  private async resetLoginRateLimit(companySlug: string, email: string, ip: string): Promise<void> {
+    await this.rateLimiter.reset(LoginRateLimiter.key(companySlug, email, ip));
+    await this.rateLimiter.reset(LoginRateLimiter.accountKey(companySlug, email));
   }
 
   async refresh(refreshToken: string): Promise<AuthTokens> {
@@ -221,6 +336,7 @@ export class AuthService {
       throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
     }
     // Chỉ chọn cột công khai → loại password_hash ở TẦNG QUERY (cấu trúc, không dựa kỷ luật map tay).
+    // Tính 2FA cùng tx: mustSetupTwoFactor = bị ép 2FA (role) nhưng CHƯA bật → FE buộc enroll (AUTH-003).
     const user = await this.dbsvc.withTenant(claims.companyId, async (tx) => {
       const [row] = await tx
         .select({
@@ -234,7 +350,10 @@ export class AuthService {
         .from(users)
         .where(eq(users.id, claims.sub))
         .limit(1);
-      return row && !row.deletedAt ? row : null;
+      if (!row || row.deletedAt) return null;
+      const required = await this.twoFactor.requiresTwoFactorTx(tx, row.id);
+      const enabled = required ? await this.twoFactor.isEnabledTx(tx, row.id) : false;
+      return { ...row, mustSetupTwoFactor: required && !enabled };
     });
     if (!user) throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
     const capabilities = await this.permissions.getCapabilities(user.id, user.companyId);
@@ -245,6 +364,7 @@ export class AuthService {
       fullName: user.fullName,
       status: user.status,
       capabilities,
+      mustSetupTwoFactor: user.mustSetupTwoFactor,
     };
   }
 
