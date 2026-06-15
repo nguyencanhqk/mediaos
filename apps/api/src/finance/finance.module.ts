@@ -3,10 +3,13 @@ import { EventsModule } from "../events/events.module";
 import { PermissionModule } from "../permission/permission.module";
 import { RevenueService } from "./revenue.service";
 import { RevenueRepository } from "./revenue.repository";
+import { RevenueController } from "./revenue.controller";
 import { CostService } from "./cost.service";
 import { CostRepository } from "./cost.repository";
+import { CostController } from "./cost.controller";
 import { CostAllocationService } from "./cost-allocation.service";
 import { CostAllocationRepository } from "./cost-allocation.repository";
+import { CostAllocationController } from "./cost-allocation.controller";
 import { ProfitService } from "./profit.service";
 import { ProfitRepository } from "./profit.repository";
 import { ExpenseRequestService } from "./expense.service";
@@ -32,6 +35,7 @@ import { FinanceTasksService } from "./finance-tasks.service";
  */
 @Module({
   imports: [EventsModule, PermissionModule],
+  controllers: [RevenueController, CostController, CostAllocationController],
   providers: [
     RevenueService,
     RevenueRepository,
