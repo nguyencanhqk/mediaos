@@ -21,12 +21,12 @@ describe("twoFactorApi", () => {
   beforeEach(() => {
     fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    useAuthStore.getState().setTokens("test-access-token");
+    useAuthStore.getState().setTokens("test-access-token", "test-refresh-token");
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    useAuthStore.getState().setTokens(null);
+    useAuthStore.getState().logout();
   });
 
   function lastCall(): FetchCall {
