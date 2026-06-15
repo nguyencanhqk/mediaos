@@ -47,6 +47,10 @@ jobs:
       DATABASE_DIRECT_URL: postgres://mediaos:postgres@localhost:5432/mediaos
       DATABASE_URL: postgres://mediaos_app:ci_app_pw@localhost:5432/mediaos
       DATABASE_WORKER_URL: postgres://mediaos_worker:ci_worker_pw@localhost:5432/mediaos
+      # PGBOUNCER_URL → mediaos_app QUA PgBouncer transaction-mode (:6432, khởi động ở step bên dưới sau khi
+      # role có mật khẩu + userlist.txt). Bật pgbouncer-tenant-isolation.int-spec (GX-4): chứng minh tenant
+      # isolation giữ vững khi connection bị TÁI DÙNG qua pooler. KHÔNG set ⇒ test đó tự skip (mất gate qua-pool).
+      PGBOUNCER_URL: postgres://mediaos_app:ci_app_pw@localhost:6432/mediaos
       VALKEY_URL: redis://localhost:6379
       # Mật khẩu role (ephemeral CI). Phải KHỚP mật khẩu trong URL ở trên.
       APP_DB_PASSWORD: ci_app_pw
@@ -84,10 +88,38 @@ jobs:
         run: pnpm --filter @mediaos/api db:migrate
 
       # Gán mật khẩu cho mediaos_app/worker/pgbouncer_auth (tách secret khỏi migration) → app kết nối được.
+      # BƯỚC NÀY cũng sinh .secrets/pgbouncer/userlist.txt (hash SCRAM của pgbouncer_auth) cho auth_query.
       - name: Setup DB role passwords
         run: pnpm db:setup-roles
+        env:
+          PGBOUNCER_USERLIST_PATH: ${{ github.workspace }}/.secrets/pgbouncer/userlist.txt
+
+      # PgBouncer transaction-mode (GX-4): khởi động SAU setup-roles (cần userlist.txt + role có mật khẩu).
+      # --network host → reach Postgres service ở localhost:5432 và publish :6432 trên host runner.
+      # DB_USER cố tình BỎ TRỐNG → pass-through user (mediaos_app) suốt tới Postgres ⇒ RLS ép thật (KHÔNG
+      # gộp về 1 server-user = bypass). transaction-mode = set_config('app.current_company_id',$1,true) LOCAL
+      # phải reset khi commit ⇒ test chứng minh không rò ngữ cảnh qua pooled conn tái dùng.
+      - name: Start PgBouncer (transaction-mode, pass-through user)
+        run: |
+          docker run -d --name mediaos-pgbouncer --network host \
+            -e DB_HOST=localhost -e DB_PORT=5432 -e DB_NAME=mediaos \
+            -e POOL_MODE=transaction \
+            -e AUTH_TYPE=scram-sha-256 -e AUTH_USER=pgbouncer_auth \
+            -e "AUTH_QUERY=SELECT username, password FROM pgbouncer.get_auth(\$1)" \
+            -e LISTEN_PORT=6432 \
+            -e MAX_CLIENT_CONN=1000 -e DEFAULT_POOL_SIZE=25 \
+            -e IGNORE_STARTUP_PARAMETERS=extra_float_digits,options \
+            -v "${{ github.workspace }}/.secrets/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro" \
+            edoburu/pgbouncer:latest
+          # Chờ pooler nhận kết nối (tránh đỏ giả vì race khởi động).
+          for i in $(seq 1 30); do
+            if pg_isready -h localhost -p 6432 -U mediaos_app -d mediaos >/dev/null 2>&1; then
+              echo "pgbouncer ready"; break
+            fi
+            sleep 1
+          done
 
       # Test gồm integration RLS/isolation/outbox/auth chạy THẬT (DATABASE_URL = mediaos_app).
-      # Đây là gate "không rò chéo tenant" của cả dự án (G2-5).
+      # Đây là gate "không rò chéo tenant" của cả dự án (G2-5) + gate qua-pool (PGBOUNCER_URL, GX-4).
       - name: Test (unit + integration RLS/auth)
         run: pnpm test
