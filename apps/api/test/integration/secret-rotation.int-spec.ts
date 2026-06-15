@@ -38,7 +38,7 @@ import { SecretEncryptionService } from '../../src/crypto/secret-encryption.serv
 import { NodeEnvelopeCipher } from '../../src/crypto/envelope-cipher';
 import { LocalKekProvider } from '../../src/crypto/local-kek.provider';
 import type { EncryptedColumns } from '../../src/crypto/secret-encryption.types';
-import { directPool, hasDb, workerPool } from '../helpers/integration-db';
+import { acquireRegistryLock, directPool, hasDb, workerPool } from '../helpers/integration-db';
 import {
   cleanupTenants,
   seedCompany,
@@ -76,6 +76,7 @@ describe.skipIf(!hasDb)('G6-2g RED 13 — SecretRotationService re-wrap (decisio
   let acctIdem: string;       // 13e
   let acctBulk: string;       // 13d
   let rotationSvc: SecretRotationService;
+  let registryLock: { release: () => Promise<void> };
 
   async function fetchEnvelope(id: string): Promise<EnvelopeSnapshot> {
     const res = await direct.query(
@@ -119,6 +120,9 @@ describe.skipIf(!hasDb)('G6-2g RED 13 — SecretRotationService re-wrap (decisio
   }
 
   beforeAll(async () => {
+    // SERIALIZE với secret-provisioning.int-spec: cả hai mutate bảng GLOBAL encryption_keys (no-RLS) → khoá
+    // advisory để vitest không chạy song song trên cùng DB (false-RED registry race — header §⚠️ ở trên).
+    registryLock = await acquireRegistryLock(direct);
     tenant = await seedCompany(direct, 'g62rot');
 
     // 0) Defensive baseline: a prior CRASHED run may have left v2 'active' (afterAll is skipped on a hard
@@ -160,6 +164,7 @@ describe.skipIf(!hasDb)('G6-2g RED 13 — SecretRotationService re-wrap (decisio
       [PURPOSE],
     );
     await cleanupTenants(direct, [tenant.companyId]);
+    await registryLock.release();
     await direct.end();
     await worker.end();
   });

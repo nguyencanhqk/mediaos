@@ -45,3 +45,26 @@ export async function withClient<T>(pool: Pool, fn: (c: PoolClient) => Promise<T
     client.release();
   }
 }
+
+/**
+ * Session-level advisory lock dùng để SERIALIZE các suite cùng mutate bảng GLOBAL `encryption_keys`
+ * (registry no-RLS, không theo tenant). Vitest chạy file int-spec SONG SONG ⇒ nhiều fork cùng đổi
+ * registry sẽ đua nhau (vd suite-A reset v1-active trong khi suite-B đang chờ v2-active) → false-RED.
+ * Khoá theo một KEY cố định: chỉ 1 suite registry-mutating chạy tại một thời điểm trên cùng DB.
+ *
+ * Giữ một CLIENT riêng suốt vòng đời suite (advisory lock là session-scoped). Gọi `release()` ở afterAll.
+ */
+export const ENCRYPTION_KEYS_LOCK_KEY = 962_006_002; // hằng số (G6-2): "G6-2" registry lock
+export async function acquireRegistryLock(pool: Pool): Promise<{ release: () => Promise<void> }> {
+  const client = await pool.connect();
+  await client.query("SELECT pg_advisory_lock($1)", [ENCRYPTION_KEYS_LOCK_KEY]);
+  return {
+    release: async () => {
+      try {
+        await client.query("SELECT pg_advisory_unlock($1)", [ENCRYPTION_KEYS_LOCK_KEY]);
+      } finally {
+        client.release();
+      }
+    },
+  };
+}

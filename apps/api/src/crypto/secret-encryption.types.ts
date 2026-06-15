@@ -72,6 +72,17 @@ export interface ISecretEncryptionService {
   decryptSecret(row: EncryptedColumns, ctx: EncryptCtx): Promise<string>;
 }
 
+/**
+ * Result of provisioning a new key version (G6-2 PR-A): the freshly INSERTed 'active' version + the prior
+ * version flipped to 'retiring' (null on the very first provision when no prior version existed). Carries NO
+ * key material — only the version numbers + purpose (kms_key_id stays inside the provider/registry).
+ */
+export interface ProvisionKeyVersionResult {
+  purpose: KeyPurpose;
+  newKeyVersion: number;
+  retiredKeyVersion: number | null;
+}
+
 /** DI token for the swappable KMS provider (local ↔ vault). */
 export const KMS_PROVIDER = 'KMS_PROVIDER';
 
