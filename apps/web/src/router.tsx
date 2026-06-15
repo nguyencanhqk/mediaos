@@ -29,6 +29,7 @@ import { AdjustmentsPage } from "@/routes/hr/adjustments";
 import { LeavePage } from "@/routes/hr/leave";
 import { SalaryProfilesPage } from "@/routes/payroll/salary-profiles";
 import { PayrollPeriodsPage } from "@/routes/payroll/periods";
+import { PayslipsPage } from "@/routes/payroll/payslips";
 import { BonusPenaltiesPage } from "@/routes/payroll/bonus-penalties";
 import { useAuthStore } from "@/stores/auth";
 
@@ -233,6 +234,14 @@ const payrollPeriodsRoute = createRoute({
   component: PayrollPeriodsPage,
 });
 
+// G12-FE: "Phiếu lương của tôi" (employee self-service) — money-free list + re-auth reveal + ack/dispute
+const payslipsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/payroll/payslips",
+  beforeLoad: authGuard,
+  component: PayslipsPage,
+});
+
 // G12-FE: bonus/penalty manage + approve (self-approve UI block, server SoD authoritative)
 const bonusPenaltiesRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -285,6 +294,7 @@ const routeTree = rootRoute.addChildren([
   leaveRoute,
   salaryProfilesRoute,
   payrollPeriodsRoute,
+  payslipsRoute,
   bonusPenaltiesRoute,
 ]);
 
