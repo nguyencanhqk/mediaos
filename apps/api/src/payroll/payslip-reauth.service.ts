@@ -58,7 +58,7 @@ export class PayslipReauthService {
     // Throttle step-up per (userId, payslipId) — cổng xem lương cưỡi trên password check này, không
     // chặn = đường brute-force vào dữ liệu lương. Tái dùng login limiter, key riêng (không đụng login/media).
     const rlKey = `reauth-payslip|${user.id}|${payslipId}`;
-    if (this.rateLimiter.isLocked(rlKey)) {
+    if (await this.rateLimiter.isLocked(rlKey)) {
       throw new HttpException(
         "Too many re-authentication attempts. Try again later.",
         HttpStatus.TOO_MANY_REQUESTS,
@@ -74,10 +74,10 @@ export class PayslipReauthService {
       return this.password.verify(row.passwordHash, factor.password);
     });
     if (!verified) {
-      this.rateLimiter.recordFailure(rlKey);
+      await this.rateLimiter.recordFailure(rlKey);
       throw new UnauthorizedException("Re-authentication failed.");
     }
-    this.rateLimiter.reset(rlKey);
+    await this.rateLimiter.reset(rlKey);
 
     const reauthValidUntil = new Date(Date.now() + REAUTH_TTL_SEC * 1000);
     // Persist-fail → 503 (KHÔNG nuốt): cửa sổ không persist nhưng báo OK ⇒ GET /payslips/:id deny mãi.

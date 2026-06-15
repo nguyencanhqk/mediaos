@@ -111,8 +111,7 @@ export class AuthService {
 
   async login(req: LoginRequest, meta: RequestMeta): Promise<AuthTokens> {
     const ip = meta.ip ?? "unknown";
-    const rlKey = LoginRateLimiter.key(req.companySlug, req.email, ip);
-    if (this.rateLimiter.isLocked(rlKey)) {
+    if (await this.isLoginRateLimited(req.companySlug, req.email, ip)) {
       throw new HttpException(
         "Quá nhiều lần thử. Vui lòng thử lại sau.",
         HttpStatus.TOO_MANY_REQUESTS,
@@ -123,7 +122,7 @@ export class AuthService {
     if (!companyId) {
       // companySlug sai: burn thời gian băm để cân bằng timing (chống dò tenant), rồi 401 đồng nhất.
       await this.password.hash(req.password);
-      this.rateLimiter.recordFailure(rlKey);
+      await this.recordLoginFailure(req.companySlug, req.email, ip);
       throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
     }
 
@@ -169,11 +168,33 @@ export class AuthService {
     });
 
     if (!result) {
-      this.rateLimiter.recordFailure(rlKey);
+      await this.recordLoginFailure(req.companySlug, req.email, ip);
       throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
     }
-    this.rateLimiter.reset(rlKey);
+    await this.resetLoginRateLimit(req.companySlug, req.email, ip);
     return result;
+  }
+
+  /** Khoá login khi BẤT KỲ bucket nào (per-IP HOẶC per-account) đã chạm ngưỡng. */
+  private async isLoginRateLimited(companySlug: string, email: string, ip: string): Promise<boolean> {
+    const ipKey = LoginRateLimiter.key(companySlug, email, ip);
+    const acctKey = LoginRateLimiter.accountKey(companySlug, email);
+    return (await this.rateLimiter.isLocked(ipKey)) || (await this.rateLimiter.isLocked(acctKey));
+  }
+
+  /** Ghi 1 lần sai vào CẢ HAI bucket: per-IP (ngưỡng mặc định) + per-account (ngưỡng cao hơn). */
+  private async recordLoginFailure(companySlug: string, email: string, ip: string): Promise<void> {
+    await this.rateLimiter.recordFailure(LoginRateLimiter.key(companySlug, email, ip));
+    await this.rateLimiter.recordFailure(
+      LoginRateLimiter.accountKey(companySlug, email),
+      this.rateLimiter.accountMaxAttempts,
+    );
+  }
+
+  /** Xoá cả hai bucket sau login thành công. */
+  private async resetLoginRateLimit(companySlug: string, email: string, ip: string): Promise<void> {
+    await this.rateLimiter.reset(LoginRateLimiter.key(companySlug, email, ip));
+    await this.rateLimiter.reset(LoginRateLimiter.accountKey(companySlug, email));
   }
 
   async refresh(refreshToken: string): Promise<AuthTokens> {
