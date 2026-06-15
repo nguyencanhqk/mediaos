@@ -1007,6 +1007,63 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+  // ── G12-2 Payroll — period (mutable) + payslip/payslip_item (append-only snapshot, mig 0094–0096) ──
+  // Mỗi bảng có company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  {
+    name: "payroll_periods",
+    table: "payroll_periods",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO payroll_periods (company_id, period_month, status)
+         VALUES ($1, '2026-01', 'draft') RETURNING id`,
+        [t.companyId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "payslips",
+    table: "payslips",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `pslip-${randomUUID().slice(0, 8)}@x.test`);
+      const periodRes = await direct.query(
+        `INSERT INTO payroll_periods (company_id, period_month, status)
+         VALUES ($1, '2026-02', 'draft') RETURNING id`,
+        [t.companyId],
+      );
+      const r = await direct.query(
+        `INSERT INTO payslips
+           (company_id, payroll_period_id, user_id, base_salary, gross, net, created_by, entry_kind)
+         VALUES ($1, $2, $3, 5000.00, 5000.00, 5000.00, $3, 'original') RETURNING id`,
+        [t.companyId, periodRes.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "payslip_items",
+    table: "payslip_items",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `pitem-${randomUUID().slice(0, 8)}@x.test`);
+      const periodRes = await direct.query(
+        `INSERT INTO payroll_periods (company_id, period_month, status)
+         VALUES ($1, '2026-03', 'draft') RETURNING id`,
+        [t.companyId],
+      );
+      const psRes = await direct.query(
+        `INSERT INTO payslips
+           (company_id, payroll_period_id, user_id, base_salary, gross, net, created_by, entry_kind)
+         VALUES ($1, $2, $3, 5000.00, 5000.00, 5000.00, $3, 'original') RETURNING id`,
+        [t.companyId, periodRes.rows[0].id, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO payslip_items (company_id, payslip_id, item_type, label, amount)
+         VALUES ($1, $2, 'earning', 'Base', 5000.00) RETURNING id`,
+        [t.companyId, psRes.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
   // ── G13 Finance (Revenue/Cost/Profit/Expense) — APPEND-ONLY ledgers + mutable allocation/request ──
   // Mỗi bảng có company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
   {
