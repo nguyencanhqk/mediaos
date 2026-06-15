@@ -9,8 +9,15 @@ import { PayrollPeriodService } from "../../src/payroll/payroll-period.service";
 import { PayrollPeriodRepository } from "../../src/payroll/payroll-period.repository";
 import { PayslipService } from "../../src/payroll/payslip.service";
 import { PayslipRepository } from "../../src/payroll/payslip.repository";
+import { BonusPenaltyRepository } from "../../src/payroll/bonus-penalty.repository";
 import { directPool, hasDb } from "../helpers/integration-db";
-import { cleanupTenants, seedCompany, seedUser, seedUserRole, type SeededTenant } from "../helpers/seed";
+import {
+  cleanupTenants,
+  seedCompany,
+  seedUser,
+  seedUserRole,
+  type SeededTenant,
+} from "../helpers/seed";
 
 /**
  * G12-2 — RLS 2-tenant qua ĐƯỜNG SERVICE. login A KHÔNG đọc payroll_period/payslip của B (0 row).
@@ -38,7 +45,13 @@ describe.skipIf(!hasDb)("G12-2 payroll RLS 2-tenant isolation (service path)", (
     const audit = new AuditService();
     const permission = new PermissionService(new PermissionRepository(db));
     periodSvc = new PayrollPeriodService(new PayrollPeriodRepository(), db, permission, audit);
-    payslipSvc = new PayslipService(new PayslipRepository(), db, permission, audit);
+    payslipSvc = new PayslipService(
+      new PayslipRepository(),
+      new BonusPenaltyRepository(),
+      db,
+      permission,
+      audit,
+    );
   });
 
   afterAll(async () => {

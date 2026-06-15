@@ -11,17 +11,25 @@ import { PayrollPeriodService } from "./payroll-period.service";
 import { PayslipController } from "./payslip.controller";
 import { PayslipRepository } from "./payslip.repository";
 import { PayslipService } from "./payslip.service";
+import { BonusPenaltyController } from "./bonus-penalty.controller";
+import { BonusPenaltyRepository } from "./bonus-penalty.repository";
+import { BonusPenaltyService } from "./bonus-penalty.service";
 
 /**
  * PayrollModule (G12 — CROWN JEWEL). PermissionModule = permission stack + guards (sensitive gate).
  * EventsModule = AuditService. DatabaseModule = withTenant (RLS).
  *  - G12-1 salary profile (mask + reveal⟹audit).
  *  - G12-2 payroll period (mutable draft→locked) + payslip snapshot (append-only, ADR-0005).
- * KPI/bonus/penalty logic (G8-4) = SLOT null — KHÔNG implement ở đây.
+ *  - G12-3 bonus/penalty (mutable draft→approved/rejected, có duyệt) → gộp vào payslip khi runPayroll.
  */
 @Module({
   imports: [DatabaseModule, EventsModule, PermissionModule],
-  controllers: [SalaryProfileController, PayrollPeriodController, PayslipController],
+  controllers: [
+    SalaryProfileController,
+    PayrollPeriodController,
+    PayslipController,
+    BonusPenaltyController,
+  ],
   providers: [
     SalaryProfileService,
     SalaryProfileRepository,
@@ -29,7 +37,9 @@ import { PayslipService } from "./payslip.service";
     PayrollPeriodRepository,
     PayslipService,
     PayslipRepository,
+    BonusPenaltyService,
+    BonusPenaltyRepository,
   ],
-  exports: [SalaryProfileService, PayrollPeriodService, PayslipService],
+  exports: [SalaryProfileService, PayrollPeriodService, PayslipService, BonusPenaltyService],
 })
 export class PayrollModule {}

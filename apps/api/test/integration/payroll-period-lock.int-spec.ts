@@ -9,8 +9,15 @@ import { PermissionService } from "../../src/permission/permission.service";
 import { PermissionRepository } from "../../src/permission/permission.repository";
 import { PayslipService } from "../../src/payroll/payslip.service";
 import { PayslipRepository } from "../../src/payroll/payslip.repository";
+import { BonusPenaltyRepository } from "../../src/payroll/bonus-penalty.repository";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
-import { cleanupTenants, seedCompany, seedUser, seedUserRole, type SeededTenant } from "../helpers/seed";
+import {
+  cleanupTenants,
+  seedCompany,
+  seedUser,
+  seedUserRole,
+  type SeededTenant,
+} from "../helpers/seed";
 
 /**
  * G12-2 — BR khoá kỳ trước khi chạy lương + reuse trigger G11 0064 (KHÔNG viết lại).
@@ -49,7 +56,10 @@ describe.skipIf(!hasDb)("G12-2 payroll period-lock BR (reuse trigger 0064)", () 
        VALUES ($1, $2, 'draft', $3) RETURNING id`,
       [A.companyId, month, ap.rows[0].id],
     );
-    return { attendancePeriodId: ap.rows[0].id as string, payrollPeriodId: pp.rows[0].id as string };
+    return {
+      attendancePeriodId: ap.rows[0].id as string,
+      payrollPeriodId: pp.rows[0].id as string,
+    };
   }
 
   async function asApp<T>(companyId: string, fn: (c: PoolClient) => Promise<T>): Promise<T> {
@@ -87,7 +97,13 @@ describe.skipIf(!hasDb)("G12-2 payroll period-lock BR (reuse trigger 0064)", () 
     const db = new DatabaseService();
     const audit = new AuditService();
     const permission = new PermissionService(new PermissionRepository(db));
-    payslipSvc = new PayslipService(new PayslipRepository(), db, permission, audit);
+    payslipSvc = new PayslipService(
+      new PayslipRepository(),
+      new BonusPenaltyRepository(),
+      db,
+      permission,
+      audit,
+    );
   });
 
   afterAll(async () => {

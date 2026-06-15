@@ -101,5 +101,7 @@ export const AUDIT_OBJECT_TYPES = [
   "payroll_period",
   "payslip",
   "payslip_item",
+  // G12-3 bonus/penalty (thưởng/phạt — create/approve/reject ghi 'bonus_penalty' cùng tx)
+  "bonus_penalty",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

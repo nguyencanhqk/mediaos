@@ -40,10 +40,7 @@ export async function seedUser(
  * Dùng trực tiếp trong integration / E2E test (không qua API).
  * Idempotent: ON CONFLICT DO NOTHING; trả về definitionId.
  */
-export async function seedWorkflowDefinition(
-  direct: Pool,
-  companyId: string,
-): Promise<string> {
+export async function seedWorkflowDefinition(direct: Pool, companyId: string): Promise<string> {
   const code = `video_standard_v0`;
 
   const res = await direct.query(
@@ -66,10 +63,10 @@ export async function seedWorkflowDefinition(
   }
 
   for (const [stepOrder, code2, name, assigneeRoleCode, reviewerRoleCode, defaultTaskTitle] of [
-    [1, "script",  "Viết kịch bản",        "script_writer",  "project_manager", "Viết kịch bản"],
-    [2, "edit",    "Dựng video",            "video_editor",   "project_manager", "Dựng video"],
-    [3, "qa",      "Kiểm tra chất lượng",  "qa_reviewer",    "project_manager", "QA nội dung"],
-    [4, "upload",  "Upload lên kênh",       "uploader",       "project_manager", "Upload video"],
+    [1, "script", "Viết kịch bản", "script_writer", "project_manager", "Viết kịch bản"],
+    [2, "edit", "Dựng video", "video_editor", "project_manager", "Dựng video"],
+    [3, "qa", "Kiểm tra chất lượng", "qa_reviewer", "project_manager", "QA nội dung"],
+    [4, "upload", "Upload lên kênh", "uploader", "project_manager", "Upload video"],
   ]) {
     // node_key NOT NULL since 0032 (G7-1a). Seed it = step code (unique per definition → satisfies
     // the (def, node_key) unique index). Keeps the G4-3 lifecycle e2e green against the G7 schema.
@@ -78,18 +75,28 @@ export async function seedWorkflowDefinition(
          (company_id, workflow_definition_id, step_order, code, name, assignee_role_code, reviewer_role_code, default_task_title, node_key)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT DO NOTHING`,
-      [companyId, definitionId, stepOrder, code2, name, assigneeRoleCode, reviewerRoleCode, defaultTaskTitle, code2],
+      [
+        companyId,
+        definitionId,
+        stepOrder,
+        code2,
+        name,
+        assigneeRoleCode,
+        reviewerRoleCode,
+        defaultTaskTitle,
+        code2,
+      ],
     );
   }
 
   for (const [fromState, event, toState, appliesToStepCode, writtenBy] of [
-    ["not_started",    "start",            "in_progress",    null,     "service"],
-    ["in_progress",    "submit",           "waiting_review", null,     "service"],
-    ["waiting_review", "approve",          "approved",       null,     "consumer"],
-    ["waiting_review", "request_revision", "revision",       null,     "consumer"],
-    ["revision",       "start",            "in_progress",    null,     "service"],
-    ["approved",       "open_next",        "in_progress",    null,     "consumer"],
-    ["approved",       "complete_workflow","completed",      "upload", "consumer"],
+    ["not_started", "start", "in_progress", null, "service"],
+    ["in_progress", "submit", "waiting_review", null, "service"],
+    ["waiting_review", "approve", "approved", null, "consumer"],
+    ["waiting_review", "request_revision", "revision", null, "consumer"],
+    ["revision", "start", "in_progress", null, "service"],
+    ["approved", "open_next", "in_progress", null, "consumer"],
+    ["approved", "complete_workflow", "completed", "upload", "consumer"],
   ]) {
     await direct.query(
       `INSERT INTO step_transitions
@@ -109,11 +116,7 @@ export async function seedWorkflowDefinition(
  * Seed 1 role cho company. Trả về roleId.
  * is_system=false, không xung đột với system roles (company_id IS NULL).
  */
-export async function seedRole(
-  direct: Pool,
-  companyId: string,
-  name: string,
-): Promise<string> {
+export async function seedRole(direct: Pool, companyId: string, name: string): Promise<string> {
   const res = await direct.query(
     `INSERT INTO roles (company_id, name, is_system)
      VALUES ($1, $2, false)
@@ -158,7 +161,7 @@ export async function seedRolePermission(
   direct: Pool,
   roleId: string,
   permissionId: string,
-  effect: 'ALLOW' | 'DENY',
+  effect: "ALLOW" | "DENY",
 ): Promise<void> {
   await direct.query(
     `INSERT INTO role_permissions (role_id, permission_id, effect)
@@ -204,7 +207,7 @@ export async function seedObjectGrant(
   resourceType: string,
   resourceId: string,
   action: string,
-  effect: 'ALLOW' | 'DENY',
+  effect: "ALLOW" | "DENY",
 ): Promise<string> {
   // Tìm permissionId từ catalog
   const permRes = await direct.query(
@@ -212,7 +215,9 @@ export async function seedObjectGrant(
     [action, resourceType],
   );
   if (permRes.rows.length === 0) {
-    throw new Error(`Permission catalog entry not found: action=${action} resourceType=${resourceType}. Call seedPermissionCatalog first.`);
+    throw new Error(
+      `Permission catalog entry not found: action=${action} resourceType=${resourceType}. Call seedPermissionCatalog first.`,
+    );
   }
   const permissionId = permRes.rows[0].id as string;
 
@@ -265,10 +270,10 @@ export async function seedPlatformAccount(
     [
       id,
       companyId,
-      opts?.secret_ciphertext ?? Buffer.from('\x00'),
-      opts?.encrypted_dek     ?? Buffer.from('\x00'),
-      opts?.dek_key_version   ?? 1,
-      opts?.kms_key_id        ?? 'local-dev-kek',
+      opts?.secret_ciphertext ?? Buffer.from("\x00"),
+      opts?.encrypted_dek ?? Buffer.from("\x00"),
+      opts?.dek_key_version ?? 1,
+      opts?.kms_key_id ?? "local-dev-kek",
     ],
   );
   return res.rows[0].id as string;
@@ -278,6 +283,11 @@ export async function seedPlatformAccount(
 export async function cleanupTenants(direct: Pool, companyIds: string[]): Promise<void> {
   if (companyIds.length === 0) return;
   const ids = [companyIds];
+
+  // ── G12-3 Bonus/Penalty ─────────────────────────────────────────────────────
+  // bonus_penalties.task_id/defect_id/kpi_result_id ON DELETE RESTRICT + user_id/created_by (NO ACTION)
+  // → PHẢI xoá TRƯỚC tasks/defects/kpi_results/users. payroll_period_id ON DELETE SET NULL (an toàn).
+  await direct.query("DELETE FROM bonus_penalties WHERE company_id = ANY($1::uuid[])", ids);
 
   // ── G12-2 Payroll (period + payslip snapshot, append-only) ──────────────────
   // payslip_items → payslips (FK CASCADE on payslip_id, but delete explicitly for clarity);
@@ -347,7 +357,10 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM workflow_steps WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM workflow_instances WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM step_transitions WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query("DELETE FROM workflow_definition_steps WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query(
+    "DELETE FROM workflow_definition_steps WHERE company_id = ANY($1::uuid[])",
+    ids,
+  );
   await direct.query("DELETE FROM workflow_definitions WHERE company_id = ANY($1::uuid[])", ids);
 
   // ── G4-2 Media ────────────────────────────────────────────────────────────

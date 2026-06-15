@@ -1064,6 +1064,21 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+  // ── G12-3 Bonus/Penalty (mutable draft→approved/rejected, mig 0098) ──
+  {
+    name: "bonus_penalties",
+    table: "bonus_penalties",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `bp-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO bonus_penalties
+           (company_id, user_id, kind, amount, period_month, status, created_by)
+         VALUES ($1, $2, 'bonus', 100.00, '2026-01', 'draft', $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
   // ── G13 Finance (Revenue/Cost/Profit/Expense) — APPEND-ONLY ledgers + mutable allocation/request ──
   // Mỗi bảng có company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
   {
@@ -1272,7 +1287,11 @@ export const RLS_TABLES: RlsTableCase[] = [
     name: "kpi_results",
     table: "kpi_results",
     seedRow: async (direct, t) => {
-      const u = await seedUser(direct, t.companyId, `rls-kpi-subj-${randomUUID().slice(0, 8)}@x.test`);
+      const u = await seedUser(
+        direct,
+        t.companyId,
+        `rls-kpi-subj-${randomUUID().slice(0, 8)}@x.test`,
+      );
       const defRes = await direct.query(
         `INSERT INTO kpi_definitions (company_id, name, weights)
          VALUES ($1, $2, $3::jsonb) RETURNING id`,

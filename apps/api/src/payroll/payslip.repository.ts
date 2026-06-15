@@ -50,6 +50,9 @@ export interface PayslipInsertData {
   workDays: string;
   presentDays: string;
   lateMinutes: number;
+  /** G12-3: tổng thưởng/phạt approved gộp vào snapshot (null khi không có). */
+  bonusAmount?: string | null;
+  penaltyAmount?: string | null;
   entryKind?: string;
   replacesPayslipId?: string | null;
   createdBy: string;
@@ -97,6 +100,8 @@ export class PayslipRepository {
         workDays: data.workDays,
         presentDays: data.presentDays,
         lateMinutes: data.lateMinutes,
+        bonusAmount: data.bonusAmount ?? null,
+        penaltyAmount: data.penaltyAmount ?? null,
         entryKind: data.entryKind ?? "original",
         replacesPayslipId: data.replacesPayslipId ?? null,
         createdBy: data.createdBy,
@@ -164,12 +169,15 @@ export class PayslipRepository {
     tx: TenantTx,
     companyId: string,
     payrollPeriodId: string,
-  ): Promise<{
-    id: string;
-    periodMonth: string;
-    status: string;
-    attendancePeriodStatus: string | null;
-  } | undefined> {
+  ): Promise<
+    | {
+        id: string;
+        periodMonth: string;
+        status: string;
+        attendancePeriodStatus: string | null;
+      }
+    | undefined
+  > {
     const [row] = await tx
       .select({
         id: payrollPeriods.id,
