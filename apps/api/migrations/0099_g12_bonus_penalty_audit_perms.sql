@@ -34,7 +34,7 @@ BEGIN
   END IF;
 
   v_def := pg_get_constraintdef(v_oid);
-  IF position('ANY' IN v_def) > 0 THEN
+  IF position('ANY' IN upper(v_def)) > 0 THEN
     -- Dạng `= ANY ('{a,b,c}'::text[])` → cast literal mảng về text[] (đúng từng phần tử).
     v_cur := substring(v_def FROM '\{[^}]*\}')::text[];
   ELSE

@@ -29,7 +29,9 @@ CREATE TABLE bonus_penalties (
   defect_id         uuid REFERENCES defects(id)     ON DELETE RESTRICT,
   kpi_result_id     uuid REFERENCES kpi_results(id) ON DELETE RESTRICT,
   status            text NOT NULL DEFAULT 'draft',
-  approved_by       uuid REFERENCES users(id) ON DELETE SET NULL,
+  -- RESTRICT (như reference FK): người duyệt 1 khoản tiền không được xoá cứng khi còn record tham chiếu
+  -- (giữ approved_pair + chuỗi audit). User xoá MỀM (deleted_at) nên RESTRICT thực tế không cản vận hành.
+  approved_by       uuid REFERENCES users(id) ON DELETE RESTRICT,
   approved_at       timestamptz,
   payroll_period_id uuid REFERENCES payroll_periods(id) ON DELETE SET NULL,
   consumed_at       timestamptz,
@@ -79,6 +81,10 @@ ALTER TABLE bonus_penalties
   ADD CONSTRAINT bonus_penalties_consumed_pair_check CHECK (
        (payroll_period_id IS NULL AND consumed_at IS NULL)
     OR (payroll_period_id IS NOT NULL AND consumed_at IS NOT NULL)
+  ),
+  -- CHỈ hàng approved mới được consume (bind kỳ lương). Chặn ở DB kể cả khi service/repo có bug.
+  ADD CONSTRAINT bonus_penalties_consume_approved_check CHECK (
+    payroll_period_id IS NULL OR status = 'approved'
   );
 --> statement-breakpoint
 -- mutable: app role UPDATE (draft→approved/rejected, consume) nhưng KHÔNG DELETE (soft-delete). worker đọc.
@@ -106,9 +112,10 @@ BEGIN
         OLD.kind, OLD.id, OLD.period_month, OLD.status
         USING ERRCODE = 'check_violation';
     END IF;
-    -- (2) đóng băng field tiền/đối tượng sau khi rời draft.
+    -- (2) đóng băng field tiền/đối tượng sau khi rời draft (gồm currency — tiền tệ cũng là field tiền).
     IF NEW.kind <> OLD.kind
        OR NEW.amount <> OLD.amount
+       OR NEW.currency <> OLD.currency
        OR NEW.user_id <> OLD.user_id
        OR NEW.period_month <> OLD.period_month
        OR NEW.reference_type IS DISTINCT FROM OLD.reference_type
@@ -117,6 +124,13 @@ BEGIN
        OR NEW.kpi_result_id IS DISTINCT FROM OLD.kpi_result_id THEN
       RAISE EXCEPTION
         'bonus_penalty_guard: % (id=%, kỳ %) đã duyệt, cấm sửa field tiền/đối tượng',
+        OLD.kind, OLD.id, OLD.period_month
+        USING ERRCODE = 'check_violation';
+    END IF;
+    -- (2b) cấm xoá mềm sau khi rời draft (đã duyệt/từ chối = bất biến; xoá mềm CHỈ khi còn draft).
+    IF NEW.deleted_at IS DISTINCT FROM OLD.deleted_at THEN
+      RAISE EXCEPTION
+        'bonus_penalty_guard: % (id=%, kỳ %) đã rời draft, cấm xoá mềm',
         OLD.kind, OLD.id, OLD.period_month
         USING ERRCODE = 'check_violation';
     END IF;

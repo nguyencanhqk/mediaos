@@ -68,6 +68,7 @@ function makeRepo(over: Record<string, unknown> = {}) {
     rejectTx: vi.fn().mockResolvedValue([draftRow({ status: "rejected", approvedBy: ACTOR_ID })]),
     softDeleteTx: vi.fn().mockResolvedValue([{ id: BP_ID }]),
     referenceExistsTx: vi.fn().mockResolvedValue(true),
+    userBelongsToCompanyTx: vi.fn().mockResolvedValue(true),
     ...over,
   };
 }

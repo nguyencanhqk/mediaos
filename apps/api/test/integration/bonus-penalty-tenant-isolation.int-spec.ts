@@ -111,4 +111,22 @@ describe.skipIf(!hasDb)("G12-3 bonus/penalty RLS 2-tenant + cross-tenant referen
     );
     expect(after.rows[0].n).toBe(before.rows[0].n);
   });
+
+  it("(c) A creating a bonus for a payee user of B → BadRequest (cross-tenant user_id)", async () => {
+    const before = await direct.query(
+      `SELECT count(*)::int AS n FROM bonus_penalties WHERE company_id = $1`,
+      [A.companyId],
+    );
+    await expect(
+      svc.create(
+        { id: adminA, companyId: A.companyId },
+        { userId: empB, kind: "bonus", amount: 100, periodMonth: "2026-07", source: "manual" },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    const after = await direct.query(
+      `SELECT count(*)::int AS n FROM bonus_penalties WHERE company_id = $1`,
+      [A.companyId],
+    );
+    expect(after.rows[0].n).toBe(before.rows[0].n);
+  });
 });

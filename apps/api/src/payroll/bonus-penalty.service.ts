@@ -111,9 +111,19 @@ export class BonusPenaltyService {
           throw new ForbiddenException("Insufficient permission to manage bonus/penalty");
         }
 
+        // Payee user_id PHẢI thuộc CÙNG tenant — FK users(id) không ép tenant (chống gán payee tenant khác).
+        const payeeOk = await this.repo.userBelongsToCompanyTx(tx, user.companyId, dto.userId);
+        if (!payeeOk) throw new BadRequestException("User not found in this company");
+
         // Reference (nếu có) PHẢI thuộc cùng tenant — FK không ép tenant, check tay TRƯỚC khi ghi.
+        // referenceType set nhưng thiếu id → báo rõ (thay vì để CHECK DB ném 409 mơ hồ).
         const refId = this.referenceId(dto);
-        if (dto.referenceType && refId) {
+        if (dto.referenceType) {
+          if (!refId) {
+            throw new BadRequestException(
+              `referenceType '${dto.referenceType}' requires a matching reference id`,
+            );
+          }
           const ok = await this.repo.referenceExistsTx(
             tx,
             user.companyId,
@@ -282,6 +292,7 @@ export class BonusPenaltyService {
     }
     this.logger.error(context, {
       error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined, // server-side ONLY (MTTR) — không gửi client
       code,
     });
     return new InternalServerErrorException("Internal server error");

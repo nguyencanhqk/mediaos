@@ -220,4 +220,30 @@ describe.skipIf(!hasDb)("G12-3 bonus/penalty FSM + freeze + CHECK (DB enforcemen
       ),
     ).rejects.toThrow();
   });
+
+  it("(7) freeze currency + block soft-delete after approval (trigger)", async () => {
+    const appr = await seedBonus({ status: "approved" });
+    await expect(
+      asApp(A.companyId, (c) =>
+        c.query(`UPDATE bonus_penalties SET currency='USD' WHERE id=$1`, [appr]),
+      ),
+    ).rejects.toThrow();
+    await expect(
+      asApp(A.companyId, (c) =>
+        c.query(`UPDATE bonus_penalties SET deleted_at=now() WHERE id=$1`, [appr]),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("(8) cannot consume a draft/rejected row (consume_approved CHECK)", async () => {
+    const draftId = await seedBonus({ status: "draft" });
+    await expect(
+      asApp(A.companyId, (c) =>
+        c.query(`UPDATE bonus_penalties SET payroll_period_id=$2, consumed_at=now() WHERE id=$1`, [
+          draftId,
+          periodId,
+        ]),
+      ),
+    ).rejects.toThrow();
+  });
 });

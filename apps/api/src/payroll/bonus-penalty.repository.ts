@@ -1,8 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { type TenantTx } from "../db/db.service";
-import { bonusPenalties, defects, kpiResults, tasks } from "../db/schema";
+import { bonusPenalties, defects, kpiResults, tasks, users } from "../db/schema";
 import type { BonusReferenceType } from "@mediaos/contracts";
+
+/** Trần bảo vệ list (tránh quét không giới hạn). Pagination đầy đủ = G12-4 nếu cần. */
+const LIST_CAP = 500;
 
 const BONUS_PENALTY_COLUMNS = {
   id: bonusPenalties.id,
@@ -96,7 +99,8 @@ export class BonusPenaltyRepository {
       .select(BONUS_PENALTY_COLUMNS)
       .from(bonusPenalties)
       .where(and(...(conditions as [(typeof conditions)[0], ...typeof conditions])))
-      .orderBy(desc(bonusPenalties.createdAt));
+      .orderBy(desc(bonusPenalties.createdAt))
+      .limit(LIST_CAP);
   }
 
   async findByIdTx(tx: TenantTx, companyId: string, id: string) {
@@ -175,6 +179,19 @@ export class BonusPenaltyRepository {
   }
 
   /**
+   * user_id (người nhận thưởng/phạt) có thuộc CÙNG tenant không? FK users(id) KHÔNG ép cùng-tenant
+   * (RLS scope hàng bonus về tenant người tạo, nhưng payee có thể là user tenant khác) → check tay.
+   */
+  async userBelongsToCompanyTx(tx: TenantTx, companyId: string, userId: string): Promise<boolean> {
+    const [row] = await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.companyId, companyId), eq(users.id, userId)))
+      .limit(1);
+    return Boolean(row);
+  }
+
+  /**
    * Referent (task/defect/kpi_result) có tồn tại trong CÙNG tenant không? FK KHÔNG ép cùng-tenant
    * (referent có thể thuộc tenant khác) → check tay TRƯỚC khi insert. Trả về true nếu hợp lệ.
    */
@@ -218,6 +235,8 @@ export class BonusPenaltyRepository {
     userId: string,
     periodMonth: string,
   ): Promise<ApprovedBonusPenaltyRow[]> {
+    // FOR UPDATE: khoá bi quan các hàng sẽ consume → runPayroll song song cùng kỳ bị tuần tự hoá ở đây
+    // (txn thứ 2 chờ txn 1 commit rồi đọc lại payroll_period_id đã set ⇒ không gộp lại) — chống trả 2 lần.
     return await tx
       .select({
         id: bonusPenalties.id,
@@ -235,7 +254,8 @@ export class BonusPenaltyRepository {
           isNull(bonusPenalties.deletedAt),
           isNull(bonusPenalties.payrollPeriodId),
         ),
-      );
+      )
+      .for("update");
   }
 
   /**
@@ -250,6 +270,7 @@ export class BonusPenaltyRepository {
         and(
           eq(bonusPenalties.companyId, companyId),
           inArray(bonusPenalties.id, ids),
+          eq(bonusPenalties.status, "approved"), // CHỈ consume hàng approved (lớp 2 sau aggregate + DB CHECK)
           isNull(bonusPenalties.payrollPeriodId),
         ),
       )

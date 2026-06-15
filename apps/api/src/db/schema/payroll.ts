@@ -240,7 +240,7 @@ export const bonusPenalties = pgTable(
     defectId: uuid("defect_id").references(() => defects.id, { onDelete: "restrict" }),
     kpiResultId: uuid("kpi_result_id").references(() => kpiResults.id, { onDelete: "restrict" }),
     status: text("status").notNull().default("draft"),
-    approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
+    approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "restrict" }),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     /** Bind kỳ lương đã consume (chống trả 2 lần). NULL = chưa vào lương. */
     payrollPeriodId: uuid("payroll_period_id").references(() => payrollPeriods.id, {
@@ -288,6 +288,11 @@ export const bonusPenalties = pgTable(
       "bonus_penalties_consumed_pair_check",
       sql`(payroll_period_id IS NULL AND consumed_at IS NULL)
         OR (payroll_period_id IS NOT NULL AND consumed_at IS NOT NULL)`,
+    ),
+    // CHỈ hàng approved mới được consume (bind kỳ lương) — chặn ở DB kể cả khi service/repo có bug.
+    check(
+      "bonus_penalties_consume_approved_check",
+      sql`payroll_period_id IS NULL OR status = 'approved'`,
     ),
   ],
 );

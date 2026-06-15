@@ -188,15 +188,34 @@ export class PayslipService {
     let penaltyTotal = 0;
     for (const row of bp) {
       const amt = Number(row.amount);
-      if (!Number.isFinite(amt)) continue;
+      // FAIL-LOUD (không bỏ qua thầm lặng): amount/kind bất thường = bug bất biến (DB CHECK lẽ ra chặn).
+      // Bỏ qua sẽ trừ/cộng thiếu mà vẫn itemize + consume ⇒ payslip sai. Ném để rollback + lộ đúng hàng.
+      if (!Number.isFinite(amt) || amt <= 0) {
+        throw new Error(
+          `bonus_penalty ${row.id} amount không hợp lệ — huỷ payslip user ${profile.userId}`,
+        );
+      }
       if (row.kind === "bonus") bonusTotal += amt;
       else if (row.kind === "penalty") penaltyTotal += amt;
+      else throw new Error(`bonus_penalty ${row.id} kind lạ '${row.kind}' — huỷ payslip`);
     }
 
     // gross = base + allowances. net = gross + bonus − penalty, CLAMP ≥ 0:
     // penalty > gross KHÔNG đẩy lương âm — net sàn 0, khoản phạt đầy đủ vẫn ghi ở payslip_items (lưu vết thật).
     const gross = baseSalary + totalAllowances;
-    const net = Math.max(0, gross + bonusTotal - penaltyTotal);
+    const rawNet = gross + bonusTotal - penaltyTotal;
+    const net = Math.max(0, rawNet);
+    const netClamped = rawNet < 0;
+    if (netClamped) {
+      // Lưu vết: penalty vượt gross → net sàn 0. KHÔNG giấu — log + cờ trong audit để compliance truy được.
+      this.logger.warn("Payslip net clamped to 0 (penalty > gross)", {
+        userId: profile.userId,
+        payrollPeriodId,
+        gross,
+        penaltyTotal,
+        rawNet,
+      });
+    }
 
     const rows = await this.repo.insertPayslipTx(tx, user.companyId, {
       payrollPeriodId,
@@ -243,13 +262,20 @@ export class PayslipService {
       });
     }
     // Consume: bind kỳ lương vào các khoản đã gộp (chống trả 2 lần). CÙNG tx với payslip (atomic).
+    // Kiểm số hàng consume đúng = số hàng đã gộp: nếu lệch (txn song song đã consume bớt) ⇒ payslip này
+    // đã itemize tiền của hàng người khác consume ⇒ NÉM 409 để rollback toàn bộ (không trả 2 lần).
     if (bp.length > 0) {
-      await this.bonusRepo.markConsumedTx(
+      const consumed = await this.bonusRepo.markConsumedTx(
         tx,
         user.companyId,
         bp.map((r) => r.id),
         payrollPeriodId,
       );
+      if (consumed.length !== bp.length) {
+        throw new ConflictException(
+          "Concurrent payroll run detected — some bonus/penalty already consumed; aborting",
+        );
+      }
     }
 
     await this.auditService.record(tx, {
@@ -261,6 +287,7 @@ export class PayslipService {
         payroll_period_id: payrollPeriodId,
         user_id: profile.userId,
         entry_kind: "original",
+        ...(netClamped ? { net_clamped: true } : {}),
       },
     });
     return payslip.id;

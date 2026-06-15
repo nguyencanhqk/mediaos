@@ -61,7 +61,10 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
 function makeBonusRepo(overrides: Record<string, unknown> = {}) {
   return {
     aggregateApprovedForPeriodTx: vi.fn().mockResolvedValue([]),
-    markConsumedTx: vi.fn().mockResolvedValue([]),
+    // Echo các id được consume (count khớp bp.length — service ném 409 nếu lệch, mô phỏng đua).
+    markConsumedTx: vi.fn((_tx: unknown, _c: string, ids: string[]) =>
+      Promise.resolve(ids.map((id) => ({ id }))),
+    ),
     ...overrides,
   };
 }
@@ -210,16 +213,14 @@ describe("PayslipService — snapshot audit-in-tx + bonus/penalty wiring", () =>
       ALLOW,
       {},
       {
-        aggregateApprovedForPeriodTx: vi
-          .fn()
-          .mockResolvedValue([
-            {
-              id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
-              kind: "penalty",
-              amount: "9000.00",
-              reason: "Lớn",
-            },
-          ]),
+        aggregateApprovedForPeriodTx: vi.fn().mockResolvedValue([
+          {
+            id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+            kind: "penalty",
+            amount: "9000.00",
+            reason: "Lớn",
+          },
+        ]),
       },
     );
     await svc.runPayroll(actor, { payrollPeriodId: PERIOD_ID });
