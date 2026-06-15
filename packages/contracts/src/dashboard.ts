@@ -100,3 +100,72 @@ export const reportResponseSchema = z.object({
   asOf: z.string(),
 });
 export type ReportResponseDto = z.infer<typeof reportResponseSchema>;
+
+// ─── G14-3: MV stats filter + response ───────────────────────────────────────
+
+export const mvStatsQuerySchema = z.object({
+  /** Filter by month, format YYYY-MM. */
+  month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+  channelId: z.string().uuid().optional(),
+  projectId: z.string().uuid().optional(),
+  departmentId: z.string().uuid().optional(),
+});
+export type MvStatsQueryDto = z.infer<typeof mvStatsQuerySchema>;
+
+export const taskStatusStatSchema = z.object({
+  status: z.string(),
+  taskCount: z.number().int().nonnegative(),
+});
+
+export const outputStatSchema = z.object({
+  status: z.string(),
+  projectId: z.string().uuid().nullable(),
+  departmentId: z.string().uuid().nullable(),
+  channelId: z.string().uuid().nullable(),
+  /** YYYY-MM-DD date string (first day of month). */
+  month: z.string().nullable(),
+  taskCount: z.number().int().nonnegative(),
+});
+
+export const mvStatsResponseSchema = z.object({
+  taskStatus: z.array(taskStatusStatSchema),
+  output: z.array(outputStatSchema),
+  asOf: z.string(),
+});
+export type MvStatsResponseDto = z.infer<typeof mvStatsResponseSchema>;
+
+// ─── G14-3: Alerts ───────────────────────────────────────────────────────────
+
+export const overdueAlertSchema = z.object({
+  type: z.literal("overdue_task"),
+  taskId: z.string().uuid(),
+  title: z.string(),
+  dueDate: z.string(),
+  status: z.string(),
+  assigneeUserId: z.string().uuid().nullable(),
+});
+
+export const channelRiskAlertSchema = z.object({
+  type: z.literal("channel_risk"),
+  channelId: z.string().uuid(),
+  overdueRate: z.number().nonnegative(),
+  overdueCount: z.number().int().nonnegative(),
+  totalCount: z.number().int().nonnegative(),
+});
+
+export const alertSchema = z.discriminatedUnion("type", [
+  overdueAlertSchema,
+  channelRiskAlertSchema,
+]);
+export type AlertDto = z.infer<typeof alertSchema>;
+
+export const alertsResponseSchema = z.object({
+  alerts: z.array(alertSchema),
+  asOf: z.string(),
+});
+export type AlertsResponseDto = z.infer<typeof alertsResponseSchema>;
+
+export const refreshResponseSchema = z.object({
+  refreshedAt: z.string(),
+});
+export type RefreshResponseDto = z.infer<typeof refreshResponseSchema>;
