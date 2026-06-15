@@ -93,5 +93,8 @@ export const AUDIT_OBJECT_TYPES = [
   "evaluation_result",
   // G8-2 defect/revision (trả sửa — createDefect ghi 'defect' cùng tx với revision task)
   "defect",
+  // G8-4 KPI (compute + confirm ghi 'kpi_result'; tạo/sửa định nghĩa ghi 'kpi_definition')
+  "kpi_definition",
+  "kpi_result",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

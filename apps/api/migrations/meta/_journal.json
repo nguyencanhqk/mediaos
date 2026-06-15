@@ -470,6 +470,20 @@
 			"when": 1717500129000,
 			"tag": "0103_g14_mv_grant_tighten",
 			"breakpoints": true
+		},
+		{
+			"idx": 67,
+			"version": "7",
+			"when": 1717500130000,
+			"tag": "0088_g8_kpi",
+			"breakpoints": true
+		},
+		{
+			"idx": 68,
+			"version": "7",
+			"when": 1717500131000,
+			"tag": "0089_g8_kpi_permissions_seed",
+			"breakpoints": true
 		}
 	]
 }

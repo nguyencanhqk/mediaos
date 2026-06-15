@@ -24,6 +24,7 @@ import { FinanceModule } from "./finance/finance.module";
 import { PermissionModule } from "./permission/permission.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { EvaluationModule } from "./evaluation/evaluation.module";
+import { KpiModule } from "./kpi/kpi.module";
 import { DefectModule } from "./defect/defect.module";
 import { MeetingModule } from "./meeting/meeting.module";
 import { JwtAuthGuard } from "./permission/guards/jwt-auth.guard";
@@ -58,6 +59,7 @@ import { CompanyGuard } from "./permission/guards/company.guard";
     FinanceModule,
     DashboardModule,
     EvaluationModule,
+    KpiModule,
     DefectModule,
     MeetingModule,
   ],
