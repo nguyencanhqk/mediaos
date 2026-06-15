@@ -23,6 +23,10 @@ export const envSchema = z.object({
   DATABASE_DIRECT_URL: z.string().url().optional(),
   // DATABASE_WORKER_URL → mediaos_worker, direct (outbox worker, G2-4). Fallback: DIRECT_URL.
   DATABASE_WORKER_URL: z.string().url().optional(),
+  // PGBOUNCER_URL → mediaos_app QUA PgBouncer transaction-mode (:6432). Chỉ dùng cho integration test
+  // kiểm chứng tenant isolation giữ vững khi connection bị tái dùng qua pooler (GX-4, g2rls). App runtime
+  // dùng DATABASE_URL (đã trỏ PgBouncer ở prod). Vắng ⇒ test pgbouncer tự skip (không đỏ giả).
+  PGBOUNCER_URL: z.string().url().optional(),
   VALKEY_URL: z.string().url().optional(),
   // ── Realtime (G10-1) ───────────────────────────────────────────────────────
   // Kill-switch gateway WS: 'false' tắt hẳn Socket.IO (FE còn poll REST fallback). KHÔNG z.coerce.boolean

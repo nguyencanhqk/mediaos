@@ -138,6 +138,7 @@ Master kết thúc ở `0037`. Mỗi lane sở hữu **1 dải 10 số** riêng:
 | G16 | `0120–0129` | reserved |
 | G12 (tràn) | `0130–0139` | ✅ **G12-4 Duyệt bảng lương ĐÃ LAND** (`0130–0132` idx 77–79 when 140000/141000/142000). Band gốc `0090–0099` đầy → band tràn riêng (sau G16, không đụng lane khác). Hook `guard-migration-band` cho G12 = `[[90,99],[130,139]]`. |
 | G3 (mutation-path) | `0140–0149` | 🟡 **đang dùng** — runtime permission mgmt (grant/revoke role + object-permission). Nền G3 có trước hệ band (master kết thúc `0037`) → cấp band bổ sung riêng sau G12-tràn. Hook `guard-migration-band` cho G3 = `[[140,149]]`. |
+| G2 (g2rls RLS hardening) | `0160–0169` | 🟢 **reserved (GX-4)** — PgBouncer × RLS hardening: assert FORCE+policy phủ mọi bảng tenant + force-before-backfill. Nền G2 có trước hệ band (master kết thúc `0037`) → cấp band riêng sau G3-mutation. Hook `guard-migration-band` cho G2 = `[[160,169]]`. **Lưu ý 2026-06-15:** kiểm tra trên `mediaos_g2rls` → **KHÔNG bảng company_id nào thiếu FORCE/policy** ⇒ GX-4 KHÔNG cần migration mới; gate giữ bằng assert (rls-coverage-assert.int-spec + force-before-backfill-order.int-spec static). Band để sẵn cho vá tương lai nếu phát hiện gap. |
 
 `_journal.json`: `idx`/`when` phải **đơn điệu tăng** trong band; khi merge nhiều lane, reconcile journal theo thứ tự merge (idx liên tục, when tăng dần). Hook `guard-migration-band` **chặn (exit 2)** file migration có số ngoài band của branch hiện tại.
 

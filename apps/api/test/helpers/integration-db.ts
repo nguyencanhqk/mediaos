@@ -10,9 +10,15 @@ import { Pool, type PoolClient } from "pg";
 export const directUrl = process.env.DATABASE_DIRECT_URL;
 export const appUrl = process.env.DATABASE_URL;
 export const workerUrl = process.env.DATABASE_WORKER_URL;
+// PGBOUNCER_URL = mediaos_app QUA PgBouncer transaction-mode (:6432). Chỉ set khi test cần kiểm chứng
+// tenant isolation giữ vững qua pooled connection bị tái dùng (GX-4). Vắng ⇒ pgbouncer-spec tự skip.
+export const pgbouncerUrl = process.env.PGBOUNCER_URL;
 
 /** Có đủ điều kiện chạy integration test không (cần cả direct + app URL). */
 export const hasDb = Boolean(directUrl && appUrl);
+
+/** Có PgBouncer để kiểm chứng tenant isolation qua pooled connection không (cần cả DB + PGBOUNCER_URL). */
+export const hasPgBouncer = Boolean(hasDb && pgbouncerUrl);
 
 // LƯU Ý: các factory này được gọi NGAY trong thân `describe.skipIf` (Vitest vẫn chạy factory để thu
 // thập test dù suite bị skip). Vì vậy KHÔNG throw ở đây — chỉ tạo Pool (lazy connect). Khi suite skip,
@@ -34,6 +40,19 @@ export function appPool(max = 1): Pool {
 /** Pool kết nối bằng mediaos_worker (direct). Fallback DATABASE_URL nếu chưa set worker URL. */
 export function workerPool(max = 1): Pool {
   return new Pool({ connectionString: workerUrl ?? appUrl, max });
+}
+
+/**
+ * Pool kết nối mediaos_app QUA PgBouncer (PGBOUNCER_URL, :6432). `max=1` ÉP tái dùng đúng 1 server-connection
+ * để test được hành vi GUC reset giữa các transaction (PgBouncer transaction-mode × RLS, GX-4).
+ *
+ * PgBouncer transaction-mode KHÔNG an toàn với server-side prepared statements ⇒ tắt qua `statement_timeout`
+ * không liên quan; điều cần là pg client KHÔNG cache named prepared statements. node-postgres chỉ dùng
+ * prepared statement khi truyền `name` trong query config — các test ở đây dùng query text thuần (simple/
+ * parametrized không tên) nên an toàn qua pooler. (docker-compose: IGNORE_STARTUP_PARAMETERS đã set.)
+ */
+export function pgbouncerPool(max = 1): Pool {
+  return new Pool({ connectionString: pgbouncerUrl, max });
 }
 
 /** Chạy `fn` với 1 client mượn từ pool rồi trả lại (đảm bảo release kể cả khi throw). */
