@@ -100,10 +100,11 @@ describe.skipIf(!hasDb)("G3 permission mutation-path", () => {
     await seedRolePermission(direct, wildcardRole, wildcardPerm, "ALLOW");
     await seedUserRole(direct, wildcardUser, wildcardRole, A.companyId);
 
-    // admin B: cùng quyền nhưng tenant khác (cross-tenant deny).
+    // admin B: cùng quyền (assign-role + grant-object-permission) nhưng tenant khác (cross-tenant deny).
     bAdminUser = await seedUser(direct, B.companyId, `pbadm-${randomUUID().slice(0, 8)}@b.test`);
     const bAdminRole = await seedRole(direct, B.companyId, `pbadm-role-${randomUUID().slice(0, 8)}`);
     await seedRolePermission(direct, bAdminRole, assignPerm, "ALLOW");
+    await seedRolePermission(direct, bAdminRole, grantObjPerm, "ALLOW");
     await seedUserRole(direct, bAdminUser, bAdminRole, B.companyId);
 
     // target A + role gán.
@@ -167,6 +168,37 @@ describe.skipIf(!hasDb)("G3 permission mutation-path", () => {
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(await countUserRoles(A.companyId, targetUser, assignableRole)).toBe(0);
+  });
+
+  it("(c2) cross-tenant: B admin cannot set object-permission on A's user (NotFound, 0 row in A)", async () => {
+    const objectId = randomUUID();
+    await expect(
+      svc.setObjectPermission(
+        { id: bAdminUser, companyId: B.companyId },
+        {
+          subjectType: "user",
+          subjectId: targetUser, // user thuộc công ty A
+          action: "view-payslip",
+          resourceType: "payslip",
+          objectType: "payslip",
+          objectId,
+          effect: "ALLOW",
+        },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    const r = await direct.query(
+      `SELECT count(*)::int AS n FROM object_permissions WHERE company_id=$1 AND subject_id=$2`,
+      [A.companyId, targetUser],
+    );
+    expect(r.rows[0].n).toBe(0);
+  });
+
+  it("(c3) self-assign blocked (SoD): admin cannot assign a role to themselves", async () => {
+    await expect(
+      svc.assignRole({ id: adminUser, companyId: A.companyId }, adminUser, {
+        roleId: assignableRole,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   // ── happy-path (GREEN) — row + audit + outbox cùng tx ──────────────────────────

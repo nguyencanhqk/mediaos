@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { and, eq, isNull } from "drizzle-orm";
 import { type TenantTx } from "../db/db.service";
 import { objectPermissions, permissions, roles, userRoles, users } from "../db/schema";
-import type { PermissionEffect } from "@mediaos/contracts";
+import type { ObjectSubjectType, PermissionEffect } from "@mediaos/contracts";
 
 /**
  * PermissionAdminRepository (G3 mutation-path) — write-side cho quản lý phân quyền runtime.
@@ -206,7 +206,7 @@ export class PermissionAdminRepository {
 
 export interface ObjectPermissionKey {
   companyId: string;
-  subjectType: string;
+  subjectType: ObjectSubjectType;
   subjectId: string;
   permissionId: string;
   objectType: string;

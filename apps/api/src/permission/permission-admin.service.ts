@@ -10,6 +10,7 @@ import {
 } from "@nestjs/common";
 import type {
   AssignRoleRequest,
+  ObjectSubjectType,
   RemoveObjectPermissionRequest,
   SetObjectPermissionRequest,
 } from "@mediaos/contracts";
@@ -23,12 +24,18 @@ const PG_FK_VIOLATION = "23503";
 const PG_UNIQUE_VIOLATION = "23505";
 const PG_CHECK_VIOLATION = "23514";
 
+/** Ngưỡng cảnh báo fan-out invalidation theo role (không cắt — chỉ log để quan sát). */
+const ROLE_FANOUT_WARN_THRESHOLD = 200;
+
 type RequestUser = { id: string; companyId: string };
 
-function pgCode(err: unknown): string | undefined {
-  return typeof err === "object" && err !== null && "code" in err
-    ? ((err as Record<string, unknown>)["code"] as string | undefined)
+function pgField(err: unknown, field: string): string | undefined {
+  return typeof err === "object" && err !== null && field in err
+    ? ((err as Record<string, unknown>)[field] as string | undefined)
     : undefined;
+}
+function pgCode(err: unknown): string | undefined {
+  return pgField(err, "code");
 }
 
 /** So sánh hai expiry (timestamptz | null) — coi 2 null là bằng nhau. */
@@ -68,10 +75,14 @@ export class PermissionAdminService {
   // ── (A) gán / thu role cho user (user_roles) ─────────────────────────────────
 
   async assignRole(actor: RequestUser, targetUserId: string, dto: AssignRoleRequest) {
+    // Gate read-only ⇒ NGOÀI write-tx (tránh nested withTenant → connection lồng nhau).
+    await this.assertCan(actor, "assign-role", "user", targetUserId);
+    // SoD: chống tự leo thang đặc quyền (nếu assign-role:user về sau cấp cho role không-admin).
+    if (actor.id === targetUserId) {
+      throw new ForbiddenException("Cannot assign a role to yourself (separation of duties)");
+    }
     try {
       return await this.db.withTenant(actor.companyId, async (tx) => {
-        await this.assertCan(actor, "assign-role", "user", targetUserId);
-
         // Validate trước (FK không ép tenant cho user_id; role có thể là system role).
         if (!(await this.repo.findAssignableRole(tx, dto.roleId))) {
           throw new NotFoundException("Role not found");
@@ -114,7 +125,9 @@ export class PermissionAdminService {
           objectType: "user_role",
           objectId: inserted.id,
           actorUserId: actor.id,
-          before: existing ? { roleId: existing.roleId, expiresAt: existing.expiresAt } : null,
+          before: existing
+            ? { id: existing.id, roleId: existing.roleId, expiresAt: existing.expiresAt }
+            : null,
           after: { userId: targetUserId, roleId: dto.roleId, expiresAt },
         });
         await this.emitPermissionChangedForUser(tx, actor.companyId, targetUserId);
@@ -127,26 +140,27 @@ export class PermissionAdminService {
   }
 
   async revokeRole(actor: RequestUser, targetUserId: string, roleId: string) {
+    await this.assertCan(actor, "assign-role", "user", targetUserId);
     try {
       await this.db.withTenant(actor.companyId, async (tx) => {
-        await this.assertCan(actor, "assign-role", "user", targetUserId);
-
-        const deletedId = await this.repo.deleteUserRole(
-          tx,
-          actor.companyId,
-          targetUserId,
-          roleId,
-        );
-        if (!deletedId) {
+        // Đọc TRƯỚC khi xoá → audit `before` đủ (grantedBy/expiresAt) + objectId = id hàng thật.
+        const existing = await this.repo.findUserRole(tx, actor.companyId, targetUserId, roleId);
+        if (!existing) {
           throw new NotFoundException("User does not have this role");
         }
+        await this.repo.deleteUserRole(tx, actor.companyId, targetUserId, roleId);
 
         await this.audit.record(tx, {
           action: "RoleRevoked",
           objectType: "user_role",
-          objectId: deletedId,
+          objectId: existing.id,
           actorUserId: actor.id,
-          before: { userId: targetUserId, roleId },
+          before: {
+            userId: targetUserId,
+            roleId,
+            grantedBy: existing.grantedBy,
+            expiresAt: existing.expiresAt,
+          },
         });
         await this.emitPermissionChangedForUser(tx, actor.companyId, targetUserId);
       });
@@ -158,10 +172,9 @@ export class PermissionAdminService {
   // ── (B) object-permission override (object_permissions) ──────────────────────
 
   async setObjectPermission(actor: RequestUser, dto: SetObjectPermissionRequest) {
+    await this.assertCan(actor, "grant-object-permission", "permission", null);
     try {
       return await this.db.withTenant(actor.companyId, async (tx) => {
-        await this.assertCan(actor, "grant-object-permission", "permission", null);
-
         const permissionId = await this.resolvePermissionId(tx, dto.action, dto.resourceType);
         await this.assertSubjectExists(tx, actor.companyId, dto.subjectType, dto.subjectId);
 
@@ -221,10 +234,9 @@ export class PermissionAdminService {
   }
 
   async removeObjectPermission(actor: RequestUser, dto: RemoveObjectPermissionRequest) {
+    await this.assertCan(actor, "grant-object-permission", "permission", null);
     try {
       await this.db.withTenant(actor.companyId, async (tx) => {
-        await this.assertCan(actor, "grant-object-permission", "permission", null);
-
         const permissionId = await this.resolvePermissionId(tx, dto.action, dto.resourceType);
         const key: ObjectPermissionKey = {
           companyId: actor.companyId,
@@ -301,7 +313,7 @@ export class PermissionAdminService {
   private async assertSubjectExists(
     tx: TenantTx,
     companyId: string,
-    subjectType: string,
+    subjectType: ObjectSubjectType,
     subjectId: string,
   ): Promise<void> {
     const found =
@@ -324,11 +336,15 @@ export class PermissionAdminService {
     });
   }
 
-  /** user → 1 event; role → fan-out 1 event / user đang giữ role (0 user ⇒ chỉ TTL phủ tương lai). */
+  /**
+   * user → 1 event; role → fan-out 1 event / user đang giữ role (0 user ⇒ chỉ TTL phủ tương lai).
+   * subjectType là union 'user'|'role' (Zod-validated) → KHÔNG nhánh ngầm; KHÔNG drop event để giữ
+   * đúng invalidation. Fan-out lớn = warn (observability) chứ không cắt — cắt = cache stale = lỗ hổng.
+   */
   private async emitPermissionChangedForSubject(
     tx: TenantTx,
     companyId: string,
-    subjectType: string,
+    subjectType: ObjectSubjectType,
     subjectId: string,
   ): Promise<void> {
     if (subjectType === "user") {
@@ -336,6 +352,11 @@ export class PermissionAdminService {
       return;
     }
     const userIds = await this.repo.findUserIdsWithRole(tx, companyId, subjectId);
+    if (userIds.length > ROLE_FANOUT_WARN_THRESHOLD) {
+      this.logger.warn(
+        `permission.changed fan-out lớn: ${userIds.length} user giữ role ${subjectId} (1 outbox/user trong cùng tx)`,
+      );
+    }
     for (const userId of userIds) {
       await this.emitPermissionChangedForUser(tx, companyId, userId);
     }
@@ -354,7 +375,14 @@ export class PermissionAdminService {
     if (code === PG_CHECK_VIOLATION) {
       return new BadRequestException("Invalid permission grant");
     }
-    this.logger.error(context, err instanceof Error ? err.stack : String(err));
+    // Lỗi PG không phân loại / lỗi lập trình: log đủ code/detail/constraint để on-call grep được
+    // (KHÔNG leak ra response — chỉ vào logger). Response giữ generic.
+    this.logger.error(context, {
+      stack: err instanceof Error ? err.stack : String(err),
+      pgCode: code,
+      pgDetail: pgField(err, "detail"),
+      pgConstraint: pgField(err, "constraint"),
+    });
     return new InternalServerErrorException(context);
   }
 }
