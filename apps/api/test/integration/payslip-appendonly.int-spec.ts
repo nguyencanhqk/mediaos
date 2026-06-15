@@ -17,6 +17,7 @@ describe.skipIf(!hasDb)("G12-2 payslip + payslip_item append-only", () => {
 
   let A: SeededTenant;
   let userId: string;
+  let userId2: string;
   let periodId: string;
   let payslipId: string;
   let payslipItemId: string;
@@ -24,6 +25,9 @@ describe.skipIf(!hasDb)("G12-2 payslip + payslip_item append-only", () => {
   beforeAll(async () => {
     A = await seedCompany(direct, "pslip-ao");
     userId = await seedUser(direct, A.companyId, `pslip-ao-${A.slug}@x.test`);
+    // Distinct payee: INSERT-grant test phải dùng (kỳ,user) KHÁC bản seed (G12-3 unique
+    // payslips_period_user_original_uq: 1 original / (company,kỳ,user)).
+    userId2 = await seedUser(direct, A.companyId, `pslip-ao2-${A.slug}@x.test`);
     // Seed via superuser (bypasses grants/RLS) — the rows the app role will try to mutate.
     const p = await direct.query(
       `INSERT INTO payroll_periods (company_id, period_month, status)
@@ -77,7 +81,7 @@ describe.skipIf(!hasDb)("G12-2 payslip + payslip_item append-only", () => {
         `INSERT INTO payslips
            (payroll_period_id, user_id, base_salary, gross, net, created_by, entry_kind)
          VALUES ($1, $2, 6000.00, 6000.00, 6000.00, $2, 'original') RETURNING id`,
-        [periodId, userId],
+        [periodId, userId2],
       );
       return r.rows[0].id as string;
     });

@@ -162,6 +162,10 @@ export const payslips = pgTable(
     uniqueIndex("payslips_replaces_uq")
       .on(t.replacesPayslipId)
       .where(sql`replaces_payslip_id IS NOT NULL`),
+    // Backstop chống trả-2-lần lương gốc (G12-3 gate, mig 0099): 1 payslip 'original' / (company, kỳ, user).
+    uniqueIndex("payslips_period_user_original_uq")
+      .on(t.companyId, t.payrollPeriodId, t.userId)
+      .where(sql`entry_kind = 'original'`),
     check("payslips_entry_kind_check", sql`entry_kind IN ('original','adjustment','void')`),
     check(
       "payslips_chain_check",
@@ -261,6 +265,10 @@ export const bonusPenalties = pgTable(
     index("bonus_penalties_company_status_idx")
       .on(t.companyId, t.status)
       .where(sql`deleted_at IS NULL`),
+    // FK approved_by RESTRICT → index tránh seq-scan khi check referent lúc xoá user.
+    index("bonus_penalties_approved_by_idx")
+      .on(t.approvedBy)
+      .where(sql`approved_by IS NOT NULL`),
     check("bonus_penalties_kind_check", sql`kind IN ('bonus','penalty')`),
     check("bonus_penalties_amount_check", sql`amount > 0`),
     check("bonus_penalties_status_check", sql`status IN ('draft','approved','rejected')`),

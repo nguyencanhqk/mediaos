@@ -226,4 +226,21 @@ describe.skipIf(!hasDb)("G12-3 bonus/penalty → payroll aggregation (money corr
     );
     expect(audit.rows[0].n).toBeGreaterThanOrEqual(1);
   });
+
+  it("(f) duplicate 'original' payslip for same (period,user) rejected by unique index (no double-pay)", async () => {
+    const { employee, periodId } = await seedScenario("2026-11");
+    await payslipSvc.runPayroll(
+      { id: admin, companyId: A.companyId },
+      { payrollPeriodId: periodId },
+    );
+    // Mô phỏng runPayroll thứ 2 chạy đua: INSERT payslip 'original' thứ 2 cùng (kỳ,user) → 23505.
+    await expect(
+      direct.query(
+        `INSERT INTO payslips
+           (company_id, payroll_period_id, user_id, base_salary, gross, net, created_by, entry_kind)
+         VALUES ($1, $2, $3, 5000, 5000, 5000, $3, 'original')`,
+        [A.companyId, periodId, employee],
+      ),
+    ).rejects.toThrow();
+  });
 });

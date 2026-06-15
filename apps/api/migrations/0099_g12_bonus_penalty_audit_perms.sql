@@ -89,3 +89,14 @@ FROM permissions p
 WHERE p.resource_type = 'bonus_penalty'
   AND p.action IN ('manage-bonus-penalty', 'approve-bonus-penalty', 'view-bonus-penalty')
 ON CONFLICT DO NOTHING;
+--> statement-breakpoint
+
+-- ── Backstop chống TRẢ-2-LẦN lương gốc (phát hiện ở FULL gate G12-3) ──
+-- runPayroll idempotency (countForPeriodUserTx) KHÔNG tuần tự hoá 2 lần chạy ĐỒNG THỜI cùng (kỳ,user):
+-- cả 2 đọc count=0 trước commit ⇒ 2 payslip 'original'. FOR UPDATE + count-check chỉ chặn double-consume
+-- bonus/penalty, KHÔNG chặn double payslip lương gốc. Unique partial index = chặn ở DB (txn thứ 2 fail 23505
+-- → mapError 409). Chỉ áp cho entry_kind='original' (adjustment/void được phép thêm bản ghi mới).
+-- Bảng G12-2 (mig 0095) nhưng band 0090-0099 đã đầy → đặt ở 0099 (in-band, ADDITIVE, không đổi data).
+CREATE UNIQUE INDEX IF NOT EXISTS payslips_period_user_original_uq
+  ON payslips(company_id, payroll_period_id, user_id)
+  WHERE entry_kind = 'original';

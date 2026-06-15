@@ -261,9 +261,10 @@ export class PayslipService {
         meta: { bonus_penalty_id: row.id },
       });
     }
-    // Consume: bind kỳ lương vào các khoản đã gộp (chống trả 2 lần). CÙNG tx với payslip (atomic).
-    // Kiểm số hàng consume đúng = số hàng đã gộp: nếu lệch (txn song song đã consume bớt) ⇒ payslip này
-    // đã itemize tiền của hàng người khác consume ⇒ NÉM 409 để rollback toàn bộ (không trả 2 lần).
+    // Consume: bind kỳ lương vào các khoản đã gộp (chống trả 2 lần KHOẢN bonus/penalty). CÙNG tx (atomic).
+    // FOR UPDATE ở aggregate + kiểm số hàng consume == số hàng đã gộp: lệch (txn song song consume bớt) ⇒ NÉM 409.
+    // LƯU Ý: double payslip LƯƠNG GỐC cùng (kỳ,user) chặn ở unique index payslips_period_user_original_uq (mig 0099),
+    // KHÔNG ở đây — count-check chỉ phủ phần thưởng/phạt.
     if (bp.length > 0) {
       const consumed = await this.bonusRepo.markConsumedTx(
         tx,

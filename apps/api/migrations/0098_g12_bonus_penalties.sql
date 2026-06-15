@@ -58,6 +58,10 @@ CREATE INDEX bonus_penalties_company_user_month_idx
 CREATE INDEX bonus_penalties_company_status_idx
   ON bonus_penalties(company_id, status) WHERE deleted_at IS NULL;
 --> statement-breakpoint
+-- FK approved_by ON DELETE RESTRICT → index để PG check referent không seq-scan khi xoá user (hiếm, soft-delete).
+CREATE INDEX bonus_penalties_approved_by_idx
+  ON bonus_penalties(approved_by) WHERE approved_by IS NOT NULL;
+--> statement-breakpoint
 ALTER TABLE bonus_penalties
   ADD CONSTRAINT bonus_penalties_kind_check   CHECK (kind IN ('bonus','penalty')),
   ADD CONSTRAINT bonus_penalties_amount_check CHECK (amount > 0),
