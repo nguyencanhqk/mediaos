@@ -210,3 +210,128 @@ export const payslipListQuerySchema = z.object({
   userId: z.string().uuid().optional(),
 });
 export type PayslipListQuery = z.infer<typeof payslipListQuerySchema>;
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// G12-3 — Bonus/Penalty (thưởng/phạt thủ công + sinh từ KPI/lỗi, có duyệt, chảy vào payroll)
+//   - bonus_penalties: MUTABLE draft→approved/rejected (đề xuất chờ duyệt). KHÁC payslip snapshot
+//     (append-only). Soft-delete deleted_at. Sửa field tiền CHỈ khi draft (trigger DB freeze sau duyệt).
+//   - reference (task/defect/kpi_result) là NULLABLE typed-FK; CHECK ép đúng-một-hoặc-không theo
+//     reference_type. Self-approve BỊ CHẶN (segregation of duties) ở service.
+//   - kind tách bonus/penalty + amount > 0 (KHÔNG dùng số âm — tránh lỗi dấu khi cộng/trừ vào payslip).
+//   - Approved + cùng period_month + chưa consume → runPayroll gộp vào payslip.bonus/penaltyAmount,
+//     bind payroll_period_id (consume) chống trả 2 lần.
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+
+export const bonusKindEnum = z.enum(["bonus", "penalty"]);
+export type BonusKind = z.infer<typeof bonusKindEnum>;
+
+export const bonusPenaltyStatusEnum = z.enum(["draft", "approved", "rejected"]);
+export type BonusPenaltyStatus = z.infer<typeof bonusPenaltyStatusEnum>;
+
+export const bonusSourceEnum = z.enum(["manual", "kpi", "defect"]);
+export type BonusSource = z.infer<typeof bonusSourceEnum>;
+
+export const bonusReferenceTypeEnum = z.enum(["task", "defect", "kpi_result"]);
+export type BonusReferenceType = z.infer<typeof bonusReferenceTypeEnum>;
+
+/** DTO bonus/penalty trả về client. amount là số tiền per-person (nhạy cảm — gate ở server). */
+export const bonusPenaltySchema = z.object({
+  id: z.string().uuid(),
+  companyId: z.string().uuid(),
+  userId: z.string().uuid(),
+  kind: bonusKindEnum,
+  amount: z.number(),
+  currency: z.string(),
+  periodMonth: periodMonthSchema,
+  reason: z.string().nullable(),
+  source: bonusSourceEnum,
+  referenceType: bonusReferenceTypeEnum.nullable(),
+  taskId: z.string().uuid().nullable(),
+  defectId: z.string().uuid().nullable(),
+  kpiResultId: z.string().uuid().nullable(),
+  status: bonusPenaltyStatusEnum,
+  approvedBy: z.string().uuid().nullable(),
+  approvedAt: z.string().datetime().nullable(),
+  payrollPeriodId: z.string().uuid().nullable(),
+  consumedAt: z.string().datetime().nullable(),
+  createdBy: z.string().uuid(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type BonusPenaltyDto = z.infer<typeof bonusPenaltySchema>;
+
+/**
+ * Đúng-một-hoặc-không reference: reference_type phải khớp đúng cột FK tương ứng được set,
+ * các cột còn lại NULL. Parity với CHECK `bonus_penalties_reference_check` (mig 0098).
+ */
+function refineReference(
+  v: {
+    referenceType?: BonusReferenceType;
+    taskId?: string;
+    defectId?: string;
+    kpiResultId?: string;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  const map: Record<BonusReferenceType, string | undefined> = {
+    task: v.taskId,
+    defect: v.defectId,
+    kpi_result: v.kpiResultId,
+  };
+  const setIds = [v.taskId, v.defectId, v.kpiResultId].filter((x) => x != null);
+  if (v.referenceType == null) {
+    if (setIds.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "referenceType is required when a reference id is provided",
+      });
+    }
+    return;
+  }
+  // referenceType set → đúng cột tương ứng phải có, không cột nào khác được set.
+  if (map[v.referenceType] == null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `${v.referenceType}Id is required when referenceType='${v.referenceType}'`,
+    });
+  }
+  if (setIds.length !== 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "exactly one reference id may be set, matching referenceType",
+    });
+  }
+}
+
+/** Create bonus/penalty — amount > 0 (kind tách bonus/penalty). reference đồng nhất với reference_type. */
+export const createBonusPenaltySchema = z
+  .object({
+    userId: z.string().uuid(),
+    kind: bonusKindEnum,
+    amount: z.number().positive(),
+    currency: z.string().min(1).optional(),
+    periodMonth: periodMonthSchema,
+    reason: z.string().max(500).optional(),
+    source: bonusSourceEnum.default("manual"),
+    referenceType: bonusReferenceTypeEnum.optional(),
+    taskId: z.string().uuid().optional(),
+    defectId: z.string().uuid().optional(),
+    kpiResultId: z.string().uuid().optional(),
+  })
+  .superRefine(refineReference);
+export type CreateBonusPenaltyRequest = z.infer<typeof createBonusPenaltySchema>;
+
+/** Duyệt/từ chối — lý do tuỳ chọn (ghi vào reason khi reject để lưu vết). */
+export const decideBonusPenaltySchema = z.object({
+  reason: z.string().max(500).optional(),
+});
+export type DecideBonusPenaltyRequest = z.infer<typeof decideBonusPenaltySchema>;
+
+/** GET /bonus-penalties query filters. */
+export const bonusPenaltyListQuerySchema = z.object({
+  userId: z.string().uuid().optional(),
+  status: bonusPenaltyStatusEnum.optional(),
+  periodMonth: periodMonthSchema.optional(),
+  kind: bonusKindEnum.optional(),
+});
+export type BonusPenaltyListQuery = z.infer<typeof bonusPenaltyListQuerySchema>;

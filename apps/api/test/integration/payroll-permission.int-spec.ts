@@ -8,6 +8,7 @@ import { PermissionService } from "../../src/permission/permission.service";
 import { PermissionRepository } from "../../src/permission/permission.repository";
 import { PayslipService } from "../../src/payroll/payslip.service";
 import { PayslipRepository } from "../../src/payroll/payslip.repository";
+import { BonusPenaltyRepository } from "../../src/payroll/bonus-penalty.repository";
 import { directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -36,10 +37,9 @@ describe.skipIf(!hasDb)("G12-2 payroll permission deny-path (fail-closed)", () =
   let payslipSvc: PayslipService;
 
   async function countPayslips(companyId: string): Promise<number> {
-    const r = await direct.query(
-      `SELECT count(*)::int AS n FROM payslips WHERE company_id = $1`,
-      [companyId],
-    );
+    const r = await direct.query(`SELECT count(*)::int AS n FROM payslips WHERE company_id = $1`, [
+      companyId,
+    ]);
     return r.rows[0].n as number;
   }
 
@@ -47,12 +47,20 @@ describe.skipIf(!hasDb)("G12-2 payroll permission deny-path (fail-closed)", () =
     A = await seedCompany(direct, "payperm");
 
     // (a) user with an empty role (no run-payroll / view-payslip).
-    noPermUser = await seedUser(direct, A.companyId, `pp-noperm-${randomUUID().slice(0, 8)}@a.test`);
+    noPermUser = await seedUser(
+      direct,
+      A.companyId,
+      `pp-noperm-${randomUUID().slice(0, 8)}@a.test`,
+    );
     const emptyRole = await seedRole(direct, A.companyId, `pp-empty-${randomUUID().slice(0, 8)}`);
     await seedUserRole(direct, noPermUser, emptyRole, A.companyId);
 
     // (c) user with wildcard *:* ALLOW but NO explicit sensitive grant → must NOT inherit.
-    wildcardUser = await seedUser(direct, A.companyId, `pp-wild-${randomUUID().slice(0, 8)}@a.test`);
+    wildcardUser = await seedUser(
+      direct,
+      A.companyId,
+      `pp-wild-${randomUUID().slice(0, 8)}@a.test`,
+    );
     const wildcardRole = await seedRole(direct, A.companyId, `pp-wild-${randomUUID().slice(0, 8)}`);
     const wildcardPerm = await seedPermissionCatalog(direct, "*", "*", false);
     await seedRolePermission(direct, wildcardRole, wildcardPerm, "ALLOW");
@@ -68,7 +76,13 @@ describe.skipIf(!hasDb)("G12-2 payroll permission deny-path (fail-closed)", () =
     const db = new DatabaseService();
     const audit = new AuditService();
     const permission = new PermissionService(new PermissionRepository(db));
-    payslipSvc = new PayslipService(new PayslipRepository(), db, permission, audit);
+    payslipSvc = new PayslipService(
+      new PayslipRepository(),
+      new BonusPenaltyRepository(),
+      db,
+      permission,
+      audit,
+    );
   });
 
   afterAll(async () => {
@@ -79,7 +93,10 @@ describe.skipIf(!hasDb)("G12-2 payroll permission deny-path (fail-closed)", () =
   it("(a) user without run-payroll → runPayroll throws Forbidden, 0 payslip written", async () => {
     const before = await countPayslips(A.companyId);
     await expect(
-      payslipSvc.runPayroll({ id: noPermUser, companyId: A.companyId }, { payrollPeriodId: periodId }),
+      payslipSvc.runPayroll(
+        { id: noPermUser, companyId: A.companyId },
+        { payrollPeriodId: periodId },
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(await countPayslips(A.companyId)).toBe(before);
   });

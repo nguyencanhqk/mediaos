@@ -7,16 +7,13 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
-import type {
-  Allowance,
-  PayslipListQuery,
-  RunPayrollRequest,
-} from "@mediaos/contracts";
+import type { Allowance, PayslipListQuery, RunPayrollRequest } from "@mediaos/contracts";
 import { AuditService } from "../events/audit.service";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { PermissionService } from "../permission/permission.service";
 import type { CanInput, PermissionDecision } from "../permission/permission.types";
 import { PayslipRepository, type ActiveSalaryProfileRow } from "./payslip.repository";
+import { BonusPenaltyRepository } from "./bonus-penalty.repository";
 
 const PG_UNIQUE_VIOLATION = "23505";
 
@@ -41,7 +38,8 @@ function sumAllowances(raw: unknown): number {
  * PayslipService — CROWN JEWEL, SNAPSHOT APPEND-ONLY (ADR-0005, BẤT BIẾN #2).
  *  - KHÔNG có update()/remove(): sửa = ghi entry_kind adjustment/void mới (append-only tuyệt đối).
  *  - runPayroll: chỉ chạy khi period DRAFT + attendance period (nếu gắn) LOCKED (BR khoá kỳ công/KPI
- *    trước khi chạy lương). Aggregate công G11 read-only → snapshot. KPI/bonus/penalty = null (slot G8-4).
+ *    trước khi chạy lương). Aggregate công G11 read-only → snapshot. KPI = null (slot G8-4).
+ *  - G12-3: gộp thưởng/phạt APPROVED cùng period_month, chưa consume → bonus/penalty + bind consume.
  *  - Mỗi payslip ghi audit_logs (object_type='payslip') TRONG cùng tx (atomic — audit fail ⇒ rollback).
  *  - view/read-payslip is_sensitive=TRUE → KHÔNG kế thừa wildcard; mapError no-leak.
  */
@@ -51,6 +49,7 @@ export class PayslipService {
 
   constructor(
     private readonly repo: PayslipRepository,
+    private readonly bonusRepo: BonusPenaltyRepository,
     private readonly db: DatabaseService,
     private readonly permissionService: PermissionService,
     private readonly auditService: AuditService,
@@ -132,9 +131,7 @@ export class PayslipService {
         // it MUST be locked. A period with no linked attendance source is rejected — runPayroll
         // requires a locked attendance basis (fail-closed, not fail-open).
         if (period.attendancePeriodStatus !== "locked") {
-          throw new ConflictException(
-            "Attendance period must be locked before running payroll",
-          );
+          throw new ConflictException("Attendance period must be locked before running payroll");
         }
 
         const profiles = await this.repo.listActiveSalaryProfilesTx(
@@ -179,9 +176,46 @@ export class PayslipService {
       profile.userId,
       periodMonth,
     );
-    // gross = base + allowances. net = gross (KPI/bonus/penalty là slot G8-4 — chưa cộng/trừ).
+
+    // G12-3: gộp thưởng/phạt APPROVED cùng period_month, chưa consume (read TRƯỚC khi insert payslip).
+    const bp = await this.bonusRepo.aggregateApprovedForPeriodTx(
+      tx,
+      user.companyId,
+      profile.userId,
+      periodMonth,
+    );
+    let bonusTotal = 0;
+    let penaltyTotal = 0;
+    for (const row of bp) {
+      const amt = Number(row.amount);
+      // FAIL-LOUD (không bỏ qua thầm lặng): amount/kind bất thường = bug bất biến (DB CHECK lẽ ra chặn).
+      // Bỏ qua sẽ trừ/cộng thiếu mà vẫn itemize + consume ⇒ payslip sai. Ném để rollback + lộ đúng hàng.
+      if (!Number.isFinite(amt) || amt <= 0) {
+        throw new Error(
+          `bonus_penalty ${row.id} amount không hợp lệ — huỷ payslip user ${profile.userId}`,
+        );
+      }
+      if (row.kind === "bonus") bonusTotal += amt;
+      else if (row.kind === "penalty") penaltyTotal += amt;
+      else throw new Error(`bonus_penalty ${row.id} kind lạ '${row.kind}' — huỷ payslip`);
+    }
+
+    // gross = base + allowances. net = gross + bonus − penalty, CLAMP ≥ 0:
+    // penalty > gross KHÔNG đẩy lương âm — net sàn 0, khoản phạt đầy đủ vẫn ghi ở payslip_items (lưu vết thật).
     const gross = baseSalary + totalAllowances;
-    const net = gross;
+    const rawNet = gross + bonusTotal - penaltyTotal;
+    const net = Math.max(0, rawNet);
+    const netClamped = rawNet < 0;
+    if (netClamped) {
+      // Lưu vết: penalty vượt gross → net sàn 0. KHÔNG giấu — log + cờ trong audit để compliance truy được.
+      this.logger.warn("Payslip net clamped to 0 (penalty > gross)", {
+        userId: profile.userId,
+        payrollPeriodId,
+        gross,
+        penaltyTotal,
+        rawNet,
+      });
+    }
 
     const rows = await this.repo.insertPayslipTx(tx, user.companyId, {
       payrollPeriodId,
@@ -195,6 +229,8 @@ export class PayslipService {
       workDays: attendance.presentDays.toFixed(2),
       presentDays: attendance.presentDays.toFixed(2),
       lateMinutes: attendance.lateMinutes,
+      bonusAmount: bonusTotal > 0 ? bonusTotal.toFixed(2) : null,
+      penaltyAmount: penaltyTotal > 0 ? penaltyTotal.toFixed(2) : null,
       entryKind: "original",
       createdBy: user.id,
     });
@@ -215,6 +251,33 @@ export class PayslipService {
         amount: totalAllowances.toFixed(2),
       });
     }
+    // 1 dòng item / khoản thưởng-phạt (lưu vết từng khoản, kể cả khi net bị clamp).
+    for (const row of bp) {
+      await this.repo.insertItemTx(tx, user.companyId, {
+        payslipId: payslip.id,
+        itemType: row.kind === "bonus" ? "bonus" : "penalty",
+        label: row.reason ?? (row.kind === "bonus" ? "Thưởng" : "Phạt"),
+        amount: Number(row.amount).toFixed(2),
+        meta: { bonus_penalty_id: row.id },
+      });
+    }
+    // Consume: bind kỳ lương vào các khoản đã gộp (chống trả 2 lần KHOẢN bonus/penalty). CÙNG tx (atomic).
+    // FOR UPDATE ở aggregate + kiểm số hàng consume == số hàng đã gộp: lệch (txn song song consume bớt) ⇒ NÉM 409.
+    // LƯU Ý: double payslip LƯƠNG GỐC cùng (kỳ,user) chặn ở unique index payslips_period_user_original_uq (mig 0099),
+    // KHÔNG ở đây — count-check chỉ phủ phần thưởng/phạt.
+    if (bp.length > 0) {
+      const consumed = await this.bonusRepo.markConsumedTx(
+        tx,
+        user.companyId,
+        bp.map((r) => r.id),
+        payrollPeriodId,
+      );
+      if (consumed.length !== bp.length) {
+        throw new ConflictException(
+          "Concurrent payroll run detected — some bonus/penalty already consumed; aborting",
+        );
+      }
+    }
 
     await this.auditService.record(tx, {
       action: "payslip_created",
@@ -225,6 +288,7 @@ export class PayslipService {
         payroll_period_id: payrollPeriodId,
         user_id: profile.userId,
         entry_kind: "original",
+        ...(netClamped ? { net_clamped: true } : {}),
       },
     });
     return payslip.id;

@@ -526,6 +526,20 @@
 			"when": 1717500137000,
 			"tag": "0053_g10_meeting_notes_tasks",
 			"breakpoints": true
+		},
+		{
+			"idx": 75,
+			"version": "7",
+			"when": 1717500138000,
+			"tag": "0098_g12_bonus_penalties",
+			"breakpoints": true
+		},
+		{
+			"idx": 76,
+			"version": "7",
+			"when": 1717500139000,
+			"tag": "0099_g12_bonus_penalty_audit_perms",
+			"breakpoints": true
 		}
 	]
 }

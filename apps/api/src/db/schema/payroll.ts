@@ -17,6 +17,8 @@ import { currentCompanyDefault } from "./_helpers";
 import { attendancePeriods } from "./hr";
 import { companies } from "./companies";
 import { users } from "./users";
+import { tasks, defects } from "./workflow";
+import { kpiResults } from "./kpi";
 
 /**
  * salary_profiles — hồ sơ lương nhân sự (G12-1, CROWN JEWEL).
@@ -135,7 +137,9 @@ export const payslips = pgTable(
       .references(() => users.id),
     salaryProfileId: uuid("salary_profile_id").references(() => salaryProfiles.id),
     baseSalary: numeric("base_salary", { precision: 18, scale: 2 }).notNull(),
-    totalAllowances: numeric("total_allowances", { precision: 18, scale: 2 }).notNull().default("0"),
+    totalAllowances: numeric("total_allowances", { precision: 18, scale: 2 })
+      .notNull()
+      .default("0"),
     gross: numeric("gross", { precision: 18, scale: 2 }).notNull(),
     net: numeric("net", { precision: 18, scale: 2 }).notNull(),
     currency: text("currency").notNull().default("VND"),
@@ -158,15 +162,16 @@ export const payslips = pgTable(
     uniqueIndex("payslips_replaces_uq")
       .on(t.replacesPayslipId)
       .where(sql`replaces_payslip_id IS NOT NULL`),
+    // Backstop chống trả-2-lần lương gốc (G12-3 gate, mig 0099): 1 payslip 'original' / (company, kỳ, user).
+    uniqueIndex("payslips_period_user_original_uq")
+      .on(t.companyId, t.payrollPeriodId, t.userId)
+      .where(sql`entry_kind = 'original'`),
     check("payslips_entry_kind_check", sql`entry_kind IN ('original','adjustment','void')`),
     check(
       "payslips_chain_check",
       sql`(entry_kind = 'original' AND replaces_payslip_id IS NULL) OR (entry_kind IN ('adjustment','void') AND replaces_payslip_id IS NOT NULL)`,
     ),
-    check(
-      "payslips_amounts_check",
-      sql`base_salary >= 0 AND total_allowances >= 0 AND gross >= 0`,
-    ),
+    check("payslips_amounts_check", sql`base_salary >= 0 AND total_allowances >= 0 AND gross >= 0`),
   ],
 );
 
@@ -205,3 +210,100 @@ export const payslipItems = pgTable(
 
 export type PayslipItem = typeof payslipItems.$inferSelect;
 export type NewPayslipItem = typeof payslipItems.$inferInsert;
+
+/**
+ * bonus_penalties — thưởng/phạt (G12-3, CROWN JEWEL). MUTABLE draft→approved/rejected (đề xuất chờ duyệt).
+ * DDL/RLS/grant + trigger guard ở migration 0098. Soft-delete deleted_at (GRANT app SELECT/INSERT/UPDATE,
+ * NO DELETE). KHÁC payslip snapshot (append-only) — đây là bản ghi đề xuất, payslip mới là sổ bất biến.
+ *
+ * BẤT BIẾN #1: company_id + RLS+FORCE (mig 0098). reference (task/defect/kpi_result) = typed-FK NULLABLE
+ * + CHECK đúng-một-hoặc-không theo reference_type. ON DELETE RESTRICT giữ chuỗi audit (referent không biến mất).
+ * Trigger `enforce_bonus_penalty_guard` (0098): chặn transition sai + đóng băng field tiền sau khi rời draft,
+ * MIỄN TRỪ consume (payroll_period_id NULL→set 1 lần). amount > 0 (kind tách bonus/penalty — không số âm).
+ */
+export const bonusPenalties = pgTable(
+  "bonus_penalties",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    kind: text("kind").notNull(),
+    amount: numeric("amount", { precision: 18, scale: 2 }).notNull(),
+    currency: text("currency").notNull().default("VND"),
+    /** 'YYYY-MM' — kỳ lương đích (gộp vào payroll cùng period_month). */
+    periodMonth: text("period_month").notNull(),
+    reason: text("reason"),
+    source: text("source").notNull().default("manual"),
+    referenceType: text("reference_type"),
+    taskId: uuid("task_id").references(() => tasks.id, { onDelete: "restrict" }),
+    defectId: uuid("defect_id").references(() => defects.id, { onDelete: "restrict" }),
+    kpiResultId: uuid("kpi_result_id").references(() => kpiResults.id, { onDelete: "restrict" }),
+    status: text("status").notNull().default("draft"),
+    approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "restrict" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    /** Bind kỳ lương đã consume (chống trả 2 lần). NULL = chưa vào lương. */
+    payrollPeriodId: uuid("payroll_period_id").references(() => payrollPeriods.id, {
+      onDelete: "set null",
+    }),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("bonus_penalties_company_id_idx").on(t.companyId),
+    // Khoá gộp khi runPayroll: (company, user, period_month).
+    index("bonus_penalties_company_user_month_idx").on(t.companyId, t.userId, t.periodMonth),
+    index("bonus_penalties_company_status_idx")
+      .on(t.companyId, t.status)
+      .where(sql`deleted_at IS NULL`),
+    // FK approved_by RESTRICT → index tránh seq-scan khi check referent lúc xoá user.
+    index("bonus_penalties_approved_by_idx")
+      .on(t.approvedBy)
+      .where(sql`approved_by IS NOT NULL`),
+    check("bonus_penalties_kind_check", sql`kind IN ('bonus','penalty')`),
+    check("bonus_penalties_amount_check", sql`amount > 0`),
+    check("bonus_penalties_status_check", sql`status IN ('draft','approved','rejected')`),
+    check("bonus_penalties_source_check", sql`source IN ('manual','kpi','defect')`),
+    check("bonus_penalties_month_check", sql`period_month ~ '^\\d{4}-(0[1-9]|1[0-2])$'`),
+    // reference đúng-một-hoặc-không (parity với contracts superRefine). CASE → boolean SẠCH (KHÔNG NULL):
+    // literal `reference_type='task'` cho NULL khi reference_type NULL ⇒ OR ra NULL ⇒ CHECK pass sai. CASE ELSE false đóng lỗ.
+    check(
+      "bonus_penalties_reference_check",
+      sql`CASE
+        WHEN reference_type IS NULL THEN (task_id IS NULL AND defect_id IS NULL AND kpi_result_id IS NULL)
+        WHEN reference_type = 'task'       THEN (task_id       IS NOT NULL AND defect_id IS NULL AND kpi_result_id IS NULL)
+        WHEN reference_type = 'defect'     THEN (defect_id     IS NOT NULL AND task_id   IS NULL AND kpi_result_id IS NULL)
+        WHEN reference_type = 'kpi_result' THEN (kpi_result_id IS NOT NULL AND task_id   IS NULL AND defect_id     IS NULL)
+        ELSE false
+      END`,
+    ),
+    // approved ⇒ phải có approver + thời điểm (cặp duyệt đầy đủ).
+    check(
+      "bonus_penalties_approved_pair_check",
+      sql`status <> 'approved' OR (approved_by IS NOT NULL AND approved_at IS NOT NULL)`,
+    ),
+    // consume cặp: payroll_period_id ↔ consumed_at cùng NULL hoặc cùng set.
+    check(
+      "bonus_penalties_consumed_pair_check",
+      sql`(payroll_period_id IS NULL AND consumed_at IS NULL)
+        OR (payroll_period_id IS NOT NULL AND consumed_at IS NOT NULL)`,
+    ),
+    // CHỈ hàng approved mới được consume (bind kỳ lương) — chặn ở DB kể cả khi service/repo có bug.
+    check(
+      "bonus_penalties_consume_approved_check",
+      sql`payroll_period_id IS NULL OR status = 'approved'`,
+    ),
+  ],
+);
+
+export type BonusPenalty = typeof bonusPenalties.$inferSelect;
+export type NewBonusPenalty = typeof bonusPenalties.$inferInsert;
