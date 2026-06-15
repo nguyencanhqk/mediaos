@@ -456,6 +456,41 @@
 			"when": 1717500127000,
 			"tag": "0052_g10_meeting",
 			"breakpoints": true
+		},
+		{
+			"idx": 65,
+			"version": "7",
+			"when": 1717500130000,
+			"tag": "0093_g12_payroll_audit_object_types",
+			"breakpoints": true
+		},
+		{
+			"idx": 66,
+			"version": "7",
+			"when": 1717500131000,
+			"tag": "0094_g12_payroll_periods",
+			"breakpoints": true
+		},
+		{
+			"idx": 67,
+			"version": "7",
+			"when": 1717500132000,
+			"tag": "0095_g12_payslips",
+			"breakpoints": true
+		},
+		{
+			"idx": 68,
+			"version": "7",
+			"when": 1717500133000,
+			"tag": "0096_g12_payslip_items",
+			"breakpoints": true
+		},
+		{
+			"idx": 69,
+			"version": "7",
+			"when": 1717500134000,
+			"tag": "0097_g12_payroll_permissions_seed",
+			"breakpoints": true
 		}
 	]
 }

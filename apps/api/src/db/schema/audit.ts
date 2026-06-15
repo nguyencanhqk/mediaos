@@ -31,7 +31,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -93,5 +93,9 @@ export const AUDIT_OBJECT_TYPES = [
   "evaluation_result",
   // G8-2 defect/revision (trả sửa — createDefect ghi 'defect' cùng tx với revision task)
   "defect",
+  // G12-2 payroll period + payslip snapshot (append-only) — runPayroll/lock ghi cùng tx
+  "payroll_period",
+  "payslip",
+  "payslip_item",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
