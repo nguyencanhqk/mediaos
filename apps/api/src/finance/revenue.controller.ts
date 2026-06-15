@@ -55,7 +55,7 @@ export class RevenueController {
   constructor(private readonly revenue: RevenueService) {}
 
   @Get()
-  @RequirePermission("view-finance", "finance")
+  @RequirePermission("view-finance", "finance", { isSensitive: true })
   list(@Req() req: AuthRequest, @Query() query: Record<string, string>) {
     const filter = parseOr400(listRevenueQuerySchema, query);
     const { id, companyId } = req.user;
