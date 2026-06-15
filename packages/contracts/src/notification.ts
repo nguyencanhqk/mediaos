@@ -58,6 +58,8 @@ export const notificationRuleSchema = z.object({
   companyId: z.string().uuid(),
   notificationType: notificationTypeSchema,
   enabled: z.boolean(),
+  /** true = user không được opt-out loại thông báo này (NOTI-002). */
+  mandatory: z.boolean(),
   config: z.record(z.unknown()),
   createdAt: z.string().datetime(),
 });

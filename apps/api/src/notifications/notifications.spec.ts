@@ -171,6 +171,36 @@ describe("B — Preference filter", () => {
   });
 });
 
+// ─── B4–B5: mandatory override preference ────────────────────────────────────
+
+describe("B — Mandatory rule overrides stale preference", () => {
+  it("B4: create(type mandatory) khi user CÓ pref enabled=false (stale) → isTypeEnabled=true → vẫn tạo notification", async () => {
+    const repo = makeRepo();
+    const prefRepo = makePrefRepo();
+    // prefRepo.isTypeEnabled phải trả TRUE khi rule mandatory, bất kể pref row
+    (prefRepo.isTypeEnabled as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    (repo.create as ReturnType<typeof vi.fn>).mockResolvedValue([makeNotifRow()]);
+    const svc = makeService(repo, prefRepo);
+
+    const result = await svc.create(CO_A, { userId: USER_A, type: "general", body: "mandatory" });
+
+    expect(repo.create).toHaveBeenCalledTimes(1);
+    expect(result).not.toBeNull();
+  });
+
+  it("B5: create(type non-mandatory) pref enabled=false → vẫn null (regression giữ hành vi cũ)", async () => {
+    const repo = makeRepo();
+    const prefRepo = makePrefRepo();
+    (prefRepo.isTypeEnabled as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+    const svc = makeService(repo, prefRepo);
+
+    const result = await svc.create(CO_A, { userId: USER_A, type: "general", body: "suppressed" });
+
+    expect(repo.create).not.toHaveBeenCalled();
+    expect(result).toBeNull();
+  });
+});
+
 // ─── C. Outbox payload đi qua DTO/masking ────────────────────────────────────
 
 describe("C — Outbox payload qua notificationSchema.parse (masking)", () => {

@@ -575,6 +575,13 @@
 			"when": 1717500160000,
 			"tag": "0120_g16_two_factor",
 			"breakpoints": true
+		},
+		{
+			"idx": 82,
+			"version": "7",
+			"when": 1717500170000,
+			"tag": "0054_g10_noti002_mandatory",
+			"breakpoints": true
 		}
 	]
 }
