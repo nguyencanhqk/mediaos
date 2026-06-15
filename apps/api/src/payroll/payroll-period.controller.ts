@@ -37,7 +37,7 @@ export class PayrollPeriodController {
   @RequirePermission("manage-payroll-period", "payroll_period")
   list(@Req() req: AuthenticatedRequest, @Query("status") status?: string) {
     return this.periods.list(req.user, {
-      status: status as "draft" | "locked" | undefined,
+      status: status as "draft" | "approved" | "published" | undefined,
     });
   }
 
@@ -47,10 +47,17 @@ export class PayrollPeriodController {
     return this.periods.create(req.user, dto);
   }
 
-  @Post(":id/lock")
-  @RequirePermission("manage-payroll-period", "payroll_period")
-  lock(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
-    return this.periods.lock(req.user, id);
+  // G12-4 vòng duyệt: duyệt (draft→approved) rồi phát hành (approved→published) — quyền tách riêng.
+  @Post(":id/approve")
+  @RequirePermission("approve-payroll-period", "payroll_period")
+  approve(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+    return this.periods.approve(req.user, id);
+  }
+
+  @Post(":id/publish")
+  @RequirePermission("publish-payroll-period", "payroll_period")
+  publish(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+    return this.periods.publish(req.user, id);
   }
 
   @Delete(":id")

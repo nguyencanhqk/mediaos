@@ -165,26 +165,39 @@ describe("payrollPeriodSchema", () => {
     status: "draft" as const,
     attendancePeriodId: null,
     kpiLocked: false,
-    lockedBy: null,
-    lockedAt: null,
+    createdBy: null,
+    approvedBy: null,
+    approvedAt: null,
+    publishedBy: null,
+    publishedAt: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
 
-  it("accepts a draft period and a locked period", () => {
+  it("accepts a draft, approved and published period (G12-4 FSM)", () => {
     expect(payrollPeriodSchema.safeParse(valid).success).toBe(true);
     expect(
       payrollPeriodSchema.safeParse({
         ...valid,
-        status: "locked",
-        lockedBy: "22222222-2222-2222-2222-222222222222",
-        lockedAt: "2026-01-31T00:00:00.000Z",
+        status: "approved",
+        approvedBy: "22222222-2222-2222-2222-222222222222",
+        approvedAt: "2026-01-31T00:00:00.000Z",
+      }).success,
+    ).toBe(true);
+    expect(
+      payrollPeriodSchema.safeParse({
+        ...valid,
+        status: "published",
+        approvedBy: "22222222-2222-2222-2222-222222222222",
+        approvedAt: "2026-01-31T00:00:00.000Z",
+        publishedBy: "33333333-3333-3333-3333-333333333333",
+        publishedAt: "2026-02-01T00:00:00.000Z",
       }).success,
     ).toBe(true);
   });
 
-  it("rejects a status outside draft/locked", () => {
-    expect(payrollPeriodSchema.safeParse({ ...valid, status: "published" }).success).toBe(false);
+  it("rejects a status outside draft/approved/published (e.g. retired 'locked')", () => {
+    expect(payrollPeriodSchema.safeParse({ ...valid, status: "locked" }).success).toBe(false);
   });
 });
 

@@ -88,11 +88,31 @@ export class PayslipService {
     }
   }
 
-  async getOne(user: RequestUser, id: string) {
+  /**
+   * Xem CHI TIẾT 1 payslip — G12-4: yêu cầu RE-AUTH (step-up). ctx.reauthValidUntil đến từ
+   * PayslipReauthGuard (đọc cửa sổ Valkey do PayslipReauthService.reauth mint). Thiếu/hết hạn cửa sổ
+   * ⇒ deny-reauth-required → 403 (kể cả HR có view-payslip). objectGrantRequired:false: KHÔNG cần
+   * object-grant per-payslip (HR/admin có quyền company-level) — chỉ ÉP step-up. KHÔNG đặt false ⇒
+   * permission engine suy ra (isSensitive && requiresReauth)=true ⇒ deny-object-required (chặn nhầm HR).
+   */
+  async getOne(user: RequestUser, id: string, ctx?: { reauthValidUntil?: Date | null }) {
     try {
       return await this.db.withTenant(user.companyId, async (tx) => {
-        const decision = await this.decision(user, "view-payslip", id);
+        const decision = await this.permissionService.can({
+          userId: user.id,
+          companyId: user.companyId,
+          action: "view-payslip",
+          resourceType: "payslip",
+          resourceId: id,
+          isSensitive: true,
+          requiresReauth: true,
+          objectGrantRequired: false,
+          ctx: { reauthValidUntil: ctx?.reauthValidUntil ?? null },
+        });
         if (!decision.allow) {
+          if (decision.reason === "deny-reauth-required") {
+            throw new ForbiddenException("Re-authentication required to view payslip");
+          }
           throw new ForbiddenException("Insufficient permission to view payslip");
         }
         const row = await this.repo.findByIdTx(tx, user.companyId, id);

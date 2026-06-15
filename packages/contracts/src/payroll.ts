@@ -108,10 +108,11 @@ export type SalaryProfileListQuery = z.infer<typeof salaryProfileListQuerySchema
 
 // period_month dùng chung periodMonthSchema (DRY — nguồn ở attendance.ts, cùng regex YYYY-MM).
 
-export const payrollPeriodStatusEnum = z.enum(["draft", "locked"]);
+// G12-4: vòng duyệt draft→approved→published (thay draft→locked của G12-2).
+export const payrollPeriodStatusEnum = z.enum(["draft", "approved", "published"]);
 export type PayrollPeriodStatus = z.infer<typeof payrollPeriodStatusEnum>;
 
-/** DTO kỳ lương trả về client. */
+/** DTO kỳ lương trả về client. Vết duyệt: created_by → approved_by/at → published_by/at. */
 export const payrollPeriodSchema = z.object({
   id: z.string().uuid(),
   companyId: z.string().uuid(),
@@ -119,8 +120,11 @@ export const payrollPeriodSchema = z.object({
   status: payrollPeriodStatusEnum,
   attendancePeriodId: z.string().uuid().nullable(),
   kpiLocked: z.boolean(),
-  lockedBy: z.string().uuid().nullable(),
-  lockedAt: z.string().datetime().nullable(),
+  createdBy: z.string().uuid().nullable(),
+  approvedBy: z.string().uuid().nullable(),
+  approvedAt: z.string().datetime().nullable(),
+  publishedBy: z.string().uuid().nullable(),
+  publishedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -335,3 +339,62 @@ export const bonusPenaltyListQuerySchema = z.object({
   kind: bonusKindEnum.optional(),
 });
 export type BonusPenaltyListQuery = z.infer<typeof bonusPenaltyListQuerySchema>;
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// G12-4 — Duyệt bảng lương (draft→approved→published) + nhân viên xác nhận/khiếu nại + re-auth payslip
+//   - Period FSM: approve (SoD: người duyệt ≠ người chạy lương) → publish (phát hành đến nhân viên).
+//   - payslip_acknowledgements: nhân viên xác nhận (acknowledged) hoặc khiếu nại (disputed + reason)
+//     phiếu CỦA MÌNH khi kỳ đã 'published'; HR resolve khiếu nại (disputed→resolved). KHÔNG chứa tiền.
+//   - Re-auth: xem chi tiết payslip cần step-up (nhập lại mật khẩu) — cửa sổ 5 phút (mirror reveal-secret).
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+
+/** Approve/publish kỳ lương — không cần body (định danh kỳ qua :id, actor qua JWT). */
+export const decidePayrollPeriodSchema = z.object({});
+export type DecidePayrollPeriodRequest = z.infer<typeof decidePayrollPeriodSchema>;
+
+export const payslipAckStatusEnum = z.enum(["acknowledged", "disputed", "resolved"]);
+export type PayslipAckStatus = z.infer<typeof payslipAckStatusEnum>;
+
+/** DTO xác nhận/khiếu nại payslip. KHÔNG chứa tiền lương (chỉ trạng thái đồng ý + lý do khiếu nại). */
+export const payslipAcknowledgementSchema = z.object({
+  id: z.string().uuid(),
+  companyId: z.string().uuid(),
+  payslipId: z.string().uuid(),
+  userId: z.string().uuid(),
+  status: payslipAckStatusEnum,
+  reason: z.string().nullable(),
+  resolvedBy: z.string().uuid().nullable(),
+  resolvedAt: z.string().datetime().nullable(),
+  resolutionNote: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type PayslipAcknowledgementDto = z.infer<typeof payslipAcknowledgementSchema>;
+
+/** Xác nhận đã nhận lương — không cần body. */
+export const acknowledgePayslipSchema = z.object({});
+export type AcknowledgePayslipRequest = z.infer<typeof acknowledgePayslipSchema>;
+
+/** Khiếu nại lương — lý do BẮT BUỘC (parity CHECK payslip_ack_dispute_reason_check). */
+export const disputePayslipSchema = z.object({
+  reason: z.string().min(1).max(500),
+});
+export type DisputePayslipRequest = z.infer<typeof disputePayslipSchema>;
+
+/** HR xử lý khiếu nại — ghi chú xử lý tuỳ chọn. */
+export const resolvePayslipDisputeSchema = z.object({
+  resolutionNote: z.string().max(500).optional(),
+});
+export type ResolvePayslipDisputeRequest = z.infer<typeof resolvePayslipDisputeSchema>;
+
+/** Step-up trước khi xem payslip — nhập lại mật khẩu (mirror reveal-secret reauth). */
+export const payslipReauthSchema = z.object({
+  password: z.string().min(1),
+});
+export type PayslipReauthRequest = z.infer<typeof payslipReauthSchema>;
+
+/** GET /payslips/:id/acknowledgements query filters. */
+export const payslipAckListQuerySchema = z.object({
+  status: payslipAckStatusEnum.optional(),
+});
+export type PayslipAckListQuery = z.infer<typeof payslipAckListQuerySchema>;

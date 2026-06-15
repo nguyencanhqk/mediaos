@@ -77,10 +77,13 @@ export type SalaryProfile = typeof salaryProfiles.$inferSelect;
 export type NewSalaryProfile = typeof salaryProfiles.$inferInsert;
 
 /**
- * payroll_periods — kỳ lương (G12-2, CROWN JEWEL). MUTABLE draft→locked (ADR-0005).
- * DDL/RLS/grant + trigger lock-guard (locked→draft chặn) ở migration 0094. Soft-delete deleted_at.
+ * payroll_periods — kỳ lương (G12-2/G12-4, CROWN JEWEL). MUTABLE vòng duyệt draft→approved→published (ADR-0005).
+ * DDL/RLS/grant ở migration 0094; FSM duyệt + cột vết duyệt + trigger status-guard ở migration 0130.
  * attendance_period_id: BR khoá kỳ công/KPI trước khi chạy lương. kpi_locked = SLOT cho G8-4.
  * GRANT app SELECT/INSERT/UPDATE (NO DELETE — soft-delete). KHÔNG over-engineer (YAGNI).
+ *
+ * G12-4 vòng duyệt: created_by (ai tạo kỳ) → approve (approved_by/at, SoD: ≠ người chạy lương) →
+ * publish (published_by/at). Trigger 0130 chỉ cho draft→approved→published; chặn lùi + xoá mềm kỳ non-draft.
  */
 export const payrollPeriods = pgTable(
   "payroll_periods",
@@ -97,8 +100,11 @@ export const payrollPeriods = pgTable(
       onDelete: "set null",
     }),
     kpiLocked: boolean("kpi_locked").notNull().default(false),
-    lockedBy: uuid("locked_by").references(() => users.id, { onDelete: "set null" }),
-    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    publishedBy: uuid("published_by").references(() => users.id, { onDelete: "set null" }),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -109,7 +115,16 @@ export const payrollPeriods = pgTable(
       .on(t.companyId, t.periodMonth)
       .where(sql`deleted_at IS NULL`),
     check("payroll_periods_month_check", sql`period_month ~ '^\\d{4}-(0[1-9]|1[0-2])$'`),
-    check("payroll_periods_status_check", sql`status IN ('draft','locked')`),
+    check("payroll_periods_status_check", sql`status IN ('draft','approved','published')`),
+    // approved ⇒ cặp duyệt; published ⇒ cặp phát hành + đã approved (parity mig 0130).
+    check(
+      "payroll_periods_approved_pair_check",
+      sql`status <> 'approved' OR (approved_by IS NOT NULL AND approved_at IS NOT NULL)`,
+    ),
+    check(
+      "payroll_periods_published_pair_check",
+      sql`status <> 'published' OR (published_by IS NOT NULL AND published_at IS NOT NULL AND approved_by IS NOT NULL AND approved_at IS NOT NULL)`,
+    ),
   ],
 );
 
@@ -307,3 +322,54 @@ export const bonusPenalties = pgTable(
 
 export type BonusPenalty = typeof bonusPenalties.$inferSelect;
 export type NewBonusPenalty = typeof bonusPenalties.$inferInsert;
+
+/**
+ * payslip_acknowledgements — nhân viên XÁC NHẬN / KHIẾU NẠI bảng lương đã phát hành (G12-4).
+ * DDL/RLS/grant + trigger guard ở migration 0131. MUTABLE hẹp (FSM trigger), KHÔNG append-only
+ * (disputed→resolved là UPDATE hợp lệ). GRANT app SELECT/INSERT/UPDATE (NO DELETE). KHÔNG chứa tiền.
+ *
+ * Ownership ép ở SERVICE: nhân viên chỉ thao tác trên payslip CỦA MÌNH, kỳ đã 'published'. HR resolve khiếu nại.
+ * unique (company,payslip,user): 1 ack / phiếu / người. Trigger 0131: chỉ disputed→resolved.
+ */
+export const payslipAcknowledgements = pgTable(
+  "payslip_acknowledgements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    payslipId: uuid("payslip_id")
+      .notNull()
+      .references(() => payslips.id),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    status: text("status").notNull(),
+    /** Lý do khiếu nại (BẮT BUỘC khi status='disputed' — CHECK ở 0131). */
+    reason: text("reason"),
+    resolvedBy: uuid("resolved_by").references(() => users.id, { onDelete: "set null" }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolutionNote: text("resolution_note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("payslip_ack_company_id_idx").on(t.companyId),
+    index("payslip_ack_company_payslip_idx").on(t.companyId, t.payslipId),
+    uniqueIndex("payslip_acknowledgements_payslip_user_uq").on(t.companyId, t.payslipId, t.userId),
+    check(
+      "payslip_ack_status_check",
+      sql`status IN ('acknowledged','disputed','resolved')`,
+    ),
+    // Khiếu nại PHẢI có lý do (OR-form NULL-safe — status NOT NULL).
+    check("payslip_ack_dispute_reason_check", sql`status <> 'disputed' OR reason IS NOT NULL`),
+    check(
+      "payslip_ack_resolved_pair_check",
+      sql`status <> 'resolved' OR (resolved_by IS NOT NULL AND resolved_at IS NOT NULL)`,
+    ),
+  ],
+);
+
+export type PayslipAcknowledgement = typeof payslipAcknowledgements.$inferSelect;
+export type NewPayslipAcknowledgement = typeof payslipAcknowledgements.$inferInsert;

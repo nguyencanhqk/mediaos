@@ -96,8 +96,12 @@ describe.skipIf(!hasDb)("G12-2 payroll RLS 2-tenant isolation (service path)", (
 
   it("PayslipService.getOne(A, B's payslip) → NotFound (cross-tenant 0 row via RLS)", async () => {
     const b = await seedPeriodWithPayslip(B, userB);
+    // G12-4: getOne yêu cầu re-auth → truyền cửa sổ HỢP LỆ để vượt step-up, kiểm ĐÚNG đường RLS
+    // (kỳ vọng NotFound vì RLS trả 0 row cho payslip của B dưới ngữ cảnh tenant A), KHÔNG dừng ở re-auth.
     await expect(
-      payslipSvc.getOne({ id: adminA, companyId: A.companyId }, b.payslipId),
+      payslipSvc.getOne({ id: adminA, companyId: A.companyId }, b.payslipId, {
+        reauthValidUntil: new Date(Date.now() + 5 * 60 * 1000),
+      }),
     ).rejects.toThrow();
   });
 });

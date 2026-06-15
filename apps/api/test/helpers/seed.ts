@@ -289,10 +289,15 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   // → PHẢI xoá TRƯỚC tasks/defects/kpi_results/users. payroll_period_id ON DELETE SET NULL (an toàn).
   await direct.query("DELETE FROM bonus_penalties WHERE company_id = ANY($1::uuid[])", ids);
 
-  // ── G12-2 Payroll (period + payslip snapshot, append-only) ──────────────────
+  // ── G12-2/G12-4 Payroll (period + payslip snapshot + ack, append-only) ──────
+  // payslip_acknowledgements.payslip_id REFERENCES payslips(id) (NO ACTION) → xoá TRƯỚC payslips.
   // payslip_items → payslips (FK CASCADE on payslip_id, but delete explicitly for clarity);
   // payslips → payroll_periods/users/salary_profiles (no cascade) → xoá TRƯỚC users/salary_profiles.
   // payroll_periods.attendance_period_id ON DELETE SET NULL → an toàn xoá trước attendance_periods.
+  await direct.query(
+    "DELETE FROM payslip_acknowledgements WHERE company_id = ANY($1::uuid[])",
+    ids,
+  );
   await direct.query("DELETE FROM payslip_items WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM payslips WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM payroll_periods WHERE company_id = ANY($1::uuid[])", ids);

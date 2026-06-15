@@ -1079,6 +1079,32 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+  // ── G12-4 Payslip acknowledgements (nhân viên xác nhận/khiếu nại, mig 0131) ──
+  {
+    name: "payslip_acknowledgements",
+    table: "payslip_acknowledgements",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `pack-${randomUUID().slice(0, 8)}@x.test`);
+      // RLS isolation chỉ cần 1 hàng ack tồn tại — kỳ 'draft' (tránh published_pair CHECK của 0130).
+      const period = await direct.query(
+        `INSERT INTO payroll_periods (company_id, period_month, status)
+         VALUES ($1, '2026-04', 'draft') RETURNING id`,
+        [t.companyId],
+      );
+      const ps = await direct.query(
+        `INSERT INTO payslips
+           (company_id, payroll_period_id, user_id, base_salary, gross, net, created_by, entry_kind)
+         VALUES ($1, $2, $3, 5000.00, 5000.00, 5000.00, $3, 'original') RETURNING id`,
+        [t.companyId, period.rows[0].id, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO payslip_acknowledgements (company_id, payslip_id, user_id, status)
+         VALUES ($1, $2, $3, 'acknowledged') RETURNING id`,
+        [t.companyId, ps.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
   // ── G13 Finance (Revenue/Cost/Profit/Expense) — APPEND-ONLY ledgers + mutable allocation/request ──
   // Mỗi bảng có company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
   {

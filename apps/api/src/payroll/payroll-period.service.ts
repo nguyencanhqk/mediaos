@@ -18,6 +18,7 @@ const PG_UNIQUE_VIOLATION = "23505";
 const PG_CHECK_VIOLATION = "23514";
 
 type RequestUser = { id: string; companyId: string };
+type PeriodAction = "manage-payroll-period" | "approve-payroll-period" | "publish-payroll-period";
 
 function pgCode(err: unknown): string | undefined {
   return typeof err === "object" && err !== null && "code" in err
@@ -26,11 +27,13 @@ function pgCode(err: unknown): string | undefined {
 }
 
 /**
- * PayrollPeriodService — kỳ lương MUTABLE (draft→locked, ADR-0005).
- *  - manage-payroll-period (không nhạy cảm): tạo/khoá/xoá-mềm kỳ.
+ * PayrollPeriodService — kỳ lương MUTABLE vòng duyệt (draft→approved→published, ADR-0005, G12-4).
+ *  - manage-payroll-period (không nhạy cảm): tạo/xoá-mềm kỳ.
+ *  - approve-payroll-period / publish-payroll-period (không nhạy cảm): vòng duyệt.
+ *    · approve: SoD — người duyệt ≠ người chạy lương kỳ này (đọc payslips.created_by); kỳ phải có ≥1 payslip.
+ *    · publish: kỳ phải đã approved.
  *  - Mọi hành động ghi audit_logs (object_type='payroll_period') TRONG cùng tx (atomic).
- *  - mapError: lỗi PG/infra → 500 generic; check_violation (trigger lock-guard) → 409; KHÔNG leak schema.
- * Mirror salary-profile.service (audit-in-tx, permission gate, mapError no-leak).
+ *  - mapError: lỗi PG/infra → 500 generic; check_violation (trigger FSM) → 409; KHÔNG leak schema.
  */
 @Injectable()
 export class PayrollPeriodService {
@@ -45,7 +48,7 @@ export class PayrollPeriodService {
 
   private decision(
     user: RequestUser,
-    action: "manage-payroll-period",
+    action: PeriodAction,
     targetId: string | null,
   ): Promise<PermissionDecision> {
     const input: CanInput = {
@@ -83,6 +86,7 @@ export class PayrollPeriodService {
         const rows = await this.repo.createTx(tx, user.companyId, {
           periodMonth: dto.periodMonth,
           attendancePeriodId: dto.attendancePeriodId ?? null,
+          createdBy: user.id,
         });
         const period = rows[0];
         if (!period) throw new Error("Failed to create payroll period");
@@ -100,32 +104,80 @@ export class PayrollPeriodService {
     }
   }
 
-  async lock(user: RequestUser, id: string) {
+  /** Duyệt bảng lương (draft→approved). SoD: người duyệt ≠ người chạy lương; kỳ phải có ≥1 payslip. */
+  async approve(user: RequestUser, id: string) {
     try {
       return await this.db.withTenant(user.companyId, async (tx) => {
-        const decision = await this.decision(user, "manage-payroll-period", id);
+        const decision = await this.decision(user, "approve-payroll-period", id);
         if (!decision.allow) {
-          throw new ForbiddenException("Insufficient permission to manage payroll period");
+          throw new ForbiddenException("Insufficient permission to approve payroll period");
         }
         const before = await this.repo.findByIdTx(tx, user.companyId, id);
         if (!before) throw new NotFoundException("Payroll period not found");
+        if (before.status !== "draft") {
+          throw new ConflictException("Only a draft payroll period can be approved");
+        }
 
-        const rows = await this.repo.lockTx(tx, user.companyId, id, user.id);
+        // SoD (segregation of duties): không duyệt bảng lương mình tự chạy. Kỳ rỗng (chưa chạy lương)
+        // KHÔNG được duyệt (vô nghĩa + lỗ hổng SoD: tập người chạy rỗng ⇒ ai cũng qua).
+        const creators = await this.repo.listPayslipCreatorsTx(tx, user.companyId, id);
+        if (creators.length === 0) {
+          throw new ConflictException("Cannot approve a payroll period that has no payslips");
+        }
+        if (creators.includes(user.id)) {
+          throw new ForbiddenException("You cannot approve a payroll period you ran");
+        }
+
+        const rows = await this.repo.approveTx(tx, user.companyId, id, user.id);
         const row = rows[0];
-        if (!row) throw new NotFoundException("Payroll period not found");
+        // Mất draft giữa đọc & ghi (đua) → 409.
+        if (!row) throw new ConflictException("Payroll period is no longer a draft");
 
         await this.auditService.record(tx, {
-          action: "payroll_period_locked",
+          action: "payroll_period_approved",
           objectType: "payroll_period",
           objectId: id,
           actorUserId: user.id,
           before: { status: before.status },
-          after: { status: row.status },
+          after: { status: row.status, approved_by: row.approvedBy },
         });
         return row;
       });
     } catch (err) {
-      throw this.mapError(err, "Failed to lock payroll period");
+      throw this.mapError(err, "Failed to approve payroll period");
+    }
+  }
+
+  /** Phát hành bảng lương (approved→published). Sau đó nhân viên xem/xác nhận/khiếu nại payslip của mình. */
+  async publish(user: RequestUser, id: string) {
+    try {
+      return await this.db.withTenant(user.companyId, async (tx) => {
+        const decision = await this.decision(user, "publish-payroll-period", id);
+        if (!decision.allow) {
+          throw new ForbiddenException("Insufficient permission to publish payroll period");
+        }
+        const before = await this.repo.findByIdTx(tx, user.companyId, id);
+        if (!before) throw new NotFoundException("Payroll period not found");
+        if (before.status !== "approved") {
+          throw new ConflictException("Only an approved payroll period can be published");
+        }
+
+        const rows = await this.repo.publishTx(tx, user.companyId, id, user.id);
+        const row = rows[0];
+        if (!row) throw new ConflictException("Payroll period is no longer approved");
+
+        await this.auditService.record(tx, {
+          action: "payroll_period_published",
+          objectType: "payroll_period",
+          objectId: id,
+          actorUserId: user.id,
+          before: { status: before.status },
+          after: { status: row.status, published_by: row.publishedBy },
+        });
+        return row;
+      });
+    } catch (err) {
+      throw this.mapError(err, "Failed to publish payroll period");
     }
   }
 
@@ -138,8 +190,9 @@ export class PayrollPeriodService {
         }
         const before = await this.repo.findByIdTx(tx, user.companyId, id);
         if (!before) throw new NotFoundException("Payroll period not found");
-        if (before.status === "locked") {
-          throw new ConflictException("Cannot delete a locked payroll period");
+        // Chỉ kỳ draft mới được xoá mềm (approved/published = sổ duyệt, không biến mất). Trigger 0130 là lớp 2.
+        if (before.status !== "draft") {
+          throw new ConflictException("Only a draft payroll period can be deleted");
         }
         const rows = await this.repo.softDeleteTx(tx, user.companyId, id);
         if (rows.length === 0) throw new NotFoundException("Payroll period not found");
@@ -158,7 +211,7 @@ export class PayrollPeriodService {
 
   /**
    * Domain HttpExceptions pass through. unique-violation (1 kỳ/(company,month)) → 409.
-   * check-violation (trigger lock-guard locked→draft) → 409 với message an toàn. Khác → 500 generic
+   * check-violation (trigger FSM transition sai) → 409 với message an toàn. Khác → 500 generic
    * (log PG detail server-side ONLY — không leak schema/constraint/code).
    */
   private mapError(err: unknown, context: string): Error {
