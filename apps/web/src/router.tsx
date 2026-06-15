@@ -28,6 +28,7 @@ import { AttendancePage } from "@/routes/hr/attendance";
 import { AdjustmentsPage } from "@/routes/hr/adjustments";
 import { LeavePage } from "@/routes/hr/leave";
 import { SalaryProfilesPage } from "@/routes/payroll/salary-profiles";
+import { BonusPenaltiesPage } from "@/routes/payroll/bonus-penalties";
 import { useAuthStore } from "@/stores/auth";
 
 const rootRoute = createRootRoute({ component: RootLayout });
@@ -223,6 +224,13 @@ const salaryProfilesRoute = createRoute({
   component: SalaryProfilesPage,
 });
 
+const bonusPenaltiesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/payroll/bonus-penalties",
+  beforeLoad: authGuard,
+  component: BonusPenaltiesPage,
+});
+
 const companySettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings/company",
@@ -266,6 +274,7 @@ const routeTree = rootRoute.addChildren([
   adjustmentsRoute,
   leaveRoute,
   salaryProfilesRoute,
+  bonusPenaltiesRoute,
 ]);
 
 export const router = createRouter({ routeTree });
