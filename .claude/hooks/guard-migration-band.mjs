@@ -11,6 +11,10 @@ import { execSync } from "node:child_process";
 // Lane → danh sách band [min,max] số migration (TASKS.md §5.2). Master kết thúc ở 0037.
 // Mỗi lane có thể có NHIỀU band rời nhau khi band gốc đầy (G12: 0090–0099 đầy → tràn 0130–0139).
 const BANDS = {
+  // G3 mutation-path (runtime permission mgmt — grant/revoke role + object-permission). Nền tảng G3
+  // có trước hệ thống band (master kết thúc 0037) nên không có band gốc; lane bổ sung này cấp band
+  // riêng 0140–0149 (sau G12 tràn 0130–0139 — KHÔNG đụng band lane khác). TASKS.md §5.2.
+  g3: [[140, 149]],
   g8: [[80, 89]],
   g9: [[40, 49]],
   g10: [[50, 59]],

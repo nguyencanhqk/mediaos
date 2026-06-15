@@ -561,6 +561,13 @@
 			"when": 1717500142000,
 			"tag": "0132_g12_approval_audit_perms",
 			"breakpoints": true
+		},
+		{
+			"idx": 80,
+			"version": "7",
+			"when": 1717500150000,
+			"tag": "0140_g3_permission_mutation_seed_audit",
+			"breakpoints": true
 		}
 	]
 }
