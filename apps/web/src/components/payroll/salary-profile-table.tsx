@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { SalaryProfileListItemDto } from "@mediaos/contracts";
 import {
   MASKED_SALARY_HINT,
@@ -19,20 +20,21 @@ interface SalaryProfileTableProps {
  * a placeholder + "Không có quyền" instead of a number.
  */
 export function SalaryProfileTable({ rows }: SalaryProfileTableProps) {
+  const { t } = useTranslation("payroll");
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">Chưa có hồ sơ lương.</p>;
+    return <p className="text-sm text-muted-foreground">{t("salaryProfiles.empty")}</p>;
   }
 
   return (
     <table className="w-full text-sm">
       <thead>
         <tr className="border-b border-border text-left text-muted-foreground">
-          <th className="py-2 font-medium">Nhân sự</th>
-          <th className="py-2 font-medium">Loại</th>
-          <th className="py-2 font-medium">Chu kỳ</th>
-          <th className="py-2 font-medium">Hiệu lực</th>
-          <th className="py-2 font-medium">Lương cơ bản</th>
-          <th className="py-2 font-medium">Trạng thái</th>
+          <th className="py-2 font-medium">{t("salaryProfiles.table.employee")}</th>
+          <th className="py-2 font-medium">{t("salaryProfiles.table.type")}</th>
+          <th className="py-2 font-medium">{t("salaryProfiles.table.payCycle")}</th>
+          <th className="py-2 font-medium">{t("salaryProfiles.table.effectiveDate")}</th>
+          <th className="py-2 font-medium">{t("salaryProfiles.table.baseSalary")}</th>
+          <th className="py-2 font-medium">{t("salaryProfiles.table.status")}</th>
         </tr>
       </thead>
       <tbody>

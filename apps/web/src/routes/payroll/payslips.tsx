@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { PayrollPeriodStatus, PayslipDto } from "@mediaos/contracts";
 import { payslipApi } from "@/lib/payslip-api";
 import { payrollPeriodApi } from "@/lib/payroll-period-api";
@@ -30,6 +31,7 @@ import { useAuthStore } from "@/stores/auth";
  * branch remains as defense-in-depth for callers who lack even view-own-payslip.
  */
 export function PayslipsPage() {
+  const { t } = useTranslation("payroll");
   const qc = useQueryClient();
   const currentUserId = useAuthStore((s) => s.user?.id ?? "");
   const [periodStatus, setPeriodStatus] = useState<PayrollPeriodStatus | "">("");
@@ -123,14 +125,14 @@ export function PayslipsPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-8">
-      <h1 className="text-2xl font-semibold">Phiếu lương của tôi</h1>
+      <h1 className="text-2xl font-semibold">{t("payslips.pageTitle")}</h1>
 
       <div className="space-y-1">
         <label
           htmlFor="payslip-period-filter"
           className="text-xs uppercase tracking-wide text-muted-foreground"
         >
-          Trạng thái kỳ
+          {t("payslips.filterPeriodStatus")}
         </label>
         <Select
           id="payslip-period-filter"
@@ -138,7 +140,7 @@ export function PayslipsPage() {
           onChange={(e) => handlePeriodFilterChange(e.target.value as PayrollPeriodStatus | "")}
           className="w-44"
         >
-          <option value="">Tất cả</option>
+          <option value="">{t("payslips.all")}</option>
           {(Object.keys(PERIOD_STATUS_LABELS) as PayrollPeriodStatus[]).map((s) => (
             <option key={s} value={s}>
               {PERIOD_STATUS_LABELS[s]}
@@ -147,15 +149,15 @@ export function PayslipsPage() {
         </Select>
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải phiếu lương…</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("payslips.loading")}</p>}
       {isError && isForbidden && (
         <p role="alert" className="text-sm text-amber-600">
-          Bạn không có quyền xem phiếu lương ở đây. Vui lòng liên hệ HR.
+          {t("payslips.forbidden")}
         </p>
       )}
       {isError && !isForbidden && (
         <p role="alert" className="text-sm text-destructive">
-          Không tải được danh sách phiếu lương.
+          {t("payslips.loadFailed")}
         </p>
       )}
 
@@ -163,8 +165,7 @@ export function PayslipsPage() {
           filter above rely on it and would otherwise mislead (raw ids + an all-hiding filter). */}
       {!isLoading && !isError && periodsError && (
         <p role="status" className="text-xs text-amber-600">
-          Không tải được thông tin kỳ lương — nhãn "Kỳ lương" và bộ lọc trạng thái có thể không
-          chính xác.
+          {t("payslips.periodsLoadFailed")}
         </p>
       )}
 
@@ -189,7 +190,7 @@ export function PayslipsPage() {
                   buttons below would imply "not acted yet" when the truth is simply unknown. */}
               {ackError && (
                 <p role="alert" className="text-sm text-amber-600">
-                  Không tải được trạng thái xác nhận — trạng thái hiển thị có thể không chính xác.
+                  {t("payslips.ackLoadFailed")}
                 </p>
               )}
               {/* Self-service view ("Phiếu lương của tôi"): isHr=false on purpose. HR resolves disputes

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PayslipAcknowledgementDto } from "@mediaos/contracts";
@@ -21,6 +22,7 @@ interface PayslipAckActionsProps {
  * KHÔNG chứa tiền — only status + reason text.
  */
 export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: PayslipAckActionsProps) {
+  const { t } = useTranslation("payroll");
   const [disputeReason, setDisputeReason] = useState("");
   const [resolutionNote, setResolutionNote] = useState("");
   const [showDisputeForm, setShowDisputeForm] = useState(false);
@@ -35,7 +37,7 @@ export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: P
       const result = await payslipApi.acknowledge(payslipId);
       onSuccess?.(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Lỗi xác nhận.");
+      setError(err instanceof Error ? err.message : t("payslips.ack.ackError"));
     } finally {
       setLoading(false);
     }
@@ -51,7 +53,7 @@ export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: P
       setDisputeReason("");
       onSuccess?.(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Lý do không hợp lệ.");
+      setError(err instanceof Error ? err.message : t("payslips.ack.disputeError"));
     } finally {
       setLoading(false);
     }
@@ -67,7 +69,7 @@ export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: P
       setResolutionNote("");
       onSuccess?.(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Lỗi xử lý khiếu nại.");
+      setError(err instanceof Error ? err.message : t("payslips.ack.resolveError"));
     } finally {
       setLoading(false);
     }
@@ -78,20 +80,20 @@ export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: P
     return (
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">
-          Trạng thái:{" "}
+          {t("payslips.ack.statusLabel")}{" "}
           <span className="font-medium">
-            {ack.status === "acknowledged" && "Đã xác nhận"}
-            {ack.status === "disputed" && "Đang khiếu nại"}
-            {ack.status === "resolved" && "Đã xử lý"}
+            {ack.status === "acknowledged" && t("payslips.ack.statusAcknowledged")}
+            {ack.status === "disputed" && t("payslips.ack.statusDisputed")}
+            {ack.status === "resolved" && t("payslips.ack.statusResolved")}
           </span>
         </p>
         {ack.reason && (
           <p className="text-sm">
-            Lý do khiếu nại: <span className="italic">{ack.reason}</span>
+            {t("payslips.ack.disputeReasonLabel")} <span className="italic">{ack.reason}</span>
           </p>
         )}
         {ack.resolutionNote && (
-          <p className="text-sm text-green-700">Ghi chú xử lý: {ack.resolutionNote}</p>
+          <p className="text-sm text-green-700">{t("payslips.ack.resolutionNoteLabel")} {ack.resolutionNote}</p>
         )}
 
         {/* HR: resolve disputed */}
@@ -104,7 +106,7 @@ export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: P
               setShowResolveForm(true);
             }}
           >
-            Xử lý khiếu nại
+            {t("payslips.ack.resolveButton")}
           </Button>
         )}
         {isHr && ack.status === "disputed" && showResolveForm && (
@@ -112,7 +114,7 @@ export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: P
             <Input
               value={resolutionNote}
               onChange={(e) => setResolutionNote(e.target.value)}
-              placeholder="Ghi chú xử lý (tuỳ chọn)"
+              placeholder={t("payslips.ack.resolutionNotePlaceholder")}
             />
             {error && (
               <p role="alert" className="text-sm text-destructive">
@@ -121,7 +123,7 @@ export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: P
             )}
             <div className="flex gap-2">
               <Button type="submit" size="sm" disabled={loading}>
-                {loading ? "Đang xử lý…" : "Xác nhận xử lý"}
+                {loading ? t("payslips.ack.resolving") : t("payslips.ack.confirmResolve")}
               </Button>
               <Button
                 type="button"
@@ -132,7 +134,7 @@ export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: P
                   setError(null);
                 }}
               >
-                Huỷ
+                {t("payslips.ack.cancelButton")}
               </Button>
             </div>
           </form>
@@ -153,7 +155,7 @@ export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: P
       {!showDisputeForm && (
         <div className="flex gap-2">
           <Button size="sm" onClick={handleAcknowledge} disabled={loading}>
-            {loading ? "Đang xác nhận…" : "Xác nhận"}
+            {loading ? t("payslips.ack.acknowledging") : t("payslips.ack.acknowledgeButton")}
           </Button>
           <Button
             size="sm"
@@ -164,7 +166,7 @@ export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: P
             }}
             disabled={loading}
           >
-            Khiếu nại
+            {t("payslips.ack.disputeButton")}
           </Button>
         </div>
       )}
@@ -174,7 +176,7 @@ export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: P
           <Input
             value={disputeReason}
             onChange={(e) => setDisputeReason(e.target.value)}
-            placeholder="Lý do khiếu nại (bắt buộc)"
+            placeholder={t("payslips.ack.disputeReasonPlaceholder")}
             required
             maxLength={500}
           />
@@ -185,7 +187,7 @@ export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: P
           )}
           <div className="flex gap-2">
             <Button type="submit" size="sm" disabled={loading || !disputeReason.trim()}>
-              {loading ? "Đang gửi…" : "Gửi khiếu nại"}
+              {loading ? t("payslips.ack.submittingDispute") : t("payslips.ack.submitDispute")}
             </Button>
             <Button
               type="button"
@@ -197,7 +199,7 @@ export function PayslipAckActions({ payslipId, ack, isHr = false, onSuccess }: P
                 setError(null);
               }}
             >
-              Huỷ
+              {t("payslips.ack.cancelButton")}
             </Button>
           </div>
         </form>

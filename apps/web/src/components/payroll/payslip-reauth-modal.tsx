@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -37,6 +38,7 @@ export function PayslipReauthModal({
   reauth = payslipApi.reauth,
   getOne = payslipApi.getOne,
 }: PayslipReauthModalProps) {
+  const { t } = useTranslation("payroll");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +62,7 @@ export function PayslipReauthModal({
     try {
       await reauth(payslipId, password);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Xác minh thất bại.");
+      setError(err instanceof Error ? err.message : t("payslips.reauth.reauthFailed"));
       setLoading(false);
       return;
     }
@@ -69,7 +71,7 @@ export function PayslipReauthModal({
       detail = await getOne(payslipId);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Không tải được phiếu lương sau xác minh. Thử lại.",
+        err instanceof Error ? err.message : t("payslips.reauth.loadFailed"),
       );
       setLoading(false);
       return;
@@ -86,13 +88,13 @@ export function PayslipReauthModal({
     <Dialog
       open={open}
       onClose={onClose}
-      title="Xác minh để xem phiếu lương"
-      description="Nhập lại mật khẩu để xem chi tiết phiếu lương. Mỗi lần xem được ghi nhật ký."
+      title={t("payslips.reauth.title")}
+      description={t("payslips.reauth.description")}
     >
       <form onSubmit={submit} className="space-y-4">
         <div className="space-y-1">
           <label htmlFor="payslip-reauth-password" className="text-sm font-medium">
-            Mật khẩu
+            {t("payslips.reauth.passwordLabel")}
           </label>
           <Input
             id="payslip-reauth-password"
@@ -113,10 +115,10 @@ export function PayslipReauthModal({
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
-            Huỷ
+            {t("payslips.reauth.cancel")}
           </Button>
           <Button type="submit" size="sm" disabled={!password.trim() || loading}>
-            {loading ? "Đang xác minh…" : "Xác minh để xem"}
+            {loading ? t("payslips.reauth.submitting") : t("payslips.reauth.submit")}
           </Button>
         </div>
       </form>

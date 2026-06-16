@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { CreateSalaryProfileRequest } from "@mediaos/contracts";
 import { salaryProfileApi } from "@/lib/salary-profile-api";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ function today(): string {
  * We never persist or display salary client-side beyond the value the user just typed.
  */
 export function CreateSalaryProfileDialog() {
+  const { t } = useTranslation("payroll");
   const [open, setOpen] = useState(false);
   const [userId, setUserId] = useState("");
   const [salaryType, setSalaryType] = useState<CreateSalaryProfileRequest["salaryType"]>("monthly");
@@ -37,7 +39,7 @@ export function CreateSalaryProfileDialog() {
       setError(null);
     },
     onError: (err: unknown) => {
-      setError(err instanceof Error ? err.message : "Không tạo được hồ sơ lương");
+      setError(err instanceof Error ? err.message : t("createSalaryProfile.createError"));
     },
   });
 
@@ -46,7 +48,7 @@ export function CreateSalaryProfileDialog() {
     setError(null);
     const amount = Number(baseSalary);
     if (!Number.isFinite(amount) || amount <= 0) {
-      setError("Lương cơ bản phải lớn hơn 0");
+      setError(t("createSalaryProfile.validationBaseSalary"));
       return;
     }
     mutation.mutate({
@@ -60,21 +62,21 @@ export function CreateSalaryProfileDialog() {
   };
 
   if (!open) {
-    return <Button onClick={() => setOpen(true)}>Thêm hồ sơ lương</Button>;
+    return <Button onClick={() => setOpen(true)}>{t("createSalaryProfile.addButton")}</Button>;
   }
 
   return (
     <form onSubmit={onSubmit} className="space-y-3 rounded-lg border border-border bg-card p-4">
-      <h2 className="text-lg font-medium">Thêm hồ sơ lương</h2>
+      <h2 className="text-lg font-medium">{t("createSalaryProfile.formTitle")}</h2>
 
       <div className="space-y-1">
         <label className="text-xs uppercase tracking-wide text-muted-foreground">
-          Nhân sự (ID)
+          {t("createSalaryProfile.employeeIdLabel")}
         </label>
         <Input
           value={userId}
           onChange={(e) => setUserId(e.target.value)}
-          placeholder="UUID nhân sự"
+          placeholder={t("createSalaryProfile.employeeIdPlaceholder")}
           required
         />
       </div>
@@ -82,7 +84,7 @@ export function CreateSalaryProfileDialog() {
       <div className="flex gap-3">
         <div className="flex-1 space-y-1">
           <label className="text-xs uppercase tracking-wide text-muted-foreground">
-            Loại lương
+            {t("createSalaryProfile.salaryTypeLabel")}
           </label>
           <Select
             value={salaryType}
@@ -101,7 +103,7 @@ export function CreateSalaryProfileDialog() {
         </div>
         <div className="flex-1 space-y-1">
           <label className="text-xs uppercase tracking-wide text-muted-foreground">
-            Chu kỳ trả
+            {t("createSalaryProfile.payCycleLabel")}
           </label>
           <Select
             value={payCycle}
@@ -119,7 +121,7 @@ export function CreateSalaryProfileDialog() {
       <div className="flex gap-3">
         <div className="flex-1 space-y-1">
           <label className="text-xs uppercase tracking-wide text-muted-foreground">
-            Ngày hiệu lực
+            {t("createSalaryProfile.effectiveDateLabel")}
           </label>
           <Input
             type="date"
@@ -130,7 +132,7 @@ export function CreateSalaryProfileDialog() {
         </div>
         <div className="flex-1 space-y-1">
           <label className="text-xs uppercase tracking-wide text-muted-foreground">
-            Lương cơ bản
+            {t("createSalaryProfile.baseSalaryLabel")}
           </label>
           <Input
             type="number"
@@ -147,10 +149,10 @@ export function CreateSalaryProfileDialog() {
 
       <div className="flex gap-2">
         <Button type="submit" disabled={mutation.isPending}>
-          {mutation.isPending ? "Đang lưu…" : "Lưu"}
+          {mutation.isPending ? t("createSalaryProfile.saving") : t("createSalaryProfile.save")}
         </Button>
         <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-          Huỷ
+          {t("createSalaryProfile.cancel")}
         </Button>
       </div>
     </form>
