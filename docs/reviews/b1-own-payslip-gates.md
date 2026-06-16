@@ -20,7 +20,10 @@ B1 thêm đường own-payslip cho nhân viên:
 - **database-reviewer**: OK. Migration idempotent additive monotonic; withTenant+RLS+company_id mọi query; append-only giữ. LOW: listOwn unbounded nhưng tập 1 nhân viên nhỏ; index `(company_id,user_id)` pre-existing.
 - **silent-failure-hunter**: OK. Ownership/re-auth/permission.can đều fail-closed; money-strip ở repo không fallback; mapError re-throw HttpException; không catch rỗng nuốt quyền.
 
-## Residual (non-blocking, người chốt)
-- **FE wiring**: trang `/payroll/payslips` hiện vẫn gọi endpoint admin (`listSummary`/reauth-không-options) → employee vẫn 403 degrade ở UI. BE own-path đã đủ + gated; method FE own (`listOwn`/`reauthOwn`/`getOwn`) đã sẵn nhưng CHƯA nối page. Quyết: nối FE trong B1 (gỡ degrade end-to-end) hay tách lane FE riêng.
+## FE wiring — ĐÃ NỐI (commit `385b899`, user chốt)
+Trang `apps/web/src/routes/payroll/payslips.tsx`: `listSummary`→`listOwn` (no-arg, ownership server-side) + `usePayslipReauthController({reauth:reauthOwn, getOne:getOwn})` (reveal đi đường own). BẤT BIẾN #3 giữ: list money-free (schema không field tiền) · tiền chỉ qua `getOwn` ephemeral không-RQ-cache · 403 `role=alert` không lộ số. Web **303 pass/0 fail** (payslips.spec 12/12, +2 test: listOwn no-arg · controller own-endpoints). typecheck/lint/prettier/build web sạch. LIGHT-gate (money guarantee server-side đã FULL-gated ở BE).
 
-**Verdict: SAFE-TO-LAND (BE). DỪNG trước merge — chờ user chốt.**
+## Commits lane
+- `f1fd18c` feat(b1) BE own-payslip · `cb955e7` docs gate · `385b899` feat(b1-fe) nối page own-endpoints.
+
+**Verdict: SAFE-TO-LAND (BE + FE end-to-end). DỪNG trước merge — chờ user chốt.**
