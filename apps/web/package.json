@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@date-fns/tz": "^1.5.0",
     "@mediaos/contracts": "workspace:*",
     "@radix-ui/react-slot": "^1.1.1",
     "@tanstack/react-query": "^5.62.0",
@@ -20,10 +21,13 @@
     "@xyflow/react": "^12.11.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
+    "i18next": "^25.10.10",
     "lucide-react": "^0.469.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-i18next": "^15.7.4",
     "recharts": "^3.8.1",
     "socket.io-client": "^4.8.3",
     "tailwind-merge": "^2.6.0",
