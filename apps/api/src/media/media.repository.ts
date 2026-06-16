@@ -104,13 +104,16 @@ export class MediaRepository {
   }
 
   findChannelById(companyId: string, id: string) {
-    return this.db.withTenant(companyId, (tx) =>
-      tx
-        .select()
-        .from(channels)
-        .where(and(eq(channels.companyId, companyId), eq(channels.id, id), isNull(channels.deletedAt)))
-        .limit(1),
-    );
+    return this.db.withTenant(companyId, (tx) => this.findChannelByIdTx(tx, companyId, id));
+  }
+
+  /** Biến thể in-tx: dùng khi caller đã ở trong `withTenant` (vd getChannel + read-path audit cùng tx, G16-1b). */
+  findChannelByIdTx(tx: TenantTx, companyId: string, id: string) {
+    return tx
+      .select()
+      .from(channels)
+      .where(and(eq(channels.companyId, companyId), eq(channels.id, id), isNull(channels.deletedAt)))
+      .limit(1);
   }
 
   /** Tạo kênh — resolve platform_id + mirror legacy `platform` text. Chạy trong tx của service (audit cùng commit). */

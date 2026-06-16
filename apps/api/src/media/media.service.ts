@@ -62,10 +62,21 @@ export class MediaService {
     return this.repo.listChannels(companyId, filters);
   }
 
-  async getChannel(companyId: string, id: string) {
-    const [channel] = await this.repo.findChannelById(companyId, id);
-    if (!channel) throw new NotFoundException(`Channel not found: ${id}`);
-    return channel;
+  async getChannel(companyId: string, id: string, actorUserId?: string) {
+    // G16-1b READ-PATH AUDIT: đọc chi tiết kênh (gồm health_status/score/note) ghi 1 audit row TRONG cùng
+    // tx (atomic). CHỈ who/when/scope (actor + channel id) — KHÔNG ghi giá trị health/secret. actorUserId
+    // optional để không phá caller cũ (listChannelMembers gọi findChannelById trực tiếp, không audit-read).
+    return this.db.withTenant(companyId, async (tx) => {
+      const [channel] = await this.repo.findChannelByIdTx(tx, companyId, id);
+      if (!channel) throw new NotFoundException(`Channel not found: ${id}`);
+      await this.audit.record(tx, {
+        action: "channel.health_viewed",
+        objectType: "channel",
+        objectId: id,
+        actorUserId,
+      });
+      return channel;
+    });
   }
 
   async createChannel(user: RequestUser, dto: CreateChannelRequest) {

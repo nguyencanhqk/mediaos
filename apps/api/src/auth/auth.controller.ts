@@ -30,12 +30,17 @@ import {
 } from "./auth.dto";
 import { TwoFactorService } from "./two-factor.service";
 import { Public } from "../permission/public.decorator";
+import { AllowWithoutTwoFactor } from "./two-factor-enforcement.decorator";
 
 /** Request đã qua JwtAuthGuard (global) — user gắn ở req.user. */
 interface AuthenticatedRequest extends Request {
   user: { id: string; companyId: string; email: string };
 }
 
+// @AllowWithoutTwoFactor ở cấp controller: TẤT CẢ route auth (me/2fa enroll/enable/disable/status) phải
+// reachable DÙ user bị ép 2FA mà chưa enroll — nếu không user deadlock (không có đường nào để enroll). Các
+// route nghiệp vụ khác (payroll/media/…) KHÔNG có decorator này nên VẪN bị TwoFactorEnforcementGuard chặn.
+@AllowWithoutTwoFactor()
 @Controller("auth")
 @UsePipes(ZodValidationPipe)
 export class AuthController {
