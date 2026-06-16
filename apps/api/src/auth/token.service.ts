@@ -13,6 +13,8 @@ export interface AccessTokenClaims {
 export interface TwoFactorChallengeClaims {
   sub: string; // user id
   companyId: string;
+  /** jti — định danh DUY NHẤT của challenge này, để ép single-use (chống replay challengeToken). */
+  jti: string;
 }
 
 /** TTL challenge 2FA — đủ ngắn để hạn chế cửa sổ brute-force mã, đủ dài để user nhập mã. */
@@ -72,21 +74,27 @@ export class TokenService {
   /**
    * Ký challenge 2FA (bước-1 login OK, chờ verify mã). Marker `tfp:true` để KHÔNG nhầm với access token —
    * verifyAccessToken sẽ bỏ qua vì thiếu email/khác đường verify. TTL ngắn (5'). KHÔNG cấp quyền API.
+   * `jti` (random) cấp nếu caller không truyền → ép SINGLE-USE qua ReplayGuard (chống replay challengeToken).
    */
-  signTwoFactorChallenge(claims: TwoFactorChallengeClaims): string {
-    return jwt.sign({ sub: claims.sub, companyId: claims.companyId, tfp: true }, this.secret(), {
-      algorithm: "HS256",
-      expiresIn: TWO_FACTOR_CHALLENGE_TTL_SEC,
-    });
+  signTwoFactorChallenge(claims: Omit<TwoFactorChallengeClaims, "jti"> & { jti?: string }): string {
+    const jti = claims.jti ?? randomBytes(16).toString("base64url");
+    return jwt.sign(
+      { sub: claims.sub, companyId: claims.companyId, tfp: true, jti },
+      this.secret(),
+      { algorithm: "HS256", expiresIn: TWO_FACTOR_CHALLENGE_TTL_SEC },
+    );
   }
 
-  /** Verify challenge 2FA. Throw nếu sai chữ ký/hạn HOẶC thiếu marker `tfp` (chống dùng nhầm access token). */
+  /**
+   * Verify challenge 2FA. Throw nếu sai chữ ký/hạn HOẶC thiếu marker `tfp` (chống dùng nhầm access token)
+   * HOẶC thiếu `jti` (challenge cũ không có jti → từ chối, ép mọi challenge phải single-use-able).
+   */
   verifyTwoFactorChallenge(token: string): TwoFactorChallengeClaims {
     const decoded = jwt.verify(token, this.secret(), { algorithms: ["HS256"] });
-    if (typeof decoded === "string" || decoded.tfp !== true) {
+    if (typeof decoded === "string" || decoded.tfp !== true || typeof decoded.jti !== "string") {
       throw new Error("token không phải challenge 2FA hợp lệ");
     }
-    return { sub: String(decoded.sub), companyId: String(decoded.companyId) };
+    return { sub: String(decoded.sub), companyId: String(decoded.companyId), jti: decoded.jti };
   }
 
   /** Sinh token ngẫu nhiên (32 byte) — trả plain (cho client) để gọi hàm băm lưu DB. */
