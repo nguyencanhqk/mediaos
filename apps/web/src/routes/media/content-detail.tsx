@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import type {
   ContentAssetDto,
   ContentChannelDto,
@@ -37,6 +38,7 @@ import {
 type Tab = "overview" | "workflow" | "channels" | "assets";
 
 export function ContentDetailPage() {
+  const { t } = useTranslation("channels");
   const { contentId } = useParams({ from: "/content/$contentId" });
   const [tab, setTab] = useState<Tab>("overview");
 
@@ -52,11 +54,11 @@ export function ContentDetailPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-8">
       <Link to="/content" className="text-sm text-muted-foreground hover:underline">
-        ← Danh sách nội dung
+        {t("contentDetail.backLink")}
       </Link>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải…</p>}
-      {isError && <p className="text-sm text-destructive">Không tải được nội dung.</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
+      {isError && <p className="text-sm text-destructive">{t("contentDetail.loadError")}</p>}
 
       {content && (
         <>
@@ -72,16 +74,16 @@ export function ContentDetailPage() {
 
           <div className="flex gap-1 border-b border-border">
             <TabButton active={tab === "overview"} onClick={() => setTab("overview")}>
-              Tổng quan
+              {t("contentDetail.tabOverview")}
             </TabButton>
             <TabButton active={tab === "workflow"} onClick={() => setTab("workflow")}>
-              Sản xuất
+              {t("contentDetail.tabWorkflow")}
             </TabButton>
             <TabButton active={tab === "channels"} onClick={() => setTab("channels")}>
-              Kênh đăng ({content.channels?.length ?? 0})
+              {t("contentDetail.tabChannels", { count: content.channels?.length ?? 0 })}
             </TabButton>
             <TabButton active={tab === "assets"} onClick={() => setTab("assets")}>
-              Asset ({content.assets?.length ?? 0})
+              {t("contentDetail.tabAssets", { count: content.assets?.length ?? 0 })}
             </TabButton>
           </div>
 
@@ -120,6 +122,7 @@ function TabButton({ active, onClick, children }: TabButtonProps) {
 // ── Overview ──────────────────────────────────────────────────────────────────
 
 function OverviewTab({ content }: { content: ContentItemDto }) {
+  const { t } = useTranslation("channels");
   const qc = useQueryClient();
   const canUpdate = useCan("update", "content");
   const [form, setForm] = useState<{
@@ -161,25 +164,25 @@ function OverviewTab({ content }: { content: ContentItemDto }) {
   return (
     <div className="space-y-4">
       <dl className="grid grid-cols-2 gap-3 text-sm">
-        <Field label="Mã" value={content.code ?? "—"} />
-        <Field label="Ngôn ngữ" value={content.language ?? "—"} />
+        <Field label={t("contentDetail.overview.fieldCode")} value={content.code ?? "—"} />
+        <Field label={t("contentDetail.overview.fieldLanguage")} value={content.language ?? "—"} />
         <Field
-          label="Lịch đăng dự kiến"
+          label={t("contentDetail.overview.fieldPlannedPublish")}
           value={content.plannedPublishAt ? new Date(content.plannedPublishAt).toLocaleString("vi") : "—"}
         />
         <Field
-          label="Đã đăng"
+          label={t("contentDetail.overview.fieldPublishedAt")}
           value={content.publishedAt ? new Date(content.publishedAt).toLocaleString("vi") : "—"}
         />
       </dl>
 
       {!canUpdate ? (
-        <p className="text-sm text-muted-foreground">Bạn không có quyền sửa nội dung.</p>
+        <p className="text-sm text-muted-foreground">{t("contentDetail.overview.noPermission")}</p>
       ) : (
         <div className="space-y-3 rounded-xl border border-border p-4">
           <div className="grid grid-cols-3 gap-3">
             <label className="space-y-1">
-              <span className="text-xs text-muted-foreground">Production status</span>
+              <span className="text-xs text-muted-foreground">{t("contentDetail.overview.productionStatusLabel")}</span>
               <Select
                 value={form.productionStatus}
                 onChange={(e) => set({ productionStatus: e.target.value as ProductionStatus | "" })}
@@ -193,7 +196,7 @@ function OverviewTab({ content }: { content: ContentItemDto }) {
               </Select>
             </label>
             <label className="space-y-1">
-              <span className="text-xs text-muted-foreground">Trạng thái</span>
+              <span className="text-xs text-muted-foreground">{t("contentDetail.overview.statusLabel")}</span>
               <Select value={form.status} onChange={(e) => set({ status: e.target.value as typeof form.status })}>
                 {CONTENT_STATUS_OPTIONS.map((s) => (
                   <option key={s} value={s}>
@@ -203,7 +206,7 @@ function OverviewTab({ content }: { content: ContentItemDto }) {
               </Select>
             </label>
             <label className="space-y-1">
-              <span className="text-xs text-muted-foreground">Ưu tiên</span>
+              <span className="text-xs text-muted-foreground">{t("contentDetail.overview.priorityLabel")}</span>
               <Select
                 value={form.priority}
                 onChange={(e) => set({ priority: e.target.value as ContentPriority | "" })}
@@ -217,16 +220,16 @@ function OverviewTab({ content }: { content: ContentItemDto }) {
               </Select>
             </label>
           </div>
-          <UrlInput label="Link cuối (final)" value={form.finalUrl} onChange={(v) => set({ finalUrl: v })} />
-          <UrlInput label="Thumbnail" value={form.thumbnailUrl} onChange={(v) => set({ thumbnailUrl: v })} />
-          <UrlInput label="Kịch bản" value={form.scriptUrl} onChange={(v) => set({ scriptUrl: v })} />
-          <UrlInput label="File video" value={form.videoFileUrl} onChange={(v) => set({ videoFileUrl: v })} />
+          <UrlInput label={t("contentDetail.overview.linkFinal")} value={form.finalUrl} onChange={(v) => set({ finalUrl: v })} />
+          <UrlInput label={t("contentDetail.overview.linkThumbnail")} value={form.thumbnailUrl} onChange={(v) => set({ thumbnailUrl: v })} />
+          <UrlInput label={t("contentDetail.overview.linkScript")} value={form.scriptUrl} onChange={(v) => set({ scriptUrl: v })} />
+          <UrlInput label={t("contentDetail.overview.linkVideo")} value={form.videoFileUrl} onChange={(v) => set({ videoFileUrl: v })} />
           <div className="flex items-center gap-3">
             <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>
-              {save.isPending ? "Đang lưu…" : "Lưu"}
+              {save.isPending ? t("contentDetail.overview.saving") : t("common:actions.save")}
             </Button>
-            {save.isError && <span className="text-sm text-destructive">Lưu thất bại.</span>}
-            {save.isSuccess && <span className="text-sm text-green-600">Đã lưu.</span>}
+            {save.isError && <span className="text-sm text-destructive">{t("contentDetail.overview.saveFailed")}</span>}
+            {save.isSuccess && <span className="text-sm text-green-600">{t("contentDetail.overview.saveSuccess")}</span>}
           </div>
         </div>
       )}
@@ -281,6 +284,7 @@ const STEP_STATUS_COLORS: Record<WorkflowStepDto["status"], string> = {
 };
 
 function WorkflowTab({ content }: { content: ContentItemDto }) {
+  const { t } = useTranslation("channels");
   const qc = useQueryClient();
   const canUpdate = useCan("update", "content");
 
@@ -294,27 +298,27 @@ function WorkflowTab({ content }: { content: ContentItemDto }) {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["workflow", content.id] }),
   });
 
-  if (isLoading) return <p className="text-sm text-muted-foreground">Đang tải…</p>;
-  if (isError) return <p className="text-sm text-destructive">Không tải được quy trình.</p>;
+  if (isLoading) return <p className="text-sm text-muted-foreground">{t("common:loading")}</p>;
+  if (isError) return <p className="text-sm text-destructive">{t("contentDetail.workflow.loadError")}</p>;
 
   if (!workflow) {
     return (
       <div className="space-y-3 rounded-xl border border-dashed border-border p-6 text-center">
         <p className="text-sm text-muted-foreground">
-          Nội dung này chưa bắt đầu quy trình sản xuất (Kịch bản → Dựng → QA → Đăng).
+          {t("contentDetail.workflow.notStartedDesc")}
         </p>
         <PermissionGate
           action="update"
           resourceType="content"
-          fallback={<p className="text-xs text-muted-foreground">Bạn không có quyền bắt đầu sản xuất.</p>}
+          fallback={<p className="text-xs text-muted-foreground">{t("contentDetail.workflow.noPermissionStart")}</p>}
         >
           <Button onClick={() => start.mutate()} disabled={start.isPending}>
-            {start.isPending ? "Đang khởi tạo…" : "Bắt đầu sản xuất"}
+            {start.isPending ? t("contentDetail.workflow.starting") : t("contentDetail.workflow.startButton")}
           </Button>
         </PermissionGate>
         {start.isError && (
           <p className="text-xs text-destructive">
-            {start.error instanceof Error ? start.error.message : "Không khởi tạo được quy trình."}
+            {start.error instanceof Error ? start.error.message : t("contentDetail.workflow.startError")}
           </p>
         )}
       </div>
@@ -327,17 +331,17 @@ function WorkflowTab({ content }: { content: ContentItemDto }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-2 text-sm">
         <span>
-          Trạng thái:{" "}
+          {t("contentDetail.workflow.statusLabel")}{" "}
           <span className="font-medium">
             {workflow.instance.status === "completed"
-              ? "Hoàn thành 🎉"
+              ? t("contentDetail.workflow.statusCompleted")
               : workflow.instance.status === "cancelled"
-                ? "Đã huỷ"
-                : `Đang ở bước ${workflow.instance.currentStepOrder}/${steps.length}`}
+                ? t("contentDetail.workflow.statusCancelled")
+                : t("contentDetail.workflow.statusAtStep", { current: workflow.instance.currentStepOrder, total: steps.length })}
           </span>
         </span>
         <Link to="/tasks" className="text-primary hover:underline">
-          Mở "Công việc của tôi" →
+          {t("contentDetail.workflow.myTasksLink")}
         </Link>
       </div>
 
@@ -356,6 +360,7 @@ function StepRow({
   canUpdate,
   qc,
 }: { step: WorkflowStepDto; contentId: string; canUpdate: boolean } & QcProp) {
+  const { t } = useTranslation("channels");
   const [editing, setEditing] = useState(false);
   const [assigneeUserId, setAssigneeUserId] = useState(step.assigneeUserId ?? "");
   const [reviewerUserId, setReviewerUserId] = useState(step.reviewerUserId ?? "");
@@ -390,7 +395,7 @@ function StepRow({
             {step.stepName}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Người làm: {nameById(step.assigneeUserId)} · Người duyệt: {nameById(step.reviewerUserId)}
+            {t("contentDetail.workflow.assigneeMeta", { assignee: nameById(step.assigneeUserId), reviewer: nameById(step.reviewerUserId) })}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -401,7 +406,7 @@ function StepRow({
           </span>
           {canUpdate && (
             <Button variant="ghost" size="sm" onClick={() => setEditing((v) => !v)}>
-              {editing ? "Đóng" : "Giao việc"}
+              {editing ? t("contentDetail.workflow.closeAssign") : t("contentDetail.workflow.assign")}
             </Button>
           )}
         </div>
@@ -410,9 +415,9 @@ function StepRow({
       {editing && canUpdate && (
         <div className="mt-3 grid grid-cols-[1fr_1fr_auto] items-end gap-2 border-t border-border pt-3">
           <label className="space-y-1">
-            <span className="text-xs text-muted-foreground">Người làm</span>
+            <span className="text-xs text-muted-foreground">{t("contentDetail.workflow.assignee")}</span>
             <Select value={assigneeUserId} onChange={(e) => setAssigneeUserId(e.target.value)}>
-              <option value="">— Chưa giao —</option>
+              <option value="">{t("contentDetail.workflow.assigneePlaceholder")}</option>
               {employees.map((e) => (
                 <option key={e.userId} value={e.userId}>
                   {e.userFullName ?? e.userEmail ?? e.userId}
@@ -421,9 +426,9 @@ function StepRow({
             </Select>
           </label>
           <label className="space-y-1">
-            <span className="text-xs text-muted-foreground">Người duyệt</span>
+            <span className="text-xs text-muted-foreground">{t("contentDetail.workflow.reviewer")}</span>
             <Select value={reviewerUserId} onChange={(e) => setReviewerUserId(e.target.value)}>
-              <option value="">— Chưa giao —</option>
+              <option value="">{t("contentDetail.workflow.reviewerPlaceholder")}</option>
               {employees.map((e) => (
                 <option key={e.userId} value={e.userId}>
                   {e.userFullName ?? e.userEmail ?? e.userId}
@@ -432,11 +437,11 @@ function StepRow({
             </Select>
           </label>
           <Button size="sm" onClick={() => assign.mutate()} disabled={assign.isPending}>
-            {assign.isPending ? "Đang lưu…" : "Lưu"}
+            {assign.isPending ? t("contentDetail.workflow.savingAssign") : t("common:actions.save")}
           </Button>
           {assign.isError && (
             <p className="col-span-3 text-xs text-destructive">
-              {assign.error instanceof Error ? assign.error.message : "Giao việc thất bại."}
+              {assign.error instanceof Error ? assign.error.message : t("contentDetail.workflow.assignFailed")}
             </p>
           )}
         </div>
@@ -448,6 +453,7 @@ function StepRow({
 // ── Publish targets (CNT-002) ─────────────────────────────────────────────────
 
 function PublishTargetsTab({ content }: { content: ContentItemDto }) {
+  const { t } = useTranslation("channels");
   const qc = useQueryClient();
   const canUpdate = useCan("update", "content");
   const targets = useMemo(() => content.channels ?? [], [content.channels]);
@@ -486,9 +492,9 @@ function PublishTargetsTab({ content }: { content: ContentItemDto }) {
       <PermissionGate action="update" resourceType="content">
         <div className="flex items-end gap-2">
           <label className="flex-1 space-y-1">
-            <span className="text-xs text-muted-foreground">Thêm kênh đăng</span>
+            <span className="text-xs text-muted-foreground">{t("contentDetail.publishTargets.addChannelLabel")}</span>
             <Select value={channelId} onChange={(e) => setChannelId(e.target.value)}>
-              <option value="">— Chọn kênh —</option>
+              <option value="">{t("contentDetail.publishTargets.channelPlaceholder")}</option>
               {available.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} ({PLATFORM_LABELS[c.platform]})
@@ -497,40 +503,40 @@ function PublishTargetsTab({ content }: { content: ContentItemDto }) {
             </Select>
           </label>
           <Button size="sm" onClick={() => add.mutate()} disabled={!channelId || add.isPending}>
-            Thêm
+            {t("common:actions.add")}
           </Button>
         </div>
       </PermissionGate>
-      {add.isError && <p className="text-sm text-destructive">Thêm kênh thất bại.</p>}
+      {add.isError && <p className="text-sm text-destructive">{t("contentDetail.publishTargets.addFailed")}</p>}
 
       {targets.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Chưa gắn kênh đăng nào.</p>
+        <p className="text-sm text-muted-foreground">{t("contentDetail.publishTargets.empty")}</p>
       ) : (
         <ul className="divide-y divide-border rounded-xl border border-border">
-          {targets.map((t) => (
-            <li key={t.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+          {targets.map((tgt) => (
+            <li key={tgt.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
               <div className="min-w-0">
                 <p className="font-medium">
-                  {t.channelName} <span className="text-muted-foreground">({PLATFORM_LABELS[t.platform]})</span>
+                  {tgt.channelName} <span className="text-muted-foreground">({PLATFORM_LABELS[tgt.platform]})</span>
                 </p>
-                {t.publishUrl && (
+                {tgt.publishUrl && (
                   <a
-                    href={t.publishUrl}
+                    href={tgt.publishUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="truncate text-xs text-primary hover:underline"
                   >
-                    {t.publishUrl}
+                    {tgt.publishUrl}
                   </a>
                 )}
               </div>
               <div className="flex items-center gap-2">
                 {canUpdate ? (
                   <Select
-                    value={t.publishStatus ?? "not_scheduled"}
+                    value={tgt.publishStatus ?? "not_scheduled"}
                     onChange={(e) =>
                       updateStatus.mutate({
-                        id: t.id,
+                        id: tgt.id,
                         publishStatus: e.target.value as ContentChannelDto["publishStatus"],
                       })
                     }
@@ -544,12 +550,12 @@ function PublishTargetsTab({ content }: { content: ContentItemDto }) {
                   </Select>
                 ) : (
                   <span className="text-xs text-muted-foreground">
-                    {t.publishStatus ? PUBLISH_STATUS_LABELS[t.publishStatus] : "—"}
+                    {tgt.publishStatus ? PUBLISH_STATUS_LABELS[tgt.publishStatus] : "—"}
                   </span>
                 )}
                 <PermissionGate action="update" resourceType="content">
-                  <Button variant="ghost" size="sm" onClick={() => remove.mutate(t.id)}>
-                    Gỡ
+                  <Button variant="ghost" size="sm" onClick={() => remove.mutate(tgt.id)}>
+                    {t("contentDetail.publishTargets.removeButton")}
                   </Button>
                 </PermissionGate>
               </div>
@@ -564,6 +570,7 @@ function PublishTargetsTab({ content }: { content: ContentItemDto }) {
 // ── Assets (version chain, CNT-003) ───────────────────────────────────────────
 
 function AssetsTab({ content }: { content: ContentItemDto }) {
+  const { t } = useTranslation("channels");
   const qc = useQueryClient();
 
   /** Nhóm theo versionGroupId; mỗi nhóm sắp theo version giảm dần (mới nhất trước). */
@@ -584,7 +591,7 @@ function AssetsTab({ content }: { content: ContentItemDto }) {
       </PermissionGate>
 
       {groups.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Chưa có asset nào.</p>
+        <p className="text-sm text-muted-foreground">{t("contentDetail.assets.empty")}</p>
       ) : (
         <div className="space-y-3">
           {groups.map((versions) => (
@@ -601,6 +608,7 @@ interface QcProp {
 }
 
 function NewAssetForm({ contentId, qc }: { contentId: string } & QcProp) {
+  const { t } = useTranslation("channels");
   const [assetType, setAssetType] = useState("");
   const [name, setName] = useState("");
   const [externalUrl, setExternalUrl] = useState("");
@@ -622,24 +630,24 @@ function NewAssetForm({ contentId, qc }: { contentId: string } & QcProp) {
 
   return (
     <div className="space-y-2 rounded-xl border border-border p-4">
-      <p className="text-sm font-medium">Thêm asset mới</p>
+      <p className="text-sm font-medium">{t("contentDetail.assets.newAssetTitle")}</p>
       <div className="grid grid-cols-2 gap-2">
         <Select value={assetType} onChange={(e) => setAssetType(e.target.value)}>
-          <option value="">— Loại asset —</option>
-          {ASSET_TYPE_OPTIONS.map((t) => (
-            <option key={t} value={t}>
-              {ASSET_TYPE_LABELS[t]}
+          <option value="">{t("contentDetail.assets.assetTypePlaceholder")}</option>
+          {ASSET_TYPE_OPTIONS.map((at) => (
+            <option key={at} value={at}>
+              {ASSET_TYPE_LABELS[at]}
             </option>
           ))}
         </Select>
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tên asset…" />
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("contentDetail.assets.assetNamePlaceholder")} />
       </div>
-      <Input value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} placeholder="https://… (link asset)" />
+      <Input value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} placeholder={t("contentDetail.assets.assetUrlPlaceholder")} />
       <div className="flex items-center gap-3">
         <Button size="sm" onClick={() => create.mutate()} disabled={!externalUrl.trim() || create.isPending}>
-          {create.isPending ? "Đang thêm…" : "Thêm asset"}
+          {create.isPending ? t("contentDetail.assets.addingAsset") : t("contentDetail.assets.addAssetButton")}
         </Button>
-        {create.isError && <span className="text-sm text-destructive">Thêm thất bại.</span>}
+        {create.isError && <span className="text-sm text-destructive">{t("contentDetail.assets.addFailed")}</span>}
       </div>
     </div>
   );
@@ -650,6 +658,7 @@ function AssetGroup({
   versions,
   qc,
 }: { contentId: string; versions: ContentAssetDto[] } & QcProp) {
+  const { t } = useTranslation("channels");
   const canUpdate = useCan("update", "content");
   const current = versions.find((v) => v.isCurrent) ?? versions[0];
   const [adding, setAdding] = useState(false);
@@ -682,7 +691,7 @@ function AssetGroup({
         </p>
         {canUpdate && (
           <Button variant="ghost" size="sm" onClick={() => setAdding((v) => !v)}>
-            {adding ? "Huỷ" : "+ Version"}
+            {adding ? t("contentDetail.assets.cancelVersion") : t("contentDetail.assets.addVersion")}
           </Button>
         )}
       </div>
@@ -692,14 +701,14 @@ function AssetGroup({
           <Input
             value={externalUrl}
             onChange={(e) => setExternalUrl(e.target.value)}
-            placeholder="https://… (link version mới)"
+            placeholder={t("contentDetail.assets.versionUrlPlaceholder")}
           />
           <Button
             size="sm"
             onClick={() => addVersion.mutate()}
             disabled={!externalUrl.trim() || addVersion.isPending}
           >
-            Lưu version
+            {t("contentDetail.assets.saveVersion")}
           </Button>
         </div>
       )}
@@ -711,7 +720,7 @@ function AssetGroup({
               <span className="text-xs text-muted-foreground">v{v.version}</span>
               {v.isCurrent && (
                 <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                  Hiện hành
+                  {t("contentDetail.assets.current")}
                 </span>
               )}
               {(v.externalUrl ?? v.fileUrl) && (
@@ -727,7 +736,7 @@ function AssetGroup({
             </div>
             {canUpdate && (
               <Button variant="ghost" size="sm" onClick={() => remove.mutate(v.id)}>
-                Xoá
+                {t("contentDetail.assets.deleteVersion")}
               </Button>
             )}
           </li>
