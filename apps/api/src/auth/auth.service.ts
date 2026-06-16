@@ -17,6 +17,8 @@ import { OutboxService } from "../events/outbox.service";
 import { PermissionService } from "../permission/permission.service";
 import { LoginRateLimiter } from "./login-rate-limiter";
 import { PasswordService } from "./password.service";
+import { ReplayGuardService } from "./replay-guard.service";
+import { SecurityAlertService } from "./security-alert.service";
 import { TokenService } from "./token.service";
 import { TwoFactorService } from "./two-factor.service";
 import { SecretEncryptionService } from "../crypto/secret-encryption.service";
@@ -99,6 +101,8 @@ export class AuthService {
     @Inject(forwardRef(() => PermissionService)) private readonly permissions: PermissionService,
     private readonly secrets: SecretEncryptionService,
     private readonly twoFactor: TwoFactorService,
+    private readonly replayGuard: ReplayGuardService,
+    private readonly securityAlerts: SecurityAlertService,
   ) {}
 
   /** Resolve companySlug → companyId qua hàm SECURITY DEFINER (lỗ RLS có kiểm soát, §3b). */
@@ -206,10 +210,17 @@ export class AuthService {
     code: string,
     meta: RequestMeta,
   ): Promise<AuthTokens> {
-    let claims: { sub: string; companyId: string };
+    let claims: { sub: string; companyId: string; jti: string };
     try {
       claims = this.tokens.verifyTwoFactorChallenge(challengeToken);
     } catch {
+      throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
+    }
+    // Defense-in-depth (G16-1b): challengeToken là SINGLE-USE. Claim jti TRƯỚC khi verify mã — challengeToken
+    // dùng lại (replay, kể cả khi mã đúng) → claim trả false → 401 đồng nhất. Fail-closed (ReplayGuard hạ
+    // memory khi Valkey rớt, KHÔNG fail-open). TTL phủ trọn cửa sổ challenge (5').
+    const firstUse = await this.replayGuard.claim(`2fa-jti:${claims.jti}`, 600);
+    if (!firstUse) {
       throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
     }
     const rlKey = `2fa|${claims.companyId}|${claims.sub}`;
@@ -220,6 +231,17 @@ export class AuthService {
     const ok = await this.twoFactor.verifyChallenge(claims.sub, claims.companyId, code);
     if (!ok) {
       await this.rateLimiter.recordFailure(rlKey);
+      // G16-1b: re-auth fail lặp tới ngưỡng khoá → phát security alert (best-effort, KHÔNG đổi outcome 401).
+      // `subject` = userId (định danh trừu tượng) — KHÔNG ghi mã/secret vào detail (BẤT BIẾN #3).
+      if (await this.rateLimiter.isLocked(rlKey)) {
+        await this.securityAlerts.emit(claims.companyId, {
+          alertType: "repeated_reauth_failure",
+          severity: "high",
+          subject: claims.sub,
+          subjectUserId: claims.sub,
+          detail: { context: "2fa_challenge", ip: meta.ip },
+        });
+      }
       throw new UnauthorizedException("Mã xác thực không đúng.");
     }
     await this.rateLimiter.reset(rlKey);

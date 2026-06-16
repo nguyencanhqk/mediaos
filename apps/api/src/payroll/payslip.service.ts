@@ -117,6 +117,15 @@ export class PayslipService {
         }
         const row = await this.repo.findByIdTx(tx, user.companyId, id);
         if (!row) throw new NotFoundException("Payslip not found");
+        // G16-1b READ-PATH AUDIT: ghi 1 audit row cho mỗi lần ĐỌC payslip (lương nhạy cảm) TRONG cùng tx
+        // (atomic — audit fail ⇒ rollback đọc). CHỈ who/when/scope: actor + object payslip id. TUYỆT ĐỐI
+        // KHÔNG ghi giá trị lương (base/gross/net) vào audit (BẤT BIẾN #3 — audit không phải nơi lưu lương).
+        await this.auditService.record(tx, {
+          action: "payslip.viewed",
+          objectType: "payslip",
+          objectId: id,
+          actorUserId: user.id,
+        });
         return row;
       });
     } catch (err) {

@@ -91,6 +91,26 @@ export class ValkeyService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Atomic SET-IF-ABSENT (`SET key val EX ttl NX`). Trả `true` CHỈ KHI key chưa tồn tại và set thành công
+   * (caller là người ĐẦU TIÊN giữ key) — `false` khi key đã có (duplicate). KHÁC `set()`: hàm này FAIL-CLOSED:
+   *   - Valkey CHƯA cấu hình (client null) → trả `null` (KHÔNG no-op-success): caller PHẢI fallback in-memory,
+   *     KHÔNG được coi là "đã giữ" (no-op true sẽ làm replay-guard luôn-pass = fail-open, hỏng single-use).
+   *   - Lỗi outage → trả `null`: caller fallback in-memory (KHÔNG fail-open).
+   * Dùng cho single-use jti (challenge 2FA) + TOTP step-replay (chống dùng lại cùng mã/step). Never throws.
+   */
+  async setNx(key: string, value: string, ttlSec: number): Promise<boolean | null> {
+    if (!this.client) return null;
+    try {
+      const res = await this.client.set(key, value, "EX", ttlSec, "NX");
+      // ioredis trả 'OK' khi set (key mới) hoặc null khi NX trượt (key đã tồn tại).
+      return res === "OK";
+    } catch (err) {
+      this.logger.warn("Valkey SETNX error", { key, error: (err as Error).message });
+      return null;
+    }
+  }
+
+  /**
    * Returns true when the DEL succeeds or Valkey is not configured.
    * Returns false on error (caller can decide whether to retry or surface the failure).
    * Never throws.

@@ -31,7 +31,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0132+0140+0150+0170). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -114,5 +114,8 @@ export const AUDIT_OBJECT_TYPES = [
   // qua Logger (mirror SecretRotationService), KHÔNG vào audit_logs tenant-scoped. 'encryption_key' nạp vào
   // CHECK superset (mig 0150) cho đường app-tenant-context tương lai; chỉ kms_key_id+version, KHÔNG key material.
   "encryption_key",
+  // G16-1b security alerting (SecurityAlertService ghi audit 'security_alert' khi phát alert — mig 0121).
+  // read-path audit (payslip/channel-health) TÁI DÙNG object_type sẵn có ('payslip'/'channel') — chỉ action mới.
+  "security_alert",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

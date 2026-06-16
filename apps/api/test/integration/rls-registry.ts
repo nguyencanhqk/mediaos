@@ -206,6 +206,20 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
   {
+    name: "security_alerts",
+    table: "security_alerts",
+    // G16-1b security alerting (mig 0122) — append-only, company_id NOT NULL + RLS+FORCE. Seed direct.
+    // KHÔNG skipNoContext (mọi hàng tenant-scoped, không hàng global).
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO security_alerts (company_id, alert_type, severity, subject)
+         VALUES ($1, 'repeated_reauth_failure', 'high', 'rls-subject') RETURNING id`,
+        [t.companyId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
     name: "refresh_tokens",
     table: "refresh_tokens",
     seedRow: async (direct, t) => {
