@@ -215,6 +215,22 @@ export const payslipListQuerySchema = z.object({
 });
 export type PayslipListQuery = z.infer<typeof payslipListQuerySchema>;
 
+/**
+ * B1 — own-payslip LIST (nhân viên xem phiếu CỦA MÌNH), MONEY-FREE-by-default (BẤT BIẾN #3a).
+ * Schema CỐ Ý KHÔNG có field tiền (baseSalary/totalAllowances/gross/net/currency/kpiAmount/
+ * bonusAmount/penaltyAmount): chỉ kỳ/người/loại bản ghi/ngày. Tiền CHỈ lộ sau re-auth qua payslipSchema
+ * (getOwn). Server là nguồn sự thật strip (repo SELECT money-free) — FE chỉ defense-in-depth.
+ */
+export const payslipSummarySchema = z.object({
+  id: z.string().uuid(),
+  payrollPeriodId: z.string().uuid(),
+  userId: z.string().uuid(),
+  entryKind: payslipEntryKindEnum,
+  replacesPayslipId: z.string().uuid().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type PayslipSummaryDto = z.infer<typeof payslipSummarySchema>;
+
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 // G12-3 — Bonus/Penalty (thưởng/phạt thủ công + sinh từ KPI/lỗi, có duyệt, chảy vào payroll)
 //   - bonus_penalties: MUTABLE draft→approved/rejected (đề xuất chờ duyệt). KHÁC payslip snapshot
