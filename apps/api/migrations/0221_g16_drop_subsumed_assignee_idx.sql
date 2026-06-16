@@ -1,0 +1,25 @@
+-- Migration 0221: G16-2 perf follow-up — drop the single-column tasks_assignee_user_id_idx,
+--   now SUBSUMED by the partial composite tasks_company_assignee_active_idx created in 0220.
+--   idx 90, when 1717500250000 (> master max 1717500240000, monotonic).
+--
+-- BAND 0220-0229 (lane C2 / G16-2). Index-ONLY migration: no RLS/permission/policy/audit/schema
+--   change. This only REMOVES a redundant access path.
+--
+-- WHY SAFE:
+--   • tasks_assignee_user_id_idx (from 0008) indexes tasks(assignee_user_id) ALONE.
+--   • Every tenant query carries company_id (RLS + app filter), so "My Tasks" / assignee lookups
+--     are served by tasks_company_assignee_active_idx (company_id, assignee_user_id) WHERE
+--     deleted_at IS NULL — a strict superset prefix of the dropped index for our access patterns.
+--   • assignee_user_id is an FK column, but Postgres does NOT require an index on the referencing
+--     side for FK enforcement; the composite still covers join/lookup paths that include company_id.
+--   • No query filters assignee_user_id WITHOUT company_id (multi-tenant invariant), so dropping
+--     the standalone index removes only write-amplification, not a used read path.
+--
+-- OPS NOTE (CONCURRENTLY): drizzle wraps each migration in a transaction, and
+--   DROP INDEX CONCURRENTLY cannot run inside a transaction. This uses plain DROP INDEX IF EXISTS
+--   (idempotent). On current (empty/small) tables the brief lock is negligible. For a large prod
+--   table, run `DROP INDEX CONCURRENTLY tasks_assignee_user_id_idx;` out-of-band (psql, autocommit)
+--   BEFORE deploying this file so the in-transaction DROP becomes a no-op (IF EXISTS).
+--   See docs/ops/backup-restore-drill.md "CONCURRENTLY for prod" for the runbook.
+
+DROP INDEX IF EXISTS tasks_assignee_user_id_idx;

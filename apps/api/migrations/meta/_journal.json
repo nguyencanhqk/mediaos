@@ -631,6 +631,13 @@
       "when": 1717500240000,
       "tag": "0190_b4_task_attachments",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1717500250000,
+      "tag": "0221_g16_drop_subsumed_assignee_idx",
+      "breakpoints": true
     }
   ]
 }
