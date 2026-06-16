@@ -1,7 +1,7 @@
 import { Suspense, lazy, useMemo, useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import type { DagValidationResultDto } from "@/lib/workflow-builder/contract";
 import { workflowTemplatesApi } from "@/lib/workflow-templates-api";
 import { ApiError } from "@/lib/api-client";
@@ -127,8 +127,7 @@ export function WorkflowTemplateDetailPage() {
           aria-label={t("detail.immutableBannerAriaLabel")}
           className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
         >
-          Quy trình đã xuất bản là bất biến. Để chỉnh sửa, hãy <strong>Nhân bản</strong> sang một
-          bản nháp phiên bản mới.
+          <Trans t={t} i18nKey="detail.immutableBanner" components={{ strong: <strong /> }} />
         </div>
       )}
 
@@ -176,8 +175,7 @@ export function WorkflowTemplateDetailPage() {
             hintId="canvas-usage-hint"
           />
           <p id="canvas-usage-hint" className="text-xs text-muted-foreground">
-            Kéo từ chấm dưới của một bước sang chấm trên của bước khác để tạo phụ thuộc. Chọn cạnh rồi
-            nhấn Delete để xoá. Cần thao tác bằng bàn phím? Chuyển sang <strong>Danh sách</strong>.
+            <Trans t={t} i18nKey="detail.canvasHint" components={{ strong: <strong /> }} />
           </p>
         </Suspense>
       ) : (

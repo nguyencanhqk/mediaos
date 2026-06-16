@@ -66,8 +66,7 @@
       "versionLine": "Phiên bản v{{version}} · Bắt đầu {{datetime}}",
       "canvasLoadingFallback": "Đang tải sơ đồ…",
       "stepsHeading": "Trạng thái các bước",
-      "parallelNote": "Nhiều bước cùng <strong>Đang làm</strong> nghĩa là chúng chạy song song. Mỗi bước sinh một công việc riêng ở <a>Công việc của tôi</a>.",
-      "parallelNoteTasksLink": "Công việc của tôi"
+      "parallelNote": "Nhiều bước cùng <strong>Đang làm</strong> nghĩa là chúng chạy song song. Mỗi bước sinh một công việc riêng ở <a>Công việc của tôi</a>."
     }
   },
   "canvas": {

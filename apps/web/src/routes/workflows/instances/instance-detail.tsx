@@ -1,7 +1,7 @@
 import { Suspense, lazy } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { workflowInstancesApi } from "@/lib/workflow-instances-api";
 import {
   INSTANCE_STATUS_BADGE_CLASSES,
@@ -82,8 +82,14 @@ export function WorkflowInstanceDetailPage() {
           ))}
         </ul>
         <p className="text-xs text-muted-foreground">
-          Nhiều bước cùng <strong>Đang làm</strong> nghĩa là chúng chạy song song. Mỗi bước sinh một
-          công việc riêng ở <Link to="/tasks" className="text-primary hover:underline">{t("instances.detail.parallelNoteTasksLink")}</Link>.
+          <Trans
+            t={t}
+            i18nKey="instances.detail.parallelNote"
+            components={{
+              strong: <strong />,
+              a: <Link to="/tasks" className="text-primary hover:underline" />,
+            }}
+          />
         </p>
       </section>
     </div>
