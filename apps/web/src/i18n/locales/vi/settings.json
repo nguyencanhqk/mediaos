@@ -1,0 +1,89 @@
+{
+  "company": {
+    "pageTitle": "Cài đặt công ty",
+    "loadError": "Không tải được cài đặt.",
+    "companyNameLabel": "Tên công ty",
+    "logoUrlLabel": "Logo (URL)",
+    "timezoneLabel": "Múi giờ",
+    "currencyLabel": "Tiền tệ",
+    "currencyVnd": "VND — Việt Nam Đồng",
+    "languageLabel": "Ngôn ngữ",
+    "languageVi": "Tiếng Việt",
+    "workingDaysLabel": "Ngày làm việc trong tuần",
+    "payrollPeriodLabel": "Kỳ lương",
+    "cutoffDayLabel": "Ngày chốt công (1–31)",
+    "payDayLabel": "Ngày trả lương (1–31)",
+    "saveButton": "Lưu cài đặt",
+    "saveSuccess": "Đã lưu thành công.",
+    "saveError": "Lưu thất bại."
+  },
+  "platformAccounts": {
+    "pageTitle": "Tài khoản nền tảng",
+    "pageDesc": "Mật khẩu/token kênh được mã hoá đầu-cuối. Xem secret cần xác minh lại danh tính.",
+    "addButton": "+ Thêm tài khoản",
+    "filterPlatformLabel": "Nền tảng",
+    "filterStatusLabel": "Trạng thái",
+    "filterSearchLabel": "Tìm kiếm",
+    "searchPlaceholder": "Tên tài khoản, định danh…",
+    "loadError": "Không tải được danh sách tài khoản.",
+    "empty": "Chưa có tài khoản nền tảng nào.",
+    "table": {
+      "colAccount": "Tài khoản",
+      "colPlatform": "Nền tảng",
+      "colIdentifier": "Định danh",
+      "colSecurity": "Bảo mật",
+      "secretLabel": "secret của {{label}}",
+      "editSecretAriaLabel": "Đổi secret của {{label}}",
+      "editSecretButton": "Đổi secret"
+    },
+    "createDialog": {
+      "title": "Thêm tài khoản nền tảng",
+      "description": "Secret được mã hoá phía máy chủ (envelope) — không lưu plaintext.",
+      "cancel": "Huỷ",
+      "creating": "Đang tạo…",
+      "fieldPlatform": "Nền tảng *",
+      "platformPlaceholder": "— Chọn nền tảng —",
+      "fieldSecret": "Secret (mật khẩu / token) *",
+      "fieldAccountName": "Tên tài khoản",
+      "fieldAccountEmail": "Email tài khoản",
+      "fieldIdentifier": "Định danh (handle/@)",
+      "fieldSecurityLevel": "Mức bảo mật",
+      "securityLevelNone": "— Không đặt —",
+      "fieldRecoveryEmail": "Email khôi phục",
+      "fieldRecoveryPhone": "SĐT khôi phục",
+      "fieldTwoFactorNote": "Ghi chú 2FA",
+      "twoFactorNotePlaceholder": "VD: backup codes ở đâu, app authenticator nào…",
+      "createError": "Tạo thất bại:",
+      "unknownError": "Lỗi không xác định"
+    },
+    "updateSecretDialog": {
+      "title": "Đổi secret",
+      "description": "Đặt secret mới cho \"{{label}}\".",
+      "cancel": "Huỷ",
+      "fieldSecretNew": "Secret mới *",
+      "saveButton": "Lưu secret mới",
+      "saveError": "Lưu thất bại:",
+      "unknownError": "Lỗi không xác định"
+    },
+    "reauth": {
+      "title": "Xác minh để hiện secret",
+      "descWithLabel": "Nhập lại mật khẩu của bạn để xem secret của \"{{accountLabel}}\".",
+      "descGeneric": "Nhập lại mật khẩu của bạn để xem secret. Mỗi lần xem được ghi nhật ký.",
+      "passwordLabel": "Mật khẩu",
+      "otpLabel": "Mã 2FA (nếu có)",
+      "cancel": "Huỷ",
+      "verifying": "Đang xác minh…",
+      "submitButton": "Xác minh & hiện",
+      "verifyError": "Xác minh thất bại."
+    },
+    "secretField": {
+      "revealAriaLabel": "Hiện {{label}}",
+      "hideAriaLabel": "Ẩn {{label}}",
+      "verifying": "Đang xác minh…",
+      "revealButton": "Hiện",
+      "hideButton": "Ẩn",
+      "revealError": "Hiện secret thất bại.",
+      "defaultLabel": "mật khẩu"
+    }
+  }
+}

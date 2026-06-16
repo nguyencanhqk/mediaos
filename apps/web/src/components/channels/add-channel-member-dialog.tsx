@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { AddChannelMemberRequest, ChannelRole } from "@mediaos/contracts";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -23,6 +24,7 @@ export function AddChannelMemberDialog({
   onClose,
   excludeUserIds,
 }: AddChannelMemberDialogProps) {
+  const { t } = useTranslation("channels");
   const qc = useQueryClient();
   const [userId, setUserId] = useState("");
   const [role, setRole] = useState<ChannelRole | "">("");
@@ -58,22 +60,22 @@ export function AddChannelMemberDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title="Thêm thành viên kênh"
+      title={t("addMemberDialog.title")}
       footer={
         <>
           <Button variant="ghost" size="sm" onClick={onClose}>
-            Huỷ
+            {t("addMemberDialog.cancel")}
           </Button>
           <Button size="sm" onClick={() => add.mutate()} disabled={!userId || add.isPending}>
-            {add.isPending ? "Đang thêm…" : "Thêm"}
+            {add.isPending ? t("addMemberDialog.adding") : t("common:actions.add")}
           </Button>
         </>
       }
     >
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-muted-foreground">Nhân sự *</span>
+        <span className="text-xs font-medium text-muted-foreground">{t("addMemberDialog.staffLabel")}</span>
         <Select value={userId} onChange={(e) => setUserId(e.target.value)}>
-          <option value="">— Chọn nhân sự —</option>
+          <option value="">{t("addMemberDialog.staffPlaceholder")}</option>
           {available.map((e) => (
             <option key={e.userId} value={e.userId}>
               {e.userFullName ?? e.userEmail ?? e.userId}
@@ -83,9 +85,9 @@ export function AddChannelMemberDialog({
       </label>
 
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-muted-foreground">Vai trò</span>
+        <span className="text-xs font-medium text-muted-foreground">{t("addMemberDialog.roleLabel")}</span>
         <Select value={role} onChange={(e) => setRole(e.target.value as ChannelRole | "")}>
-          <option value="">— Không —</option>
+          <option value="">{t("addMemberDialog.rolePlaceholder")}</option>
           {CHANNEL_ROLE_OPTIONS.map((r) => (
             <option key={r} value={r}>
               {CHANNEL_ROLE_LABELS[r]}
@@ -95,17 +97,17 @@ export function AddChannelMemberDialog({
       </label>
 
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-muted-foreground">Mức quyền</span>
+        <span className="text-xs font-medium text-muted-foreground">{t("addMemberDialog.permissionLabel")}</span>
         <Input
           value={permissionLevel}
           onChange={(e) => setPermissionLevel(e.target.value)}
-          placeholder="VD: editor, viewer…"
+          placeholder={t("addMemberDialog.permissionPlaceholder")}
         />
       </label>
 
       {add.isError && (
         <p className="text-sm text-destructive">
-          Thêm thất bại: {add.error instanceof Error ? add.error.message : "Lỗi không xác định"}
+          {t("addMemberDialog.addFailed", { detail: add.error instanceof Error ? add.error.message : t("addMemberDialog.errorUnknown") })}
         </p>
       )}
     </Dialog>

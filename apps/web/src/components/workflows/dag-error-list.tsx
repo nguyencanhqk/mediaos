@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { DagValidationResultDto } from "@/lib/workflow-builder/contract";
 import { DAG_ERROR_LABELS } from "./constants";
 
@@ -7,6 +8,7 @@ interface DagErrorListProps {
 
 /** Hiển thị kết quả validate DAG inline (nút Validate / trước Publish). */
 export function DagErrorList({ result }: DagErrorListProps) {
+  const { t } = useTranslation("workflows");
   if (!result) return null;
 
   if (result.valid) {
@@ -15,7 +17,7 @@ export function DagErrorList({ result }: DagErrorListProps) {
         role="status"
         className="rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-800"
       >
-        ✓ DAG hợp lệ — quy trình sẵn sàng để xuất bản.
+        {t("dag.valid")}
       </div>
     );
   }
@@ -26,7 +28,7 @@ export function DagErrorList({ result }: DagErrorListProps) {
       className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3"
     >
       <p className="text-sm font-medium text-destructive">
-        DAG chưa hợp lệ ({result.errors.length} lỗi):
+        {t("dag.invalidHeading", { count: result.errors.length })}
       </p>
       <ul className="space-y-1">
         {result.errors.map((err, i) => (

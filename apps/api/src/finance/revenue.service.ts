@@ -4,12 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import type { CreateRevenueRequest } from "@mediaos/contracts";
+import type { CreateRevenueRequest, RevenueRecordDto } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { PermissionService } from "../permission/permission.service";
 import { RevenueRepository } from "./revenue.repository";
+import { amountToDbString, centsToNumber, decimalStringToCents, MoneyError } from "./money";
 
 /**
  * G13-1 — RevenueService: sổ cái doanh thu APPEND-ONLY (BẤT BIẾN #2), tài chính nhạy cảm (permission).
@@ -26,6 +27,7 @@ import { RevenueRepository } from "./revenue.repository";
 
 const RESOURCE_TYPE = "finance";
 const ACTION_WRITE = "create";
+const ACTION_VIEW = "view-finance";
 
 /** "Sửa" sổ cái: amount mới + lý do (audit). Giữ nguyên các chiều (platform/channel/...) của bản gốc. */
 export interface AdjustRevenueInput {
@@ -38,10 +40,18 @@ export interface VoidRevenueInput {
   reason: string;
 }
 
-/** numeric (number) → string cho Drizzle; chặn giá trị không hữu hạn ở boundary. */
-function numToStr(value: number): string {
-  if (!Number.isFinite(value)) throw new BadRequestException(`Invalid amount: ${value}`);
-  return value.toFixed(2);
+/**
+ * numeric (number) → chuỗi cho Drizzle, AN TOÀN (B3): đi qua money.ts (cents-exact + guard
+ * MAX_SAFE_INTEGER). Vượt khoảng an toàn JS → MoneyError → BadRequestException (400 ở HTTP),
+ * KHÔNG `toFixed(2)` lossy âm thầm. Thay `numToStr` cũ (chỉ guard isFinite) — defect B3 residual.
+ */
+function amountToDbStringOr400(value: number): string {
+  try {
+    return amountToDbString(value);
+  } catch (e) {
+    if (e instanceof MoneyError) throw new BadRequestException(e.message);
+    throw e;
+  }
 }
 
 @Injectable()
@@ -54,9 +64,69 @@ export class RevenueService {
     private readonly outbox: OutboxService,
   ) {}
 
-  /** Liệt kê revenue hiệu lực của tenant (RLS lọc). filter từ ListRevenueQuery (đã validate ở controller). */
-  list(companyId: string, _userId: string, filter: Parameters<RevenueRepository["list"]>[1] = {}) {
-    return this.repo.list(companyId, filter);
+  /**
+   * Liệt kê revenue hiệu lực của tenant (RLS lọc). filter từ ListRevenueQuery (đã validate + clamp
+   * limit/offset ở controller). MASK SERVER-side (BẤT BIẾN #3, parity ProfitService): caller KHÔNG có
+   * view-finance(isSensitive) → amount = null; có quyền → số THẬT. fail-safe mask (lỗi can() → mask).
+   */
+  async list(
+    companyId: string,
+    userId: string,
+    filter: Parameters<RevenueRepository["list"]>[1] = {},
+  ): Promise<RevenueRecordDto[]> {
+    const canView = await this.canViewFinance(companyId, userId);
+    const rows = await this.repo.list(companyId, filter);
+    return rows.map((r) => this.toMaskedDto(r, canView));
+  }
+
+  /**
+   * Map row revenue_records → DTO với mask tiền. canView=false ⇒ amount=null (mask). numeric(18,2)
+   * Drizzle trả chuỗi → cents (không float) → number khi được phép xem.
+   */
+  private toMaskedDto(row: RevenueRow, canView: boolean): RevenueRecordDto {
+    const amount =
+      canView && row.amount != null ? centsToNumber(decimalStringToCents(row.amount)) : null;
+    return {
+      id: row.id,
+      companyId: row.companyId,
+      platformId: row.platformId,
+      channelId: row.channelId,
+      projectId: row.projectId,
+      contentItemId: row.contentItemId,
+      amount,
+      currency: row.currency,
+      revenueDate: row.revenueDate,
+      periodStart: row.periodStart,
+      periodEnd: row.periodEnd,
+      source: row.source as RevenueRecordDto["source"],
+      description: row.description,
+      attachmentUrl: row.attachmentUrl,
+      enteredBy: row.enteredBy,
+      entryKind: row.entryKind as RevenueRecordDto["entryKind"],
+      replacesRecordId: row.replacesRecordId,
+      isEffective: row.entryKind !== "void",
+      createdAt:
+        row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
+    };
+  }
+
+  /**
+   * view-finance(isSensitive) — quyết MASK số tiền. FAIL-SAFE MASK (parity ProfitService): mọi lỗi hạ
+   * tầng trong can() → coi như KHÔNG có quyền (mask null), KHÔNG fail-open ra số nhạy cảm.
+   */
+  private async canViewFinance(companyId: string, userId: string): Promise<boolean> {
+    try {
+      const decision = await this.permissions.can({
+        userId,
+        companyId,
+        action: ACTION_VIEW,
+        resourceType: RESOURCE_TYPE,
+        isSensitive: true,
+      });
+      return decision.allow;
+    } catch {
+      return false; // fail-safe mask.
+    }
   }
 
   /**
@@ -71,7 +141,7 @@ export class RevenueService {
         channelId: dto.channelId ?? null,
         projectId: dto.projectId ?? null,
         contentItemId: dto.contentItemId ?? null,
-        amount: numToStr(dto.amount),
+        amount: amountToDbStringOr400(dto.amount),
         currency: dto.currency,
         revenueDate: dto.revenueDate,
         periodStart: dto.periodStart ?? null,
@@ -117,7 +187,7 @@ export class RevenueService {
         channelId: original.channelId,
         projectId: original.projectId,
         contentItemId: original.contentItemId,
-        amount: numToStr(input.amount),
+        amount: amountToDbStringOr400(input.amount),
         currency: original.currency,
         revenueDate: original.revenueDate,
         periodStart: original.periodStart,
@@ -208,4 +278,26 @@ export class RevenueService {
       throw new ForbiddenException(`Permission denied: ${decision.reason}`);
     }
   }
+}
+
+/** Hàng revenue_records đọc từ Drizzle (numeric → string; timestamp → Date). */
+interface RevenueRow {
+  id: string;
+  companyId: string;
+  platformId: string | null;
+  channelId: string | null;
+  projectId: string | null;
+  contentItemId: string | null;
+  amount: string | null;
+  currency: string;
+  revenueDate: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  source: string;
+  description: string | null;
+  attachmentUrl: string | null;
+  enteredBy: string;
+  entryKind: string;
+  replacesRecordId: string | null;
+  createdAt: Date | string;
 }

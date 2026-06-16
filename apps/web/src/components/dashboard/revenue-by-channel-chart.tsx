@@ -1,4 +1,6 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import type { ReportSummaryDto } from "@mediaos/contracts";
 
 interface RevenueByChannelChartProps {
@@ -14,17 +16,25 @@ function formatVnd(value: number): string {
   return String(value);
 }
 
+function buildTooltipFormatter(t: TFunction<"dashboard">) {
+  return (v: unknown) => [
+    new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(v as number),
+    t("revenueByChannel.tooltipLabel"),
+  ];
+}
+
 /**
  * RevenueByChannelChart — horizontal bar chart of monthly revenue per channel.
  * Receives server-filtered data; caller must check non-null before rendering.
  */
 export function RevenueByChannelChart({ data }: RevenueByChannelChartProps) {
+  const { t } = useTranslation("dashboard");
   const sorted = [...data].sort((a, b) => b.amount - a.amount).slice(0, 10);
 
   return (
     <div className="rounded-lg border bg-card p-4">
       <h3 className="mb-3 text-sm font-medium text-muted-foreground">
-        Doanh thu theo kênh (tháng này)
+        {t("revenueByChannel.title")}
       </h3>
       <ResponsiveContainer width="100%" height={Math.max(120, sorted.length * 36)}>
         <BarChart
@@ -47,14 +57,7 @@ export function RevenueByChannelChart({ data }: RevenueByChannelChartProps) {
             axisLine={false}
             tickLine={false}
           />
-          <Tooltip
-            formatter={(v) => [
-              new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(
-                v as number,
-              ),
-              "Doanh thu",
-            ]}
-          />
+          <Tooltip formatter={buildTooltipFormatter(t)} />
           <Bar dataKey="amount" radius={[0, 4, 4, 0]}>
             {sorted.map((entry) => (
               <Cell key={entry.channelId} fill={BAR_COLOR} />

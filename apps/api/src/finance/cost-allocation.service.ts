@@ -107,9 +107,9 @@ export class CostAllocationService {
 
       const totalCents = decimalStringToCents(cost.amount);
 
-      // 2. Cross-tenant target guard (polymorphic) — mọi target phải tồn tại trong tenant.
-      //    G16-2 perf: 1 query/loại target (≤6) thay cho N round-trip (≤200). Báo lỗi target THIẾU
-      //    đầu tiên theo thứ tự input để giữ nguyên thông điệp/hành vi cũ (fail-closed).
+      // 2. Cross-tenant target guard (polymorphic) — BATCH (gỡ N+1): 1 query/loại bảng (≤6),
+      //    KHÔNG còn vòng per-target. Target thiếu → 400 (giữ thông điệp cũ cho target đầu tiên vắng).
+      //    Dùng existingTargetsTx của G16-2 (C2 đã land master); B2(b) bổ sung insertManyTx batch ở bước 6.
       const existing = await this.repo.existingTargetsTx(tx, dto.targets);
       for (const t of dto.targets) {
         if (!existing.has(`${t.targetType}:${t.targetId}`)) {
@@ -142,11 +142,11 @@ export class CostAllocationService {
       const softDeleted = await this.repo.softDeleteActiveTx(tx, companyId, costRecordId);
       const isReallocate = softDeleted > 0;
 
-      // 6. Insert set mới (1 allocation_run_id chung).
+      // 6. Insert set mới (1 allocation_run_id chung) — BATCH 1 câu lệnh (gỡ N+1 B2(b)), KHÔNG vòng for.
       const runId = randomUUID();
-      const allocations = [];
-      for (const line of lines) {
-        const row = await this.repo.insertTx(tx, {
+      const allocations = await this.repo.insertManyTx(
+        tx,
+        lines.map((line) => ({
           costRecordId,
           allocationRunId: runId,
           allocationTargetType: line.targetType,
@@ -154,9 +154,8 @@ export class CostAllocationService {
           allocationMethod: dto.method,
           allocatedAmount: centsToDbString(line.allocatedCents),
           allocationPercent: line.percent != null ? line.percent.toFixed(4) : null,
-        });
-        allocations.push(row);
-      }
+        })),
+      );
 
       // 7. Audit-in-tx (CostAllocated lần đầu / CostReallocated re-run).
       const action = isReallocate ? "CostReallocated" : "CostAllocated";

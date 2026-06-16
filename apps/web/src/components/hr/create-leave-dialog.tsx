@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { createLeaveRequestSchema } from "@mediaos/contracts";
 import { leaveApi } from "@/lib/leave-api";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ const emptyForm: FormState = {
 };
 
 export function CreateLeaveDialog() {
+  const { t } = useTranslation("hr");
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -35,7 +37,7 @@ export function CreateLeaveDialog() {
     queryFn: () => leaveApi.listTypes(),
   });
 
-  const activeTypes = leaveTypes.filter((t) => t.status === "active");
+  const activeTypes = leaveTypes.filter((lt) => lt.status === "active");
 
   const create = useMutation({
     mutationFn: () => {
@@ -47,7 +49,7 @@ export function CreateLeaveDialog() {
       };
       const result = createLeaveRequestSchema.safeParse(payload);
       if (!result.success) {
-        throw new Error(result.error.errors[0]?.message ?? "Dữ liệu không hợp lệ");
+        throw new Error(result.error.errors[0]?.message ?? t("leaveCreate.invalidData"));
       }
       return leaveApi.createRequest(result.data);
     },
@@ -59,7 +61,7 @@ export function CreateLeaveDialog() {
       setOpen(false);
     },
     onError: (e: unknown) => {
-      setValidationError(e instanceof Error ? e.message : "Lỗi tạo đơn nghỉ.");
+      setValidationError(e instanceof Error ? e.message : t("leaveCreate.createError"));
     },
   });
 
@@ -70,14 +72,14 @@ export function CreateLeaveDialog() {
 
   return (
     <>
-      <Button onClick={() => setOpen(true)}>+ Tạo đơn nghỉ phép</Button>
+      <Button onClick={() => setOpen(true)}>{t("leaveCreate.triggerButton")}</Button>
       <Dialog
         open={open}
         onClose={() => {
           setOpen(false);
           setValidationError(null);
         }}
-        title="Tạo đơn nghỉ phép"
+        title={t("leaveCreate.dialogTitle")}
         footer={
           <>
             <Button
@@ -87,37 +89,37 @@ export function CreateLeaveDialog() {
                 setValidationError(null);
               }}
             >
-              Huỷ
+              {t("leaveCreate.cancel")}
             </Button>
             <Button
               onClick={() => create.mutate()}
               disabled={!canSubmit || create.isPending}
             >
-              {create.isPending ? "Đang gửi…" : "Gửi đơn"}
+              {create.isPending ? t("leaveCreate.submitting") : t("leaveCreate.submit")}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">Loại nghỉ *</label>
+            <label className="text-sm font-medium">{t("leaveCreate.labelType")}</label>
             <Select
               value={form.leaveTypeId}
               onChange={(e) => patch({ leaveTypeId: e.target.value })}
             >
-              <option value="">— Chọn loại nghỉ —</option>
-              {activeTypes.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                  {t.annualQuota != null ? ` (${t.annualQuota} ngày/năm)` : ""}
-                  {t.paid ? "" : " · Không lương"}
+              <option value="">{t("leaveCreate.typePlaceholder")}</option>
+              {activeTypes.map((lt) => (
+                <option key={lt.id} value={lt.id}>
+                  {lt.name}
+                  {lt.annualQuota != null ? ` ${t("leaveCreate.quotaSuffix", { quota: lt.annualQuota })}` : ""}
+                  {lt.paid ? "" : t("leaveCreate.unpaidSuffix")}
                 </option>
               ))}
             </Select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Ngày bắt đầu *</label>
+              <label className="text-sm font-medium">{t("leaveCreate.labelStartDate")}</label>
               <Input
                 type="date"
                 value={form.startDate}
@@ -125,7 +127,7 @@ export function CreateLeaveDialog() {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Ngày kết thúc *</label>
+              <label className="text-sm font-medium">{t("leaveCreate.labelEndDate")}</label>
               <Input
                 type="date"
                 value={form.endDate}
@@ -135,10 +137,10 @@ export function CreateLeaveDialog() {
             </div>
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">Lý do</label>
+            <label className="text-sm font-medium">{t("leaveCreate.labelReason")}</label>
             <textarea
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring min-h-[80px] resize-none"
-              placeholder="Ghi rõ lý do nghỉ (không bắt buộc)…"
+              placeholder={t("leaveCreate.reasonPlaceholder")}
               value={form.reason}
               onChange={(e) => patch({ reason: e.target.value })}
               maxLength={1000}

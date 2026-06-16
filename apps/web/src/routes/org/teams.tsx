@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { TeamDto } from "@mediaos/contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,22 +10,19 @@ import { orgApi } from "@/lib/org-api";
 
 type TeamType = TeamDto["type"];
 
-const TEAM_TYPES: { value: TeamType; label: string }[] = [
-  { value: "production_team", label: "Sản xuất" },
-  { value: "script_team", label: "Kịch bản" },
-  { value: "editor_team", label: "Dựng phim" },
-  { value: "thumbnail_team", label: "Thumbnail" },
-  { value: "seo_team", label: "SEO" },
-  { value: "qa_team", label: "QA" },
-  { value: "project_team", label: "Dự án" },
-  { value: "office_team", label: "Văn phòng" },
+const TEAM_TYPE_VALUES: TeamType[] = [
+  "production_team",
+  "script_team",
+  "editor_team",
+  "thumbnail_team",
+  "seo_team",
+  "qa_team",
+  "project_team",
+  "office_team",
 ];
 
-const TYPE_LABEL: Record<string, string> = Object.fromEntries(
-  TEAM_TYPES.map((t) => [t.value, t.label]),
-);
-
 export function TeamsPage() {
+  const { t } = useTranslation("org");
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -99,82 +97,82 @@ export function TeamsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-8">
-      <h1 className="text-2xl font-semibold">Teams</h1>
+      <h1 className="text-2xl font-semibold">{t("teams.title")}</h1>
 
       <div className="flex gap-2">
         <Input
-          placeholder="Tên team…"
+          placeholder={t("teams.namePlaceholder")}
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="max-w-xs"
         />
         <Button onClick={() => createTeam.mutate()} disabled={!name.trim() || createTeam.isPending}>
-          Thêm team
+          {t("teams.addButton")}
         </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <Select
-          aria-label="Lọc theo trạng thái"
+          aria-label={t("teams.filterStatusLabel")}
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
           className="h-9 max-w-[160px] text-sm"
         >
-          <option value="">Mọi trạng thái</option>
-          <option value="active">Đang hoạt động</option>
-          <option value="inactive">Ngừng</option>
+          <option value="">{t("common:anyStatus")}</option>
+          <option value="active">{t("teams.statusActive")}</option>
+          <option value="inactive">{t("teams.statusInactive")}</option>
         </Select>
         <Select
-          aria-label="Lọc theo loại team"
+          aria-label={t("teams.filterTypeLabel")}
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
           className="h-9 max-w-[180px] text-sm"
         >
-          <option value="">Mọi loại team</option>
-          {TEAM_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
+          <option value="">{t("teams.anyType")}</option>
+          {TEAM_TYPE_VALUES.map((value) => (
+            <option key={value} value={value}>
+              {t(`teams.types.${value}`, { defaultValue: value })}
             </option>
           ))}
         </Select>
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải…</p>}
-      {isError && <p className="text-sm text-destructive">Không tải được dữ liệu.</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
+      {isError && <p className="text-sm text-destructive">{t("common:errors.loadFailed")}</p>}
       {filteredTeams.length === 0 && !isLoading && (
-        <p className="text-sm text-muted-foreground">Không có team nào khớp bộ lọc.</p>
+        <p className="text-sm text-muted-foreground">{t("teams.empty")}</p>
       )}
 
       <ul className="divide-y divide-border rounded-xl border border-border">
-        {filteredTeams.map((t) => (
-          <li key={t.id}>
+        {filteredTeams.map((team) => (
+          <li key={team.id}>
             <button
               type="button"
               className="flex w-full items-center justify-between px-4 py-3 text-left text-sm transition-colors hover:bg-muted/50"
-              onClick={() => setSelectedTeamId(t.id)}
+              onClick={() => setSelectedTeamId(team.id)}
             >
               <span className="min-w-0">
-                <span className="font-medium">{t.name}</span>
-                {t.code && (
+                <span className="font-medium">{team.name}</span>
+                {team.code && (
                   <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                    {t.code}
+                    {team.code}
                   </span>
                 )}
                 <span className="ml-2 text-xs text-muted-foreground">
-                  {TYPE_LABEL[t.type] ?? t.type}
+                  {t(`teams.types.${team.type}`, { defaultValue: team.type })}
                 </span>
-                {t.leaderUserName && (
+                {team.leaderUserName && (
                   <span className="ml-2 text-xs text-muted-foreground">
-                    Leader: {t.leaderUserName}
+                    Leader: {team.leaderUserName}
                   </span>
                 )}
               </span>
               <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                {t.capacity != null && <span>cap: {t.capacity}</span>}
+                {team.capacity != null && <span>cap: {team.capacity}</span>}
                 <span
-                  className={t.status === "active" ? "text-green-600" : "text-muted-foreground"}
+                  className={team.status === "active" ? "text-green-600" : "text-muted-foreground"}
                 >
-                  {t.status}
+                  {team.status}
                 </span>
               </span>
             </button>
@@ -185,27 +183,27 @@ export function TeamsPage() {
       <Dialog
         open={selectedTeam !== null}
         onClose={closeDrawer}
-        title={selectedTeam?.name ?? "Team"}
+        title={selectedTeam?.name ?? t("teams.title")}
         description={
-          selectedTeam ? (TYPE_LABEL[selectedTeam.type] ?? selectedTeam.type) : undefined
+          selectedTeam ? t(`teams.types.${selectedTeam.type}`, { defaultValue: selectedTeam.type }) : undefined
         }
       >
         {selectedTeam && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Trạng thái</p>
+                <p className="text-xs text-muted-foreground">{t("teams.detail.statusLabel")}</p>
                 <p>{selectedTeam.status}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Sức chứa</p>
+                <p className="text-xs text-muted-foreground">{t("teams.detail.capacityLabel")}</p>
                 <p>{selectedTeam.capacity ?? "—"}</p>
               </div>
             </div>
 
             <div className="space-y-1">
               <label className="text-sm" htmlFor="team-leader">
-                Team leader
+                {t("teams.detail.leaderLabel")}
               </label>
               <Select
                 id="team-leader"
@@ -218,7 +216,7 @@ export function TeamsPage() {
                 disabled={assignLeader.isPending}
               >
                 <option value="" disabled>
-                  — Chọn leader —
+                  {t("teams.detail.leaderPlaceholder")}
                 </option>
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>
@@ -229,15 +227,15 @@ export function TeamsPage() {
             </div>
 
             <section className="space-y-2">
-              <h3 className="text-sm font-medium">Thành viên</h3>
+              <h3 className="text-sm font-medium">{t("teams.detail.membersSection")}</h3>
               <div className="flex gap-2">
                 <Select
-                  aria-label="Chọn thành viên"
+                  aria-label={t("teams.detail.chooseMemberLabel")}
                   value={memberUserId}
                   onChange={(e) => setMemberUserId(e.target.value)}
                   className="text-xs"
                 >
-                  <option value="">— Chọn người dùng —</option>
+                  <option value="">{t("teams.detail.chooseMemberPlaceholder")}</option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.fullName ?? u.email}
@@ -249,7 +247,7 @@ export function TeamsPage() {
                   onClick={() => addMember.mutate()}
                   disabled={!memberUserId || addMember.isPending}
                 >
-                  Thêm
+                  {t("common:actions.add")}
                 </Button>
               </div>
 
@@ -265,13 +263,13 @@ export function TeamsPage() {
                         className="text-destructive hover:text-destructive"
                         onClick={() => removeMember.mutate(m.userId)}
                       >
-                        Xoá
+                        {t("teams.deleteButton")}
                       </Button>
                     </div>
                   </li>
                 ))}
                 {members.length === 0 && (
-                  <li className="py-2 text-sm text-muted-foreground">Chưa có thành viên.</li>
+                  <li className="py-2 text-sm text-muted-foreground">{t("teams.detail.noMembers")}</li>
                 )}
               </ul>
             </section>

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { HrRequestStatusDto } from "@mediaos/contracts";
 import { attendanceApi, type AdjustmentFilters } from "@/lib/attendance-api";
 import { useCan } from "@/hooks/use-can";
@@ -16,6 +17,7 @@ import {
  * G11 — Màn hình Đơn bổ sung công (attendance_adjustment).
  */
 export function AdjustmentsPage() {
+  const { t } = useTranslation("hr");
   const canApprove = useCan("approve", "attendance");
 
   const [filters, setFilters] = useState<AdjustmentFilters>({
@@ -34,7 +36,7 @@ export function AdjustmentsPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Đơn bổ sung công</h1>
+        <h1 className="text-2xl font-semibold">{t("adjustmentsPage.heading")}</h1>
         <PermissionGate action="adjust" resourceType="attendance">
           <CreateAdjustmentDialog />
         </PermissionGate>
@@ -44,7 +46,7 @@ export function AdjustmentsPage() {
       <div className="flex flex-wrap gap-3">
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground uppercase tracking-wide">
-            Phạm vi
+            {t("adjustmentsPage.filterScope")}
           </label>
           <Select
             value={filters.scope ?? "me"}
@@ -56,14 +58,14 @@ export function AdjustmentsPage() {
             }
             className="w-36"
           >
-            <option value="me">Của tôi</option>
-            {canApprove && <option value="all">Tất cả</option>}
+            <option value="me">{t("common:mine")}</option>
+            {canApprove && <option value="all">{t("common:all")}</option>}
           </Select>
         </div>
 
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground uppercase tracking-wide">
-            Trạng thái
+            {t("adjustmentsPage.filterStatus")}
           </label>
           <Select
             value={filters.status ?? ""}
@@ -75,7 +77,7 @@ export function AdjustmentsPage() {
             }
             className="w-40"
           >
-            <option value="">Tất cả</option>
+            <option value="">{t("common:all")}</option>
             {HR_REQUEST_STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
                 {HR_REQUEST_STATUS_LABELS[s]}
@@ -86,10 +88,10 @@ export function AdjustmentsPage() {
       </div>
 
       {isLoading && (
-        <p className="text-sm text-muted-foreground">Đang tải đơn bổ sung công…</p>
+        <p className="text-sm text-muted-foreground">{t("adjustmentsPage.loading")}</p>
       )}
       {isError && (
-        <p className="text-sm text-destructive">Không tải được danh sách đơn.</p>
+        <p className="text-sm text-destructive">{t("adjustmentsPage.loadError")}</p>
       )}
       {!isLoading && !isError && (
         <AdjustmentTable requests={requests} canApprove={canApprove} />

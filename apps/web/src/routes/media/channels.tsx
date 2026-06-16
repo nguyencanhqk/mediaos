@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { ChannelDto } from "@mediaos/contracts";
 import { channelsApi, type ChannelFilters } from "@/lib/channels-api";
 import { PermissionGate } from "@/components/permission-gate";
@@ -10,6 +11,7 @@ import { CreateChannelDialog } from "@/components/channels/create-channel-dialog
 import { useEmployeeOptions } from "@/components/channels/use-channel-options";
 
 export function ChannelsPage() {
+  const { t } = useTranslation("channels");
   const qc = useQueryClient();
   const [filters, setFilters] = useState<ChannelFilters>({});
   const canDelete = useCan("delete", "channel");
@@ -42,13 +44,13 @@ export function ChannelsPage() {
   });
 
   const onDelete = (channel: ChannelDto) => {
-    if (window.confirm(`Xoá kênh "${channel.name}"?`)) remove.mutate(channel.id);
+    if (window.confirm(t("channelsPage.deleteConfirm", { name: channel.name }))) remove.mutate(channel.id);
   };
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Kênh</h1>
+        <h1 className="text-2xl font-semibold">{t("channelsPage.heading")}</h1>
         <PermissionGate action="create" resourceType="channel">
           <CreateChannelDialog />
         </PermissionGate>
@@ -62,10 +64,10 @@ export function ChannelsPage() {
         nicheOptions={nicheOptions}
       />
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải…</p>}
-      {isError && <p className="text-sm text-destructive">Không tải được dữ liệu.</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
+      {isError && <p className="text-sm text-destructive">{t("common:errors.loadFailed")}</p>}
       {!isLoading && !isError && channels.length === 0 && (
-        <p className="text-sm text-muted-foreground">Không có kênh nào khớp bộ lọc.</p>
+        <p className="text-sm text-muted-foreground">{t("channelsPage.noMatch")}</p>
       )}
       {channels.length > 0 && (
         <ChannelTable

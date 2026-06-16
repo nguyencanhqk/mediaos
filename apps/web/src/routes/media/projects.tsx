@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ProjectDto } from "@mediaos/contracts";
+import { useTranslation } from "react-i18next";
 import { projectsApi, type ProjectFilters } from "@/lib/projects-api";
 import { PermissionGate } from "@/components/permission-gate";
 import { useCan } from "@/hooks/use-can";
@@ -10,6 +11,7 @@ import { ProjectTable } from "@/components/projects/project-table";
 import { CreateProjectDialog } from "@/components/projects/create-project-dialog";
 
 export function ProjectsPage() {
+  const { t } = useTranslation("projects");
   const qc = useQueryClient();
   const [filters, setFilters] = useState<ProjectFilters>({});
   const canDelete = useCan("delete", "project");
@@ -30,13 +32,13 @@ export function ProjectsPage() {
   });
 
   const onDelete = (project: ProjectDto) => {
-    if (window.confirm(`Xoá dự án "${project.name}"?`)) remove.mutate(project.id);
+    if (window.confirm(t("list.confirmDelete", { name: project.name }))) remove.mutate(project.id);
   };
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Dự án</h1>
+        <h1 className="text-2xl font-semibold">{t("list.title")}</h1>
         <PermissionGate action="create" resourceType="project">
           <CreateProjectDialog />
         </PermissionGate>
@@ -49,10 +51,10 @@ export function ProjectsPage() {
         employees={employees}
       />
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải…</p>}
-      {isError && <p className="text-sm text-destructive">Không tải được dữ liệu.</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
+      {isError && <p className="text-sm text-destructive">{t("common:errors.loadFailed")}</p>}
       {!isLoading && !isError && projects.length === 0 && (
-        <p className="text-sm text-muted-foreground">Không có dự án nào khớp bộ lọc.</p>
+        <p className="text-sm text-muted-foreground">{t("list.emptyFiltered")}</p>
       )}
       {projects.length > 0 && (
         <ProjectTable

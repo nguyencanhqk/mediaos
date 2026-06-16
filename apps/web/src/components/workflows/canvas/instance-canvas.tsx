@@ -8,6 +8,7 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { useTranslation } from "react-i18next";
 import type { DependencyDto, InstanceStepDto } from "@/lib/workflow-builder/contract";
 import { InstanceStepNodeCard } from "./instance-step-node";
 import { buildInstanceEdges, buildInstanceNodes } from "./instance-layout";
@@ -21,6 +22,7 @@ const nodeTypes: NodeTypes = { instanceStep: InstanceStepNodeCard };
 
 /** Canvas read-only của một instance — DAG tô màu theo status (3d). Không sửa được. */
 export default function InstanceCanvas({ steps, dependencies }: InstanceCanvasProps) {
+  const { t } = useTranslation("workflows");
   const nodes = useMemo(() => buildInstanceNodes(steps), [steps]);
   const edges = useMemo(() => buildInstanceEdges(dependencies), [dependencies]);
 
@@ -29,7 +31,7 @@ export default function InstanceCanvas({ steps, dependencies }: InstanceCanvasPr
       <div
         className="h-[460px] w-full overflow-hidden rounded-xl border border-border"
         role="group"
-        aria-label="Sơ đồ tiến độ quy trình (chỉ xem). Trạng thái từng bước có ở danh sách bên dưới."
+        aria-label={t("canvas.instanceAriaLabel")}
       >
         <ReactFlow
           nodes={nodes}

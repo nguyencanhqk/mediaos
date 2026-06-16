@@ -1,0 +1,23 @@
+{
+  "overview": "Tổng quan",
+  "tasks": "Công việc",
+  "taskBoard": "Bảng công việc",
+  "channels": "Kênh",
+  "platformAccounts": "Tài khoản nền tảng",
+  "projects": "Dự án",
+  "content": "Nội dung",
+  "workflows": "Quy trình",
+  "workflowInstances": "Tiến độ quy trình",
+  "departments": "Phòng ban",
+  "teams": "Nhóm",
+  "positions": "Chức vụ",
+  "employees": "Nhân sự",
+  "attendance": "Chấm công",
+  "adjustments": "Bổ sung công",
+  "leave": "Nghỉ phép",
+  "salaryProfiles": "Hồ sơ lương",
+  "payrollPeriods": "Kỳ lương",
+  "payslips": "Phiếu lương",
+  "companySettings": "Cài đặt công ty",
+  "logout": "Đăng xuất"
+}

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { workflowInstancesApi } from "@/lib/workflow-instances-api";
 import {
   INSTANCE_STATUS_BADGE_CLASSES,
@@ -7,6 +8,7 @@ import {
 } from "@/components/workflows/constants";
 
 export function WorkflowInstancesPage() {
+  const { t } = useTranslation("workflows");
   const { data: instances = [], isLoading, isError } = useQuery({
     queryKey: ["workflow-instances"],
     queryFn: () => workflowInstancesApi.list(),
@@ -15,16 +17,16 @@ export function WorkflowInstancesPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-8">
       <div>
-        <h1 className="text-2xl font-semibold">Tiến độ quy trình</h1>
+        <h1 className="text-2xl font-semibold">{t("instances.pageTitle")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Các quy trình đang chạy. Mở để xem sơ đồ trạng thái và các bước song song.
+          {t("instances.pageSubtitle")}
         </p>
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải…</p>}
-      {isError && <p className="text-sm text-destructive">Không tải được danh sách.</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("instances.loading")}</p>}
+      {isError && <p className="text-sm text-destructive">{t("instances.loadError")}</p>}
       {!isLoading && !isError && instances.length === 0 && (
-        <p className="text-sm text-muted-foreground">Chưa có quy trình nào đang chạy.</p>
+        <p className="text-sm text-muted-foreground">{t("instances.empty")}</p>
       )}
 
       {instances.length > 0 && (
@@ -39,7 +41,7 @@ export function WorkflowInstancesPage() {
                 <div>
                   <p className="font-medium text-primary">{inst.templateName}</p>
                   <p className="text-xs text-muted-foreground">
-                    Bắt đầu {new Date(inst.createdAt).toLocaleDateString("vi-VN")}
+                    {t("instances.startedAt", { date: new Date(inst.createdAt).toLocaleDateString("vi-VN") })}
                   </p>
                 </div>
                 <span

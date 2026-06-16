@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,7 @@ export function ReAuthModal({
   onRevealed,
   reveal = platformAccountsApi.revealWithReauth,
 }: ReAuthModalProps) {
+  const { t } = useTranslation("settings");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
@@ -61,7 +63,7 @@ export function ReAuthModal({
       onRevealed(secret);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Xác minh thất bại.");
+      setError(err instanceof Error ? err.message : t("platformAccounts.reauth.verifyError"));
       setLoading(false);
     }
   };
@@ -70,17 +72,17 @@ export function ReAuthModal({
     <Dialog
       open={open}
       onClose={onClose}
-      title="Xác minh để hiện secret"
+      title={t("platformAccounts.reauth.title")}
       description={
         accountLabel
-          ? `Nhập lại mật khẩu của bạn để xem secret của "${accountLabel}".`
-          : "Nhập lại mật khẩu của bạn để xem secret. Mỗi lần xem được ghi nhật ký."
+          ? t("platformAccounts.reauth.descWithLabel", { accountLabel })
+          : t("platformAccounts.reauth.descGeneric")
       }
     >
       <form onSubmit={submit} className="space-y-4">
         <div className="space-y-1">
           <label htmlFor="reauth-password" className="text-sm font-medium">
-            Mật khẩu
+            {t("platformAccounts.reauth.passwordLabel")}
           </label>
           <Input
             id="reauth-password"
@@ -95,7 +97,7 @@ export function ReAuthModal({
 
         <div className="space-y-1">
           <label htmlFor="reauth-otp" className="text-sm font-medium text-muted-foreground">
-            Mã 2FA (nếu có)
+            {t("platformAccounts.reauth.otpLabel")}
           </label>
           <Input
             id="reauth-otp"
@@ -115,10 +117,10 @@ export function ReAuthModal({
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
-            Huỷ
+            {t("platformAccounts.reauth.cancel")}
           </Button>
           <Button type="submit" size="sm" disabled={!password.trim() || loading}>
-            {loading ? "Đang xác minh…" : "Xác minh & hiện"}
+            {loading ? t("platformAccounts.reauth.verifying") : t("platformAccounts.reauth.submitButton")}
           </Button>
         </div>
       </form>

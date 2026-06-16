@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { getHealth } from "@/lib/api";
 import { channelsApi } from "@/lib/channels-api";
@@ -12,6 +13,7 @@ import {
 import { useAuthStore } from "@/stores/auth";
 
 export function HomePage() {
+  const { t } = useTranslation("home");
   const navigate = useNavigate();
   const username = useAuthStore((s) => s.username);
   const logout = useAuthStore((s) => s.logout);
@@ -35,17 +37,21 @@ export function HomePage() {
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">{username}</span>
           <Button variant="outline" size="sm" onClick={onLogout}>
-            Đăng xuất
+            {t("nav:logout")}
           </Button>
         </div>
       </header>
 
       <section className="rounded-xl border border-border p-6">
-        <h2 className="mb-2 text-sm font-medium text-muted-foreground">Trạng thái API</h2>
-        {health.isLoading && <p className="text-sm">Đang kiểm tra…</p>}
+        <h2 className="mb-2 text-sm font-medium text-muted-foreground">{t("apiStatus")}</h2>
+        {health.isLoading && <p className="text-sm">{t("apiChecking")}</p>}
         {health.isError && (
           <p className="text-sm text-destructive">
-            Không kết nối được API. Chạy <code>pnpm dev</code> và <code>docker compose up -d</code>.
+            {t("apiErrorPrefix")}
+            <code>pnpm dev</code>
+            {t("apiErrorMid")}
+            <code>docker compose up -d</code>
+            {t("apiErrorSuffix")}
           </p>
         )}
         {health.data && (
@@ -67,6 +73,7 @@ export function HomePage() {
 
 /** Widget Dashboard "Kênh rủi ro" (G6-5) — health_status ∈ {risk, declining}. */
 function RiskChannelsWidget() {
+  const { t } = useTranslation("home");
   const canViewChannels = useCan("read", "channel");
 
   const { data: channels = [], isLoading } = useQuery({
@@ -79,11 +86,11 @@ function RiskChannelsWidget() {
 
   return (
     <section className="rounded-xl border border-border p-6">
-      <h2 className="mb-3 text-sm font-medium text-muted-foreground">Kênh rủi ro</h2>
+      <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t("riskChannelsTitle")}</h2>
 
-      {isLoading && <p className="text-sm">Đang tải…</p>}
+      {isLoading && <p className="text-sm">{t("common:loading")}</p>}
       {!isLoading && channels.length === 0 && (
-        <p className="text-sm text-muted-foreground">Không có kênh nào cần chú ý.</p>
+        <p className="text-sm text-muted-foreground">{t("noRiskChannels")}</p>
       )}
 
       {channels.length > 0 && (

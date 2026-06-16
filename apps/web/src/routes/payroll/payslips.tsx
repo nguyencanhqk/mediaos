@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { PayrollPeriodStatus, PayslipDto } from "@mediaos/contracts";
 import { payslipApi } from "@/lib/payslip-api";
 import { payrollPeriodApi } from "@/lib/payroll-period-api";
@@ -13,21 +14,24 @@ import { PERIOD_STATUS_LABELS } from "@/components/payroll/period-constants";
 import { useAuthStore } from "@/stores/auth";
 
 /**
- * PayslipsPage (G12-FE) — "Phiếu lương của tôi" (employee self-service) at /payroll/payslips.
+ * PayslipsPage (B1) — "Phiếu lương của tôi" (employee self-service) at /payroll/payslips.
  *
  * Lương NHẠY CẢM (BẤT BIẾN #3):
- *  - The list uses payslipApi.listSummary → money is stripped at the API boundary, so net/gross never
- *    enter component state or the React Query cache. The table has NO money columns.
- *  - Detail money is fetched ONLY after re-auth via usePayslipReauthController (reauth → getOne, a direct
- *    fetch, never useQuery) and held in ephemeral state that is cleared whenever the selection changes.
+ *  - The list uses payslipApi.listOwn → GET /payslips/me/list returns a money-FREE projection
+ *    (no net/gross/base), so money never enters component state or the React Query cache. The table
+ *    has NO money columns. Ownership (user_id = self) is enforced SERVER-SIDE — no userId is sent.
+ *  - Detail money is fetched ONLY after re-auth via the OWN endpoints wired into
+ *    usePayslipReauthController ({ reauth: reauthOwn, getOne: getOwn } — a direct fetch, never
+ *    useQuery) and held in ephemeral state that is cleared whenever the selection changes.
  *  - A 403 on the list surfaces as a permission notice, never as leaked numbers.
  *
- * NOTE (BE follow-up, out of this FE-only lane): `view-payslip` is granted only to admin/hr, and the
- * server `GET /payslips` returns the full snapshot without re-auth. So this page only reveals money to
- * roles that hold view-payslip; a plain employee gets a 403 here until the BE adds an own-payslip,
- * re-auth-gated read for employees. The page degrades gracefully for that case.
+ * B1: this page now wires the employee OWN endpoints (view-own-payslip, re-auth-gated, ownership-scoped
+ * server-side) instead of the admin GET /payslips. A plain employee who holds only view-own-payslip can
+ * list their slips and reveal money after re-auth — no more degrade-to-403 for normal staff. The 403
+ * branch remains as defense-in-depth for callers who lack even view-own-payslip.
  */
 export function PayslipsPage() {
+  const { t } = useTranslation("payroll");
   const qc = useQueryClient();
   const currentUserId = useAuthStore((s) => s.user?.id ?? "");
   const [periodStatus, setPeriodStatus] = useState<PayrollPeriodStatus | "">("");
@@ -37,7 +41,11 @@ export function PayslipsPage() {
   const selectedIdRef = useRef<string | null>(null);
   // Revealed money — ephemeral ONLY (never cached). Cleared on selection / filter change → re-mask.
   const [revealed, setRevealed] = useState<PayslipDto | null>(null);
-  const { requestReauth, modal } = usePayslipReauthController();
+  // B1: reveal goes through the OWN endpoints (re-auth-gated, ownership-scoped server-side).
+  const { requestReauth, modal } = usePayslipReauthController({
+    reauth: payslipApi.reauthOwn,
+    getOne: payslipApi.getOwn,
+  });
 
   const {
     data: rows = [],
@@ -45,15 +53,15 @@ export function PayslipsPage() {
     isError,
     error,
   } = useQuery({
-    queryKey: ["payslips", "mine", currentUserId],
-    queryFn: () => payslipApi.listSummary({ userId: currentUserId }),
-    enabled: !!currentUserId,
+    // B1: money-FREE own list. Ownership (user_id = self) enforced SERVER-SIDE — no userId param.
+    queryKey: ["payslips", "mine"],
+    queryFn: () => payslipApi.listOwn(),
     retry: false,
   });
 
   // Period labels/status are an enrichment for display + filter. Best-effort: only after the payslip
   // list succeeds (so we never fire a known-403 for roles that can't read payslips anyway).
-  const isSuccess = !isLoading && !isError && !!currentUserId;
+  const isSuccess = !isLoading && !isError;
   const { data: periods = [], isError: periodsError } = useQuery({
     queryKey: ["payroll-periods"],
     queryFn: () => payrollPeriodApi.list(),
@@ -117,14 +125,14 @@ export function PayslipsPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-8">
-      <h1 className="text-2xl font-semibold">Phiếu lương của tôi</h1>
+      <h1 className="text-2xl font-semibold">{t("payslips.pageTitle")}</h1>
 
       <div className="space-y-1">
         <label
           htmlFor="payslip-period-filter"
           className="text-xs uppercase tracking-wide text-muted-foreground"
         >
-          Trạng thái kỳ
+          {t("payslips.filterPeriodStatus")}
         </label>
         <Select
           id="payslip-period-filter"
@@ -132,7 +140,7 @@ export function PayslipsPage() {
           onChange={(e) => handlePeriodFilterChange(e.target.value as PayrollPeriodStatus | "")}
           className="w-44"
         >
-          <option value="">Tất cả</option>
+          <option value="">{t("payslips.all")}</option>
           {(Object.keys(PERIOD_STATUS_LABELS) as PayrollPeriodStatus[]).map((s) => (
             <option key={s} value={s}>
               {PERIOD_STATUS_LABELS[s]}
@@ -141,15 +149,15 @@ export function PayslipsPage() {
         </Select>
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải phiếu lương…</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("payslips.loading")}</p>}
       {isError && isForbidden && (
         <p role="alert" className="text-sm text-amber-600">
-          Bạn không có quyền xem phiếu lương ở đây. Vui lòng liên hệ HR.
+          {t("payslips.forbidden")}
         </p>
       )}
       {isError && !isForbidden && (
         <p role="alert" className="text-sm text-destructive">
-          Không tải được danh sách phiếu lương.
+          {t("payslips.loadFailed")}
         </p>
       )}
 
@@ -157,8 +165,7 @@ export function PayslipsPage() {
           filter above rely on it and would otherwise mislead (raw ids + an all-hiding filter). */}
       {!isLoading && !isError && periodsError && (
         <p role="status" className="text-xs text-amber-600">
-          Không tải được thông tin kỳ lương — nhãn "Kỳ lương" và bộ lọc trạng thái có thể không
-          chính xác.
+          {t("payslips.periodsLoadFailed")}
         </p>
       )}
 
@@ -183,7 +190,7 @@ export function PayslipsPage() {
                   buttons below would imply "not acted yet" when the truth is simply unknown. */}
               {ackError && (
                 <p role="alert" className="text-sm text-amber-600">
-                  Không tải được trạng thái xác nhận — trạng thái hiển thị có thể không chính xác.
+                  {t("payslips.ackLoadFailed")}
                 </p>
               )}
               {/* Self-service view ("Phiếu lương của tôi"): isHr=false on purpose. HR resolves disputes

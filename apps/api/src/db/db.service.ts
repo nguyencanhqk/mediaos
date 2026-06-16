@@ -90,4 +90,24 @@ export class DatabaseService {
       return fn(tx);
     });
   }
+
+  /**
+   * G16-3 (ADR-0017): ngữ cảnh PLATFORM-admin — set GUC `app.platform_admin='on'` (LOCAL) để vượt RLS
+   * `companies` CHÉO tenant. CHỈ dùng cho ĐÚNG 1 thao tác KHÔNG có tenant context: LIST mọi công ty.
+   * (CREATE công ty mới KHÔNG dùng helper này — sinh UUID sẵn rồi `withTenant(newId)` insert + provision
+   * ATOMIC.) KHÔNG set company GUC ⇒ MỌI bảng nghiệp vụ khác (RLS keyed company_id) vẫn 0 row trong ngữ
+   * cảnh này (fail-closed) — escape-hatch CHỈ nới policy `companies` (mig 0230). Default-deny: GUC chưa set
+   * ở mọi đường khác ⇒ company-admin thường KHÔNG bao giờ thấy chéo tenant.
+   *
+   * BẢO MẬT: chỉ gọi từ service ĐÃ qua PermissionGuard với quyền `view:platform-company` (is_sensitive).
+   */
+  async withPlatformContext<T>(fn: (tx: TenantTx) => Promise<T>): Promise<T> {
+    if (!db) {
+      throw new DatabaseNotConfiguredError();
+    }
+    return db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('app.platform_admin', 'on', true)`);
+      return fn(tx);
+    });
+  }
 }

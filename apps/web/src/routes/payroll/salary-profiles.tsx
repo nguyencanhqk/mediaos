@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { SalaryProfileStatus } from "@mediaos/contracts";
 import { salaryProfileApi } from "@/lib/salary-profile-api";
 import { PermissionGate } from "@/components/permission-gate";
@@ -16,6 +17,7 @@ import { SALARY_STATUS_LABELS } from "@/components/payroll/salary-constants";
  *    the server's @RequirePermission(manage, isSensitive) is the real authority.
  */
 export function SalaryProfilesPage() {
+  const { t } = useTranslation("payroll");
   const [status, setStatus] = useState<SalaryProfileStatus | "">("");
 
   const {
@@ -30,20 +32,20 @@ export function SalaryProfilesPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Hồ sơ lương</h1>
+        <h1 className="text-2xl font-semibold">{t("salaryProfiles.pageTitle")}</h1>
         <PermissionGate action="manage-salary-profile" resourceType="salary_profile">
           <CreateSalaryProfileDialog />
         </PermissionGate>
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs uppercase tracking-wide text-muted-foreground">Trạng thái</label>
+        <label className="text-xs uppercase tracking-wide text-muted-foreground">{t("salaryProfiles.filterStatus")}</label>
         <Select
           value={status}
           onChange={(e) => setStatus(e.target.value as SalaryProfileStatus | "")}
           className="w-44"
         >
-          <option value="">Tất cả</option>
+          <option value="">{t("salaryProfiles.all")}</option>
           {(Object.keys(SALARY_STATUS_LABELS) as SalaryProfileStatus[]).map((s) => (
             <option key={s} value={s}>
               {SALARY_STATUS_LABELS[s]}
@@ -52,8 +54,8 @@ export function SalaryProfilesPage() {
         </Select>
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải hồ sơ lương…</p>}
-      {isError && <p className="text-sm text-destructive">Không tải được danh sách hồ sơ lương.</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("salaryProfiles.loading")}</p>}
+      {isError && <p className="text-sm text-destructive">{t("salaryProfiles.loadFailed")}</p>}
       {!isLoading && !isError && <SalaryProfileTable rows={rows} />}
     </div>
   );

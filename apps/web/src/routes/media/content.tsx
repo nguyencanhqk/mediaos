@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import type { ContentItemDto } from "@mediaos/contracts";
 import { contentApi, type ContentFilters } from "@/lib/content-api";
 import { projectsApi } from "@/lib/projects-api";
@@ -19,6 +20,7 @@ import {
 } from "@/components/content/constants";
 
 export function ContentPage() {
+  const { t } = useTranslation("channels");
   const qc = useQueryClient();
   const [filters, setFilters] = useState<ContentFilters>({});
   const canDelete = useCan("delete", "content");
@@ -47,7 +49,7 @@ export function ContentPage() {
   });
 
   const onDelete = (item: ContentItemDto) => {
-    if (window.confirm(`Xoá nội dung "${item.title}"?`)) remove.mutate(item.id);
+    if (window.confirm(t("contentPage.deleteConfirm", { title: item.title }))) remove.mutate(item.id);
   };
 
   const patch = (p: Partial<ContentFilters>) => setFilters((f) => ({ ...f, ...p }));
@@ -55,7 +57,7 @@ export function ContentPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Nội dung</h1>
+        <h1 className="text-2xl font-semibold">{t("contentPage.heading")}</h1>
         <PermissionGate action="create" resourceType="content">
           <CreateContentDialog />
         </PermissionGate>
@@ -63,13 +65,13 @@ export function ContentPage() {
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">Production status</span>
+          <span className="text-xs text-muted-foreground">{t("contentPage.filterProductionStatusLabel")}</span>
           <Select
             value={filters.productionStatus ?? ""}
             onChange={(e) => patch({ productionStatus: e.target.value || undefined })}
             className="w-44"
           >
-            <option value="">Tất cả</option>
+            <option value="">{t("contentPage.filterAll")}</option>
             {PRODUCTION_STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
                 {PRODUCTION_STATUS_LABELS[s]}
@@ -78,13 +80,13 @@ export function ContentPage() {
           </Select>
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">Trạng thái</span>
+          <span className="text-xs text-muted-foreground">{t("contentPage.filterStatusLabel")}</span>
           <Select
             value={filters.status ?? ""}
             onChange={(e) => patch({ status: e.target.value || undefined })}
             className="w-40"
           >
-            <option value="">Tất cả</option>
+            <option value="">{t("contentPage.filterAll")}</option>
             {CONTENT_STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
                 {CONTENT_STATUS_LABELS[s]}
@@ -93,22 +95,22 @@ export function ContentPage() {
           </Select>
         </label>
         <label className="flex-1 space-y-1">
-          <span className="text-xs text-muted-foreground">Tìm kiếm</span>
+          <span className="text-xs text-muted-foreground">{t("contentPage.filterSearchLabel")}</span>
           <Input
             value={filters.q ?? ""}
             onChange={(e) => patch({ q: e.target.value || undefined })}
-            placeholder="Tiêu đề…"
+            placeholder={t("contentPage.filterSearchPlaceholder")}
           />
         </label>
         <Button variant="ghost" size="sm" onClick={() => setFilters({})}>
-          Xoá lọc
+          {t("contentPage.clearFilter")}
         </Button>
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải…</p>}
-      {isError && <p className="text-sm text-destructive">Không tải được dữ liệu.</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
+      {isError && <p className="text-sm text-destructive">{t("common:errors.loadFailed")}</p>}
       {!isLoading && !isError && content.length === 0 && (
-        <p className="text-sm text-muted-foreground">Không có nội dung nào khớp bộ lọc.</p>
+        <p className="text-sm text-muted-foreground">{t("contentPage.noMatch")}</p>
       )}
 
       {content.length > 0 && (
@@ -116,11 +118,11 @@ export function ContentPage() {
           <table className="w-full text-sm">
             <thead className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
               <tr>
-                <th className="px-4 py-2 font-medium">Tiêu đề</th>
-                <th className="px-4 py-2 font-medium">Dự án</th>
-                <th className="px-4 py-2 font-medium">Production</th>
-                <th className="px-4 py-2 font-medium">Trạng thái</th>
-                <th className="px-4 py-2 font-medium">Ưu tiên</th>
+                <th className="px-4 py-2 font-medium">{t("contentPage.colTitle")}</th>
+                <th className="px-4 py-2 font-medium">{t("contentPage.colProject")}</th>
+                <th className="px-4 py-2 font-medium">{t("contentPage.colProduction")}</th>
+                <th className="px-4 py-2 font-medium">{t("contentPage.colStatus")}</th>
+                <th className="px-4 py-2 font-medium">{t("contentPage.colPriority")}</th>
                 <th className="px-4 py-2" />
               </tr>
             </thead>
@@ -154,7 +156,7 @@ export function ContentPage() {
                         onClick={() => onDelete(item)}
                         disabled={remove.isPending && remove.variables === item.id}
                       >
-                        Xoá
+                        {t("contentPage.deleteButton")}
                       </Button>
                     )}
                   </td>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 
 const MASK = "••••••••••";
@@ -25,7 +26,9 @@ interface SecretFieldProps {
  * (zustand / query cache / localStorage). Tự clear khi: bấm ẩn · focus rời field · hết autoHideMs ·
  * unmount. Đây là điểm RED test ép (secret-field.spec).
  */
-export function SecretField({ onRequestReveal, label = "mật khẩu", autoHideMs }: SecretFieldProps) {
+export function SecretField({ onRequestReveal, label, autoHideMs }: SecretFieldProps) {
+  const { t } = useTranslation("settings");
+  const resolvedLabel = label ?? t("platformAccounts.secretField.defaultLabel");
   const [secret, setSecret] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +60,7 @@ export function SecretField({ onRequestReveal, label = "mật khẩu", autoHideM
       if (plaintext !== null) setSecret(plaintext);
     } catch (err) {
       if (!mountedRef.current) return;
-      setError(err instanceof Error ? err.message : "Hiện secret thất bại.");
+      setError(err instanceof Error ? err.message : t("platformAccounts.secretField.revealError"));
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -99,10 +102,10 @@ export function SecretField({ onRequestReveal, label = "mật khẩu", autoHideM
             size="sm"
             onClick={handleReveal}
             disabled={loading}
-            aria-label={`Hiện ${label}`}
+            aria-label={t("platformAccounts.secretField.revealAriaLabel", { label: resolvedLabel })}
           >
             <Eye className="size-4" />
-            {loading ? "Đang xác minh…" : "Hiện"}
+            {loading ? t("platformAccounts.secretField.verifying") : t("platformAccounts.secretField.revealButton")}
           </Button>
         ) : (
           <Button
@@ -110,10 +113,10 @@ export function SecretField({ onRequestReveal, label = "mật khẩu", autoHideM
             variant="ghost"
             size="sm"
             onClick={hide}
-            aria-label={`Ẩn ${label}`}
+            aria-label={t("platformAccounts.secretField.hideAriaLabel", { label: resolvedLabel })}
           >
             <EyeOff className="size-4" />
-            Ẩn
+            {t("platformAccounts.secretField.hideButton")}
           </Button>
         )}
       </div>

@@ -137,6 +137,16 @@ export const voidFinanceRecordSchema = z.object({
 });
 export type VoidFinanceRecordRequest = z.infer<typeof voidFinanceRecordSchema>;
 
+/**
+ * Pagination chung cho list sổ cái finance: limit [1..100] default 50 · offset ≥0 default 0.
+ * MIRROR attendance paginationSchema (G11 F6) — Zod REJECT out-of-range (KHÔNG silent-clamp) → 400.
+ * Chống BẤT BIẾN unbounded-query: list LUÔN có LIMIT.
+ */
+const financePaginationFields = {
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+};
+
 export const listRevenueQuerySchema = z.object({
   platformId: z.string().uuid().optional(),
   channelId: z.string().uuid().optional(),
@@ -147,6 +157,7 @@ export const listRevenueQuerySchema = z.object({
   to: z.string().date().optional(),
   /** true = trả cả bản ghi đã thay thế/void (xem lịch sử chain). Mặc định chỉ bản hiệu lực. */
   includeSuperseded: z.coerce.boolean().optional(),
+  ...financePaginationFields,
 });
 export type ListRevenueQuery = z.infer<typeof listRevenueQuerySchema>;
 
@@ -213,6 +224,7 @@ export const listCostQuerySchema = z.object({
   from: z.string().date().optional(),
   to: z.string().date().optional(),
   includeSuperseded: z.coerce.boolean().optional(),
+  ...financePaginationFields,
 });
 export type ListCostQuery = z.infer<typeof listCostQuerySchema>;
 
@@ -252,23 +264,22 @@ export const allocateCostSchema = z
     periodStart: z.string().date().optional(),
     periodEnd: z.string().date().optional(),
   })
-  .refine(
-    (d) => d.method !== "manual_percent" || d.targets.every((t) => t.percent != null),
-    { message: "manual_percent: mỗi target phải có percent", path: ["targets"] },
-  )
+  .refine((d) => d.method !== "manual_percent" || d.targets.every((t) => t.percent != null), {
+    message: "manual_percent: mỗi target phải có percent",
+    path: ["targets"],
+  })
   .refine(
     (d) =>
       d.method !== "manual_percent" ||
       Math.abs(d.targets.reduce((s, t) => s + (t.percent ?? 0), 0) - 100) < 0.0001,
     { message: "manual_percent: tổng percent phải bằng 100", path: ["targets"] },
   )
+  .refine((d) => d.method !== "by_work_hours" || d.targets.every((t) => t.hours != null), {
+    message: "by_work_hours: mỗi target phải có hours",
+    path: ["targets"],
+  })
   .refine(
-    (d) => d.method !== "by_work_hours" || d.targets.every((t) => t.hours != null),
-    { message: "by_work_hours: mỗi target phải có hours", path: ["targets"] },
-  )
-  .refine(
-    (d) =>
-      new Set(d.targets.map((t) => `${t.targetType}:${t.targetId}`)).size === d.targets.length,
+    (d) => new Set(d.targets.map((t) => `${t.targetType}:${t.targetId}`)).size === d.targets.length,
     { message: "targets trùng nhau", path: ["targets"] },
   );
 export type AllocateCostRequest = z.infer<typeof allocateCostSchema>;
@@ -280,6 +291,15 @@ export const allocationResultSchema = z.object({
   warnings: z.array(z.string()),
 });
 export type AllocationResultDto = z.infer<typeof allocationResultSchema>;
+
+/** List allocation hiệu lực của 1 cost (hoặc theo target). Pagination như revenue/cost. */
+export const listCostAllocationQuerySchema = z.object({
+  costRecordId: z.string().uuid().optional(),
+  allocationTargetType: allocationTargetTypeEnum.optional(),
+  allocationTargetId: z.string().uuid().optional(),
+  ...financePaginationFields,
+});
+export type ListCostAllocationQuery = z.infer<typeof listCostAllocationQuerySchema>;
 
 // ─── Profit snapshot (G13-3) ─────────────────────────────────────────────────
 

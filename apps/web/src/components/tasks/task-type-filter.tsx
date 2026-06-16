@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { TaskDto } from "@mediaos/contracts";
 import { TASK_TYPE_LABELS } from "./task-status-constants";
 
@@ -25,9 +26,10 @@ interface TaskTypeFilterProps {
 }
 
 export function TaskTypeFilter({ value, onChange }: TaskTypeFilterProps) {
+  const { t } = useTranslation("tasks");
   return (
-    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Lọc theo loại công việc">
-      <FilterChip label="Tất cả" active={value === null} onClick={() => onChange(null)} />
+    <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("typeFilter.ariaLabel")}>
+      <FilterChip label={t("common:all")} active={value === null} onClick={() => onChange(null)} />
       {FILTER_TYPES.map((type) => (
         <FilterChip
           key={type}

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { BonusReferenceType, CreateBonusPenaltyRequest } from "@mediaos/contracts";
 import { bonusPenaltyApi } from "@/lib/bonus-penalty-api";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ type ReferenceChoice = "" | BonusReferenceType;
  * chốt thật: thiếu quyền ⇒ 403 khi submit. KHÔNG log/cache số tiền (chỉ giữ state form tới khi gửi).
  */
 export function CreateBonusPenaltyDialog() {
+  const { t } = useTranslation("payroll");
   const [open, setOpen] = useState(false);
   const [userId, setUserId] = useState("");
   const [kind, setKind] = useState<CreateBonusPenaltyRequest["kind"]>("bonus");
@@ -59,7 +61,7 @@ export function CreateBonusPenaltyDialog() {
       resetForm();
     },
     onError: (err: unknown) => {
-      setError(err instanceof Error ? err.message : "Không tạo được khoản thưởng/phạt");
+      setError(err instanceof Error ? err.message : t("createBonusPenalty.createError"));
     },
   });
 
@@ -75,15 +77,15 @@ export function CreateBonusPenaltyDialog() {
 
     const amountNum = Number(amount);
     if (!Number.isFinite(amountNum) || amountNum <= 0) {
-      setError("Số tiền phải lớn hơn 0");
+      setError(t("createBonusPenalty.validationAmount"));
       return;
     }
     if (!PERIOD_MONTH_RE.test(periodMonth)) {
-      setError("Kỳ phải có dạng YYYY-MM");
+      setError(t("createBonusPenalty.validationPeriod"));
       return;
     }
     if (referenceType !== "" && referenceId.trim() === "") {
-      setError("Vui lòng nhập ID tham chiếu cho loại đã chọn");
+      setError(t("createBonusPenalty.validationReferenceId"));
       return;
     }
 
@@ -112,22 +114,22 @@ export function CreateBonusPenaltyDialog() {
   };
 
   if (!open) {
-    return <Button onClick={() => setOpen(true)}>Thêm thưởng/phạt</Button>;
+    return <Button onClick={() => setOpen(true)}>{t("createBonusPenalty.addButton")}</Button>;
   }
 
   return (
     <form onSubmit={onSubmit} className="space-y-3 rounded-lg border border-border bg-card p-4">
-      <h2 className="text-lg font-medium">Thêm thưởng/phạt</h2>
+      <h2 className="text-lg font-medium">{t("createBonusPenalty.formTitle")}</h2>
 
       <div className="space-y-1">
         <label htmlFor="bp-userId" className="text-xs uppercase tracking-wide text-muted-foreground">
-          Nhân sự (ID)
+          {t("createBonusPenalty.employeeIdLabel")}
         </label>
         <Input
           id="bp-userId"
           value={userId}
           onChange={(e) => setUserId(e.target.value)}
-          placeholder="UUID nhân sự"
+          placeholder={t("createBonusPenalty.employeeIdPlaceholder")}
           required
         />
       </div>
@@ -135,7 +137,7 @@ export function CreateBonusPenaltyDialog() {
       <div className="flex gap-3">
         <div className="flex-1 space-y-1">
           <label htmlFor="bp-kind" className="text-xs uppercase tracking-wide text-muted-foreground">
-            Loại
+            {t("createBonusPenalty.kindLabel")}
           </label>
           <Select
             id="bp-kind"
@@ -154,7 +156,7 @@ export function CreateBonusPenaltyDialog() {
             htmlFor="bp-source"
             className="text-xs uppercase tracking-wide text-muted-foreground"
           >
-            Nguồn
+            {t("createBonusPenalty.sourceLabel")}
           </label>
           <Select
             id="bp-source"
@@ -178,7 +180,7 @@ export function CreateBonusPenaltyDialog() {
             htmlFor="bp-amount"
             className="text-xs uppercase tracking-wide text-muted-foreground"
           >
-            Số tiền
+            {t("createBonusPenalty.amountLabel")}
           </label>
           {/* Validation tiền > 0 do JS guard ở onSubmit (1 nguồn sự thật, kiểm thử được).
               KHÔNG dùng native min/required ở đây để guard luôn chạy & hiện thông báo thân thiện. */}
@@ -195,7 +197,7 @@ export function CreateBonusPenaltyDialog() {
             htmlFor="bp-period"
             className="text-xs uppercase tracking-wide text-muted-foreground"
           >
-            Kỳ (YYYY-MM)
+            {t("createBonusPenalty.periodLabel")}
           </label>
           <Input
             id="bp-period"
@@ -211,14 +213,14 @@ export function CreateBonusPenaltyDialog() {
       <div className="flex gap-3">
         <div className="flex-1 space-y-1">
           <label htmlFor="bp-ref" className="text-xs uppercase tracking-wide text-muted-foreground">
-            Tham chiếu
+            {t("createBonusPenalty.referenceLabel")}
           </label>
           <Select
             id="bp-ref"
             value={referenceType}
             onChange={(e) => onReferenceTypeChange(e.target.value as ReferenceChoice)}
           >
-            <option value="">Không</option>
+            <option value="">{t("createBonusPenalty.referenceNone")}</option>
             {(
               Object.keys(BONUS_REFERENCE_TYPE_LABELS) as Array<
                 keyof typeof BONUS_REFERENCE_TYPE_LABELS
@@ -235,7 +237,7 @@ export function CreateBonusPenaltyDialog() {
             htmlFor="bp-refId"
             className="text-xs uppercase tracking-wide text-muted-foreground"
           >
-            ID tham chiếu
+            {t("createBonusPenalty.referenceIdLabel")}
           </label>
           <Input
             id="bp-refId"
@@ -249,14 +251,14 @@ export function CreateBonusPenaltyDialog() {
 
       <div className="space-y-1">
         <label htmlFor="bp-reason" className="text-xs uppercase tracking-wide text-muted-foreground">
-          Lý do
+          {t("createBonusPenalty.reasonLabel")}
         </label>
         <Input
           id="bp-reason"
           value={reason}
           maxLength={REASON_MAX}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="Tuỳ chọn"
+          placeholder={t("createBonusPenalty.reasonPlaceholder")}
         />
       </div>
 
@@ -264,7 +266,7 @@ export function CreateBonusPenaltyDialog() {
 
       <div className="flex gap-2">
         <Button type="submit" disabled={mutation.isPending}>
-          {mutation.isPending ? "Đang lưu…" : "Lưu"}
+          {mutation.isPending ? t("createBonusPenalty.saving") : t("createBonusPenalty.save")}
         </Button>
         <Button
           type="button"
@@ -274,7 +276,7 @@ export function CreateBonusPenaltyDialog() {
             resetForm();
           }}
         >
-          Huỷ
+          {t("createBonusPenalty.cancel")}
         </Button>
       </div>
     </form>

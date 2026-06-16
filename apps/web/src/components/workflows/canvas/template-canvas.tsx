@@ -13,6 +13,7 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { useTranslation } from "react-i18next";
 import type { DependencyDto, TemplateStepDto } from "@/lib/workflow-builder/contract";
 import { workflowTemplatesApi } from "@/lib/workflow-templates-api";
 import { StepNodeCard } from "./step-node";
@@ -36,6 +37,7 @@ interface TemplateCanvasProps {
 const nodeTypes: NodeTypes = { stepNode: StepNodeCard };
 
 function CanvasInner({ templateId, steps, dependencies, errorNodeKeys, disabled, hintId }: TemplateCanvasProps) {
+  const { t } = useTranslation("workflows");
   const qc = useQueryClient();
   const [nodes, setNodes, onNodesChange] = useNodesState<StepNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -111,8 +113,8 @@ function CanvasInner({ templateId, steps, dependencies, errorNodeKeys, disabled,
       role="group"
       aria-label={
         disabled
-          ? "Sơ đồ quy trình (chỉ xem — quy trình đã xuất bản). Dùng chế độ Danh sách để thao tác bằng bàn phím."
-          : "Sơ đồ quy trình — node là bước, cạnh là phụ thuộc. Dùng chế độ Danh sách để thao tác bằng bàn phím."
+          ? t("canvas.templateAriaLabelReadOnly")
+          : t("canvas.templateAriaLabelEditable")
       }
       aria-describedby={hintId}
     >

@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { TaskDto } from "@mediaos/contracts";
 import { TASK_STATUS_COLORS, TASK_TYPE_LABELS } from "./task-status-constants";
 
@@ -27,13 +29,13 @@ function dayKey(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
-function groupByDueDate(tasks: TaskDto[]): DayBucket[] {
+function groupByDueDate(tasks: TaskDto[], t: TFunction<"tasks">): DayBucket[] {
   const buckets = new Map<string, DayBucket>();
   for (const task of tasks) {
     if (!task.dueDate) {
       const existing = buckets.get(NO_DUE);
       if (existing) existing.tasks.push(task);
-      else buckets.set(NO_DUE, { key: NO_DUE, label: "Chưa có hạn", tasks: [task] });
+      else buckets.set(NO_DUE, { key: NO_DUE, label: t("calendar.noDue"), tasks: [task] });
       continue;
     }
     const d = new Date(task.dueDate);
@@ -61,11 +63,12 @@ function groupByDueDate(tasks: TaskDto[]): DayBucket[] {
 }
 
 export function TaskCalendar({ tasks }: TaskCalendarProps) {
-  const days = useMemo(() => groupByDueDate(tasks), [tasks]);
+  const { t } = useTranslation("tasks");
+  const days = useMemo(() => groupByDueDate(tasks, t), [tasks, t]);
 
   if (tasks.length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-muted-foreground">Không có công việc nào.</p>
+      <p className="py-8 text-center text-sm text-muted-foreground">{t("calendar.empty")}</p>
     );
   }
 

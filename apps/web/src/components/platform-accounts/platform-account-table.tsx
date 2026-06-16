@@ -1,5 +1,6 @@
 import type { SafePlatformAccountDto } from "@mediaos/contracts";
 import { KeyRound } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PermissionGate } from "@/components/permission-gate";
 import { Button } from "@/components/ui/button";
 import { SecretField } from "./secret-field";
@@ -25,16 +26,17 @@ export function PlatformAccountTable({
   onRequestReveal,
   onEditSecret,
 }: PlatformAccountTableProps) {
+  const { t } = useTranslation("settings");
   return (
     <div className="overflow-x-auto rounded-xl border border-border">
       <table className="w-full text-sm">
         <thead className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
           <tr>
-            <th className="px-4 py-2 font-medium">Tài khoản</th>
-            <th className="px-4 py-2 font-medium">Nền tảng</th>
-            <th className="px-4 py-2 font-medium">Định danh</th>
-            <th className="px-4 py-2 font-medium">Bảo mật</th>
-            <th className="px-4 py-2 font-medium">Trạng thái</th>
+            <th className="px-4 py-2 font-medium">{t("platformAccounts.table.colAccount")}</th>
+            <th className="px-4 py-2 font-medium">{t("platformAccounts.table.colPlatform")}</th>
+            <th className="px-4 py-2 font-medium">{t("platformAccounts.table.colIdentifier")}</th>
+            <th className="px-4 py-2 font-medium">{t("platformAccounts.table.colSecurity")}</th>
+            <th className="px-4 py-2 font-medium">{t("common:status")}</th>
             <th className="px-4 py-2 font-medium">Secret</th>
             <th className="px-4 py-2 font-medium" />
           </tr>
@@ -71,7 +73,7 @@ export function PlatformAccountTable({
                     }
                   >
                     <SecretField
-                      label={`secret của ${label}`}
+                      label={t("platformAccounts.table.secretLabel", { label })}
                       onRequestReveal={() => onRequestReveal(account.id, label)}
                     />
                   </PermissionGate>
@@ -82,10 +84,10 @@ export function PlatformAccountTable({
                       variant="ghost"
                       size="sm"
                       onClick={() => onEditSecret(account)}
-                      aria-label={`Đổi secret của ${label}`}
+                      aria-label={t("platformAccounts.table.editSecretAriaLabel", { label })}
                     >
                       <KeyRound className="size-4" />
-                      Đổi secret
+                      {t("platformAccounts.table.editSecretButton")}
                     </Button>
                   </PermissionGate>
                 </td>

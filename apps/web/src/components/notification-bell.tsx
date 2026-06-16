@@ -1,21 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { notificationApi } from "@/lib/notification-api";
 import type { NotificationDto } from "@mediaos/contracts";
 
-const TYPE_LABEL: Record<string, string> = {
-  task_assigned: "Giao việc",
-  task_submitted: "Nộp việc",
-  approval_requested: "Yêu cầu duyệt",
-  approved: "Đã duyệt",
-  revision_requested: "Trả sửa",
-  mentioned: "Nhắc đến",
-  general: "Thông báo",
-};
-
 export function NotificationBell() {
+  const { t } = useTranslation("chat");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
@@ -66,7 +58,7 @@ export function NotificationBell() {
         size="sm"
         className="relative"
         onClick={() => setOpen((v) => !v)}
-        aria-label="Thông báo"
+        aria-label={t("notifications.ariaLabel")}
       >
         <Bell className="size-4" />
         {count > 0 && (
@@ -79,13 +71,13 @@ export function NotificationBell() {
       {open && (
         <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-lg border border-border bg-background shadow-lg">
           <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-            <span className="text-sm font-semibold">Thông báo</span>
+            <span className="text-sm font-semibold">{t("notifications.title")}</span>
             {count > 0 && (
               <button
                 className="text-xs text-primary hover:underline"
                 onClick={() => markAllRead.mutate()}
               >
-                Đọc tất cả
+                {t("notifications.markAllRead")}
               </button>
             )}
           </div>
@@ -93,7 +85,7 @@ export function NotificationBell() {
           <ul className="max-h-80 overflow-y-auto divide-y divide-border">
             {!list || list.length === 0 ? (
               <li className="px-4 py-6 text-center text-sm text-muted-foreground">
-                Không có thông báo
+                {t("notifications.empty")}
               </li>
             ) : (
               list.map((n: NotificationDto) => (
@@ -111,7 +103,7 @@ export function NotificationBell() {
                   />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-muted-foreground">
-                      {TYPE_LABEL[n.type] ?? n.type}
+                      {t(`notifications.types.${n.type}`, { defaultValue: n.type })}
                     </p>
                     <p className="mt-0.5 text-sm leading-snug">{n.body}</p>
                     <p className="mt-1 text-[11px] text-muted-foreground">

@@ -28,9 +28,16 @@ import { KpiModule } from "./kpi/kpi.module";
 import { DefectModule } from "./defect/defect.module";
 import { MeetingModule } from "./meeting/meeting.module";
 import { BreakGlassModule } from "./break-glass/break-glass.module";
+import { SaasModule } from "./saas/saas.module";
+import { TemplatesModule } from "./templates/templates.module";
+import { PlatformModule } from "./platform/platform.module";
 import { JwtAuthGuard } from "./permission/guards/jwt-auth.guard";
 import { CompanyGuard } from "./permission/guards/company.guard";
 import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
+import {
+  FeatureFlagEnforcementGuard,
+  UsageLimitEnforcementGuard,
+} from "./saas/enforcement.guards";
 
 @Module({
   imports: [
@@ -65,15 +72,22 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     DefectModule,
     MeetingModule,
     BreakGlassModule,
+    // G16-3 SaaS prep
+    SaasModule,
+    TemplatesModule,
+    PlatformModule,
   ],
   providers: [
-    // Global guard pipeline: JWT auth → company context extraction → 2FA enforcement (G16-1b).
-    // Order matters: JwtAuthGuard attaches req.user; CompanyGuard asserts companyId; TwoFactorEnforcementGuard
-    // DENIES protected routes when role requires 2FA but user hasn't enrolled (skips @Public/@AllowWithoutTwoFactor).
+    // Global guard pipeline: JWT auth → company context extraction → 2FA enforcement (G16-1b) →
+    // G16-3 SaaS enforcement (feature-flag + usage-limit). Order matters: JwtAuthGuard attaches req.user;
+    // CompanyGuard asserts companyId; TwoFactorEnforcementGuard DENIES when role requires 2FA but not enrolled;
+    // FeatureFlag/UsageLimit guards no-op unless route declares @RequireFeature/@EnforceUsageLimit.
     // PermissionGuard is NOT registered globally here — add @RequirePermission per-route.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: CompanyGuard },
     { provide: APP_GUARD, useClass: TwoFactorEnforcementGuard },
+    { provide: APP_GUARD, useClass: FeatureFlagEnforcementGuard },
+    { provide: APP_GUARD, useClass: UsageLimitEnforcementGuard },
   ],
 })
 export class AppModule {}

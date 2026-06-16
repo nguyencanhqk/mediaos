@@ -1,5 +1,6 @@
 import type { EmployeeListItemDto } from "@mediaos/contracts";
 import type { ProjectFilters } from "@/lib/projects-api";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -23,12 +24,13 @@ const hasAnyFilter = (f: ProjectFilters): boolean =>
   Boolean(f.status || f.projectType || f.priority || f.managerId || f.q);
 
 export function ProjectFilterBar({ filters, onChange, onClear, employees }: ProjectFilterBarProps) {
+  const { t } = useTranslation("projects");
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Input
         value={filters.q ?? ""}
         onChange={(e) => onChange({ q: e.target.value || undefined })}
-        placeholder="Tìm theo tên…"
+        placeholder={t("filterBar.searchPlaceholder")}
         className="max-w-xs"
       />
 
@@ -37,10 +39,10 @@ export function ProjectFilterBar({ filters, onChange, onClear, employees }: Proj
         onChange={(e) => onChange({ projectType: e.target.value || undefined })}
         className="w-auto"
       >
-        <option value="">Mọi loại</option>
-        {PROJECT_TYPE_OPTIONS.map((t) => (
-          <option key={t} value={t}>
-            {PROJECT_TYPE_LABELS[t]}
+        <option value="">{t("filterBar.anyType")}</option>
+        {PROJECT_TYPE_OPTIONS.map((typ) => (
+          <option key={typ} value={typ}>
+            {PROJECT_TYPE_LABELS[typ]}
           </option>
         ))}
       </Select>
@@ -50,7 +52,7 @@ export function ProjectFilterBar({ filters, onChange, onClear, employees }: Proj
         onChange={(e) => onChange({ status: e.target.value || undefined })}
         className="w-auto"
       >
-        <option value="">Mọi trạng thái</option>
+        <option value="">{t("common:anyStatus")}</option>
         {PROJECT_STATUS_OPTIONS.map((s) => (
           <option key={s} value={s}>
             {PROJECT_STATUS_LABELS[s]}
@@ -63,7 +65,7 @@ export function ProjectFilterBar({ filters, onChange, onClear, employees }: Proj
         onChange={(e) => onChange({ priority: e.target.value || undefined })}
         className="w-auto"
       >
-        <option value="">Mọi ưu tiên</option>
+        <option value="">{t("filterBar.anyPriority")}</option>
         {PROJECT_PRIORITY_OPTIONS.map((p) => (
           <option key={p} value={p}>
             {PROJECT_PRIORITY_LABELS[p]}
@@ -76,17 +78,17 @@ export function ProjectFilterBar({ filters, onChange, onClear, employees }: Proj
         onChange={(e) => onChange({ managerId: e.target.value || undefined })}
         className="w-auto"
       >
-        <option value="">Mọi PM</option>
-        {employees.map((e) => (
-          <option key={e.userId} value={e.userId}>
-            {e.userFullName ?? e.userEmail ?? e.userId}
+        <option value="">{t("filterBar.anyPM")}</option>
+        {employees.map((emp) => (
+          <option key={emp.userId} value={emp.userId}>
+            {emp.userFullName ?? emp.userEmail ?? emp.userId}
           </option>
         ))}
       </Select>
 
       {hasAnyFilter(filters) && (
         <Button variant="ghost" size="sm" onClick={onClear}>
-          Xoá lọc
+          {t("filterBar.clearFilters")}
         </Button>
       )}
     </div>

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import type {
   ChannelDto,
   ChannelHealthStatus,
@@ -32,6 +33,7 @@ import {
 type Tab = "overview" | "members" | "health";
 
 export function ChannelDetailPage() {
+  const { t } = useTranslation("channels");
   const { channelId } = useParams({ from: "/channels/$channelId" });
   const [tab, setTab] = useState<Tab>("overview");
 
@@ -47,11 +49,11 @@ export function ChannelDetailPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-8">
       <Link to="/channels" className="text-sm text-muted-foreground hover:underline">
-        ← Danh sách kênh
+        {t("channelDetail.backLink")}
       </Link>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải…</p>}
-      {isError && <p className="text-sm text-destructive">Không tải được kênh.</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
+      {isError && <p className="text-sm text-destructive">{t("channelDetail.loadError")}</p>}
 
       {channel && (
         <>
@@ -66,13 +68,13 @@ export function ChannelDetailPage() {
 
           <div className="flex gap-1 border-b border-border">
             <TabButton active={tab === "overview"} onClick={() => setTab("overview")}>
-              Tổng quan
+              {t("channelDetail.tabOverview")}
             </TabButton>
             <TabButton active={tab === "members"} onClick={() => setTab("members")}>
-              Thành viên
+              {t("channelDetail.tabMembers")}
             </TabButton>
             <TabButton active={tab === "health"} onClick={() => setTab("health")}>
-              Sức khỏe
+              {t("channelDetail.tabHealth")}
             </TabButton>
           </div>
 
@@ -110,6 +112,7 @@ function TabButton({ active, onClick, children }: TabButtonProps) {
 // ── Overview ────────────────────────────────────────────────────────────────
 
 function OverviewTab({ channel }: { channel: ChannelDto }) {
+  const { t } = useTranslation("channels");
   const [editing, setEditing] = useState(false);
   const employees = useEmployeeOptions();
   const teams = useTeamOptions();
@@ -128,16 +131,16 @@ function OverviewTab({ channel }: { channel: ChannelDto }) {
       <div className="flex justify-end">
         <PermissionGate action="update" resourceType="channel">
           <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
-            Sửa kênh
+            {t("channelDetail.overview.editButton")}
           </Button>
         </PermissionGate>
       </div>
 
       <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-xl border border-border p-5 text-sm">
-        <Detail label="Mã kênh" value={channel.code ?? "—"} />
-        <Detail label="Nền tảng" value={PLATFORM_LABELS[channel.platform]} />
+        <Detail label={t("channelDetail.overview.detailCode")} value={channel.code ?? "—"} />
+        <Detail label={t("channelDetail.overview.detailPlatform")} value={PLATFORM_LABELS[channel.platform]} />
         <Detail
-          label="URL"
+          label={t("channelDetail.overview.detailUrl")}
           value={
             channel.url ? (
               <a
@@ -153,14 +156,14 @@ function OverviewTab({ channel }: { channel: ChannelDto }) {
             )
           }
         />
-        <Detail label="Niche" value={channel.niche ?? "—"} />
-        <Detail label="Ngôn ngữ" value={channel.language ?? "—"} />
-        <Detail label="Quốc gia mục tiêu" value={channel.targetCountry ?? "—"} />
-        <Detail label="Channel Manager" value={managerName} />
-        <Detail label="Team phụ trách" value={teamName} />
-        <Detail label="Trạng thái" value={CHANNEL_STATUS_LABELS[channel.status]} />
+        <Detail label={t("channelDetail.overview.detailNiche")} value={channel.niche ?? "—"} />
+        <Detail label={t("channelDetail.overview.detailLanguage")} value={channel.language ?? "—"} />
+        <Detail label={t("channelDetail.overview.detailTargetCountry")} value={channel.targetCountry ?? "—"} />
+        <Detail label={t("channelDetail.overview.detailChannelManager")} value={managerName} />
+        <Detail label={t("channelDetail.overview.detailTeam")} value={teamName} />
+        <Detail label={t("channelDetail.overview.detailStatus")} value={CHANNEL_STATUS_LABELS[channel.status]} />
         <Detail
-          label="Health"
+          label={t("channelDetail.overview.detailHealth")}
           value={
             channel.healthStatus ? (
               <span className={HEALTH_COLORS[channel.healthStatus]}>
@@ -196,6 +199,7 @@ function Detail({ label, value }: DetailProps) {
 // ── Members ─────────────────────────────────────────────────────────────────
 
 function MembersTab({ channelId }: { channelId: string }) {
+  const { t } = useTranslation("channels");
   const qc = useQueryClient();
   const [adding, setAdding] = useState(false);
   const canManage = useCan("update", "channel");
@@ -230,18 +234,18 @@ function MembersTab({ channelId }: { channelId: string }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium">Thành viên kênh ({members.length})</h2>
+        <h2 className="text-sm font-medium">{t("channelDetail.members.heading", { count: members.length })}</h2>
         <PermissionGate action="update" resourceType="channel">
           <Button size="sm" onClick={() => setAdding(true)}>
-            + Thêm thành viên
+            {t("channelDetail.members.addButton")}
           </Button>
         </PermissionGate>
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải…</p>}
-      {isError && <p className="text-sm text-destructive">Không tải được thành viên.</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
+      {isError && <p className="text-sm text-destructive">{t("channelDetail.members.loadError")}</p>}
       {!isLoading && !isError && members.length === 0 && (
-        <p className="text-sm text-muted-foreground">Chưa có thành viên nào.</p>
+        <p className="text-sm text-muted-foreground">{t("channelDetail.members.empty")}</p>
       )}
 
       {members.length > 0 && (
@@ -267,7 +271,7 @@ function MembersTab({ channelId }: { channelId: string }) {
                     disabled={updateRole.isPending}
                   >
                     <option value="" disabled>
-                      — Vai trò —
+                      {t("channelDetail.members.rolePlaceholder")}
                     </option>
                     {CHANNEL_ROLE_OPTIONS.map((r) => (
                       <option key={r} value={r}>
@@ -288,7 +292,7 @@ function MembersTab({ channelId }: { channelId: string }) {
                     onClick={() => remove.mutate(m.id)}
                     disabled={remove.isPending && remove.variables === m.id}
                   >
-                    Xoá
+                    {t("channelDetail.members.deleteButton")}
                   </Button>
                 </PermissionGate>
               </div>
@@ -334,6 +338,7 @@ function toHealthRequest(f: HealthFormState): UpdateChannelHealthRequest {
 }
 
 function HealthTab({ channel }: { channel: ChannelDto }) {
+  const { t } = useTranslation("channels");
   const qc = useQueryClient();
   const canManage = useCan("update", "channel");
   const [form, setForm] = useState<HealthFormState>(() => fromChannelHealth(channel));
@@ -354,7 +359,7 @@ function HealthTab({ channel }: { channel: ChannelDto }) {
   return (
     <div className="max-w-xl space-y-4">
       <div className="rounded-xl border border-border p-5">
-        <p className="text-xs text-muted-foreground">Sức khỏe hiện tại</p>
+        <p className="text-xs text-muted-foreground">{t("channelDetail.health.currentLabel")}</p>
         <p className="mt-1 text-sm">
           {channel.healthStatus ? (
             <span className={HEALTH_COLORS[channel.healthStatus]}>
@@ -362,7 +367,7 @@ function HealthTab({ channel }: { channel: ChannelDto }) {
               {channel.healthScore != null ? ` · ${channel.healthScore}` : ""}
             </span>
           ) : (
-            "Chưa đánh giá"
+            t("channelDetail.health.notRated")
           )}
         </p>
         {channel.healthNote && (
@@ -371,13 +376,13 @@ function HealthTab({ channel }: { channel: ChannelDto }) {
       </div>
 
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-muted-foreground">Trạng thái sức khỏe</span>
+        <span className="text-xs font-medium text-muted-foreground">{t("channelDetail.health.statusLabel")}</span>
         <Select
           value={form.healthStatus}
           disabled={!canManage}
           onChange={(e) => setForm((f) => ({ ...f, healthStatus: e.target.value }))}
         >
-          <option value="">— Chưa đánh giá —</option>
+          <option value="">{t("channelDetail.health.statusPlaceholder")}</option>
           {HEALTH_OPTIONS.map((h) => (
             <option key={h} value={h}>
               {HEALTH_LABELS[h]}
@@ -387,7 +392,7 @@ function HealthTab({ channel }: { channel: ChannelDto }) {
       </label>
 
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-muted-foreground">Điểm sức khỏe (0–100)</span>
+        <span className="text-xs font-medium text-muted-foreground">{t("channelDetail.health.scoreLabel")}</span>
         <Input
           type="number"
           min={0}
@@ -396,40 +401,40 @@ function HealthTab({ channel }: { channel: ChannelDto }) {
           value={form.healthScore}
           disabled={!canManage}
           onChange={(e) => setForm((f) => ({ ...f, healthScore: e.target.value }))}
-          placeholder="VD: 72.5"
+          placeholder={t("channelDetail.health.scorePlaceholder")}
         />
         {scoreInvalid && (
-          <span className="text-xs text-destructive">Điểm phải trong khoảng 0–100.</span>
+          <span className="text-xs text-destructive">{t("channelDetail.health.scoreInvalid")}</span>
         )}
       </label>
 
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-muted-foreground">Ghi chú rủi ro</span>
+        <span className="text-xs font-medium text-muted-foreground">{t("channelDetail.health.noteLabel")}</span>
         <textarea
           value={form.healthNote}
           disabled={!canManage}
           onChange={(e) => setForm((f) => ({ ...f, healthNote: e.target.value }))}
           rows={3}
           maxLength={1000}
-          placeholder="Lý do cần chú ý, kế hoạch xử lý…"
+          placeholder={t("channelDetail.health.notePlaceholder")}
           className="flex w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         />
       </label>
 
       {save.isError && (
         <p className="text-sm text-destructive">
-          Lưu thất bại:{" "}
-          {save.error instanceof Error ? save.error.message : "Lỗi không xác định"}
+          {t("channelDetail.health.saveFailed")}{" "}
+          {save.error instanceof Error ? save.error.message : t("channelDetail.health.errorUnknown")}
         </p>
       )}
       {save.isSuccess && !save.isPending && (
-        <p className="text-sm text-green-600">Đã lưu sức khỏe kênh.</p>
+        <p className="text-sm text-green-600">{t("channelDetail.health.saveSuccess")}</p>
       )}
 
       <PermissionGate action="update" resourceType="channel">
         <div className="flex justify-end">
           <Button onClick={() => save.mutate()} disabled={save.isPending || scoreInvalid}>
-            {save.isPending ? "Đang lưu…" : "Lưu sức khỏe"}
+            {save.isPending ? t("channelDetail.health.saving") : t("channelDetail.health.saveButton")}
           </Button>
         </div>
       </PermissionGate>

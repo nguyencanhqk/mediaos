@@ -106,6 +106,28 @@ export class CostAllocationRepository {
   }
 
   /**
+   * BATCH INSERT N dòng allocation trong 1 câu lệnh (gỡ N+1 — B2(b)). CÙNG tx với audit/soft-delete.
+   * Mảng rỗng → trả [] KHÔNG gọi DB (Drizzle .values([]) ném lỗi). Giữ cents-exact (caller đã chia).
+   */
+  async insertManyTx(tx: TenantTx, rows: readonly InsertAllocationData[]) {
+    if (rows.length === 0) return [];
+    return tx
+      .insert(costAllocations)
+      .values(
+        rows.map((data) => ({
+          costRecordId: data.costRecordId,
+          allocationRunId: data.allocationRunId,
+          allocationTargetType: data.allocationTargetType,
+          allocationTargetId: data.allocationTargetId,
+          allocationMethod: data.allocationMethod,
+          allocatedAmount: data.allocatedAmount,
+          allocationPercent: data.allocationPercent ?? null,
+        })),
+      )
+      .returning();
+  }
+
+  /**
    * Cross-tenant target guard (batch): target tồn tại trong tenant hiện tại (RLS lọc). Polymorphic —
    * không FK, nên kiểm tay qua bảng tương ứng. Soft-deleted (deleted_at) coi như KHÔNG tồn tại (các
    * bảng target này đều có cột deleted_at). Chạy CÙNG tx (RLS đã set company_id).

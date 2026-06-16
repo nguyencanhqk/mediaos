@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { leaveApi } from "@/lib/leave-api";
 import { currentYear } from "./constants";
 
@@ -6,6 +7,7 @@ import { currentYear } from "./constants";
  * Panel số phép còn lại của user hiện tại trong năm nay.
  */
 export function LeaveBalancePanel() {
+  const { t } = useTranslation("hr");
   const year = currentYear();
 
   const { data: balances = [], isLoading, isError } = useQuery({
@@ -16,7 +18,7 @@ export function LeaveBalancePanel() {
   if (isLoading) {
     return (
       <div className="rounded-lg border border-border bg-card p-4">
-        <p className="text-sm text-muted-foreground">Đang tải số phép…</p>
+        <p className="text-sm text-muted-foreground">{t("leaveBalance.loading")}</p>
       </div>
     );
   }
@@ -24,7 +26,7 @@ export function LeaveBalancePanel() {
   if (isError) {
     return (
       <div className="rounded-lg border border-border bg-card p-4">
-        <p className="text-sm text-destructive">Không tải được số phép.</p>
+        <p className="text-sm text-destructive">{t("leaveBalance.loadError")}</p>
       </div>
     );
   }
@@ -32,14 +34,14 @@ export function LeaveBalancePanel() {
   if (balances.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-card p-4">
-        <p className="text-sm text-muted-foreground">Chưa có thông tin số phép năm {year}.</p>
+        <p className="text-sm text-muted-foreground">{t("leaveBalance.empty", { year })}</p>
       </div>
     );
   }
 
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-      <h3 className="text-sm font-semibold">Số phép năm {year}</h3>
+      <h3 className="text-sm font-semibold">{t("leaveBalance.heading", { year })}</h3>
       <div className="space-y-2">
         {balances.map((b) => {
           const pct =
@@ -49,7 +51,7 @@ export function LeaveBalancePanel() {
               <div className="flex items-center justify-between text-sm">
                 <span className="font-medium">{b.leaveTypeName ?? "—"}</span>
                 <span className="tabular-nums text-muted-foreground">
-                  {b.remainingDays} / {b.totalDays} ngày còn lại
+                  {t("leaveBalance.remaining", { remaining: b.remainingDays, total: b.totalDays })}
                 </span>
               </div>
               <div className="h-1.5 rounded-full bg-muted overflow-hidden">

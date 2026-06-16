@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   createTemplateSchema,
   type CreateTemplateRequest,
@@ -39,6 +41,7 @@ function deriveCode(name: string): string {
 /** Parse form → request qua contract Zod (nguồn DTO). Trả lỗi field đầu tiên nếu có. */
 function parseForm(
   f: TemplateFormState,
+  t: TFunction<"workflows">,
 ): { ok: true; data: CreateTemplateRequest } | { ok: false; error: string } {
   const code = f.code.trim() || deriveCode(f.name);
   const result = createTemplateSchema.safeParse({
@@ -47,10 +50,11 @@ function parseForm(
     appliesTo: f.appliesTo,
   });
   if (result.success) return { ok: true, data: result.data };
-  return { ok: false, error: result.error.issues[0]?.message ?? "Dữ liệu không hợp lệ." };
+  return { ok: false, error: result.error.issues[0]?.message ?? t("templates.createDialog.validationError") };
 }
 
 export function CreateTemplateDialog() {
+  const { t } = useTranslation("workflows");
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -68,7 +72,7 @@ export function CreateTemplateDialog() {
   });
 
   const onSubmit = () => {
-    const parsed = parseForm(form);
+    const parsed = parseForm(form, t);
     if (!parsed.ok) {
       setValidationError(parsed.error);
       return;
@@ -82,43 +86,43 @@ export function CreateTemplateDialog() {
   return (
     <>
       <Button size="sm" onClick={() => setOpen(true)}>
-        + Tạo quy trình
+        {t("templates.createBtn")}
       </Button>
       <Dialog
         open={open}
         onClose={() => setOpen(false)}
-        title="Tạo quy trình mới"
-        description="Quy trình mới luôn ở trạng thái Nháp. Thêm bước và phụ thuộc trước khi xuất bản."
+        title={t("templates.createDialog.title")}
+        description={t("templates.createDialog.description")}
         footer={
           <>
             <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
-              Huỷ
+              {t("templates.createDialog.cancel")}
             </Button>
             <Button size="sm" onClick={onSubmit} disabled={!form.name.trim() || create.isPending}>
-              {create.isPending ? "Đang tạo…" : "Tạo & mở"}
+              {create.isPending ? t("templates.createDialog.submitting") : t("templates.createDialog.submit")}
             </Button>
           </>
         }
       >
         <div className="space-y-3">
           <label className="block space-y-1">
-            <span className="text-sm font-medium">Tên quy trình *</span>
+            <span className="text-sm font-medium">{t("templates.createDialog.fieldName")}</span>
             <Input
               value={form.name}
               onChange={(e) => patch({ name: e.target.value })}
-              placeholder="VD: Sản xuất video chuẩn"
+              placeholder={t("templates.createDialog.fieldNamePlaceholder")}
             />
           </label>
           <label className="block space-y-1">
-            <span className="text-sm font-medium">Mã (tuỳ chọn)</span>
+            <span className="text-sm font-medium">{t("templates.createDialog.fieldCode")}</span>
             <Input
               value={form.code}
               onChange={(e) => patch({ code: e.target.value })}
-              placeholder="VD: video_standard (bỏ trống = tạo từ tên)"
+              placeholder={t("templates.createDialog.fieldCodePlaceholder")}
             />
           </label>
           <label className="block space-y-1">
-            <span className="text-sm font-medium">Áp dụng cho</span>
+            <span className="text-sm font-medium">{t("templates.createDialog.fieldAppliesTo")}</span>
             <Select value={form.appliesTo} onChange={(e) => patch({ appliesTo: e.target.value })}>
               {TEMPLATE_APPLIES_TO_OPTIONS.map((o) => (
                 <option key={o} value={o}>
@@ -130,7 +134,7 @@ export function CreateTemplateDialog() {
           {validationError && <p className="text-sm text-destructive">{validationError}</p>}
           {create.isError && (
             <p className="text-sm text-destructive">
-              Tạo thất bại: {create.error instanceof Error ? create.error.message : "Lỗi không xác định"}
+              {t("templates.createDialog.createError", { detail: create.error instanceof Error ? create.error.message : t("templates.createDialog.createErrorUnknown") })}
             </p>
           )}
         </div>

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { ChannelPlatform, ChannelStatus, EmployeeListItemDto, TeamDto } from "@mediaos/contracts";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -69,19 +70,20 @@ export function ChannelFormFields({
   teams,
   showStatus = false,
 }: ChannelFormFieldsProps) {
+  const { t } = useTranslation("channels");
   return (
     <div className="grid grid-cols-2 gap-3">
       <div className="col-span-2">
-        <Field label="Tên kênh *">
+        <Field label={t("formFields.channelName")}>
           <Input
             value={value.name}
             onChange={(e) => onChange({ name: e.target.value })}
-            placeholder="Tên kênh…"
+            placeholder={t("formFields.channelNamePlaceholder")}
           />
         </Field>
       </div>
 
-      <Field label="Nền tảng *">
+      <Field label={t("formFields.platform")}>
         <Select
           value={value.platform}
           onChange={(e) => onChange({ platform: e.target.value as ChannelPlatform })}
@@ -94,16 +96,16 @@ export function ChannelFormFields({
         </Select>
       </Field>
 
-      <Field label="Mã kênh">
+      <Field label={t("formFields.channelCode")}>
         <Input
           value={value.code}
           onChange={(e) => onChange({ code: e.target.value })}
-          placeholder="VD: YT-EDU-01"
+          placeholder={t("formFields.channelCodePlaceholder")}
         />
       </Field>
 
       <div className="col-span-2">
-        <Field label="URL">
+        <Field label={t("formFields.url")}>
           <Input
             value={value.url}
             onChange={(e) => onChange({ url: e.target.value })}
@@ -112,36 +114,36 @@ export function ChannelFormFields({
         </Field>
       </div>
 
-      <Field label="Ngôn ngữ">
+      <Field label={t("formFields.language")}>
         <Input
           value={value.language}
           onChange={(e) => onChange({ language: e.target.value })}
-          placeholder="vi / en…"
+          placeholder={t("formFields.languagePlaceholder")}
         />
       </Field>
 
-      <Field label="Quốc gia mục tiêu">
+      <Field label={t("formFields.targetCountry")}>
         <Input
           value={value.targetCountry}
           onChange={(e) => onChange({ targetCountry: e.target.value })}
-          placeholder="VN / US…"
+          placeholder={t("formFields.targetCountryPlaceholder")}
         />
       </Field>
 
-      <Field label="Niche">
+      <Field label={t("formFields.niche")}>
         <Input
           value={value.niche}
           onChange={(e) => onChange({ niche: e.target.value })}
-          placeholder="Giáo dục, Giải trí…"
+          placeholder={t("formFields.nichePlaceholder")}
         />
       </Field>
 
-      <Field label="Channel Manager">
+      <Field label={t("formFields.channelManager")}>
         <Select
           value={value.channelManagerId}
           onChange={(e) => onChange({ channelManagerId: e.target.value })}
         >
-          <option value="">— Chưa gán —</option>
+          <option value="">{t("common:unassigned")}</option>
           {employees.map((e) => (
             <option key={e.userId} value={e.userId}>
               {employeeLabel(e)}
@@ -150,12 +152,12 @@ export function ChannelFormFields({
         </Select>
       </Field>
 
-      <Field label="Team phụ trách">
+      <Field label={t("formFields.team")}>
         <Select
           value={value.primaryTeamId}
           onChange={(e) => onChange({ primaryTeamId: e.target.value })}
         >
-          <option value="">— Chưa gán —</option>
+          <option value="">{t("common:unassigned")}</option>
           {teams.map((t) => (
             <option key={t.id} value={t.id}>
               {t.name}
@@ -165,7 +167,7 @@ export function ChannelFormFields({
       </Field>
 
       {showStatus && (
-        <Field label="Trạng thái">
+        <Field label={t("formFields.status")}>
           <Select
             value={value.status}
             onChange={(e) => onChange({ status: e.target.value as ChannelStatus })}

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { CreateChannelRequest } from "@mediaos/contracts";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -25,6 +26,7 @@ function toCreateRequest(f: ChannelFormState): CreateChannelRequest {
 }
 
 export function CreateChannelDialog() {
+  const { t } = useTranslation("channels");
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<ChannelFormState>(emptyChannelForm);
@@ -43,23 +45,23 @@ export function CreateChannelDialog() {
   return (
     <>
       <Button size="sm" onClick={() => setOpen(true)}>
-        + Thêm kênh
+        {t("createDialog.openButton")}
       </Button>
       <Dialog
         open={open}
         onClose={() => setOpen(false)}
-        title="Thêm kênh mới"
+        title={t("createDialog.title")}
         footer={
           <>
             <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
-              Huỷ
+              {t("createDialog.cancel")}
             </Button>
             <Button
               size="sm"
               onClick={() => create.mutate()}
               disabled={!form.name.trim() || create.isPending}
             >
-              {create.isPending ? "Đang tạo…" : "Tạo kênh"}
+              {create.isPending ? t("createDialog.creating") : t("createDialog.createButton")}
             </Button>
           </>
         }
@@ -67,8 +69,8 @@ export function CreateChannelDialog() {
         <ChannelFormFields value={form} onChange={(patch) => setForm((f) => ({ ...f, ...patch }))} employees={employees} teams={teams} />
         {create.isError && (
           <p className="text-sm text-destructive">
-            Tạo kênh thất bại:{" "}
-            {create.error instanceof Error ? create.error.message : "Lỗi không xác định"}
+            {t("createDialog.createFailed")}{" "}
+            {create.error instanceof Error ? create.error.message : t("createDialog.errorUnknown")}
           </p>
         )}
       </Dialog>

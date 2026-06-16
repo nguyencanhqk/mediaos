@@ -1,16 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { StepChecklistItemStateDto } from "@mediaos/contracts";
 import { remainingRequired, workflowChecklistApi } from "@/lib/workflow-checklist-api";
-
-// ─── Labels (gom 1 chỗ — không rải text trạng thái) ────────────────────────────
-const CHECKLIST_LABELS = {
-  heading: "Checklist",
-  loading: "Đang tải checklist…",
-  error: "Không tải được checklist.",
-  required: "Bắt buộc",
-  allDone: "Đã hoàn thành mọi mục bắt buộc",
-  remaining: (n: number) => `Còn ${n} mục bắt buộc chưa hoàn thành`,
-} as const;
 
 /** Query key dùng chung để form submit và component checklist share cache (react-query dedupe). */
 export function stepChecklistQueryKey(stepId: string): readonly [string, string, string, string] {
@@ -29,6 +21,7 @@ interface StepChecklistProps {
  * <label> liên kết + aria-required; tiến độ required đọc được qua vùng aria-live.
  */
 export function StepChecklist({ stepId, editable }: StepChecklistProps) {
+  const { t } = useTranslation("tasks");
   const qc = useQueryClient();
   const { data, isLoading, isError } = useQuery({
     queryKey: stepChecklistQueryKey(stepId),
@@ -44,10 +37,10 @@ export function StepChecklist({ stepId, editable }: StepChecklistProps) {
   });
 
   if (isLoading) {
-    return <p className="text-xs text-muted-foreground">{CHECKLIST_LABELS.loading}</p>;
+    return <p className="text-xs text-muted-foreground">{t("checklist.loading")}</p>;
   }
   if (isError) {
-    return <p className="text-xs text-destructive">{CHECKLIST_LABELS.error}</p>;
+    return <p className="text-xs text-destructive">{t("checklist.error")}</p>;
   }
 
   const items = data?.items ?? [];
@@ -58,16 +51,16 @@ export function StepChecklist({ stepId, editable }: StepChecklistProps) {
   return (
     <section
       className="space-y-2 rounded-lg border border-border p-4"
-      aria-label={CHECKLIST_LABELS.heading}
+      aria-label={t("checklist.heading")}
     >
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">{CHECKLIST_LABELS.heading}</h3>
+        <h3 className="text-sm font-semibold">{t("checklist.heading")}</h3>
         <span
           role="status"
           aria-live="polite"
           className={`text-xs ${remaining === 0 ? "text-green-700" : "text-muted-foreground"}`}
         >
-          {remaining === 0 ? CHECKLIST_LABELS.allDone : CHECKLIST_LABELS.remaining(remaining)}
+          {remaining === 0 ? t("checklist.allDone") : t("checklist.remaining", { n: remaining })}
         </span>
       </div>
       <ul className="space-y-1.5">
@@ -78,12 +71,13 @@ export function StepChecklist({ stepId, editable }: StepChecklistProps) {
             editable={editable}
             pending={toggle.isPending}
             onToggle={(checked) => toggle.mutate({ itemId: item.id, checked })}
+            t={t}
           />
         ))}
       </ul>
       {toggle.isError && (
         <p className="text-xs text-destructive">
-          {toggle.error instanceof Error ? toggle.error.message : CHECKLIST_LABELS.error}
+          {toggle.error instanceof Error ? toggle.error.message : t("checklist.error")}
         </p>
       )}
     </section>
@@ -95,9 +89,10 @@ interface ChecklistRowProps {
   editable: boolean;
   pending: boolean;
   onToggle: (checked: boolean) => void;
+  t: TFunction<"tasks">;
 }
 
-function ChecklistRow({ item, editable, pending, onToggle }: ChecklistRowProps) {
+function ChecklistRow({ item, editable, pending, onToggle, t }: ChecklistRowProps) {
   const inputId = `checklist-item-${item.id}`;
   return (
     <li className="flex items-start gap-2">
@@ -114,7 +109,7 @@ function ChecklistRow({ item, editable, pending, onToggle }: ChecklistRowProps) 
         {item.label}
         {item.isRequired && (
           <span className="ml-1.5 rounded bg-red-100 px-1 py-0.5 text-[10px] font-medium text-red-700">
-            {CHECKLIST_LABELS.required}
+            {t("checklist.required")}
           </span>
         )}
       </label>

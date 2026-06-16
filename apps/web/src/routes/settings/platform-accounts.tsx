@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { SafePlatformAccountDto } from "@mediaos/contracts";
 import { channelsApi } from "@/lib/channels-api";
 import { platformAccountsApi, type PlatformAccountFilters } from "@/lib/platform-accounts-api";
@@ -17,6 +18,7 @@ import {
 } from "@/components/platform-accounts/constants";
 
 export function PlatformAccountsPage() {
+  const { t } = useTranslation("settings");
   const [filters, setFilters] = useState<PlatformAccountFilters>({});
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<SafePlatformAccountDto | null>(null);
@@ -43,14 +45,14 @@ export function PlatformAccountsPage() {
     <div className="mx-auto max-w-6xl space-y-6 p-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Tài khoản nền tảng</h1>
+          <h1 className="text-2xl font-semibold">{t("platformAccounts.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground">
-            Mật khẩu/token kênh được mã hoá đầu-cuối. Xem secret cần xác minh lại danh tính.
+            {t("platformAccounts.pageDesc")}
           </p>
         </div>
         <PermissionGate action="create" resourceType="platform-account">
           <Button size="sm" onClick={() => setCreating(true)}>
-            + Thêm tài khoản
+            {t("platformAccounts.addButton")}
           </Button>
         </PermissionGate>
       </div>
@@ -58,7 +60,7 @@ export function PlatformAccountsPage() {
       {/* Filter bar */}
       <div className="flex flex-wrap items-end gap-3">
         <label className="space-y-1">
-          <span className="block text-xs text-muted-foreground">Nền tảng</span>
+          <span className="block text-xs text-muted-foreground">{t("platformAccounts.filterPlatformLabel")}</span>
           <Select
             className="w-44"
             value={filters.platformId ?? ""}
@@ -66,7 +68,7 @@ export function PlatformAccountsPage() {
               setFilters((f) => ({ ...f, platformId: e.target.value || undefined }))
             }
           >
-            <option value="">Tất cả</option>
+            <option value="">{t("common:all")}</option>
             {(platformsQuery.data ?? []).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -76,13 +78,13 @@ export function PlatformAccountsPage() {
         </label>
 
         <label className="space-y-1">
-          <span className="block text-xs text-muted-foreground">Trạng thái</span>
+          <span className="block text-xs text-muted-foreground">{t("common:status")}</span>
           <Select
             className="w-40"
             value={filters.status ?? ""}
             onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value || undefined }))}
           >
-            <option value="">Tất cả</option>
+            <option value="">{t("common:all")}</option>
             {PLATFORM_ACCOUNT_STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
                 {PLATFORM_ACCOUNT_STATUS_LABELS[s]}
@@ -92,26 +94,26 @@ export function PlatformAccountsPage() {
         </label>
 
         <label className="flex-1 space-y-1">
-          <span className="block text-xs text-muted-foreground">Tìm kiếm</span>
+          <span className="block text-xs text-muted-foreground">{t("common:search")}</span>
           <Input
             value={filters.q ?? ""}
             onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value || undefined }))}
-            placeholder="Tên tài khoản, định danh…"
+            placeholder={t("platformAccounts.searchPlaceholder")}
             maxLength={200}
           />
         </label>
       </div>
 
       {/* States */}
-      {accountsQuery.isLoading && <p className="text-sm text-muted-foreground">Đang tải…</p>}
+      {accountsQuery.isLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
       {accountsQuery.isError && (
         <p className="text-sm text-destructive">
-          Không tải được danh sách tài khoản.{" "}
+          {t("platformAccounts.loadError")}{" "}
           {accountsQuery.error instanceof Error ? accountsQuery.error.message : ""}
         </p>
       )}
       {!accountsQuery.isLoading && !accountsQuery.isError && accounts.length === 0 && (
-        <p className="text-sm text-muted-foreground">Chưa có tài khoản nền tảng nào.</p>
+        <p className="text-sm text-muted-foreground">{t("platformAccounts.empty")}</p>
       )}
 
       {accounts.length > 0 && (

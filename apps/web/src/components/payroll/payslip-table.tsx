@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { PayrollPeriodStatus } from "@mediaos/contracts";
 import type { PayslipSummary } from "@/lib/payslip-api";
 import { PERIOD_STATUS_LABELS } from "./period-constants";
@@ -27,25 +28,26 @@ export function PayslipTable({
   selectedId,
   onSelect,
 }: PayslipTableProps) {
+  const { t } = useTranslation("payroll");
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">Chưa có phiếu lương.</p>;
+    return <p className="text-sm text-muted-foreground">{t("payslips.empty")}</p>;
   }
 
   return (
-    <table className="w-full text-sm" aria-label="Danh sách phiếu lương">
+    <table className="w-full text-sm" aria-label={t("payslips.table.ariaLabel")}>
       <thead>
         <tr className="border-b border-border text-left text-muted-foreground">
           <th scope="col" className="py-2 font-medium">
-            Kỳ lương
+            {t("payslips.table.period")}
           </th>
           <th scope="col" className="py-2 font-medium">
-            Trạng thái
+            {t("payslips.table.status")}
           </th>
           <th scope="col" className="py-2 font-medium">
-            Ngày tạo
+            {t("payslips.table.createdAt")}
           </th>
           <th scope="col" className="py-2 font-medium">
-            Loại bản ghi
+            {t("payslips.table.entryKind")}
           </th>
         </tr>
       </thead>

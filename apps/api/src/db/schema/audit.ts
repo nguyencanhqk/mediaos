@@ -31,7 +31,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0200). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -120,5 +120,13 @@ export const AUDIT_OBJECT_TYPES = [
   // G6-2 PR-B break-glass (mig 0200) — request/approve/activate/revoke/deny break-glass ghi 'break_glass_access'
   // audit-in-tx app-tenant (BreakGlassGrantService). KHÔNG secret/key material vào before/after (BẤT BIẾN #3).
   "break_glass_access",
+  // B4 task attachments (real file upload — upload ghi 'task_attachment' TaskAttachmentUploaded,
+  // soft-delete ghi TaskAttachmentDeleted; cùng tx withTenant. KHÔNG ghi storage key/secret material).
+  "task_attachment",
+  // G16-3 SaaS scaffold (subscription/feature-flag/usage — set plan/flag/limit ghi audit cùng tx; mig 0231).
+  // Lifecycle công ty ở tầng platform (create/suspend/provision) TÁI DÙNG 'company' (chỉ action mới).
+  "company_subscription",
+  "feature_flag",
+  "usage_limit",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

@@ -6,7 +6,7 @@ import type { TenantTx } from "../db/db.service";
 import { contentItems, projects } from "../db/schema/media";
 import { teamMembers } from "../db/schema/org";
 import { users } from "../db/schema/users";
-import { taskComments, tasks, workflowSteps } from "../db/schema/workflow";
+import { taskAttachments, taskComments, tasks, workflowSteps } from "../db/schema/workflow";
 
 // ─── Pagination (G9-2 DB-8/SF-2) ──────────────────────────────────────────────
 // Thay magic-cap `.limit(500)` cũ (silent-truncation: tenant >500 task mất row mà không báo).
@@ -242,6 +242,31 @@ export class TasksRepository {
     return row !== undefined;
   }
 
+  /**
+   * True nếu user là assignee của task (cùng tenant, chưa xoá). Dùng cho gate upload attachment:
+   * người được giao việc (có thể 0-quyền create:task global) vẫn được đính kèm (nhánh OR owner/assignee).
+   */
+  async isTaskAssigneeTx(
+    tx: TenantTx,
+    companyId: string,
+    taskId: string,
+    userId: string,
+  ): Promise<boolean> {
+    const [row] = await tx
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.companyId, companyId),
+          eq(tasks.id, taskId),
+          eq(tasks.assigneeUserId, userId),
+          isNull(tasks.deletedAt),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
   /** Row thô (cho guard nghiệp vụ — phân biệt task workflow vs office). */
   findRawByIdTx(tx: TenantTx, companyId: string, taskId: string) {
     return tx
@@ -306,12 +331,7 @@ export class TasksRepository {
         })
         .from(taskComments)
         .innerJoin(users, eq(taskComments.userId, users.id))
-        .where(
-          and(
-            eq(taskComments.companyId, companyId),
-            eq(taskComments.taskId, taskId),
-          ),
-        )
+        .where(and(eq(taskComments.companyId, companyId), eq(taskComments.taskId, taskId)))
         .orderBy(taskComments.createdAt),
     );
   }
@@ -330,5 +350,117 @@ export class TasksRepository {
         body: data.body,
       })
       .returning();
+  }
+
+  // ─── Attachments (B4) ────────────────────────────────────────────────────────
+  // company_id ở MỌI query + qua withTenant tx (RLS hàng rào thật, eq(company_id) defense-in-depth).
+  // Append-only: INSERT metadata; xoá = soft-delete (set deleted_at) — KHÔNG hard-delete.
+
+  /** Insert metadata row cho 1 attachment (trong tx withTenant). storage_key do SERVER sinh. */
+  createAttachment(
+    companyId: string,
+    data: {
+      taskId: string;
+      uploadedBy: string;
+      storageKey: string;
+      fileName: string;
+      contentType: string;
+      sizeBytes: number;
+    },
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(taskAttachments)
+      .values({
+        companyId,
+        taskId: data.taskId,
+        uploadedBy: data.uploadedBy,
+        storageKey: data.storageKey,
+        fileName: data.fileName,
+        contentType: data.contentType,
+        sizeBytes: data.sizeBytes,
+      })
+      .returning({
+        id: taskAttachments.id,
+        taskId: taskAttachments.taskId,
+        fileName: taskAttachments.fileName,
+        contentType: taskAttachments.contentType,
+        sizeBytes: taskAttachments.sizeBytes,
+        uploadedBy: taskAttachments.uploadedBy,
+        createdAt: taskAttachments.createdAt,
+      });
+  }
+
+  /**
+   * Soft-delete 1 attachment (set deleted_at). App role có column-grant UPDATE(deleted_at) — CHỈ cột
+   * này, nội dung bất biến. Trả [] nếu 0 row (RLS/cross-tenant/không tồn tại/đã xoá) → caller 404.
+   */
+  softDeleteAttachment(companyId: string, taskId: string, attachmentId: string, tx: TenantTx) {
+    return tx
+      .update(taskAttachments)
+      .set({ deletedAt: new Date() })
+      .where(
+        and(
+          eq(taskAttachments.companyId, companyId),
+          eq(taskAttachments.taskId, taskId),
+          eq(taskAttachments.id, attachmentId),
+          isNull(taskAttachments.deletedAt),
+        ),
+      )
+      .returning({ id: taskAttachments.id });
+  }
+
+  /** Liệt kê attachment chưa xoá của 1 task (RLS scope tenant). KHÔNG trả storage_key ra DTO. */
+  listAttachmentsByTask(companyId: string, taskId: string) {
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .select({
+          id: taskAttachments.id,
+          taskId: taskAttachments.taskId,
+          fileName: taskAttachments.fileName,
+          contentType: taskAttachments.contentType,
+          sizeBytes: taskAttachments.sizeBytes,
+          uploadedBy: taskAttachments.uploadedBy,
+          createdAt: taskAttachments.createdAt,
+        })
+        .from(taskAttachments)
+        .where(
+          and(
+            eq(taskAttachments.companyId, companyId),
+            eq(taskAttachments.taskId, taskId),
+            isNull(taskAttachments.deletedAt),
+          ),
+        )
+        .orderBy(desc(taskAttachments.createdAt)),
+    );
+  }
+
+  /**
+   * Đọc 1 attachment chưa xoá theo id (trong tx) — gồm storage_key cho presigned GET. RLS đã scope
+   * tenant; eq(company_id)+eq(task_id) defense-in-depth (URL chứa taskId, chặn id-của-task-khác).
+   */
+  findAttachmentByIdTx(tx: TenantTx, companyId: string, taskId: string, attachmentId: string) {
+    return tx
+      .select({
+        id: taskAttachments.id,
+        taskId: taskAttachments.taskId,
+        companyId: taskAttachments.companyId,
+        storageKey: taskAttachments.storageKey,
+        fileName: taskAttachments.fileName,
+        contentType: taskAttachments.contentType,
+        sizeBytes: taskAttachments.sizeBytes,
+        uploadedBy: taskAttachments.uploadedBy,
+        createdAt: taskAttachments.createdAt,
+      })
+      .from(taskAttachments)
+      .where(
+        and(
+          eq(taskAttachments.companyId, companyId),
+          eq(taskAttachments.taskId, taskId),
+          eq(taskAttachments.id, attachmentId),
+          isNull(taskAttachments.deletedAt),
+        ),
+      )
+      .limit(1);
   }
 }

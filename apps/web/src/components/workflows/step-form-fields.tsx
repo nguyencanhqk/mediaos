@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { CreateStepRequest, UpdateStepRequest } from "@/lib/workflow-builder/contract";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -68,47 +69,48 @@ interface StepFormFieldsProps {
 }
 
 export function StepFormFields({ value, onChange }: StepFormFieldsProps) {
+  const { t } = useTranslation("workflows");
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Mã bước *</span>
+          <span className="text-sm font-medium">{t("steps.form.fieldCode")}</span>
           <Input
             value={value.code}
             onChange={(e) => onChange({ code: e.target.value })}
-            placeholder="VD: script"
+            placeholder={t("steps.form.fieldCodePlaceholder")}
           />
         </label>
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Loại bước</span>
+          <span className="text-sm font-medium">{t("steps.form.fieldType")}</span>
           <Select
             value={value.stepType}
             onChange={(e) => onChange({ stepType: e.target.value })}
           >
-            {STEP_TYPE_OPTIONS.map((t) => (
-              <option key={t} value={t}>
-                {stepTypeLabel(t)}
+            {STEP_TYPE_OPTIONS.map((opt) => (
+              <option key={opt} value={opt}>
+                {stepTypeLabel(opt)}
               </option>
             ))}
           </Select>
         </label>
       </div>
       <label className="block space-y-1">
-        <span className="text-sm font-medium">Tên bước *</span>
+        <span className="text-sm font-medium">{t("steps.form.fieldName")}</span>
         <Input
           value={value.name}
           onChange={(e) => onChange({ name: e.target.value })}
-          placeholder="VD: Viết kịch bản"
+          placeholder={t("steps.form.fieldNamePlaceholder")}
         />
       </label>
       <div className="grid grid-cols-2 gap-3">
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Vai trò thực hiện</span>
+          <span className="text-sm font-medium">{t("steps.form.fieldAssignee")}</span>
           <Select
             value={value.assigneeRoleCode}
             onChange={(e) => onChange({ assigneeRoleCode: e.target.value })}
           >
-            <option value="">— Chưa gán —</option>
+            <option value="">{t("steps.form.unassigned")}</option>
             {WORKFLOW_ROLE_OPTIONS.map((r) => (
               <option key={r.code} value={r.code}>
                 {r.label}
@@ -117,12 +119,12 @@ export function StepFormFields({ value, onChange }: StepFormFieldsProps) {
           </Select>
         </label>
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Vai trò duyệt</span>
+          <span className="text-sm font-medium">{t("steps.form.fieldReviewer")}</span>
           <Select
             value={value.reviewerRoleCode}
             onChange={(e) => onChange({ reviewerRoleCode: e.target.value })}
           >
-            <option value="">— Chưa gán —</option>
+            <option value="">{t("steps.form.unassigned")}</option>
             {WORKFLOW_ROLE_OPTIONS.map((r) => (
               <option key={r.code} value={r.code}>
                 {r.label}
@@ -138,7 +140,7 @@ export function StepFormFields({ value, onChange }: StepFormFieldsProps) {
           onChange={(e) => onChange({ isRequired: e.target.checked })}
           className="h-4 w-4 rounded border-border"
         />
-        <span>Bắt buộc (workflow chỉ hoàn thành khi bước này được duyệt)</span>
+        <span>{t("steps.form.isRequired")}</span>
       </label>
     </div>
   );

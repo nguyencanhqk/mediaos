@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { BonusKind, BonusPenaltyStatus } from "@mediaos/contracts";
 import { bonusPenaltyApi } from "@/lib/bonus-penalty-api";
 import { ApiError } from "@/lib/api-client";
@@ -21,6 +22,7 @@ import { useAuthStore } from "@/stores/auth";
  * Duyệt/Từ chối chặn self-approve bằng currentUserId từ auth store (mirror BE SoD).
  */
 export function BonusPenaltiesPage() {
+  const { t } = useTranslation("payroll");
   const [status, setStatus] = useState<BonusPenaltyStatus | "">("");
   const [kind, setKind] = useState<BonusKind | "">("");
   const [periodMonth, setPeriodMonth] = useState("");
@@ -47,7 +49,7 @@ export function BonusPenaltiesPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Thưởng / Phạt</h1>
+        <h1 className="text-2xl font-semibold">{t("bonusPenalties.pageTitle")}</h1>
         <PermissionGate action="manage-bonus-penalty" resourceType="bonus_penalty">
           <CreateBonusPenaltyDialog />
         </PermissionGate>
@@ -56,14 +58,14 @@ export function BonusPenaltiesPage() {
       <div className="flex flex-wrap gap-3">
         <div className="space-y-1">
           <label className="text-xs uppercase tracking-wide text-muted-foreground">
-            Trạng thái
+            {t("bonusPenalties.filterStatus")}
           </label>
           <Select
             value={status}
             onChange={(e) => setStatus(e.target.value as BonusPenaltyStatus | "")}
             className="w-44"
           >
-            <option value="">Tất cả</option>
+            <option value="">{t("bonusPenalties.all")}</option>
             {(Object.keys(BONUS_PENALTY_STATUS_LABELS) as BonusPenaltyStatus[]).map((s) => (
               <option key={s} value={s}>
                 {BONUS_PENALTY_STATUS_LABELS[s]}
@@ -72,13 +74,13 @@ export function BonusPenaltiesPage() {
           </Select>
         </div>
         <div className="space-y-1">
-          <label className="text-xs uppercase tracking-wide text-muted-foreground">Loại</label>
+          <label className="text-xs uppercase tracking-wide text-muted-foreground">{t("bonusPenalties.filterKind")}</label>
           <Select
             value={kind}
             onChange={(e) => setKind(e.target.value as BonusKind | "")}
             className="w-44"
           >
-            <option value="">Tất cả</option>
+            <option value="">{t("bonusPenalties.all")}</option>
             {(Object.keys(BONUS_KIND_LABELS) as BonusKind[]).map((k) => (
               <option key={k} value={k}>
                 {BONUS_KIND_LABELS[k]}
@@ -87,7 +89,7 @@ export function BonusPenaltiesPage() {
           </Select>
         </div>
         <div className="space-y-1">
-          <label className="text-xs uppercase tracking-wide text-muted-foreground">Kỳ</label>
+          <label className="text-xs uppercase tracking-wide text-muted-foreground">{t("bonusPenalties.filterPeriod")}</label>
           <Input
             type="month"
             value={periodMonth}
@@ -97,12 +99,12 @@ export function BonusPenaltiesPage() {
         </div>
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải thưởng/phạt…</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("bonusPenalties.loading")}</p>}
       {isForbidden && (
-        <p className="text-sm text-destructive">Bạn không có quyền xem thưởng/phạt.</p>
+        <p className="text-sm text-destructive">{t("bonusPenalties.forbidden")}</p>
       )}
       {error && !isForbidden && (
-        <p className="text-sm text-destructive">Không tải được danh sách thưởng/phạt.</p>
+        <p className="text-sm text-destructive">{t("bonusPenalties.loadFailed")}</p>
       )}
       {!isLoading && !error && (
         <BonusPenaltyTable rows={rows} currentUserId={currentUserId} />

@@ -1,6 +1,8 @@
 import { useNavigate } from "@tanstack/react-router";
+import type { TFunction } from "i18next";
 import { LogIn } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { AuthTokens } from "@mediaos/contracts";
 import { TwoFactorChallengeForm } from "@/components/two-factor/TwoFactorChallengeForm";
 import { Button } from "@/components/ui/button";
@@ -14,16 +16,16 @@ type LoginStep =
   | { kind: "twoFactor"; challengeToken: string };
 
 /** Thông báo lỗi thân thiện — không lộ chi tiết nội bộ. */
-function friendlyError(err: unknown): string {
+function friendlyError(err: unknown, t: TFunction<"auth">): string {
   if (err instanceof ApiError) {
-    if (err.status === 401) return "Email hoặc mật khẩu không đúng.";
-    if (err.status === 403) return "Tài khoản bị khóa hoặc không có quyền truy cập.";
-    if (err.status === 429) return "Quá nhiều lần thử. Vui lòng thử lại sau.";
-    if (err.status >= 500) return "Lỗi máy chủ. Vui lòng thử lại sau.";
+    if (err.status === 401) return t("errors.invalidCredentials");
+    if (err.status === 403) return t("errors.forbidden");
+    if (err.status === 429) return t("errors.tooManyAttempts");
+    if (err.status >= 500) return t("errors.serverError");
     // Trường hợp khác — dùng message từ BE (đã được kiểm soát, không lộ nhạy cảm)
     return err.message;
   }
-  return "Có lỗi xảy ra. Vui lòng thử lại.";
+  return t("common:errors.generic");
 }
 
 /** Sau khi có tokens: gọi /me → populate store → navigate home. */
@@ -50,6 +52,7 @@ async function finalizeLogin(
 
 /** Màn đăng nhập thật (G16-real-login). Hỗ trợ luồng 2FA inline. */
 export function LoginPage() {
+  const { t } = useTranslation("auth");
   const navigate = useNavigate();
   const setTokens = useAuthStore((s) => s.setTokens);
   const setUser = useAuthStore((s) => s.setUser);
@@ -84,7 +87,7 @@ export function LoginPage() {
         await finalizeLogin(result, setTokens, setUser, logout, navigate);
       }
     } catch (err) {
-      setError(friendlyError(err));
+      setError(friendlyError(err, t));
     } finally {
       setBusy(false);
     }
@@ -96,7 +99,7 @@ export function LoginPage() {
     try {
       await finalizeLogin(tokens, setTokens, setUser, logout, navigate);
     } catch (err) {
-      setError(friendlyError(err));
+      setError(friendlyError(err, t));
     } finally {
       setBusy(false);
     }
@@ -111,8 +114,8 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm rounded-xl border border-border p-8 shadow-sm">
         <div className="mb-6 space-y-1 text-center">
-          <h1 className="text-2xl font-semibold">MediaOS</h1>
-          <p className="text-sm text-muted-foreground">Đăng nhập vào hệ thống</p>
+          <h1 className="text-2xl font-semibold">{t("common:appName")}</h1>
+          <p className="text-sm text-muted-foreground">{t("login.subtitle")}</p>
         </div>
 
         {/* Lỗi hiển thị ở container — nhìn thấy ở CẢ bước credentials lẫn 2FA. */}
@@ -132,7 +135,7 @@ export function LoginPage() {
           <form onSubmit={(e) => { void onSubmitCredentials(e); }} className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="company-slug">
-                Mã công ty
+                {t("login.companySlugLabel")}
               </label>
               <Input
                 id="company-slug"
@@ -145,7 +148,7 @@ export function LoginPage() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="email">
-                Email
+                {t("fields.email")}
               </label>
               <Input
                 id="email"
@@ -158,7 +161,7 @@ export function LoginPage() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="password">
-                Mật khẩu
+                {t("fields.password")}
               </label>
               <Input
                 id="password"
@@ -175,7 +178,7 @@ export function LoginPage() {
               disabled={busy || !companySlug.trim() || !email.trim() || !password}
             >
               <LogIn className="size-4" />
-              {busy ? "Đang đăng nhập…" : "Đăng nhập"}
+              {busy ? t("login.submitting") : t("login.submit")}
             </Button>
           </form>
         )}

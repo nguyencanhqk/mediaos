@@ -6,6 +6,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { useTranslation } from "react-i18next";
 import type { AttendanceRecordDto } from "@mediaos/contracts";
 import {
   ATTENDANCE_STATUS_COLORS,
@@ -25,14 +26,16 @@ const col = createColumnHelper<AttendanceRecordDto>();
  * Bảng chấm công tháng — hiển thị ngày, giờ vào/ra, trạng thái, ghi chú.
  */
 export function AttendanceMonthlyTable({ records }: Props) {
+  const { t } = useTranslation("hr");
+
   const columns = useMemo(
     () => [
       col.accessor("workDate", {
-        header: "Ngày",
+        header: t("attendanceMonthlyTable.colDate"),
         cell: (ctx) => formatDate(ctx.getValue()),
       }),
       col.accessor("status", {
-        header: "Trạng thái",
+        header: t("attendanceMonthlyTable.colStatus"),
         cell: (ctx) => {
           const v = ctx.getValue();
           return (
@@ -43,26 +46,26 @@ export function AttendanceMonthlyTable({ records }: Props) {
         },
       }),
       col.accessor("checkInAt", {
-        header: "Check-in",
+        header: t("attendanceMonthlyTable.colCheckIn"),
         cell: (ctx) => (
           <span className="tabular-nums">{formatTime(ctx.getValue())}</span>
         ),
       }),
       col.accessor("checkOutAt", {
-        header: "Check-out",
+        header: t("attendanceMonthlyTable.colCheckOut"),
         cell: (ctx) => (
           <span className="tabular-nums">{formatTime(ctx.getValue())}</span>
         ),
       }),
       col.accessor("checkInMethod", {
-        header: "P.thức",
+        header: t("attendanceMonthlyTable.colMethod"),
         cell: (ctx) => {
           const v = ctx.getValue();
           return v ? ATTENDANCE_METHOD_LABELS[v] : "—";
         },
       }),
       col.accessor("lateMinutes", {
-        header: "Trễ (phút)",
+        header: t("attendanceMonthlyTable.colLate"),
         cell: (ctx) => {
           const v = ctx.getValue();
           return v > 0 ? (
@@ -73,7 +76,7 @@ export function AttendanceMonthlyTable({ records }: Props) {
         },
       }),
       col.accessor("earlyLeaveMinutes", {
-        header: "Về sớm (phút)",
+        header: t("attendanceMonthlyTable.colEarlyLeave"),
         cell: (ctx) => {
           const v = ctx.getValue();
           return v > 0 ? (
@@ -84,13 +87,13 @@ export function AttendanceMonthlyTable({ records }: Props) {
         },
       }),
       col.accessor("note", {
-        header: "Ghi chú",
+        header: t("attendanceMonthlyTable.colNote"),
         cell: (ctx) => (
           <span className="text-muted-foreground text-sm">{ctx.getValue() ?? "—"}</span>
         ),
       }),
     ],
-    [],
+    [t],
   );
 
   const table = useReactTable({
@@ -103,7 +106,7 @@ export function AttendanceMonthlyTable({ records }: Props) {
   if (records.length === 0) {
     return (
       <p className="text-sm text-muted-foreground py-4">
-        Không có bản ghi nào trong tháng này.
+        {t("attendanceMonthlyTable.empty")}
       </p>
     );
   }

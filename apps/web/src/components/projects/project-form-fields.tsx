@@ -4,6 +4,7 @@ import type {
   ProjectStatus,
   ProjectType,
 } from "@mediaos/contracts";
+import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import {
@@ -76,19 +77,20 @@ export function ProjectFormFields({
   employees,
   showStatus = false,
 }: ProjectFormFieldsProps) {
+  const { t } = useTranslation("projects");
   return (
     <div className="grid grid-cols-2 gap-3">
       <div className="col-span-2">
-        <Field label="Tên dự án *">
+        <Field label={t("form.fieldName")}>
           <Input
             value={value.name}
             onChange={(e) => onChange({ name: e.target.value })}
-            placeholder="Tên dự án…"
+            placeholder={t("form.namePlaceholder")}
           />
         </Field>
       </div>
 
-      <Field label="Mã dự án">
+      <Field label={t("form.fieldCode")}>
         <Input
           value={value.code}
           onChange={(e) => onChange({ code: e.target.value })}
@@ -96,59 +98,59 @@ export function ProjectFormFields({
         />
       </Field>
 
-      <Field label="Loại dự án">
+      <Field label={t("form.fieldType")}>
         <Select
           value={value.projectType}
           onChange={(e) => onChange({ projectType: e.target.value as ProjectType | "" })}
         >
-          <option value="">— Chưa chọn —</option>
-          {PROJECT_TYPE_OPTIONS.map((t) => (
-            <option key={t} value={t}>
-              {PROJECT_TYPE_LABELS[t]}
+          <option value="">{t("common:notSelected")}</option>
+          {PROJECT_TYPE_OPTIONS.map((typ) => (
+            <option key={typ} value={typ}>
+              {PROJECT_TYPE_LABELS[typ]}
             </option>
           ))}
         </Select>
       </Field>
 
       <div className="col-span-2">
-        <Field label="Mô tả">
+        <Field label={t("form.fieldDescription")}>
           <Input
             value={value.description}
             onChange={(e) => onChange({ description: e.target.value })}
-            placeholder="Mô tả ngắn…"
+            placeholder={t("form.descriptionPlaceholder")}
           />
         </Field>
       </div>
 
-      <Field label="Chủ sở hữu (Owner)">
+      <Field label={t("form.fieldOwner")}>
         <Select
           value={value.ownerUserId}
           onChange={(e) => onChange({ ownerUserId: e.target.value })}
         >
-          <option value="">— Chưa gán —</option>
-          {employees.map((e) => (
-            <option key={e.userId} value={e.userId}>
-              {employeeLabel(e)}
+          <option value="">{t("common:unassigned")}</option>
+          {employees.map((emp) => (
+            <option key={emp.userId} value={emp.userId}>
+              {employeeLabel(emp)}
             </option>
           ))}
         </Select>
       </Field>
 
-      <Field label="Quản lý dự án (PM)">
+      <Field label={t("form.fieldPM")}>
         <Select
           value={value.projectManagerId}
           onChange={(e) => onChange({ projectManagerId: e.target.value })}
         >
-          <option value="">— Chưa gán —</option>
-          {employees.map((e) => (
-            <option key={e.userId} value={e.userId}>
-              {employeeLabel(e)}
+          <option value="">{t("common:unassigned")}</option>
+          {employees.map((emp) => (
+            <option key={emp.userId} value={emp.userId}>
+              {employeeLabel(emp)}
             </option>
           ))}
         </Select>
       </Field>
 
-      <Field label="Ngày bắt đầu">
+      <Field label={t("form.fieldStartDate")}>
         <Input
           type="date"
           value={value.startDate}
@@ -156,7 +158,7 @@ export function ProjectFormFields({
         />
       </Field>
 
-      <Field label="Ngày kết thúc">
+      <Field label={t("form.fieldEndDate")}>
         <Input
           type="date"
           value={value.endDate}
@@ -164,12 +166,12 @@ export function ProjectFormFields({
         />
       </Field>
 
-      <Field label="Độ ưu tiên">
+      <Field label={t("form.fieldPriority")}>
         <Select
           value={value.priority}
           onChange={(e) => onChange({ priority: e.target.value as ProjectPriority | "" })}
         >
-          <option value="">— Chưa chọn —</option>
+          <option value="">{t("common:notSelected")}</option>
           {PROJECT_PRIORITY_OPTIONS.map((p) => (
             <option key={p} value={p}>
               {PROJECT_PRIORITY_LABELS[p]}
@@ -178,7 +180,7 @@ export function ProjectFormFields({
         </Select>
       </Field>
 
-      <Field label="Ngân sách (VND)">
+      <Field label={t("form.fieldBudget")}>
         <Input
           type="number"
           min={0}
@@ -189,7 +191,7 @@ export function ProjectFormFields({
       </Field>
 
       {showStatus && (
-        <Field label="Trạng thái">
+        <Field label={t("form.fieldStatus")}>
           <Select
             value={value.status}
             onChange={(e) => onChange({ status: e.target.value as ProjectStatus })}

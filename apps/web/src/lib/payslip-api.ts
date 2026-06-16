@@ -2,10 +2,12 @@ import { z } from "zod";
 import type {
   PayslipEntryKind,
   PayslipListQuery,
+  PayslipSummaryDto,
   ResolvePayslipDisputeRequest,
 } from "@mediaos/contracts";
 import {
   payslipSchema,
+  payslipSummarySchema,
   payslipAcknowledgementSchema,
   disputePayslipSchema,
 } from "@mediaos/contracts";
@@ -66,6 +68,28 @@ export const payslipApi = {
 
   /** Direct fetch — NOT via useQuery. Keep result ephemeral; clear on close/unmount. */
   getOne: (id: string) => apiFetch(`/payslips/${id}`, payslipSchema),
+
+  /**
+   * B1 own-payslip LIST ("Phiếu lương của tôi"). Server is the source of truth for money-stripping:
+   * GET /payslips/me/list returns a money-FREE projection (parsed via payslipSummarySchema — a schema
+   * that has NO monetary field, so net/gross can never enter component state or the RQ cache). Ownership
+   * (user_id = self) is enforced SERVER-SIDE — the client passes no userId. BẤT BIẾN #3a.
+   */
+  listOwn: (): Promise<PayslipSummaryDto[]> =>
+    apiFetch(`/payslips/me/list`, z.array(payslipSummarySchema)),
+
+  /** B1 own step-up: opens a 5-min re-auth window for the caller's OWN payslip. Must precede getOwn. */
+  reauthOwn: (id: string, password: string) =>
+    apiFetch(`/payslips/me/${id}/reauth`, reauthWindowSchema, {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
+
+  /**
+   * B1 own getOWN — full money for the caller's OWN payslip, ONLY after reauthOwn. Direct fetch — NOT
+   * via useQuery. Keep result ephemeral; clear on close/unmount. Server enforces ownership + re-auth.
+   */
+  getOwn: (id: string) => apiFetch(`/payslips/me/${id}`, payslipSchema),
 
   /**
    * Acknowledgements for a payslip (money-FREE — only status + reason). The employee sees their own
