@@ -506,7 +506,7 @@ _(custom `react-native-reviewer/patterns/build-fix/push`)_
   - [ ] **G16-1b** (defer) read-path audit (đọc lương/payslip/secret/kênh), security-alerts, leak-by-scope contract-test; defense-in-depth: challenge single-use jti, TOTP step-replay tracking, `mustSetupTwoFactor` enforcement gate (server-side + FE redirect tới enrollment).
 - [ ] **G16-2** 🔧🟢 (M) Tối ưu: query/index, dashboard, notification, mobile; **backup/restore drill** (`ecc:canary-watch`).
 - [ ] **G16-3** 🛠️/🤖 (M) SaaS prep: workspace/company management, subscription/feature-flag/usage-limit (kiến trúc), template workflow/role/dashboard.
-- [ ] **G16-4** 🧪 (S) Integration planning: YouTube/AdSense/TikTok/Facebook/Drive/Email/SSO (**chỉ thiết kế**, chưa build).
+- [x] **G16-4** 🧪 (S) Integration planning: YouTube/AdSense/TikTok/Facebook/Drive/Email/SSO (**chỉ thiết kế**, chưa build). **✅ DESIGN COMPLETE** (lane `feat/c4-integration-design`): 8 docs `docs/integrations/` (7 connector + README index) — mỗi connector: mục tiêu, OAuth/scope tối thiểu, rate-limit/quota, webhook-vs-polling, **mapping vào model thật** (platforms/channels/platform_accounts/content_items/content_channels/revenue_records/content_assets/notifications/users — bảng mới đánh dấu "design only"), rủi ro bảo mật (token storage **tái dùng envelope-encrypt G6-2** `SecretEncryptionService` purpose `platform_account`, RLS FORCE, webhook HMAC verify, SSRF/replay), thứ tự build P1→P7. **Docs-only, 0 code/migration/test.** LIGHT doc-review pass (token-storage security + model-mapping consistency).
 
 ✅ **Done:** chạy ổn với dữ liệu thật; không lỗi phân quyền nghiêm trọng; DB sẵn sàng multi-tenant; clone template được cho công ty khác.
 
