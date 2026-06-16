@@ -13,19 +13,21 @@ import { PERIOD_STATUS_LABELS } from "@/components/payroll/period-constants";
 import { useAuthStore } from "@/stores/auth";
 
 /**
- * PayslipsPage (G12-FE) — "Phiếu lương của tôi" (employee self-service) at /payroll/payslips.
+ * PayslipsPage (B1) — "Phiếu lương của tôi" (employee self-service) at /payroll/payslips.
  *
  * Lương NHẠY CẢM (BẤT BIẾN #3):
- *  - The list uses payslipApi.listSummary → money is stripped at the API boundary, so net/gross never
- *    enter component state or the React Query cache. The table has NO money columns.
- *  - Detail money is fetched ONLY after re-auth via usePayslipReauthController (reauth → getOne, a direct
- *    fetch, never useQuery) and held in ephemeral state that is cleared whenever the selection changes.
+ *  - The list uses payslipApi.listOwn → GET /payslips/me/list returns a money-FREE projection
+ *    (no net/gross/base), so money never enters component state or the React Query cache. The table
+ *    has NO money columns. Ownership (user_id = self) is enforced SERVER-SIDE — no userId is sent.
+ *  - Detail money is fetched ONLY after re-auth via the OWN endpoints wired into
+ *    usePayslipReauthController ({ reauth: reauthOwn, getOne: getOwn } — a direct fetch, never
+ *    useQuery) and held in ephemeral state that is cleared whenever the selection changes.
  *  - A 403 on the list surfaces as a permission notice, never as leaked numbers.
  *
- * NOTE (BE follow-up, out of this FE-only lane): `view-payslip` is granted only to admin/hr, and the
- * server `GET /payslips` returns the full snapshot without re-auth. So this page only reveals money to
- * roles that hold view-payslip; a plain employee gets a 403 here until the BE adds an own-payslip,
- * re-auth-gated read for employees. The page degrades gracefully for that case.
+ * B1: this page now wires the employee OWN endpoints (view-own-payslip, re-auth-gated, ownership-scoped
+ * server-side) instead of the admin GET /payslips. A plain employee who holds only view-own-payslip can
+ * list their slips and reveal money after re-auth — no more degrade-to-403 for normal staff. The 403
+ * branch remains as defense-in-depth for callers who lack even view-own-payslip.
  */
 export function PayslipsPage() {
   const qc = useQueryClient();
@@ -37,7 +39,11 @@ export function PayslipsPage() {
   const selectedIdRef = useRef<string | null>(null);
   // Revealed money — ephemeral ONLY (never cached). Cleared on selection / filter change → re-mask.
   const [revealed, setRevealed] = useState<PayslipDto | null>(null);
-  const { requestReauth, modal } = usePayslipReauthController();
+  // B1: reveal goes through the OWN endpoints (re-auth-gated, ownership-scoped server-side).
+  const { requestReauth, modal } = usePayslipReauthController({
+    reauth: payslipApi.reauthOwn,
+    getOne: payslipApi.getOwn,
+  });
 
   const {
     data: rows = [],
@@ -45,15 +51,15 @@ export function PayslipsPage() {
     isError,
     error,
   } = useQuery({
-    queryKey: ["payslips", "mine", currentUserId],
-    queryFn: () => payslipApi.listSummary({ userId: currentUserId }),
-    enabled: !!currentUserId,
+    // B1: money-FREE own list. Ownership (user_id = self) enforced SERVER-SIDE — no userId param.
+    queryKey: ["payslips", "mine"],
+    queryFn: () => payslipApi.listOwn(),
     retry: false,
   });
 
   // Period labels/status are an enrichment for display + filter. Best-effort: only after the payslip
   // list succeeds (so we never fire a known-403 for roles that can't read payslips anyway).
-  const isSuccess = !isLoading && !isError && !!currentUserId;
+  const isSuccess = !isLoading && !isError;
   const { data: periods = [], isError: periodsError } = useQuery({
     queryKey: ["payroll-periods"],
     queryFn: () => payrollPeriodApi.list(),

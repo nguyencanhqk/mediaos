@@ -617,6 +617,13 @@
       "when": 1717500220000,
       "tag": "0220_g16_hot_path_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1717500230000,
+      "tag": "0180_b1_view_own_payslip_seed",
+      "breakpoints": true
     }
   ]
 }
