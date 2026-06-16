@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,7 @@ function useInvalidateProject(projectId: string) {
 // ── Channel ───────────────────────────────────────────────────────────────────
 
 export function AddProjectChannelDialog({ projectId, open, onClose, excludeIds }: LinkDialogProps) {
+  const { t } = useTranslation("projects");
   const invalidate = useInvalidateProject(projectId);
   const [channelId, setChannelId] = useState("");
   const [role, setRole] = useState("");
@@ -54,22 +56,22 @@ export function AddProjectChannelDialog({ projectId, open, onClose, excludeIds }
     <Dialog
       open={open}
       onClose={onClose}
-      title="Gắn kênh vào dự án"
+      title={t("linkDialogs.channel.title")}
       footer={
         <>
           <Button variant="ghost" size="sm" onClick={onClose}>
-            Huỷ
+            {t("linkDialogs.cancel")}
           </Button>
           <Button size="sm" onClick={() => add.mutate()} disabled={!channelId || add.isPending}>
-            {add.isPending ? "Đang gắn…" : "Gắn kênh"}
+            {add.isPending ? t("linkDialogs.channel.adding") : t("linkDialogs.channel.submit")}
           </Button>
         </>
       }
     >
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-muted-foreground">Kênh *</span>
+        <span className="text-xs font-medium text-muted-foreground">{t("linkDialogs.channel.fieldChannel")}</span>
         <Select value={channelId} onChange={(e) => setChannelId(e.target.value)}>
-          <option value="">— Chọn kênh —</option>
+          <option value="">{t("linkDialogs.channel.selectChannel")}</option>
           {available.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name} · {PLATFORM_LABELS[c.platform]}
@@ -78,10 +80,10 @@ export function AddProjectChannelDialog({ projectId, open, onClose, excludeIds }
         </Select>
       </label>
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-muted-foreground">Vai trò trong dự án</span>
-        <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder="VD: kênh chính" />
+        <span className="text-xs font-medium text-muted-foreground">{t("linkDialogs.channel.fieldRole")}</span>
+        <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder={t("linkDialogs.channel.rolePlaceholder")} />
       </label>
-      {add.isError && <p className="text-sm text-destructive">Gắn kênh thất bại.</p>}
+      {add.isError && <p className="text-sm text-destructive">{t("linkDialogs.channel.addFailed")}</p>}
     </Dialog>
   );
 }
@@ -89,11 +91,12 @@ export function AddProjectChannelDialog({ projectId, open, onClose, excludeIds }
 // ── Team ──────────────────────────────────────────────────────────────────────
 
 export function AddProjectTeamDialog({ projectId, open, onClose, excludeIds }: LinkDialogProps) {
+  const { t } = useTranslation("projects");
   const invalidate = useInvalidateProject(projectId);
   const teams = useTeamOptions();
   const [teamId, setTeamId] = useState("");
   const [role, setRole] = useState("");
-  const available = teams.filter((t) => !excludeIds.includes(t.id));
+  const available = teams.filter((team) => !excludeIds.includes(team.id));
 
   const add = useMutation({
     mutationFn: () =>
@@ -110,34 +113,34 @@ export function AddProjectTeamDialog({ projectId, open, onClose, excludeIds }: L
     <Dialog
       open={open}
       onClose={onClose}
-      title="Gắn team vào dự án"
+      title={t("linkDialogs.team.title")}
       footer={
         <>
           <Button variant="ghost" size="sm" onClick={onClose}>
-            Huỷ
+            {t("linkDialogs.cancel")}
           </Button>
           <Button size="sm" onClick={() => add.mutate()} disabled={!teamId || add.isPending}>
-            {add.isPending ? "Đang gắn…" : "Gắn team"}
+            {add.isPending ? t("linkDialogs.team.adding") : t("linkDialogs.team.submit")}
           </Button>
         </>
       }
     >
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-muted-foreground">Team *</span>
+        <span className="text-xs font-medium text-muted-foreground">{t("linkDialogs.team.fieldTeam")}</span>
         <Select value={teamId} onChange={(e) => setTeamId(e.target.value)}>
-          <option value="">— Chọn team —</option>
-          {available.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
+          <option value="">{t("linkDialogs.team.selectTeam")}</option>
+          {available.map((team) => (
+            <option key={team.id} value={team.id}>
+              {team.name}
             </option>
           ))}
         </Select>
       </label>
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-muted-foreground">Vai trò trong dự án</span>
-        <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder="VD: sản xuất" />
+        <span className="text-xs font-medium text-muted-foreground">{t("linkDialogs.team.fieldRole")}</span>
+        <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder={t("linkDialogs.team.rolePlaceholder")} />
       </label>
-      {add.isError && <p className="text-sm text-destructive">Gắn team thất bại.</p>}
+      {add.isError && <p className="text-sm text-destructive">{t("linkDialogs.team.addFailed")}</p>}
     </Dialog>
   );
 }
@@ -145,12 +148,13 @@ export function AddProjectTeamDialog({ projectId, open, onClose, excludeIds }: L
 // ── Member ──────────────────────────────────────────────────────────────────────
 
 export function AddProjectMemberDialog({ projectId, open, onClose, excludeIds }: LinkDialogProps) {
+  const { t } = useTranslation("projects");
   const invalidate = useInvalidateProject(projectId);
   const employees = useEmployeeOptions();
   const [userId, setUserId] = useState("");
   const [role, setRole] = useState("");
   const [workload, setWorkload] = useState("");
-  const available = employees.filter((e) => !excludeIds.includes(e.userId));
+  const available = employees.filter((emp) => !excludeIds.includes(emp.userId));
 
   const add = useMutation({
     mutationFn: () =>
@@ -172,35 +176,35 @@ export function AddProjectMemberDialog({ projectId, open, onClose, excludeIds }:
     <Dialog
       open={open}
       onClose={onClose}
-      title="Thêm thành viên dự án"
+      title={t("linkDialogs.member.title")}
       footer={
         <>
           <Button variant="ghost" size="sm" onClick={onClose}>
-            Huỷ
+            {t("linkDialogs.cancel")}
           </Button>
           <Button size="sm" onClick={() => add.mutate()} disabled={!userId || add.isPending}>
-            {add.isPending ? "Đang thêm…" : "Thêm thành viên"}
+            {add.isPending ? t("linkDialogs.member.adding") : t("linkDialogs.member.submit")}
           </Button>
         </>
       }
     >
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-muted-foreground">Nhân sự *</span>
+        <span className="text-xs font-medium text-muted-foreground">{t("linkDialogs.member.fieldMember")}</span>
         <Select value={userId} onChange={(e) => setUserId(e.target.value)}>
-          <option value="">— Chọn nhân sự —</option>
-          {available.map((e) => (
-            <option key={e.userId} value={e.userId}>
-              {e.userFullName ?? e.userEmail ?? e.userId}
+          <option value="">{t("linkDialogs.member.selectMember")}</option>
+          {available.map((emp) => (
+            <option key={emp.userId} value={emp.userId}>
+              {emp.userFullName ?? emp.userEmail ?? emp.userId}
             </option>
           ))}
         </Select>
       </label>
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-muted-foreground">Vai trò trong dự án</span>
-        <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder="VD: biên tập" />
+        <span className="text-xs font-medium text-muted-foreground">{t("linkDialogs.member.fieldRole")}</span>
+        <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder={t("linkDialogs.member.rolePlaceholder")} />
       </label>
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-muted-foreground">Khối lượng (%)</span>
+        <span className="text-xs font-medium text-muted-foreground">{t("linkDialogs.member.fieldWorkload")}</span>
         <Input
           type="number"
           min={0}
@@ -210,7 +214,7 @@ export function AddProjectMemberDialog({ projectId, open, onClose, excludeIds }:
           placeholder="0–100"
         />
       </label>
-      {add.isError && <p className="text-sm text-destructive">Thêm thành viên thất bại.</p>}
+      {add.isError && <p className="text-sm text-destructive">{t("linkDialogs.member.addFailed")}</p>}
     </Dialog>
   );
 }

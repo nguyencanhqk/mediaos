@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import {
   createColumnHelper,
   flexRender,
@@ -34,6 +35,7 @@ export function ProjectTable({
   onDelete,
   deletingId,
 }: ProjectTableProps) {
+  const { t } = useTranslation("projects");
   const [sorting, setSorting] = useState<SortingState>([]);
 
   const managerName = useMemo(() => {
@@ -45,7 +47,7 @@ export function ProjectTable({
   const columns = useMemo(
     () => [
       columnHelper.accessor("name", {
-        header: "Tên dự án",
+        header: t("table.colName"),
         cell: (ctx) => (
           <Link
             to="/projects/$projectId"
@@ -56,17 +58,17 @@ export function ProjectTable({
           </Link>
         ),
       }),
-      columnHelper.accessor((row) => row.code ?? "—", { id: "code", header: "Mã" }),
+      columnHelper.accessor((row) => row.code ?? "—", { id: "code", header: t("table.colCode") }),
       columnHelper.accessor(
         (row) => (row.projectType ? PROJECT_TYPE_LABELS[row.projectType] : "—"),
-        { id: "type", header: "Loại" },
+        { id: "type", header: t("table.colType") },
       ),
       columnHelper.accessor(
         (row) => (row.projectManagerId ? managerName.get(row.projectManagerId) ?? "—" : "—"),
-        { id: "manager", header: "PM" },
+        { id: "manager", header: t("table.colPM") },
       ),
       columnHelper.accessor("priority", {
-        header: "Ưu tiên",
+        header: t("table.colPriority"),
         cell: (ctx) => {
           const p = ctx.getValue();
           return p ? (
@@ -78,11 +80,11 @@ export function ProjectTable({
       }),
       columnHelper.accessor((row) => row.channels?.length ?? 0, {
         id: "channels",
-        header: "Kênh",
+        header: t("table.colChannels"),
         cell: (ctx) => ctx.getValue(),
       }),
       columnHelper.accessor("status", {
-        header: "Trạng thái",
+        header: t("table.colStatus"),
         cell: (ctx) => PROJECT_STATUS_LABELS[ctx.getValue()],
       }),
       columnHelper.display({
@@ -97,12 +99,12 @@ export function ProjectTable({
               onClick={() => onDelete(ctx.row.original)}
               disabled={deletingId === ctx.row.original.id}
             >
-              Xoá
+              {t("table.deleteRow")}
             </Button>
           ) : null,
       }),
     ],
-    [canDelete, deletingId, managerName, onDelete],
+    [canDelete, deletingId, managerName, onDelete, t],
   );
 
   const table = useReactTable({

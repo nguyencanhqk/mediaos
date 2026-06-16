@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { CreateProjectRequest } from "@mediaos/contracts";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { projectsApi } from "@/lib/projects-api";
@@ -25,6 +26,7 @@ function toCreateRequest(f: ProjectFormState): CreateProjectRequest {
 }
 
 export function CreateProjectDialog() {
+  const { t } = useTranslation("projects");
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<ProjectFormState>(emptyProjectForm);
@@ -42,23 +44,23 @@ export function CreateProjectDialog() {
   return (
     <>
       <Button size="sm" onClick={() => setOpen(true)}>
-        + Thêm dự án
+        {t("createDialog.trigger")}
       </Button>
       <Dialog
         open={open}
         onClose={() => setOpen(false)}
-        title="Thêm dự án mới"
+        title={t("createDialog.title")}
         footer={
           <>
             <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
-              Huỷ
+              {t("linkDialogs.cancel")}
             </Button>
             <Button
               size="sm"
               onClick={() => create.mutate()}
               disabled={!form.name.trim() || create.isPending}
             >
-              {create.isPending ? "Đang tạo…" : "Tạo dự án"}
+              {create.isPending ? t("createDialog.creating") : t("createDialog.submit")}
             </Button>
           </>
         }
@@ -70,8 +72,9 @@ export function CreateProjectDialog() {
         />
         {create.isError && (
           <p className="text-sm text-destructive">
-            Tạo dự án thất bại:{" "}
-            {create.error instanceof Error ? create.error.message : "Lỗi không xác định"}
+            {t("createDialog.createFailed", {
+              detail: create.error instanceof Error ? create.error.message : t("createDialog.createFailedUnknown"),
+            })}
           </p>
         )}
       </Dialog>

@@ -1,0 +1,137 @@
+{
+  "list": {
+    "title": "Dự án",
+    "emptyFiltered": "Không có dự án nào khớp bộ lọc.",
+    "confirmDelete": "Xoá dự án \"{{name}}\"?"
+  },
+  "createDialog": {
+    "trigger": "+ Thêm dự án",
+    "title": "Thêm dự án mới",
+    "creating": "Đang tạo…",
+    "submit": "Tạo dự án",
+    "createFailed": "Tạo dự án thất bại: {{detail}}",
+    "createFailedUnknown": "Lỗi không xác định"
+  },
+  "editDialog": {
+    "title": "Sửa dự án",
+    "saveFailed": "Lưu thất bại: {{detail}}",
+    "saveFailedUnknown": "Lỗi không xác định"
+  },
+  "filterBar": {
+    "searchPlaceholder": "Tìm theo tên…",
+    "anyType": "Mọi loại",
+    "anyPriority": "Mọi ưu tiên",
+    "anyPM": "Mọi PM",
+    "clearFilters": "Xoá lọc"
+  },
+  "table": {
+    "colName": "Tên dự án",
+    "colCode": "Mã",
+    "colType": "Loại",
+    "colPM": "PM",
+    "colPriority": "Ưu tiên",
+    "colChannels": "Kênh",
+    "colStatus": "Trạng thái",
+    "deleteRow": "Xoá"
+  },
+  "form": {
+    "fieldName": "Tên dự án *",
+    "namePlaceholder": "Tên dự án…",
+    "fieldCode": "Mã dự án",
+    "fieldDescription": "Mô tả",
+    "descriptionPlaceholder": "Mô tả ngắn…",
+    "fieldOwner": "Chủ sở hữu (Owner)",
+    "fieldPM": "Quản lý dự án (PM)",
+    "fieldStartDate": "Ngày bắt đầu",
+    "fieldEndDate": "Ngày kết thúc",
+    "fieldPriority": "Độ ưu tiên",
+    "fieldBudget": "Ngân sách (VND)",
+    "fieldStatus": "Trạng thái",
+    "fieldType": "Loại dự án"
+  },
+  "linkDialogs": {
+    "channel": {
+      "title": "Gắn kênh vào dự án",
+      "adding": "Đang gắn…",
+      "submit": "Gắn kênh",
+      "fieldChannel": "Kênh *",
+      "selectChannel": "— Chọn kênh —",
+      "fieldRole": "Vai trò trong dự án",
+      "rolePlaceholder": "VD: kênh chính",
+      "addFailed": "Gắn kênh thất bại."
+    },
+    "team": {
+      "title": "Gắn team vào dự án",
+      "adding": "Đang gắn…",
+      "submit": "Gắn team",
+      "fieldTeam": "Team *",
+      "selectTeam": "— Chọn team —",
+      "fieldRole": "Vai trò trong dự án",
+      "rolePlaceholder": "VD: sản xuất",
+      "addFailed": "Gắn team thất bại."
+    },
+    "member": {
+      "title": "Thêm thành viên dự án",
+      "adding": "Đang thêm…",
+      "submit": "Thêm thành viên",
+      "fieldMember": "Nhân sự *",
+      "selectMember": "— Chọn nhân sự —",
+      "fieldRole": "Vai trò trong dự án",
+      "rolePlaceholder": "VD: biên tập",
+      "fieldWorkload": "Khối lượng (%)",
+      "addFailed": "Thêm thành viên thất bại."
+    },
+    "cancel": "Huỷ"
+  },
+  "detail": {
+    "backToList": "← Danh sách dự án",
+    "loadFailed": "Không tải được dự án.",
+    "tabOverview": "Tổng quan",
+    "tabChannels": "Kênh ({{count}})",
+    "tabTeams": "Team ({{count}})",
+    "tabMembers": "Thành viên ({{count}})",
+    "tabContent": "Nội dung",
+    "editButton": "Sửa dự án",
+    "detailCode": "Mã dự án",
+    "detailType": "Loại",
+    "detailDescription": "Mô tả",
+    "detailOwner": "Chủ sở hữu",
+    "detailPM": "Quản lý dự án",
+    "detailStartDate": "Ngày bắt đầu",
+    "detailEndDate": "Ngày kết thúc",
+    "detailPriority": "Độ ưu tiên",
+    "detailBudget": "Ngân sách",
+    "detailStatus": "Trạng thái",
+    "channels": {
+      "sectionTitle": "Kênh gắn với dự án ({{count}})",
+      "addButton": "+ Gắn kênh",
+      "empty": "Chưa gắn kênh nào.",
+      "removeButton": "Gỡ"
+    },
+    "teams": {
+      "sectionTitle": "Team gắn với dự án ({{count}})",
+      "addButton": "+ Gắn team",
+      "empty": "Chưa gắn team nào.",
+      "removeButton": "Gỡ"
+    },
+    "members": {
+      "sectionTitle": "Thành viên dự án ({{count}})",
+      "addButton": "+ Thêm thành viên",
+      "empty": "Chưa có thành viên nào.",
+      "removeButton": "Gỡ"
+    },
+    "content": {
+      "titlePlaceholder": "Tiêu đề video…",
+      "createButton": "Tạo video",
+      "empty": "Chưa có nội dung nào.",
+      "loadFailed": "Không tải được nội dung.",
+      "status": {
+        "draft": "Nháp",
+        "in_production": "Đang làm",
+        "review": "Chờ duyệt",
+        "approved": "Đã duyệt",
+        "published": "Đã đăng"
+      }
+    }
+  }
+}
