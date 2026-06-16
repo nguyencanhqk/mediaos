@@ -1,0 +1,21 @@
+{
+  "pageTitle": "Quyền truy cập khẩn cấp (break-glass)",
+  "pageDesc": "Danh sách yêu cầu truy cập khẩn cấp của bạn. Khi một yêu cầu đã được duyệt (active), bạn có thể xem bí mật một lần — bí mật không được lưu lại.",
+  "empty": "Bạn chưa có yêu cầu break-glass nào.",
+  "loadError": "Không tải được danh sách yêu cầu break-glass.",
+  "status": {
+    "pending": "Chờ duyệt",
+    "active": "Đang hiệu lực",
+    "revoked": "Đã thu hồi"
+  },
+  "table": {
+    "colAccount": "Tài khoản nền tảng",
+    "colReason": "Lý do",
+    "colStatus": "Trạng thái",
+    "colApprovals": "Đã duyệt",
+    "colExpires": "Hết hạn",
+    "colSecret": "Bí mật",
+    "secretLabel": "bí mật tài khoản (break-glass)",
+    "revealUnavailable": "Chỉ xem được khi yêu cầu đang hiệu lực"
+  }
+}

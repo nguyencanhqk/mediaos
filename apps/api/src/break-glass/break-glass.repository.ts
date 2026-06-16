@@ -57,6 +57,72 @@ export class BreakGlassRepository {
     return row;
   }
 
+  /**
+   * 🔒 ROUND 2 cổng (b) reveal — đọc 1 grant 'active' CÒN HẠN của CHÍNH caller trên đúng account, TRONG tenant.
+   * Khớp partial index `break_glass_grants_active_idx (company_id, platform_account_id, requester_user_id)
+   * WHERE status='active'`. Hết hạn ép Ở DB theo `now()` (BẤT BIẾN #4 — KHÔNG so app-clock cho cổng reveal):
+   * `expires_at > now()` chạy trong tx ⇒ đồng hồ DB là nguồn sự thật. null = không có grant hợp lệ (no/expired/
+   * revoked/khác-requester/pending) HOẶC chéo tenant (RLS ẩn) → caller dịch sang fail-closed deny.
+   */
+  async findActiveGrantForRevealTx(
+    tx: TenantTx,
+    companyId: string,
+    accountId: string,
+    requesterUserId: string,
+  ): Promise<BreakGlassGrantRow | null> {
+    const [row] = await tx
+      .select()
+      .from(breakGlassGrants)
+      .where(
+        and(
+          eq(breakGlassGrants.companyId, companyId),
+          eq(breakGlassGrants.platformAccountId, accountId),
+          eq(breakGlassGrants.requesterUserId, requesterUserId),
+          eq(breakGlassGrants.status, "active"),
+          sql`${breakGlassGrants.expiresAt} > now()`,
+        ),
+      )
+      .orderBy(sql`${breakGlassGrants.expiresAt} desc`)
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * Liệt kê grant break-glass của CHÍNH caller (requester = caller) TRONG tenant, kèm số phiếu duyệt DISTINCT
+   * (tiến độ SoD) để UI hiện trạng thái + bật nút Reveal khi 'active'. LEFT JOIN approvals → COUNT(DISTINCT
+   * approver). RLS lọc company ở cả 2 bảng. Mới nhất trước. KHÔNG trả secret (grant không chứa secret — #3).
+   */
+  async listGrantsForRequesterTx(
+    tx: TenantTx,
+    companyId: string,
+    requesterUserId: string,
+  ): Promise<Array<BreakGlassGrantRow & { approvalCount: number }>> {
+    const rows = await tx
+      .select({
+        grant: breakGlassGrants,
+        approvalCount: sql<number>`count(distinct ${breakGlassApprovals.approverUserId})::int`,
+      })
+      .from(breakGlassGrants)
+      .leftJoin(
+        breakGlassApprovals,
+        and(
+          eq(breakGlassApprovals.companyId, breakGlassGrants.companyId),
+          eq(breakGlassApprovals.grantId, breakGlassGrants.id),
+        ),
+      )
+      .where(
+        and(
+          eq(breakGlassGrants.companyId, companyId),
+          eq(breakGlassGrants.requesterUserId, requesterUserId),
+        ),
+      )
+      // GROUP BY PK → các cột grant phụ thuộc hàm vào id (PG chấp nhận). Index (company_id, requester_user_id)
+      // (mig 0201) phủ predicate; partial active-idx không dùng được (thiếu status='active' + requester ở cột 3).
+      .groupBy(breakGlassGrants.id)
+      .orderBy(sql`${breakGlassGrants.createdAt} desc`);
+    return rows.map((r) => ({ ...r.grant, approvalCount: Number(r.approvalCount ?? 0) }));
+  }
+
   /** Đọc grant theo id TRONG tenant, KHOÁ hàng (FOR UPDATE) để serialize approve/revoke. null nếu vắng/chéo-tenant. */
   async findGrantByIdForUpdateTx(
     tx: TenantTx,

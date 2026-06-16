@@ -35,6 +35,7 @@ import { ValkeyService } from '../../src/permission/valkey.service';
 import { LoginRateLimiter } from '../../src/auth/login-rate-limiter';
 import { PasswordService } from '../../src/auth/password.service';
 import { AuditService } from '../../src/events/audit.service';
+import { BreakGlassRepository } from '../../src/break-glass/break-glass.repository';
 import { directPool, hasDb } from '../helpers/integration-db';
 import {
   cleanupTenants,
@@ -88,6 +89,7 @@ describe.skipIf(!hasDb)('G6-2b platform-accounts reveal / list / edit — RED de
       new ValkeyService(),
       password,
       new LoginRateLimiter(),
+      new BreakGlassRepository(db),
     );
 
     A = await seedCompany(direct, 'g62a');

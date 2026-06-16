@@ -666,6 +666,13 @@
       "when": 1717500290000,
       "tag": "0200_g6_break_glass_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1717500300000,
+      "tag": "0201_g6_break_glass_reveal_perm",
+      "breakpoints": true
     }
   ]
 }

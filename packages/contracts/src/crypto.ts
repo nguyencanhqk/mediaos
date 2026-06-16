@@ -97,3 +97,25 @@ export const breakGlassGrantSchema = z.object({
   createdAt: z.coerce.date(),
 });
 export type BreakGlassGrantDto = z.infer<typeof breakGlassGrantSchema>;
+
+/**
+ * ROUND 2 reveal-path contracts. Reveal CHỈ thành công khi caller có grant `active` còn hạn của CHÍNH MÌNH
+ * trên đúng account (cổng (b), ép Ở DB theo `now()`); KHÔNG nới quyền reveal thường. Plaintext trả MỘT LẦN.
+ */
+
+/**
+ * Quyền sensitive gating reveal-via-break-glass (mig 0201, company-tier, no system role). Tách khỏi
+ * `reveal-secret` thường (object-grant + re-auth) — break-glass dùng grant 'active' làm cổng object-level.
+ */
+export const REVEAL_BREAK_GLASS_ACTION = "reveal-break-glass";
+export const BREAK_GLASS_RESOURCE_TYPE = "break-glass";
+
+/**
+ * Phản hồi reveal break-glass — plaintext trả MỘT LẦN + grantId đã dùng (để UI/audit đối chiếu, KHÔNG cache
+ * plaintext). KHÔNG có field key/dek/material. Khác `revealSecretResponseSchema` ở chỗ kèm `grantId`.
+ */
+export const breakGlassRevealResponseSchema = z.object({
+  secret: z.string(),
+  grantId: z.string().uuid(),
+});
+export type BreakGlassRevealResponse = z.infer<typeof breakGlassRevealResponseSchema>;

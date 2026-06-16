@@ -245,6 +245,21 @@ export class BreakGlassGrantService {
     });
   }
 
+  // ── List (caller's own grants — for the break-glass screen / reveal button) ──────
+
+  /**
+   * Liệt kê grant break-glass của CHÍNH caller (requester = caller), kèm approvalCount (tiến độ SoD). Chỉ
+   * metadata vòng đời (KHÔNG secret — BẤT BIẾN #3). RLS lọc tenant. Không cần permission gate: đây là "yêu cầu
+   * của tôi" (đọc hàng của chính mình, không lộ gì nhạy cảm); nút Reveal trên từng grant mới gated thật ở
+   * reveal-path. FE bật Reveal CHỈ khi status='active' (server vẫn ép cổng (a)+(b) khi reveal — phòng thủ sâu).
+   */
+  async listMyGrants(user: RequestUser): Promise<BreakGlassGrantDto[]> {
+    const rows = await this.db.withTenant(user.companyId, (tx) =>
+      this.repo.listGrantsForRequesterTx(tx, user.companyId, user.id),
+    );
+    return rows.map((row) => this.toDto(row, row.approvalCount));
+  }
+
   // ── Helpers ────────────────────────────────────────────────────────────────────
 
   /**
