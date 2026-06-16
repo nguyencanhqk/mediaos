@@ -66,6 +66,17 @@ export function centsToDbString(cents: bigint): string {
   return `${neg ? "-" : ""}${unit.toString()}.${fracStr}`;
 }
 
+/**
+ * `number` (DTO amount) → chuỗi numeric "1500000.50" để INSERT cột `numeric(18,2)`, AN TOÀN.
+ *
+ * Đi qua `amountToCents` (guard `Number.isSafeInteger(Math.round(value*100))`) → cents → chuỗi. Vượt
+ * khoảng an toàn JS (amount hoặc amount*100 > MAX_SAFE_INTEGER) ⇒ ném `MoneyError` (fail-LOUD), KHÔNG
+ * `toFixed(2)` lossy âm thầm. Thay cho `numToStr` cũ (chỉ guard `Number.isFinite`) — defect B3.
+ */
+export function amountToDbString(value: number): string {
+  return centsToDbString(amountToCents(value));
+}
+
 /** cents (BigInt) → `number` cho DTO (biên JSON). Guard an toàn số nguyên JS. */
 export function centsToNumber(cents: bigint): number {
   const n = Number(cents);

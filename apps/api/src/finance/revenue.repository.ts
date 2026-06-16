@@ -30,6 +30,10 @@ export interface InsertRevenueData {
   replacesRecordId?: string | null;
 }
 
+/** Default pagination khi service không truyền (an toàn unbounded-query ở mọi caller). */
+const DEFAULT_LIMIT = 50;
+const DEFAULT_OFFSET = 0;
+
 export interface ListRevenueFilter {
   platformId?: string;
   channelId?: string;
@@ -40,6 +44,9 @@ export interface ListRevenueFilter {
   to?: string;
   /** true = trả cả bản ghi đã bị thay thế/void (xem lịch sử chain). Mặc định chỉ bản hiệu lực. */
   includeSuperseded?: boolean;
+  /** Pagination: limit [1..100] default 50 (Zod đã clamp ở controller). Repo guard default lần cuối. */
+  limit?: number;
+  offset?: number;
 }
 
 @Injectable()
@@ -72,11 +79,14 @@ export class RevenueRepository {
         );
       }
 
+      // orderBy (revenueDate, id) = thứ tự tất định cho phân trang (revenueDate trùng → id tie-break).
       return tx
         .select()
         .from(revenueRecords)
         .where(and(...conds))
-        .orderBy(revenueRecords.revenueDate);
+        .orderBy(revenueRecords.revenueDate, revenueRecords.id)
+        .limit(filter.limit ?? DEFAULT_LIMIT)
+        .offset(filter.offset ?? DEFAULT_OFFSET);
     });
   }
 
