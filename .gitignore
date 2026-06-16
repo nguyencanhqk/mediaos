@@ -26,3 +26,6 @@ npm-debug.log*
 
 # test / coverage
 coverage/
+
+# planning prompts (scratch — kept locally, not tracked)
+docs/prompts/
