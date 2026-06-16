@@ -1525,4 +1525,67 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+
+  // ── G16-3 SaaS prep (per-company subscription/feature/usage + dashboard configs) ──────────────
+  {
+    name: "company_subscriptions",
+    table: "company_subscriptions",
+    seedRow: async (direct, t) => {
+      // Gói 'free' seed sẵn ở mig 0231 (UUID cố định).
+      const r = await direct.query(
+        `INSERT INTO company_subscriptions (company_id, plan_id, status)
+         VALUES ($1, '00000000-0000-0000-0000-0000000000a1', 'active') RETURNING id`,
+        [t.companyId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "company_feature_flags",
+    table: "company_feature_flags",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO company_feature_flags (company_id, feature_key, enabled)
+         VALUES ($1, $2, true) RETURNING id`,
+        [t.companyId, `rls-feat-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "company_usage_limits",
+    table: "company_usage_limits",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO company_usage_limits (company_id, metric_key, limit_value)
+         VALUES ($1, $2, 100) RETURNING id`,
+        [t.companyId, `rls-metric-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "company_usage_counters",
+    table: "company_usage_counters",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO company_usage_counters (company_id, metric_key, period, used_count)
+         VALUES ($1, $2, 'lifetime', 1) RETURNING id`,
+        [t.companyId, `rls-metric-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "dashboard_configs",
+    table: "dashboard_configs",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO dashboard_configs (company_id, role_code, layout_json)
+         VALUES ($1, $2, '{"widgets":[]}'::jsonb) RETURNING id`,
+        [t.companyId, `rls-role-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 ];

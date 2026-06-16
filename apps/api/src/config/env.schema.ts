@@ -50,6 +50,13 @@ export const envSchema = z.object({
   // Ngưỡng cao hơn per-IP (mặc định 20) để giảm rủi ro account-lockout DoS; vẫn là backstop, không thay per-IP.
   LOGIN_ACCOUNT_MAX_ATTEMPTS: z.coerce.number().int().positive().default(20),
 
+  // ── G16-3 SaaS enforcement (feature-flag / usage-limit guards) ────────────
+  // Kill-switch toàn cục cho FeatureFlagEnforcementGuard + UsageLimitEnforcementGuard. Default 'true'
+  // (BẬT). Guard CHỈ áp khi route khai @RequireFeature/@EnforceUsageLimit (no-op nếu không) ⇒ default
+  // bật KHÔNG ảnh hưởng route hiện có. Đặt 'false' để tắt hẳn enforcement (emergency rollback). KHÔNG
+  // z.coerce.boolean ('false'→true bẫy).
+  SAAS_ENFORCEMENT_ENABLED: z.enum(["true", "false"]).default("true"),
+
   // ── KMS / Envelope encryption (G6-2, plan §6d) ────────────────────────────
   // KMS_PROVIDER chọn DI provider: 'local' (dev, KEK 32B từ file .secrets/) | 'vault' (prod, Vault transit).
   // Default 'local' để app vẫn boot/test mà KHÔNG cần Vault (KEK đọc lazy → fail-fast lúc dùng nếu thiếu file).

@@ -120,5 +120,10 @@ export const AUDIT_OBJECT_TYPES = [
   // B4 task attachments (real file upload — upload ghi 'task_attachment' TaskAttachmentUploaded,
   // soft-delete ghi TaskAttachmentDeleted; cùng tx withTenant. KHÔNG ghi storage key/secret material).
   "task_attachment",
+  // G16-3 SaaS scaffold (subscription/feature-flag/usage — set plan/flag/limit ghi audit cùng tx; mig 0231).
+  // Lifecycle công ty ở tầng platform (create/suspend/provision) TÁI DÙNG 'company' (chỉ action mới).
+  "company_subscription",
+  "feature_flag",
+  "usage_limit",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

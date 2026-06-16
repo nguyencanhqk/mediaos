@@ -57,3 +57,7 @@ export * from "./defect";
 export * from "./meeting";
 export * from "./permission";
 export * from "./crypto";
+// G16-3 SaaS prep
+export * from "./platform";
+export * from "./subscription";
+export * from "./template";

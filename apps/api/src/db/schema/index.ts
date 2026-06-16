@@ -35,3 +35,7 @@ export * from "./meeting";
 export * from "./two-factor";
 // G16-1b security alerting (append-only — repeated re-auth fail / cross-scope deny / anomalous login)
 export * from "./security-alerts";
+// G16-3 SaaS scaffold (subscription plan catalog + per-company subscription/feature-flag/usage)
+export * from "./saas";
+// G16-3 template clone (workspace_templates catalog + per-company dashboard_configs)
+export * from "./templates";
