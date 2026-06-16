@@ -736,6 +736,29 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+  // ── B4 Task attachments (mig 0190 — real file upload metadata) ───────────────
+  // company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  // Bảng con của tasks (FK task_id) → seed task office trước. KHÔNG skipNoContext (mọi hàng tenant-scoped).
+  {
+    name: "task_attachments",
+    table: "task_attachments",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `ta-${randomUUID().slice(0, 8)}@x.test`);
+      const taskRes = await direct.query(
+        `INSERT INTO tasks (company_id, task_type, title, status, origin, revision_round)
+         VALUES ($1, 'office', 'rls-task-for-attachment', 'not_started', 'initial', 0) RETURNING id`,
+        [t.companyId],
+      );
+      const taskId = taskRes.rows[0].id as string;
+      const r = await direct.query(
+        `INSERT INTO task_attachments
+           (company_id, task_id, uploaded_by, storage_key, file_name, content_type, size_bytes)
+         VALUES ($1, $2, $3, $4, 'rls.pdf', 'application/pdf', 100) RETURNING id`,
+        [t.companyId, taskId, u, `${t.companyId}/tasks/${taskId}/${randomUUID()}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 
   // ── G4-5 Approval / Defect ───────────────────────────────────────────────────
   {

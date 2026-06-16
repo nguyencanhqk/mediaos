@@ -349,6 +349,11 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
     ids,
   );
 
+  // ── B4 Task attachments ──────────────────────────────────────────────────
+  // task_attachments.task_id REFERENCES tasks(id) (ON DELETE CASCADE) — xoá TRƯỚC tasks cho rõ ràng
+  // (uploaded_by → users ON DELETE SET NULL, không chặn). Trước task_comments/tasks/users.
+  await direct.query("DELETE FROM task_attachments WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G4-4 Tasks & Comments ────────────────────────────────────────────────
   await direct.query("DELETE FROM task_comments WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM tasks WHERE company_id = ANY($1::uuid[])", ids);

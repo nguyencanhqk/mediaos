@@ -1,6 +1,7 @@
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
 import {
+  createAttachmentIntentSchema,
   createCommentSchema,
   createTaskSchema,
   listTasksQuerySchema,
@@ -30,3 +31,9 @@ export const pageQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).optional(),
 });
 export class PageQueryDto extends createZodDto(pageQuerySchema) {}
+
+/**
+ * Upload-intent body (B4) — fileName/contentType/sizeBytes. allowlist + max-size là nguồn sự thật ở
+ * contracts (createAttachmentIntentSchema). Service re-validate biên (defense-in-depth).
+ */
+export class CreateAttachmentIntentDto extends createZodDto(createAttachmentIntentSchema) {}

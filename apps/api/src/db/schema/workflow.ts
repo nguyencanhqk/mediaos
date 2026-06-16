@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
+  bigint,
   boolean,
   check,
   index,
@@ -612,3 +613,39 @@ export const taskComments = pgTable(
 
 export type TaskComment = typeof taskComments.$inferSelect;
 export type NewTaskComment = typeof taskComments.$inferInsert;
+
+// ─── task_attachments (B4 — real file upload, BẤT BIẾN #4: child of tasks) ──────
+// Metadata-only row pointing at an object in S3/MinIO. The actual bytes live in object storage under
+// a SERVER-derived tenant-scoped key `{company_id}/tasks/{task_id}/{uuid}` (NEVER client-supplied).
+// APPEND-ONLY (BẤT BIẾN #2): app role has GRANT SELECT,INSERT only (NO UPDATE/DELETE) — removal is a
+// soft-delete via `deleted_at` performed by a privileged path, never an app-role UPDATE. No signed URL
+// / credential is ever stored here (BẤT BIẾN #3) — presigned URLs are ephemeral and computed on demand.
+// RLS+FORCE + tenant policy live in migration 0190.
+
+export const taskAttachments = pgTable(
+  "task_attachments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
+    storageKey: text("storage_key").notNull(),
+    fileName: text("file_name").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: bigint("size_bytes", { mode: "number" }).notNull(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("task_attachments_company_id_idx").on(t.companyId),
+    index("task_attachments_company_task_idx").on(t.companyId, t.taskId),
+  ],
+);
+
+export type TaskAttachment = typeof taskAttachments.$inferSelect;
+export type NewTaskAttachment = typeof taskAttachments.$inferInsert;
