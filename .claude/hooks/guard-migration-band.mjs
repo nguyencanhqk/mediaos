@@ -32,7 +32,12 @@ const BANDS = {
   g13: [[70, 79]],
   g14: [[100, 109]],
   g15: [[110, 119]],
-  g16: [[120, 129]],
+  // G16 band gốc 0120–0129 (G16-1 hardening / G16-2 perf). G16-3 SaaS prep tràn sang band riêng
+  // 0230–0239 (sau B4 0190s + C2 0220s — KHÔNG đụng band lane khác). TASKS.md §5.2.
+  g16: [
+    [120, 129],
+    [230, 239],
+  ],
 };
 
 const MIGRATION_SQL = /[\\/]migrations[\\/](\d{4})_[^\\/]*\.sql$/i;
