@@ -7,3 +7,8 @@ allowBuilds:
   esbuild: true
   "@swc/core": true
   "@nestjs/core": true
+  # Expo native build scripts (G15 mobile)
+  expo: true
+  "expo-modules-core": true
+  "expo-secure-store": true
+  "expo-constants": true
