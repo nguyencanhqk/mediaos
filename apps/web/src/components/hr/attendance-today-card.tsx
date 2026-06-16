@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { attendanceApi } from "@/lib/attendance-api";
 import { PermissionGate } from "@/components/permission-gate";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import {
  * nút Check-in / Check-out theo trạng thái.
  */
 export function AttendanceTodayCard() {
+  const { t } = useTranslation("hr");
   const qc = useQueryClient();
 
   const { data, isLoading, isError } = useQuery({
@@ -34,7 +36,7 @@ export function AttendanceTodayCard() {
   if (isLoading) {
     return (
       <div className="rounded-lg border border-border bg-card p-6">
-        <p className="text-sm text-muted-foreground">Đang tải dữ liệu hôm nay…</p>
+        <p className="text-sm text-muted-foreground">{t("today.loading")}</p>
       </div>
     );
   }
@@ -42,7 +44,7 @@ export function AttendanceTodayCard() {
   if (isError || !data) {
     return (
       <div className="rounded-lg border border-border bg-card p-6">
-        <p className="text-sm text-destructive">Không tải được dữ liệu chấm công.</p>
+        <p className="text-sm text-destructive">{t("today.loadError")}</p>
       </div>
     );
   }
@@ -59,7 +61,7 @@ export function AttendanceTodayCard() {
     <div className="rounded-lg border border-border bg-card p-6 space-y-4">
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Chấm công hôm nay</h2>
+          <h2 className="text-lg font-semibold">{t("today.heading")}</h2>
           <p className="text-sm text-muted-foreground">{displayDate}</p>
         </div>
         {status && (
@@ -71,7 +73,7 @@ export function AttendanceTodayCard() {
 
       {schedule && (
         <div className="text-sm text-muted-foreground">
-          Ca: <span className="text-foreground font-medium">{schedule.name}</span>
+          {t("today.shiftLabel")} <span className="text-foreground font-medium">{schedule.name}</span>
           {" · "}{schedule.startTime} – {schedule.endTime}
         </div>
       )}
@@ -103,17 +105,17 @@ export function AttendanceTodayCard() {
 
       {(record?.lateMinutes ?? 0) > 0 && (
         <p className="text-sm text-orange-500">
-          Trễ {record!.lateMinutes} phút
+          {t("today.late", { minutes: record!.lateMinutes })}
         </p>
       )}
       {(record?.earlyLeaveMinutes ?? 0) > 0 && (
         <p className="text-sm text-yellow-600">
-          Về sớm {record!.earlyLeaveMinutes} phút
+          {t("today.earlyLeave", { minutes: record!.earlyLeaveMinutes })}
         </p>
       )}
 
       {periodLocked && (
-        <p className="text-xs text-muted-foreground italic">Kỳ công đã khoá.</p>
+        <p className="text-xs text-muted-foreground italic">{t("today.periodLocked")}</p>
       )}
 
       {!periodLocked && (
@@ -124,7 +126,7 @@ export function AttendanceTodayCard() {
                 onClick={() => checkIn.mutate()}
                 disabled={checkIn.isPending}
               >
-                {checkIn.isPending ? "Đang ghi…" : "Check-in"}
+                {checkIn.isPending ? t("today.checkingIn") : "Check-in"}
               </Button>
             )}
             {hasCheckedIn && !hasCheckedOut && (
@@ -133,7 +135,7 @@ export function AttendanceTodayCard() {
                 onClick={() => checkOut.mutate()}
                 disabled={checkOut.isPending}
               >
-                {checkOut.isPending ? "Đang ghi…" : "Check-out"}
+                {checkOut.isPending ? t("today.checkingIn") : "Check-out"}
               </Button>
             )}
           </PermissionGate>
@@ -142,12 +144,12 @@ export function AttendanceTodayCard() {
 
       {checkIn.isError && (
         <p className="text-sm text-destructive">
-          {checkIn.error instanceof Error ? checkIn.error.message : "Lỗi check-in."}
+          {checkIn.error instanceof Error ? checkIn.error.message : t("today.checkInError")}
         </p>
       )}
       {checkOut.isError && (
         <p className="text-sm text-destructive">
-          {checkOut.error instanceof Error ? checkOut.error.message : "Lỗi check-out."}
+          {checkOut.error instanceof Error ? checkOut.error.message : t("today.checkOutError")}
         </p>
       )}
     </div>
