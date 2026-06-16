@@ -13,6 +13,9 @@ import { PasswordService } from "../../src/auth/password.service";
 import { TokenService } from "../../src/auth/token.service";
 import { TotpService } from "../../src/auth/totp.service";
 import { TwoFactorService } from "../../src/auth/two-factor.service";
+import { ReplayGuardService } from "../../src/auth/replay-guard.service";
+import { SecurityAlertService } from "../../src/auth/security-alert.service";
+import { ValkeyService } from "../../src/permission/valkey.service";
 import { SecretEncryptionService } from "../../src/crypto/secret-encryption.service";
 import { NodeEnvelopeCipher } from "../../src/crypto/envelope-cipher";
 import { LocalKekProvider } from "../../src/crypto/local-kek.provider";
@@ -52,7 +55,9 @@ describe.skipIf(!hasDb)("G16-1 login 2FA flow", () => {
     const dbsvc = new DatabaseService();
     const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
     const mockPermissions = { getCapabilities: async () => ({}) } as unknown as PermissionService;
-    const tf = new TwoFactorService(dbsvc, secrets, totp, new TokenService(), new AuditService(), new LoginRateLimiter());
+    const replayGuard = new ReplayGuardService(new ValkeyService());
+    const securityAlerts = new SecurityAlertService(dbsvc, new AuditService());
+    const tf = new TwoFactorService(dbsvc, secrets, totp, new TokenService(), new AuditService(), new LoginRateLimiter(), replayGuard);
     const a = new AuthService(
       dbsvc,
       password,
@@ -63,6 +68,8 @@ describe.skipIf(!hasDb)("G16-1 login 2FA flow", () => {
       mockPermissions,
       secrets,
       tf,
+      replayGuard,
+      securityAlerts,
     );
     return { auth: a, twoFactor: tf };
   }
@@ -144,15 +151,32 @@ describe.skipIf(!hasDb)("G16-1 login 2FA flow", () => {
 
   it("rate-limit 2FA: vượt ngưỡng mã sai → 429", async () => {
     const { auth: freshAuth } = make(); // rate-limiter sạch — không dính lỗi tích luỹ từ test khác
-    const res = await freshAuth.login({ companySlug: A.slug, email: userEmail, password: PASSWORD }, meta);
-    if (!isChallenge(res)) throw new Error("mong đợi challenge");
+    // G16-1b: challengeToken là SINGLE-USE (jti) → MỖI lần thử phải login lại lấy challenge MỚI (đúng hành vi
+    // client thực: re-login để retry). Reuse 1 token sẽ bị jti-replay chặn TRƯỚC rate-limit (xem test riêng).
     for (let i = 0; i < 5; i++) {
+      const res = await freshAuth.login({ companySlug: A.slug, email: userEmail, password: PASSWORD }, meta);
+      if (!isChallenge(res)) throw new Error("mong đợi challenge");
       await expect(
         freshAuth.completeTwoFactorLogin(res.challengeToken, "000000", meta),
       ).rejects.toBeInstanceOf(UnauthorizedException);
     }
+    const last = await freshAuth.login({ companySlug: A.slug, email: userEmail, password: PASSWORD }, meta);
+    if (!isChallenge(last)) throw new Error("mong đợi challenge");
     await expect(
-      freshAuth.completeTwoFactorLogin(res.challengeToken, "000000", meta),
+      freshAuth.completeTwoFactorLogin(last.challengeToken, "000000", meta),
     ).rejects.toBeInstanceOf(HttpException);
+  });
+
+  it("G16-1b jti single-use: replay CÙNG challengeToken (kể cả mã ĐÚNG) → 401 (rejected)", async () => {
+    const { auth: freshAuth } = make();
+    const res = await freshAuth.login({ companySlug: A.slug, email: userEmail, password: PASSWORD }, meta);
+    if (!isChallenge(res)) throw new Error("mong đợi challenge");
+    // Lần 1: mã đúng → tokens.
+    const tokens = await freshAuth.completeTwoFactorLogin(res.challengeToken, totp.generate(enrolledSecret), meta);
+    expect(tokens.accessToken).toBeTruthy();
+    // Lần 2: REPLAY cùng challengeToken (dù mã vẫn đúng trong cùng step) → 401 (jti đã tiêu thụ, single-use).
+    await expect(
+      freshAuth.completeTwoFactorLogin(res.challengeToken, totp.generate(enrolledSecret), meta),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

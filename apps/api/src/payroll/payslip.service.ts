@@ -18,7 +18,7 @@ import { BonusPenaltyRepository } from "./bonus-penalty.repository";
 const PG_UNIQUE_VIOLATION = "23505";
 
 type RequestUser = { id: string; companyId: string };
-type PayslipAction = "run-payroll" | "view-payslip" | "read-payslip";
+type PayslipAction = "run-payroll" | "view-payslip" | "read-payslip" | "view-own-payslip";
 
 function pgCode(err: unknown): string | undefined {
   return typeof err === "object" && err !== null && "code" in err
@@ -117,10 +117,88 @@ export class PayslipService {
         }
         const row = await this.repo.findByIdTx(tx, user.companyId, id);
         if (!row) throw new NotFoundException("Payslip not found");
+        // G16-1b READ-PATH AUDIT: ghi 1 audit row cho mỗi lần ĐỌC payslip (lương nhạy cảm) TRONG cùng tx
+        // (atomic — audit fail ⇒ rollback đọc). CHỈ who/when/scope: actor + object payslip id. TUYỆT ĐỐI
+        // KHÔNG ghi giá trị lương (base/gross/net) vào audit (BẤT BIẾN #3 — audit không phải nơi lưu lương).
+        await this.auditService.record(tx, {
+          action: "payslip.viewed",
+          objectType: "payslip",
+          objectId: id,
+          actorUserId: user.id,
+        });
         return row;
       });
     } catch (err) {
       throw this.mapError(err, "Failed to read payslip");
+    }
+  }
+
+  /**
+   * B1 — nhân viên xem DANH SÁCH phiếu lương CỦA MÌNH (self-service), MONEY-FREE-by-default.
+   * action 'view-own-payslip' is_sensitive=TRUE (KHÔNG kế thừa wildcard *:* — G3-2). Fail-closed.
+   *  - Ownership ÉP Ở SERVICE/REPO: listOwnTx lọc user_id = self (KHÔNG nới quyền admin view-payslip).
+   *  - BẤT BIẾN #3a: repo SELECT money-FREE columns → tiền KHÔNG bao giờ vào response của list.
+   *  - 403 không lộ số (mapError generic).
+   */
+  async listOwn(user: RequestUser) {
+    try {
+      return await this.db.withTenant(user.companyId, async (tx) => {
+        const decision = await this.permissionService.can({
+          userId: user.id,
+          companyId: user.companyId,
+          action: "view-own-payslip",
+          resourceType: "payslip",
+          resourceId: null,
+          isSensitive: true,
+        });
+        if (!decision.allow) {
+          throw new ForbiddenException("Insufficient permission to view your payslips");
+        }
+        return await this.repo.listOwnTx(tx, user.companyId, user.id);
+      });
+    } catch (err) {
+      throw this.mapError(err, "Failed to list your payslips");
+    }
+  }
+
+  /**
+   * B1 — nhân viên xem CHI TIẾT phiếu CỦA MÌNH (full tiền) CHỈ sau RE-AUTH (step-up). Mirror getOne.
+   *  - decision 'view-own-payslip' isSensitive:true requiresReauth:true. objectGrantRequired:FALSE
+   *    TƯỜNG MINH (G12-4 TRAP): nếu thiếu, engine suy needsObjectGrant=(isSensitive&&requiresReauth)=true
+   *    ⇒ employee company-grant bị deny-object-required. ownership-scoped employee PHẢI qua được.
+   *  - OWNERSHIP ÉP Ở SERVICE, ĐỘC LẬP với cửa sổ re-auth: row.userId===user.id else Forbidden — employee
+   *    có cửa sổ re-auth payslip mình KHÔNG đọc được id người khác (test g). KHÔNG lộ số (Forbidden generic).
+   */
+  async getOwn(user: RequestUser, id: string, ctx?: { reauthValidUntil?: Date | null }) {
+    try {
+      return await this.db.withTenant(user.companyId, async (tx) => {
+        const decision = await this.permissionService.can({
+          userId: user.id,
+          companyId: user.companyId,
+          action: "view-own-payslip",
+          resourceType: "payslip",
+          resourceId: id,
+          isSensitive: true,
+          requiresReauth: true,
+          objectGrantRequired: false,
+          ctx: { reauthValidUntil: ctx?.reauthValidUntil ?? null },
+        });
+        if (!decision.allow) {
+          if (decision.reason === "deny-reauth-required") {
+            throw new ForbiddenException("Re-authentication required to view payslip");
+          }
+          throw new ForbiddenException("Insufficient permission to view payslip");
+        }
+        const row = await this.repo.findByIdTx(tx, user.companyId, id);
+        if (!row) throw new NotFoundException("Payslip not found");
+        // OWNERSHIP độc lập với re-auth: chỉ phiếu CỦA MÌNH. KHÔNG lộ số phiếu người khác.
+        if (row.userId !== user.id) {
+          throw new ForbiddenException("You can only view your own payslip");
+        }
+        return row;
+      });
+    } catch (err) {
+      throw this.mapError(err, "Failed to read your payslip");
     }
   }
 

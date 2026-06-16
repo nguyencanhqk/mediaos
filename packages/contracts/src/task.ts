@@ -141,3 +141,71 @@ export const listTasksQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).optional(),
 });
 export type ListTasksQueryRequest = z.infer<typeof listTasksQuerySchema>;
+
+// ─── Task attachments (B4 — real file upload) ────────────────────────────────────
+/**
+ * Allowlist + max-size are the SINGLE SOURCE OF TRUTH here (contracts) — both the DTO at the
+ * controller boundary AND the service boundary re-validate against these (defense-in-depth, the
+ * service does NOT trust the DTO alone). Whitelist over blacklist: only known-safe content types
+ * for office artifacts (docs/images/pdf/archives). Executables/SVG (XSS) are intentionally excluded.
+ */
+export const ATTACHMENT_ALLOWED_CONTENT_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "application/pdf",
+  "text/plain",
+  "text/csv",
+  "application/zip",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+] as const;
+
+/** Max upload size = 50 MiB. Client-declared at intent time; server enforces this ceiling. */
+export const ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024;
+
+export const attachmentContentTypeSchema = z.enum(ATTACHMENT_ALLOWED_CONTENT_TYPES);
+export type AttachmentContentType = z.infer<typeof attachmentContentTypeSchema>;
+
+/**
+ * Request body for POST /tasks/:taskId/attachments — client declares the file it intends to upload.
+ * The server NEVER accepts a storage key/path from the client: it derives the tenant-scoped key
+ * itself (`{companyId}/tasks/{taskId}/{uuid}`) and returns a presigned PUT URL.
+ * `sizeBytes` is client-declared and bounded here; the server re-checks at the service boundary.
+ */
+export const createAttachmentIntentSchema = z.object({
+  fileName: z.string().min(1).max(255),
+  contentType: attachmentContentTypeSchema,
+  sizeBytes: z.number().int().positive().max(ATTACHMENT_MAX_BYTES),
+});
+export type CreateAttachmentIntentRequest = z.infer<typeof createAttachmentIntentSchema>;
+
+/** Metadata DTO returned to the client — NO signed URL / credential is ever persisted (BẤT BIẾN #3). */
+export const attachmentSchema = z.object({
+  id: z.string().uuid(),
+  taskId: z.string().uuid(),
+  fileName: z.string(),
+  contentType: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  uploadedBy: z.string().uuid().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type AttachmentDto = z.infer<typeof attachmentSchema>;
+
+/** Response of the create-intent call: metadata row + the EPHEMERAL presigned PUT url (not persisted). */
+export const attachmentUploadIntentSchema = z.object({
+  attachment: attachmentSchema,
+  uploadUrl: z.string().url(),
+});
+export type AttachmentUploadIntentDto = z.infer<typeof attachmentUploadIntentSchema>;
+
+/** Response of GET /tasks/:taskId/attachments/:id/download — ephemeral presigned GET url. */
+export const attachmentDownloadUrlSchema = z.object({
+  downloadUrl: z.string().url(),
+});
+export type AttachmentDownloadUrlDto = z.infer<typeof attachmentDownloadUrlSchema>;

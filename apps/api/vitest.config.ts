@@ -25,6 +25,10 @@ function laneDbEnv(): Record<string, string> {
     // the harness is robust if DATABASE_WORKER_URL ever falls back to the superuser direct pool.
     ALLOW_SUPERUSER_ROTATION: "true",
     JWT_SECRET: "test-secret-test-secret-test-secret-test-secret",
+    // G16-1b: tắt 2FA-enforcement guard cho harness e2e cũ (admin mock đăng nhập KHÔNG enroll 2FA — bật sẽ
+    // 403 mọi route admin). Logic DENY của guard vẫn được phủ ở unit-test (set 'true' tường minh) + tích phân
+    // riêng. Prod/staging KHÔNG đặt biến này → default 'true' (BẬT). Chỉ là kill-switch cho test fixtures cũ.
+    TWO_FACTOR_ENFORCEMENT_ENABLED: "false",
     // G6-2e: int-specs construct LocalKekProvider for real → must point at the dev KEK. vitest cwd is
     // apps/api, so the env.schema default '.secrets/local-kek.bin' (relative) would miss the repo-root
     // file. Resolve an absolute path from this config's location instead.

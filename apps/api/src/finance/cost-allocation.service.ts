@@ -107,11 +107,12 @@ export class CostAllocationService {
 
       const totalCents = decimalStringToCents(cost.amount);
 
-      // 2. Cross-tenant target guard (polymorphic) — BATCH (gỡ N+1 B2(b)): 1 query/loại bảng (≤6),
+      // 2. Cross-tenant target guard (polymorphic) — BATCH (gỡ N+1): 1 query/loại bảng (≤6),
       //    KHÔNG còn vòng per-target. Target thiếu → 400 (giữ thông điệp cũ cho target đầu tiên vắng).
-      const existingKeys = await this.repo.existingTargetKeysTx(tx, dto.targets);
+      //    Dùng existingTargetsTx của G16-2 (C2 đã land master); B2(b) bổ sung insertManyTx batch ở bước 6.
+      const existing = await this.repo.existingTargetsTx(tx, dto.targets);
       for (const t of dto.targets) {
-        if (!existingKeys.has(`${t.targetType}:${t.targetId}`)) {
+        if (!existing.has(`${t.targetType}:${t.targetId}`)) {
           throw new BadRequestException(
             `Target không tồn tại trong công ty: ${t.targetType}:${t.targetId}`,
           );

@@ -15,14 +15,27 @@ interface PayslipReauthController {
 }
 
 /**
+ * Optional endpoint overrides (B1): the employee self-service page wires the OWN endpoints
+ * (reauthOwn/getOwn — re-auth-gated, ownership-scoped server-side). Default = admin reveal endpoints.
+ */
+interface PayslipReauthControllerOptions {
+  reauth?: (id: string, password: string) => Promise<{ expiresAt: string }>;
+  getOne?: (id: string) => Promise<PayslipDto>;
+}
+
+/**
  * usePayslipReauthController — mirror of useRevealController (G6-2h) for payslips.
  *
  * One modal per page, Promise-based. The controller never retains the detail
  * (plaintext money) in its own state — it forwards via Promise.resolve and forgets.
  * Cleanup on unmount resolves any pending promise with null (no leak).
  */
-export function usePayslipReauthController(): PayslipReauthController {
+export function usePayslipReauthController(
+  options?: PayslipReauthControllerOptions,
+): PayslipReauthController {
   const [pending, setPending] = useState<PendingReauth | null>(null);
+  const reauthFn = options?.reauth;
+  const getOneFn = options?.getOne;
 
   const requestReauth = useCallback(
     (payslipId: string) =>
@@ -67,9 +80,11 @@ export function usePayslipReauthController(): PayslipReauthController {
           payslipId={pending.payslipId}
           onRevealed={handleRevealed}
           onClose={handleClose}
+          reauth={reauthFn}
+          getOne={getOneFn}
         />
       ) : null,
-    [pending, handleRevealed, handleClose],
+    [pending, handleRevealed, handleClose, reauthFn, getOneFn],
   );
 
   return { requestReauth, modal };

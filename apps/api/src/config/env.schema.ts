@@ -39,6 +39,11 @@ export const envSchema = z.object({
   ACCESS_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(900), // 15 phút
   REFRESH_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(2592000), // 30 ngày
   RESET_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(3600), // 1 giờ
+  // G16-1b: ép server-side 2FA enrollment. Default 'true' (BẬT ở prod) — user có role requires_two_factor
+  // mà chưa enroll bị TwoFactorEnforcementGuard DENY mọi tài nguyên bảo vệ. KHÔNG z.coerce.boolean ('false'→true
+  // bẫy). Đặt 'false' ở harness e2e cũ (admin chưa enroll qua login mock) để không phá bộ test sẵn có; logic
+  // DENY vẫn được phủ bởi unit-test guard + tích phân riêng. Prod/staging GIỮ default true.
+  TWO_FACTOR_ENFORCEMENT_ENABLED: z.enum(["true", "false"]).default("true"),
   LOGIN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
   LOGIN_LOCKOUT_SEC: z.coerce.number().int().positive().default(900), // khoá tạm 15 phút
   // Bucket THEO TÀI KHOẢN (company|email, mọi IP) — bắt credential-stuffing phân tán nhiều IP lên 1 account.
@@ -54,6 +59,19 @@ export const envSchema = z.object({
   // Vault transit — chỉ bắt buộc khi KMS_PROVIDER='vault' (xem superRefine bên dưới).
   KMS_VAULT_ADDR: z.string().url().optional(),
   KMS_VAULT_TOKEN: z.string().min(1).optional(),
+  // ── Object storage / S3 (B4 task attachments — MinIO/R2 qua @aws-sdk/client-s3) ──────────────
+  // OPTIONAL để API vẫn boot khi storage chưa cấu hình (dev không docker). ObjectStorageService
+  // fail-fast (StorageNotConfiguredError) KHI DÙNG nếu thiếu — KHÔNG fail-open (không tự bịa endpoint).
+  // S3_FORCE_PATH_STYLE=true cho MinIO (bucket-in-path, không virtual-host). Default true.
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_REGION: z.string().min(1).default("us-east-1"),
+  S3_ACCESS_KEY: z.string().min(1).optional(),
+  S3_SECRET_KEY: z.string().min(1).optional(),
+  S3_BUCKET: z.string().min(1).optional(),
+  S3_FORCE_PATH_STYLE: z.enum(["true", "false"]).default("true"),
+  // TTL (giây) cho presigned PUT/GET URL — ephemeral, KHÔNG persist. Default 5 phút.
+  S3_PRESIGN_TTL_SEC: z.coerce.number().int().positive().max(3600).default(300),
+
   // ⚠️ ALLOW_SUPERUSER_ROTATION (KHÔNG validate qua zod — CỐ Ý): SecretRotationService đọc THẲNG
   // `process.env.ALLOW_SUPERUSER_ROTATION === 'true'` để fail-closed tuyệt đối (mọi giá trị ≠ 'true', kể cả
   // unset → CHẶN rotation bằng role BYPASS RLS). Không dùng z.coerce.boolean() vì nó coi 'false' → true (bẫy).

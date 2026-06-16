@@ -10,6 +10,8 @@ import { TwoFactorService } from "../../src/auth/two-factor.service";
 import { TotpService } from "../../src/auth/totp.service";
 import { TokenService } from "../../src/auth/token.service";
 import { LoginRateLimiter } from "../../src/auth/login-rate-limiter";
+import { ReplayGuardService } from "../../src/auth/replay-guard.service";
+import { ValkeyService } from "../../src/permission/valkey.service";
 import { DatabaseService } from "../../src/db/db.service";
 import { SecretEncryptionService } from "../../src/crypto/secret-encryption.service";
 import { NodeEnvelopeCipher } from "../../src/crypto/envelope-cipher";
@@ -38,7 +40,7 @@ describe.skipIf(!hasDb)("G16-1 TwoFactorService — 2FA TOTP", () => {
   beforeAll(async () => {
     const db = new DatabaseService();
     const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
-    svc = new TwoFactorService(db, secrets, totp, new TokenService(), new AuditService(), new LoginRateLimiter());
+    svc = new TwoFactorService(db, secrets, totp, new TokenService(), new AuditService(), new LoginRateLimiter(), new ReplayGuardService(new ValkeyService()));
 
     A = await seedCompany(direct, "g16a");
     B = await seedCompany(direct, "g16b");

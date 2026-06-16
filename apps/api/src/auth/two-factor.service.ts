@@ -13,6 +13,7 @@ import { AuditService } from "../events/audit.service";
 import { SecretEncryptionService } from "../crypto/secret-encryption.service";
 import type { EncryptedColumns } from "../crypto/secret-encryption.types";
 import { LoginRateLimiter } from "./login-rate-limiter";
+import { ReplayGuardService } from "./replay-guard.service";
 import { TokenService } from "./token.service";
 import { TotpService } from "./totp.service";
 
@@ -44,6 +45,7 @@ export class TwoFactorService {
     private readonly tokens: TokenService,
     private readonly audit: AuditService,
     private readonly rateLimiter: LoginRateLimiter,
+    private readonly replayGuard: ReplayGuardService,
   ) {}
 
   // ── login-path helpers (chạy TRONG tx của login để cùng 1 transaction) ────────────────────────
@@ -202,6 +204,22 @@ export class TwoFactorService {
       const secret = await this.decryptSecret(row, companyId, userId);
 
       if (this.totp.verify(code, secret)) {
+        // Defense-in-depth (G16-1b): TOTP step-replay. Mã hợp lệ trong 1 time-step (30s) — đánh dấu
+        // (userId, step) single-use để CÙNG mã KHÔNG verify lại được trong cùng step (chống dùng lại mã
+        // bị nghe lén/replay). Fail-closed (ReplayGuard hạ memory khi Valkey rớt). Đã giữ → coi như SAI mã.
+        const firstUse = await this.replayGuard.claim(
+          `totp-step:${userId}:${this.totp.currentStep()}`,
+          90, // ~3 step (dung sai window:1) — đủ phủ cửa sổ mã còn hiệu lực.
+        );
+        if (!firstUse) {
+          await this.audit.record(tx, {
+            action: "auth.2fa_step_replay_rejected",
+            objectType: "auth",
+            actorUserId: userId,
+            objectId: userId,
+          });
+          return false;
+        }
         await this.audit.record(tx, {
           action: "auth.2fa_verified",
           objectType: "auth",

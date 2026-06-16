@@ -29,6 +29,7 @@ import { DefectModule } from "./defect/defect.module";
 import { MeetingModule } from "./meeting/meeting.module";
 import { JwtAuthGuard } from "./permission/guards/jwt-auth.guard";
 import { CompanyGuard } from "./permission/guards/company.guard";
+import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
 
 @Module({
   imports: [
@@ -64,10 +65,13 @@ import { CompanyGuard } from "./permission/guards/company.guard";
     MeetingModule,
   ],
   providers: [
-    // Global guard pipeline: JWT auth → company context extraction.
+    // Global guard pipeline: JWT auth → company context extraction → 2FA enforcement (G16-1b).
+    // Order matters: JwtAuthGuard attaches req.user; CompanyGuard asserts companyId; TwoFactorEnforcementGuard
+    // DENIES protected routes when role requires 2FA but user hasn't enrolled (skips @Public/@AllowWithoutTwoFactor).
     // PermissionGuard is NOT registered globally here — add @RequirePermission per-route.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: CompanyGuard },
+    { provide: APP_GUARD, useClass: TwoFactorEnforcementGuard },
   ],
 })
 export class AppModule {}

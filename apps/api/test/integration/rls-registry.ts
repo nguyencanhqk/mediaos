@@ -206,6 +206,20 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
   {
+    name: "security_alerts",
+    table: "security_alerts",
+    // G16-1b security alerting (mig 0122) — append-only, company_id NOT NULL + RLS+FORCE. Seed direct.
+    // KHÔNG skipNoContext (mọi hàng tenant-scoped, không hàng global).
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO security_alerts (company_id, alert_type, severity, subject)
+         VALUES ($1, 'repeated_reauth_failure', 'high', 'rls-subject') RETURNING id`,
+        [t.companyId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
     name: "refresh_tokens",
     table: "refresh_tokens",
     seedRow: async (direct, t) => {
@@ -732,6 +746,29 @@ export const RLS_TABLES: RlsTableCase[] = [
         `INSERT INTO task_comments (company_id, task_id, user_id, body)
          VALUES ($1, $2, $3, 'rls-comment') RETURNING id`,
         [t.companyId, taskRes.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  // ── B4 Task attachments (mig 0190 — real file upload metadata) ───────────────
+  // company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  // Bảng con của tasks (FK task_id) → seed task office trước. KHÔNG skipNoContext (mọi hàng tenant-scoped).
+  {
+    name: "task_attachments",
+    table: "task_attachments",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `ta-${randomUUID().slice(0, 8)}@x.test`);
+      const taskRes = await direct.query(
+        `INSERT INTO tasks (company_id, task_type, title, status, origin, revision_round)
+         VALUES ($1, 'office', 'rls-task-for-attachment', 'not_started', 'initial', 0) RETURNING id`,
+        [t.companyId],
+      );
+      const taskId = taskRes.rows[0].id as string;
+      const r = await direct.query(
+        `INSERT INTO task_attachments
+           (company_id, task_id, uploaded_by, storage_key, file_name, content_type, size_bytes)
+         VALUES ($1, $2, $3, $4, 'rls.pdf', 'application/pdf', 100) RETURNING id`,
+        [t.companyId, taskId, u, `${t.companyId}/tasks/${taskId}/${randomUUID()}`],
       );
       return r.rows[0].id as string;
     },

@@ -8,6 +8,9 @@ import { PasswordService } from "../../src/auth/password.service";
 import { TokenService } from "../../src/auth/token.service";
 import { TotpService } from "../../src/auth/totp.service";
 import { TwoFactorService } from "../../src/auth/two-factor.service";
+import { ReplayGuardService } from "../../src/auth/replay-guard.service";
+import { SecurityAlertService } from "../../src/auth/security-alert.service";
+import { ValkeyService } from "../../src/permission/valkey.service";
 import { SecretEncryptionService } from "../../src/crypto/secret-encryption.service";
 import { NodeEnvelopeCipher } from "../../src/crypto/envelope-cipher";
 import { LocalKekProvider } from "../../src/crypto/local-kek.provider";
@@ -51,6 +54,8 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
     const dbsvc = new DatabaseService();
     const mockPermissions = { getCapabilities: async () => ({}) } as unknown as PermissionService;
     const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
+    const replayGuard = new ReplayGuardService(new ValkeyService());
+    const securityAlerts = new SecurityAlertService(dbsvc, new AuditService());
     const twoFactor = new TwoFactorService(
       dbsvc,
       secrets,
@@ -58,6 +63,7 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
       new TokenService(),
       new AuditService(),
       new LoginRateLimiter(),
+      replayGuard,
     );
     return new AuthService(
       dbsvc,
@@ -69,6 +75,8 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
       mockPermissions,
       secrets,
       twoFactor,
+      replayGuard,
+      securityAlerts,
     );
   }
 
