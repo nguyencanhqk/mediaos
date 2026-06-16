@@ -443,6 +443,13 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
     "DELETE FROM roles WHERE company_id = ANY($1::uuid[]) AND is_system = false",
     ids,
   );
+  // G16-3 SaaS prep: per-company subscription/feature/usage + dashboard configs (company_id → companies
+  // ON DELETE CASCADE; FK plan_id → subscription_plans catalog không xoá). Xoá tường minh trước companies.
+  await direct.query("DELETE FROM company_usage_counters WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM company_usage_limits WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM company_feature_flags WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM company_subscriptions WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM dashboard_configs WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM users WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM companies WHERE id = ANY($1::uuid[])", ids);
 }
