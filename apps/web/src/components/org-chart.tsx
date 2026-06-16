@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Background,
   Controls,
@@ -107,6 +108,7 @@ interface OrgChartProps {
 
 /** Sơ đồ tổ chức tương tác (@xyflow/react) — node = org_unit, edge = parent→child. */
 export function OrgChart({ units, onSelectNode, emptyLabel }: OrgChartProps) {
+  const { t } = useTranslation("org");
   const { nodes, edges } = useMemo(() => buildOrgChartFlow(units), [units]);
 
   const handleNodeClick = useCallback<NodeMouseHandler>(
@@ -117,7 +119,7 @@ export function OrgChart({ units, onSelectNode, emptyLabel }: OrgChartProps) {
   if (units.length === 0) {
     return (
       <div className="flex h-[420px] items-center justify-center rounded-xl border border-border text-sm text-muted-foreground">
-        {emptyLabel ?? "Chưa có dữ liệu sơ đồ tổ chức."}
+        {emptyLabel ?? t("chart.empty")}
       </div>
     );
   }

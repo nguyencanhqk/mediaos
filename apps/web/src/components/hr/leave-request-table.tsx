@@ -6,6 +6,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { LeaveRequestDto } from "@mediaos/contracts";
 import { leaveApi } from "@/lib/leave-api";
 import { PermissionGate } from "@/components/permission-gate";
@@ -24,6 +25,7 @@ interface Props {
 const col = createColumnHelper<LeaveRequestDto>();
 
 export function LeaveRequestTable({ requests, canApprove }: Props) {
+  const { t } = useTranslation("hr");
   const qc = useQueryClient();
 
   const approve = useMutation({
@@ -47,25 +49,25 @@ export function LeaveRequestTable({ requests, canApprove }: Props) {
   const columns = useMemo(
     () => [
       col.accessor("leaveTypeName", {
-        header: "Loại nghỉ",
+        header: t("leaveRequestTable.colType"),
         cell: (ctx) => ctx.getValue() ?? "—",
       }),
       col.accessor("startDate", {
-        header: "Từ ngày",
+        header: t("leaveRequestTable.colStartDate"),
         cell: (ctx) => formatDateFull(ctx.getValue()),
       }),
       col.accessor("endDate", {
-        header: "Đến ngày",
+        header: t("leaveRequestTable.colEndDate"),
         cell: (ctx) => formatDateFull(ctx.getValue()),
       }),
       col.accessor("totalDays", {
-        header: "Số ngày",
+        header: t("leaveRequestTable.colDays"),
         cell: (ctx) => (
           <span className="tabular-nums">{ctx.getValue()}</span>
         ),
       }),
       col.accessor("status", {
-        header: "Trạng thái",
+        header: t("leaveRequestTable.colStatus"),
         cell: (ctx) => {
           const v = ctx.getValue();
           return (
@@ -76,14 +78,14 @@ export function LeaveRequestTable({ requests, canApprove }: Props) {
         },
       }),
       col.accessor("reviewNote", {
-        header: "Ghi chú duyệt",
+        header: t("leaveRequestTable.colReviewNote"),
         cell: (ctx) => (
           <span className="text-sm text-muted-foreground">{ctx.getValue() ?? "—"}</span>
         ),
       }),
       col.display({
         id: "actions",
-        header: "Thao tác",
+        header: t("leaveRequestTable.colActions"),
         cell: (ctx) => {
           const row = ctx.row.original;
           const isLoading =
@@ -101,7 +103,7 @@ export function LeaveRequestTable({ requests, canApprove }: Props) {
                     disabled={isLoading}
                     onClick={() => approve.mutate(row.id)}
                   >
-                    Duyệt
+                    {t("leaveRequestTable.approve")}
                   </Button>
                   <Button
                     size="sm"
@@ -109,7 +111,7 @@ export function LeaveRequestTable({ requests, canApprove }: Props) {
                     disabled={isLoading}
                     onClick={() => reject.mutate(row.id)}
                   >
-                    Từ chối
+                    {t("leaveRequestTable.reject")}
                   </Button>
                 </>
               )}
@@ -121,7 +123,7 @@ export function LeaveRequestTable({ requests, canApprove }: Props) {
                     disabled={isLoading}
                     onClick={() => cancel.mutate(row.id)}
                   >
-                    Huỷ
+                    {t("leaveRequestTable.cancel")}
                   </Button>
                 </PermissionGate>
               )}
@@ -130,7 +132,7 @@ export function LeaveRequestTable({ requests, canApprove }: Props) {
         },
       }),
     ],
-    [canApprove, approve, reject, cancel],
+    [t, canApprove, approve, reject, cancel],
   );
 
   const table = useReactTable({
@@ -142,7 +144,7 @@ export function LeaveRequestTable({ requests, canApprove }: Props) {
   if (requests.length === 0) {
     return (
       <p className="text-sm text-muted-foreground py-4">
-        Chưa có đơn nghỉ phép nào.
+        {t("leaveRequestTable.empty")}
       </p>
     );
   }

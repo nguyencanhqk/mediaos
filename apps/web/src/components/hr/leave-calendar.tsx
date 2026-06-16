@@ -1,4 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import type { LeaveCalendarEntryDto } from "@mediaos/contracts";
 import { leaveApi } from "@/lib/leave-api";
 import { formatDateFull } from "./constants";
@@ -7,13 +9,13 @@ interface Props {
   month: string; // YYYY-MM
 }
 
-function CalendarEntry({ entry }: { entry: LeaveCalendarEntryDto }) {
+function CalendarEntry({ entry, t }: { entry: LeaveCalendarEntryDto; t: TFunction<"hr"> }) {
   return (
     <div className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
       <div className="space-y-0.5">
         <p className="font-medium">{entry.userFullName ?? "—"}</p>
         <p className="text-muted-foreground text-xs">
-          {entry.leaveTypeName} · {entry.totalDays} ngày
+          {entry.leaveTypeName} · {t("leaveCalendar.days", { count: entry.totalDays })}
         </p>
       </div>
       <div className="text-right text-xs text-muted-foreground">
@@ -30,6 +32,8 @@ function CalendarEntry({ entry }: { entry: LeaveCalendarEntryDto }) {
  * Lịch nghỉ team trong tháng — KHÔNG hiển thị lý do (bảo mật; server không trả về).
  */
 export function LeaveCalendar({ month }: Props) {
+  const { t } = useTranslation("hr");
+
   const { data: entries = [], isLoading, isError } = useQuery({
     queryKey: ["leave", "calendar", month],
     queryFn: () => leaveApi.listCalendar(month),
@@ -41,8 +45,8 @@ export function LeaveCalendar({ month }: Props) {
   if (isLoading) {
     return (
       <div className="space-y-2">
-        <h3 className="text-sm font-semibold">Lịch nghỉ team — {displayMonth}</h3>
-        <p className="text-sm text-muted-foreground">Đang tải lịch nghỉ…</p>
+        <h3 className="text-sm font-semibold">{t("leaveCalendar.heading", { month: displayMonth })}</h3>
+        <p className="text-sm text-muted-foreground">{t("leaveCalendar.loading")}</p>
       </div>
     );
   }
@@ -50,23 +54,23 @@ export function LeaveCalendar({ month }: Props) {
   if (isError) {
     return (
       <div className="space-y-2">
-        <h3 className="text-sm font-semibold">Lịch nghỉ team — {displayMonth}</h3>
-        <p className="text-sm text-destructive">Không tải được lịch nghỉ.</p>
+        <h3 className="text-sm font-semibold">{t("leaveCalendar.heading", { month: displayMonth })}</h3>
+        <p className="text-sm text-destructive">{t("leaveCalendar.loadError")}</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold">Lịch nghỉ team — {displayMonth}</h3>
+      <h3 className="text-sm font-semibold">{t("leaveCalendar.heading", { month: displayMonth })}</h3>
       {entries.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Không có ai nghỉ trong {displayMonth}.
+          {t("leaveCalendar.empty", { month: displayMonth })}
         </p>
       ) : (
         <div className="space-y-2">
           {entries.map((entry, idx) => (
-            <CalendarEntry key={`${entry.userId}-${entry.startDate}-${idx}`} entry={entry} />
+            <CalendarEntry key={`${entry.userId}-${entry.startDate}-${idx}`} entry={entry} t={t} />
           ))}
         </div>
       )}

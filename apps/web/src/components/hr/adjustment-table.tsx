@@ -6,6 +6,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { AdjustmentRequestDto } from "@mediaos/contracts";
 import { attendanceApi } from "@/lib/attendance-api";
 import { PermissionGate } from "@/components/permission-gate";
@@ -26,6 +27,7 @@ interface Props {
 const col = createColumnHelper<AdjustmentRequestDto>();
 
 export function AdjustmentTable({ requests, canApprove }: Props) {
+  const { t } = useTranslation("hr");
   const qc = useQueryClient();
 
   const approve = useMutation({
@@ -46,29 +48,29 @@ export function AdjustmentTable({ requests, canApprove }: Props) {
   const columns = useMemo(
     () => [
       col.accessor("workDate", {
-        header: "Ngày",
+        header: t("adjustmentTable.colDate"),
         cell: (ctx) => formatDateFull(ctx.getValue()),
       }),
       col.accessor("requestedCheckInAt", {
-        header: "Check-in đề nghị",
+        header: t("adjustmentTable.colCheckInRequested"),
         cell: (ctx) => (
           <span className="tabular-nums">{formatTime(ctx.getValue())}</span>
         ),
       }),
       col.accessor("requestedCheckOutAt", {
-        header: "Check-out đề nghị",
+        header: t("adjustmentTable.colCheckOutRequested"),
         cell: (ctx) => (
           <span className="tabular-nums">{formatTime(ctx.getValue())}</span>
         ),
       }),
       col.accessor("reason", {
-        header: "Lý do",
+        header: t("adjustmentTable.colReason"),
         cell: (ctx) => (
           <span className="max-w-xs truncate block text-sm">{ctx.getValue()}</span>
         ),
       }),
       col.accessor("status", {
-        header: "Trạng thái",
+        header: t("adjustmentTable.colStatus"),
         cell: (ctx) => {
           const v = ctx.getValue();
           return (
@@ -79,14 +81,14 @@ export function AdjustmentTable({ requests, canApprove }: Props) {
         },
       }),
       col.accessor("reviewNote", {
-        header: "Ghi chú duyệt",
+        header: t("adjustmentTable.colReviewNote"),
         cell: (ctx) => (
           <span className="text-sm text-muted-foreground">{ctx.getValue() ?? "—"}</span>
         ),
       }),
       col.display({
         id: "actions",
-        header: "Thao tác",
+        header: t("adjustmentTable.colActions"),
         cell: (ctx) => {
           const row = ctx.row.original;
           const isLoading =
@@ -104,7 +106,7 @@ export function AdjustmentTable({ requests, canApprove }: Props) {
                     disabled={isLoading}
                     onClick={() => approve.mutate(row.id)}
                   >
-                    Duyệt
+                    {t("adjustmentTable.approve")}
                   </Button>
                   <Button
                     size="sm"
@@ -112,7 +114,7 @@ export function AdjustmentTable({ requests, canApprove }: Props) {
                     disabled={isLoading}
                     onClick={() => reject.mutate(row.id)}
                   >
-                    Từ chối
+                    {t("adjustmentTable.reject")}
                   </Button>
                 </>
               )}
@@ -124,7 +126,7 @@ export function AdjustmentTable({ requests, canApprove }: Props) {
                     disabled={isLoading}
                     onClick={() => cancel.mutate(row.id)}
                   >
-                    Huỷ
+                    {t("adjustmentTable.cancel")}
                   </Button>
                 </PermissionGate>
               )}
@@ -133,7 +135,7 @@ export function AdjustmentTable({ requests, canApprove }: Props) {
         },
       }),
     ],
-    [canApprove, approve, reject, cancel],
+    [t, canApprove, approve, reject, cancel],
   );
 
   const table = useReactTable({
@@ -145,7 +147,7 @@ export function AdjustmentTable({ requests, canApprove }: Props) {
   if (requests.length === 0) {
     return (
       <p className="text-sm text-muted-foreground py-4">
-        Chưa có đơn bổ sung công nào.
+        {t("adjustmentTable.empty")}
       </p>
     );
   }

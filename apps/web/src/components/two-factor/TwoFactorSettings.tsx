@@ -1,4 +1,6 @@
+import type { TFunction } from "i18next";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { QRCodeSVG } from "qrcode.react";
 import type { TwoFactorEnrollResponse, TwoFactorStatus } from "@mediaos/contracts";
 import { Button } from "@/components/ui/button";
@@ -7,9 +9,9 @@ import { Dialog } from "@/components/ui/dialog";
 import { ApiError } from "@/lib/api-client";
 import { twoFactorApi } from "@/lib/two-factor-api";
 
-function errMsg(e: unknown): string {
+function errMsg(e: unknown, t: TFunction<"auth">): string {
   if (e instanceof ApiError) return e.message;
-  return e instanceof Error ? e.message : "Đã xảy ra lỗi.";
+  return e instanceof Error ? e.message : t("errors.unknown");
 }
 
 /**
@@ -18,6 +20,7 @@ function errMsg(e: unknown): string {
  * ⚠️ Cần access token thật (auth store) — DORMANT cho tới khi real-login FE land.
  */
 export function TwoFactorSettings() {
+  const { t } = useTranslation("auth");
   const [status, setStatus] = useState<TwoFactorStatus | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [enroll, setEnroll] = useState<TwoFactorEnrollResponse | null>(null);
@@ -33,9 +36,9 @@ export function TwoFactorSettings() {
       setStatus(await twoFactorApi.status());
     } catch (e) {
       setStatus(null);
-      setLoadError(errMsg(e));
+      setLoadError(errMsg(e, t));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void loadStatus();
@@ -48,7 +51,7 @@ export function TwoFactorSettings() {
       setEnroll(await twoFactorApi.enroll());
       setEnableCode("");
     } catch (e) {
-      setActionError(errMsg(e));
+      setActionError(errMsg(e, t));
     } finally {
       setBusy(false);
     }
@@ -62,7 +65,7 @@ export function TwoFactorSettings() {
       setEnroll(null);
       await loadStatus();
     } catch (e) {
-      setActionError(errMsg(e));
+      setActionError(errMsg(e, t));
     } finally {
       setBusy(false);
     }
@@ -77,7 +80,7 @@ export function TwoFactorSettings() {
       setDisablePassword("");
       await loadStatus();
     } catch (e) {
-      setActionError(errMsg(e));
+      setActionError(errMsg(e, t));
     } finally {
       setBusy(false);
     }
@@ -86,37 +89,37 @@ export function TwoFactorSettings() {
   if (loadError) {
     return (
       <div className="space-y-3 rounded-lg border border-border p-4">
-        <p className="text-sm text-destructive">Không tải được trạng thái 2FA: {loadError}</p>
+        <p className="text-sm text-destructive">{t("twoFactor.loadStatusFailed", { detail: loadError })}</p>
         <Button variant="outline" size="sm" onClick={() => void loadStatus()}>
-          Thử lại
+          {t("common:actions.retry")}
         </Button>
       </div>
     );
   }
 
   if (!status) {
-    return <p className="text-sm text-muted-foreground">Đang tải trạng thái 2FA…</p>;
+    return <p className="text-sm text-muted-foreground">{t("twoFactor.loadingStatus")}</p>;
   }
 
   return (
     <div className="space-y-4 rounded-lg border border-border p-4">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h3 className="font-medium">Xác thực 2 lớp (2FA)</h3>
+          <h3 className="font-medium">{t("twoFactor.settingsTitle")}</h3>
           <p className="text-sm text-muted-foreground">
-            {status.enabled ? "Đang BẬT — yêu cầu mã TOTP khi đăng nhập." : "Đang TẮT."}
+            {status.enabled ? t("twoFactor.enabledDesc") : t("twoFactor.disabledDesc")}
             {status.required && !status.enabled && (
-              <span className="ml-1 font-medium text-destructive">Vai trò của bạn BẮT BUỘC bật 2FA.</span>
+              <span className="ml-1 font-medium text-destructive">{t("twoFactor.requiredNote")}</span>
             )}
           </p>
         </div>
         {status.enabled ? (
           <Button variant="outline" size="sm" disabled={busy} onClick={() => setDisableOpen(true)}>
-            Tắt 2FA
+            {t("twoFactor.disable")}
           </Button>
         ) : (
           <Button size="sm" disabled={busy} onClick={() => void startEnroll()}>
-            Bật 2FA
+            {t("twoFactor.enable")}
           </Button>
         )}
       </div>
@@ -129,15 +132,15 @@ export function TwoFactorSettings() {
         onClose={() => {
           if (!busy) setEnroll(null);
         }}
-        title="Thiết lập 2FA"
-        description="Quét QR bằng app authenticator (Google Authenticator/Authy), rồi nhập mã 6 số để xác nhận."
+        title={t("twoFactor.enrollTitle")}
+        description={t("twoFactor.enrollDesc")}
         footer={
           <>
             <Button variant="outline" disabled={busy} onClick={() => setEnroll(null)}>
-              Huỷ
+              {t("twoFactor.cancel")}
             </Button>
             <Button disabled={busy || enableCode.trim().length < 6} onClick={() => void confirmEnable()}>
-              Xác nhận bật
+              {t("twoFactor.confirmEnable")}
             </Button>
           </>
         }
@@ -148,7 +151,7 @@ export function TwoFactorSettings() {
               <QRCodeSVG value={enroll.otpauthUri} size={176} />
             </div>
             <div>
-              <p className="mb-1 text-sm font-medium">Mã khôi phục (lưu ngay — chỉ hiện 1 lần):</p>
+              <p className="mb-1 text-sm font-medium">{t("twoFactor.recoveryCodesLabel")}</p>
               <ul className="grid grid-cols-2 gap-1 rounded-md bg-muted p-3 font-mono text-xs">
                 {enroll.recoveryCodes.map((c) => (
                   <li key={c}>{c}</li>
@@ -157,7 +160,7 @@ export function TwoFactorSettings() {
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium" htmlFor="enable-code">
-                Mã xác nhận
+                {t("twoFactor.enableCodeLabel")}
               </label>
               <Input
                 id="enable-code"
@@ -179,26 +182,26 @@ export function TwoFactorSettings() {
         onClose={() => {
           if (!busy) setDisableOpen(false);
         }}
-        title="Tắt 2FA"
-        description="Nhập lại mật khẩu để xác nhận tắt xác thực 2 lớp."
+        title={t("twoFactor.disableTitle")}
+        description={t("twoFactor.disableDesc")}
         footer={
           <>
             <Button variant="outline" disabled={busy} onClick={() => setDisableOpen(false)}>
-              Huỷ
+              {t("twoFactor.cancel")}
             </Button>
             <Button
               variant="destructive"
               disabled={busy || disablePassword.length === 0}
               onClick={() => void confirmDisable()}
             >
-              Tắt 2FA
+              {t("twoFactor.disable")}
             </Button>
           </>
         }
       >
         <div className="space-y-1">
           <label className="text-sm font-medium" htmlFor="disable-pw">
-            Mật khẩu
+            {t("fields.password")}
           </label>
           <Input
             id="disable-pw"

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { ChannelDto, UpdateChannelRequest } from "@mediaos/contracts";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -50,6 +51,7 @@ interface EditChannelDialogProps {
 }
 
 export function EditChannelDialog({ channel, open, onClose }: EditChannelDialogProps) {
+  const { t } = useTranslation("channels");
   const qc = useQueryClient();
   const [form, setForm] = useState<ChannelFormState>(() => fromChannel(channel));
   const employees = useEmployeeOptions();
@@ -73,18 +75,18 @@ export function EditChannelDialog({ channel, open, onClose }: EditChannelDialogP
     <Dialog
       open={open}
       onClose={onClose}
-      title="Sửa kênh"
+      title={t("editDialog.title")}
       footer={
         <>
           <Button variant="ghost" size="sm" onClick={onClose}>
-            Huỷ
+            {t("editDialog.cancel")}
           </Button>
           <Button
             size="sm"
             onClick={() => update.mutate()}
             disabled={!form.name.trim() || update.isPending}
           >
-            {update.isPending ? "Đang lưu…" : "Lưu"}
+            {update.isPending ? t("editDialog.saving") : t("common:actions.save")}
           </Button>
         </>
       }
@@ -92,8 +94,8 @@ export function EditChannelDialog({ channel, open, onClose }: EditChannelDialogP
       <ChannelFormFields value={form} onChange={(patch) => setForm((f) => ({ ...f, ...patch }))} employees={employees} teams={teams} showStatus />
       {update.isError && (
         <p className="text-sm text-destructive">
-          Lưu thất bại:{" "}
-          {update.error instanceof Error ? update.error.message : "Lỗi không xác định"}
+          {t("editDialog.saveFailed")}{" "}
+          {update.error instanceof Error ? update.error.message : t("editDialog.errorUnknown")}
         </p>
       )}
     </Dialog>

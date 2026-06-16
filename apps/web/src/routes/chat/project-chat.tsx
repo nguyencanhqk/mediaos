@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Send } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { chatApi } from "@/lib/chat-api";
@@ -9,6 +10,7 @@ import { projectsApi } from "@/lib/projects-api";
 import type { ChatMessageDto } from "@mediaos/contracts";
 
 export function ProjectChatPage() {
+  const { t } = useTranslation("chat");
   const { projectId } = useParams({ from: "/chat/projects/$projectId" });
   const [body, setBody] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -60,7 +62,7 @@ export function ProjectChatPage() {
           <h1 className="font-semibold">Chat — {project?.name ?? projectId}</h1>
         </header>
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          Phòng chat chưa được tạo cho dự án này.
+          {t("chat.noRoom")}
         </div>
       </div>
     );
@@ -74,7 +76,7 @@ export function ProjectChatPage() {
 
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
         {isLoading && (
-          <p className="text-sm text-muted-foreground">Đang tải...</p>
+          <p className="text-sm text-muted-foreground">{t("chat.loading")}</p>
         )}
         {messages?.map((msg: ChatMessageDto) => (
           <div key={msg.id} className="flex items-start gap-3">
@@ -105,7 +107,7 @@ export function ProjectChatPage() {
         <Input
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          placeholder="Nhập tin nhắn..."
+          placeholder={t("chat.messagePlaceholder")}
           className="flex-1"
           disabled={send.isPending || !room?.id}
         />

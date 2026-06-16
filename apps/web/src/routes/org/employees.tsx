@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { employeesApi } from "@/lib/employees-api";
 import type { ImportEmployeePreviewDto } from "@mediaos/contracts";
@@ -8,6 +9,7 @@ import type { ImportEmployeePreviewDto } from "@mediaos/contracts";
 type ImportStep = "idle" | "preview" | "done";
 
 export function EmployeesPage() {
+  const { t } = useTranslation("org");
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [importStep, setImportStep] = useState<ImportStep>("idle");
@@ -58,14 +60,14 @@ export function EmployeesPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Nhân sự</h1>
+        <h1 className="text-2xl font-semibold">{t("employees.title")}</h1>
         <Button
           variant="outline"
           size="sm"
           onClick={() => fileRef.current?.click()}
           disabled={upload.isPending || importStep === "preview"}
         >
-          {upload.isPending ? "Đang xử lý…" : "Import CSV"}
+          {upload.isPending ? t("employees.importing") : t("employees.importCsv")}
         </Button>
         <input
           ref={fileRef}
@@ -79,7 +81,7 @@ export function EmployeesPage() {
       {/* Import wizard */}
       {upload.isError && (
         <p className="text-sm text-destructive">
-          Upload thất bại: {upload.error instanceof Error ? upload.error.message : "Lỗi không xác định"}
+          {t("employees.uploadError", { message: upload.error instanceof Error ? upload.error.message : t("employees.unknownError") })}
         </p>
       )}
 
@@ -87,15 +89,15 @@ export function EmployeesPage() {
         <div className="space-y-3 rounded-xl border border-border p-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-medium">
-              Xem trước: {preview.valid.length} hợp lệ
+              {t("employees.preview.heading", { valid: preview.valid.length })}
               {preview.invalid.length > 0 && (
                 <span className="ml-2 text-destructive">
-                  · {preview.invalid.length} lỗi
+                  {t("employees.preview.invalidCount", { count: preview.invalid.length })}
                 </span>
               )}
             </h2>
             <Button variant="ghost" size="sm" onClick={resetImport}>
-              Huỷ
+              {t("employees.preview.cancel")}
             </Button>
           </div>
 
@@ -103,7 +105,7 @@ export function EmployeesPage() {
             <ul className="space-y-1 rounded-lg bg-destructive/10 p-3 text-xs text-destructive">
               {preview.invalid.map((row) => (
                 <li key={row.row}>
-                  Dòng {row.row}: {row.errors.join("; ")}
+                  {t("employees.preview.rowError", { row: row.row, errors: row.errors.join("; ") })}
                 </li>
               ))}
             </ul>
@@ -119,15 +121,14 @@ export function EmployeesPage() {
             ))}
             {preview.valid.length > 5 && (
               <li className="px-3 py-2 text-muted-foreground">
-                … và {preview.valid.length - 5} dòng nữa
+                {t("employees.preview.moreRows", { count: preview.valid.length - 5 })}
               </li>
             )}
           </ul>
 
           {confirm.isError && (
             <p className="text-sm text-destructive">
-              Xác nhận thất bại:{" "}
-              {confirm.error instanceof Error ? confirm.error.message : "Lỗi không xác định"}
+              {t("employees.preview.confirmError", { message: confirm.error instanceof Error ? confirm.error.message : t("employees.unknownError") })}
             </p>
           )}
           {preview.valid.length > 0 && (
@@ -137,8 +138,8 @@ export function EmployeesPage() {
               disabled={confirm.isPending}
             >
               {confirm.isPending
-                ? "Đang nhập…"
-                : `Xác nhận nhập ${preview.valid.length} nhân sự`}
+                ? t("employees.preview.confirming")
+                : t("employees.preview.confirmButton", { count: preview.valid.length })}
             </Button>
           )}
         </div>
@@ -147,18 +148,18 @@ export function EmployeesPage() {
       {importStep === "done" && importResult && (
         <div className="flex items-center justify-between rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
           <span>
-            Đã nhập thành công {importResult.inserted} nhân sự.
+            {t("employees.importDone", { count: importResult.inserted })}
           </span>
           <Button variant="ghost" size="sm" onClick={resetImport}>
-            Đóng
+            {t("common:actions.close")}
           </Button>
         </div>
       )}
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải…</p>}
-      {isError && <p className="text-sm text-destructive">Không tải được dữ liệu.</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
+      {isError && <p className="text-sm text-destructive">{t("common:errors.loadFailed")}</p>}
       {employees.length === 0 && !isLoading && (
-        <p className="text-sm text-muted-foreground">Chưa có nhân sự nào.</p>
+        <p className="text-sm text-muted-foreground">{t("employees.empty")}</p>
       )}
 
       <ul className="divide-y divide-border rounded-xl border border-border">
@@ -188,7 +189,7 @@ export function EmployeesPage() {
                     {e.baseSalary.toLocaleString("vi-VN")} ₫
                   </span>
                 ) : (
-                  <span>— (Không có quyền xem)</span>
+                  <span>{t("employees.salaryHidden")}</span>
                 )}
               </div>
             </div>
@@ -207,7 +208,7 @@ export function EmployeesPage() {
                 onClick={() => remove.mutate(e.id)}
                 disabled={remove.isPending}
               >
-                Xoá
+                {t("employees.deleteButton")}
               </Button>
             </div>
           </li>

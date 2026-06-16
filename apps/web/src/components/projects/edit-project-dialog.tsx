@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ProjectDto, UpdateProjectRequest } from "@mediaos/contracts";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { projectsApi } from "@/lib/projects-api";
@@ -48,6 +49,7 @@ interface EditProjectDialogProps {
 }
 
 export function EditProjectDialog({ project, open, onClose }: EditProjectDialogProps) {
+  const { t } = useTranslation("projects");
   const qc = useQueryClient();
   const [form, setForm] = useState<ProjectFormState>(() => toFormState(project));
   const employees = useEmployeeOptions();
@@ -69,18 +71,18 @@ export function EditProjectDialog({ project, open, onClose }: EditProjectDialogP
     <Dialog
       open={open}
       onClose={onClose}
-      title="Sửa dự án"
+      title={t("editDialog.title")}
       footer={
         <>
           <Button variant="ghost" size="sm" onClick={onClose}>
-            Huỷ
+            {t("linkDialogs.cancel")}
           </Button>
           <Button
             size="sm"
             onClick={() => update.mutate()}
             disabled={!form.name.trim() || update.isPending}
           >
-            {update.isPending ? "Đang lưu…" : "Lưu"}
+            {update.isPending ? t("common:saving") : t("common:actions.save")}
           </Button>
         </>
       }
@@ -93,8 +95,9 @@ export function EditProjectDialog({ project, open, onClose }: EditProjectDialogP
       />
       {update.isError && (
         <p className="text-sm text-destructive">
-          Lưu thất bại:{" "}
-          {update.error instanceof Error ? update.error.message : "Lỗi không xác định"}
+          {t("editDialog.saveFailed", {
+            detail: update.error instanceof Error ? update.error.message : t("editDialog.saveFailedUnknown"),
+          })}
         </p>
       )}
     </Dialog>

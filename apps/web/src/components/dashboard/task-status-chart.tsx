@@ -7,6 +7,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
+import { useTranslation } from "react-i18next";
 
 interface StatusRow {
   status: string;
@@ -16,15 +17,6 @@ interface StatusRow {
 interface TaskStatusChartProps {
   data: StatusRow[];
 }
-
-const STATUS_LABEL: Record<string, string> = {
-  not_started: "Chưa bắt đầu",
-  in_progress: "Đang làm",
-  waiting_review: "Chờ duyệt",
-  revision: "Sửa lại",
-  approved: "Đã duyệt",
-  completed: "Hoàn thành",
-};
 
 const STATUS_COLOR: Record<string, string> = {
   not_started: "#94a3b8",
@@ -40,8 +32,9 @@ const STATUS_COLOR: Record<string, string> = {
  * Shown only when caller has read:task (manager/leadership).
  */
 export function TaskStatusChart({ data }: TaskStatusChartProps) {
+  const { t } = useTranslation("dashboard");
   const chartData = data.map((r) => ({
-    name: STATUS_LABEL[r.status] ?? r.status,
+    name: t(`taskStatusChart.status.${r.status}`, { defaultValue: r.status }),
     count: r.count,
     color: STATUS_COLOR[r.status] ?? "#94a3b8",
   }));
@@ -49,7 +42,7 @@ export function TaskStatusChart({ data }: TaskStatusChartProps) {
   return (
     <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Phân bổ task theo trạng thái
+        {t("taskStatusChart.title")}
       </p>
       <ResponsiveContainer width="100%" height={180}>
         <BarChart data={chartData} layout="vertical" margin={{ left: 16, right: 16 }}>

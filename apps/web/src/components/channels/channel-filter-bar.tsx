@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { EmployeeListItemDto } from "@mediaos/contracts";
 import type { ChannelFilters } from "@/lib/channels-api";
 import { Button } from "@/components/ui/button";
@@ -28,12 +29,13 @@ export function ChannelFilterBar({
   employees,
   nicheOptions,
 }: ChannelFilterBarProps) {
+  const { t } = useTranslation("channels");
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Input
         value={filters.q ?? ""}
         onChange={(e) => onChange({ q: e.target.value || undefined })}
-        placeholder="Tìm theo tên…"
+        placeholder={t("filterBar.searchPlaceholder")}
         className="max-w-xs"
       />
 
@@ -42,7 +44,7 @@ export function ChannelFilterBar({
         onChange={(e) => onChange({ platform: e.target.value || undefined })}
         className="w-auto"
       >
-        <option value="">Mọi nền tảng</option>
+        <option value="">{t("filterBar.allPlatforms")}</option>
         {PLATFORM_OPTIONS.map((p) => (
           <option key={p} value={p}>
             {PLATFORM_LABELS[p]}
@@ -55,7 +57,7 @@ export function ChannelFilterBar({
         onChange={(e) => onChange({ status: e.target.value || undefined })}
         className="w-auto"
       >
-        <option value="">Mọi trạng thái</option>
+        <option value="">{t("filterBar.allStatuses")}</option>
         {CHANNEL_STATUS_OPTIONS.map((s) => (
           <option key={s} value={s}>
             {CHANNEL_STATUS_LABELS[s]}
@@ -68,7 +70,7 @@ export function ChannelFilterBar({
         onChange={(e) => onChange({ managerId: e.target.value || undefined })}
         className="w-auto"
       >
-        <option value="">Mọi manager</option>
+        <option value="">{t("filterBar.allManagers")}</option>
         {employees.map((e) => (
           <option key={e.userId} value={e.userId}>
             {e.userFullName ?? e.userEmail ?? e.userId}
@@ -81,7 +83,7 @@ export function ChannelFilterBar({
         onChange={(e) => onChange({ niche: e.target.value || undefined })}
         className="w-auto"
       >
-        <option value="">Mọi niche</option>
+        <option value="">{t("filterBar.allNiches")}</option>
         {nicheOptions.map((n) => (
           <option key={n} value={n}>
             {n}
@@ -96,12 +98,12 @@ export function ChannelFilterBar({
           onChange={(e) => onChange({ risk: e.target.checked || undefined })}
           className="h-4 w-4 rounded border-border"
         />
-        Chỉ kênh rủi ro
+        {t("filterBar.riskOnly")}
       </label>
 
       {hasAnyFilter(filters) && (
         <Button variant="ghost" size="sm" onClick={onClear}>
-          Xoá lọc
+          {t("filterBar.clearFilter")}
         </Button>
       )}
     </div>

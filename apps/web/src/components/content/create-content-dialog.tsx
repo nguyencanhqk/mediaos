@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { CreateContentItemRequest } from "@mediaos/contracts";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -14,6 +15,7 @@ interface CreateContentDialogProps {
 }
 
 export function CreateContentDialog({ fixedProjectId }: CreateContentDialogProps) {
+  const { t } = useTranslation("channels");
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -57,33 +59,33 @@ export function CreateContentDialog({ fixedProjectId }: CreateContentDialogProps
   return (
     <>
       <Button size="sm" onClick={() => setOpen(true)}>
-        + Thêm nội dung
+        {t("createContentDialog.openButton")}
       </Button>
       <Dialog
         open={open}
         onClose={() => setOpen(false)}
-        title="Thêm nội dung mới"
+        title={t("createContentDialog.title")}
         footer={
           <>
             <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
-              Huỷ
+              {t("createContentDialog.cancel")}
             </Button>
             <Button size="sm" onClick={() => create.mutate()} disabled={!canSubmit || create.isPending}>
-              {create.isPending ? "Đang tạo…" : "Tạo nội dung"}
+              {create.isPending ? t("createContentDialog.creating") : t("createContentDialog.createButton")}
             </Button>
           </>
         }
       >
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Tiêu đề</span>
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Tiêu đề nội dung…" />
+          <span className="text-sm font-medium">{t("createContentDialog.titleLabel")}</span>
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("createContentDialog.titlePlaceholder")} />
         </label>
 
         {!fixedProjectId && (
           <label className="block space-y-1">
-            <span className="text-sm font-medium">Dự án</span>
+            <span className="text-sm font-medium">{t("createContentDialog.projectLabel")}</span>
             <Select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-              <option value="">— Chọn dự án —</option>
+              <option value="">{t("createContentDialog.projectPlaceholder")}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -94,12 +96,12 @@ export function CreateContentDialog({ fixedProjectId }: CreateContentDialogProps
         )}
 
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Loại nội dung</span>
+          <span className="text-sm font-medium">{t("createContentDialog.contentTypeLabel")}</span>
           <Select value={contentTypeId} onChange={(e) => setContentTypeId(e.target.value)}>
-            <option value="">— Không chọn —</option>
-            {types.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
+            <option value="">{t("createContentDialog.contentTypePlaceholder")}</option>
+            {types.map((typ) => (
+              <option key={typ.id} value={typ.id}>
+                {typ.name}
               </option>
             ))}
           </Select>
@@ -108,15 +110,15 @@ export function CreateContentDialog({ fixedProjectId }: CreateContentDialogProps
         {contentTypeId && (
           <p className="text-xs text-muted-foreground">
             {suggestedWorkflow
-              ? `Workflow gợi ý: ${suggestedWorkflow}`
-              : "Loại nội dung này chưa gắn workflow mặc định."}
+              ? t("createContentDialog.workflowSuggested", { workflowId: suggestedWorkflow })
+              : t("createContentDialog.noDefaultWorkflow")}
           </p>
         )}
 
         {create.isError && (
           <p className="text-sm text-destructive">
-            Tạo nội dung thất bại:{" "}
-            {create.error instanceof Error ? create.error.message : "Lỗi không xác định"}
+            {t("createContentDialog.createFailed")}{" "}
+            {create.error instanceof Error ? create.error.message : t("createContentDialog.errorUnknown")}
           </p>
         )}
       </Dialog>

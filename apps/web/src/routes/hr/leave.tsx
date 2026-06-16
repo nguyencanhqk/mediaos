@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { HrRequestStatusDto } from "@mediaos/contracts";
 import { leaveApi, type LeaveRequestFilters } from "@/lib/leave-api";
 import { useCan } from "@/hooks/use-can";
@@ -23,6 +24,7 @@ type TabId = "requests" | "calendar";
  * G11 — Màn hình Nghỉ phép: danh sách đơn + số phép + lịch nghỉ team.
  */
 export function LeavePage() {
+  const { t } = useTranslation("hr");
   const canApprove = useCan("approve", "leave");
   const [tab, setTab] = useState<TabId>("requests");
   const [calendarMonth, setCalendarMonth] = useState<string>(currentMonth());
@@ -44,7 +46,7 @@ export function LeavePage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Nghỉ phép</h1>
+        <h1 className="text-2xl font-semibold">{t("leavePage.heading")}</h1>
         <PermissionGate action="create" resourceType="leave">
           <CreateLeaveDialog />
         </PermissionGate>
@@ -55,18 +57,18 @@ export function LeavePage() {
 
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-border">
-        {(["requests", "calendar"] as TabId[]).map((t) => (
+        {(["requests", "calendar"] as TabId[]).map((tabId) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tabId}
+            onClick={() => setTab(tabId)}
             className={[
               "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
-              tab === t
+              tab === tabId
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground",
             ].join(" ")}
           >
-            {t === "requests" ? "Danh sách đơn" : "Lịch nghỉ team"}
+            {tabId === "requests" ? t("leavePage.tabRequests") : t("leavePage.tabCalendar")}
           </button>
         ))}
       </div>
@@ -77,7 +79,7 @@ export function LeavePage() {
           <div className="flex flex-wrap gap-3">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground uppercase tracking-wide">
-                Phạm vi
+                {t("leavePage.filterScope")}
               </label>
               <Select
                 value={filters.scope ?? "me"}
@@ -89,14 +91,14 @@ export function LeavePage() {
                 }
                 className="w-36"
               >
-                <option value="me">Của tôi</option>
-                {canApprove && <option value="all">Tất cả</option>}
+                <option value="me">{t("common:mine")}</option>
+                {canApprove && <option value="all">{t("common:all")}</option>}
               </Select>
             </div>
 
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground uppercase tracking-wide">
-                Trạng thái
+                {t("leavePage.filterStatus")}
               </label>
               <Select
                 value={filters.status ?? ""}
@@ -108,7 +110,7 @@ export function LeavePage() {
                 }
                 className="w-40"
               >
-                <option value="">Tất cả</option>
+                <option value="">{t("common:all")}</option>
                 {HR_REQUEST_STATUS_OPTIONS.map((s) => (
                   <option key={s} value={s}>
                     {HR_REQUEST_STATUS_LABELS[s]}
@@ -119,7 +121,7 @@ export function LeavePage() {
 
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground uppercase tracking-wide">
-                Năm
+                {t("leavePage.filterYear")}
               </label>
               <Input
                 type="number"
@@ -138,10 +140,10 @@ export function LeavePage() {
           </div>
 
           {isLoading && (
-            <p className="text-sm text-muted-foreground">Đang tải đơn nghỉ phép…</p>
+            <p className="text-sm text-muted-foreground">{t("leavePage.loading")}</p>
           )}
           {isError && (
-            <p className="text-sm text-destructive">Không tải được danh sách đơn.</p>
+            <p className="text-sm text-destructive">{t("leavePage.loadError")}</p>
           )}
           {!isLoading && !isError && (
             <LeaveRequestTable requests={requests} canApprove={canApprove} />
@@ -153,7 +155,7 @@ export function LeavePage() {
         <div className="space-y-4">
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground uppercase tracking-wide">
-              Chọn tháng
+              {t("leavePage.filterMonth")}
             </label>
             <Input
               type="month"

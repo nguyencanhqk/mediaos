@@ -1,0 +1,10 @@
+{
+  "apiStatus": "Trạng thái API",
+  "apiChecking": "Đang kiểm tra…",
+  "apiErrorPrefix": "Không kết nối được API. Chạy ",
+  "apiErrorMid": " và ",
+  "apiErrorSuffix": ".",
+  "skeletonNote": "Walking skeleton G1. Module nghiệp vụ bắt đầu từ G2 (RLS/tenant) → G4 (vòng đời video).",
+  "riskChannelsTitle": "Kênh rủi ro",
+  "noRiskChannels": "Không có kênh nào cần chú ý."
+}

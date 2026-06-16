@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { AuthTokens } from "@mediaos/contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ interface TwoFactorChallengeFormProps {
  * luồng real-login (login hiện mock G1). Loading/error đầy đủ.
  */
 export function TwoFactorChallengeForm({ challengeToken, onSuccess, onCancel }: TwoFactorChallengeFormProps) {
+  const { t } = useTranslation("auth");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export function TwoFactorChallengeForm({ challengeToken, onSuccess, onCancel }: 
       const tokens = await twoFactorApi.verifyLogin(challengeToken, code.trim());
       onSuccess(tokens);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Mã không đúng hoặc đã hết hạn.");
+      setError(err instanceof ApiError ? err.message : t("errors.invalidCode"));
     } finally {
       setBusy(false);
     }
@@ -40,14 +42,14 @@ export function TwoFactorChallengeForm({ challengeToken, onSuccess, onCancel }: 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="space-y-1 text-center">
-        <h1 className="text-xl font-semibold">Xác thực 2 lớp</h1>
+        <h1 className="text-xl font-semibold">{t("twoFactor.title")}</h1>
         <p className="text-sm text-muted-foreground">
-          Nhập mã 6 số từ app authenticator, hoặc một mã khôi phục.
+          {t("twoFactor.challengeHint")}
         </p>
       </div>
       <div className="space-y-1">
         <label className="text-sm font-medium" htmlFor="tfa-code">
-          Mã xác thực
+          {t("twoFactor.codeLabel")}
         </label>
         <Input
           id="tfa-code"
@@ -63,11 +65,11 @@ export function TwoFactorChallengeForm({ challengeToken, onSuccess, onCancel }: 
       <div className="flex gap-2">
         {onCancel && (
           <Button type="button" variant="outline" className="flex-1" disabled={busy} onClick={onCancel}>
-            Quay lại
+            {t("common:actions.back")}
           </Button>
         )}
         <Button type="submit" className="flex-1" disabled={busy || code.trim().length < 6}>
-          {busy ? "Đang kiểm tra…" : "Xác nhận"}
+          {busy ? t("twoFactor.verifying") : t("common:actions.confirm")}
         </Button>
       </div>
     </form>

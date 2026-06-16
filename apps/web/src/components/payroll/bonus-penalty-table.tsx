@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { BonusPenaltyDto } from "@mediaos/contracts";
 import {
   BONUS_KIND_LABELS,
@@ -29,22 +30,23 @@ function referenceLabel(row: BonusPenaltyDto): string {
  * uỷ cho <BonusPenaltyDecisionActions> (ẩn khi self-approve / không phải draft / thiếu quyền).
  */
 export function BonusPenaltyTable({ rows, currentUserId }: BonusPenaltyTableProps) {
+  const { t } = useTranslation("payroll");
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">Chưa có khoản thưởng/phạt.</p>;
+    return <p className="text-sm text-muted-foreground">{t("bonusPenalties.empty")}</p>;
   }
 
   return (
     <table className="w-full text-sm">
       <thead>
         <tr className="border-b border-border text-left text-muted-foreground">
-          <th className="py-2 font-medium">Nhân sự</th>
-          <th className="py-2 font-medium">Loại</th>
-          <th className="py-2 font-medium">Số tiền</th>
-          <th className="py-2 font-medium">Kỳ</th>
-          <th className="py-2 font-medium">Nguồn</th>
-          <th className="py-2 font-medium">Tham chiếu</th>
-          <th className="py-2 font-medium">Trạng thái</th>
-          <th className="py-2 font-medium">Thao tác</th>
+          <th className="py-2 font-medium">{t("bonusPenalties.table.employee")}</th>
+          <th className="py-2 font-medium">{t("bonusPenalties.table.kind")}</th>
+          <th className="py-2 font-medium">{t("bonusPenalties.table.amount")}</th>
+          <th className="py-2 font-medium">{t("bonusPenalties.table.period")}</th>
+          <th className="py-2 font-medium">{t("bonusPenalties.table.source")}</th>
+          <th className="py-2 font-medium">{t("bonusPenalties.table.reference")}</th>
+          <th className="py-2 font-medium">{t("bonusPenalties.table.status")}</th>
+          <th className="py-2 font-medium">{t("bonusPenalties.table.actions")}</th>
         </tr>
       </thead>
       <tbody>

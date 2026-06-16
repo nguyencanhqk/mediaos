@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import {
   createColumnHelper,
   flexRender,
@@ -34,6 +35,7 @@ export function ChannelTable({
   onDelete,
   deletingId,
 }: ChannelTableProps) {
+  const { t } = useTranslation("channels");
   const [sorting, setSorting] = useState<SortingState>([]);
 
   const managerName = useMemo(() => {
@@ -45,7 +47,7 @@ export function ChannelTable({
   const columns = useMemo(
     () => [
       columnHelper.accessor("name", {
-        header: "Tên kênh",
+        header: t("table.colChannelName"),
         cell: (ctx) => (
           <Link
             to="/channels/$channelId"
@@ -57,7 +59,7 @@ export function ChannelTable({
         ),
       }),
       columnHelper.accessor("platform", {
-        header: "Nền tảng",
+        header: t("table.colPlatform"),
         cell: (ctx) => PLATFORM_LABELS[ctx.getValue()],
       }),
       columnHelper.accessor((row) => row.niche ?? "—", { id: "niche", header: "Niche" }),
@@ -77,7 +79,7 @@ export function ChannelTable({
         },
       }),
       columnHelper.accessor("status", {
-        header: "Trạng thái",
+        header: t("table.colStatus"),
         cell: (ctx) => CHANNEL_STATUS_LABELS[ctx.getValue()],
       }),
       columnHelper.display({
@@ -92,12 +94,12 @@ export function ChannelTable({
               onClick={() => onDelete(ctx.row.original)}
               disabled={deletingId === ctx.row.original.id}
             >
-              Xoá
+              {t("table.deleteRow")}
             </Button>
           ) : null,
       }),
     ],
-    [canDelete, deletingId, managerName, onDelete],
+    [canDelete, deletingId, managerName, onDelete, t],
   );
 
   const table = useReactTable({

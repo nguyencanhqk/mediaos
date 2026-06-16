@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { PayrollPeriodDto } from "@mediaos/contracts";
 import { Button } from "@/components/ui/button";
 import { PERIOD_STATUS_BADGE, PERIOD_STATUS_LABELS } from "./period-constants";
@@ -28,8 +29,9 @@ export function PayrollPeriodTable({
   onPublish,
   errors = {},
 }: PayrollPeriodTableProps) {
+  const { t } = useTranslation("payroll");
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">Chưa có kỳ lương.</p>;
+    return <p className="text-sm text-muted-foreground">{t("periods.empty")}</p>;
   }
 
   return (
@@ -42,7 +44,7 @@ export function PayrollPeriodTable({
           <div key={row.id} className="rounded-lg border border-border p-4 space-y-2">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <p className="font-medium">Kỳ {row.periodMonth}</p>
+                <p className="font-medium">{t("periods.periodLabel", { periodMonth: row.periodMonth })}</p>
                 <span
                   className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${PERIOD_STATUS_BADGE[row.status]}`}
                 >
@@ -58,12 +60,12 @@ export function PayrollPeriodTable({
                     disabled={isSodViolation}
                     onClick={() => onApprove(row.id)}
                   >
-                    Duyệt
+                    {t("periods.approveButton")}
                   </Button>
                 )}
                 {row.status === "approved" && (
                   <Button size="sm" onClick={() => onPublish(row.id)}>
-                    Phát hành
+                    {t("periods.publishButton")}
                   </Button>
                 )}
               </div>
@@ -83,19 +85,19 @@ export function PayrollPeriodTable({
             <dl className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
               {row.createdBy && (
                 <>
-                  <dt>Tạo bởi</dt>
+                  <dt>{t("periods.audit.createdBy")}</dt>
                   <dd className="col-span-2 font-mono truncate">{row.createdBy}</dd>
                 </>
               )}
               {row.approvedBy && (
                 <>
-                  <dt>Duyệt bởi</dt>
+                  <dt>{t("periods.audit.approvedBy")}</dt>
                   <dd className="col-span-2 font-mono truncate">{row.approvedBy}</dd>
                 </>
               )}
               {row.publishedBy && (
                 <>
-                  <dt>Phát hành bởi</dt>
+                  <dt>{t("periods.audit.publishedBy")}</dt>
                   <dd className="col-span-2 font-mono truncate">{row.publishedBy}</dd>
                 </>
               )}

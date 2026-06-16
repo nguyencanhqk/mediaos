@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { getDashboardReport } from "@/lib/dashboard-api";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { RevenueByChannelChart } from "@/components/dashboard/revenue-by-channel-chart";
@@ -15,6 +16,7 @@ function formatVnd(value: number | null): string | number {
  * Server handles all permission masking — null sections are simply not rendered.
  */
 export function ReportPage() {
+  const { t } = useTranslation("dashboard");
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["dashboard", "report"],
     queryFn: getDashboardReport,
@@ -25,8 +27,8 @@ export function ReportPage() {
   if (isLoading) {
     return (
       <div className="mx-auto max-w-5xl space-y-6 p-8">
-        <h1 className="text-2xl font-semibold">Báo cáo tổng hợp</h1>
-        <p className="text-sm text-muted-foreground">Đang tải dữ liệu…</p>
+        <h1 className="text-2xl font-semibold">{t("report.title")}</h1>
+        <p className="text-sm text-muted-foreground">{t("loadingData")}</p>
       </div>
     );
   }
@@ -34,10 +36,10 @@ export function ReportPage() {
   if (isError) {
     return (
       <div className="mx-auto max-w-5xl space-y-6 p-8">
-        <h1 className="text-2xl font-semibold">Báo cáo tổng hợp</h1>
+        <h1 className="text-2xl font-semibold">{t("report.title")}</h1>
         <p className="text-sm text-destructive">
-          Không tải được dữ liệu:{" "}
-          {error instanceof Error ? error.message : "Lỗi không xác định"}
+          {t("loadDataError")}{" "}
+          {error instanceof Error ? error.message : t("unknownError")}
         </p>
       </div>
     );
@@ -52,29 +54,29 @@ export function ReportPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-8 p-8">
-      <h1 className="text-2xl font-semibold">Báo cáo tổng hợp</h1>
+      <h1 className="text-2xl font-semibold">{t("report.title")}</h1>
 
       {/* ── Finance section — only rendered when server grants access ─── */}
       {hasFinance && (
         <section>
           <h2 className="mb-4 text-sm font-medium text-muted-foreground">
-            Tài chính tháng này
+            {t("report.finance.sectionTitle")}
           </h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <StatCard
-              label="Doanh thu"
+              label={t("report.finance.revenue")}
               value={formatVnd(report.revenueThisMonth)}
               accent="green"
               sub="VND"
             />
             <StatCard
-              label="Chi phí"
+              label={t("report.finance.cost")}
               value={formatVnd(report.costThisMonth)}
               accent="red"
               sub="VND"
             />
             <StatCard
-              label="Lợi nhuận"
+              label={t("report.finance.profit")}
               value={formatVnd(report.profitThisMonth)}
               accent={
                 report.profitThisMonth !== null && report.profitThisMonth >= 0 ? "green" : "red"
@@ -94,18 +96,18 @@ export function ReportPage() {
       {/* ── HR / Employee section ────────────────────────────────────── */}
       {(hasEmployee || hasAttendance) && (
         <section>
-          <h2 className="mb-4 text-sm font-medium text-muted-foreground">Nhân sự</h2>
+          <h2 className="mb-4 text-sm font-medium text-muted-foreground">{t("report.hr.sectionTitle")}</h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             {hasEmployee && (
               <StatCard
-                label="Tổng nhân viên"
+                label={t("report.hr.totalEmployees")}
                 value={report.totalEmployees ?? 0}
                 accent="blue"
               />
             )}
             {hasAttendance && (
               <StatCard
-                label="Tỷ lệ có mặt hôm nay"
+                label={t("report.hr.attendanceRate")}
                 value={`${report.todayAttendanceRate ?? 0}%`}
                 accent={
                   report.todayAttendanceRate !== null && report.todayAttendanceRate >= 80
@@ -120,12 +122,12 @@ export function ReportPage() {
 
       {!hasFinance && !hasEmployee && !hasAttendance && (
         <p className="text-sm text-muted-foreground">
-          Bạn không có quyền xem báo cáo tổng hợp.
+          {t("report.noPermission")}
         </p>
       )}
 
       <p className="text-xs text-muted-foreground">
-        Cập nhật lúc:{" "}
+        {t("updatedAt")}{" "}
         {new Date(data.asOf).toLocaleTimeString("vi-VN", {
           hour: "2-digit",
           minute: "2-digit",

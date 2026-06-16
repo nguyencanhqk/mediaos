@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { PayslipDto } from "@mediaos/contracts";
 import { Button } from "@/components/ui/button";
 import { MASKED_AMOUNT_PLACEHOLDER } from "./period-constants";
@@ -27,58 +28,59 @@ function fmt(amount: number, currency = "VND"): string {
  *  - Does not call any API directly — parent controls reveal lifecycle.
  */
 export function PayslipDetail({ payslipId: _payslipId, onRequestReauth, revealedSlip }: PayslipDetailProps) {
+  const { t } = useTranslation("payroll");
   const revealed = revealedSlip != null;
 
   return (
     <div className="space-y-4 rounded-lg border border-border p-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Chi tiết phiếu lương</h2>
+        <h2 className="text-lg font-semibold">{t("payslips.detail.title")}</h2>
         {!revealed && (
           <Button size="sm" variant="outline" onClick={onRequestReauth}>
-            Xác minh để xem
+            {t("payslips.detail.reauthButton")}
           </Button>
         )}
       </div>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-        <dt className="text-muted-foreground">Lương cơ bản</dt>
+        <dt className="text-muted-foreground">{t("payslips.detail.baseSalary")}</dt>
         <dd className="font-medium">
           {revealed ? fmt(revealedSlip.baseSalary, revealedSlip.currency) : MASKED_AMOUNT_PLACEHOLDER}
         </dd>
 
-        <dt className="text-muted-foreground">Phụ cấp</dt>
+        <dt className="text-muted-foreground">{t("payslips.detail.allowances")}</dt>
         <dd className="font-medium">
           {revealed ? fmt(revealedSlip.totalAllowances, revealedSlip.currency) : MASKED_AMOUNT_PLACEHOLDER}
         </dd>
 
-        <dt className="text-muted-foreground">Tổng thu nhập (gross)</dt>
+        <dt className="text-muted-foreground">{t("payslips.detail.gross")}</dt>
         <dd className="font-medium">
           {revealed ? fmt(revealedSlip.gross, revealedSlip.currency) : MASKED_AMOUNT_PLACEHOLDER}
         </dd>
 
-        <dt className="text-muted-foreground">Thực nhận (net)</dt>
+        <dt className="text-muted-foreground">{t("payslips.detail.net")}</dt>
         <dd className="font-medium text-green-700">
           {revealed ? fmt(revealedSlip.net, revealedSlip.currency) : MASKED_AMOUNT_PLACEHOLDER}
         </dd>
 
-        <dt className="text-muted-foreground">Ngày công</dt>
+        <dt className="text-muted-foreground">{t("payslips.detail.workDays")}</dt>
         <dd>{revealed ? `${revealedSlip.presentDays} / ${revealedSlip.workDays}` : MASKED_AMOUNT_PLACEHOLDER}</dd>
 
         {revealed && revealedSlip.kpiAmount != null && (
           <>
-            <dt className="text-muted-foreground">KPI</dt>
+            <dt className="text-muted-foreground">{t("payslips.detail.kpi")}</dt>
             <dd>{fmt(revealedSlip.kpiAmount, revealedSlip.currency)}</dd>
           </>
         )}
         {revealed && revealedSlip.bonusAmount != null && (
           <>
-            <dt className="text-muted-foreground">Thưởng</dt>
+            <dt className="text-muted-foreground">{t("payslips.detail.bonus")}</dt>
             <dd className="text-green-700">{fmt(revealedSlip.bonusAmount, revealedSlip.currency)}</dd>
           </>
         )}
         {revealed && revealedSlip.penaltyAmount != null && (
           <>
-            <dt className="text-muted-foreground">Phạt</dt>
+            <dt className="text-muted-foreground">{t("payslips.detail.penalty")}</dt>
             <dd className="text-red-700">{fmt(revealedSlip.penaltyAmount, revealedSlip.currency)}</dd>
           </>
         )}

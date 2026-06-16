@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { PayrollPeriodStatus } from "@mediaos/contracts";
 import { payrollPeriodApi } from "@/lib/payroll-period-api";
 import { PermissionGate } from "@/components/permission-gate";
@@ -20,6 +21,7 @@ import { useAuthStore } from "@/stores/auth";
  *  - Lỗi từ server (403, 422) map ra message hiện trên row (không crash page).
  */
 export function PayrollPeriodsPage() {
+  const { t } = useTranslation("payroll");
   const qc = useQueryClient();
   const [status, setStatus] = useState<PayrollPeriodStatus | "">("");
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
@@ -42,7 +44,7 @@ export function PayrollPeriodsPage() {
       void qc.invalidateQueries({ queryKey: ["payroll-periods"] });
     },
     onError: (err, id) => {
-      const msg = err instanceof Error ? err.message : "Duyệt thất bại.";
+      const msg = err instanceof Error ? err.message : t("periods.approveError");
       setRowErrors((prev) => ({ ...prev, [id]: msg }));
     },
   });
@@ -53,7 +55,7 @@ export function PayrollPeriodsPage() {
       void qc.invalidateQueries({ queryKey: ["payroll-periods"] });
     },
     onError: (err, id) => {
-      const msg = err instanceof Error ? err.message : "Phát hành thất bại.";
+      const msg = err instanceof Error ? err.message : t("periods.publishError");
       setRowErrors((prev) => ({ ...prev, [id]: msg }));
     },
   });
@@ -79,12 +81,12 @@ export function PayrollPeriodsPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Kỳ lương</h1>
+        <h1 className="text-2xl font-semibold">{t("periods.pageTitle")}</h1>
         {/* manage-payroll-period is non-sensitive → safe to use PermissionGate */}
         <PermissionGate action="manage-payroll-period" resourceType="payroll_period">
           {/* Tạo kỳ lương: luồng create chưa nối ở lane này (defer) — disable để không no-op im lặng. */}
-          <Button size="sm" disabled title="Sắp có">
-            Tạo kỳ lương
+          <Button size="sm" disabled title={t("periods.createButtonSoon")}>
+            {t("periods.createButton")}
           </Button>
         </PermissionGate>
       </div>
@@ -94,7 +96,7 @@ export function PayrollPeriodsPage() {
           htmlFor="period-status-filter"
           className="text-xs uppercase tracking-wide text-muted-foreground"
         >
-          Trạng thái
+          {t("periods.filterStatus")}
         </label>
         <Select
           id="period-status-filter"
@@ -102,7 +104,7 @@ export function PayrollPeriodsPage() {
           onChange={(e) => setStatus(e.target.value as PayrollPeriodStatus | "")}
           className="w-44"
         >
-          <option value="">Tất cả</option>
+          <option value="">{t("periods.all")}</option>
           {(Object.keys(PERIOD_STATUS_LABELS) as PayrollPeriodStatus[]).map((s) => (
             <option key={s} value={s}>
               {PERIOD_STATUS_LABELS[s]}
@@ -111,10 +113,10 @@ export function PayrollPeriodsPage() {
         </Select>
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải kỳ lương…</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("periods.loading")}</p>}
       {isError && (
         <p role="alert" className="text-sm text-destructive">
-          Không tải được danh sách kỳ lương.
+          {t("periods.loadFailed")}
         </p>
       )}
       {!isLoading && !isError && (

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { TeamDto, ProjectDto } from "@mediaos/contracts";
 import { tasksApi } from "@/lib/tasks-api";
 import { orgApi } from "@/lib/org-api";
@@ -12,16 +13,11 @@ import { PermissionGate } from "@/components/permission-gate";
 
 type HubTab = "my" | "team" | "project";
 
-const TAB_LABELS: Record<HubTab, string> = {
-  my: "Việc của tôi",
-  team: "Việc nhóm",
-  project: "Việc dự án",
-};
-
 // ─── Shared empty/loading/error states ───────────────────────────────────────
 
 function LoadingState() {
-  return <p className="py-8 text-center text-sm text-muted-foreground">Đang tải…</p>;
+  const { t } = useTranslation("tasks");
+  return <p className="py-8 text-center text-sm text-muted-foreground">{t("hub.loading")}</p>;
 }
 
 function ErrorState({ message }: { message: string }) {
@@ -29,12 +25,14 @@ function ErrorState({ message }: { message: string }) {
 }
 
 function EmptyState() {
-  return <p className="py-8 text-center text-sm text-muted-foreground">Không có công việc nào.</p>;
+  const { t } = useTranslation("tasks");
+  return <p className="py-8 text-center text-sm text-muted-foreground">{t("hub.empty")}</p>;
 }
 
 // ─── My Tasks tab ─────────────────────────────────────────────────────────────
 
 function MyTasksTab() {
+  const { t } = useTranslation("tasks");
   const [typeFilter, setTypeFilter] = useState<TaskTypeFilterValue>(null);
 
   const { data: allTasks = [], isLoading, isError } = useQuery({
@@ -51,7 +49,7 @@ function MyTasksTab() {
     <div className="space-y-4">
       <TaskTypeFilter value={typeFilter} onChange={setTypeFilter} />
       {isLoading && <LoadingState />}
-      {isError && <ErrorState message="Không tải được công việc của bạn." />}
+      {isError && <ErrorState message={t("hub.errorMyTasks")} />}
       {!isLoading && !isError && tasks.length === 0 && <EmptyState />}
       {!isLoading && !isError && tasks.length > 0 && <TaskTable tasks={tasks} />}
     </div>
@@ -61,6 +59,7 @@ function MyTasksTab() {
 // ─── Team Tasks tab ───────────────────────────────────────────────────────────
 
 function TeamTasksTab() {
+  const { t } = useTranslation("tasks");
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<TaskTypeFilterValue>(null);
   const [page, setPage] = useState(0);
@@ -97,10 +96,10 @@ function TeamTasksTab() {
             setSelectedTeamId(e.target.value);
             setPage(0);
           }}
-          aria-label="Chọn nhóm"
+          aria-label={t("hub.teamSelectAriaLabel")}
         >
-          <option value="">-- Chọn nhóm --</option>
-          {teamsLoading && <option disabled>Đang tải…</option>}
+          <option value="">{t("hub.teamSelectPlaceholder")}</option>
+          {teamsLoading && <option disabled>{t("hub.loadingTeams")}</option>}
           {(teams as TeamDto[]).map((team) => (
             <option key={team.id} value={team.id}>
               {team.name}
@@ -111,11 +110,11 @@ function TeamTasksTab() {
       </div>
 
       {selectedTeamId === "" && (
-        <p className="py-8 text-center text-sm text-muted-foreground">Chọn nhóm để xem công việc.</p>
+        <p className="py-8 text-center text-sm text-muted-foreground">{t("hub.selectTeamPrompt")}</p>
       )}
       {selectedTeamId !== "" && tasksLoading && <LoadingState />}
       {selectedTeamId !== "" && tasksError && (
-        <ErrorState message="Không tải được công việc nhóm (có thể thiếu quyền xem)." />
+        <ErrorState message={t("hub.errorTeamTasks")} />
       )}
       {selectedTeamId !== "" && !tasksLoading && !tasksError && tasks.length === 0 && <EmptyState />}
       {selectedTeamId !== "" && !tasksLoading && !tasksError && tasks.length > 0 && (
@@ -128,7 +127,7 @@ function TeamTasksTab() {
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               className="rounded border px-3 py-1 text-sm disabled:opacity-40"
             >
-              Trước
+              {t("hub.pagePrev")}
             </button>
             <button
               type="button"
@@ -136,7 +135,7 @@ function TeamTasksTab() {
               onClick={() => setPage((p) => p + 1)}
               className="rounded border px-3 py-1 text-sm disabled:opacity-40"
             >
-              Sau
+              {t("hub.pageNext")}
             </button>
           </div>
         </>
@@ -148,6 +147,7 @@ function TeamTasksTab() {
 // ─── Project Tasks tab ────────────────────────────────────────────────────────
 
 function ProjectTasksTab() {
+  const { t } = useTranslation("tasks");
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<TaskTypeFilterValue>(null);
   const [page, setPage] = useState(0);
@@ -184,10 +184,10 @@ function ProjectTasksTab() {
             setSelectedProjectId(e.target.value);
             setPage(0);
           }}
-          aria-label="Chọn dự án"
+          aria-label={t("hub.projectSelectAriaLabel")}
         >
-          <option value="">-- Chọn dự án --</option>
-          {projectsLoading && <option disabled>Đang tải…</option>}
+          <option value="">{t("hub.projectSelectPlaceholder")}</option>
+          {projectsLoading && <option disabled>{t("hub.loadingProjects")}</option>}
           {(projects as ProjectDto[]).map((project) => (
             <option key={project.id} value={project.id}>
               {project.name}
@@ -198,11 +198,11 @@ function ProjectTasksTab() {
       </div>
 
       {selectedProjectId === "" && (
-        <p className="py-8 text-center text-sm text-muted-foreground">Chọn dự án để xem công việc.</p>
+        <p className="py-8 text-center text-sm text-muted-foreground">{t("hub.selectProjectPrompt")}</p>
       )}
       {selectedProjectId !== "" && tasksLoading && <LoadingState />}
       {selectedProjectId !== "" && tasksError && (
-        <ErrorState message="Không tải được công việc dự án (có thể thiếu quyền xem)." />
+        <ErrorState message={t("hub.errorProjectTasks")} />
       )}
       {selectedProjectId !== "" && !tasksLoading && !tasksError && tasks.length === 0 && <EmptyState />}
       {selectedProjectId !== "" && !tasksLoading && !tasksError && tasks.length > 0 && (
@@ -215,7 +215,7 @@ function ProjectTasksTab() {
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               className="rounded border px-3 py-1 text-sm disabled:opacity-40"
             >
-              Trước
+              {t("hub.pagePrev")}
             </button>
             <button
               type="button"
@@ -223,7 +223,7 @@ function ProjectTasksTab() {
               onClick={() => setPage((p) => p + 1)}
               className="rounded border px-3 py-1 text-sm disabled:opacity-40"
             >
-              Sau
+              {t("hub.pageNext")}
             </button>
           </div>
         </>
@@ -242,12 +242,19 @@ function ProjectTasksTab() {
  * Mỗi card (TaskTable) hiện badge task_type + ngữ cảnh từ constants chung (không hard-code rải rác).
  */
 export function TaskHubPage() {
+  const { t } = useTranslation("tasks");
   const [activeTab, setActiveTab] = useState<HubTab>("my");
+
+  const TAB_LABELS: Record<HubTab, string> = {
+    my: t("hub.tabMy"),
+    team: t("hub.tabTeam"),
+    project: t("hub.tabProject"),
+  };
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
       <header>
-        <h1 className="text-xl font-semibold">Task Hub</h1>
+        <h1 className="text-xl font-semibold">{t("hub.pageTitle")}</h1>
       </header>
 
       {/* Tab bar */}
@@ -275,14 +282,14 @@ export function TaskHubPage() {
         {activeTab === "my" && <MyTasksTab />}
         {activeTab === "team" && (
           <PermissionGate action="read" resourceType="task" fallback={
-            <ErrorState message="Bạn không có quyền xem công việc nhóm." />
+            <ErrorState message={t("hub.errorNoTeamPermission")} />
           }>
             <TeamTasksTab />
           </PermissionGate>
         )}
         {activeTab === "project" && (
           <PermissionGate action="read" resourceType="task" fallback={
-            <ErrorState message="Bạn không có quyền xem công việc dự án." />
+            <ErrorState message={t("hub.errorNoProjectPermission")} />
           }>
             <ProjectTasksTab />
           </PermissionGate>

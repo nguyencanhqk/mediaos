@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import {
   createPlatformAccountSchema,
   type CreatePlatformAccountRequest,
@@ -59,6 +60,7 @@ function toRequest(f: FormState): CreatePlatformAccountRequest {
 }
 
 export function CreateAccountDialog({ open, onClose, platforms }: CreateAccountDialogProps) {
+  const { t } = useTranslation("settings");
   const qc = useQueryClient();
   const [form, setForm] = useState<FormState>(EMPTY);
 
@@ -86,24 +88,24 @@ export function CreateAccountDialog({ open, onClose, platforms }: CreateAccountD
     <Dialog
       open={open}
       onClose={onClose}
-      title="Thêm tài khoản nền tảng"
-      description="Secret được mã hoá phía máy chủ (envelope) — không lưu plaintext."
+      title={t("platformAccounts.createDialog.title")}
+      description={t("platformAccounts.createDialog.description")}
       footer={
         <>
           <Button variant="ghost" size="sm" onClick={onClose}>
-            Huỷ
+            {t("platformAccounts.createDialog.cancel")}
           </Button>
           <Button size="sm" onClick={() => create.mutate()} disabled={!parsed.success || create.isPending}>
-            {create.isPending ? "Đang tạo…" : "Tạo"}
+            {create.isPending ? t("platformAccounts.createDialog.creating") : t("common:actions.create")}
           </Button>
         </>
       }
     >
       <div className="space-y-3">
-        <Field label="Nền tảng *">
+        <Field label={t("platformAccounts.createDialog.fieldPlatform")}>
           <Select value={form.platformId} onChange={(e) => patch({ platformId: e.target.value })}>
             <option value="" disabled>
-              — Chọn nền tảng —
+              {t("platformAccounts.createDialog.platformPlaceholder")}
             </option>
             {platforms.map((p) => (
               <option key={p.id} value={p.id}>
@@ -113,7 +115,7 @@ export function CreateAccountDialog({ open, onClose, platforms }: CreateAccountD
           </Select>
         </Field>
 
-        <Field label="Secret (mật khẩu / token) *">
+        <Field label={t("platformAccounts.createDialog.fieldSecret")}>
           <Input
             type="password"
             autoComplete="off"
@@ -124,28 +126,28 @@ export function CreateAccountDialog({ open, onClose, platforms }: CreateAccountD
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Tên tài khoản">
+          <Field label={t("platformAccounts.createDialog.fieldAccountName")}>
             <Input value={form.accountName} onChange={(e) => patch({ accountName: e.target.value })} />
           </Field>
-          <Field label="Email tài khoản">
+          <Field label={t("platformAccounts.createDialog.fieldAccountEmail")}>
             <Input
               type="email"
               value={form.accountEmail}
               onChange={(e) => patch({ accountEmail: e.target.value })}
             />
           </Field>
-          <Field label="Định danh (handle/@)">
+          <Field label={t("platformAccounts.createDialog.fieldIdentifier")}>
             <Input
               value={form.accountIdentifier}
               onChange={(e) => patch({ accountIdentifier: e.target.value })}
             />
           </Field>
-          <Field label="Mức bảo mật">
+          <Field label={t("platformAccounts.createDialog.fieldSecurityLevel")}>
             <Select
               value={form.securityLevel}
               onChange={(e) => patch({ securityLevel: e.target.value })}
             >
-              <option value="">— Không đặt —</option>
+              <option value="">{t("platformAccounts.createDialog.securityLevelNone")}</option>
               {SECURITY_LEVEL_OPTIONS.map((lvl) => (
                 <option key={lvl} value={lvl}>
                   {SECURITY_LEVEL_LABELS[lvl]}
@@ -153,14 +155,14 @@ export function CreateAccountDialog({ open, onClose, platforms }: CreateAccountD
               ))}
             </Select>
           </Field>
-          <Field label="Email khôi phục">
+          <Field label={t("platformAccounts.createDialog.fieldRecoveryEmail")}>
             <Input
               type="email"
               value={form.recoveryEmail}
               onChange={(e) => patch({ recoveryEmail: e.target.value })}
             />
           </Field>
-          <Field label="SĐT khôi phục">
+          <Field label={t("platformAccounts.createDialog.fieldRecoveryPhone")}>
             <Input
               value={form.recoveryPhone}
               onChange={(e) => patch({ recoveryPhone: e.target.value })}
@@ -168,18 +170,18 @@ export function CreateAccountDialog({ open, onClose, platforms }: CreateAccountD
           </Field>
         </div>
 
-        <Field label="Ghi chú 2FA">
+        <Field label={t("platformAccounts.createDialog.fieldTwoFactorNote")}>
           <Input
             value={form.twoFactorNote}
             onChange={(e) => patch({ twoFactorNote: e.target.value })}
-            placeholder="VD: backup codes ở đâu, app authenticator nào…"
+            placeholder={t("platformAccounts.createDialog.twoFactorNotePlaceholder")}
           />
         </Field>
 
         {create.isError && (
           <p className="text-sm text-destructive">
-            Tạo thất bại:{" "}
-            {create.error instanceof Error ? create.error.message : "Lỗi không xác định"}
+            {t("platformAccounts.createDialog.createError")}{" "}
+            {create.error instanceof Error ? create.error.message : t("platformAccounts.createDialog.unknownError")}
           </p>
         )}
       </div>
