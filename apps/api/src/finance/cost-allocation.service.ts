@@ -100,15 +100,18 @@ export class CostAllocationService {
         sql`SELECT 1 FROM cost_records WHERE replaces_record_id = ${costRecordId} LIMIT 1`,
       );
       if ((superseded.rows?.length ?? 0) > 0) {
-        throw new BadRequestException("Cost đã bị thay thế (adjustment/void) — phân bổ trên bản hiệu lực.");
+        throw new BadRequestException(
+          "Cost đã bị thay thế (adjustment/void) — phân bổ trên bản hiệu lực.",
+        );
       }
 
       const totalCents = decimalStringToCents(cost.amount);
 
-      // 2. Cross-tenant target guard (polymorphic) — mọi target phải tồn tại trong tenant.
+      // 2. Cross-tenant target guard (polymorphic) — BATCH (gỡ N+1 B2(b)): 1 query/loại bảng (≤6),
+      //    KHÔNG còn vòng per-target. Target thiếu → 400 (giữ thông điệp cũ cho target đầu tiên vắng).
+      const existingKeys = await this.repo.existingTargetKeysTx(tx, dto.targets);
       for (const t of dto.targets) {
-        const exists = await this.repo.targetExistsTx(tx, t.targetType, t.targetId);
-        if (!exists) {
+        if (!existingKeys.has(`${t.targetType}:${t.targetId}`)) {
           throw new BadRequestException(
             `Target không tồn tại trong công ty: ${t.targetType}:${t.targetId}`,
           );
@@ -138,11 +141,11 @@ export class CostAllocationService {
       const softDeleted = await this.repo.softDeleteActiveTx(tx, companyId, costRecordId);
       const isReallocate = softDeleted > 0;
 
-      // 6. Insert set mới (1 allocation_run_id chung).
+      // 6. Insert set mới (1 allocation_run_id chung) — BATCH 1 câu lệnh (gỡ N+1 B2(b)), KHÔNG vòng for.
       const runId = randomUUID();
-      const allocations = [];
-      for (const line of lines) {
-        const row = await this.repo.insertTx(tx, {
+      const allocations = await this.repo.insertManyTx(
+        tx,
+        lines.map((line) => ({
           costRecordId,
           allocationRunId: runId,
           allocationTargetType: line.targetType,
@@ -150,9 +153,8 @@ export class CostAllocationService {
           allocationMethod: dto.method,
           allocatedAmount: centsToDbString(line.allocatedCents),
           allocationPercent: line.percent != null ? line.percent.toFixed(4) : null,
-        });
-        allocations.push(row);
-      }
+        })),
+      );
 
       // 7. Audit-in-tx (CostAllocated lần đầu / CostReallocated re-run).
       const action = isReallocate ? "CostReallocated" : "CostAllocated";

@@ -106,6 +106,28 @@ export class CostAllocationRepository {
   }
 
   /**
+   * BATCH INSERT N dòng allocation trong 1 câu lệnh (gỡ N+1 — B2(b)). CÙNG tx với audit/soft-delete.
+   * Mảng rỗng → trả [] KHÔNG gọi DB (Drizzle .values([]) ném lỗi). Giữ cents-exact (caller đã chia).
+   */
+  async insertManyTx(tx: TenantTx, rows: readonly InsertAllocationData[]) {
+    if (rows.length === 0) return [];
+    return tx
+      .insert(costAllocations)
+      .values(
+        rows.map((data) => ({
+          costRecordId: data.costRecordId,
+          allocationRunId: data.allocationRunId,
+          allocationTargetType: data.allocationTargetType,
+          allocationTargetId: data.allocationTargetId,
+          allocationMethod: data.allocationMethod,
+          allocatedAmount: data.allocatedAmount,
+          allocationPercent: data.allocationPercent ?? null,
+        })),
+      )
+      .returning();
+  }
+
+  /**
    * Cross-tenant target guard: target tồn tại trong tenant hiện tại (RLS lọc). Polymorphic — không FK,
    * nên kiểm tay qua bảng tương ứng. Soft-deleted (deleted_at) coi như KHÔNG tồn tại (trừ bảng không có
    * cột deleted_at — đều có ở các target này). Chạy CÙNG tx (RLS đã set company_id).
@@ -122,6 +144,43 @@ export class CostAllocationRepository {
           WHERE id = ${targetId} AND deleted_at IS NULL LIMIT 1`,
     );
     return (res.rows?.length ?? 0) > 0;
+  }
+
+  /**
+   * BATCH cross-tenant target guard (gỡ N+1 — B2(b)): với mỗi loại target, 1 query `id = ANY($ids)`
+   * (≤6 query bất kể N target). Trả Set "type:id" của target TỒN TẠI trong tenant (soft-deleted = không
+   * tồn tại). Chạy CÙNG tx (RLS đã set company_id). sql.identifier(table) = literal từ map cố định
+   * (KHÔNG nhận input); ids qua bind-param (an toàn SQLi).
+   */
+  async existingTargetKeysTx(
+    tx: TenantTx,
+    targets: readonly { targetType: AllocationTargetType; targetId: string }[],
+  ): Promise<Set<string>> {
+    const existing = new Set<string>();
+    // Gom id theo bảng (targetType → bảng cố định).
+    const byType = new Map<AllocationTargetType, string[]>();
+    for (const t of targets) {
+      const list = byType.get(t.targetType) ?? [];
+      list.push(t.targetId);
+      byType.set(t.targetType, list);
+    }
+    for (const [targetType, ids] of byType) {
+      const table = TARGET_TABLE[targetType];
+      // dedupe để bind gọn. ids là uuid hợp lệ (Zod .uuid() ở contract).
+      const uniqueIds = [...new Set(ids)];
+      // string_to_array(csv,',')::uuid[] = 1 param an toàn (mirror kpi.repository): bind THẲNG mảng JS
+      // vào sql`` → "malformed array literal" / "cannot cast record to uuid[]". CSV-join (uuid đã
+      // validate) qua bind-param đơn → string_to_array ép thành uuid[]. 1 round-trip cho cả bảng này.
+      const idCsv = uniqueIds.join(",");
+      const res = await tx.execute(
+        sql`SELECT id FROM ${sql.identifier(table)}
+            WHERE id = ANY(string_to_array(${idCsv}, ',')::uuid[]) AND deleted_at IS NULL`,
+      );
+      for (const row of res.rows ?? []) {
+        existing.add(`${targetType}:${(row as { id: string }).id}`);
+      }
+    }
+    return existing;
   }
 
   /**

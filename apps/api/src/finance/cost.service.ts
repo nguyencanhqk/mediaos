@@ -4,12 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import type { CreateCostRequest } from "@mediaos/contracts";
+import type { CreateCostRequest, CostRecordDto } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { PermissionService } from "../permission/permission.service";
 import { CostRepository } from "./cost.repository";
+import { amountToDbString, centsToNumber, decimalStringToCents, MoneyError } from "./money";
 
 /**
  * G13-2 — CostService: sổ cái chi phí APPEND-ONLY (BẤT BIẾN #2), tài chính nhạy cảm (permission).
@@ -27,6 +28,7 @@ import { CostRepository } from "./cost.repository";
 
 const RESOURCE_TYPE = "finance";
 const ACTION_WRITE = "create";
+const ACTION_VIEW = "view-finance";
 
 /** "Sửa" sổ cái: amount mới + lý do (audit). Giữ nguyên các chiều (channel/project/...) của bản gốc. */
 export interface AdjustCostInput {
@@ -39,10 +41,18 @@ export interface VoidCostInput {
   reason: string;
 }
 
-/** numeric (number) → string cho Drizzle; chặn giá trị không hữu hạn ở boundary. */
-function numToStr(value: number): string {
-  if (!Number.isFinite(value)) throw new BadRequestException(`Invalid amount: ${value}`);
-  return value.toFixed(2);
+/**
+ * numeric (number) → chuỗi cho Drizzle, AN TOÀN (B3): đi qua money.ts (cents-exact + guard
+ * MAX_SAFE_INTEGER). Vượt khoảng an toàn JS → MoneyError → BadRequestException (400), KHÔNG
+ * `toFixed(2)` lossy âm thầm. Thay `numToStr` cũ (chỉ guard isFinite) — defect B3 residual.
+ */
+function amountToDbStringOr400(value: number): string {
+  try {
+    return amountToDbString(value);
+  } catch (e) {
+    if (e instanceof MoneyError) throw new BadRequestException(e.message);
+    throw e;
+  }
 }
 
 @Injectable()
@@ -55,9 +65,71 @@ export class CostService {
     private readonly outbox: OutboxService,
   ) {}
 
-  /** Liệt kê cost hiệu lực của tenant (RLS lọc). filter từ ListCostQuery (đã validate ở controller). */
-  list(companyId: string, _userId: string, filter: Parameters<CostRepository["list"]>[1] = {}) {
-    return this.repo.list(companyId, filter);
+  /**
+   * Liệt kê cost hiệu lực của tenant (RLS lọc). filter từ ListCostQuery (đã validate + clamp limit/offset
+   * ở controller). MASK SERVER-side (BẤT BIẾN #3, parity ProfitService): caller KHÔNG có
+   * view-finance(isSensitive) → amount = null; có quyền → số THẬT. fail-safe mask (lỗi can() → mask).
+   */
+  async list(
+    companyId: string,
+    userId: string,
+    filter: Parameters<CostRepository["list"]>[1] = {},
+  ): Promise<CostRecordDto[]> {
+    const canView = await this.canViewFinance(companyId, userId);
+    const rows = await this.repo.list(companyId, filter);
+    return rows.map((r) => this.toMaskedDto(r, canView));
+  }
+
+  /**
+   * Map row cost_records → DTO với mask tiền. canView=false ⇒ amount=null (mask). numeric(18,2) Drizzle
+   * trả chuỗi → cents (không float) → number khi được phép xem.
+   */
+  private toMaskedDto(row: CostRow, canView: boolean): CostRecordDto {
+    const amount =
+      canView && row.amount != null ? centsToNumber(decimalStringToCents(row.amount)) : null;
+    return {
+      id: row.id,
+      companyId: row.companyId,
+      costType: row.costType as CostRecordDto["costType"],
+      amount,
+      currency: row.currency,
+      costDate: row.costDate,
+      orgUnitId: row.orgUnitId,
+      teamId: row.teamId,
+      projectId: row.projectId,
+      channelId: row.channelId,
+      contentItemId: row.contentItemId,
+      userId: row.userId,
+      vendorName: row.vendorName,
+      description: row.description,
+      attachmentUrl: row.attachmentUrl,
+      enteredBy: row.enteredBy,
+      entryKind: row.entryKind as CostRecordDto["entryKind"],
+      replacesRecordId: row.replacesRecordId,
+      expenseRequestId: row.expenseRequestId,
+      isEffective: row.entryKind !== "void",
+      createdAt:
+        row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
+    };
+  }
+
+  /**
+   * view-finance(isSensitive) — quyết MASK số tiền. FAIL-SAFE MASK (parity ProfitService): mọi lỗi hạ
+   * tầng trong can() → coi như KHÔNG có quyền (mask null), KHÔNG fail-open ra số nhạy cảm.
+   */
+  private async canViewFinance(companyId: string, userId: string): Promise<boolean> {
+    try {
+      const decision = await this.permissions.can({
+        userId,
+        companyId,
+        action: ACTION_VIEW,
+        resourceType: RESOURCE_TYPE,
+        isSensitive: true,
+      });
+      return decision.allow;
+    } catch {
+      return false; // fail-safe mask.
+    }
   }
 
   /**
@@ -69,7 +141,7 @@ export class CostService {
     return this.db.withTenant(companyId, async (tx) => {
       const row = await this.repo.insertTx(tx, {
         costType: dto.costType,
-        amount: numToStr(dto.amount),
+        amount: amountToDbStringOr400(dto.amount),
         currency: dto.currency,
         costDate: dto.costDate,
         orgUnitId: dto.orgUnitId ?? null,
@@ -116,7 +188,7 @@ export class CostService {
 
       const row = await this.repo.insertTx(tx, {
         costType: original.costType,
-        amount: numToStr(input.amount),
+        amount: amountToDbStringOr400(input.amount),
         currency: original.currency,
         costDate: original.costDate,
         orgUnitId: original.orgUnitId,
@@ -214,4 +286,28 @@ export class CostService {
       throw new ForbiddenException(`Permission denied: ${decision.reason}`);
     }
   }
+}
+
+/** Hàng cost_records đọc từ Drizzle (numeric → string; timestamp → Date). */
+interface CostRow {
+  id: string;
+  companyId: string;
+  costType: string;
+  amount: string | null;
+  currency: string;
+  costDate: string;
+  orgUnitId: string | null;
+  teamId: string | null;
+  projectId: string | null;
+  channelId: string | null;
+  contentItemId: string | null;
+  userId: string | null;
+  vendorName: string | null;
+  description: string | null;
+  attachmentUrl: string | null;
+  enteredBy: string;
+  entryKind: string;
+  replacesRecordId: string | null;
+  expenseRequestId: string | null;
+  createdAt: Date | string;
 }
