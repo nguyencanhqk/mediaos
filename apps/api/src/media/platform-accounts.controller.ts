@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -118,5 +119,23 @@ export class PlatformAccountsController {
       userAgent: req.headers['user-agent'],
     };
     return this.accounts.revealSecret(req.user, id, ctx);
+  }
+
+  // ── Break-glass reveal (🔒 G6-2 PR-B ROUND 2 — emergency JIT reveal, NO re-auth window) ──
+  // NO ReauthGuard: the gate is the company-tier reveal-break-glass permission (a) PLUS an active grant (b),
+  // NOT the per-account object grant + re-auth window that the normal reveal-secret route requires. The :id is
+  // the platform_account id; the service looks up the caller's own active grant for it. {isSensitive} only (no
+  // requiresReauth) → PermissionGuard does a company-tier check, does NOT treat :id as an object-grant target.
+  @Post('platform-accounts/:id/break-glass-reveal')
+  @HttpCode(200)
+  @UseGuards(PermissionGuard)
+  @RequirePermission('reveal-break-glass', 'break-glass', { isSensitive: true })
+  revealSecretViaBreakGlass(@Req() req: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    const ctx: RevealCtx = {
+      requestId: req.requestId,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    };
+    return this.accounts.revealSecretViaBreakGlass(req.user, id, ctx);
   }
 }

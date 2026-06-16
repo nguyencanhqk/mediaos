@@ -46,6 +46,8 @@ export const breakGlassGrants = pgTable(
   (t) => [
     index("break_glass_grants_company_id_idx").on(t.companyId),
     index("break_glass_grants_company_account_idx").on(t.companyId, t.platformAccountId),
+    // ROUND 2 (mig 0201): phủ listGrantsForRequester (màn "grant của tôi") lọc (company_id, requester_user_id).
+    index("break_glass_grants_requester_idx").on(t.companyId, t.requesterUserId),
     // Partial index (khớp mig 0200): tra cứu grant 'active' của 1 requester/account — ROUND 2 reveal gate.
     index("break_glass_grants_active_idx")
       .on(t.companyId, t.platformAccountId, t.requesterUserId)

@@ -280,4 +280,27 @@ describe.skipIf(!hasDb)("G6-2 PR-B break-glass grant lifecycle — RED deny-path
     expect(error).toBeInstanceOf(ForbiddenException);
     expect(await grantStatus(grantId)).toBe("pending");
   });
+
+  // ─── LIST MINE (ROUND 2 — drives the reveal screen) ──────────────────────────
+
+  it("RED 13 — listMyGrants returns ONLY the caller's own grants, with approvalCount, no secret field", async () => {
+    const mineId = await freshGrant(); // requester's own
+    await invoke(() => svc.approveGrant(ctx(approver1, A.companyId), mineId)); // 1 distinct approval
+    // A grant owned by someone else (approver1) must NOT appear in requester's list.
+    const othersId = await seedBreakGlassGrant(direct, {
+      companyId: A.companyId,
+      platformAccountId: accountA,
+      requesterUserId: approver1,
+    });
+
+    const { result } = await invoke(() => svc.listMyGrants(ctx(requester, A.companyId)));
+    expect(Array.isArray(result)).toBe(true);
+    const ids = (result ?? []).map((g) => g.id);
+    expect(ids).toContain(mineId);
+    expect(ids).not.toContain(othersId);
+    const mine = (result ?? []).find((g) => g.id === mineId);
+    expect(mine?.approvalCount).toBe(1);
+    // No secret/key material may leak through the grant DTO (BẤT BIẾN #3).
+    expect(JSON.stringify(result)).not.toMatch(/secret|dek|ciphertext|auth_tag/i);
+  });
 });

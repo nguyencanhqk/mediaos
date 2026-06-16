@@ -18,6 +18,11 @@ import { ValkeyService } from '../permission/valkey.service';
 import { LoginRateLimiter } from '../auth/login-rate-limiter';
 import { PasswordService } from '../auth/password.service';
 import { SecretEncryptionService } from '../crypto/secret-encryption.service';
+import { BreakGlassRepository } from '../break-glass/break-glass.repository';
+import {
+  BREAK_GLASS_RESOURCE_TYPE,
+  REVEAL_BREAK_GLASS_ACTION,
+} from '@mediaos/contracts';
 import { PlatformAccountsRepository, type SafePlatformAccountRow } from './platform-accounts.repository';
 
 /** Caller identity (mirror media services' RequestUser). */
@@ -92,6 +97,11 @@ const SECRET_PURPOSE = 'platform_account' as const;
 /** Re-auth window TTL (plan §6c: ~5 phút). Per-account scope keyed (userId, accountId). */
 const REAUTH_TTL_SEC = 300;
 
+// ── Break-glass reveal audit actions (object_type = 'break_glass_access', mig 0200; KHÔNG đổi audit CHECK) ──
+const AUDIT_BG_REVEALED = 'break_glass_access.secret_revealed';
+const AUDIT_BG_REVEAL_FAILED = 'break_glass_access.secret_reveal_failed';
+const AUDIT_BG_REVEAL_DENIED = 'break_glass_access.reveal_denied';
+
 /**
  * Valkey key for the per-account re-auth window (scope B). reauth(A) cannot authorize reveal(B).
  * Exported so ReauthGuard reads the SAME key the service writes — single source, no format drift.
@@ -126,6 +136,7 @@ export class PlatformAccountsService {
     private readonly valkey: ValkeyService,
     private readonly password: PasswordService,
     private readonly rateLimiter: LoginRateLimiter,
+    private readonly breakGlass: BreakGlassRepository,
   ) {}
 
   // ── Re-auth (step-up) ────────────────────────────────────────────────────────
@@ -238,6 +249,113 @@ export class PlatformAccountsService {
       throw new Error('Secret reveal failed.');
     }
     return { secret: outcome.secret };
+  }
+
+  // ── Reveal via break-glass (🔒 G6-2 PR-B ROUND 2 — emergency JIT reveal) ───────
+
+  /**
+   * Reveal 1 platform_account secret QUA cổng break-glass. Gate KÉP, fail-closed (BẤT BIẾN #1):
+   *   (a) quyền sensitive `reveal-break-glass` company-tier (exact non-wildcard; *:* KHÔNG thoả; KHÔNG cần
+   *       object-grant/re-auth — `needsObjectGrant = (isSensitive && requiresReauth=false) = false`), VÀ
+   *   (b) grant 'active' CÒN HẠN của CHÍNH caller trên đúng account (ép Ở DB theo now(), BẤT BIẾN #4).
+   * Thiếu (a) → 403. Account không thấy trong tenant (gồm chéo tenant) → 404 (RLS ẩn — BẤT BIẾN #3).
+   * Thiếu (b) → 403 (no/expired/revoked/khác-requester/pending). KHÔNG nới quyền reveal thường.
+   *
+   * Gate (b) + decrypt JIT + audit CÙNG 1 tenant tx (BẤT BIẾN #3). Audit ghi 'break_glass_access' với
+   * object_id = grantId (KHÔNG secret/key material vào before/after — BẤT BIẾN #2/#3). Decrypt lỗi (tamper)
+   * → audit 'secret_reveal_failed' best-effort NGOÀI tx (tx hỏng không nuốt vết) rồi ném lỗi chung.
+   */
+  async revealSecretViaBreakGlass(
+    user: RequestUser,
+    accountId: string,
+    ctx: RevealCtx,
+  ): Promise<{ secret: string; grantId: string }> {
+    // ── Gate (a): sensitive permission (company-tier, no object grant, no re-auth) ──
+    const decision = await this.permissions.can({
+      userId: user.id,
+      companyId: user.companyId,
+      action: REVEAL_BREAK_GLASS_ACTION,
+      resourceType: BREAK_GLASS_RESOURCE_TYPE,
+      isSensitive: true,
+    });
+    if (!decision.allow) {
+      if (decision.auditRequired) {
+        await this.recordBestEffortBreakGlassAudit(
+          user,
+          accountId,
+          AUDIT_BG_REVEAL_DENIED,
+          `permission:${decision.reason}`,
+          ctx,
+        );
+      }
+      throw new ForbiddenException(`Permission denied: ${decision.reason}`);
+    }
+
+    // ── Gate (b) + decrypt + audit, ALL in one tenant tx (atomic, RLS-scoped) ──
+    const outcome = await this.db.withTenant(user.companyId, async (tx) => {
+      // Account existence in tenant FIRST — invisible (gồm chéo tenant) → 404, KHÔNG lộ tồn tại chéo tenant.
+      const row = await this.repo.findEnvelopeByIdTx(tx, user.companyId, accountId);
+      if (!row) return { kind: 'not_found' as const };
+
+      // Gate (b): grant 'active' còn hạn của CHÍNH caller trên account này (DB-clock expiry).
+      const grant = await this.breakGlass.findActiveGrantForRevealTx(
+        tx,
+        user.companyId,
+        accountId,
+        user.id,
+      );
+      if (!grant) return { kind: 'no_active_grant' as const };
+
+      // Decrypt JIT. Chỉ bắt lỗi GIẢI MÃ ở đây (tamper/corruption) → 'secret_reveal_failed' best-effort NGOÀI
+      // tx (tx hỏng không nuốt vết) rồi ném lỗi chung. KHÔNG bọc audit.record trong cùng try: nếu audit ghi lỗi
+      // SAU khi decrypt OK, lỗi PHẢI nổi lên → tx rollback → reveal THẤT BẠI (fail-closed: KHÔNG trả secret khi
+      // chưa commit được vết audit) — chứ KHÔNG bị phân loại nhầm thành 'decrypt_failed' (forensics sai).
+      let secret: string;
+      try {
+        secret = await this.secrets.decryptSecret(row, {
+          // AAD bound to PERSISTED row columns (mirror revealSecret) — integrity độc lập với predicate query.
+          companyId: row.companyId,
+          recordId: row.id,
+          purpose: SECRET_PURPOSE,
+        });
+      } catch {
+        return { kind: 'decrypt_failed' as const, grantId: grant.id };
+      }
+      await this.audit.record(tx, {
+        action: AUDIT_BG_REVEALED,
+        objectType: 'break_glass_access',
+        objectId: grant.id, // grantId — KHÔNG secret (BẤT BIẾN #2)
+        actorUserId: user.id,
+        ip: ctx.ip,
+        userAgent: ctx.userAgent,
+        after: { platformAccountId: accountId }, // non-secret metadata only
+      });
+      return { kind: 'ok' as const, secret, grantId: grant.id };
+    });
+
+    if (outcome.kind === 'not_found') throw new NotFoundException('Platform account not found.');
+    if (outcome.kind === 'no_active_grant') {
+      // Fail-closed deny: best-effort audit (object_id = accountId — chưa có grant hợp lệ để trỏ), rồi 403.
+      await this.recordBestEffortBreakGlassAudit(
+        user,
+        accountId,
+        AUDIT_BG_REVEAL_DENIED,
+        'no-active-grant',
+        ctx,
+      );
+      throw new ForbiddenException('No active break-glass grant authorizes this reveal.');
+    }
+    if (outcome.kind === 'decrypt_failed') {
+      await this.recordBestEffortBreakGlassAudit(
+        user,
+        outcome.grantId,
+        AUDIT_BG_REVEAL_FAILED,
+        'decrypt_error',
+        ctx,
+      );
+      throw new Error('Secret reveal failed.');
+    }
+    return { secret: outcome.secret, grantId: outcome.grantId };
   }
 
   // ── List / detail (masked projection — no secret, no recovery hints) ───────────
@@ -380,6 +498,42 @@ export class PlatformAccountsService {
       this.logger.error('Failed to write best-effort audit (original outcome unchanged)', {
         userId: user.id,
         accountId,
+        action,
+        error: err instanceof Error ? err.stack ?? err.message : String(err),
+      });
+    }
+  }
+
+  /**
+   * Best-effort break-glass reveal audit in its OWN tx (object_type 'break_glass_access'). Used for the
+   * permission-deny / no-active-grant deny (objectId = accountId) and the tamper reveal-failed row
+   * (objectId = grantId, set by caller). A failed audit write must NOT turn a security deny / tamper rethrow
+   * into a different error — log it (never swallow) and the caller still throws its intended exception.
+   * NEVER records secret/key material — only the reason + the non-secret object pointer.
+   */
+  private async recordBestEffortBreakGlassAudit(
+    user: RequestUser,
+    objectId: string,
+    action: string,
+    reason: string,
+    ctx?: RevealCtx,
+  ): Promise<void> {
+    try {
+      await this.db.withTenant(user.companyId, async (tx) => {
+        await this.audit.record(tx, {
+          action,
+          objectType: 'break_glass_access',
+          objectId,
+          actorUserId: user.id,
+          ip: ctx?.ip,
+          userAgent: ctx?.userAgent,
+          after: { reason },
+        });
+      });
+    } catch (err) {
+      this.logger.error('Failed to write best-effort break-glass audit (original outcome unchanged)', {
+        userId: user.id,
+        objectId,
         action,
         error: err instanceof Error ? err.stack ?? err.message : String(err),
       });
