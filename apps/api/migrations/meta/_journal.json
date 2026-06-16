@@ -610,6 +610,13 @@
       "when": 1717500211000,
       "tag": "0122_g16_security_alerts",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1717500220000,
+      "tag": "0220_g16_hot_path_indexes",
+      "breakpoints": true
     }
   ]
 }
