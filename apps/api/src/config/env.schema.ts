@@ -59,6 +59,19 @@ export const envSchema = z.object({
   // Vault transit — chỉ bắt buộc khi KMS_PROVIDER='vault' (xem superRefine bên dưới).
   KMS_VAULT_ADDR: z.string().url().optional(),
   KMS_VAULT_TOKEN: z.string().min(1).optional(),
+  // ── Object storage / S3 (B4 task attachments — MinIO/R2 qua @aws-sdk/client-s3) ──────────────
+  // OPTIONAL để API vẫn boot khi storage chưa cấu hình (dev không docker). ObjectStorageService
+  // fail-fast (StorageNotConfiguredError) KHI DÙNG nếu thiếu — KHÔNG fail-open (không tự bịa endpoint).
+  // S3_FORCE_PATH_STYLE=true cho MinIO (bucket-in-path, không virtual-host). Default true.
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_REGION: z.string().min(1).default("us-east-1"),
+  S3_ACCESS_KEY: z.string().min(1).optional(),
+  S3_SECRET_KEY: z.string().min(1).optional(),
+  S3_BUCKET: z.string().min(1).optional(),
+  S3_FORCE_PATH_STYLE: z.enum(["true", "false"]).default("true"),
+  // TTL (giây) cho presigned PUT/GET URL — ephemeral, KHÔNG persist. Default 5 phút.
+  S3_PRESIGN_TTL_SEC: z.coerce.number().int().positive().max(3600).default(300),
+
   // ⚠️ ALLOW_SUPERUSER_ROTATION (KHÔNG validate qua zod — CỐ Ý): SecretRotationService đọc THẲNG
   // `process.env.ALLOW_SUPERUSER_ROTATION === 'true'` để fail-closed tuyệt đối (mọi giá trị ≠ 'true', kể cả
   // unset → CHẶN rotation bằng role BYPASS RLS). Không dùng z.coerce.boolean() vì nó coi 'false' → true (bẫy).

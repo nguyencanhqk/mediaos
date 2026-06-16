@@ -624,6 +624,13 @@
       "when": 1717500230000,
       "tag": "0180_b1_view_own_payslip_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1717500240000,
+      "tag": "0190_b4_task_attachments",
+      "breakpoints": true
     }
   ]
 }
