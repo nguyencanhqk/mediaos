@@ -53,6 +53,10 @@ export const notifications = pgTable(
     index("notifications_company_id_idx").on(t.companyId),
     index("notifications_user_id_idx").on(t.userId),
     index("notifications_user_unread_idx").on(t.userId, t.isRead),
+    // G16-2 perf (migration 0220): per-user inbox list orders by created_at DESC; this
+    // index lets the planner skip the sort and avoids the company_id heap filter.
+    // (countUnread stays on notifications_user_unread_idx — already optimal.)
+    index("notifications_company_user_created_idx").on(t.companyId, t.userId, t.createdAt.desc()),
   ],
 );
 

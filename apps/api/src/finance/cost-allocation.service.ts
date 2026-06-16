@@ -100,15 +100,19 @@ export class CostAllocationService {
         sql`SELECT 1 FROM cost_records WHERE replaces_record_id = ${costRecordId} LIMIT 1`,
       );
       if ((superseded.rows?.length ?? 0) > 0) {
-        throw new BadRequestException("Cost đã bị thay thế (adjustment/void) — phân bổ trên bản hiệu lực.");
+        throw new BadRequestException(
+          "Cost đã bị thay thế (adjustment/void) — phân bổ trên bản hiệu lực.",
+        );
       }
 
       const totalCents = decimalStringToCents(cost.amount);
 
       // 2. Cross-tenant target guard (polymorphic) — mọi target phải tồn tại trong tenant.
+      //    G16-2 perf: 1 query/loại target (≤6) thay cho N round-trip (≤200). Báo lỗi target THIẾU
+      //    đầu tiên theo thứ tự input để giữ nguyên thông điệp/hành vi cũ (fail-closed).
+      const existing = await this.repo.existingTargetsTx(tx, dto.targets);
       for (const t of dto.targets) {
-        const exists = await this.repo.targetExistsTx(tx, t.targetType, t.targetId);
-        if (!exists) {
+        if (!existing.has(`${t.targetType}:${t.targetId}`)) {
           throw new BadRequestException(
             `Target không tồn tại trong công ty: ${t.targetType}:${t.targetId}`,
           );
