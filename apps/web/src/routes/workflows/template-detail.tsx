@@ -1,6 +1,7 @@
 import { Suspense, lazy, useMemo, useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { DagValidationResultDto } from "@/lib/workflow-builder/contract";
 import { workflowTemplatesApi } from "@/lib/workflow-templates-api";
 import { ApiError } from "@/lib/api-client";
@@ -18,6 +19,7 @@ const TemplateCanvas = lazy(() => import("@/components/workflows/canvas/template
 type DetailView = "canvas" | "list";
 
 export function WorkflowTemplateDetailPage() {
+  const { t } = useTranslation("workflows");
   const { templateId } = useParams({ from: "/workflows/templates/$templateId" });
   const qc = useQueryClient();
   const [validation, setValidation] = useState<DagValidationResultDto | null>(null);
@@ -51,11 +53,11 @@ export function WorkflowTemplateDetailPage() {
       // 422 = DAG không hợp lệ → chạy lại validator client-side để DỰNG danh sách lỗi inline.
       // 409 = đã xuất bản / publish đồng thời → chỉ hiển thị message.
       if (err instanceof ApiError && err.status === 422) {
-        setPublishError("Quy trình chưa hợp lệ để xuất bản — xem chi tiết lỗi bên dưới.");
+        setPublishError(t("detail.publishErrorInvalid"));
         validate.mutate();
         return;
       }
-      setPublishError(err instanceof Error ? err.message : "Xuất bản thất bại.");
+      setPublishError(err instanceof Error ? err.message : t("detail.publishErrorFallback"));
     },
   });
 
@@ -70,9 +72,9 @@ export function WorkflowTemplateDetailPage() {
     [validation],
   );
 
-  if (isLoading) return <div className="p-8 text-sm text-muted-foreground">Đang tải…</div>;
+  if (isLoading) return <div className="p-8 text-sm text-muted-foreground">{t("detail.loading")}</div>;
   if (isError || !data)
-    return <div className="p-8 text-sm text-destructive">Không tải được quy trình.</div>;
+    return <div className="p-8 text-sm text-destructive">{t("detail.loadError")}</div>;
 
   const { template, steps, dependencies } = data;
   const isDraft = template.status === "draft";
@@ -80,7 +82,7 @@ export function WorkflowTemplateDetailPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-8">
       <Link to="/workflows/templates" className="text-sm text-primary hover:underline">
-        <span aria-hidden="true">← </span>Danh sách quy trình
+        <span aria-hidden="true">← </span>{t("detail.backLink")}
       </Link>
 
       {/* Header */}
@@ -91,7 +93,7 @@ export function WorkflowTemplateDetailPage() {
             <TemplateStatusBadge status={template.status} version={template.version} />
           </div>
           <p className="text-sm text-muted-foreground">
-            Mã: {template.code} · Áp cho: {appliesToLabel(template.appliesTo)}
+            {t("detail.metaLine", { code: template.code, appliesTo: appliesToLabel(template.appliesTo) })}
           </p>
         </div>
 
@@ -102,18 +104,18 @@ export function WorkflowTemplateDetailPage() {
             onClick={() => validate.mutate()}
             disabled={validate.isPending}
           >
-            {validate.isPending ? "Đang kiểm tra…" : "Kiểm tra DAG"}
+            {validate.isPending ? t("detail.validating") : t("detail.validateBtn")}
           </Button>
           {isDraft && (
             <PermissionGate action="publish" resourceType="workflow-template">
               <Button size="sm" onClick={() => publish.mutate()} disabled={publish.isPending}>
-                {publish.isPending ? "Đang xuất bản…" : "Xuất bản"}
+                {publish.isPending ? t("detail.publishing") : t("detail.publishBtn")}
               </Button>
             </PermissionGate>
           )}
           <PermissionGate action="create" resourceType="workflow-template">
             <Button size="sm" variant="outline" onClick={() => clone.mutate()} disabled={clone.isPending}>
-              {clone.isPending ? "Đang nhân bản…" : "Nhân bản"}
+              {clone.isPending ? t("detail.cloning") : t("detail.cloneBtn")}
             </Button>
           </PermissionGate>
         </div>
@@ -122,7 +124,7 @@ export function WorkflowTemplateDetailPage() {
       {!isDraft && (
         <div
           role="note"
-          aria-label="Chỉnh sửa bị khoá — quy trình đã xuất bản"
+          aria-label={t("detail.immutableBannerAriaLabel")}
           className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
         >
           Quy trình đã xuất bản là bất biến. Để chỉnh sửa, hãy <strong>Nhân bản</strong> sang một
@@ -136,7 +138,7 @@ export function WorkflowTemplateDetailPage() {
       {/* View toggle: Sơ đồ (canvas) ↔ Danh sách (fallback bàn phím, a11y 2d) */}
       <div
         role="group"
-        aria-label="Chế độ chỉnh sửa phụ thuộc"
+        aria-label={t("detail.viewToggleAriaLabel")}
         className="inline-flex rounded-lg border border-border bg-muted/30 p-0.5 text-sm"
       >
         <button
@@ -145,7 +147,7 @@ export function WorkflowTemplateDetailPage() {
           onClick={() => setView("canvas")}
           className={`rounded-md px-3 py-1.5 ${view === "canvas" ? "bg-background font-medium shadow-sm" : "text-muted-foreground"}`}
         >
-          Sơ đồ
+          {t("detail.viewCanvas")}
         </button>
         <button
           type="button"
@@ -153,7 +155,7 @@ export function WorkflowTemplateDetailPage() {
           onClick={() => setView("list")}
           className={`rounded-md px-3 py-1.5 ${view === "list" ? "bg-background font-medium shadow-sm" : "text-muted-foreground"}`}
         >
-          Danh sách
+          {t("detail.viewList")}
         </button>
       </div>
 
@@ -161,7 +163,7 @@ export function WorkflowTemplateDetailPage() {
         <Suspense
           fallback={
             <div className="flex h-[460px] items-center justify-center rounded-xl border border-border text-sm text-muted-foreground">
-              Đang tải sơ đồ…
+              {t("detail.canvasLoadingFallback")}
             </div>
           }
         >

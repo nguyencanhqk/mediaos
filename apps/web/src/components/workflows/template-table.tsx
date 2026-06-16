@@ -8,6 +8,7 @@ import {
   useReactTable,
   type SortingState,
 } from "@tanstack/react-table";
+import { useTranslation } from "react-i18next";
 import type { TemplateDto } from "@/lib/workflow-builder/contract";
 import { Button } from "@/components/ui/button";
 import { TemplateStatusBadge } from "./template-status-badge";
@@ -23,12 +24,13 @@ interface TemplateTableProps {
 const columnHelper = createColumnHelper<TemplateDto>();
 
 export function TemplateTable({ templates, canDelete, onDelete, deletingId }: TemplateTableProps) {
+  const { t } = useTranslation("workflows");
   const [sorting, setSorting] = useState<SortingState>([]);
 
   const columns = useMemo(
     () => [
       columnHelper.accessor("name", {
-        header: "Tên quy trình",
+        header: t("templates.table.colName"),
         cell: (ctx) => (
           <Link
             to="/workflows/templates/$templateId"
@@ -39,13 +41,13 @@ export function TemplateTable({ templates, canDelete, onDelete, deletingId }: Te
           </Link>
         ),
       }),
-      columnHelper.accessor("code", { header: "Mã" }),
+      columnHelper.accessor("code", { header: t("templates.table.colCode") }),
       columnHelper.accessor((row) => appliesToLabel(row.appliesTo), {
         id: "appliesTo",
-        header: "Áp cho",
+        header: t("templates.table.colAppliesTo"),
       }),
       columnHelper.accessor("status", {
-        header: "Trạng thái",
+        header: t("templates.table.colStatus"),
         cell: (ctx) => (
           <TemplateStatusBadge status={ctx.getValue()} version={ctx.row.original.version} />
         ),
@@ -62,12 +64,12 @@ export function TemplateTable({ templates, canDelete, onDelete, deletingId }: Te
               onClick={() => onDelete(ctx.row.original)}
               disabled={deletingId === ctx.row.original.id}
             >
-              Xoá
+              {t("templates.table.deleteBtn")}
             </Button>
           ) : null,
       }),
     ],
-    [canDelete, deletingId, onDelete],
+    [canDelete, deletingId, onDelete, t],
   );
 
   const table = useReactTable({

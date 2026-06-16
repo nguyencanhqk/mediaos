@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { TemplateStepDto } from "@/lib/workflow-builder/contract";
 import { workflowTemplatesApi } from "@/lib/workflow-templates-api";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ function stepToForm(step: TemplateStepDto): StepFormState {
 }
 
 export function StepEditor({ templateId, steps, disabled }: StepEditorProps) {
+  const { t } = useTranslation("workflows");
   const qc = useQueryClient();
   const [editing, setEditing] = useState<TemplateStepDto | "new" | null>(null);
   const [form, setForm] = useState<StepFormState>(emptyStepForm);
@@ -70,17 +72,17 @@ export function StepEditor({ templateId, steps, disabled }: StepEditorProps) {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Các bước ({steps.length})</h2>
+        <h2 className="text-lg font-semibold">{t("steps.heading", { count: steps.length })}</h2>
         {!disabled && (
           <Button size="sm" variant="outline" onClick={openNew}>
-            + Thêm bước
+            {t("steps.addBtn")}
           </Button>
         )}
       </div>
 
       {steps.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-          Chưa có bước nào. Thêm bước đầu tiên để bắt đầu.
+          {t("steps.empty")}
         </p>
       ) : (
         <ul className="space-y-2">
@@ -96,18 +98,17 @@ export function StepEditor({ templateId, steps, disabled }: StepEditorProps) {
                     {step.code}
                   </span>
                   {!step.isRequired && (
-                    <span className="text-xs text-muted-foreground">(không bắt buộc)</span>
+                    <span className="text-xs text-muted-foreground">{t("steps.optional")}</span>
                   )}
                 </div>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {stepTypeLabel(step.stepType)} · Thực hiện: {roleLabel(step.assigneeRoleCode)} ·
-                  Duyệt: {roleLabel(step.reviewerRoleCode)}
+                  {t("steps.metaLine", { stepType: stepTypeLabel(step.stepType), assignee: roleLabel(step.assigneeRoleCode), reviewer: roleLabel(step.reviewerRoleCode) })}
                 </p>
               </div>
               {!disabled && (
                 <div className="flex shrink-0 gap-1">
                   <Button size="sm" variant="ghost" onClick={() => openEdit(step)}>
-                    Sửa
+                    {t("steps.editBtn")}
                   </Button>
                   <Button
                     size="sm"
@@ -116,7 +117,7 @@ export function StepEditor({ templateId, steps, disabled }: StepEditorProps) {
                     onClick={() => remove.mutate(step.id)}
                     disabled={remove.isPending}
                   >
-                    Xoá
+                    {t("steps.deleteBtn")}
                   </Button>
                 </div>
               )}
@@ -128,18 +129,18 @@ export function StepEditor({ templateId, steps, disabled }: StepEditorProps) {
       <Dialog
         open={editing !== null}
         onClose={() => setEditing(null)}
-        title={editing === "new" ? "Thêm bước" : "Sửa bước"}
+        title={editing === "new" ? t("steps.dialog.titleNew") : t("steps.dialog.titleEdit")}
         footer={
           <>
             <Button variant="ghost" size="sm" onClick={() => setEditing(null)}>
-              Huỷ
+              {t("steps.dialog.cancel")}
             </Button>
             <Button
               size="sm"
               onClick={() => save.mutate()}
               disabled={!form.code.trim() || !form.name.trim() || save.isPending}
             >
-              {save.isPending ? "Đang lưu…" : "Lưu"}
+              {save.isPending ? t("steps.dialog.saving") : t("steps.dialog.save")}
             </Button>
           </>
         }
@@ -147,7 +148,7 @@ export function StepEditor({ templateId, steps, disabled }: StepEditorProps) {
         <StepFormFields value={form} onChange={(patch) => setForm((f) => ({ ...f, ...patch }))} />
         {save.isError && (
           <p className="text-sm text-destructive">
-            {save.error instanceof Error ? save.error.message : "Lưu bước thất bại."}
+            {save.error instanceof Error ? save.error.message : t("steps.saveError")}
           </p>
         )}
       </Dialog>

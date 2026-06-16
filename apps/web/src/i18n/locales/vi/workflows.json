@@ -1,0 +1,127 @@
+{
+  "templates": {
+    "pageTitle": "Quy trình (Workflow)",
+    "pageSubtitle": "Cấu hình bước, phụ thuộc và xuất bản các quy trình áp cho nội dung / dự án.",
+    "statusFilter": "Trạng thái",
+    "statusAll": "Tất cả",
+    "loadError": "Không tải được danh sách quy trình.",
+    "empty": "Chưa có quy trình nào khớp bộ lọc.",
+    "table": {
+      "colName": "Tên quy trình",
+      "colCode": "Mã",
+      "colAppliesTo": "Áp cho",
+      "colStatus": "Trạng thái",
+      "deleteBtn": "Xoá"
+    },
+    "confirmDelete": "Xoá quy trình nháp \"{{name}}\"?",
+    "createBtn": "+ Tạo quy trình",
+    "createDialog": {
+      "title": "Tạo quy trình mới",
+      "description": "Quy trình mới luôn ở trạng thái Nháp. Thêm bước và phụ thuộc trước khi xuất bản.",
+      "cancel": "Huỷ",
+      "submitting": "Đang tạo…",
+      "submit": "Tạo & mở",
+      "fieldName": "Tên quy trình *",
+      "fieldNamePlaceholder": "VD: Sản xuất video chuẩn",
+      "fieldCode": "Mã (tuỳ chọn)",
+      "fieldCodePlaceholder": "VD: video_standard (bỏ trống = tạo từ tên)",
+      "fieldAppliesTo": "Áp dụng cho",
+      "validationError": "Dữ liệu không hợp lệ.",
+      "createError": "Tạo thất bại: {{detail}}",
+      "createErrorUnknown": "Lỗi không xác định"
+    }
+  },
+  "detail": {
+    "backLink": "Danh sách quy trình",
+    "loading": "Đang tải…",
+    "loadError": "Không tải được quy trình.",
+    "metaLine": "Mã: {{code}} · Áp cho: {{appliesTo}}",
+    "validateBtn": "Kiểm tra DAG",
+    "validating": "Đang kiểm tra…",
+    "publishBtn": "Xuất bản",
+    "publishing": "Đang xuất bản…",
+    "cloneBtn": "Nhân bản",
+    "cloning": "Đang nhân bản…",
+    "publishErrorInvalid": "Quy trình chưa hợp lệ để xuất bản — xem chi tiết lỗi bên dưới.",
+    "publishErrorFallback": "Xuất bản thất bại.",
+    "immutableBanner": "Quy trình đã xuất bản là bất biến. Để chỉnh sửa, hãy <strong>Nhân bản</strong> sang một bản nháp phiên bản mới.",
+    "immutableBannerAriaLabel": "Chỉnh sửa bị khoá — quy trình đã xuất bản",
+    "viewToggleAriaLabel": "Chế độ chỉnh sửa phụ thuộc",
+    "viewCanvas": "Sơ đồ",
+    "viewList": "Danh sách",
+    "canvasLoadingFallback": "Đang tải sơ đồ…",
+    "canvasHint": "Kéo từ chấm dưới của một bước sang chấm trên của bước khác để tạo phụ thuộc. Chọn cạnh rồi nhấn Delete để xoá. Cần thao tác bằng bàn phím? Chuyển sang <strong>Danh sách</strong>."
+  },
+  "instances": {
+    "pageTitle": "Tiến độ quy trình",
+    "pageSubtitle": "Các quy trình đang chạy. Mở để xem sơ đồ trạng thái và các bước song song.",
+    "loading": "Đang tải…",
+    "loadError": "Không tải được danh sách.",
+    "empty": "Chưa có quy trình nào đang chạy.",
+    "startedAt": "Bắt đầu {{date}}",
+    "detail": {
+      "backLink": "Tiến độ quy trình",
+      "loading": "Đang tải…",
+      "loadError": "Không tải được tiến độ quy trình.",
+      "versionLine": "Phiên bản v{{version}} · Bắt đầu {{datetime}}",
+      "canvasLoadingFallback": "Đang tải sơ đồ…",
+      "stepsHeading": "Trạng thái các bước",
+      "parallelNote": "Nhiều bước cùng <strong>Đang làm</strong> nghĩa là chúng chạy song song. Mỗi bước sinh một công việc riêng ở <a>Công việc của tôi</a>.",
+      "parallelNoteTasksLink": "Công việc của tôi"
+    }
+  },
+  "canvas": {
+    "instanceAriaLabel": "Sơ đồ tiến độ quy trình (chỉ xem). Trạng thái từng bước có ở danh sách bên dưới.",
+    "templateAriaLabelReadOnly": "Sơ đồ quy trình (chỉ xem — quy trình đã xuất bản). Dùng chế độ Danh sách để thao tác bằng bàn phím.",
+    "templateAriaLabelEditable": "Sơ đồ quy trình — node là bước, cạnh là phụ thuộc. Dùng chế độ Danh sách để thao tác bằng bàn phím.",
+    "stepErrorAriaLabel": "Bước có lỗi DAG",
+    "stepOptional": "(không bắt buộc)"
+  },
+  "dag": {
+    "valid": "✓ DAG hợp lệ — quy trình sẵn sàng để xuất bản.",
+    "invalidHeading": "DAG chưa hợp lệ ({{count}} lỗi):"
+  },
+  "steps": {
+    "heading": "Các bước ({{count}})",
+    "addBtn": "+ Thêm bước",
+    "empty": "Chưa có bước nào. Thêm bước đầu tiên để bắt đầu.",
+    "optional": "(không bắt buộc)",
+    "metaLine": "{{stepType}} · Thực hiện: {{assignee}} · Duyệt: {{reviewer}}",
+    "editBtn": "Sửa",
+    "deleteBtn": "Xoá",
+    "saveError": "Lưu bước thất bại.",
+    "dialog": {
+      "titleNew": "Thêm bước",
+      "titleEdit": "Sửa bước",
+      "cancel": "Huỷ",
+      "saving": "Đang lưu…",
+      "save": "Lưu"
+    },
+    "form": {
+      "fieldCode": "Mã bước *",
+      "fieldCodePlaceholder": "VD: script",
+      "fieldType": "Loại bước",
+      "fieldName": "Tên bước *",
+      "fieldNamePlaceholder": "VD: Viết kịch bản",
+      "fieldAssignee": "Vai trò thực hiện",
+      "fieldReviewer": "Vai trò duyệt",
+      "unassigned": "— Chưa gán —",
+      "isRequired": "Bắt buộc (workflow chỉ hoàn thành khi bước này được duyệt)"
+    }
+  },
+  "dependencies": {
+    "heading": "Phụ thuộc ({{count}})",
+    "description": "Bước phụ thuộc chỉ mở khi mọi bước chạy trước đã được duyệt. Phụ thuộc rẽ nhánh = chạy song song.",
+    "labelFrom": "Bước chạy trước",
+    "labelTo": "Bước phụ thuộc",
+    "selectStep": "— Chọn bước —",
+    "addingBtn": "Đang thêm…",
+    "addBtn": "Thêm phụ thuộc",
+    "errorBothRequired": "Chọn cả bước chạy trước và bước phụ thuộc.",
+    "errorSelfDep": "Một bước không thể tự phụ thuộc.",
+    "addError": "Thêm phụ thuộc thất bại.",
+    "empty": "Chưa có phụ thuộc nào.",
+    "depLabel": "phụ thuộc vào",
+    "deleteBtn": "Xoá"
+  }
+}

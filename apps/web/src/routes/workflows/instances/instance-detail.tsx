@@ -1,6 +1,7 @@
 import { Suspense, lazy } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { workflowInstancesApi } from "@/lib/workflow-instances-api";
 import {
   INSTANCE_STATUS_BADGE_CLASSES,
@@ -12,6 +13,7 @@ import {
 const InstanceCanvas = lazy(() => import("@/components/workflows/canvas/instance-canvas"));
 
 export function WorkflowInstanceDetailPage() {
+  const { t } = useTranslation("workflows");
   const { instanceId } = useParams({ from: "/workflows/instances/$instanceId" });
 
   const { data, isLoading, isError } = useQuery({
@@ -19,9 +21,9 @@ export function WorkflowInstanceDetailPage() {
     queryFn: () => workflowInstancesApi.get(instanceId),
   });
 
-  if (isLoading) return <div className="p-8 text-sm text-muted-foreground">Đang tải…</div>;
+  if (isLoading) return <div className="p-8 text-sm text-muted-foreground">{t("instances.detail.loading")}</div>;
   if (isError || !data)
-    return <div className="p-8 text-sm text-destructive">Không tải được tiến độ quy trình.</div>;
+    return <div className="p-8 text-sm text-destructive">{t("instances.detail.loadError")}</div>;
 
   const { instance, steps, dependencies } = data;
   const sortedSteps = [...steps].sort((a, b) => a.stepOrder - b.stepOrder);
@@ -29,7 +31,7 @@ export function WorkflowInstanceDetailPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-8">
       <Link to="/workflows/instances" className="text-sm text-primary hover:underline">
-        <span aria-hidden="true">← </span>Tiến độ quy trình
+        <span aria-hidden="true">← </span>{t("instances.detail.backLink")}
       </Link>
 
       <div className="space-y-1">
@@ -42,15 +44,17 @@ export function WorkflowInstanceDetailPage() {
           </span>
         </div>
         <p className="text-sm text-muted-foreground">
-          Phiên bản v{instance.definitionVersion} · Bắt đầu{" "}
-          {new Date(instance.createdAt).toLocaleString("vi-VN")}
+          {t("instances.detail.versionLine", {
+            version: instance.definitionVersion,
+            datetime: new Date(instance.createdAt).toLocaleString("vi-VN"),
+          })}
         </p>
       </div>
 
       <Suspense
         fallback={
           <div className="flex h-[460px] items-center justify-center rounded-xl border border-border text-sm text-muted-foreground">
-            Đang tải sơ đồ…
+            {t("instances.detail.canvasLoadingFallback")}
           </div>
         }
       >
@@ -59,7 +63,7 @@ export function WorkflowInstanceDetailPage() {
 
       {/* Danh sách trạng thái — fallback đọc-được cho canvas (a11y) */}
       <section className="space-y-2">
-        <h2 className="text-lg font-semibold">Trạng thái các bước</h2>
+        <h2 className="text-lg font-semibold">{t("instances.detail.stepsHeading")}</h2>
         <ul className="space-y-2">
           {sortedSteps.map((step) => (
             <li
@@ -79,7 +83,7 @@ export function WorkflowInstanceDetailPage() {
         </ul>
         <p className="text-xs text-muted-foreground">
           Nhiều bước cùng <strong>Đang làm</strong> nghĩa là chúng chạy song song. Mỗi bước sinh một
-          công việc riêng ở <Link to="/tasks" className="text-primary hover:underline">Công việc của tôi</Link>.
+          công việc riêng ở <Link to="/tasks" className="text-primary hover:underline">{t("instances.detail.parallelNoteTasksLink")}</Link>.
         </p>
       </section>
     </div>

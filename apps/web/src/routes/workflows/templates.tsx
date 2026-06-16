@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { TemplateDto, TemplateStatus } from "@/lib/workflow-builder/contract";
 import { workflowTemplatesApi } from "@/lib/workflow-templates-api";
 import { PermissionGate } from "@/components/permission-gate";
@@ -12,6 +13,7 @@ import { TEMPLATE_STATUS_LABELS, TEMPLATE_STATUS_OPTIONS } from "@/components/wo
 type StatusFilter = TemplateStatus | "all";
 
 export function WorkflowTemplatesPage() {
+  const { t } = useTranslation("workflows");
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const canDelete = useCan("update", "workflow_template");
@@ -32,16 +34,16 @@ export function WorkflowTemplatesPage() {
   );
 
   const onDelete = (template: TemplateDto) => {
-    if (window.confirm(`Xoá quy trình nháp "${template.name}"?`)) remove.mutate(template.id);
+    if (window.confirm(t("templates.confirmDelete", { name: template.name }))) remove.mutate(template.id);
   };
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Quy trình (Workflow)</h1>
+          <h1 className="text-2xl font-semibold">{t("templates.pageTitle")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Cấu hình bước, phụ thuộc và xuất bản các quy trình áp cho nội dung / dự án.
+            {t("templates.pageSubtitle")}
           </p>
         </div>
         <PermissionGate action="create" resourceType="workflow_template">
@@ -51,13 +53,13 @@ export function WorkflowTemplatesPage() {
 
       <div className="flex items-center gap-3">
         <label className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Trạng thái</span>
+          <span className="text-muted-foreground">{t("templates.statusFilter")}</span>
           <Select
             className="h-9 w-44"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
           >
-            <option value="all">Tất cả</option>
+            <option value="all">{t("templates.statusAll")}</option>
             {TEMPLATE_STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
                 {TEMPLATE_STATUS_LABELS[s]}
@@ -67,10 +69,10 @@ export function WorkflowTemplatesPage() {
         </label>
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải…</p>}
-      {isError && <p className="text-sm text-destructive">Không tải được danh sách quy trình.</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
+      {isError && <p className="text-sm text-destructive">{t("templates.loadError")}</p>}
       {!isLoading && !isError && visible.length === 0 && (
-        <p className="text-sm text-muted-foreground">Chưa có quy trình nào khớp bộ lọc.</p>
+        <p className="text-sm text-muted-foreground">{t("templates.empty")}</p>
       )}
       {visible.length > 0 && (
         <TemplateTable
