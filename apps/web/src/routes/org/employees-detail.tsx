@@ -1,44 +1,19 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import type { EmployeeProfileDto } from "@mediaos/contracts";
 import { employeesApi } from "@/lib/employees-api";
 
 // ── Nhãn enum (vi) ─────────────────────────────────────────────────────────────
 
-const WORK_TYPE_LABELS: Record<EmployeeProfileDto["workType"], string> = {
-  offline: "Tại văn phòng",
-  remote: "Từ xa",
-  hybrid: "Linh hoạt",
-};
-
-const EMPLOYMENT_TYPE_LABELS: Record<EmployeeProfileDto["employmentType"], string> = {
-  full_time: "Toàn thời gian",
-  part_time: "Bán thời gian",
-  freelancer: "Freelancer",
-  intern: "Thực tập",
-  probation: "Thử việc",
-};
-
-const SALARY_TYPE_LABELS: Record<EmployeeProfileDto["salaryType"], string> = {
-  monthly: "Theo tháng",
-  hourly: "Theo giờ",
-  project: "Theo dự án",
-};
-
-const STATUS_LABELS: Record<EmployeeProfileDto["status"], string> = {
-  active: "Đang làm",
-  inactive: "Tạm ngưng",
-  resigned: "Đã nghỉ",
-  terminated: "Chấm dứt",
-};
-
 /**
  * Định dạng lương theo quyền (mask phía SERVER — FE chỉ render gì nhận được).
  * `null` = không có quyền xem → đúng chữ theo §6/§11. number = có quyền.
  */
-function formatSalary(baseSalary: number | null): string {
-  if (baseSalary == null) return "— (Không có quyền xem)";
+function formatSalary(baseSalary: number | null, t: TFunction<"org">): string {
+  if (baseSalary == null) return t("employees.salaryHidden");
   return `${baseSalary.toLocaleString("vi-VN")} ₫`;
 }
 
@@ -46,14 +21,7 @@ function formatSalary(baseSalary: number | null): string {
 
 type TabKey = "overview" | "work" | "team" | "task" | "kpi" | "salary";
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: "overview", label: "Tổng quan" },
-  { key: "work", label: "Công việc" },
-  { key: "team", label: "Team/Project" },
-  { key: "task", label: "Task" },
-  { key: "kpi", label: "KPI" },
-  { key: "salary", label: "Lương" },
-];
+const TAB_KEYS: TabKey[] = ["overview", "work", "team", "task", "kpi", "salary"];
 
 interface EmployeeDetailViewProps {
   employee: EmployeeProfileDto;
@@ -61,6 +29,7 @@ interface EmployeeDetailViewProps {
 
 /** Presentational — nhận sẵn DTO (đã mask), không tự fetch. Dễ test cô lập. */
 export function EmployeeDetailView({ employee }: EmployeeDetailViewProps) {
+  const { t } = useTranslation("org");
   const [tab, setTab] = useState<TabKey>("overview");
 
   return (
@@ -79,43 +48,43 @@ export function EmployeeDetailView({ employee }: EmployeeDetailViewProps) {
         <p className="text-sm text-muted-foreground">
           {employee.positionName ?? "—"}
           {employee.orgUnitName ? ` · ${employee.orgUnitName}` : ""}
-          {` · ${STATUS_LABELS[employee.status]}`}
+          {` · ${t(`employeeDetail.statusLabels.${employee.status}`, { defaultValue: employee.status })}`}
         </p>
       </header>
 
       <div role="tablist" className="flex flex-wrap gap-1 border-b border-border">
-        {TABS.map((t) => (
+        {TAB_KEYS.map((key) => (
           <button
-            key={t.key}
+            key={key}
             type="button"
             role="tab"
-            id={`tab-${t.key}`}
-            aria-selected={tab === t.key}
+            id={`tab-${key}`}
+            aria-selected={tab === key}
             // Chỉ panel của tab đang chọn tồn tại trong DOM → aria-controls chỉ trỏ khi active.
-            aria-controls={tab === t.key ? `panel-${t.key}` : undefined}
-            onClick={() => setTab(t.key)}
+            aria-controls={tab === key ? `panel-${key}` : undefined}
+            onClick={() => setTab(key)}
             className={
-              tab === t.key
+              tab === key
                 ? "border-b-2 border-primary px-4 py-2 text-sm font-medium text-primary"
                 : "px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
             }
           >
-            {t.label}
+            {t(`employeeDetail.tabs.${key}`, { defaultValue: key })}
           </button>
         ))}
       </div>
 
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-        {tab === "overview" && <OverviewTab employee={employee} />}
-        {tab === "work" && <WorkTab employee={employee} />}
+        {tab === "overview" && <OverviewTab employee={employee} t={t} />}
+        {tab === "work" && <WorkTab employee={employee} t={t} />}
         {tab === "team" && (
-          <Placeholder text="Thông tin team / dự án sẽ hiển thị khi tích hợp module Team." />
+          <Placeholder text={t("employeeDetail.placeholders.team")} />
         )}
         {tab === "task" && (
-          <Placeholder text="Danh sách công việc của nhân sự sẽ hiển thị khi tích hợp module Task." />
+          <Placeholder text={t("employeeDetail.placeholders.task")} />
         )}
-        {tab === "kpi" && <Placeholder text="KPI — Sẽ có ở G8." />}
-        {tab === "salary" && <SalaryTab employee={employee} />}
+        {tab === "kpi" && <Placeholder text={t("employeeDetail.placeholders.kpi")} />}
+        {tab === "salary" && <SalaryTab employee={employee} t={t} />}
       </div>
     </div>
   );
@@ -123,47 +92,51 @@ export function EmployeeDetailView({ employee }: EmployeeDetailViewProps) {
 
 // ── Panels ─────────────────────────────────────────────────────────────────────
 
-function OverviewTab({ employee }: EmployeeDetailViewProps) {
+interface TabProps extends EmployeeDetailViewProps {
+  t: TFunction<"org">;
+}
+
+function OverviewTab({ employee, t }: TabProps) {
   return (
     <dl className="grid grid-cols-2 gap-4 text-sm">
-      <Field label="Họ tên" value={employee.userFullName ?? "—"} />
-      <Field label="Email" value={employee.userEmail ?? "—"} />
-      <Field label="Mã nhân sự" value={employee.employeeCode ?? "—"} />
-      <Field label="Số điện thoại" value={employee.phone ?? "—"} />
-      <Field label="Hình thức làm việc" value={WORK_TYPE_LABELS[employee.workType]} />
-      <Field label="Trạng thái" value={STATUS_LABELS[employee.status]} />
-      {employee.notes && <Field label="Ghi chú" value={employee.notes} />}
+      <Field label={t("employeeDetail.fields.fullName")} value={employee.userFullName ?? "—"} />
+      <Field label={t("employeeDetail.fields.email")} value={employee.userEmail ?? "—"} />
+      <Field label={t("employeeDetail.fields.employeeCode")} value={employee.employeeCode ?? "—"} />
+      <Field label={t("employeeDetail.fields.phone")} value={employee.phone ?? "—"} />
+      <Field label={t("employeeDetail.fields.workType")} value={t(`employeeDetail.workType.${employee.workType}`, { defaultValue: employee.workType })} />
+      <Field label={t("employeeDetail.fields.status")} value={t(`employeeDetail.statusLabels.${employee.status}`, { defaultValue: employee.status })} />
+      {employee.notes && <Field label={t("employeeDetail.fields.notes")} value={employee.notes} />}
     </dl>
   );
 }
 
-function WorkTab({ employee }: EmployeeDetailViewProps) {
+function WorkTab({ employee, t }: TabProps) {
   return (
     <dl className="grid grid-cols-2 gap-4 text-sm">
-      <Field label="Phòng ban" value={employee.orgUnitName ?? "—"} />
-      <Field label="Chức vụ" value={employee.positionName ?? "—"} />
-      <Field label="Quản lý trực tiếp" value={employee.directManagerName ?? "—"} />
+      <Field label={t("employeeDetail.fields.orgUnit")} value={employee.orgUnitName ?? "—"} />
+      <Field label={t("employeeDetail.fields.position")} value={employee.positionName ?? "—"} />
+      <Field label={t("employeeDetail.fields.directManager")} value={employee.directManagerName ?? "—"} />
       <Field
-        label="Loại hợp đồng lao động"
-        value={EMPLOYMENT_TYPE_LABELS[employee.employmentType]}
+        label={t("employeeDetail.fields.employmentType")}
+        value={t(`employeeDetail.employmentType.${employee.employmentType}`, { defaultValue: employee.employmentType })}
       />
-      <Field label="Loại hợp đồng" value={employee.contractType ?? "—"} />
-      <Field label="Hình thức lương" value={SALARY_TYPE_LABELS[employee.salaryType]} />
-      <Field label="Ngày bắt đầu" value={employee.startDate ?? "—"} />
-      <Field label="Ngày kết thúc" value={employee.endDate ?? "—"} />
+      <Field label={t("employeeDetail.fields.contractType")} value={employee.contractType ?? "—"} />
+      <Field label={t("employeeDetail.fields.salaryType")} value={t(`employeeDetail.salaryType.${employee.salaryType}`, { defaultValue: employee.salaryType })} />
+      <Field label={t("employeeDetail.fields.startDate")} value={employee.startDate ?? "—"} />
+      <Field label={t("employeeDetail.fields.endDate")} value={employee.endDate ?? "—"} />
     </dl>
   );
 }
 
-function SalaryTab({ employee }: EmployeeDetailViewProps) {
+function SalaryTab({ employee, t }: TabProps) {
   return (
     <div className="space-y-3">
       <dl className="grid grid-cols-2 gap-4 text-sm">
-        <Field label="Lương cơ bản" value={formatSalary(employee.baseSalary)} />
-        <Field label="Hình thức lương" value={SALARY_TYPE_LABELS[employee.salaryType]} />
+        <Field label={t("employeeDetail.fields.baseSalary")} value={formatSalary(employee.baseSalary, t)} />
+        <Field label={t("employeeDetail.fields.salaryType")} value={t(`employeeDetail.salaryType.${employee.salaryType}`, { defaultValue: employee.salaryType })} />
       </dl>
       <p className="text-sm text-muted-foreground">
-        Bảng lương chi tiết &amp; lịch sử chi trả — Sẽ có ở G12.
+        {t("employeeDetail.placeholders.salaryHistory")}
       </p>
     </div>
   );
@@ -185,6 +158,7 @@ function Field({ label, value }: { label: string; value: string }) {
 // ── Container (route /org/employees/$employeeId — đăng ký router do phiên tích hợp lo) ──
 
 export function EmployeeDetailPage() {
+  const { t } = useTranslation("org");
   // strict:false để decouple khỏi route tree (route được đăng ký ở phiên tích hợp).
   const params = useParams({ strict: false }) as { employeeId?: string };
   const employeeId = params.employeeId ?? "";
@@ -198,11 +172,11 @@ export function EmployeeDetailPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-8">
       <Link to="/org/employees" className="text-sm text-muted-foreground hover:underline">
-        ← Danh sách nhân sự
+        {t("employees.back")}
       </Link>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải…</p>}
-      {isError && <p className="text-sm text-destructive">Không tải được hồ sơ nhân sự.</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
+      {isError && <p className="text-sm text-destructive">{t("employees.loadProfileError")}</p>}
       {data && <EmployeeDetailView employee={data} />}
     </div>
   );

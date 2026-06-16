@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { PositionDto } from "@mediaos/contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,7 @@ function toForm(p: PositionDto): PositionForm {
 }
 
 export function PositionsPage() {
+  const { t } = useTranslation("org");
   const qc = useQueryClient();
   const [orgUnitFilter, setOrgUnitFilter] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -123,13 +125,13 @@ export function PositionsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Chức vụ</h1>
-        <Button onClick={openCreate}>Thêm chức vụ</Button>
+        <h1 className="text-2xl font-semibold">{t("positions.title")}</h1>
+        <Button onClick={openCreate}>{t("positions.addButton")}</Button>
       </div>
 
       <div className="flex items-center gap-2">
         <label className="text-sm text-muted-foreground" htmlFor="org-unit-filter">
-          Lọc theo phòng ban
+          {t("positions.filterLabel")}
         </label>
         <Select
           id="org-unit-filter"
@@ -137,7 +139,7 @@ export function PositionsPage() {
           onChange={(e) => setOrgUnitFilter(e.target.value)}
           className="max-w-xs"
         >
-          <option value="">Tất cả phòng ban</option>
+          <option value="">{t("positions.allDepartments")}</option>
           {orgUnits.map((u) => (
             <option key={u.id} value={u.id}>
               {u.name}
@@ -146,10 +148,10 @@ export function PositionsPage() {
         </Select>
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải…</p>}
-      {isError && <p className="text-sm text-destructive">Không tải được dữ liệu.</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
+      {isError && <p className="text-sm text-destructive">{t("common:errors.loadFailed")}</p>}
       {positions.length === 0 && !isLoading && (
-        <p className="text-sm text-muted-foreground">Chưa có chức vụ nào.</p>
+        <p className="text-sm text-muted-foreground">{t("positions.empty")}</p>
       )}
 
       <ul className="divide-y divide-border rounded-xl border border-border">
@@ -180,7 +182,7 @@ export function PositionsPage() {
                 {p.status}
               </span>
               <Button variant="outline" size="sm" onClick={() => openEdit(p)}>
-                Sửa
+                {t("common:actions.edit")}
               </Button>
               <Button
                 variant="ghost"
@@ -189,7 +191,7 @@ export function PositionsPage() {
                 onClick={() => remove.mutate(p.id)}
                 disabled={remove.isPending}
               >
-                Xoá
+                {t("positions.deleteButton")}
               </Button>
             </div>
           </li>
@@ -199,14 +201,14 @@ export function PositionsPage() {
       <Dialog
         open={drawerOpen}
         onClose={closeDrawer}
-        title={editing ? "Sửa chức vụ" : "Thêm chức vụ"}
+        title={editing ? t("positions.dialog.editTitle") : t("positions.dialog.createTitle")}
         footer={
           <>
             <Button variant="outline" onClick={closeDrawer} disabled={save.isPending}>
-              Huỷ
+              {t("positions.dialog.cancel")}
             </Button>
             <Button onClick={() => save.mutate()} disabled={!form.name.trim() || save.isPending}>
-              {editing ? "Lưu" : "Tạo"}
+              {editing ? t("common:actions.save") : t("common:actions.create")}
             </Button>
           </>
         }
@@ -214,20 +216,20 @@ export function PositionsPage() {
         <div className="space-y-3">
           <div className="space-y-1">
             <label className="text-sm" htmlFor="pos-name">
-              Tên chức vụ
+              {t("positions.dialog.nameLabel")}
             </label>
             <Input
               id="pos-name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="VD: Trưởng nhóm sản xuất"
+              placeholder={t("positions.dialog.namePlaceholder")}
             />
           </div>
 
           <div className="flex gap-3">
             <div className="flex-1 space-y-1">
               <label className="text-sm" htmlFor="pos-code">
-                Mã (tuỳ chọn)
+                {t("positions.dialog.codeLabel")}
               </label>
               <Input
                 id="pos-code"
@@ -237,7 +239,7 @@ export function PositionsPage() {
             </div>
             <div className="w-28 space-y-1">
               <label className="text-sm" htmlFor="pos-level">
-                Cấp (1–99)
+                {t("positions.dialog.levelLabel")}
               </label>
               <Input
                 id="pos-level"
@@ -252,14 +254,14 @@ export function PositionsPage() {
 
           <div className="space-y-1">
             <label className="text-sm" htmlFor="pos-org-unit">
-              Phòng ban
+              {t("positions.dialog.orgUnitLabel")}
             </label>
             <Select
               id="pos-org-unit"
               value={form.orgUnitId}
               onChange={(e) => setForm({ ...form, orgUnitId: e.target.value })}
             >
-              <option value="">— Không gán —</option>
+              <option value="">{t("common:notAssigned")}</option>
               {orgUnits.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
@@ -270,7 +272,7 @@ export function PositionsPage() {
 
           <div className="space-y-1">
             <label className="text-sm" htmlFor="pos-role">
-              Vai trò mặc định
+              {t("positions.dialog.roleLabel")}
             </label>
             <Select
               id="pos-role"
@@ -278,7 +280,7 @@ export function PositionsPage() {
               onChange={(e) => setForm({ ...form, defaultRoleId: e.target.value })}
               disabled={roles.length === 0}
             >
-              <option value="">— Không gán —</option>
+              <option value="">{t("common:notAssigned")}</option>
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
@@ -286,13 +288,13 @@ export function PositionsPage() {
               ))}
             </Select>
             {roles.length === 0 && (
-              <p className="text-xs text-muted-foreground">Danh mục vai trò chưa sẵn sàng.</p>
+              <p className="text-xs text-muted-foreground">{t("positions.rolesNotReady")}</p>
             )}
           </div>
 
           <div className="space-y-1">
             <label className="text-sm" htmlFor="pos-desc">
-              Mô tả (tuỳ chọn)
+              {t("positions.dialog.descLabel")}
             </label>
             <Input
               id="pos-desc"
@@ -302,7 +304,7 @@ export function PositionsPage() {
           </div>
 
           {save.isError && (
-            <p className="text-sm text-destructive">Lưu thất bại, vui lòng thử lại.</p>
+            <p className="text-sm text-destructive">{t("positions.dialog.saveError")}</p>
           )}
         </div>
       </Dialog>

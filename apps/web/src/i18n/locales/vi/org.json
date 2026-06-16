@@ -1,0 +1,150 @@
+{
+  "chart": {
+    "empty": "Chưa có dữ liệu sơ đồ tổ chức."
+  },
+  "departments": {
+    "title": "Phòng ban",
+    "namePlaceholder": "Tên phòng ban…",
+    "codePlaceholder": "Mã (tuỳ chọn)",
+    "chartSection": "Sơ đồ tổ chức",
+    "headSelect": "Trưởng phòng của {{name}}",
+    "noHead": "— Chưa có trưởng phòng —",
+    "statusActive": "Đang bật",
+    "statusInactive": "Đang tắt",
+    "empty": "Chưa có phòng ban nào."
+  },
+  "employees": {
+    "title": "Nhân sự",
+    "importCsv": "Import CSV",
+    "importing": "Đang xử lý…",
+    "uploadError": "Upload thất bại: {{message}}",
+    "preview": {
+      "heading": "Xem trước: {{valid}} hợp lệ",
+      "invalidCount": "· {{count}} lỗi",
+      "rowError": "Dòng {{row}}: {{errors}}",
+      "moreRows": "… và {{count}} dòng nữa",
+      "cancel": "Huỷ",
+      "confirmButton": "Xác nhận nhập {{count}} nhân sự",
+      "confirming": "Đang nhập…",
+      "confirmError": "Xác nhận thất bại: {{message}}"
+    },
+    "importDone": "Đã nhập thành công {{count}} nhân sự.",
+    "salaryHidden": "— (Không có quyền xem)",
+    "back": "← Danh sách nhân sự",
+    "loadProfileError": "Không tải được hồ sơ nhân sự.",
+    "deleteButton": "Xoá",
+    "empty": "Chưa có nhân sự nào.",
+    "unknownError": "Lỗi không xác định"
+  },
+  "employeeDetail": {
+    "tabs": {
+      "overview": "Tổng quan",
+      "work": "Công việc",
+      "team": "Team/Project",
+      "task": "Task",
+      "kpi": "KPI",
+      "salary": "Lương"
+    },
+    "placeholders": {
+      "team": "Thông tin team / dự án sẽ hiển thị khi tích hợp module Team.",
+      "task": "Danh sách công việc của nhân sự sẽ hiển thị khi tích hợp module Task.",
+      "kpi": "KPI — Sẽ có ở G8.",
+      "salaryHistory": "Bảng lương chi tiết & lịch sử chi trả — Sẽ có ở G12."
+    },
+    "fields": {
+      "fullName": "Họ tên",
+      "email": "Email",
+      "employeeCode": "Mã nhân sự",
+      "phone": "Số điện thoại",
+      "workType": "Hình thức làm việc",
+      "status": "Trạng thái",
+      "notes": "Ghi chú",
+      "orgUnit": "Phòng ban",
+      "position": "Chức vụ",
+      "directManager": "Quản lý trực tiếp",
+      "employmentType": "Loại hợp đồng lao động",
+      "contractType": "Loại hợp đồng",
+      "salaryType": "Hình thức lương",
+      "startDate": "Ngày bắt đầu",
+      "endDate": "Ngày kết thúc",
+      "baseSalary": "Lương cơ bản"
+    },
+    "workType": {
+      "offline": "Tại văn phòng",
+      "remote": "Từ xa",
+      "hybrid": "Linh hoạt"
+    },
+    "employmentType": {
+      "full_time": "Toàn thời gian",
+      "part_time": "Bán thời gian",
+      "freelancer": "Freelancer",
+      "intern": "Thực tập",
+      "probation": "Thử việc"
+    },
+    "salaryType": {
+      "monthly": "Theo tháng",
+      "hourly": "Theo giờ",
+      "project": "Theo dự án"
+    },
+    "statusLabels": {
+      "active": "Đang làm",
+      "inactive": "Tạm ngưng",
+      "resigned": "Đã nghỉ",
+      "terminated": "Chấm dứt"
+    }
+  },
+  "positions": {
+    "title": "Chức vụ",
+    "addButton": "Thêm chức vụ",
+    "filterLabel": "Lọc theo phòng ban",
+    "allDepartments": "Tất cả phòng ban",
+    "empty": "Chưa có chức vụ nào.",
+    "deleteButton": "Xoá",
+    "rolesNotReady": "Danh mục vai trò chưa sẵn sàng.",
+    "dialog": {
+      "createTitle": "Thêm chức vụ",
+      "editTitle": "Sửa chức vụ",
+      "cancel": "Huỷ",
+      "nameLabel": "Tên chức vụ",
+      "namePlaceholder": "VD: Trưởng nhóm sản xuất",
+      "codeLabel": "Mã (tuỳ chọn)",
+      "levelLabel": "Cấp (1–99)",
+      "orgUnitLabel": "Phòng ban",
+      "roleLabel": "Vai trò mặc định",
+      "descLabel": "Mô tả (tuỳ chọn)",
+      "saveError": "Lưu thất bại, vui lòng thử lại."
+    }
+  },
+  "teams": {
+    "title": "Teams",
+    "namePlaceholder": "Tên team…",
+    "addButton": "Thêm team",
+    "filterStatusLabel": "Lọc theo trạng thái",
+    "filterTypeLabel": "Lọc theo loại team",
+    "anyType": "Mọi loại team",
+    "statusActive": "Đang hoạt động",
+    "statusInactive": "Ngừng",
+    "empty": "Không có team nào khớp bộ lọc.",
+    "deleteButton": "Xoá",
+    "detail": {
+      "statusLabel": "Trạng thái",
+      "capacityLabel": "Sức chứa",
+      "leaderLabel": "Team leader",
+      "leaderPlaceholder": "— Chọn leader —",
+      "membersSection": "Thành viên",
+      "chooseMemberLabel": "Chọn thành viên",
+      "chooseMemberPlaceholder": "— Chọn người dùng —",
+      "noMembers": "Chưa có thành viên."
+    },
+    "types": {
+      "production_team": "Sản xuất",
+      "script_team": "Kịch bản",
+      "editor_team": "Dựng phim",
+      "thumbnail_team": "Thumbnail",
+      "seo_team": "SEO",
+      "qa_team": "QA",
+      "project_team": "Dự án",
+      "office_team": "Văn phòng"
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -7,6 +8,7 @@ import { OrgChart, flattenOrgTree } from "@/components/org-chart";
 import { orgApi } from "@/lib/org-api";
 
 export function DepartmentsPage() {
+  const { t } = useTranslation("org");
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -56,36 +58,36 @@ export function DepartmentsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-8">
-      <h1 className="text-2xl font-semibold">Phòng ban</h1>
+      <h1 className="text-2xl font-semibold">{t("departments.title")}</h1>
 
       <div className="flex gap-2">
         <Input
-          placeholder="Tên phòng ban…"
+          placeholder={t("departments.namePlaceholder")}
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="max-w-xs"
         />
         <Input
-          placeholder="Mã (tuỳ chọn)"
+          placeholder={t("departments.codePlaceholder")}
           value={code}
           onChange={(e) => setCode(e.target.value)}
           className="max-w-[120px]"
         />
         <Button onClick={() => create.mutate()} disabled={!name.trim() || create.isPending}>
-          Thêm
+          {t("common:actions.add")}
         </Button>
       </div>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-medium text-muted-foreground">Sơ đồ tổ chức</h2>
+        <h2 className="text-sm font-medium text-muted-foreground">{t("departments.chartSection")}</h2>
         <OrgChart units={chartUnits} onSelectNode={setSelectedId} />
       </section>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải…</p>}
-      {isError && <p className="text-sm text-destructive">Không tải được dữ liệu.</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
+      {isError && <p className="text-sm text-destructive">{t("common:errors.loadFailed")}</p>}
 
       {departments.length === 0 && !isLoading && (
-        <p className="text-sm text-muted-foreground">Chưa có phòng ban nào.</p>
+        <p className="text-sm text-muted-foreground">{t("departments.empty")}</p>
       )}
 
       <ul className="divide-y divide-border rounded-xl border border-border">
@@ -110,7 +112,7 @@ export function DepartmentsPage() {
 
               <div className="flex items-center gap-2">
                 <Select
-                  aria-label={`Trưởng phòng của ${d.name}`}
+                  aria-label={t("departments.headSelect", { name: d.name })}
                   value={d.headUserId ?? ""}
                   onChange={(e) =>
                     update.mutate({ id: d.id, patch: { headUserId: e.target.value || null } })
@@ -118,7 +120,7 @@ export function DepartmentsPage() {
                   disabled={update.isPending}
                   className="h-8 max-w-[180px] text-xs"
                 >
-                  <option value="">— Chưa có trưởng phòng —</option>
+                  <option value="">{t("departments.noHead")}</option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.fullName ?? u.email}
@@ -133,7 +135,7 @@ export function DepartmentsPage() {
                   disabled={update.isPending}
                   className={d.status === "active" ? "text-green-600" : "text-muted-foreground"}
                 >
-                  {d.status === "active" ? "Đang bật" : "Đang tắt"}
+                  {d.status === "active" ? t("departments.statusActive") : t("departments.statusInactive")}
                 </Button>
               </div>
             </li>
