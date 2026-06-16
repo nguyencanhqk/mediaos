@@ -133,7 +133,13 @@ export class CostAllocationRepository {
     }
 
     for (const [targetType, ids] of idsByType) {
+      if (ids.length === 0) continue; // sql.join([]) → "IN ()" = lỗi cú pháp; guard phòng vỡ tương lai.
       const table = TARGET_TABLE[targetType];
+      if (!table) {
+        // targetType là khoá discriminated-union từ contracts; map cố định PHẢI phủ hết. Nếu thêm
+        // loại target mới mà quên cập nhật TARGET_TABLE → fail LOUD thay vì SQL hỏng/identifier(undefined).
+        throw new Error(`existingTargetsTx: thiếu TARGET_TABLE cho targetType '${targetType}'`);
+      }
       const idList = sql.join(
         ids.map((id) => sql`${id}`),
         sql`, `,
@@ -143,7 +149,15 @@ export class CostAllocationRepository {
             WHERE id IN (${idList}) AND deleted_at IS NULL`,
       );
       for (const row of res.rows) {
-        found.add(`${targetType}:${row.id as string}`);
+        const id = row.id;
+        if (typeof id !== "string" || id.length === 0) {
+          // Mọi PK là UUID (driver trả string). Cast ngầm "as string" che sai lệch type → key lệch →
+          // false-missing 400 trên target THẬT SỰ tồn tại. Ép kiểm để fail LOUD nếu giả định vỡ.
+          throw new Error(
+            `existingTargetsTx: id không phải string từ ${table}: ${JSON.stringify(id)}`,
+          );
+        }
+        found.add(`${targetType}:${id}`);
       }
     }
     return found;

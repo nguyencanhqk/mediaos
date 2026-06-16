@@ -13,7 +13,10 @@
 --       AFTER:  Index-only/Index Scan on tasks_company_status_active_idx.
 --   • Dashboard overdue (… AND due_date < now() AND status NOT IN (...))
 --       BEFORE: Seq Scan tasks (5700 rows), 113 buffers.
---       AFTER:  served by tasks_company_status_active_idx (company_id leading + status/due_date).
+--       AFTER:  tasks_company_status_active_idx — company_id-leading scan on the PARTIAL index
+--               (drops soft-deleted). NOTE: `status NOT IN (...)` is a negation → the planner does
+--               NOT index-scan the status column; it scans the company_id prefix + filters status/
+--               due_date. Still far cheaper than the full Seq Scan (partial index, no soft-deleted rows).
 --   • My Tasks findByAssignee (WHERE company_id AND assignee_user_id AND deleted_at IS NULL ORDER BY created_at DESC)
 --       BEFORE: Bitmap on tasks_assignee_user_id_idx + heap filter (company/deleted) + sort.
 --       AFTER:  Index Scan tasks_company_assignee_active_idx, 0 sort.
@@ -39,9 +42,14 @@ CREATE INDEX IF NOT EXISTS tasks_company_created_active_idx
 CREATE INDEX IF NOT EXISTS tasks_company_assignee_active_idx
   ON tasks (company_id, assignee_user_id, created_at DESC)
   WHERE deleted_at IS NULL;
+-- FOLLOW-UP (post-land, separate migration): the existing single-column tasks_assignee_user_id_idx is
+-- now subsumed by this partial composite for every app query (all run inside withTenant → company_id is
+-- always present), so it becomes dead write-weight. NOT dropped here — it is shared with master; track a
+-- DROP INDEX in a follow-up once this lane lands.
 --> statement-breakpoint
--- Dashboard getTaskSummary GROUP BY status + overdue (status NOT IN + due_date) share the
--- (company_id, status) prefix; include due_date so overdue can range-scan without a heap pass.
+-- Dashboard getTaskSummary GROUP BY status uses the (company_id, status) prefix (index-only).
+-- The overdue query (status NOT IN + due_date) can't index-scan on status (negation) → it uses the
+-- company_id-leading partial scan + filter; due_date is included to keep the row check off-heap.
 CREATE INDEX IF NOT EXISTS tasks_company_status_active_idx
   ON tasks (company_id, status, due_date)
   WHERE deleted_at IS NULL;

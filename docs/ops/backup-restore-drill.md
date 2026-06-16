@@ -64,9 +64,11 @@ Exit `0` = drill PASS. Any non-zero exit prints the failing step.
 - [ ] Drill exits `0` (PASS).
 - [ ] `applied` migration count == `_journal.json` entry count (no skipped/missing migration).
 - [ ] All core tables present: `companies, users, tasks, notifications, attendance_records, leave_requests, cost_allocations, payslips, audit_logs`.
-- [ ] `rls_off = 0` — RLS still **enabled** on every multi-tenant table after restore (Invariant #1; restore must not silently drop policies).
-- [ ] G16-2 hot-path indexes present: `tasks_company_created_active_idx`, `tasks_company_status_active_idx`, `notifications_company_user_created_idx`.
-- [ ] Smoke read queries succeed.
+- [ ] `rls_off = 0` — RLS still **enabled** on every multi-tenant table after restore (Invariant #1).
+- [ ] `rls_notforced = 0` — **FORCE** RLS still set (RLS applies even to table owner; `relrowsecurity` alone is insufficient).
+- [ ] `pol_missing = 0` — every multi-tenant table still has at least one RLS **policy** (a `CREATE POLICY` that failed silently during restore is caught here, not by a superuser read which bypasses RLS).
+- [ ] G16-2 hot-path indexes present (all 4): `tasks_company_created_active_idx`, `tasks_company_assignee_active_idx`, `tasks_company_status_active_idx`, `notifications_company_user_created_idx`.
+- [ ] Smoke read queries succeed (basic + tenant-GUC path).
 - [ ] Restore wall-clock time recorded and within RTO; note dataset size.
 
 ## 6. Reference transcript (dev, mediaos_c2)
@@ -75,8 +77,8 @@ Exit `0` = drill PASS. Any non-zero exit prints the failing step.
 [1/5] pg_dump mediaos_c2 (custom-format, read-only) — dump size: 460K
 [2/5] CREATE DATABASE mediaos_drill_<ts> + pg_restore — restore done
 [3/5] verify migration chain — applied=86  journal=86
-[4/5] verify schema — core_tables=9  rls_off=0  g16_indexes=3
-[5/5] smoke read — companies / tasks / notifications queries OK
+[4/5] verify schema — core_tables=9  rls_off=0  rls_notforced=0  pol_missing=0  g16_indexes=4
+[5/5] smoke read — basic + tenant-GUC queries OK
 [cleanup] DROP mediaos_drill_<ts> + rm dump
 DRILL PASS
 ```
