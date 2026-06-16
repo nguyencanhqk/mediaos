@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type { TaskDto } from "@mediaos/contracts";
 import { TaskBoardCard } from "./task-card";
 import { KANBAN_STATUS_ORDER, TASK_STATUS_LABELS } from "./task-status-constants";
@@ -12,6 +13,7 @@ interface TaskKanbanProps {
 }
 
 export function TaskKanban({ tasks }: TaskKanbanProps) {
+  const { t } = useTranslation("tasks");
   const byStatus = useMemo(() => {
     const map = new Map<TaskDto["status"], TaskDto[]>();
     for (const status of KANBAN_STATUS_ORDER) map.set(status, []);
@@ -42,7 +44,7 @@ export function TaskKanban({ tasks }: TaskKanbanProps) {
               ))}
               {items.length === 0 && (
                 <p className="px-1 py-3 text-center text-[11px] text-muted-foreground/70">
-                  Không có việc
+                  {t("kanban.emptyColumn")}
                 </p>
               )}
             </div>

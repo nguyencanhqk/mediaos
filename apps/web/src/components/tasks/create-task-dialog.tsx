@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { CreateTaskRequest, EmployeeListItemDto } from "@mediaos/contracts";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -48,6 +49,7 @@ function Field({ label, children }: FieldProps) {
 }
 
 export function CreateTaskDialog() {
+  const { t } = useTranslation("tasks");
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<TaskFormState>(emptyTaskForm);
@@ -65,43 +67,43 @@ export function CreateTaskDialog() {
   return (
     <>
       <Button size="sm" onClick={() => setOpen(true)}>
-        + Giao việc
+        {t("createTask.triggerButton")}
       </Button>
       <Dialog
         open={open}
         onClose={() => setOpen(false)}
-        title="Giao việc tay"
-        description="Tạo công việc ngoài quy trình (office) — không gắn video/workflow."
+        title={t("createTask.dialogTitle")}
+        description={t("createTask.dialogDescription")}
         footer={
           <>
             <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
-              Huỷ
+              {t("createTask.cancelButton")}
             </Button>
             <Button
               size="sm"
               onClick={() => create.mutate()}
               disabled={!form.title.trim() || create.isPending}
             >
-              {create.isPending ? "Đang tạo…" : "Giao việc"}
+              {create.isPending ? t("createTask.submitting") : t("createTask.submitButton")}
             </Button>
           </>
         }
       >
-        <Field label="Tiêu đề công việc *">
+        <Field label={t("createTask.fieldTitle")}>
           <Input
             value={form.title}
             onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-            placeholder="VD: Soạn báo cáo tuần…"
+            placeholder={t("createTask.fieldTitlePlaceholder")}
             autoFocus
           />
         </Field>
 
-        <Field label="Người nhận việc">
+        <Field label={t("createTask.fieldAssignee")}>
           <Select
             value={form.assigneeUserId}
             onChange={(e) => setForm((f) => ({ ...f, assigneeUserId: e.target.value }))}
           >
-            <option value="">— Chưa gán —</option>
+            <option value="">{t("common:unassigned")}</option>
             {employees.map((emp) => (
               <option key={emp.userId} value={emp.userId}>
                 {employeeLabel(emp)}
@@ -110,7 +112,7 @@ export function CreateTaskDialog() {
           </Select>
         </Field>
 
-        <Field label="Hạn hoàn thành">
+        <Field label={t("createTask.fieldDueDate")}>
           <Input
             type="date"
             value={form.dueDate}
@@ -120,8 +122,8 @@ export function CreateTaskDialog() {
 
         {create.isError && (
           <p className="text-sm text-destructive">
-            Giao việc thất bại:{" "}
-            {create.error instanceof Error ? create.error.message : "Lỗi không xác định"}
+            {t("createTask.errorFailed")}{" "}
+            {create.error instanceof Error ? create.error.message : t("createTask.errorUnknown")}
           </p>
         )}
       </Dialog>

@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { tasksApi } from "@/lib/tasks-api";
@@ -22,7 +24,7 @@ interface TaskGroup {
 }
 
 /** Gom task theo nội dung để các bước chạy song song hiện cùng một cụm. */
-function groupTasksByContent(tasks: TaskDto[]): TaskGroup[] {
+function groupTasksByContent(tasks: TaskDto[], t: TFunction<"tasks">): TaskGroup[] {
   const groups = new Map<string, TaskGroup>();
   for (const task of tasks) {
     const key = task.contentItemId ?? "__none__";
@@ -30,7 +32,7 @@ function groupTasksByContent(tasks: TaskDto[]): TaskGroup[] {
     if (existing) {
       existing.tasks = [...existing.tasks, task];
     } else {
-      groups.set(key, { key, title: task.contentTitle ?? "Công việc khác", tasks: [task] });
+      groups.set(key, { key, title: task.contentTitle ?? t("myTasks.otherWork"), tasks: [task] });
     }
   }
   return [...groups.values()];
@@ -39,6 +41,7 @@ function groupTasksByContent(tasks: TaskDto[]): TaskGroup[] {
 // ─── CommentThread ────────────────────────────────────────────────────────────
 
 function CommentThread({ taskId }: { taskId: string }) {
+  const { t } = useTranslation("tasks");
   const qc = useQueryClient();
   const [body, setBody] = useState("");
 
@@ -57,13 +60,13 @@ function CommentThread({ taskId }: { taskId: string }) {
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold">Bình luận</h3>
-      {isLoading && <p className="text-xs text-muted-foreground">Đang tải…</p>}
+      <h3 className="text-sm font-semibold">{t("comment.heading")}</h3>
+      {isLoading && <p className="text-xs text-muted-foreground">{t("comment.loading")}</p>}
       <ul className="space-y-2">
         {comments.map((c: CommentDto) => (
           <li key={c.id} className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
             <p className="mb-0.5 font-medium text-foreground/80">
-              {c.userFullName ?? "Người dùng"}
+              {c.userFullName ?? t("comment.unknownUser")}
               <span className="ml-2 text-xs font-normal text-muted-foreground">
                 {new Date(c.createdAt).toLocaleString("vi-VN")}
               </span>
@@ -72,12 +75,12 @@ function CommentThread({ taskId }: { taskId: string }) {
           </li>
         ))}
         {comments.length === 0 && !isLoading && (
-          <li className="text-xs text-muted-foreground">Chưa có bình luận nào.</li>
+          <li className="text-xs text-muted-foreground">{t("comment.empty")}</li>
         )}
       </ul>
       <div className="flex gap-2">
         <Input
-          placeholder="Thêm bình luận…"
+          placeholder={t("comment.placeholder")}
           value={body}
           onChange={(e) => setBody(e.target.value)}
           onKeyDown={(e) => {
@@ -92,7 +95,7 @@ function CommentThread({ taskId }: { taskId: string }) {
           onClick={() => add.mutate(body.trim())}
           disabled={!body.trim() || add.isPending}
         >
-          Gửi
+          {t("comment.submitButton")}
         </Button>
       </div>
     </div>
@@ -102,6 +105,7 @@ function CommentThread({ taskId }: { taskId: string }) {
 // ─── SubmitWorkForm ───────────────────────────────────────────────────────────
 
 function SubmitWorkForm({ task, onDone }: { task: TaskDto; onDone: () => void }) {
+  const { t } = useTranslation("tasks");
   const qc = useQueryClient();
   const [url, setUrl] = useState(task.submissionUrl ?? "");
   const [note, setNote] = useState(task.submissionNote ?? "");
@@ -136,7 +140,7 @@ function SubmitWorkForm({ task, onDone }: { task: TaskDto; onDone: () => void })
     if (task.submissionUrl) {
       return (
         <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
-          <p className="mb-1 font-medium">Đã nộp work</p>
+          <p className="mb-1 font-medium">{t("submitWork.submitted")}</p>
           <a
             href={task.submissionUrl}
             target="_blank"
@@ -156,15 +160,15 @@ function SubmitWorkForm({ task, onDone }: { task: TaskDto; onDone: () => void })
 
   return (
     <div className="space-y-3 rounded-lg border border-border p-4">
-      <h3 className="text-sm font-semibold">Nộp work</h3>
+      <h3 className="text-sm font-semibold">{t("submitWork.heading")}</h3>
       <div className="space-y-2">
         <Input
-          placeholder="Link (Drive, Dropbox, YouTube…)"
+          placeholder={t("submitWork.urlPlaceholder")}
           value={url}
           onChange={(e) => setUrl(e.target.value)}
         />
         <Input
-          placeholder="Ghi chú (không bắt buộc)"
+          placeholder={t("submitWork.notePlaceholder")}
           value={note}
           onChange={(e) => setNote(e.target.value)}
         />
@@ -175,16 +179,16 @@ function SubmitWorkForm({ task, onDone }: { task: TaskDto; onDone: () => void })
         disabled={submit.isPending || !checklistReady}
         size="sm"
       >
-        {submit.isPending ? "Đang gửi…" : "Nộp bài"}
+        {submit.isPending ? t("submitWork.submitting") : t("submitWork.submitButton")}
       </Button>
       {!checklistReady && (
         <p className="text-xs text-amber-600">
-          Hoàn thành mọi mục bắt buộc trong checklist trước khi nộp.
+          {t("submitWork.checklistPending")}
         </p>
       )}
       {submit.isError && (
         <p className="text-xs text-destructive">
-          {submit.error instanceof Error ? submit.error.message : "Lỗi khi nộp bài."}
+          {submit.error instanceof Error ? submit.error.message : t("submitWork.errorDefault")}
         </p>
       )}
     </div>
@@ -194,6 +198,7 @@ function SubmitWorkForm({ task, onDone }: { task: TaskDto; onDone: () => void })
 // ─── TaskDetail ───────────────────────────────────────────────────────────────
 
 function TaskDetail({ task, onClose }: { task: TaskDto; onClose: () => void }) {
+  const { t } = useTranslation("tasks");
   return (
     <div className="flex h-full flex-col space-y-5 overflow-y-auto p-6">
       <div className="flex items-start justify-between">
@@ -206,7 +211,7 @@ function TaskDetail({ task, onClose }: { task: TaskDto; onClose: () => void }) {
         <button
           onClick={onClose}
           className="text-lg leading-none text-muted-foreground hover:text-foreground"
-          aria-label="Đóng"
+          aria-label={t("taskDetail.closeAriaLabel")}
         >
           ✕
         </button>
@@ -222,7 +227,7 @@ function TaskDetail({ task, onClose }: { task: TaskDto; onClose: () => void }) {
         )}
         {task.origin === "revision" && (
           <span className="rounded-full bg-orange-100 px-2 py-0.5 text-orange-700">
-            Sửa lần {task.revisionRound}
+            {t("taskDetail.revisionLabel", { round: task.revisionRound })}
           </span>
         )}
       </div>
@@ -275,6 +280,7 @@ function TaskCard({
 // ─── ApprovalCard ─────────────────────────────────────────────────────────────
 
 function ApprovalCard({ req }: { req: ApprovalRequestDto }) {
+  const { t } = useTranslation("tasks");
   const qc = useQueryClient();
   const [revisionDesc, setRevisionDesc] = useState("");
   const [revisionComment, setRevisionComment] = useState("");
@@ -303,11 +309,11 @@ function ApprovalCard({ req }: { req: ApprovalRequestDto }) {
         <div className="text-sm">
           <p className="font-medium">Step: {req.workflowStepId.slice(0, 8)}…</p>
           <p className="text-xs text-muted-foreground">
-            Gửi lúc {new Date(req.createdAt).toLocaleString("vi-VN")}
+            {t("approval.submittedAt", { time: new Date(req.createdAt).toLocaleString("vi-VN") })}
           </p>
         </div>
         <span className="shrink-0 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
-          Chờ duyệt
+          {t("approval.pending")}
         </span>
       </div>
 
@@ -319,7 +325,7 @@ function ApprovalCard({ req }: { req: ApprovalRequestDto }) {
             disabled={approve.isPending}
             className="flex-1"
           >
-            {approve.isPending ? "Đang duyệt…" : "Phê duyệt"}
+            {approve.isPending ? t("approval.approving") : t("approval.approve")}
           </Button>
           <Button
             size="sm"
@@ -327,18 +333,18 @@ function ApprovalCard({ req }: { req: ApprovalRequestDto }) {
             onClick={() => setShowRevisionForm(true)}
             className="flex-1"
           >
-            Trả về sửa
+            {t("approval.requestRevision")}
           </Button>
         </div>
       ) : (
         <div className="space-y-2">
           <Input
-            placeholder="Mô tả lỗi cần sửa *"
+            placeholder={t("approval.revisionDescPlaceholder")}
             value={revisionDesc}
             onChange={(e) => setRevisionDesc(e.target.value)}
           />
           <Input
-            placeholder="Bình luận cho người thực hiện (tuỳ chọn)"
+            placeholder={t("approval.revisionCommentPlaceholder")}
             value={revisionComment}
             onChange={(e) => setRevisionComment(e.target.value)}
           />
@@ -348,21 +354,21 @@ function ApprovalCard({ req }: { req: ApprovalRequestDto }) {
               onClick={() => requestRevision.mutate()}
               disabled={!revisionDesc.trim() || requestRevision.isPending}
             >
-              {requestRevision.isPending ? "Đang gửi…" : "Xác nhận trả về"}
+              {requestRevision.isPending ? t("approval.confirmingRevision") : t("approval.confirmRevision")}
             </Button>
             <Button
               size="sm"
               variant="ghost"
               onClick={() => setShowRevisionForm(false)}
             >
-              Huỷ
+              {t("approval.cancelRevision")}
             </Button>
           </div>
           {requestRevision.isError && (
             <p className="text-xs text-destructive">
               {requestRevision.error instanceof Error
                 ? requestRevision.error.message
-                : "Lỗi khi gửi yêu cầu."}
+                : t("approval.errorDefault")}
             </p>
           )}
         </div>
@@ -374,15 +380,16 @@ function ApprovalCard({ req }: { req: ApprovalRequestDto }) {
 // ─── ApprovalQueue ────────────────────────────────────────────────────────────
 
 function ApprovalQueue() {
+  const { t } = useTranslation("tasks");
   const { data: requests = [], isLoading, isError } = useQuery({
     queryKey: ["approval-requests"],
     queryFn: () => tasksApi.listApprovalRequests(),
   });
 
-  if (isLoading) return <p className="py-6 text-center text-sm text-muted-foreground">Đang tải…</p>;
-  if (isError) return <p className="py-6 text-center text-sm text-destructive">Không tải được dữ liệu.</p>;
+  if (isLoading) return <p className="py-6 text-center text-sm text-muted-foreground">{t("approval.queueLoading")}</p>;
+  if (isError) return <p className="py-6 text-center text-sm text-destructive">{t("approval.queueError")}</p>;
   if (requests.length === 0)
-    return <p className="py-6 text-center text-sm text-muted-foreground">Không có yêu cầu duyệt nào.</p>;
+    return <p className="py-6 text-center text-sm text-muted-foreground">{t("approval.queueEmpty")}</p>;
 
   return (
     <div className="space-y-3 p-3">
@@ -398,6 +405,7 @@ function ApprovalQueue() {
 type Tab = "my-tasks" | "approvals";
 
 export function TasksPage() {
+  const { t } = useTranslation("tasks");
   const [tab, setTab] = useState<Tab>("my-tasks");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -408,7 +416,7 @@ export function TasksPage() {
   });
 
   const selectedTask = tasks.find((t) => t.id === selectedId) ?? null;
-  const taskGroups = useMemo(() => groupTasksByContent(tasks), [tasks]);
+  const taskGroups = useMemo(() => groupTasksByContent(tasks, t), [tasks, t]);
 
   return (
     <div className="flex h-full">
@@ -424,7 +432,7 @@ export function TasksPage() {
                 : "text-muted-foreground hover:bg-muted"
             }`}
           >
-            Công việc của tôi
+            {t("myTasks.tabLabel")}
           </button>
           <button
             onClick={() => { setTab("approvals"); setSelectedId(null); }}
@@ -434,7 +442,7 @@ export function TasksPage() {
                 : "text-muted-foreground hover:bg-muted"
             }`}
           >
-            Chờ duyệt
+            {t("myTasks.approvalsTabLabel")}
           </button>
         </div>
 
@@ -449,10 +457,10 @@ export function TasksPage() {
                 </div>
               </PermissionGate>
               {isLoading && (
-                <p className="py-6 text-center text-sm text-muted-foreground">Đang tải…</p>
+                <p className="py-6 text-center text-sm text-muted-foreground">{t("myTasks.loading")}</p>
               )}
               {isError && (
-                <p className="py-6 text-center text-sm text-destructive">Không tải được dữ liệu.</p>
+                <p className="py-6 text-center text-sm text-destructive">{t("myTasks.loadError")}</p>
               )}
               {taskGroups.map((group) => (
                 <div key={group.key} className="space-y-2">
@@ -462,7 +470,7 @@ export function TasksPage() {
                     </h2>
                     {group.tasks.length > 1 && (
                       <span className="shrink-0 rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
-                        {group.tasks.length} bước song song
+                        {t("myTasks.parallelSteps", { count: group.tasks.length })}
                       </span>
                     )}
                   </div>
@@ -478,7 +486,7 @@ export function TasksPage() {
               ))}
               {tasks.length === 0 && !isLoading && (
                 <p className="py-6 text-center text-sm text-muted-foreground">
-                  Bạn chưa có công việc nào.
+                  {t("myTasks.empty")}
                 </p>
               )}
             </div>
@@ -495,8 +503,8 @@ export function TasksPage() {
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             {tab === "my-tasks"
-              ? "Chọn một công việc để xem chi tiết"
-              : "Duyệt hoặc trả về từ danh sách bên trái"}
+              ? t("myTasks.selectPrompt")
+              : t("myTasks.approveSelectPrompt")}
           </div>
         )}
       </div>

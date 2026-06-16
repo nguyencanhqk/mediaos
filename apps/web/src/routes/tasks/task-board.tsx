@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { ListTasksQueryRequest } from "@mediaos/contracts";
 import { tasksApi } from "@/lib/tasks-api";
 import { TaskKanban } from "@/components/tasks/task-kanban";
@@ -16,15 +17,16 @@ import { TaskTypeFilter, type TaskTypeFilterValue } from "@/components/tasks/tas
  */
 type BoardView = "kanban" | "table" | "calendar";
 
-const VIEW_LABELS: Record<BoardView, string> = {
-  kanban: "Kanban",
-  table: "Bảng",
-  calendar: "Lịch",
-};
-
 export function TaskBoardPage() {
+  const { t } = useTranslation("tasks");
   const [view, setView] = useState<BoardView>("kanban");
   const [typeFilter, setTypeFilter] = useState<TaskTypeFilterValue>(null);
+
+  const VIEW_LABELS: Record<BoardView, string> = {
+    kanban: t("board.viewKanban"),
+    table: t("board.viewTable"),
+    calendar: t("board.viewCalendar"),
+  };
 
   const filter = useMemo<ListTasksQueryRequest | undefined>(
     () => (typeFilter ? { taskType: typeFilter } : undefined),
@@ -46,7 +48,7 @@ export function TaskBoardPage() {
     <div className="flex h-full flex-col gap-4 p-6">
       <header className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold">Bảng công việc</h1>
+          <h1 className="text-xl font-semibold">{t("board.pageTitle")}</h1>
           <div className="flex gap-1 rounded-lg border border-border p-0.5">
             {(Object.keys(VIEW_LABELS) as BoardView[]).map((v) => (
               <button
@@ -73,16 +75,16 @@ export function TaskBoardPage() {
             onClick={() => setTypeFilter((cur) => (cur === "office" ? null : "office"))}
             className="text-xs text-primary underline-offset-2 hover:underline"
           >
-            {typeFilter === "office" ? "Bỏ lọc Office Tasks" : "Chỉ xem Office Tasks"}
+            {typeFilter === "office" ? t("board.clearOfficeFilter") : t("board.showOfficeOnly")}
           </button>
         </div>
       </header>
 
       <div className="min-h-0 flex-1 overflow-auto">
-        {isLoading && <p className="py-8 text-center text-sm text-muted-foreground">Đang tải…</p>}
+        {isLoading && <p className="py-8 text-center text-sm text-muted-foreground">{t("board.loading")}</p>}
         {isError && (
           <p className="py-8 text-center text-sm text-destructive">
-            Không tải được công việc (có thể thiếu quyền xem).
+            {t("board.loadError")}
           </p>
         )}
         {!isLoading && !isError && (

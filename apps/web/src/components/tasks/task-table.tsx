@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   createColumnHelper,
   flexRender,
@@ -27,24 +28,25 @@ interface TaskTableProps {
 const columnHelper = createColumnHelper<TaskDto>();
 
 export function TaskTable({ tasks }: TaskTableProps) {
+  const { t } = useTranslation("tasks");
   const [sorting, setSorting] = useState<SortingState>([]);
 
   const columns = useMemo(
     () => [
       columnHelper.accessor("title", {
-        header: "Công việc",
+        header: t("table.colTitle"),
         cell: (ctx) => <span className="font-medium">{ctx.getValue()}</span>,
       }),
       columnHelper.accessor("taskType", {
-        header: "Loại",
+        header: t("table.colType"),
         cell: (ctx) => TASK_TYPE_LABELS[ctx.getValue()],
       }),
       columnHelper.accessor((row) => row.projectName ?? row.contentTitle ?? "—", {
         id: "context",
-        header: "Bối cảnh",
+        header: t("table.colContext"),
       }),
       columnHelper.accessor("status", {
-        header: "Trạng thái",
+        header: t("table.colStatus"),
         cell: (ctx) => {
           const task = ctx.row.original;
           if (isShortenedFlowTask(task)) return <OfficeTaskStatus task={task} />;
@@ -59,14 +61,14 @@ export function TaskTable({ tasks }: TaskTableProps) {
       }),
       columnHelper.accessor((row) => row.dueDate ?? "", {
         id: "dueDate",
-        header: "Hạn",
+        header: t("table.colDueDate"),
         cell: (ctx) => {
           const v = ctx.getValue();
           return v ? new Date(v).toLocaleDateString("vi-VN") : "—";
         },
       }),
     ],
-    [],
+    [t],
   );
 
   const table = useReactTable({
@@ -126,7 +128,7 @@ export function TaskTable({ tasks }: TaskTableProps) {
           {tasks.length === 0 && (
             <tr>
               <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                Không có công việc nào.
+                {t("table.empty")}
               </td>
             </tr>
           )}
