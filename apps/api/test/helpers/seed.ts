@@ -279,6 +279,25 @@ export async function seedPlatformAccount(
   return res.rows[0].id as string;
 }
 
+/**
+ * Seed 1 user_totp ĐÃ BẬT (enabled_at set) cho user — để qua TwoFactorEnforcementGuard (G16-1b) trong các
+ * e2e mà user giữ role `requires_two_factor` (vd company-admin) nhưng test KHÔNG xoay quanh luồng 2FA.
+ * Envelope là placeholder thoả octet_length CHECK (iv 12B / tag 16B) — KHÔNG crypto thật (test không decrypt).
+ */
+export async function seedTwoFactorEnabled(
+  direct: Pool,
+  companyId: string,
+  userId: string,
+): Promise<void> {
+  await direct.query(
+    `INSERT INTO user_totp
+       (company_id, user_id, secret_ciphertext, encrypted_dek, dek_key_version, kms_key_id, iv_nonce, auth_tag, enabled_at)
+     VALUES ($1, $2, $3, $4, 1, 'local-dev-kek', $5, $6, now())
+     ON CONFLICT (user_id) DO UPDATE SET enabled_at = now()`,
+    [companyId, userId, Buffer.alloc(8), Buffer.alloc(8), Buffer.alloc(12), Buffer.alloc(16)],
+  );
+}
+
 /** Dọn dữ liệu test theo companyId — xoá theo THỨ TỰ phụ thuộc FK (con trước, companies sau cùng). */
 export async function cleanupTenants(direct: Pool, companyIds: string[]): Promise<void> {
   if (companyIds.length === 0) return;
@@ -412,6 +431,8 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   // G16-1 2FA: user_totp + user_recovery_codes FK → users → xoá TRƯỚC users.
   await direct.query("DELETE FROM user_totp WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM user_recovery_codes WHERE company_id = ANY($1::uuid[])", ids);
+  // G16-1b security_alerts: subject_user_id FK → users (NO ACTION) → xoá TRƯỚC users. company_id → companies.
+  await direct.query("DELETE FROM security_alerts WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM object_permissions WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM user_roles WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query(

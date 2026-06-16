@@ -2,8 +2,9 @@
 -- Gate: FULL (security-reviewer [file-upload/path-traversal] + database-reviewer + silent-failure-hunter).
 --
 -- BAND 0190-0199 (lane b4 — task attachments). Hook guard-migration-band cho b4 = [[190,199]].
--- ⚠️ Journal: idx 85 (= master_max 84 + 1, KHÔNG suy từ số file 0190), when 1717500220000 (> max
---   hiện tại 1717500200000) → migrator drizzle chỉ apply entry có when STRICTLY GREATER max(created_at).
+-- ⚠️ Journal (RECONCILED khi land lên master 60b3ea0→5c2c231): idx 89 (= master_max 88 + 1 sau khi land
+--   C-batch 0121/0122/0220 + b1 0180), when 1717500240000 (> high-water 230000 của b1) → migrator drizzle
+--   chỉ apply entry có when STRICTLY GREATER max(created_at), nên 0190 chạy SAU mọi migration master+b1.
 --
 -- MỤC TIÊU: file đính kèm THẬT cho Task Hub (G9 descoped chỉ link). Bytes nằm ở S3/MinIO dưới key
 --   SERVER sinh `{company_id}/tasks/{task_id}/{uuid}` (client KHÔNG bao giờ truyền key/path). Bảng này

@@ -33,6 +33,20 @@ const PAYSLIP_COLUMNS = {
   createdAt: payslips.createdAt,
 } as const;
 
+/**
+ * B1 own-payslip LIST projection — MONEY-FREE (BẤT BIẾN #3a). KHÔNG SELECT cột tiền nào
+ * (baseSalary/totalAllowances/gross/net/currency/kpiAmount/bonusAmount/penaltyAmount) — tiền chỉ
+ * lộ sau re-auth qua findByIdTx (getOwn). Strip ở RANH GIỚI THẤP NHẤT (SELECT), KHÔNG dựa FE.
+ */
+const PAYSLIP_SUMMARY_COLUMNS = {
+  id: payslips.id,
+  payrollPeriodId: payslips.payrollPeriodId,
+  userId: payslips.userId,
+  entryKind: payslips.entryKind,
+  replacesPayslipId: payslips.replacesPayslipId,
+  createdAt: payslips.createdAt,
+} as const;
+
 export interface PayslipListFilters {
   payrollPeriodId?: string;
   userId?: string;
@@ -142,6 +156,19 @@ export class PayslipRepository {
       .where(and(eq(payslips.companyId, companyId), eq(payslips.id, id)))
       .limit(1);
     return row;
+  }
+
+  /**
+   * B1 — own-payslip LIST (nhân viên xem phiếu CỦA MÌNH), MONEY-FREE (BẤT BIẾN #3a).
+   * Ownership ÉP Ở ĐÂY: WHERE user_id = self. company_id (RLS + eq) là ranh giới tenant.
+   * KHÔNG SELECT cột tiền — strip ở SELECT, không để money rời tầng repo.
+   */
+  async listOwnTx(tx: TenantTx, companyId: string, userId: string) {
+    return await tx
+      .select(PAYSLIP_SUMMARY_COLUMNS)
+      .from(payslips)
+      .where(and(eq(payslips.companyId, companyId), eq(payslips.userId, userId)))
+      .orderBy(payslips.createdAt);
   }
 
   /** Count existing original payslips for a (period, user) — idempotency guard against double-run. */

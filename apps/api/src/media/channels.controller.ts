@@ -83,7 +83,7 @@ export class ChannelsController {
   @Get('channels/:id')
   @RequirePermission('read', 'channel')
   getChannel(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
-    return this.media.getChannel(req.user.companyId, id);
+    return this.media.getChannel(req.user.companyId, id, req.user.id);
   }
 
   @Patch('channels/:id')

@@ -242,6 +242,23 @@ describe.skipIf(!hasDb)('G6-2b platform-accounts reveal / list / edit — RED de
     }
   });
 
+  // ─── G16-1b leak-by-scope — getAccount (detail) must also omit crypto/PII keys ───
+
+  it("G16-1b leak-by-scope — getAccount detail omits secret/recovery keys (no out-of-scope fields)", async () => {
+    const { result } = await invoke(() => svc.getAccount(userCtx(userA, A.companyId), accountA));
+    expect(result).toBeDefined();
+    const forbiddenKeys = [
+      "secret_ciphertext", "secretCiphertext", "encrypted_dek", "encryptedDek",
+      "iv_nonce", "ivNonce", "auth_tag", "authTag",
+      "recovery_email", "recoveryEmail", "recovery_phone", "recoveryPhone",
+      "two_factor_note", "twoFactorNote",
+    ];
+    const row = JSON.parse(JSON.stringify(result)) as Record<string, unknown>;
+    for (const key of forbiddenKeys) {
+      expect(Object.prototype.hasOwnProperty.call(row, key)).toBe(false);
+    }
+  });
+
   // ─── RED 7b — reauth scope per (userId, accountId) ───────────────────────
 
   it('RED 7b — reauth for accountA must not authorize reveal of accountB', async () => {

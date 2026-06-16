@@ -600,7 +600,35 @@
     {
       "idx": 85,
       "version": "7",
+      "when": 1717500210000,
+      "tag": "0121_g16_read_path_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1717500211000,
+      "tag": "0122_g16_security_alerts",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
       "when": 1717500220000,
+      "tag": "0220_g16_hot_path_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1717500230000,
+      "tag": "0180_b1_view_own_payslip_seed",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1717500240000,
       "tag": "0190_b4_task_attachments",
       "breakpoints": true
     }

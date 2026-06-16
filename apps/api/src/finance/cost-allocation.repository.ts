@@ -106,22 +106,61 @@ export class CostAllocationRepository {
   }
 
   /**
-   * Cross-tenant target guard: target tồn tại trong tenant hiện tại (RLS lọc). Polymorphic — không FK,
-   * nên kiểm tay qua bảng tương ứng. Soft-deleted (deleted_at) coi như KHÔNG tồn tại (trừ bảng không có
-   * cột deleted_at — đều có ở các target này). Chạy CÙNG tx (RLS đã set company_id).
+   * Cross-tenant target guard (batch): target tồn tại trong tenant hiện tại (RLS lọc). Polymorphic —
+   * không FK, nên kiểm tay qua bảng tương ứng. Soft-deleted (deleted_at) coi như KHÔNG tồn tại (các
+   * bảng target này đều có cột deleted_at). Chạy CÙNG tx (RLS đã set company_id).
+   *
+   * G16-2 perf — batch cross-tenant target guard. Thay vòng N lần targetExistsTx (≤200 round-trip,
+   * AllocateCostRequest.targets.max(200)) bằng 1 query / loại target (≤6 loại). Cùng ngữ nghĩa:
+   * target tồn tại trong tenant (RLS lọc company_id) AND deleted_at IS NULL.
+   *
+   * Trả Set "targetType:targetId" của các target HIỆN HỮU — caller so với input để tìm target thiếu.
+   * table là literal từ map cố định (KHÔNG nhận từ input) → an toàn raw; targetId qua bind-param ($n).
    */
-  async targetExistsTx(
+  async existingTargetsTx(
     tx: TenantTx,
-    targetType: AllocationTargetType,
-    targetId: string,
-  ): Promise<boolean> {
-    const table = TARGET_TABLE[targetType];
-    // table là literal từ map cố định (KHÔNG nhận từ input) → an toàn raw. targetId qua bind-param.
-    const res = await tx.execute(
-      sql`SELECT 1 FROM ${sql.identifier(table)}
-          WHERE id = ${targetId} AND deleted_at IS NULL LIMIT 1`,
-    );
-    return (res.rows?.length ?? 0) > 0;
+    targets: readonly { targetType: AllocationTargetType; targetId: string }[],
+  ): Promise<Set<string>> {
+    const found = new Set<string>();
+    if (targets.length === 0) return found;
+
+    // Gom id theo loại → 1 query / loại (mỗi loại có bảng riêng, polymorphic không FK).
+    const idsByType = new Map<AllocationTargetType, string[]>();
+    for (const t of targets) {
+      const list = idsByType.get(t.targetType);
+      if (list) list.push(t.targetId);
+      else idsByType.set(t.targetType, [t.targetId]);
+    }
+
+    for (const [targetType, ids] of idsByType) {
+      if (ids.length === 0) continue; // sql.join([]) → "IN ()" = lỗi cú pháp; guard phòng vỡ tương lai.
+      const table = TARGET_TABLE[targetType];
+      if (!table) {
+        // targetType là khoá discriminated-union từ contracts; map cố định PHẢI phủ hết. Nếu thêm
+        // loại target mới mà quên cập nhật TARGET_TABLE → fail LOUD thay vì SQL hỏng/identifier(undefined).
+        throw new Error(`existingTargetsTx: thiếu TARGET_TABLE cho targetType '${targetType}'`);
+      }
+      const idList = sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `,
+      );
+      const res = await tx.execute(
+        sql`SELECT id FROM ${sql.identifier(table)}
+            WHERE id IN (${idList}) AND deleted_at IS NULL`,
+      );
+      for (const row of res.rows) {
+        const id = row.id;
+        if (typeof id !== "string" || id.length === 0) {
+          // Mọi PK là UUID (driver trả string). Cast ngầm "as string" che sai lệch type → key lệch →
+          // false-missing 400 trên target THẬT SỰ tồn tại. Ép kiểm để fail LOUD nếu giả định vỡ.
+          throw new Error(
+            `existingTargetsTx: id không phải string từ ${table}: ${JSON.stringify(id)}`,
+          );
+        }
+        found.add(`${targetType}:${id}`);
+      }
+    }
+    return found;
   }
 
   /**

@@ -22,6 +22,9 @@ import { PasswordService } from '../../src/auth/password.service';
 import { TokenService } from '../../src/auth/token.service';
 import { TotpService } from '../../src/auth/totp.service';
 import { TwoFactorService } from '../../src/auth/two-factor.service';
+import { ReplayGuardService } from '../../src/auth/replay-guard.service';
+import { SecurityAlertService } from '../../src/auth/security-alert.service';
+import { ValkeyService } from '../../src/permission/valkey.service';
 import { SecretEncryptionService } from '../../src/crypto/secret-encryption.service';
 import { NodeEnvelopeCipher } from '../../src/crypto/envelope-cipher';
 import { LocalKekProvider } from '../../src/crypto/local-kek.provider';
@@ -47,7 +50,9 @@ describe.skipIf(!hasDb)('G6-2b RED 12 — forgotPassword reset-token must be env
     const mockPermissions = { getCapabilities: async () => ({}) } as unknown as PermissionService;
     const dbsvc = new DatabaseService();
     const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
-    const twoFactor = new TwoFactorService(dbsvc, secrets, new TotpService(), new TokenService(), new AuditService(), new LoginRateLimiter());
+    const replayGuard = new ReplayGuardService(new ValkeyService());
+    const securityAlerts = new SecurityAlertService(dbsvc, new AuditService());
+    const twoFactor = new TwoFactorService(dbsvc, secrets, new TotpService(), new TokenService(), new AuditService(), new LoginRateLimiter(), replayGuard);
     return new AuthService(
       dbsvc,
       password,
@@ -58,6 +63,8 @@ describe.skipIf(!hasDb)('G6-2b RED 12 — forgotPassword reset-token must be env
       mockPermissions,
       secrets,
       twoFactor,
+      replayGuard,
+      securityAlerts,
     );
   }
 

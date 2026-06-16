@@ -33,3 +33,5 @@ export * from "./payroll";
 export * from "./meeting";
 // G16-1 2FA (user_totp envelope-encrypted secret + user_recovery_codes; AUTH-003)
 export * from "./two-factor";
+// G16-1b security alerting (append-only — repeated re-auth fail / cross-scope deny / anomalous login)
+export * from "./security-alerts";

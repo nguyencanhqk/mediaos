@@ -34,8 +34,17 @@ export class TotpService {
     }
   }
 
-  /** CHỈ dùng trong test: sinh mã hiện tại từ secret (round-trip verify). */
+  /** CHỉ dùng trong test: sinh mã hiện tại từ secret (round-trip verify). */
   generate(secret: string): string {
     return this.authenticator.generate(secret);
+  }
+
+  /**
+   * Time-step hiện tại (số bước 30s kể từ epoch) — khoá chống step-replay (G16-1b). Mã TOTP hợp lệ trong
+   * 1 step; gắn `(userId, step)` làm marker single-use để CÙNG mã KHÔNG dùng lại được trong cùng step.
+   * `window:1` chấp nhận ±1 step → dùng step hiện tại làm khoá đại diện (đủ chặn replay tức thời cùng phiên).
+   */
+  currentStep(nowMs: number = Date.now()): number {
+    return Math.floor(nowMs / 1000 / 30);
   }
 }

@@ -39,6 +39,11 @@ export const envSchema = z.object({
   ACCESS_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(900), // 15 phút
   REFRESH_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(2592000), // 30 ngày
   RESET_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(3600), // 1 giờ
+  // G16-1b: ép server-side 2FA enrollment. Default 'true' (BẬT ở prod) — user có role requires_two_factor
+  // mà chưa enroll bị TwoFactorEnforcementGuard DENY mọi tài nguyên bảo vệ. KHÔNG z.coerce.boolean ('false'→true
+  // bẫy). Đặt 'false' ở harness e2e cũ (admin chưa enroll qua login mock) để không phá bộ test sẵn có; logic
+  // DENY vẫn được phủ bởi unit-test guard + tích phân riêng. Prod/staging GIỮ default true.
+  TWO_FACTOR_ENFORCEMENT_ENABLED: z.enum(["true", "false"]).default("true"),
   LOGIN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
   LOGIN_LOCKOUT_SEC: z.coerce.number().int().positive().default(900), // khoá tạm 15 phút
   // Bucket THEO TÀI KHOẢN (company|email, mọi IP) — bắt credential-stuffing phân tán nhiều IP lên 1 account.
