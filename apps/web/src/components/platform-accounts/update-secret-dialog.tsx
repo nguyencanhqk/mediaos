@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import {
   updatePlatformAccountSecretSchema,
   type SafePlatformAccountDto,
@@ -20,6 +21,7 @@ interface UpdateSecretDialogProps {
  * Cần quyền `edit-platform-account` (gate ở table + enforce ở server).
  */
 export function UpdateSecretDialog({ account, onClose }: UpdateSecretDialogProps) {
+  const { t } = useTranslation("settings");
   const qc = useQueryClient();
   const [secret, setSecret] = useState("");
 
@@ -48,25 +50,25 @@ export function UpdateSecretDialog({ account, onClose }: UpdateSecretDialogProps
     <Dialog
       open={account !== null}
       onClose={onClose}
-      title="Đổi secret"
-      description={label ? `Đặt secret mới cho "${label}".` : undefined}
+      title={t("platformAccounts.updateSecretDialog.title")}
+      description={label ? t("platformAccounts.updateSecretDialog.description", { label }) : undefined}
       footer={
         <>
           <Button variant="ghost" size="sm" onClick={onClose}>
-            Huỷ
+            {t("platformAccounts.updateSecretDialog.cancel")}
           </Button>
           <Button
             size="sm"
             onClick={() => update.mutate()}
             disabled={!parsed.success || update.isPending}
           >
-            {update.isPending ? "Đang lưu…" : "Lưu secret mới"}
+            {update.isPending ? t("common:saving") : t("platformAccounts.updateSecretDialog.saveButton")}
           </Button>
         </>
       }
     >
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-muted-foreground">Secret mới *</span>
+        <span className="text-xs font-medium text-muted-foreground">{t("platformAccounts.updateSecretDialog.fieldSecretNew")}</span>
         <Input
           type="password"
           autoComplete="new-password"
@@ -80,8 +82,8 @@ export function UpdateSecretDialog({ account, onClose }: UpdateSecretDialogProps
 
       {update.isError && (
         <p className="mt-3 text-sm text-destructive">
-          Lưu thất bại:{" "}
-          {update.error instanceof Error ? update.error.message : "Lỗi không xác định"}
+          {t("platformAccounts.updateSecretDialog.saveError")}{" "}
+          {update.error instanceof Error ? update.error.message : t("platformAccounts.updateSecretDialog.unknownError")}
         </p>
       )}
     </Dialog>

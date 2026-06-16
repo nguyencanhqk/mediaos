@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -34,6 +35,7 @@ function serverStateKey(s: CompanySettingsDto): string {
 // ── Container ───────────────────────────────────────────────────────────────────
 
 export function CompanySettingsPage() {
+  const { t } = useTranslation("settings");
   const qc = useQueryClient();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["settings", "company"],
@@ -48,10 +50,10 @@ export function CompanySettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-8">
-      <h1 className="text-2xl font-semibold">Cài đặt công ty</h1>
+      <h1 className="text-2xl font-semibold">{t("company.pageTitle")}</h1>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Đang tải…</p>}
-      {isError && <p className="text-sm text-destructive">Không tải được cài đặt.</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
+      {isError && <p className="text-sm text-destructive">{t("company.loadError")}</p>}
 
       {data && (
         <CompanySettingsForm
@@ -86,6 +88,7 @@ export function CompanySettingsForm({
   isSaved = false,
   isSaveError = false,
 }: CompanySettingsFormProps) {
+  const { t } = useTranslation("settings");
   const [logoUrl, setLogoUrl] = useState(initial.logoUrl ?? "");
   const [timezone, setTimezone] = useState(initial.timezone);
   const [currency, setCurrency] = useState<CompanySettingsDto["currency"]>(initial.currency);
@@ -126,13 +129,13 @@ export function CompanySettingsForm({
     <div className="space-y-5 rounded-xl border border-border p-6">
       <div className="space-y-1">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Tên công ty
+          {t("company.companyNameLabel")}
         </p>
         <p className="text-sm font-medium">{initial.name}</p>
       </div>
 
       <label className="block space-y-1.5">
-        <span className="text-sm font-medium">Logo (URL)</span>
+        <span className="text-sm font-medium">{t("company.logoUrlLabel")}</span>
         <Input
           value={logoUrl}
           onChange={(e) => setLogoUrl(e.target.value)}
@@ -142,7 +145,7 @@ export function CompanySettingsForm({
       </label>
 
       <label className="block space-y-1.5">
-        <span className="text-sm font-medium">Múi giờ</span>
+        <span className="text-sm font-medium">{t("company.timezoneLabel")}</span>
         <Input
           value={timezone}
           onChange={(e) => setTimezone(e.target.value)}
@@ -151,29 +154,29 @@ export function CompanySettingsForm({
       </label>
 
       <label className="block space-y-1.5">
-        <span className="text-sm font-medium">Tiền tệ</span>
+        <span className="text-sm font-medium">{t("company.currencyLabel")}</span>
         <Select
           value={currency}
           onChange={(e) => setCurrency(e.target.value as CompanySettingsDto["currency"])}
         >
-          <option value="VND">VND — Việt Nam Đồng</option>
+          <option value="VND">{t("company.currencyVnd")}</option>
           <option value="USD">USD — US Dollar</option>
         </Select>
       </label>
 
       <label className="block space-y-1.5">
-        <span className="text-sm font-medium">Ngôn ngữ</span>
+        <span className="text-sm font-medium">{t("company.languageLabel")}</span>
         <Select
           value={language}
           onChange={(e) => setLanguage(e.target.value as CompanySettingsDto["language"])}
         >
-          <option value="vi">Tiếng Việt</option>
+          <option value="vi">{t("company.languageVi")}</option>
           <option value="en">English</option>
         </Select>
       </label>
 
       <fieldset className="space-y-1.5">
-        <legend className="text-sm font-medium">Ngày làm việc trong tuần</legend>
+        <legend className="text-sm font-medium">{t("company.workingDaysLabel")}</legend>
         <div className="flex flex-wrap gap-3">
           {WEEKDAYS.map((d) => (
             <label key={d.value} className="flex items-center gap-1.5 text-sm">
@@ -190,10 +193,10 @@ export function CompanySettingsForm({
       </fieldset>
 
       <fieldset className="space-y-1.5">
-        <legend className="text-sm font-medium">Kỳ lương</legend>
+        <legend className="text-sm font-medium">{t("company.payrollPeriodLabel")}</legend>
         <div className="grid grid-cols-2 gap-3">
           <label className="block space-y-1">
-            <span className="text-xs text-muted-foreground">Ngày chốt công (1–31)</span>
+            <span className="text-xs text-muted-foreground">{t("company.cutoffDayLabel")}</span>
             <Input
               type="number"
               min={1}
@@ -203,7 +206,7 @@ export function CompanySettingsForm({
             />
           </label>
           <label className="block space-y-1">
-            <span className="text-xs text-muted-foreground">Ngày trả lương (1–31)</span>
+            <span className="text-xs text-muted-foreground">{t("company.payDayLabel")}</span>
             <Input
               type="number"
               min={1}
@@ -227,16 +230,16 @@ export function CompanySettingsForm({
 
       <div className="flex items-center gap-3 pt-1">
         <Button type="button" onClick={handleSubmit} disabled={isSaving}>
-          {isSaving ? "Đang lưu…" : "Lưu cài đặt"}
+          {isSaving ? t("common:saving") : t("company.saveButton")}
         </Button>
         {isSaved && (
           <p role="status" className="text-sm text-green-600">
-            Đã lưu thành công.
+            {t("company.saveSuccess")}
           </p>
         )}
         {isSaveError && (
           <p role="alert" className="text-sm text-destructive">
-            Lưu thất bại.
+            {t("company.saveError")}
           </p>
         )}
       </div>
