@@ -1526,6 +1526,24 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
 
+  // ── G6-2 PR-B Break-glass (grant MUTABLE + approvals APPEND-ONLY — mig 0200) ──
+  // company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  // KHÔNG skipNoContext (mọi hàng tenant-scoped, company_id NOT NULL, không hàng global).
+  {
+    name: "break_glass_grants",
+    table: "break_glass_grants",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `bgg-${randomUUID().slice(0, 8)}@x.test`);
+      const accountId = await seedPlatformAccount(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO break_glass_grants
+           (company_id, platform_account_id, requester_user_id, reason, expires_at)
+         VALUES ($1, $2, $3, 'rls-break-glass', now() + interval '1 hour') RETURNING id`,
+        [t.companyId, accountId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
   // ── G16-3 SaaS prep (per-company subscription/feature/usage + dashboard configs) ──────────────
   {
     name: "company_subscriptions",
@@ -1540,6 +1558,37 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+  {
+    name: "break_glass_approvals",
+    table: "break_glass_approvals",
+    seedRow: async (direct, t) => {
+      const requester = await seedUser(
+        direct,
+        t.companyId,
+        `bga-req-${randomUUID().slice(0, 8)}@x.test`,
+      );
+      const approver = await seedUser(
+        direct,
+        t.companyId,
+        `bga-apr-${randomUUID().slice(0, 8)}@x.test`,
+      );
+      const accountId = await seedPlatformAccount(direct, t.companyId);
+      const grantRes = await direct.query(
+        `INSERT INTO break_glass_grants
+           (company_id, platform_account_id, requester_user_id, reason, expires_at)
+         VALUES ($1, $2, $3, 'rls-bga-grant', now() + interval '1 hour') RETURNING id`,
+        [t.companyId, accountId, requester],
+      );
+      const r = await direct.query(
+        `INSERT INTO break_glass_approvals
+           (company_id, grant_id, approver_user_id, requester_user_id)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [t.companyId, grantRes.rows[0].id, approver, requester],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  // ── G16-3 SaaS prep (per-company subscription/feature/usage + dashboard configs) ──────────────
   {
     name: "company_feature_flags",
     table: "company_feature_flags",

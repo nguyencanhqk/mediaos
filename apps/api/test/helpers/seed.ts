@@ -280,6 +280,49 @@ export async function seedPlatformAccount(
 }
 
 /**
+ * Seed 1 break_glass_grant TRỰC TIẾP (direct pool, bypass RLS) với timestamp tường minh — dùng cho các
+ * deny-path mà service KHÔNG tạo được (vd grant HẾT HẠN: expires_at quá khứ + created_at xa hơn để qua
+ * CHECK ttl). status='active' phải kèm activatedAt (active_pair CHECK). Trả về grant id.
+ */
+export async function seedBreakGlassGrant(
+  direct: Pool,
+  opts: {
+    companyId: string;
+    platformAccountId: string;
+    requesterUserId: string;
+    status?: "pending" | "active" | "revoked";
+    requiredApprovals?: number;
+    reason?: string;
+    expiresAt?: string;
+    createdAt?: string;
+    activatedAt?: string;
+  },
+): Promise<string> {
+  const res = await direct.query(
+    `INSERT INTO break_glass_grants
+       (company_id, platform_account_id, requester_user_id, reason, required_approvals, status,
+        expires_at, created_at, activated_at)
+     VALUES ($1, $2, $3, $4, $5, $6,
+        COALESCE($7::timestamptz, now() + interval '1 hour'),
+        COALESCE($8::timestamptz, now()),
+        $9::timestamptz)
+     RETURNING id`,
+    [
+      opts.companyId,
+      opts.platformAccountId,
+      opts.requesterUserId,
+      opts.reason ?? "seed break-glass",
+      opts.requiredApprovals ?? 2,
+      opts.status ?? "pending",
+      opts.expiresAt ?? null,
+      opts.createdAt ?? null,
+      opts.activatedAt ?? null,
+    ],
+  );
+  return res.rows[0].id as string;
+}
+
+/**
  * Seed 1 user_totp ĐÃ BẬT (enabled_at set) cho user — để qua TwoFactorEnforcementGuard (G16-1b) trong các
  * e2e mà user giữ role `requires_two_factor` (vd company-admin) nhưng test KHÔNG xoay quanh luồng 2FA.
  * Envelope là placeholder thoả octet_length CHECK (iv 12B / tag 16B) — KHÔNG crypto thật (test không decrypt).
@@ -302,6 +345,13 @@ export async function seedTwoFactorEnabled(
 export async function cleanupTenants(direct: Pool, companyIds: string[]): Promise<void> {
   if (companyIds.length === 0) return;
   const ids = [companyIds];
+
+  // ── G6-2 PR-B Break-glass ───────────────────────────────────────────────────
+  // break_glass_approvals.grant_id → break_glass_grants (CASCADE) → xoá approvals TRƯỚC grants.
+  // break_glass_grants.platform_account_id → platform_accounts (CASCADE) + requester/revoked_by → users
+  // (NO ACTION) → PHẢI xoá grants TRƯỚC users + platform_accounts. Xoá ở ĐẦU hàm (bảng mới nhất, phụ thuộc nhất).
+  await direct.query("DELETE FROM break_glass_approvals WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM break_glass_grants WHERE company_id = ANY($1::uuid[])", ids);
 
   // ── G12-3 Bonus/Penalty ─────────────────────────────────────────────────────
   // bonus_penalties.task_id/defect_id/kpi_result_id ON DELETE RESTRICT + user_id/created_by (NO ACTION)

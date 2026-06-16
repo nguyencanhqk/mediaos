@@ -27,6 +27,7 @@ import { EvaluationModule } from "./evaluation/evaluation.module";
 import { KpiModule } from "./kpi/kpi.module";
 import { DefectModule } from "./defect/defect.module";
 import { MeetingModule } from "./meeting/meeting.module";
+import { BreakGlassModule } from "./break-glass/break-glass.module";
 import { SaasModule } from "./saas/saas.module";
 import { TemplatesModule } from "./templates/templates.module";
 import { PlatformModule } from "./platform/platform.module";
@@ -70,6 +71,7 @@ import {
     KpiModule,
     DefectModule,
     MeetingModule,
+    BreakGlassModule,
     // G16-3 SaaS prep
     SaasModule,
     TemplatesModule,
