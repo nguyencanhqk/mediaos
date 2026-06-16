@@ -27,6 +27,7 @@ import { EvaluationModule } from "./evaluation/evaluation.module";
 import { KpiModule } from "./kpi/kpi.module";
 import { DefectModule } from "./defect/defect.module";
 import { MeetingModule } from "./meeting/meeting.module";
+import { BreakGlassModule } from "./break-glass/break-glass.module";
 import { JwtAuthGuard } from "./permission/guards/jwt-auth.guard";
 import { CompanyGuard } from "./permission/guards/company.guard";
 import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
@@ -63,6 +64,7 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     KpiModule,
     DefectModule,
     MeetingModule,
+    BreakGlassModule,
   ],
   providers: [
     // Global guard pipeline: JWT auth → company context extraction → 2FA enforcement (G16-1b).

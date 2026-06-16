@@ -35,3 +35,5 @@ export * from "./meeting";
 export * from "./two-factor";
 // G16-1b security alerting (append-only — repeated re-auth fail / cross-scope deny / anomalous login)
 export * from "./security-alerts";
+// G6-2 PR-B break-glass (emergency platform_account secret access — grant + SoD 2-người approval, mig 0200)
+export * from "./break-glass";

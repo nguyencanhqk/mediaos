@@ -47,3 +47,53 @@ export const provisionKeyVersionResultSchema = z.object({
   retiredKeyVersion: z.number().int().positive().nullable(),
 });
 export type ProvisionKeyVersionResult = z.infer<typeof provisionKeyVersionResultSchema>;
+
+/**
+ * G6-2 PR-B — break-glass emergency access contracts (BẤT BIẾN #3).
+ *
+ * Quyền truy cập KHẨN CẤP để reveal 1 platform_account secret, ép SoD 2-người duyệt KHÁC NHAU. Vòng đời:
+ * request → approve (≥2 approver) → active → revoke, có TTL. TUYỆT ĐỐI KHÔNG field secret/key/dek/material
+ * ở đây — grant chỉ trỏ `platformAccountId`; secret thật chỉ lộ JIT ở reveal-path (ROUND 2), audit từng lần.
+ */
+
+/** Ngưỡng SoD tối thiểu (khớp DB CHECK `required_approvals >= 2`). */
+export const BREAK_GLASS_MIN_APPROVALS = 2;
+/** Biên TTL hợp lệ cho 1 grant (giây): tối thiểu 5 phút, tối đa 24 giờ — đủ xử lý sự cố, không vô hạn. */
+export const BREAK_GLASS_MIN_TTL_SECONDS = 300;
+export const BREAK_GLASS_MAX_TTL_SECONDS = 86_400;
+
+/** Trạng thái 1 grant break-glass (khớp CHECK break_glass_grants.status). */
+export const breakGlassGrantStatusEnum = z.enum(["pending", "active", "revoked"]);
+export type BreakGlassGrantStatus = z.infer<typeof breakGlassGrantStatusEnum>;
+
+/** Input requestBreakGlass — mở 1 yêu cầu khẩn cấp trên 1 account, kèm lý do + TTL (giây). */
+export const requestBreakGlassInputSchema = z.object({
+  platformAccountId: z.string().uuid(),
+  reason: z.string().trim().min(1).max(2000),
+  ttlSeconds: z.number().int().min(BREAK_GLASS_MIN_TTL_SECONDS).max(BREAK_GLASS_MAX_TTL_SECONDS),
+});
+export type RequestBreakGlassInput = z.infer<typeof requestBreakGlassInputSchema>;
+
+/** Input approveBreakGlass / revokeBreakGlass — chỉ cần id của grant. */
+export const breakGlassGrantIdInputSchema = z.object({
+  grantId: z.string().uuid(),
+});
+export type BreakGlassGrantIdInput = z.infer<typeof breakGlassGrantIdInputSchema>;
+
+/**
+ * DTO 1 grant break-glass trả về web/API. KHÔNG có secret/key — chỉ metadata vòng đời + số phiếu duyệt
+ * đã thu (`approvalCount`) để UI hiển thị tiến độ SoD. `reason` là lý do nghiệp vụ (non-secret).
+ */
+export const breakGlassGrantSchema = z.object({
+  id: z.string().uuid(),
+  platformAccountId: z.string().uuid(),
+  requesterUserId: z.string().uuid(),
+  reason: z.string(),
+  requiredApprovals: z.number().int().min(BREAK_GLASS_MIN_APPROVALS),
+  approvalCount: z.number().int().nonnegative(),
+  status: breakGlassGrantStatusEnum,
+  expiresAt: z.coerce.date(),
+  activatedAt: z.coerce.date().nullable(),
+  createdAt: z.coerce.date(),
+});
+export type BreakGlassGrantDto = z.infer<typeof breakGlassGrantSchema>;
