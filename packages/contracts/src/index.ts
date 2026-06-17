@@ -71,3 +71,6 @@ export * from "./ui-config";
 export * from "./webhooks";
 // AC-8 Observability (audit viewer + queue monitor — tenant self + operator cross-tenant read-only)
 export * from "./observability";
+// AC-9 db-ops (operator-only data browser tenant-scoped + migration status + break-glass SoD + export scaffold)
+export * from "./db-ops-allowlist";
+export * from "./db-ops";

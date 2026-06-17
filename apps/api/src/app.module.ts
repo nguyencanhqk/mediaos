@@ -34,6 +34,7 @@ import { PlatformModule } from "./platform/platform.module";
 import { ApiKeysModule } from "./api-keys/api-keys.module";
 import { WebhooksModule } from "./webhooks/webhooks.module";
 import { ObservabilityModule } from "./observability/observability.module";
+import { DbOpsModule } from "./db-ops/db-ops.module";
 import { ApiKeyAuthGuard } from "./api-keys/guards/api-key-auth.guard";
 import { ApiKeyRepository } from "./api-keys/api-keys.repository";
 import { TokenService } from "./auth/token.service";
@@ -88,6 +89,8 @@ import {
     WebhooksModule,
     // AC-8 Observability (audit viewer tenant-self + operator cross-tenant + queue monitor — read-only)
     ObservabilityModule,
+    // AC-9 db-ops (operator data browser tenant-scoped + migration status + break-glass SoD + export scaffold)
+    DbOpsModule,
   ],
   providers: [
     // Global guard pipeline (THỨ TỰ QUAN TRỌNG):
