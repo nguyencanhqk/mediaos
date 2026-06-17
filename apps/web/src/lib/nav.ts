@@ -18,6 +18,7 @@ import {
   ReceiptText,
   Settings,
   ShieldAlert,
+  Target,
   Users,
   UsersRound,
   Wallet,
@@ -36,6 +37,7 @@ import {
  */
 export type NavCategory =
   | "work"
+  | "goals"
   | "process"
   | "hr"
   | "attendance"
@@ -63,6 +65,7 @@ export interface NavCategoryMeta {
 
 export const NAV_CATEGORIES: readonly NavCategoryMeta[] = [
   { id: "work", labelKey: "group.work" },
+  { id: "goals", labelKey: "group.goals" },
   { id: "process", labelKey: "group.process" },
   { id: "hr", labelKey: "group.hr" },
   { id: "attendance", labelKey: "group.attendance" },
@@ -78,6 +81,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "content", labelKey: "content", to: "/content", icon: FileText, tile: "bg-amber-500/12 text-amber-600", category: "work" },
   { id: "channels", labelKey: "channels", to: "/channels", icon: Radio, tile: "bg-rose-500/12 text-rose-600", category: "work" },
   { id: "dashboard", labelKey: "dashboard", to: "/dashboard", icon: LayoutDashboard, tile: "bg-blue-500/12 text-blue-600", category: "work" },
+
+  // — KPI / Mục tiêu —
+  { id: "kpi", labelKey: "kpi", to: "/kpi", icon: Target, tile: "bg-indigo-500/12 text-indigo-600", category: "goals" },
 
   // — Quy trình —
   { id: "workflows", labelKey: "workflows", to: "/workflows/templates", icon: Workflow, tile: "bg-indigo-500/12 text-indigo-600", category: "process" },

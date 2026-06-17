@@ -577,4 +577,12 @@ _(custom `react-native-reviewer/patterns/build-fix/push`)_
 
 ---
 
+---
+
+## Web UI Redesign Phase 2 — lane UI-KPI
+
+- [x] **Trang KPI / Mục tiêu (FE, MISA-style)** — route `/kpi` (`apps/web/src/routes/kpi/`): `index.tsx` (PageHeader + DataTable danh sách ĐỊNH NGHĨA KPI với thanh phân rã trọng số 5 thành phần + Badge active/inactive + search), `kpi-compute-panel.tsx` (form tính KPI theo nhân viên/nhóm + kỳ, gated `read:kpi`; action xác nhận gated `confirm:kpi` qua `PermissionGate`), `kpi-goal-tree.tsx` (cây mục tiêu: điểm tổng → 5 mục tiêu con, tiến độ % + bậc xếp loại). Lib mới `lib/kpi-api.ts` (TÁI DÙNG `apiFetch` chung + Zod contracts `kpiDefinitionSchema`/`kpiResultSchema`) + `lib/kpi-format.ts` (ngưỡng/variant/label). i18n namespace mới `kpi.json`. Nav registry: thêm category `goals` + item `kpi` (sidebar + launcher tự render). **Permission mask mặc định** (chỉ render dữ liệu server trả, `useCan`/`PermissionGate`, KHÔNG hard-code). FE-only, 0 migration. **Nợ dữ liệu**: BE chưa có `GET /kpi/results` (lịch sử kpi_results theo phòng ban) → tiến độ lấy theo từng lần `POST /kpi/compute`; danh sách lịch sử/biểu đồ xu hướng chờ endpoint list.
+
+---
+
 _Tham chiếu: PRD, ERD, Permission Matrix, Workflow mẫu, Thiết kế màn hình, Kế hoạch phase, Tài liệu dev (các `.md` cùng thư mục); `CLAUDE-CODE-TOOLKIT.md` (bản đồ agent/skill/hook + custom component); `TECH-DECISION-RECORD.md` (15 ADR)._
