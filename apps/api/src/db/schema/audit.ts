@@ -134,5 +134,9 @@ export const AUDIT_OBJECT_TYPES = [
   "tenant_branding",
   "ui_navigation",
   "i18n_override",
+  // AC-6 Webhooks (create/update/delete endpoint ghi 'webhook_endpoint'; delivery lifecycle ghi 'webhook_delivery'
+  // audit-in-tx app-tenant. KHÔNG ghi secret/plaintext/envelope vào before/after — chỉ id/url/active — mig 0320).
+  "webhook_endpoint",
+  "webhook_delivery",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

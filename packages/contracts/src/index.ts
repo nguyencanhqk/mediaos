@@ -67,3 +67,5 @@ export * from "./template";
 export * from "./module-registry";
 // AC-4 UI config (branding / navigation / i18n overrides — tenant self-service)
 export * from "./ui-config";
+// AC-6 Webhooks (tenant self-service — endpoint + subscription + delivery log; HMAC secret envelope-KMS)
+export * from "./webhooks";
