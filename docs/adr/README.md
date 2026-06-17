@@ -23,6 +23,9 @@
 | [0014](0014-storage-r2-minio-s3.md)                | Storage = Cloudflare R2 / MinIO qua S3 SDK                    | ✅ Accepted |      Thấp      |
 | [0015](0015-ui-shadcn-tanstack.md)                 | UI = shadcn/ui + Tailwind v4 + TanStack Table                 | ✅ Accepted |      Thấp      |
 | [0016](0016-approval-single-source-of-truth.md)    | Approval = nguồn sự thật duy nhất (`approval_requests`); step là projection | ✅ Accepted |     ⚠️ Cao     |
+| [0017](0017-platform-admin-tenancy.md)             | Platform-admin tenancy: GUC escape-hatch CHỈ trên `companies`  | ✅ Accepted |     ⚠️ Cao     |
+| [0018](0018-mobile-stack.md)                       | Mobile stack (Expo/React Native)                              | ✅ Accepted |   Trung bình   |
+| [0019](0019-control-plane-cross-tenant-access.md)  | Control Plane truy cập chéo-tenant 3 tầng (withTenant / GUC-read hẹp / role read-only) | 📝 Proposed |     ⚠️ Cao     |
 
 > **⚠️ Bất khả nghịch Cao** = đổi sau MVP phải đập đi làm lại nền. Chốt kỹ TRƯỚC khi code.
 

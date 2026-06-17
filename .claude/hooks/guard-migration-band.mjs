@@ -38,6 +38,15 @@ const BANDS = {
     [120, 129],
     [230, 239],
   ],
+  // Admin Control Plane (apps/admin) — band reserve 0300–0349, per-lane sub-range disjoint
+  // (ADMIN-CONTROL-PLANE-PRD-2026-06-17-v2.md §5/§6). AC-0..AC-3 no-mig (không cần band).
+  // AC-4 ui-config · AC-5 api-keys · AC-6 webhooks · AC-7 module-registry · AC-8 obs(GUC read) · AC-9 db-ops.
+  ac4: [[300, 309]],
+  ac5: [[310, 319]],
+  ac6: [[320, 329]],
+  ac7: [[330, 339]],
+  ac8: [[340, 344]],
+  ac9: [[345, 349]],
 };
 
 const MIGRATION_SQL = /[\\/]migrations[\\/](\d{4})_[^\\/]*\.sql$/i;
@@ -56,6 +65,11 @@ function laneFromBranch() {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
+    // Admin Control Plane lanes: branch/worktree dạng `ac<digit>` (vd feat/ac4-ui-config, mediaos-ac7).
+    // Khớp TRƯỚC lane `g*` để tránh `g`-trong-từ; \b chặn match giữa từ (backac4…). Bỏ hậu tố chữ
+    // (ac0a/ac0b → ac0, vốn no-mig nên không có trong BANDS ⇒ fail-open đúng ý).
+    const ac = b.match(/\bac(\d+)/i);
+    if (ac) return "ac" + ac[1];
     const m = b.match(/g(\d+)/i);
     return m ? "g" + m[1] : null;
   } catch {
