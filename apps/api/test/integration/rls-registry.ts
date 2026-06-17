@@ -1689,4 +1689,44 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+
+  // ── AC-4 UI config (tenant_branding / ui_navigation_config / i18n_overrides — mig 0300) ──────
+  // company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  // 3 bảng độc lập (chỉ FK → companies) — KHÔNG skipNoContext (mọi hàng tenant-scoped, không hàng global).
+  {
+    name: "tenant_branding",
+    table: "tenant_branding",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO tenant_branding (company_id, primary_color, company_name)
+         VALUES ($1, '#112233', 'rls-brand') RETURNING id`,
+        [t.companyId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "ui_navigation_config",
+    table: "ui_navigation_config",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO ui_navigation_config (company_id, key, label, route, display_order, is_visible)
+         VALUES ($1, $2, 'rls-nav', '/x', 0, true) RETURNING id`,
+        [t.companyId, `rls-nav-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "i18n_overrides",
+    table: "i18n_overrides",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO i18n_overrides (company_id, locale, namespace, key, value)
+         VALUES ($1, 'vi', 'common', $2, 'rls-val') RETURNING id`,
+        [t.companyId, `rls-key-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 ];
