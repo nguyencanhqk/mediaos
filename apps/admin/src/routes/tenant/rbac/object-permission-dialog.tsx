@@ -136,7 +136,7 @@ export function ObjectPermissionDialog({
             {t("actions.remove")}
           </Button>
           <Button onClick={() => validate() && setMutation.mutate()} disabled={pending}>
-            {pending ? t("common:saving") : t("actions.set")}
+            {setMutation.isPending ? t("common:saving") : t("actions.set")}
           </Button>
         </>
       }
