@@ -21,6 +21,7 @@ import { SubscriptionController } from "./subscription.controller";
   imports: [DatabaseModule, EventsModule, PermissionModule],
   controllers: [SubscriptionController],
   providers: [SaasRepository, FeatureFlagService, UsageLimitService, SubscriptionService],
-  exports: [FeatureFlagService, UsageLimitService, SubscriptionService],
+  // AC-7: + SaasRepository (ModuleRegistryService dùng upsertFeatureOverride cho từng feature_key của module).
+  exports: [FeatureFlagService, UsageLimitService, SubscriptionService, SaasRepository],
 })
 export class SaasModule {}

@@ -5,6 +5,7 @@ import { OperatorHomePage } from "@/routes/operator/home";
 import { CompaniesListPage } from "@/routes/operator/companies/companies-list";
 import { TenantHomePage } from "@/routes/tenant/tenant-home";
 import { RbacPage } from "@/routes/tenant/rbac/rbac-page";
+import { ModulesListPage } from "@/routes/operator/modules/modules-list";
 import { useAuthStore } from "@/stores/auth";
 
 const rootRoute = createRootRoute({ component: Outlet });
@@ -71,13 +72,20 @@ const tenantRbacRoute = createRoute({
   component: RbacPage,
 });
 
+// `/tenant/:companyId/modules` — module-registry (AC-7): bật/tắt module cho tenant.
+const tenantModulesRoute = createRoute({
+  getParentRoute: () => tenantRoute,
+  path: "modules",
+  component: ModulesListPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   appLayoutRoute.addChildren([
     indexRoute,
     operatorRoute,
     operatorCompaniesRoute,
-    tenantRoute.addChildren([tenantIndexRoute, tenantRbacRoute]),
+    tenantRoute.addChildren([tenantIndexRoute, tenantRbacRoute, tenantModulesRoute]),
   ]),
 ]);
 

@@ -61,3 +61,5 @@ export * from "./crypto";
 export * from "./platform";
 export * from "./subscription";
 export * from "./template";
+// AC-7 module-registry (lớp module trên feature-flag — catalog system_modules)
+export * from "./module-registry";

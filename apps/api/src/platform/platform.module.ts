@@ -12,6 +12,10 @@ import { OperatorReauthService } from "./operator-reauth.service";
 import { OperatorReauthGuard } from "./operator-reauth.guard";
 import { OperatorActionAuditService } from "./operator-action-audit.service";
 import { OperatorStepUpController } from "./operator-step-up.controller";
+// AC-7 module-registry (lớp module trên feature-flag — reuse SaasModule FeatureFlagService/SaasRepository)
+import { ModuleRegistryController } from "./module-registry.controller";
+import { ModuleRegistryService } from "./module-registry.service";
+import { ModuleRegistryRepository } from "./module-registry.repository";
 
 /**
  * PlatformModule (G16-3 + AC-0b) — tầng platform-admin quản vòng đời tenant (ADR-0017).
@@ -28,13 +32,15 @@ import { OperatorStepUpController } from "./operator-step-up.controller";
     TemplatesModule,
     forwardRef(() => AuthModule),
   ],
-  controllers: [PlatformCompanyController, OperatorStepUpController],
+  controllers: [PlatformCompanyController, OperatorStepUpController, ModuleRegistryController],
   providers: [
     PlatformCompanyService,
     PlatformCompanyRepository,
     OperatorReauthService,
     OperatorReauthGuard,
     OperatorActionAuditService,
+    ModuleRegistryService,
+    ModuleRegistryRepository,
   ],
   exports: [PlatformCompanyService, OperatorReauthService, OperatorActionAuditService],
 })
