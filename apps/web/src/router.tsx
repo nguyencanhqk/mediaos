@@ -1,11 +1,6 @@
 import { createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router";
 import { HomePage } from "@/routes/home";
 import { RootLayout } from "@/routes/root-layout";
-import { DepartmentsPage } from "@/routes/org/departments";
-import { TeamsPage } from "@/routes/org/teams";
-import { EmployeesPage } from "@/routes/org/employees";
-import { EmployeeDetailPage } from "@/routes/org/employees-detail";
-import { PositionsPage } from "@/routes/org/positions";
 import { CompanySettingsPage } from "@/routes/settings/company";
 import { PlatformAccountsPage } from "@/routes/settings/platform-accounts";
 import { BreakGlassPage } from "@/routes/settings/break-glass";
@@ -25,13 +20,6 @@ import { WorkflowInstancesPage } from "@/routes/workflows/instances/instances-li
 import { WorkflowInstanceDetailPage } from "@/routes/workflows/instances/instance-detail";
 import { DashboardPage } from "@/routes/dashboard/dashboard";
 import { KpiPage } from "@/routes/kpi/index";
-import { AttendancePage } from "@/routes/hr/attendance";
-import { AdjustmentsPage } from "@/routes/hr/adjustments";
-import { LeavePage } from "@/routes/hr/leave";
-import { SalaryProfilesPage } from "@/routes/payroll/salary-profiles";
-import { PayrollPeriodsPage } from "@/routes/payroll/periods";
-import { PayslipsPage } from "@/routes/payroll/payslips";
-import { BonusPenaltiesPage } from "@/routes/payroll/bonus-penalties";
 import { getAuthRedirectUrl, useAuthStore } from "@mediaos/web-core";
 
 const rootRoute = createRootRoute({ component: RootLayout });
@@ -52,34 +40,6 @@ const indexRoute = createRoute({
 const authGuard = () => {
   if (!useAuthStore.getState().isAuthenticated) throw redirect({ href: getAuthRedirectUrl() });
 };
-
-const departmentsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/org/departments",
-  beforeLoad: authGuard,
-  component: DepartmentsPage,
-});
-
-const teamsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/org/teams",
-  beforeLoad: authGuard,
-  component: TeamsPage,
-});
-
-const employeesRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/org/employees",
-  beforeLoad: authGuard,
-  component: EmployeesPage,
-});
-
-const employeeDetailRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/org/employees/$employeeId",
-  beforeLoad: authGuard,
-  component: EmployeeDetailPage,
-});
 
 const channelsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -153,13 +113,6 @@ const projectChatRoute = createRoute({
   component: ProjectChatPage,
 });
 
-const positionsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/org/positions",
-  beforeLoad: authGuard,
-  component: PositionsPage,
-});
-
 const workflowTemplatesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/workflows/templates",
@@ -203,58 +156,6 @@ const kpiRoute = createRoute({
   component: KpiPage,
 });
 
-const attendanceRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/hr/attendance",
-  beforeLoad: authGuard,
-  component: AttendancePage,
-});
-
-const adjustmentsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/hr/adjustments",
-  beforeLoad: authGuard,
-  component: AdjustmentsPage,
-});
-
-const leaveRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/hr/leave",
-  beforeLoad: authGuard,
-  component: LeavePage,
-});
-
-const salaryProfilesRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/payroll/salary-profiles",
-  beforeLoad: authGuard,
-  component: SalaryProfilesPage,
-});
-
-// G12-FE: payroll periods (draft→approved→published FSM + SoD + re-auth payslip)
-const payrollPeriodsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/payroll/periods",
-  beforeLoad: authGuard,
-  component: PayrollPeriodsPage,
-});
-
-// G12-FE: "Phiếu lương của tôi" (employee self-service) — money-free list + re-auth reveal + ack/dispute
-const payslipsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/payroll/payslips",
-  beforeLoad: authGuard,
-  component: PayslipsPage,
-});
-
-// G12-FE: bonus/penalty manage + approve (self-approve UI block, server SoD authoritative)
-const bonusPenaltiesRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/payroll/bonus-penalties",
-  beforeLoad: authGuard,
-  component: BonusPenaltiesPage,
-});
-
 const companySettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings/company",
@@ -279,11 +180,6 @@ const breakGlassRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  departmentsRoute,
-  teamsRoute,
-  employeesRoute,
-  employeeDetailRoute,
-  positionsRoute,
   companySettingsRoute,
   platformAccountsRoute,
   breakGlassRoute,
@@ -303,13 +199,6 @@ const routeTree = rootRoute.addChildren([
   workflowInstanceDetailRoute,
   dashboardRoute,
   kpiRoute,
-  attendanceRoute,
-  adjustmentsRoute,
-  leaveRoute,
-  salaryProfilesRoute,
-  payrollPeriodsRoute,
-  payslipsRoute,
-  bonusPenaltiesRoute,
 ]);
 
 export const router = createRouter({ routeTree });
