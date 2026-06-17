@@ -49,4 +49,9 @@ async function boot(): Promise<void> {
   );
 }
 
-void boot();
+// `boot()` không NÊN ném (bootstrapSession nuốt lỗi mạng → trả false), nhưng nếu có lỗi bất ngờ
+// (vd store throw) thì điều hướng về app đăng nhập thay vì để màn hình trắng câm lặng (silent-failure gate).
+boot().catch((err: unknown) => {
+  console.error("[people] boot() lỗi không mong đợi → điều hướng về app đăng nhập:", err);
+  redirectToAuth();
+});

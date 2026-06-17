@@ -34,6 +34,13 @@ export function HomePage() {
     void logoutSession();
   };
 
+  // App tách (FS-2) chỉ có subset category → chỉ render chip của các category THỰC SỰ có app,
+  // tránh chip "ma" (work/goals/process/system) lọc ra rỗng gây hiểu nhầm app hỏng (silent-failure gate).
+  const visibleCategories = useMemo(
+    () => NAV_CATEGORIES.filter((c) => NAV_ITEMS.some((it) => it.category === c.id)),
+    [],
+  );
+
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
     return NAV_ITEMS.filter((it) => {
@@ -99,7 +106,7 @@ export function HomePage() {
           <Chip active={filter === "all"} onClick={() => setFilter("all")}>
             {t("common:all")}
           </Chip>
-          {NAV_CATEGORIES.map((c) => (
+          {visibleCategories.map((c) => (
             <Chip key={c.id} active={filter === c.id} onClick={() => setFilter(c.id)}>
               {t(`nav:${c.labelKey}`)}
             </Chip>
