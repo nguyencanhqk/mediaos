@@ -6,6 +6,7 @@ import { NotificationsRepository } from "./notifications.repository";
 import { NotificationPreferencesRepository } from "./notification-preferences.repository";
 import { NotificationsService } from "./notifications.service";
 import { NotificationsController } from "./notifications.controller";
+import { DeviceTokenService } from "./device-token.service";
 
 @Module({
   imports: [DatabaseModule, EventsModule, RealtimeEmitterModule],
@@ -14,7 +15,8 @@ import { NotificationsController } from "./notifications.controller";
     NotificationsRepository,
     NotificationPreferencesRepository,
     NotificationsService,
+    DeviceTokenService,
   ],
-  exports: [NotificationsService],
+  exports: [NotificationsService, DeviceTokenService],
 })
 export class NotificationsModule {}

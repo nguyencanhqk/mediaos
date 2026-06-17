@@ -1637,4 +1637,21 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+
+  // ── G15-2 Device tokens (push notification registration — mig 0110) ──────────
+  // company_id + RLS+FORCE → PHẢI ở harness. Soft-delete (deleted_at) — KHÔNG hard DELETE.
+  // KHÔNG skipNoContext (mọi hàng tenant-scoped, company_id NOT NULL, không hàng global).
+  {
+    name: "device_tokens",
+    table: "device_tokens",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `dt-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO device_tokens (company_id, user_id, token, platform)
+         VALUES ($1, $2, $3, 'android') RETURNING id`,
+        [t.companyId, u, `rls-token-${randomUUID()}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 ];
