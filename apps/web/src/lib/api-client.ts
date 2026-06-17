@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getAccessToken } from "@/stores/auth";
 
 export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3100/api/v1";
 
@@ -69,9 +70,14 @@ export async function apiFetch<T>(
   schema: z.ZodType<T>,
   init?: RequestInit,
 ): Promise<T> {
+  const token = getAccessToken();
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init?.headers,
+    },
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
