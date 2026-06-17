@@ -1,14 +1,31 @@
 import { useQuery } from "@tanstack/react-query";
+import {
+  AlarmClockOff,
+  CalendarCheck,
+  CalendarRange,
+  LayoutDashboard,
+  ListTodo,
+  Plane,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { getDashboardSummary } from "@/lib/dashboard-api";
+import { PageHeader } from "@/components/layout/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { TaskStatusChart } from "@/components/dashboard/task-status-chart";
+import { DashboardSection } from "@/components/dashboard/dashboard-section";
+import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
+
+const PAGE_TITLE = "Dashboard";
 
 /**
  * DashboardPage — G14-1 role-aware dashboard.
  * Renders only what the server returns — server handles all permission masking.
  * No client-side permission checks on data visibility (server is source of truth).
  * PermissionGate/useCan is used only for UI chrome (navigation links etc.), not data sections.
+ *
+ * Phase-2 redesign: chỉ đổi layout/trình bày (PageHeader + section thẻ + skeleton/empty),
+ * KHÔNG đổi data/permission logic.
  */
 export function DashboardPage() {
   const { t } = useTranslation("dashboard");
@@ -21,21 +38,23 @@ export function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-5xl space-y-6 p-8">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">{t("loadingData")}</p>
+      <div className="mx-auto max-w-6xl space-y-6 p-6 sm:p-8">
+        <PageHeader title={PAGE_TITLE} description={t("dashboard.subtitle")} icon={LayoutDashboard} />
+        <p className="sr-only">{t("loadingData")}</p>
+        <DashboardSkeleton sections={2} />
       </div>
     );
   }
 
   if (isError) {
     return (
-      <div className="mx-auto max-w-5xl space-y-6 p-8">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <p className="text-sm text-destructive">
-          {t("loadDataError")}{" "}
-          {error instanceof Error ? error.message : t("unknownError")}
-        </p>
+      <div className="mx-auto max-w-6xl space-y-6 p-6 sm:p-8">
+        <PageHeader title={PAGE_TITLE} description={t("dashboard.subtitle")} icon={LayoutDashboard} />
+        <EmptyState
+          icon={AlarmClockOff}
+          title={t("loadDataError")}
+          description={error instanceof Error ? error.message : t("unknownError")}
+        />
       </div>
     );
   }
@@ -45,12 +64,11 @@ export function DashboardPage() {
   const { tasks, attendance, leave } = data;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 p-8">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
+    <div className="mx-auto max-w-6xl space-y-6 p-6 sm:p-8">
+      <PageHeader title={PAGE_TITLE} description={t("dashboard.subtitle")} icon={LayoutDashboard} />
 
       {/* ── Task section ─────────────────────────────────────────────────── */}
-      <section>
-        <h2 className="mb-4 text-sm font-medium text-muted-foreground">{t("dashboard.tasks.sectionTitle")}</h2>
+      <DashboardSection title={t("dashboard.tasks.sectionTitle")} icon={ListTodo}>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           <StatCard label={t("dashboard.tasks.total")} value={tasks.total} accent="blue" />
           <StatCard label={t("dashboard.tasks.inProgress")} value={tasks.inProgress} accent="blue" />
@@ -70,14 +88,11 @@ export function DashboardPage() {
             <TaskStatusChart data={tasks.byStatus} />
           </div>
         )}
-      </section>
+      </DashboardSection>
 
       {/* ── Attendance section — only if server returned data (not null) ── */}
       {attendance.todayPresent !== null && (
-        <section>
-          <h2 className="mb-4 text-sm font-medium text-muted-foreground">
-            {t("dashboard.attendance.todayTitle")}
-          </h2>
+        <DashboardSection title={t("dashboard.attendance.todayTitle")} icon={CalendarCheck}>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <StatCard label={t("dashboard.attendance.present")} value={attendance.todayPresent} accent="green" />
             <StatCard
@@ -93,10 +108,11 @@ export function DashboardPage() {
           </div>
 
           {attendance.monthAttendanceDays !== null && (
-            <>
-              <h2 className="mb-4 mt-6 text-sm font-medium text-muted-foreground">
+            <div className="mt-6">
+              <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <CalendarRange className="h-3.5 w-3.5" strokeWidth={2} />
                 {t("dashboard.attendance.monthTitle")}
-              </h2>
+              </div>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <StatCard
                   label={t("dashboard.attendance.monthDays")}
@@ -114,15 +130,14 @@ export function DashboardPage() {
                   accent={attendance.monthLateDays ? "yellow" : "gray"}
                 />
               </div>
-            </>
+            </div>
           )}
-        </section>
+        </DashboardSection>
       )}
 
       {/* ── Leave section — only if server returned data ─────────────── */}
       {leave.pendingRequests !== null && (
-        <section>
-          <h2 className="mb-4 text-sm font-medium text-muted-foreground">{t("dashboard.leave.sectionTitle")}</h2>
+        <DashboardSection title={t("dashboard.leave.sectionTitle")} icon={Plane}>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <StatCard
               label={t("dashboard.leave.pending")}
@@ -143,7 +158,7 @@ export function DashboardPage() {
               />
             )}
           </div>
-        </section>
+        </DashboardSection>
       )}
 
       <p className="text-xs text-muted-foreground">
