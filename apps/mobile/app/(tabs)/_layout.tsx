@@ -38,6 +38,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: "Trang chủ" }} />
       <Tabs.Screen name="tasks" options={{ title: "Việc của tôi" }} />
       <Tabs.Screen name="approvals" options={{ title: "Chờ duyệt" }} />
+      {/* G15-2 comms tabs */}
       <Tabs.Screen
         name="notifications"
         options={{
@@ -51,6 +52,11 @@ export default function TabsLayout() {
           title: "Chat",
         }}
       />
+      {/* G15-3 HR self-service tabs */}
+      <Tabs.Screen name="attendance" options={{ title: "Chấm công" }} />
+      <Tabs.Screen name="leave" options={{ title: "Nghỉ phép" }} />
+      <Tabs.Screen name="payslips" options={{ title: "Phiếu lương" }} />
+      <Tabs.Screen name="kpi" options={{ title: "KPI" }} />
     </Tabs>
   );
 }
