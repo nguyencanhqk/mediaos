@@ -51,3 +51,5 @@ export * from "./module-registry";
 export * from "./ui-config";
 // AC-6 Webhooks (endpoint + subscription + delivery log — per-tenant FORCE-RLS; HMAC secret envelope-KMS)
 export * from "./webhooks";
+// AC-9 db-ops (3 bảng GLOBAL no-RLS operator-scoped — break-glass grant/approval + export job; mig 0345)
+export * from "./db-ops";
