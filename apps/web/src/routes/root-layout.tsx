@@ -5,8 +5,8 @@ import { BrandLogo } from "@/components/brand/brand-mark";
 import { BRAND } from "@/lib/brand";
 import { NotificationBell } from "@/components/notification-bell";
 
-/** Route hiển thị toàn màn, KHÔNG bọc app-shell (tự lo chrome riêng). */
-const BARE_ROUTES = new Set<string>(["/", "/login"]);
+/** Route hiển thị toàn màn, KHÔNG bọc app-shell (tự lo chrome riêng). Login đã externalize sang apps/auth. */
+const BARE_ROUTES = new Set<string>(["/"]);
 
 /** Khối thương hiệu góc trái shell — app này cấp branding Funtime Media của nó. */
 const brand = (

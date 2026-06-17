@@ -53,6 +53,19 @@ export const envSchema = z.object({
   // Ngưỡng cao hơn per-IP (mặc định 20) để giảm rủi ro account-lockout DoS; vẫn là backstop, không thay per-IP.
   LOGIN_ACCOUNT_MAX_ATTEMPTS: z.coerce.number().int().positive().default(20),
 
+  // ── FS-1a Session / SSO cookie (frontend-split plan §7) ───────────────────
+  // AUTH_COOKIE_DOMAIN: domain cho refresh/CSRF cookie. Prod = `.<domain>` (vd `.mediaos.example`) để cookie
+  // dùng chung mọi subdomain (auth./studio./people./console.). RỖNG (default) → cookie host-only (dev không
+  // subdomain). KHÔNG validate URL (đây là cookie Domain attribute, không phải origin).
+  AUTH_COOKIE_DOMAIN: z.string().default(""),
+  // AUTH_COOKIE_SECURE: gắn cờ Secure cho cookie. Default 'true' (prod BẮT BUỘC TLS). Đặt 'false' CHỈ ở dev
+  // không-TLS (http). KHÔNG z.coerce.boolean ('false'→true bẫy). Browser cho phép Secure trên localhost.
+  AUTH_COOKIE_SECURE: z.enum(["true", "false"]).default("true"),
+  // AUTH_REDIRECT_ALLOWLIST: danh sách origin (phẩy) được phép cho `?redirect` (chống open-redirect, rủi ro
+  // #11). So khớp origin TƯỜNG MINH (scheme+host+port), KHÔNG '*', KHÔNG substring. RỖNG (default) → từ chối
+  // MỌI redirect (fail-closed). Vd: `https://studio.localhost,https://people.localhost,https://console.localhost`.
+  AUTH_REDIRECT_ALLOWLIST: z.string().default(""),
+
   // ── G16-3 SaaS enforcement (feature-flag / usage-limit guards) ────────────
   // Kill-switch toàn cục cho FeatureFlagEnforcementGuard + UsageLimitEnforcementGuard. Default 'true'
   // (BẬT). Guard CHỈ áp khi route khai @RequireFeature/@EnforceUsageLimit (no-op nếu không) ⇒ default

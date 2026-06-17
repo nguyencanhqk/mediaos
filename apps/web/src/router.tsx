@@ -1,6 +1,5 @@
 import { createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router";
 import { HomePage } from "@/routes/home";
-import { LoginPage } from "@/routes/login";
 import { RootLayout } from "@/routes/root-layout";
 import { DepartmentsPage } from "@/routes/org/departments";
 import { TeamsPage } from "@/routes/org/teams";
@@ -33,29 +32,25 @@ import { SalaryProfilesPage } from "@/routes/payroll/salary-profiles";
 import { PayrollPeriodsPage } from "@/routes/payroll/periods";
 import { PayslipsPage } from "@/routes/payroll/payslips";
 import { BonusPenaltiesPage } from "@/routes/payroll/bonus-penalties";
-import { useAuthStore } from "@mediaos/web-core";
+import { getAuthRedirectUrl, useAuthStore } from "@mediaos/web-core";
 
 const rootRoute = createRootRoute({ component: RootLayout });
 
+// FS-1b: login đã externalize sang app đăng nhập trung tâm (apps/auth). Guard không còn route `/login` nội bộ
+// → chưa đăng nhập thì `throw redirect({ href })` RA NGOÀI (TanStack tự suy `reloadDocument` cho absolute href:
+// điều hướng cả trang về auth.<domain>?redirect=<đích> + DỪNG pipeline router, KHÔNG nháy render route khi chưa
+// auth). Boot (main.tsx) silent-refresh trước khi mount nên đây chủ yếu là backstop khi store bị xoá giữa phiên.
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   beforeLoad: () => {
-    if (!useAuthStore.getState().isAuthenticated) {
-      throw redirect({ to: "/login" });
-    }
+    if (!useAuthStore.getState().isAuthenticated) throw redirect({ href: getAuthRedirectUrl() });
   },
   component: HomePage,
 });
 
-const loginRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/login",
-  component: LoginPage,
-});
-
 const authGuard = () => {
-  if (!useAuthStore.getState().isAuthenticated) throw redirect({ to: "/login" });
+  if (!useAuthStore.getState().isAuthenticated) throw redirect({ href: getAuthRedirectUrl() });
 };
 
 const departmentsRoute = createRoute({
@@ -284,7 +279,6 @@ const breakGlassRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  loginRoute,
   departmentsRoute,
   teamsRoute,
   employeesRoute,

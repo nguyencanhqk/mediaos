@@ -1,24 +1,33 @@
 import type {
+  AuthRefreshResponse,
   AuthTokens,
   LoginResponse,
+  LogoutResponse,
   MeResponse,
+  RedirectAllowedResponse,
   TwoFactorEnrollResponse,
   TwoFactorStatus,
 } from "@mediaos/contracts";
+import { CSRF_COOKIE_NAME, CSRF_HEADER_NAME, REFRESH_COOKIE_NAME } from "@mediaos/contracts";
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Headers,
   HttpCode,
   Post,
+  Query,
   Req,
+  Res,
   UnauthorizedException,
   UsePipes,
 } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { AuthService, type RequestMeta } from "./auth.service";
+import { csrfTokensMatch, parseCookies } from "./cookie.util";
+import { SessionCookieService } from "./session-cookie.service";
 import {
   ForgotPasswordDto,
   LoginDto,
@@ -47,20 +56,94 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly twoFactor: TwoFactorService,
+    private readonly cookies: SessionCookieService,
   ) {}
 
   @Public()
   @Post("login")
   @HttpCode(200)
-  login(@Body() dto: LoginDto, @Req() req: Request): Promise<LoginResponse> {
-    return this.auth.login(dto, this.meta(req));
+  async login(
+    @Body() dto: LoginDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LoginResponse> {
+    const result = await this.auth.login(dto, this.meta(req));
+    // SSO: login trả tokens (KHÔNG phải challenge 2FA) → đặt refresh + CSRF cookie (web-core dùng cookie;
+    // mobile/Bearer bỏ qua Set-Cookie). Body GIỮ NGUYÊN (tương thích ngược). Nhánh 2FA: cookie đặt ở /2fa/verify.
+    if ("accessToken" in result) {
+      this.setSessionCookies(res, result.refreshToken);
+    }
+    return result;
   }
 
+  /**
+   * FS-1a — refresh phiên. COOKIE-FIRST: nếu có refresh cookie → bắt buộc CSRF double-submit, xoay token
+   * (rotation + reuse-detection ở service), phát cookie MỚI, trả {accessToken,expiresIn} (refresh token NẰM
+   * TRONG cookie, KHÔNG body). Không cookie → luồng cũ body refreshToken (mobile/Bearer) trả AuthTokens đầy đủ.
+   */
   @Public()
   @Post("refresh")
   @HttpCode(200)
-  refresh(@Body() dto: RefreshDto): Promise<AuthTokens> {
+  async refresh(
+    @Body() dto: RefreshDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AuthTokens | AuthRefreshResponse> {
+    const cookies = parseCookies(req.headers.cookie);
+    const cookieToken = cookies[REFRESH_COOKIE_NAME];
+
+    if (cookieToken) {
+      this.assertCsrf(req, cookies);
+      let tokens: AuthTokens;
+      try {
+        tokens = await this.auth.refresh(cookieToken);
+      } catch (err) {
+        // Thất bại (invalid/expired/reuse-detected) → xoá cookie buộc client login lại (rotation safety).
+        this.clearSessionCookies(res);
+        throw err;
+      }
+      this.setSessionCookies(res, tokens.refreshToken); // rotation: cookie refresh + CSRF MỚI
+      return { accessToken: tokens.accessToken, expiresIn: tokens.expiresIn };
+    }
+
+    // Luồng cũ (mobile/Bearer): refreshToken trong body, KHÔNG cookie/CSRF. 401 chung (không lộ chế độ).
+    if (!dto?.refreshToken) throw new UnauthorizedException("Phiên không hợp lệ.");
     return this.auth.refresh(dto.refreshToken);
+  }
+
+  /**
+   * FS-1a — đăng xuất TOÀN CỤC: thu hồi cả họ refresh token + xoá cookie. COOKIE-based bắt buộc CSRF (chống
+   * forced-logout CSRF). Idempotent: luôn 200 + xoá cookie kể cả khi không có phiên.
+   */
+  @Public()
+  @Post("logout")
+  @HttpCode(200)
+  async logout(
+    @Body() dto: RefreshDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LogoutResponse> {
+    const cookies = parseCookies(req.headers.cookie);
+    const cookieToken = cookies[REFRESH_COOKIE_NAME];
+    if (cookieToken) {
+      this.assertCsrf(req, cookies);
+      await this.auth.logout(cookieToken);
+    } else if (dto?.refreshToken) {
+      await this.auth.logout(dto.refreshToken);
+    }
+    this.clearSessionCookies(res);
+    return { ok: true };
+  }
+
+  /**
+   * FS-1a — kiểm `?redirect` theo allowlist origin (chống open-redirect). @Public: `apps/auth` gọi TRƯỚC khi
+   * điều hướng. Server là nguồn allowlist DUY NHẤT. `target` chỉ trả khi hợp lệ (đã chuẩn hoá), ngược lại null.
+   */
+  @Public()
+  @Get("redirect-allowed")
+  redirectAllowed(@Query("redirect") redirect?: string): RedirectAllowedResponse {
+    const target = this.cookies.resolveSafeRedirect(redirect);
+    return { allowed: target !== null, target };
   }
 
   @Get("me")
@@ -94,8 +177,15 @@ export class AuthController {
   @Public()
   @Post("2fa/verify")
   @HttpCode(200)
-  verifyTwoFactor(@Body() dto: TwoFactorVerifyDto, @Req() req: Request): Promise<AuthTokens> {
-    return this.auth.completeTwoFactorLogin(dto.challengeToken, dto.code, this.meta(req));
+  async verifyTwoFactor(
+    @Body() dto: TwoFactorVerifyDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AuthTokens> {
+    const tokens = await this.auth.completeTwoFactorLogin(dto.challengeToken, dto.code, this.meta(req));
+    // SSO: phiên thành công sau bước 2 → đặt refresh + CSRF cookie (mirror /login nhánh tokens).
+    this.setSessionCookies(res, tokens.refreshToken);
+    return tokens;
   }
 
   /** Bắt đầu enroll 2FA cho chính user — trả otpauthUri (QR) + recovery codes (hiển thị 1 LẦN). */
@@ -142,5 +232,30 @@ export class AuthController {
       throw new UnauthorizedException("Thiếu access token.");
     }
     return authorization.slice("Bearer ".length).trim();
+  }
+
+  // ── FS-1a SSO cookie helpers ──────────────────────────────────────────────────
+  /** Đặt refresh (HttpOnly) + CSRF (đọc được) cookie cho phiên SSO. CSRF mới mỗi lần (login/2fa/refresh). */
+  private setSessionCookies(res: Response, refreshToken: string): void {
+    res.append("Set-Cookie", this.cookies.buildRefreshCookie(refreshToken));
+    res.append("Set-Cookie", this.cookies.buildCsrfCookie(this.cookies.newCsrfToken()));
+  }
+
+  /** Xoá refresh + CSRF cookie (logout / refresh thất bại). */
+  private clearSessionCookies(res: Response): void {
+    res.append("Set-Cookie", this.cookies.clearRefreshCookie());
+    res.append("Set-Cookie", this.cookies.clearCsrfCookie());
+  }
+
+  /**
+   * Ép CSRF double-submit cho endpoint cookie-based (refresh/logout): header `x-csrf-token` PHẢI khớp cookie
+   * CSRF (so hằng-thời-gian). Thiếu/sai → 403. Bảo vệ chống CSRF (kèm SameSite=Strict — defense-in-depth).
+   */
+  private assertCsrf(req: Request, cookies: Record<string, string>): void {
+    const header = req.headers[CSRF_HEADER_NAME];
+    const headerValue = Array.isArray(header) ? header[0] : header;
+    if (!csrfTokensMatch(headerValue, cookies[CSRF_COOKIE_NAME])) {
+      throw new ForbiddenException("CSRF token không hợp lệ.");
+    }
   }
 }

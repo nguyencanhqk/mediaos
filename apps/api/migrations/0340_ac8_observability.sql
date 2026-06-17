@@ -1,7 +1,7 @@
 -- Migration 0340: AC-8 Observability — audit viewer + queue monitor (READ-ONLY).
 -- Gate: FULL (security-reviewer [cross-tenant RLS read GUC] + database-reviewer + silent-failure-hunter + santa).
 --
--- BAND 0340-0344 (lane ac8). Journal: idx 101, when 1717500360000 (> high-water 350000 = 0320_ac6_webhooks)
+-- BAND 0340-0344 (lane ac8). Journal: idx 102, when 1717500370000 (> high-water 360000 = 0400_fs1_refresh_token_family)
 --   khi land — RECONCILE theo master max mỗi rebase. Hook guard-migration-band: BANDS.ac8 = [[340,344]].
 --
 -- MỤC TIÊU: 2 tầng đọc CHỈ-ĐỌC vào audit_logs + event queue (outbox_events + dead_letter_events):

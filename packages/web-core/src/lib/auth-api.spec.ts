@@ -48,10 +48,12 @@ describe("authApi.login", () => {
     });
 
     expect(result).toEqual(mockTokens);
+    // FS-1b: login dùng skipAuth (KHÔNG gắn Bearer cũ + 401 sai-mật-khẩu KHÔNG kích refresh-on-401).
     expect(apiClient.apiFetch).toHaveBeenCalledWith(
       "/auth/login",
       expect.anything(),
       expect.objectContaining({ method: "POST" }),
+      { skipAuth: true },
     );
   });
 

@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { LogOut, Search } from "lucide-react";
 import { Avatar } from "@mediaos/ui";
 import { NotificationBell } from "@/components/notification-bell";
 import { cn } from "@/lib/utils";
-import { getHealth } from "@mediaos/web-core";
+import { getHealth, logoutSession } from "@mediaos/web-core";
 import { BrandLogo, BrandWordmark } from "@/components/brand/brand-mark";
 import { BRAND } from "@/lib/brand";
 import { NAV_CATEGORIES, NAV_ITEMS, type NavCategory } from "@/lib/nav";
@@ -17,9 +17,7 @@ type Filter = "all" | NavCategory;
 /** Trang chủ — bộ khởi chạy ứng dụng (app launcher) kiểu MISA AMIS. */
 export function HomePage() {
   const { t } = useTranslation(["home", "nav", "common"]);
-  const navigate = useNavigate();
   const username = useAuthStore((s) => s.username);
-  const logout = useAuthStore((s) => s.logout);
 
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -31,9 +29,10 @@ export function HomePage() {
     refetchInterval: 30_000,
   });
 
+  // FS-1b: đăng xuất TOÀN CỤC — thu hồi cả họ refresh token + xoá cookie (server) → xoá store → điều hướng
+  // về app đăng nhập trung tâm. Mọi subdomain app mất phiên ở lần refresh kế (SSO logout).
   const onLogout = () => {
-    logout();
-    void navigate({ to: "/login" });
+    void logoutSession();
   };
 
   const items = useMemo(() => {

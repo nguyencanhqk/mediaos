@@ -115,18 +115,20 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
     await expect(auth.me("")).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it("refresh rotation: token cũ bị thu hồi → dùng lại = 401", async () => {
+  it("refresh rotation + REUSE-DETECTION: token mới dùng được; reuse token cũ = 401 + thu hồi cả family (FS-1a)", async () => {
     const fresh = newAuth();
     const tokens = expectTokens(
       await fresh.login({ companySlug: A.slug, email: EMAIL, password: PASSWORD }, meta),
     );
-    const rotated = await fresh.refresh(tokens.refreshToken);
+    const rotated = await fresh.refresh(tokens.refreshToken); // A → B (A revoked)
     expect(rotated.refreshToken).not.toBe(tokens.refreshToken);
-    // token cũ đã revoked
+    // token MỚI (B) dùng được → C (chuỗi rotation hợp lệ tiếp tục, KẾ THỪA family).
+    const chained = await fresh.refresh(rotated.refreshToken); // B → C
+    expect(chained.accessToken).toBeTruthy();
+    // REUSE-DETECTION (FS-1a §7.4): dùng lại token CŨ đã revoke (A) = replay → 401 ĐỒNG NHẤT.
     await expect(fresh.refresh(tokens.refreshToken)).rejects.toBeInstanceOf(UnauthorizedException);
-    // token mới vẫn dùng được
-    const again = await fresh.refresh(rotated.refreshToken);
-    expect(again.accessToken).toBeTruthy();
+    // ...và thu hồi CẢ HỌ token → token hợp lệ mới nhất (C) cũng chết (chống replay khi cookie bị lộ).
+    await expect(fresh.refresh(chained.refreshToken)).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it("forgot-password không lộ email tồn tại (email lạ vẫn trả về êm)", async () => {

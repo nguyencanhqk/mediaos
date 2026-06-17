@@ -315,6 +315,12 @@ export class AuthService {
     await this.rateLimiter.reset(LoginRateLimiter.accountKey(companySlug, email));
   }
 
+  /**
+   * Refresh token (rotation + REUSE-DETECTION — crown-jewel, FS-1a). Xoay token mỗi lần; token mới KẾ THỪA
+   * family_id. Nếu một token ĐÃ bị thu hồi (đã xoay/đã logout) bị TRÌNH LẠI ⇒ replay → THU HỒI CẢ HỌ token
+   * (family) + audit, buộc đăng nhập lại (chống replay khi refresh cookie bị lộ — plan §7.4). Hết hạn TỰ
+   * NHIÊN (không phải tấn công) → 401 thường, KHÔNG thu hồi họ. Mọi lỗi → 401 ĐỒNG NHẤT (không lộ lý do).
+   */
   async refresh(refreshToken: string): Promise<AuthTokens> {
     const parsed = this.splitScopedToken(refreshToken);
     if (!parsed) throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
@@ -322,19 +328,44 @@ export class AuthService {
     const tokenHash = this.tokens.hashToken(full);
 
     const result = await this.dbsvc.withTenant(companyId, async (tx) => {
+      // FOR UPDATE: SERIALIZE refresh đồng thời trên CÙNG token (chống TOCTOU double-spend). Hai request
+      // mang cùng refresh token: request thứ 2 chặn tới khi thứ 1 commit, rồi re-read thấy revoked_at đã set
+      // (EvaluatePlanQual) → rơi vào nhánh reuse-detection. KHÔNG khoá hàng = cả 2 cùng xoay ⇒ 2 token hợp lệ
+      // từ 1 token (bỏ qua reuse-detection). Mirror break-glass/attendance FOR UPDATE.
       const [row] = await tx
         .select()
         .from(refreshTokens)
         .where(eq(refreshTokens.tokenHash, tokenHash))
-        .limit(1);
-      if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) {
-        return null;
-      }
-      const [user] = await tx.select().from(users).where(eq(users.id, row.userId)).limit(1);
-      if (!user || user.deletedAt) return null;
+        .limit(1)
+        .for("update");
+      if (!row) return { kind: "invalid" as const };
 
-      const issued = await this.issueTokens(tx, companyId, user.id, user.email);
-      // Rotation: revoke token cũ + trỏ replaced_by token mới.
+      // REUSE-DETECTION: token đã revoke (đã xoay HOẶC family đã thu hồi) mà bị trình lại = replay. Thu hồi
+      // MỌI token cùng family_id chưa revoke (RLS tự lọc company_id trong withTenant) + audit. Commit (KHÔNG
+      // throw trong tx) để vết thu hồi + audit BỀN VỮNG, rồi caller ném 401 ngoài tx.
+      if (row.revokedAt) {
+        await tx
+          .update(refreshTokens)
+          .set({ revokedAt: new Date() })
+          .where(and(eq(refreshTokens.familyId, row.familyId), isNull(refreshTokens.revokedAt)));
+        await this.audit.record(tx, {
+          action: "auth.token_reuse_detected",
+          objectType: "auth",
+          actorUserId: row.userId,
+          objectId: row.userId,
+          after: { reason: "refresh_token_reuse", familyRevoked: true },
+        });
+        return { kind: "reuse" as const };
+      }
+
+      // Hết hạn tự nhiên → 401 thường (KHÔNG thu hồi họ — không phải tín hiệu tấn công).
+      if (row.expiresAt.getTime() <= Date.now()) return { kind: "invalid" as const };
+
+      const [user] = await tx.select().from(users).where(eq(users.id, row.userId)).limit(1);
+      if (!user || user.deletedAt) return { kind: "invalid" as const };
+
+      // Rotation: token mới KẾ THỪA family_id; revoke token cũ + trỏ replaced_by.
+      const issued = await this.issueTokens(tx, companyId, user.id, user.email, row.familyId);
       await tx
         .update(refreshTokens)
         .set({ revokedAt: new Date(), replacedBy: issued.newTokenId })
@@ -345,11 +376,53 @@ export class AuthService {
         actorUserId: user.id,
         objectId: user.id,
       });
-      return issued.tokens;
+      return { kind: "ok" as const, tokens: issued.tokens };
     });
 
-    if (!result) throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
-    return result;
+    if (result.kind === "ok") return result.tokens;
+    throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
+  }
+
+  /**
+   * Đăng xuất TOÀN CỤC (FS-1a) — thu hồi MỌI refresh token cùng family_id (mọi app/subdomain mất phiên ở
+   * lần refresh kế). Idempotent + KHÔNG lộ token tồn tại: token rác/không thấy → trả void êm (controller vẫn
+   * xoá cookie). Audit `auth.logout` khi tìm thấy phiên. CSRF được ép Ở CONTROLLER (endpoint cookie-based).
+   */
+  async logout(refreshToken: string): Promise<void> {
+    const parsed = this.splitScopedToken(refreshToken);
+    if (!parsed) {
+      // Token cookie sai định dạng (truncate/tamper) → idempotent void (controller vẫn xoá cookie), nhưng
+      // GHI WARN để bất thường quan sát được (không nuốt câm) — KHÔNG log giá trị token (BẤT BIẾN #3).
+      this.logger.warn("logout: refresh token sai định dạng (parse fail) — bỏ qua, không thu hồi family");
+      return;
+    }
+    const { companyId, full } = parsed;
+    const tokenHash = this.tokens.hashToken(full);
+
+    await this.dbsvc.withTenant(companyId, async (tx) => {
+      // KHÔNG cần FOR UPDATE: logout là TERMINAL (thu hồi tất cả). Đua với refresh đồng thời (refresh xoay
+      // A→B trong khi logout đang chạy) cùng lắm thu hồi luôn B vừa cấp — ĐÚNG Ý logout (kết thúc mọi phiên).
+      const [row] = await tx
+        .select()
+        .from(refreshTokens)
+        .where(eq(refreshTokens.tokenHash, tokenHash))
+        .limit(1);
+      // CHỈ token CÒN SỐNG mới được uỷ quyền thu hồi family. Token đã revoke/hết hạn = ĐÃ chết → KHÔNG có
+      // quyền (chống forced-logout: kẻ giữ token CŨ/đã xoay/lộ-log — vốn vô hại — KHÔNG được dùng để đăng
+      // xuất nạn nhân qua body-path @Public). Idempotent: controller vẫn xoá cookie + trả 200.
+      if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) return;
+      await tx
+        .update(refreshTokens)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(refreshTokens.familyId, row.familyId), isNull(refreshTokens.revokedAt)));
+      await this.audit.record(tx, {
+        action: "auth.logout",
+        objectType: "auth",
+        actorUserId: row.userId,
+        objectId: row.userId,
+        after: { scope: "family" },
+      });
+    });
   }
 
   async me(accessToken: string): Promise<MeResponse> {
@@ -534,12 +607,18 @@ export class AuthService {
     return row !== undefined;
   }
 
-  /** Tạo access token + refresh token (lưu hash). Trả token + id refresh mới (cho rotation). */
+  /**
+   * Tạo access token + refresh token (lưu hash). Trả token + id refresh mới (cho rotation).
+   *
+   * FS-1a: `familyId` — rotation truyền family_id của token cũ để token mới KẾ THỪA cùng họ; login KHÔNG
+   * truyền ⇒ DB DEFAULT gen_random_uuid() cấp HỌ MỚI (phiên mới độc lập). Reuse/logout thu hồi theo family_id.
+   */
   private async issueTokens(
     tx: TenantTx,
     companyId: string,
     userId: string,
     email: string,
+    familyId?: string,
   ): Promise<{ tokens: AuthTokens; newTokenId: string }> {
     // AC-0b: operator (platform-admin) ⇒ aud='operator' + TTL ngắn; còn lại ⇒ aud='tenant' + TTL thường.
     const isOperator = await this.isOperatorTx(tx, userId);
@@ -551,7 +630,8 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + this.tokens.refreshTtlSec * 1000);
     const [inserted] = await tx
       .insert(refreshTokens)
-      .values({ userId, tokenHash: this.tokens.hashToken(scoped), expiresAt })
+      // familyId undefined → bỏ qua khỏi INSERT ⇒ DB DEFAULT (họ mới). Có giá trị → kế thừa (rotation).
+      .values({ userId, tokenHash: this.tokens.hashToken(scoped), expiresAt, ...(familyId ? { familyId } : {}) })
       .returning({ id: refreshTokens.id });
     return {
       tokens: {
