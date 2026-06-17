@@ -1,0 +1,99 @@
+{
+  "title": "Công ty & Gói cước",
+  "subtitle": "Quản lý vòng đời workspace chéo tenant: tạo, đình chỉ, cấu hình và đổi gói.",
+  "navLabel": "Công ty",
+  "table": {
+    "name": "Tên công ty",
+    "slug": "Định danh",
+    "status": "Trạng thái",
+    "timezone": "Múi giờ",
+    "currency": "Tiền tệ",
+    "language": "Ngôn ngữ",
+    "createdAt": "Ngày tạo",
+    "actions": "Thao tác"
+  },
+  "status": {
+    "active": "Đang hoạt động",
+    "suspended": "Đã đình chỉ",
+    "provisioning": "Đang khởi tạo"
+  },
+  "filters": {
+    "searchPlaceholder": "Tìm theo tên hoặc định danh…",
+    "statusLabel": "Trạng thái",
+    "statusAll": "Tất cả trạng thái"
+  },
+  "empty": {
+    "title": "Chưa có công ty nào",
+    "description": "Tạo workspace đầu tiên để bắt đầu vận hành."
+  },
+  "error": {
+    "loadFailed": "Không tải được danh sách công ty.",
+    "createFailed": "Tạo công ty thất bại.",
+    "suspendFailed": "Đình chỉ công ty thất bại.",
+    "configureFailed": "Cập nhật công ty thất bại.",
+    "planFailed": "Đổi gói thất bại.",
+    "slugConflict": "Đã tồn tại công ty với định danh này."
+  },
+  "actions": {
+    "create": "Tạo công ty",
+    "suspend": "Đình chỉ",
+    "configure": "Cấu hình",
+    "changePlan": "Đổi gói"
+  },
+  "create": {
+    "title": "Tạo công ty mới",
+    "description": "Tạo workspace mới kèm provision template và gán gói mặc định.",
+    "nameLabel": "Tên công ty",
+    "namePlaceholder": "Công ty TNHH Funtime",
+    "slugLabel": "Định danh (slug)",
+    "slugHint": "Chỉ chữ thường, số và dấu gạch ngang.",
+    "slugPlaceholder": "funtime-media",
+    "timezoneLabel": "Múi giờ",
+    "currencyLabel": "Tiền tệ",
+    "languageLabel": "Ngôn ngữ",
+    "templateLabel": "Mã template (tùy chọn)",
+    "templatePlaceholder": "starter",
+    "planLabel": "Mã gói (tùy chọn)",
+    "planPlaceholder": "free",
+    "submit": "Tạo công ty"
+  },
+  "suspend": {
+    "title": "Đình chỉ công ty",
+    "description": "Đặt trạng thái công ty thành \"đã đình chỉ\". Đây không phải xóa cứng — có thể khôi phục sau.",
+    "confirm": "Bạn chắc chắn muốn đình chỉ công ty {{name}}?",
+    "submit": "Xác nhận đình chỉ"
+  },
+  "configure": {
+    "title": "Cấu hình công ty",
+    "description": "Cập nhật thông tin hiển thị của công ty.",
+    "nameLabel": "Tên công ty",
+    "timezoneLabel": "Múi giờ",
+    "currencyLabel": "Tiền tệ",
+    "languageLabel": "Ngôn ngữ",
+    "logoUrlLabel": "URL logo",
+    "logoUrlPlaceholder": "https://…",
+    "submit": "Lưu thay đổi",
+    "noChanges": "Chưa có thay đổi nào để lưu."
+  },
+  "plan": {
+    "title": "Đổi gói công ty",
+    "description": "Đặt gói cước cho công ty này (thao tác chéo tenant).",
+    "planCodeLabel": "Mã gói",
+    "planCodePlaceholder": "pro",
+    "statusLabel": "Trạng thái subscription",
+    "statusActive": "Đang hoạt động",
+    "statusTrialing": "Dùng thử",
+    "statusPastDue": "Quá hạn",
+    "statusCanceled": "Đã hủy",
+    "submit": "Đổi gói",
+    "success": "Đã cập nhật gói thành {{planCode}}."
+  },
+  "currency": {
+    "VND": "VND",
+    "USD": "USD"
+  },
+  "language": {
+    "vi": "Tiếng Việt",
+    "en": "English"
+  }
+}
