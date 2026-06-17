@@ -55,6 +55,13 @@ async function seed() {
   try {
     await client.query("BEGIN");
 
+    // AC-0b (operator-auth boundary): hội tụ DB dài-hạn — role hệ thống platform-admin (…f0) BẮT BUỘC 2FA.
+    // Migration 0230 đã vá in-place (fresh DB), nhưng DB đã chạy 0230 cũ giữ requires_two_factor=false →
+    // UPDATE idempotent ở đây để mọi DB hội tụ (bootstrap/demo path). An toàn re-run.
+    await client.query(
+      "UPDATE roles SET requires_two_factor = true WHERE id = '00000000-0000-0000-0000-0000000000f0' AND requires_two_factor IS DISTINCT FROM true",
+    );
+
     // company (idempotent theo slug)
     let r = await client.query("SELECT id FROM companies WHERE slug = $1 AND deleted_at IS NULL LIMIT 1", [COMPANY.slug]);
     let companyId = r.rows[0]?.id;
