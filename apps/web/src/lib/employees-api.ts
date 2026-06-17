@@ -5,22 +5,7 @@ import {
   employeeProfileSchema,
   importEmployeePreviewSchema,
 } from "@mediaos/contracts";
-import { unwrapEnvelope } from "@mediaos/web-core";
-
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3100/api/v1";
-
-async function apiFetch<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${path}: ${body}`);
-  }
-  const json: unknown = await res.json();
-  return schema.parse(unwrapEnvelope(json));
-}
+import { apiFetch, getAccessToken, getApiBaseUrl, unwrapEnvelope } from "@mediaos/web-core";
 
 const confirmResultSchema = z.object({ inserted: z.number(), failed: z.number() });
 
@@ -39,18 +24,27 @@ export const employeesApi = {
   createEmployee: (data: CreateEmployeeProfileRequest) =>
     apiFetch("/employees", employeeListItemSchema, { method: "POST", body: JSON.stringify(data) }),
 
-  deleteEmployee: async (id: string) => {
-    const res = await fetch(`${API_URL}/employees/${id}`, { method: "DELETE" });
-    if (!res.ok) throw new Error(`${res.status} DELETE /employees/${id}`);
-  },
+  // DELETE trả 204 No Content → web-core apiFetch trả undefined; schema z.unknown() chấp nhận.
+  deleteEmployee: (id: string) => apiFetch(`/employees/${id}`, z.unknown(), { method: "DELETE" }),
 
   uploadImport: async (file: File) => {
+    // Multipart upload: web-core `apiFetch` hardcode Content-Type=application/json (không hợp FormData),
+    // nên gọi `fetch` thẳng — NHƯNG vẫn gắn Bearer (getAccessToken) + credentials:'include' (refresh cookie)
+    // như mọi request authed. KHÔNG set Content-Type → browser tự đặt multipart boundary.
+    // Lưu ý: nhánh raw này không có refresh-on-401 của apiFetch; import là thao tác hiếm + trang đã gọi
+    // các GET authed trước đó (đã silent-refresh) nên access token thường còn hạn — chấp nhận đánh đổi này.
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch(`${API_URL}/employees/import`, { method: "POST", body: form });
+    const token = getAccessToken();
+    const res = await fetch(`${getApiBaseUrl()}/employees/import`, {
+      method: "POST",
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
     if (!res.ok) throw new Error(await res.text().catch(() => "Upload failed"));
     const json: unknown = await res.json();
-    return importEmployeePreviewSchema.parse(json);
+    return importEmployeePreviewSchema.parse(unwrapEnvelope(json));
   },
 
   confirmImport: (sessionId: string) =>
