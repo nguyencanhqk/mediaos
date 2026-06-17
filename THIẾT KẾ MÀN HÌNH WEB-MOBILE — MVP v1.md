@@ -2018,3 +2018,29 @@ Web app là nơi tạo và quản lý hệ thống.
 Mobile app là nơi nhân viên và quản lý xử lý công việc hằng ngày.
 
 Cách thiết kế này giúp hệ thống đủ dùng cho nội bộ trước, đồng thời vẫn có nền tảng để mở rộng thành SaaS sau này.
+
+---
+
+# 49. Admin Control Plane — AC-5: API Key / Personal Access Token (PAT)
+
+> Màn `apps/admin` `/tenant/:companyId/api-keys` (self-service company-admin, gate `manage:api-key`).
+
+## Danh sách API key
+
+- Bảng (TanStack Table): Tên · Tiền tố (`mok_ab12…`) · Trạng thái (badge: Đang hoạt động / Hết hạn / Đã thu hồi) · Lần dùng cuối · Hết hạn.
+- Nút **Tạo API key** (góc phải header). Mỗi hàng `active` có nút **Thu hồi**.
+- Loading/error/empty xử lý; chỉ render khi `useCan('manage','api-key')` (BE là gác cuối, fail-closed).
+
+## Tạo API key (modal 2 giai đoạn)
+
+1. **Form:** Tên token + Ngày hết hạn (tuỳ chọn) + chọn **scope** từ danh sách `GET /api-keys/scopes` (= catalog ∩ quyền THỰC của bạn — token KHÔNG thể vượt quyền bạn có). Scope nhạy cảm gắn nhãn `sensitive`.
+2. **Reveal (1 lần):** sau khi tạo, hiển thị token plaintext `mok_<...>` + nút **Sao chép** + cảnh báo "chỉ hiện 1 lần". Token chỉ ở state local FE, KHÔNG lưu/log; clear khi đóng modal.
+
+## Thu hồi
+
+- Dialog xác nhận → `POST /api-keys/:id/revoke` set `revoked_at`. Không thể hoàn tác. Token bị vô hiệu ngay (auth-path 401).
+
+## Bảo mật (BẤT BIẾN)
+
+- Token lưu **hash sha256** (`token_hash`) + `token_prefix`; plaintext KHÔNG bao giờ vào DTO list / log / audit.
+- PAT request: `ApiKeyAuthGuard` (global, trước JwtAuthGuard) verify hash + expiry + revoke → chạy `withTenant(company của key)`; quyền hiệu lực = **scope ∩ grant THỰC user** (fail-closed). Tạo/thu hồi ghi audit `api_key`.

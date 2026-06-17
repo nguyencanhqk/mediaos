@@ -1,5 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { CompanyRoleGrant, IPermissionRepository, ObjectGrant } from './permission.types';
+import type {
+  CompanyRoleGrant,
+  IPermissionRepository,
+  ObjectGrant,
+  PermissionCatalogEntry,
+} from './permission.types';
 import { ValkeyService } from './valkey.service';
 
 const CACHE_TTL_SEC = 300; // 5 minutes (plan §3b)
@@ -105,6 +110,17 @@ export class CachedPermissionRepository implements IPermissionRepository {
       });
     }
     return grants;
+  }
+
+  /**
+   * AC-5 — catalog lookup không cache (catalog nhỏ, đọc lúc tạo PAT — không hot-path). Delegate inner repo.
+   */
+  getPermissionsByIds(permissionIds: string[]): Promise<PermissionCatalogEntry[]> {
+    return this.inner.getPermissionsByIds(permissionIds);
+  }
+
+  getAllPermissions(): Promise<PermissionCatalogEntry[]> {
+    return this.inner.getAllPermissions();
   }
 
   /**

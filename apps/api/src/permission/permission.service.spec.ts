@@ -78,6 +78,14 @@ class MockPermissionRepository implements IPermissionRepository {
     if (this.failObject) throw new Error('DB connection failed (simulated)');
     return this.objectMap.get(`${userId}:${companyId}:${resourceType}:${resourceId}`) ?? [];
   }
+
+  async getPermissionsByIds(): Promise<[]> {
+    return [];
+  }
+
+  async getAllPermissions(): Promise<[]> {
+    return [];
+  }
 }
 
 // ─── Test constants ───────────────────────────────────────────────────────────
