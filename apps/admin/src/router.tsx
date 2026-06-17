@@ -10,6 +10,7 @@ import { ModuleCatalogPage } from "@/routes/operator/modules/catalog-list";
 import { EntitlementsPage } from "@/routes/operator/companies/entitlements-page";
 import { ApiKeysPage } from "@/routes/tenant/api-keys/api-keys-page";
 import { BrandingPage } from "@/routes/tenant/ui-config/branding-page";
+import { WebhooksPage } from "@/routes/tenant/webhooks/webhooks-page";
 import { NavigationPage } from "@/routes/tenant/ui-config/navigation-page";
 import { I18nPage } from "@/routes/tenant/ui-config/i18n-page";
 import { useAuthStore } from "@/stores/auth";
@@ -107,6 +108,13 @@ const tenantApiKeysRoute = createRoute({
   component: ApiKeysPage,
 });
 
+// `/tenant/:companyId/webhooks` — webhooks self-service (AC-6).
+const tenantWebhooksRoute = createRoute({
+  getParentRoute: () => tenantRoute,
+  path: "webhooks",
+  component: WebhooksPage,
+});
+
 // `/tenant/:companyId/branding` — UI config branding self-service (AC-4).
 const tenantBrandingRoute = createRoute({
   getParentRoute: () => tenantRoute,
@@ -141,6 +149,7 @@ const routeTree = rootRoute.addChildren([
       tenantModulesRoute,
       tenantEntitlementsRoute,
       tenantApiKeysRoute,
+      tenantWebhooksRoute,
       tenantBrandingRoute,
       tenantNavigationRoute,
       tenantI18nRoute,

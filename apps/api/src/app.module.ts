@@ -32,6 +32,7 @@ import { SaasModule } from "./saas/saas.module";
 import { TemplatesModule } from "./templates/templates.module";
 import { PlatformModule } from "./platform/platform.module";
 import { ApiKeysModule } from "./api-keys/api-keys.module";
+import { WebhooksModule } from "./webhooks/webhooks.module";
 import { ApiKeyAuthGuard } from "./api-keys/guards/api-key-auth.guard";
 import { ApiKeyRepository } from "./api-keys/api-keys.repository";
 import { TokenService } from "./auth/token.service";
@@ -82,6 +83,8 @@ import {
     PlatformModule,
     // AC-5 API key / PAT (exports ApiKeyRepository cho ApiKeyAuthGuard global bên dưới)
     ApiKeysModule,
+    // AC-6 Webhooks (tenant self-service — endpoint CRUD + subscribe + delivery log; HMAC secret envelope-KMS)
+    WebhooksModule,
   ],
   providers: [
     // Global guard pipeline (THỨ TỰ QUAN TRỌNG):
