@@ -1,9 +1,21 @@
 # Kế hoạch tách Frontend — MediaOS
 
-> Trạng thái: **DỰ THẢO (chưa thực thi)** · Cập nhật: 2026-06-17
+> Trạng thái: **ĐÃ KIỂM CHỨNG — Phase 0 sẵn sàng khởi động** · Cập nhật: 2026-06-17
 > Phạm vi: tách `apps/web` (1 SPA) → nhiều SPA sản phẩm + shared packages.
 > Quyết định đã chốt: **3 product app `studio` + `people` + `console`** (nhóm "system") + **`apps/auth` đăng nhập trung tâm (SSO = PA c, cookie **subdomain** — mục 7)**.
 > Tài liệu nền: [CLAUDE.md](../CLAUDE.md) · [docs/SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md)
+>
+> **✅ Kiểm chứng repo 2026-06-17** (đối chiếu plan ↔ code thật):
+>
+> - Cây sạch trên `master` (`e76bb8a`); shared kernel (`stores/auth.ts`, `lib/api*.ts`, `hooks/use-can.ts`,
+>   `components/{ui,layout}/*`, `employee-format.ts`, `nav.ts`) + `packages/contracts` dual-build **đều có đúng** như mô tả.
+> - `router.tsx` (~33 route phẳng + `authGuard`) và `nav.ts` (7 category) **khớp từng dòng**.
+> - **Risk #6 ĐÓNG:** `apps/admin` đã có trong cây làm việc, là **Vite SPA scaffold hoàn chỉnh** → dùng làm khuôn mẫu cụ thể.
+> - **Nhánh FE redesign `18b98cd` đã merge master** → Phase 0 (freeze FE) không đụng nhánh dở.
+> - **Bearer-token fix đã ở master + tốt hơn:** `apiFetch` đã gắn `Authorization` từ `getAccessToken()` **kèm `opts.skipAuth`**
+>   (opt-out endpoint công khai). Nhánh cũ `fix/web-apifetch-auth-header` (`bb58080`) bị **superseded → đã xoá** (khôi phục bằng hash nếu cần).
+>   ⇒ KHÔNG cần land nhánh nào trước Phase 0.
+> - Còn 2 nhánh local `feat/ac5-api-keys` · `feat/ac7-module-registry` chỉ chạm `apps/admin` (ngoài phạm vi) → không xung đột.
 
 ---
 
@@ -33,9 +45,10 @@
 - **Auth = JWT in-memory (Zustand)**: token mất khi refresh, **không chia sẻ giữa các origin** → đây là rủi ro #1.
 - **Dep nặng dùng cục bộ**: `@xyflow/react` (chỉ workflows), `recharts` (dashboard/kpi), `socket.io-client`
   (chat/realtime), `qrcode.react` (2FA) → tách app sẽ cô lập được, làm nhẹ bundle.
-- **Cây làm việc hiện tại** chỉ có `apps/{api,web,mobile}` + `packages/contracts`.
-  ⚠️ `apps/admin` đã land trên master (lịch sử dự án) nhưng **CHƯA có trong cây làm việc này** → cần
-  verify/pull trước khi dựa vào nó làm mẫu.
+- **Cây làm việc hiện tại** có `apps/{api,web,mobile,admin}` + `packages/contracts`.
+  ✅ `apps/admin` **đã có** trong cây làm việc, là **Vite SPA scaffold hoàn chỉnh**
+  (`vite.config.ts`, `vitest.config.ts`, `components.json`, `index.html`, `src/{components,hooks,i18n,lib,routes,stores,test,main.tsx,router.tsx}`)
+  → dùng làm **khuôn mẫu cụ thể** để scaffold `auth/studio/people/console` (khỏi clone `web` rỗng).
 
 ### Shared kernel hiện tại (mọi feature dùng) — sẽ rút ra package
 | Nhóm | File |
@@ -240,7 +253,7 @@ santa). Bearer access token in-memory giữ nguyên cho gọi REST/WS.
 | 3 | pnpm dedupe mismatch React | Pin chính xác version ở `packages/ui` (mục 5) |
 | 4 | Trùng lặp nguồn sự thật (route ở cả web lẫn app mới) | Mỗi phase: chuyển XONG thì **xoá** ở web ngay |
 | 5 | Nav registry phân mảnh | Types ở `web-core`; mỗi app khai subset; launcher đọc capabilities |
-| 6 | `apps/admin` chưa có trong cây làm việc | Verify/pull từ master trước Phase nhóm system; nếu thiếu, clone khung từ `web` rỗng |
+| 6 | ~~`apps/admin` chưa có trong cây làm việc~~ | ✅ **ĐÓNG (2026-06-17):** `apps/admin` đã có, là Vite SPA scaffold hoàn chỉnh → dùng trực tiếp làm khuôn mẫu scaffold app mới |
 | 7 | i18n namespace lẫn giữa app | `common`/`nav`/`auth` ở `web-core`; namespace feature (vd `payroll`, `tasks`) đi theo app dùng nó |
 | 8 | Refresh cookie bị lộ / replay | Rotation + **reuse-detection** thu hồi token family; access token TTL ngắn; `SameSite=Strict` |
 | 9 | CSRF trên endpoint cookie | Double-submit token / header bắt buộc + `SameSite=Strict`; **FULL gate** review |
@@ -289,3 +302,90 @@ không đăng nhập được.
 - [ ] Di chuyển kernel + UI primitives; cập nhật import trong `apps/web`
 - [ ] `pnpm install` → `pnpm build` (contracts+ui+web-core) → `pnpm --filter @mediaos/web test` = 314 xanh
 - [ ] Cập nhật `TASKS.md` (mục lane FE-split)
+
+---
+
+## 12. Kế hoạch triển khai SONG SONG (multi-lane)
+
+> Áp mô hình fan-out của dự án (CLAUDE.md §9 · TASKS.md §5): 1 worktree/lane · band migration riêng ·
+> hot-file append/reconcile · DB cô lập khi verify · gate FULL/LIGHT tách bạch model · **≤2 lane crown chạy cùng lúc**.
+
+### 12.1 Sự thật cốt lõi — parallelism CHỈ thắng ở Wave 2
+
+Đồ thị phụ thuộc **bắt buộc nối tiếp** ở 2 phase đầu:
+
+```text
+Phase 0 (packages) ──▶ Phase 1 (auth/SSO) ──▶ ┌─ people  ┐
+   [chốt chặn]          [chốt chặn]            ├─ studio  ┤──▶ cleanup web ──▶ cutover prod
+                                               └─ console ┘   (Wave 3)        (Phase 5)
+                                                (Wave 2: FAN-OUT THẬT)
+```
+
+- **Phase 0 & 1 KHÔNG fan-out được**: product app cần `web-core`/`ui` (Phase 0) **và** SSO đăng nhập (Phase 1) tồn tại trước.
+  Mở 3 product app sớm = app tách ra không build/không login được. → Hai phase này là **gate nối tiếp**.
+- **Wave 2 là nơi song song sinh lợi**: 3 product app **disjoint** theo bản đồ mục 4 → chạy đồng thời 3 worktree.
+
+### 12.2 Bản đồ wave → lane → worktree → gate → model
+
+| Wave | Lane | Worktree | Phạm vi | Migration | Gate | Model |
+| --- | --- | --- | --- | --- | --- | --- |
+| **0** | `fecore` | `mediaos-fecore` | rút `web-core` + `ui`, đổi import `apps/web` | — | LIGHT + security spot-check (web-core mang token/auth) | Sonnet |
+| **1a** | `feauth-api` | `mediaos-feauth` | api: `/auth/refresh` rotation+reuse · `/auth/logout` · refresh cookie · CSRF · CORS allowlist · redirect allowlist | **0400s** | **FULL + santa** (crown-jewel) | **Opus** |
+| **1b** | `feauth-app` | `mediaos-feauthapp` | `apps/auth` SPA + `web-core` silent-refresh/refresh-on-401/redirect | — | FULL (auth FE) | Sonnet |
+| **2** | `fe-people` | `mediaos-people` | hr+attendance+**payroll** | — | **FULL + santa** (payroll crown) | **Opus** |
+| **2** | `fe-studio` | `mediaos-studio` | work+process+goals | — | LIGHT + react-reviewer | Sonnet |
+| **2** | `fe-console` | `mediaos-console` | system: company+**platform-accounts**+**break-glass** | — | **FULL + santa** (secret crown) | **Opus** |
+| **3** | `fe-cutover` | `mediaos-cutover` | xoá `apps/web` + DNS/TLS wildcard/launcher/CI per-app | — | LIGHT (ops) | Sonnet |
+
+### 12.3 Wave 0 — Phase 0 (1 worktree, freeze FE; song song NỘI BỘ hạn chế)
+
+- Hai gói **disjoint, làm song song được**: **0a `web-core`** (auth store · api-client · use-can · permission-gate · i18n · nav types · auth/two-factor-api · employee-format) **∥ 0b `ui` primitives** (button/input/dialog/select/skeleton/empty-state/data-table/avatar/badge/card).
+- **0c hợp nhất (nối tiếp)**: layout components (`app-shell`/`app-sidebar`/`page-header`) **phụ thuộc `web-core`** (dùng nav/useCan/PermissionGate/auth) → vào `ui` SAU 0a; rồi **đổi mọi import `@/…` trong `apps/web`** + verify **314 test xanh**. Đây là phần lớn công sức, **không nên phân mảnh** (bề mặt cao, freeze FE).
+- **Gate:** LIGHT (chỉ *di chuyển* code, không đổi logic) **+ security/silent-failure spot-check riêng cho `web-core`** vì nó mang token/auth-api.
+
+### 12.4 Wave 1 — Phase 1 (crown-jewel auth, FULL gate + santa)
+
+- **1a (blocking, crown):** endpoint phiên ở `apps/api` — có **migration band `0400s`** (bảng refresh-token family) → verify trên **`LANE_DB=mediaos_feauth`** (chain-migrate `0000→latest`). Đây là điểm chốt: 1b tiêu thụ contract của 1a.
+- **1b (song song theo contract):** `apps/auth` SPA + wiring `web-core` (silent-refresh khi load · refresh-on-401 xếp hàng · redirect `auth.<domain>`). **Scaffold + viết UI song song** với 1a dựa trên contract đã chốt, **tích hợp & test e2e sau khi 1a land**.
+- **Crown budget wave này: 1** (chỉ 1a) → an toàn.
+
+### 12.5 Wave 2 — FAN-OUT THẬT: 3 product app đồng thời
+
+- **Disjoint** route/component/api theo mục 4 → 3 worktree chạy song song; mỗi lane **scaffold từ `apps/admin`** (Vite scaffold đã có), khai **NAV_ITEMS subset**, **0 migration** (FE-only).
+- **Crown budget = 2** (`people` payroll + `console` secret/break-glass) **+ 1 normal** (`studio`) → **đúng trần ≤2 crown** (bài học rate-limit fan-out). Nếu phiên căng, hạ `studio` ra lượt sau.
+- **⚠️ HOT-FILE = `apps/web/src/router.tsx` + `lib/nav.ts`:** cả 3 lane đều **xoá route/nav của mình** khỏi `apps/web` → cùng sửa 2 file này.
+  - **Chiến lược (đã có tiền lệ):** mỗi lane xoá đúng **dải dòng của mình** (tách rời, không chồng) → **merge tuần tự `people → studio → console`**, reconcile `router.tsx`/`nav.ts` mỗi lần merge (mechanical, nhỏ).
+  - *(Tuỳ chọn nâng cấp:)* prep-commit trước Wave 2 tách `router.tsx` theo category thành sub-route file → mỗi lane xoá **nguyên file**, hết chồng dòng. Thêm 1 bước nhưng merge sạch tuyệt đối.
+- **Dep:** `@xyflow/react` là dep chung của **cả `studio` (workflow canvas) lẫn `people` (org-chart)** — khai ở **cả 2** package.json, **không** refactor. `recharts` cô lập gọn vào `studio`. `socket.io-client` chưa có importer (chat REST-only) → bỏ qua tới khi nối realtime.
+
+### 12.6 Wave 3 — cleanup + cutover (nối tiếp, hạ tầng)
+
+- Xoá `apps/web` **sau khi cả 3 app land** + `web` hết route (gộp vào lane `console` vì console di chuyển nhóm system cuối cùng, hoặc lane `fe-cutover` riêng).
+- Phase 5 infra: DNS subdomain · **TLS wildcard `*.<domain>`** · launcher root · CI per-app. **Cần quyết định ops** (tên domain), không thuộc song song-hoá code.
+
+### 12.7 Bất biến vận hành áp riêng cho FE-split
+
+1. **Band migration:** chỉ **1a-auth** đụng DB → cấp band **`0400s`** (tránh đụng admin `0300s`). **Verify trần `when`/idx hiện tại trước khi đánh số.** Mọi lane FE khác = **no-migration**.
+2. **DB cô lập khi verify:** web lane chạy `pnpm --filter @mediaos/web test` (no-DB); 1a-auth dùng `LANE_DB=mediaos_feauth`.
+3. **Hot-file:** `router.tsx`/`nav.ts` reconcile khi merge (mục 12.5); `pnpm-workspace.yaml` tự nhận `packages/*` (không cần sửa).
+4. **Crown ≤2 đồng thời** xuyên mọi wave (Opus rate-limit guard).
+5. **Merge order = DAG:** `fecore` → `feauth-api` → `feauth-app` → (`people`→`studio`→`console`) → `cutover`. Mỗi merge: chain migration sạch (nếu có) + test xanh.
+6. **Worktree:** `git worktree add` mỗi lane; copy `.secrets/local-kek.bin` sang worktree mới (gitignore không theo worktree — bài học cũ) **nếu lane chạy api** (chỉ 1a cần).
+
+### 12.8 Cách khởi chạy
+
+1. **`parallel-lanes` `dryRun:true`** trước mỗi wave → in bảng routing (crown/model/reviewer) **0 token**, xác nhận crown-count.
+2. Chạy **tuần tự theo wave**; trong Wave 2 fan-out **1 lượt 3 lane** (≤2 crown).
+3. Mỗi lane: vòng RED→GREEN→gate→checkpoint; xanh + non-sensitive → auto-commit `wip(fe-…)`; crown/đỏ → người chốt.
+
+### 12.9 Ước lượng wall-clock (song song vs tuần tự)
+
+| Wave | Tuần tự | Song song |
+| --- | --- | --- |
+| 0 fecore | 1–2 tuần | 1–2 tuần (gate, không rút ngắn được) |
+| 1 auth | 1–2 tuần | ~1–1.5 tuần (1b chồng 1a một phần) |
+| 2 product (3 app) | ~2–2.5 tuần (5+4+4 ngày nối) | **~1 tuần** (= max lane, chạy đồng thời) |
+| 3 cutover | 2–4 ngày | 2–4 ngày |
+| **Tổng** | **~6–8 tuần** | **~4.5–5.5 tuần** |
+
+⇒ Song song hoá **tiết kiệm chủ yếu ở Wave 2** (~1.5 tuần). Hai gate đầu gần như không nén được — đừng kỳ vọng fan-out toàn bộ.
