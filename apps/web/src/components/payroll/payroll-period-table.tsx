@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { PayrollPeriodDto } from "@mediaos/contracts";
-import { Button } from "@/components/ui/button";
+import { Button } from "@mediaos/ui";
 import { PERIOD_STATUS_BADGE, PERIOD_STATUS_LABELS } from "./period-constants";
 import { SodWarning } from "./sod-warning";
 

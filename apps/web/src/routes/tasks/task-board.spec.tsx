@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TaskDto } from "@mediaos/contracts";
 import { TaskBoardPage } from "./task-board";
-import { useAuthStore } from "@/stores/auth";
+import { useAuthStore } from "@mediaos/web-core";
 
 // Mock tasksApi — board đọc getBoard; updateTaskStatus cho control luồng rút gọn.
 vi.mock("@/lib/tasks-api", () => ({

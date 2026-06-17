@@ -5,11 +5,11 @@ import { useTranslation } from "react-i18next";
 import type { ContentItemDto } from "@mediaos/contracts";
 import { contentApi, type ContentFilters } from "@/lib/content-api";
 import { projectsApi } from "@/lib/projects-api";
-import { PermissionGate } from "@/components/permission-gate";
-import { useCan } from "@/hooks/use-can";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { PermissionGate } from "@mediaos/web-core";
+import { useCan } from "@mediaos/web-core";
+import { Button } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
+import { Select } from "@mediaos/ui";
 import { CreateContentDialog } from "@/components/content/create-content-dialog";
 import {
   CONTENT_PRIORITY_LABELS,

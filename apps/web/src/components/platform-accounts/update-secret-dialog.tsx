@@ -5,9 +5,9 @@ import {
   updatePlatformAccountSecretSchema,
   type SafePlatformAccountDto,
 } from "@mediaos/contracts";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Button } from "@mediaos/ui";
+import { Dialog } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
 import { platformAccountsApi } from "@/lib/platform-accounts-api";
 
 interface UpdateSecretDialogProps {

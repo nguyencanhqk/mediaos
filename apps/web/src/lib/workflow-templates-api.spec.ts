@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { workflowTemplatesApi } from "./workflow-templates-api";
-import { ApiError } from "./api-client";
+import { ApiError } from "@mediaos/web-core";
 
 // VITE_WORKFLOW_MOCK chưa set trong test → `workflowTemplatesApi` = client THẬT (nối fetch).
 

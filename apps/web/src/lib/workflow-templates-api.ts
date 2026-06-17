@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 import {
   dependencySchema,
   templateDetailSchema,

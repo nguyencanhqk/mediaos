@@ -6,10 +6,10 @@ import {
   type CreatePlatformAccountRequest,
   type PlatformDto,
 } from "@mediaos/contracts";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Button } from "@mediaos/ui";
+import { Dialog } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
+import { Select } from "@mediaos/ui";
 import { platformAccountsApi } from "@/lib/platform-accounts-api";
 import { SECURITY_LEVEL_LABELS, SECURITY_LEVEL_OPTIONS } from "./constants";
 

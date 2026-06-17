@@ -2,12 +2,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
 import { tasksApi } from "@/lib/tasks-api";
 import { StepChecklist, stepChecklistQueryKey } from "@/components/tasks/step-checklist";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
-import { PermissionGate } from "@/components/permission-gate";
+import { PermissionGate } from "@mediaos/web-core";
 import { allRequiredChecked, workflowChecklistApi } from "@/lib/workflow-checklist-api";
 import {
   TASK_STATUS_COLORS,

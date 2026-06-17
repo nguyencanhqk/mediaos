@@ -4,13 +4,13 @@ import { Wallet } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { SalaryProfileStatus } from "@mediaos/contracts";
 import { salaryProfileApi } from "@/lib/salary-profile-api";
-import { PermissionGate } from "@/components/permission-gate";
+import { PermissionGate } from "@mediaos/web-core";
 import { SalaryProfileTable } from "@/components/payroll/salary-profile-table";
 import { CreateSalaryProfileDialog } from "@/components/payroll/create-salary-profile-dialog";
-import { PageHeader } from "@/components/layout/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Select } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@mediaos/ui";
+import { EmptyState } from "@mediaos/ui";
+import { Select } from "@mediaos/ui";
+import { Skeleton } from "@mediaos/ui";
 import { SALARY_STATUS_LABELS } from "@/components/payroll/salary-constants";
 
 /**

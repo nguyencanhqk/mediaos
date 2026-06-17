@@ -5,7 +5,7 @@ import type {
   UpdateSalaryProfileRequest,
 } from "@mediaos/contracts";
 import { salaryProfileListItemSchema, salaryProfileSchema } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 /**
  * Salary profile REST client (G12-1). Lương NHẠY CẢM (BẤT BIẾN #3): the server masks

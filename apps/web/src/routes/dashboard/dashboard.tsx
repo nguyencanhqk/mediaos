@@ -9,8 +9,8 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { getDashboardSummary } from "@/lib/dashboard-api";
-import { PageHeader } from "@/components/layout/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@mediaos/ui";
+import { EmptyState } from "@mediaos/ui";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { TaskStatusChart } from "@/components/dashboard/task-status-chart";
 import { DashboardSection } from "@/components/dashboard/dashboard-section";

@@ -1,0 +1,43 @@
+/** Namespace "auth" (vi) — dùng chung mọi app. Đặt ở @mediaos/web-core (TS module để build sạch dual ESM/CJS). */
+export default {
+  login: {
+    subtitle: "Đăng nhập vào hệ thống",
+    companySlugLabel: "Mã công ty",
+    submit: "Đăng nhập",
+    submitting: "Đang đăng nhập…",
+  },
+  fields: {
+    email: "Email",
+    password: "Mật khẩu",
+  },
+  twoFactor: {
+    title: "Xác thực 2 lớp",
+    challengeHint: "Nhập mã 6 số từ app authenticator, hoặc một mã khôi phục.",
+    codeLabel: "Mã xác thực",
+    verifying: "Đang kiểm tra…",
+    settingsTitle: "Xác thực 2 lớp (2FA)",
+    enabledDesc: "Đang BẬT — yêu cầu mã TOTP khi đăng nhập.",
+    disabledDesc: "Đang TẮT.",
+    requiredNote: "Vai trò của bạn BẮT BUỘC bật 2FA.",
+    enable: "Bật 2FA",
+    disable: "Tắt 2FA",
+    enrollTitle: "Thiết lập 2FA",
+    enrollDesc: "Quét QR bằng app authenticator (Google Authenticator/Authy), rồi nhập mã 6 số để xác nhận.",
+    confirmEnable: "Xác nhận bật",
+    recoveryCodesLabel: "Mã khôi phục (lưu ngay — chỉ hiện 1 lần):",
+    enableCodeLabel: "Mã xác nhận",
+    disableTitle: "Tắt 2FA",
+    disableDesc: "Nhập lại mật khẩu để xác nhận tắt xác thực 2 lớp.",
+    cancel: "Huỷ",
+    loadingStatus: "Đang tải trạng thái 2FA…",
+    loadStatusFailed: "Không tải được trạng thái 2FA: {{detail}}",
+  },
+  errors: {
+    invalidCredentials: "Email hoặc mật khẩu không đúng.",
+    forbidden: "Tài khoản bị khóa hoặc không có quyền truy cập.",
+    tooManyAttempts: "Quá nhiều lần thử. Vui lòng thử lại sau.",
+    serverError: "Lỗi máy chủ. Vui lòng thử lại sau.",
+    invalidCode: "Mã không đúng hoặc đã hết hạn.",
+    unknown: "Đã xảy ra lỗi.",
+  },
+};

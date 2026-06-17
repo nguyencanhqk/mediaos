@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { ChannelPlatform, ChannelStatus, EmployeeListItemDto, TeamDto } from "@mediaos/contracts";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Input } from "@mediaos/ui";
+import { Select } from "@mediaos/ui";
 import {
   CHANNEL_STATUS_LABELS,
   CHANNEL_STATUS_OPTIONS,

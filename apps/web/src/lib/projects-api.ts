@@ -9,7 +9,7 @@ import type {
   UpdateProjectRequest,
 } from "@mediaos/contracts";
 import { projectSchema } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 /** Filter list dự án (PRJ-001) — gửi sang `GET /projects` dưới dạng query param. */
 export interface ProjectFilters {

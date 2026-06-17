@@ -3,9 +3,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import type { BonusReferenceType, CreateBonusPenaltyRequest } from "@mediaos/contracts";
 import { bonusPenaltyApi } from "@/lib/bonus-penalty-api";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Button } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
+import { Select } from "@mediaos/ui";
 import {
   BONUS_KIND_LABELS,
   BONUS_REFERENCE_TYPE_LABELS,

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { CreateChatRoomRequest, SendMessageRequest } from "@mediaos/contracts";
 import { chatMessageSchema, chatRoomSchema } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 export const chatApi = {
   listRooms: () => apiFetch("/chat/rooms", z.array(chatRoomSchema)),

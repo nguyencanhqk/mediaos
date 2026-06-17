@@ -10,7 +10,7 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import type { EmployeeListItemDto, ProjectDto } from "@mediaos/contracts";
-import { Button } from "@/components/ui/button";
+import { Button } from "@mediaos/ui";
 import {
   PROJECT_PRIORITY_COLORS,
   PROJECT_PRIORITY_LABELS,

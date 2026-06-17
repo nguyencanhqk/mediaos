@@ -15,7 +15,7 @@ import {
   contentTypeSchema,
   suggestWorkflowSchema,
 } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 /** Filter list content (CNT-001) — gửi sang `GET /content` dưới dạng query param. */
 export interface ContentFilters {

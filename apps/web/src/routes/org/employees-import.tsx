@@ -1,8 +1,8 @@
 import { CheckCircle2, FileWarning } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ImportEmployeePreviewDto } from "@mediaos/contracts";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Button } from "@mediaos/ui";
+import { Card } from "@mediaos/ui";
 
 export type ImportStep = "idle" | "preview" | "done";
 

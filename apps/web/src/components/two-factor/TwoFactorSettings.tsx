@@ -3,11 +3,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { QRCodeSVG } from "qrcode.react";
 import type { TwoFactorEnrollResponse, TwoFactorStatus } from "@mediaos/contracts";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Dialog } from "@/components/ui/dialog";
-import { ApiError } from "@/lib/api-client";
-import { twoFactorApi } from "@/lib/two-factor-api";
+import { Button } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
+import { Dialog } from "@mediaos/ui";
+import { ApiError } from "@mediaos/web-core";
+import { twoFactorApi } from "@mediaos/web-core";
 
 function errMsg(e: unknown, t: TFunction<"auth">): string {
   if (e instanceof ApiError) return e.message;

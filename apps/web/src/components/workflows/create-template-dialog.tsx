@@ -8,10 +8,10 @@ import {
   type CreateTemplateRequest,
 } from "@/lib/workflow-builder/contract";
 import { workflowTemplatesApi } from "@/lib/workflow-templates-api";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Button } from "@mediaos/ui";
+import { Dialog } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
+import { Select } from "@mediaos/ui";
 import { TEMPLATE_APPLIES_TO_OPTIONS, appliesToLabel } from "./constants";
 
 interface TemplateFormState {

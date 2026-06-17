@@ -1,5 +1,5 @@
 import type { TaskDto } from "@mediaos/contracts";
-import type { BadgeProps } from "@/components/ui/badge";
+import type { BadgeProps } from "@mediaos/ui";
 
 /**
  * Constants dùng chung cho mọi view task (route /tasks + Task Board /tasks/board) — DRY

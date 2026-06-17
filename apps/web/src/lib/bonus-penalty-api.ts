@@ -5,7 +5,7 @@ import type {
   DecideBonusPenaltyRequest,
 } from "@mediaos/contracts";
 import { bonusPenaltySchema } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 /**
  * Bonus/Penalty REST client (G12-3 FE). Số tiền (amount) là dữ liệu NHẠY CẢM per-person

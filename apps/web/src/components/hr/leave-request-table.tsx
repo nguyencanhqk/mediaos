@@ -9,8 +9,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import type { LeaveRequestDto } from "@mediaos/contracts";
 import { leaveApi } from "@/lib/leave-api";
-import { PermissionGate } from "@/components/permission-gate";
-import { Button } from "@/components/ui/button";
+import { PermissionGate } from "@mediaos/web-core";
+import { Button } from "@mediaos/ui";
 import {
   HR_REQUEST_STATUS_COLORS,
   HR_REQUEST_STATUS_LABELS,

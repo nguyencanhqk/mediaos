@@ -1,8 +1,8 @@
 import { renderHook } from "@testing-library/react";
 import { act } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { useAuthStore } from "@/stores/auth";
-import { useCan } from "./use-can";
+import { useAuthStore } from "@mediaos/web-core";
+import { useCan } from "@mediaos/web-core";
 
 function setCaps(caps: Record<string, boolean>) {
   act(() => {

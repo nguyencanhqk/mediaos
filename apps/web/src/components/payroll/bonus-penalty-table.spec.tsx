@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BonusPenaltyDto } from "@mediaos/contracts";
 import { BonusPenaltyTable } from "./bonus-penalty-table";
-import { useAuthStore } from "@/stores/auth";
+import { useAuthStore } from "@mediaos/web-core";
 
 const CURRENT_USER = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const OTHER_USER = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";

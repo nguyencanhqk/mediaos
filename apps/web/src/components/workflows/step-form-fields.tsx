@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { CreateStepRequest, UpdateStepRequest } from "@/lib/workflow-builder/contract";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Input } from "@mediaos/ui";
+import { Select } from "@mediaos/ui";
 import { STEP_TYPE_OPTIONS, WORKFLOW_ROLE_OPTIONS, stepTypeLabel } from "./constants";
 
 export interface StepFormState {

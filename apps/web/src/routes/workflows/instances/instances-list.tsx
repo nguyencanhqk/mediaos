@@ -6,12 +6,12 @@ import { Activity, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { InstanceDto, InstanceStatus } from "@/lib/workflow-builder/contract";
 import { workflowInstancesApi } from "@/lib/workflow-instances-api";
-import { PageHeader } from "@/components/layout/page-header";
-import { DataTable } from "@/components/ui/data-table";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { PageHeader } from "@mediaos/ui";
+import { DataTable } from "@mediaos/ui";
+import { EmptyState } from "@mediaos/ui";
+import { Badge } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
+import { Select } from "@mediaos/ui";
 import {
   INSTANCE_STATUS_BADGE_VARIANT,
   INSTANCE_STATUS_LABELS,

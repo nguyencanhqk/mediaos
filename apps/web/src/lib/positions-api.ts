@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { CreatePositionRequest, UpdatePositionRequest } from "@mediaos/contracts";
 import { positionSchema } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 /**
  * Tùy chọn vai trò cho dropdown "vai trò mặc định" của chức vụ.

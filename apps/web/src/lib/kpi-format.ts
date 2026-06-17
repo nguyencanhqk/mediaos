@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next";
 import { KPI_COMPONENT_KEYS, type KpiComponentKey } from "@mediaos/contracts";
-import type { BadgeProps } from "@/components/ui/badge";
+import type { BadgeProps } from "@mediaos/ui";
 
 export type BadgeVariant = NonNullable<BadgeProps["variant"]>;
 

@@ -4,19 +4,19 @@ import { Gift } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { BonusKind, BonusPenaltyStatus } from "@mediaos/contracts";
 import { bonusPenaltyApi } from "@/lib/bonus-penalty-api";
-import { ApiError } from "@/lib/api-client";
-import { PermissionGate } from "@/components/permission-gate";
+import { ApiError } from "@mediaos/web-core";
+import { PermissionGate } from "@mediaos/web-core";
 import { BonusPenaltyTable } from "@/components/payroll/bonus-penalty-table";
 import { CreateBonusPenaltyDialog } from "@/components/payroll/create-bonus-penalty-dialog";
-import { PageHeader } from "@/components/layout/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { PageHeader } from "@mediaos/ui";
+import { EmptyState } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
+import { Select } from "@mediaos/ui";
 import {
   BONUS_KIND_LABELS,
   BONUS_PENALTY_STATUS_LABELS,
 } from "@/components/payroll/bonus-penalty-constants";
-import { useAuthStore } from "@/stores/auth";
+import { useAuthStore } from "@mediaos/web-core";
 
 /**
  * G12-3 FE — Bonus/Penalty list. Số tiền (amount) NHẠY CẢM (ADR-0010): SERVER là sự thật quyền —

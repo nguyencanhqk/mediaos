@@ -1,4 +1,4 @@
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@mediaos/ui";
 
 interface DashboardSkeletonProps {
   /** Số nhóm section giả lập khi đang tải. */

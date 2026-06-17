@@ -1,7 +1,6 @@
 import {
   Activity,
   BadgeDollarSign,
-  Bell,
   Briefcase,
   Building2,
   CalendarPlus,
@@ -23,55 +22,23 @@ import {
   UsersRound,
   Wallet,
   Workflow,
-  type LucideIcon,
 } from "lucide-react";
+import { type NavItem } from "@mediaos/web-core";
 
 /**
- * NAV REGISTRY — nguồn sự thật DUY NHẤT cho điều hướng.
+ * NAV registry của apps/web (monolith hiện tại) — nguồn sự thật DUY NHẤT cho điều hướng.
  * Dùng chung bởi app-shell (sidebar) và trang chủ launcher.
  *
- * - `labelKey`: khóa i18n trong namespace "nav".
- * - `icon`: lucide icon component.
- * - `tile`: bộ class màu cho ô icon vuông ở launcher (mỗi module 1 sắc thái).
- * - `category`: gom nhóm cho chip lọc ở launcher + section ở sidebar.
+ * Types + danh mục category + helper gom nhóm đến từ @mediaos/web-core (dùng chung mọi app);
+ * file này CHỈ khai NAV_ITEMS đầy đủ. Khi tách app (Wave 2) mỗi app khai subset riêng.
  */
-export type NavCategory =
-  | "work"
-  | "goals"
-  | "process"
-  | "hr"
-  | "attendance"
-  | "payroll"
-  | "system";
-
-export interface NavItem {
-  /** Định danh ổn định (key). */
-  id: string;
-  /** Khóa i18n (namespace nav). */
-  labelKey: string;
-  /** Đường dẫn route. */
-  to: string;
-  icon: LucideIcon;
-  /** Class màu ô icon ở launcher (nền + chữ icon). */
-  tile: string;
-  category: NavCategory;
-}
-
-export interface NavCategoryMeta {
-  id: NavCategory;
-  /** Khóa i18n (namespace nav, tiền tố "group."). */
-  labelKey: string;
-}
-
-export const NAV_CATEGORIES: readonly NavCategoryMeta[] = [
-  { id: "work", labelKey: "group.work" },
-  { id: "goals", labelKey: "group.goals" },
-  { id: "process", labelKey: "group.process" },
-  { id: "hr", labelKey: "group.hr" },
-  { id: "attendance", labelKey: "group.attendance" },
-  { id: "payroll", labelKey: "group.payroll" },
-  { id: "system", labelKey: "group.system" },
-] as const;
+export {
+  NAV_CATEGORIES,
+  navItemsByCategory,
+  type NavCategory,
+  type NavItem,
+  type NavCategoryMeta,
+} from "@mediaos/web-core";
 
 export const NAV_ITEMS: readonly NavItem[] = [
   // — Công việc & nội dung —
@@ -111,13 +78,3 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "breakGlass", labelKey: "breakGlass", to: "/settings/break-glass", icon: ShieldAlert, tile: "bg-red-500/12 text-red-600", category: "system" },
   { id: "companySettings", labelKey: "companySettings", to: "/settings/company", icon: Settings, tile: "bg-slate-500/12 text-slate-600", category: "system" },
 ] as const;
-
-/** Gom NAV_ITEMS theo category, giữ thứ tự khai báo trong NAV_CATEGORIES. */
-export function navItemsByCategory(): { meta: NavCategoryMeta; items: NavItem[] }[] {
-  return NAV_CATEGORIES.map((meta) => ({
-    meta,
-    items: NAV_ITEMS.filter((it) => it.category === meta.id),
-  }));
-}
-
-export { Bell };

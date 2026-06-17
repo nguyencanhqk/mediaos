@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { contentItemSchema } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 /**
  * Content items — thin client cho danh sách/tạo content theo project (dùng trong ProjectDetail tab).

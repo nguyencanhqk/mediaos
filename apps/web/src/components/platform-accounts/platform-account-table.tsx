@@ -1,8 +1,8 @@
 import type { SafePlatformAccountDto } from "@mediaos/contracts";
 import { KeyRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { PermissionGate } from "@/components/permission-gate";
-import { Button } from "@/components/ui/button";
+import { PermissionGate } from "@mediaos/web-core";
+import { Button } from "@mediaos/ui";
 import { SecretField } from "./secret-field";
 import {
   platformAccountStatusColor,

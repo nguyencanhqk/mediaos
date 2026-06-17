@@ -12,9 +12,9 @@ import {
 import { History } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { KpiResultDto } from "@mediaos/contracts";
-import { Badge } from "@/components/ui/badge";
-import { DataTable } from "@/components/ui/data-table";
-import { EmptyState } from "@/components/ui/empty-state";
+import { Badge } from "@mediaos/ui";
+import { DataTable } from "@mediaos/ui";
+import { EmptyState } from "@mediaos/ui";
 import {
   KPI_TIER_VARIANT,
   clampPercent,

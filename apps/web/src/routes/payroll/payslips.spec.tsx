@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PayslipsPage } from "./payslips";
-import { ApiError } from "@/lib/api-client";
+import { ApiError } from "@mediaos/web-core";
 import { payslipApi } from "@/lib/payslip-api";
 import type { PayslipDto } from "@mediaos/contracts";
 
@@ -84,7 +84,9 @@ vi.mock("@/lib/payroll-period-api", () => ({
   payrollPeriodApi: { list: (...a: unknown[]) => mockPeriodList(...a) },
 }));
 
-vi.mock("@/stores/auth", () => ({
+// Partial mock: giữ ApiError + export thật của web-core, chỉ override auth store.
+vi.mock("@mediaos/web-core", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@mediaos/web-core")>()),
   useAuthStore: (selector: (s: { user: { id: string } | null }) => unknown) =>
     selector({ user: { id: USER_ID } }),
 }));

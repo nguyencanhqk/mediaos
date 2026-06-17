@@ -1,8 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { act } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { useAuthStore } from "@/stores/auth";
-import { PermissionGate } from "./permission-gate";
+import { useAuthStore } from "@mediaos/web-core";
+import { PermissionGate } from "@mediaos/web-core";
 
 function setCaps(caps: Record<string, boolean>) {
   act(() => {

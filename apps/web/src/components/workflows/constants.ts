@@ -1,4 +1,4 @@
-import type { BadgeProps } from "@/components/ui/badge";
+import type { BadgeProps } from "@mediaos/ui";
 import type {
   DagErrorCode,
   DependencyType,

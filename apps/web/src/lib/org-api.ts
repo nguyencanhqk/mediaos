@@ -12,7 +12,7 @@ import {
   teamMemberSchema,
   teamSchema,
 } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 const voidSchema = z.void();
 

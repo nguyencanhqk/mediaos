@@ -13,7 +13,7 @@ import {
   attendanceRecordSchema,
   workScheduleSchema,
 } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 export interface AttendanceMonthFilters {
   month: string;

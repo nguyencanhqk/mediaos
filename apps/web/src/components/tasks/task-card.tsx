@@ -1,8 +1,8 @@
 import { CalendarDays, Layers } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TaskDto } from "@mediaos/contracts";
-import { Avatar } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import { Avatar } from "@mediaos/ui";
+import { Badge } from "@mediaos/ui";
 import { OfficeTaskStatus } from "./office-task-status";
 import {
   TASK_STATUS_BADGE_VARIANT,

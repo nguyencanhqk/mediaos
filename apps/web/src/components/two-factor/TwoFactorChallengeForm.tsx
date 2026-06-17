@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AuthTokens } from "@mediaos/contracts";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ApiError } from "@/lib/api-client";
-import { twoFactorApi } from "@/lib/two-factor-api";
+import { Button } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
+import { ApiError } from "@mediaos/web-core";
+import { twoFactorApi } from "@mediaos/web-core";
 
 interface TwoFactorChallengeFormProps {
   /** Challenge token nhận từ login khi 2FA bật. */

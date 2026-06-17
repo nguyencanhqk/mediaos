@@ -3,14 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { LogOut, Search } from "lucide-react";
-import { Avatar } from "@/components/ui/avatar";
+import { Avatar } from "@mediaos/ui";
 import { NotificationBell } from "@/components/notification-bell";
 import { cn } from "@/lib/utils";
-import { getHealth } from "@/lib/api";
+import { getHealth } from "@mediaos/web-core";
 import { BrandLogo, BrandWordmark } from "@/components/brand/brand-mark";
 import { BRAND } from "@/lib/brand";
 import { NAV_CATEGORIES, NAV_ITEMS, type NavCategory } from "@/lib/nav";
-import { useAuthStore } from "@/stores/auth";
+import { useAuthStore } from "@mediaos/web-core";
 
 type Filter = "all" | NavCategory;
 
