@@ -15,6 +15,19 @@
   },
   "employees": {
     "title": "Nhân sự",
+    "summary": "{{count}} nhân sự đang làm việc",
+    "searchPlaceholder": "Tìm theo tên, email, mã nhân sự…",
+    "searchEmpty": "Không tìm thấy nhân sự phù hợp.",
+    "emptyHint": "Import CSV để thêm hàng loạt nhân sự.",
+    "loadHint": "Kiểm tra kết nối và thử lại.",
+    "columns": {
+      "employee": "Nhân viên",
+      "department": "Phòng ban",
+      "position": "Chức vụ",
+      "employmentType": "Hình thức",
+      "salary": "Lương",
+      "status": "Trạng thái"
+    },
     "importCsv": "Import CSV",
     "importing": "Đang xử lý…",
     "uploadError": "Upload thất bại: {{message}}",

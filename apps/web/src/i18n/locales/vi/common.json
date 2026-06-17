@@ -15,6 +15,11 @@
   "notAssigned": "— Không gán —",
   "notSelected": "— Chưa chọn —",
   "anyStatus": "Mọi trạng thái",
+  "pagination": {
+    "range": "{{from}}–{{to}} trên {{total}}",
+    "prev": "Trang trước",
+    "next": "Trang sau"
+  },
   "actions": {
     "save": "Lưu",
     "cancel": "Hủy",

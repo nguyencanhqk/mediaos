@@ -1,17 +1,30 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { type ColumnDef } from "@tanstack/react-table";
+import { Search, Trash2, Upload, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { EmployeeListItemDto, ImportEmployeePreviewDto } from "@mediaos/contracts";
+import { PageHeader } from "@/components/layout/page-header";
+import { Avatar } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
 import { employeesApi } from "@/lib/employees-api";
-import type { ImportEmployeePreviewDto } from "@mediaos/contracts";
-
-type ImportStep = "idle" | "preview" | "done";
+import {
+  EMPLOYEE_STATUS_VARIANT,
+  type EmployeeStatus,
+  formatSalary,
+} from "@/lib/employee-format";
+import { EmployeeImportPanel, type ImportStep } from "./employees-import";
 
 export function EmployeesPage() {
   const { t } = useTranslation("org");
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState("");
   const [importStep, setImportStep] = useState<ImportStep>("idle");
   const [preview, setPreview] = useState<ImportEmployeePreviewDto | null>(null);
   const [importResult, setImportResult] = useState<{ inserted: number; failed: number } | null>(
@@ -52,168 +65,194 @@ export function EmployeesPage() {
   };
 
   const resetImport = () => {
+    upload.reset();
     setImportStep("idle");
     setPreview(null);
     setImportResult(null);
   };
 
-  return (
-    <div className="mx-auto max-w-4xl space-y-6 p-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{t("employees.title")}</h1>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => fileRef.current?.click()}
-          disabled={upload.isPending || importStep === "preview"}
-        >
-          {upload.isPending ? t("employees.importing") : t("employees.importCsv")}
-        </Button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".csv"
-          className="hidden"
-          onChange={handleFileChange}
-        />
-      </div>
-
-      {/* Import wizard */}
-      {upload.isError && (
-        <p className="text-sm text-destructive">
-          {t("employees.uploadError", { message: upload.error instanceof Error ? upload.error.message : t("employees.unknownError") })}
-        </p>
-      )}
-
-      {importStep === "preview" && preview && (
-        <div className="space-y-3 rounded-xl border border-border p-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium">
-              {t("employees.preview.heading", { valid: preview.valid.length })}
-              {preview.invalid.length > 0 && (
-                <span className="ml-2 text-destructive">
-                  {t("employees.preview.invalidCount", { count: preview.invalid.length })}
-                </span>
-              )}
-            </h2>
-            <Button variant="ghost" size="sm" onClick={resetImport}>
-              {t("employees.preview.cancel")}
+  const columns = useMemo<ColumnDef<EmployeeListItemDto>[]>(
+    () => [
+      {
+        id: "employee",
+        header: t("employees.columns.employee"),
+        accessorFn: (row) =>
+          `${row.userFullName ?? ""} ${row.userEmail ?? ""} ${row.employeeCode ?? ""}`,
+        cell: ({ row }) => {
+          const e = row.original;
+          const name = e.userFullName ?? e.userEmail ?? e.userId;
+          return (
+            <div className="flex items-center gap-3">
+              <Avatar name={name} size="md" />
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <Link
+                    to="/org/employees/$employeeId"
+                    params={{ employeeId: e.id }}
+                    className="truncate font-medium text-foreground hover:text-brand hover:underline"
+                  >
+                    {name}
+                  </Link>
+                  {e.employeeCode && (
+                    <Badge variant="muted" className="font-normal">
+                      {e.employeeCode}
+                    </Badge>
+                  )}
+                </div>
+                {e.userEmail && (
+                  <p className="truncate text-xs text-muted-foreground">{e.userEmail}</p>
+                )}
+              </div>
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: "orgUnitName",
+        header: t("employees.columns.department"),
+        cell: ({ getValue }) => (
+          <span className="text-muted-foreground">{(getValue() as string | null) ?? "—"}</span>
+        ),
+      },
+      {
+        accessorKey: "positionName",
+        header: t("employees.columns.position"),
+        cell: ({ getValue }) => (getValue() as string | null) ?? "—",
+      },
+      {
+        accessorKey: "employmentType",
+        header: t("employees.columns.employmentType"),
+        cell: ({ getValue }) => {
+          const v = getValue() as EmployeeListItemDto["employmentType"];
+          return (
+            <span className="text-muted-foreground">
+              {t(`employeeDetail.employmentType.${v}`, { defaultValue: v })}
+            </span>
+          );
+        },
+      },
+      {
+        accessorKey: "baseSalary",
+        header: t("employees.columns.salary"),
+        cell: ({ row }) => {
+          const value = row.original.baseSalary;
+          return value == null ? (
+            <span className="text-xs text-muted-foreground">{t("employees.salaryHidden")}</span>
+          ) : (
+            <span className="font-medium tabular-nums">{formatSalary(value, t)}</span>
+          );
+        },
+      },
+      {
+        accessorKey: "status",
+        header: t("employees.columns.status"),
+        cell: ({ getValue }) => {
+          const status = getValue() as EmployeeStatus;
+          return (
+            <Badge variant={EMPLOYEE_STATUS_VARIANT[status]}>
+              {t(`employeeDetail.statusLabels.${status}`, { defaultValue: status })}
+            </Badge>
+          );
+        },
+      },
+      {
+        id: "actions",
+        header: "",
+        cell: ({ row }) => (
+          <div className="text-right">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => remove.mutate(row.original.id)}
+              disabled={remove.isPending}
+              aria-label={t("employees.deleteButton")}
+              title={t("employees.deleteButton")}
+            >
+              <Trash2 className="h-4 w-4" />
             </Button>
           </div>
+        ),
+      },
+    ],
+    [t, remove],
+  );
 
-          {preview.invalid.length > 0 && (
-            <ul className="space-y-1 rounded-lg bg-destructive/10 p-3 text-xs text-destructive">
-              {preview.invalid.map((row) => (
-                <li key={row.row}>
-                  {t("employees.preview.rowError", { row: row.row, errors: row.errors.join("; ") })}
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <ul className="divide-y divide-border rounded-lg border border-border text-xs">
-            {preview.valid.slice(0, 5).map((row, i) => (
-              <li key={i} className="flex gap-4 px-3 py-2">
-                <span className="font-medium">{row.fullName}</span>
-                <span className="text-muted-foreground">{row.email}</span>
-                {row.orgUnitName && <span className="text-muted-foreground">{row.orgUnitName}</span>}
-              </li>
-            ))}
-            {preview.valid.length > 5 && (
-              <li className="px-3 py-2 text-muted-foreground">
-                {t("employees.preview.moreRows", { count: preview.valid.length - 5 })}
-              </li>
-            )}
-          </ul>
-
-          {confirm.isError && (
-            <p className="text-sm text-destructive">
-              {t("employees.preview.confirmError", { message: confirm.error instanceof Error ? confirm.error.message : t("employees.unknownError") })}
-            </p>
-          )}
-          {preview.valid.length > 0 && (
-            <Button
-              size="sm"
-              onClick={() => confirm.mutate(preview.sessionId)}
-              disabled={confirm.isPending}
-            >
-              {confirm.isPending
-                ? t("employees.preview.confirming")
-                : t("employees.preview.confirmButton", { count: preview.valid.length })}
-            </Button>
-          )}
-        </div>
-      )}
-
-      {importStep === "done" && importResult && (
-        <div className="flex items-center justify-between rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
-          <span>
-            {t("employees.importDone", { count: importResult.inserted })}
-          </span>
-          <Button variant="ghost" size="sm" onClick={resetImport}>
-            {t("common:actions.close")}
+  return (
+    <div className="mx-auto max-w-6xl space-y-6 p-6 sm:p-8">
+      <PageHeader
+        title={t("employees.title")}
+        description={t("employees.summary", { count: employees.length })}
+        icon={Users}
+        actions={
+          <Button
+            variant="outline"
+            onClick={() => fileRef.current?.click()}
+            disabled={upload.isPending || importStep === "preview"}
+          >
+            <Upload className="h-4 w-4" />
+            {upload.isPending ? t("employees.importing") : t("employees.importCsv")}
           </Button>
+        }
+      >
+        <div className="relative max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("employees.searchPlaceholder")}
+            aria-label={t("employees.searchPlaceholder")}
+            className="pl-9"
+          />
         </div>
-      )}
+      </PageHeader>
 
-      {isLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
-      {isError && <p className="text-sm text-destructive">{t("common:errors.loadFailed")}</p>}
-      {employees.length === 0 && !isLoading && (
-        <p className="text-sm text-muted-foreground">{t("employees.empty")}</p>
-      )}
+      <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
 
-      <ul className="divide-y divide-border rounded-xl border border-border">
-        {employees.map((e) => (
-          <li key={e.id} className="flex items-center justify-between px-4 py-3">
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <Link
-                  to="/org/employees/$employeeId"
-                  params={{ employeeId: e.id }}
-                  className="text-sm font-medium hover:underline"
-                >
-                  {e.userFullName ?? e.userEmail ?? e.userId}
-                </Link>
-                {e.employeeCode && (
-                  <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                    {e.employeeCode}
-                  </span>
-                )}
-              </div>
-              <div className="flex gap-3 text-xs text-muted-foreground">
-                {e.orgUnitName && <span>{e.orgUnitName}</span>}
-                {e.positionName && <span>· {e.positionName}</span>}
-                <span>· {e.employmentType}</span>
-                {e.baseSalary != null ? (
-                  <span className="text-foreground">
-                    {e.baseSalary.toLocaleString("vi-VN")} ₫
-                  </span>
-                ) : (
-                  <span>{t("employees.salaryHidden")}</span>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <span
-                className={`text-xs ${
-                  e.status === "active" ? "text-green-600" : "text-muted-foreground"
-                }`}
-              >
-                {e.status}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={() => remove.mutate(e.id)}
-                disabled={remove.isPending}
-              >
-                {t("employees.deleteButton")}
-              </Button>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <EmployeeImportPanel
+        step={importStep}
+        preview={preview}
+        result={importResult}
+        uploadError={
+          upload.isError
+            ? upload.error instanceof Error
+              ? upload.error.message
+              : t("employees.unknownError")
+            : null
+        }
+        confirming={confirm.isPending}
+        confirmError={
+          confirm.isError
+            ? confirm.error instanceof Error
+              ? confirm.error.message
+              : t("employees.unknownError")
+            : null
+        }
+        onConfirm={() => preview && confirm.mutate(preview.sessionId)}
+        onReset={resetImport}
+      />
+
+      {isError ? (
+        <EmptyState
+          icon={Users}
+          title={t("common:errors.loadFailed")}
+          description={t("employees.loadHint")}
+        />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={employees}
+          isLoading={isLoading}
+          globalFilter={query}
+          emptyState={
+            <EmptyState
+              icon={Users}
+              title={query ? t("employees.searchEmpty") : t("employees.empty")}
+              description={query ? undefined : t("employees.emptyHint")}
+            />
+          }
+        />
+      )}
     </div>
   );
 }
