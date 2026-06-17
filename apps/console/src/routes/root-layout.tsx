@@ -1,5 +1,5 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { AppShell } from "@mediaos/ui";
+import { AppShell, NotificationBell } from "@mediaos/ui";
 import { NAV_ITEMS } from "@/lib/nav";
 import { BrandLogo } from "@/components/brand/brand-mark";
 import { BRAND } from "@/lib/brand";
@@ -21,10 +21,9 @@ export function RootLayout() {
     return <Outlet />;
   }
 
-  // FS-4: chuông thông báo (notification-bell + notification-api) thuộc domain studio (§4) → app Hệ thống
-  // TẠM bỏ slot `notifications`. Nợ kỹ thuật: nâng notification-bell lên package dùng chung để gắn lại.
+  // FS-5: chuông thông báo đã lên @mediaos/ui (notification-api ở web-core) → gắn lại slot `notifications`.
   return (
-    <AppShell navItems={NAV_ITEMS} brand={brand}>
+    <AppShell navItems={NAV_ITEMS} brand={brand} notifications={<NotificationBell />}>
       <Outlet />
     </AppShell>
   );

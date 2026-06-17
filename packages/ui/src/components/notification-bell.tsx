@@ -2,12 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@mediaos/ui";
-import { notificationApi } from "@/lib/notification-api";
-import type { NotificationDto } from "@mediaos/contracts";
+import { notificationApi } from "@mediaos/web-core";
+import { Button } from "./ui/button";
 
+/**
+ * Chuông thông báo — chrome dùng chung mọi app (FS-5). Tiêu thụ `notificationApi` của @mediaos/web-core
+ * (Bearer + credentials + refresh-on-401) và namespace i18n `notifications` (nhúng sẵn ở web-core core
+ * resources → mọi app có, kể cả people/console không có feature chat). Mỗi app gắn nó vào slot
+ * `notifications` của AppShell + header trang chủ launcher.
+ */
 export function NotificationBell() {
-  const { t } = useTranslation("chat");
+  const { t } = useTranslation("notifications");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
@@ -58,7 +63,7 @@ export function NotificationBell() {
         size="sm"
         className="relative"
         onClick={() => setOpen((v) => !v)}
-        aria-label={t("notifications.ariaLabel")}
+        aria-label={t("ariaLabel")}
       >
         <Bell className="size-4" />
         {count > 0 && (
@@ -71,24 +76,23 @@ export function NotificationBell() {
       {open && (
         <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-lg border border-border bg-background shadow-lg">
           <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-            <span className="text-sm font-semibold">{t("notifications.title")}</span>
+            <span className="text-sm font-semibold">{t("title")}</span>
             {count > 0 && (
               <button
+                type="button"
                 className="text-xs text-primary hover:underline"
                 onClick={() => markAllRead.mutate()}
               >
-                {t("notifications.markAllRead")}
+                {t("markAllRead")}
               </button>
             )}
           </div>
 
           <ul className="max-h-80 overflow-y-auto divide-y divide-border">
             {!list || list.length === 0 ? (
-              <li className="px-4 py-6 text-center text-sm text-muted-foreground">
-                {t("notifications.empty")}
-              </li>
+              <li className="px-4 py-6 text-center text-sm text-muted-foreground">{t("empty")}</li>
             ) : (
-              list.map((n: NotificationDto) => (
+              list.map((n) => (
                 <li
                   key={n.id}
                   className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-muted/50 ${
@@ -98,12 +102,13 @@ export function NotificationBell() {
                     if (!n.isRead) markRead.mutate(n.id);
                   }}
                 >
-                  <div className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary opacity-0 data-[unread=true]:opacity-100"
+                  <div
+                    className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary opacity-0 data-[unread=true]:opacity-100"
                     data-unread={!n.isRead}
                   />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-muted-foreground">
-                      {t(`notifications.types.${n.type}`, { defaultValue: n.type })}
+                      {t(`types.${n.type}`, { defaultValue: n.type })}
                     </p>
                     <p className="mt-0.5 text-sm leading-snug">{n.body}</p>
                     <p className="mt-1 text-[11px] text-muted-foreground">

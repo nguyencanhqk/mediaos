@@ -3,20 +3,5 @@
     "noRoom": "Phòng chat chưa được tạo cho dự án này.",
     "loading": "Đang tải...",
     "messagePlaceholder": "Nhập tin nhắn..."
-  },
-  "notifications": {
-    "title": "Thông báo",
-    "ariaLabel": "Thông báo",
-    "markAllRead": "Đọc tất cả",
-    "empty": "Không có thông báo",
-    "types": {
-      "task_assigned": "Giao việc",
-      "task_submitted": "Nộp việc",
-      "approval_requested": "Yêu cầu duyệt",
-      "approved": "Đã duyệt",
-      "revision_requested": "Trả sửa",
-      "mentioned": "Nhắc đến",
-      "general": "Thông báo"
-    }
   }
 }

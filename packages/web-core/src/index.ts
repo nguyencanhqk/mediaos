@@ -26,6 +26,7 @@ export { bootstrapSession } from "./lib/session";
 export { getHealth, type Health } from "./lib/api";
 export { authApi } from "./lib/auth-api";
 export { twoFactorApi } from "./lib/two-factor-api";
+export { notificationApi } from "./lib/notification-api";
 
 // Permission
 export { useCan } from "./hooks/use-can";
