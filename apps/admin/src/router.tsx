@@ -7,6 +7,7 @@ import { TenantHomePage } from "@/routes/tenant/tenant-home";
 import { RbacPage } from "@/routes/tenant/rbac/rbac-page";
 import { ModulesListPage } from "@/routes/operator/modules/modules-list";
 import { ModuleCatalogPage } from "@/routes/operator/modules/catalog-list";
+import { EntitlementsPage } from "@/routes/operator/companies/entitlements-page";
 import { ApiKeysPage } from "@/routes/tenant/api-keys/api-keys-page";
 import { BrandingPage } from "@/routes/tenant/ui-config/branding-page";
 import { NavigationPage } from "@/routes/tenant/ui-config/navigation-page";
@@ -91,6 +92,14 @@ const tenantModulesRoute = createRoute({
   component: ModulesListPage,
 });
 
+// `/tenant/:companyId/entitlements` — feature-flag/usage-limit/entitlement viewer (AC-2): operator
+// xem/đặt quyền lợi gói cho tenant (cross-tenant, withTenant(target)).
+const tenantEntitlementsRoute = createRoute({
+  getParentRoute: () => tenantRoute,
+  path: "entitlements",
+  component: EntitlementsPage,
+});
+
 // `/tenant/:companyId/api-keys` — API key / PAT self-service (AC-5).
 const tenantApiKeysRoute = createRoute({
   getParentRoute: () => tenantRoute,
@@ -130,6 +139,7 @@ const routeTree = rootRoute.addChildren([
       tenantIndexRoute,
       tenantRbacRoute,
       tenantModulesRoute,
+      tenantEntitlementsRoute,
       tenantApiKeysRoute,
       tenantBrandingRoute,
       tenantNavigationRoute,
