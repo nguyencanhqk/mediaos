@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { AlertCircle, CalendarOff } from "lucide-react";
 import type { HrRequestStatusDto } from "@mediaos/contracts";
 import { leaveApi, type LeaveRequestFilters } from "@/lib/leave-api";
 import { useCan } from "@/hooks/use-can";
@@ -9,6 +10,10 @@ import { LeaveRequestTable } from "@/components/hr/leave-request-table";
 import { LeaveBalancePanel } from "@/components/hr/leave-balance-panel";
 import { LeaveCalendar } from "@/components/hr/leave-calendar";
 import { CreateLeaveDialog } from "@/components/hr/create-leave-dialog";
+import { FilterField } from "@/components/hr/filter-field";
+import { PageHeader } from "@/components/layout/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import {
@@ -44,15 +49,18 @@ export function LeavePage() {
   });
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{t("leavePage.heading")}</h1>
-        <PermissionGate action="create" resourceType="leave">
-          <CreateLeaveDialog />
-        </PermissionGate>
-      </div>
+    <div className="mx-auto max-w-6xl space-y-6 p-6 sm:p-8">
+      <PageHeader
+        title={t("leavePage.heading")}
+        description={t("leavePage.description")}
+        icon={CalendarOff}
+        actions={
+          <PermissionGate action="create" resourceType="leave">
+            <CreateLeaveDialog />
+          </PermissionGate>
+        }
+      />
 
-      {/* Leave balance for current user */}
       <LeaveBalancePanel />
 
       {/* Tab bar */}
@@ -60,11 +68,12 @@ export function LeavePage() {
         {(["requests", "calendar"] as TabId[]).map((tabId) => (
           <button
             key={tabId}
+            type="button"
             onClick={() => setTab(tabId)}
             className={[
-              "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+              "-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors",
               tab === tabId
-                ? "border-primary text-primary"
+                ? "border-brand text-brand"
                 : "border-transparent text-muted-foreground hover:text-foreground",
             ].join(" ")}
           >
@@ -75,12 +84,8 @@ export function LeavePage() {
 
       {tab === "requests" && (
         <div className="space-y-4">
-          {/* Filters */}
           <div className="flex flex-wrap gap-3">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground uppercase tracking-wide">
-                {t("leavePage.filterScope")}
-              </label>
+            <FilterField label={t("leavePage.filterScope")} className="w-36">
               <Select
                 value={filters.scope ?? "me"}
                 onChange={(e) =>
@@ -89,17 +94,13 @@ export function LeavePage() {
                     scope: e.target.value as "me" | "all",
                   }))
                 }
-                className="w-36"
               >
                 <option value="me">{t("common:mine")}</option>
                 {canApprove && <option value="all">{t("common:all")}</option>}
               </Select>
-            </div>
+            </FilterField>
 
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground uppercase tracking-wide">
-                {t("leavePage.filterStatus")}
-              </label>
+            <FilterField label={t("leavePage.filterStatus")} className="w-40">
               <Select
                 value={filters.status ?? ""}
                 onChange={(e) =>
@@ -108,7 +109,6 @@ export function LeavePage() {
                     status: (e.target.value as HrRequestStatusDto) || undefined,
                   }))
                 }
-                className="w-40"
               >
                 <option value="">{t("common:all")}</option>
                 {HR_REQUEST_STATUS_OPTIONS.map((s) => (
@@ -117,12 +117,9 @@ export function LeavePage() {
                   </option>
                 ))}
               </Select>
-            </div>
+            </FilterField>
 
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground uppercase tracking-wide">
-                {t("leavePage.filterYear")}
-              </label>
+            <FilterField label={t("leavePage.filterYear")} className="w-24">
               <Input
                 type="number"
                 value={filters.year ?? currentYear()}
@@ -134,16 +131,25 @@ export function LeavePage() {
                     year: e.target.value ? Number(e.target.value) : undefined,
                   }))
                 }
-                className="w-24"
               />
-            </div>
+            </FilterField>
           </div>
 
           {isLoading && (
-            <p className="text-sm text-muted-foreground">{t("leavePage.loading")}</p>
+            <div className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-8 w-full" />
+              ))}
+            </div>
           )}
           {isError && (
-            <p className="text-sm text-destructive">{t("leavePage.loadError")}</p>
+            <div className="rounded-xl border border-border bg-card shadow-sm">
+              <EmptyState
+                icon={AlertCircle}
+                title={t("leavePage.errorTitle")}
+                description={t("leavePage.errorHint")}
+              />
+            </div>
           )}
           {!isLoading && !isError && (
             <LeaveRequestTable requests={requests} canApprove={canApprove} />
@@ -153,17 +159,13 @@ export function LeavePage() {
 
       {tab === "calendar" && (
         <div className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground uppercase tracking-wide">
-              {t("leavePage.filterMonth")}
-            </label>
+          <FilterField label={t("leavePage.filterMonth")} className="max-w-[12rem]">
             <Input
               type="month"
               value={calendarMonth}
               onChange={(e) => setCalendarMonth(e.target.value)}
-              className="w-40"
             />
-          </div>
+          </FilterField>
           <LeaveCalendar month={calendarMonth} />
         </div>
       )}

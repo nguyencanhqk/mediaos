@@ -121,19 +121,19 @@ Mọi response đều bọc trong envelope:
 
 | Giai đoạn | Nội dung | Trạng thái |
 |-----------|----------|-----------|
-| G1 | Bootstrap repo & hạ tầng | ✅ |
-| G2 | Nền bảo mật & đa-tenant (RLS, audit, outbox) | ✅ |
-| G3 | Permission Engine (4 tầng, Valkey cache) | ✅ |
-| G4 | MVP-0 Walking Skeleton (workflow, tasks, approval, chat) | 🟡 đang làm |
-| G5–G16 | Tổ chức · Media · Workflow Builder · HR · Lương · Finance · Dashboard · Mobile · SaaS | ☐ |
+| G1–G4 | Hạ tầng · bảo mật đa-tenant (RLS/audit/outbox) · Permission Engine 4 tầng · MVP-0 (workflow/tasks/approval/chat) | ✅ |
+| G5–G7 | Tổ chức/HR · Media (kênh, tài khoản nền tảng, content) · Workflow Builder (DAG) | ✅ |
+| G8–G11 | Approval đa cấp · KPI/evaluation/defect · Task hub · Chat/Notif/Meeting · Chấm công/Nghỉ phép | ✅ |
+| G12–G14 | Lương (append-only) · Tài chính (revenue/cost/profit) · Dashboard phân quyền | ✅ |
+| G15–G16 | Mobile Expo · 2FA TOTP · SaaS prep (plan/flag/limit, template-clone) | ✅ |
 
-Chi tiết: [TASKS.md](TASKS.md)
+Chi tiết theo code: [docs/SYSTEM-DESIGN.md §19](docs/SYSTEM-DESIGN.md) · lộ trình & nợ kỹ thuật: [TASKS.md](TASKS.md)
 
 ---
 
 ## Tài liệu
 
+- [docs/SYSTEM-DESIGN.md](docs/SYSTEM-DESIGN.md) — thiết kế, cấu trúc & nguyên lý hoạt động (theo code hiện tại)
 - [CLAUDE.md](CLAUDE.md) — quy tắc vận hành, bất biến, review gate
-- [docs/adr/](docs/adr/) — 15 Architecture Decision Records
+- [docs/adr/](docs/adr/) — 19 Architecture Decision Records
 - [TASKS.md](TASKS.md) — lộ trình và tiến độ chi tiết
-- [TÀI LIỆU CHO ĐỘI DEV.md](TÀI%20LIỆU%20CHO%20ĐỘI%20DEV.md) — hướng dẫn dev

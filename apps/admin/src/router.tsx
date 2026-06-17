@@ -7,6 +7,7 @@ import { TenantHomePage } from "@/routes/tenant/tenant-home";
 import { RbacPage } from "@/routes/tenant/rbac/rbac-page";
 import { ModulesListPage } from "@/routes/operator/modules/modules-list";
 import { ModuleCatalogPage } from "@/routes/operator/modules/catalog-list";
+import { ApiKeysPage } from "@/routes/tenant/api-keys/api-keys-page";
 import { useAuthStore } from "@/stores/auth";
 
 const rootRoute = createRootRoute({ component: Outlet });
@@ -87,6 +88,13 @@ const tenantModulesRoute = createRoute({
   component: ModulesListPage,
 });
 
+// `/tenant/:companyId/api-keys` — API key / PAT self-service (AC-5).
+const tenantApiKeysRoute = createRoute({
+  getParentRoute: () => tenantRoute,
+  path: "api-keys",
+  component: ApiKeysPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   appLayoutRoute.addChildren([
@@ -94,7 +102,12 @@ const routeTree = rootRoute.addChildren([
     operatorRoute,
     operatorCompaniesRoute,
     operatorModulesRoute,
-    tenantRoute.addChildren([tenantIndexRoute, tenantRbacRoute, tenantModulesRoute]),
+    tenantRoute.addChildren([
+      tenantIndexRoute,
+      tenantRbacRoute,
+      tenantModulesRoute,
+      tenantApiKeysRoute,
+    ]),
   ]),
 ]);
 

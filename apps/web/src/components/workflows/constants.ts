@@ -1,3 +1,4 @@
+import type { BadgeProps } from "@/components/ui/badge";
 import type {
   DagErrorCode,
   DependencyType,
@@ -5,6 +6,8 @@ import type {
   StepInstanceStatus,
   TemplateStatus,
 } from "@/lib/workflow-builder/contract";
+
+type BadgeVariant = NonNullable<BadgeProps["variant"]>;
 
 // ─── Template status ──────────────────────────────────────────────────────────
 
@@ -144,4 +147,18 @@ export const INSTANCE_STATUS_BADGE_CLASSES: Record<InstanceStatus, string> = {
   active: "bg-blue-100 text-blue-700",
   completed: "bg-green-100 text-green-700",
   cancelled: "bg-muted text-muted-foreground",
+};
+
+/** Map trạng thái lượt chạy → variant Badge dùng chung (MISA-style). */
+export const INSTANCE_STATUS_BADGE_VARIANT: Record<InstanceStatus, BadgeVariant> = {
+  active: "brand",
+  completed: "success",
+  cancelled: "muted",
+};
+
+/** Map trạng thái mẫu quy trình → variant Badge dùng chung. */
+export const TEMPLATE_STATUS_BADGE_VARIANT: Record<TemplateStatus, BadgeVariant> = {
+  draft: "warning",
+  published: "success",
+  archived: "muted",
 };

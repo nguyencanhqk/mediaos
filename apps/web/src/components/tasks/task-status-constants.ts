@@ -1,4 +1,5 @@
 import type { TaskDto } from "@mediaos/contracts";
+import type { BadgeProps } from "@/components/ui/badge";
 
 /**
  * Constants dùng chung cho mọi view task (route /tasks + Task Board /tasks/board) — DRY
@@ -23,6 +24,40 @@ export const TASK_STATUS_COLORS: Record<TaskDto["status"], string> = {
   revision: "bg-orange-100 text-orange-700",
   approved: "bg-green-100 text-green-700",
   completed: "bg-green-200 text-green-800",
+};
+
+// ─── Redesign (PHASE 2 MISA): accent + tiến độ theo status ─────────────────────
+// Bổ sung-only (DRY): card/kanban đọc các map này để hiển thị chấm màu cột, badge variant và
+// thanh tiến độ. KHÔNG đổi nhãn/màu badge cũ (giữ TASK_STATUS_COLORS để không phá test/giao diện cũ).
+
+/** Variant Badge dùng chung (success/warning/danger/muted/brand) cho từng status. */
+export const TASK_STATUS_BADGE_VARIANT: Record<TaskDto["status"], NonNullable<BadgeProps["variant"]>> = {
+  not_started: "muted",
+  in_progress: "brand",
+  waiting_review: "warning",
+  revision: "danger",
+  approved: "success",
+  completed: "success",
+};
+
+/** Màu chấm tiêu đề cột Kanban (dot) — gợi ý trạng thái bằng màu. */
+export const TASK_STATUS_DOT: Record<TaskDto["status"], string> = {
+  not_started: "bg-muted-foreground/50",
+  in_progress: "bg-brand",
+  waiting_review: "bg-amber-500",
+  revision: "bg-red-500",
+  approved: "bg-emerald-500",
+  completed: "bg-emerald-600",
+};
+
+/** Tiến độ ước lượng (%) theo vòng đời — chỉ để hiển thị thanh progress trên card. */
+export const TASK_STATUS_PROGRESS: Record<TaskDto["status"], number> = {
+  not_started: 0,
+  in_progress: 40,
+  waiting_review: 70,
+  revision: 55,
+  approved: 90,
+  completed: 100,
 };
 
 // ─── Task type (7 nguồn spec + workflow_step back-compat) ─────────────────────────

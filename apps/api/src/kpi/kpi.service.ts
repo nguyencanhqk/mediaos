@@ -9,6 +9,8 @@ import type {
   ConfirmKpiResultRequest,
   CreateKpiDefinitionRequest,
   KpiComponentWeights,
+  KpiResultDto,
+  ListKpiResultQuery,
 } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
@@ -158,7 +160,40 @@ export class KpiService {
         eventType: "kpi.computed",
         payload: { kpiResultId: result.id, definitionId: dto.definitionId, actorUserId: userId },
       });
-      return result;
+      // Map về KpiResultDto (components lồng nhau + số + ISO) — khớp hợp đồng kpiResultSchema FE parse.
+      return this.repo.mapResultRow(result);
+    });
+  }
+
+  // ─── List history (read:kpi) — lịch sử kết quả KPI (append-only, server lọc scope) ──
+
+  /**
+   * Lịch sử kết quả KPI (trend theo kỳ). read:kpi (gate ở controller + assertCan defense-in-depth).
+   * SCOPE server-driven: chỉ người có quyền RỘNG (confirm:kpi HOẶC manage:kpi-definition) xem mọi
+   * chủ thể + lọc theo subjectUserId/Team; employee thường BỊ ÉP scope của-mình (subject = chính mình
+   * hoặc team mình thuộc về), BỎ QUA subjectUserId/Team client gửi → KHÔNG lộ KPI người khác.
+   */
+  async listResults(
+    companyId: string,
+    userId: string,
+    query: ListKpiResultQuery,
+  ): Promise<KpiResultDto[]> {
+    await this.assertCan(companyId, userId, READ_ACTION, READ_RESOURCE);
+    const broad = await this.hasBroadKpiAccess(companyId, userId);
+
+    return this.repo.listResults(companyId, {
+      definitionId: query.definitionId,
+      periodFrom: query.periodFrom ? new Date(query.periodFrom) : undefined,
+      periodTo: query.periodTo ? new Date(query.periodTo) : undefined,
+      confirmedOnly: query.confirmedOnly ?? false,
+      limit: query.limit,
+      scope: broad
+        ? {
+            kind: "all",
+            subjectUserId: query.subjectUserId,
+            subjectTeamId: query.subjectTeamId,
+          }
+        : { kind: "own", userId },
     });
   }
 
@@ -210,11 +245,35 @@ export class KpiService {
           actorUserId: userId,
         },
       });
-      return confirmed;
+      // Map về KpiResultDto (khớp hợp đồng kpiResultSchema FE parse — như compute).
+      return this.repo.mapResultRow(confirmed);
     });
   }
 
   // ─── Internals ──────────────────────────────────────────────────────────────
+
+  /**
+   * Quyền XEM RỘNG lịch sử KPI (mọi chủ thể) = confirm:kpi HOẶC manage:kpi-definition (HR/quản lý).
+   * Không có ⇒ employee thường ⇒ scope của-mình (fail-closed). 2 check song song (PermissionService
+   * có cache). KHÔNG ném ở đây: read:kpi đã được assertCan gate; đây chỉ quyết ĐỘ RỘNG scope.
+   */
+  private async hasBroadKpiAccess(companyId: string, userId: string): Promise<boolean> {
+    const [confirm, manage] = await Promise.all([
+      this.permissions.can({
+        userId,
+        companyId,
+        action: CONFIRM_ACTION,
+        resourceType: CONFIRM_RESOURCE,
+      }),
+      this.permissions.can({
+        userId,
+        companyId,
+        action: DEFINITION_ACTION,
+        resourceType: DEFINITION_RESOURCE,
+      }),
+    ]);
+    return confirm.allow || manage.allow;
+  }
 
   /** Fail-closed permission gate. KIỂM TRA NGOÀI tx → deny không mở transaction ⇒ KHÔNG side-effect. */
   private async assertCan(

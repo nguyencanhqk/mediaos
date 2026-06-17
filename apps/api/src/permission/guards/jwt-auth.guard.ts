@@ -42,6 +42,12 @@ export class JwtAuthGuard implements CanActivate {
     if (ctx.getType() !== "http") return true;
 
     const req = ctx.switchToHttp().getRequest<Request>();
+
+    // AC-5: nếu ApiKeyAuthGuard (chạy TRƯỚC) đã xác thực qua PAT → req.user.viaApiKey=true. Bỏ qua verify
+    // JWT (token là mok_, KHÔNG phải JWT — verifyAccessToken sẽ ném). PAT đã set companyId/scope từ key.
+    const existing = (req as Partial<AuthRequest>).user as { viaApiKey?: boolean } | undefined;
+    if (existing?.viaApiKey) return true;
+
     const authHeader = req.headers['authorization'];
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       throw new UnauthorizedException('Missing or invalid Authorization header');

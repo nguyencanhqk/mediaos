@@ -1,5 +1,7 @@
 {
   "overview": "Tổng quan",
+  "dashboard": "Bảng điều khiển",
+  "kpi": "KPI / Mục tiêu",
   "tasks": "Công việc",
   "taskBoard": "Bảng công việc",
   "channels": "Kênh",
@@ -18,6 +20,17 @@
   "salaryProfiles": "Hồ sơ lương",
   "payrollPeriods": "Kỳ lương",
   "payslips": "Phiếu lương",
+  "bonusPenalties": "Thưởng / Phạt",
+  "breakGlass": "Truy cập khẩn cấp",
   "companySettings": "Cài đặt công ty",
-  "logout": "Đăng xuất"
+  "logout": "Đăng xuất",
+  "group": {
+    "work": "Công việc & Nội dung",
+    "goals": "KPI / Mục tiêu",
+    "process": "Quy trình",
+    "hr": "Nhân sự",
+    "attendance": "Chấm công",
+    "payroll": "Tiền lương",
+    "system": "Hệ thống"
+  }
 }

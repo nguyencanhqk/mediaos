@@ -171,6 +171,34 @@ export class PermissionService {
   }
 
   /**
+   * AC-5 — danh sách scope (catalog entry) actor được phép gán cho PAT = toàn catalog ∩ grant THỰC actor.
+   * Dùng dựng bộ chọn scope FE. Lỗi DB → [] (fail-safe cho UI hint; create vẫn ép lại scope ⊆ grant).
+   */
+  async listGrantableScopes(
+    userId: string,
+    companyId: string,
+  ): Promise<Array<{ id: string; action: string; resourceType: string; isSensitive: boolean }>> {
+    try {
+      const catalog = await this.repo.getAllPermissions();
+      if (catalog.length === 0) return [];
+      const grantedIds = await this.userGrantsPermissionIds(
+        userId,
+        companyId,
+        catalog.map((p) => p.id),
+      );
+      const grantedSet = new Set(grantedIds);
+      return catalog.filter((p) => grantedSet.has(p.id));
+    } catch (error: unknown) {
+      this.logger.error('listGrantableScopes() infrastructure error — returning empty', {
+        error: error instanceof Error ? error.message : String(error),
+        userId,
+        companyId,
+      });
+      return [];
+    }
+  }
+
+  /**
    * Returns a flat map of non-sensitive capabilities for the given user.
    * Key format: "${action}:${resourceType}" — wildcards included as-is (FE handles multi-key lookup).
    * Only non-sensitive grants; sensitive permissions require explicit per-resource checks.
@@ -209,6 +237,58 @@ export class PermissionService {
         companyId,
       });
       return {};
+    }
+  }
+
+  /**
+   * AC-5 — filter `permissionIds` xuống tập user THỰC SỰ được phép (effective ALLOW, đã trừ DENY-overrides
+   * + bỏ wildcard). Dùng lúc TẠO PAT: scope của key PHẢI ⊆ tập này (PAT KHÔNG vượt quyền user, fail-closed).
+   *
+   * Cách tính: với mỗi permission id → (action, resourceType, isSensitive) qua catalog; user "có" nếu một
+   * company-grant ALLOW khớp (exact với sensitive — wildcard KHÔNG thoả gate nhạy cảm, mirror can()) VÀ
+   * KHÔNG bị DENY khớp (deny-overrides). Trả tập con của `permissionIds`. Lỗi DB → [] (fail-closed: không
+   * giao id nào → caller từ chối tạo key vượt quyền). KHÔNG xét object-grant (PAT là company-tier capability).
+   */
+  async userGrantsPermissionIds(
+    userId: string,
+    companyId: string,
+    permissionIds: string[],
+  ): Promise<string[]> {
+    if (permissionIds.length === 0) return [];
+    try {
+      const now = new Date();
+      const catalog = await this.repo.getPermissionsByIds(permissionIds);
+      const rawGrants = await this.repo.getCompanyRoleGrants(userId, companyId);
+      const grants = rawGrants.filter((g) => isGrantActive(g.expiresAt, now));
+
+      const matches = (g: CompanyRoleGrant, action: string, resourceType: string): boolean =>
+        (g.action === action || g.action === '*') &&
+        (g.resourceType === resourceType || g.resourceType === '*');
+
+      return catalog
+        .filter((p) => {
+          const denied = grants.some(
+            (g) => g.effect === 'DENY' && matches(g, p.action, p.resourceType),
+          );
+          if (denied) return false;
+          const allows = grants.filter(
+            (g) => g.effect === 'ALLOW' && matches(g, p.action, p.resourceType),
+          );
+          if (allows.length === 0) return false;
+          // Sensitive gate: wildcard KHÔNG thoả — cần exact non-wildcard ALLOW (mirror can()).
+          if (p.isSensitive) {
+            return allows.some((g) => g.action !== '*' && g.resourceType !== '*');
+          }
+          return true;
+        })
+        .map((p) => p.id);
+    } catch (error: unknown) {
+      this.logger.error('userGrantsPermissionIds() infrastructure error — fail-closed (empty set)', {
+        error: error instanceof Error ? error.message : String(error),
+        userId,
+        companyId,
+      });
+      return [];
     }
   }
 }

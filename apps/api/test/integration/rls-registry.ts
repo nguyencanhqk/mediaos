@@ -1654,4 +1654,39 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+
+  // ── AC-5 API keys / PAT (api_keys MUTABLE + api_key_usages APPEND-ONLY — mig 0310) ──────────
+  // company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  // KHÔNG skipNoContext (mọi hàng tenant-scoped, company_id NOT NULL, không hàng global).
+  {
+    name: "api_keys",
+    table: "api_keys",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `ak-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO api_keys (company_id, user_id, name, token_prefix, token_hash, scope_permission_ids)
+         VALUES ($1, $2, 'rls-key', $3, $4, ARRAY[]::uuid[]) RETURNING id`,
+        [t.companyId, u, `mok_${randomUUID().slice(0, 4)}`, randomUUID().replace(/-/g, "")],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "api_key_usages",
+    table: "api_key_usages",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `aku-${randomUUID().slice(0, 8)}@x.test`);
+      const keyRes = await direct.query(
+        `INSERT INTO api_keys (company_id, user_id, name, token_prefix, token_hash, scope_permission_ids)
+         VALUES ($1, $2, 'rls-key-usage', $3, $4, ARRAY[]::uuid[]) RETURNING id`,
+        [t.companyId, u, `mok_${randomUUID().slice(0, 4)}`, randomUUID().replace(/-/g, "")],
+      );
+      const r = await direct.query(
+        `INSERT INTO api_key_usages (company_id, api_key_id, route, ip)
+         VALUES ($1, $2, '/tasks/board', '127.0.0.1') RETURNING id`,
+        [t.companyId, keyRes.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 ];

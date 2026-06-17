@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, eq, isNull, or } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import { DatabaseService } from '../db/db.service';
 import {
   objectPermissions,
@@ -8,7 +8,12 @@ import {
   roles,
   userRoles,
 } from '../db/schema';
-import type { CompanyRoleGrant, IPermissionRepository, ObjectGrant } from './permission.types';
+import type {
+  CompanyRoleGrant,
+  IPermissionRepository,
+  ObjectGrant,
+  PermissionCatalogEntry,
+} from './permission.types';
 
 /**
  * PermissionRepository — real Drizzle implementation of IPermissionRepository.
@@ -110,5 +115,43 @@ export class PermissionRepository implements IPermissionRepository {
         effect: r.effect as 'ALLOW' | 'DENY',
       }));
     });
+  }
+
+  /** AC-5 — catalog entry cho tập id. permissions là global no-RLS → đọc không cần tenant context. */
+  async getPermissionsByIds(permissionIds: string[]): Promise<PermissionCatalogEntry[]> {
+    if (permissionIds.length === 0) return [];
+    const rows = await this.db.runRaw<{
+      id: string;
+      action: string;
+      resource_type: string;
+      is_sensitive: boolean;
+    }>(
+      sql`SELECT id, action, resource_type, is_sensitive FROM permissions WHERE id IN (${sql.join(
+        permissionIds.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      )})`,
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      action: r.action,
+      resourceType: r.resource_type,
+      isSensitive: r.is_sensitive,
+    }));
+  }
+
+  /** AC-5 — toàn bộ catalog (global no-RLS). Catalog nhỏ (vài trăm hàng) → đọc 1 phát. */
+  async getAllPermissions(): Promise<PermissionCatalogEntry[]> {
+    const rows = await this.db.runRaw<{
+      id: string;
+      action: string;
+      resource_type: string;
+      is_sensitive: boolean;
+    }>(sql`SELECT id, action, resource_type, is_sensitive FROM permissions`);
+    return rows.map((r) => ({
+      id: r.id,
+      action: r.action,
+      resourceType: r.resource_type,
+      isSensitive: r.is_sensitive,
+    }));
   }
 }

@@ -57,6 +57,8 @@ export * from "./defect";
 export * from "./meeting";
 export * from "./permission";
 export * from "./crypto";
+// AC-5 API key / Personal Access Token (PAT)
+export * from "./api-key";
 // G16-3 SaaS prep
 export * from "./platform";
 export * from "./subscription";

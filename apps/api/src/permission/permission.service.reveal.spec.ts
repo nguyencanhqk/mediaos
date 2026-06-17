@@ -54,6 +54,14 @@ class MinimalMockRepo implements IPermissionRepository {
   ): Promise<ObjectGrant[]> {
     return this.objectGrants;
   }
+
+  async getPermissionsByIds(): Promise<[]> {
+    return [];
+  }
+
+  async getAllPermissions(): Promise<[]> {
+    return [];
+  }
 }
 
 // ─── Test constants ───────────────────────────────────────────────────────────

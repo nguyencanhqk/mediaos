@@ -53,8 +53,13 @@ export const twoFactorApi = {
 
   /** Bước 2 login (2FA bật): challengeToken + mã (TOTP/recovery) → tokens. @Public (chưa có access token). */
   verifyLogin: (challengeToken: string, code: string): Promise<AuthTokens> =>
-    apiFetch("/auth/2fa/verify", authTokensSchema, {
-      method: "POST",
-      body: JSON.stringify({ challengeToken, code }),
-    }),
+    apiFetch(
+      "/auth/2fa/verify",
+      authTokensSchema,
+      {
+        method: "POST",
+        body: JSON.stringify({ challengeToken, code }),
+      },
+      { skipAuth: true },
+    ),
 };

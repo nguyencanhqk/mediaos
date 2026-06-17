@@ -1,10 +1,12 @@
 import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ReceiptText } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { PayrollPeriodStatus, PayslipDto } from "@mediaos/contracts";
 import { payslipApi } from "@/lib/payslip-api";
 import { payrollPeriodApi } from "@/lib/payroll-period-api";
 import { ApiError } from "@/lib/api-client";
+import { PageHeader } from "@/components/layout/page-header";
 import { Select } from "@/components/ui/select";
 import { PayslipTable } from "@/components/payroll/payslip-table";
 import { PayslipDetail } from "@/components/payroll/payslip-detail";
@@ -29,6 +31,10 @@ import { useAuthStore } from "@/stores/auth";
  * server-side) instead of the admin GET /payslips. A plain employee who holds only view-own-payslip can
  * list their slips and reveal money after re-auth — no more degrade-to-403 for normal staff. The 403
  * branch remains as defense-in-depth for callers who lack even view-own-payslip.
+ *
+ * Redesign (Phase 2): chuẩn hoá chrome (PageHeader + toolbar) theo house style MISA/Funtime. KHÔNG
+ * đổi data/permission/masking/re-auth — giữ nguyên listOwn(), usePayslipReauthController({reauthOwn,
+ * getOwn}), mọi nhánh loading/403/cảnh báo, và luồng mask/reveal/ack do component con đảm nhận.
  */
 export function PayslipsPage() {
   const { t } = useTranslation("payroll");
@@ -124,30 +130,34 @@ export function PayslipsPage() {
   const isForbidden = error instanceof ApiError && error.status === 403;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-8">
-      <h1 className="text-2xl font-semibold">{t("payslips.pageTitle")}</h1>
-
-      <div className="space-y-1">
-        <label
-          htmlFor="payslip-period-filter"
-          className="text-xs uppercase tracking-wide text-muted-foreground"
-        >
-          {t("payslips.filterPeriodStatus")}
-        </label>
-        <Select
-          id="payslip-period-filter"
-          value={periodStatus}
-          onChange={(e) => handlePeriodFilterChange(e.target.value as PayrollPeriodStatus | "")}
-          className="w-44"
-        >
-          <option value="">{t("payslips.all")}</option>
-          {(Object.keys(PERIOD_STATUS_LABELS) as PayrollPeriodStatus[]).map((s) => (
-            <option key={s} value={s}>
-              {PERIOD_STATUS_LABELS[s]}
-            </option>
-          ))}
-        </Select>
-      </div>
+    <div className="mx-auto max-w-5xl space-y-6 p-6 sm:p-8">
+      <PageHeader
+        title={t("payslips.pageTitle")}
+        description={t("payslips.pageDescription")}
+        icon={ReceiptText}
+      >
+        <div className="space-y-1">
+          <label
+            htmlFor="payslip-period-filter"
+            className="text-xs uppercase tracking-wide text-muted-foreground"
+          >
+            {t("payslips.filterPeriodStatus")}
+          </label>
+          <Select
+            id="payslip-period-filter"
+            value={periodStatus}
+            onChange={(e) => handlePeriodFilterChange(e.target.value as PayrollPeriodStatus | "")}
+            className="w-44"
+          >
+            <option value="">{t("payslips.all")}</option>
+            {(Object.keys(PERIOD_STATUS_LABELS) as PayrollPeriodStatus[]).map((s) => (
+              <option key={s} value={s}>
+                {PERIOD_STATUS_LABELS[s]}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </PageHeader>
 
       {isLoading && <p className="text-sm text-muted-foreground">{t("payslips.loading")}</p>}
       {isError && isForbidden && (

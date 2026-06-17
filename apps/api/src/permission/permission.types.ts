@@ -86,6 +86,14 @@ export interface ObjectGrant {
   effect: 'ALLOW' | 'DENY';
 }
 
+/** 1 entry permission catalog (global, no-RLS) — dùng cho AC-5 scope ⊆ grant validation. */
+export interface PermissionCatalogEntry {
+  id: string;
+  action: string;
+  resourceType: string;
+  isSensitive: boolean;
+}
+
 export interface IPermissionRepository {
   /**
    * Returns all role_permissions for all roles held by userId in companyId.
@@ -106,4 +114,13 @@ export interface IPermissionRepository {
     resourceType: string,
     resourceId: string,
   ): Promise<ObjectGrant[]>;
+
+  /**
+   * AC-5 — trả catalog entry cho tập permission id (global catalog, no-RLS). id không tồn tại bị bỏ qua
+   * (caller dùng để vừa validate-tồn-tại vừa lấy action/resourceType/isSensitive). Throws on DB error.
+   */
+  getPermissionsByIds(permissionIds: string[]): Promise<PermissionCatalogEntry[]>;
+
+  /** AC-5 — toàn bộ permission catalog (global, no-RLS) — để giao với grant user dựng bộ chọn scope. */
+  getAllPermissions(): Promise<PermissionCatalogEntry[]>;
 }

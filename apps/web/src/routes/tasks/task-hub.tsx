@@ -1,10 +1,14 @@
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { Inbox, LayoutList } from "lucide-react";
 import type { TeamDto, ProjectDto } from "@mediaos/contracts";
 import { tasksApi } from "@/lib/tasks-api";
 import { orgApi } from "@/lib/org-api";
 import { projectsApi } from "@/lib/projects-api";
+import { PageHeader } from "@/components/layout/page-header";
+import { EmptyState as SharedEmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TaskTable } from "@/components/tasks/task-table";
 import { TaskTypeFilter, type TaskTypeFilterValue } from "@/components/tasks/task-type-filter";
 import { PermissionGate } from "@/components/permission-gate";
@@ -13,20 +17,29 @@ import { PermissionGate } from "@/components/permission-gate";
 
 type HubTab = "my" | "team" | "project";
 
-// ─── Shared empty/loading/error states ───────────────────────────────────────
+// ─── Shared empty/loading/error states (tái dùng Skeleton + EmptyState chung) ───
 
 function LoadingState() {
-  const { t } = useTranslation("tasks");
-  return <p className="py-8 text-center text-sm text-muted-foreground">{t("hub.loading")}</p>;
+  return (
+    <div className="space-y-2" aria-hidden>
+      {[0, 1, 2, 3].map((row) => (
+        <Skeleton key={row} className="h-12 w-full rounded-lg" />
+      ))}
+    </div>
+  );
 }
 
 function ErrorState({ message }: { message: string }) {
-  return <p className="py-8 text-center text-sm text-destructive">{message}</p>;
+  return (
+    <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-6 py-8 text-center">
+      <p className="text-sm font-medium text-destructive">{message}</p>
+    </div>
+  );
 }
 
 function EmptyState() {
   const { t } = useTranslation("tasks");
-  return <p className="py-8 text-center text-sm text-muted-foreground">{t("hub.empty")}</p>;
+  return <SharedEmptyState icon={Inbox} title={t("hub.empty")} />;
 }
 
 // ─── My Tasks tab ─────────────────────────────────────────────────────────────
@@ -253,29 +266,31 @@ export function TaskHubPage() {
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <header>
-        <h1 className="text-xl font-semibold">{t("hub.pageTitle")}</h1>
-      </header>
-
-      {/* Tab bar */}
-      <div className="flex gap-1 rounded-lg border border-border p-0.5 self-start">
-        {(Object.keys(TAB_LABELS) as HubTab[]).map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setActiveTab(tab)}
-            aria-pressed={activeTab === tab}
-            data-testid={`hub-tab-${tab}`}
-            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
-              activeTab === tab
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            {TAB_LABELS[tab]}
-          </button>
-        ))}
-      </div>
+      <PageHeader
+        title={t("hub.pageTitle")}
+        description={t("hub.pageDescription")}
+        icon={LayoutList}
+      >
+        {/* Tab bar */}
+        <div className="flex gap-1 self-start rounded-lg border border-border p-0.5">
+          {(Object.keys(TAB_LABELS) as HubTab[]).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              aria-pressed={activeTab === tab}
+              data-testid={`hub-tab-${tab}`}
+              className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+                activeTab === tab
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {TAB_LABELS[tab]}
+            </button>
+          ))}
+        </div>
+      </PageHeader>
 
       {/* Tab content */}
       <div className="min-h-0 flex-1 overflow-auto">

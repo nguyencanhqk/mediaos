@@ -46,8 +46,13 @@ export class TwoFactorEnforcementGuard implements CanActivate {
     if (ctx.getType() !== "http") return true;
 
     const req = ctx.switchToHttp().getRequest<Partial<AuthRequest>>();
-    const user = req.user;
+    const user = req.user as (AuthRequest["user"] & { viaApiKey?: boolean }) | undefined;
     if (!user) return true; // JwtAuthGuard đã ném nếu thiếu — không double-throw ở đây.
+
+    // AC-5: PAT request (viaApiKey) bỏ qua enrollment 2FA. PAT KHÔNG phải phiên người tương tác (không có
+    // bước nhập TOTP); bảo mật PAT nằm ở scope∩grant + revoke + TTL. Cấp PAT lại đòi manage:api-key (sensitive)
+    // — đường cấp key đã qua phiên người (có 2FA). Đây KHÔNG phải bypass: scope∩grant vẫn ép ở PermissionGuard.
+    if (user.viaApiKey) return true;
 
     const required = await this.twoFactor.requiresTwoFactor(user.id, user.companyId);
     if (!required) return true;

@@ -25,6 +25,7 @@ import { WorkflowTemplateDetailPage } from "@/routes/workflows/template-detail";
 import { WorkflowInstancesPage } from "@/routes/workflows/instances/instances-list";
 import { WorkflowInstanceDetailPage } from "@/routes/workflows/instances/instance-detail";
 import { DashboardPage } from "@/routes/dashboard/dashboard";
+import { KpiPage } from "@/routes/kpi/index";
 import { AttendancePage } from "@/routes/hr/attendance";
 import { AdjustmentsPage } from "@/routes/hr/adjustments";
 import { LeavePage } from "@/routes/hr/leave";
@@ -199,6 +200,14 @@ const dashboardRoute = createRoute({
   component: DashboardPage,
 });
 
+// G8-4 FE: KPI / Mục tiêu — định nghĩa KPI + tính/cây mục tiêu (read/confirm:kpi gated)
+const kpiRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/kpi",
+  beforeLoad: authGuard,
+  component: KpiPage,
+});
+
 const attendanceRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/hr/attendance",
@@ -299,6 +308,7 @@ const routeTree = rootRoute.addChildren([
   workflowInstancesRoute,
   workflowInstanceDetailRoute,
   dashboardRoute,
+  kpiRoute,
   attendanceRoute,
   adjustmentsRoute,
   leaveRoute,

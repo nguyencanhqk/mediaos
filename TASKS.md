@@ -140,7 +140,8 @@ Master kết thúc ở `0037`. Mỗi lane sở hữu **1 dải 10 số** riêng:
 | G3 (mutation-path) | `0140–0149` | 🟡 **đang dùng** — runtime permission mgmt (grant/revoke role + object-permission). Nền G3 có trước hệ band (master kết thúc `0037`) → cấp band bổ sung riêng sau G12-tràn. Hook `guard-migration-band` cho G3 = `[[140,149]]`. |
 | G6 (KMS PR-A) | `0150–0159` | 🟡 **đang dùng** — G6-2 PR-A KMS provisioning (`SecretProvisioningService.provisionKeyVersion` worker-pool + version-preserving). Mig `0150` idx 84 when 1717500200000 (audit CHECK +`encryption_key`, DO-block ADD-only; áp SAU 0170 theo when). Hook `guard-migration-band` cho g6kms = `[[150,159]]`. |
 | G2 (g2rls RLS hardening) | `0160–0169` | 🟢 **reserved (GX-4)** — PgBouncer × RLS hardening: assert FORCE+policy phủ mọi bảng tenant + force-before-backfill. Nền G2 có trước hệ band (master kết thúc `0037`) → cấp band riêng sau G3-mutation. Hook `guard-migration-band` cho G2 = `[[160,169]]`. **Lưu ý 2026-06-15:** kiểm tra trên `mediaos_g2rls` → **KHÔNG bảng company_id nào thiếu FORCE/policy** ⇒ GX-4 KHÔNG cần migration mới; gate giữ bằng assert (rls-coverage-assert.int-spec + force-before-backfill-order.int-spec static). Band để sẵn cho vá tương lai nếu phát hiện gap. |
-| AC-7 (module-registry) | `0330–0339` | 🟡 **đang dùng** — Admin Control Plane N4: catalog GLOBAL `system_modules` (no-RLS, mirror permissions/subscription_plans) — lớp "module" TRÊN feature-flag G16-3, KHÔNG store on/off thứ 3 (toggle = `company_feature_flags`). Mig `0330` idx **97** when 1717500320000 (> master-max 1717500310000 LÚC LAND, re-stamp mỗi rebase). Perm mới `manage:module-toggle` (is_sensitive) + `view:system-module`, grant tường minh role …f0; audit reuse object_type='company' (action `operator.module_toggled`, KHÔNG đổi CHECK). Hook `guard-migration-band` cho ac7 = `[[330,339]]`. Verify `mediaos_ac7` chain 0000→latest sạch, AC-7 16 api + 7 admin pass. |
+| AC-5 (api-keys/PAT) | `0310–0319` | ✅ **ĐÃ LAND** (master `75a0b35`) — Personal Access Token + auth-pipeline TOÀN CỤC. Mig `0310_ac5_api_keys` (idx 97 when 1717500320000): `api_keys` (MUTABLE column-grant: app UPDATE chỉ `last_used_at`/`revoked_at`, +UNIQUE `token_hash`) + `api_key_usages` (APPEND-ONLY) + RLS+FORCE + `resolve_api_key_by_hash` SECURITY DEFINER (auth cross-tenant HẸP) + audit CHECK DO-block UNION +`api_key` + seed `manage:api-key` (sensitive) grant company-admin. Hook `guard-migration-band` cho ac5 = `[[310,319]]`. |
+| AC-7 (module-registry) | `0330–0339` | 🟡 **đang land** — Admin Control Plane N4: catalog GLOBAL `system_modules` (no-RLS, mirror permissions/subscription_plans) — lớp "module" TRÊN feature-flag G16-3, KHÔNG store on/off thứ 3 (toggle = `company_feature_flags`). Mig `0330` idx **98** when 1717500330000 (> AC-5 1717500320000, re-stamp mỗi rebase). Perm mới `manage:module-toggle` (is_sensitive, **isSensitive-only — KHÔNG requiresReauth**, step-up qua OperatorReauthGuard) + `view:system-module`, grant tường minh role …f0; audit reuse object_type='company' (action `operator.module_toggled`, KHÔNG đổi CHECK). Hook `guard-migration-band` cho ac7 = `[[330,339]]`. Verify `mediaos_ac7` chain 0000→latest sạch. |
 
 `_journal.json`: `idx`/`when` phải **đơn điệu tăng** trong band; khi merge nhiều lane, reconcile journal theo thứ tự merge (idx liên tục, when tăng dần). Hook `guard-migration-band` **chặn (exit 2)** file migration có số ngoài band của branch hiện tại.
 
@@ -513,6 +514,70 @@ _(custom `react-native-reviewer/patterns/build-fix/push`)_
 
 ---
 
+# 🏁 MỐC 6 — HOÀN THIỆN GIAO DIỆN & ADMIN _(sau MVP · đang mở)_
+
+> Backend G1–G16 đã land đủ. Mốc này gồm 2 luồng song song, ĐỘC LẬP nhau: **(A) Redesign giao diện** `apps/web` (FE-only, không đụng data/permission) và **(B) Admin Control Plane** `apps/admin` (quản trị nền tảng chéo-tenant). Nguồn: `docs/prompts/WEB-UI-REDESIGN-PHASE2-prompt.md` · `docs/prompts/ADMIN-CONTROL-PLANE-PRD-2026-06-17-v2.md`.
+
+## UI-R — Redesign giao diện (MISA AMIS-style · brand Funtime Media) _(🤖 AI-bulk 🟢 · FE-only · LIGHT gate)_
+
+> Nâng `apps/web` từ "walking skeleton" → UI ngang MISA AMIS. **Chỉ đổi UI/layout, KHÔNG đổi data/permission logic** (giữ nguyên hook query, `useCan`, `<PermissionGate>`, API client). Mỗi trang: `PageHeader` → filter/toolbar → Card/Table/Kanban → loading/empty/error tử tế. i18n đủ (không hard-code chuỗi). Mỗi `.tsx` ≤400 dòng. **Không migration.** Verify: `cd apps/web && pnpm build` xanh + `pnpm test` không tụt.
+
+- [x] **UI-R-0** 🔧🟢 (M) **Design foundation + Trang chủ launcher + branding Funtime Media** — ✅ **LANDED** (`e5e153c`): theme Slate-Corporate (`index.css` token oklch + `--color-brand`), brand source `lib/brand.ts` + `BrandMark/BrandLogo/BrandWordmark`, app-shell (topbar navy + `app-sidebar`), nav registry `lib/nav.ts` (sidebar + launcher dùng chung), login branded.
+- [x] **UI-R-1** 🤖🟢 (M) **Hồ sơ + Danh sách nhân viên** (`org/employees-detail.tsx` + `employees.tsx`) — ✅ **LANDED** (`040dd82`): header hồ sơ (avatar lớn + tên/mã/trạng thái + nút Cập nhật), sidebar mục thông tin, panel form 2 cột; danh sách = table avatar/phòng ban/chức vụ/trạng thái + filter + search. **Trích bộ SHARED tái dùng mọi module sau:** `PageHeader` · `DataTable` (TanStack v8: filter+phân trang+skeleton+empty) · `EmptyState` · `Skeleton` · `lib/employee-format`.
+- [ ] **UI-R-2** 🤖🟢 (M) **Kanban Công việc** (`tasks/task-board.tsx`, `tasks/index.tsx`, `task-hub.tsx`) — cột theo nhóm/trạng thái; card công việc (tiêu đề + assignee avatar + badge tiến độ + checklist count + thumbnail nếu có); drag nếu khả thi, không thì giữ click; toolbar lọc loại/trạng thái/người. **Tái dùng bộ shared UI-R-1.**
+- [ ] **UI-R-3** 🤖🟢 (M) **KPI / Mục tiêu** — BE có (`kpi_results`/`kpi_definitions`), **FE chưa có trang**. Tạo route `/kpi` (hoặc trong dashboard): danh sách mục tiêu theo phòng ban/nhân viên, cây mục tiêu, tiến độ %, trạng thái. Thêm vào nav registry + launcher (category `work` hoặc nhóm mới `goals`).
+- [ ] **UI-R-4** 🤖🟢 (M) **Quy trình** (`workflows/instances/*`, `templates/*`) — bảng lượt chạy (ID/tiêu đề/người tạo/ngày/trạng thái/người xử lý/hạn) + filter; trang chi tiết tái dùng canvas `@xyflow/react`; nút "Chạy quy trình". **Tái dùng bộ shared.**
+- [ ] **UI-R-5** 🤖🟢 (L) **Các màn còn lại** — Chấm công (lịch/bảng công), Tiền lương (kỳ lương/bảng lương/phiếu lương — **masking server-driven, re-auth giữ nguyên**), Media (kênh/dự án/content), Dashboard widgets (Recharts/Tremor). Theo cùng pattern shared.
+
+✅ **Done UI-R:** mọi module UI khớp tinh thần MISA + brand Funtime Media · loading/empty/error đẹp · i18n đủ · **permission gate giữ nguyên** · build xanh · không phá test · screenshot đối chiếu (`nexus-0X-*.png`).
+
+> ⚠️ **Guardrail:** KHÔNG commit/đụng `apps/web/src/lib/api-client.ts` (có nợ Bearer uncommitted phiên khác), `apps/api/demo-seed-full.mjs`, `.claude/hooks/*`, `docs/adr/*`. LIGHT gate: `typescript-reviewer` + `react-reviewer` + `quality-gate`.
+
+## AC — Admin Control Plane (`apps/admin` · 2 tầng) _(🛠️+🤖 · band `0300s` · phần lớn CROWN)_
+
+> App quản trị NỀN TẢNG: **Tầng Operator** (platform-admin, chéo-tenant: quản công ty/billing/feature-flag/observability/db-ops) + **Tầng Tenant self-service** (company-admin quản RBAC/giao diện công ty mình). 📋 **PLAN đã REVIEW (2026-06-17) — PRD v2 đã vá 5 BLOCKER**, hook `guard-migration-band` đã nhận lane `ac*`. **✅ WAVE 1 ĐÃ LAND master `9d251b4`** (AC-0a/0b/1/3 — 2026-06-17); Wave 2 còn mở. Cảnh báo từ review: ⚠️ AC-2/AC-8 **không "FE-only"** mà là backend-operator/crown; escape-hatch GUC chỉ nới bảng `companies`; KHÔNG session-impersonation mặc định (chéo-tenant = `withTenant(target)` per-call); AC-9 cần **RLS-bypass primitive read-only mới** (ADR riêng).
+
+**Trunk (tuần tự — mở mọi lane sau):**
+- [x] **AC-0a** 🔧🟢 (S) **Scaffold + root** ✅ — dựng `apps/admin` (Vite+React SPA, reuse design system + contracts), shell operator, route root, no-risk. **Đã mở Wave 1.** LIGHT gate. _(merge `376cf18`)_
+- [x] **AC-0b** 🛠️🔋 (M) **Operator auth** ✅ — token `aud=operator` riêng, **2FA bắt buộc**, step-up cho mọi cross-tenant write, session TTL ngắn, audit operator-action (`recordOperatorAction`). **CROWN** (đổi auth boundary). FULL gate + santa CONFIRMED-SAFE. _(merge `74211c4`)_
+
+**Wave 1 — FE-only / backend nhỏ (sau AC-0a/AC-0b):**
+- [x] **AC-1** 🤖🟢 (S) **Companies & Billing (Operator)** ✅ — list/create/suspend/configure công ty + đổi **plan**, map vào `platform-company.controller` (đã cross-tenant). **FE-only**, LIGHT gate. _(merge `db893df` · dep: AC-0a)_
+- [x] **AC-3** 🤖🟢 (S) **RBAC tenant self-service** ✅ — company-admin quản role công ty MÌNH qua `/tenant/:companyId/*`, reuse `permission-admin` nguyên trạng (`actor.companyId`). **FE-only thật, 0 backend/0 migration**, LIGHT gate. _(merge `9d251b4` · dep: AC-0a)_
+- [ ] **AC-2** 🛠️🔋 (M) **Feature-flag + Usage-limit viewer/editor (Operator)** — controller operator mới `GET/PUT admin/platform/companies/:id/feature-flags|usage-limits`, delegate `SubscriptionService` sẵn (target companyId), gate `manage:platform-entitlement` (`is_sensitive`). **No migration. CROWN** FULL+security. _(dep: AC-0b)_
+
+**Wave 2 — CROWN backend (sau AC-0b):**
+- [ ] **AC-7** 🛠️🔋 (M) **Module registry** — `system_modules` catalog (band `0330s`) + reuse `company_feature_flags`/`plan_entitlements` G16-3 (KHÔNG store song song). **CROWN** FULL+database. _(dep: AC-0b)_
+- [ ] **AC-4** 🛠️🔋 (L) **UI-config tenant** (branding/theme/menu/i18n override) — **3 bảng RLS mới** (band `0300s`); menu đọc effective-state từ `FeatureFlagService`/AC-7. **CROWN** FULL+database. _(dep: **AC-7** — đảo so v1)_
+- [ ] **AC-5** 🛠️🔋 (L) **API key / PAT** — **thay đổi AUTH PIPELINE TOÀN CỤC** (không chỉ apps/admin): PAT envelope-encrypt + guard auth toàn cục (band `0310s`). **CROWN đa-lane** FULL+security+santa. _(dep: AC-0b)_
+- [ ] **AC-6** 🛠️🔋 (L) **Webhooks out** — endpoint+subscription+HMAC(envelope)+delivery+chống SSRF (band `0320s`). **CROWN** FULL+security. _(dep: AC-0b)_
+- [ ] **AC-8** 🛠️🔋 (M) **Observability** — audit viewer (per-tenant → cross-tenant qua GUC read-only nếu cần, band `0340–0344s`) + queue/dead-letter monitor. **CROWN** FULL+security. _(dep: AC-0b)_
+- [ ] **AC-9** 🛠️🔋 (L) **DB ops** — migration status viewer + **data browser read-only allowlist bảng/cột (LOẠI secret/PII)** + export job; **primitive role-DB-read-only mới (ADR riêng)**, audit từng row, break-glass-style SoD approval (band `0345–0349s`). **CROWN, blast-radius cao nhất — land CUỐI.** _(dep: AC-0b, sau AC-8)_
+- [ ] **AC-10** 🛠️🔋 (M) **(Optional) Impersonation thật** — mint token TTL ngắn `aud=tenant` + claim `acting_as_operator` + audit bắt buộc + banner UI. **Lane crown riêng, KHÔNG mặc định v2.** _(dep: AC-0b)_
+
+✅ **Done AC:** operator quản được vòng đời tenant chéo-công-ty an toàn (fail-closed, audit từng hành động, không rò secret/PII); tenant self-service RBAC + giao diện; mọi cross-tenant write/AC-9 read có step-up + audit.
+
+> ⚠️ **Trước khi mở AC-0:** chốt lý do `apps/admin` riêng (review chỉ ra "SSR rò" sai vì là SPA — cân nhắc `/admin` trong `apps/web`); vá nốt mâu thuẫn PRD nếu còn. Band reserve `0300s–0349s` (xác nhận trống: latest migration `0232`).
+
+---
+
+## FE-SPLIT — Tách Frontend đa-SPA (`apps/web` → studio·people·console + auth) _(🛠️+🤖 · FE + 1 nền-phiên CROWN · 📋 DỰ THẢO 2026-06-17)_
+
+> Tách `apps/web` (1 SPA) → **3 product app** `studio` + `people` + `console` + **`apps/auth`** (đăng nhập trung tâm/SSO) + 2 shared package `packages/{ui,web-core}`. **GIỮ 1 backend** (`apps/api`) — KHÔNG tách microservices. Đường cắt tự nhiên = **7 category** trong nav registry `apps/web/src/lib/nav.ts`. 📋 Kế hoạch đầy đủ (bản đồ di chuyển theo file thật · thiết kế SSO cookie-subdomain · rủi ro · ước lượng): **`docs/frontend-split-plan.md`**. Bắt đầu **Phase 0 → Phase 1**.
+
+- [ ] **FS-0** 🤖🟢 (L) **Rút shared packages** — `packages/web-core` (auth store · api-client Bearer/envelope · use-can/PermissionGate · i18n setup · nav types) + `packages/ui` (shadcn primitives + layout + DataTable/PageHeader/EmptyState/Skeleton); đổi import `@/` → `@mediaos/{web-core,ui}` trong `apps/web`; **pin React `19.2.7`** ở `packages/ui` (bài học `apps/admin`). Vẫn 1 app. **DoD: web build + 314 test GIỮ NGUYÊN.** LIGHT gate. ⭐ ưu tiên cao nhất, rủi ro thấp, đảo ngược dễ.
+- [ ] **FS-1** 🛠️🔋🔋 (L) **Nền phiên + `apps/auth`** (đăng nhập trung tâm — RỦI RO #1) — api thêm `POST /auth/refresh` (rotation + reuse-detection) + `/auth/logout`, phát refresh cookie `HttpOnly`/`Secure`/`Domain=.<domain>`/`SameSite=Strict` + CSRF + **CORS allowlist credentials** + **validate `redirect`** (chống open-redirect); `apps/auth` SPA mỏng (login + 2FA + set-password); `web-core` **silent-refresh khi load + refresh-on-401** (xếp hàng request) + redirect `auth.<domain>` khi fail; dev `*.localhost`. Access token **giữ in-memory**. **CROWN auth boundary → FULL gate + santa.** ⭐ CHỐT CHẶN — phải xong trước khi tách product app. _(dep: FS-0)_
+- [ ] **FS-2** 🤖🟢 (M) **`apps/people`** — di chuyển hr + attendance + payroll theo bản đồ (mục 4); subdomain `people.<domain>` `base:"/"`; khai NAV_ITEMS subset; **xoá** route đã chuyển khỏi `apps/web`. _(dep: FS-1)_
+- [ ] **FS-3** 🤖🟢 (M) **`apps/studio`** — work + process + goals; subdomain `studio.<domain>`; cô lập `recharts` vào studio; `@xyflow/react` dùng chung studio↔people (org-chart) — chấp nhận hoặc refactor org-chart trước. _(dep: FS-1)_
+- [ ] **FS-4** 🤖🟢 (M) **`apps/console`** (nhóm `system`, tenant `aud=user` — **KHÁC** operator plane `apps/admin`) — settings/company · platform-accounts · break-glass; di chuyển nốt rồi **XOÁ `apps/web`**. _(dep: FS-1)_
+- [ ] **FS-5** 🔧🔋 (M) **Cutover prod** — DNS các subdomain + **TLS wildcard `*.<domain>`** + landing/launcher chọn app theo capabilities + CI per-app; SSO đăng nhập 1 lần (cookie `Domain=.<domain>`) dùng mọi subdomain. _(dep: FS-2 · FS-3 · FS-4)_
+
+✅ **Done FE-SPLIT:** mỗi mảng là SPA build/deploy riêng (bundle nhẹ); đăng nhập 1 lần dùng chung mọi app; access token chỉ in-memory (không `localStorage`); `apps/web` đã xoá.
+
+> ⚠️ **Phân biệt app:** `apps/console` = TENANT self-service (`aud=user`) ≠ `apps/admin` = operator control-plane (`aud=operator`, chéo-tenant, đã ở master — NGOÀI phạm vi đợt này). **KHÔNG tách backend** (`docs/frontend-split-plan.md` §9: 1 Postgres + RLS + ~198 FK chéo domain). Cảnh báo từ plan: token in-memory không sống qua origin khác ⇒ **FS-1 là điều kiện cần** để mọi app tách ra đăng nhập được.
+
+---
+
 ## 🚦 Mốc release nội bộ _(không chờ xong hết mới dùng)_
 
 | Release | Gồm phase | Người dùng chính |
@@ -575,6 +640,14 @@ _(custom `react-native-reviewer/patterns/build-fix/push`)_
 - [ ] Trước khi vào "thung lũng" G2/G3, nhắc mình: **đỉnh G4 ở ngay sau** — đừng bỏ cuộc giữa dốc.
 - [ ] Demo cho 1 người dùng thật **sau mỗi mốc M1–M5** → dopamine + feedback sớm, tránh build lệch.
 - [ ] Bám **MỐC**, không bám tổng 16 phase. Một mình mà nhìn tổng sẽ nản.
+
+---
+
+---
+
+## Web UI Redesign Phase 2 — lane UI-KPI
+
+- [x] **Trang KPI / Mục tiêu (FE, MISA-style)** — route `/kpi` (`apps/web/src/routes/kpi/`): `index.tsx` (PageHeader + DataTable danh sách ĐỊNH NGHĨA KPI với thanh phân rã trọng số 5 thành phần + Badge active/inactive + search), `kpi-compute-panel.tsx` (form tính KPI theo nhân viên/nhóm + kỳ, gated `read:kpi`; action xác nhận gated `confirm:kpi` qua `PermissionGate`), `kpi-goal-tree.tsx` (cây mục tiêu: điểm tổng → 5 mục tiêu con, tiến độ % + bậc xếp loại). Lib mới `lib/kpi-api.ts` (TÁI DÙNG `apiFetch` chung + Zod contracts `kpiDefinitionSchema`/`kpiResultSchema`) + `lib/kpi-format.ts` (ngưỡng/variant/label). i18n namespace mới `kpi.json`. Nav registry: thêm category `goals` + item `kpi` (sidebar + launcher tự render). **Permission mask mặc định** (chỉ render dữ liệu server trả, `useCan`/`PermissionGate`, KHÔNG hard-code). FE-only, 0 migration. **Nợ dữ liệu**: BE chưa có `GET /kpi/results` (lịch sử kpi_results theo phòng ban) → tiến độ lấy theo từng lần `POST /kpi/compute`; danh sách lịch sử/biểu đồ xu hướng chờ endpoint list.
 
 ---
 

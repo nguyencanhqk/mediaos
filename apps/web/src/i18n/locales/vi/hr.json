@@ -96,22 +96,32 @@
   },
   "adjustmentsPage": {
     "heading": "Đơn bổ sung công",
+    "description": "Gửi và duyệt đơn bổ sung giờ chấm công.",
     "filterScope": "Phạm vi",
     "filterStatus": "Trạng thái",
     "loading": "Đang tải đơn bổ sung công…",
-    "loadError": "Không tải được danh sách đơn."
+    "loadError": "Không tải được danh sách đơn.",
+    "errorTitle": "Không tải được danh sách đơn",
+    "errorHint": "Vui lòng thử lại sau giây lát.",
+    "emptyTitle": "Chưa có đơn bổ sung công",
+    "emptyHint": "Các đơn bổ sung công sẽ xuất hiện tại đây."
   },
   "attendancePage": {
     "heading": "Chấm công",
+    "description": "Theo dõi giờ vào/ra và bảng công theo tháng.",
     "filterMonth": "Tháng",
     "statOnTime": "Đúng giờ",
     "statLate": "Trễ",
     "statAbsent": "Vắng",
     "loading": "Đang tải bảng công…",
-    "loadError": "Không tải được bảng công."
+    "loadError": "Không tải được bảng công.",
+    "errorTitle": "Không tải được bảng công",
+    "errorHint": "Vui lòng thử lại sau giây lát.",
+    "tableHeading": "Bảng công {{month}}"
   },
   "leavePage": {
     "heading": "Nghỉ phép",
+    "description": "Quản lý đơn nghỉ phép, số phép còn lại và lịch nghỉ của team.",
     "tabRequests": "Danh sách đơn",
     "tabCalendar": "Lịch nghỉ team",
     "filterScope": "Phạm vi",
@@ -119,6 +129,10 @@
     "filterYear": "Năm",
     "filterMonth": "Chọn tháng",
     "loading": "Đang tải đơn nghỉ phép…",
-    "loadError": "Không tải được danh sách đơn."
+    "loadError": "Không tải được danh sách đơn.",
+    "errorTitle": "Không tải được danh sách đơn",
+    "errorHint": "Vui lòng thử lại sau giây lát.",
+    "emptyTitle": "Chưa có đơn nghỉ phép",
+    "emptyHint": "Các đơn nghỉ phép sẽ xuất hiện tại đây."
   }
 }
