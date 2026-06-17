@@ -2,6 +2,7 @@ import { Outlet, createRootRoute, createRoute, createRouter, redirect } from "@t
 import { LoginPage } from "@/routes/login";
 import { RootLayout } from "@/routes/root-layout";
 import { OperatorHomePage } from "@/routes/operator/home";
+import { CompaniesListPage } from "@/routes/operator/companies/companies-list";
 import { TenantHomePage } from "@/routes/tenant/tenant-home";
 import { useAuthStore } from "@/stores/auth";
 
@@ -40,6 +41,13 @@ const operatorRoute = createRoute({
   component: OperatorHomePage,
 });
 
+// AC-1 — Operator companies & billing (cross-tenant via withTenant(target)).
+const operatorCompaniesRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/operator/companies",
+  component: CompaniesListPage,
+});
+
 // /tenant/:companyId — operator chọn 1 tenant để thao tác (ADR-0019 Tầng 1: withTenant(target)).
 const tenantRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
@@ -49,7 +57,7 @@ const tenantRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  appLayoutRoute.addChildren([indexRoute, operatorRoute, tenantRoute]),
+  appLayoutRoute.addChildren([indexRoute, operatorRoute, operatorCompaniesRoute, tenantRoute]),
 ]);
 
 export const router = createRouter({ routeTree });

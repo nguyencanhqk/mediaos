@@ -1,5 +1,5 @@
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard } from "lucide-react";
+import { Building2, LayoutDashboard } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/stores/auth";
@@ -10,7 +10,10 @@ import { useAuthStore } from "@/stores/auth";
  * (vd AC-1 thêm `/operator/companies`). `to` được TanStack Router kiểm kiểu nên chỉ liệt kê
  * route đã tồn tại.
  */
-const NAV = [{ to: "/operator", key: "overview", icon: LayoutDashboard }] as const;
+const NAV = [
+  { to: "/operator", key: "overview", icon: LayoutDashboard },
+  { to: "/operator/companies", key: "companies", icon: Building2 },
+] as const;
 
 export function RootLayout() {
   const { t } = useTranslation("nav");
