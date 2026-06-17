@@ -7,6 +7,8 @@ import type { AuthTokens } from "@mediaos/contracts";
 import { TwoFactorChallengeForm } from "@/components/two-factor/TwoFactorChallengeForm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { BrandMark, BrandWordmark } from "@/components/brand/brand-mark";
+import { BRAND } from "@/lib/brand";
 import { ApiError } from "@/lib/api-client";
 import { authApi } from "@/lib/auth-api";
 import { useAuthStore } from "@/stores/auth";
@@ -113,9 +115,11 @@ export function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm rounded-xl border border-border p-8 shadow-sm">
-        <div className="mb-6 space-y-1 text-center">
-          <h1 className="text-2xl font-semibold">{t("common:appName")}</h1>
-          <p className="text-sm text-muted-foreground">{t("login.subtitle")}</p>
+        <div className="mb-6 flex flex-col items-center gap-2 text-center">
+          <BrandMark className="h-14 w-14 drop-shadow-sm" />
+          <BrandWordmark text={BRAND.name} className="text-xl" />
+          <p className="text-xs font-medium text-muted-foreground">{BRAND.slogan}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t("login.subtitle")}</p>
         </div>
 
         {/* Lỗi hiển thị ở container — nhìn thấy ở CẢ bước credentials lẫn 2FA. */}
