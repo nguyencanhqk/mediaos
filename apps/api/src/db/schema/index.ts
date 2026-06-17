@@ -45,3 +45,5 @@ export * from "./templates";
 export * from "./device-tokens";
 // AC-5 API key / Personal Access Token (PAT) — per-tenant FORCE-RLS + append-only usages
 export * from "./api-keys";
+// AC-7 module-registry (catalog GLOBAL no-RLS — lớp module trên feature-flag, reuse company_feature_flags)
+export * from "./module-registry";
