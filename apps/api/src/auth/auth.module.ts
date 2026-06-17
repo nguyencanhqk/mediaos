@@ -8,6 +8,7 @@ import { LoginRateLimiter } from "./login-rate-limiter";
 import { PasswordService } from "./password.service";
 import { ReplayGuardService } from "./replay-guard.service";
 import { SecurityAlertService } from "./security-alert.service";
+import { SessionCookieService } from "./session-cookie.service";
 import { TokenService } from "./token.service";
 import { TotpService } from "./totp.service";
 import { TwoFactorService } from "./two-factor.service";
@@ -32,6 +33,7 @@ import { TwoFactorEnforcementGuard } from "./two-factor-enforcement.guard";
     TwoFactorService,
     ReplayGuardService,
     SecurityAlertService,
+    SessionCookieService,
     TwoFactorEnforcementGuard,
   ],
   exports: [
