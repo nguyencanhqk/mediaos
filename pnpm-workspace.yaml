@@ -2,6 +2,13 @@ packages:
   - "apps/*"
   - "packages/*"
 
+# Pin React TYPES về một phiên bản toàn monorepo — chặn @types/react dedupe skew
+# (ReactNode/ReactPortal mismatch 19.0.14 vs 19.2.16; bài học apps/admin). Khớp peerDeps
+# packages/{ui,web-core}. Chỉ pin types (KHÔNG pin react/react-dom runtime — giữ Expo/mobile).
+overrides:
+  "@types/react": "19.2.16"
+  "@types/react-dom": "19.2.3"
+
 # Cho phép chạy postinstall của các gói cần binary native (pnpm 10+ chặn mặc định).
 allowBuilds:
   esbuild: true
