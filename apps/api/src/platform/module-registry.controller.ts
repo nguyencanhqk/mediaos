@@ -70,10 +70,19 @@ export class ModuleRegistryController {
     return this.modules.getTenantModules(id);
   }
 
-  /** Bật/tắt 1 module cho 1 tenant (cross-tenant, step-up bắt buộc, atomic + audit). */
+  /**
+   * Bật/tắt 1 module cho 1 tenant (cross-tenant, step-up bắt buộc, atomic + audit).
+   *
+   * Step-up = OperatorReauthGuard (method-level, CHẠY TRƯỚC PermissionGuard) — cửa sổ reauth oper>target ở
+   * Valkey. KHÔNG dùng `requiresReauth:true` trên @RequirePermission: cặp (isSensitive && requiresReauth) bật
+   * "reveal-class" của PermissionGuard (permission.guard.ts:87) → đòi PER-OBJECT grant trên target company +
+   * reauthContext của in-tenant ReauthGuard. Operator chỉ có grant ROLE-level (platform-admin) ⇒ sẽ bị
+   * deny-object-required VĨNH VIỄN (TRAP G12-4). isSensitive:true (khớp seed) là đủ — quyền vẫn fail-closed
+   * type-level, step-up đã do OperatorReauthGuard ép. (Mirror AC-1 platform-company.controller.)
+   */
   @Put("companies/:id/modules/:moduleKey")
   @UseGuards(OperatorReauthGuard)
-  @RequirePermission("manage", "module-toggle", { isSensitive: true, requiresReauth: true })
+  @RequirePermission("manage", "module-toggle", { isSensitive: true })
   setModuleEnabled(
     @Req() req: AuthenticatedRequest,
     @Param("id", ParseUUIDPipe) id: string,

@@ -16,7 +16,7 @@ import { apiFetch } from "./api-client";
  *
  * Permission (server ép, FE chỉ gate UI):
  *   - catalog/list / tenant modules → `view:system-module`
- *   - toggle module/tenant          → `manage:module-toggle` (is_sensitive, requiresReauth)
+ *   - toggle module/tenant          → `manage:module-toggle` (is_sensitive; step-up qua OperatorReauthGuard)
  */
 
 const BASE = "/admin/platform";

@@ -1,6 +1,19 @@
 {
   "title": "Module hệ thống",
   "subtitle": "Bật/tắt module cho công ty (lớp trên cờ tính năng).",
+  "catalog": {
+    "title": "Danh mục module",
+    "subtitle": "Toàn bộ module hệ thống (catalog dùng chung mọi công ty).",
+    "searchPlaceholder": "Tìm theo tên/mã module…",
+    "route": "Đường dẫn",
+    "dependsOn": "Phụ thuộc",
+    "active": "Kích hoạt",
+    "inactive": "Tạm tắt",
+    "empty": {
+      "title": "Danh mục module trống",
+      "description": "Chưa có module nào được định nghĩa trong hệ thống."
+    }
+  },
   "table": {
     "name": "Tên module",
     "key": "Mã",

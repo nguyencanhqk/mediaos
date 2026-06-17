@@ -117,4 +117,23 @@ describe.skipIf(!hasDb)("AC-7 module-registry deny-path", () => {
     });
     expect(d.allow).toBe(false);
   });
+
+  // (5) REGRESSION GUARD cho TRAP G12-4 (objectGrantRequired). Nếu route module-toggle lỡ đặt
+  // requiresReauth:true trên @RequirePermission, PermissionGuard bật "reveal-class" (isSensitive &&
+  // requiresReauth) → forward resourceId=target company + đòi PER-OBJECT grant. Operator chỉ có grant
+  // ROLE-level ⇒ DENY VĨNH VIỄN (đúng input guard cũ từng gửi — test(3) type-level KHÔNG bắt được).
+  // Test này CHỨNG MINH: chính platform-admin (đang ALLOW ở test 3) BỊ DENY khi đi nhánh reveal-class →
+  // lý do route PHẢI giữ isSensitive-only (step-up do OperatorReauthGuard, KHÔNG qua reveal-class).
+  it("(5) reveal-class (isSensitive+requiresReauth+resourceId) ⇒ platform-admin DENY (vì sao route KHÔNG được requiresReauth)", async () => {
+    const d = await permission.can({
+      userId: paActor,
+      companyId: A.companyId,
+      action: "manage",
+      resourceType: "module-toggle",
+      resourceId: A.companyId, // guard set req.params.id khi reveal-class
+      isSensitive: true,
+      requiresReauth: true,
+    });
+    expect(d.allow).toBe(false); // role-level grant KHÔNG đủ cho reveal-class ⇒ deny-object-required
+  });
 });

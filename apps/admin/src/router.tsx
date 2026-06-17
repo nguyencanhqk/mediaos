@@ -6,6 +6,7 @@ import { CompaniesListPage } from "@/routes/operator/companies/companies-list";
 import { TenantHomePage } from "@/routes/tenant/tenant-home";
 import { RbacPage } from "@/routes/tenant/rbac/rbac-page";
 import { ModulesListPage } from "@/routes/operator/modules/modules-list";
+import { ModuleCatalogPage } from "@/routes/operator/modules/catalog-list";
 import { useAuthStore } from "@/stores/auth";
 
 const rootRoute = createRootRoute({ component: Outlet });
@@ -50,6 +51,13 @@ const operatorCompaniesRoute = createRoute({
   component: CompaniesListPage,
 });
 
+// AC-7 — Operator catalog module GLOBAL (read-only viewer của system_modules dùng chung).
+const operatorModulesRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/operator/modules",
+  component: ModuleCatalogPage,
+});
+
 // /tenant/:companyId — operator chọn 1 tenant để thao tác (ADR-0019 Tầng 1: withTenant(target)).
 // Layout-only: render <Outlet/> để các module tenant (RBAC AC-3, branding AC-4…) gắn child route.
 const tenantRoute = createRoute({
@@ -85,6 +93,7 @@ const routeTree = rootRoute.addChildren([
     indexRoute,
     operatorRoute,
     operatorCompaniesRoute,
+    operatorModulesRoute,
     tenantRoute.addChildren([tenantIndexRoute, tenantRbacRoute, tenantModulesRoute]),
   ]),
 ]);
