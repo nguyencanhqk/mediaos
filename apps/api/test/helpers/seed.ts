@@ -382,6 +382,10 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM revenue_records WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM profit_snapshots WHERE company_id = ANY($1::uuid[])", ids);
 
+  // ── G15-2 Device tokens (push registration, soft-delete, FK → users) ──────────
+  // device_tokens.user_id → users (NO ACTION) → xoá TRƯỚC users.
+  await direct.query("DELETE FROM device_tokens WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G4-6 Communication ───────────────────────────────────────────────────
   await direct.query("DELETE FROM chat_messages WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM chat_room_members WHERE company_id = ANY($1::uuid[])", ids);

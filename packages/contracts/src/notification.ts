@@ -64,3 +64,14 @@ export const notificationRuleSchema = z.object({
   createdAt: z.string().datetime(),
 });
 export type NotificationRuleDto = z.infer<typeof notificationRuleSchema>;
+
+// ─── device_tokens (G15-2 push notification registration) ────────────────────
+
+export const devicePlatformSchema = z.enum(["ios", "android", "web"]);
+export type DevicePlatform = z.infer<typeof devicePlatformSchema>;
+
+export const registerDeviceSchema = z.object({
+  token: z.string().min(1),
+  platform: devicePlatformSchema,
+});
+export type RegisterDeviceDto = z.infer<typeof registerDeviceSchema>;

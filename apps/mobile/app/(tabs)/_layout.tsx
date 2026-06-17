@@ -1,6 +1,8 @@
 import { Redirect, Tabs } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../../src/auth/auth-context";
+import { notificationApi } from "../../src/api/notification-api";
 
 /**
  * Authenticated tabs layout + NAV GUARD (pays down the M0 "no route guard" debt):
@@ -9,6 +11,15 @@ import { useAuth } from "../../src/auth/auth-context";
  */
 export default function TabsLayout() {
   const { user, isLoading } = useAuth();
+
+  // Unread count for notification badge — only when authenticated.
+  const { data: unreadData } = useQuery({
+    queryKey: ["notifications", "unread-count"],
+    queryFn: () => notificationApi.unreadCount(),
+    enabled: Boolean(user),
+    refetchInterval: 30_000,
+  });
+  const unreadCount = unreadData?.count ?? 0;
 
   if (isLoading) {
     return (
@@ -27,6 +38,19 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: "Trang chủ" }} />
       <Tabs.Screen name="tasks" options={{ title: "Việc của tôi" }} />
       <Tabs.Screen name="approvals" options={{ title: "Chờ duyệt" }} />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: "Thông báo",
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+        }}
+      />
+      <Tabs.Screen
+        name="chat"
+        options={{
+          title: "Chat",
+        }}
+      />
     </Tabs>
   );
 }

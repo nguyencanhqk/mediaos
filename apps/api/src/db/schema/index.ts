@@ -41,3 +41,5 @@ export * from "./break-glass";
 export * from "./saas";
 // G16-3 template clone (workspace_templates catalog + per-company dashboard_configs)
 export * from "./templates";
+// G15-2 device tokens (push notification registration)
+export * from "./device-tokens";
