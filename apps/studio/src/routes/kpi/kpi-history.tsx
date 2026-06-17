@@ -127,7 +127,8 @@ export function KpiHistory({ results, isLoading, isError, subjectNames }: KpiHis
         ),
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // FS-3: apps/studio không nằm trong scope plugin react-hooks (giống apps/admin) → bỏ chỉ thị
+    // eslint-disable react-hooks/* (rule không tồn tại ở app này). Deps cố ý giữ [t, subjectNames].
     [t, subjectNames],
   );
 
