@@ -53,4 +53,41 @@ describe("TokenService", () => {
     );
     process.env.JWT_SECRET = TEST_SECRET;
   });
+
+  // ── AC-0b: token audience matrix (operator vs tenant) ──────────────────────────
+  describe("AC-0b audience boundary", () => {
+    it("legacy token (no aud) defaults to tenant — verify with expected tenant passes, operator rejects", () => {
+      const svc = new TokenService();
+      // Legacy access token: signed WITHOUT an audience (backward-compat).
+      const legacy = svc.signAccessToken({ sub: "u1", companyId: "c1", email: "a@b.c" });
+      // Default expectation (tenant) accepts a legacy token.
+      expect(svc.verifyAccessToken(legacy, "tenant").aud).toBe("tenant");
+      // No-arg verify also defaults to tenant (existing callers unchanged).
+      expect(svc.verifyAccessToken(legacy).aud).toBe("tenant");
+      // An operator route must REJECT a legacy/tenant token.
+      expect(() => svc.verifyAccessToken(legacy, "operator")).toThrow();
+    });
+
+    it("operator token verifies as operator, rejected when tenant audience expected", () => {
+      const svc = new TokenService();
+      const operator = svc.signAccessToken({ sub: "u1", companyId: "c1", email: "a@b.c", aud: "operator" });
+      expect(svc.verifyAccessToken(operator, "operator").aud).toBe("operator");
+      // Wrong-audience: operator token cannot be used on a tenant route.
+      expect(() => svc.verifyAccessToken(operator, "tenant")).toThrow();
+    });
+
+    it("explicit tenant token verifies as tenant, rejected when operator audience expected", () => {
+      const svc = new TokenService();
+      const tenant = svc.signAccessToken({ sub: "u1", companyId: "c1", email: "a@b.c", aud: "tenant" });
+      expect(svc.verifyAccessToken(tenant, "tenant").aud).toBe("tenant");
+      expect(() => svc.verifyAccessToken(tenant, "operator")).toThrow();
+    });
+
+    it("token-confusion still blocked: 2FA challenge rejected on every audience", () => {
+      const svc = new TokenService();
+      const challenge = svc.signTwoFactorChallenge({ sub: "u1", companyId: "c1" });
+      expect(() => svc.verifyAccessToken(challenge, "tenant")).toThrow();
+      expect(() => svc.verifyAccessToken(challenge, "operator")).toThrow();
+    });
+  });
 });

@@ -7,11 +7,11 @@ import type {
   ResetPasswordRequest,
   TwoFactorChallenge,
 } from "@mediaos/contracts";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
 import { DatabaseService, type TenantTx } from "../db/db.service";
-import { passwordResetTokens, refreshTokens, users } from "../db/schema";
+import { passwordResetTokens, refreshTokens, roles, userRoles, users } from "../db/schema";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { PermissionService } from "../permission/permission.service";
@@ -33,6 +33,8 @@ export interface RequestMeta {
 const uuidSchema = z.string().uuid();
 /** 401 ĐỒNG NHẤT cho mọi lỗi đăng nhập — không lộ user/tenant tồn tại (plan §3b/G2-6). */
 const UNIFORM_LOGIN_ERROR = "Thông tin đăng nhập không hợp lệ.";
+/** AC-0b: id role hệ thống `platform-admin` (mig 0230) — phiên user giữ role này = OPERATOR (aud). */
+const PLATFORM_ADMIN_ROLE_ID = "00000000-0000-0000-0000-0000000000f0";
 
 /** Hình dạng envelope reset-token lưu trong outbox payload (Buffer → base64 để truyền JSON). */
 const resetEnvelopeSchema = z.object({
@@ -353,7 +355,8 @@ export class AuthService {
   async me(accessToken: string): Promise<MeResponse> {
     let claims: ReturnType<typeof this.tokens.verifyAccessToken>;
     try {
-      claims = this.tokens.verifyAccessToken(accessToken);
+      // AC-0b: /me là endpoint định-danh CHÍNH CHỦ — chấp nhận cả phiên operator lẫn tenant ("any").
+      claims = this.tokens.verifyAccessToken(accessToken, "any");
     } catch {
       throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
     }
@@ -509,6 +512,28 @@ export class AuthService {
     return row ?? null;
   }
 
+  /**
+   * AC-0b: user giữ role hệ thống `platform-admin` (id …f0) CÒN HIỆU LỰC ⇒ phiên OPERATOR (control-plane
+   * chéo tenant). Join y hệt requiresTwoFactorTx (userRoles ⋈ roles, lọc deleted_at + expires_at) nhưng
+   * khoá theo id role platform-admin cố định. Chạy TRONG tx login (cùng 1 transaction, không round-trip thừa).
+   */
+  private async isOperatorTx(tx: TenantTx, userId: string): Promise<boolean> {
+    const [row] = await tx
+      .select({ one: sql<number>`1` })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(
+        and(
+          eq(userRoles.userId, userId),
+          eq(roles.id, PLATFORM_ADMIN_ROLE_ID),
+          isNull(roles.deletedAt),
+          or(isNull(userRoles.expiresAt), gt(userRoles.expiresAt, new Date())),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
   /** Tạo access token + refresh token (lưu hash). Trả token + id refresh mới (cho rotation). */
   private async issueTokens(
     tx: TenantTx,
@@ -516,7 +541,11 @@ export class AuthService {
     userId: string,
     email: string,
   ): Promise<{ tokens: AuthTokens; newTokenId: string }> {
-    const accessToken = this.tokens.signAccessToken({ sub: userId, companyId, email });
+    // AC-0b: operator (platform-admin) ⇒ aud='operator' + TTL ngắn; còn lại ⇒ aud='tenant' + TTL thường.
+    const isOperator = await this.isOperatorTx(tx, userId);
+    const aud = isOperator ? ("operator" as const) : ("tenant" as const);
+    const accessToken = this.tokens.signAccessToken({ sub: userId, companyId, email, aud });
+    const expiresIn = isOperator ? this.tokens.operatorAccessTtlSec : this.tokens.accessTtlSec;
     const plain = this.tokens.generateOpaqueToken();
     const scoped = this.scopeToken(companyId, plain);
     const expiresAt = new Date(Date.now() + this.tokens.refreshTtlSec * 1000);
@@ -528,7 +557,7 @@ export class AuthService {
       tokens: {
         accessToken,
         refreshToken: scoped,
-        expiresIn: this.tokens.accessTtlSec,
+        expiresIn,
       },
       newTokenId: inserted.id,
     };

@@ -32,12 +32,22 @@ ON CONFLICT (action, resource_type) DO NOTHING;
 --> statement-breakpoint
 
 -- ── Seed: system role `platform-admin` (company_id NULL, is_system) ──────────────────────────────────
--- UUID cố định nối tiếp dải system-role 0005 (…001..008). requires_two_factor=false để KHÔNG phá harness
--- test/login hiện có; HARDENING follow-up: bật true ở prod (role god-mode chéo tenant nên ép 2FA).
-INSERT INTO roles (id, company_id, name, description, is_system) VALUES
+-- UUID cố định nối tiếp dải system-role 0005 (…001..008).
+-- AC-0b (operator-auth boundary): requires_two_factor=TRUE — role god-mode chéo tenant (control plane)
+--   BẮT BUỘC 2FA. TwoFactorEnforcementGuard DENY mọi operator chưa enroll TOTP (code
+--   TWO_FACTOR_SETUP_REQUIRED). Harness test/e2e giữ xanh bằng PRE-ENROLL operator (seedTwoFactorEnabled),
+--   KHÔNG dùng kill-switch TWO_FACTOR_ENFORCEMENT_ENABLED để giấu. INSERT mới (fresh DB) lấy giá trị này;
+--   DB dài-hạn đã chạy 0230 cũ hội tụ qua UPDATE ở demo-seed/bootstrap (xem demo-seed-dashboard.mjs).
+INSERT INTO roles (id, company_id, name, description, is_system, requires_two_factor) VALUES
   ('00000000-0000-0000-0000-0000000000f0', NULL, 'platform-admin',
-   'Platform operator: manage tenant lifecycle across all companies (SaaS control plane)', true)
+   'Platform operator: manage tenant lifecycle across all companies (SaaS control plane)', true, true)
 ON CONFLICT DO NOTHING;
+--> statement-breakpoint
+
+-- AC-0b: hội tụ DB dài-hạn đã seed role …f0 với requires_two_factor=false TRƯỚC bản vá này. ON CONFLICT
+-- DO NOTHING ở trên KHÔNG cập nhật cờ cho row đã tồn tại → UPDATE tường minh (idempotent, an toàn re-run).
+UPDATE roles SET requires_two_factor = true
+  WHERE id = '00000000-0000-0000-0000-0000000000f0' AND requires_two_factor IS DISTINCT FROM true;
 --> statement-breakpoint
 
 -- Grant 4 platform permissions cho platform-admin TƯỜNG MINH (sensitive ⇒ explicit non-wildcard ALLOW).

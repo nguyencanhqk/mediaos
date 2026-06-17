@@ -37,6 +37,9 @@ export const envSchema = z.object({
   // JWT_SECRET optional để API vẫn boot khi chưa cấu hình; AuthModule fail-fast khi dùng mà thiếu.
   JWT_SECRET: z.string().min(32).optional(),
   ACCESS_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(900), // 15 phút
+  // AC-0b: TTL access token PHIÊN OPERATOR (platform-admin, aud='operator'). Ngắn hơn tenant — phiên
+  // control-plane chéo tenant rủi ro cao nên thu hẹp cửa sổ. Default 600s (10 phút).
+  OPERATOR_ACCESS_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(600),
   REFRESH_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(2592000), // 30 ngày
   RESET_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(3600), // 1 giờ
   // G16-1b: ép server-side 2FA enrollment. Default 'true' (BẬT ở prod) — user có role requires_two_factor

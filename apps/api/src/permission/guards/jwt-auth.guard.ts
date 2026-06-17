@@ -1,13 +1,16 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
-import { TokenService } from '../../auth/token.service';
+import { TokenService, type TokenAudience } from '../../auth/token.service';
+import { OPERATOR_ONLY } from '../../auth/operator-only.decorator';
 import { IS_PUBLIC } from '../public.decorator';
 
 export interface AuthenticatedUser {
   id: string;
   companyId: string;
   email: string;
+  /** AC-0b: audience của access token đã verify ('operator' phiên platform-admin, 'tenant' phiên thường). */
+  aud: TokenAudience;
 }
 
 /** Extend Express Request to carry the resolved user after JWT validation. */
@@ -44,13 +47,23 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Missing or invalid Authorization header');
     }
 
+    // AC-0b: route @OperatorOnly ⇒ audience='operator'; còn lại mặc định 'tenant' (route cũ KHÔNG đổi).
+    // verifyAccessToken ép biên: token sai audience (operator↔tenant) throw → 401. Token legacy (không
+    // aud) = 'tenant' (backward-compat) nên KHÔNG qua được route operator.
+    const operatorOnly = this.reflector.getAllAndOverride<boolean>(OPERATOR_ONLY, [
+      ctx.getHandler(),
+      ctx.getClass(),
+    ]);
+    const expectedAudience: TokenAudience = operatorOnly ? 'operator' : 'tenant';
+
     const token = authHeader.slice(7);
     try {
-      const claims = this.tokens.verifyAccessToken(token);
+      const claims = this.tokens.verifyAccessToken(token, expectedAudience);
       (req as AuthRequest).user = {
         id: claims.sub,
         companyId: claims.companyId,
         email: claims.email,
+        aud: claims.aud,
       };
       return true;
     } catch {

@@ -17,6 +17,7 @@ import { ZodValidationPipe } from "nestjs-zod";
 import { ZodError } from "zod";
 import { listCompaniesQuerySchema } from "@mediaos/contracts";
 import type { Request } from "express";
+import { OperatorOnly } from "../auth/operator-only.decorator";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import { PlatformCompanyService } from "./platform-company.service";
@@ -43,6 +44,7 @@ function parseOr400<T>(schema: { parse: (v: unknown) => T }, input: unknown): T 
  * CHỈ role platform-admin (grant tường minh non-wildcard) qua được. KHÔNG hard-delete (suspend = status).
  */
 @Controller("admin/platform/companies")
+@OperatorOnly()
 @UseGuards(PermissionGuard)
 @UsePipes(ZodValidationPipe)
 export class PlatformCompanyController {
