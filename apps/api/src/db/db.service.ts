@@ -117,6 +117,23 @@ export class DatabaseService {
     return result.rows as R[];
   }
 
+  /**
+   * AC-9: transaction KHÔNG-tenant-context cho bảng GLOBAL no-RLS OPERATOR-SCOPED (db_ops_grants/
+   * db_ops_grant_approvals/db_export_jobs — KHÔNG company_id, KHÔNG RLS). App role có grant trực tiếp
+   * (SELECT/INSERT + column-UPDATE) trên các bảng này; KHÔNG set GUC nào ⇒ MỌI bảng nghiệp vụ tenant-scoped
+   * (FORCE-RLS keyed app.current_company_id) vẫn 0 row trong tx này (fail-closed — KHÔNG rò chéo tenant).
+   *
+   * Dùng cho FSM break-glass db-ops (FOR UPDATE serialize approve/revoke). KHÔNG dùng cho bảng tenant-scoped
+   * (sẽ trả 0 row vì thiếu company GUC). KHÔNG phải escape-hatch: không nới policy, chỉ chạy trên bảng đã
+   * no-RLS-by-design (target_tenant_id, không company_id).
+   */
+  async withTransaction<T>(fn: (tx: TenantTx) => Promise<T>): Promise<T> {
+    if (!db) {
+      throw new DatabaseNotConfiguredError();
+    }
+    return db.transaction(async (tx) => fn(tx));
+  }
+
   async withPlatformContext<T>(fn: (tx: TenantTx) => Promise<T>): Promise<T> {
     if (!db) {
       throw new DatabaseNotConfiguredError();

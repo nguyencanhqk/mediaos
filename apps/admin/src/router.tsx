@@ -15,6 +15,7 @@ import { NavigationPage } from "@/routes/tenant/ui-config/navigation-page";
 import { I18nPage } from "@/routes/tenant/ui-config/i18n-page";
 import { OperatorAuditPage } from "@/routes/operator/audit/audit-list";
 import { OperatorQueuePage } from "@/routes/operator/queue/queue-monitor";
+import { OperatorDbOpsPage } from "@/routes/operator/db-ops";
 import { TenantAuditPage } from "@/routes/tenant/audit/tenant-audit";
 import { useAuthStore } from "@/stores/auth";
 
@@ -79,6 +80,13 @@ const operatorQueueRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/operator/queue",
   component: OperatorQueuePage,
+});
+
+// AC-9 — Operator DB ops CHỈ-ĐỌC (migration status + data browser tenant-scoped + break-glass + export).
+const operatorDbOpsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/operator/db-ops",
+  component: OperatorDbOpsPage,
 });
 
 // /tenant/:companyId — operator chọn 1 tenant để thao tác (ADR-0019 Tầng 1: withTenant(target)).
@@ -169,6 +177,7 @@ const routeTree = rootRoute.addChildren([
     operatorModulesRoute,
     operatorAuditRoute,
     operatorQueueRoute,
+    operatorDbOpsRoute,
     tenantRoute.addChildren([
       tenantIndexRoute,
       tenantRbacRoute,

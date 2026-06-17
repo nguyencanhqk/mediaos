@@ -1,5 +1,5 @@
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
-import { Building2, Inbox, LayoutDashboard, ScrollText } from "lucide-react";
+import { Building2, Database, Inbox, LayoutDashboard, ScrollText } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/stores/auth";
@@ -16,6 +16,8 @@ const NAV = [
   // AC-8 observability (cross-tenant read-only — server gate view:platform-audit + step-up).
   { to: "/operator/audit", key: "audit", icon: ScrollText },
   { to: "/operator/queue", key: "queue", icon: Inbox },
+  // AC-9 db-ops (operator data browser tenant-scoped + migration status + break-glass SoD; server-gated).
+  { to: "/operator/db-ops", key: "dbOps", icon: Database },
 ] as const;
 
 export function RootLayout() {
