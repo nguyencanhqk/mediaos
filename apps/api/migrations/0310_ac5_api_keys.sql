@@ -44,8 +44,9 @@ CREATE INDEX api_keys_company_id_idx ON api_keys(company_id);
 --> statement-breakpoint
 CREATE INDEX api_keys_company_prefix_idx ON api_keys(company_id, token_prefix);
 --> statement-breakpoint
--- Auth-path tra prefix → company (rồi withTenant). Prefix KHÔNG phải secret (vài ký tự đầu) → index toàn cục OK.
-CREATE INDEX api_keys_token_prefix_idx ON api_keys(token_prefix);
+-- Auth-path (ApiKeyAuthGuard → resolve_api_key_by_hash) tra theo token_hash ở MỌI request. UNIQUE index:
+-- (1) đỡ seq-scan hot-path, (2) ÉP bất biến collision-free mà SECURITY DEFINER lookup dựa vào (1 hash ⇒ ≤1 key).
+CREATE UNIQUE INDEX api_keys_token_hash_key ON api_keys(token_hash);
 --> statement-breakpoint
 -- App: SELECT/INSERT + UPDATE CHỈ last_used_at (debounced) + revoked_at (thu hồi). KHÔNG UPDATE token_hash/
 -- scope/expires_at/user_id (frozen sau request) → chống đổi quyền/gia hạn key qua app.

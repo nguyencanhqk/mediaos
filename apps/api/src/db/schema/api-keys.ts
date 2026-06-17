@@ -1,4 +1,4 @@
-import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { currentCompanyDefault } from "./_helpers";
 import { companies } from "./companies";
 import { users } from "./users";
@@ -42,10 +42,11 @@ export const apiKeys = pgTable(
   },
   (t) => [
     index("api_keys_company_id_idx").on(t.companyId),
-    // Tra cứu auth-path theo prefix (ApiKeyAuthGuard) — company_id dẫn đầu để RLS scan + prefix tách nhanh.
+    // List view (per-company qua RLS) hiển thị prefix — composite company_id+prefix đủ cho mọi truy vấn list.
     index("api_keys_company_prefix_idx").on(t.companyId, t.tokenPrefix),
-    // Global prefix lookup ở auth-path (chạy withTenant theo company của key sau khi tra prefix→company).
-    index("api_keys_token_prefix_idx").on(t.tokenPrefix),
+    // Auth-path (ApiKeyAuthGuard → resolve_api_key_by_hash) tra theo token_hash ở MỌI request → UNIQUE index
+    // (1) đỡ seq-scan hot-path, (2) ÉP bất biến collision-free mà code auth dựa vào (1 hash ⇒ ≤1 key).
+    uniqueIndex("api_keys_token_hash_key").on(t.tokenHash),
   ],
 );
 
