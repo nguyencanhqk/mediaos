@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { CalendarClock } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { PayrollPeriodStatus } from "@mediaos/contracts";
 import { payrollPeriodApi } from "@/lib/payroll-period-api";
 import { PermissionGate } from "@/components/permission-gate";
 import { PayrollPeriodTable } from "@/components/payroll/payroll-period-table";
+import { PageHeader } from "@/components/layout/page-header";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { PERIOD_STATUS_LABELS } from "@/components/payroll/period-constants";
@@ -19,6 +21,10 @@ import { useAuthStore } from "@/stores/auth";
  *    Nút Duyệt/Phát hành render OPTIMISTIC — server là chốt chặn thật (fail-closed).
  *  - SoD hiển thị FE chỉ để cảnh báo, server vẫn từ chối nếu vi phạm.
  *  - Lỗi từ server (403, 422) map ra message hiện trên row (không crash page).
+ *
+ * Redesign (Phase 2): chuẩn hoá chrome (PageHeader + toolbar + loading/error) theo house style
+ * MISA/Funtime. KHÔNG đổi data/permission/FSM/SoD — giữ nguyên hook query/mutation, PermissionGate,
+ * currentUserId, và component bảng (FSM button + SoD do bảng đảm nhận, server là chốt chặn thật).
  */
 export function PayrollPeriodsPage() {
   const { t } = useTranslation("payroll");
@@ -79,39 +85,43 @@ export function PayrollPeriodsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{t("periods.pageTitle")}</h1>
-        {/* manage-payroll-period is non-sensitive → safe to use PermissionGate */}
-        <PermissionGate action="manage-payroll-period" resourceType="payroll_period">
-          {/* Tạo kỳ lương: luồng create chưa nối ở lane này (defer) — disable để không no-op im lặng. */}
-          <Button size="sm" disabled title={t("periods.createButtonSoon")}>
-            {t("periods.createButton")}
-          </Button>
-        </PermissionGate>
-      </div>
-
-      <div className="space-y-1">
-        <label
-          htmlFor="period-status-filter"
-          className="text-xs uppercase tracking-wide text-muted-foreground"
-        >
-          {t("periods.filterStatus")}
-        </label>
-        <Select
-          id="period-status-filter"
-          value={status}
-          onChange={(e) => setStatus(e.target.value as PayrollPeriodStatus | "")}
-          className="w-44"
-        >
-          <option value="">{t("periods.all")}</option>
-          {(Object.keys(PERIOD_STATUS_LABELS) as PayrollPeriodStatus[]).map((s) => (
-            <option key={s} value={s}>
-              {PERIOD_STATUS_LABELS[s]}
-            </option>
-          ))}
-        </Select>
-      </div>
+    <div className="mx-auto max-w-5xl space-y-6 p-6 sm:p-8">
+      <PageHeader
+        title={t("periods.pageTitle")}
+        description={t("periods.pageDescription")}
+        icon={CalendarClock}
+        actions={
+          // manage-payroll-period is non-sensitive → safe to use PermissionGate
+          <PermissionGate action="manage-payroll-period" resourceType="payroll_period">
+            {/* Tạo kỳ lương: luồng create chưa nối ở lane này (defer) — disable để không no-op im lặng. */}
+            <Button size="sm" disabled title={t("periods.createButtonSoon")}>
+              {t("periods.createButton")}
+            </Button>
+          </PermissionGate>
+        }
+      >
+        <div className="space-y-1">
+          <label
+            htmlFor="period-status-filter"
+            className="text-xs uppercase tracking-wide text-muted-foreground"
+          >
+            {t("periods.filterStatus")}
+          </label>
+          <Select
+            id="period-status-filter"
+            value={status}
+            onChange={(e) => setStatus(e.target.value as PayrollPeriodStatus | "")}
+            className="w-44"
+          >
+            <option value="">{t("periods.all")}</option>
+            {(Object.keys(PERIOD_STATUS_LABELS) as PayrollPeriodStatus[]).map((s) => (
+              <option key={s} value={s}>
+                {PERIOD_STATUS_LABELS[s]}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </PageHeader>
 
       {isLoading && <p className="text-sm text-muted-foreground">{t("periods.loading")}</p>}
       {isError && (
