@@ -10,5 +10,7 @@ export default defineConfig({
   },
   server: {
     port: 5273,
+    // FS-1b SSO dev: truy cập qua `web.localhost:5273` để cookie `Domain=.localhost` chạy giống prod.
+    allowedHosts: [".localhost"],
   },
 });

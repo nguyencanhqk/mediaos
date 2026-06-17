@@ -21,7 +21,15 @@ interface AuthState {
   capabilities: Record<string, boolean>;
   /** Called after real /me to populate user profile + capabilities. */
   setUser: (user: User, capabilities: Record<string, boolean>) => void;
-  /** Lưu access + refresh token sau real-login. */
+  /**
+   * FS-1b: lưu CHỈ access token in-memory (luồng SSO cookie). Refresh token nằm trong HttpOnly cookie,
+   * JS KHÔNG bao giờ chạm → silent-refresh / refresh-on-401 dùng hàm này, KHÔNG `setTokens`.
+   */
+  setAccessToken: (accessToken: string) => void;
+  /**
+   * Lưu access + refresh token sau real-login (luồng Bearer cũ / mobile). ⚠️ Luồng SSO cookie KHÔNG dùng —
+   * refresh token PHẢI ở HttpOnly cookie ngoài tầm với của JS (chống XSS). Dùng `setAccessToken` thay thế.
+   */
   setTokens: (accessToken: string, refreshToken: string) => void;
   logout: () => void;
 }
@@ -35,6 +43,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   capabilities: {},
   setUser: (user, capabilities) =>
     set({ isAuthenticated: true, user, username: user.email, capabilities }),
+  // CHỦ Ý: chỉ set access token, KHÔNG đặt isAuthenticated. Bất biến: `isAuthenticated === true` ⟺ đã có user
+  // + capabilities (setUser). Access token đơn lẻ (sau silent-refresh, TRƯỚC /me) chưa đủ để render UI có quyền
+  // → guard/useCan không bao giờ thấy trạng thái "authed nhưng user=null". setUser mới bật cờ.
+  setAccessToken: (accessToken) => set({ accessToken }),
   setTokens: (accessToken, refreshToken) => set({ accessToken, refreshToken }),
   logout: () =>
     set({
