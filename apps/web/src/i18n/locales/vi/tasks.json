@@ -39,18 +39,30 @@
   "typeFilter": {
     "ariaLabel": "Lọc theo loại công việc"
   },
+  "statusFilter": {
+    "ariaLabel": "Lọc theo trạng thái công việc"
+  },
+  "card": {
+    "progressAriaLabel": "Tiến độ công việc",
+    "assigneeAssigned": "Đã giao người thực hiện",
+    "unassigned": "Chưa giao"
+  },
   "board": {
     "pageTitle": "Bảng công việc",
+    "pageDescription": "Theo dõi mọi công việc theo trạng thái, loại và người thực hiện.",
     "viewKanban": "Kanban",
     "viewTable": "Bảng",
     "viewCalendar": "Lịch",
     "showOfficeOnly": "Chỉ xem Office Tasks",
     "clearOfficeFilter": "Bỏ lọc Office Tasks",
     "loading": "Đang tải…",
-    "loadError": "Không tải được công việc (có thể thiếu quyền xem)."
+    "loadError": "Không tải được công việc (có thể thiếu quyền xem).",
+    "emptyTitle": "Chưa có công việc nào",
+    "emptyDescription": "Không có công việc khớp bộ lọc hiện tại."
   },
   "hub": {
     "pageTitle": "Task Hub",
+    "pageDescription": "Tổng hợp công việc của tôi, của nhóm và theo dự án.",
     "tabMy": "Việc của tôi",
     "tabTeam": "Việc nhóm",
     "tabProject": "Việc dự án",
