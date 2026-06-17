@@ -1,0 +1,15 @@
+{
+  "operator": "Vận hành",
+  "overview": "Tổng quan",
+  "companies": "Công ty & Gói cước",
+  "tenant": "Theo công ty",
+  "logout": "Đăng xuất",
+  "comingSoon": "Sắp ra mắt",
+  "sidebarLabel": "Điều hướng vận hành",
+  "modules": {
+    "companies": "Công ty & Gói cước",
+    "audit": "Nhật ký kiểm toán",
+    "flags": "Cờ tính năng & Giới hạn",
+    "dbOps": "DB Ops"
+  }
+}
