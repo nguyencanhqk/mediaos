@@ -153,3 +153,37 @@ export const listKpiDefinitionQuerySchema = z.object({
   includeInactive: z.coerce.boolean().optional(),
 });
 export type ListKpiDefinitionQuery = z.infer<typeof listKpiDefinitionQuerySchema>;
+
+// ─── List results query (lịch sử KPI — read:kpi, server lọc scope) ───────────
+
+/** Trần số bản ghi lịch sử KPI trả về 1 lần (chống quét toàn bảng). */
+export const KPI_RESULT_LIST_LIMIT_DEFAULT = 50;
+export const KPI_RESULT_LIST_LIMIT_MAX = 200;
+
+/**
+ * Filter cho GET /kpi/results (lịch sử kết quả KPI, mới nhất trước). MỌI filter tuỳ chọn; quyền
+ * xem do SERVER quyết (employee chỉ của-mình — KHÔNG dựa subjectUserId client). `subjectUserId`/
+ * `subjectTeamId` chỉ có hiệu lực cho người có quyền rộng (confirm:kpi / manage:kpi-definition);
+ * với employee thường, server BỎ QUA và ép scope của-mình (fail-closed, không lộ KPI người khác).
+ *
+ * LƯU Ý coerce.boolean: chuỗi không rỗng đều → true (kể cả "false"). FE CHỈ gắn `confirmedOnly=true`
+ * khi bật filter (mirror includeInactive); confirmedOnly chỉ THU HẸP kết quả → không rò dữ liệu.
+ */
+export const listKpiResultQuerySchema = z.object({
+  definitionId: z.string().uuid().optional(),
+  subjectUserId: z.string().uuid().optional(),
+  subjectTeamId: z.string().uuid().optional(),
+  periodFrom: z.string().datetime().optional(),
+  periodTo: z.string().datetime().optional(),
+  confirmedOnly: z.coerce.boolean().optional(),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(KPI_RESULT_LIST_LIMIT_MAX)
+    .default(KPI_RESULT_LIST_LIMIT_DEFAULT),
+});
+export type ListKpiResultQuery = z.infer<typeof listKpiResultQuerySchema>;
+
+/** Response GET /kpi/results — mảng snapshot KPI (mới nhất trước). Tái dùng kpiResultSchema. */
+export const listKpiResultResponseSchema = z.array(kpiResultSchema);

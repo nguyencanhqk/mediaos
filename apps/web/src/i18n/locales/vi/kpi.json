@@ -47,6 +47,22 @@
     "noPermissionTitle": "Bạn không có quyền tính KPI",
     "noPermissionHint": "Cần quyền đọc KPI (read:kpi) để tính điểm theo phòng ban/nhân viên."
   },
+  "history": {
+    "section": "Lịch sử KPI",
+    "trendTitle": "Xu hướng điểm KPI theo kỳ",
+    "subjectUser": "Nhân viên",
+    "subjectTeam": "Nhóm",
+    "columns": {
+      "period": "Kỳ",
+      "subject": "Chủ thể",
+      "totalScore": "Điểm tổng",
+      "status": "Trạng thái",
+      "createdAt": "Ngày tính"
+    },
+    "empty": "Chưa có kết quả KPI",
+    "emptyHint": "Kết quả KPI đã tính theo kỳ sẽ hiển thị tại đây.",
+    "loadHint": "Không tải được lịch sử KPI. Vui lòng thử lại."
+  },
   "result": {
     "totalScore": "Điểm KPI tổng",
     "period": "Kỳ {{start}} – {{end}}"

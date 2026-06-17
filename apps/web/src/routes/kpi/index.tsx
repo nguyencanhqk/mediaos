@@ -10,8 +10,14 @@ import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { kpiApi } from "@/lib/kpi-api";
+import { orgApi } from "@/lib/org-api";
+import { useCan } from "@/hooks/use-can";
 import { KPI_COMPONENT_KEYS, componentLabel, formatScore } from "@/lib/kpi-format";
 import { KpiComputePanel } from "./kpi-compute-panel";
+import { KpiHistory } from "./kpi-history";
+
+/** Trần số bản ghi lịch sử KPI tải cho trang (server cũng giới hạn max 200). */
+const KPI_HISTORY_LIMIT = 100;
 
 /**
  * KPI / Mục tiêu (G8-4). 2 vùng:
@@ -24,6 +30,7 @@ import { KpiComputePanel } from "./kpi-compute-panel";
 export function KpiPage() {
   const { t } = useTranslation("kpi");
   const [query, setQuery] = useState("");
+  const canRead = useCan("read", "kpi");
 
   const {
     data: definitions = [],
@@ -33,6 +40,35 @@ export function KpiPage() {
     queryKey: ["kpi", "definitions"],
     queryFn: () => kpiApi.listDefinitions(),
   });
+
+  // Lịch sử KPI (read:kpi). Server lọc scope của-mình cho employee — client KHÔNG tự lọc chủ thể.
+  const {
+    data: results = [],
+    isLoading: resultsLoading,
+    isError: resultsError,
+  } = useQuery({
+    queryKey: ["kpi", "results"],
+    queryFn: () => kpiApi.listResults({ limit: KPI_HISTORY_LIMIT }),
+    enabled: canRead,
+  });
+
+  // Tên chủ thể (best-effort) — tái dùng query org của compute panel (react-query dedupe theo key).
+  const { data: employees = [] } = useQuery({
+    queryKey: ["org", "employees"],
+    queryFn: orgApi.listEmployees,
+    enabled: canRead,
+  });
+  const { data: teams = [] } = useQuery({
+    queryKey: ["org", "teams"],
+    queryFn: orgApi.listTeams,
+    enabled: canRead,
+  });
+  const subjectNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const u of employees) map[u.id] = u.fullName ?? u.email;
+    for (const tm of teams) map[tm.id] = tm.name;
+    return map;
+  }, [employees, teams]);
 
   const columns = useMemo<ColumnDef<KpiDefinitionDto>[]>(
     () => [
@@ -116,6 +152,15 @@ export function KpiPage() {
           />
         )}
       </section>
+
+      {canRead && (
+        <KpiHistory
+          results={results}
+          isLoading={resultsLoading}
+          isError={resultsError}
+          subjectNames={subjectNames}
+        />
+      )}
 
       <KpiComputePanel definitions={definitions} />
     </div>

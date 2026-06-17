@@ -7,6 +7,7 @@ import {
   ConfirmKpiResultDto,
   CreateKpiDefinitionDto,
   ListKpiDefinitionQueryDto,
+  ListKpiResultQueryDto,
 } from "./kpi.dto";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
@@ -42,6 +43,18 @@ export class KpiController {
   @RequirePermission("manage", "kpi-definition")
   createDefinition(@Req() req: AuthenticatedRequest, @Body() dto: CreateKpiDefinitionDto) {
     return this.kpi.createDefinition(req.user.companyId, req.user.id, dto);
+  }
+
+  /**
+   * GET /kpi/results — lịch sử kết quả KPI (read:kpi). Employee thường chỉ thấy KPI của-mình (server
+   * lọc scope, KHÔNG dựa subjectUserId client); HR/quản lý (confirm:kpi / manage:kpi-definition) xem rộng.
+   * Route literal → đặt cạnh /definitions, không xung đột route động.
+   */
+  @Get("results")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("read", "kpi")
+  listResults(@Req() req: AuthenticatedRequest, @Query() query: ListKpiResultQueryDto) {
+    return this.kpi.listResults(req.user.companyId, req.user.id, query);
   }
 
   /** POST /kpi/compute — tính KPI cá nhân/team trong kỳ (read:kpi). */

@@ -1,7 +1,8 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import type { KpiResultDto } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
-import { kpiDefinitions, kpiResults } from "../db/schema";
+import { type KpiResult, kpiDefinitions, kpiResults } from "../db/schema";
 import type { KpiRawMetrics } from "./kpi.formula";
 
 /**
@@ -40,6 +41,25 @@ export interface AggregateScope {
   userIds: string[]; // 1 user, hoặc nhiều user (members của team)
   periodStart: string;
   periodEnd: string;
+}
+
+/**
+ * Scope quyền cho list lịch sử KPI (server-driven, không tin client):
+ *  - own  → CHỈ kết quả của chính user (subject_user_id = userId) HOẶC team user thuộc về.
+ *  - all  → mọi chủ thể trong tenant; người có quyền rộng có thể lọc thêm theo subjectUserId/Team.
+ */
+export type ListResultsScope =
+  | { kind: "own"; userId: string }
+  | { kind: "all"; subjectUserId?: string; subjectTeamId?: string };
+
+/** Tham số list lịch sử KPI. Scope do SERVICE quyết theo quyền (repo chỉ ép câu truy vấn). */
+export interface ListResultsOptions {
+  scope: ListResultsScope;
+  definitionId?: string;
+  periodFrom?: Date;
+  periodTo?: Date;
+  confirmedOnly?: boolean;
+  limit: number;
 }
 
 @Injectable()
@@ -92,6 +112,94 @@ export class KpiRepository {
     return row;
   }
 
+  /**
+   * Map 1 row kpi_results (Drizzle: numeric→string, timestamp→Date) → KpiResultDto (nguồn sự thật
+   * contracts: components LỒNG NHAU + số + ISO string). Tái dùng cho compute/confirm/list → BE trả
+   * ĐÚNG hình dạng kpiResultSchema mà FE parse (tránh lệch hợp đồng: string numeric / thiếu components).
+   */
+  mapResultRow(row: KpiResult): KpiResultDto {
+    return {
+      id: row.id,
+      companyId: row.companyId,
+      definitionId: row.definitionId,
+      subjectUserId: row.subjectUserId,
+      subjectTeamId: row.subjectTeamId,
+      periodStart: row.periodStart.toISOString(),
+      periodEnd: row.periodEnd.toISOString(),
+      components: {
+        tasksDone: Number(row.tasksDone),
+        onTimeRate: Number(row.onTimeRate),
+        evaluationScore: Number(row.evaluationScore),
+        defectScore: Number(row.defectScore),
+        firstPassApprovalRate: Number(row.firstPassApprovalRate),
+      },
+      totalScore: Number(row.totalScore),
+      confirmedBy: row.confirmedBy,
+      confirmedAt: row.confirmedAt ? row.confirmedAt.toISOString() : null,
+      computedBy: row.computedBy,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  /**
+   * Danh sách team_id mà 1 user ĐANG thuộc về (cùng tenant, membership chưa soft-delete) — cho phép
+   * xem KPI team của-mình. `deleted_at IS NULL`: user đã rời team KHÔNG còn thấy KPI team đó nữa.
+   */
+  async findUserTeamIdsTx(tx: TenantTx, companyId: string, userId: string): Promise<string[]> {
+    const rows = await tx.execute<{ team_id: string }>(sql`
+      SELECT team_id FROM team_members
+      WHERE company_id = ${companyId} AND user_id = ${userId} AND deleted_at IS NULL
+    `);
+    return rows.rows.map((r) => r.team_id);
+  }
+
+  /**
+   * Lịch sử kết quả KPI (APPEND-ONLY → CHỈ đọc, no UPDATE/DELETE). withTenant ép RLS company_id
+   * (bất biến #1). Scope quyền ép Ở DB qua WHERE (subject của-mình cho employee thường). Mới nhất
+   * trước (ORDER BY created_at DESC), LIMIT chống quét toàn bảng. Trả KpiResultDto[] (đã map).
+   */
+  async listResults(companyId: string, opts: ListResultsOptions): Promise<KpiResultDto[]> {
+    return this.db.withTenant(companyId, async (tx) => {
+      const conds = [eq(kpiResults.companyId, companyId)];
+
+      if (opts.definitionId) {
+        conds.push(eq(kpiResults.definitionId, opts.definitionId));
+      }
+
+      if (opts.scope.kind === "own") {
+        // Employee thường: CHỈ subject = chính mình HOẶC team mình thuộc về (fail-closed).
+        const teamIds = await this.findUserTeamIdsTx(tx, companyId, opts.scope.userId);
+        const ownConds = [eq(kpiResults.subjectUserId, opts.scope.userId)];
+        if (teamIds.length > 0) {
+          ownConds.push(inArray(kpiResults.subjectTeamId, teamIds));
+        }
+        const ownScope = or(...ownConds);
+        if (ownScope) conds.push(ownScope);
+      } else {
+        // Quyền rộng (HR/quản lý): có thể lọc theo chủ thể cụ thể (tuỳ chọn).
+        if (opts.scope.subjectUserId) {
+          conds.push(eq(kpiResults.subjectUserId, opts.scope.subjectUserId));
+        }
+        if (opts.scope.subjectTeamId) {
+          conds.push(eq(kpiResults.subjectTeamId, opts.scope.subjectTeamId));
+        }
+      }
+
+      if (opts.periodFrom) conds.push(gte(kpiResults.periodStart, opts.periodFrom));
+      if (opts.periodTo) conds.push(lte(kpiResults.periodStart, opts.periodTo));
+      if (opts.confirmedOnly) conds.push(isNotNull(kpiResults.confirmedAt));
+
+      const rows = await tx
+        .select()
+        .from(kpiResults)
+        .where(and(...conds))
+        .orderBy(desc(kpiResults.createdAt))
+        .limit(opts.limit);
+
+      return rows.map((row) => this.mapResultRow(row));
+    });
+  }
+
   /** Kết quả KPI theo id (cùng tenant). null nếu không có. */
   async findResultByIdTx(tx: TenantTx, companyId: string, id: string) {
     const [row] = await tx
@@ -126,11 +234,11 @@ export class KpiRepository {
     return row;
   }
 
-  /** Danh sách user_id thành viên 1 team (cùng tenant) — để gộp KPI team. */
+  /** Danh sách user_id thành viên ĐANG hoạt động của 1 team (membership chưa soft-delete) — gộp KPI team. */
   async findTeamMemberUserIdsTx(tx: TenantTx, companyId: string, teamId: string): Promise<string[]> {
     const rows = await tx.execute<{ user_id: string }>(sql`
       SELECT user_id FROM team_members
-      WHERE company_id = ${companyId} AND team_id = ${teamId}
+      WHERE company_id = ${companyId} AND team_id = ${teamId} AND deleted_at IS NULL
     `);
     return rows.rows.map((r) => r.user_id);
   }
