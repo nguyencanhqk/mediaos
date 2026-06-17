@@ -533,15 +533,15 @@ _(custom `react-native-reviewer/patterns/build-fix/push`)_
 
 ## AC — Admin Control Plane (`apps/admin` · 2 tầng) _(🛠️+🤖 · band `0300s` · phần lớn CROWN)_
 
-> App quản trị NỀN TẢNG: **Tầng Operator** (platform-admin, chéo-tenant: quản công ty/billing/feature-flag/observability/db-ops) + **Tầng Tenant self-service** (company-admin quản RBAC/giao diện công ty mình). 📋 **PLAN đã REVIEW (2026-06-17) — PRD v2 đã vá 5 BLOCKER**, hook `guard-migration-band` đã nhận lane `ac*`. **CHƯA mở AC-0** (chờ chốt khởi động). Cảnh báo từ review: ⚠️ AC-2/AC-3/AC-8 **không "FE-only"** mà là backend-operator/crown; escape-hatch GUC chỉ nới bảng `companies`; KHÔNG session-impersonation mặc định (chéo-tenant = `withTenant(target)` per-call); AC-9 cần **RLS-bypass primitive read-only mới** (ADR riêng).
+> App quản trị NỀN TẢNG: **Tầng Operator** (platform-admin, chéo-tenant: quản công ty/billing/feature-flag/observability/db-ops) + **Tầng Tenant self-service** (company-admin quản RBAC/giao diện công ty mình). 📋 **PLAN đã REVIEW (2026-06-17) — PRD v2 đã vá 5 BLOCKER**, hook `guard-migration-band` đã nhận lane `ac*`. **✅ WAVE 1 ĐÃ LAND master `9d251b4`** (AC-0a/0b/1/3 — 2026-06-17); Wave 2 còn mở. Cảnh báo từ review: ⚠️ AC-2/AC-8 **không "FE-only"** mà là backend-operator/crown; escape-hatch GUC chỉ nới bảng `companies`; KHÔNG session-impersonation mặc định (chéo-tenant = `withTenant(target)` per-call); AC-9 cần **RLS-bypass primitive read-only mới** (ADR riêng).
 
 **Trunk (tuần tự — mở mọi lane sau):**
-- [ ] **AC-0a** 🔧🟢 (S) **Scaffold + root** — dựng `apps/admin` (Vite+React SPA, reuse design system + contracts), shell operator, route root, no-risk. **Mở Wave 1** (lane FE-only). LIGHT gate.
-- [ ] **AC-0b** 🛠️🔋 (M) **Operator auth** — token `aud=operator` riêng, **2FA bắt buộc**, step-up cho mọi cross-tenant write, session TTL ngắn, audit operator-action. **CROWN** (đổi auth boundary). **Mở mọi lane backend.** FULL gate + santa.
+- [x] **AC-0a** 🔧🟢 (S) **Scaffold + root** ✅ — dựng `apps/admin` (Vite+React SPA, reuse design system + contracts), shell operator, route root, no-risk. **Đã mở Wave 1.** LIGHT gate. _(merge `376cf18`)_
+- [x] **AC-0b** 🛠️🔋 (M) **Operator auth** ✅ — token `aud=operator` riêng, **2FA bắt buộc**, step-up cho mọi cross-tenant write, session TTL ngắn, audit operator-action (`recordOperatorAction`). **CROWN** (đổi auth boundary). FULL gate + santa CONFIRMED-SAFE. _(merge `74211c4`)_
 
 **Wave 1 — FE-only / backend nhỏ (sau AC-0a/AC-0b):**
-- [ ] **AC-1** 🤖🟢 (S) **Companies & Billing (Operator)** — list/create/suspend/configure công ty + đổi **plan**, map vào `platform-company.controller` (đã cross-tenant). **FE-only**, LIGHT gate. _(dep: AC-0a)_
-- [ ] **AC-3** 🤖🟢 (S) **RBAC tenant self-service** — company-admin quản role công ty MÌNH qua `/tenant/:companyId/*`, reuse `permission-admin` nguyên trạng (`actor.companyId`). **FE-only thật, 0 backend/0 migration**, LIGHT gate. _(dep: AC-0a)_
+- [x] **AC-1** 🤖🟢 (S) **Companies & Billing (Operator)** ✅ — list/create/suspend/configure công ty + đổi **plan**, map vào `platform-company.controller` (đã cross-tenant). **FE-only**, LIGHT gate. _(merge `db893df` · dep: AC-0a)_
+- [x] **AC-3** 🤖🟢 (S) **RBAC tenant self-service** ✅ — company-admin quản role công ty MÌNH qua `/tenant/:companyId/*`, reuse `permission-admin` nguyên trạng (`actor.companyId`). **FE-only thật, 0 backend/0 migration**, LIGHT gate. _(merge `9d251b4` · dep: AC-0a)_
 - [ ] **AC-2** 🛠️🔋 (M) **Feature-flag + Usage-limit viewer/editor (Operator)** — controller operator mới `GET/PUT admin/platform/companies/:id/feature-flags|usage-limits`, delegate `SubscriptionService` sẵn (target companyId), gate `manage:platform-entitlement` (`is_sensitive`). **No migration. CROWN** FULL+security. _(dep: AC-0b)_
 
 **Wave 2 — CROWN backend (sau AC-0b):**
