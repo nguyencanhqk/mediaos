@@ -1,6 +1,7 @@
 {
   "overview": "Tổng quan",
   "dashboard": "Bảng điều khiển",
+  "kpi": "KPI / Mục tiêu",
   "tasks": "Công việc",
   "taskBoard": "Bảng công việc",
   "channels": "Kênh",
@@ -25,6 +26,7 @@
   "logout": "Đăng xuất",
   "group": {
     "work": "Công việc & Nội dung",
+    "goals": "KPI / Mục tiêu",
     "process": "Quy trình",
     "hr": "Nhân sự",
     "attendance": "Chấm công",
