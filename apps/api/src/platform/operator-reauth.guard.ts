@@ -20,7 +20,9 @@ type OperatorReauthRequest = Request & {
  *
  * NOT an authorization gate — ALWAYS returns true. Enforcement is fail-closed at the consuming route.
  * A missing/expired window leaves reauthContext unset → the write denies with 'deny-reauth-required'.
- * Valkey is best-effort (fail-open cache): an outage means no window → write denied, never a false-allow.
+ * FAIL-CLOSED for the security decision: a Valkey outage makes `get` return null → no window is attached
+ * → the downstream write is DENIED (never a false-allow). The guard returns true only to defer the
+ * actual deny to the consuming route (PermissionGuard/service), not to allow the action.
  * MUST run BEFORE PermissionGuard (applied method-level).
  */
 @Injectable()

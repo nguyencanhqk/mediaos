@@ -99,9 +99,11 @@ export class TokenService {
     if (typeof decoded === "string" || decoded.tfp === true || typeof decoded.email !== "string") {
       throw new Error("token không phải access token hợp lệ");
     }
-    // `aud` có thể là string | string[] (registered claim). Legacy (vắng) ⇒ 'tenant'.
+    // `aud` có thể là string | string[] (registered claim). Chuẩn hoá array → phần tử đầu trước khi
+    // so khớp (tránh `["operator"] === "operator"` ra false → demote câm). Legacy (vắng) ⇒ 'tenant'.
     const rawAud = decoded.aud;
-    const aud: TokenAudience = rawAud === "operator" ? "operator" : "tenant";
+    const normalizedAud = Array.isArray(rawAud) ? rawAud[0] : rawAud;
+    const aud: TokenAudience = normalizedAud === "operator" ? "operator" : "tenant";
     if (expectedAudience !== "any" && aud !== expectedAudience) {
       throw new Error("token sai audience (operator/tenant không khớp route)");
     }
