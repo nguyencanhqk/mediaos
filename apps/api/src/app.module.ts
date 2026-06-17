@@ -33,6 +33,7 @@ import { TemplatesModule } from "./templates/templates.module";
 import { PlatformModule } from "./platform/platform.module";
 import { ApiKeysModule } from "./api-keys/api-keys.module";
 import { WebhooksModule } from "./webhooks/webhooks.module";
+import { ObservabilityModule } from "./observability/observability.module";
 import { ApiKeyAuthGuard } from "./api-keys/guards/api-key-auth.guard";
 import { ApiKeyRepository } from "./api-keys/api-keys.repository";
 import { TokenService } from "./auth/token.service";
@@ -85,6 +86,8 @@ import {
     ApiKeysModule,
     // AC-6 Webhooks (tenant self-service — endpoint CRUD + subscribe + delivery log; HMAC secret envelope-KMS)
     WebhooksModule,
+    // AC-8 Observability (audit viewer tenant-self + operator cross-tenant + queue monitor — read-only)
+    ObservabilityModule,
   ],
   providers: [
     // Global guard pipeline (THỨ TỰ QUAN TRỌNG):

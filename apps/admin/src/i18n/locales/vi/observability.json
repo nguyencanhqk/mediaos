@@ -1,0 +1,38 @@
+{
+  "queue": {
+    "title": "Giám sát hàng đợi sự kiện",
+    "subtitle": "Operator: trạng thái outbox + dead-letter của mọi tenant (cross-tenant, chỉ đọc).",
+    "outbox": {
+      "title": "Outbox sự kiện",
+      "total": "Tổng cộng",
+      "status": "Trạng thái",
+      "count": "Số lượng"
+    },
+    "deadLetter": {
+      "title": "Dead-letter (sự kiện chết)",
+      "unresolved": "Chưa xử lý",
+      "total": "Tổng cộng",
+      "table": {
+        "createdAt": "Thời điểm",
+        "eventType": "Loại sự kiện",
+        "consumer": "Consumer",
+        "error": "Lỗi",
+        "resolved": "Đã xử lý",
+        "company": "Công ty"
+      },
+      "resolvedYes": "Rồi",
+      "resolvedNo": "Chưa"
+    },
+    "empty": {
+      "title": "Hàng đợi trống",
+      "description": "Không có dead-letter nào."
+    },
+    "error": {
+      "loadFailed": "Không tải được trạng thái hàng đợi."
+    },
+    "noPermission": {
+      "title": "Không có quyền",
+      "description": "Bạn không có quyền xem giám sát hàng đợi."
+    }
+  }
+}

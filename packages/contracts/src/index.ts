@@ -69,3 +69,5 @@ export * from "./module-registry";
 export * from "./ui-config";
 // AC-6 Webhooks (tenant self-service — endpoint + subscription + delivery log; HMAC secret envelope-KMS)
 export * from "./webhooks";
+// AC-8 Observability (audit viewer + queue monitor — tenant self + operator cross-tenant read-only)
+export * from "./observability";
