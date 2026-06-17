@@ -47,3 +47,7 @@ export * from "./device-tokens";
 export * from "./api-keys";
 // AC-7 module-registry (catalog GLOBAL no-RLS — lớp module trên feature-flag, reuse company_feature_flags)
 export * from "./module-registry";
+// AC-4 UI config (branding / navigation / i18n overrides — per-tenant FORCE-RLS, tenant self-service)
+export * from "./ui-config";
+// AC-6 Webhooks (endpoint + subscription + delivery log — per-tenant FORCE-RLS; HMAC secret envelope-KMS)
+export * from "./webhooks";

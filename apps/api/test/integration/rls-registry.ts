@@ -69,6 +69,21 @@ async function seedPlatformAccount(direct: Pool, companyId: string): Promise<str
   return r.rows[0].id as string;
 }
 
+async function seedWebhookEndpoint(direct: Pool, companyId: string): Promise<string> {
+  // RLS isolation test only — envelope values là DUMMY. iv_nonce/auth_tag PHẢI đúng độ dài (12B/16B) để
+  // qua octet_length CHECK; secret_ciphertext/encrypted_dek tuỳ ý. Crypto thật ở webhooks-secret int-spec.
+  const r = await direct.query(
+    `INSERT INTO webhook_endpoints
+       (company_id, url, secret_ciphertext, encrypted_dek, dek_key_version, kms_key_id, iv_nonce, auth_tag, enc_algo)
+     VALUES ($1, 'https://hooks.example.com/rls',
+             decode('00','hex'), decode('00','hex'), 1, 'local-dev-kek',
+             decode(repeat('00', 12), 'hex'), decode(repeat('00', 16), 'hex'), 'AES-256-GCM')
+     RETURNING id`,
+    [companyId],
+  );
+  return r.rows[0].id as string;
+}
+
 async function seedWorkflowDefinition(direct: Pool, companyId: string): Promise<string> {
   const r = await direct.query(
     `INSERT INTO workflow_definitions (company_id, code, name, applies_to, max_approval_level, allow_parallel_steps)
@@ -1685,6 +1700,82 @@ export const RLS_TABLES: RlsTableCase[] = [
         `INSERT INTO api_key_usages (company_id, api_key_id, route, ip)
          VALUES ($1, $2, '/tasks/board', '127.0.0.1') RETURNING id`,
         [t.companyId, keyRes.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── AC-4 UI config (tenant_branding / ui_navigation_config / i18n_overrides — mig 0300) ──────
+  // company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  // 3 bảng độc lập (chỉ FK → companies) — KHÔNG skipNoContext (mọi hàng tenant-scoped, không hàng global).
+  {
+    name: "tenant_branding",
+    table: "tenant_branding",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO tenant_branding (company_id, primary_color, company_name)
+         VALUES ($1, '#112233', 'rls-brand') RETURNING id`,
+        [t.companyId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "ui_navigation_config",
+    table: "ui_navigation_config",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO ui_navigation_config (company_id, key, label, route, display_order, is_visible)
+         VALUES ($1, $2, 'rls-nav', '/x', 0, true) RETURNING id`,
+        [t.companyId, `rls-nav-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "i18n_overrides",
+    table: "i18n_overrides",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO i18n_overrides (company_id, locale, namespace, key, value)
+         VALUES ($1, 'vi', 'common', $2, 'rls-val') RETURNING id`,
+        [t.companyId, `rls-key-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── AC-6 Webhooks (endpoint MUTABLE + subscription + deliveries APPEND-ONLY — mig 0320) ──────
+  // company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  // Envelope cols là DUMMY (iv 12B, tag 16B đúng octet_length CHECK) — crypto thật ở int-spec riêng.
+  // KHÔNG skipNoContext (mọi hàng tenant-scoped, company_id NOT NULL, không hàng global).
+  {
+    name: "webhook_endpoints",
+    table: "webhook_endpoints",
+    seedRow: async (direct, t) => seedWebhookEndpoint(direct, t.companyId),
+  },
+  {
+    name: "webhook_event_subscriptions",
+    table: "webhook_event_subscriptions",
+    seedRow: async (direct, t) => {
+      const endpointId = await seedWebhookEndpoint(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO webhook_event_subscriptions (company_id, endpoint_id, event_type)
+         VALUES ($1, $2, 'task.created') RETURNING id`,
+        [t.companyId, endpointId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "webhook_deliveries",
+    table: "webhook_deliveries",
+    seedRow: async (direct, t) => {
+      const endpointId = await seedWebhookEndpoint(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO webhook_deliveries (company_id, endpoint_id, event_type, status)
+         VALUES ($1, $2, 'task.created', 'pending') RETURNING id`,
+        [t.companyId, endpointId],
       );
       return r.rows[0].id as string;
     },

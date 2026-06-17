@@ -16,6 +16,10 @@ import { OperatorStepUpController } from "./operator-step-up.controller";
 import { ModuleRegistryController } from "./module-registry.controller";
 import { ModuleRegistryService } from "./module-registry.service";
 import { ModuleRegistryRepository } from "./module-registry.repository";
+// AC-2 platform-entitlements (operator set feature-flag/usage-limit cross-tenant — reuse SaasModule
+// SaasRepository/SubscriptionService; recordOperatorAction cùng tx)
+import { PlatformEntitlementsController } from "./platform-entitlements.controller";
+import { PlatformEntitlementsService } from "./platform-entitlements.service";
 
 /**
  * PlatformModule (G16-3 + AC-0b) — tầng platform-admin quản vòng đời tenant (ADR-0017).
@@ -32,7 +36,12 @@ import { ModuleRegistryRepository } from "./module-registry.repository";
     TemplatesModule,
     forwardRef(() => AuthModule),
   ],
-  controllers: [PlatformCompanyController, OperatorStepUpController, ModuleRegistryController],
+  controllers: [
+    PlatformCompanyController,
+    OperatorStepUpController,
+    ModuleRegistryController,
+    PlatformEntitlementsController,
+  ],
   providers: [
     PlatformCompanyService,
     PlatformCompanyRepository,
@@ -41,6 +50,7 @@ import { ModuleRegistryRepository } from "./module-registry.repository";
     OperatorActionAuditService,
     ModuleRegistryService,
     ModuleRegistryRepository,
+    PlatformEntitlementsService,
   ],
   exports: [PlatformCompanyService, OperatorReauthService, OperatorActionAuditService],
 })
