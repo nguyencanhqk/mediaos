@@ -19,6 +19,7 @@
     }
   },
   "dashboard": {
+    "subtitle": "Tổng quan công việc, chấm công và nghỉ phép theo thời gian thực",
     "tasks": {
       "sectionTitle": "Công việc",
       "total": "Tổng task",
@@ -48,7 +49,16 @@
   },
   "report": {
     "title": "Báo cáo tổng hợp",
+    "subtitle": "Tài chính, nhân sự và chấm công theo kỳ — hiển thị theo quyền của bạn",
     "noPermission": "Bạn không có quyền xem báo cáo tổng hợp.",
+    "filter": {
+      "periodLabel": "Kỳ báo cáo",
+      "period": {
+        "thisMonth": "Tháng này",
+        "lastMonth": "Tháng trước",
+        "thisQuarter": "Quý này"
+      }
+    },
     "finance": {
       "sectionTitle": "Tài chính tháng này",
       "revenue": "Doanh thu",

@@ -1,8 +1,14 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { BarChart3, Building2, Lock, TrendingUp, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { getDashboardReport } from "@/lib/dashboard-api";
+import { PageHeader } from "@/components/layout/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { RevenueByChannelChart } from "@/components/dashboard/revenue-by-channel-chart";
+import { DashboardSection } from "@/components/dashboard/dashboard-section";
+import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 
 function formatVnd(value: number | null): string | number {
   if (value === null) return 0;
@@ -11,12 +17,19 @@ function formatVnd(value: number | null): string | number {
   return value;
 }
 
+const PERIOD_OPTIONS = ["thisMonth", "lastMonth", "thisQuarter"] as const;
+type Period = (typeof PERIOD_OPTIONS)[number];
+
 /**
  * ReportPage — G14-2 role-filtered report.
  * Server handles all permission masking — null sections are simply not rendered.
+ *
+ * Phase-2 redesign: chỉ đổi layout/trình bày (PageHeader + filter + section thẻ +
+ * skeleton/empty). Filter kỳ báo cáo hiện chỉ là UI (chưa nối backend) — KHÔNG đổi query.
  */
 export function ReportPage() {
   const { t } = useTranslation("dashboard");
+  const [period, setPeriod] = useState<Period>("thisMonth");
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["dashboard", "report"],
     queryFn: getDashboardReport,
@@ -24,23 +37,43 @@ export function ReportPage() {
     refetchInterval: 120_000,
   });
 
+  const filter = (
+    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+      <span>{t("report.filter.periodLabel")}</span>
+      <select
+        value={period}
+        onChange={(e) => setPeriod(e.target.value as Period)}
+        aria-label={t("report.filter.periodLabel")}
+        className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+      >
+        {PERIOD_OPTIONS.map((opt) => (
+          <option key={opt} value={opt}>
+            {t(`report.filter.period.${opt}`)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-5xl space-y-6 p-8">
-        <h1 className="text-2xl font-semibold">{t("report.title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("loadingData")}</p>
+      <div className="mx-auto max-w-6xl space-y-6 p-6 sm:p-8">
+        <PageHeader title={t("report.title")} description={t("report.subtitle")} icon={BarChart3} />
+        <p className="sr-only">{t("loadingData")}</p>
+        <DashboardSkeleton sections={2} />
       </div>
     );
   }
 
   if (isError) {
     return (
-      <div className="mx-auto max-w-5xl space-y-6 p-8">
-        <h1 className="text-2xl font-semibold">{t("report.title")}</h1>
-        <p className="text-sm text-destructive">
-          {t("loadDataError")}{" "}
-          {error instanceof Error ? error.message : t("unknownError")}
-        </p>
+      <div className="mx-auto max-w-6xl space-y-6 p-6 sm:p-8">
+        <PageHeader title={t("report.title")} description={t("report.subtitle")} icon={BarChart3} />
+        <EmptyState
+          icon={Lock}
+          title={t("loadDataError")}
+          description={error instanceof Error ? error.message : t("unknownError")}
+        />
       </div>
     );
   }
@@ -51,17 +84,17 @@ export function ReportPage() {
   const hasFinance = report.revenueThisMonth !== null;
   const hasEmployee = report.totalEmployees !== null;
   const hasAttendance = report.todayAttendanceRate !== null;
+  const hasAny = hasFinance || hasEmployee || hasAttendance;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 p-8">
-      <h1 className="text-2xl font-semibold">{t("report.title")}</h1>
+    <div className="mx-auto max-w-6xl space-y-6 p-6 sm:p-8">
+      <PageHeader title={t("report.title")} description={t("report.subtitle")} icon={BarChart3}>
+        {hasAny && filter}
+      </PageHeader>
 
       {/* ── Finance section — only rendered when server grants access ─── */}
       {hasFinance && (
-        <section>
-          <h2 className="mb-4 text-sm font-medium text-muted-foreground">
-            {t("report.finance.sectionTitle")}
-          </h2>
+        <DashboardSection title={t("report.finance.sectionTitle")} icon={TrendingUp}>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <StatCard
               label={t("report.finance.revenue")}
@@ -90,13 +123,12 @@ export function ReportPage() {
               <RevenueByChannelChart data={report.revenueByChannel} />
             </div>
           )}
-        </section>
+        </DashboardSection>
       )}
 
       {/* ── HR / Employee section ────────────────────────────────────── */}
       {(hasEmployee || hasAttendance) && (
-        <section>
-          <h2 className="mb-4 text-sm font-medium text-muted-foreground">{t("report.hr.sectionTitle")}</h2>
+        <DashboardSection title={t("report.hr.sectionTitle")} icon={Users}>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             {hasEmployee && (
               <StatCard
@@ -117,13 +149,11 @@ export function ReportPage() {
               />
             )}
           </div>
-        </section>
+        </DashboardSection>
       )}
 
-      {!hasFinance && !hasEmployee && !hasAttendance && (
-        <p className="text-sm text-muted-foreground">
-          {t("report.noPermission")}
-        </p>
+      {!hasAny && (
+        <EmptyState icon={Building2} title={t("report.noPermission")} />
       )}
 
       <p className="text-xs text-muted-foreground">
