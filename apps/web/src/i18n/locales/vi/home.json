@@ -1,8 +1,23 @@
 {
   "greeting": "Xin chào, {{name}} 👋",
-  "searchApps": "Tìm ứng dụng…",
-  "noApps": "Không tìm thấy ứng dụng phù hợp.",
+  "subtitle": "Chọn ứng dụng để bắt đầu",
+  "openApp": "Mở ứng dụng",
+  "noAppsForRole": "Tài khoản của bạn chưa được cấp quyền vào ứng dụng nào. Liên hệ quản trị viên.",
   "apiStatus": "Trạng thái hệ thống",
   "apiChecking": "Đang kiểm tra kết nối…",
-  "apiOffline": "Mất kết nối máy chủ. Kiểm tra dịch vụ đang chạy."
+  "apiOffline": "Mất kết nối máy chủ. Kiểm tra dịch vụ đang chạy.",
+  "apps": {
+    "studio": {
+      "name": "Sản xuất",
+      "desc": "Công việc, quy trình, KPI & nội dung"
+    },
+    "people": {
+      "name": "Nhân sự",
+      "desc": "Hồ sơ, chấm công & tiền lương"
+    },
+    "console": {
+      "name": "Hệ thống",
+      "desc": "Cài đặt công ty, tài khoản nền tảng & truy cập khẩn cấp"
+    }
+  }
 }
