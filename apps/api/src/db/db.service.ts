@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { db, directPool, pool } from "./index";
 
@@ -101,6 +101,22 @@ export class DatabaseService {
    *
    * BẢO MẬT: chỉ gọi từ service ĐÃ qua PermissionGuard với quyền `view:platform-company` (is_sensitive).
    */
+  /**
+   * Chạy 1 câu SQL KHÔNG-tenant-context — CHỈ cho 2 trường hợp hẹp:
+   *   (1) gọi function SECURITY DEFINER đã tự kiểm soát phạm vi (AC-5 resolve_api_key_by_prefix — auth-path
+   *       không biết company trước, function trả ĐÚNG cột cần verify hash).
+   *   (2) đọc catalog GLOBAL no-RLS (permissions) — không có company_id nên withTenant vô nghĩa.
+   * KHÔNG dùng cho bảng nghiệp vụ tenant-scoped (FORCE-RLS sẽ trả 0 row nếu không có context → fail-closed,
+   * không rò). `db` ở đây là pool qua PgBouncer; câu lệnh tự-đủ trong 1 round-trip (không giữ GUC).
+   */
+  async runRaw<R>(query: SQL): Promise<R[]> {
+    if (!db) {
+      throw new DatabaseNotConfiguredError();
+    }
+    const result = await db.execute(query);
+    return result.rows as R[];
+  }
+
   async withPlatformContext<T>(fn: (tx: TenantTx) => Promise<T>): Promise<T> {
     if (!db) {
       throw new DatabaseNotConfiguredError();

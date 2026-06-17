@@ -43,3 +43,5 @@ export * from "./saas";
 export * from "./templates";
 // G15-2 device tokens (push notification registration)
 export * from "./device-tokens";
+// AC-5 API key / Personal Access Token (PAT) — per-tenant FORCE-RLS + append-only usages
+export * from "./api-keys";

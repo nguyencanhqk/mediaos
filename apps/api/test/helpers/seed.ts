@@ -382,6 +382,12 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM revenue_records WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM profit_snapshots WHERE company_id = ANY($1::uuid[])", ids);
 
+  // ── AC-5 API keys / PAT (usages APPEND-ONLY → api_keys MUTABLE) ───────────────
+  // api_key_usages.api_key_id → api_keys (CASCADE) → xoá usages TRƯỚC keys.
+  // api_keys.user_id → users (NO ACTION) → xoá keys TRƯỚC users.
+  await direct.query("DELETE FROM api_key_usages WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM api_keys WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G15-2 Device tokens (push registration, soft-delete, FK → users) ──────────
   // device_tokens.user_id → users (NO ACTION) → xoá TRƯỚC users.
   await direct.query("DELETE FROM device_tokens WHERE company_id = ANY($1::uuid[])", ids);

@@ -20,6 +20,12 @@ type ReauthAwareRequest = Partial<AuthRequest> & {
   params?: Record<string, string>;
   reauthContext?: { reauthValidUntil?: Date | null };
   requestId?: string;
+  /** AC-5: set bởi ApiKeyAuthGuard khi request đến qua PAT. */
+  user?: AuthRequest["user"] & {
+    viaApiKey?: boolean;
+    /** "action:resourceType" mà PAT được phép (∩ với grant THỰC user phía dưới). */
+    scopeKeys?: string[];
+  };
 };
 
 /**
@@ -78,6 +84,28 @@ export class PermissionGuard implements CanActivate {
     const user = req.user;
     if (!user?.id || !user.companyId) {
       throw new ForbiddenException('User context missing — ensure JwtAuthGuard + CompanyGuard run first');
+    }
+
+    // AC-5: request đến qua PAT (viaApiKey) → hiệu lực = scope ∩ grant THỰC user (fail-closed).
+    // Bước 1 (scope): action:resourceType yêu cầu PHẢI nằm trong scopeKeys của key. Thiếu scopeKeys hoặc
+    // không khớp → 403 deny-out-of-scope (KHÔNG gọi permission.can() — short-circuit). Bước 2 (grant THỰC
+    // user) vẫn chạy permission.can() phía dưới → PAT KHÔNG vượt quyền user. Đường JWT thường (không
+    // viaApiKey) bỏ qua block này y NGUYÊN (regression-safe).
+    if (user.viaApiKey) {
+      const requiredKey = `${meta.action}:${meta.resourceType}`;
+      const scopeKeys = user.scopeKeys ?? [];
+      const inScope =
+        scopeKeys.includes(requiredKey) ||
+        scopeKeys.includes(`*:${meta.resourceType}`) ||
+        scopeKeys.includes(`${meta.action}:*`) ||
+        scopeKeys.includes('*:*');
+      if (!inScope) {
+        this.logger.warn('PAT out-of-scope — fail-closed 403', {
+          requiredKey,
+          handler: ctx.getHandler().name,
+        });
+        throw new ForbiddenException(`API key denied: out of scope (${requiredKey})`);
+      }
     }
 
     // 2e0: forward Tier-3 resource + re-auth window ONLY for the reveal-secret class

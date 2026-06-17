@@ -31,6 +31,10 @@ import { BreakGlassModule } from "./break-glass/break-glass.module";
 import { SaasModule } from "./saas/saas.module";
 import { TemplatesModule } from "./templates/templates.module";
 import { PlatformModule } from "./platform/platform.module";
+import { ApiKeysModule } from "./api-keys/api-keys.module";
+import { ApiKeyAuthGuard } from "./api-keys/guards/api-key-auth.guard";
+import { ApiKeyRepository } from "./api-keys/api-keys.repository";
+import { TokenService } from "./auth/token.service";
 import { JwtAuthGuard } from "./permission/guards/jwt-auth.guard";
 import { CompanyGuard } from "./permission/guards/company.guard";
 import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
@@ -76,13 +80,27 @@ import {
     SaasModule,
     TemplatesModule,
     PlatformModule,
+    // AC-5 API key / PAT (exports ApiKeyRepository cho ApiKeyAuthGuard global bên dưới)
+    ApiKeysModule,
   ],
   providers: [
-    // Global guard pipeline: JWT auth → company context extraction → 2FA enforcement (G16-1b) →
-    // G16-3 SaaS enforcement (feature-flag + usage-limit). Order matters: JwtAuthGuard attaches req.user;
-    // CompanyGuard asserts companyId; TwoFactorEnforcementGuard DENIES when role requires 2FA but not enrolled;
-    // FeatureFlag/UsageLimit guards no-op unless route declares @RequireFeature/@EnforceUsageLimit.
-    // PermissionGuard is NOT registered globally here — add @RequirePermission per-route.
+    // Global guard pipeline (THỨ TỰ QUAN TRỌNG):
+    //   ApiKeyAuthGuard (AC-5) — chạy ĐẦU: nếu Bearer là PAT (mok_) → verify + set req.user{viaApiKey}.
+    //     Token KHÔNG phải mok_ (JWT thường) / header vắng → PASS-THROUGH (KHÔNG nuốt JWT) cho JwtAuthGuard.
+    //   JwtAuthGuard — nếu req.user đã set bởi ApiKeyAuthGuard (viaApiKey) → bỏ qua verify JWT; ngược lại
+    //     verify Bearer access token như cũ (đường JWT y nguyên).
+    //   CompanyGuard — req.user.companyId đã có (từ key hoặc JWT) → pass.
+    //   TwoFactorEnforcementGuard — PAT (viaApiKey) bỏ qua 2FA-enrollment (không phải phiên người;
+    //     bảo mật PAT nằm ở scope∩grant + revoke). FeatureFlag/UsageLimit no-op trừ khi route declare.
+    //   PermissionGuard KHÔNG global — add @RequirePermission per-route (mở rộng AC-5: viaApiKey ⇒ scope∩grant).
+    //
+    // ApiKeyAuthGuard cần ApiKeyAuthLookup → bind ApiKeyRepository (export từ ApiKeysModule).
+    {
+      provide: APP_GUARD,
+      useFactory: (tokens: TokenService, repo: ApiKeyRepository) =>
+        new ApiKeyAuthGuard(tokens, repo),
+      inject: [TokenService, ApiKeyRepository],
+    },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: CompanyGuard },
     { provide: APP_GUARD, useClass: TwoFactorEnforcementGuard },
