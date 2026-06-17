@@ -66,7 +66,8 @@ describe("WebhooksService — createEndpoint reveal-once + DTO an toàn (BẤT B
       expect(dtoKeys).not.toContain(forbidden);
     }
     // id sinh ở service TRƯỚC insert (bind AAD) → truyền cho repo.
-    const insertArg = insertEndpoint.mock.calls[0][1] as { id: string };
+    // mock suy luận 0 tham số → cast tuple qua unknown để đọc arg thứ 2 (input) an toàn.
+    const [, insertArg] = insertEndpoint.mock.calls[0] as unknown as [unknown, { id: string }];
     expect(insertArg.id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
