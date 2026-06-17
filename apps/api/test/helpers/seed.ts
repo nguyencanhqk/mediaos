@@ -388,6 +388,21 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM api_key_usages WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM api_keys WHERE company_id = ANY($1::uuid[])", ids);
 
+  // ── AC-4 UI config (branding / navigation / i18n) — 3 bảng độc lập (chỉ FK → companies) ───────
+  // Xoá TRƯỚC companies (FK → companies CASCADE), không phụ thuộc lẫn nhau (thứ tự tự do).
+  await direct.query("DELETE FROM tenant_branding WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM ui_navigation_config WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM i18n_overrides WHERE company_id = ANY($1::uuid[])", ids);
+
+  // ── AC-6 Webhooks — thứ tự FK con→cha: deliveries → subscriptions → endpoints ─────────────────
+  // deliveries/subscriptions.endpoint_id → webhook_endpoints (CASCADE) → xoá con TRƯỚC endpoints.
+  await direct.query("DELETE FROM webhook_deliveries WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query(
+    "DELETE FROM webhook_event_subscriptions WHERE company_id = ANY($1::uuid[])",
+    ids,
+  );
+  await direct.query("DELETE FROM webhook_endpoints WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G15-2 Device tokens (push registration, soft-delete, FK → users) ──────────
   // device_tokens.user_id → users (NO ACTION) → xoá TRƯỚC users.
   await direct.query("DELETE FROM device_tokens WHERE company_id = ANY($1::uuid[])", ids);

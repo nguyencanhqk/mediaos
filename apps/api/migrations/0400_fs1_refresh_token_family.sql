@@ -1,7 +1,8 @@
 -- Migration 0400: FS-1a (🔴 CROWN-JEWEL auth) — refresh-token FAMILY cho rotation + reuse-detection (SSO cookie).
 --
--- BAND 0400-0409 (lane feauth-api — nền phiên SSO cookie-subdomain). idx 99, when 1717500340000
---   (> max applied 1717500330000 = 0330_ac7_system_modules). Branch `feat/fe-split-feauth-api` KHÔNG khớp
+-- BAND 0400-0409 (lane feauth-api — nền phiên SSO cookie-subdomain). idx 101, when 1717500360000
+--   (re-stamp khi land: master tiến ac4/ac6 sau fork → > max applied 1717500350000 = 0320_ac6_webhooks).
+--   Branch `feat/fe-split-feauth-api` KHÔNG khớp
 --   regex g(\d+)/ac(\d+) → guard-migration-band fail-open (giống b1/b4/b5). Band cấp riêng (admin ở 0300s).
 --
 -- MỤC TIÊU (plan §7.4, frontend-split-plan): refresh token XOAY mỗi lần (rotation) + phát hiện DÙNG LẠI
