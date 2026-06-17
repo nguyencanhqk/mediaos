@@ -8,14 +8,21 @@
 // Auth store + token accessor
 export { useAuthStore, getAccessToken } from "./stores/auth";
 
-// API client (Bearer + envelope + cấu hình base URL)
+// API client (Bearer + envelope + cấu hình base URL) + SSO session lifecycle (FS-1b)
 export {
   apiFetch,
   ApiError,
   unwrapEnvelope,
   configureApiBaseUrl,
   getApiBaseUrl,
+  configureAuthAppUrl,
+  refreshAccessToken,
+  redirectToAuth,
+  getAuthRedirectUrl,
+  invalidateSession,
+  logoutSession,
 } from "./lib/api-client";
+export { bootstrapSession } from "./lib/session";
 export { getHealth, type Health } from "./lib/api";
 export { authApi } from "./lib/auth-api";
 export { twoFactorApi } from "./lib/two-factor-api";

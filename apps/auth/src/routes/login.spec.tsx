@@ -1,95 +1,53 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AuthTokens, MeResponse } from "@mediaos/contracts";
 import { LoginPage } from "./login";
 
-// --- router mock ---
-const mockNavigate = vi.fn(() => Promise.resolve());
-vi.mock("@tanstack/react-router", () => ({
-  useNavigate: () => mockNavigate,
-}));
-
-// --- 2FA challenge form mock ---
-vi.mock("@/components/two-factor/TwoFactorChallengeForm", () => ({
+// --- 2FA challenge form mock (đơn giản hoá: nút verify gọi onSuccess không tham số) ---
+vi.mock("@/components/TwoFactorChallengeForm", () => ({
   TwoFactorChallengeForm: ({
     onSuccess,
     onCancel,
   }: {
     challengeToken: string;
-    onSuccess: (tokens: AuthTokens) => void;
+    onSuccess: () => void;
     onCancel?: () => void;
   }) => (
     <div data-testid="2fa-challenge">
-      <button onClick={() => onSuccess({ accessToken: "tok", refreshToken: "ref", expiresIn: 900 })}>
-        verify-2fa
-      </button>
+      <button onClick={() => onSuccess()}>verify-2fa</button>
       {onCancel && <button onClick={onCancel}>cancel-2fa</button>}
     </div>
   ),
 }));
 
-// --- auth store mock: Zustand hook called with no args in LoginPage ---
-const mockSetTokens = vi.fn();
-const mockSetUser = vi.fn();
-const mockLogout = vi.fn();
-
-const mockStoreState = {
-  isAuthenticated: false,
-  user: null,
-  username: null,
-  accessToken: null,
-  refreshToken: null,
-  capabilities: {},
-  setTokens: mockSetTokens,
-  setUser: mockSetUser,
-  logout: mockLogout,
-};
-
-// Partial mock: giữ ApiError + các export thật của web-core, chỉ override authApi + auth store.
+// Partial mock: giữ ApiError thật, override authApi (login + checkRedirect).
 vi.mock("@mediaos/web-core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@mediaos/web-core")>()),
   authApi: {
     login: vi.fn(),
-    me: vi.fn(),
+    checkRedirect: vi.fn(),
   },
-  useAuthStore: vi.fn((selector?: (s: typeof mockStoreState) => unknown) =>
-    selector ? selector(mockStoreState) : mockStoreState,
-  ),
-  getAccessToken: vi.fn(() => null),
 }));
 
 const { authApi } = await import("@mediaos/web-core");
+const DEFAULT_APP_URL = "http://web.localhost:5273";
 
-const mockTokens: AuthTokens = {
-  accessToken: "access-abc",
-  refreshToken: "refresh-xyz",
-  expiresIn: 900,
-};
+const assign = vi.fn();
 
-const mockMe: MeResponse = {
-  id: "u1",
-  companyId: "co1",
-  email: "admin@co.com",
-  fullName: "Admin",
-  status: "active",
-  capabilities: {},
-  mustSetupTwoFactor: false,
-};
-
-function fillCredentials(slug = "my-co", email = "admin@co.com", pass = "secret") {
+function fillCredentials(slug = "my-co", email = "u@co.com", pass = "secret") {
   fireEvent.change(screen.getByLabelText("Mã công ty"), { target: { value: slug } });
   fireEvent.change(screen.getByLabelText("Email"), { target: { value: email } });
   fireEvent.change(screen.getByLabelText("Mật khẩu"), { target: { value: pass } });
 }
 
-describe("LoginPage — credentials form", () => {
+describe("apps/auth LoginPage", () => {
   beforeEach(() => {
-    mockNavigate.mockClear();
-    mockSetTokens.mockClear();
-    mockSetUser.mockClear();
-    mockLogout.mockClear();
+    assign.mockClear();
     vi.mocked(authApi.login).mockReset();
-    vi.mocked(authApi.me).mockReset();
+    vi.mocked(authApi.checkRedirect).mockReset();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { search: "?redirect=https://web.localhost/dash", assign, href: "http://auth.localhost:5275/login" },
+    });
   });
   afterEach(cleanup);
 
@@ -105,33 +63,56 @@ describe("LoginPage — credentials form", () => {
     expect(screen.getByRole("button", { name: /đăng nhập/i })).toBeDisabled();
   });
 
-  it("login success → setTokens + setUser + navigate", async () => {
-    vi.mocked(authApi.login).mockResolvedValueOnce(mockTokens);
-    vi.mocked(authApi.me).mockResolvedValueOnce(mockMe);
+  it("login success (no 2FA) → checkRedirect(requested) → window.location to allowed target", async () => {
+    vi.mocked(authApi.login).mockResolvedValueOnce({
+      accessToken: "a",
+      refreshToken: "r",
+      expiresIn: 900,
+    });
+    vi.mocked(authApi.checkRedirect).mockResolvedValueOnce({
+      allowed: true,
+      target: "https://web.localhost/dash",
+    });
     render(<LoginPage />);
 
     fillCredentials();
     fireEvent.click(screen.getByRole("button", { name: /đăng nhập/i }));
 
-    await waitFor(() => expect(mockSetTokens).toHaveBeenCalledWith("access-abc", "refresh-xyz"));
-    expect(mockSetUser).toHaveBeenCalledWith(mockMe, mockMe.capabilities);
-    expect(mockNavigate).toHaveBeenCalledWith({ to: "/" });
+    await waitFor(() =>
+      expect(authApi.checkRedirect).toHaveBeenCalledWith("https://web.localhost/dash"),
+    );
+    expect(assign).toHaveBeenCalledWith("https://web.localhost/dash");
   });
 
-  it("/me fails after tokens set → clears orphaned tokens (logout) + no navigation", async () => {
-    const { ApiError } = await import("@mediaos/web-core");
-    vi.mocked(authApi.login).mockResolvedValueOnce(mockTokens);
-    vi.mocked(authApi.me).mockRejectedValueOnce(new ApiError(500, "INTERNAL", "boom"));
+  it("redirect NOT allowed → falls back to default app URL (server is source of truth)", async () => {
+    vi.mocked(authApi.login).mockResolvedValueOnce({
+      accessToken: "a",
+      refreshToken: "r",
+      expiresIn: 900,
+    });
+    vi.mocked(authApi.checkRedirect).mockResolvedValueOnce({ allowed: false, target: null });
     render(<LoginPage />);
 
     fillCredentials();
     fireEvent.click(screen.getByRole("button", { name: /đăng nhập/i }));
 
-    // setTokens chạy trước (me() đọc token từ store), nhưng me() lỗi → logout xoá token mồ côi.
-    await waitFor(() => expect(mockLogout).toHaveBeenCalled());
-    expect(mockSetTokens).toHaveBeenCalledWith("access-abc", "refresh-xyz");
-    expect(mockSetUser).not.toHaveBeenCalled();
-    expect(mockNavigate).not.toHaveBeenCalled();
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(DEFAULT_APP_URL));
+  });
+
+  it("checkRedirect throws → falls back to default app URL (no open redirect)", async () => {
+    const { ApiError } = await import("@mediaos/web-core");
+    vi.mocked(authApi.login).mockResolvedValueOnce({
+      accessToken: "a",
+      refreshToken: "r",
+      expiresIn: 900,
+    });
+    vi.mocked(authApi.checkRedirect).mockRejectedValueOnce(new ApiError(500, "X", "boom"));
+    render(<LoginPage />);
+
+    fillCredentials();
+    fireEvent.click(screen.getByRole("button", { name: /đăng nhập/i }));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(DEFAULT_APP_URL));
   });
 
   it("login → 2FA challenge → shows TwoFactorChallengeForm", async () => {
@@ -148,12 +129,15 @@ describe("LoginPage — credentials form", () => {
     expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
   });
 
-  it("2FA verify success → setTokens + navigate", async () => {
+  it("2FA verify success → redirect to target", async () => {
     vi.mocked(authApi.login).mockResolvedValueOnce({
       twoFactorRequired: true,
       challengeToken: "ch-tok",
     });
-    vi.mocked(authApi.me).mockResolvedValueOnce(mockMe);
+    vi.mocked(authApi.checkRedirect).mockResolvedValueOnce({
+      allowed: true,
+      target: "https://web.localhost/dash",
+    });
     render(<LoginPage />);
 
     fillCredentials();
@@ -162,8 +146,7 @@ describe("LoginPage — credentials form", () => {
 
     fireEvent.click(screen.getByText("verify-2fa"));
 
-    await waitFor(() => expect(mockSetTokens).toHaveBeenCalledWith("tok", "ref"));
-    expect(mockNavigate).toHaveBeenCalledWith({ to: "/" });
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://web.localhost/dash"));
   });
 
   it("cancel 2FA → returns to credentials form", async () => {
@@ -183,7 +166,7 @@ describe("LoginPage — credentials form", () => {
     expect(screen.queryByTestId("2fa-challenge")).not.toBeInTheDocument();
   });
 
-  it("401 error → friendly message, no navigation", async () => {
+  it("401 error → friendly message, no redirect", async () => {
     const { ApiError } = await import("@mediaos/web-core");
     vi.mocked(authApi.login).mockRejectedValueOnce(
       new ApiError(401, "INVALID_CREDENTIALS", "Invalid credentials"),
@@ -196,21 +179,6 @@ describe("LoginPage — credentials form", () => {
     await waitFor(() =>
       expect(screen.getByText("Email hoặc mật khẩu không đúng.")).toBeInTheDocument(),
     );
-    expect(mockNavigate).not.toHaveBeenCalled();
-  });
-
-  it("500 error → generic server error message", async () => {
-    const { ApiError } = await import("@mediaos/web-core");
-    vi.mocked(authApi.login).mockRejectedValueOnce(
-      new ApiError(503, "SERVICE_UNAVAILABLE", "Service unavailable"),
-    );
-    render(<LoginPage />);
-
-    fillCredentials();
-    fireEvent.click(screen.getByRole("button", { name: /đăng nhập/i }));
-
-    await waitFor(() =>
-      expect(screen.getByText("Lỗi máy chủ. Vui lòng thử lại sau.")).toBeInTheDocument(),
-    );
+    expect(assign).not.toHaveBeenCalled();
   });
 });

@@ -1,22 +1,32 @@
+import type { TFunction } from "i18next";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { AuthTokens } from "@mediaos/contracts";
-import { Button } from "@mediaos/ui";
-import { Input } from "@mediaos/ui";
-import { ApiError } from "@mediaos/web-core";
-import { twoFactorApi } from "@mediaos/web-core";
+import { ApiError, twoFactorApi } from "@mediaos/web-core";
+import { Button, Input } from "@mediaos/ui";
 
 interface TwoFactorChallengeFormProps {
   /** Challenge token nhận từ login khi 2FA bật. */
   challengeToken: string;
-  /** Gọi khi verify thành công — tokens để real-login store lưu lại. */
-  onSuccess: (tokens: AuthTokens) => void;
+  /** Gọi khi verify thành công — phiên SSO (refresh+CSRF cookie) đã được server đặt ở /auth/2fa/verify. */
+  onSuccess: () => void;
   onCancel?: () => void;
 }
 
+/** Thông báo lỗi thân thiện — KHÔNG render `err.message` thô từ BE (tránh lộ chi tiết nội bộ ở UI nhạy cảm). */
+function friendlyError(err: unknown, t: TFunction<"auth">): string {
+  if (err instanceof ApiError) {
+    if (err.status === 429) return t("errors.tooManyAttempts");
+    if (err.status >= 500) return t("errors.serverError");
+    // 401/400/403 ở bước 2FA = mã sai/hết hạn → thông báo chung.
+    return t("errors.invalidCode");
+  }
+  return t("errors.invalidCode");
+}
+
 /**
- * Bước 2 đăng nhập khi 2FA bật (G16-1): nhập mã TOTP 6 số HOẶC một recovery code. Ready-to-wire vào
- * luồng real-login (login hiện mock G1). Loading/error đầy đủ.
+ * Bước 2 đăng nhập khi 2FA bật (FS-1b, chuyển từ apps/web). Nhập mã TOTP 6 số HOẶC một recovery code.
+ * `verifyLogin` (@Public, skipAuth) thành công → server phát refresh+CSRF cookie SSO; caller điều hướng về
+ * app đích. KHÔNG giữ access token ở apps/auth (app đích tự silent-refresh từ cookie).
  */
 export function TwoFactorChallengeForm({ challengeToken, onSuccess, onCancel }: TwoFactorChallengeFormProps) {
   const { t } = useTranslation("auth");
@@ -30,22 +40,21 @@ export function TwoFactorChallengeForm({ challengeToken, onSuccess, onCancel }: 
     setBusy(true);
     setError(null);
     try {
-      const tokens = await twoFactorApi.verifyLogin(challengeToken, code.trim());
-      onSuccess(tokens);
+      await twoFactorApi.verifyLogin(challengeToken, code.trim());
+      onSuccess();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("errors.invalidCode"));
+      setError(friendlyError(err, t));
     } finally {
+      // finally: nhả nút kể cả khi verify thành công nhưng điều hướng (onSuccess→redirect) chưa rời trang.
       setBusy(false);
     }
   };
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
+    <form onSubmit={(e) => void onSubmit(e)} className="space-y-4">
       <div className="space-y-1 text-center">
         <h1 className="text-xl font-semibold">{t("twoFactor.title")}</h1>
-        <p className="text-sm text-muted-foreground">
-          {t("twoFactor.challengeHint")}
-        </p>
+        <p className="text-sm text-muted-foreground">{t("twoFactor.challengeHint")}</p>
       </div>
       <div className="space-y-1">
         <label className="text-sm font-medium" htmlFor="tfa-code">
@@ -61,7 +70,11 @@ export function TwoFactorChallengeForm({ challengeToken, onSuccess, onCancel }: 
           autoFocus
         />
       </div>
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" aria-live="assertive" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
       <div className="flex gap-2">
         {onCancel && (
           <Button type="button" variant="outline" className="flex-1" disabled={busy} onClick={onCancel}>
