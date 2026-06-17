@@ -13,6 +13,9 @@ import { BrandingPage } from "@/routes/tenant/ui-config/branding-page";
 import { WebhooksPage } from "@/routes/tenant/webhooks/webhooks-page";
 import { NavigationPage } from "@/routes/tenant/ui-config/navigation-page";
 import { I18nPage } from "@/routes/tenant/ui-config/i18n-page";
+import { OperatorAuditPage } from "@/routes/operator/audit/audit-list";
+import { OperatorQueuePage } from "@/routes/operator/queue/queue-monitor";
+import { TenantAuditPage } from "@/routes/tenant/audit/tenant-audit";
 import { useAuthStore } from "@/stores/auth";
 
 const rootRoute = createRootRoute({ component: Outlet });
@@ -62,6 +65,20 @@ const operatorModulesRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/operator/modules",
   component: ModuleCatalogPage,
+});
+
+// AC-8 — Operator audit viewer CHÉO tenant (read-only, view:platform-audit + step-up).
+const operatorAuditRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/operator/audit",
+  component: OperatorAuditPage,
+});
+
+// AC-8 — Operator queue monitor CHÉO tenant (outbox + dead-letter, view:platform-audit + step-up).
+const operatorQueueRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/operator/queue",
+  component: OperatorQueuePage,
 });
 
 // /tenant/:companyId — operator chọn 1 tenant để thao tác (ADR-0019 Tầng 1: withTenant(target)).
@@ -136,6 +153,13 @@ const tenantI18nRoute = createRoute({
   component: I18nPage,
 });
 
+// `/tenant/:companyId/audit` — audit viewer self-service (AC-8): tenant xem audit của mình (view:audit-log).
+const tenantAuditRoute = createRoute({
+  getParentRoute: () => tenantRoute,
+  path: "audit",
+  component: TenantAuditPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   appLayoutRoute.addChildren([
@@ -143,6 +167,8 @@ const routeTree = rootRoute.addChildren([
     operatorRoute,
     operatorCompaniesRoute,
     operatorModulesRoute,
+    operatorAuditRoute,
+    operatorQueueRoute,
     tenantRoute.addChildren([
       tenantIndexRoute,
       tenantRbacRoute,
@@ -153,6 +179,7 @@ const routeTree = rootRoute.addChildren([
       tenantBrandingRoute,
       tenantNavigationRoute,
       tenantI18nRoute,
+      tenantAuditRoute,
     ]),
   ]),
 ]);

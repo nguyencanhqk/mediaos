@@ -52,6 +52,11 @@ import { PlatformEntitlementsService } from "./platform-entitlements.service";
     ModuleRegistryRepository,
     PlatformEntitlementsService,
   ],
-  exports: [PlatformCompanyService, OperatorReauthService, OperatorActionAuditService],
+  exports: [
+    PlatformCompanyService,
+    OperatorReauthService,
+    OperatorReauthGuard,
+    OperatorActionAuditService,
+  ],
 })
 export class PlatformModule {}

@@ -126,4 +126,29 @@ export class DatabaseService {
       return fn(tx);
     });
   }
+
+  /**
+   * AC-8 (cross-tenant primitive #2): ngữ cảnh PLATFORM-AUDIT-READ — set GUC `app.platform_audit_read='on'`
+   * (LOCAL) để ĐỌC CHÉO tenant trên ĐÚNG 3 bảng quan sát (audit_logs / outbox_events / dead_letter_events).
+   *
+   * KHÁC `withPlatformContext` (app.platform_admin chỉ nới `companies`, mig 0230): GUC HẸP RIÊNG này CHỈ bật
+   * policy `*_platform_audit_read` (FOR SELECT, USING-only — mig 0340) ⇒ blast-radius = 3 bảng quan sát,
+   * read-only by construction (KHÔNG WITH CHECK ⇒ KHÔNG thể INSERT/UPDATE chéo tenant qua đây).
+   *
+   * HỢP ĐỒNG SELECT-ONLY (ép bằng usage + bằng việc policy KHÔNG có nhánh cross-tenant trên WITH CHECK):
+   *   chỉ chạy SELECT chéo tenant trong `fn`; KHÔNG ghi nghiệp vụ chéo tenant ở đây. Mọi GHI audit
+   *   (recordOperatorAction cho mỗi lần đọc) PHẢI đi `withTenant(targetTenantId)` RIÊNG (company_id = target
+   *   qua GUC), KHÔNG ghi trong ngữ cảnh này (audit_logs WITH CHECK vẫn keyed app.current_company_id ⇒
+   *   INSERT ở đây sẽ FAIL-CLOSED vì current_company_id chưa set). Default-DENY ngoài helper: GUC chưa set
+   *   ⇒ 0 row chéo tenant ở mọi đường khác. TÁI DÙNG bởi AC-9 (data-ops read-only).
+   */
+  async withPlatformReadContext<T>(fn: (tx: TenantTx) => Promise<T>): Promise<T> {
+    if (!db) {
+      throw new DatabaseNotConfiguredError();
+    }
+    return db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('app.platform_audit_read', 'on', true)`);
+      return fn(tx);
+    });
+  }
 }

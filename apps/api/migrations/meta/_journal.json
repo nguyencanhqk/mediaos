@@ -708,6 +708,13 @@
       "when": 1717500350000,
       "tag": "0320_ac6_webhooks",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1717500360000,
+      "tag": "0340_ac8_observability",
+      "breakpoints": true
     }
   ]
 }

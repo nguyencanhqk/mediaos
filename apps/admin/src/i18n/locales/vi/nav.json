@@ -2,6 +2,8 @@
   "operator": "Vận hành",
   "overview": "Tổng quan",
   "companies": "Công ty & Gói cước",
+  "audit": "Nhật ký kiểm toán",
+  "queue": "Hàng đợi sự kiện",
   "tenant": "Theo công ty",
   "logout": "Đăng xuất",
   "comingSoon": "Sắp ra mắt",

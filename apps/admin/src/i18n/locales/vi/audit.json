@@ -1,0 +1,45 @@
+{
+  "title": "Nhật ký kiểm toán",
+  "subtitle": "Xem nhật ký kiểm toán (audit log) — chỉ đọc.",
+  "platformTitle": "Nhật ký kiểm toán toàn hệ thống",
+  "platformSubtitle": "Operator: xem nhật ký kiểm toán của mọi tenant (cross-tenant, chỉ đọc).",
+  "table": {
+    "createdAt": "Thời điểm",
+    "action": "Hành động",
+    "objectType": "Loại đối tượng",
+    "objectId": "Mã đối tượng",
+    "actor": "Người thực hiện",
+    "company": "Công ty",
+    "detail": "Chi tiết"
+  },
+  "filter": {
+    "action": "Hành động",
+    "actionPlaceholder": "vd: TaskCreated",
+    "objectType": "Loại đối tượng",
+    "objectTypePlaceholder": "vd: task",
+    "companyId": "Mã công ty (operator)",
+    "companyIdPlaceholder": "UUID công ty (bỏ trống = mọi tenant)",
+    "dateFrom": "Từ ngày",
+    "dateTo": "Đến ngày",
+    "apply": "Lọc",
+    "clear": "Xóa lọc"
+  },
+  "redacted": "(đã ẩn — dữ liệu nhạy cảm)",
+  "noPermission": {
+    "title": "Không có quyền",
+    "description": "Bạn không có quyền xem nhật ký kiểm toán."
+  },
+  "empty": {
+    "title": "Chưa có nhật ký",
+    "description": "Không có dòng nhật ký kiểm toán nào khớp bộ lọc."
+  },
+  "error": {
+    "loadFailed": "Không tải được nhật ký kiểm toán.",
+    "noTenant": "Thiếu mã công ty."
+  },
+  "pagination": {
+    "prev": "Trước",
+    "next": "Sau",
+    "summary": "Hiển thị {{from}}–{{to}} / {{total}}"
+  }
+}
