@@ -559,6 +559,23 @@ _(custom `react-native-reviewer/patterns/build-fix/push`)_
 
 ---
 
+## FE-SPLIT — Tách Frontend đa-SPA (`apps/web` → studio·people·console + auth) _(🛠️+🤖 · FE + 1 nền-phiên CROWN · 📋 DỰ THẢO 2026-06-17)_
+
+> Tách `apps/web` (1 SPA) → **3 product app** `studio` + `people` + `console` + **`apps/auth`** (đăng nhập trung tâm/SSO) + 2 shared package `packages/{ui,web-core}`. **GIỮ 1 backend** (`apps/api`) — KHÔNG tách microservices. Đường cắt tự nhiên = **7 category** trong nav registry `apps/web/src/lib/nav.ts`. 📋 Kế hoạch đầy đủ (bản đồ di chuyển theo file thật · thiết kế SSO cookie-subdomain · rủi ro · ước lượng): **`docs/frontend-split-plan.md`**. Bắt đầu **Phase 0 → Phase 1**.
+
+- [ ] **FS-0** 🤖🟢 (L) **Rút shared packages** — `packages/web-core` (auth store · api-client Bearer/envelope · use-can/PermissionGate · i18n setup · nav types) + `packages/ui` (shadcn primitives + layout + DataTable/PageHeader/EmptyState/Skeleton); đổi import `@/` → `@mediaos/{web-core,ui}` trong `apps/web`; **pin React `19.2.7`** ở `packages/ui` (bài học `apps/admin`). Vẫn 1 app. **DoD: web build + 314 test GIỮ NGUYÊN.** LIGHT gate. ⭐ ưu tiên cao nhất, rủi ro thấp, đảo ngược dễ.
+- [ ] **FS-1** 🛠️🔋🔋 (L) **Nền phiên + `apps/auth`** (đăng nhập trung tâm — RỦI RO #1) — api thêm `POST /auth/refresh` (rotation + reuse-detection) + `/auth/logout`, phát refresh cookie `HttpOnly`/`Secure`/`Domain=.<domain>`/`SameSite=Strict` + CSRF + **CORS allowlist credentials** + **validate `redirect`** (chống open-redirect); `apps/auth` SPA mỏng (login + 2FA + set-password); `web-core` **silent-refresh khi load + refresh-on-401** (xếp hàng request) + redirect `auth.<domain>` khi fail; dev `*.localhost`. Access token **giữ in-memory**. **CROWN auth boundary → FULL gate + santa.** ⭐ CHỐT CHẶN — phải xong trước khi tách product app. _(dep: FS-0)_
+- [ ] **FS-2** 🤖🟢 (M) **`apps/people`** — di chuyển hr + attendance + payroll theo bản đồ (mục 4); subdomain `people.<domain>` `base:"/"`; khai NAV_ITEMS subset; **xoá** route đã chuyển khỏi `apps/web`. _(dep: FS-1)_
+- [ ] **FS-3** 🤖🟢 (M) **`apps/studio`** — work + process + goals; subdomain `studio.<domain>`; cô lập `recharts` vào studio; `@xyflow/react` dùng chung studio↔people (org-chart) — chấp nhận hoặc refactor org-chart trước. _(dep: FS-1)_
+- [ ] **FS-4** 🤖🟢 (M) **`apps/console`** (nhóm `system`, tenant `aud=user` — **KHÁC** operator plane `apps/admin`) — settings/company · platform-accounts · break-glass; di chuyển nốt rồi **XOÁ `apps/web`**. _(dep: FS-1)_
+- [ ] **FS-5** 🔧🔋 (M) **Cutover prod** — DNS các subdomain + **TLS wildcard `*.<domain>`** + landing/launcher chọn app theo capabilities + CI per-app; SSO đăng nhập 1 lần (cookie `Domain=.<domain>`) dùng mọi subdomain. _(dep: FS-2 · FS-3 · FS-4)_
+
+✅ **Done FE-SPLIT:** mỗi mảng là SPA build/deploy riêng (bundle nhẹ); đăng nhập 1 lần dùng chung mọi app; access token chỉ in-memory (không `localStorage`); `apps/web` đã xoá.
+
+> ⚠️ **Phân biệt app:** `apps/console` = TENANT self-service (`aud=user`) ≠ `apps/admin` = operator control-plane (`aud=operator`, chéo-tenant, đã ở master — NGOÀI phạm vi đợt này). **KHÔNG tách backend** (`docs/frontend-split-plan.md` §9: 1 Postgres + RLS + ~198 FK chéo domain). Cảnh báo từ plan: token in-memory không sống qua origin khác ⇒ **FS-1 là điều kiện cần** để mọi app tách ra đăng nhập được.
+
+---
+
 ## 🚦 Mốc release nội bộ _(không chờ xong hết mới dùng)_
 
 | Release | Gồm phase | Người dùng chính |
