@@ -3,6 +3,7 @@ import { initReactI18next } from "react-i18next";
 import common from "./locales/vi/common";
 import nav from "./locales/vi/nav";
 import auth from "./locales/vi/auth";
+import notifications from "./locales/vi/notifications";
 
 /**
  * Shared i18n instance (react-i18next) cho mọi FE app.
@@ -23,6 +24,7 @@ const CORE_RESOURCES: Record<string, Record<string, unknown>> = {
   common,
   nav,
   auth,
+  notifications,
 };
 
 void i18n.use(initReactI18next).init({

@@ -1,6 +1,11 @@
 # Kế hoạch tách Frontend — MediaOS
 
-> Trạng thái: **ĐÃ KIỂM CHỨNG — Phase 0 sẵn sàng khởi động** · Cập nhật: 2026-06-17
+> Trạng thái: **Phase 0–4 + Phase 5 (CODE) ĐÃ LAND · Phase 5 (OPS hạ tầng) = runbook scaffold** · Cập nhật: 2026-06-18
+>
+> - ✅ Phase 0 (FS-0 web-core/ui) · ✅ Phase 1 (FS-1a api-session + FS-1b apps/auth) · ✅ Wave 2 (FS-2 people + FS-3 studio + FS-4 console).
+> - ✅ **Phase 5 phần CODE (FS-5, lane `feat/fs5-cutover` 2026-06-18):** trả nợ Wave 2 (employees-api Bearer; notification bell/api lên @mediaos/{ui,web-core} + gắn lại chuông 4 app) · **apps/web repurpose thành launcher root-domain** (option A — giữ web, gate theo capability, link cross-subdomain) · dọn dead shared-tới-cutover ở web.
+> - ⏳ **Phase 5 phần OPS:** runbook `docs/ops/fs5-cutover-runbook.md` + `.env.example` template prod (placeholder `mediaos.example`) — CHƯA land hạ tầng thật (chờ domain/CI/DNS/TLS/Vault).
+> - apps/web **GIỮ làm launcher** (KHÔNG xoá — chọn option A thay vì "xoá web" của Phase 4 gốc).
 > Phạm vi: tách `apps/web` (1 SPA) → nhiều SPA sản phẩm + shared packages.
 > Quyết định đã chốt: **3 product app `studio` + `people` + `console`** (nhóm "system") + **`apps/auth` đăng nhập trung tâm (SSO = PA c, cookie **subdomain** — mục 7)**.
 > Tài liệu nền: [CLAUDE.md](../CLAUDE.md) · [docs/SYSTEM-DESIGN.md](./SYSTEM-DESIGN.md)
@@ -187,13 +192,20 @@ packages/
 - `socket.io-client` hiện **chưa có importer** trong web (chat REST-only) → chưa tính là lợi ích tách; khi nối
   realtime, thêm origin app vào allowlist WS/CORS của api.
 
-### Phase 4 — Scaffold `apps/console` (nhóm `system`) + dọn `apps/web`
+### Phase 4 — Scaffold `apps/console` (nhóm `system`) + dọn `apps/web` ✅ (console ở Wave 2; dọn web ở FS-5 2026-06-18)
+
+> **Cập nhật FS-5:** chọn **giữ `apps/web` làm launcher** (option A) thay vì xoá → "dọn web" = xoá file
+> shared-tới-cutover CHẾT (channels/employees/org-api/nav + chat.json), KHÔNG xoá cả app.
 - App **riêng** cho màn system tenant (`aud=user`): `settings/company`, `settings/platform-accounts`,
   `settings/break-glass`; subdomain `console.<domain>`, `base: "/"`. **TÁCH BẠCH** operator plane `apps/admin`.
 - Di chuyển nốt nhóm `system` khỏi `web` → khi mọi route đã phủ, **xoá `apps/web`**.
 - **DoD:** `console` chạy độc lập + test xanh; `apps/web` không còn route nào.
 
-### Phase 5 — Cutover prod (DNS subdomain · TLS wildcard · launcher · CI per-app)
+### Phase 5 — Cutover prod (DNS subdomain · TLS wildcard · launcher · CI per-app) — CODE ✅ · OPS ⏳ runbook
+
+> **Cập nhật FS-5 (2026-06-18):** launcher root-domain ĐÃ làm trong `apps/web` (registry 3 app + gate
+> capability + link cross-subdomain). Hạ tầng (DNS/TLS/CI/cookie prod) = **runbook `docs/ops/fs5-cutover-runbook.md`
+> + `.env.example` template prod** (placeholder `mediaos.example`) — chưa land thật, chờ domain + CI.
 - DNS các subdomain + **TLS wildcard `*.<domain>`**; mỗi app deploy riêng (CI per-app), api ở `api.<domain>`.
 - Landing/launcher ở root domain: chọn app theo capabilities hoặc redirect theo role.
 - **DoD:** đăng nhập 1 lần (cookie `Domain=.<domain>`) dùng được mọi subdomain app; đổi app không login lại.

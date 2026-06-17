@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { LogOut, Search } from "lucide-react";
-import { Avatar } from "@mediaos/ui";
+import { Avatar, NotificationBell } from "@mediaos/ui";
 import { cn } from "@/lib/utils";
 import { getHealth, logoutSession } from "@mediaos/web-core";
 import { BrandLogo, BrandWordmark } from "@/components/brand/brand-mark";
@@ -69,6 +69,8 @@ export function HomePage() {
           </div>
 
           <div className="ml-auto flex items-center gap-1">
+            <NotificationBell />
+            <div className="mx-1 hidden h-6 w-px bg-slate-200 sm:block" />
             <Avatar name={username} size="sm" />
             <span className="ml-1.5 hidden max-w-[10rem] truncate text-sm text-slate-600 md:block">
               {username}

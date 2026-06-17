@@ -22,3 +22,6 @@ export * from "./components/ui/card";
 export * from "./components/layout/app-shell";
 export * from "./components/layout/app-sidebar";
 export * from "./components/layout/page-header";
+
+// Notification bell (chrome dùng chung — tiêu thụ notificationApi của web-core)
+export * from "./components/notification-bell";

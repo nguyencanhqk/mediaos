@@ -30,6 +30,7 @@
     "tailwind-merge": "^2.6.0"
   },
   "peerDependencies": {
+    "@tanstack/react-query": "^5.62.0",
     "@tanstack/react-router": "^1.95.0",
     "@types/react": "19.2.16",
     "@types/react-dom": "19.2.3",
@@ -38,6 +39,7 @@
     "react-i18next": "^15.7.4"
   },
   "devDependencies": {
+    "@tanstack/react-query": "^5.62.0",
     "@tanstack/react-router": "^1.95.0",
     "@types/react": "19.2.16",
     "@types/react-dom": "19.2.3",

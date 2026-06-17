@@ -1,9 +1,8 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { AppShell } from "@mediaos/ui";
+import { AppShell, NotificationBell } from "@mediaos/ui";
 import { NAV_ITEMS } from "@/lib/nav";
 import { BrandLogo } from "@/components/brand/brand-mark";
 import { BRAND } from "@/lib/brand";
-import { NotificationBell } from "@/components/notification-bell";
 
 /** Route hiển thị toàn màn, KHÔNG bọc app-shell (tự lo chrome riêng). Login đã externalize sang apps/auth. */
 const BARE_ROUTES = new Set<string>(["/"]);
