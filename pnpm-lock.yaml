@@ -337,6 +337,106 @@ importers:
         specifier: ^3.0.0
         version: 3.2.6(@types/node@22.19.19)(jiti@2.7.0)(jsdom@25.0.1)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)
 
+  apps/console:
+    dependencies:
+      '@date-fns/tz':
+        specifier: ^1.5.0
+        version: 1.5.0
+      '@mediaos/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@mediaos/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@mediaos/web-core':
+        specifier: workspace:*
+        version: link:../../packages/web-core
+      '@radix-ui/react-slot':
+        specifier: ^1.1.1
+        version: 1.2.4(@types/react@19.2.16)(react@19.2.7)
+      '@tanstack/react-query':
+        specifier: ^5.62.0
+        version: 5.101.0(react@19.2.7)
+      '@tanstack/react-router':
+        specifier: ^1.95.0
+        version: 1.170.11(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@tanstack/react-table':
+        specifier: ^8.21.3
+        version: 8.21.3(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      class-variance-authority:
+        specifier: ^0.7.1
+        version: 0.7.1
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
+      date-fns:
+        specifier: ^4.4.0
+        version: 4.4.0
+      i18next:
+        specifier: ^25.10.10
+        version: 25.10.10(typescript@5.9.3)
+      lucide-react:
+        specifier: ^0.469.0
+        version: 0.469.0(react@19.2.7)
+      react:
+        specifier: 19.2.7
+        version: 19.2.7
+      react-dom:
+        specifier: 19.2.7
+        version: 19.2.7(react@19.2.7)
+      react-i18next:
+        specifier: ^15.7.4
+        version: 15.7.4(i18next@25.10.10(typescript@5.9.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@5.9.3)
+      tailwind-merge:
+        specifier: ^2.6.0
+        version: 2.6.1
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
+      zustand:
+        specifier: ^5.0.2
+        version: 5.0.14(@types/react@19.2.16)(immer@11.1.8)(react@19.2.7)(use-sync-external-store@1.6.0(react@19.2.7))
+    devDependencies:
+      '@tailwindcss/vite':
+        specifier: ^4.0.0
+        version: 4.3.0(vite@6.4.3(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4))
+      '@testing-library/dom':
+        specifier: ^10.4.0
+        version: 10.4.1
+      '@testing-library/jest-dom':
+        specifier: ^6.6.3
+        version: 6.9.1
+      '@testing-library/react':
+        specifier: ^16.1.0
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.16))(@types/react@19.2.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.19
+      '@types/react':
+        specifier: 19.2.16
+        version: 19.2.16
+      '@types/react-dom':
+        specifier: 19.2.3
+        version: 19.2.3(@types/react@19.2.16)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.4
+        version: 4.7.0(vite@6.4.3(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4))
+      jsdom:
+        specifier: ^25.0.1
+        version: 25.0.1
+      tailwindcss:
+        specifier: ^4.0.0
+        version: 4.3.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.3(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.6(@types/node@22.19.19)(jiti@2.7.0)(jsdom@25.0.1)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)
+
   apps/mobile:
     dependencies:
       '@mediaos/contracts':

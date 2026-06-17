@@ -6,9 +6,6 @@ import { TeamsPage } from "@/routes/org/teams";
 import { EmployeesPage } from "@/routes/org/employees";
 import { EmployeeDetailPage } from "@/routes/org/employees-detail";
 import { PositionsPage } from "@/routes/org/positions";
-import { CompanySettingsPage } from "@/routes/settings/company";
-import { PlatformAccountsPage } from "@/routes/settings/platform-accounts";
-import { BreakGlassPage } from "@/routes/settings/break-glass";
 import { ChannelsPage } from "@/routes/media/channels";
 import { ChannelDetailPage } from "@/routes/media/channel-detail";
 import { ProjectsPage } from "@/routes/media/projects";
@@ -255,28 +252,6 @@ const bonusPenaltiesRoute = createRoute({
   component: BonusPenaltiesPage,
 });
 
-const companySettingsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/settings/company",
-  beforeLoad: authGuard,
-  component: CompanySettingsPage,
-});
-
-const platformAccountsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/settings/platform-accounts",
-  beforeLoad: authGuard,
-  component: PlatformAccountsPage,
-});
-
-// G6-2 PR-B ROUND 2: "My break-glass grants" — list + JIT reveal (active grants only, ephemeral plaintext).
-const breakGlassRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/settings/break-glass",
-  beforeLoad: authGuard,
-  component: BreakGlassPage,
-});
-
 const routeTree = rootRoute.addChildren([
   indexRoute,
   departmentsRoute,
@@ -284,9 +259,6 @@ const routeTree = rootRoute.addChildren([
   employeesRoute,
   employeeDetailRoute,
   positionsRoute,
-  companySettingsRoute,
-  platformAccountsRoute,
-  breakGlassRoute,
   channelsRoute,
   channelDetailRoute,
   projectsRoute,

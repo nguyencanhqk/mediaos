@@ -9,14 +9,11 @@ import {
   FileText,
   Fingerprint,
   FolderKanban,
-  KeyRound,
   LayoutDashboard,
   ListTodo,
   Plane,
   Radio,
   ReceiptText,
-  Settings,
-  ShieldAlert,
   Target,
   Users,
   UsersRound,
@@ -72,9 +69,4 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "payrollPeriods", labelKey: "payrollPeriods", to: "/payroll/periods", icon: CalendarRange, tile: "bg-teal-500/12 text-teal-600", category: "payroll" },
   { id: "payslips", labelKey: "payslips", to: "/payroll/payslips", icon: ReceiptText, tile: "bg-cyan-500/12 text-cyan-600", category: "payroll" },
   { id: "bonusPenalties", labelKey: "bonusPenalties", to: "/payroll/bonus-penalties", icon: BadgeDollarSign, tile: "bg-amber-500/12 text-amber-600", category: "payroll" },
-
-  // — Hệ thống —
-  { id: "platformAccounts", labelKey: "platformAccounts", to: "/settings/platform-accounts", icon: KeyRound, tile: "bg-slate-500/12 text-slate-600", category: "system" },
-  { id: "breakGlass", labelKey: "breakGlass", to: "/settings/break-glass", icon: ShieldAlert, tile: "bg-red-500/12 text-red-600", category: "system" },
-  { id: "companySettings", labelKey: "companySettings", to: "/settings/company", icon: Settings, tile: "bg-slate-500/12 text-slate-600", category: "system" },
 ] as const;
