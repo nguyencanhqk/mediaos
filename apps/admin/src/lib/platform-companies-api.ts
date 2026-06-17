@@ -58,8 +58,8 @@ function buildListQuery(params: ListCompaniesParams): string {
   const qs = new URLSearchParams();
   if (params.status) qs.set("status", params.status);
   if (params.search && params.search.trim()) qs.set("search", params.search.trim());
-  if (params.page) qs.set("page", String(params.page));
-  if (params.limit) qs.set("limit", String(params.limit));
+  if (params.page != null) qs.set("page", String(params.page));
+  if (params.limit != null) qs.set("limit", String(params.limit));
   const s = qs.toString();
   return s ? `?${s}` : "";
 }

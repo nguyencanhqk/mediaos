@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CompanySummaryDto } from "@mediaos/contracts";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,13 @@ export function SuspendCompanyDialog({ company, onClose }: SuspendCompanyDialogP
     },
     onError: () => setError(t("error.suspendFailed")),
   });
+
+  // Dialog luôn mounted (điều khiển qua prop `company`) → reset lỗi/mutation khi đổi công ty,
+  // tránh lỗi của company A còn hiển thị khi mở dialog cho company B. `mutation.reset` là method ổn định.
+  useEffect(() => {
+    setError(null);
+    mutation.reset();
+  }, [company]); // eslint thấy thiếu `mutation` nhưng .reset ổn định; apps/admin chưa bật react-hooks rule
 
   const handleClose = () => {
     setError(null);
