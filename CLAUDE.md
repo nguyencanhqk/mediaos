@@ -9,7 +9,9 @@
 
 **MediaOS** — hệ thống quản trị nội bộ công ty media (~200 nhân sự, 100 kênh, 300 video/tháng), kiến trúc **Modular Monolith + API-first + SaaS-ready**. Sẽ mở rộng thành SaaS sau khi vận hành nội bộ ổn.
 
-Tài liệu nguồn (cùng thư mục): `MVP REQUIREMENT...`, `DATABASE ERD...`, `USER ROLE & PERMISSION MATRIX...`, `THIẾT KẾ WORKFLOW MẪU...`, `THIẾT KẾ MÀN HÌNH WEB-MOBILE...`, `KẾ HOẠCH CHIA PHASE...`, `TÀI LIỆU CHO ĐỘI DEV...`. Kế hoạch thực thi: `TASKS.md`. Quyết định kiến trúc: `docs/adr/`.
+Tài liệu thiết kế hợp nhất (theo code hiện tại): `docs/SYSTEM-DESIGN.md` — kiến trúc, cấu trúc, nguyên lý hoạt động, sơ đồ, ERD, ADR tóm tắt. Spec chi tiết: `docs/erd-v2.md`, `docs/permission-matrix-spec.md`. Kế hoạch thực thi: `TASKS.md`. Quyết định kiến trúc: `docs/adr/`.
+
+> Bản gốc MVP v1 (PRD, ERD, design màn hình/workflow, role matrix, kế hoạch phase) đã được hợp nhất vào `docs/SYSTEM-DESIGN.md` và xóa khỏi repo (còn trong lịch sử git nếu cần tra cứu).
 
 ---
 
