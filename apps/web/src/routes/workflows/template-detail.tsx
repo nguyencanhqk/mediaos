@@ -5,12 +5,14 @@ import { Trans, useTranslation } from "react-i18next";
 import type { DagValidationResultDto } from "@/lib/workflow-builder/contract";
 import { workflowTemplatesApi } from "@/lib/workflow-templates-api";
 import { ApiError } from "@/lib/api-client";
+import { ArrowLeft } from "lucide-react";
 import { PermissionGate } from "@/components/permission-gate";
 import { Button } from "@/components/ui/button";
 import { TemplateStatusBadge } from "@/components/workflows/template-status-badge";
 import { StepEditor } from "@/components/workflows/step-editor";
 import { DependencyEditor } from "@/components/workflows/dependency-editor";
 import { DagErrorList } from "@/components/workflows/dag-error-list";
+import { RunWorkflowDialog } from "@/components/workflows/run-workflow-dialog";
 import { appliesToLabel } from "@/components/workflows/constants";
 
 // Canvas React Flow tải lười (chunk riêng + CSS) — chỉ nạp khi mở tab Sơ đồ.
@@ -81,8 +83,12 @@ export function WorkflowTemplateDetailPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-8">
-      <Link to="/workflows/templates" className="text-sm text-primary hover:underline">
-        <span aria-hidden="true">← </span>{t("detail.backLink")}
+      <Link
+        to="/workflows/templates"
+        className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+      >
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        {t("detail.backLink")}
       </Link>
 
       {/* Header */}
@@ -97,7 +103,12 @@ export function WorkflowTemplateDetailPage() {
           </p>
         </div>
 
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {!isDraft && (
+            <PermissionGate action="create" resourceType="workflow_instance">
+              <RunWorkflowDialog templateId={templateId} />
+            </PermissionGate>
+          )}
           <Button
             size="sm"
             variant="outline"

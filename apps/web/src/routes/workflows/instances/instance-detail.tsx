@@ -1,10 +1,15 @@
 import { Suspense, lazy } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { Activity, ArrowLeft } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { workflowInstancesApi } from "@/lib/workflow-instances-api";
+import { PageHeader } from "@/components/layout/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import {
-  INSTANCE_STATUS_BADGE_CLASSES,
+  INSTANCE_STATUS_BADGE_VARIANT,
   INSTANCE_STATUS_LABELS,
   STEP_INSTANCE_STATUS_DOT_CLASSES,
   STEP_INSTANCE_STATUS_LABELS,
@@ -21,39 +26,64 @@ export function WorkflowInstanceDetailPage() {
     queryFn: () => workflowInstancesApi.get(instanceId),
   });
 
-  if (isLoading) return <div className="p-8 text-sm text-muted-foreground">{t("instances.detail.loading")}</div>;
-  if (isError || !data)
-    return <div className="p-8 text-sm text-destructive">{t("instances.detail.loadError")}</div>;
+  const backLink = (
+    <Link
+      to="/workflows/instances"
+      className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+      {t("instances.detail.backLink")}
+    </Link>
+  );
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-5xl space-y-6 p-6 sm:p-8">
+        {backLink}
+        <Skeleton className="h-9 w-64" />
+        <Skeleton className="h-4 w-80" />
+        <Skeleton className="h-[460px] w-full rounded-xl" />
+      </div>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <div className="mx-auto max-w-5xl space-y-6 p-6 sm:p-8">
+        {backLink}
+        <EmptyState
+          icon={Activity}
+          title={t("instances.detail.loadError")}
+          description={t("instances.loadHint")}
+        />
+      </div>
+    );
+  }
 
   const { instance, steps, dependencies } = data;
   const sortedSteps = [...steps].sort((a, b) => a.stepOrder - b.stepOrder);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-8">
-      <Link to="/workflows/instances" className="text-sm text-primary hover:underline">
-        <span aria-hidden="true">← </span>{t("instances.detail.backLink")}
-      </Link>
+    <div className="mx-auto max-w-5xl space-y-6 p-6 sm:p-8">
+      {backLink}
 
-      <div className="space-y-1">
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-semibold">{instance.templateName}</h1>
-          <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${INSTANCE_STATUS_BADGE_CLASSES[instance.status]}`}
-          >
+      <PageHeader
+        title={instance.templateName}
+        description={t("instances.detail.versionLine", {
+          version: instance.definitionVersion,
+          datetime: new Date(instance.createdAt).toLocaleString("vi-VN"),
+        })}
+        icon={Activity}
+        actions={
+          <Badge variant={INSTANCE_STATUS_BADGE_VARIANT[instance.status]}>
             {INSTANCE_STATUS_LABELS[instance.status]}
-          </span>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {t("instances.detail.versionLine", {
-            version: instance.definitionVersion,
-            datetime: new Date(instance.createdAt).toLocaleString("vi-VN"),
-          })}
-        </p>
-      </div>
+          </Badge>
+        }
+      />
 
       <Suspense
         fallback={
-          <div className="flex h-[460px] items-center justify-center rounded-xl border border-border text-sm text-muted-foreground">
+          <div className="flex h-[460px] items-center justify-center rounded-xl border border-border bg-card text-sm text-muted-foreground">
             {t("instances.detail.canvasLoadingFallback")}
           </div>
         }
@@ -62,8 +92,8 @@ export function WorkflowInstanceDetailPage() {
       </Suspense>
 
       {/* Danh sách trạng thái — fallback đọc-được cho canvas (a11y) */}
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">{t("instances.detail.stepsHeading")}</h2>
+      <section className="space-y-3 rounded-xl border border-border bg-card p-5 shadow-sm">
+        <h2 className="text-base font-semibold">{t("instances.detail.stepsHeading")}</h2>
         <ul className="space-y-2">
           {sortedSteps.map((step) => (
             <li
