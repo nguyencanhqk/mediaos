@@ -1,23 +1,22 @@
-import i18n from "i18next";
-import { initReactI18next } from "react-i18next";
+import { i18n, registerI18nResources } from "@mediaos/web-core";
 
 /**
- * GX-7 — FE i18n (react-i18next).
+ * App-level i18n — dùng lại instance dùng chung của @mediaos/web-core (đã init đồng bộ với
+ * 3 namespace `common`/`nav`/`auth`) và đăng ký thêm namespace FEATURE của riêng app.
  *
- * Tiếng Việt là ngôn ngữ mặc định của hệ thống nội bộ. Kiến trúc đã sẵn sàng
- * đa ngôn ngữ: thêm `locales/<lang>/<namespace>.json` là đủ — KHÔNG cần sửa file này.
+ * Namespace feature tự khám phá qua `import.meta.glob` (eager) → mỗi feature sở hữu 1 file
+ * catalog độc lập, không có registry tập trung nên các lane/feature sửa song song không đụng
+ * nhau. `common`/`nav`/`auth` không nằm ở đây (đã ở web-core) nên glob chỉ gom các namespace
+ * feature còn lại.
  *
- * Namespace tự khám phá qua `import.meta.glob` (eager) → mỗi feature sở hữu 1 file
- * catalog độc lập, không có registry tập trung nên các lane/feature sửa song song
- * không đụng nhau.
- *
- * Init ĐỒNG BỘ (resources nhúng sẵn, không dùng backend async) → `t()` trả đúng
- * chuỗi vi ngay từ render đầu tiên, kể cả trong test (không cần provider).
+ * Init đồng bộ (resources nhúng sẵn) → `t()` trả đúng chuỗi vi ngay từ render đầu (kể cả test).
  */
+
+const DEFAULT_LANGUAGE = "vi";
 
 type Catalog = Record<string, unknown>;
 
-function loadResources(lang: string): Record<string, Catalog> {
+function loadFeatureResources(lang: string): Record<string, Catalog> {
   // Vite thay thế glob lúc build/transform (cả vitest) → bundle đồng bộ, không I/O.
   const modules = import.meta.glob<{ default: Catalog }>("./locales/*/*.json", {
     eager: true,
@@ -25,7 +24,7 @@ function loadResources(lang: string): Record<string, Catalog> {
 
   const byNamespace: Record<string, Catalog> = {};
   for (const [filePath, mod] of Object.entries(modules)) {
-    // filePath dạng "./locales/vi/common.json"
+    // filePath dạng "./locales/vi/tasks.json"
     const match = filePath.match(/\/locales\/([^/]+)\/([^/]+)\.json$/);
     if (!match) continue;
     const [, fileLang, namespace] = match;
@@ -35,25 +34,6 @@ function loadResources(lang: string): Record<string, Catalog> {
   return byNamespace;
 }
 
-const DEFAULT_LANGUAGE = "vi";
-const viResources = loadResources(DEFAULT_LANGUAGE);
-
-void i18n.use(initReactI18next).init({
-  resources: { [DEFAULT_LANGUAGE]: viResources },
-  lng: DEFAULT_LANGUAGE,
-  fallbackLng: DEFAULT_LANGUAGE,
-  defaultNS: "common",
-  ns: Object.keys(viResources),
-  interpolation: {
-    // React đã tự escape → tránh double-escape ký tự tiếng Việt/HTML entity.
-    escapeValue: false,
-  },
-  // Key thiếu trả về chính key (dễ phát hiện), KHÔNG render null.
-  returnNull: false,
-  react: {
-    // Init đồng bộ → không cần Suspense.
-    useSuspense: false,
-  },
-});
+registerI18nResources(DEFAULT_LANGUAGE, loadFeatureResources(DEFAULT_LANGUAGE));
 
 export default i18n;

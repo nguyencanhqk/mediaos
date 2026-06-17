@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-table";
 import { useTranslation } from "react-i18next";
 import type { TemplateDto } from "@/lib/workflow-builder/contract";
-import { Button } from "@/components/ui/button";
+import { Button } from "@mediaos/ui";
 import { TemplateStatusBadge } from "./template-status-badge";
 import { appliesToLabel } from "./constants";
 

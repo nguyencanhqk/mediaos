@@ -9,14 +9,6 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mockNavigate,
 }));
 
-// --- auth-api mock ---
-vi.mock("@/lib/auth-api", () => ({
-  authApi: {
-    login: vi.fn(),
-    me: vi.fn(),
-  },
-}));
-
 // --- 2FA challenge form mock ---
 vi.mock("@/components/two-factor/TwoFactorChallengeForm", () => ({
   TwoFactorChallengeForm: ({
@@ -53,14 +45,20 @@ const mockStoreState = {
   logout: mockLogout,
 };
 
-vi.mock("@/stores/auth", () => ({
+// Partial mock: giữ ApiError + các export thật của web-core, chỉ override authApi + auth store.
+vi.mock("@mediaos/web-core", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@mediaos/web-core")>()),
+  authApi: {
+    login: vi.fn(),
+    me: vi.fn(),
+  },
   useAuthStore: vi.fn((selector?: (s: typeof mockStoreState) => unknown) =>
     selector ? selector(mockStoreState) : mockStoreState,
   ),
   getAccessToken: vi.fn(() => null),
 }));
 
-const { authApi } = await import("@/lib/auth-api");
+const { authApi } = await import("@mediaos/web-core");
 
 const mockTokens: AuthTokens = {
   accessToken: "access-abc",
@@ -121,7 +119,7 @@ describe("LoginPage — credentials form", () => {
   });
 
   it("/me fails after tokens set → clears orphaned tokens (logout) + no navigation", async () => {
-    const { ApiError } = await import("@/lib/api-client");
+    const { ApiError } = await import("@mediaos/web-core");
     vi.mocked(authApi.login).mockResolvedValueOnce(mockTokens);
     vi.mocked(authApi.me).mockRejectedValueOnce(new ApiError(500, "INTERNAL", "boom"));
     render(<LoginPage />);
@@ -186,7 +184,7 @@ describe("LoginPage — credentials form", () => {
   });
 
   it("401 error → friendly message, no navigation", async () => {
-    const { ApiError } = await import("@/lib/api-client");
+    const { ApiError } = await import("@mediaos/web-core");
     vi.mocked(authApi.login).mockRejectedValueOnce(
       new ApiError(401, "INVALID_CREDENTIALS", "Invalid credentials"),
     );
@@ -202,7 +200,7 @@ describe("LoginPage — credentials form", () => {
   });
 
   it("500 error → generic server error message", async () => {
-    const { ApiError } = await import("@/lib/api-client");
+    const { ApiError } = await import("@mediaos/web-core");
     vi.mocked(authApi.login).mockRejectedValueOnce(
       new ApiError(503, "SERVICE_UNAVAILABLE", "Service unavailable"),
     );

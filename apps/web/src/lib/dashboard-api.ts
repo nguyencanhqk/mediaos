@@ -1,6 +1,6 @@
 import { dashboardSummarySchema, reportResponseSchema } from "@mediaos/contracts";
 import type { DashboardSummaryDto, ReportResponseDto } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 /**
  * GET /dashboard/summary — fetch role-filtered aggregate metrics.

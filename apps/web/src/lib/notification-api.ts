@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { notificationSchema, unreadCountSchema } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 export const notificationApi = {
   list: (isRead?: boolean) => {

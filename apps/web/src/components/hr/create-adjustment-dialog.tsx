@@ -3,9 +3,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { createAdjustmentRequestSchema } from "@mediaos/contracts";
 import { attendanceApi } from "@/lib/attendance-api";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Dialog } from "@/components/ui/dialog";
+import { Button } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
+import { Dialog } from "@mediaos/ui";
 
 interface FormState {
   workDate: string;

@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Target } from "lucide-react";
 import type { KpiResultDto } from "@mediaos/contracts";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@mediaos/ui";
 import { cn } from "@/lib/utils";
 import {
   KPI_COMPONENT_KEYS,

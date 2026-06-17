@@ -3,9 +3,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import type { CreateSalaryProfileRequest } from "@mediaos/contracts";
 import { salaryProfileApi } from "@/lib/salary-profile-api";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Button } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
+import { Select } from "@mediaos/ui";
 import { SALARY_TYPE_LABELS, PAY_CYCLE_LABELS } from "./salary-constants";
 
 /** Today as an ISO date (yyyy-mm-dd) for the default effective date. */

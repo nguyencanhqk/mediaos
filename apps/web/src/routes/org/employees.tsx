@@ -5,19 +5,19 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { Search, Trash2, Upload, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { EmployeeListItemDto, ImportEmployeePreviewDto } from "@mediaos/contracts";
-import { PageHeader } from "@/components/layout/page-header";
-import { Avatar } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { DataTable } from "@/components/ui/data-table";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
+import { PageHeader } from "@mediaos/ui";
+import { Avatar } from "@mediaos/ui";
+import { Badge } from "@mediaos/ui";
+import { Button } from "@mediaos/ui";
+import { DataTable } from "@mediaos/ui";
+import { EmptyState } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
 import { employeesApi } from "@/lib/employees-api";
 import {
   EMPLOYEE_STATUS_VARIANT,
   type EmployeeStatus,
   formatSalary,
-} from "@/lib/employee-format";
+} from "@mediaos/web-core";
 import { EmployeeImportPanel, type ImportStep } from "./employees-import";
 
 export function EmployeesPage() {

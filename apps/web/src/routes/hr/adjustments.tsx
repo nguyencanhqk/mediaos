@@ -4,15 +4,15 @@ import { useTranslation } from "react-i18next";
 import { AlertCircle, CalendarPlus } from "lucide-react";
 import type { HrRequestStatusDto } from "@mediaos/contracts";
 import { attendanceApi, type AdjustmentFilters } from "@/lib/attendance-api";
-import { useCan } from "@/hooks/use-can";
-import { PermissionGate } from "@/components/permission-gate";
+import { useCan } from "@mediaos/web-core";
+import { PermissionGate } from "@mediaos/web-core";
 import { AdjustmentTable } from "@/components/hr/adjustment-table";
 import { CreateAdjustmentDialog } from "@/components/hr/create-adjustment-dialog";
 import { FilterField } from "@/components/hr/filter-field";
-import { PageHeader } from "@/components/layout/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Select } from "@/components/ui/select";
+import { PageHeader } from "@mediaos/ui";
+import { EmptyState } from "@mediaos/ui";
+import { Skeleton } from "@mediaos/ui";
+import { Select } from "@mediaos/ui";
 import {
   HR_REQUEST_STATUS_LABELS,
   HR_REQUEST_STATUS_OPTIONS,

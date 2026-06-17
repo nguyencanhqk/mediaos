@@ -5,7 +5,7 @@ import {
   employeeProfileSchema,
   importEmployeePreviewSchema,
 } from "@mediaos/contracts";
-import { unwrapEnvelope } from "./api-client";
+import { unwrapEnvelope } from "@mediaos/web-core";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3100/api/v1";
 

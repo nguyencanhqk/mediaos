@@ -14,6 +14,8 @@
   "dependencies": {
     "@date-fns/tz": "^1.5.0",
     "@mediaos/contracts": "workspace:*",
+    "@mediaos/ui": "workspace:*",
+    "@mediaos/web-core": "workspace:*",
     "@radix-ui/react-slot": "^1.1.1",
     "@tanstack/react-query": "^5.62.0",
     "@tanstack/react-router": "^1.95.0",

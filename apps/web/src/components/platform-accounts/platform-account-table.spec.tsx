@@ -1,7 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SafePlatformAccountDto } from "@mediaos/contracts";
-import { useAuthStore } from "@/stores/auth";
+import { useAuthStore } from "@mediaos/web-core";
 import { PlatformAccountTable } from "./platform-account-table";
 
 const UUID = "11111111-1111-1111-1111-111111111111";

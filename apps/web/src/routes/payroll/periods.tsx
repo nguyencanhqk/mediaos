@@ -4,13 +4,13 @@ import { CalendarClock } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { PayrollPeriodStatus } from "@mediaos/contracts";
 import { payrollPeriodApi } from "@/lib/payroll-period-api";
-import { PermissionGate } from "@/components/permission-gate";
+import { PermissionGate } from "@mediaos/web-core";
 import { PayrollPeriodTable } from "@/components/payroll/payroll-period-table";
-import { PageHeader } from "@/components/layout/page-header";
-import { Select } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
+import { PageHeader } from "@mediaos/ui";
+import { Select } from "@mediaos/ui";
+import { Button } from "@mediaos/ui";
 import { PERIOD_STATUS_LABELS } from "@/components/payroll/period-constants";
-import { useAuthStore } from "@/stores/auth";
+import { useAuthStore } from "@mediaos/web-core";
 
 /**
  * PayrollPeriodsPage (G12-FE) — /payroll/periods.

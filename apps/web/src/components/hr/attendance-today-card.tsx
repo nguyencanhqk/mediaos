@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { attendanceApi } from "@/lib/attendance-api";
-import { PermissionGate } from "@/components/permission-gate";
-import { Button } from "@/components/ui/button";
+import { PermissionGate } from "@mediaos/web-core";
+import { Button } from "@mediaos/ui";
 import {
   ATTENDANCE_STATUS_COLORS,
   ATTENDANCE_STATUS_LABELS,

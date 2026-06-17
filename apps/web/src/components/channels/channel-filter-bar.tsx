@@ -1,9 +1,9 @@
 import { useTranslation } from "react-i18next";
 import type { EmployeeListItemDto } from "@mediaos/contracts";
 import type { ChannelFilters } from "@/lib/channels-api";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Button } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
+import { Select } from "@mediaos/ui";
 import {
   CHANNEL_STATUS_LABELS,
   CHANNEL_STATUS_OPTIONS,

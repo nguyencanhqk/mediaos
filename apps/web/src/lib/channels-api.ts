@@ -11,7 +11,7 @@ import {
   channelSchema,
   platformSchema,
 } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 /** Filter list kênh (CH-001) — gửi sang `GET /channels` dưới dạng query param. */
 export interface ChannelFilters {

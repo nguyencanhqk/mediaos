@@ -1,9 +1,9 @@
 import type { EmployeeListItemDto } from "@mediaos/contracts";
 import type { ProjectFilters } from "@/lib/projects-api";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Button } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
+import { Select } from "@mediaos/ui";
 import {
   PROJECT_PRIORITY_LABELS,
   PROJECT_PRIORITY_OPTIONS,

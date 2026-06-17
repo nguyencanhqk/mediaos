@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { CreatePayrollPeriodRequest, PayrollPeriodListQuery } from "@mediaos/contracts";
 import { payrollPeriodSchema } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 function buildQuery(filters: PayrollPeriodListQuery = {}): string {
   const qs = new URLSearchParams();

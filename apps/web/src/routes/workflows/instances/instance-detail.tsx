@@ -4,10 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Activity, ArrowLeft } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { workflowInstancesApi } from "@/lib/workflow-instances-api";
-import { PageHeader } from "@/components/layout/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@mediaos/ui";
+import { EmptyState } from "@mediaos/ui";
+import { Skeleton } from "@mediaos/ui";
+import { Badge } from "@mediaos/ui";
 import {
   INSTANCE_STATUS_BADGE_VARIANT,
   INSTANCE_STATUS_LABELS,

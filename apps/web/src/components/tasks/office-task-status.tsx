@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { OfficeTaskStatusDto, TaskDto } from "@mediaos/contracts";
 import { tasksApi } from "@/lib/tasks-api";
-import { PermissionGate } from "@/components/permission-gate";
+import { PermissionGate } from "@mediaos/web-core";
 import { TASK_STATUS_LABELS } from "./task-status-constants";
 
 /**

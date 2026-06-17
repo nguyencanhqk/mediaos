@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TaskDto } from "@mediaos/contracts";
 import { OfficeTaskStatus } from "./office-task-status";
-import { useAuthStore } from "@/stores/auth";
+import { useAuthStore } from "@mediaos/web-core";
 
 // Mock tasksApi — server là sự thật; ở đây chỉ chứng minh control GỌI ĐÚNG DTO.
 vi.mock("@/lib/tasks-api", () => ({

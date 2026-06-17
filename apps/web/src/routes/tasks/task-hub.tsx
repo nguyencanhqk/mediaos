@@ -6,12 +6,12 @@ import type { TeamDto, ProjectDto } from "@mediaos/contracts";
 import { tasksApi } from "@/lib/tasks-api";
 import { orgApi } from "@/lib/org-api";
 import { projectsApi } from "@/lib/projects-api";
-import { PageHeader } from "@/components/layout/page-header";
-import { EmptyState as SharedEmptyState } from "@/components/ui/empty-state";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@mediaos/ui";
+import { EmptyState as SharedEmptyState } from "@mediaos/ui";
+import { Skeleton } from "@mediaos/ui";
 import { TaskTable } from "@/components/tasks/task-table";
 import { TaskTypeFilter, type TaskTypeFilterValue } from "@/components/tasks/task-type-filter";
-import { PermissionGate } from "@/components/permission-gate";
+import { PermissionGate } from "@mediaos/web-core";
 
 // ─── Tab definition ──────────────────────────────────────────────────────────
 

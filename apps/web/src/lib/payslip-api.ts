@@ -11,7 +11,7 @@ import {
   payslipAcknowledgementSchema,
   disputePayslipSchema,
 } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 const reauthWindowSchema = z.object({ expiresAt: z.string().datetime() });
 

@@ -3,8 +3,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import type { BonusPenaltyDto } from "@mediaos/contracts";
 import { bonusPenaltyApi } from "@/lib/bonus-penalty-api";
-import { useCan } from "@/hooks/use-can";
-import { Button } from "@/components/ui/button";
+import { useCan } from "@mediaos/web-core";
+import { Button } from "@mediaos/ui";
 
 interface BonusPenaltyDecisionActionsProps {
   row: BonusPenaltyDto;

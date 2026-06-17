@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { stepChecklistSchema, type StepChecklistItemStateDto } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 /**
  * Checklist của 1 instance step (G7-4b FE): đọc items + tick state, tick/untick.

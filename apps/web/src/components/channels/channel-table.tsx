@@ -10,7 +10,7 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import type { ChannelDto, EmployeeListItemDto } from "@mediaos/contracts";
-import { Button } from "@/components/ui/button";
+import { Button } from "@mediaos/ui";
 import {
   CHANNEL_STATUS_LABELS,
   HEALTH_COLORS,

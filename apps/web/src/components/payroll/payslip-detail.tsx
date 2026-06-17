@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { PayslipDto } from "@mediaos/contracts";
-import { Button } from "@/components/ui/button";
+import { Button } from "@mediaos/ui";
 import { MASKED_AMOUNT_PLACEHOLDER } from "./period-constants";
 
 interface PayslipDetailProps {

@@ -14,7 +14,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TaskDto } from "@mediaos/contracts";
 import { TaskHubPage } from "./task-hub";
-import { useAuthStore } from "@/stores/auth";
+import { useAuthStore } from "@mediaos/web-core";
 import { TASK_TYPE_LABELS } from "@/components/tasks/task-status-constants";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────

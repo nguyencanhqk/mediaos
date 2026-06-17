@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
+import { Button } from "@mediaos/ui";
 import { notificationApi } from "@/lib/notification-api";
 import type { NotificationDto } from "@mediaos/contracts";
 

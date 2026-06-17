@@ -6,10 +6,10 @@ import { attendanceApi } from "@/lib/attendance-api";
 import { AttendanceTodayCard } from "@/components/hr/attendance-today-card";
 import { AttendanceMonthlyTable } from "@/components/hr/attendance-monthly-table";
 import { FilterField } from "@/components/hr/filter-field";
-import { PageHeader } from "@/components/layout/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
+import { PageHeader } from "@mediaos/ui";
+import { EmptyState } from "@mediaos/ui";
+import { Skeleton } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
 import { currentMonth } from "@/components/hr/constants";
 
 interface AttendanceStat {

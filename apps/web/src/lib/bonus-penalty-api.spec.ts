@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bonusPenaltyApi } from "./bonus-penalty-api";
-import { ApiError } from "./api-client";
+import { ApiError } from "@mediaos/web-core";
 
 const UUID = "dddddddd-dddd-dddd-dddd-dddddddddddd";
 const TASK_UUID = "11111111-1111-1111-1111-111111111111";

@@ -33,7 +33,7 @@ import { SalaryProfilesPage } from "@/routes/payroll/salary-profiles";
 import { PayrollPeriodsPage } from "@/routes/payroll/periods";
 import { PayslipsPage } from "@/routes/payroll/payslips";
 import { BonusPenaltiesPage } from "@/routes/payroll/bonus-penalties";
-import { useAuthStore } from "@/stores/auth";
+import { useAuthStore } from "@mediaos/web-core";
 
 const rootRoute = createRootRoute({ component: RootLayout });
 

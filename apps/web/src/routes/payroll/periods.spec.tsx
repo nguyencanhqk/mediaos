@@ -51,7 +51,9 @@ vi.mock("@/lib/payroll-period-api", () => ({
 
 // Mock auth store — expose currentUserId via user.id + empty capabilities (no PermissionGate leak)
 const mockCurrentUser = vi.fn(() => USER_B);
-vi.mock("@/stores/auth", () => ({
+// Partial mock: giữ PermissionGate + export thật của web-core, chỉ override auth store.
+vi.mock("@mediaos/web-core", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@mediaos/web-core")>()),
   useAuthStore: (selector: (s: { user: { id: string } | null; capabilities: Record<string, boolean> }) => unknown) =>
     selector({ user: { id: mockCurrentUser() }, capabilities: {} }),
 }));

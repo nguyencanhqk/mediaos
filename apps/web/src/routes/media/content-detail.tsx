@@ -16,11 +16,11 @@ import { contentApi } from "@/lib/content-api";
 import { channelsApi } from "@/lib/channels-api";
 import { workflowApi } from "@/lib/workflow-api";
 import { employeesApi } from "@/lib/employees-api";
-import { PermissionGate } from "@/components/permission-gate";
-import { useCan } from "@/hooks/use-can";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { PermissionGate } from "@mediaos/web-core";
+import { useCan } from "@mediaos/web-core";
+import { Button } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
+import { Select } from "@mediaos/ui";
 import { PLATFORM_LABELS } from "@/components/channels/constants";
 import {
   ASSET_TYPE_LABELS,

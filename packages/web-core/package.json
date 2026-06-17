@@ -1,0 +1,47 @@
+{
+  "name": "@mediaos/web-core",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/cjs/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/cjs/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json",
+    "dev": "tsc -p tsconfig.cjs.json --watch",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@mediaos/contracts": "workspace:*",
+    "lucide-react": "^0.469.0",
+    "zod": "^3.25.0",
+    "zustand": "^5.0.2"
+  },
+  "peerDependencies": {
+    "@types/react": "19.2.16",
+    "@types/react-dom": "19.2.3",
+    "i18next": "^25.10.10",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "react-i18next": "^15.7.4"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.16",
+    "@types/react-dom": "19.2.3",
+    "i18next": "^25.10.10",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "react-i18next": "^15.7.4",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0"
+  }
+}

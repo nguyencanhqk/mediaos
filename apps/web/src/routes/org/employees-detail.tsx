@@ -5,12 +5,12 @@ import type { TFunction } from "i18next";
 import { ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { EmployeeProfileDto } from "@mediaos/contracts";
-import { Avatar } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar } from "@mediaos/ui";
+import { Badge } from "@mediaos/ui";
+import { Card } from "@mediaos/ui";
+import { Skeleton } from "@mediaos/ui";
 import { employeesApi } from "@/lib/employees-api";
-import { EMPLOYEE_STATUS_VARIANT, formatSalary } from "@/lib/employee-format";
+import { EMPLOYEE_STATUS_VARIANT, formatSalary } from "@mediaos/web-core";
 import { cn } from "@/lib/utils";
 
 // ── Tabs ───────────────────────────────────────────────────────────────────────

@@ -3,10 +3,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { createLeaveRequestSchema } from "@mediaos/contracts";
 import { leaveApi } from "@/lib/leave-api";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { Dialog } from "@/components/ui/dialog";
+import { Button } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
+import { Select } from "@mediaos/ui";
+import { Dialog } from "@mediaos/ui";
 
 interface FormState {
   leaveTypeId: string;

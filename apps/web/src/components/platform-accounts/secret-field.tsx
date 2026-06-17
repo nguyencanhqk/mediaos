@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
+import { Button } from "@mediaos/ui";
 
 const MASK = "••••••••••";
 /** Tự ẩn plaintext sau 60s nếu người dùng quên ẩn (giảm cửa sổ lộ trên màn hình). */

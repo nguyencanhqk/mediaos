@@ -9,7 +9,7 @@ import {
   kpiResultSchema,
   listKpiResultResponseSchema,
 } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 /**
  * Client KPI/Mục tiêu (G8-4). TÁI DÙNG schema Zod nguồn-sự-thật ở @mediaos/contracts +

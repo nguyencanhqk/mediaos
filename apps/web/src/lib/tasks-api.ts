@@ -35,7 +35,7 @@ function boardQuery(filter?: ListTasksQueryRequest): string {
 // H-NEW-1 (gate merge-G9): dùng apiFetch CHUNG (api-client.ts) như mọi *-api.ts anh em —
 // ném ApiError có status/code (403 PermissionGuard, 400 SEC-1/SEC-2 phân biệt được ở UI),
 // KHÔNG tự định nghĩa apiFetch local ném Error thường (nuốt mất cấu trúc lỗi).
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 export const tasksApi = {
   getMyTasks: () => apiFetch("/tasks", z.array(taskSchema)),

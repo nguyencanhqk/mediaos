@@ -9,7 +9,7 @@ import {
   revealSecretResponseSchema,
   safePlatformAccountSchema,
 } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 /**
  * Platform Accounts API client (🔒 G6-2h) — crown-jewel reveal/edit surface.

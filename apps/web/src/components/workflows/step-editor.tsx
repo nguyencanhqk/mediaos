@@ -3,8 +3,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import type { TemplateStepDto } from "@/lib/workflow-builder/contract";
 import { workflowTemplatesApi } from "@/lib/workflow-templates-api";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
+import { Button } from "@mediaos/ui";
+import { Dialog } from "@mediaos/ui";
 import { roleLabel, stepTypeLabel } from "./constants";
 import {
   StepFormFields,

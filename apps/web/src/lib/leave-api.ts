@@ -11,7 +11,7 @@ import {
   leaveRequestSchema,
   leaveTypeSchema,
 } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 export interface LeaveRequestFilters {
   status?: string;

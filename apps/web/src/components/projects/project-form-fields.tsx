@@ -5,8 +5,8 @@ import type {
   ProjectType,
 } from "@mediaos/contracts";
 import { useTranslation } from "react-i18next";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Input } from "@mediaos/ui";
+import { Select } from "@mediaos/ui";
 import {
   PROJECT_PRIORITY_LABELS,
   PROJECT_PRIORITY_OPTIONS,

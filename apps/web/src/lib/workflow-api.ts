@@ -3,7 +3,7 @@ import {
   workflowStepSchema,
   type AssignStepRequest,
 } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch } from "@mediaos/web-core";
 
 /**
  * Workflow API — khởi tạo + xem + gán bước cho 1 content item.

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@mediaos/ui";
+import { Input } from "@mediaos/ui";
 import type { PayslipAcknowledgementDto } from "@mediaos/contracts";
 import { payslipApi } from "@/lib/payslip-api";
 
