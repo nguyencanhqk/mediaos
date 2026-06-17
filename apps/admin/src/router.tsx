@@ -4,6 +4,7 @@ import { RootLayout } from "@/routes/root-layout";
 import { OperatorHomePage } from "@/routes/operator/home";
 import { CompaniesListPage } from "@/routes/operator/companies/companies-list";
 import { TenantHomePage } from "@/routes/tenant/tenant-home";
+import { RbacPage } from "@/routes/tenant/rbac/rbac-page";
 import { useAuthStore } from "@/stores/auth";
 
 const rootRoute = createRootRoute({ component: Outlet });
@@ -49,15 +50,35 @@ const operatorCompaniesRoute = createRoute({
 });
 
 // /tenant/:companyId — operator chọn 1 tenant để thao tác (ADR-0019 Tầng 1: withTenant(target)).
+// Layout-only: render <Outlet/> để các module tenant (RBAC AC-3, branding AC-4…) gắn child route.
 const tenantRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/tenant/$companyId",
+  component: Outlet,
+});
+
+// Index `/tenant/:companyId` (chính xác) → trang chủ tenant.
+const tenantIndexRoute = createRoute({
+  getParentRoute: () => tenantRoute,
+  path: "/",
   component: TenantHomePage,
+});
+
+// `/tenant/:companyId/rbac` — RBAC self-service (AC-3 nhánh (a)).
+const tenantRbacRoute = createRoute({
+  getParentRoute: () => tenantRoute,
+  path: "rbac",
+  component: RbacPage,
 });
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  appLayoutRoute.addChildren([indexRoute, operatorRoute, operatorCompaniesRoute, tenantRoute]),
+  appLayoutRoute.addChildren([
+    indexRoute,
+    operatorRoute,
+    operatorCompaniesRoute,
+    tenantRoute.addChildren([tenantIndexRoute, tenantRbacRoute]),
+  ]),
 ]);
 
 export const router = createRouter({ routeTree });
