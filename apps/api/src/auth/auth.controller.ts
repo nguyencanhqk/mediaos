@@ -146,6 +146,13 @@ export class AuthController {
     return { allowed: target !== null, target };
   }
 
+  /**
+   * @Public: endpoint định-danh CHÍNH CHỦ — TỰ verify access token trong handler (auth.me → verifyAccessToken
+   * "any") để chấp nhận CẢ phiên operator lẫn tenant. Nếu để guard toàn cục chạy, JwtAuthGuard ép mặc định
+   * audience='tenant' → token operator (aud=operator) bị 401 trước khi tới handler ("any" thành code chết).
+   * @Public bỏ qua guard → handler tự verify (vẫn bắt buộc token hợp lệ; KHÔNG hạ bảo mật).
+   */
+  @Public()
   @Get("me")
   me(@Headers("authorization") authorization?: string): Promise<MeResponse> {
     return this.auth.me(this.bearer(authorization));
