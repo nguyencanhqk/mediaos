@@ -32,6 +32,9 @@ export { notificationApi } from "./lib/notification-api";
 export { useCan } from "./hooks/use-can";
 export { PermissionGate } from "./components/permission-gate";
 
+// CS-9 idle auto-logout (client UX layer; backstop = short access-token TTL + server refresh enforce)
+export { useIdleLogout, type UseIdleLogoutOptions } from "./hooks/use-idle-logout";
+
 // Nav types + helper (NAV_ITEMS cụ thể do mỗi app tự khai)
 export {
   NAV_CATEGORIES,
