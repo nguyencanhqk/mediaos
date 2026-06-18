@@ -1,5 +1,5 @@
 import { dashboardSummarySchema, reportResponseSchema } from "@mediaos/contracts";
-import type { DashboardSummaryDto, ReportResponseDto } from "@mediaos/contracts";
+import type { DashboardSummaryDto, ReportPeriod, ReportResponseDto } from "@mediaos/contracts";
 import { apiFetch } from "@mediaos/web-core";
 
 /**
@@ -11,9 +11,13 @@ export async function getDashboardSummary(): Promise<DashboardSummaryDto> {
 }
 
 /**
- * GET /dashboard/report — fetch role-filtered report aggregate.
- * null fields = caller lacks the required permission for that section.
+ * GET /dashboard/report — fetch role-filtered report aggregate for the given period.
+ * The server resolves `period` to a date range and computes the finance section over it; it also
+ * re-validates the period (rejecting unknown values). null fields = caller lacks the required
+ * permission for that section.
  */
-export async function getDashboardReport(): Promise<ReportResponseDto> {
-  return apiFetch("/dashboard/report", reportResponseSchema);
+export async function getDashboardReport(
+  period: ReportPeriod = "thisMonth",
+): Promise<ReportResponseDto> {
+  return apiFetch(`/dashboard/report?period=${encodeURIComponent(period)}`, reportResponseSchema);
 }

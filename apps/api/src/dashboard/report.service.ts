@@ -1,11 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import { and, count, eq, gte, isNull, lt, sql, sum } from "drizzle-orm";
-import type { ReportSummaryDto } from "@mediaos/contracts";
+import type { ReportPeriod, ReportSummaryDto } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { revenueRecords, costRecords } from "../db/schema/finance";
 import { channels } from "../db/schema/media";
 import { employeeProfiles } from "../db/schema/employees";
 import { attendanceRecords } from "../db/schema/hr";
+import { resolveReportRange, type ReportRange } from "./report-range";
 
 interface RequestUser {
   id: string;
@@ -27,11 +28,21 @@ interface ReportPermissionSet {
 export class ReportService {
   constructor(private readonly db: DatabaseService) {}
 
-  async getReport(actor: RequestUser, perms: ReportPermissionSet): Promise<ReportSummaryDto> {
+  async getReport(
+    actor: RequestUser,
+    perms: ReportPermissionSet,
+    period: ReportPeriod = "thisMonth",
+  ): Promise<ReportSummaryDto> {
+    // Single clock snapshot so the whole response is internally consistent (no midnight straddle
+    // between the finance range and "today"'s attendance). Finance aggregates are scoped to the
+    // selected period; headcount + today's attendance are current-snapshot (period does not apply).
+    const now = new Date();
+    const range = resolveReportRange(period, now);
+
     const [finance, employee, attendance] = await Promise.all([
-      this.getFinanceSummary(actor, perms.canReadFinanceReport),
+      this.getFinanceSummary(actor, perms.canReadFinanceReport, range),
       this.getEmployeeSummary(actor, perms.canReadEmployeeReport),
-      this.getAttendanceReport(actor, perms.canReadAttendanceReport),
+      this.getAttendanceReport(actor, perms.canReadAttendanceReport, now),
     ]);
 
     return {
@@ -49,6 +60,7 @@ export class ReportService {
   private async getFinanceSummary(
     actor: RequestUser,
     canRead: boolean,
+    range: ReportRange,
   ): Promise<
     Pick<ReportSummaryDto, "revenueThisMonth" | "costThisMonth" | "profitThisMonth" | "revenueByChannel">
   > {
@@ -62,8 +74,7 @@ export class ReportService {
     }
 
     const { companyId } = actor;
-    const today = new Date().toISOString().slice(0, 10);
-    const monthStart = today.slice(0, 7) + "-01";
+    const { startDate, endDate } = range;
 
     const [revenueRows, costRows, channelRows] = await Promise.all([
       this.db.withTenant(companyId, (tx) =>
@@ -73,7 +84,9 @@ export class ReportService {
           .where(
             and(
               eq(revenueRecords.companyId, companyId),
-              gte(revenueRecords.revenueDate, monthStart),
+              // Half-open window [start, end): the upper bound excludes future-dated entries.
+              gte(revenueRecords.revenueDate, startDate),
+              lt(revenueRecords.revenueDate, endDate),
               // Only original entries; adjustments/voids are accounted separately
               sql`${revenueRecords.entryKind} = 'original'`,
             ),
@@ -86,7 +99,8 @@ export class ReportService {
           .where(
             and(
               eq(costRecords.companyId, companyId),
-              gte(costRecords.costDate, monthStart),
+              gte(costRecords.costDate, startDate),
+              lt(costRecords.costDate, endDate),
               sql`${costRecords.entryKind} = 'original'`,
             ),
           ),
@@ -103,7 +117,8 @@ export class ReportService {
           .where(
             and(
               eq(revenueRecords.companyId, companyId),
-              gte(revenueRecords.revenueDate, monthStart),
+              gte(revenueRecords.revenueDate, startDate),
+              lt(revenueRecords.revenueDate, endDate),
               sql`${revenueRecords.entryKind} = 'original'`,
             ),
           )
@@ -157,11 +172,12 @@ export class ReportService {
   private async getAttendanceReport(
     actor: RequestUser,
     canRead: boolean,
+    now: Date,
   ): Promise<Pick<ReportSummaryDto, "todayAttendanceRate">> {
     if (!canRead) return { todayAttendanceRate: null };
 
     const { companyId } = actor;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = now.toISOString().slice(0, 10);
 
     const [presentRows, totalRows] = await Promise.all([
       this.db.withTenant(companyId, (tx) =>

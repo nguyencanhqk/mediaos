@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReportResponseDto } from "@mediaos/contracts";
 import { ReportPage } from "./report";
@@ -39,6 +39,7 @@ const FULL_REPORT: ReportResponseDto = {
     totalEmployees: 150,
     todayAttendanceRate: 87.5,
   },
+  period: "thisMonth",
   asOf: new Date().toISOString(),
 };
 
@@ -51,6 +52,7 @@ const NO_PERMS_REPORT: ReportResponseDto = {
     totalEmployees: null,
     todayAttendanceRate: null,
   },
+  period: "thisMonth",
   asOf: new Date().toISOString(),
 };
 
@@ -151,6 +153,25 @@ describe("ReportPage", () => {
       mockGetReport.mockResolvedValue(FULL_REPORT);
       renderPage(makeClient());
       expect(await screen.findByText(/Cập nhật lúc:/)).toBeInTheDocument();
+    });
+  });
+
+  describe("period filter — wired to backend (B4)", () => {
+    it("fetches with the default period on first load", async () => {
+      mockGetReport.mockResolvedValue(FULL_REPORT);
+      renderPage(makeClient());
+      await screen.findByText("Tài chính tháng này");
+      expect(mockGetReport).toHaveBeenCalledWith("thisMonth");
+    });
+
+    it("refetches with the selected period when the filter changes", async () => {
+      mockGetReport.mockResolvedValue(FULL_REPORT);
+      renderPage(makeClient());
+      await screen.findByText("Tài chính tháng này");
+
+      fireEvent.change(screen.getByRole("combobox"), { target: { value: "lastMonth" } });
+
+      await waitFor(() => expect(mockGetReport).toHaveBeenCalledWith("lastMonth"));
     });
   });
 });

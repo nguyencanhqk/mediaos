@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, Building2, Lock, TrendingUp, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { ReportPeriod } from "@mediaos/contracts";
 import { getDashboardReport } from "@/lib/dashboard-api";
 import { PageHeader } from "@mediaos/ui";
 import { EmptyState } from "@mediaos/ui";
@@ -17,22 +18,21 @@ function formatVnd(value: number | null): string | number {
   return value;
 }
 
-const PERIOD_OPTIONS = ["thisMonth", "lastMonth", "thisQuarter"] as const;
-type Period = (typeof PERIOD_OPTIONS)[number];
+const PERIOD_OPTIONS = ["thisMonth", "lastMonth", "thisQuarter"] as const satisfies readonly ReportPeriod[];
 
 /**
  * ReportPage — G14-2 role-filtered report.
  * Server handles all permission masking — null sections are simply not rendered.
  *
- * Phase-2 redesign: chỉ đổi layout/trình bày (PageHeader + filter + section thẻ +
- * skeleton/empty). Filter kỳ báo cáo hiện chỉ là UI (chưa nối backend) — KHÔNG đổi query.
+ * The period filter is wired to the backend (B4): the selected period is part of the query key, so
+ * changing it refetches with the server computing the finance section over that window.
  */
 export function ReportPage() {
   const { t } = useTranslation("dashboard");
-  const [period, setPeriod] = useState<Period>("thisMonth");
+  const [period, setPeriod] = useState<ReportPeriod>("thisMonth");
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["dashboard", "report"],
-    queryFn: getDashboardReport,
+    queryKey: ["dashboard", "report", period],
+    queryFn: () => getDashboardReport(period),
     staleTime: 60_000,
     refetchInterval: 120_000,
   });
@@ -42,7 +42,7 @@ export function ReportPage() {
       <span>{t("report.filter.periodLabel")}</span>
       <select
         value={period}
-        onChange={(e) => setPeriod(e.target.value as Period)}
+        onChange={(e) => setPeriod(e.target.value as ReportPeriod)}
         aria-label={t("report.filter.periodLabel")}
         className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
       >

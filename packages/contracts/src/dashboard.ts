@@ -54,8 +54,27 @@ export type LeaveSummaryDto = z.infer<typeof leaveSummarySchema>;
 // ─── Report aggregate (G14-2) ────────────────────────────────────────────────
 
 /**
+ * Reporting period for the finance section of the report. The server resolves this to a concrete
+ * half-open date range [start, end) server-side — the client only picks the window, never the dates.
+ * Default `thisMonth` reproduces the original G14-2 behavior.
+ */
+export const reportPeriodSchema = z.enum(["thisMonth", "lastMonth", "thisQuarter"]);
+export type ReportPeriod = z.infer<typeof reportPeriodSchema>;
+
+/** Query params for GET /dashboard/report. `period` scopes the finance aggregates. */
+export const reportQuerySchema = z.object({
+  period: reportPeriodSchema.default("thisMonth"),
+});
+export type ReportQueryDto = z.infer<typeof reportQuerySchema>;
+
+/**
  * Role-filtered report summary. null = caller lacks read:finance_report.
  * Masking is server-side — FE renders what it receives.
+ *
+ * NOTE: the finance fields (revenue/cost/profit/revenueByChannel) reflect the SELECTED `period`
+ * (echoed on the response envelope). Field names are retained for backward-compat — `*ThisMonth`
+ * is the default-period name, not a literal "this calendar month" guarantee. Headcount and
+ * attendance are current-snapshot and are NOT period-scoped.
  */
 export const reportSummarySchema = z.object({
   /** Total revenue this month (null = no read:finance_report). */
@@ -96,6 +115,8 @@ export type DashboardSummaryDto = z.infer<typeof dashboardSummarySchema>;
 
 export const reportResponseSchema = z.object({
   report: reportSummarySchema,
+  /** The period the finance aggregates were computed for (echo of the resolved query). */
+  period: reportPeriodSchema,
   /** ISO date of snapshot (server UTC now). */
   asOf: z.string(),
 });

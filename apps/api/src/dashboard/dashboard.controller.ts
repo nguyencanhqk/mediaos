@@ -9,7 +9,12 @@ import { ReportService } from "./report.service";
 import { MvDashboardService } from "./mv-dashboard.service";
 import { AlertsService } from "./alerts.service";
 import { DashboardRefreshService } from "./dashboard-refresh.service";
-import { mvStatsQuerySchema, type MvStatsQueryDto } from "@mediaos/contracts";
+import {
+  mvStatsQuerySchema,
+  reportQuerySchema,
+  type MvStatsQueryDto,
+  type ReportQueryDto,
+} from "@mediaos/contracts";
 
 interface AuthenticatedRequest extends Request {
   user: { id: string; companyId: string };
@@ -42,8 +47,10 @@ export class DashboardController {
   @Get("report")
   @UseGuards(PermissionGuard)
   @RequirePermission("read", "dashboard")
-  async getReport(@Req() req: AuthenticatedRequest) {
+  async getReport(@Req() req: AuthenticatedRequest, @Query() query: ReportQueryDto) {
     const { id: userId, companyId } = req.user;
+    // Default-applies + rejects unknown periods server-side; never trusts the raw query string.
+    const { period } = reportQuerySchema.parse(query);
 
     const [canReadFinanceReport, canReadEmployeeReport, canReadAttendanceReport] =
       await Promise.all([
@@ -74,9 +81,10 @@ export class DashboardController {
         canReadEmployeeReport: canReadEmployeeReport.allow,
         canReadAttendanceReport: canReadAttendanceReport.allow,
       },
+      period,
     );
 
-    return { report, asOf: new Date().toISOString() };
+    return { report, period, asOf: new Date().toISOString() };
   }
 
   /**

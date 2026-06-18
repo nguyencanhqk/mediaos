@@ -216,4 +216,60 @@ describe("ReportService", () => {
       expect(result.todayAttendanceRate).toBe(0);
     });
   });
+
+  describe("getReport — period filter wiring", () => {
+    const financeResponses: unknown[] = [
+      [{ total: "120000" }], // revenue
+      [{ total: "20000" }], // cost
+      [], // revenueByChannel
+      [{ cnt: 7 }], // employees
+      [{ cnt: 6 }], // present today
+      [{ cnt: 7 }], // total for rate
+    ];
+
+    it("defaults to thisMonth when no period is supplied (back-compat)", async () => {
+      let i = 0;
+      const db = {
+        withTenant: vi.fn((_cid: string, _fn: unknown) =>
+          Promise.resolve(financeResponses[i++] ?? []),
+        ),
+      } as unknown as ConstructorParameters<typeof ReportService>[0];
+
+      const svc = new ReportService(db);
+      // No period arg → default path still produces finance numbers.
+      const result = await svc.getReport(ACTOR, ALL_PERMS);
+      expect(result.revenueThisMonth).toBe(120000);
+      expect(result.profitThisMonth).toBe(100000);
+    });
+
+    it("threads a non-default period through without breaking finance computation", async () => {
+      let i = 0;
+      const db = {
+        withTenant: vi.fn((_cid: string, _fn: unknown) =>
+          Promise.resolve(financeResponses[i++] ?? []),
+        ),
+      } as unknown as ConstructorParameters<typeof ReportService>[0];
+
+      const svc = new ReportService(db);
+      const result = await svc.getReport(ACTOR, ALL_PERMS, "lastMonth");
+      expect(result.revenueThisMonth).toBe(120000);
+      expect(result.costThisMonth).toBe(20000);
+      expect(result.profitThisMonth).toBe(100000);
+    });
+
+    it("still denies finance for a non-default period when caller lacks read:finance_report", async () => {
+      const withTenantSpy = vi.fn().mockResolvedValue([]);
+      const db = { withTenant: withTenantSpy } as unknown as ConstructorParameters<
+        typeof ReportService
+      >[0];
+
+      const svc = new ReportService(db);
+      const result = await svc.getReport(ACTOR, NO_PERMS, "thisQuarter");
+
+      expect(result.revenueThisMonth).toBeNull();
+      expect(result.revenueByChannel).toBeNull();
+      // Period selection never bypasses the permission gate — no DB hit at all.
+      expect(withTenantSpy).not.toHaveBeenCalled();
+    });
+  });
 });
