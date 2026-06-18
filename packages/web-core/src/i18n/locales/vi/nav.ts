@@ -27,6 +27,9 @@ export default {
   companySettings: "Cài đặt công ty",
   activityLog: "Nhật ký hoạt động",
   permissions: "Phân quyền",
+  orgStructure: "Cơ cấu tổ chức",
+  objects: "Đối tượng",
+  usageStats: "Tình hình sử dụng",
   logout: "Đăng xuất",
   group: {
     work: "Công việc & Nội dung",

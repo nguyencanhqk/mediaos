@@ -27,7 +27,11 @@ type AnyFn = (...args: unknown[]) => unknown;
  * `resolveWith` is what the final await resolves to.
  */
 function makeChain(resolveWith: unknown[]): Record<string, AnyFn> {
-  const terminal = Object.assign(Promise.resolve(resolveWith), {
+  const terminal: Promise<unknown[]> & {
+    orderBy: AnyFn;
+    where: AnyFn;
+    leftJoin: AnyFn;
+  } = Object.assign(Promise.resolve(resolveWith), {
     orderBy: vi.fn(() => Promise.resolve(resolveWith)),
     where: vi.fn(() => terminal),
     leftJoin: vi.fn(() => terminal),
