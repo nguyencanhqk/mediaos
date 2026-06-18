@@ -38,6 +38,7 @@ import { DbOpsModule } from "./db-ops/db-ops.module";
 import { UsageModule } from "./usage/usage.module";
 import { MailConfigModule } from "./settings/mail-config.module";
 import { SecurityPolicyModule } from "./security-policy/security-policy.module";
+import { UserInvitesModule } from "./user-invites/user-invites.module";
 import { OperatorBootstrapModule } from "./operator-bootstrap/operator-bootstrap.module";
 import { SchedulerModule } from "./scheduler/scheduler.module";
 import { RecycleBinModule } from "./recycle-bin/recycle-bin.module";
@@ -103,6 +104,8 @@ import {
     MailConfigModule,
     // CS-9 Bảo mật nâng cao (per-company security policy — enforce IP/giờ/2FA/email-domain ở tầng auth)
     SecurityPolicyModule,
+    // CS-10 Đối tượng: Mời / Duyệt / Kích hoạt user (invite token → accept → approve; email-domain at accept).
+    UserInvitesModule,
     // Operator bootstrap (seed-lúc-khởi-động): tạo/đồng bộ tài khoản platform-admin god-mode từ env.
     OperatorBootstrapModule,
     // WAVE 4 OPS: scheduler gọi processBatch() của OutboxWorker + DbExportWorker định kỳ (tắt khi NODE_ENV=test).

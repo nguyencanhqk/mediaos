@@ -80,3 +80,5 @@ export * from "./usage";
 export * from "./mail-config";
 // CS-9 Bảo mật nâng cao (per-company security policy — IP/time/email-domain/2FA enforce at auth)
 export * from "./security-policy";
+// CS-10 Đối tượng: Mời / Duyệt / Kích hoạt user (invite token → accept → approve; email-domain at accept)
+export * from "./user-invite";

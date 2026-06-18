@@ -1,0 +1,54 @@
+{
+  "noPermission": {
+    "title": "Không có quyền",
+    "description": "Bạn cần quyền duyệt người dùng (approve:user) để xem hàng đợi này."
+  },
+  "tabs": {
+    "pendingApproval": "Chờ duyệt",
+    "activation": "Yêu cầu kích hoạt"
+  },
+  "table": {
+    "name": "Người dùng",
+    "email": "Email",
+    "status": "Trạng thái",
+    "expiresAt": "Hết hạn"
+  },
+  "status": {
+    "pending": "Chờ kích hoạt",
+    "accepted": "Chờ duyệt",
+    "approved": "Đã duyệt",
+    "rejected": "Đã từ chối"
+  },
+  "actions": {
+    "invite": "Mời người dùng",
+    "approve": "Duyệt",
+    "reject": "Từ chối",
+    "approving": "Đang duyệt…",
+    "rejecting": "Đang từ chối…"
+  },
+  "empty": {
+    "approval": {
+      "title": "Không có yêu cầu chờ duyệt",
+      "description": "Người dùng đã kích hoạt sẽ xuất hiện ở đây để bạn duyệt."
+    },
+    "activation": {
+      "title": "Không có lời mời chờ kích hoạt",
+      "description": "Mời người dùng mới để gửi liên kết kích hoạt qua email."
+    }
+  },
+  "error": {
+    "loadFailed": "Không tải được hàng đợi lời mời."
+  },
+  "inviteDialog": {
+    "title": "Mời người dùng",
+    "description": "Gửi liên kết kích hoạt qua email. Người được mời đặt mật khẩu rồi chờ duyệt.",
+    "fieldFullName": "Họ tên",
+    "fieldEmail": "Email",
+    "cancel": "Huỷ",
+    "submit": "Gửi lời mời",
+    "submitting": "Đang gửi…",
+    "errorPrefix": "Lỗi:",
+    "emailSentOk": "Đã tạo lời mời và gửi email kích hoạt.",
+    "emailSentFail": "Đã tạo lời mời nhưng KHÔNG gửi được email — kiểm tra cấu hình mail server (SMTP)."
+  }
+}
