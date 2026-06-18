@@ -94,8 +94,22 @@ Mỗi app build & deploy riêng → đổi 1 app không phải rebuild cả mono
 4. Publish `apps/<app>/dist` → host của subdomain đó (CDN/Caddy root).
 
 > **Tối ưu CI:** chỉ chạy job của app khi path của nó (hoặc package dùng chung) đổi — dùng path-filter
-> (`apps/studio/**` + `packages/**`). Chưa có pipeline → đây là spec để dựng (GitHub Actions matrix per app).
-> `api` deploy riêng (NestJS) + chạy `pnpm db:migrate` ở bước release (xem [ops-runbook.md](./ops-runbook.md)).
+> (`apps/studio/**` + `packages/**`).
+
+**✅ Đã dựng (WAVE 4 OPS):**
+
+- [`.github/workflows/apps-frontend.yml`](../../.github/workflows/apps-frontend.yml) — matrix build per-app
+  (web/auth/studio/people/console/admin) + path-filter (`dorny/paths-filter`): job `changes` phát hiện app
+  nào đổi → job `build` chỉ build app đó (install → build shared `contracts`/`web-core`/`ui` → nhúng
+  `VITE_*` prod theo app → typecheck → test → build). **Deploy = PLACEHOLDER** (comment) tới khi chốt host.
+- [`.github/workflows/api.yml`](../../.github/workflows/api.yml) — pipeline API riêng (path-filter
+  `apps/api/**` + `packages/contracts/**`): build/typecheck/migrate(ephemeral)/test trên Postgres service
+  container; job `release` (chỉ push master) chạy `pnpm db:migrate` lên DB prod + deploy — **PLACEHOLDER**.
+- `ci.yml` (sẵn có) GIỮ NGUYÊN làm cổng tích hợp CROSS-CUTTING (gate RLS-qua-PgBouncer GX-4 + build toàn
+  workspace) chạy trên MỌI thay đổi — bổ trợ, KHÔNG thay 2 pipeline per-app ở trên.
+
+> **Cần điền khi vận hành thật (xem §9):** repo/環境 variable `PROD_DOMAIN` (thay placeholder `mediaos.example`),
+> bước deploy + secret host (`DEPLOY_TOKEN`), DSN prod cho migrate (`secrets.PROD_DATABASE_DIRECT_URL`).
 
 ---
 
@@ -137,9 +151,27 @@ Cutover FE thuần (0 migration, 1 backend không đổi). Rollback = trỏ DNS/
 
 ---
 
-## 9. Việc CHƯA làm (cần quyết định ops thật)
+## 9. Việc CHƯA làm — cần QUYẾT ĐỊNH OPS của chủ dự án (KHÔNG code được)
 
-- Tên domain prod thật (đang placeholder `mediaos.example`).
-- Nền tảng CI/CD (GitHub Actions? matrix per-app + path-filter chưa dựng).
-- Nhà cung cấp DNS + LB/CDN + cơ chế TLS (Caddy auto / cert-manager / ACM…).
-- Vault prod cho KMS (`KMS_PROVIDER=vault`).
+> CI per-app ĐÃ dựng (§6) nhưng chỉ tới bước build/test; phần dưới cần người chốt hạ tầng + secret thật.
+> Phiên WAVE 4 OPS chỉ chuẩn bị template/placeholder, KHÔNG provision (KHÔNG đẩy secret/domain thật vào repo).
+
+**Quyết định cần chốt (☐ = chủ dự án điền):**
+
+- [ ] **Domain prod thật** — thay mọi `mediaos.example`. Đặt **GitHub repo/環境 variable `PROD_DOMAIN`** (CI
+      `apps-frontend.yml` nhúng vào `VITE_*` lúc build). Cập nhật `.env.example` khối "FS-5 CUTOVER" + §5 ở trên.
+- [ ] **DNS** — 6 subdomain (web/auth/studio/people/console + api) + apex trỏ LB (§2). Hoặc wildcard
+      `*.<domain>` + apex.
+- [ ] **TLS wildcard** `*.<domain>` **+** apex (wildcard không phủ apex) — Let's Encrypt **DNS-01** / Caddy /
+      cert-manager. Bật HSTS + redirect 80→443 (§3).
+- [ ] **Reverse proxy** route subdomain → bundle SPA; `api.` → NestJS :3100; SPA fallback `index.html`
+      (mẫu Caddyfile §4).
+- [ ] **API env prod** (§5): `AUTH_COOKIE_DOMAIN=.<domain>` · `AUTH_COOKIE_SECURE=true` · `CORS_ORIGIN` +
+      `AUTH_REDIRECT_ALLOWLIST` đủ subdomain (tường minh, KHÔNG `*`) · `KMS_PROVIDER=vault`.
+- [ ] **Vault prod** cho KMS (bỏ KEK-in-file, ADR-0004): `KMS_VAULT_ADDR` + `KMS_VAULT_TOKEN` (từ secret manager).
+- [ ] **Host + secret deploy** — bật bước deploy (đang PLACEHOLDER) trong `apps-frontend.yml` + `api.yml`:
+      chọn host (CDN/S3/Caddy), thêm secret `DEPLOY_TOKEN`; migrate prod cần `secrets.PROD_DATABASE_DIRECT_URL`.
+- [ ] **Smoke cutover** (chạy checklist §8): SSO 1-login dùng mọi subdomain · refresh-on-401 · logout toàn
+      cục · chặn open-redirect · launcher gate theo capability.
+
+**Rollback:** cutover FE thuần (0 schema change) → trỏ DNS/proxy về deployment cũ (§8 Rollback).
