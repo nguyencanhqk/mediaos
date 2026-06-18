@@ -30,6 +30,7 @@ export default {
   orgStructure: "Cơ cấu tổ chức",
   objects: "Đối tượng",
   usageStats: "Tình hình sử dụng",
+  recycleBin: "Thùng rác",
   logout: "Đăng xuất",
   group: {
     work: "Công việc & Nội dung",

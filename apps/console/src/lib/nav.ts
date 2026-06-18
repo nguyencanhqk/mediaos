@@ -8,6 +8,7 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
+  Trash2,
   Users,
 } from "lucide-react";
 import { type NavItem } from "@mediaos/web-core";
@@ -45,4 +46,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "permissions", labelKey: "permissions", to: "/system/permissions", icon: Shield, tile: "bg-amber-500/12 text-amber-600", category: "system", subcategory: "Phân quyền" },
   // CS-7: Tình hình sử dụng — thống kê login, last-login, task per-tenant (nhóm riêng theo IA, KHÔNG gộp Kiểm toán).
   { id: "usageStats", labelKey: "usageStats", to: "/system/usage", icon: BarChart2, tile: "bg-blue-500/12 text-blue-600", category: "system", subcategory: "Tình hình sử dụng" },
+  // CS-6: Thùng rác — khôi phục nhân viên bị xoá mềm (restore:employee sensitive).
+  { id: "recycleBin", labelKey: "recycleBin", to: "/recycle-bin", icon: Trash2, tile: "bg-zinc-500/12 text-zinc-600", category: "system" },
 ] as const;

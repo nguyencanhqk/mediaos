@@ -12,6 +12,7 @@ import { OrgStructurePage } from "@/routes/system/org/org-structure";
 import { PositionsPage } from "@/routes/system/org/positions";
 import { ObjectsPage } from "@/routes/system/objects";
 import { UsagePage } from "@/routes/system/usage";
+import { RecycleBinPage } from "@/routes/recycle-bin";
 
 const rootRoute = createRootRoute({ component: RootLayout });
 
@@ -111,6 +112,14 @@ const usageRoute = createRoute({
   component: UsagePage,
 });
 
+// CS-6: Thùng rác — khôi phục nhân viên bị xoá mềm (restore:employee sensitive), gate trong component.
+const recycleBinRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/recycle-bin",
+  beforeLoad: authGuard,
+  component: RecycleBinPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   companySettingsRoute,
@@ -123,6 +132,7 @@ const routeTree = rootRoute.addChildren([
   positionsRoute,
   objectsRoute,
   usageRoute,
+  recycleBinRoute,
 ]);
 
 export const router = createRouter({ routeTree });
