@@ -10,6 +10,7 @@ import { ActivityLogPage } from "@/routes/system/activity-log";
 import { PermissionsPage } from "@/routes/system/permissions/permissions-page";
 import { OrgStructurePage } from "@/routes/system/org/org-structure";
 import { PositionsPage } from "@/routes/system/org/positions";
+import { ObjectsPage } from "@/routes/system/objects";
 
 const rootRoute = createRootRoute({ component: RootLayout });
 
@@ -93,6 +94,14 @@ const positionsRoute = createRoute({
   component: PositionsPage,
 });
 
+// CS-4: Đối tượng — danh bạ Người dùng / Nhân viên — gate quyền read:employee xử lý trong component.
+const objectsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/objects",
+  beforeLoad: authGuard,
+  component: ObjectsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   companySettingsRoute,
@@ -103,6 +112,7 @@ const routeTree = rootRoute.addChildren([
   permissionsRoute,
   orgStructureRoute,
   positionsRoute,
+  objectsRoute,
 ]);
 
 export const router = createRouter({ routeTree });

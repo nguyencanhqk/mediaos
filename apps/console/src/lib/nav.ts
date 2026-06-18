@@ -7,6 +7,7 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
+  Users,
 } from "lucide-react";
 import { type NavItem } from "@mediaos/web-core";
 
@@ -37,6 +38,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // CS-3: Quản lý danh mục — Cơ cấu tổ chức + Vị trí công việc.
   { id: "orgStructure", labelKey: "orgStructure", to: "/system/org-structure", icon: Building2, tile: "bg-blue-500/12 text-blue-600", category: "system", subcategory: "Quản lý danh mục" },
   { id: "positions", labelKey: "positions", to: "/system/positions", icon: Briefcase, tile: "bg-indigo-500/12 text-indigo-600", category: "system", subcategory: "Quản lý danh mục" },
+  // CS-4: Đối tượng — danh bạ Người dùng / Nhân viên — subcategory "Quản lý danh mục".
+  { id: "objects", labelKey: "objects", to: "/system/objects", icon: Users, tile: "bg-blue-500/12 text-blue-600", category: "system", subcategory: "Quản lý danh mục" },
   // CS-2: Phân quyền (RBAC) — nhóm riêng "Phân quyền" theo IA (gán/thu vai trò + quyền theo đối tượng).
   { id: "permissions", labelKey: "permissions", to: "/system/permissions", icon: Shield, tile: "bg-amber-500/12 text-amber-600", category: "system", subcategory: "Phân quyền" },
 ] as const;

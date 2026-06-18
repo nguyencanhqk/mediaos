@@ -1,0 +1,94 @@
+{
+  "title": "Đối tượng",
+  "subtitle": "Danh bạ người dùng và hồ sơ nhân viên trong hệ thống.",
+  "tabs": {
+    "users": "Người dùng",
+    "employees": "Nhân viên"
+  },
+  "table": {
+    "name": "Họ tên",
+    "personalEmail": "Email cá nhân",
+    "accountEmail": "Email tài khoản",
+    "phone": "SĐT",
+    "status": "Trạng thái",
+    "department": "Đơn vị"
+  },
+  "statusLabels": {
+    "active": "Đang hoạt động",
+    "inactive": "Tạm ngưng",
+    "resigned": "Đã nghỉ",
+    "terminated": "Đã chấm dứt"
+  },
+  "filter": {
+    "search": "Tìm theo tên, email, mã…",
+    "status": "Trạng thái",
+    "statusAll": "Tất cả trạng thái"
+  },
+  "actions": {
+    "create": "Thêm mới",
+    "edit": "Chỉnh sửa",
+    "disable": "Vô hiệu hoá",
+    "importCsv": "Nhập CSV"
+  },
+  "noPermission": {
+    "title": "Không có quyền",
+    "description": "Bạn không có quyền xem danh sách đối tượng."
+  },
+  "empty": {
+    "title": "Chưa có nhân viên",
+    "description": "Thêm nhân viên hoặc nhập từ tệp CSV để bắt đầu.",
+    "titleFiltered": "Không có kết quả",
+    "descriptionFiltered": "Thử thay đổi bộ lọc hoặc từ khoá tìm kiếm."
+  },
+  "error": {
+    "loadFailed": "Không tải được danh sách. Thử lại sau."
+  },
+  "createDialog": {
+    "title": "Thêm nhân viên",
+    "description": "Điền thông tin để thêm nhân viên mới vào hệ thống.",
+    "fieldFullName": "Họ tên *",
+    "fieldEmail": "Email tài khoản *",
+    "fieldPhone": "Số điện thoại",
+    "fieldEmployeeCode": "Mã nhân viên",
+    "fieldDepartment": "Đơn vị / phòng ban",
+    "cancel": "Huỷ",
+    "creating": "Đang tạo…",
+    "createButton": "Tạo nhân viên",
+    "createError": "Tạo thất bại:",
+    "unknownError": "Lỗi không xác định"
+  },
+  "editDialog": {
+    "title": "Chỉnh sửa nhân viên",
+    "description": "Cập nhật thông tin cho \"{{name}}\".",
+    "fieldPhone": "Số điện thoại",
+    "fieldStatus": "Trạng thái",
+    "fieldEmployeeCode": "Mã nhân viên",
+    "cancel": "Huỷ",
+    "saving": "Đang lưu…",
+    "saveButton": "Lưu thay đổi",
+    "saveError": "Lưu thất bại:",
+    "unknownError": "Lỗi không xác định"
+  },
+  "deleteConfirm": {
+    "title": "Vô hiệu hoá nhân viên",
+    "description": "Nhân viên \"{{name}}\" sẽ bị đặt về trạng thái không hoạt động. Thao tác này có thể hoàn tác.",
+    "cancel": "Huỷ",
+    "confirm": "Vô hiệu hoá",
+    "deleting": "Đang xử lý…"
+  },
+  "import": {
+    "uploadError": "Lỗi upload: {{message}}",
+    "importing": "Đang tải lên…",
+    "preview": {
+      "heading": "Xem trước: {{valid}} dòng hợp lệ",
+      "invalidCount": "({{count}} dòng lỗi)",
+      "rowError": "Dòng {{row}}: {{errors}}",
+      "moreRows": "+ {{count}} dòng nữa",
+      "cancel": "Huỷ",
+      "confirmButton": "Xác nhận nhập {{count}} dòng",
+      "confirming": "Đang nhập…",
+      "confirmError": "Lỗi xác nhận: {{message}}"
+    },
+    "done": "Đã nhập {{count}} nhân viên thành công."
+  }
+}
