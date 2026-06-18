@@ -3,7 +3,9 @@
   "subtitle": "Danh bạ người dùng và hồ sơ nhân viên trong hệ thống.",
   "tabs": {
     "users": "Người dùng",
-    "employees": "Nhân viên"
+    "employees": "Nhân viên",
+    "pendingApproval": "Chờ duyệt",
+    "activation": "Yêu cầu kích hoạt"
   },
   "table": {
     "name": "Họ tên",

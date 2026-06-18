@@ -75,6 +75,10 @@ export const envSchema = z.object({
   // #11). So khớp origin TƯỜNG MINH (scheme+host+port), KHÔNG '*', KHÔNG substring. RỖNG (default) → từ chối
   // MỌI redirect (fail-closed). Vd: `https://studio.localhost,https://people.localhost,https://console.localhost`.
   AUTH_REDIRECT_ALLOWLIST: z.string().default(""),
+  // CS-10: URL trang kích hoạt tài khoản (người được mời mở từ email). Link = `${URL}?company=<slug>&token=<token>`.
+  // RỖNG (default) → KHÔNG gửi được email (invite trả emailSent:false; admin cần cấu hình). KHÔNG ép URL hợp lệ
+  // ở đây để dev linh hoạt (vd `https://auth.localhost/activate`); service tự bỏ qua nếu rỗng.
+  INVITE_ACTIVATION_URL: z.string().default(""),
 
   // ── G16-3 SaaS enforcement (feature-flag / usage-limit guards) ────────────
   // Kill-switch toàn cục cho FeatureFlagEnforcementGuard + UsageLimitEnforcementGuard. Default 'true'

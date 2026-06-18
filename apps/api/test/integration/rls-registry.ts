@@ -109,6 +109,17 @@ async function seedSecurityPolicy(direct: Pool, companyId: string): Promise<stri
   return r.rows[0].id as string;
 }
 
+async function seedUserInvite(direct: Pool, companyId: string): Promise<string> {
+  // CS-10 RLS isolation test only — token_hash DUMMY (không token thật); status pending; expires_at +72h.
+  const r = await direct.query(
+    `INSERT INTO user_invites (company_id, email, full_name, token_hash, status, expires_at, invited_by)
+     VALUES ($1, 'rls-invite@x.test', 'RLS Invite', 'deadbeef', 'pending', now() + interval '72 hours', $1)
+     RETURNING id`,
+    [companyId],
+  );
+  return r.rows[0].id as string;
+}
+
 async function seedWorkflowDefinition(direct: Pool, companyId: string): Promise<string> {
   const r = await direct.query(
     `INSERT INTO workflow_definitions (company_id, code, name, applies_to, max_approval_level, allow_parallel_steps)
@@ -1820,5 +1831,13 @@ export const RLS_TABLES: RlsTableCase[] = [
     name: "company_security_policies",
     table: "company_security_policies",
     seedRow: async (direct, t) => seedSecurityPolicy(direct, t.companyId),
+  },
+
+  // ── CS-10 Đối tượng: Mời/Duyệt/Kích hoạt user (user_invites — token_hash/password_hash, mig 0410) ──
+  // company_id + RLS+FORCE → PHẢI ở harness. token_hash/password_hash KHÔNG secret thật (hash). KHÔNG skipNoContext.
+  {
+    name: "user_invites",
+    table: "user_invites",
+    seedRow: async (direct, t) => seedUserInvite(direct, t.companyId),
   },
 ];

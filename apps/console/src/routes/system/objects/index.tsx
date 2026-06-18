@@ -21,6 +21,7 @@ import {
 } from "@mediaos/web-core";
 import { consoleEmployeesApi } from "@/lib/employees-api";
 import { ObjectsImportPanel, type ImportStep } from "./objects-import-panel";
+import { InvitesPanel } from "./invites-panel";
 
 /**
  * CS-4 — Quản lý danh mục: Đối tượng (/system/objects).
@@ -30,10 +31,13 @@ import { ObjectsImportPanel, type ImportStep } from "./objects-import-panel";
  * tab "Nhân viên" hiển thị toàn bộ hồ sơ. Dữ liệu từ cùng một /employees endpoint
  * (server-driven, RLS + withTenant).
  *
- * Tabs "Chờ duyệt" / "Yêu cầu kích hoạt" → CS-10 (OUT OF SCOPE).
+ * Tabs "Chờ duyệt" (accepted) / "Yêu cầu kích hoạt" (pending) → CS-10 (InvitesPanel).
  */
 
-type Tab = "users" | "employees";
+type Tab = "users" | "employees" | "pendingApproval" | "activation";
+
+/** 2 tab CS-10 = hàng đợi lời mời (không phải bảng employees). */
+const INVITE_TABS: readonly Tab[] = ["pendingApproval", "activation"];
 
 type StatusFilter = "" | "active" | "inactive" | "resigned" | "terminated";
 
@@ -348,7 +352,7 @@ export function ObjectsPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 rounded-lg border border-border bg-muted/40 p-1 w-fit">
-        {(["employees", "users"] as Tab[]).map((tab) => (
+        {(["employees", "users", "pendingApproval", "activation"] as Tab[]).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -367,6 +371,10 @@ export function ObjectsPage() {
         ))}
       </div>
 
+      {INVITE_TABS.includes(activeTab) ? (
+        <InvitesPanel kind={activeTab === "activation" ? "activation" : "approval"} />
+      ) : (
+        <>
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative max-w-sm flex-1">
@@ -615,6 +623,8 @@ export function ObjectsPage() {
           )}
         </div>
       </Dialog>
+        </>
+      )}
     </div>
   );
 }

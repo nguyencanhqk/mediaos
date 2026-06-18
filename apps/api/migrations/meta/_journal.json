@@ -778,6 +778,13 @@
       "when": 1717500450000,
       "tag": "0390_cs9_security_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1717500460000,
+      "tag": "0410_cs10_user_invites",
+      "breakpoints": true
     }
   ]
 }

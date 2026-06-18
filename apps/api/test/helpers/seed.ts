@@ -525,6 +525,9 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM company_feature_flags WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM company_subscriptions WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM dashboard_configs WHERE company_id = ANY($1::uuid[])", ids);
+  // CS-10 user_invites: company_id → companies CASCADE (created_user_id/invited_by là uuid thường, KHÔNG FK
+  // tới users) → xoá tường minh TRƯỚC users cho rõ ràng (CASCADE companies cũng phủ).
+  await direct.query("DELETE FROM user_invites WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM users WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM companies WHERE id = ANY($1::uuid[])", ids);
 }

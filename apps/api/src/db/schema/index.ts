@@ -57,3 +57,5 @@ export * from "./db-ops";
 export * from "./mail-config";
 // CS-9 Bảo mật nâng cao (per-company security policy — per-tenant FORCE-RLS; enforce IP/giờ/2FA/email-domain)
 export * from "./security-policy";
+// CS-10 Đối tượng: Mời/Duyệt/Kích hoạt user (user_invites per-tenant FORCE-RLS; token_hash + password_hash)
+export * from "./user-invites";
