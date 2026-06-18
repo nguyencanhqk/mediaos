@@ -7,6 +7,7 @@ import { BreakGlassPage } from "@/routes/settings/break-glass";
 import { SecuritySettingsPage } from "@/routes/settings/security";
 import { getAuthRedirectUrl, useAuthStore } from "@mediaos/web-core";
 import { ActivityLogPage } from "@/routes/system/activity-log";
+import { ObjectsPage } from "@/routes/system/objects";
 
 const rootRoute = createRootRoute({ component: RootLayout });
 
@@ -66,6 +67,14 @@ const activityLogRoute = createRoute({
   component: ActivityLogPage,
 });
 
+// CS-4: Đối tượng — danh bạ Người dùng / Nhân viên — gate quyền read:employee xử lý trong component.
+const objectsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/objects",
+  beforeLoad: authGuard,
+  component: ObjectsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   companySettingsRoute,
@@ -73,6 +82,7 @@ const routeTree = rootRoute.addChildren([
   breakGlassRoute,
   securityRoute,
   activityLogRoute,
+  objectsRoute,
 ]);
 
 export const router = createRouter({ routeTree });
