@@ -76,3 +76,5 @@ export * from "./db-ops-allowlist";
 export * from "./db-ops";
 // CS-7 Tình hình sử dụng (usage stats per tenant — login count, per-user last-login, task counters)
 export * from "./usage";
+// CS-9 Bảo mật nâng cao (per-company security policy — IP/time/email-domain/2FA enforce at auth)
+export * from "./security-policy";
