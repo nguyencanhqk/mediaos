@@ -1,0 +1,127 @@
+# Per-app frontend CI (build độc lập từng SPA) — runbook docs/ops/fs5-cutover-runbook.md §6.
+#
+# Mỗi app (web/auth/studio/people/console/admin) build & deploy RIÊNG: đổi 1 app KHÔNG rebuild cả monorepo.
+# `changes` job dùng dorny/paths-filter để chỉ chạy app có path đổi (hoặc packages dùng chung / lockfile đổi).
+#
+# QUAN HỆ với ci.yml: ci.yml = cổng tích hợp CROSS-CUTTING (RLS qua PgBouncer, build toàn workspace) chạy
+# trên MỌI thay đổi. File này = pipeline build/deploy ĐỘC LẬP theo app (path-filtered). Hai cái bổ trợ nhau.
+#
+# ⚠️ Deploy step = PLACEHOLDER (comment) tới khi chốt host (Caddy/CDN/S3…). KHÔNG hard-code secret/domain.
+#   VITE_* là biến BUILD-TIME công khai (nhúng vào client bundle) → dùng GitHub Actions `vars` (KHÔNG `secrets`).
+#   Đặt repo/環境 variable `PROD_DOMAIN` (vd 'mediaos.example') để nhúng đúng origin; vắng → placeholder.
+
+name: Apps — Frontend CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+concurrency:
+  group: apps-frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Phát hiện app nào đổi (path-filter) ───────────────────────────────────
+  changes:
+    name: Detect changed apps
+    runs-on: ubuntu-latest
+    outputs:
+      # `changes` = JSON array các filter khớp (vd '["web","auth"]'); rỗng → '[]'.
+      apps: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          # Mỗi app rebuild khi: source app đổi, HOẶC package dùng chung đổi, HOẶC lockfile đổi.
+          filters: |
+            web:     [ 'apps/web/**',     'packages/**', 'pnpm-lock.yaml' ]
+            auth:    [ 'apps/auth/**',    'packages/**', 'pnpm-lock.yaml' ]
+            studio:  [ 'apps/studio/**',  'packages/**', 'pnpm-lock.yaml' ]
+            people:  [ 'apps/people/**',  'packages/**', 'pnpm-lock.yaml' ]
+            console: [ 'apps/console/**', 'packages/**', 'pnpm-lock.yaml' ]
+            admin:   [ 'apps/admin/**',   'packages/**', 'pnpm-lock.yaml' ]
+
+  # ── Build/typecheck/test từng app đổi (matrix) ────────────────────────────
+  build:
+    name: Build ${{ matrix.app }}
+    needs: changes
+    # Bỏ qua khi không app nào đổi (matrix rỗng → lỗi); chỉ chạy khi có ít nhất 1 app.
+    if: ${{ needs.changes.outputs.apps != '[]' && needs.changes.outputs.apps != '' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.changes.outputs.apps) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Package dùng chung phải build TRƯỚC (apps tiêu thụ dist): contracts → web-core → ui (runbook §6.2).
+      - name: Build shared packages
+        run: pnpm --filter @mediaos/contracts --filter @mediaos/web-core --filter @mediaos/ui build
+
+      # VITE_* prod nhúng lúc BUILD (build-time, KHÔNG runtime). Mỗi app chỉ set biến nó thực sự đọc.
+      # DOMAIN từ repo var PROD_DOMAIN (vắng → placeholder 'mediaos.example' để build vẫn xanh ở CI).
+      - name: Resolve build-time VITE_* env for ${{ matrix.app }}
+        run: |
+          DOMAIN="${{ vars.PROD_DOMAIN || 'mediaos.example' }}"
+          AUTH_URL="https://auth.${DOMAIN}"
+          echo "VITE_API_URL=https://api.${DOMAIN}/api/v1" >> "$GITHUB_ENV"
+          case "${{ matrix.app }}" in
+            web)
+              echo "VITE_AUTH_APP_URL=${AUTH_URL}"          >> "$GITHUB_ENV"
+              echo "VITE_STUDIO_URL=https://studio.${DOMAIN}"  >> "$GITHUB_ENV"
+              echo "VITE_PEOPLE_URL=https://people.${DOMAIN}"  >> "$GITHUB_ENV"
+              echo "VITE_CONSOLE_URL=https://console.${DOMAIN}" >> "$GITHUB_ENV"
+              ;;
+            auth)
+              # bounce về launcher (root domain) khi ?redirect vắng/không hợp lệ
+              echo "VITE_DEFAULT_APP_URL=https://${DOMAIN}"  >> "$GITHUB_ENV"
+              ;;
+            studio)
+              echo "VITE_AUTH_APP_URL=${AUTH_URL}"          >> "$GITHUB_ENV"
+              echo "VITE_WORKFLOW_MOCK=false"               >> "$GITHUB_ENV"
+              ;;
+            people | console)
+              echo "VITE_AUTH_APP_URL=${AUTH_URL}"          >> "$GITHUB_ENV"
+              ;;
+            admin)
+              : # admin (operator plane) chỉ đọc VITE_API_URL
+              ;;
+          esac
+
+      - name: Typecheck
+        run: pnpm --filter @mediaos/${{ matrix.app }} typecheck
+
+      - name: Test
+        run: pnpm --filter @mediaos/${{ matrix.app }} test
+
+      - name: Build
+        run: pnpm --filter @mediaos/${{ matrix.app }} build
+
+      # ── Deploy (PLACEHOLDER — bật khi đã chốt host) ───────────────────────
+      # Publish apps/${{ matrix.app }}/dist → root của subdomain (CDN/Caddy). KHÔNG hard-code secret.
+      # - name: Deploy ${{ matrix.app }}
+      #   if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      #   run: ./scripts/deploy-app.sh "${{ matrix.app }}" "apps/${{ matrix.app }}/dist"
+      #   env:
+      #     DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+      - name: Deploy placeholder
+        run: |
+          echo "TODO(ops) publish apps/${{ matrix.app }}/dist to ${{ matrix.app }} subdomain after host is chosen."
