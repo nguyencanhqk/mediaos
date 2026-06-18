@@ -27,6 +27,7 @@
 | [0018](0018-mobile-stack.md)                       | Mobile stack (Expo/React Native)                              | ✅ Accepted |   Trung bình   |
 | [0019](0019-control-plane-cross-tenant-access.md)  | Control Plane truy cập chéo-tenant 3 tầng (withTenant / GUC-read hẹp / role read-only) | 📝 Proposed |     ⚠️ Cao     |
 | [0020](0020-ac9-db-ops-data-browser.md)            | AC-9 db-ops data browser tenant-scoped (Tầng 1 withTenant) + allowlist default-deny + break-glass SoD; all-tenant Tầng 3 DEFER | 📝 Proposed |     ⚠️ Cao     |
+| [0021](0021-all-tenant-readonly-role.md)           | AC-9 Tầng 3: all-tenant data browse qua role DB read-only `mediaos_readonly` (NOBYPASSRLS + policy `USING(true)` + column-GRANT) — hiện thực 0019 §Tầng 3 mà 0020 hoãn | 📝 Proposed |     ⚠️ Cao     |
 
 > **⚠️ Bất khả nghịch Cao** = đổi sau MVP phải đập đi làm lại nền. Chốt kỹ TRƯỚC khi code.
 

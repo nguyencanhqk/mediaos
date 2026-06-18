@@ -168,4 +168,36 @@ export class DatabaseService {
       return fn(tx);
     });
   }
+
+  /**
+   * WAVE 3 C1 (ADR-0021 — Tầng 3 của ADR-0019): ngữ cảnh ALL-TENANT READ-ONLY — `SET LOCAL ROLE
+   * mediaos_readonly` (LOCAL = transaction-scoped, tự reset khi commit/rollback ⇒ an toàn PgBouncer
+   * transaction-mode ADR-0003, KHÔNG mang role sang request kế tiếp). Dưới role này, policy
+   * `<bảng>_all_tenant_read` (FOR SELECT USING(true), mig 0346) cho ĐỌC mọi tenant trên bảng allowlist;
+   * column-GRANT hẹp ⇒ secret/PII ungettable Ở DB. mediaos_readonly là NOBYPASSRLS (KHÔNG bypass — vẫn
+   * lọt assertWorkerRoleSafe), NOLOGIN.
+   *
+   * KHÁC withPlatformReadContext (GUC app.platform_audit_read, app role): đây ĐỔI ROLE thật. KHÁC
+   * withPlatformContext (chỉ nới companies). CỐ Ý KHÔNG set app.current_company_id (quét all-tenant).
+   *
+   * HỢP ĐỒNG SELECT-ONLY (ép Ở DB): role KHÔNG có INSERT/UPDATE/DELETE + policy KHÔNG có WITH CHECK ⇒
+   * mọi GHI trong `fn` FAIL (permission denied). Mọi GHI audit (recordOperatorAction mỗi lần đọc) PHẢI đi
+   * `withTenant(operator.companyId)` RIÊNG (audit_logs WITH CHECK keyed company_id ⇒ ghi ở home tenant của
+   * operator), KHÔNG ghi trong ngữ cảnh này. Default-DENY ngoài helper: không SET ROLE ⇒ mediaos_app đọc
+   * tenant-scoped như thường. Gọi CHỈ từ service ĐÃ qua PermissionGuard (read:db-all-tenant) + step-up +
+   * break-glass all-tenant grant.
+   */
+  async withAllTenantReadContext<T>(fn: (tx: TenantTx) => Promise<T>): Promise<T> {
+    if (!db) {
+      throw new DatabaseNotConfiguredError();
+    }
+    return db.transaction(async (tx) => {
+      // SET LOCAL ROLE: identifier cố định (KHÔNG nội suy giá trị client) → an toàn. LOCAL = tự reset.
+      await tx.execute(sql`set local role mediaos_readonly`);
+      // Bound đường đọc NẶNG NHẤT hệ (quét xuyên mọi tenant): statement_timeout LOCAL chặn slow-scan/DoS kể
+      // cả khi caller đã hợp lệ (offset lớn / bảng to). LOCAL = tự reset khi commit (an toàn PgBouncer).
+      await tx.execute(sql`set local statement_timeout = '30s'`);
+      return fn(tx);
+    });
+  }
 }

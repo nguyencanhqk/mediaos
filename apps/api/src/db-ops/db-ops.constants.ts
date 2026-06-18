@@ -17,9 +17,13 @@ export const DB_BROWSER_RESOURCE = "db-browser";
 export const DB_BROWSER_ACTION_READ = "read";
 export const DB_OPS_RESOURCE = "db-ops";
 export const DB_OPS_ACTION_MANAGE = "manage";
+// WAVE 3 C1 (ADR-0021): all-tenant data browse — quyền RIÊNG, blast-radius cao hơn read:db-browser.
+export const DB_ALL_TENANT_RESOURCE = "db-all-tenant";
+export const DB_ALL_TENANT_ACTION_READ = "read";
 
 // ── Audit actions (REUSE object_type='company') ──────────────────────────────────────────────────────
 export const AUDIT_DB_READ = "operator.db_read";
+export const AUDIT_DB_ALL_TENANT_READ = "operator.all_tenant_read";
 export const AUDIT_DB_EXPORT = "operator.db_export";
 export const AUDIT_DB_GRANT_REQUESTED = "operator.db_grant_requested";
 export const AUDIT_DB_GRANT_APPROVED = "operator.db_grant_approved";
