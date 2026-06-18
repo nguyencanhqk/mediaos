@@ -1,4 +1,4 @@
-import { ClipboardList, KeyRound, Settings, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Briefcase, Building2, ClipboardList, KeyRound, Settings, ShieldAlert, ShieldCheck } from "lucide-react";
 import { type NavItem } from "@mediaos/web-core";
 
 /**
@@ -25,4 +25,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "companySettings", labelKey: "companySettings", to: "/settings/company", icon: Settings, tile: "bg-slate-500/12 text-slate-600", category: "system" },
   // CS-1: Nhật ký hoạt động — subcategory "Kiểm toán" mở khoá sidebar 2 cấp cho console.
   { id: "activityLog", labelKey: "activityLog", to: "/system/activity-log", icon: ClipboardList, tile: "bg-violet-500/12 text-violet-600", category: "system", subcategory: "Kiểm toán" },
+  // CS-3: Quản lý danh mục — Cơ cấu tổ chức + Vị trí công việc.
+  { id: "orgStructure", labelKey: "orgStructure", to: "/system/org-structure", icon: Building2, tile: "bg-blue-500/12 text-blue-600", category: "system", subcategory: "Quản lý danh mục" },
+  { id: "positions", labelKey: "positions", to: "/system/positions", icon: Briefcase, tile: "bg-indigo-500/12 text-indigo-600", category: "system", subcategory: "Quản lý danh mục" },
 ] as const;
