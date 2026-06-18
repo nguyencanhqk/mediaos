@@ -36,6 +36,7 @@ import { WebhooksModule } from "./webhooks/webhooks.module";
 import { ObservabilityModule } from "./observability/observability.module";
 import { DbOpsModule } from "./db-ops/db-ops.module";
 import { OperatorBootstrapModule } from "./operator-bootstrap/operator-bootstrap.module";
+import { SchedulerModule } from "./scheduler/scheduler.module";
 import { ApiKeyAuthGuard } from "./api-keys/guards/api-key-auth.guard";
 import { ApiKeyRepository } from "./api-keys/api-keys.repository";
 import { TokenService } from "./auth/token.service";
@@ -94,6 +95,8 @@ import {
     DbOpsModule,
     // Operator bootstrap (seed-lúc-khởi-động): tạo/đồng bộ tài khoản platform-admin god-mode từ env.
     OperatorBootstrapModule,
+    // WAVE 4 OPS: scheduler gọi processBatch() của OutboxWorker + DbExportWorker định kỳ (tắt khi NODE_ENV=test).
+    SchedulerModule,
   ],
   providers: [
     // Global guard pipeline (THỨ TỰ QUAN TRỌNG):
