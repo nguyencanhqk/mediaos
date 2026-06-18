@@ -24,6 +24,7 @@ import { OutboxService } from "../../src/events/outbox.service";
 import type { PermissionService } from "../../src/permission/permission.service";
 import { directPool, hasDb } from "../helpers/integration-db";
 import { cleanupTenants, seedCompany, seedUser, seedUserRole, type SeededTenant } from "../helpers/seed";
+import { makeSecurityPolicyService } from "../helpers/security-policy";
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-secret-".padEnd(40, "0");
 
@@ -70,6 +71,7 @@ describe.skipIf(!hasDb)("G16-1 login 2FA flow", () => {
       tf,
       replayGuard,
       securityAlerts,
+      makeSecurityPolicyService(dbsvc),
     );
     return { auth: a, twoFactor: tf };
   }

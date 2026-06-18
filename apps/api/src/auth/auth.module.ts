@@ -2,6 +2,7 @@ import { Module, forwardRef } from "@nestjs/common";
 import { CryptoModule } from "../crypto/crypto.module";
 import { DatabaseModule } from "../db/db.module";
 import { PermissionModule } from "../permission/permission.module";
+import { SecurityPolicyModule } from "../security-policy/security-policy.module";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { LoginRateLimiter } from "./login-rate-limiter";
@@ -22,7 +23,14 @@ import { TwoFactorEnforcementGuard } from "./two-factor-enforcement.guard";
  * + ReplayGuardService). Export TwoFactorEnforcementGuard + TwoFactorService cho APP_GUARD toàn cục (app.module).
  */
 @Module({
-  imports: [DatabaseModule, forwardRef(() => PermissionModule), CryptoModule],
+  imports: [
+    DatabaseModule,
+    forwardRef(() => PermissionModule),
+    CryptoModule,
+    // CS-9: SecurityPolicyService cho enforce IP/giờ ở login/refresh + 2FA fail-stricter. forwardRef vì
+    // SecurityPolicyModule → PermissionModule → forwardRef(AuthModule) (vòng gián tiếp).
+    forwardRef(() => SecurityPolicyModule),
+  ],
   controllers: [AuthController],
   providers: [
     AuthService,

@@ -90,29 +90,35 @@ export class SecurityPolicyService {
   // ── enforcement (auth-path) ──────────────────────────────────────────────────────────────────
 
   /**
-   * Quyết định 1 lần cấp token (login/refresh) có được phép theo IP/giờ. Kill-switch tắt ⇒ allow KHÔNG
-   * đọc DB. Lỗi đọc DB ⇒ FAIL-OPEN + log cảnh báo (không tự-khoá toàn bộ tenant vì 1 lỗi tạm thời ở
-   * bảng policy; sàn bảo mật thật vẫn là mật khẩu + 2FA + token TTL). Chạy SAU verify mật khẩu.
+   * Quyết định 1 lần cấp token (login/refresh) có được phép theo IP/giờ — chạy TRONG tx của caller (auth
+   * đã mở withTenant; +0 round-trip). Kill-switch tắt ⇒ allow KHÔNG đọc DB (BẤT BIẾN #5). Lỗi đọc DB ⇒
+   * FAIL-OPEN + log cảnh báo (không tự-khoá toàn bộ tenant vì 1 lỗi tạm thời ở bảng policy; sàn bảo mật
+   * thật vẫn là mật khẩu + 2FA + token TTL ngắn). Gọi SAU verify mật khẩu, TRƯỚC cấp token.
    */
-  async evaluateAccess(companyId: string, ctx: AccessContext): Promise<PolicyDecision> {
+  async evaluateAccessTx(
+    tx: TenantTx,
+    companyId: string,
+    ctx: AccessContext,
+  ): Promise<PolicyDecision> {
     if (!this.enforcementEnabled) return { allowed: true };
     try {
-      const config = await this.loadEvaluationConfig(companyId);
+      const config = await this.loadEvaluationConfigTx(tx, companyId);
       if (!config) return { allowed: true }; // chưa cấu hình → không enforce.
       return this.evaluator.evaluate(config, ctx);
     } catch (err) {
       this.logger.warn(
-        `evaluateAccess: đọc policy thất bại (fail-open, login dựa mật khẩu/2FA): ${err instanceof Error ? err.message : String(err)}`,
+        `evaluateAccessTx: đọc policy thất bại (fail-open, login dựa mật khẩu/2FA): ${err instanceof Error ? err.message : String(err)}`,
       );
       return { allowed: true };
     }
   }
 
-  /** Đọc config tối thiểu cho evaluator. null = chưa có hàng policy. */
-  private async loadEvaluationConfig(
+  /** Đọc config tối thiểu cho evaluator (trong tx caller). null = chưa có hàng policy. */
+  private async loadEvaluationConfigTx(
+    tx: TenantTx,
     companyId: string,
   ): Promise<PolicyEvaluationConfig | null> {
-    const row = await this.repo.findByCompany(companyId);
+    const row = await this.repo.findByCompanyTx(tx, companyId);
     if (!row) return null;
     return {
       ipRestrictionEnabled: row.ipRestrictionEnabled,

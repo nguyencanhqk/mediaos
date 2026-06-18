@@ -43,6 +43,7 @@ import { OperatorReauthService } from "../../src/platform/operator-reauth.servic
 import { OperatorActionAuditService } from "../../src/platform/operator-action-audit.service";
 // (OperatorReauthService used inside test bodies via an in-memory Valkey for deterministic scoping.)
 import { directPool, hasDb } from "../helpers/integration-db";
+import { makeSecurityPolicyService } from "../helpers/security-policy";
 import {
   cleanupTenants,
   seedCompany,
@@ -99,6 +100,7 @@ describe.skipIf(!hasDb)("AC-0b operator-auth boundary", () => {
     const a = new AuthService(
       db, password, new TokenService(), new LoginRateLimiter(), new AuditService(),
       new OutboxService(), permissions, secrets, tf, replayGuard, securityAlerts,
+      makeSecurityPolicyService(db),
     );
     return { auth: a, twoFactor: tf };
   }
