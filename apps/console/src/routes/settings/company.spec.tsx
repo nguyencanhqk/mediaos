@@ -16,14 +16,36 @@ function makeSettings(overrides: Partial<CompanySettingsDto> = {}): CompanySetti
     workingDaysJson: { days: [1, 2, 3, 4, 5] },
     payrollConfigJson: { cutoffDay: 25, payDay: 5 },
     schemaVersion: 1,
+    // CS-5 profile fields
+    shortName: null,
+    taxCode: null,
+    businessType: null,
+    companyCode: null,
+    regNumber: null,
+    regDate: null,
+    regPlace: null,
+    legalRepName: null,
+    legalRepTitle: null,
+    establishedDate: null,
+    address: null,
+    phone: null,
+    fax: null,
+    email: null,
+    website: null,
     ...overrides,
   };
 }
 
-describe("CompanySettingsForm — submit", () => {
+describe("CompanySettingsForm — Thiết lập chung tab: submit", () => {
   it("submits the full payload (timezone, currency, language, logo, working days, payroll)", () => {
     const onSubmit = vi.fn();
-    render(<CompanySettingsForm initial={makeSettings()} onSubmit={onSubmit} />);
+    render(
+      <CompanySettingsForm
+        initial={makeSettings()}
+        activeTab="general"
+        onSubmit={onSubmit}
+      />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /Lưu/ }));
 
@@ -41,7 +63,9 @@ describe("CompanySettingsForm — submit", () => {
 
   it("includes a newly toggled working day in the payload", () => {
     const onSubmit = vi.fn();
-    render(<CompanySettingsForm initial={makeSettings()} onSubmit={onSubmit} />);
+    render(
+      <CompanySettingsForm initial={makeSettings()} activeTab="general" onSubmit={onSubmit} />,
+    );
 
     // Add Saturday (day 6).
     fireEvent.click(screen.getByRole("checkbox", { name: "T7" }));
@@ -53,7 +77,9 @@ describe("CompanySettingsForm — submit", () => {
 
   it("reflects edited payroll config in the payload", () => {
     const onSubmit = vi.fn();
-    render(<CompanySettingsForm initial={makeSettings()} onSubmit={onSubmit} />);
+    render(
+      <CompanySettingsForm initial={makeSettings()} activeTab="general" onSubmit={onSubmit} />,
+    );
 
     fireEvent.change(screen.getByLabelText(/Ngày chốt công/), { target: { value: "20" } });
     fireEvent.change(screen.getByLabelText(/Ngày trả lương/), { target: { value: "10" } });
@@ -67,7 +93,7 @@ describe("CompanySettingsForm — submit", () => {
 describe("CompanySettingsForm — reflects fresh server data on remount", () => {
   it("seeds from the new `initial` when remounted with a different key", () => {
     const { rerender } = render(
-      <CompanySettingsForm key="a" initial={makeSettings()} onSubmit={vi.fn()} />,
+      <CompanySettingsForm key="a" initial={makeSettings()} activeTab="general" onSubmit={vi.fn()} />,
     );
     expect((screen.getByLabelText(/Múi giờ/) as HTMLInputElement).value).toBe("Asia/Ho_Chi_Minh");
 
@@ -76,6 +102,7 @@ describe("CompanySettingsForm — reflects fresh server data on remount", () => 
       <CompanySettingsForm
         key="b"
         initial={makeSettings({ timezone: "America/New_York" })}
+        activeTab="general"
         onSubmit={vi.fn()}
       />,
     );
@@ -83,10 +110,12 @@ describe("CompanySettingsForm — reflects fresh server data on remount", () => 
   });
 });
 
-describe("CompanySettingsForm — Zod validation blocks bad input", () => {
+describe("CompanySettingsForm — Zod validation blocks bad input (Thiết lập chung)", () => {
   it("does NOT submit and shows an error when the logo URL is invalid", () => {
     const onSubmit = vi.fn();
-    render(<CompanySettingsForm initial={makeSettings()} onSubmit={onSubmit} />);
+    render(
+      <CompanySettingsForm initial={makeSettings()} activeTab="general" onSubmit={onSubmit} />,
+    );
 
     fireEvent.change(screen.getByLabelText(/Logo/), { target: { value: "not-a-url" } });
     fireEvent.click(screen.getByRole("button", { name: /Lưu/ }));
@@ -97,12 +126,89 @@ describe("CompanySettingsForm — Zod validation blocks bad input", () => {
 
   it("does NOT submit when the payroll cutoff day is out of range", () => {
     const onSubmit = vi.fn();
-    render(<CompanySettingsForm initial={makeSettings()} onSubmit={onSubmit} />);
+    render(
+      <CompanySettingsForm initial={makeSettings()} activeTab="general" onSubmit={onSubmit} />,
+    );
 
     fireEvent.change(screen.getByLabelText(/Ngày chốt công/), { target: { value: "40" } });
     fireEvent.click(screen.getByRole("button", { name: /Lưu/ }));
 
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});
+
+describe("CompanySettingsForm — CS-5 profile tab", () => {
+  it("submits CS-5 profile fields when filled in", () => {
+    const onSubmit = vi.fn();
+    render(
+      <CompanySettingsForm initial={makeSettings()} activeTab="profile" onSubmit={onSubmit} />,
+    );
+
+    // Find inputs by placeholder since i18n keys may not resolve in test env
+    fireEvent.change(screen.getByPlaceholderText(/VD: MediaOS/i), {
+      target: { value: "MOS" },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/0123456789/i), { target: { value: "0123456789" } });
+    fireEvent.click(screen.getByRole("button", { name: /Lưu/ }));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const payload = onSubmit.mock.calls[0][0];
+    expect(payload.shortName).toBe("MOS");
+    expect(payload.taxCode).toBe("0123456789");
+  });
+
+  it("does NOT submit and shows error when taxCode format is invalid", () => {
+    const onSubmit = vi.fn();
+    render(
+      <CompanySettingsForm initial={makeSettings()} activeTab="profile" onSubmit={onSubmit} />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(/0123456789/i), { target: { value: "BAD-CODE" } });
+    fireEvent.click(screen.getByRole("button", { name: /Lưu/ }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+
+  it("does NOT submit and shows error when email is invalid", () => {
+    const onSubmit = vi.fn();
+    render(
+      <CompanySettingsForm initial={makeSettings()} activeTab="profile" onSubmit={onSubmit} />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(/contact@company.com/i), {
+      target: { value: "not-an-email" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Lưu/ }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+
+  it("does NOT submit and shows error when website URL is invalid", () => {
+    const onSubmit = vi.fn();
+    render(
+      <CompanySettingsForm initial={makeSettings()} activeTab="profile" onSubmit={onSubmit} />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(/https:\/\/company\.com/i), {
+      target: { value: "not-a-url" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Lưu/ }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+
+  it("shows the companyCode as read-only when provided", () => {
+    render(
+      <CompanySettingsForm
+        initial={makeSettings({ companyCode: "MOS-001" })}
+        activeTab="profile"
+        onSubmit={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("MOS-001")).toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import { check, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, date, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 /**
@@ -21,6 +21,22 @@ export const companies = pgTable(
     workingDaysJson: jsonb("working_days_json").notNull().default({ days: [1, 2, 3, 4, 5] }),
     payrollConfigJson: jsonb("payroll_config_json").notNull().default({ cutoffDay: 25, payDay: 5 }),
     schemaVersion: integer("schema_version").notNull().default(1),
+    // CS-5: hồ sơ công ty đầy đủ (migration 0360 — additive, nullable).
+    shortName: text("short_name"),
+    taxCode: text("tax_code"),
+    businessType: text("business_type"),
+    companyCode: text("company_code"),
+    regNumber: text("reg_number"),
+    regDate: date("reg_date"),
+    regPlace: text("reg_place"),
+    legalRepName: text("legal_rep_name"),
+    legalRepTitle: text("legal_rep_title"),
+    establishedDate: date("established_date"),
+    address: text("address"),
+    phone: text("phone"),
+    fax: text("fax"),
+    email: text("email"),
+    website: text("website"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
