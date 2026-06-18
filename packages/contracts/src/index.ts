@@ -76,3 +76,5 @@ export * from "./db-ops-allowlist";
 export * from "./db-ops";
 // CS-7 Tình hình sử dụng (usage stats per tenant — login count, per-user last-login, task counters)
 export * from "./usage";
+// CS-8 Cấu hình mail server (SMTP, secret — per-tenant + per-app scope; password envelope-KMS)
+export * from "./mail-config";

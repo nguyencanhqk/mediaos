@@ -764,6 +764,13 @@
       "when": 1717500430000,
       "tag": "0350_cs6_recycle_restore_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1717500440000,
+      "tag": "0380_cs8_company_mail_configs",
+      "breakpoints": true
     }
   ]
 }

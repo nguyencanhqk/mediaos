@@ -138,5 +138,8 @@ export const AUDIT_OBJECT_TYPES = [
   // audit-in-tx app-tenant. KHÔNG ghi secret/plaintext/envelope vào before/after — chỉ id/url/active — mig 0320).
   "webhook_endpoint",
   "webhook_delivery",
+  // CS-8 mail config (upsert/test SMTP ghi 'mail_config' audit-in-tx app-tenant. KHÔNG ghi SMTP password/
+  // envelope vào before/after — chỉ host/port/username/scope/secure/from + hasPassword — mig 0380).
+  "mail_config",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

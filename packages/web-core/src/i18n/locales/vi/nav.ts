@@ -25,6 +25,7 @@ export default {
   breakGlass: "Truy cập khẩn cấp",
   accountSecurity: "Bảo mật tài khoản",
   companySettings: "Cài đặt công ty",
+  mailConfig: "Cấu hình mail server",
   activityLog: "Nhật ký hoạt động",
   permissions: "Phân quyền",
   orgStructure: "Cơ cấu tổ chức",

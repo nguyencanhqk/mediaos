@@ -53,3 +53,5 @@ export * from "./ui-config";
 export * from "./webhooks";
 // AC-9 db-ops (3 bảng GLOBAL no-RLS operator-scoped — break-glass grant/approval + export job; mig 0345)
 export * from "./db-ops";
+// CS-8 Cấu hình mail server SMTP (per-tenant FORCE-RLS — 1 config / scope; SMTP password envelope-KMS)
+export * from "./mail-config";

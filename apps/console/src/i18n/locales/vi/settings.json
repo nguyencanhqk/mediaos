@@ -89,5 +89,33 @@
       "revealError": "Hiện secret thất bại.",
       "defaultLabel": "mật khẩu"
     }
+  },
+  "mailConfig": {
+    "pageTitle": "Cấu hình mail server",
+    "pageDesc": "Thiết lập SMTP gửi email của công ty (mặc định hoặc theo từng ứng dụng). Mật khẩu được mã hoá và không bao giờ hiển thị lại.",
+    "tabDefault": "Mặc định",
+    "tabPerApp": "Theo ứng dụng",
+    "loadError": "Không tải được cấu hình mail.",
+    "noPermission": "Bạn không có quyền cấu hình mail server.",
+    "emptyState": "Chưa thiết lập máy chủ SMTP.",
+    "setupButton": "Thiết lập",
+    "scopeLabel": "Phạm vi (scope)",
+    "hostLabel": "Máy chủ (host)",
+    "portLabel": "Cổng (port)",
+    "secureLabel": "Dùng TLS (kết nối an toàn)",
+    "usernameLabel": "Tên đăng nhập",
+    "passwordLabel": "Mật khẩu",
+    "passwordKeepPlaceholder": "Để trống để giữ mật khẩu hiện tại",
+    "passwordKeepHint": "Đã có mật khẩu — để trống nếu không đổi.",
+    "passwordRequiredNew": "Cấu hình mới yêu cầu mật khẩu SMTP.",
+    "fromNameLabel": "Tên người gửi",
+    "fromEmailLabel": "Email người gửi",
+    "saveButton": "Lưu cấu hình",
+    "saveSuccess": "Đã lưu.",
+    "saveError": "Lưu thất bại.",
+    "testButton": "Kiểm tra kết nối",
+    "testing": "Đang kiểm tra…",
+    "testSuccess": "Kết nối SMTP thành công.",
+    "testFailedGeneric": "Kiểm tra kết nối thất bại."
   }
 }
