@@ -31,7 +31,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -147,5 +147,9 @@ export const AUDIT_OBJECT_TYPES = [
   // CS-10 user invite (invite/accept/approve/reject ghi 'user_invite' audit-in-tx app-tenant — chỉ
   // email/status/id, KHÔNG token/token_hash/password_hash vào before/after — mig 0410).
   "user_invite",
+  // PM-1 apps/projects (mig 0420): project_states CRUD ghi 'project_state'; labels CRUD ghi 'label'
+  // audit-in-tx app-tenant. Sửa work-item (priority/state/desc/nhãn) TÁI DÙNG 'task' (chỉ action mới).
+  "project_state",
+  "label",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

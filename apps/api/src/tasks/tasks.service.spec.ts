@@ -40,6 +40,11 @@ function makeRepo() {
     // tenant-FK guards (SEC-1) — mặc định hợp lệ
     assigneeActiveTx: vi.fn().mockResolvedValue(true),
     projectExistsTx: vi.fn().mockResolvedValue(true),
+    // PM-1 (apps/projects, mig 0420): board/list giờ đính labels[] + cấp sequence/state khi tạo task project.
+    listLabelsForTaskIds: vi.fn().mockResolvedValue([]),
+    allocateSequenceTx: vi.fn().mockResolvedValue(1),
+    findDefaultStateTx: vi.fn().mockResolvedValue(null),
+    stateInProjectTx: vi.fn().mockResolvedValue(true),
     // writes
     createTask: vi.fn().mockResolvedValue([{ id: TASK_ID }]),
     updateStatus: vi.fn().mockResolvedValue([{ id: TASK_ID }]),
@@ -154,7 +159,8 @@ describe("TasksService.listBoard — forward filter + page (G9-3)", () => {
 
     const result = await service.listBoard(COMPANY_ID, filters, page);
 
-    expect(result).toEqual([{ id: TASK_ID, taskType: "office" }]);
+    // PM-1: board trả BoardTaskDto (đính labels[] + displayId). Hàng repo {id,taskType} → +labels:[] +displayId:null.
+    expect(result).toEqual([{ id: TASK_ID, taskType: "office", labels: [], displayId: null }]);
     // companyId LUÔN truyền + filter/page forward y nguyên (không kẹp/đổi ngầm).
     expect(repo.listAll).toHaveBeenCalledWith(COMPANY_ID, filters, page);
   });
@@ -287,7 +293,8 @@ describe("TasksService.listByProject — G9-4 SEC-1 guard", () => {
 
     expect(repo.projectExistsTx).toHaveBeenCalledWith(expect.anything(), COMPANY_ID, PROJECT_ID);
     expect(repo.listByProject).toHaveBeenCalledWith(COMPANY_ID, PROJECT_ID, { limit: 50, offset: 0 });
-    expect(result).toEqual([{ id: TASK_ID, taskType: "office" }]);
+    // PM-1: +labels[] +displayId (attachLabels).
+    expect(result).toEqual([{ id: TASK_ID, taskType: "office", labels: [], displayId: null }]);
   });
 
   it("project KHÔNG cùng tenant / không tồn tại → NotFound, KHÔNG gọi repo.listByProject", async () => {
@@ -312,7 +319,8 @@ describe("TasksService.listByTeam — G9-4 SEC-1 guard", () => {
 
     expect(repo.teamExistsTx).toHaveBeenCalledWith(expect.anything(), COMPANY_ID, TEAM_ID);
     expect(repo.listByTeam).toHaveBeenCalledWith(COMPANY_ID, TEAM_ID, { limit: 25, offset: 25 });
-    expect(result).toEqual([{ id: TASK_ID, taskType: "hr" }]);
+    // PM-1: +labels[] +displayId (attachLabels).
+    expect(result).toEqual([{ id: TASK_ID, taskType: "hr", labels: [], displayId: null }]);
   });
 
   it("team KHÔNG cùng tenant / không tồn tại → NotFound, KHÔNG gọi repo.listByTeam", async () => {

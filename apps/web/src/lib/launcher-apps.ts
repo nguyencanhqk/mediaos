@@ -1,4 +1,4 @@
-import { Briefcase, Settings, Users, type LucideIcon } from "lucide-react";
+import { Briefcase, FolderKanban, Settings, Users, type LucideIcon } from "lucide-react";
 
 /**
  * Registry các product app cho LAUNCHER root-domain (FS-5 cutover).
@@ -35,6 +35,7 @@ const DEV_URL = {
   studio: "http://studio.localhost:5276",
   people: "http://people.localhost:5277",
   console: "http://console.localhost:5278",
+  projects: "http://projects.localhost:5279",
 } as const;
 
 export const LAUNCHER_APPS: readonly LauncherApp[] = [
@@ -54,6 +55,15 @@ export const LAUNCHER_APPS: readonly LauncherApp[] = [
       "read:dashboard",
       "read:kpi",
     ],
+  },
+  {
+    id: "projects",
+    nameKey: "apps.projects.name",
+    descKey: "apps.projects.desc",
+    url: import.meta.env.VITE_PROJECTS_URL ?? DEV_URL.projects,
+    icon: FolderKanban,
+    tile: "bg-violet-50 text-violet-600",
+    anyOf: ["read:project", "read:task"],
   },
   {
     id: "people",

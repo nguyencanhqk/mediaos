@@ -448,9 +448,19 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   // (uploaded_by → users ON DELETE SET NULL, không chặn). Trước task_comments/tasks/users.
   await direct.query("DELETE FROM task_attachments WHERE company_id = ANY($1::uuid[])", ids);
 
+  // ── PM-1 apps/projects (mig 0420) ─────────────────────────────────────────
+  // task_labels.task_id/label_id → tasks/labels (CASCADE) → xoá TRƯỚC tasks/labels.
+  // tasks.state_id → project_states (ON DELETE SET NULL) → an toàn; xoá task_labels + project_states
+  // TRƯỚC tasks/projects/labels cho rõ ràng. labels.project_id → projects (CASCADE) → trước projects.
+  await direct.query("DELETE FROM task_labels WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM labels WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G4-4 Tasks & Comments ────────────────────────────────────────────────
   await direct.query("DELETE FROM task_comments WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM tasks WHERE company_id = ANY($1::uuid[])", ids);
+  // project_states.project_id → projects (CASCADE); tasks.state_id đã NULL hoặc tasks đã xoá → xoá sau tasks,
+  // trước projects (FK projects CASCADE phủ, xoá tường minh cho thứ tự rõ ràng + tránh phụ thuộc CASCADE).
+  await direct.query("DELETE FROM project_states WHERE company_id = ANY($1::uuid[])", ids);
 
   // ── G4-3 Workflow ─────────────────────────────────────────────────────────
   // G7-3: instance checklist tick-state (FK → workflow_steps + checklist_items) — xoá trước workflow_steps.
