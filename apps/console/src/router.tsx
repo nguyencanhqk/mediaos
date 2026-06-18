@@ -8,6 +8,8 @@ import { SecuritySettingsPage } from "@/routes/settings/security";
 import { getAuthRedirectUrl, useAuthStore } from "@mediaos/web-core";
 import { ActivityLogPage } from "@/routes/system/activity-log";
 import { PermissionsPage } from "@/routes/system/permissions/permissions-page";
+import { OrgStructurePage } from "@/routes/system/org/org-structure";
+import { PositionsPage } from "@/routes/system/org/positions";
 
 const rootRoute = createRootRoute({ component: RootLayout });
 
@@ -75,6 +77,22 @@ const permissionsRoute = createRoute({
   component: PermissionsPage,
 });
 
+// CS-3: Cơ cấu tổ chức — gate quyền create/update/delete:org_unit & :team xử lý trong component.
+const orgStructureRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/org-structure",
+  beforeLoad: authGuard,
+  component: OrgStructurePage,
+});
+
+// CS-3: Vị trí công việc — gate quyền create/update/delete:position xử lý trong component.
+const positionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/positions",
+  beforeLoad: authGuard,
+  component: PositionsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   companySettingsRoute,
@@ -83,6 +101,8 @@ const routeTree = rootRoute.addChildren([
   securityRoute,
   activityLogRoute,
   permissionsRoute,
+  orgStructureRoute,
+  positionsRoute,
 ]);
 
 export const router = createRouter({ routeTree });

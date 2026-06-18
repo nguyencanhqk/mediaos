@@ -1,0 +1,107 @@
+{
+  "orgStructure": {
+    "title": "Cơ cấu tổ chức",
+    "subtitle": "Quản lý đơn vị tổ chức và nhóm/team của công ty.",
+    "tabUnits": "Đơn vị tổ chức",
+    "tabTeams": "Nhóm / Team"
+  },
+  "orgUnits": {
+    "title": "Đơn vị tổ chức",
+    "addButton": "Thêm đơn vị",
+    "treeSection": "Sơ đồ tổ chức",
+    "listSection": "Danh sách đơn vị",
+    "emptyTitle": "Chưa có đơn vị tổ chức",
+    "emptyDesc": "Thêm đơn vị đầu tiên để xây dựng cơ cấu tổ chức.",
+    "types": {
+      "department": "Phòng ban",
+      "division": "Khối",
+      "unit": "Đơn vị",
+      "office": "Văn phòng",
+      "branch": "Chi nhánh"
+    },
+    "dialog": {
+      "createTitle": "Thêm đơn vị tổ chức",
+      "editTitle": "Sửa đơn vị tổ chức",
+      "nameLabel": "Tên đơn vị",
+      "namePlaceholder": "vd: Phòng Kế toán",
+      "codeLabel": "Mã",
+      "typeLabel": "Loại",
+      "parentLabel": "Đơn vị cha",
+      "descLabel": "Mô tả",
+      "saveError": "Không lưu được. Vui lòng thử lại."
+    }
+  },
+  "teams": {
+    "title": "Nhóm / Team",
+    "addButton": "Thêm nhóm",
+    "empty": "Chưa có nhóm nào.",
+    "leaderLabel": "Trưởng nhóm",
+    "types": {
+      "production_team": "Nhóm sản xuất",
+      "script_team": "Nhóm kịch bản",
+      "editor_team": "Nhóm dựng phim",
+      "thumbnail_team": "Nhóm thumbnail",
+      "seo_team": "Nhóm SEO",
+      "qa_team": "Nhóm QA",
+      "project_team": "Nhóm dự án",
+      "office_team": "Nhóm văn phòng"
+    },
+    "dialog": {
+      "createTitle": "Thêm nhóm",
+      "editTitle": "Sửa nhóm",
+      "nameLabel": "Tên nhóm",
+      "namePlaceholder": "vd: Nhóm A1",
+      "codeLabel": "Mã",
+      "typeLabel": "Loại nhóm",
+      "descLabel": "Mô tả",
+      "saveError": "Không lưu được. Vui lòng thử lại."
+    },
+    "detail": {
+      "leaderLabel": "Trưởng nhóm",
+      "leaderPlaceholder": "Chọn trưởng nhóm...",
+      "membersSection": "Thành viên",
+      "chooseMemberLabel": "Chọn thành viên",
+      "chooseMemberPlaceholder": "Chọn thành viên...",
+      "noMembers": "Chưa có thành viên nào."
+    }
+  },
+  "positions": {
+    "title": "Vị trí công việc",
+    "subtitle": "Quản lý danh mục vị trí công việc trong công ty.",
+    "addButton": "Thêm vị trí",
+    "filterLabel": "Lọc theo đơn vị:",
+    "allDepartments": "Tất cả đơn vị",
+    "emptyTitle": "Chưa có vị trí công việc",
+    "emptyDesc": "Thêm vị trí đầu tiên để quản lý cơ cấu nhân sự.",
+    "rolesNotReady": "Danh mục vai trò chưa sẵn sàng.",
+    "col": {
+      "name": "Tên vị trí",
+      "code": "Mã",
+      "orgUnit": "Đơn vị",
+      "level": "Cấp bậc",
+      "defaultRole": "Vai trò mặc định",
+      "status": "Trạng thái",
+      "actions": "Hành động"
+    },
+    "dialog": {
+      "createTitle": "Thêm vị trí công việc",
+      "editTitle": "Sửa vị trí công việc",
+      "nameLabel": "Tên vị trí",
+      "namePlaceholder": "vd: Kế toán trưởng",
+      "codeLabel": "Mã",
+      "levelLabel": "Cấp bậc",
+      "orgUnitLabel": "Đơn vị tổ chức",
+      "roleLabel": "Vai trò mặc định",
+      "descLabel": "Mô tả",
+      "cancel": "Hủy",
+      "saveError": "Không lưu được. Vui lòng thử lại."
+    }
+  },
+  "status": {
+    "active": "Đang bật",
+    "inactive": "Đã tắt"
+  },
+  "chart": {
+    "empty": "Chưa có dữ liệu tổ chức."
+  }
+}
