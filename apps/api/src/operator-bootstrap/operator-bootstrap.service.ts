@@ -72,13 +72,27 @@ export class OperatorBootstrapService implements OnApplicationBootstrap {
     }
   }
 
-  /** Resolve slug → companyId qua SECURITY DEFINER (lỗ RLS có kiểm soát, mirror AuthService.resolveCompanyId). */
+  /** Resolve slug → companyId qua SECURITY DEFINER (lỗ RLS có kiểm soát, mirror AuthService.resolveCompanyId).
+   *  Log PHÂN BIỆT not-found (sai slug) vs not-active (misconfig) để rút ngắn thời gian chẩn đoán. */
   private async resolveCompanyId(companySlug: string): Promise<string | null> {
     const rows = await this.dbsvc.runRaw<{ id: string; status: string }>(
       sql`SELECT id, status FROM resolve_company_by_slug(${companySlug})`,
     );
     const row = rows[0];
-    if (!row || row.status !== "active") return null;
+    if (!row) {
+      this.logger.warn(
+        `Không tìm thấy công ty slug="${companySlug}" — KHÔNG thể seed operator. ` +
+          `Tạo công ty trước hoặc đổi PLATFORM_OPERATOR_COMPANY_SLUG.`,
+      );
+      return null;
+    }
+    if (row.status !== "active") {
+      // Công ty TỒN TẠI nhưng chưa active → gần như chắc là misconfiguration (không phải sai slug).
+      this.logger.error(
+        `Công ty slug="${companySlug}" tồn tại nhưng status="${row.status}" (cần "active") — KHÔNG thể seed operator.`,
+      );
+      return null;
+    }
     return row.id;
   }
 
@@ -89,13 +103,7 @@ export class OperatorBootstrapService implements OnApplicationBootstrap {
     companySlug: string,
   ): Promise<void> {
     const companyId = await this.resolveCompanyId(companySlug);
-    if (!companyId) {
-      this.logger.warn(
-        `Không tìm thấy công ty active slug="${companySlug}" — KHÔNG thể seed operator. ` +
-          `Tạo công ty trước hoặc đổi PLATFORM_OPERATOR_COMPANY_SLUG.`,
-      );
-      return;
-    }
+    if (!companyId) return; // resolveCompanyId đã log lý do cụ thể (not-found vs not-active).
 
     // Hash NGOÀI transaction (argon2 tốn CPU; không giữ kết nối DB trong lúc băm).
     const passwordHash = await this.password.hash(password);
@@ -168,7 +176,9 @@ export class OperatorBootstrapService implements OnApplicationBootstrap {
 
     let roleGranted = false;
     if (!hasRole) {
-      await tx.insert(userRoles).values({ userId, roleId, companyId, grantedBy: userId });
+      // grantedBy=null: seed hệ thống, KHÔNG có actor người (tránh "operator tự gán god-mode" gây nhiễu
+      // forensics). Provenance đầy đủ ở audit 'platform.operator_bootstrapped' (source=env_bootstrap).
+      await tx.insert(userRoles).values({ userId, roleId, companyId, grantedBy: null });
       roleGranted = true;
     }
 
