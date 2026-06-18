@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { MailConfigDto, UpsertMailConfigRequest } from "@mediaos/contracts";
 import { upsertMailConfigSchema } from "@mediaos/contracts";
 import { PermissionGate } from "@mediaos/web-core";
-import { Button, Input, Select } from "@mediaos/ui";
+import { Button, Input } from "@mediaos/ui";
 import { mailConfigApi } from "@/lib/mail-config-api";
 
 const DEFAULT_SCOPE = "default";
