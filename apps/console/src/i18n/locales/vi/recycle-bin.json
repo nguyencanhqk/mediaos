@@ -1,0 +1,38 @@
+{
+  "title": "Thùng rác",
+  "subtitle": "Danh sách nhân viên đã bị xoá mềm. Bạn có thể khôi phục từng hồ sơ.",
+  "tabs": {
+    "users": "Người dùng",
+    "employees": "Nhân viên"
+  },
+  "table": {
+    "name": "Họ tên",
+    "email": "Email",
+    "orgUnit": "Đơn vị",
+    "status": "Trạng thái",
+    "deletedAt": "Ngày xoá",
+    "actions": "Thao tác"
+  },
+  "actions": {
+    "restore": "Khôi phục"
+  },
+  "statusLabels": {
+    "active": "Đang hoạt động",
+    "inactive": "Tạm ngưng",
+    "resigned": "Đã nghỉ",
+    "terminated": "Đã chấm dứt"
+  },
+  "noPermission": {
+    "title": "Không có quyền",
+    "description": "Bạn cần quyền restore:employee để khôi phục nhân viên."
+  },
+  "empty": {
+    "title": "Thùng rác trống",
+    "description": "Không có nhân viên nào đang ở thùng rác."
+  },
+  "error": {
+    "loadFailed": "Không tải được danh sách thùng rác.",
+    "restoreFailed": "Không thể khôi phục nhân viên."
+  },
+  "restoring": "Đang khôi phục…"
+}

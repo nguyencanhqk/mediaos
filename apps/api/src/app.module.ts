@@ -38,6 +38,7 @@ import { DbOpsModule } from "./db-ops/db-ops.module";
 import { UsageModule } from "./usage/usage.module";
 import { OperatorBootstrapModule } from "./operator-bootstrap/operator-bootstrap.module";
 import { SchedulerModule } from "./scheduler/scheduler.module";
+import { RecycleBinModule } from "./recycle-bin/recycle-bin.module";
 import { ApiKeyAuthGuard } from "./api-keys/guards/api-key-auth.guard";
 import { ApiKeyRepository } from "./api-keys/api-keys.repository";
 import { TokenService } from "./auth/token.service";
@@ -100,6 +101,8 @@ import {
     OperatorBootstrapModule,
     // WAVE 4 OPS: scheduler gọi processBatch() của OutboxWorker + DbExportWorker định kỳ (tắt khi NODE_ENV=test).
     SchedulerModule,
+    // CS-6: Thùng rác / recycle bin + restore (soft-deleted employees).
+    RecycleBinModule,
   ],
   providers: [
     // Global guard pipeline (THỨ TỰ QUAN TRỌNG):
