@@ -17,6 +17,11 @@ export const envSchema = z.object({
   API_PREFIX: z.string().min(1).default("api"),
   API_VERSION: z.string().min(1).default("v1"),
   CORS_ORIGIN: z.string().default("http://localhost:5273"),
+  // CS-9: nguồn `req.ip` cho IP-allowlist (security policy). Express `trust proxy` MẶC ĐỊNH "false"
+  // → req.ip = socket peer, KHÔNG đọc X-Forwarded-For (chống giả mạo XFF ở dev/no-proxy). Sau reverse
+  // proxy/LB, ops PHẢI đặt số hop tin cậy (vd "1") hoặc CIDR proxy (vd "10.0.0.0/8") — nếu không
+  // IP-allowlist hoặc vỡ (mọi request = IP proxy) hoặc bị spoof. Giá trị: "false" | số hop | preset/CIDR.
+  TRUST_PROXY: z.string().default("false"),
   // DATABASE_URL → mediaos_app qua PgBouncer (MỌI query nghiệp vụ, RLS ép ở đây).
   DATABASE_URL: z.string().url().optional(),
   // DATABASE_DIRECT_URL → owner/superuser, direct (migration + DDL).
