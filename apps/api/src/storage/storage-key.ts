@@ -111,3 +111,15 @@ export function assertKeyInTenant(key: string, companyId: string): void {
     throw new InvalidStorageKeyError("key outside tenant prefix");
   }
 }
+
+/**
+ * Build the object key for a db-ops export (WAVE 3 C2). Tenant-scoped prefix `{targetTenantId}/db-exports/
+ * {jobId}` — both are server-side validated UUIDs (target from the job row, jobId the export job id), never
+ * client free-form. No file extension (SEGMENT_RE forbids '.'); content-type is set on PUT instead. The key
+ * shares the tenant prefix so assertKeyInTenant(key, targetTenantId) gates the presigned download.
+ */
+export function buildExportKey(targetTenantId: string, jobId: string): string {
+  if (!UUID_RE.test(targetTenantId)) throw new InvalidStorageKeyError("targetTenantId is not a uuid");
+  if (!UUID_RE.test(jobId)) throw new InvalidStorageKeyError("jobId is not a uuid");
+  return validateKey(`${targetTenantId}/db-exports/${jobId}`);
+}

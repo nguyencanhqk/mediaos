@@ -4,10 +4,12 @@ import { DatabaseModule } from "../db/db.module";
 import { EventsModule } from "../events/events.module";
 import { PermissionModule } from "../permission/permission.module";
 import { PlatformModule } from "../platform/platform.module";
+import { StorageModule } from "../storage/storage.module";
 import { AllTenantBrowserService } from "./all-tenant-browser.service";
 import { DataBrowserService } from "./data-browser.service";
 import { DbExportJobRepository } from "./db-export-job.repository";
 import { DbExportJobService } from "./db-export-job.service";
+import { DbExportWorker } from "./db-export.worker";
 import { DbOpsController } from "./db-ops.controller";
 import { DbOpsGrantRepository } from "./db-ops-grant.repository";
 import { DbOpsGrantService } from "./db-ops-grant.service";
@@ -29,6 +31,7 @@ import { MigrationStatusService } from "./migration-status.service";
     EventsModule,
     PermissionModule,
     PlatformModule,
+    StorageModule,
     forwardRef(() => AuthModule),
   ],
   controllers: [DbOpsController],
@@ -40,6 +43,7 @@ import { MigrationStatusService } from "./migration-status.service";
     DbOpsGrantRepository,
     DbExportJobService,
     DbExportJobRepository,
+    DbExportWorker,
   ],
 })
 export class DbOpsModule {}

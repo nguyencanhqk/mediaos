@@ -1,5 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ATTACHMENT_ALLOWED_CONTENT_TYPES, ATTACHMENT_MAX_BYTES } from "@mediaos/contracts";
 import { assertKeyInTenant, validateKey } from "./storage-key";
@@ -131,6 +136,33 @@ export class ObjectStorageService {
       ContentLength: sizeBytes,
     });
     return getSignedUrl(this.getClient(), command, { expiresIn: config.presignTtlSec });
+  }
+
+  /**
+   * Server-side upload of bytes to `key` (WAVE 3 C2 export-worker). UNLIKE createUploadUrl (presigned, for
+   * a CLIENT to PUT), this PUTs directly from the server process — used by the export worker which generates
+   * the CSV in-process. Key MUST be server-derived + validated (re-validated here as a hard boundary).
+   */
+  async putObject(key: string, body: Uint8Array | string, contentType: string): Promise<void> {
+    const config = this.assertConfigured();
+    validateKey(key);
+    const command = new PutObjectCommand({
+      Bucket: config.bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    });
+    await this.getClient().send(command);
+  }
+
+  /**
+   * Delete object at `key` (WAVE 3 C2 compensation). Used to clean up an export object whose job failed to
+   * finalize AFTER a successful upload (avoid orphaned objects). Key re-validated as a hard boundary.
+   */
+  async deleteObject(key: string): Promise<void> {
+    const config = this.assertConfigured();
+    validateKey(key);
+    await this.getClient().send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key }));
   }
 
   /**

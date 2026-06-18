@@ -39,7 +39,7 @@ export const dbOpsGrantApprovals = pgTable("db_ops_grant_approvals", {
 });
 export type DbOpsGrantApproval = typeof dbOpsGrantApprovals.$inferSelect;
 
-/** db_export_jobs — export job scaffold (worker materialize DEFER). */
+/** db_export_jobs — export job (WAVE 3 C2: worker materialize — mig 0347 thêm object_key + error). */
 export const dbExportJobs = pgTable("db_export_jobs", {
   id: uuid("id").primaryKey().defaultRandom(),
   requesterUserId: uuid("requester_user_id").notNull(),
@@ -48,6 +48,10 @@ export const dbExportJobs = pgTable("db_export_jobs", {
   filter: jsonb("filter"),
   status: text("status").notNull().default("queued"),
   rowCount: integer("row_count"),
+  /** Vị trí file export trong bucket ({target}/db-exports/{jobId}, server-derived). NULL trước khi 'done'. */
+  objectKey: text("object_key"),
+  /** Lý do fail (non-sensitive infra message — KHÔNG row data, BẤT BIẾN #3). NULL trừ khi 'failed'. */
+  error: text("error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
 });
