@@ -26,6 +26,7 @@ export default {
   accountSecurity: "Bảo mật tài khoản",
   companySettings: "Cài đặt công ty",
   activityLog: "Nhật ký hoạt động",
+  permissions: "Phân quyền",
   logout: "Đăng xuất",
   group: {
     work: "Công việc & Nội dung",

@@ -7,6 +7,7 @@ import { BreakGlassPage } from "@/routes/settings/break-glass";
 import { SecuritySettingsPage } from "@/routes/settings/security";
 import { getAuthRedirectUrl, useAuthStore } from "@mediaos/web-core";
 import { ActivityLogPage } from "@/routes/system/activity-log";
+import { PermissionsPage } from "@/routes/system/permissions/permissions-page";
 
 const rootRoute = createRootRoute({ component: RootLayout });
 
@@ -66,6 +67,14 @@ const activityLogRoute = createRoute({
   component: ActivityLogPage,
 });
 
+// CS-2: Phân quyền (RBAC) — gate quyền assign-role:user / grant-object-permission:permission trong component.
+const permissionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/permissions",
+  beforeLoad: authGuard,
+  component: PermissionsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   companySettingsRoute,
@@ -73,6 +82,7 @@ const routeTree = rootRoute.addChildren([
   breakGlassRoute,
   securityRoute,
   activityLogRoute,
+  permissionsRoute,
 ]);
 
 export const router = createRouter({ routeTree });
