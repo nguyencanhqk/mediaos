@@ -36,6 +36,7 @@ import { WebhooksModule } from "./webhooks/webhooks.module";
 import { ObservabilityModule } from "./observability/observability.module";
 import { DbOpsModule } from "./db-ops/db-ops.module";
 import { UsageModule } from "./usage/usage.module";
+import { MailConfigModule } from "./settings/mail-config.module";
 import { OperatorBootstrapModule } from "./operator-bootstrap/operator-bootstrap.module";
 import { SchedulerModule } from "./scheduler/scheduler.module";
 import { ApiKeyAuthGuard } from "./api-keys/guards/api-key-auth.guard";
@@ -96,6 +97,8 @@ import {
     DbOpsModule,
     // CS-7 Tình hình sử dụng (usage stats per tenant — login count, per-user last-login, task counters)
     UsageModule,
+    // CS-8 Cấu hình mail server SMTP (per-tenant + per-app scope; SMTP password envelope-KMS, sensitive).
+    MailConfigModule,
     // Operator bootstrap (seed-lúc-khởi-động): tạo/đồng bộ tài khoản platform-admin god-mode từ env.
     OperatorBootstrapModule,
     // WAVE 4 OPS: scheduler gọi processBatch() của OutboxWorker + DbExportWorker định kỳ (tắt khi NODE_ENV=test).
