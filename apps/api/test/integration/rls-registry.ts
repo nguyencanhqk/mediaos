@@ -84,6 +84,31 @@ async function seedWebhookEndpoint(direct: Pool, companyId: string): Promise<str
   return r.rows[0].id as string;
 }
 
+async function seedMailConfig(direct: Pool, companyId: string): Promise<string> {
+  // CS-8 RLS isolation test only — envelope SMTP password là DUMMY (iv 12B / tag 16B đúng octet_length CHECK);
+  // crypto thật ở mail-config-envelope int-spec. host/port/username/from_email NOT NULL.
+  const r = await direct.query(
+    `INSERT INTO company_mail_configs
+       (company_id, scope, host, port, username, from_email,
+        secret_ciphertext, encrypted_dek, dek_key_version, kms_key_id, iv_nonce, auth_tag, enc_algo)
+     VALUES ($1, 'default', 'smtp.example.com', 587, 'rls@x.test', 'from@x.test',
+             decode('00','hex'), decode('00','hex'), 1, 'local-dev-kek',
+             decode(repeat('00', 12), 'hex'), decode(repeat('00', 16), 'hex'), 'AES-256-GCM')
+     RETURNING id`,
+    [companyId],
+  );
+  return r.rows[0].id as string;
+}
+
+async function seedSecurityPolicy(direct: Pool, companyId: string): Promise<string> {
+  // CS-9 RLS isolation test only — 1 hàng/công ty (UNIQUE company_id); mọi cờ/allowlist dùng default.
+  const r = await direct.query(
+    `INSERT INTO company_security_policies (company_id) VALUES ($1) RETURNING id`,
+    [companyId],
+  );
+  return r.rows[0].id as string;
+}
+
 async function seedWorkflowDefinition(direct: Pool, companyId: string): Promise<string> {
   const r = await direct.query(
     `INSERT INTO workflow_definitions (company_id, code, name, applies_to, max_approval_level, allow_parallel_steps)
@@ -1779,5 +1804,21 @@ export const RLS_TABLES: RlsTableCase[] = [
       );
       return r.rows[0].id as string;
     },
+  },
+
+  // ── CS-8 Cấu hình mail server (company_mail_configs — SMTP password envelope, mig 0380) ───────
+  // company_id + RLS+FORCE → PHẢI ở harness. Envelope DUMMY (iv 12B / tag 16B). KHÔNG skipNoContext.
+  {
+    name: "company_mail_configs",
+    table: "company_mail_configs",
+    seedRow: async (direct, t) => seedMailConfig(direct, t.companyId),
+  },
+
+  // ── CS-9 Bảo mật nâng cao (company_security_policies — 1 hàng/công ty, mig 0390) ──────────────
+  // company_id + RLS+FORCE → PHẢI ở harness. UNIQUE(company_id). KHÔNG skipNoContext.
+  {
+    name: "company_security_policies",
+    table: "company_security_policies",
+    seedRow: async (direct, t) => seedSecurityPolicy(direct, t.companyId),
   },
 ];
