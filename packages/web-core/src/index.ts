@@ -36,9 +36,12 @@ export { PermissionGate } from "./components/permission-gate";
 export {
   NAV_CATEGORIES,
   navItemsByCategory,
+  navItemsGrouped,
   type NavCategory,
   type NavItem,
   type NavCategoryMeta,
+  type NavSubgroup,
+  type NavCategoryGroup,
 } from "./lib/nav";
 
 // Định dạng nhân sự

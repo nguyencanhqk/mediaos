@@ -1,0 +1,39 @@
+{
+  "title": "Nhật ký hoạt động",
+  "subtitle": "Xem nhật ký hoạt động của công ty — chỉ đọc.",
+  "table": {
+    "createdAt": "Thời điểm",
+    "action": "Hành động",
+    "objectType": "Loại đối tượng",
+    "objectId": "Mã đối tượng",
+    "actor": "Người thực hiện",
+    "detail": "Chi tiết"
+  },
+  "filter": {
+    "action": "Hành động",
+    "actionPlaceholder": "vd: TaskCreated",
+    "objectType": "Loại đối tượng",
+    "objectTypePlaceholder": "vd: task",
+    "dateFrom": "Từ ngày",
+    "dateTo": "Đến ngày",
+    "apply": "Lọc",
+    "clear": "Xóa lọc"
+  },
+  "redacted": "(đã ẩn — dữ liệu nhạy cảm)",
+  "noPermission": {
+    "title": "Không có quyền",
+    "description": "Bạn không có quyền xem nhật ký hoạt động."
+  },
+  "empty": {
+    "title": "Chưa có nhật ký",
+    "description": "Không có dòng nhật ký nào khớp bộ lọc."
+  },
+  "error": {
+    "loadFailed": "Không tải được nhật ký hoạt động."
+  },
+  "pagination": {
+    "prev": "Trước",
+    "next": "Sau",
+    "summary": "Hiển thị {{from}}–{{to}} / {{total}}"
+  }
+}

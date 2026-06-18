@@ -6,6 +6,7 @@ import { PlatformAccountsPage } from "@/routes/settings/platform-accounts";
 import { BreakGlassPage } from "@/routes/settings/break-glass";
 import { SecuritySettingsPage } from "@/routes/settings/security";
 import { getAuthRedirectUrl, useAuthStore } from "@mediaos/web-core";
+import { ActivityLogPage } from "@/routes/system/activity-log";
 
 const rootRoute = createRootRoute({ component: RootLayout });
 
@@ -57,12 +58,21 @@ const securityRoute = createRoute({
   component: SecuritySettingsPage,
 });
 
+// CS-1: Nhật ký hoạt động — gate quyền view:audit-log xử lý trong component.
+const activityLogRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/activity-log",
+  beforeLoad: authGuard,
+  component: ActivityLogPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   companySettingsRoute,
   platformAccountsRoute,
   breakGlassRoute,
   securityRoute,
+  activityLogRoute,
 ]);
 
 export const router = createRouter({ routeTree });

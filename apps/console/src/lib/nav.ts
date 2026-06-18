@@ -1,4 +1,4 @@
-import { KeyRound, Settings, ShieldAlert, ShieldCheck } from "lucide-react";
+import { ClipboardList, KeyRound, Settings, ShieldAlert, ShieldCheck } from "lucide-react";
 import { type NavItem } from "@mediaos/web-core";
 
 /**
@@ -23,4 +23,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // Self-service — authGuard only, KHÔNG permission-gate (mỗi user tự quản 2FA của mình, giống đổi mật khẩu).
   { id: "accountSecurity", labelKey: "accountSecurity", to: "/settings/security", icon: ShieldCheck, tile: "bg-emerald-500/12 text-emerald-600", category: "system" },
   { id: "companySettings", labelKey: "companySettings", to: "/settings/company", icon: Settings, tile: "bg-slate-500/12 text-slate-600", category: "system" },
+  // CS-1: Nhật ký hoạt động — subcategory "Kiểm toán" mở khoá sidebar 2 cấp cho console.
+  { id: "activityLog", labelKey: "activityLog", to: "/system/activity-log", icon: ClipboardList, tile: "bg-violet-500/12 text-violet-600", category: "system", subcategory: "Kiểm toán" },
 ] as const;
