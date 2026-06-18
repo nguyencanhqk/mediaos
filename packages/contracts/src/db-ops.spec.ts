@@ -151,6 +151,8 @@ describe("AC-9 db-ops contracts", () => {
         filter: null,
         status: "queued" as const,
         rowCount: null,
+        error: null,
+        downloadUrl: null,
         createdAt: new Date().toISOString(),
         completedAt: null,
       };

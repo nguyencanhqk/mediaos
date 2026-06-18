@@ -157,6 +157,12 @@ export const dbExportJobStatusSchema = z.enum([
 ]);
 export type DbExportJobStatus = z.infer<typeof dbExportJobStatusSchema>;
 
+/**
+ * Trần dòng 1 job export (WAVE 3 C2) — chống unbounded export / OOM / DoS. Worker materialize CSV TRONG bộ
+ * nhớ (1 job/lần) ⇒ kẹp thấp để bound heap (~10k×cột≈vài MB). Streaming = hardening tương lai nếu cần lớn hơn.
+ */
+export const DB_EXPORT_MAX_ROWS = 10000 as const;
+
 export const dbExportJobDtoSchema = z.object({
   id: z.string().uuid(),
   requesterUserId: z.string().uuid(),
@@ -165,6 +171,10 @@ export const dbExportJobDtoSchema = z.object({
   filter: z.unknown().nullable(),
   status: dbExportJobStatusSchema,
   rowCount: z.number().int().nonnegative().nullable(),
+  /** Lý do fail (non-sensitive). NULL trừ khi status='failed'. */
+  error: z.string().nullable(),
+  /** Presigned GET URL EPHEMERAL (TTL ngắn) — CHỈ set ở getJob khi 'done'; KHÔNG ở list (không presign hàng loạt). */
+  downloadUrl: z.string().url().nullable(),
   createdAt: z.string().datetime(),
   completedAt: z.string().datetime().nullable(),
 });
