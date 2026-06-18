@@ -163,7 +163,12 @@ describe.skipIf(!hasDb)("AC-0b operator-auth boundary", () => {
     const unenrolled = await seedUser(direct, A.companyId, `ac0b-noenroll-${randomUUID().slice(0, 8)}@a.test`);
     await seedUserRole(direct, unenrolled, PLATFORM_ADMIN_ROLE, A.companyId);
 
-    const guard = new TwoFactorEnforcementGuard(new Reflector(), twoFactor);
+    const guard = new TwoFactorEnforcementGuard(
+      new Reflector(),
+      twoFactor,
+      db,
+      makeSecurityPolicyService(db),
+    );
     const ctx = {
       getType: () => "http",
       getHandler: () => () => {},
