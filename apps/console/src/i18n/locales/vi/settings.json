@@ -1,4 +1,8 @@
 {
+  "security": {
+    "pageTitle": "Bảo mật tài khoản",
+    "pageDesc": "Quản lý xác thực hai lớp (2FA) cho tài khoản của bạn."
+  },
   "company": {
     "pageTitle": "Cài đặt công ty",
     "loadError": "Không tải được cài đặt.",

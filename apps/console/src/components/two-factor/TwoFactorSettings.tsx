@@ -17,7 +17,7 @@ function errMsg(e: unknown, t: TFunction<"auth">): string {
 /**
  * TwoFactorSettings (G16-1, AUTH-003) — quản lý 2FA của user hiện tại: trạng thái, enroll (QR + recovery
  * codes), bật (verify mã), tắt (re-auth mật khẩu). Loading/error/empty đầy đủ.
- * ⚠️ Cần access token thật (auth store) — DORMANT cho tới khi real-login FE land.
+ * Nhà của self-service "account settings" = apps/console (phiên aud=user + router). Cần access token thật.
  */
 export function TwoFactorSettings() {
   const { t } = useTranslation("auth");

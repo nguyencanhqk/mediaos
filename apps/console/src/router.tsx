@@ -4,6 +4,7 @@ import { RootLayout } from "@/routes/root-layout";
 import { CompanySettingsPage } from "@/routes/settings/company";
 import { PlatformAccountsPage } from "@/routes/settings/platform-accounts";
 import { BreakGlassPage } from "@/routes/settings/break-glass";
+import { SecuritySettingsPage } from "@/routes/settings/security";
 import { getAuthRedirectUrl, useAuthStore } from "@mediaos/web-core";
 
 const rootRoute = createRootRoute({ component: RootLayout });
@@ -47,11 +48,21 @@ const breakGlassRoute = createRoute({
   component: BreakGlassPage,
 });
 
+// Self-service "Bảo mật tài khoản" — user tự quản 2FA của mình. Chỉ authGuard (không permission-gate,
+// giống đổi mật khẩu): TwoFactorSettings đã rời apps/web mồ côi về console (nơi có phiên aud=user).
+const securityRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/security",
+  beforeLoad: authGuard,
+  component: SecuritySettingsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   companySettingsRoute,
   platformAccountsRoute,
   breakGlassRoute,
+  securityRoute,
 ]);
 
 export const router = createRouter({ routeTree });
