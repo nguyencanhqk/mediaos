@@ -3,6 +3,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { type TenantTx } from "../db/db.service";
 import { objectPermissions, permissions, roles, userRoles, users } from "../db/schema";
 import type { ObjectSubjectType, PermissionEffect } from "@mediaos/contracts";
+import { notOperatorRole } from "./operator-roles";
 
 /**
  * PermissionAdminRepository (G3 mutation-path) — write-side cho quản lý phân quyền runtime.
@@ -15,7 +16,14 @@ import type { ObjectSubjectType, PermissionEffect } from "@mediaos/contracts";
 export class PermissionAdminRepository {
   // ── validation (đọc) ───────────────────────────────────────────────────────
 
-  /** Role gán được: hiện qua RLS (own-tenant HOẶC system company_id IS NULL) + chưa soft-delete. */
+  /**
+   * Role gán được: hiện qua RLS (own-tenant HOẶC system company_id IS NULL) + chưa soft-delete.
+   *
+   * 🔴 CHẶN LEO THANG ĐẶC QUYỀN (CS-2, plan-review HIGH): LOẠI TRỪ role operator-audience (platform-admin
+   * …f0) — dù RLS lộ nó (company_id IS NULL), tenant KHÔNG được gán nó cho user (sẽ phát aud='operator' →
+   * leo thang chéo tenant). Ép ở TẦNG REPOSITORY: assignRole + object-grant role-subject đều validate qua
+   * đây ⇒ role operator coi như "không tồn tại" với tenant plane (caller trả NotFound).
+   */
   async findAssignableRole(
     tx: TenantTx,
     roleId: string,
@@ -23,7 +31,7 @@ export class PermissionAdminRepository {
     const [row] = await tx
       .select({ id: roles.id })
       .from(roles)
-      .where(and(eq(roles.id, roleId), isNull(roles.deletedAt)))
+      .where(and(eq(roles.id, roleId), isNull(roles.deletedAt), notOperatorRole()))
       .limit(1);
     return row;
   }

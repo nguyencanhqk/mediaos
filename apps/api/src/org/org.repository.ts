@@ -3,6 +3,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
 import { orgUnits, teams, teamMembers, users, roles } from "../db/schema";
 import { employeeProfiles } from "../db/schema/employees";
+import { notOperatorRole } from "../permission/operator-roles";
 
 @Injectable()
 export class OrgRepository {
@@ -296,16 +297,21 @@ export class OrgRepository {
   // ── Roles ────────────────────────────────────────────────────────────────────
 
   /**
-   * Roles catalog cho dropdown "vai trò mặc định" của chức vụ (F4/F11).
+   * Roles catalog cho dropdown "vai trò mặc định" của chức vụ (F4/F11) + màn Phân quyền (CS-2).
    * KHÔNG filter company_id: roles hệ thống có company_id NULL; RLS đã lộ đúng tập
    * (tenant + system) cho app role. Chỉ lấy bản chưa xoá, sắp theo tên.
+   *
+   * 🔴 CHẶN LEO THANG ĐẶC QUYỀN (CS-2, plan-review HIGH): LOẠI TRỪ role operator-audience (platform-admin
+   * …f0). RLS lộ nó (company_id IS NULL) nhưng tenant KHÔNG được THẤY nó như lựa chọn gán (gán = leo thang
+   * chéo tenant). `findAssignableRole` (permission-admin) đã chặn ở đường ghi; ở đây chặn ở đường ĐỌC danh
+   * mục để UI không render lựa chọn cấm — phòng thủ theo tầng.
    */
   listRoles(companyId: string) {
     return this.db.withTenant(companyId, (tx) =>
       tx
         .select({ id: roles.id, name: roles.name })
         .from(roles)
-        .where(isNull(roles.deletedAt))
+        .where(and(isNull(roles.deletedAt), notOperatorRole()))
         .orderBy(roles.name),
     );
   }
