@@ -771,6 +771,13 @@
       "when": 1717500440000,
       "tag": "0380_cs8_company_mail_configs",
       "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1717500450000,
+      "tag": "0390_cs9_security_policies",
+      "breakpoints": true
     }
   ]
 }

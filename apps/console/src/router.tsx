@@ -6,6 +6,7 @@ import { MailConfigPage } from "@/routes/settings/mail-config";
 import { PlatformAccountsPage } from "@/routes/settings/platform-accounts";
 import { BreakGlassPage } from "@/routes/settings/break-glass";
 import { SecuritySettingsPage } from "@/routes/settings/security";
+import { SecurityPolicyPage } from "@/routes/settings/security-policy";
 import { getAuthRedirectUrl, useAuthStore } from "@mediaos/web-core";
 import { ActivityLogPage } from "@/routes/system/activity-log";
 import { PermissionsPage } from "@/routes/system/permissions/permissions-page";
@@ -73,6 +74,14 @@ const securityRoute = createRoute({
   component: SecuritySettingsPage,
 });
 
+// CS-9: Bảo mật nâng cao — gate quyền configure-security-policy:company xử lý trong component.
+const securityPolicyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/security-policy",
+  beforeLoad: authGuard,
+  component: SecurityPolicyPage,
+});
+
 // CS-1: Nhật ký hoạt động — gate quyền view:audit-log xử lý trong component.
 const activityLogRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -136,6 +145,7 @@ const routeTree = rootRoute.addChildren([
   mailConfigRoute,
   breakGlassRoute,
   securityRoute,
+  securityPolicyRoute,
   activityLogRoute,
   permissionsRoute,
   orgStructureRoute,

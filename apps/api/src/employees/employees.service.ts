@@ -21,6 +21,7 @@ import { PasswordService } from '../auth/password.service';
 import { PermissionService } from '../permission/permission.service';
 import { ValkeyService } from '../permission/valkey.service';
 import type { CanInput, PermissionDecision } from '../permission/permission.types';
+import { SecurityPolicyService } from '../security-policy/security-policy.service';
 import { EmployeesRepository, type BulkEmployeeRow } from './employees.repository';
 
 const PG_UNIQUE_VIOLATION = '23505';
@@ -76,6 +77,7 @@ export class EmployeesService {
     private readonly auditService: AuditService,
     private readonly valkey: ValkeyService,
     private readonly password: PasswordService,
+    private readonly securityPolicy: SecurityPolicyService,
   ) {}
 
   /**
@@ -301,6 +303,15 @@ export class EmployeesService {
     if (dto.userId) return dto.userId;
     if (!dto.email || !dto.fullName) {
       throw new BadRequestException('Provide userId, or email + fullName to create a login account');
+    }
+    // CS-9 (BẤT BIẾN #6): chính sách email-domain công ty — tài khoản MỚI phải thuộc tên miền allowlist
+    // (rỗng/tắt/kill-switch ⇒ cho qua; lỗi đọc ⇒ fail-open). Check TRONG tx tạo user, TRƯỚC createUserTx.
+    // (Hook CS-10 accept-invite sẽ tái dùng SecurityPolicyService.assertEmailDomainAllowedTx tương tự.)
+    const domainOk = await this.securityPolicy.assertEmailDomainAllowedTx(tx, companyId, dto.email);
+    if (!domainOk) {
+      throw new BadRequestException(
+        'Địa chỉ email không thuộc tên miền được phép theo chính sách bảo mật của công ty.',
+      );
     }
     const plain = dto.password ?? randomBytes(GENERATED_PASSWORD_BYTES).toString('base64url');
     const passwordHash = await this.password.hash(plain);

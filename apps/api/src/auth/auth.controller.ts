@@ -96,7 +96,8 @@ export class AuthController {
       this.assertCsrf(req, cookies);
       let tokens: AuthTokens;
       try {
-        tokens = await this.auth.refresh(cookieToken);
+        // CS-9: thread meta (ip/userAgent) để refresh enforce IP/giờ tại điểm cấp token (như login).
+        tokens = await this.auth.refresh(cookieToken, this.meta(req));
       } catch (err) {
         // Thất bại (invalid/expired/reuse-detected) → xoá cookie buộc client login lại (rotation safety).
         this.clearSessionCookies(res);
@@ -108,7 +109,7 @@ export class AuthController {
 
     // Luồng cũ (mobile/Bearer): refreshToken trong body, KHÔNG cookie/CSRF. 401 chung (không lộ chế độ).
     if (!dto?.refreshToken) throw new UnauthorizedException("Phiên không hợp lệ.");
-    return this.auth.refresh(dto.refreshToken);
+    return this.auth.refresh(dto.refreshToken, this.meta(req));
   }
 
   /**

@@ -23,6 +23,8 @@ import { TokenService } from "./token.service";
 import { TwoFactorService } from "./two-factor.service";
 import { SecretEncryptionService } from "../crypto/secret-encryption.service";
 import type { EncryptedColumns } from "../crypto/secret-encryption.types";
+import { ACCESS_RESTRICTED_CODE } from "@mediaos/contracts";
+import { SecurityPolicyService } from "../security-policy/security-policy.service";
 
 /** Ngữ cảnh request đưa vào audit (ip/user agent). */
 export interface RequestMeta {
@@ -105,7 +107,20 @@ export class AuthService {
     private readonly twoFactor: TwoFactorService,
     private readonly replayGuard: ReplayGuardService,
     private readonly securityAlerts: SecurityAlertService,
+    @Inject(forwardRef(() => SecurityPolicyService))
+    private readonly securityPolicy: SecurityPolicyService,
   ) {}
+
+  /**
+   * CS-9 — chính sách bảo mật per-company chặn cấp token khi sai IP / ngoài giờ. 403 ĐỒNG NHẤT
+   * `code:ACCESS_RESTRICTED` (KHÔNG lộ rule cụ thể). Dùng chung cho login + refresh.
+   */
+  private accessRestrictedError(): HttpException {
+    return new HttpException(
+      { code: ACCESS_RESTRICTED_CODE, message: "Truy cập bị hạn chế bởi chính sách bảo mật của công ty." },
+      HttpStatus.FORBIDDEN,
+    );
+  }
 
   /** Resolve companySlug → companyId qua hàm SECURITY DEFINER (lỗ RLS có kiểm soát, §3b). */
   private async resolveCompanyId(companySlug: string): Promise<string | null> {
@@ -164,6 +179,27 @@ export class AuthService {
         return null;
       }
 
+      // CS-9: mật khẩu ĐÚNG → check chính sách bảo mật (IP allowlist + khung giờ) TRƯỚC khi cấp token /
+      // phát challenge 2FA. exempt user + người-cấu-hình bỏ qua; kill-switch tắt ⇒ bỏ qua KHÔNG đọc DB.
+      // Vi phạm → audit deny (cùng tx) rồi 403 ACCESS_RESTRICTED ngoài tx (KHÔNG cấp token/challenge).
+      const access = await this.securityPolicy.evaluateAccessTx(tx, companyId, {
+        userId: user.id,
+        ip: meta.ip,
+        now: new Date(),
+      });
+      if (!access.allowed) {
+        await this.audit.record(tx, {
+          action: "auth.login_access_restricted",
+          objectType: "auth",
+          actorUserId: user.id,
+          objectId: user.id,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+          after: { reason: access.reason },
+        });
+        return { kind: "access_restricted" as const };
+      }
+
       // 2FA BẬT → KHÔNG cấp token ở đây; trả sentinel để login() phát hành challenge. Mật khẩu đã đúng nên
       // ghi audit challenge (KHÔNG phải login_success — phiên chưa thành cho tới khi verify mã bước 2).
       if (await this.twoFactor.isEnabledTx(tx, user.id)) {
@@ -193,6 +229,12 @@ export class AuthService {
     if (!result) {
       await this.recordLoginFailure(req.companySlug, req.email, ip);
       throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
+    }
+    // CS-9: bị chặn bởi chính sách bảo mật (IP/giờ). Mật khẩu ĐÚNG (không phải credential-fail) → KHÔNG
+    // đụng rate-limiter (tránh tự khoá account vì chính sách); reset bucket rồi 403 ACCESS_RESTRICTED.
+    if (result.kind === "access_restricted") {
+      await this.resetLoginRateLimit(req.companySlug, req.email, ip);
+      throw this.accessRestrictedError();
     }
     // Mật khẩu đúng (cả nhánh 2FA) → reset bucket login; bước 2 có rate-limit riêng theo user.
     await this.resetLoginRateLimit(req.companySlug, req.email, ip);
@@ -334,7 +376,7 @@ export class AuthService {
    * (family) + audit, buộc đăng nhập lại (chống replay khi refresh cookie bị lộ — plan §7.4). Hết hạn TỰ
    * NHIÊN (không phải tấn công) → 401 thường, KHÔNG thu hồi họ. Mọi lỗi → 401 ĐỒNG NHẤT (không lộ lý do).
    */
-  async refresh(refreshToken: string): Promise<AuthTokens> {
+  async refresh(refreshToken: string, meta: RequestMeta = {}): Promise<AuthTokens> {
     const parsed = this.splitScopedToken(refreshToken);
     if (!parsed) throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
     const { companyId, full } = parsed;
@@ -377,6 +419,27 @@ export class AuthService {
       const [user] = await tx.select().from(users).where(eq(users.id, row.userId)).limit(1);
       if (!user || user.deletedAt) return { kind: "invalid" as const };
 
+      // CS-9: refresh = 1 lần CẤP TOKEN → enforce chính sách IP/giờ y như login (BẤT BIẾN #2: check tại
+      // điểm cấp token, không per-request). Sai IP/ngoài giờ → KHÔNG xoay token; audit deny (cùng tx) +
+      // 401 ngoài tx buộc đăng nhập lại (controller xoá cookie). KHÔNG thu hồi family (không phải tấn công).
+      const access = await this.securityPolicy.evaluateAccessTx(tx, companyId, {
+        userId: user.id,
+        ip: meta.ip,
+        now: new Date(),
+      });
+      if (!access.allowed) {
+        await this.audit.record(tx, {
+          action: "auth.refresh_access_restricted",
+          objectType: "auth",
+          actorUserId: user.id,
+          objectId: user.id,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+          after: { reason: access.reason },
+        });
+        return { kind: "access_restricted" as const };
+      }
+
       // Rotation: token mới KẾ THỪA family_id; revoke token cũ + trỏ replaced_by.
       const issued = await this.issueTokens(tx, companyId, user.id, user.email, row.familyId);
       await tx
@@ -393,6 +456,9 @@ export class AuthService {
     });
 
     if (result.kind === "ok") return result.tokens;
+    // CS-9: bị chặn chính sách → 403 ACCESS_RESTRICTED (FE phân biệt với 401 hết-hạn/reuse). Controller
+    // bắt mọi throw từ refresh để xoá cookie buộc login lại.
+    if (result.kind === "access_restricted") throw this.accessRestrictedError();
     throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
   }
 

@@ -1,0 +1,61 @@
+{
+  "pageTitle": "Bảo mật nâng cao",
+  "pageDescription": "Thiết lập chính sách bảo mật áp dụng cho toàn công ty: tự động đăng xuất, giới hạn IP, khung giờ, tên miền email và xác thực 2 bước.",
+  "loadError": "Không tải được chính sách bảo mật.",
+  "saveButton": "Lưu chính sách",
+  "saveSuccess": "Đã lưu chính sách bảo mật.",
+  "saveError": "Lưu thất bại. Vui lòng thử lại.",
+  "noPermission": {
+    "title": "Không có quyền",
+    "description": "Bạn cần quyền cấu hình chính sách bảo mật để xem trang này."
+  },
+  "autoLogout": {
+    "label": "Tự động đăng xuất khi không hoạt động",
+    "hint": "Tự động kết thúc phiên sau khoảng thời gian không thao tác.",
+    "minutesLabel": "Số phút không hoạt động"
+  },
+  "ip": {
+    "label": "Giới hạn truy cập theo địa chỉ IP",
+    "hint": "Chỉ cho phép đăng nhập từ các dải IP trong danh sách. Để trống = không giới hạn.",
+    "cidrLabel": "Danh sách IP/CIDR cho phép",
+    "cidrHint": "Mỗi dòng một dải, định dạng CIDR (vd 203.0.113.0/24, 10.0.0.0/8). Hỗ trợ IPv4 và IPv6."
+  },
+  "time": {
+    "label": "Giới hạn truy cập theo khung giờ",
+    "hint": "Chỉ cho phép đăng nhập trong các khung giờ làm việc. Bật mà không có khung giờ nào = chặn toàn bộ.",
+    "emptyWarning": "Chưa có khung giờ nào — sẽ CHẶN mọi đăng nhập (trừ người được miễn).",
+    "dayLabel": "Ngày",
+    "startLabel": "Bắt đầu",
+    "endLabel": "Kết thúc",
+    "add": "Thêm khung giờ",
+    "remove": "Xoá",
+    "weekday": {
+      "mon": "Thứ Hai",
+      "tue": "Thứ Ba",
+      "wed": "Thứ Tư",
+      "thu": "Thứ Năm",
+      "fri": "Thứ Sáu",
+      "sat": "Thứ Bảy",
+      "sun": "Chủ Nhật"
+    }
+  },
+  "scope": {
+    "title": "Phạm vi áp dụng",
+    "all": "Tất cả ứng dụng",
+    "selected": "Chỉ các ứng dụng được chọn",
+    "appKeysLabel": "Mã ứng dụng (phân tách bằng dấu phẩy)"
+  },
+  "exempt": {
+    "title": "Người dùng được miễn giới hạn",
+    "hint": "Các user trong danh sách bỏ qua giới hạn IP và khung giờ. Người đang chỉnh sửa chính sách luôn được tự động miễn để tránh tự khoá."
+  },
+  "emailDomain": {
+    "label": "Giới hạn tên miền email khi tạo tài khoản",
+    "hint": "Tài khoản mới phải dùng email thuộc tên miền cho phép. Để trống = không giới hạn.",
+    "listLabel": "Tên miền cho phép"
+  },
+  "twoFactor": {
+    "label": "Bắt buộc xác thực 2 bước cho toàn công ty",
+    "hint": "Bật để ép mọi người dùng thiết lập 2FA. Nếu hệ thống đã bật 2FA toàn cục thì không thể tắt ở đây."
+  }
+}

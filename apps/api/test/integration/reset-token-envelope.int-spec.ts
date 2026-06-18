@@ -33,6 +33,7 @@ import { OutboxService } from '../../src/events/outbox.service';
 import type { PermissionService } from '../../src/permission/permission.service';
 import { directPool, hasDb } from '../helpers/integration-db';
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from '../helpers/seed';
+import { makeSecurityPolicyService } from '../helpers/security-policy';
 
 // JWT_SECRET must exist before TokenService reads env in its constructor (mirror auth.int-spec.ts:15).
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-secret-'.padEnd(40, '0');
@@ -65,6 +66,7 @@ describe.skipIf(!hasDb)('G6-2b RED 12 — forgotPassword reset-token must be env
       twoFactor,
       replayGuard,
       securityAlerts,
+      makeSecurityPolicyService(dbsvc),
     );
   }
 

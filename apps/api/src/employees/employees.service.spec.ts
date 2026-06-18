@@ -119,10 +119,16 @@ function makePassword() {
   return { hash: vi.fn().mockResolvedValue('argon2-hash') };
 }
 
+/** CS-9 SecurityPolicyService fake — mặc định cho qua (email-domain allow); ghi đè khi test reject. */
+function makeSecurityPolicy(domainAllowed = true) {
+  return { assertEmailDomainAllowedTx: vi.fn().mockResolvedValue(domainAllowed) };
+}
+
 function makeService(opts: {
   perms?: Record<string, Decision>;
   repo?: ReturnType<typeof makeRepo>;
   valkey?: ReturnType<typeof makeValkey>;
+  securityPolicy?: ReturnType<typeof makeSecurityPolicy>;
 } = {}) {
   const repo = opts.repo ?? makeRepo();
   const db = makeDb();
@@ -130,6 +136,7 @@ function makeService(opts: {
   const audit = makeAudit();
   const valkey = opts.valkey ?? makeValkey();
   const password = makePassword();
+  const securityPolicy = opts.securityPolicy ?? makeSecurityPolicy();
   const svc = new EmployeesService(
     repo as never,
     db as never,
@@ -137,8 +144,9 @@ function makeService(opts: {
     audit as never,
     valkey as never,
     password as never,
+    securityPolicy as never,
   );
-  return { svc, repo, db, permission, audit, valkey, password };
+  return { svc, repo, db, permission, audit, valkey, password, securityPolicy };
 }
 
 // ─── F1: Salary audit (crown-jewel) ─────────────────────────────────────────────
@@ -569,6 +577,59 @@ describe('EmployeesService — F7 login-account creation', () => {
     } as never);
     expect(repo.createUserTx).not.toHaveBeenCalled();
     expect(password.hash).not.toHaveBeenCalled();
+  });
+
+  // ─── CS-9: email-domain policy at account creation (BẤT BIẾN #6) ───────────────
+  it('CS-9: REJECT tạo tài khoản khi email NGOÀI domain allowlist (403/400) — KHÔNG createUserTx', async () => {
+    const repo = makeRepo({ createUserTx: vi.fn() });
+    const securityPolicy = makeSecurityPolicy(false); // policy chặn domain
+    const { svc, password } = makeService({ repo, securityPolicy });
+    await expect(
+      svc.createEmployee(actor, {
+        email: 'outsider@evil.test',
+        fullName: 'Outsider',
+        workType: 'offline',
+        employmentType: 'full_time',
+        salaryType: 'monthly',
+      } as never),
+    ).rejects.toThrow(BadRequestException);
+    // fail-closed: KHÔNG hash mật khẩu, KHÔNG tạo user row.
+    expect(password.hash).not.toHaveBeenCalled();
+    expect(repo.createUserTx).not.toHaveBeenCalled();
+  });
+
+  it('CS-9: email TRONG domain allowlist → tạo tài khoản bình thường', async () => {
+    const repo = makeRepo({
+      createUserTx: vi.fn().mockResolvedValue({ id: EMP_USER_ID }),
+      createEmployeeTx: vi.fn().mockResolvedValue([makeRow({ userId: EMP_USER_ID })]),
+    });
+    const securityPolicy = makeSecurityPolicy(true);
+    const { svc } = makeService({ repo, securityPolicy });
+    await svc.createEmployee(actor, {
+      email: 'alice@company.com',
+      fullName: 'Alice',
+      workType: 'offline',
+      employmentType: 'full_time',
+      salaryType: 'monthly',
+    } as never);
+    expect(securityPolicy.assertEmailDomainAllowedTx).toHaveBeenCalledWith(
+      expect.anything(),
+      COMPANY_ID,
+      'alice@company.com',
+    );
+    expect(repo.createUserTx).toHaveBeenCalledTimes(1);
+  });
+
+  it('CS-9: dùng userId có sẵn → KHÔNG check email-domain (chỉ áp khi TẠO tài khoản)', async () => {
+    const securityPolicy = makeSecurityPolicy(false); // dù chặn, không nên gọi vì có userId
+    const { svc } = makeService({ securityPolicy });
+    await svc.createEmployee(actor, {
+      userId: EMP_USER_ID,
+      workType: 'offline',
+      employmentType: 'full_time',
+      salaryType: 'monthly',
+    } as never);
+    expect(securityPolicy.assertEmailDomainAllowedTx).not.toHaveBeenCalled();
   });
 });
 

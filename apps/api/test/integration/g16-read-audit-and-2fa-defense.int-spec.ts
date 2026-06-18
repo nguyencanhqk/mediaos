@@ -28,6 +28,7 @@ import { SecretEncryptionService } from "../../src/crypto/secret-encryption.serv
 import { NodeEnvelopeCipher } from "../../src/crypto/envelope-cipher";
 import { LocalKekProvider } from "../../src/crypto/local-kek.provider";
 import { directPool, hasDb } from "../helpers/integration-db";
+import { makeSecurityPolicyService } from "../helpers/security-policy";
 import {
   cleanupTenants,
   seedCompany,
@@ -169,7 +170,13 @@ describe.skipIf(!hasDb)("G16-1b read-path audit + 2FA defense-in-depth", () => {
     const adminUnenrolled = await seedUser(direct, A.companyId, `g16b-adm-${randomUUID().slice(0, 8)}@a.test`);
     await seedUserRole(direct, adminUnenrolled, COMPANY_ADMIN_ROLE_ID, A.companyId);
 
-    const guard = new TwoFactorEnforcementGuard(new Reflector(), twoFactor);
+    const guardDb = new DatabaseService();
+    const guard = new TwoFactorEnforcementGuard(
+      new Reflector(),
+      twoFactor,
+      guardDb,
+      makeSecurityPolicyService(guardDb),
+    );
     const ctx = {
       getType: () => "http",
       getHandler: () => () => {},

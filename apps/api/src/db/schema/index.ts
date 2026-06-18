@@ -55,3 +55,5 @@ export * from "./webhooks";
 export * from "./db-ops";
 // CS-8 Cấu hình mail server SMTP (per-tenant FORCE-RLS — 1 config / scope; SMTP password envelope-KMS)
 export * from "./mail-config";
+// CS-9 Bảo mật nâng cao (per-company security policy — per-tenant FORCE-RLS; enforce IP/giờ/2FA/email-domain)
+export * from "./security-policy";

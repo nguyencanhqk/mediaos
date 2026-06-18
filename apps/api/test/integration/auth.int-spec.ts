@@ -19,6 +19,7 @@ import { OutboxService } from "../../src/events/outbox.service";
 import { PermissionService } from "../../src/permission/permission.service";
 import { directPool, hasDb } from "../helpers/integration-db";
 import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
+import { makeSecurityPolicyService } from "../helpers/security-policy";
 
 // JWT_SECRET phải có TRƯỚC khi TokenService đọc env (constructor).
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-secret-".padEnd(40, "0");
@@ -77,6 +78,7 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
       twoFactor,
       replayGuard,
       securityAlerts,
+      makeSecurityPolicyService(dbsvc),
     );
   }
 

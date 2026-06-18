@@ -78,3 +78,5 @@ export * from "./db-ops";
 export * from "./usage";
 // CS-8 Cấu hình mail server (SMTP, secret — per-tenant + per-app scope; password envelope-KMS)
 export * from "./mail-config";
+// CS-9 Bảo mật nâng cao (per-company security policy — IP/time/email-domain/2FA enforce at auth)
+export * from "./security-policy";
