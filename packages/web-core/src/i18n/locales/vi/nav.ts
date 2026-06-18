@@ -25,6 +25,7 @@ export default {
   breakGlass: "Truy cập khẩn cấp",
   accountSecurity: "Bảo mật tài khoản",
   companySettings: "Cài đặt công ty",
+  activityLog: "Nhật ký hoạt động",
   logout: "Đăng xuất",
   group: {
     work: "Công việc & Nội dung",

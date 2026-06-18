@@ -30,6 +30,11 @@ export interface NavItem {
   /** Class màu ô icon ở launcher (nền + chữ icon). */
   tile: string;
   category: NavCategory;
+  /**
+   * Nhóm con tùy chọn trong category (sidebar 2 cấp).
+   * Nếu KHÔNG truyền — item gom 1 cấp dưới category như cũ (tương thích ngược toàn bộ app).
+   */
+  subcategory?: string;
 }
 
 export interface NavCategoryMeta {
@@ -56,4 +61,60 @@ export function navItemsByCategory(
     meta,
     items: items.filter((it) => it.category === meta.id),
   }));
+}
+
+/**
+ * Mục con trong một subcategory (sidebar 2 cấp).
+ * Nếu subcategory là undefined thì item hiển thị phẳng dưới category (tương thích ngược).
+ */
+export interface NavSubgroup {
+  /** Tên subcategory (string tự do, dùng làm label i18n key hoặc hiện thẳng). */
+  subcategory: string;
+  items: NavItem[];
+}
+
+/**
+ * Một nhóm category đã gom con theo subcategory (sidebar 2 cấp).
+ * - `flat`: items KHÔNG có subcategory → hiển thị thẳng dưới category header.
+ * - `subgroups`: items CÓ subcategory → lồng thêm 1 cấp header nhỏ bên dưới category.
+ * App không dùng subcategory → `flat` = mọi item, `subgroups` = [] (hành vi giống v1).
+ */
+export interface NavCategoryGroup {
+  meta: NavCategoryMeta;
+  flat: NavItem[];
+  subgroups: NavSubgroup[];
+}
+
+/**
+ * Gom nav items theo category + subcategory (2 cấp).
+ * Item không có `subcategory` gom vào `flat`; item có `subcategory` gom vào `subgroups`.
+ * Thứ tự xuất hiện: `flat` trước, rồi từng subgroup theo thứ tự subcategory xuất hiện đầu tiên.
+ * Tương thích ngược: app không dùng subcategory → flat = items, subgroups = [].
+ */
+export function navItemsGrouped(items: readonly NavItem[]): NavCategoryGroup[] {
+  return NAV_CATEGORIES.map((meta) => {
+    const categoryItems = items.filter((it) => it.category === meta.id);
+    const flat: NavItem[] = [];
+    const subgroupMap = new Map<string, NavItem[]>();
+    const subgroupOrder: string[] = [];
+
+    for (const item of categoryItems) {
+      if (!item.subcategory) {
+        flat.push(item);
+      } else {
+        if (!subgroupMap.has(item.subcategory)) {
+          subgroupMap.set(item.subcategory, []);
+          subgroupOrder.push(item.subcategory);
+        }
+        subgroupMap.get(item.subcategory)!.push(item);
+      }
+    }
+
+    const subgroups: NavSubgroup[] = subgroupOrder.map((sub) => ({
+      subcategory: sub,
+      items: subgroupMap.get(sub)!,
+    }));
+
+    return { meta, flat, subgroups };
+  });
 }
