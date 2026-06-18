@@ -95,6 +95,22 @@ export const envSchema = z.object({
   // TTL (giây) cho presigned PUT/GET URL — ephemeral, KHÔNG persist. Default 5 phút.
   S3_PRESIGN_TTL_SEC: z.coerce.number().int().positive().max(3600).default(300),
 
+  // ── Platform operator bootstrap (god-mode chéo tenant, seed-lúc-khởi-động) ─────────────────────────
+  // Khi PLATFORM_OPERATOR_EMAIL được set, OperatorBootstrapService (OnApplicationBootstrap) sẽ UPSERT user
+  // này + gán role hệ thống `platform-admin` (…f0) trong công ty PLATFORM_OPERATOR_COMPANY_SLUG → login phát
+  // aud='operator' (AC-0b). KHÔNG đụng engine phân quyền (chỉ seed DATA, BẤT BIẾN giữ nguyên). Idempotent.
+  // VẮNG → no-op (không tạo gì). Đổi email → boot lại trỏ tài khoản MỚI; KHÔNG tự thu hồi operator cũ
+  // (an toàn: không hạ quyền chéo tenant âm thầm lúc boot — gỡ qua RBAC nếu muốn).
+  PLATFORM_OPERATOR_EMAIL: z.string().email().optional(),
+  // Mật khẩu khởi tạo/cập nhật cho operator (argon2id-hash phía app, KHÔNG bao giờ log — BẤT BIẾN #3).
+  // BẮT BUỘC khi có PLATFORM_OPERATOR_EMAIL (ép ở superRefine). Tối thiểu 12 ký tự (tài khoản quyền cao).
+  PLATFORM_OPERATOR_PASSWORD: z.string().min(12).optional(),
+  // Tên hiển thị operator. Default "Platform Operator".
+  PLATFORM_OPERATOR_NAME: z.string().min(1).default("Platform Operator"),
+  // Slug công ty "nhà" của operator (users.company_id — login theo companySlug). Công ty PHẢI tồn tại &
+  // active TRƯỚC khi seed (seeder KHÔNG tạo công ty). Default "demo".
+  PLATFORM_OPERATOR_COMPANY_SLUG: z.string().min(1).default("demo"),
+
   // ⚠️ ALLOW_SUPERUSER_ROTATION (KHÔNG validate qua zod — CỐ Ý): SecretRotationService đọc THẲNG
   // `process.env.ALLOW_SUPERUSER_ROTATION === 'true'` để fail-closed tuyệt đối (mọi giá trị ≠ 'true', kể cả
   // unset → CHẶN rotation bằng role BYPASS RLS). Không dùng z.coerce.boolean() vì nó coi 'false' → true (bẫy).
@@ -116,6 +132,15 @@ export const envSchema = z.object({
         message: "bắt buộc khi KMS_PROVIDER='vault'",
       });
     }
+  }
+  // Fail-fast: bật operator-bootstrap (có EMAIL) thì PHẢI có PASSWORD (không seed god-mode account
+  // không mật khẩu / khoá ngầm). Double-guard ở service cũng skip nếu thiếu.
+  if (env.PLATFORM_OPERATOR_EMAIL && !env.PLATFORM_OPERATOR_PASSWORD) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["PLATFORM_OPERATOR_PASSWORD"],
+      message: "bắt buộc khi PLATFORM_OPERATOR_EMAIL được set",
+    });
   }
 });
 
