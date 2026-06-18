@@ -1,21 +1,10 @@
-import { z } from "zod";
 import type { UpdateCompanySettingsRequest } from "@mediaos/contracts";
 import { companySettingsSchema } from "@mediaos/contracts";
+import { apiFetch } from "@mediaos/web-core";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3100/api/v1";
-
-async function apiFetch<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${path}: ${body}`);
-  }
-  const json: unknown = await res.json();
-  return schema.parse(json);
-}
+// Dùng `apiFetch` chung của @mediaos/web-core (gắn Bearer + credentials:'include' + refresh-on-401 +
+// base URL đã configureApiBaseUrl ở main.tsx). KHÔNG tự viết fetch riêng — route /settings/company
+// có PermissionGuard nên thiếu token sẽ 401 và trang kẹt mãi ở trạng thái loading.
 
 export const settingsApi = {
   getCompanySettings: () => apiFetch("/settings/company", companySettingsSchema),
