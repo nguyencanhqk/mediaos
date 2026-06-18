@@ -111,6 +111,25 @@ export const envSchema = z.object({
   // active TRƯỚC khi seed (seeder KHÔNG tạo công ty). Default "demo".
   PLATFORM_OPERATOR_COMPANY_SLUG: z.string().min(1).default("demo"),
 
+  // ── Super-admin sản phẩm (aud='tenant', FULL mọi quyền TRONG 1 công ty, seed-lúc-khởi-động) ─────────
+  // KHÁC operator ở trên: operator = control-plane chéo tenant (aud='operator', CHỈ route @OperatorOnly).
+  // Super-admin = NGƯỜI DÙNG THƯỜNG (aud='tenant') giữ role COMPANY-SCOPED chứa TOÀN BỘ catalog quyền →
+  // đăng nhập app sản phẩm (web/studio/people) làm được MỌI nghiệp vụ trong công ty đó. Khi
+  // PLATFORM_SUPERADMIN_EMAIL được set, SuperAdminBootstrapService (OnApplicationBootstrap) UPSERT user +
+  // tạo/đồng bộ role `super-admin` (company-scoped) + grant TẤT CẢ quyền catalog (idempotent, tự phủ quyền
+  // module mới mỗi boot) + gán role cho user. Role company-scoped nên RLS WITH CHECK cho ghi runtime —
+  // KHÔNG cần migration, KHÔNG escape-hatch. KHÔNG đụng engine phân quyền (chỉ seed DATA). VẮNG → no-op.
+  // ⚠️ TRẦN: reveal-secret:platform-account (lộ mật khẩu kênh) vẫn CHỈ qua break-glass per-object (ADR-0010)
+  // — không role-grant nào với tới, CỐ Ý. 2FA: role này requires_two_factor=false (tiện dùng); bật ở prod nếu cần.
+  PLATFORM_SUPERADMIN_EMAIL: z.string().email().optional(),
+  // Mật khẩu khởi tạo/cập nhật cho super-admin (argon2id-hash phía app, KHÔNG bao giờ log — BẤT BIẾN #3).
+  // BẮT BUỘC khi có PLATFORM_SUPERADMIN_EMAIL (ép ở superRefine). Tối thiểu 12 ký tự (tài khoản quyền cao).
+  PLATFORM_SUPERADMIN_PASSWORD: z.string().min(12).optional(),
+  // Tên hiển thị super-admin. Default "Super Admin".
+  PLATFORM_SUPERADMIN_NAME: z.string().min(1).default("Super Admin"),
+  // Slug công ty của super-admin. Công ty PHẢI tồn tại & active TRƯỚC khi seed. Default "demo".
+  PLATFORM_SUPERADMIN_COMPANY_SLUG: z.string().min(1).default("demo"),
+
   // ⚠️ ALLOW_SUPERUSER_ROTATION (KHÔNG validate qua zod — CỐ Ý): SecretRotationService đọc THẲNG
   // `process.env.ALLOW_SUPERUSER_ROTATION === 'true'` để fail-closed tuyệt đối (mọi giá trị ≠ 'true', kể cả
   // unset → CHẶN rotation bằng role BYPASS RLS). Không dùng z.coerce.boolean() vì nó coi 'false' → true (bẫy).
@@ -140,6 +159,15 @@ export const envSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["PLATFORM_OPERATOR_PASSWORD"],
       message: "bắt buộc khi PLATFORM_OPERATOR_EMAIL được set",
+    });
+  }
+  // Fail-fast: bật super-admin (có EMAIL) thì PHẢI có PASSWORD (mirror operator — không seed full-quyền
+  // không mật khẩu). Double-guard ở service cũng skip nếu thiếu.
+  if (env.PLATFORM_SUPERADMIN_EMAIL && !env.PLATFORM_SUPERADMIN_PASSWORD) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["PLATFORM_SUPERADMIN_PASSWORD"],
+      message: "bắt buộc khi PLATFORM_SUPERADMIN_EMAIL được set",
     });
   }
 });

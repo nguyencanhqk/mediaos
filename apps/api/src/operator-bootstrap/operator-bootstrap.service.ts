@@ -142,9 +142,12 @@ export class OperatorBootstrapService implements OnApplicationBootstrap {
     let userCreated = false;
     if (existing) {
       userId = existing.id;
+      // CHỈ đồng bộ passwordHash/fullName từ env. KHÔNG ép status='active': tôn trọng admin đã đình chỉ
+      // thủ công (suspend qua RBAC/UI) — nếu force active mỗi boot thì suspend bị vô hiệu (privilege-management
+      // bypass). User MỚI dưới đây vẫn tạo với status='active' (mặc định). Mirror SuperAdminBootstrapService.
       await tx
         .update(users)
-        .set({ passwordHash, fullName, status: "active", updatedAt: new Date() })
+        .set({ passwordHash, fullName, updatedAt: new Date() })
         .where(eq(users.id, userId));
     } else {
       // company_id LẤY TỪ DEFAULT current_setting('app.current_company_id') (withTenant đã set GUC).
