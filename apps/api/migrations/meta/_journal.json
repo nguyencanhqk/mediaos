@@ -743,6 +743,13 @@
       "when": 1717500400000,
       "tag": "0347_ac9_export_worker",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1717500410000,
+      "tag": "0370_cs7_last_login",
+      "breakpoints": true
     }
   ]
 }

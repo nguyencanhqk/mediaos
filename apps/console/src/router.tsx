@@ -7,6 +7,7 @@ import { BreakGlassPage } from "@/routes/settings/break-glass";
 import { SecuritySettingsPage } from "@/routes/settings/security";
 import { getAuthRedirectUrl, useAuthStore } from "@mediaos/web-core";
 import { ActivityLogPage } from "@/routes/system/activity-log";
+import { UsagePage } from "@/routes/system/usage";
 
 const rootRoute = createRootRoute({ component: RootLayout });
 
@@ -66,6 +67,14 @@ const activityLogRoute = createRoute({
   component: ActivityLogPage,
 });
 
+// CS-7: Tình hình sử dụng — gate quyền view:usage xử lý trong component.
+const usageRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/usage",
+  beforeLoad: authGuard,
+  component: UsagePage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   companySettingsRoute,
@@ -73,6 +82,7 @@ const routeTree = rootRoute.addChildren([
   breakGlassRoute,
   securityRoute,
   activityLogRoute,
+  usageRoute,
 ]);
 
 export const router = createRouter({ routeTree });

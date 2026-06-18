@@ -74,3 +74,5 @@ export * from "./observability";
 // AC-9 db-ops (operator-only data browser tenant-scoped + migration status + break-glass SoD + export scaffold)
 export * from "./db-ops-allowlist";
 export * from "./db-ops";
+// CS-7 Tình hình sử dụng (usage stats per tenant — login count, per-user last-login, task counters)
+export * from "./usage";

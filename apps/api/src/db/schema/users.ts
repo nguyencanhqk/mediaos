@@ -21,6 +21,8 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  // CS-7: thống kê lần đăng nhập cuối — NULL trước lần login đầu. Best-effort (không block login nếu write lỗi).
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
 });
 
 export type User = typeof users.$inferSelect;

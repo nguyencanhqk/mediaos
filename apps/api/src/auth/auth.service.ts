@@ -187,7 +187,7 @@ export class AuthService {
         ip: meta.ip,
         userAgent: meta.userAgent,
       });
-      return { kind: "tokens" as const, tokens: issued.tokens };
+      return { kind: "tokens" as const, tokens: issued.tokens, userId: user.id };
     });
 
     if (!result) {
@@ -200,6 +200,13 @@ export class AuthService {
       const challengeToken = this.tokens.signTwoFactorChallenge({ sub: result.userId, companyId });
       return { twoFactorRequired: true, challengeToken };
     }
+    // CS-7: ghi last_login_at BEST-EFFORT (KHÔNG block login nếu write thất bại — log cảnh báo, không ném).
+    // Luôn fire NGOÀI tx login đã commit thành công → write riêng không thể rollback tokens đã cấp.
+    this.writeLastLoginAt(companyId, result.userId).catch((err) => {
+      this.logger.warn(
+        `login: ghi last_login_at thất bại (best-effort, login đã thành công): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
     return result.tokens;
   }
 
@@ -248,7 +255,7 @@ export class AuthService {
     }
     await this.rateLimiter.reset(rlKey);
 
-    const tokens = await this.dbsvc.withTenant(claims.companyId, async (tx) => {
+    const { tokens, userId: twoFaUserId } = await this.dbsvc.withTenant(claims.companyId, async (tx) => {
       const [user] = await tx
         .select({ id: users.id, email: users.email, deletedAt: users.deletedAt })
         .from(users)
@@ -265,7 +272,13 @@ export class AuthService {
         userAgent: meta.userAgent,
         after: { via: "2fa" },
       });
-      return issued.tokens;
+      return { tokens: issued.tokens, userId: user.id };
+    });
+    // CS-7: ghi last_login_at BEST-EFFORT (2FA path — không block login nếu write thất bại).
+    this.writeLastLoginAt(claims.companyId, twoFaUserId).catch((err) => {
+      this.logger.warn(
+        `completeTwoFactorLogin: ghi last_login_at thất bại (best-effort): ${err instanceof Error ? err.message : String(err)}`,
+      );
     });
     return tokens;
   }
@@ -654,5 +667,20 @@ export class AuthService {
     const companyId = token.slice(0, dot);
     if (!uuidSchema.safeParse(companyId).success) return null;
     return { companyId, full: token };
+  }
+
+  /**
+   * CS-7: cập nhật users.last_login_at = now() sau đăng nhập thành công.
+   * BEST-EFFORT stats — KHÔNG throw, KHÔNG block login. Caller phải .catch(log).
+   * Chạy NGOÀI tx login đã commit (fire-and-forget pattern) → write riêng, KHÔNG ảnh hưởng tokens đã cấp.
+   * RLS: withTenant(companyId) ép company_id; UPDATE(last_login_at) GRANT riêng (mig 0370).
+   */
+  private async writeLastLoginAt(companyId: string, userId: string): Promise<void> {
+    await this.dbsvc.withTenant(companyId, async (tx) => {
+      await tx
+        .update(users)
+        .set({ lastLoginAt: new Date() })
+        .where(eq(users.id, userId));
+    });
   }
 }
