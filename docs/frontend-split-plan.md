@@ -4,7 +4,7 @@
 >
 > - ✅ Phase 0 (FS-0 web-core/ui) · ✅ Phase 1 (FS-1a api-session + FS-1b apps/auth) · ✅ Wave 2 (FS-2 people + FS-3 studio + FS-4 console).
 > - ✅ **Phase 5 phần CODE (FS-5, lane `feat/fs5-cutover` 2026-06-18):** trả nợ Wave 2 (employees-api Bearer; notification bell/api lên @mediaos/{ui,web-core} + gắn lại chuông 4 app) · **apps/web repurpose thành launcher root-domain** (option A — giữ web, gate theo capability, link cross-subdomain) · dọn dead shared-tới-cutover ở web.
-> - ⏳ **Phase 5 phần OPS:** runbook `docs/ops/fs5-cutover-runbook.md` + `.env.example` template prod (placeholder `mediaos.example`) — CHƯA land hạ tầng thật (chờ domain/CI/DNS/TLS/Vault).
+> - ⏳ **Phase 5 phần OPS:** runbook `docs/ops/fs5-cutover-runbook.md` + `.env.example` template prod — domain `funtimemediacorp.com` + hosting **Cloudflare Pages/Tunnel** ĐÃ chốt & bake vào repo; CÒN provision thật (Cloudflare site/Pages/Tunnel + CI deploy secret + Vault KMS).
 > - apps/web **GIỮ làm launcher** (KHÔNG xoá — chọn option A thay vì "xoá web" của Phase 4 gốc).
 > Phạm vi: tách `apps/web` (1 SPA) → nhiều SPA sản phẩm + shared packages.
 > Quyết định đã chốt: **3 product app `studio` + `people` + `console`** (nhóm "system") + **`apps/auth` đăng nhập trung tâm (SSO = PA c, cookie **subdomain** — mục 7)**.
@@ -205,7 +205,7 @@ packages/
 
 > **Cập nhật FS-5 (2026-06-18):** launcher root-domain ĐÃ làm trong `apps/web` (registry 3 app + gate
 > capability + link cross-subdomain). Hạ tầng (DNS/TLS/CI/cookie prod) = **runbook `docs/ops/fs5-cutover-runbook.md`
-> + `.env.example` template prod** (placeholder `mediaos.example`) — chưa land thật, chờ domain + CI.
+> + `.env.example` template prod** — domain `funtimemediacorp.com` + Cloudflare Pages/Tunnel ĐÃ chốt & bake; chờ provision Cloudflare + CI deploy.
 - DNS các subdomain + **TLS wildcard `*.<domain>`**; mỗi app deploy riêng (CI per-app), api ở `api.<domain>`.
 - Landing/launcher ở root domain: chọn app theo capabilities hoặc redirect theo role.
 - **DoD:** đăng nhập 1 lần (cookie `Domain=.<domain>`) dùng được mọi subdomain app; đổi app không login lại.

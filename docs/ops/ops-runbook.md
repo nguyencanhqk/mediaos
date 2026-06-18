@@ -43,7 +43,7 @@ trường `status` (jq nếu có, fallback grep — không bắt buộc jq) và 
 bash scripts/canary-watch.sh
 
 # Staging/prod: trỏ base URL kèm prefix.
-CANARY_BASE_URL=https://api.mediaos.example/api/v1 bash scripts/canary-watch.sh
+CANARY_BASE_URL=https://api.funtimemediacorp.com/api/v1 bash scripts/canary-watch.sh
 
 # Smoke nhanh 1 lượt, chỉ liveness (vd môi trường chưa gắn DB):
 bash scripts/canary-watch.sh --once --no-db

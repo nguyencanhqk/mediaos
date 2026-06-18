@@ -25,7 +25,7 @@
 #
 # Ví dụ:
 #   bash scripts/canary-watch.sh                                  # localhost, mặc định
-#   CANARY_BASE_URL=https://api.mediaos.example/api/v1 bash scripts/canary-watch.sh
+#   CANARY_BASE_URL=https://api.funtimemediacorp.com/api/v1 bash scripts/canary-watch.sh
 #   bash scripts/canary-watch.sh --once --no-db                  # smoke nhanh, chỉ liveness
 #   CANARY_BASE_URL=... bash scripts/canary-watch.sh --once || echo "DEPLOY ĐỎ"   # dùng trong CI
 

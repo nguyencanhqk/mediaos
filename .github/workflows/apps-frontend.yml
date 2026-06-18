@@ -6,9 +6,10 @@
 # QUAN HỆ với ci.yml: ci.yml = cổng tích hợp CROSS-CUTTING (RLS qua PgBouncer, build toàn workspace) chạy
 # trên MỌI thay đổi. File này = pipeline build/deploy ĐỘC LẬP theo app (path-filtered). Hai cái bổ trợ nhau.
 #
-# ⚠️ Deploy step = PLACEHOLDER (comment) tới khi chốt host (Caddy/CDN/S3…). KHÔNG hard-code secret/domain.
+# ⚠️ Deploy step = PLACEHOLDER (comment). Host ĐÃ chốt = Cloudflare Pages (xem deploy block cuối file + runbook §6).
+#   Bật bằng cách điền secret CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID. KHÔNG hard-code secret/domain.
 #   VITE_* là biến BUILD-TIME công khai (nhúng vào client bundle) → dùng GitHub Actions `vars` (KHÔNG `secrets`).
-#   Đặt repo/環境 variable `PROD_DOMAIN` (vd 'mediaos.example') để nhúng đúng origin; vắng → placeholder.
+#   Đặt repo/環境 variable `PROD_DOMAIN=funtimemediacorp.com` để nhúng đúng origin; vắng → default funtimemediacorp.com.
 
 name: Apps — Frontend CI
 
@@ -77,10 +78,10 @@ jobs:
         run: pnpm --filter @mediaos/contracts --filter @mediaos/web-core --filter @mediaos/ui build
 
       # VITE_* prod nhúng lúc BUILD (build-time, KHÔNG runtime). Mỗi app chỉ set biến nó thực sự đọc.
-      # DOMAIN từ repo var PROD_DOMAIN (vắng → placeholder 'mediaos.example' để build vẫn xanh ở CI).
+      # DOMAIN từ repo var PROD_DOMAIN (vắng → placeholder 'funtimemediacorp.com' để build vẫn xanh ở CI).
       - name: Resolve build-time VITE_* env for ${{ matrix.app }}
         run: |
-          DOMAIN="${{ vars.PROD_DOMAIN || 'mediaos.example' }}"
+          DOMAIN="${{ vars.PROD_DOMAIN || 'funtimemediacorp.com' }}"
           AUTH_URL="https://auth.${DOMAIN}"
           echo "VITE_API_URL=https://api.${DOMAIN}/api/v1" >> "$GITHUB_ENV"
           case "${{ matrix.app }}" in
@@ -115,13 +116,16 @@ jobs:
       - name: Build
         run: pnpm --filter @mediaos/${{ matrix.app }} build
 
-      # ── Deploy (PLACEHOLDER — bật khi đã chốt host) ───────────────────────
-      # Publish apps/${{ matrix.app }}/dist → root của subdomain (CDN/Caddy). KHÔNG hard-code secret.
-      # - name: Deploy ${{ matrix.app }}
+      # ── Deploy → Cloudflare Pages (PLACEHOLDER — bật khi đã nạp secret) ────
+      # CI đã build dist kèm VITE_* đúng → chỉ publish tĩnh. Tạo trước project 1 lần:
+      #   wrangler pages project create ${{ matrix.app }}-mediaos --production-branch main
+      # rồi gắn custom domain (runbook §2). admin = operator plane, deploy riêng nếu cần.
+      # - name: Deploy ${{ matrix.app }} → Cloudflare Pages
       #   if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-      #   run: ./scripts/deploy-app.sh "${{ matrix.app }}" "apps/${{ matrix.app }}/dist"
+      #   run: npx wrangler@3 pages deploy "apps/${{ matrix.app }}/dist" --project-name "${{ matrix.app }}-mediaos" --branch main
       #   env:
-      #     DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+      #     CLOUDFLARE_API_TOKEN:  ${{ secrets.CLOUDFLARE_API_TOKEN }}   # scope: Pages:Edit
+      #     CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Deploy placeholder
         run: |
-          echo "TODO(ops) publish apps/${{ matrix.app }}/dist to ${{ matrix.app }} subdomain after host is chosen."
+          echo "TODO(ops) wrangler pages deploy apps/${{ matrix.app }}/dist → ${{ matrix.app }}-mediaos (set CLOUDFLARE_* secrets to enable)."
