@@ -24,6 +24,7 @@ export default {
   bonusPenalties: "Thưởng / Phạt",
   breakGlass: "Truy cập khẩn cấp",
   accountSecurity: "Bảo mật tài khoản",
+  securityPolicy: "Bảo mật nâng cao",
   companySettings: "Cài đặt công ty",
   activityLog: "Nhật ký hoạt động",
   permissions: "Phân quyền",
