@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter, redirect } from "@tanstack/
 import { HomePage } from "@/routes/home";
 import { RootLayout } from "@/routes/root-layout";
 import { CompanySettingsPage } from "@/routes/settings/company";
+import { MailConfigPage } from "@/routes/settings/mail-config";
 import { PlatformAccountsPage } from "@/routes/settings/platform-accounts";
 import { BreakGlassPage } from "@/routes/settings/break-glass";
 import { SecuritySettingsPage } from "@/routes/settings/security";
@@ -44,6 +45,14 @@ const platformAccountsRoute = createRoute({
   path: "/settings/platform-accounts",
   beforeLoad: authGuard,
   component: PlatformAccountsPage,
+});
+
+// CS-8: Cấu hình mail server SMTP — authGuard; gate quyền configure-mail:company xử lý trong component (PermissionGate).
+const mailConfigRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/mail-config",
+  beforeLoad: authGuard,
+  component: MailConfigPage,
 });
 
 // G6-2 PR-B ROUND 2: "My break-glass grants" — list + JIT reveal (active grants only, ephemeral plaintext).
@@ -115,6 +124,7 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   companySettingsRoute,
   platformAccountsRoute,
+  mailConfigRoute,
   breakGlassRoute,
   securityRoute,
   activityLogRoute,
