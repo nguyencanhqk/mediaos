@@ -53,3 +53,5 @@ export * from "./ui-config";
 export * from "./webhooks";
 // AC-9 db-ops (3 bảng GLOBAL no-RLS operator-scoped — break-glass grant/approval + export job; mig 0345)
 export * from "./db-ops";
+// CS-9 Bảo mật nâng cao (per-company security policy — per-tenant FORCE-RLS; enforce IP/giờ/2FA/email-domain)
+export * from "./security-policy";

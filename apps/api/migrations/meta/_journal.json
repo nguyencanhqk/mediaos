@@ -757,6 +757,13 @@
       "when": 1717500420000,
       "tag": "0370_cs7_last_login",
       "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1717500430000,
+      "tag": "0390_cs9_security_policies",
+      "breakpoints": true
     }
   ]
 }
