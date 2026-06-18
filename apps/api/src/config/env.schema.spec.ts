@@ -78,4 +78,34 @@ describe("loadEnv", () => {
     expect(env.PLATFORM_OPERATOR_EMAIL).toBe("operator@demo.local");
     expect(env.PLATFORM_OPERATOR_COMPANY_SLUG).toBe("acme");
   });
+
+  it("defaults the worker scheduler to enabled with 5s/10s poll intervals", () => {
+    const env = loadEnv({});
+    expect(env.WORKERS_SCHEDULER_ENABLED).toBe("true");
+    expect(env.OUTBOX_POLL_MS).toBe(5000);
+    expect(env.EXPORT_POLL_MS).toBe(10000);
+  });
+
+  it("coerces worker poll intervals from strings", () => {
+    const env = loadEnv({
+      OUTBOX_POLL_MS: "2500",
+      EXPORT_POLL_MS: "30000",
+    } as NodeJS.ProcessEnv);
+    expect(env.OUTBOX_POLL_MS).toBe(2500);
+    expect(env.EXPORT_POLL_MS).toBe(30000);
+  });
+
+  it("accepts WORKERS_SCHEDULER_ENABLED=false (kill-switch)", () => {
+    const env = loadEnv({ WORKERS_SCHEDULER_ENABLED: "false" } as NodeJS.ProcessEnv);
+    expect(env.WORKERS_SCHEDULER_ENABLED).toBe("false");
+  });
+
+  it("rejects a non-positive or non-numeric poll interval", () => {
+    expect(() => loadEnv({ OUTBOX_POLL_MS: "0" } as NodeJS.ProcessEnv)).toThrow(
+      /Invalid environment variables/,
+    );
+    expect(() => loadEnv({ EXPORT_POLL_MS: "abc" } as NodeJS.ProcessEnv)).toThrow(
+      /Invalid environment variables/,
+    );
+  });
 });

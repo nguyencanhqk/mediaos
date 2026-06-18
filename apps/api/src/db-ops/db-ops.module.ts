@@ -45,5 +45,7 @@ import { MigrationStatusService } from "./migration-status.service";
     DbExportJobRepository,
     DbExportWorker,
   ],
+  // Export DbExportWorker để SchedulerModule (WAVE 4 OPS) gọi processBatch() định kỳ.
+  exports: [DbExportWorker],
 })
 export class DbOpsModule {}

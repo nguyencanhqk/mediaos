@@ -73,6 +73,18 @@ export const envSchema = z.object({
   // z.coerce.boolean ('false'→true bẫy).
   SAAS_ENFORCEMENT_ENABLED: z.enum(["true", "false"]).default("true"),
 
+  // ── Background worker scheduler (WAVE 4 OPS — gọi processBatch định kỳ) ────
+  // Hai worker (OutboxWorker, DbExportWorker) là one-shot `processBatch()`; cần ai đó gọi định kỳ ở prod.
+  // WorkerSchedulerService đăng ký 2 interval ĐỘC LẬP gọi processBatch của mỗi worker.
+  // WORKERS_SCHEDULER_ENABLED: kill-switch. Default 'true' (BẬT ở dev/prod). KHÔNG z.coerce.boolean
+  // ('false'→true bẫy). LƯU Ý: scheduler còn TỰ TẮT khi NODE_ENV==='test' (belt-and-suspenders) — spec
+  // worker gọi processBatch trực tiếp nên scheduler KHÔNG được tự tick trong vitest (đua/nhiễu test).
+  WORKERS_SCHEDULER_ENABLED: z.enum(["true", "false"]).default("true"),
+  // Chu kỳ poll (ms). Cận [250ms, 1h]: chặn footgun cấu hình (vd 1ms → hammer DB) + chặn poll quá thưa
+  // làm job kẹt lâu. Mặc định 5s (outbox, độ trễ giao event) / 10s (export, ít gấp hơn → thưa hơn).
+  OUTBOX_POLL_MS: z.coerce.number().int().min(250).max(3_600_000).default(5000),
+  EXPORT_POLL_MS: z.coerce.number().int().min(250).max(3_600_000).default(10000),
+
   // ── KMS / Envelope encryption (G6-2, plan §6d) ────────────────────────────
   // KMS_PROVIDER chọn DI provider: 'local' (dev, KEK 32B từ file .secrets/) | 'vault' (prod, Vault transit).
   // Default 'local' để app vẫn boot/test mà KHÔNG cần Vault (KEK đọc lazy → fail-fast lúc dùng nếu thiếu file).
