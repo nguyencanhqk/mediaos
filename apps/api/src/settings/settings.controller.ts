@@ -25,6 +25,6 @@ export class SettingsController {
   @Patch('company')
   @RequirePermission('configure-company', 'company')
   updateCompanySettings(@Req() req: AuthenticatedRequest, @Body() dto: UpdateCompanySettingsDto) {
-    return this.settings.updateCompanySettings(req.user.companyId, dto);
+    return this.settings.updateCompanySettings(req.user.companyId, dto, req.user.id);
   }
 }
