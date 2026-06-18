@@ -47,6 +47,11 @@ export const envSchema = z.object({
   // bẫy). Đặt 'false' ở harness e2e cũ (admin chưa enroll qua login mock) để không phá bộ test sẵn có; logic
   // DENY vẫn được phủ bởi unit-test guard + tích phân riêng. Prod/staging GIỮ default true.
   TWO_FACTOR_ENFORCEMENT_ENABLED: z.enum(["true", "false"]).default("true"),
+  // CS-9: kill-switch CỨNG cho enforcement chính sách bảo mật per-company (IP/giờ/email-domain + nhánh
+  // 2FA-override đọc DB). Default 'true' (BẬT). Đặt 'false' ⇒ BỎ QUA toàn bộ enforce CS-9 mà KHÔNG đọc DB
+  // (chống tự-khoá admin khi policy lỗi/parse sai — rollback tức thì, không cần revert). KHÔNG z.coerce.boolean
+  // ('false'→true bẫy). LƯU Ý: tắt cờ này KHÔNG hạ sàn 2FA global (TWO_FACTOR_ENFORCEMENT_ENABLED độc lập).
+  SECURITY_POLICY_ENFORCEMENT_ENABLED: z.enum(["true", "false"]).default("true"),
   LOGIN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
   LOGIN_LOCKOUT_SEC: z.coerce.number().int().positive().default(900), // khoá tạm 15 phút
   // Bucket THEO TÀI KHOẢN (company|email, mọi IP) — bắt credential-stuffing phân tán nhiều IP lên 1 account.
