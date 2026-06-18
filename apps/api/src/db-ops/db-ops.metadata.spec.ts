@@ -33,6 +33,7 @@ describe("AC-9 db-ops controller metadata (regression guard)", () => {
   const allHandlers: Array<[string, unknown]> = [
     ["getMigrationStatus", proto.getMigrationStatus],
     ["browse", proto.browse],
+    ["browseAllTenants", proto.browseAllTenants],
     ["listGrants", proto.listGrants],
     ["requestGrant", proto.requestGrant],
     ["approveGrant", proto.approveGrant],
@@ -65,6 +66,12 @@ describe("AC-9 db-ops controller metadata (regression guard)", () => {
     const m = metaOf(proto.browse);
     expect(m?.action).toBe("read");
     expect(m?.resourceType).toBe("db-browser");
+  });
+
+  it("browseAllTenants khai read:db-all-tenant (quyền RIÊNG, blast-radius cao hơn)", () => {
+    const m = metaOf(proto.browseAllTenants);
+    expect(m?.action).toBe("read");
+    expect(m?.resourceType).toBe("db-all-tenant");
   });
 
   it.each([

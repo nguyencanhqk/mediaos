@@ -14,9 +14,11 @@ import {
 import { ZodError } from "zod";
 import type { Request } from "express";
 import {
+  dbAllTenantBrowseQuerySchema,
   dbBrowserQuerySchema,
   dbExportJobCreateSchema,
   dbOpsGrantRequestSchema,
+  type DbAllTenantBrowseQuery,
   type DbBrowserQuery,
   type DbExportJobCreate,
   type DbOpsGrantRequest,
@@ -26,10 +28,13 @@ import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import { OperatorReauthGuard } from "../platform/operator-reauth.guard";
 import { OperatorReauthService } from "../platform/operator-reauth.service";
+import { AllTenantBrowserService } from "./all-tenant-browser.service";
 import { DataBrowserService } from "./data-browser.service";
 import { DbExportJobService } from "./db-export-job.service";
 import { DbOpsGrantService } from "./db-ops-grant.service";
 import {
+  DB_ALL_TENANT_ACTION_READ,
+  DB_ALL_TENANT_RESOURCE,
   DB_BROWSER_ACTION_READ,
   DB_BROWSER_RESOURCE,
   DB_OPS_ACTION_MANAGE,
@@ -67,6 +72,7 @@ export class DbOpsController {
   constructor(
     private readonly migrationStatus: MigrationStatusService,
     private readonly dataBrowser: DataBrowserService,
+    private readonly allTenantBrowser: AllTenantBrowserService,
     private readonly grants: DbOpsGrantService,
     private readonly exportJobs: DbExportJobService,
     private readonly operatorReauth: OperatorReauthService,
@@ -91,6 +97,19 @@ export class DbOpsController {
     const query: DbBrowserQuery = parseOr400(dbBrowserQuerySchema, rawQuery);
     await this.requireStepUp(req.user, query.targetCompanyId);
     return this.dataBrowser.browse(req.user, query);
+  }
+
+  // ── C1 All-tenant data browser (all-tenant op → sentinel step-up + perm read:db-all-tenant) ──────
+  // ADR-0021 Tầng 3: quét XUYÊN MỌI TENANT qua role read-only. Quyền + grant break-glass all-tenant
+  // (target null) ÉP ở service (assertAllTenantGrantActive). Step-up theo sentinel (KHÔNG có target id).
+  @Get("browse-all")
+  @OperatorOnly()
+  @UseGuards(OperatorReauthGuard, PermissionGuard)
+  @RequirePermission(DB_ALL_TENANT_ACTION_READ, DB_ALL_TENANT_RESOURCE, { isSensitive: true })
+  async browseAllTenants(@Req() req: AuthenticatedRequest, @Query() rawQuery: unknown) {
+    const query: DbAllTenantBrowseQuery = parseOr400(dbAllTenantBrowseQuerySchema, rawQuery);
+    await this.requireStepUp(req.user, PLATFORM_DB_OPS_SCOPE);
+    return this.allTenantBrowser.browseAllTenants(req.user, query);
   }
 
   // ── P3 Break-glass SoD grant lifecycle ───────────────────────────────────────────────────────────

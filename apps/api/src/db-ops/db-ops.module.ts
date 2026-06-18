@@ -4,6 +4,7 @@ import { DatabaseModule } from "../db/db.module";
 import { EventsModule } from "../events/events.module";
 import { PermissionModule } from "../permission/permission.module";
 import { PlatformModule } from "../platform/platform.module";
+import { AllTenantBrowserService } from "./all-tenant-browser.service";
 import { DataBrowserService } from "./data-browser.service";
 import { DbExportJobRepository } from "./db-export-job.repository";
 import { DbExportJobService } from "./db-export-job.service";
@@ -34,6 +35,7 @@ import { MigrationStatusService } from "./migration-status.service";
   providers: [
     MigrationStatusService,
     DataBrowserService,
+    AllTenantBrowserService,
     DbOpsGrantService,
     DbOpsGrantRepository,
     DbExportJobService,

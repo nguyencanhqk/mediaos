@@ -76,6 +76,43 @@ export const dbBrowserResultSchema = z.object({
 });
 export type DbBrowserResult = z.infer<typeof dbBrowserResultSchema>;
 
+// ── All-tenant data browser (WAVE 3 C1 — ADR-0021 Tầng 3) ──────────────────────────────────────────
+/**
+ * Query ALL-TENANT data browser. KHÁC dbBrowserQuerySchema: KHÔNG targetCompanyId (quét XUYÊN MỌI tenant
+ * qua role DB read-only `mediaos_readonly`, ADR-0021). table PHẢI ∈ allowlist (enum); cols optional (vắng =
+ * toàn bộ cột allowlist — server ÉP thêm company_id để định danh tenant mỗi row). filters/limit/offset như
+ * tenant-scoped. `.strict()` reject key lạ (gồm targetCompanyId — buộc dùng /browse cho tenant-scoped).
+ *
+ * Gate (server): @RequirePermission('read','db-all-tenant') + step-up sentinel PLATFORM_DB_OPS_SCOPE +
+ * break-glass grant ALL-TENANT (target_tenant_id IS NULL) — grant tenant-scoped KHÔNG đủ.
+ */
+export const dbAllTenantBrowseQuerySchema = z
+  .object({
+    table: z.enum(allowedTablesTuple),
+    cols: z.array(z.string().min(1).max(64)).max(64).optional(),
+    filters: z.array(dbBrowserFilterSchema).max(16).optional(),
+    limit: z.coerce.number().int().min(1).max(DB_BROWSER_MAX_ROWS).default(DB_BROWSER_DEFAULT_ROWS),
+    offset: z.coerce.number().int().min(0).default(0),
+  })
+  .strict();
+export type DbAllTenantBrowseQuery = z.infer<typeof dbAllTenantBrowseQuerySchema>;
+
+/**
+ * Response all-tenant data browser: rows project cột allowlist + company_id (định danh tenant). KHÔNG
+ * targetCompanyId (cross-tenant). meta row-capped như tenant-scoped.
+ */
+export const dbAllTenantBrowseResultSchema = z.object({
+  table: z.string(),
+  columns: z.array(z.string()),
+  rows: z.array(z.record(z.string(), z.unknown())),
+  meta: z.object({
+    total: z.number().int().nonnegative(),
+    limit: z.number().int().positive(),
+    offset: z.number().int().nonnegative(),
+  }),
+});
+export type DbAllTenantBrowseResult = z.infer<typeof dbAllTenantBrowseResultSchema>;
+
 // ── Break-glass grant DTO ─────────────────────────────────────────────────────────────────────────
 export const dbOpsGrantStatusSchema = z.enum(["pending", "active", "revoked"]);
 export type DbOpsGrantStatus = z.infer<typeof dbOpsGrantStatusSchema>;
