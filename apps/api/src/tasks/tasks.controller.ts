@@ -22,6 +22,7 @@ import {
   CreateTaskDto,
   ListTasksQueryDto,
   PageQueryDto,
+  UpdateTaskFieldsDto,
   UpdateTaskStatusDto,
 } from "./tasks.dto";
 
@@ -128,6 +129,25 @@ export class TasksController {
     );
   }
 
+  /**
+   * PATCH /tasks/:taskId — cập nhật field work item (PM-1): title/description/priority/state/assignee/
+   * due/start. Gate `update:task` (reuse). Task workflow-driven bị service từ chối (FSM giữ nguyên).
+   */
+  @Patch(":taskId")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "task")
+  updateTaskFields(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Body() dto: UpdateTaskFieldsDto,
+  ) {
+    return this.tasks.updateTaskFields(
+      { id: req.user.id, companyId: req.user.companyId },
+      taskId,
+      dto,
+    );
+  }
+
   /** DELETE /tasks/:taskId — soft-delete task office (workflow task bị từ chối) */
   @Delete(":taskId")
   @HttpCode(204)
@@ -135,6 +155,39 @@ export class TasksController {
   @RequirePermission("delete", "task")
   async deleteTask(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
     await this.tasks.deleteTask({ id: req.user.id, companyId: req.user.companyId }, taskId);
+  }
+
+  /** POST /tasks/:taskId/labels/:labelId — gán nhãn cho work item (idempotent). Gate `update:task`. */
+  @Post(":taskId/labels/:labelId")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "task")
+  async addLabel(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Param("labelId") labelId: string,
+  ) {
+    await this.tasks.addLabelToTask(
+      { id: req.user.id, companyId: req.user.companyId },
+      taskId,
+      labelId,
+    );
+  }
+
+  /** DELETE /tasks/:taskId/labels/:labelId — gỡ nhãn khỏi work item (hard-delete link). Gate `update:task`. */
+  @Delete(":taskId/labels/:labelId")
+  @HttpCode(204)
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "task")
+  async removeLabel(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Param("labelId") labelId: string,
+  ) {
+    await this.tasks.removeLabelFromTask(
+      { id: req.user.id, companyId: req.user.companyId },
+      taskId,
+      labelId,
+    );
   }
 
   /** GET /tasks/:taskId/comments — thread bình luận của task */

@@ -81,10 +81,14 @@ export class ProjectsService {
             endDate: dto.endDate ?? null,
             priority: dto.priority ?? null,
             budget: numToStr(dto.budget) ?? null,
+            // PM-1 (apps/projects, mig 0420): mã prefix Plane (đã uppercase ở contract transform).
+            identifier: dto.identifier ?? null,
           },
           tx,
         );
         if (!rows[0]) throw new InternalServerErrorException('Failed to create project');
+        // PM-1: seed 5 trạng thái mặc định kiểu Plane trong CÙNG tx (atomic với project).
+        await this.repo.seedDefaultStatesTx(user.companyId, rows[0].id, tx);
         await this.audit.record(tx, {
           action: 'ProjectCreated',
           objectType: 'project',
@@ -126,6 +130,8 @@ export class ProjectsService {
             priority: dto.priority,
             budget: numToStr(dto.budget),
             status: dto.status,
+            // PM-1: cho đổi/xoá identifier (null = xoá mã).
+            identifier: dto.identifier,
           },
           tx,
         );

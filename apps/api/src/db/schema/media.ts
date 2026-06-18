@@ -303,6 +303,9 @@ export const projects = pgTable(
     priority: text("priority"),
     budget: numeric("budget", { precision: 18, scale: 2 }),
     status: text("status").notNull().default("active"),
+    // PM-1 (apps/projects, mig 0420): mã prefix Plane (displayId {IDENT}-{seq}) + bộ đếm sequence/project.
+    identifier: text("identifier"),
+    lastTaskSequence: integer("last_task_sequence").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -317,6 +320,9 @@ export const projects = pgTable(
     uniqueIndex("projects_company_code_active_uq")
       .on(t.companyId, t.code)
       .where(sql`deleted_at IS NULL AND code IS NOT NULL`),
+    uniqueIndex("projects_company_identifier_active_uq")
+      .on(t.companyId, sql`upper(identifier)`)
+      .where(sql`deleted_at IS NULL AND identifier IS NOT NULL`),
     check("projects_status_check", sql`status IN ('active', 'paused', 'archived')`),
     check(
       "projects_type_check",

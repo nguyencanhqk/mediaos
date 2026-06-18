@@ -11,6 +11,10 @@
       "name": "Sản xuất",
       "desc": "Công việc, quy trình, KPI & nội dung"
     },
+    "projects": {
+      "name": "Dự án",
+      "desc": "Quản lý dự án & công việc kiểu Kanban"
+    },
     "people": {
       "name": "Nhân sự",
       "desc": "Hồ sơ, chấm công & tiền lương"

@@ -6,6 +6,7 @@ import {
   projectChannels,
   projectMembers,
   projects,
+  projectStates,
   projectTeams,
   teams,
   users,
@@ -24,6 +25,8 @@ export interface CreateProjectData {
   endDate?: string | null;
   priority?: string | null;
   budget?: string | null;
+  // PM-1 (apps/projects, mig 0420): mã prefix Plane (đã uppercase ở contract transform).
+  identifier?: string | null;
 }
 
 /** Patch project — chỉ field có mặt mới đổi (partial). */
@@ -40,7 +43,18 @@ export interface UpdateProjectData {
   priority?: string | null;
   budget?: string | null;
   status?: string;
+  // PM-1: cho đổi/xoá identifier (null = xoá mã).
+  identifier?: string | null;
 }
+
+/** PM-1: 5 trạng thái mặc định kiểu Plane — seed cho project mới (mirror backfill mig 0420). */
+const DEFAULT_PROJECT_STATES = [
+  { name: 'Backlog', stateGroup: 'backlog', color: '#94a3b8', isDefault: false, sortOrder: 0 },
+  { name: 'Todo', stateGroup: 'unstarted', color: '#64748b', isDefault: true, sortOrder: 1 },
+  { name: 'In Progress', stateGroup: 'started', color: '#3b82f6', isDefault: false, sortOrder: 2 },
+  { name: 'Done', stateGroup: 'completed', color: '#22c55e', isDefault: false, sortOrder: 3 },
+  { name: 'Cancelled', stateGroup: 'cancelled', color: '#ef4444', isDefault: false, sortOrder: 4 },
+] as const;
 
 export interface ListProjectsFilter {
   status?: string;
@@ -88,6 +102,15 @@ function normalizeOptional(value: string | null | undefined): string | null {
   if (value === undefined || value === null) return null;
   const trimmed = value.trim();
   return trimmed === '' ? null : trimmed;
+}
+
+/**
+ * PM-1: chuẩn hoá identifier → trim + UPPERCASE (DB unique theo upper(identifier) per-company). Uppercase
+ * Ở ĐÂY (không chỉ ở Zod transform) = defense-in-depth: gọi service trực tiếp (không qua pipe) vẫn lưu UPPER.
+ */
+function normalizeIdentifier(value: string | null | undefined): string | null {
+  const v = normalizeOptional(value);
+  return v === null ? null : v.toUpperCase();
 }
 
 @Injectable()
@@ -260,8 +283,27 @@ export class ProjectsRepository {
         endDate: data.endDate ?? null,
         priority: data.priority ?? null,
         budget: data.budget ?? null,
+        identifier: normalizeIdentifier(data.identifier),
       })
       .returning();
+  }
+
+  /** PM-1: seed 5 trạng thái mặc định cho project mới (cùng tx createProject — atomic). */
+  seedDefaultStatesTx(companyId: string, projectId: string, tx: TenantTx) {
+    return tx
+      .insert(projectStates)
+      .values(
+        DEFAULT_PROJECT_STATES.map((s) => ({
+          companyId,
+          projectId,
+          name: s.name,
+          stateGroup: s.stateGroup,
+          color: s.color,
+          isDefault: s.isDefault,
+          sortOrder: s.sortOrder,
+        })),
+      )
+      .returning({ id: projectStates.id });
   }
 
   updateProject(companyId: string, id: string, data: UpdateProjectData, tx: TenantTx) {
@@ -278,6 +320,7 @@ export class ProjectsRepository {
     if (data.priority !== undefined) patch.priority = data.priority;
     if (data.budget !== undefined) patch.budget = data.budget;
     if (data.status !== undefined) patch.status = data.status;
+    if (data.identifier !== undefined) patch.identifier = normalizeIdentifier(data.identifier);
     return tx
       .update(projects)
       .set(patch)

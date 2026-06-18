@@ -1,0 +1,2 @@
+# Cloudflare Pages SPA fallback — mọi route không khớp file tĩnh → index.html (client-side router).
+/*    /index.html   200

@@ -3,8 +3,13 @@ import { z } from "zod";
 import {
   createAttachmentIntentSchema,
   createCommentSchema,
+  createLabelSchema,
+  createProjectStateSchema,
   createTaskSchema,
   listTasksQuerySchema,
+  updateLabelSchema,
+  updateProjectStateSchema,
+  updateTaskFieldsSchema,
   updateTaskStatusSchema,
 } from "@mediaos/contracts";
 
@@ -37,3 +42,20 @@ export class PageQueryDto extends createZodDto(pageQuerySchema) {}
  * contracts (createAttachmentIntentSchema). Service re-validate biên (defense-in-depth).
  */
 export class CreateAttachmentIntentDto extends createZodDto(createAttachmentIntentSchema) {}
+
+// ─── PM-1 (apps/projects, mig 0420) — work item / project_states / labels ────────
+
+/** PATCH /tasks/:id — cập nhật field work item (partial; ≥1 field). KHÔNG đổi status (qua state/legacy). */
+export class UpdateTaskFieldsDto extends createZodDto(updateTaskFieldsSchema) {}
+
+/** POST /projects/:projectId/states — tạo trạng thái tùy biến. */
+export class CreateProjectStateDto extends createZodDto(createProjectStateSchema) {}
+
+/** PATCH /states/:stateId — sửa trạng thái (rename/recolor/reorder/set-default). */
+export class UpdateProjectStateDto extends createZodDto(updateProjectStateSchema) {}
+
+/** POST /projects/:projectId/labels — tạo nhãn màu. */
+export class CreateLabelDto extends createZodDto(createLabelSchema) {}
+
+/** PATCH /labels/:labelId — sửa nhãn (rename/recolor). */
+export class UpdateLabelDto extends createZodDto(updateLabelSchema) {}

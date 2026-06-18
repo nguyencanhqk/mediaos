@@ -1,12 +1,20 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, inArray, isNull, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import type { OfficeTaskStatusDto } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import type { TenantTx } from "../db/db.service";
 import { contentItems, projects } from "../db/schema/media";
 import { teamMembers } from "../db/schema/org";
 import { users } from "../db/schema/users";
-import { taskAttachments, taskComments, tasks, workflowSteps } from "../db/schema/workflow";
+import {
+  labels,
+  projectStates,
+  taskAttachments,
+  taskComments,
+  taskLabels,
+  tasks,
+  workflowSteps,
+} from "../db/schema/workflow";
 
 // ─── Pagination (G9-2 DB-8/SF-2) ──────────────────────────────────────────────
 // Thay magic-cap `.limit(500)` cũ (silent-truncation: tenant >500 task mất row mà không báo).
@@ -63,6 +71,17 @@ const TASK_COLUMNS = {
   // project context (null nếu không gắn dự án)
   projectId: tasks.projectId,
   projectName: projects.name,
+  // PM-1 (apps/projects, mig 0420) — work item kiểu Plane. displayId compute ở service từ identifier+sequence.
+  priority: tasks.priority,
+  description: tasks.description,
+  startDate: tasks.startDate,
+  sequence: tasks.sequence,
+  projectIdentifier: projects.identifier,
+  // state tùy biến (LEFT JOIN project_states — null cho task chưa map state).
+  stateId: tasks.stateId,
+  stateName: projectStates.name,
+  stateGroup: projectStates.stateGroup,
+  stateColor: projectStates.color,
 } as const;
 
 export interface ListTasksFilter {
@@ -70,6 +89,21 @@ export interface ListTasksFilter {
   status?: string;
   projectId?: string;
   assigneeUserId?: string;
+  // PM-1: lọc board theo state tùy biến / ưu tiên / nhãn.
+  stateId?: string;
+  priority?: string;
+  labelId?: string;
+}
+
+/** Patch field work item (PM-1) — chỉ field CÓ MẶT mới đổi (partial). undefined = giữ nguyên. */
+export interface UpdateTaskFieldsData {
+  title?: string;
+  description?: string | null;
+  priority?: string;
+  stateId?: string | null;
+  assigneeUserId?: string | null;
+  dueDate?: string | null;
+  startDate?: string | null;
 }
 
 export interface CreateTaskData {
@@ -78,20 +112,31 @@ export interface CreateTaskData {
   assigneeUserId: string | null;
   projectId: string | null;
   dueDate: string | null;
+  // PM-1 (apps/projects, mig 0420) — work item kiểu Plane (tất cả optional; luồng office cũ bỏ qua).
+  priority?: string;
+  description?: string | null;
+  stateId?: string | null;
+  sequence?: number | null;
+  startDate?: string | null;
 }
 
 @Injectable()
 export class TasksRepository {
   constructor(private readonly db: DatabaseService) {}
 
-  /** Query nền dùng chung: SELECT + 3 LEFT JOIN. Caller thêm `.where(...).orderBy(...)`. */
+  /** Query nền dùng chung: SELECT + 4 LEFT JOIN (workflow_steps/content_items/projects/project_states). */
   private baseQuery(tx: TenantTx) {
     return tx
       .select(TASK_COLUMNS)
       .from(tasks)
       .leftJoin(workflowSteps, eq(tasks.workflowStepId, workflowSteps.id))
       .leftJoin(contentItems, eq(tasks.contentItemId, contentItems.id))
-      .leftJoin(projects, eq(tasks.projectId, projects.id));
+      .leftJoin(projects, eq(tasks.projectId, projects.id))
+      // PM-1: state tùy biến — LEFT JOIN cùng tenant (eq(company_id) defense-in-depth ngoài RLS).
+      .leftJoin(
+        projectStates,
+        and(eq(tasks.stateId, projectStates.id), eq(projectStates.companyId, tasks.companyId)),
+      );
   }
 
   // ─── Reads (TaskDto shape) ───────────────────────────────────────────────────
@@ -112,7 +157,7 @@ export class TasksRepository {
     );
   }
 
-  /** Task Board tổng — lọc tuỳ chọn theo task_type / status / project / assignee + phân trang (G9-3). */
+  /** Task Board tổng — lọc tuỳ chọn theo task_type / status / project / assignee / state / priority / label + phân trang. */
   listAll(companyId: string, filters: ListTasksFilter, page?: Pagination) {
     const conditions: (SQL | undefined)[] = [
       eq(tasks.companyId, companyId),
@@ -122,14 +167,26 @@ export class TasksRepository {
     if (filters.status) conditions.push(eq(tasks.status, filters.status));
     if (filters.projectId) conditions.push(eq(tasks.projectId, filters.projectId));
     if (filters.assigneeUserId) conditions.push(eq(tasks.assigneeUserId, filters.assigneeUserId));
+    // PM-1 filters.
+    if (filters.stateId) conditions.push(eq(tasks.stateId, filters.stateId));
+    if (filters.priority) conditions.push(eq(tasks.priority, filters.priority));
+    const labelId = filters.labelId;
 
-    return this.db.withTenant(companyId, (tx) =>
-      this.baseQuery(tx)
+    return this.db.withTenant(companyId, (tx) => {
+      if (labelId) {
+        // labelId: chỉ task có gán nhãn này (subselect cùng tenant — task_labels keyed company_id + RLS).
+        const taggedTaskIds = tx
+          .select({ taskId: taskLabels.taskId })
+          .from(taskLabels)
+          .where(and(eq(taskLabels.companyId, companyId), eq(taskLabels.labelId, labelId)));
+        conditions.push(inArray(tasks.id, taggedTaskIds));
+      }
+      return this.baseQuery(tx)
         .where(and(...conditions))
         .orderBy(desc(tasks.createdAt))
         .limit(clampLimit(page?.limit))
-        .offset(safeOffset(page?.offset)),
-    );
+        .offset(safeOffset(page?.offset));
+    });
   }
 
   /** Project Tasks — mọi task gắn 1 dự án + phân trang (G9-3). */
@@ -267,7 +324,7 @@ export class TasksRepository {
     return row !== undefined;
   }
 
-  /** Row thô (cho guard nghiệp vụ — phân biệt task workflow vs office). */
+  /** Row thô (cho guard nghiệp vụ — phân biệt task workflow vs office; projectId cho guard nhãn/state). */
   findRawByIdTx(tx: TenantTx, companyId: string, taskId: string) {
     return tx
       .select({
@@ -275,6 +332,7 @@ export class TasksRepository {
         taskType: tasks.taskType,
         workflowStepId: tasks.workflowStepId,
         status: tasks.status,
+        projectId: tasks.projectId,
       })
       .from(tasks)
       .where(and(eq(tasks.companyId, companyId), eq(tasks.id, taskId), isNull(tasks.deletedAt)))
@@ -295,6 +353,12 @@ export class TasksRepository {
         dueDate: data.dueDate ? new Date(data.dueDate) : null,
         status: "not_started",
         origin: "initial",
+        // PM-1: thuộc tính work item (default priority='none' ở DB nếu không truyền).
+        priority: data.priority ?? "none",
+        description: data.description ?? null,
+        stateId: data.stateId ?? null,
+        sequence: data.sequence ?? null,
+        startDate: data.startDate ? new Date(data.startDate) : null,
       })
       .returning({ id: tasks.id });
   }
@@ -314,6 +378,373 @@ export class TasksRepository {
       .set({ deletedAt: new Date() })
       .where(and(eq(tasks.companyId, companyId), eq(tasks.id, taskId), isNull(tasks.deletedAt)))
       .returning({ id: tasks.id });
+  }
+
+  // ─── PM-1 (apps/projects, mig 0420) — work item: sequence + field update ──────
+
+  /**
+   * Cấp số sequence kế tiếp cho 1 project — ATOMIC: UPDATE … RETURNING giữ row-lock trên hàng projects
+   * (KHÔNG max()+1 — đua nhau cấp trùng). Trả số mới, hoặc null nếu project không tồn tại/đã xoá.
+   */
+  async allocateSequenceTx(
+    tx: TenantTx,
+    companyId: string,
+    projectId: string,
+  ): Promise<number | null> {
+    const [row] = await tx
+      .update(projects)
+      .set({ lastTaskSequence: sql`${projects.lastTaskSequence} + 1`, updatedAt: new Date() })
+      .where(
+        and(
+          eq(projects.companyId, companyId),
+          eq(projects.id, projectId),
+          isNull(projects.deletedAt),
+        ),
+      )
+      .returning({ sequence: projects.lastTaskSequence });
+    return row ? row.sequence : null;
+  }
+
+  /** Patch field work item — chỉ set cột CÓ MẶT (partial) + updatedAt. Trả [] nếu 0 row → caller 404. */
+  updateTaskFieldsTx(
+    companyId: string,
+    taskId: string,
+    fields: UpdateTaskFieldsData,
+    tx: TenantTx,
+  ) {
+    const patch: Partial<typeof tasks.$inferInsert> = { updatedAt: new Date() };
+    if (fields.title !== undefined) patch.title = fields.title;
+    if (fields.description !== undefined) patch.description = fields.description;
+    if (fields.priority !== undefined) patch.priority = fields.priority;
+    if (fields.stateId !== undefined) patch.stateId = fields.stateId;
+    if (fields.assigneeUserId !== undefined) patch.assigneeUserId = fields.assigneeUserId;
+    if (fields.dueDate !== undefined) patch.dueDate = fields.dueDate ? new Date(fields.dueDate) : null;
+    if (fields.startDate !== undefined)
+      patch.startDate = fields.startDate ? new Date(fields.startDate) : null;
+    return tx
+      .update(tasks)
+      .set(patch)
+      .where(and(eq(tasks.companyId, companyId), eq(tasks.id, taskId), isNull(tasks.deletedAt)))
+      .returning({ id: tasks.id });
+  }
+
+  // ─── PM-1 — project_states (tenant-scoped, soft-delete) ───────────────────────
+
+  /** Liệt kê state chưa xoá của 1 project (order theo sort_order). */
+  listStatesByProject(companyId: string, projectId: string) {
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .select()
+        .from(projectStates)
+        .where(
+          and(
+            eq(projectStates.companyId, companyId),
+            eq(projectStates.projectId, projectId),
+            isNull(projectStates.deletedAt),
+          ),
+        )
+        .orderBy(asc(projectStates.sortOrder), asc(projectStates.createdAt)),
+    );
+  }
+
+  /** 1 state theo id (chưa xoá, cùng tenant) — guard nghiệp vụ + trả về sau create/update. */
+  findStateByIdTx(tx: TenantTx, companyId: string, stateId: string) {
+    return tx
+      .select()
+      .from(projectStates)
+      .where(
+        and(
+          eq(projectStates.companyId, companyId),
+          eq(projectStates.id, stateId),
+          isNull(projectStates.deletedAt),
+        ),
+      )
+      .limit(1);
+  }
+
+  /** True nếu state thuộc ĐÚNG project trong tenant (chưa xoá) — guard set state_id cho task. */
+  async stateInProjectTx(
+    tx: TenantTx,
+    companyId: string,
+    projectId: string,
+    stateId: string,
+  ): Promise<boolean> {
+    const [row] = await tx
+      .select({ id: projectStates.id })
+      .from(projectStates)
+      .where(
+        and(
+          eq(projectStates.companyId, companyId),
+          eq(projectStates.projectId, projectId),
+          eq(projectStates.id, stateId),
+          isNull(projectStates.deletedAt),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
+  /** Default state (is_default=true, chưa xoá) của project — dùng làm state mặc định khi tạo task. */
+  async findDefaultStateTx(
+    tx: TenantTx,
+    companyId: string,
+    projectId: string,
+  ): Promise<string | null> {
+    const [row] = await tx
+      .select({ id: projectStates.id })
+      .from(projectStates)
+      .where(
+        and(
+          eq(projectStates.companyId, companyId),
+          eq(projectStates.projectId, projectId),
+          eq(projectStates.isDefault, true),
+          isNull(projectStates.deletedAt),
+        ),
+      )
+      .limit(1);
+    return row ? row.id : null;
+  }
+
+  createStateTx(
+    companyId: string,
+    data: {
+      projectId: string;
+      name: string;
+      stateGroup: string;
+      color?: string;
+      isDefault?: boolean;
+      sortOrder?: number;
+    },
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(projectStates)
+      .values({
+        companyId,
+        projectId: data.projectId,
+        name: data.name,
+        stateGroup: data.stateGroup,
+        color: data.color ?? "#64748b",
+        isDefault: data.isDefault ?? false,
+        sortOrder: data.sortOrder ?? 0,
+      })
+      .returning();
+  }
+
+  updateStateTx(
+    companyId: string,
+    stateId: string,
+    data: {
+      name?: string;
+      stateGroup?: string;
+      color?: string;
+      sortOrder?: number;
+      isDefault?: boolean;
+    },
+    tx: TenantTx,
+  ) {
+    const patch: Partial<typeof projectStates.$inferInsert> = { updatedAt: new Date() };
+    if (data.name !== undefined) patch.name = data.name;
+    if (data.stateGroup !== undefined) patch.stateGroup = data.stateGroup;
+    if (data.color !== undefined) patch.color = data.color;
+    if (data.sortOrder !== undefined) patch.sortOrder = data.sortOrder;
+    if (data.isDefault !== undefined) patch.isDefault = data.isDefault;
+    return tx
+      .update(projectStates)
+      .set(patch)
+      .where(
+        and(
+          eq(projectStates.companyId, companyId),
+          eq(projectStates.id, stateId),
+          isNull(projectStates.deletedAt),
+        ),
+      )
+      .returning();
+  }
+
+  /** Bỏ cờ default mọi state KHÁC trong CÙNG project (đảm bảo ≤1 default/project). */
+  clearOtherDefaultsTx(
+    companyId: string,
+    projectId: string,
+    keepStateId: string | null,
+    tx: TenantTx,
+  ) {
+    const conds = [
+      eq(projectStates.companyId, companyId),
+      eq(projectStates.projectId, projectId),
+      eq(projectStates.isDefault, true),
+      isNull(projectStates.deletedAt),
+    ];
+    if (keepStateId) conds.push(sql`${projectStates.id} <> ${keepStateId}`);
+    return tx
+      .update(projectStates)
+      .set({ isDefault: false, updatedAt: new Date() })
+      .where(and(...conds))
+      .returning({ id: projectStates.id });
+  }
+
+  softDeleteStateTx(companyId: string, stateId: string, tx: TenantTx) {
+    return tx
+      .update(projectStates)
+      .set({ deletedAt: new Date() })
+      .where(
+        and(
+          eq(projectStates.companyId, companyId),
+          eq(projectStates.id, stateId),
+          isNull(projectStates.deletedAt),
+        ),
+      )
+      .returning({ id: projectStates.id });
+  }
+
+  /** Đếm task (chưa xoá) đang tham chiếu 1 state — chặn xoá state đang dùng. */
+  async countTasksByStateTx(tx: TenantTx, companyId: string, stateId: string): Promise<number> {
+    const [row] = await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(tasks)
+      .where(
+        and(eq(tasks.companyId, companyId), eq(tasks.stateId, stateId), isNull(tasks.deletedAt)),
+      );
+    return row ? row.n : 0;
+  }
+
+  // ─── PM-1 — labels (tenant-scoped, soft-delete) ───────────────────────────────
+
+  listLabelsByProject(companyId: string, projectId: string) {
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .select()
+        .from(labels)
+        .where(
+          and(
+            eq(labels.companyId, companyId),
+            eq(labels.projectId, projectId),
+            isNull(labels.deletedAt),
+          ),
+        )
+        .orderBy(asc(labels.name)),
+    );
+  }
+
+  findLabelByIdTx(tx: TenantTx, companyId: string, labelId: string) {
+    return tx
+      .select()
+      .from(labels)
+      .where(and(eq(labels.companyId, companyId), eq(labels.id, labelId), isNull(labels.deletedAt)))
+      .limit(1);
+  }
+
+  createLabelTx(
+    companyId: string,
+    data: { projectId: string; name: string; color?: string; createdBy: string | null },
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(labels)
+      .values({
+        companyId,
+        projectId: data.projectId,
+        name: data.name,
+        color: data.color ?? "#6366f1",
+        createdBy: data.createdBy,
+      })
+      .returning();
+  }
+
+  updateLabelTx(
+    companyId: string,
+    labelId: string,
+    data: { name?: string; color?: string },
+    tx: TenantTx,
+  ) {
+    const patch: Partial<typeof labels.$inferInsert> = {};
+    if (data.name !== undefined) patch.name = data.name;
+    if (data.color !== undefined) patch.color = data.color;
+    return tx
+      .update(labels)
+      .set(patch)
+      .where(and(eq(labels.companyId, companyId), eq(labels.id, labelId), isNull(labels.deletedAt)))
+      .returning();
+  }
+
+  softDeleteLabelTx(companyId: string, labelId: string, tx: TenantTx) {
+    return tx
+      .update(labels)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(labels.companyId, companyId), eq(labels.id, labelId), isNull(labels.deletedAt)))
+      .returning({ id: labels.id });
+  }
+
+  // ─── PM-1 — task_labels (M:N link, HARD-delete khi gỡ) ────────────────────────
+
+  /**
+   * Nhãn của 1 tập task (1 query, group ở JS — tránh N+1). Trả mọi nhãn chưa xoá gắn vào các task id đó.
+   * row.taskId để caller gom theo task. KHÔNG xoá link khi nhãn soft-deleted → lọc deleted_at IS NULL.
+   */
+  listLabelsForTaskIds(companyId: string, taskIds: string[]) {
+    if (taskIds.length === 0) return Promise.resolve([] as never[]);
+    return this.db.withTenant(companyId, (tx) =>
+      tx
+        .select({
+          taskId: taskLabels.taskId,
+          id: labels.id,
+          companyId: labels.companyId,
+          projectId: labels.projectId,
+          name: labels.name,
+          color: labels.color,
+          createdBy: labels.createdBy,
+          createdAt: labels.createdAt,
+        })
+        .from(taskLabels)
+        .innerJoin(
+          labels,
+          and(eq(taskLabels.labelId, labels.id), isNull(labels.deletedAt)),
+        )
+        .where(and(eq(taskLabels.companyId, companyId), inArray(taskLabels.taskId, taskIds)))
+        .orderBy(asc(labels.name)),
+    );
+  }
+
+  /** True nếu task ĐÃ gán nhãn này (idempotent add). */
+  async taskLabelExistsTx(
+    tx: TenantTx,
+    companyId: string,
+    taskId: string,
+    labelId: string,
+  ): Promise<boolean> {
+    const [row] = await tx
+      .select({ id: taskLabels.id })
+      .from(taskLabels)
+      .where(
+        and(
+          eq(taskLabels.companyId, companyId),
+          eq(taskLabels.taskId, taskId),
+          eq(taskLabels.labelId, labelId),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
+  addTaskLabelTx(companyId: string, taskId: string, labelId: string, tx: TenantTx) {
+    return tx
+      .insert(taskLabels)
+      .values({ companyId, taskId, labelId })
+      .onConflictDoNothing({ target: [taskLabels.companyId, taskLabels.taskId, taskLabels.labelId] })
+      .returning({ id: taskLabels.id });
+  }
+
+  removeTaskLabelTx(companyId: string, taskId: string, labelId: string, tx: TenantTx) {
+    return tx
+      .delete(taskLabels)
+      .where(
+        and(
+          eq(taskLabels.companyId, companyId),
+          eq(taskLabels.taskId, taskId),
+          eq(taskLabels.labelId, labelId),
+        ),
+      )
+      .returning({ id: taskLabels.id });
   }
 
   // ─── Comments ──────────────────────────────────────────────────────────────

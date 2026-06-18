@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   readonly VITE_STUDIO_URL?: string;
   readonly VITE_PEOPLE_URL?: string;
   readonly VITE_CONSOLE_URL?: string;
+  readonly VITE_PROJECTS_URL?: string;
 }
 
 interface ImportMeta {

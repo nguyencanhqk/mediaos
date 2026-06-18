@@ -825,6 +825,59 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
 
+  // ── PM-1 apps/projects (project_states / labels / task_labels — mig 0420) ─────
+  // company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  // project_states/labels: soft-delete. task_labels: link M:N hard-DELETE. KHÔNG skipNoContext (tenant-scoped).
+  {
+    name: "project_states",
+    table: "project_states",
+    seedRow: async (direct, t) => {
+      const projectId = await seedProject(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO project_states (company_id, project_id, name, state_group, color, sort_order)
+         VALUES ($1, $2, 'rls-state', 'unstarted', '#64748b', 0) RETURNING id`,
+        [t.companyId, projectId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "labels",
+    table: "labels",
+    seedRow: async (direct, t) => {
+      const projectId = await seedProject(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO labels (company_id, project_id, name, color)
+         VALUES ($1, $2, $3, '#6366f1') RETURNING id`,
+        [t.companyId, projectId, `rls-label-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "task_labels",
+    table: "task_labels",
+    seedRow: async (direct, t) => {
+      const projectId = await seedProject(direct, t.companyId);
+      const taskRes = await direct.query(
+        `INSERT INTO tasks (company_id, task_type, title, status, origin, revision_round, project_id)
+         VALUES ($1, 'office', 'rls-task-for-label', 'not_started', 'initial', 0, $2) RETURNING id`,
+        [t.companyId, projectId],
+      );
+      const labelRes = await direct.query(
+        `INSERT INTO labels (company_id, project_id, name, color)
+         VALUES ($1, $2, $3, '#6366f1') RETURNING id`,
+        [t.companyId, projectId, `rls-tl-label-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO task_labels (company_id, task_id, label_id)
+         VALUES ($1, $2, $3) RETURNING id`,
+        [t.companyId, taskRes.rows[0].id, labelRes.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
   // ── G4-5 Approval / Defect ───────────────────────────────────────────────────
   {
     name: "approval_requests",
