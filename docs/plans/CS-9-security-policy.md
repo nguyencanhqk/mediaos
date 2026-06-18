@@ -116,4 +116,4 @@ _(xác nhận bước 0 đúng điểm tạo tài khoản + chữ ký refresh th
 
 ## 🏁 completion-evaluator
 
-_(điền khi đóng CS-9.)_
+✅ **CLOSED — LANDED master `168eecf` (--no-ff) 2026-06-18** (Console Wave 2). 6 bất biến enforcement đều implemented + test-covered (2FA fail-stricter 4 tổ hợp · IP/giờ tại cấp-token login+refresh · fail-OPEN(ip)/fail-CLOSED(giờ) · admin/exempt không tự khoá · kill-switch no-DB-read · email-domain tại tạo account). Security-review = **SAFE-AFTER-FIXES** → vá HIGH `req.ip` trust boundary (`faf8a29`: env `TRUST_PROXY` default off, chống XFF spoof). Verify master: api 2605/0 (gồm 40 auth-regression + tenant-isolation 312 phủ bảng mới), console 136, web-core 59. **DEBT:** `useIdleLogout` BUILT chưa mount app-wide (cần `auto_logout_minutes` ở `/auth/me` — làm ở CS-10; backstop TTL ngắn); `applyScope='selected'` lưu nhưng MVP enforce 'all' (stricter); ops phải set `TRUST_PROXY` ở prod; guard 2FA cache 30s (stricter-only). DI cycle Auth↔SecurityPolicy↔Permission giải bằng forwardRef.
