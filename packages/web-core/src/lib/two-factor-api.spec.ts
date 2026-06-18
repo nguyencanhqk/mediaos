@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { twoFactorApi } from "@mediaos/web-core";
-import { useAuthStore } from "@mediaos/web-core";
+import { twoFactorApi } from "./two-factor-api";
+import { useAuthStore } from "../stores/auth";
 
 type FetchCall = [input: string, init?: RequestInit];
 

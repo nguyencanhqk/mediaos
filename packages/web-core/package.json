@@ -35,9 +35,14 @@
     "react-i18next": "^15.7.4"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
     "@types/react": "19.2.16",
     "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "^4.3.4",
     "i18next": "^25.10.10",
+    "jsdom": "^25.0.1",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-i18next": "^15.7.4",

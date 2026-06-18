@@ -1,8 +1,9 @@
+// @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
 import { act } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { useAuthStore } from "@mediaos/web-core";
-import { PermissionGate } from "@mediaos/web-core";
+import { useAuthStore } from "../stores/auth";
+import { PermissionGate } from "./permission-gate";
 
 function setCaps(caps: Record<string, boolean>) {
   act(() => {
