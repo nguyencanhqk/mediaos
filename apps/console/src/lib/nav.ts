@@ -1,4 +1,5 @@
 import {
+  BarChart2,
   Briefcase,
   Building2,
   ClipboardList,
@@ -42,4 +43,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "objects", labelKey: "objects", to: "/system/objects", icon: Users, tile: "bg-blue-500/12 text-blue-600", category: "system", subcategory: "Quản lý danh mục" },
   // CS-2: Phân quyền (RBAC) — nhóm riêng "Phân quyền" theo IA (gán/thu vai trò + quyền theo đối tượng).
   { id: "permissions", labelKey: "permissions", to: "/system/permissions", icon: Shield, tile: "bg-amber-500/12 text-amber-600", category: "system", subcategory: "Phân quyền" },
+  // CS-7: Tình hình sử dụng — thống kê login, last-login, task per-tenant (nhóm riêng theo IA, KHÔNG gộp Kiểm toán).
+  { id: "usageStats", labelKey: "usageStats", to: "/system/usage", icon: BarChart2, tile: "bg-blue-500/12 text-blue-600", category: "system", subcategory: "Tình hình sử dụng" },
 ] as const;

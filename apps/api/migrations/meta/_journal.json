@@ -750,6 +750,13 @@
       "when": 1717500410000,
       "tag": "0360_cs5_company_profile",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1717500420000,
+      "tag": "0370_cs7_last_login",
+      "breakpoints": true
     }
   ]
 }

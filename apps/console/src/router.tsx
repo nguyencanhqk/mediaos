@@ -11,6 +11,7 @@ import { PermissionsPage } from "@/routes/system/permissions/permissions-page";
 import { OrgStructurePage } from "@/routes/system/org/org-structure";
 import { PositionsPage } from "@/routes/system/org/positions";
 import { ObjectsPage } from "@/routes/system/objects";
+import { UsagePage } from "@/routes/system/usage";
 
 const rootRoute = createRootRoute({ component: RootLayout });
 
@@ -102,6 +103,14 @@ const objectsRoute = createRoute({
   component: ObjectsPage,
 });
 
+// CS-7: Tình hình sử dụng — gate quyền view:usage xử lý trong component.
+const usageRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/usage",
+  beforeLoad: authGuard,
+  component: UsagePage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   companySettingsRoute,
@@ -113,6 +122,7 @@ const routeTree = rootRoute.addChildren([
   orgStructureRoute,
   positionsRoute,
   objectsRoute,
+  usageRoute,
 ]);
 
 export const router = createRouter({ routeTree });
