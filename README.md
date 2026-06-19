@@ -27,13 +27,24 @@ Kiến trúc: **Modular Monolith + API-first + SaaS-ready** (~200 nhân sự · 
 ```
 mediaos/
 ├── apps/
-│   ├── api/          # NestJS modular monolith (:3100)
-│   └── web/          # Vite + React 19 SPA (:5273)
+│   ├── api/          # NestJS modular monolith — backend DUY NHẤT (:3100)
+│   ├── auth/         # SSO — đăng nhập trung tâm (:5275)
+│   ├── web/          # Launcher root-domain (:5273)
+│   ├── studio/       # work · process · goals (:5276)
+│   ├── people/       # hr · attendance · payroll (:5277)
+│   ├── console/      # system tenant (aud=user) (:5278)
+│   ├── projects/     # PM app kiểu Plane, backend dùng chung (:5279)
+│   ├── admin/        # operator control plane (aud=operator, cross-tenant)
+│   └── mobile/       # Expo (React Native)
 ├── packages/
-│   └── contracts/    # Zod schemas — nguồn sự thật DTO (dual-build ESM+CJS)
-├── docs/             # ADR, spikes, design docs
-└── scripts/          # backup-db.sh, setup-db-roles.mjs
+│   ├── contracts/    # Zod schemas — nguồn sự thật DTO (dual-build ESM+CJS)
+│   ├── ui/           # shadcn primitives + layout (DataTable/PageHeader/…)
+│   └── web-core/     # auth store · api-client · use-can · i18n
+├── docs/             # STATUS, SYSTEM-DESIGN, ADR, plans, integrations, ops
+└── scripts/          # backup-db.sh, setup-db-roles.mjs, lane-db-setup.sh
 ```
+
+> Frontend tách thành nhiều SPA theo `docs/frontend-split-plan.md` (multi-SPA, shared packages). Backend vẫn là **một** modular monolith — xem lý do không tách microservices ở `docs/frontend-split-plan.md §9`.
 
 ---
 
@@ -84,6 +95,8 @@ pnpm db:migrate       # áp migration (DATABASE_DIRECT_URL)
 # Riêng từng app
 pnpm --filter @mediaos/api  dev|build|test|typecheck
 pnpm --filter @mediaos/web  dev|build|test|typecheck
+# Các FE SPA khác: @mediaos/{auth,studio,people,console,projects} (cùng cú pháp)
+# Khởi động nhanh nhiều app local (Windows): dev/dev.bat
 
 # Sinh migration mới (sau khi sửa schema)
 pnpm --filter @mediaos/api db:generate
@@ -126,8 +139,11 @@ Mọi response đều bọc trong envelope:
 | G8–G11 | Approval đa cấp · KPI/evaluation/defect · Task hub · Chat/Notif/Meeting · Chấm công/Nghỉ phép | ✅ |
 | G12–G14 | Lương (append-only) · Tài chính (revenue/cost/profit) · Dashboard phân quyền | ✅ |
 | G15–G16 | Mobile Expo · 2FA TOTP · SaaS prep (plan/flag/limit, template-clone) | ✅ |
+| FE-split | Tách multi-SPA: web-core/ui · auth (SSO) · studio · people · console · launcher | 🔄 Phase 5 OPS (provision Cloudflare) |
+| Projects PM | `apps/projects` — PM app kiểu Plane trên backend dùng chung | 🔄 Phase 1 ✅, còn 2–5 |
+| Console | Nâng cấp system console (mail/security-policy/user-invites) | 🔄 đang chạy |
 
-Chi tiết theo code: [docs/SYSTEM-DESIGN.md §19](docs/SYSTEM-DESIGN.md) · lộ trình & nợ kỹ thuật: [TASKS.md](TASKS.md)
+Đang ở đâu / làm gì tiếp: [docs/STATUS.md](docs/STATUS.md) · chi tiết theo code: [docs/SYSTEM-DESIGN.md](docs/SYSTEM-DESIGN.md) · lộ trình & nợ kỹ thuật: [TASKS.md](TASKS.md)
 
 ---
 

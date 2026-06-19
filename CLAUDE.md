@@ -9,7 +9,9 @@
 
 **MediaOS** — hệ thống quản trị nội bộ công ty media (~200 nhân sự, 100 kênh, 300 video/tháng), kiến trúc **Modular Monolith + API-first + SaaS-ready**. Sẽ mở rộng thành SaaS sau khi vận hành nội bộ ổn.
 
-Tài liệu thiết kế hợp nhất (theo code hiện tại): `docs/SYSTEM-DESIGN.md` — kiến trúc, cấu trúc, nguyên lý hoạt động, sơ đồ, ERD, ADR tóm tắt. Spec chi tiết: `docs/erd-v2.md`, `docs/permission-matrix-spec.md`. Kế hoạch thực thi: `TASKS.md`. Quyết định kiến trúc: `docs/adr/`.
+**HARNESS (cách làm việc — cập nhật 2026-06-19):** mở phiên bằng `bash harness/init.sh`. Contract gọn cross-tool: `AGENTS.md`. Cách làm + 6 cơ chế: `harness/README.md`. Luật tự động (zone→model/gate/autonomy + thang leo): `harness/policy.md`.
+
+Điểm khởi đầu mỗi phiên — "đang ở đâu, làm gì tiếp": **`docs/STATUS.md` (TỰ SINH bởi `harness/gen-status.mjs` — KHÔNG sửa tay)**. Nguồn việc máy-đọc (Work Order): **`harness/backlog.mjs`** (thay cho tiến độ prose trong `TASKS.md` — `TASKS.md` còn lưu DAG/band lịch sử). Tài liệu thiết kế hợp nhất: `docs/SYSTEM-DESIGN.md`. ERD đầy đủ: `docs/erd-current.md`. Spec phân quyền: `docs/permission-matrix-spec.md`. Quyết định kiến trúc: `docs/adr/`.
 
 > Bản gốc MVP v1 (PRD, ERD, design màn hình/workflow, role matrix, kế hoạch phase) đã được hợp nhất vào `docs/SYSTEM-DESIGN.md` và xóa khỏi repo (còn trong lịch sử git nếu cần tra cứu).
 
@@ -139,7 +141,7 @@ pnpm --filter @mediaos/web dev|build|test|typecheck
 bash scripts/backup-db.sh          # pg_dump → encrypt → rclone offsite (xem .env BACKUP_*)
 ```
 
-> **Cấu trúc:** `apps/api` (NestJS modular monolith) · `apps/web` (Vite+React19 SPA) · `packages/contracts` (Zod = nguồn sự thật DTO, dual-build). Health: `GET /api/v1/health` + `/health/db` (fail-soft).
+> **Cấu trúc (9 apps + 3 packages):** Backend `apps/api` (NestJS modular monolith — DUY NHẤT, không tách microservices). Frontend multi-SPA (Vite+React19, kết quả `docs/frontend-split-plan.md`): `apps/auth` (SSO đăng nhập trung tâm) · `apps/web` (launcher root-domain) · `apps/studio` (work/process/goals) · `apps/people` (hr/attendance/payroll) · `apps/console` (system tenant, `aud=user`) · `apps/admin` (operator plane, `aud=operator` — cross-tenant) · `apps/projects` (PM app kiểu Plane, backend dùng chung) · `apps/mobile` (Expo). Packages: `packages/contracts` (Zod = nguồn sự thật DTO, dual-build) · `packages/ui` (shadcn primitives + layout) · `packages/web-core` (auth store · api-client · use-can · i18n). Health: `GET /api/v1/health` + `/health/db` (fail-soft).
 
 ---
 
