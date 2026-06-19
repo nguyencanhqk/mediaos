@@ -18,7 +18,8 @@ secret/envelope/encrypt/KMS · finance/revenue/cost/profit/ledger · KPI · FSM/
 
 `guard-tenant` · `guard-secrets` · `guard-immutability` (3 bất biến) · `anti-bandaid-guard`
 (chặn `catch{}` rỗng / `@ts-ignore` / `eslint-disable` / `.skip`/`.only` / TODO-fix vùng đỏ) ·
-`guard-migration-band` · **`guard-scope` (cảnh báo khi sửa ngoài `paths` của Work Order — warn-only)**.
+`guard-migration-band` · **`guard-scope` (cảnh báo khi sửa ngoài `paths` của Work Order — warn-only)** ·
+**`guard-claim` (claim-on-touch theo `session_id`; cảnh báo khi HAI PHIÊN cùng giữ một Work Order — warn-only, sổ chung mọi worktree ở `.git/mediaos-claims/`; xem `node harness/claim.mjs list`)**.
 
 ## Routing — mỗi sub-task chọn 3 thứ (⑤)
 

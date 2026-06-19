@@ -22,6 +22,10 @@ echo ""
 echo "════════════════ TIÊU ĐIỂM (làm gì · sửa ở đâu) ════════════════"
 node harness/gen-status.mjs --focus
 
+echo ""
+echo "════════════════ PHIÊN KHÁC ĐANG GIỮ (chống làm trùng) ════════════════"
+node harness/claim.mjs list
+
 echo "════════════════ BÀN GIAO TỪ PHIÊN TRƯỚC (memory) ════════════════"
 if [ -f harness/handoff.md ]; then
   sed -n '1,40p' harness/handoff.md

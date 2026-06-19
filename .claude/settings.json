@@ -28,6 +28,10 @@
           {
             "type": "command",
             "command": "node .claude/hooks/guard-scope.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/guard-claim.mjs"
           }
         ]
       }
@@ -53,6 +57,10 @@
           {
             "type": "command",
             "command": "node .claude/hooks/stop-gate.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/guard-claim.mjs"
           }
         ]
       }

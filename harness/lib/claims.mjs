@@ -21,7 +21,8 @@ import path from 'node:path';
 export const CLAIM_TTL_MS = 8 * 60 * 60 * 1000; // 8h
 
 function git(args, cwd) {
-  const r = spawnSync('git', args, { cwd, encoding: 'utf8', shell: process.platform === 'win32' });
+  // KHÔNG shell:true — git.exe resolve trực tiếp qua PATH (cả win32), tránh DeprecationWarning DEP0190.
+  const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
   return r.status === 0 ? (r.stdout || '').trim() : '';
 }
 
