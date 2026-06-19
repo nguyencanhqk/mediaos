@@ -52,11 +52,7 @@ export function TwoFactorChallengeForm({ challengeToken, onSuccess, onCancel }: 
 
   return (
     <form onSubmit={(e) => void onSubmit(e)} className="space-y-4">
-      <div className="space-y-1 text-center">
-        <h1 className="text-xl font-semibold">{t("twoFactor.title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("twoFactor.challengeHint")}</p>
-      </div>
-      <div className="space-y-1">
+      <div className="space-y-2">
         <label className="text-sm font-medium" htmlFor="tfa-code">
           {t("twoFactor.codeLabel")}
         </label>
@@ -67,11 +63,16 @@ export function TwoFactorChallengeForm({ challengeToken, onSuccess, onCancel }: 
           placeholder="123456"
           value={code}
           onChange={(e) => setCode(e.target.value)}
+          className="text-center font-mono text-lg tracking-[0.4em]"
           autoFocus
         />
       </div>
       {error && (
-        <p role="alert" aria-live="assertive" className="text-sm text-destructive">
+        <p
+          role="alert"
+          aria-live="assertive"
+          className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
           {error}
         </p>
       )}
