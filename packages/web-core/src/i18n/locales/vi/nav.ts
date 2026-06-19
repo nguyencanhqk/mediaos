@@ -34,6 +34,8 @@ export default {
   objects: "Đối tượng",
   usageStats: "Tình hình sử dụng",
   recycleBin: "Thùng rác",
+  apiKeys: "API key",
+  webhooks: "Webhooks",
   logout: "Đăng xuất",
   group: {
     work: "Công việc & Nội dung",

@@ -1,0 +1,77 @@
+{
+  "title": "Webhooks",
+  "subtitle": "Đăng ký endpoint nhận sự kiện, chọn loại sự kiện, và xem lịch sử giao. Secret ký HMAC chỉ hiển thị một lần khi tạo.",
+  "noPermission": {
+    "title": "Không có quyền xem webhook",
+    "description": "Bạn cần quyền view:webhook để xem và manage:webhook để chỉnh sửa."
+  },
+  "actions": {
+    "create": "Tạo endpoint",
+    "edit": "Sửa",
+    "delete": "Xoá",
+    "subscribe": "Đăng ký sự kiện",
+    "viewDeliveries": "Lịch sử giao",
+    "copy": "Sao chép",
+    "copied": "Đã sao chép",
+    "close": "Đóng"
+  },
+  "table": {
+    "url": "URL",
+    "description": "Mô tả",
+    "active": "Trạng thái",
+    "created": "Tạo lúc",
+    "empty": "Chưa có endpoint nào.",
+    "activeYes": "Bật",
+    "activeNo": "Tắt"
+  },
+  "create": {
+    "title": "Tạo webhook endpoint",
+    "description": "URL phải dùng https và trỏ tới máy chủ công khai. Secret ký HMAC sẽ được sinh tự động.",
+    "urlLabel": "URL endpoint",
+    "urlPlaceholder": "https://hooks.example.com/mediaos",
+    "descriptionLabel": "Mô tả (tuỳ chọn)",
+    "submit": "Tạo endpoint",
+    "submitting": "Đang tạo...",
+    "urlRequired": "URL là bắt buộc và phải dùng https."
+  },
+  "reveal": {
+    "title": "Secret đã được tạo",
+    "warning": "Đây là lần DUY NHẤT secret hiển thị. Sao chép và lưu lại ngay — dùng để xác minh chữ ký HMAC của webhook.",
+    "secretLabel": "Secret của bạn"
+  },
+  "delete": {
+    "title": "Xoá webhook endpoint?",
+    "description": "Endpoint \"{{url}}\" sẽ ngừng nhận sự kiện. Hành động này không thể hoàn tác.",
+    "confirm": "Xoá endpoint"
+  },
+  "subscribe": {
+    "title": "Đăng ký loại sự kiện",
+    "eventLabel": "Loại sự kiện",
+    "submit": "Đăng ký",
+    "empty": "Chưa đăng ký sự kiện nào.",
+    "added": "Đã đăng ký sự kiện."
+  },
+  "deliveries": {
+    "title": "Lịch sử giao",
+    "event": "Sự kiện",
+    "status": "Trạng thái",
+    "attempts": "Số lần thử",
+    "responseCode": "Mã phản hồi",
+    "scheduledAt": "Lên lịch",
+    "deliveredAt": "Đã giao",
+    "empty": "Chưa có lần giao nào."
+  },
+  "status": {
+    "pending": "Đang chờ",
+    "success": "Thành công",
+    "failed": "Thất bại"
+  },
+  "feedback": {
+    "created": "Đã tạo webhook endpoint.",
+    "deleted": "Đã xoá endpoint.",
+    "loadFailed": "Không tải được danh sách endpoint.",
+    "createFailed": "Tạo endpoint thất bại.",
+    "deleteFailed": "Xoá endpoint thất bại.",
+    "subscribeFailed": "Đăng ký sự kiện thất bại."
+  }
+}
