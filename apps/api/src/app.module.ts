@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { ENV_FILE_PATHS, loadEnv } from "./config/env.schema";
 import { AuthModule } from "./auth/auth.module";
+import { UsersModule } from "./users/users.module";
 import { DatabaseModule } from "./db/db.module";
 import { EventsModule } from "./events/events.module";
 import { HealthModule } from "./health/health.module";
@@ -63,6 +64,7 @@ import {
     DatabaseModule,
     EventsModule,
     AuthModule,
+    UsersModule,
     PermissionModule,
     HealthModule,
     OrgModule,

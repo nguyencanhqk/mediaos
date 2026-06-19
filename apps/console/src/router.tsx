@@ -6,6 +6,7 @@ import { MailConfigPage } from "@/routes/settings/mail-config";
 import { PlatformAccountsPage } from "@/routes/settings/platform-accounts";
 import { BreakGlassPage } from "@/routes/settings/break-glass";
 import { SecuritySettingsPage } from "@/routes/settings/security";
+import { AccountSettingsPage } from "@/routes/settings/account";
 import { SecurityPolicyPage } from "@/routes/settings/security-policy";
 import { getAuthRedirectUrl, useAuthStore } from "@mediaos/web-core";
 import { ActivityLogPage } from "@/routes/system/activity-log";
@@ -72,6 +73,15 @@ const securityRoute = createRoute({
   path: "/settings/security",
   beforeLoad: authGuard,
   component: SecuritySettingsPage,
+});
+
+// ACCT-1 (Module 2a): "Tài khoản của tôi" — self-service hồ sơ + đổi mật khẩu của CHÍNH user. Chỉ authGuard
+// (không permission-gate, giống /settings/security): mỗi người tự quản tài khoản mình; service ép WHERE id=self.
+const accountRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/account",
+  beforeLoad: authGuard,
+  component: AccountSettingsPage,
 });
 
 // CS-9: Bảo mật nâng cao — gate quyền configure-security-policy:company xử lý trong component.
@@ -145,6 +155,7 @@ const routeTree = rootRoute.addChildren([
   mailConfigRoute,
   breakGlassRoute,
   securityRoute,
+  accountRoute,
   securityPolicyRoute,
   activityLogRoute,
   permissionsRoute,

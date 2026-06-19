@@ -10,6 +10,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Trash2,
+  UserCircle,
   Users,
 } from "lucide-react";
 import { type NavItem } from "@mediaos/web-core";
@@ -33,7 +34,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // — Hệ thống —
   { id: "platformAccounts", labelKey: "platformAccounts", to: "/settings/platform-accounts", icon: KeyRound, tile: "bg-slate-500/12 text-slate-600", category: "system" },
   { id: "breakGlass", labelKey: "breakGlass", to: "/settings/break-glass", icon: ShieldAlert, tile: "bg-red-500/12 text-red-600", category: "system" },
-  // Self-service — authGuard only, KHÔNG permission-gate (mỗi user tự quản 2FA của mình, giống đổi mật khẩu).
+  // Self-service — authGuard only, KHÔNG permission-gate (mỗi user tự quản tài khoản của mình).
+  // ACCT-1 (Module 2a): Tài khoản của tôi — hồ sơ + đổi mật khẩu. Bảo mật (2FA) tách riêng bên dưới.
+  { id: "myAccount", labelKey: "myAccount", to: "/settings/account", icon: UserCircle, tile: "bg-emerald-500/12 text-emerald-600", category: "system" },
   { id: "accountSecurity", labelKey: "accountSecurity", to: "/settings/security", icon: ShieldCheck, tile: "bg-emerald-500/12 text-emerald-600", category: "system" },
   { id: "companySettings", labelKey: "companySettings", to: "/settings/company", icon: Settings, tile: "bg-slate-500/12 text-slate-600", category: "system" },
   // CS-8: Cấu hình mail server (SMTP, secret) — tenant self-service, permission configure-mail:company.

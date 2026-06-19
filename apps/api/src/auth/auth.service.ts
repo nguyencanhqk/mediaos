@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Inject, Injectable, Logger, UnauthorizedException, forwardRef } from "@nestjs/common";
+import { BadRequestException, HttpException, HttpStatus, Inject, Injectable, Logger, UnauthorizedException, forwardRef } from "@nestjs/common";
 import type {
   AuthTokens,
   ForgotPasswordRequest,
@@ -346,6 +346,63 @@ export class AuthService {
     }
     await this.rateLimiter.reset(rlKey);
     await this.twoFactor.disable(user.id, user.companyId);
+  }
+
+  /**
+   * Đổi mật khẩu khi ĐÃ đăng nhập (self-service, Module 2a). Re-auth bằng mật khẩu HIỆN TẠI (chống
+   * chiếm phiên đổi pass), rate-limit per-user. Mật khẩu mới PHẢI khác mật khẩu cũ. Thành công → thu hồi
+   * MỌI refresh token còn sống của user (đổi pass = đăng xuất mọi phiên, mirror resetPassword) + audit.
+   * KHÔNG bao giờ log/return plaintext hay hash (BẤT BIẾN #3).
+   */
+  async changePassword(
+    user: { id: string; companyId: string },
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const rlKey = `change-pw|${user.companyId}|${user.id}`;
+    if (await this.rateLimiter.isLocked(rlKey)) {
+      throw new HttpException("Quá nhiều lần thử. Vui lòng thử lại sau.", HttpStatus.TOO_MANY_REQUESTS);
+    }
+    // Khác mật khẩu cũ: chặn no-op + ép xoay thật. So plaintext (chưa chạm DB) → lỗi rõ ràng, không tốn băm.
+    if (newPassword === currentPassword) {
+      throw new BadRequestException("Mật khẩu mới phải khác mật khẩu hiện tại.");
+    }
+
+    const ok = await this.dbsvc.withTenant(user.companyId, async (tx) => {
+      const [row] = await tx
+        .select({ passwordHash: users.passwordHash })
+        .from(users)
+        .where(and(eq(users.id, user.id), isNull(users.deletedAt)))
+        .limit(1);
+      if (!row) return false;
+      // verify trả false khi SAI mật khẩu; NÉM (PasswordVerificationError) khi hash hỏng → 500 (KHÔNG nuốt thành 401).
+      const verified = await this.password.verify(row.passwordHash, currentPassword);
+      if (!verified) return false;
+
+      const newHash = await this.password.hash(newPassword);
+      await tx
+        .update(users)
+        .set({ passwordHash: newHash, updatedAt: new Date() })
+        .where(eq(users.id, user.id));
+      // Đổi mật khẩu = đăng xuất MỌI phiên: thu hồi mọi refresh token còn sống (mirror resetPassword).
+      await tx
+        .update(refreshTokens)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(refreshTokens.userId, user.id), isNull(refreshTokens.revokedAt)));
+      await this.audit.record(tx, {
+        action: "auth.password_changed",
+        objectType: "auth",
+        actorUserId: user.id,
+        objectId: user.id,
+      });
+      return true;
+    });
+
+    if (!ok) {
+      await this.rateLimiter.recordFailure(rlKey);
+      throw new UnauthorizedException("Mật khẩu hiện tại không đúng.");
+    }
+    await this.rateLimiter.reset(rlKey);
   }
 
   /** Khoá login khi BẤT KỲ bucket nào (per-IP HOẶC per-account) đã chạm ngưỡng. */

@@ -23,6 +23,7 @@ export default {
   payslips: "Phiếu lương",
   bonusPenalties: "Thưởng / Phạt",
   breakGlass: "Truy cập khẩn cấp",
+  myAccount: "Tài khoản của tôi",
   accountSecurity: "Bảo mật tài khoản",
   securityPolicy: "Bảo mật nâng cao",
   companySettings: "Cài đặt công ty",

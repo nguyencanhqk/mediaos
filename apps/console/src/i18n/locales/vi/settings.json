@@ -1,4 +1,29 @@
 {
+  "account": {
+    "pageTitle": "Tài khoản của tôi",
+    "pageDesc": "Cập nhật hồ sơ và mật khẩu của bạn.",
+    "profileTitle": "Hồ sơ",
+    "profileDesc": "Thông tin hiển thị của bạn trong hệ thống.",
+    "emailLabel": "Email",
+    "emailHint": "Email là định danh đăng nhập — không thể tự đổi.",
+    "fullNameLabel": "Họ và tên",
+    "save": "Lưu hồ sơ",
+    "saving": "Đang lưu…",
+    "profileSaved": "Đã lưu hồ sơ.",
+    "passwordTitle": "Đổi mật khẩu",
+    "passwordDesc": "Sau khi đổi, mọi phiên đăng nhập sẽ bị đăng xuất — bạn cần đăng nhập lại bằng mật khẩu mới.",
+    "currentLabel": "Mật khẩu hiện tại",
+    "newLabel": "Mật khẩu mới",
+    "confirmLabel": "Nhập lại mật khẩu mới",
+    "showPassword": "Hiện mật khẩu",
+    "hidePassword": "Ẩn mật khẩu",
+    "changeButton": "Đổi mật khẩu",
+    "changing": "Đang đổi…",
+    "tooShort": "Mật khẩu mới tối thiểu 8 ký tự.",
+    "mismatch": "Nhập lại mật khẩu không khớp.",
+    "sameAsCurrent": "Mật khẩu mới phải khác mật khẩu hiện tại.",
+    "genericError": "Có lỗi xảy ra. Vui lòng thử lại."
+  },
   "security": {
     "pageTitle": "Bảo mật tài khoản",
     "pageDesc": "Quản lý xác thực hai lớp (2FA) cho tài khoản của bạn."
