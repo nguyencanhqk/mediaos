@@ -83,3 +83,5 @@ export * from "./mail-config";
 export * from "./security-policy";
 // CS-10 Đối tượng: Mời / Duyệt / Kích hoạt user (invite token → accept → approve; email-domain at accept)
 export * from "./user-invite";
+// AI-1 AI Insight (read-only): tóm tắt KPI + chi phí ĐÃ MASK theo permission qua Claude API
+export * from "./ai";

@@ -43,6 +43,7 @@ import { UserInvitesModule } from "./user-invites/user-invites.module";
 import { OperatorBootstrapModule } from "./operator-bootstrap/operator-bootstrap.module";
 import { SchedulerModule } from "./scheduler/scheduler.module";
 import { RecycleBinModule } from "./recycle-bin/recycle-bin.module";
+import { AiModule } from "./ai/ai.module";
 import { ApiKeyAuthGuard } from "./api-keys/guards/api-key-auth.guard";
 import { ApiKeyRepository } from "./api-keys/api-keys.repository";
 import { TokenService } from "./auth/token.service";
@@ -114,6 +115,8 @@ import {
     SchedulerModule,
     // CS-6: Thùng rác / recycle bin + restore (soft-deleted employees).
     RecycleBinModule,
+    // AI-1: AI Insight (read-only) — tóm tắt KPI + chi phí ĐÃ MASK theo permission qua Claude.
+    AiModule,
   ],
   providers: [
     // Global guard pipeline (THỨ TỰ QUAN TRỌNG):
