@@ -40,6 +40,17 @@ export function makeTask(partial: Partial<TaskDto> = {}): TaskDto {
     contentTitle: null,
     projectId: null,
     projectName: null,
+    // PM-1 (mig 0420) — work item kiểu Plane (ADDITIVE; giữ fixture khớp TaskDto).
+    priority: "none",
+    description: null,
+    startDate: null,
+    sequence: null,
+    displayId: null,
+    projectIdentifier: null,
+    stateId: null,
+    stateName: null,
+    stateGroup: null,
+    stateColor: null,
     ...partial,
   };
 }

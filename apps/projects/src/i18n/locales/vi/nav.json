@@ -1,3 +1,15 @@
 {
-  "projectsList": "Dự án"
+  "projectsList": "Dự án",
+  "appName": "Công việc",
+  "overview": "Tổng quan",
+  "myTasks": "Việc của tôi",
+  "reports": "Báo cáo",
+  "favorites": "Yêu thích",
+  "personal": "Cá nhân",
+  "trash": "Thùng rác",
+  "comingSoon": "Sắp có",
+  "searchPlaceholder": "Tìm kiếm",
+  "ungroupedProjects": "Dự án",
+  "noProjects": "Chưa có dự án nào",
+  "noMatch": "Không có dự án khớp"
 }

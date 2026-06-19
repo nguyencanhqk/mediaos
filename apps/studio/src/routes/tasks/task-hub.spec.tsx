@@ -77,6 +77,16 @@ function makeTask(over: Partial<TaskDto>): TaskDto {
     contentTitle: null,
     projectId: null,
     projectName: null,
+    priority: "none",
+    description: null,
+    startDate: null,
+    sequence: null,
+    displayId: null,
+    projectIdentifier: null,
+    stateId: null,
+    stateName: null,
+    stateGroup: null,
+    stateColor: null,
     ...over,
   };
 }

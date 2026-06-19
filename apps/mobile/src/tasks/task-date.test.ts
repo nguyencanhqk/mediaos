@@ -1,5 +1,5 @@
 import { isDueToday, isOverdue, summarizeTasks } from "./task-date";
-import type { TaskDto } from "@mediaos/contracts";
+import { makeTask as task } from "../test-utils/fixtures";
 
 // Built with the LOCAL-time constructor (not a UTC "Z" string) so the day-boundary assertions are
 // timezone-independent — isDueToday compares LOCAL calendar days (matching how the UI shows dates).
@@ -26,34 +26,6 @@ describe("isOverdue / isDueToday", () => {
     expect(isDueToday(localIso(2026, 5, 17, 1), NOW)).toBe(false);
   });
 });
-
-function task(partial: Partial<TaskDto>): TaskDto {
-  return {
-    id: "t",
-    companyId: "c",
-    taskType: "office",
-    title: "x",
-    status: "in_progress",
-    origin: "initial",
-    revisionRound: 0,
-    dueDate: null,
-    createdAt: NOW.toISOString(),
-    updatedAt: NOW.toISOString(),
-    assigneeUserId: null,
-    stepId: null,
-    stepCode: null,
-    stepName: null,
-    stepStatus: null,
-    submissionUrl: null,
-    submissionNote: null,
-    workflowInstanceId: null,
-    contentItemId: null,
-    contentTitle: null,
-    projectId: null,
-    projectName: null,
-    ...partial,
-  };
-}
 
 describe("summarizeTasks", () => {
   it("counts only open tasks; completed/approved are excluded", () => {
