@@ -12,6 +12,7 @@ import {
   Terminal,
   Trash2,
   UserCircle,
+  UserCog,
   Users,
   Webhook,
 } from "lucide-react";
@@ -54,6 +55,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "positions", labelKey: "positions", to: "/system/positions", icon: Briefcase, tile: "bg-indigo-500/15 text-indigo-400", category: "system", subcategory: "Quản lý danh mục" },
   // CS-4: Đối tượng — danh bạ Người dùng / Nhân viên — subcategory "Quản lý danh mục".
   { id: "objects", labelKey: "objects", to: "/system/objects", icon: Users, tile: "bg-blue-500/15 text-blue-400", category: "system", subcategory: "Quản lý danh mục" },
+  // ACCT-2-FE: Quản lý người dùng (admin) — manage:user. Gate quyền trong component.
+  { id: "adminUsers", labelKey: "adminUsers", to: "/system/users", icon: UserCog, tile: "bg-purple-500/15 text-purple-400", category: "system", subcategory: "Phân quyền" },
   // CS-2: Phân quyền (RBAC) — nhóm riêng "Phân quyền" theo IA (gán/thu vai trò + quyền theo đối tượng).
   { id: "permissions", labelKey: "permissions", to: "/system/permissions", icon: Shield, tile: "bg-amber-500/15 text-amber-400", category: "system", subcategory: "Phân quyền" },
   // CS-7: Tình hình sử dụng — thống kê login, last-login, task per-tenant (nhóm riêng theo IA, KHÔNG gộp Kiểm toán).

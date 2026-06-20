@@ -18,6 +18,8 @@ import { UsagePage } from "@/routes/system/usage";
 import { ApiKeysPage } from "@/routes/system/api-keys/api-keys-page";
 import { WebhooksPage } from "@/routes/system/webhooks/webhooks-page";
 import { RecycleBinPage } from "@/routes/recycle-bin";
+// ACCT-2-FE: Quản lý người dùng (admin user CRUD — manage:user + suspend:user + delete-user:user).
+import { UsersPage } from "@/routes/system/users/users-page";
 
 const rootRoute = createRootRoute({ component: RootLayout });
 
@@ -158,6 +160,14 @@ const webhooksRoute = createRoute({
   component: WebhooksPage,
 });
 
+// ACCT-2-FE: Quản lý người dùng — gate manage:user xử lý trong component (PermissionGate + useCan).
+const adminUsersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/users",
+  beforeLoad: authGuard,
+  component: UsersPage,
+});
+
 // CS-6: Thùng rác — khôi phục nhân viên bị xoá mềm (restore:employee sensitive), gate trong component.
 const recycleBinRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -168,6 +178,7 @@ const recycleBinRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  adminUsersRoute,
   companySettingsRoute,
   platformAccountsRoute,
   mailConfigRoute,
