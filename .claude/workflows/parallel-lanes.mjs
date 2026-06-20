@@ -65,19 +65,44 @@ const DOMAIN = {
   fe: /(react|\.tsx|component|\bweb\b|\bui\b|tanstack|zustand|shadcn|form|màn hình)/i,
 };
 
+// VAI TRÒ review (mô tả, để khung prompt) → agent type CÓ THẬT trong registry.
+// Lý do: reviewer 'ecc:*' KHÔNG tồn tại ở runtime này → stage Review crown fail âm thầm (phiên 2026-06-20).
+// 3 nhóm cho ĐA GÓC NHÌN mà không spawn trùng: DB/RLS · bảo mật · chất-lượng-code.
+// Available: claude · claude-code-guide · completion-evaluator · Explore · general-purpose · Plan · plan-reviewer · rls-tenant-isolation-tester · statusline-setup.
+const REVIEWER_AGENT = {
+  'database-reviewer': 'rls-tenant-isolation-tester', // chuyên dụng RLS/tenant, read-only
+  'security-reviewer': 'general-purpose', // suy luận bảo mật (prompt ép read-only)
+  'silent-failure-hunter': 'general-purpose',
+  'react-reviewer': 'completion-evaluator', // chất lượng FE/UI
+  'typescript-reviewer': 'completion-evaluator', // baseline: chạy typecheck/test + rubric DoD
+};
+const reviewerAgentFor = (role) => REVIEWER_AGENT[short(role)] || 'general-purpose';
+
+// Trả về [{ agentType, roles[], label }] — đã GOM theo agent thật (1 agent/lần, kèm các vai trò nó đảm nhiệm).
 function pickReviewers(L) {
   if (L.noReview) return [];
-  if (Array.isArray(L.reviewers) && L.reviewers.length) return [...new Set(L.reviewers)];
-  const t = `${L.task || ''} ${L.gate || ''}`;
-  const set = new Set();
-  if (DOMAIN.db.test(t)) set.add('ecc:database-reviewer');
-  if (DOMAIN.sec.test(t) || L.gate === 'FULL') {
-    set.add('ecc:security-reviewer');
-    set.add('ecc:silent-failure-hunter');
+  let roles;
+  if (Array.isArray(L.reviewers) && L.reviewers.length) {
+    roles = [...new Set(L.reviewers.map(short))]; // override: chấp nhận cả 'ecc:x' lẫn 'x'
+  } else {
+    const t = `${L.task || ''} ${L.gate || ''}`;
+    const set = new Set();
+    if (DOMAIN.db.test(t)) set.add('database-reviewer');
+    if (DOMAIN.sec.test(t) || L.gate === 'FULL') {
+      set.add('security-reviewer');
+      set.add('silent-failure-hunter');
+    }
+    if (DOMAIN.fe.test(t)) set.add('react-reviewer');
+    set.add('typescript-reviewer'); // baseline mọi lane có code
+    roles = [...set];
   }
-  if (DOMAIN.fe.test(t)) set.add('ecc:react-reviewer');
-  set.add('ecc:typescript-reviewer'); // baseline mọi lane có code
-  return [...set];
+  const byAgent = new Map(); // agentType → roles[]
+  for (const role of roles) {
+    const agentType = reviewerAgentFor(role);
+    if (!byAgent.has(agentType)) byAgent.set(agentType, []);
+    byAgent.get(agentType).push(role);
+  }
+  return [...byAgent.entries()].map(([agentType, rs]) => ({ agentType, roles: rs, label: rs.join('+') }));
 }
 
 function pickSkills(L) {
@@ -103,7 +128,7 @@ lanes.forEach((L) => {
   const rv = pickReviewers(L);
   if (rv.length) {
     const sk = pickSkills(L);
-    log(`      reviewers: ${rv.map(short).join(', ')}${sk.length ? ` · skills: ${sk.map(short).join(', ')}` : ''} · build: ${short(pickBuildResolver(L))}`);
+    log(`      reviewers: ${rv.map((r) => `${r.label}→${r.agentType}`).join(', ')}${sk.length ? ` · skills: ${sk.map(short).join(', ')}` : ''} · build: ${short(pickBuildResolver(L))}`);
   }
 });
 
@@ -117,7 +142,7 @@ if (dryRun) {
       crown: isCrown(L),
       plan: needsPlan(L),
       reviewStage: isCrown(L) && pickReviewers(L).length > 0, // crown mới spawn reviewer độc lập
-      reviewers: pickReviewers(L),
+      reviewers: pickReviewers(L).map((r) => `${r.label}→${r.agentType}`),
       skills: pickSkills(L),
       buildResolver: pickBuildResolver(L),
     })),
@@ -218,7 +243,7 @@ function implementerPrompt(L, plan) {
         ``,
       ]
     : [];
-  const gateList = [...pickReviewers(L), ...pickSkills(L)].map(short).join(', ') || '(không có)';
+  const gateList = [...pickReviewers(L).map((r) => `${r.label} (${r.agentType})`), ...pickSkills(L).map(short)].join(', ') || '(không có)';
   const buildResolver = short(pickBuildResolver(L));
   return [
     `Bạn vận hành LANE ${L.id.toUpperCase()} của dự án MediaOS.`,
@@ -250,15 +275,17 @@ function implementerPrompt(L, plan) {
 }
 
 function reviewPrompt(L, rv) {
+  const roleDesc = rv.roles.join(' + ');
   return [
-    `Bạn là ${short(rv)} review LANE ${L.id.toUpperCase()} của MediaOS — vùng CROWN-JEWEL, hãy NGHIÊM KHẮC.`,
+    `Bạn review LANE ${L.id.toUpperCase()} của MediaOS với (các) VAI TRÒ: ${roleDesc} — vùng CROWN-JEWEL, hãy NGHIÊM KHẮC theo đúng các vai trò đó.`,
     `Worktree: ${L.worktree}. Xem thay đổi mới nhất:`,
     `  cd "${L.worktree}" && git --no-pager diff HEAD~1   (nếu lane vừa commit checkpoint)`,
     `  cd "${L.worktree}" && git --no-pager diff           (nếu còn dở chưa commit)`,
     `Bối cảnh nhiệm vụ: ${L.task}`,
     ``,
     `Bất biến BẮT BUỘC soi: company_id ở mọi query + RLS/FORCE · bảng audit/snapshot append-only (app role không UPDATE/DELETE) · không secret plaintext (envelope+KMS phía app, không pgcrypto-in-SQL, không log).`,
-    `CHỈ REVIEW (read-only) — KHÔNG sửa file. Trả DUY NHẤT verdict theo schema (reviewer="${short(rv)}").`,
+    `CHỈ REVIEW — READ-ONLY. TUYỆT ĐỐI KHÔNG Edit/Write/sửa file/commit/đổi git state; chỉ đọc (Read/Grep/Glob + Bash chỉ-đọc như 'git diff'/chạy test). Tự ý sửa file = VI PHẠM hợp đồng review.`,
+    `Trả DUY NHẤT verdict theo schema (reviewer="${rv.label}").`,
     `blocking=true CHỈ khi có lỗi CRITICAL/HIGH thật (rò tenant chéo, mất bất biến, secret lộ, silent failure, mất append-only). Nghi ngờ → ghi findings, KHÔNG tự ý blocking.`,
   ].join('\n');
 }
@@ -314,10 +341,10 @@ const rawResults = (
       return parallel(
         reviewers.map((rv) => () =>
           agent(reviewPrompt(L, rv), {
-            label: `review:${L.id}:${short(rv)}`,
+            label: `review:${L.id}:${rv.label}`,
             phase: 'Review',
             model: pickModel(L),
-            agentType: rv,
+            agentType: rv.agentType,
             schema: VERDICT_SCHEMA,
           }),
         ),
