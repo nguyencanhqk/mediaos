@@ -26,3 +26,19 @@ export const BRAND = {
 } as const;
 
 export type Brand = typeof BRAND;
+
+/** Nhãn phụ kiểu mono ở hero "Phòng điều khiển" (Latin, stylized — không i18n). */
+export const BRAND_SYSTEM_LABEL = "SYSTEM CONTROL PLANE";
+
+/**
+ * Phổ màu thương hiệu Funtime (teal → đỏ) — chữ ký "thanh tín hiệu on-air".
+ * Cùng dải màu với .brand-gradient-* trong index.css (một nguồn ý niệm) và với apps/auth.
+ */
+export const BRAND_SPECTRUM = [
+  "#16A085", // teal
+  "#1FA9E0", // blue
+  "#36A94E", // green
+  "#F5B50C", // amber
+  "#F0641E", // orange
+  "#E8482E", // red
+] as const;

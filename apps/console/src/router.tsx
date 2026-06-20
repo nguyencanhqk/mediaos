@@ -15,6 +15,8 @@ import { OrgStructurePage } from "@/routes/system/org/org-structure";
 import { PositionsPage } from "@/routes/system/org/positions";
 import { ObjectsPage } from "@/routes/system/objects";
 import { UsagePage } from "@/routes/system/usage";
+import { ApiKeysPage } from "@/routes/system/api-keys/api-keys-page";
+import { WebhooksPage } from "@/routes/system/webhooks/webhooks-page";
 import { RecycleBinPage } from "@/routes/recycle-bin";
 
 const rootRoute = createRootRoute({ component: RootLayout });
@@ -140,6 +142,22 @@ const usageRoute = createRoute({
   component: UsagePage,
 });
 
+// DevOps — API key/PAT (hút từ apps/admin tenant-plane). Gate quyền manage:api-key trong component.
+const apiKeysRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/api-keys",
+  beforeLoad: authGuard,
+  component: ApiKeysPage,
+});
+
+// DevOps — Webhooks (hút từ apps/admin tenant-plane). Gate quyền view/manage:webhook trong component.
+const webhooksRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/webhooks",
+  beforeLoad: authGuard,
+  component: WebhooksPage,
+});
+
 // CS-6: Thùng rác — khôi phục nhân viên bị xoá mềm (restore:employee sensitive), gate trong component.
 const recycleBinRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -163,6 +181,8 @@ const routeTree = rootRoute.addChildren([
   positionsRoute,
   objectsRoute,
   usageRoute,
+  apiKeysRoute,
+  webhooksRoute,
   recycleBinRoute,
 ]);
 
