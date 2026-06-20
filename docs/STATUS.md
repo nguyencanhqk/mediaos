@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-06-19 13:27Z**. Sửa tiến độ ở `harness/backlog.mjs`, rồi chạy lại.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-06-20 08:13Z**. Sửa tiến độ ở `harness/backlog.mjs`, rồi chạy lại.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -9,23 +9,20 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
-- 🟡 `ACCT-2` ②b Quản trị user (admin): CRUD/mời/suspend/soft-delete + FE user-management
-- 🟢 `CONSOLE-1` ④ Quản trị hệ thống: redesign apps/console, hút màn devops hữu ích từ operator plane
-- 🟡 `TRIM-1` Trim chức năng: gộp defect→tasks(labels), gỡ template-clone/recycle-bin nếu không dùng
-- 🟡 `AI-1` AI insight v1 (read-only): KPI insight đọc kpi+finance → tóm tắt, KHÔNG ghi DB
+- 🟡 `PERM-UI-1` ③ Phân quyền: giữ engine 4-tier, wire Tier-2 scope nếu cần + redesign role/permission UI
+- 🟡 `TRIM-1` Trim chức năng hướng cũ: gỡ/park media·workflow-DAG·defect·template-clone·recycle-bin không thuộc spec MVP
 
 **CHỜ (kẹt phụ thuộc):**
-- `PERM-UI-1` ③ Phân quyền: giữ engine 4-tier, wire Tier-2 scope nếu cần + redesign role/permission UI ⏳ cần: ACCT-2
-- `APP-MERGE-1` Dựng apps/app (shell hợp nhất): studio (work/process/goals) + people (hr/payroll) + projects (PM) ⏳ cần: PERM-UI-1, CONSOLE-1
+- `APP-MERGE-1` Dựng apps/app (shell hợp nhất) cho module MVP: HR · ATT · LEAVE · TASK · DASH · NOTI (theo docs/spec/) ⏳ cần: PERM-UI-1
 
-**Đã xong (v2):** `HARNESS-SPINE`, `FE-AUTH-1`, `ACCT-1`
+**Đã xong (v2):** `HARNESS-SPINE`, `FE-AUTH-1`, `ACCT-1`, `ACCT-2`, `ACCT-2-FE`, `AUTH-FIX-1`, `CONSOLE-1`, `AI-1`
 
 ## Trạng thái repo
 
-- **branch**: `feat/login-account-selfservice` · **file đang đổi (dirty)**: 19
-- **migration head**: idx 112 — `0420_pm_foundation` (113 migration)
-- **nền**: G1–G16 đã land master (RLS·permission·audit·outbox·payroll·finance·workflow·task-hub). Lịch sử ở git.
-- **hướng v2**: v2 (owner 2026-06-19): đơn giản hoá để KIỂM SOÁT — tuần tự 1 tính năng/phiên, gộp FE 9→3 (auth·console·app), GIỮ backend (company_id/RLS ở N=1), redesign UX, trim chức năng, AI-first mỏng. Thay thế kế hoạch gộp-vào-apps/workspace cũ.
+- **branch**: `master` · **file đang đổi (dirty)**: 83
+- **migration head**: idx 113 — `0430_acct2_admin_user_admin_perms` (114 migration)
+- **nền**: Nền backend G1–G16 đã land master (RLS·permission·audit·outbox + giữ lại). De-media-fy: media·workflow-DAG·payroll·finance·SaaS·mobile PARKED (out-of-scope, không xóa) — xem docs/SYSTEM-DESIGN.md §14. Lịch sử ở git.
+- **hướng v2**: v2 (owner 2026-06-19, reframe 2026-06-20): đơn giản hoá để KIỂM SOÁT — tuần tự 1 tính năng/phiên. De-media-fy thành hệ QLDN chung; GIỮ backend hạ tầng (company_id/RLS ở N=1, audit, permission); xây/redesign 7 module MVP theo docs/spec/. FE: auth·console·app. Khi code cũ mâu thuẫn spec → spec thắng.
 
 ## Commit gần đây
 

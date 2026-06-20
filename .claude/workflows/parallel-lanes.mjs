@@ -45,10 +45,13 @@ const short = (a) => String(a).replace(/^ecc:/, '');
 // ── Model routing (CLAUDE.md §6) ────────────────────────────────────────────
 // Quyết định 2026-06-12 (thận trọng chất lượng): KHÔNG Haiku · Sonnet mặc định · Opus chỉ crown-jewel.
 // Crown-jewel còn được lập micro-plan (Opus) TRƯỚC khi code. Việc thường chạy thẳng Sonnet.
-// Không dùng \b (word-boundary ASCII không đáng tin với dấu tiếng Việt: "chi phí", "lương"…).
+// Không dùng \b (word-boundary ASCII không đáng tin với dấu tiếng Việt: "lương", "phê duyệt"…).
 // Chấp nhận over-match nhẹ → thiên về Opus, đúng tinh thần thận trọng chất lượng.
+// De-media-fy 2026-06-20: bỏ finance/revenue/cost/profit/kpi/ledger (subsystem parked). Crown MVP =
+//   permission/RLS · secret/encrypt/KMS · audit/append-only · auth/token · workflow phê duyệt (FSM/DAG) · ADR.
+//   Giữ cụm payroll/lương/payslip cho Phase 2 (payroll quay lại làm crown khi build).
 const CROWN_JEWEL =
-  /(payroll|l[uư]ơng|payslip|bảng lương|bonus|penalty|thưởng|phạt|permission|\brls\b|policy|secret|envelope|encrypt|mã hóa|kms|vault|finance|revenue|doanh thu|\bcost\b|chi phí|profit|lợi nhuận|ledger|\bkpi\b|\bfsm\b|\bdag\b|append-only|\badr\b)/i;
+  /(payroll|l[uư]ơng|payslip|bảng lương|bonus|penalty|thưởng|phạt|permission|\brls\b|policy|secret|envelope|encrypt|mã hóa|kms|vault|\bauth\b|token|\bfsm\b|\bdag\b|append-only|\badr\b)/i;
 const PLANNER_MODEL = 'opus'; // model cho bước plan của crown-jewel (đổi 'sonnet' nếu muốn rẻ hơn)
 
 const isCrown = (L) => L.tier === 'crown' || CROWN_JEWEL.test(L.task || '');
@@ -311,7 +314,10 @@ function mergeVerdicts(impl, verdicts, L) {
 
 // KHÔNG dùng isolation:'worktree' — mỗi lane đã có worktree thật trên đĩa; agent cd vào đó qua Bash.
 // pipeline 3 stage (không barrier — mỗi lane chảy độc lập): Plan → Implement → Review.
-// - Plan:      crown-jewel → agent Opus lập micro-plan; lane thường → null (bỏ qua).
+// - Plan:      crown-jewel → agent Opus lập micro-plan; lane thường → sentinel {__noPlan} (KHÔNG null!).
+//              LÝ DO: pipeline DROP item khi 1 stage trả null/falsy → lane skipPlan/non-crown biến mất
+//              khỏi Implement (0-token/0-agent). Bug tái diễn 3 lần (CONSOLE-1 ×2, acct2fe). Sentinel
+//              non-null giữ item sống tới Implement; stage2 quy đổi sentinel về null cho prompt.
 // - Implement: agent theo pickModel(L), nhận plan (nếu có) + gate-injection reviewer/skill + auto build-fix.
 // - Review:    crown-jewel → spawn reviewer agent ĐỘC LẬP (agentType) trên diff → mergeVerdicts;
 //              lane thường → trả nguyên (review đã chạy trong Implement qua gate-injection).
@@ -326,9 +332,9 @@ const rawResults = (
             model: PLANNER_MODEL,
             schema: PLAN_SCHEMA,
           })
-        : null,
+        : { __noPlan: true }, // sentinel non-null: KHÔNG trả null (pipeline drop item khi stage trả falsy)
     (plan, L) =>
-      agent(implementerPrompt(L, plan), {
+      agent(implementerPrompt(L, plan && plan.__noPlan ? null : plan), {
         label: `lane:${L.id}`,
         phase: 'Implement',
         model: pickModel(L),

@@ -18,11 +18,12 @@
 //   done_when   : string[] tiêu chí HỘI TỤ (đích để dừng; verify chứng minh)
 
 export const meta = {
-  project: 'MediaOS',
+  project: 'Hệ thống Quản lý Doanh nghiệp (de-media-fy 2026-06-20)',
+  spec: 'Nguồn sự thật sản phẩm = docs/spec/ (SPEC-01…08). MVP = AUTH·HR·ATT·LEAVE·TASK·DASH·NOTI.',
   foundation:
-    'G1–G16 đã land master (RLS·permission·audit·outbox·payroll·finance·workflow·task-hub). Lịch sử ở git.',
+    'Nền backend G1–G16 đã land master (RLS·permission·audit·outbox + giữ lại). De-media-fy: media·workflow-DAG·payroll·finance·SaaS·mobile PARKED (out-of-scope, không xóa) — xem docs/SYSTEM-DESIGN.md §14. Lịch sử ở git.',
   direction:
-    'v2 (owner 2026-06-19): đơn giản hoá để KIỂM SOÁT — tuần tự 1 tính năng/phiên, gộp FE 9→3 (auth·console·app), GIỮ backend (company_id/RLS ở N=1), redesign UX, trim chức năng, AI-first mỏng. Thay thế kế hoạch gộp-vào-apps/workspace cũ.',
+    'v2 (owner 2026-06-19, reframe 2026-06-20): đơn giản hoá để KIỂM SOÁT — tuần tự 1 tính năng/phiên. De-media-fy thành hệ QLDN chung; GIỮ backend hạ tầng (company_id/RLS ở N=1, audit, permission); xây/redesign 7 module MVP theo docs/spec/. FE: auth·console·app. Khi code cũ mâu thuẫn spec → spec thắng.',
   brain: 'Điều phối đa-agent (decompose/route/review/escalate) dùng .claude/workflows/parallel-lanes.mjs.',
 };
 
@@ -88,15 +89,54 @@ export const backlog = [
   },
   {
     id: 'ACCT-2',
-    title: '②b Quản trị user (admin): CRUD/mời/suspend/soft-delete + FE user-management',
+    title: '②b Quản trị user (admin) BACKEND: CRUD/mời/suspend/soft-delete + contracts',
     zone: 'yellow',
-    status: 'todo',
-    paths: ['apps/api/src/users/**', 'packages/contracts/src/users.ts', 'apps/console/**', 'apps/app/**'],
+    // DONE 2026-06-20 (merge b1b53ec): BE-only. admin-users controller/service/repo + mig 0430 (perm sensitive
+    // suspend:user/delete-user:user + grant). Review độc lập RLS+security OK 0 blocking; full API 2748 pass.
+    // FE user-management tách sang ACCT-2-FE (Wave 2, trong vỏ console mới). Follow-up: AUTH-FIX-1 (suspended login).
+    status: 'done',
+    paths: ['apps/api/src/users/**', 'packages/contracts/src/users.ts'],
     skills: ['code-review'],
     depends_on: ['ACCT-1'],
     done_when: [
       'admin user CRUD + suspend + soft-delete (deleted_at, KHÔNG hard-delete) qua permission guard',
-      'deny-path test khi thiếu quyền; FE danh sách + thao tác user',
+      'deny-path test khi thiếu quyền (RED trước)',
+    ],
+  },
+  {
+    id: 'ACCT-2-FE',
+    title: '②b-FE Quản trị user: màn danh sách + thao tác (suspend/soft-delete/mời) trong vỏ console mới',
+    zone: 'yellow',
+    // DONE 2026-06-20 (Wave 2a, merge 2c1ac49): UsersPage (TanStack Table + filter q/status + pagination +
+    // loading/error/empty) + suspend/delete/invite dialog; gating useCan/PermissionGate bằng hằng (manage/
+    // suspend/delete-user/invite:user); reuse consoleInvitesApi cho mời; api-client validate Zod. Chạy qua
+    // Agent tool (workflow drop lane skipPlan — đã vá sentinel). Verify master: console 173/173 + typecheck OK.
+    status: 'done',
+    paths: ['apps/console/src/routes/system/users/**', 'packages/web-core/**'],
+    skills: ['frontend-design', 'code-review'],
+    depends_on: ['ACCT-2', 'CONSOLE-1'],
+    done_when: [
+      'FE danh sách user + thao tác (suspend/reactivate/soft-delete/mời) gọi API ACCT-2 qua permission guard (useCan/PermissionGate)',
+      'web test console xanh; không hard-code quyền; mask dữ liệu nhạy cảm theo server',
+    ],
+  },
+  {
+    id: 'AUTH-FIX-1',
+    title: 'Chặn login khi user status=suspended (login hiện chỉ lọc deleted_at) — bổ trợ ACCT-2 suspend',
+    zone: 'red', // chạm auth login flow — nhạy cảm, FULL gate + deny-path test RED trước
+    // DONE 2026-06-20 (Wave 2a, merge 67e7f2f, red→human-chốt): allow-list fail-closed status==='active' tại
+    // CẢ 3 đường cấp token (login sau password.verify; refresh thu hồi family; 2FA step-2 — đường thứ 3 ask
+    // gốc bỏ sót). 401 đồng nhất anti status-probing, reason chỉ vào audit_logs. Không migration. Chạy qua
+    // workflow (Opus+plan+reviewer độc lập LOW). Verify: spec 10/10 + full api 2758 pass/0 fail.
+    status: 'done',
+    // Phát hiện bởi lane ACCT-2 (2026-06-20): auth.service.ts:302-306 chỉ lọc deleted_at →
+    // user bị suspend VẪN đăng nhập được. Soft-delete đã chặn; suspend thì chưa. Để riêng vì chạm auth hot/shared.
+    paths: ['apps/api/src/auth/**'],
+    skills: ['code-review'],
+    depends_on: ['ACCT-2'],
+    done_when: [
+      'login + refresh chặn user status=suspended (deny-path test RED trước); soft-delete giữ nguyên đã chặn',
+      'không phá luồng login user active; không lộ lý do chi tiết gây dò trạng thái',
     ],
   },
   {
@@ -116,7 +156,9 @@ export const backlog = [
     id: 'CONSOLE-1',
     title: '④ Quản trị hệ thống: redesign apps/console, hút màn devops hữu ích từ operator plane',
     zone: 'green',
-    status: 'todo',
+    // DONE 2026-06-20 (merge b1b53ec): design "Phòng điều khiển" áp sang console + hút api-keys/webhooks
+    // (tenant-plane, KHÔNG hút operator cross-tenant); console vốn không có bề mặt multi-company. test 161/161.
+    status: 'done',
     paths: ['apps/console/**', 'packages/web-core/**', 'packages/ui/**'],
     skills: ['frontend-design', 'code-review'],
     depends_on: ['FE-AUTH-1'],
@@ -127,22 +169,26 @@ export const backlog = [
   },
   {
     id: 'APP-MERGE-1',
-    title: 'Dựng apps/app (shell hợp nhất): studio (work/process/goals) + people (hr/payroll) + projects (PM)',
-    zone: 'yellow', // chạm payroll FE → mask/re-auth phải giữ
+    title: 'Dựng apps/app (shell hợp nhất) cho module MVP: HR · ATT · LEAVE · TASK · DASH · NOTI (theo docs/spec/)',
+    zone: 'yellow',
     status: 'todo',
+    // RESCOPE 2026-06-20 (de-media-fy): bỏ framing studio/people/payroll/projects cũ. apps/app gom 7 module MVP.
+    // payroll = Phase 2 (parked) → KHÔNG đưa payslip vào shell này. Lấy docs/spec/ làm chuẩn.
     paths: ['apps/app/**', 'apps/studio/**', 'apps/people/**', 'apps/projects/**', 'packages/web-core/**'],
     skills: ['frontend-design', 'code-review'],
     depends_on: ['PERM-UI-1', 'CONSOLE-1'],
     done_when: [
-      'studio/people/projects route gộp vào apps/app; payslip money-free + re-auth giữ nguyên',
+      'route 7 module MVP (HR·ATT·LEAVE·TASK·DASH·NOTI) gộp vào apps/app theo docs/spec/; KHÔNG có payslip/payroll',
       'gỡ shell trùng; CI apps-frontend path-filter trỏ về app/auth/console; web test xanh',
     ],
   },
   {
     id: 'TRIM-1',
-    title: 'Trim chức năng: gộp defect→tasks(labels), gỡ template-clone/recycle-bin nếu không dùng',
+    title: 'Trim chức năng hướng cũ: gỡ/park media·workflow-DAG·defect·template-clone·recycle-bin không thuộc spec MVP',
     zone: 'yellow',
     status: 'todo',
+    // RESCOPE 2026-06-20 (de-media-fy): defect/workflow-DAG thuộc subsystem parked. Audit usage thật, gỡ an toàn,
+    // KHÔNG đụng bảng/route module MVP. Mục tiêu: thu hẹp bề mặt code về đúng 7 module spec.
     paths: ['apps/api/src/defect/**', 'apps/api/src/tasks/**', 'apps/api/src/templates/**'],
     skills: ['code-review'],
     depends_on: ['HARNESS-SPINE'],
@@ -155,7 +201,10 @@ export const backlog = [
     id: 'AI-1',
     title: 'AI insight v1 (read-only): KPI insight đọc kpi+finance → tóm tắt, KHÔNG ghi DB',
     zone: 'yellow', // đọc dữ liệu nhạy cảm → mask + permission, nhưng không mutate
-    status: 'todo',
+    // DONE 2026-06-20 (merge 1cf12e6): module ai/ đọc kpi_results + cost_records MASK qua Claude, read-only.
+    // PARKED 2026-06-20 (de-media-fy): đọc kpi/finance = subsystem parked; AI là Phase 5 trong docs/spec/.
+    //   Giữ 'done' (lịch sử), KHÔNG phát triển tiếp ở MVP. Không tham chiếu khi làm module spec.
+    status: 'done',
     paths: ['apps/api/src/ai/**', 'packages/contracts/src/ai.ts'],
     skills: ['code-review'],
     depends_on: ['HARNESS-SPINE'],
