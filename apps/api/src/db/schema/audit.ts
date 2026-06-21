@@ -1,4 +1,5 @@
-import { index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { desc } from "drizzle-orm";
+import { index, jsonb, pgTable, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 import { currentCompanyDefault } from "./_helpers";
 import { companies } from "./companies";
 import { users } from "./users";
@@ -6,6 +7,13 @@ import { users } from "./users";
 /**
  * audit_logs — append-only (BẤT BIẾN #2). DDL/RLS/grant ở migration 0003. app role chỉ INSERT/SELECT
  * (không UPDATE/DELETE). Cột chốt theo plan G2-4. KHÔNG ghi secret/hash vào before/after (bất biến #3).
+ *
+ * FOUNDATION-DB-2 (mig 0432) NÂNG về DB-08 §8.5 ADDITIVE: thêm cột module_code/entity_type/entity_id/
+ * actor_type/old_values/new_values/changed_fields/sensitivity_level/result_status/request_id/
+ * correlation_id/ip_address (đều nullable — writer cũ KHÔNG vỡ). CHECK actor_type/sensitivity_level/
+ * result_status (cho phép NULL) ở DB; KHÔNG biểu diễn được bằng Drizzle schema → chỉ sống trong SQL.
+ * Cột cũ object_type/object_id/before/after/ip/user_agent GIỮ NGUYÊN (AuditService v1 vẫn dùng);
+ * AuditService v2 (FOUNDATION-BE-3) điền cột mới + tự tính changed_fields từ old/new.
  */
 export const auditLogs = pgTable(
   "audit_logs",
@@ -17,16 +25,42 @@ export const auditLogs = pgTable(
       .references(() => companies.id),
     actorUserId: uuid("actor_user_id").references(() => users.id),
     action: text("action").notNull(),
+    // ── shape G2-4 cũ (GIỮ — writer v1) ──
     objectType: text("object_type").notNull(),
     objectId: uuid("object_id"),
     before: jsonb("before"),
     after: jsonb("after"),
     ip: text("ip"),
     userAgent: text("user_agent"),
+    // ── DB-08 §8.5 ADDITIVE (mig 0432, nullable — writer v2 FOUNDATION-BE-3 điền) ──
+    moduleCode: varchar("module_code", { length: 50 }),
+    entityType: varchar("entity_type", { length: 100 }),
+    entityId: uuid("entity_id"),
+    actorType: varchar("actor_type", { length: 50 }),
+    oldValues: jsonb("old_values"),
+    newValues: jsonb("new_values"),
+    changedFields: jsonb("changed_fields"),
+    sensitivityLevel: varchar("sensitivity_level", { length: 50 }),
+    resultStatus: varchar("result_status", { length: 50 }),
+    requestId: varchar("request_id", { length: 100 }),
+    correlationId: varchar("correlation_id", { length: 100 }),
+    ipAddress: varchar("ip_address", { length: 45 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("audit_logs_company_object_idx").on(t.companyId, t.objectType, t.objectId)],
+  (t) => [
+    index("audit_logs_company_object_idx").on(t.companyId, t.objectType, t.objectId),
+    // DB-08 §8.5 index (mig 0432) — parity với SQL.
+    index("idx_audit_logs_company_created").on(t.companyId, desc(t.createdAt)),
+    index("idx_audit_logs_entity").on(t.moduleCode, t.entityType, t.entityId),
+    index("idx_audit_logs_request").on(t.requestId),
+    index("idx_audit_logs_correlation").on(t.correlationId),
+  ],
 );
+
+// CHECK constraint actor_type/sensitivity_level/result_status sống ở SQL (mig 0432) — Drizzle pg-core
+// không biểu diễn enum-nullable tiện; allowed (NULL hợp lệ, additive): actor_type ∈ User/System/Job/
+// Integration · sensitivity_level ∈ Normal/Sensitive/HighlySensitive · result_status ∈ Success/Failure/
+// Denied/Error.
 
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
