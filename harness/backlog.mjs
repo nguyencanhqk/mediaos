@@ -4,7 +4,7 @@
 //   - harness/gen-status.mjs       → sinh docs/STATUS.md ("đang ở đâu, làm gì kế")
 //   - .claude/hooks/guard-scope.mjs → cảnh báo khi sửa file NGOÀI `paths` của item in_progress
 //
-// Mỗi phần tử = 1 Work Order. Sửa file NÀY khi mở/đóng việc — KHÔNG nhồi tiến độ vào TASKS.md prose.
+// Mỗi phần tử = 1 Work Order. Sửa file NÀY khi mở/đóng việc — KHÔNG nhồi tiến độ vào prose doc (docs/STATUS.md tự sinh từ file này).
 // Nền G1–G16 đã land master: lịch sử ở git + _journal.json, KHÔNG liệt lại ở đây (chống phình).
 //
 // Schema 1 item:
@@ -142,7 +142,9 @@ export const backlog = [
   {
     id: 'PERM-UI-1',
     title: '③ Phân quyền: giữ engine 4-tier, wire Tier-2 scope nếu cần + redesign role/permission UI',
-    zone: 'yellow',
+    // RED (red-zone-scanner 2026-06-21): paths chạm engine can() (permission.service.ts), hợp đồng useCan/PermissionGate,
+    // và role grant/revoke ghi audit_logs + emit permission.changed in-tx → authz + audit append-only. Cần lane đỏ + FULL gate.
+    zone: 'red',
     status: 'todo',
     paths: ['apps/api/src/permission/**', 'apps/console/**', 'apps/app/**', 'packages/web-core/**'],
     skills: ['code-review'],
@@ -185,7 +187,9 @@ export const backlog = [
   {
     id: 'TRIM-1',
     title: 'Trim chức năng hướng cũ: gỡ/park media·workflow-DAG·defect·template-clone·recycle-bin không thuộc spec MVP',
-    zone: 'yellow',
+    // RED (red-zone-scanner 2026-06-21): defect/templates chạm permission+audit+FSM; tasks/** là module MVP TASK (KHÔNG parked);
+    // gỡ defect orphan AUDIT_OBJECT_TYPES 'defect' (mirror DB CHECK, UNION-append-only → phá BẤT BIẾN #2). Re-scope + lane đỏ trước khi gỡ.
+    zone: 'red',
     status: 'todo',
     // RESCOPE 2026-06-20 (de-media-fy): defect/workflow-DAG thuộc subsystem parked. Audit usage thật, gỡ an toàn,
     // KHÔNG đụng bảng/route module MVP. Mục tiêu: thu hẹp bề mặt code về đúng 7 module spec.
@@ -213,4 +217,234 @@ export const backlog = [
       'không thêm bảng mới; không ghi; deny-path test khi thiếu quyền',
     ],
   },
+  // ═════ MVP BUILDOUT — Wave 1: FOUNDATION (EPIC-01, Sprint 1) ═════
+  // Seed 2026-06-21 từ gap-analysis (docs/plans/MVP-WORK-BREAKDOWN.md + mvp-work-orders.json, 141 WO tổng).
+  // FOUNDATION = critical path mở khóa AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH. Phần lớn ĐỎ (migration/audit/settings/files) → người + FULL gate.
+  // codeState=wrong-shape: hạ tầng G1–G16 có nhưng audit/settings/files/sequence/holidays LỆCH spec DB-08. Migration nối tiếp từ head 0430.
+  {
+    id: 'FOUNDATION-DB-1',
+    title: 'Migration system_settings + company_settings (RLS+FORCE) theo DB-08 §8.3/8.4',
+    zone: 'red',
+    status: 'todo',
+    paths: ['apps/api/migrations/0431_*.sql', 'apps/api/src/db/schema/settings.ts', 'apps/api/src/db/schema/index.ts'],
+    skills: ['code-review'],
+    depends_on: [],
+    done_when: [
+      'company_settings có company_id NOT NULL + RLS ENABLE+FORCE + policy USING/WITH CHECK company_id=current_setting(\'app.current_company_id\') TẠO TRƯỚC mọi INSERT/backfill (CLAUDE.md §3)',
+      'system_settings (no company_id, global) + company_settings có cột theo DB-08: setting_key/setting_value(jsonb)/value_type/category/module_code/is_public/is_sensitive/is_encrypted/secret_ref/validation_schema/status + CHECK value_type/status (DB-08 §8.3/8.4 constraint)',
+      'uq company_settings (company_id,setting_key) WHERE deleted_at IS NULL AND status=\'Active\' + uq system_settings(setting_key) WHERE status=\'Active\'',
+      'drizzle schema settings.ts parity với SQL + export trong schema/index.ts (append, không rewrite)',
+    ],
+  },
+  {
+    id: 'FOUNDATION-DB-2',
+    title: 'Migration audit_logs nâng cấp về DB-08 shape (giữ append-only) hoặc bảng audit chuẩn',
+    zone: 'red',
+    status: 'todo',
+    paths: ['apps/api/migrations/0432_*.sql', 'apps/api/src/db/schema/audit.ts'],
+    skills: ['code-review'],
+    depends_on: [],
+    done_when: [
+      'audit_logs có đủ cột DB-08 §8.5: module_code/action/entity_type/entity_id/actor_type/old_values/new_values/changed_fields/sensitivity_level/result_status/request_id/correlation_id/ip_address/user_agent (additive, giữ cột cũ nếu cần để không vỡ ghi hiện tại)',
+      'CHECK actor_type/sensitivity_level/result_status theo DB-08; GIỮ append-only: app role REVOKE UPDATE/DELETE vẫn còn (BẤT BIẾN #2) — verify bằng test ghi-rồi-update phải fail',
+      'index company_id+created_at desc, module_code+entity_type+entity_id, request_id, correlation_id (DB-08 §8.5)',
+      'migration đơn điệu sau head 0430 (idx 113), RLS company_id giữ nguyên FORCE',
+    ],
+  },
+  {
+    id: 'FOUNDATION-DB-3',
+    title: 'Migration files + file_links + file_access_logs (RLS+FORCE, polymorphic có kiểm soát) theo DB-08 §8.6-8.8',
+    zone: 'red',
+    status: 'todo',
+    paths: ['apps/api/migrations/0433_*.sql', 'apps/api/src/db/schema/files.ts', 'apps/api/src/db/schema/index.ts'],
+    skills: ['code-review'],
+    depends_on: [],
+    done_when: [
+      '3 bảng có company_id NOT NULL + RLS ENABLE+FORCE + policy company_id TẠO TRƯỚC backfill (CLAUDE.md §3)',
+      'files có upload_status(Pending/Uploaded/Failed/Deleted) + scan_status(NotRequired/Pending/Clean/Infected/Failed) + visibility(Private/Internal/Public) + storage_provider/storage_path/checksum_sha256 + CHECK đúng DB-08 §8.6; default visibility=Private',
+      'file_links polymorphic (module_code/entity_type/entity_id) + CHECK link_type/access_scope + uq is_primary per entity (DB-08 §8.7); file_access_logs CHECK action Preview/Download/Upload/Delete/Link/Unlink/GenerateSignedUrl (DB-08 §8.8)',
+      'file_access_logs append-only (REVOKE UPDATE/DELETE app role); drizzle parity files.ts',
+    ],
+  },
+  {
+    id: 'FOUNDATION-DB-4',
+    title: 'Migration sequence_counters + public_holidays (RLS+FORCE, company_id nullable cho global) theo DB-08 §8.9-8.10',
+    zone: 'red',
+    status: 'todo',
+    paths: ['apps/api/migrations/0434_*.sql', 'apps/api/src/db/schema/sequences.ts', 'apps/api/src/db/schema/holidays.ts', 'apps/api/src/db/schema/index.ts'],
+    skills: ['code-review'],
+    depends_on: [],
+    done_when: [
+      'sequence_counters có (company_id nullable, sequence_key, current_value, prefix, padding_length, reset_policy, suffix) + uq (company_id,sequence_key); public_holidays (company_id nullable, country_code, holiday_date, name, is_paid_holiday) theo DB-08 §8.9/8.10',
+      'RLS+FORCE cho company-scoped rows; row company_id NULL chỉ truy cập qua system/global path (DB-08 §5.3) — policy không rò chéo tenant',
+      'uq tránh trùng holiday (company_id/country_code, holiday_date) + index holiday_date range',
+      'migration nối tiếp sau 0433; drizzle parity',
+    ],
+  },
+  {
+    id: 'FOUNDATION-DB-5',
+    title: 'Migration data_retention_policies + seed_batches + seed_items + seed modules catalog/permission/system_settings (idempotent)',
+    zone: 'red',
+    status: 'todo',
+    paths: ['apps/api/migrations/0435_*.sql', 'apps/api/src/db/schema/retention.ts', 'apps/api/src/db/schema/seed-tracking.ts', 'apps/api/src/db/schema/index.ts'],
+    skills: ['code-review'],
+    depends_on: ['FOUNDATION-DB-1'],
+    done_when: [
+      'data_retention_policies + seed_batches + seed_items theo DB-08 §8.11-8.13 (RLS+FORCE nếu company_id; seed_items có seed_key/checksum/status)',
+      'seed modules catalog DB-08 §8.2 (AUTH/HR/ATT/LEAVE/TASK/DASH/NOTI active + PAYROLL.. inactive) — bảng modules CHUẨN spec, KHÔNG đụng system_modules SaaS hiện có',
+      'seed system_settings mặc định (file.max_upload_size_mb, file.allowed_mime_types, system.default_timezone/locale, audit.default_retention_days) bằng ON CONFLICT DO NOTHING (idempotent — chạy lại không trùng)',
+      'seed permission Foundation theo model (action,resource) hiện tại của permission engine (KHÔNG chuỗi dotted) — ON CONFLICT DO NOTHING',
+    ],
+  },
+  {
+    id: 'FOUNDATION-BE-1',
+    title: 'SettingService: precedence company→system→default + /settings/public (lọc is_public, mask is_sensitive) + admin update có audit',
+    zone: 'red',
+    status: 'todo',
+    paths: ['apps/api/src/foundation/settings/**', 'apps/api/src/settings/**'],
+    skills: ['code-review'],
+    depends_on: ['FOUNDATION-DB-1', 'FOUNDATION-BE-3'],
+    done_when: [
+      'resolveSetting(companyId,key) trả theo precedence company_settings→system_settings→fallback (BACKEND-11 §13.3); resolveMany hỗ trợ batch',
+      'GET /api/v1/foundation/settings/public CHỈ trả setting is_public=true AND is_sensitive=false; KHÔNG bao giờ trả secret_ref/raw secret (BACKEND-11 §13.4, security test)',
+      'PATCH setting validate value_type + validation_schema, ghi audit_logs CONFIG_UPDATE old/new/changed_fields trong cùng tx withTenant (BACKEND-04 §14.2)',
+      'deny-path test (RED): user thiếu FOUNDATION setting permission → 403; public endpoint không lộ sensitive (BACKEND-04 §18.4)',
+    ],
+  },
+  {
+    id: 'FOUNDATION-BE-2',
+    title: 'SequenceService.nextCode transaction + FOR UPDATE row lock + preview (không tăng) + ensureCounter',
+    zone: 'red',
+    status: 'todo',
+    paths: ['apps/api/src/foundation/sequences/**'],
+    skills: ['code-review'],
+    depends_on: ['FOUNDATION-DB-4'],
+    done_when: [
+      'nextCode chạy trong tx, SELECT ... FOR UPDATE trên sequence_counters; KHÔNG dùng MAX(code)+1 (DB-08 §5.10, BACKEND-04 §14.5)',
+      'format code theo prefix/padding/datePattern/suffix + reset_policy Never/Yearly/Monthly/Daily (BACKEND-04 §8.6)',
+      'previewNextCode trả mã kế tiếp KHÔNG mutate counter; admin PATCH sequence ghi audit',
+      'integration test concurrent N request đồng thời → 0 mã trùng (BACKEND-04 §18.2.3)',
+    ],
+  },
+  {
+    id: 'FOUNDATION-BE-3',
+    title: 'AuditService v2 (DB-08 shape) + AuditMaskerService + audit-list/detail API theo permission+scope',
+    zone: 'red',
+    status: 'todo',
+    paths: ['apps/api/src/foundation/audit/**', 'apps/api/src/events/audit.service.ts'],
+    skills: ['code-review'],
+    depends_on: ['FOUNDATION-DB-2'],
+    done_when: [
+      'write() điền đủ field DB-08 (module_code/action/entity_type/actor_type/sensitivity_level/result_status), tự tính changed_fields từ old/new, ghi trong cùng tx withTenant (giữ outbox/append-only)',
+      'AuditMaskerService mask password/token/secret/secret_ref/identity_number/bank_account/storage_path/signed_url TRƯỚC insert — test mask không vỡ cấu trúc diff (BACKEND-11 §12.5)',
+      'GET /api/v1/foundation/audit-logs (+ /{id}) filter module_code/action/actor/entity/from-to/request_id; data scope Company chỉ thấy audit company hiện tại, System mới thấy toàn hệ thống (BACKEND-04 §9.5)',
+      'deny-path test (RED): Employee gọi audit-logs → 403; response KHÔNG chứa token/password/storage_path (BACKEND-04 §18.3/18.4)',
+    ],
+  },
+  {
+    id: 'FOUNDATION-BE-4',
+    title: 'FileService: upload metadata + StorageAdapter port + link/unlink + download-qua-backend + file_access_log',
+    zone: 'red',
+    status: 'todo',
+    paths: ['apps/api/src/foundation/files/**', 'apps/api/src/storage/**'],
+    skills: ['code-review'],
+    depends_on: ['FOUNDATION-DB-3', 'FOUNDATION-BE-3', 'FOUNDATION-BE-5'],
+    done_when: [
+      'upload ghi metadata files (visibility=Private default) + validate size theo file.max_upload_size_mb, MIME theo file.allowed_mime_types (KHÔNG tin MIME client), sanitize filename chống path traversal (BACKEND-11 §11.6)',
+      'StorageAdapter port (putObject/getObject/deleteObject/signedUrl) — adapter S3 hiện có bọc lại; KHÔNG trả storage_path/signed_url dài hạn cho FE (BACKEND-04 §14.4)',
+      'download flow: AuthGuard→PermissionGuard→FilePolicyService resolve theo file_links/module owner→kiểm visibility/deleted_at/upload_status→ghi file_access_logs nếu private/sensitive→stream/signed URL ngắn hạn (BACKEND-11 §11.9)',
+      'link/unlink validate entity cùng company + scan_status!=Infected; soft-delete file không hard-delete; audit Upload/Link/Unlink/Delete (DB-08 §8.7 rule, BACKEND-11 §11.12)',
+    ],
+  },
+  {
+    id: 'FOUNDATION-BE-5',
+    title: 'FilePolicyService + FileOwnerPermissionResolver registry (deny-by-default, dispatch theo module_code/entity_type)',
+    zone: 'red',
+    status: 'todo',
+    paths: ['apps/api/src/foundation/files/file-policy.service.ts', 'apps/api/src/foundation/files/resolvers/**'],
+    skills: ['code-review'],
+    depends_on: ['FOUNDATION-DB-3'],
+    done_when: [
+      'FileOwnerPermissionResolver interface (canView/canDownload/canLink/canDelete) + registry dispatch theo (module_code,entity_type) (BACKEND-04 §11.4)',
+      'Không resolve được entity/module → TỪ CHỐI truy cập (deny-by-default, fail-closed — BACKEND-11 §11.10)',
+      'fallback chỉ cho user có Foundation file permission khi chưa có resolver; HR/LEAVE/TASK đăng ký resolver được (contract sẵn cho module sau)',
+      'unit test resolver fallback + deny-by-default (BACKEND-04 §18.1 FilePermissionService)',
+    ],
+  },
+  {
+    id: 'FOUNDATION-BE-6',
+    title: 'HolidayService: CRUD public_holidays + isWorkingDay (global+company override) + getHolidaysInRange + internal contract cho ATT/LEAVE',
+    zone: 'green',
+    status: 'todo',
+    paths: ['apps/api/src/foundation/holidays/**'],
+    skills: ['code-review'],
+    depends_on: ['FOUNDATION-DB-4'],
+    done_when: [
+      'isWorkingDay(companyId,date) kết hợp weekend (company setting/workingDaysJson) + public_holidays; company-specific override holiday global cùng ngày (BACKEND-11 §16.2, BACKEND-04 §11.6)',
+      'getHolidaysInRange batch (không gọi từng ngày N lần) cho ATT/LEAVE; CRUD holiday qua permission FOUNDATION holiday (BACKEND-04 §9.8)',
+      'GET /api/v1/foundation/public-holidays + check-working-day theo query year/month/country_code/company_only',
+      'unit test working-day + override global/company (BACKEND-04 §18.1 HolidayService)',
+    ],
+  },
+  {
+    id: 'FOUNDATION-BE-7',
+    title: 'CompanyService /company/current (GET/PATCH có audit) + ModuleCatalogService my-apps (lọc theo permission+module active+setting)',
+    zone: 'yellow',
+    status: 'todo',
+    paths: ['apps/api/src/foundation/company/**', 'apps/api/src/foundation/module-catalog/**'],
+    skills: ['code-review'],
+    depends_on: ['FOUNDATION-DB-5', 'FOUNDATION-BE-3'],
+    done_when: [
+      'GET /api/v1/foundation/company/current trả company từ AuthContext (KHÔNG nhận company_id body); PATCH ghi audit CONFIG_UPDATE; company Suspended chặn nghiệp vụ (BACKEND-04 §8.1)',
+      'GET /modules/my-apps lọc app theo: module is_active AND company setting enabled AND user có ≥1 required permission (BACKEND-04 §11.7 visibility rule) — đọc catalog modules spec (KHÔNG system_modules SaaS)',
+      'recent/favorite/open: nếu chưa có bảng user_module_preferences thì trả rỗng + ghi TODO rõ (BACKEND-04 §19 Phase2.5), KHÔNG bịa dữ liệu',
+      'permission/scope test: user thiếu permission gọi my-apps → 200 nhưng app bị lọc (BACKEND-04 §18.3)',
+    ],
+  },
+  {
+    id: 'FOUNDATION-BE-8',
+    title: 'SeedTrackingService idempotent + RetentionService CRUD + cleanup job skeleton (dry-run, không xóa thật)',
+    zone: 'yellow',
+    status: 'todo',
+    paths: ['apps/api/src/foundation/seed/**', 'apps/api/src/foundation/retention/**'],
+    skills: ['code-review'],
+    depends_on: ['FOUNDATION-DB-5'],
+    done_when: [
+      'SeedTrackingService startBatch/markItem*/finishBatch ghi seed_batches/seed_items với checksum; chạy lại không tạo trùng (idempotent — BACKEND-04 §11.8)',
+      'RetentionService CRUD policy + run-dry simulate đếm record eligible, KHÔNG xóa khi is_enforced=false (BACKEND-11 §17.4 safety)',
+      'cleanup job skeleton có dry-run mode + ghi system/audit log khi chạy; KHÔNG xóa audit_logs nếu policy chưa active (BACKEND-11 §18)',
+      'unit test seed idempotent + retention simulate không xóa thật (BACKEND-04 §18.1 SeedTrackingService)',
+    ],
+  },
+  {
+    id: 'FOUNDATION-BE-9',
+    title: 'FoundationModule + foundation contracts (Zod DTO) + wire vào app.module.ts (additive)',
+    zone: 'green',
+    status: 'todo',
+    paths: ['apps/api/src/foundation/foundation.module.ts', 'apps/api/src/app.module.ts', 'packages/contracts/src/foundation/**'],
+    skills: ['code-review'],
+    depends_on: ['FOUNDATION-BE-1', 'FOUNDATION-BE-3', 'FOUNDATION-BE-4', 'FOUNDATION-BE-6', 'FOUNDATION-BE-7'],
+    done_when: [
+      'FoundationModule gom company/module-catalog/settings/audit/files/sequence/holidays/retention/seed; import vào app.module.ts khối additive (KHÔNG rewrite — CLAUDE.md §9.3)',
+      'packages/contracts có Zod DTO cho mọi response Foundation (company/my-apps/settings.public/file upload/audit/holiday) = nguồn sự thật, dual-build',
+      'mọi public endpoint /api/v1/foundation/* qua AuthGuard+PermissionGuard; response envelope {success,message,data,meta} (BACKEND-11 §10)',
+      'pnpm --filter @mediaos/api build + typecheck XANH; OpenAPI/Swagger render endpoint Foundation (BACKEND-04 §22.17)',
+    ],
+  },
+  {
+    id: 'FOUNDATION-QA-1',
+    title: 'QA hardening Foundation: permission/scope + file security + sequence concurrency + audit masking + public settings leak',
+    zone: 'red',
+    status: 'todo',
+    paths: ['apps/api/src/foundation/**/*.spec.ts', 'apps/api/test/foundation/**'],
+    skills: ['code-review'],
+    depends_on: ['FOUNDATION-BE-1', 'FOUNDATION-BE-2', 'FOUNDATION-BE-3', 'FOUNDATION-BE-4', 'FOUNDATION-BE-6', 'FOUNDATION-BE-7', 'FOUNDATION-BE-8'],
+    done_when: [
+      'permission/scope test pass: Employee→audit 403; admin xem company hiện tại 200, company khác 403; my-apps lọc app (BACKEND-04 §18.3)',
+      'file security: upload .exe đổi đuôi .pdf bị chặn, filename ../../ sanitize, soft-deleted file không download được, response không lộ storage_path/signed_url (BACKEND-04 §18.4)',
+      'sequence concurrency test 0 trùng; audit masking test không lộ token/password; public settings không trả sensitive (BACKEND-04 §18.2/18.4)',
+      'append-only test: UPDATE/DELETE audit_logs bằng app role FAIL (BẤT BIẾN #2); coverage module nhạy cảm ≥80% (CLAUDE.md §6)',
+    ],
+  },
+
 ];
