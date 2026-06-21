@@ -244,6 +244,9 @@ GRANT SELECT, INSERT ON file_access_logs TO mediaos_app;
 REVOKE UPDATE, DELETE ON file_access_logs FROM mediaos_app;
 --> statement-breakpoint
 GRANT SELECT, INSERT ON file_access_logs TO mediaos_worker;
+--> statement-breakpoint
+-- Append-only HARDEN cho worker (nhất quán defense-in-depth với app role): worker cũng chỉ SELECT/INSERT.
+REVOKE UPDATE, DELETE ON file_access_logs FROM mediaos_worker;
 
 -- -------- Down (manual) --------
 -- DROP TABLE IF EXISTS file_access_logs;
