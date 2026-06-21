@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "@/i18n";
@@ -52,6 +52,9 @@ afterEach(() => {
   useAuthStore.setState({ capabilities: {}, accessToken: null, isAuthenticated: false });
 });
 
+// ────────────────────────────────────────────────────────────────
+// DENY-PATH: không có quyền nào
+// ────────────────────────────────────────────────────────────────
 describe("CS-2 PermissionsPage — gating (deny-path)", () => {
   it("hiển thị 'không có quyền' khi thiếu cả hai quyền", () => {
     setCaps({});
@@ -59,8 +62,19 @@ describe("CS-2 PermissionsPage — gating (deny-path)", () => {
     expect(screen.getByText("Không có quyền")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Phân quyền" })).not.toBeInTheDocument();
   });
+
+  it("không hiện bất kỳ nút hành động nào khi không có quyền", () => {
+    setCaps({});
+    renderPage();
+    expect(screen.queryByRole("button", { name: "Gán vai trò" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Thu vai trò" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Quyền theo đối tượng" })).not.toBeInTheDocument();
+  });
 });
 
+// ────────────────────────────────────────────────────────────────
+// QuyỀN assign-role:user
+// ────────────────────────────────────────────────────────────────
 describe("CS-2 PermissionsPage — với quyền assign-role:user", () => {
   beforeEach(() => setCaps({ "assign-role:user": true }));
 
@@ -93,8 +107,28 @@ describe("CS-2 PermissionsPage — với quyền assign-role:user", () => {
       expect.anything(),
     );
   });
+
+  it("lọc user qua ô tìm kiếm — nhập email hiện đúng user, nhập rác ẩn hết", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByText("ann@x.test")).toBeInTheDocument());
+
+    const searchInput = screen.getByRole("searchbox", { name: "Tìm kiếm người dùng" });
+
+    // Lọc đúng email
+    fireEvent.change(searchInput, { target: { value: "ann" } });
+    await waitFor(() => expect(screen.getByText("ann@x.test")).toBeInTheDocument());
+
+    // Lọc không khớp → empty state
+    fireEvent.change(searchInput, { target: { value: "zzz-no-match" } });
+    await waitFor(() =>
+      expect(screen.getByText("Không tìm thấy người dùng.")).toBeInTheDocument(),
+    );
+  });
 });
 
+// ────────────────────────────────────────────────────────────────
+// QUYỀN grant-object-permission:permission
+// ────────────────────────────────────────────────────────────────
 describe("CS-2 PermissionsPage — với quyền grant-object-permission:permission", () => {
   beforeEach(() => setCaps({ "grant-object-permission:permission": true }));
 
@@ -106,6 +140,26 @@ describe("CS-2 PermissionsPage — với quyền grant-object-permission:permiss
   });
 });
 
+// ────────────────────────────────────────────────────────────────
+// CẢ HAI QUYỀN
+// ────────────────────────────────────────────────────────────────
+describe("CS-2 PermissionsPage — với cả hai quyền", () => {
+  beforeEach(() =>
+    setCaps({ "assign-role:user": true, "grant-object-permission:permission": true }),
+  );
+
+  it("hiện cả 3 nút hành động cho user", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByText("ann@x.test")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Gán vai trò" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Thu vai trò" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Quyền theo đối tượng" })).toBeInTheDocument();
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
+// LỖI TẢI
+// ────────────────────────────────────────────────────────────────
 describe("CS-2 PermissionsPage — lỗi tải", () => {
   it("hiển thị thông báo lỗi role=alert khi fetch thất bại", async () => {
     vi.stubGlobal(
@@ -113,8 +167,13 @@ describe("CS-2 PermissionsPage — lỗi tải", () => {
       vi.fn().mockResolvedValue({
         ok: false,
         status: 500,
-        text: async () => JSON.stringify({ success: false, data: null, error: { code: "ERR", message: "boom" } }),
-        json: async () => ({ success: false, data: null, error: { code: "ERR", message: "boom" } }),
+        text: async () =>
+          JSON.stringify({ success: false, data: null, error: { code: "ERR", message: "boom" } }),
+        json: async () => ({
+          success: false,
+          data: null,
+          error: { code: "ERR", message: "boom" },
+        }),
       }),
     );
     setCaps({ "assign-role:user": true });
@@ -122,5 +181,27 @@ describe("CS-2 PermissionsPage — lỗi tải", () => {
     await waitFor(() =>
       expect(screen.getByText("Không tải được dữ liệu phân quyền.")).toBeInTheDocument(),
     );
+  });
+
+  it("hiển thị nút thử lại trong alert lỗi", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: async () =>
+          JSON.stringify({ success: false, data: null, error: { code: "ERR", message: "boom" } }),
+        json: async () => ({
+          success: false,
+          data: null,
+          error: { code: "ERR", message: "boom" },
+        }),
+      }),
+    );
+    setCaps({ "assign-role:user": true });
+    renderPage();
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    // Nút thử lại hiện trong alert
+    expect(screen.getByRole("button", { name: /thử lại/i })).toBeInTheDocument();
   });
 });
