@@ -49,3 +49,5 @@ export * from "./mail-config";
 export * from "./security-policy";
 // CS-10 Đối tượng: Mời/Duyệt/Kích hoạt user (user_invites per-tenant FORCE-RLS; token_hash + password_hash)
 export * from "./user-invites";
+// FOUNDATION-DB-1 settings (DB-08 §8.3/8.4): system_settings GLOBAL no-RLS + company_settings per-tenant FORCE-RLS
+export * from "./settings";
