@@ -1,0 +1,1820 @@
+  # ===========================================================================
+  # FOUNDATION — Shared foundation module paths fragment (API-09)
+  # Concatenated under the single top-level `paths:` key of the base spec.
+  # Groups: Companies, Modules, Settings, Audit Logs, Files, File Links,
+  #         File Access Logs, Sequences, Public Holidays, Retention, Seeds,
+  #         Internal, System (health).
+  # ===========================================================================
+
+  # --------------------------------------------------------------------------
+  # Companies (§8)
+  # --------------------------------------------------------------------------
+  /api/v1/foundation/companies/me:
+    get:
+      tags: [Foundation - Companies]
+      summary: Lấy công ty hiện tại của user
+      operationId: fndGetMyCompany
+      x-required-permission: FOUNDATION.COMPANY.VIEW
+      x-allowed-roles: [Employee, Manager, HR, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/foundation/companies:
+    get:
+      tags: [Foundation - Companies]
+      summary: Lấy danh sách công ty/tenant
+      operationId: fndListCompanies
+      x-required-permission: FOUNDATION.COMPANY.VIEW
+      x-allowed-roles: [Super Admin]
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/SortParam'
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [Active, Inactive, Suspended, Deleted] }
+        - name: country_code
+          in: query
+          required: false
+          schema: { type: string }
+        - name: include_deleted
+          in: query
+          required: false
+          schema: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Foundation - Companies]
+      summary: Tạo công ty/tenant
+      operationId: fndCreateCompany
+      x-required-permission: FOUNDATION.COMPANY.MANAGE
+      x-allowed-roles: [Super Admin]
+      x-data-scope: [System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: FOUNDATION.COMPANY_CREATED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [company_code, name, timezone]
+              properties:
+                company_code: { type: string }
+                name: { type: string }
+                legal_name: { type: string }
+                tax_code: { type: string }
+                email: { type: string, format: email }
+                phone: { type: string }
+                website: { type: string }
+                address: { type: string }
+                country_code: { type: string }
+                timezone: { type: string }
+                default_locale: { type: string }
+                currency_code: { type: string }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/foundation/companies/{company_id}:
+    patch:
+      tags: [Foundation - Companies]
+      summary: Cập nhật công ty
+      operationId: fndUpdateCompany
+      x-required-permission: FOUNDATION.COMPANY.MANAGE
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - name: company_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                legal_name: { type: string }
+                email: { type: string, format: email }
+                phone: { type: string }
+                website: { type: string }
+                address: { type: string }
+                timezone: { type: string }
+                default_locale: { type: string }
+                currency_code: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/foundation/companies/{company_id}/suspend:
+    post:
+      tags: [Foundation - Companies]
+      summary: Suspend công ty
+      operationId: fndSuspendCompany
+      x-required-permission: FOUNDATION.COMPANY.MANAGE
+      x-allowed-roles: [Super Admin]
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: FOUNDATION.COMPANY_SUSPENDED
+      parameters:
+        - name: company_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+                notify_admins: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/foundation/companies/{company_id}/activate:
+    post:
+      tags: [Foundation - Companies]
+      summary: Activate công ty
+      operationId: fndActivateCompany
+      x-required-permission: FOUNDATION.COMPANY.MANAGE
+      x-allowed-roles: [Super Admin]
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: FOUNDATION.COMPANY_ACTIVATED
+      parameters:
+        - name: company_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+                notify_admins: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # --------------------------------------------------------------------------
+  # Module Catalog (§9)
+  # --------------------------------------------------------------------------
+  /api/v1/foundation/modules:
+    get:
+      tags: [Foundation - Modules]
+      summary: Lấy danh sách module
+      operationId: fndListModules
+      x-required-permission: FOUNDATION.MODULE.VIEW
+      x-allowed-roles: [Employee, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/SearchParam'
+        - name: is_active
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: is_mvp
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: module_group
+          in: query
+          required: false
+          schema: { type: string, enum: [Foundation, Core, Operation, Experience, Extension] }
+        - name: include_inactive
+          in: query
+          required: false
+          schema: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/foundation/modules/{module_code}:
+    get:
+      tags: [Foundation - Modules]
+      summary: Lấy chi tiết module
+      operationId: fndGetModule
+      x-required-permission: FOUNDATION.MODULE.VIEW
+      x-allowed-roles: [Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - name: module_code
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Foundation - Modules]
+      summary: Cập nhật trạng thái module
+      operationId: fndUpdateModule
+      x-required-permission: FOUNDATION.MODULE.MANAGE
+      x-allowed-roles: [Super Admin]
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - name: module_code
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                is_active: { type: boolean }
+                sort_order: { type: integer }
+                metadata: { type: object, additionalProperties: true }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # --------------------------------------------------------------------------
+  # Settings (§10)
+  # --------------------------------------------------------------------------
+  /api/v1/foundation/settings/public:
+    get:
+      tags: [Foundation - Settings]
+      summary: Lấy public settings
+      description: "AUDIT AUD-008: permission set to null (Authenticated only); doc proposes FOUNDATION.SETTING.VIEW but public settings should be readable by any authenticated user."
+      operationId: fndGetPublicSettings
+      x-required-permission: null
+      x-allowed-roles: [Employee, Manager, HR, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - name: keys
+          in: query
+          required: false
+          schema: { type: string }
+        - name: module_code
+          in: query
+          required: false
+          schema: { type: string }
+        - name: category
+          in: query
+          required: false
+          schema: { type: string, enum: [General, Security, File, Audit, Notification, Dashboard] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/foundation/settings/effective:
+    get:
+      tags: [Foundation - Settings]
+      summary: Lấy effective settings (company -> system)
+      operationId: fndGetEffectiveSettings
+      x-required-permission: FOUNDATION.SETTING.VIEW
+      x-allowed-roles: [Employee, Manager, HR, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - name: keys
+          in: query
+          required: false
+          schema: { type: string }
+        - name: category
+          in: query
+          required: false
+          schema: { type: string }
+        - name: module_code
+          in: query
+          required: false
+          schema: { type: string }
+        - name: include_metadata
+          in: query
+          required: false
+          schema: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/foundation/system-settings:
+    get:
+      tags: [Foundation - Settings]
+      summary: Lấy danh sách system settings
+      description: "AUDIT AUD-001: read gated by MANAGE; proposed FOUNDATION.SYSTEM_SETTING.VIEW"
+      operationId: fndListSystemSettings
+      x-required-permission: FOUNDATION.SYSTEM_SETTING.MANAGE
+      x-allowed-roles: [Super Admin]
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - name: category
+          in: query
+          required: false
+          schema: { type: string }
+        - name: module_code
+          in: query
+          required: false
+          schema: { type: string }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [Active, Inactive] }
+        - name: is_public
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: is_sensitive
+          in: query
+          required: false
+          schema: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/foundation/system-settings/{setting_key}:
+    patch:
+      tags: [Foundation - Settings]
+      summary: Cập nhật system setting
+      operationId: fndUpdateSystemSetting
+      x-required-permission: FOUNDATION.SYSTEM_SETTING.MANAGE
+      x-allowed-roles: [Super Admin]
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: FOUNDATION.SYSTEM_SETTING_UPDATED
+      parameters:
+        - name: setting_key
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                setting_value: {}
+                value_type: { type: string, enum: [String, Number, Boolean, JSON, Array, SecretRef] }
+                description: { type: string }
+                is_public: { type: boolean }
+                is_sensitive: { type: boolean }
+                status: { type: string, enum: [Active, Inactive] }
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/foundation/company-settings:
+    get:
+      tags: [Foundation - Settings]
+      summary: Lấy danh sách company settings
+      operationId: fndListCompanySettings
+      x-required-permission: FOUNDATION.SETTING.VIEW
+      x-allowed-roles: [Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - name: category
+          in: query
+          required: false
+          schema: { type: string }
+        - name: module_code
+          in: query
+          required: false
+          schema: { type: string }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [Active, Inactive] }
+        - name: is_public
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: is_sensitive
+          in: query
+          required: false
+          schema: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/foundation/company-settings/{setting_key}:
+    patch:
+      tags: [Foundation - Settings]
+      summary: Cập nhật company setting
+      operationId: fndUpdateCompanySetting
+      x-required-permission: FOUNDATION.SETTING.MANAGE
+      x-allowed-roles: [Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: FOUNDATION.COMPANY_SETTING_UPDATED
+      parameters:
+        - name: setting_key
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                setting_value: {}
+                value_type: { type: string, enum: [String, Number, Boolean, JSON, Array, SecretRef] }
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/foundation/company-settings/{setting_key}/reset:
+    post:
+      tags: [Foundation - Settings]
+      summary: Reset company setting về system default
+      operationId: fndResetCompanySetting
+      x-required-permission: FOUNDATION.SETTING.MANAGE
+      x-allowed-roles: [Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - name: setting_key
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # --------------------------------------------------------------------------
+  # Audit Logs (§11)
+  # --------------------------------------------------------------------------
+  /api/v1/foundation/audit-logs:
+    get:
+      tags: [Foundation - Audit Logs]
+      summary: Lấy danh sách audit log
+      operationId: fndListAuditLogs
+      x-required-permission: FOUNDATION.AUDIT_LOG.VIEW
+      x-allowed-roles: [Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/SortParam'
+        - name: module_code
+          in: query
+          required: false
+          schema: { type: string }
+        - name: entity_type
+          in: query
+          required: false
+          schema: { type: string }
+        - name: entity_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: actor_user_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: action
+          in: query
+          required: false
+          schema: { type: string }
+        - name: from_date
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: to_date
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: severity
+          in: query
+          required: false
+          schema: { type: string, enum: [Info, Warning, Critical] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/foundation/audit-logs/entity:
+    get:
+      tags: [Foundation - Audit Logs]
+      summary: Lấy audit log theo entity
+      operationId: fndListAuditLogsByEntity
+      x-required-permission: FOUNDATION.AUDIT_LOG.VIEW
+      x-allowed-roles: [Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: module_code
+          in: query
+          required: true
+          schema: { type: string }
+        - name: entity_type
+          in: query
+          required: true
+          schema: { type: string }
+        - name: entity_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/foundation/audit-logs/export:
+    post:
+      tags: [Foundation - Audit Logs]
+      summary: Export audit log
+      operationId: fndExportAuditLogs
+      x-required-permission: FOUNDATION.AUDIT_LOG.EXPORT
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                filters:
+                  type: object
+                  properties:
+                    module_code: { type: string }
+                    entity_type: { type: string }
+                    entity_id: { type: string, format: uuid }
+                    from: { type: string, format: date-time }
+                    to: { type: string, format: date-time }
+                format: { type: string, enum: [CSV, JSON, XLSX] }
+                include_sensitive_diff: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '202': { $ref: '#/components/responses/Accepted' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/foundation/audit-logs/{audit_log_id}:
+    get:
+      tags: [Foundation - Audit Logs]
+      summary: Lấy chi tiết audit log
+      operationId: fndGetAuditLog
+      x-required-permission: FOUNDATION.AUDIT_LOG.VIEW
+      x-allowed-roles: [Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - name: audit_log_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # --------------------------------------------------------------------------
+  # Files (§12)
+  # --------------------------------------------------------------------------
+  /api/v1/foundation/files:
+    post:
+      tags: [Foundation - Files]
+      summary: Upload file
+      operationId: fndUploadFile
+      x-required-permission: FOUNDATION.FILE.UPLOAD
+      x-allowed-roles: [Employee, Manager, HR, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, module_code]
+              properties:
+                file: { type: string, format: binary }
+                module_code: { type: string }
+                entity_type: { type: string }
+                entity_id: { type: string, format: uuid }
+                purpose: { type: string }
+                visibility: { type: string, enum: [Private, Internal, Public, Restricted] }
+                is_sensitive: { type: boolean }
+                description: { type: string }
+                link_immediately: { type: boolean }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/foundation/files/{file_id}:
+    get:
+      tags: [Foundation - Files]
+      summary: Lấy metadata file
+      operationId: fndGetFile
+      x-required-permission: FOUNDATION.FILE.VIEW
+      x-allowed-roles: [Employee, Manager, HR, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Foundation - Files]
+      summary: Xóa mềm file
+      operationId: fndDeleteFile
+      x-required-permission: FOUNDATION.FILE.DELETE
+      x-allowed-roles: [HR, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/foundation/files/{file_id}/download:
+    get:
+      tags: [Foundation - Files]
+      summary: Tải file
+      operationId: fndDownloadFile
+      x-required-permission: FOUNDATION.FILE.DOWNLOAD
+      x-allowed-roles: [Employee, Manager, HR, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: disposition
+          in: query
+          required: false
+          schema: { type: string, enum: [attachment, inline] }
+        - name: variant
+          in: query
+          required: false
+          schema: { type: string, enum: [original, thumbnail, preview] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/foundation/files/{file_id}/preview-url:
+    post:
+      tags: [Foundation - Files]
+      summary: Tạo preview/signed URL ngắn hạn
+      operationId: fndCreateFilePreviewUrl
+      x-required-permission: FOUNDATION.FILE.DOWNLOAD
+      x-allowed-roles: [Employee, Manager, HR, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expires_in_seconds: { type: integer }
+                disposition: { type: string, enum: [attachment, inline] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # --------------------------------------------------------------------------
+  # File Links (§13)
+  # --------------------------------------------------------------------------
+  /api/v1/foundation/file-links:
+    get:
+      tags: [Foundation - File Links]
+      summary: Lấy file theo entity
+      operationId: fndListFileLinks
+      x-required-permission: FOUNDATION.FILE.VIEW
+      x-allowed-roles: [Employee, Manager, HR, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - name: module_code
+          in: query
+          required: true
+          schema: { type: string }
+        - name: entity_type
+          in: query
+          required: true
+          schema: { type: string }
+        - name: entity_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: purpose
+          in: query
+          required: false
+          schema: { type: string }
+        - name: include_deleted
+          in: query
+          required: false
+          schema: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Foundation - File Links]
+      summary: Link file vào entity
+      operationId: fndCreateFileLink
+      x-required-permission: FOUNDATION.FILE.LINK
+      x-allowed-roles: [Employee, Manager, HR, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [file_id, module_code, entity_type, entity_id]
+              properties:
+                file_id: { type: string, format: uuid }
+                module_code: { type: string }
+                entity_type: { type: string }
+                entity_id: { type: string, format: uuid }
+                purpose: { type: string }
+                link_type: { type: string }
+                is_primary: { type: boolean }
+                sort_order: { type: integer }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/foundation/file-links/{file_link_id}:
+    delete:
+      tags: [Foundation - File Links]
+      summary: Unlink file khỏi entity
+      operationId: fndDeleteFileLink
+      x-required-permission: FOUNDATION.FILE.UNLINK
+      x-allowed-roles: [Employee, Manager, HR, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - name: file_link_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # --------------------------------------------------------------------------
+  # File Access Logs (§14)
+  # --------------------------------------------------------------------------
+  /api/v1/foundation/file-access-logs:
+    get:
+      tags: [Foundation - File Access Logs]
+      summary: Lấy log truy cập file
+      operationId: fndListFileAccessLogs
+      x-required-permission: FOUNDATION.FILE_ACCESS_LOG.VIEW
+      x-allowed-roles: [Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: file_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: actor_user_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: action
+          in: query
+          required: false
+          schema: { type: string, enum: [VIEWED, DOWNLOADED, PREVIEWED, DELETED] }
+        - name: module_code
+          in: query
+          required: false
+          schema: { type: string }
+        - name: from_date
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: to_date
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # --------------------------------------------------------------------------
+  # Sequences (§15)
+  # --------------------------------------------------------------------------
+  /api/v1/foundation/sequences:
+    get:
+      tags: [Foundation - Sequences]
+      summary: Lấy danh sách sequence counters
+      operationId: fndListSequences
+      x-required-permission: FOUNDATION.SEQUENCE.VIEW
+      x-allowed-roles: [Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: sequence_key
+          in: query
+          required: false
+          schema: { type: string }
+        - name: module_code
+          in: query
+          required: false
+          schema: { type: string }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [Active, Inactive] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Foundation - Sequences]
+      summary: Tạo sequence counter
+      operationId: fndCreateSequence
+      x-required-permission: FOUNDATION.SEQUENCE.MANAGE
+      x-allowed-roles: [Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sequence_key, module_code]
+              properties:
+                sequence_key: { type: string }
+                module_code: { type: string }
+                prefix: { type: string }
+                current_value: { type: integer }
+                increment_by: { type: integer }
+                padding_length: { type: integer }
+                format_pattern: { type: string }
+                reset_policy: { type: string, enum: [Never, Yearly, Monthly, Daily] }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/foundation/sequences/{sequence_id}:
+    patch:
+      tags: [Foundation - Sequences]
+      summary: Cập nhật sequence counter
+      operationId: fndUpdateSequence
+      x-required-permission: FOUNDATION.SEQUENCE.MANAGE
+      x-allowed-roles: [Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - name: sequence_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prefix: { type: string }
+                current_value: { type: integer }
+                increment_by: { type: integer }
+                padding_length: { type: integer }
+                format_pattern: { type: string }
+                reset_policy: { type: string, enum: [Never, Yearly, Monthly, Daily] }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/foundation/sequences/{sequence_key}/preview:
+    post:
+      tags: [Foundation - Sequences]
+      summary: Preview mã tiếp theo
+      operationId: fndPreviewSequence
+      x-required-permission: FOUNDATION.SEQUENCE.VIEW
+      x-allowed-roles: [Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - name: sequence_key
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                context:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # --------------------------------------------------------------------------
+  # Public Holidays (§16)
+  # --------------------------------------------------------------------------
+  /api/v1/foundation/public-holidays:
+    get:
+      tags: [Foundation - Public Holidays]
+      summary: Lấy danh sách ngày nghỉ lễ
+      operationId: fndListPublicHolidays
+      x-required-permission: FOUNDATION.HOLIDAY.VIEW
+      x-allowed-roles: [Employee, Manager, HR, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: year
+          in: query
+          required: false
+          schema: { type: integer }
+        - name: month
+          in: query
+          required: false
+          schema: { type: integer }
+        - name: country_code
+          in: query
+          required: false
+          schema: { type: string }
+        - name: from_date
+          in: query
+          required: false
+          schema: { type: string, format: date }
+        - name: to_date
+          in: query
+          required: false
+          schema: { type: string, format: date }
+        - name: type
+          in: query
+          required: false
+          schema: { type: string, enum: [PublicHoliday, CompanyHoliday, WorkingDayOverride] }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [Active, Inactive] }
+        - name: scope
+          in: query
+          required: false
+          schema: { type: string, enum: [Global, Company] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Foundation - Public Holidays]
+      summary: Tạo ngày nghỉ lễ
+      operationId: fndCreatePublicHoliday
+      x-required-permission: FOUNDATION.HOLIDAY.MANAGE
+      x-allowed-roles: [HR, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: FOUNDATION.PUBLIC_HOLIDAY_CHANGED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [holiday_date, name]
+              properties:
+                holiday_date: { type: string, format: date }
+                name: { type: string }
+                country_code: { type: string }
+                type: { type: string, enum: [PublicHoliday, CompanyHoliday, WorkingDayOverride] }
+                is_paid: { type: boolean }
+                is_working_day: { type: boolean }
+                status: { type: string, enum: [Active, Inactive] }
+                description: { type: string }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/foundation/public-holidays/check:
+    get:
+      tags: [Foundation - Public Holidays]
+      summary: Kiểm tra một ngày có phải ngày nghỉ không
+      operationId: fndCheckPublicHoliday
+      x-required-permission: FOUNDATION.HOLIDAY.VIEW
+      x-allowed-roles: [Employee, Manager, HR, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: country_code
+          in: query
+          required: false
+          schema: { type: string }
+        - name: include_company_override
+          in: query
+          required: false
+          schema: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/foundation/public-holidays/import:
+    post:
+      tags: [Foundation - Public Holidays]
+      summary: Import public holidays
+      operationId: fndImportPublicHolidays
+      x-required-permission: FOUNDATION.HOLIDAY.MANAGE
+      x-allowed-roles: [HR, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: FOUNDATION.PUBLIC_HOLIDAY_CHANGED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                year: { type: integer }
+                country_code: { type: string }
+                mode: { type: string, enum: [insert_only, upsert, replace_year] }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      holiday_date: { type: string, format: date }
+                      name: { type: string }
+                      type: { type: string, enum: [PublicHoliday, CompanyHoliday, WorkingDayOverride] }
+                      is_paid: { type: boolean }
+                      is_working_day: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '202': { $ref: '#/components/responses/Accepted' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/foundation/public-holidays/{holiday_id}:
+    patch:
+      tags: [Foundation - Public Holidays]
+      summary: Cập nhật ngày nghỉ lễ
+      operationId: fndUpdatePublicHoliday
+      x-required-permission: FOUNDATION.HOLIDAY.MANAGE
+      x-allowed-roles: [HR, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: FOUNDATION.PUBLIC_HOLIDAY_CHANGED
+      parameters:
+        - name: holiday_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                holiday_date: { type: string, format: date }
+                name: { type: string }
+                country_code: { type: string }
+                type: { type: string, enum: [PublicHoliday, CompanyHoliday, WorkingDayOverride] }
+                is_paid: { type: boolean }
+                is_working_day: { type: boolean }
+                status: { type: string, enum: [Active, Inactive] }
+                description: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [Foundation - Public Holidays]
+      summary: Xóa mềm ngày nghỉ lễ
+      operationId: fndDeletePublicHoliday
+      x-required-permission: FOUNDATION.HOLIDAY.MANAGE
+      x-allowed-roles: [HR, Admin, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: FOUNDATION.PUBLIC_HOLIDAY_CHANGED
+      parameters:
+        - name: holiday_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # --------------------------------------------------------------------------
+  # Retention Policies (§17)
+  # --------------------------------------------------------------------------
+  /api/v1/foundation/retention-policies:
+    get:
+      tags: [Foundation - Retention]
+      summary: Lấy danh sách retention policy
+      operationId: fndListRetentionPolicies
+      x-required-permission: FOUNDATION.RETENTION.VIEW
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: module_code
+          in: query
+          required: false
+          schema: { type: string }
+        - name: entity_type
+          in: query
+          required: false
+          schema: { type: string }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [Active, Inactive] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Foundation - Retention]
+      summary: Tạo retention policy
+      operationId: fndCreateRetentionPolicy
+      x-required-permission: FOUNDATION.RETENTION.MANAGE
+      x-allowed-roles: [Super Admin]
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [module_code, entity_type, retention_days]
+              properties:
+                module_code: { type: string }
+                entity_type: { type: string }
+                retention_days: { type: integer }
+                cleanup_action: { type: string, enum: [Delete, Archive, Anonymize, None] }
+                schedule: { type: string }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/foundation/retention-policies/{policy_id}:
+    patch:
+      tags: [Foundation - Retention]
+      summary: Cập nhật retention policy
+      operationId: fndUpdateRetentionPolicy
+      x-required-permission: FOUNDATION.RETENTION.MANAGE
+      x-allowed-roles: [Super Admin]
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - name: policy_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                retention_days: { type: integer }
+                cleanup_action: { type: string, enum: [Delete, Archive, Anonymize, None] }
+                schedule: { type: string }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # --------------------------------------------------------------------------
+  # Seed Tracking (§18)
+  # --------------------------------------------------------------------------
+  /api/v1/foundation/seed-batches:
+    get:
+      tags: [Foundation - Seeds]
+      summary: Lấy danh sách seed batches
+      operationId: fndListSeedBatches
+      x-required-permission: FOUNDATION.SEED.VIEW
+      x-allowed-roles: [Super Admin]
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: batch_key
+          in: query
+          required: false
+          schema: { type: string }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [Pending, Applied, Skipped, Failed] }
+        - name: environment
+          in: query
+          required: false
+          schema: { type: string, enum: [local, dev, staging, prod] }
+        - name: from_date
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: to_date
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/foundation/seed-batches/{batch_id}:
+    get:
+      tags: [Foundation - Seeds]
+      summary: Lấy chi tiết seed batch
+      operationId: fndGetSeedBatch
+      x-required-permission: FOUNDATION.SEED.VIEW
+      x-allowed-roles: [Super Admin]
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - name: batch_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/foundation/seed-items:
+    get:
+      tags: [Foundation - Seeds]
+      summary: Lấy seed items
+      operationId: fndListSeedItems
+      x-required-permission: FOUNDATION.SEED.VIEW
+      x-allowed-roles: [Super Admin]
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: batch_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: seed_key
+          in: query
+          required: false
+          schema: { type: string }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [Applied, Skipped, Failed] }
+        - name: module_code
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # --------------------------------------------------------------------------
+  # System Health (§5.2)
+  # --------------------------------------------------------------------------
+  /api/v1/health:
+    get:
+      tags: [System]
+      summary: Health check
+      operationId: fndHealthCheck
+      security: []
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: []
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+
+  # --------------------------------------------------------------------------
+  # Internal Service API (§11.6, §13.4, §15.6, §17.3, §18.4, §19, §20)
+  # internalServiceAuth only; not callable from frontend/mobile.
+  # --------------------------------------------------------------------------
+  /internal/v1/foundation/audit-logs:
+    post:
+      tags: [Foundation - Internal]
+      summary: Internal ghi audit log
+      operationId: fndInternalCreateAuditLog
+      security:
+        - internalServiceAuth: []
+      x-required-permission: null
+      x-allowed-roles: [System Job, Service Account]
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [company_id, module_code, action, entity_type, entity_id]
+              properties:
+                company_id: { type: string, format: uuid }
+                module_code: { type: string }
+                action: { type: string }
+                entity_type: { type: string }
+                entity_id: { type: string, format: uuid }
+                actor_user_id: { type: string, format: uuid }
+                request_id: { type: string }
+                correlation_id: { type: string }
+                old_values: { type: object, additionalProperties: true }
+                new_values: { type: object, additionalProperties: true }
+                metadata: { type: object, additionalProperties: true }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '202': { $ref: '#/components/responses/Accepted' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /internal/v1/foundation/files/link:
+    post:
+      tags: [Foundation - Internal]
+      summary: Internal link file vào entity
+      operationId: fndInternalLinkFile
+      security:
+        - internalServiceAuth: []
+      x-required-permission: null
+      x-allowed-roles: [System Job, Service Account]
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [file_id, module_code, entity_type, entity_id]
+              properties:
+                file_id: { type: string, format: uuid }
+                module_code: { type: string }
+                entity_type: { type: string }
+                entity_id: { type: string, format: uuid }
+                purpose: { type: string }
+                link_type: { type: string }
+                is_primary: { type: boolean }
+                sort_order: { type: integer }
+                actor_user_id: { type: string, format: uuid }
+                company_id: { type: string, format: uuid }
+                correlation_id: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '202': { $ref: '#/components/responses/Accepted' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /internal/v1/foundation/sequences/generate:
+    post:
+      tags: [Foundation - Internal]
+      summary: Internal sinh mã tự động
+      operationId: fndInternalGenerateSequence
+      security:
+        - internalServiceAuth: []
+      x-required-permission: FOUNDATION.SEQUENCE.GENERATE
+      x-allowed-roles: [System Job, Service Account]
+      x-data-scope: [System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [company_id, sequence_key]
+              properties:
+                company_id: { type: string, format: uuid }
+                sequence_key: { type: string }
+                module_code: { type: string }
+                context:
+                  type: object
+                  additionalProperties: true
+                idempotency_key: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '202': { $ref: '#/components/responses/Accepted' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /internal/v1/foundation/retention/cleanup-jobs/run:
+    post:
+      tags: [Foundation - Internal]
+      summary: Internal chạy cleanup job
+      operationId: fndInternalRunCleanupJob
+      security:
+        - internalServiceAuth: []
+      x-required-permission: null
+      x-allowed-roles: [System Job, Service Account]
+      x-data-scope: [System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: FOUNDATION.RETENTION_JOB_FAILED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                module_code: { type: string }
+                entity_type: { type: string }
+                dry_run: { type: boolean }
+                limit: { type: integer }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '202': { $ref: '#/components/responses/Accepted' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /internal/v1/foundation/seeds/run:
+    post:
+      tags: [Foundation - Internal]
+      summary: Internal chạy seed
+      operationId: fndInternalRunSeed
+      security:
+        - internalServiceAuth: []
+      x-required-permission: FOUNDATION.SEED.RUN
+      x-allowed-roles: [System Job, Service Account]
+      x-data-scope: [System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: FOUNDATION.SEED_FAILED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [batch_key, environment]
+              properties:
+                batch_key: { type: string }
+                environment: { type: string, enum: [local, dev, staging, prod] }
+                dry_run: { type: boolean }
+                allow_dev_only: { type: boolean }
+                modules:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '202': { $ref: '#/components/responses/Accepted' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /internal/v1/foundation/settings/resolve:
+    post:
+      tags: [Foundation - Internal]
+      summary: Internal resolve effective setting
+      operationId: fndInternalResolveSettings
+      security:
+        - internalServiceAuth: []
+      x-required-permission: null
+      x-allowed-roles: [System Job, Service Account]
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [company_id, keys]
+              properties:
+                company_id: { type: string, format: uuid }
+                keys:
+                  type: array
+                  items: { type: string }
+                include_sensitive: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '202': { $ref: '#/components/responses/Accepted' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /internal/v1/foundation/public-holidays/check:
+    post:
+      tags: [Foundation - Internal]
+      summary: Internal check holiday
+      operationId: fndInternalCheckHoliday
+      security:
+        - internalServiceAuth: []
+      x-required-permission: null
+      x-allowed-roles: [System Job, Service Account]
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [company_id, date]
+              properties:
+                company_id: { type: string, format: uuid }
+                date: { type: string, format: date }
+                country_code: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '202': { $ref: '#/components/responses/Accepted' }
+        '401': { $ref: '#/components/responses/Unauthorized' }

@@ -2,7 +2,7 @@
 
 - **Trạng thái:** ✅ Accepted
 - **Bất khả nghịch:** ⚠️ Cao
-- **Liên quan:** [0001](0001-rls-multi-tenant.md), [0002](0002-orm-drizzle.md), [0003](0003-pgbouncer-transaction-mode.md), [0005](0005-immutable-payroll-finance-snapshot.md)
+- **Liên quan:** [0001](0001-rls-multi-tenant.md), [0002](0002-orm-drizzle.md), [0003](0003-pgbouncer-transaction-mode.md)
 
 ## Bối cảnh
 

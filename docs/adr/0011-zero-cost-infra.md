@@ -3,7 +3,7 @@
 - **Trạng thái:** ✅ Accepted
 - **Bất khả nghịch:** Thấp
 - **Liên quan:** [0001](0001-rls-multi-tenant.md), [0014](0014-storage-r2-minio-s3.md)
-- **Kế hoạch triển khai chi tiết (G0-5):** [`../infra-zero-cost-plan.md`](../infra-zero-cost-plan.md)
+- _(Kế hoạch triển khai chi tiết `infra-zero-cost-plan.md` đã gỡ ở đợt de-media-fy 2026-06-20 — còn trong git; viết lại khi build tới khâu deploy.)_
 
 ## Bối cảnh
 

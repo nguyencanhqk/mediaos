@@ -1,0 +1,1428 @@
+  # ==========================================================================
+  # TASK - Projects (11.1..11.8)
+  # ==========================================================================
+  /api/v1/tasks/projects:
+    get:
+      tags: [Tasks - Projects]
+      summary: Xem danh sách dự án
+      operationId: taskListProjects
+      x-required-permission: TASK.PROJECT.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Planning, Active, On Hold, Completed, Cancelled, Archived] } }
+        - { name: priority, in: query, required: false, schema: { type: string, enum: [Low, Medium, High, Urgent] } }
+        - { name: owner_employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: visibility, in: query, required: false, schema: { type: string, enum: [Private, Internal, Public] } }
+        - { name: start_date_from, in: query, required: false, schema: { type: string, format: date } }
+        - { name: start_date_to, in: query, required: false, schema: { type: string, format: date } }
+        - { name: end_date_from, in: query, required: false, schema: { type: string, format: date } }
+        - { name: end_date_to, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Tasks - Projects]
+      summary: Tạo dự án
+      operationId: taskCreateProject
+      x-required-permission: TASK.PROJECT.CREATE
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, HR]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: PROJECT_MEMBER_ADDED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, owner_employee_id]
+              properties:
+                name: { type: string, maxLength: 255 }
+                description: { type: string }
+                owner_employee_id: { type: string, format: uuid }
+                department_id: { type: string, format: uuid }
+                priority: { type: string, enum: [Low, Medium, High, Urgent] }
+                visibility: { type: string, enum: [Private, Internal, Public] }
+                status: { type: string, enum: [Planning, Active] }
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date }
+                members:
+                  type: array
+                  items:
+                    type: object
+                    required: [employee_id, project_role]
+                    properties:
+                      employee_id: { type: string, format: uuid }
+                      project_role: { type: string, enum: [Owner, Manager, Member, Viewer] }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/tasks/projects/{project_id}:
+    parameters:
+      - { name: project_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Tasks - Projects]
+      summary: Xem chi tiết dự án
+      operationId: taskGetProject
+      x-required-permission: TASK.PROJECT.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Tasks - Projects]
+      summary: Cập nhật dự án
+      operationId: taskUpdateProject
+      x-required-permission: TASK.PROJECT.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager]
+      x-data-scope: [Project, Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: PROJECT_UPDATED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 255 }
+                description: { type: string }
+                owner_employee_id: { type: string, format: uuid }
+                department_id: { type: string, format: uuid }
+                priority: { type: string, enum: [Low, Medium, High, Urgent] }
+                visibility: { type: string, enum: [Private, Internal, Public] }
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [Tasks - Projects]
+      summary: Xóa mềm dự án
+      operationId: taskDeleteProject
+      x-required-permission: TASK.PROJECT.DELETE
+      x-allowed-roles: [Super Admin, Company Admin, Project Manager]
+      x-data-scope: [Project, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      responses:
+        '204': { $ref: '#/components/responses/NoContent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/tasks/projects/{project_id}/close:
+    post:
+      tags: [Tasks - Projects]
+      summary: Đóng/hoàn thành dự án
+      operationId: taskCloseProject
+      x-required-permission: TASK.PROJECT.CLOSE
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager]
+      x-data-scope: [Project, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: PROJECT_CLOSED
+      parameters:
+        - { name: project_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note: { type: string }
+                cancel_remaining_tasks: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/tasks/projects/{project_id}/cancel:
+    post:
+      tags: [Tasks - Projects]
+      summary: Hủy dự án
+      operationId: taskCancelProject
+      x-required-permission: [TASK.PROJECT.CLOSE, TASK.PROJECT.UPDATE]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager]
+      x-data-scope: [Project, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: PROJECT_CANCELLED
+      parameters:
+        - { name: project_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cancel_reason]
+              properties:
+                cancel_reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/tasks/projects/{project_id}/archive:
+    post:
+      tags: [Tasks - Projects]
+      summary: Lưu trữ dự án
+      operationId: taskArchiveProject
+      x-required-permission: TASK.PROJECT.ARCHIVE
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager]
+      x-data-scope: [Project, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: PROJECT_ARCHIVED
+      parameters:
+        - { name: project_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ==========================================================================
+  # TASK - Project Members (12.1..12.4)
+  # ==========================================================================
+  /api/v1/tasks/projects/{project_id}/members:
+    parameters:
+      - { name: project_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Tasks - Project Members]
+      summary: Danh sách thành viên dự án
+      operationId: taskListProjectMembers
+      x-required-permission: TASK.PROJECT.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: include_removed, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Tasks - Project Members]
+      summary: Thêm thành viên dự án
+      operationId: taskAddProjectMembers
+      x-required-permission: TASK.PROJECT.MANAGE_MEMBER
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager]
+      x-data-scope: [Project, Department, Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: PROJECT_MEMBER_ADDED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [members]
+              properties:
+                members:
+                  type: array
+                  items:
+                    type: object
+                    required: [employee_id, project_role]
+                    properties:
+                      employee_id: { type: string, format: uuid }
+                      project_role: { type: string, enum: [Owner, Manager, Member, Viewer] }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/tasks/projects/{project_id}/members/{member_id}:
+    parameters:
+      - { name: project_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: member_id, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [Tasks - Project Members]
+      summary: Cập nhật role thành viên dự án
+      operationId: taskUpdateProjectMember
+      x-required-permission: TASK.PROJECT.MANAGE_MEMBER
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager]
+      x-data-scope: [Project, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: PROJECT_MEMBER_ROLE_CHANGED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_role]
+              properties:
+                project_role: { type: string, enum: [Owner, Manager, Member, Viewer] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [Tasks - Project Members]
+      summary: Xóa thành viên dự án
+      operationId: taskRemoveProjectMember
+      x-required-permission: TASK.PROJECT.MANAGE_MEMBER
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager]
+      x-data-scope: [Project, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: PROJECT_MEMBER_REMOVED
+      responses:
+        '204': { $ref: '#/components/responses/NoContent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ==========================================================================
+  # TASK - Project Files (18.1)
+  # ==========================================================================
+  /api/v1/tasks/projects/{project_id}/files:
+    parameters:
+      - { name: project_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Tasks - Files]
+      summary: Danh sách file dự án
+      operationId: taskListProjectFiles
+      x-required-permission: TASK.PROJECT.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Tasks - Files]
+      summary: Upload file dự án
+      operationId: taskUploadProjectFile
+      x-required-permission: TASK.PROJECT.FILE_UPLOAD
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Project, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                description: { type: string }
+                file_category: { type: string }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/tasks/projects/{project_id}/files/{file_id}:
+    parameters:
+      - { name: project_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: file_id, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [Tasks - Files]
+      summary: Xóa file dự án
+      operationId: taskDeleteProjectFile
+      x-required-permission: TASK.PROJECT.FILE_DELETE
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager]
+      x-data-scope: [Project, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      responses:
+        '204': { $ref: '#/components/responses/NoContent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ==========================================================================
+  # TASK - Project Kanban (15.1)
+  # ==========================================================================
+  /api/v1/tasks/projects/{project_id}/kanban:
+    get:
+      tags: [Tasks - Kanban]
+      summary: Lấy Kanban board theo dự án
+      operationId: taskGetProjectKanban
+      x-required-permission: TASK.TASK.VIEW_KANBAN
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: project_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: assignee_employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: priority, in: query, required: false, schema: { type: string, enum: [Low, Medium, High, Urgent] } }
+        - { name: due_from, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: due_to, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: include_done, in: query, required: false, schema: { type: boolean } }
+        - { name: include_cancelled, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ==========================================================================
+  # TASK - Project Report (20.1)
+  # ==========================================================================
+  /api/v1/tasks/projects/{project_id}/report:
+    get:
+      tags: [Tasks - Reports]
+      summary: Báo cáo tiến độ dự án
+      operationId: taskGetProjectReport
+      x-required-permission: TASK.PROJECT.VIEW_REPORT
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: project_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ==========================================================================
+  # TASK - Project Activity Logs (19.2)
+  # ==========================================================================
+  /api/v1/tasks/projects/{project_id}/activity-logs:
+    get:
+      tags: [Tasks - Activity Logs]
+      summary: Xem lịch sử hoạt động dự án
+      operationId: taskListProjectActivityLogs
+      x-required-permission: [TASK.AUDIT_LOG.VIEW, TASK.PROJECT.VIEW]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: project_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - { name: activity_type, in: query, required: false, schema: { type: string } }
+        - { name: actor_user_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: include_tasks, in: query, required: false, schema: { type: boolean } }
+        - { name: from, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: false, schema: { type: string, format: date-time } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ==========================================================================
+  # TASK - Project Export (21.2)
+  # ==========================================================================
+  /api/v1/tasks/projects/export:
+    get:
+      tags: [Tasks - Exports]
+      summary: Xuất danh sách dự án
+      operationId: taskExportProjects
+      x-required-permission: [TASK.PROJECT.VIEW_REPORT, TASK.PROJECT.VIEW]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/SearchParam'
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Planning, Active, On Hold, Completed, Cancelled, Archived] } }
+        - { name: priority, in: query, required: false, schema: { type: string, enum: [Low, Medium, High, Urgent] } }
+        - { name: owner_employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: visibility, in: query, required: false, schema: { type: string, enum: [Private, Internal, Public] } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ==========================================================================
+  # TASK - Aggregate Task Lists (13.3 + 10.3)
+  # ==========================================================================
+  /api/v1/tasks/my-tasks:
+    get:
+      tags: [Tasks - Tasks]
+      summary: Việc của tôi
+      operationId: taskListMyTasks
+      x-required-permission: TASK.TASK.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: project_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Todo, In Progress, In Review, Done, Cancelled] } }
+        - { name: priority, in: query, required: false, schema: { type: string, enum: [Low, Medium, High, Urgent] } }
+        - { name: is_overdue, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/tasks/assigned-to-me:
+    get:
+      tags: [Tasks - Tasks]
+      summary: Task được giao cho tôi
+      operationId: taskListAssignedToMe
+      x-required-permission: TASK.TASK.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: project_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Todo, In Progress, In Review, Done, Cancelled] } }
+        - { name: priority, in: query, required: false, schema: { type: string, enum: [Low, Medium, High, Urgent] } }
+        - { name: is_overdue, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/tasks/created-by-me:
+    get:
+      tags: [Tasks - Tasks]
+      summary: Task tôi tạo
+      operationId: taskListCreatedByMe
+      x-required-permission: TASK.TASK.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: project_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Todo, In Progress, In Review, Done, Cancelled] } }
+        - { name: priority, in: query, required: false, schema: { type: string, enum: [Low, Medium, High, Urgent] } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/tasks/watching:
+    get:
+      tags: [Tasks - Tasks]
+      summary: Task tôi theo dõi
+      operationId: taskListWatching
+      x-required-permission: TASK.TASK.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: project_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Todo, In Progress, In Review, Done, Cancelled] } }
+        - { name: priority, in: query, required: false, schema: { type: string, enum: [Low, Medium, High, Urgent] } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/tasks/overdue:
+    get:
+      tags: [Tasks - Tasks]
+      summary: Task quá hạn
+      operationId: taskListOverdue
+      x-required-permission: TASK.TASK.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: project_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: priority, in: query, required: false, schema: { type: string, enum: [Low, Medium, High, Urgent] } }
+        - { name: assignee_employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/tasks/due-soon:
+    get:
+      tags: [Tasks - Tasks]
+      summary: Task sắp đến hạn
+      operationId: taskListDueSoon
+      x-required-permission: TASK.TASK.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: project_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: priority, in: query, required: false, schema: { type: string, enum: [Low, Medium, High, Urgent] } }
+        - { name: assignee_employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: due_from, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: due_to, in: query, required: false, schema: { type: string, format: date-time } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ==========================================================================
+  # TASK - Task Export (21.1)
+  # ==========================================================================
+  /api/v1/tasks/export:
+    get:
+      tags: [Tasks - Exports]
+      summary: Xuất danh sách task
+      operationId: taskExportTasks
+      x-required-permission: TASK.TASK.EXPORT
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/SearchParam'
+        - { name: project_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Todo, In Progress, In Review, Done, Cancelled] } }
+        - { name: priority, in: query, required: false, schema: { type: string, enum: [Low, Medium, High, Urgent] } }
+        - { name: assignee_employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: due_from, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: due_to, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: is_overdue, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ==========================================================================
+  # TASK - Reports Summary (20.2)
+  # ==========================================================================
+  /api/v1/tasks/reports/summary:
+    get:
+      tags: [Tasks - Reports]
+      summary: Báo cáo tổng hợp task
+      operationId: taskGetReportSummary
+      x-required-permission: [TASK.PROJECT.VIEW_REPORT, TASK.TASK.VIEW]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string, enum: [my, team, department, company] } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: project_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: from, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: false, schema: { type: string, format: date-time } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ==========================================================================
+  # TASK - Tasks CRUD (13.1, 13.2, 13.4, 13.5, 13.6)
+  # ==========================================================================
+  /api/v1/tasks:
+    get:
+      tags: [Tasks - Tasks]
+      summary: Xem danh sách task
+      operationId: taskListTasks
+      x-required-permission: TASK.TASK.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: project_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Todo, In Progress, In Review, Done, Cancelled] } }
+        - { name: priority, in: query, required: false, schema: { type: string, enum: [Low, Medium, High, Urgent] } }
+        - { name: assignee_employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: reporter_employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: watcher_employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: due_from, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: due_to, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: is_overdue, in: query, required: false, schema: { type: boolean } }
+        - { name: has_assignee, in: query, required: false, schema: { type: boolean } }
+        - { name: created_from, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: created_to, in: query, required: false, schema: { type: string, format: date-time } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Tasks - Tasks]
+      summary: Tạo task
+      operationId: taskCreateTask
+      x-required-permission: TASK.TASK.CREATE
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: TASK_ASSIGNED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                project_id: { type: string, format: uuid, nullable: true }
+                parent_task_id: { type: string, format: uuid, nullable: true }
+                title: { type: string, maxLength: 255 }
+                description: { type: string }
+                priority: { type: string, enum: [Low, Medium, High, Urgent] }
+                status: { type: string, enum: [Todo, In Progress, In Review, Done, Cancelled] }
+                main_assignee_employee_id: { type: string, format: uuid, nullable: true }
+                watcher_employee_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+                start_at: { type: string, format: date-time }
+                due_at: { type: string, format: date-time }
+                estimated_minutes: { type: integer, minimum: 0 }
+                checklists:
+                  type: array
+                  items:
+                    type: object
+                    required: [title]
+                    properties:
+                      title: { type: string }
+                      items:
+                        type: array
+                        items: { type: string }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/tasks/{task_id}:
+    parameters:
+      - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Tasks - Tasks]
+      summary: Xem chi tiết task
+      operationId: taskGetTask
+      x-required-permission: TASK.TASK.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Tasks - Tasks]
+      summary: Cập nhật task
+      operationId: taskUpdateTask
+      x-required-permission: TASK.TASK.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: TASK_UPDATED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string, maxLength: 255 }
+                description: { type: string }
+                priority: { type: string, enum: [Low, Medium, High, Urgent] }
+                start_at: { type: string, format: date-time }
+                due_at: { type: string, format: date-time }
+                estimated_minutes: { type: integer, minimum: 0 }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [Tasks - Tasks]
+      summary: Xóa mềm task
+      operationId: taskDeleteTask
+      x-required-permission: TASK.TASK.DELETE
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      responses:
+        '204': { $ref: '#/components/responses/NoContent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ==========================================================================
+  # TASK - Task Actions (14.1..14.6)
+  # ==========================================================================
+  /api/v1/tasks/{task_id}/assign:
+    post:
+      tags: [Tasks - Task Actions]
+      summary: Giao/đổi assignee
+      operationId: taskAssign
+      x-required-permission: TASK.TASK.ASSIGN
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: TASK_ASSIGNED
+      parameters:
+        - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [main_assignee_employee_id]
+              properties:
+                main_assignee_employee_id: { type: string, format: uuid }
+                co_assignee_employee_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/tasks/{task_id}/change-status:
+    post:
+      tags: [Tasks - Task Actions]
+      summary: Đổi trạng thái task
+      operationId: taskChangeStatus
+      x-required-permission: TASK.TASK.UPDATE_STATUS
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: TASK_STATUS_CHANGED
+      parameters:
+        - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [Todo, In Progress, In Review, Done, Cancelled] }
+                note: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/tasks/{task_id}/change-priority:
+    post:
+      tags: [Tasks - Task Actions]
+      summary: Đổi priority task
+      operationId: taskChangePriority
+      x-required-permission: TASK.TASK.UPDATE_PRIORITY
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: TASK_PRIORITY_CHANGED
+      parameters:
+        - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [priority]
+              properties:
+                priority: { type: string, enum: [Low, Medium, High, Urgent] }
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/tasks/{task_id}/change-deadline:
+    post:
+      tags: [Tasks - Task Actions]
+      summary: Đổi deadline task
+      operationId: taskChangeDeadline
+      x-required-permission: TASK.TASK.UPDATE_DEADLINE
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: TASK_DUE_DATE_CHANGED
+      parameters:
+        - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [due_at]
+              properties:
+                due_at: { type: string, format: date-time }
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/tasks/{task_id}/watch:
+    post:
+      tags: [Tasks - Task Actions]
+      summary: Theo dõi task
+      operationId: taskWatch
+      x-required-permission: TASK.TASK.WATCH
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: TASK_WATCHER_ADDED
+      parameters:
+        - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/tasks/{task_id}/unwatch:
+    post:
+      tags: [Tasks - Task Actions]
+      summary: Bỏ theo dõi task
+      operationId: taskUnwatch
+      x-required-permission: TASK.TASK.WATCH
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: TASK_WATCHER_REMOVED
+      parameters:
+        - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ==========================================================================
+  # TASK - Comments (16.1..16.4)
+  # ==========================================================================
+  /api/v1/tasks/{task_id}/comments:
+    parameters:
+      - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Tasks - Comments]
+      summary: Danh sách bình luận task
+      operationId: taskListComments
+      x-required-permission: TASK.TASK.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Tasks - Comments]
+      summary: Tạo bình luận task
+      operationId: taskCreateComment
+      x-required-permission: TASK.TASK.COMMENT
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: TASK_COMMENT_CREATED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, maxLength: 5000 }
+                mention_employee_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/tasks/{task_id}/comments/{comment_id}:
+    parameters:
+      - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: comment_id, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [Tasks - Comments]
+      summary: Sửa bình luận task
+      operationId: taskUpdateComment
+      x-required-permission: TASK.TASK.COMMENT
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, maxLength: 5000 }
+                mention_employee_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [Tasks - Comments]
+      summary: Xóa bình luận task
+      operationId: taskDeleteComment
+      x-required-permission: TASK.TASK.COMMENT
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      responses:
+        '204': { $ref: '#/components/responses/NoContent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ==========================================================================
+  # TASK - Checklists & Items (17.1..17.7)
+  # ==========================================================================
+  /api/v1/tasks/{task_id}/checklists:
+    parameters:
+      - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Tasks - Checklists]
+      summary: Danh sách checklist task
+      operationId: taskListChecklists
+      x-required-permission: TASK.TASK.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Tasks - Checklists]
+      summary: Tạo checklist task
+      operationId: taskCreateChecklist
+      x-required-permission: TASK.TASK.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                items:
+                  type: array
+                  items: { type: string }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/tasks/{task_id}/checklists/{checklist_id}:
+    parameters:
+      - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: checklist_id, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [Tasks - Checklists]
+      summary: Cập nhật checklist task
+      operationId: taskUpdateChecklist
+      x-required-permission: TASK.TASK.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                order_index: { type: integer }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [Tasks - Checklists]
+      summary: Xóa checklist task
+      operationId: taskDeleteChecklist
+      x-required-permission: TASK.TASK.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      responses:
+        '204': { $ref: '#/components/responses/NoContent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/tasks/{task_id}/checklists/{checklist_id}/items:
+    post:
+      tags: [Tasks - Checklists]
+      summary: Tạo checklist item
+      operationId: taskCreateChecklistItem
+      x-required-permission: TASK.TASK.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: checklist_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                order_index: { type: integer }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/tasks/{task_id}/checklists/{checklist_id}/items/{item_id}:
+    parameters:
+      - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: checklist_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: item_id, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [Tasks - Checklists]
+      summary: Cập nhật checklist item
+      operationId: taskUpdateChecklistItem
+      x-required-permission: TASK.TASK.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                is_done: { type: boolean }
+                order_index: { type: integer }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [Tasks - Checklists]
+      summary: Xóa checklist item
+      operationId: taskDeleteChecklistItem
+      x-required-permission: TASK.TASK.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      responses:
+        '204': { $ref: '#/components/responses/NoContent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ==========================================================================
+  # TASK - Task Files (18.2)
+  # ==========================================================================
+  /api/v1/tasks/{task_id}/files:
+    parameters:
+      - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Tasks - Files]
+      summary: Danh sách file task
+      operationId: taskListTaskFiles
+      x-required-permission: TASK.TASK.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Tasks - Files]
+      summary: Upload file task
+      operationId: taskUploadTaskFile
+      x-required-permission: TASK.TASK.FILE_UPLOAD
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: conditional
+      x-notification-event: TASK_FILE_UPLOADED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                description: { type: string }
+                file_category: { type: string }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/tasks/{task_id}/files/{file_id}/download-url:
+    get:
+      tags: [Tasks - Files]
+      summary: Lấy signed URL tải file task
+      operationId: taskGetTaskFileDownloadUrl
+      x-required-permission: TASK.TASK.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: file_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/tasks/{task_id}/files/{file_id}:
+    delete:
+      tags: [Tasks - Files]
+      summary: Xóa file task
+      operationId: taskDeleteTaskFile
+      x-required-permission: TASK.TASK.FILE_DELETE
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: file_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { $ref: '#/components/responses/NoContent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ==========================================================================
+  # TASK - Task Activity Logs (19.1)
+  # ==========================================================================
+  /api/v1/tasks/{task_id}/activity-logs:
+    get:
+      tags: [Tasks - Activity Logs]
+      summary: Xem lịch sử hoạt động task
+      operationId: taskListTaskActivityLogs
+      x-required-permission: [TASK.AUDIT_LOG.VIEW, TASK.TASK.VIEW]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Super Admin, Company Admin, Manager, Project Manager, Employee]
+      x-data-scope: [Own, Team, Department, Project, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - { name: activity_type, in: query, required: false, schema: { type: string } }
+        - { name: actor_user_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: from, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: false, schema: { type: string, format: date-time } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }

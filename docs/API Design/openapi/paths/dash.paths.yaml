@@ -1,0 +1,1044 @@
+  # ==========================================================================
+  # DASHBOARD - Dashboards (DASH-API-001..008)
+  # ==========================================================================
+  /api/v1/dashboard/me:
+    get:
+      tags: [Dashboard]
+      summary: Lấy dashboard mặc định của user hiện tại (scope per-widget theo dashboard type được resolve)
+      operationId: dashGetMe
+      x-required-permission: DASH.DASHBOARD.VIEW
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: []
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: view, in: query, required: false, schema: { type: string, enum: [full, compact] } }
+        - { name: widget_codes, in: query, required: false, schema: { type: array, items: { type: string } } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/dashboard/types:
+    get:
+      tags: [Dashboard]
+      summary: Lấy danh sách dashboard type user được phép xem
+      operationId: dashListTypes
+      x-required-permission: DASH.DASHBOARD.VIEW
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: []
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/dashboard/widgets:
+    get:
+      tags: [Dashboard]
+      summary: Lấy danh sách widget khả dụng theo quyền (scope per-widget)
+      operationId: dashListWidgets
+      x-required-permission: DASH.DASHBOARD.VIEW
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: []
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: dashboard_type, in: query, required: false, schema: { type: string, enum: [Employee, Manager, HR, Admin] } }
+        - { name: include_hidden, in: query, required: false, schema: { type: boolean } }
+        - { name: include_data, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/dashboard/employee:
+    get:
+      tags: [Dashboard]
+      summary: Lấy Employee Dashboard (scope per-widget theo widget cao nhất phù hợp)
+      operationId: dashGetEmployee
+      x-required-permission: DASH.DASHBOARD.VIEW_EMPLOYEE
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: []
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: view, in: query, required: false, schema: { type: string, enum: [full, compact] } }
+        - { name: widget_codes, in: query, required: false, schema: { type: array, items: { type: string } } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/dashboard/manager:
+    get:
+      tags: [Dashboard]
+      summary: Lấy Manager Dashboard (scope per-widget theo widget cao nhất phù hợp)
+      operationId: dashGetManager
+      x-required-permission: DASH.DASHBOARD.VIEW_MANAGER
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: []
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: view, in: query, required: false, schema: { type: string, enum: [full, compact] } }
+        - { name: widget_codes, in: query, required: false, schema: { type: array, items: { type: string } } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/dashboard/hr:
+    get:
+      tags: [Dashboard]
+      summary: Lấy HR Dashboard (scope per-widget theo widget cao nhất phù hợp)
+      operationId: dashGetHr
+      x-required-permission: DASH.DASHBOARD.VIEW_HR
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: []
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: view, in: query, required: false, schema: { type: string, enum: [full, compact] } }
+        - { name: widget_codes, in: query, required: false, schema: { type: array, items: { type: string } } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/dashboard/admin:
+    get:
+      tags: [Dashboard]
+      summary: Lấy Admin Dashboard (scope per-widget theo widget cao nhất phù hợp)
+      operationId: dashGetAdmin
+      x-required-permission: DASH.DASHBOARD.VIEW_ADMIN
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: view, in: query, required: false, schema: { type: string, enum: [full, compact] } }
+        - { name: widget_codes, in: query, required: false, schema: { type: array, items: { type: string } } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/dashboard/summary:
+    get:
+      tags: [Dashboard]
+      summary: Lấy summary dashboard nhẹ cho header/mobile (scope per summary item)
+      operationId: dashGetSummary
+      x-required-permission: DASH.DASHBOARD.VIEW
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: []
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: items, in: query, required: false, schema: { type: array, items: { type: string } } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ==========================================================================
+  # DASHBOARD - Widgets (DASH-API-101..122)
+  # ==========================================================================
+  /api/v1/dashboard/widgets/attendance-today:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Chấm công hôm nay
+      operationId: dashWidgetAttendanceToday
+      x-required-permission: DASH.WIDGET.VIEW_ATTENDANCE_TODAY
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/my-tasks:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Task của tôi hôm nay
+      operationId: dashWidgetMyTasks
+      x-required-permission: DASH.WIDGET.VIEW_MY_TASKS
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/task-alerts:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Task quá hạn/sắp đến hạn
+      operationId: dashWidgetTaskAlerts
+      x-required-permission: DASH.WIDGET.VIEW_TASK_ALERTS
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own, Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string } }
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/leave-balance:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Số ngày phép còn lại
+      operationId: dashWidgetLeaveBalance
+      x-required-permission: DASH.WIDGET.VIEW_LEAVE_BALANCE
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/pending-leave:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Đơn nghỉ chờ duyệt
+      operationId: dashWidgetPendingLeave
+      x-required-permission: DASH.WIDGET.VIEW_PENDING_LEAVE
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string } }
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/leave-calendar:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Lịch nghỉ team/công ty
+      operationId: dashWidgetLeaveCalendar
+      x-required-permission: DASH.WIDGET.VIEW_LEAVE_CALENDAR
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string } }
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/notifications:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Thông báo mới
+      operationId: dashWidgetNotifications
+      x-required-permission: DASH.WIDGET.VIEW_NOTIFICATIONS
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/hr-overview:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Tổng quan nhân sự
+      operationId: dashWidgetHrOverview
+      x-required-permission: DASH.WIDGET.VIEW_HR_OVERVIEW
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string } }
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/new-employees:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Nhân sự mới
+      operationId: dashWidgetNewEmployees
+      x-required-permission: DASH.WIDGET.VIEW_NEW_EMPLOYEES
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string } }
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/contract-expiring:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Hợp đồng sắp hết hạn
+      operationId: dashWidgetContractExpiring
+      x-required-permission: DASH.WIDGET.VIEW_CONTRACT_EXPIRING
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string } }
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/attendance-alerts:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Bất thường chấm công
+      operationId: dashWidgetAttendanceAlerts
+      x-required-permission: DASH.WIDGET.VIEW_ATTENDANCE_ALERTS
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string } }
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/project-progress:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Tiến độ dự án
+      operationId: dashWidgetProjectProgress
+      x-required-permission: DASH.WIDGET.VIEW_PROJECT_PROGRESS
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own, Team, Project, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string } }
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/user-summary:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Tổng số user
+      operationId: dashWidgetUserSummary
+      x-required-permission: DASH.WIDGET.VIEW_USER_SUMMARY
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string } }
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/employee-summary:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Tổng số nhân viên
+      operationId: dashWidgetEmployeeSummary
+      x-required-permission: DASH.WIDGET.VIEW_EMPLOYEE_SUMMARY
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string } }
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/module-status:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Module đang dùng
+      operationId: dashWidgetModuleStatus
+      x-required-permission: DASH.WIDGET.VIEW_MODULE_STATUS
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string } }
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/config-warnings:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Cảnh báo cấu hình
+      operationId: dashWidgetConfigWarnings
+      x-required-permission: DASH.WIDGET.VIEW_CONFIG_WARNINGS
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string } }
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/new-users:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Tài khoản mới
+      operationId: dashWidgetNewUsers
+      x-required-permission: DASH.WIDGET.VIEW_NEW_USERS
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string } }
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/system-logs:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Log quan trọng gần đây
+      operationId: dashWidgetSystemLogs
+      x-required-permission: DASH.WIDGET.VIEW_SYSTEM_LOGS
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string } }
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/system-notifications:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Thông báo hệ thống
+      operationId: dashWidgetSystemNotifications
+      x-required-permission: DASH.WIDGET.VIEW_SYSTEM_NOTIFICATIONS
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string } }
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/latest-leave:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Đơn nghỉ gần nhất
+      operationId: dashWidgetLatestLeave
+      x-required-permission: DASH.WIDGET.VIEW_LATEST_LEAVE
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/team-tasks-today:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Task team hôm nay
+      operationId: dashWidgetTeamTasksToday
+      x-required-permission: DASH.WIDGET.VIEW_TEAM_TASKS_TODAY
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string } }
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/dashboard/widgets/probation-ending:
+    get:
+      tags: [Dashboard - Widgets]
+      summary: Widget Sắp hết thử việc
+      operationId: dashWidgetProbationEnding
+      x-required-permission: DASH.WIDGET.VIEW_PROBATION_ENDING
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: scope, in: query, required: false, schema: { type: string } }
+        - { name: period, in: query, required: false, schema: { type: string, enum: [today, current_week, current_month, custom] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: refresh, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ==========================================================================
+  # DASHBOARD - Configs (DASH-API-201..208)
+  # ==========================================================================
+  /api/v1/dashboard/configs:
+    get:
+      tags: [Dashboard - Configs]
+      summary: Lấy danh sách cấu hình dashboard/widget
+      operationId: dashListConfigs
+      x-required-permission: DASH.CONFIG.VIEW
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: dashboard_type, in: query, required: false, schema: { type: string, enum: [Employee, Manager, HR, Admin] } }
+        - { name: role_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: user_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: widget_code, in: query, required: false, schema: { type: string } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Active, Inactive] } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Dashboard - Configs]
+      summary: Tạo cấu hình widget
+      operationId: dashCreateConfig
+      x-required-permission: DASH.CONFIG.UPDATE
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: DASH_CONFIG_UPDATED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dashboard_type, widget_code, target_type]
+              properties:
+                dashboard_type: { type: string, enum: [Employee, Manager, HR, Admin] }
+                widget_code: { type: string }
+                target_type: { type: string, enum: [Company, Role, User] }
+                target_role_id: { type: string, format: uuid }
+                target_user_id: { type: string, format: uuid }
+                enabled: { type: boolean }
+                order_index: { type: integer }
+                size: { type: string, enum: [small, medium, large, full] }
+                config: { type: object }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/dashboard/configs/reset-default:
+    post:
+      tags: [Dashboard - Configs]
+      summary: Khôi phục cấu hình dashboard mặc định
+      operationId: dashResetDefaultConfigs
+      x-required-permission: DASH.CONFIG.UPDATE
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: DASH_CONFIG_UPDATED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dashboard_type, target_type]
+              properties:
+                dashboard_type: { type: string, enum: [Employee, Manager, HR, Admin] }
+                target_type: { type: string, enum: [Company, Role, User] }
+                target_role_id: { type: string, format: uuid }
+                target_user_id: { type: string, format: uuid }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/dashboard/configs/reorder:
+    post:
+      tags: [Dashboard - Configs]
+      summary: Cập nhật thứ tự widget
+      operationId: dashReorderConfigs
+      x-required-permission: DASH.CONFIG.UPDATE
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: DASH_CONFIG_UPDATED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dashboard_type, target_type, items]
+              properties:
+                dashboard_type: { type: string, enum: [Employee, Manager, HR, Admin] }
+                target_type: { type: string, enum: [Company, Role, User] }
+                target_role_id: { type: string, format: uuid }
+                target_user_id: { type: string, format: uuid }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [widget_code, order_index]
+                    properties:
+                      widget_code: { type: string }
+                      order_index: { type: integer }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/dashboard/configs/bulk-update:
+    post:
+      tags: [Dashboard - Configs]
+      summary: Cập nhật nhiều cấu hình widget
+      operationId: dashBulkUpdateConfigs
+      x-required-permission: DASH.CONFIG.UPDATE
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: DASH_CONFIG_UPDATED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                dashboard_type: { type: string, enum: [Employee, Manager, HR, Admin] }
+                target_type: { type: string, enum: [Company, Role, User] }
+                target_role_id: { type: string, format: uuid }
+                target_user_id: { type: string, format: uuid }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [widget_code]
+                    properties:
+                      config_id: { type: string, format: uuid }
+                      widget_code: { type: string }
+                      enabled: { type: boolean }
+                      order_index: { type: integer }
+                      size: { type: string, enum: [small, medium, large, full] }
+                      config: { type: object }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/dashboard/configs/{config_id}:
+    get:
+      tags: [Dashboard - Configs]
+      summary: Xem chi tiết cấu hình widget
+      operationId: dashGetConfig
+      x-required-permission: DASH.CONFIG.VIEW
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: config_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Dashboard - Configs]
+      summary: Cập nhật cấu hình widget
+      operationId: dashUpdateConfig
+      x-required-permission: DASH.CONFIG.UPDATE
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: DASH_CONFIG_UPDATED
+      parameters:
+        - { name: config_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                order_index: { type: integer }
+                size: { type: string, enum: [small, medium, large, full] }
+                config: { type: object }
+                version: { type: integer }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [Dashboard - Configs]
+      summary: Xóa mềm/vô hiệu hóa cấu hình widget
+      operationId: dashDeleteConfig
+      x-required-permission: DASH.CONFIG.UPDATE
+      x-allowed-roles: [Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: DASH_CONFIG_UPDATED
+      parameters:
+        - { name: config_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { $ref: '#/components/responses/NoContent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ==========================================================================
+  # DASHBOARD - Internal (DASH-INT-001..004)
+  # ==========================================================================
+  /internal/v1/dashboard/cache/invalidate:
+    post:
+      tags: [Dashboard - Internal]
+      summary: Invalidate cache dashboard theo event/module/entity
+      operationId: dashInternalInvalidateCache
+      security: [{ internalServiceAuth: [] }]
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                company_id: { type: string, format: uuid }
+                source_module: { type: string }
+                event_code: { type: string }
+                entity_type: { type: string }
+                entity_id: { type: string, format: uuid }
+                affected_user_ids: { type: array, items: { type: string, format: uuid } }
+                affected_employee_ids: { type: array, items: { type: string, format: uuid } }
+                cache_keys: { type: array, items: { type: string } }
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /internal/v1/dashboard/cache/refresh:
+    post:
+      tags: [Dashboard - Internal]
+      summary: Refresh cache widget/dashboard
+      operationId: dashInternalRefreshCache
+      security: [{ internalServiceAuth: [] }]
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                company_id: { type: string, format: uuid }
+                source_module: { type: string }
+                event_code: { type: string }
+                entity_type: { type: string }
+                entity_id: { type: string, format: uuid }
+                affected_user_ids: { type: array, items: { type: string, format: uuid } }
+                affected_employee_ids: { type: array, items: { type: string, format: uuid } }
+                cache_keys: { type: array, items: { type: string } }
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /internal/v1/dashboard/events/module-updated:
+    post:
+      tags: [Dashboard - Internal]
+      summary: Nhận event module source thay đổi
+      operationId: dashInternalModuleUpdated
+      security: [{ internalServiceAuth: [] }]
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                company_id: { type: string, format: uuid }
+                source_module: { type: string }
+                event_code: { type: string }
+                entity_type: { type: string }
+                entity_id: { type: string, format: uuid }
+                affected_user_ids: { type: array, items: { type: string, format: uuid } }
+                affected_employee_ids: { type: array, items: { type: string, format: uuid } }
+                cache_keys: { type: array, items: { type: string } }
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /internal/v1/dashboard/jobs/warmup-cache:
+    post:
+      tags: [Dashboard - Internal]
+      summary: Job warm up cache dashboard
+      operationId: dashInternalWarmupCache
+      security: [{ internalServiceAuth: [] }]
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: [System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                company_id: { type: string, format: uuid }
+                source_module: { type: string }
+                event_code: { type: string }
+                entity_type: { type: string }
+                entity_id: { type: string, format: uuid }
+                affected_user_ids: { type: array, items: { type: string, format: uuid } }
+                affected_employee_ids: { type: array, items: { type: string, format: uuid } }
+                cache_keys: { type: array, items: { type: string } }
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }

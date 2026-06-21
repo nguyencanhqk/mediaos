@@ -2,7 +2,7 @@
 
 - **Trạng thái:** ✅ Accepted
 - **Bất khả nghịch:** ⚠️ Cao
-- **Liên quan:** [0001](0001-rls-multi-tenant.md), [0004](0004-envelope-encryption-kms.md), [0005](0005-immutable-payroll-finance-snapshot.md), [0006](0006-frontend-vite-react-spa.md)
+- **Liên quan:** [0001](0001-rls-multi-tenant.md), [0006](0006-frontend-vite-react-spa.md), [0009](0009-audit-outbox-event-bus.md)
 
 ## Bối cảnh
 

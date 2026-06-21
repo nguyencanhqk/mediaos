@@ -2,7 +2,7 @@
 
 - **Trạng thái:** ✅ Accepted
 - **Bất khả nghịch:** ⚠️ Cao
-- **Liên quan:** [0005](0005-immutable-payroll-finance-snapshot.md)
+- **Liên quan:** [0009](0009-audit-outbox-event-bus.md)
 
 ## Bối cảnh
 

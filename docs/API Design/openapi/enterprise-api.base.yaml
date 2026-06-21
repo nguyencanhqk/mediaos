@@ -1,0 +1,384 @@
+openapi: 3.1.0
+info:
+  title: Enterprise Management System API
+  version: 1.0.0
+  description: |
+    OpenAPI 3.1 cho **Hệ thống Quản lý Doanh nghiệp nội bộ** (MVP).
+
+    Tài liệu này được sinh chuẩn hóa từ API-02 → API-09 theo quy chuẩn API-01.
+    Permission/scope tham chiếu [API-10 Permission Matrix](../API-10%20PERMISSION%20MATRIX.md).
+
+    ## Quy ước extension (x-*) cho authorization & hành vi
+    Mỗi operation mang metadata phân quyền dưới dạng vendor extension:
+
+    | Extension | Kiểu | Ý nghĩa |
+    | --------- | ---- | ------- |
+    | `x-required-permission` | string \| string[] | Mã permission bắt buộc. Mảng = nhiều permission. |
+    | `x-permission-mode` | `allOf` \| `anyOf` | Cách kết hợp khi là mảng. Mặc định `allOf`. `anyOf` = bất kỳ quyền nào trong mảng. |
+    | `x-allowed-roles` | string[] | Role thường dùng (mô tả, không phải nguồn enforce). |
+    | `x-data-scope` | string[] | Scope áp dụng: Own/Team/Department/Project/Company/System. |
+    | `x-idempotency` | `Required` \| `Optional` \| `No` | Yêu cầu header `Idempotency-Key`. |
+    | `x-audit-log` | `always` \| `conditional` \| `none` | Mức ghi audit log. |
+    | `x-notification-event` | string \| null | Event code phát ra (nếu có). |
+
+    Public endpoint dùng `security: []`. Internal `/internal/v1/*` dùng `internalServiceAuth`.
+  contact:
+    name: Enterprise Management System — Backend
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local
+  - url: https://dev-api.example.com/api/v1
+    description: Development
+  - url: https://staging-api.example.com/api/v1
+    description: Staging
+  - url: https://api.example.com/api/v1
+    description: Production
+
+security:
+  - bearerAuth: []
+
+tags:
+  # AUTH
+  - { name: Auth - Session, description: Login/logout/refresh/password }
+  - { name: Auth - Me, description: Thông tin user hiện tại }
+  - { name: Auth - Users, description: Quản lý user }
+  - { name: Auth - Roles, description: Quản lý role }
+  - { name: Auth - Permissions, description: Permission catalog & matrix }
+  - { name: Auth - Security Logs, description: Login log, security event, audit }
+  # HR
+  - { name: HR - Employees, description: Hồ sơ nhân viên }
+  - { name: HR - My Profile, description: Hồ sơ cá nhân & yêu cầu sửa }
+  - { name: HR - Profile Change Requests, description: Duyệt yêu cầu sửa hồ sơ }
+  - { name: HR - Departments, description: Phòng ban }
+  - { name: HR - Positions, description: Chức vụ }
+  - { name: HR - Master Data, description: Job level, contract type }
+  - { name: HR - Contracts, description: Hợp đồng lao động }
+  - { name: HR - Employee Files, description: File hồ sơ }
+  - { name: HR - Employee Code, description: Cấu hình & sinh mã nhân viên }
+  - { name: HR - Org Chart, description: Sơ đồ tổ chức }
+  - { name: HR - Audit Logs, description: Audit hồ sơ }
+  # ATT
+  - { name: Attendance - Today, description: Trạng thái & check-in/out hôm nay }
+  - { name: Attendance - Records, description: Bảng công }
+  - { name: Attendance - Adjustments, description: Yêu cầu điều chỉnh công }
+  - { name: Attendance - Remote Requests, description: Remote/công tác }
+  - { name: Attendance - Shifts, description: Ca làm việc }
+  - { name: Attendance - Shift Assignments, description: Phân ca }
+  - { name: Attendance - Rules, description: Quy tắc chấm công }
+  - { name: Attendance - Exports, description: Xuất dữ liệu công }
+  - { name: Attendance - Audit Logs, description: Audit chấm công }
+  - { name: Attendance - Internal, description: Job nội bộ ATT }
+  # LEAVE
+  - { name: Leave - My Balance, description: Số dư phép của tôi }
+  - { name: Leave - My Requests, description: Đơn nghỉ của tôi }
+  - { name: Leave - Requests, description: Đơn nghỉ theo quyền }
+  - { name: Leave - Approvals, description: Duyệt/từ chối/thu hồi }
+  - { name: Leave - Calculation, description: Preview & validate }
+  - { name: Leave - Calendar, description: Lịch nghỉ }
+  - { name: Leave - Types, description: Loại nghỉ }
+  - { name: Leave - Policies, description: Chính sách nghỉ }
+  - { name: Leave - Balances, description: Số dư phép (quản trị) }
+  - { name: Leave - Files, description: File đính kèm đơn nghỉ }
+  - { name: Leave - Exports, description: Xuất dữ liệu nghỉ }
+  - { name: Leave - Internal, description: Sync nội bộ LEAVE↔ATT }
+  # TASK
+  - { name: Tasks - Projects, description: Dự án }
+  - { name: Tasks - Project Members, description: Thành viên dự án }
+  - { name: Tasks - Tasks, description: Công việc }
+  - { name: Tasks - Task Actions, description: Giao/đổi trạng thái/ưu tiên/deadline/watch }
+  - { name: Tasks - Kanban, description: Bảng Kanban }
+  - { name: Tasks - Comments, description: Bình luận }
+  - { name: Tasks - Checklists, description: Checklist & item }
+  - { name: Tasks - Files, description: File task/project }
+  - { name: Tasks - Activity Logs, description: Nhật ký hoạt động }
+  - { name: Tasks - Reports, description: Báo cáo tiến độ }
+  - { name: Tasks - Exports, description: Xuất dữ liệu task/project }
+  # NOTI
+  - { name: Notifications - My, description: Thông báo của tôi }
+  - { name: Notifications - Actions, description: Đánh dấu đọc/ẩn/xóa }
+  - { name: Notifications - Admin, description: Quản trị thông báo }
+  - { name: Notifications - Events, description: Cấu hình event }
+  - { name: Notifications - Templates, description: Template thông báo }
+  - { name: Notifications - Channels, description: Kênh gửi }
+  - { name: Notifications - Delivery Logs, description: Log gửi }
+  - { name: Notifications - Internal, description: Nhận event & gửi nội bộ }
+  # DASH
+  - { name: Dashboard, description: Dashboard tổng hợp }
+  - { name: Dashboard - Widgets, description: Widget riêng lẻ }
+  - { name: Dashboard - Configs, description: Cấu hình widget }
+  - { name: Dashboard - Internal, description: Cache/event nội bộ DASH }
+  # FOUNDATION
+  - { name: Foundation - Companies, description: Company/tenant }
+  - { name: Foundation - Modules, description: Module catalog }
+  - { name: Foundation - Settings, description: System/company/effective settings }
+  - { name: Foundation - Audit Logs, description: Truy vấn/xuất audit }
+  - { name: Foundation - Files, description: Upload/download/metadata file }
+  - { name: Foundation - File Links, description: Link/unlink file với entity }
+  - { name: Foundation - File Access Logs, description: Log truy cập file }
+  - { name: Foundation - Sequences, description: Sinh mã tự động }
+  - { name: Foundation - Public Holidays, description: Ngày lễ }
+  - { name: Foundation - Retention, description: Retention policy & cleanup }
+  - { name: Foundation - Seeds, description: Seed tracking }
+  - { name: Foundation - Internal, description: API nội bộ Foundation }
+  - { name: System, description: Health check }
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 'Access token JWT — `Authorization: Bearer <access_token>` (API-01 §6.2).'
+    internalServiceAuth:
+      type: apiKey
+      in: header
+      name: X-Internal-Token
+      description: Service-to-service token cho `/internal/v1/*`. Không gọi được từ frontend.
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, default: 1 }
+      description: Trang hiện tại (offset pagination).
+    PerPageParam:
+      name: per_page
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      description: Số bản ghi mỗi trang (tối đa 100).
+    SearchParam:
+      name: search
+      in: query
+      required: false
+      schema: { type: string }
+      description: Từ khóa tìm kiếm (theo field whitelist của module).
+    SortParam:
+      name: sort
+      in: query
+      required: false
+      schema: { type: string, example: "created_at:desc" }
+      description: "Sắp xếp theo field whitelist, dạng `field:asc|desc`."
+    CursorParam:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string }
+      description: Con trỏ cursor pagination (log/notification).
+    LimitParam:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      description: Giới hạn bản ghi (cursor pagination).
+    XRequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      schema: { type: string }
+      description: ID request từ client để truy vết.
+    XClientType:
+      name: X-Client-Type
+      in: header
+      required: false
+      schema: { type: string, enum: [web, mobile, system] }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: { type: string, format: uuid }
+      description: Chống xử lý trùng cho API quan trọng (API-01 §21).
+    IfMatch:
+      name: If-Match
+      in: header
+      required: false
+      schema: { type: string }
+      description: Optimistic locking theo version (API-01 §22.1).
+
+  schemas:
+    Meta:
+      type: object
+      properties:
+        request_id: { type: string, example: req_20260620_000001 }
+        timestamp: { type: string, format: date-time, example: "2026-06-20T10:00:00+07:00" }
+        idempotent_replay: { type: boolean }
+      required: [request_id, timestamp]
+    Pagination:
+      type: object
+      properties:
+        page: { type: integer, example: 1 }
+        per_page: { type: integer, example: 20 }
+        total: { type: integer, example: 100 }
+        total_pages: { type: integer, example: 5 }
+        has_next: { type: boolean }
+        has_prev: { type: boolean }
+      required: [page, per_page, total, total_pages, has_next, has_prev]
+    CursorPagination:
+      type: object
+      properties:
+        limit: { type: integer, example: 20 }
+        next_cursor: { type: string, nullable: true }
+        has_next: { type: boolean }
+      required: [limit, has_next]
+    ValidationFieldError:
+      type: object
+      properties:
+        field: { type: string, example: email }
+        message: { type: string, example: Email không đúng định dạng }
+        rule: { type: string, example: email }
+      required: [field, message, rule]
+    ErrorObject:
+      type: object
+      properties:
+        code: { type: string, example: AUTH-ERR-FORBIDDEN }
+        type: { type: string, example: ForbiddenError }
+        details:
+          oneOf:
+            - type: object
+              nullable: true
+            - type: array
+              items: { $ref: '#/components/schemas/ValidationFieldError' }
+          nullable: true
+      required: [code, type]
+    SuccessResponse:
+      type: object
+      properties:
+        success: { type: boolean, enum: [true], example: true }
+        message: { type: string, example: Thao tác thành công }
+        data:
+          type: object
+          nullable: true
+        meta: { $ref: '#/components/schemas/Meta' }
+      required: [success, message, data, meta]
+    SuccessListResponse:
+      type: object
+      properties:
+        success: { type: boolean, enum: [true], example: true }
+        message: { type: string, example: Lấy danh sách thành công }
+        data:
+          type: array
+          items: { type: object }
+        pagination: { $ref: '#/components/schemas/Pagination' }
+        meta: { $ref: '#/components/schemas/Meta' }
+      required: [success, message, data, meta]
+    CursorListResponse:
+      type: object
+      properties:
+        success: { type: boolean, enum: [true], example: true }
+        message: { type: string }
+        data:
+          type: array
+          items: { type: object }
+        pagination: { $ref: '#/components/schemas/CursorPagination' }
+        meta: { $ref: '#/components/schemas/Meta' }
+      required: [success, data]
+    ErrorResponse:
+      type: object
+      properties:
+        success: { type: boolean, enum: [false], example: false }
+        message: { type: string, example: Bạn không có quyền thực hiện thao tác này }
+        error: { $ref: '#/components/schemas/ErrorObject' }
+        meta: { $ref: '#/components/schemas/Meta' }
+      required: [success, message, error, meta]
+    ValidationErrorResponse:
+      type: object
+      properties:
+        success: { type: boolean, enum: [false], example: false }
+        message: { type: string, example: Dữ liệu không hợp lệ }
+        error:
+          type: object
+          properties:
+            code: { type: string, example: VALIDATION-ERR-001 }
+            type: { type: string, example: ValidationError }
+            details:
+              type: array
+              items: { $ref: '#/components/schemas/ValidationFieldError' }
+          required: [code, type, details]
+        meta: { $ref: '#/components/schemas/Meta' }
+      required: [success, message, error, meta]
+
+  responses:
+    SuccessObject:
+      description: Thành công (object)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SuccessResponse' }
+    SuccessList:
+      description: Thành công (list có phân trang)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SuccessListResponse' }
+    SuccessCursorList:
+      description: Thành công (list cursor)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/CursorListResponse' }
+    Created:
+      description: Tạo mới thành công
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SuccessResponse' }
+    Accepted:
+      description: Đã nhận, xử lý bất đồng bộ
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SuccessResponse' }
+    NoContent:
+      description: Thành công, không có nội dung
+    BadRequest:
+      description: Request sai format / validation lỗi
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationErrorResponse' }
+    Unauthorized:
+      description: Chưa xác thực / token sai / hết hạn
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: Đã xác thực nhưng không có quyền / ngoài data scope
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Không tìm thấy / user không được phép thấy
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: Xung đột trạng thái / trùng dữ liệu / version
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    UnprocessableEntity:
+      description: Đúng format nhưng vi phạm business rule
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    PayloadTooLarge:
+      description: File vượt giới hạn dung lượng
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    UnsupportedMediaType:
+      description: MIME type không cho phép
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    TooManyRequests:
+      description: Rate limit
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ServerError:
+      description: Lỗi hệ thống
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+paths:
