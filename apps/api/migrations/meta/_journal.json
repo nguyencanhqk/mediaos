@@ -820,6 +820,13 @@
       "when": 1717500510000,
       "tag": "0433_foundation_db3_files",
       "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1717500520000,
+      "tag": "0434_foundation_db4_sequences_holidays",
+      "breakpoints": true
     }
   ]
 }

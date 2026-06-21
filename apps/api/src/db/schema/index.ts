@@ -54,3 +54,9 @@ export * from "./settings";
 // FOUNDATION-DB-3 files (DB-08 §8.6/8.7/8.8): files + file_links (per-tenant FORCE-RLS, soft-delete) +
 // file_access_logs (per-tenant FORCE-RLS, APPEND-ONLY — app role REVOKE UPDATE/DELETE)
 export * from "./files";
+// FOUNDATION-DB-4 sequences (DB-08 §8.9): sequence_counters — company_id NULLABLE (system sequence=NULL),
+// RLS+FORCE policy nullable-tenant (USING own+global, WITH CHECK own) mẫu 0005 roles; mutable soft-delete.
+export * from "./sequences";
+// FOUNDATION-DB-4 holidays (DB-08 §8.10): public_holidays — company_id NULLABLE (global holiday=NULL),
+// RLS+FORCE policy nullable-tenant; uq global/company tách theo company_id IS [NOT] NULL; mutable soft-delete.
+export * from "./holidays";
