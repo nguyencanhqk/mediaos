@@ -51,3 +51,6 @@ export * from "./security-policy";
 export * from "./user-invites";
 // FOUNDATION-DB-1 settings (DB-08 §8.3/8.4): system_settings GLOBAL no-RLS + company_settings per-tenant FORCE-RLS
 export * from "./settings";
+// FOUNDATION-DB-3 files (DB-08 §8.6/8.7/8.8): files + file_links (per-tenant FORCE-RLS, soft-delete) +
+// file_access_logs (per-tenant FORCE-RLS, APPEND-ONLY — app role REVOKE UPDATE/DELETE)
+export * from "./files";
