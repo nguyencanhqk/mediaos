@@ -144,14 +144,44 @@ export const backlog = [
     title: '③ Phân quyền: giữ engine 4-tier, wire Tier-2 scope nếu cần + redesign role/permission UI',
     // RED (red-zone-scanner 2026-06-21): paths chạm engine can() (permission.service.ts), hợp đồng useCan/PermissionGate,
     // và role grant/revoke ghi audit_logs + emit permission.changed in-tx → authz + audit append-only. Cần lane đỏ + FULL gate.
+    // DONE 2026-06-21 (auto, song song DB-2, owner waive chốt): tech-lead chứng minh Tier-2 data_scope CHƯA tồn tại
+    // (role_permissions không có cột data_scope) → engine/useCan/PermissionGate ĐÓNG BĂNG, thu về THUẦN FE redesign (green).
+    // 6 file FE: page + 3 dialog (assign/revoke/object) redesign theo "Phòng điều khiển" + i18n vi + spec gating. Read-API
+    // hiện-trạng-grant + wire Tier-2 TÁCH sang PERM-UI-2. completion-evaluator PASS 96/100, contract-freeze use-can/
+    // permission-gate xanh (59/59 web-core), console 177/177, typecheck clean. Vùng đóng băng sạch (git diff).
     zone: 'red',
-    status: 'todo',
+    status: 'done',
     paths: ['apps/api/src/permission/**', 'apps/console/**', 'apps/app/**', 'packages/web-core/**'],
     skills: ['code-review'],
     depends_on: ['ACCT-2'],
     done_when: [
       'role/permission UI redesigned; useCan/PermissionGate giữ nguyên hợp đồng',
       'KHÔNG sửa shape engine trừ khi Tier-2 scope thật sự cần; test permission xanh',
+    ],
+  },
+  {
+    id: 'PERM-UI-2',
+    title: 'Phân quyền v2: read-API hiện-trạng grant (role/object-permission của user) + (Phase) wire Tier-2 data_scope',
+    // TÁCH từ PERM-UI-1 (2026-06-21): tech-lead chứng minh role_permissions KHÔNG có cột data_scope → engine 4-tier sạch.
+    // Wire Tier-2 = thêm cột DB + migration + đổi thuật toán can() → CHẠM lane migration nối tiếp (đụng FOUNDATION-DB-2).
+    // Read-API hiện-trạng grant = THÊM @Get vào permission-admin.controller (crown) + trả dữ liệu phân quyền (rò = leak ai-có-quyền-gì) → FULL gate + Opus.
+    // ⚠️ Sub-phase data_scope BẮT BUỘC xếp sau chuỗi FOUNDATION-DB (giành slot migration), KHÔNG chạy song song migration khác.
+    zone: 'red',
+    status: 'todo',
+    paths: [
+      'apps/api/src/permission/permission-admin.controller.ts',
+      'apps/api/src/permission/permission-admin.repository.ts',
+      'apps/api/src/permission/permission-admin.service.ts',
+      'packages/contracts/src/permission.ts',
+      'apps/console/src/routes/system/permissions/**',
+      'apps/console/src/lib/rbac-api.ts',
+    ],
+    skills: ['code-review'],
+    depends_on: ['PERM-UI-1'],
+    done_when: [
+      'read-API GET hiện-trạng grant (role của 1 user + object-permission list) qua @RequirePermission + tenant-scope; deny-path test RED (user thiếu quyền → 403, không rò grant user khác)',
+      'dialog revoke/object hiển thị state hiện hữu (hết "thao tác mù"); useCan/PermissionGate giữ nguyên hợp đồng',
+      '(Phase sau, sau FOUNDATION-DB chain) wire Tier-2 data_scope: cột role_permissions.data_scope + migration nối tiếp + nhánh deny-scope trong can() + RED test scope — TÁCH sub-WO migration riêng',
     ],
   },
   {
