@@ -1,6 +1,5 @@
 import { Logger } from "@nestjs/common";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DbExportWorker } from "../db-ops/db-export.worker";
 import type { OutboxWorker } from "../events/outbox-worker";
 import type { WorkerSchedulerConfig } from "./worker-scheduler.config";
 import { WorkerSchedulerService } from "./worker-scheduler.service";
@@ -14,16 +13,11 @@ function makeConfig(over: Partial<WorkerSchedulerConfig> = {}): WorkerSchedulerC
 function makeWorkers() {
   return {
     outbox: { processBatch: vi.fn().mockResolvedValue({ claimed: 0, deadLettered: 0 }) },
-    exportWorker: { processBatch: vi.fn().mockResolvedValue({ claimed: 0, done: 0, failed: 0 }) },
   };
 }
 
 function makeService(config: WorkerSchedulerConfig, workers: ReturnType<typeof makeWorkers>) {
-  return new WorkerSchedulerService(
-    workers.outbox as unknown as OutboxWorker,
-    workers.exportWorker as unknown as DbExportWorker,
-    config,
-  );
+  return new WorkerSchedulerService(workers.outbox as unknown as OutboxWorker, config);
 }
 
 describe("WorkerSchedulerService", () => {
@@ -40,23 +34,21 @@ describe("WorkerSchedulerService", () => {
     vi.restoreAllMocks();
   });
 
-  it("gọi processBatch của mỗi worker theo đúng chu kỳ độc lập", async () => {
+  it("gọi processBatch của outbox worker theo đúng chu kỳ", async () => {
     const workers = makeWorkers();
     const svc = makeService(makeConfig(), workers);
     svc.onApplicationBootstrap();
 
     await vi.advanceTimersByTimeAsync(5000);
     expect(workers.outbox.processBatch).toHaveBeenCalledTimes(1);
-    expect(workers.exportWorker.processBatch).toHaveBeenCalledTimes(0); // 10s chưa tới
 
     await vi.advanceTimersByTimeAsync(5000); // tổng 10s
     expect(workers.outbox.processBatch).toHaveBeenCalledTimes(2);
-    expect(workers.exportWorker.processBatch).toHaveBeenCalledTimes(1);
 
     svc.onModuleDestroy();
   });
 
-  it("nuốt lỗi 1 nhịp (log ERROR, KHÔNG throw) và vẫn tick tiếp; worker kia KHÔNG bị ảnh hưởng", async () => {
+  it("nuốt lỗi 1 nhịp (log ERROR, KHÔNG throw) và vẫn tick tiếp", async () => {
     const workers = makeWorkers();
     workers.outbox.processBatch
       .mockRejectedValueOnce(new Error("boom"))
@@ -69,9 +61,8 @@ describe("WorkerSchedulerService", () => {
     expect(errSpy).toHaveBeenCalledTimes(1);
     expect(workers.outbox.processBatch).toHaveBeenCalledTimes(1);
 
-    await vi.advanceTimersByTimeAsync(5000); // tổng 10s: outbox nhịp 2 (ok) + export nhịp 1 (ok)
+    await vi.advanceTimersByTimeAsync(5000); // tổng 10s: outbox nhịp 2 (ok)
     expect(workers.outbox.processBatch).toHaveBeenCalledTimes(2);
-    expect(workers.exportWorker.processBatch).toHaveBeenCalledTimes(1);
     expect(errSpy).toHaveBeenCalledTimes(1); // không lỗi thêm
 
     svc.onModuleDestroy();
@@ -84,7 +75,6 @@ describe("WorkerSchedulerService", () => {
 
     await vi.advanceTimersByTimeAsync(60_000);
     expect(workers.outbox.processBatch).not.toHaveBeenCalled();
-    expect(workers.exportWorker.processBatch).not.toHaveBeenCalled();
   });
 
   it("KHÔNG đăng ký interval khi NODE_ENV=test (dù enabled=true)", async () => {
@@ -94,7 +84,6 @@ describe("WorkerSchedulerService", () => {
 
     await vi.advanceTimersByTimeAsync(60_000);
     expect(workers.outbox.processBatch).not.toHaveBeenCalled();
-    expect(workers.exportWorker.processBatch).not.toHaveBeenCalled();
   });
 
   it("dừng tick sau onModuleDestroy (KHÔNG rò timer)", async () => {

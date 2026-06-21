@@ -5,7 +5,6 @@ import {
   type OnApplicationBootstrap,
   type OnModuleDestroy,
 } from "@nestjs/common";
-import { DbExportWorker } from "../db-ops/db-export.worker";
 import { OutboxWorker } from "../events/outbox-worker";
 import { WORKER_SCHEDULER_CONFIG, type WorkerSchedulerConfig } from "./worker-scheduler.config";
 
@@ -39,7 +38,6 @@ export class WorkerSchedulerService implements OnApplicationBootstrap, OnModuleD
 
   constructor(
     private readonly outbox: OutboxWorker,
-    private readonly exportWorker: DbExportWorker,
     @Inject(WORKER_SCHEDULER_CONFIG) private readonly config: WorkerSchedulerConfig,
   ) {}
 
@@ -58,10 +56,7 @@ export class WorkerSchedulerService implements OnApplicationBootstrap, OnModuleD
     }
 
     this.register("outbox", this.config.outboxPollMs, () => this.outbox.processBatch());
-    this.register("db-export", this.config.exportPollMs, () => this.exportWorker.processBatch());
-    this.logger.log(
-      `Worker scheduler BẬT — outbox mỗi ${this.config.outboxPollMs}ms, db-export mỗi ${this.config.exportPollMs}ms.`,
-    );
+    this.logger.log(`Worker scheduler BẬT — outbox mỗi ${this.config.outboxPollMs}ms.`);
   }
 
   onModuleDestroy(): void {

@@ -35,24 +35,14 @@ export * from "./meeting";
 export * from "./two-factor";
 // G16-1b security alerting (append-only — repeated re-auth fail / cross-scope deny / anomalous login)
 export * from "./security-alerts";
-// G6-2 PR-B break-glass (emergency platform_account secret access — grant + SoD 2-người approval, mig 0200)
+// G6-2 PR-B break-glass (emergency platform_account secret access — PARK cùng media, out-of-scope)
 export * from "./break-glass";
-// G16-3 SaaS scaffold (subscription plan catalog + per-company subscription/feature-flag/usage)
-export * from "./saas";
-// G16-3 template clone (workspace_templates catalog + per-company dashboard_configs)
-export * from "./templates";
 // G15-2 device tokens (push notification registration)
 export * from "./device-tokens";
 // AC-5 API key / Personal Access Token (PAT) — per-tenant FORCE-RLS + append-only usages
 export * from "./api-keys";
 // AC-7 module-registry (catalog GLOBAL no-RLS — lớp module trên feature-flag, reuse company_feature_flags)
 export * from "./module-registry";
-// AC-4 UI config (branding / navigation / i18n overrides — per-tenant FORCE-RLS, tenant self-service)
-export * from "./ui-config";
-// AC-6 Webhooks (endpoint + subscription + delivery log — per-tenant FORCE-RLS; HMAC secret envelope-KMS)
-export * from "./webhooks";
-// AC-9 db-ops (3 bảng GLOBAL no-RLS operator-scoped — break-glass grant/approval + export job; mig 0345)
-export * from "./db-ops";
 // CS-8 Cấu hình mail server SMTP (per-tenant FORCE-RLS — 1 config / scope; SMTP password envelope-KMS)
 export * from "./mail-config";
 // CS-9 Bảo mật nâng cao (per-company security policy — per-tenant FORCE-RLS; enforce IP/giờ/2FA/email-domain)

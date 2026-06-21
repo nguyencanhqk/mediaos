@@ -1,5 +1,5 @@
 /**
- * G10-4 Meeting service deny-path tests (TASKS.md §5.5 — RED trước implement).
+ * G10-4 Meeting service deny-path tests (CLAUDE.md §9.4 — RED trước implement).
  *
  * Bắt buộc theo nhiệm vụ:
  *   A. double-booking: cùng phòng + overlap khung giờ → ConflictException.
