@@ -827,6 +827,13 @@
       "when": 1717500520000,
       "tag": "0434_foundation_db4_sequences_holidays",
       "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1717500530000,
+      "tag": "0435_foundation_db5_retention_seed_modules",
+      "breakpoints": true
     }
   ]
 }

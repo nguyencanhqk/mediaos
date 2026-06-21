@@ -60,3 +60,10 @@ export * from "./sequences";
 // FOUNDATION-DB-4 holidays (DB-08 §8.10): public_holidays — company_id NULLABLE (global holiday=NULL),
 // RLS+FORCE policy nullable-tenant; uq global/company tách theo company_id IS [NOT] NULL; mutable soft-delete.
 export * from "./holidays";
+// FOUNDATION-DB-5 retention (DB-08 §8.11): data_retention_policies — company_id NULLABLE (global default=NULL),
+// RLS+FORCE policy nullable-tenant; mutable soft-delete; uq (company,module,entity) WHERE enabled & not-deleted.
+export * from "./retention";
+// FOUNDATION-DB-5 seed-tracking (DB-08 §8.2/8.12/8.13): modules (catalog CHUẨN spec — KHÔNG company_id,
+// no-RLS, KHÁC system_modules SaaS) + seed_batches/seed_items (company_id NULLABLE, RLS+FORCE nullable-tenant,
+// tracking mutable — KHÔNG DELETE, giữ lịch sử seed idempotent). Seed catalog+settings+permission ở 0435.
+export * from "./seed-tracking";
