@@ -4,6 +4,9 @@ import { WS_EVENTS, type ChatMessageDto, type NotificationDto } from "@mediaos/c
 import { RealtimeEmitterService } from "./realtime-emitter.service";
 import { chatRoomName, userRoomName } from "./rooms";
 
+// CLEAN-DECOUPLE-1: gateway chat handlers đã gỡ, nhưng emitChatMessage GIỮ (ChatService consume tới
+// khi cụm chat gỡ ở CLEAN-BE-1). Spec phủ cả emitChatMessage + emitNotification masking/routing.
+
 const COMPANY = "c0000000-0000-0000-0000-00000000000a";
 const ROOM = "11111111-1111-1111-1111-111111111111";
 const USER = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";

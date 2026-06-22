@@ -1,17 +1,15 @@
 /**
- * AC-5 — PAT (Personal Access Token) HTTP deny-path on a NON-ADMIN route (GET /tasks/board, gate read:task).
- * Supertest + Nest app thật → đi qua GLOBAL guard pipeline (ApiKeyAuthGuard → JwtAuthGuard → CompanyGuard →
- * 2FA → SaaS → PermissionGuard). RED-first: ApiKeyAuthGuard/api_keys chưa tồn tại tới khi AC-5 GREEN.
+ * GUARD-PIPELINE REGRESSION — CLEAN-DECOUPLE-1 (Pha B de-media-fy).
  *
- * 6 chốt fail-closed (rủi ro #1–#4 micro-plan):
- *  (1) in-scope + user-grant → 200 (PAT gọi được route trong scope).
- *  (2) out-of-scope (key scope thiếu read:task) → 403 (deny-out-of-scope).
- *  (3) sau revoke (revoked_at set) → 401 (key bị thu hồi không auth được).
- *  (4) sau expiry (expires_at quá khứ) → 401.
- *  (5) cross-tenant: PAT của tenant A KHÔNG đọc data tenant B (RLS scope theo company_id của KEY).
- *  (6) PAT KHÔNG vượt grant user: key scope CÓ read:task nhưng USER thiếu grant → 403.
+ * Bối cảnh: `ApiKeyAuthGuard` (đường PAT `mok_`) ĐÃ ĐƯỢC GỠ khỏi APP_GUARD (api-keys = out-of-scope,
+ * module gỡ hẳn ở CLEAN-BE-2). File này từ "AC-5 PAT deny-path" thu về **regression cổng guard** chứng minh:
+ *   (A) Đường JWT thường GIỮ NGUYÊN — vẫn auth + qua pipeline 3 guard (JwtAuthGuard→CompanyGuard→2FA).
+ *   (B) Đường PAT ĐÓNG — Bearer `mok_<...>` (kể cả key HỢP LỆ, đúng scope+grant) → 401, KHÔNG còn lọt.
+ *       (RED-first: trước khi gỡ guard, key hợp lệ trả 200; sau khi gỡ → token không-JWT rơi vào
+ *        JwtAuthGuard.verifyAccessToken → ném → 401. Không có đường auth nào hở.)
  *
- * Pass-through: token JWT thường (không mok_) vẫn auth bình thường (regression — đường JWT y nguyên).
+ * Các case PAT scope/revoke/expiry/cross-tenant/over-grant cũ đã XOÁ cùng việc gỡ guard (feature biến mất).
+ * Supertest + Nest app thật → đi qua GLOBAL guard pipeline. skipIf(!hasDb): cần Postgres (verify DB cô lập).
  */
 
 import "reflect-metadata";
@@ -51,16 +49,14 @@ async function permId(direct: Pool, action: string, resourceType: string): Promi
   return r.rows[0].id as string;
 }
 
-/** Seed 1 api_keys row DIRECT (bypass RLS). Trả plaintext token (mok_<...>) để gọi qua header. */
-async function seedApiKey(
+/**
+ * Seed 1 api_keys row HỢP LỆ DIRECT (bypass RLS). Trả plaintext token `mok_<...>`.
+ * Dùng để chứng minh: kể cả PAT hợp lệ (scope+grant đúng) cũng KHÔNG còn auth sau khi gỡ ApiKeyAuthGuard.
+ * (api_keys table còn tồn tại tới CLEAN-BE-2; seed direct không phụ thuộc guard.)
+ */
+async function seedValidApiKey(
   direct: Pool,
-  opts: {
-    companyId: string;
-    userId: string;
-    scopePermissionIds: string[];
-    expiresAt?: Date | null;
-    revokedAt?: Date | null;
-  },
+  opts: { companyId: string; userId: string; scopePermissionIds: string[] },
 ): Promise<string> {
   const random = randomUUID().replace(/-/g, "");
   const plaintext = `${API_KEY_TOKEN_PREFIX}${random}`;
@@ -69,42 +65,19 @@ async function seedApiKey(
   await direct.query(
     `INSERT INTO api_keys
        (company_id, user_id, name, token_prefix, token_hash, scope_permission_ids, expires_at, revoked_at)
-     VALUES ($1, $2, $3, $4, $5, $6::uuid[], $7, $8)`,
-    [
-      opts.companyId,
-      opts.userId,
-      `key-${random.slice(0, 6)}`,
-      tokenPrefix,
-      tokenHash,
-      opts.scopePermissionIds,
-      opts.expiresAt ?? null,
-      opts.revokedAt ?? null,
-    ],
+     VALUES ($1, $2, $3, $4, $5, $6::uuid[], NULL, NULL)`,
+    [opts.companyId, opts.userId, `key-${random.slice(0, 6)}`, tokenPrefix, tokenHash, opts.scopePermissionIds],
   );
   return plaintext;
 }
 
-/** Seed 1 office task DIRECT để board có dữ liệu xác minh RLS scope. */
-async function seedTask(direct: Pool, companyId: string): Promise<string> {
-  const r = await direct.query(
-    `INSERT INTO tasks (company_id, task_type, title, status, origin, revision_round)
-     VALUES ($1, 'office', $2, 'not_started', 'initial', 0) RETURNING id`,
-    [companyId, `pat-task-${randomUUID().slice(0, 8)}`],
-  );
-  return r.rows[0].id as string;
-}
-
-describe.skipIf(!hasDb)("AC-5 PAT deny-path on non-admin route (GET /tasks/board)", () => {
+describe.skipIf(!hasDb)("Guard pipeline regression — JWT giữ, PAT (mok_) đã gỡ (CLEAN-DECOUPLE-1)", () => {
   let app: INestApplication;
   let direct: Pool;
   let A: SeededTenant;
-  let B: SeededTenant;
   let readTaskPermId: string;
-  let readNotificationPermId: string;
-  /** user A có grant read:task (qua role). */
+  /** user A có grant read:task (qua role) — đủ điều kiện nếu PAT path còn sống. */
   let grantedUserA: string;
-  /** user A KHÔNG có grant read:task (role rỗng). */
-  let noGrantUserA: string;
   let jwtTokenA: string;
   const companyIds: string[] = [];
 
@@ -117,59 +90,25 @@ describe.skipIf(!hasDb)("AC-5 PAT deny-path on non-admin route (GET /tasks/board
     direct = directPool();
 
     A = await seedCompany(direct, "patA");
-    B = await seedCompany(direct, "patB");
-    companyIds.push(A.companyId, B.companyId);
+    companyIds.push(A.companyId);
 
     readTaskPermId = await permId(direct, "read", "task");
-    readNotificationPermId = await permId(direct, "read", "notification");
-
     const pw = await new PasswordService().hash(PASSWORD);
 
-    // grantedUserA: role có read:task → user grant tồn tại.
-    grantedUserA = await seedUser(
-      direct,
-      A.companyId,
-      `pat-granted-${randomUUID().slice(0, 8)}@a.test`,
-      pw,
-    );
-    const roleWithRead = await seedRole(
-      direct,
-      A.companyId,
-      `pat-role-read-${randomUUID().slice(0, 8)}`,
-    );
+    // grantedUserA: role có read:task → user grant tồn tại (PAT hợp lệ vẫn nên bị chặn ở (B)).
+    grantedUserA = await seedUser(direct, A.companyId, `pat-granted-${randomUUID().slice(0, 8)}@a.test`, pw);
+    const roleWithRead = await seedRole(direct, A.companyId, `pat-role-read-${randomUUID().slice(0, 8)}`);
     await seedRolePermission(direct, roleWithRead, readTaskPermId, "ALLOW");
     await seedUserRole(direct, grantedUserA, roleWithRead, A.companyId);
 
-    // noGrantUserA: role rỗng → KHÔNG có read:task grant.
-    noGrantUserA = await seedUser(
-      direct,
-      A.companyId,
-      `pat-nogrant-${randomUUID().slice(0, 8)}@a.test`,
-      pw,
-    );
-    const emptyRole = await seedRole(
-      direct,
-      A.companyId,
-      `pat-role-empty-${randomUUID().slice(0, 8)}`,
-    );
-    await seedUserRole(direct, noGrantUserA, emptyRole, A.companyId);
-
     // JWT thường của grantedUserA (regression: đường JWT y nguyên).
-    const login = await api(app)
-      .post("/auth/login")
-      .send({ companySlug: A.slug, email: `pat-granted`, password: PASSWORD });
-    // login bằng email thật:
     const grantedEmail = (await direct.query(`SELECT email FROM users WHERE id=$1`, [grantedUserA]))
       .rows[0].email as string;
     const realLogin = await api(app)
       .post("/auth/login")
       .send({ companySlug: A.slug, email: grantedEmail, password: PASSWORD });
     expect(realLogin.status, JSON.stringify(realLogin.body)).toBe(200);
-    void login;
     jwtTokenA = realLogin.body.data.accessToken as string;
-
-    await seedTask(direct, A.companyId);
-    await seedTask(direct, B.companyId);
   });
 
   afterAll(async () => {
@@ -177,96 +116,23 @@ describe.skipIf(!hasDb)("AC-5 PAT deny-path on non-admin route (GET /tasks/board
     if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
   });
 
-  // (regression) JWT thường vẫn auth bình thường — đường JWT KHÔNG bị ApiKeyAuthGuard nuốt.
-  it("JWT thường (không mok_) vẫn gọi được GET /tasks/board → 200", async () => {
+  // (A) regression — đường JWT KHÔNG bị ảnh hưởng bởi việc gỡ ApiKeyAuthGuard.
+  it("(A) JWT thường (không mok_) vẫn gọi được GET /tasks/board → 200", async () => {
     const res = await api(app).get("/tasks/board").set("Authorization", `Bearer ${jwtTokenA}`);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.success).toBe(true);
   });
 
-  // (1) in-scope + user-grant → 200.
-  it("(1) PAT scope read:task + user có grant → 200", async () => {
-    const token = await seedApiKey(direct, {
+  // (B) PAT đóng — kể cả key HỢP LỆ (scope read:task + user có grant) cũng → 401 sau khi gỡ guard.
+  //     RED-first: với ApiKeyAuthGuard còn trong pipeline, key hợp lệ trả 200 → test ĐỎ; sau gỡ → 401 (XANH).
+  it("(B) PAT mok_ HỢP LỆ → 401 (đường PAT đã gỡ — hệ quả CÓ CHỦ ĐÍCH, không lọt auth)", async () => {
+    const token = await seedValidApiKey(direct, {
       companyId: A.companyId,
       userId: grantedUserA,
       scopePermissionIds: [readTaskPermId],
     });
     const res = await api(app).get("/tasks/board").set("Authorization", `Bearer ${token}`);
-    expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(res.body.success).toBe(true);
-  });
-
-  // (2) out-of-scope → 403.
-  it("(2) PAT scope thiếu read:task (chỉ read:notification) → 403 deny-out-of-scope", async () => {
-    const token = await seedApiKey(direct, {
-      companyId: A.companyId,
-      userId: grantedUserA,
-      scopePermissionIds: [readNotificationPermId],
-    });
-    const res = await api(app).get("/tasks/board").set("Authorization", `Bearer ${token}`);
-    expect(res.status).toBe(403);
-    expect(res.body.success).toBe(false);
-  });
-
-  // (3) revoked → 401.
-  it("(3) PAT đã revoke → 401", async () => {
-    const token = await seedApiKey(direct, {
-      companyId: A.companyId,
-      userId: grantedUserA,
-      scopePermissionIds: [readTaskPermId],
-      revokedAt: new Date(Date.now() - 1000),
-    });
-    const res = await api(app).get("/tasks/board").set("Authorization", `Bearer ${token}`);
-    expect(res.status).toBe(401);
-    expect(res.body.success).toBe(false);
-  });
-
-  // (4) expired → 401.
-  it("(4) PAT hết hạn → 401", async () => {
-    const token = await seedApiKey(direct, {
-      companyId: A.companyId,
-      userId: grantedUserA,
-      scopePermissionIds: [readTaskPermId],
-      expiresAt: new Date(Date.now() - 1000),
-    });
-    const res = await api(app).get("/tasks/board").set("Authorization", `Bearer ${token}`);
-    expect(res.status).toBe(401);
-    expect(res.body.success).toBe(false);
-  });
-
-  // (5) cross-tenant: PAT của A không thấy data B (RLS scope theo company_id của KEY).
-  it("(5) PAT của tenant A KHÔNG thấy task của tenant B (RLS theo company_id của key)", async () => {
-    const token = await seedApiKey(direct, {
-      companyId: A.companyId,
-      userId: grantedUserA,
-      scopePermissionIds: [readTaskPermId],
-    });
-    const res = await api(app).get("/tasks/board").set("Authorization", `Bearer ${token}`);
-    expect(res.status).toBe(200);
-    const rows = res.body.data as Array<{ companyId?: string }>;
-    // Mọi row trả về thuộc tenant A (không có row B). board trả task của company hiện tại (RLS=A).
-    const bTaskCount = await direct.query(
-      `SELECT count(*)::int AS n FROM tasks WHERE company_id = $1`,
-      [B.companyId],
-    );
-    expect(bTaskCount.rows[0].n).toBeGreaterThan(0); // B có task
-    // Không thể khẳng định shape companyId trong DTO, nên xác minh gián tiếp: total ≤ số task của A.
-    const aTaskCount = await direct.query(
-      `SELECT count(*)::int AS n FROM tasks WHERE company_id = $1`,
-      [A.companyId],
-    );
-    expect(rows.length).toBeLessThanOrEqual(aTaskCount.rows[0].n as number);
-  });
-
-  // (6) PAT không vượt grant user: key scope có read:task nhưng USER thiếu grant → 403.
-  it("(6) PAT scope read:task nhưng USER thiếu grant read:task → 403 (không vượt quyền user)", async () => {
-    const token = await seedApiKey(direct, {
-      companyId: A.companyId,
-      userId: noGrantUserA,
-      scopePermissionIds: [readTaskPermId],
-    });
-    const res = await api(app).get("/tasks/board").set("Authorization", `Bearer ${token}`);
-    expect(res.status).toBe(403);
+    expect(res.status, JSON.stringify(res.body)).toBe(401);
     expect(res.body.success).toBe(false);
   });
 });

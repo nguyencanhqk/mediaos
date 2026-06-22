@@ -9,11 +9,11 @@ import { OutboxWorker } from "../events/outbox-worker";
 import { WORKER_SCHEDULER_CONFIG, type WorkerSchedulerConfig } from "./worker-scheduler.config";
 
 /**
- * WorkerSchedulerService (WAVE 4 OPS) — gọi `processBatch()` của 2 background worker theo chu kỳ cấu hình.
+ * WorkerSchedulerService (WAVE 4 OPS) — gọi `processBatch()` của background worker theo chu kỳ cấu hình.
  *
- * Cả OutboxWorker (EventsModule) lẫn DbExportWorker (DbOpsModule) là **one-shot** `processBatch()`; trước đây
- * KHÔNG có gì gọi chúng định kỳ ở prod (job nằm chờ). Service này đăng ký 2 `setInterval` ĐỘC LẬP — mỗi
- * worker một nhịp riêng — lúc app khởi động.
+ * OutboxWorker (EventsModule) là **one-shot** `processBatch()`; trước đây KHÔNG có gì gọi định kỳ ở prod
+ * (job nằm chờ). Service này đăng ký 1 `setInterval` lúc app khởi động.
+ * (de-media-fy: DbExportWorker/DbOpsModule = out-of-scope đã gỡ — chỉ còn nhịp outbox, audit/outbox bất biến.)
  *
  * Vì sao `setInterval` (KHÔNG `@nestjs/schedule`): tránh thêm dependency + thay đổi lockfile (CI dùng
  * `--frozen-lockfile`); mirror đúng pattern OnApplicationBootstrap sẵn có (operator-bootstrap.service.ts);

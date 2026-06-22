@@ -17,6 +17,9 @@ import { chatRoomName, userRoomName } from "./rooms";
  * Server gắn bởi RealtimeGateway.afterInit (cùng instance Nest DI). Khi REALTIME_ENABLED=false hoặc gateway
  * chưa init → `server` null → emit là NO-OP (fail-soft, FE còn poll REST). KHÔNG bao giờ throw lên caller
  * (realtime là best-effort phụ trợ — lỗi emit không được làm hỏng giao dịch nghiệp vụ đã commit).
+ *
+ * (CLEAN-DECOUPLE-1: gateway chat handlers đã gỡ. emitChatMessage GIỮ — ChatService còn consume tới khi
+ *  cụm chat gỡ ở CLEAN-BE-1; đây là chiều chat→realtime, KHÔNG phải dây in→out của WO decouple.)
  */
 @Injectable()
 export class RealtimeEmitterService {
