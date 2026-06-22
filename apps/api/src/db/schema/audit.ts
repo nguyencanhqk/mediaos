@@ -126,8 +126,8 @@ export const AUDIT_OBJECT_TYPES = [
   // G8-3 evaluation (chấm điểm gắn workflow step — recordScores ghi 'evaluation_result' cùng tx)
   "evaluation_template",
   "evaluation_result",
-  // G8-2 defect/revision (trả sửa — createDefect ghi 'defect' cùng tx với revision task)
-  "defect",
+  // (de-media-fy CLEAN-BE-1: gỡ orphan 'defect' khỏi mảng TS — module defect đã gỡ ở 892f208, không còn caller.
+  //  DB CHECK GIỮ NGUYÊN 'defect' (append-only #2 — union chỉ-tăng, KHÔNG sửa CHECK); TS array = subset hợp lệ.)
   // G8-4 KPI (compute + confirm ghi 'kpi_result'; tạo/sửa định nghĩa ghi 'kpi_definition')
   "kpi_definition",
   "kpi_result",
