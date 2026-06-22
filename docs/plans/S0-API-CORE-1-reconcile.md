@@ -114,7 +114,7 @@ Các lệch cụ thể:
 
 **API-01 §12.1 yêu cầu:**
 ```json
-{ "success": false, "message": "...", "error": { "code": "AUTH-ERR-403", "type": "ForbiddenError", "details": null }, "meta": { "request_id": "...", "timestamp": "..." } }
+{ "success": false, "message": "...", "error": { "code": "AUTH-ERR-FORBIDDEN", "type": "ForbiddenError", "details": null }, "meta": { "request_id": "...", "timestamp": "..." } }
 ```
 
 ### 1.3 Log redaction — xác nhận gap

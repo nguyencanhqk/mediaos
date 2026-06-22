@@ -84,7 +84,7 @@ Kiểm thử toàn hệ thống
 FRONTEND-14 bám theo các quyết định đã chốt:
 
 1. Frontend được xây theo kiến trúc enterprise web platform, gồm App Runtime, App Shell, Design System, Navigation/Registry, Auth/Permission, API/State và Feature Module.
-2. Stack MVP mặc định: Next.js, React, TypeScript, Tailwind CSS/CSS Variables, TanStack Query, React Hook Form, Zod, TanStack Table, Zustand, Vitest, Testing Library, Playwright và Storybook.
+2. Stack MVP mặc định: Vite + React 19 SPA + TanStack Router, TypeScript, Tailwind CSS/CSS Variables, TanStack Query, React Hook Form, Zod, TanStack Table, Zustand, Vitest, Testing Library, Playwright và Storybook.
 3. Sau đăng nhập, user vào **Home Portal** trước, sau đó mở module bằng Home Portal hoặc App Switcher.
 4. Mọi màn protected phải đi qua route guard, permission guard, module status và feature flag nếu có.
 5. Frontend không được hard-code theo role name; phải dựa trên permission, data scope, route metadata, action metadata và allowed actions từ backend.

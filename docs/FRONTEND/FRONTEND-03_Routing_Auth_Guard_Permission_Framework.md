@@ -777,7 +777,9 @@ export const routeRegistry: RouteMeta[] = [
 
 ---
 
-## 13. Route structure đề xuất với Next.js App Router
+## 13. Route structure đề xuất (TanStack Router file-based)
+
+> Cây route dưới đây là **bản đồ màn hình** (screen inventory) minh hoạ phân cấp route, KHÔNG ràng buộc convention thư mục. TanStack Router dùng **file-based routing ở `src/routes/`**: route group `(public)`/`(protected)` → layout route; `page.tsx` → route/`index.tsx`; `[id]` → `$id`. Xem [DECISIONS-02 §1](<../DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md>).
 
 ### 13.1 Folder route
 
