@@ -834,6 +834,13 @@
       "when": 1717500530000,
       "tag": "0435_foundation_db5_retention_seed_modules",
       "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1717500540000,
+      "tag": "0436_foundation_dbfix1_company_id_immutable",
+      "breakpoints": true
     }
   ]
 }
