@@ -1,6 +1,6 @@
 # Permission Matrix — Hệ thống Quản lý Doanh nghiệp
 
-> **Nguồn sự thật phân quyền tầng-trên**, hợp nhất từ bộ SPEC-02…08 (mỗi SPEC §"Quyền trong module" + "Ma trận phân quyền MVP"). Engine thực thi: [ADR-0010](adr/0010-permission-engine-4-tier.md). Test deny-path TRƯỚC (RED) cho mọi quyền nhạy cảm/phê duyệt ([`CLAUDE.md` §6](../CLAUDE.md)).
+> **Nguồn sự thật phân quyền tầng-trên**, hợp nhất từ bộ SPEC-02…08 (mỗi SPEC §"Quyền trong module" + "Ma trận phân quyền MVP"). Engine thực thi: permission engine 4 tầng (quyền nhạy cảm KHÔNG kế thừa). Test deny-path TRƯỚC (RED) cho mọi quyền nhạy cảm/phê duyệt ([`CLAUDE.md` §6](../CLAUDE.md)).
 >
 > **3 bất biến chi phối:** (1) `company_id` ép bằng RLS ở tầng DB, KHÔNG nằm trong PermissionService; (2) không hard-delete audit; (3) masking dữ liệu nhạy cảm là việc của **server**, FE chỉ UX.
 >

@@ -2,7 +2,7 @@
 
 > **Sơ đồ quan hệ dữ liệu** của 7 module MVP, dựng từ phần **"Dữ liệu cần lưu"** của bộ SPEC-02…08.
 > Nguồn sự thật field đầy đủ: từng SPEC §"Dữ liệu cần lưu". Tài liệu này chỉ vẽ thực thể + quan hệ tầng-trên.
-> ⚠️ De-media-fy 2026-06-20: ERD media/finance/payroll/SaaS cũ đã bỏ. Bảng của các subsystem **parked** (xem [`SYSTEM-DESIGN.md §14`](./SYSTEM-DESIGN.md#14-subsystem-parked-hướng-cũ)) không vẽ ở đây.
+> ⚠️ De-media-fy 2026-06-20: ERD media/finance/payroll/SaaS cũ đã bỏ. Bảng của các subsystem **parked** (de-media-fy 2026-06-20) không vẽ ở đây.
 
 ## Quy ước đọc
 
