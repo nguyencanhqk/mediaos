@@ -1,0 +1,79 @@
+# Security gates — secret scan + dependency scan (WO S0-CI-2, DEVOPS-02 §9.2/§11/§17.2).
+#
+# ADDITIVE: file MỚI — KHÔNG rewrite ci.yml/api.yml/apps-frontend.yml/auto-merge.yml. ci.yml giữ cổng
+# tích hợp cross-cutting (RLS qua PgBouncer, build/test toàn workspace). File này bổ sung hai cổng bảo mật
+# mà S0-CI-1 đã defer-có-vé sang đây:
+#   1. secret-scan     — gitleaks full-history → FAIL build khi phát hiện secret THẬT (BẤT BIẾN #3).
+#   2. dependency-scan — pnpm audit → FAIL khi có lỗ hổng high|critical chưa xử lý (SCA, DEVOPS-02 §9.2).
+#
+# REQUIRED STATUS CHECK: hai job 'secret-scan' và 'dependency-scan' phải là required check trên branch
+# protection của master (đồng bộ auto-merge.yml + repo settings) — auto-merge CHỈ squash sau khi cả hai xanh.
+# Branch model = master (single-tenant N=1), KHÔNG develop — quyết định lệch DEVOPS-02 (develop/main) ghi ở
+# docs/plans/S0-CI-2.md. Trigger master/main giữ đồng bộ với ci.yml/api.yml/apps-frontend.yml.
+#
+# DEFER-CÓ-VÉ (KHÔNG thu hẹp âm thầm pipeline DEVOPS-02): SAST/CodeQL (QA06-CICD-003) + Trivy image scan
+# (QA06-CICD-004) chưa làm ở WO này — bàn sang WO sau (S0-CI-3 / DEVOPS image pipeline). Xem plan §7.
+
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+
+# Concurrency group RIÊNG — không xung đột ci.yml (ci-*), api.yml (api-*), apps-frontend.yml (apps-frontend-*),
+# auto-merge.yml (không có concurrency).
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Cổng 1: Secret scanning (gitleaks, full-history) ───────────────────────────────────────────
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # fetch-depth: 0 = full git history → gitleaks quét MỌI commit, không chỉ HEAD,
+          # bắt secret bị commit rồi "xóa" ở commit sau (vẫn nằm trong history ⇒ vẫn rò).
+          fetch-depth: 0
+
+      # gitleaks-action@v2: exit non-zero khi tìm secret ⇒ FAIL build. Cấu hình + allowlist hẹp ở .gitleaks.toml.
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Trỏ tường minh tới config trong repo (extend default + allowlist ephemeral CI hẹp).
+          GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
+          # KHÔNG bật GITLEAKS_ENABLE_UPLOAD_ARTIFACT mặc định để tránh log/artifact lộ chuỗi nghi vấn.
+
+  # ── Cổng 2: Dependency scan (pnpm audit, SCA) ──────────────────────────────────────────────────
+  dependency-scan:
+    name: Dependency scan (pnpm audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # --frozen-lockfile: cài đúng theo pnpm-lock.yaml đã commit → audit quét chính lockfile của repo
+      # (QA-06 §10 dòng 227: lockfile được commit + được scan trong CI).
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      # NGƯỠNG FAIL = high|critical. --audit-level=high ⇒ pnpm audit exit non-zero khi có lỗ hổng
+      # mức high HOẶC critical chưa xử lý ⇒ FAIL build. Lỗ hổng low/moderate KHÔNG làm đỏ cổng
+      # (báo cáo để theo dõi, không chặn merge) — khớp QA06-CICD-002 "Không Critical/High chưa xử lý".
+      - name: pnpm audit (fail on high|critical)
+        run: pnpm audit --audit-level=high
