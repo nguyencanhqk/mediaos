@@ -3,8 +3,8 @@ packages:
   - "packages/*"
 
 # Pin React TYPES về một phiên bản toàn monorepo — chặn @types/react dedupe skew
-# (ReactNode/ReactPortal mismatch 19.0.14 vs 19.2.16; bài học apps/admin). Khớp peerDeps
-# packages/{ui,web-core}. Chỉ pin types (KHÔNG pin react/react-dom runtime — giữ Expo/mobile).
+# (ReactNode/ReactPortal mismatch 19.0.14 vs 19.2.16). Khớp peerDeps packages/{ui,web-core}.
+# Chỉ pin types (KHÔNG pin react/react-dom runtime).
 overrides:
   "@types/react": "19.2.16"
   "@types/react-dom": "19.2.3"
@@ -14,11 +14,3 @@ allowBuilds:
   esbuild: true
   "@swc/core": true
   "@nestjs/core": true
-  # Expo native build scripts (G15 mobile)
-  expo: true
-  "expo-modules-core": true
-  "expo-secure-store": true
-  "expo-constants": true
-  # Pulled in transitively by eslint-config-expo's import resolver; ships prebuilt binaries, so its
-  # build script is not needed — disabled to keep installs deterministic and warning-free.
-  unrs-resolver: false
