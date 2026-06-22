@@ -67,6 +67,13 @@ services:
     volumes:
       # userlist.txt chứa hash của pgbouncer_auth — sinh bởi setup-db-roles.mjs, đã gitignore.
       - ./.secrets/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    healthcheck:
+      # pg_isready qua port pooler — xác nhận PgBouncer nhận TCP và đang sẵn sàng (DEVOPS-03 §16).
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U ${POSTGRES_USER:-mediaos} || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
     depends_on:
       postgres:
         condition: service_healthy
