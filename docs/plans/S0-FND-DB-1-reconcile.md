@@ -1,3 +1,28 @@
+<!-- ⚙️ KHỐI MÁY-ĐỌC (auto-loop ĐỌC khối này thay vì phân rã lại; reconcile-refresh trước build). -->
+<!-- Phần ỔN ĐỊNH (lanes/acceptanceChecks/testTasks/steps) tái dùng; phần GAP trong prose bên dưới PHẢI đối chiếu lại với code hiện tại. -->
+```yaml
+wo: S0-FND-DB-1
+zone: red
+generated_by: human
+reconciled_at: "migration head 0437 / idx 120"   # mốc freshness — head đổi ⇒ reconcile-refresh lại
+lanes:
+  - id: S0-FND-DB-1
+    builder: db-migration
+    task: "Migration 0438 (band foundation-db): thêm 11 cột DB-08 §8.5 (nullable, ADD COLUMN IF NOT EXISTS) + 2 index vào audit_logs; parity audit.ts; RED append-only test; journal idx 121"
+    paths: ["apps/api/migrations/**", "apps/api/src/db/schema/audit.ts", "apps/api/test/integration/audit-logs-appendonly.int-spec.ts"]
+acceptanceChecks:
+  - "migration 0438 áp sạch nối tiếp head; 11 cột nullable idempotent (KHÔNG db:generate/drop/rename)"
+  - "append-only audit_logs: INSERT qua app role SUCCEED, UPDATE/DELETE DENIED (RED test) — BẤT BIẾN #2"
+  - "KHÔNG đụng RLS/policy/FORCE (đã đúng 0003), object_type CHECK (union), grant REVOKE (0432)"
+  - "rls-coverage-assert + rls-guards xanh; typecheck xanh"
+testTasks:
+  - "apps/api/test/integration/audit-logs-appendonly.int-spec.ts — mirror file-access-logs: insert ok / update / delete denied (seed row qua directPool)"
+steps:
+  - "0438 SQL: 11 cột nullable §8.5 + 2 index (actor_created, action); re-assert GRANT SELECT,INSERT"
+  - "audit.ts: 11 cột nullable parity (block 'DB-08 §8.5 ADDITIVE (mig 0438)')"
+  - "RED test audit-logs-appendonly + _journal.json append {idx:121, tag:0438}"
+```
+
 # S0-FND-DB-1 — Micro-plan (reconcile schema nền vs DB-01/DB-08/DB-10)
 
 > Zone: 🔴 RED / crown (RLS · audit · append-only · migration). Reconcile-first, append-only, spec-wins.
