@@ -185,5 +185,12 @@ export const AUDIT_OBJECT_TYPES = [
   // audit-in-tx app-tenant. Sửa work-item (priority/state/desc/nhãn) TÁI DÙNG 'task' (chỉ action mới).
   "project_state",
   "label",
+  // FOUNDATION-BE-2 sequence_counters: admin PATCH cấu hình counter ghi 'sequence_counter'/SequenceUpdated
+  // audit-in-tx app-tenant (before/after = cấu hình mã, KHÔNG current_value/secret/PII). ⚠️ DB CHECK
+  // object_type CHƯA chứa 'sequence_counter' (head mig 0420 thêm tới 'project_state'/'label' — 0432 KHÔNG
+  // đụng CHECK). Cần lane DB (band foundation-db) thêm 'sequence_counter' vào CHECK DO-block UNION + sync
+  // mảng này CÙNG commit. Tới khi đó, updateSequence ghi audit sẽ vỡ CHECK trên Postgres thật ⇒ integration
+  // test updateSequence GATE theo sự hiện diện 'sequence_counter' trong CHECK (skip có chú thích, KHÔNG xanh-giả).
+  "sequence_counter",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
