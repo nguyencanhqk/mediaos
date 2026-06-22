@@ -211,9 +211,45 @@ const STAMP_SCHEMA = {
   required: ['ok'],
   properties: { ok: { type: 'boolean' }, ts: { type: 'string' } },
 };
+// Liệt kê NHẸ hàng đợi READY cho dryRun preview (KHÔNG phân rã) — 1 agent thay cho MAX_ROUNDS agent nặng.
+const ENUMERATE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['workOrders'],
+  properties: {
+    workOrders: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'title', 'paths'],
+        properties: {
+          id: { type: 'string' },
+          title: { type: 'string' },
+          paths: { type: 'array', items: { type: 'string' } },
+          zone: { type: 'string' },
+          done_when: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+  },
+};
 
 // ─────────────────────────── Prompts ──────────────────────────────────────
 const J = (o) => JSON.stringify(o);
+
+// ── DRYRUN: liệt kê NHẸ hàng đợi READY (KHÔNG đọc docs, KHÔNG phân rã) — chỉ để xem trước ──
+const enumeratePrompt = () =>
+  [
+    `Bạn là project-analyst. LIỆT KÊ (KHÔNG phân rã, KHÔNG đọc docs/spec, KHÔNG mở tài liệu khác) các Work Order READY kế tiếp để XEM TRƯỚC hàng đợi auto-loop.`,
+    `Đọc DUY NHẤT harness/backlog.mjs. READY = status 'todo' && mọi depends_on đã 'done'.`,
+    only ? `CHỈ XÉT id khớp regex /${only}/.` : '',
+    `Sắp theo ưu tiên (ít phụ thuộc & mở khóa nhiều việc khác trước). Tối đa ${MAX_ROUNDS} WO.`,
+    `Với MỖI WO trả {id,title,paths,zone,done_when} LẤY NGUYÊN từ backlog — KHÔNG bịa, KHÔNG phân rã lane, KHÔNG đọc docs.`,
+    `Trả DUY NHẤT { workOrders:[...] } theo schema. Đây chỉ là liệt kê nhẹ để preview, KHÔNG phải kế hoạch.`,
+  ]
+    .filter(Boolean)
+    .join('\n');
 
 // ── ĐỘI 1: Phân tích & Kế hoạch ──
 const analyzePrompt = (exclude) =>
@@ -610,8 +646,25 @@ if (queue && MAX_CONCURRENT > 1 && !dryRun) {
     else break; // không khởi động được thêm (hết slot/cạn budget) và không có gì đang chạy
   }
   if (pending.length) log(`⏸ Còn ${pending.length} WO chưa chạy (cạn budget/dừng): ${pending.map((x) => x.id).join(', ')}`);
+} else if (dryRun && !queue) {
+  // ── DRYRUN PREVIEW (fallback, KHÔNG có queue truyền sẵn) ──
+  // SỬA FAN-OUT: trước đây mỗi round chạy 1 agent tech-lead phân rã NẶNG (đọc docs + decompose) chỉ để in 1 dòng
+  // preview ⇒ tới MAX_ROUNDS agent Opus, ~0 giá trị. Nay: 1 agent NHẸ liệt kê hàng đợi → dựng preview CỤC BỘ.
+  phase('Analyze');
+  const enr = await agent(enumeratePrompt(), { agentType: 'project-analyst', effort: 'low', schema: ENUMERATE_SCHEMA, label: 'analyze:enumerate', phase: 'Analyze' });
+  const readys = ((enr && enr.workOrders) || []).slice(0, MAX_ROUNDS);
+  if (!readys.length) log('✅ Không còn Work Order READY actionable (preview).');
+  for (const it of readys) {
+    round++;
+    // Tách lane theo DOMAIN của paths — ước lượng cục bộ, KHÔNG gọi agent decompose.
+    const domains = [...new Set((it.paths || []).map((p) => domainOf([p])))];
+    const lanes = domains.length
+      ? domains.map((d) => ({ id: `${it.id}·${d}`, task: it.title, paths: (it.paths || []).filter((p) => domainOf([p]) === d), builder: d }))
+      : [{ id: it.id, task: it.title, paths: it.paths || [], builder: domainOf(it.paths) }];
+    dryPreview({ wo: { id: it.id, title: it.title, paths: it.paths || [] }, lanes, accept: it.done_when || [], tests: [], steps: [], planned: needsPlanning(it) });
+  }
 } else {
-  // ── TUẦN TỰ (mặc định) + DRYRUN + FALLBACK (Đội 1 tự tìm) ──
+  // ── TUẦN TỰ (mặc định) + FALLBACK (Đội 1 tự tìm) ──
   while (round < MAX_ROUNDS) {
     if (budget.total && budget.remaining() < MIN_BUDGET) {
       log(`⛔ Cạn budget (còn ${Math.round(budget.remaining() / 1000)}k) — dừng-có-trạng-thái.`);
