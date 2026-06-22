@@ -21,6 +21,7 @@ import { ChatModule } from "./chat/chat.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { PermissionModule } from "./permission/permission.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
+import { AuditModule } from "./foundation/audit/audit.module";
 import { ApiKeysModule } from "./api-keys/api-keys.module";
 import { MailConfigModule } from "./settings/mail-config.module";
 import { SecurityPolicyModule } from "./security-policy/security-policy.module";
@@ -60,6 +61,8 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     ChatModule,
     RealtimeModule,
     DashboardModule,
+    // FOUNDATION-BE-3: Audit viewer read-API (/foundation/audit-logs). BE-9 sẽ relocate vào FoundationModule.
+    AuditModule,
     // AC-5 API key / PAT (exports ApiKeyRepository cho ApiKeyAuthGuard global bên dưới)
     ApiKeysModule,
     // CS-8 Cấu hình mail server SMTP (per-company scope; SMTP password envelope-KMS, sensitive).

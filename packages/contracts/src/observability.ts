@@ -31,6 +31,12 @@ export const auditLogQuerySchema = z
     actorUserId: z.string().uuid().optional(),
     /** Chỉ operator: lọc theo 1 tenant cụ thể (bỏ trống = mọi tenant). */
     companyId: z.string().uuid().optional(),
+    // ── DB-08 §8.5 filters (v2, additive — đều optional) ──
+    moduleCode: z.string().min(1).max(50).optional(),
+    entityType: z.string().min(1).max(100).optional(),
+    entityId: z.string().uuid().optional(),
+    actorType: z.string().min(1).max(50).optional(),
+    requestId: z.string().min(1).max(100).optional(),
     dateFrom: z.string().datetime().optional(),
     dateTo: z.string().datetime().optional(),
     limit: z.coerce
@@ -64,6 +70,21 @@ export const auditLogDtoSchema = z.object({
   after: z.unknown().nullable(),
   ip: z.string().nullable(),
   userAgent: z.string().nullable(),
+  // ── DB-08 §8.5 (v2, additive). Hàng legacy = null. oldValues/newValues ĐÃ redact phía server. ──
+  moduleCode: z.string().nullable(),
+  entityType: z.string().nullable(),
+  entityId: z.string().uuid().nullable(),
+  actorType: z.string().nullable(),
+  /** Đã redact với field nhạy cảm (mask-by-server). */
+  oldValues: z.unknown().nullable(),
+  newValues: z.unknown().nullable(),
+  /** Chỉ TÊN field đổi — không bao giờ chứa value (an toàn bất biến #3). */
+  changedFields: z.array(z.string()).nullable(),
+  sensitivityLevel: z.string().nullable(),
+  resultStatus: z.string().nullable(),
+  requestId: z.string().nullable(),
+  correlationId: z.string().nullable(),
+  ipAddress: z.string().nullable(),
   createdAt: z.string().datetime(),
 });
 export type AuditLogDto = z.infer<typeof auditLogDtoSchema>;
