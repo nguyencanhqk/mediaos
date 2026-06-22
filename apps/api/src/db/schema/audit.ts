@@ -14,6 +14,12 @@ import { users } from "./users";
  * result_status (cho phép NULL) ở DB; KHÔNG biểu diễn được bằng Drizzle schema → chỉ sống trong SQL.
  * Cột cũ object_type/object_id/before/after/ip/user_agent GIỮ NGUYÊN (AuditService v1 vẫn dùng);
  * AuditService v2 (FOUNDATION-BE-3) điền cột mới + tự tính changed_fields từ old/new.
+ *
+ * S0-FND-DB-1 (mig 0438) HOÀN TẤT §8.5 shape ADDITIVE: thêm nốt 11 cột còn thiếu actor_employee_id/
+ * action_group/entity_id_text/entity_code/permission_code/data_scope/device_info/diff_summary/
+ * error_code/error_message/metadata (đều nullable). company_id GIỮ NOT NULL (lệch có chủ đích vs spec
+ * nullable — N=1, bất biến #1 mạnh hơn). data_scope KHÔNG CHECK (spec §8.5 không định nghĩa) — ép enum
+ * Own/Team/Department/Company/System ở tầng app (S1-FND-AUDIT-1).
  */
 export const auditLogs = pgTable(
   "audit_logs",
@@ -45,6 +51,19 @@ export const auditLogs = pgTable(
     requestId: varchar("request_id", { length: 100 }),
     correlationId: varchar("correlation_id", { length: 100 }),
     ipAddress: varchar("ip_address", { length: 45 }),
+    // ── DB-08 §8.5 ADDITIVE (mig 0438 — 11 cột còn thiếu, nullable; writer v2 S1-FND-AUDIT-1 điền) ──
+    // actorEmployeeId: uuid KHÔNG FK (HR dùng employee_profiles) — theo tiền lệ file_access_logs.
+    actorEmployeeId: uuid("actor_employee_id"),
+    actionGroup: varchar("action_group", { length: 100 }),
+    entityIdText: varchar("entity_id_text", { length: 255 }),
+    entityCode: varchar("entity_code", { length: 255 }),
+    permissionCode: varchar("permission_code", { length: 150 }),
+    dataScope: varchar("data_scope", { length: 50 }),
+    deviceInfo: jsonb("device_info"),
+    diffSummary: text("diff_summary"),
+    errorCode: varchar("error_code", { length: 100 }),
+    errorMessage: text("error_message"),
+    metadata: jsonb("metadata"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -54,6 +73,9 @@ export const auditLogs = pgTable(
     index("idx_audit_logs_entity").on(t.moduleCode, t.entityType, t.entityId),
     index("idx_audit_logs_request").on(t.requestId),
     index("idx_audit_logs_correlation").on(t.correlationId),
+    // DB-08 §8.5 index (mig 0438) — parity với SQL.
+    index("idx_audit_logs_actor_created").on(t.actorUserId, desc(t.createdAt)),
+    index("idx_audit_logs_action").on(t.companyId, t.moduleCode, t.action, desc(t.createdAt)),
   ],
 );
 

@@ -848,6 +848,13 @@
       "when": 1717500550000,
       "tag": "0437_be2_audit_sequence_counter",
       "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1717500560000,
+      "tag": "0438_foundation_db6_audit_db08_shape",
+      "breakpoints": true
     }
   ]
 }
