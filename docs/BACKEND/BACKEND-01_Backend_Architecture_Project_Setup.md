@@ -1,4 +1,4 @@
-> ⚠️ **ĐÍNH CHÍNH STACK (bắt buộc) — đọc trước:** Tài liệu này có thể còn nhắc Next.js/Prisma (lỗi thời). Stack đã CHỐT: **Vite + React 19 SPA + TanStack Router (KHÔNG Next.js)** · **Drizzle (KHÔNG Prisma)** · **Valkey** · **Vitest**. Các token an toàn đã thay inline; phần khái niệm lấy [DECISIONS-02](../DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md) làm chuẩn.
+> ✅ **ĐÍNH CHÍNH STACK (đã đồng bộ body 22/06):** Tài liệu này đã được dọn về stack CHỐT: NestJS + TypeScript + **Drizzle + drizzle-kit (KHÔNG Prisma)** · PostgreSQL + RLS/FORCE · **Valkey** · **Vitest + Supertest**. Nguồn chuẩn: [DECISIONS-02](../DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md).
 
 # BACKEND-01: BACKEND ARCHITECTURE & PROJECT SETUP
 
@@ -256,8 +256,8 @@ Ngoại lệ:
 | Language | TypeScript | Type-safe, dễ chia sẻ contract với frontend |
 | Framework | NestJS | Module architecture rõ, guard/interceptor/filter mạnh |
 | Database | PostgreSQL | Đã chốt trong DB Design |
-| ORM | Prisma hoặc TypeORM | Chọn một, ưu tiên Prisma nếu muốn type-safe nhanh |
-| Migration | Prisma Migrate hoặc TypeORM Migration | Phải deterministic và có rollback plan |
+| ORM | Drizzle + drizzle-kit (ĐÃ CHỐT — xem DECISIONS-02 §1.1 / ADR-0002) | Type-safe, không phá outbox transactional, set tenant context an toàn trên PgBouncer transaction-mode |
+| Migration | drizzle-kit generate + migrator trên `DATABASE_DIRECT_URL` | Phải deterministic và có rollback plan |
 | Validation | class-validator/class-transformer hoặc Zod | Validate DTO rõ ràng |
 | Auth | JWT access token + refresh token | Bám API-01 |
 | Password hash | Argon2id hoặc bcrypt | Không lưu plain text |
@@ -271,27 +271,27 @@ Ngoại lệ:
 
 ### 7.2 ORM decision
 
-Khuyến nghị MVP:
+Đã CHỐT cho MVP (DECISIONS-02 §1.1 / ADR-0002):
 
 ```text
-NestJS + Prisma + PostgreSQL
+NestJS + Drizzle + PostgreSQL
 ```
 
 Lý do:
 
-1. Type-safe query tốt.
-2. Migration và schema dễ review.
+1. Type-safe query tốt (schema bằng TypeScript ở `apps/api/src/db/schema/*.ts`).
+2. Migration và schema dễ review (SQL sinh từ `drizzle-kit generate`).
 3. Phù hợp với TypeScript.
 4. Dễ sinh type và DTO mapping.
-5. Dễ onboarding team frontend/fullstack.
+5. Không phá outbox transactional + set tenant context an toàn trên PgBouncer transaction-mode (lý do KHÔNG dùng Prisma).
 
-Lưu ý khi dùng Prisma:
+Lưu ý khi dùng Drizzle:
 
-1. Với query phức tạp/dashboard/report có thể dùng raw SQL có kiểm soát.
-2. Transaction nghiệp vụ phải dùng `prisma.$transaction`.
-3. Không để controller gọi Prisma trực tiếp.
-4. Repository/service phải luôn nhận `company_id` từ auth context.
-5. Migration production phải review kỹ, không dùng `db push`.
+1. Với query phức tạp/dashboard/report có thể dùng raw SQL có kiểm soát (`sql` template).
+2. Transaction nghiệp vụ phải dùng `db.transaction` / `withTenant` (xem DECISIONS-02 §2.1).
+3. Không để controller gọi `db` trực tiếp — đi qua repository/service.
+4. Repository/service phải luôn nhận `company_id` từ auth context (qua `withTenant`), KHÔNG từ body/header.
+5. Migration production phải review kỹ; áp qua migrator trên `DATABASE_DIRECT_URL`, không push schema trực tiếp.
 
 ### 7.3 Monorepo hay backend repo riêng
 
@@ -327,12 +327,14 @@ backend/
   docker-compose.yml
   README.md
 
-  prisma/
-    schema.prisma
-    migrations/
-    seed.ts
+  drizzle.config.ts
 
   src/
+    db/
+      schema/            # schema bằng TypeScript (*.ts)
+      migrations/        # SQL sinh từ drizzle-kit + journal meta/
+      seed.ts
+
     main.ts
     app.module.ts
 
@@ -395,8 +397,8 @@ backend/
         query.util.ts
 
     database/
-      prisma.module.ts
-      prisma.service.ts
+      db.module.ts
+      db.service.ts          # drizzle(pool) client + withTenant()
       transaction-manager.ts
       pagination.repository-helper.ts
       soft-delete.repository-helper.ts
@@ -1705,12 +1707,12 @@ api
     "format": "prettier --write .",
     "test": "vitest",
     "test:watch": "vitest --watch",
-    "test:e2e": "jest --config ./test/vitest-e2e.config.ts",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:migrate:deploy": "prisma migrate deploy",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:reset": "prisma migrate reset",
+    "test:e2e": "vitest --config ./test/vitest-e2e.config.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:migrate:deploy": "tsx src/db/migrate.ts",
+    "db:seed": "tsx src/db/seed.ts",
+    "db:studio": "drizzle-kit studio",
     "openapi:export": "tsx scripts/export-openapi.ts"
   }
 }
@@ -1983,7 +1985,7 @@ export class EmployeeService {
 | Mã | Câu hỏi | Owner | Mức độ | Đề xuất chốt |
 | --- | --- | --- | --- | --- |
 | BE01-OQ-001 | Backend dùng NestJS hay framework khác? | Tech Lead | Cao | NestJS + TypeScript |
-| BE01-OQ-002 | ORM dùng Prisma hay TypeORM? | BE Lead | Cao | Prisma cho MVP |
+| BE01-OQ-002 | ORM dùng gì? | BE Lead | Cao | ĐÃ CHỐT: **Drizzle + drizzle-kit** (DECISIONS-02 §1.1 / ADR-0002) |
 | BE01-OQ-003 | Access token lưu ở frontend theo mode nào? | BE/FE Lead | Cao | Bearer access token memory, refresh HttpOnly cookie |
 | BE01-OQ-004 | `/auth/me` có trả app registry không? | BE/FE/Product | Cao | Có, backend-driven |
 | BE01-OQ-005 | Field-level permission backend omit hay mask? | BE/FE/Product | Cao | Omit mặc định, mask khi UI cần hiển thị có kiểm soát |
@@ -2023,7 +2025,7 @@ export class EmployeeService {
 
 ### 30.3 Database infrastructure
 
-- [ ] Prisma module/service hoặc ORM module tương ứng.
+- [ ] Drizzle `db` module/service (drizzle(pool) client + withTenant()).
 - [ ] Database connection config.
 - [ ] Migration command.
 - [ ] Seed command.
@@ -2116,7 +2118,7 @@ BACKEND-02: Database Migration, ORM & Seed Implementation
 
 BACKEND-02 cần tập trung:
 
-1. Cấu hình PostgreSQL/Prisma.
+1. Cấu hình PostgreSQL/Drizzle.
 2. Tạo migration foundation/auth/hr/att/leave/task/noti/dash.
 3. Tạo index theo DB-09.
 4. Tạo seed modules/settings/permissions/roles.
@@ -2149,7 +2151,7 @@ BACKEND-03 cần hoàn thiện:
 BACKEND-01 chốt nền kiến trúc backend cho MVP theo hướng:
 
 ```text
-NestJS + TypeScript + PostgreSQL + Prisma
+NestJS + TypeScript + PostgreSQL + Drizzle
 Modular Monolith
 Permission + Data Scope
 Multi-tenant by company_id

@@ -901,13 +901,13 @@ async function assertPermission(
   const grant = ctx.permissions[permission]
 
   if (!grant) {
-    throw new ForbiddenError('AUTH-ERR-403', 'Bạn không có quyền thực hiện thao tác này')
+    throw new ForbiddenError('AUTH-ERR-FORBIDDEN', 'Bạn không có quyền thực hiện thao tác này')
   }
 
   if (requiredScopes?.length) {
     const ok = grant.scopes.some(scope => requiredScopes.includes(scope))
     if (!ok) {
-      throw new ForbiddenError('AUTH-ERR-403', 'Bạn không có phạm vi dữ liệu phù hợp')
+      throw new ForbiddenError('AUTH-ERR-FORBIDDEN', 'Bạn không có phạm vi dữ liệu phù hợp')
     }
   }
 
@@ -966,7 +966,7 @@ async function assertResourceInScope(params: {
     return await isInProjectScope(params.ctx, params.target.projectId)
   }
 
-  throw new ForbiddenError('AUTH-ERR-403', 'Dữ liệu không nằm trong phạm vi được phép')
+  throw new ForbiddenError('AUTH-ERR-FORBIDDEN', 'Dữ liệu không nằm trong phạm vi được phép')
 }
 ```
 

@@ -4,6 +4,8 @@
 > [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · **SPEC-07 DASH** · [SPEC-08 NOTI](<SPEC-08 NOTI.md>)
 >
 > **Liên quan:** [Thiết kế DB: DB-07 NOTI/DASH](<../DB/DB-07 NOTI DASH Database Design.md>) · [Sản phẩm: PRD-00 §9.6](<../PRD/PRD-00 Enterprise Management System .md>) · [Thiết kế API: API-08 DASH](<../API Design/API-08_DASH_API_Design.md>) · [Chỉ mục tài liệu](<../README.md>)
+>
+> **Drift reconciliation 22/06 (theo [SPEC-DRIFT-MATRIX](<../_review/SPEC-DRIFT-MATRIX.md>) §6).** SPEC-07 đã đồng bộ về chuẩn DB-07/API-08/BACKEND-10: **DN-7** bổ sung quyền `DASH.CACHE.REFRESH` vào ma trận quyền (§8.2) — seed DB-07 §10.2/API-10 cần lane khác cập nhật · **DN-8** mã lỗi chốt **slug** theo API-08 (§19) · **DN-9** module nguồn widget §14.15–14.19 đổi từ "System config" mơ hồ sang `FOUNDATION`/`AUDIT` (khớp API-08/BACKEND-10). Khi mâu thuẫn, lấy DB-07/API-08 làm chuẩn.
 
 ---
 

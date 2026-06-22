@@ -16,12 +16,12 @@
 | Tên dự án     | Hệ thống quản lý doanh nghiệp nội bộ                   |
 | Tên sản phẩm  | Enterprise Management System                           |
 | Phiên bản     | v1.0                                                   |
-| Trạng thái    | Draft                                                  |
+| Trạng thái    | 6 quyết định Block-code Đã chốt (23/06/2026); Block-1-module + linh hoạt còn Đề xuất |
 | Giai đoạn     | Pre-Implementation Decision Lock                       |
 | Ngày tạo      | 21/06/2026                                             |
-| Ngày cập nhật | 21/06/2026                                             |
+| Ngày cập nhật | 23/06/2026                                             |
 | Người viết    |                                                        |
-| Người duyệt   |                                                        |
+| Người duyệt   | Cian (Product Owner)                                   |
 
 ---
 
@@ -73,7 +73,7 @@ Khi tài liệu thiết kế khác mâu thuẫn với một quyết định **đ
 
 | ID    | Câu hỏi (rút gọn)                          | Khuyến nghị (rút gọn)                                              | Mức độ chặn      | Trạng thái | Người quyết định |
 | ----- | ------------------------------------------ | ----------------------------------------------------------------- | ---------------- | ---------- | ---------------- |
-| D-01  | Một công ty hay nhiều công ty?             | Single-company ở MVP, multi-tenant ready (`company_id`)           | Block code       | Đề xuất    |                  |
+| D-01  | Một công ty hay nhiều công ty?             | Single-company ở MVP, multi-tenant ready (`company_id`)           | Block code       | Đã chốt    | Cian             |
 | D-02  | Hỗ trợ nhiều chi nhánh?                     | Chưa hỗ trợ ở MVP; thiết kế sẵn field `branch_id`                 | Block 1 module (HR) | Đề xuất | |
 | D-03  | Phòng ban nhiều cấp?                        | Có — `parent_id` (cây phòng ban) ngay từ đầu                      | Block 1 module (HR) | Đề xuất | |
 | D-04  | Duyệt nghỉ theo phòng ban hay quản lý TT?  | Theo quản lý trực tiếp là chính; HR scope Company                 | Block 1 module (LEAVE) | Đề xuất | |
@@ -81,13 +81,13 @@ Khi tài liệu thiết kế khác mâu thuẫn với một quyết định **đ
 | D-06  | Lưu vị trí check-in?                        | Tùy chọn, chỉ lưu metadata khi cấu hình bật (cân nhắc NĐ13)      | Block 1 module (ATT) | Đề xuất | |
 | D-07  | Ngày phép theo tháng / năm / thủ công?     | Theo năm + cộng dồn theo chính sách, cho điều chỉnh thủ công      | Block 1 module (LEAVE) | Đề xuất | |
 | D-08  | Nhân viên tự cập nhật hồ sơ?               | Được **đề xuất** sửa; HR/Admin duyệt                             | Block 1 module (HR) | Đề xuất | |
-| D-09  | HR có xem lương không?                      | KHÔNG mặc định; tách quyền `PAYROLL.SALARY.VIEW`                 | Block code       | Đề xuất    |                  |
+| D-09  | HR có xem lương không?                      | KHÔNG mặc định; tách quyền `PAYROLL.SALARY.VIEW`                 | Block code       | Đã chốt    | Cian             |
 | D-10  | Quản lý theo dự án hay task cá nhân?        | Cả hai; MVP mỗi task 1 assignee chính                            | Block 1 module (TASK) | Đề xuất | |
 | D-11  | Có cần duyệt task hoàn thành?               | MVP KHÔNG bắt buộc; thiết kế status mở                          | Block 1 module (TASK) | Đề xuất | |
-| D-12  | File lưu server nội bộ hay cloud?          | Object storage S3-compatible (MinIO self-host)                   | Block code       | Đề xuất    |                  |
-| D-13  | Tiếng Việt / Anh / đa ngôn ngữ?           | Tiếng Việt trước, code **i18n-ready** ngay từ đầu               | Block code (FE)  | Đề xuất    |                  |
-| D-14  | Phân quyền export riêng?                    | CÓ — quyền `….EXPORT` tách riêng                                | Block code       | Đề xuất    |                  |
-| D-15  | Audit log cho thao tác xem nhạy cảm?       | CÓ — log hành động VIEW dữ liệu nhạy cảm                         | Block code       | Đề xuất    |                  |
+| D-12  | File lưu server nội bộ hay cloud?          | Object storage S3-compatible (MinIO self-host)                   | Block code       | Đã chốt    | Cian             |
+| D-13  | Tiếng Việt / Anh / đa ngôn ngữ?           | Tiếng Việt trước, code **i18n-ready** ngay từ đầu               | Block code (FE)  | Đã chốt    | Cian             |
+| D-14  | Phân quyền export riêng?                    | CÓ — quyền `….EXPORT` tách riêng                                | Block code       | Đã chốt    | Cian             |
+| D-15  | Audit log cho thao tác xem nhạy cảm?       | CÓ — log hành động VIEW dữ liệu nhạy cảm                         | Block code       | Đã chốt    | Cian             |
 
 ---
 
@@ -105,7 +105,7 @@ Khi tài liệu thiết kế khác mâu thuẫn với một quyết định **đ
   | C. Multi-company đầy đủ ở MVP (chuyển công ty, user thuộc nhiều công ty) | Sẵn sàng SaaS ngay | Phình scope MVP không cần thiết: cần company switcher, cross-company guard, seed nhiều tenant |
 - **Khuyến nghị:** **Phương án B — "single-company, multi-tenant ready".** Vận hành MVP với đúng một công ty (một bản ghi `companies`), nhưng mọi bảng nghiệp vụ vẫn mang `company_id` và mọi repository nhận `companyId` từ auth context. Đây đúng tinh thần "MVP gọn nhưng thiết kế sẵn mở rộng" và đã được BACKEND-01 hiện thực hóa, nên về bản chất câu hỏi này **đã được trả lời ngầm bởi thiết kế** — tài liệu này chỉ chính thức hóa.
 - **Ảnh hưởng nếu đổi sau:** Nếu chọn A rồi muốn lên đa công ty: rất đắt (ALTER mọi bảng, backfill `company_id`, viết lại toàn bộ query + guard). Nếu đã chọn B: gần như **0 chi phí schema**, chỉ cần bật luồng tạo/đổi company và cross-company guard.
-- **Người quyết định / Trạng thái:** Đề xuất
+- **Người quyết định / Trạng thái:** Đã chốt — Cian (PO), 23/06/2026
 
 ---
 
@@ -232,7 +232,7 @@ Khi tài liệu thiết kế khác mâu thuẫn với một quyết định **đ
   | B. **Lương tách quyền riêng `PAYROLL.SALARY.VIEW`, KHÔNG gán mặc định cho HR; ai cần thì cấp riêng** | Đúng nguyên tắc bảo mật; doanh nghiệp toàn quyền quyết ai xem lương; HR có thể được cấp thêm nếu muốn | Cần quản trị viên gán quyền chủ đích (đúng như mong muốn) |
 - **Khuyến nghị:** **Phương án B — tách quyền lương riêng, không mặc định cho HR.** Định nghĩa permission `PAYROLL.SALARY.VIEW` (và các quyền lương khác) như một nhóm độc lập trong catalog (API-10), **không** đưa vào role HR seed mặc định. Doanh nghiệp tự gán cho người phụ trách (Payroll Officer, hoặc HR cụ thể được ủy quyền). Nhất quán tuyệt đối với SPEC-01 §11.3 và mô hình "không hard-code role" của BACKEND-01 §6.4. Đây là quyết định **Block code** vì định hình RBAC seed dùng cho mọi module.
 - **Ảnh hưởng nếu đổi sau:** Nếu lỡ gán lương cho HR theo mặc định rồi gỡ ra, rủi ro là dữ liệu đã bị xem/rò rỉ trong thời gian đó. Tách quyền từ đầu là biện pháp phòng ngừa, gần như không tốn thêm chi phí code.
-- **Người quyết định / Trạng thái:** Đề xuất
+- **Người quyết định / Trạng thái:** Đã chốt — Cian (PO), 23/06/2026
 
 ---
 
@@ -280,7 +280,7 @@ Khi tài liệu thiết kế khác mâu thuẫn với một quyết định **đ
   | C. Cloud công cộng (AWS S3/GCS) ngay | Vận hành nhẹ | Phụ thuộc nhà cung cấp + chi phí + cân nhắc dữ liệu ra nước ngoài (NĐ13/an ninh dữ liệu) |
 - **Khuyến nghị:** **Phương án B — dùng object storage S3-compatible, triển khai MinIO self-host cho MVP.** Driver file dùng giao thức S3 (qua biến `FILE_STORAGE_DRIVER=s3`), MVP trỏ tới MinIO chạy bằng Docker (giữ dữ liệu trong nước/on-premise, hợp lý về pháp lý), về sau có thể đổi endpoint sang cloud mà **không sửa code** vì cùng API S3. Không lưu trực tiếp filesystem server. Khớp định hướng hạ tầng tại **DEVOPS-01** *(tài liệu song hành đang được tạo)*. File vẫn private mặc định + signed URL TTL ngắn (BACKEND-01 §20.6).
 - **Ảnh hưởng nếu đổi sau:** Nếu lỡ lưu filesystem rồi muốn lên object storage, phải migrate toàn bộ file + đổi mọi đường dẫn lưu trong DB. Dùng abstraction S3 từ đầu thì đổi backend lưu trữ chỉ là đổi cấu hình.
-- **Người quyết định / Trạng thái:** Đề xuất
+- **Người quyết định / Trạng thái:** Đã chốt — Cian (PO), 23/06/2026
 
 ---
 
@@ -296,7 +296,7 @@ Khi tài liệu thiết kế khác mâu thuẫn với một quyết định **đ
   | C. **Tiếng Việt trước, NHƯNG code i18n-ready: mọi chuỗi qua key/dictionary, có hạ tầng locale ngay từ đầu** | Hiển thị tiếng Việt cho MVP; thêm tiếng Anh sau chỉ là thêm bộ dịch, không sửa component | Cần kỷ luật "không hard-code chuỗi" ngay từ commit đầu |
 - **Khuyến nghị:** **Phương án C — tiếng Việt trước, code i18n-ready ngay từ đầu.** Ngôn ngữ mặc định và duy nhất ở MVP là **tiếng Việt (`vi-VN`)**, nhưng FE bắt buộc dùng cơ chế i18n (mọi chuỗi qua key, không nhúng cứng), và BE trả `locale` trong context (đã có). Nhấn mạnh: đây là **quyết định chặn FE** — phải chốt **trước khi viết dòng code FE đầu tiên**, vì đổi sau rất đắt. Thêm tiếng Anh sau chỉ là cung cấp file dịch.
 - **Ảnh hưởng nếu đổi sau:** Nếu bỏ qua i18n từ đầu, chi phí "quốc tế hóa" về sau gần như viết lại tầng hiển thị. Làm i18n-ready ngay chỉ tốn chi phí thiết lập ban đầu nhỏ.
-- **Người quyết định / Trạng thái:** Đề xuất
+- **Người quyết định / Trạng thái:** Đã chốt — Cian (PO), 23/06/2026
 
 ---
 
@@ -311,7 +311,7 @@ Khi tài liệu thiết kế khác mâu thuẫn với một quyết định **đ
   | B. **Quyền export tách riêng (`MODULE.RESOURCE.EXPORT`), độc lập với quyền VIEW** | Đúng nguyên tắc bảo mật; kiểm soát rò rỉ dữ liệu ra file; dễ audit ai export gì | Thêm một số permission code vào catalog |
 - **Khuyến nghị:** **Phương án B — CÓ phân quyền export riêng.** Mỗi nguồn dữ liệu có thể export định nghĩa quyền `….EXPORT` riêng (ví dụ `HR.EMPLOYEE.EXPORT`, `ATT.TIMESHEET.EXPORT`), tách khỏi `….VIEW`. Việc export là hành động "mang dữ liệu ra ngoài hệ thống" nên phải kiểm soát chặt hơn xem trên màn hình, và **phải ghi audit log** (xem D-15, SPEC-01 §16.3 liệt kê "Xuất dữ liệu" là hành động cần log). Đây là quyết định **Block code** vì định hình catalog quyền chung.
 - **Ảnh hưởng nếu đổi sau:** Nếu ban đầu gộp export vào view rồi tách ra, phải định nghĩa lại quyền + gán lại cho user + sửa guard ở mọi endpoint export. Tách từ đầu gần như miễn phí.
-- **Người quyết định / Trạng thái:** Đề xuất
+- **Người quyết định / Trạng thái:** Đã chốt — Cian (PO), 23/06/2026
 
 ---
 
@@ -327,7 +327,7 @@ Khi tài liệu thiết kế khác mâu thuẫn với một quyết định **đ
   | C. **Log thao tác XEM CHỈ với nhóm dữ liệu nhạy cảm (lương, CCCD/CMND, hợp đồng, file hồ sơ, vị trí check-in...)** | Đúng nguyên tắc bảo mật, khối lượng kiểm soát được, đủ để audit/tuân thủ | Cần đánh dấu rõ resource/field nào là "nhạy cảm" |
 - **Khuyến nghị:** **Phương án C — CÓ audit log cho thao tác xem, giới hạn ở dữ liệu nhạy cảm.** Định nghĩa danh mục dữ liệu nhạy cảm theo SPEC-01 §11.3 (lương, tài khoản ngân hàng, CCCD/CMND, hợp đồng, hồ sơ kỷ luật/nghỉ việc, chấm công chi tiết, vị trí check-in nếu bật theo D-06, file nhạy cảm). Khi user xem các dữ liệu này, ghi audit (actor, target, time, IP) qua audit service (BACKEND-01 §16.4). Không log lượt xem dữ liệu thường để tránh phình log. Quyết định **Block code** vì định hình audit interceptor/decorator (`@AuditAction`) áp dụng toàn hệ thống. Chính sách lưu trữ/lưu giữ log (retention) xử lý tại **COMPLIANCE-01** *(song hành)*.
 - **Ảnh hưởng nếu đổi sau:** Nếu không gắn audit view từ đầu, khi cần tuân thủ/điều tra sẽ thiếu dữ liệu lịch sử không thể tái tạo. Gắn interceptor audit ngay từ nền tảng là rẻ và đúng nguyên tắc.
-- **Người quyết định / Trạng thái:** Đề xuất
+- **Người quyết định / Trạng thái:** Đã chốt — Cian (PO), 23/06/2026
 
 ---
 
@@ -365,7 +365,7 @@ Khu vực này dành cho các quyết định **chưa thuộc 15 câu hỏi SPEC
 | Phiên bản | Ngày       | Người thực hiện | Thay đổi                                                                 |
 | --------- | ---------- | --------------- | ----------------------------------------------------------------------- |
 | v1.0      | 21/06/2026 |                 | Tạo sổ quyết định; đưa 15 câu hỏi SPEC-01 §29 thành D-01→D-15; tất cả ở trạng thái "Đề xuất"; thêm khung D-16+ tham chiếu DEVOPS-01/COMPLIANCE-01. |
-|           |            |                 |                                                                         |
+| v1.1      | 23/06/2026 | Cian            | Chốt 6 quyết định Block-code D-01/09/12/13/14/15 → "Đã chốt"; mở khóa lập trình nền tảng. |
 
 ---
 

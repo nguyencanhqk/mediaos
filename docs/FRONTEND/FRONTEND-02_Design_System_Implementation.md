@@ -1,4 +1,4 @@
-> ⚠️ **ĐÍNH CHÍNH STACK (bắt buộc) — đọc trước:** Tài liệu này có thể còn nhắc Next.js/Prisma (lỗi thời). Stack đã CHỐT: **Vite + React 19 SPA + TanStack Router (KHÔNG Next.js)** · **Drizzle (KHÔNG Prisma)** · **Valkey** · **Vitest**. Các token an toàn đã thay inline; phần khái niệm lấy [DECISIONS-02](../DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md) làm chuẩn.
+> ✅ **ĐÍNH CHÍNH STACK (đã đồng bộ body):** Tài liệu này đã được dọn về stack CHỐT: **Vite + React 19 SPA + TanStack Router (KHÔNG Next.js)** · **Drizzle + drizzle-kit (KHÔNG Prisma)** · **Valkey** · **Vitest**. Nguồn chuẩn: [DECISIONS-02](../DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md).
 
 # FRONTEND-02: DESIGN SYSTEM IMPLEMENTATION
 
@@ -88,12 +88,12 @@ FRONTEND-02 không triển khai toàn bộ màn nghiệp vụ. Tài liệu này 
 
 ## 5. Giả định stack kỹ thuật
 
-Stack chính đã được FRONTEND-01 §8 chốt: **Next.js App Router + React + TypeScript** và **Tailwind CSS + CSS variables**. FRONTEND-02 bám theo quyết định này:
+Stack chính đã được FRONTEND-01 §8 chốt: **Vite + React 19 SPA + TanStack Router + TypeScript** và **Tailwind CSS + CSS variables**. FRONTEND-02 bám theo quyết định này:
 
 | Nhóm | Đề xuất |
 | --- | --- |
 | Framework | React + TypeScript |
-| Build/App framework | Next.js App Router (đã chốt ở FRONTEND-01 §8) |
+| Build/App framework | Vite + TanStack Router (đã chốt ở FRONTEND-01 §8) |
 | Styling | Tailwind CSS + CSS variables (đã chốt ở FRONTEND-01 §8) |
 | Component variant | class-variance-authority hoặc helper tương đương |
 | Utility class merge | clsx + tailwind-merge |
@@ -2217,7 +2217,7 @@ FRONTEND-02 hoàn thành khi:
 
 | Mã | Câu hỏi | Owner | Mức độ |
 | --- | --- | --- | --- |
-| FE02-OQ-001 | ~~Stack chính là Vite React hay Next.js?~~ Đã chốt: **Next.js App Router** theo FRONTEND-01 §8. | Tech Lead | Đã chốt |
+| FE02-OQ-001 | ~~Stack chính là Vite React hay Next.js?~~ Đã chốt: **Vite + React 19 SPA + TanStack Router** theo FRONTEND-01 §8. | Tech Lead | Đã chốt |
 | FE02-OQ-002 | ~~Có dùng Tailwind bắt buộc hay dùng CSS module/theme object?~~ Đã chốt: **Tailwind CSS + CSS variables** theo FRONTEND-01 §8. | FE Lead | Đã chốt |
 | FE02-OQ-003 | Có dùng shadcn/radix làm primitive nền không? | FE Lead | Trung bình |
 | FE02-OQ-004 | Storybook có bắt buộc trong MVP không? | Product/FE Lead | Trung bình |

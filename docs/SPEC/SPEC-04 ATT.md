@@ -4,6 +4,8 @@
 > [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · **SPEC-04 ATT** · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>)
 >
 > **Liên quan:** [Thiết kế DB: DB-04 ATT](<../DB/DB-04_ATT Database Design.md>) · [Sản phẩm: PRD-00 §9.3](<../PRD/PRD-00 Enterprise Management System .md>) · [Thiết kế API: API-04 ATT](<../API Design/API-04_ATT_API_Design.md>) · [Chỉ mục tài liệu](<../README.md>)
+>
+> **Drift reconciliation 22/06 (theo [SPEC-DRIFT-MATRIX](<../_review/SPEC-DRIFT-MATRIX.md>) §3).** Tài liệu này đã được đối chiếu về chuẩn DB-04/API-04/BACKEND-06. Các điều chỉnh chính: tên bảng/cột (`work_date`, `check_in_at`/`check_out_at`, `worked_minutes`, `shifts`/`shift_assignments`, `remote_work_requests`/`location_text`, `attendance_status`/`attendance_source`/`work_mode`, bổ sung `overtime_minutes`/`applied_rule_id`/`has_pending_adjustment`); bỏ bảng audit riêng `attendance_audit_logs` → dùng `audit_logs` chung (Bất biến #2); path `/api/v1/attendance/...`; thêm quyền `ATT.ATTENDANCE.RECALCULATE`; self-approval thành hard-rule (`ATT-ERR-SELF-APPROVAL`); contract đọc `public_holidays` từ Foundation. Khi có mâu thuẫn còn sót, **lấy DB-04/API-04 làm chuẩn**.
 
 ---
 
@@ -234,6 +236,19 @@ Employee gửi yêu cầu điều chỉnh công
 → ATT phát event ATT_ADJUSTMENT_SUBMITTED
 → NOTI gửi thông báo cho Manager/HR có quyền duyệt
 ```
+
+---
+
+### 3.9 Liên kết với Foundation: `public_holidays`
+
+Module `ATT` đọc danh mục ngày nghỉ lễ/ngày không làm việc từ bảng dùng chung **`public_holidays`** của Foundation (DB-04 §3.2). ATT **chỉ đọc** (read-only), không sở hữu/ghi bảng này.
+
+Contract ATT → Foundation `public_holidays`:
+
+* ATT truy vấn `public_holidays` theo `company_id` + ngày (`work_date`) để xác định ngày hiện tại có phải ngày nghỉ lễ hay không.
+* Kết quả ảnh hưởng bước kiểm tra "ngày làm việc" trong luồng check-in (§10 bước 2, §16.4): nếu là ngày lễ và rule `allow_holiday_attendance = false` thì chặn chấm công (trả `ATT-ERR-005`/`ATT-ERR-032` theo bảng §29); nếu rule cho phép thì cho chấm công và đánh dấu là làm ngày lễ.
+* Job tự động chấm công (§14.10) và tính lại công (recalculate) cũng tham chiếu `public_holidays` để bỏ qua hoặc xử lý riêng ngày lễ.
+* ATT **không** tự định nghĩa lịch lễ riêng; mọi thay đổi ngày lễ do Foundation/HR quản trị, ATT đọc tại thời điểm tính công và (nếu cần) lưu vào `calculation_snapshot` của bản ghi để truy vết.
 
 ---
 
@@ -1406,7 +1421,7 @@ Cho phép HR/Admin tạo và quản lý danh mục ca làm việc.
 | ------------------------- | ------------ | -------------------------------------- |
 | shift_code                | Có           | Mã ca                                  |
 | shift_name                | Có           | Tên ca                                 |
-| shift_type                | Có           | Fixed/Flexible                         |
+| shift_type                | Có           | Fixed/Flexible/Split/Night (MVP dùng Fixed/Flexible; Split/Night reserved cho phase sau) |
 | start_time                | Có nếu fixed | Giờ bắt đầu                            |
 | end_time                  | Có nếu fixed | Giờ kết thúc                           |
 | break_start_time          | Không        | Giờ bắt đầu nghỉ giữa ca               |
@@ -2262,7 +2277,7 @@ Tài khoản nhân viên không còn ở trạng thái làm việc, không thể
 | ------------------------- | ----------------------------------------------- |
 | Ngày làm việc bình thường | Cho phép check-in                               |
 | Ngày nghỉ cuối tuần       | Chặn hoặc cho phép nếu có ca/lệnh làm thêm      |
-| Ngày lễ                   | Chặn hoặc cho phép nếu có rule làm việc ngày lễ |
+| Ngày lễ                   | Đọc Foundation `public_holidays` (§3.9); chặn nếu rule `allow_holiday_attendance = false`, cho phép nếu rule bật |
 | Ngày không có ca          | Chặn hoặc cho phép theo ca linh hoạt            |
 
 Thông báo nếu bị chặn:
@@ -3151,7 +3166,7 @@ company_id + employee_id + work_date + shift_id
 | company_id                | UUID         | Có       | Công ty            |
 | shift_code                | String       | Có       | Mã ca              |
 | name                      | String       | Có       | Tên ca             |
-| shift_type                | String       | Có       | Fixed/Flexible/Split/Night |
+| shift_type                | String       | Có       | Fixed/Flexible/Split/Night (DB-04 CHECK đủ 4 giá trị; MVP scope chỉ Fixed/Flexible, Split/Night reserved phase sau) |
 | start_time                | Time         | Không    | Giờ bắt đầu        |
 | end_time                  | Time         | Không    | Giờ kết thúc       |
 | break_start_time          | Time         | Không    | Bắt đầu nghỉ       |
@@ -3279,6 +3294,9 @@ ATT **không có bảng audit riêng**. Mọi thao tác quan trọng (xem §25) 
 | ATT-API-006 | GET    | /api/v1/attendance/records        | Bảng công toàn công ty | ATT.ATTENDANCE.VIEW_COMPANY |
 | ATT-API-007 | GET    | /api/v1/attendance/records/{id}   | Chi tiết ngày công     | ATT.ATTENDANCE.VIEW_DETAIL  |
 | ATT-API-008 | GET    | /api/v1/attendance/records/export | Xuất bảng công         | ATT.ATTENDANCE.EXPORT       |
+| ATT-API-031 | POST   | /api/v1/attendance/records/{id}/recalculate | Tính lại một bản ghi công | ATT.ATTENDANCE.RECALCULATE |
+
+> Ngoài ra có **API nội bộ** `POST /internal/v1/attendance/recalculate` (service token) để ATT tự tính lại công khi nhận event LEAVE/REMOTE/RULE thay đổi — xem [API-04](<../API Design/API-04_ATT_API_Design.md>) §17 (ATT-API-107/801). Các mã/đánh số API cụ thể lấy theo dải của API-04.
 
 ---
 

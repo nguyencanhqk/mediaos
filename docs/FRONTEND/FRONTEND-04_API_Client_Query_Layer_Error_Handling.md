@@ -1,4 +1,4 @@
-> ⚠️ **ĐÍNH CHÍNH STACK (bắt buộc) — đọc trước:** Tài liệu này có thể còn nhắc Next.js/Prisma (lỗi thời). Stack đã CHỐT: **Vite + React 19 SPA + TanStack Router (KHÔNG Next.js)** · **Drizzle (KHÔNG Prisma)** · **Valkey** · **Vitest**. Các token an toàn đã thay inline; phần khái niệm lấy [DECISIONS-02](../DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md) làm chuẩn.
+> ✅ **ĐÍNH CHÍNH STACK (đã đồng bộ body):** Tài liệu này đã được dọn về stack CHỐT: **Vite + React 19 SPA + TanStack Router (KHÔNG Next.js)** · **Drizzle + drizzle-kit (KHÔNG Prisma)** · **Valkey** · **Vitest**. Nguồn chuẩn: [DECISIONS-02](../DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md).
 
 # FRONTEND-04: API CLIENT, QUERY LAYER & ERROR HANDLING
 
@@ -2010,40 +2010,23 @@ Mark read nếu cần
 
 ---
 
-## 30. SSR/CSR strategy trong Next.js
+## 30. Chiến lược tải dữ liệu (SPA client-side — KHÔNG SSR)
 
-### 30.1 Default MVP: client-side query cho protected data
+> Stack là Vite + React 19 SPA (KHÔNG Next.js, KHÔNG server component/SSR — DECISIONS-02 §1). Mọi protected data tải client qua TanStack Query. Đây cũng là lý do cấm SSR: render dữ liệu nhạy cảm phía server dễ rò khi quyền/masking lệch.
 
-Để tránh phức tạp token/cookie/tenant trong server component, MVP có thể ưu tiên:
+### 30.1 Mặc định MVP: client-side query cho mọi protected data
 
-1. Protected layout boot session ở client.
-2. Module pages dùng TanStack Query ở client.
-3. Server component chủ yếu render shell/static layout.
+1. Protected layout boot session ở client (đọc token, gọi /auth/me).
+2. Module pages dùng TanStack Query (client).
+3. App shell/layout tĩnh, không fetch dữ liệu nhạy cảm.
 
-### 30.2 Khi nào dùng server fetch
+### 30.2 Tải tĩnh / public
 
-Có thể dùng server fetch cho:
+Fetch trực tiếp (không cần session) cho: public page không nhạy cảm; static config không phụ thuộc user (vd /settings/public). KHÔNG đưa dữ liệu nhạy cảm vào bundle build-time hay cache CDN.
 
-1. Public page không nhạy cảm.
-2. Static config không phụ thuộc user.
-3. SEO/public content nếu có.
+### 30.3 Tối ưu sau (vẫn trong SPA)
 
-Không nên dùng server fetch tùy tiện cho dữ liệu nhạy cảm nếu chưa chốt cookie/session strategy.
-
-### 30.3 Hydration sau này
-
-Phase sau có thể dùng:
-
-```text
-Server prefetch -> dehydrate -> HydrationBoundary
-```
-
-Nhưng phải đảm bảo:
-
-1. Cookie auth được backend hỗ trợ tốt.
-2. Không leak data user này sang user khác.
-3. Query key có tenant/user boundary.
-4. Cache server/CDN không lưu private response.
+Có thể thêm prefetch + HydrationBoundary của TanStack Query (client-side), nhưng phải: query key có ranh giới tenant/user; không cache private response ở CDN/service worker; invalidation đúng khi logout/đổi company.
 
 ---
 

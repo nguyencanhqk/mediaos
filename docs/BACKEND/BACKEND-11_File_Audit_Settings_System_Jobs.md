@@ -299,8 +299,8 @@ src/
 | `FOUNDATION.FILE.DELETE` | Xóa mềm file | Own, Team, Department, Company, System |
 | `FOUNDATION.FILE.LINK` | Link file vào entity nghiệp vụ | Own, Team, Department, Company |
 | `FOUNDATION.FILE.UNLINK` | Gỡ file khỏi entity nghiệp vụ | Own, Team, Department, Company |
-| `FOUNDATION.AUDIT.VIEW` | Xem audit log | Company, System |
-| `FOUNDATION.AUDIT.EXPORT` | Export audit log | Company, System |
+| `FOUNDATION.AUDIT_LOG.VIEW` | Xem audit log cross-module | Company, System |
+| `FOUNDATION.AUDIT_LOG.EXPORT` | Export audit log cross-module | Company, System |
 | `FOUNDATION.SEQUENCE.VIEW` | Xem sequence counter | Company, System |
 | `FOUNDATION.SEQUENCE.UPDATE` | Cập nhật/reset sequence | Company, System |
 | `FOUNDATION.HOLIDAY.VIEW` | Xem public holidays | Own, Company, System |
@@ -311,6 +311,9 @@ src/
 | `FOUNDATION.JOB.RUN` | Chạy job thủ công | System |
 | `FOUNDATION.SEED.VIEW` | Xem seed batch/item | System |
 | `FOUNDATION.SEED.RUN` | Chạy seed thủ công | System |
+
+> **Drift reconciliation 22/06 (theo SPEC-DRIFT-MATRIX §1, AU-2/AU-3):** mã audit của Foundation **chuẩn = `FOUNDATION.AUDIT_LOG.*`** (resource `AUDIT_LOG`, khớp [API-09](<../API Design/API-09_FOUNDATION_API_Design.md>) / [API-10 §5.8](<../API Design/API-10 PERMISSION MATRIX.md>) / [FRONTEND-13](<../FRONTEND/FRONTEND-13_System_Foundation_Frontend.md>)). Mã cũ `FOUNDATION.AUDIT.VIEW/EXPORT` (không có `_LOG`) **không còn dùng**.
+> **Ranh giới với `AUTH.AUDIT_LOG.VIEW` (AU-3):** audit thuộc **AUTH-domain** (login/security/đăng nhập/đổi mật khẩu/khóa-mở user/role-permission) đọc qua `AUTH.AUDIT_LOG.VIEW` (module AUTH); audit **cross-module / toàn hệ thống** (truy vết entity bất kỳ qua `audit-logs` Foundation) đọc qua `FOUNDATION.AUDIT_LOG.VIEW/EXPORT`. Cả hai cùng đọc bảng `audit_logs` chung nhưng khác phạm vi guard.
 
 ### 8.2 Nguyên tắc không hard-code role
 
@@ -394,10 +397,10 @@ Internal/job API dùng prefix:
 
 | Method | Endpoint | Permission | Mục đích |
 | --- | --- | --- | --- |
-| GET | `/api/v1/foundation/audit-logs` | `FOUNDATION.AUDIT.VIEW` | Danh sách audit logs |
-| GET | `/api/v1/foundation/audit-logs/{audit_log_id}` | `FOUNDATION.AUDIT.VIEW` | Chi tiết audit log |
-| GET | `/api/v1/foundation/audit-logs/entity/{entity_type}/{entity_id}` | `FOUNDATION.AUDIT.VIEW` | Audit theo entity |
-| GET | `/api/v1/foundation/audit-logs/export` | `FOUNDATION.AUDIT.EXPORT` | Export audit log |
+| GET | `/api/v1/foundation/audit-logs` | `FOUNDATION.AUDIT_LOG.VIEW` | Danh sách audit logs |
+| GET | `/api/v1/foundation/audit-logs/{audit_log_id}` | `FOUNDATION.AUDIT_LOG.VIEW` | Chi tiết audit log |
+| GET | `/api/v1/foundation/audit-logs/entity/{entity_type}/{entity_id}` | `FOUNDATION.AUDIT_LOG.VIEW` | Audit theo entity |
+| GET | `/api/v1/foundation/audit-logs/export` | `FOUNDATION.AUDIT_LOG.EXPORT` | Export audit log |
 
 ### 9.6 Sequence API
 

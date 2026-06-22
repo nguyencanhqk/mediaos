@@ -642,7 +642,7 @@ Idempotency-Key: 1a8b8e7b-8d4a-4d6c-9f8b-22f7e2d11111
   "success": false,
   "message": "Bạn không có quyền thực hiện thao tác này",
   "error": {
-    "code": "AUTH-ERR-403",
+    "code": "AUTH-ERR-FORBIDDEN",
     "type": "ForbiddenError",
     "details": null
   },

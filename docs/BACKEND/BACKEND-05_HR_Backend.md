@@ -654,7 +654,7 @@ updateStatus(requestId, statusPatch, tx): void
 | Email công ty trùng | `HR-ERR-EMPLOYEE-EMAIL-DUPLICATED` |
 | Employee code trùng | `HR-ERR-EMPLOYEE-CODE-DUPLICATED` |
 | Config sinh mã lỗi | `HR-ERR-EMPLOYEE-CODE-CONFIG-INVALID` |
-| Manual override thiếu quyền | `AUTH-ERR-403` |
+| Manual override thiếu quyền | `AUTH-ERR-FORBIDDEN` |
 
 ### Transaction boundary
 

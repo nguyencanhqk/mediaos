@@ -6,6 +6,8 @@
 > [DB-01 Tổng quan](<DB-01 DATABASE DESIGN TỔNG QUAN.md>) · [DB-02 AUTH/RBAC](<DB-02 AUTH RBAC Database Design.md>) · [DB-03 HR](<DB-03_HR Database Design.md>) · [DB-04 ATT](<DB-04_ATT Database Design.md>) · [DB-05 LEAVE](<DB-05 LEAVE Database Design.md>) · [DB-06 TASK](<DB-06 TASK Database Design.md>) · **DB-07 NOTI/DASH** · [DB-08 Audit/Files/Settings](<DB-08 Audit Files Settings Seeds Database Design.md>) · [DB-09 Index/Hiệu năng](<DB-09 Database Index Query Pattern Performance Design.md>) · [DB-10 Migration/Seed](<DB-10_Migration_Plan_Initial_Seed_Data_Database_Design.md>)
 >
 > **Nguồn & liên quan:** [PRD-00 §9.6–9.7](<../PRD/PRD-00 Enterprise Management System .md>) · SPEC tương ứng: [SPEC-07 DASH](<../SPEC/SPEC-07 DASH.md>) · [SPEC-08 NOTI](<../SPEC/SPEC-08 NOTI.md>) · [SPEC-01 Tổng quan](<../SPEC/SPEC-01 Tổng quan.md>) · [Thiết kế API: API-07 NOTI](<../API Design/API-07_NOTI_API_Design.md>) · [API-08 DASH](<../API Design/API-08_DASH_API_Design.md>) · [Chỉ mục tài liệu](<../README.md>)
+>
+> **Drift reconciliation 22/06 (theo [SPEC-DRIFT-MATRIX](<../_review/SPEC-DRIFT-MATRIX.md>) §6).** **DN-5** chốt tự-mâu-thuẫn trong DB-07: quyền quản trị danh mục thông báo dùng **`NOTI.EVENT.*`** (`NOTI.EVENT.VIEW`/`NOTI.EVENT.CONFIG`), KHÔNG dùng `NOTI.TYPE.*` — "loại/type" (`notification_type`) là thuộc tính trong `notification_events`, không phải resource quyền riêng (khớp API-07/BACKEND-09). Xem chốt chi tiết tại §10.1.
 
 ---
 

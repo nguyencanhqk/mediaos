@@ -328,6 +328,12 @@ AUTH.PERMISSION.ASSIGN
 
 > **Non-guard (AU-9):** `AUTH.LOGIN.ACCESS`, `AUTH.PROFILE.VIEW`, `AUTH.PROFILE.UPDATE` là **nhãn mô tả**, KHÔNG phải permission guard — đăng nhập và màn hồ sơ cá nhân gate bằng `Authenticated` (đã đăng nhập), không kiểm permission code. Vì vậy số quyền AUTH **thực-guard = 14** (khớp [API-10 PERMISSION MATRIX](<../API Design/API-10 PERMISSION MATRIX.md>)); bảng trên liệt kê 17 mã (gồm 3 nhãn non-guard + `AUTH.USER.DELETE` theo AU-11) để tham chiếu đầy đủ.
 
+> **Ranh giới audit `AUTH.AUDIT_LOG.VIEW` vs `FOUNDATION.AUDIT_LOG.VIEW` (AU-3):** hệ thống ghi mọi log vào bảng `audit_logs` **chung** (Foundation), nhưng quyền đọc tách theo phạm vi:
+> - `AUTH.AUDIT_LOG.VIEW` — audit thuộc **AUTH-domain / security** (đăng nhập thành công-thất bại, logout, đổi/đặt lại mật khẩu, khóa-mở user, tạo-sửa user, gán role/permission). Đây là quyền dùng cho màn hình **AUTH-SCREEN-014 (Nhật ký hoạt động AUTH)** và ma trận §19 ("Xem audit log AUTH").
+> - `FOUNDATION.AUDIT_LOG.VIEW` / `FOUNDATION.AUDIT_LOG.EXPORT` — audit **cross-module / toàn hệ thống** (truy vết entity bất kỳ qua endpoint `audit-logs` của Foundation, không giới hạn module AUTH).
+>
+> Quy ước này khớp [API-10 §5.1/§5.8](<../API Design/API-10 PERMISSION MATRIX.md>), [BACKEND-11 §8.1](<../BACKEND/BACKEND-11_File_Audit_Settings_System_Jobs.md>) và seed [DB-02 §9.1](<../DB/DB-02 AUTH RBAC Database Design.md>). KHÔNG trộn hai mã trong cùng một guard.
+
 <!-- sửa theo DRIFT AU-11: thêm `AUTH.USER.DELETE` (quyền nhạy cảm). Backend đã có admin xóa-mềm user (`delete-user:user`, is_sensitive=true, mig 0430); thao tác chỉ set `deleted_at`/`status`, KHÔNG hard-delete (BẤT BIẾN #2). -->
 <!-- sửa theo DRIFT AU-9: đánh dấu AUTH.LOGIN.ACCESS / AUTH.PROFILE.VIEW / AUTH.PROFILE.UPDATE là non-guard (gate bằng Authenticated), khớp API-10 §Audit. -->
 
@@ -2044,45 +2050,53 @@ Cho phép người có quyền xem nhật ký (audit log) các thao tác quan tr
 
 ## 16. API sơ bộ
 
+> **Drift reconciliation 22/06 (theo SPEC-DRIFT-MATRIX §1, AU-10):** prefix chuẩn = **`/api/v1/...`** và toàn bộ user/role/permission **gộp dưới `/auth`** (khớp [API-02](<../API Design/API-02 AUTH API Design.md>)). Các path cũ `/api/auth/...`, `/api/users`, `/api/roles` (thiếu `/v1`, tách rời) **không còn dùng**. API-02 còn bổ sung `refresh`, `logout-all`, `me/sessions` (self-service, gate `Authenticated`) — chi tiết & TTL token xem [API-01 §3.5](<../API Design/API-01 TỔNG QUAN.md>) và §21 bên dưới.
+
 ### 16.1 Authentication API
 
-| Mã API       | Method | Endpoint                  | Mục đích                    | Permission           |
-| ------------ | ------ | ------------------------- | --------------------------- | -------------------- |
-| AUTH-API-001 | POST   | /api/auth/login           | Đăng nhập                   | Public               |
-| AUTH-API-002 | POST   | /api/auth/logout          | Đăng xuất                   | Authenticated        |
-| AUTH-API-003 | POST   | /api/auth/forgot-password | Quên mật khẩu               | Public               |
-| AUTH-API-004 | POST   | /api/auth/reset-password  | Đặt lại mật khẩu            | Public with token    |
-| AUTH-API-005 | POST   | /api/auth/change-password | Đổi mật khẩu                | AUTH.PASSWORD.CHANGE |
-| AUTH-API-006 | GET    | /api/auth/me              | Lấy thông tin user hiện tại | Authenticated        |
-| AUTH-API-007 | GET    | /api/auth/me/permissions  | Lấy quyền user hiện tại     | Authenticated        |
+| Mã API       | Method | Endpoint                     | Mục đích                    | Permission           |
+| ------------ | ------ | ---------------------------- | --------------------------- | -------------------- |
+| AUTH-API-001 | POST   | /api/v1/auth/login           | Đăng nhập                   | Public               |
+| AUTH-API-002 | POST   | /api/v1/auth/logout          | Đăng xuất                   | Authenticated        |
+| AUTH-API-003 | POST   | /api/v1/auth/forgot-password | Quên mật khẩu               | Public               |
+| AUTH-API-004 | POST   | /api/v1/auth/reset-password  | Đặt lại mật khẩu            | Public with token    |
+| AUTH-API-005 | POST   | /api/v1/auth/change-password | Đổi mật khẩu                | AUTH.PASSWORD.CHANGE |
+| AUTH-API-006 | GET    | /api/v1/auth/me              | Lấy thông tin user hiện tại | Authenticated        |
+| AUTH-API-007 | GET    | /api/v1/auth/me/permissions  | Lấy quyền user hiện tại     | Authenticated        |
+| AUTH-API-008 | POST   | /api/v1/auth/refresh         | Làm mới access token        | Public with refresh token |
+| AUTH-API-009 | POST   | /api/v1/auth/logout-all      | Đăng xuất mọi phiên         | Authenticated        |
+| AUTH-API-010 | GET    | /api/v1/auth/me/sessions     | Liệt kê phiên của chính mình | Authenticated       |
 
 ---
 
 ### 16.2 User API
 
-| Mã API       | Method | Endpoint               | Mục đích           | Permission            |
-| ------------ | ------ | ---------------------- | ------------------ | --------------------- |
-| AUTH-API-101 | GET    | /api/users             | Lấy danh sách user | AUTH.USER.VIEW        |
-| AUTH-API-102 | GET    | /api/users/{id}        | Lấy chi tiết user  | AUTH.USER.VIEW        |
-| AUTH-API-103 | POST   | /api/users             | Tạo user           | AUTH.USER.CREATE      |
-| AUTH-API-104 | PUT    | /api/users/{id}        | Cập nhật user      | AUTH.USER.UPDATE      |
-| AUTH-API-105 | POST   | /api/users/{id}/lock   | Khóa user          | AUTH.USER.LOCK        |
-| AUTH-API-106 | POST   | /api/users/{id}/unlock | Mở khóa user       | AUTH.USER.UNLOCK      |
-| AUTH-API-107 | PUT    | /api/users/{id}/roles  | Gán role cho user  | AUTH.USER.ASSIGN_ROLE |
+| Mã API       | Method | Endpoint                       | Mục đích           | Permission            |
+| ------------ | ------ | ------------------------------ | ------------------ | --------------------- |
+| AUTH-API-101 | GET    | /api/v1/auth/users             | Lấy danh sách user | AUTH.USER.VIEW        |
+| AUTH-API-102 | GET    | /api/v1/auth/users/{id}        | Lấy chi tiết user  | AUTH.USER.VIEW        |
+| AUTH-API-103 | POST   | /api/v1/auth/users             | Tạo user           | AUTH.USER.CREATE      |
+| AUTH-API-104 | PUT    | /api/v1/auth/users/{id}        | Cập nhật user      | AUTH.USER.UPDATE      |
+| AUTH-API-105 | POST   | /api/v1/auth/users/{id}/lock   | Khóa user          | AUTH.USER.LOCK        |
+| AUTH-API-106 | POST   | /api/v1/auth/users/{id}/unlock | Mở khóa user       | AUTH.USER.UNLOCK      |
+| AUTH-API-107 | PUT    | /api/v1/auth/users/{id}/roles  | Gán role cho user  | AUTH.USER.ASSIGN_ROLE |
+| AUTH-API-108 | DELETE | /api/v1/auth/users/{id}        | Xóa mềm user (soft-delete) | AUTH.USER.DELETE |
+
+> **AU-11:** `DELETE /api/v1/auth/users/{id}` chỉ thực hiện **xóa mềm** (set `deleted_at`/`status=Deleted`), KHÔNG hard-delete (BẤT BIẾN #2). Quyền `AUTH.USER.DELETE` (is_sensitive) — xem §8.1.
 
 ---
 
 ### 16.3 Role & Permission API
 
-| Mã API       | Method | Endpoint                    | Mục đích                 | Permission             |
-| ------------ | ------ | --------------------------- | ------------------------ | ---------------------- |
-| AUTH-API-201 | GET    | /api/roles                  | Lấy danh sách role       | AUTH.ROLE.VIEW         |
-| AUTH-API-202 | GET    | /api/roles/{id}             | Lấy chi tiết role        | AUTH.ROLE.VIEW         |
-| AUTH-API-203 | POST   | /api/roles                  | Tạo role                 | AUTH.ROLE.CREATE       |
-| AUTH-API-204 | PUT    | /api/roles/{id}             | Cập nhật role            | AUTH.ROLE.UPDATE       |
-| AUTH-API-205 | DELETE | /api/roles/{id}             | Vô hiệu hóa role         | AUTH.ROLE.DELETE       |
-| AUTH-API-206 | PUT    | /api/roles/{id}/permissions | Gán quyền cho role       | AUTH.PERMISSION.ASSIGN |
-| AUTH-API-207 | GET    | /api/permissions            | Lấy danh sách permission | AUTH.PERMISSION.VIEW   |
+| Mã API       | Method | Endpoint                            | Mục đích                 | Permission             |
+| ------------ | ------ | ----------------------------------- | ------------------------ | ---------------------- |
+| AUTH-API-201 | GET    | /api/v1/auth/roles                  | Lấy danh sách role       | AUTH.ROLE.VIEW         |
+| AUTH-API-202 | GET    | /api/v1/auth/roles/{id}             | Lấy chi tiết role        | AUTH.ROLE.VIEW         |
+| AUTH-API-203 | POST   | /api/v1/auth/roles                  | Tạo role                 | AUTH.ROLE.CREATE       |
+| AUTH-API-204 | PUT    | /api/v1/auth/roles/{id}             | Cập nhật role            | AUTH.ROLE.UPDATE       |
+| AUTH-API-205 | DELETE | /api/v1/auth/roles/{id}             | Vô hiệu hóa role         | AUTH.ROLE.DELETE       |
+| AUTH-API-206 | PUT    | /api/v1/auth/roles/{id}/permissions | Gán quyền cho role       | AUTH.PERMISSION.ASSIGN |
+| AUTH-API-207 | GET    | /api/v1/auth/permissions            | Lấy danh sách permission | AUTH.PERMISSION.VIEW   |
 
 ---
 
@@ -2150,7 +2164,7 @@ Trong MVP, mật khẩu nên có rule tối thiểu:
 
 * Tối thiểu 8 ký tự.
 * Nên có chữ và số.
-* Không lưu mật khẩu dạng plain text.
+* Không lưu mật khẩu dạng plain text — hash bằng **`argon2id`** (tham số ở §21.1, AU-6).
 * Khi reset password, token phải có thời hạn.
 * Token reset password chỉ dùng một lần.
 
@@ -2286,14 +2300,16 @@ Trong MVP, các notification này có thể chỉ ghi nhận dạng in-app hoặ
 
 ## 21. Yêu cầu bảo mật
 
-1. Mật khẩu phải được hash bằng thuật toán an toàn.
-2. Không trả password_hash về frontend.
-3. Token/session cần có thời hạn.
-4. API cần kiểm tra quyền ở backend.
-5. Token reset password cần hết hạn.
-6. Token reset password chỉ dùng một lần.
+> **Drift reconciliation 22/06 (theo SPEC-DRIFT-MATRIX §1, AU-6/AU-7/AU-8):** chốt thuật toán hash, TTL token và rotation/reuse-detection thành **giá trị cứng, bắt buộc MVP** (crown-jewel) thay cho mô tả mở "thuật toán an toàn"/"có thời hạn".
+
+1. **Mật khẩu hash bằng `argon2id` (AU-6).** Tham số tối thiểu MVP (theo khuyến nghị OWASP Password Storage Cheat Sheet): `memoryCost ≥ 19 MiB` (19456 KiB), `timeCost (iterations) ≥ 2`, `parallelism = 1`, salt ngẫu nhiên ≥ 16 byte/user. KHÔNG dùng MD5/SHA thường, KHÔNG tự triển khai thuật toán hash. Có thể thêm `pepper` ở application secret nếu cần. (`bcrypt` chỉ là phương án rút lui nếu môi trường không hỗ trợ argon2id — chuẩn chính là `argon2id`; cần đồng bộ tham số trong `BACKEND-03 §11.1` và `DB-02 §16.3`.)
+2. Không trả `password_hash` về frontend.
+3. **Token có thời hạn cứng (AU-7):** access token **15 phút**, refresh token **7 ngày** (nguồn chuẩn duy nhất = [API-01 §3.5](<../API Design/API-01 TỔNG QUAN.md>); các doc khác trỏ về, không lặp lại giá trị khác). Access token là JWT ngắn hạn; refresh token lưu **hash** ở `user_sessions` (DB-02), không lưu plaintext.
+4. **Refresh-token rotation + reuse-detection là BẮT BUỘC MVP (AU-8, crown-jewel):** mỗi lần `refresh`, refresh token cũ bị thu hồi và cấp token mới (rotation). Nếu một refresh token đã thu hồi/đã dùng lại được trình lại (reuse), backend phải coi là dấu hiệu đánh cắp và **thu hồi toàn bộ token family** của user đó, trả `AUTH-ERR-REFRESH-TOKEN-INVALID`. Chi tiết token family/lưu trữ thuộc [API-02](<../API Design/API-02 AUTH API Design.md>) / [DB-02](<../DB/DB-02 AUTH RBAC Database Design.md>).
+5. API cần kiểm tra quyền ở backend.
+6. Token reset password cần hết hạn và chỉ dùng một lần.
 7. Không tiết lộ email có tồn tại hay không ở màn hình quên mật khẩu.
-8. Tài khoản Locked/Inactive không được đăng nhập.
+8. Tài khoản `Locked`/`Suspended`/`Inactive`/`Deleted` không được đăng nhập (xem §10).
 9. Các thao tác quản trị user/role/permission phải ghi audit log.
 10. Không cho user tự nâng quyền.
 11. Không cho Admin thường chỉnh Super Admin nếu không có quyền đặc biệt.

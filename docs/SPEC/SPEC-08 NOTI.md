@@ -4,6 +4,8 @@
 > [SPEC-01 Tổng quan](<SPEC-01 Tổng quan.md>) · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · **SPEC-08 NOTI**
 >
 > **Liên quan:** [Thiết kế DB: DB-07 NOTI/DASH](<../DB/DB-07 NOTI DASH Database Design.md>) · [Sản phẩm: PRD-00 §9.7](<../PRD/PRD-00 Enterprise Management System .md>) · [Thiết kế API: API-07 NOTI](<../API Design/API-07_NOTI_API_Design.md>) · [Chỉ mục tài liệu](<../README.md>)
+>
+> **Drift reconciliation 22/06 (theo [SPEC-DRIFT-MATRIX](<../_review/SPEC-DRIFT-MATRIX.md>) §6).** SPEC-08 đã đồng bộ về chuẩn DB-07/API-07/BACKEND-09: **DN-1** path `/api/v1/notifications` + verb POST cho mark-read/mark-all-read + `/dropdown` (§17) · **DN-2** tên bảng canonical `notification_delivery_logs`/`notification_preferences`, bỏ bảng `notification_channels` (chuyển sang settings/DB-08) (§14) · **DN-3** thêm `company_id NOT NULL` cho `notifications`/`notification_delivery_logs`/`notification_preferences` — Bất biến #1 RLS+FORCE (§14.1) · **DN-4/DN-6** mã lỗi chốt **slug** + bảng API NOTI-API-XXX 1-1 theo API-07 (§17, §19) · **DN-10** thêm event `ATT_CHECKIN_REMINDER`/`ATT_CHECKOUT_REMINDER` vào registry (§15.3) · **DN-11** response unread thêm `high_priority_unread_count`/`urgent_unread_count` (§18.2). Khi mâu thuẫn, lấy DB-07/API-07 làm chuẩn.
 
 ---
 

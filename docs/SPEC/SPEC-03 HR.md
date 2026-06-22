@@ -2678,20 +2678,19 @@ Kiểm soát việc người dùng có được sửa mã nhân viên thủ côn
 
 ### 15.7 Bảng employee_files
 
-| Trường       | Kiểu dữ liệu | Bắt buộc | Ghi chú                  |
-| ------------ | ------------ | -------- | ------------------------ |
-| id           | UUID/Integer | Có       | ID file                  |
-| employee_id  | UUID/Integer | Có       | Nhân viên                |
-| file_name    | String       | Có       | Tên file                 |
-| file_url     | String       | Có       | Đường dẫn file           |
-| file_type    | String       | Có       | CV, ID_CARD, CONTRACT... |
-| mime_type    | String       | Không    | Loại MIME                |
-| file_size    | Integer      | Không    | Dung lượng               |
-| is_sensitive | Boolean      | Có       | File nhạy cảm hay không  |
-| note         | Text         | Không    | Ghi chú                  |
-| uploaded_by  | UUID/Integer | Có       | Người upload             |
-| uploaded_at  | DateTime     | Có       | Ngày upload              |
-| deleted_at   | DateTime     | Không    | Xóa mềm                  |
+> Drift reconciliation 22/06 (theo SPEC-DRIFT-MATRIX §2, HR-4): KHÔNG nhúng metadata file (`file_url/mime_type/file_size`) vào bảng HR. Dùng **FK `file_id` → bảng `files` chung** của Foundation; metadata vật lý (tên/MIME/dung lượng/đường dẫn) sống ở `files`. Bảng `employee_files` chỉ giữ liên kết HR-specific + phân loại + cờ nhạy cảm (khớp DB-03 §7.8).
+
+| Trường         | Kiểu dữ liệu | Bắt buộc | Ghi chú                                                       |
+| -------------- | ------------ | -------- | ------------------------------------------------------------ |
+| id             | UUID/Integer | Có       | ID liên kết file hồ sơ                                       |
+| employee_id    | UUID/Integer | Có       | Nhân viên                                                    |
+| file_id        | UUID         | Có       | FK `files.id` (metadata vật lý: tên/MIME/dung lượng/đường dẫn ở `files`) |
+| file_category  | String       | Có       | CV/IDENTITY/CONTRACT/CERTIFICATE/DECISION/OTHER (CHECK)       |
+| is_sensitive   | Boolean      | Có       | File nhạy cảm hay không (gate `HR.EMPLOYEE.VIEW_SENSITIVE`)   |
+| note           | Text         | Không    | Ghi chú                                                      |
+| uploaded_by    | UUID/Integer | Có       | Người upload                                                 |
+| uploaded_at    | DateTime     | Có       | Ngày upload                                                  |
+| deleted_at     | DateTime     | Không    | Xóa mềm                                                      |
 
 ---
 
@@ -2741,19 +2740,18 @@ Các `object_type` của HR (`Employee`, `Department`, `Position`, `JobLevel`, `
 
 ---
 
-### 15.11 Bảng employee_profile_change_request_files
+### 15.11 Bảng profile_change_request_files
 
-| Trường      | Kiểu dữ liệu | Bắt buộc | Ghi chú          |
-| ----------- | ------------ | -------- | ---------------- |
-| id          | UUID/Integer | Có       | ID               |
-| request_id  | UUID/Integer | Có       | Yêu cầu cập nhật |
-| file_name   | String       | Có       | Tên file         |
-| file_url    | String       | Có       | Đường dẫn        |
-| file_type   | String       | Không    | Loại file        |
-| mime_type   | String       | Không    | MIME type        |
-| file_size   | Integer      | Không    | Dung lượng       |
-| uploaded_by | UUID/Integer | Có       | Người upload     |
-| uploaded_at | DateTime     | Có       | Thời gian upload |
+> Drift reconciliation 22/06 (theo SPEC-DRIFT-MATRIX §2, HR-1 + HR-4): đổi tên bảng từ `employee_profile_change_request_files` → `profile_change_request_files` (cùng family với `profile_change_requests`); bỏ metadata file nhúng (`file_url/file_type/mime_type/file_size`), dùng **FK `file_id` → `files` chung**. (Diff từng-field của yêu cầu lưu ở `profile_change_request_items` — DB-03 §7.10.)
+
+| Trường      | Kiểu dữ liệu | Bắt buộc | Ghi chú                                                  |
+| ----------- | ------------ | -------- | -------------------------------------------------------- |
+| id          | UUID/Integer | Có       | ID                                                       |
+| request_id  | UUID/Integer | Có       | FK `profile_change_requests.id`                          |
+| file_id     | UUID         | Có       | FK `files.id` (metadata vật lý ở `files`)                |
+| is_sensitive| Boolean      | Có       | File chứng minh nhạy cảm (vd CCCD)                       |
+| uploaded_by | UUID/Integer | Có       | Người upload                                             |
+| uploaded_at | DateTime     | Có       | Thời gian upload                                         |
 
 ---
 
@@ -2802,6 +2800,8 @@ Dùng để kiểm soát số thứ tự theo từng phạm vi reset.
 
 ## 16. API sơ bộ
 
+> Drift reconciliation 22/06 (theo SPEC-DRIFT-MATRIX §2, HR-5): mọi endpoint HR dùng prefix `/api/v1/hr/...` (KHÔNG còn `/api/employees`, `/api/positions`, `/api/contracts`, `/api/job-levels`, `/api/profile-change-requests`, `/api/employee-code-config` rời). **Nguồn sự thật về mã API + endpoint đầy đủ là [API-03](<../API Design/API-03_HR_API_Design.md>)**; bảng §16 dưới đây là sơ bộ và đã được chỉnh path theo API-03. Khi API-03 và §16 lệch số/đường dẫn, lấy API-03 làm chuẩn (vd: contract-types ở API-03 = HR-API-601..605, employee files = HR-API-801..802, employee-code-config = HR-API-901..902).
+
 ### 16.1 Employee API
 
 | Mã API     | Method | Endpoint                          | Mục đích                        | Permission                            |
@@ -2837,11 +2837,11 @@ Dùng để kiểm soát số thứ tự theo từng phạm vi reset.
 
 | Mã API     | Method | Endpoint            | Mục đích                    | Permission         |
 | ---------- | ------ | ------------------- | --------------------------- | ------------------ |
-| HR-API-201 | GET    | /api/positions      | Lấy danh sách chức vụ       | HR.POSITION.VIEW   |
-| HR-API-202 | GET    | /api/positions/{id} | Lấy chi tiết chức vụ        | HR.POSITION.VIEW   |
-| HR-API-203 | POST   | /api/positions      | Tạo chức vụ                 | HR.POSITION.CREATE |
-| HR-API-204 | PUT    | /api/positions/{id} | Cập nhật chức vụ            | HR.POSITION.UPDATE |
-| HR-API-205 | DELETE | /api/positions/{id} | Xóa mềm/vô hiệu hóa chức vụ | HR.POSITION.DELETE |
+| HR-API-201 | GET    | /api/v1/hr/positions      | Lấy danh sách chức vụ       | HR.POSITION.VIEW   |
+| HR-API-202 | GET    | /api/v1/hr/positions/{id} | Lấy chi tiết chức vụ        | HR.POSITION.VIEW   |
+| HR-API-203 | POST   | /api/v1/hr/positions      | Tạo chức vụ                 | HR.POSITION.CREATE |
+| HR-API-204 | PUT    | /api/v1/hr/positions/{id} | Cập nhật chức vụ            | HR.POSITION.UPDATE |
+| HR-API-205 | DELETE | /api/v1/hr/positions/{id} | Xóa mềm/vô hiệu hóa chức vụ | HR.POSITION.DELETE |
 
 ---
 
@@ -2851,9 +2851,9 @@ Dùng để kiểm soát số thứ tự theo từng phạm vi reset.
 | ---------- | ------ | ----------------------------- | -------------------------- | ------------------ |
 | HR-API-301 | GET    | /api/v1/hr/employees/{id}/contracts | Lấy hợp đồng của nhân viên | HR.CONTRACT.VIEW   |
 | HR-API-302 | POST   | /api/v1/hr/employees/{id}/contracts | Tạo hợp đồng               | HR.CONTRACT.CREATE |
-| HR-API-303 | PUT    | /api/contracts/{contract_id}  | Cập nhật hợp đồng          | HR.CONTRACT.UPDATE |
-| HR-API-304 | DELETE | /api/contracts/{contract_id}  | Xóa mềm hợp đồng           | HR.CONTRACT.DELETE |
-| HR-API-305 | GET    | /api/contracts/expiring       | Lấy hợp đồng sắp hết hạn   | HR.CONTRACT.VIEW   |
+| HR-API-303 | PUT    | /api/v1/hr/contracts/{contract_id}  | Cập nhật hợp đồng          | HR.CONTRACT.UPDATE |
+| HR-API-304 | DELETE | /api/v1/hr/contracts/{contract_id}  | Xóa mềm hợp đồng           | HR.CONTRACT.DELETE |
+| HR-API-305 | GET    | /api/v1/hr/contracts/expiring       | Lấy hợp đồng sắp hết hạn   | HR.CONTRACT.VIEW   |
 
 ---
 
@@ -2863,21 +2863,23 @@ Dùng để kiểm soát số thứ tự theo từng phạm vi reset.
 | ---------- | ------ | -------------------------------------- | ----------------- | ----------------------- |
 | HR-API-401 | GET    | /api/v1/hr/employees/{id}/files              | Lấy file hồ sơ    | HR.EMPLOYEE.FILE_VIEW   |
 | HR-API-402 | POST   | /api/v1/hr/employees/{id}/files              | Upload file hồ sơ | HR.EMPLOYEE.FILE_UPLOAD |
-| HR-API-403 | GET    | /api/employee-files/{file_id}/download | Tải file          | HR.EMPLOYEE.FILE_VIEW   |
-| HR-API-404 | DELETE | /api/employee-files/{file_id}          | Xóa file          | HR.EMPLOYEE.FILE_DELETE |
+| HR-API-403 | GET    | /api/v1/hr/employee-files/{file_id}/download | Tải file          | HR.EMPLOYEE.FILE_VIEW   |
+| HR-API-404 | DELETE | /api/v1/hr/employee-files/{file_id}          | Xóa file          | HR.EMPLOYEE.FILE_DELETE |
 
 ---
 
 ### 16.6 Master Data API
 
-| Mã API     | Method | Endpoint                 | Mục đích          | Permission                                  |
-| ---------- | ------ | ------------------------ | ----------------- | ------------------------------------------- |
-| HR-API-501 | GET    | /api/job-levels          | Lấy cấp bậc       | HR.MASTER_DATA.MANAGE hoặc HR.EMPLOYEE.VIEW |
-| HR-API-502 | POST   | /api/job-levels          | Tạo cấp bậc       | HR.MASTER_DATA.MANAGE                       |
-| HR-API-503 | PUT    | /api/job-levels/{id}     | Sửa cấp bậc       | HR.MASTER_DATA.MANAGE                       |
-| HR-API-504 | GET    | /api/contract-types      | Lấy loại hợp đồng | HR.MASTER_DATA.MANAGE hoặc HR.CONTRACT.VIEW |
-| HR-API-505 | POST   | /api/contract-types      | Tạo loại hợp đồng | HR.MASTER_DATA.MANAGE                       |
-| HR-API-506 | PUT    | /api/contract-types/{id} | Sửa loại hợp đồng | HR.MASTER_DATA.MANAGE                       |
+> Drift reconciliation 22/06 (theo SPEC-DRIFT-MATRIX §2, HR-7): danh mục master data (job_levels, contract_types) dùng **MỘT family quyền nhất quán** — đọc = `HR.MASTER_DATA.VIEW`, ghi = `HR.MASTER_DATA.MANAGE`. KHÔNG trộn `HR.CONTRACT.VIEW` cho việc đọc danh mục loại hợp đồng (`HR.CONTRACT.*` chỉ dành cho hợp đồng của nhân viên ở §16.4). `HR.EMPLOYEE.VIEW` vẫn được chấp nhận khi chỉ cần đọc dropdown trong luồng tạo/sửa nhân viên.
+
+| Mã API     | Method | Endpoint                       | Mục đích          | Permission                               |
+| ---------- | ------ | ------------------------------ | ----------------- | ---------------------------------------- |
+| HR-API-501 | GET    | /api/v1/hr/job-levels          | Lấy cấp bậc       | HR.MASTER_DATA.VIEW hoặc HR.EMPLOYEE.VIEW |
+| HR-API-502 | POST   | /api/v1/hr/job-levels          | Tạo cấp bậc       | HR.MASTER_DATA.MANAGE                    |
+| HR-API-503 | PUT    | /api/v1/hr/job-levels/{id}     | Sửa cấp bậc       | HR.MASTER_DATA.MANAGE                    |
+| HR-API-504 | GET    | /api/v1/hr/contract-types      | Lấy loại hợp đồng | HR.MASTER_DATA.VIEW hoặc HR.EMPLOYEE.VIEW |
+| HR-API-505 | POST   | /api/v1/hr/contract-types      | Tạo loại hợp đồng | HR.MASTER_DATA.MANAGE                    |
+| HR-API-506 | PUT    | /api/v1/hr/contract-types/{id} | Sửa loại hợp đồng | HR.MASTER_DATA.MANAGE                    |
 
 ---
 

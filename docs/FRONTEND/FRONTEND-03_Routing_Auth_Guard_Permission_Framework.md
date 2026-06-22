@@ -1,4 +1,4 @@
-> ⚠️ **ĐÍNH CHÍNH STACK (bắt buộc) — đọc trước:** Tài liệu này có thể còn nhắc Next.js/Prisma (lỗi thời). Stack đã CHỐT: **Vite + React 19 SPA + TanStack Router (KHÔNG Next.js)** · **Drizzle (KHÔNG Prisma)** · **Valkey** · **Vitest**. Các token an toàn đã thay inline; phần khái niệm lấy [DECISIONS-02](../DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md) làm chuẩn.
+> ✅ **ĐÍNH CHÍNH STACK (đã đồng bộ body):** Tài liệu này đã được dọn về stack CHỐT: **Vite + React 19 SPA + TanStack Router (KHÔNG Next.js)** · **Drizzle + drizzle-kit (KHÔNG Prisma)** · **Valkey** · **Vitest**. Nguồn chuẩn: [DECISIONS-02](../DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md).
 
 # FRONTEND-03: ROUTING, AUTH GUARD & PERMISSION FRAMEWORK
 

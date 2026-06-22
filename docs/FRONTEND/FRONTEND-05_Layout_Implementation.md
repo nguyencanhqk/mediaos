@@ -1,4 +1,4 @@
-> ⚠️ **ĐÍNH CHÍNH STACK (bắt buộc) — đọc trước:** Tài liệu này có thể còn nhắc Next.js/Prisma (lỗi thời). Stack đã CHỐT: **Vite + React 19 SPA + TanStack Router (KHÔNG Next.js)** · **Drizzle (KHÔNG Prisma)** · **Valkey** · **Vitest**. Các token an toàn đã thay inline; phần khái niệm lấy [DECISIONS-02](../DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md) làm chuẩn.
+> ✅ **ĐÍNH CHÍNH STACK (đã đồng bộ body):** Tài liệu này đã được dọn về stack CHỐT: **Vite + React 19 SPA + TanStack Router (KHÔNG Next.js)** · **Drizzle + drizzle-kit (KHÔNG Prisma)** · **Valkey** · **Vitest**. Nguồn chuẩn: [DECISIONS-02](../DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md).
 
 # FRONTEND-05: LAYOUT IMPLEMENTATION
 
@@ -1461,7 +1461,7 @@ audit log
 
 1. AppSwitcher có thể lazy import nếu bundle lớn.
 2. Module sidebar icons nên dùng icon tree-shaking.
-3. Module pages tự code split theo Next.js route.
+3. Module pages tự code split theo TanStack Router route.
 
 ---
 
@@ -1566,22 +1566,20 @@ src/
 
 ---
 
-## 26. Route integration với Next.js App Router
+## 26. Route integration với TanStack Router
 
-### 26.1 Root layout
+### 26.1 Root route + app entry
 
 ```tsx
-// src/app/layout.tsx
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="vi">
-      <body>
-        <AppProviders>{children}</AppProviders>
-      </body>
-    </html>
-  );
-}
+// src/main.tsx — entry SPA (Vite); providers bọc toàn app
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <AppProviders><RouterProvider router={router} /></AppProviders>,
+);
+// src/routes/__root.tsx — root route của TanStack Router
+export const Route = createRootRoute({ component: () => <Outlet /> });
 ```
+
+(lang="vi" đặt trong index.html của Vite)
 
 ### 26.2 Public layout
 
@@ -1877,7 +1875,7 @@ User click notification button
 4. Tạo `ProtectedShell` skeleton.
 5. Tạo `GlobalTopbar` basic.
 6. Tạo `MainContentShell` basic.
-7. Gắn với Next.js route layout.
+7. Gắn với TanStack Router layout route.
 
 ### Sprint FE05.2 - Home Portal + App Switcher shell
 

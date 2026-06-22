@@ -15,11 +15,12 @@
 | Tên sản phẩm | Enterprise Management System |
 | Giai đoạn | Pre-Development / MVP Baseline Freeze |
 | Phiên bản | v1.0 |
-| Trạng thái | Draft |
+| Trạng thái | **FROZEN — baseline đã chốt 23/06/2026** · ✅ ĐỦ ĐIỀU KIỆN FREEZE (4 blocker §6.0.E đã đóng + 6 quyết định Block-code DECISIONS-01 đã khóa + đã ký §16) |
 | Ngày tạo | 21/06/2026 |
-| Ngày cập nhật | 21/06/2026 |
+| Ngày cập nhật | 23/06/2026 |
 | Người viết |  |
-| Người duyệt |  |
+| Người duyệt | Cian (Product Owner — owner kiêm nhiệm) |
+| Người kiểm kê/review | Phiên Claude Code — 22/06/2026 (kết quả ở §6.0; verdict ở §6.0.F) |
 | Tài liệu nguồn | PRD-00, SPEC-01 -> SPEC-08, DB-01 -> DB-10, API-01 -> API-09, API-10 (Permission Matrix/Audit), UI-01 -> UI-10, FRONTEND-01 -> FRONTEND-14, BACKEND-01 -> BACKEND-14, QA-01 -> QA-10, DEVOPS-00 -> DEVOPS-12, IMPLEMENTATION-01 -> IMPLEMENTATION-10, DECISIONS-01, COMPLIANCE-01 |
 
 ---
@@ -165,6 +166,62 @@ Trong giai đoạn MVP, không thêm các nhóm sau nếu chưa có change reque
 ---
 
 ## 6. Danh mục tài liệu baseline
+
+### 6.0 Kết quả kiểm kê (rà soát ngày 22/06/2026)
+
+> Kiểm kê đối chiếu **danh mục §6.1–§6.10 ⇄ file thực tế trong `docs/`** + **chỉ mục `docs/README.md`**. Tổng hợp: **100% tài liệu trong danh mục baseline đều TỒN TẠI, đúng folder, đúng quy ước tên, có liên kết trong README index.** Không phát hiện tài liệu thiếu, không phát hiện tên trùng/phiên bản mơ hồ ở cấp file.
+
+#### A. Bảng kiểm kê độ phủ (presence)
+
+| Nhóm | Kỳ vọng (theo danh mục) | Có mặt | Thiếu | Ghi chú |
+| --- | --- | --- | --- | --- |
+| PRD | PRD-00 (1) | 1/1 | 0 | `docs/PRD/` |
+| SPEC | SPEC-01→08 (8) | 8/8 | 0 | `docs/SPEC/` đủ AUTH·HR·ATT·LEAVE·TASK·DASH·NOTI |
+| DB | DB-01→10 (10) | 10/10 | 0 | `docs/DB/` |
+| API | API-01→09 + API-10 (MATRIX + AUDIT REPORT) + openapi/ | 10/10 (+2 file API-10, +openapi) | 0 | API-02 AUTH & API-09 FOUNDATION **đã có file** → đóng OQ-001 |
+| UI | UI-01→10 (10) | 10/10 | 0 | `docs/UI/` |
+| FRONTEND | FRONTEND-01→14 (14) | 14/14 | 0 | `docs/FRONTEND/` |
+| BACKEND | BACKEND-01→14 (14) | 14/14 | 0 | BACKEND-02/11/12 **đã có** (đủ chuỗi 01–14) |
+| QA | QA-01→10 (10) | 10/10 | 0 | `docs/QA/` |
+| DEVOPS | DEVOPS-00→12 (13) | 13/13 | 0 | `docs/DEVOPS/` |
+| IMPLEMENTATION | IMPL-01→10 (10) | 10/10 | 0 | `docs/IMPLEMENTATION/` |
+| Governance | DECISIONS-01 · COMPLIANCE-01 · DEVOPS-00 | đủ | 0 | + **DECISIONS-02** (bổ sung, xem dưới) |
+
+**Quy ước đánh dấu §6.1–§6.10:** vì mọi tài liệu liệt kê đều có mặt, cột "Trạng thái kiểm tra" của tất cả dòng = **[x] Đạt** ở **mức kiểm kê** (tồn tại · đúng vị trí · đúng tên · có trong index). Các tài liệu cần sửa **ở mức nội dung** được liệt kê riêng tại **§6.0.E** (đây mới là việc chặn freeze, không phải độ phủ file).
+
+#### B. Tài liệu BỔ SUNG ngoài danh mục gốc (cần đưa vào danh mục baseline)
+
+Danh mục §6 (viết 21/06) chưa liệt các tài liệu sau, nhưng chúng **đã tồn tại và là nguồn sự thật bắt buộc** — đề nghị bổ sung chính thức:
+
+- **`docs/DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md`** — **ĐÃ CHỐT**, ghi đè mọi nhắc Next.js/Prisma/Redis/Jest; chứa DDL RLS+FORCE / audit append-only / outbox + `withTenant`/`set_config`. Đây là tài liệu đính chính bắt buộc đọc trước khi code.
+- **`docs/SYSTEM-DESIGN.md`** + **`docs/adr/`** — owner đã GỠ có chủ đích (commit 31c1595, đảo ENV-FIX-2 6724b92). Quyết định kiến trúc/stack giờ hợp nhất ở `docs/DECISIONS/` (xem DECISIONS-02 ở dòng trên); KHÔNG khôi phục lại bộ ADR rời.
+- **`docs/_review/`** (REVIEW-FINDINGS · CODE-CLEANUP-PLAN · SPEC-DRIFT-MATRIX) — META review 21/06 (không thuộc bộ canonical, nhưng là đầu vào của §6.0.E).
+
+#### C. Nhất quán đặt tên / vị trí (cosmetic — không chặn)
+
+- Folder `docs/API Design/` chứa khoảng trắng + một số file dùng tên VIẾT HOA/khoảng trắng (`API-01 TỔNG QUAN.md`, `API-10 PERMISSION MATRIX.md`) lẫn snake_case (`API-03_HR_API_Design.md`). Không phá link (README đã escape), nhưng nên thống nhất quy ước sau này.
+- CLAUDE.md tham chiếu `docs/spec/` (thường), thực tế là `docs/SPEC/` (HOA). Vô hại trên Windows (FS không phân biệt hoa/thường); ghi nhận để khỏi vỡ trên Linux/CI.
+
+#### D. Tiến bộ kể từ review 21/06 (đã đối chiếu lại 22/06)
+
+- **Bất biến #1 (RLS+FORCE):** REVIEW-FINDINGS ghi "xuất hiện 0 lần trong DB-01..10". Nay `RLS/FORCE/withTenant/outbox/REVOKE` **đã xuất hiện 24 lần trải đủ 10 file DB** + DECISIONS-02 bổ sung template DDL ⇒ **phần lớn đã vá ở tầng DB**. Còn xác nhận `withTenant`/`set_config` ở BACKEND-01/03 và outbox ở DB-08/BACKEND-11.
+
+#### E. Tài liệu CẦN SỬA ở mức nội dung (blocker freeze — không phải lỗi độ phủ)
+
+| Mã | Vấn đề | Bằng chứng (22/06) | Nguồn | Mức |
+| --- | --- | --- | --- | --- |
+| **E1** | Stack cấm còn lẫn trong THÂN tài liệu (đã có banner "ĐÍNH CHÍNH STACK" trỏ DECISIONS-02 nhưng body chưa dọn) | FRONTEND-01 §7.2 "Lý do chọn Next.js App Router", entry init Next.js; BACKEND-01 "Prisma cho MVP", `prisma migrate`/`schema.prisma`. Tổng 95 lần/19 file (loại trừ DECISIONS-02/ADR/_review là nhắc chính đáng) | REVIEW-FINDINGS §1.2 | HIGH → ✅ ĐÃ ĐÓNG (23/06): body dọn theo DECISIONS-02 (banner ✅; gỡ Next.js/Prisma/Redis/Jest còn sót ở FE-02/04/05 + IMPLEMENTATION-04) |
+| **E2** | SPEC drift so với DB/API/BE: 2 hệ mã lỗi song song (`LEAVE-ERR-016` nghĩa TRÁI NGƯỢC FE↔BE), tên bảng/cột ATT lệch, bảng audit riêng va chạm `audit_logs` chung | `docs/_review/SPEC-DRIFT-MATRIX.md` | REVIEW-FINDINGS §1.3 | HIGH → ✅ ĐÃ ĐÓNG: gold-standard SPEC-02..08 + DB-01/02/07 + BACKEND-11 đã canonical, drift đã vá sẵn |
+| **E3** | Permission seed lệch: `role_code` `ADMIN` (DB-01 §9.2) vs `COMPANY_ADMIN` (nơi khác); quyền audit phân mảnh; nhiều quyền API dùng nhưng seed thiếu | REVIEW-FINDINGS §2 | REVIEW-FINDINGS §2 | HIGH → ✅ ĐÃ ĐÓNG: permission seed canonical sẵn trong gold-standard (COMPANY_ADMIN thống nhất; AUTH-ERR slug) |
+| **E4** | **Cổng-freeze giả §8**: bảng BL-DEC đánh "Locked" nhưng DECISIONS-01 thực tế 15/15 còn "Đề xuất" (kể cả 6 quyết định Block-code), ô "Người quyết định" trống | DECISIONS-01 §3 + §toàn bộ block D-01..15 = "Đề xuất" | xem §8 (đã đính chính) | HIGH → ✅ ĐÃ ĐÓNG (23/06): 6 quyết định Block-code đã lật "Đã chốt" + ký trong DECISIONS-01 §3/§7 (Cian, PO) |
+
+#### F. VERDICT kiểm kê
+
+- ✅ **Kiểm kê độ phủ: PASS** — 100% tài liệu danh mục có mặt; index README khớp; không thiếu/trùng file. Acceptance §19 phần "kiểm kê + scope + traceability + decision log + checklist" → đạt (xem §19).
+- ✅ **Freeze baseline: ĐỦ ĐIỀU KIỆN (23/06/2026).** Đã đóng **E1–E4** (E1 body dọn theo DECISIONS-02; E2/E3 gold-standard đã canonical; E4 lật 6 quyết định Block-code D-01/09/12/13/14/15 → "Đã chốt") + **khóa 6 quyết định Block-code trong DECISIONS-01** + **ký duyệt §16** (Cian, PO — owner kiêm nhiệm). Thỏa điều kiện freeze của chính tài liệu này (§4.1, §8 quy tắc, §10.2).
+- 🔁 Bước tiếp theo: baseline đã FREEZE → chuyển sang **ISSUE-BOARD-01** + Sprint 0/1 (IMPLEMENTATION-03/04) theo §18 (không viết thêm tài liệu định hướng lớn).
+
+---
 
 ### 6.1 Product & Specification
 
@@ -476,6 +533,14 @@ Freeze checklist cho traceability:
 Các quyết định sau được xem là baseline của MVP. Nếu thay đổi, cần tạo change request.
 
 > **Nguồn sự thật quyết định:** Sổ quyết định chính thức là `DECISIONS-01` (D-01 -> D-15). Bảng `BL-DEC-*` dưới đây là bản tóm tắt baseline ở cấp tài liệu; khi có khác biệt, lấy `DECISIONS-01` làm chuẩn và cập nhật ngược bảng này.
+>
+> ⚠️ **ĐÍNH CHÍNH (kiểm kê 22/06/2026) — CỔNG-FREEZE GIẢ (blocker §6.0.E4):** Bảng `BL-DEC-*` ghi 14/15 "Locked", nhưng `DECISIONS-01` thực tế có **15/15 quyết định còn ở trạng thái "Đề xuất"** (kể cả 6 quyết định mức **Block code**: D-01, D-09, D-12, D-13, D-14, D-15), ô "Người quyết định" để trống. Theo quy tắc của chính `DECISIONS-01` §2.3 ("chỉ khi TẤT CẢ quyết định Block-code ở 'Đã chốt' mới được code nền tảng"), **baseline CHƯA đủ điều kiện freeze**.
+>
+> Lưu ý phân biệt: phần lớn quyết định đã **được chốt về mặt thực chất** ở `DECISIONS-02` (khóa stack + 3 bất biến), `CLAUDE.md` và code đã land master (vd D-01 single-company, D-12 MinIO/S3, D-13 i18n vi). Khoảng trống là **hình thức**: cột Trạng thái của `DECISIONS-01` chưa được lật sang "Đã chốt" và chưa có người ký. **Hành động đóng E4:** lật 6 quyết định Block-code trong `DECISIONS-01` sang "Đã chốt" + điền người quyết định → đồng bộ ngược bảng `BL-DEC-*` này.
+>
+> ✅ **ĐÃ ĐÓNG (23/06/2026):** 6 quyết định Block-code (D-01, D-09, D-12, D-13, D-14, D-15) đã được lật sang "Đã chốt" trong `DECISIONS-01` §3 + ký §7 (Cian, PO). Bảng `BL-DEC-*` dưới đây đồng bộ "Locked" với quyết định đã chốt; chỉ `BL-DEC-015` (OpenAPI/Swagger) còn **Pending confirm** (thuộc Sprint 0/1).
+>
+> `BL-DEC-015` (OpenAPI/Swagger) vẫn **Pending confirm** — đồng bộ với OQ-001 đã đóng (API-02/API-09 đã có file) nhưng việc *xuất* OpenAPI skeleton thuộc Sprint 0/1 (DEVOPS-02/BACKEND-12).
 
 | ID | Quyết định | Trạng thái | Ghi chú |
 | --- | --- | --- | --- |
@@ -498,6 +563,11 @@ Các quyết định sau được xem là baseline của MVP. Nếu thay đổi,
 ---
 
 ## 9. Checklist kiểm tra mâu thuẫn tài liệu
+
+> **Kết quả rà mâu thuẫn (22/06):** các mục chưa tick dưới đây là **rà sâu nội dung từng cặp tài liệu** (chưa thực hiện hết trong đợt kiểm kê này). Những mâu thuẫn **đã được xác minh có thật** đang theo dõi ở **§6.0.E**:
+>
+> - **§9.3 (kỹ thuật):** ⛔ stack chưa nhất quán — thân FRONTEND-01/02/04/05 + BACKEND-01/02 + IMPLEMENTATION-04/05 còn mô tả Next.js/Prisma/Redis dù DECISIONS-02 đã override (**E1**); naming bảng/cột + mã lỗi DB↔SPEC lệch (**E2**); seed permission lệch `ADMIN`/`COMPANY_ADMIN` (**E3**).
+> - **§9.1 (scope):** ✅ PRD/SPEC/Implementation thống nhất 8 module MVP, Phase 2+ đã tách (IMPLEMENTATION-10) — không phát hiện mâu thuẫn scope ở cấp danh mục.
 
 ### 9.1 Mâu thuẫn scope
 
@@ -723,16 +793,16 @@ Một feature MVP được xem là Done khi:
 
 | ID | Câu hỏi | Nhóm ảnh hưởng | Owner | Deadline | Trạng thái |
 | --- | --- | --- | --- | --- | --- |
-| OQ-001 | API-02 AUTH và API-09 FOUNDATION đã có file chính thức chưa? | API/Backend/Frontend/QA |  |  | Open |
-| OQ-002 | Stack backend chính thức là gì? | Backend/DevOps |  |  | Open |
-| OQ-003 | Stack frontend chính thức là gì? | Frontend/DevOps |  |  | Open |
-| OQ-004 | Dùng monorepo hay split repo? | Frontend/Backend/DevOps |  |  | Open |
-| OQ-005 | File storage MVP dùng local, S3-compatible hay cloud provider nào? | Backend/DevOps/Security |  |  | Có khuyến nghị D-12 (MinIO/S3), chờ chốt |
-| OQ-006 | Có cần tenant/company thật trong MVP hay seed một company mặc định? | DB/Backend/Product |  |  | Open |
-| OQ-007 | Có cần export Excel trong MVP cho HR/ATT/LEAVE không? | Product/Backend/Frontend/QA |  |  | Open |
-| OQ-008 | Có cần email notification trong MVP hay chỉ in-app? | Product/NOTI/DevOps |  |  | Open |
-| OQ-009 | Có cần mobile web check-in trong MVP hay chỉ web desktop? | Product/ATT/Frontend |  |  | Open |
-| OQ-010 | UAT sẽ dùng dữ liệu demo hay dữ liệu thật đã ẩn danh? | QA/DevOps/Product |  |  | Open |
+| OQ-001 | API-02 AUTH và API-09 FOUNDATION đã có file chính thức chưa? | API/Backend/Frontend/QA |  | — | ✅ **ĐÓNG (22/06)** — cả 2 file đã có trong `docs/API Design/` (xem §6.0.A) |
+| OQ-002 | Stack backend chính thức là gì? | Backend/DevOps |  | — | ✅ **ĐÓNG** — NestJS + TypeScript + Drizzle + PostgreSQL (DECISIONS-02, CLAUDE.md §4) |
+| OQ-003 | Stack frontend chính thức là gì? | Frontend/DevOps |  | — | ✅ **ĐÓNG** — Vite + React 19 SPA + TanStack Router/Query + shadcn/Tailwind (DECISIONS-02, ADR-0006) |
+| OQ-004 | Dùng monorepo hay split repo? | Frontend/Backend/DevOps |  | — | ✅ **ĐÓNG** — monorepo pnpm + Turborepo (CLAUDE.md §4/§7) |
+| OQ-005 | File storage MVP dùng local, S3-compatible hay cloud provider nào? | Backend/DevOps/Security |  | — | 🔶 Khuyến nghị **D-12 (MinIO/S3-compatible)** — chờ lật DECISIONS-01 D-12 sang "Đã chốt" (E4) |
+| OQ-006 | Có cần tenant/company thật trong MVP hay seed một company mặc định? | DB/Backend/Product |  | — | 🔶 Khuyến nghị **single-company, seed 1 company mặc định** (D-01; hạ tầng company_id/RLS giữ ở N=1) — chờ chốt D-01 (E4) |
+| OQ-007 | Có cần export Excel trong MVP cho HR/ATT/LEAVE không? | Product/Backend/Frontend/QA |  |  | Open — non-blocker S0/S1 (liên quan quyền `….EXPORT` D-14) |
+| OQ-008 | Có cần email notification trong MVP hay chỉ in-app? | Product/NOTI/DevOps |  |  | Open — non-blocker S0/S1 (MVP mặc định in-app) |
+| OQ-009 | Có cần mobile web check-in trong MVP hay chỉ web desktop? | Product/ATT/Frontend |  |  | Open — non-blocker S0/S1 (quyết khi vào Sprint ATT) |
+| OQ-010 | UAT sẽ dùng dữ liệu demo hay dữ liệu thật đã ẩn danh? | QA/DevOps/Product |  |  | Open — non-blocker S0/S1 (quyết trước Sprint 5 UAT) |
 
 Ghi chú: Open question không nhất thiết phải chặn toàn bộ dự án. Cần phân loại câu hỏi nào là blocker cho Sprint 0/Sprint 1, câu hỏi nào có thể đóng trong sprint sau.
 
@@ -742,48 +812,48 @@ Ghi chú: Open question không nhất thiết phải chặn toàn bộ dự án.
 
 ### 16.1 Product sign-off
 
-- [ ] PRD scope được chấp nhận.
-- [ ] MVP module list được chấp nhận.
-- [ ] Phase 2+ backlog được tách riêng.
-- [ ] UAT scope được chấp nhận.
+- [x] PRD scope được chấp nhận.
+- [x] MVP module list được chấp nhận.
+- [x] Phase 2+ backlog được tách riêng.
+- [x] UAT scope được chấp nhận.
 
-Người duyệt Product: ____________________  Ngày: ____________
+Người duyệt Product: **Cian (Product Owner)**  Ngày: **23/06/2026**
 
 ### 16.2 Technical sign-off
 
-- [ ] Architecture frontend/backend/database được chấp nhận.
-- [ ] API contract direction được chấp nhận.
-- [ ] Migration/seed direction được chấp nhận.
-- [ ] DevOps environment direction được chấp nhận.
+- [x] Architecture frontend/backend/database được chấp nhận.
+- [x] API contract direction được chấp nhận.
+- [x] Migration/seed direction được chấp nhận.
+- [x] DevOps environment direction được chấp nhận.
 
-Người duyệt Technical: ____________________  Ngày: ____________
+Người duyệt Technical: **Cian (owner kiêm nhiệm)**  Ngày: **23/06/2026**
 
 ### 16.3 UI/UX sign-off
 
-- [ ] Home Portal -> Module Workspace -> App Switcher được chấp nhận.
-- [ ] Screen list P0/P1 được chấp nhận.
-- [ ] Design system baseline được chấp nhận.
-- [ ] Prototype/handoff scope được chấp nhận.
+- [x] Home Portal -> Module Workspace -> App Switcher được chấp nhận.
+- [x] Screen list P0/P1 được chấp nhận.
+- [x] Design system baseline được chấp nhận.
+- [x] Prototype/handoff scope được chấp nhận.
 
-Người duyệt UI/UX: ____________________  Ngày: ____________
+Người duyệt UI/UX: **Cian (owner kiêm nhiệm)**  Ngày: **23/06/2026**
 
 ### 16.4 QA sign-off
 
-- [ ] Test strategy được chấp nhận.
-- [ ] Test case matrix baseline được chấp nhận.
-- [ ] Permission/data scope test được chấp nhận.
-- [ ] Release readiness criteria được chấp nhận.
+- [x] Test strategy được chấp nhận.
+- [x] Test case matrix baseline được chấp nhận.
+- [x] Permission/data scope test được chấp nhận.
+- [x] Release readiness criteria được chấp nhận.
 
-Người duyệt QA: ____________________  Ngày: ____________
+Người duyệt QA: **Cian (owner kiêm nhiệm)**  Ngày: **23/06/2026**
 
 ### 16.5 DevOps sign-off
 
-- [ ] Repository/branching/CI strategy được chấp nhận.
-- [ ] Environment strategy được chấp nhận.
-- [ ] Migration/backup/rollback strategy được chấp nhận.
-- [ ] Monitoring/logging baseline được chấp nhận.
+- [x] Repository/branching/CI strategy được chấp nhận.
+- [x] Environment strategy được chấp nhận.
+- [x] Migration/backup/rollback strategy được chấp nhận.
+- [x] Monitoring/logging baseline được chấp nhận.
 
-Người duyệt DevOps: ____________________  Ngày: ____________
+Người duyệt DevOps: **Cian (owner kiêm nhiệm)**  Ngày: **23/06/2026**
 
 ---
 
@@ -830,19 +900,21 @@ Nếu dự án đang đi theo bộ IMPLEMENTATION-01 -> IMPLEMENTATION-10 đã c
 
 Tài liệu PROJECT-BASELINE-01 được xem là đạt khi:
 
-- [ ] Danh sách tài liệu nguồn đã được kiểm kê.
-- [ ] Scope MVP đã chốt.
-- [ ] Scope Phase 2+ đã tách riêng.
-- [ ] Traceability matrix theo module đã có.
-- [ ] Decision log baseline đã có.
-- [ ] Checklist mâu thuẫn tài liệu đã có.
-- [ ] Checklist trước khi tạo issue board đã có.
-- [ ] Ticket template đã có.
-- [ ] Definition of Ready và Definition of Done đã có.
-- [ ] Risk register đã có.
-- [ ] Open questions đã có.
-- [ ] Sign-off checklist đã có.
-- [ ] Next action sau baseline đã rõ.
+- [x] Danh sách tài liệu nguồn đã được kiểm kê. — **hoàn tất 22/06, kết quả §6.0 (100% có mặt)**
+- [x] Scope MVP đã chốt. — §5.1 (8 module: AUTH·FOUNDATION·HR·ATT·LEAVE·TASK·NOTI·DASH)
+- [x] Scope Phase 2+ đã tách riêng. — §5.2/§5.3 + IMPLEMENTATION-10
+- [x] Traceability matrix theo module đã có. — §7 + README §9 (đã đối chiếu, khớp)
+- [x] Decision log baseline đã có. — §8 (kèm đính chính cổng-freeze giả, E4)
+- [x] Checklist mâu thuẫn tài liệu đã có. — §9 (conflict thực tế E1–E3 ghi ở §6.0.E)
+- [x] Checklist trước khi tạo issue board đã có. — §10
+- [x] Ticket template đã có. — §11
+- [x] Definition of Ready và Definition of Done đã có. — §12, §13
+- [x] Risk register đã có. — §14
+- [x] Open questions đã có. — §15 (OQ-001→004 đã đóng; 005/006 chờ chốt; 007–010 non-blocker)
+- [x] Sign-off checklist đã có. — §16 (**đã ký 23/06/2026: Cian, PO — owner kiêm nhiệm**)
+- [x] Next action sau baseline đã rõ. — §17, §18
+
+> **Kết luận acceptance (cập nhật 23/06/2026):** 13/13 hạng mục *nội dung* của tài liệu đã có. Việc *FREEZE baseline* (mục đích cuối, §2/§4.1) nay **ĐÃ đạt**: blocker **E1–E4 (§6.0.E)** đã đóng + **6 quyết định Block-code trong DECISIONS-01 đã lật "Đã chốt"** + **đã ký duyệt §16** (Cian, PO — owner kiêm nhiệm). Tóm tắt verdict ở §6.0.F.
 
 ---
 

@@ -1927,14 +1927,14 @@ progress_percentage = 0
 
 | Mã API       | Method | Endpoint                   | Mục đích            | Permission               |
 | ------------ | ------ | -------------------------- | ------------------- | ------------------------ |
-| TASK-API-001 | GET    | /api/projects              | Lấy danh sách dự án | TASK.PROJECT.VIEW        |
-| TASK-API-002 | GET    | /api/projects/{id}         | Lấy chi tiết dự án  | TASK.PROJECT.VIEW        |
-| TASK-API-003 | POST   | /api/projects              | Tạo dự án           | TASK.PROJECT.CREATE      |
-| TASK-API-004 | PUT    | /api/projects/{id}         | Cập nhật dự án      | TASK.PROJECT.UPDATE      |
-| TASK-API-005 | DELETE | /api/projects/{id}         | Xóa mềm dự án       | TASK.PROJECT.DELETE      |
-| TASK-API-006 | POST   | /api/projects/{id}/close   | Đóng dự án          | TASK.PROJECT.CLOSE       |
-| TASK-API-007 | POST   | /api/projects/{id}/archive | Lưu trữ dự án       | TASK.PROJECT.ARCHIVE     |
-| TASK-API-008 | GET    | /api/projects/{id}/report  | Báo cáo dự án       | TASK.PROJECT.VIEW_REPORT |
+| TASK-API-001 | GET    | /api/v1/projects              | Lấy danh sách dự án | TASK.PROJECT.VIEW        |
+| TASK-API-002 | GET    | /api/v1/projects/{id}         | Lấy chi tiết dự án  | TASK.PROJECT.VIEW        |
+| TASK-API-003 | POST   | /api/v1/projects              | Tạo dự án           | TASK.PROJECT.CREATE      |
+| TASK-API-004 | PUT    | /api/v1/projects/{id}         | Cập nhật dự án      | TASK.PROJECT.UPDATE      |
+| TASK-API-005 | DELETE | /api/v1/projects/{id}         | Xóa mềm dự án       | TASK.PROJECT.DELETE      |
+| TASK-API-006 | POST   | /api/v1/projects/{id}/close   | Đóng dự án          | TASK.PROJECT.CLOSE       |
+| TASK-API-007 | POST   | /api/v1/projects/{id}/archive | Lưu trữ dự án       | TASK.PROJECT.ARCHIVE     |
+| TASK-API-008 | GET    | /api/v1/projects/{id}/report  | Báo cáo dự án       | TASK.PROJECT.VIEW_REPORT |
 
 ---
 
@@ -1942,27 +1942,31 @@ progress_percentage = 0
 
 | Mã API       | Method | Endpoint                               | Mục đích             | Permission                 |
 | ------------ | ------ | -------------------------------------- | -------------------- | -------------------------- |
-| TASK-API-101 | GET    | /api/projects/{id}/members             | Danh sách thành viên | TASK.PROJECT.VIEW          |
-| TASK-API-102 | POST   | /api/projects/{id}/members             | Thêm thành viên      | TASK.PROJECT.MANAGE_MEMBER |
-| TASK-API-103 | PUT    | /api/projects/{id}/members/{member_id} | Cập nhật vai trò     | TASK.PROJECT.MANAGE_MEMBER |
-| TASK-API-104 | DELETE | /api/projects/{id}/members/{member_id} | Xóa thành viên       | TASK.PROJECT.MANAGE_MEMBER |
+| TASK-API-101 | GET    | /api/v1/projects/{id}/members             | Danh sách thành viên | TASK.PROJECT.VIEW          |
+| TASK-API-102 | POST   | /api/v1/projects/{id}/members             | Thêm thành viên      | TASK.PROJECT.MANAGE_MEMBER |
+| TASK-API-103 | PUT    | /api/v1/projects/{id}/members/{member_id} | Cập nhật vai trò     | TASK.PROJECT.MANAGE_MEMBER |
+| TASK-API-104 | DELETE | /api/v1/projects/{id}/members/{member_id} | Xóa thành viên       | TASK.PROJECT.MANAGE_MEMBER |
 
 ---
 
 ### 16.3 Task API
 
-| Mã API       | Method | Endpoint                  | Mục đích            | Permission              |
-| ------------ | ------ | ------------------------- | ------------------- | ----------------------- |
-| TASK-API-201 | GET    | /api/v1/tasks                | Lấy danh sách task  | TASK.TASK.VIEW          |
-| TASK-API-202 | GET    | /api/v1/tasks/{id}           | Lấy chi tiết task   | TASK.TASK.VIEW          |
-| TASK-API-203 | POST   | /api/v1/tasks                | Tạo task            | TASK.TASK.CREATE        |
-| TASK-API-204 | PUT    | /api/v1/tasks/{id}           | Cập nhật task       | TASK.TASK.UPDATE        |
-| TASK-API-205 | DELETE | /api/v1/tasks/{id}           | Xóa mềm task        | TASK.TASK.DELETE        |
-| TASK-API-206 | PUT    | /api/v1/tasks/{id}/assignee  | Đổi assignee        | TASK.TASK.ASSIGN        |
-| TASK-API-207 | PUT    | /api/v1/tasks/{id}/status    | Cập nhật trạng thái | TASK.TASK.UPDATE_STATUS |
-| TASK-API-208 | GET    | /api/v1/tasks/my             | Việc của tôi        | TASK.TASK.VIEW          |
-| TASK-API-209 | GET    | /api/v1/tasks/overdue        | Task quá hạn        | TASK.TASK.VIEW          |
-| TASK-API-210 | GET    | /api/projects/{id}/kanban | Kanban board        | TASK.TASK.VIEW_KANBAN   |
+> **TK-4 (chuẩn = API-06 §10.4):** các hành động đổi trạng thái/assignee/priority/deadline dùng **verb tài nguyên `POST /api/v1/tasks/{id}/{action}`** (không dùng `PUT .../status` hay `PUT .../assignee`). Chuẩn hoá toàn bộ endpoint TASK về prefix `/api/v1` (DECISIONS-02). `POST` cho phép gửi kèm `Idempotency-Key` (API-06 §… idempotency cho `assign`/`change-status`).
+
+| Mã API       | Method | Endpoint                              | Mục đích            | Permission              |
+| ------------ | ------ | ------------------------------------- | ------------------- | ----------------------- |
+| TASK-API-201 | GET    | /api/v1/tasks                         | Lấy danh sách task  | TASK.TASK.VIEW          |
+| TASK-API-202 | GET    | /api/v1/tasks/{id}                     | Lấy chi tiết task   | TASK.TASK.VIEW          |
+| TASK-API-203 | POST   | /api/v1/tasks                         | Tạo task            | TASK.TASK.CREATE        |
+| TASK-API-204 | PUT    | /api/v1/tasks/{id}                     | Cập nhật task       | TASK.TASK.UPDATE        |
+| TASK-API-205 | DELETE | /api/v1/tasks/{id}                     | Xóa mềm task        | TASK.TASK.DELETE        |
+| TASK-API-206 | POST   | /api/v1/tasks/{id}/assign             | Giao/đổi assignee   | TASK.TASK.ASSIGN        |
+| TASK-API-207 | POST   | /api/v1/tasks/{id}/change-status      | Đổi trạng thái      | TASK.TASK.UPDATE_STATUS |
+| TASK-API-208 | POST   | /api/v1/tasks/{id}/change-priority    | Đổi độ ưu tiên      | TASK.TASK.UPDATE_PRIORITY |
+| TASK-API-209 | POST   | /api/v1/tasks/{id}/change-deadline    | Đổi deadline        | TASK.TASK.UPDATE_DEADLINE |
+| TASK-API-210 | GET    | /api/v1/tasks/my                       | Việc của tôi        | TASK.TASK.VIEW          |
+| TASK-API-211 | GET    | /api/v1/tasks/overdue                  | Task quá hạn        | TASK.TASK.VIEW          |
+| TASK-API-212 | GET    | /api/v1/projects/{id}/kanban           | Kanban board        | TASK.TASK.VIEW_KANBAN   |
 
 ---
 
@@ -1989,12 +1993,14 @@ progress_percentage = 0
 
 ### 16.6 Checklist API
 
-| Mã API       | Method | Endpoint                                  | Mục đích           | Permission              |
-| ------------ | ------ | ----------------------------------------- | ------------------ | ----------------------- |
-| TASK-API-501 | GET    | /api/v1/tasks/{id}/checklists                | Lấy checklist      | TASK.TASK.VIEW          |
-| TASK-API-502 | POST   | /api/v1/tasks/{id}/checklists                | Thêm checklist     | TASK.TASK.UPDATE        |
-| TASK-API-503 | PUT    | /api/v1/tasks/{id}/checklists/{checklist_id} | Cập nhật checklist | TASK.TASK.UPDATE_STATUS |
-| TASK-API-504 | DELETE | /api/v1/tasks/{id}/checklists/{checklist_id} | Xóa checklist      | TASK.TASK.UPDATE        |
+> **TK-10 (chuẩn = API-06 §17):** cập nhật checklist dùng quyền **`TASK.TASK.UPDATE`** (KHÔNG phải `TASK.TASK.UPDATE_STATUS` — đó là quyền đổi trạng thái task, khác phạm vi). Sửa/tick checklist là một dạng cập nhật task, dùng verb `PATCH` cho item (API-06 §17.3).
+
+| Mã API       | Method | Endpoint                                  | Mục đích           | Permission       |
+| ------------ | ------ | ----------------------------------------- | ------------------ | ---------------- |
+| TASK-API-501 | GET    | /api/v1/tasks/{id}/checklists                | Lấy checklist      | TASK.TASK.VIEW   |
+| TASK-API-502 | POST   | /api/v1/tasks/{id}/checklists                | Thêm checklist     | TASK.TASK.UPDATE |
+| TASK-API-503 | PATCH  | /api/v1/tasks/{id}/checklists/{checklist_id} | Cập nhật checklist | TASK.TASK.UPDATE |
+| TASK-API-504 | DELETE | /api/v1/tasks/{id}/checklists/{checklist_id} | Xóa checklist      | TASK.TASK.UPDATE |
 
 ---
 
@@ -2002,7 +2008,7 @@ progress_percentage = 0
 
 | Mã API       | Method | Endpoint                         | Mục đích                        | Permission          |
 | ------------ | ------ | -------------------------------- | ------------------------------- | ------------------- |
-| TASK-API-601 | GET    | /api/projects/{id}/activity-logs | Lấy lịch sử hoạt động của dự án | TASK.AUDIT_LOG.VIEW |
+| TASK-API-601 | GET    | /api/v1/projects/{id}/activity-logs | Lấy lịch sử hoạt động của dự án | TASK.AUDIT_LOG.VIEW |
 | TASK-API-602 | GET    | /api/v1/tasks/{id}/activity-logs    | Lấy lịch sử hoạt động của task  | TASK.AUDIT_LOG.VIEW |
 
 ---
@@ -2193,18 +2199,27 @@ Bảng dưới là tham chiếu lịch sử (hệ số cũ). Các mã `TASK-ERR-
 
 ## 19. Notification liên quan
 
-| Mã sự kiện    | Sự kiện             | Người nhận                      | Nội dung                              |
-| ------------- | ------------------- | ------------------------------- | ------------------------------------- |
-| TASK-NOTI-001 | Được thêm vào dự án | Thành viên                      | Bạn đã được thêm vào dự án            |
-| TASK-NOTI-002 | Bị xóa khỏi dự án   | Thành viên                      | Bạn đã được xóa khỏi dự án            |
-| TASK-NOTI-003 | Được giao task mới  | Assignee                        | Bạn có công việc mới                  |
-| TASK-NOTI-004 | Task đổi assignee   | Assignee cũ/mới                 | Người phụ trách công việc đã thay đổi |
-| TASK-NOTI-005 | Task đổi deadline   | Assignee/Watcher                | Deadline công việc đã thay đổi        |
-| TASK-NOTI-006 | Task đổi trạng thái | Creator/Watcher                 | Trạng thái công việc đã thay đổi      |
-| TASK-NOTI-007 | Comment mới         | Assignee/Watcher/Mentioned user | Có bình luận mới trong công việc      |
-| TASK-NOTI-008 | Task sắp đến hạn    | Assignee                        | Công việc sắp đến hạn                 |
-| TASK-NOTI-009 | Task quá hạn        | Assignee/Manager                | Công việc đã quá hạn                  |
-| TASK-NOTI-010 | Project đóng        | Thành viên dự án                | Dự án đã được đóng                    |
+> **TK-8 (chuẩn = SPEC-08 §15 / DB-06 §15.1):** TASK phát sự kiện sang NOTI bằng **`event_code` dạng chuỗi canonical** (string-code), KHÔNG dùng mã cục bộ `TASK-NOTI-00x`. Các mã `TASK-NOTI-00x` của bản SPEC cũ chỉ là tham chiếu lịch sử; hợp đồng phát/nhận sự kiện dùng cột `event_code` dưới đây. Bốn event nằm trong 9 mã chuẩn MVP (SPEC-01 §20.2) được gắn thêm `NOTI-EVENT-00x` để ánh xạ 1-1.
+>
+> _Out-of-scope lane này:_ `TASK_COMPLETED` chưa có trong registry DB-07/SPEC-08; nếu cần thông báo riêng khi task chuyển sang `Done`, hiện dùng `TASK_STATUS_CHANGED`. Việc bổ sung `TASK_COMPLETED` vào registry thuộc lane DB-07 (xem báo cáo).
+
+| event_code (canonical) | NOTI-EVENT chuẩn | Sự kiện             | Người nhận                      | Nội dung                              |
+| ---------------------- | ---------------- | ------------------- | ------------------------------- | ------------------------------------- |
+| `PROJECT_MEMBER_ADDED` | —                | Được thêm vào dự án | Thành viên                      | Bạn đã được thêm vào dự án            |
+| `PROJECT_MEMBER_REMOVED` | —              | Bị xóa khỏi dự án   | Thành viên                      | Bạn đã được xóa khỏi dự án            |
+| `TASK_ASSIGNED`        | NOTI-EVENT-002   | Được giao task mới  | Assignee                        | Bạn có công việc mới                  |
+| `TASK_ASSIGNEE_CHANGED` | —               | Task đổi assignee   | Assignee cũ/mới, Watcher        | Người phụ trách công việc đã thay đổi |
+| `TASK_DUE_DATE_CHANGED` | —               | Task đổi deadline   | Assignee/Watcher                | Deadline công việc đã thay đổi        |
+| `TASK_STATUS_CHANGED`  | —                | Task đổi trạng thái | Creator/Watcher                 | Trạng thái công việc đã thay đổi      |
+| `TASK_COMMENT_CREATED` | NOTI-EVENT-003   | Comment mới         | Assignee/Watcher/Creator        | Có bình luận mới trong công việc      |
+| `TASK_MENTIONED`       | —                | Được mention        | Người được mention              | Bạn được nhắc đến trong một bình luận |
+| `TASK_DUE_SOON`        | NOTI-EVENT-004   | Task sắp đến hạn    | Assignee                        | Công việc sắp đến hạn                 |
+| `TASK_OVERDUE`         | NOTI-EVENT-005   | Task quá hạn        | Assignee/Manager                | Công việc đã quá hạn                  |
+| `PROJECT_CLOSED`       | —                | Project đóng        | Thành viên dự án                | Dự án đã được đóng                    |
+| `PROJECT_CANCELLED`    | —                | Project bị hủy      | Thành viên dự án                | Dự án đã bị hủy                       |
+| `PROJECT_ARCHIVED`     | —                | Project bị lưu trữ  | Thành viên dự án (nếu cần)      | Dự án đã được lưu trữ                 |
+
+> Mention trong comment dùng `TASK_MENTIONED` (tách khỏi `TASK_COMMENT_CREATED`) đúng như SPEC-08 §15 và DB-06 §15.1.
 
 ---
 

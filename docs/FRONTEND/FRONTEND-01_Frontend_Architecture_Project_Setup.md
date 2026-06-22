@@ -1,4 +1,4 @@
-> ⚠️ **ĐÍNH CHÍNH STACK (bắt buộc) — đọc trước:** Tài liệu này có thể còn nhắc Next.js/Prisma (lỗi thời). Stack đã CHỐT: **Vite + React 19 SPA + TanStack Router (KHÔNG Next.js)** · **Drizzle (KHÔNG Prisma)** · **Valkey** · **Vitest**. Các token an toàn đã thay inline; phần khái niệm lấy [DECISIONS-02](../DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md) làm chuẩn.
+> ✅ **ĐÍNH CHÍNH STACK (đã đồng bộ body):** Tài liệu này đã được dọn về stack CHỐT: **Vite + React 19 SPA + TanStack Router (KHÔNG Next.js)** · **Drizzle (KHÔNG Prisma)** · **Valkey** · **Vitest**. Nguồn chuẩn: [DECISIONS-02](../DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md).
 
 # FRONTEND-01: FRONTEND ARCHITECTURE & PROJECT SETUP
 # KIẾN TRÚC FRONTEND & THIẾT LẬP DỰ ÁN
@@ -185,8 +185,9 @@ Layout dùng chung
 
 | Nhóm | Công nghệ đề xuất | Vai trò |
 | --- | --- | --- |
-| Framework | Next.js App Router | Routing, layout, SSR/CSR linh hoạt |
-| UI runtime | React | Component model |
+| Build tool | Vite | Dev server + bundle SPA nhanh |
+| Router | TanStack Router | Type-safe routing, nested layout, route tree |
+| UI runtime | React 19 | Component model |
 | Language | TypeScript | Type safety |
 | Styling | Tailwind CSS + CSS Variables | Utility-first + design token |
 | UI primitive | Radix UI hoặc shadcn/ui | Accessible base component |
@@ -202,7 +203,9 @@ Layout dùng chung
 | E2E | Playwright | Test user flow |
 | Component docs | Storybook | Tài liệu component và visual review |
 
-### 7.2 Lý do chọn Next.js App Router
+### 7.2 Lý do chọn Vite SPA + TanStack Router
+
+Dự án **cấm Next.js**: SSR render dữ liệu nhạy cảm phía server → rủi ro rò khi quyền/masking lệch. Mô hình an toàn là **SPA + permission-gate + masking server-side** (DECISIONS-02 §1, ADR-0006/0015). Vite cho dev server và bundle nhanh; TanStack Router cho routing type-safe.
 
 Hệ thống có nhiều layout nested:
 
@@ -213,24 +216,24 @@ ModuleWorkspaceLayout
 DashboardLayout
 ```
 
-Next.js App Router phù hợp vì có thể tổ chức route theo layout group, route segment và nested layout.
+TanStack Router phù hợp vì route tree biểu diễn được layout lồng nhau (parent route mang layout, child route render trong `<Outlet/>`), tách public/protected qua route nhánh.
 
-Ví dụ:
+Ví dụ (route tree):
 
 ```text
-app/
-  (public)/
-    login/
-    forgot-password/
-  (protected)/
-    home/
-    dashboard/
-    hr/
-    attendance/
-    leave/
-    tasks/
-    notifications/
-    system/
+__root__                 -> AppProviders + <Outlet/>
+  /(public)              -> AuthLayout
+    /login
+    /forgot-password
+  /(protected)           -> ModuleWorkspaceLayout (guard auth)
+    /home
+    /dashboard
+    /hr
+    /attendance
+    /leave
+    /tasks
+    /notifications
+    /system
 ```
 
 ### 7.3 Lý do chọn TanStack Query
@@ -270,7 +273,8 @@ React Hook Form xử lý form-state tốt, còn Zod giúp chuẩn hóa schema va
 ### 8.1 Stack MVP mặc định
 
 ```text
-Next.js + React + TypeScript
+Vite + React 19 + TypeScript
+TanStack Router
 Tailwind CSS + CSS Variables
 TanStack Query
 React Hook Form + Zod
@@ -436,69 +440,47 @@ VITE_ENABLE_DEBUG_PANEL="true"
 
 ```text
 src/
-  app/
+  routes/                          # cây route TanStack Router (file-based)
+    __root.tsx                     # root route: AppProviders + <Outlet/>
     (public)/
-      login/
-        page.tsx
-      forgot-password/
-        page.tsx
-      reset-password/
-        page.tsx
+      route.tsx                    # AuthLayout
+      login.tsx
+      forgot-password.tsx
+      reset-password.tsx
     (protected)/
-      layout.tsx
-      home/
-        page.tsx
+      route.tsx                    # ModuleWorkspaceLayout + guard auth
+      home.tsx
       dashboard/
-        page.tsx
-        employee/
-          page.tsx
-        manager/
-          page.tsx
-        hr/
-          page.tsx
-        admin/
-          page.tsx
+        index.tsx
+        employee.tsx
+        manager.tsx
+        hr.tsx
+        admin.tsx
       hr/
-        page.tsx
+        index.tsx
         employees/
-          page.tsx
-          [employeeId]/
-            page.tsx
+          index.tsx
+          $employeeId.tsx
       attendance/
-        page.tsx
-        today/
-          page.tsx
-        records/
-          page.tsx
+        index.tsx
+        today.tsx
+        records.tsx
       leave/
-        page.tsx
+        index.tsx
         me/
-          requests/
-            page.tsx
-          balances/
-            page.tsx
+          requests.tsx
+          balances.tsx
         requests/
-          new/
-            page.tsx
-          [requestId]/
-            page.tsx
-        approvals/
-          page.tsx
+          new.tsx
+          $requestId.tsx
+        approvals.tsx
       tasks/
-        page.tsx
-        my-tasks/
-          page.tsx
-        projects/
-          page.tsx
-        kanban/
-          page.tsx
-      notifications/
-        page.tsx
-      system/
-        page.tsx
-    api/
-      health/
-        route.ts
+        index.tsx
+        my-tasks.tsx
+        projects.tsx
+        kanban.tsx
+      notifications.tsx
+      system.tsx
   components/
     ui/
     forms/
@@ -532,7 +514,7 @@ src/
     auth/
     storage/
     telemetry/
-  routes/
+  registry/
     appRegistry.ts
     routeRegistry.ts
     sidebarRegistry.ts
@@ -555,13 +537,13 @@ src/
 
 | Folder | Vai trò |
 | --- | --- |
-| `app` | Route entry, page, layout theo Next.js |
+| `routes` | Cây route TanStack Router (route entry + layout route) |
 | `components` | Component dùng chung, không chứa business module sâu |
 | `layouts` | Layout shell lớn: Auth, Home, Workspace |
 | `modules` | Feature module: UI, hooks, service, schema riêng của từng module |
 | `providers` | Provider toàn app |
 | `services` | API client, auth service, storage service |
-| `routes` | Metadata app/route/sidebar/action |
+| `registry` | Metadata app/route/sidebar/action |
 | `stores` | Client-state nhỏ |
 | `lib` | Helper thuần, không phụ thuộc React nếu có thể |
 | `types` | Type dùng chung |
@@ -608,7 +590,7 @@ modules/leave/
 
 Nguyên tắc:
 
-1. `pages` chứa component màn hình lớn, được import bởi Next.js page entry.
+1. `pages` chứa component màn hình lớn, được import bởi route entry trong cây `src/routes/`.
 2. `components` chứa component module-specific.
 3. `hooks` chứa hook query/mutation module.
 4. `services` chứa API function và query key.
@@ -1765,7 +1747,7 @@ Test component:
 
 | Mã | Công việc | Kết quả |
 | --- | --- | --- |
-| FE01-SETUP-001 | Init Next.js App Router + TypeScript | Project chạy local |
+| FE01-SETUP-001 | Init Vite + React 19 SPA + TanStack Router + TypeScript | Project chạy local |
 | FE01-SETUP-002 | Cấu hình Tailwind | `globals.css`, token base |
 | FE01-SETUP-003 | Cấu hình path alias `@/*` | Import gọn |
 | FE01-SETUP-004 | Cấu hình ESLint/Prettier | Lint/format chạy được |

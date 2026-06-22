@@ -287,7 +287,7 @@ Trong MVP, có thể chỉ ghi in-app notification hoặc audit log. Email có t
   "success": false,
   "message": "Bạn không có quyền thực hiện thao tác này",
   "error": {
-    "code": "AUTH-ERR-403",
+    "code": "AUTH-ERR-FORBIDDEN",
     "type": "ForbiddenError",
     "details": null
   },

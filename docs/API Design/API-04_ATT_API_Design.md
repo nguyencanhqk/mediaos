@@ -234,7 +234,7 @@ Tất cả response tuân thủ API-01.
   "success": false,
   "message": "Bạn không có quyền thực hiện thao tác này",
   "error": {
-    "code": "AUTH-ERR-403",
+    "code": "AUTH-ERR-FORBIDDEN",
     "type": "ForbiddenError",
     "details": null
   },

@@ -1,4 +1,4 @@
-> ⚠️ **ĐÍNH CHÍNH STACK (bắt buộc) — đọc trước:** Tài liệu này có thể còn nhắc Next.js/Prisma (lỗi thời). Stack đã CHỐT: **Vite + React 19 SPA + TanStack Router (KHÔNG Next.js)** · **Drizzle (KHÔNG Prisma)** · **Valkey** · **Vitest**. Các token an toàn đã thay inline; phần khái niệm lấy [DECISIONS-02](../DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md) làm chuẩn.
+> ✅ **ĐÍNH CHÍNH STACK (đã đồng bộ body 22/06):** Tài liệu này đã được dọn về stack CHỐT: **Vite + React 19 SPA + TanStack Router (KHÔNG Next.js)** · **Drizzle + drizzle-kit (KHÔNG Prisma)** · **Valkey** · **Vitest**. Nguồn chuẩn: [DECISIONS-02](../DECISIONS/DECISIONS-02_Stack_Lock_And_Invariants.md).
 
 # IMPLEMENTATION-04: Sprint 1 Foundation, Environment & Core Infrastructure Execution Plan
 # KẾ HOẠCH THỰC THI SPRINT 1 - NỀN TẢNG, MÔI TRƯỜNG & HẠ TẦNG LÕI
@@ -183,7 +183,7 @@ Các thao tác quan trọng như login, thay đổi setting, tạo user, cập n
 | Auth skeleton | Login/logout/refresh/me skeleton hoặc mock-real hybrid, password hash, session/token strategy nền |
 | RBAC skeleton | Permission resolver, data scope resolver, guard decorator/middleware skeleton |
 | Foundation service | Audit service, setting service, sequence service, file metadata service skeleton |
-| Frontend shell | Next.js/React app shell, public/protected route, Home Portal placeholder, Module Workspace placeholder |
+| Frontend shell | Vite + React 19 SPA shell (TanStack Router), public/protected route, Home Portal placeholder, Module Workspace placeholder |
 | Frontend permission | Auth context, permission checker, route guard, app/sidebar registry skeleton |
 | API client | Client wrapper, response/error type, token injection placeholder, query provider, mock support |
 | CI | Lint, typecheck, unit test, build, migration smoke test ở mức cơ bản |
@@ -233,10 +233,10 @@ Các thao tác quan trọng như login, thay đổi setting, tạo user, cập n
 | Sprint length | 2 tuần (10 ngày làm việc) là chuẩn cho đủ deliverable; biến thể 1 tuần (5 ngày) chỉ dùng cho skeleton-only/giảm scope |
 | Team | Backend, Frontend, QA, DevOps, Product/BA tham gia review |
 | Database | PostgreSQL là database chính |
-| Frontend | Next.js/React/TypeScript theo stack đã chốt trong FRONTEND-01 |
-| Backend | Stack đã được **khóa cứng trong BACKEND-01**: NestJS + TypeScript, Prisma ORM, PostgreSQL + UUID, Valkey cache, test bằng Vitest + Supertest, API base path `/api/v1`. Sprint 1 **CONFIRM** (không quyết định lại) stack này. |
+| Frontend | Vite + React 19 SPA + TanStack Router/TypeScript theo stack đã chốt trong FRONTEND-01 |
+| Backend | Stack đã được **khóa cứng trong BACKEND-01**: NestJS + TypeScript, Drizzle + drizzle-kit, PostgreSQL + UUID, Valkey cache, test bằng Vitest + Supertest, API base path `/api/v1`. Sprint 1 **CONFIRM** (không quyết định lại) stack này. |
 
-> **Lưu ý stack (đã khóa, không phải quyết định trong Sprint 1):** Backend stack đã được chốt trong **BACKEND-01** — NestJS + TypeScript, Prisma ORM, PostgreSQL với khóa chính UUID, Valkey làm cache/session, test bằng Vitest + Supertest, API base path `/api/v1`. Sprint 1 chỉ có nhiệm vụ **xác nhận (CONFIRM)** và hiện thực hóa stack này, không tranh luận lại lựa chọn framework/ORM/test runner. Mọi chỗ trong tài liệu này còn ghi "nếu đã có", "mono hoặc multi", "chọn migration tool" được hiểu theo nghĩa hiện thực hóa quyết định đã chốt, không phải mở lại quyết định kiến trúc.
+> **Lưu ý stack (đã khóa, không phải quyết định trong Sprint 1):** Backend stack đã được chốt trong **BACKEND-01** — NestJS + TypeScript, Drizzle + drizzle-kit, PostgreSQL với khóa chính UUID, Valkey làm cache/session, test bằng Vitest + Supertest, API base path `/api/v1`. Sprint 1 chỉ có nhiệm vụ **xác nhận (CONFIRM)** và hiện thực hóa stack này, không tranh luận lại lựa chọn framework/ORM/test runner. Mọi chỗ trong tài liệu này còn ghi "nếu đã có", "mono hoặc multi", "chọn migration tool" được hiểu theo nghĩa hiện thực hóa quyết định đã chốt, không phải mở lại quyết định kiến trúc.
 | Auth | Access token + refresh token là cơ chế xác thực MVP |
 | Deployment | Sprint 1 tối thiểu có local và development; staging có thể chuẩn bị skeleton |
 | Data thật | Không import dữ liệu thật trong Sprint 1 |
@@ -512,7 +512,7 @@ M00 enable extensions
 
 ### 13.7 Task checklist
 
-- [ ] Xác nhận migration tool theo BACKEND-01 (Prisma Migrate).
+- [ ] Xác nhận migration tool theo BACKEND-01 (Drizzle + drizzle-kit).
 - [ ] Tạo migration folder convention.
 - [ ] Tạo migration table/history nếu tool cần.
 - [ ] Tạo migration M00 enable extensions.
@@ -940,7 +940,7 @@ Tạo app frontend chạy được với route shell, provider, layout và place
 
 | Nhóm | Nội dung |
 | --- | --- |
-| App runtime | Next.js/React/TypeScript project setup hoặc stack đã chốt |
+| App runtime | Vite + React 19 SPA + TanStack Router/TypeScript theo stack đã chốt |
 | Providers | QueryProvider, AuthProvider, PermissionProvider, ThemeProvider, ToastProvider |
 | Public routes | Login, forgot password, reset password placeholder |
 | Protected routes | Protected layout, auth bootstrap boundary |
