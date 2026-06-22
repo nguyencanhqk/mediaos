@@ -841,6 +841,13 @@
       "when": 1717500540000,
       "tag": "0436_foundation_dbfix1_company_id_immutable",
       "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1717500550000,
+      "tag": "0437_be2_audit_sequence_counter",
+      "breakpoints": true
     }
   ]
 }
