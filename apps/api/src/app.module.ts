@@ -27,9 +27,6 @@ import { SecurityPolicyModule } from "./security-policy/security-policy.module";
 import { UserInvitesModule } from "./user-invites/user-invites.module";
 import { SchedulerModule } from "./scheduler/scheduler.module";
 import { RecycleBinModule } from "./recycle-bin/recycle-bin.module";
-import { ApiKeyAuthGuard } from "./api-keys/guards/api-key-auth.guard";
-import { ApiKeyRepository } from "./api-keys/api-keys.repository";
-import { TokenService } from "./auth/token.service";
 import { JwtAuthGuard } from "./permission/guards/jwt-auth.guard";
 import { CompanyGuard } from "./permission/guards/company.guard";
 import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
@@ -60,7 +57,8 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     ChatModule,
     RealtimeModule,
     DashboardModule,
-    // AC-5 API key / PAT (exports ApiKeyRepository cho ApiKeyAuthGuard global bên dưới)
+    // AC-5 API key / PAT — out-of-scope (de-media-fy). Guard global đã GỠ ở CLEAN-DECOUPLE-1;
+    // module giữ tạm tới CLEAN-BE-2 (gỡ hẳn cùng console FE). KHÔNG còn provider nào dùng ApiKeyRepository.
     ApiKeysModule,
     // CS-8 Cấu hình mail server SMTP (per-company scope; SMTP password envelope-KMS, sensitive).
     MailConfigModule,
@@ -75,21 +73,13 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
   ],
   providers: [
     // Global guard pipeline (THỨ TỰ QUAN TRỌNG):
-    //   ApiKeyAuthGuard (AC-5) — chạy ĐẦU: nếu Bearer là PAT (mok_) → verify + set req.user{viaApiKey}.
-    //     Token KHÔNG phải mok_ (JWT thường) / header vắng → PASS-THROUGH (KHÔNG nuốt JWT) cho JwtAuthGuard.
-    //   JwtAuthGuard — nếu req.user đã set bởi ApiKeyAuthGuard (viaApiKey) → bỏ qua verify JWT; ngược lại
-    //     verify Bearer access token như cũ (đường JWT y nguyên).
-    //   CompanyGuard — req.user.companyId đã có (từ key hoặc JWT) → pass.
-    //   TwoFactorEnforcementGuard — PAT (viaApiKey) bỏ qua 2FA-enrollment (không phải phiên người).
+    //   JwtAuthGuard — verify Bearer access token (đường JWT là đường auth DUY NHẤT).
+    //   CompanyGuard — req.user.companyId đã có (từ JWT) → pass.
+    //   TwoFactorEnforcementGuard — enforce 2FA-enrollment cho phiên người.
     //   PermissionGuard KHÔNG global — add @RequirePermission per-route.
     //
-    // ApiKeyAuthGuard cần ApiKeyAuthLookup → bind ApiKeyRepository (export từ ApiKeysModule).
-    {
-      provide: APP_GUARD,
-      useFactory: (tokens: TokenService, repo: ApiKeyRepository) =>
-        new ApiKeyAuthGuard(tokens, repo),
-      inject: [TokenService, ApiKeyRepository],
-    },
+    // CLEAN-DECOUPLE-1 (de-media-fy): GỠ ApiKeyAuthGuard (đường PAT mok_ = out-of-scope, api-keys gỡ ở BE-2).
+    //   Token không-JWT (kể cả mok_) rơi vào JwtAuthGuard → verify thất bại → 401 (fail-closed, không lọt).
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: CompanyGuard },
     { provide: APP_GUARD, useClass: TwoFactorEnforcementGuard },
