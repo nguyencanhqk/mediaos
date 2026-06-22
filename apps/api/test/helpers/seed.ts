@@ -346,6 +346,41 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   if (companyIds.length === 0) return;
   const ids = [companyIds];
 
+  // ── FOUNDATION-DB-3 (mig 0433) — files / file_links / file_access_logs ─────
+  // file_access_logs.file_id → files (CASCADE); file_links.file_id → files (CASCADE).
+  // files.uploaded_by → users (RESTRICT) → xoá TRƯỚC users (phải ở đầu hàm).
+  // Thứ tự: file_access_logs → file_links → files (con → cha).
+  await direct.query("DELETE FROM file_access_logs WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM file_links WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM files WHERE company_id = ANY($1::uuid[])", ids);
+
+  // ── FOUNDATION-DB-5 (mig 0435) — seed_items → seed_batches ─────────────────
+  // seed_items.seed_batch_id → seed_batches (ON DELETE CASCADE) → xoá items TRƯỚC batches.
+  await direct.query("DELETE FROM seed_items WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM seed_batches WHERE company_id = ANY($1::uuid[])", ids);
+
+  // ── FOUNDATION-DB-5 (mig 0435) — data_retention_policies ───────────────────
+  // company_id NULLABLE (CASCADE companies) — xoá tenant rows (company_id = ANY(...)) only.
+  await direct.query(
+    "DELETE FROM data_retention_policies WHERE company_id = ANY($1::uuid[])",
+    ids,
+  );
+
+  // ── FOUNDATION-DB-4 (mig 0434) — sequence_counters / public_holidays ────────
+  // company_id NULLABLE (CASCADE companies) — xoá tenant rows only.
+  await direct.query(
+    "DELETE FROM sequence_counters WHERE company_id = ANY($1::uuid[])",
+    ids,
+  );
+  await direct.query(
+    "DELETE FROM public_holidays WHERE company_id = ANY($1::uuid[])",
+    ids,
+  );
+
+  // ── FOUNDATION-DB-1 (mig 0431) — company_settings ───────────────────────────
+  // company_id NOT NULL (CASCADE companies) — xoá tường minh TRƯỚC companies.
+  await direct.query("DELETE FROM company_settings WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G6-2 PR-B Break-glass ───────────────────────────────────────────────────
   // break_glass_approvals.grant_id → break_glass_grants (CASCADE) → xoá approvals TRƯỚC grants.
   // break_glass_grants.platform_account_id → platform_accounts (CASCADE) + requester/revoked_by → users

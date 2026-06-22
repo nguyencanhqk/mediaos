@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { and, eq, sql } from "drizzle-orm";
-import { DatabaseService } from "../../db/db.service";
+import { DatabaseService, type TenantTx } from "../../db/db.service";
 import { seedBatches, seedItems } from "../../db/schema/seed-tracking";
 import { computeChecksum } from "./seed-checksum.util";
 import type {
@@ -43,7 +43,7 @@ export class SeedTrackingService {
       input;
 
     return this.db.withTenant(companyId, async (tx) => {
-      const inserted = await (tx as typeof tx & { insert: Function })
+      const inserted = await tx
         .insert(seedBatches)
         .values({
           companyId,
@@ -73,7 +73,7 @@ export class SeedTrackingService {
       }
 
       // ON CONFLICT DO NOTHING → returning() rỗng → batch đã tồn tại → SELECT-back.
-      const existing = await (tx as typeof tx & { select: Function })
+      const existing = await tx
         .select()
         .from(seedBatches)
         .where(
@@ -122,7 +122,7 @@ export class SeedTrackingService {
 
     return this.db.withTenant(companyId, async (tx) => {
       // Check existing item.
-      const existing = await (tx as typeof tx & { select: Function })
+      const existing = await tx
         .select()
         .from(seedItems)
         .where(
@@ -136,7 +136,7 @@ export class SeedTrackingService {
 
       if (existing.length === 0) {
         // Item chưa có → INSERT.
-        const inserted = await (tx as typeof tx & { insert: Function })
+        const inserted = await tx
           .insert(seedItems)
           .values({
             seedBatchId: batchId,
@@ -171,7 +171,7 @@ export class SeedTrackingService {
       }
 
       // Checksum đổi → Update.
-      const updated = await (tx as typeof tx & { update: Function })
+      const updated = await tx
         .update(seedItems)
         .set({
           operation: "Update" as SeedItemOperation,
@@ -198,7 +198,7 @@ export class SeedTrackingService {
     const { companyId, batchId, targetTable, targetKey, reason, targetId } = input;
 
     return this.db.withTenant(companyId, async (tx) => {
-      const inserted = await (tx as typeof tx & { insert: Function })
+      const inserted = await tx
         .insert(seedItems)
         .values({
           seedBatchId: batchId,
@@ -228,7 +228,7 @@ export class SeedTrackingService {
       input;
 
     return this.db.withTenant(companyId, async (tx) => {
-      const inserted = await (tx as typeof tx & { insert: Function })
+      const inserted = await tx
         .insert(seedItems)
         .values({
           seedBatchId: batchId,
@@ -257,7 +257,7 @@ export class SeedTrackingService {
    */
   async finishBatch(companyId: string, batchId: string): Promise<FinishBatchResult> {
     return this.db.withTenant(companyId, async (tx) => {
-      const items = await (tx as typeof tx & { select: Function })
+      const items = await tx
         .select()
         .from(seedItems)
         .where(eq(seedItems.seedBatchId, batchId))
@@ -267,7 +267,7 @@ export class SeedTrackingService {
       const batchStatus: SeedBatchStatus = hasFailed ? "Failed" : "Success";
       const finishedAt = new Date();
 
-      await (tx as typeof tx & { update: Function })
+      await tx
         .update(seedBatches)
         .set({ status: batchStatus, finishedAt, updatedAt: finishedAt })
         .where(eq(seedBatches.id, batchId))
@@ -279,12 +279,12 @@ export class SeedTrackingService {
   }
 
   private async _getItemId(
-    tx: unknown,
+    tx: TenantTx,
     batchId: string,
     targetTable: string,
     targetKey: string,
   ): Promise<string> {
-    const rows = await (tx as typeof tx & { select: Function })
+    const rows = await tx
       .select()
       .from(seedItems)
       .where(
