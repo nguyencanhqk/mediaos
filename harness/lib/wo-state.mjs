@@ -12,19 +12,36 @@
 //
 // Dùng bởi: dashboard/server.mjs · gen-status.mjs · .claude/hooks/guard-scope.mjs · guard-claim.mjs · finish.sh
 
-import { readEvents, appendEvent } from '../ledger.mjs';
+import { readEvents, appendEvent } from "../ledger.mjs";
 
 // Phân loại type sự kiện → "rổ" trạng thái. Sự kiện sau (theo thứ tự append) THẮNG → reopen-sau-block tự đúng.
-const DONE = new Set(['finished', 'done', 'committed', 'pr_opened']);
-const BLOCKED = new Set(['needs_human', 'stopped_red', 'evaluate_block', 'blocked', 'stopped']);
+const DONE = new Set(["finished", "done", "committed", "pr_opened"]);
+const BLOCKED = new Set(["needs_human", "stopped_red", "evaluate_block", "blocked", "stopped"]);
+// 'reopened'/'reset' = MỞ LẠI: gỡ WO khỏi overlay ⇒ về lại status literal (thường 'todo') để loop re-pick được.
+//   Vẫn append-only mà reset được: event sau THẮNG, nên 'reopened' đặt SAU 'blocked'/'started' mồ côi ⇒ map.delete.
+const REOPEN = new Set(["reopened", "reset"]);
 // 'skipped' = bỏ qua (không đổi status, giữ literal). Còn lại (started/milestone/verified/…) ⇒ in_progress.
+// QUAN TRỌNG: auto-loop ghi outcome THẬT (needs_human/plan_block/stopped…) DƯỚI type 'finished' + detail.
+//   Nếu chỉ nhìn type ⇒ xếp nhầm vào 'done' (FALSE-DONE — đúng cái harness phải tránh). Nên xét detail:
+const BLOCK_DETAIL = /^\s*(needs_human|plan_block|stopped_red|evaluate_block|blocked|stopped)\b/i;
 
 // Map<woId, 'in_progress'|'done'|'blocked'> — chỉ chứa WO có sự kiện vòng đời trong ledger.
 export function statusOverlay() {
   const map = new Map();
   for (const e of readEvents()) {
-    if (!e || !e.wo || !e.type || e.type === 'skipped') continue;
-    const bucket = DONE.has(e.type) ? 'done' : BLOCKED.has(e.type) ? 'blocked' : 'in_progress';
+    if (!e || !e.wo || !e.type || e.type === "skipped") continue;
+    if (REOPEN.has(e.type)) {
+      map.delete(e.wo);
+      continue;
+    } // mở lại ⇒ về literal (todo)
+    // detail báo chặn THẮNG type: 'finished — needs_human' là blocked, KHÔNG phải done.
+    const bucket = BLOCK_DETAIL.test(e.detail || "")
+      ? "blocked"
+      : DONE.has(e.type)
+        ? "done"
+        : BLOCKED.has(e.type)
+          ? "blocked"
+          : "in_progress";
     map.set(e.wo, bucket); // chronological (append-only) ⇒ last-wins
   }
   return map;
@@ -41,22 +58,22 @@ export function applyStatus(backlog, ov = statusOverlay()) {
 }
 
 export function anyInProgress(backlog, ov = statusOverlay()) {
-  return backlog.some((b) => effectiveStatusOf(b, ov) === 'in_progress');
+  return backlog.some((b) => effectiveStatusOf(b, ov) === "in_progress");
 }
 
 // glob (chỉ ** và *) → RegExp khớp toàn chuỗi, dùng '/'. (Cùng quy ước với guard-scope.)
 function globToRe(g) {
-  const esc = g.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-  const re = esc.replace(/\*\*/g, ' ').replace(/\*/g, '[^/]*').replace(/ /g, '.*');
-  return new RegExp('^' + re + '$');
+  const esc = g.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  const re = esc.replace(/\*\*/g, " ").replace(/\*/g, "[^/]*").replace(/ /g, ".*");
+  return new RegExp("^" + re + "$");
 }
 
 // Các WO 'todo' + READY (depends_on đã done theo status hiệu dụng) mà `rel` rơi vào paths.
 function readyTodoMatches(backlog, rel, ov = statusOverlay()) {
   const byId = Object.fromEntries(backlog.map((b) => [b.id, b]));
-  const isDone = (id) => !byId[id] || effectiveStatusOf(byId[id], ov) === 'done';
+  const isDone = (id) => !byId[id] || effectiveStatusOf(byId[id], ov) === "done";
   return backlog.filter((b) => {
-    if (effectiveStatusOf(b, ov) !== 'todo') return false;
+    if (effectiveStatusOf(b, ov) !== "todo") return false;
     if (!(b.depends_on || []).every(isDone)) return false; // chỉ READY
     return (b.paths || []).some((p) => globToRe(p).test(rel));
   });
@@ -70,6 +87,6 @@ export function autoStartOnTouch(backlog, rel, by) {
   const cands = readyTodoMatches(backlog, rel, ov);
   if (cands.length !== 1) return null; // mơ hồ → bỏ qua
   const wo = cands[0];
-  appendEvent({ wo: wo.id, type: 'started', detail: `auto: chạm ${rel}`, by: by || undefined });
+  appendEvent({ wo: wo.id, type: "started", detail: `auto: chạm ${rel}`, by: by || undefined });
   return wo;
 }

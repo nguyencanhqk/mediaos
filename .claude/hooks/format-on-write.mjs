@@ -5,6 +5,7 @@
 
 import process from "node:process";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 
 // LƯU Ý: KHÔNG format .md/.mdx. Prettier reflow prose + bỏ dấu <> trong link markdown,
 // làm file đổi trên đĩa sau mỗi edit → snapshot read của Claude bị "cũ" → edit nối tiếp trượt
@@ -24,12 +25,24 @@ try {
   const file = input?.tool_input?.file_path ?? "";
   if (!file || !FMT_EXT.test(file) || SKIP_PATH.test(file)) process.exit(0);
 
-  const res = spawnSync("npx", ["prettier", "--write", file], {
+  // Resolve prettier CỤC BỘ — KHÔNG dùng `npx` (npx re-resolve mỗi lần gọi + treo vô hạn
+  // trên Windows / khi nhiều edit liên tiếp → chặn PostToolUse → ĐƠ CẢ VÒNG LẶP).
+  let prettierBin;
+  try {
+    prettierBin = createRequire(import.meta.url).resolve("prettier/bin/prettier.cjs");
+  } catch {
+    process.exit(0); // không có prettier cục bộ → fail-open
+  }
+
+  const res = spawnSync(process.execPath, [prettierBin, "--write", file], {
     stdio: ["ignore", "ignore", "pipe"],
-    shell: process.platform === "win32",
     encoding: "utf8",
+    timeout: 15000, // CỨNG: treo >15s → SIGKILL + fail-open, KHÔNG BAO GIỜ chặn vòng lặp
+    killSignal: "SIGKILL",
   });
-  if (res.status !== 0 && res.stderr) {
+  if (res.error && res.error.code === "ETIMEDOUT") {
+    process.stderr.write(`⚠️  format-on-write: prettier timeout >15s, bỏ qua ${file}\n`);
+  } else if (res.status !== 0 && res.stderr) {
     process.stderr.write(`⚠️  format-on-write: prettier bỏ qua ${file}\n`);
   }
   process.exit(0);
