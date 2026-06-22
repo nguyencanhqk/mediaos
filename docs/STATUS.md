@@ -1,43 +1,58 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-06-21 08:24Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-06-22 18:26Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🟢 S0-GOV-1 — Governance: chuẩn hoá board/label/DoR/DoD + chốt backlog harness theo ISSUE-BOARD-01 (master-plan pointer)
+- **zone**: green
+- **sửa ở đâu (paths)**: `harness/**`, `docs/plans/**`, `docs/STATUS.md`, `.claude/**`
+- **done_when (đích hội tụ)**:
+  - [ ] backlog.mjs + docs/plans/MVP-MASTER-PLAN.md phản ánh đúng kế hoạch mới (7 sprint, pull-sprint policy); STATUS regen khớp
+  - [ ] DoR/DoD + label taxonomy (module/layer/priority/sprint/scope) ghi rõ ở master-plan, trace về ISSUE-BOARD-01
+  - [ ] mọi WO trong file này có src[] trace về docs nguồn (ISSUE-BOARD §5.2)
+
+### 🟢 S0-FE-API-1 — Đối chiếu API client + query layer + error mapper (401/403/422/500 · request-id · idempotency) với FRONTEND-04
+- **zone**: green · **skills**: code-review
+- **sửa ở đâu (paths)**: `packages/web-core/**`
+- **phụ thuộc**: S0-API-CORE-1⏳
+- **done_when (đích hội tụ)**:
+  - [ ] api-client inject token + map 401(refresh)/403(forbidden)/422(validation)/500; gắn request-id + idempotency-key
+  - [ ] query/cache layer (TanStack Query) + invalidation; validate response bằng Zod contracts
+  - [ ] web-core test xanh
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
-- 🔴 `PERM-UI-1` ③ Phân quyền: giữ engine 4-tier, wire Tier-2 scope nếu cần + redesign role/permission UI
-- 🔴 `TRIM-1` Trim chức năng hướng cũ: gỡ/park media·workflow-DAG·defect·template-clone·recycle-bin không thuộc spec MVP
-- 🔴 `FOUNDATION-DB-1` Migration system_settings + company_settings (RLS+FORCE) theo DB-08 §8.3/8.4
-- 🔴 `FOUNDATION-DB-2` Migration audit_logs nâng cấp về DB-08 shape (giữ append-only) hoặc bảng audit chuẩn
-- 🔴 `FOUNDATION-DB-3` Migration files + file_links + file_access_logs (RLS+FORCE, polymorphic có kiểm soát) theo DB-08 §8.6-8.8
-- 🔴 `FOUNDATION-DB-4` Migration sequence_counters + public_holidays (RLS+FORCE, company_id nullable cho global) theo DB-08 §8.9-8.10
+- 🔴 `S0-FND-SEED-1` Seed module catalog (MVP active · Phase inactive) + default system/company settings idempotent (ON CONFLICT)
+- 🟡 `S0-QA-1` Test strategy + verify migrate/seed từ DB trống + test-case matrix skeleton (QA-01/02)
+- 🔴 `S1-FND-AUDIT-1` AuditService v2 (DB-08 shape) + AuditMaskerService + audit-list/detail API theo permission+data-scope (append-only)
+- 🔴 `S1-FND-SEQ-1` SequenceService.nextCode (tx + FOR UPDATE) + preview (không tăng) + reset_policy; concurrency 0-dup
 
 **CHỜ (kẹt phụ thuộc):**
-- `APP-MERGE-1` Dựng apps/app (shell hợp nhất) cho module MVP: HR · ATT · LEAVE · TASK · DASH · NOTI (theo docs/spec/) ⏳ cần: PERM-UI-1
-- `FOUNDATION-DB-5` Migration data_retention_policies + seed_batches + seed_items + seed modules catalog/permission/system_settings (idempotent) ⏳ cần: FOUNDATION-DB-1
-- `FOUNDATION-BE-1` SettingService: precedence company→system→default + /settings/public (lọc is_public, mask is_sensitive) + admin update có audit ⏳ cần: FOUNDATION-DB-1, FOUNDATION-BE-3
-- `FOUNDATION-BE-2` SequenceService.nextCode transaction + FOR UPDATE row lock + preview (không tăng) + ensureCounter ⏳ cần: FOUNDATION-DB-4
-- `FOUNDATION-BE-3` AuditService v2 (DB-08 shape) + AuditMaskerService + audit-list/detail API theo permission+scope ⏳ cần: FOUNDATION-DB-2
-- `FOUNDATION-BE-4` FileService: upload metadata + StorageAdapter port + link/unlink + download-qua-backend + file_access_log ⏳ cần: FOUNDATION-DB-3, FOUNDATION-BE-3, FOUNDATION-BE-5
-- `FOUNDATION-BE-5` FilePolicyService + FileOwnerPermissionResolver registry (deny-by-default, dispatch theo module_code/entity_type) ⏳ cần: FOUNDATION-DB-3
-- `FOUNDATION-BE-6` HolidayService: CRUD public_holidays + isWorkingDay (global+company override) + getHolidaysInRange + internal contract cho ATT/LEAVE ⏳ cần: FOUNDATION-DB-4
-- `FOUNDATION-BE-7` CompanyService /company/current (GET/PATCH có audit) + ModuleCatalogService my-apps (lọc theo permission+module active+setting) ⏳ cần: FOUNDATION-DB-5, FOUNDATION-BE-3
-- `FOUNDATION-BE-8` SeedTrackingService idempotent + RetentionService CRUD + cleanup job skeleton (dry-run, không xóa thật) ⏳ cần: FOUNDATION-DB-5
-- `FOUNDATION-BE-9` FoundationModule + foundation contracts (Zod DTO) + wire vào app.module.ts (additive) ⏳ cần: FOUNDATION-BE-1, FOUNDATION-BE-3, FOUNDATION-BE-4, FOUNDATION-BE-6, FOUNDATION-BE-7
-- `FOUNDATION-QA-1` QA hardening Foundation: permission/scope + file security + sequence concurrency + audit masking + public settings leak ⏳ cần: FOUNDATION-BE-1, FOUNDATION-BE-2, FOUNDATION-BE-3, FOUNDATION-BE-4, FOUNDATION-BE-6, FOUNDATION-BE-7, FOUNDATION-BE-8
+- `S0-CI-2` CI security gates: secret-scan (gitleaks/trufflehog) + dependency-scan (pnpm audit) theo DEVOPS-02 §9.2/§11/§17.2 ⏳ cần: S0-CI-1
+- `S1-FND-SETTING-1` SettingService: precedence company→system→default + /settings/public (lọc is_public, mask is_sensitive) + admin update có audit ⏳ cần: S1-FND-AUDIT-1
+- `S1-FND-FILE-1` FileService: upload metadata + StorageAdapter port + FilePolicy (deny-by-default) + link/unlink + download-qua-backend + file_access_log ⏳ cần: S1-FND-AUDIT-1
+- `S1-FND-MODULE-1` CompanyService /company/current (GET/PATCH có audit) + ModuleCatalogService /modules/my-apps (lọc permission+active+setting) ⏳ cần: S0-FND-SEED-1, S1-FND-AUDIT-1
+- `S1-FND-WIRE-1` FoundationModule gom (company·module-catalog·settings·audit·files·sequence·holidays·retention·seed) + foundation contracts (Zod) + wire app.module additive ⏳ cần: S1-FND-AUDIT-1, S1-FND-SETTING-1, S1-FND-FILE-1, S1-FND-SEQ-1, S1-FND-MODULE-1
+- `S1-FE-LAYOUT-1` FE shell: Home Portal + App Switcher + Module Workspace layout (topbar/sidebar, permission-based app visibility, dirty-form guard) ⏳ cần: S0-FE-CORE-1
+- `S1-FE-REGISTRY-1` App/route/sidebar registry (permission-driven; metadata permission/scope/module/status — KHÔNG hard-code role) ⏳ cần: S0-FE-CORE-1
+- `S1-QA-FND-1` QA hardening Foundation: permission/scope + file security + sequence concurrency + audit masking + public-settings leak + append-only ⏳ cần: S1-FND-AUDIT-1, S1-FND-SETTING-1, S1-FND-FILE-1, S1-FND-SEQ-1, S1-FND-MODULE-1
 
-**Đã xong (v2):** `HARNESS-SPINE`, `FE-AUTH-1`, `ACCT-1`, `ACCT-2`, `ACCT-2-FE`, `AUTH-FIX-1`, `CONSOLE-1`, `AI-1`
+**🛑 BLOCKED:**
+- `S0-CI-1` CI BE/FE: đối chiếu lint·typecheck·test·build + migration-check + path-filter (api/auth/console/app) với DEVOPS-02
+- `S0-AUTH-DB-1` Đối chiếu AUTH/RBAC schema (users·sessions·password_reset·login_log·roles·permissions·user_roles·role_permissions) + seed matrix với DB-02
+- `S0-API-CORE-1` Đối chiếu shared config·logger·error-response envelope {success,message,data,meta}·health/health-db·auth context với BACKEND-01
+- `S0-FE-CORE-1` Đối chiếu FE project structure (auth·console·app) + design token + base component skeleton với FRONTEND-01/02 + UI-05
+
+**Đã xong (v2):** `S0-ENV-1`, `S0-FND-DB-1`
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 127
-- **migration head**: idx 113 — `0430_acct2_admin_user_admin_perms` (114 migration)
-- **nền**: Nền backend G1–G16 đã land master (RLS·permission·audit·outbox + giữ lại). De-media-fy: media·workflow-DAG·payroll·finance·SaaS·mobile PARKED (out-of-scope, không xóa) — xem docs/SYSTEM-DESIGN.md §14. Lịch sử ở git.
-- **hướng v2**: v2 (owner 2026-06-19, reframe 2026-06-20): đơn giản hoá để KIỂM SOÁT — tuần tự 1 tính năng/phiên. De-media-fy thành hệ QLDN chung; GIỮ backend hạ tầng (company_id/RLS ở N=1, audit, permission); xây/redesign 7 module MVP theo docs/spec/. FE: auth·console·app. Khi code cũ mâu thuẫn spec → spec thắng.
+- **branch**: `feat/foundation-wave1` · **file đang đổi (dirty)**: 67
+- **migration head**: idx 121 — `0438_foundation_db6_audit_db08_shape` (122 migration)
+- **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 120 / 0437. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
+- **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
 
 ## Commit gần đây
 

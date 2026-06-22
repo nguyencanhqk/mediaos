@@ -85,10 +85,28 @@ export const backlog = [
     skills: ['code-review'],
     depends_on: [],
     src: ['ISSUE-BOARD-01 §18.11 (DEVOPS-CI-001/002)', 'DEVOPS-02', 'IMPLEMENTATION-01 §16.2'],
+    plan: 'docs/plans/S0-CI-1-reconcile.md',
     done_when: [
-      'pipeline PR: lint → typecheck → unit test → build → migration-check (BE) xanh trên workspace pnpm+turbo',
-      'path-filter apps-frontend.yml chỉ trỏ auth/console/app; api.yml trỏ apps/api; gỡ trỏ app cũ đã park',
-      'CI skeleton xanh end-to-end (DEVOPS-02), không cổng nào treo',
+      'pipeline PR pnpm+turbo: lint → typecheck → unit test → build → migration-check (script db:check = migrate DB trống + verify head idx) — mỗi cổng pass/fail đo được',
+      'path-filter: api.yml→apps/api; apps-frontend.yml→auth+console (entry "app" để-sẵn nhưng KHÔNG kích hoạt tới khi apps/app có package.json); KHÔNG còn trỏ app park (apps/web, apps/admin)',
+      'branch model = master (nhánh chính single-tenant) — trigger master/main giữ; ghi rõ quyết định lệch DEVOPS-02 (develop/main) ở plan',
+      'secret-scan + dependency-scan DEFER → S0-CI-2 (defer-có-vé, KHÔNG thu hẹp âm thầm pipeline DEVOPS-02)',
+    ],
+  },
+  {
+    id: 'S0-CI-2',
+    module: 'DEVOPS',
+    layer: 'SEC',
+    title: 'CI security gates: secret-scan (gitleaks/trufflehog) + dependency-scan (pnpm audit) theo DEVOPS-02 §9.2/§11/§17.2',
+    zone: 'yellow',
+    status: 'todo',
+    paths: ['.github/workflows/**'],
+    skills: ['code-review'],
+    depends_on: ['S0-CI-1'],
+    src: ['DEVOPS-02 §9.2/§11/§17.2', 'ISSUE-BOARD-01 §18.11'],
+    done_when: [
+      'secret-scan (gitleaks HOẶC trufflehog) chạy trên PR + push; fail build khi phát hiện secret (BẤT BIẾN #3)',
+      'dependency-scan (pnpm audit --audit-level=high hoặc tương đương) là cổng PR; ngưỡng fail ghi rõ',
     ],
   },
   {
@@ -155,10 +173,12 @@ export const backlog = [
     skills: ['code-review'],
     depends_on: [],
     src: ['ISSUE-BOARD-01 §18.3 (AUTH-DB-001..003)', 'DB-02', 'SPEC-02', 'API-10 PERMISSION MATRIX'],
+    plan: 'docs/plans/S0-AUTH-DB-1-reconcile.md',
     done_when: [
-      'schema AUTH/RBAC khớp DB-02 (permission model action/resource hiện hữu — KHÔNG đổi shape engine 4-tier trừ khi spec yêu cầu)',
-      'seed permission/role + role-permission matrix theo SPEC-02/API-10 bằng ON CONFLICT DO NOTHING (idempotent)',
-      'RLS company-scope giữ FORCE; deny-path test grant không rò chéo tenant',
+      'GIỮ engine 4-tier (action,resource_type,effect) — KHÔNG đổi shape; data_scope (DB-02) KHÔNG biểu diễn được ở engine hiện tại = DEFERRED (ghi note, không churn)',
+      'seed DANH SÁCH permission AUTH cụ thể (plan liệt kê từng cặp action/resource_type/is_sensitive) + ma trận role→permission SPEC-02/API-10, ON CONFLICT DO NOTHING; verify đếm đúng số cặp đã seed',
+      'permission sensitive MỚI (migration này thêm) KHÔNG auto-grant cho system role qua wildcard; ngoại lệ đã ship hợp lệ: hr-manager view/update-salary (mig 0019), company-admin assign-role (mig 0140)',
+      'RLS company-scope giữ FORCE; deny-path test grant không rò chéo tenant; 1 lane db-migration (KHÔNG parity song song)',
     ],
   },
   {
@@ -168,14 +188,16 @@ export const backlog = [
     title: 'Đối chiếu shared config·logger·error-response envelope {success,message,data,meta}·health/health-db·auth context với BACKEND-01',
     zone: 'yellow',
     status: 'todo',
-    paths: ['apps/api/src/common/**', 'apps/api/src/health/**', 'apps/api/src/main.ts', 'apps/api/src/app.module.ts'],
+    paths: ['apps/api/src/common/**', 'apps/api/src/health/**', 'apps/api/src/main.ts', 'apps/api/src/app.module.ts', 'packages/contracts/src/index.ts'],
     skills: ['code-review'],
     depends_on: [],
     src: ['ISSUE-BOARD-01 §18.2 (FOUNDATION-BE-001)', 'BACKEND-01', 'API-01'],
+    plan: 'docs/plans/S0-API-CORE-1-reconcile.md',
     done_when: [
-      'response envelope + error mapper (validation/business/auth) khớp API-01; mã lỗi theo SPEC-01 §9',
-      'GET /api/v1/health + /health/db xanh; auth context (company_id) bơm qua withTenant/set_config (BACKEND-01)',
-      'config/logger không log secret; build + typecheck apps/api xanh',
+      'RESHAPE envelope theo API-01: {success,message,data,meta:{request_id,timestamp}} + pagination block riêng — sửa packages/contracts/src/index.ts (apiResponseSchema) + interceptor; thứ tự contracts→api; S0-FE-API-1 đồng bộ shape (depends)',
+      'error-code enum MODULE-ERR-XXX (SPEC-01 §9 / API-01 §13.2) ở common/; map HttpStatus→code; ZodValidationPipe→VALIDATION-ERR-001 với details[] field-level',
+      'deny-path test TRƯỚC (RED): no-secret-log (Authorization/password/token redacted) + 5xx KHÔNG lộ stack + auth-context companyId A KHÔNG thấy B (isolation)',
+      'GET /api/v1/health + /health/db xanh; auth context qua withTenant/set_config; build + typecheck apps/api + contracts xanh',
     ],
   },
   {
@@ -183,16 +205,18 @@ export const backlog = [
     module: 'FRONTEND',
     layer: 'FE',
     title: 'Đối chiếu FE project structure (auth·console·app) + design token + base component skeleton với FRONTEND-01/02 + UI-05',
-    zone: 'green',
+    zone: 'red',
     status: 'todo',
     paths: ['apps/auth/**', 'apps/console/**', 'apps/app/**', 'packages/ui/**', 'packages/web-core/**'],
     skills: ['frontend-design', 'code-review'],
     depends_on: [],
     src: ['ISSUE-BOARD-01 §18.4 (FRONTEND-FE-001/002)', 'FRONTEND-01', 'FRONTEND-02', 'UI-05'],
+    plan: 'docs/plans/S0-FE-CORE-1-reconcile.md',
     done_when: [
-      'cấu trúc 3 app (auth·console·app) + packages/ui + web-core khớp FRONTEND-01; vite build + typecheck xanh',
-      'design token + base component (Button/Form/Table/Modal/Drawer/Toast/State/PermissionGate) theo UI-05/FRONTEND-02',
-      'i18n vi + theme tokens tái dùng được giữa 3 app',
+      'apps/app TẠO-MỚI chỉ import API public web-core (bootstrapSession/PermissionGate/useCan) — KHÔNG sửa nội bộ auth/token/permission; vite build + typecheck xanh cả 3 app',
+      'design token CSS từ packages/ui import + build xanh ở cả 3 app; ≥1 render/smoke test mỗi base component (Button/Form/Table/Modal/Drawer/Toast/State/PermissionGate)',
+      'BẤT BIẾN token-storage: lint/grep chặn localStorage/sessionStorage chứa access/refresh token + KHÔNG console.log token; regression XANH không sửa-để-qua: use-can/permission-gate/api-client/session spec',
+      'i18n vi missing-key check + 1 test render chuỗi vi; FULL gate (zone=red) + người chốt',
     ],
   },
   {
@@ -204,7 +228,10 @@ export const backlog = [
     status: 'todo',
     paths: ['packages/web-core/**'],
     skills: ['code-review'],
-    depends_on: [],
+    // WIP đang ở git stash@{0} (run wby3ahcpy bị DỪNG): error-mapper dùng ApiError.requestId/.kind
+    // nhưng api-client.ts CHƯA cập nhật → shape lệch. Re-run SAU khi S0-API-CORE-1 chốt envelope
+    // {success,message,data,meta} để FE map đúng (tránh land shape sai rồi đổi lại).
+    depends_on: ['S0-API-CORE-1'],
     src: ['ISSUE-BOARD-01 §18.4 (FRONTEND-FE-003)', 'FRONTEND-04', 'API-01'],
     done_when: [
       'api-client inject token + map 401(refresh)/403(forbidden)/422(validation)/500; gắn request-id + idempotency-key',
@@ -214,6 +241,8 @@ export const backlog = [
   },
   {
     id: 'S0-QA-1',
+    module: 'QA',
+    layer: 'QA',
     title: 'Test strategy + verify migrate/seed từ DB trống + test-case matrix skeleton (QA-01/02)',
     zone: 'yellow',
     status: 'todo',
@@ -231,6 +260,8 @@ export const backlog = [
   // IMPLEMENTATION-04 · EPIC-01 (FND) + EPIC-09 (FE core). Foundation service đã có một phần → reconcile + lấp gap (settings/company/module-catalog/foundation.module).
   {
     id: 'S1-FND-AUDIT-1',
+    module: 'FOUNDATION',
+    layer: 'BE',
     title: 'AuditService v2 (DB-08 shape) + AuditMaskerService + audit-list/detail API theo permission+data-scope (append-only)',
     zone: 'red',
     status: 'todo',
@@ -253,6 +284,8 @@ export const backlog = [
   },
   {
     id: 'S1-FND-SETTING-1',
+    module: 'FOUNDATION',
+    layer: 'BE',
     title: 'SettingService: precedence company→system→default + /settings/public (lọc is_public, mask is_sensitive) + admin update có audit',
     zone: 'red',
     status: 'todo',
@@ -269,6 +302,8 @@ export const backlog = [
   },
   {
     id: 'S1-FND-FILE-1',
+    module: 'FOUNDATION',
+    layer: 'BE',
     title: 'FileService: upload metadata + StorageAdapter port + FilePolicy (deny-by-default) + link/unlink + download-qua-backend + file_access_log',
     zone: 'red',
     status: 'todo',
@@ -285,6 +320,8 @@ export const backlog = [
   },
   {
     id: 'S1-FND-SEQ-1',
+    module: 'FOUNDATION',
+    layer: 'BE',
     title: 'SequenceService.nextCode (tx + FOR UPDATE) + preview (không tăng) + reset_policy; concurrency 0-dup',
     zone: 'red',
     status: 'todo',
@@ -300,6 +337,8 @@ export const backlog = [
   },
   {
     id: 'S1-FND-MODULE-1',
+    module: 'FOUNDATION',
+    layer: 'BE',
     title: 'CompanyService /company/current (GET/PATCH có audit) + ModuleCatalogService /modules/my-apps (lọc permission+active+setting)',
     zone: 'yellow',
     status: 'todo',
@@ -315,6 +354,8 @@ export const backlog = [
   },
   {
     id: 'S1-FND-WIRE-1',
+    module: 'FOUNDATION',
+    layer: 'BE',
     title: 'FoundationModule gom (company·module-catalog·settings·audit·files·sequence·holidays·retention·seed) + foundation contracts (Zod) + wire app.module additive',
     zone: 'green',
     status: 'todo',
@@ -331,6 +372,8 @@ export const backlog = [
   },
   {
     id: 'S1-FE-LAYOUT-1',
+    module: 'FRONTEND',
+    layer: 'FE',
     title: 'FE shell: Home Portal + App Switcher + Module Workspace layout (topbar/sidebar, permission-based app visibility, dirty-form guard)',
     zone: 'green',
     status: 'todo',
@@ -346,6 +389,8 @@ export const backlog = [
   },
   {
     id: 'S1-FE-REGISTRY-1',
+    module: 'FRONTEND',
+    layer: 'FE',
     title: 'App/route/sidebar registry (permission-driven; metadata permission/scope/module/status — KHÔNG hard-code role)',
     zone: 'green',
     status: 'todo',
@@ -361,6 +406,8 @@ export const backlog = [
   },
   {
     id: 'S1-QA-FND-1',
+    module: 'QA',
+    layer: 'QA',
     title: 'QA hardening Foundation: permission/scope + file security + sequence concurrency + audit masking + public-settings leak + append-only',
     zone: 'red',
     status: 'todo',
