@@ -17,7 +17,6 @@ import { TasksModule } from "./tasks/tasks.module";
 import { AttendanceModule } from "./attendance/attendance.module";
 import { LeaveModule } from "./leave/leave.module";
 import { NotificationsModule } from "./notifications/notifications.module";
-import { ChatModule } from "./chat/chat.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { PermissionModule } from "./permission/permission.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
@@ -55,7 +54,6 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     AttendanceModule,
     LeaveModule,
     NotificationsModule,
-    ChatModule,
     RealtimeModule,
     DashboardModule,
     // FOUNDATION-BE-3: Audit viewer read-API (/foundation/audit-logs). BE-9 sẽ relocate vào FoundationModule.
