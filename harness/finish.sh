@@ -34,8 +34,8 @@ echo ""
 echo "▸ Tái sinh trạng thái…"
 node harness/gen-status.mjs
 
-# Work Order đang làm: id + zone (để quyết auto-commit có an toàn không)
-INPROG=$(node -e "import('./harness/backlog.mjs').then(m=>{const b=m.backlog.find(x=>x.status==='in_progress');process.stdout.write(b?b.id+' '+b.zone:'')}).catch(()=>{})" 2>/dev/null)
+# Work Order đang làm: id + zone (status HIỆU DỤNG = overlay ledger đè literal) — để quyết auto-commit/finish.
+INPROG=$(node -e "Promise.all([import('./harness/backlog.mjs'),import('./harness/lib/wo-state.mjs')]).then(([m,s])=>{const b=s.applyStatus(m.backlog).find(x=>x.status==='in_progress');process.stdout.write(b?b.id+' '+b.zone:'')}).catch(()=>{})" 2>/dev/null)
 INPROG_ID="${INPROG%% *}"
 INPROG_ZONE="${INPROG##* }"
 
@@ -46,13 +46,21 @@ if [ -n "$COMMIT_MSG" ]; then
   elif [ "$INPROG_ZONE" = "red" ]; then
     echo "⛔ KHÔNG auto-commit: Work Order $INPROG_ID là vùng ĐỎ → người chốt + người commit tay (CLAUDE.md §6)."
   else
-    git add -A && git commit -m "$COMMIT_MSG" && echo "✅ Đã commit: $COMMIT_MSG"
+    if git add -A && git commit -m "$COMMIT_MSG"; then
+      echo "✅ Đã commit: $COMMIT_MSG"
+      # AUTO-FINISH: commit xanh + non-red → đóng dấu ledger 'committed' ⇒ board tự nhảy WO sang 'done'.
+      if [ -n "$INPROG_ID" ]; then
+        LEDGER_BY=finish.sh node harness/ledger.mjs event "$INPROG_ID" committed "$COMMIT_MSG" >/dev/null 2>&1 \
+          && echo "🗂️  Ledger: $INPROG_ID → done (committed)."
+      fi
+    fi
   fi
 fi
 
 echo ""
 echo "════════════════ VIỆC CUỐI PHIÊN (kỷ luật) ════════════════"
-echo "  1. Cập nhật harness/backlog.mjs — đổi status item vừa xong → 'done' (hoặc thêm item kế)."
-echo "  2. Ghi harness/handoff.md — đã làm gì · đang dở · bẫy · việc kế (cho phiên sau)."
-echo "  3. Chạy lại: node harness/gen-status.mjs (đồng bộ STATUS)."
+echo "  • Status TỰ ĐỘNG từ ledger: chạm file → 'started'; commit xanh non-red → 'done'."
+echo "  • Vùng ĐỎ / đóng tay: 'node harness/ledger.mjs done $INPROG_ID' (đừng sửa status literal — overlay sẽ đè)."
+echo "  • Thêm/đổi cơ cấu WO (title/zone/paths/deps) → harness/backlog.mjs; mục mới mặc định 'todo'."
+echo "  • Ghi harness/handoff.md (đã làm/đang dở/bẫy/việc kế) → chạy lại: node harness/gen-status.mjs."
 [ "$CHECK_OK" = 1 ] && echo "  Check: XANH ✅" || echo "  Check: ĐỎ ❌ — chưa được đóng việc."

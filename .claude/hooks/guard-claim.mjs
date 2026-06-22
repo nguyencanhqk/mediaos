@@ -36,7 +36,9 @@ function minsAgo(ts) {
 async function inProgressWO(cwd) {
   try {
     const { backlog } = await import(pathToFileURL(path.join(cwd, 'harness/backlog.mjs')).href);
-    return backlog.find((b) => b.status === 'in_progress') ?? null;
+    const { applyStatus } = await import(pathToFileURL(path.join(cwd, 'harness/lib/wo-state.mjs')).href);
+    // status hiệu dụng (overlay ledger) — khớp với start-on-touch của guard-scope.
+    return applyStatus(backlog).find((b) => b.status === 'in_progress') ?? null;
   } catch {
     return null;
   }

@@ -1,227 +1,200 @@
 # CLAUDE-CODE-TOOLKIT — MediaOS
 
-> **Artifact 2/3** của bộ harness. Bản đồ công cụ Claude Code cho dự án MediaOS.
-> Trả lời câu hỏi: _"Task này dùng agent/skill/hook nào, model nào, custom component nào?"_
-> Đọc kèm `CLAUDE.md` (hợp đồng vận hành) và `TASKS.md` (kế hoạch thực thi).
+> **Bản đồ công cụ Claude Code** cho dự án. Trả lời: _"Task này dùng **agent / skill / hook / workflow** nào, **model** nào, **zone/gate** nào?"_
+> Đây là **MAP, KHÔNG phải nguồn sự thật** — luật sống ở: `CLAUDE.md` §6 (review gate) · `harness/policy.md` (zone→model/gate/autonomy) · `harness/team.md` (roster) · `harness/AUTOMATION-LOOP.md` (vòng 3 đội). Khi mâu thuẫn, các file đó thắng.
+> Đọc kèm `harness/backlog.mjs` (Work Order) và `docs/spec/` + `docs/README.md` §8 (sản phẩm).
 
 ---
 
 ## 0. Cách đọc file này
 
-- Cột **ECC** = agent/skill có sẵn trong bộ ECC (gọi qua Skill tool hoặc Agent tool, tiền tố `ecc:`).
-- Cột **Custom** = thành phần CHƯA có, phải tự tạo (spec ở §5).
-- **Model** = Haiku / Sonnet / Opus theo độ khó (luật §6 CLAUDE.md).
-- Nguyên tắc bao trùm: **search-first** (`ecc:search-first`, `gh search`) trước khi viết mới; **review gate phân tầng** sau khi viết.
+- **Agent** = `.claude/agents/*.md` — gọi qua **Agent tool** (`subagent_type`/`agentType`). Đây là **thành phần THẬT trong repo**, KHÔNG còn `ecc:*`.
+- **Skill** = gọi qua **Skill tool** — `skill-smith` (project) + skill toàn cục (deep-research, frontend-design, code-review, verify…).
+- **Hook** = `.claude/hooks/*.mjs` — **tự chạy** quanh tool (PreToolUse/PostToolUse/Stop), đăng ký trong `.claude/settings.json`.
+- **Workflow** = `.claude/workflows/*.mjs` — "bộ não" đa-agent, gọi qua **Workflow tool**.
+- **Model:** **Sonnet mặc định · Opus cho crown/red · KHÔNG Haiku** (quyết định "thận trọng chất lượng" 2026-06-12).
+- **Reframe 2026-06-20:** dự án đã **de-media-fy** → là **Hệ thống quản lý doanh nghiệp nội bộ** (AUTH·HR·ATT·LEAVE·TASK·DASH·NOTI). Module media/channel/content/finance/payroll-theo-kênh **out-of-scope** (parked). Mọi nhắc tới "media/finance" bên dưới chỉ là di sản hoặc Phase 2.
 
 ---
 
-## 1. Harness lõi (đã cài — Artifact 1)
-
-| Thành phần               | Vị trí           | Vai trò                                                |
-| ------------------------ | ---------------- | ------------------------------------------------------ |
-| `CLAUDE.md`              | root             | 3 bất biến + luật phụ thuộc + tech stack + review gate |
-| `.claude/settings.json`  | —                | Đăng ký hooks + permissions + env                      |
-| `guard-tenant.mjs`       | `.claude/hooks/` | Chặn query thiếu `company_id` / không qua `withTenant` |
-| `guard-immutability.mjs` | `.claude/hooks/` | Chặn UPDATE/DELETE/hard-delete bảng audit/snapshot     |
-| `guard-secrets.mjs`      | `.claude/hooks/` | Chặn secret plaintext / pgcrypto-in-SQL / log secret   |
-
-> 3 hook = ép tự động 3 bất biến. Nếu hook chặn nhầm → sửa pattern hook, KHÔNG bypass.
-
-**Cài đặt skill lõi 1 lần (G0-6):**
+## 1. Harness lõi — vòng một phiên
 
 ```text
-ecc:configure-ecc          # cấu hình harness
-ecc:agent-sort             # chỉ nạp skill/agent dự án thật cần (tránh phình context)
-ecc:project-init           # khi bootstrap monorepo (G1-1)
+bash harness/init.sh     # MỞ: đang ở đâu · làm gì · sửa ở đâu (đọc handoff + tái sinh STATUS)
+   │  → làm ĐÚNG 1 Work Order in_progress trong backlog.mjs (green/yellow: code thẳng · red/phức tạp: parallel-lanes)
+bash harness/check.sh --quick   # VERIFY nhanh: lint + typecheck (KHÔNG DB/test) — '--all' (+build) khi tiền-merge/vùng đỏ
+bash harness/finish.sh   # ĐÓNG: full check (+test) → cập nhật backlog → ghi handoff → commit-if-safe
 ```
 
----
-
-## 2. Bản đồ ECC theo Giai đoạn
-
-### G0 — Quyết định & Thiết kế
-
-| Task                         | ECC                                   | Custom                           | Model  |
-| ---------------------------- | ------------------------------------- | -------------------------------- | ------ |
-| G0-1 Chốt scope MVP-0        | `ecc:planner`, `ecc:plan-prd`         | —                                | Opus   |
-| G0-2 Viết ADR                | `ecc:architecture-decision-records`   | —                                | Opus   |
-| G0-3 Spike Workflow FSM      | `ecc:architect`                       | `workflow-statemachine-designer` | Opus   |
-| G0-4 Spike Permission Matrix | `ecc:type-design-analyzer`            | `permission-matrix-spec`         | Opus   |
-| G0-5 Hạ tầng $0              | `ecc:deep-research`                   | —                                | Sonnet |
-| G0-6 Harness                 | `ecc:configure-ecc`, `ecc:agent-sort` | —                                | Sonnet |
-
-### G1 — Bootstrap repo & hạ tầng
-
-| Task                     | ECC                                                               | Custom                                                         | Model  |
-| ------------------------ | ----------------------------------------------------------------- | -------------------------------------------------------------- | ------ |
-| G1-1 Monorepo pnpm+Turbo | `ecc:project-init`                                                | —                                                              | Sonnet |
-| G1-2 Docker Compose      | `ecc:docker-patterns`                                             | —                                                              | Haiku  |
-| G1-3 Drizzle + migration | `ecc:postgres-patterns`, `ecc:database-migrations`                | —                                                              | Sonnet |
-| G1-4 NestJS skeleton     | `ecc:nestjs-patterns`, `ecc:api-design`                           | —                                                              | Sonnet |
-| G1-5 Vite+React skeleton | `ecc:frontend-patterns`, `ecc:design-system`, `ecc:vite-patterns` | —                                                              | Sonnet |
-| G1-6 CI                  | —                                                                 | `ci-pipeline-generator`                                        | Sonnet |
-| G1-7 Hooks guardrail     | `ecc:hookify`, `ecc:hookify-rules`                                | `tenant-isolation-guard`, `no-hard-delete`, `secret-scan-gate` | Sonnet |
-| G1-8 Backup pg_dump→B2   | `ecc:terminal-ops`                                                | —                                                              | Haiku  |
-
-### G2 — Nền bảo mật & đa-tenant (FULL gate toàn bộ)
-
-| Task                            | ECC                                                | Custom                        | Model |
-| ------------------------------- | -------------------------------------------------- | ----------------------------- | ----- |
-| G2-1 App DB role non-superuser  | `ecc:postgres-patterns`, `ecc:database-reviewer`   | —                             | Opus  |
-| G2-2 `withTenant()` wrapper     | `ecc:postgres-patterns`                            | —                             | Opus  |
-| G2-3 Bảng nền + RLS             | `ecc:database-migrations`, `ecc:database-reviewer` | —                             | Opus  |
-| G2-4 Audit + outbox + event bus | `ecc:silent-failure-hunter`                        | `event-outbox-audit-guide`    | Opus  |
-| G2-5 Test 2-tenant đối kháng    | `ecc:tdd-guide`                                    | `rls-tenant-isolation-tester` | Opus  |
-| G2-6 Auth                       | `ecc:security-reviewer`, `ecc:error-handling`      | —                             | Opus  |
-
-### G3 — Permission Engine (FULL gate)
-
-| Task                           | ECC                                         | Custom                   | Model  |
-| ------------------------------ | ------------------------------------------- | ------------------------ | ------ |
-| G3-1 Bảng RBAC                 | `ecc:database-reviewer`                     | —                        | Sonnet |
-| G3-2 `PermissionService.can()` | `ecc:type-design-analyzer`, `ecc:architect` | `permission-matrix-spec` | Opus   |
-| G3-3 Test deny-path TRƯỚC      | `ecc:tdd-guide`, `ecc:tdd-workflow`         | —                        | Opus   |
-| G3-4 Guards + cache Valkey     | `ecc:nestjs-patterns`, `ecc:redis-patterns` | —                        | Sonnet |
-| G3-5 FE `<PermissionGate>`     | `ecc:react-patterns`, `ecc:frontend-a11y`   | —                        | Sonnet |
-
-### G4 — 🎯 MVP-0 Walking Skeleton
-
-| Task                           | ECC                                                   | Custom                         | Model  |
-| ------------------------------ | ----------------------------------------------------- | ------------------------------ | ------ |
-| G4-1 Org/Employee              | `ecc:nestjs-patterns`, `ecc:react-patterns`           | —                              | Sonnet |
-| G4-2 Channel/Project/Content   | `ecc:feature-dev`                                     | —                              | Sonnet |
-| G4-3 1 workflow cứng           | `ecc:architect`                                       | `workflow-state-machine-guide` | Opus   |
-| G4-4 My Tasks + submit         | `ecc:tdd-workflow`                                    | —                              | Sonnet |
-| G4-5 Approval 1 cấp + return   | `ecc:tdd-workflow`                                    | —                              | Sonnet |
-| G4-6 Notification + group chat | `ecc:nestjs-patterns`                                 | —                              | Sonnet |
-| G4-7 E2E full vòng đời         | `ecc:e2e-runner`, `ecc:e2e-testing`, `ecc:browser-qa` | —                              | Sonnet |
-| G4-8 Pilot 1 team              | `ecc:canary-watch`                                    | —                              | Haiku  |
-
-### G5 — Mở rộng module (mỗi module: `ecc:prp-plan` → TDD → implement → review gate)
-
-| Module                            | ECC                                              | Custom                                                                                       | Model  |
-| --------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------- | ------ |
-| G5a Workflow Builder (React Flow) | `ecc:a11y-architect`, `ecc:frontend-patterns`    | `workflow-statemachine-tester`                                                               | Opus   |
-| G5b Approval 3 cấp + KPI          | `ecc:prp-plan`, `ecc:tdd-workflow`               | —                                                                                            | Sonnet |
-| G5c Chat realtime + Meeting       | `ecc:nestjs-patterns`, `ecc:redis-patterns`      | `realtime-test-harness`                                                                      | Opus   |
-| G5d Attendance + Leave            | `ecc:tdd-workflow`                               | —                                                                                            | Sonnet |
-| G5e Platform Account Encryption   | `ecc:security-reviewer`                          | `secret-encryption-reviewer`, `envelope-encryption-auditor`, `kms-provisioning-and-rotation` | Opus   |
-| G5f Payroll + Bonus/Penalty       | `ecc:santa-method`, `ecc:security-reviewer`      | `payroll-snapshot-immutability-guard`, `immutable-snapshot-architect`                        | Opus   |
-| G5g Finance                       | `ecc:database-reviewer`, `ecc:santa-method`      | `immutable-snapshot-architect`                                                               | Opus   |
-| G5h Dashboard theo role           | `ecc:dashboard-builder`, `ecc:frontend-patterns` | —                                                                                            | Sonnet |
-| G5i Mobile RN                     | `ecc:flutter-review`\*, `ecc:frontend-a11y`      | `react-native-reviewer/patterns/build-fix/push`                                              | Sonnet |
-
-\* ECC chưa có reviewer React Native riêng → tạm dùng pattern chung + custom `react-native-*`.
-
-### GX — Xuyên suốt (mọi sprint)
-
-| Task                                        | ECC                                                       |
-| ------------------------------------------- | --------------------------------------------------------- |
-| GX-1 Review gate phân tầng                  | xem §3                                                    |
-| GX-2 Test deny-path + coverage ≥80%         | `ecc:tdd-guide`, `ecc:test-coverage`                      |
-| GX-3 Audit + event mọi hành động            | `ecc:silent-failure-hunter`                               |
-| GX-4 Migration an toàn (RLS trước backfill) | `ecc:database-migrations`                                 |
-| GX-5 Backup + health + audit harness        | `ecc:canary-watch`, `ecc:harness-audit` (cuối G2/G5b/G5f) |
-| GX-6 Theo dõi chi phí + model routing       | `ecc:cost-tracking`, `ecc:model-route`                    |
-| GX-7 i18n (vi) + timezone                   | `ecc:documentation-lookup`                                |
+| Mảnh | File |
+| --- | --- |
+| Hợp đồng vận hành (3 bất biến · tech stack · review gate) | `CLAUDE.md` · contract gọn: `AGENTS.md` |
+| Work Order (làm gì · `paths` · `done_when` · `zone` · `skills`) | `harness/backlog.mjs` |
+| Trạng thái "đang ở đâu" (TỰ SINH — không sửa tay) | `harness/gen-status.mjs` → `docs/STATUS.md` |
+| Ghi nhớ phiên→bàn giao→dài hạn | `harness/handoff.md` · `docs/DECISIONS/` |
+| Sổ mốc thời gian WO (append-only) | `harness/ledger.mjs` → `harness/activity.jsonl` |
+| Báo cáo tiến độ + rủi ro | `harness/report.md` |
+| Luật tự động hoá (zone→model/gate/leo thang) | `harness/policy.md` · roster: `harness/team.md` |
 
 ---
 
-## 3. Review gate phân tầng (§6 CLAUDE.md) — bảng quyết định
+## 2. Đội agent (`.claude/agents/`) — 14 agent THẬT
 
-```text
-diff chạm: permission / RLS / secret / payroll / audit ?
-   ├─ CÓ  → FULL gate:
-   │         ecc:security-reviewer + ecc:database-reviewer + ecc:silent-failure-hunter
-   │         (+ ecc:santa-method nếu là crown-jewel: payroll, permission algebra, FSM)
-   └─ KHÔNG (CRUD/UI thường) → LIGHT gate:
-             ecc:typescript-reviewer + ecc:quality-gate
+> Gọi solo qua Agent tool theo `agentType`, hoặc để workflow tự route theo domain. Phép tính nhân sự + posture: `harness/team.md`.
+
+### Điều phối & triage
+
+| Agent | Vai trò | Model | Khi nào |
+| --- | --- | --- | --- |
+| `tech-lead` | Phân rã 1 WO/module → lane song song có thứ tự, đánh dấu crown, kế hoạch hot-file/migration nối tiếp (read-only) | Opus | TRƯỚC khi fan-out |
+| `red-zone-scanner` | Đọc **diff/file THẬT** → vẽ bản đồ zone theo hunk, bắt ca "tiêu đề xanh nhưng nội dung đỏ" | Opus | trước route/merge khi nghi ngờ |
+| `plan-reviewer` | Review đối kháng **plan** trước khi code: thiếu deny-path? migration an toàn? scope creep? | — | khi tạo/đổi `docs/plans/*.md` |
+
+### Builders (thực thi)
+
+| Agent | Vai trò | Model | Đồng thời |
+| --- | --- | --- | --- |
+| `backend-builder` | Module NestJS (service·controller·repo·DTO), ép `company_id`/`withTenant`, permission guard, audit, deny-path RED | Sonnet (Opus khi crown) | ✅ ×2 |
+| `frontend-builder` | React 19 SPA (Vite·TanStack·Zustand·shadcn) apps/app·console·auth; PermissionGate/useCan; masking do server; i18n vi | Sonnet | ✅ ×2 |
+| `db-migration` | **LANE NỐI TIẾP DUY NHẤT** chạm schema/migration: Drizzle + migration đánh số tiếp head, **RLS+FORCE TRƯỚC backfill**, grant append-only | Opus | ⚠️ **serialize 1** |
+| `devops-ci` | Giữ build/typecheck/lint xanh toàn workspace (pnpm+Turbo), CI path-filter, docker compose, sửa build đỏ tận gốc | Sonnet | on-demand |
+
+### Gate (kiểm tra & review — read-only)
+
+| Agent | Vai trò | Model | Khi nào |
+| --- | --- | --- | --- |
+| `security-reviewer` | Cổng **FULL gate**: OWASP + 3 bất biến trên diff permission·RLS·secret·audit·auth·migration → severity + PASS/BLOCK | Opus | mọi lane gate=FULL/crown |
+| `rls-tenant-isolation-tester` | Seed 2 tenant A/B → assert mọi path trả 0 row của B khi login A (cổng RLS chuyên dụng) | — | on-demand RLS |
+| `qa-test-engineer` | Deny-path RED-trước, integration DB cô lập theo lane, E2E luồng tới hạn, coverage ≥80% | Sonnet | on-demand |
+| `completion-evaluator` | Chấm DoD + rubric chất lượng có trọng số → điểm + PASS/BLOCK (chạy test/lint xác minh) | Opus | đóng phase/merge lớn |
+
+### Ship & theo dõi
+
+| Agent | Vai trò | Model | Khi nào |
+| --- | --- | --- | --- |
+| `deploy-gate` | green/yellow + check xanh → branch + commit + push + `gh pr create` + nhãn `auto-merge`. **red → DỪNG cho người.** KHÔNG push thẳng master | Sonnet | sau eval |
+| `progress-tracker` | Đóng dấu start/milestone/finish (giờ thật) vào `harness/activity.jsonl` qua `ledger.mjs` | Sonnet | mỗi WO |
+| `project-analyst` | Cập nhật STATUS + viết `harness/report.md` + chấm rủi ro (WIP ì, kẹt deps, scope drift, CI đỏ) | Sonnet | on-demand |
+
+> Override per-lane trong workflow: `lane.builder` ép builder · `lane.reviewers:[…]` ép reviewer · `lane.model` ép model.
+
+---
+
+## 3. Hooks (`.claude/hooks/`) — sàn cứng tự động (đăng ký ở `settings.json`)
+
+| Hook | Sự kiện | Ép điều gì |
+| --- | --- | --- |
+| `guard-tenant.mjs` | PreToolUse (Write/Edit) | **Bất biến 1** — query nghiệp vụ phải có `company_id` / đi qua `withTenant(` |
+| `guard-immutability.mjs` | PreToolUse | **Bất biến 2** — chặn UPDATE/DELETE/hard-delete bảng audit/snapshot; ép `deleted_at` soft-delete |
+| `guard-secrets.mjs` | PreToolUse | **Bất biến 3** — chặn secret plaintext / pgcrypto-in-SQL / log secret |
+| `anti-bandaid-guard.mjs` | PreToolUse | Chặn vá triệu chứng: `catch{}` rỗng · `@ts-ignore` · `eslint-disable` · `.skip`/`.only` · TODO-fix vùng đỏ |
+| `guard-migration-band.mjs` | PreToolUse | Migration phải nằm trong band của lane; `_journal` idx/when đơn điệu tăng |
+| `guard-scope.mjs` | PreToolUse | **Warn-only** — cảnh báo khi sửa ra ngoài `paths` của Work Order |
+| `guard-claim.mjs` | PreToolUse + Stop | **Warn-only** — claim-on-touch theo `session_id`; cảnh báo khi 2 phiên cùng giữ 1 WO (`node harness/claim.mjs list`) |
+| `format-on-write.mjs` | PostToolUse | Auto prettier file vừa ghi |
+| `typecheck-changed.mjs` | PostToolUse | Typecheck workspace vừa đổi |
+| `stop-gate.mjs` | Stop | Kết phiên → lint+typecheck workspace vừa đổi; hiện `advisory` (cảnh báo, vẫn cho dừng) tới khi baseline xanh → đổi `block` |
+
+> 3 hook đầu = ép 3 bất biến §2 CLAUDE.md. Hook chặn nhầm → **sửa pattern hook, KHÔNG bypass**. CI mirror: `.github/workflows/ci.yml` (RLS gate).
+
+---
+
+## 4. Workflows (`.claude/workflows/`) — bộ não đa-agent (Workflow tool)
+
+| Workflow | Dùng khi | Tự làm gì | Xem trước |
+| --- | --- | --- | --- |
+| `parallel-lanes` | Fan-out NHIỀU lane song song (mỗi lane 1 worktree + 1 band migration) cho việc đỏ/phức tạp | `pickModel` (crown→Opus) · `pickBuilder`/`pickReviewers` theo domain · pipeline plan→implement→review · crown spawn reviewer độc lập + santa-method · `mergeVerdicts`→`needs_human` | `args:{dryRun:true}` (in routing, 0 token) |
+| `auto-loop` | Vòng tự động end-to-end **3 đội** (Phân tích→Thực thi→Review, FAIL trả về phân tích) tới khi hết READY/cạn budget | Đội1 `tech-lead`/`project-analyst` → Đội2 builder (db nối tiếp) → Đội3 `completion-evaluator`+`qa`+(`security`) → PASS: `deploy-gate` auto-merge; FAIL: re-analyze | `args:{}` (dryRun mặc định) |
+| `gap-analysis-mvp` | Soi KHOẢNG CÁCH spec/docs ↔ code thật từng module → đề xuất Work Orders (id·zone·paths·done_when·effort) | 1 agent read-only/module → trả WO codeable còn thiếu để tổng hợp vào `backlog.mjs` | READ-ONLY mặc định |
+
+**Routing tự động trong `parallel-lanes` / `auto-loop`** (deterministic theo regex trên `task`/`paths`):
+
+| Tín hiệu | Builder | Reviewer kèm |
+| --- | --- | --- |
+| `migration`·`drizzle`·`schema`·`rls`·`_journal`·`/db/` | `db-migration` (Opus, nối tiếp) | `rls-tenant-isolation-tester` |
+| `permission`·`auth`·`secret`·`audit`·`encrypt`·`token` HOẶC gate=FULL | builder theo domain | `security-reviewer` (+silent-failure) |
+| `react`·`.tsx`·`component`·`form`·`web`·`ui`·`màn hình` | `frontend-builder` | `completion-evaluator` (chất lượng FE) |
+| còn lại (service/controller/repo API) | `backend-builder` | `completion-evaluator` (baseline DoD) |
+| crown-jewel (mọi vùng đỏ) | + Opus + plan | + `santa-method` + `quality-gate` |
+
+> Lưu ý runtime: reviewer mô tả `database-reviewer`/`silent-failure-hunter`/`react-reviewer`/`typescript-reviewer` được **ánh xạ về agent THẬT** (`rls-tenant-isolation-tester` · `security-reviewer` · `completion-evaluator`) trong `parallel-lanes.mjs` — `ecc:*` KHÔNG tồn tại ở runtime này.
+
+---
+
+## 5. Zone → model · gate · autonomy (rút gọn `harness/policy.md`)
+
+| zone | Diff chạm | Model | Gate | Auto-commit | Người chốt |
+| --- | --- | --- | --- | --- | --- |
+| 🟢 **green** | CRUD · list/detail · form · dashboard UI · docs · style · dời route | Sonnet | LIGHT (`typescript-reviewer` + `quality-gate`) | ✅ khi check xanh | ❌ |
+| 🟡 **yellow** | workflow phê duyệt (nghỉ phép/điều chỉnh công) · task · noti · FE dữ liệu nhạy cảm HR (mask) | Sonnet/Opus | LIGHT + test logic | ✅ khi xanh | ⚠️ xem trước merge lớn |
+| 🔴 **red** | permission · RLS · secret/encrypt · audit · auth (login/token) · migration | **Opus** | **FULL** (`security` + RLS-tester + silent-failure [+`santa-method`]) | ❌ | ✅ **luôn người** |
+
+**Đường nhanh việc nhỏ (fast lane):** ≤30 dòng/≤2 file + sạch đỏ + loại text/i18n/docs/đổi-tên/style/dời-route → main-loop sửa thẳng + `check.sh --quick`. KHÔNG plan · KHÔNG reviewer độc lập · KHÔNG Opus · KHÔNG Workflow. Nghi ngờ nhạy cảm → KHÔNG trivial (fail-closed).
+
+**Thang leo khi kẹt:** L0 Sonnet → L1 +effort+nạp lại context → L2 ↑Opus → L3 Opus+santa-method → **L4 ⛔ người chốt (trần cứng)**. Stop-rule: 2 vòng chưa ra gốc → dừng-có-trạng-thái, ghi memory, KHÔNG chồng fix mù.
+
+---
+
+## 6. Skills (Skill tool)
+
+| Skill | Dùng khi |
+| --- | --- |
+| `skill-smith` (project, `.claude/skills/`) | Đóng băng ma sát lặp ≥2 lần (ghi ở `handoff.md`) / thủ tục tay ≥3 lần → thành skill. Từ chối one-off |
+| `frontend-design` | Khi dựng/đổi UI mới — hướng thẩm mỹ, typography, tránh "templated default" |
+| `code-review` / `simplify` | Review diff hiện tại (bug + reuse/simplify) · `simplify` = chỉ dọn chất lượng. `code-review ultra` = review đám mây đa-agent |
+| `verify` / `run` | Chạy app thật để xác minh một thay đổi/PR hoạt động (không chỉ test) |
+| `deep-research` | Báo cáo nghiên cứu đa nguồn, fact-check có trích dẫn |
+| `loop` / `schedule` | Lặp một prompt/slash-command theo chu kỳ · tạo cloud agent theo cron |
+| `claude-api` | Tra cứu Claude API/SDK (model id, pricing, tool use, caching) trước khi code phần LLM |
+| `update-config` / `fewer-permission-prompts` / `keybindings-help` | Sửa `settings.json` (hooks/permissions/env) · giảm prompt quyền · keybinding |
+
+> Skill `skills` tĩnh của một WO khai trong `backlog.mjs` (vd `skills: ['frontend-design', 'code-review']`); workflow chèn vào prompt builder.
+
+---
+
+## 7. Map nhanh: task → công cụ
+
+| Tôi đang làm… | Dùng |
+| --- | --- |
+| Mở phiên / biết làm gì tiếp | `bash harness/init.sh` → `docs/STATUS.md` → 1 WO `in_progress` |
+| Schema/migration/RLS | agent `db-migration` (nối tiếp) → cổng `rls-tenant-isolation-tester` + `security-reviewer` |
+| Module BE (service/repo/DTO + audit) | agent `backend-builder` → gate FULL nếu chạm permission/audit/auth |
+| Màn hình/form FE | agent `frontend-builder` (+ skill `frontend-design`) → `completion-evaluator` |
+| Permission/auth/secret/audit (crown) | **red zone** → Opus + plan + `security-reviewer` + **người chốt**; quét trước bằng `red-zone-scanner` |
+| Phân rã 1 module lớn thành lane | agent `tech-lead` (read-only) → fan-out `parallel-lanes` |
+| Tìm việc còn thiếu so với spec | workflow `gap-analysis-mvp` → tổng hợp WO vào `backlog.mjs` |
+| Chạy tự động end-to-end nhiều WO | workflow `auto-loop` (`args:{dryRun:false}`) |
+| Review trước commit | skill `code-review` · vùng đỏ → agent `security-reviewer` |
+| Đóng phase / chấm DoD | agent `completion-evaluator` |
+| Build/typecheck đỏ | agent `devops-ci` (root-cause; CẤM `@ts-ignore`/`eslint-disable`) |
+| Đóng việc + commit an toàn | `bash harness/finish.sh` → green/yellow xanh → `deploy-gate` mở PR + auto-merge |
+
+---
+
+## 8. Lệnh tham chiếu nhanh
+
+```bash
+# Harness
+bash harness/init.sh              # mở phiên
+bash harness/check.sh --quick     # lint+typecheck nhanh (--all: +build, tiền-merge)
+bash harness/finish.sh            # đóng phiên: full check + backlog + handoff
+node harness/claim.mjs list       # ai đang giữ WO nào
+
+# Dự án (Node ≥20, pnpm 11)
+pnpm dev | build | lint | typecheck | test | format
+pnpm db:up | db:down | db:migrate
+pnpm --filter @mediaos/api db:generate     # sinh migration từ schema
+bash scripts/lane-db-setup.sh <lane>       # DB cô lập theo lane (chống shared-DB drift)
+pnpm dashboard                              # trực quan tiến độ
+
+# Workflow (Workflow tool)
+Workflow{ name:'parallel-lanes', args:{ dryRun:true, lanes:[…] } }   # xem trước routing
+Workflow{ name:'auto-loop',      args:{ dryRun:false } }             # vòng 3 đội thật
+Workflow{ name:'gap-analysis-mvp' }                                 # soi gap spec↔code
 ```
 
-- FE chạm `.tsx/.jsx` → thêm `ecc:react-review`.
-- Trước khi đóng Giai đoạn G2 / G5b / G5f → chạy `ecc:harness-audit`.
-- Trước commit nhánh chung → `ecc:security-scan` + `ecc:security-review`.
+**Cấu trúc code:** `apps/api` (NestJS modular monolith — duy nhất) · `apps/auth` (đăng nhập) · `apps/console` (quản trị) · `apps/app` (vỏ nghiệp vụ hợp nhất — đang dựng). Packages: `contracts` (Zod = nguồn sự thật DTO) · `ui` (shadcn) · `web-core` (auth store·api-client·use-can·i18n). CI: `ci.yml` · `api.yml` · `apps-frontend.yml` · `auto-merge.yml`.
 
 ---
 
-## 4. Hooks guardrail — đặc tả 3 hook lõi (G1-7)
-
-| Hook                     | Sự kiện                 | Chặn khi                                                                            | Pass khi                                                 |
-| ------------------------ | ----------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `tenant-isolation-guard` | PreToolUse (Edit/Write) | Repository/query SQL không có `company_id` hoặc không bọc `withTenant(`             | Mọi data-access qua `withTenant`                         |
-| `no-hard-delete`         | PreToolUse (Edit/Write) | `DELETE FROM`/`.delete(` trên bảng audit/snapshot; thiếu `deleted_at` ở soft-delete | Soft-delete; append-only tables không bị UPDATE/DELETE   |
-| `secret-scan-gate`       | PreToolUse + PreCommit  | Secret plaintext, pgcrypto-in-SQL, log/DTO chứa secret                              | Envelope encryption app-side; secret không rò ra log/DTO |
-
-> Hiện đã có bản `.mjs` tương ứng (`guard-tenant`, `guard-immutability`, `guard-secrets`). G1-7 = nâng lên CI check (`*-ci-check`) để chạy cả ngoài Claude Code.
-
----
-
-## 5. Custom components phải tự tạo — đặc tả tóm tắt
-
-> ECC chưa có. Tạo trong `.claude/agents/`, `.claude/skills/`, `.claude/hooks/`. Mỗi cái kèm test riêng.
-
-| Tên                                                 | Loại         | Dùng ở     | Mục tiêu / Tiêu chí done                                                                                                                              |
-| --------------------------------------------------- | ------------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `workflow-statemachine-designer`                    | agent        | G0-3, G4-3 | Sinh bảng `workflow_transitions` + luật "khóa phần liên quan" + auto-sinh task. Done: transition hợp lệ duy nhất, không deadlock, có guard điều kiện. |
-| `workflow-statemachine-tester`                      | agent        | G5a        | Fuzz mọi đường đi FSM; phát hiện transition mồ côi / vòng lặp / bước song song hỏng DAG.                                                              |
-| `permission-matrix-spec`                            | skill        | G0-4, G3-2 | Nguồn sự thật RBAC×Scope×Object×Sensitive + danh sách deny-case. Done: mọi sensitive-permission KHÔNG kế thừa; sinh được test deny-path.              |
-| `immutable-snapshot-architect`                      | agent        | G5f, G5g   | Thiết kế bảng snapshot append-only (payslip/kpi/profit); cấm UPDATE; khóa kỳ trước khi tính.                                                          |
-| `event-outbox-audit-guide`                          | skill        | G2-4       | Transactional outbox + audit bất biến + event bus idempotent + dead-letter + alert khi drop.                                                          |
-| `tenant-isolation-guard` / `-ci-check`              | hook         | G1-7       | Ép `company_id`/`withTenant`; chạy cả trong Claude Code và CI.                                                                                        |
-| `rls-tenant-isolation-tester`                       | agent        | G2-5       | Seed 2 tenant A/B; assert mọi path trả 0 row của B khi login A.                                                                                       |
-| `secret-encryption-reviewer`                        | agent        | G5e        | Soát envelope encryption app-side; chặn pgcrypto-in-SQL & secret rò DTO.                                                                              |
-| `envelope-encryption-auditor`                       | skill        | G5e        | Audit DEK/KEK, rotation, reveal-secret + re-auth + audit.                                                                                             |
-| `sensitive-action-audit-hook`                       | hook         | G5e        | Ép audit log cho mọi hành động nhạy cảm (reveal secret, đổi quyền).                                                                                   |
-| `payroll-snapshot-immutability-guard`               | hook         | G5f        | Chặn sửa payslip đã chốt; ép khóa kỳ KPI trước khi chạy lương.                                                                                        |
-| `secret-scan-gate`                                  | hook/skill   | G1-7       | Quét secret pre-commit (xem §4).                                                                                                                      |
-| `ci-pipeline-generator`                             | skill        | G1-6       | Sinh CI: lint+typecheck+test trên Postgres ephemeral + assert RLS-trước-backfill.                                                                     |
-| `react-native-*` (reviewer/patterns/build-fix/push) | agent/skill  | G5i        | Bộ công cụ RN: review, pattern, fix build, push FCM.                                                                                                  |
-| `realtime-test-harness`                             | custom       | G5c        | Test WS lifecycle: connect/reconnect, presence cross-tenant, ordering, room `co:{companyId}`.                                                         |
-| `kms-provisioning-and-rotation`                     | custom infra | G5e        | Provision KMS/Vault, rotation key, break-glass.                                                                                                       |
-
-**Thứ tự tạo custom (theo phụ thuộc):**
-
-1. G1-7 hooks (`tenant-isolation-guard`, `no-hard-delete`, `secret-scan-gate`) → đã có bản `.mjs`, nâng CI.
-2. `event-outbox-audit-guide` + `rls-tenant-isolation-tester` (G2).
-3. `permission-matrix-spec` + `workflow-statemachine-designer` (G0/G3/G4).
-4. Phần nhạy cảm muộn: `immutable-snapshot-architect`, `*-encryption-*`, `payroll-*`, `react-native-*`, `realtime-test-harness`, `kms-*`.
-
----
-
-## 6. Model routing (GX-6) — bảng nhanh
-
-| Loại task                                                                              | Model      | Lý do                      |
-| -------------------------------------------------------------------------------------- | ---------- | -------------------------- |
-| build-fix, CRUD đơn, docs, format, Docker                                              | **Haiku**  | rẻ, đủ năng lực            |
-| phát triển module, FE component, API thường                                            | **Sonnet** | cân bằng                   |
-| spike khó: workflow FSM, permission algebra, payroll/finance snapshot, ADR, RLS design | **Opus**   | reasoning sâu, crown-jewel |
-
-> Theo dõi chi phí: `ecc:cost-tracking` / `ecc:cost-report`. Định tuyến: `ecc:model-route`.
-
----
-
-## 7. Lệnh tham chiếu nhanh
-
-```text
-# Lập kế hoạch module
-/ecc:prp-plan  hoặc  /ecc:plan
-
-# TDD
-/ecc:tdd-workflow      # bất kỳ ngôn ngữ
-/ecc:react-test        # FE
-# (backend NestJS: tdd-workflow + nestjs-patterns)
-
-# Review
-/ecc:code-review               # local diff
-/ecc:security-review           # bảo mật
-/ecc:database-reviewer (agent) # SQL/migration/RLS
-
-# Hạ tầng / vận hành
-/ecc:harness-audit             # cuối G2/G5b/G5f
-/ecc:canary-watch              # sau deploy
-/ecc:cost-tracking             # chi phí
-```
-
----
-
-_Liên kết: `CLAUDE.md` (hợp đồng) · `TASKS.md` (kế hoạch) · `TECH-DECISION-RECORD.md` (quyết định kiến trúc — Artifact 3)._
+_Liên kết: `CLAUDE.md` (hợp đồng) · `AGENTS.md` (contract gọn) · `harness/policy.md` (zone→routing) · `harness/team.md` (roster) · `harness/AUTOMATION-LOOP.md` (vòng 3 đội) · `harness/backlog.mjs` (Work Order) · `docs/spec/` + `docs/README.md` §8 (sản phẩm) · `docs/DECISIONS/` (quyết định)._

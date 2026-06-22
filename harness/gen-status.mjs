@@ -17,7 +17,11 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
 
-import { backlog, meta } from './backlog.mjs';
+import { backlog as rawBacklog, meta } from './backlog.mjs';
+import { applyStatus } from './lib/wo-state.mjs';
+
+// status hiệu dụng: overlay từ ledger (activity.jsonl) đè literal ⇒ STATUS.md khớp dashboard.
+const backlog = applyStatus(rawBacklog);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -95,7 +99,10 @@ const now = new Date().toISOString().replace('T', ' ').slice(0, 16);
 const md = [];
 md.push('# STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)');
 md.push('');
-md.push(`> Sinh bởi \`harness/gen-status.mjs\` lúc **${now}Z**. Sửa tiến độ ở \`harness/backlog.mjs\`, rồi chạy lại.`);
+md.push(
+  `> Sinh bởi \`harness/gen-status.mjs\` lúc **${now}Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); ` +
+    `đóng dấu tay: \`node harness/ledger.mjs start|done <WO>\`. Cơ cấu WO (title/zone/paths/deps) sửa ở \`harness/backlog.mjs\`.`,
+);
 md.push('');
 md.push('## Tiêu điểm phiên (đang làm)');
 md.push('');

@@ -8,11 +8,48 @@
 | zone | Diff chạm | Model | Gate | Auto-fix | Auto-commit | Người chốt |
 | --- | --- | --- | --- | --- | --- | --- |
 | 🟢 **green** | CRUD · list/detail · form · dashboard UI · docs · style · dời route | Sonnet | LIGHT (`typescript-reviewer` + `quality-gate`) | ✅ | ✅ khi check xanh | ❌ |
-| 🟡 **yellow** | workflow logic · task hub · noti · KPI calc · chat realtime · FE payroll(mask) | Sonnet/Opus | LIGHT + test logic | ✅ báo diff | ✅ khi xanh | ⚠️ xem trước merge lớn |
-| 🔴 **red** | permission · RLS · secret/encrypt · payroll · finance snapshot · audit · migration | **Opus** | **FULL** (`security` + `database` + `silent-failure` [+ `santa-method`]) | ❌ không sửa mù | ❌ | ✅ **luôn người** |
+| 🟡 **yellow** | workflow phê duyệt (nghỉ phép/điều chỉnh công) · task · noti · FE dữ liệu nhạy cảm HR (mask) | Sonnet/Opus | LIGHT + test logic | ✅ báo diff | ✅ khi xanh | ⚠️ xem trước merge lớn |
+| 🔴 **red** | permission · RLS · secret/encrypt · audit · auth (login/token) · migration | **Opus** | **FULL** (`security` + `database` + `silent-failure` [+ `santa-method`]) | ❌ không sửa mù | ❌ | ✅ **luôn người** |
 
-Phát hiện crown-jewel tự động (regex trong parallel-lanes): payroll/lương/payslip · permission/RLS/policy ·
-secret/envelope/encrypt/KMS · finance/revenue/cost/profit/ledger · KPI · FSM/DAG · audit append-only · ADR.
+Phát hiện crown-jewel tự động (regex trong parallel-lanes): permission/RLS/policy · secret/envelope/encrypt/KMS ·
+auth/token · workflow phê duyệt (FSM/DAG) · audit append-only · ADR · (Phase 2: payroll/lương/payslip).
+De-media-fy 2026-06-20: bỏ finance/revenue/cost/profit/ledger/KPI (subsystem parked).
+
+> **Khoanh vùng đỏ chính xác = agent `red-zone-scanner`** (`.claude/agents/`). Regex `CROWN_JEWEL` soi tiêu đề + `RED_PATHS`
+> soi đường dẫn là **sàn rẻ trong brain** (thiên Opus, fail-closed); scanner đọc **diff/file thật** vẽ bản đồ zone theo
+> từng hunk — bắt ca "tiêu đề/đường dẫn xanh nhưng nội dung chạm đỏ". Gọi TRƯỚC khi route/merge khi nghi ngờ.
+
+## Đường nhanh việc nhỏ (fast lane — chống over-process)
+
+> Mặc định v2: cỗ máy đa-agent (`parallel-lanes`/`auto-loop` · plan → review độc lập · Opus) CHỈ dành cho việc
+> ĐỎ/phức tạp. Việc nhỏ KHÔNG đi qua máy — main-loop sửa thẳng, rẻ và nhanh. (Trước đây routing over-match
+> đẩy cả edit tí hon vào đường nặng ⇒ "rất lâu mới đổi vài chữ".)
+
+**Trivial edit** = main-loop tự `Edit` + `bash harness/check.sh --quick`. KHÔNG plan · KHÔNG reviewer độc lập ·
+KHÔNG Opus · KHÔNG gọi Workflow. Điều kiện ĐỦ (phải thoả MỌI gạch đầu dòng):
+
+- ≤ ~30 dòng diff **hoặc** ≤ 2 file;
+- KHÔNG chạm vùng đỏ (permission/RLS · secret/encrypt · audit · auth/token · migration/schema · FSM phê duyệt · ADR) — đụng 1 cái là hết trivial, theo zone 🔴;
+- loại việc: text/i18n/copy · comment/docs · đổi tên cục bộ · style · dời route · tinh chỉnh UI thuần.
+
+Nghi ngờ nhạy cảm → KHÔNG trivial (fail-closed). Lane lỡ route vào `parallel-lanes` nhưng thực ra nhỏ + sạch đỏ:
+hạ cấp tay bằng `skipPlan:true` + `noReview:true` (hoặc `model:'sonnet'`) — đây là dạng "cổng kích thước" thủ công.
+
+## Đường nhanh việc nhỏ (fast lane — chống over-process)
+
+> Mặc định v2: cỗ máy đa-agent (`parallel-lanes`/`auto-loop` · plan → review độc lập · Opus) CHỈ dành cho việc
+> ĐỎ/phức tạp. Việc nhỏ KHÔNG đi qua máy — main-loop sửa thẳng, rẻ và nhanh. (Trước đây routing over-match
+> đẩy cả edit tí hon vào đường nặng ⇒ "rất lâu mới đổi vài chữ".)
+
+**Trivial edit** = main-loop tự `Edit` + `bash harness/check.sh --quick`. KHÔNG plan · KHÔNG reviewer độc lập ·
+KHÔNG Opus · KHÔNG gọi Workflow. Điều kiện ĐỦ (phải thoả MỌI gạch đầu dòng):
+
+- ≤ ~30 dòng diff **hoặc** ≤ 2 file;
+- KHÔNG chạm vùng đỏ (permission/RLS · secret/encrypt · audit · auth/token · migration/schema · FSM phê duyệt · ADR) — đụng 1 cái là hết trivial, theo zone 🔴;
+- loại việc: text/i18n/copy · comment/docs · đổi tên cục bộ · style · dời route · tinh chỉnh UI thuần.
+
+Nghi ngờ nhạy cảm → KHÔNG trivial (fail-closed). Lane lỡ route vào `parallel-lanes` nhưng thực ra nhỏ + sạch đỏ:
+hạ cấp tay bằng `skipPlan:true` + `noReview:true` (hoặc `model:'sonnet'`) — đây là dạng "cổng kích thước" thủ công.
 
 ## Sàn cứng (không bypass — `.claude/hooks/`, PreToolUse)
 
@@ -21,9 +58,10 @@ secret/envelope/encrypt/KMS · finance/revenue/cost/profit/ledger · KPI · FSM/
 `guard-migration-band` · **`guard-scope` (cảnh báo khi sửa ngoài `paths` của Work Order — warn-only)** ·
 **`guard-claim` (claim-on-touch theo `session_id`; cảnh báo khi HAI PHIÊN cùng giữ một Work Order — warn-only, sổ chung mọi worktree ở `.git/mediaos-claims/`; xem `node harness/claim.mjs list`)**.
 
-## Routing — mỗi sub-task chọn 3 thứ (⑤)
+## Routing — mỗi sub-task chọn 4 thứ (⑤)
 
-- **pickModel**: red→Opus · else Sonnet (KHÔNG Haiku — thận trọng chất lượng, 2026-06-12).
+- **pickModel** (bộ não nào): red→Opus · else Sonnet (KHÔNG Haiku — thận trọng chất lượng, 2026-06-12).
+- **pickEffort** (nghĩ sâu tới đâu — TÁCH BẠCH với model): theo zone (fast→`low` · green/yellow→`medium` · crown→`high`) × stage (PLAN crown→`xhigh` là nơi reasoning trả giá nhất · REVIEW đối kháng→`high`). Override BASE bằng `lane.effort`. Escalation L1: mỗi vòng kẹt (`lane.retry`) +1 nấc TRƯỚC khi ↑ Opus (rẻ hơn nhảy model). Thang: `low<medium<high<xhigh<max`.
 - **pickReviewers** (auto theo domain): db→`database-reviewer` · sec/payroll/audit hoặc gate=FULL→`security-reviewer`+`silent-failure-hunter` · FE→`react-reviewer` · baseline `typescript-reviewer`.
 - **pickSkills**: tĩnh = field `skills` của Work Order (`backlog.mjs`); crown → `santa-method`; mọi lane → `quality-gate`.
 
@@ -33,7 +71,7 @@ Kích hoạt: gate đỏ > 2 vòng chưa ra gốc · agent tự báo bí · test
 
 ```
 L0  Sonnet (mặc định green/yellow)
-L1  cùng model + tăng reasoning effort + NẠP LẠI Work Order & memory   (nâng context — rẻ)
+L1  cùng model + tăng reasoning effort + NẠP LẠI Work Order & memory   (đã CODE: pickEffort +1 nấc/lane.retry — rẻ)
 L2  ↑ Opus                                                              (nâng model — red vào từ đây)
 L3  Opus + santa-method (2 agent đối kháng hội tụ) / chuyên gia góc khác
 L4  ⛔ NGƯỜI CHỐT — trần cứng

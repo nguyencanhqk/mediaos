@@ -1,7 +1,7 @@
 export const meta = {
   name: 'parallel-lanes',
   description: 'Fan-out micro-step (plan→RED→GREEN→gate→review→checkpoint) trên nhiều lane MediaOS song song, tự chọn model + agent/skill theo độ khó',
-  whenToUse: 'Khi muốn đẩy nhiều phase G* cùng lúc — mỗi lane 1 worktree + 1 band migration riêng. Crown-jewel tự lên Opus + plan + review độc lập; việc thường chạy Sonnet, reviewer/skill chèn vào gate (TASKS.md §5).',
+  whenToUse: 'Khi muốn đẩy nhiều phase G* cùng lúc — mỗi lane 1 worktree + 1 band migration riêng. Crown-jewel tự lên Opus + plan + review độc lập; việc thường chạy Sonnet, reviewer/skill chèn vào gate (CLAUDE.md §6 + §9 · harness/policy.md).',
   phases: [
     { title: 'Plan', detail: 'lane crown-jewel: 1 agent Opus lập micro-plan trước khi code' },
     { title: 'Implement', detail: 'mỗi lane 1 agent trong worktree+band của nó, chạy 1 round micro-step' },
@@ -17,7 +17,10 @@ export const meta = {
 //       gate: 'FULL', mode: 'TDD',           // mode: 'TDD' (🛠️) | 'AI-bulk' (🤖)
 //       tier: 'crown',                       // (tuỳ chọn) ép crown-jewel -> Opus + plan + review độc lập
 //       model: 'sonnet',                     // (tuỳ chọn) override model tay: 'opus'|'sonnet'|'haiku'
+//       effort: 'high',                      // (tuỳ chọn) override effort BASE: 'low'|'medium'|'high'|'xhigh'|'max' (escalation vẫn +nấc)
+//       retry: 2,                            // (tuỳ chọn) số vòng kẹt đã leo — auto-loop set; mỗi vòng +1 nấc effort (ladder L1) TRƯỚC khi ↑ Opus
 //       skipPlan: true,                      // (tuỳ chọn) bỏ bước plan dù là crown
+//       fastLane: true,                      // (tuỳ chọn) alias TRIVIAL = skipPlan + model:'sonnet' + noReview (chỉ lane nhỏ + sạch đỏ; xem policy.md "Đường nhanh việc nhỏ")
 //       reviewers: ['ecc:database-reviewer'],// (tuỳ chọn) ép danh sách reviewer (bỏ auto-detect)
 //       noReview: true },                    // (tuỳ chọn) tắt review + gate-injection
 //     ...
@@ -36,7 +39,7 @@ if (typeof cfg === 'string') {
 const lanes = cfg && Array.isArray(cfg.lanes) ? cfg.lanes : [];
 const dryRun = !!(cfg && cfg.dryRun);
 if (!lanes.length) {
-  log('⚠️  Không có lane nào trong args.lanes. Truyền { lanes: [{ id, worktree, band, task, gate, mode }] } (xem TASKS.md §5).');
+  log('⚠️  Không có lane nào trong args.lanes. Truyền { lanes: [{ id, worktree, band, task, gate, mode }] } (xem CLAUDE.md §9 + harness/policy.md).');
   return { error: 'no lanes provided' };
 }
 
@@ -52,13 +55,49 @@ const short = (a) => String(a).replace(/^ecc:/, '');
 //   Giữ cụm payroll/lương/payslip cho Phase 2 (payroll quay lại làm crown khi build).
 const CROWN_JEWEL =
   /(payroll|l[uư]ơng|payslip|bảng lương|bonus|penalty|thưởng|phạt|permission|\brls\b|policy|secret|envelope|encrypt|mã hóa|kms|vault|\bauth\b|token|\bfsm\b|\bdag\b|append-only|\badr\b)/i;
+// VÙNG ĐỎ theo PATH — vá lỗ hổng "tiêu đề xanh nhưng file chạm đỏ" (CROWN_JEWEL chỉ soi L.task).
+// Bản đồ đỏ THẬT theo từng hunk do agent `red-zone-scanner` vẽ; đây là sàn rẻ trong brain.
+const RED_PATHS =
+  /(\/permission\/|\/auth\/|\/crypto\/|\/security-policy\/|\/break-glass\/|drizzle|_journal|migration|audit|outbox|\/adr\/|\.permission\.)/i;
+const pathsTouchRed = (L) => Array.isArray(L.paths) && L.paths.some((p) => RED_PATHS.test(p));
 const PLANNER_MODEL = 'opus'; // model cho bước plan của crown-jewel (đổi 'sonnet' nếu muốn rẻ hơn)
 
-const isCrown = (L) => L.tier === 'crown' || CROWN_JEWEL.test(L.task || '');
-const pickModel = (L) => L.model || (isCrown(L) ? 'opus' : 'sonnet');
-const needsPlan = (L) => isCrown(L) && !L.skipPlan;
+// Đỏ nếu: ép tier='crown' · tiêu đề khớp CROWN_JEWEL · HOẶC paths chạm vùng đỏ (fail-closed, thiên Opus).
+const isCrown = (L) => L.tier === 'crown' || CROWN_JEWEL.test(L.task || '') || pathsTouchRed(L);
+// fastLane (policy.md "Đường nhanh việc nhỏ"): operator KHẲNG ĐỊNH lane này trivial + sạch đỏ (CROWN_JEWEL/
+// RED_PATHS over-match false-positive). = alias skipPlan + model:'sonnet' + noReview. KHÔNG bypass sàn cứng
+// PreToolUse (.claude/hooks/ guard-tenant/secrets/immutability/anti-bandaid) lẫn cổng merge NGƯỜI — chỉ tắt
+// plan + Opus + reviewer-độc-lập. Cùng mô hình tin-cậy như skipPlan/noReview/model đã có (operator tự khai).
+const isFast = (L) => !!L.fastLane;
+const pickModel = (L) => L.model || (isFast(L) ? 'sonnet' : isCrown(L) ? 'opus' : 'sonnet');
+const needsPlan = (L) => isCrown(L) && !L.skipPlan && !isFast(L);
 
-// ── Agent/skill routing (CLAUDE.md §6, TASKS.md §5.6) ────────────────────────
+// ── Effort routing (operationalize ladder L1 — harness/policy.md dòng "tăng reasoning effort") ──
+// Effort = núm "đổi token + latency lấy CHIỀU SÂU suy luận". TÁCH BẠCH với model: model chọn "bộ não nào",
+// effort chọn "nghĩ sâu tới đâu". Một việc green vẫn có thể cần effort thấp trên Sonnet (nhanh/rẻ); một việc
+// crown chạy Opus + effort cao (chất lượng > latency). Hai núm độc lập → 2 hàm độc lập.
+//
+// Nguyên tắc:
+//   • zone   : fast→low (mechanical, nhanh nhất) · green/yellow→medium · crown/red→high (chất lượng > latency)
+//   • stage  : PLAN của crown = nơi suy luận sâu TRẢ GIÁ NHẤT → xhigh · REVIEW đối kháng cần chiều sâu → high
+//   • escalation (L1): mỗi vòng kẹt (L.retry) NHẤC 1 NẤC effort TRƯỚC khi ↑ Opus (rẻ hơn nhảy model nhiều)
+//   • override tay: L.effort = BASE (operator chốt); escalation vẫn cộng nấc lên trên.
+const EFFORT_LADDER = ['low', 'medium', 'high', 'xhigh', 'max'];
+const bumpEffort = (e, n = 1) => {
+  const i = EFFORT_LADDER.indexOf(e);
+  return EFFORT_LADDER[Math.min(EFFORT_LADDER.length - 1, Math.max(0, (i < 0 ? 1 : i) + n))];
+};
+function pickEffort(L, stage = 'implement') {
+  const retry = Math.max(0, Number(L.retry) || 0); // số vòng kẹt đã leo (auto-loop set)
+  let e;
+  if (L.effort) e = L.effort;                                          // base do operator chốt
+  else if (stage === 'plan') e = isCrown(L) ? 'xhigh' : 'high';        // micro-plan: reasoning trả giá nhất
+  else if (stage === 'review') e = isCrown(L) ? 'high' : 'medium';     // review đối kháng cần chiều sâu
+  else /* implement */ e = isFast(L) ? 'low' : isCrown(L) ? 'high' : 'medium';
+  return bumpEffort(e, retry); // ladder L1: mỗi vòng kẹt +1 nấc
+}
+
+// ── Agent/skill routing (CLAUDE.md §6 · harness/policy.md) ───────────────────
 // Tự chọn reviewer/skill/build-resolver đúng domain của lane. Hybrid:
 //   crown-jewel → spawn reviewer agent ĐỘC LẬP ở stage Review (+ santa-method);
 //   việc thường → chèn danh sách vào prompt để implementer tự chạy.
@@ -71,11 +110,13 @@ const DOMAIN = {
 // VAI TRÒ review (mô tả, để khung prompt) → agent type CÓ THẬT trong registry.
 // Lý do: reviewer 'ecc:*' KHÔNG tồn tại ở runtime này → stage Review crown fail âm thầm (phiên 2026-06-20).
 // 3 nhóm cho ĐA GÓC NHÌN mà không spawn trùng: DB/RLS · bảo mật · chất-lượng-code.
-// Available: claude · claude-code-guide · completion-evaluator · Explore · general-purpose · Plan · plan-reviewer · rls-tenant-isolation-tester · statusline-setup.
+// Available (project .claude/agents/ + runtime): tech-lead · red-zone-scanner · backend-builder · frontend-builder ·
+//   db-migration · security-reviewer · qa-test-engineer · devops-ci · completion-evaluator · plan-reviewer ·
+//   rls-tenant-isolation-tester · claude · general-purpose · Explore · Plan.
 const REVIEWER_AGENT = {
   'database-reviewer': 'rls-tenant-isolation-tester', // chuyên dụng RLS/tenant, read-only
-  'security-reviewer': 'general-purpose', // suy luận bảo mật (prompt ép read-only)
-  'silent-failure-hunter': 'general-purpose',
+  'security-reviewer': 'security-reviewer', // agent an ninh THẬT (OWASP + 3 bất biến, read-only Opus)
+  'silent-failure-hunter': 'security-reviewer', // gộp vào reviewer an ninh: 1 spawn soi cả nuốt-lỗi/secret
   'react-reviewer': 'completion-evaluator', // chất lượng FE/UI
   'typescript-reviewer': 'completion-evaluator', // baseline: chạy typecheck/test + rubric DoD
 };
@@ -83,7 +124,7 @@ const reviewerAgentFor = (role) => REVIEWER_AGENT[short(role)] || 'general-purpo
 
 // Trả về [{ agentType, roles[], label }] — đã GOM theo agent thật (1 agent/lần, kèm các vai trò nó đảm nhiệm).
 function pickReviewers(L) {
-  if (L.noReview) return [];
+  if (L.noReview || isFast(L)) return [];
   let roles;
   if (Array.isArray(L.reviewers) && L.reviewers.length) {
     roles = [...new Set(L.reviewers.map(short))]; // override: chấp nhận cả 'ecc:x' lẫn 'x'
@@ -109,7 +150,7 @@ function pickReviewers(L) {
 }
 
 function pickSkills(L) {
-  if (L.noReview) return [];
+  if (L.noReview || isFast(L)) return [];
   const s = [];
   if (isCrown(L)) s.push('ecc:santa-method');
   s.push('ecc:quality-gate');
@@ -119,10 +160,20 @@ function pickSkills(L) {
 const pickBuildResolver = (L) =>
   DOMAIN.fe.test(`${L.task || ''}`) ? 'ecc:react-build-resolver' : 'ecc:build-error-resolver';
 
+// Builder thực thi stage Implement theo domain → agent THẬT trong .claude/agents/.
+//   DB/migration → db-migration (lane nối tiếp, Opus) · FE → frontend-builder · còn lại → backend-builder.
+// Tất cả mang sẵn bất biến MediaOS (company_id/RLS · audit append-only · soft-delete · deny-path RED).
+const pickBuilder = (L) =>
+  DOMAIN.db.test(`${L.task || ''}`)
+    ? 'db-migration'
+    : DOMAIN.fe.test(`${L.task || ''}`)
+      ? 'frontend-builder'
+      : 'backend-builder';
+
 // ── Log routing minh bạch ────────────────────────────────────────────────────
 const routeLabel = (L) =>
-  `${L.id} → ${pickModel(L)}${
-    isCrown(L) ? ` [crown${needsPlan(L) ? ', +plan' : ''}${pickReviewers(L).length ? ', +review' : ''}]` : ''
+  `${L.id} → ${pickModel(L)}/${pickEffort(L, 'implement')}${Number(L.retry) ? `↑${L.retry}` : ''} · ${pickBuilder(L)}${isFast(L) ? ' ⚡fast' : ''}${
+    isCrown(L) && !isFast(L) ? ` [crown${needsPlan(L) ? ', +plan' : ''}${pickReviewers(L).length ? ', +review' : ''}]` : ''
   }`;
 
 log(`Routing ${lanes.length} lane:`);
@@ -142,7 +193,10 @@ if (dryRun) {
     routing: lanes.map((L) => ({
       lane: L.id,
       model: pickModel(L),
+      effort: { plan: pickEffort(L, 'plan'), implement: pickEffort(L, 'implement'), review: pickEffort(L, 'review') },
+      builder: pickBuilder(L),
       crown: isCrown(L),
+      fast: isFast(L),
       plan: needsPlan(L),
       reviewStage: isCrown(L) && pickReviewers(L).length > 0, // crown mới spawn reviewer độc lập
       reviewers: pickReviewers(L).map((r) => `${r.label}→${r.agentType}`),
@@ -217,7 +271,7 @@ function plannerPrompt(L) {
     `Bạn LẬP KẾ HOẠCH (KHÔNG sửa file) cho LANE ${L.id.toUpperCase()} — vùng CROWN-JEWEL nhạy cảm của MediaOS.`,
     `Worktree: ${L.worktree}. Band migration: ${L.band}.`,
     ``,
-    `ĐỌC TRƯỚC (read-only): ${L.worktree}/CLAUDE.md (§2 bất biến · §6 review gate · §9 song song) + ${L.worktree}/TASKS.md §5.`,
+    `ĐỌC TRƯỚC (read-only): ${L.worktree}/CLAUDE.md (§2 bất biến · §6 review gate · §9 vận hành song song) + ${L.worktree}/harness/policy.md (luật model/gate/routing).`,
     `Có thể đọc code liên quan trong ${L.worktree} để lập plan chính xác. TUYỆT ĐỐI KHÔNG Edit/Write/commit/chạy lệnh đổi trạng thái.`,
     ``,
     `NHIỆM VỤ CẦN LẬP PLAN: ${L.task}`,
@@ -253,12 +307,12 @@ function implementerPrompt(L, plan) {
     `Worktree DUY NHẤT được phép đụng: ${L.worktree}. Band migration: ${L.band}.`,
     `Mọi lệnh git/pnpm chạy bằng: cd "${L.worktree}" && <lệnh>.`,
     ``,
-    `ĐỌC TRƯỚC: ${L.worktree}/CLAUDE.md (đặc biệt §9 vận hành song song) + ${L.worktree}/TASKS.md §5.`,
+    `ĐỌC TRƯỚC: ${L.worktree}/CLAUDE.md (đặc biệt §6 review gate + §9 vận hành song song) + ${L.worktree}/harness/policy.md.`,
     ...planBlock,
     `NHIỆM VỤ LƯỢT NÀY: ${L.task}`,
     `Chế độ: ${L.mode}. Gate: ${L.gate}.`,
     ``,
-    `VÒNG MICRO-STEP BẮT BUỘC (TASKS.md §5.5):`,
+    `VÒNG MICRO-STEP BẮT BUỘC (CLAUDE.md §9.4):`,
     tddStep,
     `2) Implement TỐI THIỂU để GREEN. Migration (nếu có) PHẢI nằm trong band ${L.band}; _journal.json idx/when đơn điệu tăng.`,
     `2.5) DB CÔ LẬP (chống shared-DB drift) — TRƯỚC khi chạy test cần Postgres: nếu apps/api/vitest.config.ts còn bản hardcode URL cũ, đồng bộ từ master: 'git checkout master -- apps/api/vitest.config.ts'. Rồi 'bash ../MediaOS/scripts/lane-db-setup.sh ${L.id}' (tạo + chain-migrate mediaos_${L.id}) và 'export LANE_DB=mediaos_${L.id}'. TUYỆT ĐỐI KHÔNG migrate/test vào DB dùng chung 'mediaos' (drizzle migrator đơn điệu theo when → migration band thấp bị SKIP).`,
@@ -270,7 +324,7 @@ function implementerPrompt(L, plan) {
     ``,
     `RÀNG BUỘC CỨNG:`,
     `- TUYỆT ĐỐI chỉ làm trong ${L.worktree}; KHÔNG đụng worktree/lane khác.`,
-    `- Hot-file CẤM rewrite (TASKS.md §5.3): audit object_types CHECK = UNION; permission seed = ON CONFLICT DO NOTHING; schema/index.ts + app.module.ts = khối additive.`,
+    `- Hot-file CẤM rewrite (CLAUDE.md §9.3): audit object_types CHECK = UNION; permission seed = ON CONFLICT DO NOTHING; schema/index.ts + app.module.ts = khối additive.`,
     `- KHÔNG vá triệu chứng (@ts-ignore, catch rỗng, eslint-disable) — truy root-cause.`,
     ``,
     `Trả về DUY NHẤT object theo schema (lane="${L.id}").`,
@@ -330,6 +384,7 @@ const rawResults = (
             label: `plan:${L.id}`,
             phase: 'Plan',
             model: PLANNER_MODEL,
+            effort: pickEffort(L, 'plan'),
             schema: PLAN_SCHEMA,
           })
         : { __noPlan: true }, // sentinel non-null: KHÔNG trả null (pipeline drop item khi stage trả falsy)
@@ -338,6 +393,8 @@ const rawResults = (
         label: `lane:${L.id}`,
         phase: 'Implement',
         model: pickModel(L),
+        effort: pickEffort(L, 'implement'),
+        agentType: pickBuilder(L), // builder thật theo domain (db-migration/frontend/backend-builder)
         schema: RESULT_SCHEMA,
       }),
     (impl, L) => {
@@ -350,6 +407,7 @@ const rawResults = (
             label: `review:${L.id}:${rv.label}`,
             phase: 'Review',
             model: pickModel(L),
+            effort: pickEffort(L, 'review'),
             agentType: rv.agentType,
             schema: VERDICT_SCHEMA,
           }),

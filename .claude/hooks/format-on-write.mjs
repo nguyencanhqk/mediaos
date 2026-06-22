@@ -6,7 +6,10 @@
 import process from "node:process";
 import { spawnSync } from "node:child_process";
 
-const FMT_EXT = /\.(ts|tsx|js|jsx|mjs|cjs|json|css|md|yml|yaml|html)$/i;
+// LƯU Ý: KHÔNG format .md/.mdx. Prettier reflow prose + bỏ dấu <> trong link markdown,
+// làm file đổi trên đĩa sau mỗi edit → snapshot read của Claude bị "cũ" → edit nối tiếp trượt
+// ("Edit failed" hàng loạt khi sửa nhiều chỗ trong 1 doc). Docs do người soạn, không auto-format.
+const FMT_EXT = /\.(ts|tsx|js|jsx|mjs|cjs|json|css|yml|yaml|html)$/i;
 const SKIP_PATH = /([\\/]\.claude[\\/]|[\\/]node_modules[\\/]|[\\/]dist[\\/])/i;
 
 async function readStdin() {

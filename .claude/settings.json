@@ -43,10 +43,6 @@
           {
             "type": "command",
             "command": "node .claude/hooks/format-on-write.mjs"
-          },
-          {
-            "type": "command",
-            "command": "node .claude/hooks/typecheck-changed.mjs"
           }
         ]
       }
@@ -54,6 +50,10 @@
     "Stop": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/typecheck-on-stop.mjs"
+          },
           {
             "type": "command",
             "command": "node .claude/hooks/stop-gate.mjs"

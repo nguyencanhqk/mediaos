@@ -27,7 +27,7 @@ bash harness/finish.sh      # ĐÓNG: full check (+test) → cập nhật backlo
 | **Hướng dẫn** | contract slim | `AGENTS.md` → `CLAUDE.md` |
 | **Phạm vi** | ① Work Order (làm gì · `paths` · `done_when`) | `harness/backlog.mjs` |
 | **Trạng thái** | tự sinh "đang ở đâu" | `harness/gen-status.mjs` → `docs/STATUS.md` |
-| **Ghi nhớ** | ② 3 tầng: phiên (TodoWrite) → bàn giao → dài hạn | `harness/handoff.md` · `docs/adr/` |
+| **Ghi nhớ** | ② 3 tầng: phiên (TodoWrite) → bàn giao → dài hạn | `harness/handoff.md` · `docs/DECISIONS/` |
 | **Kiểm chứng** | verify 1 lệnh + 6 hook + CI RLS gate | `harness/check.sh` · `.claude/hooks/` · `.github/workflows/ci.yml` |
 | **Vòng đời** | ④ mở/đóng phiên | `harness/init.sh` · `harness/finish.sh` |
 | (xuyên suốt) | ③ phân rã→song song→chuyên gia→leo thang · ⑤ routing model/skill | `.claude/workflows/parallel-lanes.mjs` + `policy.md` |
@@ -37,11 +37,11 @@ bash harness/finish.sh      # ĐÓNG: full check (+test) → cập nhật backlo
 
 ```js
 // harness/backlog.mjs
-{ id: 'FE-WS-1', title: '…', zone: 'green', status: 'in_progress',
-  paths: ['apps/workspace/**', 'apps/studio/**'],   // ◀ SỬA Ở ĐÂU (guard-scope ép)
-  skills: ['frontend-design', 'code-review'],        // ◀ DÙNG SKILL NÀO (⑤ tĩnh)
+{ id: 'HR-EMP-1', title: 'HR: danh sách + chi tiết nhân viên (mask CCCD)', zone: 'yellow', status: 'in_progress',
+  paths: ['apps/api/src/hr/**', 'apps/app/src/routes/hr/**'],  // ◀ SỬA Ở ĐÂU (guard-scope ép)
+  skills: ['frontend-design', 'code-review'],                   // ◀ DÙNG SKILL NÀO (⑤ tĩnh)
   depends_on: ['HARNESS-SPINE'],
-  done_when: ['…'] }                                  // ◀ ĐÍCH HỘI TỤ (verify chứng minh)
+  done_when: ['…'] }                                            // ◀ ĐÍCH HỘI TỤ (verify chứng minh)
 ```
 
 ## Bộ não (đa-agent) nối vào thế nào
