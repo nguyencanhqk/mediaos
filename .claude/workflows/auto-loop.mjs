@@ -555,7 +555,9 @@ async function executeWO(plan, wt) {
 
     // ── ĐỘI 3: Kiểm tra & Review (song song; PASS iff TẤT CẢ pass) ──
     phase('Review');
-    const roles = sensitive ? ['completion-evaluator', 'security-reviewer', 'qa-test-engineer'] : ['completion-evaluator', 'code-reviewer'];
+    // 'code-reviewer' KHÔNG phải agentType đăng ký trong workflow (chỉ có ở ~/.claude/agents global, KHÔNG spawn được) →
+    //   trước đây spawn lỗi + bị filter(Boolean) loại âm thầm ⇒ review non-sensitive DEGRADE còn 1 reviewer. Dùng agent CÓ THẬT.
+    const roles = sensitive ? ['completion-evaluator', 'security-reviewer', 'qa-test-engineer'] : ['completion-evaluator', 'qa-test-engineer'];
     const reviews = await parallel(
       roles.map((role) => () =>
         agent(reviewPrompt(wo, built, accept, tests, role, wt), {
