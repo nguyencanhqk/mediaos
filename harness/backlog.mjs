@@ -293,7 +293,8 @@ export const backlog = [
     title:
       "AuditService v2 (DB-08 shape) + AuditMaskerService + audit-list/detail API theo permission+data-scope (append-only)",
     zone: "red",
-    status: "todo",
+    // closed by lane commits d1181e6 / 45f5aac / f33d4c4 (L1 write-shape · L2 read-contracts · L3 tests)
+    status: "done",
     paths: [
       "apps/api/src/foundation/audit/**",
       "apps/api/src/events/audit.service.ts",
