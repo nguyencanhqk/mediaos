@@ -83,6 +83,9 @@ jobs:
       JWT_SECRET: ci-only-jwt-secret-0123456789abcdef
       # Scheduler tắt trong CI test (NODE_ENV=test) — vitest set NODE_ENV=test; double-guard kill-switch off.
       WORKERS_SCHEDULER_ENABLED: "false"
+      # Test crypto/2FA (LocalKekProvider) cần file KEK 32-byte tại path này. CI sinh KEK EPHEMERAL ở step dưới
+      # (KHÔNG phải secret thật — prod dùng Vault transit, ADR-0004). Đặt env để cả gen-step lẫn test cùng đọc.
+      KMS_LOCAL_KEK_PATH: ${{ github.workspace }}/.secrets/local-kek.bin
 
     steps:
       - uses: actions/checkout@v4
@@ -119,6 +122,13 @@ jobs:
       # Gán mật khẩu mediaos_app/worker (tách secret khỏi migration) → app role nối được, RLS ép thật.
       - name: Setup DB role passwords
         run: pnpm db:setup-roles
+
+      # Crypto tests (secret-encryption · 2FA enroll) cần KEK 32-byte tại KMS_LOCAL_KEK_PATH (LocalKekProvider,
+      # dev-only). Sinh KEK NGẪU NHIÊN ephemeral mỗi run — KHÔNG phải secret thật (prod = Vault transit, ADR-0004).
+      - name: Generate ephemeral dev KEK (crypto tests)
+        run: |
+          mkdir -p "$(dirname "$KMS_LOCAL_KEK_PATH")"
+          node -e "require('fs').writeFileSync(process.env.KMS_LOCAL_KEK_PATH, require('crypto').randomBytes(32))"
 
       - name: Test (unit + integration RLS/auth)
         run: pnpm --filter @mediaos/api test

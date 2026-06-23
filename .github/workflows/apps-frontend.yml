@@ -74,8 +74,17 @@ jobs:
       - name: Build shared packages
         run: pnpm --filter @mediaos/contracts --filter @mediaos/web-core --filter @mediaos/ui build
 
-      # VITE_* prod nhúng lúc BUILD (build-time, KHÔNG runtime). Mỗi app chỉ set biến nó thực sự đọc.
-      # DOMAIN từ repo var PROD_DOMAIN (vắng → placeholder 'funtimemediacorp.com' để build vẫn xanh ở CI).
+      - name: Typecheck
+        run: pnpm --filter @mediaos/${{ matrix.app }} typecheck
+
+      # Test (vitest) chạy với env DEV mặc định — TUYỆT ĐỐI KHÔNG inject VITE_* prod TRƯỚC bước này: login.spec
+      # assert DEFAULT_APP_URL dev ('http://web.localhost:5273', config.ts fallback). Nếu set VITE_DEFAULT_APP_URL
+      # prod trước test → import.meta.env override → assertion lệch → đỏ-giả. Vì vậy Resolve VITE_* nằm SAU Test.
+      - name: Test
+        run: pnpm --filter @mediaos/${{ matrix.app }} test
+
+      # VITE_* prod nhúng lúc BUILD (build-time, KHÔNG runtime) — resolve SAU Test, chỉ phục vụ Build.
+      # Mỗi app chỉ set biến nó thực sự đọc. DOMAIN từ repo var PROD_DOMAIN (vắng → placeholder để build xanh ở CI).
       - name: Resolve build-time VITE_* env for ${{ matrix.app }}
         run: |
           DOMAIN="${{ vars.PROD_DOMAIN || 'funtimemediacorp.com' }}"
@@ -90,12 +99,6 @@ jobs:
               echo "VITE_AUTH_APP_URL=${AUTH_URL}"          >> "$GITHUB_ENV"
               ;;
           esac
-
-      - name: Typecheck
-        run: pnpm --filter @mediaos/${{ matrix.app }} typecheck
-
-      - name: Test
-        run: pnpm --filter @mediaos/${{ matrix.app }} test
 
       - name: Build
         run: pnpm --filter @mediaos/${{ matrix.app }} build

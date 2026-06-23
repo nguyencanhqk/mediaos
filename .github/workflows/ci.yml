@@ -58,6 +58,9 @@ jobs:
       PGBOUNCER_AUTH_PASSWORD: ci_pgb_pw
       # JWT secret ephemeral cho test auth (G2-6).
       JWT_SECRET: ci-only-jwt-secret-0123456789abcdef
+      # Test crypto/2FA (LocalKekProvider) cần file KEK 32-byte tại path này — sinh ephemeral ở step dưới
+      # (KHÔNG phải secret thật; prod = Vault transit, ADR-0004).
+      KMS_LOCAL_KEK_PATH: ${{ github.workspace }}/.secrets/local-kek.bin
 
     steps:
       - uses: actions/checkout@v4
@@ -124,6 +127,12 @@ jobs:
             fi
             sleep 1
           done
+
+      # Crypto/2FA tests cần KEK 32-byte (LocalKekProvider, dev-only) — sinh ephemeral mỗi run (prod = Vault).
+      - name: Generate ephemeral dev KEK (crypto tests)
+        run: |
+          mkdir -p "$(dirname "$KMS_LOCAL_KEK_PATH")"
+          node -e "require('fs').writeFileSync(process.env.KMS_LOCAL_KEK_PATH, require('crypto').randomBytes(32))"
 
       # Test gồm integration RLS/isolation/outbox/auth chạy THẬT (DATABASE_URL = mediaos_app).
       # Đây là gate "không rò chéo tenant" của cả dự án (G2-5) + gate qua-pool (PGBOUNCER_URL, GX-4).
