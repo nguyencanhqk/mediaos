@@ -468,16 +468,20 @@ export const backlog = [
       "Wire QueryClient defaultOptions (retry=shouldRetryQuery + staleTime/gcTime FRONTEND-04 §16) vào apps/*/main.tsx + override X-Client-Version từ build env",
     zone: "green",
     // Tách từ S0-FE-API-1 (scope=packages/web-core/** không sửa được apps): web-core CHỈ export query-keys +
-    // shouldRetryQuery (hàm thuần); việc lắp vào `new QueryClient({defaultOptions})` + configureClient(version)
+    // shouldRetryQuery (hàm thuần); việc lắp vào `new QueryClient({defaultOptions})` + configureClientVersion
     // ở app NẰM NGOÀI scope WO kia → WO này nhận phần wiring app-level.
-    status: "todo",
+    // CLOSE 2026-06-23 (PR #5): RECONCILE done_when ↔ code — apps/auth KHÔNG dùng react-query (SPA login 1-trang)
+    //   nên CHỈ app+console lắp QueryClient defaultOptions; hàm thật = configureClientVersion (KHÔNG "configureClient");
+    //   thêm VITE_APP_VERSION vào 3 vite-env.d.ts. typecheck+build+test 3 app xanh (app 61 · console 177 · auth 9).
+    status: "done",
     paths: ["apps/app/**", "apps/console/**", "apps/auth/**"],
     skills: ["code-review"],
     depends_on: ["S0-FE-API-1"],
     src: ["FRONTEND-04 §16.1-16.3", "FRONTEND-04 §8 (X-Client-Version)"],
+    plan: "docs/plans/S1-FE-QUERY-WIRE-1.md",
     done_when: [
-      "apps/{app,console,auth}/src/main.tsx dùng new QueryClient({defaultOptions:{queries:{retry:shouldRetryQuery, staleTime, gcTime, refetchOnWindowFocus:false}, mutations:{retry:false}}}) — KHÔNG còn QueryClient trần",
-      "configureClient() truyền X-Client-Version từ import.meta.env (build env) ở mỗi app main.tsx (web-core giữ default 'web'/'0.1.0')",
+      "apps/app + apps/console main.tsx dùng new QueryClient({defaultOptions:{queries:{retry:shouldRetryQuery, staleTime:30_000, gcTime:5*60_000, refetchOnWindowFocus:false}, mutations:{retry:false}}}) — KHÔNG còn QueryClient trần (apps/auth KHÔNG có QueryClient → bỏ qua)",
+      "configureClientVersion(import.meta.env.VITE_APP_VERSION) ở cả 3 app main.tsx (web-core giữ default 'web'/'0.1.0' khi env vắng); VITE_APP_VERSION khai trong vite-env.d.ts",
       "web test 3 app xanh; typecheck xanh",
     ],
   },

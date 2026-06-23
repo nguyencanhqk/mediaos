@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
-import { configureApiBaseUrl, i18n } from "@mediaos/web-core";
+import { configureApiBaseUrl, configureClientVersion, i18n } from "@mediaos/web-core";
 import { LoginPage } from "@/routes/login";
 import "@/index.css";
 
@@ -12,6 +12,7 @@ import "@/index.css";
 // (authApi.login · twoFactorApi.verifyLogin · authApi.checkRedirect đều đã set). Nếu gọi authed → 401 sẽ kích
 // refresh-on-401 → redirectToAuth() → tự điều hướng về CHÍNH apps/auth = vòng lặp. KHÔNG configureAuthAppUrl ở đây.
 configureApiBaseUrl(import.meta.env.VITE_API_URL);
+configureClientVersion(import.meta.env.VITE_APP_VERSION);
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {

@@ -14,6 +14,8 @@ const bootstrapSession = vi.fn();
 const redirectToAuth = vi.fn();
 const configureApiBaseUrl = vi.fn();
 const configureAuthAppUrl = vi.fn();
+const configureClientVersion = vi.fn();
+const shouldRetryQuery = vi.fn(() => false);
 const renderSpy = vi.fn();
 const createRootSpy = vi.fn(() => ({ render: renderSpy, unmount: vi.fn() }));
 
@@ -22,6 +24,9 @@ vi.mock("@mediaos/web-core", () => ({
   redirectToAuth,
   configureApiBaseUrl,
   configureAuthAppUrl,
+  // S1-FE-QUERY-WIRE-1: main.tsx truyền version + lắp retry policy vào QueryClient.
+  configureClientVersion,
+  shouldRetryQuery,
   // i18n re-export dùng bởi @/i18n (NAMED `i18n`) — chỉ cần object react-i18next-compatible.
   i18n: { t: (k: string) => k, on: vi.fn(), off: vi.fn(), changeLanguage: vi.fn() },
   registerI18nResources: vi.fn(),
