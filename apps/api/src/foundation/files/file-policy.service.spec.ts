@@ -16,21 +16,21 @@
  *   8. duplicate-registration — two resolvers same (module,entity) → loud-fail throw
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { FilePolicyService, type FilePermissionChecker } from './file-policy.service';
-import { FilePolicyAction, type FilePermissionInput } from './file-policy.types';
-import type { FileOwnerPermissionResolver } from './resolvers/file-owner-permission-resolver';
-import type { PermissionDecision } from '../../permission/permission.types';
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { FilePolicyService, type FilePermissionChecker } from "./file-policy.service";
+import { FilePolicyAction, type FilePermissionInput } from "./file-policy.types";
+import type { FileOwnerPermissionResolver } from "./resolvers/file-owner-permission-resolver";
+import type { PermissionDecision } from "../../permission/permission.types";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 type CanCall = { userId: string; companyId: string; action: string; resourceType: string };
 
 function allowDecision(): PermissionDecision {
-  return { allow: true, reason: 'allow', auditRequired: false };
+  return { allow: true, reason: "allow", auditRequired: false };
 }
 
-function denyDecision(reason: PermissionDecision['reason'] = 'deny-default'): PermissionDecision {
+function denyDecision(reason: PermissionDecision["reason"] = "deny-default"): PermissionDecision {
   return { allow: false, reason, auditRequired: false };
 }
 
@@ -48,7 +48,7 @@ function makePermissionMock(decision: PermissionDecision | (() => never)): {
         action: input.action,
         resourceType: input.resourceType,
       });
-      if (typeof decision === 'function') return decision();
+      if (typeof decision === "function") return decision();
       return decision;
     }),
   };
@@ -59,11 +59,11 @@ function makePermissionMock(decision: PermissionDecision | (() => never)): {
 function makeResolver(
   moduleCode: string,
   entityTypes: string[] | undefined,
-  verdict: boolean | 'throw',
+  verdict: boolean | "throw",
 ): FileOwnerPermissionResolver & { calls: string[] } {
   const calls: string[] = [];
   const decide = async (): Promise<boolean> => {
-    if (verdict === 'throw') throw new Error('resolver boom');
+    if (verdict === "throw") throw new Error("resolver boom");
     return verdict;
   };
   return {
@@ -90,19 +90,19 @@ function makeResolver(
 }
 
 const baseInput = (overrides: Partial<FilePermissionInput> = {}): FilePermissionInput => ({
-  companyId: 'co-1',
-  userId: 'user-1',
-  fileId: 'file-1',
-  moduleCode: 'HR',
-  entityType: 'EmployeeContract',
-  entityId: 'ent-1',
+  companyId: "co-1",
+  userId: "user-1",
+  fileId: "file-1",
+  moduleCode: "HR",
+  entityType: "EmployeeContract",
+  entityId: "ent-1",
   action: FilePolicyAction.Download,
   ...overrides,
 });
 
 // ─── Suite ──────────────────────────────────────────────────────────────────
 
-describe('FilePolicyService', () => {
+describe("FilePolicyService", () => {
   let permission: ReturnType<typeof makePermissionMock>;
   let service: FilePolicyService;
 
@@ -112,9 +112,9 @@ describe('FilePolicyService', () => {
   });
 
   // 1. deny-by-default ──────────────────────────────────────────────────────
-  describe('deny-by-default (fail-closed)', () => {
-    it('denies every action when no resolver matches AND user has no FOUNDATION.FILE.*', async () => {
-      const input = baseInput({ moduleCode: 'UNKNOWN', entityType: 'Mystery' });
+  describe("deny-by-default (fail-closed)", () => {
+    it("denies every action when no resolver matches AND user has no FOUNDATION.FILE.*", async () => {
+      const input = baseInput({ moduleCode: "UNKNOWN", entityType: "Mystery" });
 
       expect((await service.canView(input)).allow).toBe(false);
       expect((await service.canDownload(input)).allow).toBe(false);
@@ -124,47 +124,47 @@ describe('FilePolicyService', () => {
   });
 
   // 2. resolver-dispatch ──────────────────────────────────────────────────────
-  describe('resolver dispatch by (module_code, entity_type)', () => {
-    it('picks the exact resolver for the matching (module, entity); wrong resolver is NOT called', async () => {
-      const hrContract = makeResolver('HR', ['EmployeeContract'], true);
-      const leaveAttach = makeResolver('LEAVE', ['LeaveAttachment'], true);
+  describe("resolver dispatch by (module_code, entity_type)", () => {
+    it("picks the exact resolver for the matching (module, entity); wrong resolver is NOT called", async () => {
+      const hrContract = makeResolver("HR", ["EmployeeContract"], true);
+      const leaveAttach = makeResolver("LEAVE", ["LeaveAttachment"], true);
       service.registerResolver(hrContract);
       service.registerResolver(leaveAttach);
 
       const decision = await service.canDownload(
-        baseInput({ moduleCode: 'HR', entityType: 'EmployeeContract' }),
+        baseInput({ moduleCode: "HR", entityType: "EmployeeContract" }),
       );
 
       expect(decision.allow).toBe(true);
-      expect(hrContract.calls).toEqual(['download:EmployeeContract']);
+      expect(hrContract.calls).toEqual(["download:EmployeeContract"]);
       expect(leaveAttach.calls).toEqual([]); // wrong module/entity never invoked
       expect(permission.calls).toHaveLength(0); // fallback NOT used when a resolver matched
     });
 
-    it('normalizes case/whitespace so registration and lookup agree', async () => {
-      const hr = makeResolver('hr', ['employeecontract'], true);
+    it("normalizes case/whitespace so registration and lookup agree", async () => {
+      const hr = makeResolver("hr", ["employeecontract"], true);
       service.registerResolver(hr);
 
       const decision = await service.canDownload(
-        baseInput({ moduleCode: '  HR ', entityType: 'EmployeeContract' }),
+        baseInput({ moduleCode: "  HR ", entityType: "EmployeeContract" }),
       );
 
       expect(decision.allow).toBe(true);
-      expect(hr.calls).toEqual(['download:EmployeeContract']);
+      expect(hr.calls).toEqual(["download:EmployeeContract"]);
     });
   });
 
   // 3. resolver-deny (no escalation) ──────────────────────────────────────────
-  describe('resolver deny is final', () => {
-    it('returns DENY when matched resolver returns false — does NOT fall through to FOUNDATION.FILE.*', async () => {
-      const hr = makeResolver('HR', ['EmployeeContract'], false);
+  describe("resolver deny is final", () => {
+    it("returns DENY when matched resolver returns false — does NOT fall through to FOUNDATION.FILE.*", async () => {
+      const hr = makeResolver("HR", ["EmployeeContract"], false);
       // permission would ALLOW if consulted — proves no escalation path
       const grant = makePermissionMock(allowDecision());
       service = new FilePolicyService(grant.service);
       service.registerResolver(hr);
 
       const decision = await service.canDownload(
-        baseInput({ moduleCode: 'HR', entityType: 'EmployeeContract' }),
+        baseInput({ moduleCode: "HR", entityType: "EmployeeContract" }),
       );
 
       expect(decision.allow).toBe(false);
@@ -173,11 +173,11 @@ describe('FilePolicyService', () => {
   });
 
   // 4. fallback-allow ─────────────────────────────────────────────────────────
-  describe('fallback to FOUNDATION.FILE.* when no resolver registered', () => {
-    it('allows when PermissionService.can() ALLOWs and maps each action to the right permission', async () => {
+  describe("fallback to FOUNDATION.FILE.* when no resolver registered", () => {
+    it("allows when PermissionService.can() ALLOWs and maps each action to the right permission", async () => {
       const grant = makePermissionMock(allowDecision());
       service = new FilePolicyService(grant.service);
-      const input = baseInput({ moduleCode: 'UNKNOWN', entityType: 'Mystery' });
+      const input = baseInput({ moduleCode: "UNKNOWN", entityType: "Mystery" });
 
       expect((await service.canView(input)).allow).toBe(true);
       expect((await service.canDownload(input)).allow).toBe(true);
@@ -185,93 +185,95 @@ describe('FilePolicyService', () => {
       expect((await service.canDelete(input)).allow).toBe(true);
 
       const actions = grant.calls.map((c) => c.action);
-      expect(actions).toEqual(['view', 'download', 'link', 'delete']);
-      expect(grant.calls.every((c) => c.resourceType === 'file')).toBe(true);
+      expect(actions).toEqual(["view", "download", "link", "delete"]);
+      expect(grant.calls.every((c) => c.resourceType === "foundation-file")).toBe(true);
     });
   });
 
   // 5. fallback-deny ──────────────────────────────────────────────────────────
-  describe('fallback denies when can() does not allow', () => {
-    it('denies on deny-default', async () => {
-      const grant = makePermissionMock(denyDecision('deny-default'));
+  describe("fallback denies when can() does not allow", () => {
+    it("denies on deny-default", async () => {
+      const grant = makePermissionMock(denyDecision("deny-default"));
       service = new FilePolicyService(grant.service);
       expect(
-        (await service.canDownload(baseInput({ moduleCode: 'X', entityType: 'Y' }))).allow,
+        (await service.canDownload(baseInput({ moduleCode: "X", entityType: "Y" }))).allow,
       ).toBe(false);
     });
 
-    it('denies on deny-sensitive', async () => {
-      const grant = makePermissionMock(denyDecision('deny-sensitive'));
+    it("denies on deny-sensitive", async () => {
+      const grant = makePermissionMock(denyDecision("deny-sensitive"));
       service = new FilePolicyService(grant.service);
-      expect((await service.canView(baseInput({ moduleCode: 'X', entityType: 'Y' }))).allow).toBe(
+      expect((await service.canView(baseInput({ moduleCode: "X", entityType: "Y" }))).allow).toBe(
         false,
       );
     });
   });
 
   // 6. fail-closed-on-throw ───────────────────────────────────────────────────
-  describe('fail-closed on exception', () => {
-    it('denies when the matched resolver throws', async () => {
-      const hr = makeResolver('HR', ['EmployeeContract'], 'throw');
+  describe("fail-closed on exception", () => {
+    it("denies when the matched resolver throws", async () => {
+      const hr = makeResolver("HR", ["EmployeeContract"], "throw");
       service.registerResolver(hr);
       const decision = await service.canDownload(
-        baseInput({ moduleCode: 'HR', entityType: 'EmployeeContract' }),
+        baseInput({ moduleCode: "HR", entityType: "EmployeeContract" }),
       );
       expect(decision.allow).toBe(false);
     });
 
-    it('denies when PermissionService.can() throws', async () => {
+    it("denies when PermissionService.can() throws", async () => {
       const grant = makePermissionMock(() => {
-        throw new Error('db down');
+        throw new Error("db down");
       });
       service = new FilePolicyService(grant.service);
-      const decision = await service.canDownload(baseInput({ moduleCode: 'X', entityType: 'Y' }));
+      const decision = await service.canDownload(baseInput({ moduleCode: "X", entityType: "Y" }));
       expect(decision.allow).toBe(false);
     });
   });
 
   // 7. tenant-guard ───────────────────────────────────────────────────────────
-  describe('tenant guard', () => {
-    it('denies when companyId is missing', async () => {
+  describe("tenant guard", () => {
+    it("denies when companyId is missing", async () => {
       const grant = makePermissionMock(allowDecision());
       service = new FilePolicyService(grant.service);
       const decision = await service.canDownload(
-        baseInput({ companyId: '', moduleCode: 'X', entityType: 'Y' }),
+        baseInput({ companyId: "", moduleCode: "X", entityType: "Y" }),
       );
       expect(decision.allow).toBe(false);
       expect(grant.calls).toHaveLength(0); // never reached the permission / resolver layer
     });
 
-    it('denies when userId is missing', async () => {
+    it("denies when userId is missing", async () => {
       const grant = makePermissionMock(allowDecision());
       service = new FilePolicyService(grant.service);
       const decision = await service.canDownload(
-        baseInput({ userId: '', moduleCode: 'X', entityType: 'Y' }),
+        baseInput({ userId: "", moduleCode: "X", entityType: "Y" }),
       );
       expect(decision.allow).toBe(false);
       expect(grant.calls).toHaveLength(0);
     });
 
-    it('forwards companyId on every fallback can() call (no cross-tenant leak)', async () => {
+    it("forwards companyId on every fallback can() call (no cross-tenant leak)", async () => {
       const grant = makePermissionMock(allowDecision());
       service = new FilePolicyService(grant.service);
-      await service.canDownload(baseInput({ companyId: 'co-42', moduleCode: 'X', entityType: 'Y' }));
-      expect(grant.calls.every((c) => c.companyId === 'co-42')).toBe(true);
+      await service.canDownload(
+        baseInput({ companyId: "co-42", moduleCode: "X", entityType: "Y" }),
+      );
+      expect(grant.calls.every((c) => c.companyId === "co-42")).toBe(true);
     });
   });
 
   // 8. duplicate-registration ─────────────────────────────────────────────────
-  describe('duplicate registration loud-fail', () => {
-    it('throws when two resolvers register the same (module_code, entity_type)', () => {
-      const a = makeResolver('HR', ['EmployeeContract'], true);
-      const b = makeResolver('HR', ['EmployeeContract'], false);
+  describe("duplicate registration loud-fail", () => {
+    it("throws when two resolvers register the same (module_code, entity_type)", () => {
+      const a = makeResolver("HR", ["EmployeeContract"], true);
+      const b = makeResolver("HR", ["EmployeeContract"], false);
       service.registerResolver(a);
       expect(() => service.registerResolver(b)).toThrow();
     });
 
-    it('throws on duplicate even with different case/whitespace (normalized key)', () => {
-      const a = makeResolver('HR', ['EmployeeContract'], true);
-      const b = makeResolver(' hr ', ['employeecontract'], true);
+    it("throws on duplicate even with different case/whitespace (normalized key)", () => {
+      const a = makeResolver("HR", ["EmployeeContract"], true);
+      const b = makeResolver(" hr ", ["employeecontract"], true);
       service.registerResolver(a);
       expect(() => service.registerResolver(b)).toThrow();
     });
