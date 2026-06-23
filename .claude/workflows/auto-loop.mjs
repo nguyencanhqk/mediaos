@@ -20,6 +20,9 @@ export const meta = {
 const A = typeof args === 'string' ? (() => { try { return JSON.parse(args || '{}'); } catch { return {}; } })() : args || {};
 const dryRun = A.dryRun !== false; // mặc định true; chỉ false khi truyền tường minh dryRun:false
 const only = A.only ? String(A.only) : null; // lọc id WO (regex) — vd '^FOUNDATION-BE'
+// ÉP `only` BẰNG CODE (không chỉ nhờ prompt — agent từng phớt lờ → loop nhảy ngoài phạm vi).
+const onlyRe = only ? new RegExp(only) : null;
+const matchesOnly = (id) => !onlyRe || onlyRe.test(String(id));
 const MAX_ROUNDS = A.maxRounds || 8; // trần số Work Order xử lý/lần chạy
 const MAX_REVIEW = A.maxReviewIterations || 3; // trần vòng phản hồi Đội3→Đội1 trước khi giao người
 const MAX_RETRY = A.maxRetry || 2; // self-heal retry mỗi lane trong 1 vòng build
@@ -386,19 +389,23 @@ const reanalyzePrompt = (wo, failures) =>
 // ── ĐỘI 3 → SHIP (lights-out auto-merge, degrade trung thực) ──
 const shipPrompt = (wo, sensitive, wt) =>
   [
-    `Bạn là deploy-gate. Work Order ${wo.id} đã được Đội 3 duyệt PASS. ĐÁNH DẤU HOÀN THÀNH + đưa ra master theo lights-out.`,
-    `LUẬT (harness/policy.md): KHÔNG push thẳng master.`,
+    `Bạn là deploy-gate. Work Order ${wo.id} đã được Đội 3 duyệt PASS. ĐÁNH DẤU HOÀN THÀNH + đưa ra theo lights-out.`,
+    `LUẬT (harness/policy.md): KHÔNG push thẳng master. Commit của WO đã do Đội 2 tạo SẴN trên nhánh/HEAD hiện tại — KHÔNG 'git add -A'/'git add .'.`,
+    `⛔ TUYỆT ĐỐI CẤM (phá cây gốc / mất ngữ cảnh / tạo PR rác): đổi nhánh cây làm việc ('git checkout <nhánh>' / 'git switch'), 'git cherry-pick', 'git reset --hard', tạo branch off 'master'. Commit ĐÃ có sẵn — KHÔNG dựng lại diff bằng cherry-pick.`,
     wt
-      ? `🌳 WO này làm trong WORKTREE ${wt}, các commit đã nằm trên branch 'auto/${wo.id}'. Chạy git/gh với 'cd "${wt}" && …': push branch 'auto/${wo.id}', 'gh pr create' base=${MERGE_BASE} head=auto/${wo.id}.${KEEP_WORKTREE ? '' : ` SAU KHI merge/PR xong: 'cd <repo gốc> && git worktree remove "${wt}" --force' để dọn.`} KHÔNG 'git add -A'.`
-      : `⛔ CÂY LÀM VIỆC ĐANG BẨN (có thay đổi KHÔNG liên quan WO). TUYỆT ĐỐI KHÔNG 'git add -A'/'git add .'. Commit của WO đã do Đội 2 tạo sẵn (chỉ file trong paths: ${J(wo.paths || [])}). Tạo branch từ các COMMIT đã có (branch KHÔNG mang theo file chưa stage). Nếu cần commit thêm, stage CHỈ file trong paths của WO. KHÔNG để file ngoài paths lọt vào PR.`,
+      ? `🌳 WO làm trong WORKTREE ${wt}; commit đã trên branch 'auto/${wo.id}'. Chạy 'cd "${wt}" && …': 'git push -u origin auto/${wo.id}', rồi 'gh pr create' base=${MERGE_BASE} head=auto/${wo.id}.${KEEP_WORKTREE ? '' : ` Dọn sau: 'cd <repo gốc> && git worktree remove "${wt}" --force'.`}`
+      : [
+          `CÂY GỐC (KHÔNG worktree) — có thể bẩn (thay đổi ngoài WO). BƯỚC 1: B=$(git branch --show-current).`,
+          `BƯỚC 2 — nếu B == "${MERGE_BASE}" (đang TRÊN nhánh tích hợp): commit của WO ĐÃ nằm trên ${MERGE_BASE} = ĐÃ TÍCH HỢP. ${AUTO_MERGE ? `Chỉ 'git push origin ${MERGE_BASE}' (nếu có remote) → action='merged'; thiếu remote → action='committed'. KHÔNG tạo branch, KHÔNG PR.` : `tạo branch KHÔNG-đổi-cây 'git branch auto/${wo.id} HEAD' + 'git push -u origin auto/${wo.id}' + 'gh pr create' base=${MERGE_BASE} head=auto/${wo.id} → action='pr_opened'.`}`,
+          `BƯỚC 3 — nếu B != "${MERGE_BASE}": 'git branch auto/${wo.id} HEAD' (TẠO branch từ HEAD, KHÔNG checkout) + 'git push -u origin auto/${wo.id}' + 'gh pr create' base=${MERGE_BASE} head=auto/${wo.id}.`,
+        ].join('\n'),
     AUTO_MERGE
       ? [
-          `CHẾ ĐỘ AUTO-MERGE (lights-out): tạo branch auto/${wo.id} (từ ${MERGE_BASE} hoặc HEAD hiện tại), commit gộp, push, 'gh pr create' base=${MERGE_BASE}.`,
-          `Cố auto-merge: gắn nhãn 'auto-merge' + 'gh pr merge --squash --auto'.`,
+          `MERGE (CHỈ khi có PR — tức B != ${MERGE_BASE}, hoặc worktree): gắn nhãn 'auto-merge' + 'gh pr merge --squash --auto'.`,
           `⚠️ NẾU branch protection của base yêu cầu review NGƯỜI (gh báo chặn) → KHÔNG ép. Để PR + nhãn auto-merge, action=blocked_protection, summary nêu rõ "GitHub chặn auto-merge: cần 1 review người" (KHÔNG báo merged khi chưa merge).`,
           `Nếu base KHÔNG protection / đủ điều kiện → squash-merge xong → action=merged + pr.`,
         ].join('\n')
-      : `CHẾ ĐỘ PR: tạo branch auto/${wo.id}, commit gộp, push, 'gh pr create' + nhãn 'auto-merge' (chờ người). action=pr_opened.`,
+      : `CHẾ ĐỘ PR: 'gh pr create' + nhãn 'auto-merge' (chờ người). action=pr_opened.`,
     sensitive ? `Lane nhạy cảm — đảm bảo FULL gate đã PASS ở Đội 3 trước khi mở PR.` : '',
     `Nếu thiếu gh/remote → action=committed (chỉ commit local), nêu rõ trong summary.`,
     `Trả { action, branch, pr, summary } theo schema.`,
@@ -431,7 +438,7 @@ const skip = new Set(); // WO bỏ qua lượt này (giao người / vắt kiệ
 const inFlight = []; // WO đã ship (merged/PR) — không pick lại
 const report = [];
 const dryQueue = [];
-let queue = providedWOs ? [...providedWOs] : null; // hàng đợi READY (nếu truyền qua args)
+let queue = providedWOs ? providedWOs.filter((w) => matchesOnly(w.id)) : null; // hàng đợi READY (lọc theo only)
 let round = 0;
 
 // ── planWO: TRIAGE 1 queue item → {wo,lanes,accept,tests,steps,sensitive,planned}. Đội 1 chỉ chạy khi việc KHÓ + LIVE. ──
@@ -652,7 +659,7 @@ if (queue && MAX_CONCURRENT > 1 && !dryRun) {
   // preview ⇒ tới MAX_ROUNDS agent Opus, ~0 giá trị. Nay: 1 agent NHẸ liệt kê hàng đợi → dựng preview CỤC BỘ.
   phase('Analyze');
   const enr = await agent(enumeratePrompt(), { agentType: 'project-analyst', effort: 'low', schema: ENUMERATE_SCHEMA, label: 'analyze:enumerate', phase: 'Analyze' });
-  const readys = ((enr && enr.workOrders) || []).slice(0, MAX_ROUNDS);
+  const readys = ((enr && enr.workOrders) || []).filter((it) => matchesOnly(it.id)).slice(0, MAX_ROUNDS);
   if (!readys.length) log('✅ Không còn Work Order READY actionable (preview).');
   for (const it of readys) {
     round++;
@@ -692,6 +699,11 @@ if (queue && MAX_CONCURRENT > 1 && !dryRun) {
         break;
       }
       const wo = fp.workOrder;
+      if (!matchesOnly(wo.id)) {
+        log(`⏭ ${wo.id} không khớp only=/${only}/ — bỏ qua (ép bằng code, không nhờ prompt).`);
+        skip.add(wo.id);
+        continue;
+      }
       const lanes = fp.lanes && fp.lanes.length ? fp.lanes : [{ id: wo.id, task: wo.title, paths: wo.paths, builder: domainOf(wo.paths) }];
       const plan = { wo, lanes, accept: fp.acceptanceChecks || [], tests: fp.testTasks || [], steps: fp.steps || [], sensitive: lanes.some(isSensitive), planned: true };
       if (dryRun) {
