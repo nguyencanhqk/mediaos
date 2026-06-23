@@ -42,6 +42,7 @@ jobs:
           filters: |
             auth:    [ 'apps/auth/**',    'packages/**', 'pnpm-lock.yaml' ]
             console: [ 'apps/console/**', 'packages/**', 'pnpm-lock.yaml' ]
+            app:     [ 'apps/app/**',     'packages/**', 'pnpm-lock.yaml' ]
 
   # ── Build/typecheck/test từng app đổi (matrix) ────────────────────────────
   build:
@@ -102,7 +103,7 @@ jobs:
       # ── Deploy → Cloudflare Pages (PLACEHOLDER — bật khi đã nạp secret) ────
       # CI đã build dist kèm VITE_* đúng → chỉ publish tĩnh. Tạo trước project 1 lần:
       #   wrangler pages project create ${{ matrix.app }}-mediaos --production-branch main
-      # rồi gắn custom domain (runbook §2). admin = operator plane, deploy riêng nếu cần.
+      # rồi gắn custom domain (runbook §2).
       # - name: Deploy ${{ matrix.app }} → Cloudflare Pages
       #   if: github.event_name == 'push' && github.ref == 'refs/heads/master'
       #   run: npx wrangler@3 pages deploy "apps/${{ matrix.app }}/dist" --project-name "${{ matrix.app }}-mediaos" --branch main

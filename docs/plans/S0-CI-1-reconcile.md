@@ -63,10 +63,10 @@ steps:
 
 | done_when | Trạng thái | Hành động |
 | --- | --- | --- |
-| #1 PR pipeline: lint → typecheck → test → build → migration-check | ⚠️ **gap: db:check chưa có** | Thêm `db:check` script (journal-invariant, KHÔNG hard-code idx) vào api/package.json + bước CI vào ci.yml và api.yml |
-| #2 path-filter: api.yml → apps/api; apps-frontend.yml → auth+console(+**app**); không trỏ web/admin | ⚠️ **filter THIẾU 'app'** (apps/app đã tồn tại nhưng chưa được CI bao phủ → lỗ hổng im lặng); comment thừa "admin = operator plane" dòng ~105 còn đó | Thêm entry `app`; xoá comment thừa |
-| #3 branch model = master; ghi lệch vs DEVOPS-02 | ⚠️ **chưa ghi chính thức** | Ghi deviation trong kế hoạch này (prose) + comment trong workflow |
-| #4 secret-scan + dependency-scan DEFER → S0-CI-2 | ✅ **ĐÃ hiện thực ở security.yml (S0-CI-2)**; ⚠️ ci.yml/api.yml chưa có comment trỏ rõ | Thêm comment trỏ S0-CI-2/security.yml vào ci.yml và api.yml |
+| #1 PR pipeline: lint → typecheck → test → build → migration-check | ✅ **ĐÃ làm** | `db:check` script (journal-invariant, head ĐỌC ĐỘNG — KHÔNG hard-code idx) + bước `Migration check (db:check)` SAU `Apply migrations` ở CẢ ci.yml và api.yml. Logic kiểm tách hàm thuần (`parseJournal`/`assertJournalInvariants`/`summarizeJournal`) + unit-test `check.spec.ts` (no-Postgres). |
+| #2 path-filter: api.yml → apps/api; apps-frontend.yml → auth+console(+**app**); không trỏ web/admin | ✅ **ĐÃ làm** | Thêm entry `app: [ 'apps/app/**', 'packages/**', 'pnpm-lock.yaml' ]`; xoá đuôi comment "admin = operator plane" dòng ~105. Filter keys = auth/console/app (KHÔNG web/admin). |
+| #3 branch model = master; ghi lệch vs DEVOPS-02 | ✅ **ĐÃ ghi chính thức** (xem §1 dưới) | Deviation prose §1: giữ `master` đơn nhánh, KHÔNG mở `develop`; trigger `[master, main]` giữ nguyên. |
+| #4 secret-scan + dependency-scan DEFER → S0-CI-2 | ✅ **ĐÃ hiện thực ở security.yml (S0-CI-2) + comment trỏ rõ** | Comment `# DEFER → S0-CI-2` (DEVOPS-02 §9.2/§11/§17.2) thêm vào ci.yml và api.yml — KHÔNG trùng lặp gitleaks/pnpm audit. |
 
 **Không có gì phải làm ở:** turbo.json (build/typecheck/test/lint đã đúng thứ tự), pnpm-workspace.yaml (apps/* packages/* đủ — apps/app tự nhận), pnpm trigger (master + main đã có trong cả 3 workflow).
 

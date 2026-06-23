@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:cov": "vitest run src/workflow --coverage --coverage.include=src/workflow/**",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/db/migrate.ts"
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:check": "tsx src/db/check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.2",

@@ -110,12 +110,21 @@ jobs:
       - name: Apply migrations (ephemeral Postgres)
         run: pnpm --filter @mediaos/api db:migrate
 
+      # Gate journal forward-only (S0-CI-1): migrate DB rỗng → kiểm BẤT BIẾN NỘI TẠI của
+      # migrations/meta/_journal.json (idx liên tục từ 0/no-gap, tag duy nhất/no-dup, head=entries[last].idx
+      # ĐỌC ĐỘNG, số .sql áp = entries.length). KHÔNG so literal idx chép tay. Chạy SAU migrate, TRƯỚC roles.
+      - name: Migration check (db:check)
+        run: pnpm --filter @mediaos/api db:check
+
       # Gán mật khẩu mediaos_app/worker (tách secret khỏi migration) → app role nối được, RLS ép thật.
       - name: Setup DB role passwords
         run: pnpm db:setup-roles
 
       - name: Test (unit + integration RLS/auth)
         run: pnpm --filter @mediaos/api test
+
+      # DEFER → S0-CI-2: secret-scan (gitleaks) + dependency-scan (pnpm audit) — ĐÃ hiện thực ở security.yml
+      # (WO S0-CI-2); KHÔNG bỏ qua silently (DEVOPS-02 §9.2/§11/§17.2). Đặt ở workflow riêng để tránh trùng lặp.
 
       - name: Build (NestJS)
         run: pnpm --filter @mediaos/api build
