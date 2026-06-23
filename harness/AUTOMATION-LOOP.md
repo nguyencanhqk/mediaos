@@ -87,14 +87,17 @@ Workflow{ scriptPath:'.claude/workflows/auto-loop.mjs', args:{ dryRun:false, aut
 | `maxConcurrent` | `1` | `≥2` + có `workOrders` + live ⇒ **worktree-isolation** (mỗi WO 1 worktree `../mediaos-<id>` off `mergeBase`); `1` = tuần tự cây-gốc |
 | `keepWorktree` | `false` | giữ lại worktree sau merge (mặc định tự gỡ) — bật khi cần khám nghiệm |
 
-## ⭐ LUẬT chạy AN TOÀN (worktree-isolation) — bắt buộc cho live nhiều WO
+## ⭐ LUẬT chạy AN TOÀN — sequential mặc định · worktree-isolation cho parallel rời rạc
 
-> Học từ sự cố 2026-06-23: chạy live ở **sequential cây-gốc**, lane con (sống sót cả sau `TaskStop`) commit/đổi
-> nhánh THẲNG trên cây làm việc — có lần `git checkout master` + cherry-pick → clobber cây gốc + đẻ PR rác.
+> Học từ sự cố 2026-06-23: (a) lane con (sống sót cả sau `TaskStop`) `git checkout master` + cherry-pick → clobber
+> cây gốc + PR rác; (b) worktree mode đua `git worktree add` trên cùng `.git` lock, preamble cũ nuốt lỗi → lane
+> im lặng FALLBACK cây gốc rồi commit thẳng `mergeBase`. Cả hai đã vá; rút ra 2 chế độ chạy:
 
-**LUẬT:** chạy live (`dryRun:false`) nhiều WO PHẢI ở **worktree-isolation** — đủ 3 điều kiện: `workOrders` (tường minh) + `maxConcurrent≥2` + `dryRun:false`. (Thiếu `workOrders` → fallback Đội-1-tự-tìm = sequential cây-gốc, KHÔNG cô lập.)
+**LUẬT (chọn chế độ theo việc):**
 
-- Mỗi WO chạy trong worktree riêng `../mediaos-<id>` (off `mergeBase`), **cô lập git index** khỏi cây gốc + WO khác.
+1. **MẶC ĐỊNH AN TOÀN = SEQUENTIAL `maxConcurrent:1`** (không worktree) — cho việc **ĐỎ/crown** hoặc khi không chắc. An toàn nhờ `shipPrompt` đã cấm checkout/cherry-pick (commit nằm sẵn trên nhánh hiện tại → chỉ push). 1 WO/lần, KHÔNG race.
+2. **WORKTREE-ISOLATION `maxConcurrent≥2`** — opt-in cho **nhiều WO RỜI RẠC path + KHÔNG nhạy cảm**. Đủ 3: `workOrders` (tường minh) + `maxConcurrent≥2` + `dryRun:false`. Mỗi WO 1 worktree `../mediaos-<id>` (off `mergeBase`, **cô lập git index**). ⚠️ `git worktree add` đua trên `.git` lock → tạo worktree SERIALIZE (retry-on-lock); đua nặng → vài lane `needs_human` (chấp nhận — fail-closed hơn là mất cô lập).
+
 - **FAIL-CLOSED** (`auto-loop.mjs` wtPreamble): lane KHÔNG vào/xác minh được worktree → **DỪNG `needs_human`**, TUYỆT ĐỐI KHÔNG fallback cây gốc, KHÔNG commit thẳng `mergeBase`.
 - **Ship an toàn** (`shipPrompt`): CẤM `git checkout`/`switch`/`cherry-pick`/`reset --hard`/branch-off-master; branch tạo bằng `git branch <name> HEAD` (KHÔNG đổi nhánh cây). Đang TRÊN `mergeBase` → chỉ push, KHÔNG branch/PR.
 - **`only` ép bằng code** (queue+preview+fallback) — loop không nhảy ngoài phạm vi.
