@@ -16,12 +16,65 @@ export {
   configureApiBaseUrl,
   getApiBaseUrl,
   configureAuthAppUrl,
+  configureClientVersion,
   refreshAccessToken,
   redirectToAuth,
   getAuthRedirectUrl,
   invalidateSession,
   logoutSession,
+  type ApiFetchOpts,
 } from "./lib/api-client";
+
+// API error kind + mapper (FRONTEND-04 §10, §22)
+export { type ApiErrorKind, mapStatusToErrorKind, kindFromPayload } from "./lib/api-error-kind";
+export {
+  mapApiErrorToUi,
+  isValidationDetails,
+  extractValidationDetails,
+  showApiErrorToast,
+  configureToast,
+  type ErrorUiBehavior,
+  type ErrorUiMapping,
+  type ToastFn,
+} from "./lib/error-mapper";
+
+// API types (FRONTEND-04 §9) — NAMED re-export; no wildcard (contracts exports type ApiError)
+export type {
+  ApiValidationDetail,
+  ApiPagination,
+  ApiMeta,
+  ApiSuccessResponse,
+  ApiListResponse,
+  ApiErrorPayload,
+  ApiErrorResponse,
+  HttpMethod,
+  ApiRequestOptions,
+  ApiListParams,
+  TableQueryState,
+} from "./lib/api-types";
+export { toApiListParams } from "./lib/api-types";
+
+// Request-id + idempotency helpers (FRONTEND-04 §11)
+export { createRequestId } from "./lib/api-request-id";
+export { createIdempotencyKey } from "./lib/api-idempotency";
+
+// Query string helpers (FRONTEND-04 §12)
+export { buildQueryString } from "./lib/api-params";
+
+// Query key factories (FRONTEND-04 §17) — pure const arrays, no react-query dep
+export {
+  rootKeys,
+  authKeys,
+  dashboardKeys,
+  hrKeys,
+  attendanceKeys,
+  leaveKeys,
+  taskKeys,
+  notificationKeys,
+} from "./lib/query-keys";
+
+// Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
+export { shouldRetryQuery } from "./lib/query-retry";
 export { bootstrapSession } from "./lib/session";
 export { getHealth, type Health } from "./lib/api";
 export { authApi } from "./lib/auth-api";

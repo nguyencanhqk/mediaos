@@ -260,11 +260,13 @@ export const backlog = [
     status: "todo",
     paths: ["packages/web-core/**"],
     skills: ["code-review"],
-    // WIP đang ở git stash@{0} (run wby3ahcpy bị DỪNG): error-mapper dùng ApiError.requestId/.kind
-    // nhưng api-client.ts CHƯA cập nhật → shape lệch. Re-run SAU khi S0-API-CORE-1 chốt envelope
-    // {success,message,data,meta} để FE map đúng (tránh land shape sai rồi đổi lại).
+    // depends S0-API-CORE-1 = DONE (52156cf) → envelope {success,message,data,error,meta} đã lock; blocker gỡ.
+    // WIP gốc ở git stash@{1} (run wby3ahcpy bị DỪNG; backlog cũ ghi {0} sai do stash cleanup-tail đè lên):
+    // 6 helper untracked, error-mapper dùng ApiError.requestId/.kind nhưng api-client.ts CHƯA cập nhật → shape lệch.
+    // Micro-plan đã lập (reshape ApiError + land helper + query-keys/retry) → docs/plans/S0-FE-API-1.md.
     depends_on: ["S0-API-CORE-1"],
     src: ["ISSUE-BOARD-01 §18.4 (FRONTEND-FE-003)", "FRONTEND-04", "API-01"],
+    plan: "docs/plans/S0-FE-API-1.md",
     done_when: [
       "api-client inject token + map 401(refresh)/403(forbidden)/422(validation)/500; gắn request-id + idempotency-key",
       "query/cache layer (TanStack Query) + invalidation; validate response bằng Zod contracts",
@@ -426,7 +428,7 @@ export const backlog = [
     title:
       "FE shell: Home Portal + App Switcher + Module Workspace layout (topbar/sidebar, permission-based app visibility, dirty-form guard)",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**", "packages/ui/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S0-FE-CORE-1"],
@@ -453,6 +455,27 @@ export const backlog = [
       "app registry + route registry + sidebar registry sinh menu từ metadata (permission/scope/module/status), KHÔNG hard-code theo role",
       "route guard: trái quyền → forbidden; app inactive/thiếu setting → ẩn khỏi switcher",
       "web test registry + guard xanh",
+    ],
+  },
+  {
+    id: "S1-FE-QUERY-WIRE-1",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      "Wire QueryClient defaultOptions (retry=shouldRetryQuery + staleTime/gcTime FRONTEND-04 §16) vào apps/*/main.tsx + override X-Client-Version từ build env",
+    zone: "green",
+    // Tách từ S0-FE-API-1 (scope=packages/web-core/** không sửa được apps): web-core CHỈ export query-keys +
+    // shouldRetryQuery (hàm thuần); việc lắp vào `new QueryClient({defaultOptions})` + configureClient(version)
+    // ở app NẰM NGOÀI scope WO kia → WO này nhận phần wiring app-level.
+    status: "todo",
+    paths: ["apps/app/**", "apps/console/**", "apps/auth/**"],
+    skills: ["code-review"],
+    depends_on: ["S0-FE-API-1"],
+    src: ["FRONTEND-04 §16.1-16.3", "FRONTEND-04 §8 (X-Client-Version)"],
+    done_when: [
+      "apps/{app,console,auth}/src/main.tsx dùng new QueryClient({defaultOptions:{queries:{retry:shouldRetryQuery, staleTime, gcTime, refetchOnWindowFocus:false}, mutations:{retry:false}}}) — KHÔNG còn QueryClient trần",
+      "configureClient() truyền X-Client-Version từ import.meta.env (build env) ở mỗi app main.tsx (web-core giữ default 'web'/'0.1.0')",
+      "web test 3 app xanh; typecheck xanh",
     ],
   },
   {
