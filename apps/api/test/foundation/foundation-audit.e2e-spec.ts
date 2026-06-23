@@ -21,11 +21,11 @@ import { Test } from "@nestjs/testing";
 import type { Pool } from "pg";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { AppModule } from "../src/app.module";
-import { AllExceptionsFilter } from "../src/common/filters/all-exceptions.filter";
-import { ResponseEnvelopeInterceptor } from "../src/common/interceptors/response-envelope.interceptor";
-import { PasswordService } from "../src/auth/password.service";
-import { directPool, hasDb } from "./helpers/integration-db";
+import { AppModule } from "../../src/app.module";
+import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
+import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
+import { PasswordService } from "../../src/auth/password.service";
+import { directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
   seedCompany,
@@ -34,7 +34,7 @@ import {
   seedUser,
   seedUserRole,
   type SeededTenant,
-} from "./helpers/seed";
+} from "../helpers/seed";
 
 const PASSWORD = "Passw0rd!test99";
 const COMPANY_ADMIN_ROLE = "00000000-0000-0000-0000-000000000001";
