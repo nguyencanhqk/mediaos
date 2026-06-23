@@ -48,12 +48,44 @@ export {
   type NavCategoryGroup,
 } from "./lib/nav";
 
-// Định dạng nhân sự
+// Registry: App / Sidebar / Route + Permission Checker (FRONTEND-03 §10–§17)
 export {
-  EMPLOYEE_STATUS_VARIANT,
-  formatSalary,
-  type EmployeeStatus,
-} from "./lib/employee-format";
+  // Types — Module & Scope
+  type ModuleCode,
+  type DataScope,
+  type ModuleStatus,
+  type ModuleAccessItem,
+  // Types — Permission
+  type PermissionCode,
+  type PermissionRequirement,
+  type PermissionCheckResult,
+  type UserPermission,
+  type PermissionChecker,
+  createPermissionChecker,
+  // Types — Session
+  type AuthStatus,
+  type SessionUser,
+  type SessionCompany,
+  type SessionContext,
+  // Route metadata & guard
+  type LayoutType,
+  type RouteMeta,
+  type RouteGuardAction,
+  type RouteGuardResult,
+  evaluateRouteAccess,
+  ROUTE_REGISTRY,
+  getRouteMeta,
+  // App registry
+  type AppRegistryItem,
+  APP_REGISTRY,
+  getVisibleApps,
+  // Sidebar registry
+  type SidebarItemMeta,
+  filterSidebarItems,
+} from "./lib/registry";
+
+// Định dạng nhân sự
+export { EMPLOYEE_STATUS_VARIANT, formatSalary, type EmployeeStatus } from "./lib/employee-format";
 
 // i18n: instance dùng chung + helper đăng ký namespace feature
 export { default as i18n, registerI18nResources } from "./i18n";

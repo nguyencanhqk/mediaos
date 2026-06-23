@@ -1,5 +1,75 @@
 /** Namespace "nav" (vi) — dùng chung mọi app. Đặt ở @mediaos/web-core (TS module để build sạch dual ESM/CJS). */
 export default {
+  // App registry names (App Switcher / Home Portal)
+  app: {
+    dashboard: "Dashboard",
+    hr: "Nhân sự",
+    attendance: "Chấm công",
+    leave: "Nghỉ phép",
+    tasks: "Công việc",
+    notifications: "Thông báo",
+    system: "Hệ thống",
+  },
+  // App registry descriptions
+  appDesc: {
+    dashboard: "Tổng quan công việc, chấm công, nghỉ phép và cảnh báo.",
+    hr: "Hồ sơ nhân viên, phòng ban, chức vụ và hợp đồng.",
+    attendance: "Check-in, check-out, bảng công, ca làm và điều chỉnh công.",
+    leave: "Số dư phép, tạo đơn nghỉ, duyệt đơn và lịch nghỉ.",
+    tasks: "Dự án, task, Kanban, bình luận, checklist và file.",
+    notifications: "Danh sách thông báo, trạng thái đọc và cấu hình thông báo.",
+    system: "Người dùng, vai trò, quyền, cấu hình, audit log và module catalog.",
+  },
+  // Route titles
+  routeTitle: {
+    login: "Đăng nhập",
+    forgot: "Quên mật khẩu",
+    reset: "Đặt lại mật khẩu",
+    home: "Trang chủ",
+    dashboard: "Dashboard",
+    hr: "Nhân sự",
+    hrEmployees: "Danh sách nhân viên",
+    hrMe: "Hồ sơ của tôi",
+    attToday: "Chấm công hôm nay",
+    attMyRecords: "Bảng công của tôi",
+    leave: "Nghỉ phép",
+    leaveMyRequests: "Đơn nghỉ của tôi",
+    leaveApprovals: "Đơn cần duyệt",
+    tasks: "Công việc",
+    taskMyTasks: "Việc của tôi",
+    notifications: "Thông báo",
+    system: "Hệ thống",
+    systemUsers: "Người dùng",
+    systemRoles: "Vai trò",
+    systemAuditLogs: "Audit log",
+    accountProfile: "Hồ sơ tài khoản",
+    forbidden: "Không có quyền truy cập",
+    notFound: "Không tìm thấy trang",
+  },
+  // App Switcher empty / status messages
+  appSwitcher: {
+    searchPlaceholder: "Tìm ứng dụng…",
+    empty: "Không tìm thấy ứng dụng phù hợp.",
+    noApps:
+      "Tài khoản của bạn chưa được cấp quyền sử dụng ứng dụng. Vui lòng liên hệ quản trị viên.",
+    locked: "Ứng dụng này chưa được kích hoạt cho công ty của bạn.",
+    comingSoon: "Sắp ra mắt",
+    maintenance: "Đang bảo trì",
+  },
+  // Forbidden / error states
+  forbidden: {
+    title: "Bạn không có quyền truy cập trang này.",
+    description: "Vui lòng liên hệ quản trị viên nếu bạn cho rằng đây là nhầm lẫn.",
+    goHome: "Về trang chủ",
+    reason: {
+      NO_PERMISSION: "Tài khoản của bạn không có quyền xem nội dung này.",
+      NO_SCOPE: "Nội dung này nằm ngoài phạm vi dữ liệu của bạn.",
+      USER_INACTIVE: "Tài khoản của bạn đang bị vô hiệu hóa.",
+      COMPANY_INACTIVE: "Công ty của bạn đang bị đình chỉ hoặc vô hiệu hóa.",
+      MODULE_DISABLED: "Module này chưa được kích hoạt.",
+      FEATURE_DISABLED: "Tính năng này đang bị tắt.",
+    },
+  },
   overview: "Tổng quan",
   dashboard: "Bảng điều khiển",
   kpi: "KPI / Mục tiêu",
