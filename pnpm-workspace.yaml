@@ -8,6 +8,12 @@ packages:
 overrides:
   "@types/react": "19.2.16"
   "@types/react-dom": "19.2.3"
+  # S0-CI-2 dependency-scan: ép phiên bản ĐÃ VÁ cho dep transitive có advisory high-sev (pnpm audit gate).
+  # Range-scoped (chỉ override dải lỗ hổng) — KHÔNG đụng major khác. ws/form-data transitive; multer cũng
+  # tới gián tiếp qua @nestjs/platform-express nên direct bump apps/api chưa đủ → cần override.
+  "ws@>=8.0.0 <8.21.0": "^8.21.0"
+  "form-data@>=4.0.0 <4.0.6": "^4.0.6"
+  "multer@>=1.0.0 <2.2.0": "^2.2.0"
 
 # Cho phép chạy postinstall của các gói cần binary native (pnpm 10+ chặn mặc định).
 allowBuilds:

@@ -27,16 +27,7 @@ import {
   hashInviteToken,
   inviteTokenHashEquals,
 } from "./user-invite-token.util";
-
-const PG_UNIQUE_VIOLATION = "23505";
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code: string }).code === PG_UNIQUE_VIOLATION
-  );
-}
+import { isUniqueViolation } from "../common/db-error";
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 

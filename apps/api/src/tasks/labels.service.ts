@@ -7,21 +7,12 @@ import {
 import type { CreateLabelRequest, UpdateLabelRequest } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
+import { pgErrorCode, PG_UNIQUE_VIOLATION } from "../common/db-error";
 import { TasksRepository } from "./tasks.repository";
 
 interface RequestUser {
   id: string;
   companyId: string;
-}
-
-const PG_UNIQUE_VIOLATION = "23505";
-
-function pgErrorCode(err: unknown): string | undefined {
-  if (typeof err === "object" && err !== null && "code" in err) {
-    const code = (err as Record<string, unknown>)["code"];
-    return typeof code === "string" ? code : undefined;
-  }
-  return undefined;
 }
 
 /**

@@ -27,9 +27,9 @@ import {
   lateMinutesFor,
   type ScheduleCalc,
 } from "./attendance.logic";
+import { isUniqueViolation } from "../common/db-error";
 
 const DEFAULT_TZ = "Asia/Ho_Chi_Minh";
-const PG_UNIQUE_VIOLATION = "23505";
 
 interface Actor {
   id: string;
@@ -46,15 +46,6 @@ function toScheduleCalc(row: ScheduleRow): ScheduleCalc {
     timezone: row.timezone,
     workingDays: row.workingDaysJson,
   };
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as Record<string, unknown>)["code"] === PG_UNIQUE_VIOLATION
-  );
 }
 
 /**
@@ -112,7 +103,9 @@ export class AttendanceService {
         });
         return toScheduleDto(row);
       })
-      .catch((err: unknown) => this.mapError(err, "createSchedule", { companyId: actor.companyId }));
+      .catch((err: unknown) =>
+        this.mapError(err, "createSchedule", { companyId: actor.companyId }),
+      );
   }
 
   async updateSchedule(actor: Actor, id: string, dto: UpdateWorkScheduleRequest) {
@@ -148,7 +141,9 @@ export class AttendanceService {
         });
         return toScheduleDto(row);
       })
-      .catch((err: unknown) => this.mapError(err, "updateSchedule", { companyId: actor.companyId, id }));
+      .catch((err: unknown) =>
+        this.mapError(err, "updateSchedule", { companyId: actor.companyId, id }),
+      );
   }
 
   // ─── Check-in / Check-out (check-in:attendance) ──────────────────────────────
@@ -158,8 +153,17 @@ export class AttendanceService {
       const schedule = await this.repo.resolveScheduleForUserTx(actor.companyId, actor.id, tx);
       const tz = schedule?.timezone ?? DEFAULT_TZ;
       const workDate = localDateOf(new Date(), tz);
-      const [record] = await this.repo.findRecordByUserDateTx(actor.companyId, actor.id, workDate, tx);
-      const periodLocked = await this.repo.isPeriodLockedTx(actor.companyId, monthOfDate(workDate), tx);
+      const [record] = await this.repo.findRecordByUserDateTx(
+        actor.companyId,
+        actor.id,
+        workDate,
+        tx,
+      );
+      const periodLocked = await this.repo.isPeriodLockedTx(
+        actor.companyId,
+        monthOfDate(workDate),
+        tx,
+      );
       return {
         workDate,
         record: record ? toRecordDto(record) : null,
@@ -176,9 +180,17 @@ export class AttendanceService {
         const schedule = await this.repo.resolveScheduleForUserTx(actor.companyId, actor.id, tx);
         const tz = schedule?.timezone ?? DEFAULT_TZ;
         const workDate = localDateOf(now, tz);
-        this.assertPeriodOpen(await this.repo.isPeriodLockedTx(actor.companyId, monthOfDate(workDate), tx), workDate);
+        this.assertPeriodOpen(
+          await this.repo.isPeriodLockedTx(actor.companyId, monthOfDate(workDate), tx),
+          workDate,
+        );
 
-        const [existing] = await this.repo.findRecordByUserDateTx(actor.companyId, actor.id, workDate, tx);
+        const [existing] = await this.repo.findRecordByUserDateTx(
+          actor.companyId,
+          actor.id,
+          workDate,
+          tx,
+        );
         if (existing?.checkInAt) throw new ConflictException(`Đã check-in cho ngày ${workDate}`);
 
         const calc = schedule ? toScheduleCalc(schedule) : null;
@@ -229,7 +241,9 @@ export class AttendanceService {
         });
         return toRecordDto(record);
       })
-      .catch((err: unknown) => this.mapError(err, "checkIn", { companyId: actor.companyId, userId: actor.id }));
+      .catch((err: unknown) =>
+        this.mapError(err, "checkIn", { companyId: actor.companyId, userId: actor.id }),
+      );
   }
 
   async checkOut(actor: Actor, dto: CheckOutRequest) {
@@ -244,7 +258,10 @@ export class AttendanceService {
         const [existing] = await this.repo.findOpenRecordForUserTx(actor.companyId, actor.id, tx);
         if (!existing?.checkInAt) throw new ConflictException("Chưa check-in (hoặc đã check-out)");
         const workDate = existing.workDate;
-        this.assertPeriodOpen(await this.repo.isPeriodLockedTx(actor.companyId, monthOfDate(workDate), tx), workDate);
+        this.assertPeriodOpen(
+          await this.repo.isPeriodLockedTx(actor.companyId, monthOfDate(workDate), tx),
+          workDate,
+        );
 
         const calc = schedule ? toScheduleCalc(schedule) : null;
         const earlyLeaveMinutes = calc ? earlyLeaveMinutesFor(now, workDate, calc) : 0;
@@ -271,7 +288,9 @@ export class AttendanceService {
         });
         return toRecordDto(record);
       })
-      .catch((err: unknown) => this.mapError(err, "checkOut", { companyId: actor.companyId, userId: actor.id }));
+      .catch((err: unknown) =>
+        this.mapError(err, "checkOut", { companyId: actor.companyId, userId: actor.id }),
+      );
   }
 
   // ─── Monthly list (read:attendance; others ⇒ manage) ─────────────────────────
@@ -338,7 +357,9 @@ export class AttendanceService {
       })
       .catch((err: unknown) => {
         if (isUniqueViolation(err)) {
-          throw new ConflictException(`Đã có đơn bổ sung công đang chờ duyệt cho ngày ${dto.workDate}`);
+          throw new ConflictException(
+            `Đã có đơn bổ sung công đang chờ duyệt cho ngày ${dto.workDate}`,
+          );
         }
         return this.mapError(err, "createAdjustment", { companyId: actor.companyId });
       });
@@ -372,7 +393,9 @@ export class AttendanceService {
         const [request] = await this.repo.findAdjustmentByIdForUpdateTx(actor.companyId, id, tx);
         if (!request) throw new NotFoundException(`Adjustment request not found: ${id}`);
         if (request.status !== "pending") {
-          throw new ConflictException(`Đơn không còn ở trạng thái chờ duyệt (status=${request.status})`);
+          throw new ConflictException(
+            `Đơn không còn ở trạng thái chờ duyệt (status=${request.status})`,
+          );
         }
         this.assertPeriodOpen(
           await this.repo.isPeriodLockedTx(actor.companyId, monthOfDate(request.workDate), tx),
@@ -380,7 +403,11 @@ export class AttendanceService {
         );
 
         // Apply the requested times to the attendance record (create it if the day had none).
-        const schedule = await this.repo.resolveScheduleForUserTx(actor.companyId, request.userId, tx);
+        const schedule = await this.repo.resolveScheduleForUserTx(
+          actor.companyId,
+          request.userId,
+          tx,
+        );
         const calc = schedule ? toScheduleCalc(schedule) : null;
         const [existing] = await this.repo.findRecordByUserDateTx(
           actor.companyId,
@@ -391,15 +418,20 @@ export class AttendanceService {
 
         const checkInAt = request.requestedCheckInAt ?? existing?.checkInAt ?? null;
         const checkOutAt = request.requestedCheckOutAt ?? existing?.checkOutAt ?? null;
-        const lateMinutes = calc && checkInAt ? lateMinutesFor(checkInAt, request.workDate, calc) : 0;
+        const lateMinutes =
+          calc && checkInAt ? lateMinutesFor(checkInAt, request.workDate, calc) : 0;
         const earlyLeaveMinutes =
           calc && checkOutAt ? earlyLeaveMinutesFor(checkOutAt, request.workDate, calc) : 0;
 
         const recordValues = {
           checkInAt,
           checkOutAt,
-          checkInMethod: request.requestedCheckInAt ? "adjustment" : existing?.checkInMethod ?? null,
-          checkOutMethod: request.requestedCheckOutAt ? "adjustment" : existing?.checkOutMethod ?? null,
+          checkInMethod: request.requestedCheckInAt
+            ? "adjustment"
+            : (existing?.checkInMethod ?? null),
+          checkOutMethod: request.requestedCheckOutAt
+            ? "adjustment"
+            : (existing?.checkOutMethod ?? null),
           lateMinutes,
           earlyLeaveMinutes,
           status: "approved_adjustment" as const,
@@ -434,7 +466,8 @@ export class AttendanceService {
         );
         if (!updated) throw new InternalServerErrorException("Failed to close adjustment request");
 
-        if (request.taskId) await this.hrTasks.closeTaskTx(tx, actor.companyId, request.taskId, "approved");
+        if (request.taskId)
+          await this.hrTasks.closeTaskTx(tx, actor.companyId, request.taskId, "approved");
 
         await this.audit.record(tx, {
           action: "AttendanceAdjustmentApproved",
@@ -452,11 +485,18 @@ export class AttendanceService {
         });
         await this.outbox.enqueue(tx, {
           eventType: "attendance.adjustment_approved",
-          payload: { requestId: id, recordId: record.id, userId: request.userId, approvedBy: actor.id },
+          payload: {
+            requestId: id,
+            recordId: record.id,
+            userId: request.userId,
+            approvedBy: actor.id,
+          },
         });
         return toAdjustmentDto(updated);
       })
-      .catch((err: unknown) => this.mapError(err, "approveAdjustment", { companyId: actor.companyId, id }));
+      .catch((err: unknown) =>
+        this.mapError(err, "approveAdjustment", { companyId: actor.companyId, id }),
+      );
   }
 
   async rejectAdjustment(actor: Actor, id: string, note?: string) {
@@ -466,16 +506,24 @@ export class AttendanceService {
         const [request] = await this.repo.findAdjustmentByIdForUpdateTx(actor.companyId, id, tx);
         if (!request) throw new NotFoundException(`Adjustment request not found: ${id}`);
         if (request.status !== "pending") {
-          throw new ConflictException(`Đơn không còn ở trạng thái chờ duyệt (status=${request.status})`);
+          throw new ConflictException(
+            `Đơn không còn ở trạng thái chờ duyệt (status=${request.status})`,
+          );
         }
         const [updated] = await this.repo.updateAdjustmentTx(
           actor.companyId,
           id,
-          { status: "rejected", approvedBy: actor.id, approvedAt: new Date(), reviewNote: note ?? null },
+          {
+            status: "rejected",
+            approvedBy: actor.id,
+            approvedAt: new Date(),
+            reviewNote: note ?? null,
+          },
           tx,
         );
         if (!updated) throw new InternalServerErrorException("Failed to reject adjustment request");
-        if (request.taskId) await this.hrTasks.closeTaskTx(tx, actor.companyId, request.taskId, "completed");
+        if (request.taskId)
+          await this.hrTasks.closeTaskTx(tx, actor.companyId, request.taskId, "completed");
 
         await this.audit.record(tx, {
           action: "AttendanceAdjustmentRejected",
@@ -490,7 +538,9 @@ export class AttendanceService {
         });
         return toAdjustmentDto(updated);
       })
-      .catch((err: unknown) => this.mapError(err, "rejectAdjustment", { companyId: actor.companyId, id }));
+      .catch((err: unknown) =>
+        this.mapError(err, "rejectAdjustment", { companyId: actor.companyId, id }),
+      );
   }
 
   async cancelAdjustment(actor: Actor, id: string) {
@@ -522,7 +572,9 @@ export class AttendanceService {
         });
         return toAdjustmentDto(updated);
       })
-      .catch((err: unknown) => this.mapError(err, "cancelAdjustment", { companyId: actor.companyId, id }));
+      .catch((err: unknown) =>
+        this.mapError(err, "cancelAdjustment", { companyId: actor.companyId, id }),
+      );
   }
 
   // ─── Period lock (lock-period:attendance) ────────────────────────────────────
@@ -558,7 +610,9 @@ export class AttendanceService {
         });
         return toPeriodDto(row);
       })
-      .catch((err: unknown) => this.mapError(err, "lockPeriod", { companyId: actor.companyId, periodMonth }));
+      .catch((err: unknown) =>
+        this.mapError(err, "lockPeriod", { companyId: actor.companyId, periodMonth }),
+      );
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -569,7 +623,9 @@ export class AttendanceService {
 
   private assertPeriodOpen(locked: boolean, workDate: string): void {
     if (locked) {
-      throw new ConflictException(`Kỳ công ${monthOfDate(workDate)} đã khoá — không thể ghi/sửa công`);
+      throw new ConflictException(
+        `Kỳ công ${monthOfDate(workDate)} đã khoá — không thể ghi/sửa công`,
+      );
     }
   }
 
@@ -580,7 +636,8 @@ export class AttendanceService {
       action: "manage",
       resourceType,
     });
-    if (!decision.allow) throw new ForbiddenException("Không có quyền xem dữ liệu của nhân sự khác");
+    if (!decision.allow)
+      throw new ForbiddenException("Không có quyền xem dữ liệu của nhân sự khác");
   }
 
   private async assertCanApprove(actor: Actor, resourceType: string): Promise<void> {
@@ -685,4 +742,3 @@ function toPeriodDto(row: {
     lockedAt: row.lockedAt,
   };
 }
-

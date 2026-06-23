@@ -19,24 +19,18 @@ import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { PermissionService } from "./permission.service";
 import { PermissionAdminRepository, type ObjectPermissionKey } from "./permission-admin.repository";
-
-const PG_FK_VIOLATION = "23503";
-const PG_UNIQUE_VIOLATION = "23505";
-const PG_CHECK_VIOLATION = "23514";
+import {
+  pgErrorCode,
+  pgErrorField,
+  PG_CHECK_VIOLATION,
+  PG_FK_VIOLATION,
+  PG_UNIQUE_VIOLATION,
+} from "../common/db-error";
 
 /** Ngưỡng cảnh báo fan-out invalidation theo role (không cắt — chỉ log để quan sát). */
 const ROLE_FANOUT_WARN_THRESHOLD = 200;
 
 type RequestUser = { id: string; companyId: string };
-
-function pgField(err: unknown, field: string): string | undefined {
-  return typeof err === "object" && err !== null && field in err
-    ? ((err as Record<string, unknown>)[field] as string | undefined)
-    : undefined;
-}
-function pgCode(err: unknown): string | undefined {
-  return pgField(err, "code");
-}
 
 /** So sánh hai expiry (timestamptz | null) — coi 2 null là bằng nhau. */
 function sameExpiry(a: Date | null, b: Date | null): boolean {
@@ -224,7 +218,12 @@ export class PermissionAdminService {
             effect: dto.effect,
           },
         });
-        await this.emitPermissionChangedForSubject(tx, actor.companyId, dto.subjectType, dto.subjectId);
+        await this.emitPermissionChangedForSubject(
+          tx,
+          actor.companyId,
+          dto.subjectType,
+          dto.subjectId,
+        );
 
         return inserted;
       });
@@ -267,7 +266,12 @@ export class PermissionAdminService {
             effect: dto.effect,
           },
         });
-        await this.emitPermissionChangedForSubject(tx, actor.companyId, dto.subjectType, dto.subjectId);
+        await this.emitPermissionChangedForSubject(
+          tx,
+          actor.companyId,
+          dto.subjectType,
+          dto.subjectId,
+        );
       });
     } catch (err) {
       throw this.mapError(err, "Failed to remove object permission");
@@ -365,7 +369,7 @@ export class PermissionAdminService {
   /** PG/infra → 500 generic (KHÔNG leak schema); FK/unique/check → 4xx; HttpException giữ nguyên. */
   private mapError(err: unknown, context: string): HttpException {
     if (err instanceof HttpException) return err;
-    const code = pgCode(err);
+    const code = pgErrorCode(err);
     if (code === PG_FK_VIOLATION) {
       return new BadRequestException("Referenced entity does not exist");
     }
@@ -380,8 +384,8 @@ export class PermissionAdminService {
     this.logger.error(context, {
       stack: err instanceof Error ? err.stack : String(err),
       pgCode: code,
-      pgDetail: pgField(err, "detail"),
-      pgConstraint: pgField(err, "constraint"),
+      pgDetail: pgErrorField(err, "detail"),
+      pgConstraint: pgErrorField(err, "constraint"),
     });
     return new InternalServerErrorException(context);
   }

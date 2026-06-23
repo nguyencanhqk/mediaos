@@ -13,17 +13,7 @@ import type {
   UpdateTeamRequest,
 } from "@mediaos/contracts";
 import { OrgRepository } from "./org.repository";
-
-const PG_UNIQUE_VIOLATION = "23505";
-
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as Record<string, unknown>)["code"] === PG_UNIQUE_VIOLATION
-  );
-}
+import { isUniqueViolation } from "../common/db-error";
 
 @Injectable()
 export class OrgService {

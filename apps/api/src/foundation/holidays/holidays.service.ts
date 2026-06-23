@@ -2,7 +2,12 @@ import { ConflictException, Injectable, NotFoundException } from "@nestjs/common
 import { addDaysToLocalDate, monthDateRange } from "../../common/tz.util";
 import { DatabaseService } from "../../db/db.service";
 import { publicHolidays } from "../../db/schema/holidays";
-import type { CheckWorkingDayQuery, CreateHolidayInput, HolidayListQuery, UpdateHolidayInput } from "./holidays.dto";
+import type {
+  CheckWorkingDayQuery,
+  CreateHolidayInput,
+  HolidayListQuery,
+  UpdateHolidayInput,
+} from "./holidays.dto";
 import {
   DEFAULT_WORKING_DAYS,
   computeIsWorkingDay,
@@ -10,23 +15,13 @@ import {
   filterByCountry,
 } from "./holidays.logic";
 import { HolidaysRepository } from "./holidays.repository";
+import { isUniqueViolation } from "../../common/db-error";
 
 type HolidayRow = typeof publicHolidays.$inferSelect;
 
 interface Actor {
   id: string;
   companyId: string;
-}
-
-const PG_UNIQUE_VIOLATION = "23505";
-
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as Record<string, unknown>)["code"] === PG_UNIQUE_VIOLATION
-  );
 }
 
 /** DTO trả ra — `scope` cho FE phân biệt global vs riêng công ty mà không cần đoán từ companyId. */

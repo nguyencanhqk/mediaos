@@ -42,14 +42,19 @@ jobs:
           # bắt secret bị commit rồi "xóa" ở commit sau (vẫn nằm trong history ⇒ vẫn rò).
           fetch-depth: 0
 
-      # gitleaks-action@v2: exit non-zero khi tìm secret ⇒ FAIL build. Cấu hình + allowlist hẹp ở .gitleaks.toml.
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Trỏ tường minh tới config trong repo (extend default + allowlist ephemeral CI hẹp).
-          GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
-          # KHÔNG bật GITLEAKS_ENABLE_UPLOAD_ARTIFACT mặc định để tránh log/artifact lộ chuỗi nghi vấn.
+      # Chạy gitleaks TRỰC TIẾP qua docker image chính thức (zricethezav/gitleaks) — KHÔNG dùng
+      # gitleaks-action@v2: action KHÔNG honor .gitleaks.toml ổn định (báo "leaks detected" trên chuỗi
+      # ephemeral CI mà allowlist đã loại) + cố ghi comment PR (cần pull-requests:write, gây warning).
+      # Docker `detect` đọc đúng --config → khớp verify cục bộ (538 commit, 0 leaks). Exit non-zero ⇒ FAIL.
+      # --redact: KHÔNG in giá trị nghi vấn ra log/artifact (BẤT BIẾN #3).
+      # Pin tag CỐ ĐỊNH (KHÔNG :latest) → required security check tái lập được, không trôi hành vi/exit
+      # giữa các run (đây là version đã verify cục bộ = 0 leaks trên 538 commit).
+      - name: Run gitleaks (full history, honor .gitleaks.toml)
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/repo" -w /repo \
+            zricethezav/gitleaks:v8.30.1 detect \
+            --source /repo --config /repo/.gitleaks.toml \
+            --no-banner --redact --exit-code 1
 
   # ── Cổng 2: Dependency scan (pnpm audit, SCA) ──────────────────────────────────────────────────
   dependency-scan:
