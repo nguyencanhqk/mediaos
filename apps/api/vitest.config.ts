@@ -49,13 +49,21 @@ export default defineConfig({
     // theo-kênh (cost/revenue/cost-allocation) + workflow-DAG (content/project/channel lifecycle). Code đã
     // PARK (không phát triển, không xoá đợt này) ⇒ test của chúng fail-giả che phạm vi THẬT của suite.
     // Exclude (KHÔNG xoá) để dễ un-park sau. KHÔNG đụng approval-FSM (workflow phê duyệt LEAVE/ATT = IN scope).
-    // (ui-config-deny + webhooks-deny KHÔNG ở đây — đang chờ S1-INT-MOUNT-1 quyết mount-or-skip.)
+    // OUT-OF-MVP / Phase-defer (S1-INT-MOUNT-1 — quyết theo SPEC-01 §7.2 + Phase 5): module CHƯA dựng tầng
+    // app (route trả 404, KHÔNG phải lỗi) ⇒ exclude deny-test có VÉ PHASE; un-exclude khi build module:
+    //   • webhooks-deny → INTEGRATION = Phase 5 (SPEC-01 §7.2/Phase 5, cùng MOBILE/AI).
+    //   • ui-config-deny (branding/ui-navigation/i18n-override) → KHÔNG thuộc 7 module MVP (SPEC-01 §7.1);
+    //     tùy-biến-giao-diện = giai đoạn sau. (Owner muốn đưa vào MVP → đó là WO BUILD module, không phải mount.)
     exclude: [
       ...configDefaults.exclude,
+      // de-media-fy (parked — CLAUDE.md reframe)
       "test/workflow-lifecycle.e2e-spec.ts",
       "test/integration/finance-cost-controller-deny.int-spec.ts",
       "test/integration/finance-cost-allocation-controller-deny.int-spec.ts",
       "test/integration/finance-revenue-controller-deny.int-spec.ts",
+      // out-of-MVP / Phase-defer (S1-INT-MOUNT-1)
+      "test/integration/webhooks-deny.int-spec.ts",
+      "test/integration/ui-config-deny.int-spec.ts",
     ],
     // Integration test mở/đóng pool + chạy DDL → nới timeout mặc định.
     testTimeout: 20000,
