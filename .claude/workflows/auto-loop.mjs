@@ -339,9 +339,13 @@ const planReviewPrompt = (wo, lanes, steps, accept, tests) =>
 const wtPreamble = (wo, wt) =>
   wt
     ? [
-        `🌳 LÀM TRONG WORKTREE RIÊNG (song song, cô lập khỏi cây gốc + worktree WO khác): ${wt}`,
-        `   Bước 0 — tạo nếu chưa có rồi VÀO: git worktree add -B auto/${wo.id} "${wt}" ${MERGE_BASE} 2>/dev/null || true ; cd "${wt}"`,
-        `   MỌI lệnh git/pnpm/test chạy với: cd "${wt}" && <lệnh>. TUYỆT ĐỐI KHÔNG đụng cây gốc hay worktree WO khác.`,
+        `🌳 CÔ LẬP BẮT BUỘC — LÀM TRONG WORKTREE RIÊNG: ${wt} (off ${MERGE_BASE}).`,
+        `   ⛔ FAIL-CLOSED: nếu KHÔNG vào+xác minh được worktree, DỪNG NGAY → status=needs_human, blockers=["worktree isolation failed: <lỗi>"]. TUYỆT ĐỐI KHÔNG fallback về cây gốc, KHÔNG commit thẳng lên ${MERGE_BASE}.`,
+        `   Bước 0a — tạo worktree (idempotent, retry khi .git lock bận): chạy lệnh sau (đã tồn tại → coi như OK; lỗi lock → đợi rồi thử lại tối đa 3 lần):`,
+        `     for i in 1 2 3; do git worktree add -B auto/${wo.id} "${wt}" ${MERGE_BASE} && break; git -C "${wt}" rev-parse --git-dir >/dev/null 2>&1 && break; sleep 2; done`,
+        `   Bước 0b — VÀO + XÁC MINH (BẮT BUỘC trước khi làm gì khác): cd "${wt}" && [ "$(git rev-parse --abbrev-ref HEAD)" = "auto/${wo.id}" ] && git rev-parse --is-inside-work-tree`,
+        `     → nếu lệnh 0b in 'true' VÀ branch = auto/${wo.id}: OK, tiếp tục. Ngược lại (pwd≠worktree / branch sai / chưa add được): ÁP DỤNG FAIL-CLOSED ở trên, KHÔNG làm tiếp trong cây gốc.`,
+        `   MỌI lệnh git/pnpm/test PHẢI chạy bên trong "${wt}" (prefix: cd "${wt}" && <lệnh>). KHÔNG 'cd' về cây gốc, KHÔNG đụng worktree WO khác.`,
       ].join('\n')
     : '';
 
@@ -389,23 +393,19 @@ const reanalyzePrompt = (wo, failures) =>
 // ── ĐỘI 3 → SHIP (lights-out auto-merge, degrade trung thực) ──
 const shipPrompt = (wo, sensitive, wt) =>
   [
-    `Bạn là deploy-gate. Work Order ${wo.id} đã được Đội 3 duyệt PASS. ĐÁNH DẤU HOÀN THÀNH + đưa ra theo lights-out.`,
-    `LUẬT (harness/policy.md): KHÔNG push thẳng master. Commit của WO đã do Đội 2 tạo SẴN trên nhánh/HEAD hiện tại — KHÔNG 'git add -A'/'git add .'.`,
-    `⛔ TUYỆT ĐỐI CẤM (phá cây gốc / mất ngữ cảnh / tạo PR rác): đổi nhánh cây làm việc ('git checkout <nhánh>' / 'git switch'), 'git cherry-pick', 'git reset --hard', tạo branch off 'master'. Commit ĐÃ có sẵn — KHÔNG dựng lại diff bằng cherry-pick.`,
+    `Bạn là deploy-gate. Work Order ${wo.id} đã được Đội 3 duyệt PASS. ĐÁNH DẤU HOÀN THÀNH + đưa ra master theo lights-out.`,
+    `LUẬT (harness/policy.md): KHÔNG push thẳng master.`,
     wt
-      ? `🌳 WO làm trong WORKTREE ${wt}; commit đã trên branch 'auto/${wo.id}'. Chạy 'cd "${wt}" && …': 'git push -u origin auto/${wo.id}', rồi 'gh pr create' base=${MERGE_BASE} head=auto/${wo.id}.${KEEP_WORKTREE ? '' : ` Dọn sau: 'cd <repo gốc> && git worktree remove "${wt}" --force'.`}`
-      : [
-          `CÂY GỐC (KHÔNG worktree) — có thể bẩn (thay đổi ngoài WO). BƯỚC 1: B=$(git branch --show-current).`,
-          `BƯỚC 2 — nếu B == "${MERGE_BASE}" (đang TRÊN nhánh tích hợp): commit của WO ĐÃ nằm trên ${MERGE_BASE} = ĐÃ TÍCH HỢP. ${AUTO_MERGE ? `Chỉ 'git push origin ${MERGE_BASE}' (nếu có remote) → action='merged'; thiếu remote → action='committed'. KHÔNG tạo branch, KHÔNG PR.` : `tạo branch KHÔNG-đổi-cây 'git branch auto/${wo.id} HEAD' + 'git push -u origin auto/${wo.id}' + 'gh pr create' base=${MERGE_BASE} head=auto/${wo.id} → action='pr_opened'.`}`,
-          `BƯỚC 3 — nếu B != "${MERGE_BASE}": 'git branch auto/${wo.id} HEAD' (TẠO branch từ HEAD, KHÔNG checkout) + 'git push -u origin auto/${wo.id}' + 'gh pr create' base=${MERGE_BASE} head=auto/${wo.id}.`,
-        ].join('\n'),
+      ? `🌳 WO này làm trong WORKTREE ${wt}, các commit đã nằm trên branch 'auto/${wo.id}'. Chạy git/gh với 'cd "${wt}" && …': push branch 'auto/${wo.id}', 'gh pr create' base=${MERGE_BASE} head=auto/${wo.id}.${KEEP_WORKTREE ? '' : ` SAU KHI merge/PR xong: 'cd <repo gốc> && git worktree remove "${wt}" --force' để dọn.`} KHÔNG 'git add -A'.`
+      : `⛔ CÂY LÀM VIỆC ĐANG BẨN (có thay đổi KHÔNG liên quan WO). TUYỆT ĐỐI KHÔNG 'git add -A'/'git add .'. Commit của WO đã do Đội 2 tạo sẵn (chỉ file trong paths: ${J(wo.paths || [])}). Tạo branch từ các COMMIT đã có (branch KHÔNG mang theo file chưa stage). Nếu cần commit thêm, stage CHỈ file trong paths của WO. KHÔNG để file ngoài paths lọt vào PR.`,
     AUTO_MERGE
       ? [
-          `MERGE (CHỈ khi có PR — tức B != ${MERGE_BASE}, hoặc worktree): gắn nhãn 'auto-merge' + 'gh pr merge --squash --auto'.`,
+          `CHẾ ĐỘ AUTO-MERGE (lights-out): tạo branch auto/${wo.id} (từ ${MERGE_BASE} hoặc HEAD hiện tại), commit gộp, push, 'gh pr create' base=${MERGE_BASE}.`,
+          `Cố auto-merge: gắn nhãn 'auto-merge' + 'gh pr merge --squash --auto'.`,
           `⚠️ NẾU branch protection của base yêu cầu review NGƯỜI (gh báo chặn) → KHÔNG ép. Để PR + nhãn auto-merge, action=blocked_protection, summary nêu rõ "GitHub chặn auto-merge: cần 1 review người" (KHÔNG báo merged khi chưa merge).`,
           `Nếu base KHÔNG protection / đủ điều kiện → squash-merge xong → action=merged + pr.`,
         ].join('\n')
-      : `CHẾ ĐỘ PR: 'gh pr create' + nhãn 'auto-merge' (chờ người). action=pr_opened.`,
+      : `CHẾ ĐỘ PR: tạo branch auto/${wo.id}, commit gộp, push, 'gh pr create' + nhãn 'auto-merge' (chờ người). action=pr_opened.`,
     sensitive ? `Lane nhạy cảm — đảm bảo FULL gate đã PASS ở Đội 3 trước khi mở PR.` : '',
     `Nếu thiếu gh/remote → action=committed (chỉ commit local), nêu rõ trong summary.`,
     `Trả { action, branch, pr, summary } theo schema.`,
