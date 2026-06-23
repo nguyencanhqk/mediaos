@@ -277,7 +277,7 @@ export const backlog = [
     layer: "QA",
     title: "Test strategy + verify migrate/seed từ DB trống + test-case matrix skeleton (QA-01/02)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/test/**", "docs/plans/**"],
     skills: ["code-review"],
     depends_on: ["S0-FND-DB-1"],
