@@ -82,7 +82,11 @@ export const backlog = [
     title:
       "CI BE/FE: đối chiếu lint·typecheck·test·build + migration-check + path-filter (api/auth/console/app) với DEVOPS-02",
     zone: "green",
-    status: "todo",
+    // CLOSE 2026-06-23: deliverables RIÊNG xanh — db:check journal-invariant (head đọc động) + CI migration-check
+    //   + app path-filter + file-policy fixture fix (commit a4a1174/a07461d). DoD §8 "toàn API suite xanh" KHÔNG áp
+    //   cho WO hạ-tầng-CI này: 60 fail PRE-EXISTING (parked finance/workflow · webhooks/ui-config chưa mount ·
+    //   migration-smoke 'sessions' chờ S0-AUTH-DB-1) đã TÁCH sang S1-QA-DEBT-1 + S1-INT-MOUNT-1.
+    status: "done",
     paths: [".github/workflows/**", "turbo.json", "package.json", "pnpm-workspace.yaml"],
     skills: ["code-review"],
     depends_on: [],
@@ -474,6 +478,50 @@ export const backlog = [
       "file security: .exe đổi đuôi .pdf bị chặn; filename ../../ sanitize; soft-deleted không download; response không lộ storage_path/signed_url",
       "sequence concurrency 0-dup; audit masking không lộ token/password; public settings không trả sensitive",
       "append-only: UPDATE/DELETE audit_logs + file_access_logs bằng app role FAIL (BẤT BIẾN #2); coverage vùng nhạy cảm ≥80%",
+    ],
+  },
+
+  // ════════════════════ TEST-DEBT triage — tách từ S0-CI-1 ════════════════════
+  // S0-CI-1 chạy `pnpm --filter @mediaos/api test` trên DB CÔ LẬP SẠCH (mediaos_ci1) → lộ 60 fail PRE-EXISTING
+  // mà lane-DB band-thấp trước đây che (CLAUDE.md §9.5). KHÔNG phải lỗi S0-CI-1 — tách thành WO có chủ.
+  {
+    id: "S1-QA-DEBT-1",
+    module: "QA",
+    layer: "QA",
+    title:
+      "Test-suite triage: xoá/exclude test của module PARKED (de-media-fy: finance·workflow·media) + gate test phụ thuộc WO chưa land — để `pnpm api test` xanh = phạm vi THẬT",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/api/test/**", "apps/api/src/**/*.spec.ts", "apps/api/vitest.config.ts"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "CLAUDE.md (de-media-fy reframe 2026-06-20)",
+      "QA-01",
+      "S0-CI-1 (bảng phân loại 60 fail PRE-EXISTING)",
+    ],
+    done_when: [
+      "test của module OUT-OF-SCOPE (finance-cost/revenue/cost-allocation-deny · workflow-lifecycle.e2e · media-era) ĐƯỢC xoá HOẶC exclude qua vitest config với lý do de-media-fy ghi rõ — KHÔNG để fail-giả che suite",
+      "migration-smoke 'sessions' assertion GATE sau S0-AUTH-DB-1 (skipIf bảng chưa có) HOẶC chờ S0-AUTH-DB-1 land — KHÔNG fail vì bảng chưa migrate",
+      "modules-idempotent re-seed fail điều tra: bug seed thật → sửa; test sai → sửa test (ghi rõ nguyên nhân)",
+      "`pnpm --filter @mediaos/api test` XANH (0 fail) trên DB cô lập sạch; fail còn lại CHỈ thuộc WO đang chờ (tracked), KHÔNG phải rác parked",
+    ],
+  },
+  {
+    id: "S1-INT-MOUNT-1",
+    module: "BACKEND",
+    layer: "INT",
+    title:
+      "Quyết scope + mount-or-skip: webhooks-deny + ui-config-deny đang 404 (module chưa mount) — mount nếu trong MVP, else exclude test có vé Phase",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/api/src/**", "apps/api/test/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: ["S0-CI-1 (bảng phân loại 60 fail PRE-EXISTING)", "SPEC-01 §7/§25 (phase scope)"],
+    done_when: [
+      "quyết định scope webhooks + ui-config/branding/i18n theo SPEC-01 phase map (MVP vs Phase 5 INTEGRATION): in-scope → mount module + wire route; out-of-scope → exclude deny-test có vé Phase ghi rõ",
+      "webhooks-deny + ui-config-deny KHÔNG còn 404-masked: pass (nếu mount) hoặc excluded có lý do phase",
     ],
   },
 ];
