@@ -1,11 +1,11 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "//": "globalPassThroughEnv: turbo 2.x chạy STRICT env-mode mặc định → task chỉ nhận env được khai báo. CI (ci.yml) chạy `turbo run test`; thiếu các biến này thì vitest.config (laneDbEnv) rơi về fallback `changeme_*` ⇒ 'password authentication failed for user mediaos/mediaos_app'. Local KHÔNG lộ vì có apps/api/.env (gitignored) nạp qua envDir. passThrough (KHÔNG cache-hash) đúng cho biến runtime/CI/secret.",
+  "//pgbouncer": "PGBOUNCER_URL CỐ Ý KHÔNG passthrough: gate GX-4 pgbouncer-tenant-isolation CHƯA TỪNG chạy trong ci.yml (env vốn bị strip → skip). Khi pass-through, 3 test đó CHẠY nhưng đỏ vì 'password authentication failed for user postgres' — edoburu/pgbouncer kết nối backend bằng user 'postgres' KHÔNG tồn tại (POSTGRES_USER=mediaos). Đây là lỗi cấu hình pgbouncer-trong-CI (follow-up GX-4-PGB-CI), KHÔNG phải code. Giữ skip (đúng hiện trạng lâu nay) tới khi sửa edoburu config; isolation-qua-pool vẫn được kiểm bằng docker compose local.",
   "globalPassThroughEnv": [
     "DATABASE_URL",
     "DATABASE_DIRECT_URL",
     "DATABASE_WORKER_URL",
-    "PGBOUNCER_URL",
     "PG_HOSTPORT",
     "LANE_DB",
     "VALKEY_URL",
