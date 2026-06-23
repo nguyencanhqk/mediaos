@@ -9,13 +9,13 @@ import {
   type RouteMeta,
   type SessionContext,
 } from "@mediaos/web-core";
-import { HomePage } from "@/routes/home";
 import { ForbiddenPage } from "@/routes/forbidden";
+import { ProtectedShell } from "@/layouts/protected/ProtectedShell";
+import { HomePortalLayout } from "@/layouts/home/HomePortalLayout";
+import { ModuleWorkspaceLayout } from "@/layouts/workspace/ModuleWorkspaceLayout";
 
 // ---------------------------------------------------------------------------
 // Auth guard — điều hướng về app đăng nhập trung tâm nếu chưa có phiên.
-// SSO: login externalize sang apps/auth. Boot (main.tsx) silent-refresh trước
-// khi mount; đây là backstop khi store bị xoá giữa phiên.
 // ---------------------------------------------------------------------------
 const authGuard = () => {
   if (!useAuthStore.getState().isAuthenticated) {
@@ -24,38 +24,27 @@ const authGuard = () => {
 };
 
 // ---------------------------------------------------------------------------
-// Permission guard factory — xây SessionContext từ auth store rồi chạy
-// evaluateRouteAccess. Nếu SHOW_403 → render ForbiddenPage (không throw).
-// Nếu REDIRECT_LOGIN → throw redirect về auth app.
+// buildSession — SessionContext từ auth store.
+// company/modules populated khi BE wire /me expansion (TODO S1-FE-LAYOUT-1 complete).
 // ---------------------------------------------------------------------------
 function buildSession(): SessionContext {
   const state = useAuthStore.getState();
-  // Auth store hiện chưa giữ company / modules đầy đủ (BE chưa wire /me mở rộng).
-  // Guard dùng capabilities map (đã có) để kiểm tra permission; company/modules
-  // được mở rộng ở S1-FE-LAYOUT-1 khi /auth/me trả đủ payload.
   return {
     status: state.isAuthenticated ? "authenticated" : "unauthenticated",
     user: state.user
       ? {
           id: state.user.id,
           email: state.user.email,
-          status:
-            (state.user.status as SessionContext["user"] extends null
-              ? never
-              : NonNullable<SessionContext["user"]>["status"]) ?? "Active",
+          status: (state.user.status as NonNullable<SessionContext["user"]>["status"]) ?? "Active",
           companyId: state.user.companyId,
         }
       : null,
-    company: null, // populated by S1-FE-LAYOUT-1 after /me expansion
-    modules: [], // populated by S1-FE-LAYOUT-1 after /me expansion
+    company: null, // TODO(BE): populate after /me expansion
+    modules: [], // TODO(BE): populate after /me expansion
   };
 }
 
 function buildPermissionChecker() {
-  // capabilities map: { "ACTION:RESOURCE": boolean } — flatten sang UserPermission[]
-  // format MODULE.RESOURCE.ACTION được lưu trong capabilities với key "action:resource"
-  // (useCan dùng "action:resourceType"). Tạm thời chuyển ngược capabilities thành
-  // UserPermission[] để feed createPermissionChecker. Full /me payload ở S1-FE-LAYOUT-1.
   const caps = useAuthStore.getState().capabilities;
   const userPermissions = Object.entries(caps)
     .filter(([, v]) => v)
@@ -63,29 +52,18 @@ function buildPermissionChecker() {
   return createPermissionChecker(userPermissions);
 }
 
-/**
- * Tạo beforeLoad guard cho một route có RouteMeta.
- * - Chưa đăng nhập → redirect auth app.
- * - Trái quyền (SHOW_403) → KHÔNG throw; component sẽ render ForbiddenPage.
- *   (TanStack Router không có built-in "render different component" từ beforeLoad
- *   nên guard chỉ throw khi cần redirect; 403 xử lý ở component wrapper.)
- */
 function permissionGuard(meta: RouteMeta) {
   return () => {
     const state = useAuthStore.getState();
     if (!state.isAuthenticated) {
       throw redirect({ href: getAuthRedirectUrl() });
     }
-
     const session = buildSession();
     const permission = buildPermissionChecker();
     const result = evaluateRouteAccess(session, meta, permission);
-
     if (result.action === "REDIRECT_LOGIN") {
       throw redirect({ href: getAuthRedirectUrl() });
     }
-    // SHOW_403 / SHOW_DISABLED / SHOW_404 → store result for component to consume
-    // via route context so it can render ForbiddenPage without a separate route.
     return { guardResult: result };
   };
 }
@@ -96,49 +74,33 @@ function permissionGuard(meta: RouteMeta) {
 
 const rootRoute = createRootRoute();
 
-// Home — auth-only, no module permission needed
-const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/",
-  beforeLoad: authGuard,
-  component: HomePage,
-});
-
-// /home — canonical Home Portal landing after login
+// Home — canonical Home Portal landing after login
 const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/home",
   beforeLoad: authGuard,
-  component: HomePage,
+  component: () => (
+    <ProtectedShell>
+      <HomePortalLayout />
+    </ProtectedShell>
+  ),
+});
+
+// Index redirect → /home
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/",
+  beforeLoad: authGuard,
+  component: () => (
+    <ProtectedShell>
+      <HomePortalLayout />
+    </ProtectedShell>
+  ),
 });
 
 // ---------------------------------------------------------------------------
-// Permission-guarded placeholder routes
-// Each route uses permissionGuard so direct URL access is blocked at the FE
-// layer before the BE enforces it. Component renders ForbiddenPage when guard
-// returns SHOW_403; otherwise renders a placeholder until S1-FE-LAYOUT-1.
+// Guarded module routes — wrap with ModuleWorkspaceLayout
 // ---------------------------------------------------------------------------
-
-function makeGuardedRoute(path: string, meta: RouteMeta, component: () => React.ReactElement) {
-  return createRoute({
-    getParentRoute: () => rootRoute,
-    path,
-    beforeLoad: permissionGuard(meta),
-    component,
-  });
-}
-
-/** Placeholder component used by module routes not yet implemented. */
-function ModulePlaceholder() {
-  // eslint is fine: this is a pure scaffold, replaced module-by-module
-  return (
-    <div className="flex min-h-screen items-center justify-center text-muted-foreground text-sm">
-      Module đang xây dựng…
-    </div>
-  );
-}
-
-// Import ROUTE_REGISTRY to pull RouteMeta without duplicating data
 import { ROUTE_REGISTRY } from "@mediaos/web-core";
 
 function getMeta(routeKey: string): RouteMeta {
@@ -147,84 +109,125 @@ function getMeta(routeKey: string): RouteMeta {
   return meta;
 }
 
-const dashboardRoute = makeGuardedRoute("/dashboard", getMeta("dashboard"), ModulePlaceholder);
-const hrRoute = makeGuardedRoute("/hr", getMeta("hr.overview"), ModulePlaceholder);
-const hrEmployeesRoute = makeGuardedRoute(
-  "/hr/employees",
-  getMeta("hr.employees"),
-  ModulePlaceholder,
-);
-const hrMeRoute = makeGuardedRoute("/hr/me", getMeta("hr.me"), ModulePlaceholder);
+function makeModuleRoute(
+  path: string,
+  metaKey: string,
+  moduleCode: Parameters<typeof ModuleWorkspaceLayout>[0]["moduleCode"],
+  PageComponent: () => React.ReactElement,
+) {
+  const meta = getMeta(metaKey);
+  return createRoute({
+    getParentRoute: () => rootRoute,
+    path,
+    beforeLoad: permissionGuard(meta),
+    component: () => (
+      <ProtectedShell>
+        <ModuleWorkspaceLayout moduleCode={moduleCode}>
+          <PageComponent />
+        </ModuleWorkspaceLayout>
+      </ProtectedShell>
+    ),
+  });
+}
 
-const attTodayRoute = makeGuardedRoute(
-  "/attendance/today",
-  getMeta("att.today"),
-  ModulePlaceholder,
-);
-const attMyRecordsRoute = makeGuardedRoute(
+/** Placeholder component used for module routes not yet implemented. */
+function ModulePlaceholder() {
+  return (
+    <div className="flex min-h-96 items-center justify-center p-8 text-sm text-muted-foreground">
+      Màn hình đang xây dựng…
+    </div>
+  );
+}
+
+// Dashboard
+const dashboardRoute = makeModuleRoute("/dashboard", "dashboard", "DASH", ModulePlaceholder);
+
+// HR
+const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", ModulePlaceholder);
+const hrEmployeesRoute = makeModuleRoute("/hr/employees", "hr.employees", "HR", ModulePlaceholder);
+const hrMeRoute = makeModuleRoute("/hr/me", "hr.me", "HR", ModulePlaceholder);
+
+// Attendance
+const attTodayRoute = makeModuleRoute("/attendance/today", "att.today", "ATT", ModulePlaceholder);
+const attMyRecordsRoute = makeModuleRoute(
   "/attendance/my-records",
-  getMeta("att.my-records"),
+  "att.my-records",
+  "ATT",
   ModulePlaceholder,
 );
 
-const leaveRoute = makeGuardedRoute("/leave", getMeta("leave.overview"), ModulePlaceholder);
-const leaveMyRequestsRoute = makeGuardedRoute(
+// Leave
+const leaveRoute = makeModuleRoute("/leave", "leave.overview", "LEAVE", ModulePlaceholder);
+const leaveMyRequestsRoute = makeModuleRoute(
   "/leave/me/requests",
-  getMeta("leave.my-requests"),
+  "leave.my-requests",
+  "LEAVE",
   ModulePlaceholder,
 );
-const leaveApprovalsRoute = makeGuardedRoute(
+const leaveApprovalsRoute = makeModuleRoute(
   "/leave/approvals",
-  getMeta("leave.approvals"),
+  "leave.approvals",
+  "LEAVE",
   ModulePlaceholder,
 );
 
-const tasksRoute = makeGuardedRoute("/tasks", getMeta("task.overview"), ModulePlaceholder);
-const tasksMyTasksRoute = makeGuardedRoute(
+// Tasks
+const tasksRoute = makeModuleRoute("/tasks", "task.overview", "TASK", ModulePlaceholder);
+const tasksMyTasksRoute = makeModuleRoute(
   "/tasks/my-tasks",
-  getMeta("task.my-tasks"),
+  "task.my-tasks",
+  "TASK",
   ModulePlaceholder,
 );
 
-const notificationsRoute = makeGuardedRoute(
+// Notifications
+const notificationsRoute = makeModuleRoute(
   "/notifications",
-  getMeta("noti.list"),
+  "noti.list",
+  "NOTI",
   ModulePlaceholder,
 );
 
-const systemRoute = makeGuardedRoute("/system", getMeta("system.overview"), ModulePlaceholder);
-const systemUsersRoute = makeGuardedRoute(
+// System / Foundation
+const systemRoute = makeModuleRoute("/system", "system.overview", "FOUNDATION", ModulePlaceholder);
+const systemUsersRoute = makeModuleRoute(
   "/system/users",
-  getMeta("system.users"),
+  "system.users",
+  "FOUNDATION",
   ModulePlaceholder,
 );
-const systemRolesRoute = makeGuardedRoute(
+const systemRolesRoute = makeModuleRoute(
   "/system/roles",
-  getMeta("system.roles"),
+  "system.roles",
+  "FOUNDATION",
   ModulePlaceholder,
 );
-const systemAuditLogsRoute = makeGuardedRoute(
+const systemAuditLogsRoute = makeModuleRoute(
   "/system/audit-logs",
-  getMeta("system.audit-logs"),
+  "system.audit-logs",
+  "FOUNDATION",
   ModulePlaceholder,
 );
 
-// 403 page — public, no guard
+// ---------------------------------------------------------------------------
+// Error / public routes
+// ---------------------------------------------------------------------------
 const forbiddenRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/403",
   component: () => <ForbiddenPage />,
 });
 
-// 404 catch-all
 const notFoundRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "*",
   beforeLoad: authGuard,
   component: () => (
-    <div className="flex min-h-screen items-center justify-center text-muted-foreground text-sm">
-      404 — Không tìm thấy trang.
-    </div>
+    <ProtectedShell>
+      <div className="flex min-h-96 items-center justify-center p-8 text-sm text-muted-foreground">
+        404 — Không tìm thấy trang.
+      </div>
+    </ProtectedShell>
   ),
 });
 
