@@ -1,10 +1,15 @@
+<!-- ✅ DONE 2026-06-23 — KHÔNG BUILD LẠI. Deliverable đã committed (cda2a09 — mig 0438 đã TỒN TẠI; head idx 121).
+     Tạo migration 0438 MỚI = vỡ journal (dup idx). WO đã verify+gate+close: 3 done_when xanh trên lane DB sạch
+     (rls-coverage-assert/rls-guards/foundation-tables-tenant-deny + audit-logs-appendonly), FULL gate PASS
+     (security-reviewer + rls-tenant-isolation-tester ISOLATION INTACT). Plan dưới = lịch sử phân rã, GIỮ để trace. -->
 <!-- ⚙️ KHỐI MÁY-ĐỌC (auto-loop ĐỌC khối này thay vì phân rã lại; reconcile-refresh trước build). -->
 <!-- Phần ỔN ĐỊNH (lanes/acceptanceChecks/testTasks/steps) tái dùng; phần GAP trong prose bên dưới PHẢI đối chiếu lại với code hiện tại. -->
 ```yaml
 wo: S0-FND-DB-1
 zone: red
+status: done   # cda2a09 — mig 0438 committed; verify+gate PASS 2026-06-23
 generated_by: human
-reconciled_at: "migration head 0437 / idx 120"   # mốc freshness — head đổi ⇒ reconcile-refresh lại
+reconciled_at: "DONE @ migration head 0438 / idx 121 (cda2a09) — verified + FULL gate PASS 2026-06-23"   # mốc freshness
 lanes:
   - id: S0-FND-DB-1
     builder: db-migration
