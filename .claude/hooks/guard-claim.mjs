@@ -19,6 +19,7 @@ import {
   listClaims,
   isStale,
   currentBranch,
+  sessionsOnBranch,
   CLAIM_TTL_MS,
 } from '../../harness/lib/claims.mjs';
 
@@ -80,10 +81,24 @@ try {
     process.exit(0); // CẢNH BÁO — không chặn
   }
 
+  // ── Branch-level: PHIÊN KHÁC đang cùng làm trên CÙNG branch (dù khác WO) → cảnh báo giẫm chân ──
+  const branch = currentBranch(cwd);
+  const others = sessionsOnBranch(branch, now, cwd).filter((s) => s.session_id !== sid);
+  if (others.length) {
+    process.stderr.write(
+      `\n⚠️  guard-claim: branch \`${branch}\` đang có ${others.length} PHIÊN KHÁC cùng làm — dễ GIẪM CHÂN (commit/đè nhau):\n` +
+        others
+          .map((s) => `   • session ${String(s.session_id).slice(0, 8)}…  giữ ${s.wos.join(', ')}  • ${s.cwd}  • ${minsAgo(s.ts)}'`)
+          .join('\n') +
+        `\n   → Thống nhất AI CẦM branch \`${branch}\`; phiên kia chuyển nhánh/worktree riêng.\n` +
+        `   (Xem: \`node harness/claim.mjs branch\`)\n`,
+    );
+  }
+
   // Chưa ai giữ / claim quá hạn / chính mình giữ → ghi/refresh quyền giữ của phiên này.
   writeClaim(
     wo.id,
-    { wo: wo.id, session_id: sid, branch: currentBranch(cwd), cwd, ts: now, at: new Date(now).toISOString() },
+    { wo: wo.id, session_id: sid, branch, cwd, ts: now, at: new Date(now).toISOString() },
     cwd,
   );
   process.exit(0);

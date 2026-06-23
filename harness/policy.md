@@ -56,7 +56,21 @@ hạ cấp tay bằng `skipPlan:true` + `noReview:true` (hoặc `model:'sonnet'`
 `guard-tenant` · `guard-secrets` · `guard-immutability` (3 bất biến) · `anti-bandaid-guard`
 (chặn `catch{}` rỗng / `@ts-ignore` / `eslint-disable` / `.skip`/`.only` / TODO-fix vùng đỏ) ·
 `guard-migration-band` · **`guard-scope` (cảnh báo khi sửa ngoài `paths` của Work Order — warn-only)** ·
-**`guard-claim` (claim-on-touch theo `session_id`; cảnh báo khi HAI PHIÊN cùng giữ một Work Order — warn-only, sổ chung mọi worktree ở `.git/mediaos-claims/`; xem `node harness/claim.mjs list`)**.
+**`guard-claim` (claim-on-touch theo `session_id`; cảnh báo khi HAI PHIÊN cùng giữ một Work Order — warn-only, sổ chung mọi worktree ở `.git/mediaos-claims/`; xem `node harness/claim.mjs list`)** ·
+**branch-level: cảnh báo khi ≥2 phiên cùng làm trên MỘT branch (xem `node harness/claim.mjs branch`)**.
+
+## Đa-phiên cùng branch (⑦ — chống giẫm chân)
+
+> Bài học 2026-06-23: hai phiên/người cùng commit trên `feat/foundation-wave1` → đè/clobber nhau (commit lạc, revert edit uncommitted của nhau, PR rác). Đây là sự cố THẬT trong một phiên.
+
+**LUẬT: 1 phiên CẦM 1 branch tại 1 thời điểm.** Ép mềm TỰ ĐỘNG (warn-only, fail-open — không bẫy người):
+
+- `guard-claim` (PreToolUse mọi Edit) thấy phiên khác cùng branch → **CẢNH BÁO ngay**: "branch X có N phiên khác — thống nhất AI CẦM".
+- Phân biệt phiên = `session_id`; claim refresh mỗi Edit, hết hạn 8h hoặc nhả khi Stop; sổ chung mọi worktree ở `.git/mediaos-claims/`.
+
+**Khi thấy cảnh báo:** dừng → `node harness/claim.mjs branch` xem ai cầm gì. Một phiên giữ branch; phiên kia **tách nhánh riêng** (`git switch -c feat/<việc>`) hoặc **worktree riêng** rồi PR về. Phiên đã chết để lại claim quá hạn → `node harness/claim.mjs prune`.
+
+**Auto-loop live:** chạy `node harness/claim.mjs branch` TRƯỚC; có phiên khác sống trên branch đích → KHÔNG chạy (thống nhất trước). Caveat: `TaskStop` không giết lane con (xem `AUTOMATION-LOOP.md`).
 
 ## Routing — mỗi sub-task chọn 4 thứ (⑤)
 
