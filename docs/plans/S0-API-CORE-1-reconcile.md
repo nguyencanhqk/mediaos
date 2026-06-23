@@ -4,206 +4,170 @@
 wo: S0-API-CORE-1
 zone: yellow
 generated_by: human
-reconciled_at: "2026-06-23 / feat/foundation-wave1"   # mốc freshness — branch đổi ⇒ reconcile-refresh lại
+reconciled_at: "2026-06-23 / feat/foundation-wave1 (rev2 — vá 2 plan_block)"   # mốc freshness — branch đổi ⇒ reconcile-refresh lại
 lanes:
   - id: S0-API-CORE-1
     builder: backend-builder
     task: >
-      Reshape envelope {success,data,error}→{success,message,data,meta:{request_id,timestamp}} + pagination block riêng;
-      tạo error-code enum MODULE-ERR-XXX trong common/; ZodValidationPipe→VALIDATION-ERR-001 với details[];
-      thêm log-redaction (Authorization/password/token) vào AllExceptionsFilter + logger;
-      CompanyGuard — DEFER tenant-active-check sang AUTH WO (xem quyết định §3);
-      deny-path tests RED trước (no-secret-log, 5xx no-stack-leak, tenant isolation);
-      health/health-db giữ nguyên (đã xanh, chỉ verify).
+      Reshape envelope {success,data,error}→{success,message,data,error,meta:{request_id,timestamp}} +
+      pagination block RIÊNG; GIỮ error:null trong success envelope (back-compat: web-core unwrapEnvelope +
+      18 api-client test KHÔNG đổi → api-client.ts NẰM NGOÀI scope, để S0-FE-API-1 reshape sau);
+      tạo error-code enum trong common/errors; AllExceptionsFilter PHẢI branch `instanceof ZodValidationException`
+      (status 400) TRƯỚC fallback httpStatusToCode → code=VALIDATION-ERR-001 + details[] từ getZodError().issues;
+      thêm log-redaction (Authorization/Cookie + query-string trong url) vào AllExceptionsFilter; request-id qua
+      FUNCTIONAL middleware + ambient declare Express.Request.requestId (.d.ts trong paths, KHÔNG `any`/@ts-ignore);
+      interceptor đọc request qua context.switchToHttp().getRequest() (KHÔNG REQUEST-scope);
+      CompanyGuard — DEFER tenant-active-check sang S0-AUTH-DB-1 (xem §2);
+      cập nhật 2 consumer BẮT BUỘC di chuyển cùng contract: contracts/index.spec.ts + web-core/lib/api.ts(getHealth);
+      deny-path tests RED trước (no-secret-log, 5xx no-stack-leak); health giữ envelope (KHÔNG skip interceptor).
     paths:
       - packages/contracts/src/index.ts
+      - packages/contracts/src/index.spec.ts                        # CẬP NHẬT — assert shape mới (cùng package, vỡ nếu không sửa)
+      - packages/web-core/src/lib/api.ts                            # CẬP NHẬT/VERIFY getHealth — consumer LIVE của apiResponseSchema
       - apps/api/src/common/filters/all-exceptions.filter.ts
       - apps/api/src/common/interceptors/response-envelope.interceptor.ts
-      - apps/api/src/common/interceptors/response-envelope.interceptor.spec.ts
-      - apps/api/src/common/errors/error-codes.ts          # TẠO MỚI
-      - apps/api/src/common/middleware/request-id.middleware.ts   # TẠO MỚI
+      - apps/api/src/common/errors/error-codes.ts                   # TẠO MỚI
+      - apps/api/src/common/middleware/request-id.middleware.ts     # TẠO MỚI (functional)
+      - apps/api/src/types/express-request.d.ts                     # TẠO MỚI — ambient declare Request.requestId (auto-include qua tsconfig "src")
       - apps/api/src/main.ts
-      - apps/api/src/health/health.controller.ts
-      - apps/api/test/unit/common/response-envelope.spec.ts       # TẠO MỚI (deny-path + envelope)
-      - apps/api/test/unit/common/all-exceptions-filter.spec.ts   # TẠO MỚI (deny-path)
+      - apps/api/src/health/health.controller.ts                    # chỉ verify (không skip interceptor)
+      - apps/api/src/common/interceptors/response-envelope.interceptor.spec.ts   # CẬP NHẬT (envelope + meta) — COLOCATED (vitest include=src/**/*.spec.ts)
+      - apps/api/src/common/filters/all-exceptions.filter.spec.ts   # TẠO MỚI (deny-path #1/#2 + VALIDATION details) — COLOCATED (test/** chỉ nhận e2e/int-spec → file ở test/unit KHÔNG chạy = green giả)
 acceptanceChecks:
-  - "apiResponseSchema (packages/contracts/src/index.ts) parse đúng {success,message,data,meta:{request_id,timestamp}} — test Zod.parse xanh"
-  - "paginationSchema tách block riêng ({page,per_page,total,total_pages,has_next,has_prev})"
-  - "ResponseEnvelopeInterceptor bọc data thành {success:true,message,data,meta:{request_id,timestamp}}"
-  - "AllExceptionsFilter trả {success:false,message,error:{code,type,details},meta:{request_id,timestamp}} — KHÔNG trả stack/file path trong body"
-  - "error-code enum tồn tại ở apps/api/src/common/errors/error-codes.ts; bao gồm AUTH-ERR-UNAUTHENTICATED, AUTH-ERR-FORBIDDEN, VALIDATION-ERR-001, RESOURCE-ERR-NOT-FOUND, SYSTEM-ERR-001"
-  - "ZodValidationPipe thất bại → code=VALIDATION-ERR-001 + details[] field-level (field, message, rule)"
-  - "TEST deny-path #1 (no-secret-log): request chứa Authorization header → log KHÔNG chứa giá trị Bearer token"
-  - "TEST deny-path #2 (5xx no-stack-leak): forced InternalServerException → response body KHÔNG chứa 'stack' hoặc path file hệ thống"
-  - "TEST deny-path #3 (tenant isolation): companyId trong JWT khác companyId của resource → truy vấn qua withTenant trả 0 row (regression guard)"
-  - "GET /api/v1/health → {status:'ok'} và GET /api/v1/health/db → {status:'ok'|'down'} — response không bị bọc thêm envelope (controller trả trực tiếp, interceptor skip nếu cần)"
-  - "build + typecheck apps/api + packages/contracts xanh (KHÔNG @ts-ignore / eslint-disable)"
-  - "S0-FE-API-1 được ghi chú là depends_on S0-API-CORE-1; stash chưa land — không break gì"
+  - "apiResponseSchema (packages/contracts/src/index.ts) parse đúng {success,message,data,error:null,meta:{request_id,timestamp}} — test Zod.parse xanh; error GIỮ nullable (back-compat)"
+  - "paginationSchema TÁCH block riêng ({page,per_page,total,total_pages,has_next,has_prev}) — export riêng, KHÔNG nhét vào meta"
+  - "ResponseEnvelopeInterceptor bọc data thành {success:true,message,data,error:null,meta:{request_id,timestamp}} — đọc request_id qua context.switchToHttp().getRequest().requestId"
+  - "AllExceptionsFilter trả {success:false,message,data:null,error:{code,type,details},meta:{request_id,timestamp}} — body KHÔNG chứa stack/đường dẫn file hệ thống"
+  - "error-code enum tồn tại ở apps/api/src/common/errors/error-codes.ts; gồm AUTH-ERR-UNAUTHENTICATED, AUTH-ERR-FORBIDDEN, VALIDATION-ERR-001, RESOURCE-ERR-NOT-FOUND, SYSTEM-ERR-001; map HttpStatus→code"
+  - "AllExceptionsFilter branch `instanceof ZodValidationException` TRƯỚC fallback httpStatusToCode (ZodValidationException extends BadRequestException → status 400, sẽ map generic nếu không branch trước) → code=VALIDATION-ERR-001 + error.details[] field-level ({field,message,rule}) từ exception.getZodError().issues (path.join('.')→field, message, code→rule); import { ZodValidationException } from 'nestjs-zod'"
+  - "request-id: FUNCTIONAL middleware (req,res,next) gán req.requestId (từ header X-Request-Id hoặc randomUUID) + set res header X-Request-Id; đăng ký app.use(requestIdMiddleware) TRƯỚC app.listen() — KHÔNG dùng class @Injectable qua app.use"
+  - "req.requestId typecheck XANH ở filter+interceptor+middleware nhờ ambient declare (apps/api/src/types/express-request.d.ts: `declare global { namespace Express { interface Request { requestId?: string } } }`) — KHÔNG (req as any)/@ts-ignore"
+  - "TEST deny-path #1 (no-secret-log): request có header Authorization='Bearer secret123' + Cookie + url='/x?token=secret123' → log line KHÔNG chứa 'secret123' (headers redact [REDACTED] + query-string strip khỏi url trước logger.error)"
+  - "TEST deny-path #2 (5xx no-stack-leak): InternalServerErrorException (stack non-null) → response.json() KHÔNG có key 'stack' và KHÔNG có đường dẫn file"
+  - "GET /api/v1/health + /health/db: ĐI QUA interceptor (KHÔNG skip) → bọc envelope mới; web-core getHealth vẫn parse + đọc .data thành công"
+  - "web-core test XANH (59/59) — api-client.ts KHÔNG bị sửa (unwrapEnvelope giữ nguyên nhờ error:null); chỉ getHealth/contracts spec di chuyển cùng shape"
+  - "build + typecheck packages/contracts + apps/api + packages/web-core XANH (KHÔNG @ts-ignore / eslint-disable)"
 testTasks:
   - "apps/api/test/unit/common/all-exceptions-filter.spec.ts — RED trước GREEN:
-      (1) DENY: gọi filter với exception có Authorization='Bearer secret123' trong log context → assert log line KHÔNG chứa 'secret123' (header redaction);
-      (2) DENY: gọi filter với InternalServerErrorException (exception.stack non-null) → assert response.json() KHÔNG chứa key 'stack';
-      (3) PASS: gọi filter với BadRequestException({code:'VALIDATION-ERR-001',message:'...'}) → response body chứa {success:false, error:{code:'VALIDATION-ERR-001'}, meta:{request_id}}"
-  - "apps/api/test/unit/common/response-envelope.spec.ts — mở rộng interceptor.spec hiện tại:
-      (1) PASS: handler trả {id:'1'} → envelope {success:true,message,data:{id:'1'},meta:{request_id,timestamp}};
+      (1) DENY #1: filter nhận request có headers {authorization:'Bearer secret123', cookie:'mediaos_rt=xyz'} + url='/api/v1/x?token=secret123' + status 500 → spy trên Logger.error: KHÔNG arg nào chứa 'secret123' hoặc 'xyz' (redact [REDACTED] headers + strip query-string khỏi url);
+      (2) DENY #2: InternalServerErrorException với .stack non-null → response body KHÔNG chứa key 'stack', KHÔNG chứa chuỗi '.ts:' / đường dẫn; body = {success:false, error:{code:'SYSTEM-ERR-001'}, meta:{request_id}};
+      (3) PASS: dựng ZodValidationException THẬT (new ZodValidationException(new ZodError([...]))) — KHÔNG hand-build BadRequestException → error.code='VALIDATION-ERR-001' + error.details[] có {field,message} từ getZodError().issues; meta.request_id non-empty; KHẲNG ĐỊNH branch chạy TRƯỚC httpStatusToCode (không bị map generic theo 400);
+      (4) PASS: ForbiddenException → error.code='AUTH-ERR-FORBIDDEN', status 403"
+  - "apps/api/test/unit/common/response-envelope.spec.ts — interceptor shape mới:
+      (1) PASS: handler trả {id:'1'} (request.requestId='req-1') → {success:true, message:'OK', data:{id:'1'}, error:null, meta:{request_id:'req-1', timestamp:<ISO>}};
       (2) PASS: handler trả undefined → data:null;
-      (3) kiểm tra meta.request_id là string non-empty; meta.timestamp là ISO-8601 string"
-  - "apps/api/test/unit/common/tenant-isolation.spec.ts (TẠO MỚI) — deny-path #3:
-      (1) DENY: withTenant('company-A', fn) → khi query bị intercept, set_config được gọi với 'company-A'; query trả 0 row khi record.company_id='company-B' (mock drizzle);
-      (2) kiểm tra rằng AllExceptionsFilter KHÔNG lọ companyId của tenant khác trong body lỗi"
+      (3) meta.request_id = string non-empty; meta.timestamp parse được bằng Date (ISO-8601)"
+  - "packages/contracts/src/index.spec.ts — CẬP NHẬT assert shape mới:
+      (1) success envelope hợp lệ phải có message + meta:{request_id,timestamp}; error:null;
+      (2) error envelope: error:{code,type?,details?} + meta; data:null;
+      (3) paginationSchema.parse({page,per_page,total,total_pages,has_next,has_prev}) OK; reject thiếu field;
+      (4) reject envelope THIẾU meta (chứng minh meta là bắt buộc)"
 steps:
-  - "BƯỚC 0 — RED: Viết test deny-path trước khi sửa bất kỳ code nào. Chạy → confirm FAIL đỏ (filter test sẽ fail vì log chưa redact, envelope test fail vì chưa có meta)"
-  - "BƯỚC 1 — packages/contracts/src/index.ts: reshape apiResponseSchema. Thêm message:z.string(), đổi meta từ paginationMetaSchema.optional() thành {request_id:z.string(),timestamp:z.string()}; tách paginationSchema thành export riêng. Export type ApiResponse<T>. Giữ CONTRACTS_VERSION. KHÔNG đổi các export khác. Thứ tự: contracts trước api."
-  - "BƯỚC 2 — apps/api/src/common/errors/error-codes.ts (TẠO MỚI): enum/object hằng số mã lỗi theo API-01 §13.2. Map HttpStatus→code. Bao gồm VALIDATION-ERR-001 với shape details[]. Không import từ NestJS internals."
-  - "BƯỚC 3 — apps/api/src/common/middleware/request-id.middleware.ts (TẠO MỚI): gán req.requestId từ X-Request-Id header hoặc sinh uuid nếu không có; set res header X-Request-Id. Đăng ký ở main.ts (app.use). KHÔNG sửa app.module.ts (global prefix pipeline)."
-  - "BƯỚC 4 — apps/api/src/common/interceptors/response-envelope.interceptor.ts: thêm message (mặc định 'OK' cho 2xx, controller có thể override qua metadata hoặc data.message), meta:{request_id:từ req.requestId, timestamp:new Date().toISOString()}. Inject REQUEST scope hoặc đọc từ ExecutionContext."
-  - "BƯỚC 5 — apps/api/src/common/filters/all-exceptions.filter.ts: (a) REDACTION: trước khi logger.error, lấy headers từ request và mask Authorization/Cookie header (thay value bằng '[REDACTED]'); KHÔNG log header value thô; (b) KHÔNG trả stack trong body (đã đúng — chỉ log server-side); (c) dùng error-codes.ts: map HttpStatus→code chuẩn; (d) thêm meta:{request_id,timestamp} vào response body; (e) ZodValidationException: parse Zod issues → details[] với {field,message,rule}."
-  - "BƯỚC 6 — apps/api/src/main.ts: đăng ký RequestIdMiddleware (app.use); KHÔNG đổi guard/pipe/filter pipeline (đã đúng thứ tự)."
-  - "BƯỚC 7 — apps/api/src/health/health.controller.ts: kiểm tra health response có bị bọc envelope hay không — nếu interceptor thêm meta không làm lệch shape thì giữ nguyên; nếu cần skip interceptor thì dùng @SkipInterceptor decorator. Mục tiêu: GET /health trả {status:'ok'} vẫn parse được, không lỗi."
-  - "BƯỚC 8 — GREEN: Chạy lại test deny-path → xanh. Cập nhật interceptor.spec.ts cho shape mới. Chạy pnpm typecheck + pnpm build contracts + api."
+  - "BƯỚC 0 — RED: viết all-exceptions-filter.spec.ts + response-envelope.spec.ts TRƯỚC. Chạy → confirm FAIL đỏ (filter chưa redact + chưa có meta; interceptor chưa có message/meta)."
+  - "BƯỚC 1 — packages/contracts/src/index.ts: thêm responseMetaSchema {request_id:z.string(), timestamp:z.string()}; mở rộng apiErrorSchema += type?:z.string(), details?: z.array({field,message,rule?}).nullable() (GIỮ message); reshape apiResponseSchema = {success, message:z.string(), data:data.nullable(), error:apiErrorSchema.nullable(), meta:responseMetaSchema, pagination:paginationSchema.optional()}; THÊM paginationSchema export riêng ({page,per_page,total,total_pages,has_next,has_prev}). GIỮ paginationMetaSchema làm alias deprecated (KHÔNG xóa — spec còn test). Build contracts trước."
+  - "BƯỚC 2 — packages/contracts/src/index.spec.ts: cập nhật success/error case sang shape mới (message+meta required, error nullable); GIỮ case paginationMetaSchema cũ + THÊM case paginationSchema mới + case reject envelope thiếu meta (xem testTask). XANH sau khi index.ts đổi."
+  - "BƯỚC 3 — apps/api/src/common/errors/error-codes.ts (TẠO MỚI): object hằng ERROR_CODES theo API-01 §13.2 + hàm httpStatusToCode(status). KHÔNG import NestJS internals."
+  - "BƯỚC 4 — apps/api/src/common/middleware/request-id.middleware.ts (TẠO MỚI): FUNCTIONAL middleware `export function requestIdMiddleware(req,res,next){ const id = (req.headers['x-request-id'] as string) ?? randomUUID(); req.requestId = id; res.setHeader('X-Request-Id', id); next(); }` (import randomUUID từ 'node:crypto'). KHÔNG class @Injectable (không chạy đúng qua app.use)."
+  - "BƯỚC 4b — apps/api/src/types/express-request.d.ts (TẠO MỚI): `declare global { namespace Express { interface Request { requestId?: string } } }` + `export {}`. Auto-include qua tsconfig include:['src']. Đây là điều kiện để req.requestId typecheck XANH ở middleware/interceptor/filter — KHÔNG dùng (req as any)/@ts-ignore."
+  - "BƯỚC 5 — apps/api/src/common/interceptors/response-envelope.interceptor.ts: đọc request qua context.switchToHttp().getRequest() (KHÔNG REQUEST-scope); map data → {success:true, message:'OK', data:data??null, error:null, meta:{request_id:req.requestId, timestamp:new Date().toISOString()}}."
+  - "BƯỚC 6 — apps/api/src/common/filters/all-exceptions.filter.ts. THỨ TỰ resolve code QUAN TRỌNG: (a) NẾU `exception instanceof ZodValidationException` (import từ 'nestjs-zod'; nó extends BadRequestException → status 400) → code='VALIDATION-ERR-001', details = exception.getZodError().issues.map(i=>({field:i.path.join('.'), message:i.message, rule:i.code})) — branch NÀY chạy TRƯỚC (b); (b) NGƯỢC LẠI: code = (exception payload có 'code' string hợp lệ ? payload.code : httpStatusToCode(status)); (c) REDACT trước logger.error: bản sao headers thay authorization/cookie/x-csrf-token→'[REDACTED]' + strip query-string khỏi request.url (chỉ log pathname) — KHÔNG log value thô; (d) body KHÔNG stack (đã đúng, giữ); (e) error.type = exception.name; (f) thêm message top-level + meta:{request_id:req.requestId, timestamp}."
+  - "BƯỚC 7 — apps/api/src/main.ts: import { requestIdMiddleware }; gọi app.use(requestIdMiddleware) NGAY SAU NestFactory.create, TRƯỚC setGlobalPrefix/useGlobalInterceptors/useGlobalFilters và TRƯỚC app.listen() — để req.requestId sẵn cho interceptor+filter ở mọi request (kể cả request bị guard reject sớm). KHÔNG đổi thứ tự pipe/interceptor/filter còn lại."
+  - "BƯỚC 8 — apps/api/src/health/health.controller.ts: VERIFY 2 endpoint vẫn trả {status} qua interceptor (KHÔNG thêm @SkipInterceptor — health phải có cùng envelope để getHealth parse được)."
+  - "BƯỚC 9 — packages/web-core/src/lib/api.ts: VERIFY getHealth — apiResponseSchema(healthSchema).parse(json) với shape mới (message+meta required, error nullable) vẫn đọc .data OK. Chỉ sửa nếu parse vỡ (vd thêm message khi build healthSchema không cần). KHÔNG đụng api-client.ts."
+  - "BƯỚC 10 — GREEN: chạy lại deny-path + interceptor spec → xanh; pnpm --filter @mediaos/contracts build; pnpm --filter @mediaos/api typecheck+build+test; pnpm --filter @mediaos/web-core test (xác nhận 59/59, api-client KHÔNG đổi)."
 ```
 
-# S0-API-CORE-1 — Micro-plan (reconcile shared config · envelope · error-code · health)
+# S0-API-CORE-1 — Micro-plan rev2 (reconcile shared config · envelope · error-code · health)
 
-> Zone: yellow (chạm secrets redaction + tenant isolation = BẤT BIẾN #3). Builder: backend-builder.
-> Reconcile tại: 2026-06-23 / branch feat/foundation-wave1.
+> Zone: yellow (chạm secrets redaction = BẤT BIẾN #3). Builder: backend-builder. FULL gate.
+> Rev2 tại 2026-06-23 / branch feat/foundation-wave1 — **vá 2 plan_block** (xem §3 + §8).
 
-## 0. Kết quả đối chiếu (đã verify line-level)
+## 0. Kết quả đối chiếu (verify line-level 2026-06-23)
 
-| done_when | Trạng thái hiện tại | Hành động |
+| done_when | Trạng thái hiện tại (đã đọc code) | Hành động |
 | --- | --- | --- |
-| #1 RESHAPE envelope {success,message,data,meta} | ⚠️ **GAP**: envelope hiện tại là `{success,data,error:null}` (interceptor L18-22) và `{success,data,error:{code,message}}` (filter L46-50). `message` và `meta:{request_id,timestamp}` CHƯA có. `packages/contracts/src/index.ts` L23-30 xác nhận `apiResponseSchema` chỉ có `{success,data,error,meta?:paginationMeta}`. | Sửa contracts → interceptor → filter |
-| #2 error-code enum MODULE-ERR-XXX | ⚠️ **GAP**: grep `MODULE-ERR` trong `apps/api/src/` trả 0 file nguồn code (chỉ xuất hiện trong docs/CLAUDE). `all-exceptions.filter.ts` L35 sinh code ad-hoc bằng `exception.name.replace(/Exception$/,'').toUpperCase()` — KHÔNG phải enum chuẩn. | Tạo `common/errors/error-codes.ts` |
-| #3 deny-path test RED: no-secret-log + 5xx no-stack + isolation | ⚠️ **GAP**: `all-exceptions.filter.ts` L40-44 log `request.method + request.url + status` NHƯNG không redact headers. KHÔNG có test cho 3 deny-path. Interceptor spec hiện tại (L11-21) chỉ test `{success,data,error:null}` — chưa test meta. | Viết test RED trước GREEN |
-| #4 GET /health + /health/db xanh | ✅ **ĐÃ ĐẠT**: health.controller.ts đã đúng, hai endpoint hoạt động. Chỉ cần verify không bị phá bởi envelope reshape. | Verify sau bước 7 |
+| #1 RESHAPE envelope {success,message,data,meta} | ⚠️ **GAP**: interceptor L18-22 trả `{success:true,data,error:null}`; filter L46-50 trả `{success:false,data:null,error:{code,message}}`; contracts L23-30 `apiResponseSchema` = `{success,data,error,meta?:pagination}`. Thiếu `message`, `meta:{request_id,timestamp}`. | contracts → interceptor → filter |
+| #2 error-code enum | ⚠️ **GAP**: filter L35 sinh code ad-hoc `exception.name.replace(...).toUpperCase()`. Không có enum. | tạo `common/errors/error-codes.ts` |
+| #3 deny-path RED: no-secret-log + 5xx no-stack | ⚠️ **GAP**: filter L40-44 log `method+url+status` (chưa redact header); body KHÔNG có stack (✅ đã đúng). 0 test cho 2 deny-path. | viết test RED trước |
+| #4 GET /health + /health/db | ✅ **ĐẠT** (chỉ verify không bị envelope reshape phá). | verify BƯỚC 8 |
 
-**Không có gì để build cho:** app.module.ts (pipeline guard đúng thứ tự), main.ts (ZodValidationPipe + interceptor + filter đã đăng ký đúng), CompanyGuard (xem quyết định §3).
+**Không build cho:** app.module.ts (pipeline đúng thứ tự), CompanyGuard (DEFER §2), api-client.ts (giữ nguyên §3).
 
-## 1. Phân tích gap chi tiết
+## 1. Envelope đích (API-01 §11/§12/§16)
 
-### 1.1 Envelope hiện tại vs. API-01 spec
+**Success** — `{success:true, message, data, error:null, meta:{request_id,timestamp}, pagination?}`
+**Error** — `{success:false, message, data:null, error:{code,type,details}, meta:{request_id,timestamp}}`
 
-**Hiện tại (`packages/contracts/src/index.ts` L23-30):**
-```typescript
-// success, data (nullable), error (nullable), meta?: paginationMeta
-```
+- `message`: bắt buộc, default `'OK'` cho 2xx; filter set message cho lỗi.
+- `meta`: `{request_id, timestamp}` (KHÁC `paginationMeta` cũ). `request_id` lấy từ `req.requestId` (middleware).
+- `pagination`: **block riêng** `{page,per_page,total,total_pages,has_next,has_prev}` (API-01 §16.1) — KHÔNG nằm trong `meta`.
+- `error`: **GIỮ nullable** trong cả 2 nhánh (success → `error:null`). Lý do back-compat ở §3.
 
-**API-01 §11.1/§11.2 yêu cầu:**
-```json
-{
-  "success": true,
-  "message": "Lấy dữ liệu thành công",
-  "data": { ... },
-  "pagination": { "page":1,"per_page":20,"total":100,"total_pages":5,"has_next":true,"has_prev":false },
-  "meta": { "request_id": "...", "timestamp": "2026-06-20T10:00:00+07:00" }
-}
-```
+## 2. Quyết định CompanyGuard (Blocker plan-review #1.4) — **DEFER**
 
-Các lệch cụ thể:
-- `message`: thiếu hoàn toàn
-- `meta`: hiện là `paginationMeta` (total/page/limit) — phải đổi thành `{request_id,timestamp}`
-- `pagination`: phải là block riêng (không nằm trong `meta`)
-- `error.type` và `error.details[]`: thiếu (API-01 §12.1/§12.2)
+Giữ nguyên quyết định rev1: tenant-active-check (company Active/tồn tại) → **S0-AUTH-DB-1** (cần `companies.status` + AuthContext của AUTH module). CompanyGuard hiện **fail-closed** (vắng `companyId` → ForbiddenException) = safe default ở N=1. Action: ghi comment TODO trong `company.guard.ts`. KHÔNG implement ở WO này, KHÔNG nằm trong paths.
 
-### 1.2 Error response hiện tại vs. API-01 §12
+## 3. Consumer của contract & thứ tự an toàn (VÁ plan_block #2 — điểm chặn lặp lại)
 
-**Hiện tại (`all-exceptions.filter.ts` L46-50):**
-```typescript
-{ success: false, data: null, error: { code, message } }
-```
+> **plan_block #2 (2026-06-22 18:57Z) chặn vì rev1 §3 KHẲNG ĐỊNH SAI "không có consumer FE nào trên main".** Sự thật (đã verify):
 
-**API-01 §12.1 yêu cầu:**
-```json
-{ "success": false, "message": "...", "error": { "code": "AUTH-ERR-FORBIDDEN", "type": "ForbiddenError", "details": null }, "meta": { "request_id": "...", "timestamp": "..." } }
-```
+Reshape `apiResponseSchema` (shared `packages/contracts`) ripple tới **3 consumer**:
 
-### 1.3 Log redaction — xác nhận gap
+| Consumer | Dùng gì | Ảnh hưởng | Xử lý |
+| --- | --- | --- | --- |
+| `packages/contracts/src/index.spec.ts` | assert shape cũ (success không message, meta=pagination) | **VỠ** khi reshape (cùng package) | **TRONG paths** — cập nhật BƯỚC 2 |
+| `packages/web-core/src/lib/api.ts` `getHealth` (L13-21, export ở index.ts L26) | `apiResponseSchema(healthSchema).parse(json)` rồi đọc `.data` / `.error?.message` | parse OK nếu message+meta có (interceptor thêm) & error giữ nullable; đọc `.data` không đổi | **TRONG paths** — verify/sửa tối thiểu BƯỚC 9 |
+| `packages/web-core/src/lib/api-client.ts` `unwrapEnvelope` (L43-54) | detect `"success"&&"data"&&"error" in json` rồi lấy `.data` | **KHÔNG vỡ** vì success envelope GIỮ `error:null` → đủ 3 key → unwrap đúng. 18 test (mock `{success,data,error}`) xanh nguyên | **NGOÀI paths** — reshape đầy đủ (message/meta/error.type/request-id/idempotency) thuộc **S0-FE-API-1** |
+| `apps/console/src/lib/employees-api.ts:84` (unwrapEnvelope) + `apps/console/src/routes/home.tsx` (getHealth) | đọc `.data` đã unwrap | **KHÔNG vỡ** (đã verify): unwrapEnvelope vẫn lấy `.data` (3 key còn đủ); getHealth trả `.data` nên home.tsx đọc `.status`/`.service` không đổi | **NGOÀI paths** — chỉ ghi nhận đã kiểm, không sửa |
 
-`AllExceptionsFilter.catch()` L40-44 gọi:
-```typescript
-this.logger.error(`${request.method} ${request.url} -> ${status}`, exception.stack)
-```
+**Chốt thiết kế:** GIỮ `error:null` trong success envelope chính là cơ chế để api-client (crown của S0-FE-API-1) KHÔNG phải đổi ở WO này → ranh giới WO sạch, web-core test 59/59 xanh. Đây là deviation chủ ý (API-01 success "thuần" không có error) — sẽ được dọn khi S0-FE-API-1 reshape api-client.
 
-URL không chứa Authorization header nhưng KHÔNG có kiểm tra để loại bỏ Authorization khỏi log nếu sau này được log. Quan trọng hơn: **chưa có test nào** kiểm tra rằng header Authorization không bị log. Đây là deny-path test bắt buộc theo BẤT BIẾN #3 và blocker của WO.
+**Thứ tự:** `contracts (+spec)` → `apps/api/common` → verify `web-core/api.ts` → test cả 3 package. Build `@mediaos/contracts` trước (turbo dep) để api + web đọc type mới.
 
-### 1.4 request_id — hiện trạng
-
-Không có middleware nào sinh/đọc `X-Request-Id`. Cần tạo `RequestIdMiddleware`.
-
-## 2. Quyết định về CompanyGuard (Blocker #4)
-
-**Quyết định: DEFER tenant-active-check sang AUTH WO.**
-
-**Lý do:**
-1. `CompanyGuard` hiện chỉ kiểm tra `req.user?.companyId` tồn tại trong JWT (L26-28). BACKEND-01 §13.2 yêu cầu kiểm tra thêm company `Active` + tồn tại trong DB.
-2. Thực hiện active-check đòi hỏi: (a) inject service đọc bảng `companies`, (b) bảng `companies` cần có cột `status`, (c) cần mã lỗi `AUTH-ERR-COMPANY-INACTIVE` + `AUTH-ERR-COMPANY-NOT-FOUND`, (d) deny-path test riêng.
-3. Bảng `companies` và `AuthContext` thuộc domain AUTH module — chưa được reconcile trong WO này (thuộc `S0-AUTH-DB-1`).
-4. Thực hiện ở đây sẽ vượt phạm vi `paths` của WO (CompanyGuard nằm trong paths nhưng service đọc companies thì không), và vi phạm nguyên tắc "1 Work Order tại 1 thời điểm" (CLAUDE.md §9.1).
-
-**Ghi chú:** CompanyGuard hiện tại là **fail-closed** — nếu `companyId` không có trong JWT thì ném `ForbiddenException`. Đây là safe default. Tenant-active-check bổ sung thêm bảo vệ nhưng không phải lỗ hổng ngay lập tức ở N=1. Defer là an toàn.
-
-**Action:** Ghi comment trong `company.guard.ts` (block "TODO S0-AUTH-DB-1: thêm tenant active-check + AUTH-ERR-COMPANY-INACTIVE sau khi companies.status được xác nhận ở S0-AUTH-DB-1"). KHÔNG implement ở WO này.
-
-## 3. Thứ tự thay đổi và tính an toàn breaking change
-
-Envelope thay đổi là **breaking** cho bất kỳ consumer nào đang parse `{success,data,error}`. Thứ tự đảm bảo không vỡ:
-
-| Bước | File | Ghi chú |
-| --- | --- | --- |
-| 1 | `packages/contracts/src/index.ts` | Reshape schema, export type mới. Build contracts trước. |
-| 2 | `apps/api/src/common/**` | Cập nhật interceptor + filter dùng shape mới. |
-| 3 | FE (`packages/web-core`) | S0-FE-API-1 đang ở git stash, CHƯA land → không có consumer FE nào bị vỡ ngay. |
-
-Tại thời điểm reconcile, S0-FE-API-1 ở stash (`backlog.mjs` L231: "WIP đang ở git stash@{0}") và có `depends_on: ['S0-API-CORE-1']` — đây là cơ chế bảo vệ đã được ghi nhận trong backlog. Không có consumer nào hiện đang dùng shape cũ trên main branch. Thứ tự contracts→api là đủ để không break.
+**Atomic / rollback:** reshape `packages/contracts` là thay đổi fan-out cross-package — commit **all-or-none** (toàn bộ paths trong 1 commit). Đây CHÍNH là điểm vỡ của plan_block #2 (thay đổi cross-package áp dở dang). Nếu `apps/api` build đỏ giữa chừng → revert cả commit, KHÔNG land riêng contracts.
 
 ## 4. Bất biến giữ nguyên
 
-- **#1 company_id mọi query:** không đụng repository nào trong WO này. CompanyGuard giữ nguyên (fail-closed).
-- **#2 append-only audit:** không đụng bảng audit trong WO này.
-- **#3 no-secret plaintext:** đây là mục tiêu chính — deny-path test #1 (log redaction) chứng minh Authorization/password/token bị mask trước khi log. `AuditMaskerService` đã có cơ chế redact ở tầng audit; WO này thêm redaction ở tầng HTTP filter/logger.
+- **#1 company_id mọi query:** không đụng repository. CompanyGuard fail-closed giữ nguyên.
+- **#2 append-only audit:** không đụng bảng audit.
+- **#3 no-secret plaintext:** mục tiêu chính — deny #1 chứng minh Authorization/Cookie bị mask `[REDACTED]` trước logger.error; deny #2 chứng minh body 5xx không lộ stack/đường dẫn.
 
 ## 5. Deviation — không churn
 
-- `paginationMetaSchema` hiện có `total/page/limit` — sẽ được đổi sang block riêng `paginationSchema` với `{page,per_page,total,total_pages,has_next,has_prev}` theo API-01 §16.1. Đây là thay đổi chủ ý theo spec, ghi rõ ở comment block trong contracts.
-- Health controller KHÔNG bị bọc thêm envelope nếu làm vỡ shape — kiểm tra sau reshape, dùng `@SkipInterceptor()` nếu cần (health là `@Public()`, không cần meta request_id).
+- `paginationMetaSchema` (total/page/limit) → GIỮ làm **alias deprecated** (KHÔNG xóa — `index.spec.ts:42-46` còn test nó); THÊM `paginationSchema` mới (API-01 §16.1: page/per_page/total/total_pages/has_next/has_prev) làm block riêng cho response. `apiResponseSchema.meta` đổi từ `paginationMetaSchema.optional()` → `responseMetaSchema` (request_id/timestamp). BƯỚC 2 giữ case test paginationMetaSchema cũ + thêm case paginationSchema mới.
+- `error:null` ở success envelope — back-compat có chủ ý (§3), KHÔNG churn api-client.
+- Health KHÔNG `@SkipInterceptor` — đồng nhất envelope để getHealth parse được.
 
 ## 6. Verify (lane độc lập)
 
 ```bash
-# Bước 0 — xác nhận test đỏ TRƯỚC
-pnpm --filter @mediaos/api test -- all-exceptions-filter response-envelope tenant-isolation
-# Đích: FAIL (RED) vì code chưa implement
+# BƯỚC 0 — test đỏ TRƯỚC
+pnpm --filter @mediaos/api test -- all-exceptions-filter response-envelope    # đích: RED
 
-# Sau khi implement (GREEN):
-pnpm --filter @mediaos/contracts build          # contracts build clean
-pnpm --filter @mediaos/api typecheck            # tsc --noEmit xanh
-pnpm --filter @mediaos/api build                # nest build xanh
-pnpm --filter @mediaos/api test -- all-exceptions-filter response-envelope tenant-isolation
-# Đích: PASS (GREEN)
+# GREEN:
+pnpm --filter @mediaos/contracts build
+pnpm --filter @mediaos/api typecheck && pnpm --filter @mediaos/api build
+pnpm --filter @mediaos/api test -- all-exceptions-filter response-envelope    # đích: PASS
+pnpm --filter @mediaos/web-core test                                          # đích: 59/59 (api-client không đổi)
+pnpm --filter @mediaos/contracts test                                         # đích: PASS (spec shape mới)
 
-# Health smoke:
-curl http://localhost:3000/api/v1/health
-# → {"status":"ok","service":"mediaos-api","time":"..."}
-curl http://localhost:3000/api/v1/health/db
-# → {"status":"ok","database":{...}}
+# Health smoke (cần API chạy):
+curl http://localhost:3100/api/v1/health      # → envelope {success,message,data:{status},error:null,meta:{request_id,timestamp}}
+curl http://localhost:3100/api/v1/health/db
 ```
 
 ## 7. Gate
 
-Zone yellow, chạm secrets + tenant isolation → **FULL gate**: `security-reviewer` + `silent-failure-hunter`.
-
-Reviewer tập trung vào:
-- Log redaction: xác nhận Authorization/Cookie/password/token KHÔNG xuất hiện trong log output
-- Stack trace: xác nhận response body 5xx KHÔNG chứa stack/file path
-- Envelope shape: xác nhận contracts Zod parse đúng shape mới
-- Không có `@ts-ignore` / `eslint-disable`
+Zone yellow, chạm secrets redaction → **FULL gate**: `security-reviewer` + `silent-failure-hunter`. Reviewer tập trung:
+- Redaction: Authorization/Cookie/CSRF KHÔNG xuất hiện trong log output (cả message lẫn trace arg).
+- Stack: body 5xx KHÔNG chứa stack/đường dẫn file.
+- Envelope: contracts Zod parse đúng shape mới; web-core 59/59 xanh; api-client KHÔNG bị sửa.
+- Không `@ts-ignore` / `eslint-disable`.
 
 ## 8. Out-of-scope (KHÔNG làm ở WO này)
 
-- Tenant active-check trong CompanyGuard → **S0-AUTH-DB-1** (cần bảng companies.status + AuthContext từ AUTH module).
-- Rate limiting middleware → **S1-FND-SEC-1** (phase sau).
-- CORS chi tiết / IP allowlist → đã có ở SecurityPolicyModule (riêng).
-- S0-FE-API-1 (web-core api-client reshape) → WO riêng, depends_on WO này, đang ở stash.
-- Idempotency interceptor → phase sau (BACKEND-01 §... scope lớn hơn).
-- Audit interceptor (`audit.interceptor.ts`) → S1-FND-AUDIT-1.
-- OpenAPI/Swagger setup → BACKEND-12 WO riêng.
+- **Tenant-active-check trong CompanyGuard** → S0-AUTH-DB-1 (cần companies.status + AuthContext).
+- **Deny-path tenant-isolation (rev1 testTask #3)** → **GỠ khỏi WO này.** WO không chạm repository/`withTenant`/auth-context nào (CompanyGuard DEFER), nên test isolation ở đây chỉ kiểm mock (plan_block #2 đã chỉ ra "không chứng minh isolation thật"). Isolation thật do `rls-tenant-isolation-tester` + S0-AUTH-DB-1 phụ trách.
+- **api-client.ts reshape đầy đủ** (message/meta/error.type/request-id attach/idempotency-key/error-mapper/query layer) → **S0-FE-API-1** (depends_on WO này; WIP ở `git stash@{1}`).
+- Rate limiting / CORS chi tiết / IP allowlist → security policy module riêng / phase sau.
+- Audit interceptor → S1-FND-AUDIT-1. OpenAPI/Swagger → BACKEND-12.

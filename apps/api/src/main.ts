@@ -8,6 +8,7 @@ import { ZodValidationPipe } from "nestjs-zod";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { ResponseEnvelopeInterceptor } from "./common/interceptors/response-envelope.interceptor";
+import { requestIdMiddleware } from "./common/middleware/request-id.middleware";
 import { loadEnv } from "./config/env.schema";
 
 /**
@@ -25,6 +26,10 @@ function parseTrustProxy(raw: string): boolean | number | string {
 async function bootstrap(): Promise<void> {
   const env = loadEnv();
   const app = await NestFactory.create(AppModule);
+
+  // SỚM NHẤT: gán req.requestId (Express middleware chạy trước routing/guard) để interceptor + filter
+  // luôn có request_id cho meta — kể cả request bị guard từ chối sớm. KHÔNG dùng class middleware qua app.use.
+  app.use(requestIdMiddleware);
 
   // CS-9: thiết lập biên tin cậy cho `req.ip` (IP-allowlist của security policy đọc giá trị này).
   // Mặc định "false" ⇒ KHÔNG tin X-Forwarded-For (req.ip = socket peer, chống spoof ở dev/no-proxy).
