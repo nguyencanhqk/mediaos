@@ -1,15 +1,26 @@
+<!-- ✅ DONE 2026-06-23 (VERIFY-CLOSE, KHÔNG MIGRATION) — plan-review BLOCK đã lật ngược §2:
+     3 cặp "thiếu" là QUYỀN-MA, đã ship dưới action-string runtime KHÁC:
+       • (lock,user)/(unlock,user)  → ĐÃ CÓ = suspend:user (mig 0430; admin-users.controller suspend/reactivate)
+       • (assign,role)              → ĐÃ CÓ = change-role:role (0005:216)
+     Catalog AUTH ĐỦ. Live DB xác nhận company-admin có đủ grant sensitive cho mọi feature đã ship
+     (suspend/assign-role/delete-user/grant-object-permission/approve/invite). RLS+FORCE+cross-tenant-deny
+     cho roles/role_permissions/user_roles đã verify (115/115 bảng ở S0-FND-DB-1 isolation run).
+     → KHÔNG tạo 0439 (sẽ seed quyền-ma + churn journal). DEFER: company-admin chưa có change-role:role
+     (vector leo thang; CHƯA có endpoint nào dùng) → cấp KÈM endpoint quản-permission-của-role (owner chốt
+     2026-06-23: defer). Plan dưới = phân rã SAI cũ, GIỮ để trace bài học "reconcile theo action-string runtime,
+     KHÔNG theo mã spec trừu tượng". -->
 <!-- ⚙️ KHỐI MÁY-ĐỌC (auto-loop ĐỌC khối này thay vì phân rã lại; reconcile-refresh trước build). -->
-<!-- Phần ỔN ĐỊNH (lanes/acceptanceChecks/testTasks/steps) tái dùng; phần GAP trong prose bên dưới PHẢI đối chiếu lại với code hiện tại. -->
 ```yaml
 wo: S0-AUTH-DB-1
 zone: red
+status: done   # VERIFY-CLOSE 2026-06-23 — KHÔNG migration (catalog đủ; 3 cặp "thiếu" là quyền-ma đã có tên khác)
 generated_by: human
-reconciled_at: "migration head 0438 / idx 121"   # mốc freshness — head đổi ⇒ reconcile-refresh lại
+reconciled_at: "DONE @ head 0438 / idx 121 — verify-close, plan-review lật §2 (quyền-ma); KHÔNG 0439"
 lanes:
   - id: S0-AUTH-DB-1
-    builder: db-migration
-    task: "Migration 0439 (band foundation-db, idx 122): seed permission AUTH còn THIẾU vs SPEC-02/API-10 ((lock|unlock):user · (read|assign):role) ON CONFLICT DO NOTHING + grant company-admin/super-admin theo matrix (non-wildcard cho sensitive mới) + RED deny-path test grant không rò chéo tenant. KHÔNG đổi shape engine; data_scope = DEFERRED. 1 lane nối tiếp — KHÔNG parity song song."
-    paths: ["apps/api/migrations/**", "apps/api/test/integration/auth-rbac-tenant-deny.int-spec.ts"]
+    builder: NONE   # KHÔNG build — verify-close. (Phân rã cũ dưới đây SAI: seed quyền-ma lock/unlock/assign,role.)
+    task: "VERIFY-CLOSE: catalog AUTH đủ (suspend=lock/unlock, change-role=assign-role-perm); grant company-admin đúng cho feature đã ship; RLS+deny đã verify. KHÔNG migration. DEFER change-role:role grant tới khi có endpoint."
+    paths: []
 acceptanceChecks:
   - "GIỮ engine (action,resource_type,is_sensitive)+(role_id,permission_id,effect) — KHÔNG db:generate/drop/rename/ADD COLUMN permission_code/data_scope. data_scope DB-02 = DEFERRED (ghi note migration, không churn)."
   - "Sau migrate: SELECT count(*) cho 14 cặp guard AUTH (SPEC-02/API-10) đều = 1 (đủ catalog); 4 cặp MỚI ((lock,user),(unlock,user),(read,role),(assign,role)) tồn tại đúng is_sensitive."
