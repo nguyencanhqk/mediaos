@@ -93,4 +93,137 @@ describe("AuditService v2 (BE-3)", () => {
       expect(r["changedFields"]).toBeNull();
     });
   });
+
+  // ── S1-FND-AUDIT-1 L1 (write-shape): 11 cột §8.5 mới (mig 0438) + enum guard fail-closed ──
+  describe("record() — 11 cột §8.5 mới (mig 0438)", () => {
+    it("điền ĐỦ 11 cột §8.5 khi caller cung cấp", async () => {
+      const { tx, rows } = captureTx();
+      await svc.record(tx, {
+        action: "X",
+        objectType: "user",
+        actorEmployeeId: "11111111-1111-1111-1111-111111111111",
+        actionGroup: "auth",
+        entityIdText: "EMP-001",
+        entityCode: "EMP-001",
+        permissionCode: "HR.EMPLOYEE.VIEW",
+        dataScope: "Company",
+        deviceInfo: { browser: "chrome", os: "win" },
+        diffSummary: "name changed",
+        errorCode: "AUTH-ERR-001",
+        errorMessage: "denied",
+        metadata: { reason: "test" },
+      } as AuditEntry);
+      const r = rows[0] as Record<string, unknown>;
+      expect(r["actorEmployeeId"]).toBe("11111111-1111-1111-1111-111111111111");
+      expect(r["actionGroup"]).toBe("auth");
+      expect(r["entityIdText"]).toBe("EMP-001");
+      expect(r["entityCode"]).toBe("EMP-001");
+      expect(r["permissionCode"]).toBe("HR.EMPLOYEE.VIEW");
+      expect(r["dataScope"]).toBe("Company");
+      expect(r["deviceInfo"]).toEqual({ browser: "chrome", os: "win" });
+      expect(r["diffSummary"]).toBe("name changed");
+      expect(r["errorCode"]).toBe("AUTH-ERR-001");
+      expect(r["errorMessage"]).toBe("denied");
+      expect(r["metadata"]).toEqual({ reason: "test" });
+    });
+
+    it("caller chỉ-v1 → mọi cột §8.5 mới = null (writer cũ KHÔNG vỡ)", async () => {
+      const { tx, rows } = captureTx();
+      await svc.record(tx, { action: "X", objectType: "user" } as AuditEntry);
+      const r = rows[0] as Record<string, unknown>;
+      for (const col of [
+        "actorEmployeeId",
+        "actionGroup",
+        "entityIdText",
+        "entityCode",
+        "permissionCode",
+        "dataScope",
+        "deviceInfo",
+        "diffSummary",
+        "errorCode",
+        "errorMessage",
+        "metadata",
+      ]) {
+        expect(r[col]).toBeNull();
+      }
+    });
+
+    it("MASK device_info/metadata (BẤT BIẾN #3 mask-at-write)", async () => {
+      const { tx, rows } = captureTx();
+      await svc.record(tx, {
+        action: "X",
+        objectType: "user",
+        deviceInfo: { token: "abc", browser: "chrome" },
+        metadata: { password: "p", note: "ok" },
+      } as AuditEntry);
+      const r = rows[0] as {
+        deviceInfo: Record<string, unknown>;
+        metadata: Record<string, unknown>;
+      };
+      expect(r.deviceInfo["token"]).toBe("***");
+      expect(r.deviceInfo["browser"]).toBe("chrome");
+      expect(r.metadata["password"]).toBe("***");
+      expect(r.metadata["note"]).toBe("ok");
+    });
+  });
+
+  describe("enum guard fail-closed (TRƯỚC insert, tránh vỡ CHECK Postgres)", () => {
+    it.each(["Own", "Team", "Department", "Company", "System"])(
+      "data_scope hợp lệ '%s' → ghi nguyên",
+      async (scope) => {
+        const { tx, rows } = captureTx();
+        await svc.record(tx, { action: "X", objectType: "user", dataScope: scope } as AuditEntry);
+        expect((rows[0] as Record<string, unknown>)["dataScope"]).toBe(scope);
+      },
+    );
+
+    it("data_scope ngoài enum → throw TRƯỚC insert (fail-closed)", async () => {
+      const { tx, rows } = captureTx();
+      await expect(
+        svc.record(tx, { action: "X", objectType: "user", dataScope: "Galaxy" } as AuditEntry),
+      ).rejects.toThrow(/data_scope/i);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("actor_type ngoài enum → throw TRƯỚC insert", async () => {
+      const { tx, rows } = captureTx();
+      await expect(
+        svc.record(tx, { action: "X", objectType: "user", actorType: "Robot" } as AuditEntry),
+      ).rejects.toThrow(/actor_type/i);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("sensitivity_level ngoài enum → throw TRƯỚC insert", async () => {
+      const { tx, rows } = captureTx();
+      await expect(
+        svc.record(tx, {
+          action: "X",
+          objectType: "user",
+          sensitivityLevel: "TopSecret",
+        } as AuditEntry),
+      ).rejects.toThrow(/sensitivity_level/i);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("result_status ngoài enum → throw TRƯỚC insert", async () => {
+      const { tx, rows } = captureTx();
+      await expect(
+        svc.record(tx, {
+          action: "X",
+          objectType: "user",
+          resultStatus: "Maybe",
+        } as AuditEntry),
+      ).rejects.toThrow(/result_status/i);
+      expect(rows).toHaveLength(0);
+    });
+
+    it.each(["User", "System", "Job", "Integration"])(
+      "actor_type hợp lệ '%s' → ghi nguyên",
+      async (actorType) => {
+        const { tx, rows } = captureTx();
+        await svc.record(tx, { action: "X", objectType: "user", actorType } as AuditEntry);
+        expect((rows[0] as Record<string, unknown>)["actorType"]).toBe(actorType);
+      },
+    );
+  });
 });
