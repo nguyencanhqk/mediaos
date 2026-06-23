@@ -1,5 +1,24 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "//": "globalPassThroughEnv: turbo 2.x chạy STRICT env-mode mặc định → task chỉ nhận env được khai báo. CI (ci.yml) chạy `turbo run test`; thiếu các biến này thì vitest.config (laneDbEnv) rơi về fallback `changeme_*` ⇒ 'password authentication failed for user mediaos/mediaos_app'. Local KHÔNG lộ vì có apps/api/.env (gitignored) nạp qua envDir. passThrough (KHÔNG cache-hash) đúng cho biến runtime/CI/secret.",
+  "globalPassThroughEnv": [
+    "DATABASE_URL",
+    "DATABASE_DIRECT_URL",
+    "DATABASE_WORKER_URL",
+    "PGBOUNCER_URL",
+    "PG_HOSTPORT",
+    "LANE_DB",
+    "VALKEY_URL",
+    "JWT_SECRET",
+    "KMS_PROVIDER",
+    "KMS_LOCAL_KEK_PATH",
+    "WORKERS_SCHEDULER_ENABLED",
+    "ALLOW_SUPERUSER_ROTATION",
+    "TWO_FACTOR_ENFORCEMENT_ENABLED",
+    "APP_DB_PASSWORD",
+    "WORKER_DB_PASSWORD",
+    "PGBOUNCER_AUTH_PASSWORD"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
