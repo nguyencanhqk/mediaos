@@ -169,7 +169,14 @@ export const backlog = [
     title:
       "Seed module catalog (MVP active · Phase inactive) + default system/company settings idempotent (ON CONFLICT)",
     zone: "red",
-    status: "todo",
+    // CLOSE 2026-06-23 (VERIFY-CLOSE, KHÔNG build): đã seed ở mig 0435 + framework seed-tracking (checksum).
+    //   Live DB (lane) xác nhận: modules MVP active = AUTH/HR/ATT/LEAVE/TASK/DASH/NOTI; Phase inactive =
+    //   AI/ASSET/CHAT/MOBILE/PAYROLL/RECRUIT/ROOM/SOCIAL (bảng `modules` chuẩn, KHÔNG system_modules SaaS).
+    //   system_settings: file.max_upload_size_mb/allowed_mime_types + system.default_timezone/locale +
+    //   audit.default_retention_days. Idempotent: 0435 ON CONFLICT DO NOTHING (modules: (module_code) WHERE
+    //   deleted_at IS NULL; settings: (setting_key) WHERE status='Active'). Test: foundation-seed-idempotent ✓4 +
+    //   migration-smoke ✓59 (clean migrate 0000→0438). Non-sensitive config → đóng nhẹ (không cần FULL gate).
+    status: "done",
     paths: ["apps/api/src/foundation/seed/**", "apps/api/migrations/**"],
     skills: ["code-review"],
     depends_on: ["S0-FND-DB-1"],
