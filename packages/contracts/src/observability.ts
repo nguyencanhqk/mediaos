@@ -37,6 +37,13 @@ export const auditLogQuerySchema = z
     entityId: z.string().uuid().optional(),
     actorType: z.string().min(1).max(50).optional(),
     requestId: z.string().min(1).max(100).optional(),
+    // ── DB-08 §8.5 filters (v2 mig 0438, additive — đều optional) ──
+    /** Phân loại nhóm hành động (vd: auth/data/config). Filter eq trên action_group. */
+    actionGroup: z.string().min(1).max(100).optional(),
+    /** Mã quyền MODULE.RESOURCE.ACTION đã kiểm khi thực hiện. Filter eq trên permission_code. */
+    permissionCode: z.string().min(1).max(150).optional(),
+    /** Phạm vi dữ liệu ∈ {Own,Team,Department,Company,System} (ép enum, fail-closed). */
+    dataScope: z.enum(["Own", "Team", "Department", "Company", "System"]).optional(),
     dateFrom: z.string().datetime().optional(),
     dateTo: z.string().datetime().optional(),
     limit: z.coerce
@@ -48,7 +55,8 @@ export const auditLogQuerySchema = z
     offset: z.coerce.number().int().min(0).default(0),
   })
   .refine(
-    (q) => !q.dateFrom || !q.dateTo || new Date(q.dateFrom).getTime() <= new Date(q.dateTo).getTime(),
+    (q) =>
+      !q.dateFrom || !q.dateTo || new Date(q.dateFrom).getTime() <= new Date(q.dateTo).getTime(),
     { message: "dateFrom phải <= dateTo.", path: ["dateFrom"] },
   );
 export type AuditLogQuery = z.infer<typeof auditLogQuerySchema>;
@@ -85,6 +93,21 @@ export const auditLogDtoSchema = z.object({
   requestId: z.string().nullable(),
   correlationId: z.string().nullable(),
   ipAddress: z.string().nullable(),
+  // ── DB-08 §8.5 (v2 mig 0438, additive). Hàng legacy/caller chỉ-v1 = null. ──
+  actorEmployeeId: z.string().uuid().nullable(),
+  actionGroup: z.string().nullable(),
+  entityIdText: z.string().nullable(),
+  entityCode: z.string().nullable(),
+  permissionCode: z.string().nullable(),
+  /** Phạm vi dữ liệu ∈ {Own,Team,Department,Company,System} (hàng legacy = null). */
+  dataScope: z.string().nullable(),
+  /** jsonb forensic — ĐÃ redact phía server (device_info có thể chứa token/ip). */
+  deviceInfo: z.unknown().nullable(),
+  diffSummary: z.string().nullable(),
+  errorCode: z.string().nullable(),
+  errorMessage: z.string().nullable(),
+  /** jsonb tự do — ĐÃ redact phía server (metadata có thể chứa khóa nhạy cảm). */
+  metadata: z.unknown().nullable(),
   createdAt: z.string().datetime(),
 });
 export type AuditLogDto = z.infer<typeof auditLogDtoSchema>;

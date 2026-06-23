@@ -18,6 +18,10 @@ export interface AuditFilter {
   entityId?: string;
   actorType?: string;
   requestId?: string;
+  // ── DB-08 §8.5 filters (v2 mig 0438) ──
+  actionGroup?: string;
+  permissionCode?: string;
+  dataScope?: string;
   companyId?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -42,6 +46,9 @@ export class AuditRepository {
     if (filter.entityId) conds.push(eq(auditLogs.entityId, filter.entityId));
     if (filter.actorType) conds.push(eq(auditLogs.actorType, filter.actorType));
     if (filter.requestId) conds.push(eq(auditLogs.requestId, filter.requestId));
+    if (filter.actionGroup) conds.push(eq(auditLogs.actionGroup, filter.actionGroup));
+    if (filter.permissionCode) conds.push(eq(auditLogs.permissionCode, filter.permissionCode));
+    if (filter.dataScope) conds.push(eq(auditLogs.dataScope, filter.dataScope));
     if (filter.companyId) conds.push(eq(auditLogs.companyId, filter.companyId));
     if (filter.dateFrom) conds.push(gte(auditLogs.createdAt, new Date(filter.dateFrom)));
     if (filter.dateTo) conds.push(lte(auditLogs.createdAt, new Date(filter.dateTo)));

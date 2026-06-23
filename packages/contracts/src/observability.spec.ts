@@ -46,9 +46,9 @@ describe("AC-8 observability contracts", () => {
     });
 
     it("REJECT limit > MAX (row cap §8.3)", () => {
-      expect(
-        auditLogQuerySchema.safeParse({ limit: MAX_AUDIT_PAGE_LIMIT + 1 }).success,
-      ).toBe(false);
+      expect(auditLogQuerySchema.safeParse({ limit: MAX_AUDIT_PAGE_LIMIT + 1 }).success).toBe(
+        false,
+      );
     });
 
     it("REJECT limit < 1", () => {
@@ -66,30 +66,119 @@ describe("AC-8 observability contracts", () => {
       });
       expect(res.success).toBe(false);
     });
+
+    // ── §8.5 filter mới (mig 0438): actionGroup/permissionCode/dataScope ──
+    it("parse filter §8.5 mới (actionGroup/permissionCode/dataScope)", () => {
+      const q = auditLogQuerySchema.parse({
+        actionGroup: "auth",
+        permissionCode: "HR.EMPLOYEE.VIEW",
+        dataScope: "Company",
+      });
+      expect(q.actionGroup).toBe("auth");
+      expect(q.permissionCode).toBe("HR.EMPLOYEE.VIEW");
+      expect(q.dataScope).toBe("Company");
+    });
+
+    it("REJECT dataScope ngoài enum (fail-closed §8.5)", () => {
+      expect(auditLogQuerySchema.safeParse({ dataScope: "Galaxy" }).success).toBe(false);
+    });
+
+    it.each(["Own", "Team", "Department", "Company", "System"])(
+      "ACCEPT dataScope hợp lệ '%s'",
+      (scope) => {
+        expect(auditLogQuerySchema.safeParse({ dataScope: scope }).success).toBe(true);
+      },
+    );
   });
 
-  describe("auditLogListResponseSchema", () => {
-    it("parse response hợp lệ", () => {
+  describe("auditLogDtoSchema / auditLogListResponseSchema", () => {
+    /** Hàng audit như AuditQueryService.toDto sản xuất: v1 + MỌI cột v2 (null khi legacy/caller chỉ-v1). */
+    const v2NullFields = {
+      moduleCode: null,
+      entityType: null,
+      entityId: null,
+      actorType: null,
+      oldValues: null,
+      newValues: null,
+      changedFields: null,
+      sensitivityLevel: null,
+      resultStatus: null,
+      requestId: null,
+      correlationId: null,
+      ipAddress: null,
+      // §8.5 mig 0438
+      actorEmployeeId: null,
+      actionGroup: null,
+      entityIdText: null,
+      entityCode: null,
+      permissionCode: null,
+      dataScope: null,
+      deviceInfo: null,
+      diffSummary: null,
+      errorCode: null,
+      errorMessage: null,
+      metadata: null,
+    };
+
+    function baseRow(): Record<string, unknown> {
+      return {
+        id: "00000000-0000-0000-0000-000000000001",
+        companyId: "00000000-0000-0000-0000-000000000002",
+        actorUserId: null,
+        action: "TaskCreated",
+        objectType: "task",
+        objectId: null,
+        before: null,
+        after: { title: "x" },
+        ip: null,
+        userAgent: null,
+        ...v2NullFields,
+        createdAt: "2026-06-17T00:00:00.000Z",
+      };
+    }
+
+    it("parse response hợp lệ (hàng legacy: mọi cột v2 = null)", () => {
       const res = auditLogListResponseSchema.parse({
-        data: [
-          {
-            id: "00000000-0000-0000-0000-000000000001",
-            companyId: "00000000-0000-0000-0000-000000000002",
-            actorUserId: null,
-            action: "TaskCreated",
-            objectType: "task",
-            objectId: null,
-            before: null,
-            after: { title: "x" },
-            ip: null,
-            userAgent: null,
-            createdAt: "2026-06-17T00:00:00.000Z",
-          },
-        ],
+        data: [baseRow()],
         meta: { total: 1, limit: 50, offset: 0 },
       });
       expect(res.data).toHaveLength(1);
       expect(res.meta.total).toBe(1);
+    });
+
+    it("parse DTO với §8.5 mig 0438 đầy đủ (actorEmployeeId/dataScope/deviceInfo/metadata…)", () => {
+      const res = auditLogListResponseSchema.parse({
+        data: [
+          {
+            ...baseRow(),
+            actorEmployeeId: "00000000-0000-0000-0000-0000000000aa",
+            actionGroup: "auth",
+            entityIdText: "EMP-001",
+            entityCode: "EMP-001",
+            permissionCode: "HR.EMPLOYEE.VIEW",
+            dataScope: "Company",
+            deviceInfo: { browser: "chrome", token: "***" },
+            diffSummary: "name changed",
+            errorCode: "AUTH-ERR-001",
+            errorMessage: "denied",
+            metadata: { reason: "ok" },
+          },
+        ],
+        meta: { total: 1, limit: 50, offset: 0 },
+      });
+      const row = res.data[0];
+      expect(row.actorEmployeeId).toBe("00000000-0000-0000-0000-0000000000aa");
+      expect(row.dataScope).toBe("Company");
+      expect(row.deviceInfo).toEqual({ browser: "chrome", token: "***" });
+      expect(row.metadata).toEqual({ reason: "ok" });
+    });
+
+    it("REJECT actorEmployeeId không phải uuid", () => {
+      const res = auditLogListResponseSchema.safeParse({
+        data: [{ ...baseRow(), actorEmployeeId: "not-a-uuid" }],
+        meta: { total: 1, limit: 50, offset: 0 },
+      });
+      expect(res.success).toBe(false);
     });
   });
 

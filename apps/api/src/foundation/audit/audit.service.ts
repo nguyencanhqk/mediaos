@@ -84,6 +84,9 @@ export class AuditQueryService {
       entityId: query.entityId,
       actorType: query.actorType,
       requestId: query.requestId,
+      actionGroup: query.actionGroup,
+      permissionCode: query.permissionCode,
+      dataScope: query.dataScope,
       companyId: isSystem ? query.companyId : undefined,
       dateFrom: query.dateFrom,
       dateTo: query.dateTo,
@@ -115,6 +118,18 @@ export class AuditQueryService {
       requestId: row.requestId ?? null,
       correlationId: row.correlationId ?? null,
       ipAddress: row.ipAddress ?? null,
+      // ── DB-08 §8.5 (v2 mig 0438). deviceInfo/metadata redact-at-read (D5) — có thể chứa token/ip. ──
+      actorEmployeeId: row.actorEmployeeId ?? null,
+      actionGroup: row.actionGroup ?? null,
+      entityIdText: row.entityIdText ?? null,
+      entityCode: row.entityCode ?? null,
+      permissionCode: row.permissionCode ?? null,
+      dataScope: row.dataScope ?? null,
+      deviceInfo: this.masker.mask(row.deviceInfo ?? null),
+      diffSummary: row.diffSummary ?? null,
+      errorCode: row.errorCode ?? null,
+      errorMessage: row.errorMessage ?? null,
+      metadata: this.masker.mask(row.metadata ?? null),
       createdAt: row.createdAt.toISOString(),
     };
   }
