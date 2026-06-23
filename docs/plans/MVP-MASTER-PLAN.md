@@ -56,7 +56,7 @@ Thứ tự phụ thuộc bắt buộc (IMPLEMENTATION-01 §4 / §10): **Foundati
 
 ### Reconcile-first (đối chiếu, không vứt code đúng)
 
-Hạ tầng đã build (RLS·permission·audit·outbox + một phần Foundation: audit/holidays/files/sequences/retention/seed; migration head idx 120 / 0437). Mỗi WO khung là **"đối chiếu/align `<X>` với spec mới (DB-08/BACKEND/API), GIỮ phần khớp, chỉ build phần thiếu/lệch"**. Khi code cũ mâu thuẫn spec → **SPEC THẮNG**. De-media-fy giữ nguyên (media·finance·SaaS·workflow-DAG·payroll·mobile = out-of-scope).
+Hạ tầng đã build (RLS·permission·audit·outbox + một phần Foundation: audit/holidays/files/sequences/retention/seed; migration head idx 121 / 0438). Mỗi WO khung là **"đối chiếu/align `<X>` với spec mới (DB-08/BACKEND/API), GIỮ phần khớp, chỉ build phần thiếu/lệch"**. Khi code cũ mâu thuẫn spec → **SPEC THẮNG**. De-media-fy giữ nguyên (media·finance·SaaS·workflow-DAG·payroll·mobile = out-of-scope).
 
 ---
 
