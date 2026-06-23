@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import swc from "unplugin-swc";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 // Build the test env, resolving the target Postgres DB from process.env FIRST so per-lane isolation
 // works. Precedence: explicit DATABASE_URL/DIRECT/WORKER from the env > LANE_DB (lane DB name) >
@@ -9,8 +9,7 @@ import { defineConfig } from "vitest/config";
 function laneDbEnv(): Record<string, string> {
   const host = process.env.PG_HOSTPORT ?? "localhost:5432";
   const db = process.env.LANE_DB ?? "mediaos";
-  const url =
-    process.env.DATABASE_URL ?? `postgres://mediaos_app:changeme_app_only@${host}/${db}`;
+  const url = process.env.DATABASE_URL ?? `postgres://mediaos_app:changeme_app_only@${host}/${db}`;
   const directUrl =
     process.env.DATABASE_DIRECT_URL ?? `postgres://mediaos:changeme_dev_only@${host}/${db}`;
   const workerUrl =
@@ -46,6 +45,18 @@ export default defineConfig({
     root: ".",
     // *.int-spec.ts = integration (Postgres thật) — tự skip khi không có DATABASE_URL (xem helpers/integration-db).
     include: ["src/**/*.spec.ts", "test/**/*.e2e-spec.ts", "test/**/*.int-spec.ts"],
+    // DE-MEDIA-FY (CLAUDE.md reframe 2026-06-20 · S1-QA-DEBT-1): test của module OUT-OF-SCOPE — finance
+    // theo-kênh (cost/revenue/cost-allocation) + workflow-DAG (content/project/channel lifecycle). Code đã
+    // PARK (không phát triển, không xoá đợt này) ⇒ test của chúng fail-giả che phạm vi THẬT của suite.
+    // Exclude (KHÔNG xoá) để dễ un-park sau. KHÔNG đụng approval-FSM (workflow phê duyệt LEAVE/ATT = IN scope).
+    // (ui-config-deny + webhooks-deny KHÔNG ở đây — đang chờ S1-INT-MOUNT-1 quyết mount-or-skip.)
+    exclude: [
+      ...configDefaults.exclude,
+      "test/workflow-lifecycle.e2e-spec.ts",
+      "test/integration/finance-cost-controller-deny.int-spec.ts",
+      "test/integration/finance-cost-allocation-controller-deny.int-spec.ts",
+      "test/integration/finance-revenue-controller-deny.int-spec.ts",
+    ],
     // Integration test mở/đóng pool + chạy DDL → nới timeout mặc định.
     testTimeout: 20000,
     hookTimeout: 30000,
@@ -70,14 +81,39 @@ export default defineConfig({
       // read as 0–25% and would fail a blanket threshold (false red). Keys are exact paths so per-file vs
       // aggregate semantics are identical. Only active when --coverage is passed (e.g. `pnpm test:cov`).
       thresholds: {
-        "src/workflow/workflow-fsm.service.ts": { lines: 80, functions: 80, branches: 80, statements: 80 },
-        "src/workflow/approval.service.ts": { lines: 80, functions: 80, branches: 80, statements: 80 },
+        "src/workflow/workflow-fsm.service.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
+        "src/workflow/approval.service.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
         // G7-2a: DagValidatorService is pure crown-jewel logic — higher bar (plan §4/§6).
-        "src/workflow/dag-validator.service.ts": { lines: 90, functions: 90, branches: 90, statements: 90 },
+        "src/workflow/dag-validator.service.ts": {
+          lines: 90,
+          functions: 90,
+          branches: 90,
+          statements: 90,
+        },
         // G7-2b: DAG adapter (port + code map) is pure + fully unit-tested → crown-jewel bar.
-        "src/workflow/dag-result.adapter.ts": { lines: 90, functions: 90, branches: 90, statements: 90 },
+        "src/workflow/dag-result.adapter.ts": {
+          lines: 90,
+          functions: 90,
+          branches: 90,
+          statements: 90,
+        },
         // G12-1: salary profile service is crown-jewel (lương nhạy cảm) → ≥80% (CLAUDE.md §6).
-        "src/payroll/salary-profile.service.ts": { lines: 80, functions: 80, branches: 80, statements: 80 },
+        "src/payroll/salary-profile.service.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
       },
     },
   },
