@@ -1,10 +1,15 @@
+<!-- ✅ DONE 2026-06-23 (VERIFY-CLOSE) — plan freshness CŨ ("apps/app NOT EXISTS") đã LỖI THỜI: apps/app ĐÃ
+     tồn tại (scaffold qua S1-FE-LAYOUT-1/REGISTRY-1). Audit done_when: token-storage 0 hits · console.log token
+     0 hits · apps/app KHÔNG import web-core/src trực tiếp 0 hits · @theme design token 34 dòng trong index.css ·
+     boot.spec+i18n.spec tồn tại. Test: 3 app (app 61 · console 177 · auth 9) + web-core 182 (regression crown
+     use-can/permission-gate/api-client/session) + packages/ui 53/14-file (≥1 smoke mỗi base component). KHÔNG build. -->
 <!-- ⚙️ KHỐI MÁY-ĐỌC (auto-loop ĐỌC khối này thay vì phân rã lại; reconcile-refresh trước build). -->
-<!-- Phần ỔN ĐỊNH (lanes/acceptanceChecks/testTasks/steps) tái dùng; phần GAP trong prose bên dưới PHẢI đối chiếu lại với code hiện tại. -->
 ```yaml
 wo: S0-FE-CORE-1
 zone: red
+status: done   # VERIFY-CLOSE 2026-06-23 — apps/app đã tồn tại; audit + test xanh
 generated_by: human
-reconciled_at: "2026-06-23 / apps/app NOT EXISTS / web-core index.ts verified"
+reconciled_at: "DONE 2026-06-23 — apps/app EXISTS (S1-FE-LAYOUT/REGISTRY); audit + 3-app/ui/web-core test xanh"
 lanes:
   - id: S0-FE-CORE-1
     builder: frontend-builder
