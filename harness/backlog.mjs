@@ -391,7 +391,12 @@ export const backlog = [
     title:
       "SequenceService.nextCode (tx + FOR UPDATE) + preview (không tăng) + reset_policy; concurrency 0-dup",
     zone: "red",
-    status: "todo",
+    // CLOSE 2026-06-23 (VERIFY-CLOSE): SequenceService đã build đủ (FOUNDATION-BE-2). nextCode qua withTenant +
+    //   repo.lockCounterForUpdateTx (SELECT…FOR UPDATE, KHÔNG MAX+1); previewNextCode đọc KHÔNG lock/mutate;
+    //   updateSequence (admin) ghi audit SequenceUpdated trong tx (config-only, không current_value/secret);
+    //   reset Never/Yearly/Monthly/Daily theo tz. Test xanh lane DB: sequence-concurrent ✓4 (0-dup) +
+    //   sequence-formatter ✓9 + sequence.service ✓15. (Wiring controller = S1-FND-WIRE-1, ngoài scope.)
+    status: "done",
     paths: ["apps/api/src/foundation/sequences/**"],
     skills: ["code-review"],
     depends_on: ["S0-FND-DB-1"],
