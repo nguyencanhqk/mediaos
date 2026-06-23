@@ -185,7 +185,7 @@ describe.skipIf(!runIsolatedDb)(
 
       // Mô phỏng chạy lại seed — cùng insert như 0435 nhưng có ON CONFLICT DO NOTHING.
       await direct.query(`
-      INSERT INTO modules (module_code, module_name, module_type, is_core, is_active, is_visible, sort_order)
+      INSERT INTO modules (module_code, name, module_group, is_core, is_mvp, is_active, sort_order)
       VALUES
         ('AUTH',    'Tài khoản & phân quyền',    'Core',        true,  true,  true,  1),
         ('HR',      'Nhân sự',                    'Core',        true,  true,  true,  2),
