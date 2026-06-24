@@ -855,6 +855,13 @@
       "when": 1717500560000,
       "tag": "0438_foundation_db6_audit_db08_shape",
       "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1717500570000,
+      "tag": "0439_setting1_audit_object_type",
+      "breakpoints": true
     }
   ]
 }
