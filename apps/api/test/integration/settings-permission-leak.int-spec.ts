@@ -224,7 +224,9 @@ describe.skipIf(!runIsolatedDb)("S1-FND-SETTING-1 audit COMPANY_SETTING_UPDATED 
   const direct = directPool();
   const db = new DatabaseService();
   const permission = new PermissionService(new PermissionRepository(db));
-  const svc = new SettingService(db, new SettingRepository(db), new AuditService(), permission);
+  const repo = new SettingRepository(db);
+  const audit = new AuditService();
+  const svc = new SettingService(db, repo, audit, permission);
   let A: SeededTenant;
   let adminUserId: string;
   let hasType = false;
@@ -278,30 +280,115 @@ describe.skipIf(!runIsolatedDb)("S1-FND-SETTING-1 audit COMPANY_SETTING_UPDATED 
     expect(Array.isArray(cf) ? cf : []).toContain("settingValue");
   });
 
-  it("business rollback → NO audit row left (audit + mutation same tx)", async (ctx) => {
+  // (a) Validate-trước-tx: value sai type → throw TRƯỚC khi mở withTenant ⇒ KHÔNG bao giờ chạm DB
+  // (KHÔNG audit, KHÔNG upsert nửa vời). Đây là LỚP 1 (fail-fast), KHÁC với in-tx rollback (LỚP 2 dưới).
+  it("validate-before-tx: wrong value_type rejected BEFORE any DB write (no audit, no upsert)", async (ctx) => {
     if (!hasType) {
       ctx.skip(); // gated cùng lý do trên (runtime skip THẬT, KHÔNG pass-câm).
       return;
     }
+    const probeKey = `audit.locale.${A.slug}`;
     const before = await direct.query(
-      `SELECT count(*)::int AS n FROM audit_logs WHERE company_id=$1 AND action='COMPANY_SETTING_UPDATED_ROLLBACK_PROBE'`,
+      `SELECT count(*)::int AS n FROM audit_logs WHERE company_id=$1 AND object_type='company_setting'`,
       [A.companyId],
     );
-    // Ép lỗi sau khi đã upsert+audit (giả lập): gọi với value sai type → throw TRƯỚC mọi side-effect ⇒
-    // không có audit nào ghi (chứng minh validate-trước, KHÔNG audit nửa vời).
+    const beforeRow = await direct.query(
+      `SELECT count(*)::int AS n FROM company_settings WHERE company_id=$1 AND setting_key=$2`,
+      [A.companyId, probeKey],
+    );
     await expect(
-      svc.updateCompanySetting(
-        { id: adminUserId, companyId: A.companyId },
-        `audit.locale.${A.slug}`,
-        {
-          settingValue: 123, // system value_type=String ⇒ BadRequest
-        },
-      ),
+      svc.updateCompanySetting({ id: adminUserId, companyId: A.companyId }, probeKey, {
+        settingValue: 123, // system value_type=String ⇒ BadRequest TRƯỚC withTenant
+      }),
     ).rejects.toThrow();
     const after = await direct.query(
-      `SELECT count(*)::int AS n FROM audit_logs WHERE company_id=$1 AND action='COMPANY_SETTING_UPDATED_ROLLBACK_PROBE'`,
+      `SELECT count(*)::int AS n FROM audit_logs WHERE company_id=$1 AND object_type='company_setting'`,
       [A.companyId],
     );
+    const afterRow = await direct.query(
+      `SELECT count(*)::int AS n FROM company_settings WHERE company_id=$1 AND setting_key=$2`,
+      [A.companyId, probeKey],
+    );
     expect(after.rows[0].n).toBe(before.rows[0].n);
+    expect(afterRow.rows[0].n).toBe(beforeRow.rows[0].n);
+  });
+
+  // (b) TRUE in-transaction rollback (BẤT BIẾN #2 — audit + mutation CÙNG commit/rollback): thực hiện
+  // upsert company_setting + audit.record(tx) THẬT trong MỘT withTenant, rồi THROW SAU audit để ép DB
+  // rollback. Verify CẢ company_setting row LẪN audit_logs row biến mất sau rollback (chứng minh audit
+  // KHÔNG commit độc lập với mutation). KHÁC test (a): lỗi xảy ra SAU khi đã ghi audit trong tx — đúng
+  // kịch bản QA yêu cầu (post-write error trong cùng withTenant tx → audit cũng rollback).
+  it("in-tx rollback: post-audit error rolls back BOTH the upsert AND the audit row (same tx)", async (ctx) => {
+    if (!hasType) {
+      ctx.skip(); // gated cùng lý do trên (runtime skip THẬT, KHÔNG pass-câm).
+      return;
+    }
+    const rbKey = `rollback.probe.${A.slug}`;
+    const sentinel = new Error("forced post-audit failure to assert tx rollback");
+
+    const auditBefore = await direct.query(
+      `SELECT count(*)::int AS n FROM audit_logs
+         WHERE company_id=$1 AND object_type='company_setting' AND entity_code=$2`,
+      [A.companyId, rbKey],
+    );
+    const settingBefore = await direct.query(
+      `SELECT count(*)::int AS n FROM company_settings WHERE company_id=$1 AND setting_key=$2`,
+      [A.companyId, rbKey],
+    );
+
+    await expect(
+      db.withTenant(A.companyId, async (tx) => {
+        // 1) upsert company_setting THẬT (qua repo, RLS context đã set bởi withTenant).
+        const [inserted] = await repo.insertCompanyTx(
+          A.companyId,
+          {
+            companyId: A.companyId,
+            settingKey: rbKey,
+            settingValue: "vi" as never,
+            valueType: "String",
+            category: "General",
+            moduleCode: "SYSTEM",
+            isPublic: false,
+            isSensitive: false,
+            isEncrypted: false,
+            status: "Active",
+            createdBy: adminUserId,
+            updatedBy: adminUserId,
+          },
+          tx,
+        );
+        // 2) audit.record THẬT trong CÙNG tx (BẤT BIẾN #2 append-only, object_type='company_setting').
+        await audit.record(tx, {
+          action: "COMPANY_SETTING_UPDATED",
+          objectType: "company_setting",
+          objectId: inserted.id,
+          actorUserId: adminUserId,
+          actorType: "User",
+          entityType: "company_setting",
+          entityId: inserted.id,
+          entityCode: rbKey,
+          oldValues: {},
+          newValues: { settingValue: "vi" },
+          resultStatus: "Success",
+          dataScope: "Company",
+        });
+        // 3) Lỗi nghiệp vụ SAU khi đã upsert + audit trong tx ⇒ Postgres ROLLBACK toàn bộ.
+        throw sentinel;
+      }),
+    ).rejects.toThrow(sentinel);
+
+    // Sau rollback: KHÔNG còn company_setting row (upsert bị rollback)…
+    const settingAfter = await direct.query(
+      `SELECT count(*)::int AS n FROM company_settings WHERE company_id=$1 AND setting_key=$2`,
+      [A.companyId, rbKey],
+    );
+    expect(settingAfter.rows[0].n).toBe(settingBefore.rows[0].n);
+    // …VÀ KHÔNG còn audit row (audit ghi trong cùng tx cũng bị rollback — append-only KHÔNG nửa vời).
+    const auditAfter = await direct.query(
+      `SELECT count(*)::int AS n FROM audit_logs
+         WHERE company_id=$1 AND object_type='company_setting' AND entity_code=$2`,
+      [A.companyId, rbKey],
+    );
+    expect(auditAfter.rows[0].n).toBe(auditBefore.rows[0].n);
   });
 });

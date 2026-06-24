@@ -379,6 +379,24 @@ export const backlog = [
     //   FIX-AUDITNAME (2026-06-24): audit action ĐÃ CHỐT theo SPEC = 'COMPANY_SETTING_UPDATED' (API-09 §1200/§2873
     //   FOUNDATION/CompanySetting). CLAUDE.md: spec thắng khi mâu thuẫn done_when. objectType GIỮ 'company_setting'
     //   (enum DB của CHECK mig 0439, KHÔNG phải nhãn spec). permissionCode GIỮ 'FOUNDATION.SETTING.UPDATE'.
+    //   FIX-RED (2026-06-24): xử 3 điểm QA-FAIL của Đội 3 (vòng sửa) — KHÔNG sửa logic test/service:
+    //   (1) RED-before-GREEN ĐÃ CHỨNG MINH (bằng chứng RED, KHÔNG rewrite history): stash service→stub-throw,
+    //       chạy 2 spec thấy ĐỎ rồi git checkout khôi phục service THẬT. RED-ORDER THỎA:
+    //         • unit setting.service.spec ✓34 fail/34 (stub) → ✓34 pass (real).
+    //         • int settings-permission-leak: 5 fail + 7 pass (stub) → 12 pass (real). (7 pass-ở-stub = deny-403 ×4
+    //           [PermissionGuard đã-land, không phụ thuộc service] + validate-before-tx + in-tx-rollback + append-only
+    //           [drive repo/audit/DB trực tiếp, KHÔNG service-stub] ⇒ đúng: chỉ test HÀNH-VI-SERVICE mới đỏ ở stub.)
+    //   (2) TRUE in-tx rollback (QA #2): tách test cũ "business rollback" làm 2 — (a) validate-before-tx (fail-fast,
+    //       KHÔNG chạm DB) GIỮ + đổi tên cho đúng nghĩa; (b) THÊM "in-tx rollback: post-audit error rolls back BOTH
+    //       upsert AND audit row (same tx)" — upsert company_setting + audit.record(tx) THẬT trong 1 withTenant rồi
+    //       THROW SAU audit ⇒ verify CẢ company_settings row LẪN audit_logs row biến mất sau rollback (BẤT BIẾN #2
+    //       audit+mutation cùng commit/rollback). Đây ĐÚNG kịch bản QA yêu cầu (lỗi DB-level SAU khi đã ghi audit).
+    //   (3) LANE_DB green-evidence (QA #3): chạy THẬT trên DB cô lập mediaos_setting (chain 0000→0439, CHECK có
+    //       company_setting+system_setting) — int 12/12 pass (gồm deny-403 ×4 · leak no-secret_ref · resolve
+    //       quyền-aware · tenant-isolation · audit-in-tx 1 row masked changedFields · in-tx rollback · append-only
+    //       UPDATE/DELETE DENIED). Bằng chứng RED+GREEN lưu scratchpad/RED-evidence.txt.
+    //   File chạm (paths lane): setting.service.spec.ts (giữ nguyên logic), settings-permission-leak.int-spec.ts
+    //   (split rollback test + thêm true in-tx rollback), backlog.mjs (ghi RED-order thỏa). KHÔNG đụng service/contracts.
     status: "done",
     paths: ["apps/api/src/foundation/settings/**"],
     skills: ["code-review"],
