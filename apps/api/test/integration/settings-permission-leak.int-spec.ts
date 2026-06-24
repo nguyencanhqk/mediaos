@@ -200,7 +200,7 @@ describe.skipIf(!runIsolatedDb)("S1-FND-SETTING-1 settings permission + leak + a
     }
     const ins = await direct.query(
       `INSERT INTO audit_logs (company_id, action, object_type)
-       VALUES ($1, 'CONFIG_UPDATE', 'company_setting') RETURNING id`,
+       VALUES ($1, 'COMPANY_SETTING_UPDATED', 'company_setting') RETURNING id`,
       [A.companyId],
     );
     const auditId = ins.rows[0].id as string;
@@ -220,7 +220,7 @@ describe.skipIf(!runIsolatedDb)("S1-FND-SETTING-1 settings permission + leak + a
 
 // ── audit-in-tx: gated CHECK 'company_setting' (KHÔNG xanh-giả nếu mig 0439 chưa áp trên DB band thấp) ──
 // Gate suite = hasDb && LANE_DB (DB cô lập đã migrate 0439) — KHÔNG chạm DB dev chung 'mediaos'.
-describe.skipIf(!runIsolatedDb)("S1-FND-SETTING-1 audit CONFIG_UPDATE in-tx", () => {
+describe.skipIf(!runIsolatedDb)("S1-FND-SETTING-1 audit COMPANY_SETTING_UPDATED in-tx", () => {
   const direct = directPool();
   const db = new DatabaseService();
   const permission = new PermissionService(new PermissionRepository(db));
@@ -256,7 +256,7 @@ describe.skipIf(!runIsolatedDb)("S1-FND-SETTING-1 audit CONFIG_UPDATE in-tx", ()
 
   // Gate ở CẤP it (ctx.skip = runtime skip THẬT, KHÔNG early-return = pass-câm). hasType chỉ biết sau
   // beforeAll nên dùng ctx.skip() (runtime) thay cho skipIf(collect-time).
-  it("PATCH company-setting → exactly 1 audit_logs row CONFIG_UPDATE company_setting, masked snapshot", async (ctx) => {
+  it("PATCH company-setting → exactly 1 audit_logs row COMPANY_SETTING_UPDATED company_setting, masked snapshot", async (ctx) => {
     if (!hasType) {
       ctx.skip(); // mig 0439 chưa áp trên DB này → 'company_setting' chưa có trong CHECK audit_logs.
       return;
@@ -269,7 +269,7 @@ describe.skipIf(!runIsolatedDb)("S1-FND-SETTING-1 audit CONFIG_UPDATE in-tx", ()
     const rows = await direct.query(
       `SELECT action, object_type, old_values, new_values, changed_fields
          FROM audit_logs
-        WHERE company_id = $1 AND object_type = 'company_setting' AND action = 'CONFIG_UPDATE'`,
+        WHERE company_id = $1 AND object_type = 'company_setting' AND action = 'COMPANY_SETTING_UPDATED'`,
       [A.companyId],
     );
     expect(rows.rows).toHaveLength(1);
@@ -284,7 +284,7 @@ describe.skipIf(!runIsolatedDb)("S1-FND-SETTING-1 audit CONFIG_UPDATE in-tx", ()
       return;
     }
     const before = await direct.query(
-      `SELECT count(*)::int AS n FROM audit_logs WHERE company_id=$1 AND action='CONFIG_UPDATE_ROLLBACK_PROBE'`,
+      `SELECT count(*)::int AS n FROM audit_logs WHERE company_id=$1 AND action='COMPANY_SETTING_UPDATED_ROLLBACK_PROBE'`,
       [A.companyId],
     );
     // Ép lỗi sau khi đã upsert+audit (giả lập): gọi với value sai type → throw TRƯỚC mọi side-effect ⇒
@@ -299,7 +299,7 @@ describe.skipIf(!runIsolatedDb)("S1-FND-SETTING-1 audit CONFIG_UPDATE in-tx", ()
       ),
     ).rejects.toThrow();
     const after = await direct.query(
-      `SELECT count(*)::int AS n FROM audit_logs WHERE company_id=$1 AND action='CONFIG_UPDATE_ROLLBACK_PROBE'`,
+      `SELECT count(*)::int AS n FROM audit_logs WHERE company_id=$1 AND action='COMPANY_SETTING_UPDATED_ROLLBACK_PROBE'`,
       [A.companyId],
     );
     expect(after.rows[0].n).toBe(before.rows[0].n);

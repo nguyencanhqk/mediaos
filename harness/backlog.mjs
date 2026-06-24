@@ -368,15 +368,17 @@ export const backlog = [
     //   (2) GET /settings/public chỉ is_public=true AND is_sensitive=false; secret_ref/secret/encrypted DROP tận
     //       gốc (setting-mask.ts toPublicMap). (3) POST /resolve quyền-aware (PermissionService.can update) — user
     //       thường chỉ public; admin → masked metadata; secret_ref KHÔNG bao giờ ra. (4) PATCH /company-settings/:key
-    //       validate value_type+validation_schema → withTenant(tx): old→upsert→AuditService.record CONFIG_UPDATE
+    //       validate value_type+validation_schema → withTenant(tx): old→upsert→AuditService.record COMPANY_SETTING_UPDATED
     //       object_type='company_setting' (mig 0439 CHECK) CÙNG tx (mask+changedFields auto). Mọi route
     //       UseGuards(PermissionGuard) fail-closed (view→GET/POST, update→PATCH).
     //   Verify lane DB mediaos_setting (chain 0000→0439): unit setting.service.spec ✓13 (precedence/public/mask/
     //   validate-deny/audit-1-row) + int settings-permission-leak ✓11 (deny-403 ×3 · leak no-secret_ref · resolve
     //   quyền-aware · tenant-isolation · audit-in-tx 1 row masked changedFields · append-only UPDATE/DELETE DENIED).
     //   typecheck + eslint xanh. CÒN NỢ: wiring SettingsModule vào app (BE-9/S1-FND-WIRE-1) + system-setting PATCH
-    //   (system-manage, OPTIONAL) chưa build (để BE-9/QA). Audit action='CONFIG_UPDATE' theo done_when (API-09 dùng
-    //   COMPANY_SETTING_UPDATED — QA đối chiếu khi nghiệm thu).
+    //   (system-manage, OPTIONAL) chưa build (để BE-9/QA).
+    //   FIX-AUDITNAME (2026-06-24): audit action ĐÃ CHỐT theo SPEC = 'COMPANY_SETTING_UPDATED' (API-09 §1200/§2873
+    //   FOUNDATION/CompanySetting). CLAUDE.md: spec thắng khi mâu thuẫn done_when. objectType GIỮ 'company_setting'
+    //   (enum DB của CHECK mig 0439, KHÔNG phải nhãn spec). permissionCode GIỮ 'FOUNDATION.SETTING.UPDATE'.
     status: "done",
     paths: ["apps/api/src/foundation/settings/**"],
     skills: ["code-review"],
@@ -385,7 +387,7 @@ export const backlog = [
     done_when: [
       "resolveSetting(companyId,key) theo precedence company_settings→system_settings→fallback; resolveMany batch",
       "GET /foundation/settings/public CHỈ trả is_public=true AND is_sensitive=false; KHÔNG bao giờ trả secret_ref/raw secret",
-      "PATCH validate value_type + validation_schema, ghi audit CONFIG_UPDATE old/new/changed_fields trong tx withTenant",
+      "PATCH validate value_type + validation_schema, ghi audit COMPANY_SETTING_UPDATED (CHỐT theo SPEC API-09 §1200/§2873; objectType='company_setting' enum DB) old/new/changed_fields trong tx withTenant",
       "deny-path RED: thiếu quyền → 403; public endpoint không lộ sensitive",
     ],
   },

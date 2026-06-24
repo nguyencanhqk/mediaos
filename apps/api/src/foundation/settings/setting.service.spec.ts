@@ -6,7 +6,7 @@
  *  - getPublic: CHỈ is_public=true AND is_sensitive=false; secret-like (encrypted/SecretRef/secret_ref) DROP.
  *  - resolve quyền-aware: user thường → chỉ public; admin → masked metadata; secret_ref KHÔNG bao giờ ra.
  *  - updateCompanySetting: value_type/validation_schema sai → 400/422 KHÔNG upsert KHÔNG audit;
- *    đúng → upsert + audit CONFIG_UPDATE object_type='company_setting' CÙNG tx (1 lần record).
+ *    đúng → upsert + audit COMPANY_SETTING_UPDATED object_type='company_setting' CÙNG tx (1 lần record).
  */
 
 import { BadRequestException, UnprocessableEntityException } from "@nestjs/common";
@@ -274,7 +274,7 @@ describe("SettingService.updateCompanySetting (validate + audit-in-tx)", () => {
     expect(audit.record).not.toHaveBeenCalled();
   });
 
-  it("valid insert → upsert + exactly ONE audit CONFIG_UPDATE company_setting in same tx", async () => {
+  it("valid insert → upsert + exactly ONE audit COMPANY_SETTING_UPDATED company_setting in same tx", async () => {
     const inserted = row({
       settingKey: "system.default_locale",
       settingValue: "en",
@@ -295,7 +295,7 @@ describe("SettingService.updateCompanySetting (validate + audit-in-tx)", () => {
     expect(audit.record).toHaveBeenCalledTimes(1);
     const [, entry] = audit.record.mock.calls[0];
     expect(entry).toMatchObject({
-      action: "CONFIG_UPDATE",
+      action: "COMPANY_SETTING_UPDATED",
       objectType: "company_setting",
       actorUserId: ACTOR_ID,
     });

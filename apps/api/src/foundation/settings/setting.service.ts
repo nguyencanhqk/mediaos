@@ -59,7 +59,7 @@ function toRaw(row: {
  * (3) resolve (quyền-aware): user thường chỉ public; sensitive masked; secret_ref KHÔNG bao giờ trả; metadata
  *     đầy đủ cần quyền update (admin-level).
  * (4) updateCompanySetting: validate value_type + validation_schema → withTenant(tx): old → upsert → audit
- *     CONFIG_UPDATE object_type='company_setting' CÙNG tx (mask + changedFields auto). BẤT BIẾN #1/#2/#3.
+ *     COMPANY_SETTING_UPDATED object_type='company_setting' CÙNG tx (mask + changedFields auto). BẤT BIẾN #1/#2/#3.
  */
 @Injectable()
 export class SettingService {
@@ -183,7 +183,7 @@ export class SettingService {
   /**
    * Upsert override công ty cho `key`. validate value_type + validation_schema TRƯỚC mọi side-effect (sai →
    * 400/422, KHÔNG upsert, KHÔNG audit). Trong db.withTenant(tx): đọc old → upsert → AuditService.record
-   * CONFIG_UPDATE object_type='company_setting' CÙNG tx (mask + changedFields auto). KHÔNG secret_ref vào audit.
+   * COMPANY_SETTING_UPDATED object_type='company_setting' CÙNG tx (mask + changedFields auto). KHÔNG secret_ref vào audit.
    */
   async updateCompanySetting(
     actor: Actor,
@@ -290,9 +290,11 @@ export class SettingService {
       });
 
       // Audit CÙNG tx (BẤT BIẾN #2 append-only). object_type='company_setting' ∈ CHECK (mig 0439).
+      // action='COMPANY_SETTING_UPDATED' theo SPEC API-09 §1200/§2873 (nhãn audit chuẩn cho
+      // FOUNDATION/CompanySetting). objectType GIỮ 'company_setting' = enum DB của CHECK (mig 0439).
       // old/new đã mask-at-source; AuditService cũng mask (phòng thủ chiều sâu) + auto changedFields.
       await this.audit.record(tx, {
-        action: "CONFIG_UPDATE",
+        action: "COMPANY_SETTING_UPDATED",
         objectType: "company_setting",
         objectId: savedRow.id,
         actorUserId: actor.id,
