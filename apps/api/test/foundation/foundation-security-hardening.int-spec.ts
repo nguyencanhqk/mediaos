@@ -258,7 +258,8 @@ describe.skipIf(!runDb)(
     // PRODUCTION leak-guard sống ở SettingService.getPublic() — verify NÓ TRỰC TIẾP (đường thật, KHÔNG mock).
     // HTTP route /foundation/settings/public CHƯA mount ở build này: SettingsModule (foundation/settings) gom
     // vào FoundationModule + wire app.module = S1-FND-WIRE-1 (CHƯA land — app.module mount ./settings, KHÔNG
-    // mount ./foundation/settings). H2c GATE/skip có vé S1-FND-WIRE-1 + ÉP RED khi route land lén.
+    // mount ./foundation/settings). H2c = runtime probe TỰ-KÍCH-HOẠT (ctx.skip nếu 404 → vé S1-FND-WIRE-1;
+    // 200 → assert no-leak THẬT) + H2-gate ÉP RED khi route land lén.
     // ════════════════════════════════════════════════════════════════════════════════
     describe("H2 — settings/public returns ONLY public-nonsensitive (no secret/secret_ref/is_sensitive)", () => {
       const db = new DatabaseService();
@@ -298,28 +299,50 @@ describe.skipIf(!runDb)(
         }
       });
 
-      // GATE: HTTP route mount = S1-FND-WIRE-1 (FoundationModule chưa land). it.skip giữ chỗ — KHÔNG bịa pass.
-      // Khi S1-FND-WIRE-1 mount route: bỏ skip, assert envelope HTTP cũng KHÔNG lộ secret.
-      it.skip("H2c — GET /foundation/settings/public HTTP envelope no-leak [GATE: S1-FND-WIRE-1 chưa mount route]", async () => {
+      // H2c — GATE TỰ-KÍCH-HOẠT (probe route, KHÔNG it.skip chết — giống D6 audit-permission-deny:219-229).
+      // Probe GET /foundation/settings/public:
+      //   • 404/501 (route mount = S1-FND-WIRE-1 chưa land) ⇒ ctx.skip() runtime: skip-CÓ-VÉ, KHÔNG bịa pass.
+      //   • 200 (WIRE-1 land + merge) ⇒ CHẠY assertion no-leak THẬT trên envelope HTTP — activate-now,
+      //     không cần sửa tay. H2-gate (assert 404) phía dưới vẫn ÉP RED khi route land lén → buộc nhánh 200 chạy.
+      it("H2c — GET /foundation/settings/public HTTP envelope no-leak [TỰ-KÍCH-HOẠT khi route live; nếu 404 → skip-có-vé S1-FND-WIRE-1]", async (ctx) => {
         const res = await api(app)
           .get(`/foundation/settings/public`)
           .set("Authorization", `Bearer ${adminToken}`);
-        expect(res.status).toBe(200);
-        const serialized = JSON.stringify(res.body);
-        for (const leak of ALL_LEAK_VALUES) {
-          expect(serialized).not.toContain(leak);
+
+        // Route chưa mount (SettingsModule chưa gom vào FoundationModule + wire = S1-FND-WIRE-1 'todo') ⇒ 404/501.
+        // KHÔNG nghiệm thu được envelope HTTP ở cây này; skip-có-vé runtime (KHÔNG pass-câm, KHÔNG fail-giả).
+        if (res.status === 404 || res.status === 501) {
+          ctx.skip();
+          return;
         }
+
+        // ── Route ĐÃ live ⇒ assertion no-leak THẬT trên envelope HTTP ────────────────────
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        const serialized = JSON.stringify(res.body);
+        // KHÔNG giá trị secret sentinel nào lọt ra wire.
+        for (const leak of ALL_LEAK_VALUES) {
+          expect(
+            serialized,
+            `secret '${leak}' leaked in /foundation/settings/public HTTP envelope`,
+          ).not.toContain(leak);
+        }
+        // Cũng KHÔNG lộ cờ metadata nhạy cảm / secret_ref qua envelope.
+        expect(serialized).not.toContain("secret_ref");
+        expect(serialized).not.toContain("secretRef");
+        expect(serialized).not.toContain("is_sensitive");
+        expect(serialized).not.toContain("isSensitive");
       });
 
-      // ÉP RED nếu ai đó "land lén" route mà KHÔNG bỏ skip H2c: nếu route đã mount (≠404), test này ĐỎ →
-      // buộc kích hoạt H2c. KHÔNG bao giờ pass-câm khi wiring đã có nhưng test HTTP vẫn skip.
-      it("H2-gate — route still un-mounted (else S1-FND-WIRE-1 landed → un-skip H2c)", async () => {
+      // FORCE-RED khi route "land lén": H2c đã TỰ-KÍCH-HOẠT khi route live (probe 200 → chạy assertion), nhưng
+      // gate này là lớp dự phòng thứ 2 — nếu CI vô tình KHÔNG chạy H2c (file bị exclude/filter), gate vẫn ĐỎ
+      // khi route mount (≠404) ⇒ phơi bày S1-FND-WIRE-1 đã land mà coverage HTTP no-leak chưa được chứng minh.
+      it("H2-gate — route still un-mounted (S1-FND-WIRE-1 landed → H2c tự chạy assertion no-leak THẬT)", async () => {
         const res = await api(app)
           .get(`/foundation/settings/public`)
           .set("Authorization", `Bearer ${adminToken}`);
         expect(
           res.status,
-          "/foundation/settings/public is now mounted — S1-FND-WIRE-1 landed: remove .skip on H2c + assert HTTP envelope no-leak",
+          "/foundation/settings/public is now mounted — S1-FND-WIRE-1 landed: H2c now self-runs HTTP envelope no-leak assertions (this gate just flags the transition)",
         ).toBe(404);
       });
     });
