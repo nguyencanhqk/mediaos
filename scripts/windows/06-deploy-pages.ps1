@@ -3,6 +3,9 @@
 #   Non-interactive: đặt $env:CLOUDFLARE_API_TOKEN (Pages:Edit) + $env:CLOUDFLARE_ACCOUNT_ID. Nếu thiếu → wrangler login.
 param(
   [string]$Domain = "funtimemediacorp.com",
+  # apps/auth dùng company slug CỐ ĐỊNH lúc build (VITE_COMPANY_SLUG ?? 'demo') — form prod KHÔNG có ô nhập.
+  # PHẢI khớp company của admin prod (xem ADMIN_COMPANY_SLUG/.env.prod) nếu không login báo sai mật khẩu.
+  [string]$CompanySlug = "funtime",
   [string[]]$Apps = @("app", "auth", "console")
 )
 . "$PSScriptRoot\_lib.ps1"
@@ -40,7 +43,8 @@ try {
       # app = vỏ nghiệp vụ ở apex; cần biết auth app để bounce khi mất phiên (main.tsx đọc VITE_AUTH_APP_URL).
       "app"     { $env:VITE_AUTH_APP_URL = $auth }
       # auth = login; sau đăng nhập bounce về app shell ở apex khi `?redirect` vắng (config.ts đọc VITE_DEFAULT_APP_URL).
-      "auth"    { $env:VITE_DEFAULT_APP_URL = "https://$Domain" }
+      # VITE_COMPANY_SLUG: slug công ty cố định (form không có ô nhập) — PHẢI khớp company admin prod.
+      "auth"    { $env:VITE_DEFAULT_APP_URL = "https://$Domain"; $env:VITE_COMPANY_SLUG = $CompanySlug }
       # console = quản trị; mất phiên thì về auth (main.tsx đọc VITE_AUTH_APP_URL).
       "console" { $env:VITE_AUTH_APP_URL = $auth }
     }
