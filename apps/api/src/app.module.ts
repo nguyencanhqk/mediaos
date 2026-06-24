@@ -20,7 +20,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { PermissionModule } from "./permission/permission.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
-import { AuditModule } from "./foundation/audit/audit.module";
+import { FoundationModule } from "./foundation/foundation.module";
 import { ApiKeysModule } from "./api-keys/api-keys.module";
 import { MailConfigModule } from "./settings/mail-config.module";
 import { SecurityPolicyModule } from "./security-policy/security-policy.module";
@@ -56,8 +56,9 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     NotificationsModule,
     RealtimeModule,
     DashboardModule,
-    // FOUNDATION-BE-3: Audit viewer read-API (/foundation/audit-logs). BE-9 sẽ relocate vào FoundationModule.
-    AuditModule,
+    // S1-FND-WIRE-1 (BE-9): FoundationModule gom audit·settings·company·module-catalog·files·holidays →
+    // /api/v1/foundation/*. AuditModule (FOUNDATION-BE-3) đã relocate vào đây (KHÔNG wire lẻ nữa).
+    FoundationModule,
     // AC-5 API key / PAT — out-of-scope (de-media-fy). Guard global đã GỠ ở CLEAN-DECOUPLE-1;
     // module giữ tạm tới CLEAN-BE-2 (gỡ hẳn cùng console FE). KHÔNG còn provider nào dùng ApiKeyRepository.
     ApiKeysModule,
