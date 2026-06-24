@@ -6,12 +6,20 @@
  * over file metadata — it never touches storage_path / checksum / binary content (CLAUDE.md §2.3).
  */
 
-/** The four guarded file actions. Map 1:1 to FOUNDATION.FILE.{VIEW|DOWNLOAD|LINK|DELETE}. */
+/**
+ * The guarded file actions. Map 1:1 to FOUNDATION.FILE.{VIEW|DOWNLOAD|LINK|UNLINK|DELETE}.
+ *
+ * `Unlink` is additive (S1-FND-FILE-1): the seed catalog (mig 0435) carries a distinct `unlink`
+ * permission on `foundation-file`, so unlinking a file from an entity is a SEPARATE authorization from
+ * linking it. The resolver method (`canUnlinkFile`) is OPTIONAL on the resolver interface so existing
+ * resolvers (which predate Unlink) keep compiling and fall back to FOUNDATION.FILE.UNLINK by default.
+ */
 export enum FilePolicyAction {
-  View = 'View',
-  Download = 'Download',
-  Link = 'Link',
-  Delete = 'Delete',
+  View = "View",
+  Download = "Download",
+  Link = "Link",
+  Unlink = "Unlink",
+  Delete = "Delete",
 }
 
 /**
@@ -50,12 +58,12 @@ export interface FilePolicyDecision {
 }
 
 export type FilePolicyReason =
-  | 'allow-resolver' // a registered module resolver granted access
-  | 'allow-foundation' // fallback FOUNDATION.FILE.* permission granted access
-  | 'deny-resolver' // a registered module resolver denied access (final, no escalation)
-  | 'deny-foundation' // no resolver + FOUNDATION.FILE.* permission not granted
-  | 'deny-tenant' // missing/invalid tenant scope (companyId/userId)
-  | 'deny-error'; // exception while deciding — fail-closed
+  | "allow-resolver" // a registered module resolver granted access
+  | "allow-foundation" // fallback FOUNDATION.FILE.* permission granted access
+  | "deny-resolver" // a registered module resolver denied access (final, no escalation)
+  | "deny-foundation" // no resolver + FOUNDATION.FILE.* permission not granted
+  | "deny-tenant" // missing/invalid tenant scope (companyId/userId)
+  | "deny-error"; // exception while deciding — fail-closed
 
 /**
  * Maps each FilePolicyAction to the (action, resourceType) tuple consumed by
@@ -70,8 +78,9 @@ export type FilePolicyReason =
 export const FOUNDATION_FILE_PERMISSION: Readonly<
   Record<FilePolicyAction, { action: string; resourceType: string }>
 > = Object.freeze({
-  [FilePolicyAction.View]: { action: 'view', resourceType: 'foundation-file' },
-  [FilePolicyAction.Download]: { action: 'download', resourceType: 'foundation-file' },
-  [FilePolicyAction.Link]: { action: 'link', resourceType: 'foundation-file' },
-  [FilePolicyAction.Delete]: { action: 'delete', resourceType: 'foundation-file' },
+  [FilePolicyAction.View]: { action: "view", resourceType: "foundation-file" },
+  [FilePolicyAction.Download]: { action: "download", resourceType: "foundation-file" },
+  [FilePolicyAction.Link]: { action: "link", resourceType: "foundation-file" },
+  [FilePolicyAction.Unlink]: { action: "unlink", resourceType: "foundation-file" },
+  [FilePolicyAction.Delete]: { action: "delete", resourceType: "foundation-file" },
 });

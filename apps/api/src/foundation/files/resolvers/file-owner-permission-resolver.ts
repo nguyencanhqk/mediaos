@@ -21,7 +21,7 @@
  * FOUNDATION.FILE.* fallback. A thrown exception is treated as DENY (never a false-ALLOW).
  */
 
-import type { FilePermissionInput } from '../file-policy.types';
+import type { FilePermissionInput } from "../file-policy.types";
 
 export interface FileOwnerPermissionResolver {
   /** Owning module code, e.g. "HR", "LEAVE", "TASK" (case/whitespace-insensitive). */
@@ -42,6 +42,16 @@ export interface FileOwnerPermissionResolver {
 
   /** May the user LINK this file to the owning entity? */
   canLinkFile(input: FilePermissionInput): Promise<boolean>;
+
+  /**
+   * May the user UNLINK (soft-delete the link of) this file from the owning entity?
+   *
+   * OPTIONAL — added with the Unlink action (S1-FND-FILE-1). Resolvers written before Unlink existed do
+   * not implement it; the policy layer treats a missing method as "no resolver verdict for Unlink" and
+   * falls back to FOUNDATION.FILE.UNLINK (deny-by-default unless granted). A resolver that DOES implement
+   * it takes precedence (final verdict, no escalation) exactly like the other methods.
+   */
+  canUnlinkFile?(input: FilePermissionInput): Promise<boolean>;
 
   /** May the user DELETE (soft) this file? */
   canDeleteFile(input: FilePermissionInput): Promise<boolean>;
