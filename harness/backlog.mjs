@@ -360,7 +360,24 @@ export const backlog = [
     title:
       "SettingService: precedence company→system→default + /settings/public (lọc is_public, mask is_sensitive) + admin update có audit",
     zone: "red",
-    status: "todo",
+    // SVC lane CLOSE 2026-06-24 (S1-FND-SETTING-1-SVC): tầng app apps/api/src/foundation/settings/** đã build
+    //   self-contained (SettingsModule imports DatabaseModule+PermissionModule+EventsModule, exports SettingService;
+    //   KHÔNG sửa app.module.ts=BE-9). DTO Zod CỤC BỘ (settings.dto.ts) — KHÔNG đụng packages/contracts/settings.ts.
+    //   (1) resolveSetting/resolveMany precedence company(Active,deleted_at NULL,withTenant)→system(Active)→default
+    //       hard-coded (setting-defaults.ts); resolveMany BATCH ≤2 query (1/bảng) — assert KHÔNG N+1 (unit spy).
+    //   (2) GET /settings/public chỉ is_public=true AND is_sensitive=false; secret_ref/secret/encrypted DROP tận
+    //       gốc (setting-mask.ts toPublicMap). (3) POST /resolve quyền-aware (PermissionService.can update) — user
+    //       thường chỉ public; admin → masked metadata; secret_ref KHÔNG bao giờ ra. (4) PATCH /company-settings/:key
+    //       validate value_type+validation_schema → withTenant(tx): old→upsert→AuditService.record CONFIG_UPDATE
+    //       object_type='company_setting' (mig 0439 CHECK) CÙNG tx (mask+changedFields auto). Mọi route
+    //       UseGuards(PermissionGuard) fail-closed (view→GET/POST, update→PATCH).
+    //   Verify lane DB mediaos_setting (chain 0000→0439): unit setting.service.spec ✓13 (precedence/public/mask/
+    //   validate-deny/audit-1-row) + int settings-permission-leak ✓11 (deny-403 ×3 · leak no-secret_ref · resolve
+    //   quyền-aware · tenant-isolation · audit-in-tx 1 row masked changedFields · append-only UPDATE/DELETE DENIED).
+    //   typecheck + eslint xanh. CÒN NỢ: wiring SettingsModule vào app (BE-9/S1-FND-WIRE-1) + system-setting PATCH
+    //   (system-manage, OPTIONAL) chưa build (để BE-9/QA). Audit action='CONFIG_UPDATE' theo done_when (API-09 dùng
+    //   COMPANY_SETTING_UPDATED — QA đối chiếu khi nghiệm thu).
+    status: "done",
     paths: ["apps/api/src/foundation/settings/**"],
     skills: ["code-review"],
     depends_on: ["S0-FND-DB-1", "S1-FND-AUDIT-1"],
@@ -420,16 +437,35 @@ export const backlog = [
     layer: "BE",
     title:
       "CompanyService /company/current (GET/PATCH có audit) + ModuleCatalogService /modules/my-apps (lọc permission+active+setting)",
-    zone: "yellow",
+    // REOPEN 2026-06-24 — gỡ plan_block (auto-loop 00:37). Đã chốt nguồn dữ liệu THẬT, hết "lơ lửng":
+    //   • enum: companies_status_chk = ('active','suspended') CHỮ THƯỜNG (mig 0002) — KHÔNG 'Suspended'.
+    //   • required_permissions: bảng `modules` (mig 0435, KHÁC system_modules SaaS) có metadata jsonb NHƯNG
+    //     seed để NULL ⇒ nguồn = HẰNG MODULE_APP_METADATA[code].requiredAnyPermissions trong service
+    //     (route/icon/requiredAny — §8.2), merge trên row DB. KHÔNG bịa cột modules.required_permissions.
+    //   • "company setting enabled": key `module.<code>.enabled` (§8.3) đọc qua SettingService precedence
+    //     company→system→default (default=true) ⇒ THÊM depends_on S1-FND-SETTING-1 (phụ thuộc ẩn của plan_block).
+    //   • deny-path RED viết-TRƯỚC = điều kiện DoD (#6) + micro-plan docs/plans/S1-FND-MODULE-1.md.
+    //   zone yellow→red: ghi audit CONFIG_UPDATE + lọc permission ⇒ crown/FULL gate (CLAUDE.md §6).
+    zone: "red",
     status: "todo",
     paths: ["apps/api/src/foundation/company/**", "apps/api/src/foundation/module-catalog/**"],
     skills: ["code-review"],
-    depends_on: ["S0-FND-SEED-1", "S1-FND-AUDIT-1"],
-    src: ["IMP02-STORY-005/006", "BACKEND-04 §8.1/§11.7"],
+    depends_on: ["S0-FND-SEED-1", "S1-FND-AUDIT-1", "S1-FND-SETTING-1"],
+    src: [
+      "IMP02-STORY-005/006",
+      "BACKEND-04 §8.1/§8.2/§8.3/§9.2/§9.3",
+      "DB-08 §8.2",
+      "mig 0435 (modules)",
+      "mig 0002 (companies_status_chk)",
+    ],
+    plan: "docs/plans/S1-FND-MODULE-1.md",
     done_when: [
-      "GET /foundation/company/current từ AuthContext (KHÔNG nhận company_id body); PATCH ghi audit CONFIG_UPDATE; company Suspended chặn nghiệp vụ",
-      "GET /modules/my-apps lọc: module is_active AND company setting enabled AND user có ≥1 required permission (đọc catalog modules spec, KHÔNG system_modules SaaS)",
-      "recent/favorite chưa có bảng → trả rỗng + TODO rõ (KHÔNG bịa); permission test user thiếu quyền → app bị lọc",
+      "GET /foundation/company/current đọc company TỪ AuthContext (bỏ qua company_id nếu client gửi trong body/query); permission FOUNDATION.COMPANY.VIEW (§9.2)",
+      "PATCH /foundation/company/current: permission FOUNDATION.COMPANY.UPDATE; ghi audit CONFIG_UPDATE (CompanyUpdated) trong tx withTenant với old/new/changed_fields; KHÔNG ghi audit khi 403",
+      "company.status='suspended' (CHỮ THƯỜNG — companies_status_chk mig 0002) → endpoint nghiệp vụ trả 403; tái dùng allow-list status==='active' ở auth path (mig 0430)",
+      "GET /modules/my-apps đọc bảng `modules` (mig 0435, KHÔNG system_modules SaaS) WHERE is_active AND deleted_at IS NULL; enabled = SettingService.resolve('module.<code>.enabled', default=true) precedence company→system→default (§8.3); required_permissions = MODULE_APP_METADATA[code].requiredAnyPermissions hằng trong service",
+      "Lọc my-apps: enabled AND (requiredAny rỗng → HIỆN | user có ≥1 → HIỆN | thiếu hết → ẨN); recent/favorite chưa có bảng → trả [] + TODO rõ (KHÔNG bịa)",
+      "deny-path RED viết-TRƯỚC: (a) PATCH thiếu FOUNDATION.COMPANY.UPDATE → 403 + 0 audit; (b) my-apps user thiếu requiredAny của 1 module → module BỊ LỌC; (c) 2-tenant: company A KHÔNG đọc/ghi company B (withTenant+RLS); (d) PATCH gửi company_id lạ trong body → bỏ qua, ghi đúng tenant AuthContext",
     ],
   },
   {
