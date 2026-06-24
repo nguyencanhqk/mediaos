@@ -194,6 +194,20 @@ export class SettingService {
       const [existing] = await this.repo.findOneCompanyTx(actor.companyId, key, tx);
       const [systemRef] = await this.repo.findOneSystemTx(key, tx);
 
+      // Sticky secret guard (deny TRƯỚC validateValue/upsert): nếu setting hiện hữu đang là SecretRef
+      // HOẶC isSensitive=true thì KHÔNG cho đổi value_type sang loại khác — chặn un-mask giá trị nhạy
+      // cảm thành plaintext ở /resolve. KHÔNG upsert, KHÔNG audit (giống các deny khác).
+      if (
+        existing &&
+        (existing.valueType === "SecretRef" || existing.isSensitive) &&
+        dto.valueType !== undefined &&
+        dto.valueType !== "SecretRef"
+      ) {
+        throw new BadRequestException(
+          `Không thể đổi value_type của setting nhạy cảm '${key}' ra khỏi SecretRef.`,
+        );
+      }
+
       // value_type: dto > existing > system > default. valueType ép phải có để validate.
       const defaultMeta = getSettingDefault(key);
       const valueType = (dto.valueType ??

@@ -302,6 +302,110 @@ describe("SettingService.updateCompanySetting (validate + audit-in-tx)", () => {
     expect(out.scope).toBe("company");
   });
 
+  it("sticky valueType: existing SecretRef sensitive + dto.valueType='String' → BadRequest, NO upsert, NO audit", async () => {
+    const existing = row({
+      settingKey: "smtp.password",
+      settingValue: "old-pw",
+      valueType: "SecretRef",
+      isSensitive: true,
+    });
+    const repo = makeRepo({
+      findOneCompanyTx: vi.fn().mockResolvedValue([existing]),
+      findOneSystemTx: vi.fn().mockResolvedValue([]),
+    });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await expect(
+      svc.updateCompanySetting(actor, "smtp.password", {
+        settingValue: "now-plaintext",
+        valueType: "String",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(repo.insertCompanyTx).not.toHaveBeenCalled();
+    expect(repo.updateCompanyTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("sticky valueType: existing isSensitive (non-SecretRef) + dto.valueType='Number' → BadRequest, NO upsert, NO audit", async () => {
+    const existing = row({
+      settingKey: "feature.secret_flag",
+      settingValue: "x",
+      valueType: "String",
+      isSensitive: true,
+    });
+    const repo = makeRepo({
+      findOneCompanyTx: vi.fn().mockResolvedValue([existing]),
+      findOneSystemTx: vi.fn().mockResolvedValue([]),
+    });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await expect(
+      svc.updateCompanySetting(actor, "feature.secret_flag", {
+        settingValue: 1,
+        valueType: "Number",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(repo.insertCompanyTx).not.toHaveBeenCalled();
+    expect(repo.updateCompanyTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("sticky valueType: existing SecretRef + dto.valueType='SecretRef' (unchanged) → upsert proceeds", async () => {
+    const existing = row({
+      settingKey: "smtp.password",
+      settingValue: "old-pw",
+      valueType: "SecretRef",
+      isSensitive: true,
+    });
+    const updated = row({
+      settingKey: "smtp.password",
+      settingValue: "vault://new",
+      valueType: "SecretRef",
+      isSensitive: true,
+    });
+    const repo = makeRepo({
+      findOneCompanyTx: vi.fn().mockResolvedValue([existing]),
+      findOneSystemTx: vi.fn().mockResolvedValue([]),
+      updateCompanyTx: vi.fn().mockResolvedValue([updated]),
+    });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await svc.updateCompanySetting(actor, "smtp.password", {
+      settingValue: "vault://new",
+      valueType: "SecretRef",
+    });
+    expect(repo.updateCompanyTx).toHaveBeenCalledTimes(1);
+    expect(audit.record).toHaveBeenCalledTimes(1);
+  });
+
+  it("sticky valueType: non-sensitive existing flow unchanged (valueType may change freely)", async () => {
+    const existing = row({
+      settingKey: "system.default_locale",
+      settingValue: "vi",
+      valueType: "String",
+      isSensitive: false,
+    });
+    const updated = row({
+      settingKey: "system.default_locale",
+      settingValue: 2,
+      valueType: "Number",
+      isSensitive: false,
+    });
+    const repo = makeRepo({
+      findOneCompanyTx: vi.fn().mockResolvedValue([existing]),
+      findOneSystemTx: vi.fn().mockResolvedValue([]),
+      updateCompanyTx: vi.fn().mockResolvedValue([updated]),
+    });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await svc.updateCompanySetting(actor, "system.default_locale", {
+      settingValue: 2,
+      valueType: "Number",
+    });
+    expect(repo.updateCompanyTx).toHaveBeenCalledTimes(1);
+    expect(audit.record).toHaveBeenCalledTimes(1);
+  });
+
   it("audit oldValues/newValues mask the value for a sensitive setting", async () => {
     const existing = row({
       settingKey: "smtp.password",
