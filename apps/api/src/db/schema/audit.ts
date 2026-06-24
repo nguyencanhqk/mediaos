@@ -87,7 +87,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -214,5 +214,12 @@ export const AUDIT_OBJECT_TYPES = [
   // mảng này CÙNG commit. Tới khi đó, updateSequence ghi audit sẽ vỡ CHECK trên Postgres thật ⇒ integration
   // test updateSequence GATE theo sự hiện diện 'sequence_counter' trong CHECK (skip có chú thích, KHÔNG xanh-giả).
   "sequence_counter",
+  // S1-FND-SETTING-1 settings (mig 0439): SettingService.updateCompanySetting (admin PATCH
+  // /foundation/company-settings/:key) ghi audit CONFIG_UPDATE object_type='company_setting' audit-in-tx
+  // app-tenant (old/new_values ĐÃ mask, KHÔNG secret_ref/secret material vào before/after — BẤT BIẾN #3).
+  // 'system_setting' cho nhánh system-manage PATCH (system-setting). Bảng settings/permission seed ĐÃ ở
+  // 0431/0435 — 0439 CHỈ mở rộng CHECK object_type (UNION ADD-only, append-only #2 nguyên vẹn).
+  "company_setting",
+  "system_setting",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
