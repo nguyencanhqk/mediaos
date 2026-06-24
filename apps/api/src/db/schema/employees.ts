@@ -1,7 +1,19 @@
 import { sql } from "drizzle-orm";
-import { check, date, index, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  check,
+  date,
+  index,
+  integer,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { currentCompanyDefault } from "./_helpers";
 import { companies } from "./companies";
+import { contractTypes, jobLevels } from "./hr-master";
 import { orgUnits } from "./org";
 import { positions } from "./positions";
 import { users } from "./users";
@@ -22,12 +34,21 @@ export const employeeProfiles = pgTable(
       .notNull()
       .default(currentCompanyDefault)
       .references(() => companies.id, { onDelete: "cascade" }),
+    // S2-HR-DB-1 (mig 0442): DB đã NỚI user_id → NULLABLE (employee tồn tại TRƯỚC khi gán account — DB-03 §7.2).
+    // Drizzle GIỮ .notNull() TẠM tới S2-HR-BE-2 (rework innerJoin→LEFT JOIN + cho insert employee-không-user);
+    // type chặt hơn DB = AN TOÀN (code hiện không insert NULL). unique (company_id,user_id) WHERE deleted_at IS NULL
+    // vẫn chặn 2 employee active cùng user (NULL phân biệt trong unique index Postgres).
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     employeeCode: text("employee_code"),
     orgUnitId: uuid("org_unit_id").references(() => orgUnits.id, { onDelete: "set null" }),
     positionId: uuid("position_id").references(() => positions.id, { onDelete: "set null" }),
+    // S2-HR-DB-1: FK master data DB-03 (nullable, additive). Giữ contractType text + baseSalary cũ (back-compat).
+    jobLevelId: uuid("job_level_id").references(() => jobLevels.id, { onDelete: "set null" }),
+    contractTypeId: uuid("contract_type_id").references(() => contractTypes.id, {
+      onDelete: "set null",
+    }),
     directManagerId: uuid("direct_manager_id").references(() => users.id, { onDelete: "set null" }),
     workType: text("work_type").notNull().default("offline"),
     employmentType: text("employment_type").notNull().default("full_time"),
@@ -63,10 +84,7 @@ export const employeeProfiles = pgTable(
       sql`employment_type IN ('full_time','part_time','freelancer','intern','probation')`,
     ),
     check("emp_salary_type_check", sql`salary_type IN ('monthly','hourly','project')`),
-    check(
-      "emp_status_check",
-      sql`status IN ('active','inactive','resigned','terminated')`,
-    ),
+    check("emp_status_check", sql`status IN ('active','inactive','resigned','terminated')`),
   ],
 );
 
@@ -120,3 +138,31 @@ export const employeeManagerRelations = pgTable(
 
 export type EmployeeManagerRelation = typeof employeeManagerRelations.$inferSelect;
 export type NewEmployeeManagerRelation = typeof employeeManagerRelations.$inferInsert;
+
+/**
+ * employee_status_histories — log vòng đời trạng thái nhân viên (S2-HR-DB-1, mig 0442 / DB-03).
+ * APPEND-ONLY (BẤT BIẾN #2): app role chỉ SELECT,INSERT — KHÔNG UPDATE/DELETE. RLS+FORCE company_id.
+ * Mỗi lần đổi status (S2-HR-BE-2) ghi 1 hàng old→new + reason + changed_by trong cùng tx.
+ */
+export const employeeStatusHistories = pgTable(
+  "employee_status_histories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employeeProfiles.id, { onDelete: "cascade" }),
+    oldStatus: text("old_status"),
+    newStatus: text("new_status").notNull(),
+    reason: text("reason"),
+    changedBy: uuid("changed_by").references(() => users.id, { onDelete: "set null" }),
+    changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("esh_company_employee_idx").on(t.companyId, t.employeeId)],
+);
+
+export type EmployeeStatusHistory = typeof employeeStatusHistories.$inferSelect;
+export type NewEmployeeStatusHistory = typeof employeeStatusHistories.$inferInsert;
