@@ -20,16 +20,16 @@
  * tenant isolation at the DB layer (RLS+FORCE) is owned by the migration lane, not here.
  */
 
-import { Injectable, Logger } from '@nestjs/common';
-import type { PermissionDecision } from '../../permission/permission.types';
-import type { CanInput } from '../../permission/permission.types';
+import { Injectable, Logger } from "@nestjs/common";
+import type { PermissionDecision } from "../../permission/permission.types";
+import type { CanInput } from "../../permission/permission.types";
 import {
   FOUNDATION_FILE_PERMISSION,
   FilePolicyAction,
   type FilePermissionInput,
   type FilePolicyDecision,
-} from './file-policy.types';
-import type { FileOwnerPermissionResolver } from './resolvers/file-owner-permission-resolver';
+} from "./file-policy.types";
+import type { FileOwnerPermissionResolver } from "./resolvers/file-owner-permission-resolver";
 
 /**
  * The slice of PermissionService this layer depends on. Declared here (not imported from
@@ -41,15 +41,19 @@ export interface FilePermissionChecker {
 }
 
 /** Sentinel used in the registry key to mark a module-wildcard (resolver matches every entity). */
-const MODULE_WILDCARD = '*';
+const MODULE_WILDCARD = "*";
 
 /** Only the decision-method keys of the resolver (excludes moduleCode/entityTypes) — keeps the dynamic
  *  dispatch `resolver[method]` provably callable (no unsafe index). */
+// NonNullable strips the `| undefined` that an OPTIONAL resolver method (e.g. canUnlinkFile?) carries —
+// without it the optional property fails the `extends (...) => Promise<boolean>` check and maps to never,
+// wrongly excluding its key. Optionality means a resolver may OMIT the method, not that the method name is
+// absent from the dispatch map (the `typeof resolver[method] === "function"` guard handles a missing impl).
 type FileResolverMethod = Exclude<
   {
-    [K in keyof FileOwnerPermissionResolver]-?: FileOwnerPermissionResolver[K] extends (
-      input: FilePermissionInput,
-    ) => Promise<boolean>
+    [K in keyof FileOwnerPermissionResolver]-?: NonNullable<
+      FileOwnerPermissionResolver[K]
+    > extends (input: FilePermissionInput) => Promise<boolean>
       ? K
       : never;
   }[keyof FileOwnerPermissionResolver],
@@ -58,11 +62,14 @@ type FileResolverMethod = Exclude<
 
 /** Maps a FilePolicyAction to the resolver method that answers it. */
 const RESOLVER_METHOD: Readonly<Record<FilePolicyAction, FileResolverMethod>> = Object.freeze({
-    [FilePolicyAction.View]: 'canViewFile',
-    [FilePolicyAction.Download]: 'canDownloadFile',
-    [FilePolicyAction.Link]: 'canLinkFile',
-    [FilePolicyAction.Delete]: 'canDeleteFile',
-  });
+  [FilePolicyAction.View]: "canViewFile",
+  [FilePolicyAction.Download]: "canDownloadFile",
+  [FilePolicyAction.Link]: "canLinkFile",
+  // OPTIONAL on the resolver interface — a resolver may omit it; decideViaResolver falls back to
+  // FOUNDATION.FILE.UNLINK when the method is absent (deny-by-default preserved).
+  [FilePolicyAction.Unlink]: "canUnlinkFile",
+  [FilePolicyAction.Delete]: "canDeleteFile",
+});
 
 @Injectable()
 export class FilePolicyService {
@@ -83,7 +90,7 @@ export class FilePolicyService {
   registerResolver(resolver: FileOwnerPermissionResolver): void {
     const moduleKey = this.normalize(resolver.moduleCode);
     if (!moduleKey) {
-      throw new Error('FilePolicyService.registerResolver: resolver.moduleCode must be non-empty');
+      throw new Error("FilePolicyService.registerResolver: resolver.moduleCode must be non-empty");
     }
 
     const entityTypes = resolver.entityTypes ?? [];
@@ -120,6 +127,10 @@ export class FilePolicyService {
     return this.decide({ ...input, action: FilePolicyAction.Link });
   }
 
+  canUnlink(input: FilePermissionInput): Promise<FilePolicyDecision> {
+    return this.decide({ ...input, action: FilePolicyAction.Unlink });
+  }
+
   canDelete(input: FilePermissionInput): Promise<FilePolicyDecision> {
     return this.decide({ ...input, action: FilePolicyAction.Delete });
   }
@@ -131,14 +142,18 @@ export class FilePolicyService {
     if (!input.companyId || !input.userId) {
       this.logger.warn(
         `file-policy deny-tenant: missing tenant scope ` +
-          `(requestId=${input.requestId ?? '-'} module=${input.moduleCode} entity=${input.entityType})`,
+          `(requestId=${input.requestId ?? "-"} module=${input.moduleCode} entity=${input.entityType})`,
       );
-      return { allow: false, reason: 'deny-tenant' };
+      return { allow: false, reason: "deny-tenant" };
     }
 
-    // 2. Resolver dispatch — exact (module,entity) then module-wildcard. Matched resolver is FINAL.
+    // 2. Resolver dispatch — exact (module,entity) then module-wildcard. Matched resolver is FINAL,
+    //    EXCEPT when the resolver does not implement the (optional) method for this action — then we
+    //    fall through to the FOUNDATION.FILE.* fallback (deny-by-default). This only ever applies to
+    //    Unlink (canUnlinkFile?), which is optional on the resolver interface (S1-FND-FILE-1).
     const resolver = this.lookupResolver(input.moduleCode, input.entityType);
-    if (resolver) {
+    const method = RESOLVER_METHOD[input.action];
+    if (resolver && typeof resolver[method] === "function") {
       return this.decideViaResolver(resolver, input);
     }
 
@@ -152,14 +167,16 @@ export class FilePolicyService {
   ): Promise<FilePolicyDecision> {
     const method = RESOLVER_METHOD[input.action];
     try {
-      const ok = await resolver[method](input);
+      // method existence is guaranteed by the caller (decide) before reaching here.
+      const fn = resolver[method] as (i: FilePermissionInput) => Promise<boolean>;
+      const ok = await fn.call(resolver, input);
       // Matched resolver verdict is final — NEVER escalate to FOUNDATION.FILE.* (BACKEND-11 §11.10).
       return ok
-        ? { allow: true, reason: 'allow-resolver' }
-        : { allow: false, reason: 'deny-resolver' };
+        ? { allow: true, reason: "allow-resolver" }
+        : { allow: false, reason: "deny-resolver" };
     } catch (err) {
-      this.logError('resolver threw', input, err);
-      return { allow: false, reason: 'deny-error' };
+      this.logError("resolver threw", input, err);
+      return { allow: false, reason: "deny-error" };
     }
   }
 
@@ -174,11 +191,11 @@ export class FilePolicyService {
         resourceId: input.fileId ?? null,
       });
       return decision.allow
-        ? { allow: true, reason: 'allow-foundation' }
-        : { allow: false, reason: 'deny-foundation' };
+        ? { allow: true, reason: "allow-foundation" }
+        : { allow: false, reason: "deny-foundation" };
     } catch (err) {
-      this.logError('permission.can() threw', input, err);
-      return { allow: false, reason: 'deny-error' };
+      this.logError("permission.can() threw", input, err);
+      return { allow: false, reason: "deny-error" };
     }
   }
 
@@ -207,7 +224,7 @@ export class FilePolicyService {
     // Fail-closed log carries ONLY non-sensitive correlation metadata (CLAUDE.md §2.3).
     this.logger.error(
       `file-policy deny-error: ${what} ` +
-        `(requestId=${input.requestId ?? '-'} module=${input.moduleCode} ` +
+        `(requestId=${input.requestId ?? "-"} module=${input.moduleCode} ` +
         `entity=${input.entityType} action=${input.action})`,
       err instanceof Error ? err.stack : String(err),
     );

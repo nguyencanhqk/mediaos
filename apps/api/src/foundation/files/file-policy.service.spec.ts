@@ -262,6 +262,70 @@ describe("FilePolicyService", () => {
     });
   });
 
+  // 9. canUnlink deny-by-default (Unlink is the ONLY new action — lock it fail-closed) ─────
+  describe("canUnlink deny-by-default (additive Unlink action)", () => {
+    it("(a) no resolver match AND no FOUNDATION.FILE.UNLINK → DENY (fallback), never ALLOW", async () => {
+      // beforeEach service = FilePolicyService(denyDecision()). No resolver registered → fallback path.
+      const decision = await service.canUnlink(
+        baseInput({ moduleCode: "UNKNOWN", entityType: "Mystery" }),
+      );
+      expect(decision.allow).toBe(false);
+      expect(decision.reason).toBe("deny-foundation");
+      // fallback consulted the FOUNDATION.FILE.UNLINK permission (action='unlink', resourceType='foundation-file').
+      expect(permission.calls).toHaveLength(1);
+      expect(permission.calls[0].action).toBe("unlink");
+      expect(permission.calls[0].resourceType).toBe("foundation-file");
+    });
+
+    it("(b) resolver MATCHES (module,entity) but does NOT implement canUnlinkFile → falls back to deny-by-default, never ALLOW", async () => {
+      // makeResolver omits canUnlinkFile (optional method absent). A matched resolver MUST NOT cause a
+      // false-ALLOW for Unlink — the policy falls through to FOUNDATION.FILE.UNLINK (here: deny).
+      const hr = makeResolver("HR", ["EmployeeContract"], true); // would ALLOW link/view/etc if asked
+      expect((hr as { canUnlinkFile?: unknown }).canUnlinkFile).toBeUndefined();
+      service.registerResolver(hr);
+
+      const decision = await service.canUnlink(
+        baseInput({ moduleCode: "HR", entityType: "EmployeeContract" }),
+      );
+      expect(decision.allow).toBe(false);
+      expect(decision.reason).toBe("deny-foundation");
+      // resolver's OTHER methods were NOT invoked for the unlink decision (no canUnlinkFile to call).
+      expect(hr.calls).toEqual([]);
+      // fallback WAS consulted (resolver had no unlink verdict) and denied via FOUNDATION.FILE.UNLINK.
+      expect(permission.calls).toHaveLength(1);
+      expect(permission.calls[0].action).toBe("unlink");
+    });
+
+    it("(c) resolver THAT implements canUnlinkFile is final (ALLOW) — no fallback escalation", async () => {
+      // Sanity that the optional-method path still works when present: implement canUnlinkFile=true with a
+      // GRANTING fallback that must NOT be consulted (proves resolver verdict is final, like the others).
+      const grant = makePermissionMock(allowDecision());
+      service = new FilePolicyService(grant.service);
+      const calls: string[] = [];
+      const hr: FileOwnerPermissionResolver & { calls: string[] } = {
+        moduleCode: "HR",
+        entityTypes: ["EmployeeContract"],
+        calls,
+        canViewFile: vi.fn(async () => true),
+        canDownloadFile: vi.fn(async () => true),
+        canLinkFile: vi.fn(async () => true),
+        canDeleteFile: vi.fn(async () => true),
+        canUnlinkFile: vi.fn(async (i: FilePermissionInput) => {
+          calls.push(`unlink:${i.entityType}`);
+          return false; // resolver DENIES → final, no escalation to the granting fallback
+        }),
+      };
+      service.registerResolver(hr);
+
+      const decision = await service.canUnlink(
+        baseInput({ moduleCode: "HR", entityType: "EmployeeContract" }),
+      );
+      expect(decision.allow).toBe(false); // resolver verdict is final
+      expect(calls).toEqual(["unlink:EmployeeContract"]);
+      expect(grant.calls).toHaveLength(0); // fallback NOT consulted (resolver matched + answered)
+    });
+  });
+
   // 8. duplicate-registration ─────────────────────────────────────────────────
   describe("duplicate registration loud-fail", () => {
     it("throws when two resolvers register the same (module_code, entity_type)", () => {

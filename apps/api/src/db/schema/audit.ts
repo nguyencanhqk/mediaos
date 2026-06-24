@@ -87,7 +87,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -221,5 +221,8 @@ export const AUDIT_OBJECT_TYPES = [
   // 0431/0435 — 0439 CHỈ mở rộng CHECK object_type (UNION ADD-only, append-only #2 nguyên vẹn).
   "company_setting",
   "system_setting",
+  // S1-FND-FILE-1 (mig 0440): upload/link/unlink/delete file ghi audit object_type 'file' (Upload/Delete) / 'file_link' (Link/Unlink) audit-in-tx; masker che storage_path/signed_url. UNION ADD-only.
+  "file",
+  "file_link",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
