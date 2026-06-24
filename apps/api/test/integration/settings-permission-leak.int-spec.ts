@@ -33,7 +33,12 @@ import {
 
 const COMPANY_ADMIN_ROLE = "00000000-0000-0000-0000-000000000001";
 
-describe.skipIf(!hasDb)("S1-FND-SETTING-1 settings permission + leak + audit", () => {
+// Gate: hasDb (DATABASE_URL+DIRECT) + LANE_DB (DB cô lập đã migrate 0439). THIẾU LANE_DB → SKIP để
+// KHÔNG chạm DB dev chung 'mediaos' (chưa có 'company_setting' trong CHECK ⇒ ô nhiễm + đỏ-giả).
+// Cùng mẫu đã vá ở migration-smoke.int-spec.ts:106 (runIsolatedDb = hasDb && !!process.env.LANE_DB).
+const runIsolatedDb = hasDb && !!process.env.LANE_DB;
+
+describe.skipIf(!runIsolatedDb)("S1-FND-SETTING-1 settings permission + leak + audit", () => {
   const direct = directPool();
   const db = new DatabaseService();
   const permission = new PermissionService(new PermissionRepository(db));
@@ -186,11 +191,11 @@ describe.skipIf(!hasDb)("S1-FND-SETTING-1 settings permission + leak + audit", (
   });
 
   // ── BẤT BIẾN #2: audit_logs append-only — app role KHÔNG UPDATE/DELETE (gated CHECK 'company_setting') ──
-  it("append-only: app role UPDATE/DELETE on company_setting audit row is DENIED", async () => {
+  // Gate ở CẤP it (ctx.skip = runtime skip THẬT, KHÔNG early-return = pass-câm). hasCompanySettingType
+  // chỉ biết sau beforeAll nên skipIf(collect-time) không dùng được → ctx.skip() là tương đương runtime.
+  it("append-only: app role UPDATE/DELETE on company_setting audit row is DENIED", async (ctx) => {
     if (!hasCompanySettingType) {
-      console.warn(
-        "[skip] append-only: 'company_setting' chưa có trong CHECK audit_logs (cần mig 0439 / LANE_DB).",
-      );
+      ctx.skip(); // 'company_setting' chưa có trong CHECK audit_logs (cần mig 0439 / LANE_DB).
       return;
     }
     const ins = await direct.query(
@@ -214,7 +219,8 @@ describe.skipIf(!hasDb)("S1-FND-SETTING-1 settings permission + leak + audit", (
 });
 
 // ── audit-in-tx: gated CHECK 'company_setting' (KHÔNG xanh-giả nếu mig 0439 chưa áp trên DB band thấp) ──
-describe.skipIf(!hasDb)("S1-FND-SETTING-1 audit CONFIG_UPDATE in-tx", () => {
+// Gate suite = hasDb && LANE_DB (DB cô lập đã migrate 0439) — KHÔNG chạm DB dev chung 'mediaos'.
+describe.skipIf(!runIsolatedDb)("S1-FND-SETTING-1 audit CONFIG_UPDATE in-tx", () => {
   const direct = directPool();
   const db = new DatabaseService();
   const permission = new PermissionService(new PermissionRepository(db));
@@ -248,12 +254,11 @@ describe.skipIf(!hasDb)("S1-FND-SETTING-1 audit CONFIG_UPDATE in-tx", () => {
     await direct.end();
   });
 
-  it("PATCH company-setting → exactly 1 audit_logs row CONFIG_UPDATE company_setting, masked snapshot", async () => {
+  // Gate ở CẤP it (ctx.skip = runtime skip THẬT, KHÔNG early-return = pass-câm). hasType chỉ biết sau
+  // beforeAll nên dùng ctx.skip() (runtime) thay cho skipIf(collect-time).
+  it("PATCH company-setting → exactly 1 audit_logs row CONFIG_UPDATE company_setting, masked snapshot", async (ctx) => {
     if (!hasType) {
-      // mig 0439 chưa áp trên DB này → INSERT audit sẽ vỡ CHECK ⇒ SKIP có chú thích (KHÔNG xanh-giả).
-      console.warn(
-        "[skip] audit-in-tx: 'company_setting' chưa có trong CHECK audit_logs (cần mig 0439 / LANE_DB).",
-      );
+      ctx.skip(); // mig 0439 chưa áp trên DB này → 'company_setting' chưa có trong CHECK audit_logs.
       return;
     }
     const key = `audit.locale.${A.slug}`;
@@ -273,8 +278,11 @@ describe.skipIf(!hasDb)("S1-FND-SETTING-1 audit CONFIG_UPDATE in-tx", () => {
     expect(Array.isArray(cf) ? cf : []).toContain("settingValue");
   });
 
-  it("business rollback → NO audit row left (audit + mutation same tx)", async () => {
-    if (!hasType) return; // gated cùng lý do trên
+  it("business rollback → NO audit row left (audit + mutation same tx)", async (ctx) => {
+    if (!hasType) {
+      ctx.skip(); // gated cùng lý do trên (runtime skip THẬT, KHÔNG pass-câm).
+      return;
+    }
     const before = await direct.query(
       `SELECT count(*)::int AS n FROM audit_logs WHERE company_id=$1 AND action='CONFIG_UPDATE_ROLLBACK_PROBE'`,
       [A.companyId],
