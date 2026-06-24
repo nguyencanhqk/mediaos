@@ -2,7 +2,7 @@ import "reflect-metadata";
 import { ExecutionContext, ForbiddenException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { DatabaseService } from "../../src/db/db.service";
 import { AuditService } from "../../src/events/audit.service";
 import { PermissionGuard } from "../../src/permission/guards/permission.guard";
@@ -313,18 +313,34 @@ describe.skipIf(!runIsolatedDb)("S1-FND-SETTING-1 audit COMPANY_SETTING_UPDATED 
     expect(afterRow.rows[0].n).toBe(beforeRow.rows[0].n);
   });
 
-  // (b) TRUE in-transaction rollback (BẤT BIẾN #2 — audit + mutation CÙNG commit/rollback): thực hiện
-  // upsert company_setting + audit.record(tx) THẬT trong MỘT withTenant, rồi THROW SAU audit để ép DB
-  // rollback. Verify CẢ company_setting row LẪN audit_logs row biến mất sau rollback (chứng minh audit
-  // KHÔNG commit độc lập với mutation). KHÁC test (a): lỗi xảy ra SAU khi đã ghi audit trong tx — đúng
-  // kịch bản QA yêu cầu (post-write error trong cùng withTenant tx → audit cũng rollback).
-  it("in-tx rollback: post-audit error rolls back BOTH the upsert AND the audit row (same tx)", async (ctx) => {
+  // (b) TRUE in-transaction rollback của PRODUCTION PATH (BẤT BIẾN #2 — audit + mutation CÙNG commit/
+  // rollback): drive svc.updateCompanySetting() THẬT (KHÔNG replay tx bằng tay) — spy audit.record gọi-qua
+  // implementation THẬT (audit row ĐƯỢC INSERT vào tx production) RỒI THROW NGAY SAU đó ⇒ ép lỗi DB-level
+  // XẢY RA SAU audit.record() trong CÙNG db.withTenant tx của service. Đây ĐÚNG kịch bản QA §30 yêu cầu:
+  //   (i)  updateCompanySetting REJECT,
+  //   (ii) KHÔNG còn audit_logs row cho key (audit ghi trong tx bị rollback cùng upsert),
+  //   (iii) company_settings.setting_value KHÔNG đổi (upsert cũng rollback).
+  // KHÁC test (a) value-type-mismatch (throw TẠI validateValue TRƯỚC upsert+audit): ở đây lỗi nằm SAU khi
+  // production method đã ghi audit trong tx ⇒ chứng minh audit KHÔNG commit độc lập với mutation.
+  // KHÔNG sửa setting.service.ts — chỉ spy AuditService trong int-spec (in-scope, không đụng production code).
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("in-tx rollback (production path): post-audit error in updateCompanySetting rolls back BOTH upsert AND audit row", async (ctx) => {
     if (!hasType) {
       ctx.skip(); // gated cùng lý do trên (runtime skip THẬT, KHÔNG pass-câm).
       return;
     }
-    const rbKey = `rollback.probe.${A.slug}`;
-    const sentinel = new Error("forced post-audit failure to assert tx rollback");
+    // Seed system fallback để updateCompanySetting suy ra value_type=String (key chưa có company override).
+    const rbKey = `rollback.prod.${A.slug}`;
+    await direct.query(
+      `INSERT INTO system_settings (setting_key, setting_value, value_type, category, module_code, is_public, is_sensitive, status)
+       VALUES ($1,'"vi"'::jsonb,'String','General','SYSTEM', true, false,'Active')
+       ON CONFLICT (setting_key) WHERE status='Active' DO NOTHING`,
+      [rbKey],
+    );
+    const sentinel = new Error("forced post-audit failure to assert tx rollback (production path)");
 
     const auditBefore = await direct.query(
       `SELECT count(*)::int AS n FROM audit_logs
@@ -332,63 +348,43 @@ describe.skipIf(!runIsolatedDb)("S1-FND-SETTING-1 audit COMPANY_SETTING_UPDATED 
       [A.companyId, rbKey],
     );
     const settingBefore = await direct.query(
-      `SELECT count(*)::int AS n FROM company_settings WHERE company_id=$1 AND setting_key=$2`,
+      `SELECT setting_value FROM company_settings WHERE company_id=$1 AND setting_key=$2`,
       [A.companyId, rbKey],
     );
 
+    // Spy audit.record: gọi-qua implementation THẬT (audit row ĐƯỢC ghi vào tx production) RỒI ném lỗi
+    // NGAY SAU — mô phỏng lỗi DB-level xảy ra sau audit.record() trong cùng withTenant tx của service.
+    const realRecord = audit.record.bind(audit);
+    const spy = vi.spyOn(audit, "record").mockImplementation(async (tx, entry): Promise<void> => {
+      await realRecord(tx, entry); // INSERT audit row THẬT vào tx production…
+      throw sentinel; // …rồi lỗi NGAY SAU ⇒ Postgres ROLLBACK toàn bộ tx (upsert + audit).
+    });
+
+    // updateCompanySetting (production) PHẢI reject (lỗi cuốn ra khỏi withTenant).
     await expect(
-      db.withTenant(A.companyId, async (tx) => {
-        // 1) upsert company_setting THẬT (qua repo, RLS context đã set bởi withTenant).
-        const [inserted] = await repo.insertCompanyTx(
-          A.companyId,
-          {
-            companyId: A.companyId,
-            settingKey: rbKey,
-            settingValue: "vi" as never,
-            valueType: "String",
-            category: "General",
-            moduleCode: "SYSTEM",
-            isPublic: false,
-            isSensitive: false,
-            isEncrypted: false,
-            status: "Active",
-            createdBy: adminUserId,
-            updatedBy: adminUserId,
-          },
-          tx,
-        );
-        // 2) audit.record THẬT trong CÙNG tx (BẤT BIẾN #2 append-only, object_type='company_setting').
-        await audit.record(tx, {
-          action: "COMPANY_SETTING_UPDATED",
-          objectType: "company_setting",
-          objectId: inserted.id,
-          actorUserId: adminUserId,
-          actorType: "User",
-          entityType: "company_setting",
-          entityId: inserted.id,
-          entityCode: rbKey,
-          oldValues: {},
-          newValues: { settingValue: "vi" },
-          resultStatus: "Success",
-          dataScope: "Company",
-        });
-        // 3) Lỗi nghiệp vụ SAU khi đã upsert + audit trong tx ⇒ Postgres ROLLBACK toàn bộ.
-        throw sentinel;
+      svc.updateCompanySetting({ id: adminUserId, companyId: A.companyId }, rbKey, {
+        settingValue: "en",
+        reason: "in-tx rollback probe",
       }),
     ).rejects.toThrow(sentinel);
+    expect(spy).toHaveBeenCalledTimes(1); // chắc chắn ĐÃ vào audit.record (lỗi nằm SAU audit, KHÔNG phải fail-fast).
 
-    // Sau rollback: KHÔNG còn company_setting row (upsert bị rollback)…
-    const settingAfter = await direct.query(
-      `SELECT count(*)::int AS n FROM company_settings WHERE company_id=$1 AND setting_key=$2`,
-      [A.companyId, rbKey],
-    );
-    expect(settingAfter.rows[0].n).toBe(settingBefore.rows[0].n);
-    // …VÀ KHÔNG còn audit row (audit ghi trong cùng tx cũng bị rollback — append-only KHÔNG nửa vời).
+    // (ii) KHÔNG còn audit row cho key — audit ghi trong tx bị rollback cùng upsert (append-only KHÔNG nửa vời).
     const auditAfter = await direct.query(
       `SELECT count(*)::int AS n FROM audit_logs
          WHERE company_id=$1 AND object_type='company_setting' AND entity_code=$2`,
       [A.companyId, rbKey],
     );
     expect(auditAfter.rows[0].n).toBe(auditBefore.rows[0].n);
+
+    // (iii) company_settings.setting_value KHÔNG đổi — upsert (insert mới) cũng bị rollback.
+    const settingAfter = await direct.query(
+      `SELECT setting_value FROM company_settings WHERE company_id=$1 AND setting_key=$2`,
+      [A.companyId, rbKey],
+    );
+    expect(settingAfter.rows.length).toBe(settingBefore.rows.length); // 0 trước & 0 sau (insert rollback)
+    expect(settingAfter.rows[0]?.setting_value).toBe(settingBefore.rows[0]?.setting_value);
+
+    await direct.query(`DELETE FROM system_settings WHERE setting_key = $1`, [rbKey]);
   });
 });
