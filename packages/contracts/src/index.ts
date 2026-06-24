@@ -93,6 +93,8 @@ export * from "./employees";
 export * from "./attendance";
 export * from "./leave";
 export * from "./finance";
+// S1-FND-FILE-1 File subsystem contracts (upload input / metadata / download-url / link DTOs)
+export * from "./files";
 export * from "./dashboard";
 export * from "./evaluation";
 export * from "./kpi";

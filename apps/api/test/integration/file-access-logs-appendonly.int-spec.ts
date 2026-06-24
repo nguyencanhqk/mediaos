@@ -11,9 +11,14 @@ import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../hel
  * REVOKE UPDATE,DELETE tường minh → UPDATE/DELETE bằng app role PHẢI BỊ TỪ CHỐI (permission denied).
  *
  * Mirror pattern: payslip-appendonly.int-spec.ts (G12-2).
+ *
+ * Gate: skipIf(!hasDb || !LANE_DB) — KHỚP files-rls-isolation.int-spec.ts. `.env` làm hasDb=true → nếu
+ * chỉ gate !hasDb thì suite chạy trên DB dev chung khi KHÔNG set LANE_DB ⇒ đỏ-giả (memory:
+ * integration-test-lane-db-gate). LANE_DB bắt buộc để chạy trên DB cô lập mediaos_<lane>.
  */
+const hasLaneDb = hasDb && !!process.env.LANE_DB;
 
-describe.skipIf(!hasDb)("FOUNDATION-DB-3 file_access_logs append-only (mediaos_app)", () => {
+describe.skipIf(!hasLaneDb)("FOUNDATION-DB-3 file_access_logs append-only (mediaos_app)", () => {
   const direct = directPool();
   const app = appPool();
 
@@ -61,10 +66,7 @@ describe.skipIf(!hasDb)("FOUNDATION-DB-3 file_access_logs append-only (mediaos_a
   });
 
   /** Run fn inside a transaction as app role with tenant context set. */
-  async function asTenant<T>(
-    companyId: string,
-    fn: (c: PoolClient) => Promise<T>,
-  ): Promise<T> {
+  async function asTenant<T>(companyId: string, fn: (c: PoolClient) => Promise<T>): Promise<T> {
     const c = await app.connect();
     try {
       await c.query("BEGIN");
@@ -97,10 +99,7 @@ describe.skipIf(!hasDb)("FOUNDATION-DB-3 file_access_logs append-only (mediaos_a
   it("app role UPDATE on file_access_logs is DENIED (append-only — REVOKE UPDATE)", async () => {
     await expect(
       asTenant(A.companyId, async (c) => {
-        await c.query(
-          `UPDATE file_access_logs SET action = 'Upload' WHERE id = $1`,
-          [logId],
-        );
+        await c.query(`UPDATE file_access_logs SET action = 'Upload' WHERE id = $1`, [logId]);
       }),
     ).rejects.toThrow(/permission denied/);
   });
