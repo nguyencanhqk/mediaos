@@ -412,6 +412,14 @@ export const tasks = pgTable(
     origin: text("origin").notNull().default("initial"),
     revisionRound: integer("revision_round").notNull().default(0),
     dueDate: timestamp("due_date", { withTimezone: true }),
+    // PM-1 (apps/projects, mig 0420 — ADDITIVE; status/task_type CHECK cũ GIỮ chạy cho FSM studio):
+    priority: text("priority").notNull().default("none"),
+    description: text("description"),
+    stateId: uuid("state_id").references((): AnyPgColumn => projectStates.id, {
+      onDelete: "set null",
+    }),
+    sequence: integer("sequence"),
+    startDate: timestamp("start_date", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -449,11 +457,123 @@ export const tasks = pgTable(
       "tasks_task_type_check",
       sql`task_type IN ('workflow_step', 'production', 'review', 'revision', 'meeting_action', 'office', 'finance', 'hr')`,
     ),
+    // PM-1 (mig 0420): work item kiểu Plane.
+    check("tasks_priority_check", sql`priority IN ('urgent', 'high', 'medium', 'low', 'none')`),
+    index("tasks_company_priority_active_idx")
+      .on(t.companyId, t.priority)
+      .where(sql`deleted_at IS NULL`),
+    index("tasks_company_state_active_idx")
+      .on(t.companyId, t.stateId)
+      .where(sql`deleted_at IS NULL`),
+    index("tasks_project_sequence_idx")
+      .on(t.companyId, t.projectId, t.sequence)
+      .where(sql`deleted_at IS NULL AND project_id IS NOT NULL`),
   ],
 );
 
 export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;
+
+// ─── PM-1 (apps/projects, mig 0420): project_states · labels · task_labels ───────
+// `task`=work item, `project`=project. Mở rộng ADDITIVE domain tasks/projects — KHÔNG bảng issue riêng.
+
+/**
+ * project_states — trạng thái tùy biến theo project (5 nhóm Plane: backlog/unstarted/started/completed/
+ * cancelled). Thay thế DẦN tasks.status (giữ song song để FSM studio tiếp tục dùng status legacy).
+ * Soft-delete + reorder (sort_order) + recolor. App role SELECT/INSERT/UPDATE (không hard-DELETE).
+ */
+export const projectStates = pgTable(
+  "project_states",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    stateGroup: text("state_group").notNull(),
+    color: text("color").notNull().default("#64748b"),
+    isDefault: boolean("is_default").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("project_states_company_id_idx").on(t.companyId),
+    index("project_states_company_project_idx").on(t.companyId, t.projectId),
+    uniqueIndex("project_states_project_name_active_uq")
+      .on(t.companyId, t.projectId, t.name)
+      .where(sql`deleted_at IS NULL`),
+    check(
+      "project_states_group_check",
+      sql`state_group IN ('backlog', 'unstarted', 'started', 'completed', 'cancelled')`,
+    ),
+  ],
+);
+
+export type ProjectState = typeof projectStates.$inferSelect;
+export type NewProjectState = typeof projectStates.$inferInsert;
+
+/** labels — nhãn màu theo project. Soft-delete + rename/recolor. */
+export const labels = pgTable(
+  "labels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    color: text("color").notNull().default("#6366f1"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("labels_company_id_idx").on(t.companyId),
+    index("labels_company_project_idx").on(t.companyId, t.projectId),
+    uniqueIndex("labels_project_name_active_uq")
+      .on(t.companyId, t.projectId, t.name)
+      .where(sql`deleted_at IS NULL`),
+  ],
+);
+
+export type Label = typeof labels.$inferSelect;
+export type NewLabel = typeof labels.$inferInsert;
+
+/** task_labels — gán nhãn cho work item (M:N). Link thuần: hard-DELETE khi gỡ (tiền lệ project_teams). */
+export const taskLabels = pgTable(
+  "task_labels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    labelId: uuid("label_id")
+      .notNull()
+      .references(() => labels.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("task_labels_task_id_idx").on(t.taskId),
+    index("task_labels_label_id_idx").on(t.labelId),
+    uniqueIndex("task_labels_uq").on(t.companyId, t.taskId, t.labelId),
+  ],
+);
+
+export type TaskLabel = typeof taskLabels.$inferSelect;
+export type NewTaskLabel = typeof taskLabels.$inferInsert;
 
 // ─── approval_requests ────────────────────────────────────────────────────────
 // Source of truth for step approval (ADR-0016). Created on submit (T2).

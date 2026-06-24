@@ -1,0 +1,1367 @@
+  # ==========================================================================
+  # LEAVE - My Balance (LEAVE-API-001..003)
+  # ==========================================================================
+  /api/v1/leave/me/balances:
+    get:
+      tags: [Leave - My Balance]
+      summary: Xem số dư phép của tôi
+      operationId: leaveListMyBalances
+      x-required-permission: LEAVE.BALANCE.VIEW_OWN
+      x-allowed-roles: [Employee, Manager, HR]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: period_year, in: query, required: false, schema: { type: integer } }
+        - { name: leave_type_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: include_zero_balance, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/leave/me/balances/{leave_type_id}:
+    get:
+      tags: [Leave - My Balance]
+      summary: Chi tiết số dư một loại phép của tôi
+      operationId: leaveGetMyBalance
+      x-required-permission: LEAVE.BALANCE.VIEW_OWN
+      x-allowed-roles: [Employee, Manager, HR]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: leave_type_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: period_year, in: query, required: false, schema: { type: integer } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/leave/me/balance-transactions:
+    get:
+      tags: [Leave - My Balance]
+      summary: Lịch sử giao dịch số dư phép của tôi
+      operationId: leaveListMyBalanceTransactions
+      x-required-permission: LEAVE.BALANCE.VIEW_OWN
+      x-allowed-roles: [Employee, Manager, HR]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - { name: period_year, in: query, required: false, schema: { type: integer } }
+        - { name: leave_type_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: transaction_type, in: query, required: false, schema: { type: string, enum: [ACCRUAL, USE, RESERVE, RELEASE, REFUND, ADJUSTMENT] } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ==========================================================================
+  # LEAVE - My Requests (LEAVE-API-101..107)
+  # ==========================================================================
+  /api/v1/leave/me/requests:
+    get:
+      tags: [Leave - My Requests]
+      summary: Danh sách đơn nghỉ của tôi
+      operationId: leaveListMyRequests
+      x-required-permission: LEAVE.REQUEST.VIEW_OWN
+      x-allowed-roles: [Employee, Manager, HR]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Draft, Pending, Approved, Rejected, Cancelled, Revoked] } }
+        - { name: leave_type_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/leave/me/requests/{request_id}:
+    get:
+      tags: [Leave - My Requests]
+      summary: Chi tiết đơn nghỉ của tôi
+      operationId: leaveGetMyRequest
+      x-required-permission: LEAVE.REQUEST.VIEW_OWN
+      x-allowed-roles: [Employee, Manager, HR]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/leave/requests:
+    post:
+      tags: [Leave - My Requests]
+      summary: Tạo/lưu nháp đơn nghỉ
+      operationId: leaveCreateRequest
+      x-required-permission: LEAVE.REQUEST.CREATE
+      x-allowed-roles: [Employee, Manager, HR]
+      x-data-scope: [Own]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: LEAVE_REQUEST_SUBMITTED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [leave_type_id, start_date, end_date, duration_type]
+              properties:
+                leave_type_id: { type: string, format: uuid }
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date }
+                duration_type: { type: string, enum: [FullDay, HalfDay, Hourly] }
+                half_day_period: { type: string, enum: [Morning, Afternoon], nullable: true }
+                start_time: { type: string, nullable: true }
+                end_time: { type: string, nullable: true }
+                reason: { type: string, nullable: true }
+                handover_note: { type: string, nullable: true }
+                file_ids: { type: array, items: { type: string, format: uuid } }
+                submit_now: { type: boolean, default: false }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+    get:
+      tags: [Leave - Requests]
+      summary: Danh sách đơn nghỉ theo quyền
+      operationId: leaveListRequests
+      x-required-permission: LEAVE.REQUEST.VIEW
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin, Payroll Officer]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Draft, Pending, Approved, Rejected, Cancelled, Revoked] } }
+        - { name: leave_type_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: approver_employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: duration_type, in: query, required: false, schema: { type: string, enum: [FullDay, HalfDay, Hourly] } }
+        - { name: include_sensitive, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/leave/requests/{request_id}:
+    patch:
+      tags: [Leave - My Requests]
+      summary: Cập nhật đơn nháp
+      operationId: leaveUpdateDraftRequest
+      x-required-permission: LEAVE.REQUEST.UPDATE_DRAFT
+      x-allowed-roles: [Employee]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                leave_type_id: { type: string, format: uuid }
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date }
+                duration_type: { type: string, enum: [FullDay, HalfDay, Hourly] }
+                half_day_period: { type: string, enum: [Morning, Afternoon], nullable: true }
+                start_time: { type: string, nullable: true }
+                end_time: { type: string, nullable: true }
+                reason: { type: string, nullable: true }
+                handover_note: { type: string, nullable: true }
+                file_ids: { type: array, items: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+    get:
+      tags: [Leave - Requests]
+      summary: Chi tiết đơn nghỉ theo quyền
+      operationId: leaveGetRequest
+      x-required-permission: LEAVE.REQUEST.VIEW
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin, Payroll Officer]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+    delete:
+      tags: [Leave - My Requests]
+      summary: Xóa/hủy nháp đơn nghỉ
+      operationId: leaveDeleteDraftRequest
+      x-required-permission: [LEAVE.REQUEST.UPDATE_DRAFT, LEAVE.REQUEST.CANCEL_OWN]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Employee]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { $ref: '#/components/responses/NoContent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/leave/requests/{request_id}/submit:
+    post:
+      tags: [Leave - My Requests]
+      summary: Gửi đơn nghỉ
+      operationId: leaveSubmitRequest
+      x-required-permission: LEAVE.REQUEST.SUBMIT
+      x-allowed-roles: [Employee]
+      x-data-scope: [Own]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: LEAVE_REQUEST_SUBMITTED
+      parameters:
+        - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/leave/requests/{request_id}/cancel:
+    post:
+      tags: [Leave - My Requests]
+      summary: Hủy đơn nghỉ của tôi
+      operationId: leaveCancelRequest
+      x-required-permission: LEAVE.REQUEST.CANCEL_OWN
+      x-allowed-roles: [Employee]
+      x-data-scope: [Own]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: LEAVE_REQUEST_CANCELLED
+      parameters:
+        - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cancel_reason]
+              properties:
+                cancel_reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ==========================================================================
+  # LEAVE - Approvals (LEAVE-API-203..208)
+  # ==========================================================================
+  /api/v1/leave/requests/pending-approvals:
+    get:
+      tags: [Leave - Approvals]
+      summary: Danh sách đơn chờ tôi duyệt
+      operationId: leaveListPendingApprovals
+      x-required-permission: [LEAVE.REQUEST.APPROVE, LEAVE.REQUEST.REJECT]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: leave_type_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/leave/requests/{request_id}/approve:
+    post:
+      tags: [Leave - Approvals]
+      summary: Duyệt đơn nghỉ
+      operationId: leaveApproveRequest
+      x-required-permission: LEAVE.REQUEST.APPROVE
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: LEAVE_REQUEST_APPROVED
+      parameters:
+        - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                approval_note: { type: string }
+                override_balance_check: { type: boolean, default: false }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/leave/requests/{request_id}/reject:
+    post:
+      tags: [Leave - Approvals]
+      summary: Từ chối đơn nghỉ
+      operationId: leaveRejectRequest
+      x-required-permission: LEAVE.REQUEST.REJECT
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: LEAVE_REQUEST_REJECTED
+      parameters:
+        - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reject_reason]
+              properties:
+                reject_reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/leave/requests/{request_id}/cancel-by-admin:
+    post:
+      tags: [Leave - Approvals]
+      summary: HR/Admin hủy đơn nghỉ
+      operationId: leaveCancelRequestByAdmin
+      x-required-permission: LEAVE.REQUEST.CANCEL_ANY
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Department, Company, System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: LEAVE_REQUEST_CANCELLED
+      parameters:
+        - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cancel_reason]
+              properties:
+                cancel_reason: { type: string }
+                notify_employee: { type: boolean, default: true }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/leave/requests/{request_id}/revoke:
+    post:
+      tags: [Leave - Approvals]
+      summary: Thu hồi đơn đã duyệt
+      operationId: leaveRevokeRequest
+      x-required-permission: LEAVE.REQUEST.REVOKE
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Department, Company, System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: LEAVE_REQUEST_REVOKED
+      parameters:
+        - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [revoke_reason]
+              properties:
+                revoke_reason: { type: string }
+                refund_balance: { type: boolean, default: true }
+                recalculate_attendance: { type: boolean, default: true }
+                notify_employee: { type: boolean, default: true }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/leave/requests/{request_id}/approvals:
+    get:
+      tags: [Leave - Approvals]
+      summary: Lịch sử xử lý đơn nghỉ
+      operationId: leaveListRequestApprovals
+      x-required-permission: [LEAVE.AUDIT_LOG.VIEW, LEAVE.REQUEST.VIEW]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ==========================================================================
+  # LEAVE - Calculation (LEAVE-API-301..302)
+  # ==========================================================================
+  /api/v1/leave/requests/calculate:
+    post:
+      tags: [Leave - Calculation]
+      summary: Preview số ngày/giờ nghỉ và balance
+      operationId: leaveCalculateRequest
+      x-required-permission: [LEAVE.REQUEST.CREATE, LEAVE.REQUEST.VIEW]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Employee, Manager, HR, Company Admin]
+      x-data-scope: [Own, Team, Department, Company]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [leave_type_id, start_date, end_date, duration_type]
+              properties:
+                employee_id: { type: string, format: uuid, nullable: true }
+                leave_type_id: { type: string, format: uuid }
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date }
+                duration_type: { type: string, enum: [FullDay, HalfDay, Hourly] }
+                half_day_period: { type: string, enum: [Morning, Afternoon], nullable: true }
+                start_time: { type: string, nullable: true }
+                end_time: { type: string, nullable: true }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/leave/requests/validate:
+    post:
+      tags: [Leave - Calculation]
+      summary: Validate rule trước khi submit
+      operationId: leaveValidateRequest
+      x-required-permission: [LEAVE.REQUEST.CREATE, LEAVE.REQUEST.SUBMIT]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Employee, Manager, HR, Company Admin]
+      x-data-scope: [Own, Team, Department, Company]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [leave_type_id, start_date, end_date, duration_type]
+              properties:
+                employee_id: { type: string, format: uuid, nullable: true }
+                leave_type_id: { type: string, format: uuid }
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date }
+                duration_type: { type: string, enum: [FullDay, HalfDay, Hourly] }
+                half_day_period: { type: string, enum: [Morning, Afternoon], nullable: true }
+                start_time: { type: string, nullable: true }
+                end_time: { type: string, nullable: true }
+                reason: { type: string, nullable: true }
+                file_ids: { type: array, items: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ==========================================================================
+  # LEAVE - Calendar (LEAVE-API-401..403)
+  # ==========================================================================
+  /api/v1/leave/calendar/me:
+    get:
+      tags: [Leave - Calendar]
+      summary: Lịch nghỉ của tôi
+      operationId: leaveGetMyCalendar
+      x-required-permission: LEAVE.CALENDAR.VIEW_OWN
+      x-allowed-roles: [Employee, Manager, HR]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: from_date, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: true, schema: { type: string, format: date } }
+        - { name: view_mode, in: query, required: false, schema: { type: string, enum: [Month, Week, Day, List] } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Approved, Pending, All] } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/leave/calendar/team:
+    get:
+      tags: [Leave - Calendar]
+      summary: Lịch nghỉ team
+      operationId: leaveGetTeamCalendar
+      x-required-permission: LEAVE.CALENDAR.VIEW_TEAM
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - { name: from_date, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: true, schema: { type: string, format: date } }
+        - { name: view_mode, in: query, required: false, schema: { type: string, enum: [Month, Week, Day, List] } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: leave_type_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Approved, Pending, All] } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/leave/calendar:
+    get:
+      tags: [Leave - Calendar]
+      summary: Lịch nghỉ theo scope
+      operationId: leaveGetCalendar
+      x-required-permission: [LEAVE.CALENDAR.VIEW_TEAM, LEAVE.CALENDAR.VIEW_COMPANY]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - { name: from_date, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: true, schema: { type: string, format: date } }
+        - { name: view_mode, in: query, required: false, schema: { type: string, enum: [Month, Week, Day, List] } }
+        - { name: scope, in: query, required: false, schema: { type: string, enum: [Own, Team, Department, Company] } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: leave_type_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Approved, Pending, All] } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ==========================================================================
+  # LEAVE - Types (LEAVE-API-501..505)
+  # ==========================================================================
+  /api/v1/leave/types:
+    get:
+      tags: [Leave - Types]
+      summary: Lấy danh sách loại nghỉ
+      operationId: leaveListTypes
+      x-required-permission: [LEAVE.TYPE.VIEW, LEAVE.REQUEST.CREATE]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Employee, Manager, HR, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Active, Inactive, All] } }
+        - { name: is_paid, in: query, required: false, schema: { type: boolean } }
+        - { name: is_balance_required, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+    post:
+      tags: [Leave - Types]
+      summary: Tạo loại nghỉ
+      operationId: leaveCreateType
+      x-required-permission: LEAVE.TYPE.CREATE
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: LEAVE_TYPE_CREATED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [leave_type_code, name, unit]
+              properties:
+                leave_type_code: { type: string }
+                name: { type: string }
+                description: { type: string, nullable: true }
+                unit: { type: string, enum: [Day, Hour] }
+                is_paid: { type: boolean }
+                is_balance_required: { type: boolean }
+                is_attachment_required: { type: boolean }
+                is_reason_required: { type: boolean }
+                is_sensitive: { type: boolean }
+                allow_half_day: { type: boolean }
+                allow_hourly: { type: boolean }
+                allow_negative_balance: { type: boolean }
+                max_days_per_request: { type: number, nullable: true }
+                min_notice_days: { type: integer, nullable: true }
+                color: { type: string, nullable: true }
+                status: { type: string, enum: [Active, Inactive] }
+                sort_order: { type: integer }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/leave/types/{leave_type_id}:
+    get:
+      tags: [Leave - Types]
+      summary: Chi tiết loại nghỉ
+      operationId: leaveGetType
+      x-required-permission: LEAVE.TYPE.VIEW
+      x-allowed-roles: [Employee, Manager, HR, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: leave_type_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+    patch:
+      tags: [Leave - Types]
+      summary: Cập nhật loại nghỉ
+      operationId: leaveUpdateType
+      x-required-permission: LEAVE.TYPE.UPDATE
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: LEAVE_TYPE_UPDATED
+      parameters:
+        - { name: leave_type_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string, nullable: true }
+                is_paid: { type: boolean }
+                is_balance_required: { type: boolean }
+                is_attachment_required: { type: boolean }
+                is_reason_required: { type: boolean }
+                is_sensitive: { type: boolean }
+                allow_half_day: { type: boolean }
+                allow_hourly: { type: boolean }
+                allow_negative_balance: { type: boolean }
+                max_days_per_request: { type: number, nullable: true }
+                min_notice_days: { type: integer, nullable: true }
+                color: { type: string, nullable: true }
+                status: { type: string, enum: [Active, Inactive] }
+                sort_order: { type: integer }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+    delete:
+      tags: [Leave - Types]
+      summary: Xóa mềm loại nghỉ
+      operationId: leaveDeleteType
+      x-required-permission: LEAVE.TYPE.DELETE
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: LEAVE_TYPE_DELETED
+      parameters:
+        - { name: leave_type_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { $ref: '#/components/responses/NoContent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ==========================================================================
+  # LEAVE - Policies (LEAVE-API-601..606)
+  # ==========================================================================
+  /api/v1/leave/policies:
+    get:
+      tags: [Leave - Policies]
+      summary: Danh sách chính sách nghỉ
+      operationId: leaveListPolicies
+      x-required-permission: LEAVE.POLICY.VIEW
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - { name: leave_type_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: scope_type, in: query, required: false, schema: { type: string, enum: [Company, Department, Employee, JobLevel, ContractType] } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Active, Inactive] } }
+        - { name: effective_date, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+    post:
+      tags: [Leave - Policies]
+      summary: Tạo chính sách nghỉ
+      operationId: leaveCreatePolicy
+      x-required-permission: LEAVE.POLICY.CREATE
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: LEAVE_POLICY_CREATED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [policy_code, name, leave_type_id, scope_type, effective_from]
+              properties:
+                policy_code: { type: string }
+                name: { type: string }
+                leave_type_id: { type: string, format: uuid }
+                scope_type: { type: string, enum: [Company, Department, Employee, JobLevel, ContractType] }
+                scope_id: { type: string, format: uuid, nullable: true }
+                period_year: { type: integer, nullable: true }
+                annual_entitlement_days: { type: number }
+                accrual_method: { type: string }
+                allow_negative_balance: { type: boolean }
+                max_negative_days: { type: number }
+                min_notice_days: { type: integer }
+                max_days_per_request: { type: number }
+                allow_half_day: { type: boolean }
+                allow_hourly: { type: boolean }
+                exclude_weekends: { type: boolean }
+                exclude_public_holidays: { type: boolean }
+                require_attachment_after_days: { type: integer, nullable: true }
+                effective_from: { type: string, format: date }
+                effective_to: { type: string, format: date, nullable: true }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/leave/policies/{policy_id}:
+    get:
+      tags: [Leave - Policies]
+      summary: Chi tiết chính sách nghỉ
+      operationId: leaveGetPolicy
+      x-required-permission: LEAVE.POLICY.VIEW
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: policy_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+    patch:
+      tags: [Leave - Policies]
+      summary: Cập nhật chính sách nghỉ
+      operationId: leaveUpdatePolicy
+      x-required-permission: LEAVE.POLICY.UPDATE
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: LEAVE_POLICY_UPDATED
+      parameters:
+        - { name: policy_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                annual_entitlement_days: { type: number }
+                accrual_method: { type: string }
+                allow_negative_balance: { type: boolean }
+                max_negative_days: { type: number }
+                min_notice_days: { type: integer }
+                max_days_per_request: { type: number }
+                allow_half_day: { type: boolean }
+                allow_hourly: { type: boolean }
+                exclude_weekends: { type: boolean }
+                exclude_public_holidays: { type: boolean }
+                require_attachment_after_days: { type: integer, nullable: true }
+                effective_from: { type: string, format: date }
+                effective_to: { type: string, format: date, nullable: true }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+    delete:
+      tags: [Leave - Policies]
+      summary: Xóa mềm chính sách nghỉ
+      operationId: leaveDeletePolicy
+      x-required-permission: LEAVE.POLICY.DELETE
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: LEAVE_POLICY_DELETED
+      parameters:
+        - { name: policy_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { $ref: '#/components/responses/NoContent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/leave/policies/resolve:
+    post:
+      tags: [Leave - Policies]
+      summary: Preview policy áp dụng cho employee
+      operationId: leaveResolvePolicy
+      x-required-permission: [LEAVE.POLICY.VIEW, LEAVE.REQUEST.CREATE]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Employee, Manager, HR, Company Admin]
+      x-data-scope: [Own, Team, Department, Company]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [leave_type_id, target_date]
+              properties:
+                employee_id: { type: string, format: uuid, nullable: true }
+                leave_type_id: { type: string, format: uuid }
+                target_date: { type: string, format: date }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ==========================================================================
+  # LEAVE - Balances admin (LEAVE-API-701..705)
+  # ==========================================================================
+  /api/v1/leave/balances:
+    get:
+      tags: [Leave - Balances]
+      summary: Danh sách số dư phép nhân viên
+      operationId: leaveListBalances
+      x-required-permission: LEAVE.BALANCE.VIEW
+      x-allowed-roles: [HR, Company Admin, Super Admin, Manager]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: leave_type_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: period_year, in: query, required: false, schema: { type: integer } }
+        - { name: low_balance, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/leave/balances/{balance_id}:
+    get:
+      tags: [Leave - Balances]
+      summary: Chi tiết số dư phép
+      operationId: leaveGetBalance
+      x-required-permission: LEAVE.BALANCE.VIEW
+      x-allowed-roles: [HR, Company Admin, Super Admin, Manager]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: balance_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/leave/balances/{balance_id}/transactions:
+    get:
+      tags: [Leave - Balances]
+      summary: Lịch sử giao dịch số dư
+      operationId: leaveListBalanceTransactions
+      x-required-permission: LEAVE.BALANCE.TRANSACTION_VIEW
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: balance_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - { name: transaction_type, in: query, required: false, schema: { type: string, enum: [ACCRUAL, USE, RESERVE, RELEASE, REFUND, ADJUSTMENT, OPENING] } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/leave/balances/{balance_id}/adjust:
+    post:
+      tags: [Leave - Balances]
+      summary: Điều chỉnh số dư phép
+      operationId: leaveAdjustBalance
+      x-required-permission: LEAVE.BALANCE.ADJUST
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Department, Company, System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: LEAVE_BALANCE_ADJUSTED
+      parameters:
+        - { name: balance_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [adjustment_type, amount_days, reason]
+              properties:
+                adjustment_type: { type: string, enum: [Increase, Decrease] }
+                amount_days: { type: number }
+                reason: { type: string }
+                effective_date: { type: string, format: date }
+                notify_employee: { type: boolean, default: true }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/leave/balances/initialize:
+    post:
+      tags: [Leave - Balances]
+      summary: Khởi tạo số dư phép cho employee/năm
+      operationId: leaveInitializeBalances
+      x-required-permission: LEAVE.BALANCE.ADJUST
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: LEAVE_BALANCE_INITIALIZED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [period_year, leave_type_id, opening_balance]
+              properties:
+                period_year: { type: integer }
+                leave_type_id: { type: string, format: uuid }
+                employee_ids: { type: array, items: { type: string, format: uuid }, nullable: true }
+                department_id: { type: string, format: uuid, nullable: true }
+                opening_balance: { type: number }
+                skip_existing: { type: boolean, default: true }
+                reason: { type: string, nullable: true }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ==========================================================================
+  # LEAVE - Files (LEAVE-API-801..804)
+  # ==========================================================================
+  /api/v1/leave/requests/{request_id}/files:
+    get:
+      tags: [Leave - Files]
+      summary: Danh sách file đơn nghỉ
+      operationId: leaveListRequestFiles
+      x-required-permission: [LEAVE.FILE.VIEW, LEAVE.REQUEST.VIEW_OWN]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own, Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+    post:
+      tags: [Leave - Files]
+      summary: Link file vào đơn nghỉ
+      operationId: leaveLinkRequestFile
+      x-required-permission: [LEAVE.FILE.UPLOAD, LEAVE.REQUEST.UPDATE_DRAFT]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Employee, HR, Company Admin]
+      x-data-scope: [Own, Department, Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [file_id]
+              properties:
+                file_id: { type: string, format: uuid }
+                file_purpose: { type: string }
+                note: { type: string, nullable: true }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/leave/requests/{request_id}/files/{file_id}/download-url:
+    get:
+      tags: [Leave - Files]
+      summary: Lấy signed URL file đơn nghỉ
+      operationId: leaveGetRequestFileDownloadUrl
+      x-required-permission: [LEAVE.FILE.VIEW, LEAVE.REQUEST.VIEW_OWN]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own, Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: file_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/leave/requests/{request_id}/files/{file_id}:
+    delete:
+      tags: [Leave - Files]
+      summary: Unlink file khỏi đơn nghỉ
+      operationId: leaveUnlinkRequestFile
+      x-required-permission: [LEAVE.FILE.DELETE, LEAVE.REQUEST.UPDATE_DRAFT]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Employee, HR, Company Admin]
+      x-data-scope: [Own, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: file_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { $ref: '#/components/responses/NoContent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  # ==========================================================================
+  # LEAVE - Exports (LEAVE-API-901..903)
+  # ==========================================================================
+  /api/v1/leave/requests/export:
+    get:
+      tags: [Leave - Exports]
+      summary: Xuất danh sách đơn nghỉ
+      operationId: leaveExportRequests
+      x-required-permission: LEAVE.REQUEST.EXPORT
+      x-allowed-roles: [HR, Company Admin, Super Admin, Payroll Officer]
+      x-data-scope: [Department, Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: LEAVE_REQUEST_EXPORT_CREATED
+      parameters:
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Draft, Pending, Approved, Rejected, Cancelled, Revoked] } }
+        - { name: leave_type_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: format, in: query, required: false, schema: { type: string, enum: [xlsx, csv], default: xlsx } }
+        - { name: include_reason, in: query, required: false, schema: { type: boolean } }
+        - { name: include_files, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '202': { $ref: '#/components/responses/Accepted' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/leave/calendar/export:
+    get:
+      tags: [Leave - Exports]
+      summary: Xuất lịch nghỉ
+      operationId: leaveExportCalendar
+      x-required-permission: [LEAVE.REQUEST.EXPORT, LEAVE.CALENDAR.VIEW_COMPANY]
+      x-permission-mode: anyOf
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - { name: from_date, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: true, schema: { type: string, format: date } }
+        - { name: scope, in: query, required: false, schema: { type: string, enum: [Own, Team, Department, Company] } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: leave_type_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Approved, Pending, All] } }
+        - { name: format, in: query, required: false, schema: { type: string, enum: [xlsx, csv], default: xlsx } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '202': { $ref: '#/components/responses/Accepted' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/leave/balances/export:
+    get:
+      tags: [Leave - Exports]
+      summary: Xuất số dư phép
+      operationId: leaveExportBalances
+      x-required-permission: [LEAVE.REQUEST.EXPORT, LEAVE.BALANCE.VIEW]
+      x-permission-mode: anyOf
+      x-allowed-roles: [HR, Company Admin, Super Admin, Payroll Officer]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - { name: employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: leave_type_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: period_year, in: query, required: false, schema: { type: integer } }
+        - { name: format, in: query, required: false, schema: { type: string, enum: [xlsx, csv], default: xlsx } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '202': { $ref: '#/components/responses/Accepted' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  # ==========================================================================
+  # LEAVE - Internal (LEAVE -> ATT sync)
+  # ==========================================================================
+  /internal/v1/attendance/leave-sync:
+    post:
+      tags: [Leave - Internal]
+      summary: Đồng bộ đơn nghỉ Approved/Cancelled/Revoked sang ATT
+      operationId: leaveInternalAttendanceSync
+      x-required-permission: null
+      x-allowed-roles: [System]
+      x-data-scope: [System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: null
+      security:
+        - internalServiceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event_code, company_id, leave_request_id, employee_id, days]
+              properties:
+                event_code: { type: string, enum: [LEAVE_REQUEST_APPROVED, LEAVE_REQUEST_CANCELLED, LEAVE_REQUEST_REVOKED] }
+                company_id: { type: string, format: uuid }
+                leave_request_id: { type: string, format: uuid }
+                employee_id: { type: string, format: uuid }
+                request_code: { type: string }
+                days:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      date: { type: string, format: date }
+                      duration_type: { type: string, enum: [FullDay, HalfDay, Hourly] }
+                      leave_days: { type: number }
+                      leave_hours: { type: number }
+                      start_time: { type: string, nullable: true }
+                      end_time: { type: string, nullable: true }
+                correlation_id: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '202': { $ref: '#/components/responses/Accepted' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/ServerError' }

@@ -220,6 +220,9 @@ export const projectSchema = z.object({
   /** numeric(18,2) — Drizzle trả string. */
   budget: z.string().nullable(),
   status: projectStatusSchema,
+  // PM-1 (apps/projects, mig 0420): mã prefix Plane + bộ đếm sequence per-project.
+  identifier: z.string().nullable(),
+  lastTaskSequence: z.number().int(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   /** Populated khi list/detail. */
@@ -228,6 +231,19 @@ export const projectSchema = z.object({
   members: z.array(projectMemberSchema).optional(),
 });
 export type ProjectDto = z.infer<typeof projectSchema>;
+
+/**
+ * PM-1 (apps/projects, mig 0420) — mã prefix kiểu Plane cho displayId ({IDENT}-{seq}, vd "WEB-12").
+ * 1–10 ký tự, CHỈ chữ cái/chữ số; chuẩn hoá UPPERCASE (DB unique theo upper(identifier) per-company).
+ * Nhận input bất kỳ hoa/thường → transform về UPPER (service lưu bản uppercased).
+ */
+export const projectIdentifierSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(10)
+  .regex(/^[A-Za-z0-9]+$/, "Identifier chỉ gồm chữ cái và chữ số (1–10 ký tự).")
+  .transform((s) => s.toUpperCase());
 
 export const createProjectSchema = z.object({
   name: z.string().min(1).max(200),
@@ -241,6 +257,8 @@ export const createProjectSchema = z.object({
   endDate: z.string().date().optional(),
   priority: projectPrioritySchema.optional(),
   budget: z.coerce.number().nonnegative().max(1_000_000_000_000).optional(),
+  // PM-1: mã prefix Plane (optional — dự án cũ không bắt buộc; ADDITIVE).
+  identifier: projectIdentifierSchema.optional(),
 });
 export type CreateProjectRequest = z.infer<typeof createProjectSchema>;
 
@@ -258,6 +276,8 @@ export const updateProjectSchema = z
     priority: projectPrioritySchema.nullable(),
     budget: z.coerce.number().nonnegative().max(1_000_000_000_000).nullable(),
     status: projectStatusSchema,
+    // PM-1: cho đổi/xoá identifier (null = xoá mã). ADDITIVE.
+    identifier: projectIdentifierSchema.nullable(),
   })
   .partial();
 export type UpdateProjectRequest = z.infer<typeof updateProjectSchema>;

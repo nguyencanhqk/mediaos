@@ -18,7 +18,8 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:migrate": "pnpm --filter @mediaos/api db:migrate",
-    "db:setup-roles": "node scripts/setup-db-roles.mjs"
+    "db:setup-roles": "node scripts/setup-db-roles.mjs",
+    "dashboard": "node harness/dashboard/server.mjs"
   },
   "devDependencies": {
     "pg": "^8.13.0",

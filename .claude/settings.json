@@ -24,6 +24,14 @@
           {
             "type": "command",
             "command": "node .claude/hooks/guard-migration-band.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/guard-scope.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/guard-claim.mjs"
           }
         ]
       }
@@ -35,10 +43,24 @@
           {
             "type": "command",
             "command": "node .claude/hooks/format-on-write.mjs"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/typecheck-on-stop.mjs"
           },
           {
             "type": "command",
-            "command": "node .claude/hooks/typecheck-changed.mjs"
+            "command": "node .claude/hooks/stop-gate.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/guard-claim.mjs"
           }
         ]
       }

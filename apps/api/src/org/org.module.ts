@@ -1,15 +1,14 @@
 import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../db/db.module";
 import { PermissionModule } from "../permission/permission.module";
-import { ChatModule } from "../chat/chat.module";
 import { OrgRepository } from "./org.repository";
 import { OrgService } from "./org.service";
 import { OrgController } from "./org.controller";
 
 // PermissionModule cung cấp PermissionService cho PermissionGuard (F2 — guard các mutation org/team).
-// ChatModule (exports ChatService) cho G10-2 auto-tạo group chat phòng ban khi tạo org_unit.
+// (de-media-fy CLEAN-DECOUPLE-1: gỡ ChatModule — auto group-chat phòng ban G10-2 thuộc cụm chat out-of-scope.)
 @Module({
-  imports: [DatabaseModule, PermissionModule, ChatModule],
+  imports: [DatabaseModule, PermissionModule],
   providers: [OrgRepository, OrgService],
   controllers: [OrgController],
   exports: [OrgService],

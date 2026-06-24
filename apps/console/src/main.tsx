@@ -7,7 +7,9 @@ import {
   bootstrapSession,
   configureApiBaseUrl,
   configureAuthAppUrl,
+  configureClientVersion,
   redirectToAuth,
+  shouldRetryQuery,
 } from "@mediaos/web-core";
 import i18n from "@/i18n";
 import { router } from "@/router";
@@ -17,8 +19,21 @@ import "@/index.css";
 // package dùng chung). Dev SSO trỏ `api.localhost` / `auth.localhost` để cookie `Domain=.localhost` chạy.
 configureApiBaseUrl(import.meta.env.VITE_API_URL);
 configureAuthAppUrl(import.meta.env.VITE_AUTH_APP_URL);
+configureClientVersion(import.meta.env.VITE_APP_VERSION);
 
-const queryClient = new QueryClient();
+// TanStack Query defaults (FRONTEND-04 §16.1): chỉ retry lỗi tạm (shouldRetryQuery — bỏ qua
+// 401/403/422/404…), staleTime 30s, gcTime 5'; mutation KHÔNG retry (dùng Idempotency-Key chống trùng).
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: shouldRetryQuery,
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+      refetchOnWindowFocus: false,
+    },
+    mutations: { retry: false },
+  },
+});
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {

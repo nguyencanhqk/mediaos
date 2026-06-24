@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import swc from "unplugin-swc";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 // Build the test env, resolving the target Postgres DB from process.env FIRST so per-lane isolation
 // works. Precedence: explicit DATABASE_URL/DIRECT/WORKER from the env > LANE_DB (lane DB name) >
@@ -9,8 +9,7 @@ import { defineConfig } from "vitest/config";
 function laneDbEnv(): Record<string, string> {
   const host = process.env.PG_HOSTPORT ?? "localhost:5432";
   const db = process.env.LANE_DB ?? "mediaos";
-  const url =
-    process.env.DATABASE_URL ?? `postgres://mediaos_app:changeme_app_only@${host}/${db}`;
+  const url = process.env.DATABASE_URL ?? `postgres://mediaos_app:changeme_app_only@${host}/${db}`;
   const directUrl =
     process.env.DATABASE_DIRECT_URL ?? `postgres://mediaos:changeme_dev_only@${host}/${db}`;
   const workerUrl =
@@ -46,6 +45,26 @@ export default defineConfig({
     root: ".",
     // *.int-spec.ts = integration (Postgres thật) — tự skip khi không có DATABASE_URL (xem helpers/integration-db).
     include: ["src/**/*.spec.ts", "test/**/*.e2e-spec.ts", "test/**/*.int-spec.ts"],
+    // DE-MEDIA-FY (CLAUDE.md reframe 2026-06-20 · S1-QA-DEBT-1): test của module OUT-OF-SCOPE — finance
+    // theo-kênh (cost/revenue/cost-allocation) + workflow-DAG (content/project/channel lifecycle). Code đã
+    // PARK (không phát triển, không xoá đợt này) ⇒ test của chúng fail-giả che phạm vi THẬT của suite.
+    // Exclude (KHÔNG xoá) để dễ un-park sau. KHÔNG đụng approval-FSM (workflow phê duyệt LEAVE/ATT = IN scope).
+    // OUT-OF-MVP / Phase-defer (S1-INT-MOUNT-1 — quyết theo SPEC-01 §7.2 + Phase 5): module CHƯA dựng tầng
+    // app (route trả 404, KHÔNG phải lỗi) ⇒ exclude deny-test có VÉ PHASE; un-exclude khi build module:
+    //   • webhooks-deny → INTEGRATION = Phase 5 (SPEC-01 §7.2/Phase 5, cùng MOBILE/AI).
+    //   • ui-config-deny (branding/ui-navigation/i18n-override) → KHÔNG thuộc 7 module MVP (SPEC-01 §7.1);
+    //     tùy-biến-giao-diện = giai đoạn sau. (Owner muốn đưa vào MVP → đó là WO BUILD module, không phải mount.)
+    exclude: [
+      ...configDefaults.exclude,
+      // de-media-fy (parked — CLAUDE.md reframe)
+      "test/workflow-lifecycle.e2e-spec.ts",
+      "test/integration/finance-cost-controller-deny.int-spec.ts",
+      "test/integration/finance-cost-allocation-controller-deny.int-spec.ts",
+      "test/integration/finance-revenue-controller-deny.int-spec.ts",
+      // out-of-MVP / Phase-defer (S1-INT-MOUNT-1)
+      "test/integration/webhooks-deny.int-spec.ts",
+      "test/integration/ui-config-deny.int-spec.ts",
+    ],
     // Integration test mở/đóng pool + chạy DDL → nới timeout mặc định.
     testTimeout: 20000,
     hookTimeout: 30000,
@@ -70,14 +89,48 @@ export default defineConfig({
       // read as 0–25% and would fail a blanket threshold (false red). Keys are exact paths so per-file vs
       // aggregate semantics are identical. Only active when --coverage is passed (e.g. `pnpm test:cov`).
       thresholds: {
-        "src/workflow/workflow-fsm.service.ts": { lines: 80, functions: 80, branches: 80, statements: 80 },
-        "src/workflow/approval.service.ts": { lines: 80, functions: 80, branches: 80, statements: 80 },
+        "src/workflow/workflow-fsm.service.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
+        "src/workflow/approval.service.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
         // G7-2a: DagValidatorService is pure crown-jewel logic — higher bar (plan §4/§6).
-        "src/workflow/dag-validator.service.ts": { lines: 90, functions: 90, branches: 90, statements: 90 },
+        "src/workflow/dag-validator.service.ts": {
+          lines: 90,
+          functions: 90,
+          branches: 90,
+          statements: 90,
+        },
         // G7-2b: DAG adapter (port + code map) is pure + fully unit-tested → crown-jewel bar.
-        "src/workflow/dag-result.adapter.ts": { lines: 90, functions: 90, branches: 90, statements: 90 },
+        "src/workflow/dag-result.adapter.ts": {
+          lines: 90,
+          functions: 90,
+          branches: 90,
+          statements: 90,
+        },
         // G12-1: salary profile service is crown-jewel (lương nhạy cảm) → ≥80% (CLAUDE.md §6).
-        "src/payroll/salary-profile.service.ts": { lines: 80, functions: 80, branches: 80, statements: 80 },
+        "src/payroll/salary-profile.service.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
+        // S1-FND-SETTING-1: SettingService is crown-jewel (validation_schema + secret-mask + audit-in-tx,
+        // CLAUDE.md §6 module nhạy cảm) → ≥80% on all axes. Fully unit-tested (no-DB) so per-file gate is
+        // safe (unlike controller/repo exercised only by int-specs). Exact path = per-file semantics.
+        "src/foundation/settings/setting.service.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
       },
     },
   },

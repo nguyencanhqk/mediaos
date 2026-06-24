@@ -1,0 +1,814 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MediaOS — Báo cáo dự án</title>
+    <style>
+      :root {
+        --bg: #0b0e14; --panel: #131722; --panel2: #1b2130; --line: #2a3142;
+        --txt: #e6edf3; --dim: #8b97a8; --accent: #38bdf8;
+        --green: #2ecc71; --yellow: #f1c40f; --red: #e74c3c;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--txt);
+        font: 14px/1.5 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif; }
+      a { color: var(--accent); text-decoration: none; }
+      .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 18px 60px; }
+      h1 { font-size: 20px; margin: 0; letter-spacing: .3px; }
+      .muted { color: var(--dim); }
+      .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+      .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+      .row { display: flex; gap: 14px; flex-wrap: wrap; }
+      .grow { flex: 1 1 0; min-width: 0; }
+      .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+      .live { font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 0 rgba(46,204,113,.6); animation: pulse 2s infinite; }
+      @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(46,204,113,.5)} 70%{box-shadow:0 0 0 8px rgba(46,204,113,0)} 100%{box-shadow:0 0 0 0 rgba(46,204,113,0)} }
+      .big { font-size: 40px; font-weight: 700; line-height: 1; }
+      .bar { height: 10px; border-radius: 6px; background: var(--panel2); overflow: hidden; margin-top: 8px; }
+      .bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--green), var(--accent)); }
+      .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 14px; }
+      .kpi { background: var(--panel2); border-radius: 10px; padding: 10px 12px; text-align: center; }
+      .kpi b { font-size: 22px; display: block; }
+      .sec { margin-top: 22px; }
+      .sec h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); margin: 0 0 10px; }
+      .wo { background: var(--panel); border: 1px solid var(--line); border-left-width: 4px; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; }
+      .wo:hover { background: var(--panel2); }
+      .wo.z-green { border-left-color: var(--green); }
+      .wo.z-yellow { border-left-color: var(--yellow); }
+      .wo.z-red { border-left-color: var(--red); }
+      .wo .t { display: flex; gap: 10px; align-items: baseline; }
+      .badge { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--dim); white-space: nowrap; }
+      .badge.green { color: var(--green); border-color: var(--green); }
+      .badge.yellow { color: var(--yellow); border-color: var(--yellow); }
+      .badge.red { color: var(--red); border-color: var(--red); }
+      .det { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 12px; display: grid; gap: 12px; }
+      .det h4 { margin: 0 0 4px; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .6px; }
+      .cmd { background: #0a0d13; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; white-space: pre-wrap; }
+      ul.chk { margin: 0; padding-left: 18px; } ul.chk li { margin: 2px 0; }
+      .risk { display: flex; gap: 8px; padding: 8px 10px; border-radius: 8px; background: var(--panel2); margin-bottom: 6px; }
+      .risk.warn { border-left: 3px solid var(--red); } .risk.info { border-left: 3px solid var(--accent); }
+      .commits div { padding: 4px 0; border-bottom: 1px solid var(--line); }
+      .err { color: var(--red); }
+      @media (max-width: 760px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+
+      /* ── nav tabs ── */
+      .tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+      .tab { padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; color: var(--dim); cursor: pointer; background: var(--panel); font-size: 13px; user-select: none; }
+      .tab:hover { background: var(--panel2); }
+      .tab.active { color: var(--txt); border-color: var(--accent); background: var(--panel2); }
+      .subtabs { flex-wrap: wrap; margin-top: 24px; margin-bottom: 6px; }
+
+      /* ── tiến độ theo module × lớp ── */
+      .partcard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+      .partcard.zero { opacity: 0.62; }
+      .parthead { display: flex; align-items: baseline; gap: 10px; }
+      .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+      .chip2 { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--dim); white-space: nowrap; }
+      .chip2.full { color: var(--green); border-color: var(--green); }
+      .chip2.part { color: var(--accent); border-color: var(--accent); }
+      .chip2.empty { opacity: 0.45; }
+      .lyrhead { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); margin: 12px 0 2px; }
+      .clrow { border-top: 1px dashed var(--line); }
+      .cltop { display: flex; gap: 8px; align-items: baseline; cursor: pointer; padding: 5px 4px; border-radius: 6px; }
+      .cltop:hover { background: var(--panel2); }
+      .clmark { width: 18px; text-align: center; flex: none; }
+      .dwlist { margin: 2px 0 8px 30px; color: var(--dim); font-size: 12.5px; }
+
+      /* ── tiến độ theo phần ── */
+      .partcard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+      .parthead { display: flex; align-items: baseline; gap: 10px; }
+      .checklist { margin-top: 12px; display: grid; gap: 2px; }
+      .clrow { border-top: 1px dashed var(--line); }
+      .cltop { display: flex; gap: 8px; align-items: baseline; cursor: pointer; padding: 5px 4px; border-radius: 6px; }
+      .cltop:hover { background: var(--panel2); }
+      .clmark { width: 20px; text-align: center; flex: none; }
+      .dwlist { margin: 2px 0 8px 32px; color: var(--dim); font-size: 12.5px; }
+
+      /* ── docs browser ── */
+      .docs { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; }
+      .docnav { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; max-height: 80vh; overflow: auto; position: sticky; top: 12px; }
+      .docsearch { width: 100%; padding: 7px 9px; margin-bottom: 8px; background: #0a0d13; border: 1px solid var(--line); border-radius: 8px; color: var(--txt); font: inherit; }
+      .docnav .grp { margin: 4px 0 8px; }
+      .docnav .gh { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); padding: 6px 6px 3px; position: sticky; top: 0; background: var(--panel); }
+      .docnav a.f { display: block; padding: 4px 8px; border-radius: 6px; color: var(--txt); font-size: 13px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .docnav a.f:hover { background: var(--panel2); }
+      .docnav a.f.sel { background: var(--accent); color: #001018; }
+      .docview { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px 26px; min-height: 60vh; max-height: 86vh; overflow: auto; }
+
+      /* ── rendered markdown ── */
+      .docview h1, .docview h2, .docview h3, .docview h4, .docview h5, .docview h6 { color: var(--txt); line-height: 1.25; margin: 20px 0 8px; }
+      .docview h1 { font-size: 24px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+      .docview h2 { font-size: 20px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+      .docview h3 { font-size: 16px; }
+      .docview h4 { font-size: 14px; color: var(--dim); }
+      .docview p { margin: 8px 0; }
+      .docview code { background: #0a0d13; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
+      .docview pre.md-pre { background: #0a0d13; border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow: auto; }
+      .docview pre.md-pre code { border: 0; background: none; padding: 0; }
+      .docview table.md-table { border-collapse: collapse; margin: 12px 0; width: 100%; font-size: 13px; }
+      .docview table.md-table th, .docview table.md-table td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+      .docview table.md-table th { background: var(--panel2); }
+      .docview blockquote { border-left: 3px solid var(--accent); margin: 10px 0; padding: 4px 12px; color: var(--dim); background: var(--panel2); border-radius: 0 8px 8px 0; }
+      .docview hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
+      .docview ul, .docview ol { margin: 8px 0; padding-left: 22px; }
+      .docview li { margin: 3px 0; }
+      .docview a { color: var(--accent); }
+      @media (max-width: 760px) { .docs { grid-template-columns: 1fr; } .docnav { position: static; max-height: none; } }
+    </style>
+  </head>
+  <body>
+    <div id="root" class="wrap"><p class="muted">Đang tải…</p></div>
+
+    <!-- Vanilla JS thuần — KHÔNG React/htm/CDN. Khớp triết lý zero-dep của server.mjs, chạy offline, không dính lỗi minified React (#62/#283). -->
+    <script>
+      'use strict';
+      const ZWORD = { green: 'xanh', yellow: 'vàng', red: 'đỏ' };
+      const SLABEL = { in_progress: '🔄 đang làm', todo: '⏳ chờ', done: '✅ xong', blocked: '🛑 chặn' };
+
+      // el('div', {class:'x', style:{w:..}, onclick:fn}, child, child...) → HTMLElement.
+      // Children là chuỗi/số (→ text node, tự escape) hoặc Node. null/false/undefined bị bỏ qua.
+      function el(tag, attrs, ...kids) {
+        const n = document.createElement(tag);
+        if (attrs)
+          for (const k in attrs) {
+            const v = attrs[k];
+            if (v == null || v === false) continue;
+            if (k === 'class') n.className = v;
+            else if (k === 'style' && typeof v === 'object') Object.assign(n.style, v);
+            else if (k.startsWith('on') && typeof v === 'function') n.addEventListener(k.slice(2), v);
+            else n.setAttribute(k, v);
+          }
+        for (const kid of kids.flat()) {
+          if (kid == null || kid === false || kid === true) continue;
+          n.appendChild(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+        }
+        return n;
+      }
+
+      const open = new Set(); // id Work Order đang bung
+      let lastData = null;
+      let seeded = false; // đã seed open theo in_progress lần đầu chưa
+      let view = 'board'; // 'board' (báo cáo) | 'docs' (tra cứu tài liệu)
+      let boardTab = 'inprogress'; // sub-tab đang chọn trong "Báo cáo"
+
+      function detailEl(b) {
+        const det = el('div', { class: 'det' });
+        if (b.dependsOn.length) {
+          const d = el('div', null, el('h4', null, 'Phụ thuộc'));
+          b.dependsOn.forEach((x) => {
+            d.appendChild(el('span', { class: 'badge' }, (x.done ? '✓ ' : '⏳ ') + x.id));
+            d.appendChild(document.createTextNode(' '));
+          });
+          det.appendChild(d);
+        }
+        if (b.doneWhen.length) {
+          det.appendChild(
+            el('div', null, el('h4', null, 'Done when (đích hội tụ)'), el('ul', { class: 'chk' }, ...b.doneWhen.map((x) => el('li', null, x)))),
+          );
+        }
+        const v = b.verify;
+        const vbox = el(
+          'div',
+          null,
+          el('h4', null, 'Kiểm tra ở đâu / thế nào'),
+          el('div', { class: 'muted', style: { marginBottom: '6px' } }, 'Spec nghiệm thu: ', el('span', { class: 'mono' }, v.spec)),
+          el('div', { class: 'cmd' }, v.commands.join('\n')),
+        );
+        if (v.testGlobs.length)
+          vbox.appendChild(el('div', { class: 'muted', style: { marginTop: '6px' } }, 'Test ở: ', el('span', { class: 'mono' }, v.testGlobs.join(' · '))));
+        vbox.appendChild(el('div', { class: 'muted', style: { marginTop: '6px' } }, '⚑ ' + v.note));
+        det.appendChild(vbox);
+        return det;
+      }
+
+      function workOrderEl(b) {
+        const statusLabel = b.status === 'todo' ? (b.ready ? '⏳ sẵn sàng' : '⏳ chờ phụ thuộc') : SLABEL[b.status] || b.status;
+        const isOpen = open.has(b.id);
+        const card = el(
+          'div',
+          {
+            class: 'wo z-' + b.zone,
+            onclick: () => {
+              if (open.has(b.id)) open.delete(b.id);
+              else open.add(b.id);
+              paint();
+            },
+          },
+          el(
+            'div',
+            { class: 't' },
+            el('strong', null, b.id),
+            el('span', { class: 'badge ' + b.zone }, ZWORD[b.zone] || b.zone),
+            el('span', { class: 'badge' }, statusLabel),
+            el('span', { class: 'grow muted', style: { fontSize: '13px' } }, b.title),
+            el('span', { class: 'muted' }, isOpen ? '▾' : '▸'),
+          ),
+        );
+        if (isOpen) {
+          const det = detailEl(b);
+          det.addEventListener('click', (e) => e.stopPropagation()); // click trong chi tiết KHÔNG gập card
+          card.appendChild(det);
+        }
+        return card;
+      }
+
+      // Một section nhóm Work Order theo predicate (rỗng → báo "không có mục nào").
+      function groupSection(data, label, pred) {
+        const items = data.workOrders.filter(pred);
+        const sec = el('div', { class: 'sec' }, el('h2', null, label + ' · ' + items.length));
+        if (!items.length) sec.appendChild(el('p', { class: 'muted', style: { padding: '4px 2px' } }, 'Không có mục nào.'));
+        else items.forEach((b) => sec.appendChild(workOrderEl(b)));
+        return sec;
+      }
+
+      function risksSection(data) {
+        const risks = data.risks || [];
+        const sec = el('div', { class: 'sec' }, el('h2', null, '⚠️ Cảnh báo rủi ro · ' + risks.length));
+        if (!risks.length) sec.appendChild(el('p', { class: 'muted', style: { padding: '4px 2px' } }, 'Không có cảnh báo.'));
+        else risks.forEach((r) => sec.appendChild(el('div', { class: 'risk ' + r.level }, (r.level === 'warn' ? '⚠️ ' : 'ℹ️ ') + r.message)));
+        return sec;
+      }
+
+      // Các sub-tab của "Báo cáo" — mỗi tab: nhãn + số đếm + nội dung render khi chọn.
+      const BOARD_TABS = [
+        { id: 'inprogress', label: '🔄 Đang làm', count: (d) => d.progress.inProgress, render: (d) => groupSection(d, 'Đang làm', (b) => b.status === 'in_progress') },
+        { id: 'ready', label: '⏳ Sẵn sàng', count: (d) => d.progress.ready, render: (d) => groupSection(d, 'Sẵn sàng', (b) => b.status === 'todo' && b.ready) },
+        { id: 'waiting', label: '⌛ Chờ phụ thuộc', count: (d) => d.progress.waiting, render: (d) => groupSection(d, 'Chờ phụ thuộc', (b) => b.status === 'todo' && !b.ready) },
+        { id: 'blocked', label: '🛑 Bị chặn', count: (d) => d.progress.blocked, render: (d) => groupSection(d, 'Bị chặn', (b) => b.status === 'blocked') },
+        { id: 'done', label: '✅ Đã xong', count: (d) => d.progress.done, render: (d) => groupSection(d, 'Đã xong', (b) => b.status === 'done') },
+        { id: 'risks', label: '⚠️ Cảnh báo', count: (d) => (d.risks || []).length, render: (d) => risksSection(d) },
+        { id: 'timeline', label: '⏱ Dòng thời gian', count: (d) => (d.activity || []).length, render: (d) => timelineEl(d) || el('div', { class: 'sec' }, el('p', { class: 'muted' }, 'Chưa có mốc thời gian.')) },
+      ];
+
+      function boardTabsEl(data) {
+        const bar = el('div', { class: 'tabs subtabs' });
+        for (const t of BOARD_TABS) {
+          bar.appendChild(
+            el(
+              'div',
+              {
+                class: 'tab' + (boardTab === t.id ? ' active' : ''),
+                onclick: () => {
+                  boardTab = t.id;
+                  paint();
+                },
+              },
+              t.label + ' · ' + t.count(data),
+            ),
+          );
+        }
+        return bar;
+      }
+
+      const fmtTime = (iso) => (iso ? new Date(iso).toLocaleString('vi-VN', { hour12: false }) : '—');
+      const fmtDur = (ms) => {
+        if (ms == null) return '';
+        const s = Math.round(ms / 1000);
+        if (s < 60) return s + 's';
+        const m = Math.floor(s / 60);
+        return m < 60 ? m + 'm' + (s % 60) + 's' : Math.floor(m / 60) + 'h' + (m % 60) + 'm';
+      };
+
+      // Dòng thời gian từng Work Order: bắt đầu → mốc → hoàn thành + thời lượng (đọc data.activity từ ledger).
+      function timelineEl(data) {
+        const acts = data.activity || [];
+        if (!acts.length) return null;
+        const sec = el('div', { class: 'sec' }, el('h2', null, '⏱ Dòng thời gian (mốc thực hiện) · ' + acts.length));
+        acts.forEach((g) => {
+          const head = el(
+            'div',
+            { class: 't' },
+            el('strong', null, g.wo),
+            el('span', { class: 'badge' }, g.status),
+            g.durationMs != null && el('span', { class: 'badge' }, '⏱ ' + fmtDur(g.durationMs)),
+            el(
+              'div',
+              { class: 'grow muted', style: { fontSize: '12px' } },
+              'bắt đầu ' + fmtTime(g.startedAt) + (g.finishedAt ? ' → xong ' + fmtTime(g.finishedAt) : ' → đang chạy'),
+            ),
+          );
+          const card = el('div', { class: 'wo' }, head);
+          const evs = (g.events || []).filter((e) => e.type !== 'started');
+          if (evs.length) {
+            const ul = el('ul', { class: 'chk' });
+            evs.forEach((e) =>
+              ul.appendChild(el('li', null, fmtTime(e.ts) + '  ' + e.type + (e.detail ? ' — ' + e.detail : '') + (e.by ? '  (' + e.by + ')' : ''))),
+            );
+            card.appendChild(el('div', { class: 'det' }, ul));
+          }
+          sec.appendChild(card);
+        });
+        return sec;
+      }
+
+      function renderBoard(root, data) {
+        if (!data) {
+          root.appendChild(el('p', { class: 'muted' }, 'Đang tải…'));
+          return;
+        }
+        const p = data.progress;
+        const repo = data.repo;
+
+        root.appendChild(
+          el(
+            'div',
+            { class: 'head' },
+            el(
+              'div',
+              null,
+              el('h1', null, '📊 MediaOS — Báo cáo dự án'),
+              el('div', { class: 'muted', style: { marginTop: '4px', maxWidth: '720px' } }, data.direction || ''),
+            ),
+            el(
+              'div',
+              { style: { textAlign: 'right' } },
+              el('div', { class: 'live' }, el('span', { class: 'dot' }), ' live · cập nhật ' + new Date().toLocaleTimeString('vi-VN')),
+            ),
+          ),
+        );
+
+        const progPanel = el(
+          'div',
+          { class: 'panel grow' },
+          el('div', { class: 'muted' }, 'Tiến độ Work Order'),
+          el('div', { class: 'big' }, String(p.pct), el('span', { style: { fontSize: '20px' } }, ' %')),
+          el('div', { class: 'bar' }, el('i', { style: { width: p.pct + '%' } })),
+          el('div', { class: 'muted', style: { marginTop: '6px' } }, p.done + '/' + p.total + ' done'),
+          el(
+            'div',
+            { class: 'kpis' },
+            el('div', { class: 'kpi' }, el('b', null, String(p.inProgress)), el('span', { class: 'muted' }, 'đang làm')),
+            el('div', { class: 'kpi' }, el('b', null, String(p.ready)), el('span', { class: 'muted' }, 'sẵn sàng')),
+            el('div', { class: 'kpi' }, el('b', null, String(p.waiting)), el('span', { class: 'muted' }, 'chờ')),
+            el('div', { class: 'kpi' }, el('b', null, String(p.blocked)), el('span', { class: 'muted' }, 'chặn')),
+            el('div', { class: 'kpi' }, el('b', null, String(p.done)), el('span', { class: 'muted' }, 'xong')),
+          ),
+        );
+
+        const repoPanel = el(
+          'div',
+          { class: 'panel grow' },
+          el('div', { class: 'muted' }, 'Trạng thái repo'),
+          el('div', { style: { marginTop: '8px' } }, '🌿 branch ', el('b', { class: 'mono' }, repo.branch)),
+          el('div', null, '✏️ dirty ', el('b', null, String(repo.dirty)), ' file'),
+          el(
+            'div',
+            null,
+            '🗃️ migration head ',
+            repo.migration
+              ? el('b', { class: 'mono' }, 'idx ' + repo.migration.idx + ' · ' + repo.migration.tag + ' (' + repo.migration.count + ')')
+              : '—',
+          ),
+          el(
+            'div',
+            { class: 'sec commits' },
+            el('h2', null, 'Commit gần đây'),
+            ...(repo.commits || [])
+              .slice(0, 6)
+              .map((c) => el('div', null, el('span', { class: 'mono muted' }, c.sha), ' · ' + c.date + ' · ' + c.subject)),
+          ),
+        );
+
+        root.appendChild(el('div', { class: 'row' }, progPanel, repoPanel));
+
+        root.appendChild(boardTabsEl(data));
+        const activeBoardTab = BOARD_TABS.find((t) => t.id === boardTab) || BOARD_TABS[0];
+        root.appendChild(activeBoardTab.render(data));
+
+        root.appendChild(
+          el(
+            'p',
+            { class: 'muted', style: { marginTop: '24px', fontSize: '12px' } },
+            'Nguồn: harness/backlog.mjs + git + activity.jsonl · tự poll 5s · báo cáo+rủi ro: ',
+            el('span', { class: 'mono' }, 'project-analyst'),
+            ' · mốc thời gian: ',
+            el('span', { class: 'mono' }, 'progress-tracker'),
+            '.',
+          ),
+        );
+      }
+
+      // ── markdown renderer (zero-dep, an toàn: escape mọi text, chỉ phát tag đã biết) ──
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      }
+      function mdInline(s) {
+        s = escapeHtml(s);
+        s = s.replace(/`([^`]+)`/g, (m, p) => '<code>' + p + '</code>');
+        s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+        s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, t, u) => {
+          const safe = /^(https?:|#|\/|mailto:)/i.test(u) ? u : '#';
+          return '<a href="' + escapeHtml(safe) + '" target="_blank" rel="noopener">' + t + '</a>';
+        });
+        return s;
+      }
+      function splitRow(line) {
+        return line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+      }
+      function mdToHtml(src) {
+        const lines = String(src).replace(/\r\n?/g, '\n').split('\n');
+        let html = '', i = 0;
+        while (i < lines.length) {
+          const line = lines[i];
+          const fence = line.match(/^```(.*)$/);
+          if (fence) {
+            i++;
+            const buf = [];
+            while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i++; }
+            i++;
+            html += '<pre class="md-pre"><code>' + escapeHtml(buf.join('\n')) + '</code></pre>';
+            continue;
+          }
+          const h = line.match(/^(#{1,6})\s+(.*)$/);
+          if (h) { html += '<h' + h[1].length + '>' + mdInline(h[2]) + '</h' + h[1].length + '>'; i++; continue; }
+          if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) { html += '<hr/>'; i++; continue; }
+          if (/^>\s?/.test(line)) {
+            const buf = [];
+            while (i < lines.length && /^>\s?/.test(lines[i])) { buf.push(lines[i].replace(/^>\s?/, '')); i++; }
+            html += '<blockquote>' + mdInline(buf.join(' ')) + '</blockquote>';
+            continue;
+          }
+          if (/\|/.test(line) && i + 1 < lines.length && /^\s*\|?[\s:|-]*-+[\s:|-]*\|?\s*$/.test(lines[i + 1])) {
+            const rows = [splitRow(line)];
+            i += 2;
+            while (i < lines.length && /\|/.test(lines[i]) && lines[i].trim() !== '') { rows.push(splitRow(lines[i])); i++; }
+            let t = '<table class="md-table"><thead><tr>' + rows[0].map((c) => '<th>' + mdInline(c) + '</th>').join('') + '</tr></thead><tbody>';
+            for (const r of rows.slice(1)) t += '<tr>' + r.map((c) => '<td>' + mdInline(c) + '</td>').join('') + '</tr>';
+            html += t + '</tbody></table>';
+            continue;
+          }
+          if (/^\s*([-*+]|\d+\.)\s+/.test(line)) {
+            const ordered = /^\s*\d+\./.test(line);
+            const buf = [];
+            while (i < lines.length && /^\s*([-*+]|\d+\.)\s+/.test(lines[i])) { buf.push(lines[i].replace(/^\s*([-*+]|\d+\.)\s+/, '')); i++; }
+            const tag = ordered ? 'ol' : 'ul';
+            html += '<' + tag + '>' + buf.map((b) => '<li>' + mdInline(b) + '</li>').join('') + '</' + tag + '>';
+            continue;
+          }
+          if (line.trim() === '') { i++; continue; }
+          const buf = [line];
+          i++;
+          while (i < lines.length && lines[i].trim() !== '' && !/^(#{1,6}\s|```|>\s?|\s*([-*+]|\d+\.)\s+)/.test(lines[i])) { buf.push(lines[i]); i++; }
+          html += '<p>' + mdInline(buf.join('\n')) + '</p>';
+        }
+        return html;
+      }
+
+      // ── docs browser ─────────────────────────────────────────────────────────────
+      let docsList = null; // {files:[{path,size}]} — cache sau lần fetch đầu
+      let docSel = null; // path tài liệu đang xem
+      let docFilter = ''; // chuỗi lọc
+
+      function buildDocNav(container, viewEl) {
+        container.textContent = '';
+        const q = docFilter.trim().toLowerCase();
+        const files = (docsList.files || []).filter((f) => !q || f.path.toLowerCase().includes(q));
+        if (!files.length) {
+          container.appendChild(el('p', { class: 'muted', style: { padding: '8px' } }, 'Không có tài liệu khớp.'));
+          return;
+        }
+        const groups = {};
+        for (const f of files) {
+          const idx = f.path.indexOf('/');
+          const g = idx < 0 ? '(gốc)' : f.path.slice(0, idx);
+          (groups[g] = groups[g] || []).push(f);
+        }
+        for (const g of Object.keys(groups).sort((a, b) => a.localeCompare(b, 'vi'))) {
+          const box = el('div', { class: 'grp' }, el('div', { class: 'gh' }, g + ' · ' + groups[g].length));
+          for (const f of groups[g]) {
+            const name = f.path.includes('/') ? f.path.slice(f.path.indexOf('/') + 1) : f.path;
+            box.appendChild(
+              el(
+                'a',
+                {
+                  class: 'f' + (docSel === f.path ? ' sel' : ''),
+                  title: f.path,
+                  onclick: () => {
+                    docSel = f.path;
+                    location.hash = '#docs:' + encodeURIComponent(f.path);
+                    buildDocNav(container, viewEl);
+                    openDoc(f.path, viewEl);
+                  },
+                },
+                name,
+              ),
+            );
+          }
+          container.appendChild(box);
+        }
+      }
+
+      function openDoc(relPath, viewEl) {
+        viewEl.replaceChildren(el('p', { class: 'muted' }, 'Đang tải ' + relPath + '…'));
+        fetch('/api/docs/raw?path=' + encodeURIComponent(relPath))
+          .then((r) => {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.text();
+          })
+          .then((text) => {
+            const ext = (relPath.split('.').pop() || '').toLowerCase();
+            const body = el('div', { class: 'mdbody' });
+            if (ext === 'md' || ext === 'mdx') body.innerHTML = mdToHtml(text);
+            else body.appendChild(el('pre', { class: 'md-pre' }, el('code', null, text)));
+            viewEl.replaceChildren(
+              el('div', { class: 'muted', style: { marginBottom: '10px', fontSize: '12px' } }, '📄 docs/' + relPath),
+              body,
+            );
+            viewEl.scrollTop = 0;
+          })
+          .catch((e) => viewEl.replaceChildren(el('p', { class: 'err' }, 'Lỗi tải tài liệu: ' + ((e && e.message) || e))));
+      }
+
+      function renderDocs(root) {
+        const nav = el('div', { class: 'docnav' });
+        const viewEl = el('div', { class: 'docview' });
+        const navBody = el('div');
+        nav.appendChild(
+          el('input', {
+            class: 'docsearch',
+            placeholder: 'Lọc tài liệu…',
+            value: docFilter,
+            oninput: (e) => {
+              docFilter = e.target.value;
+              buildDocNav(navBody, viewEl);
+            },
+          }),
+        );
+        nav.appendChild(navBody);
+        root.appendChild(el('div', { class: 'docs' }, nav, viewEl));
+
+        const ready = () => {
+          buildDocNav(navBody, viewEl);
+          if (docSel) openDoc(docSel, viewEl);
+          else viewEl.appendChild(el('p', { class: 'muted' }, 'Chọn một tài liệu bên trái để xem.'));
+        };
+        if (docsList) return void ready();
+        viewEl.appendChild(el('p', { class: 'muted' }, 'Đang tải danh sách tài liệu…'));
+        fetch('/api/docs')
+          .then((r) => r.json())
+          .then((d) => {
+            docsList = d;
+            ready();
+          })
+          .catch((e) => viewEl.replaceChildren(el('p', { class: 'err' }, 'Lỗi tải /api/docs: ' + e)));
+      }
+
+      // ── tiến độ theo MODULE × LỚP (suy tự động từ work order) ─────────────────────
+      // Module code chuẩn ISSUE-BOARD-01 §8.2 (thẻ nhóm). FRONTEND/QA/DEVOPS/PROJECT là MODULE riêng (board §12).
+      const MODULES = [
+        { code: 'PROJECT', name: 'PROJECT — Quản trị dự án & Backlog' },
+        { code: 'FOUNDATION', name: 'FOUNDATION — Nền tảng & Hệ thống dùng chung' },
+        { code: 'AUTH', name: 'AUTH — Tài khoản, Đăng nhập & Phân quyền' },
+        { code: 'HR', name: 'HR — Quản lý nhân sự' },
+        { code: 'ATT', name: 'ATT — Chấm công' },
+        { code: 'LEAVE', name: 'LEAVE — Nghỉ phép' },
+        { code: 'TASK', name: 'TASK — Công việc & Dự án' },
+        { code: 'NOTI', name: 'NOTI — Thông báo' },
+        { code: 'DASH', name: 'DASH — Dashboard' },
+        { code: 'FRONTEND', name: 'FRONTEND — Giao diện chung' },
+        { code: 'QA', name: 'QA — Kiểm thử & Chất lượng' },
+        { code: 'DEVOPS', name: 'DEVOPS — Hạ tầng & CI/CD' },
+      ];
+      // Layer code chuẩn ISSUE-BOARD-01 §8.3 (chip lớp trong thẻ).
+      const LAYERS = [
+        { code: 'DOC', name: 'Tài liệu' },
+        { code: 'DB', name: 'Cơ sở dữ liệu / Migration / Seed' },
+        { code: 'API', name: 'API contract / OpenAPI' },
+        { code: 'BE', name: 'Backend implementation' },
+        { code: 'FE', name: 'Frontend implementation' },
+        { code: 'UI', name: 'UI/UX / Prototype / Handoff' },
+        { code: 'QA', name: 'Test / Manual / Automation' },
+        { code: 'DEVOPS', name: 'Infra / CI-CD / Deploy' },
+        { code: 'SEC', name: 'Security' },
+        { code: 'PERF', name: 'Performance' },
+        { code: 'INT', name: 'Integration' },
+        { code: 'REL', name: 'Release' },
+      ];
+      // Chip lớp lõi luôn hiện; lớp phụ (DOC/SEC/PERF/INT/REL) chỉ hiện khi có WO.
+      const CORE_LAYERS = ['DB', 'API', 'BE', 'FE', 'UI', 'QA', 'DEVOPS'];
+
+      // Module của Work Order: ưu tiên trường khai báo (backlog.mjs §8.2), thiếu → suy theo keyword.
+      function moduleOf(b) {
+        if (b.module && MODULES.some((m) => m.code === b.module)) return b.module;
+        const hay = (b.id + ' ' + b.title + ' ' + (b.paths || []).join(' ')).toLowerCase();
+        if (/auth|login|đăng nhập|2fa|phân quyền|permission|account|tài khoản|\brole\b|\buser\b/.test(hay)) return 'AUTH';
+        if (/\bhr\b|nhân sự|employee|hồ sơ nhân|phòng ban|position/.test(hay)) return 'HR';
+        if (/\batt\b|chấm công|attendance|ca làm/.test(hay)) return 'ATT';
+        if (/leave|nghỉ phép/.test(hay)) return 'LEAVE';
+        if (/\btask\b|công việc|dự án/.test(hay)) return 'TASK';
+        if (/dash|dashboard|biểu đồ/.test(hay)) return 'DASH';
+        if (/noti|thông báo|notification/.test(hay)) return 'NOTI';
+        return 'FOUNDATION';
+      }
+
+      // Layer của Work Order: ưu tiên trường khai báo (backlog.mjs §8.3), thiếu → suy theo paths/title.
+      function layerOf(b) {
+        if (b.layer && LAYERS.some((L) => L.code === b.layer)) return b.layer;
+        const hay = (b.id + ' ' + b.title + ' ' + (b.paths || []).join(' ')).toLowerCase();
+        if (/\.spec|\/test\/|deny-path|coverage/.test(hay)) return 'QA';
+        if (/migration|db\/schema|drizzle|\brls\b|backfill|\bseed\b/.test(hay)) return 'DB';
+        if (/\.github|turbo\.json|pnpm-workspace|docker|\bci\b|\bdevops\b/.test(hay)) return 'DEVOPS';
+        const fe = /apps\/(auth|console|app|web|admin|mobile)/.test(hay) || /packages\/ui|web-core|\.tsx|component/.test(hay);
+        if (fe) return /redesign|design token|prototype|wireframe|ui\/ux/.test(hay) ? 'UI' : 'FE';
+        if (/contracts|openapi|\bendpoint\b/.test(hay)) return 'API';
+        if (/apps\/api\/src/.test(hay)) return 'BE';
+        return 'BE';
+      }
+
+      const WO_MARK = { done: '✅', in_progress: '🔄', blocked: '🛑' };
+      function woMark(b) {
+        return WO_MARK[b.status] || (b.ready ? '◻️' : '⏳');
+      }
+
+      // Một dòng checklist Work Order; bấm → bung done_when (tiêu chí hội tụ).
+      function woRow(b) {
+        const has = b.doneWhen && b.doneWhen.length;
+        const isOpen = open.has(b.id);
+        const row = el('div', { class: 'clrow' });
+        row.appendChild(
+          el(
+            'div',
+            {
+              class: 'cltop',
+              onclick: () => {
+                if (!has) return;
+                if (open.has(b.id)) open.delete(b.id);
+                else open.add(b.id);
+                paint();
+              },
+            },
+            el('span', { class: 'clmark' }, woMark(b)),
+            el('strong', { class: 'mono', style: { fontSize: '12px' } }, b.id),
+            el('span', { class: 'badge ' + b.zone }, ZWORD[b.zone] || b.zone),
+            el('span', { class: 'grow muted', style: { fontSize: '13px' } }, b.title),
+            el('span', { class: 'muted' }, has ? (isOpen ? '▾' : '▸') : ''),
+          ),
+        );
+        if (isOpen && has) {
+          const allDone = b.status === 'done';
+          const ul = el('ul', { class: 'chk dwlist' });
+          b.doneWhen.forEach((d) => ul.appendChild(el('li', null, (allDone ? '✅ ' : '◻️ ') + d)));
+          row.appendChild(ul);
+        }
+        return row;
+      }
+
+      function moduleCard(mod) {
+        const wos = mod.items;
+        const total = wos.length;
+        const done = wos.filter((b) => b.status === 'done').length;
+        const pct = total ? Math.round((done / total) * 100) : 0;
+        const card = el('div', { class: 'partcard' + (total ? '' : ' zero') });
+        card.appendChild(
+          el(
+            'div',
+            { class: 'parthead' },
+            el('strong', null, mod.name),
+            el('span', { class: 'muted', style: { marginLeft: 'auto' } }, total ? done + '/' + total + ' · ' + pct + '%' : 'chưa bắt đầu'),
+          ),
+        );
+        card.appendChild(el('div', { class: 'bar', style: { marginTop: '8px' } }, el('i', { style: { width: pct + '%' } })));
+
+        // chip theo lớp: lõi luôn hiện; lớp phụ chỉ hiện khi có WO. code + done/total, tô màu theo tiến độ.
+        const chips = el('div', { class: 'chips' });
+        const byLayer = {};
+        LAYERS.forEach((L) => (byLayer[L.code] = wos.filter((b) => layerOf(b) === L.code)));
+        LAYERS.forEach((L) => {
+          const cw = byLayer[L.code];
+          if (!cw.length && !CORE_LAYERS.includes(L.code)) return;
+          const d = cw.filter((b) => b.status === 'done').length;
+          const cls = cw.length === 0 ? 'empty' : d === cw.length ? 'full' : 'part';
+          chips.appendChild(el('span', { class: 'chip2 ' + cls, title: L.name }, L.code + ' ' + d + '/' + cw.length));
+        });
+        card.appendChild(chips);
+
+        // checklist từng lớp (chỉ lớp có WO)
+        LAYERS.forEach((L) => {
+          const cw = byLayer[L.code];
+          if (!cw.length) return;
+          const d = cw.filter((b) => b.status === 'done').length;
+          card.appendChild(el('div', { class: 'lyrhead' }, L.code + ' — ' + L.name + ' · ' + d + '/' + cw.length));
+          cw.forEach((b) => card.appendChild(woRow(b)));
+        });
+        if (!total) card.appendChild(el('p', { class: 'muted', style: { marginTop: '8px', fontSize: '12px' } }, 'Chưa có work order cho module này.'));
+        return card;
+      }
+
+      function renderProgress(root) {
+        const data = lastData;
+        if (!data) {
+          root.appendChild(el('p', { class: 'muted' }, 'Đang tải…'));
+          return;
+        }
+        const p = data.progress;
+        root.appendChild(
+          el(
+            'div',
+            { class: 'panel' },
+            el('div', { class: 'muted' }, 'Tổng tiến độ dự án'),
+            el('div', { class: 'big' }, String(p.pct), el('span', { style: { fontSize: '20px' } }, ' %')),
+            el('div', { class: 'bar' }, el('i', { style: { width: p.pct + '%' } })),
+            el(
+              'div',
+              { class: 'muted', style: { marginTop: '6px' } },
+              p.done + '/' + p.total + ' Work Order xong · ' + p.inProgress + ' đang làm · ' + p.ready + ' sẵn sàng · ' + p.blocked + ' chặn',
+            ),
+          ),
+        );
+        const mods = MODULES.map((m) => ({ ...m, items: data.workOrders.filter((b) => moduleOf(b) === m.code) }));
+        const sec = el('div', { class: 'sec' }, el('h2', null, '📦 Tiến độ theo module & hệ thống · ' + mods.length));
+        mods.forEach((m) => sec.appendChild(moduleCard(m)));
+        root.appendChild(sec);
+        root.appendChild(
+          el(
+            'p',
+            { class: 'muted', style: { marginTop: '16px', fontSize: '12px' } },
+            'Phân loại theo trường module/layer khai báo trong harness/backlog.mjs (taxonomy ISSUE-BOARD-01 §8.2/§8.3); thiếu → suy tự động từ id · tiêu đề · paths. Chip lớp lõi luôn hiện; lớp phụ chỉ hiện khi có WO.',
+          ),
+        );
+      }
+
+      // ── nav + dispatcher ─────────────────────────────────────────────────────────
+      function navEl() {
+        const tab = (id, label) =>
+          el(
+            'div',
+            {
+              class: 'tab' + (view === id ? ' active' : ''),
+              onclick: () => {
+                if (view === id) return;
+                view = id;
+                location.hash = id === 'docs' ? '#docs' : id === 'progress' ? '#progress' : '';
+                paint();
+              },
+            },
+            label,
+          );
+        return el('div', { class: 'tabs' }, tab('board', '📊 Báo cáo'), tab('progress', '📈 Tiến độ'), tab('docs', '📚 Tài liệu'));
+      }
+
+      function paint() {
+        const root = document.getElementById('root');
+        root.textContent = '';
+        root.appendChild(navEl());
+        if (view === 'docs') renderDocs(root);
+        else if (view === 'progress') renderProgress(root);
+        else renderBoard(root, lastData);
+      }
+
+      function applyHash() {
+        const h = location.hash || '';
+        if (h.indexOf('#docs') === 0) {
+          view = 'docs';
+          const m = h.match(/^#docs:(.*)$/);
+          if (m) {
+            try {
+              docSel = decodeURIComponent(m[1]);
+            } catch {
+              /* hash hỏng → bỏ qua */
+            }
+          }
+        } else if (h.indexOf('#progress') === 0) {
+          view = 'progress';
+        } else {
+          view = 'board';
+        }
+      }
+      window.addEventListener('hashchange', () => {
+        applyHash();
+        paint();
+      });
+
+      async function load() {
+        try {
+          const r = await fetch('/api/status');
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const data = await r.json();
+          if (!seeded) {
+            data.workOrders.forEach((b) => {
+              if (b.status === 'in_progress') open.add(b.id);
+            });
+            seeded = true;
+          }
+          lastData = data;
+          if (view === 'board' || view === 'progress') paint(); // vẽ lại board/tiến độ khi đang xem (đừng đè tài liệu)
+        } catch (e) {
+          if (view === 'board' && !lastData) {
+            const root = document.getElementById('root');
+            root.textContent = '';
+            root.appendChild(navEl());
+            root.appendChild(el('p', { class: 'err' }, 'Lỗi tải /api/status: ' + ((e && e.message) || e) + '. Server còn chạy không?'));
+          }
+        }
+      }
+
+      applyHash();
+      paint();
+      load();
+      setInterval(load, 5000);
+    </script>
+  </body>
+</html>

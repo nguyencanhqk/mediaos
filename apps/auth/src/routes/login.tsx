@@ -1,11 +1,13 @@
 import type { TFunction } from "i18next";
-import { LogIn } from "lucide-react";
+import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiError, authApi } from "@mediaos/web-core";
 import { Button, Input } from "@mediaos/ui";
+import { SignalBar } from "@/components/SignalBar";
 import { TwoFactorChallengeForm } from "@/components/TwoFactorChallengeForm";
-import { DEFAULT_APP_URL } from "@/lib/config";
+import { BRAND_SYSTEM_LABEL, BRAND_WORDMARK } from "@/lib/brand";
+import { DEFAULT_APP_URL, SINGLE_COMPANY_SLUG } from "@/lib/config";
 
 type LoginStep =
   | { kind: "credentials" }
@@ -45,25 +47,57 @@ async function redirectToTarget(): Promise<void> {
   }
 }
 
+/** Bảng nhận diện bên trái — "bàn điều khiển": wordmark + tagline + thanh tín hiệu on-air + trạng thái. */
+function BrandPanel() {
+  const { t } = useTranslation("auth");
+  return (
+    <section className="flex flex-1 flex-col justify-between gap-10 lg:max-w-md">
+      <div className="space-y-2">
+        <h1 className="brand-gradient-text font-display text-4xl font-bold tracking-tight">
+          {BRAND_WORDMARK}
+        </h1>
+        <p className="font-mono text-[0.7rem] uppercase tracking-[0.25em] text-muted-foreground">
+          {BRAND_SYSTEM_LABEL}
+        </p>
+      </div>
+
+      <div className="space-y-5">
+        <p className="font-display text-xl font-medium text-foreground/90">
+          {t("login.tagline")}
+        </p>
+        <SignalBar />
+      </div>
+
+      <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
+        <span className="live-dot inline-block size-2 rounded-full bg-brand shadow-[0_0_8px] shadow-brand" />
+        <span className="tracking-widest text-foreground/80">{t("login.onAir")}</span>
+        <span aria-hidden>·</span>
+        <span>{t("login.sessionNote")}</span>
+      </div>
+    </section>
+  );
+}
+
 /** App đăng nhập trung tâm (FS-1b). Credentials → (2FA challenge nếu bật) → cookie SSO → về app đích. */
 export function LoginPage() {
   const { t } = useTranslation("auth");
 
   const [step, setStep] = useState<LoginStep>({ kind: "credentials" });
-  const [companySlug, setCompanySlug] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const onSubmitCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!companySlug.trim() || !email.trim() || !password) return;
+    if (!email.trim() || !password) return;
     setBusy(true);
     setError(null);
     try {
+      // Đơn-tenant: slug đến từ config (SINGLE_COMPANY_SLUG), user KHÔNG phải gõ — hợp đồng backend không đổi.
       const result = await authApi.login({
-        companySlug: companySlug.trim(),
+        companySlug: SINGLE_COMPANY_SLUG,
         email: email.trim(),
         password,
       });
@@ -99,77 +133,98 @@ export function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-xl border border-border p-8 shadow-sm">
-        <div className="mb-6 space-y-1 text-center">
-          <h1 className="text-2xl font-semibold">{t("common:appName")}</h1>
-          <p className="text-sm text-muted-foreground">{t("login.subtitle")}</p>
-        </div>
+    <div className="control-room-bg min-h-screen w-full">
+      <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col items-center justify-center gap-12 px-6 py-12 lg:flex-row lg:items-stretch lg:gap-20 lg:py-0">
+        <BrandPanel />
 
-        {/* Lỗi hiển thị ở container — nhìn thấy ở CẢ bước credentials lẫn 2FA. */}
-        {error && (
-          <p role="alert" aria-live="assertive" className="mb-4 text-sm text-destructive">
-            {error}
-          </p>
-        )}
+        {/* Bảng console xác thực */}
+        <section className="flex w-full max-w-sm items-center lg:flex-1">
+          <div className="w-full rounded-xl border border-border bg-card p-7 shadow-2xl shadow-black/40">
+            <div className="mb-6 space-y-1">
+              <h2 className="font-display text-2xl font-semibold">
+                {step.kind === "twoFactor" ? t("twoFactor.title") : t("login.heading")}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {step.kind === "twoFactor" ? t("twoFactor.challengeHint") : t("login.subtitle")}
+              </p>
+            </div>
 
-        {step.kind === "twoFactor" ? (
-          <TwoFactorChallengeForm
-            challengeToken={step.challengeToken}
-            onSuccess={() => { void onTwoFactorSuccess(); }}
-            onCancel={onCancelTwoFactor}
-          />
-        ) : (
-          <form onSubmit={(e) => { void onSubmitCredentials(e); }} className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="company-slug">
-                {t("login.companySlugLabel")}
-              </label>
-              <Input
-                id="company-slug"
-                value={companySlug}
-                onChange={(e) => setCompanySlug(e.target.value)}
-                placeholder="my-company"
-                autoComplete="organization"
-                autoFocus
+            {/* Lỗi hiển thị ở container — nhìn thấy ở CẢ bước credentials lẫn 2FA. */}
+            {error && (
+              <p
+                role="alert"
+                aria-live="assertive"
+                className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              >
+                {error}
+              </p>
+            )}
+
+            {step.kind === "twoFactor" ? (
+              <TwoFactorChallengeForm
+                challengeToken={step.challengeToken}
+                onSuccess={() => {
+                  void onTwoFactorSuccess();
+                }}
+                onCancel={onCancelTwoFactor}
               />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="email">
-                {t("fields.email")}
-              </label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@company.com"
-                autoComplete="email"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="password">
-                {t("fields.password")}
-              </label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                autoComplete="current-password"
-              />
-            </div>
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={busy || !companySlug.trim() || !email.trim() || !password}
-            >
-              <LogIn className="size-4" />
-              {busy ? t("login.submitting") : t("login.submit")}
-            </Button>
-          </form>
-        )}
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  void onSubmitCredentials(e);
+                }}
+                className="space-y-4"
+              >
+                <div className="space-y-2">
+                  <label className="text-sm font-medium" htmlFor="email">
+                    {t("fields.email")}
+                  </label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@company.com"
+                    autoComplete="email"
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium" htmlFor="password">
+                    {t("fields.password")}
+                  </label>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      autoComplete="current-password"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={showPassword ? t("fields.hidePassword") : t("fields.showPassword")}
+                      className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </button>
+                  </div>
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={busy || !email.trim() || !password}
+                >
+                  {busy ? t("login.submitting") : t("login.submit")}
+                  {!busy && <ArrowRight className="size-4" />}
+                </Button>
+              </form>
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );

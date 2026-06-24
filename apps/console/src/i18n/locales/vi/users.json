@@ -1,0 +1,90 @@
+{
+  "title": "Quản lý người dùng",
+  "subtitle": "Danh sách tài khoản trong hệ thống. Quản trị viên có thể mời, khoá, mở khoá và xoá tài khoản.",
+  "noPermission": {
+    "title": "Không có quyền quản lý người dùng",
+    "description": "Bạn cần quyền manage:user để xem danh sách tài khoản."
+  },
+  "filter": {
+    "search": "Tìm kiếm",
+    "searchPlaceholder": "Email hoặc tên...",
+    "status": "Trạng thái",
+    "all": "Tất cả",
+    "active": "Đang hoạt động",
+    "suspended": "Đã khoá",
+    "apply": "Lọc",
+    "clear": "Xoá lọc"
+  },
+  "table": {
+    "email": "Email",
+    "fullName": "Họ và tên",
+    "status": "Trạng thái",
+    "lastLoginAt": "Đăng nhập lần cuối",
+    "createdAt": "Ngày tạo",
+    "actions": "Thao tác",
+    "empty": "Không có người dùng nào.",
+    "neverLoggedIn": "Chưa đăng nhập",
+    "noName": "(Chưa đặt tên)"
+  },
+  "status": {
+    "active": "Hoạt động",
+    "suspended": "Đã khoá"
+  },
+  "actions": {
+    "invite": "Mời người dùng",
+    "suspend": "Khoá",
+    "reactivate": "Mở khoá",
+    "delete": "Xoá"
+  },
+  "suspend": {
+    "title": "Khoá tài khoản?",
+    "description": "Người dùng \"{{email}}\" sẽ không thể đăng nhập sau khi bị khoá.",
+    "reasonLabel": "Lý do (tuỳ chọn)",
+    "reasonPlaceholder": "Nhập lý do khoá tài khoản...",
+    "confirm": "Xác nhận khoá",
+    "cancel": "Huỷ"
+  },
+  "reactivate": {
+    "title": "Mở khoá tài khoản?",
+    "description": "Người dùng \"{{email}}\" sẽ có thể đăng nhập lại.",
+    "confirm": "Mở khoá",
+    "cancel": "Huỷ"
+  },
+  "delete": {
+    "title": "Xoá tài khoản?",
+    "description": "Tài khoản \"{{email}}\" sẽ bị xoá mềm. Hành động này không thể hoàn tác qua giao diện.",
+    "confirm": "Xoá tài khoản",
+    "cancel": "Huỷ"
+  },
+  "invite": {
+    "title": "Mời người dùng mới",
+    "description": "Gửi lời mời qua email. Người được mời sẽ nhận link kích hoạt tài khoản (hiệu lực 72 giờ).",
+    "emailLabel": "Email",
+    "emailPlaceholder": "user@example.com",
+    "fullNameLabel": "Họ và tên",
+    "fullNamePlaceholder": "Nguyễn Văn A",
+    "submit": "Gửi lời mời",
+    "submitting": "Đang gửi...",
+    "emailRequired": "Email là bắt buộc.",
+    "emailInvalid": "Email không hợp lệ.",
+    "fullNameRequired": "Họ và tên là bắt buộc.",
+    "cancel": "Huỷ"
+  },
+  "feedback": {
+    "loadFailed": "Không tải được danh sách người dùng.",
+    "suspendOk": "Đã khoá tài khoản.",
+    "suspendFailed": "Khoá tài khoản thất bại.",
+    "reactivateOk": "Đã mở khoá tài khoản.",
+    "reactivateFailed": "Mở khoá tài khoản thất bại.",
+    "deleteOk": "Đã xoá tài khoản.",
+    "deleteFailed": "Xoá tài khoản thất bại.",
+    "inviteOk": "Đã gửi lời mời.",
+    "inviteOkNoEmail": "Đã tạo lời mời nhưng email không gửi được — kiểm tra cấu hình SMTP.",
+    "inviteFailed": "Gửi lời mời thất bại."
+  },
+  "pagination": {
+    "summary": "{{from}}–{{to}} / {{total}} người dùng",
+    "prev": "Trước",
+    "next": "Tiếp"
+  }
+}

@@ -68,6 +68,16 @@ export const resetPasswordRequestSchema = z.object({
 });
 export type ResetPasswordRequest = z.infer<typeof resetPasswordRequestSchema>;
 
+/**
+ * Đổi mật khẩu khi ĐÃ đăng nhập (self-service, Module 2a). `currentPassword` để re-auth (chống chiếm
+ * phiên đổi pass); `newPassword` ≥ 8 ký tự (mirror reset). "Khác mật khẩu cũ" ép ở service (lỗi rõ ràng).
+ */
+export const changePasswordRequestSchema = z.object({
+  currentPassword: z.string().min(1).max(200),
+  newPassword: z.string().min(8).max(200),
+});
+export type ChangePasswordRequest = z.infer<typeof changePasswordRequestSchema>;
+
 /** Cặp token trả về khi login/refresh. */
 export const authTokensSchema = z.object({
   accessToken: z.string(),

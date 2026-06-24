@@ -1,4 +1,5 @@
 import {
+  changePasswordRequestSchema,
   forgotPasswordRequestSchema,
   loginRequestSchema,
   refreshRequestSchema,
@@ -14,6 +15,7 @@ export class LoginDto extends createZodDto(loginRequestSchema) {}
 export class RefreshDto extends createZodDto(refreshRequestSchema) {}
 export class ForgotPasswordDto extends createZodDto(forgotPasswordRequestSchema) {}
 export class ResetPasswordDto extends createZodDto(resetPasswordRequestSchema) {}
+export class ChangePasswordDto extends createZodDto(changePasswordRequestSchema) {}
 export class TwoFactorEnableDto extends createZodDto(twoFactorEnableRequestSchema) {}
 export class TwoFactorVerifyDto extends createZodDto(twoFactorVerifyRequestSchema) {}
 export class TwoFactorDisableDto extends createZodDto(twoFactorDisableRequestSchema) {}

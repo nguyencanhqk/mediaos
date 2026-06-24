@@ -1,9 +1,10 @@
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { EmployeeDto } from "@mediaos/contracts";
 import { ApiError } from "@mediaos/web-core";
-import { Button, Dialog, Input, Select } from "@mediaos/ui";
+import { Button, Dialog, Input } from "@mediaos/ui";
 import { rbacApi, type RoleSummary } from "@/lib/rbac-api";
 
 interface AssignRoleDialogProps {
@@ -22,7 +23,7 @@ function toIso(localValue: string): string | null {
 }
 
 /**
- * Gán role cho 1 user (POST /permissions/users/:id/roles). CS-2 (mirror apps/admin tenant/rbac).
+ * Gán role cho 1 user (POST /permissions/users/:id/roles). CS-2.
  * Gate ở BE: `assign-role:user` (isSensitive). UI chỉ ẩn/hiện affordance — BE là gác cuối (fail-closed).
  * Danh mục `roles` đã được BE loại trừ role operator-audience (chống leo thang).
  */
@@ -30,12 +31,14 @@ export function AssignRoleDialog({ open, onClose, user, roles, onSuccess }: Assi
   const { t } = useTranslation("rbac");
   const queryClient = useQueryClient();
   const [roleId, setRoleId] = React.useState("");
+  const [roleSearch, setRoleSearch] = React.useState("");
   const [expiresLocal, setExpiresLocal] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (open) {
       setRoleId("");
+      setRoleSearch("");
       setExpiresLocal("");
       setError(null);
     }
@@ -68,6 +71,12 @@ export function AssignRoleDialog({ open, onClose, user, roles, onSuccess }: Assi
 
   const userName = user.fullName ?? user.email;
 
+  const filteredRoles = roleSearch.trim()
+    ? roles.filter((r) => r.name.toLowerCase().includes(roleSearch.toLowerCase()))
+    : roles;
+
+  const selectedRole = roles.find((r) => r.id === roleId);
+
   return (
     <Dialog
       open={open}
@@ -79,37 +88,94 @@ export function AssignRoleDialog({ open, onClose, user, roles, onSuccess }: Assi
           <Button variant="outline" onClick={onClose} disabled={mutation.isPending}>
             {t("common:actions.cancel")}
           </Button>
-          <Button onClick={onSubmit} disabled={mutation.isPending}>
+          <Button onClick={onSubmit} disabled={mutation.isPending || !roleId}>
             {mutation.isPending ? t("common:saving") : t("actions.assign")}
           </Button>
         </>
       }
     >
-      <div className="space-y-4">
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">{t("assignDialog.roleLabel")}</span>
-          <Select value={roleId} onChange={(e) => setRoleId(e.target.value)}>
-            <option value="">{t("assignDialog.rolePlaceholder")}</option>
-            {roles.map((role) => (
-              <option key={role.id} value={role.id}>
-                {role.name}
-              </option>
-            ))}
-          </Select>
-        </label>
+      {/* Cảnh báo nhạy cảm */}
+      <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />
+        <span>{t("assignDialog.warning")}</span>
+      </div>
 
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">{t("assignDialog.expiresLabel")}</span>
+      <div className="space-y-4">
+        {/* Role search + select */}
+        <div className="space-y-1.5">
+          <label htmlFor="assign-role-search" className="block text-sm font-medium">
+            {t("assignDialog.roleLabel")}
+          </label>
+
+          {roles.length > 5 && (
+            <Input
+              id="assign-role-search"
+              type="search"
+              placeholder={t("assignDialog.roleSearchPlaceholder")}
+              value={roleSearch}
+              onChange={(e) => setRoleSearch(e.target.value)}
+              className="mb-1"
+            />
+          )}
+
+          <div className="max-h-40 overflow-y-auto rounded-md border border-border">
+            {filteredRoles.length === 0 ? (
+              <p className="px-3 py-2 text-sm text-muted-foreground">
+                {t("assignDialog.noRolesFound")}
+              </p>
+            ) : (
+              filteredRoles.map((role) => (
+                <button
+                  key={role.id}
+                  type="button"
+                  className={[
+                    "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors",
+                    roleId === role.id
+                      ? "bg-brand-muted text-brand font-medium"
+                      : "hover:bg-muted/60",
+                  ].join(" ")}
+                  onClick={() => setRoleId(role.id)}
+                >
+                  <span
+                    className={[
+                      "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+                      roleId === role.id ? "border-brand bg-brand" : "border-border",
+                    ].join(" ")}
+                  >
+                    {roleId === role.id && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                    )}
+                  </span>
+                  {role.name}
+                </button>
+              ))
+            )}
+          </div>
+
+          {selectedRole && (
+            <p className="text-xs text-muted-foreground">
+              {t("assignDialog.selectedRole", { name: selectedRole.name })}
+            </p>
+          )}
+        </div>
+
+        {/* Hết hạn */}
+        <div className="space-y-1.5">
+          <label htmlFor="assign-expires" className="block text-sm font-medium">
+            {t("assignDialog.expiresLabel")}
+          </label>
           <Input
+            id="assign-expires"
             type="datetime-local"
             value={expiresLocal}
             onChange={(e) => setExpiresLocal(e.target.value)}
+            disabled={mutation.isPending}
           />
-          <span className="text-xs text-muted-foreground">{t("assignDialog.expiresHint")}</span>
-        </label>
+          <p className="text-xs text-muted-foreground">{t("assignDialog.expiresHint")}</p>
+        </div>
 
         {error && (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" aria-live="assertive" className="text-sm text-destructive">
             {error}
           </p>
         )}

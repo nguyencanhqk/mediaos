@@ -10,18 +10,7 @@ import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { ApprovalService } from "../workflow/approval.service";
 import { ApprovalRulesRepository } from "./approval-rules.repository";
-
-const PG_UNIQUE_VIOLATION = "23505";
-
-/** Concurrent same-(request, level) decision loses the FOR UPDATE race → 23505 on the append-only uq. */
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as Record<string, unknown>)["code"] === PG_UNIQUE_VIOLATION
-  );
-}
+import { isUniqueViolation } from "../common/db-error";
 
 interface RuleRow {
   level: number;
@@ -69,7 +58,12 @@ export class ApprovalMultilevelService {
 
     // Final level → reuse the proven G4-5 close + fan-out + complete path verbatim. No early-close.
     if (request.currentLevel >= request.maxLevel) {
-      await this.assertActorIsCurrentLevelApprover(companyId, request.workflowStepId, request.currentLevel, actorId);
+      await this.assertActorIsCurrentLevelApprover(
+        companyId,
+        request.workflowStepId,
+        request.currentLevel,
+        actorId,
+      );
       return this.finalApproval.approve(companyId, requestId, actorId, comment);
     }
 
@@ -186,7 +180,9 @@ export class ApprovalMultilevelService {
       );
     }
     if (currentRule.approverUserId !== actorId) {
-      throw new ConflictException("Not your level yet — you are not the approver of the current level");
+      throw new ConflictException(
+        "Not your level yet — you are not the approver of the current level",
+      );
     }
   }
 

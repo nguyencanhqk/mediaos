@@ -33,8 +33,7 @@ const DEFAULT_APP_URL = "http://web.localhost:5273";
 
 const assign = vi.fn();
 
-function fillCredentials(slug = "my-co", email = "u@co.com", pass = "secret") {
-  fireEvent.change(screen.getByLabelText("Mã công ty"), { target: { value: slug } });
+function fillCredentials(email = "u@co.com", pass = "secret") {
   fireEvent.change(screen.getByLabelText("Email"), { target: { value: email } });
   fireEvent.change(screen.getByLabelText("Mật khẩu"), { target: { value: pass } });
 }
@@ -51,16 +50,16 @@ describe("apps/auth LoginPage", () => {
   });
   afterEach(cleanup);
 
-  it("renders credential fields", () => {
+  it("renders credential fields (no company-slug field — single tenant)", () => {
     render(<LoginPage />);
-    expect(screen.getByLabelText("Mã công ty")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Mã công ty")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Email")).toBeInTheDocument();
     expect(screen.getByLabelText("Mật khẩu")).toBeInTheDocument();
   });
 
   it("submit button disabled when fields empty", () => {
     render(<LoginPage />);
-    expect(screen.getByRole("button", { name: /đăng nhập/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /vào hệ thống/i })).toBeDisabled();
   });
 
   it("login success (no 2FA) → checkRedirect(requested) → window.location to allowed target", async () => {
@@ -76,7 +75,7 @@ describe("apps/auth LoginPage", () => {
     render(<LoginPage />);
 
     fillCredentials();
-    fireEvent.click(screen.getByRole("button", { name: /đăng nhập/i }));
+    fireEvent.click(screen.getByRole("button", { name: /vào hệ thống/i }));
 
     await waitFor(() =>
       expect(authApi.checkRedirect).toHaveBeenCalledWith("https://web.localhost/dash"),
@@ -94,7 +93,7 @@ describe("apps/auth LoginPage", () => {
     render(<LoginPage />);
 
     fillCredentials();
-    fireEvent.click(screen.getByRole("button", { name: /đăng nhập/i }));
+    fireEvent.click(screen.getByRole("button", { name: /vào hệ thống/i }));
 
     await waitFor(() => expect(assign).toHaveBeenCalledWith(DEFAULT_APP_URL));
   });
@@ -110,7 +109,7 @@ describe("apps/auth LoginPage", () => {
     render(<LoginPage />);
 
     fillCredentials();
-    fireEvent.click(screen.getByRole("button", { name: /đăng nhập/i }));
+    fireEvent.click(screen.getByRole("button", { name: /vào hệ thống/i }));
 
     await waitFor(() => expect(assign).toHaveBeenCalledWith(DEFAULT_APP_URL));
   });
@@ -123,7 +122,7 @@ describe("apps/auth LoginPage", () => {
     render(<LoginPage />);
 
     fillCredentials();
-    fireEvent.click(screen.getByRole("button", { name: /đăng nhập/i }));
+    fireEvent.click(screen.getByRole("button", { name: /vào hệ thống/i }));
 
     await waitFor(() => expect(screen.getByTestId("2fa-challenge")).toBeInTheDocument());
     expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
@@ -141,7 +140,7 @@ describe("apps/auth LoginPage", () => {
     render(<LoginPage />);
 
     fillCredentials();
-    fireEvent.click(screen.getByRole("button", { name: /đăng nhập/i }));
+    fireEvent.click(screen.getByRole("button", { name: /vào hệ thống/i }));
     await waitFor(() => screen.getByTestId("2fa-challenge"));
 
     fireEvent.click(screen.getByText("verify-2fa"));
@@ -157,7 +156,7 @@ describe("apps/auth LoginPage", () => {
     render(<LoginPage />);
 
     fillCredentials();
-    fireEvent.click(screen.getByRole("button", { name: /đăng nhập/i }));
+    fireEvent.click(screen.getByRole("button", { name: /vào hệ thống/i }));
     await waitFor(() => screen.getByTestId("2fa-challenge"));
 
     fireEvent.click(screen.getByText("cancel-2fa"));
@@ -174,7 +173,7 @@ describe("apps/auth LoginPage", () => {
     render(<LoginPage />);
 
     fillCredentials();
-    fireEvent.click(screen.getByRole("button", { name: /đăng nhập/i }));
+    fireEvent.click(screen.getByRole("button", { name: /vào hệ thống/i }));
 
     await waitFor(() =>
       expect(screen.getByText("Email hoặc mật khẩu không đúng.")).toBeInTheDocument(),

@@ -47,6 +47,35 @@ export type TaskStatusDto = z.infer<typeof taskStatusSchema>;
 export const officeTaskStatusSchema = z.enum(["not_started", "in_progress", "completed"]);
 export type OfficeTaskStatusDto = z.infer<typeof officeTaskStatusSchema>;
 
+// ─── PM-1 (apps/projects, mig 0420): priority · state group · label ─────────────
+// Định nghĩa TRƯỚC taskSchema vì taskSchema tham chiếu (const không hoisted — tránh TDZ).
+
+/** Mức ưu tiên kiểu Plane. 'none' = chưa đặt (mặc định). */
+export const prioritySchema = z.enum(["urgent", "high", "medium", "low", "none"]);
+export type PriorityDto = z.infer<typeof prioritySchema>;
+
+/** 5 nhóm trạng thái Plane (project_states.state_group). */
+export const projectStateGroupSchema = z.enum([
+  "backlog",
+  "unstarted",
+  "started",
+  "completed",
+  "cancelled",
+]);
+export type ProjectStateGroupDto = z.infer<typeof projectStateGroupSchema>;
+
+/** Nhãn màu theo project (labels). */
+export const labelSchema = z.object({
+  id: z.string().uuid(),
+  companyId: z.string().uuid(),
+  projectId: z.string().uuid(),
+  name: z.string(),
+  color: z.string(),
+  createdBy: z.string().uuid().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type LabelDto = z.infer<typeof labelSchema>;
+
 // ─── Task ─────────────────────────────────────────────────────────────────────
 // taskType uses the canonical 8-type `taskTypeSchema` defined above (G9-1 unified hub).
 // (A stale 5-type duplicate from merge 599609e was removed here — it shadowed the canonical
@@ -78,8 +107,28 @@ export const taskSchema = z.object({
   // Joined from projects (null when not project-scoped)
   projectId: z.string().uuid().nullable(),
   projectName: z.string().nullable(),
+  // ── PM-1 (apps/projects, mig 0420) — work item kiểu Plane (ADDITIVE; mọi endpoint task trả các cột này) ──
+  priority: prioritySchema,
+  description: z.string().nullable(),
+  startDate: z.string().datetime().nullable(),
+  sequence: z.number().int().nullable(),
+  /** {projectIdentifier}-{sequence}, vd "WEB-12". null nếu project chưa đặt identifier hoặc task không có project. */
+  displayId: z.string().nullable(),
+  projectIdentifier: z.string().nullable(),
+  // State tùy biến (joined từ project_states; null cho task chưa map state — fallback `status` legacy).
+  stateId: z.string().uuid().nullable(),
+  stateName: z.string().nullable(),
+  stateGroup: projectStateGroupSchema.nullable(),
+  stateColor: z.string().nullable(),
 });
 export type TaskDto = z.infer<typeof taskSchema>;
+
+// ─── Board work item (TaskDto + nhãn gắn) ───────────────────────────────────────
+// Dùng cho GET /tasks/board + detail: trả thêm labels[] (aggregate). My Tasks giữ TaskDto (rẻ, không join nhãn).
+export const boardTaskSchema = taskSchema.extend({
+  labels: z.array(labelSchema),
+});
+export type BoardTaskDto = z.infer<typeof boardTaskSchema>;
 
 // ─── Comment ──────────────────────────────────────────────────────────────────
 
@@ -111,8 +160,32 @@ export const createTaskSchema = z.object({
   assigneeUserId: z.string().uuid().nullable().optional(),
   projectId: z.string().uuid().nullable().optional(),
   dueDate: z.string().datetime().nullable().optional(),
+  // PM-1: tạo work item kèm thuộc tính Plane (đều optional — luồng office cũ không cần).
+  priority: prioritySchema.optional(),
+  description: z.string().max(50000).nullable().optional(),
+  stateId: z.string().uuid().nullable().optional(),
+  startDate: z.string().datetime().nullable().optional(),
 });
 export type CreateTaskRequest = z.infer<typeof createTaskSchema>;
+
+/**
+ * PM-1 — cập nhật field work item (PATCH /tasks/:id, mở rộng khỏi luồng status-only office). Mọi field
+ * optional (partial update). CHỈ áp cho task KHÔNG thuộc FSM (service giữ guard WORKFLOW_TASK_TYPES).
+ * `status` CỐ Ý không có ở đây — đổi trạng thái đi qua state_id (PM) hoặc PATCH /status (office legacy).
+ */
+export const updateTaskFieldsSchema = z
+  .object({
+    title: z.string().min(1).max(200),
+    description: z.string().max(50000).nullable(),
+    priority: prioritySchema,
+    stateId: z.string().uuid().nullable(),
+    assigneeUserId: z.string().uuid().nullable(),
+    dueDate: z.string().datetime().nullable(),
+    startDate: z.string().datetime().nullable(),
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: "Cần ít nhất 1 field để cập nhật." });
+export type UpdateTaskFieldsRequest = z.infer<typeof updateTaskFieldsSchema>;
 
 /** Update status of a non-workflow task via the shortened flow (G9-3). */
 export const updateTaskStatusSchema = z.object({
@@ -137,6 +210,10 @@ export const listTasksQuerySchema = z.object({
   status: taskStatusSchema.optional(),
   projectId: z.string().uuid().optional(),
   assigneeUserId: z.string().uuid().optional(),
+  // PM-1: lọc board theo state tùy biến / ưu tiên / nhãn.
+  stateId: z.string().uuid().optional(),
+  priority: prioritySchema.optional(),
+  labelId: z.string().uuid().optional(),
   limit: z.coerce.number().int().min(1).max(BOARD_PAGE_LIMIT_MAX).optional(),
   offset: z.coerce.number().int().min(0).optional(),
 });
@@ -209,3 +286,58 @@ export const attachmentDownloadUrlSchema = z.object({
   downloadUrl: z.string().url(),
 });
 export type AttachmentDownloadUrlDto = z.infer<typeof attachmentDownloadUrlSchema>;
+
+// ─── PM-1 (apps/projects, mig 0420): project states (trạng thái tùy biến) ────────
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
+export const projectStateSchema = z.object({
+  id: z.string().uuid(),
+  companyId: z.string().uuid(),
+  projectId: z.string().uuid(),
+  name: z.string(),
+  stateGroup: projectStateGroupSchema,
+  color: z.string(),
+  isDefault: z.boolean(),
+  sortOrder: z.number().int(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type ProjectStateDto = z.infer<typeof projectStateSchema>;
+
+export const createProjectStateSchema = z.object({
+  name: z.string().min(1).max(80),
+  stateGroup: projectStateGroupSchema,
+  color: z.string().regex(HEX_COLOR).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+export type CreateProjectStateRequest = z.infer<typeof createProjectStateSchema>;
+
+export const updateProjectStateSchema = z
+  .object({
+    name: z.string().min(1).max(80),
+    stateGroup: projectStateGroupSchema,
+    color: z.string().regex(HEX_COLOR),
+    sortOrder: z.number().int().min(0),
+    isDefault: z.boolean(),
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: "Cần ít nhất 1 field để cập nhật." });
+export type UpdateProjectStateRequest = z.infer<typeof updateProjectStateSchema>;
+
+// ─── PM-1: labels (nhãn màu) ─────────────────────────────────────────────────────
+
+export const createLabelSchema = z.object({
+  name: z.string().min(1).max(60),
+  color: z.string().regex(HEX_COLOR).optional(),
+});
+export type CreateLabelRequest = z.infer<typeof createLabelSchema>;
+
+export const updateLabelSchema = z
+  .object({
+    name: z.string().min(1).max(60),
+    color: z.string().regex(HEX_COLOR),
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: "Cần ít nhất 1 field để cập nhật." });
+export type UpdateLabelRequest = z.infer<typeof updateLabelSchema>;

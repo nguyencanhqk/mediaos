@@ -1,8 +1,0 @@
-{
-  "greeting": "Xin chào, {{name}} 👋",
-  "searchApps": "Tìm ứng dụng…",
-  "noApps": "Không tìm thấy ứng dụng phù hợp.",
-  "apiStatus": "Trạng thái hệ thống",
-  "apiChecking": "Đang kiểm tra kết nối…",
-  "apiOffline": "Mất kết nối máy chủ. Kiểm tra dịch vụ đang chạy."
-}

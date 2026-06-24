@@ -16,7 +16,9 @@
 import pg from "pg";
 import { hash, Algorithm } from "@node-rs/argon2";
 
-const DIRECT_URL = "postgres://mediaos:changeme_dev_only@localhost:5432/mediaos";
+// SEED_DIRECT_URL override (vd dùng cho DB lane isolated: mediaos_projectspm). Mặc định = DB dev chung.
+const DIRECT_URL =
+  process.env.SEED_DIRECT_URL ?? "postgres://mediaos:changeme_dev_only@localhost:5432/mediaos";
 const COMPANY_ID = "401c90a0-dfea-4b0a-986c-4317b798cd7b";
 const ADMIN_ID = "31348071-d4e2-4723-a66d-3322e4ce85aa";
 const USER_PASSWORD = "Demo@12345";

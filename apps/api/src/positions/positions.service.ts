@@ -3,24 +3,14 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import type { CreatePositionRequest, UpdatePositionRequest } from '@mediaos/contracts';
-import { DatabaseService } from '../db/db.service';
-import { AuditService } from '../events/audit.service';
-import { PermissionService } from '../permission/permission.service';
-import type { CanInput } from '../permission/permission.types';
-import { PositionsRepository } from './positions.repository';
-
-const PG_UNIQUE_VIOLATION = '23505';
-
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as Record<string, unknown>)['code'] === PG_UNIQUE_VIOLATION
-  );
-}
+} from "@nestjs/common";
+import type { CreatePositionRequest, UpdatePositionRequest } from "@mediaos/contracts";
+import { DatabaseService } from "../db/db.service";
+import { AuditService } from "../events/audit.service";
+import { PermissionService } from "../permission/permission.service";
+import type { CanInput } from "../permission/permission.types";
+import { PositionsRepository } from "./positions.repository";
+import { isUniqueViolation } from "../common/db-error";
 
 @Injectable()
 export class PositionsService {
@@ -37,7 +27,7 @@ export class PositionsService {
 
   async getPosition(companyId: string, id: string) {
     const rows = await this.repo.findById(companyId, id);
-    if (!rows[0]) throw new NotFoundException('Position not found');
+    if (!rows[0]) throw new NotFoundException("Position not found");
     return rows[0];
   }
 
@@ -57,14 +47,14 @@ export class PositionsService {
     const input: CanInput = {
       userId: actorUserId,
       companyId,
-      action: 'manage.position',
-      resourceType: 'position',
+      action: "manage.position",
+      resourceType: "position",
       resourceId,
       isSensitive: false,
     };
     const decision = await this.permissionService.can(input);
     if (!decision.allow) {
-      throw new ForbiddenException('Insufficient permission to assign default role to position');
+      throw new ForbiddenException("Insufficient permission to assign default role to position");
     }
   }
 
@@ -90,13 +80,13 @@ export class PositionsService {
           tx,
         );
         const created = rows[0];
-        if (!created) throw new Error('Failed to create position');
+        if (!created) throw new Error("Failed to create position");
 
         if (assigningRole) {
           // Audit nguyên tử cùng tx — rollback chung nếu insert lỗi (BẤT BIẾN #2).
           await this.audit.record(tx, {
-            action: 'assign-default-role',
-            objectType: 'position',
+            action: "assign-default-role",
+            objectType: "position",
             objectId: created.id,
             actorUserId,
             before: { defaultRoleId: null },
@@ -108,7 +98,7 @@ export class PositionsService {
     } catch (err) {
       // Giữ nguyên err gốc (pg DatabaseError: constraint, detail) để không mất dấu vết debug.
       if (isUniqueViolation(err)) {
-        throw new ConflictException('Position name or code already exists', { cause: err });
+        throw new ConflictException("Position name or code already exists", { cause: err });
       }
       throw err;
     }
@@ -131,7 +121,7 @@ export class PositionsService {
         let beforeRoleId: string | null = null;
         if (changingRole) {
           const existing = await this.repo.findById(companyId, id, tx);
-          if (!existing[0]) throw new NotFoundException('Position not found');
+          if (!existing[0]) throw new NotFoundException("Position not found");
           beforeRoleId = existing[0].defaultRoleId ?? null;
         }
 
@@ -150,12 +140,12 @@ export class PositionsService {
           tx,
         );
         const updated = rows[0];
-        if (!updated) throw new NotFoundException('Position not found');
+        if (!updated) throw new NotFoundException("Position not found");
 
         if (changingRole) {
           await this.audit.record(tx, {
-            action: 'assign-default-role',
-            objectType: 'position',
+            action: "assign-default-role",
+            objectType: "position",
             objectId: id,
             actorUserId,
             before: { defaultRoleId: beforeRoleId },
@@ -166,7 +156,7 @@ export class PositionsService {
       });
     } catch (err) {
       if (isUniqueViolation(err)) {
-        throw new ConflictException('Position name or code already exists', { cause: err });
+        throw new ConflictException("Position name or code already exists", { cause: err });
       }
       throw err;
     }
@@ -174,6 +164,6 @@ export class PositionsService {
 
   async deletePosition(companyId: string, id: string) {
     const rows = await this.repo.softDeletePosition(companyId, id);
-    if (rows.length === 0) throw new NotFoundException('Position not found');
+    if (rows.length === 0) throw new NotFoundException("Position not found");
   }
 }

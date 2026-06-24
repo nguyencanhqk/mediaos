@@ -35,27 +35,35 @@ export * from "./meeting";
 export * from "./two-factor";
 // G16-1b security alerting (append-only — repeated re-auth fail / cross-scope deny / anomalous login)
 export * from "./security-alerts";
-// G6-2 PR-B break-glass (emergency platform_account secret access — grant + SoD 2-người approval, mig 0200)
+// G6-2 PR-B break-glass (emergency platform_account secret access — PARK cùng media, out-of-scope)
 export * from "./break-glass";
-// G16-3 SaaS scaffold (subscription plan catalog + per-company subscription/feature-flag/usage)
-export * from "./saas";
-// G16-3 template clone (workspace_templates catalog + per-company dashboard_configs)
-export * from "./templates";
 // G15-2 device tokens (push notification registration)
 export * from "./device-tokens";
 // AC-5 API key / Personal Access Token (PAT) — per-tenant FORCE-RLS + append-only usages
 export * from "./api-keys";
 // AC-7 module-registry (catalog GLOBAL no-RLS — lớp module trên feature-flag, reuse company_feature_flags)
 export * from "./module-registry";
-// AC-4 UI config (branding / navigation / i18n overrides — per-tenant FORCE-RLS, tenant self-service)
-export * from "./ui-config";
-// AC-6 Webhooks (endpoint + subscription + delivery log — per-tenant FORCE-RLS; HMAC secret envelope-KMS)
-export * from "./webhooks";
-// AC-9 db-ops (3 bảng GLOBAL no-RLS operator-scoped — break-glass grant/approval + export job; mig 0345)
-export * from "./db-ops";
 // CS-8 Cấu hình mail server SMTP (per-tenant FORCE-RLS — 1 config / scope; SMTP password envelope-KMS)
 export * from "./mail-config";
 // CS-9 Bảo mật nâng cao (per-company security policy — per-tenant FORCE-RLS; enforce IP/giờ/2FA/email-domain)
 export * from "./security-policy";
 // CS-10 Đối tượng: Mời/Duyệt/Kích hoạt user (user_invites per-tenant FORCE-RLS; token_hash + password_hash)
 export * from "./user-invites";
+// FOUNDATION-DB-1 settings (DB-08 §8.3/8.4): system_settings GLOBAL no-RLS + company_settings per-tenant FORCE-RLS
+export * from "./settings";
+// FOUNDATION-DB-3 files (DB-08 §8.6/8.7/8.8): files + file_links (per-tenant FORCE-RLS, soft-delete) +
+// file_access_logs (per-tenant FORCE-RLS, APPEND-ONLY — app role REVOKE UPDATE/DELETE)
+export * from "./files";
+// FOUNDATION-DB-4 sequences (DB-08 §8.9): sequence_counters — company_id NULLABLE (system sequence=NULL),
+// RLS+FORCE policy nullable-tenant (USING own+global, WITH CHECK own) mẫu 0005 roles; mutable soft-delete.
+export * from "./sequences";
+// FOUNDATION-DB-4 holidays (DB-08 §8.10): public_holidays — company_id NULLABLE (global holiday=NULL),
+// RLS+FORCE policy nullable-tenant; uq global/company tách theo company_id IS [NOT] NULL; mutable soft-delete.
+export * from "./holidays";
+// FOUNDATION-DB-5 retention (DB-08 §8.11): data_retention_policies — company_id NULLABLE (global default=NULL),
+// RLS+FORCE policy nullable-tenant; mutable soft-delete; uq (company,module,entity) WHERE enabled & not-deleted.
+export * from "./retention";
+// FOUNDATION-DB-5 seed-tracking (DB-08 §8.2/8.12/8.13): modules (catalog CHUẨN spec — KHÔNG company_id,
+// no-RLS, KHÁC system_modules SaaS) + seed_batches/seed_items (company_id NULLABLE, RLS+FORCE nullable-tenant,
+// tracking mutable — KHÔNG DELETE, giữ lịch sử seed idempotent). Seed catalog+settings+permission ở 0435.
+export * from "./seed-tracking";

@@ -1,0 +1,1443 @@
+  # ===========================================================================
+  # ATT — Attendance module paths fragment (API-04)
+  # Concatenated under the single top-level `paths:` key of the base spec.
+  # ===========================================================================
+
+  # --------------------------------------------------------------------------
+  # Today Attendance (ATT-API-001..003)
+  # --------------------------------------------------------------------------
+  /api/v1/attendance/today:
+    get:
+      tags: [Attendance - Today]
+      summary: Lấy trạng thái chấm công hôm nay của tôi
+      operationId: attGetToday
+      x-required-permission: ATT.ATTENDANCE.VIEW_OWN
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - name: date
+          in: query
+          required: false
+          schema: { type: string, format: date }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/attendance/check-in:
+    post:
+      tags: [Attendance - Today]
+      summary: Check-in cho chính mình
+      operationId: attCheckIn
+      x-required-permission: ATT.ATTENDANCE.CHECK_IN
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own]
+      x-idempotency: "Required"
+      x-audit-log: conditional
+      x-notification-event: ATTENDANCE_CHECKED_IN
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/XClientType'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                source: { type: string, enum: [WEB, MOBILE, REMOTE, API] }
+                note: { type: string }
+                client_time: { type: string, format: date-time }
+                client_timezone: { type: string }
+                gps:
+                  type: object
+                  properties:
+                    latitude: { type: number }
+                    longitude: { type: number }
+                    accuracy_meters: { type: number }
+                device:
+                  type: object
+                  properties:
+                    device_id: { type: string }
+                    device_type: { type: string }
+                    device_name: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/attendance/check-out:
+    post:
+      tags: [Attendance - Today]
+      summary: Check-out cho chính mình
+      operationId: attCheckOut
+      x-required-permission: ATT.ATTENDANCE.CHECK_OUT
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own]
+      x-idempotency: "Required"
+      x-audit-log: conditional
+      x-notification-event: ATTENDANCE_CHECKED_OUT
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/XClientType'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                source: { type: string, enum: [WEB, MOBILE, REMOTE, API] }
+                note: { type: string }
+                client_time: { type: string, format: date-time }
+                client_timezone: { type: string }
+                gps:
+                  type: object
+                  properties:
+                    latitude: { type: number }
+                    longitude: { type: number }
+                    accuracy_meters: { type: number }
+                device:
+                  type: object
+                  properties:
+                    device_id: { type: string }
+                    device_type: { type: string }
+                    device_name: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  # --------------------------------------------------------------------------
+  # Attendance Records (ATT-API-101..108)
+  # --------------------------------------------------------------------------
+  /api/v1/attendance/my-records:
+    get:
+      tags: [Attendance - Records]
+      summary: Bảng công cá nhân
+      operationId: attListMyRecords
+      x-required-permission: ATT.ATTENDANCE.VIEW_OWN
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: shift_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: attendance_status, in: query, required: false, schema: { type: string } }
+        - { name: source, in: query, required: false, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/attendance/team-records:
+    get:
+      tags: [Attendance - Records]
+      summary: Bảng công team
+      operationId: attListTeamRecords
+      x-required-permission: ATT.ATTENDANCE.VIEW_TEAM
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: shift_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: attendance_status, in: query, required: false, schema: { type: string } }
+        - { name: source, in: query, required: false, schema: { type: string } }
+        - { name: has_pending_adjustment, in: query, required: false, schema: { type: boolean } }
+        - { name: is_adjusted, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/attendance/records:
+    get:
+      tags: [Attendance - Records]
+      summary: Bảng công theo scope Company/Department/System
+      operationId: attListRecords
+      x-required-permission: [ATT.ATTENDANCE.VIEW_COMPANY, ATT.ATTENDANCE.VIEW_TEAM]
+      x-permission-mode: anyOf
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: shift_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: attendance_status, in: query, required: false, schema: { type: string } }
+        - { name: source, in: query, required: false, schema: { type: string } }
+        - { name: has_pending_adjustment, in: query, required: false, schema: { type: boolean } }
+        - { name: is_adjusted, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/attendance/records/{attendance_record_id}:
+    get:
+      tags: [Attendance - Records]
+      summary: Chi tiết bản ghi công
+      operationId: attGetRecord
+      x-required-permission: ATT.ATTENDANCE.VIEW_DETAIL
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own, Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - name: attendance_record_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - { name: include_logs, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/attendance/records/{attendance_record_id}/logs:
+    get:
+      tags: [Attendance - Records]
+      summary: Log thô của bản ghi công
+      operationId: attListRecordLogs
+      x-required-permission: ATT.ATTENDANCE.VIEW_DETAIL
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own, Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - name: attendance_record_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/attendance/records/{attendance_record_id}/manual-adjust:
+    post:
+      tags: [Attendance - Records]
+      summary: HR/Admin điều chỉnh công trực tiếp
+      operationId: attManualAdjustRecord
+      x-required-permission: ATT.ATTENDANCE.ADJUST_DIRECT
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: ATTENDANCE_MANUALLY_ADJUSTED
+      parameters:
+        - name: attendance_record_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                check_in_at: { type: string, format: date-time }
+                check_out_at: { type: string, format: date-time }
+                attendance_status: { type: string }
+                reason: { type: string }
+                recalculate: { type: boolean }
+                version: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/attendance/records/{attendance_record_id}/recalculate:
+    post:
+      tags: [Attendance - Records]
+      summary: Tính lại một bản ghi công
+      operationId: attRecalculateRecord
+      x-required-permission: ATT.ATTENDANCE.RECALCULATE
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - name: attendance_record_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/attendance/exports:
+    post:
+      tags: [Attendance - Exports]
+      summary: Tạo file export bảng công
+      operationId: attCreateExport
+      x-required-permission: ATT.ATTENDANCE.EXPORT
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Department, Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: ATTENDANCE_EXPORT_READY
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from_date, to_date, format]
+              properties:
+                from_date: { type: string, format: date }
+                to_date: { type: string, format: date }
+                department_id: { type: string, format: uuid }
+                employee_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+                attendance_status:
+                  type: array
+                  items: { type: string }
+                format: { type: string, enum: [xlsx, csv] }
+                include_logs: { type: boolean }
+                include_sensitive_fields: { type: boolean }
+      responses:
+        '202': { $ref: '#/components/responses/Accepted' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  # --------------------------------------------------------------------------
+  # Attendance Adjustment Requests (ATT-API-201..207)
+  # --------------------------------------------------------------------------
+  /api/v1/attendance/my-adjustment-requests:
+    get:
+      tags: [Attendance - Adjustments]
+      summary: Yêu cầu điều chỉnh công của tôi
+      operationId: attListMyAdjustmentRequests
+      x-required-permission: ATT.ADJUSTMENT.VIEW_OWN
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - { name: request_type, in: query, required: false, schema: { type: string } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/attendance/adjustment-requests:
+    post:
+      tags: [Attendance - Adjustments]
+      summary: Employee gửi yêu cầu điều chỉnh công
+      operationId: attCreateAdjustmentRequest
+      x-required-permission: ATT.ADJUSTMENT.CREATE_OWN
+      x-allowed-roles: [Employee, Manager, HR, Company Admin]
+      x-data-scope: [Own]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: ATTENDANCE_ADJUSTMENT_SUBMITTED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [attendance_record_id, request_type, reason, items]
+              properties:
+                attendance_record_id: { type: string, format: uuid }
+                request_type:
+                  type: string
+                  enum: [MISSING_CHECK_IN, MISSING_CHECK_OUT, WRONG_TIME, REMOTE_NOT_RECORDED, OTHER]
+                reason: { type: string }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [field_name, new_value]
+                    properties:
+                      field_name: { type: string }
+                      old_value: {}
+                      new_value: {}
+                file_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    get:
+      tags: [Attendance - Adjustments]
+      summary: Danh sách yêu cầu điều chỉnh theo scope
+      operationId: attListAdjustmentRequests
+      x-required-permission: [ATT.ADJUSTMENT.VIEW_TEAM, ATT.ADJUSTMENT.VIEW_COMPANY]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - { name: request_type, in: query, required: false, schema: { type: string } }
+        - { name: employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: submitted_from, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: submitted_to, in: query, required: false, schema: { type: string, format: date-time } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/attendance/adjustment-requests/{request_id}:
+    get:
+      tags: [Attendance - Adjustments]
+      summary: Chi tiết yêu cầu điều chỉnh
+      operationId: attGetAdjustmentRequest
+      x-required-permission: [ATT.ADJUSTMENT.VIEW_OWN, ATT.ADJUSTMENT.VIEW_TEAM, ATT.ADJUSTMENT.VIEW_COMPANY]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own, Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/attendance/adjustment-requests/{request_id}/approve:
+    post:
+      tags: [Attendance - Adjustments]
+      summary: Duyệt yêu cầu điều chỉnh
+      operationId: attApproveAdjustmentRequest
+      x-required-permission: ATT.ADJUSTMENT.APPROVE
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: ATTENDANCE_ADJUSTMENT_APPROVED
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                review_note: { type: string }
+                version: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/attendance/adjustment-requests/{request_id}/reject:
+    post:
+      tags: [Attendance - Adjustments]
+      summary: Từ chối yêu cầu điều chỉnh
+      operationId: attRejectAdjustmentRequest
+      x-required-permission: ATT.ADJUSTMENT.REJECT
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: ATTENDANCE_ADJUSTMENT_REJECTED
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [review_note]
+              properties:
+                review_note: { type: string }
+                version: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/attendance/adjustment-requests/{request_id}/cancel:
+    post:
+      tags: [Attendance - Adjustments]
+      summary: Employee hủy yêu cầu điều chỉnh của mình
+      operationId: attCancelAdjustmentRequest
+      x-required-permission: ATT.ADJUSTMENT.CANCEL_OWN
+      x-allowed-roles: [Employee, Manager, HR, Company Admin]
+      x-data-scope: [Own]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # --------------------------------------------------------------------------
+  # Remote Work Requests (ATT-API-301..307)
+  # --------------------------------------------------------------------------
+  /api/v1/attendance/my-remote-requests:
+    get:
+      tags: [Attendance - Remote Requests]
+      summary: Remote/công tác của tôi
+      operationId: attListMyRemoteRequests
+      x-required-permission: ATT.REMOTE_REQUEST.VIEW_OWN
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - { name: request_type, in: query, required: false, schema: { type: string } }
+        - { name: date_from, in: query, required: false, schema: { type: string, format: date } }
+        - { name: date_to, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/attendance/remote-requests:
+    post:
+      tags: [Attendance - Remote Requests]
+      summary: Employee gửi remote/công tác
+      operationId: attCreateRemoteRequest
+      x-required-permission: ATT.REMOTE_REQUEST.CREATE_OWN
+      x-allowed-roles: [Employee, Manager, HR, Company Admin]
+      x-data-scope: [Own]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: REMOTE_REQUEST_SUBMITTED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [request_type, date_from, date_to, reason]
+              properties:
+                request_type:
+                  type: string
+                  enum: [RemoteWork, BusinessTrip, OutsideOffice]
+                date_from: { type: string, format: date }
+                date_to: { type: string, format: date }
+                time_from: { type: string }
+                time_to: { type: string }
+                remote_mode: { type: string }
+                reason: { type: string }
+                task_id: { type: string, format: uuid }
+                project_id: { type: string, format: uuid }
+                file_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    get:
+      tags: [Attendance - Remote Requests]
+      summary: Danh sách remote/công tác theo scope
+      operationId: attListRemoteRequests
+      x-required-permission: [ATT.REMOTE_REQUEST.VIEW_TEAM, ATT.REMOTE_REQUEST.VIEW_COMPANY]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - { name: request_type, in: query, required: false, schema: { type: string } }
+        - { name: employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: date_from, in: query, required: false, schema: { type: string, format: date } }
+        - { name: date_to, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/attendance/remote-requests/{request_id}:
+    get:
+      tags: [Attendance - Remote Requests]
+      summary: Chi tiết remote/công tác
+      operationId: attGetRemoteRequest
+      x-required-permission: [ATT.REMOTE_REQUEST.VIEW_OWN, ATT.REMOTE_REQUEST.VIEW_TEAM, ATT.REMOTE_REQUEST.VIEW_COMPANY]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own, Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/attendance/remote-requests/{request_id}/approve:
+    post:
+      tags: [Attendance - Remote Requests]
+      summary: Duyệt remote/công tác
+      operationId: attApproveRemoteRequest
+      x-required-permission: ATT.REMOTE_REQUEST.APPROVE
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: REMOTE_REQUEST_APPROVED
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                review_note: { type: string }
+                auto_create_attendance: { type: boolean }
+                version: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/attendance/remote-requests/{request_id}/reject:
+    post:
+      tags: [Attendance - Remote Requests]
+      summary: Từ chối remote/công tác
+      operationId: attRejectRemoteRequest
+      x-required-permission: ATT.REMOTE_REQUEST.REJECT
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: REMOTE_REQUEST_REJECTED
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [review_note]
+              properties:
+                review_note: { type: string }
+                version: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/attendance/remote-requests/{request_id}/cancel:
+    post:
+      tags: [Attendance - Remote Requests]
+      summary: Employee hủy remote/công tác của mình
+      operationId: attCancelRemoteRequest
+      x-required-permission: ATT.REMOTE_REQUEST.CANCEL_OWN
+      x-allowed-roles: [Employee, Manager, HR, Company Admin]
+      x-data-scope: [Own]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # --------------------------------------------------------------------------
+  # Shifts (ATT-API-401..405)
+  # --------------------------------------------------------------------------
+  /api/v1/attendance/shifts:
+    get:
+      tags: [Attendance - Shifts]
+      summary: Danh sách ca làm
+      operationId: attListShifts
+      x-required-permission: ATT.SHIFT.VIEW
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: shift_type, in: query, required: false, schema: { type: string } }
+        - { name: status, in: query, required: false, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Attendance - Shifts]
+      summary: Tạo ca làm
+      operationId: attCreateShift
+      x-required-permission: ATT.SHIFT.CREATE
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shift_code, name, shift_type, start_time, end_time, required_working_minutes]
+              properties:
+                shift_code: { type: string }
+                name: { type: string }
+                description: { type: string }
+                shift_type: { type: string, enum: [Fixed, Flexible] }
+                start_time: { type: string }
+                end_time: { type: string }
+                break_start_time: { type: string }
+                break_end_time: { type: string }
+                break_minutes: { type: integer }
+                required_working_minutes: { type: integer }
+                allow_flexible_start: { type: boolean }
+                flexible_start_from: { type: string }
+                flexible_start_to: { type: string }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/attendance/shifts/{shift_id}:
+    get:
+      tags: [Attendance - Shifts]
+      summary: Chi tiết ca làm
+      operationId: attGetShift
+      x-required-permission: ATT.SHIFT.VIEW
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - name: shift_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Attendance - Shifts]
+      summary: Cập nhật ca làm
+      operationId: attUpdateShift
+      x-required-permission: ATT.SHIFT.UPDATE
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - name: shift_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                start_time: { type: string }
+                end_time: { type: string }
+                break_start_time: { type: string }
+                break_end_time: { type: string }
+                break_minutes: { type: integer }
+                required_working_minutes: { type: integer }
+                allow_flexible_start: { type: boolean }
+                flexible_start_from: { type: string }
+                flexible_start_to: { type: string }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [Attendance - Shifts]
+      summary: Xóa mềm/vô hiệu hóa ca làm
+      operationId: attDeleteShift
+      x-required-permission: ATT.SHIFT.DELETE
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - name: shift_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { $ref: '#/components/responses/NoContent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # --------------------------------------------------------------------------
+  # Shift Assignments (ATT-API-501..505)
+  # --------------------------------------------------------------------------
+  /api/v1/attendance/shift-assignments:
+    get:
+      tags: [Attendance - Shift Assignments]
+      summary: Danh sách gán ca
+      operationId: attListShiftAssignments
+      x-required-permission: ATT.SHIFT_ASSIGNMENT.VIEW
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: shift_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: assignment_scope, in: query, required: false, schema: { type: string } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Attendance - Shift Assignments]
+      summary: Tạo gán ca
+      operationId: attCreateShiftAssignment
+      x-required-permission: ATT.SHIFT_ASSIGNMENT.UPDATE
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shift_id, assignment_scope, effective_from]
+              properties:
+                shift_id: { type: string, format: uuid }
+                assignment_scope: { type: string, enum: [Company, Department, Employee] }
+                department_id: { type: string, format: uuid }
+                employee_id: { type: string, format: uuid }
+                effective_from: { type: string, format: date }
+                effective_to: { type: string, format: date }
+                priority: { type: integer }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/attendance/shift-assignments/{assignment_id}:
+    get:
+      tags: [Attendance - Shift Assignments]
+      summary: Chi tiết gán ca
+      operationId: attGetShiftAssignment
+      x-required-permission: ATT.SHIFT_ASSIGNMENT.VIEW
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - name: assignment_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Attendance - Shift Assignments]
+      summary: Cập nhật gán ca
+      operationId: attUpdateShiftAssignment
+      x-required-permission: ATT.SHIFT_ASSIGNMENT.UPDATE
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - name: assignment_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                effective_from: { type: string, format: date }
+                effective_to: { type: string, format: date }
+                priority: { type: integer }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [Attendance - Shift Assignments]
+      summary: Hủy/xóa mềm gán ca
+      operationId: attDeleteShiftAssignment
+      x-required-permission: ATT.SHIFT_ASSIGNMENT.UPDATE
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - name: assignment_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { $ref: '#/components/responses/NoContent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # --------------------------------------------------------------------------
+  # Attendance Rules (ATT-API-601..606)
+  # --------------------------------------------------------------------------
+  /api/v1/attendance/rules:
+    get:
+      tags: [Attendance - Rules]
+      summary: Danh sách rule chấm công
+      operationId: attListRules
+      x-required-permission: ATT.RULE.VIEW
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: scope_type, in: query, required: false, schema: { type: string } }
+        - { name: status, in: query, required: false, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Attendance - Rules]
+      summary: Tạo rule chấm công
+      operationId: attCreateRule
+      x-required-permission: ATT.RULE.CONFIG
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rule_code, name, scope_type, priority]
+              properties:
+                rule_code: { type: string }
+                name: { type: string }
+                scope_type: { type: string, enum: [Company, Department, Employee] }
+                scope_id: { type: string, format: uuid }
+                priority: { type: integer }
+                requires_check_in: { type: boolean }
+                requires_check_out: { type: boolean }
+                grace_late_minutes: { type: integer, minimum: 0 }
+                grace_early_leave_minutes: { type: integer, minimum: 0 }
+                minimum_working_minutes: { type: integer, minimum: 0 }
+                requires_gps: { type: boolean }
+                requires_note: { type: boolean }
+                allow_remote_check_in: { type: boolean }
+                allow_auto_attendance: { type: boolean }
+                allow_weekend_attendance: { type: boolean }
+                allow_holiday_attendance: { type: boolean }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/attendance/rules/{rule_id}:
+    get:
+      tags: [Attendance - Rules]
+      summary: Chi tiết rule chấm công
+      operationId: attGetRule
+      x-required-permission: ATT.RULE.VIEW
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Attendance - Rules]
+      summary: Cập nhật rule chấm công
+      operationId: attUpdateRule
+      x-required-permission: ATT.RULE.CONFIG
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                priority: { type: integer }
+                requires_check_in: { type: boolean }
+                requires_check_out: { type: boolean }
+                grace_late_minutes: { type: integer, minimum: 0 }
+                grace_early_leave_minutes: { type: integer, minimum: 0 }
+                minimum_working_minutes: { type: integer, minimum: 0 }
+                requires_gps: { type: boolean }
+                requires_note: { type: boolean }
+                allow_remote_check_in: { type: boolean }
+                allow_auto_attendance: { type: boolean }
+                allow_weekend_attendance: { type: boolean }
+                allow_holiday_attendance: { type: boolean }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [Attendance - Rules]
+      summary: Xóa mềm/vô hiệu hóa rule
+      operationId: attDeleteRule
+      x-required-permission: ATT.RULE.CONFIG
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { $ref: '#/components/responses/NoContent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/attendance/effective-rule:
+    get:
+      tags: [Attendance - Rules]
+      summary: Xem rule hiệu lực của bản thân hoặc employee theo quyền
+      operationId: attGetEffectiveRule
+      x-required-permission: ATT.RULE.VIEW
+      x-allowed-roles: [Employee, Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Own, Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: date, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # --------------------------------------------------------------------------
+  # Audit / Logs (ATT-API-701..702)
+  # --------------------------------------------------------------------------
+  /api/v1/attendance/audit-logs:
+    get:
+      tags: [Attendance - Audit Logs]
+      summary: Xem audit log ATT
+      operationId: attListAuditLogs
+      x-required-permission: ATT.AUDIT_LOG.VIEW
+      x-allowed-roles: [HR, Company Admin, Super Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: action, in: query, required: false, schema: { type: string } }
+        - { name: entity_type, in: query, required: false, schema: { type: string } }
+        - { name: entity_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: actor_user_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/attendance/logs:
+    get:
+      tags: [Attendance - Records]
+      summary: Xem log thô chấm công theo scope
+      operationId: attListLogs
+      x-required-permission: ATT.ATTENDANCE.VIEW_DETAIL
+      x-allowed-roles: [Manager, HR, Company Admin, Super Admin]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: attendance_record_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: log_type, in: query, required: false, schema: { type: string } }
+        - { name: source, in: query, required: false, schema: { type: string } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # --------------------------------------------------------------------------
+  # Internal jobs (ATT-API-801..803) — service-to-service only
+  # --------------------------------------------------------------------------
+  /internal/v1/attendance/recalculate:
+    post:
+      tags: [Attendance - Internal]
+      summary: Internal tính lại công theo event
+      operationId: attInternalRecalculate
+      security: [{ internalServiceAuth: [] }]
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: [System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [company_id, source_event_id]
+              properties:
+                company_id: { type: string, format: uuid }
+                employee_id: { type: string, format: uuid }
+                date_from: { type: string, format: date }
+                date_to: { type: string, format: date }
+                reason: { type: string }
+                source_event_id: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /internal/v1/attendance/auto-attendance-job:
+    post:
+      tags: [Attendance - Internal]
+      summary: Internal job tự động chấm công
+      operationId: attInternalAutoAttendanceJob
+      security: [{ internalServiceAuth: [] }]
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: [System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: AUTO_ATTENDANCE_CREATED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                company_id: { type: string, format: uuid }
+                work_date: { type: string, format: date }
+                source_event_id: { type: string }
+      responses:
+        '202': { $ref: '#/components/responses/Accepted' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /internal/v1/attendance/missing-checkout-job:
+    post:
+      tags: [Attendance - Internal]
+      summary: Internal job cảnh báo thiếu check-out
+      operationId: attInternalMissingCheckoutJob
+      security: [{ internalServiceAuth: [] }]
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: [System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: ATTENDANCE_MISSING_CHECKOUT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                company_id: { type: string, format: uuid }
+                work_date: { type: string, format: date }
+                source_event_id: { type: string }
+      responses:
+        '202': { $ref: '#/components/responses/Accepted' }
+        '401': { $ref: '#/components/responses/Unauthorized' }

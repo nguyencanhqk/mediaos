@@ -1,0 +1,47 @@
+import { Module } from "@nestjs/common";
+import { DatabaseModule } from "../../db/db.module";
+import { EventsModule } from "../../events/events.module";
+import { PermissionModule } from "../../permission/permission.module";
+import { PermissionService } from "../../permission/permission.service";
+import { StorageModule } from "../../storage/storage.module";
+import { SettingsModule } from "../settings/settings.module";
+import { FileAccessLogService } from "./file-access-log.service";
+import { FileLinkRepository } from "./file-link.repository";
+import { FilePolicyService } from "./file-policy.service";
+import { FileRepository } from "./file.repository";
+import { FilesController } from "./files.controller";
+import { FileService } from "./files.service";
+
+/**
+ * S1-FND-FILE-1 — FilesModule (self-contained). Wiring:
+ *   - DatabaseModule  → withTenant/RLS (BẤT BIẾN #1).
+ *   - PermissionModule → PermissionService (route gate qua PermissionGuard + nguồn của FilePolicy fallback).
+ *   - EventsModule     → AuditService (@Global; import tường minh để self-contained) — audit-in-tx (#2/#3).
+ *   - StorageModule    → STORAGE_ADAPTER (presign download TTL-ngắn; KHÔNG lộ storage_path — #2.3).
+ *   - SettingsModule   → SettingService.resolveMany (allowlist MIME + max-size, precedence company>system>
+ *     default; KHÔNG hard-code allowlist — S1-FND-SETTING-1).
+ *
+ * FilePolicyService cấp qua factory (constructor nhận FilePermissionChecker — PermissionService thoả mãn
+ * cấu trúc). Đây là CHỐT deny-by-default cho view/download/link/unlink/delete.
+ *
+ * Wiring vào app: S1-FND-WIRE-1 gom module này vào FoundationModule (KHÔNG sửa app.module.ts ở WO này —
+ * tránh va hot-file).
+ */
+@Module({
+  imports: [DatabaseModule, PermissionModule, EventsModule, StorageModule, SettingsModule],
+  controllers: [FilesController],
+  providers: [
+    FileRepository,
+    FileLinkRepository,
+    FileAccessLogService,
+    FileService,
+    {
+      provide: FilePolicyService,
+      useFactory: (permission: PermissionService): FilePolicyService =>
+        new FilePolicyService(permission),
+      inject: [PermissionService],
+    },
+  ],
+  exports: [FileService, FilePolicyService],
+})
+export class FilesModule {}

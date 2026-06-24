@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Inject, Injectable, Logger, UnauthorizedException, forwardRef } from "@nestjs/common";
+import { BadRequestException, HttpException, HttpStatus, Inject, Injectable, Logger, UnauthorizedException, forwardRef } from "@nestjs/common";
 import type {
   AuthTokens,
   ForgotPasswordRequest,
@@ -35,6 +35,16 @@ export interface RequestMeta {
 const uuidSchema = z.string().uuid();
 /** 401 ĐỒNG NHẤT cho mọi lỗi đăng nhập — không lộ user/tenant tồn tại (plan §3b/G2-6). */
 const UNIFORM_LOGIN_ERROR = "Thông tin đăng nhập không hợp lệ.";
+/**
+ * AUTH-FIX-1: ALLOW-LIST trạng thái được phép cấp token (login/refresh/2FA). Fail-closed — CHỈ 'active'
+ * mới qua; mọi giá trị khác ('suspended' và mọi trạng thái tương lai vd 'locked'/'pending') bị CHẶN. Dùng
+ * allow-list (không deny-list 'suspended') để trạng thái mới mặc định KHÔNG lọt. Khớp users.status DEFAULT
+ * 'active' (mig 0002) + CHECK ('active'|'suspended', mig 0430). reason chỉ vào audit, KHÔNG vào HTTP body.
+ */
+const ACTIVE_USER_STATUS = "active";
+function isAuthorizedStatus(status: string): boolean {
+  return status === ACTIVE_USER_STATUS;
+}
 /** AC-0b: id role hệ thống `platform-admin` (mig 0230) — phiên user giữ role này = OPERATOR (aud). */
 const PLATFORM_ADMIN_ROLE_ID = "00000000-0000-0000-0000-0000000000f0";
 
@@ -179,6 +189,23 @@ export class AuthService {
         return null;
       }
 
+      // AUTH-FIX-1: mật khẩu ĐÚNG nhưng tài khoản KHÔNG 'active' (suspended/…) → CHẶN cấp token. Đặt SAU
+      // verify (timing ~ happy path → không thành oracle timing) và TRƯỚC securityPolicy/2FA/issueTokens.
+      // audit deny (cùng tx, append-only; reason CHỈ ở audit_logs) rồi return null → 401 ĐỒNG NHẤT y như
+      // bad-password/not-found (anti status-probing). password.hash đã chạy ở nhánh not-found → timing đều.
+      if (!isAuthorizedStatus(user.status)) {
+        await this.audit.record(tx, {
+          action: "auth.login_blocked",
+          objectType: "auth",
+          actorUserId: user.id,
+          objectId: user.id,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+          after: { reason: "suspended" },
+        });
+        return null;
+      }
+
       // CS-9: mật khẩu ĐÚNG → check chính sách bảo mật (IP allowlist + khung giờ) TRƯỚC khi cấp token /
       // phát challenge 2FA. exempt user + người-cấu-hình bỏ qua; kill-switch tắt ⇒ bỏ qua KHÔNG đọc DB.
       // Vi phạm → audit deny (cùng tx) rồi 403 ACCESS_RESTRICTED ngoài tx (KHÔNG cấp token/challenge).
@@ -299,11 +326,15 @@ export class AuthService {
 
     const { tokens, userId: twoFaUserId } = await this.dbsvc.withTenant(claims.companyId, async (tx) => {
       const [user] = await tx
-        .select({ id: users.id, email: users.email, deletedAt: users.deletedAt })
+        .select({ id: users.id, email: users.email, deletedAt: users.deletedAt, status: users.status })
         .from(users)
         .where(eq(users.id, claims.sub))
         .limit(1);
-      if (!user || user.deletedAt) throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
+      // AUTH-FIX-1: đóng path login THỨ 3 (2FA bước 2). Trước đây chỉ check deletedAt → user suspended có
+      // bật 2FA VẪN cấp token. Cộng allow-list status==='active' (fail-closed) → 401 ĐỒNG NHẤT, KHÔNG cấp token.
+      if (!user || user.deletedAt || !isAuthorizedStatus(user.status)) {
+        throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
+      }
       const issued = await this.issueTokens(tx, claims.companyId, user.id, user.email);
       await this.audit.record(tx, {
         action: "auth.login_success",
@@ -346,6 +377,63 @@ export class AuthService {
     }
     await this.rateLimiter.reset(rlKey);
     await this.twoFactor.disable(user.id, user.companyId);
+  }
+
+  /**
+   * Đổi mật khẩu khi ĐÃ đăng nhập (self-service, Module 2a). Re-auth bằng mật khẩu HIỆN TẠI (chống
+   * chiếm phiên đổi pass), rate-limit per-user. Mật khẩu mới PHẢI khác mật khẩu cũ. Thành công → thu hồi
+   * MỌI refresh token còn sống của user (đổi pass = đăng xuất mọi phiên, mirror resetPassword) + audit.
+   * KHÔNG bao giờ log/return plaintext hay hash (BẤT BIẾN #3).
+   */
+  async changePassword(
+    user: { id: string; companyId: string },
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const rlKey = `change-pw|${user.companyId}|${user.id}`;
+    if (await this.rateLimiter.isLocked(rlKey)) {
+      throw new HttpException("Quá nhiều lần thử. Vui lòng thử lại sau.", HttpStatus.TOO_MANY_REQUESTS);
+    }
+    // Khác mật khẩu cũ: chặn no-op + ép xoay thật. So plaintext (chưa chạm DB) → lỗi rõ ràng, không tốn băm.
+    if (newPassword === currentPassword) {
+      throw new BadRequestException("Mật khẩu mới phải khác mật khẩu hiện tại.");
+    }
+
+    const ok = await this.dbsvc.withTenant(user.companyId, async (tx) => {
+      const [row] = await tx
+        .select({ passwordHash: users.passwordHash })
+        .from(users)
+        .where(and(eq(users.id, user.id), isNull(users.deletedAt)))
+        .limit(1);
+      if (!row) return false;
+      // verify trả false khi SAI mật khẩu; NÉM (PasswordVerificationError) khi hash hỏng → 500 (KHÔNG nuốt thành 401).
+      const verified = await this.password.verify(row.passwordHash, currentPassword);
+      if (!verified) return false;
+
+      const newHash = await this.password.hash(newPassword);
+      await tx
+        .update(users)
+        .set({ passwordHash: newHash, updatedAt: new Date() })
+        .where(eq(users.id, user.id));
+      // Đổi mật khẩu = đăng xuất MỌI phiên: thu hồi mọi refresh token còn sống (mirror resetPassword).
+      await tx
+        .update(refreshTokens)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(refreshTokens.userId, user.id), isNull(refreshTokens.revokedAt)));
+      await this.audit.record(tx, {
+        action: "auth.password_changed",
+        objectType: "auth",
+        actorUserId: user.id,
+        objectId: user.id,
+      });
+      return true;
+    });
+
+    if (!ok) {
+      await this.rateLimiter.recordFailure(rlKey);
+      throw new UnauthorizedException("Mật khẩu hiện tại không đúng.");
+    }
+    await this.rateLimiter.reset(rlKey);
   }
 
   /** Khoá login khi BẤT KỲ bucket nào (per-IP HOẶC per-account) đã chạm ngưỡng. */
@@ -418,6 +506,27 @@ export class AuthService {
 
       const [user] = await tx.select().from(users).where(eq(users.id, row.userId)).limit(1);
       if (!user || user.deletedAt) return { kind: "invalid" as const };
+
+      // AUTH-FIX-1: token còn sống nhưng chủ KHÔNG 'active' (suspended/…) → THU HỒI CẢ HỌ token (family,
+      // RLS tự lọc company_id trong withTenant) để token đang lộ không thể refresh tiếp + buộc đăng nhập
+      // lại. KHÔNG xoay token mới. audit deny (cùng tx, append-only; reason CHỈ ở audit_logs). Caller ném
+      // 401 ĐỒNG NHẤT ngoài tx (controller xoá cookie). Khác reuse-detection: đây là deny do trạng thái.
+      if (!isAuthorizedStatus(user.status)) {
+        await tx
+          .update(refreshTokens)
+          .set({ revokedAt: new Date() })
+          .where(and(eq(refreshTokens.familyId, row.familyId), isNull(refreshTokens.revokedAt)));
+        await this.audit.record(tx, {
+          action: "auth.refresh_blocked",
+          objectType: "auth",
+          actorUserId: user.id,
+          objectId: user.id,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+          after: { reason: "suspended", familyRevoked: true },
+        });
+        return { kind: "invalid" as const };
+      }
 
       // CS-9: refresh = 1 lần CẤP TOKEN → enforce chính sách IP/giờ y như login (BẤT BIẾN #2: check tại
       // điểm cấp token, không per-request). Sai IP/ngoài giờ → KHÔNG xoay token; audit deny (cùng tx) +

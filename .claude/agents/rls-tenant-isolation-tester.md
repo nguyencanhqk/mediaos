@@ -14,7 +14,7 @@ Mặc định hoài nghi: nếu một bảng/đường đi CHƯA được chứn
 ## Ngữ cảnh bắt buộc đọc
 
 - `CLAUDE.md` §2 (bất biến) + §3 (luật phụ thuộc) + §4 (PgBouncer transaction-mode).
-- `docs/adr/0001-rls-multi-tenant.md`, `0003-pgbouncer-transaction-mode.md`.
+- `CLAUDE.md` §2 (RLS + FORCE) · §4 (PgBouncer transaction-mode) · `docs/DECISIONS/` (stack-lock).
 - `apps/api/src/db/db.service.ts` (`withTenant`) + `apps/api/src/db/index.ts` (pool/directPool/workerPool).
 - `apps/api/migrations/*.sql` (policy + FORCE + grant của từng bảng).
 - `apps/api/test/integration/rls-registry.ts` + `tenant-isolation.int-spec.ts` (lưới hiện có).

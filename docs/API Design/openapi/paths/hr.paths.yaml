@@ -1,0 +1,1526 @@
+  # ===========================================================================
+  # HR - Employees (HR-API-001..011)
+  # ===========================================================================
+  /api/v1/hr/employees:
+    get:
+      tags: [HR - Employees]
+      summary: Lấy danh sách nhân viên
+      operationId: hrListEmployees
+      x-required-permission: HR.EMPLOYEE.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager]
+      x-data-scope: [Own, Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: position_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: job_level_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: direct_manager_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: employment_status, in: query, required: false, schema: { type: string } }
+        - { name: employee_type, in: query, required: false, schema: { type: string } }
+        - { name: joined_from, in: query, required: false, schema: { type: string, format: date } }
+        - { name: joined_to, in: query, required: false, schema: { type: string, format: date } }
+        - { name: contract_type_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: has_user, in: query, required: false, schema: { type: boolean } }
+        - { name: include_deleted, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [HR - Employees]
+      summary: Tạo nhân viên mới
+      operationId: hrCreateEmployee
+      x-required-permission: HR.EMPLOYEE.CREATE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: HR_EMPLOYEE_CREATED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [full_name, department_id, position_id, joined_date, employment_status]
+              properties:
+                employee_code: { type: string, nullable: true }
+                full_name: { type: string }
+                gender: { type: string }
+                date_of_birth: { type: string, format: date }
+                personal_email: { type: string, format: email }
+                company_email: { type: string, format: email }
+                phone: { type: string }
+                address: { type: string }
+                identity_number: { type: string }
+                tax_code: { type: string }
+                bank_account_number: { type: string }
+                bank_name: { type: string }
+                department_id: { type: string, format: uuid }
+                position_id: { type: string, format: uuid }
+                job_level_id: { type: string, format: uuid }
+                direct_manager_id: { type: string, format: uuid }
+                joined_date: { type: string, format: date }
+                probation_end_date: { type: string, format: date }
+                employment_status: { type: string }
+                employee_type: { type: string }
+                work_location: { type: string }
+                contract: { type: object }
+                create_user_account: { type: boolean }
+                user: { type: object }
+                file_ids: { type: array, items: { type: string, format: uuid } }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/hr/employees/export:
+    get:
+      tags: [HR - Employees]
+      summary: Xuất danh sách nhân viên
+      operationId: hrExportEmployees
+      x-required-permission: HR.EMPLOYEE.EXPORT
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: HR_EMPLOYEE_EXPORT_COMPLETED
+      parameters:
+        - $ref: '#/components/parameters/SearchParam'
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: position_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: employment_status, in: query, required: false, schema: { type: string } }
+        - { name: format, in: query, required: false, schema: { type: string, enum: [xlsx, csv] } }
+        - { name: include_sensitive, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/hr/employees/lookup:
+    get:
+      tags: [HR - Employees]
+      summary: Lookup nhân viên cho dropdown
+      operationId: hrLookupEmployees
+      x-required-permission: HR.EMPLOYEE.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/SearchParam'
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 20, maximum: 50 } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/hr/employees/{employee_id}:
+    parameters:
+      - { name: employee_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [HR - Employees]
+      summary: Lấy chi tiết nhân viên
+      operationId: hrGetEmployee
+      x-required-permission: HR.EMPLOYEE.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager, Employee]
+      x-data-scope: [Own, Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - { name: include, in: query, required: false, schema: { type: string } }
+        - { name: sensitive, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [HR - Employees]
+      summary: Cập nhật hồ sơ nhân viên
+      operationId: hrUpdateEmployee
+      x-required-permission: HR.EMPLOYEE.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: HR_EMPLOYEE_UPDATED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name: { type: string }
+                phone: { type: string }
+                department_id: { type: string, format: uuid }
+                position_id: { type: string, format: uuid }
+                job_level_id: { type: string, format: uuid }
+                direct_manager_id: { type: string, format: uuid }
+                work_location: { type: string }
+                note: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [HR - Employees]
+      summary: Xóa mềm nhân viên
+      operationId: hrDeleteEmployee
+      x-required-permission: HR.EMPLOYEE.DELETE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: HR_EMPLOYEE_DELETED
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/hr/employees/{employee_id}/change-status:
+    parameters:
+      - { name: employee_id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [HR - Employees]
+      summary: Đổi trạng thái nhân viên
+      operationId: hrChangeEmployeeStatus
+      x-required-permission: HR.EMPLOYEE.CHANGE_STATUS
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: HR_EMPLOYEE_STATUS_CHANGED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_status, effective_date]
+              properties:
+                new_status: { type: string, enum: [Onboarding, Probation, Official, Temporarily Suspended, Resigned, Terminated] }
+                effective_date: { type: string, format: date }
+                reason: { type: string }
+                note: { type: string }
+                lock_user_if_resigned: { type: boolean }
+                revoke_sessions_if_locked: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/hr/employees/{employee_id}/link-user:
+    parameters:
+      - { name: employee_id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [HR - Employees]
+      summary: Liên kết employee với user
+      operationId: hrLinkEmployeeUser
+      x-required-permission: HR.EMPLOYEE.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: HR_EMPLOYEE_USER_LINKED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id: { type: string, format: uuid }
+                create_user: { type: boolean }
+                email: { type: string, format: email }
+                default_role_code: { type: string }
+                send_activation: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [HR - Employees]
+      summary: Hủy liên kết employee-user
+      operationId: hrUnlinkEmployeeUser
+      x-required-permission: HR.EMPLOYEE.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: HR_EMPLOYEE_USER_UNLINKED
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                lock_user: { type: boolean }
+                revoke_sessions: { type: boolean }
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/hr/employees/{employee_id}/audit-logs:
+    parameters:
+      - { name: employee_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [HR - Audit Logs]
+      summary: Lịch sử thay đổi hồ sơ nhân viên
+      operationId: hrListEmployeeAuditLogs
+      x-required-permission: HR.AUDIT_LOG.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - { name: action, in: query, required: false, schema: { type: string } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: actor_user_id, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ===========================================================================
+  # HR - My Profile (HR-API-101..106)
+  # ===========================================================================
+  /api/v1/hr/me/profile:
+    get:
+      tags: [HR - My Profile]
+      summary: Xem hồ sơ cá nhân của tôi
+      operationId: hrGetMyProfile
+      x-required-permission: HR.EMPLOYEE.VIEW
+      x-allowed-roles: []
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/hr/me/profile/editable-fields:
+    get:
+      tags: [HR - My Profile]
+      summary: Lấy danh sách field được phép đề xuất sửa
+      operationId: hrGetMyEditableFields
+      x-required-permission: HR.PROFILE_CHANGE_REQUEST.CREATE
+      x-allowed-roles: []
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/hr/me/profile-change-requests:
+    get:
+      tags: [HR - My Profile]
+      summary: Yêu cầu cập nhật hồ sơ của tôi
+      operationId: hrListMyProfileChangeRequests
+      x-required-permission: HR.PROFILE_CHANGE_REQUEST.VIEW_OWN
+      x-allowed-roles: []
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Pending, Approved, Rejected, Cancelled] } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [HR - My Profile]
+      summary: Gửi yêu cầu cập nhật hồ sơ
+      operationId: hrCreateMyProfileChangeRequest
+      x-required-permission: HR.PROFILE_CHANGE_REQUEST.CREATE
+      x-allowed-roles: []
+      x-data-scope: [Own]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: HR_PROFILE_CHANGE_REQUEST_SUBMITTED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [changes]
+              properties:
+                reason: { type: string }
+                changes:
+                  type: array
+                  items:
+                    type: object
+                    required: [field_name, new_value]
+                    properties:
+                      field_name: { type: string }
+                      new_value: { type: string }
+                attachment_file_ids: { type: array, items: { type: string, format: uuid } }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/hr/me/profile-change-requests/{request_id}:
+    parameters:
+      - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [HR - My Profile]
+      summary: Chi tiết yêu cầu của tôi
+      operationId: hrGetMyProfileChangeRequest
+      x-required-permission: HR.PROFILE_CHANGE_REQUEST.VIEW_OWN
+      x-allowed-roles: []
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/hr/me/profile-change-requests/{request_id}/cancel:
+    parameters:
+      - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [HR - My Profile]
+      summary: Hủy yêu cầu của tôi
+      operationId: hrCancelMyProfileChangeRequest
+      x-required-permission: HR.PROFILE_CHANGE_REQUEST.CANCEL_OWN
+      x-allowed-roles: []
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: HR_PROFILE_CHANGE_REQUEST_CANCELLED
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ===========================================================================
+  # HR - Profile Change Requests (admin) (HR-API-201..204)
+  # ===========================================================================
+  /api/v1/hr/profile-change-requests:
+    get:
+      tags: [HR - Profile Change Requests]
+      summary: Danh sách yêu cầu cập nhật hồ sơ
+      operationId: hrListProfileChangeRequests
+      x-required-permission: HR.PROFILE_CHANGE_REQUEST.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Pending, Approved, Rejected, Cancelled] } }
+        - { name: employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: submitted_from, in: query, required: false, schema: { type: string, format: date } }
+        - { name: submitted_to, in: query, required: false, schema: { type: string, format: date } }
+        - { name: reviewed_from, in: query, required: false, schema: { type: string, format: date } }
+        - { name: reviewed_to, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/hr/profile-change-requests/{request_id}:
+    parameters:
+      - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [HR - Profile Change Requests]
+      summary: Chi tiết yêu cầu cập nhật hồ sơ
+      operationId: hrGetProfileChangeRequest
+      x-required-permission: HR.PROFILE_CHANGE_REQUEST.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/hr/profile-change-requests/{request_id}/approve:
+    parameters:
+      - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [HR - Profile Change Requests]
+      summary: Duyệt yêu cầu cập nhật hồ sơ
+      operationId: hrApproveProfileChangeRequest
+      x-required-permission: HR.PROFILE_CHANGE_REQUEST.APPROVE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: HR_PROFILE_CHANGE_REQUEST_APPROVED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                review_note: { type: string }
+                approved_item_ids: { type: array, items: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/hr/profile-change-requests/{request_id}/reject:
+    parameters:
+      - { name: request_id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [HR - Profile Change Requests]
+      summary: Từ chối yêu cầu cập nhật hồ sơ
+      operationId: hrRejectProfileChangeRequest
+      x-required-permission: HR.PROFILE_CHANGE_REQUEST.REJECT
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: HR_PROFILE_CHANGE_REQUEST_REJECTED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [review_note]
+              properties:
+                review_note: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ===========================================================================
+  # HR - Departments (HR-API-301..306)
+  # ===========================================================================
+  /api/v1/hr/departments:
+    get:
+      tags: [HR - Departments]
+      summary: Lấy danh sách phòng ban
+      operationId: hrListDepartments
+      x-required-permission: HR.DEPARTMENT.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Active, Inactive] } }
+        - { name: parent_id, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [HR - Departments]
+      summary: Tạo phòng ban
+      operationId: hrCreateDepartment
+      x-required-permission: HR.DEPARTMENT.CREATE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: HR_DEPARTMENT_CREATED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [department_code, name]
+              properties:
+                department_code: { type: string }
+                name: { type: string }
+                description: { type: string }
+                parent_id: { type: string, format: uuid, nullable: true }
+                manager_employee_id: { type: string, format: uuid }
+                status: { type: string, enum: [Active, Inactive] }
+                sort_order: { type: integer }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/hr/departments/tree:
+    get:
+      tags: [HR - Departments]
+      summary: Lấy cây phòng ban
+      operationId: hrGetDepartmentTree
+      x-required-permission: HR.DEPARTMENT.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/hr/departments/{department_id}:
+    parameters:
+      - { name: department_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [HR - Departments]
+      summary: Chi tiết phòng ban
+      operationId: hrGetDepartment
+      x-required-permission: HR.DEPARTMENT.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [HR - Departments]
+      summary: Cập nhật phòng ban
+      operationId: hrUpdateDepartment
+      x-required-permission: HR.DEPARTMENT.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: HR_DEPARTMENT_UPDATED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                parent_id: { type: string, format: uuid, nullable: true }
+                manager_employee_id: { type: string, format: uuid }
+                status: { type: string, enum: [Active, Inactive] }
+                sort_order: { type: integer }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [HR - Departments]
+      summary: Xóa mềm phòng ban
+      operationId: hrDeleteDepartment
+      x-required-permission: HR.DEPARTMENT.DELETE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: HR_DEPARTMENT_DELETED
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ===========================================================================
+  # HR - Positions (HR-API-401..405)
+  # ===========================================================================
+  /api/v1/hr/positions:
+    get:
+      tags: [HR - Positions]
+      summary: Lấy danh sách chức vụ
+      operationId: hrListPositions
+      x-required-permission: HR.POSITION.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: job_level_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Active, Inactive] } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [HR - Positions]
+      summary: Tạo chức vụ
+      operationId: hrCreatePosition
+      x-required-permission: HR.POSITION.CREATE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: HR_POSITION_CREATED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [position_code, name]
+              properties:
+                position_code: { type: string }
+                name: { type: string }
+                description: { type: string }
+                department_id: { type: string, format: uuid }
+                job_level_id: { type: string, format: uuid }
+                status: { type: string, enum: [Active, Inactive] }
+                sort_order: { type: integer }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/hr/positions/{position_id}:
+    parameters:
+      - { name: position_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [HR - Positions]
+      summary: Chi tiết chức vụ
+      operationId: hrGetPosition
+      x-required-permission: HR.POSITION.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [HR - Positions]
+      summary: Cập nhật chức vụ
+      operationId: hrUpdatePosition
+      x-required-permission: HR.POSITION.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: HR_POSITION_UPDATED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                department_id: { type: string, format: uuid }
+                job_level_id: { type: string, format: uuid }
+                status: { type: string, enum: [Active, Inactive] }
+                sort_order: { type: integer }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [HR - Positions]
+      summary: Xóa mềm chức vụ
+      operationId: hrDeletePosition
+      x-required-permission: HR.POSITION.DELETE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: HR_POSITION_DELETED
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ===========================================================================
+  # HR - Master Data: Job Levels (HR-API-501..505)
+  # ===========================================================================
+  /api/v1/hr/job-levels:
+    get:
+      tags: [HR - Master Data]
+      summary: Lấy danh sách cấp bậc
+      operationId: hrListJobLevels
+      x-required-permission: [HR.MASTER_DATA.MANAGE, HR.EMPLOYEE.VIEW]
+      x-permission-mode: anyOf
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Active, Inactive] } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [HR - Master Data]
+      summary: Tạo cấp bậc
+      operationId: hrCreateJobLevel
+      x-required-permission: HR.MASTER_DATA.MANAGE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: HR_MASTER_DATA_CHANGED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [level_code, name]
+              properties:
+                level_code: { type: string }
+                name: { type: string }
+                rank_order: { type: integer }
+                description: { type: string }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/hr/job-levels/{job_level_id}:
+    parameters:
+      - { name: job_level_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [HR - Master Data]
+      summary: Chi tiết cấp bậc
+      operationId: hrGetJobLevel
+      x-required-permission: HR.MASTER_DATA.MANAGE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [HR - Master Data]
+      summary: Cập nhật cấp bậc
+      operationId: hrUpdateJobLevel
+      x-required-permission: HR.MASTER_DATA.MANAGE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: HR_MASTER_DATA_CHANGED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                rank_order: { type: integer }
+                description: { type: string }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [HR - Master Data]
+      summary: Xóa mềm cấp bậc
+      operationId: hrDeleteJobLevel
+      x-required-permission: HR.MASTER_DATA.MANAGE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: HR_MASTER_DATA_CHANGED
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ===========================================================================
+  # HR - Master Data: Contract Types (HR-API-601..605)
+  # ===========================================================================
+  /api/v1/hr/contract-types:
+    get:
+      tags: [HR - Master Data]
+      summary: Lấy danh sách loại hợp đồng
+      operationId: hrListContractTypes
+      x-required-permission: HR.CONTRACT.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Active, Inactive] } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [HR - Master Data]
+      summary: Tạo loại hợp đồng
+      operationId: hrCreateContractType
+      x-required-permission: HR.MASTER_DATA.MANAGE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: HR_MASTER_DATA_CHANGED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contract_type_code, name]
+              properties:
+                contract_type_code: { type: string }
+                name: { type: string }
+                description: { type: string }
+                default_duration_months: { type: integer }
+                requires_end_date: { type: boolean }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/hr/contract-types/{contract_type_id}:
+    parameters:
+      - { name: contract_type_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [HR - Master Data]
+      summary: Chi tiết loại hợp đồng
+      operationId: hrGetContractType
+      x-required-permission: HR.CONTRACT.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [HR - Master Data]
+      summary: Cập nhật loại hợp đồng
+      operationId: hrUpdateContractType
+      x-required-permission: HR.MASTER_DATA.MANAGE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: HR_MASTER_DATA_CHANGED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                default_duration_months: { type: integer }
+                requires_end_date: { type: boolean }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [HR - Master Data]
+      summary: Xóa mềm loại hợp đồng
+      operationId: hrDeleteContractType
+      x-required-permission: HR.MASTER_DATA.MANAGE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: HR_MASTER_DATA_CHANGED
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ===========================================================================
+  # HR - Contracts (HR-API-701..706)
+  # ===========================================================================
+  /api/v1/hr/employees/{employee_id}/contracts:
+    parameters:
+      - { name: employee_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [HR - Contracts]
+      summary: Danh sách hợp đồng của nhân viên
+      operationId: hrListEmployeeContracts
+      x-required-permission: HR.CONTRACT.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [HR - Contracts]
+      summary: Tạo hợp đồng nhân viên
+      operationId: hrCreateEmployeeContract
+      x-required-permission: HR.CONTRACT.CREATE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: HR_CONTRACT_CREATED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contract_type_id, start_date]
+              properties:
+                contract_type_id: { type: string, format: uuid }
+                contract_code: { type: string }
+                title: { type: string }
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date }
+                signed_date: { type: string, format: date }
+                status: { type: string, enum: [Draft, Active, Expired, Terminated, Cancelled] }
+                is_primary: { type: boolean }
+                file_id: { type: string, format: uuid }
+                note: { type: string }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/hr/employees/{employee_id}/contracts/{contract_id}:
+    parameters:
+      - { name: employee_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: contract_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [HR - Contracts]
+      summary: Chi tiết hợp đồng
+      operationId: hrGetEmployeeContract
+      x-required-permission: HR.CONTRACT.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [HR - Contracts]
+      summary: Cập nhật hợp đồng
+      operationId: hrUpdateEmployeeContract
+      x-required-permission: HR.CONTRACT.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: HR_CONTRACT_UPDATED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                contract_type_id: { type: string, format: uuid }
+                contract_code: { type: string }
+                title: { type: string }
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date }
+                signed_date: { type: string, format: date }
+                status: { type: string, enum: [Draft, Active, Expired, Terminated, Cancelled] }
+                file_id: { type: string, format: uuid }
+                note: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [HR - Contracts]
+      summary: Xóa mềm hợp đồng
+      operationId: hrDeleteEmployeeContract
+      x-required-permission: HR.CONTRACT.DELETE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/hr/employees/{employee_id}/contracts/{contract_id}/set-primary:
+    parameters:
+      - { name: employee_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: contract_id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [HR - Contracts]
+      summary: Đặt hợp đồng chính
+      operationId: hrSetPrimaryContract
+      x-required-permission: HR.CONTRACT.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: HR_CONTRACT_PRIMARY_CHANGED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ===========================================================================
+  # HR - Employee Files (HR-API-801..805)
+  # ===========================================================================
+  /api/v1/hr/employees/{employee_id}/files:
+    parameters:
+      - { name: employee_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [HR - Employee Files]
+      summary: Danh sách file hồ sơ nhân viên
+      operationId: hrListEmployeeFiles
+      x-required-permission: HR.EMPLOYEE.FILE_VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - { name: file_type, in: query, required: false, schema: { type: string, enum: [CV, Identity, Contract, Certificate, Decision, Other] } }
+        - { name: is_sensitive, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [HR - Employee Files]
+      summary: Upload hoặc link file hồ sơ
+      operationId: hrUploadEmployeeFile
+      x-required-permission: HR.EMPLOYEE.FILE_UPLOAD
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: HR_EMPLOYEE_FILE_UPLOADED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, file_type]
+              properties:
+                file: { type: string, format: binary }
+                file_type: { type: string, enum: [CV, Identity, Contract, Certificate, Decision, Other] }
+                description: { type: string }
+                is_sensitive: { type: boolean }
+          application/json:
+            schema:
+              type: object
+              required: [file_id, file_type]
+              properties:
+                file_id: { type: string, format: uuid }
+                file_type: { type: string, enum: [CV, Identity, Contract, Certificate, Decision, Other] }
+                description: { type: string }
+                is_sensitive: { type: boolean }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/hr/employees/{employee_id}/files/{file_id}:
+    parameters:
+      - { name: employee_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: file_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [HR - Employee Files]
+      summary: Chi tiết metadata file hồ sơ
+      operationId: hrGetEmployeeFile
+      x-required-permission: HR.EMPLOYEE.FILE_VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [HR - Employee Files]
+      summary: Xóa hoặc unlink file hồ sơ
+      operationId: hrDeleteEmployeeFile
+      x-required-permission: HR.EMPLOYEE.FILE_DELETE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: HR_EMPLOYEE_FILE_DELETED
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/hr/employees/{employee_id}/files/{file_id}/download-url:
+    parameters:
+      - { name: employee_id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: file_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [HR - Employee Files]
+      summary: Lấy signed download URL của file hồ sơ
+      operationId: hrGetEmployeeFileDownloadUrl
+      x-required-permission: HR.EMPLOYEE.FILE_VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ===========================================================================
+  # HR - Employee Code (HR-API-901..905)
+  # ===========================================================================
+  /api/v1/hr/employee-code-config:
+    get:
+      tags: [HR - Employee Code]
+      summary: Xem cấu hình sinh mã nhân viên
+      operationId: hrGetEmployeeCodeConfig
+      x-required-permission: HR.EMPLOYEE_CODE_CONFIG.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    patch:
+      tags: [HR - Employee Code]
+      summary: Cập nhật cấu hình sinh mã nhân viên
+      operationId: hrUpdateEmployeeCodeConfig
+      x-required-permission: HR.EMPLOYEE_CODE_CONFIG.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: HR_EMPLOYEE_CODE_CONFIG_UPDATED
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prefix: { type: string }
+                number_length: { type: integer, minimum: 1, maximum: 12 }
+                start_number: { type: integer }
+                use_department_code: { type: boolean }
+                use_year: { type: boolean }
+                use_month: { type: boolean }
+                separator: { type: string }
+                reset_rule: { type: string, enum: [Never, Yearly, Monthly, Department] }
+                allow_manual_override: { type: boolean }
+                lock_after_created: { type: boolean }
+                pattern: { type: string }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/hr/employee-code/preview:
+    post:
+      tags: [HR - Employee Code]
+      summary: Preview mã nhân viên tiếp theo
+      operationId: hrPreviewEmployeeCode
+      x-required-permission: HR.EMPLOYEE_CODE.PREVIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                department_id: { type: string, format: uuid }
+                joined_date: { type: string, format: date }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/hr/employees/{employee_id}/unlock-employee-code:
+    parameters:
+      - { name: employee_id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [HR - Employee Code]
+      summary: Mở khóa sửa mã nhân viên
+      operationId: hrUnlockEmployeeCode
+      x-required-permission: HR.EMPLOYEE_CODE.MANUAL_OVERRIDE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: HR_EMPLOYEE_CODE_UNLOCKED
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/hr/employees/{employee_id}/lock-employee-code:
+    parameters:
+      - { name: employee_id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [HR - Employee Code]
+      summary: Khóa sửa mã nhân viên
+      operationId: hrLockEmployeeCode
+      x-required-permission: HR.EMPLOYEE_CODE.MANUAL_OVERRIDE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: HR_EMPLOYEE_CODE_LOCKED
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ===========================================================================
+  # HR - Org Chart (HR-API-1001..1002)
+  # ===========================================================================
+  /api/v1/hr/org-chart:
+    get:
+      tags: [HR - Org Chart]
+      summary: Lấy sơ đồ tổ chức cơ bản
+      operationId: hrGetOrgChart
+      x-required-permission: HR.ORG_CHART.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: root_department_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: root_employee_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: depth, in: query, required: false, schema: { type: integer, default: 3 } }
+        - { name: include_inactive, in: query, required: false, schema: { type: boolean, default: false } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/hr/employees/{employee_id}/subordinates:
+    parameters:
+      - { name: employee_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [HR - Org Chart]
+      summary: Lấy cấp dưới của một nhân viên
+      operationId: hrGetEmployeeSubordinates
+      x-required-permission: HR.EMPLOYEE.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager]
+      x-data-scope: [Team, Department, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: depth, in: query, required: false, schema: { type: integer, default: 1 } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }

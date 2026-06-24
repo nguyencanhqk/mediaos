@@ -58,6 +58,9 @@ jobs:
       PGBOUNCER_AUTH_PASSWORD: ci_pgb_pw
       # JWT secret ephemeral cho test auth (G2-6).
       JWT_SECRET: ci-only-jwt-secret-0123456789abcdef
+      # Test crypto/2FA (LocalKekProvider) cần file KEK 32-byte tại path này — sinh ephemeral ở step dưới
+      # (KHÔNG phải secret thật; prod = Vault transit, ADR-0004).
+      KMS_LOCAL_KEK_PATH: ${{ github.workspace }}/.secrets/local-kek.bin
 
     steps:
       - uses: actions/checkout@v4
@@ -86,6 +89,12 @@ jobs:
       # Migration TRƯỚC test: tạo role + bảng + RLS policy + FORCE (GX-4 — policy+FORCE cùng CREATE).
       - name: Apply migrations (real Postgres)
         run: pnpm --filter @mediaos/api db:migrate
+
+      # Gate journal forward-only (S0-CI-1): migrate DB rỗng → kiểm BẤT BIẾN NỘI TẠI của
+      # migrations/meta/_journal.json (idx liên tục từ 0/no-gap, tag duy nhất/no-dup, head=entries[last].idx
+      # ĐỌC ĐỘNG, số .sql áp = entries.length). KHÔNG so literal idx chép tay. Chạy SAU migrate, TRƯỚC roles.
+      - name: Migration check (db:check)
+        run: pnpm --filter @mediaos/api db:check
 
       # Gán mật khẩu cho mediaos_app/worker/pgbouncer_auth (tách secret khỏi migration) → app kết nối được.
       # BƯỚC NÀY cũng sinh .secrets/pgbouncer/userlist.txt (hash SCRAM của pgbouncer_auth) cho auth_query.
@@ -119,7 +128,16 @@ jobs:
             sleep 1
           done
 
+      # Crypto/2FA tests cần KEK 32-byte (LocalKekProvider, dev-only) — sinh ephemeral mỗi run (prod = Vault).
+      - name: Generate ephemeral dev KEK (crypto tests)
+        run: |
+          mkdir -p "$(dirname "$KMS_LOCAL_KEK_PATH")"
+          node -e "require('fs').writeFileSync(process.env.KMS_LOCAL_KEK_PATH, require('crypto').randomBytes(32))"
+
       # Test gồm integration RLS/isolation/outbox/auth chạy THẬT (DATABASE_URL = mediaos_app).
       # Đây là gate "không rò chéo tenant" của cả dự án (G2-5) + gate qua-pool (PGBOUNCER_URL, GX-4).
       - name: Test (unit + integration RLS/auth)
         run: pnpm test
+
+      # DEFER → S0-CI-2: secret-scan (gitleaks) + dependency-scan (pnpm audit) — ĐÃ hiện thực ở security.yml
+      # (WO S0-CI-2); KHÔNG bỏ qua silently (DEVOPS-02 §9.2/§11/§17.2). Đặt ở workflow riêng để tránh trùng lặp.

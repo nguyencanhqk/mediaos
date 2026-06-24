@@ -28,9 +28,14 @@ import {
   TemplateNotFoundError,
   TemplatePublishedImmutableError,
 } from "./workflow-templates.types";
+import {
+  isUniqueViolation,
+  isForeignKeyViolation,
+  pgErrorCode,
+  pgErrorField,
+  PG_UNIQUE_VIOLATION,
+} from "../common/db-error";
 
-const PG_UNIQUE_VIOLATION = "23505";
-const PG_FK_VIOLATION = "23503";
 // Partial-unique index (company_id, code, version) WHERE deleted_at IS NULL — định nghĩa ở schema/0032.
 const TEMPLATE_CODE_VERSION_UQ = "workflow_defs_company_code_version_active_uq";
 
@@ -46,28 +51,9 @@ const DEP_EDGE_UQ = "wf_step_deps_edge_uq";
 
 /** Trả tên unique-constraint nếu err là 23505, ngược lại null. */
 function uniqueConstraintName(err: unknown): string | null {
-  if (typeof err !== "object" || err === null) return null;
-  const e = err as Record<string, unknown>;
-  if (e["code"] !== PG_UNIQUE_VIOLATION) return null;
-  return typeof e["constraint"] === "string" ? (e["constraint"] as string) : null;
-}
-
-/** True nếu err là 23505 BẤT KỲ (kể cả thiếu tên constraint) — fallback chống raw 500 rò schema. */
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    (err as Record<string, unknown>)["code"] === PG_UNIQUE_VIOLATION
-  );
-}
-
-/** True nếu err là 23503 (FK violation) — vd race xoá step giữa lúc thêm dependency. */
-function isForeignKeyViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    (err as Record<string, unknown>)["code"] === PG_FK_VIOLATION
-  );
+  if (pgErrorCode(err) !== PG_UNIQUE_VIOLATION) return null;
+  const constraint = pgErrorField(err, "constraint");
+  return constraint ?? null;
 }
 
 /** Chỉ lấy field được gửi (Zod partial); null hợp lệ (clear cột nullable). nodeKey BẤT BIẾN — không có ở đây. */
@@ -136,7 +122,9 @@ export class WorkflowTemplatesService {
     } catch (err) {
       if (err instanceof InternalServerErrorException) throw err;
       if (isTemplateCodeConflict(err)) {
-        throw new ConflictException(`Workflow template code '${dto.code}' (version 1) already exists`);
+        throw new ConflictException(
+          `Workflow template code '${dto.code}' (version 1) already exists`,
+        );
       }
       if (isUniqueViolation(err)) {
         throw new ConflictException("A unique constraint was violated creating this template");
@@ -170,12 +158,7 @@ export class WorkflowTemplatesService {
   }
 
   /** PATCH /workflow-templates/:id — đổi name (draft-only). */
-  async updateTemplate(
-    companyId: string,
-    actorId: string,
-    id: string,
-    dto: UpdateTemplateRequest,
-  ) {
+  async updateTemplate(companyId: string, actorId: string, id: string, dto: UpdateTemplateRequest) {
     try {
       return await this.db.withTenant(companyId, async (tx) => {
         const [existing] = await this.repo.findByIdInTx(companyId, id, tx);
@@ -253,7 +236,9 @@ export class WorkflowTemplatesService {
         const steps = await this.repo.findStepsInTx(companyId, id, tx);
         const deps = await this.repo.findDependenciesInTx(companyId, id, tx);
         const input = buildDagInput(steps, deps);
-        const validation = toDagValidationResultDto(this.dagValidator.validateDag(input.steps, input.deps));
+        const validation = toDagValidationResultDto(
+          this.dagValidator.validateDag(input.steps, input.deps),
+        );
         if (!validation.valid) {
           throw new TemplateDagInvalidError(validation);
         }
@@ -262,7 +247,9 @@ export class WorkflowTemplatesService {
         // loadDraftTemplate already confirmed draft → 0 rows means a concurrent publish/delete won the
         // race (atomic WHERE status='draft'). Surface 409, not a misleading 500.
         if (!published) {
-          throw new ConflictException(`Template ${id} was published or modified by a concurrent request`);
+          throw new ConflictException(
+            `Template ${id} was published or modified by a concurrent request`,
+          );
         }
 
         await this.audit.record(tx, {
@@ -355,7 +342,9 @@ export class WorkflowTemplatesService {
           const fromStepId = stepIdMap.get(dep.fromStepId);
           const toStepId = stepIdMap.get(dep.toStepId);
           if (!fromStepId || !toStepId) {
-            throw new InternalServerErrorException("Dependency references a step missing from the clone");
+            throw new InternalServerErrorException(
+              "Dependency references a step missing from the clone",
+            );
           }
           await this.repo.createDependency(
             companyId,
@@ -373,7 +362,9 @@ export class WorkflowTemplatesService {
             : undefined;
           // findChecklistsInTx INNER JOINs steps → workflowDefinitionStepId is always a live, mapped step.
           if (!newStepId) {
-            throw new InternalServerErrorException("Checklist references a step missing from the clone");
+            throw new InternalServerErrorException(
+              "Checklist references a step missing from the clone",
+            );
           }
           const [newChecklist] = await this.repo.createChecklist(
             companyId,
@@ -389,7 +380,9 @@ export class WorkflowTemplatesService {
         for (const item of sourceItems) {
           const newChecklistId = checklistIdMap.get(item.checklistId);
           if (!newChecklistId) {
-            throw new InternalServerErrorException("Checklist item references a checklist missing from the clone");
+            throw new InternalServerErrorException(
+              "Checklist item references a checklist missing from the clone",
+            );
           }
           const [newItem] = await this.repo.createChecklistItem(
             companyId,
@@ -515,7 +508,11 @@ export class WorkflowTemplatesService {
 
         const fields = buildStepUpdate(dto);
         if (Object.keys(fields).length === 0) {
-          this.logger.debug("updateStep no-op (no fields to change)", { companyId, templateId, stepId });
+          this.logger.debug("updateStep no-op (no fields to change)", {
+            companyId,
+            templateId,
+            stepId,
+          });
           return existing;
         }
 
@@ -527,7 +524,12 @@ export class WorkflowTemplatesService {
           objectType: "workflow_template",
           objectId: templateId,
           actorUserId: actorId,
-          before: { stepId, code: existing.code, name: existing.name, stepOrder: existing.stepOrder },
+          before: {
+            stepId,
+            code: existing.code,
+            name: existing.name,
+            stepOrder: existing.stepOrder,
+          },
           after: { code: updated.code, name: updated.name, stepOrder: updated.stepOrder },
         });
 
@@ -584,7 +586,12 @@ export class WorkflowTemplatesService {
           throw new BadRequestException("A step cannot depend on itself (self-dependency)");
         }
         // from/to PHẢI thuộc đúng template này (chặn cross-template edge ở add-time — DV3 backstop).
-        const [fromStep] = await this.repo.findStepByIdInTx(companyId, templateId, dto.fromStepId, tx);
+        const [fromStep] = await this.repo.findStepByIdInTx(
+          companyId,
+          templateId,
+          dto.fromStepId,
+          tx,
+        );
         if (!fromStep) {
           throw new BadRequestException(`from_step not found in this template: ${dto.fromStepId}`);
         }
@@ -637,14 +644,19 @@ export class WorkflowTemplatesService {
         if (!existing) throw new NotFoundException(`Dependency not found: ${depId}`);
 
         const [deleted] = await this.repo.deleteDependency(companyId, templateId, depId, tx);
-        if (!deleted) throw new InternalServerErrorException(`Failed to delete dependency ${depId}`);
+        if (!deleted)
+          throw new InternalServerErrorException(`Failed to delete dependency ${depId}`);
 
         await this.audit.record(tx, {
           action: "WorkflowTemplateDependencyRemoved",
           objectType: "workflow_template",
           objectId: templateId,
           actorUserId: actorId,
-          before: { dependencyId: depId, fromStepId: existing.fromStepId, toStepId: existing.toStepId },
+          before: {
+            dependencyId: depId,
+            fromStepId: existing.fromStepId,
+            toStepId: existing.toStepId,
+          },
         });
 
         return { id: depId, deleted: true as const };
@@ -705,7 +717,12 @@ export class WorkflowTemplatesService {
         await this.loadDraftTemplate(companyId, templateId, tx);
         const [step] = await this.repo.findStepByIdInTx(companyId, templateId, stepId, tx);
         if (!step) throw new NotFoundException(`Template step not found: ${stepId}`);
-        const [existing] = await this.repo.findChecklistByStepInTx(companyId, stepId, checklistId, tx);
+        const [existing] = await this.repo.findChecklistByStepInTx(
+          companyId,
+          stepId,
+          checklistId,
+          tx,
+        );
         if (!existing) throw new NotFoundException(`Checklist not found: ${checklistId}`);
 
         const [deleted] = await this.repo.deleteChecklist(companyId, stepId, checklistId, tx);
@@ -760,7 +777,12 @@ export class WorkflowTemplatesService {
           objectType: "workflow_template",
           objectId: templateId,
           actorUserId: actorId,
-          after: { itemId: created.id, checklistId, label: created.label, isRequired: created.isRequired },
+          after: {
+            itemId: created.id,
+            checklistId,
+            label: created.label,
+            isRequired: created.isRequired,
+          },
         });
 
         return created;
@@ -790,11 +812,17 @@ export class WorkflowTemplatesService {
         if (!checklist) {
           throw new NotFoundException(`Checklist not found in this template: ${checklistId}`);
         }
-        const [existing] = await this.repo.findChecklistItemByIdInTx(companyId, checklistId, itemId, tx);
+        const [existing] = await this.repo.findChecklistItemByIdInTx(
+          companyId,
+          checklistId,
+          itemId,
+          tx,
+        );
         if (!existing) throw new NotFoundException(`Checklist item not found: ${itemId}`);
 
         const [deleted] = await this.repo.deleteChecklistItem(companyId, checklistId, itemId, tx);
-        if (!deleted) throw new InternalServerErrorException(`Failed to delete checklist item ${itemId}`);
+        if (!deleted)
+          throw new InternalServerErrorException(`Failed to delete checklist item ${itemId}`);
 
         await this.audit.record(tx, {
           action: "WorkflowTemplateChecklistItemRemoved",

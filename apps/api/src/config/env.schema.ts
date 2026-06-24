@@ -156,6 +156,15 @@ export const envSchema = z.object({
   // Slug công ty của super-admin. Công ty PHẢI tồn tại & active TRƯỚC khi seed. Default "demo".
   PLATFORM_SUPERADMIN_COMPANY_SLUG: z.string().min(1).default("demo"),
 
+  // ── AI Insight (AI-1) — Claude API tóm tắt KPI + chi phí (read-only) ──────────────────────────────
+  // ANTHROPIC_API_KEY: khoá Claude API. OPTIONAL để API vẫn boot khi AI chưa cấu hình (mirror DATABASE_URL).
+  // AiClient fail-fast (ServiceUnavailable) KHI DÙNG nếu thiếu — KHÔNG fail-open gọi với key rỗng. BẤT BIẾN
+  // #3: KHÔNG hardcode, KHÔNG commit giá trị thật vào .env.example (chỉ key rỗng), KHÔNG log key.
+  ANTHROPIC_API_KEY: z.string().optional(),
+  // AI_MODEL: chọn model mặc định từ allowlist (KHÔNG hậu tố ngày → 404). Default claude-opus-4-8.
+  // claude-sonnet-4-6 = lựa chọn rẻ/nhanh hơn. Giá trị ngoài enum bị reject ở boundary (fail-fast cấu hình).
+  AI_MODEL: z.enum(["claude-opus-4-8", "claude-sonnet-4-6"]).default("claude-opus-4-8"),
+
   // ⚠️ ALLOW_SUPERUSER_ROTATION (KHÔNG validate qua zod — CỐ Ý): SecretRotationService đọc THẲNG
   // `process.env.ALLOW_SUPERUSER_ROTATION === 'true'` để fail-closed tuyệt đối (mọi giá trị ≠ 'true', kể cả
   // unset → CHẶN rotation bằng role BYPASS RLS). Không dùng z.coerce.boolean() vì nó coi 'false' → true (bẫy).

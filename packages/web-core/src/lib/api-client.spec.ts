@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
+/** Minimal shape for new ApiError fields — used to avoid `as any` in assertions. */
+interface ApiErrorShape {
+  status: number;
+  code: string;
+  message: string;
+  kind?: string;
+  requestId?: string;
+  details?: unknown;
+}
+
 /**
  * FS-1b — crown logic: silent-refresh + refresh-on-401 SINGLE-FLIGHT + redirect-on-fail. Chứng minh:
  * (1) N request 401 đồng thời → ĐÚNG 1 lần /auth/refresh; (2) KHÔNG vòng lặp (replay 401 không refresh lại);
@@ -178,7 +188,10 @@ describe("apiFetch — refresh-on-401 single-flight", () => {
     await expect(api.apiFetch("/x", testSchema)).rejects.toMatchObject({ status: 401 });
     const refreshCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes("/auth/refresh"));
     expect(refreshCalls).toHaveLength(1); // refresh thành công 1 lần, replay 401 → dừng, KHÔNG refresh lại
-    expect((globalThis as unknown as { window: { location: { assign: ReturnType<typeof vi.fn> } } }).window.location.assign).not.toHaveBeenCalled();
+    expect(
+      (globalThis as unknown as { window: { location: { assign: ReturnType<typeof vi.fn> } } })
+        .window.location.assign,
+    ).not.toHaveBeenCalled();
   });
 });
 
@@ -193,10 +206,11 @@ describe("apiFetch — refresh fail → redirect, không loop", () => {
 
     await expect(api.apiFetch("/x", testSchema)).rejects.toMatchObject({
       status: 401,
-      code: "UNAUTHENTICATED",
+      code: "AUTH-ERR-UNAUTHENTICATED", // BE code (ERROR_CODES.AUTH_UNAUTHENTICATED) — updated by S0-FE-API-1
     });
-    const assign = (globalThis as unknown as { window: { location: { assign: ReturnType<typeof vi.fn> } } })
-      .window.location.assign;
+    const assign = (
+      globalThis as unknown as { window: { location: { assign: ReturnType<typeof vi.fn> } } }
+    ).window.location.assign;
     expect(assign).toHaveBeenCalledTimes(1);
     const target = String(assign.mock.calls[0][0]);
     expect(target).toContain("/login?redirect=");
@@ -273,7 +287,11 @@ describe("refreshAccessToken — single-flight internals", () => {
     const { api, store } = await loadFresh();
     store.useAuthStore.getState().setAccessToken("keep-old");
     let resolveFetch: (v: unknown) => void = () => {};
-    fetchMock.mockReturnValueOnce(new Promise((r) => { resolveFetch = r; }));
+    fetchMock.mockReturnValueOnce(
+      new Promise((r) => {
+        resolveFetch = r;
+      }),
+    );
 
     const p = api.refreshAccessToken();
     api.invalidateSession(); // logout xảy ra giữa chừng
@@ -291,8 +309,9 @@ describe("redirectToAuth", () => {
     const { api } = await loadFresh();
     api.redirectToAuth();
     api.redirectToAuth();
-    const assign = (globalThis as unknown as { window: { location: { assign: ReturnType<typeof vi.fn> } } })
-      .window.location.assign;
+    const assign = (
+      globalThis as unknown as { window: { location: { assign: ReturnType<typeof vi.fn> } } }
+    ).window.location.assign;
     expect(assign).toHaveBeenCalledTimes(1);
   });
 
@@ -300,5 +319,140 @@ describe("redirectToAuth", () => {
     vi.stubGlobal("window", undefined);
     const { api } = await loadFresh();
     expect(() => api.redirectToAuth()).not.toThrow();
+  });
+});
+
+// ─── NEW CASES (S0-FE-API-1) ──────────────────────────────────────────────────
+// errResFull: body lỗi CÓ meta.request_id + error.type (errRes cũ thiếu meta/type)
+function errResFull(
+  status: number,
+  {
+    code = "ERR",
+    type = "GenericError",
+    details,
+    requestId,
+    message = "boom",
+  }: {
+    code?: string;
+    type?: string;
+    details?: unknown;
+    requestId?: string;
+    message?: string;
+  } = {},
+) {
+  const body = {
+    success: false,
+    data: null,
+    message,
+    error: { code, type, message, details },
+    meta: { request_id: requestId ?? "req_test-id", timestamp: new Date().toISOString() },
+  };
+  return { ok: false, status, json: async () => body, text: async () => JSON.stringify(body) };
+}
+
+describe("apiFetch — kind + request-id (S0-FE-API-1)", () => {
+  it("403 → kind='FORBIDDEN', KHÔNG refresh, KHÔNG redirect", async () => {
+    stubBrowser();
+    const { api } = await loadFresh();
+    fetchMock.mockResolvedValueOnce(errResFull(403, { code: "AUTH-ERR-FORBIDDEN" }));
+
+    await expect(api.apiFetch("/admin", testSchema)).rejects.toMatchObject({
+      name: "ApiError",
+      status: 403,
+      kind: "FORBIDDEN",
+    });
+    // KHÔNG có lần /auth/refresh
+    const refreshCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes("/auth/refresh"));
+    expect(refreshCalls).toHaveLength(0);
+    // KHÔNG redirect
+    const win = (
+      globalThis as unknown as { window?: { location?: { assign?: ReturnType<typeof vi.fn> } } }
+    ).window;
+    if (win?.location?.assign) expect(win.location.assign).not.toHaveBeenCalled();
+  });
+
+  it("422 code='VALIDATION-ERR-001' → kind='VALIDATION', details[] surface", async () => {
+    stubBrowser();
+    const { api } = await loadFresh();
+    const details = [{ field: "name", message: "required" }];
+    fetchMock.mockResolvedValueOnce(errResFull(422, { code: "VALIDATION-ERR-001", details }));
+
+    let caught: unknown;
+    try {
+      await api.apiFetch("/hr/employees", testSchema);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toMatchObject({ status: 422, kind: "VALIDATION" });
+    expect((caught as ApiErrorShape).details).toEqual(details);
+  });
+
+  it("500 → kind='SERVER'", async () => {
+    stubBrowser();
+    const { api } = await loadFresh();
+    fetchMock.mockResolvedValueOnce(errResFull(500, { code: "SYSTEM-ERR-001" }));
+
+    await expect(api.apiFetch("/x", testSchema)).rejects.toMatchObject({
+      status: 500,
+      kind: "SERVER",
+    });
+  });
+
+  it("request có header X-Request-Id + X-Client-Type", async () => {
+    stubBrowser();
+    const { api } = await loadFresh();
+    fetchMock.mockResolvedValueOnce(dataOk());
+
+    await api.apiFetch("/x", testSchema);
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(typeof init.headers["X-Request-Id"]).toBe("string");
+    expect(init.headers["X-Request-Id"]).toMatch(/^req_/);
+    expect(init.headers["X-Client-Type"]).toBe("web");
+  });
+
+  it("opts.idempotencyKey → header Idempotency-Key xuất hiện", async () => {
+    stubBrowser();
+    const { api } = await loadFresh();
+    fetchMock.mockResolvedValueOnce(dataOk());
+
+    await api.apiFetch("/x", testSchema, { method: "POST" }, { idempotencyKey: "idem-key-123" });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.headers["Idempotency-Key"]).toBe("idem-key-123");
+  });
+
+  it("GET KHÔNG có Idempotency-Key dù không truyền", async () => {
+    stubBrowser();
+    const { api } = await loadFresh();
+    fetchMock.mockResolvedValueOnce(dataOk());
+
+    await api.apiFetch("/x", testSchema, { method: "GET" });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.headers["Idempotency-Key"]).toBeUndefined();
+  });
+
+  it("ApiError.requestId = meta.request_id từ errResFull", async () => {
+    stubBrowser();
+    const { api } = await loadFresh();
+    fetchMock.mockResolvedValueOnce(errResFull(500, { requestId: "req_xyz-999" }));
+
+    let caught: unknown;
+    try {
+      await api.apiFetch("/x", testSchema);
+    } catch (e) {
+      caught = e;
+    }
+    expect((caught as ApiErrorShape).requestId).toBe("req_xyz-999");
+  });
+
+  it("positional construct new ApiError(status,code,message) vẫn compile + hoạt động", async () => {
+    const { ApiError: ApiErrorClass } = await import("./api-client");
+    const err = new ApiErrorClass(404, "NOT_FOUND", "not found");
+    expect(err.status).toBe(404);
+    expect(err.code).toBe("NOT_FOUND");
+    expect(err.message).toBe("not found");
+    expect(err.name).toBe("ApiError");
   });
 });

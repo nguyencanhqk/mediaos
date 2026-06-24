@@ -6,44 +6,35 @@ import {
   Logger,
   NotFoundException,
   ServiceUnavailableException,
-} from '@nestjs/common';
-import { randomBytes, randomUUID } from 'crypto';
+} from "@nestjs/common";
+import { randomBytes, randomUUID } from "crypto";
 import type {
   CreateEmployeeProfileRequest,
   EmployeeListQuery,
   ImportEmployeeRow,
   UpdateEmployeeProfileRequest,
-} from '@mediaos/contracts';
-import { importEmployeeRowSchema } from '@mediaos/contracts';
-import { AuditService } from '../events/audit.service';
-import { DatabaseService, type TenantTx } from '../db/db.service';
-import { PasswordService } from '../auth/password.service';
-import { PermissionService } from '../permission/permission.service';
-import { ValkeyService } from '../permission/valkey.service';
-import type { CanInput, PermissionDecision } from '../permission/permission.types';
-import { SecurityPolicyService } from '../security-policy/security-policy.service';
-import { EmployeesRepository, type BulkEmployeeRow } from './employees.repository';
+} from "@mediaos/contracts";
+import { importEmployeeRowSchema } from "@mediaos/contracts";
+import { AuditService } from "../events/audit.service";
+import { DatabaseService, type TenantTx } from "../db/db.service";
+import { PasswordService } from "../auth/password.service";
+import { PermissionService } from "../permission/permission.service";
+import { ValkeyService } from "../permission/valkey.service";
+import type { CanInput, PermissionDecision } from "../permission/permission.types";
+import { SecurityPolicyService } from "../security-policy/security-policy.service";
+import { EmployeesRepository, type BulkEmployeeRow } from "./employees.repository";
+import { isUniqueViolation } from "../common/db-error";
 
-const PG_UNIQUE_VIOLATION = '23505';
 const IMPORT_SESSION_TTL_SEC = 5 * 60; // plan §7: 5 minutes
 const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 const GENERATED_PASSWORD_BYTES = 18;
 
 /** Mimetypes browsers/curl commonly attach to a `.csv` upload. */
-const CSV_MIME_TYPES = new Set(['text/csv', 'application/csv', 'application/vnd.ms-excel']);
-
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as Record<string, unknown>)['code'] === PG_UNIQUE_VIOLATION
-  );
-}
+const CSV_MIME_TYPES = new Set(["text/csv", "application/csv", "application/vnd.ms-excel"]);
 
 function isCsvMime(contentType: string | undefined): boolean {
   if (!contentType) return false;
-  return CSV_MIME_TYPES.has(contentType.split(';')[0].trim().toLowerCase());
+  return CSV_MIME_TYPES.has(contentType.split(";")[0].trim().toLowerCase());
 }
 
 type SalaryMaskable = { baseSalary: unknown };
@@ -55,7 +46,7 @@ type SalaryMaskable = { baseSalary: unknown };
 function maskSalary<T extends SalaryMaskable>(
   item: T,
   allow: boolean,
-): Omit<T, 'baseSalary'> & { baseSalary: number | null } {
+): Omit<T, "baseSalary"> & { baseSalary: number | null } {
   const salary = allow && item.baseSalary != null ? Number(item.baseSalary) : null;
   return { ...item, baseSalary: salary };
 }
@@ -86,14 +77,14 @@ export class EmployeesService {
    */
   private salaryDecision(
     user: RequestUser,
-    action: 'view-salary' | 'update-salary',
+    action: "view-salary" | "update-salary",
     targetId: string,
   ): Promise<PermissionDecision> {
     const input: CanInput = {
       userId: user.id,
       companyId: user.companyId,
       action,
-      resourceType: 'employee',
+      resourceType: "employee",
       resourceId: targetId,
       isSensitive: true,
     };
@@ -120,7 +111,7 @@ export class EmployeesService {
     // revealed (mirrors platform-accounts reveal). A missing row throws before any audit is written.
     return this.db.withTenant(user.companyId, async (tx) => {
       const row = await this.repo.findByIdTx(tx, user.companyId, id);
-      if (!row) throw new NotFoundException('Employee not found');
+      if (!row) throw new NotFoundException("Employee not found");
       const reveal = await this.revealSalary(tx, user, id);
       return maskSalary(row, reveal);
     });
@@ -137,12 +128,12 @@ export class EmployeesService {
    * The audit INSERT IS in `tx`, so the salary is never returned unless the audit commits.
    */
   private async revealSalary(tx: TenantTx, user: RequestUser, targetId: string): Promise<boolean> {
-    const decision = await this.salaryDecision(user, 'view-salary', targetId);
+    const decision = await this.salaryDecision(user, "view-salary", targetId);
     const reveal = decision.allow && decision.auditRequired;
     if (reveal) {
       await this.auditService.record(tx, {
-        action: 'view-salary',
-        objectType: 'employee',
+        action: "view-salary",
+        objectType: "employee",
         objectId: targetId,
         actorUserId: user.id,
       });
@@ -176,7 +167,7 @@ export class EmployeesService {
           notes: dto.notes ?? null,
         });
         const profile = rows[0];
-        if (!profile) throw new Error('Failed to create employee profile');
+        if (!profile) throw new Error("Failed to create employee profile");
 
         // F5: keep employee_manager_relations consistent with the direct_manager_id shortcut.
         if (dto.directManagerId != null) {
@@ -186,13 +177,13 @@ export class EmployeesService {
         // F1 (MEDIUM-fix): gate + audit the initial salary. The row exists now so resourceId is the
         // real profile id (per-object grants honored); a deny throws → the whole create rolls back.
         if (settingSalary) {
-          const decision = await this.salaryDecision(user, 'update-salary', profile.id);
+          const decision = await this.salaryDecision(user, "update-salary", profile.id);
           if (!decision.allow) {
-            throw new ForbiddenException('Insufficient permission to set salary');
+            throw new ForbiddenException("Insufficient permission to set salary");
           }
           await this.auditService.record(tx, {
-            action: 'update-salary',
-            objectType: 'employee',
+            action: "update-salary",
+            objectType: "employee",
             objectId: profile.id,
             actorUserId: user.id,
             before: { base_salary: null },
@@ -207,7 +198,7 @@ export class EmployeesService {
     } catch (err) {
       if (isUniqueViolation(err)) {
         throw new ConflictException(
-          'Email or employee code already exists, or the user already has a profile in this company',
+          "Email or employee code already exists, or the user already has a profile in this company",
         );
       }
       throw err;
@@ -223,9 +214,9 @@ export class EmployeesService {
         // INSIDE the tx (right before the write) to minimize the TOCTOU window — a deny rolls back
         // before anything is written. (permissionService.can() resolves on its own connection/cache.)
         if (changingSalary) {
-          const decision = await this.salaryDecision(user, 'update-salary', id);
+          const decision = await this.salaryDecision(user, "update-salary", id);
           if (!decision.allow) {
-            throw new ForbiddenException('Insufficient permission to update salary');
+            throw new ForbiddenException("Insufficient permission to update salary");
           }
         }
 
@@ -256,7 +247,7 @@ export class EmployeesService {
           status: dto.status,
         });
         const row = rows[0];
-        if (!row) throw new NotFoundException('Employee not found');
+        if (!row) throw new NotFoundException("Employee not found");
 
         // F5: set/clear direct_manager_id → upsert/soft-delete the EMR direct_manager row.
         if (dto.directManagerId !== undefined) {
@@ -267,8 +258,8 @@ export class EmployeesService {
         // (append-only, RLS) — plan §6 mandates capturing old/new for update-salary.
         if (changingSalary) {
           await this.auditService.record(tx, {
-            action: 'update-salary',
-            objectType: 'employee',
+            action: "update-salary",
+            objectType: "employee",
             objectId: id,
             actorUserId: user.id,
             before: { base_salary: before?.baseSalary != null ? Number(before.baseSalary) : null },
@@ -282,7 +273,7 @@ export class EmployeesService {
       return maskSalary(updated, false);
     } catch (err) {
       if (isUniqueViolation(err)) {
-        throw new ConflictException('Employee code already exists');
+        throw new ConflictException("Employee code already exists");
       }
       throw err;
     }
@@ -290,7 +281,7 @@ export class EmployeesService {
 
   async deleteEmployee(companyId: string, id: string) {
     const rows = await this.repo.softDeleteEmployee(companyId, id);
-    if (rows.length === 0) throw new NotFoundException('Employee not found');
+    if (rows.length === 0) throw new NotFoundException("Employee not found");
   }
 
   // ── F7: resolve an existing user or create a login account ──────────────────────
@@ -302,7 +293,9 @@ export class EmployeesService {
   ): Promise<string> {
     if (dto.userId) return dto.userId;
     if (!dto.email || !dto.fullName) {
-      throw new BadRequestException('Provide userId, or email + fullName to create a login account');
+      throw new BadRequestException(
+        "Provide userId, or email + fullName to create a login account",
+      );
     }
     // CS-9 (BẤT BIẾN #6): chính sách email-domain công ty — tài khoản MỚI phải thuộc tên miền allowlist
     // (rỗng/tắt/kill-switch ⇒ cho qua; lỗi đọc ⇒ fail-open). Check TRONG tx tạo user, TRƯỚC createUserTx.
@@ -310,17 +303,17 @@ export class EmployeesService {
     const domainOk = await this.securityPolicy.assertEmailDomainAllowedTx(tx, companyId, dto.email);
     if (!domainOk) {
       throw new BadRequestException(
-        'Địa chỉ email không thuộc tên miền được phép theo chính sách bảo mật của công ty.',
+        "Địa chỉ email không thuộc tên miền được phép theo chính sách bảo mật của công ty.",
       );
     }
-    const plain = dto.password ?? randomBytes(GENERATED_PASSWORD_BYTES).toString('base64url');
+    const plain = dto.password ?? randomBytes(GENERATED_PASSWORD_BYTES).toString("base64url");
     const passwordHash = await this.password.hash(plain);
     const newUser = await this.repo.createUserTx(tx, companyId, {
       email: dto.email,
       fullName: dto.fullName,
       passwordHash,
     });
-    if (!newUser) throw new Error('Failed to create login account');
+    if (!newUser) throw new Error("Failed to create login account");
     return newUser.id;
   }
 
@@ -336,7 +329,7 @@ export class EmployeesService {
     await this.repo.softDeleteDirectManagerEmrTx(tx, companyId, employeeUserId);
     if (managerId != null) {
       if (managerId === employeeUserId) {
-        throw new BadRequestException('An employee cannot be their own direct manager');
+        throw new BadRequestException("An employee cannot be their own direct manager");
       }
       await this.repo.insertDirectManagerEmrTx(tx, companyId, employeeUserId, managerId);
     }
@@ -351,14 +344,14 @@ export class EmployeesService {
     contentType: string,
   ) {
     if (!isCsvMime(contentType)) {
-      throw new BadRequestException('Invalid file type — expected a CSV (text/csv)');
+      throw new BadRequestException("Invalid file type — expected a CSV (text/csv)");
     }
     if (fileBuffer.length > MAX_IMPORT_BYTES) {
-      throw new BadRequestException('File too large (max 5MB)');
+      throw new BadRequestException("File too large (max 5MB)");
     }
 
     // Lazy-load csv-parse to avoid top-level import issues in test environments.
-    const { parse } = await import('csv-parse/sync');
+    const { parse } = await import("csv-parse/sync");
     let records: unknown[];
     try {
       records = parse(fileBuffer, {
@@ -368,10 +361,10 @@ export class EmployeesService {
       }) as unknown[];
     } catch (err) {
       // Log the parser detail server-side (a malformed file and a parser bug look identical to the client).
-      this.logger.warn('CSV parse failed', {
+      this.logger.warn("CSV parse failed", {
         error: err instanceof Error ? err.message : String(err),
       });
-      throw new BadRequestException('Invalid CSV format');
+      throw new BadRequestException("Invalid CSV format");
     }
 
     const valid: ImportEmployeeRow[] = [];
@@ -384,7 +377,7 @@ export class EmployeesService {
       } else {
         invalid.push({
           row: i + 2, // 1-based, +1 for header row
-          errors: result.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`),
+          errors: result.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`),
         });
       }
     }
@@ -398,7 +391,9 @@ export class EmployeesService {
       IMPORT_SESSION_TTL_SEC,
     );
     if (!staged) {
-      throw new ServiceUnavailableException('Import staging is temporarily unavailable — please retry');
+      throw new ServiceUnavailableException(
+        "Import staging is temporarily unavailable — please retry",
+      );
     }
     return { valid, invalid, sessionId };
   }
@@ -413,28 +408,28 @@ export class EmployeesService {
     // import) → 409 rather than inserting an unvalidated batch.
     const raw = await this.valkey.get(key);
     if (raw == null) {
-      throw new ConflictException('Import session not found, expired, or already consumed');
+      throw new ConflictException("Import session not found, expired, or already consumed");
     }
     // NOTE: get()+del() is not a single atomic compare-and-delete; a fully atomic GETDEL belongs in
     // ValkeyService (owned by another lane). The DB unique index (company_id, user_id) is the real
     // backstop — a racing second confirm hits 23505 below and is rejected. Refuse if we can't consume.
     const consumed = await this.valkey.del(key);
     if (!consumed) {
-      throw new ServiceUnavailableException('Could not consume import session — please retry');
+      throw new ServiceUnavailableException("Could not consume import session — please retry");
     }
 
     let rows: ImportEmployeeRow[];
     try {
       // Re-validate the deserialized payload — never trust the cache shape (tamper / cross-version).
       const parsed = importEmployeeRowSchema.array().safeParse(JSON.parse(raw) as unknown);
-      if (!parsed.success) throw new Error('schema mismatch');
+      if (!parsed.success) throw new Error("schema mismatch");
       rows = parsed.data;
     } catch (err) {
-      this.logger.error('Corrupt import session payload', {
+      this.logger.error("Corrupt import session payload", {
         key,
         error: err instanceof Error ? err.message : String(err),
       });
-      throw new BadRequestException('Corrupt import session payload');
+      throw new BadRequestException("Corrupt import session payload");
     }
 
     // Re-validate lookups + bulk insert inside ONE withTenant: any failed row rolls back the batch.
@@ -493,7 +488,7 @@ export class EmployeesService {
       // A racing duplicate confirm (or re-import) collides on the (company_id, user_id) unique index.
       if (isUniqueViolation(err)) {
         throw new ConflictException(
-          'One or more employees already have a profile (possible duplicate import)',
+          "One or more employees already have a profile (possible duplicate import)",
         );
       }
       throw err;

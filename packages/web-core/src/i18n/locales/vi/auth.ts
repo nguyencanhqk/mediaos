@@ -1,13 +1,18 @@
 /** Namespace "auth" (vi) — dùng chung mọi app. Đặt ở @mediaos/web-core (TS module để build sạch dual ESM/CJS). */
 export default {
   login: {
-    subtitle: "Đăng nhập vào hệ thống",
-    companySlugLabel: "Mã công ty",
-    submit: "Đăng nhập",
-    submitting: "Đang đăng nhập…",
+    heading: "Đăng nhập",
+    subtitle: "Dùng email công ty để vào hệ thống.",
+    tagline: "Phòng điều khiển vận hành nội bộ.",
+    onAir: "TRỰC TUYẾN",
+    sessionNote: "Phiên SSO bảo mật",
+    submit: "Vào hệ thống",
+    submitting: "Đang vào…",
   },
   fields: {
     email: "Email",
+    showPassword: "Hiện mật khẩu",
+    hidePassword: "Ẩn mật khẩu",
     password: "Mật khẩu",
   },
   twoFactor: {

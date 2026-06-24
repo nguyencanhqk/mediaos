@@ -2,6 +2,10 @@
 node_modules/
 .pnpm-store/
 
+# harness — artefact runtime (ledger có timestamp + báo cáo tự sinh), KHÔNG commit
+harness/activity.jsonl
+harness/report.md
+
 # build
 dist/
 build/
@@ -29,3 +33,6 @@ coverage/
 
 # planning prompts (scratch — kept locally, not tracked)
 docs/prompts/
+
+# MCP local config — chứa đường dẫn binary tuyệt đối theo máy, KHÔNG portable, KHÔNG commit (repo public)
+.mcp.json

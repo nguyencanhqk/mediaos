@@ -5,16 +5,15 @@ import {
   type OnApplicationBootstrap,
   type OnModuleDestroy,
 } from "@nestjs/common";
-import { DbExportWorker } from "../db-ops/db-export.worker";
 import { OutboxWorker } from "../events/outbox-worker";
 import { WORKER_SCHEDULER_CONFIG, type WorkerSchedulerConfig } from "./worker-scheduler.config";
 
 /**
- * WorkerSchedulerService (WAVE 4 OPS) — gọi `processBatch()` của 2 background worker theo chu kỳ cấu hình.
+ * WorkerSchedulerService (WAVE 4 OPS) — gọi `processBatch()` của background worker theo chu kỳ cấu hình.
  *
- * Cả OutboxWorker (EventsModule) lẫn DbExportWorker (DbOpsModule) là **one-shot** `processBatch()`; trước đây
- * KHÔNG có gì gọi chúng định kỳ ở prod (job nằm chờ). Service này đăng ký 2 `setInterval` ĐỘC LẬP — mỗi
- * worker một nhịp riêng — lúc app khởi động.
+ * OutboxWorker (EventsModule) là **one-shot** `processBatch()`; trước đây KHÔNG có gì gọi định kỳ ở prod
+ * (job nằm chờ). Service này đăng ký 1 `setInterval` lúc app khởi động.
+ * (de-media-fy: DbExportWorker/DbOpsModule = out-of-scope đã gỡ — chỉ còn nhịp outbox, audit/outbox bất biến.)
  *
  * Vì sao `setInterval` (KHÔNG `@nestjs/schedule`): tránh thêm dependency + thay đổi lockfile (CI dùng
  * `--frozen-lockfile`); mirror đúng pattern OnApplicationBootstrap sẵn có (operator-bootstrap.service.ts);
@@ -39,7 +38,6 @@ export class WorkerSchedulerService implements OnApplicationBootstrap, OnModuleD
 
   constructor(
     private readonly outbox: OutboxWorker,
-    private readonly exportWorker: DbExportWorker,
     @Inject(WORKER_SCHEDULER_CONFIG) private readonly config: WorkerSchedulerConfig,
   ) {}
 
@@ -58,10 +56,7 @@ export class WorkerSchedulerService implements OnApplicationBootstrap, OnModuleD
     }
 
     this.register("outbox", this.config.outboxPollMs, () => this.outbox.processBatch());
-    this.register("db-export", this.config.exportPollMs, () => this.exportWorker.processBatch());
-    this.logger.log(
-      `Worker scheduler BẬT — outbox mỗi ${this.config.outboxPollMs}ms, db-export mỗi ${this.config.exportPollMs}ms.`,
-    );
+    this.logger.log(`Worker scheduler BẬT — outbox mỗi ${this.config.outboxPollMs}ms.`);
   }
 
   onModuleDestroy(): void {

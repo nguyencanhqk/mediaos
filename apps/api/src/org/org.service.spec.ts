@@ -29,8 +29,6 @@ function makeRepo() {
       },
     ]),
     createOrgUnit: vi.fn().mockResolvedValue([{ id: UNIT_ID, name: "Eng", type: "department" }]),
-    // G10-2: createOrgUnit auto-tạo group chat phòng ban → cần nguồn member-set.
-    listOrgUnitMemberUserIds: vi.fn().mockResolvedValue([]),
     updateOrgUnit: vi.fn().mockResolvedValue([{ id: UNIT_ID, status: "inactive" }]),
     softDeleteOrgUnit: vi.fn().mockResolvedValue([{ id: UNIT_ID }]),
     listTeams: vi.fn().mockResolvedValue([{ id: TEAM_ID, name: "Team A" }]),
@@ -46,13 +44,8 @@ function makeRepo() {
   };
 }
 
-/** G10-2: OrgService phụ thuộc ChatService (auto-room phòng ban). Mock no-op best-effort. */
-function makeChat() {
-  return { ensureOrgUnitRoom: vi.fn().mockResolvedValue(null) };
-}
-
-function makeService(repo = makeRepo(), chat = makeChat()) {
-  return { service: new OrgService(repo as never, chat as never), repo, chat };
+function makeService(repo = makeRepo()) {
+  return { service: new OrgService(repo as never), repo };
 }
 
 describe("OrgService (F3 breadth)", () => {
