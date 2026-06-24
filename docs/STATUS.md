@@ -1,44 +1,25 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-06-24 02:48Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-06-24 09:06Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-### 🔴 S1-FND-SETTING-1 — SettingService: precedence company→system→default + /settings/public (lọc is_public, mask is_sensitive) + admin update có audit
-- **zone**: red · **skills**: code-review
-- **sửa ở đâu (paths)**: `apps/api/src/foundation/settings/**`
-- **phụ thuộc**: S0-FND-DB-1✓, S1-FND-AUDIT-1✓
-- **done_when (đích hội tụ)**:
-  - [ ] resolveSetting(companyId,key) theo precedence company_settings→system_settings→fallback; resolveMany batch
-  - [ ] GET /foundation/settings/public CHỈ trả is_public=true AND is_sensitive=false; KHÔNG bao giờ trả secret_ref/raw secret
-  - [ ] PATCH validate value_type + validation_schema, ghi audit COMPANY_SETTING_UPDATED (CHỐT theo SPEC API-09 §1200/§2873; objectType='company_setting' enum DB) old/new/changed_fields trong tx withTenant
-  - [ ] deny-path RED: thiếu quyền → 403; public endpoint không lộ sensitive
-
-### 🔴 S1-FND-FILE-1 — FileService: upload metadata + StorageAdapter port + FilePolicy (deny-by-default) + link/unlink + download-qua-backend + file_access_log
-- **zone**: red · **skills**: code-review
-- **sửa ở đâu (paths)**: `apps/api/src/foundation/files/**`, `apps/api/src/storage/**`
-- **phụ thuộc**: S0-FND-DB-1✓, S1-FND-AUDIT-1✓
-- **done_when (đích hội tụ)**:
-  - [ ] upload ghi metadata (visibility=Private default) + validate size/MIME (KHÔNG tin MIME client) + sanitize filename chống path-traversal
-  - [ ] StorageAdapter port (put/get/delete/signedUrl) bọc S3 hiện có; KHÔNG trả storage_path/signed-url dài hạn cho FE
-  - [ ] FilePolicy resolver registry dispatch theo (module_code,entity_type) — không resolve được → TỪ CHỐI (deny-by-default); ghi file_access_logs cho private/sensitive
-  - [ ] link/unlink validate cùng company + scan_status!=Infected; soft-delete không hard-delete; audit Upload/Link/Unlink/Delete
+_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
-- _(trống)_
+- 🟢 `S1-FND-WIRE-1` FoundationModule gom (company·module-catalog·settings·audit·files·sequence·holidays·retention·seed) + foundation contracts (Zod) + wire app.module additive
+- 🔴 `S1-QA-FND-1` QA hardening Foundation: permission/scope + file security + sequence concurrency + audit masking + public-settings leak + append-only
 
 **CHỜ (kẹt phụ thuộc):**
-- `S1-FND-MODULE-1` CompanyService /company/current (GET/PATCH có audit) + ModuleCatalogService /modules/my-apps (lọc permission+active+setting) ⏳ cần: S1-FND-SETTING-1
-- `S1-FND-WIRE-1` FoundationModule gom (company·module-catalog·settings·audit·files·sequence·holidays·retention·seed) + foundation contracts (Zod) + wire app.module additive ⏳ cần: S1-FND-SETTING-1, S1-FND-FILE-1, S1-FND-MODULE-1
-- `S1-QA-FND-1` QA hardening Foundation: permission/scope + file security + sequence concurrency + audit masking + public-settings leak + append-only ⏳ cần: S1-FND-SETTING-1, S1-FND-FILE-1, S1-FND-MODULE-1
+- _(trống)_
 
-**Đã xong (v2):** `S0-GOV-1`, `S0-CI-1`, `S0-CI-2`, `S0-ENV-1`, `S0-FND-DB-1`, `S0-FND-SEED-1`, `S0-AUTH-DB-1`, `S0-API-CORE-1`, `S0-FE-CORE-1`, `S0-FE-API-1`, `S0-QA-1`, `S1-FND-AUDIT-1`, `S1-FND-SEQ-1`, `S1-FE-LAYOUT-1`, `S1-FE-REGISTRY-1`, `S1-FE-QUERY-WIRE-1`, `S1-QA-DEBT-1`, `S1-INT-MOUNT-1`
+**Đã xong (v2):** `S0-GOV-1`, `S0-CI-1`, `S0-CI-2`, `S0-ENV-1`, `S0-FND-DB-1`, `S0-FND-SEED-1`, `S0-AUTH-DB-1`, `S0-API-CORE-1`, `S0-FE-CORE-1`, `S0-FE-API-1`, `S0-QA-1`, `S1-FND-AUDIT-1`, `S1-FND-SETTING-1`, `S1-FND-FILE-1`, `S1-FND-SEQ-1`, `S1-FND-MODULE-1`, `S1-FE-LAYOUT-1`, `S1-FE-REGISTRY-1`, `S1-FE-QUERY-WIRE-1`, `S1-QA-DEBT-1`, `S1-INT-MOUNT-1`
 
 ## Trạng thái repo
 
-- **branch**: `feat/foundation-wave1` · **file đang đổi (dirty)**: 29
+- **branch**: `chore/dev-tooling` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 123 — `0440_file1_audit_object_type` (124 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
