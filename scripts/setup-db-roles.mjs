@@ -19,7 +19,9 @@ import { Pool } from "pg";
 
 const DIRECT_URL = process.env.DATABASE_DIRECT_URL;
 if (!DIRECT_URL) {
-  console.error("[setup-db-roles] DATABASE_DIRECT_URL is required (superuser bootstrap connection).");
+  console.error(
+    "[setup-db-roles] DATABASE_DIRECT_URL is required (superuser bootstrap connection).",
+  );
   process.exit(1);
 }
 
@@ -37,9 +39,7 @@ const ROLE_PASSWORDS = [
 async function main() {
   const missing = ROLE_PASSWORDS.filter((r) => r.required && !process.env[r.env]);
   if (missing.length > 0) {
-    console.error(
-      `[setup-db-roles] thiếu env bắt buộc: ${missing.map((r) => r.env).join(", ")}`,
-    );
+    console.error(`[setup-db-roles] thiếu env bắt buộc: ${missing.map((r) => r.env).join(", ")}`);
     process.exit(1);
   }
 
@@ -64,17 +64,21 @@ async function main() {
       console.log(`[setup-db-roles] đã gán mật khẩu cho ${role}.`);
     }
 
-    // Sinh userlist.txt cho PgBouncer auth_query: chứa SCRAM verifier của pgbouncer_auth
-    // (đọc từ pg_authid sau khi đã set password). KHÔNG log nội dung (secret).
-    const verifier = await pool.query(
-      "SELECT rolpassword FROM pg_authid WHERE rolname = $1",
-      ["pgbouncer_auth"],
-    );
-    const hash = verifier.rows[0]?.rolpassword;
-    if (!hash) {
-      throw new Error("không đọc được hash của pgbouncer_auth (cần superuser đọc pg_authid).");
+    // Sinh userlist.txt cho PgBouncer auth_query. auth_user (pgbouncer_auth) ĐĂNG NHẬP BACKEND để chạy
+    // auth_query ⇒ entry của nó PHẢI là mật khẩu PLAINTEXT. Lý do (PgBouncer docs): một SCRAM verifier
+    // (`SCRAM-SHA-256$…` đọc từ pg_authid) chỉ XÁC THỰC được client INBOUND, KHÔNG dùng để ĐĂNG NHẬP
+    // server OUTBOUND (pgbouncer cần mật khẩu gốc để tính client-proof) → nếu ghi verifier sẽ lỗi
+    // "server login failed: wrong password type". File .secrets/pgbouncer/userlist.txt đã gitignore +
+    // mode 0600 (BẤT BIẾN #3: secret KHÔNG vào source/migration — đọc từ env runtime). KHÔNG log nội dung.
+    // Client (mediaos_app) vẫn xác thực SCRAM qua auth_query get_auth() (lấy verifier từ pg_authid) — an toàn.
+    const pgbAuthPassword = process.env.PGBOUNCER_AUTH_PASSWORD;
+    if (!pgbAuthPassword) {
+      throw new Error(
+        "thiếu PGBOUNCER_AUTH_PASSWORD để sinh userlist auth_user (plaintext bắt buộc).",
+      );
     }
-    const line = `"pgbouncer_auth" "${hash}"\n`;
+    // userlist format: `"user" "password"`; escape dấu " lồng nhau theo quy ước "" của PgBouncer.
+    const line = `"pgbouncer_auth" "${pgbAuthPassword.replace(/"/g, '""')}"\n`;
     mkdirSync(dirname(USERLIST_PATH), { recursive: true });
     writeFileSync(USERLIST_PATH, line, { mode: 0o600 });
     console.log(`[setup-db-roles] đã sinh userlist PgBouncer → ${USERLIST_PATH}`);
