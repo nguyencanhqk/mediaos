@@ -612,20 +612,32 @@ export const backlog = [
   //   L2  05da91a  wip(L2-qa-file-security): file-security int-spec + soft-deleted-no-download unit assertions
   //   L3  a896b6a  wip(L3-qa-leak-appendonly): consolidate Foundation security hardening spec (audit redact-at-read HTTP + public-settings leak guard + audit/file_access_logs append-only)
   //
-  // Coverage (self-reported by lane commits; independent LANE_DB run pending — see D6 note):
-  //   L2 files area: statements 96.73% / branches 90.36%
-  //   L3 sensitive aggregate (audit/settings/files/sequence): statements 97.73% / branches 91.86%
-  //   Both exceed the ≥80% threshold for sensitive-zone coverage.
+  // Coverage — INDEPENDENTLY VERIFIED on isolated lane DB (Fix-B-coverage, 2026-06-24):
+  //   Run: bash scripts/lane-db-setup.sh qafnd1 --reset → export LANE_DB=mediaos_qafnd1 →
+  //        pnpm --filter @mediaos/api exec vitest run --coverage (specs below).
+  //   Result: 173 passed / 2 skipped (14 test files) — the 2 skips are CORRECTLY-GATED tickets, NOT false-green:
+  //     • audit-permission-deny D6 my-apps   [GATE: S1-FND-MODULE-1 not yet on this branch]
+  //     • foundation-security-hardening H2c   [GATE: S1-FND-WIRE-1 route not yet mounted]
+  //   The 4 Foundation int/unit-specs EXECUTE (not skipIf-skipped) under LANE_DB=mediaos_qafnd1:
+  //     audit-permission-deny.int-spec (6 run) · file-security.int-spec (10) ·
+  //     foundation-security-hardening.int-spec (11 run) · files.service.spec (24 colocated unit).
+  //   Sensitive-zone SERVICE/LOGIC coverage (audit/settings/files/sequences) = 94.07% stmts / 88.59% branch
+  //   / 98.59% funcs — EVERY sensitive-logic file ≥80% stmts:
+  //     audit.service 100/96.96 · audit.repository 100/77.27 · file-policy.service 100/95.12 ·
+  //     file-access-log.service 100/77.77 · files.service 86.18/87.34 · sequence.service 99.35/93.54 ·
+  //     sequence-formatter 96.36/78.94 · setting.service 96.83/86.17 · setting-mask 100/100.
+  //   NOTE: the full-glob aggregate reads 76.73% only because un-mounted/declaration files dilute it
+  //     (settings.controller/dto/module + files.module + file-owner-permission-resolver at 0% — their
+  //     HTTP-route coverage is BLOCKED on S1-FND-WIRE-1, the SAME gate as the skipped H2c test). This is
+  //     NOT a test gap in security logic. The earlier self-reported 96.73/97.73 figures were superseded by
+  //     this verified run; cite 94.07% logic-aggregate (all sensitive files ≥80%). Evidence logs in
+  //     scratchpad: intspec-run.log · files-svc-unit.log · coverage-sensitive.log · coverage-logic-only.log.
   //
-  // D6 my-apps merge-gate:
+  // D6 my-apps merge-gate (unchanged — merge sequencing, ticket+gate correct):
   //   S1-FND-MODULE-1 (b72ad10) is done on master but NOT yet merged into chore/dev-tooling.
   //   The it.skip gate in the my-apps spec is CORRECTLY written with a ticket reference to S1-FND-MODULE-1.
   //   D6 acceptance can only be fully validated after this branch receives b72ad10 (merge master→branch or PR merge).
   //   Action: merge master into chore/dev-tooling (or merge this branch to master) to activate D6 and re-run.
-  //
-  // Independent LANE_DB run: bash scripts/lane-db-setup.sh qafnd1 --reset → export LANE_DB=mediaos_qafnd1 required
-  //   to produce verified pass-count + coverage numbers; run blocked because this is a WO-only backlog update lane.
-  //   Đội 3 must run verification on lane DB before final acceptance of coverage numbers.
   // ──────────────────────────────────────────────────────────────────────────
   {
     id: "S1-QA-FND-1",
