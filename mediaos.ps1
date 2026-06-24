@@ -299,6 +299,33 @@ function Import-DevOnlineEnv {
   Import-DotEnv $onlineEnv
 }
 
+# Giải phóng cổng dev-online (API 3200 + Vite 5273/5275/5278) → re-run sạch, khỏi phải đóng cửa sổ tay.
+function Stop-DevOnline {
+  foreach ($port in @(3200, 5273, 5275, 5278)) {
+    $procIds = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
+      Select-Object -ExpandProperty OwningProcess -Unique
+    foreach ($procId in $procIds) {
+      if ($procId -and $procId -ne 0) { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue }
+    }
+  }
+}
+
+# Rebuild package dùng chung (FE app consume DIST của chúng) → đổi code contracts/ui/web-core mới hiện online.
+# turbo cache → nhanh khi không đổi gì.
+function Build-SharedPackages {
+  Write-Host "  build packages dùng chung (contracts · ui · web-core) ..." -ForegroundColor DarkGray
+  Exec {
+    pnpm exec turbo run build `
+      --filter=@mediaos/contracts --filter=@mediaos/ui --filter=@mediaos/web-core
+  } "build shared packages"
+}
+
+function Invoke-DevOnlineStop {
+  Write-Step "DỪNG dev-online (giải phóng cổng 3200/5273/5275/5278)"
+  Stop-DevOnline
+  Write-Ok "Đã dừng server dev-online (cửa sổ cmd có thể tự đóng)."
+}
+
 function Invoke-DevOnlineDb {
   Write-Step "DEV-ONLINE DB — tạo + migrate + seed mediaos_dev (cô lập khỏi prod)"
   Import-DevOnlineEnv
@@ -320,6 +347,9 @@ function Invoke-DevOnlineDb {
 function Invoke-DevOnline {
   Write-Step "DEV-ONLINE — chạy dev stack (API :3200 + 3 SPA) cho cian-dev.*"
   Import-DevOnlineEnv
+  Write-Host "  dừng server dev-online cũ (nếu có) → re-run sạch ..." -ForegroundColor DarkGray
+  Stop-DevOnline
+  Build-SharedPackages
   Exec { docker compose up -d } "docker compose up"
   if (-not (Wait-Postgres)) { return }
   Start-DevWindow "api-online" "apps\api"
@@ -381,9 +411,10 @@ function Show-Help {
   Write-Host "    prod-env            khôi phục .env.prod -> .env (KHÔNG chạy browser local)"
   Write-Host ""
   Write-Host "  DEV-ONLINE (lộ dev ra cian-dev.*.funtimemediacorp.com, song song prod)" -ForegroundColor Yellow
+  Write-Host "    dev-online          chạy/restart dev stack lộ ra cian-dev.* (tự dừng cũ + rebuild shared)"
+  Write-Host "    dev-online-stop     dừng dev-online (giải phóng cổng 3200/5273/5275/5278)"
   Write-Host "    dev-online-db       tạo + migrate + seed DB cô lập mediaos_dev (1 lần)"
   Write-Host "    dev-online-tunnel   tạo ingress cloudflared + DNS cho cian-dev.* (1 lần, Administrator)"
-  Write-Host "    dev-online          chạy dev stack (API :3200 + 3 SPA) lộ ra cian-dev.*"
   Write-Host ""
   Write-Host "  menu              menu tương tác (dev/dev.bat gọi cái này)"
   Write-Host ""
@@ -409,9 +440,15 @@ function Show-Menu {
     Write-Host "   [8] Sync DB roles -> dev  (khi login báo sai mật khẩu)"
     Write-Host "   [9] STATUS                (docker · cổng · health)"
     Write-Host "  [10] Khôi phục .env PROD"
+    Write-Host ""
+    Write-Host "  --- DEV-ONLINE (lộ ra cian-dev.*, song song prod) ---" -ForegroundColor DarkCyan
+    Write-Host "  [11] DEV-ONLINE          chạy/restart (tự dừng cũ + rebuild shared)"
+    Write-Host "  [12] Dừng dev-online"
+    Write-Host "  [13] Dev-online: tạo DB mediaos_dev      (1 lần)"
+    Write-Host "  [14] Dev-online: ingress tunnel          (1 lần, Administrator)"
     Write-Host "   [0] Thoát"
     Write-Host ""
-    $choice = Read-Host "Chọn (0-10)"
+    $choice = Read-Host "Chọn (0-14)"
     switch ($choice) {
       "1"  { Invoke-Dev }
       "2"  { Invoke-Up }
@@ -423,6 +460,10 @@ function Show-Menu {
       "8"  { Invoke-Roles }
       "9"  { Invoke-Status }
       "10" { Invoke-ProdEnv }
+      "11" { Invoke-DevOnline }
+      "12" { Invoke-DevOnlineStop }
+      "13" { Invoke-DevOnlineDb }
+      "14" { Invoke-DevOnlineTunnel }
       "0"  { return }
       default { }
     }
@@ -461,6 +502,7 @@ switch ($Command.ToLower()) {
   "deploy-env" { Invoke-DeployEnv $Rest }
   "deploy-seed" { Invoke-DeploySeed }
   "dev-online"        { Invoke-DevOnline }
+  "dev-online-stop"   { Invoke-DevOnlineStop }
   "dev-online-db"     { Invoke-DevOnlineDb }
   "dev-online-tunnel" { Invoke-DevOnlineTunnel }
   default      { Write-Err "Lệnh không hợp lệ: $Command"; Show-Help; exit 1 }
