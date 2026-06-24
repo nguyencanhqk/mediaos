@@ -435,7 +435,9 @@ export const backlog = [
     title:
       "FileService: upload metadata + StorageAdapter port + FilePolicy (deny-by-default) + link/unlink + download-qua-backend + file_access_log",
     zone: "red",
-    status: "todo",
+    // CLOSE 2026-06-24: literal sync — FILE-1 đã done (ledger overlay + foundation/files trên master + STATUS "Đã xong").
+    //   Literal chưa flip lúc đóng → loop Đội-1 (đọc literal) coi WIRE-1/QA-FND-1 chưa ready. Flip để khớp board.
+    status: "done",
     paths: ["apps/api/src/foundation/files/**", "apps/api/src/storage/**"],
     skills: ["code-review"],
     depends_on: ["S0-FND-DB-1", "S1-FND-AUDIT-1"],
