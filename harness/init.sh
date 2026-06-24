@@ -13,6 +13,7 @@ GIT_TERMINAL_PROMPT=0 git fetch --quiet 2>/dev/null || echo "  (bỏ qua fetch �
 echo ""
 echo "▸ Tái sinh trạng thái…"
 node harness/gen-status.mjs
+node harness/gen-plan-index.mjs   # đồng bộ docs/plans/INDEX.md theo backlog/ledger (cùng cò với STATUS — tránh INDEX trôi)
 
 echo ""
 echo "▸ Repo:"
