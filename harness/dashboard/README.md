@@ -6,8 +6,16 @@ App nhỏ **served + live** để xem: dự án đang ở đâu · tiến độ 
 
 ```bash
 node harness/dashboard/server.mjs      # hoặc: pnpm dashboard
-# → mở http://localhost:5180   (đổi cổng: PORT=6000 node harness/dashboard/server.mjs)
+# → http://localhost:5180            Board Work Order (sprint hành S0–S1)
+# → http://localhost:5180/progress   Ma trận Module → Tính năng (toàn 112 story)
+# → http://localhost:5180/docs        Trình duyệt tài liệu (toàn bộ docs/)
+# (đổi cổng: PORT=6000 node harness/dashboard/server.mjs)
 ```
+
+> **3 trang** dùng chung menu điều hướng (Báo cáo · Tiến độ · Tài liệu):
+> - `/` board Work Order · `/progress` ma trận tính năng (IMPLEMENTATION-02 × backlog × ledger
+>   qua `harness/lib/stories.mjs`) · `/docs` trình duyệt tài liệu (`docs.html`).
+> - Story chưa có Work Order = "Sprint sau" (backlog hành chỉ giữ S0–S1, kéo dần theo IMPLEMENTATION-02 §9).
 
 Ctrl+C để dừng. **LIVE**: server đọc lại `harness/backlog.mjs` mỗi lần poll (5s) → sửa backlog là dashboard tự cập nhật, không cần restart.
 
