@@ -329,3 +329,220 @@ describe("SettingService.updateCompanySetting (validate + audit-in-tx)", () => {
     expect(JSON.stringify(entry.oldValues)).toContain("***");
   });
 });
+
+/**
+ * assertSchema branch coverage (crown-jewel validation_schema, CLAUDE.md §6 ≥80% branch).
+ * Schema + matching valueType injected via findOneSystemTx (same pattern as 'mismatch (min)').
+ * findOneCompanyTx empty so a VALID value proceeds to insert (no throw). assertValueType passes
+ * first, then assertSchema runs the branch under test.
+ */
+describe("SettingService.updateCompanySetting (validation_schema branches)", () => {
+  // Helper: system ref carrying valueType + validationSchema; company side empty (insert path).
+  function repoWithSchema(valueType: string, validationSchema: unknown) {
+    return makeRepo({
+      findOneCompanyTx: vi.fn().mockResolvedValue([]),
+      findOneSystemTx: vi.fn().mockResolvedValue([row({ valueType, validationSchema })]),
+    });
+  }
+
+  it("enum: value NOT in enum → UnprocessableEntity, NO upsert, NO audit", async () => {
+    const repo = repoWithSchema("String", { enum: ["vi", "en"] });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await expect(
+      svc.updateCompanySetting(actor, "system.default_locale", { settingValue: "fr" }),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(repo.insertCompanyTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("enum: value IN enum → passes, upsert + audit run", async () => {
+    const repo = repoWithSchema("String", { enum: ["vi", "en"] });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await svc.updateCompanySetting(actor, "system.default_locale", { settingValue: "en" });
+    expect(repo.insertCompanyTx).toHaveBeenCalledTimes(1);
+    expect(audit.record).toHaveBeenCalledTimes(1);
+  });
+
+  it("Number max: value > max → UnprocessableEntity, NO upsert", async () => {
+    const repo = repoWithSchema("Number", { max: 100 });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await expect(
+      svc.updateCompanySetting(actor, "file.max_upload_size_mb", { settingValue: 999 }),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(repo.insertCompanyTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("Number min+max: value within [min,max] → passes", async () => {
+    const repo = repoWithSchema("Number", { min: 1, max: 100 });
+    const { svc } = makeService({ repo });
+    await svc.updateCompanySetting(actor, "file.max_upload_size_mb", { settingValue: 50 });
+    expect(repo.insertCompanyTx).toHaveBeenCalledTimes(1);
+  });
+
+  it("String minLength: value too short → UnprocessableEntity, NO upsert", async () => {
+    const repo = repoWithSchema("String", { minLength: 3 });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await expect(
+      svc.updateCompanySetting(actor, "system.default_locale", { settingValue: "x" }),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(repo.insertCompanyTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("String maxLength: value too long → UnprocessableEntity, NO upsert", async () => {
+    const repo = repoWithSchema("String", { maxLength: 2 });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await expect(
+      svc.updateCompanySetting(actor, "system.default_locale", { settingValue: "toolong" }),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(repo.insertCompanyTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("String length within [minLength,maxLength] → passes", async () => {
+    const repo = repoWithSchema("String", { minLength: 2, maxLength: 5 });
+    const { svc } = makeService({ repo });
+    await svc.updateCompanySetting(actor, "system.default_locale", { settingValue: "vi" });
+    expect(repo.insertCompanyTx).toHaveBeenCalledTimes(1);
+  });
+
+  it("pattern matches → passes, upsert runs", async () => {
+    const repo = repoWithSchema("String", { pattern: "^[a-z]{2}$" });
+    const { svc } = makeService({ repo });
+    await svc.updateCompanySetting(actor, "system.default_locale", { settingValue: "vi" });
+    expect(repo.insertCompanyTx).toHaveBeenCalledTimes(1);
+  });
+
+  it("pattern does NOT match → UnprocessableEntity, NO upsert", async () => {
+    const repo = repoWithSchema("String", { pattern: "^[a-z]{2}$" });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await expect(
+      svc.updateCompanySetting(actor, "system.default_locale", { settingValue: "ABC123" }),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(repo.insertCompanyTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("pattern is invalid regex → UnprocessableEntity (pattern không hợp lệ), NO upsert", async () => {
+    // Unbalanced group → new RegExp throws → caught → fail("...không hợp lệ.").
+    const repo = repoWithSchema("String", { pattern: "(" });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await expect(
+      svc.updateCompanySetting(actor, "system.default_locale", { settingValue: "vi" }),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(repo.insertCompanyTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("schema is non-object (e.g. array) → ignored, value passes", async () => {
+    // raw is Array → assertSchema early-returns (covers the null/non-object/array guard branch).
+    const repo = repoWithSchema("String", ["not", "a", "schema"]);
+    const { svc } = makeService({ repo });
+    await svc.updateCompanySetting(actor, "system.default_locale", { settingValue: "anything" });
+    expect(repo.insertCompanyTx).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * assertValueType branch coverage — every value_type's fail + pass branch (BadRequest on type mismatch).
+ * valueType injected via findOneSystemTx; company empty so a VALID value reaches insert.
+ */
+describe("SettingService.updateCompanySetting (value_type branches)", () => {
+  function repoForType(valueType: string) {
+    return makeRepo({
+      findOneCompanyTx: vi.fn().mockResolvedValue([]),
+      findOneSystemTx: vi.fn().mockResolvedValue([row({ valueType, validationSchema: null })]),
+    });
+  }
+
+  it("Boolean: non-boolean → BadRequest; boolean → passes", async () => {
+    const bad = repoForType("Boolean");
+    const auditBad = makeAudit();
+    const svcBad = makeService({ repo: bad, audit: auditBad }).svc;
+    await expect(
+      svcBad.updateCompanySetting(actor, "feature.flag", { settingValue: "true" }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(bad.insertCompanyTx).not.toHaveBeenCalled();
+    expect(auditBad.record).not.toHaveBeenCalled();
+
+    const ok = repoForType("Boolean");
+    const svcOk = makeService({ repo: ok }).svc;
+    await svcOk.updateCompanySetting(actor, "feature.flag", { settingValue: true });
+    expect(ok.insertCompanyTx).toHaveBeenCalledTimes(1);
+  });
+
+  it("Array: non-array → BadRequest; array → passes", async () => {
+    const bad = repoForType("Array");
+    const svcBad = makeService({ repo: bad }).svc;
+    await expect(
+      svcBad.updateCompanySetting(actor, "file.allowed_mime_types", { settingValue: "image/png" }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(bad.insertCompanyTx).not.toHaveBeenCalled();
+
+    const ok = repoForType("Array");
+    const svcOk = makeService({ repo: ok }).svc;
+    await svcOk.updateCompanySetting(actor, "file.allowed_mime_types", {
+      settingValue: ["image/png"],
+    });
+    expect(ok.insertCompanyTx).toHaveBeenCalledTimes(1);
+  });
+
+  it("JSON: array value → BadRequest; null → BadRequest; plain object → passes", async () => {
+    const badArr = repoForType("JSON");
+    const svcArr = makeService({ repo: badArr }).svc;
+    await expect(
+      svcArr.updateCompanySetting(actor, "cfg.json", { settingValue: [1, 2] }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(badArr.insertCompanyTx).not.toHaveBeenCalled();
+
+    const badNull = repoForType("JSON");
+    const svcNull = makeService({ repo: badNull }).svc;
+    await expect(
+      svcNull.updateCompanySetting(actor, "cfg.json", { settingValue: null }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(badNull.insertCompanyTx).not.toHaveBeenCalled();
+
+    const ok = repoForType("JSON");
+    const svcOk = makeService({ repo: ok }).svc;
+    await svcOk.updateCompanySetting(actor, "cfg.json", { settingValue: { a: 1 } });
+    expect(ok.insertCompanyTx).toHaveBeenCalledTimes(1);
+  });
+
+  it("Number: NaN → BadRequest (Number.isNaN branch)", async () => {
+    const repo = repoForType("Number");
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await expect(
+      svc.updateCompanySetting(actor, "file.max_upload_size_mb", { settingValue: Number.NaN }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(repo.insertCompanyTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("SecretRef: non-string → BadRequest", async () => {
+    const repo = repoForType("SecretRef");
+    const { svc } = makeService({ repo });
+    await expect(
+      svc.updateCompanySetting(actor, "smtp.password", { settingValue: 123 }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(repo.insertCompanyTx).not.toHaveBeenCalled();
+  });
+
+  it("unsupported value_type (exhaustiveness default) → BadRequest", async () => {
+    // Bogus valueType reaches the switch default (never branch) → fail(...không hỗ trợ).
+    const repo = repoForType("BogusType");
+    const { svc } = makeService({ repo });
+    await expect(
+      svc.updateCompanySetting(actor, "weird.key", { settingValue: "x" }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(repo.insertCompanyTx).not.toHaveBeenCalled();
+  });
+});

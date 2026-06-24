@@ -122,6 +122,15 @@ export default defineConfig({
           branches: 80,
           statements: 80,
         },
+        // S1-FND-SETTING-1: SettingService is crown-jewel (validation_schema + secret-mask + audit-in-tx,
+        // CLAUDE.md §6 module nhạy cảm) → ≥80% on all axes. Fully unit-tested (no-DB) so per-file gate is
+        // safe (unlike controller/repo exercised only by int-specs). Exact path = per-file semantics.
+        "src/foundation/settings/setting.service.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
       },
     },
   },
