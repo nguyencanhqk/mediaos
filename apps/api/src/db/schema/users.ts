@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { currentCompanyDefault } from "./_helpers";
 import { companies } from "./companies";
 
@@ -15,14 +16,26 @@ export const users = pgTable("users", {
     .default(currentCompanyDefault)
     .references(() => companies.id),
   email: text("email").notNull(),
+  // S2-AUTH-DB-2 (§12.1/§12.4): email chuẩn hoá lowercase — GENERATED STORED từ email (citext) ⇒ KHÔNG drift,
+  // app khỏi tự set. Nền cho unique (company_id, normalized_email) + login lookup. KHÔNG đưa vào INSERT.
+  normalizedEmail: text("normalized_email").generatedAlwaysAs(sql`lower(email::text)`),
   passwordHash: text("password_hash").notNull(),
   fullName: text("full_name"),
   status: text("status").notNull().default("active"),
+  // S2-AUTH-DB-2 (§12.1): đếm login fail liên tiếp + khoá tài khoản (BE-1 tăng/reset; lock/unlock admin).
+  failedLoginCount: integer("failed_login_count").notNull().default(0),
+  lockedAt: timestamp("locked_at", { withTimezone: true }),
+  lockedReason: text("locked_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   // CS-7: thống kê lần đăng nhập cuối — NULL trước lần login đầu. Best-effort (không block login nếu write lỗi).
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  // S2-AUTH-DB-2 (§12.1 "audit columns"): self-ref actor. FK ở DB (migration 0443, ON DELETE SET NULL);
+  // schema giữ uuid trần để tránh vòng tham chiếu self-table khi suy luận type.
+  createdBy: uuid("created_by"),
+  updatedBy: uuid("updated_by"),
+  deletedBy: uuid("deleted_by"),
 });
 
 export type User = typeof users.$inferSelect;
