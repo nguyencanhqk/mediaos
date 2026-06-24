@@ -49,16 +49,20 @@ try {
     pnpm --filter "@mediaos/$app" build
     if ($LASTEXITCODE -ne 0) { throw "build $app thất bại." }
 
-    # tạo project (bỏ qua nếu đã tồn tại)
-    npx wrangler@3 pages project create "$app-mediaos" --production-branch main 2>$null
+    # Project name: app → `web-mediaos` (project ĐANG giữ apex funtimemediacorp.com) để domain TỰ cập nhật,
+    # KHỎI trỏ lại tay. auth/console deploy vào project cùng tên (đã gắn auth./console. sẵn). de-media-fy:
+    # studio/people-mediaos cũ bỏ mặc (parked).
+    $projectName = if ($app -eq "app") { "web-mediaos" } else { "$app-mediaos" }
 
-    Write-Host "    deploy → $app-mediaos ..."
-    npx wrangler@3 pages deploy "apps/$app/dist" --project-name "$app-mediaos" --branch main
-    if ($LASTEXITCODE -ne 0) { Write-Warn "deploy $app trả mã $LASTEXITCODE." } else { Write-Ok "$app deployed" }
+    # tạo project (bỏ qua nếu đã tồn tại)
+    npx wrangler@3 pages project create "$projectName" --production-branch main 2>$null
+
+    Write-Host "    deploy → $projectName ..."
+    npx wrangler@3 pages deploy "apps/$app/dist" --project-name "$projectName" --branch main
+    if ($LASTEXITCODE -ne 0) { Write-Warn "deploy $app trả mã $LASTEXITCODE." } else { Write-Ok "$app ($projectName) deployed" }
   }
 }
 finally { Pop-Location }
 
-Write-Ok "06 xong."
-Write-Warn "Gắn custom domain mỗi project (1 lần) trên dashboard Pages → Custom domains:"
-Write-Host  "  app-mediaos → $Domain (apex) · auth-mediaos → auth.$Domain · console-mediaos → console.$Domain"
+Write-Ok "06 xong. Domain đã gắn sẵn vào project → TỰ cập nhật (KHÔNG cần trỏ lại tay):"
+Write-Host  "  $Domain (apex) → web-mediaos · auth.$Domain → auth-mediaos · console.$Domain → console-mediaos"
