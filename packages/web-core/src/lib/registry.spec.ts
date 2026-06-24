@@ -45,6 +45,40 @@ describe("createPermissionChecker", () => {
     expect(c.can("HR.EMPLOYEE.VIEW")).toBe(false);
   });
 
+  it("can(FE code) khớp khi user có CẶP engine tương ứng (BE getCapabilities trả action:resourceType)", () => {
+    const c = createPermissionChecker(makePerms(["read:employee", "read:dashboard"]));
+    expect(c.can("HR.EMPLOYEE.VIEW")).toBe(true); // read:employee → HR.EMPLOYEE.VIEW
+    expect(c.can("DASH.DASHBOARD.VIEW")).toBe(true);
+    expect(c.can("AUTH.ROLE.VIEW")).toBe(false); // không có read:role
+  });
+
+  it("getVisibleApps hiện đủ 7 app cho company-admin (capabilities = cặp engine non-sensitive)", () => {
+    const caps = makePerms([
+      "read:dashboard",
+      "read:employee",
+      "read:attendance",
+      "read:leave",
+      "approve:leave",
+      "read:task",
+      "read:project",
+      "read:notification",
+      "read:user",
+      "read:role",
+      "view:foundation-setting",
+      "view:foundation-audit-log",
+    ]);
+    const apps = getVisibleApps(APP_REGISTRY, makeSession(), createPermissionChecker(caps));
+    expect(apps.map((a) => a.appKey).sort()).toEqual([
+      "attendance",
+      "dashboard",
+      "hr",
+      "leave",
+      "notifications",
+      "system",
+      "tasks",
+    ]);
+  });
+
   it("canAll() true khi có đủ mọi permission", () => {
     const c = createPermissionChecker(makePerms(["A.B.C", "D.E.F"]));
     expect(c.canAll(["A.B.C", "D.E.F"])).toBe(true);
