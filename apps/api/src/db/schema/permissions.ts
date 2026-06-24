@@ -1,12 +1,4 @@
-import {
-  boolean,
-  index,
-  pgTable,
-  text,
-  timestamp,
-  uniqueIndex,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { boolean, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { companies } from "./companies";
 import { users } from "./users";
 
@@ -52,17 +44,20 @@ export const permissions = pgTable(
     resourceType: text("resource_type").notNull(),
     isSensitive: boolean("is_sensitive").notNull().default(false),
   },
-  (t) => [
-    uniqueIndex("permissions_action_resource_uq").on(t.action, t.resourceType),
-  ],
+  (t) => [uniqueIndex("permissions_action_resource_uq").on(t.action, t.resourceType)],
 );
 
 export type Permission = typeof permissions.$inferSelect;
 
 /**
- * role_permissions -- maps roles to permissions with ALLOW/DENY effect.
+ * role_permissions -- maps roles to permissions with ALLOW/DENY effect + RBAC data_scope.
  * ALLOW + DENY can coexist for same (role, permission); deny-overrides logic is in app layer.
- * No UPDATE grant: delete + insert to change effect. RLS via JOIN to roles table.
+ * No UPDATE grant: delete + insert to change effect/scope. RLS via JOIN to roles table.
+ *
+ * data_scope (S2-AUTH-DB-1, mig 0441): canonical RBAC scope Own/Team/Department/Company/System per
+ * grant (IMPLEMENTATION-05 §13 / BACKEND-03 / DB-02). NOT NULL DEFAULT 'Company' + CHECK at DB level.
+ * Resolved (not enforced here) by DataScopeResolver in S2-AUTH-BE-2. Distinct from audit_logs.data_scope
+ * (audit visibility); see ROLE_DATA_SCOPES below.
  */
 export const rolePermissions = pgTable(
   "role_permissions",
@@ -74,9 +69,10 @@ export const rolePermissions = pgTable(
       .notNull()
       .references(() => permissions.id, { onDelete: "cascade" }),
     effect: text("effect").notNull(),
+    dataScope: text("data_scope").notNull().default("Company"),
   },
   // Unique on (role_id, permission_id, effect) -- allows both ALLOW and DENY for same pair.
-  // Defined via CONSTRAINT in migration SQL; no Drizzle primaryKey here.
+  // CHECK data_scope IN (ROLE_DATA_SCOPES). Both defined via CONSTRAINT in migration SQL (0005/0441).
 );
 
 export type RolePermission = typeof rolePermissions.$inferSelect;
@@ -148,6 +144,14 @@ export type NewObjectPermission = typeof objectPermissions.$inferInsert;
 /** Effect values for role_permissions and object_permissions. */
 export const PERMISSION_EFFECTS = ["ALLOW", "DENY"] as const;
 export type PermissionEffect = (typeof PERMISSION_EFFECTS)[number];
+
+/**
+ * RBAC data_scope values for role_permissions.data_scope (S2-AUTH-DB-1, mig 0441 CHECK).
+ * Canonical scope model — IMPLEMENTATION-05 §13 / BACKEND-03 / DB-02. Ordered narrow→wide.
+ * Consumed by DataScopeResolver (S2-AUTH-BE-2). NOT the same as audit_logs.data_scope (visibility).
+ */
+export const ROLE_DATA_SCOPES = ["Own", "Team", "Department", "Company", "System"] as const;
+export type RoleDataScope = (typeof ROLE_DATA_SCOPES)[number];
 
 /** subject_type values for object_permissions. */
 export const SUBJECT_TYPES = ["user", "role"] as const;
