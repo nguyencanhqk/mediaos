@@ -397,6 +397,25 @@ export const backlog = [
     //       UPDATE/DELETE DENIED). Bằng chứng RED+GREEN lưu scratchpad/RED-evidence.txt.
     //   File chạm (paths lane): setting.service.spec.ts (giữ nguyên logic), settings-permission-leak.int-spec.ts
     //   (split rollback test + thêm true in-tx rollback), backlog.mjs (ghi RED-order thỏa). KHÔNG đụng service/contracts.
+    //   FIX-DBEVIDENCE (2026-06-24, Đội 2 — chỉ CHẠY + thu bằng chứng, KHÔNG sửa nguồn): xử QA #3 (integration
+    //   gated LANE_DB không ký được nếu skip). Setup DB cô lập: `bash scripts/lane-db-setup.sh setting --reset`
+    //   (chain 0000→latest áp SẠCH); CHECK audit_logs.object_type trên mediaos_setting CÓ 'company_setting'+
+    //   'system_setting' (mig 0439) ⇒ runIsolatedDb=true & hasType=true ⇒ KHÔNG ctx.skip.
+    //   `export LANE_DB=mediaos_setting && pnpm --filter @mediaos/api exec vitest run
+    //    test/integration/settings-permission-leak.int-spec.ts --reporter=verbose` ⇒ 12/12 PASS (KHÔNG skip):
+    //     • deny-403 ×3: getPublic / resolve / updateCompanySetting thiếu grant → ForbiddenException ✓
+    //     • guard ALLOW sanity (company-admin) ✓
+    //     • leak: getPublic chỉ public-nonsensitive — KHÔNG co-leak / co-secret-val / vault:// / secret_ref ✓
+    //     • resolve quyền-aware: admin → sensitive MASKED '***', no-role → chỉ public; secret_ref KHÔNG bao giờ ra ✓
+    //     • tenant-isolation: A resolve co-pub của A, KHÔNG ra 'B-only' của B (RLS) ✓
+    //     • audit-in-tx: PATCH → ĐÚNG 1 audit_logs COMPANY_SETTING_UPDATED company_setting, changedFields⊃settingValue ✓
+    //     • validate-before-tx: sai value_type → reject TRƯỚC mọi DB-write (count audit+company_settings KHÔNG đổi) ✓
+    //     • in-tx rollback (production path): lỗi SAU audit.record() trong cùng withTenant ⇒ CẢ upsert LẪN audit row
+    //       rollback (auditAfter==auditBefore, settingAfter==settingBefore) ✓ — đúng kịch bản QA #2.
+    //     • append-only: app role UPDATE/DELETE audit_logs → DENIED (BẤT BIẾN #2) ✓
+    //   Chứng gate THẬT (không xanh-giả): cùng spec KHÔNG LANE_DB ⇒ 12/12 SKIP (runIsolatedDb=false).
+    //   Phụ: unit setting.service.spec ✓34/34; mig 0439 re-run idempotent (no-op, no error); grant audit_logs cho
+    //   mediaos_app = chỉ INSERT+SELECT (KHÔNG UPDATE/DELETE); AUDIT_OBJECT_TYPES (schema/audit.ts) khớp CHECK DB.
     status: "done",
     paths: ["apps/api/src/foundation/settings/**"],
     skills: ["code-review"],
