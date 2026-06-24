@@ -324,9 +324,9 @@ function Invoke-DevOnline {
   if (-not (Wait-Postgres)) { return }
   Start-DevWindow "api-online" "apps\api"
   # mỗi Vite cần VITE_TUNNEL_HOST riêng (Start-Process chụp env lúc spawn) → set tuần tự.
-  $env:VITE_TUNNEL_HOST = "cian-dev";         Start-DevWindow "app-online" "apps\app"
-  $env:VITE_TUNNEL_HOST = "cian-dev-auth";    Start-DevWindow "auth-online" "apps\auth"
-  $env:VITE_TUNNEL_HOST = "cian-dev-console"; Start-DevWindow "console-online" "apps\console"
+  $env:VITE_TUNNEL_HOST = "cian-dev.funtimemediacorp.com";         Start-DevWindow "app-online" "apps\app"
+  $env:VITE_TUNNEL_HOST = "cian-dev-auth.funtimemediacorp.com";    Start-DevWindow "auth-online" "apps\auth"
+  $env:VITE_TUNNEL_HOST = "cian-dev-console.funtimemediacorp.com"; Start-DevWindow "console-online" "apps\console"
   Remove-Item Env:VITE_TUNNEL_HOST -ErrorAction SilentlyContinue
   Write-Host ""
   Write-Ok "Dev-online local đang chạy (API :3200). Online qua cloudflared:"
