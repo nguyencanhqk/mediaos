@@ -169,8 +169,12 @@ describe.skipIf(!hasDb)("FOUNDATION-BE-3 audit viewer e2e (deny-path + scope + r
       .get(`/foundation/audit-logs?action=${ACTION_A}`)
       .set("Authorization", `Bearer ${adminToken}`);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    const rows = res.body.data.data as Array<Record<string, unknown>>;
+    const rows = res.body.data as Array<Record<string, unknown>>;
     expect(rows.length).toBe(1);
+    // S1-FND-WIRE-DRIFT-1: pagination = block ĐỈNH (API-01 §16.1), KHÔNG trong meta.
+    expect(res.body.pagination).toMatchObject({ total: 1, page: 1 });
+    expect(res.body.meta).toMatchObject({ request_id: expect.any(String) });
+    expect(res.body.meta.total).toBeUndefined();
     const row = rows[0] as {
       before: Record<string, unknown>;
       after: Record<string, unknown>;
@@ -198,7 +202,7 @@ describe.skipIf(!hasDb)("FOUNDATION-BE-3 audit viewer e2e (deny-path + scope + r
       .get(`/foundation/audit-logs?action=${ACTION_B}`)
       .set("Authorization", `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
-    expect((res.body.data.data as unknown[]).length).toBe(0);
+    expect((res.body.data as unknown[]).length).toBe(0);
   });
 
   // 3d — audience boundary (System route) ───────────────────────────────────────
@@ -224,7 +228,7 @@ describe.skipIf(!hasDb)("FOUNDATION-BE-3 audit viewer e2e (deny-path + scope + r
       .get(`/foundation/audit-logs/all?action=${ACTION_B}`)
       .set("Authorization", `Bearer ${operatorToken}`);
     expect(all.status, JSON.stringify(all.body)).toBe(200);
-    expect((all.body.data.data as unknown[]).length).toBe(1);
+    expect((all.body.data as unknown[]).length).toBe(1);
     expect(JSON.stringify(all.body)).not.toContain(SECRET);
 
     // ?companyId=A → KHÔNG còn hàng của B.
@@ -232,6 +236,6 @@ describe.skipIf(!hasDb)("FOUNDATION-BE-3 audit viewer e2e (deny-path + scope + r
       .get(`/foundation/audit-logs/all?action=${ACTION_B}&companyId=${A.companyId}`)
       .set("Authorization", `Bearer ${operatorToken}`);
     expect(scoped.status).toBe(200);
-    expect((scoped.body.data.data as unknown[]).length).toBe(0);
+    expect((scoped.body.data as unknown[]).length).toBe(0);
   });
 });

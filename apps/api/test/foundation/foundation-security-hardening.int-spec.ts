@@ -216,7 +216,8 @@ describe.skipIf(!runDb)(
         }
 
         // The masked row IS returned (DTO not dropped) and non-sensitive fields are preserved.
-        const rows = res.body.data.data as Array<Record<string, unknown>>;
+        // S1-FND-WIRE-DRIFT-1: audit list rows ở body.data (pagination tách ra body.pagination).
+        const rows = res.body.data as Array<Record<string, unknown>>;
         const row = rows.find((r) => r["action"] === leakyAction);
         expect(row, "leaky audit row must still be returned (masked, not dropped)").toBeTruthy();
         const before = row!["before"] as Record<string, unknown>;
@@ -333,18 +334,8 @@ describe.skipIf(!runDb)(
         expect(serialized).not.toContain("isSensitive");
       });
 
-      // FORCE-RED khi route "land lén": H2c đã TỰ-KÍCH-HOẠT khi route live (probe 200 → chạy assertion), nhưng
-      // gate này là lớp dự phòng thứ 2 — nếu CI vô tình KHÔNG chạy H2c (file bị exclude/filter), gate vẫn ĐỎ
-      // khi route mount (≠404) ⇒ phơi bày S1-FND-WIRE-1 đã land mà coverage HTTP no-leak chưa được chứng minh.
-      it("H2-gate — route still un-mounted (S1-FND-WIRE-1 landed → H2c tự chạy assertion no-leak THẬT)", async () => {
-        const res = await api(app)
-          .get(`/foundation/settings/public`)
-          .set("Authorization", `Bearer ${adminToken}`);
-        expect(
-          res.status,
-          "/foundation/settings/public is now mounted — S1-FND-WIRE-1 landed: H2c now self-runs HTTP envelope no-leak assertions (this gate just flags the transition)",
-        ).toBe(404);
-      });
+      // (H2-gate REMOVED — S1-FND-WIRE-1 đã land + merge: /foundation/settings/public mount = 200 ⇒ H2c
+      //  TỰ-KÍCH-HOẠT chạy assertion no-leak THẬT. Gate transition-flag chỉ-một-lần đã hoàn thành nhiệm vụ.)
     });
 
     // ════════════════════════════════════════════════════════════════════════════════

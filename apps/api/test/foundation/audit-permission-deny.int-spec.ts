@@ -86,8 +86,8 @@ async function insertAudit(direct: Pool, companyId: string, action: string): Pro
   return r.rows[0].id as string;
 }
 
-function rowsOf(body: { data: { data: unknown[] } }): unknown[] {
-  return body.data.data;
+function rowsOf(body: { data: unknown[] }): unknown[] {
+  return body.data;
 }
 
 describe.skipIf(!runDb)("S1-QA-FND-1 audit permission + scope deny-path", () => {

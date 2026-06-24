@@ -2,6 +2,7 @@ import type { ExecutionContext } from "@nestjs/common";
 import { of, lastValueFrom } from "rxjs";
 import { describe, expect, it } from "vitest";
 import { ResponseEnvelopeInterceptor } from "./response-envelope.interceptor";
+import { paginated, toPagination } from "../pagination";
 
 function contextWithRequestId(requestId: string | undefined): ExecutionContext {
   return {
@@ -38,6 +39,23 @@ describe("ResponseEnvelopeInterceptor", () => {
     const out = (await run(undefined)) as Record<string, unknown>;
     expect(out.data).toBeNull();
     expect(out.success).toBe(true);
+  });
+
+  it("hoists a paginated() result → top-level `pagination` block (API-01 §16.1), data un-nested", async () => {
+    const out = (await run(paginated([{ id: "1" }], toPagination(1, 1, 20)), "req-1")) as Record<
+      string,
+      unknown
+    >;
+    expect(out.success).toBe(true);
+    expect(out.data).toEqual([{ id: "1" }]); // data is the rows, NOT { data, pagination }
+    expect(out.pagination).toMatchObject({ total: 1, page: 1, per_page: 20, total_pages: 1 });
+    // pagination must NOT be folded into meta
+    expect((out.meta as Record<string, unknown>).total).toBeUndefined();
+  });
+
+  it("non-paginated payload has no `pagination` key (additive — không ảnh hưởng response thường)", async () => {
+    const out = (await run({ id: "1" })) as Record<string, unknown>;
+    expect("pagination" in out).toBe(false);
   });
 
   it("falls back to empty request_id string when middleware did not set one", async () => {

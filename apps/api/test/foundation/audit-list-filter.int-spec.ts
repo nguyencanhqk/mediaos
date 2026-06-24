@@ -100,8 +100,8 @@ async function insertAudit(direct: Pool, companyId: string, s: AuditSeed): Promi
 
 type Row = Record<string, unknown>;
 
-function rowsOf(body: { data: { data: Row[] } }): Row[] {
-  return body.data.data;
+function rowsOf(body: { data: Row[] }): Row[] {
+  return body.data;
 }
 
 describe.skipIf(!hasDb)("S1-FND-AUDIT-1 audit list filter + scope + pagination", () => {
@@ -334,16 +334,17 @@ describe.skipIf(!hasDb)("S1-FND-AUDIT-1 audit list filter + scope + pagination",
     expect(rows[0]["companyId"]).toBe(A.companyId);
   });
 
-  // ── F5: pagination meta + limit cap ──────────────────────────────────────────────
-  it("F5 — meta total/limit/offset đúng; limit=1 phân trang được", async () => {
+  // ── F5: pagination block (API-01 §16.1, top-level) + limit cap ───────────────────
+  it("F5 — pagination block đỉnh đúng; limit=1 phân trang được", async () => {
     const res = await api(app)
       .get(`/foundation/audit-logs?moduleCode=HR&limit=1&offset=0`)
       .set("Authorization", `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
-    const meta = res.body.data.meta as { total: number; limit: number; offset: number };
-    expect(meta.limit).toBe(1);
-    expect(meta.offset).toBe(0);
-    expect(meta.total).toBeGreaterThanOrEqual(2); // hr-view + hr-old của A
+    // S1-FND-WIRE-DRIFT-1: pagination = block ĐỈNH (per_page/page/total), KHÔNG trong data.meta.
+    const pg = res.body.pagination as { total: number; per_page: number; page: number };
+    expect(pg.per_page).toBe(1);
+    expect(pg.page).toBe(1); // offset=0 → trang 1
+    expect(pg.total).toBeGreaterThanOrEqual(2); // hr-view + hr-old của A
     expect(rowsOf(res.body).length).toBe(1); // 1 trang = 1 hàng
   });
 

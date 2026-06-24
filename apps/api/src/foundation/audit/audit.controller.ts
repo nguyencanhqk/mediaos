@@ -4,6 +4,7 @@ import type { Request } from "express";
 import { OperatorOnly } from "../../auth/operator-only.decorator";
 import { PermissionGuard } from "../../permission/guards/permission.guard";
 import { RequirePermission } from "../../permission/require-permission.decorator";
+import { paginated, toPaginationFromOffset } from "../../common/pagination";
 import { AuditLogQueryDto } from "./audit.dto";
 import { AuditQueryService } from "./audit.service";
 
@@ -27,19 +28,21 @@ interface AuthenticatedRequest extends Request {
 export class AuditController {
   constructor(private readonly audit: AuditQueryService) {}
 
-  /** COMPANY — list audit của tenant hiện tại (RLS ép). */
+  /** COMPANY — list audit của tenant hiện tại (RLS ép). Pagination = block đỉnh (API-01 §16.1). */
   @Get()
   @RequirePermission("view", "audit-log", { isSensitive: true })
-  listCompany(@Req() req: AuthenticatedRequest, @Query() query: AuditLogQueryDto) {
-    return this.audit.listCompany(req.user.companyId, query);
+  async listCompany(@Req() req: AuthenticatedRequest, @Query() query: AuditLogQueryDto) {
+    const { data, meta } = await this.audit.listCompany(req.user.companyId, query);
+    return paginated(data, toPaginationFromOffset(meta.total, meta.offset, meta.limit));
   }
 
   /** SYSTEM — list audit chéo tenant (operator). KHAI BÁO TRƯỚC '/:id'. `?companyId` khoanh 1 tenant. */
   @Get("all")
   @OperatorOnly()
   @RequirePermission("view", "platform-audit", { isSensitive: true })
-  listSystem(@Query() query: AuditLogQueryDto) {
-    return this.audit.listSystem(query);
+  async listSystem(@Query() query: AuditLogQueryDto) {
+    const { data, meta } = await this.audit.listSystem(query);
+    return paginated(data, toPaginationFromOffset(meta.total, meta.offset, meta.limit));
   }
 
   /** SYSTEM — chi tiết 1 audit chéo tenant (id toàn cục — không cần companyId). */
