@@ -98,14 +98,50 @@ export interface UserPermission {
 // Permission checker (FRONTEND-03 §10.2)
 // ---------------------------------------------------------------------------
 
+/**
+ * Ánh xạ FE permission code (`MODULE.RESOURCE.ACTION` — dùng trong registry/route/sidebar) → cặp engine
+ * `action:resourceType` mà backend trả trong `/auth/me` capabilities (permission.service `getCapabilities`).
+ *
+ * LÝ DO: bảng `permissions` chỉ có (action, resource_type), KHÔNG có cột `code`. FE gate HIỂN THỊ theo code,
+ * BE enforce theo cặp → cần cầu nối ở TẦNG HIỂN THỊ (KHÔNG đụng engine enforcement — BE vẫn là cổng thật).
+ * Cặp lấy từ seed thật (migrations *_permissions_seed.sql). Scope variant (VIEW_OWN/TEAM/COMPANY) gộp cùng
+ * cặp đọc — phân biệt scope do `requiredScopes` lo riêng. Code chưa có trong bảng → checker thử khớp TRỰC
+ * TIẾP (phòng khi BE trả thẳng cặp). Bổ sung code mới ở đây khi thêm app/route.
+ */
+export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> = {
+  "DASH.DASHBOARD.VIEW": "read:dashboard",
+  "HR.EMPLOYEE.VIEW": "read:employee",
+  "ATT.ATTENDANCE.VIEW_OWN": "read:attendance",
+  "ATT.ATTENDANCE.VIEW_TEAM": "read:attendance",
+  "ATT.ATTENDANCE.VIEW_COMPANY": "read:attendance",
+  "LEAVE.REQUEST.VIEW_OWN": "read:leave",
+  "LEAVE.REQUEST.VIEW": "read:leave",
+  "LEAVE.REQUEST.APPROVE": "approve:leave",
+  "TASK.TASK.VIEW": "read:task",
+  "TASK.PROJECT.VIEW": "read:project",
+  "NOTI.NOTIFICATION.VIEW_OWN": "read:notification",
+  "AUTH.USER.VIEW": "read:user",
+  "AUTH.ROLE.VIEW": "read:role",
+  "FOUNDATION.SETTING.VIEW": "view:foundation-setting",
+  "FOUNDATION.AUDIT_LOG.VIEW": "view:foundation-audit-log",
+};
+
 export function createPermissionChecker(userPermissions: readonly UserPermission[]) {
   const map = new Map<PermissionCode, Set<DataScope>>();
   for (const item of userPermissions) {
     map.set(item.permission, new Set(item.scopes));
   }
 
+  /** Key khớp trong map: chính `permission` (đã là cặp / khớp trực tiếp) hoặc cặp engine ánh xạ từ FE code. */
+  function resolveKey(permission: PermissionCode): PermissionCode | undefined {
+    if (map.has(permission)) return permission;
+    const pair = PERMISSION_CODE_TO_PAIR[permission];
+    if (pair && map.has(pair)) return pair;
+    return undefined;
+  }
+
   function can(permission: PermissionCode): boolean {
-    return map.has(permission);
+    return resolveKey(permission) !== undefined;
   }
 
   function canAll(permissions: readonly PermissionCode[]): boolean {
@@ -118,18 +154,21 @@ export function createPermissionChecker(userPermissions: readonly UserPermission
   }
 
   function getScopes(permission: PermissionCode): DataScope[] {
-    return Array.from(map.get(permission) ?? []);
+    const key = resolveKey(permission);
+    return key ? Array.from(map.get(key) ?? []) : [];
   }
 
   function hasScope(permission: PermissionCode, scope: DataScope): boolean {
-    const scopes = map.get(permission);
+    const key = resolveKey(permission);
+    const scopes = key ? map.get(key) : undefined;
     if (!scopes) return false;
     return satisfiesScope(scopes, scope);
   }
 
   function hasAnyScope(permission: PermissionCode, required: readonly DataScope[]): boolean {
     if (required.length === 0) return true;
-    const scopes = map.get(permission);
+    const key = resolveKey(permission);
+    const scopes = key ? map.get(key) : undefined;
     if (!scopes) return false;
     return required.some((s) => satisfiesScope(scopes, s));
   }
