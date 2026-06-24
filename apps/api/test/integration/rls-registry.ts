@@ -2180,4 +2180,54 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+
+  // ── S2-AUTH-DB-2 — AUTH sessions/logs (mig 0443) ─────────────────────────────
+  // Mỗi bảng có company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  // login_logs/user_security_events APPEND-ONLY; user_sessions MUTABLE. KHÔNG skipNoContext (seedRow gắn tenant).
+  {
+    name: "user_sessions",
+    table: "user_sessions",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `usess-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO user_sessions (company_id, user_id, refresh_token_hash, expired_at)
+         VALUES ($1, $2, $3, now() + interval '7 days') RETURNING id`,
+        [t.companyId, u, randomUUID()],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "login_logs",
+    table: "login_logs",
+    // company_id NULLABLE: hàng pre-auth (email không tồn tại) có company_id IS NULL → HIỂN THỊ với mọi tenant
+    // qua USING (company_id = GUC OR company_id IS NULL) — GIỐNG roles/seed_items có hàng global. Vì vậy
+    // skipNoContext: test 'no context → 0 row' KHÔNG đúng cho bảng nullable-tenant (sẽ đỏ khi có hàng NULL).
+    // Cô lập chéo tenant + WITH CHECK forge-deny vẫn được harness phủ; hành vi nullable-tenant đã verify ở
+    // auth-appendonly + rls-tenant-isolation (FULL gate). Mẫu: roles/role_permissions/seed_items.
+    skipNoContext: true,
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `llog-${randomUUID().slice(0, 8)}@x.test`);
+      const email = `llog-${randomUUID().slice(0, 8)}@x.test`;
+      const r = await direct.query(
+        `INSERT INTO login_logs (company_id, user_id, email, normalized_email, login_status)
+         VALUES ($1, $2, $3, lower($3), 'success') RETURNING id`,
+        [t.companyId, u, email],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "user_security_events",
+    table: "user_security_events",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `usec-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO user_security_events (company_id, user_id, event_type, severity)
+         VALUES ($1, $2, 'PASSWORD_CHANGED', 'info') RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 ];

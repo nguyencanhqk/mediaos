@@ -361,21 +361,12 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
 
   // ── FOUNDATION-DB-5 (mig 0435) — data_retention_policies ───────────────────
   // company_id NULLABLE (CASCADE companies) — xoá tenant rows (company_id = ANY(...)) only.
-  await direct.query(
-    "DELETE FROM data_retention_policies WHERE company_id = ANY($1::uuid[])",
-    ids,
-  );
+  await direct.query("DELETE FROM data_retention_policies WHERE company_id = ANY($1::uuid[])", ids);
 
   // ── FOUNDATION-DB-4 (mig 0434) — sequence_counters / public_holidays ────────
   // company_id NULLABLE (CASCADE companies) — xoá tenant rows only.
-  await direct.query(
-    "DELETE FROM sequence_counters WHERE company_id = ANY($1::uuid[])",
-    ids,
-  );
-  await direct.query(
-    "DELETE FROM public_holidays WHERE company_id = ANY($1::uuid[])",
-    ids,
-  );
+  await direct.query("DELETE FROM sequence_counters WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM public_holidays WHERE company_id = ANY($1::uuid[])", ids);
 
   // ── FOUNDATION-DB-1 (mig 0431) — company_settings ───────────────────────────
   // company_id NOT NULL (CASCADE companies) — xoá tường minh TRƯỚC companies.
@@ -553,6 +544,11 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM user_recovery_codes WHERE company_id = ANY($1::uuid[])", ids);
   // G16-1b security_alerts: subject_user_id FK → users (NO ACTION) → xoá TRƯỚC users. company_id → companies.
   await direct.query("DELETE FROM security_alerts WHERE company_id = ANY($1::uuid[])", ids);
+  // S2-AUTH-DB-2: user_sessions/login_logs/user_security_events FK → users (NO ACTION) → xoá TRƯỚC users.
+  //   login_logs.session_id FK → user_sessions → xoá login_logs TRƯỚC user_sessions.
+  await direct.query("DELETE FROM login_logs WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM user_security_events WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM user_sessions WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM object_permissions WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM user_roles WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query(

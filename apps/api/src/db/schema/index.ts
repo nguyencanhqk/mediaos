@@ -12,6 +12,9 @@ export * from "./users";
 export * from "./audit";
 export * from "./outbox";
 export * from "./auth";
+// S2-AUTH-DB-2 (DB-02 §7.6/§7.8/§7.9): user_sessions (in ./auth) + login_logs + user_security_events.
+// login_logs/user_security_events APPEND-ONLY (app SELECT,INSERT only); login_logs company_id NULLABLE.
+export * from "./auth-logs";
 export * from "./permissions";
 export * from "./org";
 export * from "./positions";

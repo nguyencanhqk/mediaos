@@ -26,13 +26,20 @@ function makeUser(over: Partial<User> = {}): User {
     id: TARGET_ID,
     companyId: ACTOR.companyId,
     email: "target@a.test",
+    normalizedEmail: "target@a.test",
     passwordHash: "$argon2-secret-NEVER-IN-DTO",
     fullName: "Mục Tiêu",
     status: "active",
+    failedLoginCount: 0,
+    lockedAt: null,
+    lockedReason: null,
     createdAt: new Date("2026-06-19T00:00:00.000Z"),
     updatedAt: new Date("2026-06-19T00:00:00.000Z"),
     deletedAt: null,
     lastLoginAt: null,
+    createdBy: null,
+    updatedBy: null,
+    deletedBy: null,
     ...over,
   };
 }
@@ -48,7 +55,9 @@ describe("AdminUsersService", () => {
     audit = { record: vi.fn(async () => undefined) };
     db = {
       // chạy callback với tx giả — service phải gọi repo *Tx + audit TRONG callback (cùng tx).
-      withTenant: vi.fn(async (_companyId: string, fn: (tx: unknown) => Promise<unknown>) => fn(TX)),
+      withTenant: vi.fn(async (_companyId: string, fn: (tx: unknown) => Promise<unknown>) =>
+        fn(TX),
+      ),
     };
     repo = {
       findManyTx: vi.fn(async () => ({ rows: [makeUser()], total: 1 })),
