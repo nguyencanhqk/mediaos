@@ -85,6 +85,7 @@ export * from "./workflow";
 export * from "./approval";
 export * from "./task";
 export * from "./notification";
+export * from "./foundation";
 export * from "./chat";
 export * from "./realtime";
 export * from "./settings";
