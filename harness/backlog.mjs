@@ -633,11 +633,23 @@ export const backlog = [
   //     this verified run; cite 94.07% logic-aggregate (all sensitive files ≥80%). Evidence logs in
   //     scratchpad: intspec-run.log · files-svc-unit.log · coverage-sensitive.log · coverage-logic-only.log.
   //
-  // D6 my-apps merge-gate (unchanged — merge sequencing, ticket+gate correct):
-  //   S1-FND-MODULE-1 (b72ad10) is done on master but NOT yet merged into chore/dev-tooling.
-  //   The it.skip gate in the my-apps spec is CORRECTLY written with a ticket reference to S1-FND-MODULE-1.
-  //   D6 acceptance can only be fully validated after this branch receives b72ad10 (merge master→branch or PR merge).
-  //   Action: merge master into chore/dev-tooling (or merge this branch to master) to activate D6 and re-run.
+  // D6 my-apps merge-gate (RESOLVED Fix-C, 2026-06-24 — gate now SELF-ACTIVATING, no manual edit needed):
+  //   Investigated the activate-now path. Branch-merge master→chore/dev-tooling produces >12 conflicts in
+  //   files OUTSIDE this QA lane's scope (.env.example, env.schema.ts, vite configs, dashboard, web-core) —
+  //   aborted, NOT lane-safe. AND, decisively: even with master merged, S1-FND-MODULE-1's ModuleCatalogModule
+  //   is defined but NOT wired into app.module.ts — wiring is S1-FND-WIRE-1 (status 'todo' on master). So
+  //   GET /foundation/modules/my-apps is unregistered in the Nest graph → 404. The "route returns 200"
+  //   precondition does NOT hold until S1-FND-WIRE-1 lands. ⇒ True blocker for D6 is S1-FND-WIRE-1, not the
+  //   b72ad10 branch-merge alone.
+  //   Fix: replaced the inert it.skip stub with a SELF-ACTIVATING runtime gate (3a705d9 commit):
+  //     • probe GET /foundation/modules/my-apps → 404/501 ⇒ ctx.skip() (runtime skip-có-vé, NO fake pass);
+  //     • 200 (after S1-FND-WIRE-1 + master merge) ⇒ runs REAL permission-filter assertions automatically
+  //       (admin sees ≥1 app; employee app-set is SUBSET of admin = thiếu requiredAny ⇒ module LỌC; no
+  //       storage_path/secret leak) — NO manual test edit required.
+  //   Proof-of-activation (temp-wired module-catalog+app.module, then reverted): 7 passed / 0 skipped (D6 ran
+  //   real assertions). Committed state (route absent): 6 passed / 1 ctx.skip (D6) on LANE_DB=mediaos_qafnd1.
+  //   Remaining gate ticket: S1-FND-WIRE-1 (mount ModuleCatalogModule). When it lands + branch receives it,
+  //   D6 turns GREEN on next CI run with zero edits. No further QA action needed on this WO.
   // ──────────────────────────────────────────────────────────────────────────
   {
     id: "S1-QA-FND-1",

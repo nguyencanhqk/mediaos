@@ -15,10 +15,16 @@
  *   D5 [QA05-SYS-004 / §18.3]  Biên audience + grant SYSTEM route: admin A (token tenant, KHÔNG view:platform-audit)
  *                              GET /foundation/audit-logs/all → 401/403 (@OperatorOnly chặn token tenant TRƯỚC,
  *                              fallback grant nếu audience qua). KHÔNG bao giờ 200 (không thấy chéo tenant).
- *   D6 [QA05-SYS-007 / §18.3]  my-apps lọc theo permission — GATE/skip: source module-catalog (S1-FND-MODULE-1)
- *                              implemented nhưng CHƯA commit/land trong cây này (apps/api/src/foundation/module-catalog
- *                              MISSING). Route /modules/my-apps → 404 ⇒ KHÔNG nghiệm thu được ở lane này.
- *                              Vé: S1-FND-MODULE-1 (chưa commit). it.skip giữ chỗ — KHÔNG bịa pass.
+ *   D6 [QA05-SYS-007 / §18.3]  my-apps lọc theo permission — GATE TỰ-KÍCH-HOẠT (probe route trước, KHÔNG it.skip
+ *                              chết). Trạng thái cây HIỆN TẠI: source S1-FND-MODULE-1 đã land trên `master`
+ *                              (b72ad10: module-catalog service/controller/repo/dto/metadata) NHƯNG (a) nhánh làm
+ *                              việc CHƯA merge master — branch-merge ở lane QA tạo >12 xung đột file NGOÀI scope
+ *                              (.env.example/env.schema/vite/dashboard/web-core) ⇒ KHÔNG an toàn ở lane này; VÀ
+ *                              (b) ngay cả khi merge, ModuleCatalogModule CHƯA wire vào app.module.ts — wiring là
+ *                              việc của S1-FND-WIRE-1 (status 'todo' trên master) ⇒ route /modules/my-apps KHÔNG
+ *                              đăng ký trong Nest graph ⇒ 404. Vé chặn: S1-FND-WIRE-1 (gom + wire FoundationModule).
+ *                              ⇒ Gate dưới TỰ probe route: 404/501 (route chưa live) → skip-có-vé (KHÔNG bịa pass);
+ *                              200 (WIRE-1 đã land) → CHẠY assertion lọc-quyền THẬT, KHÔNG cần sửa tay (activate-now).
  *
  * Dùng Postgres THẬT (DB cô lập mediaos_<lane>, CLAUDE §9.5). Gate `hasDb && LANE_DB` (memory:
  * integration-test-lane-db-gate) — .env làm hasDb=true; thiếu LANE_DB → đỏ-giả trên DB dev chung.
@@ -202,12 +208,59 @@ describe.skipIf(!runDb)("S1-QA-FND-1 audit permission + scope deny-path", () => 
     expect(res.body.data ?? null).toBeNull();
   });
 
-  // ── D6: my-apps lọc permission — GATE (source S1-FND-MODULE-1 chưa land trong cây này) ──
-  // ÉP RED nếu ai đó "land lén" route: nếu /modules/my-apps trả 200 thì source ĐÃ có → bỏ skip này,
-  // viết assertion lọc permission thật. Hiện apps/api/src/foundation/module-catalog MISSING ⇒ skip có vé.
-  it.skip("D6 — my-apps lọc app theo permission [GATE: S1-FND-MODULE-1 chưa commit — module-catalog source MISSING]", () => {
-    // Khi S1-FND-MODULE-1 commit: user thiếu requiredAny của 1 module → module BỊ LỌC;
-    // user có ≥1 → module HIỆN. Verify qua GET /foundation/modules/my-apps.
-    expect(true).toBe(true);
+  // ── D6: my-apps lọc permission — GATE TỰ-KÍCH-HOẠT (probe route, KHÔNG it.skip chết) ──
+  // Probe GET /foundation/modules/my-apps:
+  //   • 404/501 (route chưa wire — S1-FND-WIRE-1 'todo') ⇒ skip-có-vé runtime: KHÔNG bịa pass, KHÔNG fail-giả.
+  //   • 200 (WIRE-1 land + master merge) ⇒ CHẠY assertion lọc-quyền THẬT — không cần sửa tay (activate-now).
+  // Assertion bất biến (không hardcode module nào, không vỡ khi seed-grant drift):
+  //   (1) admin (role 0001, grant rộng) thấy ≥1 app; mỗi item shape my-apps đúng + KHÔNG lộ storage_path/secret.
+  //   (2) employee (role 0008, quyền tối thiểu) → tập app là SUBSET của admin (ít/bằng quyền ⇒ ít/bằng app).
+  //       Đây là chứng minh hướng-lọc: thiếu requiredAny của module ⇒ module BỊ LỌC khỏi my-apps.
+  it("D6 — my-apps lọc app theo permission [TỰ-KÍCH-HOẠT khi route live; nếu 404 → skip-có-vé S1-FND-WIRE-1]", async (ctx) => {
+    const adminRes = await api(app)
+      .get(`/foundation/modules/my-apps`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    // Route chưa wire (ModuleCatalogModule chưa vào app.module.ts — S1-FND-WIRE-1 'todo') ⇒ 404.
+    // KHÔNG nghiệm thu được ở cây này; skip-có-vé runtime (KHÔNG bịa pass).
+    if (adminRes.status === 404 || adminRes.status === 501) {
+      ctx.skip();
+      return;
+    }
+
+    // ── Route ĐÃ live ⇒ assertion lọc-quyền THẬT ──────────────────────────────────
+    expect(adminRes.status, JSON.stringify(adminRes.body)).toBe(200);
+    const adminApps = (adminRes.body.data as Array<Record<string, unknown>>) ?? [];
+    expect(Array.isArray(adminApps)).toBe(true);
+    expect(adminApps.length).toBeGreaterThan(0); // admin (grant rộng) thấy ≥1 app
+
+    // Shape + KHÔNG lộ secret/storage_path trên mọi item (BẤT BIẾN #3 / QA06-FILE-001).
+    for (const item of adminApps) {
+      expect(item).toHaveProperty("module_code");
+      expect(item).toHaveProperty("route");
+      expect(item).toHaveProperty("is_active");
+      const serialized = JSON.stringify(item);
+      expect(serialized).not.toMatch(/storage_path/i);
+      expect(serialized).not.toMatch(/secret_ref/i);
+      expect(serialized).not.toMatch(/password_hash|refresh_token/i);
+    }
+    const adminCodes = new Set(adminApps.map((a) => a.module_code as string));
+
+    // Employee (role 0008, quyền tối thiểu): tập app là SUBSET của admin.
+    const empRes = await api(app)
+      .get(`/foundation/modules/my-apps`)
+      .set("Authorization", `Bearer ${employeeToken}`);
+    expect(empRes.status, JSON.stringify(empRes.body)).toBe(200);
+    const empApps = (empRes.body.data as Array<Record<string, unknown>>) ?? [];
+    const empCodes = empApps.map((a) => a.module_code as string);
+
+    // Ít/bằng quyền ⇒ ít/bằng app: mọi app employee thấy thì admin cũng thấy (subset),
+    // và employee KHÔNG thấy nhiều hơn admin. Chứng minh module thiếu requiredAny BỊ LỌC.
+    for (const code of empCodes) {
+      expect(adminCodes.has(code), `employee thấy '${code}' nhưng admin không → lọc sai`).toBe(
+        true,
+      );
+    }
+    expect(empApps.length).toBeLessThanOrEqual(adminApps.length);
   });
 });
