@@ -869,6 +869,13 @@
       "when": 1717500580000,
       "tag": "0440_file1_audit_object_type",
       "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1717500590000,
+      "tag": "0441_s2_authdb1_role_perm_data_scope",
+      "breakpoints": true
     }
   ]
 }
