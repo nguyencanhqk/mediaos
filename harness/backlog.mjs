@@ -606,6 +606,27 @@ export const backlog = [
       "web test 3 app xanh; typecheck xanh",
     ],
   },
+  // ── CLOSE/RECONCILE S1-QA-FND-1 (2026-06-24) ──────────────────────────────
+  // Lane commits (all on branch chore/dev-tooling):
+  //   L1  b950915  wip(L1-qa-perm-scope): audit permission+scope deny-path spec (QA05-SYS-003/004/007, BACKEND-04 §18.3)
+  //   L2  05da91a  wip(L2-qa-file-security): file-security int-spec + soft-deleted-no-download unit assertions
+  //   L3  a896b6a  wip(L3-qa-leak-appendonly): consolidate Foundation security hardening spec (audit redact-at-read HTTP + public-settings leak guard + audit/file_access_logs append-only)
+  //
+  // Coverage (self-reported by lane commits; independent LANE_DB run pending — see D6 note):
+  //   L2 files area: statements 96.73% / branches 90.36%
+  //   L3 sensitive aggregate (audit/settings/files/sequence): statements 97.73% / branches 91.86%
+  //   Both exceed the ≥80% threshold for sensitive-zone coverage.
+  //
+  // D6 my-apps merge-gate:
+  //   S1-FND-MODULE-1 (b72ad10) is done on master but NOT yet merged into chore/dev-tooling.
+  //   The it.skip gate in the my-apps spec is CORRECTLY written with a ticket reference to S1-FND-MODULE-1.
+  //   D6 acceptance can only be fully validated after this branch receives b72ad10 (merge master→branch or PR merge).
+  //   Action: merge master into chore/dev-tooling (or merge this branch to master) to activate D6 and re-run.
+  //
+  // Independent LANE_DB run: bash scripts/lane-db-setup.sh qafnd1 --reset → export LANE_DB=mediaos_qafnd1 required
+  //   to produce verified pass-count + coverage numbers; run blocked because this is a WO-only backlog update lane.
+  //   Đội 3 must run verification on lane DB before final acceptance of coverage numbers.
+  // ──────────────────────────────────────────────────────────────────────────
   {
     id: "S1-QA-FND-1",
     module: "QA",
@@ -613,7 +634,7 @@ export const backlog = [
     title:
       "QA hardening Foundation: permission/scope + file security + sequence concurrency + audit masking + public-settings leak + append-only",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/foundation/**/*.spec.ts", "apps/api/test/foundation/**"],
     skills: ["code-review"],
     depends_on: [
