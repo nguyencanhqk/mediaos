@@ -485,8 +485,15 @@ export const backlog = [
     //     company→system→default (default=true) ⇒ THÊM depends_on S1-FND-SETTING-1 (phụ thuộc ẩn của plan_block).
     //   • deny-path RED viết-TRƯỚC = điều kiện DoD (#6) + micro-plan docs/plans/S1-FND-MODULE-1.md.
     //   zone yellow→red: ghi audit CONFIG_UPDATE + lọc permission ⇒ crown/FULL gate (CLAUDE.md §6).
+    // BUILD 2026-06-24 — implemented + FULL gate PASS (chưa commit; red-zone chờ người chốt + nhánh feature).
+    //   company/** (status-gate·dto allow-list·repo·service audit-in-tx·controller view/update:foundation-company)
+    //   + module-catalog/** (MODULE_APP_METADATA engine-pairs·repo no-RLS·service getMyApps·controller Authenticated).
+    //   ⚠ plan-reviewer bắt drift: cặp ĐÚNG = view/update:foundation-company (seed 0435), KHÔNG read/update:company (0005).
+    //   23/23 unit spec colocated XANH (deny-path: suspended→403/0-audit · not-found→4xx/0-audit · empty→no-op/0-audit
+    //   · 2-tenant · permission-deny→403 · my-apps filter/wildcard/disabled/missing-metadata). typecheck+lint XANH.
+    //   security-reviewer PASS + rls-tenant-isolation-tester PASS (RLS int-suite 351+3+19 XANH trên DB cô lập).
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/foundation/company/**", "apps/api/src/foundation/module-catalog/**"],
     skills: ["code-review"],
     depends_on: ["S0-FND-SEED-1", "S1-FND-AUDIT-1", "S1-FND-SETTING-1"],
