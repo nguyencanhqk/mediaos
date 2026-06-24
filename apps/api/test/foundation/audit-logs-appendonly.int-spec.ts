@@ -14,7 +14,13 @@ import { cleanupTenants, seedCompany, type SeededTenant } from "../helpers/seed"
  * object_type 'company' nằm trong CHECK object_type (union 0011…0437) — không vỡ CHECK.
  */
 
-describe.skipIf(!hasDb)("S0-FND-DB-1 audit_logs append-only (mediaos_app)", () => {
+// [S1-QA-FND-1-FIX-A] Gate: hasDb (DATABASE_DIRECT_URL+URL) + LANE_DB (DB cô lập theo lane). Thiếu
+// LANE_DB → SKIP để KHÔNG chạm DB dev chung 'mediaos' (.env làm hasDb=true → đỏ-giả/xanh-giả; memory:
+// integration-test-lane-db-gate, CLAUDE.md §9.5). KHỚP canonical: file-access-logs-appendonly.int-spec.ts:19
+// / file-security.int-spec.ts:52 / migration-smoke.int-spec.ts:106. Append-only = BẤT BIẾN #2.
+const hasLaneDb = hasDb && !!process.env.LANE_DB;
+
+describe.skipIf(!hasLaneDb)("S0-FND-DB-1 audit_logs append-only (mediaos_app)", () => {
   const direct = directPool();
   const app = appPool();
 
@@ -41,10 +47,7 @@ describe.skipIf(!hasDb)("S0-FND-DB-1 audit_logs append-only (mediaos_app)", () =
   });
 
   /** Run fn inside a transaction as app role with tenant context set. */
-  async function asTenant<T>(
-    companyId: string,
-    fn: (c: PoolClient) => Promise<T>,
-  ): Promise<T> {
+  async function asTenant<T>(companyId: string, fn: (c: PoolClient) => Promise<T>): Promise<T> {
     const c = await app.connect();
     try {
       await c.query("BEGIN");
