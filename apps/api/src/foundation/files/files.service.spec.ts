@@ -19,6 +19,7 @@ import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
   ForbiddenException,
+  NotFoundException,
   PayloadTooLargeException,
   UnsupportedMediaTypeException,
 } from "@nestjs/common";
@@ -243,6 +244,33 @@ describe("FileService (deny-path / validation RED)", () => {
 
       await expect(h.service.deleteFile(user, FILE)).rejects.toBeInstanceOf(ForbiddenException);
       expect(h.fileRepo.softDeleteTx).not.toHaveBeenCalled();
+    });
+  });
+
+  // 1b. Missing / soft-deleted row (findByIdTx → undefined) → 404 BEFORE policy / storage ──────
+  // S1-QA-FND-1 (QA05-SYS-006 / QA06-FILE-002): a soft-deleted file (repo filters deleted_at) — or a
+  // cross-tenant one (RLS 0 row) — resolves to undefined ⇒ download/metadata/delete must 404 WITHOUT
+  // consulting FilePolicy and WITHOUT generating a signed-url. (Integration F3 covers the real DB path;
+  // this is the fast colocated unit gate for "soft-deleted is not downloadable".)
+  describe("missing / soft-deleted row → 404 (no policy, no signed-url)", () => {
+    it("download: row undefined (soft-deleted/cross-tenant) → NotFound, storage.get NOT called, policy NOT consulted", async () => {
+      h.fileRepo.findByIdTx.mockResolvedValue(undefined);
+      await expect(h.service.getDownloadUrl(user, FILE)).rejects.toBeInstanceOf(NotFoundException);
+      expect(h.storage.get).not.toHaveBeenCalled();
+      expect(h.policy.canDownload).not.toHaveBeenCalled();
+    });
+
+    it("getMetadata: row undefined → NotFound, policy NOT consulted", async () => {
+      h.fileRepo.findByIdTx.mockResolvedValue(undefined);
+      await expect(h.service.getMetadata(user, FILE)).rejects.toBeInstanceOf(NotFoundException);
+      expect(h.policy.canView).not.toHaveBeenCalled();
+    });
+
+    it("delete: row undefined → NotFound, softDelete NOT called, policy NOT consulted", async () => {
+      h.fileRepo.findByIdTx.mockResolvedValue(undefined);
+      await expect(h.service.deleteFile(user, FILE)).rejects.toBeInstanceOf(NotFoundException);
+      expect(h.fileRepo.softDeleteTx).not.toHaveBeenCalled();
+      expect(h.policy.canDelete).not.toHaveBeenCalled();
     });
   });
 
