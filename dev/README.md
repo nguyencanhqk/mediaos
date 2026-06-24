@@ -56,6 +56,24 @@ Infra docker: postgres :5432 · pgbouncer :6432 · valkey :6379 · minio :9000/9
 - Domain mặc định `funtimemediacorp.com`. FE map: `app`→apex · `auth`→auth. · `console`→console.
 - Vẫn còn bước làm tay 1 lần (DNS · TLS wildcard · gắn custom domain mỗi Pages project) — xem `scripts/windows/` + runbook trong `docs/ops/`.
 
+## Dev-online — xem DEV trên domain thật, song song prod
+
+Lộ dev stack local ra internet qua cloudflared dưới `cian-dev.*`, chạy đồng thời với prod.
+
+| Việc | Lệnh |
+|------|------|
+| Tạo DB cô lập `mediaos_dev` (1 lần) | `m dev-online-db` |
+| Tạo ingress cloudflared + DNS (1 lần, **Administrator**) | `m dev-online-tunnel` |
+| Chạy dev stack lộ online | `m dev-online` |
+
+URL (sau 3 bước trên): app `https://cian-dev.funtimemediacorp.com` · auth `https://cian-dev-auth…` · console `https://cian-dev-console…` · api `https://cian-dev-api…/api/v1/health`.
+
+- **Tách khỏi prod:** dev-online dùng API **:3200** + DB **`mediaos_dev`** (prod giữ :3100 + DB `mediaos`). Config ở `.env.dev-online` (đè lên `.env.dev`; `m dev-online` tự tạo từ `.env.dev-online.example`).
+- **Host 1 cấp** (`cian-dev`, `cian-dev-api`, …) → Universal SSL `*.funtimemediacorp.com` phủ TLS miễn phí.
+- **Role Postgres cluster-global:** chạy song song prod-API thì sửa 3 mật khẩu DB trong `.env.dev-online` cho KHỚP role prod (xem `.env.prod`), vì 1 role chỉ 1 mật khẩu cho mọi DB.
+- ⚠️ **Cookie domain trùng prod** (`.funtimemediacorp.com`) → 1 trình duyệt không đăng nhập đồng thời prod + dev. Test dev bằng **trình duyệt/profile khác**. (Muốn cô lập cookie hẳn: cần host 2 cấp `*.cian-dev.…` + Cloudflare Advanced Certificate trả phí.)
+- Đổi tên `cian-dev`: sửa `$DevPrefix` trong `scripts/windows/07-tunnel-dev.ps1` + hostname trong `.env.dev-online` + `VITE_TUNNEL_HOST` trong `mediaos.ps1`.
+
 ## Lưu ý
 
 - Test chạy `vitest` **trực tiếp** trong thư mục app (turbo nuốt env → fail giả).

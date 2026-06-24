@@ -287,6 +287,64 @@ function Invoke-DeploySeed {
   if ($LASTEXITCODE -ne 0) { throw "seed-admin thất bại — kiểm tra ADMIN_* trong .env." }
 }
 
+# ── DEV-ONLINE (lộ dev stack ra cian-dev.* qua cloudflared, song song prod) ──────────────
+# Nạp .env.dev (base) rồi .env.dev-online (override) vào session → cửa sổ con kế thừa.
+function Import-DevOnlineEnv {
+  $onlineEnv = Join-Path $Root ".env.dev-online"
+  if (-not (Test-Path $onlineEnv)) {
+    Copy-Item (Join-Path $Root ".env.dev-online.example") $onlineEnv
+    Write-Ok "tạo .env.dev-online từ .example (sửa nếu cần)"
+  }
+  Import-DotEnv (Join-Path $Root ".env.dev")
+  Import-DotEnv $onlineEnv
+}
+
+function Invoke-DevOnlineDb {
+  Write-Step "DEV-ONLINE DB — tạo + migrate + seed mediaos_dev (cô lập khỏi prod)"
+  Import-DevOnlineEnv
+  Exec { docker compose up -d } "docker compose up"
+  if (-not (Wait-Postgres)) { return }
+  Write-Host "  CREATE DATABASE mediaos_dev (bỏ qua nếu đã có) ..." -ForegroundColor DarkGray
+  docker exec mediaos-postgres psql -U mediaos -d postgres -c "CREATE DATABASE mediaos_dev" 2>&1 | Out-Null
+  Write-Host "  migrate mediaos_dev (DATABASE_DIRECT_URL từ .env.dev-online) ..." -ForegroundColor DarkGray
+  Exec { pnpm db:migrate } "pnpm db:migrate (mediaos_dev)"
+  Push-Location (Join-Path $Root "apps\api")
+  try {
+    $env:SEED_DIRECT_URL = $env:DATABASE_DIRECT_URL
+    Exec { node demo-seed-base.mjs } "demo-seed-base"
+    Exec { node demo-seed-full.mjs } "demo-seed-full"
+  } finally { Pop-Location; Remove-Item Env:SEED_DIRECT_URL -ErrorAction SilentlyContinue }
+  Write-Ok "mediaos_dev sẵn sàng (login: demo / admin@demo.local / Admin@12345)"
+}
+
+function Invoke-DevOnline {
+  Write-Step "DEV-ONLINE — chạy dev stack (API :3200 + 3 SPA) cho cian-dev.*"
+  Import-DevOnlineEnv
+  Exec { docker compose up -d } "docker compose up"
+  if (-not (Wait-Postgres)) { return }
+  Start-DevWindow "api-online" "apps\api"
+  # mỗi Vite cần VITE_TUNNEL_HOST riêng (Start-Process chụp env lúc spawn) → set tuần tự.
+  $env:VITE_TUNNEL_HOST = "cian-dev";         Start-DevWindow "app-online" "apps\app"
+  $env:VITE_TUNNEL_HOST = "cian-dev-auth";    Start-DevWindow "auth-online" "apps\auth"
+  $env:VITE_TUNNEL_HOST = "cian-dev-console"; Start-DevWindow "console-online" "apps\console"
+  Remove-Item Env:VITE_TUNNEL_HOST -ErrorAction SilentlyContinue
+  Write-Host ""
+  Write-Ok "Dev-online local đang chạy (API :3200). Online qua cloudflared:"
+  Write-Host "    app     https://cian-dev.funtimemediacorp.com"
+  Write-Host "    auth    https://cian-dev-auth.funtimemediacorp.com"
+  Write-Host "    console https://cian-dev-console.funtimemediacorp.com"
+  Write-Host "    api     https://cian-dev-api.funtimemediacorp.com/api/v1/health"
+  Write-Host ""
+  Write-Host "  Login: demo / admin@demo.local / Admin@12345" -ForegroundColor Magenta
+  Write-Warn "Lần đầu: 'm dev-online-db' (tạo mediaos_dev) + 'm dev-online-tunnel' (admin, tạo ingress+DNS)."
+  Write-Warn "Cookie domain trùng prod → test bằng trình duyệt/profile KHÁC với prod."
+}
+
+function Invoke-DevOnlineTunnel {
+  Write-Step "DEV-ONLINE TUNNEL — ingress cian-dev.* (cần Administrator)"
+  & (Join-Path $Root "scripts\windows\07-tunnel-dev.ps1")
+}
+
 # ── Help ────────────────────────────────────────────────────────────────────
 function Show-Help {
   Write-Host ""
@@ -321,6 +379,11 @@ function Show-Help {
   Write-Host "    deploy-env [domain] sinh .env PROD (secrets ngẫu nhiên)"
   Write-Host "    deploy-seed         seed admin/công ty cho prod (đọc ADMIN_* từ .env)"
   Write-Host "    prod-env            khôi phục .env.prod -> .env (KHÔNG chạy browser local)"
+  Write-Host ""
+  Write-Host "  DEV-ONLINE (lộ dev ra cian-dev.*.funtimemediacorp.com, song song prod)" -ForegroundColor Yellow
+  Write-Host "    dev-online-db       tạo + migrate + seed DB cô lập mediaos_dev (1 lần)"
+  Write-Host "    dev-online-tunnel   tạo ingress cloudflared + DNS cho cian-dev.* (1 lần, Administrator)"
+  Write-Host "    dev-online          chạy dev stack (API :3200 + 3 SPA) lộ ra cian-dev.*"
   Write-Host ""
   Write-Host "  menu              menu tương tác (dev/dev.bat gọi cái này)"
   Write-Host ""
@@ -397,5 +460,8 @@ switch ($Command.ToLower()) {
   "deploy-api" { Invoke-DeployApi }
   "deploy-env" { Invoke-DeployEnv $Rest }
   "deploy-seed" { Invoke-DeploySeed }
+  "dev-online"        { Invoke-DevOnline }
+  "dev-online-db"     { Invoke-DevOnlineDb }
+  "dev-online-tunnel" { Invoke-DevOnlineTunnel }
   default      { Write-Err "Lệnh không hợp lệ: $Command"; Show-Help; exit 1 }
 }
