@@ -478,6 +478,60 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
 
+  // ── S2-HR-DB-1 (mig 0442) HR-Core master/lifecycle ──────────────────────────
+  // company_id NOT NULL + RLS+FORCE → PHẢI ở harness. KHÔNG skipNoContext (mọi hàng tenant-scoped).
+  {
+    name: "job_levels",
+    table: "job_levels",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO job_levels (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-jl-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "contract_types",
+    table: "contract_types",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO contract_types (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-ct-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "employee_code_configs",
+    table: "employee_code_configs",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO employee_code_configs (company_id, prefix) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `JL${randomUUID().slice(0, 4)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "employee_status_histories",
+    table: "employee_status_histories",
+    // Append-only (app role chỉ SELECT,INSERT) — harness mutate-deny dùng direct (superuser) để seed; OK.
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `esh-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO employee_status_histories (company_id, employee_id, new_status)
+         VALUES ($1, $2, 'active') RETURNING id`,
+        [t.companyId, emp.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
   // ── G4-2 Media ──────────────────────────────────────────────────────────────
   {
     name: "channels",
@@ -1947,11 +2001,7 @@ export const RLS_TABLES: RlsTableCase[] = [
     name: "file_links",
     table: "file_links",
     seedRow: async (direct, t) => {
-      const u = await seedUser(
-        direct,
-        t.companyId,
-        `rls-fl-${randomUUID().slice(0, 8)}@x.test`,
-      );
+      const u = await seedUser(direct, t.companyId, `rls-fl-${randomUUID().slice(0, 8)}@x.test`);
       // Seed a files row first (FK file_id NOT NULL → files)
       const fileRes = await direct.query(
         `INSERT INTO files
@@ -1988,11 +2038,7 @@ export const RLS_TABLES: RlsTableCase[] = [
     name: "file_access_logs",
     table: "file_access_logs",
     seedRow: async (direct, t) => {
-      const u = await seedUser(
-        direct,
-        t.companyId,
-        `rls-fal-${randomUUID().slice(0, 8)}@x.test`,
-      );
+      const u = await seedUser(direct, t.companyId, `rls-fal-${randomUUID().slice(0, 8)}@x.test`);
       // Seed a files row first (FK file_id NOT NULL → files)
       const fileRes = await direct.query(
         `INSERT INTO files

@@ -15,6 +15,7 @@ export * from "./auth";
 export * from "./permissions";
 export * from "./org";
 export * from "./positions";
+export * from "./hr-master";
 export * from "./employees";
 export * from "./media";
 export * from "./workflow";
