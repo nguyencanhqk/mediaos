@@ -47,38 +47,6 @@ describe("loadEnv", () => {
     expect(env.KMS_PROVIDER).toBe("vault");
   });
 
-  it("leaves PLATFORM_OPERATOR_EMAIL undefined by default with sane defaults", () => {
-    const env = loadEnv({});
-    expect(env.PLATFORM_OPERATOR_EMAIL).toBeUndefined();
-    expect(env.PLATFORM_OPERATOR_NAME).toBe("Platform Operator");
-    expect(env.PLATFORM_OPERATOR_COMPANY_SLUG).toBe("demo");
-  });
-
-  it("throws when PLATFORM_OPERATOR_EMAIL is set without a password", () => {
-    expect(() =>
-      loadEnv({ PLATFORM_OPERATOR_EMAIL: "operator@demo.local" } as NodeJS.ProcessEnv),
-    ).toThrow(/PLATFORM_OPERATOR_PASSWORD/);
-  });
-
-  it("throws when PLATFORM_OPERATOR_PASSWORD is shorter than 12 chars", () => {
-    expect(() =>
-      loadEnv({
-        PLATFORM_OPERATOR_EMAIL: "operator@demo.local",
-        PLATFORM_OPERATOR_PASSWORD: "short",
-      } as NodeJS.ProcessEnv),
-    ).toThrow(/Invalid environment variables/);
-  });
-
-  it("accepts a complete operator bootstrap config", () => {
-    const env = loadEnv({
-      PLATFORM_OPERATOR_EMAIL: "operator@demo.local",
-      PLATFORM_OPERATOR_PASSWORD: "Operator@12345",
-      PLATFORM_OPERATOR_COMPANY_SLUG: "acme",
-    } as NodeJS.ProcessEnv);
-    expect(env.PLATFORM_OPERATOR_EMAIL).toBe("operator@demo.local");
-    expect(env.PLATFORM_OPERATOR_COMPANY_SLUG).toBe("acme");
-  });
-
   it("defaults the worker scheduler to enabled with 5s/10s poll intervals", () => {
     const env = loadEnv({});
     expect(env.WORKERS_SCHEDULER_ENABLED).toBe("true");

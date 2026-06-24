@@ -1,8 +1,9 @@
-﻿# 06-deploy-pages.ps1 — build + deploy 5 SPA lên Cloudflare Pages (web/auth/studio/people/console).
+﻿# 06-deploy-pages.ps1 — build + deploy 3 SPA lên Cloudflare Pages (app/auth/console).
+#   app phục vụ ở APEX ($Domain) · auth.$Domain · console.$Domain. (de-media-fy: bỏ web/studio/people cũ.)
 #   Non-interactive: đặt $env:CLOUDFLARE_API_TOKEN (Pages:Edit) + $env:CLOUDFLARE_ACCOUNT_ID. Nếu thiếu → wrangler login.
 param(
   [string]$Domain = "funtimemediacorp.com",
-  [string[]]$Apps = @("web", "auth", "studio", "people", "console")
+  [string[]]$Apps = @("app", "auth", "console")
 )
 . "$PSScriptRoot\_lib.ps1"
 
@@ -36,15 +37,11 @@ try {
 
     $env:VITE_API_URL = $api
     switch ($app) {
-      "web" {
-        $env:VITE_AUTH_APP_URL = $auth
-        $env:VITE_STUDIO_URL = "https://studio.$Domain"
-        $env:VITE_PEOPLE_URL = "https://people.$Domain"
-        $env:VITE_CONSOLE_URL = "https://console.$Domain"
-      }
+      # app = vỏ nghiệp vụ ở apex; cần biết auth app để bounce khi mất phiên (main.tsx đọc VITE_AUTH_APP_URL).
+      "app"     { $env:VITE_AUTH_APP_URL = $auth }
+      # auth = login; sau đăng nhập bounce về app shell ở apex khi `?redirect` vắng (config.ts đọc VITE_DEFAULT_APP_URL).
       "auth"    { $env:VITE_DEFAULT_APP_URL = "https://$Domain" }
-      "studio"  { $env:VITE_AUTH_APP_URL = $auth; $env:VITE_WORKFLOW_MOCK = "false" }
-      "people"  { $env:VITE_AUTH_APP_URL = $auth }
+      # console = quản trị; mất phiên thì về auth (main.tsx đọc VITE_AUTH_APP_URL).
       "console" { $env:VITE_AUTH_APP_URL = $auth }
     }
 
@@ -64,4 +61,4 @@ finally { Pop-Location }
 
 Write-Ok "06 xong."
 Write-Warn "Gắn custom domain mỗi project (1 lần) trên dashboard Pages → Custom domains:"
-Write-Host  "  web-mediaos → $Domain (apex) · auth-mediaos → auth.$Domain · studio./people./console.$Domain"
+Write-Host  "  app-mediaos → $Domain (apex) · auth-mediaos → auth.$Domain · console-mediaos → console.$Domain"
