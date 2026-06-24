@@ -666,4 +666,497 @@ export const backlog = [
       "webhooks-deny + ui-config-deny KHÔNG còn 404-masked: pass (nếu mount) hoặc excluded có lý do phase",
     ],
   },
+
+  // ════════════════════ SPRINT 2 — AUTH Core + HR Core ════════════════════
+  // IMPLEMENTATION-05 · EPIC-02 AUTH (87pt) + EPIC-03 HR (100pt) + EPIC-10 integration (13pt) = 200pt.
+  // PULL 2026-06-24: S0–S1 (Foundation) đã hội tụ (PR #14/#15/#16 merged master) → kéo sprint kế theo
+  //   quy ước "chỉ giữ sprint hành" (dòng 17-19). Nguồn phân rã = IMPLEMENTATION-05 §9 (epic→story) + §11
+  //   (API) + §12 (DB checklist) + §13 (permission matrix) + ISSUE-BOARD-01 §18.3 (AUTH) / §18.5 (HR).
+  //   Reconcile-first: code cũ đã có apps/api/src/{auth,permission,users,employees,org,positions} (media-era)
+  //   → đối chiếu spec mới, giữ phần khớp, build/sửa phần lệch. SPEC thắng khi mâu thuẫn (DB-02/03·API-02/03·SPEC-02/03).
+  //   Thứ tự dependency (IMPLEMENTATION-01 §4): AUTH-DB → AUTH-SEED → AUTH-BE(login/guard) → HR-DB → HR-BE → FE → INT → QA.
+  //   Crown/FULL gate cho mọi WO chạm auth·token·permission·data_scope·audit·migration (CLAUDE.md §6) → người chốt.
+
+  {
+    id: "S2-AUTH-DB-1",
+    module: "AUTH",
+    layer: "DB",
+    title:
+      "RBAC engine: thêm cột role_permissions.data_scope (Own/Team/Department/Company/System) per grant — gỡ nợ DEFERRED của S0-AUTH-DB-1",
+    zone: "red",
+    // CLOSE 2026-06-24 (a1bee66, nhánh feat/s2-auth-db-1): mig 0441 (idx 124) ALTER role_permissions ADD
+    //   data_scope text NOT NULL DEFAULT 'Company' + CHECK 5 giá trị — thuần additive (HOT-FILE §9.3), KHÔNG
+    //   đụng RLS/FORCE/policy/grant (mig 0005) → BẤT BIẾN #1 giữ. drizzle permissions.ts: dataScope + ROLE_DATA_SCOPES.
+    //   RED→GREEN int (gate hasDb && LANE_DB) 6/6 trên mediaos_verifyss1 (chain 0000→0441 sạch). Seed scope từng
+    //   role = S2-AUTH-SEED-1; resolver tiêu thụ scope = S2-AUTH-BE-2.
+    status: "done",
+    paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/test/integration/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: ["IMPLEMENTATION-05 §12.1/§13", "ISSUE-BOARD-01 §18.3", "DB-02", "BACKEND-03"],
+    plan: "docs/plans/S2-AUTH-DB-1.md",
+    done_when: [
+      "cột data_scope NOT NULL DEFAULT 'Company' + CHECK IN (Own/Team/Department/Company/System); giữ effect (additive)",
+      "schema drizzle đồng bộ; RLS+FORCE role_permissions GIỮ NGUYÊN; backfill 'Company' KHÔNG nới system-role",
+      "migrate 0000→head sạch (1 lane db-migration); cross-tenant deny còn xanh; rls-tenant-isolation-tester PASS",
+    ],
+  },
+  {
+    id: "S2-AUTH-DB-2",
+    module: "AUTH",
+    layer: "DB",
+    title:
+      "Đối chiếu AUTH/RBAC tables vs DB-02 §12.1 (users·user_sessions·password_reset_tokens·login_logs) + user_security_events (nên có) + required indexes",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/test/integration/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-AUTH-DB-1"],
+    src: [
+      "IMPLEMENTATION-05 §12.1/§12.4",
+      "ISSUE-BOARD-01 §18.3 (AUTH-DB-001/002)",
+      "DB-02",
+      "SPEC-02",
+    ],
+    done_when: [
+      "shape users/user_sessions/password_reset_tokens/login_logs khớp DB-02 §12.1 (failed_login_count/locked_at, token hash, expired_at/used_at, ip/user_agent/reason); migration nối tiếp head cho phần lệch — KHÔNG db:generate drop",
+      "user_security_events (event_type/severity/payload) thêm nếu thiếu; company_id NOT NULL + RLS ENABLE+FORCE + policy; rls-registry đăng ký đủ",
+      "login_logs/user_security_events append-only (app role REVOKE UPDATE/DELETE) — RED test ghi-rồi-update FAIL (BẤT BIẾN #2); index company/status/email/joined theo §12.4",
+    ],
+  },
+  {
+    id: "S2-AUTH-SEED-1",
+    module: "AUTH",
+    layer: "DB",
+    title:
+      "Seed permission/role/role_permission VỚI data_scope đúng từng role + bootstrap admin (idempotent ON CONFLICT) theo permission matrix §13 / API-10",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/src/permission/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-AUTH-DB-1", "S2-AUTH-DB-2"],
+    src: [
+      "IMPLEMENTATION-05 §13 (permission matrix)",
+      "ISSUE-BOARD-01 §18.3 (AUTH-DB-003)",
+      "API-10 PERMISSION MATRIX",
+      "SPEC-02",
+    ],
+    done_when: [
+      "seed role_permissions.data_scope đúng từng role theo matrix §13 (employee=Own · manager=Team/Department · hr/admin=Company · system=System); ON CONFLICT DO NOTHING idempotent",
+      "permission sensitive MỚI KHÔNG auto-grant system role qua wildcard; bootstrap admin đăng nhập được từ DB trống",
+      "đổi scope = delete+insert (app role KHÔNG UPDATE role_permissions); verify đếm đúng số cặp + scope đã seed; chạy lại KHÔNG nhân đôi",
+    ],
+  },
+  {
+    id: "S2-AUTH-BE-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "Login/logout/me: password verify + session issue/revoke + login_log + GET /auth/me (user·company·roles·permissions·scopes·employee·modules)",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/auth/**", "packages/contracts/src/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-AUTH-DB-2"],
+    src: [
+      "IMPLEMENTATION-05 §9.1 (AUTH-S2-001/002/003) §11.1 §15.1",
+      "ISSUE-BOARD-01 §18.3 (AUTH-BE-001/002/003)",
+      "API-02",
+      "SPEC-02",
+    ],
+    done_when: [
+      "POST /auth/login: verify password hash (KHÔNG plaintext — BẤT BIẾN #3); Active đăng nhập OK, Locked/Inactive → 403; sai mật khẩu ghi login_log + tăng failed_login_count, KHÔNG lộ user tồn tại",
+      "POST /auth/logout revoke session/refresh; GET /auth/me trả context bootstrap (roles/permissions/scopes/employee mapping) — mask field thiếu quyền",
+      "session/token strategy theo S2-OQ-001 (HttpOnly cookie); token KHÔNG vào log/DTO role không quyền; deny-path RED: no-token → 401, locked → 403, no-secret-log",
+    ],
+  },
+  {
+    id: "S2-AUTH-BE-2",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "Permission + data-scope resolver guard dùng chung (decorator/middleware): Own/Team/Department/Company/System — lớp kiểm soát quyền cuối cho mọi module",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/permission/**", "apps/api/src/auth/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-AUTH-DB-1", "S2-AUTH-SEED-1"],
+    src: [
+      "IMPLEMENTATION-05 §9.1 (AUTH-S2-004) §13 §15.1",
+      "ISSUE-BOARD-01 §18.3 (AUTH-BE-004)",
+      "BACKEND-03",
+      "API-10",
+    ],
+    done_when: [
+      "PermissionService.can(action,resource) + scope resolver dịch data_scope→điều kiện query (Own=self · Team/Department=cây quản lý · Company=tenant · System=toàn hệ thống); deny-overrides giữ",
+      "guard decorator/middleware tái dùng được cho HR API (S2-HR-BE-*) — KHÔNG hard-code role; thiếu quyền → 403 TRƯỚC khi chạm dữ liệu",
+      "deny-path RED viết-TRƯỚC: employee chỉ thấy scope Own; cross-tenant deny (RLS+resolver); scope rộng hơn grant → 403; coverage vùng nhạy cảm ≥80%",
+    ],
+  },
+  {
+    id: "S2-AUTH-BE-3",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "User admin API (P1): list/detail/create/update + lock/unlock + roles/permissions list (search/filter/paginate)",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/users/**", "apps/api/src/permission/**", "packages/contracts/src/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-AUTH-BE-2"],
+    src: [
+      "IMPLEMENTATION-05 §9.1 (AUTH-S2-006) §11.2",
+      "ISSUE-BOARD-01 §18.3 (AUTH-BE-005..)",
+      "API-02",
+      "IMP02-STORY-018/019/020/021",
+    ],
+    done_when: [
+      "GET/POST/PATCH /auth/users + lock/unlock có permission guard (AUTH.USER.*); list pagination/search/filter; mật khẩu hash khi tạo",
+      "POST /auth/users/{id}/lock|unlock ghi audit + login bị chặn khi locked; GET /auth/roles + /auth/permissions cho UI gán quyền",
+      "deny-path RED: thiếu quyền → 403 + 0 audit; 2-tenant không thấy user công ty khác; thao tác quan trọng có audit log",
+    ],
+  },
+  {
+    id: "S2-AUTH-BE-4",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "Change-password + forgot/reset-password (P1): token hash + expiry/used_at + email mock; đổi mật khẩu khi đã đăng nhập",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/auth/**", "apps/api/migrations/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-AUTH-DB-2", "S2-AUTH-BE-1"],
+    src: [
+      "IMPLEMENTATION-05 §9.1 (AUTH-S2-007) §11.1 (006/007/008)",
+      "API-02",
+      "SPEC-02",
+      "IMP02-STORY-015/016",
+    ],
+    done_when: [
+      "POST /auth/change-password yêu cầu mật khẩu cũ + verify; POST /auth/forgot-password sinh token HASH (KHÔNG lưu plaintext) + expiry; reset-password validate token chưa dùng/chưa hết hạn → set used_at",
+      "email gửi token = mock/log-an-toàn (KHÔNG log token); rate-limit forgot; revoke session sau đổi mật khẩu",
+      "deny-path RED: token sai/hết hạn/đã dùng → lỗi chuẩn KHÔNG lộ user tồn tại; no-secret-log",
+    ],
+  },
+  {
+    id: "S2-HR-DB-1",
+    module: "HR",
+    layer: "DB",
+    title:
+      "Migration HR Core: departments·positions·job_levels·contract_types·employees·employee_status_histories·employee_code_configs + RLS+FORCE + indexes",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/test/integration/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "IMPLEMENTATION-05 §9.2 (HR-S2-001/002/003/005) §12.2/§12.4",
+      "ISSUE-BOARD-01 §18.5 (HR-DB-001/002/003)",
+      "DB-03",
+      "SPEC-03",
+    ],
+    done_when: [
+      "tạo bảng HR Core (company_id NOT NULL, UUID PK, soft delete, audit columns) khớp DB-03 §12.2; RLS ENABLE+FORCE + policy company_id TRƯỚC backfill; rls-registry đăng ký đủ (BẤT BIẾN #1)",
+      "employee_status_histories (đổi status → history) + employee_code_configs (dùng sequence_counters, KHÔNG MAX+1); migration nối tiếp head 0441 — KHÔNG db:generate drop",
+      "index company/status/department/full_name/code/joined_date (§12.4); migrate 0000→head sạch lane DB; cross-tenant deny xanh (rls-tenant-isolation-tester)",
+    ],
+  },
+  {
+    id: "S2-HR-SEED-1",
+    module: "HR",
+    layer: "DB",
+    title:
+      "Seed HR master data (job_levels·contract_types·employee_code_config + demo department/position) idempotent + seed HR permissions",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/src/permission/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-HR-DB-1", "S2-AUTH-SEED-1"],
+    src: ["IMPLEMENTATION-05 §9.2 (HR-S2-004) §12", "ISSUE-BOARD-01 §18.5", "DB-03", "API-10"],
+    done_when: [
+      "seed job_levels/contract_types/employee_code_config ON CONFLICT DO NOTHING; chạy lại KHÔNG nhân đôi (idempotent từ DB trống + DB hiện có)",
+      "seed HR permissions (HR.EMPLOYEE.VIEW/CREATE/UPDATE/CHANGE_STATUS · HR.DEPARTMENT.* · HR.POSITION.* · HR.MASTER_DATA.MANAGE · HR.EMPLOYEE_CODE.PREVIEW) + data_scope theo matrix §13",
+      "permission sensitive (salary/contract) KHÔNG auto-grant qua wildcard; verify đếm đúng",
+    ],
+  },
+  {
+    id: "S2-HR-BE-1",
+    module: "HR",
+    layer: "BE",
+    title:
+      "HR read core: GET /hr/employees (list/pagination/search/filter/sort/data-scope) + GET /{id} (sensitive masking) + GET /hr/me/profile + lookups",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/employees/**",
+      "apps/api/src/org/**",
+      "apps/api/src/positions/**",
+      "packages/contracts/src/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S2-HR-DB-1", "S2-AUTH-BE-2"],
+    src: [
+      "IMPLEMENTATION-05 §9.3 (HR-S2-101/102/103/108) §11.3 §15.2",
+      "ISSUE-BOARD-01 §18.5 (HR-BE-001/002)",
+      "API-03",
+      "SPEC-03",
+    ],
+    done_when: [
+      "GET /hr/employees qua guard data-scope (Own/Team/Department/Company/System) — list chỉ trả phạm vi đúng, pagination/search/filter/sort; KHÔNG lộ sensitive field nếu thiếu quyền (masking SERVER)",
+      "GET /hr/employees/{id} field-level masking; GET /hr/me/profile chỉ hồ sơ liên kết user; lookups department/position/job-level/contract-type/employee-code preview",
+      "deny-path RED viết-TRƯỚC: employee scope Own không thấy người khác; thiếu HR.EMPLOYEE.VIEW → 403; 2-tenant deny; response không chứa salary/bank khi thiếu quyền",
+    ],
+  },
+  {
+    id: "S2-HR-BE-2",
+    module: "HR",
+    layer: "BE",
+    title:
+      "HR write core: POST/PATCH /hr/employees + auto employee-code (tx + SequenceService) + change-status (history) + link/unlink user (unique active) + audit",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/employees/**", "packages/contracts/src/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-HR-BE-1", "S2-HR-SEED-1"],
+    src: [
+      "IMPLEMENTATION-05 §9.3 (HR-S2-104/105/106/107) §11.3 §15.2 §16.2",
+      "ISSUE-BOARD-01 §18.5 (HR-BE-003/004)",
+      "API-03",
+      "DB-03",
+    ],
+    done_when: [
+      "POST /hr/employees sinh mã qua SequenceService trong tx (0-dup); validate duplicate email/code; ghi audit Created trong tx withTenant",
+      "PATCH /hr/employees/{id} validate + audit old/new/changed_fields; change-status tạo employee_status_histories + optional lock user; link/unlink user enforce 1 user ↔ ≤1 employee active",
+      "deny-path RED: thiếu quyền → 403 + 0 audit; soft-delete KHÔNG hard-delete (BẤT BIẾN #2); 2-tenant không ghi chéo; thao tác quan trọng có audit",
+    ],
+  },
+  {
+    id: "S2-HR-BE-3",
+    module: "HR",
+    layer: "BE",
+    title:
+      "Department/position CRUD (P1): create/update/soft-delete + master data manage (job-level/contract-type)",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/api/src/org/**", "apps/api/src/positions/**", "packages/contracts/src/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-HR-DB-1", "S2-AUTH-BE-2"],
+    src: [
+      "IMPLEMENTATION-05 §9.3 (HR-S2-109) §11.4",
+      "ISSUE-BOARD-01 §18.5 (HR-BE-005)",
+      "API-03",
+      "IMP02-STORY-029/030",
+    ],
+    done_when: [
+      "CRUD department (cây parent_id) + position có permission guard (HR.DEPARTMENT.*/HR.POSITION.*); soft-delete KHÔNG hard-delete",
+      "validate cycle parent department + cùng company; audit thao tác create/update/delete",
+      "deny-path: thiếu quyền → 403; 2-tenant deny; FE lookup load được dropdown",
+    ],
+  },
+  {
+    id: "S2-HR-BE-4",
+    module: "HR",
+    layer: "BE",
+    title:
+      "Profile change request skeleton (P1/P2): employee gửi yêu cầu sửa hồ sơ + HR duyệt/từ chối (có thể carry-over Sprint 5 nếu quá tải)",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/api/src/employees/**", "packages/contracts/src/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-HR-BE-1"],
+    src: [
+      "IMPLEMENTATION-05 §9.3 (HR-S2-110) §11.4 (107)",
+      "ISSUE-BOARD-01 §18.5",
+      "API-03",
+      "IMP02-STORY-033/034",
+    ],
+    done_when: [
+      "POST profile-change-request (employee, scope Own) + GET list/detail; PATCH approve/reject (HR) ghi audit",
+      "yêu cầu duyệt → áp vào employee có history; field nhạy cảm cần quyền cao hơn",
+      "deny-path: employee chỉ gửi/sửa của mình; thiếu quyền duyệt → 403; carry-over policy ghi rõ nếu defer",
+    ],
+  },
+  {
+    id: "S2-FE-AUTH-1",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      "FE Auth: Login page + auth bootstrap (/auth/me) + ProtectedRoute/PublicRoute/PermissionGate/ForbiddenState + menu/action visibility theo quyền",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/auth/**", "apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S2-AUTH-BE-1", "S2-AUTH-BE-2"],
+    src: [
+      "IMPLEMENTATION-05 §9.4 (FE-S2-001..004) §14.1",
+      "ISSUE-BOARD-01 §18.4",
+      "FRONTEND-03",
+      "FRONTEND-04",
+      "UI-02",
+    ],
+    done_when: [
+      "Login page form validation + call /auth/login, error state rõ; bootstrap session qua /auth/me, refresh giữ session nếu token hợp lệ",
+      "ProtectedRoute/PublicRoute + PermissionGate/useCan (KHÔNG hard-code role); direct URL thiếu quyền → ForbiddenState (403); menu/action visibility theo permission",
+      "token KHÔNG vào localStorage/sessionStorage + KHÔNG console.log (BẤT BIẾN #3 — grep chặn); loading/empty/error/forbidden; web test 3 app xanh",
+    ],
+  },
+  {
+    id: "S2-FE-HR-1",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      "FE HR: EmployeeList (table/filter/search/pagination) + EmployeeDetail (tabs, masked sensitive state) nối API thật",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S2-HR-BE-1", "S2-FE-AUTH-1"],
+    src: [
+      "IMPLEMENTATION-05 §9.4 (FE-S2-005/006) §14.1 §14.3",
+      "ISSUE-BOARD-01 §18.4",
+      "FRONTEND-06",
+      "UI-09",
+    ],
+    done_when: [
+      "EmployeeList table + filter/search/pagination nối GET /hr/employees; loading/empty/error state",
+      "EmployeeDetail tabs/sections hiển thị đúng quyền sensitive (field bị mask/ẩn do server — client không render được gì không nhận)",
+      "web test list + detail xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S2-FE-HR-2",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      "FE HR: EmployeeForm (create/edit) + dropdown lookups + validation + submit mutation + invalidate list/detail",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S2-HR-BE-2", "S2-FE-HR-1"],
+    src: [
+      "IMPLEMENTATION-05 §9.4 (FE-S2-007) §14.3",
+      "ISSUE-BOARD-01 §18.4",
+      "FRONTEND-06",
+      "UI-09",
+    ],
+    done_when: [
+      "EmployeeForm React Hook Form + Zod validation; dropdown lookup department/position/job-level/contract-type",
+      "submit mutation POST/PATCH; thành công → invalidate list/detail (TanStack Query); dirty-form guard",
+      "web test form xanh; error/validation state hiển thị rõ",
+    ],
+  },
+  {
+    id: "S2-FE-HR-3",
+    module: "FRONTEND",
+    layer: "FE",
+    title: "FE: MyProfile (read-only) + user/role read-only placeholder (P1, KHÔNG chặn Sprint 3)",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-HR-BE-1", "S2-FE-AUTH-1"],
+    src: ["IMPLEMENTATION-05 §9.4 (FE-S2-008/009) §14.2", "ISSUE-BOARD-01 §18.4", "FRONTEND-06"],
+    done_when: [
+      "MyProfile read-only nối GET /hr/me/profile — employee chỉ xem hồ sơ của mình",
+      "user/role list placeholder hoặc read-only (không chặn Sprint 3 nếu chưa đủ)",
+      "web test smoke xanh; loading/empty/error",
+    ],
+  },
+  {
+    id: "S2-INT-1",
+    module: "BACKEND",
+    layer: "INT",
+    title:
+      "Tích hợp HR tạo employee ↔ AUTH tạo/link user (giao dịch nhất quán, unique active link, audit cả 2 phía)",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/employees/**", "apps/api/src/auth/**", "apps/api/src/users/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-HR-BE-2", "S2-AUTH-BE-3"],
+    src: [
+      "IMPLEMENTATION-05 §9 (IMP02-STORY-098)",
+      "ISSUE-BOARD-01 §18 (EPIC-10)",
+      "API-02",
+      "API-03",
+    ],
+    done_when: [
+      "tạo employee có thể tạo/link user tương ứng trong tx nhất quán; 1 user ↔ ≤1 employee active (unique)",
+      "audit cả AUTH (user created) lẫn HR (employee created); rollback đồng bộ khi 1 phía lỗi",
+      "deny-path RED: thiếu quyền 1 trong 2 → 403 + 0 ghi; 2-tenant không link chéo company",
+    ],
+  },
+  {
+    id: "S2-INT-2",
+    module: "BACKEND",
+    layer: "INT",
+    title:
+      "Tích hợp HR direct_manager ↔ data-scope Team/Department của permission resolver (approval scope nền cho LEAVE/ATT sau)",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/api/src/employees/**", "apps/api/src/permission/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-HR-BE-1", "S2-AUTH-BE-2"],
+    src: [
+      "IMPLEMENTATION-05 §9 (IMP02-STORY-099) §13",
+      "ISSUE-BOARD-01 §18 (EPIC-10)",
+      "BACKEND-03",
+    ],
+    done_when: [
+      "scope resolver Team/Department đọc cây direct_manager/department từ HR — manager thấy nhân viên dưới quyền",
+      "thay đổi direct_manager phản ánh đúng scope (KHÔNG cache cũ); base cho approval scope Sprint sau",
+      "deny-path RED: manager không thấy ngoài cây mình; cross-tenant deny",
+    ],
+  },
+  {
+    id: "S2-QA-1",
+    module: "QA",
+    layer: "QA",
+    title:
+      "QA AUTH + RBAC/data-scope: login success/fail/locked/logout/me + Own/Team/Department/Company/System cho HR list/detail",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/auth/**/*.spec.ts",
+      "apps/api/src/permission/**/*.spec.ts",
+      "apps/api/test/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S2-AUTH-BE-2", "S2-HR-BE-1"],
+    src: [
+      "IMPLEMENTATION-05 §9.5 (QA-S2-001/002/004) §17.1",
+      "ISSUE-BOARD-01 §18.5",
+      "QA-03",
+      "CLAUDE.md §6",
+    ],
+    done_when: [
+      "auth test: login success/sai mật khẩu/locked/inactive/logout/me — error chuẩn, login_log đúng, no-secret-log",
+      "RBAC/data-scope: Own/Team/Department/Company/System cho HR list+detail trên DB cô lập lane; deny-path 403; cross-tenant deny",
+      "sensitive-data: thiếu quyền KHÔNG thấy field nhạy cảm (salary/bank); coverage vùng nhạy cảm ≥80%",
+    ],
+  },
+  {
+    id: "S2-QA-2",
+    module: "QA",
+    layer: "QA",
+    title:
+      "QA HR CRUD + FE smoke + regression: employee create/update/status/link-user + login/route-guard/list/detail/create + checklist Sprint 2",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/employees/**/*.spec.ts", "apps/api/test/**", "apps/app/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-HR-BE-2", "S2-FE-HR-2"],
+    src: [
+      "IMPLEMENTATION-05 §9.5 (QA-S2-003/005/006) §17.2/§17.3 §18",
+      "ISSUE-BOARD-01 §18.5",
+      "QA-03",
+      "QA-06",
+    ],
+    done_when: [
+      "HR API: employee create (mã tự sinh 0-dup)/update/change-status (history)/link-user (unique active) trên DB cô lập lane",
+      "FE smoke: login → route guard → HR list → detail → create employee (theo §17.3); state loading/empty/error",
+      "regression checklist Sprint 2 (§18 acceptance) ký xác nhận; `pnpm --filter @mediaos/api test` xanh phạm vi THẬT",
+    ],
+  },
 ];
