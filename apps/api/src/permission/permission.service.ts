@@ -1,11 +1,21 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { DataScope } from "@mediaos/contracts";
+import { DATA_SCOPES, type DataScope } from "@mediaos/contracts";
 import type {
   CanInput,
   CompanyRoleGrant,
+  CompanyRoleGrantWithScope,
   IPermissionRepository,
   PermissionDecision,
 } from "./permission.types";
+
+/** Scope strength order (BACKEND-03 §18.1): higher = wider visibility. */
+const SCOPE_STRENGTH: Record<DataScope, number> = {
+  Own: 1,
+  Team: 2,
+  Department: 3,
+  Company: 4,
+  System: 5,
+};
 
 @Injectable()
 export class PermissionService {
@@ -290,6 +300,82 @@ export class PermissionService {
   }
 
   /**
+   * S2-AUTH-BE-2 — effective (strongest) data_scope cho 1 cặp (action,resourceType) ĐÃ được phép.
+   * Đây là phần "scope" của cổng cuối: consumer (HR list/detail) dùng để dịch sang điều kiện query.
+   *
+   * Thuật toán (PIN chống nới scope ngầm — BACKEND-03 §18, plan-review):
+   *   1. DENY-overrides (wildcard-aware) khớp → null (chặn, ưu tiên cao nhất).
+   *   2. Mỗi grant đóng góp ĐÚNG dataScope của chính nó — KHÔNG nâng cấp (vd: *:* mang 'Company' KHÔNG thành System).
+   *   3. Sensitive (caller-hint HOẶC grant.isSensitive) → chỉ EXACT non-wildcard ALLOW đủ điều kiện (mirror can()).
+   *   4. EXACT > WILDCARD: có exact ALLOW đủ điều kiện → mạnh nhất trong exact; else (non-sensitive) → mạnh nhất wildcard.
+   *   5. Không đủ điều kiện → null. Lỗi hạ tầng → fail-closed null (KHÁC getCapabilityScopes fail-safe {} cho UI).
+   * KHÔNG đụng can() hot-path; method độc lập, read-only.
+   */
+  async resolveStrongestScope(
+    userId: string,
+    companyId: string,
+    action: string,
+    resourceType: string,
+    opts?: { isSensitive?: boolean },
+  ): Promise<DataScope | null> {
+    try {
+      const now = new Date();
+      const rawGrants = await this.repo.getCompanyRoleGrantsWithScope(userId, companyId);
+      const grants = rawGrants.filter((grant) => isGrantActive(grant.expiresAt, now));
+
+      const matches = (grant: CompanyRoleGrantWithScope): boolean =>
+        (grant.action === action || grant.action === "*") &&
+        (grant.resourceType === resourceType || grant.resourceType === "*");
+
+      // Deny-overrides-across-roles (wildcard-aware) — any matching DENY blocks all scope.
+      if (grants.some((grant) => grant.effect === "DENY" && matches(grant))) return null;
+
+      const allowMatches = grants.filter((grant) => grant.effect === "ALLOW" && matches(grant));
+      if (allowMatches.length === 0) return null;
+
+      const isExact = (grant: CompanyRoleGrantWithScope): boolean =>
+        grant.action === action && grant.resourceType === resourceType;
+
+      // Sensitive gate (mirror can() §3b): wildcard ALLOW does NOT satisfy a sensitive pair.
+      const effectivelySensitive =
+        (opts?.isSensitive ?? false) || allowMatches.some((grant) => grant.isSensitive);
+
+      let eligible: CompanyRoleGrantWithScope[];
+      if (effectivelySensitive) {
+        // Mirror can() (:124-131): only exact (non-wildcard) ALLOW satisfies a sensitive pair.
+        eligible = allowMatches.filter(isExact);
+      } else {
+        const exact = allowMatches.filter(isExact);
+        eligible = exact.length > 0 ? exact : allowMatches;
+      }
+      if (eligible.length === 0) return null;
+
+      // Strongest scope among eligible; each grant contributes its own scope (no upgrade).
+      let best: DataScope | null = null;
+      let bestStrength = 0;
+      for (const grant of eligible) {
+        const scope = normalizeScope(grant.dataScope);
+        if (scope == null) continue;
+        const strength = SCOPE_STRENGTH[scope];
+        if (strength > bestStrength) {
+          bestStrength = strength;
+          best = scope;
+        }
+      }
+      return best;
+    } catch (error: unknown) {
+      this.logger.error("resolveStrongestScope() infrastructure error — fail-closed null", {
+        error: error instanceof Error ? error.message : String(error),
+        userId,
+        companyId,
+        action,
+        resourceType,
+      });
+      return null;
+    }
+  }
+
+  /**
    * AC-5 — filter `permissionIds` xuống tập user THỰC SỰ được phép (effective ALLOW, đã trừ DENY-overrides
    * + bỏ wildcard). Dùng lúc TẠO PAT: scope của key PHẢI ⊆ tập này (PAT KHÔNG vượt quyền user, fail-closed).
    *
@@ -357,4 +443,9 @@ function isReauthValid(reauthValidUntil: Date | null | undefined, now: Date): bo
   if (reauthValidUntil == null) return false;
   if (!(reauthValidUntil instanceof Date) || isNaN(reauthValidUntil.getTime())) return false;
   return reauthValidUntil > now;
+}
+
+/** Narrows an arbitrary string to a known DataScope, or null when it is not a recognised scope. */
+function normalizeScope(value: string): DataScope | null {
+  return (DATA_SCOPES as readonly string[]).includes(value) ? (value as DataScope) : null;
 }

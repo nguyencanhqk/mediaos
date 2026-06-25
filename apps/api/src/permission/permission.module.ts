@@ -17,6 +17,8 @@ import { CompanyGuard } from "./guards/company.guard";
 import { PermissionGuard } from "./guards/permission.guard";
 import { SuperAdminBootstrapService } from "./super-admin-bootstrap.service";
 import { SuperAdminBootstrapRepository } from "./super-admin-bootstrap.repository";
+import { DataScopeService } from "./data-scope.service";
+import { DataScopeRepository } from "./data-scope.repository";
 
 const CACHED_REPO = "CACHED_PERMISSION_REPO";
 
@@ -118,7 +120,19 @@ class PermissionCacheInvalidator implements OnModuleInit {
     // DatabaseService từ DatabaseModule (@Global). KHÔNG đụng factory permission cũ (hot-file APPEND).
     SuperAdminBootstrapRepository,
     SuperAdminBootstrapService,
+    // S2-AUTH-BE-2 (additive): shared data-scope resolver. DataScopeRepository injects DatabaseService
+    // (@Global); DataScopeService injects PermissionService (provided above) + DataScopeRepository.
+    // Exported so HR-BE-1 (and later ATT/LEAVE/TASK) can inject it. KHÔNG đụng factory cũ (hot-file APPEND).
+    DataScopeRepository,
+    DataScopeService,
   ],
-  exports: [PermissionService, ValkeyService, JwtAuthGuard, CompanyGuard, PermissionGuard],
+  exports: [
+    PermissionService,
+    ValkeyService,
+    JwtAuthGuard,
+    CompanyGuard,
+    PermissionGuard,
+    DataScopeService,
+  ],
 })
 export class PermissionModule {}

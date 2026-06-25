@@ -770,7 +770,7 @@ export const backlog = [
     title:
       "Login/logout/me: password verify + session issue/revoke + login_log + GET /auth/me (user·company·roles·permissions·scopes·employee·modules)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/auth/**", "apps/api/src/permission/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-DB-2", "S2-AUTH-SEED-1"],
@@ -793,10 +793,17 @@ export const backlog = [
     title:
       "Permission + data-scope resolver guard dùng chung (decorator/middleware): Own/Team/Department/Company/System — lớp kiểm soát quyền cuối cho mọi module",
     zone: "red",
-    status: "todo",
-    paths: ["apps/api/src/permission/**", "apps/api/src/auth/**"],
+    // IN-PROGRESS 2026-06-25 (feat/s2-auth-be-2, cắt master a0ace35/#26). Chồng lên BE-1: thêm
+    //   PermissionService.resolveStrongestScope() (engine, additive) + DataScopeService (scope→predicate
+    //   employee_profiles: Own/Team(reports∪self)/Department(org_unit)/Company/System, luôn kèm company_id).
+    //   KHÔNG migration (data_scope cột đã có mig 0441). Plan PASS-after-fix (plan-reviewer: exact>wildcard,
+    //   không nâng-scope, sensitive mirror can(), isEmployeeInScope tenant-guard, narrowing≠403). paths +
+    //   test/integration/** cho int spec LANE_DB. FULL gate + người chốt; KHÔNG push master.
+    status: "in_progress",
+    paths: ["apps/api/src/permission/**", "apps/api/src/auth/**", "apps/api/test/integration/**"],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-DB-1", "S2-AUTH-SEED-1"],
+    plan: "docs/plans/S2-AUTH-BE-2.md",
     src: [
       "IMPLEMENTATION-05 §9.1 (AUTH-S2-004) §13 §15.1",
       "ISSUE-BOARD-01 §18.3 (AUTH-BE-004)",
@@ -886,7 +893,7 @@ export const backlog = [
     title:
       "Seed HR master data (job_levels·contract_types·employee_code_config + demo department/position) idempotent + seed HR permissions",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/src/permission/**"],
     skills: ["code-review"],
     depends_on: ["S2-HR-DB-1", "S2-AUTH-SEED-1"],
