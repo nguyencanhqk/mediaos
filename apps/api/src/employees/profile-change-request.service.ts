@@ -21,8 +21,11 @@ import { DatabaseService } from "../db/db.service";
 import { PermissionService } from "../permission/permission.service";
 import {
   FIELD_TO_COLUMN,
+  // NOT a type-only import: ProfileChangeRequestRepository is an @Injectable class injected at
+  // constructor index [0]. A `type` import erases the runtime paramtype metadata → Nest DI resolves
+  // it to undefined ("dependency at index [0] appears to be undefined at runtime"). Keep it a value.
+  ProfileChangeRequestRepository,
   type ProfileChangeHistoryEntry,
-  type ProfileChangeRequestRepository,
   type PcrDetailRow,
 } from "./profile-change-request.repository";
 
