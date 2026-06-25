@@ -166,7 +166,7 @@ describe("AuthLayout", () => {
     expect(screen.getByText("Nhập thông tin tài khoản")).toBeInTheDocument();
   });
 
-  it("renders brand panel EMS text by default", () => {
+  it("renders brand panel FUNTIME MEDIA text by default", () => {
     const { container } = render(
       <Wrapper>
         <AuthLayout>
@@ -174,7 +174,7 @@ describe("AuthLayout", () => {
         </AuthLayout>
       </Wrapper>,
     );
-    expect(container.textContent).toContain("EMS");
+    expect(container.textContent).toContain("FUNTIME MEDIA");
   });
 
   it("hides brand panel content when showBrandPanel=false", () => {

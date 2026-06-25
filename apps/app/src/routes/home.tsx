@@ -10,7 +10,7 @@ export function HomePage() {
   return (
     <div className="control-room-bg flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center">
       <h1 className="brand-gradient-text font-display text-3xl font-bold tracking-tight">
-        MediaOS
+        FUNTIME MEDIA
       </h1>
       <div className="brand-gradient-line h-0.5 w-48 max-w-full rounded-full opacity-80" />
       <p className="text-sm text-muted-foreground">{t("loading")}</p>
