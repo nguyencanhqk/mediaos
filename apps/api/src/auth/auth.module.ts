@@ -9,6 +9,7 @@ import { AuthService } from "./auth.service";
 import { LoginRateLimiter } from "./login-rate-limiter";
 import { PasswordService } from "./password.service";
 import { ReplayGuardService } from "./replay-guard.service";
+import { ResetPasswordMailService } from "./reset-password-mail.service";
 import { SecurityAlertService } from "./security-alert.service";
 import { SessionCookieService } from "./session-cookie.service";
 import { TokenService } from "./token.service";
@@ -44,6 +45,7 @@ import { TwoFactorEnforcementGuard } from "./two-factor-enforcement.guard";
     TotpService,
     TwoFactorService,
     ReplayGuardService,
+    ResetPasswordMailService,
     SecurityAlertService,
     SessionCookieService,
     TwoFactorEnforcementGuard,
