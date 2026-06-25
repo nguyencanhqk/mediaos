@@ -31,6 +31,10 @@ npm-debug.log*
 
 # test / coverage
 coverage/
+# QA evidence artifacts (RED-before-GREEN capture, CI logs) — luôn TRACK dù trùng pattern scratch/coverage.
+# Negate-pattern HẸP: chỉ whitelist docs/QA/evidence/**, KHÔNG nới rộng ignore nào khác.
+!docs/QA/evidence/
+!docs/QA/evidence/**
 
 # planning prompts (scratch — kept locally, not tracked)
 docs/prompts/
