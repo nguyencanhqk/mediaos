@@ -45,7 +45,11 @@ describe("apps/auth LoginPage", () => {
     vi.mocked(authApi.checkRedirect).mockReset();
     Object.defineProperty(window, "location", {
       configurable: true,
-      value: { search: "?redirect=https://web.localhost/dash", assign, href: "http://auth.localhost:5275/login" },
+      value: {
+        search: "?redirect=https://web.localhost/dash",
+        assign,
+        href: "http://auth.localhost:5275/login",
+      },
     });
   });
   afterEach(cleanup);
@@ -163,6 +167,27 @@ describe("apps/auth LoginPage", () => {
 
     expect(screen.getByLabelText("Email")).toBeInTheDocument();
     expect(screen.queryByTestId("2fa-challenge")).not.toBeInTheDocument();
+  });
+
+  it("empty email submit → inline RHF+Zod validation error, authApi.login NOT called", async () => {
+    render(<LoginPage />);
+
+    // Chỉ điền mật khẩu, để trống email rồi submit form (bỏ qua disabled-check qua submit form).
+    fireEvent.change(screen.getByLabelText("Mật khẩu"), { target: { value: "secret" } });
+    fireEvent.submit(screen.getByRole("button", { name: /vào hệ thống/i }).closest("form")!);
+
+    await waitFor(() => expect(screen.getByText("Vui lòng nhập email.")).toBeInTheDocument());
+    expect(authApi.login).not.toHaveBeenCalled();
+  });
+
+  it("invalid email format → inline validation error, authApi.login NOT called", async () => {
+    render(<LoginPage />);
+
+    fillCredentials("not-an-email", "secret");
+    fireEvent.submit(screen.getByRole("button", { name: /vào hệ thống/i }).closest("form")!);
+
+    await waitFor(() => expect(screen.getByText("Email không hợp lệ.")).toBeInTheDocument());
+    expect(authApi.login).not.toHaveBeenCalled();
   });
 
   it("401 error → friendly message, no redirect", async () => {
