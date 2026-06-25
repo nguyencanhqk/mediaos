@@ -224,5 +224,10 @@ export const AUDIT_OBJECT_TYPES = [
   // S1-FND-FILE-1 (mig 0440): upload/link/unlink/delete file ghi audit object_type 'file' (Upload/Delete) / 'file_link' (Link/Unlink) audit-in-tx; masker che storage_path/signed_url. UNION ADD-only.
   "file",
   "file_link",
+  // S2-HR-BE-3 (additive): HR master data CRUD audit — job_levels / contract_types.
+  // DB CHECK ở migration 0440 chưa có 2 type này → lane db-migration phải UNION ADD vào CHECK DO-block.
+  // App array ĐÃ có để TS type-safe; integration test sẽ thất bại trên Postgres thật cho đến khi migration ship.
+  "job_level",
+  "contract_type",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

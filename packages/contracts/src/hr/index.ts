@@ -4,3 +4,5 @@
  */
 export * from "./employee-read";
 export * from "./lookups";
+// S2-HR-BE-3 (additive): HR master data CRUD + department CRUD contracts.
+export * from "./master-data";
