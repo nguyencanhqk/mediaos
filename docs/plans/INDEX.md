@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**47 WO** · có micro-plan: **21/47** · ⬜ 9 chờ · 🔵 0 đang làm · ✅ 38 xong · 🔴 0 chặn
+**48 WO** · có micro-plan: **21/48** · ⬜ 9 chờ · 🔵 1 đang làm · ✅ 38 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -59,7 +59,7 @@
 | `S2-FE-AUTH-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S2-AUTH-BE-1 ✅S2-AUTH-BE-2 | FE Auth: Login page + auth bootstrap (/auth/me) + ProtectedRoute/Publi |
 | `S2-FE-HR-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S2-HR-BE-1 ✅S2-FE-AUTH-1 | FE HR: EmployeeList (table/filter/search/pagination) + EmployeeDetail  |
 | `S2-FE-HR-2` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S2-HR-BE-2 ✅S2-FE-HR-1 | FE HR: EmployeeForm (create/edit) + dropdown lookups + validation + su |
-| `S2-FE-HR-3` | 🟢 | ⬜ chờ | — *(chưa)* | ✅S2-HR-BE-1 ✅S2-FE-AUTH-1 | FE: MyProfile (read-only) + user/role read-only placeholder (P1, KHÔNG |
+| `S2-FE-HR-3` | 🟢 | 🔵 đang làm | — *(chưa)* | ✅S2-HR-BE-1 ✅S2-FE-AUTH-1 | FE: MyProfile (read-only) + user/role read-only placeholder (P1, KHÔNG |
 | `S2-INT-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S2-HR-BE-2 ✅S2-AUTH-BE-3 | Tích hợp HR tạo employee ↔ AUTH tạo/link user (giao dịch nhất quán, un |
 | `S2-INT-2` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S2-HR-BE-1 ✅S2-AUTH-BE-2 | Tích hợp HR direct_manager ↔ data-scope Team/Department của permission |
 | `S2-QA-1` | 🔴 | ✅ xong | — *(chưa)* | ✅S2-AUTH-BE-2 ✅S2-HR-BE-1 | QA AUTH + RBAC/data-scope: login success/fail/locked/logout/me + Own/T |
@@ -67,6 +67,7 @@
 | `S2-QA-DEBT-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S2-AUTH-BE-3 ✅S2-AUTH-BE-4 | Test-hygiene AUTH: gate int-spec trên hasDb && LANE_DB (KHÔNG bare ski |
 | `S2-AUTH-HARDEN-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S2-AUTH-BE-4 | Hardening password-reset (P2): tách rate-limit bucket forgot khỏi logi |
 | `S2-HR-MASK-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S2-HR-BE-1 | HR read tinh chỉnh (P2): xác nhận+gate masking salaryType theo SPEC-03 |
+| `S2-AUTH-BRAND-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Rebrand TOTP issuer (P3): TOTP_ISSUER 'MediaOS' → 'FUNTIME MEDIA' khớp |
 
 ---
 

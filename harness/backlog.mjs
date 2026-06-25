@@ -1300,4 +1300,33 @@ export const backlog = [
       "masking đụng field nhạy cảm → FULL gate (security-reviewer) + người chốt; regression deny-path HR còn xanh",
     ],
   },
+  {
+    id: "S2-AUTH-BRAND-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "Rebrand TOTP issuer (P3): TOTP_ISSUER 'MediaOS' → 'FUNTIME MEDIA' khớp rebrand FE (#37), GIỮ tương thích 2FA đã enroll",
+    zone: "red",
+    // FOLLOW-UP rebrand PR #37. TOTP_ISSUER là nhãn hiện trong app authenticator (Google/Authy) → đụng auth/token =
+    //   crown-jewel (FULL gate). Validation dựa trên SECRET nên user đã bật 2FA KHÔNG bị khoá; chỉ nhãn hiển thị đổi.
+    status: "todo",
+    paths: [
+      "apps/api/src/auth/totp.service.ts",
+      "apps/api/src/auth/totp.service.spec.ts",
+      "apps/console/src/components/two-factor/TwoFactorSettings.spec.tsx",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "rebrand PR #37 (EMS/MediaOS → FUNTIME MEDIA): topbar/AuthLayout/home/index.html đã đổi, còn TOTP_ISSUER",
+      "SPEC-02 (2FA/TOTP)",
+      "apps/api/src/auth/totp.service.ts §TOTP_ISSUER",
+    ],
+    done_when: [
+      "TOTP_ISSUER 'MediaOS' → 'FUNTIME MEDIA' trong totp.service.ts; cập nhật totp.service.spec.ts (assert issuer mới) + console TwoFactorSettings.spec.tsx (otpauth fixture); otpauth:// URI-encode đúng dấu cách trong issuer",
+      "XÁC NHẬN tương thích ngược: secret KHÔNG đổi → user đã enroll vẫn verify/login được; chỉ nhãn authenticator đổi cho enrollment MỚI (cũ giữ 'MediaOS' tới khi tự re-enroll) — KHÔNG ép re-enroll, KHÔNG migration data",
+      "GHI policy nhãn hỗn hợp (cũ MediaOS / mới FUNTIME MEDIA) là chấp nhận; cân nhắc 1 dòng note UI 2FA nếu cần",
+      "FULL gate (security-reviewer — auth crown) + người chốt; regression 2FA enroll/verify/login còn xanh; deny-path không đổi",
+    ],
+  },
 ];
