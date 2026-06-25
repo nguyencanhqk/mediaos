@@ -741,7 +741,11 @@ export const backlog = [
     title:
       "Seed permission/role/role_permission VỚI data_scope đúng từng role + bootstrap admin (idempotent ON CONFLICT) theo permission matrix §13 / API-10",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
+    // Plan: docs/plans/S2-AUTH-SEED-1.md §13 (per-pair data_scope). L1 (db-migration): mig 0444 canonical
+    // roles + per-pair seed (commit a7c6a1f). L2 (this lane, SuperAdminBootstrap): runtime seed super-admin
+    // company-scoped — apps/api/src/permission/super-admin-bootstrap.{service,repository}.ts wired additive
+    // into PermissionModule; unit + LANE_DB int specs GREEN. Pending: FULL red-zone gate + human merge.
     paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/src/permission/**"],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-DB-1", "S2-AUTH-DB-2"],
@@ -750,6 +754,7 @@ export const backlog = [
       "ISSUE-BOARD-01 §18.3 (AUTH-DB-003)",
       "API-10 PERMISSION MATRIX",
       "SPEC-02",
+      "docs/plans/S2-AUTH-SEED-1.md §13",
     ],
     done_when: [
       "Mô hình role: employee(…008)/company-admin(…001)/hr-manager(…009) là SYSTEM role ĐÃ tồn tại (company_id NULL, name globally-unique roles_system_name_active_uq — mig 0005/0019) → KHÔNG tạo trùng; manager/hr = system role MỚI (company_id NULL, is_system=true, ON CONFLICT(name) DO NOTHING). data_scope SEED THEO TỪNG CẶP (action,resource_type,role) đúng BẢNG §13 (docs/plans/S2-AUTH-SEED-1.md) — KHÔNG phẳng theo role. super-admin = role COMPANY-SCOPED do SuperAdminBootstrapService tạo runtime (env PLATFORM_SUPERADMIN_*, argon2id — KHÔNG literal hash/log; full catalog data_scope=System TRỪ reveal-secret/break-glass ADR-0010), KHÔNG seed ở migration; bootstrap từ DB trống đăng nhập được, idempotent (1 user + 1 user_role)",
