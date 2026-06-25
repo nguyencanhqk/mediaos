@@ -104,7 +104,7 @@ export function GlobalTopbar() {
           className="flex items-center gap-2 rounded-lg px-2 py-1 text-slate-100 transition-colors hover:bg-white/10"
           aria-label="Về trang chủ"
         >
-          <span className="brand-gradient-text font-display text-base font-bold">EMS</span>
+          <span className="brand-gradient-text font-display text-base font-bold">FUNTIME MEDIA</span>
         </Link>
 
         {/* Divider */}
