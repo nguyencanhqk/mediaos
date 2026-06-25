@@ -962,7 +962,7 @@ export const backlog = [
     title:
       "Department/position CRUD (P1): create/update/soft-delete + master data manage (job-level/contract-type)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/org/**", "apps/api/src/positions/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S2-HR-DB-1", "S2-AUTH-BE-2"],
