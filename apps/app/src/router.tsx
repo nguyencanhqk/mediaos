@@ -118,6 +118,10 @@ import { EmployeeListPage } from "@/routes/hr/employees/EmployeeListPage";
 import { EmployeeDetailPage } from "@/routes/hr/employees/EmployeeDetailPage";
 import { MyProfilePage } from "@/routes/hr/me/MyProfilePage";
 
+// System
+import { UsersPage } from "@/routes/system/UsersPage";
+import { RolesPage } from "@/routes/system/RolesPage";
+
 const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", EmployeeListPage);
 const hrEmployeesRoute = makeModuleRoute("/hr/employees", "hr.employees", "HR", EmployeeListPage);
 const hrMeRoute = makeModuleRoute("/hr/me", "hr.me", "HR", MyProfilePage);
@@ -184,18 +188,8 @@ const notificationsRoute = makeModuleRoute(
 
 // System / Foundation
 const systemRoute = makeModuleRoute("/system", "system.overview", "FOUNDATION", ModulePlaceholder);
-const systemUsersRoute = makeModuleRoute(
-  "/system/users",
-  "system.users",
-  "FOUNDATION",
-  ModulePlaceholder,
-);
-const systemRolesRoute = makeModuleRoute(
-  "/system/roles",
-  "system.roles",
-  "FOUNDATION",
-  ModulePlaceholder,
-);
+const systemUsersRoute = makeModuleRoute("/system/users", "system.users", "FOUNDATION", UsersPage);
+const systemRolesRoute = makeModuleRoute("/system/roles", "system.roles", "FOUNDATION", RolesPage);
 const systemAuditLogsRoute = makeModuleRoute(
   "/system/audit-logs",
   "system.audit-logs",

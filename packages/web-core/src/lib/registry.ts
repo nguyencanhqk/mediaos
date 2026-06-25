@@ -120,8 +120,9 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "TASK.TASK.VIEW": "read:task",
   "TASK.PROJECT.VIEW": "read:project",
   "NOTI.NOTIFICATION.VIEW_OWN": "read:notification",
-  "AUTH.USER.VIEW": "read:user",
-  "AUTH.ROLE.VIEW": "read:role",
+  // Canonical theo DB-02 §9.1 + seed §13 (migration 0444): cặp đọc là view:user / view:role.
+  "AUTH.USER.VIEW": "view:user",
+  "AUTH.ROLE.VIEW": "view:role",
   "FOUNDATION.SETTING.VIEW": "view:foundation-setting",
   "FOUNDATION.AUDIT_LOG.VIEW": "view:foundation-audit-log",
 };

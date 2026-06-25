@@ -3,7 +3,8 @@
 // `registerI18nResources` → cùng instance, không tách riêng.
 import { i18n, registerI18nResources } from "@mediaos/web-core";
 import hrVi from "./locales/vi/hr";
+import systemVi from "./locales/vi/system";
 
-registerI18nResources("vi", { hr: hrVi });
+registerI18nResources("vi", { hr: hrVi, system: systemVi });
 
 export default i18n;
