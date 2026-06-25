@@ -20,26 +20,43 @@
  * Coverage requirement: ≥90% for PermissionService.can() (G3-2 must hit this).
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
-import { PermissionService } from './permission.service';
+import { beforeEach, describe, expect, it } from "vitest";
+import { PermissionService } from "./permission.service";
 import type {
   CanInput,
   CompanyRoleGrant,
+  CompanyRoleGrantWithScope,
   IPermissionRepository,
   ObjectGrant,
   PermissionDecision,
-} from './permission.types';
+} from "./permission.types";
 
 // ─── Mock repository ─────────────────────────────────────────────────────────
 
 class MockPermissionRepository implements IPermissionRepository {
   private companyMap = new Map<string, CompanyRoleGrant[]>();
+  private companyScopeMap = new Map<string, CompanyRoleGrantWithScope[]>();
   private objectMap = new Map<string, ObjectGrant[]>();
   private failCompany = false;
+  private failCompanyScope = false;
   private failObject = false;
 
   setCompanyGrants(userId: string, companyId: string, grants: CompanyRoleGrant[]): this {
     this.companyMap.set(`${userId}:${companyId}`, grants);
+    return this;
+  }
+
+  setCompanyScopeGrants(
+    userId: string,
+    companyId: string,
+    grants: CompanyRoleGrantWithScope[],
+  ): this {
+    this.companyScopeMap.set(`${userId}:${companyId}`, grants);
+    return this;
+  }
+
+  setFailCompanyScope(v: boolean): this {
+    this.failCompanyScope = v;
     return this;
   }
 
@@ -65,8 +82,16 @@ class MockPermissionRepository implements IPermissionRepository {
   }
 
   async getCompanyRoleGrants(userId: string, companyId: string): Promise<CompanyRoleGrant[]> {
-    if (this.failCompany) throw new Error('DB connection failed (simulated)');
+    if (this.failCompany) throw new Error("DB connection failed (simulated)");
     return this.companyMap.get(`${userId}:${companyId}`) ?? [];
+  }
+
+  async getCompanyRoleGrantsWithScope(
+    userId: string,
+    companyId: string,
+  ): Promise<CompanyRoleGrantWithScope[]> {
+    if (this.failCompanyScope) throw new Error("DB connection failed (simulated)");
+    return this.companyScopeMap.get(`${userId}:${companyId}`) ?? [];
   }
 
   async getObjectGrants(
@@ -75,7 +100,7 @@ class MockPermissionRepository implements IPermissionRepository {
     resourceType: string,
     resourceId: string,
   ): Promise<ObjectGrant[]> {
-    if (this.failObject) throw new Error('DB connection failed (simulated)');
+    if (this.failObject) throw new Error("DB connection failed (simulated)");
     return this.objectMap.get(`${userId}:${companyId}:${resourceType}:${resourceId}`) ?? [];
   }
 
@@ -90,10 +115,10 @@ class MockPermissionRepository implements IPermissionRepository {
 
 // ─── Test constants ───────────────────────────────────────────────────────────
 
-const CO = 'co-test-1';
-const U = 'user-test-1';
-const OBJ_A = 'object-a';
-const OBJ_B = 'object-b';
+const CO = "co-test-1";
+const U = "user-test-1";
+const OBJ_A = "object-a";
+const OBJ_B = "object-b";
 
 const PAST = new Date(Date.now() - 60_000); // 1 minute ago = expired
 const FUTURE = new Date(Date.now() + 3_600_000); // 1 hour from now = valid
@@ -103,7 +128,7 @@ const FUTURE = new Date(Date.now() + 3_600_000); // 1 hour from now = valid
 function rg(
   action: string,
   resourceType: string,
-  effect: 'ALLOW' | 'DENY' = 'ALLOW',
+  effect: "ALLOW" | "DENY" = "ALLOW",
   opts: { isSensitive?: boolean; expiresAt?: Date | null } = {},
 ): CompanyRoleGrant {
   return {
@@ -118,7 +143,7 @@ function rg(
 function og(
   action: string,
   resourceType: string,
-  effect: 'ALLOW' | 'DENY' = 'ALLOW',
+  effect: "ALLOW" | "DENY" = "ALLOW",
   isSensitive = false,
 ): ObjectGrant {
   return { action, resourceType, isSensitive, effect };
@@ -148,7 +173,7 @@ function input(
 
 // ─── Suite ────────────────────────────────────────────────────────────────────
 
-describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
+describe("PermissionService.can() — G3-3 deny-path RED suite", () => {
   let repo: MockPermissionRepository;
   let svc: PermissionService;
 
@@ -165,17 +190,17 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
   // (a) USER HAS NO ROLES
   // ═══════════════════════════════════════════════════════════════
 
-  describe('(a) user has no roles', () => {
-    it('a1 — no grants at all → deny-default', async () => {
-      const d = await can(input('read', 'project'));
+  describe("(a) user has no roles", () => {
+    it("a1 — no grants at all → deny-default", async () => {
+      const d = await can(input("read", "project"));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-default');
+      expect(d.reason).toBe("deny-default");
     });
 
-    it('a2 — no grants, sensitive action → deny-sensitive (sensitive gate fires before default)', async () => {
-      const d = await can(input('view-salary', 'payslip', { isSensitive: true }));
+    it("a2 — no grants, sensitive action → deny-sensitive (sensitive gate fires before default)", async () => {
+      const d = await can(input("view-salary", "payslip", { isSensitive: true }));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-sensitive');
+      expect(d.reason).toBe("deny-sensitive");
       expect(d.auditRequired).toBe(true);
     });
   });
@@ -184,27 +209,24 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
   // (b) DENY WINS ALLOW — same tier
   // ═══════════════════════════════════════════════════════════════
 
-  describe('(b) DENY wins ALLOW in same tier', () => {
-    it('b1 — same role: ALLOW + DENY for same action → deny-explicit', async () => {
-      repo.setCompanyGrants(U, CO, [
-        rg('approve', 'step', 'ALLOW'),
-        rg('approve', 'step', 'DENY'),
-      ]);
-      const d = await can(input('approve', 'step'));
+  describe("(b) DENY wins ALLOW in same tier", () => {
+    it("b1 — same role: ALLOW + DENY for same action → deny-explicit", async () => {
+      repo.setCompanyGrants(U, CO, [rg("approve", "step", "ALLOW"), rg("approve", "step", "DENY")]);
+      const d = await can(input("approve", "step"));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-explicit');
+      expect(d.reason).toBe("deny-explicit");
     });
 
-    it('b2 — object tier: ALLOW + DENY → deny-explicit', async () => {
+    it("b2 — object tier: ALLOW + DENY → deny-explicit", async () => {
       repo
-        .setCompanyGrants(U, CO, [rg('read', 'project', 'ALLOW')])
-        .setObjectGrants(U, CO, 'project', OBJ_A, [
-          og('read', 'project', 'ALLOW'),
-          og('read', 'project', 'DENY'),
+        .setCompanyGrants(U, CO, [rg("read", "project", "ALLOW")])
+        .setObjectGrants(U, CO, "project", OBJ_A, [
+          og("read", "project", "ALLOW"),
+          og("read", "project", "DENY"),
         ]);
-      const d = await can(input('read', 'project', { resourceId: OBJ_A }));
+      const d = await can(input("read", "project", { resourceId: OBJ_A }));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-explicit');
+      expect(d.reason).toBe("deny-explicit");
     });
   });
 
@@ -212,37 +234,37 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
   // (c) DENY-OVERRIDES ACROSS ROLES [critical]
   // ═══════════════════════════════════════════════════════════════
 
-  describe('(c) deny-overrides across-roles', () => {
-    it('c1 — role A ALLOW + role B DENY same action:type → deny-explicit', async () => {
+  describe("(c) deny-overrides across-roles", () => {
+    it("c1 — role A ALLOW + role B DENY same action:type → deny-explicit", async () => {
       // Simulates user holding two roles; one allows, the other denies
       repo.setCompanyGrants(U, CO, [
-        rg('view-salary', 'payslip', 'ALLOW', { isSensitive: true }),
-        rg('view-salary', 'payslip', 'DENY', { isSensitive: true }),
+        rg("view-salary", "payslip", "ALLOW", { isSensitive: true }),
+        rg("view-salary", "payslip", "DENY", { isSensitive: true }),
       ]);
-      const d = await can(input('view-salary', 'payslip', { isSensitive: true }));
+      const d = await can(input("view-salary", "payslip", { isSensitive: true }));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-explicit');
+      expect(d.reason).toBe("deny-explicit");
     });
 
-    it('c2 — role A ALLOW other + role B DENY target action → deny-explicit for target', async () => {
+    it("c2 — role A ALLOW other + role B DENY target action → deny-explicit for target", async () => {
       repo.setCompanyGrants(U, CO, [
-        rg('read', 'project', 'ALLOW'),
-        rg('approve', 'step', 'ALLOW'),
-        rg('approve', 'step', 'DENY'), // role B denies approve
+        rg("read", "project", "ALLOW"),
+        rg("approve", "step", "ALLOW"),
+        rg("approve", "step", "DENY"), // role B denies approve
       ]);
-      const d = await can(input('approve', 'step'));
+      const d = await can(input("approve", "step"));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-explicit');
+      expect(d.reason).toBe("deny-explicit");
     });
 
-    it('c3 — DENY for unrelated action does NOT affect allowed action → allow', async () => {
+    it("c3 — DENY for unrelated action does NOT affect allowed action → allow", async () => {
       repo.setCompanyGrants(U, CO, [
-        rg('read', 'project', 'ALLOW'),
-        rg('delete', 'project', 'DENY'),
+        rg("read", "project", "ALLOW"),
+        rg("delete", "project", "DENY"),
       ]);
-      const d = await can(input('read', 'project'));
+      const d = await can(input("read", "project"));
       expect(d.allow).toBe(true);
-      expect(d.reason).toBe('allow');
+      expect(d.reason).toBe("allow");
     });
   });
 
@@ -250,33 +272,33 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
   // (d) OBJECT-DENY WINS COMPANY-ALLOW
   // ═══════════════════════════════════════════════════════════════
 
-  describe('(d) object-DENY beats company-ALLOW', () => {
-    it('d1 — company ALLOW + object DENY → deny-explicit', async () => {
+  describe("(d) object-DENY beats company-ALLOW", () => {
+    it("d1 — company ALLOW + object DENY → deny-explicit", async () => {
       repo
-        .setCompanyGrants(U, CO, [rg('read', 'project', 'ALLOW')])
-        .setObjectGrants(U, CO, 'project', OBJ_A, [og('read', 'project', 'DENY')]);
-      const d = await can(input('read', 'project', { resourceId: OBJ_A }));
+        .setCompanyGrants(U, CO, [rg("read", "project", "ALLOW")])
+        .setObjectGrants(U, CO, "project", OBJ_A, [og("read", "project", "DENY")]);
+      const d = await can(input("read", "project", { resourceId: OBJ_A }));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-explicit');
+      expect(d.reason).toBe("deny-explicit");
     });
 
-    it('d2 — no company grant + object DENY → deny-explicit', async () => {
+    it("d2 — no company grant + object DENY → deny-explicit", async () => {
       repo
         .setCompanyGrants(U, CO, [])
-        .setObjectGrants(U, CO, 'project', OBJ_A, [og('read', 'project', 'DENY')]);
-      const d = await can(input('read', 'project', { resourceId: OBJ_A }));
+        .setObjectGrants(U, CO, "project", OBJ_A, [og("read", "project", "DENY")]);
+      const d = await can(input("read", "project", { resourceId: OBJ_A }));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-explicit');
+      expect(d.reason).toBe("deny-explicit");
     });
 
-    it('d3 — object DENY on different objectId does NOT affect target object → allow', async () => {
+    it("d3 — object DENY on different objectId does NOT affect target object → allow", async () => {
       repo
-        .setCompanyGrants(U, CO, [rg('read', 'project', 'ALLOW')])
-        .setObjectGrants(U, CO, 'project', OBJ_B, [og('read', 'project', 'DENY')]); // DENY on OBJ_B
+        .setCompanyGrants(U, CO, [rg("read", "project", "ALLOW")])
+        .setObjectGrants(U, CO, "project", OBJ_B, [og("read", "project", "DENY")]); // DENY on OBJ_B
       // Querying OBJ_A → no DENY for OBJ_A
-      const d = await can(input('read', 'project', { resourceId: OBJ_A }));
+      const d = await can(input("read", "project", { resourceId: OBJ_A }));
       expect(d.allow).toBe(true);
-      expect(d.reason).toBe('allow');
+      expect(d.reason).toBe("allow");
     });
   });
 
@@ -284,38 +306,38 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
   // (e) SENSITIVE + WILDCARD BLOCKED
   // ═══════════════════════════════════════════════════════════════
 
-  describe('(e) sensitive action: wildcard does NOT satisfy', () => {
-    it('e1 — wildcard *:* ALLOW does NOT grant sensitive action → deny-sensitive', async () => {
-      repo.setCompanyGrants(U, CO, [rg('*', '*', 'ALLOW')]);
-      const d = await can(input('view-salary', 'payslip', { isSensitive: true }));
+  describe("(e) sensitive action: wildcard does NOT satisfy", () => {
+    it("e1 — wildcard *:* ALLOW does NOT grant sensitive action → deny-sensitive", async () => {
+      repo.setCompanyGrants(U, CO, [rg("*", "*", "ALLOW")]);
+      const d = await can(input("view-salary", "payslip", { isSensitive: true }));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-sensitive');
+      expect(d.reason).toBe("deny-sensitive");
       expect(d.auditRequired).toBe(true);
     });
 
-    it('e2 — action wildcard (action=* resourceType=payslip) ALLOW does NOT satisfy sensitive', async () => {
-      repo.setCompanyGrants(U, CO, [rg('*', 'payslip', 'ALLOW')]);
-      const d = await can(input('view-salary', 'payslip', { isSensitive: true }));
+    it("e2 — action wildcard (action=* resourceType=payslip) ALLOW does NOT satisfy sensitive", async () => {
+      repo.setCompanyGrants(U, CO, [rg("*", "payslip", "ALLOW")]);
+      const d = await can(input("view-salary", "payslip", { isSensitive: true }));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-sensitive');
+      expect(d.reason).toBe("deny-sensitive");
     });
 
-    it('e3 — manage ALLOW does NOT grant sensitive delete-project', async () => {
+    it("e3 — manage ALLOW does NOT grant sensitive delete-project", async () => {
       // 'manage' is not 'delete-project' — different action string
-      repo.setCompanyGrants(U, CO, [rg('manage', 'project', 'ALLOW')]);
-      const d = await can(input('delete-project', 'project', { isSensitive: true }));
+      repo.setCompanyGrants(U, CO, [rg("manage", "project", "ALLOW")]);
+      const d = await can(input("delete-project", "project", { isSensitive: true }));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-sensitive');
+      expect(d.reason).toBe("deny-sensitive");
     });
 
-    it('e4 — sensitive action with only non-sensitive grants for other actions → deny-sensitive', async () => {
+    it("e4 — sensitive action with only non-sensitive grants for other actions → deny-sensitive", async () => {
       repo.setCompanyGrants(U, CO, [
-        rg('read', 'project', 'ALLOW'),
-        rg('approve', 'step', 'ALLOW'),
+        rg("read", "project", "ALLOW"),
+        rg("approve", "step", "ALLOW"),
       ]);
-      const d = await can(input('view-salary', 'payslip', { isSensitive: true }));
+      const d = await can(input("view-salary", "payslip", { isSensitive: true }));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-sensitive');
+      expect(d.reason).toBe("deny-sensitive");
     });
   });
 
@@ -323,49 +345,49 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
   // (g) EXPIRED ROLES (expiresAt re-check)
   // ═══════════════════════════════════════════════════════════════
 
-  describe('(g) expired role grants are ignored', () => {
-    it('g1 — only grant has expiresAt in past → deny-default', async () => {
-      repo.setCompanyGrants(U, CO, [rg('read', 'project', 'ALLOW', { expiresAt: PAST })]);
-      const d = await can(input('read', 'project'));
+  describe("(g) expired role grants are ignored", () => {
+    it("g1 — only grant has expiresAt in past → deny-default", async () => {
+      repo.setCompanyGrants(U, CO, [rg("read", "project", "ALLOW", { expiresAt: PAST })]);
+      const d = await can(input("read", "project"));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-default');
+      expect(d.reason).toBe("deny-default");
     });
 
-    it('g2 — cache-hit scenario: stale grant with expired expiresAt → service must re-check → deny-default', async () => {
+    it("g2 — cache-hit scenario: stale grant with expired expiresAt → service must re-check → deny-default", async () => {
       // Even when the repo returns the grant (simulates stale cache), service must filter by expiresAt
       repo.setCompanyGrants(U, CO, [
-        rg('approve', 'step', 'ALLOW', { expiresAt: PAST }), // expired
+        rg("approve", "step", "ALLOW", { expiresAt: PAST }), // expired
       ]);
-      const d = await can(input('approve', 'step'));
+      const d = await can(input("approve", "step"));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-default');
+      expect(d.reason).toBe("deny-default");
     });
 
-    it('g3 — expired grant mixed with valid grant: valid one still grants', async () => {
+    it("g3 — expired grant mixed with valid grant: valid one still grants", async () => {
       repo.setCompanyGrants(U, CO, [
-        rg('read', 'project', 'ALLOW', { expiresAt: PAST }), // expired
-        rg('read', 'project', 'ALLOW', { expiresAt: FUTURE }), // valid
+        rg("read", "project", "ALLOW", { expiresAt: PAST }), // expired
+        rg("read", "project", "ALLOW", { expiresAt: FUTURE }), // valid
       ]);
-      const d = await can(input('read', 'project'));
+      const d = await can(input("read", "project"));
       expect(d.allow).toBe(true);
-      expect(d.reason).toBe('allow');
+      expect(d.reason).toBe("allow");
     });
 
-    it('g4 — null expiresAt = permanent, never expires → allow', async () => {
-      repo.setCompanyGrants(U, CO, [rg('read', 'project', 'ALLOW', { expiresAt: null })]);
-      const d = await can(input('read', 'project'));
+    it("g4 — null expiresAt = permanent, never expires → allow", async () => {
+      repo.setCompanyGrants(U, CO, [rg("read", "project", "ALLOW", { expiresAt: null })]);
+      const d = await can(input("read", "project"));
       expect(d.allow).toBe(true);
-      expect(d.reason).toBe('allow');
+      expect(d.reason).toBe("allow");
     });
 
-    it('g5 — expired DENY grant + valid ALLOW → allow (DENY also expires)', async () => {
+    it("g5 — expired DENY grant + valid ALLOW → allow (DENY also expires)", async () => {
       repo.setCompanyGrants(U, CO, [
-        rg('read', 'project', 'DENY', { expiresAt: PAST }), // expired DENY
-        rg('read', 'project', 'ALLOW', { expiresAt: null }), // permanent ALLOW
+        rg("read", "project", "DENY", { expiresAt: PAST }), // expired DENY
+        rg("read", "project", "ALLOW", { expiresAt: null }), // permanent ALLOW
       ]);
-      const d = await can(input('read', 'project'));
+      const d = await can(input("read", "project"));
       expect(d.allow).toBe(true);
-      expect(d.reason).toBe('allow');
+      expect(d.reason).toBe("allow");
     });
   });
 
@@ -373,24 +395,24 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
   // (h) SUPER-ADMIN + SENSITIVE WITHOUT EXPLICIT
   // ═══════════════════════════════════════════════════════════════
 
-  describe('(h) super-admin wildcard cannot access sensitive without explicit ALLOW', () => {
-    it('h1 — super-admin *:* ALLOW + sensitive action without explicit → deny-sensitive', async () => {
-      repo.setCompanyGrants(U, CO, [rg('*', '*', 'ALLOW')]); // super-admin
-      const d = await can(input('reveal-secret', 'platform-account', { isSensitive: true }));
+  describe("(h) super-admin wildcard cannot access sensitive without explicit ALLOW", () => {
+    it("h1 — super-admin *:* ALLOW + sensitive action without explicit → deny-sensitive", async () => {
+      repo.setCompanyGrants(U, CO, [rg("*", "*", "ALLOW")]); // super-admin
+      const d = await can(input("reveal-secret", "platform-account", { isSensitive: true }));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-sensitive');
+      expect(d.reason).toBe("deny-sensitive");
     });
 
-    it('h2 — super-admin with many non-sensitive ALLOWs still blocked for sensitive → deny-sensitive', async () => {
+    it("h2 — super-admin with many non-sensitive ALLOWs still blocked for sensitive → deny-sensitive", async () => {
       repo.setCompanyGrants(U, CO, [
-        rg('*', '*', 'ALLOW'),
-        rg('read', 'project', 'ALLOW'),
-        rg('approve', 'step', 'ALLOW'),
-        rg('manage', 'company', 'ALLOW'),
+        rg("*", "*", "ALLOW"),
+        rg("read", "project", "ALLOW"),
+        rg("approve", "step", "ALLOW"),
+        rg("manage", "company", "ALLOW"),
       ]);
-      const d = await can(input('view-salary', 'payslip', { isSensitive: true }));
+      const d = await can(input("view-salary", "payslip", { isSensitive: true }));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-sensitive');
+      expect(d.reason).toBe("deny-sensitive");
     });
   });
 
@@ -398,15 +420,15 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
   // (i) OBJECT GRANTS ONLY, NO resourceId
   // ═══════════════════════════════════════════════════════════════
 
-  describe('(i) only object grants, no resourceId → deny-default', () => {
-    it('i1 — user has object-level grant but no company grant and no resourceId → deny-default', async () => {
+  describe("(i) only object grants, no resourceId → deny-default", () => {
+    it("i1 — user has object-level grant but no company grant and no resourceId → deny-default", async () => {
       repo
         .setCompanyGrants(U, CO, []) // no company grants
-        .setObjectGrants(U, CO, 'project', OBJ_A, [og('read', 'project', 'ALLOW')]);
+        .setObjectGrants(U, CO, "project", OBJ_A, [og("read", "project", "ALLOW")]);
       // no resourceId → object grants not queried → company grants empty → deny-default
-      const d = await can(input('read', 'project')); // resourceId omitted
+      const d = await can(input("read", "project")); // resourceId omitted
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-default');
+      expect(d.reason).toBe("deny-default");
     });
   });
 
@@ -414,26 +436,24 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
   // (l) FAIL-CLOSED ON DB/CACHE ERROR
   // ═══════════════════════════════════════════════════════════════
 
-  describe('(l) fail-closed when DB/cache throws', () => {
-    it('l1 — company grants DB error → resolves to DENY (not false-ALLOW, not uncaught throw)', async () => {
+  describe("(l) fail-closed when DB/cache throws", () => {
+    it("l1 — company grants DB error → resolves to DENY (not false-ALLOW, not uncaught throw)", async () => {
       repo.setFailCompany(true);
-      await expect(can(input('read', 'project'))).resolves.toMatchObject({ allow: false });
+      await expect(can(input("read", "project"))).resolves.toMatchObject({ allow: false });
     });
 
-    it('l2 — object grants DB error with resourceId → fail-closed DENY', async () => {
-      repo
-        .setCompanyGrants(U, CO, [rg('read', 'project', 'ALLOW')])
-        .setFailObject(true);
-      await expect(
-        can(input('read', 'project', { resourceId: OBJ_A })),
-      ).resolves.toMatchObject({ allow: false });
+    it("l2 — object grants DB error with resourceId → fail-closed DENY", async () => {
+      repo.setCompanyGrants(U, CO, [rg("read", "project", "ALLOW")]).setFailObject(true);
+      await expect(can(input("read", "project", { resourceId: OBJ_A }))).resolves.toMatchObject({
+        allow: false,
+      });
     });
 
-    it('l3 — both company and object DB errors → fail-closed DENY (no exception propagated)', async () => {
+    it("l3 — both company and object DB errors → fail-closed DENY (no exception propagated)", async () => {
       repo.setFailCompany(true).setFailObject(true);
-      await expect(
-        can(input('read', 'project', { resourceId: OBJ_A })),
-      ).resolves.toMatchObject({ allow: false });
+      await expect(can(input("read", "project", { resourceId: OBJ_A }))).resolves.toMatchObject({
+        allow: false,
+      });
     });
   });
 
@@ -441,50 +461,56 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
   // RBAC cases from permission-matrix-spec §8
   // ═══════════════════════════════════════════════════════════════
 
-  describe('RBAC deny cases (from permission-matrix-spec §8)', () => {
-    it('rbac1 — Employee has no approve grant → approve step → deny-default', async () => {
-      repo.setCompanyGrants(U, CO, [rg('read', 'task', 'ALLOW'), rg('submit', 'task', 'ALLOW')]);
-      const d = await can(input('approve', 'step'));
+  describe("RBAC deny cases (from permission-matrix-spec §8)", () => {
+    it("rbac1 — Employee has no approve grant → approve step → deny-default", async () => {
+      repo.setCompanyGrants(U, CO, [rg("read", "task", "ALLOW"), rg("submit", "task", "ALLOW")]);
+      const d = await can(input("approve", "step"));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-default');
+      expect(d.reason).toBe("deny-default");
     });
 
-    it('rbac2 — ScriptWriter has no create:content → deny-default', async () => {
-      repo.setCompanyGrants(U, CO, [rg('read', 'content', 'ALLOW'), rg('submit', 'task', 'ALLOW')]);
-      const d = await can(input('create', 'content'));
+    it("rbac2 — ScriptWriter has no create:content → deny-default", async () => {
+      repo.setCompanyGrants(U, CO, [rg("read", "content", "ALLOW"), rg("submit", "task", "ALLOW")]);
+      const d = await can(input("create", "content"));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-default');
+      expect(d.reason).toBe("deny-default");
     });
 
-    it('rbac3 — Editor has read+update but not delete-project (sensitive) → deny-sensitive', async () => {
-      repo.setCompanyGrants(U, CO, [rg('read', 'project', 'ALLOW'), rg('update', 'content', 'ALLOW')]);
-      const d = await can(input('delete-project', 'project', { isSensitive: true }));
-      expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-sensitive');
-    });
-
-    it('rbac4 — CompanyAdmin manage:company does NOT grant view-salary → deny-sensitive', async () => {
-      repo.setCompanyGrants(U, CO, [rg('manage', 'company', 'ALLOW'), rg('*', '*', 'ALLOW')]);
-      const d = await can(input('view-salary', 'payslip', { isSensitive: true }));
-      expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-sensitive');
-    });
-
-    it('rbac5 — ChannelManager manage:channel does NOT grant reveal-secret → deny-sensitive', async () => {
+    it("rbac3 — Editor has read+update but not delete-project (sensitive) → deny-sensitive", async () => {
       repo.setCompanyGrants(U, CO, [
-        rg('manage', 'channel', 'ALLOW'),
-        rg('read', 'platform-account', 'ALLOW'),
+        rg("read", "project", "ALLOW"),
+        rg("update", "content", "ALLOW"),
       ]);
-      const d = await can(input('reveal-secret', 'platform-account', { isSensitive: true }));
+      const d = await can(input("delete-project", "project", { isSensitive: true }));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-sensitive');
+      expect(d.reason).toBe("deny-sensitive");
     });
 
-    it('rbac6 — DeptManager manage:department does NOT grant change-role → deny-sensitive', async () => {
-      repo.setCompanyGrants(U, CO, [rg('manage', 'department', 'ALLOW'), rg('read', 'user', 'ALLOW')]);
-      const d = await can(input('change-role', 'role', { isSensitive: true }));
+    it("rbac4 — CompanyAdmin manage:company does NOT grant view-salary → deny-sensitive", async () => {
+      repo.setCompanyGrants(U, CO, [rg("manage", "company", "ALLOW"), rg("*", "*", "ALLOW")]);
+      const d = await can(input("view-salary", "payslip", { isSensitive: true }));
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-sensitive');
+      expect(d.reason).toBe("deny-sensitive");
+    });
+
+    it("rbac5 — ChannelManager manage:channel does NOT grant reveal-secret → deny-sensitive", async () => {
+      repo.setCompanyGrants(U, CO, [
+        rg("manage", "channel", "ALLOW"),
+        rg("read", "platform-account", "ALLOW"),
+      ]);
+      const d = await can(input("reveal-secret", "platform-account", { isSensitive: true }));
+      expect(d.allow).toBe(false);
+      expect(d.reason).toBe("deny-sensitive");
+    });
+
+    it("rbac6 — DeptManager manage:department does NOT grant change-role → deny-sensitive", async () => {
+      repo.setCompanyGrants(U, CO, [
+        rg("manage", "department", "ALLOW"),
+        rg("read", "user", "ALLOW"),
+      ]);
+      const d = await can(input("change-role", "role", { isSensitive: true }));
+      expect(d.allow).toBe(false);
+      expect(d.reason).toBe("deny-sensitive");
     });
   });
 
@@ -492,20 +518,20 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
   // REAUTH cases
   // ═══════════════════════════════════════════════════════════════
 
-  describe('reauth required for reveal-secret type actions', () => {
-    it('reauth1 — reveal-secret with explicit ALLOW but no reauthValidUntil → deny-reauth-required', async () => {
+  describe("reauth required for reveal-secret type actions", () => {
+    it("reauth1 — reveal-secret with explicit ALLOW but no reauthValidUntil → deny-reauth-required", async () => {
       // F2 (G6-2): reveal-secret needs a per-object ALLOW; with the object grant present but NO reauth
       // window the denial reason is deny-reauth-required (object-tier reached, reauth missing).
       repo
         .setCompanyGrants(U, CO, [
-          rg('reveal-secret', 'platform-account', 'ALLOW', { isSensitive: true }),
+          rg("reveal-secret", "platform-account", "ALLOW", { isSensitive: true }),
         ])
-        .setObjectGrants(U, CO, 'platform-account', OBJ_A, [
-          og('reveal-secret', 'platform-account', 'ALLOW', true),
+        .setObjectGrants(U, CO, "platform-account", OBJ_A, [
+          og("reveal-secret", "platform-account", "ALLOW", true),
         ]);
       // reauthValidUntil not provided → no reauth
       const d = await can(
-        input('reveal-secret', 'platform-account', {
+        input("reveal-secret", "platform-account", {
           resourceId: OBJ_A,
           isSensitive: true,
           requiresReauth: true,
@@ -513,21 +539,21 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
         }),
       );
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-reauth-required');
+      expect(d.reason).toBe("deny-reauth-required");
       expect(d.requiresReauth).toBe(true);
     });
 
-    it('reauth2 — reveal-secret with explicit ALLOW + expired reauth → deny-reauth-required', async () => {
+    it("reauth2 — reveal-secret with explicit ALLOW + expired reauth → deny-reauth-required", async () => {
       // F2 (G6-2): object grant present + expired reauth → deny-reauth-required.
       repo
         .setCompanyGrants(U, CO, [
-          rg('reveal-secret', 'platform-account', 'ALLOW', { isSensitive: true }),
+          rg("reveal-secret", "platform-account", "ALLOW", { isSensitive: true }),
         ])
-        .setObjectGrants(U, CO, 'platform-account', OBJ_A, [
-          og('reveal-secret', 'platform-account', 'ALLOW', true),
+        .setObjectGrants(U, CO, "platform-account", OBJ_A, [
+          og("reveal-secret", "platform-account", "ALLOW", true),
         ]);
       const d = await can(
-        input('reveal-secret', 'platform-account', {
+        input("reveal-secret", "platform-account", {
           resourceId: OBJ_A,
           isSensitive: true,
           requiresReauth: true,
@@ -535,7 +561,7 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
         }),
       );
       expect(d.allow).toBe(false);
-      expect(d.reason).toBe('deny-reauth-required');
+      expect(d.reason).toBe("deny-reauth-required");
       expect(d.requiresReauth).toBe(true);
     });
   });
@@ -544,30 +570,30 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
   // (k) IDEMPOTENCY
   // ═══════════════════════════════════════════════════════════════
 
-  describe('(k) idempotency — two revoke events yield consistent DENY', () => {
-    it('k1 — calling can() twice returns identical result', async () => {
-      repo.setCompanyGrants(U, CO, [rg('read', 'project', 'ALLOW')]);
-      const d1 = await can(input('read', 'project'));
-      const d2 = await can(input('read', 'project'));
+  describe("(k) idempotency — two revoke events yield consistent DENY", () => {
+    it("k1 — calling can() twice returns identical result", async () => {
+      repo.setCompanyGrants(U, CO, [rg("read", "project", "ALLOW")]);
+      const d1 = await can(input("read", "project"));
+      const d2 = await can(input("read", "project"));
       expect(d1.allow).toBe(d2.allow);
       expect(d1.reason).toBe(d2.reason);
     });
 
-    it('k2 — simulated revoke (grants cleared) → deny-default on second call', async () => {
-      repo.setCompanyGrants(U, CO, [rg('read', 'project', 'ALLOW')]);
-      const before = await can(input('read', 'project'));
+    it("k2 — simulated revoke (grants cleared) → deny-default on second call", async () => {
+      repo.setCompanyGrants(U, CO, [rg("read", "project", "ALLOW")]);
+      const before = await can(input("read", "project"));
       expect(before.allow).toBe(true);
 
       repo.setCompanyGrants(U, CO, []); // simulate revoke invalidating grants
-      const after = await can(input('read', 'project'));
+      const after = await can(input("read", "project"));
       expect(after.allow).toBe(false);
-      expect(after.reason).toBe('deny-default');
+      expect(after.reason).toBe("deny-default");
     });
 
-    it('k3 — two consecutive deny calls return same DENY (idempotent)', async () => {
+    it("k3 — two consecutive deny calls return same DENY (idempotent)", async () => {
       repo.setCompanyGrants(U, CO, []);
-      const d1 = await can(input('read', 'project'));
-      const d2 = await can(input('read', 'project'));
+      const d1 = await can(input("read", "project"));
+      const d2 = await can(input("read", "project"));
       expect(d1.allow).toBe(false);
       expect(d2.allow).toBe(false);
       expect(d1.reason).toBe(d2.reason);
@@ -578,81 +604,79 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
   // ALLOW CASES (≥10 required)
   // ═══════════════════════════════════════════════════════════════
 
-  describe('ALLOW cases', () => {
-    it('allow1 — direct matching ALLOW grant → allow', async () => {
-      repo.setCompanyGrants(U, CO, [rg('read', 'project', 'ALLOW')]);
-      const d = await can(input('read', 'project'));
+  describe("ALLOW cases", () => {
+    it("allow1 — direct matching ALLOW grant → allow", async () => {
+      repo.setCompanyGrants(U, CO, [rg("read", "project", "ALLOW")]);
+      const d = await can(input("read", "project"));
       expect(d.allow).toBe(true);
-      expect(d.reason).toBe('allow');
+      expect(d.reason).toBe("allow");
     });
 
-    it('allow2 — multiple roles all ALLOW → allow', async () => {
+    it("allow2 — multiple roles all ALLOW → allow", async () => {
       repo.setCompanyGrants(U, CO, [
-        rg('read', 'project', 'ALLOW'),
-        rg('read', 'project', 'ALLOW'),
+        rg("read", "project", "ALLOW"),
+        rg("read", "project", "ALLOW"),
       ]);
-      const d = await can(input('read', 'project'));
+      const d = await can(input("read", "project"));
       expect(d.allow).toBe(true);
-      expect(d.reason).toBe('allow');
+      expect(d.reason).toBe("allow");
     });
 
-    it('allow3 — wildcard *:* ALLOW for non-sensitive action → allow', async () => {
-      repo.setCompanyGrants(U, CO, [rg('*', '*', 'ALLOW')]);
-      const d = await can(input('approve', 'step'));
+    it("allow3 — wildcard *:* ALLOW for non-sensitive action → allow", async () => {
+      repo.setCompanyGrants(U, CO, [rg("*", "*", "ALLOW")]);
+      const d = await can(input("approve", "step"));
       expect(d.allow).toBe(true);
-      expect(d.reason).toBe('allow');
+      expect(d.reason).toBe("allow");
     });
 
-    it('(f1) allow4 — sensitive action with explicit ALLOW → allow', async () => {
-      repo.setCompanyGrants(U, CO, [
-        rg('view-salary', 'payslip', 'ALLOW', { isSensitive: true }),
-      ]);
-      const d = await can(input('view-salary', 'payslip', { isSensitive: true }));
+    it("(f1) allow4 — sensitive action with explicit ALLOW → allow", async () => {
+      repo.setCompanyGrants(U, CO, [rg("view-salary", "payslip", "ALLOW", { isSensitive: true })]);
+      const d = await can(input("view-salary", "payslip", { isSensitive: true }));
       expect(d.allow).toBe(true);
-      expect(d.reason).toBe('allow');
+      expect(d.reason).toBe("allow");
       expect(d.auditRequired).toBe(true);
     });
 
-    it('(f2) allow5 — super-admin wildcard + explicit sensitive ALLOW → allow', async () => {
+    it("(f2) allow5 — super-admin wildcard + explicit sensitive ALLOW → allow", async () => {
       repo.setCompanyGrants(U, CO, [
-        rg('*', '*', 'ALLOW'), // super-admin
-        rg('view-salary', 'payslip', 'ALLOW', { isSensitive: true }), // explicit sensitive
+        rg("*", "*", "ALLOW"), // super-admin
+        rg("view-salary", "payslip", "ALLOW", { isSensitive: true }), // explicit sensitive
       ]);
-      const d = await can(input('view-salary', 'payslip', { isSensitive: true }));
+      const d = await can(input("view-salary", "payslip", { isSensitive: true }));
       expect(d.allow).toBe(true);
-      expect(d.reason).toBe('allow');
+      expect(d.reason).toBe("allow");
     });
 
-    it('(j1) allow6 — object-ALLOW overrides company-DENY (lower tier wins)', async () => {
+    it("(j1) allow6 — object-ALLOW overrides company-DENY (lower tier wins)", async () => {
       repo
-        .setCompanyGrants(U, CO, [rg('read', 'project', 'DENY')])
-        .setObjectGrants(U, CO, 'project', OBJ_A, [og('read', 'project', 'ALLOW')]);
-      const d = await can(input('read', 'project', { resourceId: OBJ_A }));
+        .setCompanyGrants(U, CO, [rg("read", "project", "DENY")])
+        .setObjectGrants(U, CO, "project", OBJ_A, [og("read", "project", "ALLOW")]);
+      const d = await can(input("read", "project", { resourceId: OBJ_A }));
       expect(d.allow).toBe(true);
-      expect(d.reason).toBe('allow');
+      expect(d.reason).toBe("allow");
     });
 
-    it('allow7 — expired role ignored; valid role still grants', async () => {
+    it("allow7 — expired role ignored; valid role still grants", async () => {
       repo.setCompanyGrants(U, CO, [
-        rg('approve', 'step', 'ALLOW', { expiresAt: PAST }), // expired
-        rg('approve', 'step', 'ALLOW', { expiresAt: FUTURE }), // valid
+        rg("approve", "step", "ALLOW", { expiresAt: PAST }), // expired
+        rg("approve", "step", "ALLOW", { expiresAt: FUTURE }), // valid
       ]);
-      const d = await can(input('approve', 'step'));
+      const d = await can(input("approve", "step"));
       expect(d.allow).toBe(true);
-      expect(d.reason).toBe('allow');
+      expect(d.reason).toBe("allow");
     });
 
-    it('allow8 — reveal-secret with explicit ALLOW + valid reauth → allow', async () => {
+    it("allow8 — reveal-secret with explicit ALLOW + valid reauth → allow", async () => {
       // F2 (G6-2): reveal-secret ALLOWs only with a per-object grant; object grant + valid reauth → allow.
       repo
         .setCompanyGrants(U, CO, [
-          rg('reveal-secret', 'platform-account', 'ALLOW', { isSensitive: true }),
+          rg("reveal-secret", "platform-account", "ALLOW", { isSensitive: true }),
         ])
-        .setObjectGrants(U, CO, 'platform-account', OBJ_A, [
-          og('reveal-secret', 'platform-account', 'ALLOW', true),
+        .setObjectGrants(U, CO, "platform-account", OBJ_A, [
+          og("reveal-secret", "platform-account", "ALLOW", true),
         ]);
       const d = await can(
-        input('reveal-secret', 'platform-account', {
+        input("reveal-secret", "platform-account", {
           resourceId: OBJ_A,
           isSensitive: true,
           requiresReauth: true,
@@ -660,41 +684,41 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
         }),
       );
       expect(d.allow).toBe(true);
-      expect(d.reason).toBe('allow');
+      expect(d.reason).toBe("allow");
     });
 
-    it('allow9 — CompanyAdmin wildcard → allow non-sensitive action', async () => {
-      repo.setCompanyGrants(U, CO, [rg('*', '*', 'ALLOW')]);
-      const d = await can(input('read', 'project'));
+    it("allow9 — CompanyAdmin wildcard → allow non-sensitive action", async () => {
+      repo.setCompanyGrants(U, CO, [rg("*", "*", "ALLOW")]);
+      const d = await can(input("read", "project"));
       expect(d.allow).toBe(true);
-      expect(d.reason).toBe('allow');
+      expect(d.reason).toBe("allow");
     });
 
-    it('allow10 — object-level ALLOW with no company grant → allow', async () => {
+    it("allow10 — object-level ALLOW with no company grant → allow", async () => {
       repo
         .setCompanyGrants(U, CO, [])
-        .setObjectGrants(U, CO, 'project', OBJ_A, [og('read', 'project', 'ALLOW')]);
-      const d = await can(input('read', 'project', { resourceId: OBJ_A }));
+        .setObjectGrants(U, CO, "project", OBJ_A, [og("read", "project", "ALLOW")]);
+      const d = await can(input("read", "project", { resourceId: OBJ_A }));
       expect(d.allow).toBe(true);
-      expect(d.reason).toBe('allow');
+      expect(d.reason).toBe("allow");
     });
 
-    it('allow11 — DENY for other action does not block allowed action', async () => {
+    it("allow11 — DENY for other action does not block allowed action", async () => {
       repo.setCompanyGrants(U, CO, [
-        rg('read', 'project', 'ALLOW'),
-        rg('delete-project', 'project', 'DENY', { isSensitive: true }),
+        rg("read", "project", "ALLOW"),
+        rg("delete-project", "project", "DENY", { isSensitive: true }),
       ]);
-      const d = await can(input('read', 'project'));
+      const d = await can(input("read", "project"));
       expect(d.allow).toBe(true);
-      expect(d.reason).toBe('allow');
+      expect(d.reason).toBe("allow");
     });
 
-    it('allow12 — direct match ALLOW overrides wildcard DENY (direct match wins within tier)', async () => {
+    it("allow12 — direct match ALLOW overrides wildcard DENY (direct match wins within tier)", async () => {
       // Wildcard DENY + direct ALLOW: direct match should be checked specifically
       // This tests that the algorithm doesn't over-apply wildcard DENY
       repo.setCompanyGrants(U, CO, [
-        rg('*', '*', 'DENY'), // wildcard deny
-        rg('read', 'project', 'ALLOW'), // direct allow
+        rg("*", "*", "DENY"), // wildcard deny
+        rg("read", "project", "ALLOW"), // direct allow
       ]);
       // Under the algorithm: company-DENY check — does wildcard DENY match?
       // If yes: deny-explicit. If only direct DENY is checked: allow.
@@ -704,9 +728,9 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
       // Per spec: "gom TẤT CẢ role → nếu có BẤT KỲ DENY nào thì DENY thắng"
       // "BẤT KỲ DENY" = any DENY (including wildcard) → DENY
       // So this test should be: deny-explicit
-      const d = await can(input('read', 'project'));
+      const d = await can(input("read", "project"));
       expect(d.allow).toBe(false); // wildcard DENY wins
-      expect(d.reason).toBe('deny-explicit');
+      expect(d.reason).toBe("deny-explicit");
     });
   });
 
@@ -714,33 +738,31 @@ describe('PermissionService.can() — G3-3 deny-path RED suite', () => {
   // AUDIT FLAG
   // ═══════════════════════════════════════════════════════════════
 
-  describe('auditRequired flag', () => {
-    it('audit1 — sensitive action DENY → auditRequired true', async () => {
+  describe("auditRequired flag", () => {
+    it("audit1 — sensitive action DENY → auditRequired true", async () => {
       repo.setCompanyGrants(U, CO, []);
-      const d = await can(input('view-salary', 'payslip', { isSensitive: true }));
+      const d = await can(input("view-salary", "payslip", { isSensitive: true }));
       expect(d.allow).toBe(false);
       expect(d.auditRequired).toBe(true);
     });
 
-    it('audit2 — non-sensitive deny-default → auditRequired false', async () => {
+    it("audit2 — non-sensitive deny-default → auditRequired false", async () => {
       repo.setCompanyGrants(U, CO, []);
-      const d = await can(input('read', 'project'));
+      const d = await can(input("read", "project"));
       expect(d.allow).toBe(false);
       expect(d.auditRequired).toBe(false);
     });
 
-    it('audit3 — sensitive ALLOW → auditRequired true', async () => {
-      repo.setCompanyGrants(U, CO, [
-        rg('view-salary', 'payslip', 'ALLOW', { isSensitive: true }),
-      ]);
-      const d = await can(input('view-salary', 'payslip', { isSensitive: true }));
+    it("audit3 — sensitive ALLOW → auditRequired true", async () => {
+      repo.setCompanyGrants(U, CO, [rg("view-salary", "payslip", "ALLOW", { isSensitive: true })]);
+      const d = await can(input("view-salary", "payslip", { isSensitive: true }));
       expect(d.allow).toBe(true);
       expect(d.auditRequired).toBe(true);
     });
 
-    it('audit4 — non-sensitive ALLOW → auditRequired false', async () => {
-      repo.setCompanyGrants(U, CO, [rg('read', 'project', 'ALLOW')]);
-      const d = await can(input('read', 'project'));
+    it("audit4 — non-sensitive ALLOW → auditRequired false", async () => {
+      repo.setCompanyGrants(U, CO, [rg("read", "project", "ALLOW")]);
+      const d = await can(input("read", "project"));
       expect(d.allow).toBe(true);
       expect(d.auditRequired).toBe(false);
     });

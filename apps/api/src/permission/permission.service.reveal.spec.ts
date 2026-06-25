@@ -17,14 +17,15 @@
  * Why RED: PermissionService.can() returns allow=true for this input today.
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
-import { PermissionService } from './permission.service';
+import { beforeEach, describe, expect, it } from "vitest";
+import { PermissionService } from "./permission.service";
 import type {
   CanInput,
   CompanyRoleGrant,
+  CompanyRoleGrantWithScope,
   IPermissionRepository,
   ObjectGrant,
-} from './permission.types';
+} from "./permission.types";
 
 // ─── Minimal mock repo (mirrors permission.service.spec.ts pattern) ───────────
 
@@ -44,6 +45,13 @@ class MinimalMockRepo implements IPermissionRepository {
 
   async getCompanyRoleGrants(_userId: string, _companyId: string): Promise<CompanyRoleGrant[]> {
     return this.companyGrants;
+  }
+
+  async getCompanyRoleGrantsWithScope(
+    _userId: string,
+    _companyId: string,
+  ): Promise<CompanyRoleGrantWithScope[]> {
+    return [];
   }
 
   async getObjectGrants(
@@ -66,16 +74,16 @@ class MinimalMockRepo implements IPermissionRepository {
 
 // ─── Test constants ───────────────────────────────────────────────────────────
 
-const CO = 'co-reveal-test';
-const U  = 'user-reveal-test';
+const CO = "co-reveal-test";
+const U = "user-reveal-test";
 const FUTURE = new Date(Date.now() + 3_600_000);
 
 function revealInput(resourceId: string | null | undefined): CanInput {
   return {
     userId: U,
     companyId: CO,
-    action: 'reveal-secret',
-    resourceType: 'platform-account',
+    action: "reveal-secret",
+    resourceType: "platform-account",
     resourceId,
     isSensitive: true,
     requiresReauth: true,
@@ -84,16 +92,16 @@ function revealInput(resourceId: string | null | undefined): CanInput {
 }
 
 const exactRevealAllow: CompanyRoleGrant = {
-  action: 'reveal-secret',
-  resourceType: 'platform-account',
+  action: "reveal-secret",
+  resourceType: "platform-account",
   isSensitive: true,
-  effect: 'ALLOW',
+  effect: "ALLOW",
   expiresAt: null,
 };
 
 // ─── Suite ────────────────────────────────────────────────────────────────────
 
-describe('PermissionService.can() — RED 14b: reveal-secret with null resourceId must DENY (fail-closed)', () => {
+describe("PermissionService.can() — RED 14b: reveal-secret with null resourceId must DENY (fail-closed)", () => {
   let repo: MinimalMockRepo;
   let svc: PermissionService;
 
@@ -102,7 +110,7 @@ describe('PermissionService.can() — RED 14b: reveal-secret with null resourceI
     svc = new PermissionService(repo);
   });
 
-  it('RED 14b-1 — company exact ALLOW for reveal-secret + resourceId:null → DENY (object grant required)', async () => {
+  it("RED 14b-1 — company exact ALLOW for reveal-secret + resourceId:null → DENY (object grant required)", async () => {
     // Arrange: user has company-level exact ALLOW for reveal-secret (not a wildcard).
     // Per F2: this is NOT enough; an object-tier grant per account is mandatory.
     // Seam: permission.service.ts:55-58 skips object check when resourceId==null, then
@@ -122,38 +130,36 @@ describe('PermissionService.can() — RED 14b: reveal-secret with null resourceI
     expect(decision.allow).toBe(false);
   });
 
-  it('RED 14b-2 — company exact ALLOW for reveal-secret + resourceId:undefined → DENY (fail-closed)', async () => {
+  it("RED 14b-2 — company exact ALLOW for reveal-secret + resourceId:undefined → DENY (fail-closed)", async () => {
     // Same as 14b-1 but with undefined instead of null (both must deny).
     repo.withCompanyGrants([exactRevealAllow]);
     const decision = await svc.can(revealInput(undefined));
     expect(decision.allow).toBe(false);
   });
 
-  it('RED 14b-3 — super-admin wildcard ALLOW + reveal-secret + resourceId:null → DENY (fail-closed)', async () => {
+  it("RED 14b-3 — super-admin wildcard ALLOW + reveal-secret + resourceId:null → DENY (fail-closed)", async () => {
     // Even a super-admin (*:* ALLOW) must be denied reveal-secret without a per-object grant.
     repo.withCompanyGrants([
-      { action: '*', resourceType: '*', isSensitive: false, effect: 'ALLOW', expiresAt: null },
+      { action: "*", resourceType: "*", isSensitive: false, effect: "ALLOW", expiresAt: null },
       exactRevealAllow, // + explicit sensitive ALLOW
     ]);
     const decision = await svc.can(revealInput(null));
     expect(decision.allow).toBe(false);
   });
 
-  it('BASELINE — company exact ALLOW + VALID resourceId + object grant → allow (object grant satisfies)', async () => {
+  it("BASELINE — company exact ALLOW + VALID resourceId + object grant → allow (object grant satisfies)", async () => {
     // This is the PASSING case to validate our mock is correct.
     // When resourceId IS provided and there is an object-level ALLOW, can() returns allow=true.
     // This case is expected GREEN (it tests existing correct behavior).
-    const ACCOUNT_ID = 'account-1234-5678';
-    repo
-      .withCompanyGrants([exactRevealAllow])
-      .withObjectGrants([
-        {
-          action: 'reveal-secret',
-          resourceType: 'platform-account',
-          isSensitive: true,
-          effect: 'ALLOW',
-        },
-      ]);
+    const ACCOUNT_ID = "account-1234-5678";
+    repo.withCompanyGrants([exactRevealAllow]).withObjectGrants([
+      {
+        action: "reveal-secret",
+        resourceType: "platform-account",
+        isSensitive: true,
+        effect: "ALLOW",
+      },
+    ]);
 
     const decision = await svc.can({
       ...revealInput(ACCOUNT_ID),
@@ -165,6 +171,6 @@ describe('PermissionService.can() — RED 14b: reveal-secret with null resourceI
     // We only assert it's the non-null-resourceId case (don't assert allow=true, to avoid false green
     // if the implementation changes this path).
     // The key invariant: the null-resourceId cases (RED 14b-1,2,3) must DENY.
-    expect(typeof decision.allow).toBe('boolean');
+    expect(typeof decision.allow).toBe("boolean");
   });
 });

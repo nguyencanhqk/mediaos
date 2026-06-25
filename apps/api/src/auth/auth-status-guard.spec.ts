@@ -33,10 +33,7 @@ import { refreshTokens, users } from "../db/schema";
 import type { AuditEntry } from "../events/audit.service";
 
 /** Tìm 1 audit entry theo action trong các lần gọi audit.record (calls = [tx, entry][]). */
-function findAudit(
-  calls: [unknown, AuditEntry][],
-  action: string,
-): AuditEntry | undefined {
+function findAudit(calls: [unknown, AuditEntry][], action: string): AuditEntry | undefined {
   return calls.find((c) => c[1]?.action === action)?.[1];
 }
 
@@ -181,6 +178,7 @@ function makeDeps(tx: unknown) {
     replayGuard as never,
     securityAlerts as never,
     securityPolicy as never,
+    { getMyApps: async () => [] } as never,
   );
   return { service, dbsvc, password, tokens, audit, twoFactor };
 }
@@ -257,7 +255,9 @@ describe("refresh() — guard status='suspended'", () => {
       refreshRow: makeRefreshRow(),
     });
     const { service } = makeDeps(tx);
-    await expect(service.refresh(REFRESH_TOKEN, META)).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(service.refresh(REFRESH_TOKEN, META)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
     expect(calls.refreshInserts).toBe(0);
   });
 
@@ -267,7 +267,9 @@ describe("refresh() — guard status='suspended'", () => {
       refreshRow: makeRefreshRow(),
     });
     const { service, audit } = makeDeps(tx);
-    await expect(service.refresh(REFRESH_TOKEN, META)).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(service.refresh(REFRESH_TOKEN, META)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
     // revoke: ít nhất 1 update refreshTokens (family)
     expect(calls.refreshUpdates).toBeGreaterThanOrEqual(1);
     const entry = findAudit(audit.record.mock.calls, "auth.refresh_blocked");
@@ -294,9 +296,9 @@ describe("completeTwoFactorLogin() — guard status='suspended'", () => {
   it("step-2 user suspended → 401 UNIFORM, KHÔNG cấp token", async () => {
     const { tx, calls } = makeTx({ userRow: makeUserRow({ status: "suspended" }) });
     const { service } = makeDeps(tx);
-    await expect(service.completeTwoFactorLogin("challenge", "123456", META)).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(
+      service.completeTwoFactorLogin("challenge", "123456", META),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(calls.refreshInserts).toBe(0);
   });
 

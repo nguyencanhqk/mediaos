@@ -86,7 +86,21 @@ export const authTokensSchema = z.object({
 });
 export type AuthTokens = z.infer<typeof authTokensSchema>;
 
-/** DTO user công khai — TUYỆT ĐỐI không chứa password_hash (BẤT BIẾN #3). */
+/**
+ * RBAC data_scope (BACKEND-03 §13 / DB-02 §12). Canonical, narrow→wide. Nguồn sự thật phía contract —
+ * apps/api có `ROLE_DATA_SCOPES` (schema) PHẢI khớp mảng này (test đồng bộ ở apps/api). KHÔNG để contracts
+ * import từ apps/api (đảo chiều phụ thuộc → vỡ dual ESM/CJS build).
+ */
+export const DATA_SCOPES = ["Own", "Team", "Department", "Company", "System"] as const;
+export type DataScope = (typeof DATA_SCOPES)[number];
+
+/**
+ * DTO user công khai — TUYỆT ĐỐI không chứa password_hash (BẤT BIẾN #3).
+ *
+ * S2-AUTH-BE-1: bổ sung ADDITIVE bootstrap context (BACKEND-03 §15.2/§15.3) — `company`, `employee`, `roles`,
+ * `scopes`, `modules`. Tất cả OPTIONAL/nullable để tương thích ngược (FE cũ strip field lạ; rollback = bỏ qua).
+ * `capabilities`/`mustSetupTwoFactor` GIỮ nguyên (FE web-core đang dùng). `scopes` keyed Y HỆT `capabilities`.
+ */
 export const meResponseSchema = z.object({
   id: z.string().uuid(),
   companyId: z.string().uuid(),
@@ -97,5 +111,31 @@ export const meResponseSchema = z.object({
   capabilities: z.record(z.boolean()),
   /** true khi role ép 2FA (requires_two_factor) nhưng user CHƯA bật → FE buộc enroll (G16-1, AUTH-003). */
   mustSetupTwoFactor: z.boolean(),
+  /** Company hiện tại (tenant của phiên). */
+  company: z.object({ id: z.string().uuid(), name: z.string(), status: z.string() }).optional(),
+  /**
+   * Hồ sơ nhân sự liên kết user — null khi không có (operator/super-admin). KHÔNG bao giờ chứa base_salary
+   * (nhạy cảm). full_name lấy từ users.full_name; departmentId = org_unit_id; employmentStatus = profile.status.
+   */
+  employee: z
+    .object({
+      id: z.string().uuid(),
+      employeeCode: z.string().nullable(),
+      fullName: z.string().nullable(),
+      departmentId: z.string().uuid().nullable(),
+      directManagerId: z.string().uuid().nullable(),
+      employmentStatus: z.string(),
+    })
+    .nullable()
+    .optional(),
+  /** Role active (user_roles ⋈ roles, chưa xoá/hết hạn). roles không có cột `code` → `name` chính là code. */
+  roles: z.array(z.object({ id: z.string().uuid(), name: z.string() })).optional(),
+  /**
+   * Union data_scope theo từng cặp ALLOW non-sensitive (BACKEND-03 §15.3 rule 6 — mảng hợp, KHÔNG scalar).
+   * Key = "action:resourceType" (đồng bộ `capabilities`); cặp bị DENY-override KHÔNG xuất hiện. Đã dedupe.
+   */
+  scopes: z.record(z.array(z.enum(DATA_SCOPES))).optional(),
+  /** Module user thấy ở Home/App-Switcher — TÁI DÙNG ModuleCatalogService.getMyApps() (KHÔNG re-implement). */
+  modules: z.array(z.object({ code: z.string(), name: z.string() })).optional(),
 });
 export type MeResponse = z.infer<typeof meResponseSchema>;

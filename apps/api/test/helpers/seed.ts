@@ -162,12 +162,13 @@ export async function seedRolePermission(
   roleId: string,
   permissionId: string,
   effect: "ALLOW" | "DENY",
+  dataScope: "Own" | "Team" | "Department" | "Company" | "System" = "Company",
 ): Promise<void> {
   await direct.query(
-    `INSERT INTO role_permissions (role_id, permission_id, effect)
-     VALUES ($1, $2, $3)
+    `INSERT INTO role_permissions (role_id, permission_id, effect, data_scope)
+     VALUES ($1, $2, $3, $4)
      ON CONFLICT DO NOTHING`,
-    [roleId, permissionId, effect],
+    [roleId, permissionId, effect, dataScope],
   );
 }
 
