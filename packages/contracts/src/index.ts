@@ -76,6 +76,9 @@ export function apiResponseSchema<T extends z.ZodTypeAny>(data: T) {
 export const CONTRACTS_VERSION = "0.0.0" as const;
 
 export * from "./auth";
+// S2-AUTH-BE-3 (additive): auth admin subdir (user-admin + role/permission list). Đặt SAU flat auth.ts;
+// TÊN export RIÊNG (auth*/AUTH_USER…) KHÔNG trùng auth.ts hay users.ts (AdminUser*) → không vỡ barrel.
+export * from "./auth/index";
 export * from "./users";
 export * from "./two-factor";
 export * from "./org";
