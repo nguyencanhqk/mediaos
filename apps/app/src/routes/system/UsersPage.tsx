@@ -2,7 +2,8 @@
  * HR-SCREEN-SYSTEM-USERS (S2-FE-HR-3 P1) — User list read-only placeholder.
  *
  * Scope: read-only view placeholder; full CRUD deferred to Sprint 3 (S3-FE-SYSTEM-USERS).
- * Permission gate: useCan("manage", "user") — khớp engine pair AUTH.USER.VIEW → manage:user.
+ * Permission gate: useCan("view", "user") — canonical engine pair AUTH.USER.VIEW → view:user
+ *   (DB-02 §9.1 + seed §13 migration 0444; hr + company-admin được view:user/Company).
  * Server enforces all data-scope; client only renders what server returns.
  *
  * States covered: loading · error · empty · forbidden.
@@ -87,6 +88,7 @@ function useUserColumns(t: ReturnType<typeof useTranslation<"system">>["t"]): Co
 export function UsersPage() {
   const { t } = useTranslation("system");
   const { t: tc } = useTranslation("common");
+  // READ_USER = { action: "view", resourceType: "user" } → view:user (seed §13).
   const { action, resourceType } = SYSTEM_ENGINE_PAIRS.READ_USER;
   const canView = useCan(action, resourceType);
 

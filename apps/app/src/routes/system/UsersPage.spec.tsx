@@ -1,6 +1,8 @@
 /**
  * [RED-trước · deny-path] UsersPage — S2-FE-HR-3.
- * Gate: manage:user — khớp engine pair AUTH.USER.VIEW → manage:user (seed migration).
+ * Gate: view:user — canonical engine pair AUTH.USER.VIEW → view:user
+ *   (DB-02 §9.1 + seed §13 migration 0444: hr + company-admin được view:user/Company).
+ * Deny-path dùng read:employee (HR.EMPLOYEE.VIEW, KHÔNG mở được system users).
  * States: loading · error · empty · forbidden · list render.
  */
 import React from "react";
@@ -127,25 +129,26 @@ describe("UsersPage", () => {
     vi.clearAllMocks();
   });
 
-  // ── DENY-PATH: no manage:user → forbidden, API not called ────────────────
-  it("renders forbidden state and does NOT call API when user lacks manage:user", () => {
+  // ── DENY-PATH: no view:user → forbidden, API not called ──────────────────
+  it("renders forbidden state and does NOT call API when user lacks view:user", () => {
     setCapabilities({});
     renderWithQuery(<UsersPage />);
     expect(screen.getByText(/không có quyền truy cập/i)).toBeInTheDocument();
     expect(usersApi.listUsers).not.toHaveBeenCalled();
   });
 
-  // ── DENY-PATH: read:employee but not manage:user → still forbidden ────────
-  it("renders forbidden when user has read:employee but not manage:user", () => {
+  // ── DENY-PATH: read:employee but not view:user → still forbidden ──────────
+  //   HR.EMPLOYEE.VIEW (read:employee) KHÔNG cấp quyền mở danh sách user hệ thống.
+  it("renders forbidden when user has read:employee but not view:user", () => {
     setCapabilities({ "read:employee": true });
     renderWithQuery(<UsersPage />);
     expect(screen.getByText(/không có quyền truy cập/i)).toBeInTheDocument();
     expect(usersApi.listUsers).not.toHaveBeenCalled();
   });
 
-  // ── ALLOW-PATH: manage:user → list renders ──────────────────────────────
-  it("renders user list when user has manage:user", async () => {
-    setCapabilities({ "manage:user": true });
+  // ── ALLOW-PATH: view:user → list renders ─────────────────────────────────
+  it("renders user list when user has view:user", async () => {
+    setCapabilities({ "view:user": true });
     vi.mocked(usersApi.listUsers).mockResolvedValue(MOCK_LIST);
     renderWithQuery(<UsersPage />);
     await waitFor(() => expect(screen.getByText("admin@demo.local")).toBeInTheDocument());
@@ -155,7 +158,7 @@ describe("UsersPage", () => {
 
   // ── LOADING state ─────────────────────────────────────────────────────────
   it("shows loading skeleton while fetching", () => {
-    setCapabilities({ "manage:user": true });
+    setCapabilities({ "view:user": true });
     vi.mocked(usersApi.listUsers).mockReturnValue(new Promise(() => {}));
     renderWithQuery(<UsersPage />);
     const table = document.querySelector("table");
@@ -164,7 +167,7 @@ describe("UsersPage", () => {
 
   // ── ERROR state ───────────────────────────────────────────────────────────
   it("shows error state when API fails", async () => {
-    setCapabilities({ "manage:user": true });
+    setCapabilities({ "view:user": true });
     vi.mocked(usersApi.listUsers).mockRejectedValue(new Error("network error"));
     renderWithQuery(<UsersPage />);
     await waitFor(() => expect(screen.getByText(/không thể tải danh sách/i)).toBeInTheDocument());
@@ -172,7 +175,7 @@ describe("UsersPage", () => {
 
   // ── EMPTY state ───────────────────────────────────────────────────────────
   it("shows empty state when no users returned", async () => {
-    setCapabilities({ "manage:user": true });
+    setCapabilities({ "view:user": true });
     vi.mocked(usersApi.listUsers).mockResolvedValue({ users: [], total: 0 });
     renderWithQuery(<UsersPage />);
     await waitFor(() => expect(screen.getByText(/không có người dùng/i)).toBeInTheDocument());
@@ -180,7 +183,7 @@ describe("UsersPage", () => {
 
   // ── Sprint-3 notice visible ───────────────────────────────────────────────
   it("shows Sprint 3 placeholder notice when user has permission", async () => {
-    setCapabilities({ "manage:user": true });
+    setCapabilities({ "view:user": true });
     vi.mocked(usersApi.listUsers).mockResolvedValue(MOCK_LIST);
     renderWithQuery(<UsersPage />);
     await waitFor(() => expect(screen.getByText("admin@demo.local")).toBeInTheDocument());

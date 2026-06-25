@@ -1,6 +1,9 @@
 /**
  * [RED-trước · deny-path] RolesPage — S2-FE-HR-3.
- * Gate: read:role — khớp engine pair AUTH.ROLE.VIEW → read:role (seed migration).
+ * Gate: view:role — canonical engine pair AUTH.ROLE.VIEW → view:role
+ *   (DB-02 §9.1 + seed §13 migration 0444: chỉ company-admin được view:role/Company).
+ * Deny-path dùng view:user (role hr có view:user nhưng KHÔNG có view:role) — bắt đúng drift
+ *   theo cặp seed-truth, KHÔNG khớp cặp FE sai để xanh giả.
  * States: loading · error · empty · forbidden · list render.
  */
 import React from "react";
@@ -106,25 +109,26 @@ describe("RolesPage", () => {
     vi.clearAllMocks();
   });
 
-  // ── DENY-PATH: no read:role → forbidden, API not called ─────────────────
-  it("renders forbidden state and does NOT call API when user lacks read:role", () => {
+  // ── DENY-PATH: no view:role → forbidden, API not called ──────────────────
+  it("renders forbidden state and does NOT call API when user lacks view:role", () => {
     setCapabilities({});
     renderWithQuery(<RolesPage />);
     expect(screen.getByText(/không có quyền truy cập/i)).toBeInTheDocument();
     expect(apiFetch).not.toHaveBeenCalled();
   });
 
-  // ── DENY-PATH: manage:user but not read:role → still forbidden ───────────
-  it("renders forbidden when user has manage:user but not read:role", () => {
-    setCapabilities({ "manage:user": true });
+  // ── DENY-PATH: view:user (hr) but not view:role → still forbidden ─────────
+  //   role hr được §13 cấp view:user(Company) nhưng KHÔNG có view:role → Roles vẫn bị chặn.
+  it("renders forbidden when user has view:user but not view:role", () => {
+    setCapabilities({ "view:user": true });
     renderWithQuery(<RolesPage />);
     expect(screen.getByText(/không có quyền truy cập/i)).toBeInTheDocument();
     expect(apiFetch).not.toHaveBeenCalled();
   });
 
-  // ── ALLOW-PATH: read:role → list renders ─────────────────────────────────
-  it("renders roles list when user has read:role", async () => {
-    setCapabilities({ "read:role": true });
+  // ── ALLOW-PATH: view:role → list renders ─────────────────────────────────
+  it("renders roles list when user has view:role", async () => {
+    setCapabilities({ "view:role": true });
     vi.mocked(apiFetch).mockResolvedValue(MOCK_ROLES);
     renderWithQuery(<RolesPage />);
     await waitFor(() => expect(screen.getByText("Super Admin")).toBeInTheDocument());
@@ -134,7 +138,7 @@ describe("RolesPage", () => {
 
   // ── LOADING state ─────────────────────────────────────────────────────────
   it("shows loading skeleton while fetching", () => {
-    setCapabilities({ "read:role": true });
+    setCapabilities({ "view:role": true });
     vi.mocked(apiFetch).mockReturnValue(new Promise(() => {}));
     renderWithQuery(<RolesPage />);
     const table = document.querySelector("table");
@@ -143,7 +147,7 @@ describe("RolesPage", () => {
 
   // ── ERROR state ───────────────────────────────────────────────────────────
   it("shows error state when API fails", async () => {
-    setCapabilities({ "read:role": true });
+    setCapabilities({ "view:role": true });
     vi.mocked(apiFetch).mockRejectedValue(new Error("network error"));
     renderWithQuery(<RolesPage />);
     await waitFor(() => expect(screen.getByText(/không thể tải danh sách/i)).toBeInTheDocument());
@@ -151,7 +155,7 @@ describe("RolesPage", () => {
 
   // ── EMPTY state ───────────────────────────────────────────────────────────
   it("shows empty state when no roles returned", async () => {
-    setCapabilities({ "read:role": true });
+    setCapabilities({ "view:role": true });
     vi.mocked(apiFetch).mockResolvedValue([]);
     renderWithQuery(<RolesPage />);
     await waitFor(() => expect(screen.getByText(/không có vai trò/i)).toBeInTheDocument());
@@ -159,7 +163,7 @@ describe("RolesPage", () => {
 
   // ── Sprint-3 notice visible ───────────────────────────────────────────────
   it("shows Sprint 3 placeholder notice when user has permission", async () => {
-    setCapabilities({ "read:role": true });
+    setCapabilities({ "view:role": true });
     vi.mocked(apiFetch).mockResolvedValue(MOCK_ROLES);
     renderWithQuery(<RolesPage />);
     await waitFor(() => expect(screen.getByText("Super Admin")).toBeInTheDocument());

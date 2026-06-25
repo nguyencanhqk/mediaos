@@ -2,7 +2,8 @@
  * SYSTEM-SCREEN-ROLES (S2-FE-HR-3 P1) — Role list read-only placeholder.
  *
  * Scope: read-only list only; full role-permission management deferred to Sprint 3.
- * Permission gate: useCan("read", "role") — khớp engine pair AUTH.ROLE.VIEW → read:role.
+ * Permission gate: useCan("view", "role") — canonical engine pair AUTH.ROLE.VIEW → view:role
+ *   (DB-02 §9.1 + seed §13 migration 0444; chỉ company-admin được view:role/Company).
  * Server enforces all data-scope; client only renders what server returns.
  *
  * States covered: loading · error · empty · forbidden.
@@ -61,6 +62,7 @@ function useRoleColumns(
 export function RolesPage() {
   const { t } = useTranslation("system");
   const { t: tc } = useTranslation("common");
+  // READ_ROLE = { action: "view", resourceType: "role" } → view:role (seed §13).
   const { action, resourceType } = SYSTEM_ENGINE_PAIRS.READ_ROLE;
   const canView = useCan(action, resourceType);
 
