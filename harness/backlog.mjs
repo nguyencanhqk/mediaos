@@ -1088,7 +1088,10 @@ export const backlog = [
     layer: "FE",
     title: "FE: MyProfile (read-only) + user/role read-only placeholder (P1, KHÔNG chặn Sprint 3)",
     zone: "green",
-    status: "todo",
+    // CLOSE (2026-06-25): MyProfile read-only (GET /hr/me/profile) + system/Users·Roles read-only pages
+    //   + i18n vi/system + registry view:user/view:role (canonical seed §13). Rebased clean onto master
+    //   (drop stale base; vitest/tsconfig giữ source-resolution). app 116 test + web-core 188 xanh, lint 0 err.
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["code-review"],
     depends_on: ["S2-HR-BE-1", "S2-FE-AUTH-1"],
