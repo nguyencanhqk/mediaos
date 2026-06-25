@@ -32,11 +32,12 @@ describe("TotpService (RFC 6238 TOTP)", () => {
     expect(svc.verify(token, s2)).toBe(false);
   });
 
-  it("keyUri là otpauth:// chứa issuer MediaOS + accountName", () => {
+  it("keyUri là otpauth:// chứa issuer FUNTIME MEDIA + accountName", () => {
     const secret = svc.generateSecret();
     const uri = svc.keyUri("alice@acme.test", secret);
     expect(uri).toMatch(/^otpauth:\/\/totp\//);
-    expect(uri).toContain("MediaOS");
+    expect(uri).toContain("FUNTIME%20MEDIA"); // dấu cách PHẢI được encode (otplib encodeURIComponent)
+    expect(uri).not.toContain("FUNTIME MEDIA"); // space thật trong URI ⇒ vỡ new URL() parse ở int-spec
     expect(uri).toContain("alice%40acme.test"); // email URL-encoded
     expect(uri).toContain(`secret=${secret}`);
   });
