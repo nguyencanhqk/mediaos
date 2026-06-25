@@ -37,12 +37,10 @@ export const employeeProfiles = pgTable(
       .default(currentCompanyDefault)
       .references(() => companies.id, { onDelete: "cascade" }),
     // S2-HR-DB-1 (mig 0442): DB đã NỚI user_id → NULLABLE (employee tồn tại TRƯỚC khi gán account — DB-03 §7.2).
-    // Drizzle GIỮ .notNull() TẠM tới S2-HR-BE-2 (rework innerJoin→LEFT JOIN + cho insert employee-không-user);
-    // type chặt hơn DB = AN TOÀN (code hiện không insert NULL). unique (company_id,user_id) WHERE deleted_at IS NULL
-    // vẫn chặn 2 employee active cùng user (NULL phân biệt trong unique index Postgres).
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+    // S2-HR-BE-2: Drizzle NỚI .notNull() theo DB → cho phép unlink-user (user_id=NULL) + hr-read LEFT JOIN.
+    // unique (company_id, user_id) WHERE deleted_at IS NULL vẫn chặn 2 employee active cùng 1 user (NULL phân
+    // biệt trong unique index Postgres → nhiều employee chưa-link cùng tồn tại, nhưng 1 user → ≤1 employee active).
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
     employeeCode: text("employee_code"),
     orgUnitId: uuid("org_unit_id").references(() => orgUnits.id, { onDelete: "set null" }),
     positionId: uuid("position_id").references(() => positions.id, { onDelete: "set null" }),

@@ -250,7 +250,8 @@ export class EmployeesService {
         if (!row) throw new NotFoundException("Employee not found");
 
         // F5: set/clear direct_manager_id → upsert/soft-delete the EMR direct_manager row.
-        if (dto.directManagerId !== undefined) {
+        // S2-HR-BE-2: an unlinked employee (userId NULL) has no user to key an EMR on → skip.
+        if (dto.directManagerId !== undefined && row.userId) {
           await this.syncDirectManagerEmr(tx, user.companyId, row.userId, dto.directManagerId);
         }
 

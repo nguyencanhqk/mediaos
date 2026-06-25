@@ -69,7 +69,9 @@ export interface ListRequestsFilter {
 export interface EmployeeSnapshot {
   id: string;
   companyId: string;
-  userId: string;
+  // S2-HR-BE-2: employee_profiles.user_id is nullable (unlink-user). A self-service change-request is
+  // always raised by the linked user, so in this flow it is non-null in practice.
+  userId: string | null;
   phone: string | null;
   avatarUrl: string | null;
   notes: string | null;

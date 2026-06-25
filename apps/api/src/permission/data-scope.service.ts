@@ -14,7 +14,9 @@ export interface ScopeContext {
 
 /** A candidate employee row whose in-scope membership we test (single-resource path). */
 export interface EmployeeScopeTarget {
-  userId: string;
+  // S2-HR-BE-2: nullable — an unlinked employee has no user. null never matches Own/Team (=== a real
+  // user id is false), so it is correctly out of Own/Team scope; Company/System/Department unaffected.
+  userId: string | null;
   companyId: string;
   orgUnitId?: string | null;
   /** employee_profiles.direct_manager_id (a users.id) — for Team membership. */

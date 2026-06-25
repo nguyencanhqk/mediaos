@@ -252,7 +252,7 @@ export function EmployeeDetailPage({ employeeId, onBack }: EmployeeDetailPagePro
   return (
     <div className="space-y-6 p-6">
       <PageHeader
-        title={data.fullName}
+        title={data.fullName ?? "—"}
         description={`${t("detail.fields.code")}: ${data.employeeCode ?? "—"}`}
         icon={Users}
         actions={
