@@ -37,6 +37,7 @@ import { PermissionService } from "../permission/permission.service";
 import { LoginRateLimiter } from "./login-rate-limiter";
 import { PasswordService } from "./password.service";
 import { ReplayGuardService } from "./replay-guard.service";
+import { ResetPasswordMailService } from "./reset-password-mail.service";
 import { SecurityAlertService } from "./security-alert.service";
 import { TokenService } from "./token.service";
 import { TwoFactorService } from "./two-factor.service";
@@ -141,6 +142,9 @@ export class AuthService {
     // S2-AUTH-BE-1: /auth/me TÁI DÙNG getMyApps() cho `modules` (KHÔNG re-implement). ModuleCatalogModule
     // KHÔNG import AuthModule → acyclic (không cần forwardRef).
     private readonly modules: ModuleCatalogService,
+    // S2-AUTH-BE-4: gửi email "đặt lại mật khẩu" (mock MVP). Optional để các int-spec dựng AuthService bằng
+    // tay (KHÔNG truyền) vẫn chạy — vắng ⇒ forgotPassword bỏ qua bước gửi mail (đường outbox durable vẫn còn).
+    private readonly resetMail?: ResetPasswordMailService,
   ) {}
 
   /**
@@ -831,6 +835,21 @@ export class AuthService {
     const companyId = await this.resolveCompanyId(req.companySlug);
     if (!companyId) return; // im lặng — không lộ tenant
 
+    // S2-AUTH-BE-4: rate-limit per-account + per-IP DÙNG LẠI LoginRateLimiter (chống dội email reset +
+    // enumeration timing). LOCKED → trả VOID ĐỒNG NHẤT y như happy/ghost (KHÔNG ném, KHÔNG đổi outcome —
+    // anti-enumeration). Mỗi lần gọi cho email/slug resolve được sẽ recordFailure (bump bucket); reset sau
+    // resetPassword thành công. KHÔNG ghi vào login_logs (đây không phải login attempt).
+    const ip = meta.ip ?? "unknown";
+    const ipKey = LoginRateLimiter.key(req.companySlug, req.email, ip);
+    const acctKey = LoginRateLimiter.accountKey(req.companySlug, req.email);
+    if ((await this.rateLimiter.isLocked(ipKey)) || (await this.rateLimiter.isLocked(acctKey))) {
+      return; // im lặng — không lộ "account tồn tại"
+    }
+    await this.rateLimiter.recordFailure(ipKey);
+    await this.rateLimiter.recordFailure(acctKey, this.rateLimiter.accountMaxAttempts);
+
+    // Plaintext token tồn tại NGOÀI tx (để gửi mail sau commit). null khi email không tồn tại.
+    let mailToken: { email: string; token: string } | null = null;
     try {
       await this.dbsvc.withTenant(companyId, async (tx) => {
         const user = await this.findActiveUserByEmail(tx, req.email);
@@ -839,6 +858,7 @@ export class AuthService {
         const plain = this.tokens.generateOpaqueToken();
         const scoped = this.scopeToken(companyId, plain);
         const expiresAt = new Date(Date.now() + this.tokens.resetTtlSec * 1000);
+        mailToken = { email: user.email, token: scoped };
         await tx.insert(passwordResetTokens).values({
           userId: user.id,
           tokenHash: this.tokens.hashToken(scoped),
@@ -877,6 +897,24 @@ export class AuthService {
         "forgotPassword: xử lý reset thất bại (đã rollback, không phát event)",
         redactEmailFromDetail(detail, req.email),
       );
+      return; // tx rollback → KHÔNG gửi mail (không có token hợp lệ).
+    }
+
+    // S2-AUTH-BE-4: gửi email reset NGOÀI tx (sau commit), BEST-EFFORT. Lỗi gửi mail KHÔNG được đổi 200-vs-500
+    // (oracle enumeration) → .catch redact + nuốt-CÓ-log. Token CHỈ trong RAM ở đây; service KHÔNG log token.
+    // `mailToken` null khi email không tồn tại (uniform-void giữ nguyên). Đường outbox durable (G6-2f) vẫn còn
+    // cho consumer bền vững — mock này là đường gửi đồng bộ cho MVP/test, KHÔNG nhân đôi decrypt/log token.
+    if (mailToken && this.resetMail) {
+      const { email, token } = mailToken;
+      try {
+        await this.resetMail.sendResetEmail({ companyId, email, token });
+      } catch (err) {
+        const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+        this.logger.error(
+          "forgotPassword: gửi email reset thất bại (best-effort, KHÔNG đổi outcome)",
+          redactEmailFromDetail(detail, req.email),
+        );
+      }
     }
   }
 
