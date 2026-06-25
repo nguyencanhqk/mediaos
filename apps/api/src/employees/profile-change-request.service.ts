@@ -5,21 +5,25 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import type {
-  ApproveProfileChangeRequest,
-  CreateProfileChangeRequest,
-  ProfileChangeRequestDetail,
-  ProfileChangeRequestListItem,
-  ProfileChangeRequestListQuery,
-  ProfileChangeRequestListResponse,
-  RejectProfileChangeRequest,
+import {
+  PROFILE_CHANGE_SENSITIVE_FIELDS,
+  type ApproveProfileChangeRequest,
+  type CreateProfileChangeRequest,
+  type ProfileChangeRequestDetail,
+  type ProfileChangeRequestListItem,
+  type ProfileChangeRequestListQuery,
+  type ProfileChangeRequestListResponse,
+  type RejectProfileChangeRequest,
 } from "@mediaos/contracts";
 import { AuditService } from "../events/audit.service";
+import { AuditMaskerService } from "../events/audit-masker.service";
 import { DatabaseService } from "../db/db.service";
 import { PermissionService } from "../permission/permission.service";
-import type {
-  ProfileChangeRequestRepository,
-  PcrDetailRow,
+import {
+  FIELD_TO_COLUMN,
+  type ProfileChangeHistoryEntry,
+  type ProfileChangeRequestRepository,
+  type PcrDetailRow,
 } from "./profile-change-request.repository";
 
 type RequestUser = { id: string; companyId: string };
@@ -38,6 +42,13 @@ const FORBIDDEN_FIELDS = new Set([
 ]);
 
 /**
+ * Nhóm "Giấy tờ" (SPEC-03 §14.18 — "Có, cần duyệt nghiêm ngặt"). Khi yêu cầu duyệt chạm bất kỳ
+ * field nào trong tập này, người DUYỆT phải có thêm quyền cao hơn `view-sensitive:employee`
+ * (seed mig 0444 — KHÔNG seed mới). Một nguồn sự thật từ contracts.
+ */
+const SENSITIVE_FIELDS = new Set<string>(PROFILE_CHANGE_SENSITIVE_FIELDS);
+
+/**
  * S2-HR-BE-4 — Profile change request business logic (SPEC-03 §14.18/14.19/14.20).
  *
  * BẤT BIẾN #1: every DB write runs inside db.withTenant(companyId, fn).
@@ -53,12 +64,20 @@ const FORBIDDEN_FIELDS = new Set([
  */
 @Injectable()
 export class ProfileChangeRequestService {
+  /** BẤT BIẾN #3: mask giá trị nhạy cảm (identity_number…) TRƯỚC khi ghi history append-only. */
+  private readonly masker: AuditMaskerService;
+
   constructor(
     private readonly repo: ProfileChangeRequestRepository,
     private readonly db: DatabaseService,
     private readonly permission: PermissionService,
     private readonly audit: AuditService,
-  ) {}
+    masker?: AuditMaskerService,
+  ) {
+    // masker optional ở chữ ký để KHÔNG vỡ call-site `new ProfileChangeRequestService(...)` trong unit
+    // test. Nest DI luôn truyền AuditMaskerService thật (EventsModule @Global); thiếu → default cùng hàm.
+    this.masker = masker ?? new AuditMaskerService();
+  }
 
   // ── Employee: create request ───────────────────────────────────────────────────
 
@@ -214,7 +233,7 @@ export class ProfileChangeRequestService {
   async approveRequest(
     user: RequestUser,
     id: string,
-    dto: ApproveProfileChangeRequest,
+    _dto: ApproveProfileChangeRequest,
   ): Promise<{ id: string; status: string }> {
     await this.assertCan(user, "approve", "profile-change-request");
 
@@ -227,8 +246,50 @@ export class ProfileChangeRequestService {
         );
       }
 
-      // Apply newValues to employee_profiles (only allowed mapped columns).
+      const fields = Array.isArray(req.changedFields) ? req.changedFields : [];
+      const touchesSensitive = fields.some((f) => SENSITIVE_FIELDS.has(f));
+
+      // SENSITIVE GATE (SPEC-03 §14.18 "Giấy tờ — cần duyệt nghiêm ngặt"): an approver may hold
+      // approve:profile-change-request without view-sensitive:employee. If the request touches an
+      // identity field, require the stronger grant. Fail-closed → 403 + audit Denied/Sensitive.
+      if (touchesSensitive) {
+        const decision = await this.permission.can({
+          userId: user.id,
+          companyId: user.companyId,
+          action: "view-sensitive",
+          resourceType: "employee",
+        });
+        if (!decision.allow) {
+          // BẤT BIẾN #2: audit the denial inside the same tx. BẤT BIẾN #3: masker handles PII.
+          await this.audit.record(tx, {
+            action: "approve",
+            objectType: "profile_change_request",
+            objectId: id,
+            actorUserId: user.id,
+            moduleCode: "HR",
+            actionGroup: "ProfileChangeRequest",
+            resultStatus: "Denied",
+            sensitivityLevel: "Sensitive",
+            permissionCode: "HR.EMPLOYEE.VIEW_SENSITIVE",
+            metadata: { changedFields: fields, reason: "missing view-sensitive:employee" },
+          });
+          throw new ForbiddenException(
+            "Permission denied: approving identity/document fields requires HR.EMPLOYEE.VIEW_SENSITIVE.",
+          );
+        }
+      }
+
+      // Apply newValues to employee_profiles (only allowed mapped columns — FIELD_TO_COLUMN).
       await this.repo.applyChangesToEmployeeTx(tx, user.companyId, req.employeeId, req.newValues);
+
+      // Append field-level history rows (SPEC-03 §14.12) in the SAME tx — append-only (BẤT BIẾN #2).
+      const entries = this.buildHistoryEntries(req);
+      await this.repo.writeProfileChangeHistoryTx(tx, user.companyId, {
+        employeeId: req.employeeId,
+        requestId: id,
+        changedBy: user.id,
+        entries,
+      });
 
       // Advance state machine → Approved.
       const updated = await this.repo.updateRequestStatusTx(tx, user.companyId, id, {
@@ -245,12 +306,41 @@ export class ProfileChangeRequestService {
         moduleCode: "HR",
         actionGroup: "ProfileChangeRequest",
         resultStatus: "Success",
+        sensitivityLevel: touchesSensitive ? "Sensitive" : undefined,
         oldValues: req.oldValues,
         newValues: req.newValues,
       });
 
       return { id: updated.id, status: updated.status };
     });
+  }
+
+  /**
+   * Build one history entry per applied field (fields with a real employee_profiles column).
+   * BẤT BIẾN #3: sensitive values are masked (identity_number → "***") before being persisted
+   * to the append-only history. is_sensitive marks the §14.18 "Giấy tờ" group.
+   */
+  private buildHistoryEntries(req: PcrDetailRow): ProfileChangeHistoryEntry[] {
+    const fields = Array.isArray(req.changedFields) ? req.changedFields : [];
+    const entries: ProfileChangeHistoryEntry[] = [];
+    for (const field of fields) {
+      // Only persist history for fields that actually map to an employee column.
+      if (!FIELD_TO_COLUMN[field]) continue;
+      const isSensitive = SENSITIVE_FIELDS.has(field);
+      entries.push({
+        fieldName: field,
+        oldValue: this.maskFieldValue(field, req.oldValues?.[field] ?? null),
+        newValue: this.maskFieldValue(field, req.newValues?.[field] ?? null),
+        isSensitive,
+      });
+    }
+    return entries;
+  }
+
+  /** Mask a single field value using the shared masker key rules (identity_number → "***"). */
+  private maskFieldValue(field: string, value: unknown): unknown {
+    const masked = this.masker.mask({ [field]: value }) as Record<string, unknown>;
+    return masked[field];
   }
 
   // ── HR: reject request ─────────────────────────────────────────────────────────
@@ -414,19 +504,10 @@ export class ProfileChangeRequestService {
 // ── Field name → employee_profiles column key mapping ────────────────────────────
 
 /**
- * Maps SPEC-03 allowed field names to the current Drizzle column keys on employeeProfiles.
- * Returns null for fields whose columns do not yet exist in the schema
- * (they will be added in S2-HR-DB-2 migration lane).
+ * Maps a SPEC-03 allowed field name to the Drizzle column key on employeeProfiles.
+ * All 11 self-service fields now have real columns (mig 0451). Returns null for unknown keys.
+ * Single source of truth = FIELD_TO_COLUMN in the repository (shared map).
  */
 function fieldToColumnKey(field: string): string | null {
-  const MAP: Record<string, string> = {
-    phone: "phone",
-    avatar_file_id: "avatarUrl",
-    notes: "notes",
-    // Fields below need S2-HR-DB-2 migration to add columns to employee_profiles:
-    // date_of_birth, gender, marital_status, personal_email, current_address,
-    // permanent_address, emergency_contact_name, emergency_contact_phone,
-    // identity_number, identity_issue_date, identity_issue_place
-  };
-  return MAP[field] ?? null;
+  return FIELD_TO_COLUMN[field] ?? null;
 }

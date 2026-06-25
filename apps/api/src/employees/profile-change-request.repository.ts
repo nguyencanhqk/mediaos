@@ -1,7 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
-import { employeeProfiles, profileChangeRequests, users } from "../db/schema";
+import {
+  employeeProfileChangeHistories,
+  employeeProfiles,
+  profileChangeRequests,
+  users,
+} from "../db/schema";
 
 /** Columns for a list row — no sensitive fields from old/new values. */
 const LIST_COLUMNS = {
@@ -68,7 +73,57 @@ export interface EmployeeSnapshot {
   phone: string | null;
   avatarUrl: string | null;
   notes: string | null;
+  // S2-HR-BE-4 (mig 0451): 11 cột self-service — old_values snapshot phản ánh đúng giá trị hiện tại.
+  dateOfBirth: string | null;
+  gender: string | null;
+  maritalStatus: string | null;
+  personalEmail: string | null;
+  currentAddress: string | null;
+  permanentAddress: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  identityNumber: string | null;
+  identityIssueDate: string | null;
+  identityIssuePlace: string | null;
 }
+
+/** One field-level history entry to append when a request is approved. */
+export interface ProfileChangeHistoryEntry {
+  fieldName: string;
+  oldValue: unknown;
+  newValue: unknown;
+  isSensitive: boolean;
+}
+
+/** Batch of history rows written in the same approval tx (append-only). */
+export interface WriteHistoryData {
+  employeeId: string;
+  requestId: string;
+  changedBy: string;
+  entries: ProfileChangeHistoryEntry[];
+}
+
+/**
+ * Single source of truth: SPEC-03 allowed field name → employee_profiles Drizzle column key.
+ * All 11 self-service fields now have real columns (mig 0451). Unknown keys map to null →
+ * silently ignored by apply (defense-in-depth; the service validates changedFields first).
+ */
+export const FIELD_TO_COLUMN: Record<string, keyof typeof employeeProfiles.$inferInsert> = {
+  phone: "phone",
+  avatar_file_id: "avatarUrl", // stored as avatarUrl in the current schema
+  notes: "notes",
+  date_of_birth: "dateOfBirth",
+  gender: "gender",
+  marital_status: "maritalStatus",
+  personal_email: "personalEmail",
+  current_address: "currentAddress",
+  permanent_address: "permanentAddress",
+  emergency_contact_name: "emergencyContactName",
+  emergency_contact_phone: "emergencyContactPhone",
+  identity_number: "identityNumber",
+  identity_issue_date: "identityIssueDate",
+  identity_issue_place: "identityIssuePlace",
+};
 
 /** Full shape returned by detail query (includes joined columns). */
 export interface PcrDetailRow {
@@ -115,6 +170,17 @@ export class ProfileChangeRequestRepository {
         phone: employeeProfiles.phone,
         avatarUrl: employeeProfiles.avatarUrl,
         notes: employeeProfiles.notes,
+        dateOfBirth: employeeProfiles.dateOfBirth,
+        gender: employeeProfiles.gender,
+        maritalStatus: employeeProfiles.maritalStatus,
+        personalEmail: employeeProfiles.personalEmail,
+        currentAddress: employeeProfiles.currentAddress,
+        permanentAddress: employeeProfiles.permanentAddress,
+        emergencyContactName: employeeProfiles.emergencyContactName,
+        emergencyContactPhone: employeeProfiles.emergencyContactPhone,
+        identityNumber: employeeProfiles.identityNumber,
+        identityIssueDate: employeeProfiles.identityIssueDate,
+        identityIssuePlace: employeeProfiles.identityIssuePlace,
       })
       .from(employeeProfiles)
       .where(
@@ -238,9 +304,9 @@ export class ProfileChangeRequestRepository {
   // ── Apply approved changes to employee record ─────────────────────────────────
 
   /**
-   * Apply the subset of newValues that map to real employee_profiles columns.
-   * Only the ALLOWED fields are applied — unknown keys are silently ignored
-   * (belt-and-suspenders: service already validated changedFields before storing).
+   * Apply the subset of newValues that map to real employee_profiles columns (FIELD_TO_COLUMN).
+   * Unknown keys are silently ignored (defense-in-depth: the service already validated
+   * changedFields against the allow-list before the request was ever stored).
    * BẤT BIẾN #1: update is scoped to companyId + employeeId (RLS + explicit WHERE).
    */
   async applyChangesToEmployeeTx(
@@ -249,22 +315,9 @@ export class ProfileChangeRequestRepository {
     employeeId: string,
     newValues: Record<string, unknown>,
   ): Promise<void> {
-    // Map of allowed field names → drizzle column references.
-    // Only fields that have a direct column in employee_profiles are listed.
-    const FIELD_COLUMN_MAP: Record<string, keyof typeof employeeProfiles.$inferInsert> = {
-      phone: "phone",
-      avatar_file_id: "avatarUrl", // stored as avatarUrl in the current schema
-      notes: "notes",
-      // Future: date_of_birth, gender, marital_status, personal_email,
-      // current_address, permanent_address, emergency_contact_name, emergency_contact_phone,
-      // identity_number, identity_issue_date, identity_issue_place
-      // (these columns are not yet in the Drizzle schema for employee_profiles; skip silently
-      //  until the DB migration adds them — S2-HR-DB-2 lane).
-    };
-
     const setData: Record<string, unknown> = { updatedAt: new Date() };
     for (const [field, value] of Object.entries(newValues)) {
-      const col = FIELD_COLUMN_MAP[field];
+      const col = FIELD_TO_COLUMN[field];
       if (col) setData[col] = value;
     }
 
@@ -282,6 +335,34 @@ export class ProfileChangeRequestRepository {
           isNull(employeeProfiles.deletedAt),
         ),
       );
+  }
+
+  // ── Append-only history (BẤT BIẾN #2: app role chỉ SELECT,INSERT — KHÔNG UPDATE/DELETE) ──────
+
+  /**
+   * Append one employee_profile_change_histories row per applied field, in the SAME approval tx
+   * (SPEC-03 §14.12). No-op when entries is empty. BẤT BIẾN #1: company_id scoped (RLS DEFAULT +
+   * explicit value). BẤT BIẾN #3: caller masks sensitive values before passing them in — this
+   * method does NOT see plaintext identity_number (already "***").
+   */
+  async writeProfileChangeHistoryTx(
+    tx: TenantTx,
+    companyId: string,
+    data: WriteHistoryData,
+  ): Promise<void> {
+    if (data.entries.length === 0) return;
+    await tx.insert(employeeProfileChangeHistories).values(
+      data.entries.map((e) => ({
+        companyId,
+        employeeId: data.employeeId,
+        requestId: data.requestId,
+        fieldName: e.fieldName,
+        oldValue: e.oldValue,
+        newValue: e.newValue,
+        isSensitive: e.isSensitive,
+        changedBy: data.changedBy,
+      })),
+    );
   }
 
   // ── Reviewer name lookup (for response enrichment) ────────────────────────────

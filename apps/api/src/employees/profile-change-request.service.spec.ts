@@ -46,6 +46,15 @@ type Decision = { allow: boolean; reason: string; auditRequired: boolean };
 const ALLOW: Decision = { allow: true, reason: "allow", auditRequired: false };
 const DENY = (reason = "no-grant"): Decision => ({ allow: false, reason, auditRequired: false });
 
+/** can() input shape (subset used by the service). */
+type CanInput = { action: string };
+type CanFn = (input: CanInput) => Decision;
+
+/** Build a can() that returns a different decision per `action` (e.g. approve=ALLOW, view-sensitive=DENY). */
+function perActionDecision(map: Record<string, Decision>): CanFn {
+  return ({ action }) => map[action] ?? DENY(`no grant for action ${action}`);
+}
+
 function makePendingRequest(overrides: Record<string, unknown> = {}) {
   return {
     id: REQUEST_ID,
@@ -93,11 +102,12 @@ function defaultRepo() {
     listOwnRequestsTx: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
     updateRequestStatusTx: vi.fn().mockResolvedValue(makePendingRequest({ status: "Approved" })),
     applyChangesToEmployeeTx: vi.fn().mockResolvedValue(undefined),
+    writeProfileChangeHistoryTx: vi.fn().mockResolvedValue(undefined),
   };
 }
 
-function makePermission(canImpl: () => Decision = () => ALLOW) {
-  return { can: vi.fn().mockImplementation(async () => canImpl()) };
+function makePermission(canImpl: CanFn = () => ALLOW) {
+  return { can: vi.fn().mockImplementation(async (input: CanInput) => canImpl(input)) };
 }
 
 function makeAudit() {
@@ -118,7 +128,7 @@ function makeDb(repo: ReturnType<typeof makeRepo>) {
 
 function makeService(
   repoOverrides: Partial<ReturnType<typeof defaultRepo>> = {},
-  canDecision: () => Decision = () => ALLOW,
+  canDecision: CanFn = () => ALLOW,
 ) {
   const repo = makeRepo(repoOverrides);
   const permission = makePermission(canDecision);
@@ -266,6 +276,56 @@ describe("ProfileChangeRequestService — deny-path", () => {
 
     await expect(svc.cancelRequest(empUser, REQUEST_ID)).rejects.toBeInstanceOf(ConflictException);
   });
+
+  // ── 9. SENSITIVE GATE (§14.18 "Giấy tờ" — duyệt nghiêm ngặt): approver chạm identity_* ─────────
+  //     phải có view-sensitive:employee. Có approve nhưng THIẾU view-sensitive → 403 + audit Denied.
+  it("approve: throws ForbiddenException when approving identity_number without view-sensitive:employee", async () => {
+    const sensitiveReq = makePendingRequest({
+      changedFields: ["identity_number"],
+      oldValues: { identity_number: "0790000" },
+      newValues: { identity_number: "079123456789" },
+    });
+    // approve:profile-change-request → ALLOW ; view-sensitive:employee → DENY
+    const { svc, repo, audit } = makeService(
+      { findRequestByIdTx: vi.fn().mockResolvedValue(sensitiveReq) },
+      perActionDecision({ approve: ALLOW, "view-sensitive": DENY("no view-sensitive:employee") }),
+    );
+
+    await expect(svc.approveRequest(hrUser, REQUEST_ID, {})).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+
+    // No write to employee record (gate blocks before apply).
+    expect(repo.applyChangesToEmployeeTx).not.toHaveBeenCalled();
+    expect(repo.updateRequestStatusTx).not.toHaveBeenCalled();
+    // Audit the denied attempt with sensitivityLevel='Sensitive' + resultStatus='Denied'.
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: "approve",
+        objectType: "profile_change_request",
+        resultStatus: "Denied",
+        sensitivityLevel: "Sensitive",
+      }),
+    );
+  });
+
+  it("approve: identity_issue_date/place are also strict-approval (gated by view-sensitive)", async () => {
+    const sensitiveReq = makePendingRequest({
+      changedFields: ["identity_issue_place"],
+      oldValues: { identity_issue_place: "HCM" },
+      newValues: { identity_issue_place: "Ha Noi" },
+    });
+    const { svc, repo } = makeService(
+      { findRequestByIdTx: vi.fn().mockResolvedValue(sensitiveReq) },
+      perActionDecision({ approve: ALLOW, "view-sensitive": DENY() }),
+    );
+
+    await expect(svc.approveRequest(hrUser, REQUEST_ID, {})).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(repo.applyChangesToEmployeeTx).not.toHaveBeenCalled();
+  });
 });
 
 // ─── Happy-path tests (GREEN) ──────────────────────────────────────────────────
@@ -286,7 +346,7 @@ describe("ProfileChangeRequestService — happy-path", () => {
     expect(result.id).toBeDefined();
   });
 
-  // ── 10. Approve: applies newValues to employees table ────────────────────────
+  // ── 10. Approve: applies newValues to employees table + writes history ───────
   it("approve: calls applyChangesToEmployeeTx and records audit", async () => {
     const { svc, repo, audit } = makeService();
 
@@ -306,6 +366,61 @@ describe("ProfileChangeRequestService — happy-path", () => {
         objectType: "profile_change_request",
         objectId: REQUEST_ID,
         actorUserId: HR_USER_ID,
+      }),
+    );
+  });
+
+  // ── 10b. Approve: writes ONE history row per applied field in the SAME tx (§14.12) ──
+  it("approve: writes employee_profile_change_histories row for each changed field", async () => {
+    const req = makePendingRequest({
+      changedFields: ["phone", "current_address"],
+      oldValues: { phone: "0900000000", current_address: "Old St" },
+      newValues: { phone: "0911111111", current_address: "New St" },
+    });
+    const { svc, repo } = makeService({
+      findRequestByIdTx: vi.fn().mockResolvedValue(req),
+    });
+
+    await svc.approveRequest(hrUser, REQUEST_ID, {});
+
+    expect(repo.writeProfileChangeHistoryTx).toHaveBeenCalledWith(
+      expect.anything(), // tx
+      COMPANY_A,
+      expect.objectContaining({
+        employeeId: EMP_PROFILE_ID,
+        requestId: REQUEST_ID,
+        changedBy: HR_USER_ID,
+        entries: expect.arrayContaining([
+          expect.objectContaining({ fieldName: "phone", isSensitive: false }),
+          expect.objectContaining({ fieldName: "current_address", isSensitive: false }),
+        ]),
+      }),
+    );
+  });
+
+  // ── 10c. Approve sensitive field WITH view-sensitive grant → applies + history is_sensitive ──
+  it("approve: identity_number with view-sensitive grant applies + marks history sensitive", async () => {
+    const req = makePendingRequest({
+      changedFields: ["identity_number"],
+      oldValues: { identity_number: "0790000" },
+      newValues: { identity_number: "079123456789" },
+    });
+    const { svc, repo } = makeService(
+      { findRequestByIdTx: vi.fn().mockResolvedValue(req) },
+      perActionDecision({ approve: ALLOW, "view-sensitive": ALLOW }),
+    );
+
+    const result = await svc.approveRequest(hrUser, REQUEST_ID, {});
+
+    expect(result.status).toBe("Approved");
+    expect(repo.applyChangesToEmployeeTx).toHaveBeenCalledOnce();
+    expect(repo.writeProfileChangeHistoryTx).toHaveBeenCalledWith(
+      expect.anything(),
+      COMPANY_A,
+      expect.objectContaining({
+        entries: expect.arrayContaining([
+          expect.objectContaining({ fieldName: "identity_number", isSensitive: true }),
+        ]),
       }),
     );
   });

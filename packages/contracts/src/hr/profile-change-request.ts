@@ -35,6 +35,20 @@ export const PROFILE_CHANGE_ALLOWED_FIELDS = [
 
 export type ProfileChangeAllowedField = (typeof PROFILE_CHANGE_ALLOWED_FIELDS)[number];
 
+/**
+ * Nhóm "Giấy tờ" (SPEC-03 §14.18) — "Có, cần duyệt nghiêm ngặt".
+ * Khi yêu cầu chạm bất kỳ field nào dưới đây, người DUYỆT phải có quyền cao hơn
+ * `HR.EMPLOYEE.VIEW_SENSITIVE` (engine pair `view-sensitive:employee`, seed mig 0444).
+ * Một nguồn sự thật chia sẻ BE (gate duyệt) ↔ FE (mask/hint UI).
+ */
+export const PROFILE_CHANGE_SENSITIVE_FIELDS = [
+  "identity_number",
+  "identity_issue_date",
+  "identity_issue_place",
+] as const;
+
+export type ProfileChangeSensitiveField = (typeof PROFILE_CHANGE_SENSITIVE_FIELDS)[number];
+
 // ── Request status ────────────────────────────────────────────────────────────────
 
 export const PROFILE_CHANGE_STATUSES = [
