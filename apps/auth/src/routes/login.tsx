@@ -1,6 +1,8 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import type { TFunction } from "i18next";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
+import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { ApiError, authApi } from "@mediaos/web-core";
 import { Button, Input } from "@mediaos/ui";
@@ -8,10 +10,9 @@ import { SignalBar } from "@/components/SignalBar";
 import { TwoFactorChallengeForm } from "@/components/TwoFactorChallengeForm";
 import { BRAND_SYSTEM_LABEL, BRAND_WORDMARK } from "@/lib/brand";
 import { DEFAULT_APP_URL, SINGLE_COMPANY_SLUG } from "@/lib/config";
+import { loginFormSchema, type LoginFormValues } from "@/lib/login-form-schema";
 
-type LoginStep =
-  | { kind: "credentials" }
-  | { kind: "twoFactor"; challengeToken: string };
+type LoginStep = { kind: "credentials" } | { kind: "twoFactor"; challengeToken: string };
 
 /** Thông báo lỗi thân thiện — không lộ chi tiết nội bộ. */
 function friendlyError(err: unknown, t: TFunction<"auth">): string {
@@ -62,9 +63,7 @@ function BrandPanel() {
       </div>
 
       <div className="space-y-5">
-        <p className="font-display text-xl font-medium text-foreground/90">
-          {t("login.tagline")}
-        </p>
+        <p className="font-display text-xl font-medium text-foreground/90">{t("login.tagline")}</p>
         <SignalBar />
       </div>
 
@@ -83,23 +82,36 @@ export function LoginPage() {
   const { t } = useTranslation("auth");
 
   const [step, setStep] = useState<LoginStep>({ kind: "credentials" });
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const onSubmitCredentials = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim() || !password) return;
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginFormSchema),
+    mode: "onSubmit",
+    defaultValues: { email: "", password: "" },
+  });
+
+  // Disable nút khi chưa nhập gì (UX) — validation NỘI DUNG (định dạng) do Zod lo khi submit.
+  const watchedEmail = watch("email");
+  const watchedPassword = watch("password");
+  const isEmpty = !watchedEmail?.trim() || !watchedPassword;
+
+  // Chỉ chạy khi Zod validate PASS (email hợp lệ + password không rỗng). Lỗi field hiển thị inline qua `errors`.
+  const onSubmitCredentials = async (values: LoginFormValues) => {
     setBusy(true);
     setError(null);
     try {
       // Đơn-tenant: slug đến từ config (SINGLE_COMPANY_SLUG), user KHÔNG phải gõ — hợp đồng backend không đổi.
       const result = await authApi.login({
         companySlug: SINGLE_COMPANY_SLUG,
-        email: email.trim(),
-        password,
+        email: values.email.trim(),
+        password: values.password,
       });
       if ("twoFactorRequired" in result) {
         setStep({ kind: "twoFactor", challengeToken: result.challengeToken });
@@ -170,9 +182,10 @@ export function LoginPage() {
               />
             ) : (
               <form
-                onSubmit={(e) => {
-                  void onSubmitCredentials(e);
-                }}
+                onSubmit={handleSubmit((values) => {
+                  void onSubmitCredentials(values);
+                })}
+                noValidate
                 className="space-y-4"
               >
                 <div className="space-y-2">
@@ -182,12 +195,17 @@ export function LoginPage() {
                   <Input
                     id="email"
                     type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
                     placeholder="name@company.com"
                     autoComplete="email"
                     autoFocus
+                    aria-invalid={errors.email ? "true" : undefined}
+                    {...register("email")}
                   />
+                  {errors.email && (
+                    <p role="alert" className="text-sm text-destructive">
+                      {t(errors.email.message ?? "")}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium" htmlFor="password">
@@ -197,27 +215,30 @@ export function LoginPage() {
                     <Input
                       id="password"
                       type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
                       autoComplete="current-password"
                       className="pr-10"
+                      aria-invalid={errors.password ? "true" : undefined}
+                      {...register("password")}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword((v) => !v)}
-                      aria-label={showPassword ? t("fields.hidePassword") : t("fields.showPassword")}
+                      aria-label={
+                        showPassword ? t("fields.hidePassword") : t("fields.showPassword")
+                      }
                       className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground transition-colors hover:text-foreground"
                     >
                       {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                     </button>
                   </div>
+                  {errors.password && (
+                    <p role="alert" className="text-sm text-destructive">
+                      {t(errors.password.message ?? "")}
+                    </p>
+                  )}
                 </div>
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={busy || !email.trim() || !password}
-                >
+                <Button type="submit" className="w-full" disabled={busy || isEmpty}>
                   {busy ? t("login.submitting") : t("login.submit")}
                   {!busy && <ArrowRight className="size-4" />}
                 </Button>

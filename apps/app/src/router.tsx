@@ -1,16 +1,9 @@
 import React from "react";
 import { createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router";
-import {
-  getAuthRedirectUrl,
-  useAuthStore,
-  evaluateRouteAccess,
-  createPermissionChecker,
-  type DataScope,
-  type RouteMeta,
-  type SessionContext,
-} from "@mediaos/web-core";
+import { getAuthRedirectUrl, useAuthStore, type RouteMeta } from "@mediaos/web-core";
 import { ForbiddenPage } from "@/routes/forbidden";
 import { ProtectedShell } from "@/layouts/protected/ProtectedShell";
+import { ProtectedRoute } from "@/layouts/protected/ProtectedRoute";
 import { HomePortalLayout } from "@/layouts/home/HomePortalLayout";
 import { ModuleWorkspaceLayout } from "@/layouts/workspace/ModuleWorkspaceLayout";
 
@@ -22,51 +15,6 @@ const authGuard = () => {
     throw redirect({ href: getAuthRedirectUrl() });
   }
 };
-
-// ---------------------------------------------------------------------------
-// buildSession — SessionContext từ auth store.
-// company/modules populated khi BE wire /me expansion (TODO S1-FE-LAYOUT-1 complete).
-// ---------------------------------------------------------------------------
-function buildSession(): SessionContext {
-  const state = useAuthStore.getState();
-  return {
-    status: state.isAuthenticated ? "authenticated" : "unauthenticated",
-    user: state.user
-      ? {
-          id: state.user.id,
-          email: state.user.email,
-          status: (state.user.status as NonNullable<SessionContext["user"]>["status"]) ?? "Active",
-          companyId: state.user.companyId,
-        }
-      : null,
-    company: null, // TODO(BE): populate after /me expansion
-    modules: [], // TODO(BE): populate after /me expansion
-  };
-}
-
-function buildPermissionChecker() {
-  const caps = useAuthStore.getState().capabilities;
-  const userPermissions = Object.entries(caps)
-    .filter(([, v]) => v)
-    .map(([key]) => ({ permission: key, scopes: [] as DataScope[] }));
-  return createPermissionChecker(userPermissions);
-}
-
-function permissionGuard(meta: RouteMeta) {
-  return () => {
-    const state = useAuthStore.getState();
-    if (!state.isAuthenticated) {
-      throw redirect({ href: getAuthRedirectUrl() });
-    }
-    const session = buildSession();
-    const permission = buildPermissionChecker();
-    const result = evaluateRouteAccess(session, meta, permission);
-    if (result.action === "REDIRECT_LOGIN") {
-      throw redirect({ href: getAuthRedirectUrl() });
-    }
-    return { guardResult: result };
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Route tree
@@ -115,16 +63,20 @@ function makeModuleRoute(
   moduleCode: Parameters<typeof ModuleWorkspaceLayout>[0]["moduleCode"],
   PageComponent: () => React.ReactElement,
 ) {
-  const meta = getMeta(metaKey);
+  const meta: RouteMeta = getMeta(metaKey);
   return createRoute({
     getParentRoute: () => rootRoute,
     path,
-    beforeLoad: permissionGuard(meta),
+    // beforeLoad: chỉ chặn khi CHƯA có phiên (redirect SSO). Phân quyền theo route (403/disabled/404)
+    // do ProtectedRoute TIÊU THỤ guardResult ở tầng component — nội dung module chỉ render khi ALLOW.
+    beforeLoad: authGuard,
     component: () => (
       <ProtectedShell>
-        <ModuleWorkspaceLayout moduleCode={moduleCode}>
-          <PageComponent />
-        </ModuleWorkspaceLayout>
+        <ProtectedRoute meta={meta}>
+          <ModuleWorkspaceLayout moduleCode={moduleCode}>
+            <PageComponent />
+          </ModuleWorkspaceLayout>
+        </ProtectedRoute>
       </ProtectedShell>
     ),
   });

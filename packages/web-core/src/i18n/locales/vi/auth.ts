@@ -15,6 +15,11 @@ export default {
     hidePassword: "Ẩn mật khẩu",
     password: "Mật khẩu",
   },
+  validation: {
+    emailRequired: "Vui lòng nhập email.",
+    emailInvalid: "Email không hợp lệ.",
+    passRequired: "Vui lòng nhập mật khẩu.",
+  },
   twoFactor: {
     title: "Xác thực 2 lớp",
     challengeHint: "Nhập mã 6 số từ app authenticator, hoặc một mã khôi phục.",
@@ -27,7 +32,8 @@ export default {
     enable: "Bật 2FA",
     disable: "Tắt 2FA",
     enrollTitle: "Thiết lập 2FA",
-    enrollDesc: "Quét QR bằng app authenticator (Google Authenticator/Authy), rồi nhập mã 6 số để xác nhận.",
+    enrollDesc:
+      "Quét QR bằng app authenticator (Google Authenticator/Authy), rồi nhập mã 6 số để xác nhận.",
     confirmEnable: "Xác nhận bật",
     recoveryCodesLabel: "Mã khôi phục (lưu ngay — chỉ hiện 1 lần):",
     enableCodeLabel: "Mã xác nhận",
