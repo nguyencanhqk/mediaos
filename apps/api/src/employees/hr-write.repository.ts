@@ -80,6 +80,7 @@ export class HrWriteRepository {
   ): Promise<Record<string, unknown> | undefined> {
     const [row] = await tx
       .select({
+        userId: employeeProfiles.userId,
         employeeCode: employeeProfiles.employeeCode,
         orgUnitId: employeeProfiles.orgUnitId,
         positionId: employeeProfiles.positionId,

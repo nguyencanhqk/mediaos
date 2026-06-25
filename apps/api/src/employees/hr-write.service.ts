@@ -18,6 +18,7 @@ import type {
 import { AuditService } from "../events/audit.service";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { PasswordService } from "../auth/password.service";
+import { DataScopeService } from "../permission/data-scope.service";
 import { SecurityPolicyService } from "../security-policy/security-policy.service";
 import { SequenceService } from "../foundation/sequences/sequence.service";
 import {
@@ -47,6 +48,9 @@ const STATUS_TRANSITIONS: Record<HrEmployeeStatus, readonly HrEmployeeStatus[]> 
 
 const LOCKING_STATUSES: ReadonlySet<HrEmployeeStatus> = new Set(["resigned", "terminated"]);
 
+/** Employee writes are company-wide operations — only a Company/System data_scope may perform them. */
+const WRITE_SCOPES: ReadonlySet<string> = new Set(["Company", "System"]);
+
 /**
  * S2-HR-BE-2 — HR write core (API-03 §11.2/§11.5/§11.6/§11.7/§11.8). Crown-jewel:
  *  - BẤT BIẾN #1: every mutation runs in `withTenant(caller.companyId)`; repo ANDs company_id.
@@ -67,11 +71,31 @@ export class HrWriteService {
     private readonly sequence: SequenceService,
     private readonly password: PasswordService,
     private readonly securityPolicy: SecurityPolicyService,
+    private readonly dataScope: DataScopeService,
   ) {}
+
+  /**
+   * Defense-in-depth (mirrors the read core's resolveAndAssert): the PermissionGuard already gated the
+   * pair, but resolve the caller's strongest write scope and FAIL-CLOSED unless it is Company/System.
+   * Every seeded employee-write grant is Company today; this prevents a future sub-Company grant from
+   * silently turning a write endpoint into a company-wide IDOR.
+   */
+  private async assertWriteScope(user: RequestUser, action: string): Promise<void> {
+    const scope = await this.dataScope.resolveAndAssert(
+      user.id,
+      user.companyId,
+      action,
+      "employee",
+    );
+    if (!WRITE_SCOPES.has(scope)) {
+      throw new ForbiddenException("AUTH-ERR-SCOPE-DENIED: employee write requires Company scope");
+    }
+  }
 
   // ── Create ───────────────────────────────────────────────────────────────────────
 
   async createEmployee(user: RequestUser, dto: CreateHrEmployeeRequest) {
+    await this.assertWriteScope(user, "create");
     const manualCode = dto.employeeCode ?? null;
     // Auto-code is allocated in its OWN tx BEFORE the insert tx (gaps OK, dups impossible).
     const autoCode = manualCode ? null : await this.allocateEmployeeCode(user.companyId);
@@ -154,21 +178,37 @@ export class HrWriteService {
   // ── Update ───────────────────────────────────────────────────────────────────────
 
   async updateEmployee(user: RequestUser, id: string, dto: UpdateHrEmployeeRequest) {
+    await this.assertWriteScope(user, "update");
     try {
       return await this.db.withTenant(user.companyId, async (tx) => {
         const before = await this.repo.findStructuralByIdTx(tx, user.companyId, id);
         if (!before) throw new NotFoundException("Employee not found");
+        const subjectUserId = (before["userId"] as string | null | undefined) ?? null;
 
-        // Only the keys the client actually sent; refs validated when present.
+        // Only the keys the client actually sent; refs validated when present (incl. manager ≠ self).
         const patch = dto as EmployeeUpdateData;
         await this.assertReferencesValid(tx, user.companyId, {
           orgUnitId: dto.orgUnitId ?? undefined,
           positionId: dto.positionId ?? undefined,
           directManagerId: dto.directManagerId ?? undefined,
+          subjectUserId,
         });
 
         const updated = await this.repo.updateTx(tx, user.companyId, id, patch);
         if (!updated) throw new NotFoundException("Employee not found");
+
+        // Keep employee_manager_relations consistent with the direct_manager_id shortcut (mirror create).
+        if (dto.directManagerId !== undefined && subjectUserId) {
+          await this.repo.softDeleteDirectManagerEmrTx(tx, user.companyId, subjectUserId);
+          if (dto.directManagerId) {
+            await this.repo.insertDirectManagerEmrTx(
+              tx,
+              user.companyId,
+              subjectUserId,
+              dto.directManagerId,
+            );
+          }
+        }
 
         const { changedFields, beforeDiff, afterDiff } = this.diffStructural(before, dto);
         if (changedFields.length > 0) {
@@ -195,6 +235,7 @@ export class HrWriteService {
   // ── Change status ──────────────────────────────────────────────────────────────────
 
   async changeStatus(user: RequestUser, id: string, dto: ChangeEmployeeStatusRequest) {
+    await this.assertWriteScope(user, "change-status");
     return this.db.withTenant(user.companyId, async (tx) => {
       const row = await this.repo.findForUpdateTx(tx, user.companyId, id);
       if (!row) throw new NotFoundException("Employee not found");
@@ -221,7 +262,8 @@ export class HrWriteService {
       });
 
       // Optional account lock on resignation/termination (session/token revoke = Auth follow-up).
-      if (dto.lockUser && LOCKING_STATUSES.has(newStatus) && row.userId) {
+      // Never let an actor lock their OWN account via a status change (self-lockout / last-admin DoS).
+      if (dto.lockUser && LOCKING_STATUSES.has(newStatus) && row.userId && row.userId !== user.id) {
         await this.repo.lockUserTx(
           tx,
           user.companyId,
@@ -245,6 +287,7 @@ export class HrWriteService {
   // ── Link / unlink user ───────────────────────────────────────────────────────────
 
   async linkUser(user: RequestUser, id: string, dto: LinkUserRequest) {
+    await this.assertWriteScope(user, "update");
     try {
       return await this.db.withTenant(user.companyId, async (tx) => {
         const row = await this.repo.findForUpdateTx(tx, user.companyId, id);
@@ -279,6 +322,7 @@ export class HrWriteService {
   }
 
   async unlinkUser(user: RequestUser, id: string, dto: UnlinkUserRequest) {
+    await this.assertWriteScope(user, "update");
     return this.db.withTenant(user.companyId, async (tx) => {
       const row = await this.repo.findForUpdateTx(tx, user.companyId, id);
       if (!row) throw new NotFoundException("Employee not found");
@@ -384,8 +428,14 @@ export class HrWriteService {
     if (refs.positionId && !(await this.repo.positionActiveTx(tx, companyId, refs.positionId))) {
       throw new UnprocessableEntityException("HR-ERR-POSITION-INACTIVE");
     }
-    if (refs.directManagerId && refs.subjectUserId && refs.directManagerId === refs.subjectUserId) {
-      throw new BadRequestException("An employee cannot be their own direct manager");
+    if (refs.directManagerId) {
+      if (refs.subjectUserId && refs.directManagerId === refs.subjectUserId) {
+        throw new BadRequestException("An employee cannot be their own direct manager");
+      }
+      // Validate the manager exists in-tenant (else the FK violation would surface as a raw 500).
+      if (!(await this.repo.findLinkableUserTx(tx, companyId, refs.directManagerId))) {
+        throw new UnprocessableEntityException("HR-ERR-MANAGER-INVALID");
+      }
     }
   }
 

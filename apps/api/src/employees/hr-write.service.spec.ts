@@ -79,6 +79,8 @@ function makeService(opts: { repo?: ReturnType<typeof makeRepo>; sequence?: unkn
   };
   const password = { hash: vi.fn().mockResolvedValue("hashed") };
   const securityPolicy = { assertEmailDomainAllowedTx: vi.fn().mockResolvedValue(true) };
+  // Default: Company scope → assertWriteScope passes. Tests can override to assert fail-closed.
+  const dataScope = { resolveAndAssert: vi.fn().mockResolvedValue("Company") };
   const svc = new HrWriteService(
     repo as never,
     db as never,
@@ -86,8 +88,9 @@ function makeService(opts: { repo?: ReturnType<typeof makeRepo>; sequence?: unkn
     sequence as never,
     password as never,
     securityPolicy as never,
+    dataScope as never,
   );
-  return { svc, repo, db, audit, sequence };
+  return { svc, repo, db, audit, sequence, dataScope };
 }
 
 function assertNoSensitiveAuditKeys(audit: { record: ReturnType<typeof vi.fn> }) {
@@ -126,14 +129,12 @@ describe("HrWriteService.changeStatus — FSM", () => {
 
   it("422 on illegal transition (terminated is terminal)", async () => {
     const repo = makeRepo({
-      findForUpdateTx: vi
-        .fn()
-        .mockResolvedValue({
-          id: EMP_ID,
-          companyId: COMPANY_A,
-          userId: OTHER_USER,
-          status: "terminated",
-        }),
+      findForUpdateTx: vi.fn().mockResolvedValue({
+        id: EMP_ID,
+        companyId: COMPANY_A,
+        userId: OTHER_USER,
+        status: "terminated",
+      }),
     });
     const { svc } = makeService({ repo });
     await expect(
@@ -241,14 +242,12 @@ describe("HrWriteService.unlinkUser", () => {
 
   it("403 when a user tries to unlink their OWN account", async () => {
     const repo = makeRepo({
-      findForUpdateTx: vi
-        .fn()
-        .mockResolvedValue({
-          id: EMP_ID,
-          companyId: COMPANY_A,
-          userId: ACTOR_ID,
-          status: "active",
-        }),
+      findForUpdateTx: vi.fn().mockResolvedValue({
+        id: EMP_ID,
+        companyId: COMPANY_A,
+        userId: ACTOR_ID,
+        status: "active",
+      }),
     });
     const { svc, repo: r } = makeService({ repo });
     await expect(svc.unlinkUser(actorA, EMP_ID, { lockUser: false })).rejects.toThrow(
@@ -258,7 +257,7 @@ describe("HrWriteService.unlinkUser", () => {
   });
 
   it("detaches the user, soft-deletes EMR, and locks the account when lockUser=true", async () => {
-    const { svc, repo, audit } = makeService(); // userId=OTHER_USER (not the actor)
+    const { svc, repo } = makeService(); // userId=OTHER_USER (not the actor)
     const res = await svc.unlinkUser(actorA, EMP_ID, { lockUser: true, reason: "left" });
     expect(res).toEqual({ id: EMP_ID, userId: null });
     expect(repo.setUserIdTx).toHaveBeenCalledWith(FAKE_TX, COMPANY_A, EMP_ID, null);
@@ -289,6 +288,31 @@ describe("HrWriteService.createEmployee", () => {
     await expect(
       svc.createEmployee(actorA, { userId: OTHER_USER, employeeCode: "X-1" } as never),
     ).rejects.toThrow(ForbiddenException);
+  });
+
+  it("403 (fail-closed) when the caller's write scope is below Company (latent-IDOR guard)", async () => {
+    const dataScope = { resolveAndAssert: vi.fn().mockResolvedValue("Team") };
+    const repo = makeRepo();
+    const db = {
+      withTenant: vi.fn((_c: string, fn: (tx: unknown) => Promise<unknown>) => fn(FAKE_TX)),
+    };
+    const audit = { record: vi.fn() };
+    const sequence = { nextCode: vi.fn() };
+    const password = { hash: vi.fn() };
+    const securityPolicy = { assertEmailDomainAllowedTx: vi.fn() };
+    const svc = new HrWriteService(
+      repo as never,
+      db as never,
+      audit as never,
+      sequence as never,
+      password as never,
+      securityPolicy as never,
+      dataScope as never,
+    );
+    await expect(svc.createEmployee(actorA, { userId: OTHER_USER } as never)).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(repo.createTx).not.toHaveBeenCalled();
   });
 
   it("creates with an auto-generated code and audits 'create' WITHOUT any salary/PII key", async () => {
