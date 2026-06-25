@@ -4,5 +4,7 @@
  */
 export * from "./employee-read";
 export * from "./lookups";
+// S2-HR-BE-3 (additive): HR master data CRUD + department CRUD contracts.
+export * from "./master-data";
 // S2-HR-BE-4: profile change request DTOs (SPEC-03 §14.18/14.19/14.20).
 export * from "./profile-change-request";

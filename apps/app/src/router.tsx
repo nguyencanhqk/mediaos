@@ -8,7 +8,12 @@ import { HomePortalLayout } from "@/layouts/home/HomePortalLayout";
 import { ModuleWorkspaceLayout } from "@/layouts/workspace/ModuleWorkspaceLayout";
 
 // ---------------------------------------------------------------------------
-// Auth guard — điều hướng về app đăng nhập trung tâm nếu chưa có phiên.
+// Auth guard — `beforeLoad` CHỈ làm REDIRECT_LOGIN khi CHƯA có phiên (redirect SSO).
+//
+// Phân quyền theo route (SHOW_403 / SHOW_404 / SHOW_DISABLED / SHOW_LOADING) KHÔNG nằm ở đây:
+// nó do <ProtectedRoute meta> TIÊU THỤ guardResult ở TẦNG COMPONENT (evaluateRouteFromStore) —
+// nội dung module CHỈ render khi action === "ALLOW". `beforeLoad` chạy ngoài React tree nên không
+// thể render trạng thái; vì vậy nó giới hạn ở đúng việc redirect (cổng quyền thật vẫn ở server).
 // ---------------------------------------------------------------------------
 const authGuard = () => {
   if (!useAuthStore.getState().isAuthenticated) {
@@ -51,34 +56,48 @@ const indexRoute = createRoute({
 // ---------------------------------------------------------------------------
 import { ROUTE_REGISTRY } from "@mediaos/web-core";
 
-function getMeta(routeKey: string): RouteMeta {
+export function getMeta(routeKey: string): RouteMeta {
   const meta = ROUTE_REGISTRY.find((r) => r.routeKey === routeKey);
   if (!meta) throw new Error(`[router] RouteMeta not found for key: ${routeKey}`);
   return meta;
 }
 
+type ModuleCodeArg = Parameters<typeof ModuleWorkspaceLayout>[0]["moduleCode"];
+
+/**
+ * Nội dung 1 route module: ProtectedShell → ProtectedRoute(meta) → ModuleWorkspaceLayout → page.
+ *
+ * <ProtectedRoute meta> TIÊU THỤ guardResult: nó CHỈ render workspace + page khi ALLOW; ngược lại
+ * render trạng thái 403/404/disabled/loading. Nhờ vậy MỌI route module (kể cả ModulePlaceholder) bị
+ * chặn ở tầng route khi user thiếu quyền — không chỉ HR. Tách ra để route detail tái dùng + test wiring.
+ */
+export function buildModuleRouteContent(
+  meta: RouteMeta,
+  moduleCode: ModuleCodeArg,
+  page: React.ReactNode,
+): React.ReactElement {
+  return (
+    <ProtectedShell>
+      <ProtectedRoute meta={meta}>
+        <ModuleWorkspaceLayout moduleCode={moduleCode}>{page}</ModuleWorkspaceLayout>
+      </ProtectedRoute>
+    </ProtectedShell>
+  );
+}
+
 function makeModuleRoute(
   path: string,
   metaKey: string,
-  moduleCode: Parameters<typeof ModuleWorkspaceLayout>[0]["moduleCode"],
+  moduleCode: ModuleCodeArg,
   PageComponent: () => React.ReactElement,
 ) {
-  const meta: RouteMeta = getMeta(metaKey);
+  const meta = getMeta(metaKey);
   return createRoute({
     getParentRoute: () => rootRoute,
     path,
-    // beforeLoad: chỉ chặn khi CHƯA có phiên (redirect SSO). Phân quyền theo route (403/disabled/404)
-    // do ProtectedRoute TIÊU THỤ guardResult ở tầng component — nội dung module chỉ render khi ALLOW.
+    // beforeLoad: CHỈ REDIRECT_LOGIN (xem ghi chú authGuard). Phân quyền route do ProtectedRoute lo.
     beforeLoad: authGuard,
-    component: () => (
-      <ProtectedShell>
-        <ProtectedRoute meta={meta}>
-          <ModuleWorkspaceLayout moduleCode={moduleCode}>
-            <PageComponent />
-          </ModuleWorkspaceLayout>
-        </ProtectedRoute>
-      </ProtectedShell>
-    ),
+    component: () => buildModuleRouteContent(meta, moduleCode, <PageComponent />),
   });
 }
 
@@ -95,9 +114,32 @@ function ModulePlaceholder() {
 const dashboardRoute = makeModuleRoute("/dashboard", "dashboard", "DASH", ModulePlaceholder);
 
 // HR
-const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", ModulePlaceholder);
-const hrEmployeesRoute = makeModuleRoute("/hr/employees", "hr.employees", "HR", ModulePlaceholder);
-const hrMeRoute = makeModuleRoute("/hr/me", "hr.me", "HR", ModulePlaceholder);
+import { EmployeeListPage } from "@/routes/hr/employees/EmployeeListPage";
+import { EmployeeDetailPage } from "@/routes/hr/employees/EmployeeDetailPage";
+import { MyProfilePage } from "@/routes/hr/me/MyProfilePage";
+
+const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", EmployeeListPage);
+const hrEmployeesRoute = makeModuleRoute("/hr/employees", "hr.employees", "HR", EmployeeListPage);
+const hrMeRoute = makeModuleRoute("/hr/me", "hr.me", "HR", MyProfilePage);
+
+// HR detail — no sidebar entry; path param resolved via useParams.
+// Dùng CÙNG ProtectedRoute như các route module khác (KHÔNG authGuard trần) để guardResult được
+// tiêu thụ ở tầng route: thiếu HR.EMPLOYEE.VIEW → 403, không render detail. Meta tái dùng hr.employees
+// (cùng yêu cầu HR.EMPLOYEE.VIEW); masking field nhạy cảm do server + useCan trong EmployeeDetailPage.
+const hrEmployeeDetailMeta = getMeta("hr.employees");
+const hrEmployeeDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/employees/$employeeId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { employeeId } = hrEmployeeDetailRoute.useParams();
+    return buildModuleRouteContent(
+      hrEmployeeDetailMeta,
+      "HR",
+      <EmployeeDetailPage employeeId={employeeId} />,
+    );
+  },
+});
 
 // Attendance
 const attTodayRoute = makeModuleRoute("/attendance/today", "att.today", "ATT", ModulePlaceholder);
@@ -190,6 +232,7 @@ const routeTree = rootRoute.addChildren([
   dashboardRoute,
   hrRoute,
   hrEmployeesRoute,
+  hrEmployeeDetailRoute,
   hrMeRoute,
   attTodayRoute,
   attMyRecordsRoute,

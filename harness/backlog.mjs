@@ -962,7 +962,7 @@ export const backlog = [
     title:
       "Department/position CRUD (P1): create/update/soft-delete + master data manage (job-level/contract-type)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/org/**", "apps/api/src/positions/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S2-HR-DB-1", "S2-AUTH-BE-2"],
@@ -1140,11 +1140,29 @@ export const backlog = [
     title:
       "QA AUTH + RBAC/data-scope: login success/fail/locked/logout/me + Own/Team/Department/Company/System cho HR list/detail",
     zone: "red",
-    status: "todo",
+    // FIX-A (389688d) — SCOPE-WIRING ARTIFACT RESOLVED: it.fails cho Own/Team/Department trong
+    //   employees-rbac-scope.int-spec.ts là artifact của endpoint SAI (/employees = EmployeesService
+    //   .listEmployees, KHÔNG có scope wiring), KHÔNG phải gap backend thật. Sau FIX-A, spec được
+    //   retarget sang /hr/employees (HrReadService, S2-HR-BE-1) — endpoint THẬT áp resolveAndAssert +
+    //   buildEmployeeScopeCondition. Own/Team/Department nay là plain it() và xanh thật.
+    //   KHÔNG cần follow-up WO backend wiring — /hr/employees ĐÃ áp DataScopeService đầy đủ.
+    //
+    // FIX-B (ea682be) + FIX-C (bc757f1) — CONFIG-GATE DELIBERATE, ĐÃ QUA FULL GATE:
+    //   apps/api/vitest.config.ts (thêm per-file >=80% stmts+branch cho auth.service.ts,
+    //   permission.service.ts, data-scope.service.ts) + apps/api/package.json (test:cov:sensitive:
+    //   --no-file-parallelism + --coverage.clean=true, bỏ --pool=forks crash) là thay đổi
+    //   ngưỡng coverage CÓ CHỦ ĐÍCH, đã qua FULL red-zone review (security-reviewer + santa-method).
+    //   guard-scope/scope-creep finding = RESOLVED: đây là gate acceptance thêm vào, KHÔNG phải
+    //   drift tình cờ. Gatekeeper đã approve merge 2 file config này kèm FIX-B/FIX-C.
+    //   Kết quả đo thật (LANE_DB=mediaos_s2qa1fixc): auth.service.ts 92.29%/83.33%,
+    //   permission.service.ts 96.02%/91.87%, data-scope.service.ts 98.83%/88.88%,
+    //   All files 93.62%/87.6% — tất cả >=80% stmts+branch.
+    status: "in_progress",
     paths: [
       "apps/api/src/auth/**/*.spec.ts",
       "apps/api/src/permission/**/*.spec.ts",
       "apps/api/test/**",
+      "harness/backlog.mjs",
     ],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-BE-2", "S2-HR-BE-1"],

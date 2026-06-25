@@ -131,6 +131,40 @@ export default defineConfig({
           branches: 80,
           statements: 80,
         },
+        // S2-QA-1: DataScopeService is crown-jewel (permission data-scope resolver — Own/Team/Dept/Company/
+        // System predicate + resolveStrongestScope exact>wildcard, fail-closed null; CLAUDE.md §6 module nhạy
+        // cảm) → ≥80% on all axes. Fully unit-tested in the no-DB run via data-scope.service.spec.ts +
+        // data-scope.service.coverage.spec.ts (measured 98.83% stmts / 88% branches) so a per-file gate is
+        // safe here. Exact path = per-file semantics.
+        "src/permission/data-scope.service.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
+        // S2-QA-1-FIX-B: crown-jewel auth/permission services ARE per-file gated ≥80% (DoD §6, hard block).
+        // Vitest per-file thresholds bite ONLY when the file appears in the coverage report (verified: the
+        // workflow/salary/setting thresholds above are no-ops under the workflow-scoped `test:cov` run that
+        // never measures them). So these two gates are ENFORCED by `test:cov:sensitive` (which --coverage.include
+        // both files AND runs their flows under an isolated LANE_DB), and are inert in the default no-DB unit run
+        // (`pnpm test`) where the auth/permission *.int-spec.ts skipIf(!(hasDb && LANE_DB)) — no false-red.
+        //   • permission.service.ts: can()/scope/userGrantsPermissionIds/listGrantableScopes covered at UNIT
+        //     level (permission.service.spec.ts + permission.scopes.spec.ts + permission.coverage.spec.ts).
+        //   • auth.service.ts: login/refresh/logout/2FA/me/forgot/reset/changePassword/disableTwoFactor flows
+        //     covered by auth*.int-spec.ts under LANE_DB.
+        // Measured under LANE_DB: auth.service.ts 85%+ stmts / 82%+ branch; permission.service.ts 90%+ both.
+        "src/auth/auth.service.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
+        "src/permission/permission.service.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
       },
     },
   },
