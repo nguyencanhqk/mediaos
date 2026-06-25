@@ -149,15 +149,43 @@ describe("HrDepartmentService — cycle detection + 2-tenant deny (S2-HR-BE-3 RE
 
   beforeEach(() => vi.clearAllMocks());
 
-  it("createDepartment: parent_id = own id → BadRequestException (cycle)", async () => {
-    const { service } = makeService({});
+  // RED: pre-insert parentId validation — parentId NOT found in same company → BadRequestException.
+  // (Post-insert self-ref check `created.id === dto.parentId` was a no-op in production because
+  //  DB-generated UUIDs are always fresh. Fixed: validate parentId existence BEFORE INSERT in tx.)
+  it("createDepartment: parentId does not exist in company → BadRequestException (HR-ERR-016)", async () => {
+    const NONEXISTENT_PARENT_ID = "99999999-9999-9999-9999-999999999999";
+    const repo = makeRepo();
+    // Simulate: parent row absent (different company or deleted or never existed).
+    // findDepartmentById called with (companyId, parentId, tx) returns empty → parent not found.
+    repo.findDepartmentById.mockResolvedValue([]);
+    // createDepartment returns a FRESH UUID (≠ NONEXISTENT_PARENT_ID) — in real DB, UUID never matches.
+    repo.createDepartment.mockResolvedValue([
+      { id: "aaaabbbb-0000-0000-0000-000000000001", companyId: COMPANY_A },
+    ]);
+    const { service } = makeService({ repo });
     await expect(
       service.createDepartment(COMPANY_A, ACTOR_ID, {
-        name: "Loop Dept",
-        parentId: DEPT_ID, // will be set to the newly-created dept id — checked server-side
-        code: "LOOP",
+        name: "Orphan Dept",
+        parentId: NONEXISTENT_PARENT_ID, // different from any returned id → post-insert check is dead
+        code: "ORPHAN",
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("createDepartment: parentId exists in same company → succeeds (no cycle)", async () => {
+    const PARENT_ID = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+    const NEW_ID = "ffffffff-ffff-ffff-ffff-ffffffffffff";
+    const repo = makeRepo();
+    // Parent exists in COMPANY_A
+    repo.findDepartmentById.mockResolvedValue([{ id: PARENT_ID, companyId: COMPANY_A }]);
+    repo.createDepartment.mockResolvedValue([{ id: NEW_ID, companyId: COMPANY_A }]);
+    const { service } = makeService({ repo });
+    const result = await service.createDepartment(COMPANY_A, ACTOR_ID, {
+      name: "Child Dept",
+      parentId: PARENT_ID,
+      code: "CHILD",
+    });
+    expect(result).toMatchObject({ id: NEW_ID });
   });
 
   it("updateDepartment: parentId = own id → BadRequestException (self-cycle)", async () => {

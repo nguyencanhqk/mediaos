@@ -37,6 +37,18 @@ export class HrDepartmentService {
   async createDepartment(companyId: string, actorUserId: string, dto: CreateDepartmentRequest) {
     try {
       return await this.db.withTenant(companyId, async (tx) => {
+        // PRE-INSERT: validate parentId exists in the same company (BẤT BIẾN #1 — company_id query).
+        // DB-generated UUIDs are always fresh, so post-insert self-ref checks are a no-op.
+        // Must run INSIDE tx so the lookup is part of the same tenant context.
+        if (dto.parentId) {
+          const parentRows = await this.repo.findDepartmentById(companyId, dto.parentId, tx);
+          if (!parentRows[0]) {
+            throw new BadRequestException(
+              "Parent department does not exist in this company (HR-ERR-016)",
+            );
+          }
+        }
+
         const rows = await this.repo.createDepartment(
           companyId,
           {
@@ -51,14 +63,6 @@ export class HrDepartmentService {
         );
         const created = rows[0];
         if (!created) throw new Error("Failed to create department");
-
-        // Post-insert self-reference guard: if DB assigned an id equal to parentId, reject.
-        // (Normally impossible with DB-generated UUIDs; guards against id-collision edge cases.)
-        if (dto.parentId && created.id === dto.parentId) {
-          throw new BadRequestException(
-            "Department cannot reference itself as parent (HR-ERR-016)",
-          );
-        }
 
         await this.audit.record(tx, {
           action: "create",
