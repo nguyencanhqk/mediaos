@@ -904,6 +904,13 @@
       "when": 1717500630000,
       "tag": "0445_s2_hrseed1_hr_perms",
       "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1717500640000,
+      "tag": "0450_s2_authbe3_user_admin_perms",
+      "breakpoints": true
     }
   ]
 }
