@@ -131,6 +131,25 @@ export default defineConfig({
           branches: 80,
           statements: 80,
         },
+        // S2-QA-1: DataScopeService is crown-jewel (permission data-scope resolver — Own/Team/Dept/Company/
+        // System predicate + resolveStrongestScope exact>wildcard, fail-closed null; CLAUDE.md §6 module nhạy
+        // cảm) → ≥80% on all axes. Fully unit-tested in the no-DB run via data-scope.service.spec.ts +
+        // data-scope.service.coverage.spec.ts (measured 98.83% stmts / 88% branches) so a per-file gate is
+        // safe here. Exact path = per-file semantics.
+        //
+        // WHY auth.service.ts and permission.service.ts are NOT per-file gated here: their real flows
+        // (login/refresh/logout/blocked-status; can()/scope resolution against seeded grants) live in
+        // *.int-spec.ts that skipIf(!(hasDb && LANE_DB)). In the no-DB unit run those int-specs are skipped,
+        // so v8 reads auth.service.ts ≈49.9% stmts and permission.service.ts ≈53–70% stmts — gating them in
+        // the default unit run would be a FALSE RED. They follow the SAME LANE_DB caveat as the workflow
+        // controller/repo files above: their real coverage number is PRINTED (not gated) by the
+        // `test:cov:sensitive` script, which runs the sensitive int-specs under an isolated LANE_DB.
+        "src/permission/data-scope.service.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
       },
     },
   },
