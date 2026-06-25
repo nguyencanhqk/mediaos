@@ -23,7 +23,13 @@ import { AuditService } from "../../src/events/audit.service";
 import { OutboxService } from "../../src/events/outbox.service";
 import type { PermissionService } from "../../src/permission/permission.service";
 import { directPool, hasDb } from "../helpers/integration-db";
-import { cleanupTenants, seedCompany, seedUser, seedUserRole, type SeededTenant } from "../helpers/seed";
+import {
+  cleanupTenants,
+  seedCompany,
+  seedUser,
+  seedUserRole,
+  type SeededTenant,
+} from "../helpers/seed";
 import { makeSecurityPolicyService } from "../helpers/security-policy";
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-secret-".padEnd(40, "0");
@@ -55,10 +61,18 @@ describe.skipIf(!hasDb)("G16-1 login 2FA flow", () => {
   function make(): { auth: AuthService; twoFactor: TwoFactorService } {
     const dbsvc = new DatabaseService();
     const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
-    const mockPermissions = { getCapabilities: async () => ({}) } as unknown as PermissionService;
+    const mockPermissions = { getCapabilities: async () => ({}), getCapabilityScopes: async () => ({}) } as unknown as PermissionService;
     const replayGuard = new ReplayGuardService(new ValkeyService());
     const securityAlerts = new SecurityAlertService(dbsvc, new AuditService());
-    const tf = new TwoFactorService(dbsvc, secrets, totp, new TokenService(), new AuditService(), new LoginRateLimiter(), replayGuard);
+    const tf = new TwoFactorService(
+      dbsvc,
+      secrets,
+      totp,
+      new TokenService(),
+      new AuditService(),
+      new LoginRateLimiter(),
+      replayGuard,
+    );
     const a = new AuthService(
       dbsvc,
       password,
@@ -72,6 +86,7 @@ describe.skipIf(!hasDb)("G16-1 login 2FA flow", () => {
       replayGuard,
       securityAlerts,
       makeSecurityPolicyService(dbsvc),
+      { getMyApps: async () => [] } as never,
     );
     return { auth: a, twoFactor: tf };
   }
@@ -99,13 +114,19 @@ describe.skipIf(!hasDb)("G16-1 login 2FA flow", () => {
   });
 
   it("user KHÔNG 2FA: login → AuthTokens trực tiếp (không challenge)", async () => {
-    const res = await auth.login({ companySlug: A.slug, email: plainUserEmail, password: PASSWORD }, meta);
+    const res = await auth.login(
+      { companySlug: A.slug, email: plainUserEmail, password: PASSWORD },
+      meta,
+    );
     expect(isChallenge(res)).toBe(false);
     expect((res as AuthTokens).accessToken).toBeTruthy();
   });
 
   it("user CÓ 2FA: login đúng mật khẩu → challenge (KHÔNG token)", async () => {
-    const res = await auth.login({ companySlug: A.slug, email: userEmail, password: PASSWORD }, meta);
+    const res = await auth.login(
+      { companySlug: A.slug, email: userEmail, password: PASSWORD },
+      meta,
+    );
     expect(isChallenge(res)).toBe(true);
     expect((res as { challengeToken: string }).challengeToken).toBeTruthy();
   });
@@ -117,35 +138,51 @@ describe.skipIf(!hasDb)("G16-1 login 2FA flow", () => {
   });
 
   it("completeTwoFactorLogin: challenge + mã TOTP đúng → tokens", async () => {
-    const res = await auth.login({ companySlug: A.slug, email: userEmail, password: PASSWORD }, meta);
+    const res = await auth.login(
+      { companySlug: A.slug, email: userEmail, password: PASSWORD },
+      meta,
+    );
     if (!isChallenge(res)) throw new Error("mong đợi challenge");
-    const tokens = await auth.completeTwoFactorLogin(res.challengeToken, totp.generate(enrolledSecret), meta);
+    const tokens = await auth.completeTwoFactorLogin(
+      res.challengeToken,
+      totp.generate(enrolledSecret),
+      meta,
+    );
     expect(tokens.accessToken).toBeTruthy();
     expect(tokens.refreshToken).toContain(`${A.companyId}.`);
   });
 
   it("DENY: completeTwoFactorLogin mã sai → 401", async () => {
-    const res = await auth.login({ companySlug: A.slug, email: userEmail, password: PASSWORD }, meta);
-    if (!isChallenge(res)) throw new Error("mong đợi challenge");
-    await expect(auth.completeTwoFactorLogin(res.challengeToken, "000000", meta)).rejects.toBeInstanceOf(
-      UnauthorizedException,
+    const res = await auth.login(
+      { companySlug: A.slug, email: userEmail, password: PASSWORD },
+      meta,
     );
+    if (!isChallenge(res)) throw new Error("mong đợi challenge");
+    await expect(
+      auth.completeTwoFactorLogin(res.challengeToken, "000000", meta),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it("DENY: completeTwoFactorLogin challengeToken rác → 401", async () => {
-    await expect(auth.completeTwoFactorLogin("garbage.token.x", "123456", meta)).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(
+      auth.completeTwoFactorLogin("garbage.token.x", "123456", meta),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it("/me.mustSetupTwoFactor: admin bị ép 2FA chưa enroll → true; user thường → false", async () => {
-    const adminLogin = await auth.login({ companySlug: A.slug, email: adminEmail, password: PASSWORD }, meta);
+    const adminLogin = await auth.login(
+      { companySlug: A.slug, email: adminEmail, password: PASSWORD },
+      meta,
+    );
     // admin chưa enroll 2FA → login ra tokens (chưa bật), nhưng /me báo phải setup.
     if (isChallenge(adminLogin)) throw new Error("admin chưa bật 2FA, không nên challenge");
     const adminMe = await auth.me(adminLogin.accessToken);
     expect(adminMe.mustSetupTwoFactor).toBe(true);
 
-    const plainLogin = await auth.login({ companySlug: A.slug, email: plainUserEmail, password: PASSWORD }, meta);
+    const plainLogin = await auth.login(
+      { companySlug: A.slug, email: plainUserEmail, password: PASSWORD },
+      meta,
+    );
     if (isChallenge(plainLogin)) throw new Error("plain user không 2FA");
     const plainMe = await auth.me(plainLogin.accessToken);
     expect(plainMe.mustSetupTwoFactor).toBe(false);
@@ -156,13 +193,19 @@ describe.skipIf(!hasDb)("G16-1 login 2FA flow", () => {
     // G16-1b: challengeToken là SINGLE-USE (jti) → MỖI lần thử phải login lại lấy challenge MỚI (đúng hành vi
     // client thực: re-login để retry). Reuse 1 token sẽ bị jti-replay chặn TRƯỚC rate-limit (xem test riêng).
     for (let i = 0; i < 5; i++) {
-      const res = await freshAuth.login({ companySlug: A.slug, email: userEmail, password: PASSWORD }, meta);
+      const res = await freshAuth.login(
+        { companySlug: A.slug, email: userEmail, password: PASSWORD },
+        meta,
+      );
       if (!isChallenge(res)) throw new Error("mong đợi challenge");
       await expect(
         freshAuth.completeTwoFactorLogin(res.challengeToken, "000000", meta),
       ).rejects.toBeInstanceOf(UnauthorizedException);
     }
-    const last = await freshAuth.login({ companySlug: A.slug, email: userEmail, password: PASSWORD }, meta);
+    const last = await freshAuth.login(
+      { companySlug: A.slug, email: userEmail, password: PASSWORD },
+      meta,
+    );
     if (!isChallenge(last)) throw new Error("mong đợi challenge");
     await expect(
       freshAuth.completeTwoFactorLogin(last.challengeToken, "000000", meta),
@@ -171,10 +214,17 @@ describe.skipIf(!hasDb)("G16-1 login 2FA flow", () => {
 
   it("G16-1b jti single-use: replay CÙNG challengeToken (kể cả mã ĐÚNG) → 401 (rejected)", async () => {
     const { auth: freshAuth } = make();
-    const res = await freshAuth.login({ companySlug: A.slug, email: userEmail, password: PASSWORD }, meta);
+    const res = await freshAuth.login(
+      { companySlug: A.slug, email: userEmail, password: PASSWORD },
+      meta,
+    );
     if (!isChallenge(res)) throw new Error("mong đợi challenge");
     // Lần 1: mã đúng → tokens.
-    const tokens = await freshAuth.completeTwoFactorLogin(res.challengeToken, totp.generate(enrolledSecret), meta);
+    const tokens = await freshAuth.completeTwoFactorLogin(
+      res.challengeToken,
+      totp.generate(enrolledSecret),
+      meta,
+    );
     expect(tokens.accessToken).toBeTruthy();
     // Lần 2: REPLAY cùng challengeToken (dù mã vẫn đúng trong cùng step) → 401 (jti đã tiêu thụ, single-use).
     await expect(

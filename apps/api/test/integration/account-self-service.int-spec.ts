@@ -54,7 +54,7 @@ describe.skipIf(!hasDb)("Module 2a self-service account", () => {
   /** AuthService thật với deps thật + PermissionService mock (mỗi test instance riêng → rate-limiter sạch). */
   function newAuth(): AuthService {
     const dbsvc = new DatabaseService();
-    const mockPermissions = { getCapabilities: async () => ({}) } as unknown as PermissionService;
+    const mockPermissions = { getCapabilities: async () => ({}), getCapabilityScopes: async () => ({}) } as unknown as PermissionService;
     const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
     const replayGuard = new ReplayGuardService(new ValkeyService());
     const securityAlerts = new SecurityAlertService(dbsvc, new AuditService());
@@ -80,6 +80,7 @@ describe.skipIf(!hasDb)("Module 2a self-service account", () => {
       replayGuard,
       securityAlerts,
       makeSecurityPolicyService(dbsvc),
+      { getMyApps: async () => [] } as never,
     );
   }
 
@@ -92,7 +93,11 @@ describe.skipIf(!hasDb)("Module 2a self-service account", () => {
 
   it("changePassword: sai mật khẩu hiện tại → 401 (re-auth fail, không đổi)", async () => {
     await expect(
-      newAuth().changePassword({ id: userId, companyId: A.companyId }, "wrong-current", "BrandNewPw!1"),
+      newAuth().changePassword(
+        { id: userId, companyId: A.companyId },
+        "wrong-current",
+        "BrandNewPw!1",
+      ),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 

@@ -1,10 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from "@nestjs/common";
+import type { DataScope } from "@mediaos/contracts";
 import type {
   CanInput,
   CompanyRoleGrant,
   IPermissionRepository,
   PermissionDecision,
-} from './permission.types';
+} from "./permission.types";
 
 @Injectable()
 export class PermissionService {
@@ -62,8 +63,8 @@ export class PermissionService {
       // Company grants support wildcards: action='*' matches any action, resourceType='*' any type.
       // Object grants are always specific (no wildcards).
       const matchesCompanyGrant = (g: CompanyRoleGrant): boolean =>
-        (g.action === action || g.action === '*') &&
-        (g.resourceType === resourceType || g.resourceType === '*');
+        (g.action === action || g.action === "*") &&
+        (g.resourceType === resourceType || g.resourceType === "*");
 
       // ── Object-tier (priority 1–2) ────────────────────────────────────────
       if (resourceId != null) {
@@ -72,32 +73,32 @@ export class PermissionService {
         );
 
         // Priority 1: any object-level DENY → immediate deny
-        if (forAction.some((g) => g.effect === 'DENY')) {
-          return { allow: false, reason: 'deny-explicit', auditRequired: isSensitive };
+        if (forAction.some((g) => g.effect === "DENY")) {
+          return { allow: false, reason: "deny-explicit", auditRequired: isSensitive };
         }
 
         // Priority 2: object-level ALLOW
         // Object grants are inherently exact (no wildcards), so they satisfy the sensitive gate.
         // The isSensitive wildcard guard is intentionally not applied here — exact object grants
         // ARE the explicit grant that the sensitive gate requires.
-        if (forAction.some((g) => g.effect === 'ALLOW')) {
+        if (forAction.some((g) => g.effect === "ALLOW")) {
           if (requiresReauth && !isReauthValid(ctx?.reauthValidUntil, now)) {
             return {
               allow: false,
-              reason: 'deny-reauth-required',
+              reason: "deny-reauth-required",
               requiresReauth: true,
               auditRequired: true,
             };
           }
-          return { allow: true, reason: 'allow', auditRequired: isSensitive };
+          return { allow: true, reason: "allow", auditRequired: isSensitive };
         }
       }
 
       // ── Company-tier (priority 3–4) ───────────────────────────────────────
       // Priority 3: any company-level DENY from ANY role (deny-overrides-across-roles).
       // Wildcard (*:*) DENY also matches — it blocks all actions.
-      if (companyGrants.some((g) => matchesCompanyGrant(g) && g.effect === 'DENY')) {
-        return { allow: false, reason: 'deny-explicit', auditRequired: isSensitive };
+      if (companyGrants.some((g) => matchesCompanyGrant(g) && g.effect === "DENY")) {
+        return { allow: false, reason: "deny-explicit", auditRequired: isSensitive };
       }
 
       // ── F2 object-grant requirement (crown-jewel, ADR-0010) ────────────────
@@ -107,11 +108,11 @@ export class PermissionService {
       // sufficient. Fail-closed DENY. Derived from (isSensitive && requiresReauth) unless caller overrides.
       const needsObjectGrant = objectGrantRequired ?? (isSensitive && requiresReauth);
       if (needsObjectGrant) {
-        return { allow: false, reason: 'deny-object-required', auditRequired: true };
+        return { allow: false, reason: "deny-object-required", auditRequired: true };
       }
 
       const companyAllows = companyGrants.filter(
-        (g) => matchesCompanyGrant(g) && g.effect === 'ALLOW',
+        (g) => matchesCompanyGrant(g) && g.effect === "ALLOW",
       );
 
       // Defense-in-depth: treat as sensitive if EITHER the caller flags it (from @RequirePermission
@@ -123,20 +124,20 @@ export class PermissionService {
         // Sensitive gate: wildcards (*) do NOT satisfy — require exact (non-wildcard) ALLOW.
         // Plan §3b: "Wildcard (*:* hoặc resource:*) KHÔNG match — chỉ exact ALLOW mới được tính."
         const explicitAllows = companyAllows.filter(
-          (g) => g.action !== '*' && g.resourceType !== '*',
+          (g) => g.action !== "*" && g.resourceType !== "*",
         );
         if (explicitAllows.length === 0) {
-          return { allow: false, reason: 'deny-sensitive', auditRequired: true };
+          return { allow: false, reason: "deny-sensitive", auditRequired: true };
         }
         if (requiresReauth && !isReauthValid(ctx?.reauthValidUntil, now)) {
           return {
             allow: false,
-            reason: 'deny-reauth-required',
+            reason: "deny-reauth-required",
             requiresReauth: true,
             auditRequired: true,
           };
         }
-        return { allow: true, reason: 'allow', auditRequired: true };
+        return { allow: true, reason: "allow", auditRequired: true };
       }
 
       // Priority 4: non-sensitive ALLOW (wildcards valid here)
@@ -144,20 +145,20 @@ export class PermissionService {
         if (requiresReauth && !isReauthValid(ctx?.reauthValidUntil, now)) {
           return {
             allow: false,
-            reason: 'deny-reauth-required',
+            reason: "deny-reauth-required",
             requiresReauth: true,
             auditRequired: false,
           };
         }
-        return { allow: true, reason: 'allow', auditRequired: false };
+        return { allow: true, reason: "allow", auditRequired: false };
       }
 
       // ── Default deny ──────────────────────────────────────────────────────
-      return { allow: false, reason: 'deny-default', auditRequired: isSensitive };
+      return { allow: false, reason: "deny-default", auditRequired: isSensitive };
     } catch (error: unknown) {
       // Fail-closed: DB/cache/network error → DENY. Never false-ALLOW on exception.
       // Log with full context so infra failures are distinguishable from legitimate denies.
-      this.logger.error('permission.can() infrastructure error — fail-closed deny', {
+      this.logger.error("permission.can() infrastructure error — fail-closed deny", {
         error: error instanceof Error ? error.message : String(error),
         userId,
         companyId,
@@ -166,7 +167,7 @@ export class PermissionService {
         resourceId,
         requestId: ctx?.requestId,
       });
-      return { allow: false, reason: 'deny-default', auditRequired: isSensitive };
+      return { allow: false, reason: "deny-default", auditRequired: isSensitive };
     }
   }
 
@@ -189,7 +190,7 @@ export class PermissionService {
       const grantedSet = new Set(grantedIds);
       return catalog.filter((p) => grantedSet.has(p.id));
     } catch (error: unknown) {
-      this.logger.error('listGrantableScopes() infrastructure error — returning empty', {
+      this.logger.error("listGrantableScopes() infrastructure error — returning empty", {
         error: error instanceof Error ? error.message : String(error),
         userId,
         companyId,
@@ -213,7 +214,7 @@ export class PermissionService {
 
       const denyKeys = new Set<string>();
       for (const g of grants) {
-        if (g.effect === 'DENY') denyKeys.add(`${g.action}:${g.resourceType}`);
+        if (g.effect === "DENY") denyKeys.add(`${g.action}:${g.resourceType}`);
       }
 
       // Wildcard-aware deny check: a DENY on *:T or A:* or *:* suppresses matching ALLOW keys.
@@ -221,17 +222,65 @@ export class PermissionService {
         denyKeys.has(`${action}:${resourceType}`) ||
         denyKeys.has(`*:${resourceType}`) ||
         denyKeys.has(`${action}:*`) ||
-        denyKeys.has('*:*');
+        denyKeys.has("*:*");
 
       const caps: Record<string, boolean> = {};
       for (const g of grants) {
-        if (g.effect === 'ALLOW' && !isDenied(g.action, g.resourceType)) {
+        if (g.effect === "ALLOW" && !isDenied(g.action, g.resourceType)) {
           caps[`${g.action}:${g.resourceType}`] = true;
         }
       }
       return caps;
     } catch (error: unknown) {
-      this.logger.error('getCapabilities() infrastructure error — returning empty map', {
+      this.logger.error("getCapabilities() infrastructure error — returning empty map", {
+        error: error instanceof Error ? error.message : String(error),
+        userId,
+        companyId,
+      });
+      return {};
+    }
+  }
+
+  /**
+   * S2-AUTH-BE-1 — union data_scope cho từng cặp ALLOW non-sensitive (cho /auth/me `scopes`, BACKEND-03 §15.3
+   * rule 6). KEYSET Y HỆT getCapabilities: chỉ ALLOW non-sensitive; cặp bị DENY-override (wildcard-aware) bị
+   * LOẠI hoàn toàn (KHÔNG union). Mảng scope đã DEDUPE. Lỗi hạ tầng → {} (fail-safe UI hint; guard BE-2 là cổng
+   * thật). Độc lập getCapabilities: nếu method này lỗi mà getCapabilities ok, /me trả caps không kèm scope —
+   * chấp nhận (chỉ là gợi ý FE).
+   */
+  async getCapabilityScopes(
+    userId: string,
+    companyId: string,
+  ): Promise<Record<string, DataScope[]>> {
+    try {
+      const now = new Date();
+      const rawGrants = await this.repo.getCompanyRoleGrantsWithScope(userId, companyId);
+      const grants = rawGrants.filter((g) => isGrantActive(g.expiresAt, now) && !g.isSensitive);
+
+      const denyKeys = new Set<string>();
+      for (const g of grants) {
+        if (g.effect === "DENY") denyKeys.add(`${g.action}:${g.resourceType}`);
+      }
+      const isDenied = (action: string, resourceType: string): boolean =>
+        denyKeys.has(`${action}:${resourceType}`) ||
+        denyKeys.has(`*:${resourceType}`) ||
+        denyKeys.has(`${action}:*`) ||
+        denyKeys.has("*:*");
+
+      const scopeSets = new Map<string, Set<DataScope>>();
+      for (const g of grants) {
+        if (g.effect !== "ALLOW" || isDenied(g.action, g.resourceType)) continue;
+        const key = `${g.action}:${g.resourceType}`;
+        const set = scopeSets.get(key) ?? new Set<DataScope>();
+        set.add(g.dataScope as DataScope);
+        scopeSets.set(key, set);
+      }
+
+      const out: Record<string, DataScope[]> = {};
+      for (const [key, set] of scopeSets) out[key] = [...set];
+      return out;
+    } catch (error: unknown) {
+      this.logger.error("getCapabilityScopes() infrastructure error — returning empty map", {
         error: error instanceof Error ? error.message : String(error),
         userId,
         companyId,
@@ -262,32 +311,35 @@ export class PermissionService {
       const grants = rawGrants.filter((g) => isGrantActive(g.expiresAt, now));
 
       const matches = (g: CompanyRoleGrant, action: string, resourceType: string): boolean =>
-        (g.action === action || g.action === '*') &&
-        (g.resourceType === resourceType || g.resourceType === '*');
+        (g.action === action || g.action === "*") &&
+        (g.resourceType === resourceType || g.resourceType === "*");
 
       return catalog
         .filter((p) => {
           const denied = grants.some(
-            (g) => g.effect === 'DENY' && matches(g, p.action, p.resourceType),
+            (g) => g.effect === "DENY" && matches(g, p.action, p.resourceType),
           );
           if (denied) return false;
           const allows = grants.filter(
-            (g) => g.effect === 'ALLOW' && matches(g, p.action, p.resourceType),
+            (g) => g.effect === "ALLOW" && matches(g, p.action, p.resourceType),
           );
           if (allows.length === 0) return false;
           // Sensitive gate: wildcard KHÔNG thoả — cần exact non-wildcard ALLOW (mirror can()).
           if (p.isSensitive) {
-            return allows.some((g) => g.action !== '*' && g.resourceType !== '*');
+            return allows.some((g) => g.action !== "*" && g.resourceType !== "*");
           }
           return true;
         })
         .map((p) => p.id);
     } catch (error: unknown) {
-      this.logger.error('userGrantsPermissionIds() infrastructure error — fail-closed (empty set)', {
-        error: error instanceof Error ? error.message : String(error),
-        userId,
-        companyId,
-      });
+      this.logger.error(
+        "userGrantsPermissionIds() infrastructure error — fail-closed (empty set)",
+        {
+          error: error instanceof Error ? error.message : String(error),
+          userId,
+          companyId,
+        },
+      );
       return [];
     }
   }

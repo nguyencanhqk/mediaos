@@ -1,15 +1,16 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from "@nestjs/common";
 import type {
   CompanyRoleGrant,
+  CompanyRoleGrantWithScope,
   IPermissionRepository,
   ObjectGrant,
   PermissionCatalogEntry,
-} from './permission.types';
-import { ValkeyService } from './valkey.service';
+} from "./permission.types";
+import { ValkeyService } from "./valkey.service";
 
 const CACHE_TTL_SEC = 300; // 5 minutes (plan §3b)
 
-type SerializedGrant = Omit<CompanyRoleGrant, 'expiresAt'> & { expiresAt: string | null };
+type SerializedGrant = Omit<CompanyRoleGrant, "expiresAt"> & { expiresAt: string | null };
 
 /**
  * CachedPermissionRepository — transparent Valkey cache layer over IPermissionRepository.
@@ -34,7 +35,12 @@ export class CachedPermissionRepository implements IPermissionRepository {
     return `perm:cap:${companyId}:${userId}`;
   }
 
-  private objKey(companyId: string, userId: string, resourceType: string, resourceId: string): string {
+  private objKey(
+    companyId: string,
+    userId: string,
+    resourceType: string,
+    resourceId: string,
+  ): string {
     return `perm:obj:${companyId}:${userId}:${resourceType}:${resourceId}`;
   }
 
@@ -46,7 +52,7 @@ export class CachedPermissionRepository implements IPermissionRepository {
       cached = await this.valkey.get(key);
     } catch {
       // ValkeyService.get() should never throw, but defensively fall through to DB
-      this.logger.warn('Unexpected error reading Valkey — falling back to DB', { key });
+      this.logger.warn("Unexpected error reading Valkey — falling back to DB", { key });
     }
 
     if (cached) {
@@ -57,7 +63,7 @@ export class CachedPermissionRepository implements IPermissionRepository {
           expiresAt: g.expiresAt ? new Date(g.expiresAt) : null,
         }));
       } catch {
-        this.logger.warn('Failed to parse cached company grants — falling back to DB', { key });
+        this.logger.warn("Failed to parse cached company grants — falling back to DB", { key });
       }
     }
 
@@ -69,12 +75,23 @@ export class CachedPermissionRepository implements IPermissionRepository {
     try {
       await this.valkey.set(key, JSON.stringify(serialized), CACHE_TTL_SEC);
     } catch (err) {
-      this.logger.warn('Failed to write company grants to cache — best-effort, ignoring', {
+      this.logger.warn("Failed to write company grants to cache — best-effort, ignoring", {
         key,
         error: (err as Error).message,
       });
     }
     return grants;
+  }
+
+  /**
+   * S2-AUTH-BE-1 — passthrough (KHÔNG cache): scopes chỉ dùng cho /auth/me bootstrap (ít gọi, KHÔNG nằm trên
+   * can() hot-path) → bỏ cache để tránh thêm khoá + vòng invalidation. RLS vẫn ép ở inner (withTenant).
+   */
+  async getCompanyRoleGrantsWithScope(
+    userId: string,
+    companyId: string,
+  ): Promise<CompanyRoleGrantWithScope[]> {
+    return this.inner.getCompanyRoleGrantsWithScope(userId, companyId);
   }
 
   async getObjectGrants(
@@ -89,14 +106,14 @@ export class CachedPermissionRepository implements IPermissionRepository {
     try {
       cached = await this.valkey.get(key);
     } catch {
-      this.logger.warn('Unexpected error reading Valkey — falling back to DB', { key });
+      this.logger.warn("Unexpected error reading Valkey — falling back to DB", { key });
     }
 
     if (cached) {
       try {
         return JSON.parse(cached) as ObjectGrant[];
       } catch {
-        this.logger.warn('Failed to parse cached object grants — falling back to DB', { key });
+        this.logger.warn("Failed to parse cached object grants — falling back to DB", { key });
       }
     }
 
@@ -104,7 +121,7 @@ export class CachedPermissionRepository implements IPermissionRepository {
     try {
       await this.valkey.set(key, JSON.stringify(grants), CACHE_TTL_SEC);
     } catch (err) {
-      this.logger.warn('Failed to write object grants to cache — best-effort, ignoring', {
+      this.logger.warn("Failed to write object grants to cache — best-effort, ignoring", {
         key,
         error: (err as Error).message,
       });
@@ -130,7 +147,9 @@ export class CachedPermissionRepository implements IPermissionRepository {
   async invalidateUser(companyId: string, userId: string): Promise<void> {
     const ok = await this.valkey.del(this.capKey(companyId, userId));
     if (!ok) {
-      throw new Error(`Valkey DEL failed for permission cache key — stale cache possible for up to ${300}s`);
+      throw new Error(
+        `Valkey DEL failed for permission cache key — stale cache possible for up to ${300}s`,
+      );
     }
   }
 }

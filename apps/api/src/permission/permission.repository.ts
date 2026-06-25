@@ -1,19 +1,14 @@
-import { Injectable } from '@nestjs/common';
-import { and, eq, isNull, or, sql } from 'drizzle-orm';
-import { DatabaseService } from '../db/db.service';
-import {
-  objectPermissions,
-  permissions,
-  rolePermissions,
-  roles,
-  userRoles,
-} from '../db/schema';
+import { Injectable } from "@nestjs/common";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { DatabaseService } from "../db/db.service";
+import { objectPermissions, permissions, rolePermissions, roles, userRoles } from "../db/schema";
 import type {
   CompanyRoleGrant,
+  CompanyRoleGrantWithScope,
   IPermissionRepository,
   ObjectGrant,
   PermissionCatalogEntry,
-} from './permission.types';
+} from "./permission.types";
 
 /**
  * PermissionRepository — real Drizzle implementation of IPermissionRepository.
@@ -55,7 +50,48 @@ export class PermissionRepository implements IPermissionRepository {
         action: r.action,
         resourceType: r.resourceType,
         isSensitive: r.isSensitive,
-        effect: r.effect as 'ALLOW' | 'DENY',
+        effect: r.effect as "ALLOW" | "DENY",
+        expiresAt: r.expiresAt ?? null,
+      }));
+    });
+  }
+
+  /**
+   * S2-AUTH-BE-1 — như getCompanyRoleGrants nhưng kèm role_permissions.data_scope (cho /auth/me `scopes`).
+   * Cùng JOIN + RLS (withTenant). KHÔNG đổi can() hot-path (back-compat — đây là method riêng).
+   */
+  async getCompanyRoleGrantsWithScope(
+    userId: string,
+    companyId: string,
+  ): Promise<CompanyRoleGrantWithScope[]> {
+    return this.db.withTenant(companyId, async (tx) => {
+      const rows = await tx
+        .select({
+          action: permissions.action,
+          resourceType: permissions.resourceType,
+          isSensitive: permissions.isSensitive,
+          effect: rolePermissions.effect,
+          dataScope: rolePermissions.dataScope,
+          expiresAt: userRoles.expiresAt,
+        })
+        .from(userRoles)
+        .innerJoin(roles, eq(userRoles.roleId, roles.id))
+        .innerJoin(rolePermissions, eq(rolePermissions.roleId, roles.id))
+        .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
+        .where(
+          and(
+            eq(userRoles.userId, userId),
+            eq(userRoles.companyId, companyId),
+            isNull(roles.deletedAt),
+          ),
+        );
+
+      return rows.map((r) => ({
+        action: r.action,
+        resourceType: r.resourceType,
+        isSensitive: r.isSensitive,
+        effect: r.effect as "ALLOW" | "DENY",
+        dataScope: r.dataScope,
         expiresAt: r.expiresAt ?? null,
       }));
     });
@@ -79,12 +115,9 @@ export class PermissionRepository implements IPermissionRepository {
       const roleIds = userRoleRows.map((r) => r.roleId);
 
       const subjectConditions = [
-        and(eq(objectPermissions.subjectType, 'user'), eq(objectPermissions.subjectId, userId)),
+        and(eq(objectPermissions.subjectType, "user"), eq(objectPermissions.subjectId, userId)),
         ...roleIds.map((roleId) =>
-          and(
-            eq(objectPermissions.subjectType, 'role'),
-            eq(objectPermissions.subjectId, roleId),
-          ),
+          and(eq(objectPermissions.subjectType, "role"), eq(objectPermissions.subjectId, roleId)),
         ),
       ].filter(Boolean);
 
@@ -112,7 +145,7 @@ export class PermissionRepository implements IPermissionRepository {
         action: r.action,
         resourceType: r.resourceType,
         isSensitive: r.isSensitive,
-        effect: r.effect as 'ALLOW' | 'DENY',
+        effect: r.effect as "ALLOW" | "DENY",
       }));
     });
   }

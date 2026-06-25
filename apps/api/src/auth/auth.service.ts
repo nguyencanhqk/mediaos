@@ -1,4 +1,13 @@
-import { BadRequestException, HttpException, HttpStatus, Inject, Injectable, Logger, UnauthorizedException, forwardRef } from "@nestjs/common";
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+  forwardRef,
+} from "@nestjs/common";
 import type {
   AuthTokens,
   ForgotPasswordRequest,
@@ -11,9 +20,19 @@ import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
 import { DatabaseService, type TenantTx } from "../db/db.service";
-import { passwordResetTokens, refreshTokens, roles, userRoles, users } from "../db/schema";
+import {
+  companies,
+  employeeProfiles,
+  loginLogs,
+  passwordResetTokens,
+  refreshTokens,
+  roles,
+  userRoles,
+  users,
+} from "../db/schema";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
+import { ModuleCatalogService } from "../foundation/module-catalog/module-catalog.service";
 import { PermissionService } from "../permission/permission.service";
 import { LoginRateLimiter } from "./login-rate-limiter";
 import { PasswordService } from "./password.service";
@@ -119,6 +138,9 @@ export class AuthService {
     private readonly securityAlerts: SecurityAlertService,
     @Inject(forwardRef(() => SecurityPolicyService))
     private readonly securityPolicy: SecurityPolicyService,
+    // S2-AUTH-BE-1: /auth/me TÁI DÙNG getMyApps() cho `modules` (KHÔNG re-implement). ModuleCatalogModule
+    // KHÔNG import AuthModule → acyclic (không cần forwardRef).
+    private readonly modules: ModuleCatalogService,
   ) {}
 
   /**
@@ -127,7 +149,10 @@ export class AuthService {
    */
   private accessRestrictedError(): HttpException {
     return new HttpException(
-      { code: ACCESS_RESTRICTED_CODE, message: "Truy cập bị hạn chế bởi chính sách bảo mật của công ty." },
+      {
+        code: ACCESS_RESTRICTED_CODE,
+        message: "Truy cập bị hạn chế bởi chính sách bảo mật của công ty.",
+      },
       HttpStatus.FORBIDDEN,
     );
   }
@@ -146,6 +171,15 @@ export class AuthService {
   async login(req: LoginRequest, meta: RequestMeta): Promise<AuthTokens | TwoFactorChallenge> {
     const ip = meta.ip ?? "unknown";
     if (await this.isLoginRateLimited(req.companySlug, req.email, ip)) {
+      // PRE-AUTH (chưa resolve tenant) → login_logs company_id NULL (best-effort). reason chỉ ở DB row.
+      await this.recordLoginAttempt({
+        companyId: null,
+        userId: null,
+        email: req.email,
+        status: "blocked",
+        reason: "TooManyAttempts",
+        meta,
+      });
       throw new HttpException(
         "Quá nhiều lần thử. Vui lòng thử lại sau.",
         HttpStatus.TOO_MANY_REQUESTS,
@@ -154,9 +188,18 @@ export class AuthService {
 
     const companyId = await this.resolveCompanyId(req.companySlug);
     if (!companyId) {
-      // companySlug sai: burn thời gian băm để cân bằng timing (chống dò tenant), rồi 401 đồng nhất.
+      // companySlug sai/không active: burn thời gian băm để cân bằng timing (chống dò tenant), rồi 401 đồng
+      // nhất. login_logs PRE-AUTH company_id NULL (KHÔNG lộ tenant tồn tại — reason chung CompanyInactive).
       await this.password.hash(req.password);
       await this.recordLoginFailure(req.companySlug, req.email, ip);
+      await this.recordLoginAttempt({
+        companyId: null,
+        userId: null,
+        email: req.email,
+        status: "failed",
+        reason: "CompanyInactive",
+        meta,
+      });
       throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
     }
 
@@ -172,7 +215,7 @@ export class AuthService {
           userAgent: meta.userAgent,
           after: { reason: "user_not_found", email: req.email },
         });
-        return null;
+        return { kind: "fail" as const, reason: "UserNotFound" as const, userId: null };
       }
 
       const ok = await this.password.verify(user.passwordHash, req.password);
@@ -186,7 +229,7 @@ export class AuthService {
           userAgent: meta.userAgent,
           after: { reason: "bad_password" },
         });
-        return null;
+        return { kind: "fail" as const, reason: "WrongPassword" as const, userId: user.id };
       }
 
       // AUTH-FIX-1: mật khẩu ĐÚNG nhưng tài khoản KHÔNG 'active' (suspended/…) → CHẶN cấp token. Đặt SAU
@@ -203,7 +246,7 @@ export class AuthService {
           userAgent: meta.userAgent,
           after: { reason: "suspended" },
         });
-        return null;
+        return { kind: "blocked" as const, reason: "Inactive" as const, userId: user.id };
       }
 
       // CS-9: mật khẩu ĐÚNG → check chính sách bảo mật (IP allowlist + khung giờ) TRƯỚC khi cấp token /
@@ -253,8 +296,23 @@ export class AuthService {
       return { kind: "tokens" as const, tokens: issued.tokens, userId: user.id };
     });
 
-    if (!result) {
+    if (result.kind === "fail" || result.kind === "blocked") {
+      // GIỮ NGUYÊN hành vi cũ: cả credential-fail lẫn blocked đều bump rate-limit bucket (AUTH-FIX-1).
       await this.recordLoginFailure(req.companySlug, req.email, ip);
+      // S2-AUTH-BE-1: ghi login_logs (failed/blocked + failure_reason) + tăng failed_login_count (chỉ sai
+      // mật khẩu). BEST-EFFORT-NHƯNG-QUAN-SÁT: lỗi ghi log KHÔNG đổi 401 ĐỒNG NHẤT (reason CHỈ ở DB row, KHÔNG
+      // vào body — anti status-probing) và KHÔNG được nuốt câm (logger.error bên trong helper).
+      await this.recordLoginAttempt({
+        companyId,
+        userId: result.userId,
+        email: req.email,
+        status: result.kind === "blocked" ? "blocked" : "failed",
+        reason: result.reason,
+        meta,
+      });
+      if (result.reason === "WrongPassword" && result.userId) {
+        await this.bumpFailedLoginCount(companyId, result.userId);
+      }
       throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
     }
     // CS-9: bị chặn bởi chính sách bảo mật (IP/giờ). Mật khẩu ĐÚNG (không phải credential-fail) → KHÔNG
@@ -269,12 +327,20 @@ export class AuthService {
       const challengeToken = this.tokens.signTwoFactorChallenge({ sub: result.userId, companyId });
       return { twoFactorRequired: true, challengeToken };
     }
-    // CS-7: ghi last_login_at BEST-EFFORT (KHÔNG block login nếu write thất bại — log cảnh báo, không ném).
-    // Luôn fire NGOÀI tx login đã commit thành công → write riêng không thể rollback tokens đã cấp.
+    // CS-7: ghi last_login_at + reset failed_login_count BEST-EFFORT (KHÔNG block login nếu write thất bại —
+    // log cảnh báo, không ném). Luôn fire NGOÀI tx login đã commit thành công → write riêng không thể rollback
+    // tokens đã cấp (login_logs success cũng ngoài tx vì lỗi ghi log KHÔNG được làm hỏng phiên đã cấp).
     this.writeLastLoginAt(companyId, result.userId).catch((err) => {
       this.logger.warn(
         `login: ghi last_login_at thất bại (best-effort, login đã thành công): ${err instanceof Error ? err.message : String(err)}`,
       );
+    });
+    await this.recordLoginAttempt({
+      companyId,
+      userId: result.userId,
+      email: req.email,
+      status: "success",
+      meta,
     });
     return result.tokens;
   }
@@ -303,7 +369,10 @@ export class AuthService {
     }
     const rlKey = `2fa|${claims.companyId}|${claims.sub}`;
     if (await this.rateLimiter.isLocked(rlKey)) {
-      throw new HttpException("Quá nhiều lần thử. Vui lòng thử lại sau.", HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        "Quá nhiều lần thử. Vui lòng thử lại sau.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     const ok = await this.twoFactor.verifyChallenge(claims.sub, claims.companyId, code);
@@ -324,9 +393,18 @@ export class AuthService {
     }
     await this.rateLimiter.reset(rlKey);
 
-    const { tokens, userId: twoFaUserId } = await this.dbsvc.withTenant(claims.companyId, async (tx) => {
+    const {
+      tokens,
+      userId: twoFaUserId,
+      email: twoFaEmail,
+    } = await this.dbsvc.withTenant(claims.companyId, async (tx) => {
       const [user] = await tx
-        .select({ id: users.id, email: users.email, deletedAt: users.deletedAt, status: users.status })
+        .select({
+          id: users.id,
+          email: users.email,
+          deletedAt: users.deletedAt,
+          status: users.status,
+        })
         .from(users)
         .where(eq(users.id, claims.sub))
         .limit(1);
@@ -345,13 +423,21 @@ export class AuthService {
         userAgent: meta.userAgent,
         after: { via: "2fa" },
       });
-      return { tokens: issued.tokens, userId: user.id };
+      return { tokens: issued.tokens, userId: user.id, email: user.email };
     });
-    // CS-7: ghi last_login_at BEST-EFFORT (2FA path — không block login nếu write thất bại).
+    // CS-7: ghi last_login_at + reset failed_login_count BEST-EFFORT (2FA path — không block login nếu lỗi).
     this.writeLastLoginAt(claims.companyId, twoFaUserId).catch((err) => {
       this.logger.warn(
         `completeTwoFactorLogin: ghi last_login_at thất bại (best-effort): ${err instanceof Error ? err.message : String(err)}`,
       );
+    });
+    // S2-AUTH-BE-1: login_logs success cho phiên 2FA bước-2 (đường cấp token THỨ 3). Best-effort-quan-sát.
+    await this.recordLoginAttempt({
+      companyId: claims.companyId,
+      userId: twoFaUserId,
+      email: twoFaEmail,
+      status: "success",
+      meta,
     });
     return tokens;
   }
@@ -360,7 +446,10 @@ export class AuthService {
   async disableTwoFactor(user: { id: string; companyId: string }, password: string): Promise<void> {
     const rlKey = `2fa-disable|${user.companyId}|${user.id}`;
     if (await this.rateLimiter.isLocked(rlKey)) {
-      throw new HttpException("Quá nhiều lần thử. Vui lòng thử lại sau.", HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        "Quá nhiều lần thử. Vui lòng thử lại sau.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
     const ok = await this.dbsvc.withTenant(user.companyId, async (tx) => {
       const [row] = await tx
@@ -392,7 +481,10 @@ export class AuthService {
   ): Promise<void> {
     const rlKey = `change-pw|${user.companyId}|${user.id}`;
     if (await this.rateLimiter.isLocked(rlKey)) {
-      throw new HttpException("Quá nhiều lần thử. Vui lòng thử lại sau.", HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        "Quá nhiều lần thử. Vui lòng thử lại sau.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
     // Khác mật khẩu cũ: chặn no-op + ép xoay thật. So plaintext (chưa chạm DB) → lỗi rõ ràng, không tốn băm.
     if (newPassword === currentPassword) {
@@ -437,7 +529,11 @@ export class AuthService {
   }
 
   /** Khoá login khi BẤT KỲ bucket nào (per-IP HOẶC per-account) đã chạm ngưỡng. */
-  private async isLoginRateLimited(companySlug: string, email: string, ip: string): Promise<boolean> {
+  private async isLoginRateLimited(
+    companySlug: string,
+    email: string,
+    ip: string,
+  ): Promise<boolean> {
     const ipKey = LoginRateLimiter.key(companySlug, email, ip);
     const acctKey = LoginRateLimiter.accountKey(companySlug, email);
     return (await this.rateLimiter.isLocked(ipKey)) || (await this.rateLimiter.isLocked(acctKey));
@@ -581,7 +677,9 @@ export class AuthService {
     if (!parsed) {
       // Token cookie sai định dạng (truncate/tamper) → idempotent void (controller vẫn xoá cookie), nhưng
       // GHI WARN để bất thường quan sát được (không nuốt câm) — KHÔNG log giá trị token (BẤT BIẾN #3).
-      this.logger.warn("logout: refresh token sai định dạng (parse fail) — bỏ qua, không thu hồi family");
+      this.logger.warn(
+        "logout: refresh token sai định dạng (parse fail) — bỏ qua, không thu hồi family",
+      );
       return;
     }
     const { companyId, full } = parsed;
@@ -621,9 +719,10 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
     }
-    // Chỉ chọn cột công khai → loại password_hash ở TẦNG QUERY (cấu trúc, không dựa kỷ luật map tay).
-    // Tính 2FA cùng tx: mustSetupTwoFactor = bị ép 2FA (role) nhưng CHƯA bật → FE buộc enroll (AUTH-003).
-    const user = await this.dbsvc.withTenant(claims.companyId, async (tx) => {
+    // S2-AUTH-BE-1 — bootstrap context (BACKEND-03 §15): user/company/employee/roles trong 1 withTenant.
+    // Chỉ chọn cột công khai → loại password_hash ở TẦNG QUERY. employee KHÔNG bao giờ chọn base_salary
+    // (nhạy cảm). mustSetupTwoFactor = bị ép 2FA (role) nhưng CHƯA bật → FE buộc enroll (AUTH-003).
+    const ctx = await this.dbsvc.withTenant(claims.companyId, async (tx) => {
       const [row] = await tx
         .select({
           id: users.id,
@@ -639,18 +738,91 @@ export class AuthService {
       if (!row || row.deletedAt) return null;
       const required = await this.twoFactor.requiresTwoFactorTx(tx, row.id);
       const enabled = required ? await this.twoFactor.isEnabledTx(tx, row.id) : false;
-      return { ...row, mustSetupTwoFactor: required && !enabled };
+
+      const [company] = await tx
+        .select({ id: companies.id, name: companies.name, status: companies.status })
+        .from(companies)
+        .where(eq(companies.id, row.companyId))
+        .limit(1);
+
+      // employee mapping (nullable — operator/super-admin không có hồ sơ). full_name lấy từ users.full_name;
+      // departmentId = org_unit_id; employmentStatus = profile.status. KHÔNG chọn base_salary.
+      const [emp] = await tx
+        .select({
+          id: employeeProfiles.id,
+          employeeCode: employeeProfiles.employeeCode,
+          departmentId: employeeProfiles.orgUnitId,
+          directManagerId: employeeProfiles.directManagerId,
+          employmentStatus: employeeProfiles.status,
+        })
+        .from(employeeProfiles)
+        .where(and(eq(employeeProfiles.userId, row.id), isNull(employeeProfiles.deletedAt)))
+        .limit(1);
+
+      // roles active (mirror RBAC §16.2: chưa xoá + chưa hết hạn). roles không có cột code → name = code.
+      const roleRows = await tx
+        .select({ id: roles.id, name: roles.name })
+        .from(userRoles)
+        .innerJoin(roles, eq(userRoles.roleId, roles.id))
+        .where(
+          and(
+            eq(userRoles.userId, row.id),
+            eq(userRoles.companyId, row.companyId),
+            isNull(roles.deletedAt),
+            or(isNull(userRoles.expiresAt), gt(userRoles.expiresAt, new Date())),
+          ),
+        );
+
+      return {
+        base: {
+          id: row.id,
+          companyId: row.companyId,
+          email: row.email,
+          fullName: row.fullName,
+          status: row.status,
+        },
+        mustSetupTwoFactor: required && !enabled,
+        company: company ?? undefined,
+        employee: emp
+          ? {
+              id: emp.id,
+              employeeCode: emp.employeeCode,
+              fullName: row.fullName,
+              departmentId: emp.departmentId,
+              directManagerId: emp.directManagerId,
+              employmentStatus: emp.employmentStatus,
+            }
+          : null,
+        roles: roleRows,
+      };
     });
-    if (!user) throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
-    const capabilities = await this.permissions.getCapabilities(user.id, user.companyId);
+    if (!ctx) throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
+
+    // capabilities + scopes fail-safe ({} khi lỗi — chỉ gợi ý FE; guard BE-2 là cổng thật). modules TÁI DÙNG
+    // getMyApps → {code,name}; lỗi → [] (best-effort, FE còn /foundation/modules/my-apps). Tất cả NGOÀI tx.
+    const [capabilities, scopes] = await Promise.all([
+      this.permissions.getCapabilities(ctx.base.id, ctx.base.companyId),
+      this.permissions.getCapabilityScopes(ctx.base.id, ctx.base.companyId),
+    ]);
+    let modules: Array<{ code: string; name: string }> = [];
+    try {
+      const apps = await this.modules.getMyApps({ id: ctx.base.id, companyId: ctx.base.companyId });
+      modules = apps.map((a) => ({ code: a.module_code, name: a.name }));
+    } catch (err) {
+      this.logger.warn(
+        `me: getMyApps thất bại (best-effort, /me vẫn trả): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
     return {
-      id: user.id,
-      companyId: user.companyId,
-      email: user.email,
-      fullName: user.fullName,
-      status: user.status,
+      ...ctx.base,
       capabilities,
-      mustSetupTwoFactor: user.mustSetupTwoFactor,
+      mustSetupTwoFactor: ctx.mustSetupTwoFactor,
+      company: ctx.company,
+      employee: ctx.employee,
+      roles: ctx.roles,
+      scopes,
+      modules,
     };
   }
 
@@ -723,9 +895,15 @@ export class AuthService {
       if (!row || row.usedAt || row.expiresAt.getTime() <= Date.now()) return false;
 
       const newHash = await this.password.hash(req.newPassword);
-      await tx.update(users).set({ passwordHash: newHash, updatedAt: new Date() }).where(eq(users.id, row.userId));
+      await tx
+        .update(users)
+        .set({ passwordHash: newHash, updatedAt: new Date() })
+        .where(eq(users.id, row.userId));
       // single-use: đánh dấu đã dùng.
-      await tx.update(passwordResetTokens).set({ usedAt: new Date() }).where(eq(passwordResetTokens.id, row.id));
+      await tx
+        .update(passwordResetTokens)
+        .set({ usedAt: new Date() })
+        .where(eq(passwordResetTokens.id, row.id));
       // Thu hồi mọi refresh token còn sống của user (đổi mật khẩu = đăng xuất mọi phiên).
       await tx
         .update(refreshTokens)
@@ -754,7 +932,11 @@ export class AuthService {
    * Khi build mail consumer (deferred — 2f residual), đặt method này SAU boundary của consumer
    * (worker context), KHÔNG để AuthService phơi capability giải mã rộng cho mọi module inject.
    */
-  async decryptResetToken(companyId: string, resetTokenEnc: unknown, userId: string): Promise<string> {
+  async decryptResetToken(
+    companyId: string,
+    resetTokenEnc: unknown,
+    userId: string,
+  ): Promise<string> {
     return this.secrets.decryptSecret(deserializeResetEnvelope(resetTokenEnc), {
       companyId,
       recordId: userId,
@@ -819,7 +1001,12 @@ export class AuthService {
     const [inserted] = await tx
       .insert(refreshTokens)
       // familyId undefined → bỏ qua khỏi INSERT ⇒ DB DEFAULT (họ mới). Có giá trị → kế thừa (rotation).
-      .values({ userId, tokenHash: this.tokens.hashToken(scoped), expiresAt, ...(familyId ? { familyId } : {}) })
+      .values({
+        userId,
+        tokenHash: this.tokens.hashToken(scoped),
+        expiresAt,
+        ...(familyId ? { familyId } : {}),
+      })
       .returning({ id: refreshTokens.id });
     return {
       tokens: {
@@ -852,10 +1039,74 @@ export class AuthService {
    */
   private async writeLastLoginAt(companyId: string, userId: string): Promise<void> {
     await this.dbsvc.withTenant(companyId, async (tx) => {
+      // S2-AUTH-BE-1: login thành công cũng reset failed_login_count về 0 (chuỗi sai bị xoá). UPDATE toàn-bảng
+      // mediaos_app đã có (mig 0002) → set nhiều cột OK. Vẫn best-effort (caller .catch) — KHÔNG block login.
       await tx
         .update(users)
-        .set({ lastLoginAt: new Date() })
+        .set({ lastLoginAt: new Date(), failedLoginCount: 0 })
         .where(eq(users.id, userId));
     });
+  }
+
+  /**
+   * S2-AUTH-BE-1 — ghi login_logs (success/failed/blocked + failure_reason). BEST-EFFORT-NHƯNG-QUAN-SÁT:
+   * lỗi ghi log KHÔNG ném (KHÔNG đổi outcome HTTP — chống biến lỗi-log thành status oracle) NHƯNG cũng KHÔNG
+   * nuốt câm (logger.error). normalized_email NOT NULL & KHÔNG generated → tính lower(email) ở app. Append-only
+   * (grant chỉ SELECT,INSERT). company_id: có tenant → withTenant + company_id (WITH CHECK = current_setting);
+   * pre-auth (companyId null) → module `db` KHÔNG GUC → company_id NULL (WITH CHECK nhánh NULL, mig 0443).
+   * KHÔNG bao giờ ghi password/token (BẤT BIẾN #3).
+   */
+  private async recordLoginAttempt(args: {
+    companyId: string | null;
+    userId: string | null;
+    email: string;
+    status: "success" | "failed" | "blocked";
+    reason?: string;
+    meta: RequestMeta;
+  }): Promise<void> {
+    const row = {
+      userId: args.userId ?? undefined,
+      email: args.email,
+      normalizedEmail: args.email.toLowerCase(),
+      loginStatus: args.status,
+      failureReason: args.reason,
+      ipAddress: args.meta.ip,
+      userAgent: args.meta.userAgent,
+    };
+    try {
+      if (args.companyId) {
+        const companyId = args.companyId;
+        await this.dbsvc.withTenant(companyId, async (tx) => {
+          await tx.insert(loginLogs).values({ companyId, ...row });
+        });
+      } else {
+        // PRE-AUTH: KHÔNG ngữ cảnh tenant → module db (không set GUC) → company_id NULL.
+        if (!db) return;
+        await db.insert(loginLogs).values({ companyId: null, ...row });
+      }
+    } catch (err) {
+      this.logger.error(
+        `recordLoginAttempt thất bại (best-effort, KHÔNG đổi outcome): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /**
+   * S2-AUTH-BE-1 — tăng users.failed_login_count (sai mật khẩu). BEST-EFFORT (KHÔNG block 401). Khoá tài khoản
+   * theo ngưỡng (locked_at) là WO RIÊNG — đây chỉ đếm. UPDATE toàn-bảng mediaos_app (mig 0002).
+   */
+  private async bumpFailedLoginCount(companyId: string, userId: string): Promise<void> {
+    try {
+      await this.dbsvc.withTenant(companyId, async (tx) => {
+        await tx
+          .update(users)
+          .set({ failedLoginCount: sql`${users.failedLoginCount} + 1` })
+          .where(eq(users.id, userId));
+      });
+    } catch (err) {
+      this.logger.warn(
+        `bumpFailedLoginCount thất bại (best-effort): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 }
