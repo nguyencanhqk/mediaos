@@ -911,6 +911,13 @@
       "when": 1717500640000,
       "tag": "0450_s2_authbe3_user_admin_perms",
       "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1717500645000,
+      "tag": "0446_s2_hrbe3_audit_object_types",
+      "breakpoints": true
     }
   ]
 }
