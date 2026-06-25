@@ -1,12 +1,17 @@
-import { Module } from '@nestjs/common';
-import { MulterModule } from '@nestjs/platform-express';
-import { DatabaseModule } from '../db/db.module';
-import { PasswordService } from '../auth/password.service';
-import { PermissionModule } from '../permission/permission.module';
-import { SecurityPolicyModule } from '../security-policy/security-policy.module';
-import { EmployeesController } from './employees.controller';
-import { EmployeesRepository } from './employees.repository';
-import { EmployeesService } from './employees.service';
+import { Module } from "@nestjs/common";
+import { MulterModule } from "@nestjs/platform-express";
+import { DatabaseModule } from "../db/db.module";
+import { PasswordService } from "../auth/password.service";
+import { PermissionModule } from "../permission/permission.module";
+import { SecurityPolicyModule } from "../security-policy/security-policy.module";
+import { EmployeesController } from "./employees.controller";
+import { EmployeesRepository } from "./employees.repository";
+import { EmployeesService } from "./employees.service";
+// S2-HR-BE-1 (additive): HR read core. PermissionModule (imported above) exports DataScopeService;
+// AuditService comes from the @Global EventsModule (same source as EmployeesService).
+import { HrReadController } from "./hr-read.controller";
+import { HrReadRepository } from "./hr-read.repository";
+import { HrReadService } from "./hr-read.service";
 
 @Module({
   imports: [
@@ -17,9 +22,16 @@ import { EmployeesService } from './employees.service';
     SecurityPolicyModule,
     MulterModule.register({ limits: { fileSize: 5 * 1024 * 1024 } }),
   ],
-  controllers: [EmployeesController],
+  controllers: [EmployeesController, HrReadController],
   // PasswordService is stateless (argon2) — provided locally to hash generated login passwords (F7).
-  providers: [EmployeesService, EmployeesRepository, PasswordService],
-  exports: [EmployeesService],
+  providers: [
+    EmployeesService,
+    EmployeesRepository,
+    PasswordService,
+    // S2-HR-BE-1 (additive): HR read core providers.
+    HrReadService,
+    HrReadRepository,
+  ],
+  exports: [EmployeesService, HrReadService],
 })
 export class EmployeesModule {}
