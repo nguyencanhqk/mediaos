@@ -742,9 +742,9 @@ export const backlog = [
       "SPEC-02",
     ],
     done_when: [
-      "seed role_permissions.data_scope đúng từng role theo matrix §13 (employee=Own · manager=Team/Department · hr/admin=Company · system=System); ON CONFLICT DO NOTHING idempotent",
-      "permission sensitive MỚI KHÔNG auto-grant system role qua wildcard; bootstrap admin đăng nhập được từ DB trống",
-      "đổi scope = delete+insert (app role KHÔNG UPDATE role_permissions); verify đếm đúng số cặp + scope đã seed; chạy lại KHÔNG nhân đôi",
+      "Seed canonical roles ADDITIVE (employee/manager/hr/company-admin) + role_permissions.data_scope ĐÚNG §13 (employee=Own · manager=Team/Department · hr=Company · company-admin=Company); KHÔNG đụng role media 0005/0019/0430/0435; ON CONFLICT DO NOTHING idempotent (chạy lại KHÔNG nhân đôi)",
+      "super-admin = role COMPANY-SCOPED do SuperAdminBootstrapService tạo/sync runtime (env PLATFORM_SUPERADMIN_*, argon2id — KHÔNG literal hash/log, BẤT BIẾN #3) — KHÔNG seed system-role company_id NULL ở migration (theo env.schema §140-150); grant TOÀN BỘ catalog TRỪ reveal-secret:platform-account (break-glass ADR-0010); bootstrap admin đăng nhập từ DB trống, chạy lại KHÔNG nhân đôi (1 user + 1 user_role)",
+      "Sensitive 2 lớp: VIEW_SENSITIVE (is_sensitive, field-mask Tầng-4 ở can()) ĐƯỢC grant theo §13 (hr/company-admin=Company, super-admin=System); object-grant/break-glass (reveal-secret) + finance/payroll (out-of-scope) KHÔNG role-grant — assert CHỈ trên role MỚI seed (KHÔNG quét grant media cũ); đổi scope = DELETE theo role_id MỚI + INSERT (app role KHÔNG UPDATE); migration band idx 127 (when > head 0443), KHÔNG db:generate",
     ],
   },
   {
@@ -755,9 +755,9 @@ export const backlog = [
       "Login/logout/me: password verify + session issue/revoke + login_log + GET /auth/me (user·company·roles·permissions·scopes·employee·modules)",
     zone: "red",
     status: "todo",
-    paths: ["apps/api/src/auth/**", "packages/contracts/src/**"],
+    paths: ["apps/api/src/auth/**", "apps/api/src/permission/**", "packages/contracts/src/**"],
     skills: ["code-review"],
-    depends_on: ["S2-AUTH-DB-2"],
+    depends_on: ["S2-AUTH-DB-2", "S2-AUTH-SEED-1"],
     src: [
       "IMPLEMENTATION-05 §9.1 (AUTH-S2-001/002/003) §11.1 §15.1",
       "ISSUE-BOARD-01 §18.3 (AUTH-BE-001/002/003)",
@@ -765,9 +765,9 @@ export const backlog = [
       "SPEC-02",
     ],
     done_when: [
-      "POST /auth/login: verify password hash (KHÔNG plaintext — BẤT BIẾN #3); Active đăng nhập OK, Locked/Inactive → 403; sai mật khẩu ghi login_log + tăng failed_login_count, KHÔNG lộ user tồn tại",
-      "POST /auth/logout revoke session/refresh; GET /auth/me trả context bootstrap (roles/permissions/scopes/employee mapping) — mask field thiếu quyền",
-      "session/token strategy theo S2-OQ-001 (HttpOnly cookie); token KHÔNG vào log/DTO role không quyền; deny-path RED: no-token → 401, locked → 403, no-secret-log",
+      "POST /auth/login: verify password hash (KHÔNG plaintext — BẤT BIẾN #3); Active đăng nhập OK; Locked/Inactive → 401 ĐỒNG NHẤT chống status-probing (AUTH-FIX-1 — KHÔNG 403 lộ trạng thái) + ghi login_logs Blocked/failure_reason; sai mật khẩu ghi login_log + tăng failed_login_count, KHÔNG lộ user tồn tại",
+      "POST /auth/logout revoke session/refresh; GET /auth/me trả context bootstrap (roles/permissions/scopes=data_scope mạnh nhất/employee mapping/modules) — modules TÁI DÙNG ModuleCatalogService.getMyApps() (KHÔNG re-implement), mask field thiếu quyền (server-side)",
+      "session/token strategy theo S2-OQ-001 (HttpOnly cookie); token KHÔNG vào log/DTO role không quyền; deny-path RED: no-token → 401, locked → 401-uniform, no-secret-log",
     ],
   },
   {
