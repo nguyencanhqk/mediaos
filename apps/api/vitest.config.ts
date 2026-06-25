@@ -136,15 +136,30 @@ export default defineConfig({
         // cảm) → ≥80% on all axes. Fully unit-tested in the no-DB run via data-scope.service.spec.ts +
         // data-scope.service.coverage.spec.ts (measured 98.83% stmts / 88% branches) so a per-file gate is
         // safe here. Exact path = per-file semantics.
-        //
-        // WHY auth.service.ts and permission.service.ts are NOT per-file gated here: their real flows
-        // (login/refresh/logout/blocked-status; can()/scope resolution against seeded grants) live in
-        // *.int-spec.ts that skipIf(!(hasDb && LANE_DB)). In the no-DB unit run those int-specs are skipped,
-        // so v8 reads auth.service.ts ≈49.9% stmts and permission.service.ts ≈53–70% stmts — gating them in
-        // the default unit run would be a FALSE RED. They follow the SAME LANE_DB caveat as the workflow
-        // controller/repo files above: their real coverage number is PRINTED (not gated) by the
-        // `test:cov:sensitive` script, which runs the sensitive int-specs under an isolated LANE_DB.
         "src/permission/data-scope.service.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
+        // S2-QA-1-FIX-B: crown-jewel auth/permission services ARE per-file gated ≥80% (DoD §6, hard block).
+        // Vitest per-file thresholds bite ONLY when the file appears in the coverage report (verified: the
+        // workflow/salary/setting thresholds above are no-ops under the workflow-scoped `test:cov` run that
+        // never measures them). So these two gates are ENFORCED by `test:cov:sensitive` (which --coverage.include
+        // both files AND runs their flows under an isolated LANE_DB), and are inert in the default no-DB unit run
+        // (`pnpm test`) where the auth/permission *.int-spec.ts skipIf(!(hasDb && LANE_DB)) — no false-red.
+        //   • permission.service.ts: can()/scope/userGrantsPermissionIds/listGrantableScopes covered at UNIT
+        //     level (permission.service.spec.ts + permission.scopes.spec.ts + permission.coverage.spec.ts).
+        //   • auth.service.ts: login/refresh/logout/2FA/me/forgot/reset/changePassword/disableTwoFactor flows
+        //     covered by auth*.int-spec.ts under LANE_DB.
+        // Measured under LANE_DB: auth.service.ts 85%+ stmts / 82%+ branch; permission.service.ts 90%+ both.
+        "src/auth/auth.service.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
+        "src/permission/permission.service.ts": {
           lines: 80,
           functions: 80,
           branches: 80,
