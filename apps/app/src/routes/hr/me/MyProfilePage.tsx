@@ -1,0 +1,150 @@
+import React from "react";
+import { useTranslation } from "react-i18next";
+import { useQuery } from "@tanstack/react-query";
+import { User, RefreshCw } from "lucide-react";
+import { hrApi, hrKeys, useCan, formatDate } from "@mediaos/web-core";
+import { PageHeader, EmptyState, Button, Card, CardContent } from "@mediaos/ui";
+import { HR_ENGINE_PAIRS } from "../constants";
+import { EmployeeStatusBadge } from "../employee-status";
+
+// ---------------------------------------------------------------------------
+// Shared field row
+// ---------------------------------------------------------------------------
+function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-[160px_1fr] gap-2 py-2 text-sm">
+      <span className="font-medium text-muted-foreground">{label}</span>
+      <span className="text-foreground">{value ?? "—"}</span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+export function MyProfilePage() {
+  const { t } = useTranslation("hr");
+  const { t: tc } = useTranslation("common");
+
+  // /hr/me/profile — own scope enforced server-side; all authenticated users may call it
+  const canViewSensitive = useCan(
+    HR_ENGINE_PAIRS.VIEW_SENSITIVE.action,
+    HR_ENGINE_PAIRS.VIEW_SENSITIVE.resourceType,
+  );
+  const canViewSalary = useCan(
+    HR_ENGINE_PAIRS.VIEW_SALARY.action,
+    HR_ENGINE_PAIRS.VIEW_SALARY.resourceType,
+  );
+
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: hrKeys.employees.me(),
+    queryFn: () => hrApi.getMyProfile(),
+    // All authenticated users can call this — server enforces Own scope
+    enabled: true,
+    staleTime: 60_000,
+    retry: (failCount, err) => {
+      const status = (err as { status?: number }).status;
+      // 404 = not linked; 403 = no read:employee — both are definitive
+      if (status === 404 || status === 403) return false;
+      return failCount < 2;
+    },
+  });
+
+  const notLinked = isError && (error as { status?: number })?.status === 404;
+
+  const masked = t("detail.masked");
+
+  // ── Loading ────────────────────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div className="space-y-6 p-6">
+        <PageHeader title={t("me.title")} description={t("me.description")} icon={User} />
+        <div className="h-48 animate-pulse rounded-xl bg-muted" />
+      </div>
+    );
+  }
+
+  // ── Not linked ─────────────────────────────────────────────────────────────
+  if (notLinked) {
+    return (
+      <div className="p-6">
+        <PageHeader title={t("me.title")} description={t("me.description")} icon={User} />
+        <div className="mt-8">
+          <EmptyState title={t("me.notLinked.title")} description={t("me.notLinked.description")} />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Error ──────────────────────────────────────────────────────────────────
+  if (isError || !data) {
+    return (
+      <div className="p-6">
+        <PageHeader title={t("me.title")} description={t("me.description")} icon={User} />
+        <div className="mt-8">
+          <EmptyState
+            title={t("me.error.title")}
+            description={t("me.error.description")}
+            action={
+              <Button variant="outline" size="sm" onClick={() => void refetch()}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                {tc("actions.retry")}
+              </Button>
+            }
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 p-6">
+      <PageHeader title={t("me.title")} description={data.fullName} icon={User} />
+
+      {/* Basic info */}
+      <Card>
+        <CardContent className="divide-y divide-border pt-4">
+          <FieldRow label={t("detail.fields.code")} value={data.employeeCode} />
+          <FieldRow label={t("detail.fields.name")} value={data.fullName} />
+          <FieldRow label={t("detail.fields.email")} value={data.email} />
+          <FieldRow label={t("detail.fields.department")} value={data.orgUnitName} />
+          <FieldRow label={t("detail.fields.position")} value={data.positionName} />
+          <FieldRow
+            label={t("detail.fields.status")}
+            value={<EmployeeStatusBadge status={data.status} />}
+          />
+          <FieldRow
+            label={t("detail.fields.startDate")}
+            value={data.startDate ? formatDate(new Date(data.startDate)) : "—"}
+          />
+          <FieldRow label={t("detail.fields.workType")} value={data.workType} />
+        </CardContent>
+      </Card>
+
+      {/* Sensitive section: server masks fields to null when unauthorized.
+          Client only shows what server returned; never reveals hidden data. */}
+      <Card>
+        <CardContent className="divide-y divide-border pt-4">
+          <FieldRow
+            label={t("detail.sensitiveFields.phone")}
+            value={data.phone !== null ? data.phone : canViewSensitive ? "—" : masked}
+          />
+          <FieldRow
+            label={t("detail.sensitiveFields.notes")}
+            value={data.notes !== null ? data.notes : canViewSensitive ? "—" : masked}
+          />
+          <FieldRow
+            label={t("detail.sensitiveFields.baseSalary")}
+            value={
+              data.baseSalary !== null
+                ? `${data.baseSalary.toLocaleString("vi-VN")} ₫`
+                : canViewSalary
+                  ? "—"
+                  : masked
+            }
+          />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

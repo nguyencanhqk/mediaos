@@ -81,6 +81,7 @@ export { authApi } from "./lib/auth-api";
 export { usersApi } from "./lib/users-api";
 export { twoFactorApi } from "./lib/two-factor-api";
 export { notificationApi } from "./lib/notification-api";
+export { hrApi } from "./lib/hr-api";
 
 // Permission
 export { useCan } from "./hooks/use-can";

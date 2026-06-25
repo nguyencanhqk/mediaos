@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * [registry-guard] Kiểm tra registry + route guard của apps/app.
+ * [registry-guard] Kiểm tra registry + route guard logic (đơn-vị thuần) của apps/app.
  *
  * Phủ:
  * 1. ForbiddenPage renders đúng title + reason text.
@@ -8,6 +8,13 @@
  *    với session được build từ auth store (mô phỏng buildSession()).
  * 3. getVisibleApps lọc đúng theo capabilities của auth store.
  * 4. filterSidebarItems ẩn item khi thiếu quyền.
+ *
+ * PHẠM VI: spec này CHỈ kiểm tra hàm guard THUẦN (evaluateRouteAccess) + helper registry — KHÔNG khẳng
+ * định wiring router→ProtectedRoute. Vì guard thuần xanh KHÔNG bảo chứng router thực sự TIÊU THỤ guardResult
+ * (regression cũ: guardResult bị bỏ rơi vẫn để các unit-test này xanh). Hợp đồng wiring SỐNG (router →
+ * ProtectedRoute chặn nội dung module khi thiếu quyền) được khóa ở consumer THẬT:
+ *   apps/app/src/layouts/protected/ProtectedRoute.spec.tsx (ProtectedRoute + buildModuleRouteContent).
+ * Đừng coi green ở file này là bằng chứng route-level authz còn sống.
  */
 
 import { render, screen } from "@testing-library/react";
