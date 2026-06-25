@@ -64,7 +64,8 @@ export const backlog = [
     title:
       "Governance: chuẩn hoá board/label/DoR/DoD + chốt backlog harness theo ISSUE-BOARD-01 (master-plan pointer)",
     zone: "green",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): ledger finished — backlog/master-plan seeded; literal synced.
+    status: "done",
     paths: ["harness/**", "docs/plans/**", "docs/STATUS.md", ".claude/**"],
     skills: [],
     depends_on: [],
@@ -232,7 +233,8 @@ export const backlog = [
     title:
       "Đối chiếu shared config·logger·error-response envelope {success,message,data,meta}·health/health-db·auth context với BACKEND-01",
     zone: "yellow",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): landed 52156cf (envelope reshape); ledger finished.
+    status: "done",
     paths: [
       "apps/api/src/common/**",
       "apps/api/src/health/**",
@@ -435,7 +437,8 @@ export const backlog = [
     title:
       "FileService: upload metadata + StorageAdapter port + FilePolicy (deny-by-default) + link/unlink + download-qua-backend + file_access_log",
     zone: "red",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): PR #9 merged 9213cdb (FilePolicy/StorageAdapter/file_access_log).
+    status: "done",
     paths: ["apps/api/src/foundation/files/**", "apps/api/src/storage/**"],
     skills: ["code-review"],
     depends_on: ["S0-FND-DB-1", "S1-FND-AUDIT-1"],
@@ -486,7 +489,8 @@ export const backlog = [
     //   • deny-path RED viết-TRƯỚC = điều kiện DoD (#6) + micro-plan docs/plans/S1-FND-MODULE-1.md.
     //   zone yellow→red: ghi audit CONFIG_UPDATE + lọc permission ⇒ crown/FULL gate (CLAUDE.md §6).
     zone: "red",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): PR #12 merged b72ad10 (company/current + modules/my-apps; FULL gate PASS).
+    status: "done",
     paths: ["apps/api/src/foundation/company/**", "apps/api/src/foundation/module-catalog/**"],
     skills: ["code-review"],
     depends_on: ["S0-FND-SEED-1", "S1-FND-AUDIT-1", "S1-FND-SETTING-1"],
@@ -514,7 +518,8 @@ export const backlog = [
     title:
       "FoundationModule gom (company·module-catalog·settings·audit·files·sequence·holidays·retention·seed) + foundation contracts (Zod) + wire app.module additive",
     zone: "green",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): PR #15 merged 9832840 + drift PR #16 ea8fb25 (Foundation S0-S1 hội tụ).
+    status: "done",
     paths: [
       "apps/api/src/foundation/foundation.module.ts",
       "apps/api/src/app.module.ts",
@@ -561,7 +566,8 @@ export const backlog = [
     title:
       "App/route/sidebar registry (permission-driven; metadata permission/scope/module/status — KHÔNG hard-code role)",
     zone: "green",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): ledger finished — registry.ts metadata-driven (app/route/sidebar) + route guard.
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["code-review"],
     depends_on: ["S0-FE-CORE-1"],
@@ -604,7 +610,8 @@ export const backlog = [
     title:
       "QA hardening Foundation: permission/scope + file security + sequence concurrency + audit masking + public-settings leak + append-only",
     zone: "red",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): PR #14 merged 1e51374 (QA hardening Foundation).
+    status: "done",
     paths: ["apps/api/src/foundation/**/*.spec.ts", "apps/api/test/foundation/**"],
     skills: ["code-review"],
     depends_on: [
@@ -633,7 +640,8 @@ export const backlog = [
     title:
       "Test-suite triage: xoá/exclude test của module PARKED (de-media-fy: finance·workflow·media) + gate test phụ thuộc WO chưa land — để `pnpm api test` xanh = phạm vi THẬT",
     zone: "yellow",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): ledger finished — excluded 4 parked tests (finance×3 + workflow-DAG) via vitest.config.
+    status: "done",
     paths: ["apps/api/test/**", "apps/api/src/**/*.spec.ts", "apps/api/vitest.config.ts"],
     skills: ["code-review"],
     depends_on: [],
@@ -656,7 +664,8 @@ export const backlog = [
     title:
       "Quyết scope + mount-or-skip: webhooks-deny + ui-config-deny đang 404 (module chưa mount) — mount nếu trong MVP, else exclude test có vé Phase",
     zone: "yellow",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): ledger finished — webhooks→Phase5, ui-config out-of-MVP §7.1; deny-tests excluded w/ phase ticket.
+    status: "done",
     paths: ["apps/api/src/**", "apps/api/test/**"],
     skills: ["code-review"],
     depends_on: [],
@@ -708,7 +717,8 @@ export const backlog = [
     title:
       "Đối chiếu AUTH/RBAC tables vs DB-02 §12.1 (users·user_sessions·password_reset_tokens·login_logs) + user_security_events (nên có) + required indexes",
     zone: "red",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): PR #23 merged 616ab45 (sessions/login_logs/security_events; FULL gate PASS×3).
+    status: "done",
     paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/test/integration/**"],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-DB-1"],
@@ -846,7 +856,8 @@ export const backlog = [
     title:
       "Migration HR Core: departments·positions·job_levels·contract_types·employees·employee_status_histories·employee_code_configs + RLS+FORCE + indexes",
     zone: "red",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): PR #21 merged 4e1791e (HR-Core mig 0442 idx125; FULL gate PASS×2).
+    status: "done",
     paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/test/integration/**"],
     skills: ["code-review"],
     depends_on: [],
