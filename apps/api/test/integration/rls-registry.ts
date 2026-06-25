@@ -531,6 +531,47 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+  {
+    // S2-HR-BE-4 (mig 0451): bảng chính self-service. company_id NOT NULL + RLS+FORCE → PHẢI ở harness.
+    // KHÔNG skipNoContext (mọi hàng tenant-scoped). old/new_values/changed_fields NOT NULL jsonb.
+    name: "profile_change_requests",
+    table: "profile_change_requests",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `pcr-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO profile_change_requests
+           (company_id, employee_id, requested_by, status, old_values, new_values, changed_fields)
+         VALUES ($1, $2, $3, 'Pending', '{}'::jsonb, '{"phone":"1"}'::jsonb, '["phone"]'::jsonb)
+         RETURNING id`,
+        [t.companyId, emp.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    // S2-HR-BE-4 (mig 0451): log áp-dụng APPEND-ONLY (app role chỉ SELECT,INSERT). harness mutate-deny
+    // dùng direct (superuser) để seed. company_id NOT NULL + RLS+FORCE → PHẢI ở harness. KHÔNG skipNoContext.
+    name: "employee_profile_change_histories",
+    table: "employee_profile_change_histories",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `epch-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO employee_profile_change_histories
+           (company_id, employee_id, field_name, old_value, new_value)
+         VALUES ($1, $2, 'phone', '"old"'::jsonb, '"new"'::jsonb) RETURNING id`,
+        [t.companyId, emp.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 
   // ── G4-2 Media ──────────────────────────────────────────────────────────────
   {

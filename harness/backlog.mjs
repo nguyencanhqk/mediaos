@@ -985,7 +985,7 @@ export const backlog = [
     title:
       "Profile change request skeleton (P1/P2): employee gửi yêu cầu sửa hồ sơ + HR duyệt/từ chối (có thể carry-over Sprint 5 nếu quá tải)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/employees/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S2-HR-BE-1"],
