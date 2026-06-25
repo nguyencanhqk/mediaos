@@ -224,5 +224,9 @@ export const AUDIT_OBJECT_TYPES = [
   // S1-FND-FILE-1 (mig 0440): upload/link/unlink/delete file ghi audit object_type 'file' (Upload/Delete) / 'file_link' (Link/Unlink) audit-in-tx; masker che storage_path/signed_url. UNION ADD-only.
   "file",
   "file_link",
+  // S2-HR-BE-4 (mig 0451): profile change request lifecycle — create/approve/reject/cancel ghi
+  // 'profile_change_request' audit-in-tx app-tenant. UNION ADD-only (BẤT BIẾN #2). KHÔNG ghi
+  // identity_number/bank_account/secret vào before/after (BẤT BIẾN #3 — masker che).
+  "profile_change_request",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

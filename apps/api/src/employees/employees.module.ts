@@ -12,6 +12,10 @@ import { EmployeesService } from "./employees.service";
 import { HrReadController } from "./hr-read.controller";
 import { HrReadRepository } from "./hr-read.repository";
 import { HrReadService } from "./hr-read.service";
+// S2-HR-BE-4 (additive): profile change request skeleton.
+import { ProfileChangeRequestController } from "./profile-change-request.controller";
+import { ProfileChangeRequestRepository } from "./profile-change-request.repository";
+import { ProfileChangeRequestService } from "./profile-change-request.service";
 
 @Module({
   imports: [
@@ -22,7 +26,7 @@ import { HrReadService } from "./hr-read.service";
     SecurityPolicyModule,
     MulterModule.register({ limits: { fileSize: 5 * 1024 * 1024 } }),
   ],
-  controllers: [EmployeesController, HrReadController],
+  controllers: [EmployeesController, HrReadController, ProfileChangeRequestController],
   // PasswordService is stateless (argon2) — provided locally to hash generated login passwords (F7).
   providers: [
     EmployeesService,
@@ -31,7 +35,10 @@ import { HrReadService } from "./hr-read.service";
     // S2-HR-BE-1 (additive): HR read core providers.
     HrReadService,
     HrReadRepository,
+    // S2-HR-BE-4 (additive): profile change request providers.
+    ProfileChangeRequestService,
+    ProfileChangeRequestRepository,
   ],
-  exports: [EmployeesService, HrReadService],
+  exports: [EmployeesService, HrReadService, ProfileChangeRequestService],
 })
 export class EmployeesModule {}

@@ -4,6 +4,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   numeric,
   pgTable,
   text,
@@ -166,3 +167,63 @@ export const employeeStatusHistories = pgTable(
 
 export type EmployeeStatusHistory = typeof employeeStatusHistories.$inferSelect;
 export type NewEmployeeStatusHistory = typeof employeeStatusHistories.$inferInsert;
+
+/**
+ * profile_change_requests — yêu cầu cập nhật hồ sơ cá nhân (SPEC-03 §15.10, HR-FUNC-018/019).
+ * Employee gửi yêu cầu; HR/Admin duyệt/từ chối → chỉ khi duyệt mới ghi vào employees.
+ * SOFT-DELETE: không có deleted_at vì yêu cầu chỉ bị Cancelled/Rejected, không xóa.
+ * APPEND-ONCE MUTATION: status chỉ tiến (Pending→Approved/Rejected/Cancelled) — KHÔNG giảm trạng thái.
+ * Audit mọi thao tác vào audit_logs (object_type='profile_change_request').
+ * S2-HR-BE-4 (mig 0451 — xem lane db-migration).
+ */
+export const profileChangeRequests = pgTable(
+  "profile_change_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .default(currentCompanyDefault)
+      .references(() => companies.id, { onDelete: "cascade" }),
+    /** Nhân viên sở hữu yêu cầu (link tới employee_profiles). */
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employeeProfiles.id, { onDelete: "cascade" }),
+    /** User tạo yêu cầu (thường chính là user của employee, nhưng không bắt buộc). */
+    requestedBy: uuid("requested_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Draft/Pending/Approved/Rejected/Cancelled. */
+    status: text("status").notNull().default("Pending"),
+    /** Snapshot giá trị cũ (JSON object field→value). BẤT BIẾN #3: mask identity_number/bank_account. */
+    oldValues: jsonb("old_values").notNull().$type<Record<string, unknown>>(),
+    /** Snapshot giá trị mới do Employee đề xuất. */
+    newValues: jsonb("new_values").notNull().$type<Record<string, unknown>>(),
+    /** Danh sách field thay đổi (array of field name strings). */
+    changedFields: jsonb("changed_fields").notNull().$type<string[]>(),
+    /** Lý do Employee gửi yêu cầu. */
+    reason: text("reason"),
+    /** Lý do từ chối của HR (bắt buộc khi Rejected). */
+    rejectionReason: text("rejection_reason"),
+    /** User đã duyệt/từ chối. */
+    reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+    /** Thời gian HR xử lý. */
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    /** Thời gian Employee gửi (Pending). */
+    submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Thời gian Employee hủy. */
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("pcr_company_id_idx").on(t.companyId),
+    index("pcr_employee_id_idx").on(t.employeeId),
+    index("pcr_status_idx").on(t.companyId, t.status),
+    index("pcr_requested_by_idx").on(t.requestedBy),
+    check("pcr_status_check", sql`status IN ('Draft','Pending','Approved','Rejected','Cancelled')`),
+    check("pcr_rejection_reason_check", sql`status <> 'Rejected' OR rejection_reason IS NOT NULL`),
+  ],
+);
+
+export type ProfileChangeRequest = typeof profileChangeRequests.$inferSelect;
+export type NewProfileChangeRequest = typeof profileChangeRequests.$inferInsert;
