@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**44 WO** · có micro-plan: **14/44** · ⬜ 19 chờ · 🔵 0 đang làm · ✅ 25 xong · 🔴 0 chặn
+**44 WO** · có micro-plan: **17/44** · ⬜ 18 chờ · 🔵 0 đang làm · ✅ 26 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -43,14 +43,14 @@
 
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
-| `S2-AUTH-DB-1` | 🔴 | ✅ xong | — *(chưa)* | — | RBAC engine: thêm cột role_permissions.data_scope (Own/Team/Department |
-| `S2-AUTH-DB-2` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S2-AUTH-DB-1 | Đối chiếu AUTH/RBAC tables vs DB-02 §12.1 (users·user_sessions·passwor |
-| `S2-AUTH-SEED-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S2-AUTH-DB-1 ⏳S2-AUTH-DB-2 | Seed permission/role/role_permission VỚI data_scope đúng từng role + b |
-| `S2-AUTH-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S2-AUTH-DB-2 | Login/logout/me: password verify + session issue/revoke + login_log +  |
+| `S2-AUTH-DB-1` | 🔴 | ✅ xong | [📄](S2-AUTH-DB-1.md) | — | RBAC engine: thêm cột role_permissions.data_scope (Own/Team/Department |
+| `S2-AUTH-DB-2` | 🔴 | ✅ xong | [📄](S2-AUTH-DB-2.md) | ✅S2-AUTH-DB-1 | Đối chiếu AUTH/RBAC tables vs DB-02 §12.1 (users·user_sessions·passwor |
+| `S2-AUTH-SEED-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S2-AUTH-DB-1 ✅S2-AUTH-DB-2 | Seed permission/role/role_permission VỚI data_scope đúng từng role + b |
+| `S2-AUTH-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S2-AUTH-DB-2 | Login/logout/me: password verify + session issue/revoke + login_log +  |
 | `S2-AUTH-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S2-AUTH-DB-1 ⏳S2-AUTH-SEED-1 | Permission + data-scope resolver guard dùng chung (decorator/middlewar |
 | `S2-AUTH-BE-3` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S2-AUTH-BE-2 | User admin API (P1): list/detail/create/update + lock/unlock + roles/p |
-| `S2-AUTH-BE-4` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S2-AUTH-DB-2 ⏳S2-AUTH-BE-1 | Change-password + forgot/reset-password (P1): token hash + expiry/used |
-| `S2-HR-DB-1` | 🔴 | ✅ xong | — *(chưa)* | — | Migration HR Core: departments·positions·job_levels·contract_types·emp |
+| `S2-AUTH-BE-4` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S2-AUTH-DB-2 ⏳S2-AUTH-BE-1 | Change-password + forgot/reset-password (P1): token hash + expiry/used |
+| `S2-HR-DB-1` | 🔴 | ✅ xong | [📄](S2-HR-DB-1.md) | — | Migration HR Core: departments·positions·job_levels·contract_types·emp |
 | `S2-HR-SEED-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S2-HR-DB-1 ⏳S2-AUTH-SEED-1 | Seed HR master data (job_levels·contract_types·employee_code_config +  |
 | `S2-HR-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S2-HR-DB-1 ⏳S2-AUTH-BE-2 | HR read core: GET /hr/employees (list/pagination/search/filter/sort/da |
 | `S2-HR-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S2-HR-BE-1 ⏳S2-HR-SEED-1 | HR write core: POST/PATCH /hr/employees + auto employee-code (tx + Seq |

@@ -890,6 +890,13 @@
       "when": 1717500610000,
       "tag": "0443_s2_authdb2_sessions_logs_security_events",
       "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1717500620000,
+      "tag": "0444_s2_authseed1_canonical_roles_perms",
+      "breakpoints": true
     }
   ]
 }

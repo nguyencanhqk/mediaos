@@ -64,7 +64,8 @@ export const backlog = [
     title:
       "Governance: chuẩn hoá board/label/DoR/DoD + chốt backlog harness theo ISSUE-BOARD-01 (master-plan pointer)",
     zone: "green",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): ledger finished — backlog/master-plan seeded; literal synced.
+    status: "done",
     paths: ["harness/**", "docs/plans/**", "docs/STATUS.md", ".claude/**"],
     skills: [],
     depends_on: [],
@@ -232,7 +233,8 @@ export const backlog = [
     title:
       "Đối chiếu shared config·logger·error-response envelope {success,message,data,meta}·health/health-db·auth context với BACKEND-01",
     zone: "yellow",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): landed 52156cf (envelope reshape); ledger finished.
+    status: "done",
     paths: [
       "apps/api/src/common/**",
       "apps/api/src/health/**",
@@ -435,7 +437,8 @@ export const backlog = [
     title:
       "FileService: upload metadata + StorageAdapter port + FilePolicy (deny-by-default) + link/unlink + download-qua-backend + file_access_log",
     zone: "red",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): PR #9 merged 9213cdb (FilePolicy/StorageAdapter/file_access_log).
+    status: "done",
     paths: ["apps/api/src/foundation/files/**", "apps/api/src/storage/**"],
     skills: ["code-review"],
     depends_on: ["S0-FND-DB-1", "S1-FND-AUDIT-1"],
@@ -486,7 +489,8 @@ export const backlog = [
     //   • deny-path RED viết-TRƯỚC = điều kiện DoD (#6) + micro-plan docs/plans/S1-FND-MODULE-1.md.
     //   zone yellow→red: ghi audit CONFIG_UPDATE + lọc permission ⇒ crown/FULL gate (CLAUDE.md §6).
     zone: "red",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): PR #12 merged b72ad10 (company/current + modules/my-apps; FULL gate PASS).
+    status: "done",
     paths: ["apps/api/src/foundation/company/**", "apps/api/src/foundation/module-catalog/**"],
     skills: ["code-review"],
     depends_on: ["S0-FND-SEED-1", "S1-FND-AUDIT-1", "S1-FND-SETTING-1"],
@@ -514,7 +518,8 @@ export const backlog = [
     title:
       "FoundationModule gom (company·module-catalog·settings·audit·files·sequence·holidays·retention·seed) + foundation contracts (Zod) + wire app.module additive",
     zone: "green",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): PR #15 merged 9832840 + drift PR #16 ea8fb25 (Foundation S0-S1 hội tụ).
+    status: "done",
     paths: [
       "apps/api/src/foundation/foundation.module.ts",
       "apps/api/src/app.module.ts",
@@ -561,7 +566,8 @@ export const backlog = [
     title:
       "App/route/sidebar registry (permission-driven; metadata permission/scope/module/status — KHÔNG hard-code role)",
     zone: "green",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): ledger finished — registry.ts metadata-driven (app/route/sidebar) + route guard.
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["code-review"],
     depends_on: ["S0-FE-CORE-1"],
@@ -604,7 +610,8 @@ export const backlog = [
     title:
       "QA hardening Foundation: permission/scope + file security + sequence concurrency + audit masking + public-settings leak + append-only",
     zone: "red",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): PR #14 merged 1e51374 (QA hardening Foundation).
+    status: "done",
     paths: ["apps/api/src/foundation/**/*.spec.ts", "apps/api/test/foundation/**"],
     skills: ["code-review"],
     depends_on: [
@@ -633,7 +640,8 @@ export const backlog = [
     title:
       "Test-suite triage: xoá/exclude test của module PARKED (de-media-fy: finance·workflow·media) + gate test phụ thuộc WO chưa land — để `pnpm api test` xanh = phạm vi THẬT",
     zone: "yellow",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): ledger finished — excluded 4 parked tests (finance×3 + workflow-DAG) via vitest.config.
+    status: "done",
     paths: ["apps/api/test/**", "apps/api/src/**/*.spec.ts", "apps/api/vitest.config.ts"],
     skills: ["code-review"],
     depends_on: [],
@@ -656,7 +664,8 @@ export const backlog = [
     title:
       "Quyết scope + mount-or-skip: webhooks-deny + ui-config-deny đang 404 (module chưa mount) — mount nếu trong MVP, else exclude test có vé Phase",
     zone: "yellow",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): ledger finished — webhooks→Phase5, ui-config out-of-MVP §7.1; deny-tests excluded w/ phase ticket.
+    status: "done",
     paths: ["apps/api/src/**", "apps/api/test/**"],
     skills: ["code-review"],
     depends_on: [],
@@ -708,7 +717,8 @@ export const backlog = [
     title:
       "Đối chiếu AUTH/RBAC tables vs DB-02 §12.1 (users·user_sessions·password_reset_tokens·login_logs) + user_security_events (nên có) + required indexes",
     zone: "red",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): PR #23 merged 616ab45 (sessions/login_logs/security_events; FULL gate PASS×3).
+    status: "done",
     paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/test/integration/**"],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-DB-1"],
@@ -731,7 +741,11 @@ export const backlog = [
     title:
       "Seed permission/role/role_permission VỚI data_scope đúng từng role + bootstrap admin (idempotent ON CONFLICT) theo permission matrix §13 / API-10",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
+    // Plan: docs/plans/S2-AUTH-SEED-1.md §13 (per-pair data_scope). L1 (db-migration): mig 0444 canonical
+    // roles + per-pair seed (commit a7c6a1f). L2 (this lane, SuperAdminBootstrap): runtime seed super-admin
+    // company-scoped — apps/api/src/permission/super-admin-bootstrap.{service,repository}.ts wired additive
+    // into PermissionModule; unit + LANE_DB int specs GREEN. Pending: FULL red-zone gate + human merge.
     paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/src/permission/**"],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-DB-1", "S2-AUTH-DB-2"],
@@ -740,11 +754,13 @@ export const backlog = [
       "ISSUE-BOARD-01 §18.3 (AUTH-DB-003)",
       "API-10 PERMISSION MATRIX",
       "SPEC-02",
+      "docs/plans/S2-AUTH-SEED-1.md §13",
     ],
     done_when: [
-      "seed role_permissions.data_scope đúng từng role theo matrix §13 (employee=Own · manager=Team/Department · hr/admin=Company · system=System); ON CONFLICT DO NOTHING idempotent",
-      "permission sensitive MỚI KHÔNG auto-grant system role qua wildcard; bootstrap admin đăng nhập được từ DB trống",
-      "đổi scope = delete+insert (app role KHÔNG UPDATE role_permissions); verify đếm đúng số cặp + scope đã seed; chạy lại KHÔNG nhân đôi",
+      "Mô hình role: employee(…008)/company-admin(…001)/hr-manager(…009) là SYSTEM role ĐÃ tồn tại (company_id NULL, name globally-unique roles_system_name_active_uq — mig 0005/0019) → KHÔNG tạo trùng; manager/hr = system role MỚI (company_id NULL, is_system=true, ON CONFLICT(name) DO NOTHING). data_scope SEED THEO TỪNG CẶP (action,resource_type,role) đúng BẢNG §13 (docs/plans/S2-AUTH-SEED-1.md) — KHÔNG phẳng theo role. super-admin = role COMPANY-SCOPED do SuperAdminBootstrapService tạo runtime (env PLATFORM_SUPERADMIN_*, argon2id — KHÔNG literal hash/log; full catalog data_scope=System TRỪ reveal-secret/break-glass ADR-0010), KHÔNG seed ở migration; bootstrap từ DB trống đăng nhập được, idempotent (1 user + 1 user_role)",
+      "PER-PAIR §13 (KHÔNG flat): CẶP 'Own cho MỌI role' = view:me + create:profile-change-request (employee/manager/hr/company-admin ĐỀU Own; super-admin System) · read:employee(employee=Own·manager=Team·hr/admin=Company) · read:department(employee=Company·manager=Department·hr/admin=Company) · read:position(employee/manager=Company·hr/admin=Company). Vì UNIQUE(role_id,permission_id,effect) KHÔNG gồm data_scope → ON CONFLICT DO NOTHING KHÔNG sửa scope: cặp ĐÃ có ở scope SAI phải DELETE đúng (role_id,permission_id,effect) RỒI INSERT lại scope §13, BỌC 1 transaction; cặp chưa có = INSERT. ⛔ CẤM blanket DELETE FROM role_permissions WHERE role_id=… (mất grant)",
+      "company-admin(…001): HẦU HẾT cặp = Company (ĐÚNG §13 → additive INSERT, ON CONFLICT DO NOTHING); NGOẠI LỆ view:me + create:profile-change-request = Own → nếu đã có ở Company phải DELETE-theo-cặp + INSERT Own (1 transaction). CẤM blanket DELETE. AcceptanceCheck đo được: COUNT grant resource_type LIKE 'foundation-%'/channel/project/content/platform-account/workflow của …001 BẰNG NHAU trước/sau migration (KHÔNG mất grant media/foundation parked — mig 0005/0019/0430/0435)",
+      "Sensitive 2 lớp: VIEW_SENSITIVE (field-mask Tầng-4 ở can()) ĐƯỢC grant §13 (employee=Own self/policy-gated · hr/company-admin=Company; manager KHÔNG có); reveal-secret + finance/payroll (out-of-scope) KHÔNG role-grant. Nghiệm thu idempotent ĐO BỘ BA (role_id,permission_id,data_scope) trước/sau — KHÔNG chỉ COUNT (COUNT mù với scope drift); migrate lần 2 từ DB-hiện-có → từng (role,pair,scope) BẤT BIẾN. migration idx 127 (when>head 0443), KHÔNG db:generate; permissions.ts CHỈ append hằng role-id manager/hr (KHÔNG rewrite ROLE_DATA_SCOPES)",
     ],
   },
   {
@@ -755,9 +771,9 @@ export const backlog = [
       "Login/logout/me: password verify + session issue/revoke + login_log + GET /auth/me (user·company·roles·permissions·scopes·employee·modules)",
     zone: "red",
     status: "todo",
-    paths: ["apps/api/src/auth/**", "packages/contracts/src/**"],
+    paths: ["apps/api/src/auth/**", "apps/api/src/permission/**", "packages/contracts/src/**"],
     skills: ["code-review"],
-    depends_on: ["S2-AUTH-DB-2"],
+    depends_on: ["S2-AUTH-DB-2", "S2-AUTH-SEED-1"],
     src: [
       "IMPLEMENTATION-05 §9.1 (AUTH-S2-001/002/003) §11.1 §15.1",
       "ISSUE-BOARD-01 §18.3 (AUTH-BE-001/002/003)",
@@ -765,9 +781,9 @@ export const backlog = [
       "SPEC-02",
     ],
     done_when: [
-      "POST /auth/login: verify password hash (KHÔNG plaintext — BẤT BIẾN #3); Active đăng nhập OK, Locked/Inactive → 403; sai mật khẩu ghi login_log + tăng failed_login_count, KHÔNG lộ user tồn tại",
-      "POST /auth/logout revoke session/refresh; GET /auth/me trả context bootstrap (roles/permissions/scopes/employee mapping) — mask field thiếu quyền",
-      "session/token strategy theo S2-OQ-001 (HttpOnly cookie); token KHÔNG vào log/DTO role không quyền; deny-path RED: no-token → 401, locked → 403, no-secret-log",
+      "POST /auth/login: verify password hash (KHÔNG plaintext — BẤT BIẾN #3); Active đăng nhập OK; Locked/Inactive → 401 ĐỒNG NHẤT chống status-probing (AUTH-FIX-1 — KHÔNG 403 lộ trạng thái) + ghi login_logs Blocked/failure_reason; sai mật khẩu ghi login_log + tăng failed_login_count, KHÔNG lộ user tồn tại",
+      "POST /auth/logout revoke session/refresh; GET /auth/me trả context bootstrap (roles/permissions/scopes=data_scope mạnh nhất/employee mapping/modules) — modules TÁI DÙNG ModuleCatalogService.getMyApps() (KHÔNG re-implement), mask field thiếu quyền (server-side)",
+      "session/token strategy theo S2-OQ-001 (HttpOnly cookie); token KHÔNG vào log/DTO role không quyền; deny-path RED: no-token → 401, locked → 401-uniform, no-secret-log",
     ],
   },
   {
@@ -846,7 +862,8 @@ export const backlog = [
     title:
       "Migration HR Core: departments·positions·job_levels·contract_types·employees·employee_status_histories·employee_code_configs + RLS+FORCE + indexes",
     zone: "red",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): PR #21 merged 4e1791e (HR-Core mig 0442 idx125; FULL gate PASS×2).
+    status: "done",
     paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/test/integration/**"],
     skills: ["code-review"],
     depends_on: [],
