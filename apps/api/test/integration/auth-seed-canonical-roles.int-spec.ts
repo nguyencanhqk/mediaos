@@ -1,5 +1,13 @@
-import { afterAll, describe, expect, it } from "vitest";
-import { directPool, hasDb } from "../helpers/integration-db";
+import type { PoolClient } from "pg";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { appPool, directPool, hasDb } from "../helpers/integration-db";
+import {
+  cleanupTenants,
+  seedCompany,
+  seedPermissionCatalog,
+  seedRole,
+  type SeededTenant,
+} from "../helpers/seed";
 
 /**
  * S2-AUTH-SEED-1 / L1-SEED-MIG — Canonical roles + per-pair data_scope seed (mig 0444).
@@ -292,6 +300,122 @@ describe.skipIf(!runIsolatedDb)(
         res.rows[0].n,
         "grant media/foundation parked của company-admin phải > 0 (KHÔNG bị blanket DELETE)",
       ).toBeGreaterThan(0);
+    });
+  },
+);
+
+/**
+ * G. BẤT BIẾN #2 (append-only) — app role (mediaos_app) KHÔNG có grant UPDATE trên role_permissions
+ *    (mig 0005:109 = GRANT SELECT, INSERT, DELETE — KHÔNG UPDATE). Vì thế "đổi scope" PHẢI = DELETE+INSERT
+ *    trong 1 transaction (mig 0441 cũng tài liệu hoá: "đổi scope = delete+insert (đồng nhất effect)").
+ *
+ * Khẳng định grant-LEVEL (KHÔNG phải RLS 0-row): seed hàng role_permissions qua `direct` (superuser, bypass
+ * RLS) cho một role TENANT-SCOPED (company_id = công ty A) ⇒ hàng HIỂN THỊ + GHI ĐƯỢC dưới RLS app context
+ * (policy WITH CHECK yêu cầu role.company_id = current). UPDATE thất bại CHỈ vì THIẾU grant UPDATE.
+ *
+ * Idiom tái dùng từ auth-appendonly.int-spec.ts: asTenant() + rejects.toThrow(/permission denied/).
+ * Gate: hasDb && LANE_DB (KHÔNG chạm DB dev chung 'mediaos' — memory integration-test-lane-db-gate).
+ */
+describe.skipIf(!runIsolatedDb)(
+  "S2-AUTH-SEED-1 role_permissions APPEND-ONLY: app role UPDATE DENIED → đổi scope = DELETE+INSERT (BẤT BIẾN #2)",
+  () => {
+    const direct = directPool();
+    const app = appPool();
+
+    let A: SeededTenant;
+    let tenantRoleId: string;
+    let permissionId: string;
+
+    beforeAll(async () => {
+      A = await seedCompany(direct, "rp-ao");
+      // Role TENANT-SCOPED (company_id = A) — không phải system role: app context (company_id=A) THẤY +
+      // được phép GHI (RLS WITH CHECK pass). Nếu là system role (company_id NULL), DELETE/INSERT của app
+      // sẽ bị RLS chặn ⇒ KHÔNG phân biệt được "thiếu grant" với "RLS chặn". Tenant role tách bạch 2 lớp.
+      tenantRoleId = await seedRole(direct, A.companyId, "rp-ao-role");
+      // Permission catalog (toàn cục, không company_id). Verb riêng để KHÔNG đụng cặp §13 seeded.
+      permissionId = await seedPermissionCatalog(direct, "rp-ao-action", "rp-ao-resource", false);
+
+      // Seed role_permission qua DIRECT (bypass RLS/grant) — hàng app role sẽ thử UPDATE (kỳ vọng denied)
+      // rồi DELETE+INSERT (kỳ vọng success). data_scope='Own' (mig 0441 CHECK ∈ Own/Team/Department/Company/System).
+      await direct.query(
+        `INSERT INTO role_permissions (role_id, permission_id, effect, data_scope)
+         VALUES ($1, $2, 'ALLOW', 'Own')
+         ON CONFLICT (role_id, permission_id, effect) DO UPDATE SET data_scope = EXCLUDED.data_scope`,
+        [tenantRoleId, permissionId],
+      );
+    });
+
+    afterAll(async () => {
+      await cleanupTenants(direct, [A.companyId]);
+      await direct.end();
+      await app.end();
+    });
+
+    /** Run fn inside a transaction as app role với tenant context set (mirror auth-appendonly.int-spec.ts). */
+    async function asTenant<T>(companyId: string, fn: (c: PoolClient) => Promise<T>): Promise<T> {
+      const c = await app.connect();
+      try {
+        await c.query("BEGIN");
+        await c.query("SELECT set_config('app.current_company_id', $1, true)", [companyId]);
+        const r = await fn(c);
+        await c.query("COMMIT");
+        return r;
+      } catch (e) {
+        await c.query("ROLLBACK");
+        throw e;
+      } finally {
+        c.release();
+      }
+    }
+
+    it("hàng seed HIỂN THỊ dưới app RLS context (chứng minh deny sau = grant-level, KHÔNG phải RLS 0-row)", async () => {
+      const visible = await asTenant(A.companyId, async (c) => {
+        const r = await c.query<{ data_scope: string }>(
+          `SELECT data_scope FROM role_permissions WHERE role_id=$1 AND permission_id=$2 AND effect='ALLOW'`,
+          [tenantRoleId, permissionId],
+        );
+        return r.rows;
+      });
+      expect(visible.length, "app role PHẢI thấy hàng (tenant role → RLS USING pass)").toBe(1);
+      expect(visible[0].data_scope).toBe("Own");
+    });
+
+    it("app role UPDATE role_permissions data_scope is DENIED (append-only — no UPDATE grant, mig 0005:109)", async () => {
+      await expect(
+        asTenant(A.companyId, async (c) => {
+          await c.query(
+            `UPDATE role_permissions SET data_scope = 'Company' WHERE role_id=$1 AND permission_id=$2 AND effect='ALLOW'`,
+            [tenantRoleId, permissionId],
+          );
+        }),
+      ).rejects.toThrow(/permission denied/);
+    });
+
+    it("đổi scope = DELETE(role_id,permission_id,effect)+INSERT (scope mới) trong 1 transaction SUCCEEDS (BẤT BIẾN #2)", async () => {
+      // App role có GRANT SELECT,INSERT,DELETE → DELETE đúng (role_id,permission_id,effect) rồi INSERT lại
+      // với data_scope MỚI, atomically trong 1 transaction. Đây là cách CANONICAL đổi scope khi không có UPDATE.
+      await asTenant(A.companyId, async (c) => {
+        const del = await c.query(
+          `DELETE FROM role_permissions WHERE role_id=$1 AND permission_id=$2 AND effect='ALLOW'`,
+          [tenantRoleId, permissionId],
+        );
+        expect(del.rowCount, "DELETE đúng hàng cũ (1 row)").toBe(1);
+        await c.query(
+          `INSERT INTO role_permissions (role_id, permission_id, effect, data_scope)
+           VALUES ($1, $2, 'ALLOW', 'Company')`,
+          [tenantRoleId, permissionId],
+        );
+      });
+
+      // Đọc lại bằng direct (bypass RLS) — scope đã đổi 'Own' → 'Company' qua DELETE+INSERT, KHÔNG qua UPDATE.
+      const after = await direct.query<{ data_scope: string }>(
+        `SELECT data_scope FROM role_permissions WHERE role_id=$1 AND permission_id=$2 AND effect='ALLOW'`,
+        [tenantRoleId, permissionId],
+      );
+      expect(after.rows.length, "đúng 1 hàng sau DELETE+INSERT").toBe(1);
+      expect(after.rows[0].data_scope, "scope đã đổi sang 'Company' qua DELETE+INSERT").toBe(
+        "Company",
+      );
     });
   },
 );
