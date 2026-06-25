@@ -38,6 +38,20 @@ export class LoginRateLimiter {
     return `rl:acct:${companySlug}|${email.toLowerCase()}`;
   }
 
+  /**
+   * S2-AUTH-HARDEN-1 — namespace RIÊNG cho forgot-password (`rl:forgot:*`), TÁCH HẲN bucket login
+   * (`rl:ip:`/`rl:acct:`). Lý do: dùng chung bucket ⇒ spam forgot cho email của victim sẽ khoá luôn LOGIN
+   * của victim (DoS qua endpoint công khai). Tách namespace ⇒ rate-limit forgot KHÔNG ảnh hưởng login.
+   * Giữ NGUYÊN cơ chế/ngưỡng kép (per-IP `LOGIN_MAX_ATTEMPTS` + per-account `accountMaxAttempts`).
+   */
+  static forgotKey(companySlug: string, email: string, ip: string): string {
+    return `rl:forgot:ip:${companySlug}|${email.toLowerCase()}|${ip}`;
+  }
+
+  static forgotAccountKey(companySlug: string, email: string): string {
+    return `rl:forgot:acct:${companySlug}|${email.toLowerCase()}`;
+  }
+
   async isLocked(key: string, nowMs: number = Date.now()): Promise<boolean> {
     if (this.useValkey()) {
       if ((await this.valkey!.get(this.lockKey(key))) !== null) return true;
