@@ -911,7 +911,7 @@ export const backlog = [
     title:
       "HR read core: GET /hr/employees (list/pagination/search/filter/sort/data-scope) + GET /{id} (sensitive masking) + GET /hr/me/profile + lookups",
     zone: "red",
-    status: "todo",
+    status: "in_review",
     paths: [
       "apps/api/src/employees/**",
       "apps/api/src/org/**",

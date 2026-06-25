@@ -134,3 +134,5 @@ export * from "./security-policy";
 export * from "./user-invite";
 // AI-1 AI Insight (read-only): tóm tắt KPI + chi phí ĐÃ MASK theo permission qua Claude API
 export * from "./ai";
+// S2-HR-BE-1 HR read-core contracts (list/detail/me-profile + lookups; sensitive fields server-masked)
+export * from "./hr";
