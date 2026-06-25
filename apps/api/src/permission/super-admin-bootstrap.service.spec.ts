@@ -170,6 +170,25 @@ describe("SuperAdminBootstrapService", () => {
     expect(repo.upsertUserCalls).toHaveLength(0);
   });
 
+  it("BẤT BIẾN #3: EMAIL set NHƯNG thiếu PASSWORD → throw fail-fast (KHÔNG resolve company, KHÔNG hash, KHÔNG ghi)", async () => {
+    // Double-guard của readConfig(): superRefine ở env.schema đã ép, nhưng nếu lọt (loadConfig seam trả env
+    // thô không qua superRefine) service PHẢI fail-fast — KHÔNG seed god-mode account KHÔNG mật khẩu.
+    const { service, repo, hashSpy, resolveSpy } = makeService({
+      env: {
+        PLATFORM_SUPERADMIN_EMAIL: "sa@demo.local",
+        // PLATFORM_SUPERADMIN_PASSWORD cố tình VẮNG
+        PLATFORM_SUPERADMIN_COMPANY_SLUG: "demo",
+      },
+    });
+
+    await expect(service.onApplicationBootstrap()).rejects.toThrow(/PLATFORM_SUPERADMIN_PASSWORD/);
+    // fail-fast NGAY ở readConfig → KHÔNG chạm company resolver, KHÔNG hash, KHÔNG ghi role/user.
+    expect(resolveSpy).not.toHaveBeenCalled();
+    expect(hashSpy).not.toHaveBeenCalled();
+    expect(repo.upsertRoleCalls).toHaveLength(0);
+    expect(repo.upsertUserCalls).toHaveLength(0);
+  });
+
   it("EMAIL set + company active → tạo role + user (hash argon2id) + grant catalog TRỪ reveal-secret + 1 user_role + emit permission.changed", async () => {
     const { service, repo, hashSpy, enqueueSpy, withTenantSpy } = makeService({
       env: {
