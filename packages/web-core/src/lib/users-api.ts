@@ -25,12 +25,13 @@ export const usersApi = {
     }),
 
   /**
-   * GET /users — danh sách user (admin read-only, S2-FE-HR-3 P1).
+   * GET /users/admin — danh sách user (admin read-only, S2-FE-HR-3 P1).
    * Yêu cầu: manage:user permission (is_sensitive=false). Masking do server — client render gì nhận được.
    * Full CRUD (suspend/delete/role-assign) dành cho Sprint 3 (S3-FE-SYSTEM-USERS).
+   * Route: AdminUsersController @Controller('users/admin') @Get() → GET /api/v1/users/admin.
    */
   listUsers: (query?: Partial<ListUsersQuery>): Promise<AdminUserListDto> => {
     const qs = buildQueryString(query ?? {});
-    return apiFetch(`/users${qs}`, adminUserListSchema);
+    return apiFetch(`/users/admin${qs}`, adminUserListSchema);
   },
 };

@@ -47,7 +47,7 @@ export const adminUserSchema = z.object({
 });
 export type AdminUserDto = z.infer<typeof adminUserSchema>;
 
-/** GET /users — danh sách + tổng (cho pagination). */
+/** GET /users/admin — danh sách + tổng (cho pagination). Route: AdminUsersController @Controller('users/admin'). */
 export const adminUserListSchema = z.object({
   users: z.array(adminUserSchema),
   total: z.number().int().nonnegative(),
@@ -59,7 +59,7 @@ const LIST_LIMIT_MIN = 1;
 const LIST_LIMIT_MAX = 100;
 
 /**
- * Query GET /users — filter status?/q? + phân trang. limit clamp [1..100] default 50; offset ≥0 default 0.
+ * Query GET /users/admin — filter status?/q? + phân trang. limit clamp [1..100] default 50; offset ≥0 default 0.
  * `coerce` để nhận query-string (vd ?limit=10). `.catch` để input rác → default (không 400 cho list đọc).
  */
 export const listUsersQuerySchema = z.object({
