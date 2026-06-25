@@ -1,8 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import { authenticator } from "otplib";
 
-/** Issuer hiển thị trong app authenticator (Google Authenticator/Authy…). */
-const TOTP_ISSUER = "MediaOS";
+/**
+ * Issuer hiển thị trong app authenticator (Google Authenticator/Authy…). Chỉ là NHÃN display-time,
+ * baked vào otpauth:// URI lúc enroll; KHÔNG tham gia verify (chỉ secret + time-step). Đổi nhãn ⇒ chỉ
+ * enrollment MỚI thấy tên mới; user đã enroll giữ nhãn cũ trong app + vẫn verify/login bình thường.
+ */
+const TOTP_ISSUER = "FUNTIME MEDIA";
 
 /**
  * TotpService — TOTP RFC 6238 (otplib). Thuần tính toán, KHÔNG chạm DB/secret-at-rest. Secret base32 do
