@@ -12,6 +12,8 @@ import { ValkeyService } from "./valkey.service";
 import { PermissionAdminController } from "./permission-admin.controller";
 import { PermissionAdminService } from "./permission-admin.service";
 import { PermissionAdminRepository } from "./permission-admin.repository";
+// S2-AUTH-BE-3 (additive): read-only catalogs cho UI gán quyền (GET /auth/roles · /auth/permissions).
+import { AuthRolesPermissionsController } from "./auth-roles-permissions.controller";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { CompanyGuard } from "./guards/company.guard";
 import { PermissionGuard } from "./guards/permission.guard";
@@ -93,7 +95,7 @@ class PermissionCacheInvalidator implements OnModuleInit {
  */
 @Module({
   imports: [DatabaseModule, EventsModule, forwardRef(() => AuthModule)],
-  controllers: [PermissionAdminController],
+  controllers: [PermissionAdminController, AuthRolesPermissionsController],
   providers: [
     ValkeyService,
     PermissionRepository,
