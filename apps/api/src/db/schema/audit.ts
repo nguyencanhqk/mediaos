@@ -87,7 +87,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -224,5 +224,11 @@ export const AUDIT_OBJECT_TYPES = [
   // S1-FND-FILE-1 (mig 0440): upload/link/unlink/delete file ghi audit object_type 'file' (Upload/Delete) / 'file_link' (Link/Unlink) audit-in-tx; masker che storage_path/signed_url. UNION ADD-only.
   "file",
   "file_link",
+  // S2-HR-BE-3 (mig 0446): HR master-data CRUD ghi audit create/update/delete object_type 'job_level'
+  // (job_levels) / 'contract_type' (contract_types) audit-in-tx app-tenant — KHÔNG secret/PII vào
+  // before/after (chỉ name/code/active). 0446 UNION ADD-only vào CHECK (clone 0440), append-only #2
+  // nguyên vẹn; INSERT audit KHÔNG còn vỡ CHECK trên Postgres thật.
+  "job_level",
+  "contract_type",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
