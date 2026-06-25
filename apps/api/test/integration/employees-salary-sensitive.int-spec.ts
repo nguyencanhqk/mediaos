@@ -1,10 +1,17 @@
 /**
  * S2-QA-1 — sensitive-data salary over HTTP (CROWN-JEWEL, BẤT BIẾN #3).
  *
- * Dựng app NestJS THẬT (Test.createTestingModule(AppModule)) + supertest → GET /employees,
- * GET /employees/:id và PATCH /employees/:id chạy qua đường auth/permission THẬT
- * (JwtAuthGuard → CompanyGuard → TwoFactorEnforcementGuard → PermissionGuard → EmployeesController
- * → EmployeesService → PermissionService.can()). KHÔNG mock permission engine.
+ * Dựng app NestJS THẬT (Test.createTestingModule(AppModule)) + supertest. Hai bề mặt khác nhau:
+ *   - ĐỌC (mask/reveal + audit-per-item): GET /hr/employees + GET /hr/employees/:id qua HrReadController
+ *     → HrReadService.revealSalary (lane S2-HR-BE-1) — endpoint THẬT áp salary mask + per-row audit
+ *     + DataScopeService. (S2-QA-1-FIX-A retarget từ /employees → /hr/employees cho đúng endpoint
+ *     có-scope; /employees cũ chỉ gate read:employee + RLS, không nghiệm thu được scope.)
+ *   - GHI (update-salary gate + audit before/after): PATCH /employees/:id qua EmployeesController →
+ *     EmployeesService.updateEmployee — KHÔNG có write endpoint dưới /hr, đây là bề mặt GHI ĐÃ SHIP
+ *     thật sự (gate update:employee ở PermissionGuard + update-salary:employee is_sensitive trong
+ *     service + audit row update-salary before/after). Giữ PATCH trên /employees (xác minh: shipped).
+ * Tất cả chạy qua đường auth/permission THẬT (JwtAuthGuard → CompanyGuard → TwoFactorEnforcementGuard
+ * → PermissionGuard → controller → service → PermissionService.can()). KHÔNG mock permission engine.
  *
  * Field nhạy cảm: base_salary (employee_profiles.base_salary) — field nhạy cảm DUY NHẤT hiện có trên
  * employee_profiles. GAP đã biết: schema KHÔNG có cột 'bank'/'bank_account' trên employee_profiles
@@ -228,8 +235,9 @@ describe.skipIf(!hasLaneDb)(
       if (app) await app.close();
     });
 
+    // ĐỌC qua /hr/employees/:id (HrReadService — endpoint THẬT áp salary mask + per-view audit).
     async function getDetail(token: string, profileId: string) {
-      return api(app).get(`/employees/${profileId}`).set(bearer(token));
+      return api(app).get(`/hr/employees/${profileId}`).set(bearer(token));
     }
 
     // ── DENY (mask): thiếu view-salary:employee → baseSalary=null, NO audit ─────────
@@ -281,21 +289,27 @@ describe.skipIf(!hasLaneDb)(
       expect(after2 - after1).toBe(1);
     });
 
-    it("REVEAL (list): GET /employees với view-salary → mỗi item allowed có baseSalary=number + 1 audit/item", async () => {
+    it("REVEAL (list): GET /hr/employees với view-salary → mỗi item allowed có baseSalary=number + 1 audit/item", async () => {
       const token = await login(app, A.slug, `viewer@${A.slug}.test`);
       const before = await countAudit(A.companyId, "view-salary", targetProfileId);
-      const res = await api(app).get("/employees").set(bearer(token));
+      // /hr/employees trả { items, meta } → đọc data.items; pageSize=100 để item mục tiêu chắc chắn ở trang 1.
+      const res = await api(app).get("/hr/employees?pageSize=100").set(bearer(token));
       expect(res.status, JSON.stringify(res.body)).toBe(200);
-      const rows = res.body.data as Array<{ id: string; baseSalary: number | null }>;
+      const rows = res.body.data.items as Array<{ id: string; baseSalary: number | null }>;
       const targetRow = rows.find((r) => r.id === targetProfileId);
       expect(targetRow, "target profile must be in list").toBeDefined();
       expect(targetRow!.baseSalary).toBe(REAL_SALARY_NUM);
-      // List ghi ĐÚNG 1 audit view-salary cho item mục tiêu (per-item audit).
+      // List ghi ĐÚNG 1 audit view-salary cho item mục tiêu (per-item audit, HrReadService.revealSalary).
       const after = await countAudit(A.companyId, "view-salary", targetProfileId);
       expect(after - before).toBe(1);
     });
 
-    // ── PATCH base_salary: gate update-salary:employee ──────────────────────────────
+    // ── PATCH base_salary: gate update-salary:employee (GHI — bề mặt /employees ĐÃ SHIP) ───────
+    //
+    // S2-QA-1-FIX-A: KHÔNG có write endpoint dưới /hr (HrReadController chỉ Get). PATCH /employees/:id
+    // (EmployeesController.updateEmployee) LÀ bề mặt ghi shipped thật: PermissionGuard gate update:employee,
+    // service gate update-salary:employee is_sensitive (wildcard không thoả) trước write, và ghi 1 audit
+    // update-salary với before/after. Giữ PATCH ở /employees — đây KHÔNG phải bề mặt unscoped đọc.
 
     it("DENY: PATCH base_salary thiếu update-salary:employee → 403, KHÔNG write, KHÔNG audit update-salary", async () => {
       const token = await login(app, A.slug, `noupdate@${A.slug}.test`);

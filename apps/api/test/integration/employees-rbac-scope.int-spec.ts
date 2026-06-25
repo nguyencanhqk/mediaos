@@ -1,29 +1,28 @@
 /**
  * S2-QA-1 — RBAC / data-scope over HTTP for HR list + detail (CROWN-JEWEL).
  *
- * Dựng app NestJS THẬT (Test.createTestingModule(AppModule)) + supertest → GET /employees và
- * GET /employees/:id chạy qua đường auth/permission THẬT (JwtAuthGuard → CompanyGuard →
- * TwoFactorEnforcementGuard → PermissionGuard → EmployeesController). KHÔNG mock permission.
+ * Dựng app NestJS THẬT (Test.createTestingModule(AppModule)) + supertest → GET /hr/employees và
+ * GET /hr/employees/:id chạy qua đường auth/permission THẬT (JwtAuthGuard → CompanyGuard →
+ * TwoFactorEnforcementGuard → PermissionGuard → HrReadController → HrReadService). KHÔNG mock permission.
+ *
+ * RETARGET (S2-QA-1-FIX-A): trỏ vào endpoint THẬT có áp scope = /hr/employees (HrReadService, lane
+ * S2-HR-BE-1). Endpoint cũ /employees (EmployeesService.listEmployees) CHỈ gate read:employee + RLS,
+ * KHÔNG áp DataScopeService → mọi role có read:employee thấy toàn tenant ⇒ KHÔNG nghiệm thu được
+ * Own/Team/Department. /hr/employees gọi resolveAndAssert + buildEmployeeScopeCondition Own/Team/
+ * Department/Company/System nên các assert scope là XANH-THẬT (không còn it.fails đỏ-có-chủ-đích).
  *
  * Nguồn sự thật scope: docs/plans + auth-seed-canonical-roles §13 —
  *   read:employee : employee=Own · manager=Team · hr=Company · company-admin=Company · super-admin=System.
  *
- * RED-first (cố ý ĐỎ tới khi backend wiring áp scope):
- *   GAP đã biết — EmployeesService.listEmployees/getEmployee HIỆN gate CHỈ bằng read:employee + RLS,
- *   KHÔNG áp DataScopeService.buildEmployeeScopeCondition. Vì vậy mọi role có read:employee đang thấy
- *   TOÀN tenant. Các assert Own/Team/Department dưới đây sẽ ĐỎ trên code hiện tại → buộc lane backend
- *   wiring (out-of-scope WO này) áp scope. Các nhánh Company/System/deny-path/cross-tenant PHẢI XANH ngay.
- *
- * GREEN ngay (không phụ thuộc scope-wiring):
- *   - Thiếu read:employee → 403 (deny-path, fail-closed PermissionGuard).
- *   - Company / System scope → thấy toàn tenant (nhưng KHÔNG thấy tenant khác).
- *   - cross-tenant: user công ty B → KHÔNG thấy hồ sơ công ty A; GET /:id của A → 404 (RLS che).
+ * Response shape /hr/employees: { items, meta } (paginated) → list parse qua res.body.data.items.
+ * /hr/employees/:id trả detail object trực tiếp; out-of-scope/cross-tenant → 404 (NotFoundException,
+ * KHÔNG lộ sự tồn tại hàng ngoài scope).
  *
  * Gate hasDb && LANE_DB (memory integration-test-LANE_DB-gate): .env trỏ DB dev chung làm hasDb=true,
  * assertion sẽ chạm DB chung = đỏ-giả ⇒ CHỈ chạy khi LANE_DB set (DB cô lập).
  *
  * BẤT BIẾN kiểm chứng:
- *   #1 company_id mọi query: cross-tenant user KHÔNG đọc được hồ sơ tenant khác (RLS + predicate).
+ *   #1 company_id mọi query: cross-tenant user KHÔNG đọc được hồ sơ tenant khác (RLS + predicate scope).
  */
 
 import "reflect-metadata";
@@ -209,74 +208,67 @@ describe.skipIf(!hasLaneDb)(
       if (app) await app.close();
     });
 
-    /** GET /employees → mảng user_id thấy được (200 expected). */
+    /**
+     * GET /hr/employees → mảng user_id thấy được (200 expected). /hr/employees trả { items, meta }
+     * (HrEmployeeListResponse) bọc trong envelope → đọc res.body.data.items. pageSize=100 để 1 trang
+     * chứa toàn bộ cây nhân sự seed (≤ 6 hồ sơ tenant A) — assert scope không bị cắt do phân trang.
+     */
     async function listVisibleUserIds(token: string): Promise<string[]> {
-      const res = await api(app).get("/employees").set(bearer(token));
+      const res = await api(app).get("/hr/employees?pageSize=100").set(bearer(token));
       expect(res.status, `list failed: ${JSON.stringify(res.body)}`).toBe(200);
-      const rows = res.body.data as Array<{ userId: string }>;
+      const rows = res.body.data.items as Array<{ userId: string }>;
       expect(Array.isArray(rows)).toBe(true);
       return rows.map((r) => r.userId);
     }
 
     // ── DENY-PATH (GREEN ngay) ────────────────────────────────────────────────────
 
-    it("DENY: GET /employees KHÔNG có read:employee → 403 (fail-closed PermissionGuard)", async () => {
+    it("DENY: GET /hr/employees KHÔNG có read:employee → 403 (fail-closed PermissionGuard)", async () => {
       const token = await login(app, A.slug, `noperm@${A.slug}.test`);
-      const res = await api(app).get("/employees").set(bearer(token));
+      const res = await api(app).get("/hr/employees").set(bearer(token));
       expect(res.status).toBe(403);
       expect(res.body.success).toBe(false);
     });
 
-    it("DENY: GET /employees/:id KHÔNG có read:employee → 403", async () => {
+    it("DENY: GET /hr/employees/:id KHÔNG có read:employee → 403", async () => {
       const token = await login(app, A.slug, `noperm@${A.slug}.test`);
-      const res = await api(app).get(`/employees/${repProfileId}`).set(bearer(token));
+      const res = await api(app).get(`/hr/employees/${repProfileId}`).set(bearer(token));
       expect(res.status).toBe(403);
       expect(res.body.success).toBe(false);
     });
 
-    // ── ALLOW + SCOPE (Own/Team/Department) ─────────────────────────────────────────
+    // ── ALLOW + SCOPE (Own/Team/Department) — XANH THẬT trên /hr/employees ───────────
     //
-    // GAP đã biết (reconcileNotes): EmployeesService.listEmployees gate CHỈ bằng read:employee + RLS,
-    // KHÔNG áp DataScopeService.buildEmployeeScopeCondition ⇒ Own/Team/Department HIỆN trả TOÀN tenant.
-    // 3 spec dưới dùng `it.fails` — KHẲNG ĐỊNH gap còn tồn tại (assertion ĐỎ ⇒ it.fails PASS), giữ file
-    // gate CI xanh NHƯNG tự FLIP-đỏ khi lane backend wiring áp scope (lúc đó assertion XANH ⇒ it.fails
-    // FAIL → nhắc gỡ `.fails` + xác nhận scope đã wired). KHÔNG hạ ngưỡng — đây là RED-có-chủ-đích,
-    // KHÔNG auto-merge, escalate người chốt + mở follow-up WO backend wiring (xem Nghiệm thu Đội 3).
+    // S2-QA-1-FIX-A: /hr/employees (HrReadService) ÁP DataScopeService.buildEmployeeScopeCondition,
+    // nên Own/Team/Department lọc hàng THẬT theo data_scope đã grant. Đây là plain it() PHẢI XANH —
+    // KHÔNG còn it.fails (endpoint /employees cũ thiếu scope không còn được WO này kiểm). Nếu một
+    // trong các assert dưới ĐỎ ⇒ scope wiring hồi quy, KHÔNG che bằng it.fails.
 
-    it.fails(
-      "Own: employee CHỈ thấy hồ sơ CHÍNH MÌNH — RED tới khi service áp scope (gỡ .fails khi wired)",
-      async () => {
-        const token = await login(app, A.slug, `rep@${A.slug}.test`);
-        const seen = await listVisibleUserIds(token);
-        expect(seen.sort()).toEqual([repUserId]);
-      },
-    );
+    it("Own: employee CHỈ thấy hồ sơ CHÍNH MÌNH (data_scope=Own)", async () => {
+      const token = await login(app, A.slug, `rep@${A.slug}.test`);
+      const seen = await listVisibleUserIds(token);
+      expect(seen.sort()).toEqual([repUserId]);
+    });
 
-    it.fails(
-      "Team: manager thấy reports ∪ self, KHÔNG thấy peer — RED tới khi service áp scope (gỡ .fails khi wired)",
-      async () => {
-        const token = await login(app, A.slug, `mgr@${A.slug}.test`);
-        const seen = await listVisibleUserIds(token);
-        expect(seen.sort()).toEqual([mgrUserId, repUserId].sort());
-        expect(seen).not.toContain(peerUserId);
-      },
-    );
+    it("Team: manager thấy reports ∪ self, KHÔNG thấy peer (data_scope=Team)", async () => {
+      const token = await login(app, A.slug, `mgr@${A.slug}.test`);
+      const seen = await listVisibleUserIds(token);
+      expect(seen.sort()).toEqual([mgrUserId, repUserId].sort());
+      expect(seen).not.toContain(peerUserId);
+    });
 
-    it.fails(
-      "Department: cùng org_unit, KHÔNG thấy phòng khác — RED tới khi service áp scope (gỡ .fails khi wired)",
-      async () => {
-        // hrUser scope=Department, org_unit=Engineering → thấy Engineering (mgr/rep/hr/sys), KHÔNG thấy Sales (peer/admin).
-        const token = await login(app, A.slug, `hr@${A.slug}.test`);
-        const seen = await listVisibleUserIds(token);
-        expect(seen).toContain(mgrUserId);
-        expect(seen).toContain(repUserId);
-        expect(seen).toContain(hrUserId);
-        expect(seen).not.toContain(peerUserId); // Sales
-        expect(seen).not.toContain(adminUserId); // Sales
-      },
-    );
+    it("Department: cùng org_unit, KHÔNG thấy phòng khác (data_scope=Department)", async () => {
+      // hrUser scope=Department, org_unit=Engineering → thấy Engineering (mgr/rep/hr/sys), KHÔNG thấy Sales (peer/admin).
+      const token = await login(app, A.slug, `hr@${A.slug}.test`);
+      const seen = await listVisibleUserIds(token);
+      expect(seen).toContain(mgrUserId);
+      expect(seen).toContain(repUserId);
+      expect(seen).toContain(hrUserId);
+      expect(seen).not.toContain(peerUserId); // Sales
+      expect(seen).not.toContain(adminUserId); // Sales
+    });
 
-    it("Company: company-admin thấy TOÀN tenant A, KHÔNG thấy tenant B (GREEN)", async () => {
+    it("Company: company-admin thấy TOÀN tenant A, KHÔNG thấy tenant B (data_scope=Company)", async () => {
       const token = await login(app, A.slug, `admin@${A.slug}.test`);
       const seen = await listVisibleUserIds(token);
       expect(seen).toEqual(
@@ -292,7 +284,7 @@ describe.skipIf(!hasLaneDb)(
       expect(seen).not.toContain(bUserId);
     });
 
-    it("System: super-admin scope thấy toàn bộ tenant (GREEN, N=1 bounded tới tenant)", async () => {
+    it("System: super-admin scope thấy toàn bộ tenant (data_scope=System, N=1 bounded tới tenant)", async () => {
       const token = await login(app, A.slug, `sys@${A.slug}.test`);
       const seen = await listVisibleUserIds(token);
       expect(seen).toEqual(
@@ -308,16 +300,24 @@ describe.skipIf(!hasLaneDb)(
       expect(seen).not.toContain(bUserId);
     });
 
-    it("GET /:id allow-path: company-admin xem hồ sơ trong tenant → 200 (GREEN)", async () => {
+    it("GET /hr/employees/:id allow-path: company-admin xem hồ sơ trong tenant → 200", async () => {
       const token = await login(app, A.slug, `admin@${A.slug}.test`);
-      const res = await api(app).get(`/employees/${peerProfileId}`).set(bearer(token));
+      const res = await api(app).get(`/hr/employees/${peerProfileId}`).set(bearer(token));
       expect(res.status, JSON.stringify(res.body)).toBe(200);
       expect(res.body.data.userId).toBe(peerUserId);
     });
 
+    it("GET /hr/employees/:id out-of-scope: Own không xem được hồ sơ người khác → 404 (KHÔNG lộ tồn tại)", async () => {
+      // rep scope=Own → chỉ hồ sơ chính mình. Xem hồ sơ peer (khác người) → 404, KHÔNG 200/403.
+      const token = await login(app, A.slug, `rep@${A.slug}.test`);
+      const res = await api(app).get(`/hr/employees/${peerProfileId}`).set(bearer(token));
+      expect(res.status).toBe(404);
+      expect(res.body.success).toBe(false);
+    });
+
     // ── CROSS-TENANT DENY (BẤT BIẾN #1, GREEN) ──────────────────────────────────────
 
-    it("cross-tenant: user công ty B KHÔNG thấy hồ sơ công ty A trong list (GREEN)", async () => {
+    it("cross-tenant: user công ty B KHÔNG thấy hồ sơ công ty A trong list", async () => {
       const token = await login(app, B.slug, `b@${B.slug}.test`);
       const seen = await listVisibleUserIds(token);
       expect(seen).toContain(bUserId); // thấy chính tenant B
@@ -327,9 +327,9 @@ describe.skipIf(!hasLaneDb)(
       }
     });
 
-    it("cross-tenant: GET /employees/:id của tenant A bằng token tenant B → 404 (RLS che, KHÔNG 200)", async () => {
+    it("cross-tenant: GET /hr/employees/:id của tenant A bằng token tenant B → 404 (RLS che, KHÔNG 200)", async () => {
       const token = await login(app, B.slug, `b@${B.slug}.test`);
-      const res = await api(app).get(`/employees/${mgrProfileId}`).set(bearer(token));
+      const res = await api(app).get(`/hr/employees/${mgrProfileId}`).set(bearer(token));
       expect(res.status).toBe(404);
       // KHÔNG lộ chuỗi salary trong body lỗi (BẤT BIẾN #3 — không rò field nhạy cảm).
       const blob = JSON.stringify(res.body);
