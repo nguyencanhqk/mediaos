@@ -897,6 +897,13 @@
       "when": 1717500620000,
       "tag": "0444_s2_authseed1_canonical_roles_perms",
       "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1717500630000,
+      "tag": "0445_s2_hrseed1_hr_perms",
+      "breakpoints": true
     }
   ]
 }
