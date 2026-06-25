@@ -741,7 +741,9 @@ export const backlog = [
     title:
       "Seed permission/role/role_permission VỚI data_scope đúng từng role + bootstrap admin (idempotent ON CONFLICT) theo permission matrix §13 / API-10",
     zone: "red",
-    status: "in_progress",
+    // CLOSE (sync 2026-06-25): PR #24 merged dc9717d (canonical roles + per-pair §13 data_scope + super-admin
+    //   bootstrap). FULL red-zone gate PASS + human merge — pending-note cũ đã xong.
+    status: "done",
     // Plan: docs/plans/S2-AUTH-SEED-1.md §13 (per-pair data_scope). L1 (db-migration): mig 0444 canonical
     // roles + per-pair seed (commit a7c6a1f). L2 (this lane, SuperAdminBootstrap): runtime seed super-admin
     // company-scoped — apps/api/src/permission/super-admin-bootstrap.{service,repository}.ts wired additive
@@ -799,7 +801,8 @@ export const backlog = [
     //   KHÔNG migration (data_scope cột đã có mig 0441). Plan PASS-after-fix (plan-reviewer: exact>wildcard,
     //   không nâng-scope, sensitive mirror can(), isEmployeeInScope tenant-guard, narrowing≠403). paths +
     //   test/integration/** cho int spec LANE_DB. FULL gate + người chốt; KHÔNG push master.
-    status: "in_progress",
+    // CLOSE (sync 2026-06-25): PR #27 merged 38b99ca (resolveStrongestScope + DataScopeService). FULL gate PASS×3.
+    status: "done",
     paths: ["apps/api/src/permission/**", "apps/api/src/auth/**", "apps/api/test/integration/**"],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-DB-1", "S2-AUTH-SEED-1"],
@@ -823,7 +826,9 @@ export const backlog = [
     title:
       "User admin API (P1): list/detail/create/update + lock/unlock + roles/permissions list (search/filter/paginate)",
     zone: "red",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): PR #28 merged c629764 (user-admin API + mig 0450). FULL gate PASS×2
+    //   (security-reviewer + DB/silent-failure). LOW follow-ups (LANE_DB gate test) → S2-QA-DEBT-1.
+    status: "done",
     paths: ["apps/api/src/users/**", "apps/api/src/permission/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-BE-2"],
@@ -846,7 +851,9 @@ export const backlog = [
     title:
       "Change-password + forgot/reset-password (P1): token hash + expiry/used_at + email mock; đổi mật khẩu khi đã đăng nhập",
     zone: "red",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): PR #29 merged c158bc8 (change/forgot/reset-password hardening). FULL gate
+    //   PASS×2 (security + silent-failure). LOW hardening follow-ups → S2-AUTH-HARDEN-1 + test → S2-QA-DEBT-1.
+    status: "done",
     paths: ["apps/api/src/auth/**", "apps/api/migrations/**"],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-DB-2", "S2-AUTH-BE-1"],
@@ -911,7 +918,9 @@ export const backlog = [
     title:
       "HR read core: GET /hr/employees (list/pagination/search/filter/sort/data-scope) + GET /{id} (sensitive masking) + GET /hr/me/profile + lookups",
     zone: "red",
-    status: "in_review",
+    // CLOSE (sync 2026-06-25): PR #30 merged 1c6aaef (scoped list + masked detail + me-profile + lookups).
+    //   FULL gate PASS×2 (security/masking + TS-quality). LOW follow-ups (salaryType masking + quality) → S2-HR-MASK-1.
+    status: "done",
     paths: [
       "apps/api/src/employees/**",
       "apps/api/src/org/**",
@@ -1008,7 +1017,9 @@ export const backlog = [
     title:
       "FE Auth: Login page + auth bootstrap (/auth/me) + ProtectedRoute/PublicRoute/PermissionGate/ForbiddenState + menu/action visibility theo quyền",
     zone: "yellow",
-    status: "todo",
+    // CLOSE (sync 2026-06-25): PR #31 merged d6fbba3 (route guards wired + RHF login form). LIGHT gate PASS
+    //   (react/TS). LOW findings = nhánh forward-compat unreachable (SHOW_LOADING/404) cố ý → KHÔNG cần WO.
+    status: "done",
     paths: ["apps/auth/**", "apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-AUTH-BE-1", "S2-AUTH-BE-2"],
@@ -1199,6 +1210,94 @@ export const backlog = [
       "HR API: employee create (mã tự sinh 0-dup)/update/change-status (history)/link-user (unique active) trên DB cô lập lane",
       "FE smoke: login → route guard → HR list → detail → create employee (theo §17.3); state loading/empty/error",
       "regression checklist Sprint 2 (§18 acceptance) ký xác nhận; `pnpm --filter @mediaos/api test` xanh phạm vi THẬT",
+    ],
+  },
+
+  // ════════════════════ FOLLOW-UP — review LOW findings từ PR #28-#31 (merged 2026-06-25) ════════════════════
+  // 7 reviewer agent (security/db/silent-failure/ts/react) PASS×4 PR, KHÔNG CRITICAL/HIGH. Các LOW dưới đây
+  // KHÔNG chặn merge → gộp thành WO follow-up có chủ thay vì để trôi. FE #31 LOW = forward-compat cố ý → KHÔNG WO.
+  {
+    id: "S2-QA-DEBT-1",
+    module: "QA",
+    layer: "QA",
+    title:
+      "Test-hygiene AUTH: gate int-spec trên hasDb && LANE_DB (KHÔNG bare skipIf(!hasDb)) + siết efficacy forgot-password-rate-limit spec",
+    zone: "yellow",
+    // FOLLOW-UP review PR #28/#29. Test-only — KHÔNG đụng logic service. LIGHT gate.
+    status: "todo",
+    paths: [
+      "apps/api/test/integration/auth-users-admin.int-spec.ts",
+      "apps/api/test/integration/auth-roles-permissions.int-spec.ts",
+      "apps/api/src/auth/forgot-password-rate-limit.spec.ts",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S2-AUTH-BE-3", "S2-AUTH-BE-4"],
+    src: [
+      "review PR #28/#29 (LOW: LANE_DB gate + rate-limit spec efficacy)",
+      "CLAUDE.md §9.5 (lane DB cô lập)",
+      "harness memory: Integration test LANE_DB gate",
+    ],
+    done_when: [
+      "auth-users-admin.int-spec.ts + auth-roles-permissions.int-spec.ts đổi describe.skipIf(!hasDb) → skipIf(!(hasDb && LANE_DB)) khớp tiền lệ auth-appendonly/data-scope-resolver (tránh đỏ-giả / ô nhiễm DB dev chung)",
+      "forgot-password-rate-limit.spec: THÊM assert (a) N lần forgotPassword THẬT đẩy bucket tới locked; (b) khi locked, withTenant/DB KHÔNG được gọi (short-circuit) — KHÔNG chỉ test 'void khi đã pre-lock'",
+      "pnpm --filter @mediaos/api test xanh trên lane DB cô lập; spec mới thực sự xuất hiện trong run summary (KHÔNG xanh-giả)",
+    ],
+  },
+  {
+    id: "S2-AUTH-HARDEN-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "Hardening password-reset (P2): tách rate-limit bucket forgot khỏi login + giảm timing-oracle enumeration + redact token ở mail-catch + .env.example RESET_PASSWORD_URL",
+    zone: "red",
+    // FOLLOW-UP review PR #29 — các LOW security của forgot/reset-password (KHÔNG chặn merge). Auth crown → FULL gate.
+    status: "todo",
+    paths: [
+      "apps/api/src/auth/auth.service.ts",
+      "apps/api/src/auth/reset-password-mail.service.ts",
+      "apps/api/src/auth/login-rate-limiter.ts",
+      ".env.example",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S2-AUTH-BE-4"],
+    src: [
+      "review PR #29 (LOW: rate-limit bucket share / timing-oracle / token-redact / env.example)",
+      "SPEC-02",
+      "API-02",
+    ],
+    done_when: [
+      "forgot-password dùng namespace rate-limit RIÊNG (rl:forgot:*) — KHÔNG chung bucket login (rl:acct/rl:ip) → spam forgot KHÔNG lock được login của victim; sửa comment sai 'reset sau resetPassword'",
+      "giảm timing-oracle: đẩy gửi mail HẲN khỏi request-path (dựa outbox consumer đã có) HOẶC thêm sàn/jitter để nhánh email-tồn-tại ≈ nhánh ghost (giữ uniform 202)",
+      "reset-password-mail.service KHÔNG rethrow kèm token ra caller (mirror InviteMailService trả {sent:false,reason}) HOẶC redact token ở catch — chuẩn bị SMTP thật (BẤT BIẾN #3); .env.example thêm RESET_PASSWORD_URL= (empty default)",
+      "deny-path RED giữ nguyên (uniform 202, no-enum, no-secret-log); FULL gate (auth crown) + người chốt",
+    ],
+  },
+  {
+    id: "S2-HR-MASK-1",
+    module: "HR",
+    layer: "BE",
+    title:
+      "HR read tinh chỉnh (P2): xác nhận+gate masking salaryType theo SPEC-03 §18.8 + dọn quality (audit N+1 list / email .email() / hằng code-length)",
+    zone: "red",
+    // FOLLOW-UP review PR #30. salaryType = quyết định masking field nhạy cảm → red/FULL (fail-closed); phần quality là nhẹ.
+    status: "todo",
+    paths: [
+      "apps/api/src/employees/hr-read.service.ts",
+      "apps/api/src/employees/hr-read.repository.ts",
+      "packages/contracts/src/hr/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S2-HR-BE-1"],
+    src: [
+      "review PR #30 (LOW: salaryType unmasked / per-row audit N+1 / email format / magic number)",
+      "SPEC-03 §18.8 (dữ liệu lương nhạy cảm)",
+      "API-03",
+    ],
+    done_when: [
+      "CHỐT với SPEC-03 §18.8: salaryType (monthly/hourly/project) có thuộc 'dữ liệu lương nhạy cảm' không — CÓ → gate sau revealSalary cùng baseSalary; KHÔNG → ghi note spec là directory-data cố ý hở",
+      "(tùy chọn) list-path resolve view-salary 1 lần/trang + 1 audit list-view thay vì can()+audit per-row (bỏ N+1 trong tx) — GIỮ bất biến reveal⟹audit",
+      "quality: contracts output email dùng z.string().email(); hằng DEFAULT_EMPLOYEE_CODE_NUMBER_LENGTH=4 thay magic number; comment getMyProfile rõ guard là gate",
+      "masking đụng field nhạy cảm → FULL gate (security-reviewer) + người chốt; regression deny-path HR còn xanh",
     ],
   },
 ];
