@@ -1500,7 +1500,9 @@ export const backlog = [
     title:
       "Migration LEAVE Core: leave_types·leave_policies·leave_balances·leave_balance_transactions·leave_requests·leave_request_days·leave_request_approvals + RLS+FORCE + indexes + append-only ledger",
     zone: "red",
-    status: "todo",
+    // CLOSE (deploy-gate 2026-06-26): landed on feat/s3-wave1 (commit 0b04f12) — migration 0453 LEAVE Core
+    //   (DB-05 evolve-additive, 4 new tables + ALTER-ADD, RLS+FORCE, append-only ledger). FULL gate PASS.
+    status: "done",
     paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/test/integration/**"],
     skills: ["code-review"],
     depends_on: ["S3-ATT-DB-1"], // ordering: lane db-migration NỐI TIẾP (idx kế ATT-DB), KHÔNG data-dep thực
