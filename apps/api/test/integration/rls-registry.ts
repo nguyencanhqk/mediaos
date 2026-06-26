@@ -1403,6 +1403,106 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+
+  // ── S3 LEAVE — Core (mig 0453) ───────────────────────────────────────────────
+  {
+    name: "leave_policies",
+    table: "leave_policies",
+    seedRow: async (direct, t) => {
+      const lt = await direct.query(
+        `INSERT INTO leave_types (company_id, name, code) VALUES ($1, 'rls-lp-lt', $2) RETURNING id`,
+        [t.companyId, `rls-lp-lt-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO leave_policies
+           (company_id, leave_type_id, policy_code, name, policy_scope, effective_from)
+         VALUES ($1, $2, $3, 'rls-policy', 'Company', '2026-01-01') RETURNING id`,
+        [t.companyId, lt.rows[0].id, `rls-lp-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "leave_balance_transactions",
+    table: "leave_balance_transactions",
+    // APPEND-ONLY ledger (app SELECT,INSERT). Seed direct (superuser). FK employee_id → employee_profiles.
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `lbt-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const lt = await direct.query(
+        `INSERT INTO leave_types (company_id, name, code) VALUES ($1, 'rls-lbt-lt', $2) RETURNING id`,
+        [t.companyId, `rls-lbt-lt-${randomUUID().slice(0, 8)}`],
+      );
+      const lb = await direct.query(
+        `INSERT INTO leave_balances (company_id, user_id, leave_type_id, year, total_days)
+         VALUES ($1, $2, $3, 2026, 12) RETURNING id`,
+        [t.companyId, u, lt.rows[0].id],
+      );
+      const r = await direct.query(
+        `INSERT INTO leave_balance_transactions
+           (company_id, leave_balance_id, employee_id, leave_type_id, transaction_type, transaction_date, amount_days, created_by_type)
+         VALUES ($1, $2, $3, $4, 'GRANT', '2026-01-01', 12, 'System') RETURNING id`,
+        [t.companyId, lb.rows[0].id, emp.rows[0].id, lt.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "leave_request_days",
+    table: "leave_request_days",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `lrd-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const lt = await direct.query(
+        `INSERT INTO leave_types (company_id, name, code) VALUES ($1, 'rls-lrd-lt', $2) RETURNING id`,
+        [t.companyId, `rls-lrd-lt-${randomUUID().slice(0, 8)}`],
+      );
+      const lr = await direct.query(
+        `INSERT INTO leave_requests
+           (company_id, user_id, leave_type_id, start_date, end_date, total_days, status)
+         VALUES ($1, $2, $3, '2026-06-03', '2026-06-03', 1, 'Pending') RETURNING id`,
+        [t.companyId, u, lt.rows[0].id],
+      );
+      const r = await direct.query(
+        `INSERT INTO leave_request_days
+           (company_id, leave_request_id, employee_id, leave_type_id, work_date, day_type)
+         VALUES ($1, $2, $3, $4, '2026-06-03', 'Full Day') RETURNING id`,
+        [t.companyId, lr.rows[0].id, emp.rows[0].id, lt.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "leave_request_approvals",
+    table: "leave_request_approvals",
+    // APPEND-ONLY history (app SELECT,INSERT). Seed direct (superuser). Parent leave_requests.
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `lra-${randomUUID().slice(0, 8)}@x.test`);
+      const lt = await direct.query(
+        `INSERT INTO leave_types (company_id, name, code) VALUES ($1, 'rls-lra-lt', $2) RETURNING id`,
+        [t.companyId, `rls-lra-lt-${randomUUID().slice(0, 8)}`],
+      );
+      const lr = await direct.query(
+        `INSERT INTO leave_requests
+           (company_id, user_id, leave_type_id, start_date, end_date, total_days, status)
+         VALUES ($1, $2, $3, '2026-06-03', '2026-06-03', 1, 'Pending') RETURNING id`,
+        [t.companyId, u, lt.rows[0].id],
+      );
+      const r = await direct.query(
+        `INSERT INTO leave_request_approvals
+           (company_id, leave_request_id, approval_step, approver_user_id, action)
+         VALUES ($1, $2, 1, $3, 'SUBMIT') RETURNING id`,
+        [t.companyId, lr.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
   // ── G12 Payroll — Salary Profile (mig 0091, 🔒 crown-jewel, lương nhạy cảm) ──────
   // Chống XANH-GIẢ: salary_profiles có company_id ⇒ rls-guards.int-spec sẽ ĐỎ nếu thiếu đăng ký.
   // KHÔNG skipNoContext (mọi hàng tenant-scoped, company_id NOT NULL, không hàng global).
