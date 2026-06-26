@@ -65,16 +65,23 @@ function grant(
   return { action, resourceType, isSensitive, effect, dataScope, expiresAt: null };
 }
 
-/** Records the args passed to the org-unit lookup so we assert tenant+user are forwarded verbatim. */
-function spyRepo(orgUnitId: string | null): {
+/** Records the args passed to the scope-context lookup so we assert tenant+user are forwarded verbatim. */
+function spyRepo(
+  orgUnitId: string | null,
+  extra?: { managedUserIds?: string[]; headedOrgUnitIds?: string[] },
+): {
   repo: DataScopeRepository;
   calls: Array<{ userId: string; companyId: string }>;
 } {
   const calls: Array<{ userId: string; companyId: string }> = [];
   const repo = {
-    getRequesterOrgUnitId: async (userId: string, companyId: string) => {
+    getRequesterScopeContext: async (userId: string, companyId: string) => {
       calls.push({ userId, companyId });
-      return orgUnitId;
+      return {
+        orgUnitId,
+        managedUserIds: extra?.managedUserIds ?? [],
+        headedOrgUnitIds: extra?.headedOrgUnitIds ?? [],
+      };
     },
   } as unknown as DataScopeRepository;
   return { repo, calls };
@@ -90,7 +97,13 @@ describe("DataScopeService.resolveContext (coverage: org-unit packing)", () => {
 
     const ctx = await svc.resolveContext("user-1", "co-1");
 
-    expect(ctx).toEqual({ userId: "user-1", companyId: "co-1", orgUnitId: "ou-42" });
+    expect(ctx).toEqual({
+      userId: "user-1",
+      companyId: "co-1",
+      orgUnitId: "ou-42",
+      managedUserIds: [],
+      headedOrgUnitIds: [],
+    });
     expect(calls).toEqual([{ userId: "user-1", companyId: "co-1" }]);
   });
 

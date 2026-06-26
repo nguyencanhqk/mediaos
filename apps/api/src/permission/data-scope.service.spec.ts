@@ -59,9 +59,18 @@ function g(
   return { action, resourceType, isSensitive, effect, dataScope, expiresAt: null };
 }
 
-/** Stub repo for the requester org-unit lookup (Department scope). */
-function stubRepo(orgUnitId: string | null): DataScopeRepository {
-  return { getRequesterOrgUnitId: async () => orgUnitId } as unknown as DataScopeRepository;
+/** Stub repo for the requester scope-context lookup (Department/Team). */
+function stubRepo(
+  orgUnitId: string | null,
+  extra?: { managedUserIds?: string[]; headedOrgUnitIds?: string[] },
+): DataScopeRepository {
+  return {
+    getRequesterScopeContext: async () => ({
+      orgUnitId,
+      managedUserIds: extra?.managedUserIds ?? [],
+      headedOrgUnitIds: extra?.headedOrgUnitIds ?? [],
+    }),
+  } as unknown as DataScopeRepository;
 }
 
 const dialect = new PgDialect();
@@ -240,6 +249,185 @@ describe("DataScopeService.isEmployeeInScope", () => {
 
   it("null scope → false", () => {
     expect(svc.isEmployeeInScope(null, ctx, { userId: "u1", companyId: "co1" })).toBe(false);
+  });
+});
+
+/**
+ * S2-INT-2 — Team reads the EMR multi-manager set; Department reads own unit ∪ headed units. The
+ * managed/headed sets are pre-resolved into ctx (resolveContext), so both the list predicate and the
+ * in-memory check consume the SAME data → list and detail agree exactly. Deny-path RED: a manager sees
+ * NOTHING outside their tree; cross-tenant still denies even for a managed/headed target.
+ */
+describe("S2-INT-2 Team/Department over employee_manager_relations + org-unit head", () => {
+  const dialect2 = new PgDialect();
+  const render2 = (cond: SQL): string => dialect2.sqlToQuery(cond).sql;
+
+  describe("buildEmployeeScopeCondition", () => {
+    const svc = new DataScopeService(new PermissionService(new ScopeMockRepo()), stubRepo("ou1"));
+
+    it("Team with EMR-managed users → adds a user_id membership term (reports ∪ self ∪ managed)", () => {
+      const ctx: ScopeContext = {
+        userId: "u1",
+        companyId: "co1",
+        managedUserIds: ["m1", "m2"],
+      };
+      const q = dialect2.sqlToQuery(svc.buildEmployeeScopeCondition("Team", ctx));
+      // direct_manager_id = u1 OR user_id = u1 OR user_id IN (m1, m2) → the managed ids are bound params.
+      expect(q.sql).toContain('"direct_manager_id"');
+      expect(q.sql.toLowerCase()).toContain(" in ");
+      expect(q.params).toEqual(expect.arrayContaining(["m1", "m2"]));
+    });
+
+    it("Team WITHOUT managed users → still reports ∪ self only (no empty IN, never match-all)", () => {
+      const ctx: ScopeContext = { userId: "u1", companyId: "co1", managedUserIds: [] };
+      const sql = render2(svc.buildEmployeeScopeCondition("Team", ctx)).toLowerCase();
+      expect(sql).toContain('"direct_manager_id"');
+      expect(sql).not.toContain(" in ("); // no inArray term emitted for an empty managed set
+    });
+
+    it("Department over own unit ∪ headed units → org_unit_id membership carries both", () => {
+      const ctx: ScopeContext = {
+        userId: "u1",
+        companyId: "co1",
+        orgUnitId: "ouOwn",
+        headedOrgUnitIds: ["ouHead"],
+      };
+      const q = dialect2.sqlToQuery(svc.buildEmployeeScopeCondition("Department", ctx));
+      expect(q.sql).toContain('"org_unit_id"');
+      expect(q.params).toEqual(expect.arrayContaining(["ouOwn", "ouHead"]));
+    });
+
+    it("Department with neither own nor headed unit → false (fail-closed, 0 rows)", () => {
+      const ctx: ScopeContext = {
+        userId: "u1",
+        companyId: "co1",
+        orgUnitId: null,
+        headedOrgUnitIds: [],
+      };
+      expect(render2(svc.buildEmployeeScopeCondition("Department", ctx)).toLowerCase()).toContain(
+        "false",
+      );
+    });
+
+    it("Department for a head with no own profile → headed units only (head still sees their unit)", () => {
+      const ctx: ScopeContext = {
+        userId: "u1",
+        companyId: "co1",
+        orgUnitId: null,
+        headedOrgUnitIds: ["ouHead"],
+      };
+      const q = dialect2.sqlToQuery(svc.buildEmployeeScopeCondition("Department", ctx));
+      expect(q.sql).toContain('"org_unit_id"');
+      expect(q.params).toEqual(expect.arrayContaining(["ouHead"]));
+    });
+  });
+
+  describe("isEmployeeInScope (list/detail parity)", () => {
+    const svc = new DataScopeService(new PermissionService(new ScopeMockRepo()), stubRepo("ou1"));
+
+    it("Team: an EMR-managed employee (NOT a direct report) is IN scope", () => {
+      const ctx: ScopeContext = { userId: "mgr", companyId: "co1", managedUserIds: ["emp"] };
+      expect(
+        svc.isEmployeeInScope("Team", ctx, {
+          userId: "emp",
+          companyId: "co1",
+          directManagerUserId: "someoneElse", // not the direct manager — managed only via EMR
+        }),
+      ).toBe(true);
+    });
+
+    it("Team DENY: an employee neither managed, nor a direct report, nor self → OUT of scope", () => {
+      const ctx: ScopeContext = { userId: "mgr", companyId: "co1", managedUserIds: ["emp"] };
+      expect(
+        svc.isEmployeeInScope("Team", ctx, {
+          userId: "stranger",
+          companyId: "co1",
+          directManagerUserId: "otherMgr",
+        }),
+      ).toBe(false);
+    });
+
+    it("Department: an employee in a HEADED unit (head's own profile elsewhere) is IN scope", () => {
+      const ctx: ScopeContext = {
+        userId: "head",
+        companyId: "co1",
+        orgUnitId: "ouHeadHome",
+        headedOrgUnitIds: ["ouHeaded"],
+      };
+      expect(
+        svc.isEmployeeInScope("Department", ctx, {
+          userId: "emp",
+          companyId: "co1",
+          orgUnitId: "ouHeaded",
+        }),
+      ).toBe(true);
+    });
+
+    it("Department DENY: an employee outside both own and headed units → OUT of scope", () => {
+      const ctx: ScopeContext = {
+        userId: "head",
+        companyId: "co1",
+        orgUnitId: "ouHome",
+        headedOrgUnitIds: ["ouHeaded"],
+      };
+      expect(
+        svc.isEmployeeInScope("Department", ctx, {
+          userId: "emp",
+          companyId: "co1",
+          orgUnitId: "ouFar",
+        }),
+      ).toBe(false);
+    });
+
+    it("cross-tenant DENY: a managed/headed target in ANOTHER company is still OUT for Team & Department", () => {
+      const ctx: ScopeContext = {
+        userId: "mgr",
+        companyId: "co1",
+        managedUserIds: ["emp"],
+        headedOrgUnitIds: ["ouHeaded"],
+      };
+      expect(svc.isEmployeeInScope("Team", ctx, { userId: "emp", companyId: "OTHER" })).toBe(false);
+      expect(
+        svc.isEmployeeInScope("Department", ctx, {
+          userId: "emp",
+          companyId: "OTHER",
+          orgUnitId: "ouHeaded",
+        }),
+      ).toBe(false);
+    });
+  });
+
+  describe("resolveContext (fresh read, no stale cache)", () => {
+    it("packs managedUserIds + headedOrgUnitIds from the repo into the context", async () => {
+      const svc = new DataScopeService(
+        new PermissionService(new ScopeMockRepo()),
+        stubRepo("ouOwn", { managedUserIds: ["e1", "e2"], headedOrgUnitIds: ["ouH"] }),
+      );
+      const ctx = await svc.resolveContext("u1", "co1");
+      expect(ctx).toEqual({
+        userId: "u1",
+        companyId: "co1",
+        orgUnitId: "ouOwn",
+        managedUserIds: ["e1", "e2"],
+        headedOrgUnitIds: ["ouH"],
+      });
+    });
+
+    it("re-reads the repo every call (a direct_manager/EMR change is reflected, not cached)", async () => {
+      let managed = ["e1"];
+      const repo = {
+        getRequesterScopeContext: async () => ({
+          orgUnitId: null,
+          managedUserIds: managed,
+          headedOrgUnitIds: [],
+        }),
+      } as unknown as DataScopeRepository;
+      const svc = new DataScopeService(new PermissionService(new ScopeMockRepo()), repo);
+
+      expect((await svc.resolveContext("u1", "co1")).managedUserIds).toEqual(["e1"]);
+      managed = ["e1", "e2"]; // manager gains a new report between requests
+      expect((await svc.resolveContext("u1", "co1")).managedUserIds).toEqual(["e1", "e2"]);
+    });
   });
 });
 
