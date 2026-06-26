@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { apiResponseSchema } from "./index";
 
 /**
  * Auth DTO (G2-6) — nguồn sự thật cho api ↔ web. Login cần `companySlug` vì email chỉ unique theo
@@ -139,3 +140,174 @@ export const meResponseSchema = z.object({
   modules: z.array(z.object({ code: z.string(), name: z.string() })).optional(),
 });
 export type MeResponse = z.infer<typeof meResponseSchema>;
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * S2-AUTH-BE-5 — Login-log + Security-event VIEWER DTOs (nguồn sự thật cho
+ * AUTH-API-401 GET /auth/login-logs + AUTH-API-402 GET /auth/security-events).
+ *
+ * NGUỒN SỰ THẬT contract: API-02 §13 (AUTH-API-401/402) + DB schema auth-logs.ts
+ *   (login_logs · user_security_events — append-only, mig 0443, RLS+FORCE).
+ *
+ * BẤT BIẾN #3 (KHÔNG secret plaintext): các DTO này CHỈ phơi field forensic an toàn
+ *   (status/severity/ip/user_agent/reason). Cột jsonb `metadata` (login_logs) và
+ *   `payload` (user_security_events) CÓ THỂ chứa token/secret theo ngữ cảnh →
+ *   TUYỆT ĐỐI KHÔNG đưa vào list-item DTO. (Nếu spec sau cần phơi metadata đã-mask
+ *   thì thêm field `metadata: z.unknown().nullable()` ĐÃ qua AuditMaskerService —
+ *   KHÔNG phơi thô.) KHÔNG có password_hash/secret_ref/normalized_email.
+ *
+ * Quy ước field = snake_case theo API-02 (data + query + pagination). `status` của
+ *   login-log dùng CHỮ THƯỜNG success|failed|blocked — khớp DB (auth-logs.ts: cột
+ *   login_status lowercase) + task; ví dụ "SUCCESS" trong API-02 là minh hoạ cũ.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Cặp quyền CANONICAL gate cho cả 2 endpoint (seed mig 0340 — is_sensitive=true, grant
+ * company-admin). BE @RequirePermission PHẢI khớp cặp ENGINE THỰC NÀY, KHÔNG theo mã FE
+ * "AUTH.AUDIT_LOG.VIEW" (bài học drift S1-FND-MODULE: BE gate trên cặp seed, không theo tên FE).
+ */
+export const AUTH_AUDIT_LOG_RESOURCE_TYPE = "audit-log" as const;
+export const AUTH_AUDIT_LOG = {
+  RESOURCE: AUTH_AUDIT_LOG_RESOURCE_TYPE,
+  VIEW: { action: "view", resource: AUTH_AUDIT_LOG_RESOURCE_TYPE },
+} as const;
+
+/** Trần/mặc định số dòng 1 trang (chống unbounded read — DoS). per_page kẹp [1..MAX]. */
+export const AUTH_LOG_PAGE_SIZE_MAX = 100 as const;
+export const AUTH_LOG_PAGE_SIZE_DEFAULT = 20 as const;
+
+/** Trạng thái 1 lần đăng nhập (lowercase — khớp DB login_logs.login_status). */
+export const LOGIN_LOG_STATUSES = ["success", "failed", "blocked"] as const;
+export type LoginLogStatus = (typeof LOGIN_LOG_STATUSES)[number];
+
+/** Mức nghiêm trọng sự kiện bảo mật (khớp DB user_security_events.severity). */
+export const SECURITY_EVENT_SEVERITIES = ["info", "low", "medium", "high", "critical"] as const;
+export type SecurityEventSeverity = (typeof SECURITY_EVENT_SEVERITIES)[number];
+
+/**
+ * Cột được phép ORDER BY (allowlist — repo map sang ORDER BY cố định; chặn SQL-injection
+ * qua tham số sort). Mặc định created_at DESC (forensic mới nhất trước).
+ */
+export const LOGIN_LOG_SORT_FIELDS = ["created_at", "status"] as const;
+export type LoginLogSortField = (typeof LOGIN_LOG_SORT_FIELDS)[number];
+
+export const SECURITY_EVENT_SORT_FIELDS = ["created_at", "severity", "event_type"] as const;
+export type SecurityEventSortField = (typeof SECURITY_EVENT_SORT_FIELDS)[number];
+
+/** Hướng sắp xếp chung. */
+export const AUTH_LOG_SORT_ORDERS = ["asc", "desc"] as const;
+export type AuthLogSortOrder = (typeof AUTH_LOG_SORT_ORDERS)[number];
+
+/**
+ * Tham chiếu user RÚT GỌN nhúng trong log-item (login-log.user · security-event.user/actor).
+ * display_name lấy từ users.full_name (nullable). KHÔNG kèm field nhạy cảm.
+ */
+export const authLogUserRefSchema = z.object({
+  id: z.string().uuid(),
+  email: z.string().email(),
+  display_name: z.string().nullable(),
+});
+export type AuthLogUserRef = z.infer<typeof authLogUserRefSchema>;
+
+/**
+ * Query GET /auth/login-logs — phân trang + filter (status/user_id/from_date/to_date) + sort
+ * whitelist. Query-string → coerce; per_page kẹp [1..MAX] (ngoài dải → VALIDATION-ERR field-level).
+ * Refine from_date <= to_date (chống dải đảo). Date-only ("2026-06-01") + ISO datetime đều nhận.
+ */
+export const loginLogListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    per_page: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(AUTH_LOG_PAGE_SIZE_MAX)
+      .default(AUTH_LOG_PAGE_SIZE_DEFAULT),
+    user_id: z.string().uuid().optional(),
+    status: z.enum(LOGIN_LOG_STATUSES).optional(),
+    from_date: z.coerce.date().optional(),
+    to_date: z.coerce.date().optional(),
+    sort: z.enum(LOGIN_LOG_SORT_FIELDS).default("created_at"),
+    order: z.enum(AUTH_LOG_SORT_ORDERS).default("desc"),
+  })
+  .refine((q) => !q.from_date || !q.to_date || q.from_date.getTime() <= q.to_date.getTime(), {
+    message: "from_date phải <= to_date.",
+    path: ["from_date"],
+  });
+export type LoginLogListQuery = z.infer<typeof loginLogListQuerySchema>;
+
+/**
+ * 1 dòng login-log (AUTH-API-401). `user` nullable: lần fail với email KHÔNG tồn tại (UserNotFound)
+ * KHÔNG có user liên kết. failure_reason chỉ mã lý do (WrongPassword/Locked…), KHÔNG chứa secret.
+ */
+export const loginLogListItemSchema = z.object({
+  id: z.string().uuid(),
+  user: authLogUserRefSchema.nullable(),
+  status: z.enum(LOGIN_LOG_STATUSES),
+  ip_address: z.string().nullable(),
+  user_agent: z.string().nullable(),
+  failure_reason: z.string().nullable(),
+  created_at: z.string().datetime({ offset: true }),
+});
+export type LoginLogListItem = z.infer<typeof loginLogListItemSchema>;
+
+/**
+ * Envelope list login-log {success,message,data,error,pagination,meta} (API-01/02).
+ *
+ * `z.lazy` HOÃN gọi `apiResponseSchema` tới lúc parse — TRÁNH circular-init TDZ: barrel index.ts
+ * `export * from "./auth"` bị hoist (ESM) nên auth.ts chạy TRƯỚC khi `apiErrorSchema` (const trong
+ * index.ts) khởi tạo; gọi thẳng ở top-level sẽ "Cannot access before initialization". Lazy giải quyết
+ * mà vẫn TÁI DÙNG envelope chuẩn (KHÔNG nhân bản apiErrorSchema/pagination/meta → chống drift).
+ */
+export const loginLogListResponseSchema = z.lazy(() =>
+  apiResponseSchema(z.array(loginLogListItemSchema)),
+);
+export type LoginLogListResponse = z.infer<typeof loginLogListResponseSchema>;
+
+/**
+ * Query GET /auth/security-events — phân trang + filter (event_type/severity/user_id/from/to) + sort.
+ * event_type tự do (PASSWORD_CHANGED/USER_LOCKED/ROLE_ASSIGNED…) nên là string bị giới hạn độ dài, KHÔNG enum.
+ */
+export const securityEventListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    per_page: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(AUTH_LOG_PAGE_SIZE_MAX)
+      .default(AUTH_LOG_PAGE_SIZE_DEFAULT),
+    user_id: z.string().uuid().optional(),
+    event_type: z.string().trim().min(1).max(100).optional(),
+    severity: z.enum(SECURITY_EVENT_SEVERITIES).optional(),
+    from_date: z.coerce.date().optional(),
+    to_date: z.coerce.date().optional(),
+    sort: z.enum(SECURITY_EVENT_SORT_FIELDS).default("created_at"),
+    order: z.enum(AUTH_LOG_SORT_ORDERS).default("desc"),
+  })
+  .refine((q) => !q.from_date || !q.to_date || q.from_date.getTime() <= q.to_date.getTime(), {
+    message: "from_date phải <= to_date.",
+    path: ["from_date"],
+  });
+export type SecurityEventListQuery = z.infer<typeof securityEventListQuerySchema>;
+
+/**
+ * 1 dòng security-event (AUTH-API-402). `actor` nullable = hệ thống tự sinh (actor_user_id NULL).
+ * `user` nullable phòng user đã soft-delete. KHÔNG phơi cột jsonb `payload` (có thể chứa secret).
+ */
+export const securityEventListItemSchema = z.object({
+  id: z.string().uuid(),
+  user: authLogUserRefSchema.nullable(),
+  event_type: z.string(),
+  severity: z.enum(SECURITY_EVENT_SEVERITIES),
+  actor: authLogUserRefSchema.nullable(),
+  ip_address: z.string().nullable(),
+  user_agent: z.string().nullable(),
+  created_at: z.string().datetime({ offset: true }),
+});
+export type SecurityEventListItem = z.infer<typeof securityEventListItemSchema>;
+
+/** Envelope list security-event {success,message,data,error,pagination,meta} (API-01/02). z.lazy: xem note ở loginLogListResponseSchema (tránh circular-init TDZ với barrel). */
+export const securityEventListResponseSchema = z.lazy(() =>
+  apiResponseSchema(z.array(securityEventListItemSchema)),
+);
+export type SecurityEventListResponse = z.infer<typeof securityEventListResponseSchema>;
