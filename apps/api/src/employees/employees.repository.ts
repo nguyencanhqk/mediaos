@@ -1,7 +1,14 @@
-import { Injectable } from '@nestjs/common';
-import { and, eq, ilike, isNull, or } from 'drizzle-orm';
-import { DatabaseService, type TenantTx } from '../db/db.service';
-import { employeeManagerRelations, employeeProfiles, orgUnits, positions, users } from '../db/schema';
+import { Injectable } from "@nestjs/common";
+import { and, eq, ilike, isNull, or } from "drizzle-orm";
+import { DatabaseService, type TenantTx } from "../db/db.service";
+import {
+  employeeManagerRelations,
+  employeeProfiles,
+  orgUnits,
+  positions,
+  users,
+  type User,
+} from "../db/schema";
 
 /** Columns returned by the flat list projection. */
 const LIST_COLUMNS = {
@@ -159,7 +166,10 @@ export class EmployeesRepository {
   // ── Create / update (tx cores) ─────────────────────────────────────────────────
 
   createEmployeeTx(tx: TenantTx, companyId: string, data: EmployeeInsertData) {
-    return tx.insert(employeeProfiles).values({ companyId, ...data }).returning();
+    return tx
+      .insert(employeeProfiles)
+      .values({ companyId, ...data })
+      .returning();
   }
 
   updateEmployeeTx(tx: TenantTx, companyId: string, id: string, data: EmployeeUpdateData) {
@@ -197,8 +207,8 @@ export class EmployeesRepository {
   async createUserTx(
     tx: TenantTx,
     companyId: string,
-    data: { email: string; fullName: string; passwordHash: string },
-  ) {
+    data: { email: string; fullName: string; passwordHash: string; createdBy: string },
+  ): Promise<User> {
     const [row] = await tx
       .insert(users)
       .values({
@@ -206,8 +216,10 @@ export class EmployeesRepository {
         email: data.email,
         fullName: data.fullName,
         passwordHash: data.passwordHash,
+        createdBy: data.createdBy,
+        updatedBy: data.createdBy,
       })
-      .returning({ id: users.id });
+      .returning();
     return row;
   }
 
@@ -217,12 +229,12 @@ export class EmployeesRepository {
   softDeleteDirectManagerEmrTx(tx: TenantTx, companyId: string, employeeUserId: string) {
     return tx
       .update(employeeManagerRelations)
-      .set({ deletedAt: new Date(), status: 'inactive', updatedAt: new Date() })
+      .set({ deletedAt: new Date(), status: "inactive", updatedAt: new Date() })
       .where(
         and(
           eq(employeeManagerRelations.companyId, companyId),
           eq(employeeManagerRelations.employeeUserId, employeeUserId),
-          eq(employeeManagerRelations.relationType, 'direct_manager'),
+          eq(employeeManagerRelations.relationType, "direct_manager"),
           isNull(employeeManagerRelations.deletedAt),
         ),
       )
@@ -241,8 +253,8 @@ export class EmployeesRepository {
         companyId,
         employeeUserId,
         managerUserId,
-        relationType: 'direct_manager',
-        status: 'active',
+        relationType: "direct_manager",
+        status: "active",
       })
       .returning();
   }

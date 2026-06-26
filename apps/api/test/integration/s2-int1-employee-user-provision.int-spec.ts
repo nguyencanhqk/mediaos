@@ -290,5 +290,38 @@ describe.skipIf(!hasLaneDb)(
         .send({ userId: linkedUserId });
       expect(dup.status).toBe(409);
     });
+
+    // ── Legacy POST /employees must enforce the SAME gate (no bypass of /hr/employees) ──────────
+    it("legacy /employees provision DENY: create:employee but NOT create:user → 403 + 0 writes", async () => {
+      const token = await login(app, A.slug, empOnlyEmail);
+      const email = `legacy-deny@${A.slug}.test`;
+      const beforeUser = await countAudit(direct, A.companyId, "user", "user.created");
+
+      const res = await api(app)
+        .post("/employees")
+        .set(bearer(token))
+        .send({ email, fullName: "Legacy Denied" });
+      expect(res.status, JSON.stringify(res.body)).toBe(403);
+
+      expect(await userByEmail(direct, A.companyId, email)).toBeUndefined();
+      expect(await countAudit(direct, A.companyId, "user", "user.created")).toBe(beforeUser);
+    });
+
+    it("legacy /employees provision with create:user → 201 + a user.created audit", async () => {
+      const token = await login(app, A.slug, fullEmail);
+      const email = `legacy-ok@${A.slug}.test`;
+      const beforeUser = await countAudit(direct, A.companyId, "user", "user.created");
+
+      const res = await api(app)
+        .post("/employees")
+        .set(bearer(token))
+        .send({ email, fullName: "Legacy Ok" });
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+
+      const created = await userByEmail(direct, A.companyId, email);
+      expect(created).toBeTruthy();
+      expect(created!.password_hash).not.toBe(PASSWORD);
+      expect(await countAudit(direct, A.companyId, "user", "user.created")).toBe(beforeUser + 1);
+    });
   },
 );
