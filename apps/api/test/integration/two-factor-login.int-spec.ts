@@ -61,7 +61,11 @@ describe.skipIf(!hasDb)("G16-1 login 2FA flow", () => {
   function make(): { auth: AuthService; twoFactor: TwoFactorService } {
     const dbsvc = new DatabaseService();
     const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
-    const mockPermissions = { getCapabilities: async () => ({}), getCapabilityScopes: async () => ({}) } as unknown as PermissionService;
+    const mockPermissions = {
+      getCapabilities: async () => ({}),
+      getAllowlistedSensitiveCapabilities: async () => ({}),
+      getCapabilityScopes: async () => ({}),
+    } as unknown as PermissionService;
     const replayGuard = new ReplayGuardService(new ValkeyService());
     const securityAlerts = new SecurityAlertService(dbsvc, new AuditService());
     const tf = new TwoFactorService(

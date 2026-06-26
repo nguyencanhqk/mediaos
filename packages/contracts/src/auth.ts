@@ -108,7 +108,11 @@ export const meResponseSchema = z.object({
   email: z.string().email(),
   fullName: z.string().nullable(),
   status: z.string(),
-  /** Non-sensitive action:resourceType capabilities keyed for O(1) FE lookup. Wildcards included as-is. */
+  /**
+   * non-sensitive + allowlisted sensitive view-caps (action:resourceType) keyed for O(1) FE lookup.
+   * Wildcards included as-is. Sensitive caps are EXCLUDED by default; only a curated allowlist (e.g.
+   * 'view:audit-log') is surfaced as a UI hint — enforcement stays per-resource (PermissionGuard/can()).
+   */
   capabilities: z.record(z.boolean()),
   /** true khi role ép 2FA (requires_two_factor) nhưng user CHƯA bật → FE buộc enroll (G16-1, AUTH-003). */
   mustSetupTwoFactor: z.boolean(),
