@@ -6,11 +6,18 @@
  * HrWriteService) with the REAL permission engine. No mocks. Verifies at the DB layer:
  *   - auto employee-code via SequenceService (FOR UPDATE) → 0-dup, monotonic (EMP0001, EMP0002);
  *   - exactly one 'create' audit_logs row (object_type='employee') per create;
+ *   - update (PATCH) a structural field → 200, reports changedFields + exactly one 'update' audit row;
  *   - change-status appends one employee_status_histories row + one 'change-status' audit row;
+ *   - link-user endpoint links an unlinked employee to an existing user → 201, sets user_id + one
+ *     'link-user' audit row; linking a user already on another active employee → 409 (unique active);
  *   - deny-path: no grant → 403 and NO audit row written;
  *   - 2-tenant: PATCH a cross-tenant employee → 404 (never cross-writes);
- *   - unique active link: a user already linked to an active employee → 409 (DB partial-unique index);
+ *   - unique active link (create arm): a user already linked to an active employee → 409;
  *   - no counter provisioned → 422 (HR-ERR-EMPLOYEE-CODE-CONFIG-INVALID), never 500.
+ *
+ * S2-QA-2: the update + link-user cases below close the QA-S2-003 / HR-S2-TC-009/011/012 gaps left by
+ * S2-HR-BE-2 (which proved create/change-status/dup-on-create). Targets are seeded DIRECTLY (no API
+ * create) so they never consume the EMP code sequence — keeping the monotonic-code assertion stable.
  *
  * Gate hasDb && LANE_DB (memory integration-test-LANE_DB-gate): .env points DATABASE_URL at the shared
  * dev DB (hasDb=true) → only run on an isolated lane DB, else false-red.
@@ -99,6 +106,25 @@ async function countAudit(direct: Pool, companyId: string, action: string): Prom
     [companyId, action],
   );
   return r.rows[0].n as number;
+}
+
+/**
+ * Seed an employee_profiles row DIRECTLY (superuser, bypass RLS) — no API create, so it never consumes
+ * the EMP code sequence. `userId=null` seeds an unlinked employee (the link-user target). `workType` is
+ * set explicitly so an update diff is deterministic.
+ */
+async function seedEmployee(
+  direct: Pool,
+  companyId: string,
+  userId: string | null,
+  opts: { status?: string; workType?: string } = {},
+): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO employee_profiles (company_id, user_id, status, work_type)
+     VALUES ($1, $2, $3, $4) RETURNING id`,
+    [companyId, userId, opts.status ?? "active", opts.workType ?? "offline"],
+  );
+  return r.rows[0].id as string;
 }
 
 describe.skipIf(!hasLaneDb)("S2-HR-BE-2 HR write core (HTTP, real permission engine)", () => {
@@ -258,5 +284,107 @@ describe.skipIf(!hasLaneDb)("S2-HR-BE-2 HR write core (HTTP, real permission eng
       .set(bearer(token))
       .send({ email: `nocfg@${B.slug}.test`, fullName: "No Cfg" });
     expect(res.status).toBe(422);
+  });
+
+  // ── S2-QA-2: update happy-path (HR-S2-TC-009) ──────────────────────────────────────────────
+  it("update: PATCH a structural field → 200, reports changedFields + exactly one 'update' audit row", async () => {
+    const token = await login(app, A.slug, hrEmail);
+    const subj = await seedUser(direct, A.companyId, `upd-subj@${A.slug}.test`, await hashedPw());
+    const empId = await seedEmployee(direct, A.companyId, subj, { workType: "offline" });
+
+    const before = await countAudit(direct, A.companyId, "update");
+    const res = await api(app)
+      .patch(`/hr/employees/${empId}`)
+      .set(bearer(token))
+      .send({ workType: "remote" });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.changedFields).toContain("workType");
+
+    const row = await direct.query("SELECT work_type FROM employee_profiles WHERE id = $1", [
+      empId,
+    ]);
+    expect(row.rows[0].work_type).toBe("remote");
+    // Exactly one audit row for this change (no audit when nothing actually changes — see service diff).
+    expect(await countAudit(direct, A.companyId, "update")).toBe(before + 1);
+  });
+
+  // ── S2-QA-2: manager self-reference validation (HR-S2-TC-015) ─────────────────────────────
+  it("update: an employee cannot be its own direct manager → 400 (no 'update' audit)", async () => {
+    const token = await login(app, A.slug, hrEmail);
+    const subj = await seedUser(direct, A.companyId, `selfmgr@${A.slug}.test`, await hashedPw());
+    const empId = await seedEmployee(direct, A.companyId, subj);
+
+    const before = await countAudit(direct, A.companyId, "update");
+    const res = await api(app)
+      .patch(`/hr/employees/${empId}`)
+      .set(bearer(token))
+      .send({ directManagerId: subj }); // point the manager at the employee's own user
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(await countAudit(direct, A.companyId, "update")).toBe(before);
+  });
+
+  // ── S2-QA-2: create referencing an INACTIVE department (HR-S2-TC-008) ─────────────────────
+  it("create with an inactive department → 422 (HR-ERR-DEPARTMENT-INACTIVE), no orphan user", async () => {
+    const token = await login(app, A.slug, hrEmail);
+    // A real org_unit that EXISTS but is status='inactive' — distinct from a non-existent ref.
+    const dept = await direct.query(
+      `INSERT INTO org_units (company_id, name, status) VALUES ($1, $2, 'inactive') RETURNING id`,
+      [A.companyId, `Inactive Dept ${A.slug}`],
+    );
+    const inactiveDept = dept.rows[0].id as string;
+
+    const email = `inactdept@${A.slug}.test`;
+    const res = await api(app)
+      .post("/hr/employees")
+      .set(bearer(token))
+      .send({ email, fullName: "Inactive Dept", orgUnitId: inactiveDept });
+    expect(res.status, JSON.stringify(res.body)).toBe(422);
+
+    // The login account is provisioned inside the tx, then the ref check fails → whole tx rolls back.
+    const u = await direct.query(
+      `SELECT id FROM users WHERE company_id = $1 AND email = $2 AND deleted_at IS NULL`,
+      [A.companyId, email],
+    );
+    expect(u.rows).toHaveLength(0);
+  });
+
+  // ── S2-QA-2: dedicated link-user endpoint (HR-S2-TC-011) ──────────────────────────────────
+  it("link-user endpoint: link an unlinked employee to an existing user → 201, sets user_id + one 'link-user' audit", async () => {
+    const token = await login(app, A.slug, hrEmail);
+    const target = await seedUser(
+      direct,
+      A.companyId,
+      `linktarget@${A.slug}.test`,
+      await hashedPw(),
+    );
+    const empId = await seedEmployee(direct, A.companyId, null); // unlinked employee
+
+    const before = await countAudit(direct, A.companyId, "link-user");
+    const res = await api(app)
+      .post(`/hr/employees/${empId}/link-user`)
+      .set(bearer(token))
+      .send({ userId: target });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.data.userId).toBe(target);
+
+    const row = await direct.query("SELECT user_id FROM employee_profiles WHERE id = $1", [empId]);
+    expect(row.rows[0].user_id).toBe(target);
+    expect(await countAudit(direct, A.companyId, "link-user")).toBe(before + 1);
+  });
+
+  // ── S2-QA-2: link-user unique-active via the dedicated endpoint (HR-S2-TC-012) ────────────
+  it("link-user unique active: linking a user already on another active employee → 409 (no audit)", async () => {
+    const token = await login(app, A.slug, hrEmail);
+    const busy = await seedUser(direct, A.companyId, `busy@${A.slug}.test`, await hashedPw());
+    await seedEmployee(direct, A.companyId, busy, { status: "active" }); // busy already linked + active
+    const other = await seedEmployee(direct, A.companyId, null); // a second, unlinked employee
+
+    const before = await countAudit(direct, A.companyId, "link-user");
+    const res = await api(app)
+      .post(`/hr/employees/${other}/link-user`)
+      .set(bearer(token))
+      .send({ userId: busy });
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
+    expect(await countAudit(direct, A.companyId, "link-user")).toBe(before);
   });
 });
