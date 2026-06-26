@@ -1292,6 +1292,13 @@ export const backlog = [
       "HR read tinh chỉnh (P2): xác nhận+gate masking salaryType theo SPEC-03 §18.8 + dọn quality (audit N+1 list / email .email() / hằng code-length)",
     zone: "red",
     // FOLLOW-UP review PR #30. salaryType = quyết định masking field nhạy cảm → red/FULL (fail-closed); phần quality là nhẹ.
+    //   CLOSE (2026-06-26, branch feat/s2-hr-mask-1):
+    //   • CHỐT owner: salaryType = salary-class (§18.8 "dữ liệu lương") → gate cùng baseSalary sau view-salary (fail-closed).
+    //   • N+1 list-path: GIỮ per-row reveal — can('view-salary') có resourceId honor object-grant (ADR-0010), trang trộn
+    //     reveal/mask; gộp resourceType-level = rò lương chéo-bản-ghi. KHÔNG hạ. (plan-block 25/6 đã cảnh báo đúng.)
+    //   • quality: email output .email() · DEFAULT_EMPLOYEE_CODE_NUMBER_LENGTH=4 · comment getMyProfile guard.
+    //   • FULL gate security-reviewer: diff in-scope PASS; phát hiện CRITICAL CÓ SẴN ngoài scope (legacy GET /employees
+    //     rò salaryType+PII+IDOR, console dùng) → owner chốt tách → S2-HR-EMP-LEGACY-LOCK-1. Verify: 15 unit + 36 int xanh (LANE_DB).
     status: "todo",
     paths: [
       "apps/api/src/employees/hr-read.service.ts",
@@ -1310,6 +1317,41 @@ export const backlog = [
       "(tùy chọn) list-path resolve view-salary 1 lần/trang + 1 audit list-view thay vì can()+audit per-row (bỏ N+1 trong tx) — GIỮ bất biến reveal⟹audit",
       "quality: contracts output email dùng z.string().email(); hằng DEFAULT_EMPLOYEE_CODE_NUMBER_LENGTH=4 thay magic number; comment getMyProfile rõ guard là gate",
       "masking đụng field nhạy cảm → FULL gate (security-reviewer) + người chốt; regression deny-path HR còn xanh",
+    ],
+  },
+  {
+    id: "S2-HR-EMP-LEGACY-LOCK-1",
+    module: "HR",
+    layer: "BE",
+    title:
+      "Khoá route legacy GET /employees(/:id): mask salaryType+PII (view-salary/view-sensitive) + data-scope (vá IDOR nội-tenant) hoặc di trú console→/hr/employees",
+    zone: "red",
+    // FOLLOW-UP từ FULL gate S2-HR-MASK-1 (2026-06-26). CRITICAL CÓ SẴN (không do MASK-1 tạo): EmployeesController
+    // (media-era, vẫn mount app.module.ts:50) phục vụ console qua employees-api.ts. EmployeesService.getEmployee/
+    // listEmployees chỉ mask baseSalary → salaryType+phone+contractType+notes lọt cho mọi caller có read:employee mà
+    // KHÔNG cần view-salary/view-sensitive; thêm THIẾU data-scope → IDOR đọc bất kỳ nhân viên nội-tenant. hr-read đã kín;
+    // route legacy là bề mặt còn hở. crown/FULL gate. CHỐT hướng: (a) mask+scope route legacy, HOẶC (b) di trú console
+    // sang /hr/employees rồi decommission route đọc legacy. KHÔNG xoá code media-era nếu chỉ disable route đủ.
+    status: "todo",
+    paths: [
+      "apps/api/src/employees/employees.service.ts",
+      "apps/api/src/employees/employees.controller.ts",
+      "apps/api/src/employees/employees.repository.ts",
+      "apps/api/test/**",
+      "apps/console/src/lib/employees-api.ts",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S2-HR-BE-1", "S2-HR-MASK-1"],
+    src: [
+      "FULL gate S2-HR-MASK-1 (CRITICAL: legacy /employees rò salaryType+PII + IDOR thiếu data-scope)",
+      "SPEC-03 §18.8 (dữ liệu lương nhạy cảm)",
+      "S2-INT-1 note (TWO routes: /hr/employees + legacy /employees)",
+    ],
+    done_when: [
+      "GET /employees/:id + GET /employees: salaryType gate view-salary (reveal⟹audit) + phone/contractType/notes gate view-sensitive — KHÔNG còn lọt khi thiếu quyền (mirror hr-read masking layer)",
+      "data-scope: áp resolveAndAssert + isEmployeeInScope (Own/Team/Department/Company/System) cho list+detail legacy → vá IDOR nội-tenant; cross-tenant + out-of-scope → 404",
+      "HOẶC: di trú apps/console/src/lib/employees-api.ts sang /hr/employees rồi decommission route đọc legacy (giữ create/import nếu còn dùng) — chốt hướng với owner",
+      "deny-path RED viết-TRƯỚC; FULL gate (security-reviewer) PASS + người chốt; regression console + HR còn xanh",
     ],
   },
   {
