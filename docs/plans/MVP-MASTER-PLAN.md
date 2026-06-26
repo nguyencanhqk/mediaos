@@ -11,6 +11,8 @@ Ngày **2026-06-22**, dự án **dựng lại kế hoạch tổng thể** theo b
 
 Kế hoạch mới = **greenfield theo docs nhưng thực thi RECONCILE-FIRST** trên code đã build.
 
+> **Tiến độ (cập nhật 2026-06-26):** **S0–S2 đã HỘI TỤ** — Sprint 0 (readiness/baseline) · Sprint 1 (Foundation + FE shell) · Sprint 2 (AUTH/RBAC + HR core) đều `done` (merged master). **Sprint 3 (ATT + LEAVE + LEAVE→ATT sync) đã được PULL** vào `harness/backlog.mjs` (19 WO) và là **sprint hành hiện tại**. Trạng thái sống: [docs/STATUS.md](../STATUS.md).
+
 ---
 
 ## 1. Kế hoạch tổng thể nằm ở đâu (canonical)
@@ -49,8 +51,8 @@ Thứ tự phụ thuộc bắt buộc (IMPLEMENTATION-01 §4 / §10): **Foundati
 
 ## 3. Chính sách vận hành backlog (harness ↔ docs)
 
-1. **`harness/backlog.mjs` chỉ giữ Work Order của SPRINT HÀNH.** Hiện = **S0 + S1**. Đây là nguồn máy-đọc cho `gen-status` · `guard-scope` · `auto-loop` · ledger.
-2. **Pull-sprint:** khi S0–S1 hội tụ (mọi WO `done`), **kéo sprint kế (S2…)** từ `ISSUE-BOARD-01 §18` + IMPLEMENTATION-05.. vào `backlog.mjs` (dịch ticket → WO: thêm `paths`/`done_when`/`depends_on`/`src`). KHÔNG nhồi cả 7 sprint vào một lúc (chống phình; docs là nguồn sự thật).
+1. **`harness/backlog.mjs` giữ WO của các sprint ĐÃ PULL.** Hiện = **S0 → S3** (sprint đã hội tụ giữ literal `done` làm baseline lịch sử; sprint hành = **S3**). Đây là nguồn máy-đọc cho `gen-status` · `guard-scope` · `auto-loop` · ledger. KHÔNG nhồi cả 7 sprint (S4–S6 CHƯA pull; docs là nguồn sự thật).
+2. **Pull-sprint:** khi sprint hành hội tụ (mọi WO `done`), **kéo sprint kế** từ `ISSUE-BOARD-01 §18` + IMPLEMENTATION-05.. vào `backlog.mjs` (dịch ticket → WO: thêm `paths`/`done_when`/`depends_on`/`src`). Đã pull: S2 (2026-06-24, IMPLEMENTATION-05) · **S3 (2026-06-26, IMPLEMENTATION-06)**. Sprint kế chờ pull: S4 (IMPLEMENTATION-07 — Task/Noti/Dash).
 3. **Trace bắt buộc:** mỗi WO có `src[]` trỏ về docs nguồn (ISSUE-BOARD §5.2 — "ticket không có tài liệu nguồn thì không vào Sprint").
 4. **Mã WO** theo `<MODULE>-<LAYER>-<n>` (ISSUE-BOARD §8). Ở tầng harness dùng tiền tố sprint `S0-…/S1-…` cho nhóm WO; ticket con §18 ghi trong `src`.
 
@@ -60,15 +62,29 @@ Hạ tầng đã build (RLS·permission·audit·outbox + một phần Foundation
 
 ---
 
-## 4. Sprint hành hiện tại (S0–S1) — đang ở `harness/backlog.mjs`
+## 4. Sprint hành hiện tại (S3) — đang ở `harness/backlog.mjs`
 
-> Trạng thái sống tự sinh ở [docs/STATUS.md](../STATUS.md). Bảng dưới là ảnh chụp cơ cấu để người đọc nắm nhanh.
+> Trạng thái sống tự sinh ở [docs/STATUS.md](../STATUS.md). Bảng dưới là ảnh chụp cơ cấu để người đọc nắm nhanh. Status hiệu dụng = overlay từ ledger (`harness/activity.jsonl`), KHÔNG phải literal trong backlog.
 
-**Sprint 0 — Readiness & Baseline reconciliation** (IMPLEMENTATION-03 · EPIC-00):
-`S0-GOV-1` · `S0-CI-1` · `S0-ENV-1` · `S0-FND-DB-1` · `S0-FND-SEED-1` · `S0-AUTH-DB-1` · `S0-API-CORE-1` · `S0-FE-CORE-1` · `S0-FE-API-1` · `S0-QA-1`
+**✅ Đã hội tụ (`done`, giữ literal baseline):**
 
-**Sprint 1 — Foundation services + FE shell** (IMPLEMENTATION-04 · EPIC-01/09):
-`S1-FND-AUDIT-1` · `S1-FND-SETTING-1` · `S1-FND-FILE-1` · `S1-FND-SEQ-1` · `S1-FND-MODULE-1` · `S1-FND-WIRE-1` · `S1-FE-LAYOUT-1` · `S1-FE-REGISTRY-1` · `S1-QA-FND-1`
+- **S0 — Readiness & Baseline** (IMPLEMENTATION-03 · EPIC-00): `S0-GOV-1` · `S0-CI-1/2` · `S0-ENV-1` · `S0-FND-DB-1` · `S0-FND-SEED-1` · `S0-AUTH-DB-1` · `S0-API-CORE-1` · `S0-FE-CORE-1` · `S0-FE-API-1` · `S0-QA-1`
+- **S1 — Foundation + FE shell** (IMPLEMENTATION-04 · EPIC-01/09): `S1-FND-AUDIT-1` · `S1-FND-SETTING-1` · `S1-FND-FILE-1` · `S1-FND-SEQ-1` · `S1-FND-MODULE-1` · `S1-FND-WIRE-1` · `S1-FE-LAYOUT-1` · `S1-FE-REGISTRY-1` · `S1-FE-QUERY-WIRE-1` · `S1-QA-FND-1` · `S1-QA-DEBT-1` · `S1-INT-MOUNT-1`
+- **S2 — AUTH/RBAC + HR core** (IMPLEMENTATION-05 · EPIC-02/03/10): `S2-AUTH-DB-1/2` · `S2-AUTH-SEED-1` · `S2-AUTH-BE-1/2/3/4` · `S2-HR-DB-1` · `S2-HR-SEED-1` · `S2-HR-BE-1/2/3/4` · `S2-FE-AUTH-1` · `S2-FE-HR-1/2/3` · `S2-INT-1/2` · `S2-QA-1/2` + follow-up (`S2-QA-DEBT-1` · `S2-AUTH-HARDEN-1` · `S2-HR-MASK-1` · `S2-HR-EMP-LEGACY-LOCK-1` · `S2-AUTH-BRAND-1`)
+
+**🏃 SPRINT 3 — Attendance Core + Leave Core + LEAVE→ATT Sync** (IMPLEMENTATION-06 · EPIC-04/05 + EPIC-10 story-100/064 · **241pt**):
+
+- **DB** (lane nối tiếp): `S3-ATT-DB-1` → `S3-LEAVE-DB-1`
+- **SEED**: `S3-ATT-SEED-1` · `S3-LEAVE-SEED-1` (permission + data_scope §11 + shift/leave-type/policy §12)
+- **ATT BE**: `S3-ATT-BE-1` (today/check-in-out) · `S3-ATT-BE-2` (records) · `S3-ATT-BE-3` (shift/rule, P1)
+- **LEAVE BE**: `S3-LEAVE-BE-1` (balance/calc) · `S3-LEAVE-BE-2` (request) · `S3-LEAVE-BE-3` (approval) · `S3-LEAVE-BE-4` (type/policy/balance, P1)
+- **INT**: `S3-INT-1` (LEAVE→ATT sync)
+- **FE**: `S3-FE-REGISTRY-1` · `S3-FE-ATT-1/2` · `S3-FE-LEAVE-1/2`
+- **QA**: `S3-QA-1` (ATT) · `S3-QA-2` (LEAVE + integration)
+
+> **Capacity (IMPLEMENTATION-06 §22.4 — 241pt, nặng nhất MVP):** chạy theo harness v2 *"1 WO/phiên, tuần tự"* → **P0-spine trước**, P1 (yellow) sau. **Carry-over §21 — KHÔNG seed đợt này:** adjustment workflow đầy đủ (CO-S4-003) · remote-work (CO-S4-004) · leave calendar (CO-S4-005) · export (CO-S4-006) · shift/policy admin UI nâng cao (CO-S4-007/8) · hourly-leave optional. *(Bảng adjustment/remote-work vẫn migrate ở `S3-ATT-DB-1` để đủ schema; API/UI để Sprint 4.)*
+>
+> **HR carry-over (EPIC-03 P1/P2 — quyết 2026-06-26):** 4 story HR deferred khỏi Sprint 2, là gap THẬT (dashboard hiển thị đúng `planned`): **#031** hợp đồng lao động (P1, cần bảng mới) · **#035** cấu hình mã NV admin (P1, preview đã có) · **#036** file hồ sơ NV (P1, FileService đã có) · **#037** org chart (P2). **KHÔNG seed WO sống đợt này** — pull thành mini-pass *"HR-finish"* sau khi S3 P0 spine xanh, hoặc fold vào S5. Chi tiết: comment `harness/backlog.mjs` (mục CARRY-OVER EPIC-03). Story đã build xong (25/26/27/28/29/30/32/33/34) = **9/13**.
 
 ---
 
