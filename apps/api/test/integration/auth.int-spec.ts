@@ -53,7 +53,11 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
 
   function newAuth(): AuthService {
     const dbsvc = new DatabaseService();
-    const mockPermissions = { getCapabilities: async () => ({}), getCapabilityScopes: async () => ({}) } as unknown as PermissionService;
+    const mockPermissions = {
+      getCapabilities: async () => ({}),
+      getAllowlistedSensitiveCapabilities: async () => ({}),
+      getCapabilityScopes: async () => ({}),
+    } as unknown as PermissionService;
     const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
     const replayGuard = new ReplayGuardService(new ValkeyService());
     const securityAlerts = new SecurityAlertService(dbsvc, new AuditService());

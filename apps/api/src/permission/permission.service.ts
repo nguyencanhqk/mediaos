@@ -17,6 +17,17 @@ const SCOPE_STRENGTH: Record<DataScope, number> = {
   System: 5,
 };
 
+/**
+ * FIX-1-CAP-EXPOSE (S2-AUTH-BE-5) — ALLOWLIST cặp quyền NHẠY CẢM được phép PHƠI vào /auth/me `capabilities`
+ * dưới dạng GỢI Ý UI (FE render/ẩn entry điều hướng, vd trang Audit-log viewer). getCapabilities() CỐ Ý lọc bỏ
+ * MỌI grant sensitive (FE không được suy quyền nhạy cảm từ map gợi ý) ⇒ FE useCan() trên cặp nhạy cảm luôn
+ * false. Allowlist này TÁI MỞ có kiểm soát ĐÚNG các cặp view-only ĐỌC — KHÔNG nới enforcement (cổng thật vẫn là
+ * can()/PermissionGuard per-resource). Cặp = "action:resourceType" khớp SEED THẬT (mig 0340: view:audit-log
+ * is_sensitive=true), KHÔNG theo mã FE. Wildcard *:* KHÔNG nằm trong allowlist ⇒ KHÔNG kế thừa (mirror sensitive
+ * gate của can(): wildcard không thoả cặp nhạy cảm). Thêm cặp mới ⇒ thêm dòng ở đây (curated, append-only).
+ */
+const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>(["view:audit-log"]);
+
 @Injectable()
 export class PermissionService {
   private readonly logger = new Logger(PermissionService.name);
@@ -247,6 +258,64 @@ export class PermissionService {
         userId,
         companyId,
       });
+      return {};
+    }
+  }
+
+  /**
+   * FIX-1-CAP-EXPOSE (S2-AUTH-BE-5) — map cờ cho các cặp NHẠY CẢM trong SENSITIVE_CAPABILITY_ALLOWLIST mà user
+   * THỰC SỰ được ALLOW ở cấp-role (company-tier). getCapabilities() lọc bỏ TẤT CẢ sensitive ⇒ FE useCan() trên
+   * cặp nhạy cảm luôn false (vd viewer audit-log không bao giờ render được). Method này surface CÓ KIỂM SOÁT ĐÚNG
+   * cặp allowlist để FE render entry/nav. KHÔNG đổi semantics getCapabilities() (caller module-catalog giữ
+   * nguyên) và KHÔNG phải cổng enforcement — can()/PermissionGuard per-resource vẫn là cổng THẬT.
+   *
+   * Thuật toán = Y HỆT getCapabilities (đọc getCompanyRoleGrants, isGrantActive, deny-override wildcard-aware) +
+   * 2 ràng buộc:
+   *   - chỉ thêm key khi cặp LITERAL "action:resourceType" ∈ allowlist ⇒ wildcard (*:* / view:*) KHÔNG khớp
+   *     allowlist ⇒ KHÔNG kế thừa (mirror sensitive gate can(): wildcard không thoả cặp nhạy cảm).
+   *   - deny-override tính trên TẤT CẢ active grants (DENY trên cặp nhạy cảm HOẶC wildcard *:* đều suppress) —
+   *     an toàn hơn getCapabilities (vốn chỉ tính deny trên tập non-sensitive).
+   * Lỗi hạ tầng → {} (fail-safe UI hint — KHÔNG fail-closed như can()).
+   */
+  async getAllowlistedSensitiveCapabilities(
+    userId: string,
+    companyId: string,
+  ): Promise<Record<string, boolean>> {
+    try {
+      const now = new Date();
+      const rawGrants = await this.repo.getCompanyRoleGrants(userId, companyId);
+      const active = rawGrants.filter((g) => isGrantActive(g.expiresAt, now));
+
+      const denyKeys = new Set<string>();
+      for (const g of active) {
+        if (g.effect === "DENY") denyKeys.add(`${g.action}:${g.resourceType}`);
+      }
+      const isDenied = (action: string, resourceType: string): boolean =>
+        denyKeys.has(`${action}:${resourceType}`) ||
+        denyKeys.has(`*:${resourceType}`) ||
+        denyKeys.has(`${action}:*`) ||
+        denyKeys.has("*:*");
+
+      const caps: Record<string, boolean> = {};
+      for (const g of active) {
+        if (g.effect !== "ALLOW") continue;
+        const key = `${g.action}:${g.resourceType}`;
+        // Allowlist gate: chỉ cặp LITERAL nhạy cảm được phép (wildcard không có trong allowlist ⇒ loại bỏ ⇒
+        // sensitive KHÔNG kế thừa qua *:*). Sau đó áp deny-override wildcard-aware (mirror getCapabilities).
+        if (!SENSITIVE_CAPABILITY_ALLOWLIST.has(key)) continue;
+        if (isDenied(g.action, g.resourceType)) continue;
+        caps[key] = true;
+      }
+      return caps;
+    } catch (error: unknown) {
+      this.logger.error(
+        "getAllowlistedSensitiveCapabilities() infrastructure error — returning empty map",
+        {
+          error: error instanceof Error ? error.message : String(error),
+          userId,
+          companyId,
+        },
+      );
       return {};
     }
   }

@@ -812,10 +812,16 @@ export class AuthService {
 
     // capabilities + scopes fail-safe ({} khi lỗi — chỉ gợi ý FE; guard BE-2 là cổng thật). modules TÁI DÙNG
     // getMyApps → {code,name}; lỗi → [] (best-effort, FE còn /foundation/modules/my-apps). Tất cả NGOÀI tx.
-    const [capabilities, scopes] = await Promise.all([
+    const [nonSensitiveCaps, allowlistedSensitiveCaps, scopes] = await Promise.all([
       this.permissions.getCapabilities(ctx.base.id, ctx.base.companyId),
+      this.permissions.getAllowlistedSensitiveCapabilities(ctx.base.id, ctx.base.companyId),
       this.permissions.getCapabilityScopes(ctx.base.id, ctx.base.companyId),
     ]);
+    // FIX-1-CAP-EXPOSE: hợp nhất cặp NHẠY CẢM trong allowlist ('view:audit-log') vào capabilities — ADDITIVE.
+    // getCapabilities() (non-sensitive) là nguồn CHÍNH; spread SAU nên non-sensitive THẮNG khi trùng key (không
+    // ghi đè). Cho phép FE useCan('view','audit-log') hoạt động THẬT (trước fix: sensitive bị lọc ⇒ viewer luôn
+    // forbidden). KHÔNG đổi semantics getCapabilities() (module-catalog giữ nguyên); enforcement vẫn ở guard.
+    const capabilities = { ...allowlistedSensitiveCaps, ...nonSensitiveCaps };
     let modules: Array<{ code: string; name: string }> = [];
     try {
       const apps = await this.modules.getMyApps({ id: ctx.base.id, companyId: ctx.base.companyId });
