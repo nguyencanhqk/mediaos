@@ -8,6 +8,7 @@
  * - Tối đa 2 cấp trong MVP.
  */
 import { type SidebarItemMeta } from "@mediaos/web-core";
+import { AUDIT_LOG_VIEW_PERMISSION } from "@/routes/system/auth-logs/constants";
 
 // ---------------------------------------------------------------------------
 // DASH
@@ -212,6 +213,29 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     group: "report",
     order: 40,
     requiredAnyPermissions: ["FOUNDATION.AUDIT_LOG.VIEW"],
+  },
+  // S2-AUTH-BE-5 — viewer nhật ký bảo mật. Gate theo cặp ENGINE THỰC ('view:audit-log',
+  // seed mig 0340, grant company-admin), KHÔNG mã FE → filterSidebarItems khớp trực tiếp
+  // capabilities (tránh drift PERMISSION_CODE_TO_PAIR).
+  {
+    sidebarKey: "system.login-logs",
+    moduleCode: "FOUNDATION",
+    label: "Nhật ký đăng nhập",
+    path: "/system/login-logs",
+    icon: "log-in",
+    group: "report",
+    order: 41,
+    requiredAnyPermissions: [AUDIT_LOG_VIEW_PERMISSION],
+  },
+  {
+    sidebarKey: "system.security-events",
+    moduleCode: "FOUNDATION",
+    label: "Sự kiện bảo mật",
+    path: "/system/security-events",
+    icon: "shield-alert",
+    group: "report",
+    order: 42,
+    requiredAnyPermissions: [AUDIT_LOG_VIEW_PERMISSION],
   },
 ];
 

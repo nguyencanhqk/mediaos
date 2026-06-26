@@ -51,4 +51,81 @@ export default {
       description: "Bạn không có quyền xem danh sách vai trò.",
     },
   },
+
+  // S2-AUTH-BE-5 — bộ lọc dùng chung cho 2 trang nhật ký bảo mật.
+  authLogFilters: {
+    fromDate: "Từ ngày",
+    toDate: "Đến ngày",
+    userId: "Mã người dùng",
+    userIdPlaceholder: "UUID người dùng",
+    apply: "Lọc",
+    reset: "Xóa lọc",
+    allStatuses: "Mọi trạng thái",
+    allSeverities: "Mọi mức độ",
+    eventType: "Loại sự kiện",
+    eventTypePlaceholder: "VD: PASSWORD_CHANGED",
+    page: "Trang {{page}}",
+  },
+
+  loginLogs: {
+    title: "Nhật ký đăng nhập",
+    description: "Lịch sử các lần đăng nhập (thành công, thất bại, bị chặn) — chỉ đọc",
+    columns: {
+      createdAt: "Thời gian",
+      user: "Người dùng",
+      status: "Kết quả",
+      ipAddress: "Địa chỉ IP",
+      userAgent: "Thiết bị / Trình duyệt",
+      failureReason: "Lý do thất bại",
+    },
+    status: {
+      success: "Thành công",
+      failed: "Thất bại",
+      blocked: "Bị chặn",
+    },
+    empty: {
+      title: "Không có nhật ký đăng nhập",
+      description: "Chưa có bản ghi đăng nhập nào khớp bộ lọc.",
+    },
+    error: {
+      title: "Không thể tải nhật ký đăng nhập",
+      description: "Có lỗi khi tải nhật ký đăng nhập. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem nhật ký bảo mật của hệ thống.",
+    },
+  },
+
+  securityEvents: {
+    title: "Sự kiện bảo mật",
+    description: "Các sự kiện bảo mật của tài khoản (đổi mật khẩu, khóa, gán vai trò…) — chỉ đọc",
+    columns: {
+      createdAt: "Thời gian",
+      eventType: "Loại sự kiện",
+      severity: "Mức độ",
+      user: "Người dùng",
+      actor: "Người thực hiện",
+      ipAddress: "Địa chỉ IP",
+    },
+    severity: {
+      info: "Thông tin",
+      low: "Thấp",
+      medium: "Trung bình",
+      high: "Cao",
+      critical: "Nghiêm trọng",
+    },
+    empty: {
+      title: "Không có sự kiện bảo mật",
+      description: "Chưa có sự kiện bảo mật nào khớp bộ lọc.",
+    },
+    error: {
+      title: "Không thể tải sự kiện bảo mật",
+      description: "Có lỗi khi tải sự kiện bảo mật. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem nhật ký bảo mật của hệ thống.",
+    },
+  },
 };
