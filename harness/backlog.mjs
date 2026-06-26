@@ -881,7 +881,19 @@ export const backlog = [
     // SEED 2026-06-26 (chốt owner): gap THẬT duy nhất của EPIC-02 — bảng login_logs/user_security_events ĐÃ ghi
     //   (S2-AUTH-DB-2 + S2-AUTH-BE-1) nhưng CHƯA có endpoint đọc (auth.controller chỉ có me/2fa/redirect-allowed).
     //   Đọc dữ liệu security → red/FULL gate. KHÔNG chặn Sprint 3 (P1) — chạy xen khi rảnh.
-    status: "todo",
+    // WIP 2026-06-27 (FIX-BE5-HARNESS): đang thực thi trên feat/s3-wave1 — endpoint BE + FE viewer đã code (auth-logs-viewer.*).
+    //   done_when-evidence (int-spec apps/api/src/auth/auth-logs-viewer.int.spec.ts):
+    //     D1/D2 deny (403; wildcard '*:*' KHÔNG kế thừa sensitive) · P3 positive (200 + envelope phân trang) ·
+    //     X4 cross-tenant (admin A → user_id B = 0 row, BẤT BIẾN #1 RLS Company-scope) · M5 mask (metadata/payload no-secret) ·
+    //     A6 append-only (app-role UPDATE/DELETE login_logs+user_security_events DENIED, BẤT BIẾN #2) ·
+    //     V7 validate (status/enum ngoài whitelist → 400 VALIDATION-ERR) · R8 date-range (from/to subset + biên ngoài → 0) ·
+    //     E9 event_type (narrow → đúng 1 row) · + 2 case MỚI status (login-logs success-only) / severity (security-events high-only) positive-path.
+    //   coverage-gate (vùng nhạy cảm ≥80%, CLAUDE.md §6): apps/api/vitest.config.ts per-file thresholds cho
+    //     auth-logs-viewer.controller.ts · auth-logs-viewer.service.ts · login-log.repository.ts · security-event.repository.ts,
+    //     ép qua script test:cov:sensitive (apps/api/package.json).
+    //   CHỈ flip 'done' SAU: PR mở + FULL gate (security-reviewer + silent-failure-hunter) PASS + người chốt + merge
+    //   (red-zone, no auto-merge) — KHÔNG fabricate done sớm.
+    status: "in_progress",
     paths: ["apps/api/src/auth/**", "packages/contracts/src/**", "apps/app/**"],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-DB-2", "S2-AUTH-BE-3"],
