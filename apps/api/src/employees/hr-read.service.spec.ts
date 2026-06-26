@@ -291,10 +291,12 @@ describe("HrReadService.getHrEmployee — 2-tenant + scope + masking", () => {
     await expect(svc.getHrEmployee(actorA, EMP_ID)).rejects.toThrow(NotFoundException);
   });
 
-  it("DENY view-salary → baseSalary null, NO view-salary audit", async () => {
+  it("DENY view-salary → baseSalary AND salaryType null, NO view-salary audit", async () => {
     const { svc, audit } = makeService({ perms: { "view-salary": DENY() } });
     const res = await svc.getHrEmployee(actorA, EMP_ID);
     expect(res.baseSalary).toBeNull();
+    // S2-HR-MASK-1: salaryType is salary-class — masked under the SAME view-salary gate as the amount.
+    expect(res.salaryType).toBeNull();
     expect(audit.record).not.toHaveBeenCalled();
   });
 
@@ -308,10 +310,12 @@ describe("HrReadService.getHrEmployee — 2-tenant + scope + masking", () => {
     expect(res.contractType).toBeNull();
   });
 
-  it("ALLOW view-salary → baseSalary number AND exactly one view-salary audit row", async () => {
+  it("ALLOW view-salary → baseSalary number, salaryType revealed AND exactly one view-salary audit row", async () => {
     const { svc, audit } = makeService({ perms: { "view-salary": ALLOW() } });
     const res = await svc.getHrEmployee(actorA, EMP_ID);
     expect(res.baseSalary).toBe(5000);
+    // S2-HR-MASK-1: salaryType revealed by the SAME view-salary grant as the amount.
+    expect(res.salaryType).toBe("monthly");
     expect(audit.record).toHaveBeenCalledTimes(1);
     expect(audit.record).toHaveBeenCalledWith(
       FAKE_TX,
@@ -319,14 +323,15 @@ describe("HrReadService.getHrEmployee — 2-tenant + scope + masking", () => {
     );
   });
 
-  it("ALLOW but auditRequired=false → salary MASKED, no audit (never reveal unaudited)", async () => {
+  it("ALLOW but auditRequired=false → salary + salaryType MASKED, no audit (never reveal unaudited)", async () => {
     const { svc, audit } = makeService({ perms: { "view-salary": ALLOW(false) } });
     const res = await svc.getHrEmployee(actorA, EMP_ID);
     expect(res.baseSalary).toBeNull();
+    expect(res.salaryType).toBeNull();
     expect(audit.record).not.toHaveBeenCalled();
   });
 
-  it("ALLOW view-sensitive → PII revealed", async () => {
+  it("ALLOW view-sensitive → PII revealed BUT salaryType stays null (follows view-salary, not view-sensitive)", async () => {
     const { svc } = makeService({
       perms: { "view-salary": DENY(), "view-sensitive": ALLOW(false) },
     });
@@ -334,6 +339,8 @@ describe("HrReadService.getHrEmployee — 2-tenant + scope + masking", () => {
     expect(res.phone).toBe("0900000000");
     expect(res.notes).toBe("secret note");
     expect(res.contractType).toBe("permanent");
+    // S2-HR-MASK-1: salaryType is gated by view-salary — a view-sensitive grant does NOT reveal it.
+    expect(res.salaryType).toBeNull();
   });
 
   // S2-HR-BE-2: an unlinked employee (LEFT JOIN users → no row) still details, with null name/email.

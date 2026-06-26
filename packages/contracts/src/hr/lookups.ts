@@ -38,6 +38,12 @@ export const hrContractTypeLookupSchema = z.object({
 export type HrContractTypeLookup = z.infer<typeof hrContractTypeLookupSchema>;
 
 /**
+ * Default zero-pad width for the numeric part of an employee code when no active config exists
+ * (the preview fallback). Mirrors the employee_code_configs.number_length default.
+ */
+export const DEFAULT_EMPLOYEE_CODE_NUMBER_LENGTH = 4;
+
+/**
  * GET /hr/lookups/employee-code/preview — the next employee code the active config WOULD produce.
  * PREVIEW ONLY: it reads employee_code_configs and does NOT allocate a sequence number (allocation
  * runs in the create path via sequence_counters). `available` is false when no active config exists.

@@ -3,10 +3,15 @@ import { z } from "zod";
 /**
  * S2-HR-BE-1 — HR read-core DTOs (SPEC-03 / API-10).
  *
- * Sensitive projection contract (BẤT BIẾN #3): baseSalary + PII (phone/notes/contractType) are
- * SERVER-masked. A caller without `view-salary:employee` gets `baseSalary: null`; a caller without
- * `view-sensitive:employee` gets the PII fields `null`. Both are NULLABLE here so the same DTO carries
+ * Sensitive projection contract (BẤT BIẾN #3): baseSalary + salaryType + PII (phone/notes/
+ * contractType) are SERVER-masked. A caller without `view-salary:employee` gets `baseSalary: null`
+ * AND `salaryType: null` (salaryType is salary-class per the owner decision below); a caller without
+ * `view-sensitive:employee` gets the PII fields `null`. All are NULLABLE here so the same DTO carries
  * the masked and the revealed shape — masking is enforced server-side, never trusted to the client.
+ *
+ * S2-HR-MASK-1 (owner chốt 2026-06-26): salaryType (monthly/hourly/project) is the compensation MODEL
+ * and is classed under SPEC-03 §18.8 "dữ liệu lương" → gated WITH baseSalary behind view-salary
+ * (fail-closed). It is NOT directory-data like workType/employmentType.
  */
 
 /** Sortable list columns (allowlist — repository maps to a fixed ORDER BY; blocks SQL injection). */
@@ -45,7 +50,7 @@ export const hrEmployeeListItemSchema = z.object({
   userId: z.string().uuid().nullable(),
   employeeCode: z.string().nullable(),
   fullName: z.string().nullable(),
-  email: z.string().nullable(),
+  email: z.string().email().nullable(),
   orgUnitId: z.string().uuid().nullable(),
   orgUnitName: z.string().nullable(),
   positionId: z.string().uuid().nullable(),
@@ -65,7 +70,7 @@ export const hrEmployeeDetailSchema = z.object({
   userId: z.string().uuid().nullable(),
   employeeCode: z.string().nullable(),
   fullName: z.string().nullable(),
-  email: z.string().nullable(),
+  email: z.string().email().nullable(),
   orgUnitId: z.string().uuid().nullable(),
   orgUnitName: z.string().nullable(),
   positionId: z.string().uuid().nullable(),
@@ -76,7 +81,7 @@ export const hrEmployeeDetailSchema = z.object({
   startDate: z.string().nullable(),
   endDate: z.string().nullable(),
   status: z.string(),
-  /** SENSITIVE (view-salary) — null when unauthorized. */
+  /** SENSITIVE (view-salary) — both null when unauthorized; salaryType is salary-class (§18.8). */
   baseSalary: z.number().nullable(),
   salaryType: z.string().nullable(),
   /** PII (view-sensitive) — null when unauthorized. */
