@@ -117,6 +117,8 @@ export class HrWriteService {
         await this.assertReferencesValid(tx, user.companyId, {
           orgUnitId: dto.orgUnitId,
           positionId: dto.positionId,
+          jobLevelId: dto.jobLevelId,
+          contractTypeId: dto.contractTypeId,
           directManagerId: dto.directManagerId,
           subjectUserId: userId,
         });
@@ -190,6 +192,8 @@ export class HrWriteService {
         await this.assertReferencesValid(tx, user.companyId, {
           orgUnitId: dto.orgUnitId ?? undefined,
           positionId: dto.positionId ?? undefined,
+          jobLevelId: dto.jobLevelId ?? undefined,
+          contractTypeId: dto.contractTypeId ?? undefined,
           directManagerId: dto.directManagerId ?? undefined,
           subjectUserId,
         });
@@ -411,13 +415,19 @@ export class HrWriteService {
     return created.id;
   }
 
-  /** Validate referenced org_unit/position are active in-tenant; a manager cannot be the subject. */
+  /**
+   * Validate referenced master data (org_unit/position/job_level/contract_type) is active in-tenant,
+   * and that a manager is a valid in-tenant user who is not the subject. Without these checks a stale or
+   * cross-tenant FK id surfaces as a raw PG FK violation (23503) → generic 500; here it maps to 422.
+   */
   private async assertReferencesValid(
     tx: TenantTx,
     companyId: string,
     refs: {
       orgUnitId?: string;
       positionId?: string;
+      jobLevelId?: string;
+      contractTypeId?: string;
       directManagerId?: string;
       subjectUserId?: string | null;
     },
@@ -427,6 +437,15 @@ export class HrWriteService {
     }
     if (refs.positionId && !(await this.repo.positionActiveTx(tx, companyId, refs.positionId))) {
       throw new UnprocessableEntityException("HR-ERR-POSITION-INACTIVE");
+    }
+    if (refs.jobLevelId && !(await this.repo.jobLevelActiveTx(tx, companyId, refs.jobLevelId))) {
+      throw new UnprocessableEntityException("HR-ERR-JOB-LEVEL-INACTIVE");
+    }
+    if (
+      refs.contractTypeId &&
+      !(await this.repo.contractTypeActiveTx(tx, companyId, refs.contractTypeId))
+    ) {
+      throw new UnprocessableEntityException("HR-ERR-CONTRACT-TYPE-INACTIVE");
     }
     if (refs.directManagerId) {
       if (refs.subjectUserId && refs.directManagerId === refs.subjectUserId) {

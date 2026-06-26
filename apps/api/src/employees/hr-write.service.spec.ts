@@ -60,6 +60,8 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     lockUserTx: vi.fn().mockResolvedValue(undefined),
     orgUnitActiveTx: vi.fn().mockResolvedValue(true),
     positionActiveTx: vi.fn().mockResolvedValue(true),
+    jobLevelActiveTx: vi.fn().mockResolvedValue(true),
+    contractTypeActiveTx: vi.fn().mockResolvedValue(true),
     softDeleteDirectManagerEmrTx: vi.fn().mockResolvedValue(undefined),
     insertDirectManagerEmrTx: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -315,6 +317,30 @@ describe("HrWriteService.createEmployee", () => {
     expect(repo.createTx).not.toHaveBeenCalled();
   });
 
+  it("422 (not 500) when jobLevelId is not an active in-tenant record (FK→422)", async () => {
+    const repo = makeRepo({ jobLevelActiveTx: vi.fn().mockResolvedValue(false) });
+    const { svc } = makeService({ repo });
+    await expect(
+      svc.createEmployee(actorA, {
+        userId: OTHER_USER,
+        jobLevelId: "99999999-9999-9999-9999-999999999999",
+      } as never),
+    ).rejects.toThrow(UnprocessableEntityException);
+    expect(repo.createTx).not.toHaveBeenCalled();
+  });
+
+  it("422 (not 500) when contractTypeId is not an active in-tenant record (FK→422)", async () => {
+    const repo = makeRepo({ contractTypeActiveTx: vi.fn().mockResolvedValue(false) });
+    const { svc } = makeService({ repo });
+    await expect(
+      svc.createEmployee(actorA, {
+        userId: OTHER_USER,
+        contractTypeId: "99999999-9999-9999-9999-999999999999",
+      } as never),
+    ).rejects.toThrow(UnprocessableEntityException);
+    expect(repo.createTx).not.toHaveBeenCalled();
+  });
+
   it("creates with an auto-generated code and audits 'create' WITHOUT any salary/PII key", async () => {
     const { svc, repo, audit, sequence } = makeService();
     const res = await svc.createEmployee(actorA, {
@@ -331,5 +357,31 @@ describe("HrWriteService.createEmployee", () => {
     );
     expect(res.employeeCode).toBe("EMP0001");
     assertNoSensitiveAuditKeys(audit);
+  });
+});
+
+// ─── update (reference validation parity with create) ──────────────────────────────────
+
+describe("HrWriteService.updateEmployee — reference validation", () => {
+  it("422 (not 500) when patching jobLevelId to an inactive in-tenant record", async () => {
+    const repo = makeRepo({ jobLevelActiveTx: vi.fn().mockResolvedValue(false) });
+    const { svc } = makeService({ repo });
+    await expect(
+      svc.updateEmployee(actorA, EMP_ID, {
+        jobLevelId: "99999999-9999-9999-9999-999999999999",
+      } as never),
+    ).rejects.toThrow(UnprocessableEntityException);
+    expect(repo.updateTx).not.toHaveBeenCalled();
+  });
+
+  it("422 (not 500) when patching contractTypeId to an inactive in-tenant record", async () => {
+    const repo = makeRepo({ contractTypeActiveTx: vi.fn().mockResolvedValue(false) });
+    const { svc } = makeService({ repo });
+    await expect(
+      svc.updateEmployee(actorA, EMP_ID, {
+        contractTypeId: "99999999-9999-9999-9999-999999999999",
+      } as never),
+    ).rejects.toThrow(UnprocessableEntityException);
+    expect(repo.updateTx).not.toHaveBeenCalled();
   });
 });

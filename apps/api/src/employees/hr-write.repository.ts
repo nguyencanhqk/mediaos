@@ -2,10 +2,12 @@ import { Injectable } from "@nestjs/common";
 import { and, eq, isNull, ne } from "drizzle-orm";
 import { type TenantTx } from "../db/db.service";
 import {
+  contractTypes,
   employeeCodeConfigs,
   employeeManagerRelations,
   employeeProfiles,
   employeeStatusHistories,
+  jobLevels,
   orgUnits,
   positions,
   users,
@@ -271,6 +273,38 @@ export class HrWriteRepository {
           eq(positions.id, id),
           eq(positions.status, "active"),
           isNull(positions.deletedAt),
+        ),
+      )
+      .limit(1);
+    return Boolean(row);
+  }
+
+  async jobLevelActiveTx(tx: TenantTx, companyId: string, id: string): Promise<boolean> {
+    const [row] = await tx
+      .select({ id: jobLevels.id })
+      .from(jobLevels)
+      .where(
+        and(
+          eq(jobLevels.companyId, companyId),
+          eq(jobLevels.id, id),
+          eq(jobLevels.status, "active"),
+          isNull(jobLevels.deletedAt),
+        ),
+      )
+      .limit(1);
+    return Boolean(row);
+  }
+
+  async contractTypeActiveTx(tx: TenantTx, companyId: string, id: string): Promise<boolean> {
+    const [row] = await tx
+      .select({ id: contractTypes.id })
+      .from(contractTypes)
+      .where(
+        and(
+          eq(contractTypes.companyId, companyId),
+          eq(contractTypes.id, id),
+          eq(contractTypes.status, "active"),
+          isNull(contractTypes.deletedAt),
         ),
       )
       .limit(1);
