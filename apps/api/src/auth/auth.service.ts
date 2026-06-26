@@ -68,6 +68,14 @@ function isAuthorizedStatus(status: string): boolean {
 /** AC-0b: id role hệ thống `platform-admin` (mig 0230) — phiên user giữ role này = OPERATOR (aud). */
 const PLATFORM_ADMIN_ROLE_ID = "00000000-0000-0000-0000-0000000000f0";
 
+/**
+ * S2-AUTH-HARDEN-1 — sàn thời gian phản hồi đồng nhất cho forgotPassword (anti-timing-enumeration). Mọi
+ * return-path chờ tối thiểu FLOOR + jitter[0..JITTER] ms ⇒ nhánh email-tồn-tại ≈ nhánh ghost. Là GIẢM THIỂU
+ * (reduce, done_when #2), KHÔNG phải constant-time tuyệt đối.
+ */
+const FORGOT_PW_FLOOR_MS = 250;
+const FORGOT_PW_JITTER_MS = 80;
+
 /** Hình dạng envelope reset-token lưu trong outbox payload (Buffer → base64 để truyền JSON). */
 const resetEnvelopeSchema = z.object({
   secretCiphertext: z.string(),
@@ -830,18 +838,31 @@ export class AuthService {
     };
   }
 
-  /** Luôn trả thành công đồng nhất (không lộ email tồn tại). Có user ⇒ tạo reset token + phát event mail. */
+  /** Luôn trả thành công đồng nhất (không lộ email tồn tại). Có user ⇒ tạo reset token + phát event mail.
+   *  S2-AUTH-HARDEN-1: bọc SÀN thời gian phản hồi đồng nhất (anti-timing-enumeration) quanh thân thật. */
   async forgotPassword(req: ForgotPasswordRequest, meta: RequestMeta): Promise<void> {
+    // startedAt ở public boundary; finally áp sàn cho MỌI return-path của forgotPasswordImpl
+    // (unknown-tenant · locked · ghost · existing · error) ⇒ thời gian phản hồi ~đồng nhất.
+    const startedAt = Date.now();
+    try {
+      await this.forgotPasswordImpl(req, meta);
+    } finally {
+      await this.applyUniformResponseFloor(startedAt);
+    }
+  }
+
+  /** Thân forgot thật — LUÔN gọi qua wrapper forgotPassword (đã áp sàn thời gian). */
+  private async forgotPasswordImpl(req: ForgotPasswordRequest, meta: RequestMeta): Promise<void> {
     const companyId = await this.resolveCompanyId(req.companySlug);
     if (!companyId) return; // im lặng — không lộ tenant
 
-    // S2-AUTH-BE-4: rate-limit per-account + per-IP DÙNG LẠI LoginRateLimiter (chống dội email reset +
-    // enumeration timing). LOCKED → trả VOID ĐỒNG NHẤT y như happy/ghost (KHÔNG ném, KHÔNG đổi outcome —
-    // anti-enumeration). Mỗi lần gọi cho email/slug resolve được sẽ recordFailure (bump bucket); reset sau
-    // resetPassword thành công. KHÔNG ghi vào login_logs (đây không phải login attempt).
+    // S2-AUTH-HARDEN-1: rate-limit forgot dùng NAMESPACE RIÊNG (rl:forgot:*) — TÁCH HẲN bucket login
+    // (rl:ip/rl:acct). Trước đây dùng CHUNG ⇒ spam forgot cho email victim khoá luôn LOGIN của victim (DoS
+    // qua endpoint công khai). LOCKED → trả VOID ĐỒNG NHẤT y như happy/ghost (anti-enumeration). Bucket forgot
+    // tự HẾT HẠN theo TTL (LOGIN_LOCKOUT_SEC) — KHÔNG reset ở resetPassword. KHÔNG ghi login_logs (không phải login).
     const ip = meta.ip ?? "unknown";
-    const ipKey = LoginRateLimiter.key(req.companySlug, req.email, ip);
-    const acctKey = LoginRateLimiter.accountKey(req.companySlug, req.email);
+    const ipKey = LoginRateLimiter.forgotKey(req.companySlug, req.email, ip);
+    const acctKey = LoginRateLimiter.forgotAccountKey(req.companySlug, req.email);
     if ((await this.rateLimiter.isLocked(ipKey)) || (await this.rateLimiter.isLocked(acctKey))) {
       return; // im lặng — không lộ "account tồn tại"
     }
@@ -916,6 +937,18 @@ export class AuthService {
         );
       }
     }
+  }
+
+  /**
+   * S2-AUTH-HARDEN-1 — chờ tới SÀN thời gian (+ jitter ngẫu nhiên) để mọi nhánh forgotPassword phản hồi trong
+   * khoảng ~đồng nhất, làm mờ timing-oracle "email tồn tại?". GIẢM THIỂU, KHÔNG constant-time tuyệt đối: KMS
+   * chậm (vd Vault transit) có thể vượt sàn → cân nhắc nâng FORGOT_PW_FLOOR_MS hoặc dời crypto/mail sang
+   * outbox-consumer (deferred) khi có. Chỉ dùng hằng + setTimeout (KHÔNG tham chiếu field inject) + KHÔNG log.
+   */
+  private async applyUniformResponseFloor(startedAtMs: number): Promise<void> {
+    const target = FORGOT_PW_FLOOR_MS + Math.floor(Math.random() * (FORGOT_PW_JITTER_MS + 1));
+    const remaining = target - (Date.now() - startedAtMs);
+    if (remaining > 0) await new Promise<void>((resolve) => setTimeout(resolve, remaining));
   }
 
   async resetPassword(req: ResetPasswordRequest): Promise<void> {

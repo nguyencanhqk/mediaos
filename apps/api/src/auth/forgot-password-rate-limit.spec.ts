@@ -56,10 +56,10 @@ describe("AuthService.forgotPassword — rate-limit uniform-void (S2-AUTH-BE-4)"
     expect(withTenant).toHaveBeenCalledTimes(1);
   });
 
-  it("(b) sau khi bucket account bị khoá → forgotPassword trả VOID + SHORT-CIRCUIT (KHÔNG gọi withTenant)", async () => {
+  it("(b) sau khi bucket forgot-account bị khoá → forgotPassword trả VOID + SHORT-CIRCUIT (KHÔNG gọi withTenant)", async () => {
     const { auth, limiter, withTenant } = makeAuth();
-    // Khoá thủ công bucket account để mô phỏng "đã quá ngưỡng".
-    const acctKey = LoginRateLimiter.accountKey(SLUG, EMAIL);
+    // Khoá thủ công bucket FORGOT-account (rl:forgot:acct:*) để mô phỏng "đã quá ngưỡng".
+    const acctKey = LoginRateLimiter.forgotAccountKey(SLUG, EMAIL);
     for (let i = 0; i < limiter.accountMaxAttempts; i++) {
       await limiter.recordFailure(acctKey, limiter.accountMaxAttempts);
     }
@@ -72,21 +72,21 @@ describe("AuthService.forgotPassword — rate-limit uniform-void (S2-AUTH-BE-4)"
     expect(withTenant).not.toHaveBeenCalled();
   });
 
-  it("(a) N lần forgotPassword THẬT (= LOGIN_MAX_ATTEMPTS) đẩy bucket per-IP tới locked + cuộc gọi kế short-circuit", async () => {
+  it("(a) N lần forgotPassword THẬT (= LOGIN_MAX_ATTEMPTS) đẩy bucket FORGOT per-IP tới locked + cuộc gọi kế short-circuit", async () => {
     const { auth, limiter, withTenant } = makeAuth();
-    const ipKey = LoginRateLimiter.key(SLUG, EMAIL, meta.ip);
+    const forgotIpKey = LoginRateLimiter.forgotKey(SLUG, EMAIL, meta.ip);
     const maxAttempts = loadEnv().LOGIN_MAX_ATTEMPTS; // N từ chính nguồn limiter dùng — KHÔNG magic number.
 
-    expect(await limiter.isLocked(ipKey)).toBe(false);
+    expect(await limiter.isLocked(forgotIpKey)).toBe(false);
     for (let i = 0; i < maxAttempts; i++) {
-      // Trước MỖI lần gọi, bucket CHƯA khoá ⇒ cuộc gọi đi hết đường-thường (không short-circuit sớm).
-      expect(await limiter.isLocked(ipKey), `lần ${i + 1} không được pre-locked`).toBe(false);
+      // Trước MỖI lần gọi, bucket forgot CHƯA khoá ⇒ cuộc gọi đi hết đường-thường (không short-circuit sớm).
+      expect(await limiter.isLocked(forgotIpKey), `lần ${i + 1} không được pre-locked`).toBe(false);
       await expect(
         auth.forgotPassword({ companySlug: SLUG, email: EMAIL }, meta),
       ).resolves.toBeUndefined();
     }
-    // Đúng N cuộc gọi THẬT → bucket per-IP đã khoá (efficacy: N forgotPassword đẩy tới locked).
-    expect(await limiter.isLocked(ipKey)).toBe(true);
+    // Đúng N cuộc gọi THẬT → bucket forgot per-IP đã khoá (efficacy: N forgotPassword đẩy tới locked).
+    expect(await limiter.isLocked(forgotIpKey)).toBe(true);
     expect(withTenant).toHaveBeenCalledTimes(maxAttempts); // mỗi lần trong loop đều chạm DB (chưa khoá).
 
     // Cuộc gọi KẾ TIẾP (đã locked) → short-circuit, KHÔNG chạm DB thêm.
@@ -95,6 +95,21 @@ describe("AuthService.forgotPassword — rate-limit uniform-void (S2-AUTH-BE-4)"
       auth.forgotPassword({ companySlug: SLUG, email: EMAIL }, meta),
     ).resolves.toBeUndefined();
     expect(withTenant).not.toHaveBeenCalled();
+  });
+
+  it("(a-sec) spam forgot KHÔNG khoá bucket LOGIN của victim (rl:ip/rl:acct TÁCH HẲN rl:forgot)", async () => {
+    const { auth, limiter } = makeAuth();
+    const loginIpKey = LoginRateLimiter.key(SLUG, EMAIL, meta.ip);
+    const loginAcctKey = LoginRateLimiter.accountKey(SLUG, EMAIL);
+    const maxAttempts = loadEnv().LOGIN_MAX_ATTEMPTS;
+
+    // Dội forgot vượt ngưỡng (đủ khoá bucket forgot). Nếu dùng CHUNG bucket login ⇒ login victim bị khoá.
+    for (let i = 0; i < maxAttempts + 2; i++) {
+      await auth.forgotPassword({ companySlug: SLUG, email: EMAIL }, meta);
+    }
+    // ĐÍCH AN NINH (S2-AUTH-HARDEN-1 #1): login của victim KHÔNG bị khoá bởi spam forgot.
+    expect(await limiter.isLocked(loginIpKey)).toBe(false);
+    expect(await limiter.isLocked(loginAcctKey)).toBe(false);
   });
 
   it("đường locked KHÔNG phân biệt được với đường thường (cùng trả void)", async () => {
