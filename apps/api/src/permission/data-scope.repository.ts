@@ -48,6 +48,11 @@ export class DataScopeRepository {
         .where(and(eq(employeeProfiles.userId, userId), isNull(employeeProfiles.deletedAt)))
         .limit(1);
 
+      // MVP intent (S2-INT-2): ANY active relation type (direct/project/professional/temporary) grants
+      // Team visibility of the managed employee's non-sensitive profile — relationType / scope_type /
+      // scope_id are deliberately NOT narrowed here. A wrong-relation row cannot widen tenant/sensitive
+      // exposure (salary/PII stay behind view-salary/view-sensitive + server masking; RLS bounds the row
+      // set to this company). Project/team-scoped narrowing belongs to the TASK module's Project scope.
       const managedRows = await tx
         .select({ employeeUserId: employeeManagerRelations.employeeUserId })
         .from(employeeManagerRelations)

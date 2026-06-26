@@ -93,6 +93,7 @@ describe.skipIf(!hasLaneDb)("S2-INT-2 HR manager-tree ↔ data-scope (HTTP, real
   // tenant B
   let bUserId = "";
   let bProfileId = "";
+  let bMgrUserId = ""; // tenant-B manager with Team scope — target of the adversarial cross-tenant EMR row
 
   async function seedOrgUnit(
     companyId: string,
@@ -191,6 +192,18 @@ describe.skipIf(!hasLaneDb)("S2-INT-2 HR manager-tree ↔ data-scope (HTTP, real
     bProfileId = await seedEmployee(B.companyId, bUserId, null, null);
     await grantReadEmployee(B.companyId, bUserId, "Company");
 
+    bMgrUserId = await seedUser(direct, B.companyId, `bmgr@${B.slug}.test`, hash);
+    await seedEmployee(B.companyId, bMgrUserId, null, null); // B manager's own profile
+    await grantReadEmployee(B.companyId, bMgrUserId, "Team");
+
+    // ADVERSARIAL cross-tenant EMR rows (seeded as superuser — bypasses RLS). The resolver runs as the
+    // RLS-forced app role, so each managed set is bounded to its own tenant and the company_id AND-predicate
+    // must still deny the foreign employee:
+    //   - tenant B claims to manage tenant A's `emp`  → B's Team manager must NOT see A's emp.
+    //   - tenant A's `pm` claims to manage tenant B's user → A's pm must NOT see B's user.
+    await seedEmr(B.companyId, bMgrUserId, empUserId); // B row pointing at an A employee
+    await seedEmr(A.companyId, pmUserId, bUserId); // A row pointing at a B employee
+
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
@@ -282,5 +295,26 @@ describe.skipIf(!hasLaneDb)("S2-INT-2 HR manager-tree ↔ data-scope (HTTP, real
       expect(seen).not.toContain(aUser);
     }
     void bProfileId;
+  });
+
+  // ── Adversarial cross-tenant over the NEW Team/EMR branch (drives managedUserIds across tenants) ──
+
+  it("cross-tenant EMR: a tenant-B Team manager with a planted EMR row to an A employee sees NOTHING of A", async () => {
+    const token = await login(app, B.slug, `bmgr@${B.slug}.test`);
+    const seen = await listVisibleUserIds(token); // managedUserIds=[A's emp] but RLS+predicate bound to B
+    expect(seen).not.toContain(empUserId); // A's employee — never surfaced
+    for (const aUser of [pmUserId, strangerUserId, headUserId, farUserId, lateUserId]) {
+      expect(seen).not.toContain(aUser);
+    }
+    // detail of A's employee by the B manager → 404 (RLS hides it; no existence leak).
+    const detail = await api(app).get(`/hr/employees/${empProfileId}`).set(bearer(token));
+    expect(detail.status).toBe(404);
+  });
+
+  it("cross-tenant EMR: tenant-A pm with a planted EMR row to a B user still never sees that B user", async () => {
+    const token = await login(app, A.slug, `pm@${A.slug}.test`);
+    const seen = await listVisibleUserIds(token);
+    expect(seen).not.toContain(bUserId); // B user — A's predicate is company_id=A bound, B row excluded
+    expect(seen).toContain(empUserId); // sanity: pm's legit A managed set still works
   });
 });
