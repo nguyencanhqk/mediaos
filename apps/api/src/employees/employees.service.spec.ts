@@ -135,12 +135,38 @@ function makeSecurityPolicy(domainAllowed = true) {
   return { assertEmailDomainAllowedTx: vi.fn().mockResolvedValue(domainAllowed) };
 }
 
+/** A scope predicate sentinel — the service must AND this into the list query untouched. */
+const SCOPE_COND = Symbol("scope-cond");
+
+/**
+ * S2-HR-EMP-LEGACY-LOCK-1: DataScopeService fake. Default = Company scope + inScope:true so existing
+ * (non-scope) tests keep passing; deny-path tests flip throwOnAssert / inScope.
+ */
+function makeDataScope(
+  opts: { scope?: string | null; inScope?: boolean; throwOnAssert?: boolean } = {},
+) {
+  return {
+    resolveAndAssert: vi.fn(async () => {
+      if (opts.throwOnAssert) {
+        throw new ForbiddenException("AUTH-ERR-FORBIDDEN: out of permission scope");
+      }
+      return opts.scope ?? "Company";
+    }),
+    resolveContext: vi
+      .fn()
+      .mockResolvedValue({ userId: ACTOR_ID, companyId: COMPANY_ID, orgUnitId: null }),
+    buildEmployeeScopeCondition: vi.fn().mockReturnValue(SCOPE_COND),
+    isEmployeeInScope: vi.fn().mockReturnValue(opts.inScope ?? true),
+  };
+}
+
 function makeService(
   opts: {
     perms?: Record<string, Decision>;
     repo?: ReturnType<typeof makeRepo>;
     valkey?: ReturnType<typeof makeValkey>;
     securityPolicy?: ReturnType<typeof makeSecurityPolicy>;
+    dataScope?: ReturnType<typeof makeDataScope>;
   } = {},
 ) {
   const repo = opts.repo ?? makeRepo();
@@ -150,6 +176,7 @@ function makeService(
   const valkey = opts.valkey ?? makeValkey();
   const password = makePassword();
   const securityPolicy = opts.securityPolicy ?? makeSecurityPolicy();
+  const dataScope = opts.dataScope ?? makeDataScope();
   const svc = new EmployeesService(
     repo as never,
     db as never,
@@ -158,8 +185,9 @@ function makeService(
     valkey as never,
     password as never,
     securityPolicy as never,
+    dataScope as never,
   );
-  return { svc, repo, db, permission, audit, valkey, password, securityPolicy };
+  return { svc, repo, db, permission, audit, valkey, password, securityPolicy, dataScope };
 }
 
 // ─── F1: Salary audit (crown-jewel) ─────────────────────────────────────────────
@@ -208,6 +236,121 @@ describe("EmployeesService — F1 salary mask + audit", () => {
       const { svc, audit } = makeService({ perms: { "view-salary": ALLOW() }, repo });
       await expect(svc.getEmployee(actor, EMP_ID)).rejects.toThrow(NotFoundException);
       expect(audit.record).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── S2-HR-EMP-LEGACY-LOCK-1: data-scope (IDOR) + salaryType/PII masking on legacy GET /employees/:id ──
+  describe("getEmployee — data-scope + sensitive masking (legacy lock)", () => {
+    it("DENY no read:employee scope → resolveAndAssert throws 403 BEFORE any repo read", async () => {
+      const repo = makeRepo();
+      const dataScope = makeDataScope({ throwOnAssert: true });
+      const { svc } = makeService({ repo, dataScope, perms: { "view-salary": ALLOW() } });
+      await expect(svc.getEmployee(actor, EMP_ID)).rejects.toThrow(ForbiddenException);
+      expect(repo.findByIdTx).not.toHaveBeenCalled();
+    });
+
+    it("out-of-scope (same tenant) → NotFound, never returns the row (no existence leak)", async () => {
+      const dataScope = makeDataScope({ scope: "Own", inScope: false });
+      const { svc } = makeService({ dataScope, perms: { "view-salary": ALLOW() } });
+      await expect(svc.getEmployee(actor, EMP_ID)).rejects.toThrow(NotFoundException);
+    });
+
+    it("2-TENANT deny: cross-tenant row → NotFound (isEmployeeInScope rejects every scope)", async () => {
+      const repo = makeRepo({
+        findByIdTx: vi
+          .fn()
+          .mockResolvedValue(makeRow({ companyId: "dddddddd-dddd-dddd-dddd-dddddddddddd" })),
+      });
+      const dataScope = makeDataScope({ scope: "System", inScope: false });
+      const { svc } = makeService({ repo, dataScope, perms: { "view-salary": ALLOW() } });
+      await expect(svc.getEmployee(actor, EMP_ID)).rejects.toThrow(NotFoundException);
+    });
+
+    it("DENY view-salary → salaryType (and baseSalary) null", async () => {
+      const repo = makeRepo({
+        findByIdTx: vi.fn().mockResolvedValue(makeRow({ salaryType: "hourly" })),
+      });
+      const { svc } = makeService({ repo, perms: { "view-salary": DENY() } });
+      const res = await svc.getEmployee(actor, EMP_ID);
+      expect(res.baseSalary).toBeNull();
+      expect(res.salaryType).toBeNull();
+    });
+
+    it("ALLOW view-salary → salaryType revealed alongside baseSalary", async () => {
+      const repo = makeRepo({
+        findByIdTx: vi.fn().mockResolvedValue(makeRow({ salaryType: "hourly" })),
+      });
+      const { svc } = makeService({ repo, perms: { "view-salary": ALLOW() } });
+      const res = await svc.getEmployee(actor, EMP_ID);
+      expect(res.baseSalary).toBe(5000);
+      expect(res.salaryType).toBe("hourly");
+    });
+
+    it("DENY view-sensitive → PII (phone/contractType/notes) null", async () => {
+      const repo = makeRepo({
+        findByIdTx: vi
+          .fn()
+          .mockResolvedValue(
+            makeRow({ phone: "0900000000", contractType: "permanent", notes: "secret" }),
+          ),
+      });
+      const { svc } = makeService({
+        repo,
+        perms: { "view-salary": DENY(), "view-sensitive": DENY() },
+      });
+      const res = await svc.getEmployee(actor, EMP_ID);
+      expect(res.phone).toBeNull();
+      expect(res.contractType).toBeNull();
+      expect(res.notes).toBeNull();
+    });
+
+    it("ALLOW view-sensitive → PII revealed BUT salaryType stays null (PII gate ≠ salary gate)", async () => {
+      const repo = makeRepo({
+        findByIdTx: vi.fn().mockResolvedValue(
+          makeRow({
+            phone: "0900000000",
+            contractType: "permanent",
+            notes: "secret",
+            salaryType: "monthly",
+          }),
+        ),
+      });
+      const { svc } = makeService({
+        repo,
+        perms: { "view-salary": DENY(), "view-sensitive": ALLOW(false) },
+      });
+      const res = await svc.getEmployee(actor, EMP_ID);
+      expect(res.phone).toBe("0900000000");
+      expect(res.contractType).toBe("permanent");
+      expect(res.notes).toBe("secret");
+      expect(res.salaryType).toBeNull();
+    });
+  });
+
+  describe("listEmployees — data-scope filter (legacy lock)", () => {
+    it("passes the resolved scope predicate into the repo query (Own/Team/Dept funnel here)", async () => {
+      const repo = makeRepo({ listEmployeesTx: vi.fn().mockResolvedValue([]) });
+      const dataScope = makeDataScope({ scope: "Own" });
+      const { svc } = makeService({ repo, dataScope, perms: { "view-salary": DENY() } });
+      await svc.listEmployees(actor, {});
+      expect(dataScope.buildEmployeeScopeCondition).toHaveBeenCalledWith(
+        "Own",
+        expect.objectContaining({ userId: ACTOR_ID, companyId: COMPANY_ID }),
+      );
+      expect(repo.listEmployeesTx).toHaveBeenCalledWith(
+        expect.anything(),
+        COMPANY_ID,
+        expect.anything(),
+        SCOPE_COND,
+      );
+    });
+
+    it("DENY no read:employee scope → 403 BEFORE any repo read", async () => {
+      const repo = makeRepo();
+      const dataScope = makeDataScope({ throwOnAssert: true });
+      const { svc } = makeService({ repo, dataScope });
+      await expect(svc.listEmployees(actor, {})).rejects.toThrow(ForbiddenException);
+      expect(repo.listEmployeesTx).not.toHaveBeenCalled();
     });
   });
 
@@ -757,6 +900,8 @@ describe("EmployeesService — F8 search filter", () => {
       expect.anything(),
       COMPANY_ID,
       expect.objectContaining({ search: "alice" }),
+      // S2-HR-EMP-LEGACY-LOCK-1: scope predicate now threaded as the 4th arg.
+      expect.anything(),
     );
   });
 });
