@@ -1474,7 +1474,9 @@ export const backlog = [
     title:
       "Migration ATT Core: shifts·shift_assignments·attendance_rules·attendance_records·attendance_logs (+adjustment·remote_work skeleton) + RLS+FORCE + indexes + append-only attendance_logs",
     zone: "red",
-    status: "todo",
+    // CLOSE (sync 2026-06-26): merged to master via PR #54 (squash 07254e3) — migration 0452 ATT Core
+    //   (DB-04 reconcile, evolve-additive). FULL gate PASS×3. Literal reconciled todo→done so auto-loop skips it.
+    status: "done",
     paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/test/integration/**"],
     skills: ["code-review"],
     depends_on: [],
