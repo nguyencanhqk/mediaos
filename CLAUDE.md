@@ -27,7 +27,9 @@ Sau MVP (thiết kế để mở rộng, CHƯA làm): PAYROLL · RECRUIT (Phase 
 
 **HARNESS (cách làm việc):** mở phiên bằng `bash harness/init.sh`. Contract gọn cross-tool: `AGENTS.md`. Cách làm + cơ chế: `harness/README.md`. Luật tự động (zone→model/gate/autonomy + thang leo): `harness/policy.md`.
 
-Điểm khởi đầu mỗi phiên — "đang ở đâu, làm gì tiếp": **`docs/STATUS.md` (TỰ SINH bởi `harness/gen-status.mjs` — KHÔNG sửa tay)**. Nguồn việc máy-đọc (Work Order): **`harness/backlog.mjs`**. Chỉ mục tài liệu đầy đủ: `docs/README.md` (kiến trúc BE/FE = `BACKEND-01`/`FRONTEND-01`). ERD: `docs/erd-current.md`. Phân quyền hợp nhất: `docs/permission-matrix-spec.md`. Quyết định kiến trúc/stack: `docs/DECISIONS/`.
+Điểm khởi đầu mỗi phiên — "đang ở đâu, làm gì tiếp": **`docs/STATUS.md` (TỰ SINH bởi `harness/gen-status.mjs` — KHÔNG sửa tay)**. Nguồn việc máy-đọc (Work Order): **`harness/backlog.mjs`**. Chỉ mục tài liệu đầy đủ: `docs/README.md` (kiến trúc BE/FE = `BACKEND-01`/`FRONTEND-01`). **Schema chuẩn = bộ `docs/DB/` (DB-01…10)**; ERD tổng hợp theo docs/DB + Phụ lục đối chiếu code↔thiết kế: `docs/erd-current.md`. Chức năng đã hoàn thành & test thực tế được: `docs/TESTABLE-FEATURES.md`. Phân quyền hợp nhất: `docs/permission-matrix-spec.md`. Quyết định kiến trúc/stack: `docs/DECISIONS/`.
+
+> **Code đang reconcile, KHÔNG phải chuẩn:** schema hiện thực hoá ở `apps/api/src/db/schema/` còn LỆCH tên & LẪN bảng hướng cũ (media/finance/payroll…). Khi mâu thuẫn → **`docs/DB` + `docs/spec` là chuẩn**, không phải code. Bản đồ lệch (đã build / đổi tên / chưa build / cần dọn): `docs/erd-current.md` Phụ lục A.
 
 > Chi tiết nghiệp vụ (màn hình, API, rule, test case, mã lỗi) sống ở `docs/spec/` — KHÔNG nhân bản vào các doc khác để tránh trôi (drift). Doc kiến trúc/ERD/permission chỉ tổng hợp tầng-trên và **trỏ về** spec.
 
@@ -36,7 +38,7 @@ Sau MVP (thiết kế để mở rộng, CHƯA làm): PAYROLL · RECRUIT (Phase 
 ## 2. BẤT BIẾN — không bao giờ được phá
 
 1. **`company_id` ở MỌI query** dữ liệu nghiệp vụ. Cô lập dữ liệu ép ở tầng DB bằng **RLS + FORCE**, KHÔNG dựa vào kỷ luật dev. Mọi repository đi qua `withTenant(companyId, fn)`. _Hiện chạy ở N=1 (một công ty); hạ tầng giữ nguyên để sẵn sàng mở rộng — không tháo._
-2. **Không hard-delete** dữ liệu quan trọng. Dùng `deleted_at` (soft delete — SPEC-01 §16.2). Bảng **audit/snapshot là append-only** — app role không có quyền UPDATE/DELETE. Bảng append-only hiện tại: `audit_logs`. _(Khi build PAYROLL/finance ở Phase 2, bổ sung `payslips`/`kpi_results`/… vào danh sách này.)_
+2. **Không hard-delete** dữ liệu quan trọng. Dùng `deleted_at` (soft delete — SPEC-01 §16.2). Bảng **audit/snapshot/ledger là append-only** — app role không có quyền UPDATE/DELETE. Theo thiết kế (docs/DB): `audit_logs` · `login_logs` · `attendance_logs` · `leave_balance_transactions` · `task_activity_logs` · `notification_delivery_logs` · `employee_status_histories`. Code hiện ép: `audit_logs`, `login_logs`, `user_security_events`, `file_access_logs`, `api_key_usages`, `security_alerts` (đầy đủ + đối chiếu: `docs/erd-current.md` §9 / Phụ lục A). _(Phase 2 PAYROLL/KPI: bổ sung `payslips`/`kpi_results`/…)_
 3. **Không secret plaintext.** Mật khẩu user → **hash** (SPEC-01 §22.1, SPEC-02). Secret hệ thống (token tích hợp, khóa API…) → **env/secret manager**, không hard-code, không log, không vào DTO của role không quyền. _(Envelope-encryption/KMS chỉ áp dụng lại nếu Phase sau cần lưu credential bên thứ ba.)_
 
 > 3 bất biến này được ép tự động bởi hook trong `.claude/hooks/` (xem mục 6).
@@ -155,7 +157,7 @@ pnpm --filter @mediaos/web dev|build|test|typecheck
 
 > **Cấu trúc:** Backend `apps/api` (NestJS modular monolith — DUY NHẤT). Frontend Vite+React19 SPA: `apps/auth` (đăng nhập) · `apps/console` (quản trị hệ thống) · `apps/app` (vỏ nghiệp vụ hợp nhất). Packages: `packages/contracts` (Zod = nguồn sự thật DTO, dual-build) · `packages/ui` (shadcn primitives + layout) · `packages/web-core` (auth store · api-client · use-can · i18n). Health: `GET /api/v1/health` + `/health/db`.
 >
-> _Ghi chú: cây code hiện còn một số app/module của hướng cũ (media/finance/operator-plane) đang được park hoặc gộp dần — xem `harness/backlog.mjs`. Lấy `docs/spec/` làm chuẩn khi có mâu thuẫn._
+> _Ghi chú: cây code còn app/module + bảng schema của hướng cũ (media/finance/payroll/operator-plane) đang park/gộp dần — xem `harness/backlog.mjs`. Khi mâu thuẫn → **`docs/DB` + `docs/spec` là chuẩn** (không phải code); bản đồ đối chiếu schema code↔thiết kế: `docs/erd-current.md` Phụ lục A._
 
 ---
 
