@@ -5,6 +5,10 @@ import { ModuleCatalogModule } from "../foundation/module-catalog/module-catalog
 import { PermissionModule } from "../permission/permission.module";
 import { SecurityPolicyModule } from "../security-policy/security-policy.module";
 import { AuthController } from "./auth.controller";
+import { AuthLogsViewerController } from "./auth-logs-viewer.controller";
+import { AuthLogsViewerService } from "./auth-logs-viewer.service";
+import { LoginLogRepository } from "./login-log.repository";
+import { SecurityEventRepository } from "./security-event.repository";
 import { AuthService } from "./auth.service";
 import { LoginRateLimiter } from "./login-rate-limiter";
 import { PasswordService } from "./password.service";
@@ -36,8 +40,13 @@ import { TwoFactorEnforcementGuard } from "./two-factor-enforcement.guard";
     // KHÔNG import AuthModule (chỉ Permission/Settings/Database) → import thẳng, KHÔNG cần forwardRef.
     ModuleCatalogModule,
   ],
-  controllers: [AuthController],
+  // S2-AUTH-BE-5 (APPEND): AuthLogsViewerController = viewer READ-ONLY login_logs + user_security_events.
+  controllers: [AuthController, AuthLogsViewerController],
   providers: [
+    // S2-AUTH-BE-5 (APPEND): viewer service + 2 repo append-only (PermissionGuard từ PermissionModule).
+    AuthLogsViewerService,
+    LoginLogRepository,
+    SecurityEventRepository,
     AuthService,
     PasswordService,
     TokenService,
