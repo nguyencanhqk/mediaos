@@ -242,6 +242,34 @@ export interface SessionUser {
   companyId: string;
 }
 
+/**
+ * Chuẩn hoá `status` user THÔ từ API (`/auth/me` trả enum DB chữ THƯỜNG: 'active' | 'suspended' —
+ * users.status DEFAULT 'active' mig 0002, CHECK mig 0430) về union canonical Title-case của FE.
+ *
+ * LÝ DO: guard `evaluateRouteAccess` so khớp đúng "Active" (Title-case). BE trả "active" (thường) ⇒
+ * "active" !== "Active" ⇒ MỌI user đã đăng nhập (login chỉ cho status='active') bị gắn USER_INACTIVE ⇒
+ * 403 ở mọi route module. Bug không bị test bắt vì fixture hard-code "Active".
+ *
+ * Fail-closed: giá trị lạ/thiếu → "Inactive" (guard chặn) — server vẫn là cổng quyền THẬT, đây chỉ là
+ * tầng hiển thị. Cũng map 'suspended' → "Locked" (trước đây fallback "Active" = fail-OPEN).
+ */
+export function normalizeUserStatus(raw: string | null | undefined): SessionUser["status"] {
+  switch ((raw ?? "").trim().toLowerCase()) {
+    case "active":
+      return "Active";
+    case "suspended":
+    case "locked":
+      return "Locked";
+    case "inactive":
+      return "Inactive";
+    case "pending activation":
+    case "pending":
+      return "Pending Activation";
+    default:
+      return "Inactive";
+  }
+}
+
 export interface SessionCompany {
   id: string;
   name: string;

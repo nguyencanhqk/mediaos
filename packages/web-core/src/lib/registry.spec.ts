@@ -4,6 +4,7 @@ import {
   evaluateRouteAccess,
   filterSidebarItems,
   getVisibleApps,
+  normalizeUserStatus,
   APP_REGISTRY,
   ROUTE_REGISTRY,
   getRouteMeta,
@@ -29,6 +30,32 @@ function makeSession(overrides: Partial<SessionContext> = {}): SessionContext {
 function makePerms(permissions: string[], scopes: string[] = []): UserPermission[] {
   return permissions.map((p) => ({ permission: p, scopes: scopes as never }));
 }
+
+// ---------------------------------------------------------------------------
+// normalizeUserStatus — vá lệch hoa/thường BE('active') vs guard('Active')
+// ---------------------------------------------------------------------------
+
+describe("normalizeUserStatus", () => {
+  it("'active' (BE chữ thường) → 'Active' — KHÔNG bị guard chặn USER_INACTIVE", () => {
+    expect(normalizeUserStatus("active")).toBe("Active");
+  });
+
+  it("'suspended' (BE) → 'Locked' (fail-closed, trước đây fallback 'Active' = fail-open)", () => {
+    expect(normalizeUserStatus("suspended")).toBe("Locked");
+  });
+
+  it("đã canonical Title-case → pass-through", () => {
+    expect(normalizeUserStatus("Active")).toBe("Active");
+    expect(normalizeUserStatus("Pending Activation")).toBe("Pending Activation");
+  });
+
+  it("giá trị lạ / thiếu → 'Inactive' (fail-closed)", () => {
+    expect(normalizeUserStatus("wat")).toBe("Inactive");
+    expect(normalizeUserStatus("")).toBe("Inactive");
+    expect(normalizeUserStatus(undefined)).toBe("Inactive");
+    expect(normalizeUserStatus(null)).toBe("Inactive");
+  });
+});
 
 // ---------------------------------------------------------------------------
 // createPermissionChecker

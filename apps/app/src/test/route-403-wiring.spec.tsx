@@ -101,4 +101,38 @@ describe("ProtectedRoute consumes guardResult", () => {
     expect(screen.getByText(MODULE_CONTENT)).toBeInTheDocument();
     expect(screen.queryByText("forbidden.title")).not.toBeInTheDocument();
   });
+
+  // Regression: BE /auth/me trả status chữ THƯỜNG 'active'. Đi qua setUser (đường THẬT, có chuẩn hoá) —
+  // KHÔNG dùng seedAuth/setState (bỏ qua chuẩn hoá). Trước fix: "active" !== "Active" → USER_INACTIVE 403.
+  it("setUser('active') → chuẩn hoá 'Active' → ALLOW (vá lệch hoa/thường)", () => {
+    useAuthStore
+      .getState()
+      .setUser(
+        { id: "u1", companyId: "c1", email: "u@co.com", fullName: "U", status: "active" },
+        { "read:employee": true },
+      );
+    render(
+      <ProtectedRoute meta={hrMeta} onRedirect={() => {}}>
+        <ModulePage />
+      </ProtectedRoute>,
+    );
+    expect(screen.getByText(MODULE_CONTENT)).toBeInTheDocument();
+    expect(screen.queryByText("forbidden.reason.USER_INACTIVE")).not.toBeInTheDocument();
+  });
+
+  it("setUser('suspended') → chuẩn hoá 'Locked' → SHOW_403 USER_INACTIVE (fail-closed)", () => {
+    useAuthStore
+      .getState()
+      .setUser(
+        { id: "u1", companyId: "c1", email: "u@co.com", fullName: "U", status: "suspended" },
+        { "read:employee": true },
+      );
+    render(
+      <ProtectedRoute meta={hrMeta} onRedirect={() => {}}>
+        <ModulePage />
+      </ProtectedRoute>,
+    );
+    expect(screen.getByText("forbidden.reason.USER_INACTIVE")).toBeInTheDocument();
+    expect(screen.queryByText(MODULE_CONTENT)).not.toBeInTheDocument();
+  });
 });
