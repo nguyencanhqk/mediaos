@@ -21,6 +21,10 @@
  *      trong dải (total khớp) + biên NGOÀI dải → 0 row.
  *   E9 [QA-04 — FIX Đội-3 MEDIUM]  event_type filter /auth/security-events: eq exact — lọc 1 loại trả
  *      đúng 1 row, KHÔNG lẫn event loại khác cùng user.
+ *   S10 [QA-04 — FIX Đội-3 MEDIUM]  status filter /auth/login-logs: status=success CHỈ trả success-rows
+ *      (KHÔNG lẫn failed/blocked) + sort=status/order=asc + no-filter (phủ branch repo cho coverage gate).
+ *   S11 [QA-04 — FIX Đội-3 MEDIUM]  severity filter /auth/security-events: severity=high CHỈ trả high-rows
+ *      (KHÔNG lẫn medium/low) + sort=severity/event_type + from/to range + no-filter (phủ branch repo).
  *
  * PIN theo CẶP SEED THẬT ('view','audit-log') — KHÔNG theo mã FE (bài học drift S1-FND-MODULE).
  */
@@ -445,5 +449,127 @@ describe.skipIf(!runDb)("S2-AUTH-BE-5 auth-logs viewer deny/scope/mask/append-on
     for (const row of filtered.body.data as Array<Record<string, unknown>>) {
       expect(row.event_type).not.toBe("EMAIL_CHANGED");
     }
+  });
+
+  // ── S10: status filter — eq exact, CHỈ success-rows; + sort/order/no-filter (phủ branch repo) ──
+  // FIX Đội-3 (MEDIUM): trước đây CHƯA có int-test positive cho status (V7 chỉ phủ reject enum sai;
+  // P3 dùng user_id KHÔNG kèm status). Subject riêng (company A) 3 row KHÁC status cho CÙNG user —
+  // KHÔNG đụng userA1 (giữ P3 = 2). status=success → CHỈ success. Kèm sort=status&order=asc +
+  // no-filter để phủ orderBy(status-col/asc) + buildWhere(no-conds) login-log.repository cho coverage
+  // gate ≥80% (HARD — KHÔNG hạ ngưỡng, KHÔNG tắt type-check).
+  it("S10 — login-logs status=success → CHỈ success-rows + sort=status asc (phủ branch repo)", async () => {
+    const email = `subjStatus-${TAG}@a.test`;
+    const subj = await seedUser(direct, A.companyId, email);
+    await insertLoginLog(direct, A.companyId, subj, email, "success", { i: 0 });
+    await insertLoginLog(direct, A.companyId, subj, email, "failed", { i: 1 });
+    await insertLoginLog(direct, A.companyId, subj, email, "blocked", { i: 2 });
+
+    // Sanity: KHÔNG filter status (user_id) → cả 3 row (chứng minh filter thực sự thu hẹp 3→1).
+    const all = await api(app)
+      .get(`/auth/login-logs?user_id=${subj}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(all.status, JSON.stringify(all.body)).toBe(200);
+    expect(all.body.pagination.total).toBe(3);
+
+    // status=success → đúng 1 row, mọi row.status==='success', KHÔNG lẫn failed/blocked.
+    const filtered = await api(app)
+      .get(`/auth/login-logs?user_id=${subj}&status=success`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(filtered.status, JSON.stringify(filtered.body)).toBe(200);
+    expect(filtered.body.data.length).toBe(1);
+    expect(filtered.body.pagination.total).toBe(1);
+    for (const row of filtered.body.data as Array<Record<string, unknown>>) {
+      expect(row.status).toBe("success");
+      expect(row.status).not.toBe("failed");
+      expect(row.status).not.toBe("blocked");
+    }
+
+    // sort=status&order=asc → ORDER BY login_status ASC (phủ orderBy(status-col, asc) repo).
+    const sorted = await api(app)
+      .get(`/auth/login-logs?user_id=${subj}&sort=status&order=asc`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(sorted.status, JSON.stringify(sorted.body)).toBe(200);
+    expect(sorted.body.data.length).toBe(3);
+    const statuses = (sorted.body.data as Array<{ status: string }>).map((r) => r.status);
+    expect(statuses).toEqual([...statuses].sort());
+
+    // No-filter list (KHÔNG user_id/status/date) → buildWhere trả undefined (phủ nhánh no-conds repo).
+    const noFilter = await api(app)
+      .get(`/auth/login-logs`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(noFilter.status, JSON.stringify(noFilter.body)).toBe(200);
+    expect(noFilter.body.pagination.total).toBeGreaterThanOrEqual(3);
+  });
+
+  // ── S11: severity filter — eq exact, CHỈ high; + sort/event_type/date-range/no-filter (phủ branch repo) ──
+  // FIX Đội-3 (MEDIUM): trước đây CHƯA có int-test positive cho severity (V7 chỉ phủ reject enum sai;
+  // E9 phủ event_type). Subject riêng (company A) 3 event KHÁC severity + KHÁC event_type cho CÙNG user —
+  // KHÔNG đụng userA1 (giữ P3 = 1). severity=high → CHỈ high. Kèm sort=severity/event_type + from/to range +
+  // no-filter để phủ orderBy(severity/event_type) + buildWhere(date/no-conds) security-event.repository cho
+  // coverage gate ≥80% (HARD — KHÔNG hạ ngưỡng, KHÔNG tắt type-check).
+  it("S11 — security-events severity=high → CHỈ high-rows + sort/date-range (phủ branch repo)", async () => {
+    const email = `subjSev-${TAG}@a.test`;
+    const subj = await seedUser(direct, A.companyId, email);
+    await insertSecurityEvent(direct, A.companyId, subj, null, "ACCOUNT_RECOVERY", "high", {
+      i: 0,
+    });
+    await insertSecurityEvent(direct, A.companyId, subj, null, "MFA_DISABLED", "medium", { i: 1 });
+    await insertSecurityEvent(direct, A.companyId, subj, null, "SUSPICIOUS_LOGIN", "low", { i: 2 });
+
+    // Sanity: KHÔNG filter severity (user_id) → cả 3 row (chứng minh filter thực sự thu hẹp 3→1).
+    const all = await api(app)
+      .get(`/auth/security-events?user_id=${subj}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(all.status, JSON.stringify(all.body)).toBe(200);
+    expect(all.body.pagination.total).toBe(3);
+
+    // severity=high → đúng 1 row, mọi row.severity==='high', KHÔNG lẫn medium/low.
+    const filtered = await api(app)
+      .get(`/auth/security-events?user_id=${subj}&severity=high`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(filtered.status, JSON.stringify(filtered.body)).toBe(200);
+    expect(filtered.body.data.length).toBe(1);
+    expect(filtered.body.pagination.total).toBe(1);
+    for (const row of filtered.body.data as Array<Record<string, unknown>>) {
+      expect(row.severity).toBe("high");
+      expect(row.severity).not.toBe("medium");
+      expect(row.severity).not.toBe("low");
+    }
+
+    // sort=severity&order=asc → ORDER BY severity ASC (phủ orderBy(severity-col, asc) repo).
+    const bySev = await api(app)
+      .get(`/auth/security-events?user_id=${subj}&sort=severity&order=asc`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(bySev.status, JSON.stringify(bySev.body)).toBe(200);
+    expect(bySev.body.data.length).toBe(3);
+    const sevs = (bySev.body.data as Array<{ severity: string }>).map((r) => r.severity);
+    expect(sevs).toEqual([...sevs].sort());
+
+    // sort=event_type&order=asc → ORDER BY event_type ASC (phủ orderBy(event_type-col) repo).
+    const byType = await api(app)
+      .get(`/auth/security-events?user_id=${subj}&sort=event_type&order=asc`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(byType.status, JSON.stringify(byType.body)).toBe(200);
+    const types = (byType.body.data as Array<{ event_type: string }>).map((r) => r.event_type);
+    expect(types).toEqual([...types].sort());
+
+    // from/to range trên created_at (event ~now): dải bao now → cả 3 (phủ gte+lte branch); to_date quá khứ → 0.
+    const wide = await api(app)
+      .get(`/auth/security-events?user_id=${subj}&from_date=2000-01-01&to_date=2999-12-31`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(wide.status, JSON.stringify(wide.body)).toBe(200);
+    expect(wide.body.pagination.total).toBe(3);
+    const past = await api(app)
+      .get(`/auth/security-events?user_id=${subj}&to_date=2000-01-01`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(past.status, JSON.stringify(past.body)).toBe(200);
+    expect(past.body.pagination.total).toBe(0);
+
+    // No-filter list → buildWhere trả undefined (phủ nhánh no-conds repo).
+    const noFilter = await api(app)
+      .get(`/auth/security-events`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(noFilter.status, JSON.stringify(noFilter.body)).toBe(200);
+    expect(noFilter.body.pagination.total).toBeGreaterThanOrEqual(3);
   });
 });
