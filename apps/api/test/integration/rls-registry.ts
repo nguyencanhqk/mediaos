@@ -1218,6 +1218,141 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
 
+  // ── S3-ATT-DB-1 (mig 0452) ATT Core — 7 bảng MỚI DB-04 §7 ─────────────────────
+  // company_id NOT NULL + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  // attendance_logs/_adjustment_items/remote_work_request_approvals APPEND-ONLY (app SELECT,INSERT) — harness
+  // mutate-deny dùng direct (superuser) để seed. KHÔNG skipNoContext (mọi hàng tenant-scoped, không hàng global).
+  // FK target THẬT: employee_id → employee_profiles · department_id → org_units.
+  {
+    name: "shifts",
+    table: "shifts",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO shifts (company_id, shift_code, name, required_working_minutes)
+         VALUES ($1, $2, 'rls-shift', 480) RETURNING id`,
+        [t.companyId, `rls-sh-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "shift_assignments",
+    table: "shift_assignments",
+    seedRow: async (direct, t) => {
+      const shiftRes = await direct.query(
+        `INSERT INTO shifts (company_id, shift_code, name, required_working_minutes)
+         VALUES ($1, $2, 'rls-sa-shift', 480) RETURNING id`,
+        [t.companyId, `rls-sash-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO shift_assignments
+           (company_id, shift_id, assignment_scope, effective_from)
+         VALUES ($1, $2, 'Company', '2026-06-01') RETURNING id`,
+        [t.companyId, shiftRes.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "attendance_rules",
+    table: "attendance_rules",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO attendance_rules
+           (company_id, rule_code, name, rule_scope, effective_from)
+         VALUES ($1, $2, 'rls-rule', 'Company', '2026-06-01') RETURNING id`,
+        [t.companyId, `rls-ru-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "attendance_logs",
+    table: "attendance_logs",
+    // APPEND-ONLY (app SELECT,INSERT). Seed direct (superuser). FK employee_id → employee_profiles.
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `al-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO attendance_logs (company_id, employee_id, work_date, log_type, source)
+         VALUES ($1, $2, '2026-06-03', 'Check-in', 'WEB') RETURNING id`,
+        [t.companyId, emp.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "attendance_adjustment_items",
+    table: "attendance_adjustment_items",
+    // APPEND-ONLY (app SELECT,INSERT). Parent attendance_adjustment_requests (old user_id NOT NULL kept).
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `aai-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const req = await direct.query(
+        `INSERT INTO attendance_adjustment_requests
+           (company_id, user_id, employee_id, work_date, request_type, reason, status, requested_check_in_at)
+         VALUES ($1, $2, $3, '2026-06-03', 'MISSING_CHECK_IN', 'rls', 'pending', '2026-06-03T02:00:00Z')
+         RETURNING id`,
+        [t.companyId, u, emp.rows[0].id],
+      );
+      const r = await direct.query(
+        `INSERT INTO attendance_adjustment_items (company_id, request_id, field_name, new_value)
+         VALUES ($1, $2, 'check_in_at', '"2026-06-03T01:00:00Z"'::jsonb) RETURNING id`,
+        [t.companyId, req.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "remote_work_requests",
+    table: "remote_work_requests",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `rwr-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO remote_work_requests
+           (company_id, employee_id, request_type, start_date, end_date, reason, requested_by, status)
+         VALUES ($1, $2, 'Remote', '2026-06-03', '2026-06-03', 'rls', $3, 'Pending') RETURNING id`,
+        [t.companyId, emp.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "remote_work_request_approvals",
+    table: "remote_work_request_approvals",
+    // APPEND-ONLY (app SELECT,INSERT). Parent remote_work_requests.
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `rwra-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const rwr = await direct.query(
+        `INSERT INTO remote_work_requests
+           (company_id, employee_id, request_type, start_date, end_date, reason, requested_by, status)
+         VALUES ($1, $2, 'Remote', '2026-06-03', '2026-06-03', 'rls', $3, 'Pending') RETURNING id`,
+        [t.companyId, emp.rows[0].id, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO remote_work_request_approvals
+           (company_id, remote_work_request_id, step_order, approver_user_id, action)
+         VALUES ($1, $2, 1, $3, 'Submitted') RETURNING id`,
+        [t.companyId, rwr.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
   // ── G11 HR — Leave (mig 0062) ────────────────────────────────────────────────
   {
     name: "leave_types",

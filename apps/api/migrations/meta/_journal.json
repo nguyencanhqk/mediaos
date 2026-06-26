@@ -925,6 +925,13 @@
       "when": 1717500650000,
       "tag": "0451_s2_hrbe4_profile_change_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1717500655000,
+      "tag": "0452_s3_attdb1_att_core",
+      "breakpoints": true
     }
   ]
 }
