@@ -19,6 +19,7 @@ import { AuditService } from "../events/audit.service";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { PasswordService } from "../auth/password.service";
 import { DataScopeService } from "../permission/data-scope.service";
+import { PermissionService } from "../permission/permission.service";
 import { SecurityPolicyService } from "../security-policy/security-policy.service";
 import { SequenceService } from "../foundation/sequences/sequence.service";
 import {
@@ -26,6 +27,11 @@ import {
   SequenceNotFoundError,
 } from "../foundation/sequences/sequence.types";
 import { isUniqueViolation } from "../common/db-error";
+// S2-INT-1: pure (non-provider) snapshot helper — guarantees the user.created audit never carries
+// password_hash/normalized_email (BẤT BIẾN #3). Importing the function does NOT pull AuthUsersService
+// into HR's DI graph (no module cycle).
+import { authUserSnapshot } from "../users/auth-users.repository";
+import type { User } from "../db/schema";
 import { HrWriteRepository, type EmployeeUpdateData } from "./hr-write.repository";
 
 type RequestUser = { id: string; companyId: string };
@@ -72,6 +78,7 @@ export class HrWriteService {
     private readonly password: PasswordService,
     private readonly securityPolicy: SecurityPolicyService,
     private readonly dataScope: DataScopeService,
+    private readonly permissions: PermissionService,
   ) {}
 
   /**
@@ -92,10 +99,36 @@ export class HrWriteService {
     }
   }
 
+  /**
+   * S2-INT-1 — gate the AUTH-create arm of employee creation. The PermissionGuard only gated
+   * create:employee; minting a brand-new login account additionally requires create:user (fail-closed).
+   * Called BEFORE any write/sequence allocation so a deny leaves zero side effects (acceptance #3).
+   */
+  private async assertCanProvisionUser(user: RequestUser): Promise<void> {
+    const decision = await this.permissions.can({
+      userId: user.id,
+      companyId: user.companyId,
+      action: "create",
+      resourceType: "user",
+    });
+    if (!decision.allow) {
+      throw new ForbiddenException(
+        "AUTH-ERR-USER-PROVISION-DENIED: creating a login account requires the create:user permission",
+      );
+    }
+  }
+
   // ── Create ───────────────────────────────────────────────────────────────────────
 
   async createEmployee(user: RequestUser, dto: CreateHrEmployeeRequest) {
     await this.assertWriteScope(user, "create");
+    // S2-INT-1: provisioning a NEW login account is an AUTH write — an actor with create:employee alone
+    // must not be able to mint accounts. Linking an EXISTING user (dto.userId) creates no AUTH row, so
+    // only create:employee is required there. Gate runs before code allocation → deny = 0 side effects.
+    const willProvisionUser = !dto.userId && Boolean(dto.email);
+    if (willProvisionUser) {
+      await this.assertCanProvisionUser(user);
+    }
     const manualCode = dto.employeeCode ?? null;
     // Auto-code is allocated in its OWN tx BEFORE the insert tx (gaps OK, dups impossible).
     const autoCode = manualCode ? null : await this.allocateEmployeeCode(user.companyId);
@@ -113,7 +146,7 @@ export class HrWriteService {
           }
         }
 
-        const userId = await this.resolveUserId(tx, user.companyId, dto);
+        const { userId, provisioned } = await this.resolveUserId(tx, user.companyId, dto, user.id);
         await this.assertReferencesValid(tx, user.companyId, {
           orgUnitId: dto.orgUnitId,
           positionId: dto.positionId,
@@ -141,6 +174,18 @@ export class HrWriteService {
 
         if (dto.directManagerId && userId) {
           await this.repo.insertDirectManagerEmrTx(tx, user.companyId, userId, dto.directManagerId);
+        }
+
+        // S2-INT-1: audit the AUTH side too when a brand-new account was minted — same tx as the HR
+        // audit (BẤT BIẾN #2: both commit or both roll back). authUserSnapshot strips password_hash (#3).
+        if (provisioned) {
+          await this.audit.record(tx, {
+            action: "user.created",
+            objectType: "user",
+            objectId: provisioned.id,
+            actorUserId: user.id,
+            after: authUserSnapshot(provisioned),
+          });
         }
 
         await this.audit.record(tx, {
@@ -383,16 +428,29 @@ export class HrWriteService {
     }
   }
 
-  /** Resolve an existing user or provision a login account (mirrors the legacy create path). */
+  /**
+   * Resolve an existing user or provision a login account (mirrors the legacy create path).
+   * Returns the resolved `userId` plus `provisioned` — the freshly-minted row when (and only when) a
+   * new account was created, so the caller can emit a `user.created` audit (S2-INT-1). Keep
+   * `provisioned` confined to `authUserSnapshot`; it carries password_hash and must never be returned
+   * to the client or logged.
+   */
   private async resolveUserId(
     tx: TenantTx,
     companyId: string,
     dto: CreateHrEmployeeRequest,
-  ): Promise<string> {
+    actorUserId: string,
+  ): Promise<{ userId: string; provisioned: User | null }> {
     if (dto.userId) {
       const existing = await this.repo.findLinkableUserTx(tx, companyId, dto.userId);
       if (!existing) throw new NotFoundException("User not found in this company");
-      return dto.userId;
+      // Enforce "1 user ↔ ≤1 active employee" up-front (exceptId=null: no existing row on create).
+      // The partial-unique index remains the authoritative DB backstop against a race.
+      const clash = await this.repo.findActiveByUserIdTx(tx, companyId, dto.userId, null);
+      if (clash) {
+        throw new ConflictException("User is already linked to another active employee");
+      }
+      return { userId: dto.userId, provisioned: null };
     }
     if (!dto.email) {
       throw new BadRequestException("Provide userId, or email to create a login account");
@@ -410,9 +468,10 @@ export class HrWriteService {
       email: dto.email,
       fullName: dto.fullName ?? null,
       passwordHash,
+      createdBy: actorUserId,
     });
     if (!created) throw new Error("Failed to create login account");
-    return created.id;
+    return { userId: created.id, provisioned: created };
   }
 
   /**

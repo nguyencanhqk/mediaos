@@ -26,6 +26,8 @@ const OTHER_USER = "22222222-2222-2222-2222-222222222222";
 
 const actorA = { id: ACTOR_ID, companyId: COMPANY_A };
 const FAKE_TX = { __tx: true };
+/** The enum fields the contract defaults; supplied explicitly in unit tests that bypass the schema. */
+const baseEnums = { workType: "offline", employmentType: "full_time", salaryType: "monthly" };
 
 /** Keys that must NEVER appear in an audit before/after payload (BẤT BIẾN #3). */
 const FORBIDDEN_AUDIT_KEYS = [
@@ -56,7 +58,15 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     insertStatusHistoryTx: vi.fn().mockResolvedValue(undefined),
     findActiveByUserIdTx: vi.fn().mockResolvedValue(undefined),
     findLinkableUserTx: vi.fn().mockResolvedValue({ id: OTHER_USER }),
-    createUserTx: vi.fn().mockResolvedValue({ id: OTHER_USER }),
+    createUserTx: vi.fn().mockResolvedValue({
+      id: OTHER_USER,
+      email: "provisioned@a.test",
+      fullName: "Provisioned User",
+      status: "active",
+      lockedAt: null,
+      lockedReason: null,
+      createdAt: new Date(),
+    }),
     lockUserTx: vi.fn().mockResolvedValue(undefined),
     orgUnitActiveTx: vi.fn().mockResolvedValue(true),
     positionActiveTx: vi.fn().mockResolvedValue(true),
@@ -83,6 +93,8 @@ function makeService(opts: { repo?: ReturnType<typeof makeRepo>; sequence?: unkn
   const securityPolicy = { assertEmailDomainAllowedTx: vi.fn().mockResolvedValue(true) };
   // Default: Company scope → assertWriteScope passes. Tests can override to assert fail-closed.
   const dataScope = { resolveAndAssert: vi.fn().mockResolvedValue("Company") };
+  // S2-INT-1 create:user gate. Default allow → the provision arm passes; tests override to assert deny.
+  const permissions = { can: vi.fn().mockResolvedValue({ allow: true, reason: "allow" }) };
   const svc = new HrWriteService(
     repo as never,
     db as never,
@@ -91,8 +103,9 @@ function makeService(opts: { repo?: ReturnType<typeof makeRepo>; sequence?: unkn
     password as never,
     securityPolicy as never,
     dataScope as never,
+    permissions as never,
   );
-  return { svc, repo, db, audit, sequence, dataScope };
+  return { svc, repo, db, audit, sequence, dataScope, permissions };
 }
 
 function assertNoSensitiveAuditKeys(audit: { record: ReturnType<typeof vi.fn> }) {
@@ -302,6 +315,7 @@ describe("HrWriteService.createEmployee", () => {
     const sequence = { nextCode: vi.fn() };
     const password = { hash: vi.fn() };
     const securityPolicy = { assertEmailDomainAllowedTx: vi.fn() };
+    const permissions = { can: vi.fn().mockResolvedValue({ allow: true, reason: "allow" }) };
     const svc = new HrWriteService(
       repo as never,
       db as never,
@@ -310,6 +324,7 @@ describe("HrWriteService.createEmployee", () => {
       password as never,
       securityPolicy as never,
       dataScope as never,
+      permissions as never,
     );
     await expect(svc.createEmployee(actorA, { userId: OTHER_USER } as never)).rejects.toThrow(
       ForbiddenException,
@@ -357,6 +372,87 @@ describe("HrWriteService.createEmployee", () => {
     );
     expect(res.employeeCode).toBe("EMP0001");
     assertNoSensitiveAuditKeys(audit);
+  });
+});
+
+// ─── S2-INT-1 — employee↔user provisioning integration ────────────────────────────────
+
+describe("HrWriteService.createEmployee — S2-INT-1 user provisioning", () => {
+  const provisionDto = {
+    email: "new.hire@a.test",
+    fullName: "New Hire",
+    workType: "offline",
+    employmentType: "full_time",
+    salaryType: "monthly",
+  };
+
+  it("provision arm: requires create:user, mints the account, audits BOTH user.created + employee create", async () => {
+    const { svc, repo, audit, permissions } = makeService();
+    const res = await svc.createEmployee(actorA, provisionDto as never);
+
+    // create:user was checked for the provision arm.
+    expect(permissions.can).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "create", resourceType: "user", companyId: COMPANY_A }),
+    );
+    // account minted with the actor recorded as creator.
+    expect(repo.createUserTx).toHaveBeenCalledWith(
+      FAKE_TX,
+      COMPANY_A,
+      expect.objectContaining({ email: provisionDto.email, createdBy: ACTOR_ID }),
+    );
+    // BOTH sides audited, in the same tx.
+    expect(audit.record).toHaveBeenCalledWith(
+      FAKE_TX,
+      expect.objectContaining({ action: "user.created", objectType: "user", objectId: OTHER_USER }),
+    );
+    expect(audit.record).toHaveBeenCalledWith(
+      FAKE_TX,
+      expect.objectContaining({ action: "create", objectType: "employee" }),
+    );
+    expect(res).toEqual({ id: EMP_ID, employeeCode: "EMP0001", userId: OTHER_USER });
+    // BẤT BIẾN #3: the user.created snapshot must never carry password_hash / secrets.
+    for (const call of audit.record.mock.calls) {
+      const entry = call[1] as { after?: Record<string, unknown> };
+      if (entry.after && typeof entry.after === "object") {
+        expect(Object.keys(entry.after)).not.toContain("passwordHash");
+        expect(Object.keys(entry.after)).not.toContain("password_hash");
+        expect(Object.keys(entry.after)).not.toContain("normalizedEmail");
+      }
+    }
+  });
+
+  it("provision arm DENY (no create:user) → 403 with ZERO side effects (no code, no rows, no audit)", async () => {
+    const { svc, repo, audit, sequence, permissions } = makeService();
+    permissions.can.mockResolvedValue({ allow: false, reason: "deny-default" });
+
+    await expect(svc.createEmployee(actorA, provisionDto as never)).rejects.toThrow(
+      ForbiddenException,
+    );
+    // Gated BEFORE any write or sequence allocation.
+    expect((sequence as { nextCode: ReturnType<typeof vi.fn> }).nextCode).not.toHaveBeenCalled();
+    expect(repo.createUserTx).not.toHaveBeenCalled();
+    expect(repo.createTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("link-existing arm: does NOT require create:user and writes NO user.created audit", async () => {
+    const { svc, repo, audit, permissions } = makeService();
+    await svc.createEmployee(actorA, { userId: OTHER_USER, ...baseEnums } as never);
+
+    expect(permissions.can).not.toHaveBeenCalled();
+    expect(repo.createUserTx).not.toHaveBeenCalled();
+    const auditedActions = audit.record.mock.calls.map((c) => (c[1] as { action: string }).action);
+    expect(auditedActions).toContain("create");
+    expect(auditedActions).not.toContain("user.created");
+  });
+
+  it("link-existing arm: 409 when the target user is already linked to another active employee", async () => {
+    const repo = makeRepo({ findActiveByUserIdTx: vi.fn().mockResolvedValue({ id: "other-emp" }) });
+    const { svc, repo: r } = makeService({ repo });
+    await expect(
+      svc.createEmployee(actorA, { userId: OTHER_USER, ...baseEnums } as never),
+    ).rejects.toThrow(ConflictException);
+    expect(r.createTx).not.toHaveBeenCalled();
   });
 });
 
