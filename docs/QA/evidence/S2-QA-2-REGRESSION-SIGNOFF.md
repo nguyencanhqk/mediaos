@@ -14,7 +14,7 @@ records the regression mapping below.
 
 | File | What |
 | --- | --- |
-| `apps/api/test/integration/hr-employee-write.int-spec.ts` | +4 cases: update happy-path (TC-009), link-user endpoint (TC-011), link unique-active (TC-012), manager self-ref (TC-015). |
+| `apps/api/test/integration/hr-employee-write.int-spec.ts` | +5 cases: update happy-path (TC-009), link-user endpoint (TC-011), link unique-active (TC-012), manager self-ref (TC-015), inactive-department create (TC-008). |
 | `apps/app/src/test/hr-flow-smoke.spec.tsx` | NEW — §17.3 journey spine: guard → list → detail → create → logout (TC-003/005/007/008/010). |
 | `docs/QA/evidence/S2-QA-2-REGRESSION-SIGNOFF.md` | This sign-off. |
 
@@ -49,7 +49,7 @@ EMP code sequence — the monotonic-code assertion (EMP0001/EMP0002) stays deter
 | HR-S2-TC-005 | Cross-tenant → 403/404, no leak | `hr-employee-write.int-spec.ts` (PATCH→404), `employees-rbac-scope.int-spec.ts` | ✅ |
 | HR-S2-TC-006 | Create employee → 201 + auto code | `hr-employee-write.int-spec.ts` (monotonic EMP0001/0002) | ✅ |
 | HR-S2-TC-007 | Create duplicate / already-linked user → conflict | `hr-employee-write.int-spec.ts`, `s2-int1-employee-user-provision.int-spec.ts` | ✅ |
-| HR-S2-TC-008 | Create w/ inactive ref → validation 422 | `s2-int1-...` (bad orgUnit → 422 rollback); `hr-write.service.spec.ts` | ✅ |
+| HR-S2-TC-008 | Create w/ inactive ref → validation 422 | `hr-employee-write.int-spec.ts` **(NEW — real inactive org_unit → 422 HR-ERR-DEPARTMENT-INACTIVE + no orphan user)**; also `s2-int1-...` (nonexistent ref → 422 rollback) | ✅ |
 | HR-S2-TC-009 | **Update employee → 200 + audit** | `hr-employee-write.int-spec.ts` **(NEW)** | ✅ |
 | HR-S2-TC-010 | Change status → 200 + status history | `hr-employee-write.int-spec.ts` | ✅ |
 | HR-S2-TC-011 | **Link user → user_id set + audit** | `hr-employee-write.int-spec.ts` **(NEW — dedicated endpoint)** | ✅ |
@@ -72,7 +72,7 @@ EMP code sequence — the monotonic-code assertion (EMP0001/EMP0002) stays deter
 | FE-S2-TC-007 | Open employee detail → data + sensitive per perm | `EmployeeDetailPage.spec.tsx`, **`hr-flow-smoke.spec.tsx`** | ✅ |
 | FE-S2-TC-008 | Create employee → submit OK | `EmployeeFormPage.spec.tsx`, **`hr-flow-smoke.spec.tsx`** | ✅ |
 | FE-S2-TC-009 | Edit employee → PATCH dirty only, invalidate | `EmployeeFormPage.spec.tsx` | ✅ |
-| FE-S2-TC-010 | Logout → cache clear, back to login | **`hr-flow-smoke.spec.tsx`** (store cleared) | ✅ |
+| FE-S2-TC-010 | Logout → cache clear, back to login | **`hr-flow-smoke.spec.tsx`** asserts the auth store is cleared (isAuthenticated/user/capabilities). The query-cache `clear()` runs in the app's logout handler (web-core), wired to this same store action — referenced, not re-asserted in this unit smoke. | ✅ |
 
 > States (loading / empty / error) per §17.3 are exhaustively asserted in the per-page specs
 > (`EmployeeListPage.spec` / `EmployeeDetailPage.spec` / `EmployeeFormPage.spec`); `hr-flow-smoke`
@@ -110,7 +110,7 @@ EMP code sequence — the monotonic-code assertion (EMP0001/EMP0002) stays deter
 | 6 | Response/error/pagination per API-01 | response-envelope interceptor + list meta in specs | ✅ |
 | 7 | Audit on important AUTH/HR actions | TC-009/010/011 assert audit rows; `audit-*` int-specs | ✅ |
 | 8 | FE not hard-coded by role name | `useCan`/`PermissionGate` (engine pairs) in all HR specs | ✅ |
-| 9 | Query cache cleared on logout | TC-010 (store + queryClient wired to logout) | ✅ |
+| 9 | Query cache cleared on logout | TC-010 — smoke asserts the auth store is cleared; `queryClient.clear()` is performed by web-core's logout handler (wired to the same store action) | ✅ |
 | 10 | P0 unit/API tests pass in CI | full-suite run below | ✅ |
 | 11 | Staging login + HR core flow | FE smoke spine + API happy-paths | ✅ |
 | 12 | No blocker/critical bug | — | ✅ |
@@ -124,12 +124,12 @@ EMP code sequence — the monotonic-code assertion (EMP0001/EMP0002) stays deter
 $ bash scripts/lane-db-setup.sh s2qa2
 $ export LANE_DB=mediaos_s2qa2 && pnpm --filter @mediaos/api test
   Test Files  204 passed | 1 skipped (205)
-       Tests  3024 passed | 11 skipped (3035)
+       Tests  3025 passed | 11 skipped (3036)
 
-# Targeted — HR write core (incl. the 4 new S2-QA-2 cases)
+# Targeted — HR write core (incl. the 5 new S2-QA-2 cases)
 $ pnpm --filter @mediaos/api exec vitest run test/integration/hr-employee-write.int-spec.ts
   Test Files  1 passed (1)
-       Tests  10 passed (10)
+       Tests  11 passed (11)
 
 # Frontend — apps/app (incl. hr-flow-smoke)
 $ pnpm --filter @mediaos/app test

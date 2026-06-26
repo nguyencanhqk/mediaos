@@ -323,6 +323,31 @@ describe.skipIf(!hasLaneDb)("S2-HR-BE-2 HR write core (HTTP, real permission eng
     expect(await countAudit(direct, A.companyId, "update")).toBe(before);
   });
 
+  // ── S2-QA-2: create referencing an INACTIVE department (HR-S2-TC-008) ─────────────────────
+  it("create with an inactive department → 422 (HR-ERR-DEPARTMENT-INACTIVE), no orphan user", async () => {
+    const token = await login(app, A.slug, hrEmail);
+    // A real org_unit that EXISTS but is status='inactive' — distinct from a non-existent ref.
+    const dept = await direct.query(
+      `INSERT INTO org_units (company_id, name, status) VALUES ($1, $2, 'inactive') RETURNING id`,
+      [A.companyId, `Inactive Dept ${A.slug}`],
+    );
+    const inactiveDept = dept.rows[0].id as string;
+
+    const email = `inactdept@${A.slug}.test`;
+    const res = await api(app)
+      .post("/hr/employees")
+      .set(bearer(token))
+      .send({ email, fullName: "Inactive Dept", orgUnitId: inactiveDept });
+    expect(res.status, JSON.stringify(res.body)).toBe(422);
+
+    // The login account is provisioned inside the tx, then the ref check fails → whole tx rolls back.
+    const u = await direct.query(
+      `SELECT id FROM users WHERE company_id = $1 AND email = $2 AND deleted_at IS NULL`,
+      [A.companyId, email],
+    );
+    expect(u.rows).toHaveLength(0);
+  });
+
   // ── S2-QA-2: dedicated link-user endpoint (HR-S2-TC-011) ──────────────────────────────────
   it("link-user endpoint: link an unlinked employee to an existing user → 201, sets user_id + one 'link-user' audit", async () => {
     const token = await login(app, A.slug, hrEmail);
