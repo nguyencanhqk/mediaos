@@ -121,6 +121,7 @@ export {
   type SessionUser,
   type SessionCompany,
   type SessionContext,
+  normalizeUserStatus,
   // Route metadata & guard
   type LayoutType,
   type RouteMeta,
