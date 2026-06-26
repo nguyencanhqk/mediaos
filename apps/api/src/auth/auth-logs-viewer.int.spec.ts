@@ -17,6 +17,10 @@
  *      ip_address/user_agent vẫn trả cho admin đủ quyền.
  *   A6 [QA-06 / BẤT BIẾN #2]  Append-only: app-role UPDATE/DELETE login_logs + user_security_events → DENIED.
  *   V7 [QA-04]  Validate query whitelist: status sai dải → 400 (VALIDATION-ERR field-level).
+ *   R8 [QA-04 — FIX Đội-3 MEDIUM]  from_date/to_date range: gte/lte trên created_at — bao đúng subset
+ *      trong dải (total khớp) + biên NGOÀI dải → 0 row.
+ *   E9 [QA-04 — FIX Đội-3 MEDIUM]  event_type filter /auth/security-events: eq exact — lọc 1 loại trả
+ *      đúng 1 row, KHÔNG lẫn event loại khác cùng user.
  *
  * PIN theo CẶP SEED THẬT ('view','audit-log') — KHÔNG theo mã FE (bài học drift S1-FND-MODULE).
  */
@@ -84,23 +88,38 @@ async function insertLoginLog(
   email: string,
   status: "success" | "failed" | "blocked",
   metadata: Record<string, unknown>,
+  createdAt?: string,
 ): Promise<void> {
-  await direct.query(
-    `INSERT INTO login_logs
-       (company_id, user_id, email, normalized_email, login_status, failure_reason, ip_address, user_agent, metadata)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    [
-      companyId,
-      userId,
-      email,
-      email.toLowerCase(),
-      status,
-      status === "failed" ? "WrongPassword" : null,
-      SEED_IP,
-      SEED_UA,
-      JSON.stringify(metadata),
-    ],
-  );
+  // created_at chỉ chèn khi seed cần timestamp TƯỜNG MINH (test range from_date/to_date);
+  // bỏ qua ⇒ DEFAULT now() (giữ NGUYÊN hành vi mọi call hiện có — additive, không phá).
+  const cols = [
+    "company_id",
+    "user_id",
+    "email",
+    "normalized_email",
+    "login_status",
+    "failure_reason",
+    "ip_address",
+    "user_agent",
+    "metadata",
+  ];
+  const vals: unknown[] = [
+    companyId,
+    userId,
+    email,
+    email.toLowerCase(),
+    status,
+    status === "failed" ? "WrongPassword" : null,
+    SEED_IP,
+    SEED_UA,
+    JSON.stringify(metadata),
+  ];
+  if (createdAt) {
+    cols.push("created_at");
+    vals.push(createdAt);
+  }
+  const placeholders = vals.map((_, i) => `$${i + 1}`).join(",");
+  await direct.query(`INSERT INTO login_logs (${cols.join(", ")}) VALUES (${placeholders})`, vals);
 }
 
 async function insertSecurityEvent(
@@ -333,5 +352,98 @@ describe.skipIf(!runDb)("S2-AUTH-BE-5 auth-logs viewer deny/scope/mask/append-on
       .set("Authorization", `Bearer ${adminToken}`);
     expect(res.status, JSON.stringify(res.body)).toBe(400);
     expect(res.body.success).toBe(false);
+  });
+
+  // ── R8: from_date/to_date range — gte/lte trên created_at, biên NGOÀI dải → 0 ────
+  // FIX Đội-3 (MEDIUM): trước đây chưa có int-test cho dải ngày; chứng minh gte/lte repo
+  // chạy thật trên DB. Subject riêng (company A) 3 row created_at TƯỜNG MINH cách xa nhau —
+  // KHÔNG đụng userA1 (giữ P3 đếm = 2). 1 row TRONG dải 2023, 2 row NGOÀI (2020 + 2025).
+  it("R8 — login-logs from_date/to_date bao đúng subset trong dải + biên ngoài → 0", async () => {
+    const email = `subjDate-${TAG}@a.test`;
+    const subj = await seedUser(direct, A.companyId, email);
+    await insertLoginLog(
+      direct,
+      A.companyId,
+      subj,
+      email,
+      "success",
+      { i: 0 },
+      "2020-01-01T00:00:00.000Z",
+    );
+    await insertLoginLog(
+      direct,
+      A.companyId,
+      subj,
+      email,
+      "success",
+      { i: 1 },
+      "2023-06-15T12:00:00.000Z",
+    );
+    await insertLoginLog(
+      direct,
+      A.companyId,
+      subj,
+      email,
+      "success",
+      { i: 2 },
+      "2025-12-31T00:00:00.000Z",
+    );
+
+    // Sanity: KHÔNG filter date → cả 3 row (chứng minh range thực sự thu hẹp 3→1).
+    const all = await api(app)
+      .get(`/auth/login-logs?user_id=${subj}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(all.status, JSON.stringify(all.body)).toBe(200);
+    expect(all.body.pagination.total).toBe(3);
+
+    // Trong dải [2023-01-01 .. 2023-12-31] → đúng 1 row (2023-06-15); total khớp subset.
+    const inRange = await api(app)
+      .get(`/auth/login-logs?user_id=${subj}&from_date=2023-01-01&to_date=2023-12-31`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(inRange.status, JSON.stringify(inRange.body)).toBe(200);
+    expect(inRange.body.data.length).toBe(1);
+    expect(inRange.body.pagination.total).toBe(1);
+    const ts = new Date(inRange.body.data[0].created_at as string).getTime();
+    expect(ts).toBeGreaterThanOrEqual(new Date("2023-01-01T00:00:00.000Z").getTime());
+    expect(ts).toBeLessThanOrEqual(new Date("2023-12-31T23:59:59.999Z").getTime());
+
+    // Biên NGOÀI dải (2024 — không có row nào) → 0 row + total 0.
+    const outRange = await api(app)
+      .get(`/auth/login-logs?user_id=${subj}&from_date=2024-01-01&to_date=2024-12-31`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(outRange.status, JSON.stringify(outRange.body)).toBe(200);
+    expect(outRange.body.data.length).toBe(0);
+    expect(outRange.body.pagination.total).toBe(0);
+  });
+
+  // ── E9: event_type filter — eq exact, KHÔNG lẫn event loại khác ────────────────
+  // FIX Đội-3 (MEDIUM): trước đây chưa có int-test cho event_type. Subject riêng (company A)
+  // có 2 event KHÁC loại cho CÙNG user — KHÔNG đụng userA1 (giữ P3 = 1). Lọc 1 loại → 1 row.
+  it("E9 — security-events event_type=PASSWORD_CHANGED → đúng 1 row, không lẫn EMAIL_CHANGED", async () => {
+    const email = `subjEv-${TAG}@a.test`;
+    const subj = await seedUser(direct, A.companyId, email);
+    await insertSecurityEvent(direct, A.companyId, subj, null, "PASSWORD_CHANGED", "high", {
+      i: 0,
+    });
+    await insertSecurityEvent(direct, A.companyId, subj, null, "EMAIL_CHANGED", "medium", { i: 1 });
+
+    // Sanity: KHÔNG filter type → 2 row (chứng minh filter thực sự thu hẹp 2→1).
+    const all = await api(app)
+      .get(`/auth/security-events?user_id=${subj}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(all.status, JSON.stringify(all.body)).toBe(200);
+    expect(all.body.pagination.total).toBe(2);
+
+    // Lọc event_type=PASSWORD_CHANGED → đúng 1 row, KHÔNG lẫn EMAIL_CHANGED.
+    const filtered = await api(app)
+      .get(`/auth/security-events?user_id=${subj}&event_type=PASSWORD_CHANGED`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(filtered.status, JSON.stringify(filtered.body)).toBe(200);
+    expect(filtered.body.data.length).toBe(1);
+    expect(filtered.body.pagination.total).toBe(1);
+    expect(filtered.body.data[0].event_type).toBe("PASSWORD_CHANGED");
+    for (const row of filtered.body.data as Array<Record<string, unknown>>) {
+      expect(row.event_type).not.toBe("EMAIL_CHANGED");
+    }
   });
 });
