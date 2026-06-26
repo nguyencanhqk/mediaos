@@ -11,6 +11,7 @@ import {
   orgUnits,
   positions,
   users,
+  type User,
 } from "../db/schema";
 
 /**
@@ -178,25 +179,25 @@ export class HrWriteRepository {
 
   /**
    * The ACTIVE employee profile linked to `userId`, excluding `exceptId` — used to enforce
-   * "1 user ↔ ≤1 active employee" before a link. The partial unique index is the DB backstop.
+   * "1 user ↔ ≤1 active employee" before a link. `exceptId=null` (create path: no existing row to
+   * exclude) checks ALL active links. The partial unique index is the DB backstop either way.
    */
   async findActiveByUserIdTx(
     tx: TenantTx,
     companyId: string,
     userId: string,
-    exceptId: string,
+    exceptId: string | null,
   ): Promise<{ id: string } | undefined> {
+    const conds = [
+      eq(employeeProfiles.companyId, companyId),
+      eq(employeeProfiles.userId, userId),
+      isNull(employeeProfiles.deletedAt),
+    ];
+    if (exceptId !== null) conds.push(ne(employeeProfiles.id, exceptId));
     const [row] = await tx
       .select({ id: employeeProfiles.id })
       .from(employeeProfiles)
-      .where(
-        and(
-          eq(employeeProfiles.companyId, companyId),
-          eq(employeeProfiles.userId, userId),
-          ne(employeeProfiles.id, exceptId),
-          isNull(employeeProfiles.deletedAt),
-        ),
-      )
+      .where(and(...conds))
       .limit(1);
     return row;
   }
@@ -215,11 +216,16 @@ export class HrWriteRepository {
     return row;
   }
 
+  /**
+   * Provision a login account for a new employee. Returns the FULL row so the caller can write a
+   * `user.created` audit via `authUserSnapshot` (S2-INT-1) — keep the returned row OUT of any response
+   * or log (it carries password_hash); only `authUserSnapshot` is allowed to read it.
+   */
   async createUserTx(
     tx: TenantTx,
     companyId: string,
-    data: { email: string; fullName: string | null; passwordHash: string },
-  ) {
+    data: { email: string; fullName: string | null; passwordHash: string; createdBy: string },
+  ): Promise<User> {
     const [row] = await tx
       .insert(users)
       .values({
@@ -227,8 +233,10 @@ export class HrWriteRepository {
         email: data.email,
         fullName: data.fullName,
         passwordHash: data.passwordHash,
+        createdBy: data.createdBy,
+        updatedBy: data.createdBy,
       })
-      .returning({ id: users.id });
+      .returning();
     return row;
   }
 

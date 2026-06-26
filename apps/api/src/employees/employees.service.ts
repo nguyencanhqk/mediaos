@@ -17,11 +17,15 @@ import type {
 import { importEmployeeRowSchema } from "@mediaos/contracts";
 import { AuditService } from "../events/audit.service";
 import { DatabaseService, type TenantTx } from "../db/db.service";
+import type { User } from "../db/schema";
 import { PasswordService } from "../auth/password.service";
 import { PermissionService } from "../permission/permission.service";
 import { ValkeyService } from "../permission/valkey.service";
 import type { CanInput, PermissionDecision } from "../permission/permission.types";
 import { SecurityPolicyService } from "../security-policy/security-policy.service";
+// S2-INT-1: same pure snapshot helper the HR write core uses — guarantees the user.created audit
+// never carries password_hash/normalized_email (BẤT BIẾN #3). Pure function → no DI/module cycle.
+import { authUserSnapshot } from "../users/auth-users.repository";
 import { EmployeesRepository, type BulkEmployeeRow } from "./employees.repository";
 import { isUniqueViolation } from "../common/db-error";
 
@@ -147,9 +151,18 @@ export class EmployeesService {
     // PATCH guard. A null/absent salary is not a sensitive write (no salary is being set).
     const settingSalary = dto.baseSalary != null;
 
+    // S2-INT-1: provisioning a NEW login account here is an AUTH write — the controller only gated
+    // create:employee, so this legacy path must ALSO require create:user (parity with /hr/employees;
+    // otherwise it is a bypass of that gate). Linking an existing userId mints no account → no gate.
+    // Checked BEFORE the tx so a deny writes nothing.
+    const willProvisionUser = !dto.userId && Boolean(dto.email) && Boolean(dto.fullName);
+    if (willProvisionUser) {
+      await this.assertCanProvisionUser(user);
+    }
+
     try {
       const created = await this.db.withTenant(user.companyId, async (tx) => {
-        const userId = await this.resolveUserId(tx, user.companyId, dto);
+        const { userId, provisioned } = await this.resolveUserId(tx, user.companyId, dto, user.id);
         const rows = await this.repo.createEmployeeTx(tx, user.companyId, {
           userId,
           employeeCode: dto.employeeCode ?? null,
@@ -168,6 +181,18 @@ export class EmployeesService {
         });
         const profile = rows[0];
         if (!profile) throw new Error("Failed to create employee profile");
+
+        // S2-INT-1: audit the AUTH side when a brand-new account was minted — same tx as the employee
+        // write (atomic, BẤT BIẾN #2); authUserSnapshot strips password_hash (BẤT BIẾN #3).
+        if (provisioned) {
+          await this.auditService.record(tx, {
+            action: "user.created",
+            objectType: "user",
+            objectId: provisioned.id,
+            actorUserId: user.id,
+            after: authUserSnapshot(provisioned),
+          });
+        }
 
         // F5: keep employee_manager_relations consistent with the direct_manager_id shortcut.
         if (dto.directManagerId != null) {
@@ -287,12 +312,47 @@ export class EmployeesService {
 
   // ── F7: resolve an existing user or create a login account ──────────────────────
 
+  /**
+   * S2-INT-1 — gate the AUTH-create arm. The controller only gated create:employee; minting a login
+   * account additionally requires create:user (fail-closed). Mirrors HrWriteService.assertCanProvisionUser.
+   */
+  private async assertCanProvisionUser(user: RequestUser): Promise<void> {
+    const decision = await this.permissionService.can({
+      userId: user.id,
+      companyId: user.companyId,
+      action: "create",
+      resourceType: "user",
+    });
+    if (!decision.allow) {
+      throw new ForbiddenException(
+        "AUTH-ERR-USER-PROVISION-DENIED: creating a login account requires the create:user permission",
+      );
+    }
+  }
+
+  /**
+   * Resolve an existing user or provision a login account. Returns the resolved `userId` plus
+   * `provisioned` (the freshly-minted row, only when an account was created) so the caller can emit a
+   * `user.created` audit (S2-INT-1). Keep `provisioned` confined to authUserSnapshot — it carries
+   * password_hash and must never reach the client or a log.
+   */
   private async resolveUserId(
     tx: TenantTx,
     companyId: string,
     dto: CreateEmployeeProfileRequest,
-  ): Promise<string> {
-    if (dto.userId) return dto.userId;
+    actorUserId: string,
+  ): Promise<{ userId: string; provisioned: User | null }> {
+    if (dto.userId) {
+      // S2-INT-1: validate the user is IN-TENANT before linking — a raw FK does not check company_id,
+      // so without this a cross-tenant userId would link into this company's employee (acceptance #3).
+      const existing = await this.repo.findLinkableUserTx(tx, companyId, dto.userId);
+      if (!existing) throw new NotFoundException("User not found in this company");
+      const clash = await this.repo.findActiveByUserIdTx(tx, companyId, dto.userId, null);
+      if (clash) {
+        throw new ConflictException("User is already linked to another active employee");
+      }
+      return { userId: dto.userId, provisioned: null };
+    }
     if (!dto.email || !dto.fullName) {
       throw new BadRequestException(
         "Provide userId, or email + fullName to create a login account",
@@ -313,9 +373,10 @@ export class EmployeesService {
       email: dto.email,
       fullName: dto.fullName,
       passwordHash,
+      createdBy: actorUserId,
     });
     if (!newUser) throw new Error("Failed to create login account");
-    return newUser.id;
+    return { userId: newUser.id, provisioned: newUser };
   }
 
   // ── F5: direct_manager_id ↔ employee_manager_relations consistency ──────────────

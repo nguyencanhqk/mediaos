@@ -119,10 +119,15 @@ describe.skipIf(!hasLaneDb)("S2-HR-BE-2 HR write core (HTTP, real permission eng
     B = await seedCompany(direct, "hrwriteB");
     await seedEmployeeCodeCounter(direct, A.companyId); // B intentionally has none
 
+    // S2-INT-1: create:user is required to provision a login account via the create-employee
+    // provision arm (email/no-userId). The happy paths below create employees by email, so the HR
+    // actor needs it too. Shared by BOTH tenants (B's "no counter → 422" must still reach the
+    // sequence path, not trip the new gate).
     const WRITE_PAIRS: Array<[string, string]> = [
       ["create", "employee"],
       ["update", "employee"],
       ["change-status", "employee"],
+      ["create", "user"],
     ];
 
     hrEmail = `hr@${A.slug}.test`;
