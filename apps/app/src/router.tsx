@@ -123,6 +123,14 @@ import { MyProfilePage } from "@/routes/hr/me/MyProfilePage";
 // System
 import { UsersPage } from "@/routes/system/UsersPage";
 import { RolesPage } from "@/routes/system/RolesPage";
+import { LoginLogsPage } from "@/routes/system/auth-logs/LoginLogsPage";
+import { SecurityEventsPage } from "@/routes/system/auth-logs/SecurityEventsPage";
+import {
+  LOGIN_LOGS_PATH,
+  LOGIN_LOGS_ROUTE_META,
+  SECURITY_EVENTS_PATH,
+  SECURITY_EVENTS_ROUTE_META,
+} from "@/routes/system/auth-logs/constants";
 
 const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", EmployeeListPage);
 const hrEmployeesRoute = makeModuleRoute("/hr/employees", "hr.employees", "HR", EmployeeListPage);
@@ -247,6 +255,23 @@ const systemAuditLogsRoute = makeModuleRoute(
   ModulePlaceholder,
 );
 
+// System / Foundation — viewer nhật ký bảo mật (S2-AUTH-BE-5). RouteMeta CỤC BỘ (KHÔNG ở
+// ROUTE_REGISTRY web-core — lane không sửa web-core); dùng CÙNG buildModuleRouteContent →
+// ProtectedRoute tiêu thụ guardResult (thiếu 'view:audit-log' → 403). FOUNDATION module code.
+const systemLoginLogsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: LOGIN_LOGS_PATH,
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(LOGIN_LOGS_ROUTE_META, "FOUNDATION", <LoginLogsPage />),
+});
+const systemSecurityEventsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: SECURITY_EVENTS_PATH,
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(SECURITY_EVENTS_ROUTE_META, "FOUNDATION", <SecurityEventsPage />),
+});
+
 // ---------------------------------------------------------------------------
 // Error / public routes
 // ---------------------------------------------------------------------------
@@ -292,6 +317,8 @@ const routeTree = rootRoute.addChildren([
   systemUsersRoute,
   systemRolesRoute,
   systemAuditLogsRoute,
+  systemLoginLogsRoute,
+  systemSecurityEventsRoute,
   notFoundRoute,
 ]);
 
