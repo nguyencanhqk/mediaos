@@ -4,6 +4,9 @@
  *  §deny  — role rỗng (KHÔNG view:role / view:permission) → 403.
  *  §allow — company-admin (0444 grant view:role + view:permission) → 200 + danh sách.
  *  §no-operator — /auth/roles KHÔNG chứa role operator-audience (platform-admin …f0) — chống leo thang.
+ *
+ * Gate: hasDb && LANE_DB (DB cô lập theo lane) — thiếu LANE_DB → SKIP để KHÔNG chạm DB dev chung 'mediaos'
+ * (.env làm hasDb=true → đỏ-giả/xanh-giả) — CLAUDE.md §9.5, memory integration-test-lane-db-gate.
  */
 
 import "reflect-metadata";
@@ -54,7 +57,10 @@ async function login(app: INestApplication, slug: string, email: string): Promis
   return res.body.data.accessToken as string;
 }
 
-describe.skipIf(!hasDb)("S2-AUTH-BE-3 /auth/roles + /auth/permissions", () => {
+// Gate hasDb && LANE_DB: thiếu DB lane cô lập → SKIP (KHÔNG chạm 'mediaos' dev chung). CLAUDE.md §9.5.
+const hasLaneDb = hasDb && !!process.env.LANE_DB;
+
+describe.skipIf(!hasLaneDb)("S2-AUTH-BE-3 /auth/roles + /auth/permissions", () => {
   let app: INestApplication;
   let direct: Pool;
   let A: SeededTenant;

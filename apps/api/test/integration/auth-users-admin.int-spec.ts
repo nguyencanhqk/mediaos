@@ -9,7 +9,9 @@
  *   POST   /auth/users/:id/lock     — lock      (lock:user)   → chặn login
  *   POST   /auth/users/:id/unlock   — unlock    (unlock:user)
  *
- * Cases (gate hasDb — int-spec chỉ chạy trên DB lane có migration 0450, tránh đỏ-giả DB chung):
+ * Cases (gate hasDb && LANE_DB — int-spec chỉ chạy trên DB lane CÔ LẬP có migration 0450; thiếu LANE_DB
+ *  → SKIP để KHÔNG chạm DB dev chung 'mediaos' (.env làm hasDb=true → đỏ-giả/xanh-giả) — CLAUDE.md §9.5,
+ *  memory integration-test-lane-db-gate. Khớp tiền lệ auth-appendonly/auth-blocked-status):
  *  §deny  — user role rỗng (KHÔNG view/create/update/lock/unlock:user) → MỌI route 403 +
  *           COUNT(audit_logs action LIKE 'user.%')=0 (thiếu quyền → 0 audit, deny KHÔNG ghi audit rác).
  *  §rls   — admin A thao tác user B → 404 (RLS che, KHÔNG lộ tồn tại) + 0 audit + row B KHÔNG đổi;
@@ -104,7 +106,10 @@ async function auditSnapshotJson(direct: Pool, objectId: string): Promise<string
   return JSON.stringify(r.rows[0] ?? {});
 }
 
-describe.skipIf(!hasDb)("S2-AUTH-BE-3 /auth/users admin API", () => {
+// Gate hasDb && LANE_DB: thiếu DB lane cô lập → SKIP (KHÔNG chạm 'mediaos' dev chung). CLAUDE.md §9.5.
+const hasLaneDb = hasDb && !!process.env.LANE_DB;
+
+describe.skipIf(!hasLaneDb)("S2-AUTH-BE-3 /auth/users admin API", () => {
   let app: INestApplication;
   let direct: Pool;
   let A: SeededTenant;
