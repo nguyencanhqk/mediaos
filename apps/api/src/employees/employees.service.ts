@@ -342,7 +342,17 @@ export class EmployeesService {
     dto: CreateEmployeeProfileRequest,
     actorUserId: string,
   ): Promise<{ userId: string; provisioned: User | null }> {
-    if (dto.userId) return { userId: dto.userId, provisioned: null };
+    if (dto.userId) {
+      // S2-INT-1: validate the user is IN-TENANT before linking — a raw FK does not check company_id,
+      // so without this a cross-tenant userId would link into this company's employee (acceptance #3).
+      const existing = await this.repo.findLinkableUserTx(tx, companyId, dto.userId);
+      if (!existing) throw new NotFoundException("User not found in this company");
+      const clash = await this.repo.findActiveByUserIdTx(tx, companyId, dto.userId, null);
+      if (clash) {
+        throw new ConflictException("User is already linked to another active employee");
+      }
+      return { userId: dto.userId, provisioned: null };
+    }
     if (!dto.email || !dto.fullName) {
       throw new BadRequestException(
         "Provide userId, or email + fullName to create a login account",

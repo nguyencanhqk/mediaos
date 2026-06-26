@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, eq, ilike, isNull, ne, or } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import {
   employeeManagerRelations,
@@ -203,6 +203,48 @@ export class EmployeesRepository {
   }
 
   // ── Login account (F7 — create users row when none supplied) ───────────────────
+
+  /**
+   * S2-INT-1 — a linkable user: exists in THIS tenant and is not soft-deleted. A cross-tenant userId
+   * resolves to undefined (RLS + explicit company_id) so the caller 404s instead of FK-linking across
+   * tenants (the FK alone does not check company_id).
+   */
+  async findLinkableUserTx(
+    tx: TenantTx,
+    companyId: string,
+    userId: string,
+  ): Promise<{ id: string } | undefined> {
+    const [row] = await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.companyId, companyId), eq(users.id, userId), isNull(users.deletedAt)))
+      .limit(1);
+    return row;
+  }
+
+  /**
+   * S2-INT-1 — the ACTIVE employee profile linked to `userId` (excluding `exceptId` when given) to
+   * enforce "1 user ↔ ≤1 active employee" before a link. The partial unique index is the DB backstop.
+   */
+  async findActiveByUserIdTx(
+    tx: TenantTx,
+    companyId: string,
+    userId: string,
+    exceptId: string | null,
+  ): Promise<{ id: string } | undefined> {
+    const conds = [
+      eq(employeeProfiles.companyId, companyId),
+      eq(employeeProfiles.userId, userId),
+      isNull(employeeProfiles.deletedAt),
+    ];
+    if (exceptId !== null) conds.push(ne(employeeProfiles.id, exceptId));
+    const [row] = await tx
+      .select({ id: employeeProfiles.id })
+      .from(employeeProfiles)
+      .where(and(...conds))
+      .limit(1);
+    return row;
+  }
 
   async createUserTx(
     tx: TenantTx,

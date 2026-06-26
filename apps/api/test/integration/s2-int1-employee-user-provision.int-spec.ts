@@ -323,5 +323,11 @@ describe.skipIf(!hasLaneDb)(
       expect(created!.password_hash).not.toBe(PASSWORD);
       expect(await countAudit(direct, A.companyId, "user", "user.created")).toBe(beforeUser + 1);
     });
+
+    it("legacy /employees 2-tenant: linking a user from another company → 404", async () => {
+      const token = await login(app, A.slug, fullEmail);
+      const res = await api(app).post("/employees").set(bearer(token)).send({ userId: bUserId });
+      expect(res.status).toBe(404);
+    });
   },
 );

@@ -87,6 +87,8 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     }),
     softDeleteDirectManagerEmrTx: vi.fn().mockResolvedValue(undefined),
     insertDirectManagerEmrTx: vi.fn().mockResolvedValue(undefined),
+    findLinkableUserTx: vi.fn().mockResolvedValue({ id: EMP_USER_ID }),
+    findActiveByUserIdTx: vi.fn().mockResolvedValue(undefined),
     findUserByEmailTx: vi.fn().mockResolvedValue({ id: EMP_USER_ID }),
     findOrgUnitByNameTx: vi.fn().mockResolvedValue({ id: "org-1" }),
     findPositionByNameTx: vi.fn().mockResolvedValue({ id: "pos-1" }),
@@ -684,6 +686,34 @@ describe("EmployeesService — F7 login-account creation", () => {
         expect(Object.keys(entry.after)).not.toContain("password_hash");
       }
     }
+  });
+
+  it("S2-INT-1: linking a cross-tenant userId → 404 (in-tenant validation, never FK-links across tenants)", async () => {
+    const repo = makeRepo({ findLinkableUserTx: vi.fn().mockResolvedValue(undefined) });
+    const { svc } = makeService({ repo });
+    await expect(
+      svc.createEmployee(actor, {
+        userId: EMP_USER_ID,
+        workType: "offline",
+        employmentType: "full_time",
+        salaryType: "monthly",
+      } as never),
+    ).rejects.toThrow(NotFoundException);
+    expect(repo.createEmployeeTx).not.toHaveBeenCalled();
+  });
+
+  it("S2-INT-1: linking a userId already on an active employee → 409", async () => {
+    const repo = makeRepo({ findActiveByUserIdTx: vi.fn().mockResolvedValue({ id: EMP2_ID }) });
+    const { svc } = makeService({ repo });
+    await expect(
+      svc.createEmployee(actor, {
+        userId: EMP_USER_ID,
+        workType: "offline",
+        employmentType: "full_time",
+        salaryType: "monthly",
+      } as never),
+    ).rejects.toThrow(ConflictException);
+    expect(repo.createEmployeeTx).not.toHaveBeenCalled();
   });
 
   it("S2-INT-1: linking an existing userId does NOT require create:user and writes no user.created audit", async () => {
