@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { Users, RefreshCw, ArrowLeft } from "lucide-react";
+import { Users, RefreshCw, ArrowLeft, Pencil } from "lucide-react";
 import type { HrEmployeeDetail } from "@mediaos/contracts";
-import { hrApi, hrKeys, useCan, formatDate } from "@mediaos/web-core";
+import { hrApi, hrKeys, useCan, formatDate, PermissionGate } from "@mediaos/web-core";
 import { PageHeader, EmptyState, Button, Card, CardContent } from "@mediaos/ui";
 import { HR_ENGINE_PAIRS } from "../constants";
 import { EmployeeStatusBadge } from "../employee-status";
@@ -166,9 +166,10 @@ function WorkTab({
 interface EmployeeDetailPageProps {
   employeeId: string;
   onBack?: () => void;
+  onEdit?: () => void;
 }
 
-export function EmployeeDetailPage({ employeeId, onBack }: EmployeeDetailPageProps) {
+export function EmployeeDetailPage({ employeeId, onBack, onEdit }: EmployeeDetailPageProps) {
   const { t } = useTranslation("hr");
   const { t: tc } = useTranslation("common");
   const [activeTab, setActiveTab] = useState<Tab>("overview");
@@ -256,12 +257,25 @@ export function EmployeeDetailPage({ employeeId, onBack }: EmployeeDetailPagePro
         description={`${t("detail.fields.code")}: ${data.employeeCode ?? "—"}`}
         icon={Users}
         actions={
-          onBack ? (
-            <Button variant="outline" size="sm" onClick={onBack}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              {t("detail.backToList")}
-            </Button>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            {onBack && (
+              <Button variant="outline" size="sm" onClick={onBack}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                {t("detail.backToList")}
+              </Button>
+            )}
+            {onEdit && (
+              <PermissionGate
+                action={HR_ENGINE_PAIRS.UPDATE_EMPLOYEE.action}
+                resourceType={HR_ENGINE_PAIRS.UPDATE_EMPLOYEE.resourceType}
+              >
+                <Button size="sm" onClick={onEdit}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  {t("employees.actions.edit")}
+                </Button>
+              </PermissionGate>
+            )}
+          </div>
         }
       />
 

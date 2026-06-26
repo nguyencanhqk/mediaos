@@ -1066,7 +1066,16 @@ export const backlog = [
     title:
       "FE HR: EmployeeForm (create/edit) + dropdown lookups + validation + submit mutation + invalidate list/detail",
     zone: "green",
-    status: "todo",
+    // CLOSE (2026-06-26): EmployeeFormPage (create+edit) RHF + zodResolver; 4 dropdown lookups
+    //   (department/position read; job-level/contract-type gated manage:master-data, query disabled
+    //   when uncapable). hrApi.createEmployee/updateEmployee + create/update response schemas in
+    //   contracts (match BE service returns). Edit PATCHes only dirty fields; empty-PATCH guarded.
+    //   Pre-fill resets ONCE per employeeId (no refetch-clobber). Dirty-form guard wired; query
+    //   invalidate list+detail on success. Routes /hr/employees/new + /$id/edit; list "Add" + detail
+    //   "Edit" buttons (PermissionGate). i18n vi/form. app 124 test xanh, typecheck+lint 0 err
+    //   (contracts/web-core rebuilt). LIGHT gate (medium code-review) — 2 correctness + 3 quality
+    //   findings applied.
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-HR-BE-2", "S2-FE-HR-1"],

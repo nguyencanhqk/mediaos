@@ -61,4 +61,6 @@ export const HR_ENGINE_PAIRS = {
   DELETE_EMPLOYEE: { action: "delete", resourceType: "employee" },
   READ_DEPARTMENT: { action: "read", resourceType: "department" },
   READ_POSITION: { action: "read", resourceType: "position" },
+  // job-level / contract-type lookups are gated by manage:master-data on the BE (hr-read.controller).
+  MANAGE_MASTER_DATA: { action: "manage", resourceType: "master-data" },
 } as const;

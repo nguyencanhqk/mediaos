@@ -77,6 +77,22 @@ export const updateHrEmployeeSchema = z
   .refine((v) => Object.keys(v).length > 0, { message: "No fields to update" });
 export type UpdateHrEmployeeRequest = z.infer<typeof updateHrEmployeeSchema>;
 
+// ── Write responses ────────────────────────────────────────────────────────────────
+/** POST /hr/employees response — the new id + allocated code + resolved login user. */
+export const createHrEmployeeResponseSchema = z.object({
+  id: z.string().uuid(),
+  employeeCode: z.string().nullable(),
+  userId: z.string().uuid().nullable(),
+});
+export type CreateHrEmployeeResponse = z.infer<typeof createHrEmployeeResponseSchema>;
+
+/** PATCH /hr/employees/:id response — the id + the list of fields actually changed. */
+export const updateHrEmployeeResponseSchema = z.object({
+  id: z.string().uuid(),
+  changedFields: z.array(z.string()),
+});
+export type UpdateHrEmployeeResponse = z.infer<typeof updateHrEmployeeResponseSchema>;
+
 // ── Change status ──────────────────────────────────────────────────────────────────
 /** POST /hr/employees/:id/change-status. `lockUser` only takes effect for resigned/terminated. */
 export const changeEmployeeStatusSchema = z
