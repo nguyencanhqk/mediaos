@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",
+    "@hookform/resolvers": "^3.10.0",
     "@mediaos/contracts": "workspace:*",
     "@mediaos/ui": "workspace:*",
     "@mediaos/web-core": "workspace:*",
@@ -28,6 +29,7 @@
     "qrcode.react": "^4.2.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
+    "react-hook-form": "^7.80.0",
     "react-i18next": "^15.7.4",
     "tailwind-merge": "^2.6.0",
     "zod": "^3.25.0",

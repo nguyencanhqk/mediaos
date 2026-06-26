@@ -60,6 +60,16 @@ export const hrKeys = {
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.hr, "positions", "list", params] as const,
   },
+  jobLevels: {
+    all: [...rootKeys.hr, "job-levels"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "job-levels", "list", params] as const,
+  },
+  contractTypes: {
+    all: [...rootKeys.hr, "contract-types"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "contract-types", "list", params] as const,
+  },
 };
 
 // ── Attendance keys ───────────────────────────────────────────────────────────

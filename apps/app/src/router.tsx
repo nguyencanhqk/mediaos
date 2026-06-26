@@ -114,8 +114,10 @@ function ModulePlaceholder() {
 const dashboardRoute = makeModuleRoute("/dashboard", "dashboard", "DASH", ModulePlaceholder);
 
 // HR
+import { useNavigate } from "@tanstack/react-router";
 import { EmployeeListPage } from "@/routes/hr/employees/EmployeeListPage";
 import { EmployeeDetailPage } from "@/routes/hr/employees/EmployeeDetailPage";
+import { EmployeeFormPage } from "@/routes/hr/employees/EmployeeFormPage";
 import { MyProfilePage } from "@/routes/hr/me/MyProfilePage";
 
 // System
@@ -125,6 +127,29 @@ import { RolesPage } from "@/routes/system/RolesPage";
 const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", EmployeeListPage);
 const hrEmployeesRoute = makeModuleRoute("/hr/employees", "hr.employees", "HR", EmployeeListPage);
 const hrMeRoute = makeModuleRoute("/hr/me", "hr.me", "HR", MyProfilePage);
+
+// HR employee create — static "new" segment ranks above the "$employeeId" param route, so it never
+// collides with detail. Reuses hr.employees meta (route-level VIEW gate); EmployeeFormPage applies the
+// finer create:employee useCan check, and the server PermissionGuard is the real gate.
+const hrEmployeeCreateMeta = getMeta("hr.employees");
+const hrEmployeeCreateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/employees/new",
+  beforeLoad: authGuard,
+  component: () => {
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      hrEmployeeCreateMeta,
+      "HR",
+      <EmployeeFormPage
+        onSuccess={(id) =>
+          void navigate({ to: "/hr/employees/$employeeId", params: { employeeId: id } })
+        }
+        onCancel={() => void navigate({ to: "/hr/employees" as "/" })}
+      />,
+    );
+  },
+});
 
 // HR detail — no sidebar entry; path param resolved via useParams.
 // Dùng CÙNG ProtectedRoute như các route module khác (KHÔNG authGuard trần) để guardResult được
@@ -137,10 +162,35 @@ const hrEmployeeDetailRoute = createRoute({
   beforeLoad: authGuard,
   component: () => {
     const { employeeId } = hrEmployeeDetailRoute.useParams();
+    const navigate = useNavigate();
     return buildModuleRouteContent(
       hrEmployeeDetailMeta,
       "HR",
-      <EmployeeDetailPage employeeId={employeeId} />,
+      <EmployeeDetailPage
+        employeeId={employeeId}
+        onEdit={() =>
+          void navigate({ to: "/hr/employees/$employeeId/edit", params: { employeeId } })
+        }
+      />,
+    );
+  },
+});
+
+// HR employee edit — reuses hr.employees meta; EmployeeFormPage applies the update:employee useCan gate.
+const hrEmployeeEditMeta = getMeta("hr.employees");
+const hrEmployeeEditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/employees/$employeeId/edit",
+  beforeLoad: authGuard,
+  component: () => {
+    const { employeeId } = hrEmployeeEditRoute.useParams();
+    const navigate = useNavigate();
+    const toDetail = () =>
+      void navigate({ to: "/hr/employees/$employeeId", params: { employeeId } });
+    return buildModuleRouteContent(
+      hrEmployeeEditMeta,
+      "HR",
+      <EmployeeFormPage employeeId={employeeId} onSuccess={toDetail} onCancel={toDetail} />,
     );
   },
 });
@@ -226,7 +276,9 @@ const routeTree = rootRoute.addChildren([
   dashboardRoute,
   hrRoute,
   hrEmployeesRoute,
+  hrEmployeeCreateRoute,
   hrEmployeeDetailRoute,
+  hrEmployeeEditRoute,
   hrMeRoute,
   attTodayRoute,
   attMyRecordsRoute,

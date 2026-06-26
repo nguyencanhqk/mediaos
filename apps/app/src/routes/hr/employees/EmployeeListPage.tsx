@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Users, RefreshCw } from "lucide-react";
@@ -104,6 +105,7 @@ const STATUS_OPTIONS = [
 // ---------------------------------------------------------------------------
 export function EmployeeListPage() {
   const { t } = useTranslation("hr");
+  const navigate = useNavigate();
   const { action, resourceType } = HR_ENGINE_PAIRS.READ_EMPLOYEE;
   const canView = useCan(action, resourceType);
 
@@ -172,7 +174,9 @@ export function EmployeeListPage() {
               action={HR_ENGINE_PAIRS.CREATE_EMPLOYEE.action}
               resourceType={HR_ENGINE_PAIRS.CREATE_EMPLOYEE.resourceType}
             >
-              <Button size="sm">{t("employees.addEmployee")}</Button>
+              <Button size="sm" onClick={() => void navigate({ to: "/hr/employees/new" })}>
+                {t("employees.addEmployee")}
+              </Button>
             </PermissionGate>
           </div>
         }
