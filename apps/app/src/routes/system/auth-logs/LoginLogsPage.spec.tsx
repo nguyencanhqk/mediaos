@@ -1,10 +1,18 @@
 /**
- * [RED-trước · deny-path] LoginLogsPage — S2-AUTH-BE-5 · L3-FE-VIEWER.
+ * LoginLogsPage — S2-AUTH-BE-5 · L3-FE-VIEWER (FIX-3: real-flow gating).
  *
- * Gate: cặp ENGINE THỰC 'view:audit-log' (seed mig 0340, grant company-admin) — PIN theo cặp seed,
+ * Gate: cặp ENGINE THỰC ('view','audit-log') từ contract `AUTH_AUDIT_LOG` (seed mig 0340,
+ *   is_sensitive=true, grant company-admin) — PIN theo cặp seed, KHÔNG literal magic-string,
  *   KHÔNG mã FE "AUTH.AUDIT_LOG.VIEW" (bài học drift S1-FND-MODULE).
- * Deny-path dùng read:employee (KHÔNG mở được nhật ký bảo mật) → forbidden, apiFetch KHÔNG gọi.
+ *
+ * FIX-3 — gỡ green-fake: allow-path KHÔNG còn inject thẳng capabilities qua setState/setCaps.
+ *   Thay vào đó nạp phiên qua ĐÚNG entrypoint mà /auth/me dùng: `useAuthStore.setUser(me, me.capabilities)`
+ *   (xem packages/web-core/src/lib/session.ts → doBootstrap). Payload /auth/me được validate bằng
+ *   `meResponseSchema` để bám contract thật. FIX-1 đã surface cap nhạy cảm 'view:audit-log' vào
+ *   /auth/me.capabilities (allowlist) ⇒ trạng thái allow giờ ĐẾN ĐƯỢC end-to-end trong production.
+ *
  * States: loading · error · empty · forbidden · list render · filter→refetch.
+ * Discriminate: cùng page, cùng đường hydrate — chỉ KHÁC cap trong payload /auth/me ⇒ allow≠deny.
  * Bảo mật: DTO không chứa metadata/secret → client không thể render; KHÔNG token vào storage.
  */
 import React from "react";
@@ -12,11 +20,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, apiFetch } from "@mediaos/web-core";
-import type { LoginLogListItem } from "@mediaos/contracts";
+import {
+  AUTH_AUDIT_LOG,
+  meResponseSchema,
+  type LoginLogListItem,
+  type MeResponse,
+} from "@mediaos/contracts";
 import { LoginLogsPage } from "./LoginLogsPage";
 
 // ---------------------------------------------------------------------------
-// Mock web-core: chỉ thay apiFetch; GIỮ useCan + useAuthStore thật (đọc store).
+// Mock web-core: chỉ thay apiFetch; GIỮ useCan + useAuthStore + setUser THẬT.
 // ---------------------------------------------------------------------------
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
@@ -102,22 +115,44 @@ const MOCK_ROWS: LoginLogListItem[] = [
   },
 ];
 
-function setCaps(caps: Record<string, boolean>) {
-  useAuthStore.setState({
-    isAuthenticated: true,
-    capabilities: caps,
-    user: {
-      id: "u1",
-      email: "admin@demo.local",
-      fullName: "Admin",
-      status: "Active",
-      companyId: "co-1",
-    },
+// Cặp engine canonical từ contract (KHÔNG literal magic-string) → key capabilities "view:audit-log".
+const VIEW_AUDIT_LOG_CAP = `${AUTH_AUDIT_LOG.VIEW.action}:${AUTH_AUDIT_LOG.VIEW.resource}`;
+// Một cap KHÁC, không phải audit-log — dùng chứng minh deny không phải vì store rỗng mà vì THIẾU đúng cặp.
+const NON_AUDIT_CAP = "read:employee";
+
+/**
+ * Dựng payload /auth/me HỢP LỆ (validate bằng contract `meResponseSchema`) — bảo đảm test bám
+ * đúng shape response thật, không drift. `capabilities` là phần FIX-1 nạp (gồm cap nhạy cảm allowlisted).
+ */
+function makeMe(capabilities: Record<string, boolean>): MeResponse {
+  return meResponseSchema.parse({
+    id: "11111111-1111-4111-8111-111111111111",
+    companyId: "22222222-2222-4222-8222-222222222222",
+    email: "admin@demo.local",
+    fullName: "Super Admin",
+    status: "active",
+    capabilities,
+    mustSetupTwoFactor: false,
   });
 }
 
-function clearCaps() {
-  useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
+/**
+ * Nạp phiên qua ĐÚNG entrypoint /auth/me dùng (session.ts doBootstrap):
+ *   useAuthStore.getState().setUser(me, me.capabilities)
+ * → useCan đọc capabilities y như production. KHÔNG dùng tắt setState/setCaps.
+ */
+function hydrateFromMe(me: MeResponse) {
+  useAuthStore.getState().setUser(me, me.capabilities);
+}
+
+/** Nạp phiên ĐỦ quyền xem nhật ký bảo mật qua đường thật. */
+function hydrateWithAuditView() {
+  hydrateFromMe(makeMe({ [VIEW_AUDIT_LOG_CAP]: true }));
+}
+
+/** Reset phiên qua action thật `logout()` (không setState thô). */
+function resetSession() {
+  useAuthStore.getState().logout();
 }
 
 // ---------------------------------------------------------------------------
@@ -125,30 +160,30 @@ function clearCaps() {
 // ---------------------------------------------------------------------------
 describe("LoginLogsPage", () => {
   beforeEach(() => {
-    clearCaps();
+    resetSession();
     vi.clearAllMocks();
     localStorage.clear();
     sessionStorage.clear();
   });
 
   // ── DENY-PATH (RED-trước) ─────────────────────────────────────────────────
-  it("renders forbidden and does NOT call API when user lacks view:audit-log", () => {
-    setCaps({});
+  it("renders forbidden and does NOT call API when /auth/me has no view:audit-log cap", () => {
+    hydrateFromMe(makeMe({})); // phiên hợp lệ nhưng KHÔNG có cặp view:audit-log
     renderWithQuery(<LoginLogsPage />);
     expect(screen.getByText(/không có quyền truy cập/i)).toBeInTheDocument();
     expect(apiFetch).not.toHaveBeenCalled();
   });
 
-  it("renders forbidden when user has read:employee but not view:audit-log", () => {
-    setCaps({ "read:employee": true });
+  it("renders forbidden when /auth/me grants a non-audit cap but not view:audit-log", () => {
+    hydrateFromMe(makeMe({ [NON_AUDIT_CAP]: true }));
     renderWithQuery(<LoginLogsPage />);
     expect(screen.getByText(/không có quyền truy cập/i)).toBeInTheDocument();
     expect(apiFetch).not.toHaveBeenCalled();
   });
 
-  // ── ALLOW-PATH ─────────────────────────────────────────────────────────────
-  it("renders login-log list when user has view:audit-log", async () => {
-    setCaps({ "view:audit-log": true });
+  // ── ALLOW-PATH (qua hydrate THẬT từ /auth/me) ──────────────────────────────
+  it("renders login-log list when /auth/me hydrates view:audit-log capability", async () => {
+    hydrateWithAuditView();
     vi.mocked(apiFetch).mockResolvedValue(MOCK_ROWS);
     renderWithQuery(<LoginLogsPage />);
     await waitFor(() => expect(screen.getByText("Super Admin")).toBeInTheDocument());
@@ -161,9 +196,29 @@ describe("LoginLogsPage", () => {
     );
   });
 
+  // ── DISCRIMINATE allow≠deny — cùng page, cùng đường hydrate, CHỈ khác cap ───
+  it("discriminates allow vs deny purely from the hydrated /auth/me capability", async () => {
+    // ALLOW: /auth/me chứa view:audit-log → render list + gọi API.
+    hydrateWithAuditView();
+    vi.mocked(apiFetch).mockResolvedValue(MOCK_ROWS);
+    const allow = renderWithQuery(<LoginLogsPage />);
+    await waitFor(() => expect(screen.getByText("Super Admin")).toBeInTheDocument());
+    expect(vi.mocked(apiFetch).mock.calls.length).toBeGreaterThan(0);
+    expect(screen.queryByText(/không có quyền truy cập/i)).not.toBeInTheDocument();
+    allow.unmount();
+
+    // DENY: cùng component, chỉ payload /auth/me KHÁC (rớt cap) → forbidden + KHÔNG gọi API.
+    vi.mocked(apiFetch).mockClear();
+    hydrateFromMe(makeMe({}));
+    renderWithQuery(<LoginLogsPage />);
+    expect(screen.getByText(/không có quyền truy cập/i)).toBeInTheDocument();
+    expect(screen.queryByText("Super Admin")).not.toBeInTheDocument();
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
   // ── LOADING ─────────────────────────────────────────────────────────────────
   it("shows table skeleton while fetching", () => {
-    setCaps({ "view:audit-log": true });
+    hydrateWithAuditView();
     vi.mocked(apiFetch).mockReturnValue(new Promise(() => {}));
     renderWithQuery(<LoginLogsPage />);
     expect(document.querySelector("table")).toBeInTheDocument();
@@ -171,7 +226,7 @@ describe("LoginLogsPage", () => {
 
   // ── ERROR ─────────────────────────────────────────────────────────────────
   it("shows error state when API fails", async () => {
-    setCaps({ "view:audit-log": true });
+    hydrateWithAuditView();
     vi.mocked(apiFetch).mockRejectedValue(new Error("network"));
     renderWithQuery(<LoginLogsPage />);
     await waitFor(() =>
@@ -181,7 +236,7 @@ describe("LoginLogsPage", () => {
 
   // ── EMPTY ─────────────────────────────────────────────────────────────────
   it("shows empty state when no rows returned", async () => {
-    setCaps({ "view:audit-log": true });
+    hydrateWithAuditView();
     vi.mocked(apiFetch).mockResolvedValue([]);
     renderWithQuery(<LoginLogsPage />);
     await waitFor(() =>
@@ -191,7 +246,7 @@ describe("LoginLogsPage", () => {
 
   // ── FILTER → refetch với param status ───────────────────────────────────────
   it("re-queries with status filter when applied", async () => {
-    setCaps({ "view:audit-log": true });
+    hydrateWithAuditView();
     vi.mocked(apiFetch).mockResolvedValue(MOCK_ROWS);
     renderWithQuery(<LoginLogsPage />);
     await waitFor(() => expect(screen.getByText("Super Admin")).toBeInTheDocument());
@@ -208,7 +263,7 @@ describe("LoginLogsPage", () => {
 
   // ── BẢO MẬT: không token vào storage; DTO không phơi secret ──────────────────
   it("does not leak any token into client storage", async () => {
-    setCaps({ "view:audit-log": true });
+    hydrateWithAuditView();
     vi.mocked(apiFetch).mockResolvedValue(MOCK_ROWS);
     renderWithQuery(<LoginLogsPage />);
     await waitFor(() => expect(screen.getByText("Super Admin")).toBeInTheDocument());
