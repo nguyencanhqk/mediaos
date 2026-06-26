@@ -67,10 +67,11 @@ const DETAIL_COLUMNS = {
 /** Raw list row (baseSalary still the DB numeric string — the service masks/parses it). */
 export interface HrListRow {
   id: string;
-  userId: string;
+  // S2-HR-BE-2: LEFT JOIN users → these are null for an unlinked (userId IS NULL) employee.
+  userId: string | null;
   employeeCode: string | null;
-  fullName: string;
-  email: string;
+  fullName: string | null;
+  email: string | null;
   orgUnitId: string | null;
   orgUnitName: string | null;
   positionId: string | null;
@@ -85,10 +86,11 @@ export interface HrListRow {
 export interface HrDetailRow {
   id: string;
   companyId: string;
-  userId: string;
+  // S2-HR-BE-2: LEFT JOIN users → null for an unlinked employee.
+  userId: string | null;
   employeeCode: string | null;
-  fullName: string;
-  email: string;
+  fullName: string | null;
+  email: string | null;
   orgUnitId: string | null;
   orgUnitName: string | null;
   positionId: string | null;
@@ -170,7 +172,7 @@ export class HrReadRepository {
     const rows = await tx
       .select(LIST_COLUMNS)
       .from(employeeProfiles)
-      .innerJoin(users, eq(employeeProfiles.userId, users.id))
+      .leftJoin(users, eq(employeeProfiles.userId, users.id))
       .leftJoin(orgUnits, eq(employeeProfiles.orgUnitId, orgUnits.id))
       .leftJoin(positions, eq(employeeProfiles.positionId, positions.id))
       .where(where)
@@ -181,7 +183,7 @@ export class HrReadRepository {
     const [{ count } = { count: 0 }] = await tx
       .select({ count: sql<number>`cast(count(*) as int)` })
       .from(employeeProfiles)
-      .innerJoin(users, eq(employeeProfiles.userId, users.id))
+      .leftJoin(users, eq(employeeProfiles.userId, users.id))
       .where(where);
 
     return { rows: rows as HrListRow[], total: Number(count) };
@@ -192,7 +194,7 @@ export class HrReadRepository {
     const [row] = await tx
       .select(DETAIL_COLUMNS)
       .from(employeeProfiles)
-      .innerJoin(users, eq(employeeProfiles.userId, users.id))
+      .leftJoin(users, eq(employeeProfiles.userId, users.id))
       .leftJoin(orgUnits, eq(employeeProfiles.orgUnitId, orgUnits.id))
       .leftJoin(positions, eq(employeeProfiles.positionId, positions.id))
       .where(
@@ -215,7 +217,7 @@ export class HrReadRepository {
     const [row] = await tx
       .select(DETAIL_COLUMNS)
       .from(employeeProfiles)
-      .innerJoin(users, eq(employeeProfiles.userId, users.id))
+      .leftJoin(users, eq(employeeProfiles.userId, users.id))
       .leftJoin(orgUnits, eq(employeeProfiles.orgUnitId, orgUnits.id))
       .leftJoin(positions, eq(employeeProfiles.positionId, positions.id))
       .where(

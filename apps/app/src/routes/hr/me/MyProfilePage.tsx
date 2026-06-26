@@ -99,7 +99,7 @@ export function MyProfilePage() {
 
   return (
     <div className="space-y-6 p-6">
-      <PageHeader title={t("me.title")} description={data.fullName} icon={User} />
+      <PageHeader title={t("me.title")} description={data.fullName ?? undefined} icon={User} />
 
       {/* Basic info */}
       <Card>

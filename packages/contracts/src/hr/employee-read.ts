@@ -40,10 +40,12 @@ export type HrEmployeeListQuery = z.infer<typeof hrEmployeeListQuerySchema>;
 /** One row in GET /hr/employees. baseSalary is null unless the caller holds view-salary:employee. */
 export const hrEmployeeListItemSchema = z.object({
   id: z.string().uuid(),
-  userId: z.string().uuid(),
+  // S2-HR-BE-2: nullable — an employee can exist without a linked user (unlink-user). fullName/email
+  // come from the users LEFT JOIN, so they are null for an unlinked (nameless) employee.
+  userId: z.string().uuid().nullable(),
   employeeCode: z.string().nullable(),
-  fullName: z.string(),
-  email: z.string(),
+  fullName: z.string().nullable(),
+  email: z.string().nullable(),
   orgUnitId: z.string().uuid().nullable(),
   orgUnitName: z.string().nullable(),
   positionId: z.string().uuid().nullable(),
@@ -59,10 +61,11 @@ export type HrEmployeeListItem = z.infer<typeof hrEmployeeListItemSchema>;
 /** GET /hr/employees/:id detail. Sensitive fields null/omitted unless authorized. */
 export const hrEmployeeDetailSchema = z.object({
   id: z.string().uuid(),
-  userId: z.string().uuid(),
+  // S2-HR-BE-2: nullable for an unlinked employee (see list-item note).
+  userId: z.string().uuid().nullable(),
   employeeCode: z.string().nullable(),
-  fullName: z.string(),
-  email: z.string(),
+  fullName: z.string().nullable(),
+  email: z.string().nullable(),
   orgUnitId: z.string().uuid().nullable(),
   orgUnitName: z.string().nullable(),
   positionId: z.string().uuid().nullable(),

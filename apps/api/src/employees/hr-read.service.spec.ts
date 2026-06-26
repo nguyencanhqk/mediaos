@@ -335,6 +335,21 @@ describe("HrReadService.getHrEmployee — 2-tenant + scope + masking", () => {
     expect(res.notes).toBe("secret note");
     expect(res.contractType).toBe("permanent");
   });
+
+  // S2-HR-BE-2: an unlinked employee (LEFT JOIN users → no row) still details, with null name/email.
+  it("unlinked employee (userId/fullName/email NULL) → still returned, no crash", async () => {
+    const repo = makeRepo({
+      findByIdTx: vi
+        .fn()
+        .mockResolvedValue(makeDetailRow({ userId: null, fullName: null, email: null })),
+    });
+    const { svc } = makeService({ repo, perms: { "view-salary": DENY() } });
+    const res = await svc.getHrEmployee(actorA, EMP_ID);
+    expect(res.userId).toBeNull();
+    expect(res.fullName).toBeNull();
+    expect(res.email).toBeNull();
+    expect(res.id).toBe(EMP_ID);
+  });
 });
 
 // ─── me/profile self-only ────────────────────────────────────────────────────────
