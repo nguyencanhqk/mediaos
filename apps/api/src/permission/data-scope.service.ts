@@ -1,15 +1,25 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
-import { and, eq, or, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { DataScope } from "@mediaos/contracts";
 import { employeeProfiles } from "../db/schema";
 import { PermissionService } from "./permission.service";
 import { DataScopeRepository } from "./data-scope.repository";
 
-/** The acting user's scope context. orgUnitId is needed only for Department scope (lazy-loaded). */
+/**
+ * The acting user's scope context. orgUnitId / managedUserIds / headedOrgUnitIds are the HR signals
+ * resolved once per request (resolveContext) and are only consulted by Department/Team. They are
+ * OPTIONAL so a manually-built context (e.g. an Own/Company check) need not carry them — an absent
+ * set is treated as empty (fail-closed), never match-all.
+ */
 export interface ScopeContext {
   userId: string;
   companyId: string;
+  /** Requester's own org_unit — for Department (same unit). */
   orgUnitId?: string | null;
+  /** S2-INT-2: users.id the requester manages via employee_manager_relations — for Team (multi-manager). */
+  managedUserIds?: string[];
+  /** S2-INT-2: org_unit ids the requester heads (org_units.head_user_id) — for Department over a headed unit. */
+  headedOrgUnitIds?: string[];
 }
 
 /** A candidate employee row whose in-scope membership we test (single-resource path). */
@@ -68,16 +78,37 @@ export class DataScopeService {
     return scope;
   }
 
-  /** Resolve the acting user's full scope context (adds org_unit for Department scope). */
+  /**
+   * Resolve the acting user's full scope context: own org_unit (Department), the EMR-managed user set
+   * (Team multi-manager) and headed org_units (Department over a headed unit). Read fresh from the DB
+   * each call — never cached — so a manager/head reassignment takes effect on the next request (S2-INT-2).
+   */
   async resolveContext(userId: string, companyId: string): Promise<ScopeContext> {
-    const orgUnitId = await this.repo.getRequesterOrgUnitId(userId, companyId);
-    return { userId, companyId, orgUnitId };
+    const data = await this.repo.getRequesterScopeContext(userId, companyId);
+    return {
+      userId,
+      companyId,
+      orgUnitId: data.orgUnitId,
+      managedUserIds: data.managedUserIds,
+      headedOrgUnitIds: data.headedOrgUnitIds,
+    };
+  }
+
+  /**
+   * The org_unit ids that bound Department scope: the requester's own unit ∪ every unit they head.
+   * Empty → Department fail-closes to 0 rows (never a match-all).
+   */
+  private departmentOrgUnitIds(ctx: ScopeContext): string[] {
+    const ids = new Set<string>();
+    if (ctx.orgUnitId) ids.add(ctx.orgUnitId);
+    for (const id of ctx.headedOrgUnitIds ?? []) ids.add(id);
+    return [...ids];
   }
 
   /**
    * Build the employee-list predicate for `scope`. ALWAYS carries company_id (belt-and-suspenders over RLS;
    * never a bare no-op that could match-all if RLS were bypassed — plan-review #9). Unknown/null scope and
-   * Department-without-org_unit fail closed to `false` (0 rows).
+   * Department with no own/headed unit fail closed to `false` (0 rows).
    */
   buildEmployeeScopeCondition(scope: DataScope | null, ctx: ScopeContext): SQL {
     const tenant = eq(employeeProfiles.companyId, ctx.companyId);
@@ -87,20 +118,23 @@ export class DataScopeService {
       case "System":
       case "Company":
         return tenant;
-      case "Department":
-        if (!ctx.orgUnitId) return falsey;
-        return and(tenant, eq(employeeProfiles.orgUnitId, ctx.orgUnitId)) ?? falsey;
-      case "Team":
-        // reports ∪ self: a line-manager sees their direct reports and their own row.
-        return (
-          and(
-            tenant,
-            or(
-              eq(employeeProfiles.directManagerId, ctx.userId),
-              eq(employeeProfiles.userId, ctx.userId),
-            ),
-          ) ?? falsey
-        );
+      case "Department": {
+        // own unit ∪ headed units (S2-INT-2). Empty → 0 rows (fail-closed, never match-all).
+        const orgUnitIds = this.departmentOrgUnitIds(ctx);
+        if (orgUnitIds.length === 0) return falsey;
+        return and(tenant, inArray(employeeProfiles.orgUnitId, orgUnitIds)) ?? falsey;
+      }
+      case "Team": {
+        // reports ∪ self ∪ EMR-managed (S2-INT-2): a manager sees their direct reports, their own row,
+        // and every employee they manage via employee_manager_relations (project/professional/temporary).
+        const managed = ctx.managedUserIds ?? [];
+        const teamOr: SQL[] = [
+          eq(employeeProfiles.directManagerId, ctx.userId),
+          eq(employeeProfiles.userId, ctx.userId),
+        ];
+        if (managed.length > 0) teamOr.push(inArray(employeeProfiles.userId, managed));
+        return and(tenant, or(...teamOr)) ?? falsey;
+      }
       case "Own":
         return and(tenant, eq(employeeProfiles.userId, ctx.userId)) ?? falsey;
       default:
@@ -124,9 +158,17 @@ export class DataScopeService {
       case "Company":
         return true;
       case "Department":
-        return ctx.orgUnitId != null && target.orgUnitId === ctx.orgUnitId;
+        // own unit ∪ headed units (mirrors buildEmployeeScopeCondition for list/detail parity).
+        return (
+          target.orgUnitId != null && this.departmentOrgUnitIds(ctx).includes(target.orgUnitId)
+        );
       case "Team":
-        return target.directManagerUserId === ctx.userId || target.userId === ctx.userId;
+        // reports ∪ self ∪ EMR-managed (mirrors the list predicate so list and detail agree exactly).
+        return (
+          target.directManagerUserId === ctx.userId ||
+          target.userId === ctx.userId ||
+          (target.userId != null && (ctx.managedUserIds ?? []).includes(target.userId))
+        );
       case "Own":
         return target.userId === ctx.userId;
       default:
