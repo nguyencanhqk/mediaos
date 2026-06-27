@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**48 WO** · có micro-plan: **21/48** · ⬜ 9 chờ · 🔵 0 đang làm · ✅ 39 xong · 🔴 0 chặn
+**48 WO** · có micro-plan: **24/48** · ⬜ 3 chờ · 🔵 1 đang làm · ✅ 44 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -53,21 +53,21 @@
 | `S2-HR-DB-1` | 🔴 | ✅ xong | [📄](S2-HR-DB-1.md) | — | Migration HR Core: departments·positions·job_levels·contract_types·emp |
 | `S2-HR-SEED-1` | 🔴 | ✅ xong | [📄](S2-HR-SEED-1.md) | ✅S2-HR-DB-1 ✅S2-AUTH-SEED-1 | Seed HR master data (job_levels·contract_types·employee_code_config +  |
 | `S2-HR-BE-1` | 🔴 | ✅ xong | — *(chưa)* | ✅S2-HR-DB-1 ✅S2-AUTH-BE-2 | HR read core: GET /hr/employees (list/pagination/search/filter/sort/da |
-| `S2-HR-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S2-HR-BE-1 ✅S2-HR-SEED-1 | HR write core: POST/PATCH /hr/employees + auto employee-code (tx + Seq |
+| `S2-HR-BE-2` | 🔴 | ✅ xong | [📄](S2-HR-BE-2.md) | ✅S2-HR-BE-1 ✅S2-HR-SEED-1 | HR write core: POST/PATCH /hr/employees + auto employee-code (tx + Seq |
 | `S2-HR-BE-3` | 🟡 | ✅ xong | — *(chưa)* | ✅S2-HR-DB-1 ✅S2-AUTH-BE-2 | Department/position CRUD (P1): create/update/soft-delete + master data |
 | `S2-HR-BE-4` | 🟡 | ✅ xong | — *(chưa)* | ✅S2-HR-BE-1 | Profile change request skeleton (P1/P2): employee gửi yêu cầu sửa hồ s |
 | `S2-FE-AUTH-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S2-AUTH-BE-1 ✅S2-AUTH-BE-2 | FE Auth: Login page + auth bootstrap (/auth/me) + ProtectedRoute/Publi |
 | `S2-FE-HR-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S2-HR-BE-1 ✅S2-FE-AUTH-1 | FE HR: EmployeeList (table/filter/search/pagination) + EmployeeDetail  |
-| `S2-FE-HR-2` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S2-HR-BE-2 ✅S2-FE-HR-1 | FE HR: EmployeeForm (create/edit) + dropdown lookups + validation + su |
+| `S2-FE-HR-2` | 🟢 | ✅ xong | — *(chưa)* | ✅S2-HR-BE-2 ✅S2-FE-HR-1 | FE HR: EmployeeForm (create/edit) + dropdown lookups + validation + su |
 | `S2-FE-HR-3` | 🟢 | ✅ xong | — *(chưa)* | ✅S2-HR-BE-1 ✅S2-FE-AUTH-1 | FE: MyProfile (read-only) + user/role read-only placeholder (P1, KHÔNG |
-| `S2-INT-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S2-HR-BE-2 ✅S2-AUTH-BE-3 | Tích hợp HR tạo employee ↔ AUTH tạo/link user (giao dịch nhất quán, un |
+| `S2-INT-1` | 🔴 | ⬜ chờ | [📄](S2-INT-1.md) | ✅S2-HR-BE-2 ✅S2-AUTH-BE-3 | Tích hợp HR tạo employee ↔ AUTH tạo/link user (giao dịch nhất quán, un |
 | `S2-INT-2` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S2-HR-BE-1 ✅S2-AUTH-BE-2 | Tích hợp HR direct_manager ↔ data-scope Team/Department của permission |
 | `S2-QA-1` | 🔴 | ✅ xong | — *(chưa)* | ✅S2-AUTH-BE-2 ✅S2-HR-BE-1 | QA AUTH + RBAC/data-scope: login success/fail/locked/logout/me + Own/T |
-| `S2-QA-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S2-HR-BE-2 ⏳S2-FE-HR-2 | QA HR CRUD + FE smoke + regression: employee create/update/status/link |
-| `S2-QA-DEBT-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S2-AUTH-BE-3 ✅S2-AUTH-BE-4 | Test-hygiene AUTH: gate int-spec trên hasDb && LANE_DB (KHÔNG bare ski |
-| `S2-AUTH-HARDEN-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S2-AUTH-BE-4 | Hardening password-reset (P2): tách rate-limit bucket forgot khỏi logi |
+| `S2-QA-2` | 🔴 | 🔵 đang làm | — *(chưa)* | ✅S2-HR-BE-2 ✅S2-FE-HR-2 | QA HR CRUD + FE smoke + regression: employee create/update/status/link |
+| `S2-QA-DEBT-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S2-AUTH-BE-3 ✅S2-AUTH-BE-4 | Test-hygiene AUTH: gate int-spec trên hasDb && LANE_DB (KHÔNG bare ski |
+| `S2-AUTH-HARDEN-1` | 🔴 | ✅ xong | [📄](S2-AUTH-HARDEN-1.md) | ✅S2-AUTH-BE-4 | Hardening password-reset (P2): tách rate-limit bucket forgot khỏi logi |
 | `S2-HR-MASK-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S2-HR-BE-1 | HR read tinh chỉnh (P2): xác nhận+gate masking salaryType theo SPEC-03 |
-| `S2-AUTH-BRAND-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Rebrand TOTP issuer (P3): TOTP_ISSUER 'MediaOS' → 'FUNTIME MEDIA' khớp |
+| `S2-AUTH-BRAND-1` | 🔴 | ✅ xong | — *(chưa)* | — | Rebrand TOTP issuer (P3): TOTP_ISSUER 'MediaOS' → 'FUNTIME MEDIA' khớp |
 
 ---
 
