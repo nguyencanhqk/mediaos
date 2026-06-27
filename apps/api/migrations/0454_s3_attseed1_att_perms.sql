@@ -99,10 +99,10 @@ DECLARE
     ['manager',       'view-own',       'attendance',           'Own'],
     ['hr',            'view-own',       'attendance',           'Own'],
     ['company-admin', 'view-own',       'attendance',           'Own'],
-    -- ATTENDANCE.VIEW_TEAM (manager=Team, hr=Team, company-admin=Company)
+    -- ATTENDANCE.VIEW_TEAM (manager=Team, hr=Team, company-admin=Team — API-10 §5.3 max=Team)
     ['manager',       'view-team',      'attendance',           'Team'],
     ['hr',            'view-team',      'attendance',           'Team'],
-    ['company-admin', 'view-team',      'attendance',           'Company'],
+    ['company-admin', 'view-team',      'attendance',           'Team'],
     -- ATTENDANCE.VIEW_COMPANY (hr/company-admin=Company)
     ['hr',            'view-company',   'attendance',           'Company'],
     ['company-admin', 'view-company',   'attendance',           'Company'],
@@ -133,10 +133,10 @@ DECLARE
     ['manager',       'view-own',       'adjustment',           'Own'],
     ['hr',            'view-own',       'adjustment',           'Own'],
     ['company-admin', 'view-own',       'adjustment',           'Own'],
-    -- ADJUSTMENT.VIEW_TEAM (manager=Team, hr=Team, company-admin=Company)
+    -- ADJUSTMENT.VIEW_TEAM (manager=Team, hr=Team, company-admin=Team — API-10 §5.3 max=Team)
     ['manager',       'view-team',      'adjustment',           'Team'],
     ['hr',            'view-team',      'adjustment',           'Team'],
-    ['company-admin', 'view-team',      'adjustment',           'Company'],
+    ['company-admin', 'view-team',      'adjustment',           'Team'],
     -- ADJUSTMENT.VIEW_COMPANY (hr/company-admin=Company)
     ['hr',            'view-company',   'adjustment',           'Company'],
     ['company-admin', 'view-company',   'adjustment',           'Company'],
@@ -163,10 +163,10 @@ DECLARE
     ['manager',       'view-own',       'remote-request',       'Own'],
     ['hr',            'view-own',       'remote-request',       'Own'],
     ['company-admin', 'view-own',       'remote-request',       'Own'],
-    -- REMOTE_REQUEST.VIEW_TEAM (manager=Team, hr=Team, company-admin=Company)
+    -- REMOTE_REQUEST.VIEW_TEAM (manager=Team, hr=Team, company-admin=Team — API-10 §5.3 max=Team)
     ['manager',       'view-team',      'remote-request',       'Team'],
     ['hr',            'view-team',      'remote-request',       'Team'],
-    ['company-admin', 'view-team',      'remote-request',       'Company'],
+    ['company-admin', 'view-team',      'remote-request',       'Team'],
     -- REMOTE_REQUEST.VIEW_COMPANY (hr/company-admin=Company)
     ['hr',            'view-company',   'remote-request',       'Company'],
     ['company-admin', 'view-company',   'remote-request',       'Company'],
