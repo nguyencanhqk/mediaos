@@ -1608,7 +1608,8 @@ export const backlog = [
     title:
       "Seed LEAVE permissions (§11.2) + role→data_scope mapping + leave types (Annual/Sick/Unpaid/Other) + default policy (§12.2) idempotent",
     zone: "red",
-    status: "in_progress",
+    // DONE 2026-06-27 (feat/s3-wave1, 9fd71bf): mig 0455 = 30 cặp catalog/7 resource_type + 83 grant per-pair (least-privilege manager-deny: 0 trên leave-policy/leave-audit-log/leave-file + 0 admin-action leave-balance, GIỮ view-own:Own self-service; CA view-team:leave-calendar=Team) · leave-permissions.const.ts (PIN 30 cho S3-LEAVE-BE) · LeaveMasterDataSeeder (4 type + DEFAULT_ANNUAL quota=12) cắm runner S3-FND-SEEDRUN-1 · 156 lane-spec + 793 regression PASS (mediaos_leaveseed) · FULL gate PASS (security PASS, completion 95/100). ĐÍNH CHÍNH: legacy create:leave re-scope Company→Own áp cho CẢ employee VÀ company-admin (hardening đúng, create là Own-action; KHÔNG regression). Owner ratify is_sensitive (9 cặp false) + per-employee balance (defer HR-flow/§8.4) ở wave-PR. Verify cuối + merge ở wave-PR feat/s3-wave1→master.
+    status: "done",
     paths: [
       "apps/api/src/db/schema/**",
       "apps/api/migrations/**",
