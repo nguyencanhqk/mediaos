@@ -1608,26 +1608,30 @@ export const backlog = [
     title:
       "Seed LEAVE permissions (§11.2) + role→data_scope mapping + leave types (Annual/Sick/Unpaid/Other) + default policy (§12.2) idempotent",
     zone: "red",
-    status: "todo",
+    status: "in_progress",
     paths: [
       "apps/api/src/db/schema/**",
       "apps/api/migrations/**",
       "apps/api/src/permission/**",
       "apps/api/src/foundation/**",
+      "apps/api/src/leave/**",
     ],
     skills: ["code-review"],
     depends_on: ["S3-LEAVE-DB-1", "S2-AUTH-SEED-1", "S3-ATT-SEED-1", "S3-FND-SEEDRUN-1"], // perm=migration NỐI TIẾP sau ATT-SEED; master-data=runtime seeder qua S3-FND-SEEDRUN-1
     src: [
-      "IMPLEMENTATION-06 §11.0/§11.2/§11.3 (data_scope canonical)",
-      "IMPLEMENTATION-06 §12.2 (leave type/policy seed)",
-      "API-10",
+      "IMPLEMENTATION-06 §11.2 (catalog 30 mã) + §11.3/§11.0 (data_scope canonical)",
+      "API-10 §5.4 + §6.4 (role→action→max-scope — NGUỒN CHUẨN; DB-05 §8.1 STALE 28 mã, §11.2 THẮNG)",
+      "IMPLEMENTATION-06 §12.2 (leave type/policy seed) · DB-05 (landed schema: leave_types/leave_policies)",
+      "mig 0454 (ATT-SEED-1 pattern NHÂN BẢN) · mig 0063/0441 (legacy 'leave' resource+grant — KHÔNG xoá) · mig 0444 (FLAT roles)",
     ],
-    // RECONCILE (chốt owner 2026-06-26): seed FULL §11.2 catalog + pin pairs + wire into bootstrap runner (đồng bộ stance với S3-ATT-SEED-1).
+    // RECONCILE v2 (2026-06-27, sau research tech-lead — TÁCH 2 phần như S3-ATT-SEED-1: (A) PERMISSION=migration 0455; (B) MASTER-DATA=runtime seeder cắm S3-FND-SEEDRUN-1). Quyết định mặc định (owner chốt ở wave-PR): is_sensitive suy theo triết lý ATT · approve:leave GIỮ non-sensitive (legacy=false, ON CONFLICT không UPDATE; approve là action-gate, masking N/A) · policy = CHỈ DEFAULT_ANNUAL (§12.2 chỉ định lượng annual 12n) · per-employee balance DEFER (HR create-flow/demo §8.4 — BE coi balance rỗng là hợp lệ).
     done_when: [
-      "seed ĐỦ catalog LEAVE permissions §11.2 (BALANCE.VIEW/ADJUST · REQUEST.CREATE/SUBMIT/VIEW/UPDATE_DRAFT/CANCEL/APPROVE/REJECT/REVOKE · TYPE.* · POLICY.* …) là ACTION; phạm vi qua role_permissions.data_scope (§11.0 canonical); ON CONFLICT DO NOTHING; PIN bộ (action,resource_type) vào hằng dùng chung ('leave'/'leave-type'/'leave-policy'/'leave-balance') khớp consumer S3-LEAVE-BE + API-10 (tránh drift tên)",
-      "role mapping §11.3 + API-10 per-cặp→data_scope: Employee=Own (view balance·create/submit/view/cancel own) · Manager=Team (view/approve/reject team) · HR=Company; scope SAI → DELETE-cặp+INSERT trong tx; CẤM blanket DELETE",
-      "seed leave types Annual(paid,balance,half-day)·Sick(paid)·Unpaid·Other + default company policy (annual 12 ngày/năm, allow half-day, min-notice 1 annual / 0 sick) §12.2 ON CONFLICT DO NOTHING; WIRING vào foundation seed bootstrap runner + integration test seed chạy thật khi bootstrap company",
-      "balance demo/bootstrap: tạo leave_balances khi tạo employee HOẶC seed demo (§8.4) — mọi thay đổi qua leave_balance_transactions append-only (seed direct/superuser, KHÔNG sửa balance thẳng); idempotent ĐO BỘ BA; migration NỐI TIẾP head sau LEAVE-DB-1+ATT-SEED-1, 1 lane db-migration",
+      "(A) PERMISSION = migration 0455 NỐI TIẾP head (global/system-scoped, AN TOÀN migrate-time): catalog §11.2 = ĐÚNG 30 cặp (action,resource_type) TƯỜNG MINH trên 7 resource_type — leave(11): view-own/view/create/submit/update-draft/cancel-own/approve/reject/cancel-any/revoke/export · leave-type(4): view/create/update/delete · leave-policy(4): view/create/update/delete · leave-balance(4): view-own/view/view-transaction/adjust · leave-calendar(3): view-own/view-team/view-company · leave-file(3): view/upload/delete · leave-audit-log(1): view (CẶP RIÊNG, KHÔNG tái dùng generic audit-log mig 0005); ON CONFLICT(action,resource_type) DO NOTHING (legacy mig 0063 ('read'/'create'/'approve'/'manage','leave') GIỮ NGUYÊN, KHÔNG xoá); is_sensitive=true cho cross-scope/approval-admin/audit/file (self-service view-own/create/submit/cancel-own + view leave-type = false để feed FE tile); PIN 30 cặp vào hằng dùng chung apps/api/src/leave/leave-permissions.const.ts (LEAVE_PERMISSION_COUNT=30) cho S3-LEAVE-BE",
+      "(A) ROLE→data_scope BẢNG TƯỜNG MINH per-(role,action,resource) — roles FLAT (mig 0444, KHÔNG kế thừa); 83 hàng grant: self-service (view-own/create/submit/update-draft/cancel-own:leave + view-own:leave-balance + view-own:leave-calendar) = Own cho TẤT CẢ 4 role · view/approve/reject:leave = mgr(Team)+hr+CA(Company) · cancel-any/revoke/export:leave = hr+CA(Company) · view-team:leave-calendar = mgr+hr+CA(Team, CA KHÔNG vượt max=Team) · view-company:leave-calendar = hr+CA(Company) · view:leave-type = cả 4 role(Company) · TYPE/POLICY write + leave-balance view/view-transaction/adjust + leave-audit-log = CHỈ hr+CA(Company); **LEAST-PRIVILEGE (owner ①): manager KHÔNG grant nào trên leave-policy/leave-balance/leave-audit-log/leave-file + KHÔNG cancel-any/revoke/export — manager (✓)=grantable-not-default**; pattern mig 0454 per-cặp DELETE wrong-scope + INSERT ON CONFLICT(role_id,permission_id,effect), CẤM blanket DELETE (giữ legacy media/parked grants); re-scope legacy employee create:leave Company→Own đúng hardening",
+      "(A) deny + positive test TỪNG role (lane LANE_DB): emp/mgr/hr/CA đều Own self-service; manager COUNT(*)=0 trên ('leave-policy','leave-balance','leave-audit-log','leave-file') + KHÔNG cancel-any/revoke/export (deny — chống over-grant); emp KHÔNG có view/approve/reject:leave; cross-tenant RLS deny dùng app role (mediaos_app, KHÔNG owner bypass); idempotent ĐO BỘ BA (role_id,permission_id,data_scope)",
+      "(B) LEAVE MASTER-DATA SEEDER (RUNTIME — đăng ký MasterDataSeederRegistry của S3-FND-SEEDRUN-1, KHÔNG seed trong migration): 4 leave_types ANNUAL/SICK/UNPAID/OTHER theo §12.2 (paid/deduct_balance/allow_half_day/min_notice_days/sort_order/is_system_default; status='active' lowercase = chk leave_types) + 1 leave_policy DEFAULT_ANNUAL (policy_scope='Company', leave_type_id→ANNUAL [NOT NULL=per-type], yearly_quota_days=12, status='Active' TitleCase = chk leave_policies); field→cột THẬT (leave_types/leave_policies trong schema/hr.ts+leave.ts mig 0453, KHÔNG seed cột không tồn tại; half-day/min-notice sống trên leave_types KHÔNG trên policy); idempotent qua SeedTrackingService + onConflictDoNothing partial-unique (company_id,code|policy_code) WHERE deleted_at IS NULL; seedKey 'leave.master-data' v1; seed types TRƯỚC rồi resolve ANNUAL id cho policy",
+      "(B) integration test LANE_DB: chạy ĐÚNG entry-point runner.reconcileCompany trên company test → assert 4 type + DEFAULT_ANNUAL policy tồn tại (đúng giá trị, is_system_default, quota=12) + chạy lần 2 = Skipped (idempotent, count không nhân đôi); app role RLS-enforced (KHÔNG gọi seeder.seed() trực tiếp → tránh false-green)",
+      "WIRING: LeaveModule import SeedModule + LeaveSeedRegistrar (OnModuleInit) — mirror attendance.module.ts; KHÔNG sửa module-app-metadata.ts (FE tile gating = S3-FE-REGISTRY-1 re-point sang ('view-own','leave')); migration 0455 NỐI TIẾP head THẬT (head 0454 trên feat/s3-wave1, idx 135 when 1717500670000) — cùng wave PR đảm bảo thứ tự 0453→0454→0455 (drizzle skip when nhỏ hơn)",
     ],
   },
 
