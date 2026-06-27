@@ -9,6 +9,8 @@ import { LeaveMasterDataSeeder } from "./leave-master-data.seeder";
 import { LeaveReadRepository } from "./leave-read.repository";
 import { LeaveReadService } from "./leave-read.service";
 import { LeaveRepository } from "./leave.repository";
+import { LeaveRequestRepository } from "./leave-request.repository";
+import { LeaveRequestService } from "./leave-request.service";
 import { LeaveSeedRegistrar } from "./leave-seed.registrar";
 import { LeaveService } from "./leave.service";
 
@@ -32,6 +34,9 @@ import { LeaveService } from "./leave.service";
     LeaveRepository,
     LeaveReadService,
     LeaveReadRepository,
+    // S3-LEAVE-BE-2 — request workflow (draft/submit/cancel) service + repo.
+    LeaveRequestService,
+    LeaveRequestRepository,
     HrTasksService,
     LeaveMasterDataSeeder,
     LeaveSeedRegistrar,

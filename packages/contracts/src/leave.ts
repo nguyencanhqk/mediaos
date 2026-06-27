@@ -268,3 +268,198 @@ export const leaveCalculateResponseSchema = z.object({
   warnings: z.array(z.string()),
 });
 export type LeaveCalculateResponse = z.infer<typeof leaveCalculateResponseSchema>;
+
+// ─── S3-LEAVE-BE-2: request workflow (draft / submit / cancel) ───────────────────
+//
+// ADDITIVE — KHÔNG sửa createLeaveRequestSchema legacy ở trên (route legacy đang dùng). Các schema dưới đây
+// phục vụ self-service workflow: tạo nháp → gửi duyệt → huỷ. Body server-authoritative: employee_id/user_id/
+// company_id/status/total_* client gửi đều BỊ Zod strip (object mặc định strip key lạ) — resolve actor ở server.
+
+/**
+ * Trường ngày/loại nghỉ DÙNG CHUNG cho create-draft + update-draft. Tách ra để gắn refine 1 lần (DRY),
+ * khớp ĐÚNG bộ refine của leaveCalculateRequestSchema (start<=end + cùng năm; HalfDay⇒1 ngày + session;
+ * Hourly⇒1 ngày + end>start).
+ */
+const leaveRequestDraftBaseSchema = z.object({
+  leaveTypeId: z.string().uuid(),
+  startDate: z.string().date(),
+  endDate: z.string().date(),
+  durationType: leaveDurationTypeSchema,
+  halfDaySession: leaveHalfDaySessionSchema.optional(),
+  startTime: clockTimeSchema.optional(),
+  endTime: clockTimeSchema.optional(),
+  reason: z.string().max(1000).optional(),
+  handoverNote: z.string().max(2000).optional(),
+  contactDuringLeave: z.string().max(255).optional(),
+});
+
+/** Hình dạng tối thiểu mà bộ refine ngày cần — predicate nhận đúng các field này (tránh `any`). */
+interface LeaveDraftDateRefineFields {
+  startDate: string;
+  endDate: string;
+  durationType: LeaveDurationType;
+  halfDaySession?: LeaveHalfDaySession;
+  startTime?: string;
+  endTime?: string;
+}
+
+/**
+ * Gắn bộ refine ngày/loại nghỉ lên 1 ZodObject draft. Generic ràng buộc output ⊇ LeaveDraftDateRefineFields
+ * ⇒ predicate `(v: LeaveDraftDateRefineFields)` hợp lệ qua contravariance (object rộng hơn assignable). Trả về
+ * ZodEffects — createZodDto vẫn nhận được. Một nguồn refine duy nhất cho create-draft + update-draft.
+ */
+function withLeaveDraftRefines<Shape extends z.ZodRawShape, Out extends LeaveDraftDateRefineFields>(
+  schema: z.ZodObject<Shape, "strip", z.ZodTypeAny, Out>,
+) {
+  return schema
+    .refine((v: LeaveDraftDateRefineFields) => v.startDate <= v.endDate, {
+      message: "Ngày bắt đầu phải trước hoặc bằng ngày kết thúc",
+      path: ["endDate"],
+    })
+    .refine((v: LeaveDraftDateRefineFields) => v.startDate.slice(0, 4) === v.endDate.slice(0, 4), {
+      message: "Khoảng nghỉ không được vắt qua 2 năm (tách thành 2 đơn)",
+      path: ["endDate"],
+    })
+    .refine(
+      (v: LeaveDraftDateRefineFields) => v.durationType !== "HalfDay" || v.startDate === v.endDate,
+      { message: "Nghỉ nửa ngày chỉ áp dụng cho đúng 1 ngày", path: ["endDate"] },
+    )
+    .refine(
+      (v: LeaveDraftDateRefineFields) => v.durationType !== "HalfDay" || v.halfDaySession != null,
+      { message: "Nghỉ nửa ngày phải chọn buổi (Morning/Afternoon)", path: ["halfDaySession"] },
+    )
+    .refine(
+      (v: LeaveDraftDateRefineFields) => v.durationType !== "Hourly" || v.startDate === v.endDate,
+      { message: "Nghỉ theo giờ chỉ áp dụng cho đúng 1 ngày", path: ["endDate"] },
+    )
+    .refine(
+      (v: LeaveDraftDateRefineFields) =>
+        v.durationType !== "Hourly" || (v.startTime != null && v.endTime != null),
+      { message: "Nghỉ theo giờ phải có giờ bắt đầu và kết thúc", path: ["endTime"] },
+    )
+    .refine(
+      (v: LeaveDraftDateRefineFields) =>
+        v.durationType !== "Hourly" ||
+        v.startTime == null ||
+        v.endTime == null ||
+        v.endTime > v.startTime,
+      { message: "Giờ kết thúc phải sau giờ bắt đầu", path: ["endTime"] },
+    );
+}
+
+/**
+ * POST /leave/requests — tạo đơn NHÁP (status='Draft'). submitNow=true ⇒ server chạy luôn nhánh submit
+ * trong CÙNG transaction (nháp → gửi duyệt 1 lần gọi).
+ */
+export const createLeaveRequestDraftSchema = withLeaveDraftRefines(
+  leaveRequestDraftBaseSchema.extend({ submitNow: z.boolean().default(false) }),
+);
+export type CreateLeaveRequestDraft = z.infer<typeof createLeaveRequestDraftSchema>;
+
+/** PATCH /leave/requests/:id — sửa đơn NHÁP (chỉ khi status='Draft'; recompute + replace day-rows). */
+export const updateLeaveRequestDraftSchema = withLeaveDraftRefines(leaveRequestDraftBaseSchema);
+export type UpdateLeaveRequestDraft = z.infer<typeof updateLeaveRequestDraftSchema>;
+
+/** POST /leave/requests/:id/submit — Draft → Pending. note ghi vào lịch sử duyệt (action SUBMIT). */
+export const submitLeaveRequestSchema = z.object({
+  note: z.string().max(1000).optional(),
+});
+export type SubmitLeaveRequest = z.infer<typeof submitLeaveRequestSchema>;
+
+/** POST /leave/requests/:id/cancel — Draft|Pending → Cancelled. cancelReason ghi vào lịch sử (action CANCEL). */
+export const cancelLeaveRequestSchema = z.object({
+  cancelReason: z.string().max(1000).optional(),
+});
+export type CancelLeaveRequest = z.infer<typeof cancelLeaveRequestSchema>;
+
+/** GET /leave/me/requests — query phân trang + lọc (status / loại nghỉ / khoảng ngày theo start_date). */
+export const leaveRequestListQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().positive().max(100).default(20),
+  /** Lọc theo trạng thái (TitleCase mới hoặc lowercase legacy) — khớp chính xác. */
+  status: z.string().min(1).max(32).optional(),
+  leaveTypeId: z.string().uuid().optional(),
+  /** [fromDate, toDate] inclusive trên start_date. */
+  fromDate: z.string().date().optional(),
+  toDate: z.string().date().optional(),
+});
+export type LeaveRequestListQuery = z.infer<typeof leaveRequestListQuerySchema>;
+
+/** 1 dòng chi tiết ngày nghỉ (camelCase, FE-friendly). dayType có khoảng trắng ('Full Day'/'Half Day'/'Hourly'). */
+export const leaveRequestDayViewSchema = z.object({
+  id: z.string().uuid(),
+  workDate: z.string().date(),
+  dayType: z.string(),
+  halfDaySession: z.string().nullable(),
+  startTime: z.string().nullable(),
+  endTime: z.string().nullable(),
+  leaveDays: z.number(),
+  leaveHours: z.number(),
+  leaveMinutes: z.number(),
+  isWorkingDay: z.boolean(),
+  isPublicHoliday: z.boolean(),
+  status: z.string(),
+});
+export type LeaveRequestDayView = z.infer<typeof leaveRequestDayViewSchema>;
+
+/** 1 dòng lịch sử duyệt (append-only). action ∈ SUBMIT/APPROVE/REJECT/CANCEL/REVOKE/COMMENT. */
+export const leaveRequestApprovalViewSchema = z.object({
+  id: z.string().uuid(),
+  approvalStep: z.number().int(),
+  action: z.string(),
+  fromStatus: z.string().nullable(),
+  toStatus: z.string().nullable(),
+  comment: z.string().nullable(),
+  approverUserId: z.string().uuid().nullable(),
+  actedAt: z.string().datetime(),
+});
+export type LeaveRequestApprovalView = z.infer<typeof leaveRequestApprovalViewSchema>;
+
+/** 1 dòng danh sách đơn nghỉ của tôi (GET /leave/me/requests). */
+export const leaveRequestListItemViewSchema = z.object({
+  id: z.string().uuid(),
+  leaveTypeId: z.string().uuid(),
+  leaveTypeCode: z.string().nullable(),
+  leaveTypeName: z.string().nullable(),
+  startDate: z.string().date(),
+  endDate: z.string().date(),
+  durationType: z.string().nullable(),
+  totalDays: z.number(),
+  totalHours: z.number().nullable(),
+  status: z.string(),
+  reason: z.string().nullable(),
+  balanceEffectStatus: z.string().nullable(),
+  submittedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type LeaveRequestListItemView = z.infer<typeof leaveRequestListItemViewSchema>;
+
+/** Chi tiết 1 đơn nghỉ của tôi (GET /leave/me/requests/:id) — đơn + days[] + lịch sử duyệt[]. */
+export const leaveRequestDetailViewSchema = leaveRequestListItemViewSchema.extend({
+  employeeId: z.string().uuid().nullable(),
+  leavePolicyId: z.string().uuid().nullable(),
+  halfDaySession: z.string().nullable(),
+  startTime: z.string().nullable(),
+  endTime: z.string().nullable(),
+  handoverNote: z.string().nullable(),
+  contactDuringLeave: z.string().nullable(),
+  cancelReason: z.string().nullable(),
+  cancelledAt: z.string().datetime().nullable(),
+  days: z.array(leaveRequestDayViewSchema),
+  approvals: z.array(leaveRequestApprovalViewSchema),
+});
+export type LeaveRequestDetailView = z.infer<typeof leaveRequestDetailViewSchema>;
+
+/** Envelope danh sách (mirror attendance {items, meta}). */
+export const leaveRequestListResponseSchema = z.object({
+  items: z.array(leaveRequestListItemViewSchema),
+  meta: z.object({
+    page: z.number().int().positive(),
+    pageSize: z.number().int().positive(),
+    total: z.number().int().nonnegative(),
+    totalPages: z.number().int().nonnegative(),
+    hasNext: z.boolean(),
+    hasPrev: z.boolean(),
+  }),
+});
+export type LeaveRequestListResponse = z.infer<typeof leaveRequestListResponseSchema>;

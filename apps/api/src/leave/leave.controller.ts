@@ -22,14 +22,19 @@ import {
   type LeaveResourceType,
 } from "./leave-permissions.const";
 import { LeaveReadService } from "./leave-read.service";
+import { LeaveRequestService } from "./leave-request.service";
 import { LeaveService } from "./leave.service";
 import {
-  CreateLeaveRequestDto,
+  CancelLeaveRequestDto,
+  CreateLeaveRequestDraftDto,
   CreateLeaveTypeDto,
   LeaveCalculateDto,
   LeaveCalendarQueryDto,
   LeaveListQueryDto,
+  LeaveRequestListQueryDto,
   ReviewNoteDto,
+  SubmitLeaveRequestDto,
+  UpdateLeaveRequestDraftDto,
   UpdateLeaveTypeDto,
   UpsertLeaveBalanceDto,
 } from "./leave.dto";
@@ -58,6 +63,11 @@ function leavePair(action: string, resourceType: LeaveResourceType): LeavePermis
 const VIEW_LEAVE_TYPE = leavePair("view", LEAVE_RESOURCES.LEAVE_TYPE);
 const VIEW_OWN_BALANCE = leavePair("view-own", LEAVE_RESOURCES.LEAVE_BALANCE);
 const CREATE_LEAVE = leavePair("create", LEAVE_RESOURCES.LEAVE);
+// S3-LEAVE-BE-2 — self-service workflow pairs (mig 0455, granted @ Own to all 4 canonical roles).
+const SUBMIT_LEAVE = leavePair("submit", LEAVE_RESOURCES.LEAVE);
+const UPDATE_DRAFT_LEAVE = leavePair("update-draft", LEAVE_RESOURCES.LEAVE);
+const CANCEL_OWN_LEAVE = leavePair("cancel-own", LEAVE_RESOURCES.LEAVE);
+const VIEW_OWN_LEAVE = leavePair("view-own", LEAVE_RESOURCES.LEAVE);
 
 /**
  * G11-2 — Leave HTTP surface. Every route gated by PermissionGuard (@RequirePermission, fail-closed).
@@ -71,6 +81,7 @@ export class LeaveController {
   constructor(
     private readonly leave: LeaveService,
     private readonly leaveRead: LeaveReadService,
+    private readonly leaveRequest: LeaveRequestService,
   ) {}
 
   // ─── Leave types ─────────────────────────────────────────────────────────────
@@ -114,6 +125,27 @@ export class LeaveController {
     return this.leaveRead.listMyBalances(req.user);
   }
 
+  // ─── My leave requests (S3-LEAVE-BE-2 self-service) ──────────────────────────
+  // Static "me/requests" declared BEFORE "me/requests/:id" (Express order: static before param, same verb).
+  // view-own:leave (Own) — list/detail SELF-LOCKED by user_id in the service (not a scope query). 404 (not
+  // 403) when a request exists but isn't owned/cross-tenant → never leak existence.
+
+  @Get("me/requests")
+  @RequirePermission(VIEW_OWN_LEAVE.action, VIEW_OWN_LEAVE.resourceType, {
+    isSensitive: VIEW_OWN_LEAVE.sensitive,
+  })
+  listMyRequests(@Req() req: AuthenticatedRequest, @Query() query: LeaveRequestListQueryDto) {
+    return this.leaveRequest.listMine(req.user, query);
+  }
+
+  @Get("me/requests/:id")
+  @RequirePermission(VIEW_OWN_LEAVE.action, VIEW_OWN_LEAVE.resourceType, {
+    isSensitive: VIEW_OWN_LEAVE.sensitive,
+  })
+  getMyRequest(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+    return this.leaveRequest.getMineDetail(req.user, id);
+  }
+
   @Get("balances")
   @RequirePermission("read", "leave")
   listBalances(@Req() req: AuthenticatedRequest, @Query() query: LeaveListQueryDto) {
@@ -134,10 +166,14 @@ export class LeaveController {
     return this.leave.listRequests(req.user, query);
   }
 
+  // S3-LEAVE-BE-2 REPOINT: create now produces a Draft via LeaveRequestService (FSM Draft→Pending→Cancelled).
+  // submitNow=true in the body runs the submit path in the same tx. create:leave (Own) gate.
   @Post("requests")
-  @RequirePermission("create", "leave")
-  createRequest(@Req() req: AuthenticatedRequest, @Body() dto: CreateLeaveRequestDto) {
-    return this.leave.createRequest(req.user, dto);
+  @RequirePermission(CREATE_LEAVE.action, CREATE_LEAVE.resourceType, {
+    isSensitive: CREATE_LEAVE.sensitive,
+  })
+  createRequest(@Req() req: AuthenticatedRequest, @Body() dto: CreateLeaveRequestDraftDto) {
+    return this.leaveRequest.createDraft(req.user, dto);
   }
 
   // S3-LEAVE-BE-1 NEW: LEAVE-API-301 preview (canonical path /leave/requests/calculate). PREVIEW ONLY —
@@ -150,6 +186,34 @@ export class LeaveController {
   })
   calculateRequest(@Req() req: AuthenticatedRequest, @Body() dto: LeaveCalculateDto) {
     return this.leaveRead.calculate(req.user, dto);
+  }
+
+  // S3-LEAVE-BE-2 NEW: update draft (only when status='Draft' → else 409). PATCH /requests/:id (distinct verb
+  // from POST /requests/calculate → no shadow). update-draft:leave (Own).
+  @Patch("requests/:id")
+  @RequirePermission(UPDATE_DRAFT_LEAVE.action, UPDATE_DRAFT_LEAVE.resourceType, {
+    isSensitive: UPDATE_DRAFT_LEAVE.sensitive,
+  })
+  updateRequestDraft(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Body() dto: UpdateLeaveRequestDraftDto,
+  ) {
+    return this.leaveRequest.updateDraft(req.user, id, dto);
+  }
+
+  // S3-LEAVE-BE-2 NEW: submit draft (Draft → Pending; min-notice + overlap + balance reserve). submit:leave (Own).
+  @Post("requests/:id/submit")
+  @HttpCode(200)
+  @RequirePermission(SUBMIT_LEAVE.action, SUBMIT_LEAVE.resourceType, {
+    isSensitive: SUBMIT_LEAVE.sensitive,
+  })
+  submitRequest(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Body() dto: SubmitLeaveRequestDto,
+  ) {
+    return this.leaveRequest.submit(req.user, id, dto.note);
   }
 
   @Post("requests/:id/approve")
@@ -172,11 +236,19 @@ export class LeaveController {
     return this.leave.rejectRequest(req.user, id, dto.note);
   }
 
+  // S3-LEAVE-BE-2 REPOINT + REGATE: cancel own request (Draft|Pending → Cancelled; releases reserve on
+  // Pending). Gate CHANGED create:leave → cancel-own:leave (Own) — correct self-service pair (mig 0455).
   @Post("requests/:id/cancel")
   @HttpCode(200)
-  @RequirePermission("create", "leave")
-  cancelRequest(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
-    return this.leave.cancelRequest(req.user, id);
+  @RequirePermission(CANCEL_OWN_LEAVE.action, CANCEL_OWN_LEAVE.resourceType, {
+    isSensitive: CANCEL_OWN_LEAVE.sensitive,
+  })
+  cancelRequest(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Body() dto: CancelLeaveRequestDto,
+  ) {
+    return this.leaveRequest.cancel(req.user, id, dto.cancelReason);
   }
 
   // ─── Team calendar ───────────────────────────────────────────────────────────
