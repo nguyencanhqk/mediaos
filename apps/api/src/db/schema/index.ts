@@ -24,6 +24,10 @@ export * from "./media";
 export * from "./workflow";
 export * from "./communication";
 export * from "./hr";
+// S3-ATT-DB-1 (DB-04 §7, mig 0452): ATT Core 7 bảng MỚI — shifts · shift_assignments · attendance_rules ·
+// attendance_logs (APPEND-ONLY) · attendance_adjustment_items (APPEND-ONLY) · remote_work_requests ·
+// remote_work_request_approvals (APPEND-ONLY). attendance_records/_adjustment_requests reconcile ở ./hr (ALTER-ADD).
+export * from "./attendance";
 export * from "./finance";
 // G8 approval (multi-level rules — approval_requests/_steps live in ./workflow)
 export * from "./approval";

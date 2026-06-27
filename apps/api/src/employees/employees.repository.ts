@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, ilike, isNull, ne, or } from "drizzle-orm";
+import { and, eq, ilike, isNull, ne, or, type SQL } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import {
   employeeManagerRelations,
@@ -115,11 +115,21 @@ export class EmployeesRepository {
 
   // async + awaited so the Promise boundary is explicit: a dropped `await` at the call site would
   // otherwise yield a query-builder object, and the service's reveal loop would silently mask all rows.
-  async listEmployeesTx(tx: TenantTx, companyId: string, filters: EmployeeListFilters) {
+  //
+  // S2-HR-EMP-LEGACY-LOCK-1: `scopeCond` is the DataScopeService predicate (Own/Team/Department/…),
+  // ANDed with the tenant guard + soft-delete + filters so a caller never lists rows outside their
+  // scope (closes the legacy unscoped-read IDOR). null = no extra scope (kept for back-compat callers).
+  async listEmployeesTx(
+    tx: TenantTx,
+    companyId: string,
+    filters: EmployeeListFilters,
+    scopeCond?: SQL | null,
+  ) {
     const conditions = [
       eq(employeeProfiles.companyId, companyId),
       isNull(employeeProfiles.deletedAt),
     ];
+    if (scopeCond) conditions.push(scopeCond);
     if (filters.orgUnitId) conditions.push(eq(employeeProfiles.orgUnitId, filters.orgUnitId));
     if (filters.positionId) conditions.push(eq(employeeProfiles.positionId, filters.positionId));
     if (filters.status) conditions.push(eq(employeeProfiles.status, filters.status));

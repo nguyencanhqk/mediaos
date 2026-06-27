@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { DEFAULT_EMPLOYEE_CODE_NUMBER_LENGTH } from "@mediaos/contracts";
 import type {
   HrContractTypeLookup,
   HrDepartmentLookup,
@@ -28,8 +29,8 @@ type RequestUser = { id: string; companyId: string };
  * Lookups expose only non-sensitive reference data.
  *
  * BẤT BIẾN #1: every read runs in withTenant(caller.companyId); the scope predicate carries company_id
- * too (belt-and-suspenders over RLS). BẤT BIẾN #3: baseSalary (view-salary) + PII phone/notes/
- * contractType (view-sensitive) are masked SERVER-side; a wildcard *:* grant does NOT reveal them
+ * too (belt-and-suspenders over RLS). BẤT BIẾN #3: baseSalary + salaryType (view-salary) + PII phone/
+ * notes/contractType (view-sensitive) are masked SERVER-side; a wildcard *:* grant does NOT reveal them
  * (both are sensitive catalog pairs → can() requires an exact ALLOW). Reveal ⟹ audit atomically:
  * the view-salary audit INSERT shares the caller's tenant tx, so a failed audit rolls back the read.
  */
@@ -72,7 +73,11 @@ export class HrReadService {
         pageSize: query.pageSize,
       });
 
-      // Per-row salary reveal (object-scoped grants honored) + atomic audit, sequential on the tx.
+      // Per-row salary reveal — KEEP per-row, do NOT collapse to one decision/page: can('view-salary')
+      // is called with resourceId so OBJECT-level grants (ADR-0010) resolve per employee, and a single
+      // page can legitimately mix revealed + masked rows. Each revealed row audits atomically on the tx
+      // (reveal ⟹ audit, per object). Collapsing to a resourceType-level check would leak or hide salary
+      // across rows depending on object grants — a cross-record disclosure bug, not a perf win.
       const items: HrEmployeeListItem[] = [];
       for (const row of rows) {
         const revealSalary = await this.revealSalary(tx, user, row.id);
@@ -128,8 +133,10 @@ export class HrReadService {
   // ── Me / profile ────────────────────────────────────────────────────────────────
 
   async getMyProfile(user: RequestUser): Promise<HrMeProfile> {
-    // Self-only: locked to caller.id within the tenant — NOT a scope query (a Company-scope read must
-    // not let /me/profile return someone else's row).
+    // Gate: the controller's @RequirePermission("read","employee") is the coarse access gate; THIS
+    // self-by-userId lookup is the fine gate — it pins the row to the caller, so the route returns the
+    // caller's OWN profile only. Self-only: locked to caller.id within the tenant — NOT a scope query
+    // (a Company-scope read must not let /me/profile return someone else's row).
     return this.db.withTenant(user.companyId, async (tx) => {
       const row = await this.repo.findByUserIdTx(tx, user.companyId, user.id);
       if (!row) throw new NotFoundException("No employee profile linked to your account");
@@ -171,7 +178,13 @@ export class HrReadService {
     return this.db.withTenant(user.companyId, async (tx) => {
       const cfg = await this.repo.getEmployeeCodeConfigTx(tx, user.companyId);
       if (!cfg) {
-        return { available: false, prefix: null, pattern: null, numberLength: 4, sample: null };
+        return {
+          available: false,
+          prefix: null,
+          pattern: null,
+          numberLength: DEFAULT_EMPLOYEE_CODE_NUMBER_LENGTH,
+          sample: null,
+        };
       }
       const padded = "1".padStart(cfg.numberLength, "0");
       const sample = `${cfg.prefix ?? ""}${padded}`;
@@ -269,7 +282,10 @@ export class HrReadService {
       endDate: row.endDate,
       status: row.status,
       baseSalary: revealSalary && row.baseSalary != null ? Number(row.baseSalary) : null,
-      salaryType: row.salaryType,
+      // SENSITIVE (salary-class, S2-HR-MASK-1): salaryType is the compensation MODEL (monthly/hourly/
+      // project). Owner chốt 2026-06-26 classes it under SPEC-03 §18.8 "dữ liệu lương" → gate WITH the
+      // amount behind view-salary (fail-closed). No view-salary reveal ⟹ null, same as baseSalary.
+      salaryType: revealSalary ? row.salaryType : null,
       // PII — masked unless view-sensitive grants reveal.
       phone: revealPii ? row.phone : null,
       contractType: revealPii ? row.contractType : null,

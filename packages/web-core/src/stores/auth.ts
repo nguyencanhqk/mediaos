@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { normalizeUserStatus } from "../lib/registry";
 
 interface User {
   id: string;
@@ -41,8 +42,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   accessToken: null,
   refreshToken: null,
   capabilities: {},
+  // Chuẩn hoá status thô từ /me ('active'|'suspended') → canonical Title-case TẠI ĐÂY (chokepoint duy nhất
+  // ghi `user` vào store) → mọi nơi đọc state.user.status (guard route, ProtectedShell, layouts) nhận giá trị
+  // đã chuẩn, sửa 403 USER_INACTIVE oan do lệch hoa/thường.
   setUser: (user, capabilities) =>
-    set({ isAuthenticated: true, user, username: user.email, capabilities }),
+    set({
+      isAuthenticated: true,
+      user: { ...user, status: normalizeUserStatus(user.status) },
+      username: user.email,
+      capabilities,
+    }),
   // CHỦ Ý: chỉ set access token, KHÔNG đặt isAuthenticated. Bất biến: `isAuthenticated === true` ⟺ đã có user
   // + capabilities (setUser). Access token đơn lẻ (sau silent-refresh, TRƯỚC /me) chưa đủ để render UI có quyền
   // → guard/useCan không bao giờ thấy trạng thái "authed nhưng user=null". setUser mới bật cờ.

@@ -440,6 +440,25 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM chat_rooms WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM notifications WHERE company_id = ANY($1::uuid[])", ids);
 
+  // ── S3-ATT-DB-1 (mig 0452) ATT Core 7 bảng MỚI ───────────────────────────
+  // Thứ tự FK con→cha: remote_work_request_approvals → remote_work_requests; attendance_adjustment_items →
+  // attendance_adjustment_requests (xoá ở dưới); attendance_logs (FK employee_profiles CASCADE + attendance_records
+  // SET NULL); shift_assignments → shifts; attendance_rules. Mọi company_id → companies CASCADE. employee_id →
+  // employee_profiles (CASCADE/SET NULL). Xoá tường minh TRƯỚC attendance_records/users/employee_profiles cho rõ thứ tự.
+  await direct.query(
+    "DELETE FROM remote_work_request_approvals WHERE company_id = ANY($1::uuid[])",
+    ids,
+  );
+  await direct.query("DELETE FROM remote_work_requests WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query(
+    "DELETE FROM attendance_adjustment_items WHERE company_id = ANY($1::uuid[])",
+    ids,
+  );
+  await direct.query("DELETE FROM attendance_logs WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM shift_assignments WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM attendance_rules WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM shifts WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G11 HR (Attendance + Leave) ──────────────────────────────────────────
   // adjustment_requests/leave_requests có FK → tasks → xoá TRƯỚC tasks. attendance_records
   // FK ← adjustment_requests (attendance_record_id) → xoá requests trước records.

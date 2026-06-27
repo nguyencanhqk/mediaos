@@ -338,5 +338,57 @@ describe.skipIf(!hasLaneDb)(
       void bProfileId;
       void mgrProfileId;
     });
+
+    // ── S2-HR-EMP-LEGACY-LOCK-1: legacy GET /employees(/:id) now scoped + masked like /hr/employees ──
+    //
+    // Trước WO này, /employees(/:id) (EmployeesService) CHỈ gate read:employee + RLS → bất kỳ grantee
+    // nào đọc được salaryType + PII của MỌI nhân viên trong tenant (IDOR + rò field nhạy cảm). Giờ áp
+    // DataScopeService + masking (salaryType↔view-salary · phone/contractType/notes↔view-sensitive).
+    describe("legacy /employees(/:id) — scoped + masked (LEGACY-LOCK)", () => {
+      it("DENY: GET /employees KHÔNG có read:employee → 403", async () => {
+        const token = await login(app, A.slug, `noperm@${A.slug}.test`);
+        const res = await api(app).get("/employees").set(bearer(token));
+        expect(res.status).toBe(403);
+        expect(res.body.success).toBe(false);
+      });
+
+      it("list scoped: rep (Own) GET /employees → CHỈ thấy hồ sơ chính mình (IDOR list đóng)", async () => {
+        const token = await login(app, A.slug, `rep@${A.slug}.test`);
+        const res = await api(app).get("/employees").set(bearer(token));
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        const rows = res.body.data as Array<{ userId: string }>;
+        expect(rows.map((r) => r.userId)).toEqual([repUserId]);
+      });
+
+      it("IDOR detail đóng: rep (Own) GET /employees/:id của peer → 404 (trước đây 200 + lộ salaryType)", async () => {
+        const token = await login(app, A.slug, `rep@${A.slug}.test`);
+        const res = await api(app).get(`/employees/${peerProfileId}`).set(bearer(token));
+        expect(res.status).toBe(404);
+        expect(res.body.success).toBe(false);
+      });
+
+      it("in-scope NHƯNG thiếu view-salary/view-sensitive → 200 với salaryType + PII = null (masked)", async () => {
+        // admin scope=Company → thấy peer; KHÔNG view-salary/view-sensitive → salaryType (DB default
+        // 'monthly') phải mask thành null ⇒ chứng minh salary-class gate chạy trên route legacy.
+        const token = await login(app, A.slug, `admin@${A.slug}.test`);
+        const res = await api(app).get(`/employees/${peerProfileId}`).set(bearer(token));
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        expect(res.body.data.userId).toBe(peerUserId);
+        expect(res.body.data.baseSalary).toBeNull();
+        expect(res.body.data.salaryType).toBeNull();
+        expect(res.body.data.phone).toBeNull();
+        expect(res.body.data.contractType).toBeNull();
+        expect(res.body.data.notes).toBeNull();
+      });
+
+      it("cross-tenant: GET /employees/:id tenant A bằng token tenant B → 404, KHÔNG rò salary", async () => {
+        const token = await login(app, B.slug, `b@${B.slug}.test`);
+        const res = await api(app).get(`/employees/${mgrProfileId}`).set(bearer(token));
+        expect(res.status).toBe(404);
+        const blob = JSON.stringify(res.body);
+        expect(blob).not.toContain("salary_type");
+        expect(blob).not.toContain("salaryType");
+      });
+    });
   },
 );

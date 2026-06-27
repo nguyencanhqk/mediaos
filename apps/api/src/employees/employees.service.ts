@@ -20,6 +20,7 @@ import { DatabaseService, type TenantTx } from "../db/db.service";
 import type { User } from "../db/schema";
 import { PasswordService } from "../auth/password.service";
 import { PermissionService } from "../permission/permission.service";
+import { DataScopeService } from "../permission/data-scope.service";
 import { ValkeyService } from "../permission/valkey.service";
 import type { CanInput, PermissionDecision } from "../permission/permission.types";
 import { SecurityPolicyService } from "../security-policy/security-policy.service";
@@ -73,6 +74,9 @@ export class EmployeesService {
     private readonly valkey: ValkeyService,
     private readonly password: PasswordService,
     private readonly securityPolicy: SecurityPolicyService,
+    // S2-HR-EMP-LEGACY-LOCK-1: same resolver the HR read core uses — added LAST (DI is by type; the
+    // unit spec constructs positionally, so new deps go at the end to keep existing arg order stable).
+    private readonly dataScope: DataScopeService,
   ) {}
 
   /**
@@ -96,29 +100,107 @@ export class EmployeesService {
   }
 
   async listEmployees(user: RequestUser, filters: EmployeeListQuery) {
+    // S2-HR-EMP-LEGACY-LOCK-1: gate + SCOPE the legacy list (was unscoped → tenant-wide IDOR). The
+    // controller already requires read:employee; resolveAndAssert re-asserts and returns the caller's
+    // strongest read scope, then buildEmployeeScopeCondition narrows the query to the permitted rows
+    // (Own/Team/Department/Company/System) — same layer GET /hr/employees uses.
+    const scope = await this.dataScope.resolveAndAssert(
+      user.id,
+      user.companyId,
+      "read",
+      "employee",
+    );
+    const ctx = await this.dataScope.resolveContext(user.id, user.companyId);
+    const scopeCond = this.dataScope.buildEmployeeScopeCondition(scope, ctx);
+
     // Read + per-item salary audit share ONE tenant tx (same atomic guarantee as getEmployee):
     // a failed audit INSERT rolls back and no salary is revealed. Salary scope can be per-employee
     // (object_permissions), so each row is decided/masked individually — no all-or-nothing shortcut.
     return this.db.withTenant(user.companyId, async (tx) => {
-      const rows = await this.repo.listEmployeesTx(tx, user.companyId, filters);
+      const rows = await this.repo.listEmployeesTx(tx, user.companyId, filters, scopeCond);
       // Sequential (not Promise.all): audit INSERTs share the tx connection and must not interleave.
       const reveals: boolean[] = [];
       for (const row of rows) {
         reveals.push(await this.revealSalary(tx, user, row.id));
       }
+      // List projection carries no salaryType/PII (LIST_COLUMNS) — only baseSalary needs masking here.
       return rows.map((row, i) => maskSalary(row, reveals[i]));
     });
   }
 
   async getEmployee(user: RequestUser, id: string) {
+    // S2-HR-EMP-LEGACY-LOCK-1: gate + SCOPE the legacy detail (was read:employee + RLS only → any
+    // grantee could read ANY employee's salaryType + PII, tenant-wide IDOR). resolveAndAssert returns
+    // the caller's read scope; an out-of-scope or cross-tenant row 404s (never leaks existence).
+    const scope = await this.dataScope.resolveAndAssert(
+      user.id,
+      user.companyId,
+      "read",
+      "employee",
+    );
+    const ctx = await this.dataScope.resolveContext(user.id, user.companyId);
+
     // Read + audit share one tenant tx: a failed audit INSERT rolls back and the salary is not
     // revealed (mirrors platform-accounts reveal). A missing row throws before any audit is written.
     return this.db.withTenant(user.companyId, async (tx) => {
       const row = await this.repo.findByIdTx(tx, user.companyId, id);
       if (!row) throw new NotFoundException("Employee not found");
-      const reveal = await this.revealSalary(tx, user, id);
-      return maskSalary(row, reveal);
+
+      // directManagerId references users.id → it IS the manager's user id (for Team in-scope checks).
+      const inScope = this.dataScope.isEmployeeInScope(scope, ctx, {
+        userId: row.userId,
+        companyId: row.companyId,
+        orgUnitId: row.orgUnitId,
+        directManagerUserId: row.directManagerId,
+      });
+      if (!inScope) throw new NotFoundException("Employee not found");
+
+      const revealSalary = await this.revealSalary(tx, user, id);
+      const revealPii = await this.canViewSensitive(user, id);
+      return this.maskEmployeeDetail(row, revealSalary, revealPii);
     });
+  }
+
+  /**
+   * view-sensitive:employee gate for PII (phone/contractType/notes) — mirrors HrReadService. Sensitive
+   * catalog pair → a wildcard *:* grant does NOT satisfy it. PII reveal is read-only, not separately
+   * audited (no salary-class trail). avatarUrl is non-sensitive (SPEC-03 §18.8) and stays unmasked.
+   */
+  private async canViewSensitive(user: RequestUser, targetId: string): Promise<boolean> {
+    const decision = await this.permissionService.can({
+      userId: user.id,
+      companyId: user.companyId,
+      action: "view-sensitive",
+      resourceType: "employee",
+      resourceId: targetId,
+      isSensitive: true,
+    });
+    return decision.allow;
+  }
+
+  /**
+   * Detail masking (BẤT BIẾN #3): baseSalary + salaryType behind view-salary (salaryType is salary-class
+   * per SPEC-03 §18.8 / S2-HR-MASK-1); phone/contractType/notes behind view-sensitive. Mirrors the
+   * HrReadService masking layer; the two converge on salaryType once S2-HR-MASK-1 (PR #49) lands —
+   * until then this legacy route is the stricter (fail-closed) of the two, which is the safe direction.
+   */
+  private maskEmployeeDetail<
+    T extends {
+      baseSalary: unknown;
+      salaryType: unknown;
+      phone: unknown;
+      contractType: unknown;
+      notes: unknown;
+    },
+  >(row: T, revealSalary: boolean, revealPii: boolean) {
+    return {
+      ...row,
+      baseSalary: revealSalary && row.baseSalary != null ? Number(row.baseSalary) : null,
+      salaryType: revealSalary ? row.salaryType : null,
+      phone: revealPii ? row.phone : null,
+      contractType: revealPii ? row.contractType : null,
+      notes: revealPii ? row.notes : null,
+    };
   }
 
   /**

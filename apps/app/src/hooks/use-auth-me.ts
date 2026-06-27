@@ -12,7 +12,7 @@
  * staleTime=5 phút, refetchOnWindowFocus=true để phát hiện session revoke sớm.
  */
 import { useQuery } from "@tanstack/react-query";
-import { authApi, type SessionContext } from "@mediaos/web-core";
+import { authApi, normalizeUserStatus, type SessionContext } from "@mediaos/web-core";
 
 /** Query key stable — dùng trong invalidate sau logout / permission change. */
 export const AUTH_ME_QUERY_KEY = ["auth", "me"] as const;
@@ -23,20 +23,13 @@ export function useAuthMe() {
     queryFn: async (): Promise<SessionContext> => {
       const me = await authApi.me();
 
-      const userStatus = ((): NonNullable<SessionContext["user"]>["status"] => {
-        const s = me.status;
-        if (s === "Active" || s === "Inactive" || s === "Locked" || s === "Pending Activation") {
-          return s;
-        }
-        return "Active";
-      })();
-
       return {
         status: "authenticated",
         user: {
           id: me.id,
           email: me.email,
-          status: userStatus,
+          // BE trả status chữ thường ('active'|'suspended') → chuẩn hoá về union canonical (fail-closed).
+          status: normalizeUserStatus(me.status),
           companyId: me.companyId,
         },
         // TODO(BE): map company + modules khi BE wire đủ payload vào /auth/me

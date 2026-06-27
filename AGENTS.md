@@ -15,12 +15,14 @@ bash harness/finish.sh   → cập nhật backlog · ghi handoff · commit-if-sa
 
 ## 1. Dự án
 
-**Hệ thống quản lý doanh nghiệp nội bộ** (Enterprise Management System) — đơn-công-ty (N=1), modular monolith + API-first. MVP = **AUTH · HR · ATT · LEAVE · TASK · DASH · NOTI** (bản đồ ghép cặp PRD · SPEC · DB · API · UI · FRONTEND · BACKEND · QA theo module ở [`docs/README.md`](docs/README.md) §9). KHÔNG còn media/kênh/content; payroll/finance/KPI/SaaS/operator-plane là hướng cũ đã **park (out-of-scope)**, đang dọn dần — lấy bộ `docs/` làm chuẩn khi mâu thuẫn với code cũ.
+**Hệ thống quản lý doanh nghiệp nội bộ** (Enterprise Management System) — đơn-công-ty (N=1), modular monolith + API-first. MVP = **AUTH · HR · ATT · LEAVE · TASK · DASH · NOTI** (bản đồ ghép cặp PRD · SPEC · DB · API · UI · FRONTEND · BACKEND · QA theo module ở [`docs/README.md`](docs/README.md) §9). KHÔNG còn media/kênh/content; payroll/finance/KPI/SaaS/operator-plane là hướng cũ đã **park (out-of-scope)**, đang dọn dần.
+
+> **Schema chuẩn = bộ [`docs/DB/`](docs/DB/) (DB-01…10)** · ERD tổng hợp + đối chiếu code↔thiết kế = [`docs/erd-current.md`](docs/erd-current.md) (Phụ lục A) · chức năng test thực tế = [`docs/TESTABLE-FEATURES.md`](docs/TESTABLE-FEATURES.md). Code ở `apps/api/src/db/schema/` còn LỆCH tên & LẪN bảng cũ → khi mâu thuẫn **`docs/DB` + `docs/spec` là chuẩn, KHÔNG phải code**.
 
 ## 2. 3 BẤT BIẾN — không bao giờ phá (ép bằng hook `.claude/hooks/`)
 
 1. **`company_id` ở MỌI query** nghiệp vụ. Cô lập ở DB bằng **RLS + FORCE**, không dựa kỷ luật dev. Mọi repo qua `withTenant(companyId, fn)`. _Chạy ở N=1; hạ tầng giữ để sẵn sàng mở rộng._
-2. **Không hard-delete** dữ liệu quan trọng (`deleted_at`). Bảng **audit/snapshot append-only** — app role không UPDATE/DELETE. Hiện: `audit_logs` (+ các bảng log/ledger: `attendance_audit_logs`, `task_activity_logs`, `leave_balance_transactions`, `notification_logs`…). _(Phase 2 thêm `payslips`/`kpi_results` khi build.)_
+2. **Không hard-delete** dữ liệu quan trọng (`deleted_at`). Bảng **audit/snapshot/ledger append-only** — app role không UPDATE/DELETE. Thiết kế (docs/DB): `audit_logs` · `login_logs` · `attendance_logs` · `leave_balance_transactions` · `task_activity_logs` · `notification_delivery_logs` · `employee_status_histories`. Code hiện: `audit_logs`, `login_logs`, `user_security_events`, `file_access_logs`, `api_key_usages`, `security_alerts` (đầy đủ: `docs/erd-current.md` §9 / Phụ lục A). _(Phase 2: `payslips`/`kpi_results`.)_
 3. **Không secret plaintext.** Mật khẩu user → **hash**. Secret hệ thống → env/secret manager, không log, không vào DTO role không quyền.
 
 ## 3. Luật phụ thuộc (thứ tự bắt buộc)
