@@ -6,6 +6,8 @@ import { HrTasksService } from "../tasks/hr-tasks.service";
 import { AttMasterDataSeeder } from "./att-master-data.seeder";
 import { AttSeedRegistrar } from "./att-seed.registrar";
 import { AttendanceController } from "./attendance.controller";
+import { AttendanceReadRepository } from "./attendance-read.repository";
+import { AttendanceReadService } from "./attendance-read.service";
 import { AttendanceRepository } from "./attendance.repository";
 import { AttendanceService } from "./attendance.service";
 
@@ -24,10 +26,14 @@ import { AttendanceService } from "./attendance.service";
   providers: [
     AttendanceService,
     AttendanceRepository,
+    // S3-ATT-BE-2 (additive): scoped records read. AttendanceReadService injects DataScopeService +
+    // PermissionService (PermissionModule exports both) + DatabaseService (@Global) + the read repo.
+    AttendanceReadService,
+    AttendanceReadRepository,
     HrTasksService,
     AttMasterDataSeeder,
     AttSeedRegistrar,
   ],
-  exports: [AttendanceService],
+  exports: [AttendanceService, AttendanceReadService],
 })
 export class AttendanceModule {}

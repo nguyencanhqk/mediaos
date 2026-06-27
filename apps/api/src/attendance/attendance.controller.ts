@@ -21,10 +21,12 @@ import {
   type AttPermissionPair,
   type AttResourceType,
 } from "./attendance-permissions.const";
+import { AttendanceReadService } from "./attendance-read.service";
 import { AttendanceService } from "./attendance.service";
 import {
   AdjustmentListQueryDto,
   AttendanceListQueryDto,
+  AttendanceRecordListQueryDto,
   CheckInDto,
   CheckOutDto,
   CreateAdjustmentDto,
@@ -55,6 +57,10 @@ function attPair(action: string, resourceType: AttResourceType): AttPermissionPa
 const CHECK_IN = attPair("check-in", ATT_RESOURCES.ATTENDANCE);
 const CHECK_OUT = attPair("check-out", ATT_RESOURCES.ATTENDANCE);
 const VIEW_OWN = attPair("view-own", ATT_RESOURCES.ATTENDANCE);
+// S3-ATT-BE-2: scoped records read pairs (mig 0454). view-team/company/detail all is_sensitive=true.
+const VIEW_TEAM = attPair("view-team", ATT_RESOURCES.ATTENDANCE);
+const VIEW_COMPANY = attPair("view-company", ATT_RESOURCES.ATTENDANCE);
+const VIEW_DETAIL = attPair("view-detail", ATT_RESOURCES.ATTENDANCE);
 
 /**
  * G11-1 — Attendance HTTP surface. Every route gated by PermissionGuard (@RequirePermission,
@@ -65,7 +71,10 @@ const VIEW_OWN = attPair("view-own", ATT_RESOURCES.ATTENDANCE);
 @UseGuards(PermissionGuard)
 @UsePipes(ZodValidationPipe)
 export class AttendanceController {
-  constructor(private readonly attendance: AttendanceService) {}
+  constructor(
+    private readonly attendance: AttendanceService,
+    private readonly attendanceRead: AttendanceReadService,
+  ) {}
 
   // ─── Check-in / out + today ────────────────────────────────────────────────
 
@@ -95,6 +104,50 @@ export class AttendanceController {
   @RequirePermission("read", "attendance")
   listMonthly(@Req() req: AuthenticatedRequest, @Query() query: AttendanceListQueryDto) {
     return this.attendance.listMonthly(req.user, query);
+  }
+
+  // ─── S3-ATT-BE-2: scoped records read (my/team/company/detail/logs) ──────────
+  // Static paths declared BEFORE the /records/:id param route so Express never shadows them.
+  // Pairs bound via attPair() (fail-fast on catalog drift). 403 = no grant (PermissionGuard);
+  // out-of-scope-but-exists = 404 (no existence leak). location/gps/ip/device masked server-side.
+
+  @Get("my-records")
+  @RequirePermission(VIEW_OWN.action, VIEW_OWN.resourceType, { isSensitive: VIEW_OWN.sensitive })
+  listMyRecords(@Req() req: AuthenticatedRequest, @Query() query: AttendanceRecordListQueryDto) {
+    return this.attendanceRead.listMyRecords(req.user, query);
+  }
+
+  @Get("team-records")
+  @RequirePermission(VIEW_TEAM.action, VIEW_TEAM.resourceType, { isSensitive: VIEW_TEAM.sensitive })
+  listTeamRecords(@Req() req: AuthenticatedRequest, @Query() query: AttendanceRecordListQueryDto) {
+    return this.attendanceRead.listTeamRecords(req.user, query);
+  }
+
+  @Get("records")
+  @RequirePermission(VIEW_COMPANY.action, VIEW_COMPANY.resourceType, {
+    isSensitive: VIEW_COMPANY.sensitive,
+  })
+  listCompanyRecords(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: AttendanceRecordListQueryDto,
+  ) {
+    return this.attendanceRead.listCompanyRecords(req.user, query);
+  }
+
+  @Get("records/:id/logs")
+  @RequirePermission(VIEW_DETAIL.action, VIEW_DETAIL.resourceType, {
+    isSensitive: VIEW_DETAIL.sensitive,
+  })
+  getRecordLogs(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+    return this.attendanceRead.getRecordLogs(req.user, id);
+  }
+
+  @Get("records/:id")
+  @RequirePermission(VIEW_DETAIL.action, VIEW_DETAIL.resourceType, {
+    isSensitive: VIEW_DETAIL.sensitive,
+  })
+  getRecordDetail(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+    return this.attendanceRead.getRecordDetail(req.user, id);
   }
 
   // ─── Work schedules ────────────────────────────────────────────────────────
