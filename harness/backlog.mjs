@@ -1574,7 +1574,8 @@ export const backlog = [
     title:
       "Seed ATT permissions (§11.1) + role→data_scope mapping (§11.3) + default shift OFFICE_8H + DEFAULT_OFFICE_RULE (§12.1) idempotent",
     zone: "red",
-    status: "todo",
+    // DONE 2026-06-27 (feat/s3-wave1, b8026313 + canonical fix 7b02f72): mig 0454 = 33 cặp catalog + 93 grant per-pair (least-privilege ① manager-deny COUNT=0 + 8 deny test) · attendance-permissions.const.ts (PIN cho S3-ATT-BE-1) · AttMasterDataSeeder (OFFICE_8H 08:00-17:00/60' + DEFAULT_OFFICE_RULE) cắm vào runner S3-FND-SEEDRUN-1 · 170 int-spec PASS lane mediaos_attseed (reset→0454 clean) · FULL gate PASS (security PASS, completion 89/100 PASS; MEDIUM CA view-team Company→Team đã reconcile về API-10 §5.3). Verify cuối + merge ở wave-PR feat/s3-wave1→master.
+    status: "done",
     paths: [
       "apps/api/src/db/schema/**",
       "apps/api/migrations/**",
