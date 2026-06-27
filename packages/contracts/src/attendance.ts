@@ -99,15 +99,25 @@ const locationSchema = z
   })
   .optional();
 
+/**
+ * S3-ATT-BE-1 (DB-04): clientTime/clientTimezone là THAM CHIẾU — server time (logTime DEFAULT now())
+ * mới authoritative cho mọi tính toán (chống client gian lận giờ). note tuỳ chọn cho log.
+ */
 export const checkInSchema = z.object({
   method: z.enum(["web", "mobile"]).default("web"),
   location: locationSchema,
+  clientTime: z.string().datetime().optional(),
+  clientTimezone: z.string().min(1).max(64).optional(),
+  note: z.string().max(1000).optional(),
 });
 export type CheckInRequest = z.infer<typeof checkInSchema>;
 
 export const checkOutSchema = z.object({
   method: z.enum(["web", "mobile"]).default("web"),
   location: locationSchema,
+  clientTime: z.string().datetime().optional(),
+  clientTimezone: z.string().min(1).max(64).optional(),
+  note: z.string().max(1000).optional(),
 });
 export type CheckOutRequest = z.infer<typeof checkOutSchema>;
 
@@ -119,6 +129,78 @@ export const attendanceTodaySchema = z.object({
   periodLocked: z.boolean(),
 });
 export type AttendanceTodayDto = z.infer<typeof attendanceTodaySchema>;
+
+// ─── S3-ATT-BE-1 (DB-04 §7) — Today/check-in/check-out V2 (shift/rule effective) ────
+
+/** Bản ghi chấm công V2 (cột legacy + DB-04 §7.4 additive). instant = ISO datetime UTC. */
+export const attendanceRecordV2Schema = z.object({
+  id: z.string().uuid(),
+  workDate: z.string().date(),
+  employeeId: z.string().uuid().nullable(),
+  shiftId: z.string().uuid().nullable(),
+  checkInAt: z.string().datetime().nullable(),
+  checkOutAt: z.string().datetime().nullable(),
+  checkInMethod: z.string().nullable(),
+  checkOutMethod: z.string().nullable(),
+  lateMinutes: z.number().int().min(0),
+  earlyLeaveMinutes: z.number().int().min(0),
+  workingMinutes: z.number().int().nullable(),
+  requiredWorkingMinutes: z.number().int().nullable(),
+  missingMinutes: z.number().int().nullable(),
+  breakMinutes: z.number().int().nullable(),
+  /** status lowercase legacy (present/late/early_leave/…) — feed payroll/back-compat. */
+  status: z.string(),
+  /** attendance_status TitleCase DB-04 (Checked-in/Late/Present/Early Leave/Missing Hours/…). */
+  attendanceStatus: z.string().nullable(),
+  isLate: z.boolean().nullable(),
+  isEarlyLeave: z.boolean().nullable(),
+  isMissingCheckOut: z.boolean().nullable(),
+});
+export type AttendanceRecordV2Dto = z.infer<typeof attendanceRecordV2Schema>;
+
+/** Ca làm hiệu lực (rút gọn) cho màn Today. */
+export const attendanceShiftSummarySchema = z.object({
+  id: z.string().uuid(),
+  shiftCode: z.string(),
+  name: z.string(),
+  startTime: z.string().nullable(),
+  endTime: z.string().nullable(),
+  breakMinutes: z.number().int(),
+  requiredWorkingMinutes: z.number().int(),
+  graceLateMinutes: z.number().int(),
+  graceEarlyLeaveMinutes: z.number().int(),
+  crossDay: z.boolean(),
+  isDefault: z.boolean(),
+  timezone: z.string(),
+});
+export type AttendanceShiftSummaryDto = z.infer<typeof attendanceShiftSummarySchema>;
+
+/** Rule chấm công hiệu lực (rút gọn) cho màn Today. */
+export const attendanceRuleSummarySchema = z.object({
+  id: z.string().uuid().nullable(),
+  ruleCode: z.string().nullable(),
+  requireCheckIn: z.boolean(),
+  requireCheckOut: z.boolean(),
+  blockWhenLeaveApproved: z.boolean(),
+});
+export type AttendanceRuleSummaryDto = z.infer<typeof attendanceRuleSummarySchema>;
+
+/** GET /attendance/today V2 — employee/shift/rule/record + allowedActions + disabledReason. */
+export const attendanceTodayV2Schema = z.object({
+  workDate: z.string().date(),
+  employee: z.object({ id: z.string().uuid(), status: z.string() }).nullable(),
+  shift: attendanceShiftSummarySchema.nullable(),
+  rule: attendanceRuleSummarySchema.nullable(),
+  record: attendanceRecordV2Schema.nullable(),
+  allowedActions: z.object({ canCheckIn: z.boolean(), canCheckOut: z.boolean() }),
+  disabledReason: z.string().nullable(),
+  periodLocked: z.boolean(),
+});
+export type AttendanceTodayV2Dto = z.infer<typeof attendanceTodayV2Schema>;
+
+/** POST /attendance/check-in | check-out → bản ghi V2. */
+export type CheckInResponse = AttendanceRecordV2Dto;
+export type CheckOutResponse = AttendanceRecordV2Dto;
 
 /** Generic pagination params: limit (1–100, default 50) + offset (≥0, default 0). */
 export const listPaginationSchema = z.object({
@@ -200,3 +282,137 @@ export const attendancePeriodSchema = z.object({
   lockedAt: z.string().datetime().nullable(),
 });
 export type AttendancePeriodDto = z.infer<typeof attendancePeriodSchema>;
+
+// ─── S3-ATT-BE-2 (API-10 §5.3) — scoped attendance records read ──────────────────
+// my/team/company/detail/logs. Server-side scope (Own/Team/Company) + masking (BẤT BIẾN #3):
+// location/gps/ip/device NEVER leak in lists; in detail/logs they are gated behind view-sensitive.
+
+/** Sortable list columns (allowlist — repo maps each to a fixed column; blocks ORDER BY injection). */
+export const ATTENDANCE_RECORD_SORT_FIELDS = [
+  "workDate",
+  "checkInAt",
+  "checkOutAt",
+  "lateMinutes",
+  "earlyLeaveMinutes",
+  "missingMinutes",
+  "workingMinutes",
+  "createdAt",
+  "updatedAt",
+] as const;
+export const attendanceRecordSortFieldSchema = z.enum(ATTENDANCE_RECORD_SORT_FIELDS);
+export type AttendanceRecordSortField = z.infer<typeof attendanceRecordSortFieldSchema>;
+
+export const ATTENDANCE_RECORD_PAGE_SIZE_MAX = 100;
+export const ATTENDANCE_RECORD_PAGE_SIZE_DEFAULT = 20;
+
+/**
+ * GET /attendance/{my-records,team-records,records} query — page-based pagination + filter + sort.
+ * Query params arrive as strings → page/pageSize coerced; pageSize clamped to bound the result set.
+ * Date filters form a half-open interval [fromDate, toDate) over work_date (toDate exclusive).
+ */
+export const attendanceRecordListQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(ATTENDANCE_RECORD_PAGE_SIZE_MAX)
+    .default(ATTENDANCE_RECORD_PAGE_SIZE_DEFAULT),
+  /** Half-open [fromDate, toDate) over work_date. */
+  fromDate: z.string().date().optional(),
+  toDate: z.string().date().optional(),
+  /** Legacy lowercase record status (present/late/…). */
+  status: attendanceStatusSchema.optional(),
+  /** DB-04 TitleCase attendance_status (Present/Late/Missing Hours/…). */
+  attendanceStatus: z.string().min(1).max(64).optional(),
+  /** Filter by org_unit (Department) — honored on team/company lists only. */
+  departmentId: z.string().uuid().optional(),
+  shiftId: z.string().uuid().optional(),
+  /** employee_profiles.id — honored only when scope permits (ignored on my-records). */
+  employeeId: z.string().uuid().optional(),
+  sort: attendanceRecordSortFieldSchema.default("workDate"),
+  order: z.enum(["asc", "desc"]).default("desc"),
+});
+export type AttendanceRecordListQuery = z.infer<typeof attendanceRecordListQuerySchema>;
+
+/**
+ * One row in a scoped records list — safe record columns (attendanceRecordV2Schema) + employee summary.
+ * NO location_json / gps / ip / device (those live on attendance_logs and are never listed).
+ */
+export const attendanceRecordListItemSchema = attendanceRecordV2Schema.extend({
+  userId: z.string().uuid(),
+  employeeCode: z.string().nullable(),
+  fullName: z.string().nullable(),
+  orgUnitId: z.string().uuid().nullable(),
+  orgUnitName: z.string().nullable(),
+});
+export type AttendanceRecordListItem = z.infer<typeof attendanceRecordListItemSchema>;
+
+/** Paginated envelope meta (mirrors hrPageMetaSchema). */
+export const attendanceRecordPageMetaSchema = z.object({
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+  total: z.number().int().nonnegative(),
+  totalPages: z.number().int().nonnegative(),
+  hasNext: z.boolean(),
+  hasPrev: z.boolean(),
+});
+export type AttendanceRecordPageMeta = z.infer<typeof attendanceRecordPageMetaSchema>;
+
+export const attendanceRecordListResponseSchema = z.object({
+  items: z.array(attendanceRecordListItemSchema),
+  meta: attendanceRecordPageMetaSchema,
+});
+export type AttendanceRecordListResponse = z.infer<typeof attendanceRecordListResponseSchema>;
+
+/**
+ * GET /attendance/records/:id detail — list item + the record-only `location_json` (SENSITIVE, gated
+ * behind view-sensitive:attendance → null when unauthorized) + extra status/source/timestamp columns.
+ */
+export const attendanceRecordDetailSchema = attendanceRecordListItemSchema.extend({
+  /** SENSITIVE (view-sensitive:attendance) — null when unauthorized. jsonb → unknown. */
+  locationJson: z.unknown().nullable(),
+  workScheduleId: z.string().uuid().nullable(),
+  checkInStatus: z.string().nullable(),
+  checkOutStatus: z.string().nullable(),
+  attendanceSource: z.string().nullable(),
+  workMode: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type AttendanceRecordDetail = z.infer<typeof attendanceRecordDetailSchema>;
+
+/**
+ * GET /attendance/records/:id/logs — one attendance_logs row. Sensitive fields (gps/ip/device/
+ * locationLabel/userAgent/rawPayload) are null unless the caller holds view-sensitive:attendance.
+ * There is NO own-record bypass: an employee viewing their OWN logs still sees gps=null.
+ */
+export const attendanceLogListItemSchema = z.object({
+  id: z.string().uuid(),
+  logType: z.string(),
+  logTime: z.string().datetime(),
+  source: z.string(),
+  platform: z.string().nullable(),
+  clientTime: z.string().datetime().nullable(),
+  clientTimezone: z.string().nullable(),
+  isValid: z.boolean(),
+  invalidReason: z.string().nullable(),
+  note: z.string().nullable(),
+  workDate: z.string().date(),
+  // SENSITIVE (view-sensitive:attendance) — all null unless revealed.
+  gpsLatitude: z.string().nullable(),
+  gpsLongitude: z.string().nullable(),
+  gpsAccuracyMeters: z.string().nullable(),
+  locationLabel: z.string().nullable(),
+  ipAddress: z.string().nullable(),
+  deviceId: z.string().nullable(),
+  deviceName: z.string().nullable(),
+  userAgent: z.string().nullable(),
+  rawPayload: z.unknown().nullable(),
+});
+export type AttendanceLogListItem = z.infer<typeof attendanceLogListItemSchema>;
+
+export const attendanceLogListResponseSchema = z.object({
+  items: z.array(attendanceLogListItemSchema),
+});
+export type AttendanceLogListResponse = z.infer<typeof attendanceLogListResponseSchema>;

@@ -63,14 +63,34 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     resolveScheduleForUserTx: vi.fn().mockResolvedValue(null),
     findScheduleByIdTx: vi.fn().mockResolvedValue([null]),
     findSchedules: vi.fn().mockResolvedValue([]),
-    createScheduleTx: vi.fn().mockResolvedValue([{ id: "sched", name: "Ca", isDefault: false, timezone: "Asia/Ho_Chi_Minh" }]),
+    createScheduleTx: vi
+      .fn()
+      .mockResolvedValue([
+        { id: "sched", name: "Ca", isDefault: false, timezone: "Asia/Ho_Chi_Minh" },
+      ]),
     updateScheduleTx: vi.fn().mockResolvedValue([{ id: "sched" }]),
+    // S3-ATT-BE-1 employee/shift/rule/leave/log resolvers (single row | null | boolean — NOT arrays).
+    resolveEmployeeByUserIdTx: vi
+      .fn()
+      .mockResolvedValue({ id: "emp-1", status: "active", orgUnitId: null, positionId: null }),
+    resolveEffectiveShiftTx: vi.fn().mockResolvedValue(null),
+    findDefaultShiftTx: vi.fn().mockResolvedValue(null),
+    findShiftByIdTx: vi.fn().mockResolvedValue(null),
+    resolveEffectiveRuleTx: vi.fn().mockResolvedValue(null),
+    findRuleByCodeTx: vi.fn().mockResolvedValue(null),
+    findAnyActiveRuleTx: vi.fn().mockResolvedValue(null),
+    findApprovedFullDayLeaveTx: vi.fn().mockResolvedValue(false),
+    insertAttendanceLogTx: vi.fn().mockResolvedValue([{ id: "log-1" }]),
     isPeriodLockedTx: vi.fn().mockResolvedValue(false),
     findRecordByUserDateTx: vi.fn().mockResolvedValue([]),
     findOpenRecordForUserTx: vi.fn().mockResolvedValue([]),
     findRecordsByMonth: vi.fn().mockResolvedValue([]),
-    insertRecordTx: vi.fn().mockResolvedValue([makeRecord({ checkInAt: new Date(), status: "present" })]),
-    updateRecordTx: vi.fn().mockResolvedValue([makeRecord({ checkOutAt: new Date(), status: "present" })]),
+    insertRecordTx: vi
+      .fn()
+      .mockResolvedValue([makeRecord({ checkInAt: new Date(), status: "present" })]),
+    updateRecordTx: vi
+      .fn()
+      .mockResolvedValue([makeRecord({ checkOutAt: new Date(), status: "present" })]),
     findAdjustmentByIdTx: vi.fn().mockResolvedValue([makeAdjustment()]),
     findAdjustmentByIdForUpdateTx: vi.fn().mockResolvedValue([makeAdjustment()]),
     findAdjustments: vi.fn().mockResolvedValue([]),
@@ -78,19 +98,33 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     updateAdjustmentTx: vi.fn().mockResolvedValue([makeAdjustment({ status: "approved" })]),
     findPeriods: vi.fn().mockResolvedValue([]),
     findPeriodTx: vi.fn().mockResolvedValue([]),
-    lockPeriodTx: vi.fn().mockResolvedValue([{ id: "p", periodMonth: "2024-06", status: "locked", lockedBy: ACTOR_ID, lockedAt: new Date() }]),
+    lockPeriodTx: vi
+      .fn()
+      .mockResolvedValue([
+        {
+          id: "p",
+          periodMonth: "2024-06",
+          status: "locked",
+          lockedBy: ACTOR_ID,
+          lockedAt: new Date(),
+        },
+      ]),
     ...overrides,
   };
 }
 
 function makeDb(repo: ReturnType<typeof makeRepo>) {
   return {
-    withTenant: vi.fn().mockImplementation((_c: string, fn: (tx: unknown) => Promise<unknown>) => fn(repo)),
+    withTenant: vi
+      .fn()
+      .mockImplementation((_c: string, fn: (tx: unknown) => Promise<unknown>) => fn(repo)),
   };
 }
 
 const makePermission = (allow: boolean) => ({
-  can: vi.fn().mockResolvedValue({ allow, reason: allow ? "allow" : "deny-default", auditRequired: false }),
+  can: vi
+    .fn()
+    .mockResolvedValue({ allow, reason: allow ? "allow" : "deny-default", auditRequired: false }),
 });
 const makeHrTasks = () => ({
   createApprovalTaskTx: vi.fn().mockResolvedValue({ id: "task-1" }),
@@ -168,14 +202,20 @@ describe("AttendanceService — adjustment lifecycle", () => {
     const repo = makeRepo({ isPeriodLockedTx: vi.fn().mockResolvedValue(true) });
     const { service, hrTasks } = build(repo);
     await expect(
-      service.createAdjustment(actor, { workDate: "2024-06-03", requestedCheckInAt: "2024-06-03T02:00:00Z", reason: "x" }),
+      service.createAdjustment(actor, {
+        workDate: "2024-06-03",
+        requestedCheckInAt: "2024-06-03T02:00:00Z",
+        reason: "x",
+      }),
     ).rejects.toThrow(ConflictException);
     expect(hrTasks.createApprovalTaskTx).not.toHaveBeenCalled();
   });
 
   it("blocks approving an adjustment that is not pending", async () => {
     const repo = makeRepo({
-      findAdjustmentByIdForUpdateTx: vi.fn().mockResolvedValue([makeAdjustment({ status: "approved" })]),
+      findAdjustmentByIdForUpdateTx: vi
+        .fn()
+        .mockResolvedValue([makeAdjustment({ status: "approved" })]),
     });
     const { service } = build(repo);
     await expect(service.approveAdjustment(actor, REQ_ID)).rejects.toThrow(ConflictException);
@@ -190,12 +230,14 @@ describe("AttendanceService — adjustment lifecycle", () => {
   it("blocks approving an adjustment for a month whose period is locked even when the current month is open (cross-month lock)", async () => {
     // Đơn cho 2024-05; tháng 2024-05 ĐÃ khoá, dù tháng hiện tại (now) có thể open. assertPeriodOpen
     // của approve dùng monthOfDate(request.workDate) ⇒ phải tra ĐÚNG '2024-05', không phải tháng now.
-    const isPeriodLockedTx = vi.fn().mockImplementation(async (_c: string, month: string) =>
-      month === "2024-05",
-    );
+    const isPeriodLockedTx = vi
+      .fn()
+      .mockImplementation(async (_c: string, month: string) => month === "2024-05");
     const repo = makeRepo({
       isPeriodLockedTx,
-      findAdjustmentByIdForUpdateTx: vi.fn().mockResolvedValue([makeAdjustment({ workDate: "2024-05-20" })]),
+      findAdjustmentByIdForUpdateTx: vi
+        .fn()
+        .mockResolvedValue([makeAdjustment({ workDate: "2024-05-20" })]),
     });
     const { service } = build(repo);
     await expect(service.approveAdjustment(actor, REQ_ID)).rejects.toThrow(ConflictException);
@@ -204,7 +246,9 @@ describe("AttendanceService — adjustment lifecycle", () => {
 
   it("blocks rejecting an adjustment that is not pending", async () => {
     const repo = makeRepo({
-      findAdjustmentByIdForUpdateTx: vi.fn().mockResolvedValue([makeAdjustment({ status: "cancelled" })]),
+      findAdjustmentByIdForUpdateTx: vi
+        .fn()
+        .mockResolvedValue([makeAdjustment({ status: "cancelled" })]),
     });
     const { service } = build(repo);
     await expect(service.rejectAdjustment(actor, REQ_ID)).rejects.toThrow(ConflictException);
@@ -245,14 +289,23 @@ describe("AttendanceService — period lock + scope", () => {
   it("blocks listing all adjustments (scope=all) without approve permission", async () => {
     const repo = makeRepo();
     const { service } = build(repo, false);
-    await expect(service.listAdjustments(actor, { scope: "all", limit: 50, offset: 0 })).rejects.toThrow(ForbiddenException);
+    await expect(
+      service.listAdjustments(actor, { scope: "all", limit: 50, offset: 0 }),
+    ).rejects.toThrow(ForbiddenException);
   });
 
   it("allows listing my own adjustments (scope=me) without elevated permission", async () => {
     const repo = makeRepo();
     const { service } = build(repo, false);
-    await expect(service.listAdjustments(actor, { scope: "me", limit: 50, offset: 0 })).resolves.toEqual([]);
-    expect(repo.findAdjustments).toHaveBeenCalledWith(COMPANY_ID, { userId: ACTOR_ID, status: undefined, limit: 50, offset: 0 });
+    await expect(
+      service.listAdjustments(actor, { scope: "me", limit: 50, offset: 0 }),
+    ).resolves.toEqual([]);
+    expect(repo.findAdjustments).toHaveBeenCalledWith(COMPANY_ID, {
+      userId: ACTOR_ID,
+      status: undefined,
+      limit: 50,
+      offset: 0,
+    });
   });
 });
 

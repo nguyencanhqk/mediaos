@@ -5,6 +5,7 @@ import { CompanyModule } from "./company/company.module";
 import { ModuleCatalogModule } from "./module-catalog/module-catalog.module";
 import { FilesModule } from "./files/files.module";
 import { HolidaysModule } from "./holidays/holidays.module";
+import { SeedModule } from "./seed/seed.module";
 
 /**
  * S1-FND-WIRE-1 — FoundationModule: gom các module Foundation CÓ HTTP surface vào MỘT nơi để
@@ -26,6 +27,9 @@ import { HolidaysModule } from "./holidays/holidays.module";
     ModuleCatalogModule,
     FilesModule,
     HolidaysModule,
+    // S3-FND-SEEDRUN-1 (additive): runtime per-company master-data seed runner + registry +
+    // OnApplicationBootstrap trigger. Re-export registry/runner để ATT/LEAVE/HR đăng ký seeder.
+    SeedModule,
   ],
   exports: [
     AuditModule,
@@ -34,6 +38,7 @@ import { HolidaysModule } from "./holidays/holidays.module";
     ModuleCatalogModule,
     FilesModule,
     HolidaysModule,
+    SeedModule,
   ],
 })
 export class FoundationModule {}

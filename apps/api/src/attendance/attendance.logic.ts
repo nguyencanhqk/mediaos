@@ -86,3 +86,81 @@ function toSeconds(time: string): number {
   const [h, m, s] = time.split(":").map(Number);
   return h * 3600 + m * 60 + (s ?? 0);
 }
+
+/**
+ * S3-ATT-BE-1 (DB-04 §7) — shift-aware pure helpers for the new Today/check-in/check-out path.
+ *
+ * Distinct from the legacy ScheduleCalc helpers above (still used by attendance adjustments): the new
+ * `shifts` table carries separate late/early grace windows, an explicit break, a required-minutes target
+ * and a cross_day flag. start/end may be NULL (no-effective-shift) → contributions degrade to 0 so a
+ * missing shift never 500s nor inflates lateness. Server time is authoritative (caller passes new Date()).
+ */
+export interface ShiftCalc {
+  /** Wall-clock 'HH:MM[:SS]' in `timezone`, or null when the shift has no fixed start/end. */
+  startTime: string | null;
+  endTime: string | null;
+  graceLateMinutes: number;
+  graceEarlyLeaveMinutes: number;
+  breakMinutes: number;
+  /** End wall-clock falls on the NEXT local day (overnight shift). */
+  crossDay: boolean;
+  timezone: string;
+}
+
+/** Minutes late vs. the shift start; forgiven entirely within grace (≤ grace ⇒ 0). 0 when no start. */
+export function shiftLateMinutes(checkInAt: Date, workDate: string, shift: ShiftCalc): number {
+  if (!shift.startTime) return 0;
+  const start = wallTimeToInstant(workDate, shift.startTime, shift.timezone);
+  const mins = minutesBetween(start, checkInAt); // positive when check-in is after start
+  return mins <= shift.graceLateMinutes ? 0 : mins;
+}
+
+/** Minutes early vs. the shift end (overnight ⇒ next day); forgiven within grace. 0 when no end. */
+export function shiftEarlyLeaveMinutes(
+  checkOutAt: Date,
+  workDate: string,
+  shift: ShiftCalc,
+): number {
+  if (!shift.endTime) return 0;
+  const endDate = shift.crossDay ? addDaysToLocalDate(workDate, 1) : workDate;
+  const end = wallTimeToInstant(endDate, shift.endTime, shift.timezone);
+  const mins = minutesBetween(checkOutAt, end); // positive when check-out is before end
+  return mins <= shift.graceEarlyLeaveMinutes ? 0 : mins;
+}
+
+/** Worked minutes = elapsed (check-in→check-out) minus the unpaid break; never negative. */
+export function computeWorkingMinutes(
+  checkInAt: Date,
+  checkOutAt: Date,
+  breakMinutes: number,
+): number {
+  return Math.max(0, minutesBetween(checkInAt, checkOutAt) - breakMinutes);
+}
+
+/** Shortfall vs. the required target (0 when no required target or when target is met). */
+export function computeMissingMinutes(
+  requiredWorkingMinutes: number | null,
+  workedMinutes: number,
+): number {
+  if (requiredWorkingMinutes == null) return 0;
+  return Math.max(0, requiredWorkingMinutes - workedMinutes);
+}
+
+export type CheckInTitleStatus = "Checked-in" | "Late";
+/** attendance_status at check-in (no EOD job): Late if late > 0, else Checked-in. */
+export function checkInTitleStatus(isLate: boolean): CheckInTitleStatus {
+  return isLate ? "Late" : "Checked-in";
+}
+
+export type CheckOutTitleStatus = "Present" | "Late" | "Early Leave" | "Missing Hours";
+/** attendance_status at check-out: Late ≻ Early Leave ≻ Missing Hours ≻ Present (single-valued). */
+export function checkOutTitleStatus(
+  lateMinutes: number,
+  earlyLeaveMinutes: number,
+  missingMinutes: number,
+): CheckOutTitleStatus {
+  if (lateMinutes > 0) return "Late";
+  if (earlyLeaveMinutes > 0) return "Early Leave";
+  if (missingMinutes > 0) return "Missing Hours";
+  return "Present";
+}

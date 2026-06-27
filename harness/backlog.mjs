@@ -881,7 +881,19 @@ export const backlog = [
     // SEED 2026-06-26 (chốt owner): gap THẬT duy nhất của EPIC-02 — bảng login_logs/user_security_events ĐÃ ghi
     //   (S2-AUTH-DB-2 + S2-AUTH-BE-1) nhưng CHƯA có endpoint đọc (auth.controller chỉ có me/2fa/redirect-allowed).
     //   Đọc dữ liệu security → red/FULL gate. KHÔNG chặn Sprint 3 (P1) — chạy xen khi rảnh.
-    status: "todo",
+    // WIP 2026-06-27 (FIX-BE5-HARNESS): đang thực thi trên feat/s3-wave1 — endpoint BE + FE viewer đã code (auth-logs-viewer.*).
+    //   done_when-evidence (int-spec apps/api/src/auth/auth-logs-viewer.int.spec.ts):
+    //     D1/D2 deny (403; wildcard '*:*' KHÔNG kế thừa sensitive) · P3 positive (200 + envelope phân trang) ·
+    //     X4 cross-tenant (admin A → user_id B = 0 row, BẤT BIẾN #1 RLS Company-scope) · M5 mask (metadata/payload no-secret) ·
+    //     A6 append-only (app-role UPDATE/DELETE login_logs+user_security_events DENIED, BẤT BIẾN #2) ·
+    //     V7 validate (status/enum ngoài whitelist → 400 VALIDATION-ERR) · R8 date-range (from/to subset + biên ngoài → 0) ·
+    //     E9 event_type (narrow → đúng 1 row) · + 2 case MỚI status (login-logs success-only) / severity (security-events high-only) positive-path.
+    //   coverage-gate (vùng nhạy cảm ≥80%, CLAUDE.md §6): apps/api/vitest.config.ts per-file thresholds cho
+    //     auth-logs-viewer.controller.ts · auth-logs-viewer.service.ts · login-log.repository.ts · security-event.repository.ts,
+    //     ép qua script test:cov:sensitive (apps/api/package.json).
+    //   CHỈ flip 'done' SAU: PR mở + FULL gate (security-reviewer + silent-failure-hunter) PASS + người chốt + merge
+    //   (red-zone, no auto-merge) — KHÔNG fabricate done sớm.
+    status: "in_progress",
     paths: ["apps/api/src/auth/**", "packages/contracts/src/**", "apps/app/**"],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-DB-2", "S2-AUTH-BE-3"],
@@ -1474,7 +1486,9 @@ export const backlog = [
     title:
       "Migration ATT Core: shifts·shift_assignments·attendance_rules·attendance_records·attendance_logs (+adjustment·remote_work skeleton) + RLS+FORCE + indexes + append-only attendance_logs",
     zone: "red",
-    status: "todo",
+    // CLOSE (sync 2026-06-26): merged to master via PR #54 (squash 07254e3) — migration 0452 ATT Core
+    //   (DB-04 reconcile, evolve-additive). FULL gate PASS×3. Literal reconciled todo→done so auto-loop skips it.
+    status: "done",
     paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/test/integration/**"],
     skills: ["code-review"],
     depends_on: [],
@@ -1498,7 +1512,9 @@ export const backlog = [
     title:
       "Migration LEAVE Core: leave_types·leave_policies·leave_balances·leave_balance_transactions·leave_requests·leave_request_days·leave_request_approvals + RLS+FORCE + indexes + append-only ledger",
     zone: "red",
-    status: "todo",
+    // CLOSE (deploy-gate 2026-06-26): landed on feat/s3-wave1 (commit 0b04f12) — migration 0453 LEAVE Core
+    //   (DB-05 evolve-additive, 4 new tables + ALTER-ADD, RLS+FORCE, append-only ledger). FULL gate PASS.
+    status: "done",
     paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/test/integration/**"],
     skills: ["code-review"],
     depends_on: ["S3-ATT-DB-1"], // ordering: lane db-migration NỐI TIẾP (idx kế ATT-DB), KHÔNG data-dep thực
@@ -1508,11 +1524,45 @@ export const backlog = [
       "DB-05",
       "SPEC-05",
     ],
+    // RECONCILE (chốt owner 2026-06-26 = follow landed schema, MIRROR Option A của 0452; defer DB-05 balance semantics → S3-LEAVE-BE).
     done_when: [
-      "tạo bảng LEAVE (leave_types·leave_policies·leave_balances·leave_balance_transactions·leave_requests·leave_request_days·leave_request_approvals) khớp DB-05: company_id NOT NULL · UUID PK · soft-delete; RLS ENABLE+FORCE + policy company_id TRƯỚC backfill; rls-registry đủ (BẤT BIẾN #1)",
-      "leave_request_days có attendance_sync_status (cho LEAVE→ATT sync §8.7); leave_requests state field (Draft/Pending/Approved/Rejected/Cancelled/Revoked theo SPEC-05); index company/employee/status/date-range",
-      "leave_balance_transactions append-only (app role REVOKE UPDATE/DELETE) — ledger BẤT BIẾN #2; migration NỐI TIẾP head ATT-DB (KHÔNG db:generate drop); 1 lane db-migration",
-      "migrate 0000→head sạch lane DB; cross-tenant deny xanh (rls-tenant-isolation-tester)",
+      "RECONCILE (mirror Option A 0452): 3 bảng media-era đã tồn tại (leave_types·leave_requests·leave_balances ở hr.ts/mig 0062) → EVOLVE-ADDITIVE (thêm cột DB-05 dạng ADD COLUMN IF NOT EXISTS <type> NULL — KHÔNG NOT NULL, KHÔNG DEFAULT-rewrite, an toàn trên hàng cũ); used_days/remaining_days ĐÃ có → KHÔNG re-add. CREATE 4 bảng MỚI (leave_policies·leave_balance_transactions·leave_request_days·leave_request_approvals) company_id NOT NULL·UUID PK·soft-delete + RLS ENABLE+FORCE + policy company_id TRƯỚC backfill (BẤT BIẾN #1)",
+      "GIỮ NGUYÊN media-era leave_balances.remaining_days GENERATED ALWAYS AS (total_days-used_days) STORED + CHECK used<=total (CẤM DROP/recreate cột generated); ngữ nghĩa remaining_days/negative-balance theo DB-05 = SCOPED OUT sang S3-LEAVE-BE (KHÔNG làm ở DB lane này)",
+      "status CHECK: DROP CONSTRAINT leave_req_status_check (mig 0062 chỉ cho lowercase) RỒI ADD lại 1 union check (lowercase ∪ TitleCase Draft/Pending/Approved/Rejected/Cancelled/Revoked theo SPEC-05) — KHÔNG 'thêm union song song' (residual cũ sẽ reject TitleCase); leave_request_days có attendance_sync_status (§8.7); index company/employee/status/date-range",
+      "rls-registry: leave_types/leave_requests/leave_balances ĐÃ đăng ký (~lines 1358-1399) — chỉ THÊM 4 bảng MỚI (KHÔNG tạo case trùng); leave_balance_transactions·leave_request_approvals append-only (app role REVOKE UPDATE/DELETE — BẤT BIẾN #2) → registry seed = direct/superuser (FK chain cũng direct) để append-only check không fail; migration NỐI TIẾP head ATT-DB (KHÔNG db:generate drop), 1 lane db-migration",
+      "POSITIVE test: app-role INSERT leave_requests status='Pending' (TitleCase) + cột DB-05 mới THÀNH CÔNG dưới RLS (chứng minh union + cột mới chạy thật, không xanh-giả trên DB rỗng); migrate 0000→head sạch lane DB; cross-tenant deny xanh (rls-tenant-isolation-tester)",
+    ],
+  },
+
+  // ── FOUNDATION: runtime per-company master-data seed runner (chốt owner ① 2026-06-27) ──
+  // Lý do: master-data theo công ty (ca/rule ATT · leave-type/policy LEAVE · HR master-data) KHÔNG seed được lúc
+  //   migrate-time (DB sạch 0 company → FK/NOT-NULL fail; convention mig 0445/0008 cấm). SeedTrackingService ĐÃ có
+  //   nhưng CHƯA có ai gọi/trigger → master-data không bao giờ chạy. WO này dựng cơ chế đó, dùng chung mọi module.
+  {
+    id: "S3-FND-SEEDRUN-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Runtime per-company master-data seed runner: registry + bootstrap reconcile chạy mỗi company qua SeedTrackingService + withTenant (idempotent), nền cho ATT/LEAVE/HR master-data seed",
+    zone: "red",
+    // CLOSE 2026-06-27: committed aa0a3b3 trên feat/s3-wave1 (hand-built). FULL gate PASS — security-reviewer PASS
+    //   (0 CRIT/HIGH; tenant/append-only/secret/authz ✓; enumerate qua withPlatformContext mig 0230), completion 93/100.
+    //   Verified trên Postgres lane cô lập: unit 10/10 + int 4/4 (idempotent + fail-safe + RLS app-role). API seeder cho ATT/LEAVE cắm vào.
+    //   Follow-up (KHÔNG chặn, để wave PR): +cross-tenant WITH CHECK deny test · unit test bootstrap gating · gỡ dead export MASTER_DATA_SEEDERS symbol.
+    status: "done",
+    paths: ["apps/api/src/foundation/**", "apps/api/test/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "S3-ATT-SEED-1 round-3/4 plan-review (no runtime seeder exists — memory s3-spine-planblock-schema-divergence)",
+      "mig 0445/0008 (convention: company-scoped master-data = RUNTIME seed, KHÔNG migrate-time)",
+      "SeedTrackingService (apps/api/src/foundation/seed/seed-tracking.service.ts: startBatch/markItem/finishBatch)",
+    ],
+    done_when: [
+      "MasterDataSeederRegistry + interface ModuleMasterDataSeeder {seedKey, seedVersion, seed(ctx:{companyId,tx,track})} — module ATT/LEAVE/HR đăng ký seeder của mình; runner KHÔNG biết chi tiết module (đảo phụ thuộc)",
+      "Bootstrap reconcile (OnApplicationBootstrap HOẶC startup service, có cờ env tắt cho test/CI): với MỖI company chưa xoá → chạy MỌI seeder đã đăng ký idempotent qua SeedTrackingService.startBatch(companyId,seedKey,version) → markItem từng row → finishBatch, TẤT CẢ trong withTenant(companyId) (RLS WITH CHECK pass; company_id từ context, BẤT BIẾN #1). Chạy được cho N=1 + sẵn sàng N>1 (loop mọi company)",
+      "FAIL-SAFE: 1 seeder lỗi → log có cấu trúc + markBatch Failed, KHÔNG crash app boot, KHÔNG chặn seeder khác; idempotent: chạy lại = markItem Skipped (checksum) + ON CONFLICT no-op (KHÔNG nhân đôi)",
+      "integration test LANE_DB: tạo company test → gọi ĐÚNG entry-point runner production dùng → assert seeder chạy (rows tồn tại) + chạy lần 2 = Skipped (idempotent). Dùng app role RLS-enforced (KHÔNG owner/migrator bypass). KHÔNG migration mới (tái dùng seed_batches/seed_items)",
     ],
   },
 
@@ -1524,20 +1574,31 @@ export const backlog = [
     title:
       "Seed ATT permissions (§11.1) + role→data_scope mapping (§11.3) + default shift OFFICE_8H + DEFAULT_OFFICE_RULE (§12.1) idempotent",
     zone: "red",
-    status: "todo",
-    paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/src/permission/**"],
-    skills: ["code-review"],
-    depends_on: ["S3-ATT-DB-1", "S2-AUTH-SEED-1"],
-    src: [
-      "IMPLEMENTATION-06 §11.0/§11.1/§11.3 (data_scope canonical)",
-      "IMPLEMENTATION-06 §12.1 (shift/rule seed)",
-      "API-10",
+    // DONE 2026-06-27 (feat/s3-wave1, b8026313 + canonical fix 7b02f72): mig 0454 = 33 cặp catalog + 93 grant per-pair (least-privilege ① manager-deny COUNT=0 + 8 deny test) · attendance-permissions.const.ts (PIN cho S3-ATT-BE-1) · AttMasterDataSeeder (OFFICE_8H 08:00-17:00/60' + DEFAULT_OFFICE_RULE) cắm vào runner S3-FND-SEEDRUN-1 · 170 int-spec PASS lane mediaos_attseed (reset→0454 clean) · FULL gate PASS (security PASS, completion 89/100 PASS; MEDIUM CA view-team Company→Team đã reconcile về API-10 §5.3). Verify cuối + merge ở wave-PR feat/s3-wave1→master.
+    status: "done",
+    paths: [
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "apps/api/src/permission/**",
+      "apps/api/src/foundation/**",
     ],
+    skills: ["code-review"],
+    depends_on: ["S3-ATT-DB-1", "S2-AUTH-SEED-1", "S3-FND-SEEDRUN-1"],
+    src: [
+      "IMPLEMENTATION-06 §11.0/§11.1 (catalog + data_scope canonical)",
+      "SPEC-04 §12 + DB-04 §12 + API-10 §5.3 (ma trận role→action→data_scope — NGUỒN CHUẨN, KHÔNG '§11.3')",
+      "DB-10 §14.2 (Initial-Seed-Data design-of-record: OFFICE_8H 08:00-17:00/60' + DEFAULT_OFFICE_RULE)",
+      "mig 0444/0445 (per-pair seed pattern) · mig 0005 (audit-log generic — KHÔNG tái dùng) · mig 0452 (landed ATT schema)",
+    ],
+    // RECONCILE v3 (chốt owner 2026-06-27, sau 3 lần plan-block — TÁCH 2 phần: (A) PERMISSION = migration; (B) MASTER-DATA ca/rule = RUNTIME seeder cắm vào S3-FND-SEEDRUN-1):
+    //   roles FLAT (mig 0444) · least-privilege ① (manager KHÔNG shift/rule-view) · catalog §11.2 = 33 mã · default ca/rule = DB-10 §14.2 · KHÔNG seed master-data lúc migrate.
     done_when: [
-      "seed ATT permissions (§11.1: ATTENDANCE.CHECK_IN/CHECK_OUT/VIEW/VIEW_DETAIL/VIEW_SENSITIVE/EXPORT/RECALCULATE · SHIFT.* · RULE.* …) là ACTION; phạm vi qua cột role_permissions.data_scope (§11.0 canonical — KHÔNG mã hoá Own/Team/Company vào TÊN); ON CONFLICT DO NOTHING",
-      "role mapping §11.3 PER-CẶP (action,resource_type,role)→data_scope: Employee=Own (check-in/out·view own) · Manager=Team · HR=Company; cặp đã có scope SAI → DELETE-theo-cặp + INSERT (UNIQUE KHÔNG gồm data_scope) trong 1 tx; CẤM blanket DELETE",
-      "seed default shift OFFICE_8H (08:00-17:30, break 90, required 480, Asia/Ho_Chi_Minh) + DEFAULT_OFFICE_RULE (grace 5/5, allow_web, require_gps=false) §12.1 ON CONFLICT DO NOTHING",
-      "VIEW_SENSITIVE (GPS/IP/device) KHÔNG auto-grant qua wildcard; idempotent ĐO BỘ BA (role_id,permission_id,data_scope) trước/sau; migration NỐI TIẾP head, 1 lane db-migration",
+      "(A) PERMISSION = migration 0454 NỐI TIẾP head (global/system-scoped, AN TOÀN migrate-time — KHÔNG đụng bảng company-scoped): (a) catalog §11.2 = ĐÚNG 33 cặp (action,resource_type) TƯỜNG MINH — ATTENDANCE.{CHECK_IN,CHECK_OUT,VIEW_OWN,VIEW_TEAM,VIEW_COMPANY,VIEW_DETAIL,VIEW_SENSITIVE,ADJUST_DIRECT,RECALCULATE,EXPORT} · ADJUSTMENT.{CREATE_OWN,VIEW_OWN,VIEW_TEAM,VIEW_COMPANY,APPROVE,REJECT,CANCEL_OWN} · REMOTE_REQUEST.{CREATE_OWN,VIEW_OWN,VIEW_TEAM,VIEW_COMPANY,APPROVE,REJECT,CANCEL_OWN} · SHIFT.{VIEW,CREATE,UPDATE,DELETE} · SHIFT_ASSIGNMENT.{VIEW,UPDATE} · RULE.{VIEW,CONFIG} · AUDIT_LOG.VIEW(=cặp riêng 'view','attendance-audit-log'); ON CONFLICT(action,resource_type) DO NOTHING; assert TỒN TẠI theo từng cặp (KHÔNG count===34); is_sensitive=true cho quyền DB-04 §12 đánh Sensitive; PIN cặp vào 1 hằng dùng chung S3-ATT-BE-1",
+      "(A) ROLE→data_scope BẢNG TƯỜNG MINH per-(role,action,resource) theo API-10 §6.3 — roles FLAT (KHÔNG kế thừa): check_in/check_out/view_own + *_OWN(adjustment,remote) = Own cho TẤT CẢ role (emp+mgr+hr+CA); view_team/*_VIEW_TEAM/APPROVE/REJECT = mgr+hr+CA (Team); view_company/VIEW_SENSITIVE/RECALCULATE/ADJUST_DIRECT/EXPORT/*_VIEW_COMPANY = hr+CA (Company); view_detail = Own(emp)+Team(mgr)+Company(hr/CA) (SPEC-04 §12 THẮNG API-10); **LEAST-PRIVILEGE (owner ①): SHIFT.*/SHIFT_ASSIGNMENT.*/RULE.* + AUDIT_LOG.VIEW = CHỈ hr+CA (Company) — manager (✓)=grantable-not-default → KHÔNG seed**; super-admin runtime (KHÔNG seed system company_id NULL). Pattern mig 0444: per-cặp DELETE wrong-scope + INSERT ON CONFLICT(role_id,permission_id,effect), CẤM blanket DELETE; DO-block thuần KHÔNG db:generate",
+      "(A) deny + positive test TỪNG role: emp/mgr/hr/CA đều có Own check-in/out/view-own; manager KHÔNG có shift.view/shift_assignment.view/rule.view/audit_log.view (deny — chống over-grant); emp KHÔNG có view_company/approve/reject; cross-tenant RLS deny dùng app role (mediaos_app, KHÔNG owner bypass); idempotent ĐO BỘ BA (role_id,permission_id,data_scope)",
+      "(B) ATT MASTER-DATA SEEDER (RUNTIME — đăng ký vào MasterDataSeederRegistry của S3-FND-SEEDRUN-1, KHÔNG seed trong migration): seed OFFICE_8H (DB-10 §14.2: start 08:00·end 17:00·break_start 12:00·break_end 13:00 [=60']·required 480·is_default=true·tz→metadata jsonb) + DEFAULT_OFFICE_RULE (rule_code='DEFAULT_OFFICE_RULE'·rule_scope='Company'·effective_from set·grace 5/5 TRÊN SHIFT·rule_config jsonb {missing_checkout_policy,block_when_leave_approved,allow_remote_checkin}); field→cột THẬT 0452 (grace trên shifts, KHÔNG seed cột không tồn tại); idempotent qua SeedTrackingService.markItem; seedKey 'attendance.master-data.v1'",
+      "(B) integration test LANE_DB: chạy runner trên company test → assert OFFICE_8H + DEFAULT_OFFICE_RULE tồn tại (is_default, đúng giá trị) + chạy lần 2 = Skipped (idempotent); dùng ĐÚNG entry-point runner production (KHÔNG gọi seeder trực tiếp → tránh false-green); app role RLS-enforced",
+      "migration 0454 NỐI TIẾP head THẬT lúc mở PR (head hiện 0453 trên feat/s3-wave1) — KHÔNG để 0454 merge master TRƯỚC 0453 (drizzle skip `when` nhỏ hơn); cùng wave PR đảm bảo thứ tự",
     ],
   },
   {
@@ -1547,20 +1608,31 @@ export const backlog = [
     title:
       "Seed LEAVE permissions (§11.2) + role→data_scope mapping + leave types (Annual/Sick/Unpaid/Other) + default policy (§12.2) idempotent",
     zone: "red",
-    status: "todo",
-    paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/src/permission/**"],
-    skills: ["code-review"],
-    depends_on: ["S3-LEAVE-DB-1", "S2-AUTH-SEED-1", "S3-ATT-SEED-1"], // serial migration lane sau ATT-SEED
-    src: [
-      "IMPLEMENTATION-06 §11.0/§11.2/§11.3 (data_scope canonical)",
-      "IMPLEMENTATION-06 §12.2 (leave type/policy seed)",
-      "API-10",
+    // DONE 2026-06-27 (feat/s3-wave1, 9fd71bf): mig 0455 = 30 cặp catalog/7 resource_type + 83 grant per-pair (least-privilege manager-deny: 0 trên leave-policy/leave-audit-log/leave-file + 0 admin-action leave-balance, GIỮ view-own:Own self-service; CA view-team:leave-calendar=Team) · leave-permissions.const.ts (PIN 30 cho S3-LEAVE-BE) · LeaveMasterDataSeeder (4 type + DEFAULT_ANNUAL quota=12) cắm runner S3-FND-SEEDRUN-1 · 156 lane-spec + 793 regression PASS (mediaos_leaveseed) · FULL gate PASS (security PASS, completion 95/100). ĐÍNH CHÍNH: legacy create:leave re-scope Company→Own áp cho CẢ employee VÀ company-admin (hardening đúng, create là Own-action; KHÔNG regression). Owner ratify is_sensitive (9 cặp false) + per-employee balance (defer HR-flow/§8.4) ở wave-PR. Verify cuối + merge ở wave-PR feat/s3-wave1→master.
+    status: "done",
+    paths: [
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "apps/api/src/permission/**",
+      "apps/api/src/foundation/**",
+      "apps/api/src/leave/**",
     ],
+    skills: ["code-review"],
+    depends_on: ["S3-LEAVE-DB-1", "S2-AUTH-SEED-1", "S3-ATT-SEED-1", "S3-FND-SEEDRUN-1"], // perm=migration NỐI TIẾP sau ATT-SEED; master-data=runtime seeder qua S3-FND-SEEDRUN-1
+    src: [
+      "IMPLEMENTATION-06 §11.2 (catalog 30 mã) + §11.3/§11.0 (data_scope canonical)",
+      "API-10 §5.4 + §6.4 (role→action→max-scope — NGUỒN CHUẨN; DB-05 §8.1 STALE 28 mã, §11.2 THẮNG)",
+      "IMPLEMENTATION-06 §12.2 (leave type/policy seed) · DB-05 (landed schema: leave_types/leave_policies)",
+      "mig 0454 (ATT-SEED-1 pattern NHÂN BẢN) · mig 0063/0441 (legacy 'leave' resource+grant — KHÔNG xoá) · mig 0444 (FLAT roles)",
+    ],
+    // RECONCILE v2 (2026-06-27, sau research tech-lead — TÁCH 2 phần như S3-ATT-SEED-1: (A) PERMISSION=migration 0455; (B) MASTER-DATA=runtime seeder cắm S3-FND-SEEDRUN-1). Quyết định mặc định (owner chốt ở wave-PR): is_sensitive suy theo triết lý ATT · approve:leave GIỮ non-sensitive (legacy=false, ON CONFLICT không UPDATE; approve là action-gate, masking N/A) · policy = CHỈ DEFAULT_ANNUAL (§12.2 chỉ định lượng annual 12n) · per-employee balance DEFER (HR create-flow/demo §8.4 — BE coi balance rỗng là hợp lệ).
     done_when: [
-      "seed LEAVE permissions (§11.2: BALANCE.VIEW/ADJUST · REQUEST.CREATE/SUBMIT/VIEW/UPDATE_DRAFT/CANCEL/APPROVE/REJECT/REVOKE · TYPE.* · POLICY.* …) là ACTION; phạm vi qua data_scope; ON CONFLICT DO NOTHING",
-      "role mapping §11.3 per-cặp→data_scope: Employee=Own (view balance·create/submit/view/cancel own) · Manager=Team (view/approve/reject team) · HR=Company; scope SAI → DELETE-cặp+INSERT trong tx; CẤM blanket DELETE",
-      "seed leave types Annual(paid,balance,half-day)·Sick(paid)·Unpaid·Other + default company policy (annual 12 ngày/năm, allow half-day, min-notice 1 annual / 0 sick) §12.2 ON CONFLICT DO NOTHING",
-      "balance demo/bootstrap: tạo leave_balances khi tạo employee HOẶC seed demo (§8.4) — mọi thay đổi qua leave_balance_transactions (KHÔNG sửa balance thẳng); idempotent ĐO BỘ BA; 1 lane db-migration NỐI TIẾP",
+      "(A) PERMISSION = migration 0455 NỐI TIẾP head (global/system-scoped, AN TOÀN migrate-time): catalog §11.2 = ĐÚNG 30 cặp (action,resource_type) TƯỜNG MINH trên 7 resource_type — leave(11): view-own/view/create/submit/update-draft/cancel-own/approve/reject/cancel-any/revoke/export · leave-type(4): view/create/update/delete · leave-policy(4): view/create/update/delete · leave-balance(4): view-own/view/view-transaction/adjust · leave-calendar(3): view-own/view-team/view-company · leave-file(3): view/upload/delete · leave-audit-log(1): view (CẶP RIÊNG, KHÔNG tái dùng generic audit-log mig 0005); ON CONFLICT(action,resource_type) DO NOTHING (legacy mig 0063 ('read'/'create'/'approve'/'manage','leave') GIỮ NGUYÊN, KHÔNG xoá); is_sensitive=true cho cross-scope/approval-admin/audit/file (self-service view-own/create/submit/cancel-own + view leave-type = false để feed FE tile); PIN 30 cặp vào hằng dùng chung apps/api/src/leave/leave-permissions.const.ts (LEAVE_PERMISSION_COUNT=30) cho S3-LEAVE-BE",
+      "(A) ROLE→data_scope BẢNG TƯỜNG MINH per-(role,action,resource) — roles FLAT (mig 0444, KHÔNG kế thừa); 83 hàng grant: self-service (view-own/create/submit/update-draft/cancel-own:leave + view-own:leave-balance + view-own:leave-calendar) = Own cho TẤT CẢ 4 role · view/approve/reject:leave = mgr(Team)+hr+CA(Company) · cancel-any/revoke/export:leave = hr+CA(Company) · view-team:leave-calendar = mgr+hr+CA(Team, CA KHÔNG vượt max=Team) · view-company:leave-calendar = hr+CA(Company) · view:leave-type = cả 4 role(Company) · TYPE/POLICY write + leave-balance view/view-transaction/adjust + leave-audit-log = CHỈ hr+CA(Company); **LEAST-PRIVILEGE (owner ①): manager KHÔNG grant nào trên leave-policy/leave-balance/leave-audit-log/leave-file + KHÔNG cancel-any/revoke/export — manager (✓)=grantable-not-default**; pattern mig 0454 per-cặp DELETE wrong-scope + INSERT ON CONFLICT(role_id,permission_id,effect), CẤM blanket DELETE (giữ legacy media/parked grants); re-scope legacy employee create:leave Company→Own đúng hardening",
+      "(A) deny + positive test TỪNG role (lane LANE_DB): emp/mgr/hr/CA đều Own self-service; manager COUNT(*)=0 trên ('leave-policy','leave-balance','leave-audit-log','leave-file') + KHÔNG cancel-any/revoke/export (deny — chống over-grant); emp KHÔNG có view/approve/reject:leave; cross-tenant RLS deny dùng app role (mediaos_app, KHÔNG owner bypass); idempotent ĐO BỘ BA (role_id,permission_id,data_scope)",
+      "(B) LEAVE MASTER-DATA SEEDER (RUNTIME — đăng ký MasterDataSeederRegistry của S3-FND-SEEDRUN-1, KHÔNG seed trong migration): 4 leave_types ANNUAL/SICK/UNPAID/OTHER theo §12.2 (paid/deduct_balance/allow_half_day/min_notice_days/sort_order/is_system_default; status='active' lowercase = chk leave_types) + 1 leave_policy DEFAULT_ANNUAL (policy_scope='Company', leave_type_id→ANNUAL [NOT NULL=per-type], yearly_quota_days=12, status='Active' TitleCase = chk leave_policies); field→cột THẬT (leave_types/leave_policies trong schema/hr.ts+leave.ts mig 0453, KHÔNG seed cột không tồn tại; half-day/min-notice sống trên leave_types KHÔNG trên policy); idempotent qua SeedTrackingService + onConflictDoNothing partial-unique (company_id,code|policy_code) WHERE deleted_at IS NULL; seedKey 'leave.master-data' v1; seed types TRƯỚC rồi resolve ANNUAL id cho policy",
+      "(B) integration test LANE_DB: chạy ĐÚNG entry-point runner.reconcileCompany trên company test → assert 4 type + DEFAULT_ANNUAL policy tồn tại (đúng giá trị, is_system_default, quota=12) + chạy lần 2 = Skipped (idempotent, count không nhân đôi); app role RLS-enforced (KHÔNG gọi seeder.seed() trực tiếp → tránh false-green)",
+      "WIRING: LeaveModule import SeedModule + LeaveSeedRegistrar (OnModuleInit) — mirror attendance.module.ts; KHÔNG sửa module-app-metadata.ts (FE tile gating = S3-FE-REGISTRY-1 re-point sang ('view-own','leave')); migration 0455 NỐI TIẾP head THẬT (head 0454 trên feat/s3-wave1, idx 135 when 1717500670000) — cùng wave PR đảm bảo thứ tự 0453→0454→0455 (drizzle skip when nhỏ hơn)",
     ],
   },
 
@@ -1572,7 +1644,8 @@ export const backlog = [
     title:
       "ATT Today + check-in + check-out: resolve employee/shift/rule (server-time) + chặn Approved full-day leave + attendance_records tx (0-dup) + attendance_logs + tính late/early/missing + audit",
     zone: "red",
-    status: "todo",
+    // DONE 2026-06-27 (feat/s3-wave1): rewrite getToday/checkIn/checkOut sang DB-04 §7. Repo: resolveEmployeeByUserIdTx (server-side, employment gate) · resolveEffectiveShift/RuleTx (Employee≻Dept≻Company≻System, fallback OFFICE_8H/DEFAULT_OFFICE_RULE, no-shift KHÔNG 500) · findApprovedFullDayLeaveTx (status duality 'approved'∪'Approved', duration FullDay/MultipleDays/NULL) · insertAttendanceLogTx (APPEND-ONLY). Service: server-time authoritative (client_time chỉ tham chiếu trên log) · attendance_records ghi CẢ cột legacy (user_id) + DB-04 additive (employee/shift/rule/working/missing/attendance_status TitleCase/calculation_snapshot) trong tx · 0-dup app-guard + 23505 backstop · audit 'attendance.check_in/out' objectType='attendance_record' + outbox in-tx · first/last_log_id backfill. Logic: shift-aware pure helpers (shiftLate/EarlyLeave/working/missing/check{In,Out}TitleStatus). Controller: today read→view-own (isSensitive) + cặp từ attendance-permissions.const (anti-drift); check-in/out giữ nguyên. Contracts additive: clientTime/clientTimezone/note + V2 schemas. TDD: attendance-be1.service.spec (17) + logic.spec (+20) + attendance-be1.int.spec (7: happy/0-dup/leave-dual/cross-tenant/server-time/HTTP view-own gate). Verify lane mediaos_attbe1: attendance 297 PASS · full suite 3549 PASS/0 fail · typecheck+build green. NO migration (mig 0452/0454 đã có sẵn cột/audit-type/grant). FULL gate PASS: security-reviewer PASS (0 CRIT/HIGH — tenant/append-only/permission/PII/server-time/0-dup/IDOR verified; INFO: legacy non-BE-1 routes read/manage:attendance orphaned post-0444 → follow-up reconcile WO), completion 86/100 → đã vá objection >800 dòng: refactor f4263820 tách attendance.service.ts 1186→790 (mappers/builders/types, 297 PASS không đổi, no behavior change). Verify cuối + merge ở wave-PR feat/s3-wave1→master.
+    status: "done",
     paths: ["apps/api/src/attendance/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S3-ATT-SEED-1", "S2-AUTH-BE-2", "S2-HR-BE-1"],
@@ -1597,7 +1670,8 @@ export const backlog = [
     title:
       "ATT records read: my-records + records/{id} detail + team-records + records(HR) theo data-scope Own/Team/Dept/Company + pagination/filter/sort whitelist + mask GPS/IP/device + no N+1",
     zone: "red",
-    status: "todo",
+    // DONE 2026-06-27 (feat/s3-wave1, fdc45ed5): 5 route đọc theo scope (my-records self-locked user.id · team-records view-team→Team · records view-company→Company · records/:id + /logs view-detail, out-of-scope→404 no-grant→403) qua DataScopeService (resolveAndAssert gate + buildEmployeeScopeCondition, INNER JOIN employee_profiles ON user_id+company_id). MASK SERVER: list KHÔNG có location/gps/ip/device; detail locationJson null trừ view-sensitive; logs mask 9 field (gps*/locationLabel/ip/device*/userAgent/rawPayload) trừ view-sensitive, KHÔNG own-bypass; reveal = permission.can(view-sensitive,isSensitive:true) page-uniform (wildcard *:* không thoả). No N+1 (1 page + 1 count query, join users/org_units). Sort Zod-enum whitelist (no ORDER BY injection), pageSize≤100. Files mới attendance-read.{service,repository,mappers}.ts (<800, service.ts giữ 790). NO migration. TDD: read-unit 16 + be2.int 14 (entry-point thật AppModule+supertest+login, planted EMR rows). Verify lane mediaos_attbe2: attendance 327 PASS · full 3579 PASS/0 fail · typecheck+build green. FULL gate PASS (security PASS 0-CRIT, completion 94/100). Verify cuối + merge ở wave-PR.
+    status: "done",
     paths: ["apps/api/src/attendance/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S3-ATT-BE-1"],
@@ -1645,7 +1719,8 @@ export const backlog = [
     title:
       "LEAVE balance + types + calculation preview: GET /leave/types + GET /leave/me/balances (Own) + POST /leave/calculate (preview ngày/giờ + holiday/non-working-day + balance trước/sau)",
     zone: "red",
-    status: "todo",
+    // DONE 2026-06-27 (feat/s3-wave1, e57a034e): 3 route read/preview. GET /leave/types RE-GATE read:leave(mồ côi)→view:leave-type (net access fix 4 role canonical) + richer DTO. GET /leave/me/balances view-own:leave-balance, ghim user_id=actor.id (IDOR-safe), empty→[]. POST /leave/requests/calculate (API-05 §16.1 canonical, KHÔNG shorthand /leave/calculate — spec-wins) gate create:leave (view:leave sensitive emp không có). Calculate: HolidayService.getHolidaysInRange (batch, predicate affectsLeaveCalculation≠affectsAttendance) + workingDays resolveWorkingDaysForUserTx + HOURS_PER_DAY=8; balance before/after từ remainingDays GENERATED (read-only) or 0; KHÔNG mutate (preview thuần, verify count 3 bảng + used_days bất biến); Zod strip client calculated_days/balance_after/employee_id. NO migration. TDD: calc unit 9 + be1.int 8 (entry-point thật AppModule+supertest, own-only/403/cross-tenant 404/no-mutation/empty-balance/holiday-weekend). Verify lane mediaos_leavebe1: leave 206 PASS · full 3596 PASS/0 fail · typecheck+build green. FULL gate PASS (security PASS 0-CRIT, completion 93/100). FOLLOW-UP (không chặn, dọn ở BE-2): LeaveService.listTypes/toTypeDto mồ côi sau re-point + resolveEmployeeByUserIdTx round-trip bỏ kết quả; is_enough chưa trừ reserved/pending (BE-2 validate cuối). Verify cuối + merge ở wave-PR.
+    status: "done",
     paths: ["apps/api/src/leave/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S3-LEAVE-SEED-1", "S2-AUTH-BE-2", "S2-HR-BE-1"],
@@ -1668,7 +1743,8 @@ export const backlog = [
     title:
       "LEAVE request workflow (me): create draft + update draft + submit + list + detail + cancel + validate (overlap/balance/min-notice) + leave_request_days + reserve + audit + event SUBMITTED",
     zone: "red",
-    status: "todo",
+    // DONE 2026-06-27 (feat/s3-wave1, 15476a7): 6 route self-service. POST /leave/requests (draft, repoint legacy, submitNow chạy submit in-tx) · PATCH /:id (Draft-only→409) · POST /:id/submit (Draft→Pending) · POST /:id/cancel (cancel-own re-gate, Draft|Pending→Cancelled) · GET /leave/me/requests + /:id (own, 404 not-owner). FSM TitleCase. Submit: FOR UPDATE re-read + min-notice (company tz) + OVERLAP 422 LEAVE-ERR-REQUEST-OVERLAP (user_id, status Pending/Approved + lowercase, range intersect, exclude self+terminal; báo conflict id+dates) + balance (available=remaining-pending nếu !allowNegative→422) + RESERVE leave_balance_transactions (UPPERCASE) + pending_days += (KHÔNG chạm remaining GENERATED/used) + approval SUBMIT + audit objectType='leave_request' + outbox leave.request.submitted — TẤT CẢ 1 tx. Cancel: RELEASE tx + pending -= + approval CANCEL + event. employee_profiles BẮT BUỘC (422 LEAVE-ERR-EMPLOYEE-NOT-ELIGIBLE). leave_request_days (day_type có SPACE) replace mỗi create/update/submit. NO migration (audit 'leave_request' đã trong CHECK). Files mới leave-request.{service(748)/repository/logic/mappers}.ts (<800). TDD: 14 int (AppModule+supertest+Postgres thật) + append-only deny qua leave-ledger-appendonly.int-spec. Verify lane mediaos_leavebe2: leave 220 PASS · full 3610 PASS/0 fail · typecheck+build green. FULL gate PASS (security PASS 0-CRIT/0-HIGH, completion 93/100). FOLLOW-UP (không chặn): [MEDIUM] TOCTOU pending_days — balance read chưa FOR UPDATE, 2 submit song song cùng user/balance có thể over-reserve (sửa ở BE-3 cùng balance row-lock approve→USE); test dùng ngày cứng 2026 (time-bomb min-notice — neo today+offset); max_days/hours_per_request chưa validate; require_attachment defer (upload BE); approver routing defer→BE-3. Verify cuối + merge ở wave-PR.
+    status: "done",
     paths: ["apps/api/src/leave/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S3-LEAVE-BE-1"],
@@ -1770,7 +1846,9 @@ export const backlog = [
     status: "todo",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["code-review"],
-    depends_on: ["S2-FE-AUTH-1", "S1-FE-REGISTRY-1"],
+    // depends_on +S3-ATT-SEED-1/+S3-LEAVE-SEED-1 (chốt owner 2026-06-26): cặp (action,resource_type) cho route mới
+    //   cần NGUỒN CHUẨN từ seed §11 đã land — pin test theo seed THẬT, không theo mã FE (bài học S1-FND-MODULE).
+    depends_on: ["S2-FE-AUTH-1", "S1-FE-REGISTRY-1", "S3-ATT-SEED-1", "S3-LEAVE-SEED-1"],
     src: [
       "IMPLEMENTATION-06 §8.8 (FE integration chung)",
       "ISSUE-BOARD-01 §18.6/§18.7 (ATT/LEAVE FE)",
@@ -1779,9 +1857,11 @@ export const backlog = [
       "UI-04",
     ],
     done_when: [
-      "app registry + sidebar registry thêm ATT/LEAVE sinh menu từ metadata (permission/scope/module/status — KHÔNG hard-code role); route registry cho routes §8.8 (/attendance/*, /leave/*); app inactive/thiếu setting → ẩn",
-      "attendanceApi + leaveApi service modules (web-core) + query-key factory ATT/LEAVE + mutation invalidation matrix (check-in/out → today+my-records; approve → list+detail+balance)",
-      "web test registry + guard xanh; typecheck xanh",
+      "ĐỘI 1 LƯU Ý: web-core (CORE) + apps/app (APP) KHÔNG độc lập (APP import web-core, router gọi getMeta đọc ROUTE_REGISTRY của CORE) → phân rã 1 LANE DUY NHẤT (frontend-builder, cùng cây tuần tự), KHÔNG 2 lane worktree song song",
+      "app registry + sidebar registry thêm ATT/LEAVE sinh menu từ metadata (permission/scope/module/status — KHÔNG hard-code role); route registry cho routes §8.8 (/attendance/*, /leave/*); app inactive/thiếu setting → ẩn; cặp (action,resource_type)+data_scope cho route mới khớp NGUỒN CHUẨN seed §11 đã land — pin test theo seed THẬT (bài học S1-FND-MODULE), KHÔNG theo mã FE",
+      "FAIL-CLOSED scope: route+sidebar Team/Company (team-records, /records company, /leave approvals, calendar) BẮT BUỘC requiredScopes:[Team]/[Company] (vì VIEW_* map về read:attendance/read:leave — thiếu scope = lọt); test data-scope RED-trước cho CẢ route guard LẪN filterSidebarItems với session.modules ĐƯỢC populate (active/inactive/hidden — modules:[] = test xanh-giả)",
+      "attendanceApi + leaveApi service modules (web-core, typed apiFetch — KHÔNG nhận/forward company_id, KHÔNG đụng token-storage) + query-key factory ATT/LEAVE (APPEND key mới today/team/records.detail — KHÔNG đổi tên key cũ) + mutation invalidation matrix (check-in/out → today+my-records; approve → list+detail+balance)",
+      "DEFER chống scope-creep: /leave/calculate preview (chưa có contract @mediaos/contracts) → hoãn sang S3-FE-LEAVE-1; /leave/settings/policies giữ ModulePlaceholder (KHÔNG dựng leaveApi.policy ở WO này); web test registry+guard xanh; typecheck xanh",
     ],
   },
   {

@@ -28,6 +28,10 @@ export * from "./hr";
 // attendance_logs (APPEND-ONLY) · attendance_adjustment_items (APPEND-ONLY) · remote_work_requests ·
 // remote_work_request_approvals (APPEND-ONLY). attendance_records/_adjustment_requests reconcile ở ./hr (ALTER-ADD).
 export * from "./attendance";
+// S3-LEAVE-DB-1 (DB-05 §7, mig 0453): LEAVE Core 4 bảng MỚI — leave_policies · leave_request_days +
+// leave_balance_transactions (APPEND-ONLY ledger) · leave_request_approvals (APPEND-ONLY history).
+// leave_types/leave_requests/leave_balances (mig 0062) reconcile ở ./hr (ALTER-ADD additive nullable).
+export * from "./leave";
 export * from "./finance";
 // G8 approval (multi-level rules — approval_requests/_steps live in ./workflow)
 export * from "./approval";

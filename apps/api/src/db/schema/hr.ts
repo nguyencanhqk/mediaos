@@ -328,6 +328,27 @@ export const leaveTypes = pgTable(
     /** Hạn mức năm (ngày). NULL = không giới hạn (vd nghỉ không lương). */
     annualQuota: numeric("annual_quota", { precision: 5, scale: 1 }),
     status: text("status").notNull().default("active"),
+    // ─── S3-LEAVE-DB-1 (mig 0453): DB-05 §7.1 cột MỚI NULLABLE additive. Cột cũ ở trên GIỮ NGUYÊN ───
+    // (code = leave_type_code, paid = is_paid). balance_unit/allow_*/require_* = cấu hình loại nghỉ MỚI.
+    description: text("description"),
+    deductBalance: boolean("deduct_balance"),
+    balanceUnit: text("balance_unit"),
+    allowFullDay: boolean("allow_full_day"),
+    allowHalfDay: boolean("allow_half_day"),
+    allowHourly: boolean("allow_hourly"),
+    allowMultipleDays: boolean("allow_multiple_days"),
+    requireReason: boolean("require_reason"),
+    requireAttachment: boolean("require_attachment"),
+    minNoticeDays: integer("min_notice_days"),
+    maxDaysPerRequest: numeric("max_days_per_request", { precision: 8, scale: 2 }),
+    maxHoursPerRequest: numeric("max_hours_per_request", { precision: 8, scale: 2 }),
+    allowNegativeBalance: boolean("allow_negative_balance"),
+    isSystemDefault: boolean("is_system_default"),
+    sortOrder: integer("sort_order"),
+    metadata: jsonb("metadata"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    deletedBy: uuid("deleted_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -338,6 +359,18 @@ export const leaveTypes = pgTable(
       .where(sql`deleted_at IS NULL`),
     index("leave_types_company_id_idx").on(t.companyId),
     check("leave_types_status_check", sql`status IN ('active','inactive')`),
+    // S3-LEAVE-DB-1 (mig 0453): CHECK + index cột MỚI (tên MỚI, NULLABLE — KHÔNG đụng status_check cũ).
+    check(
+      "chk_leave_types_balance_unit",
+      sql`balance_unit IS NULL OR balance_unit IN ('Day','Hour')`,
+    ),
+    check(
+      "chk_leave_types_request_limit",
+      sql`(max_days_per_request IS NULL OR max_days_per_request > 0) AND (max_hours_per_request IS NULL OR max_hours_per_request > 0)`,
+    ),
+    index("idx_leave_types_company_sort")
+      .on(t.companyId, t.sortOrder)
+      .where(sql`deleted_at IS NULL`),
   ],
 );
 
@@ -369,6 +402,45 @@ export const leaveRequests = pgTable(
     approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     reviewNote: text("review_note"),
+    // ─── S3-LEAVE-DB-1 (mig 0453): DB-05 §7.5 cột MỚI NULLABLE additive. Cột cũ ở trên GIỮ NGUYÊN. ───
+    // employee_id MỚI (nullable) BÊN CẠNH user_id cũ. FK cross-file (employee_profiles/org_units/positions/
+    // leave_policies) = uuid TRẦN tránh import vòng — FK thật ở mig 0453. status union check (lowercase ∪ TitleCase).
+    leaveRequestCode: text("leave_request_code"),
+    employeeId: uuid("employee_id"),
+    departmentId: uuid("department_id"),
+    positionId: uuid("position_id"),
+    directManagerEmployeeId: uuid("direct_manager_employee_id"),
+    leavePolicyId: uuid("leave_policy_id"),
+    durationType: text("duration_type"),
+    halfDaySession: text("half_day_session"),
+    startTime: time("start_time"),
+    endTime: time("end_time"),
+    totalHours: numeric("total_hours", { precision: 8, scale: 2 }),
+    handoverNote: text("handover_note"),
+    contactDuringLeave: text("contact_during_leave"),
+    currentApproverUserId: uuid("current_approver_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    currentApproverEmployeeId: uuid("current_approver_employee_id"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    submittedBy: uuid("submitted_by").references(() => users.id, { onDelete: "set null" }),
+    rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+    rejectedBy: uuid("rejected_by").references(() => users.id, { onDelete: "set null" }),
+    rejectionReason: text("rejection_reason"),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    cancelledBy: uuid("cancelled_by").references(() => users.id, { onDelete: "set null" }),
+    cancelReason: text("cancel_reason"),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedBy: uuid("revoked_by").references(() => users.id, { onDelete: "set null" }),
+    revokeReason: text("revoke_reason"),
+    balanceEffectStatus: text("balance_effect_status"),
+    attendanceSyncStatus: text("attendance_sync_status"),
+    calculationSnapshot: jsonb("calculation_snapshot"),
+    approvalSnapshot: jsonb("approval_snapshot"),
+    metadata: jsonb("metadata"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    deletedBy: uuid("deleted_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -378,9 +450,47 @@ export const leaveRequests = pgTable(
     index("leave_requests_user_id_idx").on(t.userId),
     index("leave_requests_status_idx").on(t.companyId, t.status),
     index("leave_requests_dates_idx").on(t.companyId, t.startDate, t.endDate),
-    check("leave_req_status_check", sql`status IN ('pending','approved','rejected','cancelled')`),
+    // S3-LEAVE-DB-1 (mig 0453): status CHECK = UNION (lowercase legacy ∪ TitleCase SPEC-05) — HOT-FILE union,
+    // giữ giá trị cũ chèn được + cho phép TitleCase mới (DB-05 §4.8). KHÔNG rewrite mất giá trị legacy.
+    check(
+      "leave_req_status_check",
+      sql`status IN ('pending','approved','rejected','cancelled','draft','revoked','Draft','Pending','Approved','Rejected','Cancelled','Revoked')`,
+    ),
     check("leave_req_dates_check", sql`start_date <= end_date`),
     check("leave_req_days_check", sql`total_days > 0`),
+    // S3-LEAVE-DB-1 (mig 0453): CHECK + index cột MỚI (tên MỚI, NULLABLE hợp lệ — cột chưa backfill).
+    check(
+      "chk_leave_requests_duration_type",
+      sql`duration_type IS NULL OR duration_type IN ('FullDay','HalfDay','Hourly','MultipleDays')`,
+    ),
+    check(
+      "chk_leave_requests_half_day_session",
+      sql`half_day_session IS NULL OR half_day_session IN ('Morning','Afternoon')`,
+    ),
+    check(
+      "chk_leave_requests_balance_effect_status",
+      sql`balance_effect_status IS NULL OR balance_effect_status IN ('None','Reserved','Used','Released','Refunded')`,
+    ),
+    check(
+      "chk_leave_requests_attendance_sync_status",
+      sql`attendance_sync_status IS NULL OR attendance_sync_status IN ('Not Required','Pending','Synced','Failed','Reverted','Pending Revert')`,
+    ),
+    check("chk_leave_requests_total_hours", sql`total_hours IS NULL OR total_hours >= 0`),
+    uniqueIndex("uq_leave_requests_company_code_active")
+      .on(t.companyId, t.leaveRequestCode)
+      .where(sql`deleted_at IS NULL AND leave_request_code IS NOT NULL`),
+    index("idx_leave_requests_employee_date")
+      .on(t.companyId, t.employeeId, t.startDate, t.endDate)
+      .where(sql`deleted_at IS NULL`),
+    index("idx_leave_requests_pending_approver")
+      .on(t.companyId, t.currentApproverUserId, t.status)
+      .where(sql`deleted_at IS NULL AND status = 'Pending'`),
+    index("idx_leave_requests_department_date")
+      .on(t.companyId, t.departmentId, t.startDate, t.endDate)
+      .where(sql`deleted_at IS NULL`),
+    index("idx_leave_requests_type_status")
+      .on(t.companyId, t.leaveTypeId, t.status)
+      .where(sql`deleted_at IS NULL`),
   ],
 );
 
@@ -408,9 +518,37 @@ export const leaveBalances = pgTable(
     year: integer("year").notNull(),
     totalDays: numeric("total_days", { precision: 5, scale: 1 }).notNull().default("0"),
     usedDays: numeric("used_days", { precision: 5, scale: 1 }).notNull().default("0"),
+    // ⛔ GIỮ NGUYÊN: remaining_days GENERATED ALWAYS AS (total_days - used_days) STORED — DB đảm bảo không
+    // lệch. KHÔNG DROP/recreate, KHÔNG re-add (S3-LEAVE-DB-1 giữ generated col + CHECK leave_bal_used_check).
     remainingDays: numeric("remaining_days", { precision: 6, scale: 1 }).generatedAlwaysAs(
       sql`total_days - used_days`,
     ),
+    // ─── S3-LEAVE-DB-1 (mig 0453): DB-05 §7.3 cột MỚI NULLABLE additive. Cột cũ ở trên GIỮ NGUYÊN. ───
+    // employee_id MỚI (nullable) BÊN CẠNH user_id cũ (uuid TRẦN → FK thật ở mig 0453). balance_year = năm DB-05.
+    employeeId: uuid("employee_id"),
+    balanceYear: integer("balance_year"),
+    periodStart: date("period_start"),
+    periodEnd: date("period_end"),
+    openingDays: numeric("opening_days", { precision: 8, scale: 2 }),
+    grantedDays: numeric("granted_days", { precision: 8, scale: 2 }),
+    pendingDays: numeric("pending_days", { precision: 8, scale: 2 }),
+    adjustedDays: numeric("adjusted_days", { precision: 8, scale: 2 }),
+    carriedOverDays: numeric("carried_over_days", { precision: 8, scale: 2 }),
+    expiredDays: numeric("expired_days", { precision: 8, scale: 2 }),
+    openingHours: numeric("opening_hours", { precision: 8, scale: 2 }),
+    grantedHours: numeric("granted_hours", { precision: 8, scale: 2 }),
+    usedHours: numeric("used_hours", { precision: 8, scale: 2 }),
+    pendingHours: numeric("pending_hours", { precision: 8, scale: 2 }),
+    adjustedHours: numeric("adjusted_hours", { precision: 8, scale: 2 }),
+    remainingHours: numeric("remaining_hours", { precision: 8, scale: 2 }),
+    lastAccrualAt: timestamp("last_accrual_at", { withTimezone: true }),
+    lastCalculatedAt: timestamp("last_calculated_at", { withTimezone: true }),
+    status: text("status"),
+    metadata: jsonb("metadata"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedBy: uuid("deleted_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -426,6 +564,14 @@ export const leaveBalances = pgTable(
     check("leave_bal_year_check", sql`year >= 2000 AND year <= 2100`),
     check("leave_bal_total_check", sql`total_days >= 0`),
     check("leave_bal_used_check", sql`used_days >= 0 AND used_days <= total_days`),
+    // S3-LEAVE-DB-1 (mig 0453): CHECK + index cột MỚI (tên MỚI, NULLABLE — KHÔNG đụng các CHECK cũ ở trên).
+    check("chk_leave_balances_status", sql`status IS NULL OR status IN ('Active','Closed')`),
+    index("idx_leave_balances_employee_year")
+      .on(t.companyId, t.employeeId, t.balanceYear)
+      .where(sql`deleted_at IS NULL`),
+    index("idx_leave_balances_type_year_new")
+      .on(t.companyId, t.leaveTypeId, t.balanceYear)
+      .where(sql`deleted_at IS NULL`),
   ],
 );
 

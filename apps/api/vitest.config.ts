@@ -165,6 +165,39 @@ export default defineConfig({
           branches: 80,
           statements: 80,
         },
+        // S2-AUTH-BE-5-FIX (same enforcement model as S2-QA-1-FIX-B above): the 4 NEW auth-log-viewer
+        // crown-jewel files (read security data + Company-scope RLS + jsonb masking) ARE per-file gated ≥80%
+        // on all axes (CLAUDE.md §6 "permission/auth — ngưỡng riêng module nhạy cảm"; DoD §8 hard block).
+        // Vitest per-file thresholds bite ONLY when the file appears in the coverage report, so these gates
+        // are ENFORCED by `test:cov:sensitive` (which --coverage.include all 4 files AND drives their flows via
+        // auth-logs-viewer.int.spec.ts under an isolated LANE_DB), and are inert in the default no-DB unit run
+        // (`pnpm test`) where that int-spec skipIf(!(hasDb && LANE_DB)) — no false-red. Measured under LANE_DB:
+        // all 4 files 100% lines/functions/statements; branches: controller 100% · service 100% · login-log
+        // repo 100% · security-event repo 100% (filter/sort/date branches driven by V7/R8/E9/S10/S11).
+        "src/auth/auth-logs-viewer.controller.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
+        "src/auth/auth-logs-viewer.service.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
+        "src/auth/login-log.repository.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
+        "src/auth/security-event.repository.ts": {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
       },
     },
   },

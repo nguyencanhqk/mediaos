@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   adjustmentListQuerySchema,
   attendanceListQuerySchema,
+  attendanceRecordListQuerySchema,
   checkInSchema,
   checkOutSchema,
   createAdjustmentRequestSchema,
@@ -21,6 +22,8 @@ export class CreateAdjustmentDto extends createZodDto(createAdjustmentRequestSch
 export class ReviewNoteDto extends createZodDto(reviewNoteSchema) {}
 export class AttendanceListQueryDto extends createZodDto(attendanceListQuerySchema) {}
 export class AdjustmentListQueryDto extends createZodDto(adjustmentListQuerySchema) {}
+/** S3-ATT-BE-2 — GET /attendance/{my-records,team-records,records} query (page-based + filter + sort). */
+export class AttendanceRecordListQueryDto extends createZodDto(attendanceRecordListQuerySchema) {}
 /** GET /attendance/periods — phân trang danh sách kỳ công. */
 export class PeriodListQueryDto extends createZodDto(listPaginationSchema) {}
 

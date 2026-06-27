@@ -58,6 +58,8 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     DashboardModule,
     // S1-FND-WIRE-1 (BE-9): FoundationModule gom audit·settings·company·module-catalog·files·holidays →
     // /api/v1/foundation/*. AuditModule (FOUNDATION-BE-3) đã relocate vào đây (KHÔNG wire lẻ nữa).
+    // S3-FND-SEEDRUN-1 (additive): FoundationModule nay gồm SeedModule → MasterDataSeedBootstrapService
+    // (OnApplicationBootstrap) chạy reconcileAllCompanies() lúc boot (gated MASTER_DATA_SEED_ON_BOOT + NODE_ENV).
     FoundationModule,
     // AC-5 API key / PAT — out-of-scope (de-media-fy). Guard global đã GỠ ở CLEAN-DECOUPLE-1;
     // module giữ tạm tới CLEAN-BE-2 (gỡ hẳn cùng console FE). KHÔNG còn provider nào dùng ApiKeyRepository.
