@@ -1534,6 +1534,34 @@ export const backlog = [
     ],
   },
 
+  // ── FOUNDATION: runtime per-company master-data seed runner (chốt owner ① 2026-06-27) ──
+  // Lý do: master-data theo công ty (ca/rule ATT · leave-type/policy LEAVE · HR master-data) KHÔNG seed được lúc
+  //   migrate-time (DB sạch 0 company → FK/NOT-NULL fail; convention mig 0445/0008 cấm). SeedTrackingService ĐÃ có
+  //   nhưng CHƯA có ai gọi/trigger → master-data không bao giờ chạy. WO này dựng cơ chế đó, dùng chung mọi module.
+  {
+    id: "S3-FND-SEEDRUN-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Runtime per-company master-data seed runner: registry + bootstrap reconcile chạy mỗi company qua SeedTrackingService + withTenant (idempotent), nền cho ATT/LEAVE/HR master-data seed",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/foundation/**", "apps/api/test/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "S3-ATT-SEED-1 round-3/4 plan-review (no runtime seeder exists — memory s3-spine-planblock-schema-divergence)",
+      "mig 0445/0008 (convention: company-scoped master-data = RUNTIME seed, KHÔNG migrate-time)",
+      "SeedTrackingService (apps/api/src/foundation/seed/seed-tracking.service.ts: startBatch/markItem/finishBatch)",
+    ],
+    done_when: [
+      "MasterDataSeederRegistry + interface ModuleMasterDataSeeder {seedKey, seedVersion, seed(ctx:{companyId,tx,track})} — module ATT/LEAVE/HR đăng ký seeder của mình; runner KHÔNG biết chi tiết module (đảo phụ thuộc)",
+      "Bootstrap reconcile (OnApplicationBootstrap HOẶC startup service, có cờ env tắt cho test/CI): với MỖI company chưa xoá → chạy MỌI seeder đã đăng ký idempotent qua SeedTrackingService.startBatch(companyId,seedKey,version) → markItem từng row → finishBatch, TẤT CẢ trong withTenant(companyId) (RLS WITH CHECK pass; company_id từ context, BẤT BIẾN #1). Chạy được cho N=1 + sẵn sàng N>1 (loop mọi company)",
+      "FAIL-SAFE: 1 seeder lỗi → log có cấu trúc + markBatch Failed, KHÔNG crash app boot, KHÔNG chặn seeder khác; idempotent: chạy lại = markItem Skipped (checksum) + ON CONFLICT no-op (KHÔNG nhân đôi)",
+      "integration test LANE_DB: tạo company test → gọi ĐÚNG entry-point runner production dùng → assert seeder chạy (rows tồn tại) + chạy lần 2 = Skipped (idempotent). Dùng app role RLS-enforced (KHÔNG owner/migrator bypass). KHÔNG migration mới (tái dùng seed_batches/seed_items)",
+    ],
+  },
+
   // ── SEED (permission + data_scope theo §11 + business default §12) ──
   {
     id: "S3-ATT-SEED-1",
@@ -1543,25 +1571,29 @@ export const backlog = [
       "Seed ATT permissions (§11.1) + role→data_scope mapping (§11.3) + default shift OFFICE_8H + DEFAULT_OFFICE_RULE (§12.1) idempotent",
     zone: "red",
     status: "todo",
-    paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/src/permission/**"],
+    paths: [
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "apps/api/src/permission/**",
+      "apps/api/src/foundation/**",
+    ],
     skills: ["code-review"],
-    depends_on: ["S3-ATT-DB-1", "S2-AUTH-SEED-1"],
+    depends_on: ["S3-ATT-DB-1", "S2-AUTH-SEED-1", "S3-FND-SEEDRUN-1"],
     src: [
       "IMPLEMENTATION-06 §11.0/§11.1 (catalog + data_scope canonical)",
       "SPEC-04 §12 + DB-04 §12 + API-10 §5.3 (ma trận role→action→data_scope — NGUỒN CHUẨN, KHÔNG '§11.3')",
       "DB-10 §14.2 (Initial-Seed-Data design-of-record: OFFICE_8H 08:00-17:00/60' + DEFAULT_OFFICE_RULE)",
       "mig 0444/0445 (per-pair seed pattern) · mig 0005 (audit-log generic — KHÔNG tái dùng) · mig 0452 (landed ATT schema)",
     ],
-    // RECONCILE v2 (chốt owner 2026-06-26, sau 2 lần plan-block — nguồn ma trận = SPEC-04 §12 + DB-04 §12 + API-10 §5.3, KHÔNG '§11.3'):
-    //   roles FLAT (mig 0444, KHÔNG kế thừa) · default shift = DB-10 §14.2 (08:00-17:00/60') · audit-log riêng · seed-in-migration (N=1 không có provisioning path).
+    // RECONCILE v3 (chốt owner 2026-06-27, sau 3 lần plan-block — TÁCH 2 phần: (A) PERMISSION = migration; (B) MASTER-DATA ca/rule = RUNTIME seeder cắm vào S3-FND-SEEDRUN-1):
+    //   roles FLAT (mig 0444) · least-privilege ① (manager KHÔNG shift/rule-view) · catalog §11.2 = 33 mã · default ca/rule = DB-10 §14.2 · KHÔNG seed master-data lúc migrate.
     done_when: [
-      "RECONCILE field→cột (follow landed schema 0452): grace_late/grace_early TRÊN shifts (grace_late_minutes/grace_early_leave_minutes, KHÔNG phải attendance_rules); timezone → shifts.metadata jsonb {timezone:'Asia/Ho_Chi_Minh'}; missing_checkout_policy → attendance_rules.rule_config jsonb {missing_checkout_policy:'MarkMissingCheckout'} (string KHÔNG có trong spec → PIN 1 hằng dùng chung BE import). TUYỆT ĐỐI KHÔNG seed cột không tồn tại trong 0452",
-      "DEFAULT SHIFT/RULE (chốt owner = DB-10 §14.2, KHÔNG DB-04 17:30/90): OFFICE_8H start 08:00 · end 17:00 · break_start 12:00 · break_end 13:00 (=60') · required_working_minutes 480 · is_default=true · tz trong metadata; DEFAULT_OFFICE_RULE rule_code='DEFAULT_OFFICE_RULE' · rule_scope='Company' [NOT NULL] · effective_from set [NOT NULL] · grace 5/5 trên SHIFT · rule_config jsonb missing_checkout · allow_web=true · require_gps=false. ON CONFLICT PHẢI kèm predicate partial-index: ON CONFLICT (company_id, shift_code) WHERE deleted_at IS NULL DO NOTHING (và rule_code tương tự) — thiếu predicate = lỗi 'no unique constraint matching'",
-      "SEED-IN-MIGRATION (KHÔNG 'bootstrap hook' — N=1 KHÔNG có company-provisioning path; CompanyService chỉ getCurrent/updateCompany): seed shift/rule + grant TRỰC TIẾP trong migration + BACKFILL company N=1 hiện có; idempotent reconcile-safe (chạy lại không nhân đôi); integration test gọi ĐÚNG entry-point production dùng (KHÔNG gọi aggregator trực tiếp → tránh false-green hệ thống)",
-      "CATALOG ĐỦ §11.1 (superset — anchor count theo §11.1; DB-04 §12 thiếu VIEW_SENSITIVE/RECALCULATE → ghi nhận gap): ATTENDANCE.CHECK_IN/CHECK_OUT/VIEW_OWN/VIEW_TEAM/VIEW_COMPANY/VIEW_DETAIL/VIEW_SENSITIVE/EXPORT/RECALCULATE/ADJUST_DIRECT · ADJUSTMENT.{CREATE_OWN,VIEW_OWN,CANCEL_OWN,APPROVE,REJECT} · REMOTE_REQUEST.{CREATE_OWN,VIEW_OWN,CANCEL_OWN,APPROVE,REJECT} · SHIFT.* · SHIFT_ASSIGNMENT.* · RULE.* · AUDIT_LOG.VIEW; mỗi quyền=(action,resource_type) PIN 1 hằng dùng chung khớp S3-ATT-BE-1; ON CONFLICT DO NOTHING; is_sensitive=true cho quyền DB-04 §12 đánh Sensitive (VIEW_*/DETAIL, EXPORT, ADJUST_DIRECT, APPROVE/REJECT, RULE.*, SHIFT_ASSIGNMENT.*) — ghi rõ quyết định (gates wildcard/auto-grant SA)",
-      "AUDIT-LOG RIÊNG (least-privilege): KHÔNG tái dùng cặp generic ('read','audit-log')/('access-audit-log','audit-log') của mig 0005 (cấp HR/CA xem audit TOÀN công ty mọi module); dùng cặp attendance-scoped RIÊNG (vd ('view','attendance-audit-log')); deny test: grant ATT audit KHÔNG cho truy cập audit non-attendance",
-      "ROLE→data_scope BẢNG ĐẦY ĐỦ per-(role,action,resource) — roles FLAT (mig 0444, KHÔNG kế thừa): check_in/check_out/view_own/create_own(adjustment+remote)/cancel_own = data_scope=Own cho TẤT CẢ role (employee+manager+hr+company-admin theo API-10 §5.3 — seed Own-baseline cho cả manager/hr/CA, KHÔNG để thiếu hoặc scope Company/Team sai); view_detail:attendance = Own(employee) + Team(manager) (SPEC-04 §12 THẮNG API-10, ghi rõ deviation); view_team=Team(manager) · view_company=Company(hr/CA) · view:shift/shift-assignment=Company(manager+hr+CA per API-10 §5.3); per-cặp DELETE-wrong-scope + INSERT ON CONFLICT(role_id,permission_id,effect) — CẤM blanket DELETE; positive + deny test cho Own-action của TỪNG role TRƯỚC khi code",
-      "VIEW_SENSITIVE (GPS/IP/device) KHÔNG auto-grant qua wildcard; idempotent ĐO BỘ BA (role_id,permission_id,data_scope) trước/sau (UNIQUE KHÔNG gồm data_scope); migration NỐI TIẾP head 0453, 1 lane db-migration; KHÔNG đụng drizzle schema permissions.ts (DO-block thuần, không DDL/db:generate)",
+      "(A) PERMISSION = migration 0454 NỐI TIẾP head (global/system-scoped, AN TOÀN migrate-time — KHÔNG đụng bảng company-scoped): (a) catalog §11.2 = ĐÚNG 33 cặp (action,resource_type) TƯỜNG MINH — ATTENDANCE.{CHECK_IN,CHECK_OUT,VIEW_OWN,VIEW_TEAM,VIEW_COMPANY,VIEW_DETAIL,VIEW_SENSITIVE,ADJUST_DIRECT,RECALCULATE,EXPORT} · ADJUSTMENT.{CREATE_OWN,VIEW_OWN,VIEW_TEAM,VIEW_COMPANY,APPROVE,REJECT,CANCEL_OWN} · REMOTE_REQUEST.{CREATE_OWN,VIEW_OWN,VIEW_TEAM,VIEW_COMPANY,APPROVE,REJECT,CANCEL_OWN} · SHIFT.{VIEW,CREATE,UPDATE,DELETE} · SHIFT_ASSIGNMENT.{VIEW,UPDATE} · RULE.{VIEW,CONFIG} · AUDIT_LOG.VIEW(=cặp riêng 'view','attendance-audit-log'); ON CONFLICT(action,resource_type) DO NOTHING; assert TỒN TẠI theo từng cặp (KHÔNG count===34); is_sensitive=true cho quyền DB-04 §12 đánh Sensitive; PIN cặp vào 1 hằng dùng chung S3-ATT-BE-1",
+      "(A) ROLE→data_scope BẢNG TƯỜNG MINH per-(role,action,resource) theo API-10 §6.3 — roles FLAT (KHÔNG kế thừa): check_in/check_out/view_own + *_OWN(adjustment,remote) = Own cho TẤT CẢ role (emp+mgr+hr+CA); view_team/*_VIEW_TEAM/APPROVE/REJECT = mgr+hr+CA (Team); view_company/VIEW_SENSITIVE/RECALCULATE/ADJUST_DIRECT/EXPORT/*_VIEW_COMPANY = hr+CA (Company); view_detail = Own(emp)+Team(mgr)+Company(hr/CA) (SPEC-04 §12 THẮNG API-10); **LEAST-PRIVILEGE (owner ①): SHIFT.*/SHIFT_ASSIGNMENT.*/RULE.* + AUDIT_LOG.VIEW = CHỈ hr+CA (Company) — manager (✓)=grantable-not-default → KHÔNG seed**; super-admin runtime (KHÔNG seed system company_id NULL). Pattern mig 0444: per-cặp DELETE wrong-scope + INSERT ON CONFLICT(role_id,permission_id,effect), CẤM blanket DELETE; DO-block thuần KHÔNG db:generate",
+      "(A) deny + positive test TỪNG role: emp/mgr/hr/CA đều có Own check-in/out/view-own; manager KHÔNG có shift.view/shift_assignment.view/rule.view/audit_log.view (deny — chống over-grant); emp KHÔNG có view_company/approve/reject; cross-tenant RLS deny dùng app role (mediaos_app, KHÔNG owner bypass); idempotent ĐO BỘ BA (role_id,permission_id,data_scope)",
+      "(B) ATT MASTER-DATA SEEDER (RUNTIME — đăng ký vào MasterDataSeederRegistry của S3-FND-SEEDRUN-1, KHÔNG seed trong migration): seed OFFICE_8H (DB-10 §14.2: start 08:00·end 17:00·break_start 12:00·break_end 13:00 [=60']·required 480·is_default=true·tz→metadata jsonb) + DEFAULT_OFFICE_RULE (rule_code='DEFAULT_OFFICE_RULE'·rule_scope='Company'·effective_from set·grace 5/5 TRÊN SHIFT·rule_config jsonb {missing_checkout_policy,block_when_leave_approved,allow_remote_checkin}); field→cột THẬT 0452 (grace trên shifts, KHÔNG seed cột không tồn tại); idempotent qua SeedTrackingService.markItem; seedKey 'attendance.master-data.v1'",
+      "(B) integration test LANE_DB: chạy runner trên company test → assert OFFICE_8H + DEFAULT_OFFICE_RULE tồn tại (is_default, đúng giá trị) + chạy lần 2 = Skipped (idempotent); dùng ĐÚNG entry-point runner production (KHÔNG gọi seeder trực tiếp → tránh false-green); app role RLS-enforced",
+      "migration 0454 NỐI TIẾP head THẬT lúc mở PR (head hiện 0453 trên feat/s3-wave1) — KHÔNG để 0454 merge master TRƯỚC 0453 (drizzle skip `when` nhỏ hơn); cùng wave PR đảm bảo thứ tự",
     ],
   },
   {
@@ -1572,9 +1604,14 @@ export const backlog = [
       "Seed LEAVE permissions (§11.2) + role→data_scope mapping + leave types (Annual/Sick/Unpaid/Other) + default policy (§12.2) idempotent",
     zone: "red",
     status: "todo",
-    paths: ["apps/api/src/db/schema/**", "apps/api/migrations/**", "apps/api/src/permission/**"],
+    paths: [
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "apps/api/src/permission/**",
+      "apps/api/src/foundation/**",
+    ],
     skills: ["code-review"],
-    depends_on: ["S3-LEAVE-DB-1", "S2-AUTH-SEED-1", "S3-ATT-SEED-1"], // serial migration lane sau ATT-SEED
+    depends_on: ["S3-LEAVE-DB-1", "S2-AUTH-SEED-1", "S3-ATT-SEED-1", "S3-FND-SEEDRUN-1"], // perm=migration NỐI TIẾP sau ATT-SEED; master-data=runtime seeder qua S3-FND-SEEDRUN-1
     src: [
       "IMPLEMENTATION-06 §11.0/§11.2/§11.3 (data_scope canonical)",
       "IMPLEMENTATION-06 §12.2 (leave type/policy seed)",
