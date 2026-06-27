@@ -1670,7 +1670,8 @@ export const backlog = [
     title:
       "ATT records read: my-records + records/{id} detail + team-records + records(HR) theo data-scope Own/Team/Dept/Company + pagination/filter/sort whitelist + mask GPS/IP/device + no N+1",
     zone: "red",
-    status: "todo",
+    // DONE 2026-06-27 (feat/s3-wave1, fdc45ed5): 5 route đọc theo scope (my-records self-locked user.id · team-records view-team→Team · records view-company→Company · records/:id + /logs view-detail, out-of-scope→404 no-grant→403) qua DataScopeService (resolveAndAssert gate + buildEmployeeScopeCondition, INNER JOIN employee_profiles ON user_id+company_id). MASK SERVER: list KHÔNG có location/gps/ip/device; detail locationJson null trừ view-sensitive; logs mask 9 field (gps*/locationLabel/ip/device*/userAgent/rawPayload) trừ view-sensitive, KHÔNG own-bypass; reveal = permission.can(view-sensitive,isSensitive:true) page-uniform (wildcard *:* không thoả). No N+1 (1 page + 1 count query, join users/org_units). Sort Zod-enum whitelist (no ORDER BY injection), pageSize≤100. Files mới attendance-read.{service,repository,mappers}.ts (<800, service.ts giữ 790). NO migration. TDD: read-unit 16 + be2.int 14 (entry-point thật AppModule+supertest+login, planted EMR rows). Verify lane mediaos_attbe2: attendance 327 PASS · full 3579 PASS/0 fail · typecheck+build green. FULL gate PASS (security PASS 0-CRIT, completion 94/100). Verify cuối + merge ở wave-PR.
+    status: "done",
     paths: ["apps/api/src/attendance/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S3-ATT-BE-1"],
