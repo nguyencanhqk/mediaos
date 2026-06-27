@@ -15,10 +15,18 @@ import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
+import {
+  LEAVE_PERMISSIONS,
+  LEAVE_RESOURCES,
+  type LeavePermissionPair,
+  type LeaveResourceType,
+} from "./leave-permissions.const";
+import { LeaveReadService } from "./leave-read.service";
 import { LeaveService } from "./leave.service";
 import {
   CreateLeaveRequestDto,
   CreateLeaveTypeDto,
+  LeaveCalculateDto,
   LeaveCalendarQueryDto,
   LeaveListQueryDto,
   ReviewNoteDto,
@@ -31,6 +39,27 @@ interface AuthenticatedRequest extends Request {
 }
 
 /**
+ * S3-LEAVE-BE-1: bind @RequirePermission from the REAL catalog pair (leave-permissions.const = single source
+ * of truth, in sync with mig 0455) — NOT hard-coded strings (avoids the action/resource drift hit at
+ * S1-FND-MODULE). Fail-fast at load if a pair is missing from the catalog. Mirrors attendance.controller attPair().
+ */
+function leavePair(action: string, resourceType: LeaveResourceType): LeavePermissionPair {
+  const pair = LEAVE_PERMISSIONS.find(
+    (p) => p.action === action && p.resourceType === resourceType,
+  );
+  if (!pair) {
+    throw new Error(`LEAVE permission pair missing from catalog: ${action}:${resourceType}`);
+  }
+  return pair;
+}
+
+// view:leave-type (read catalog — granted to all 4 canonical roles @ Company in mig 0455; replaces the
+// orphaned read:leave pair the legacy route used). view-own:leave-balance + create:leave for the new routes.
+const VIEW_LEAVE_TYPE = leavePair("view", LEAVE_RESOURCES.LEAVE_TYPE);
+const VIEW_OWN_BALANCE = leavePair("view-own", LEAVE_RESOURCES.LEAVE_BALANCE);
+const CREATE_LEAVE = leavePair("create", LEAVE_RESOURCES.LEAVE);
+
+/**
  * G11-2 — Leave HTTP surface. Every route gated by PermissionGuard (@RequirePermission, fail-closed).
  * Resource type = 'leave'. Self-service (read own balance, create/cancel own request) vs. management
  * (manage types/balances, approve/reject, list-all, team calendar) split by action in the catalog (0063).
@@ -39,14 +68,22 @@ interface AuthenticatedRequest extends Request {
 @UseGuards(PermissionGuard)
 @UsePipes(ZodValidationPipe)
 export class LeaveController {
-  constructor(private readonly leave: LeaveService) {}
+  constructor(
+    private readonly leave: LeaveService,
+    private readonly leaveRead: LeaveReadService,
+  ) {}
 
   // ─── Leave types ─────────────────────────────────────────────────────────────
 
+  // S3-LEAVE-BE-1 re-gate: was @RequirePermission('read','leave') (orphaned media-era pair NOT granted to
+  // the 4 canonical roles) → view:leave-type (granted @ Company to employee/manager/hr/company-admin, mig
+  // 0455). Re-pointed to the read service → richer DTO (mig 0453 config columns), active-only, sorted.
   @Get("types")
-  @RequirePermission("read", "leave")
+  @RequirePermission(VIEW_LEAVE_TYPE.action, VIEW_LEAVE_TYPE.resourceType, {
+    isSensitive: VIEW_LEAVE_TYPE.sensitive,
+  })
   listTypes(@Req() req: AuthenticatedRequest) {
-    return this.leave.listTypes(req.user.companyId);
+    return this.leaveRead.listTypes(req.user.companyId);
   }
 
   @Post("types")
@@ -66,6 +103,16 @@ export class LeaveController {
   }
 
   // ─── Leave balances ──────────────────────────────────────────────────────────
+
+  // S3-LEAVE-BE-1 NEW: own balances (self-locked by user_id in the service). view-own:leave-balance is
+  // granted to all 4 canonical roles @ Own (mig 0455). Declared BEFORE /balances (distinct path; 2 segments).
+  @Get("me/balances")
+  @RequirePermission(VIEW_OWN_BALANCE.action, VIEW_OWN_BALANCE.resourceType, {
+    isSensitive: VIEW_OWN_BALANCE.sensitive,
+  })
+  listMyBalances(@Req() req: AuthenticatedRequest) {
+    return this.leaveRead.listMyBalances(req.user);
+  }
 
   @Get("balances")
   @RequirePermission("read", "leave")
@@ -91,6 +138,18 @@ export class LeaveController {
   @RequirePermission("create", "leave")
   createRequest(@Req() req: AuthenticatedRequest, @Body() dto: CreateLeaveRequestDto) {
     return this.leave.createRequest(req.user, dto);
+  }
+
+  // S3-LEAVE-BE-1 NEW: LEAVE-API-301 preview (canonical path /leave/requests/calculate). PREVIEW ONLY —
+  // no mutation. create:leave gate (view:leave is sensitive & employees don't hold it → would wrongly 403).
+  // Static path declared BEFORE the /requests/:id/* routes so Express never shadows it.
+  @Post("requests/calculate")
+  @HttpCode(200)
+  @RequirePermission(CREATE_LEAVE.action, CREATE_LEAVE.resourceType, {
+    isSensitive: CREATE_LEAVE.sensitive,
+  })
+  calculateRequest(@Req() req: AuthenticatedRequest, @Body() dto: LeaveCalculateDto) {
+    return this.leaveRead.calculate(req.user, dto);
   }
 
   @Post("requests/:id/approve")

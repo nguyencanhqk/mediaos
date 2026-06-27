@@ -28,7 +28,11 @@ export class LeaveRepository {
       .limit(1);
 
     const conds = profile?.workScheduleId
-      ? and(eq(workSchedules.companyId, companyId), eq(workSchedules.id, profile.workScheduleId), isNull(workSchedules.deletedAt))
+      ? and(
+          eq(workSchedules.companyId, companyId),
+          eq(workSchedules.id, profile.workScheduleId),
+          isNull(workSchedules.deletedAt),
+        )
       : and(
           eq(workSchedules.companyId, companyId),
           eq(workSchedules.isDefault, true),
@@ -43,6 +47,26 @@ export class LeaveRepository {
       .limit(1);
 
     return schedule?.workingDaysJson ?? [1, 2, 3, 4, 5];
+  }
+
+  /**
+   * S3-LEAVE-BE-1 — resolve the actor's employee_profiles row by (company, user). Used to anchor
+   * SERVER-SIDE actor resolution for calculate (§6.2 — ignore any client employee_id). Returns [] when
+   * the user has no employee profile; leave_balances key on user_id so the link is NOT required to
+   * compute days (caller proceeds either way).
+   */
+  resolveEmployeeByUserIdTx(companyId: string, userId: string, tx: TenantTx) {
+    return tx
+      .select({ id: employeeProfiles.id })
+      .from(employeeProfiles)
+      .where(
+        and(
+          eq(employeeProfiles.companyId, companyId),
+          eq(employeeProfiles.userId, userId),
+          isNull(employeeProfiles.deletedAt),
+        ),
+      )
+      .limit(1);
   }
 
   // ─── leave_types ───────────────────────────────────────────────────────────
@@ -62,13 +86,20 @@ export class LeaveRepository {
       .select()
       .from(leaveTypes)
       .where(
-        and(eq(leaveTypes.companyId, companyId), eq(leaveTypes.id, id), isNull(leaveTypes.deletedAt)),
+        and(
+          eq(leaveTypes.companyId, companyId),
+          eq(leaveTypes.id, id),
+          isNull(leaveTypes.deletedAt),
+        ),
       )
       .limit(1);
   }
 
   createTypeTx(companyId: string, data: typeof leaveTypes.$inferInsert, tx: TenantTx) {
-    return tx.insert(leaveTypes).values({ ...data, companyId }).returning();
+    return tx
+      .insert(leaveTypes)
+      .values({ ...data, companyId })
+      .returning();
   }
 
   updateTypeTx(
@@ -81,7 +112,11 @@ export class LeaveRepository {
       .update(leaveTypes)
       .set({ ...data, updatedAt: new Date() })
       .where(
-        and(eq(leaveTypes.companyId, companyId), eq(leaveTypes.id, id), isNull(leaveTypes.deletedAt)),
+        and(
+          eq(leaveTypes.companyId, companyId),
+          eq(leaveTypes.id, id),
+          isNull(leaveTypes.deletedAt),
+        ),
       )
       .returning();
   }
@@ -172,7 +207,10 @@ export class LeaveRepository {
   ) {
     return tx
       .update(leaveBalances)
-      .set({ usedDays: sql`${leaveBalances.usedDays} + ${data.delta}::numeric`, updatedAt: new Date() })
+      .set({
+        usedDays: sql`${leaveBalances.usedDays} + ${data.delta}::numeric`,
+        updatedAt: new Date(),
+      })
       .where(
         and(
           eq(leaveBalances.companyId, companyId),
@@ -262,7 +300,10 @@ export class LeaveRepository {
   }
 
   insertRequestTx(companyId: string, data: typeof leaveRequests.$inferInsert, tx: TenantTx) {
-    return tx.insert(leaveRequests).values({ ...data, companyId }).returning();
+    return tx
+      .insert(leaveRequests)
+      .values({ ...data, companyId })
+      .returning();
   }
 
   updateRequestTx(

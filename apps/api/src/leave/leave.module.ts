@@ -1,10 +1,13 @@
 import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../db/db.module";
+import { HolidaysModule } from "../foundation/holidays/holidays.module";
 import { SeedModule } from "../foundation/seed/seed.module";
 import { PermissionModule } from "../permission/permission.module";
 import { HrTasksService } from "../tasks/hr-tasks.service";
 import { LeaveController } from "./leave.controller";
 import { LeaveMasterDataSeeder } from "./leave-master-data.seeder";
+import { LeaveReadRepository } from "./leave-read.repository";
+import { LeaveReadService } from "./leave-read.service";
 import { LeaveRepository } from "./leave.repository";
 import { LeaveSeedRegistrar } from "./leave-seed.registrar";
 import { LeaveService } from "./leave.service";
@@ -20,11 +23,15 @@ import { LeaveService } from "./leave.service";
  * foundation KHÔNG import LEAVE.
  */
 @Module({
-  imports: [DatabaseModule, PermissionModule, SeedModule],
+  // S3-LEAVE-BE-1: + HolidaysModule (self-contained, exports HolidaysService) → leave-specific holiday
+  // exclusion in calculate preview. + LeaveReadService/LeaveReadRepository (read/preview surface).
+  imports: [DatabaseModule, PermissionModule, SeedModule, HolidaysModule],
   controllers: [LeaveController],
   providers: [
     LeaveService,
     LeaveRepository,
+    LeaveReadService,
+    LeaveReadRepository,
     HrTasksService,
     LeaveMasterDataSeeder,
     LeaveSeedRegistrar,
