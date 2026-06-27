@@ -103,6 +103,15 @@ export const envSchema = z
     OUTBOX_POLL_MS: z.coerce.number().int().min(250).max(3_600_000).default(5000),
     EXPORT_POLL_MS: z.coerce.number().int().min(250).max(3_600_000).default(10000),
 
+    // ── S3-FND-SEEDRUN-1 (runtime per-company master-data seed) ───────────────
+    // Khi BẬT, MasterDataSeedBootstrapService (OnApplicationBootstrap) chạy reconcileAllCompanies(): mỗi
+    // company × mỗi module-seeder đã đăng ký (ATT/LEAVE/HR) seed master-data (default shift/rule, leave types…)
+    // — KHÔNG làm được ở migrate-time (clean DB có 0 company; convention 0445/0008 cấm seed company-scoped).
+    // Idempotent (startBatch + markItem dedup) ⇒ chạy mỗi boot vô hại. Default 'true' (BẬT ở dev/prod). KHÔNG
+    // z.coerce.boolean ('false'→true bẫy). LƯU Ý: còn TỰ TẮT khi NODE_ENV==='test' (spec gọi runner trực tiếp,
+    // tránh đua/nhiễu). Đặt 'false' = emergency rollback (KHÔNG seed lúc boot; gọi reconcile tay nếu cần).
+    MASTER_DATA_SEED_ON_BOOT: z.enum(["true", "false"]).default("true"),
+
     // ── KMS / Envelope encryption (G6-2, plan §6d) ────────────────────────────
     // KMS_PROVIDER chọn DI provider: 'local' (dev, KEK 32B từ file .secrets/) | 'vault' (prod, Vault transit).
     // Default 'local' để app vẫn boot/test mà KHÔNG cần Vault (KEK đọc lazy → fail-fast lúc dùng nếu thiếu file).
