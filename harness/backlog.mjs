@@ -1545,7 +1545,11 @@ export const backlog = [
     title:
       "Runtime per-company master-data seed runner: registry + bootstrap reconcile chạy mỗi company qua SeedTrackingService + withTenant (idempotent), nền cho ATT/LEAVE/HR master-data seed",
     zone: "red",
-    status: "todo",
+    // CLOSE 2026-06-27: committed aa0a3b3 trên feat/s3-wave1 (hand-built). FULL gate PASS — security-reviewer PASS
+    //   (0 CRIT/HIGH; tenant/append-only/secret/authz ✓; enumerate qua withPlatformContext mig 0230), completion 93/100.
+    //   Verified trên Postgres lane cô lập: unit 10/10 + int 4/4 (idempotent + fail-safe + RLS app-role). API seeder cho ATT/LEAVE cắm vào.
+    //   Follow-up (KHÔNG chặn, để wave PR): +cross-tenant WITH CHECK deny test · unit test bootstrap gating · gỡ dead export MASTER_DATA_SEEDERS symbol.
+    status: "done",
     paths: ["apps/api/src/foundation/**", "apps/api/test/**"],
     skills: ["code-review"],
     depends_on: [],
