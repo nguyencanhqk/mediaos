@@ -1719,7 +1719,8 @@ export const backlog = [
     title:
       "LEAVE balance + types + calculation preview: GET /leave/types + GET /leave/me/balances (Own) + POST /leave/calculate (preview ngày/giờ + holiday/non-working-day + balance trước/sau)",
     zone: "red",
-    status: "todo",
+    // DONE 2026-06-27 (feat/s3-wave1, e57a034e): 3 route read/preview. GET /leave/types RE-GATE read:leave(mồ côi)→view:leave-type (net access fix 4 role canonical) + richer DTO. GET /leave/me/balances view-own:leave-balance, ghim user_id=actor.id (IDOR-safe), empty→[]. POST /leave/requests/calculate (API-05 §16.1 canonical, KHÔNG shorthand /leave/calculate — spec-wins) gate create:leave (view:leave sensitive emp không có). Calculate: HolidayService.getHolidaysInRange (batch, predicate affectsLeaveCalculation≠affectsAttendance) + workingDays resolveWorkingDaysForUserTx + HOURS_PER_DAY=8; balance before/after từ remainingDays GENERATED (read-only) or 0; KHÔNG mutate (preview thuần, verify count 3 bảng + used_days bất biến); Zod strip client calculated_days/balance_after/employee_id. NO migration. TDD: calc unit 9 + be1.int 8 (entry-point thật AppModule+supertest, own-only/403/cross-tenant 404/no-mutation/empty-balance/holiday-weekend). Verify lane mediaos_leavebe1: leave 206 PASS · full 3596 PASS/0 fail · typecheck+build green. FULL gate PASS (security PASS 0-CRIT, completion 93/100). FOLLOW-UP (không chặn, dọn ở BE-2): LeaveService.listTypes/toTypeDto mồ côi sau re-point + resolveEmployeeByUserIdTx round-trip bỏ kết quả; is_enough chưa trừ reserved/pending (BE-2 validate cuối). Verify cuối + merge ở wave-PR.
+    status: "done",
     paths: ["apps/api/src/leave/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S3-LEAVE-SEED-1", "S2-AUTH-BE-2", "S2-HR-BE-1"],
