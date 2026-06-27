@@ -15,6 +15,12 @@ import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
+import {
+  ATT_PERMISSIONS,
+  ATT_RESOURCES,
+  type AttPermissionPair,
+  type AttResourceType,
+} from "./attendance-permissions.const";
 import { AttendanceService } from "./attendance.service";
 import {
   AdjustmentListQueryDto,
@@ -30,8 +36,25 @@ import {
 } from "./attendance.dto";
 
 interface AuthenticatedRequest extends Request {
-  user: { id: string; companyId: string };
+  user: { id: string; companyId: string; email: string };
 }
+
+/**
+ * S3-ATT-BE-1: gắn @RequirePermission từ CẶP catalog THẬT (attendance-permissions.const = nguồn sự thật,
+ * đồng bộ mig 0454) — KHÔNG hard-code chuỗi rời (tránh drift action/resource đã gặp ở S1-FND-MODULE).
+ * Fail-fast lúc load nếu cặp thiếu khỏi catalog.
+ */
+function attPair(action: string, resourceType: AttResourceType): AttPermissionPair {
+  const pair = ATT_PERMISSIONS.find((p) => p.action === action && p.resourceType === resourceType);
+  if (!pair) {
+    throw new Error(`ATT permission pair missing from catalog: ${action}:${resourceType}`);
+  }
+  return pair;
+}
+
+const CHECK_IN = attPair("check-in", ATT_RESOURCES.ATTENDANCE);
+const CHECK_OUT = attPair("check-out", ATT_RESOURCES.ATTENDANCE);
+const VIEW_OWN = attPair("view-own", ATT_RESOURCES.ATTENDANCE);
 
 /**
  * G11-1 — Attendance HTTP surface. Every route gated by PermissionGuard (@RequirePermission,
@@ -47,19 +70,21 @@ export class AttendanceController {
   // ─── Check-in / out + today ────────────────────────────────────────────────
 
   @Get("today")
-  @RequirePermission("read", "attendance")
+  @RequirePermission(VIEW_OWN.action, VIEW_OWN.resourceType, { isSensitive: VIEW_OWN.sensitive })
   getToday(@Req() req: AuthenticatedRequest) {
     return this.attendance.getToday(req.user);
   }
 
   @Post("check-in")
-  @RequirePermission("check-in", "attendance")
+  @RequirePermission(CHECK_IN.action, CHECK_IN.resourceType, { isSensitive: CHECK_IN.sensitive })
   checkIn(@Req() req: AuthenticatedRequest, @Body() dto: CheckInDto) {
     return this.attendance.checkIn(req.user, dto);
   }
 
   @Post("check-out")
-  @RequirePermission("check-out", "attendance")
+  @RequirePermission(CHECK_OUT.action, CHECK_OUT.resourceType, {
+    isSensitive: CHECK_OUT.sensitive,
+  })
   checkOut(@Req() req: AuthenticatedRequest, @Body() dto: CheckOutDto) {
     return this.attendance.checkOut(req.user, dto);
   }
@@ -142,7 +167,10 @@ export class AttendanceController {
   @Get("periods")
   @RequirePermission("read", "attendance")
   listPeriods(@Req() req: AuthenticatedRequest, @Query() query: PeriodListQueryDto) {
-    return this.attendance.listPeriods(req.user.companyId, { limit: query.limit, offset: query.offset });
+    return this.attendance.listPeriods(req.user.companyId, {
+      limit: query.limit,
+      offset: query.offset,
+    });
   }
 
   @Post("periods/lock")

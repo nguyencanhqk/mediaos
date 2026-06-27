@@ -1644,7 +1644,8 @@ export const backlog = [
     title:
       "ATT Today + check-in + check-out: resolve employee/shift/rule (server-time) + chặn Approved full-day leave + attendance_records tx (0-dup) + attendance_logs + tính late/early/missing + audit",
     zone: "red",
-    status: "todo",
+    // DONE 2026-06-27 (feat/s3-wave1): rewrite getToday/checkIn/checkOut sang DB-04 §7. Repo: resolveEmployeeByUserIdTx (server-side, employment gate) · resolveEffectiveShift/RuleTx (Employee≻Dept≻Company≻System, fallback OFFICE_8H/DEFAULT_OFFICE_RULE, no-shift KHÔNG 500) · findApprovedFullDayLeaveTx (status duality 'approved'∪'Approved', duration FullDay/MultipleDays/NULL) · insertAttendanceLogTx (APPEND-ONLY). Service: server-time authoritative (client_time chỉ tham chiếu trên log) · attendance_records ghi CẢ cột legacy (user_id) + DB-04 additive (employee/shift/rule/working/missing/attendance_status TitleCase/calculation_snapshot) trong tx · 0-dup app-guard + 23505 backstop · audit 'attendance.check_in/out' objectType='attendance_record' + outbox in-tx · first/last_log_id backfill. Logic: shift-aware pure helpers (shiftLate/EarlyLeave/working/missing/check{In,Out}TitleStatus). Controller: today read→view-own (isSensitive) + cặp từ attendance-permissions.const (anti-drift); check-in/out giữ nguyên. Contracts additive: clientTime/clientTimezone/note + V2 schemas. TDD: attendance-be1.service.spec (17) + logic.spec (+20) + attendance-be1.int.spec (7: happy/0-dup/leave-dual/cross-tenant/server-time/HTTP view-own gate). Verify lane mediaos_attbe1: attendance 297 PASS · full suite 3549 PASS/0 fail · typecheck+build green. NO migration (mig 0452/0454 đã có sẵn cột/audit-type/grant).
+    status: "done",
     paths: ["apps/api/src/attendance/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S3-ATT-SEED-1", "S2-AUTH-BE-2", "S2-HR-BE-1"],

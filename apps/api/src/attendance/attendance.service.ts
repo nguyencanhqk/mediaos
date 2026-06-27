@@ -22,19 +22,60 @@ import { HrTasksService } from "../tasks/hr-tasks.service";
 import { assertValidTimezone, localDateOf, monthDateRange, monthOfDate } from "../common/tz.util";
 import { AttendanceRepository } from "./attendance.repository";
 import {
+  checkInTitleStatus,
+  checkOutTitleStatus,
+  computeMissingMinutes,
+  computeWorkingMinutes,
   deriveAttendanceStatus,
   earlyLeaveMinutesFor,
   lateMinutesFor,
   type ScheduleCalc,
+  type ShiftCalc,
+  shiftEarlyLeaveMinutes,
+  shiftLateMinutes,
 } from "./attendance.logic";
 import { isUniqueViolation } from "../common/db-error";
 
 const DEFAULT_TZ = "Asia/Ho_Chi_Minh";
+/** Business-key của rule mặc định (đồng bộ AttMasterDataSeeder ATT_DEFAULT_RULE_CODE). */
+const ATT_DEFAULT_RULE_CODE = "DEFAULT_OFFICE_RULE";
+const NO_EMPLOYEE_MSG = "Tài khoản chưa liên kết hồ sơ nhân sự";
 
 interface Actor {
   id: string;
   companyId: string;
 }
+
+/** Hồ sơ nhân sự đã resolve server-side (BẤT BIẾN: KHÔNG tin employee_id client). */
+type ResolvedEmployee = {
+  id: string;
+  status: string;
+  orgUnitId: string | null;
+  positionId: string | null;
+};
+
+/** Ca làm hiệu lực rút gọn (từ SHIFT_FIELDS) — null = không có ca hiệu lực. */
+type ShiftRow = NonNullable<Awaited<ReturnType<AttendanceRepository["findDefaultShiftTx"]>>>;
+
+/** Rule chấm công hiệu lực đã chuẩn hoá (in-code default khi DB không có). */
+interface EffectiveRule {
+  id: string | null;
+  ruleCode: string | null;
+  requireCheckIn: boolean;
+  requireCheckOut: boolean;
+  blockWhenLeaveApproved: boolean;
+}
+
+const DEFAULT_RULE: EffectiveRule = {
+  id: null,
+  ruleCode: null,
+  requireCheckIn: true,
+  requireCheckOut: true,
+  blockWhenLeaveApproved: true,
+};
+
+/** Insert shape cho attendance_logs (company_id do repo gắn từ ngữ cảnh). */
+type AttendanceLogInsert = Parameters<AttendanceRepository["insertAttendanceLogTx"]>[1];
 
 type ScheduleRow = Awaited<ReturnType<AttendanceRepository["findSchedules"]>>[number];
 
@@ -146,44 +187,73 @@ export class AttendanceService {
       );
   }
 
-  // ─── Check-in / Check-out (check-in:attendance) ──────────────────────────────
+  // ─── Today / Check-in / Check-out (S3-ATT-BE-1, DB-04 §7) ────────────────────
+  // Employee resolve server-side (KHÔNG tin client). Ca/rule hiệu lực Employee≻Dept≻Company(≻System).
+  // Mọi ghi đi qua `withTenant` (RLS+FORCE) + audit/outbox/log TRONG cùng tx. attendance_logs APPEND-ONLY.
 
   async getToday(actor: Actor) {
-    return this.db.withTenant(actor.companyId, async (tx) => {
-      const schedule = await this.repo.resolveScheduleForUserTx(actor.companyId, actor.id, tx);
-      const tz = schedule?.timezone ?? DEFAULT_TZ;
-      const workDate = localDateOf(new Date(), tz);
-      const [record] = await this.repo.findRecordByUserDateTx(
-        actor.companyId,
-        actor.id,
-        workDate,
-        tx,
+    return this.db
+      .withTenant(actor.companyId, async (tx) => {
+        const employee = await this.repo.resolveEmployeeByUserIdTx(actor.companyId, actor.id, tx);
+        if (!employee) {
+          return emptyToday(localDateOf(new Date(), DEFAULT_TZ), NO_EMPLOYEE_MSG);
+        }
+        const { shift, rule, tz, workDate } = await this.resolveShiftAndRule(
+          tx,
+          actor.companyId,
+          employee,
+          new Date(),
+        );
+        const [record] = await this.repo.findRecordByUserDateTx(
+          actor.companyId,
+          actor.id,
+          workDate,
+          tx,
+        );
+        const periodLocked = await this.repo.isPeriodLockedTx(
+          actor.companyId,
+          monthOfDate(workDate),
+          tx,
+        );
+        const onLeave = rule.blockWhenLeaveApproved
+          ? await this.repo.findApprovedFullDayLeaveTx(
+              actor.companyId,
+              { userId: actor.id, employeeId: employee.id, workDate },
+              tx,
+            )
+          : false;
+        return buildTodayDto({
+          workDate,
+          employee,
+          shift,
+          rule,
+          tz,
+          record: record ?? null,
+          periodLocked,
+          onLeave,
+        });
+      })
+      .catch((err: unknown) =>
+        this.mapError(err, "getToday", { companyId: actor.companyId, userId: actor.id }),
       );
-      const periodLocked = await this.repo.isPeriodLockedTx(
-        actor.companyId,
-        monthOfDate(workDate),
-        tx,
-      );
-      return {
-        workDate,
-        record: record ? toRecordDto(record) : null,
-        schedule: schedule ? toScheduleDto(schedule) : null,
-        periodLocked,
-      };
-    });
   }
 
   async checkIn(actor: Actor, dto: CheckInRequest) {
     const now = new Date();
     return this.db
       .withTenant(actor.companyId, async (tx) => {
-        const schedule = await this.repo.resolveScheduleForUserTx(actor.companyId, actor.id, tx);
-        const tz = schedule?.timezone ?? DEFAULT_TZ;
-        const workDate = localDateOf(now, tz);
+        const employee = await this.requireEmployee(tx, actor);
+        const { shift, rule, tz, workDate } = await this.resolveShiftAndRule(
+          tx,
+          actor.companyId,
+          employee,
+          now,
+        );
         this.assertPeriodOpen(
           await this.repo.isPeriodLockedTx(actor.companyId, monthOfDate(workDate), tx),
           workDate,
         );
+        await this.assertNotOnApprovedLeave(tx, actor, employee, rule, workDate);
 
         const [existing] = await this.repo.findRecordByUserDateTx(
           actor.companyId,
@@ -193,68 +263,75 @@ export class AttendanceService {
         );
         if (existing?.checkInAt) throw new ConflictException(`Đã check-in cho ngày ${workDate}`);
 
-        const calc = schedule ? toScheduleCalc(schedule) : null;
-        const lateMinutes = calc ? lateMinutesFor(now, workDate, calc) : 0;
-        const status = deriveAttendanceStatus(lateMinutes, 0);
+        const calc = shift ? toShiftCalc(shift, tz) : null;
+        const lateMinutes = calc ? shiftLateMinutes(now, workDate, calc) : 0;
+        const isLate = lateMinutes > 0;
+        const values = buildCheckInValues(actor, employee, shift, rule, tz, now, dto, lateMinutes);
 
         const [record] = existing
-          ? await this.repo.updateRecordTx(
-              actor.companyId,
-              existing.id,
-              {
-                checkInAt: now,
-                checkInMethod: dto.method,
-                locationJson: dto.location ?? null,
-                lateMinutes,
-                status,
-                workScheduleId: schedule?.id ?? null,
-              },
-              tx,
-            )
+          ? await this.repo.updateRecordTx(actor.companyId, existing.id, values, tx)
           : await this.repo.insertRecordTx(
               actor.companyId,
               {
                 companyId: actor.companyId,
                 userId: actor.id,
                 workDate,
-                workScheduleId: schedule?.id ?? null,
-                checkInAt: now,
-                checkInMethod: dto.method,
-                locationJson: dto.location ?? null,
-                lateMinutes,
-                status,
+                createdBy: actor.id,
+                ...values,
               },
               tx,
             );
         if (!record) throw new InternalServerErrorException("Failed to record check-in");
 
+        const [log] = await this.repo.insertAttendanceLogTx(
+          actor.companyId,
+          buildLog(actor, employee, record.id, workDate, "Check-in", dto),
+          tx,
+        );
+        await this.repo.updateRecordTx(
+          actor.companyId,
+          record.id,
+          { firstLogId: log.id, lastLogId: log.id },
+          tx,
+        );
+
         await this.audit.record(tx, {
-          action: "AttendanceCheckIn",
+          action: "attendance.check_in",
           objectType: "attendance_record",
           objectId: record.id,
           actorUserId: actor.id,
-          after: { workDate, checkInAt: now, status, lateMinutes, method: dto.method },
+          after: {
+            workDate,
+            checkInAt: now,
+            lateMinutes,
+            attendanceStatus: checkInTitleStatus(isLate),
+            method: dto.method,
+          },
         });
         await this.outbox.enqueue(tx, {
           eventType: "attendance.checked_in",
-          payload: { recordId: record.id, userId: actor.id, workDate, status },
+          payload: {
+            recordId: record.id,
+            userId: actor.id,
+            employeeId: employee.id,
+            workDate,
+            status: values.status,
+          },
         });
-        return toRecordDto(record);
+        return toRecordV2Dto(record);
       })
-      .catch((err: unknown) =>
-        this.mapError(err, "checkIn", { companyId: actor.companyId, userId: actor.id }),
-      );
+      .catch((err: unknown) => this.mapCheckInError(err, actor));
   }
 
   async checkOut(actor: Actor, dto: CheckOutRequest) {
     const now = new Date();
     return this.db
       .withTenant(actor.companyId, async (tx) => {
-        const schedule = await this.repo.resolveScheduleForUserTx(actor.companyId, actor.id, tx);
+        const employee = await this.requireEmployee(tx, actor);
 
-        // F5: resolve the in-progress (open) record by checked-in/not-checked-out, NOT by today's
-        // local date — an overnight shift checks in on day D and out on D+1, so the open record's
-        // own workDate is the anchor for period-lock + early-leave calc.
+        // F5: resolve the in-progress (open) record by checked-in/not-checked-out, NOT by today's local
+        // date — an overnight shift checks in on day D and out on D+1, so the open record's own workDate
+        // is the anchor for period-lock + early-leave calc.
         const [existing] = await this.repo.findOpenRecordForUserTx(actor.companyId, actor.id, tx);
         if (!existing?.checkInAt) throw new ConflictException("Chưa check-in (hoặc đã check-out)");
         const workDate = existing.workDate;
@@ -263,34 +340,174 @@ export class AttendanceService {
           workDate,
         );
 
-        const calc = schedule ? toScheduleCalc(schedule) : null;
-        const earlyLeaveMinutes = calc ? earlyLeaveMinutesFor(now, workDate, calc) : 0;
-        const status = deriveAttendanceStatus(existing.lateMinutes, earlyLeaveMinutes);
+        // Calc against the shift APPLIED at check-in (stored shift_id) so the math is stable across days.
+        const shift = existing.shiftId
+          ? await this.repo.findShiftByIdTx(actor.companyId, existing.shiftId, tx)
+          : null;
+        const tz = shiftTimezone(shift);
+        const rule = await this.resolveRule(tx, actor.companyId, employee, workDate);
+        await this.assertNotOnApprovedLeave(tx, actor, employee, rule, workDate);
+
+        const breakMin = existing.breakMinutes ?? shift?.breakMinutes ?? 0;
+        const required = existing.requiredWorkingMinutes ?? shift?.requiredWorkingMinutes ?? null;
+        const earlyLeaveMinutes = shift
+          ? shiftEarlyLeaveMinutes(now, workDate, toShiftCalc(shift, tz))
+          : 0;
+        const worked = computeWorkingMinutes(existing.checkInAt, now, breakMin);
+        const missing = computeMissingMinutes(required, worked);
+        const lateMinutes = existing.lateMinutes;
+        const legacyStatus = deriveAttendanceStatus(lateMinutes, earlyLeaveMinutes);
+        const attendanceStatus = checkOutTitleStatus(lateMinutes, earlyLeaveMinutes, missing);
 
         const [record] = await this.repo.updateRecordTx(
           actor.companyId,
           existing.id,
-          { checkOutAt: now, checkOutMethod: dto.method, earlyLeaveMinutes, status },
+          {
+            checkOutAt: now,
+            checkOutMethod: dto.method,
+            earlyLeaveMinutes,
+            status: legacyStatus,
+            workingMinutes: worked,
+            missingMinutes: missing,
+            attendanceStatus,
+            isEarlyLeave: earlyLeaveMinutes > 0,
+            isMissingCheckOut: false,
+            calculationSnapshot: {
+              tz,
+              shiftId: shift?.id ?? null,
+              endTime: shift?.endTime ?? null,
+              earlyLeaveMinutes,
+              workingMinutes: worked,
+              requiredWorkingMinutes: required,
+              missingMinutes: missing,
+              checkOutAt: now.toISOString(),
+            },
+            updatedBy: actor.id,
+          },
           tx,
         );
         if (!record) throw new InternalServerErrorException("Failed to record check-out");
 
+        const [log] = await this.repo.insertAttendanceLogTx(
+          actor.companyId,
+          buildLog(actor, employee, record.id, workDate, "Check-out", dto),
+          tx,
+        );
+        await this.repo.updateRecordTx(actor.companyId, record.id, { lastLogId: log.id }, tx);
+
         await this.audit.record(tx, {
-          action: "AttendanceCheckOut",
+          action: "attendance.check_out",
           objectType: "attendance_record",
           objectId: record.id,
           actorUserId: actor.id,
-          after: { workDate, checkOutAt: now, status, earlyLeaveMinutes, method: dto.method },
+          after: {
+            workDate,
+            checkOutAt: now,
+            earlyLeaveMinutes,
+            workingMinutes: worked,
+            missingMinutes: missing,
+            attendanceStatus,
+            method: dto.method,
+          },
         });
         await this.outbox.enqueue(tx, {
           eventType: "attendance.checked_out",
-          payload: { recordId: record.id, userId: actor.id, workDate, status },
+          payload: {
+            recordId: record.id,
+            userId: actor.id,
+            employeeId: employee.id,
+            workDate,
+            status: legacyStatus,
+          },
         });
-        return toRecordDto(record);
+        return toRecordV2Dto(record);
       })
       .catch((err: unknown) =>
         this.mapError(err, "checkOut", { companyId: actor.companyId, userId: actor.id }),
       );
+  }
+
+  // ─── S3-ATT-BE-1 helpers ─────────────────────────────────────────────────────
+
+  /** Resolve hồ sơ nhân sự + gate trạng thái việc làm (chỉ 'active' được chấm công). */
+  private async requireEmployee(tx: TenantTx, actor: Actor): Promise<ResolvedEmployee> {
+    const employee = await this.repo.resolveEmployeeByUserIdTx(actor.companyId, actor.id, tx);
+    if (!employee) throw new ForbiddenException(NO_EMPLOYEE_MSG);
+    if (employee.status === "active") return employee;
+    if (employee.status === "resigned" || employee.status === "terminated") {
+      throw new ForbiddenException(
+        `Hồ sơ nhân sự ở trạng thái "${employee.status}" — không thể chấm công`,
+      );
+    }
+    throw new ConflictException(
+      `Hồ sơ nhân sự đang tạm ngưng (${employee.status}) — không thể chấm công`,
+    );
+  }
+
+  /** Ca hiệu lực (assignment → ca mặc định) + rule hiệu lực + tz + work_date (theo tz ca). */
+  private async resolveShiftAndRule(
+    tx: TenantTx,
+    companyId: string,
+    employee: ResolvedEmployee,
+    now: Date,
+  ): Promise<{ shift: ShiftRow | null; rule: EffectiveRule; tz: string; workDate: string }> {
+    // Provisional date (DEFAULT_TZ) chỉ để lọc khoảng hiệu lực assignment; tz cuối lấy từ ca → work_date chuẩn.
+    const provisional = localDateOf(now, DEFAULT_TZ);
+    const shift =
+      (await this.repo.resolveEffectiveShiftTx(
+        companyId,
+        { employeeId: employee.id, orgUnitId: employee.orgUnitId, workDate: provisional },
+        tx,
+      )) ?? (await this.repo.findDefaultShiftTx(companyId, tx));
+    const tz = shiftTimezone(shift);
+    const workDate = localDateOf(now, tz);
+    const rule = await this.resolveRule(tx, companyId, employee, workDate);
+    return { shift, rule, tz, workDate };
+  }
+
+  /** Rule hiệu lực: scope-match → DEFAULT_OFFICE_RULE → bất kỳ Company/System → in-code default. */
+  private async resolveRule(
+    tx: TenantTx,
+    companyId: string,
+    employee: ResolvedEmployee,
+    workDate: string,
+  ): Promise<EffectiveRule> {
+    const row =
+      (await this.repo.resolveEffectiveRuleTx(
+        companyId,
+        { employeeId: employee.id, orgUnitId: employee.orgUnitId, workDate },
+        tx,
+      )) ??
+      (await this.repo.findRuleByCodeTx(companyId, ATT_DEFAULT_RULE_CODE, tx)) ??
+      (await this.repo.findAnyActiveRuleTx(companyId, tx));
+    return row ? toEffectiveRule(row) : DEFAULT_RULE;
+  }
+
+  /** Chặn check-in/check-out khi có đơn nghỉ cả ngày ĐÃ DUYỆT (gate sau rule.blockWhenLeaveApproved). */
+  private async assertNotOnApprovedLeave(
+    tx: TenantTx,
+    actor: Actor,
+    employee: ResolvedEmployee,
+    rule: EffectiveRule,
+    workDate: string,
+  ): Promise<void> {
+    if (!rule.blockWhenLeaveApproved) return;
+    const onLeave = await this.repo.findApprovedFullDayLeaveTx(
+      actor.companyId,
+      { userId: actor.id, employeeId: employee.id, workDate },
+      tx,
+    );
+    if (onLeave) {
+      throw new ConflictException(`Đã có đơn nghỉ được duyệt cho ngày ${workDate}`);
+    }
+  }
+
+  /** check-in: 23505 (đua chèn cùng ngày) → 409 backstop; còn lại → mapError chung. */
+  private mapCheckInError(err: unknown, actor: Actor): never {
+    if (isUniqueViolation(err)) {
+      throw new ConflictException("Đã có bản ghi chấm công cho hôm nay (trùng lặp)");
+    }
+    return this.mapError(err, "checkIn", { companyId: actor.companyId, userId: actor.id });
   }
 
   // ─── Monthly list (read:attendance; others ⇒ manage) ─────────────────────────
@@ -679,33 +896,258 @@ function toScheduleDto(row: ScheduleRow) {
   };
 }
 
-function toRecordDto(row: {
+// ─── S3-ATT-BE-1 mappers / pure builders (Date → JSON ISO handled by the serializer) ──
+
+/** Đọc tz từ shift.metadata.timezone (jsonb), fallback DEFAULT_TZ. */
+function shiftTimezone(shift: ShiftRow | null): string {
+  const meta = shift?.metadata;
+  if (meta && typeof meta === "object" && "timezone" in meta) {
+    const tz = (meta as { timezone?: unknown }).timezone;
+    if (typeof tz === "string" && tz.length > 0) return tz;
+  }
+  return DEFAULT_TZ;
+}
+
+/** ShiftRow → ShiftCalc (chỉ field math cần). */
+function toShiftCalc(shift: ShiftRow, tz: string): ShiftCalc {
+  return {
+    startTime: shift.startTime,
+    endTime: shift.endTime,
+    graceLateMinutes: shift.graceLateMinutes,
+    graceEarlyLeaveMinutes: shift.graceEarlyLeaveMinutes,
+    breakMinutes: shift.breakMinutes,
+    crossDay: shift.crossDay,
+    timezone: tz,
+  };
+}
+
+/** Chuẩn hoá rule row → EffectiveRule (block_when_leave_approved default true khi thiếu). */
+function toEffectiveRule(row: {
   id: string;
-  userId: string;
+  ruleCode: string;
+  requireCheckIn: boolean;
+  requireCheckOut: boolean;
+  ruleConfig: unknown;
+}): EffectiveRule {
+  const cfg = (row.ruleConfig ?? {}) as Record<string, unknown>;
+  return {
+    id: row.id,
+    ruleCode: row.ruleCode,
+    requireCheckIn: row.requireCheckIn,
+    requireCheckOut: row.requireCheckOut,
+    blockWhenLeaveApproved: cfg["block_when_leave_approved"] !== false,
+  };
+}
+
+/** method (web/mobile) → attendance source enum (WEB/MOBILE) — CHECK chk_*_source. */
+function methodToSource(method: string): "WEB" | "MOBILE" {
+  return method === "mobile" ? "MOBILE" : "WEB";
+}
+
+/** Giá trị ghi attendance_records lúc check-in (cột legacy + DB-04 §7.4 additive). */
+function buildCheckInValues(
+  actor: Actor,
+  employee: ResolvedEmployee,
+  shift: ShiftRow | null,
+  rule: EffectiveRule,
+  tz: string,
+  now: Date,
+  dto: CheckInRequest,
+  lateMinutes: number,
+) {
+  const isLate = lateMinutes > 0;
+  return {
+    // ── legacy (KEEP — user_id NOT NULL ⇒ live 0-dup unique attendance_records_company_user_date_uq) ──
+    checkInAt: now,
+    checkInMethod: dto.method,
+    locationJson: dto.location ?? null,
+    lateMinutes,
+    earlyLeaveMinutes: 0,
+    status: deriveAttendanceStatus(lateMinutes, 0),
+    // ── DB-04 §7.4 additive (nullable) ──
+    employeeId: employee.id,
+    departmentId: employee.orgUnitId,
+    positionId: employee.positionId,
+    shiftId: shift?.id ?? null,
+    appliedRuleId: rule.id,
+    requiredWorkingMinutes: shift?.requiredWorkingMinutes ?? null,
+    breakMinutes: shift?.breakMinutes ?? null,
+    attendanceStatus: checkInTitleStatus(isLate),
+    attendanceSource: methodToSource(dto.method),
+    workMode: "Office",
+    isLate,
+    isEarlyLeave: false,
+    isMissingCheckIn: false,
+    isMissingCheckOut: true,
+    calculationSnapshot: {
+      tz,
+      shiftId: shift?.id ?? null,
+      shiftCode: shift?.shiftCode ?? null,
+      startTime: shift?.startTime ?? null,
+      graceLateMinutes: shift?.graceLateMinutes ?? null,
+      lateMinutes,
+      ruleId: rule.id,
+      checkInAt: now.toISOString(),
+    },
+    updatedBy: actor.id,
+  };
+}
+
+/** attendance_logs APPEND-ONLY row: server-time (logTime DEFAULT now()); client_time = tham chiếu. */
+function buildLog(
+  actor: Actor,
+  employee: ResolvedEmployee,
+  recordId: string,
+  workDate: string,
+  logType: "Check-in" | "Check-out",
+  dto: CheckInRequest | CheckOutRequest,
+): AttendanceLogInsert {
+  return {
+    attendanceRecordId: recordId,
+    employeeId: employee.id,
+    userId: actor.id,
+    workDate,
+    logType,
+    clientTime: dto.clientTime ? new Date(dto.clientTime) : null,
+    clientTimezone: dto.clientTimezone ?? null,
+    source: methodToSource(dto.method),
+    gpsLatitude: dto.location ? String(dto.location.lat) : null,
+    gpsLongitude: dto.location ? String(dto.location.lng) : null,
+    locationLabel: dto.location?.label ?? null,
+    isValid: true,
+    note: dto.note ?? null,
+    createdBy: actor.id,
+  };
+}
+
+/** Một attendance_records row (superset) → DTO V2 trả REST/WS. */
+interface RecordRowForDto {
+  id: string;
   workDate: string;
-  workScheduleId: string | null;
+  employeeId: string | null;
+  shiftId: string | null;
   checkInAt: Date | null;
   checkOutAt: Date | null;
   checkInMethod: string | null;
   checkOutMethod: string | null;
   lateMinutes: number;
   earlyLeaveMinutes: number;
+  workingMinutes: number | null;
+  requiredWorkingMinutes: number | null;
+  missingMinutes: number | null;
+  breakMinutes: number | null;
   status: string;
-  note: string | null;
-}) {
+  attendanceStatus: string | null;
+  isLate: boolean | null;
+  isEarlyLeave: boolean | null;
+  isMissingCheckOut: boolean | null;
+}
+
+function toRecordV2Dto(row: RecordRowForDto) {
   return {
     id: row.id,
-    userId: row.userId,
     workDate: row.workDate,
-    workScheduleId: row.workScheduleId,
+    employeeId: row.employeeId ?? null,
+    shiftId: row.shiftId ?? null,
     checkInAt: row.checkInAt,
     checkOutAt: row.checkOutAt,
     checkInMethod: row.checkInMethod,
     checkOutMethod: row.checkOutMethod,
     lateMinutes: row.lateMinutes,
     earlyLeaveMinutes: row.earlyLeaveMinutes,
+    workingMinutes: row.workingMinutes ?? null,
+    requiredWorkingMinutes: row.requiredWorkingMinutes ?? null,
+    missingMinutes: row.missingMinutes ?? null,
+    breakMinutes: row.breakMinutes ?? null,
     status: row.status,
-    note: row.note,
+    attendanceStatus: row.attendanceStatus ?? null,
+    isLate: row.isLate ?? null,
+    isEarlyLeave: row.isEarlyLeave ?? null,
+    isMissingCheckOut: row.isMissingCheckOut ?? null,
+  };
+}
+
+function toShiftSummary(shift: ShiftRow, tz: string) {
+  return {
+    id: shift.id,
+    shiftCode: shift.shiftCode,
+    name: shift.name,
+    startTime: shift.startTime,
+    endTime: shift.endTime,
+    breakMinutes: shift.breakMinutes,
+    requiredWorkingMinutes: shift.requiredWorkingMinutes,
+    graceLateMinutes: shift.graceLateMinutes,
+    graceEarlyLeaveMinutes: shift.graceEarlyLeaveMinutes,
+    crossDay: shift.crossDay,
+    isDefault: shift.isDefault,
+    timezone: tz,
+  };
+}
+
+function toRuleSummary(rule: EffectiveRule) {
+  return {
+    id: rule.id,
+    ruleCode: rule.ruleCode,
+    requireCheckIn: rule.requireCheckIn,
+    requireCheckOut: rule.requireCheckOut,
+    blockWhenLeaveApproved: rule.blockWhenLeaveApproved,
+  };
+}
+
+/** Today khi không có employee mapping (KHÔNG throw — màn hình hiển thị lý do). */
+function emptyToday(workDate: string, reason: string) {
+  return {
+    workDate,
+    employee: null,
+    shift: null,
+    rule: null,
+    record: null,
+    allowedActions: { canCheckIn: false, canCheckOut: false },
+    disabledReason: reason,
+    periodLocked: false,
+  };
+}
+
+function todayDisabledReason(args: {
+  active: boolean;
+  onLeave: boolean;
+  periodLocked: boolean;
+  checkedOut: boolean;
+  workDate: string;
+}): string | null {
+  if (!args.active) return "Hồ sơ nhân sự không ở trạng thái làm việc — không thể chấm công";
+  if (args.onLeave) return `Đã có đơn nghỉ được duyệt cho ngày ${args.workDate}`;
+  if (args.periodLocked) return `Kỳ công ${monthOfDate(args.workDate)} đã khoá`;
+  if (args.checkedOut) return "Đã hoàn tất chấm công hôm nay";
+  return null;
+}
+
+function buildTodayDto(args: {
+  workDate: string;
+  employee: ResolvedEmployee;
+  shift: ShiftRow | null;
+  rule: EffectiveRule;
+  tz: string;
+  record: RecordRowForDto | null;
+  periodLocked: boolean;
+  onLeave: boolean;
+}) {
+  const { workDate, employee, shift, rule, tz, record, periodLocked, onLeave } = args;
+  const active = employee.status === "active";
+  const checkedIn = Boolean(record?.checkInAt);
+  const checkedOut = Boolean(record?.checkOutAt);
+  return {
+    workDate,
+    employee: { id: employee.id, status: employee.status },
+    shift: shift ? toShiftSummary(shift, tz) : null,
+    rule: toRuleSummary(rule),
+    record: record ? toRecordV2Dto(record) : null,
+    allowedActions: {
+      canCheckIn: active && !periodLocked && !onLeave && !checkedIn,
+      canCheckOut: active && !periodLocked && !onLeave && checkedIn && !checkedOut,
+    },
+    disabledReason: todayDisabledReason({ active, onLeave, periodLocked, checkedOut, workDate }),
+    periodLocked,
   };
 }
 

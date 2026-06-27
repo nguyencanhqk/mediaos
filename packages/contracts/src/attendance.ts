@@ -99,15 +99,25 @@ const locationSchema = z
   })
   .optional();
 
+/**
+ * S3-ATT-BE-1 (DB-04): clientTime/clientTimezone là THAM CHIẾU — server time (logTime DEFAULT now())
+ * mới authoritative cho mọi tính toán (chống client gian lận giờ). note tuỳ chọn cho log.
+ */
 export const checkInSchema = z.object({
   method: z.enum(["web", "mobile"]).default("web"),
   location: locationSchema,
+  clientTime: z.string().datetime().optional(),
+  clientTimezone: z.string().min(1).max(64).optional(),
+  note: z.string().max(1000).optional(),
 });
 export type CheckInRequest = z.infer<typeof checkInSchema>;
 
 export const checkOutSchema = z.object({
   method: z.enum(["web", "mobile"]).default("web"),
   location: locationSchema,
+  clientTime: z.string().datetime().optional(),
+  clientTimezone: z.string().min(1).max(64).optional(),
+  note: z.string().max(1000).optional(),
 });
 export type CheckOutRequest = z.infer<typeof checkOutSchema>;
 
@@ -119,6 +129,78 @@ export const attendanceTodaySchema = z.object({
   periodLocked: z.boolean(),
 });
 export type AttendanceTodayDto = z.infer<typeof attendanceTodaySchema>;
+
+// ─── S3-ATT-BE-1 (DB-04 §7) — Today/check-in/check-out V2 (shift/rule effective) ────
+
+/** Bản ghi chấm công V2 (cột legacy + DB-04 §7.4 additive). instant = ISO datetime UTC. */
+export const attendanceRecordV2Schema = z.object({
+  id: z.string().uuid(),
+  workDate: z.string().date(),
+  employeeId: z.string().uuid().nullable(),
+  shiftId: z.string().uuid().nullable(),
+  checkInAt: z.string().datetime().nullable(),
+  checkOutAt: z.string().datetime().nullable(),
+  checkInMethod: z.string().nullable(),
+  checkOutMethod: z.string().nullable(),
+  lateMinutes: z.number().int().min(0),
+  earlyLeaveMinutes: z.number().int().min(0),
+  workingMinutes: z.number().int().nullable(),
+  requiredWorkingMinutes: z.number().int().nullable(),
+  missingMinutes: z.number().int().nullable(),
+  breakMinutes: z.number().int().nullable(),
+  /** status lowercase legacy (present/late/early_leave/…) — feed payroll/back-compat. */
+  status: z.string(),
+  /** attendance_status TitleCase DB-04 (Checked-in/Late/Present/Early Leave/Missing Hours/…). */
+  attendanceStatus: z.string().nullable(),
+  isLate: z.boolean().nullable(),
+  isEarlyLeave: z.boolean().nullable(),
+  isMissingCheckOut: z.boolean().nullable(),
+});
+export type AttendanceRecordV2Dto = z.infer<typeof attendanceRecordV2Schema>;
+
+/** Ca làm hiệu lực (rút gọn) cho màn Today. */
+export const attendanceShiftSummarySchema = z.object({
+  id: z.string().uuid(),
+  shiftCode: z.string(),
+  name: z.string(),
+  startTime: z.string().nullable(),
+  endTime: z.string().nullable(),
+  breakMinutes: z.number().int(),
+  requiredWorkingMinutes: z.number().int(),
+  graceLateMinutes: z.number().int(),
+  graceEarlyLeaveMinutes: z.number().int(),
+  crossDay: z.boolean(),
+  isDefault: z.boolean(),
+  timezone: z.string(),
+});
+export type AttendanceShiftSummaryDto = z.infer<typeof attendanceShiftSummarySchema>;
+
+/** Rule chấm công hiệu lực (rút gọn) cho màn Today. */
+export const attendanceRuleSummarySchema = z.object({
+  id: z.string().uuid().nullable(),
+  ruleCode: z.string().nullable(),
+  requireCheckIn: z.boolean(),
+  requireCheckOut: z.boolean(),
+  blockWhenLeaveApproved: z.boolean(),
+});
+export type AttendanceRuleSummaryDto = z.infer<typeof attendanceRuleSummarySchema>;
+
+/** GET /attendance/today V2 — employee/shift/rule/record + allowedActions + disabledReason. */
+export const attendanceTodayV2Schema = z.object({
+  workDate: z.string().date(),
+  employee: z.object({ id: z.string().uuid(), status: z.string() }).nullable(),
+  shift: attendanceShiftSummarySchema.nullable(),
+  rule: attendanceRuleSummarySchema.nullable(),
+  record: attendanceRecordV2Schema.nullable(),
+  allowedActions: z.object({ canCheckIn: z.boolean(), canCheckOut: z.boolean() }),
+  disabledReason: z.string().nullable(),
+  periodLocked: z.boolean(),
+});
+export type AttendanceTodayV2Dto = z.infer<typeof attendanceTodayV2Schema>;
+
+/** POST /attendance/check-in | check-out → bản ghi V2. */
+export type CheckInResponse = AttendanceRecordV2Dto;
+export type CheckOutResponse = AttendanceRecordV2Dto;
 
 /** Generic pagination params: limit (1–100, default 50) + offset (≥0, default 0). */
 export const listPaginationSchema = z.object({
