@@ -29,6 +29,7 @@ import { AuthService, type RequestMeta } from "./auth.service";
 import { csrfTokensMatch, parseCookies } from "./cookie.util";
 import { SessionCookieService } from "./session-cookie.service";
 import {
+  ChangePasswordDto,
   ForgotPasswordDto,
   LoginDto,
   RefreshDto,
@@ -176,6 +177,25 @@ export class AuthController {
   @HttpCode(200)
   async resetPassword(@Body() dto: ResetPasswordDto): Promise<{ ok: true }> {
     await this.auth.resetPassword(dto);
+    return { ok: true };
+  }
+
+  /**
+   * Đổi mật khẩu khi ĐÃ đăng nhập (self-service, Module 2a). Authenticated (KHÔNG @Public) → JwtAuthGuard
+   * global cấp req.user. Service re-auth bằng mật khẩu hiện tại. Thành công → MỌI phiên (refresh token) bị
+   * thu hồi ⇒ client phải đăng nhập lại (FE điều hướng về /login).
+   */
+  @Post("change-password")
+  @HttpCode(200)
+  async changePassword(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<{ ok: true }> {
+    await this.auth.changePassword(
+      { id: req.user.id, companyId: req.user.companyId },
+      dto.currentPassword,
+      dto.newPassword,
+    );
     return { ok: true };
   }
 

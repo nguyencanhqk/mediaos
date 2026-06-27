@@ -1,4 +1,5 @@
-import { index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { desc } from "drizzle-orm";
+import { index, jsonb, pgTable, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 import { currentCompanyDefault } from "./_helpers";
 import { companies } from "./companies";
 import { users } from "./users";
@@ -6,6 +7,19 @@ import { users } from "./users";
 /**
  * audit_logs — append-only (BẤT BIẾN #2). DDL/RLS/grant ở migration 0003. app role chỉ INSERT/SELECT
  * (không UPDATE/DELETE). Cột chốt theo plan G2-4. KHÔNG ghi secret/hash vào before/after (bất biến #3).
+ *
+ * FOUNDATION-DB-2 (mig 0432) NÂNG về DB-08 §8.5 ADDITIVE: thêm cột module_code/entity_type/entity_id/
+ * actor_type/old_values/new_values/changed_fields/sensitivity_level/result_status/request_id/
+ * correlation_id/ip_address (đều nullable — writer cũ KHÔNG vỡ). CHECK actor_type/sensitivity_level/
+ * result_status (cho phép NULL) ở DB; KHÔNG biểu diễn được bằng Drizzle schema → chỉ sống trong SQL.
+ * Cột cũ object_type/object_id/before/after/ip/user_agent GIỮ NGUYÊN (AuditService v1 vẫn dùng);
+ * AuditService v2 (FOUNDATION-BE-3) điền cột mới + tự tính changed_fields từ old/new.
+ *
+ * S0-FND-DB-1 (mig 0438) HOÀN TẤT §8.5 shape ADDITIVE: thêm nốt 11 cột còn thiếu actor_employee_id/
+ * action_group/entity_id_text/entity_code/permission_code/data_scope/device_info/diff_summary/
+ * error_code/error_message/metadata (đều nullable). company_id GIỮ NOT NULL (lệch có chủ đích vs spec
+ * nullable — N=1, bất biến #1 mạnh hơn). data_scope KHÔNG CHECK (spec §8.5 không định nghĩa) — ép enum
+ * Own/Team/Department/Company/System ở tầng app (S1-FND-AUDIT-1).
  */
 export const auditLogs = pgTable(
   "audit_logs",
@@ -17,21 +31,63 @@ export const auditLogs = pgTable(
       .references(() => companies.id),
     actorUserId: uuid("actor_user_id").references(() => users.id),
     action: text("action").notNull(),
+    // ── shape G2-4 cũ (GIỮ — writer v1) ──
     objectType: text("object_type").notNull(),
     objectId: uuid("object_id"),
     before: jsonb("before"),
     after: jsonb("after"),
     ip: text("ip"),
     userAgent: text("user_agent"),
+    // ── DB-08 §8.5 ADDITIVE (mig 0432, nullable — writer v2 FOUNDATION-BE-3 điền) ──
+    moduleCode: varchar("module_code", { length: 50 }),
+    entityType: varchar("entity_type", { length: 100 }),
+    entityId: uuid("entity_id"),
+    actorType: varchar("actor_type", { length: 50 }),
+    oldValues: jsonb("old_values"),
+    newValues: jsonb("new_values"),
+    changedFields: jsonb("changed_fields"),
+    sensitivityLevel: varchar("sensitivity_level", { length: 50 }),
+    resultStatus: varchar("result_status", { length: 50 }),
+    requestId: varchar("request_id", { length: 100 }),
+    correlationId: varchar("correlation_id", { length: 100 }),
+    ipAddress: varchar("ip_address", { length: 45 }),
+    // ── DB-08 §8.5 ADDITIVE (mig 0438 — 11 cột còn thiếu, nullable; writer v2 S1-FND-AUDIT-1 điền) ──
+    // actorEmployeeId: uuid KHÔNG FK (HR dùng employee_profiles) — theo tiền lệ file_access_logs.
+    actorEmployeeId: uuid("actor_employee_id"),
+    actionGroup: varchar("action_group", { length: 100 }),
+    entityIdText: varchar("entity_id_text", { length: 255 }),
+    entityCode: varchar("entity_code", { length: 255 }),
+    permissionCode: varchar("permission_code", { length: 150 }),
+    dataScope: varchar("data_scope", { length: 50 }),
+    deviceInfo: jsonb("device_info"),
+    diffSummary: text("diff_summary"),
+    errorCode: varchar("error_code", { length: 100 }),
+    errorMessage: text("error_message"),
+    metadata: jsonb("metadata"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("audit_logs_company_object_idx").on(t.companyId, t.objectType, t.objectId)],
+  (t) => [
+    index("audit_logs_company_object_idx").on(t.companyId, t.objectType, t.objectId),
+    // DB-08 §8.5 index (mig 0432) — parity với SQL.
+    index("idx_audit_logs_company_created").on(t.companyId, desc(t.createdAt)),
+    index("idx_audit_logs_entity").on(t.moduleCode, t.entityType, t.entityId),
+    index("idx_audit_logs_request").on(t.requestId),
+    index("idx_audit_logs_correlation").on(t.correlationId),
+    // DB-08 §8.5 index (mig 0438) — parity với SQL.
+    index("idx_audit_logs_actor_created").on(t.actorUserId, desc(t.createdAt)),
+    index("idx_audit_logs_action").on(t.companyId, t.moduleCode, t.action, desc(t.createdAt)),
+  ],
 );
+
+// CHECK constraint actor_type/sensitivity_level/result_status sống ở SQL (mig 0432) — Drizzle pg-core
+// không biểu diễn enum-nullable tiện; allowed (NULL hợp lệ, additive): actor_type ∈ User/System/Job/
+// Integration · sensitivity_level ∈ Normal/Sensitive/HighlySensitive · result_status ∈ Success/Failure/
+// Denied/Error.
 
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -92,8 +148,8 @@ export const AUDIT_OBJECT_TYPES = [
   // G8-3 evaluation (chấm điểm gắn workflow step — recordScores ghi 'evaluation_result' cùng tx)
   "evaluation_template",
   "evaluation_result",
-  // G8-2 defect/revision (trả sửa — createDefect ghi 'defect' cùng tx với revision task)
-  "defect",
+  // (de-media-fy CLEAN-BE-1: gỡ orphan 'defect' khỏi mảng TS — module defect đã gỡ ở 892f208, không còn caller.
+  //  DB CHECK GIỮ NGUYÊN 'defect' (append-only #2 — union chỉ-tăng, KHÔNG sửa CHECK); TS array = subset hợp lệ.)
   // G8-4 KPI (compute + confirm ghi 'kpi_result'; tạo/sửa định nghĩa ghi 'kpi_definition')
   "kpi_definition",
   "kpi_result",
@@ -147,5 +203,36 @@ export const AUDIT_OBJECT_TYPES = [
   // CS-10 user invite (invite/accept/approve/reject ghi 'user_invite' audit-in-tx app-tenant — chỉ
   // email/status/id, KHÔNG token/token_hash/password_hash vào before/after — mig 0410).
   "user_invite",
+  // PM-1 apps/projects (mig 0420): project_states CRUD ghi 'project_state'; labels CRUD ghi 'label'
+  // audit-in-tx app-tenant. Sửa work-item (priority/state/desc/nhãn) TÁI DÙNG 'task' (chỉ action mới).
+  "project_state",
+  "label",
+  // FOUNDATION-BE-2 sequence_counters: admin PATCH cấu hình counter ghi 'sequence_counter'/SequenceUpdated
+  // audit-in-tx app-tenant (before/after = cấu hình mã, KHÔNG current_value/secret/PII). ⚠️ DB CHECK
+  // object_type CHƯA chứa 'sequence_counter' (head mig 0420 thêm tới 'project_state'/'label' — 0432 KHÔNG
+  // đụng CHECK). Cần lane DB (band foundation-db) thêm 'sequence_counter' vào CHECK DO-block UNION + sync
+  // mảng này CÙNG commit. Tới khi đó, updateSequence ghi audit sẽ vỡ CHECK trên Postgres thật ⇒ integration
+  // test updateSequence GATE theo sự hiện diện 'sequence_counter' trong CHECK (skip có chú thích, KHÔNG xanh-giả).
+  "sequence_counter",
+  // S1-FND-SETTING-1 settings (mig 0439): SettingService.updateCompanySetting (admin PATCH
+  // /foundation/company-settings/:key) ghi audit CONFIG_UPDATE object_type='company_setting' audit-in-tx
+  // app-tenant (old/new_values ĐÃ mask, KHÔNG secret_ref/secret material vào before/after — BẤT BIẾN #3).
+  // 'system_setting' cho nhánh system-manage PATCH (system-setting). Bảng settings/permission seed ĐÃ ở
+  // 0431/0435 — 0439 CHỈ mở rộng CHECK object_type (UNION ADD-only, append-only #2 nguyên vẹn).
+  "company_setting",
+  "system_setting",
+  // S1-FND-FILE-1 (mig 0440): upload/link/unlink/delete file ghi audit object_type 'file' (Upload/Delete) / 'file_link' (Link/Unlink) audit-in-tx; masker che storage_path/signed_url. UNION ADD-only.
+  "file",
+  "file_link",
+  // S2-HR-BE-3 (mig 0446): HR master-data CRUD ghi audit create/update/delete object_type 'job_level'
+  // (job_levels) / 'contract_type' (contract_types) audit-in-tx app-tenant — KHÔNG secret/PII vào
+  // before/after (chỉ name/code/active). 0446 UNION ADD-only vào CHECK (clone 0440), append-only #2
+  // nguyên vẹn; INSERT audit KHÔNG còn vỡ CHECK trên Postgres thật.
+  "job_level",
+  "contract_type",
+  // S2-HR-BE-4 (mig 0451): profile change request lifecycle — create/approve/reject/cancel ghi
+  // 'profile_change_request' audit-in-tx app-tenant. UNION ADD-only (BẤT BIẾN #2). KHÔNG ghi
+  // identity_number/bank_account/secret vào before/after (BẤT BIẾN #3 — masker che).
+  "profile_change_request",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

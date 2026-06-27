@@ -478,6 +478,101 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
 
+  // ── S2-HR-DB-1 (mig 0442) HR-Core master/lifecycle ──────────────────────────
+  // company_id NOT NULL + RLS+FORCE → PHẢI ở harness. KHÔNG skipNoContext (mọi hàng tenant-scoped).
+  {
+    name: "job_levels",
+    table: "job_levels",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO job_levels (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-jl-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "contract_types",
+    table: "contract_types",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO contract_types (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-ct-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "employee_code_configs",
+    table: "employee_code_configs",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO employee_code_configs (company_id, prefix) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `JL${randomUUID().slice(0, 4)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "employee_status_histories",
+    table: "employee_status_histories",
+    // Append-only (app role chỉ SELECT,INSERT) — harness mutate-deny dùng direct (superuser) để seed; OK.
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `esh-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO employee_status_histories (company_id, employee_id, new_status)
+         VALUES ($1, $2, 'active') RETURNING id`,
+        [t.companyId, emp.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    // S2-HR-BE-4 (mig 0451): bảng chính self-service. company_id NOT NULL + RLS+FORCE → PHẢI ở harness.
+    // KHÔNG skipNoContext (mọi hàng tenant-scoped). old/new_values/changed_fields NOT NULL jsonb.
+    name: "profile_change_requests",
+    table: "profile_change_requests",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `pcr-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO profile_change_requests
+           (company_id, employee_id, requested_by, status, old_values, new_values, changed_fields)
+         VALUES ($1, $2, $3, 'Pending', '{}'::jsonb, '{"phone":"1"}'::jsonb, '["phone"]'::jsonb)
+         RETURNING id`,
+        [t.companyId, emp.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    // S2-HR-BE-4 (mig 0451): log áp-dụng APPEND-ONLY (app role chỉ SELECT,INSERT). harness mutate-deny
+    // dùng direct (superuser) để seed. company_id NOT NULL + RLS+FORCE → PHẢI ở harness. KHÔNG skipNoContext.
+    name: "employee_profile_change_histories",
+    table: "employee_profile_change_histories",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `epch-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO employee_profile_change_histories
+           (company_id, employee_id, field_name, old_value, new_value)
+         VALUES ($1, $2, 'phone', '"old"'::jsonb, '"new"'::jsonb) RETURNING id`,
+        [t.companyId, emp.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
   // ── G4-2 Media ──────────────────────────────────────────────────────────────
   {
     name: "channels",
@@ -825,6 +920,59 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
 
+  // ── PM-1 apps/projects (project_states / labels / task_labels — mig 0420) ─────
+  // company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  // project_states/labels: soft-delete. task_labels: link M:N hard-DELETE. KHÔNG skipNoContext (tenant-scoped).
+  {
+    name: "project_states",
+    table: "project_states",
+    seedRow: async (direct, t) => {
+      const projectId = await seedProject(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO project_states (company_id, project_id, name, state_group, color, sort_order)
+         VALUES ($1, $2, 'rls-state', 'unstarted', '#64748b', 0) RETURNING id`,
+        [t.companyId, projectId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "labels",
+    table: "labels",
+    seedRow: async (direct, t) => {
+      const projectId = await seedProject(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO labels (company_id, project_id, name, color)
+         VALUES ($1, $2, $3, '#6366f1') RETURNING id`,
+        [t.companyId, projectId, `rls-label-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "task_labels",
+    table: "task_labels",
+    seedRow: async (direct, t) => {
+      const projectId = await seedProject(direct, t.companyId);
+      const taskRes = await direct.query(
+        `INSERT INTO tasks (company_id, task_type, title, status, origin, revision_round, project_id)
+         VALUES ($1, 'office', 'rls-task-for-label', 'not_started', 'initial', 0, $2) RETURNING id`,
+        [t.companyId, projectId],
+      );
+      const labelRes = await direct.query(
+        `INSERT INTO labels (company_id, project_id, name, color)
+         VALUES ($1, $2, $3, '#6366f1') RETURNING id`,
+        [t.companyId, projectId, `rls-tl-label-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO task_labels (company_id, task_id, label_id)
+         VALUES ($1, $2, $3) RETURNING id`,
+        [t.companyId, taskRes.rows[0].id, labelRes.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
   // ── G4-5 Approval / Defect ───────────────────────────────────────────────────
   {
     name: "approval_requests",
@@ -1065,6 +1213,141 @@ export const RLS_TABLES: RlsTableCase[] = [
         `INSERT INTO attendance_periods (company_id, period_month, status)
          VALUES ($1, '2024-06', 'open') RETURNING id`,
         [t.companyId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── S3-ATT-DB-1 (mig 0452) ATT Core — 7 bảng MỚI DB-04 §7 ─────────────────────
+  // company_id NOT NULL + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  // attendance_logs/_adjustment_items/remote_work_request_approvals APPEND-ONLY (app SELECT,INSERT) — harness
+  // mutate-deny dùng direct (superuser) để seed. KHÔNG skipNoContext (mọi hàng tenant-scoped, không hàng global).
+  // FK target THẬT: employee_id → employee_profiles · department_id → org_units.
+  {
+    name: "shifts",
+    table: "shifts",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO shifts (company_id, shift_code, name, required_working_minutes)
+         VALUES ($1, $2, 'rls-shift', 480) RETURNING id`,
+        [t.companyId, `rls-sh-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "shift_assignments",
+    table: "shift_assignments",
+    seedRow: async (direct, t) => {
+      const shiftRes = await direct.query(
+        `INSERT INTO shifts (company_id, shift_code, name, required_working_minutes)
+         VALUES ($1, $2, 'rls-sa-shift', 480) RETURNING id`,
+        [t.companyId, `rls-sash-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO shift_assignments
+           (company_id, shift_id, assignment_scope, effective_from)
+         VALUES ($1, $2, 'Company', '2026-06-01') RETURNING id`,
+        [t.companyId, shiftRes.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "attendance_rules",
+    table: "attendance_rules",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO attendance_rules
+           (company_id, rule_code, name, rule_scope, effective_from)
+         VALUES ($1, $2, 'rls-rule', 'Company', '2026-06-01') RETURNING id`,
+        [t.companyId, `rls-ru-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "attendance_logs",
+    table: "attendance_logs",
+    // APPEND-ONLY (app SELECT,INSERT). Seed direct (superuser). FK employee_id → employee_profiles.
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `al-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO attendance_logs (company_id, employee_id, work_date, log_type, source)
+         VALUES ($1, $2, '2026-06-03', 'Check-in', 'WEB') RETURNING id`,
+        [t.companyId, emp.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "attendance_adjustment_items",
+    table: "attendance_adjustment_items",
+    // APPEND-ONLY (app SELECT,INSERT). Parent attendance_adjustment_requests (old user_id NOT NULL kept).
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `aai-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const req = await direct.query(
+        `INSERT INTO attendance_adjustment_requests
+           (company_id, user_id, employee_id, work_date, request_type, reason, status, requested_check_in_at)
+         VALUES ($1, $2, $3, '2026-06-03', 'MISSING_CHECK_IN', 'rls', 'pending', '2026-06-03T02:00:00Z')
+         RETURNING id`,
+        [t.companyId, u, emp.rows[0].id],
+      );
+      const r = await direct.query(
+        `INSERT INTO attendance_adjustment_items (company_id, request_id, field_name, new_value)
+         VALUES ($1, $2, 'check_in_at', '"2026-06-03T01:00:00Z"'::jsonb) RETURNING id`,
+        [t.companyId, req.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "remote_work_requests",
+    table: "remote_work_requests",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `rwr-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO remote_work_requests
+           (company_id, employee_id, request_type, start_date, end_date, reason, requested_by, status)
+         VALUES ($1, $2, 'Remote', '2026-06-03', '2026-06-03', 'rls', $3, 'Pending') RETURNING id`,
+        [t.companyId, emp.rows[0].id, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "remote_work_request_approvals",
+    table: "remote_work_request_approvals",
+    // APPEND-ONLY (app SELECT,INSERT). Parent remote_work_requests.
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `rwra-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const rwr = await direct.query(
+        `INSERT INTO remote_work_requests
+           (company_id, employee_id, request_type, start_date, end_date, reason, requested_by, status)
+         VALUES ($1, $2, 'Remote', '2026-06-03', '2026-06-03', 'rls', $3, 'Pending') RETURNING id`,
+        [t.companyId, emp.rows[0].id, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO remote_work_request_approvals
+           (company_id, remote_work_request_id, step_order, approver_user_id, action)
+         VALUES ($1, $2, 1, $3, 'Submitted') RETURNING id`,
+        [t.companyId, rwr.rows[0].id, u],
       );
       return r.rows[0].id as string;
     },
@@ -1839,5 +2122,288 @@ export const RLS_TABLES: RlsTableCase[] = [
     name: "user_invites",
     table: "user_invites",
     seedRow: async (direct, t) => seedUserInvite(direct, t.companyId),
+  },
+
+  // ── FOUNDATION-DB-1 (mig 0431) — company_settings ───────────────────────────
+  // company_id NOT NULL DEFAULT current_setting + RLS+FORCE. Mutable (KHÔNG append-only). Soft-delete.
+  // KHÔNG skipNoContext (mọi hàng tenant-scoped, không hàng global). value_type CHECK IN (...).
+  {
+    name: "company_settings",
+    table: "company_settings",
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO company_settings
+           (company_id, setting_key, setting_value, value_type, category)
+         VALUES ($1, $2, '"rls-test"'::jsonb, 'String', 'General')
+         RETURNING id`,
+        [t.companyId, `rls-cs-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── FOUNDATION-DB-3 (mig 0433) — files ──────────────────────────────────────
+  // company_id NOT NULL DEFAULT current_setting + RLS+FORCE. Mutable (soft-delete). KHÔNG append-only.
+  // Requires: uploaded_by FK → users (NOT NULL). storage_provider CHECK IN (...).
+  // upload_status CHECK IN (...). visibility CHECK IN (...). file_size_bytes ≥ 0.
+  {
+    name: "files",
+    table: "files",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `rls-files-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO files
+           (company_id, original_name, stored_name, mime_type, file_size_bytes,
+            storage_provider, storage_path, visibility, upload_status, scan_status, uploaded_by)
+         VALUES ($1, 'rls-test.pdf', $2, 'application/pdf', 1024,
+                 'MinIO', $3, 'Private', 'Uploaded', 'NotRequired', $4)
+         RETURNING id`,
+        [
+          t.companyId,
+          `rls-stored-${randomUUID().slice(0, 8)}.pdf`,
+          `rls/${t.companyId}/${randomUUID()}/test.pdf`,
+          u,
+        ],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── FOUNDATION-DB-3 (mig 0433) — file_links ─────────────────────────────────
+  // company_id NOT NULL DEFAULT current_setting + RLS+FORCE. Polymorphic (module_code/entity_type/entity_id).
+  // Requires: file_id FK → files (NOT NULL); created_by FK → users (NOT NULL).
+  // link_type CHECK IN (...); access_scope CHECK IN (...).
+  {
+    name: "file_links",
+    table: "file_links",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `rls-fl-${randomUUID().slice(0, 8)}@x.test`);
+      // Seed a files row first (FK file_id NOT NULL → files)
+      const fileRes = await direct.query(
+        `INSERT INTO files
+           (company_id, original_name, stored_name, mime_type, file_size_bytes,
+            storage_provider, storage_path, visibility, upload_status, scan_status, uploaded_by)
+         VALUES ($1, 'rls-fl.pdf', $2, 'application/pdf', 512,
+                 'MinIO', $3, 'Private', 'Uploaded', 'NotRequired', $4)
+         RETURNING id`,
+        [
+          t.companyId,
+          `rls-fl-stored-${randomUUID().slice(0, 8)}.pdf`,
+          `rls/${t.companyId}/${randomUUID()}/fl.pdf`,
+          u,
+        ],
+      );
+      const fileId = fileRes.rows[0].id as string;
+      const r = await direct.query(
+        `INSERT INTO file_links
+           (company_id, file_id, module_code, entity_type, entity_id, link_type,
+            access_scope, created_by)
+         VALUES ($1, $2, 'TASK', 'task', $3, 'Attachment', 'Company', $4)
+         RETURNING id`,
+        [t.companyId, fileId, randomUUID(), u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── FOUNDATION-DB-3 (mig 0433) — file_access_logs ───────────────────────────
+  // company_id NOT NULL DEFAULT current_setting + RLS+FORCE. APPEND-ONLY: REVOKE UPDATE,DELETE.
+  // Requires: file_id FK → files (NOT NULL). action CHECK IN (...). access_granted NOT NULL.
+  // KHÔNG skipNoContext (mọi hàng tenant-scoped). skipNoContext=false (mặc định).
+  {
+    name: "file_access_logs",
+    table: "file_access_logs",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `rls-fal-${randomUUID().slice(0, 8)}@x.test`);
+      // Seed a files row first (FK file_id NOT NULL → files)
+      const fileRes = await direct.query(
+        `INSERT INTO files
+           (company_id, original_name, stored_name, mime_type, file_size_bytes,
+            storage_provider, storage_path, visibility, upload_status, scan_status, uploaded_by)
+         VALUES ($1, 'rls-fal.pdf', $2, 'application/pdf', 256,
+                 'MinIO', $3, 'Private', 'Uploaded', 'NotRequired', $4)
+         RETURNING id`,
+        [
+          t.companyId,
+          `rls-fal-stored-${randomUUID().slice(0, 8)}.pdf`,
+          `rls/${t.companyId}/${randomUUID()}/fal.pdf`,
+          u,
+        ],
+      );
+      const fileId = fileRes.rows[0].id as string;
+      const r = await direct.query(
+        `INSERT INTO file_access_logs
+           (company_id, file_id, actor_user_id, action, access_granted)
+         VALUES ($1, $2, $3, 'Download', true)
+         RETURNING id`,
+        [t.companyId, fileId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── FOUNDATION-DB-4 (mig 0434) — sequence_counters ──────────────────────────
+  // company_id NULLABLE: global rows (company_id IS NULL) visible without tenant context by design.
+  // skipNoContext: true (like `roles`). Still seed a tenant-scoped row (company_id NOT NULL) to test
+  // cross-tenant isolation of tenant rows. WITH CHECK: app role cannot write NULL company_id.
+  // scope_type CHECK IN (...). reset_policy CHECK IN (...). status CHECK IN (...).
+  {
+    name: "sequence_counters (tenant-scoped only)",
+    table: "sequence_counters",
+    skipNoContext: true,
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO sequence_counters
+           (company_id, module_code, sequence_key, scope_type, reset_policy, status)
+         VALUES ($1, 'HR', $2, 'Company', 'Never', 'Active')
+         RETURNING id`,
+        [t.companyId, `rls-seq-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── FOUNDATION-DB-4 (mig 0434) — public_holidays ────────────────────────────
+  // company_id NULLABLE: global holiday rows (company_id IS NULL) visible without tenant context.
+  // skipNoContext: true (same pattern as sequence_counters). Still seed a tenant-scoped row.
+  // holiday_code + holiday_date + holiday_type CHECK IN (...). status CHECK IN (...).
+  // uq: (company_id, holiday_date, holiday_code) WHERE company_id IS NOT NULL AND deleted_at IS NULL.
+  {
+    name: "public_holidays (tenant-scoped only)",
+    table: "public_holidays",
+    skipNoContext: true,
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO public_holidays
+           (company_id, holiday_code, name, holiday_date, holiday_type, status)
+         VALUES ($1, $2, 'RLS Test Holiday', '2099-01-01', 'CompanyHoliday', 'Active')
+         RETURNING id`,
+        [t.companyId, `rls-hol-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── FOUNDATION-DB-5 (mig 0435) — data_retention_policies ────────────────────
+  // company_id NULLABLE (NULL = global default, NOT NULL = company override) + RLS+FORCE nullable-tenant.
+  // skipNoContext: true (global rows company_id IS NULL visible to all tenants by design).
+  // cleanup_action CHECK IN (...). retention_days ≥ 0.
+  // uq: (COALESCE(company_id, nil-uuid), module_code, entity_type) WHERE deleted_at IS NULL AND is_enabled.
+  // Seed is_enabled=false to avoid uq conflict across concurrent test runs.
+  {
+    name: "data_retention_policies (tenant-scoped only)",
+    table: "data_retention_policies",
+    skipNoContext: true,
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO data_retention_policies
+           (company_id, module_code, entity_type, retention_days, cleanup_action, is_enabled)
+         VALUES ($1, 'FOUNDATION', $2, 365, 'None', false)
+         RETURNING id`,
+        [t.companyId, `rls-drp-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── FOUNDATION-DB-5 (mig 0435) — seed_batches ───────────────────────────────
+  // company_id NULLABLE (NULL = global seed, NOT NULL = company-scoped). RLS+FORCE nullable-tenant.
+  // skipNoContext: true (global seed rows visible to all tenants by design).
+  // status CHECK IN (...). uq: (COALESCE(company_id, nil-uuid), seed_key, seed_version).
+  {
+    name: "seed_batches (tenant-scoped only)",
+    table: "seed_batches",
+    skipNoContext: true,
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO seed_batches
+           (company_id, seed_key, seed_version, status)
+         VALUES ($1, $2, '1.0.0', 'Pending')
+         RETURNING id`,
+        [t.companyId, `rls-sb-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── FOUNDATION-DB-5 (mig 0435) — seed_items ─────────────────────────────────
+  // company_id NULLABLE (NULL = global). RLS+FORCE nullable-tenant.
+  // skipNoContext: true (global seed items visible by design).
+  // Requires: seed_batch_id FK → seed_batches (NOT NULL, ON DELETE CASCADE).
+  // operation CHECK IN (...). status CHECK IN (...).
+  // uq: (seed_batch_id, target_table, target_key).
+  {
+    name: "seed_items (tenant-scoped only)",
+    table: "seed_items",
+    skipNoContext: true,
+    seedRow: async (direct, t) => {
+      // Seed a seed_batches row first (FK seed_batch_id NOT NULL → seed_batches)
+      const batchRes = await direct.query(
+        `INSERT INTO seed_batches
+           (company_id, seed_key, seed_version, status)
+         VALUES ($1, $2, '1.0.0', 'Pending')
+         RETURNING id`,
+        [t.companyId, `rls-si-sb-${randomUUID().slice(0, 8)}`],
+      );
+      const batchId = batchRes.rows[0].id as string;
+      const r = await direct.query(
+        `INSERT INTO seed_items
+           (seed_batch_id, company_id, target_table, target_key, operation, status)
+         VALUES ($1, $2, 'companies', $3, 'Upsert', 'Pending')
+         RETURNING id`,
+        [batchId, t.companyId, `rls-si-key-${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── S2-AUTH-DB-2 — AUTH sessions/logs (mig 0443) ─────────────────────────────
+  // Mỗi bảng có company_id + RLS+FORCE → PHẢI ở harness (rls-guards "không bảng nào company_id thiếu case").
+  // login_logs/user_security_events APPEND-ONLY; user_sessions MUTABLE. KHÔNG skipNoContext (seedRow gắn tenant).
+  {
+    name: "user_sessions",
+    table: "user_sessions",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `usess-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO user_sessions (company_id, user_id, refresh_token_hash, expired_at)
+         VALUES ($1, $2, $3, now() + interval '7 days') RETURNING id`,
+        [t.companyId, u, randomUUID()],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "login_logs",
+    table: "login_logs",
+    // company_id NULLABLE: hàng pre-auth (email không tồn tại) có company_id IS NULL → HIỂN THỊ với mọi tenant
+    // qua USING (company_id = GUC OR company_id IS NULL) — GIỐNG roles/seed_items có hàng global. Vì vậy
+    // skipNoContext: test 'no context → 0 row' KHÔNG đúng cho bảng nullable-tenant (sẽ đỏ khi có hàng NULL).
+    // Cô lập chéo tenant + WITH CHECK forge-deny vẫn được harness phủ; hành vi nullable-tenant đã verify ở
+    // auth-appendonly + rls-tenant-isolation (FULL gate). Mẫu: roles/role_permissions/seed_items.
+    skipNoContext: true,
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `llog-${randomUUID().slice(0, 8)}@x.test`);
+      const email = `llog-${randomUUID().slice(0, 8)}@x.test`;
+      const r = await direct.query(
+        `INSERT INTO login_logs (company_id, user_id, email, normalized_email, login_status)
+         VALUES ($1, $2, $3, lower($3), 'success') RETURNING id`,
+        [t.companyId, u, email],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "user_security_events",
+    table: "user_security_events",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `usec-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO user_security_events (company_id, user_id, event_type, severity)
+         VALUES ($1, $2, 'PASSWORD_CHANGED', 'info') RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
   },
 ];

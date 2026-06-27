@@ -162,12 +162,13 @@ export async function seedRolePermission(
   roleId: string,
   permissionId: string,
   effect: "ALLOW" | "DENY",
+  dataScope: "Own" | "Team" | "Department" | "Company" | "System" = "Company",
 ): Promise<void> {
   await direct.query(
-    `INSERT INTO role_permissions (role_id, permission_id, effect)
-     VALUES ($1, $2, $3)
+    `INSERT INTO role_permissions (role_id, permission_id, effect, data_scope)
+     VALUES ($1, $2, $3, $4)
      ON CONFLICT DO NOTHING`,
-    [roleId, permissionId, effect],
+    [roleId, permissionId, effect, dataScope],
   );
 }
 
@@ -346,6 +347,32 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   if (companyIds.length === 0) return;
   const ids = [companyIds];
 
+  // ── FOUNDATION-DB-3 (mig 0433) — files / file_links / file_access_logs ─────
+  // file_access_logs.file_id → files (CASCADE); file_links.file_id → files (CASCADE).
+  // files.uploaded_by → users (RESTRICT) → xoá TRƯỚC users (phải ở đầu hàm).
+  // Thứ tự: file_access_logs → file_links → files (con → cha).
+  await direct.query("DELETE FROM file_access_logs WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM file_links WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM files WHERE company_id = ANY($1::uuid[])", ids);
+
+  // ── FOUNDATION-DB-5 (mig 0435) — seed_items → seed_batches ─────────────────
+  // seed_items.seed_batch_id → seed_batches (ON DELETE CASCADE) → xoá items TRƯỚC batches.
+  await direct.query("DELETE FROM seed_items WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM seed_batches WHERE company_id = ANY($1::uuid[])", ids);
+
+  // ── FOUNDATION-DB-5 (mig 0435) — data_retention_policies ───────────────────
+  // company_id NULLABLE (CASCADE companies) — xoá tenant rows (company_id = ANY(...)) only.
+  await direct.query("DELETE FROM data_retention_policies WHERE company_id = ANY($1::uuid[])", ids);
+
+  // ── FOUNDATION-DB-4 (mig 0434) — sequence_counters / public_holidays ────────
+  // company_id NULLABLE (CASCADE companies) — xoá tenant rows only.
+  await direct.query("DELETE FROM sequence_counters WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM public_holidays WHERE company_id = ANY($1::uuid[])", ids);
+
+  // ── FOUNDATION-DB-1 (mig 0431) — company_settings ───────────────────────────
+  // company_id NOT NULL (CASCADE companies) — xoá tường minh TRƯỚC companies.
+  await direct.query("DELETE FROM company_settings WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G6-2 PR-B Break-glass ───────────────────────────────────────────────────
   // break_glass_approvals.grant_id → break_glass_grants (CASCADE) → xoá approvals TRƯỚC grants.
   // break_glass_grants.platform_account_id → platform_accounts (CASCADE) + requester/revoked_by → users
@@ -413,6 +440,25 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM chat_rooms WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM notifications WHERE company_id = ANY($1::uuid[])", ids);
 
+  // ── S3-ATT-DB-1 (mig 0452) ATT Core 7 bảng MỚI ───────────────────────────
+  // Thứ tự FK con→cha: remote_work_request_approvals → remote_work_requests; attendance_adjustment_items →
+  // attendance_adjustment_requests (xoá ở dưới); attendance_logs (FK employee_profiles CASCADE + attendance_records
+  // SET NULL); shift_assignments → shifts; attendance_rules. Mọi company_id → companies CASCADE. employee_id →
+  // employee_profiles (CASCADE/SET NULL). Xoá tường minh TRƯỚC attendance_records/users/employee_profiles cho rõ thứ tự.
+  await direct.query(
+    "DELETE FROM remote_work_request_approvals WHERE company_id = ANY($1::uuid[])",
+    ids,
+  );
+  await direct.query("DELETE FROM remote_work_requests WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query(
+    "DELETE FROM attendance_adjustment_items WHERE company_id = ANY($1::uuid[])",
+    ids,
+  );
+  await direct.query("DELETE FROM attendance_logs WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM shift_assignments WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM attendance_rules WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM shifts WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G11 HR (Attendance + Leave) ──────────────────────────────────────────
   // adjustment_requests/leave_requests có FK → tasks → xoá TRƯỚC tasks. attendance_records
   // FK ← adjustment_requests (attendance_record_id) → xoá requests trước records.
@@ -448,9 +494,19 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   // (uploaded_by → users ON DELETE SET NULL, không chặn). Trước task_comments/tasks/users.
   await direct.query("DELETE FROM task_attachments WHERE company_id = ANY($1::uuid[])", ids);
 
+  // ── PM-1 apps/projects (mig 0420) ─────────────────────────────────────────
+  // task_labels.task_id/label_id → tasks/labels (CASCADE) → xoá TRƯỚC tasks/labels.
+  // tasks.state_id → project_states (ON DELETE SET NULL) → an toàn; xoá task_labels + project_states
+  // TRƯỚC tasks/projects/labels cho rõ ràng. labels.project_id → projects (CASCADE) → trước projects.
+  await direct.query("DELETE FROM task_labels WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM labels WHERE company_id = ANY($1::uuid[])", ids);
+
   // ── G4-4 Tasks & Comments ────────────────────────────────────────────────
   await direct.query("DELETE FROM task_comments WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM tasks WHERE company_id = ANY($1::uuid[])", ids);
+  // project_states.project_id → projects (CASCADE); tasks.state_id đã NULL hoặc tasks đã xoá → xoá sau tasks,
+  // trước projects (FK projects CASCADE phủ, xoá tường minh cho thứ tự rõ ràng + tránh phụ thuộc CASCADE).
+  await direct.query("DELETE FROM project_states WHERE company_id = ANY($1::uuid[])", ids);
 
   // ── G4-3 Workflow ─────────────────────────────────────────────────────────
   // G7-3: instance checklist tick-state (FK → workflow_steps + checklist_items) — xoá trước workflow_steps.
@@ -508,6 +564,11 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   await direct.query("DELETE FROM user_recovery_codes WHERE company_id = ANY($1::uuid[])", ids);
   // G16-1b security_alerts: subject_user_id FK → users (NO ACTION) → xoá TRƯỚC users. company_id → companies.
   await direct.query("DELETE FROM security_alerts WHERE company_id = ANY($1::uuid[])", ids);
+  // S2-AUTH-DB-2: user_sessions/login_logs/user_security_events FK → users (NO ACTION) → xoá TRƯỚC users.
+  //   login_logs.session_id FK → user_sessions → xoá login_logs TRƯỚC user_sessions.
+  await direct.query("DELETE FROM login_logs WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM user_security_events WHERE company_id = ANY($1::uuid[])", ids);
+  await direct.query("DELETE FROM user_sessions WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM object_permissions WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM user_roles WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query(

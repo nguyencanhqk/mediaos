@@ -2,7 +2,6 @@ import { Injectable } from "@nestjs/common";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
 import { orgUnits, teams, teamMembers, users, roles } from "../db/schema";
-import { employeeProfiles } from "../db/schema/employees";
 import { notOperatorRole } from "../permission/operator-roles";
 
 @Injectable()
@@ -127,25 +126,6 @@ export class OrgRepository {
     );
   }
 
-  /**
-   * G10-2 auto-room: user ids của nhân sự đang thuộc 1 phòng ban (employee_profiles.org_unit_id),
-   * chưa nghỉ (deleted_at IS NULL). Qua withTenant(companyId) ⇒ RLS chặn kéo nhân sự tenant khác.
-   */
-  listOrgUnitMemberUserIds(companyId: string, orgUnitId: string): Promise<string[]> {
-    return this.db.withTenant(companyId, async (tx) => {
-      const rows = await tx
-        .select({ userId: employeeProfiles.userId })
-        .from(employeeProfiles)
-        .where(
-          and(
-            eq(employeeProfiles.companyId, companyId),
-            eq(employeeProfiles.orgUnitId, orgUnitId),
-            isNull(employeeProfiles.deletedAt),
-          ),
-        );
-      return rows.map((r) => r.userId);
-    });
-  }
 
   // ── Teams ────────────────────────────────────────────────────────────────────
 

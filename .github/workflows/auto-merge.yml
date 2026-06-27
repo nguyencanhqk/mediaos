@@ -1,0 +1,27 @@
+name: Auto-merge
+
+# Bật GitHub auto-merge cho PR gắn nhãn "auto-merge".
+# GitHub CHỈ squash-merge sau khi branch protection thoả mãn (CI 'verify' xanh + 1 review người duyệt).
+# ⇒ Agent KHÔNG bao giờ push thẳng master; phanh thật là branch protection, không phải workflow này.
+#
+# KỶ LUẬT ZONE (xem harness/policy.md): chỉ gắn nhãn "auto-merge" cho PR vùng 🟢 green / 🟡 yellow.
+# Vùng 🔴 red (permission/RLS/secret/payroll/finance/audit/migration) → KHÔNG gắn nhãn; người merge tay.
+# Yêu cầu 1 review người duyệt nghĩa là kể cả khi auto-merge bật, vùng đỏ vẫn dừng chờ người.
+
+on:
+  pull_request:
+    types: [labeled, opened, reopened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-auto-merge:
+    if: contains(github.event.pull_request.labels.*.name, 'auto-merge') && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable auto-merge (squash)
+        run: gh pr merge --auto --squash "${{ github.event.pull_request.html_url }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

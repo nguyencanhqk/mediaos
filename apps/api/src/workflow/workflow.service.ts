@@ -28,18 +28,9 @@ import {
   type StepStatus,
 } from "./workflow.types";
 import type { FsmInstanceInput, FsmStepInput } from "./workflow-fsm.service";
+import { isUniqueViolation } from "../common/db-error";
 
 const MVP0_WORKFLOW_CODE = "video_standard_v0";
-const PG_UNIQUE_VIOLATION = "23505";
-
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as Record<string, unknown>)["code"] === PG_UNIQUE_VIOLATION
-  );
-}
 
 // Drizzle infers text columns as `string`; cast to narrower FSM types at the boundary.
 // stepStatusSchema.parse() would be safer but adds a dependency on contracts inside api —
@@ -111,11 +102,7 @@ export class WorkflowService {
    * Guard: content item tồn tại; chưa có active workflow.
    * Idempotency: UNIQUE constraint (content_item_id) WHERE status='active' chặn duplicate.
    */
-  async startWorkflow(
-    companyId: string,
-    contentItemId: string,
-    createdBy: string,
-  ) {
+  async startWorkflow(companyId: string, contentItemId: string, createdBy: string) {
     try {
       return await this.db.withTenant(companyId, async (tx) => {
         // Validate content item exists in this tenant
@@ -125,7 +112,11 @@ export class WorkflowService {
         }
 
         // Find MVP-0 workflow definition (must be seeded per company)
-        const [definition] = await this.repo.findActiveDefinitionInTx(companyId, MVP0_WORKFLOW_CODE, tx);
+        const [definition] = await this.repo.findActiveDefinitionInTx(
+          companyId,
+          MVP0_WORKFLOW_CODE,
+          tx,
+        );
         if (!definition) {
           throw new InternalServerErrorException(
             `Workflow definition '${MVP0_WORKFLOW_CODE}' not found. Run scripts/seed-workflow-definition.sql first.`,
@@ -181,7 +172,9 @@ export class WorkflowService {
           tx,
         );
         if (!task) {
-          this.logger.warn(`createTask no-op (dedup collision) for step ${step1.id} — task already exists`);
+          this.logger.warn(
+            `createTask no-op (dedup collision) for step ${step1.id} — task already exists`,
+          );
         }
 
         // Audit: WorkflowStarted
@@ -206,9 +199,7 @@ export class WorkflowService {
         throw err;
       }
       if (isUniqueViolation(err)) {
-        throw new ConflictException(
-          `Content item ${contentItemId} already has an active workflow`,
-        );
+        throw new ConflictException(`Content item ${contentItemId} already has an active workflow`);
       }
       this.logger.error("startWorkflow unexpected error", { err, companyId, contentItemId });
       throw err;
@@ -241,7 +232,9 @@ export class WorkflowService {
         // Validate target khớp appliesTo + tồn tại trong tenant; chỉ giữ target khớp.
         if (template.appliesTo === "content_item") {
           if (!target.contentItemId) {
-            throw new BadRequestException("This template applies to a content_item — provide contentItemId");
+            throw new BadRequestException(
+              "This template applies to a content_item — provide contentItemId",
+            );
           }
           const [ci] = await this.repo.findContentItemById(companyId, target.contentItemId, tx);
           if (!ci) throw new NotFoundException(`Content item not found: ${target.contentItemId}`);
@@ -325,12 +318,18 @@ export class WorkflowService {
             tx,
           );
           if (task) rootTasksSpawned++;
-          else this.logger.warn("applyTemplate createTask no-op (dedup collision)", { stepId: step.id, instanceId: instance.id });
+          else
+            this.logger.warn("applyTemplate createTask no-op (dedup collision)", {
+              stepId: step.id,
+              instanceId: instance.id,
+            });
         }
         // Published template LUÔN có ≥1 root (DagValidator chặn NO_ROOT/cycle ở publish). 0 task mở = instance
         // kẹt vĩnh viễn → fail to thay vì âm thầm. Rollback toàn bộ tx.
         if (rootNodeKeys.size > 0 && rootTasksSpawned === 0) {
-          throw new InternalServerErrorException("applyTemplate: no root task opened — workflow would stall");
+          throw new InternalServerErrorException(
+            "applyTemplate: no root task opened — workflow would stall",
+          );
         }
 
         await this.audit.record(tx, {
@@ -349,7 +348,13 @@ export class WorkflowService {
 
         await this.outbox.enqueue(tx, {
           eventType: "workflow.started",
-          payload: { instanceId: instance.id, templateId, contentItemId, projectId, createdBy: actorId },
+          payload: {
+            instanceId: instance.id,
+            templateId,
+            contentItemId,
+            projectId,
+            createdBy: actorId,
+          },
         });
 
         return { instance, steps: createdSteps };
@@ -410,7 +415,11 @@ export class WorkflowService {
         const [step] = await this.repo.findStepByIdInTx(companyId, stepId, tx);
         if (!step) throw new NotFoundException(`Step not found: ${stepId}`);
 
-        const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
+        const [instance] = await this.repo.findInstanceByIdInTx(
+          companyId,
+          step.workflowInstanceId,
+          tx,
+        );
         if (!instance) throw new WorkflowNotFoundError("instance", step.workflowInstanceId);
         if (instance.status !== "active") {
           throw new ConflictException(`Workflow is not active (status=${instance.status})`);
@@ -469,9 +478,21 @@ export class WorkflowService {
     // Sequential awaits, NOT Promise.all — node-postgres cannot run concurrent queries on one tx
     // connection (Promise.all triggers a pg deprecation warning and breaks on pg@9). Staying on
     // the caller's tx keeps these ready for the per-instance FOR UPDATE lock added in 3c-iii.
-    const defSteps = await this.repo.findDefinitionStepsInTx(companyId, instance.workflowDefinitionId, tx);
-    const deps = await this.repo.findTemplateDependenciesInTx(companyId, instance.workflowDefinitionId, tx);
-    const instanceSteps = await this.repo.findStepsByInstanceIdInTx(companyId, step.workflowInstanceId, tx);
+    const defSteps = await this.repo.findDefinitionStepsInTx(
+      companyId,
+      instance.workflowDefinitionId,
+      tx,
+    );
+    const deps = await this.repo.findTemplateDependenciesInTx(
+      companyId,
+      instance.workflowDefinitionId,
+      tx,
+    );
+    const instanceSteps = await this.repo.findStepsByInstanceIdInTx(
+      companyId,
+      step.workflowInstanceId,
+      tx,
+    );
     return allDependenciesApproved(
       { nodeKey: step.nodeKey, stepCode: step.stepCode },
       {
@@ -502,12 +523,18 @@ export class WorkflowService {
     // No node_key (legacy / un-snapshotted step) → no def-step resolvable → no checklist exists → not
     // gated (vacuously complete). Log so this rare path is visible if a future spawn skips the snapshot.
     if (!step.nodeKey) {
-      this.logger.debug(`resolveChecklistComplete: step ${step.id} has no node_key — checklist gate skipped`);
+      this.logger.debug(
+        `resolveChecklistComplete: step ${step.id} has no node_key — checklist gate skipped`,
+      );
       return true;
     }
     const [row] = await this.repo.countUnmetRequiredChecklistItemsForStepInTx(
       companyId,
-      { workflowDefinitionId: instance.workflowDefinitionId, nodeKey: step.nodeKey, stepId: step.id },
+      {
+        workflowDefinitionId: instance.workflowDefinitionId,
+        nodeKey: step.nodeKey,
+        stepId: step.id,
+      },
       tx,
     );
     // count(*) ALWAYS returns one row; a missing row signals a query/driver fault → fail CLOSED
@@ -530,7 +557,11 @@ export class WorkflowService {
         const [step] = await this.repo.findStepByIdInTx(companyId, stepId, tx);
         if (!step) throw new NotFoundException(`Step not found: ${stepId}`);
 
-        const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
+        const [instance] = await this.repo.findInstanceByIdInTx(
+          companyId,
+          step.workflowInstanceId,
+          tx,
+        );
         if (!instance) throw new WorkflowNotFoundError("instance", step.workflowInstanceId);
 
         // Sequential awaits (one pg connection per tx): resolve deps, then the revision lock.
@@ -600,7 +631,11 @@ export class WorkflowService {
         const [step] = await this.repo.findStepByIdForUpdateInTx(companyId, stepId, tx);
         if (!step) throw new NotFoundException(`Step not found: ${stepId}`);
 
-        const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
+        const [instance] = await this.repo.findInstanceByIdInTx(
+          companyId,
+          step.workflowInstanceId,
+          tx,
+        );
         if (!instance) throw new WorkflowNotFoundError("instance", step.workflowInstanceId);
 
         // Sequential awaits (one pg connection per tx): resolve deps, the revision lock, then the
@@ -612,7 +647,12 @@ export class WorkflowService {
           tx,
         );
         const stepLocked = await this.locks.isStepLocked(companyId, stepId, tx);
-        const checklistComplete = await this.resolveChecklistComplete(companyId, step, instance, tx);
+        const checklistComplete = await this.resolveChecklistComplete(
+          companyId,
+          step,
+          instance,
+          tx,
+        );
         try {
           this.fsm.validateServiceTransition({
             step: toFsmStep(step),
@@ -711,7 +751,11 @@ export class WorkflowService {
         // No node_key → no resolvable def-step checklist (legacy/un-snapshotted) → empty (not gated).
         if (!step.nodeKey) return { stepId, items: [] };
 
-        const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
+        const [instance] = await this.repo.findInstanceByIdInTx(
+          companyId,
+          step.workflowInstanceId,
+          tx,
+        );
         if (!instance) throw new WorkflowNotFoundError("instance", step.workflowInstanceId);
 
         const items = await this.repo.findChecklistItemsForStepInTx(
@@ -755,7 +799,11 @@ export class WorkflowService {
         const [step] = await this.repo.findStepByIdForUpdateInTx(companyId, stepId, tx);
         if (!step) throw new NotFoundException(`Step not found: ${stepId}`);
 
-        const [instance] = await this.repo.findInstanceByIdInTx(companyId, step.workflowInstanceId, tx);
+        const [instance] = await this.repo.findInstanceByIdInTx(
+          companyId,
+          step.workflowInstanceId,
+          tx,
+        );
         if (!instance) throw new WorkflowNotFoundError("instance", step.workflowInstanceId);
         if (instance.status !== "active") {
           throw new ConflictException(`Workflow is not active (status=${instance.status})`);
@@ -767,7 +815,8 @@ export class WorkflowService {
         }
 
         // Cross-item guard: the item must belong to a checklist of this step's def-step (node_key).
-        if (!step.nodeKey) throw new NotFoundException(`Checklist item not found for step: ${itemId}`);
+        if (!step.nodeKey)
+          throw new NotFoundException(`Checklist item not found for step: ${itemId}`);
         const [item] = await this.repo.findChecklistItemForStepInTx(
           companyId,
           { workflowDefinitionId: instance.workflowDefinitionId, nodeKey: step.nodeKey, itemId },

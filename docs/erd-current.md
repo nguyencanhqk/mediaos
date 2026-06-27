@@ -1,597 +1,425 @@
-# MediaOS — ERD đầy đủ (theo code hiện tại)
+# ERD — Thiết kế DB hiện tại (theo `docs/DB`) — MediaOS
 
-> **Sơ đồ quan hệ dữ liệu ĐẦY ĐỦ** dựng trực tiếp từ 25 file schema Drizzle (`apps/api/src/db/schema/`).
-> Bổ sung cho ERD "representative subset" ở [`SYSTEM-DESIGN.md §14`](./SYSTEM-DESIGN.md#14-mô-hình-dữ-liệu-erd).
-> Mốc đối chiếu: git `040dd82`. Tách theo domain vì mermaid `erDiagram` không hỗ trợ subgraph.
+> **Nguồn sự thật = bộ thiết kế `docs/DB/DB-01…10`** (gold-standard). Đây là **thiết kế CHUẨN** cho 7 module MVP + Foundation: AUTH · HR · ATT · LEAVE · TASK · DASH · NOTI. Tài liệu này tổng hợp ERD + bảng/cột/quan hệ cấp trên; field/constraint chi tiết từng module: xem DB-02…08.
+> ⚠️ **Code hiện thực hoá đang LỆCH & LẪN bảng hướng cũ** (media/finance/payroll…). Phần đối chiếu code↔thiết kế: **[§Phụ lục A](#phụ-lục-a--trạng-thái-hiện-thực-hoá-code--thiết-kế)**. Liệt kê bảng thật trong DB (gồm parked): xem lịch sử git của file này hoặc đọc thẳng `apps/api/src/db/schema/`.
+> **Cập nhật:** 2026-06-26.
 
-## Quy ước đọc
+## Bất biến DB (DECISIONS-02 §2–3)
 
-- **`||--o{`** = 1‑nhiều (cha có 0..n con) · **`}o--||`** = nhiều‑1 · **`}o--o{`** = nhiều‑nhiều (qua bảng nối).
-- **Mọi bảng tenant-scoped** đều có `company_id NOT NULL → companies(id)` + FORCE RLS. Để giảm nhiễu, cạnh `→ companies` **không vẽ lặp** trong từng domain (chỉ vẽ ở sơ đồ tổng).
-- 🔒 = mã hóa envelope · 📋 = catalog global (no RLS) · 🔁 = append-only (app chỉ SELECT/INSERT) · 🔑 = self-FK.
-- **Polymorphic** (`*_type` + `*_id`, KHÔNG FK DB) ghi bằng ghi chú, không vẽ cạnh cứng.
+1. Mọi bảng có `company_id` PHẢI bật **RLS + FORCE** (BẤT BIẾN #1) — cô lập tenant ở tầng DB.
+2. `audit_logs` (và bảng snapshot) **append-only**: app role REVOKE UPDATE/DELETE (BẤT BIẾN #2).
+3. Secret/mật khẩu **hash/encrypt**, không plaintext (BẤT BIẾN #3).
+4. Audit/event ghi qua **outbox** trong cùng transaction nghiệp vụ.
+5. **Soft-delete** (`deleted_at`/`deleted_by`) cho dữ liệu quan trọng — KHÔNG hard-delete.
 
-## Thống kê thực tế
+## Quy ước
 
-| Domain | Số bảng | Domain | Số bảng |
-|---|---|---|---|
-| Foundation (companies) | 1 | Communication | 6 |
-| Identity & Auth | 8 | HR (chấm công/nghỉ) | 7 |
-| Audit & Events | 5 | Finance | 6 |
-| Org & Employees | 6 | Payroll 🔒 | 6 |
-| Media & Content | 14 | Evaluation | 4 |
-| Workflow & Task | 17 | KPI | 2 |
-| Meeting | 5 | 2FA & Security 🔒 | 3 |
-| Break-glass | 2 | SaaS | 6 |
-| Templates | 2 | Device tokens | 1 |
-| **TỔNG** | | | **~101 bảng** |
+- PK = khoá chính (`id` UUID) · FK = khoá ngoại `{table_singular}_id` · UK = unique · 🔑 self-FK (cây/đệ quy) · 🔒 nhạy cảm (mask theo quyền) · 🗑️ soft-delete · 🔁 append-only.
+- Bảng nghiệp vụ có **bộ cột audit chuẩn**: `created_at/created_by/updated_at/updated_by/deleted_at/deleted_by` (DB-01 §5.4) — bảng dưới chỉ ghi cột đặc thù, ngầm hiểu có audit cols.
+- `company_id` trên hầu hết bảng nghiệp vụ (multi-tenant); bảng global (`permissions`, `modules`, `system_settings`) có thể không có hoặc nullable.
+- Mã nghiệp vụ ở cột `code` (employee_code, project_code, permission_code…). Status = text + CHECK (DB-01 §6.5).
 
-> ⚠️ **Đính chính tài liệu:** SYSTEM-DESIGN.md ghi "~90 bảng" và erd-v2.md là bản kế hoạch cũ — số bảng thực tế đếm từ code là **~101**.
+## Thống kê (thiết kế MVP)
 
----
-
-## 0. Sơ đồ tổng — phụ thuộc giữa các domain
-
-```mermaid
-flowchart TB
-    COMP["companies (tenant root)"]
-    COMP --> IDN["Identity & Auth<br/>users · roles · permissions"]
-    COMP --> EVT["Audit & Events<br/>audit_logs · outbox"]
-    IDN --> ORG["Org & Employees"]
-    IDN --> MED["Media & Content 🔒"]
-    ORG --> MED
-    MED --> WF["Workflow & Task"]
-    WF --> EVAL["Evaluation"]
-    WF --> KPI["KPI"]
-    MED --> FIN["Finance"]
-    WF --> HR["HR (chấm công/nghỉ)"]
-    HR --> PAY["Payroll 🔒"]
-    KPI --> PAY
-    FIN --> PAY
-    IDN --> COMM["Communication"]
-    WF --> COMM
-    MED --> MEET["Meeting"]
-    MED --> SEC["2FA · Security · Break-glass 🔒"]
-    COMP --> SAAS["SaaS · Templates"]
-```
+| Nhóm | Bảng | Nhóm | Bảng |
+| --- | --- | --- | --- |
+| Foundation/System | 9 | LEAVE | 7 |
+| AUTH/RBAC | 8 | TASK | 11 |
+| HR | 11 | NOTI | 5 |
+| ATT | 9 | DASH | 3 |
+| | | **TỔNG** | **63 bảng MVP** |
 
 ---
 
-## 1. Identity & Auth (8 bảng)
+## 0. ERD cấp cao — toàn hệ thống (DB-01 §16)
 
 ```mermaid
 erDiagram
-    companies ||--o{ users : ""
-    users ||--o{ refresh_tokens : ""
-    refresh_tokens ||--o| refresh_tokens : "replaced_by 🔑"
+    companies ||--o{ users : has
+    companies ||--o{ employees : has
+    companies ||--o{ departments : has
+    companies ||--o{ roles : has
+    companies ||--o{ projects : has
+    companies ||--o{ notifications : has
+
+    users ||--o{ user_roles : assigned
+    roles ||--o{ user_roles : contains
+    roles ||--o{ role_permissions : grants
+    permissions ||--o{ role_permissions : included
+
+    users ||--o| employees : linked_to
+    departments ||--o{ employees : contains
+    positions ||--o{ employees : assigned
+    job_levels ||--o{ employees : assigned
+    employees ||--o{ employees : manages
+
+    employees ||--o{ employee_contracts : has
+    employees ||--o{ attendance_records : has
+    employees ||--o{ leave_requests : submits
+    employees ||--o{ project_members : joins
+    employees ||--o{ tasks : assigned
+
+    projects ||--o{ tasks : contains
+    leave_types ||--o{ leave_requests : classifies
+    leave_requests ||--o{ attendance_records : affects
+    shifts ||--o{ attendance_records : applies
+    attendance_records ||--o{ attendance_logs : has
+    users ||--o{ notifications : receives
+```
+
+> **Nguyên tắc liên-module:** AUTH = nền phân quyền · **HR (employees) = trung tâm dữ liệu nhân sự**; ATT/LEAVE/TASK gắn trực tiếp `employee_id` · NOTI = sink event dùng chung · DASH chỉ tổng hợp (không sở hữu dữ liệu gốc).
+
+---
+
+## 1. Foundation / System (DB-01 §7.1, §8 · DB-08)
+
+```mermaid
+erDiagram
+    companies ||--o{ company_settings : ""
+    companies ||--o{ audit_logs : "🔁"
+    companies ||--o{ files : "🗑️"
+    files ||--o{ file_links : ""
+    companies ||--o{ sequence_counters : ""
+```
+
+| Bảng | Mô tả | Cột đặc thù chính |
+| --- | --- | --- |
+| **companies** 🗑️ | Công ty/tenant (gốc) | `company_code` UK · name · legal_name · tax_code · email · phone · address · timezone · status (Active/Inactive/Suspended) |
+| **modules** | Danh mục module | `module_code` (AUTH/HR/ATT/LEAVE/TASK/DASH/NOTI) · name · is_active · sort_order |
+| **company_settings** | Cấu hình theo công ty | company_id · setting_key · setting_value · (override system_settings) |
+| **system_settings** 🌐 | Cấu hình global/default | setting_key · setting_value (global, no company_id) |
+| **audit_logs** 🔁 | Nhật ký thao tác toàn hệ thống | company_id · actor_user_id · actor_employee_id · module_code · action (CREATE/UPDATE/DELETE/APPROVE/REJECT/LOGIN/EXPORT) · entity_type · entity_id · old_values jsonb · new_values jsonb · metadata jsonb(ip/ua/request_id) · created_at |
+| **files** 🗑️ | Metadata file (binary ở storage) | company_id · original_name · stored_name · mime_type · file_size · storage_provider(local/s3/gcs/minio) · storage_path · checksum · uploaded_by · is_private 🔒 |
+| **file_links** | File ↔ entity nghiệp vụ (polymorphic) | file_id · module_code · entity_type · entity_id · link_type(attachment/avatar/contract/document) |
+| **sequence_counters** | Sinh mã tự động | sequence_key(EMPLOYEE_CODE/LEAVE_REQUEST_CODE/PROJECT_CODE) · prefix · current_value · padding_length · reset_policy(NEVER/YEARLY/MONTHLY) |
+| **public_holidays** | Ngày lễ/ngày không làm | holiday_date · name · is_paid · affects_attendance · affects_leave |
+
+---
+
+## 2. AUTH / RBAC (DB-01 §7.2, §9 · DB-02)
+
+```mermaid
+erDiagram
+    companies ||--o{ users : has
+    users ||--o| employees : linked_to
+    users ||--o{ user_roles : has
+    roles ||--o{ user_roles : assigned_to
+    roles ||--o{ role_permissions : has
+    permissions ||--o{ role_permissions : granted
+    users ||--o{ user_sessions : ""
     users ||--o{ password_reset_tokens : ""
-    companies ||--o{ roles : "company_id NULL = system role"
-    roles ||--o{ role_permissions : ""
-    permissions ||--o{ role_permissions : "📋 catalog"
-    users ||--o{ user_roles : ""
-    roles ||--o{ user_roles : ""
-    users ||--o{ user_roles : "granted_by"
-    permissions ||--o{ object_permissions : ""
-    users ||--o{ object_permissions : "granted_by"
-
-    permissions {
-        text action "📋 global, no RLS"
-        text resource_type
-        boolean is_sensitive
-    }
-    role_permissions {
-        uuid role_id FK
-        uuid permission_id FK
-        text effect "ALLOW|DENY"
-    }
-    object_permissions {
-        text subject_type "user|role (polymorphic)"
-        uuid subject_id "no FK"
-        text object_type "polymorphic"
-        uuid object_id "no FK"
-        text effect "ALLOW|DENY"
-    }
+    users ||--o{ login_logs : ""
 ```
 
-- `permissions` 📋 **global catalog** (không `company_id`, không RLS). `role_permissions` RLS qua JOIN `roles`.
-- `roles.company_id` **nullable** — NULL = system role (seed, app không ghi được).
-- `object_permissions`: subject/object là **polymorphic** (không FK DB) — deny-overrides ở app layer.
+### users 🗑️
+
+| Cột | Kiểu | Ghi chú |
+| --- | --- | --- |
+| id | UUID | PK |
+| company_id | UUID | FK→companies.id |
+| email | VARCHAR | UK (company_id, email) |
+| password_hash | VARCHAR | 🔒 hash (BẤT BIẾN #3) |
+| display_name | VARCHAR | tên hiển thị |
+| avatar_file_id | UUID | FK→files.id, nullable |
+| status | VARCHAR | Pending Activation/Active/Inactive/Locked/Deleted |
+| last_login_at · password_changed_at | TIMESTAMP | nullable |
+| + audit cols | | created/updated/deleted_* |
+
+### roles 🗑️
+
+`id` PK · `company_id` (NULL=global) · `role_code` UK(company_id,role_code) **SUPER_ADMIN/COMPANY_ADMIN/HR/MANAGER/EMPLOYEE** · name · description · is_system_role · status(Active/Inactive).
+
+### permissions 🌐
+
+`id` PK · `module_code` · `permission_code` UK (vd `HR.EMPLOYEE.VIEW`) · `resource` · `action`(VIEW/CREATE/UPDATE/DELETE/APPROVE) · is_active. (Global — không company_id.)
+
+### user_roles
+
+`id` PK · company_id · user_id FK→users · role_id FK→roles · assigned_by · assigned_at · expired_at(nullable) · is_active. **UK (user_id, role_id)**.
+
+### role_permissions
+
+`id` PK · company_id(nullable) · role_id FK→roles · permission_id FK→permissions · `data_scope`(Own/Team/Department/Project/Company/System) · conditions jsonb. **UK (role_id, permission_id, data_scope)**.
+
+### user_sessions
+
+`id` PK · user_id FK→users · `refresh_token_hash` 🔒 · ip_address · user_agent · device_id · expired_at · revoked_at · created_at.
+
+### password_reset_tokens
+
+`id` PK · user_id FK→users · `token_hash` 🔒 · purpose(ResetPassword/ActivateAccount) · expires_at · used_at.
+
+### login_logs 🔁
+
+`id` PK · company_id(nullable, pre-auth) · user_id(nullable) · email · login_status(Success/Failed/Blocked) · failure_reason · ip_address · user_agent · created_at.
 
 ---
 
-## 2. Audit & Events (5 bảng)
+## 3. HR (DB-01 §7.3, §10 · DB-03)
 
 ```mermaid
 erDiagram
-    companies ||--o{ audit_logs : "🔁 append-only"
-    companies ||--o{ outbox_events : ""
-    outbox_events ||--o{ processed_events : "event_id (idempotency)"
-    outbox_events ||--o{ dead_letter_events : "event_id"
-    companies ||--o{ dead_letter_alerts : "🔁 append-only"
-
-    audit_logs {
-        uuid actor_user_id FK
-        text object_type "polymorphic (~130 enum)"
-        uuid object_id "no FK, nullable"
-        jsonb before "no secret (BẤT BIẾN #3)"
-        jsonb after
-    }
-    outbox_events {
-        text status "pending|processing|done|failed"
-        timestamptz available_at
-    }
-    processed_events {
-        text consumer_name "PK part"
-        uuid event_id "PK part — no RLS"
-    }
+    departments ||--o{ departments : "🔑 parent"
+    departments ||--o{ employees : contains
+    positions ||--o{ employees : assigned
+    job_levels ||--o{ employees : assigned
+    employees ||--o{ employees : "🔑 direct_manager"
+    users ||--o| employees : linked_to
+    employees ||--o{ employee_contracts : has
+    contract_types ||--o{ employee_contracts : ""
+    employees ||--o{ employee_status_histories : "🔁"
+    employees ||--o{ profile_change_requests : submits
+    profile_change_requests ||--o{ profile_change_request_items : contains
 ```
 
-- `audit_logs` 🔁 + polymorphic `object_type/object_id` (lưới an toàn = CHECK enum + composite index).
-- `processed_events` là **infra** (no `company_id`, no RLS) — idempotency `(consumer_name, event_id)`.
+### employees 🗑️ (trung tâm dữ liệu nhân sự)
+
+| Cột | Kiểu | Ghi chú |
+| --- | --- | --- |
+| id | UUID | PK |
+| company_id | UUID | FK→companies.id |
+| user_id | UUID | FK→users.id (nullable — employee không bắt buộc có account) |
+| employee_code | VARCHAR | UK (company_id, employee_code) |
+| full_name · first_name · last_name | VARCHAR | |
+| gender · date_of_birth | | 🔒 |
+| personal_email · phone · address | | 🔒 |
+| company_email | VARCHAR | UK (company_id, company_email) |
+| department_id · position_id · job_level_id | UUID | FK |
+| direct_manager_id | UUID | 🔑 FK→employees.id, nullable |
+| joined_date · official_date · resigned_date | DATE | |
+| employment_status | VARCHAR | Probation/Official/Temporarily Suspended/Resigned/Terminated |
+| avatar_file_id | UUID | FK→files.id |
+| + audit cols | | |
+
+### departments 🗑️
+
+`id` PK · company_id · `parent_department_id` 🔑 FK→departments · department_code · name · manager_employee_id FK→employees · status(Active/Inactive) · sort_order.
+
+### positions 🗑️
+
+`id` PK · company_id · position_code · name · description · status.
+
+### job_levels 🗑️
+
+`id` PK · company_id · level_code(INTERN/JUNIOR/SENIOR/MANAGER) · name · rank_order · status.
+
+### contract_types
+
+`id` PK · company_id · code · name · (loại hợp đồng).
+
+### employee_contracts 🗑️
+
+`id` PK · company_id · employee_id FK→employees · contract_code · contract_type_id FK→contract_types · start_date · end_date · signed_date · status(Draft/Active/Expired/Terminated) · file_id FK→files 🔒 · note.
+
+### employee_files
+
+Liên kết file hồ sơ nhân viên (qua `file_links` hoặc bảng riêng) · 🔒 file is_sensitive.
+
+### employee_status_histories 🔁
+
+`id` PK · company_id · employee_id FK→employees · old_status · new_status · reason · changed_by · changed_at.
+
+### profile_change_requests
+
+`id` PK · company_id · employee_id FK→employees · requested_by FK→users · status(Pending/Approved/Rejected/Cancelled) · reason · reviewed_by · reviewed_at · review_note.
+
+### profile_change_request_items
+
+`id` PK · request_id FK→profile_change_requests · field_name · old_value 🔒 · new_value · value_type.
+
+### employee_code_configs
+
+`id` PK · company_id · config_name · prefix_pattern(EMP/{DEPT}/{YEAR}-EMP) · number_length · reset_policy · allow_manual_override · is_active.
 
 ---
 
-## 3. Org & Employees (6 bảng)
+## 4. ATT — Chấm công (DB-01 §7.4, §11 · DB-04)
 
 ```mermaid
 erDiagram
-    companies ||--o{ org_units : ""
-    org_units ||--o| org_units : "parent_id 🔑 (cây)"
-    org_units ||--o{ teams : "set null"
-    org_units ||--o{ positions : "set null"
-    teams ||--o{ team_members : ""
-    users ||--o{ team_members : ""
-    users ||--o| org_units : "head_user_id (set null)"
-    users ||--o| teams : "leader_user_id (set null)"
-    roles ||--o{ positions : "default_role_id (set null)"
-    users ||--o{ employee_profiles : ""
-    org_units ||--o{ employee_profiles : "set null"
-    positions ||--o{ employee_profiles : "set null"
-    users ||--o{ employee_profiles : "direct_manager_id 🔑→users"
-    users ||--o{ employee_manager_relations : "employee + manager"
-
-    employee_profiles {
-        numeric base_salary "🔐 mask: view-salary"
-        text employee_code
-    }
-    employee_manager_relations {
-        text relation_type "direct|project|professional|temporary"
-        text scope_type "polymorphic"
-        check no_self_manage "employee != manager"
-    }
+    shifts ||--o{ shift_assignments : assigned
+    shifts ||--o{ attendance_records : applies
+    attendance_rules ||--o{ attendance_records : applied
+    employees ||--o{ attendance_records : has
+    attendance_records ||--o{ attendance_logs : has
+    attendance_records ||--o{ attendance_adjustment_requests : adjusted
+    employees ||--o{ remote_work_requests : submits
+    remote_work_requests ||--o{ attendance_records : affects
 ```
+
+### attendance_records 🗑️ (bản ghi công tổng hợp theo ngày/ca)
+
+`id` PK · company_id · `employee_id` FK→employees · work_date · shift_id FK→shifts(nullable) · check_in_at · check_out_at · total_working_minutes · required_working_minutes · late_minutes · early_leave_minutes · missing_minutes · status(Present/Late/Absent/Leave/Remote Work/…) · source(WEB/MOBILE/MANUAL/AUTO/REMOTE/DEVICE) · leave_request_id FK→leave_requests(nullable) · remote_work_request_id · applied_rule_id · note · + audit. **UK (company_id, employee_id, work_date, shift_id)**.
+
+| Bảng | Mô tả | Cột chính |
+| --- | --- | --- |
+| **shifts** 🗑️ | Ca làm việc | shift_code · start_time · end_time · break_*_time · required_working_minutes · allowed_late_minutes · allowed_early_leave_minutes · is_flexible · flexible_checkin_from/to |
+| **shift_assignments** | Gán ca (company/dept/employee) | shift_id · assignment_type(Company/Department/Employee) · department_id · employee_id · effective_from/to · priority |
+| **attendance_rules** | Rule chấm công | rule_name · scope_type · require_check_in/out · require_gps · allow_remote_checkin · allow_auto_attendance · allow_adjustment_request · rule_config jsonb · priority |
+| **attendance_logs** 🔁 | Log check-in/out thô | attendance_record_id · employee_id · log_type(CHECK_IN/CHECK_OUT) · log_time · source · ip_address · device_info jsonb · latitude · longitude |
+| **attendance_adjustment_requests** | Yêu cầu điều chỉnh công | employee_id · attendance_record_id · request_type(Missing Check-in/out/Remote/Fix Time) · reason · status(Pending/Approved/Rejected/Cancelled) · submitted_by · reviewed_by |
+| **attendance_adjustment_items** | Chi tiết điều chỉnh | (field/old/new theo từng đơn) |
+| **remote_work_requests** | Remote/công tác (thuộc ATT) | employee_id · request_code · work_type(Remote/Business Trip/Outside Office) · start_date/end_date · reason · status · rule_mode(AUTO_ATTENDANCE/SELF_CHECK_IN) |
+| **remote_work_request_approvals** | Lịch sử duyệt remote | request_id · approver · action · acted_at |
 
 ---
 
-## 4. Media & Content (14 bảng) 🔒
+## 5. LEAVE — Nghỉ phép (DB-01 §7.5, §12 · DB-05)
 
 ```mermaid
 erDiagram
-    platforms ||--o{ channels : "📋 restrict"
-    companies ||--o{ channels : ""
-    channels ||--o{ channel_members : ""
-    users ||--o{ channel_members : ""
-    platforms ||--o{ platform_accounts : "📋 restrict"
-    channels }o--o{ platform_accounts : "via channel_accounts (M:N)"
-    channels ||--o{ channel_accounts : ""
-    platform_accounts ||--o{ channel_accounts : "cascade"
-    companies ||--o{ projects : ""
-    org_units ||--o{ projects : "set null"
-    projects ||--o{ project_channels : ""
-    channels ||--o{ project_channels : ""
-    projects ||--o{ project_teams : ""
-    teams ||--o{ project_teams : ""
-    projects ||--o{ project_members : ""
-    users ||--o{ project_members : ""
-    companies ||--o{ content_types : ""
-    projects ||--o{ content_items : ""
-    content_types ||--o{ content_items : "set null"
-    channels ||--o{ content_items : "main_channel_id (set null)"
-    content_items ||--o{ content_channels : ""
-    channels ||--o{ content_channels : ""
-    platforms ||--o{ content_channels : "restrict"
-    content_items ||--o{ content_assets : "version chain"
-
-    platform_accounts {
-        bytea secret_ciphertext "🔒 envelope"
-        bytea encrypted_dek "🔒"
-        bytea iv_nonce "len=12"
-        bytea auth_tag "len=16"
-        text recovery_email "🔐 PII, no DTO"
-    }
-    channel_accounts {
-        text relation_type "immutable, hard-DELETE"
-        uniqueIndex "company+channel+account+relation_type"
-    }
-    content_assets {
-        uuid version_group_id "🔑 chain"
-        uuid parent_asset_id "🔑 nullable"
-        boolean is_current "one-current uq"
-        uuid superseded_by
-    }
+    leave_types ||--o{ leave_requests : classifies
+    leave_types ||--o{ leave_policies : configured
+    leave_types ||--o{ leave_balances : balances
+    employees ||--o{ leave_requests : submits
+    employees ||--o{ leave_balances : owns
+    leave_balances ||--o{ leave_balance_transactions : "🔁 ledger"
+    leave_requests ||--o{ leave_request_approvals : approved
+    leave_requests ||--o{ leave_request_days : expands
+    leave_request_days ||--o{ attendance_records : syncs
 ```
 
-- **Đính chính ERD chính:** `platform_accounts ↔ channels` là **M:N qua `channel_accounts`**, KHÔNG phải FK trực tiếp.
-- `encryption_keys` 📋 (global KEK registry) đứng riêng — xem domain Security.
-- `content_assets`: chuỗi version (`version_group_id` + `parent_asset_id` + `is_current` + `superseded_by`), unique 1‑current.
+### leave_requests 🗑️
+
+`id` PK · company_id · `leave_request_code` · `employee_id` FK→employees · leave_type_id FK→leave_types · duration_type(Full Day/Half Day/Hourly/Multiple Days) · start_date · end_date · start_time · end_time · total_days · total_hours · reason · status(Draft/Pending/Approved/Rejected/Cancelled/Revoked) · current_approver_id · submitted_at/approved_at/rejected_at/cancelled_at · + audit.
+
+| Bảng | Mô tả | Cột chính |
+| --- | --- | --- |
+| **leave_types** 🗑️ | Loại nghỉ | leave_type_code(ANNUAL/SICK/UNPAID) · is_paid · deduct_balance · require_attachment |
+| **leave_policies** | Chính sách nghỉ | leave_type_id · scope_type(Company/Department/Employee/JobLevel) · annual_quota_days · allow_negative_balance · carry_forward_allowed · max_carry_forward_days · policy_config jsonb |
+| **leave_balances** | Số dư phép NV | employee_id · leave_type_id · year · granted_days · used_days · pending_days · adjusted_days · carried_forward_days · remaining_days. **UK (company_id, employee_id, leave_type_id, year)** |
+| **leave_balance_transactions** 🔁 | Ledger biến động phép | leave_balance_id · transaction_type(GRANT/USE/REFUND/ADJUST/EXPIRE/CARRY_OVER) · days · reference_type(LeaveRequest/Manual/System) · reference_id |
+| **leave_request_approvals** | Lịch sử duyệt đơn | leave_request_id · approver_user_id · action(APPROVE/REJECT/CANCEL/REVOKE) · acted_at |
+| **leave_request_days** | Chi tiết từng ngày nghỉ | leave_request_id · employee_id · leave_date · duration_type · leave_minutes · attendance_record_id FK→attendance_records (đồng bộ ATT) |
 
 ---
 
-## 5. Workflow & Task (17 bảng)
+## 6. TASK — Công việc & dự án (DB-01 §7.6, §13 · DB-06)
 
 ```mermaid
 erDiagram
-    companies ||--o{ workflow_definitions : ""
-    workflow_definitions ||--o{ workflow_definition_steps : ""
-    workflow_definition_steps ||--o| checklists : "default_checklist_id 🔁circular"
-    checklists ||--o| workflow_definition_steps : "wf_def_step_id 🔁circular"
-    checklists ||--o{ checklist_items : ""
-    workflow_definitions ||--o{ workflow_step_dependencies : "DAG edges"
-    workflow_definition_steps ||--o{ workflow_step_dependencies : "from + to (no self-loop)"
-    workflow_definitions ||--o{ step_transitions : "FSM"
-    workflow_definitions ||--o{ workflow_instances : ""
-    content_items ||--o{ workflow_instances : "cascade"
-    projects ||--o{ workflow_instances : "cascade (XOR content_item)"
-    workflow_instances ||--o{ workflow_steps : ""
-    users ||--o{ workflow_steps : "assignee + reviewer (set null)"
-    workflow_steps ||--o{ workflow_step_checklist_states : ""
-    checklist_items ||--o{ workflow_step_checklist_states : ""
-    workflow_steps ||--o{ workflow_step_instance_locks : "locked + caused_by"
-    workflow_steps ||--o{ approval_requests : ""
-    approval_requests ||--o{ approval_steps : "🔁 append-only"
-    workflow_steps ||--o{ approval_rules : "level → approver"
-    workflow_steps ||--o{ defects : "🔁"
-    approval_steps ||--o| defects : "caused_by (set null)"
-    workflow_steps ||--o{ tasks : "set null (hub)"
-    workflow_instances ||--o{ tasks : "set null"
-    content_items ||--o{ tasks : "set null"
-    projects ||--o{ tasks : "set null"
-    tasks ||--o{ task_comments : "🔁"
-    tasks ||--o{ task_attachments : "🔁 soft-del"
-
-    workflow_instances {
-        check target "content_item XOR project = 1"
-    }
-    workflow_steps {
-        text status "ADR-0016: consumer ghi approved/revision"
-    }
-    tasks {
-        text task_type "8 loại (hub BẤT BIẾN #4)"
-        uniqueIndex dedup_key "company+step+revision_round"
-    }
-    approval_steps {
-        text decision "approved|revision_requested"
-        uniqueIndex "request + level"
-    }
+    projects ||--o{ project_members : has
+    employees ||--o{ project_members : joins
+    projects ||--o{ tasks : contains
+    employees ||--o{ tasks : main_assignee
+    tasks ||--o{ tasks : "🔑 subtask"
+    tasks ||--o{ task_assignees : assigned
+    tasks ||--o{ task_watchers : watched
+    tasks ||--o{ task_comments : has
+    task_comments ||--o{ task_comments : "🔑 reply"
+    tasks ||--o{ task_checklists : has
+    task_checklists ||--o{ task_checklist_items : contains
+    tasks ||--o{ task_activity_logs : "🔁 logs"
 ```
 
-- `workflow_definition_steps ⇄ checklists`: **FK vòng** (Drizzle lazy-thunk).
-- `workflow_instances`: **exactly-one** target `content_item_id XOR project_id`.
-- ADR-0016: `approval_requests/steps` = nguồn sự thật; `workflow_steps.status` là projection.
-- `tasks` = hub thống nhất (FK thật tới workflow_step/instance/content/project, đều `set null`).
+### tasks 🗑️
+
+`id` PK · company_id · project_id FK→projects(nullable) · `task_code` · title · description · creator_user_id · reporter_employee_id · `main_assignee_employee_id` FK→employees · `parent_task_id` 🔑 FK→tasks · priority(Low/Medium/High/Urgent) · status(Todo/In Progress/In Review/Done/Cancelled) · due_date · start_date · completed_at · + audit. *(Overdue = dẫn xuất từ due_date, KHÔNG lưu cứng.)*
+
+| Bảng | Mô tả | Cột chính |
+| --- | --- | --- |
+| **projects** 🗑️ | Dự án | project_code · name · owner_employee_id · manager_employee_id · start/end_date · status(Planning/Active/On Hold/Completed/Cancelled/Archived) · priority |
+| **project_members** | Thành viên dự án | project_id · employee_id · project_role(Owner/Manager/Member/Watcher) · status. **UK (project_id, employee_id)** |
+| **project_files** | File dự án | project_id · file_id |
+| **task_assignees** | Nhiều người phụ trách | task_id · employee_id · role(Main/Co-assignee) |
+| **task_watchers** | Người theo dõi | task_id · employee_id |
+| **task_comments** 🗑️ | Bình luận (có reply) | task_id · author_user_id · parent_comment_id 🔑 · content · mentioned_user_ids jsonb |
+| **task_checklists** | Checklist | task_id · title · sort_order |
+| **task_checklist_items** | Item checklist | checklist_id · content · is_done · done_by · done_at |
+| **task_files** | File task | task_id · file_id |
+| **task_activity_logs** 🔁 | Log hoạt động | project_id · task_id · actor_user_id · action(CREATED/UPDATED/ASSIGNED/STATUS_CHANGED/COMMENTED) · old/new_values jsonb |
 
 ---
 
-## 6. Communication (6 bảng)
+## 7. NOTI — Thông báo (DB-01 §7.7, §14 · DB-07)
 
 ```mermaid
 erDiagram
-    companies ||--o{ notifications : ""
-    users ||--o{ notifications : ""
-    companies ||--o{ notification_rules : "🔁"
-    companies ||--o{ notification_preferences : ""
-    users ||--o{ notification_preferences : ""
-    companies ||--o{ chat_rooms : ""
-    projects ||--o| chat_rooms : "ref_id (set null)"
-    channels ||--o| chat_rooms : "set null"
-    org_units ||--o| chat_rooms : "set null"
-    chat_rooms ||--o{ chat_room_members : ""
-    users ||--o{ chat_room_members : ""
-    chat_rooms ||--o{ chat_messages : "🔁 body immutable"
-    users ||--o{ chat_messages : "sender + pinned_by"
-
-    notifications {
-        text ref_type "polymorphic + CHECK enum"
-        uuid ref_id "no FK"
-    }
-    chat_rooms {
-        text room_type "project|direct|group|channel|department"
-        text direct_key "DM dedup"
-    }
-    chat_messages {
-        bigint seq "GENERATED (total order)"
-        jsonb mentions
-    }
+    notification_events ||--o{ notification_templates : uses
+    notification_events ||--o{ notifications : emits
+    users ||--o{ notifications : receives
+    notifications ||--o{ notification_delivery_logs : "🔁 delivered"
 ```
 
-- `chat_rooms`: scope **exactly-one** trong {ref_id(project), channel_id, org_unit_id, direct_key} (partial unique).
-- `chat_messages` 🔁: chỉ `pinned_at/pinned_by` được UPDATE (column-grant); body/sender bất biến.
+| Bảng | Mô tả | Cột chính |
+| --- | --- | --- |
+| **notification_events** | Danh mục event | event_code(LEAVE_REQUEST_SUBMITTED/TASK_ASSIGNED…) · module_code · default_priority(Low/Normal/High/Urgent/Critical) · is_active |
+| **notification_templates** | Template | company_id(NULL=global) · event_id · channel(IN_APP/EMAIL/PUSH) · title_template · body_template · variables_schema jsonb |
+| **notifications** 🗑️ | Thông báo tới user | company_id · recipient_user_id · recipient_employee_id · module_code · event_code · title · body · priority · status(Unread/Read/Hidden/Archived/Deleted) · target_type/target_id/target_url(deep-link) · payload jsonb · read_at |
+| **notification_delivery_logs** 🔁 | Log gửi theo kênh | notification_id · channel(IN_APP/EMAIL/PUSH/REALTIME) · status(Pending/Sent/Failed) · provider · provider_response jsonb · error_message · sent_at |
+| **notification_preferences** | Cấu hình nhận (phase sau) | user_id · event/channel · enabled |
 
 ---
 
-## 7. HR — Chấm công & Nghỉ phép (7 bảng)
+## 8. DASH — Dashboard (DB-01 §7.8, §15 · DB-07)
 
-```mermaid
-erDiagram
-    companies ||--o{ work_schedules : ""
-    work_schedules ||--o{ attendance_records : "set null"
-    users ||--o{ attendance_records : ""
-    attendance_records ||--o{ attendance_adjustment_requests : "set null"
-    users ||--o{ attendance_adjustment_requests : ""
-    tasks ||--o| attendance_adjustment_requests : "task_id (hub, set null)"
-    companies ||--o{ attendance_periods : ""
-    attendance_periods ||--o{ payroll_periods : "set null (→ Payroll)"
-    companies ||--o{ leave_types : ""
-    leave_types ||--o{ leave_requests : "restrict"
-    users ||--o{ leave_requests : ""
-    tasks ||--o| leave_requests : "task_id (hub, set null)"
-    leave_types ||--o{ leave_balances : "cascade"
-    users ||--o{ leave_balances : ""
+> DASH **không sở hữu dữ liệu nghiệp vụ gốc** — chỉ cấu hình widget + cache; module nguồn ép data scope.
 
-    attendance_periods {
-        text status "open|locked"
-        text period_month "YYYY-MM (CHECK)"
-    }
-    leave_balances {
-        numeric remaining_days "GENERATED (total - used)"
-    }
-    leave_requests {
-        check dates "start_date <= end_date"
-    }
-```
-
-- `attendance_adjustment_requests` & `leave_requests` đều phát **task** vào hub (`task_type='hr'`).
-- `attendance_periods → payroll_periods`: kỳ chấm công khóa trước khi chạy lương.
+| Bảng | Mô tả | Cột chính |
+| --- | --- | --- |
+| **dashboard_widgets** | Danh mục widget | widget_code(DASH-WIDGET-001) · module_code · required_permission_code · default_data_scope(Own/Team/Company/System) · component_key |
+| **dashboard_widget_configs** | Cấu hình theo company/role/user | company_id · widget_id · role_id(nullable) · user_id(nullable) · is_enabled · sort_order · config jsonb |
+| **dashboard_widget_cache** | Cache số liệu (nếu cần) | company_id · widget_id · cache_key · data jsonb · expired_at |
 
 ---
 
-## 8. Finance (6 bảng)
+## 9. Quan hệ liên-module quan trọng (DB-01 §20)
 
-```mermaid
-erDiagram
-    platforms ||--o{ revenue_records : "set null"
-    channels ||--o{ revenue_records : "set null"
-    projects ||--o{ revenue_records : "set null"
-    content_items ||--o{ revenue_records : "set null"
-    users ||--o{ revenue_records : "entered_by (NO ACTION)"
-    revenue_records ||--o| revenue_records : "replaces_record_id 🔑"
-    org_units ||--o{ cost_records : "set null"
-    teams ||--o{ cost_records : "set null"
-    projects ||--o{ cost_records : "set null"
-    channels ||--o{ cost_records : "set null"
-    content_items ||--o{ cost_records : "set null"
-    users ||--o{ cost_records : "user + entered_by"
-    cost_records ||--o| cost_records : "replaces_record_id 🔑"
-    cost_records ||--o{ cost_allocations : ""
-    cost_records ||--o| expense_requests : "lineage (set null)"
-    expense_requests ||--o{ expense_approvals : "🔁"
-    users ||--o{ expense_approvals : ""
-    tasks ||--o| expense_requests : "task_id (hub, set null)"
-    companies ||--o{ profit_snapshots : "🔁"
+| Cạnh | Khoá | Ý nghĩa |
+| --- | --- | --- |
+| AUTH→HR | `users.id → employees.user_id` (1-1, nullable) | employee cần user để đăng nhập/chấm công/xin nghỉ/nhận task |
+| HR→ATT | `employees.id → attendance_records.employee_id` | chấm công luôn gắn employee; NV nghỉ việc không chấm công |
+| HR→LEAVE | `employees.id → leave_requests/leave_balances.employee_id` | đơn nghỉ + số dư gắn employee |
+| LEAVE↔ATT | `leave_requests.id → attendance_records.leave_request_id` · `leave_request_days.attendance_record_id` | đơn Approved tạo/sửa bản ghi công (status=Leave); hủy/thu hồi → ATT tính lại |
+| HR→TASK | `employees.id → projects.owner/ tasks.main_assignee_employee_id` | owner/assignee là employee; manager scope dựa `direct_manager_id` |
+| *→NOTI | `event → notification_events → notifications` | mọi module phát event → NOTI |
+| *→DASH | query/tổng hợp | DASH chỉ đọc, ép permission + data scope |
 
-    revenue_records {
-        text entry_kind "🔁 original|adjustment|void"
-        uuid replaces_record_id "uq (1 lần)"
-        check chain "original⟺replaces NULL"
-    }
-    cost_allocations {
-        text allocation_target_type "polymorphic (6 loại)"
-        uuid allocation_target_id "no FK"
-        text allocation_method "6 method"
-    }
-    profit_snapshots {
-        text target_type "company⇒id NULL; con⇒id NOT NULL"
-    }
-```
-
-- `revenue_records` · `cost_records` · `profit_snapshots` · `expense_approvals` đều 🔁 (chuỗi `entry_kind`/`replaces`).
-- `cost_allocations` dùng **polymorphic** target (channel/project/content/team/org_unit/employee) + CHECK enum.
-- Vòng đời chi phí: `expense_requests → (duyệt) → cost_records` (lineage 2 chiều, FK set ở mig 0073).
+**Bảng append-only 🔁:** `audit_logs` · `login_logs` · `attendance_logs` · `leave_balance_transactions` · `employee_status_histories` · `task_activity_logs` · `notification_delivery_logs`.
+**Không cascade-delete** dữ liệu nghiệp vụ (DB-01 §22.4) — dùng soft-delete giữ lịch sử.
 
 ---
 
-## 9. Payroll (6 bảng) 🔒 crown-jewel
+## Phụ lục A — Trạng thái hiện thực hoá (code ↔ thiết kế)
 
-```mermaid
-erDiagram
-    companies ||--o{ salary_profiles : ""
-    users ||--o{ salary_profiles : ""
-    companies ||--o{ payroll_periods : ""
-    attendance_periods ||--o| payroll_periods : "set null"
-    users ||--o{ payroll_periods : "created/approved/published_by"
-    payroll_periods ||--o{ payslips : "🔁"
-    salary_profiles ||--o{ payslips : ""
-    users ||--o{ payslips : ""
-    payslips ||--o{ payslip_items : "🔁"
-    payslips ||--o| payslips : "replaces_payslip_id 🔑"
-    payslips ||--o{ payslip_acknowledgements : ""
-    users ||--o{ payslip_acknowledgements : ""
-    users ||--o{ bonus_penalties : "NO ACTION"
-    tasks ||--o| bonus_penalties : "restrict"
-    defects ||--o| bonus_penalties : "restrict"
-    kpi_results ||--o| bonus_penalties : "restrict"
-    payroll_periods ||--o{ bonus_penalties : "set null (consume)"
+> ⚠️ Code thật trong `apps/api/src/db/schema/` **CHƯA khớp 100%** thiết kế trên và **còn lẫn bảng hướng cũ (media OS)**. Bảng dưới là bản đối chiếu để reconcile dần (đừng coi code là chuẩn).
 
-    salary_profiles {
-        numeric base_salary "🔐 mask view-salary"
-        jsonb allowances "🔐"
-    }
-    payroll_periods {
-        text status "FSM: draft→approved→published"
-        boolean kpi_locked
-    }
-    payslips {
-        text entry_kind "🔁 original|adjustment|void"
-        uniqueIndex "company+period+user WHERE original"
-    }
-    bonus_penalties {
-        text reference_type "task|defect|kpi_result (exactly-one CHECK)"
-        text status "draft|approved|rejected (FSM)"
-    }
-```
+### A1. Đã build & khớp (gần) đúng thiết kế
 
-- `payslips` 🔁: chuỗi `entry_kind` + `replaces_payslip_id`; unique theo `original`.
-- `bonus_penalties`: **exactly-one** reference {task/defect/kpi_result}; consume vào `payroll_period` chỉ khi `approved`.
-- Lương (`base_salary`, `allowances`) 🔐 mask theo quyền `view-salary`; payslip có re-auth gate.
+`companies` · `users` · `roles` · `permissions` · `user_roles` · `role_permissions` · `user_sessions` · `password_reset_tokens` · `login_logs` · `audit_logs` · `files` · `file_links` · `system_settings` · `company_settings` · `sequence_counters` (→ `sequence_counters`) · `public_holidays` · `modules` · `positions` · `profile_change_requests` (+ `employee_code_configs`).
+
+### A2. Lệch TÊN (code khác thiết kế — cần biết khi tra cứu)
+
+| Thiết kế (docs/DB) | Code thật |
+| --- | --- |
+| `departments` | **`org_units`** (+ `teams`, `team_members` — code thêm) |
+| `employees` | **`employee_profiles`** |
+| `shifts` | **`work_schedules`** |
+| `job_levels`, `contract_types` | giữ tên, nằm ở `hr-master.ts` |
+| `permissions.permission_code` | cặp **`(action, resource_type)`** (không có permission_code) |
+| `profile_change_request_items` | gộp vào `profile_change_requests.changed_fields` (jsonb) + `employee_profile_change_histories` |
+
+### A3. Lệch CẤU TRÚC (cần reconcile)
+
+- **ATT/LEAVE/TASK code dùng `user_id`** thay vì `employee_id` như thiết kế → khác mô hình "employee là trung tâm". (Bảng `attendance_records`/`leave_requests`/`tasks` trong code FK→`users`.)
+- **`roles`/`permissions` tối giản:** thiếu `role_code`/`role_type`/`status`/`metadata` (roles) và `permission_code`/`module_code`/`is_active` (permissions).
+- **`users`:** code dùng `full_name` + `status` chữ thường (`active`/`suspended`); thiếu `display_name`/`email_verified_at`/`password_changed_at`/`avatar_file_id`.
+
+### A4. Thiết kế CÓ nhưng code CHƯA build
+
+`employee_contracts` · `employee_files` · `shift_assignments` · `attendance_rules` · `remote_work_requests`(+approvals) · `leave_policies` · `leave_balance_transactions` · `leave_request_approvals` · `leave_request_days` · `notification_events` · `notification_templates` · `notification_delivery_logs` · toàn bộ **DASH** (`dashboard_widgets`/`_configs`/`_cache`). *(ATT/LEAVE/TASK/NOTI ở code mới là bản rút gọn hướng cũ, chưa reconcile.)*
+
+### A5. Code CÒN bảng HƯỚNG CŨ — out-of-scope, cần DỌN (de-media-fy, CLAUDE.md §1)
+
+KHÔNG thuộc thiết kế MVP, còn sót trong DB:
+
+- **media** (`media.ts`): platforms · channels · channel_members · platform_accounts · encryption_keys · channel_accounts · projects(media) · project_channels/teams/members · content_types · content_items · content_channels · content_assets.
+- **finance** (`finance.ts`): revenue_records · cost_records · cost_allocations · profit_snapshots · expense_requests · expense_approvals.
+- **payroll** (`payroll.ts`, Phase 2): salary_profiles · payroll_periods · payslips · payslip_items · bonus_penalties · payslip_acknowledgements.
+- **kpi/evaluation/meeting/chat/workflow** (`kpi.ts`/`evaluation.ts`/`meeting.ts`/`communication.ts` chat · `workflow.ts`/`approval.ts` engine) + **break-glass** (`break-glass.ts`).
+
+> Reconcile-first (CLAUDE.md §STATUS): giữ phần A1, đổi tên/bổ sung theo A2–A4 khi build từng module, **park/dọn** A5. Khi có mâu thuẫn → **`docs/DB` + `docs/spec` là chuẩn**, không phải code.
 
 ---
 
-## 10. Evaluation + KPI (6 bảng)
-
-```mermaid
-erDiagram
-    companies ||--o{ evaluation_templates : ""
-    evaluation_templates ||--o{ evaluation_criteria : ""
-    evaluation_templates ||--o{ evaluation_results : "🔁"
-    workflow_steps ||--o{ evaluation_results : ""
-    users ||--o{ evaluation_results : "subject + evaluator"
-    evaluation_results ||--o{ evaluation_scores : "🔁"
-    evaluation_criteria ||--o{ evaluation_scores : ""
-    companies ||--o{ kpi_definitions : ""
-    kpi_definitions ||--o{ kpi_results : "🔁 snapshot"
-    users ||--o{ kpi_results : "subject_user (XOR team)"
-    teams ||--o{ kpi_results : "subject_team"
-
-    evaluation_criteria {
-        numeric weight "0<w<=100"
-        check "max_score > min_score"
-    }
-    kpi_definitions {
-        jsonb weights "5 thành phần, sum=100 (CHECK)"
-    }
-    kpi_results {
-        check subject "user XOR team"
-        numeric total_score "0-100"
-        timestamptz confirmed_at "NULL = tham chiếu"
-    }
-```
-
-- `kpi_results` 🔁 snapshot: **exactly-one** subject (user XOR team); `confirmed_at` NULL = chưa khóa.
-- `evaluation_results` không có unique → cho phép chấm lại (mỗi lần 1 row mới).
-
----
-
-## 11. Meeting (5 bảng)
-
-```mermaid
-erDiagram
-    companies ||--o{ meeting_rooms : ""
-    meeting_rooms ||--o{ meetings : "set null"
-    users ||--o{ meetings : "organizer (cascade)"
-    meetings ||--o{ meeting_attendees : ""
-    users ||--o{ meeting_attendees : ""
-    meetings ||--o{ meeting_notes : ""
-    users ||--o{ meeting_notes : "author"
-    meetings ||--o{ meeting_tasks : ""
-
-    meetings {
-        text status "scheduled|cancelled|completed"
-    }
-    meeting_tasks {
-        uuid task_id "no FK (task ở bảng tasks — BẤT BIẾN #4)"
-    }
-```
-
-- `meeting_tasks.task_id` là **uuid trần** (không FK) — action item sống ở bảng `tasks` (hub).
-
----
-
-## 12. 2FA · Security · Break-glass (5 bảng) 🔒
-
-```mermaid
-erDiagram
-    encryption_keys ||..o{ user_totp : "📋 KEK registry (no FK)"
-    encryption_keys ||..o{ platform_accounts : "📋 (no FK)"
-    users ||--o| user_totp : ""
-    users ||--o{ user_recovery_codes : ""
-    users ||--o{ security_alerts : "🔁 subject"
-    companies ||--o{ break_glass_grants : ""
-    platform_accounts ||--o{ break_glass_grants : "cascade"
-    users ||--o{ break_glass_grants : "requester + revoked_by"
-    break_glass_grants ||--o{ break_glass_approvals : "🔁 SoD>=2"
-    users ||--o{ break_glass_approvals : "approver"
-
-    user_totp {
-        bytea secret_ciphertext "🔒 envelope"
-        bytea encrypted_dek "🔒"
-        timestamptz enabled_at "NULL = chưa confirm"
-    }
-    user_recovery_codes {
-        text code_hash "SHA-256, không plaintext"
-    }
-    break_glass_grants {
-        int required_approvals ">=2 (SoD)"
-        text status "pending|active|revoked"
-    }
-    break_glass_approvals {
-        check no_self_approve "approver != requester"
-        uniqueIndex "company+grant+approver"
-    }
-```
-
-- `encryption_keys` 📋 global (no `company_id`, no RLS) — `kms_key_id` = đường dẫn Vault, KHÔNG phải key material. Liên kết tới `user_totp`/`platform_accounts` qua `kms_key_id`/`dek_key_version` (logic, không FK).
-- `break_glass`: SoD ép 3 tầng (UNIQUE + CHECK no-self-approve + COUNT DISTINCT ≥2). Grant chỉ giữ con trỏ `platform_account_id`, KHÔNG chứa secret.
-
----
-
-## 13. SaaS + Templates + Device (9 bảng)
-
-```mermaid
-erDiagram
-    subscription_plans ||--o{ plan_entitlements : "📋 cascade"
-    subscription_plans ||--o{ company_subscriptions : "📋"
-    companies ||--o{ company_subscriptions : ""
-    companies ||--o{ company_feature_flags : ""
-    companies ||--o{ company_usage_limits : ""
-    companies ||--o{ company_usage_counters : "mutable"
-    workspace_templates ||--o{ dashboard_configs : "📋 blueprint (soft-ref)"
-    companies ||--o{ dashboard_configs : ""
-    companies ||--o{ device_tokens : ""
-    users ||--o{ device_tokens : ""
-
-    subscription_plans {
-        text code "📋 free|pro|enterprise"
-    }
-    plan_entitlements {
-        text kind "feature|limit (boolValue XOR limitValue)"
-    }
-    company_usage_counters {
-        text period "lifetime|YYYY-MM"
-    }
-    workspace_templates {
-        jsonb blueprint_json "📋 roles/workflows/dashboards"
-    }
-```
-
-- `subscription_plans`, `plan_entitlements`, `workspace_templates` đều 📋 **global catalog**.
-- `dashboard_configs.role_code` là **soft-ref** (text, không FK tới roles).
-
----
-
-## 14. Tổng hợp phân loại bảng
-
-### 📋 Catalog global (6 — KHÔNG company_id, KHÔNG RLS)
-`permissions` · `platforms` · `encryption_keys` · `subscription_plans` · `plan_entitlements` · `workspace_templates`
-*(`processed_events` cũng no-RLS nhưng là infra, không phải catalog.)*
-
-### 🔁 Append-only (16 — app chỉ SELECT/INSERT)
-`audit_logs` · `outbox_events` · `dead_letter_events` · `dead_letter_alerts` · `approval_steps` · `defects` · `task_comments` · `task_attachments`(soft-del) · `chat_messages`(trừ pin) · `revenue_records` · `cost_records` · `profit_snapshots` · `expense_approvals` · `payslips` · `payslip_items` · `evaluation_results` · `evaluation_scores` · `kpi_results` · `security_alerts` · `break_glass_approvals`
-
-### 🔒 Mã hóa envelope (2) + hash (1)
-`platform_accounts.secret_ciphertext` · `user_totp.secret_ciphertext` (AES-256-GCM, DEK/KEK) · `user_recovery_codes.code_hash` (SHA-256).
-
-### 🔑 Self-FK / chuỗi
-`refresh_tokens.replaced_by` · `org_units.parent_id` · `employee_profiles.direct_manager_id` · `content_assets.parent_asset_id` · `revenue_records`/`cost_records`/`payslips.replaces_*`.
-
-### Polymorphic (no FK DB — CHECK enum + composite index)
-`audit_logs`(object) · `object_permissions`(subject+object) · `notifications`(ref) · `cost_allocations`(target) · `bonus_penalties`(reference) · `employee_manager_relations`(scope) · `meeting_tasks.task_id`.
-
-### Ràng buộc toàn vẹn tiêu biểu
-- **Exactly-one:** `workflow_instances`(content XOR project) · `kpi_results`(user XOR team) · `bonus_penalties`(task/defect/kpi) · `chat_rooms`(4 scope) · `profit_snapshots`(company⇒id NULL).
-- **No-self:** `employee_manager_relations` · `workflow_step_dependencies` · `break_glass_approvals`.
-- **Append-only chain:** `revenue/cost_records` + `payslips` (`entry_kind` + `replaces_*` + CHECK + unique-replaces).
-- **Soft-delete unique:** partial index `WHERE deleted_at IS NULL` (users/channels/projects/roles…).
-
----
-
-> Sinh từ code tại git `040dd82`. Cập nhật khi schema đổi. Nguồn: `apps/api/src/db/schema/*.ts`.
+> Field/CHECK/index đầy đủ từng module: **DB-02** (AUTH) · **DB-03** (HR) · **DB-04** (ATT) · **DB-05** (LEAVE) · **DB-06** (TASK) · **DB-07** (NOTI/DASH) · **DB-08** (Foundation) · **DB-09** (index/hiệu năng) · **DB-10** (migration/seed). Nghiệp vụ: `docs/spec/`.

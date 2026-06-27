@@ -1,5 +1,5 @@
 /**
- * G10-2 Notification deny-path + contract tests (TASKS.md §5.5 — RED trước).
+ * G10-2 Notification deny-path + contract tests (CLAUDE.md §9.4 — RED trước).
  *
  * 3 nhóm bắt buộc (nhạy cảm tenant-iso + preference + outbox masking):
  *   A. Tenant isolation — user công ty A KHÔNG đọc được notification công ty B.

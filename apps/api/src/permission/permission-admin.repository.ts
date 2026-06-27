@@ -24,10 +24,7 @@ export class PermissionAdminRepository {
    * leo thang chéo tenant). Ép ở TẦNG REPOSITORY: assignRole + object-grant role-subject đều validate qua
    * đây ⇒ role operator coi như "không tồn tại" với tenant plane (caller trả NotFound).
    */
-  async findAssignableRole(
-    tx: TenantTx,
-    roleId: string,
-  ): Promise<{ id: string } | undefined> {
+  async findAssignableRole(tx: TenantTx, roleId: string): Promise<{ id: string } | undefined> {
     const [row] = await tx
       .select({ id: roles.id })
       .from(roles)
@@ -199,16 +196,52 @@ export class PermissionAdminRepository {
   // ── invalidation fan-out ──────────────────────────────────────────────────────
 
   /** userIds đang giữ role (để emit permission.changed cho từng user khi grant theo role). */
-  async findUserIdsWithRole(
-    tx: TenantTx,
-    companyId: string,
-    roleId: string,
-  ): Promise<string[]> {
+  async findUserIdsWithRole(tx: TenantTx, companyId: string, roleId: string): Promise<string[]> {
     const rows = await tx
       .select({ userId: userRoles.userId })
       .from(userRoles)
       .where(and(eq(userRoles.companyId, companyId), eq(userRoles.roleId, roleId)));
     return rows.map((r) => r.userId);
+  }
+
+  // ── read-only catalogs (S2-AUTH-BE-3) — UI gán quyền ──────────────────────────
+
+  /**
+   * Danh sách role gán được (UI assign): own-tenant + system (RLS lộ company_id IS NULL) chưa xoá mềm,
+   * LOẠI role operator-audience (platform-admin …f0) — KHÔNG để tenant gán role chéo-plane (mirror
+   * findAssignableRole / notOperatorRole). CHỈ ĐỌC. Sắp theo name.
+   */
+  async listRolesTx(
+    tx: TenantTx,
+  ): Promise<Array<{ id: string; name: string; description: string | null; isSystem: boolean }>> {
+    return tx
+      .select({
+        id: roles.id,
+        name: roles.name,
+        description: roles.description,
+        isSystem: roles.isSystem,
+      })
+      .from(roles)
+      .where(and(isNull(roles.deletedAt), notOperatorRole()))
+      .orderBy(roles.name);
+  }
+
+  /**
+   * Danh sách permission catalog (UI assign). Catalog GLOBAL (no RLS, app role SELECT-only) — KHÔNG
+   * theo tenant. CHỈ ĐỌC. Sắp theo (resource_type, action).
+   */
+  async listPermissionsTx(
+    tx: TenantTx,
+  ): Promise<Array<{ id: string; action: string; resourceType: string; isSensitive: boolean }>> {
+    return tx
+      .select({
+        id: permissions.id,
+        action: permissions.action,
+        resourceType: permissions.resourceType,
+        isSensitive: permissions.isSensitive,
+      })
+      .from(permissions)
+      .orderBy(permissions.resourceType, permissions.action);
   }
 }
 

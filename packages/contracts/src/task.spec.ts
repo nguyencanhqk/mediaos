@@ -105,10 +105,64 @@ describe("taskSchema (DTO shape for a non-video office task)", () => {
       contentTitle: null,
       projectId: null,
       projectName: null,
+      // PM-1 (mig 0420) work-item fields — office task: priority 'none', rest null (no project/state).
+      priority: "none" as const,
+      description: null,
+      startDate: null,
+      sequence: null,
+      displayId: null,
+      projectIdentifier: null,
+      stateId: null,
+      stateName: null,
+      stateGroup: null,
+      stateColor: null,
     };
     const parsed = taskSchema.parse(officeTask);
     expect(parsed.taskType).toBe("office");
     expect(parsed.contentItemId).toBeNull();
     expect(parsed.workflowInstanceId).toBeNull();
+    expect(parsed.priority).toBe("none");
+    expect(parsed.stateId).toBeNull();
+  });
+
+  it("validates a project-scoped work item with PM fields populated", () => {
+    const issue = {
+      id: "33333333-3333-3333-3333-333333333333",
+      companyId: "44444444-4444-4444-4444-444444444444",
+      taskType: "office" as const,
+      title: "Thiết kế trang chủ",
+      status: "in_progress" as const,
+      origin: "initial" as const,
+      revisionRound: 0,
+      dueDate: null,
+      createdAt: "2026-06-12T00:00:00.000Z",
+      updatedAt: "2026-06-12T00:00:00.000Z",
+      assigneeUserId: null,
+      stepId: null,
+      stepCode: null,
+      stepName: null,
+      stepStatus: null,
+      submissionUrl: null,
+      submissionNote: null,
+      workflowInstanceId: null,
+      contentItemId: null,
+      contentTitle: null,
+      projectId: "55555555-5555-5555-5555-555555555555",
+      projectName: "Website",
+      priority: "high" as const,
+      description: "Mô tả",
+      startDate: null,
+      sequence: 12,
+      displayId: "WEB-12",
+      projectIdentifier: "WEB",
+      stateId: "66666666-6666-6666-6666-666666666666",
+      stateName: "In Progress",
+      stateGroup: "started" as const,
+      stateColor: "#3b82f6",
+    };
+    const parsed = taskSchema.parse(issue);
+    expect(parsed.displayId).toBe("WEB-12");
+    expect(parsed.priority).toBe("high");
+    expect(parsed.stateGroup).toBe("started");
   });
 });

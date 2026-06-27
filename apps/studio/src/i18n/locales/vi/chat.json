@@ -1,7 +1,0 @@
-{
-  "chat": {
-    "noRoom": "Phòng chat chưa được tạo cho dự án này.",
-    "loading": "Đang tải...",
-    "messagePlaceholder": "Nhập tin nhắn..."
-  }
-}

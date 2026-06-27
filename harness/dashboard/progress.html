@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MediaOS · Tiến độ theo Module / Tính năng</title>
+    <style>
+      :root {
+        --bg: #0b0f17;
+        --panel: #131a26;
+        --panel2: #0f1620;
+        --line: #20293a;
+        --txt: #e6edf6;
+        --mut: #8a98ad;
+        --acc: #4f9cff;
+        --done: #2ea043;
+        --prog: #4f9cff;
+        --part: #1f9e8f;
+        --todo: #d29922;
+        --blk: #f85149;
+        --plan: #5a6678;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--txt);
+        font:
+          14px/1.5 system-ui,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+      }
+      a {
+        color: var(--acc);
+        text-decoration: none;
+      }
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        background: linear-gradient(180deg, #0d1320, #0b0f17);
+        border-bottom: 1px solid var(--line);
+        padding: 14px 22px;
+      }
+      .h-row {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      h1 {
+        font-size: 17px;
+        margin: 0;
+        font-weight: 650;
+        letter-spacing: 0.2px;
+      }
+      .sub {
+        color: var(--mut);
+        font-size: 12px;
+      }
+      .wrap {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 18px 22px 80px;
+      }
+      .big {
+        font-size: 26px;
+        font-weight: 750;
+      }
+      .nav {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+      }
+      .nav a {
+        padding: 5px 13px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--mut);
+        font-size: 13px;
+        background: var(--panel2);
+      }
+      .nav a:hover {
+        background: #1b2433;
+      }
+      .nav a.on {
+        color: #fff;
+        border-color: var(--acc);
+        background: #16314f;
+      }
+      .kpis {
+        display: flex;
+        gap: 22px;
+        flex-wrap: wrap;
+        margin-left: auto;
+      }
+      .kpi {
+        text-align: right;
+      }
+      .kpi small {
+        display: block;
+        color: var(--mut);
+        font-size: 11px;
+      }
+      .bar {
+        height: 8px;
+        border-radius: 6px;
+        background: #1b2433;
+        overflow: hidden;
+      }
+      .bar > i {
+        display: block;
+        height: 100%;
+        background: var(--done);
+      }
+      .sprints {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+      .sp {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        padding: 8px 11px;
+        min-width: 116px;
+      }
+      .sp b {
+        font-size: 12px;
+      }
+      .sp .bar {
+        margin-top: 6px;
+      }
+      .sp small {
+        color: var(--mut);
+        font-size: 11px;
+      }
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin: 18px 0 6px;
+      }
+      input[type="search"],
+      select {
+        background: var(--panel2);
+        border: 1px solid var(--line);
+        color: var(--txt);
+        padding: 7px 10px;
+        border-radius: 8px;
+        font-size: 13px;
+      }
+      input[type="search"] {
+        min-width: 230px;
+      }
+      .chip {
+        cursor: pointer;
+        user-select: none;
+        border: 1px solid var(--line);
+        background: var(--panel2);
+        color: var(--mut);
+        padding: 5px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+      }
+      .chip.on {
+        color: #fff;
+        border-color: var(--acc);
+        background: #16314f;
+      }
+      .epic {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        margin-top: 14px;
+        overflow: hidden;
+      }
+      .epic > summary {
+        cursor: pointer;
+        list-style: none;
+        padding: 13px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .epic > summary::-webkit-details-marker {
+        display: none;
+      }
+      .epic .mod {
+        font-weight: 700;
+        font-size: 14px;
+      }
+      .epic .nm {
+        color: var(--mut);
+        font-size: 12.5px;
+      }
+      .epic .pbar {
+        width: 160px;
+      }
+      .epic .pct {
+        font-variant-numeric: tabular-nums;
+        font-weight: 650;
+      }
+      .tag {
+        font-size: 10.5px;
+        padding: 1px 7px;
+        border-radius: 20px;
+        border: 1px solid var(--line);
+        color: var(--mut);
+        white-space: nowrap;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 8px 10px;
+        border-top: 1px solid var(--line);
+        vertical-align: top;
+      }
+      th {
+        color: var(--mut);
+        font-weight: 600;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+      }
+      tbody tr:hover {
+        background: #0f1722;
+      }
+      td.num {
+        color: var(--mut);
+        font-variant-numeric: tabular-nums;
+        width: 38px;
+      }
+      .st {
+        font-size: 11px;
+        padding: 2px 9px;
+        border-radius: 20px;
+        font-weight: 650;
+        white-space: nowrap;
+        display: inline-block;
+      }
+      .st.done {
+        background: #11331d;
+        color: #4ae168;
+      }
+      .st.in_progress {
+        background: #102a45;
+        color: #6fb6ff;
+      }
+      .st.partial {
+        background: #0d2e2a;
+        color: #45d6c2;
+      }
+      .st.todo {
+        background: #332708;
+        color: #ecc34e;
+      }
+      .st.blocked {
+        background: #3a1414;
+        color: #ff7b72;
+      }
+      .st.planned {
+        background: #1a2230;
+        color: #8a98ad;
+      }
+      .pr {
+        font-size: 10.5px;
+        font-weight: 700;
+        padding: 1px 6px;
+        border-radius: 5px;
+      }
+      .P0 {
+        background: #3a1414;
+        color: #ff9b94;
+      }
+      .P1 {
+        background: #33260a;
+        color: #f0c558;
+      }
+      .P2,
+      .P3 {
+        background: #1a2230;
+        color: #93a1b5;
+      }
+      .tst {
+        font-size: 11px;
+      }
+      .tst.y {
+        color: #4ae168;
+      }
+      .tst.n {
+        color: var(--mut);
+      }
+      .woc {
+        font-size: 10.5px;
+        background: #0f1f31;
+        border: 1px solid #1d3550;
+        color: #8fc1ff;
+        padding: 1px 6px;
+        border-radius: 5px;
+        margin-right: 4px;
+        white-space: nowrap;
+      }
+      .detail {
+        background: var(--panel2);
+        border-top: 1px dashed var(--line);
+        padding: 10px 12px 12px;
+        font-size: 12.5px;
+      }
+      .detail h4 {
+        margin: 8px 0 4px;
+        font-size: 11px;
+        color: var(--mut);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+      }
+      .detail ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+      .detail li {
+        margin: 2px 0;
+      }
+      pre.cmd {
+        background: #0a1019;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        padding: 8px 10px;
+        overflow-x: auto;
+        font:
+          12px/1.5 ui-monospace,
+          Consolas,
+          monospace;
+        color: #c8d6ea;
+        margin: 4px 0;
+      }
+      .muted {
+        color: var(--mut);
+      }
+      .foot {
+        margin-top: 26px;
+        color: var(--mut);
+        font-size: 12px;
+      }
+      .legend {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 6px;
+      }
+      .err {
+        background: #3a1414;
+        border: 1px solid #5a2020;
+        padding: 12px;
+        border-radius: 8px;
+        color: #ffb4ae;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="h-row">
+        <div>
+          <h1>Tiến độ theo Module / Tính năng</h1>
+          <div class="sub">
+            112 story · EPIC-00→11 · nguồn: IMPLEMENTATION-02 × backlog × ledger
+          </div>
+          <nav class="nav">
+            <a href="/">📊 Báo cáo</a>
+            <a href="/progress" class="on">📈 Tiến độ</a>
+            <a href="/docs">📚 Tài liệu</a>
+          </nav>
+        </div>
+        <div class="kpis" id="kpis"></div>
+      </div>
+      <div id="sprints" class="sprints"></div>
+    </header>
+    <div class="wrap">
+      <div class="toolbar">
+        <input type="search" id="q" placeholder="Tìm tính năng / mã story…" />
+        <select id="fmod">
+          <option value="">Mọi module</option>
+        </select>
+        <span class="chip on" data-st="">Tất cả</span>
+        <span class="chip" data-st="done">✓ Done</span>
+        <span class="chip" data-st="in_progress">Đang làm</span>
+        <span class="chip" data-st="todo">Chờ làm</span>
+        <span class="chip" data-st="planned">Sprint sau</span>
+        <span class="chip" data-st="blocked">Blocked</span>
+        <span style="margin-left: auto" class="sub" id="updated"></span>
+      </div>
+      <div class="legend sub">
+        Trạng thái = overlay từ ledger (giống board). "Đã test" = có bằng chứng pass/✓ trong sổ hoạt
+        động.
+      </div>
+      <div id="root"></div>
+      <div id="infra"></div>
+      <div class="foot" id="foot"></div>
+    </div>
+
+    <script>
+      const $ = (s, r = document) => r.querySelector(s);
+      const esc = (s) =>
+        String(s == null ? "" : s).replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+      const ST_LABEL = {
+        done: "Done",
+        in_progress: "Đang làm",
+        partial: "Một phần",
+        todo: "Chờ làm",
+        blocked: "Blocked",
+        planned: "Sprint sau",
+      };
+      const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+      const state = { data: null, q: "", mod: "", st: "" };
+
+      function bar(p, color) {
+        return `<div class="bar"><i style="width:${p}%;${color ? "background:" + color : ""}"></i></div>`;
+      }
+
+      function storyTitle(t) {
+        // bỏ tiền tố "Là một X, tôi muốn " cho gọn
+        return t
+          .replace(/^Là một[^,]*,\s*tôi muốn\s*/i, "")
+          .replace(/^[a-zà-ỹ]/, (c) => c.toUpperCase());
+      }
+
+      function renderHeader(d) {
+        const t = d.totals;
+        $("#kpis").innerHTML = `
+          <div class="kpi"><span class="big">${t.done}/${t.stories}</span><small>story xong · ${t.pct}%</small></div>
+          <div class="kpi"><span class="big">${t.donePoints}</span><small>/ ${t.points} point</small></div>
+          <div class="kpi"><span class="big">${t.inProgress}</span><small>đang làm</small></div>`;
+        const order = ["S0", "S1", "S2", "S3", "S4", "S5", "S6"];
+        $("#sprints").innerHTML = order
+          .filter((k) => d.sprints[k])
+          .map((k) => {
+            const s = d.sprints[k],
+              p = pct(s.done, s.total);
+            return `<div class="sp"><b>${k}</b> <small>· ${s.done}/${s.total} story</small>${bar(p)}<small>${p}% · ${s.donePoints}/${s.points} pt</small></div>`;
+          })
+          .join("");
+        $("#updated").textContent =
+          "cập nhật " + new Date(d.generatedAt).toLocaleTimeString("vi-VN");
+      }
+
+      function matchStory(s) {
+        if (
+          state.st &&
+          !(state.st === "in_progress"
+            ? s.status === "in_progress" || s.status === "partial"
+            : s.status === state.st)
+        )
+          return false;
+        if (state.q) {
+          const hay = (s.id + " " + s.title + " " + s.ac + " " + s.wos.join(" ")).toLowerCase();
+          if (!hay.includes(state.q)) return false;
+        }
+        return true;
+      }
+
+      function storyRow(s) {
+        const wos = s.wos
+          .map(
+            (w) => `<span class="woc">${esc(w.startsWith("__shipped") ? "✓ đã ship" : w)}</span>`,
+          )
+          .join("");
+        const tst = s.tested.tested
+          ? `<span class="tst y" title="${esc(s.tested.summary || "")}">✓ có</span>`
+          : `<span class="tst n">—</span>`;
+        return `
+          <tbody data-row>
+            <tr data-toggle style="cursor:pointer">
+              <td class="num">${s.num}</td>
+              <td><b>${esc(storyTitle(s.title))}</b><div class="muted" style="font-size:11.5px">${esc(s.ac)}</div></td>
+              <td><span class="pr ${s.priority}">${s.priority}</span></td>
+              <td class="num">${s.points}</td>
+              <td><span class="st ${s.status}">${ST_LABEL[s.status] || s.status}</span></td>
+              <td>${tst}</td>
+              <td>${wos || '<span class="muted" style="font-size:11px">— ' + esc(s.sprint) + "</span>"}</td>
+            </tr>
+          </tbody>`;
+      }
+
+      function detailHtml(s) {
+        const dw =
+          s.doneWhen && s.doneWhen.length
+            ? `<h4>Việc cần làm (done_when)</h4><ul>${s.doneWhen.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`
+            : "";
+        const cmds = s.run.commands.length
+          ? `<h4>Chạy thử / kiểm thử</h4>${s.run.commands.map((c) => `<pre class="cmd">${esc(c)}</pre>`).join("")}`
+          : "";
+        const urls = s.run.urls.length
+          ? `<div>${s.run.urls.map((u) => `App <b>${esc(u.app)}</b>: <pre class="cmd">${esc(u.dev)}  →  <a href="${esc(u.url)}" target="_blank">${esc(u.url)}</a></pre>`).join("")}</div>`
+          : "";
+        const ev = s.tested.summary
+          ? `<h4>Bằng chứng test (ledger)</h4><div class="muted">${esc(s.tested.summary)}</div>`
+          : "";
+        return `<tr><td colspan="7" style="padding:0"><div class="detail">
+            <div class="muted">${esc(s.actor)} · ${esc(s.id)} · sprint ${esc(s.sprint)}</div>
+            ${dw}${cmds}${urls}
+            <h4>Cách dùng</h4><div class="muted">${esc(s.run.note)}</div>
+            ${ev}
+          </div></td></tr>`;
+      }
+
+      function renderEpics(d) {
+        const root = $("#root");
+        root.innerHTML = "";
+        for (const ep of d.epics) {
+          const shown = ep.stories.filter(matchStory);
+          if (!shown.length) continue;
+          const det = document.createElement("details");
+          det.className = "epic";
+          det.open = ep.stats.done < ep.stats.total && ep.stats.total - ep.stats.planned > 0; // mở epic đang chạy
+          det.innerHTML = `
+            <summary>
+              <span class="mod">${esc(ep.module)}</span>
+              <span class="tag">${esc(ep.id)}</span>
+              <span class="tag">${esc(ep.sprint)}</span>
+              <span class="nm">${esc(ep.name)}</span>
+              <span style="margin-left:auto"></span>
+              <span class="pbar" style="width:160px">${bar(ep.stats.pct)}</span>
+              <span class="pct">${ep.stats.done}/${ep.stats.total}</span>
+            </summary>
+            <table>
+              <thead><tr><th>#</th><th>Tính năng</th><th>Ưu tiên</th><th>Pt</th><th>Trạng thái</th><th>Test</th><th>Work Order</th></tr></thead>
+              ${shown.map(storyRow).join("")}
+            </table>`;
+          // gắn click mở chi tiết từng dòng
+          det.querySelectorAll("tbody[data-row]").forEach((tb, i) => {
+            const s = shown[i];
+            tb.querySelector("[data-toggle]").addEventListener("click", () => {
+              const ex = tb.querySelector("tr.det");
+              if (ex) {
+                ex.remove();
+                return;
+              }
+              tb.insertAdjacentHTML("beforeend", detailHtml(s).replace("<tr>", '<tr class="det">'));
+            });
+          });
+          root.appendChild(det);
+        }
+        if (!root.children.length)
+          root.innerHTML = '<div class="foot">Không có tính năng khớp bộ lọc.</div>';
+      }
+
+      function renderInfra(d) {
+        if (!d.infraWOs || !d.infraWOs.length) return;
+        const rows = d.infraWOs
+          .map(
+            (w) =>
+              `<tr><td>${esc(w.id)}</td><td><span class="st ${w.status === "done" ? "done" : w.status === "in_progress" ? "in_progress" : "todo"}">${esc(w.status)}</span></td><td>${esc(w.title)}</td></tr>`,
+          )
+          .join("");
+        $("#infra").innerHTML = `
+          <details class="epic" style="margin-top:18px">
+            <summary><span class="mod">WO nền / hạ tầng</span><span class="nm">Work Order không gắn 1 story cụ thể (DB · CI · env · wire · QA-debt)</span><span style="margin-left:auto" class="tag">${d.infraWOs.length}</span></summary>
+            <table><thead><tr><th>WO</th><th>Trạng thái</th><th>Mô tả</th></tr></thead><tbody>${rows}</tbody></table>
+          </details>`;
+      }
+
+      function renderModuleOptions(d) {
+        const sel = $("#fmod");
+        if (sel.options.length > 1) return;
+        d.epics.forEach((e) => {
+          const o = document.createElement("option");
+          o.value = e.module;
+          o.textContent = `${e.module} (${e.stats.done}/${e.stats.total})`;
+          sel.appendChild(o);
+        });
+      }
+
+      function render() {
+        const d = state.data;
+        if (!d) return;
+        const filtered = state.mod
+          ? { ...d, epics: d.epics.filter((e) => e.module === state.mod) }
+          : d;
+        renderHeader(d);
+        renderModuleOptions(d);
+        renderEpics(filtered);
+        renderInfra(state.mod ? { infraWOs: [] } : d);
+        $("#foot").innerHTML =
+          `Trang TỰ SINH từ <code>harness/lib/stories.mjs</code> · poll mỗi 15s. Story chưa có Work Order = "Sprint sau" (backlog hành chỉ giữ S0–S1, kéo dần theo IMPLEMENTATION-02 §9).`;
+      }
+
+      async function load() {
+        try {
+          const r = await fetch("/api/progress", { cache: "no-store" });
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          state.data = await r.json();
+          render();
+        } catch (e) {
+          $("#root").innerHTML =
+            `<div class="err">Không tải được /api/progress: ${esc(e.message)}.<br/>Chạy: <code>pnpm dashboard</code> (hoặc <code>node harness/dashboard/server.mjs</code>).</div>`;
+        }
+      }
+
+      $("#q").addEventListener("input", (e) => {
+        state.q = e.target.value.trim().toLowerCase();
+        render();
+      });
+      $("#fmod").addEventListener("change", (e) => {
+        state.mod = e.target.value;
+        render();
+      });
+      document.querySelectorAll(".chip").forEach((c) =>
+        c.addEventListener("click", () => {
+          document.querySelectorAll(".chip").forEach((x) => x.classList.remove("on"));
+          c.classList.add("on");
+          state.st = c.dataset.st;
+          render();
+        }),
+      );
+      load();
+      setInterval(load, 15000);
+    </script>
+  </body>
+</html>

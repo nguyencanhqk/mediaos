@@ -13,6 +13,12 @@ export default defineConfig({
     // subdomain `auth.localhost:5275` để cookie `Domain=.localhost` (SSO) chạy giống prod (plan §6 Phase 1.4).
     port: 5275,
     // Vite cho phép host `.localhost` mặc định; khai tường minh để chắc chắn dev *.localhost không bị chặn.
-    allowedHosts: [".localhost"],
+    // dev-online: cho phép host cloudflared + HMR qua wss:443 khi VITE_TUNNEL_HOST set (m dev-online).
+    allowedHosts: process.env.VITE_TUNNEL_HOST
+      ? [".localhost", process.env.VITE_TUNNEL_HOST]
+      : [".localhost"],
+    hmr: process.env.VITE_TUNNEL_HOST
+      ? { host: process.env.VITE_TUNNEL_HOST, protocol: "wss", clientPort: 443 }
+      : undefined,
   },
 });

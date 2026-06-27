@@ -1,9 +1,12 @@
 import {
   loginResponseSchema,
+  logoutResponseSchema,
   meResponseSchema,
   redirectAllowedResponseSchema,
+  type ChangePasswordRequest,
   type LoginRequest,
   type LoginResponse,
+  type LogoutResponse,
   type MeResponse,
   type RedirectAllowedResponse,
 } from "@mediaos/contracts";
@@ -39,6 +42,17 @@ export const authApi = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
   },
+
+  /**
+   * Đổi mật khẩu khi ĐÃ đăng nhập (self-service, Module 2a). Authenticated (KHÔNG skipAuth — gắn Bearer).
+   * Server re-auth bằng mật khẩu hiện tại + thu hồi MỌI phiên (refresh token) khi thành công ⇒ caller PHẢI
+   * `logoutSession()` để đăng xuất + điều hướng về /login (đăng nhập lại bằng mật khẩu mới).
+   */
+  changePassword: (body: ChangePasswordRequest): Promise<LogoutResponse> =>
+    apiFetch("/auth/change-password", logoutResponseSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   /**
    * FS-1b — hỏi server `?redirect` có nằm trong allowlist origin không (chống open-redirect). apps/auth gọi

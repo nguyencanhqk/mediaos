@@ -12,26 +12,12 @@ import type {
   UpdateOrgUnitRequest,
   UpdateTeamRequest,
 } from "@mediaos/contracts";
-import { ChatService } from "../chat/chat.service";
 import { OrgRepository } from "./org.repository";
-
-const PG_UNIQUE_VIOLATION = "23505";
-
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as Record<string, unknown>)["code"] === PG_UNIQUE_VIOLATION
-  );
-}
+import { isUniqueViolation } from "../common/db-error";
 
 @Injectable()
 export class OrgService {
-  constructor(
-    private readonly repo: OrgRepository,
-    private readonly chat: ChatService,
-  ) {}
+  constructor(private readonly repo: OrgRepository) {}
 
   // ── Org Units ────────────────────────────────────────────────────────────────
 
@@ -62,12 +48,6 @@ export class OrgService {
       }
       throw err;
     }
-
-    // G10-2 — auto-tạo group chat phòng ban (non-critical, best-effort). members = head + nhân sự
-    // hiện thuộc phòng ban (employee_profiles.org_unit_id). Lúc TẠO thường chưa có nhân sự ⇒ chỉ head.
-    const memberIds = await this.repo.listOrgUnitMemberUserIds(companyId, unit.id);
-    const members = unit.headUserId ? [unit.headUserId, ...memberIds] : memberIds;
-    await this.chat.ensureOrgUnitRoom(companyId, unit.id, unit.name, members);
 
     return unit;
   }

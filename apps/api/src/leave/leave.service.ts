@@ -21,21 +21,11 @@ import { HrTasksService } from "../tasks/hr-tasks.service";
 import { monthDateRange } from "../common/tz.util";
 import { LeaveRepository } from "./leave.repository";
 import { countLeaveDays } from "./leave.logic";
-
-const PG_UNIQUE_VIOLATION = "23505";
+import { isUniqueViolation } from "../common/db-error";
 
 interface Actor {
   id: string;
   companyId: string;
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as Record<string, unknown>)["code"] === PG_UNIQUE_VIOLATION
-  );
 }
 
 /** Calendar year of an ISO 'YYYY-MM-DD' date — the quota year a request is deducted from. */
@@ -134,7 +124,9 @@ export class LeaveService {
         });
         return toTypeDto(row);
       })
-      .catch((err: unknown) => this.mapError(err, "updateType", { companyId: actor.companyId, id }));
+      .catch((err: unknown) =>
+        this.mapError(err, "updateType", { companyId: actor.companyId, id }),
+      );
   }
 
   // ─── leave_balances (read own; manage:leave to upsert / view others) ─────────
@@ -190,7 +182,11 @@ export class LeaveService {
           throw new ConflictException(`Loại nghỉ '${type.name}' đang không hoạt động`);
         }
 
-        const workingDays = await this.repo.resolveWorkingDaysForUserTx(actor.companyId, actor.id, tx);
+        const workingDays = await this.repo.resolveWorkingDaysForUserTx(
+          actor.companyId,
+          actor.id,
+          tx,
+        );
         const totalDays = countLeaveDays(dto.startDate, dto.endDate, workingDays);
         if (totalDays <= 0) {
           throw new ConflictException("Khoảng nghỉ không có ngày làm việc nào để tính phép");
@@ -244,7 +240,12 @@ export class LeaveService {
     query: { status?: string; scope: "me" | "all"; year?: number; limit: number; offset: number },
   ) {
     if (query.scope === "all") {
-      await this.assertCan(actor, "approve", "leave", "Không có quyền xem đơn nghỉ của nhân sự khác");
+      await this.assertCan(
+        actor,
+        "approve",
+        "leave",
+        "Không có quyền xem đơn nghỉ của nhân sự khác",
+      );
       return this.repo.findRequests(actor.companyId, {
         status: query.status,
         year: query.year,
@@ -269,7 +270,9 @@ export class LeaveService {
         const [request] = await this.repo.findRequestByIdForUpdateTx(actor.companyId, id, tx);
         if (!request) throw new NotFoundException(`Leave request not found: ${id}`);
         if (request.status !== "pending") {
-          throw new ConflictException(`Đơn không còn ở trạng thái chờ duyệt (status=${request.status})`);
+          throw new ConflictException(
+            `Đơn không còn ở trạng thái chờ duyệt (status=${request.status})`,
+          );
         }
         const year = yearOf(request.startDate);
         // Trừ phép race-safe: chỉ trừ nếu used + delta ≤ total (chốt trong WHERE).
@@ -302,7 +305,8 @@ export class LeaveService {
         );
         if (!updated) throw new InternalServerErrorException("Failed to close leave request");
 
-        if (request.taskId) await this.hrTasks.closeTaskTx(tx, actor.companyId, request.taskId, "approved");
+        if (request.taskId)
+          await this.hrTasks.closeTaskTx(tx, actor.companyId, request.taskId, "approved");
 
         await this.audit.record(tx, {
           action: "LeaveApproved",
@@ -320,11 +324,18 @@ export class LeaveService {
         });
         await this.outbox.enqueue(tx, {
           eventType: "leave.approved",
-          payload: { requestId: id, userId: request.userId, approvedBy: actor.id, totalDays: request.totalDays },
+          payload: {
+            requestId: id,
+            userId: request.userId,
+            approvedBy: actor.id,
+            totalDays: request.totalDays,
+          },
         });
         return toRequestDto(updated);
       })
-      .catch((err: unknown) => this.mapError(err, "approveRequest", { companyId: actor.companyId, id }));
+      .catch((err: unknown) =>
+        this.mapError(err, "approveRequest", { companyId: actor.companyId, id }),
+      );
   }
 
   async rejectRequest(actor: Actor, id: string, note?: string) {
@@ -334,16 +345,24 @@ export class LeaveService {
         const [request] = await this.repo.findRequestByIdForUpdateTx(actor.companyId, id, tx);
         if (!request) throw new NotFoundException(`Leave request not found: ${id}`);
         if (request.status !== "pending") {
-          throw new ConflictException(`Đơn không còn ở trạng thái chờ duyệt (status=${request.status})`);
+          throw new ConflictException(
+            `Đơn không còn ở trạng thái chờ duyệt (status=${request.status})`,
+          );
         }
         const [updated] = await this.repo.updateRequestTx(
           actor.companyId,
           id,
-          { status: "rejected", approvedBy: actor.id, approvedAt: new Date(), reviewNote: note ?? null },
+          {
+            status: "rejected",
+            approvedBy: actor.id,
+            approvedAt: new Date(),
+            reviewNote: note ?? null,
+          },
           tx,
         );
         if (!updated) throw new InternalServerErrorException("Failed to reject leave request");
-        if (request.taskId) await this.hrTasks.closeTaskTx(tx, actor.companyId, request.taskId, "completed");
+        if (request.taskId)
+          await this.hrTasks.closeTaskTx(tx, actor.companyId, request.taskId, "completed");
 
         await this.audit.record(tx, {
           action: "LeaveRejected",
@@ -358,7 +377,9 @@ export class LeaveService {
         });
         return toRequestDto(updated);
       })
-      .catch((err: unknown) => this.mapError(err, "rejectRequest", { companyId: actor.companyId, id }));
+      .catch((err: unknown) =>
+        this.mapError(err, "rejectRequest", { companyId: actor.companyId, id }),
+      );
   }
 
   async cancelRequest(actor: Actor, id: string) {
@@ -373,7 +394,12 @@ export class LeaveService {
 
     return this.db
       .withTenant(actor.companyId, async (tx) => {
-        const [updated] = await this.repo.updateRequestTx(actor.companyId, id, { status: "cancelled" }, tx);
+        const [updated] = await this.repo.updateRequestTx(
+          actor.companyId,
+          id,
+          { status: "cancelled" },
+          tx,
+        );
         if (!updated) throw new InternalServerErrorException("Failed to cancel leave request");
         if (request.taskId) await this.hrTasks.cancelTaskTx(tx, actor.companyId, request.taskId);
 
@@ -385,7 +411,9 @@ export class LeaveService {
         });
         return toRequestDto(updated);
       })
-      .catch((err: unknown) => this.mapError(err, "cancelRequest", { companyId: actor.companyId, id }));
+      .catch((err: unknown) =>
+        this.mapError(err, "cancelRequest", { companyId: actor.companyId, id }),
+      );
   }
 
   // ─── Team calendar (read:leave) ──────────────────────────────────────────────
@@ -461,7 +489,10 @@ function toBalanceDto(row: {
     year: row.year,
     totalDays: Number(row.totalDays),
     usedDays: Number(row.usedDays),
-    remainingDays: row.remainingDays != null ? Number(row.remainingDays) : Number(row.totalDays) - Number(row.usedDays),
+    remainingDays:
+      row.remainingDays != null
+        ? Number(row.remainingDays)
+        : Number(row.totalDays) - Number(row.usedDays),
   };
 }
 

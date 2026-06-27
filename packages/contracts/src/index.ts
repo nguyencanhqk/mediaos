@@ -5,13 +5,54 @@ import { z } from "zod";
  * Mọi schema dùng chung khai báo ở đây bằng Zod, suy ra type bằng z.infer.
  */
 
-/** Envelope phản hồi API thống nhất (xem patterns: API Response Format). */
+/**
+ * Envelope phản hồi API thống nhất (API-01 §11/§12).
+ *
+ * Success: { success:true, message, data, error:null, meta:{request_id,timestamp}, pagination? }
+ * Error:   { success:false, message, data:null, error:{code,type,details}, meta:{request_id,timestamp} }
+ *
+ * BACK-COMPAT (S0-API-CORE-1): `error` GIỮ nullable ở CẢ HAI nhánh (success → error:null) để
+ * web-core `unwrapEnvelope` (detect 3 key success/data/error) không phải đổi — api-client reshape
+ * đầy đủ thuộc S0-FE-API-1.
+ */
+export const errorDetailSchema = z.object({
+  field: z.string(),
+  message: z.string(),
+  rule: z.string().optional(),
+});
+export type ErrorDetail = z.infer<typeof errorDetailSchema>;
+
 export const apiErrorSchema = z.object({
   code: z.string(),
   message: z.string(),
+  /** Tên class exception (API-01 §12.1) — vd "ZodValidationException", "ForbiddenException". */
+  type: z.string().optional(),
+  /** Lỗi field-level (validation) — null/absent khi không áp dụng. */
+  details: z.array(errorDetailSchema).nullable().optional(),
 });
 export type ApiError = z.infer<typeof apiErrorSchema>;
 
+/** Meta đính kèm MỌI response — truy vết request (API-01 §11.2). */
+export const responseMetaSchema = z.object({
+  request_id: z.string(),
+  timestamp: z.string(),
+});
+export type ResponseMeta = z.infer<typeof responseMetaSchema>;
+
+/** Block phân trang RIÊNG (API-01 §16.1) — KHÔNG nằm trong `meta`. */
+export const paginationSchema = z.object({
+  page: z.number().int().positive(),
+  per_page: z.number().int().positive(),
+  total: z.number().int().nonnegative(),
+  total_pages: z.number().int().nonnegative(),
+  has_next: z.boolean(),
+  has_prev: z.boolean(),
+});
+export type Pagination = z.infer<typeof paginationSchema>;
+
+/**
+ * @deprecated Dùng `paginationSchema` (API-01 §16.1). Giữ lại để không phá consumer cũ.
+ */
 export const paginationMetaSchema = z.object({
   total: z.number().int().nonnegative(),
   page: z.number().int().positive(),
@@ -19,13 +60,15 @@ export const paginationMetaSchema = z.object({
 });
 export type PaginationMeta = z.infer<typeof paginationMetaSchema>;
 
-/** Bao phản hồi chuẩn: success + data (nullable on error) + error (nullable on success) + meta. */
+/** Bao phản hồi chuẩn: success + message + data (nullable) + error (nullable) + meta (bắt buộc) + pagination?. */
 export function apiResponseSchema<T extends z.ZodTypeAny>(data: T) {
   return z.object({
     success: z.boolean(),
+    message: z.string(),
     data: data.nullable(),
     error: apiErrorSchema.nullable(),
-    meta: paginationMetaSchema.optional(),
+    meta: responseMetaSchema,
+    pagination: paginationSchema.optional(),
   });
 }
 
@@ -33,6 +76,10 @@ export function apiResponseSchema<T extends z.ZodTypeAny>(data: T) {
 export const CONTRACTS_VERSION = "0.0.0" as const;
 
 export * from "./auth";
+// S2-AUTH-BE-3 (additive): auth admin subdir (user-admin + role/permission list). Đặt SAU flat auth.ts;
+// TÊN export RIÊNG (auth*/AUTH_USER…) KHÔNG trùng auth.ts hay users.ts (AdminUser*) → không vỡ barrel.
+export * from "./auth/index";
+export * from "./users";
 export * from "./two-factor";
 export * from "./org";
 export * from "./media";
@@ -41,6 +88,7 @@ export * from "./workflow";
 export * from "./approval";
 export * from "./task";
 export * from "./notification";
+export * from "./foundation";
 export * from "./chat";
 export * from "./realtime";
 export * from "./settings";
@@ -49,6 +97,8 @@ export * from "./employees";
 export * from "./attendance";
 export * from "./leave";
 export * from "./finance";
+// S1-FND-FILE-1 File subsystem contracts (upload input / metadata / download-url / link DTOs)
+export * from "./files";
 export * from "./dashboard";
 export * from "./evaluation";
 export * from "./kpi";
@@ -82,3 +132,7 @@ export * from "./mail-config";
 export * from "./security-policy";
 // CS-10 Đối tượng: Mời / Duyệt / Kích hoạt user (invite token → accept → approve; email-domain at accept)
 export * from "./user-invite";
+// AI-1 AI Insight (read-only): tóm tắt KPI + chi phí ĐÃ MASK theo permission qua Claude API
+export * from "./ai";
+// S2-HR-BE-1 HR read-core contracts (list/detail/me-profile + lookups; sensitive fields server-masked)
+export * from "./hr";

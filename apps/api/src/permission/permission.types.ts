@@ -5,13 +5,13 @@
  */
 
 export type PermissionReason =
-  | 'allow'
-  | 'deny-default' // no matching grants
-  | 'deny-explicit' // explicit DENY in role_permissions or object_permissions
-  | 'deny-scope' // action allowed but object is outside user's scope
-  | 'deny-sensitive' // sensitive action without explicit non-wildcard ALLOW
-  | 'deny-reauth-required' // sensitive action requires re-auth, none provided/expired
-  | 'deny-object-required'; // reveal-secret class: per-object ALLOW mandatory, company-level ALLOW not enough (F2)
+  | "allow"
+  | "deny-default" // no matching grants
+  | "deny-explicit" // explicit DENY in role_permissions or object_permissions
+  | "deny-scope" // action allowed but object is outside user's scope
+  | "deny-sensitive" // sensitive action without explicit non-wildcard ALLOW
+  | "deny-reauth-required" // sensitive action requires re-auth, none provided/expired
+  | "deny-object-required"; // reveal-secret class: per-object ALLOW mandatory, company-level ALLOW not enough (F2)
 
 export interface PermissionDecision {
   allow: boolean;
@@ -70,9 +70,18 @@ export interface CompanyRoleGrant {
   action: string; // '*' = wildcard
   resourceType: string; // '*' = wildcard
   isSensitive: boolean; // from permissions.is_sensitive (false for wildcards)
-  effect: 'ALLOW' | 'DENY';
+  effect: "ALLOW" | "DENY";
   /** null = no expiry. Service MUST filter out grants where expiresAt <= now(). */
   expiresAt: Date | null;
+}
+
+/**
+ * S2-AUTH-BE-1 — CompanyRoleGrant + data_scope (role_permissions.data_scope). Surfaced for /auth/me bootstrap
+ * (`scopes` union per ALLOW pair). dataScope ∈ ROLE_DATA_SCOPES; service unions per pair after deny-overrides.
+ * SEPARATE from getCompanyRoleGrants (can() hot-path untouched, back-compat).
+ */
+export interface CompanyRoleGrantWithScope extends CompanyRoleGrant {
+  dataScope: string;
 }
 
 /**
@@ -83,7 +92,7 @@ export interface ObjectGrant {
   action: string;
   resourceType: string;
   isSensitive: boolean;
-  effect: 'ALLOW' | 'DENY';
+  effect: "ALLOW" | "DENY";
 }
 
 /** 1 entry permission catalog (global, no-RLS) — dùng cho AC-5 scope ⊆ grant validation. */
@@ -102,6 +111,15 @@ export interface IPermissionRepository {
    * Returns [] when user has no roles. Throws on DB/connection error.
    */
   getCompanyRoleGrants(userId: string, companyId: string): Promise<CompanyRoleGrant[]>;
+
+  /**
+   * S2-AUTH-BE-1 — như getCompanyRoleGrants nhưng kèm role_permissions.data_scope (cho /auth/me `scopes`).
+   * Returns [] when user has no roles. Throws on DB/connection error.
+   */
+  getCompanyRoleGrantsWithScope(
+    userId: string,
+    companyId: string,
+  ): Promise<CompanyRoleGrantWithScope[]>;
 
   /**
    * Returns all object_permissions for userId (and user's roles) in companyId

@@ -1,9 +1,10 @@
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ShieldCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { EmployeeDto, PermissionEffect } from "@mediaos/contracts";
 import { ApiError } from "@mediaos/web-core";
-import { Button, Dialog, Input, Select } from "@mediaos/ui";
+import { Button, Dialog, Input } from "@mediaos/ui";
 import { rbacApi } from "@/lib/rbac-api";
 
 interface ObjectPermissionDialogProps {
@@ -31,8 +32,13 @@ const EMPTY_FORM: FormState = {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const EFFECT_OPTIONS: Array<{ value: PermissionEffect; labelKey: string }> = [
+  { value: "ALLOW", labelKey: "objectDialog.effectAllow" },
+  { value: "DENY", labelKey: "objectDialog.effectDeny" },
+];
+
 /**
- * Set/xoá object-permission override cho 1 user (subjectType="user"). CS-2 (mirror apps/admin tenant/rbac).
+ * Set/xoá object-permission override cho 1 user (subjectType="user"). CS-2.
  * PUT/DELETE /permissions/object — gate BE `grant-object-permission:permission` (isSensitive).
  * Subject = user đã chọn; nhập action/resourceType/objectType/objectId + effect.
  */
@@ -130,47 +136,110 @@ export function ObjectPermissionDialog({
             onClick={() => validate() && removeMutation.mutate()}
             disabled={pending}
           >
-            {t("actions.remove")}
+            {removeMutation.isPending ? t("common:saving") : t("actions.remove")}
           </Button>
-          <Button onClick={() => validate() && setMutation.mutate()} disabled={pending}>
+          <Button
+            onClick={() => validate() && setMutation.mutate()}
+            disabled={pending}
+          >
             {setMutation.isPending ? t("common:saving") : t("actions.set")}
           </Button>
         </>
       }
     >
+      {/* Cảnh báo nhạy cảm */}
+      <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />
+        <span>{t("objectDialog.warning")}</span>
+      </div>
+
       <div className="space-y-4">
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">{t("objectDialog.actionLabel")}</span>
-          <Input value={form.action} onChange={(e) => update("action", e.target.value)} />
-        </label>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">{t("objectDialog.resourceTypeLabel")}</span>
-          <Input
-            value={form.resourceType}
-            onChange={(e) => update("resourceType", e.target.value)}
-          />
-        </label>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">{t("objectDialog.objectTypeLabel")}</span>
-          <Input value={form.objectType} onChange={(e) => update("objectType", e.target.value)} />
-        </label>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">{t("objectDialog.objectIdLabel")}</span>
-          <Input value={form.objectId} onChange={(e) => update("objectId", e.target.value)} />
-        </label>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">{t("objectDialog.effectLabel")}</span>
-          <Select
-            value={form.effect}
-            onChange={(e) => update("effect", e.target.value as PermissionEffect)}
-          >
-            <option value="ALLOW">{t("objectDialog.effectAllow")}</option>
-            <option value="DENY">{t("objectDialog.effectDeny")}</option>
-          </Select>
-        </label>
+        {/* Hai cột: action + resourceType */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label htmlFor="obj-action" className="block text-sm font-medium">
+              {t("objectDialog.actionLabel")}
+            </label>
+            <Input
+              id="obj-action"
+              value={form.action}
+              onChange={(e) => update("action", e.target.value)}
+              placeholder="read"
+              disabled={pending}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="obj-resource-type" className="block text-sm font-medium">
+              {t("objectDialog.resourceTypeLabel")}
+            </label>
+            <Input
+              id="obj-resource-type"
+              value={form.resourceType}
+              onChange={(e) => update("resourceType", e.target.value)}
+              placeholder="task"
+              disabled={pending}
+            />
+          </div>
+        </div>
+
+        {/* Hai cột: objectType + objectId */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label htmlFor="obj-object-type" className="block text-sm font-medium">
+              {t("objectDialog.objectTypeLabel")}
+            </label>
+            <Input
+              id="obj-object-type"
+              value={form.objectType}
+              onChange={(e) => update("objectType", e.target.value)}
+              placeholder="project"
+              disabled={pending}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="obj-object-id" className="block text-sm font-medium">
+              {t("objectDialog.objectIdLabel")}
+            </label>
+            <Input
+              id="obj-object-id"
+              value={form.objectId}
+              onChange={(e) => update("objectId", e.target.value)}
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              disabled={pending}
+            />
+          </div>
+        </div>
+
+        {/* Effect toggle */}
+        <div className="space-y-1.5">
+          <span className="block text-sm font-medium">{t("objectDialog.effectLabel")}</span>
+          <div className="flex gap-2">
+            {EFFECT_OPTIONS.map(({ value, labelKey }) => (
+              <button
+                key={value}
+                type="button"
+                disabled={pending}
+                className={[
+                  "flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                  form.effect === value
+                    ? value === "ALLOW"
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                      : "border-red-300 bg-red-50 text-red-800"
+                    : "border-border bg-background text-muted-foreground hover:bg-muted/60",
+                ].join(" ")}
+                onClick={() => update("effect", value)}
+              >
+                {t(labelKey)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Hint về objectId */}
+        <p className="text-xs text-muted-foreground">{t("objectDialog.objectIdHint")}</p>
 
         {error && (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" aria-live="assertive" className="text-sm text-destructive">
             {error}
           </p>
         )}

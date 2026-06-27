@@ -1,6 +1,7 @@
 import { Module, forwardRef } from "@nestjs/common";
 import { CryptoModule } from "../crypto/crypto.module";
 import { DatabaseModule } from "../db/db.module";
+import { ModuleCatalogModule } from "../foundation/module-catalog/module-catalog.module";
 import { PermissionModule } from "../permission/permission.module";
 import { SecurityPolicyModule } from "../security-policy/security-policy.module";
 import { AuthController } from "./auth.controller";
@@ -8,6 +9,7 @@ import { AuthService } from "./auth.service";
 import { LoginRateLimiter } from "./login-rate-limiter";
 import { PasswordService } from "./password.service";
 import { ReplayGuardService } from "./replay-guard.service";
+import { ResetPasswordMailService } from "./reset-password-mail.service";
 import { SecurityAlertService } from "./security-alert.service";
 import { SessionCookieService } from "./session-cookie.service";
 import { TokenService } from "./token.service";
@@ -30,6 +32,9 @@ import { TwoFactorEnforcementGuard } from "./two-factor-enforcement.guard";
     // CS-9: SecurityPolicyService cho enforce IP/giờ ở login/refresh + 2FA fail-stricter. forwardRef vì
     // SecurityPolicyModule → PermissionModule → forwardRef(AuthModule) (vòng gián tiếp).
     forwardRef(() => SecurityPolicyModule),
+    // S2-AUTH-BE-1: /auth/me TÁI DÙNG ModuleCatalogService.getMyApps() cho `modules`. ModuleCatalogModule
+    // KHÔNG import AuthModule (chỉ Permission/Settings/Database) → import thẳng, KHÔNG cần forwardRef.
+    ModuleCatalogModule,
   ],
   controllers: [AuthController],
   providers: [
@@ -40,6 +45,7 @@ import { TwoFactorEnforcementGuard } from "./two-factor-enforcement.guard";
     TotpService,
     TwoFactorService,
     ReplayGuardService,
+    ResetPasswordMailService,
     SecurityAlertService,
     SessionCookieService,
     TwoFactorEnforcementGuard,

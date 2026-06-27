@@ -1,0 +1,60 @@
+# .gitleaks.toml — cấu hình secret scanning cho MediaOS (WO S0-CI-2)
+#
+# MỤC TIÊU (BẤT BIẾN #3 — không secret plaintext): chặn secret THẬT lọt vào repo/history.
+# Dùng kèm .github/workflows/security.yml (gitleaks-action@v2) chạy trên pull_request + push,
+# full-history scan (fetch-depth: 0). Phát hiện secret ⇒ exit non-zero ⇒ FAIL build (cổng required).
+#
+# NGUYÊN TẮC ALLOWLIST: phạm vi HẸP — chỉ chứa các secret EPHEMERAL của CI đã biết
+# (mật khẩu DB của service container + JWT secret test trong ci.yml). Đây KHÔNG phải secret thật
+# (chỉ tồn tại trong runner ephemeral, không truy cập gì ngoài CI). KHÔNG dùng pattern bao trùm
+# (vd: allowlist toàn bộ .github/, allowlist *.ts, hay regex .* ) — như thế sẽ che secret thật.
+
+# Kế thừa toàn bộ ruleset mặc định của gitleaks (AWS, GCP, JWT, generic API key, private key, …).
+[extend]
+useDefault = true
+
+# ── Allowlist #0: chuỗi ephemeral CI đã biết — CHỈ trong file ci.yml, từng chuỗi liệt kê tường minh ──
+# Đây KHÔNG phải secret thật (chỉ tồn tại trong runner ephemeral). Phạm vi đường dẫn HẸP = đúng ci.yml.
+[[allowlists]]
+description = "Ephemeral CI secrets trong ci.yml — không phải secret thật, không nới rộng."
+
+# Chỉ áp allowlist cho đúng file workflow chứa các giá trị ephemeral này (phạm vi đường dẫn hẹp).
+paths = [
+  '''\.github/workflows/ci\.yml''',
+]
+
+# Liệt kê TƯỜNG MINH từng chuỗi ephemeral — neo bằng anchor đầy đủ, không dùng wildcard bao trùm.
+# Nếu CI đổi mật khẩu ephemeral, cập nhật danh sách này (không thêm pattern rộng để "cho qua").
+regexes = [
+  # Mật khẩu role DB của service Postgres CI (ci.yml env + DSN).
+  '''ci_app_pw''',
+  '''ci_worker_pw''',
+  '''ci_pgb_pw''',
+  # Mật khẩu superuser Postgres của service container CI (POSTGRES_PASSWORD=postgres / DSN ...:postgres@).
+  '''POSTGRES_PASSWORD: postgres''',
+  '''mediaos:postgres@''',
+  # JWT secret test — chỉ ký token trong CI auth test (G2-6). Neo theo prefix cố định 'ci-only-jwt-secret-'.
+  '''ci-only-jwt-secret-[0-9a-f]+''',
+]
+
+# ── False-positive #1: Idempotency-Key trong tài liệu API/QA ───────────────────────────────────
+# Idempotency-Key/idempotency_key là token CLIENT tự sinh để khử trùng request — KHÔNG phải secret
+# (theo thiết kế là non-secret, có thể log). gitseaks generic-api-key bắt nhầm UUID/chuỗi ví dụ trong docs.
+# Phạm vi HẸP: chỉ áp khi chuỗi đứng NGAY SAU header/field 'Idempotency-Key' (không allowlist UUID chung).
+[[allowlists]]
+description = "Idempotency-Key header values trong docs/QA — non-secret by design (request dedup)."
+regexTarget = "match"
+regexes = [
+  '''(?i)idempotency[-_]key["']?\s*[:=]\s*["']?[\w.\-]+''',
+]
+
+# ── False-positive #2: đọc secret từ env (đúng pattern BẤT BIẾN #3) ─────────────────────────────
+# 'env.S3_SECRET_KEY' / 'env.JWT_SECRET' … là THAM CHIẾU biến (đọc từ env/secret manager) — KHÔNG phải
+# secret hard-code. Phạm vi HẸP: chỉ allowlist khi giá trị là 'env.<NAME>' (biểu thức đọc env), KHÔNG
+# allowlist giá trị literal được gán cứng.
+[[allowlists]]
+description = "Tham chiếu đọc secret từ env (env.X) trong source — đúng pattern, không phải hard-code."
+regexTarget = "match"
+regexes = [
+  '''(?:secret|token|key|password)\w*\s*=\s*env\.[A-Z0-9_]+''',
+]

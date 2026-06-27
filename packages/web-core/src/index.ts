@@ -16,17 +16,72 @@ export {
   configureApiBaseUrl,
   getApiBaseUrl,
   configureAuthAppUrl,
+  configureClientVersion,
   refreshAccessToken,
   redirectToAuth,
   getAuthRedirectUrl,
   invalidateSession,
   logoutSession,
+  type ApiFetchOpts,
 } from "./lib/api-client";
+
+// API error kind + mapper (FRONTEND-04 §10, §22)
+export { type ApiErrorKind, mapStatusToErrorKind, kindFromPayload } from "./lib/api-error-kind";
+export {
+  mapApiErrorToUi,
+  isValidationDetails,
+  extractValidationDetails,
+  showApiErrorToast,
+  configureToast,
+  type ErrorUiBehavior,
+  type ErrorUiMapping,
+  type ToastFn,
+} from "./lib/error-mapper";
+
+// API types (FRONTEND-04 §9) — NAMED re-export; no wildcard (contracts exports type ApiError)
+export type {
+  ApiValidationDetail,
+  ApiPagination,
+  ApiMeta,
+  ApiSuccessResponse,
+  ApiListResponse,
+  ApiErrorPayload,
+  ApiErrorResponse,
+  HttpMethod,
+  ApiRequestOptions,
+  ApiListParams,
+  TableQueryState,
+} from "./lib/api-types";
+export { toApiListParams } from "./lib/api-types";
+
+// Request-id + idempotency helpers (FRONTEND-04 §11)
+export { createRequestId } from "./lib/api-request-id";
+export { createIdempotencyKey } from "./lib/api-idempotency";
+
+// Query string helpers (FRONTEND-04 §12)
+export { buildQueryString } from "./lib/api-params";
+
+// Query key factories (FRONTEND-04 §17) — pure const arrays, no react-query dep
+export {
+  rootKeys,
+  authKeys,
+  dashboardKeys,
+  hrKeys,
+  attendanceKeys,
+  leaveKeys,
+  taskKeys,
+  notificationKeys,
+} from "./lib/query-keys";
+
+// Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
+export { shouldRetryQuery } from "./lib/query-retry";
 export { bootstrapSession } from "./lib/session";
 export { getHealth, type Health } from "./lib/api";
 export { authApi } from "./lib/auth-api";
+export { usersApi } from "./lib/users-api";
 export { twoFactorApi } from "./lib/two-factor-api";
 export { notificationApi } from "./lib/notification-api";
+export { hrApi } from "./lib/hr-api";
 
 // Permission
 export { useCan } from "./hooks/use-can";
@@ -47,12 +102,45 @@ export {
   type NavCategoryGroup,
 } from "./lib/nav";
 
-// Định dạng nhân sự
+// Registry: App / Sidebar / Route + Permission Checker (FRONTEND-03 §10–§17)
 export {
-  EMPLOYEE_STATUS_VARIANT,
-  formatSalary,
-  type EmployeeStatus,
-} from "./lib/employee-format";
+  // Types — Module & Scope
+  type ModuleCode,
+  type DataScope,
+  type ModuleStatus,
+  type ModuleAccessItem,
+  // Types — Permission
+  type PermissionCode,
+  type PermissionRequirement,
+  type PermissionCheckResult,
+  type UserPermission,
+  type PermissionChecker,
+  createPermissionChecker,
+  // Types — Session
+  type AuthStatus,
+  type SessionUser,
+  type SessionCompany,
+  type SessionContext,
+  normalizeUserStatus,
+  // Route metadata & guard
+  type LayoutType,
+  type RouteMeta,
+  type RouteGuardAction,
+  type RouteGuardResult,
+  evaluateRouteAccess,
+  ROUTE_REGISTRY,
+  getRouteMeta,
+  // App registry
+  type AppRegistryItem,
+  APP_REGISTRY,
+  getVisibleApps,
+  // Sidebar registry
+  type SidebarItemMeta,
+  filterSidebarItems,
+} from "./lib/registry";
+
+// Định dạng nhân sự
+export { EMPLOYEE_STATUS_VARIANT, formatSalary, type EmployeeStatus } from "./lib/employee-format";
 
 // i18n: instance dùng chung + helper đăng ký namespace feature
 export { default as i18n, registerI18nResources } from "./i18n";

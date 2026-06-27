@@ -1,0 +1,326 @@
+import { Injectable } from "@nestjs/common";
+import { and, asc, desc, eq, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
+import type { HrEmployeeSortField } from "@mediaos/contracts";
+import { DatabaseService, type TenantTx } from "../db/db.service";
+import {
+  contractTypes,
+  employeeCodeConfigs,
+  employeeProfiles,
+  jobLevels,
+  orgUnits,
+  positions,
+  users,
+} from "../db/schema";
+
+/**
+ * S2-HR-BE-1 — read-only repository for the HR read core. Every method runs inside the caller's
+ * tenant tx (withTenant → RLS+FORCE), and the list query ANDs an externally-supplied scope predicate
+ * (from DataScopeService) so the caller only ever sees their permitted rows (BẤT BIẾN #1).
+ *
+ * It SELECTs only — no UPDATE/DELETE — except the salary audit INSERT which the service owns.
+ */
+
+const LIST_COLUMNS = {
+  id: employeeProfiles.id,
+  userId: employeeProfiles.userId,
+  employeeCode: employeeProfiles.employeeCode,
+  fullName: users.fullName,
+  email: users.email,
+  orgUnitId: employeeProfiles.orgUnitId,
+  orgUnitName: orgUnits.name,
+  positionId: employeeProfiles.positionId,
+  positionName: positions.name,
+  workType: employeeProfiles.workType,
+  employmentType: employeeProfiles.employmentType,
+  status: employeeProfiles.status,
+  baseSalary: employeeProfiles.baseSalary,
+} as const;
+
+const DETAIL_COLUMNS = {
+  id: employeeProfiles.id,
+  companyId: employeeProfiles.companyId,
+  userId: employeeProfiles.userId,
+  employeeCode: employeeProfiles.employeeCode,
+  fullName: users.fullName,
+  email: users.email,
+  orgUnitId: employeeProfiles.orgUnitId,
+  orgUnitName: orgUnits.name,
+  positionId: employeeProfiles.positionId,
+  positionName: positions.name,
+  directManagerId: employeeProfiles.directManagerId,
+  // directManagerId references users.id → this IS the manager's user id (for Team in-scope check).
+  directManagerUserId: employeeProfiles.directManagerId,
+  workType: employeeProfiles.workType,
+  employmentType: employeeProfiles.employmentType,
+  startDate: employeeProfiles.startDate,
+  endDate: employeeProfiles.endDate,
+  status: employeeProfiles.status,
+  baseSalary: employeeProfiles.baseSalary,
+  salaryType: employeeProfiles.salaryType,
+  phone: employeeProfiles.phone,
+  contractType: employeeProfiles.contractType,
+  notes: employeeProfiles.notes,
+  createdAt: employeeProfiles.createdAt,
+  updatedAt: employeeProfiles.updatedAt,
+} as const;
+
+/** Raw list row (baseSalary still the DB numeric string — the service masks/parses it). */
+export interface HrListRow {
+  id: string;
+  // S2-HR-BE-2: LEFT JOIN users → these are null for an unlinked (userId IS NULL) employee.
+  userId: string | null;
+  employeeCode: string | null;
+  fullName: string | null;
+  email: string | null;
+  orgUnitId: string | null;
+  orgUnitName: string | null;
+  positionId: string | null;
+  positionName: string | null;
+  workType: string | null;
+  employmentType: string | null;
+  status: string;
+  baseSalary: string | null;
+}
+
+/** Raw detail row (sensitive fields still raw — the service masks them per permission). */
+export interface HrDetailRow {
+  id: string;
+  companyId: string;
+  // S2-HR-BE-2: LEFT JOIN users → null for an unlinked employee.
+  userId: string | null;
+  employeeCode: string | null;
+  fullName: string | null;
+  email: string | null;
+  orgUnitId: string | null;
+  orgUnitName: string | null;
+  positionId: string | null;
+  positionName: string | null;
+  directManagerId: string | null;
+  directManagerUserId: string | null;
+  workType: string | null;
+  employmentType: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  status: string;
+  baseSalary: string | null;
+  salaryType: string | null;
+  phone: string | null;
+  contractType: string | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface HrListFilters {
+  search?: string;
+  orgUnitId?: string;
+  positionId?: string;
+  status?: string;
+  sort: HrEmployeeSortField;
+  order: "asc" | "desc";
+  /** 1-based page number (already clamped by the DTO). */
+  page: number;
+  pageSize: number;
+}
+
+/** Allowlist mapping the DTO sort key → the concrete column (blocks ORDER BY injection). */
+const SORT_COLUMNS = {
+  fullName: users.fullName,
+  employeeCode: employeeProfiles.employeeCode,
+  status: employeeProfiles.status,
+  createdAt: employeeProfiles.createdAt,
+} as const;
+
+@Injectable()
+export class HrReadRepository {
+  constructor(private readonly db: DatabaseService) {}
+
+  /**
+   * Scoped + paginated list. `scopeCond` is the DataScopeService predicate (Own/Team/Department/…);
+   * it is ANDed with the tenant guard + soft-delete + filters so a row outside the caller's scope is
+   * never returned. Returns the page rows + the total matching count (for pagination meta).
+   */
+  async listScopedTx(
+    tx: TenantTx,
+    companyId: string,
+    scopeCond: SQL,
+    filters: HrListFilters,
+  ): Promise<{ rows: HrListRow[]; total: number }> {
+    const conditions: SQL[] = [
+      eq(employeeProfiles.companyId, companyId),
+      isNull(employeeProfiles.deletedAt),
+      scopeCond,
+    ];
+    if (filters.orgUnitId) conditions.push(eq(employeeProfiles.orgUnitId, filters.orgUnitId));
+    if (filters.positionId) conditions.push(eq(employeeProfiles.positionId, filters.positionId));
+    if (filters.status) conditions.push(eq(employeeProfiles.status, filters.status));
+    if (filters.search) {
+      const term = `%${filters.search}%`;
+      const fuzzy = or(
+        ilike(users.fullName, term),
+        ilike(users.email, term),
+        ilike(employeeProfiles.employeeCode, term),
+      );
+      if (fuzzy) conditions.push(fuzzy);
+    }
+
+    const where = and(...conditions);
+    const sortCol = SORT_COLUMNS[filters.sort];
+    const direction = filters.order === "desc" ? desc : asc;
+    const offset = (filters.page - 1) * filters.pageSize;
+
+    const rows = await tx
+      .select(LIST_COLUMNS)
+      .from(employeeProfiles)
+      .leftJoin(users, eq(employeeProfiles.userId, users.id))
+      .leftJoin(orgUnits, eq(employeeProfiles.orgUnitId, orgUnits.id))
+      .leftJoin(positions, eq(employeeProfiles.positionId, positions.id))
+      .where(where)
+      .orderBy(direction(sortCol))
+      .limit(filters.pageSize)
+      .offset(offset);
+
+    const [{ count } = { count: 0 }] = await tx
+      .select({ count: sql<number>`cast(count(*) as int)` })
+      .from(employeeProfiles)
+      .leftJoin(users, eq(employeeProfiles.userId, users.id))
+      .where(where);
+
+    return { rows: rows as HrListRow[], total: Number(count) };
+  }
+
+  /** Single employee by profile id (tenant-scoped). companyId/directManagerUserId surfaced for in-scope. */
+  async findByIdTx(tx: TenantTx, companyId: string, id: string): Promise<HrDetailRow | undefined> {
+    const [row] = await tx
+      .select(DETAIL_COLUMNS)
+      .from(employeeProfiles)
+      .leftJoin(users, eq(employeeProfiles.userId, users.id))
+      .leftJoin(orgUnits, eq(employeeProfiles.orgUnitId, orgUnits.id))
+      .leftJoin(positions, eq(employeeProfiles.positionId, positions.id))
+      .where(
+        and(
+          eq(employeeProfiles.companyId, companyId),
+          eq(employeeProfiles.id, id),
+          isNull(employeeProfiles.deletedAt),
+        ),
+      )
+      .limit(1);
+    return row as HrDetailRow | undefined;
+  }
+
+  /** The profile linked to a specific login user (for GET /hr/me/profile). Self lookup, NOT scope-based. */
+  async findByUserIdTx(
+    tx: TenantTx,
+    companyId: string,
+    userId: string,
+  ): Promise<HrDetailRow | undefined> {
+    const [row] = await tx
+      .select(DETAIL_COLUMNS)
+      .from(employeeProfiles)
+      .leftJoin(users, eq(employeeProfiles.userId, users.id))
+      .leftJoin(orgUnits, eq(employeeProfiles.orgUnitId, orgUnits.id))
+      .leftJoin(positions, eq(employeeProfiles.positionId, positions.id))
+      .where(
+        and(
+          eq(employeeProfiles.companyId, companyId),
+          eq(employeeProfiles.userId, userId),
+          isNull(employeeProfiles.deletedAt),
+        ),
+      )
+      .limit(1);
+    return row as HrDetailRow | undefined;
+  }
+
+  // ── Lookups (active reference data; never carry sensitive fields) ───────────────
+
+  listDepartmentsTx(tx: TenantTx, companyId: string) {
+    return tx
+      .select({
+        id: orgUnits.id,
+        name: orgUnits.name,
+        code: orgUnits.code,
+        parentId: orgUnits.parentId,
+      })
+      .from(orgUnits)
+      .where(
+        and(
+          eq(orgUnits.companyId, companyId),
+          eq(orgUnits.status, "active"),
+          isNull(orgUnits.deletedAt),
+        ),
+      )
+      .orderBy(asc(orgUnits.name));
+  }
+
+  listPositionsTx(tx: TenantTx, companyId: string) {
+    return tx
+      .select({ id: positions.id, name: positions.name, code: positions.code })
+      .from(positions)
+      .where(
+        and(
+          eq(positions.companyId, companyId),
+          eq(positions.status, "active"),
+          isNull(positions.deletedAt),
+        ),
+      )
+      .orderBy(asc(positions.name));
+  }
+
+  listJobLevelsTx(tx: TenantTx, companyId: string) {
+    return tx
+      .select({
+        id: jobLevels.id,
+        name: jobLevels.name,
+        code: jobLevels.code,
+        rankOrder: jobLevels.rankOrder,
+      })
+      .from(jobLevels)
+      .where(
+        and(
+          eq(jobLevels.companyId, companyId),
+          eq(jobLevels.status, "active"),
+          isNull(jobLevels.deletedAt),
+        ),
+      )
+      .orderBy(asc(jobLevels.rankOrder), asc(jobLevels.name));
+  }
+
+  listContractTypesTx(tx: TenantTx, companyId: string) {
+    return tx
+      .select({
+        id: contractTypes.id,
+        name: contractTypes.name,
+        code: contractTypes.code,
+        requiresEndDate: contractTypes.requiresEndDate,
+      })
+      .from(contractTypes)
+      .where(
+        and(
+          eq(contractTypes.companyId, companyId),
+          eq(contractTypes.status, "active"),
+          isNull(contractTypes.deletedAt),
+        ),
+      )
+      .orderBy(asc(contractTypes.name));
+  }
+
+  /** The active employee-code config (format only — allocation is a separate write path). */
+  async getEmployeeCodeConfigTx(tx: TenantTx, companyId: string) {
+    const [row] = await tx
+      .select({
+        prefix: employeeCodeConfigs.prefix,
+        pattern: employeeCodeConfigs.pattern,
+        numberLength: employeeCodeConfigs.numberLength,
+      })
+      .from(employeeCodeConfigs)
+      .where(
+        and(
+          eq(employeeCodeConfigs.companyId, companyId),
+          eq(employeeCodeConfigs.status, "active"),
+          isNull(employeeCodeConfigs.deletedAt),
+        ),
+      )
+      .limit(1);
+    return row;
+  }
+}

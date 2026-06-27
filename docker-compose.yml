@@ -53,6 +53,14 @@ services:
       DB_PORT: "5432"
       DB_NAME: ${POSTGRES_DB:-mediaos}
       # DB_USER cố tình BỎ TRỐNG → pass-through user (xem ghi chú chí mạng ở trên).
+      # 🔧 FIX auth_query (S1 reconcile 2026-06-24): entrypoint edoburu dựng dòng [databases] là
+      #    `auth_user=${DB_USER:-postgres}`. DB_USER trống ⇒ rơi về `auth_user=postgres` (role KHÔNG tồn
+      #    tại — superuser của ta là `mediaos`) ⇒ pgbouncer login backend chạy auth_query THẤT BẠI
+      #    ("password authentication failed for user postgres"). Đặt DATABASE_URL để DB_USER=pgbouncer_auth
+      #    CHỈ nuôi `auth_user=` của database (generate_config_db_entry KHÔNG phát `user=` per-db) ⇒
+      #    client→backend VẪN pass-through (mediaos_app) ⇒ RLS GIỮ NGUYÊN (đã verify current_user).
+      #    Mật khẩu trong URL chỉ dùng nếu phải tự sinh userlist; ở đây userlist đã có pgbouncer_auth nên bỏ qua.
+      DATABASE_URL: postgres://pgbouncer_auth:${PGBOUNCER_AUTH_PASSWORD:-changeme_pgbauth_only}@postgres:5432/${POSTGRES_DB:-mediaos}
       POOL_MODE: transaction
       AUTH_TYPE: scram-sha-256
       AUTH_USER: pgbouncer_auth
@@ -63,10 +71,20 @@ services:
       # Drizzle/pg dùng simple/parametrized query nên OK.
       IGNORE_STARTUP_PARAMETERS: extra_float_digits,options
     ports:
-      - "${PGBOUNCER_PORT:-6432}:6432"
+      # edoburu/pgbouncer lắng nghe container:5432 (docker logs: 'listening on 0.0.0.0:5432').
+      # Host :6432 (đích DATABASE_URL/RLS) forward tới cổng PgBouncer thực nghe (container:5432).
+      - "${PGBOUNCER_PORT:-6432}:5432"
     volumes:
       # userlist.txt chứa hash của pgbouncer_auth — sinh bởi setup-db-roles.mjs, đã gitignore.
       - ./.secrets/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    healthcheck:
+      # Probe cổng container-internal PgBouncer (5432). PgBouncer + Postgres ở 2 container khác nhau
+      # nên 127.0.0.1:5432 trong container này = chính PgBouncer, KHÔNG phải Postgres (DEVOPS-03 §16).
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U ${POSTGRES_USER:-mediaos} || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
     depends_on:
       postgres:
         condition: service_healthy

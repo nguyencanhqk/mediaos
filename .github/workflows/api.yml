@@ -83,6 +83,9 @@ jobs:
       JWT_SECRET: ci-only-jwt-secret-0123456789abcdef
       # Scheduler tắt trong CI test (NODE_ENV=test) — vitest set NODE_ENV=test; double-guard kill-switch off.
       WORKERS_SCHEDULER_ENABLED: "false"
+      # Test crypto/2FA (LocalKekProvider) cần file KEK 32-byte tại path này. CI sinh KEK EPHEMERAL ở step dưới
+      # (KHÔNG phải secret thật — prod dùng Vault transit, ADR-0004). Đặt env để cả gen-step lẫn test cùng đọc.
+      KMS_LOCAL_KEK_PATH: ${{ github.workspace }}/.secrets/local-kek.bin
 
     steps:
       - uses: actions/checkout@v4
@@ -110,12 +113,52 @@ jobs:
       - name: Apply migrations (ephemeral Postgres)
         run: pnpm --filter @mediaos/api db:migrate
 
+      # Gate journal forward-only (S0-CI-1): migrate DB rỗng → kiểm BẤT BIẾN NỘI TẠI của
+      # migrations/meta/_journal.json (idx liên tục từ 0/no-gap, tag duy nhất/no-dup, head=entries[last].idx
+      # ĐỌC ĐỘNG, số .sql áp = entries.length). KHÔNG so literal idx chép tay. Chạy SAU migrate, TRƯỚC roles.
+      - name: Migration check (db:check)
+        run: pnpm --filter @mediaos/api db:check
+
       # Gán mật khẩu mediaos_app/worker (tách secret khỏi migration) → app role nối được, RLS ép thật.
       - name: Setup DB role passwords
         run: pnpm db:setup-roles
 
+      # Crypto tests (secret-encryption · 2FA enroll) cần KEK 32-byte tại KMS_LOCAL_KEK_PATH (LocalKekProvider,
+      # dev-only). Sinh KEK NGẪU NHIÊN ephemeral mỗi run — KHÔNG phải secret thật (prod = Vault transit, ADR-0004).
+      - name: Generate ephemeral dev KEK (crypto tests)
+        run: |
+          mkdir -p "$(dirname "$KMS_LOCAL_KEK_PATH")"
+          node -e "require('fs').writeFileSync(process.env.KMS_LOCAL_KEK_PATH, require('crypto').randomBytes(32))"
+
       - name: Test (unit + integration RLS/auth)
         run: pnpm --filter @mediaos/api test
+
+      # ── S2-AUTH-SEED-1 / FIX-SEED1-D — integration suite trên DB CÔ LẬP của CI ──────────
+      # 2 spec SEED-1 (canonical roles per-pair data_scope + super-admin bootstrap) gate
+      # `runIsolatedDb = hasDb && !!process.env.LANE_DB` → SKIP khi LANE_DB vắng. Step Test phía trên KHÔNG
+      # set LANE_DB nên 66+9 = 75 test SEED-1 đều SKIP (gốc FAIL #3 của QA: tests không THỰC SỰ chạy).
+      #
+      # LANE_DB=mediaos = CHÍNH DB ephemeral của job này (đã migrate 0000→head ở step "Apply migrations" +
+      # db:check pass). Đây là DB CÔ LẬP/EPHEMERAL của CI, KHÔNG phải DB dev chung ⇒ KHÔNG vi phạm policy
+      # memory integration-test-LANE_DB-gate (gate đó chống .env trỏ DB dev chung làm hasDb=true → đỏ-giả).
+      # Precedence vitest.config laneDbEnv(): DATABASE_URL/DIRECT explicit (env job) > LANE_DB > fallback —
+      # nên LANE_DB CHỈ bật gate, KHÔNG đổi connection string (vẫn trỏ DB ephemeral đã migrate tới head).
+      #
+      # Filter ĐÚNG 2 file SEED-1 (KHÔNG bật blanket mọi spec hasDb&&LANE_DB chưa được CI kiểm chứng — ngoài
+      # scope lane). Log step này = artifact GREEN xác minh được cho QA (đối chiếu FAIL #3 + bằng chứng GREEN).
+      # Dùng `exec vitest run <file>` (KHÔNG `test -- <file>`): qua `pnpm run test` thì `--` không truyền
+      # đúng filter cho vitest (vitest coi `--` là token positional → chạy CẢ suite). `exec` gọi thẳng vitest
+      # ⇒ 2 path là positional filter THẬT → đúng 75 test (66 canonical-roles + 9 super-admin-bootstrap).
+      - name: Integration (SEED-1 isolated-DB suites)
+        env:
+          LANE_DB: mediaos
+        run: >-
+          pnpm --filter @mediaos/api exec vitest run
+          test/integration/auth-seed-canonical-roles.int-spec.ts
+          test/integration/super-admin-bootstrap.int-spec.ts
+
+      # DEFER → S0-CI-2: secret-scan (gitleaks) + dependency-scan (pnpm audit) — ĐÃ hiện thực ở security.yml
+      # (WO S0-CI-2); KHÔNG bỏ qua silently (DEVOPS-02 §9.2/§11/§17.2). Đặt ở workflow riêng để tránh trùng lặp.
 
       - name: Build (NestJS)
         run: pnpm --filter @mediaos/api build

@@ -785,6 +785,153 @@
       "when": 1717500460000,
       "tag": "0410_cs10_user_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1717500470000,
+      "tag": "0420_pm_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1717500480000,
+      "tag": "0430_acct2_admin_user_admin_perms",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1717500490000,
+      "tag": "0431_foundation_db1_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1717500500000,
+      "tag": "0432_foundation_db2_audit_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1717500510000,
+      "tag": "0433_foundation_db3_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1717500520000,
+      "tag": "0434_foundation_db4_sequences_holidays",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1717500530000,
+      "tag": "0435_foundation_db5_retention_seed_modules",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1717500540000,
+      "tag": "0436_foundation_dbfix1_company_id_immutable",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1717500550000,
+      "tag": "0437_be2_audit_sequence_counter",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1717500560000,
+      "tag": "0438_foundation_db6_audit_db08_shape",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1717500570000,
+      "tag": "0439_setting1_audit_object_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1717500580000,
+      "tag": "0440_file1_audit_object_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1717500590000,
+      "tag": "0441_s2_authdb1_role_perm_data_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1717500600000,
+      "tag": "0442_s2_hrdb1_hr_core_reconcile",
+      "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1717500610000,
+      "tag": "0443_s2_authdb2_sessions_logs_security_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1717500620000,
+      "tag": "0444_s2_authseed1_canonical_roles_perms",
+      "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1717500630000,
+      "tag": "0445_s2_hrseed1_hr_perms",
+      "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1717500640000,
+      "tag": "0450_s2_authbe3_user_admin_perms",
+      "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1717500645000,
+      "tag": "0446_s2_hrbe3_audit_object_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1717500650000,
+      "tag": "0451_s2_hrbe4_profile_change_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1717500655000,
+      "tag": "0452_s3_attdb1_att_core",
+      "breakpoints": true
     }
   ]
 }

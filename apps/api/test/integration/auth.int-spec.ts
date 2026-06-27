@@ -53,7 +53,7 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
 
   function newAuth(): AuthService {
     const dbsvc = new DatabaseService();
-    const mockPermissions = { getCapabilities: async () => ({}) } as unknown as PermissionService;
+    const mockPermissions = { getCapabilities: async () => ({}), getCapabilityScopes: async () => ({}) } as unknown as PermissionService;
     const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
     const replayGuard = new ReplayGuardService(new ValkeyService());
     const securityAlerts = new SecurityAlertService(dbsvc, new AuditService());
@@ -79,6 +79,7 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
       replayGuard,
       securityAlerts,
       makeSecurityPolicyService(dbsvc),
+      { getMyApps: async () => [] } as never,
     );
   }
 
@@ -152,11 +153,17 @@ describe.skipIf(!hasDb)("G2-6 auth flow", () => {
     );
     const payload = ev.rows[0].payload as { userId: string; resetTokenEnc: unknown };
     // Mail consumer JIT decrypt (G6-2f): payload mang envelope, không còn plaintext.
-    const resetToken = await fresh.decryptResetToken(A.companyId, payload.resetTokenEnc, payload.userId);
+    const resetToken = await fresh.decryptResetToken(
+      A.companyId,
+      payload.resetTokenEnc,
+      payload.userId,
+    );
     expect(resetToken).toContain(`${A.companyId}.`);
 
     const NEW_PW = "BrandNewPw!2026";
-    await expect(fresh.resetPassword({ token: resetToken, newPassword: NEW_PW })).resolves.toBeUndefined();
+    await expect(
+      fresh.resetPassword({ token: resetToken, newPassword: NEW_PW }),
+    ).resolves.toBeUndefined();
     // dùng lại token → từ chối
     await expect(
       fresh.resetPassword({ token: resetToken, newPassword: "another!Pw1" }),

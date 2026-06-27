@@ -1,6 +1,6 @@
 # Per-app frontend CI (build độc lập từng SPA) — runbook docs/ops/fs5-cutover-runbook.md §6.
 #
-# Mỗi app (web/auth/studio/people/console/admin) build & deploy RIÊNG: đổi 1 app KHÔNG rebuild cả monorepo.
+# Mỗi app (auth/console) build & deploy RIÊNG: đổi 1 app KHÔNG rebuild cả monorepo.
 # `changes` job dùng dorny/paths-filter để chỉ chạy app có path đổi (hoặc packages dùng chung / lockfile đổi).
 #
 # QUAN HỆ với ci.yml: ci.yml = cổng tích hợp CROSS-CUTTING (RLS qua PgBouncer, build toàn workspace) chạy
@@ -40,12 +40,9 @@ jobs:
         with:
           # Mỗi app rebuild khi: source app đổi, HOẶC package dùng chung đổi, HOẶC lockfile đổi.
           filters: |
-            web:     [ 'apps/web/**',     'packages/**', 'pnpm-lock.yaml' ]
             auth:    [ 'apps/auth/**',    'packages/**', 'pnpm-lock.yaml' ]
-            studio:  [ 'apps/studio/**',  'packages/**', 'pnpm-lock.yaml' ]
-            people:  [ 'apps/people/**',  'packages/**', 'pnpm-lock.yaml' ]
             console: [ 'apps/console/**', 'packages/**', 'pnpm-lock.yaml' ]
-            admin:   [ 'apps/admin/**',   'packages/**', 'pnpm-lock.yaml' ]
+            app:     [ 'apps/app/**',     'packages/**', 'pnpm-lock.yaml' ]
 
   # ── Build/typecheck/test từng app đổi (matrix) ────────────────────────────
   build:
@@ -77,41 +74,31 @@ jobs:
       - name: Build shared packages
         run: pnpm --filter @mediaos/contracts --filter @mediaos/web-core --filter @mediaos/ui build
 
-      # VITE_* prod nhúng lúc BUILD (build-time, KHÔNG runtime). Mỗi app chỉ set biến nó thực sự đọc.
-      # DOMAIN từ repo var PROD_DOMAIN (vắng → placeholder 'funtimemediacorp.com' để build vẫn xanh ở CI).
+      - name: Typecheck
+        run: pnpm --filter @mediaos/${{ matrix.app }} typecheck
+
+      # Test (vitest) chạy với env DEV mặc định — TUYỆT ĐỐI KHÔNG inject VITE_* prod TRƯỚC bước này: login.spec
+      # assert DEFAULT_APP_URL dev ('http://web.localhost:5273', config.ts fallback). Nếu set VITE_DEFAULT_APP_URL
+      # prod trước test → import.meta.env override → assertion lệch → đỏ-giả. Vì vậy Resolve VITE_* nằm SAU Test.
+      - name: Test
+        run: pnpm --filter @mediaos/${{ matrix.app }} test
+
+      # VITE_* prod nhúng lúc BUILD (build-time, KHÔNG runtime) — resolve SAU Test, chỉ phục vụ Build.
+      # Mỗi app chỉ set biến nó thực sự đọc. DOMAIN từ repo var PROD_DOMAIN (vắng → placeholder để build xanh ở CI).
       - name: Resolve build-time VITE_* env for ${{ matrix.app }}
         run: |
           DOMAIN="${{ vars.PROD_DOMAIN || 'funtimemediacorp.com' }}"
           AUTH_URL="https://auth.${DOMAIN}"
           echo "VITE_API_URL=https://api.${DOMAIN}/api/v1" >> "$GITHUB_ENV"
           case "${{ matrix.app }}" in
-            web)
-              echo "VITE_AUTH_APP_URL=${AUTH_URL}"          >> "$GITHUB_ENV"
-              echo "VITE_STUDIO_URL=https://studio.${DOMAIN}"  >> "$GITHUB_ENV"
-              echo "VITE_PEOPLE_URL=https://people.${DOMAIN}"  >> "$GITHUB_ENV"
-              echo "VITE_CONSOLE_URL=https://console.${DOMAIN}" >> "$GITHUB_ENV"
-              ;;
             auth)
               # bounce về launcher (root domain) khi ?redirect vắng/không hợp lệ
               echo "VITE_DEFAULT_APP_URL=https://${DOMAIN}"  >> "$GITHUB_ENV"
               ;;
-            studio)
+            console)
               echo "VITE_AUTH_APP_URL=${AUTH_URL}"          >> "$GITHUB_ENV"
-              echo "VITE_WORKFLOW_MOCK=false"               >> "$GITHUB_ENV"
-              ;;
-            people | console)
-              echo "VITE_AUTH_APP_URL=${AUTH_URL}"          >> "$GITHUB_ENV"
-              ;;
-            admin)
-              : # admin (operator plane) chỉ đọc VITE_API_URL
               ;;
           esac
-
-      - name: Typecheck
-        run: pnpm --filter @mediaos/${{ matrix.app }} typecheck
-
-      - name: Test
-        run: pnpm --filter @mediaos/${{ matrix.app }} test
 
       - name: Build
         run: pnpm --filter @mediaos/${{ matrix.app }} build
@@ -119,7 +106,7 @@ jobs:
       # ── Deploy → Cloudflare Pages (PLACEHOLDER — bật khi đã nạp secret) ────
       # CI đã build dist kèm VITE_* đúng → chỉ publish tĩnh. Tạo trước project 1 lần:
       #   wrangler pages project create ${{ matrix.app }}-mediaos --production-branch main
-      # rồi gắn custom domain (runbook §2). admin = operator plane, deploy riêng nếu cần.
+      # rồi gắn custom domain (runbook §2).
       # - name: Deploy ${{ matrix.app }} → Cloudflare Pages
       #   if: github.event_name == 'push' && github.ref == 'refs/heads/master'
       #   run: npx wrangler@3 pages deploy "apps/${{ matrix.app }}/dist" --project-name "${{ matrix.app }}-mediaos" --branch main

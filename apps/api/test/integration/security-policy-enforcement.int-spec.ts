@@ -49,16 +49,40 @@ function makeAuth(policyEnforcementEnabled: boolean) {
   process.env.SECURITY_POLICY_ENFORCEMENT_ENABLED = policyEnforcementEnabled ? "true" : "false";
   const dbsvc = new DatabaseService();
   const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
-  const mockPermissions = { getCapabilities: async () => ({}) } as unknown as PermissionService;
+  const mockPermissions = { getCapabilities: async () => ({}), getCapabilityScopes: async () => ({}) } as unknown as PermissionService;
   const replayGuard = new ReplayGuardService(new ValkeyService());
   const securityAlerts = new SecurityAlertService(dbsvc, new AuditService());
-  const tf = new TwoFactorService(dbsvc, secrets, new TotpService(), new TokenService(), new AuditService(), new LoginRateLimiter(), replayGuard);
+  const tf = new TwoFactorService(
+    dbsvc,
+    secrets,
+    new TotpService(),
+    new TokenService(),
+    new AuditService(),
+    new LoginRateLimiter(),
+    replayGuard,
+  );
   // SecurityPolicyService đọc env lúc construct → dựng SAU khi set SECURITY_POLICY_ENFORCEMENT_ENABLED.
   const policyRepo = new SecurityPolicyRepository(dbsvc);
-  const policySvc = new SecurityPolicyService(dbsvc, policyRepo, new SecurityPolicyEvaluator(), new AuditService());
+  const policySvc = new SecurityPolicyService(
+    dbsvc,
+    policyRepo,
+    new SecurityPolicyEvaluator(),
+    new AuditService(),
+  );
   const auth = new AuthService(
-    dbsvc, new PasswordService(), new TokenService(), new LoginRateLimiter(), new AuditService(),
-    new OutboxService(), mockPermissions, secrets, tf, replayGuard, securityAlerts, policySvc,
+    dbsvc,
+    new PasswordService(),
+    new TokenService(),
+    new LoginRateLimiter(),
+    new AuditService(),
+    new OutboxService(),
+    mockPermissions,
+    secrets,
+    tf,
+    replayGuard,
+    securityAlerts,
+    policySvc,
+    { getMyApps: async () => [] } as never,
   );
   return { auth, policySvc };
 }
@@ -91,7 +115,11 @@ describe.skipIf(!hasDb)("CS-9 login/refresh enforcement (IP/giờ)", () => {
 
   /** Đặt IP allowlist chỉ cho phép 10.0.0.0/8 (qua admin — admin tự được exempt). */
   async function setIpRestriction(svc: SecurityPolicyService) {
-    await svc.updatePolicy(A.companyId, { ipRestrictionEnabled: true, allowlistCidrs: ["10.0.0.0/8"] }, adminId);
+    await svc.updatePolicy(
+      A.companyId,
+      { ipRestrictionEnabled: true, allowlistCidrs: ["10.0.0.0/8"] },
+      adminId,
+    );
   }
 
   it("login từ IP NGOÀI allowlist → 403 ACCESS_RESTRICTED", async () => {
@@ -111,7 +139,10 @@ describe.skipIf(!hasDb)("CS-9 login/refresh enforcement (IP/giờ)", () => {
   it("login từ IP TRONG allowlist → thành công", async () => {
     const { auth, policySvc } = makeAuth(true);
     await setIpRestriction(policySvc);
-    const r = await auth.login({ companySlug: A.slug, email, password: PASSWORD }, { ip: "10.1.2.3" });
+    const r = await auth.login(
+      { companySlug: A.slug, email, password: PASSWORD },
+      { ip: "10.1.2.3" },
+    );
     expect(expectTokens(r).accessToken).toBeTruthy();
   });
 
@@ -123,7 +154,10 @@ describe.skipIf(!hasDb)("CS-9 login/refresh enforcement (IP/giờ)", () => {
       { ipRestrictionEnabled: true, allowlistCidrs: ["10.0.0.0/8"], exemptUserIds: [userId] },
       adminId,
     );
-    const r = await auth.login({ companySlug: A.slug, email, password: PASSWORD }, { ip: "203.0.113.9" });
+    const r = await auth.login(
+      { companySlug: A.slug, email, password: PASSWORD },
+      { ip: "203.0.113.9" },
+    );
     expect(expectTokens(r).accessToken).toBeTruthy();
   });
 
@@ -135,7 +169,10 @@ describe.skipIf(!hasDb)("CS-9 login/refresh enforcement (IP/giờ)", () => {
       { ipRestrictionEnabled: true, allowlistCidrs: ["10.0.0.0/8"], exemptUserIds: [] },
       adminId,
     );
-    const r = await auth.login({ companySlug: A.slug, email: adminEmail, password: PASSWORD }, { ip: "203.0.113.9" });
+    const r = await auth.login(
+      { companySlug: A.slug, email: adminEmail, password: PASSWORD },
+      { ip: "203.0.113.9" },
+    );
     expect(expectTokens(r).accessToken).toBeTruthy();
   });
 
@@ -144,19 +181,30 @@ describe.skipIf(!hasDb)("CS-9 login/refresh enforcement (IP/giờ)", () => {
     await setIpRestriction(policySvc); // bật restriction trong DB
     // dựng lại auth với enforcement TẮT → bỏ qua dù DB có cấu hình chặn.
     const off = makeAuth(false);
-    const r = await off.auth.login({ companySlug: A.slug, email, password: PASSWORD }, { ip: "203.0.113.9" });
+    const r = await off.auth.login(
+      { companySlug: A.slug, email, password: PASSWORD },
+      { ip: "203.0.113.9" },
+    );
     expect(expectTokens(r).accessToken).toBeTruthy();
   });
 
   it("REFRESH từ IP NGOÀI allowlist → 403 ACCESS_RESTRICTED (BẤT BIẾN #2 — check tại điểm cấp token)", async () => {
     // 1) login từ IP hợp lệ để lấy refresh token.
     const ok = makeAuth(true);
-    await ok.policySvc.updatePolicy(A.companyId, { ipRestrictionEnabled: false, allowlistCidrs: [] }, adminId);
+    await ok.policySvc.updatePolicy(
+      A.companyId,
+      { ipRestrictionEnabled: false, allowlistCidrs: [] },
+      adminId,
+    );
     const tokens = expectTokens(
       await ok.auth.login({ companySlug: A.slug, email, password: PASSWORD }, { ip: "10.1.2.3" }),
     );
     // 2) bật IP-restriction, rồi refresh từ IP ngoài → chặn.
-    await ok.policySvc.updatePolicy(A.companyId, { ipRestrictionEnabled: true, allowlistCidrs: ["10.0.0.0/8"] }, adminId);
+    await ok.policySvc.updatePolicy(
+      A.companyId,
+      { ipRestrictionEnabled: true, allowlistCidrs: ["10.0.0.0/8"] },
+      adminId,
+    );
     try {
       await ok.auth.refresh(tokens.refreshToken, { ip: "203.0.113.9" });
       throw new Error("đáng lẽ refresh bị chặn");
@@ -170,11 +218,19 @@ describe.skipIf(!hasDb)("CS-9 login/refresh enforcement (IP/giờ)", () => {
 
   it("REFRESH từ IP TRONG allowlist → xoay token thành công", async () => {
     const ok = makeAuth(true);
-    await ok.policySvc.updatePolicy(A.companyId, { ipRestrictionEnabled: false, allowlistCidrs: [] }, adminId);
+    await ok.policySvc.updatePolicy(
+      A.companyId,
+      { ipRestrictionEnabled: false, allowlistCidrs: [] },
+      adminId,
+    );
     const tokens = expectTokens(
       await ok.auth.login({ companySlug: A.slug, email, password: PASSWORD }, { ip: "10.1.2.3" }),
     );
-    await ok.policySvc.updatePolicy(A.companyId, { ipRestrictionEnabled: true, allowlistCidrs: ["10.0.0.0/8"] }, adminId);
+    await ok.policySvc.updatePolicy(
+      A.companyId,
+      { ipRestrictionEnabled: true, allowlistCidrs: ["10.0.0.0/8"] },
+      adminId,
+    );
     const refreshed = await ok.auth.refresh(tokens.refreshToken, { ip: "10.9.9.9" });
     expect(refreshed.accessToken).toBeTruthy();
   });

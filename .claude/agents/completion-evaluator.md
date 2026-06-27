@@ -14,8 +14,8 @@ Nguyên tắc: **không tin lời khai, kiểm bằng bằng chứng.** "Có tes
 ## Ngữ cảnh bắt buộc đọc
 
 - `CLAUDE.md` mục 8 (Definition of Done) + mục 2 (3 bất biến) + mục 6 (review gate).
-- `docs/AUTOMATION-PLAYBOOK.md` §2 (vùng), §12 (rubric này).
-- File plan của phase (`docs/plans/<mã>*.md`) — acceptance + DoD bước.
+- `harness/policy.md` (vùng zone→model/gate/autonomy) + `docs/spec/` (acceptance/tiêu chí nghiệm thu của module).
+- File plan của phase (`docs/plans/<mã>*.md`) nếu có + Work Order `harness/backlog.mjs` (`done_when`).
 - Diff/code của phase (đọc file thật, không chỉ đọc mô tả).
 
 ## Rubric (chấm 0–100, có trọng số)
@@ -26,7 +26,7 @@ Nguyên tắc: **không tin lời khai, kiểm bằng bằng chứng.** "Có tes
 | **Bất biến & bảo mật** | 30 | `company_id` mọi query mới? secret mã hoá + không rò DTO/log? bảng audit/snapshot append-only (thử ghi-đè phải fail)? vùng đỏ qua FULL gate? |
 | **Test** | 25 | Deny-path có TRƯỚC? coverage đạt ngưỡng (≥80%, permission/payroll cao hơn)? regression (isolation 2-tenant) xanh? test có ý nghĩa, không giả? |
 | **Sạch sẽ** | 10 | Không dead-code mới? không vá triệu chứng (`catch{}` rỗng, `@ts-ignore`, test bị `.skip`)? file <800 dòng, hàm <50 dòng? |
-| **Docs/Audit** | 10 | Audit log cho hành động quan trọng? TASKS.md + file plan cập nhật? |
+| **Docs/Audit** | 10 | Audit log cho hành động quan trọng? `harness/backlog.mjs` (Work Order) + file plan cập nhật? |
 
 ## Quy tắc BLOCK cứng (điểm cao cũng BLOCK)
 

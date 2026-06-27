@@ -42,7 +42,7 @@ describe("TwoFactorSettings", () => {
   it("opens the enroll dialog with the one-time recovery codes when enabling", async () => {
     status.mockResolvedValue({ enabled: false, required: false });
     enroll.mockResolvedValue({
-      otpauthUri: "otpauth://totp/MediaOS:user?secret=ABCDEF",
+      otpauthUri: "otpauth://totp/FUNTIME%20MEDIA:user?secret=ABCDEF",
       recoveryCodes: ["AAAA-BBBB", "CCCC-DDDD"],
     });
     render(<TwoFactorSettings />);

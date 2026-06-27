@@ -53,7 +53,10 @@ export const workSchedules = pgTable(
     startTime: time("start_time").notNull(),
     endTime: time("end_time").notNull(),
     /** Ngày làm việc ISO (1=Thứ 2 … 7=Chủ nhật). */
-    workingDaysJson: jsonb("working_days_json").$type<number[]>().notNull().default([1, 2, 3, 4, 5]),
+    workingDaysJson: jsonb("working_days_json")
+      .$type<number[]>()
+      .notNull()
+      .default([1, 2, 3, 4, 5]),
     timezone: text("timezone").notNull().default("Asia/Ho_Chi_Minh"),
     graceMinutes: integer("grace_minutes").notNull().default(0),
     isDefault: boolean("is_default").notNull().default(false),
@@ -103,6 +106,43 @@ export const attendanceRecords = pgTable(
     earlyLeaveMinutes: integer("early_leave_minutes").notNull().default(0),
     status: text("status").notNull().default("missing_checkin"),
     note: text("note"),
+    // ─── S3-ATT-DB-1 (mig 0452): DB-04 §7.4 cột MỚI NULLABLE additive (Option A evolve). ───
+    // Cột cũ ở trên GIỮ NGUYÊN (module attendance/** + payroll KHÔNG vỡ). FK cross-file (employee_profiles/
+    // org_units/shifts/attendance_rules/remote_work_requests) = uuid TRẦN tránh import vòng — FK thật ở mig 0452.
+    // first/last_log_id + leave_request_id = uuid TRẦN (cycle records↔logs / optional, KHÔNG hard-FK).
+    // attendance_status TitleCase MỚI ≠ status lowercase cũ (CHECK chk_attendance_records_attendance_status).
+    employeeId: uuid("employee_id"),
+    departmentId: uuid("department_id"),
+    positionId: uuid("position_id"),
+    shiftId: uuid("shift_id"),
+    appliedRuleId: uuid("applied_rule_id"),
+    firstLogId: uuid("first_log_id"),
+    lastLogId: uuid("last_log_id"),
+    requiredWorkingMinutes: integer("required_working_minutes"),
+    workingMinutes: integer("working_minutes"),
+    breakMinutes: integer("break_minutes"),
+    missingMinutes: integer("missing_minutes"),
+    overtimeMinutes: integer("overtime_minutes"),
+    attendanceStatus: text("attendance_status"),
+    checkInStatus: text("check_in_status"),
+    checkOutStatus: text("check_out_status"),
+    attendanceSource: text("attendance_source"),
+    workMode: text("work_mode"),
+    isLate: boolean("is_late"),
+    isEarlyLeave: boolean("is_early_leave"),
+    isMissingCheckIn: boolean("is_missing_check_in"),
+    isMissingCheckOut: boolean("is_missing_check_out"),
+    isAdjusted: boolean("is_adjusted"),
+    isAuto: boolean("is_auto"),
+    leaveRequestId: uuid("leave_request_id"),
+    remoteWorkRequestId: uuid("remote_work_request_id"),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    lockedBy: uuid("locked_by").references(() => users.id, { onDelete: "set null" }),
+    calculationSnapshot: jsonb("calculation_snapshot"),
+    metadata: jsonb("metadata"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    deletedBy: uuid("deleted_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -119,6 +159,45 @@ export const attendanceRecords = pgTable(
       sql`status IN ('present','late','early_leave','absent','missing_checkin','pending_adjustment','approved_adjustment')`,
     ),
     check("attendance_minutes_check", sql`late_minutes >= 0 AND early_leave_minutes >= 0`),
+    // S3-ATT-DB-1 (mig 0452): index + CHECK cột MỚI (forward-looking; UNIQUE chỉ enforce khi employee_id NOT NULL).
+    uniqueIndex("uq_attendance_records_employee_date_shift")
+      .on(t.companyId, t.employeeId, t.workDate, t.shiftId)
+      .where(sql`deleted_at IS NULL AND employee_id IS NOT NULL AND shift_id IS NOT NULL`),
+    uniqueIndex("uq_attendance_records_employee_date_no_shift")
+      .on(t.companyId, t.employeeId, t.workDate)
+      .where(sql`deleted_at IS NULL AND employee_id IS NOT NULL AND shift_id IS NULL`),
+    index("idx_attendance_records_employee_date")
+      .on(t.companyId, t.employeeId, t.workDate)
+      .where(sql`deleted_at IS NULL`),
+    index("idx_attendance_records_company_date_status")
+      .on(t.companyId, t.workDate, t.attendanceStatus)
+      .where(sql`deleted_at IS NULL`),
+    index("idx_attendance_records_department_date")
+      .on(t.companyId, t.departmentId, t.workDate)
+      .where(sql`deleted_at IS NULL`),
+    index("idx_attendance_records_remote_request")
+      .on(t.remoteWorkRequestId)
+      .where(sql`remote_work_request_id IS NOT NULL`),
+    check(
+      "chk_attendance_records_attendance_status",
+      sql`attendance_status IS NULL OR attendance_status IN ('Not Checked-in','Checked-in','Checked-out','Present','Late','Early Leave','Missing Hours','Missing Check-in','Missing Check-out','Absent','Leave','Remote Work','Auto Attendance','Adjusted','Pending Adjustment','Invalid')`,
+    ),
+    check(
+      "chk_attendance_records_attendance_source",
+      sql`attendance_source IS NULL OR attendance_source IN ('WEB','MOBILE','MANUAL','AUTO','REMOTE','DEVICE','IMPORT','API')`,
+    ),
+    check(
+      "chk_attendance_records_work_mode",
+      sql`work_mode IS NULL OR work_mode IN ('Office','Remote','BusinessTrip','Auto','Leave')`,
+    ),
+    check(
+      "chk_attendance_records_new_minutes",
+      sql`(required_working_minutes IS NULL OR required_working_minutes >= 0)
+        AND (working_minutes IS NULL OR working_minutes >= 0)
+        AND (break_minutes IS NULL OR break_minutes >= 0)
+        AND (missing_minutes IS NULL OR missing_minutes >= 0)
+        AND (overtime_minutes IS NULL OR overtime_minutes >= 0)`,
+    ),
   ],
 );
 
@@ -151,6 +230,25 @@ export const attendanceAdjustmentRequests = pgTable(
     approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     reviewNote: text("review_note"),
+    // ─── S3-ATT-DB-1 (mig 0452): DB-04 §7.6 cột MỚI NULLABLE additive. Cột cũ ở trên GIỮ NGUYÊN. ───
+    // employee_id → employee_profiles(id) = uuid TRẦN tránh import vòng (FK thật ở mig 0452).
+    // request_type CHECK tên MỚI (chk_att_adj_requests_request_type) — KHÔNG đụng att_adj_status_check cũ.
+    requestCode: text("request_code"),
+    employeeId: uuid("employee_id"),
+    requestType: text("request_type"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    requestedBy: uuid("requested_by").references(() => users.id, { onDelete: "set null" }),
+    currentApproverUserId: uuid("current_approver_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    currentApproverEmployeeId: uuid("current_approver_employee_id"),
+    reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    attachmentFileId: uuid("attachment_file_id"),
+    metadata: jsonb("metadata"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    deletedBy: uuid("deleted_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -166,6 +264,20 @@ export const attendanceAdjustmentRequests = pgTable(
     check(
       "att_adj_has_request_check",
       sql`requested_check_in_at IS NOT NULL OR requested_check_out_at IS NOT NULL`,
+    ),
+    // S3-ATT-DB-1 (mig 0452): index + CHECK request_type cột MỚI.
+    index("idx_att_adj_employee_status")
+      .on(t.companyId, t.employeeId, t.status, t.workDate)
+      .where(sql`deleted_at IS NULL`),
+    index("idx_att_adj_status_submitted")
+      .on(t.companyId, t.status, t.submittedAt)
+      .where(sql`deleted_at IS NULL`),
+    index("idx_att_adj_current_approver")
+      .on(t.companyId, t.currentApproverUserId, t.status)
+      .where(sql`deleted_at IS NULL`),
+    check(
+      "chk_att_adj_requests_request_type",
+      sql`request_type IS NULL OR request_type IN ('MISSING_CHECK_IN','MISSING_CHECK_OUT','UPDATE_CHECK_IN','UPDATE_CHECK_OUT','EXPLAIN_LATE','EXPLAIN_EARLY_LEAVE','UPDATE_STATUS','REMOTE_CORRECTION','OTHER')`,
     ),
   ],
 );
@@ -303,7 +415,12 @@ export const leaveBalances = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("leave_balances_user_type_year_uq").on(t.companyId, t.userId, t.leaveTypeId, t.year),
+    uniqueIndex("leave_balances_user_type_year_uq").on(
+      t.companyId,
+      t.userId,
+      t.leaveTypeId,
+      t.year,
+    ),
     index("leave_balances_company_id_idx").on(t.companyId),
     index("leave_balances_user_id_idx").on(t.userId),
     check("leave_bal_year_check", sql`year >= 2000 AND year <= 2100`),

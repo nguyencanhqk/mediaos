@@ -2,11 +2,11 @@ import { Module } from "@nestjs/common";
 import { RealtimeEmitterService } from "./realtime-emitter.service";
 
 /**
- * Module LÁ (không phụ thuộc Chat/Notifications) chỉ cung cấp RealtimeEmitterService.
+ * Module LÁ (không phụ thuộc module nghiệp vụ) chỉ cung cấp RealtimeEmitterService.
  *
- * Tách riêng để PHÁ vòng phụ thuộc: ChatModule + NotificationsModule cần emit (import module này),
- * còn RealtimeModule (gateway) cần ChatService. Nếu emitter nằm trong RealtimeModule sẽ tạo cycle
- * RealtimeModule → ChatModule → RealtimeModule. Để emitter ở module lá ⇒ đồ thị acyclic.
+ * Tách riêng để NotificationsModule import cổng emit mà KHÔNG kéo theo RealtimeModule (gateway + AuthModule).
+ * (de-media-fy CLEAN-BE-1: cụm chat đã gỡ — trước đây leaf này còn để phá cycle Realtime→Chat→Realtime;
+ *  nay chỉ NotificationsModule dùng, giữ leaf cho nhẹ phụ thuộc.)
  */
 @Module({
   providers: [RealtimeEmitterService],

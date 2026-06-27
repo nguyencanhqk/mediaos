@@ -10,14 +10,7 @@ import { type LucideIcon } from "lucide-react";
  * - `tile`: bộ class màu cho ô icon vuông ở launcher (mỗi module 1 sắc thái).
  * - `category`: gom nhóm cho chip lọc ở launcher + section ở sidebar.
  */
-export type NavCategory =
-  | "work"
-  | "goals"
-  | "process"
-  | "hr"
-  | "attendance"
-  | "payroll"
-  | "system";
+export type NavCategory = "work" | "goals" | "process" | "hr" | "attendance" | "payroll" | "system";
 
 export interface NavItem {
   /** Định danh ổn định (key). */
@@ -35,6 +28,31 @@ export interface NavItem {
    * Nếu KHÔNG truyền — item gom 1 cấp dưới category như cũ (tương thích ngược toàn bộ app).
    */
   subcategory?: string;
+  // -------------------------------------------------------------------------
+  // Registry metadata (tuỳ chọn — thêm cho S1-FE-REGISTRY-1, tương thích ngược)
+  // -------------------------------------------------------------------------
+  /**
+   * Mã quyền MODULE.RESOURCE.ACTION dùng cho `useCan` / `filterSidebarItems`.
+   * Nếu không truyền — item luôn hiển thị (tương thích ngược).
+   */
+  permission?: string;
+  /**
+   * Mã module theo SPEC-01 §9 (AUTH/HR/ATT/LEAVE/TASK/DASH/NOTI/FOUNDATION/…).
+   * Dùng để kiểm tra module active trước khi hiện item.
+   */
+  module?: string;
+  /**
+   * Trạng thái item:
+   * - 'active'       → hiển thị bình thường
+   * - 'inactive'     → ẩn khỏi App Switcher / sidebar
+   * - 'coming-soon'  → hiển thị nhưng disabled
+   * Mặc định 'active' nếu không truyền (tương thích ngược).
+   */
+  status?: "active" | "inactive" | "coming-soon";
+  /**
+   * Scope dữ liệu tối thiểu để UX ẩn/hiện (chỉ UX — backend vẫn guard thực sự).
+   */
+  scope?: string;
 }
 
 export interface NavCategoryMeta {

@@ -1,7 +1,14 @@
-import { Injectable } from '@nestjs/common';
-import { and, eq, ilike, isNull, or } from 'drizzle-orm';
-import { DatabaseService, type TenantTx } from '../db/db.service';
-import { employeeManagerRelations, employeeProfiles, orgUnits, positions, users } from '../db/schema';
+import { Injectable } from "@nestjs/common";
+import { and, eq, ilike, isNull, ne, or, type SQL } from "drizzle-orm";
+import { DatabaseService, type TenantTx } from "../db/db.service";
+import {
+  employeeManagerRelations,
+  employeeProfiles,
+  orgUnits,
+  positions,
+  users,
+  type User,
+} from "../db/schema";
 
 /** Columns returned by the flat list projection. */
 const LIST_COLUMNS = {
@@ -108,11 +115,21 @@ export class EmployeesRepository {
 
   // async + awaited so the Promise boundary is explicit: a dropped `await` at the call site would
   // otherwise yield a query-builder object, and the service's reveal loop would silently mask all rows.
-  async listEmployeesTx(tx: TenantTx, companyId: string, filters: EmployeeListFilters) {
+  //
+  // S2-HR-EMP-LEGACY-LOCK-1: `scopeCond` is the DataScopeService predicate (Own/Team/Department/…),
+  // ANDed with the tenant guard + soft-delete + filters so a caller never lists rows outside their
+  // scope (closes the legacy unscoped-read IDOR). null = no extra scope (kept for back-compat callers).
+  async listEmployeesTx(
+    tx: TenantTx,
+    companyId: string,
+    filters: EmployeeListFilters,
+    scopeCond?: SQL | null,
+  ) {
     const conditions = [
       eq(employeeProfiles.companyId, companyId),
       isNull(employeeProfiles.deletedAt),
     ];
+    if (scopeCond) conditions.push(scopeCond);
     if (filters.orgUnitId) conditions.push(eq(employeeProfiles.orgUnitId, filters.orgUnitId));
     if (filters.positionId) conditions.push(eq(employeeProfiles.positionId, filters.positionId));
     if (filters.status) conditions.push(eq(employeeProfiles.status, filters.status));
@@ -159,7 +176,10 @@ export class EmployeesRepository {
   // ── Create / update (tx cores) ─────────────────────────────────────────────────
 
   createEmployeeTx(tx: TenantTx, companyId: string, data: EmployeeInsertData) {
-    return tx.insert(employeeProfiles).values({ companyId, ...data }).returning();
+    return tx
+      .insert(employeeProfiles)
+      .values({ companyId, ...data })
+      .returning();
   }
 
   updateEmployeeTx(tx: TenantTx, companyId: string, id: string, data: EmployeeUpdateData) {
@@ -194,11 +214,53 @@ export class EmployeesRepository {
 
   // ── Login account (F7 — create users row when none supplied) ───────────────────
 
+  /**
+   * S2-INT-1 — a linkable user: exists in THIS tenant and is not soft-deleted. A cross-tenant userId
+   * resolves to undefined (RLS + explicit company_id) so the caller 404s instead of FK-linking across
+   * tenants (the FK alone does not check company_id).
+   */
+  async findLinkableUserTx(
+    tx: TenantTx,
+    companyId: string,
+    userId: string,
+  ): Promise<{ id: string } | undefined> {
+    const [row] = await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.companyId, companyId), eq(users.id, userId), isNull(users.deletedAt)))
+      .limit(1);
+    return row;
+  }
+
+  /**
+   * S2-INT-1 — the ACTIVE employee profile linked to `userId` (excluding `exceptId` when given) to
+   * enforce "1 user ↔ ≤1 active employee" before a link. The partial unique index is the DB backstop.
+   */
+  async findActiveByUserIdTx(
+    tx: TenantTx,
+    companyId: string,
+    userId: string,
+    exceptId: string | null,
+  ): Promise<{ id: string } | undefined> {
+    const conds = [
+      eq(employeeProfiles.companyId, companyId),
+      eq(employeeProfiles.userId, userId),
+      isNull(employeeProfiles.deletedAt),
+    ];
+    if (exceptId !== null) conds.push(ne(employeeProfiles.id, exceptId));
+    const [row] = await tx
+      .select({ id: employeeProfiles.id })
+      .from(employeeProfiles)
+      .where(and(...conds))
+      .limit(1);
+    return row;
+  }
+
   async createUserTx(
     tx: TenantTx,
     companyId: string,
-    data: { email: string; fullName: string; passwordHash: string },
-  ) {
+    data: { email: string; fullName: string; passwordHash: string; createdBy: string },
+  ): Promise<User> {
     const [row] = await tx
       .insert(users)
       .values({
@@ -206,8 +268,10 @@ export class EmployeesRepository {
         email: data.email,
         fullName: data.fullName,
         passwordHash: data.passwordHash,
+        createdBy: data.createdBy,
+        updatedBy: data.createdBy,
       })
-      .returning({ id: users.id });
+      .returning();
     return row;
   }
 
@@ -217,12 +281,12 @@ export class EmployeesRepository {
   softDeleteDirectManagerEmrTx(tx: TenantTx, companyId: string, employeeUserId: string) {
     return tx
       .update(employeeManagerRelations)
-      .set({ deletedAt: new Date(), status: 'inactive', updatedAt: new Date() })
+      .set({ deletedAt: new Date(), status: "inactive", updatedAt: new Date() })
       .where(
         and(
           eq(employeeManagerRelations.companyId, companyId),
           eq(employeeManagerRelations.employeeUserId, employeeUserId),
-          eq(employeeManagerRelations.relationType, 'direct_manager'),
+          eq(employeeManagerRelations.relationType, "direct_manager"),
           isNull(employeeManagerRelations.deletedAt),
         ),
       )
@@ -241,8 +305,8 @@ export class EmployeesRepository {
         companyId,
         employeeUserId,
         managerUserId,
-        relationType: 'direct_manager',
-        status: 'active',
+        relationType: "direct_manager",
+        status: "active",
       })
       .returning();
   }

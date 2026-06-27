@@ -6,14 +6,19 @@ import { LogOut, Search } from "lucide-react";
 import { Avatar, NotificationBell } from "@mediaos/ui";
 import { cn } from "@/lib/utils";
 import { getHealth, logoutSession } from "@mediaos/web-core";
-import { BrandLogo, BrandWordmark } from "@/components/brand/brand-mark";
-import { BRAND } from "@/lib/brand";
+import { BrandLogo } from "@/components/brand/brand-mark";
+import { SignalBar } from "@/components/brand/signal-bar";
+import { BRAND, BRAND_SYSTEM_LABEL } from "@/lib/brand";
 import { NAV_CATEGORIES, NAV_ITEMS, type NavCategory } from "@/lib/nav";
 import { useAuthStore } from "@mediaos/web-core";
 
 type Filter = "all" | NavCategory;
 
-/** Trang chủ — bộ khởi chạy ứng dụng (app launcher) kiểu MISA AMIS. */
+/**
+ * Trang chủ — bộ khởi chạy ứng dụng (app launcher) kiểu "Phòng điều khiển".
+ * Áp ngôn ngữ thiết kế từ apps/auth: nền navy + lưới mờ, wordmark gradient phổ Funtime,
+ * thanh tín hiệu on-air, chấm TRỰC TUYẾN. Behavior giữ nguyên (search/chip/health/logout).
+ */
 export function HomePage() {
   const { t } = useTranslation(["home", "nav", "common"]);
   const username = useAuthStore((s) => s.username);
@@ -51,33 +56,33 @@ export function HomePage() {
   }, [filter, query, t]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-slate-50">
-      {/* Header */}
-      <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
+    <div className="control-room-bg min-h-screen text-foreground">
+      {/* Header — panel navy mờ kính */}
+      <header className="sticky top-0 z-20 border-b border-border/70 bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60">
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6">
           <BrandLogo size="md" wordmarkText={BRAND.shortName} wordmarkClassName="text-lg" />
 
           <div className="relative mx-auto hidden w-full max-w-sm sm:block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t("home:searchApps")}
               aria-label={t("home:searchApps")}
-              className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+              className="h-9 w-full rounded-lg border border-border bg-background/60 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
             />
           </div>
 
           <div className="ml-auto flex items-center gap-1">
             <NotificationBell />
-            <div className="mx-1 hidden h-6 w-px bg-slate-200 sm:block" />
+            <div className="mx-1 hidden h-6 w-px bg-border sm:block" />
             <Avatar name={username} size="sm" />
-            <span className="ml-1.5 hidden max-w-[10rem] truncate text-sm text-slate-600 md:block">
+            <span className="ml-1.5 hidden max-w-[10rem] truncate text-sm text-muted-foreground md:block">
               {username}
             </span>
             <button
               onClick={onLogout}
-              className="ml-1 flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+              className="ml-1 flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               aria-label={t("nav:logout")}
               title={t("nav:logout")}
             >
@@ -88,19 +93,23 @@ export function HomePage() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
-        {/* Hero */}
-        <div className="mb-7">
-          <p className="text-sm text-slate-500">
-            {t("home:greeting", { name: username ?? "" })}
-          </p>
-          <h1 className="mt-1 inline-block">
-            <BrandWordmark
-              text={BRAND.name}
-              className="text-2xl font-bold sm:text-3xl"
-            />
-          </h1>
-          <div className="brand-gradient-line mt-1 h-0.5 w-56 max-w-full rounded-full opacity-80" />
-          <p className="mt-2 text-sm text-slate-500">{BRAND.slogan}</p>
+        {/* Hero — bàn điều khiển: greeting + wordmark gradient + thanh tín hiệu */}
+        <div className="mb-8 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="font-mono text-[0.7rem] uppercase tracking-[0.25em] text-muted-foreground">
+              {BRAND_SYSTEM_LABEL}
+            </p>
+            <h1 className="brand-gradient-text mt-2 inline-block font-display text-3xl font-bold tracking-tight sm:text-4xl">
+              {BRAND.name}
+            </h1>
+            <div className="brand-gradient-line mt-1.5 h-0.5 w-56 max-w-full rounded-full opacity-80" />
+            <p className="mt-3 text-sm text-muted-foreground">
+              {t("home:greeting", { name: username ?? "" })}
+            </p>
+          </div>
+          <div className="hidden lg:block">
+            <SignalBar />
+          </div>
         </div>
 
         {/* Category chips */}
@@ -117,7 +126,7 @@ export function HomePage() {
 
         {/* App grid */}
         {items.length === 0 ? (
-          <p className="py-16 text-center text-sm text-slate-500">{t("home:noApps")}</p>
+          <p className="py-16 text-center text-sm text-muted-foreground">{t("home:noApps")}</p>
         ) : (
           <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
             {items.map((item) => {
@@ -126,17 +135,17 @@ export function HomePage() {
                 <Link
                   key={item.id}
                   to={item.to}
-                  className="group flex flex-col items-center gap-2.5 rounded-xl p-3 text-center transition-colors hover:bg-white"
+                  className="group flex flex-col items-center gap-2.5 rounded-xl p-3 text-center transition-colors hover:bg-card"
                 >
                   <span
                     className={cn(
-                      "flex h-14 w-14 items-center justify-center rounded-2xl shadow-sm ring-1 ring-slate-900/5 transition-transform group-hover:-translate-y-0.5 group-hover:shadow-md",
+                      "flex h-14 w-14 items-center justify-center rounded-2xl shadow-sm ring-1 ring-white/5 transition-transform group-hover:-translate-y-0.5 group-hover:shadow-md group-hover:shadow-black/40",
                       item.tile,
                     )}
                   >
                     <Icon className="h-7 w-7" strokeWidth={1.75} />
                   </span>
-                  <span className="text-[13px] font-medium leading-tight text-slate-700">
+                  <span className="text-[13px] font-medium leading-tight text-foreground/90">
                     {t(`nav:${item.labelKey}`)}
                   </span>
                 </Link>
@@ -145,12 +154,16 @@ export function HomePage() {
           </div>
         )}
 
-        {/* Footer: trạng thái hệ thống */}
-        <footer className="mt-12 flex items-center gap-2 text-xs text-slate-400">
+        {/* Footer: trạng thái hệ thống — chấm TRỰC TUYẾN nhịp như on-air */}
+        <footer className="mt-12 flex items-center gap-2 font-mono text-xs text-muted-foreground">
           <span
             className={cn(
               "h-2 w-2 rounded-full",
-              health.isLoading ? "bg-slate-300" : health.data ? "bg-emerald-500" : "bg-red-500",
+              health.isLoading
+                ? "bg-muted-foreground/40"
+                : health.data
+                  ? "live-dot bg-emerald-400 shadow-[0_0_8px] shadow-emerald-400/60"
+                  : "bg-destructive shadow-[0_0_8px] shadow-destructive/60",
             )}
           />
           <span>
@@ -181,8 +194,8 @@ function Chip({
       className={cn(
         "rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
         active
-          ? "border-transparent bg-slate-900 text-white"
-          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
+          ? "border-brand/60 bg-brand/15 text-brand"
+          : "border-border bg-card/60 text-muted-foreground hover:border-brand/40 hover:text-foreground",
       )}
     >
       {children}

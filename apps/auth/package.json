@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@hookform/resolvers": "^3.10.0",
     "@mediaos/contracts": "workspace:*",
     "@mediaos/ui": "workspace:*",
     "@mediaos/web-core": "workspace:*",
@@ -20,6 +21,7 @@
     "lucide-react": "^0.469.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
+    "react-hook-form": "^7.80.0",
     "react-i18next": "^15.7.4",
     "zod": "^3.25.0"
   },

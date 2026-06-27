@@ -29,25 +29,24 @@ $envArgs = @{ Domain = $Domain; CompanySlug = $CompanySlug }
 if ($AdminEmail) { $envArgs.AdminEmail = $AdminEmail }
 if ($ForceEnv)   { $envArgs.Force = $true }
 & "$PSScriptRoot\01-setup-env.ps1" @envArgs
-Write-Warn "ĐÃ in mật khẩu super-admin ở trên — LƯU LẠI trước khi tiếp."
-Pause-Step "Đã lưu mật khẩu super-admin chưa?"
+Write-Warn "ĐÃ in mật khẩu admin ở trên — LƯU LẠI trước khi tiếp."
+Pause-Step "Đã lưu mật khẩu admin chưa?"
 
 & "$PSScriptRoot\02-infra-up.ps1"
 & "$PSScriptRoot\03-migrate.ps1"
 
-# Seed company đầu tiên (thủ công — cần xác nhận schema companies). Xem 03 output / guide §3.3.
-Pause-Step "SEED company '$CompanySlug' (psql INSERT INTO companies ...) RỒI Enter để cài service API"
+# Seed admin + company (idempotent — đọc ADMIN_* từ .env). Thay bước psql thủ công cũ + bootstrap-lúc-boot (đã gỡ).
+Import-DotEnv
+Write-Step "Seed admin (apps/api/seed-admin.mjs)"
+Push-Location (Join-Path $RepoRoot "apps\api")
+try { node seed-admin.mjs } finally { Pop-Location }
+if ($LASTEXITCODE -ne 0) { throw "seed-admin thất bại — kiểm tra ADMIN_* trong .env." }
 
 & "$PSScriptRoot\04-build-install-service.ps1"
-# Restart 1 lần để super-admin bootstrap chạy SAU khi company đã tồn tại.
-if (Get-Service "MediaOS-API" -ErrorAction SilentlyContinue) {
-  Write-Host "  restart MediaOS-API để chạy super-admin bootstrap ..."
-  Restart-Service "MediaOS-API"
-}
 
 & "$PSScriptRoot\05-tunnel.ps1" -Domain $Domain
 
-Pause-Step "Tạo 5 Pages project + custom domain có thể làm ở 06; tiếp tục deploy FE"
+Pause-Step "Tạo 3 Pages project (app/auth/console) + custom domain có thể làm ở 06; tiếp tục deploy FE"
 & "$PSScriptRoot\06-deploy-pages.ps1" -Domain $Domain
 
 Write-Step "HOÀN TẤT"

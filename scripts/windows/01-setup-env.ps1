@@ -26,14 +26,17 @@ $pgbAuthPw = New-Secret 24
 $minioPw   = New-Secret 24
 $s3Secret  = New-Secret 24
 $jwtSecret = New-HexSecret 32
-$superPw   = New-Secret 18
+$adminPw   = New-Secret 18
 
 $kekPath = Join-Path $RepoRoot ".secrets\local-kek.bin"
 
 # ── Origin lists ─────────────────────────────────────────────────────────
-$apps = @("studio", "people", "console")
-$cors = @("https://$Domain", "https://auth.$Domain") + ($apps | ForEach-Object { "https://$_.$Domain" })
-$redirect = @("https://$Domain") + ($apps | ForEach-Object { "https://$_.$Domain" })
+# Kiến trúc 3 FE app: apps/app phục vụ ở APEX ($Domain) · auth.$Domain · console.$Domain.
+# (de-media-fy: bỏ studio/people/web cũ.) $subApps = app subdomain NGOÀI auth (app ở apex).
+$subApps = @("console")
+$cors = @("https://$Domain", "https://auth.$Domain") + ($subApps | ForEach-Object { "https://$_.$Domain" })
+# redirect allowlist = nơi auth bounce về sau đăng nhập = apex (app shell) + console.
+$redirect = @("https://$Domain") + ($subApps | ForEach-Object { "https://$_.$Domain" })
 $CORS = ($cors -join ",")
 $REDIRECT = ($redirect -join ",")
 
@@ -97,13 +100,14 @@ AUTH_COOKIE_SECURE=true
 CORS_ORIGIN=$CORS
 AUTH_REDIRECT_ALLOWLIST=$REDIRECT
 
-# ── Super-admin bootstrap (tạo lúc API boot — company slug PHẢI tồn tại trước, xem 03-migrate + guide §3.3) ──
-PLATFORM_SUPERADMIN_EMAIL=$AdminEmail
-PLATFORM_SUPERADMIN_PASSWORD=$superPw
-PLATFORM_SUPERADMIN_NAME=Super Admin
-PLATFORM_SUPERADMIN_COMPANY_SLUG=$CompanySlug
-# Hoãn 2FA lúc bootstrap đầu (bật lại =true sau khi enroll TOTP):
-TWO_FACTOR_ENFORCEMENT_ENABLED=true
+# ── Admin seed (apps/api/seed-admin.mjs — chạy qua `m deploy-seed` SAU db:migrate, KHÔNG seed lúc boot) ──
+ADMIN_COMPANY_SLUG=$CompanySlug
+ADMIN_COMPANY_NAME=$CompanySlug
+ADMIN_EMAIL=$AdminEmail
+ADMIN_PASSWORD=$adminPw
+ADMIN_NAME=Administrator
+# 2FA tắt cho lần login đầu (admin chưa enroll TOTP) — bật lại =true sau khi enroll:
+TWO_FACTOR_ENFORCEMENT_ENABLED=false
 
 # ── Backup (G1-8) ──
 BACKUP_DIR=./backups
@@ -126,9 +130,9 @@ if ((Test-Path $kekPath) -and -not $Force) {
 }
 
 Write-Host "`n--------------------------------------------------------------" -ForegroundColor Magenta
-Write-Host " SUPER-ADMIN (LƯU NGAY — không in lại):" -ForegroundColor Magenta
+Write-Host " ADMIN (LƯU NGAY — không in lại; seed bằng 'm deploy-seed' sau migrate):" -ForegroundColor Magenta
 Write-Host ("   email:    " + $AdminEmail)
-Write-Host ("   password: " + $superPw)
+Write-Host ("   password: " + $adminPw)
 Write-Host ("   company:  " + $CompanySlug)
 Write-Host "--------------------------------------------------------------`n" -ForegroundColor Magenta
 Write-Ok "01 xong. Tiếp: 02-infra-up.ps1"

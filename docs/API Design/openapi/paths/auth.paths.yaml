@@ -1,0 +1,1014 @@
+  # =========================================================================
+  # AUTH — Session API (login/logout/refresh/password)
+  # =========================================================================
+  /api/v1/auth/login:
+    post:
+      tags: [Auth - Session]
+      summary: Đăng nhập bằng email và mật khẩu
+      operationId: authLogin
+      security: []
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: []
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email, maxLength: 255 }
+                password: { type: string, format: password }
+                remember_me: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/refresh-token:
+    post:
+      tags: [Auth - Session]
+      summary: Làm mới access token bằng refresh token
+      operationId: authRefreshToken
+      security: []
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: []
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth - Session]
+      summary: Đăng xuất session hiện tại
+      operationId: authLogout
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: [Own]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/logout-all:
+    post:
+      tags: [Auth - Session]
+      summary: Đăng xuất khỏi tất cả thiết bị
+      operationId: authLogoutAll
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: [Own]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                except_current_session: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/forgot-password:
+    post:
+      tags: [Auth - Session]
+      summary: Gửi yêu cầu quên mật khẩu
+      operationId: authForgotPassword
+      security: []
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: []
+      x-idempotency: "No"
+      x-audit-log: conditional
+      x-notification-event: AUTH.PASSWORD_RESET_REQUESTED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/reset-password:
+    post:
+      tags: [Auth - Session]
+      summary: Đặt lại mật khẩu bằng reset token
+      operationId: authResetPassword
+      security: []
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: []
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: AUTH.PASSWORD_CHANGED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, new_password, confirm_password]
+              properties:
+                token: { type: string }
+                new_password: { type: string, format: password }
+                confirm_password: { type: string, format: password }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/change-password:
+    post:
+      tags: [Auth - Session]
+      summary: Đổi mật khẩu của user hiện tại
+      operationId: authChangePassword
+      x-required-permission: AUTH.PASSWORD.CHANGE
+      x-allowed-roles: [Super Admin, Company Admin, HR, Manager, Employee]
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: always
+      x-notification-event: AUTH.PASSWORD_CHANGED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password, confirm_password]
+              properties:
+                current_password: { type: string, format: password }
+                new_password: { type: string, format: password }
+                confirm_password: { type: string, format: password }
+                logout_other_sessions: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  # =========================================================================
+  # AUTH — Me API (/auth/me/*)
+  # =========================================================================
+  /api/v1/auth/me:
+    get:
+      tags: [Auth - Me]
+      summary: Lấy thông tin user hiện tại
+      operationId: authGetMe
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/me/permissions:
+    get:
+      tags: [Auth - Me]
+      summary: Lấy permission hiện tại của user
+      operationId: authGetMyPermissions
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/me/roles:
+    get:
+      tags: [Auth - Me]
+      summary: Lấy role hiện tại của user
+      operationId: authGetMyRoles
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/me/menu:
+    get:
+      tags: [Auth - Me]
+      summary: Lấy menu/sidebar theo quyền hiện tại
+      operationId: authGetMyMenu
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/me/sessions:
+    get:
+      tags: [Auth - Me]
+      summary: Lấy danh sách session của tôi
+      operationId: authListMySessions
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: [Own]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/me/sessions/{session_id}:
+    delete:
+      tags: [Auth - Me]
+      summary: Thu hồi một session của tôi
+      operationId: authRevokeMySession
+      x-required-permission: null
+      x-allowed-roles: []
+      x-data-scope: [Own]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  # =========================================================================
+  # AUTH — User management API (/auth/users*)
+  # =========================================================================
+  /api/v1/auth/users:
+    get:
+      tags: [Auth - Users]
+      summary: Lấy danh sách user
+      operationId: authListUsers
+      x-required-permission: AUTH.USER.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/SortParam'
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Active, Locked, Inactive, Pending Activation] } }
+        - { name: role_code, in: query, required: false, schema: { type: string } }
+        - { name: department_id, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [Auth - Users]
+      summary: Tạo user mới
+      operationId: authCreateUser
+      x-required-permission: AUTH.USER.CREATE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: AUTH.USER_CREATED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, display_name]
+              properties:
+                email: { type: string, format: email }
+                display_name: { type: string, maxLength: 255 }
+                employee_id: { type: string, format: uuid }
+                role_ids: { type: array, items: { type: string, format: uuid } }
+                status: { type: string, enum: [Pending Activation, Active, Inactive] }
+                must_change_password: { type: boolean }
+                send_activation_email: { type: boolean }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/users/{user_id}:
+    get:
+      tags: [Auth - Users]
+      summary: Lấy chi tiết user
+      operationId: authGetUser
+      x-required-permission: AUTH.USER.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: user_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    patch:
+      tags: [Auth - Users]
+      summary: Cập nhật user
+      operationId: authUpdateUser
+      x-required-permission: AUTH.USER.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - { name: user_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name: { type: string, maxLength: 255 }
+                status: { type: string, enum: [Active, Inactive, Locked, Pending Activation] }
+                avatar_file_id: { type: string, format: uuid }
+                must_change_password: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/users/{user_id}/lock:
+    post:
+      tags: [Auth - Users]
+      summary: Khóa user
+      operationId: authLockUser
+      x-required-permission: AUTH.USER.LOCK
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: AUTH.USER_LOCKED
+      parameters:
+        - { name: user_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+                revoke_sessions: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/users/{user_id}/unlock:
+    post:
+      tags: [Auth - Users]
+      summary: Mở khóa user
+      operationId: authUnlockUser
+      x-required-permission: AUTH.USER.UNLOCK
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: AUTH.USER_UNLOCKED
+      parameters:
+        - { name: user_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/users/{user_id}/roles:
+    put:
+      tags: [Auth - Users]
+      summary: Thay thế toàn bộ role của user
+      operationId: authReplaceUserRoles
+      x-required-permission: AUTH.USER.ASSIGN_ROLE
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: AUTH.USER_ROLE_CHANGED
+      parameters:
+        - { name: user_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_ids]
+              properties:
+                role_ids: { type: array, items: { type: string, format: uuid } }
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [Auth - Users]
+      summary: Gán thêm role cho user
+      operationId: authAddUserRoles
+      x-required-permission: AUTH.USER.ASSIGN_ROLE
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: AUTH.USER_ROLE_CHANGED
+      parameters:
+        - { name: user_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_ids]
+              properties:
+                role_ids: { type: array, items: { type: string, format: uuid } }
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/users/{user_id}/roles/{role_id}:
+    delete:
+      tags: [Auth - Users]
+      summary: Gỡ role khỏi user
+      operationId: authRemoveUserRole
+      x-required-permission: AUTH.USER.ASSIGN_ROLE
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: AUTH.USER_ROLE_CHANGED
+      parameters:
+        - { name: user_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: role_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/users/{user_id}/force-reset-password:
+    post:
+      tags: [Auth - Users]
+      summary: Admin yêu cầu user đổi mật khẩu
+      operationId: authForceResetUserPassword
+      x-required-permission: AUTH.USER.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: AUTH.PASSWORD_RESET_REQUESTED
+      parameters:
+        - { name: user_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+                send_email: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/users/{user_id}/sessions:
+    get:
+      tags: [Auth - Users]
+      summary: Xem danh sách session của user
+      operationId: authListUserSessions
+      x-required-permission: AUTH.USER.VIEW
+      x-allowed-roles: [Super Admin, Company Admin, HR]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: user_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/users/{user_id}/sessions/{session_id}:
+    delete:
+      tags: [Auth - Users]
+      summary: Thu hồi một session của user
+      operationId: authRevokeUserSession
+      x-required-permission: AUTH.USER.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - { name: user_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: session_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  # =========================================================================
+  # AUTH — Role API (/auth/roles*)
+  # =========================================================================
+  /api/v1/auth/roles:
+    get:
+      tags: [Auth - Roles]
+      summary: Lấy danh sách role
+      operationId: authListRoles
+      x-required-permission: AUTH.ROLE.VIEW
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - { name: status, in: query, required: false, schema: { type: string, enum: [Active, Inactive] } }
+        - { name: role_type, in: query, required: false, schema: { type: string, enum: [System, Company, Project, Future] } }
+        - { name: include_system_roles, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [Auth - Roles]
+      summary: Tạo role mới
+      operationId: authCreateRole
+      x-required-permission: AUTH.ROLE.CREATE
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Required"
+      x-audit-log: always
+      x-notification-event: null
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_code, name]
+              properties:
+                role_code: { type: string }
+                name: { type: string }
+                description: { type: string }
+                role_type: { type: string, enum: [Company, Project, Future] }
+                is_default: { type: boolean }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/roles/{role_id}:
+    get:
+      tags: [Auth - Roles]
+      summary: Lấy chi tiết role
+      operationId: authGetRole
+      x-required-permission: AUTH.ROLE.VIEW
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: role_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    patch:
+      tags: [Auth - Roles]
+      summary: Cập nhật role
+      operationId: authUpdateRole
+      x-required-permission: AUTH.ROLE.UPDATE
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - { name: role_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                is_default: { type: boolean }
+                status: { type: string, enum: [Active, Inactive] }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    delete:
+      tags: [Auth - Roles]
+      summary: Vô hiệu hóa role
+      operationId: authDisableRole
+      x-required-permission: AUTH.ROLE.DELETE
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - { name: role_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/roles/{role_id}/permissions:
+    get:
+      tags: [Auth - Roles]
+      summary: Xem permission của role
+      operationId: authGetRolePermissions
+      x-required-permission: AUTH.ROLE.VIEW
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: role_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    put:
+      tags: [Auth - Roles]
+      summary: Thay thế toàn bộ permission của role
+      operationId: authReplaceRolePermissions
+      x-required-permission: AUTH.PERMISSION.ASSIGN
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - { name: role_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permissions]
+              properties:
+                permissions:
+                  type: array
+                  items:
+                    type: object
+                    required: [permission_id, data_scope]
+                    properties:
+                      permission_id: { type: string, format: uuid }
+                      data_scope: { type: string, enum: [Own, Team, Department, Project, Company, System] }
+                      conditions: { type: object, nullable: true }
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [Auth - Roles]
+      summary: Gán thêm permission cho role
+      operationId: authAddRolePermissions
+      x-required-permission: AUTH.PERMISSION.ASSIGN
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - { name: role_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permissions]
+              properties:
+                permissions:
+                  type: array
+                  items:
+                    type: object
+                    required: [permission_id, data_scope]
+                    properties:
+                      permission_id: { type: string, format: uuid }
+                      data_scope: { type: string, enum: [Own, Team, Department, Project, Company, System] }
+                      conditions: { type: object, nullable: true }
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/roles/{role_id}/permissions/{permission_id}:
+    delete:
+      tags: [Auth - Roles]
+      summary: Gỡ permission khỏi role
+      operationId: authRemoveRolePermission
+      x-required-permission: AUTH.PERMISSION.ASSIGN
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "Optional"
+      x-audit-log: always
+      x-notification-event: null
+      parameters:
+        - { name: role_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: permission_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  # =========================================================================
+  # AUTH — Permission API (/auth/permissions*)
+  # =========================================================================
+  /api/v1/auth/permissions:
+    get:
+      tags: [Auth - Permissions]
+      summary: Lấy danh sách permission catalog
+      operationId: authListPermissions
+      x-required-permission: AUTH.PERMISSION.VIEW
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - { name: module_code, in: query, required: false, schema: { type: string } }
+        - { name: resource, in: query, required: false, schema: { type: string } }
+        - { name: action, in: query, required: false, schema: { type: string } }
+        - { name: is_sensitive, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/permissions/{permission_id}:
+    get:
+      tags: [Auth - Permissions]
+      summary: Lấy chi tiết permission
+      operationId: authGetPermission
+      x-required-permission: AUTH.PERMISSION.VIEW
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - { name: permission_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/permissions/modules:
+    get:
+      tags: [Auth - Permissions]
+      summary: Lấy danh sách module có permission
+      operationId: authListPermissionModules
+      x-required-permission: AUTH.PERMISSION.VIEW
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/permissions/matrix:
+    get:
+      tags: [Auth - Permissions]
+      summary: Lấy permission matrix theo module/resource/action
+      operationId: authGetPermissionMatrix
+      x-required-permission: AUTH.PERMISSION.VIEW
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      responses:
+        '200': { $ref: '#/components/responses/SuccessObject' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  # =========================================================================
+  # AUTH — Security Logs API (login-logs/security-events/audit-logs)
+  # =========================================================================
+  /api/v1/auth/login-logs:
+    get:
+      tags: [Auth - Security Logs]
+      summary: Xem login log
+      operationId: authListLoginLogs
+      x-required-permission: AUTH.AUDIT_LOG.VIEW
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Own, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - { name: user_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [SUCCESS, FAILED] } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/security-events:
+    get:
+      tags: [Auth - Security Logs]
+      summary: Xem security event
+      operationId: authListSecurityEvents
+      x-required-permission: AUTH.AUDIT_LOG.VIEW
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Own, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - { name: user_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: event_type, in: query, required: false, schema: { type: string } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /api/v1/auth/audit-logs:
+    get:
+      tags: [Auth - Security Logs]
+      summary: Xem audit log của AUTH
+      operationId: authListAuditLogs
+      x-required-permission: AUTH.AUDIT_LOG.VIEW
+      x-allowed-roles: [Super Admin, Company Admin]
+      x-data-scope: [Own, Company, System]
+      x-idempotency: "No"
+      x-audit-log: none
+      x-notification-event: null
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - { name: user_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: action, in: query, required: false, schema: { type: string } }
+        - { name: from_date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to_date, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }

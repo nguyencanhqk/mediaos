@@ -36,6 +36,16 @@ export default tseslint.config(
     },
   },
   {
+    // Node scripts thuần (seed/demo .js|.mjs|.cjs) — cấp node + fetch globals để no-undef không báo nhầm
+    // (block ts/tsx ở trên chỉ phủ *.{ts,tsx}; *.config.{js,mjs,cjs} đã ignore ở đầu file).
+    files: ["**/*.{js,mjs,cjs}"],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: "module",
+      globals: { ...globals.node, ...globals.browser },
+    },
+  },
+  {
     // Frontend: quy tắc hooks + fast-refresh.
     files: ["apps/web/**/*.{ts,tsx}"],
     plugins: { "react-hooks": reactHooks, "react-refresh": reactRefresh },

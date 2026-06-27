@@ -1,22 +1,18 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { Server } from "socket.io";
-import {
-  WS_EVENTS,
-  wsChatMessageEventSchema,
-  wsNotificationEventSchema,
-  type ChatMessageDto,
-  type NotificationDto,
-} from "@mediaos/contracts";
-import { chatRoomName, userRoomName } from "./rooms";
+import { WS_EVENTS, wsNotificationEventSchema, type NotificationDto } from "@mediaos/contracts";
+import { userRoomName } from "./rooms";
 
 /**
- * RealtimeEmitterService — CỔNG DUY NHẤT để module khác (ChatService, NotificationsService, …) đẩy
- * sự kiện server→client. BẤT BIẾN masking (CLAUDE.md §5): MỌI payload `.parse()` qua schema contracts
+ * RealtimeEmitterService — CỔNG DUY NHẤT để module khác (NotificationsService, …) đẩy sự kiện
+ * server→client. BẤT BIẾN masking (CLAUDE.md §5): MỌI payload `.parse()` qua schema contracts
  * TRƯỚC khi emit — strip field thừa, validate shape. CẤM `io.emit` row DB thẳng.
  *
  * Server gắn bởi RealtimeGateway.afterInit (cùng instance Nest DI). Khi REALTIME_ENABLED=false hoặc gateway
  * chưa init → `server` null → emit là NO-OP (fail-soft, FE còn poll REST). KHÔNG bao giờ throw lên caller
  * (realtime là best-effort phụ trợ — lỗi emit không được làm hỏng giao dịch nghiệp vụ đã commit).
+ *
+ * (CLEAN-BE-1 de-media-fy: gỡ emitChatMessage cùng cụm chat — chỉ còn đường NOTI.)
  */
 @Injectable()
 export class RealtimeEmitterService {
@@ -26,20 +22,6 @@ export class RealtimeEmitterService {
   /** Gateway gọi 1 lần khi server Socket.IO sẵn sàng. */
   setServer(server: Server): void {
     this.server = server;
-  }
-
-  /** Đẩy tin nhắn mới tới mọi socket đang ở room chat (đã join + membership-checked tại join). */
-  emitChatMessage(companyId: string, roomId: string, message: ChatMessageDto): void {
-    if (!this.server) return;
-    try {
-      const payload = wsChatMessageEventSchema.parse(message);
-      this.server.to(chatRoomName(companyId, roomId)).emit(WS_EVENTS.CHAT_MESSAGE, payload);
-    } catch (err) {
-      this.logger.warn("emitChatMessage failed", {
-        roomId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
   }
 
   /** Đẩy notification tới room riêng của user (mọi thiết bị). Dùng bởi NotificationsService sau insert. */

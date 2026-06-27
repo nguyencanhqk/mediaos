@@ -2,6 +2,10 @@
 node_modules/
 .pnpm-store/
 
+# harness — artefact runtime (ledger có timestamp + báo cáo tự sinh), KHÔNG commit
+harness/activity.jsonl
+harness/report.md
+
 # build
 dist/
 build/
@@ -12,6 +16,7 @@ build/
 .env
 .env.*
 !.env.example
+!.env.dev-online.example
 .secrets/
 
 # logs
@@ -26,6 +31,13 @@ npm-debug.log*
 
 # test / coverage
 coverage/
+# QA evidence artifacts (RED-before-GREEN capture, CI logs) — luôn TRACK dù trùng pattern scratch/coverage.
+# Negate-pattern HẸP: chỉ whitelist docs/QA/evidence/**, KHÔNG nới rộng ignore nào khác.
+!docs/QA/evidence/
+!docs/QA/evidence/**
 
 # planning prompts (scratch — kept locally, not tracked)
 docs/prompts/
+
+# MCP local config — chứa đường dẫn binary tuyệt đối theo máy, KHÔNG portable, KHÔNG commit (repo public)
+.mcp.json

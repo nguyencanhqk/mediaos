@@ -1,22 +1,28 @@
-import { Inject, Injectable, Logger, Module, OnModuleInit, forwardRef } from '@nestjs/common';
-import { DatabaseModule } from '../db/db.module';
-import { EventsModule } from '../events/events.module';
-import { EventBus, type EventContext } from '../events/event-bus';
-import { AuditService } from '../events/audit.service';
-import { OutboxService } from '../events/outbox.service';
-import { AuthModule } from '../auth/auth.module';
-import { PermissionService } from './permission.service';
-import { PermissionRepository } from './permission.repository';
-import { CachedPermissionRepository } from './permission.cache';
-import { ValkeyService } from './valkey.service';
-import { PermissionAdminController } from './permission-admin.controller';
-import { PermissionAdminService } from './permission-admin.service';
-import { PermissionAdminRepository } from './permission-admin.repository';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { CompanyGuard } from './guards/company.guard';
-import { PermissionGuard } from './guards/permission.guard';
+import { Inject, Injectable, Logger, Module, OnModuleInit, forwardRef } from "@nestjs/common";
+import { DatabaseModule } from "../db/db.module";
+import { EventsModule } from "../events/events.module";
+import { EventBus, type EventContext } from "../events/event-bus";
+import { AuditService } from "../events/audit.service";
+import { OutboxService } from "../events/outbox.service";
+import { AuthModule } from "../auth/auth.module";
+import { PermissionService } from "./permission.service";
+import { PermissionRepository } from "./permission.repository";
+import { CachedPermissionRepository } from "./permission.cache";
+import { ValkeyService } from "./valkey.service";
+import { PermissionAdminController } from "./permission-admin.controller";
+import { PermissionAdminService } from "./permission-admin.service";
+import { PermissionAdminRepository } from "./permission-admin.repository";
+// S2-AUTH-BE-3 (additive): read-only catalogs cho UI gán quyền (GET /auth/roles · /auth/permissions).
+import { AuthRolesPermissionsController } from "./auth-roles-permissions.controller";
+import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { CompanyGuard } from "./guards/company.guard";
+import { PermissionGuard } from "./guards/permission.guard";
+import { SuperAdminBootstrapService } from "./super-admin-bootstrap.service";
+import { SuperAdminBootstrapRepository } from "./super-admin-bootstrap.repository";
+import { DataScopeService } from "./data-scope.service";
+import { DataScopeRepository } from "./data-scope.repository";
 
-const CACHED_REPO = 'CACHED_PERMISSION_REPO';
+const CACHED_REPO = "CACHED_PERMISSION_REPO";
 
 /**
  * Subscribes to permission.changed events and invalidates Valkey cache for the affected user.
@@ -43,29 +49,36 @@ class PermissionCacheInvalidator implements OnModuleInit {
 
   onModuleInit(): void {
     this.bus.register({
-      consumerName: 'permission-cache-invalidator',
-      eventType: 'permission.changed',
+      consumerName: "permission-cache-invalidator",
+      eventType: "permission.changed",
       handle: async (ctx: EventContext): Promise<void> => {
         const payload = ctx.payload;
-        if (typeof payload !== 'object' || payload === null) {
-          this.logger.warn('permission.changed event has non-object payload', { eventId: ctx.eventId });
+        if (typeof payload !== "object" || payload === null) {
+          this.logger.warn("permission.changed event has non-object payload", {
+            eventId: ctx.eventId,
+          });
           return;
         }
         const { userId, companyId } = payload as { userId?: string; companyId?: string };
         if (!userId || !companyId) {
-          this.logger.warn('permission.changed event missing userId/companyId', { eventId: ctx.eventId });
+          this.logger.warn("permission.changed event missing userId/companyId", {
+            eventId: ctx.eventId,
+          });
           return;
         }
         try {
           await this.cachedRepo.invalidateUser(companyId, userId);
-          this.logger.debug('Permission cache invalidated', { companyId, userId });
+          this.logger.debug("Permission cache invalidated", { companyId, userId });
         } catch (err) {
-          this.logger.error('Failed to invalidate permission cache — stale grants possible for up to 300s', {
-            companyId,
-            userId,
-            eventId: ctx.eventId,
-            error: err instanceof Error ? err.message : String(err),
-          });
+          this.logger.error(
+            "Failed to invalidate permission cache — stale grants possible for up to 300s",
+            {
+              companyId,
+              userId,
+              eventId: ctx.eventId,
+              error: err instanceof Error ? err.message : String(err),
+            },
+          );
           throw err;
         }
       },
@@ -82,7 +95,7 @@ class PermissionCacheInvalidator implements OnModuleInit {
  */
 @Module({
   imports: [DatabaseModule, EventsModule, forwardRef(() => AuthModule)],
-  controllers: [PermissionAdminController],
+  controllers: [PermissionAdminController, AuthRolesPermissionsController],
   providers: [
     ValkeyService,
     PermissionRepository,
@@ -104,6 +117,16 @@ class PermissionCacheInvalidator implements OnModuleInit {
     JwtAuthGuard,
     CompanyGuard,
     PermissionGuard,
+    // S2-AUTH-SEED-1 / L2 (additive): seed super-admin company-scoped lúc khởi động (runtime, không migration).
+    // PasswordService đến từ forwardRef(AuthModule); AuditService/OutboxService từ EventsModule (@Global);
+    // DatabaseService từ DatabaseModule (@Global). KHÔNG đụng factory permission cũ (hot-file APPEND).
+    SuperAdminBootstrapRepository,
+    SuperAdminBootstrapService,
+    // S2-AUTH-BE-2 (additive): shared data-scope resolver. DataScopeRepository injects DatabaseService
+    // (@Global); DataScopeService injects PermissionService (provided above) + DataScopeRepository.
+    // Exported so HR-BE-1 (and later ATT/LEAVE/TASK) can inject it. KHÔNG đụng factory cũ (hot-file APPEND).
+    DataScopeRepository,
+    DataScopeService,
   ],
   exports: [
     PermissionService,
@@ -111,6 +134,7 @@ class PermissionCacheInvalidator implements OnModuleInit {
     JwtAuthGuard,
     CompanyGuard,
     PermissionGuard,
+    DataScopeService,
   ],
 })
 export class PermissionModule {}
