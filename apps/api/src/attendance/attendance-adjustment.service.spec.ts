@@ -36,18 +36,16 @@ function makeRepo(over: Record<string, unknown> = {}) {
   return {
     insertRequestTx: vi.fn().mockResolvedValue([{ id: REQ }]),
     updateRequestTx: vi.fn().mockResolvedValue([{ id: REQ }]),
-    findRequestByIdForUpdateTx: vi
-      .fn()
-      .mockResolvedValue([
-        {
-          id: REQ,
-          status: "Pending",
-          userId: ACTOR,
-          employeeId: OWN_EMP,
-          workDate: "2024-06-03",
-          taskId: null,
-        },
-      ]),
+    findRequestByIdForUpdateTx: vi.fn().mockResolvedValue([
+      {
+        id: REQ,
+        status: "Pending",
+        userId: ACTOR,
+        employeeId: OWN_EMP,
+        workDate: "2024-06-03",
+        taskId: null,
+      },
+    ]),
     findDetailByIdTx: vi.fn().mockResolvedValue([{ id: REQ, userId: ACTOR }]),
     listTx: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
     findEmployeeScopeByIdTx: vi.fn().mockResolvedValue(empScope(OTHER_EMP)),
@@ -168,17 +166,15 @@ describe("AttendanceAdjustmentService — approve deny-paths", () => {
   it("blocks double-approve of a terminal (Approved) request → 409", async () => {
     const { service } = build({
       repo: {
-        findRequestByIdForUpdateTx: vi
-          .fn()
-          .mockResolvedValue([
-            {
-              id: REQ,
-              status: "Approved",
-              userId: ACTOR,
-              employeeId: OWN_EMP,
-              workDate: "2024-06-03",
-            },
-          ]),
+        findRequestByIdForUpdateTx: vi.fn().mockResolvedValue([
+          {
+            id: REQ,
+            status: "Approved",
+            userId: ACTOR,
+            employeeId: OWN_EMP,
+            workDate: "2024-06-03",
+          },
+        ]),
       },
     });
     await expect(service.approve(actor, REQ, {})).rejects.toThrow(ConflictException);
@@ -202,21 +198,86 @@ describe("AttendanceAdjustmentService — approve deny-paths", () => {
   });
 });
 
-describe("AttendanceAdjustmentService — reject + direct deny-paths", () => {
-  it("blocks rejecting a terminal request → 409", async () => {
+describe("AttendanceAdjustmentService — self-approval hard-rule (SPEC-04 §15.10 quy tắc 6)", () => {
+  // A Pending request whose creator IS the acting approver (requested_by === actor.id).
+  const selfPending = [
+    {
+      id: REQ,
+      status: "Pending",
+      userId: ACTOR,
+      requestedBy: ACTOR,
+      employeeId: OWN_EMP,
+      workDate: "2024-06-03",
+      taskId: null,
+    },
+  ];
+
+  it("blocks the requester APPROVING their own request → 403 ATT-ERR-SELF-APPROVAL (even with covering scope)", async () => {
+    // dataScope is permissive (Company + isEmployeeInScope true) → proves data-scope can NOT substitute.
+    const { service, dataScope } = build({
+      repo: { findRequestByIdForUpdateTx: vi.fn().mockResolvedValue(selfPending) },
+    });
+    await expect(service.approve(actor, REQ, {})).rejects.toThrow(ForbiddenException);
+    await expect(service.approve(actor, REQ, {})).rejects.toThrow(/ATT-ERR-SELF-APPROVAL/);
+    // Hard-rule fires BEFORE assertScope → the decision-scope resolver must not even be consulted.
+    expect(dataScope.resolveAndAssert).not.toHaveBeenCalled();
+  });
+
+  it("blocks the requester REJECTING their own request → 403 ATT-ERR-SELF-APPROVAL", async () => {
+    const { service, dataScope } = build({
+      repo: { findRequestByIdForUpdateTx: vi.fn().mockResolvedValue(selfPending) },
+    });
+    await expect(service.reject(actor, REQ, { reason: "x" })).rejects.toThrow(
+      /ATT-ERR-SELF-APPROVAL/,
+    );
+    expect(dataScope.resolveAndAssert).not.toHaveBeenCalled();
+  });
+
+  it("terminal-state guard STILL precedes the self-rule (self-request already Approved → 409, not 403)", async () => {
     const { service } = build({
       repo: {
         findRequestByIdForUpdateTx: vi
           .fn()
+          .mockResolvedValue([{ ...selfPending[0], status: "Approved" }]),
+      },
+    });
+    await expect(service.approve(actor, REQ, {})).rejects.toThrow(ConflictException);
+  });
+
+  it("a DIFFERENT approver (requested_by ≠ actor) is NOT blocked by the self-rule (falls through to scope)", async () => {
+    // requestedBy is a different user → self-rule passes; scope denies → 403 from assertScope instead.
+    const { service, dataScope } = build({
+      repo: {
+        findRequestByIdForUpdateTx: vi
+          .fn()
           .mockResolvedValue([
-            {
-              id: REQ,
-              status: "Rejected",
-              userId: ACTOR,
-              employeeId: OWN_EMP,
-              workDate: "2024-06-03",
-            },
+            { ...selfPending[0], requestedBy: "77777777-7777-7777-7777-777777777777" },
           ]),
+      },
+      dataScope: {
+        resolveAndAssert: vi.fn().mockResolvedValue("Team"),
+        isEmployeeInScope: vi.fn().mockReturnValue(false),
+      },
+    });
+    await expect(service.approve(actor, REQ, {})).rejects.toThrow(ForbiddenException);
+    // Proof it reached the scope check (not short-circuited by the self-rule).
+    expect(dataScope.resolveAndAssert).toHaveBeenCalled();
+  });
+});
+
+describe("AttendanceAdjustmentService — reject + direct deny-paths", () => {
+  it("blocks rejecting a terminal request → 409", async () => {
+    const { service } = build({
+      repo: {
+        findRequestByIdForUpdateTx: vi.fn().mockResolvedValue([
+          {
+            id: REQ,
+            status: "Rejected",
+            userId: ACTOR,
+            employeeId: OWN_EMP,
+            workDate: "2024-06-03",
+          },
+        ]),
       },
     });
     await expect(service.reject(actor, REQ, { reason: "no" })).rejects.toThrow(ConflictException);

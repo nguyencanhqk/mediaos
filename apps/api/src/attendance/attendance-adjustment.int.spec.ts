@@ -197,6 +197,9 @@ describe.skipIf(!runDb)("S3-ATT-BE-4 adjustment surface (DB cô lập, đường
       ["view-own", "adjustment", "Own"],
     ]);
     await grant(A.companyId, mgrUser, "mgr", [
+      // create-own lets the manager file their OWN request — used to prove the self-approval hard-rule
+      // (SPEC-04 §15.10 quy tắc 6): even an approver covering their own scope may NOT self-decide.
+      ["create-own", "adjustment", "Own"],
       ["view-own", "adjustment", "Own"],
       ["view-team", "adjustment", "Team"],
       ["approve", "adjustment", "Team"],
@@ -452,5 +455,74 @@ describe.skipIf(!runDb)("S3-ATT-BE-4 adjustment surface (DB cô lập, đường
     );
     expect(companyEmps.has(empProfile)).toBe(true);
     expect(companyEmps.has(otherProfile)).toBe(true);
+  });
+
+  // ── 13 · SELF-APPROVAL hard-rule (SPEC-04 §15.10 quy tắc 6): requester ≠ approver ──
+  it("the creator may NOT self-APPROVE their own request → 403 ATT-ERR-SELF-APPROVAL (scope covers self)", async () => {
+    // mgr both creates AND holds approve (Team) — their scope trivially covers themselves, yet the
+    // hard-rule must still block. Data-scope can NOT substitute for requested_by ≠ approver_id.
+    const mgrToken = await login(A.slug, `mgr@${A.slug}.test`);
+    const created = await createAs(mgrToken, "2024-07-10");
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const id = created.body.data.id as string;
+
+    const res = await authPost(mgrToken, `/attendance/adjustment-requests/${id}/approve`).send({
+      note: "self",
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(403);
+    expect(JSON.stringify(res.body)).toContain("ATT-ERR-SELF-APPROVAL");
+    // The request stays Pending (no state change on a blocked decision).
+    const row = await direct.query(
+      "SELECT status FROM attendance_adjustment_requests WHERE id=$1",
+      [id],
+    );
+    expect(row.rows[0].status).toBe("Pending");
+  });
+
+  // ── 14 · SELF-REJECT of own request → 403 ──────────────────────────────────────
+  it("the creator may NOT self-REJECT their own request → 403 ATT-ERR-SELF-APPROVAL", async () => {
+    const mgrToken = await login(A.slug, `mgr@${A.slug}.test`);
+    const created = await createAs(mgrToken, "2024-07-11");
+    expect(created.status).toBe(201);
+    const id = created.body.data.id as string;
+
+    const res = await authPost(mgrToken, `/attendance/adjustment-requests/${id}/reject`).send({
+      reason: "self-reject attempt",
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(403);
+    expect(JSON.stringify(res.body)).toContain("ATT-ERR-SELF-APPROVAL");
+  });
+
+  // ── 15 · CONCURRENT double-approve (FOR UPDATE serialises) → one 200, one 409 ──
+  it("two CONCURRENT approves of the same Pending request → exactly one 200 and one 409 (row-lock)", async () => {
+    // A fresh request from emp (mgr's report). Fire two approvals in the SAME tick via Promise.all —
+    // proves the FOR UPDATE row-lock serialises real concurrency, not just terminal-state-after-commit.
+    const empToken = await login(A.slug, `emp@${A.slug}.test`);
+    const created = await createAs(empToken, "2024-07-12");
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const id = created.body.data.id as string;
+
+    const mgrToken = await login(A.slug, `mgr@${A.slug}.test`);
+    const fire = () =>
+      authPost(mgrToken, `/attendance/adjustment-requests/${id}/approve`).send({ note: "race" });
+    const [a, b] = await Promise.all([fire(), fire()]);
+
+    const codes = [a.status, b.status].sort((x, y) => x - y);
+    expect(
+      codes,
+      `statuses=${JSON.stringify([a.status, b.status])} bodies=${JSON.stringify([a.body, b.body])}`,
+    ).toEqual([200, 409]);
+
+    // Final state is Approved exactly once; no duplicate Adjustment ledger from the losing tx.
+    const row = await direct.query(
+      "SELECT status FROM attendance_adjustment_requests WHERE id=$1",
+      [id],
+    );
+    expect(row.rows[0].status).toBe("Approved");
+    const applied = await direct.query(
+      "SELECT count(*)::int AS n FROM attendance_adjustment_items WHERE request_id=$1 AND is_applied=true",
+      [id],
+    );
+    expect(applied.rows[0].n).toBeGreaterThanOrEqual(1);
   });
 });

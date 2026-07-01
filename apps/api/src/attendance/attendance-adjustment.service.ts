@@ -17,9 +17,7 @@ import type {
   DirectAdjustRequest,
   RejectAdjustmentRequest,
 } from "@mediaos/contracts";
-import { eq } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
-import { attendanceAdjustmentRequests } from "../db/schema/hr";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { PermissionService } from "../permission/permission.service";
@@ -38,8 +36,8 @@ import {
   isDecidable,
   recomputeRecord,
   type AdjustmentItemProposal,
-  type RecordCalcInput,
 } from "./attendance-adjustment.logic";
+import { deriveRequestedTimes, eqUserId, toCalcInput } from "./attendance-adjustment.helpers";
 import { toAdjustmentDetailDto, toAdjustmentListItem } from "./attendance-adjustment.mappers";
 
 const ADJUSTMENT = ATT_RESOURCES.ADJUSTMENT;
@@ -103,7 +101,7 @@ export class AttendanceAdjustmentService {
           assigneeUserId: null,
         });
         const proposals = this.proposals(dto);
-        const requested = this.deriveRequestedTimes(dto.workDate, {
+        const requested = deriveRequestedTimes(dto.workDate, {
           explicitIn: dto.requestedCheckInAt,
           explicitOut: dto.requestedCheckOutAt,
           proposals,
@@ -399,7 +397,7 @@ export class AttendanceAdjustmentService {
           newValue: i.newValue,
           note: i.note,
         }));
-        const requested = this.deriveRequestedTimes(record.workDate, {
+        const requested = deriveRequestedTimes(record.workDate, {
           proposals,
           existingCheckIn: record.checkInAt,
         });
@@ -563,6 +561,17 @@ export class AttendanceAdjustmentService {
         `Đơn không còn ở trạng thái chờ duyệt (status=${request.status})`,
       );
     }
+    // SPEC-04 §15.10 quy tắc 6 — HARD-RULE (cấm tuyệt đối, SAU isDecidable, TRƯỚC assertScope):
+    // người tạo đơn KHÔNG được tự duyệt/từ chối đơn của chính mình (requested_by ≠ approver_id).
+    // Data-scope KHÔNG thay được rule này — manager có scope Team/Company trùm chính họ vẫn phải bị
+    // chặn khi tự xử lý đơn của mình (deny-path test RED-trước ở service.spec + int.spec).
+    if (request.requestedBy === actor.id) {
+      throw new ForbiddenException({
+        code: "ATT-ERR-SELF-APPROVAL",
+        message:
+          "ATT-ERR-SELF-APPROVAL: người tạo đơn không được tự duyệt/từ chối đơn của chính mình",
+      });
+    }
     const target = await this.resolveRequestEmployee(actor.companyId, request, tx);
     await this.assertScope(actor, action, ADJUSTMENT, target);
     return request;
@@ -661,35 +670,6 @@ export class AttendanceAdjustmentService {
   }
 
   // ─── Ledger / DTO helpers ────────────────────────────────────────────────────────
-
-  /**
-   * A request row must carry ≥1 requested time (att_adj_has_request_check, mig 0061 — NOT dropped by
-   * 0457). We take the explicit dto times, else derive from a checkInAt/checkOutAt item, else fall back
-   * to the existing record's check-in or a start-of-workday sentinel so an explanation-only request still
-   * persists. FOLLOW-UP (db-migration lane): drop att_adj_has_request_check to store purely-explanatory
-   * requests without a sentinel.
-   */
-  private deriveRequestedTimes(
-    workDate: string,
-    opts: {
-      explicitIn?: string | null;
-      explicitOut?: string | null;
-      proposals: AdjustmentItemProposal[];
-      existingCheckIn?: Date | null;
-    },
-  ): { checkInAt: Date | null; checkOutAt: Date | null } {
-    const inAt = opts.explicitIn
-      ? new Date(opts.explicitIn)
-      : itemDate(opts.proposals, "checkInAt");
-    const outAt = opts.explicitOut
-      ? new Date(opts.explicitOut)
-      : itemDate(opts.proposals, "checkOutAt");
-    if (inAt || outAt) return { checkInAt: inAt, checkOutAt: outAt };
-    return {
-      checkInAt: opts.existingCheckIn ?? new Date(`${workDate}T00:00:00.000Z`),
-      checkOutAt: null,
-    };
-  }
 
   private proposals(dto: CreateAdjustmentRequest): AdjustmentItemProposal[] {
     return (dto.items ?? []).map((i) => ({
@@ -790,44 +770,4 @@ export class AttendanceAdjustmentService {
     this.logger.error(`${op} unexpected error`, { err, ...ctx });
     throw new InternalServerErrorException("Lỗi hệ thống, vui lòng thử lại");
   }
-}
-
-/** attendanceAdjustmentRequests.userId self-lock predicate for the "my" list. */
-function eqUserId(userId: string) {
-  return eq(attendanceAdjustmentRequests.userId, userId);
-}
-
-/** Pull a Date from a checkInAt/checkOutAt proposal (ISO string / Date), or null when absent/invalid. */
-function itemDate(proposals: AdjustmentItemProposal[], field: string): Date | null {
-  const item = proposals.find((p) => p.fieldName === field);
-  if (!item || item.newValue == null) return null;
-  const d = item.newValue instanceof Date ? item.newValue : new Date(String(item.newValue));
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-/** attendance_records row (or absent) → the minimal view the recalc reads. Absent = a fresh record. */
-function toCalcInput(row: RecordCalcSource | undefined): RecordCalcInput {
-  return {
-    checkInAt: row?.checkInAt ?? null,
-    checkOutAt: row?.checkOutAt ?? null,
-    lateMinutes: row?.lateMinutes ?? 0,
-    earlyLeaveMinutes: row?.earlyLeaveMinutes ?? 0,
-    workingMinutes: row?.workingMinutes ?? null,
-    requiredWorkingMinutes: row?.requiredWorkingMinutes ?? null,
-    breakMinutes: row?.breakMinutes ?? null,
-    missingMinutes: row?.missingMinutes ?? null,
-    note: row?.note ?? null,
-  };
-}
-
-interface RecordCalcSource {
-  checkInAt: Date | null;
-  checkOutAt: Date | null;
-  lateMinutes: number;
-  earlyLeaveMinutes: number;
-  workingMinutes: number | null;
-  requiredWorkingMinutes: number | null;
-  breakMinutes: number | null;
-  missingMinutes: number | null;
-  note: string | null;
 }
