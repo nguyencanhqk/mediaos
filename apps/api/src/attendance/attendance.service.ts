@@ -372,15 +372,24 @@ export class AttendanceService {
     );
   }
 
-  /** Ca hiệu lực (assignment → ca mặc định) + rule hiệu lực + tz + work_date (theo tz ca). */
-  private async resolveShiftAndRule(
+  /**
+   * Ca hiệu lực (assignment → ca mặc định) + rule hiệu lực + tz + work_date (theo tz ca).
+   *
+   * S3-ATT-BE-3: PUBLIC (was private) + `explicitWorkDate` optional param — AttendanceShiftService
+   * (GET /attendance/rules/effective) reuses this EXACT method so the shift/rule priority order
+   * (Employee≻Department≻Company≻System, DB-04 §10) has ONE implementation shared with S3-ATT-BE-1
+   * (today/check-in/check-out). Existing callers (checkIn/checkOut/getToday) omit the 5th arg —
+   * behavior unchanged (provisional/workDate still derived from `now`).
+   */
+  async resolveShiftAndRule(
     tx: TenantTx,
     companyId: string,
     employee: ResolvedEmployee,
     now: Date,
+    explicitWorkDate?: string,
   ): Promise<{ shift: ShiftRow | null; rule: EffectiveRule; tz: string; workDate: string }> {
     // Provisional date (DEFAULT_TZ) chỉ để lọc khoảng hiệu lực assignment; tz cuối lấy từ ca → work_date chuẩn.
-    const provisional = localDateOf(now, DEFAULT_TZ);
+    const provisional = explicitWorkDate ?? localDateOf(now, DEFAULT_TZ);
     const shift =
       (await this.repo.resolveEffectiveShiftTx(
         companyId,
@@ -388,7 +397,7 @@ export class AttendanceService {
         tx,
       )) ?? (await this.repo.findDefaultShiftTx(companyId, tx));
     const tz = shiftTimezone(shift);
-    const workDate = localDateOf(now, tz);
+    const workDate = explicitWorkDate ?? localDateOf(now, tz);
     const rule = await this.resolveRule(tx, companyId, employee, workDate);
     return { shift, rule, tz, workDate };
   }

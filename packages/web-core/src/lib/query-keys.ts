@@ -92,6 +92,19 @@ export const attendanceKeys = {
       [...rootKeys.attendance, "records", "list", params] as const,
     detail: (id: string) => [...rootKeys.attendance, "records", "detail", id] as const,
   },
+  // S3-FE-ATT-5 — APPEND. Danh mục nhỏ (không phân trang server): list() không nhận params.
+  shifts: {
+    all: [...rootKeys.attendance, "shifts"] as const,
+    list: () => [...rootKeys.attendance, "shifts", "list"] as const,
+  },
+  shiftAssignments: {
+    all: [...rootKeys.attendance, "shift-assignments"] as const,
+    list: () => [...rootKeys.attendance, "shift-assignments", "list"] as const,
+  },
+  rules: {
+    all: [...rootKeys.attendance, "rules"] as const,
+    list: () => [...rootKeys.attendance, "rules", "list"] as const,
+  },
 };
 
 // ── Leave keys ────────────────────────────────────────────────────────────────

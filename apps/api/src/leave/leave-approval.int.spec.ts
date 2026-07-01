@@ -83,6 +83,8 @@ const DATES = {
   ledger: "2027-03-12",
   listHr: "2027-03-15",
   listMgr: "2027-03-16",
+  deptFilter: "2027-03-17",
+  deptFilterScope: "2027-03-18",
 } as const;
 
 describe.skipIf(!runDb)("S3-LEAVE-BE-3 approval workflow (DB cô lập, đường thật)", () => {
@@ -147,6 +149,29 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-3 approval workflow (DB cô lập, đườn
       [companyId, `LT-${randomUUID().slice(0, 8)}`, "Annual"],
     );
     return r.rows[0].id as string;
+  }
+
+  async function plantOrgUnit(companyId: string, name: string): Promise<string> {
+    const r = await direct.query(
+      `INSERT INTO org_units (company_id, name, type) VALUES ($1,$2,'department') RETURNING id`,
+      [companyId, name],
+    );
+    return r.rows[0].id as string;
+  }
+
+  /** Seed a full self-service employee (user + role grants + profile + balance) inside an org unit. */
+  async function seedSelfEmployee(
+    companyId: string,
+    slug: string,
+    email: string,
+    leaveTypeId: string,
+    opts: { orgUnitId?: string; managerUserId?: string } = {},
+  ): Promise<string> {
+    const userId = await seedUser(direct, companyId, email, await hash());
+    await seedProfile(companyId, userId, opts);
+    await grantLeave(companyId, userId, `self-${userId.slice(0, 8)}`, SELF_PAIRS);
+    await plantBalance(companyId, userId, leaveTypeId, 20);
+    return userId;
   }
 
   async function plantBalance(
@@ -531,5 +556,46 @@ describe.skipIf(!runDb)("S3-LEAVE-BE-3 approval workflow (DB cô lập, đườn
       mgrList.body.data.items as Array<{ id: string; requester: { userId: string } }>
     ).find((x) => x.id === r1);
     expect(r1Item?.requester.userId).toBe(u.emp1.id);
+  });
+
+  // ── DEPT FILTER · departmentId narrows the scoped list server-side (list+count agree) ──
+  it("GET /requests?departmentId= — HR sees only that department's requests; count matches", async () => {
+    const deptX = await plantOrgUnit(A.companyId, `Dept-X-${randomUUID().slice(0, 6)}`);
+    const deptY = await plantOrgUnit(A.companyId, `Dept-Y-${randomUUID().slice(0, 6)}`);
+    await seedSelfEmployee(A.companyId, A.slug, `dx@${A.slug}.test`, annualA, { orgUnitId: deptX });
+    await seedSelfEmployee(A.companyId, A.slug, `dy@${A.slug}.test`, annualA, { orgUnitId: deptY });
+    const reqX = await createPending(A.slug, `dx@${A.slug}.test`, annualA, DATES.deptFilter);
+    const reqY = await createPending(A.slug, `dy@${A.slug}.test`, annualA, DATES.deptFilter);
+
+    const hrToken = await login(A.slug, `hr@${A.slug}.test`);
+    const filtered = await get(
+      hrToken,
+      `/leave/requests?status=Pending&pageSize=100&departmentId=${deptX}`,
+    );
+    expect(filtered.status, JSON.stringify(filtered.body)).toBe(200);
+    const ids = (filtered.body.data.items as Array<{ id: string }>).map((x) => x.id);
+    expect(ids).toContain(reqX);
+    expect(ids).not.toContain(reqY);
+    // total (from countPendingScopedTx) must reflect the same filter as the page — every item is in deptX.
+    expect(filtered.body.data.meta.total).toBe(ids.length);
+    expect(ids.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // ── DEPT FILTER is SCOPE-SAFE · a manager can't widen past their Team via departmentId ──
+  it("manager filtering by a department with NON-report owners → still sees nothing (scope wins)", async () => {
+    const deptZ = await plantOrgUnit(A.companyId, `Dept-Z-${randomUUID().slice(0, 6)}`);
+    // employee in deptZ, NOT a report of mgr → outside mgr's Team.
+    await seedSelfEmployee(A.companyId, A.slug, `dz@${A.slug}.test`, annualA, { orgUnitId: deptZ });
+    const reqZ = await createPending(A.slug, `dz@${A.slug}.test`, annualA, DATES.deptFilterScope);
+
+    const mgrToken = await login(A.slug, `mgr@${A.slug}.test`);
+    const res = await get(
+      mgrToken,
+      `/leave/requests?status=Pending&pageSize=100&departmentId=${deptZ}`,
+    );
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const ids = (res.body.data.items as Array<{ id: string }>).map((x) => x.id);
+    // departmentId ANDs AFTER scopeCond → the filter can only NARROW, never widen past Team.
+    expect(ids).not.toContain(reqZ);
   });
 });
