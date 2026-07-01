@@ -770,6 +770,9 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 41,
   },
+  // S3-FE-LEAVE-2 PIN CỔNG: gate = CHỈ view:leave (LEAVE.REQUEST.VIEW) — khớp BE GET /leave/requests
+  // (VIEW_LEAVE, SENSITIVE, mig 0455). KHÔNG gate LEAVE.REQUEST.APPROVE ở cổng route: người chỉ có approve
+  // mà thiếu view sẽ 403 ở list-load ⇒ route phải đòi ĐÚNG cặp đọc chéo. Nút approve/reject gate riêng trong page.
   {
     routeKey: "leave.approvals",
     path: "/leave/approvals",
@@ -777,7 +780,7 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     moduleCode: "LEAVE",
     screenCode: "LEAVE-SCREEN-APPROVALS",
     titleKey: "routeTitle.leaveApprovals",
-    requiredAnyPermissions: ["LEAVE.REQUEST.APPROVE", "LEAVE.REQUEST.VIEW"],
+    requiredAnyPermissions: ["LEAVE.REQUEST.VIEW"],
     showInSidebar: true,
     order: 42,
   },

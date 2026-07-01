@@ -147,7 +147,8 @@ export const notificationKeys = {
 // Mỗi entry trả về DANH SÁCH prefix key để `queryClient.invalidateQueries({ queryKey })`. Prefix (BỎ slot
 // params) nên khớp mọi biến thể param'd (TanStack matches theo prefix). Nguồn sự thật DUY NHẤT để hook
 // mutation không rải string tay — check-in/out làm mới today + bảng công của tôi; duyệt/từ chối nghỉ làm
-// mới danh sách đơn + chi tiết đơn + số dư phép (balance có thể đổi khi duyệt).
+// mới danh sách đơn quản lý + chi tiết đơn (KHÔNG số dư phép — balance thuộc requester, không nằm trong
+// cache của người duyệt).
 
 const attendanceMyRecordsPrefix = [...rootKeys.attendance, "my", "records"] as const;
 const leaveRequestsListPrefix = [...rootKeys.leave, "requests", "list"] as const;
@@ -157,17 +158,12 @@ export const attendanceInvalidation = {
   checkOut: () => [attendanceKeys.myToday(), attendanceMyRecordsPrefix] as const,
 };
 
+// S3-FE-LEAVE-2: approver KHÔNG giữ balance key của requester (balance thuộc user gửi đơn, không nằm
+// trong cache của người duyệt) → BỎ leaveKeys.balances.all. Chỉ làm mới danh sách quản lý (mọi biến thể
+// param'd qua list-prefix) + chi tiết đúng đơn vừa duyệt/từ chối.
 export const leaveInvalidation = {
   approve: (requestId: string) =>
-    [
-      leaveRequestsListPrefix,
-      leaveKeys.requests.detail(requestId),
-      leaveKeys.balances.all,
-    ] as const,
+    [leaveRequestsListPrefix, leaveKeys.requests.detail(requestId)] as const,
   reject: (requestId: string) =>
-    [
-      leaveRequestsListPrefix,
-      leaveKeys.requests.detail(requestId),
-      leaveKeys.balances.all,
-    ] as const,
+    [leaveRequestsListPrefix, leaveKeys.requests.detail(requestId)] as const,
 };

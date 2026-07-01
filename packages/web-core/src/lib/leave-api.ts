@@ -4,12 +4,15 @@ import {
   leaveBalanceViewSchema,
   leaveRequestDetailViewSchema,
   leaveRequestListResponseSchema,
+  leaveManagementListResponseSchema,
   leaveCalculateResponseSchema,
   type LeaveTypeView,
   type LeaveBalanceView,
   type LeaveRequestDetailView,
   type LeaveRequestListResponse,
   type LeaveRequestListQuery,
+  type LeaveManagementListResponse,
+  type PendingLeaveRequestListQuery,
   type LeaveCalculateRequest,
   type LeaveCalculateResponse,
   type CreateLeaveRequestDraft,
@@ -117,5 +120,41 @@ export const leaveApi = {
     apiFetch("/leave/requests/calculate", leaveCalculateResponseSchema, {
       method: "POST",
       body: JSON.stringify(body),
+    }),
+
+  // ── Quản lý / phê duyệt (HR·manager) — S3-FE-LEAVE-2 ──────────────────────
+  // Cổng SERVER: GET /leave/requests = view:leave (SENSITIVE, scope Team/Company do server áp);
+  // approve = approve:leave; reject = reject:leave (SENSITIVE). Client chỉ chọn endpoint + validate.
+
+  /**
+   * GET /leave/requests — danh sách đơn nghỉ cho HR/manager duyệt (mặc định status='Pending').
+   * Permission: view:leave (đọc chéo, server scope Team/Company). Phân trang + lọc.
+   * company_id resolve từ auth context — client KHÔNG truyền.
+   */
+  listRequests: (
+    query?: Partial<PendingLeaveRequestListQuery>,
+  ): Promise<LeaveManagementListResponse> => {
+    const qs = buildQueryString(query ?? {});
+    return apiFetch(`/leave/requests${qs}`, leaveManagementListResponseSchema);
+  },
+
+  /**
+   * POST /leave/requests/:id/approve — duyệt đơn Pending → Approved. note tuỳ chọn.
+   * Permission: approve:leave. Actor/companyId server-authoritative (client note bị Zod strip khác).
+   */
+  approveRequest: (id: string, note?: string): Promise<LeaveRequestDetailView> =>
+    apiFetch(`/leave/requests/${id}/approve`, leaveRequestDetailViewSchema, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    }),
+
+  /**
+   * POST /leave/requests/:id/reject — từ chối đơn Pending → Rejected. reason BẮT BUỘC (min1,max2000).
+   * Permission: reject:leave (SENSITIVE). Validate lý do rỗng là việc form + Zod contract phía page.
+   */
+  rejectRequest: (id: string, reason: string): Promise<LeaveRequestDetailView> =>
+    apiFetch(`/leave/requests/${id}/reject`, leaveRequestDetailViewSchema, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
     }),
 };

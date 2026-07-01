@@ -42,10 +42,13 @@ const EMPLOYEE_PERMS = makeScopedPerms([
   { permission: "view-own:attendance", scopes: ["Own"] },
   { permission: "view-own:leave", scopes: ["Own"] },
 ]);
+// S3-FE-LEAVE-2: manager có view:leave @ Team (mig 0455) → đọc chéo đơn nhóm để duyệt.
+// (approve:leave @ Team đi kèm; reject:leave sensitive/không allowlist nên KHÔNG lộ qua /auth/me.)
 const MANAGER_PERMS = makeScopedPerms([
   { permission: "view-own:attendance", scopes: ["Own"] },
   { permission: "view-team:attendance", scopes: ["Team"] },
   { permission: "view-own:leave", scopes: ["Own"] },
+  { permission: "view:leave", scopes: ["Team"] },
   { permission: "approve:leave", scopes: ["Team"] },
 ]);
 const HR_PERMS = makeScopedPerms([
@@ -398,16 +401,12 @@ describe("evaluateRouteAccess — ATT scoped pair-as-gate (deny-path matrix)", (
     titleKey: "routeTitle.attRecords",
     requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_COMPANY"],
   };
-  const leaveApprovalsRoute = {
-    routeKey: "leave.approvals",
-    path: "/leave/approvals",
-    layout: "MODULE_WORKSPACE" as const,
-    moduleCode: "LEAVE" as const,
-    titleKey: "routeTitle.leaveApprovals",
-    requiredAnyPermissions: ["LEAVE.REQUEST.APPROVE", "LEAVE.REQUEST.VIEW"],
-  };
+  // S3-FE-LEAVE-2 PIN CỔNG: leave.approvals gate = view:leave (LEAVE.REQUEST.VIEW) — khớp BE
+  // GET /leave/requests (VIEW_LEAVE). KHÔNG gate approve:leave: manager có approve nhưng thiếu view sẽ
+  // 403 ở list-load ⇒ route phải đòi ĐÚNG cặp đọc chéo. (Dùng META THẬT từ ROUTE_REGISTRY, chống drift.)
+  const leaveApprovalsRoute = getRouteMeta("leave.approvals")!;
 
-  it("employee (view-own only) → KHÔNG ALLOW team-records / records / approvals", () => {
+  it("employee (không view:leave) → KHÔNG ALLOW team-records / records / approvals", () => {
     const session = makeSession(ATT_LEAVE_SESSION());
     const c = createPermissionChecker(EMPLOYEE_PERMS);
     expect(evaluateRouteAccess(session, attTeamRoute, c).action).toBe("SHOW_403");
@@ -415,12 +414,18 @@ describe("evaluateRouteAccess — ATT scoped pair-as-gate (deny-path matrix)", (
     expect(evaluateRouteAccess(session, leaveApprovalsRoute, c).action).toBe("SHOW_403");
   });
 
-  it("manager (view-team:attendance) → ALLOW team-records + approvals, KHÔNG company records", () => {
+  it("manager (view:leave @ Team) → ALLOW team-records + approvals, KHÔNG company records", () => {
     const session = makeSession(ATT_LEAVE_SESSION());
     const c = createPermissionChecker(MANAGER_PERMS);
     expect(evaluateRouteAccess(session, attTeamRoute, c).action).toBe("ALLOW");
     expect(evaluateRouteAccess(session, leaveApprovalsRoute, c).action).toBe("ALLOW");
     expect(evaluateRouteAccess(session, attCompanyRoute, c).action).toBe("SHOW_403");
+  });
+
+  it("hr (view:leave @ Company) → ALLOW approvals", () => {
+    const session = makeSession(ATT_LEAVE_SESSION());
+    const c = createPermissionChecker(HR_PERMS);
+    expect(evaluateRouteAccess(session, leaveApprovalsRoute, c).action).toBe("ALLOW");
   });
 
   it("hr (view-company:attendance) → ALLOW company records + team-records", () => {
@@ -449,6 +454,17 @@ describe("ROUTE_REGISTRY — ATT scoped routes", () => {
     expect(meta?.path).toBe("/attendance/records");
     expect(meta?.moduleCode).toBe("ATT");
     expect(meta?.requiredAnyPermissions).toEqual(["ATT.ATTENDANCE.VIEW_COMPANY"]);
+    expect(meta?.requiredScopes).toBeUndefined();
+  });
+
+  // S3-FE-LEAVE-2: leave.approvals gate = CHỈ view:leave (LEAVE.REQUEST.VIEW), khớp BE GET /leave/requests
+  // (VIEW_LEAVE). KHÔNG còn LEAVE.REQUEST.APPROVE ở cổng route (approve chỉ gate 2 nút trong page).
+  it("leave.approvals gate CHỈ LEAVE.REQUEST.VIEW (KHÔNG APPROVE ở cổng route)", () => {
+    const meta = getRouteMeta("leave.approvals");
+    expect(meta?.path).toBe("/leave/approvals");
+    expect(meta?.moduleCode).toBe("LEAVE");
+    expect(meta?.requiredAnyPermissions).toEqual(["LEAVE.REQUEST.VIEW"]);
+    expect(meta?.requiredAnyPermissions).not.toContain("LEAVE.REQUEST.APPROVE");
     expect(meta?.requiredScopes).toBeUndefined();
   });
 });

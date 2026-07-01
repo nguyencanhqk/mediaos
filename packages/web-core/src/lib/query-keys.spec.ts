@@ -87,11 +87,22 @@ describe("mutation invalidation matrix", () => {
     expect(attendanceInvalidation.checkOut()).toEqual(keys);
   });
 
-  it("leave approve → list prefix + detail(id) + balances", () => {
+  // S3-FE-LEAVE-2: approver KHÔNG giữ balance key của requester → BỎ balances.all khỏi approve/reject.
+  // Chỉ invalidate list (mọi biến thể param'd qua prefix) + chi tiết đúng đơn vừa duyệt/từ chối.
+  it("leave approve → list prefix + detail(id), KHÔNG balances.all", () => {
     const keys = leaveInvalidation.approve("lr1");
     expect(keys).toContainEqual(["leave", "requests", "list"]);
     expect(keys).toContainEqual(["leave", "requests", "detail", "lr1"]);
-    expect(keys).toContainEqual(["leave", "balances"]);
+    expect(keys).not.toContainEqual(["leave", "balances"]);
+    expect(keys).toHaveLength(2);
+  });
+
+  it("leave reject → list prefix + detail(id), KHÔNG balances.all", () => {
+    const keys = leaveInvalidation.reject("lr2");
+    expect(keys).toContainEqual(["leave", "requests", "list"]);
+    expect(keys).toContainEqual(["leave", "requests", "detail", "lr2"]);
+    expect(keys).not.toContainEqual(["leave", "balances"]);
+    expect(keys).toHaveLength(2);
   });
 });
 
