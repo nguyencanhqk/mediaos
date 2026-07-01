@@ -120,6 +120,12 @@ import { EmployeeDetailPage } from "@/routes/hr/employees/EmployeeDetailPage";
 import { EmployeeFormPage } from "@/routes/hr/employees/EmployeeFormPage";
 import { MyProfilePage } from "@/routes/hr/me/MyProfilePage";
 
+// Leave
+import { MyLeaveBalancePage } from "@/routes/leave/MyLeaveBalancePage";
+import { MyLeaveRequestsPage } from "@/routes/leave/MyLeaveRequestsPage";
+import { CreateLeaveRequestPage } from "@/routes/leave/CreateLeaveRequestPage";
+import { LeaveRequestDetailPage } from "@/routes/leave/LeaveRequestDetailPage";
+
 // System
 import { UsersPage } from "@/routes/system/UsersPage";
 import { RolesPage } from "@/routes/system/RolesPage";
@@ -213,12 +219,12 @@ const attMyRecordsRoute = makeModuleRoute(
 );
 
 // Leave
-const leaveRoute = makeModuleRoute("/leave", "leave.overview", "LEAVE", ModulePlaceholder);
+const leaveRoute = makeModuleRoute("/leave", "leave.overview", "LEAVE", MyLeaveBalancePage);
 const leaveMyRequestsRoute = makeModuleRoute(
   "/leave/me/requests",
   "leave.my-requests",
   "LEAVE",
-  ModulePlaceholder,
+  MyLeaveRequestsPage,
 );
 const leaveApprovalsRoute = makeModuleRoute(
   "/leave/approvals",
@@ -226,6 +232,32 @@ const leaveApprovalsRoute = makeModuleRoute(
   "LEAVE",
   ModulePlaceholder,
 );
+
+// Leave create — static "new" segment before "$requestId" param route
+const leaveCreateMeta = getMeta("leave.my-requests");
+const leaveCreateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/leave/me/requests/new",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(leaveCreateMeta, "LEAVE", <CreateLeaveRequestPage />),
+});
+
+// Leave detail — local RouteMeta (no sidebar entry; reuses leave.my-requests permission).
+// Pattern mirrors systemLoginLogsRoute: local meta, buildModuleRouteContent → ProtectedRoute guard.
+const leaveDetailMeta = getMeta("leave.my-requests");
+const leaveDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/leave/me/requests/$requestId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { requestId } = leaveDetailRoute.useParams();
+    return buildModuleRouteContent(
+      leaveDetailMeta,
+      "LEAVE",
+      <LeaveRequestDetailPage requestId={requestId} />,
+    );
+  },
+});
 
 // Tasks
 const tasksRoute = makeModuleRoute("/tasks", "task.overview", "TASK", ModulePlaceholder);
@@ -309,6 +341,8 @@ const routeTree = rootRoute.addChildren([
   attMyRecordsRoute,
   leaveRoute,
   leaveMyRequestsRoute,
+  leaveCreateRoute,
+  leaveDetailRoute,
   leaveApprovalsRoute,
   tasksRoute,
   tasksMyTasksRoute,
