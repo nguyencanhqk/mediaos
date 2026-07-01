@@ -210,9 +210,16 @@ export function LeaveRequestDetailPage({ requestId }: LeaveRequestDetailPageProp
     LEAVE_ENGINE_PAIRS.CANCEL_OWN.resourceType,
   );
 
+  // QA05-LEAVE-004: gate view-own:leave — block fetch + show forbidden when missing
+  const canViewRequest = useCan(
+    LEAVE_ENGINE_PAIRS.VIEW_OWN_REQUEST.action,
+    LEAVE_ENGINE_PAIRS.VIEW_OWN_REQUEST.resourceType,
+  );
+
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: leaveKeys.requests.detail(requestId),
     queryFn: () => leaveApi.getMyRequest(requestId),
+    enabled: canViewRequest,
     staleTime: 30_000,
     retry: (count, err) => {
       if (err instanceof ApiError && err.status === 404) return false;
@@ -232,6 +239,24 @@ export function LeaveRequestDetailPage({ requestId }: LeaveRequestDetailPageProp
 
   function goBack() {
     void navigate({ to: LEAVE_PATHS.MY_REQUESTS as "/" });
+  }
+
+  // ── Permission gate ────────────────────────────────────────────────────────
+  if (!canViewRequest) {
+    return (
+      <div className="p-6">
+        <EmptyState
+          title={t("detail.forbidden.title")}
+          description={t("detail.forbidden.description")}
+          action={
+            <Button variant="outline" size="sm" onClick={goBack}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              {t("detail.backToList")}
+            </Button>
+          }
+        />
+      </div>
+    );
   }
 
   // ── Loading ────────────────────────────────────────────────────────────────

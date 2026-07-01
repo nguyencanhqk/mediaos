@@ -153,6 +153,23 @@ describe("LeaveRequestDetailPage — data states", () => {
   });
 });
 
+// ── QA05-LEAVE-004: permission gate ──────────────────────────────────────────
+describe("LeaveRequestDetailPage — permission gate", () => {
+  it("QA05-LEAVE-004 — shows forbidden EmptyState when canViewRequest=false", async () => {
+    // Deny view-own:leave specifically; all other useCan calls return true
+    mockUseCan.mockImplementation((action: string) => {
+      if (action === "view-own") return false;
+      return true;
+    });
+    renderPage(buildQC());
+    await waitFor(() => {
+      expect(screen.getByText(/không có quyền truy cập/i)).toBeTruthy();
+    });
+    // fetch must be blocked (enabled:false when no permission)
+    expect(mockGetMyRequest).not.toHaveBeenCalled();
+  });
+});
+
 describe("LeaveRequestDetailPage — cancel action", () => {
   it("shows cancel button for Pending request when canCancelOwn=true", async () => {
     mockGetMyRequest.mockResolvedValue(MOCK_REQUEST);
@@ -171,9 +188,9 @@ describe("LeaveRequestDetailPage — cancel action", () => {
 
   it("hides cancel button when canCancelOwn=false", async () => {
     mockGetMyRequest.mockResolvedValue(MOCK_REQUEST);
-    // First call for VIEW_OWN, second for CANCEL_OWN
-    mockUseCan.mockImplementation((_action: string, resourceType: string) => {
-      if (resourceType === "leave") return false;
+    // Action-specific mock: only deny cancel-own; keep view-own=true so page loads normally
+    mockUseCan.mockImplementation((action: string) => {
+      if (action === "cancel-own") return false;
       return true;
     });
     renderPage(buildQC());
