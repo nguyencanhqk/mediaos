@@ -22,6 +22,7 @@ import {
   type LeaveResourceType,
 } from "./leave-permissions.const";
 import { LeaveApprovalService } from "./leave-approval.service";
+import { LeaveCalendarService } from "./leave-calendar.service";
 import { LeaveReadService } from "./leave-read.service";
 import { LeaveRequestService } from "./leave-request.service";
 import { LeaveService } from "./leave.service";
@@ -77,6 +78,10 @@ const VIEW_OWN_LEAVE = leavePair("view-own", LEAVE_RESOURCES.LEAVE);
 const VIEW_LEAVE = leavePair("view", LEAVE_RESOURCES.LEAVE);
 const APPROVE_LEAVE = leavePair("approve", LEAVE_RESOURCES.LEAVE);
 const REJECT_LEAVE = leavePair("reject", LEAVE_RESOURCES.LEAVE);
+// S3-LEAVE-BE-5 — calendar (own/team/company). Controller gates the COARSE Own pair (granted to all 4
+// canonical roles) — the REAL per-scope gate (view-own/view-team/view-company) runs in
+// LeaveCalendarService via DataScopeService.resolveAndAssert, mirroring the BE-3 listPending 2-tier gate.
+const VIEW_OWN_CALENDAR = leavePair("view-own", LEAVE_RESOURCES.LEAVE_CALENDAR);
 
 /**
  * G11-2 — Leave HTTP surface. Every route gated by PermissionGuard (@RequirePermission, fail-closed).
@@ -92,6 +97,7 @@ export class LeaveController {
     private readonly leaveRead: LeaveReadService,
     private readonly leaveRequest: LeaveRequestService,
     private readonly leaveApproval: LeaveApprovalService,
+    private readonly leaveCalendar: LeaveCalendarService,
   ) {}
 
   // ─── Leave types ─────────────────────────────────────────────────────────────
@@ -277,11 +283,17 @@ export class LeaveController {
     return this.leaveRequest.cancel(req.user, id, dto.cancelReason);
   }
 
-  // ─── Team calendar ───────────────────────────────────────────────────────────
+  // ─── Leave calendar (S3-LEAVE-BE-5 · CO-S4-005) ──────────────────────────────
 
+  // Coarse gate here (view-own:leave-calendar, granted @Own to all 4 canonical roles). The REAL gate for
+  // scope=team/company (view-team/view-company — sensitive, NOT granted to every role) runs inside
+  // LeaveCalendarService.listCalendar (dataScope.resolveAndAssert) → 403 if the caller lacks THAT scope's
+  // grant, regardless of this coarse decorator passing.
   @Get("calendar")
-  @RequirePermission("read", "leave")
+  @RequirePermission(VIEW_OWN_CALENDAR.action, VIEW_OWN_CALENDAR.resourceType, {
+    isSensitive: VIEW_OWN_CALENDAR.sensitive,
+  })
   listCalendar(@Req() req: AuthenticatedRequest, @Query() query: LeaveCalendarQueryDto) {
-    return this.leave.listCalendar(req.user.companyId, query.month);
+    return this.leaveCalendar.listCalendar(req.user, query);
   }
 }

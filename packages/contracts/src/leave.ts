@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { hrRequestStatusSchema, periodMonthSchema } from "./attendance";
+import { hrRequestStatusSchema } from "./attendance";
 
 /**
  * G11-2 — Leave contracts (loại nghỉ, số phép, đơn nghỉ, lịch nghỉ team).
@@ -107,24 +107,57 @@ export const leaveListQuerySchema = z.object({
 });
 export type LeaveListQuery = z.infer<typeof leaveListQuerySchema>;
 
-// ─── Lịch nghỉ team ───────────────────────────────────────────────────────────
+// ─── Lịch nghỉ (S3-LEAVE-BE-5 · CO-S4-005) ───────────────────────────────────
+//
+// GET /leave/calendar?scope=own|team|company&from&to — đơn Approved/Pending trong khoảng, theo data-scope
+// (tái dùng DataScopeService S2-INT-2: own→Own, team→Team, company→Company). Gate 2 tầng (mirror BE-3
+// management list): controller chỉ gate coarse view-own:leave-calendar (mọi role đều có ở Own); SERVICE gọi
+// dataScope.resolveAndAssert(actor, action-theo-scope, 'leave-calendar') — action THỰC = 'view-own'/
+// 'view-team'/'view-company' (3 cặp catalog riêng, mig 0455) → thiếu quyền cho scope yêu cầu = 403 ngay,
+// KHÔNG rơi về Own âm thầm (fail-closed, không đoán ý người gọi).
+//
+// MASK: `reason` CHỈ trả cho dòng CỦA CHÍNH người gọi (row.userId === actor.id) — mọi dòng khác (đồng
+// nghiệp/cấp dưới) LUÔN null, bất kể scope nào (đây là lịch "ai nghỉ khi nào", KHÔNG phải màn hình duyệt
+// đơn — lý do nghỉ luôn riêng tư ngoài bản thân). Không cần thêm 1 lượt permission-check nữa (đơn giản,
+// fail-safe theo mặc định).
 
-/** 1 dòng lịch nghỉ team — KHÔNG kèm reason (riêng tư), chỉ ai/nghỉ gì/khi nào. */
+export const leaveCalendarScopeSchema = z.enum(["own", "team", "company"]);
+export type LeaveCalendarScope = z.infer<typeof leaveCalendarScopeSchema>;
+
+export const leaveCalendarQuerySchema = z
+  .object({
+    scope: leaveCalendarScopeSchema.default("own"),
+    from: z.string().date(),
+    to: z.string().date(),
+  })
+  .refine((v) => v.from <= v.to, {
+    message: "'from' phải trước hoặc bằng 'to'",
+    path: ["to"],
+  });
+export type LeaveCalendarQuery = z.infer<typeof leaveCalendarQuerySchema>;
+
+/** 1 dòng lịch nghỉ. `reason` masked (null) trừ khi là đơn của chính người gọi (xem MASK ở trên). */
 export const leaveCalendarEntrySchema = z.object({
+  id: z.string().uuid(),
   userId: z.string().uuid(),
   userFullName: z.string().nullable(),
-  leaveTypeCode: z.string(),
-  leaveTypeName: z.string(),
+  employeeCode: z.string().nullable(),
+  leaveTypeId: z.string().uuid(),
+  leaveTypeCode: z.string().nullable(),
+  leaveTypeName: z.string().nullable(),
   startDate: z.string().date(),
   endDate: z.string().date(),
   totalDays: z.number(),
+  status: z.string(),
+  reason: z.string().nullable(),
 });
 export type LeaveCalendarEntryDto = z.infer<typeof leaveCalendarEntrySchema>;
 
-export const leaveCalendarQuerySchema = z.object({
-  month: periodMonthSchema,
+export const leaveCalendarResponseSchema = z.object({
+  scope: leaveCalendarScopeSchema,
+  items: z.array(leaveCalendarEntrySchema),
 });
-export type LeaveCalendarQuery = z.infer<typeof leaveCalendarQuerySchema>;
+export type LeaveCalendarResponse = z.infer<typeof leaveCalendarResponseSchema>;
 
 // ─── S3-LEAVE-BE-1: rich read views + calculate preview ─────────────────────────
 //

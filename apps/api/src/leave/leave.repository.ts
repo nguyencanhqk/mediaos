@@ -325,32 +325,7 @@ export class LeaveRepository {
       .returning();
   }
 
-  /** Team calendar: APPROVED leave overlapping [from, toExclusive). No `reason` (privacy). */
-  findCalendar(companyId: string, range: { from: string; toExclusive: string }) {
-    return this.db.withTenant(companyId, (tx) =>
-      tx
-        .select({
-          userId: leaveRequests.userId,
-          userFullName: users.fullName,
-          leaveTypeCode: leaveTypes.code,
-          leaveTypeName: leaveTypes.name,
-          startDate: leaveRequests.startDate,
-          endDate: leaveRequests.endDate,
-          totalDays: leaveRequests.totalDays,
-        })
-        .from(leaveRequests)
-        .innerJoin(users, eq(leaveRequests.userId, users.id))
-        .innerJoin(leaveTypes, eq(leaveRequests.leaveTypeId, leaveTypes.id))
-        .where(
-          and(
-            eq(leaveRequests.companyId, companyId),
-            eq(leaveRequests.status, "approved"),
-            isNull(leaveRequests.deletedAt),
-            lt(leaveRequests.startDate, range.toExclusive),
-            gte(leaveRequests.endDate, range.from),
-          ),
-        )
-        .orderBy(leaveRequests.startDate, users.fullName),
-    );
-  }
+  // NOTE (S3-LEAVE-BE-5): the old unscoped `findCalendar` (company-wide, no data-scope, no reason
+  // masking, never wired to a real permission/test) was REMOVED — superseded by
+  // LeaveCalendarRepository.listScopedTx (data-scope aware, mig 0455 leave-calendar catalog).
 }
