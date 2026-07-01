@@ -25,8 +25,21 @@ const SCOPE_STRENGTH: Record<DataScope, number> = {
  * can()/PermissionGuard per-resource). Cặp = "action:resourceType" khớp SEED THẬT (mig 0340: view:audit-log
  * is_sensitive=true), KHÔNG theo mã FE. Wildcard *:* KHÔNG nằm trong allowlist ⇒ KHÔNG kế thừa (mirror sensitive
  * gate của can(): wildcard không thoả cặp nhạy cảm). Thêm cặp mới ⇒ thêm dòng ở đây (curated, append-only).
+ *
+ * S3-FE-REGISTRY-1 (beCapExpose) — APPEND 4 cặp ATT/LEAVE view NHẠY CẢM để FE dựng CỜ HIỂN THỊ nav
+ * (att.team-records / att.records / trang leave). Cặp seed THẬT is_sensitive=true (attendance-permissions.const
+ * mig 0454: view-own/view-team/view-company·attendance; leave-permissions.const mig 0455: view·leave). KHÔNG
+ * thêm view-own:leave / approve:leave (đã non-sensitive ⇒ lộ qua getCapabilities, không thuộc allowlist).
+ * Enforcement KHÔNG đổi — chỉ mở cờ hiển thị (UI-hint).
  */
-const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>(["view:audit-log"]);
+const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
+  "view:audit-log",
+  // S3-FE-REGISTRY-1 — APPEND-only (giữ view:audit-log ở trên):
+  "view-own:attendance",
+  "view-team:attendance",
+  "view-company:attendance",
+  "view:leave",
+]);
 
 @Injectable()
 export class PermissionService {
