@@ -28,6 +28,13 @@ export const LEAVE_ERR = {
   REQUEST_OVERLAP: "LEAVE-ERR-REQUEST-OVERLAP",
   BALANCE_NOT_ENOUGH: "LEAVE-ERR-BALANCE-NOT-ENOUGH",
   INVALID_STATE: "LEAVE-ERR-INVALID-STATE",
+  // ─── S3-LEAVE-BE-3 (approval workflow) ───────────────────────────────────────
+  // approver === requester (SPEC-05 §14.9 MUST): người tạo đơn KHÔNG được tự duyệt (chặn ở service).
+  APPROVER_INVALID: "LEAVE-ERR-APPROVER-INVALID",
+  // Đơn nằm NGOÀI data-scope người duyệt (manager=Team / hr=Company) → 403 (đã có quyền pair, sai phạm vi).
+  OUT_OF_SCOPE: "LEAVE-ERR-OUT-OF-SCOPE",
+  // reject BẮT BUỘC lý do (Zod chặn ở boundary; backstop tại service khi reason rỗng).
+  REASON_MISSING: "LEAVE-ERR-REJECT-REASON-REQUIRED",
 } as const;
 
 /** TZ công ty mặc định (SPEC-01; SettingService per-company DEFERRED — dùng default VN). */
