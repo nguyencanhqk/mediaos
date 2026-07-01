@@ -11,7 +11,7 @@ Ngày **2026-06-22**, dự án **dựng lại kế hoạch tổng thể** theo b
 
 Kế hoạch mới = **greenfield theo docs nhưng thực thi RECONCILE-FIRST** trên code đã build.
 
-> **Tiến độ (cập nhật 2026-06-26):** **S0–S2 đã HỘI TỤ** — Sprint 0 (readiness/baseline) · Sprint 1 (Foundation + FE shell) · Sprint 2 (AUTH/RBAC + HR core) đều `done` (merged master). **Sprint 3 (ATT + LEAVE + LEAVE→ATT sync) đã được PULL** vào `harness/backlog.mjs` (19 WO) và là **sprint hành hiện tại**. Trạng thái sống: [docs/STATUS.md](../STATUS.md).
+> **Tiến độ (cập nhật 2026-07-01):** **S0–S2 đã HỘI TỤ** — Sprint 0 (readiness/baseline) · Sprint 1 (Foundation + FE shell) · Sprint 2 (AUTH/RBAC + HR core) đều `done` (merged master). **Sprint 3 (ATT + LEAVE + LEAVE→ATT sync)** đã PULL và là **sprint hành hiện tại**. **2026-07-01 — pull độ phủ màn hình FE:** đối chiếu route map (FRONTEND-06 AUTH · FRONTEND-09 ATT · FRONTEND-10 LEAVE · FRONTEND-13 System/Foundation + UI-02 sitemap §9.5/§9.10) với FE đã build → **seed toàn bộ carry-over màn còn thiếu** của AUTH · FOUNDATION console · HR · ATT/LEAVE P1/P2. `harness/backlog.mjs` nay **105 WO** (mọi màn MVP đều có WO; TASK/DASH/NOTI để sprint sau). Trạng thái sống: [docs/STATUS.md](../STATUS.md).
 
 ---
 
@@ -51,8 +51,8 @@ Thứ tự phụ thuộc bắt buộc (IMPLEMENTATION-01 §4 / §10): **Foundati
 
 ## 3. Chính sách vận hành backlog (harness ↔ docs)
 
-1. **`harness/backlog.mjs` giữ WO của các sprint ĐÃ PULL.** Hiện = **S0 → S3** (sprint đã hội tụ giữ literal `done` làm baseline lịch sử; sprint hành = **S3**). Đây là nguồn máy-đọc cho `gen-status` · `guard-scope` · `auto-loop` · ledger. KHÔNG nhồi cả 7 sprint (S4–S6 CHƯA pull; docs là nguồn sự thật).
-2. **Pull-sprint:** khi sprint hành hội tụ (mọi WO `done`), **kéo sprint kế** từ `ISSUE-BOARD-01 §18` + IMPLEMENTATION-05.. vào `backlog.mjs` (dịch ticket → WO: thêm `paths`/`done_when`/`depends_on`/`src`). Đã pull: S2 (2026-06-24, IMPLEMENTATION-05) · **S3 (2026-06-26, IMPLEMENTATION-06)**. Sprint kế chờ pull: S4 (IMPLEMENTATION-07 — Task/Noti/Dash).
+1. **`harness/backlog.mjs` giữ WO của các sprint ĐÃ PULL.** Hiện = **S0 → S3 + FE screen-coverage carry-over** (sprint đã hội tụ giữ literal `done` làm baseline lịch sử; sprint hành = **S3**). Đây là nguồn máy-đọc cho `gen-status` · `guard-scope` · `auto-loop` · ledger. KHÔNG nhồi cả 7 sprint (S4–S6 module TASK/NOTI/DASH CHƯA pull; docs là nguồn sự thật).
+2. **Pull-sprint:** khi sprint hành hội tụ (mọi WO `done`), **kéo sprint kế** từ `ISSUE-BOARD-01 §18` + IMPLEMENTATION-05.. vào `backlog.mjs` (dịch ticket → WO: thêm `paths`/`done_when`/`depends_on`/`src`). Đã pull: S2 (2026-06-24, IMPLEMENTATION-05) · **S3 (2026-06-26, IMPLEMENTATION-06)** · **FE screen-coverage carry-over (2026-07-01, đối chiếu route map — AUTH/FOUNDATION/HR admin + ATT/LEAVE P1/P2 CO-S4)**. Sprint kế chờ pull: S4 (IMPLEMENTATION-07 — Task/Noti/Dash).
 3. **Trace bắt buộc:** mỗi WO có `src[]` trỏ về docs nguồn (ISSUE-BOARD §5.2 — "ticket không có tài liệu nguồn thì không vào Sprint").
 4. **Mã WO** theo `<MODULE>-<LAYER>-<n>` (ISSUE-BOARD §8). Ở tầng harness dùng tiền tố sprint `S0-…/S1-…` cho nhóm WO; ticket con §18 ghi trong `src`.
 
@@ -82,9 +82,16 @@ Hạ tầng đã build (RLS·permission·audit·outbox + một phần Foundation
 - **FE**: `S3-FE-REGISTRY-1` · `S3-FE-ATT-1/2` · `S3-FE-LEAVE-1/2`
 - **QA**: `S3-QA-1` (ATT) · `S3-QA-2` (LEAVE + integration)
 
-> **Capacity (IMPLEMENTATION-06 §22.4 — 241pt, nặng nhất MVP):** chạy theo harness v2 *"1 WO/phiên, tuần tự"* → **P0-spine trước**, P1 (yellow) sau. **Carry-over §21 — KHÔNG seed đợt này:** adjustment workflow đầy đủ (CO-S4-003) · remote-work (CO-S4-004) · leave calendar (CO-S4-005) · export (CO-S4-006) · shift/policy admin UI nâng cao (CO-S4-007/8) · hourly-leave optional. *(Bảng adjustment/remote-work vẫn migrate ở `S3-ATT-DB-1` để đủ schema; API/UI để Sprint 4.)*
->
-> **HR carry-over (EPIC-03 P1/P2 — quyết 2026-06-26):** 4 story HR deferred khỏi Sprint 2, là gap THẬT (dashboard hiển thị đúng `planned`): **#031** hợp đồng lao động (P1, cần bảng mới) · **#035** cấu hình mã NV admin (P1, preview đã có) · **#036** file hồ sơ NV (P1, FileService đã có) · **#037** org chart (P2). **KHÔNG seed WO sống đợt này** — pull thành mini-pass *"HR-finish"* sau khi S3 P0 spine xanh, hoặc fold vào S5. Chi tiết: comment `harness/backlog.mjs` (mục CARRY-OVER EPIC-03). Story đã build xong (25/26/27/28/29/30/32/33/34) = **9/13**.
+> **Capacity (IMPLEMENTATION-06 §22.4 — 241pt, nặng nhất MVP):** chạy theo harness v2 *"1 WO/phiên, tuần tự"* → **P0-spine trước**, P1 (yellow) sau. Carry-over §21 (CO-S4-003..008) **ĐÃ đảo chiều & seed 2026-07-01** — xem khối "FE screen-coverage carry-over" dưới; các WO đó *waiting* sau P0-spine (không giành lane với check-in/approval core). Bảng adjustment/remote-work migrate skeleton ở `S3-ATT-DB-1`; BE hoàn thiện cột khi làm.
+
+**🖥️ FE screen-coverage carry-over (seed 2026-07-01 — owner chốt, đối chiếu route map vs FE đã build):** P1, KHÔNG chặn S3 P0-spine. Ánh xạ chi tiết + BE readiness ở comment `harness/backlog.mjs` (các khối CARRY-OVER). Nguyên tắc: BE sẵn → `todo`(ready); BE thiếu → seed BE follow-up + FE `todo` chờ dep (không `blocked` kẹt); pin permission theo **cặp seed thật** (KHÔNG nhãn doc — bài học `S1-FND-MODULE`).
+
+- **AUTH** (FRONTEND-06 + UI-02 §9.10): `S2-FE-AUTH-2` (forgot/reset/change-password + session-expired) · `S2-FE-AUTH-3` (user CRUD `/system/users`) · `S2-FE-AUTH-4` (role/permission admin) · `S2-FE-AUTH-5` (`/account/sessions`) + BE `S2-AUTH-BE-6` (role write + assign-permission) · `S2-AUTH-BE-7` (session list/revoke — hoàn tất `user_sessions`)
+- **FOUNDATION console** (FRONTEND-13 §7.1 — nay phủ đủ **16 màn** `/system/*`): `S2-FE-FND-1` (overview/company/settings) · `S2-FE-FND-2` (audit+files viewer) · `S2-FE-FND-3` (module catalog) · `S2-FE-FND-4` (holidays+health) · `S2-FE-FND-5` (sequences+seeds) · `S2-FE-FND-6` (retention+file-access) + BE `S2-FND-BE-1` (admin module list) · `S2-FND-BE-2` (sequences/seeds) · `S2-FND-BE-3` (retention/file-access, red)
+- **HR** (UI-02 §9.5): `S2-FE-HR-4` (profile change-request workflow) · `S2-FE-HR-5` (master-data: dept/position/job-level/contract-type) · `S2-FE-HR-6` (org-chart + hr audit) · `S2-FE-HR-7` (contracts) · `S2-FE-HR-8` (employee-code config) + BE `S2-HR-BE-6` (employee_contracts DB+API) · `S2-HR-BE-7` (employee-code admin API)
+- **ATT/LEAVE P1/P2** (FRONTEND-09/10 — CO-S4-003..008 kéo lên): ATT `S3-ATT-BE-4` (adjustment) · `S3-ATT-BE-5` (remote-work) · `S3-ATT-BE-6` (reports+audit) + `S3-FE-ATT-3..6` · LEAVE `S3-LEAVE-BE-5` (calendar) · `S3-LEAVE-BE-6` (reports/transactions/audit) + `S3-FE-LEAVE-3..6`
+
+> **HR carry-over (EPIC-03 P1/P2):** #031 hợp đồng · #035 cấu hình mã NV · #037 org chart — **ĐÃ seed 2026-07-01** trong khối HR trên (#031→`S2-HR-BE-6`/`S2-FE-HR-7` · #035→`S2-HR-BE-7`/`S2-FE-HR-8` · #037→`S2-FE-HR-6`). **#036** (upload file hồ sơ NV) chưa nằm trong route map §9.5 → **vẫn deferred**. RECONCILE quan trọng: self-edit hồ sơ = **workflow change-request** (`S2-FE-HR-4`, BE `hr/profile-change-requests` đã có), KHÔNG direct-PATCH (đã bỏ WO direct-self-update sai).
 
 ---
 
