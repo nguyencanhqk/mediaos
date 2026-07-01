@@ -1,30 +1,33 @@
 /**
- * AttendanceShiftAssignmentsPage — danh sách gán ca (UI-02 §9.6 `/attendance/shift-assignments`,
- * S3-FE-ATT-5).
+ * AttendanceShiftAssignmentsPage — danh sách gán ca + CREATE tối thiểu (UI-02 §9.6
+ * `/attendance/shift-assignments`, S3-FE-ATT-5).
  *
- * Gate: useCanExact('view','shift-assignment') — cặp is_sensitive (attendance-permissions.const.ts) →
- * fail-closed, KHÔNG wildcard fallback (khớp BE @RequirePermission view:shift-assignment,
- * isSensitive=true). Read-only minimum — CRUD carry-over CO-S4-007. company_id do SERVER resolve.
+ * Nối S3-ATT-BE-3 (PR #69): GET/POST /attendance/shift-assignments. DTO thật (shiftAssignmentSchema) CHỈ có
+ * shiftId (KHÔNG có shiftName) → cột "Ca" tra tên từ danh mục ca (nếu load được), fallback shiftId.
+ * Gate xem: useCanExact('view','shift-assignment') — cặp is_sensitive → fail-closed. Gate tạo:
+ * useCanExact('update','shift-assignment'). Sửa/xoá gán ca = carry-over CO-S4-007 (contract chỉ có POST).
  */
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { type ColumnDef } from "@tanstack/react-table";
-import { CalendarClock, RefreshCw } from "lucide-react";
-import { useCanExact, type AttShiftAssignmentListItem } from "@mediaos/web-core";
+import { CalendarClock, RefreshCw, Plus } from "lucide-react";
+import type { ShiftAssignmentDto } from "@mediaos/contracts";
+import { useCan, useCanExact } from "@mediaos/web-core";
 import { PageHeader, DataTable, EmptyState, Button } from "@mediaos/ui";
-import { useShiftAssignments } from "./hooks/useAttendanceAdmin";
+import { useShiftAssignments, useShifts } from "./hooks/useAttendanceAdmin";
 import { ATT_ENGINE_PAIRS } from "./constants";
+import { ShiftAssignmentFormDialog } from "./admin/ShiftAssignmentFormDialog";
 
 function useColumns(
   t: ReturnType<typeof useTranslation<"attendance">>["t"],
-): ColumnDef<AttShiftAssignmentListItem>[] {
+  shiftLabel: (shiftId: string) => string,
+): ColumnDef<ShiftAssignmentDto>[] {
   return [
     {
       id: "shift",
       header: t("shiftAssignments.columns.shift"),
       cell: ({ row }) => (
-        <span className="text-sm font-medium">
-          {row.original.shiftName ?? row.original.shiftId}
-        </span>
+        <span className="text-sm font-medium">{shiftLabel(row.original.shiftId)}</span>
       ),
     },
     {
@@ -69,14 +72,31 @@ function useColumns(
 export function AttendanceShiftAssignmentsPage() {
   const { t } = useTranslation("attendance");
 
-  // NHẠY CẢM: useCanExact — KHÔNG wildcard fallback (view:shift-assignment is_sensitive).
+  // NHẠY CẢM: useCanExact — KHÔNG wildcard fallback (view/update:shift-assignment is_sensitive).
   const canView = useCanExact(
     ATT_ENGINE_PAIRS.SHIFT_ASSIGNMENT_VIEW.action,
     ATT_ENGINE_PAIRS.SHIFT_ASSIGNMENT_VIEW.resourceType,
   );
+  const canCreate = useCanExact(
+    ATT_ENGINE_PAIRS.SHIFT_ASSIGNMENT_UPDATE.action,
+    ATT_ENGINE_PAIRS.SHIFT_ASSIGNMENT_UPDATE.resourceType,
+  );
+  // Danh mục ca cho select tạo gán ca + tra tên ca — chỉ load khi có quyền xem ca (BE gate view:shift).
+  const canViewShift = useCan(
+    ATT_ENGINE_PAIRS.SHIFT_VIEW.action,
+    ATT_ENGINE_PAIRS.SHIFT_VIEW.resourceType,
+  );
 
   const { data, isLoading, isError, refetch } = useShiftAssignments(canView);
-  const columns = useColumns(t);
+  const { data: shifts } = useShifts(canView && canViewShift);
+
+  const [createOpen, setCreateOpen] = useState(false);
+
+  const shiftLabel = (shiftId: string): string => {
+    const s = (shifts ?? []).find((x) => x.id === shiftId);
+    return s ? `${s.shiftCode} — ${s.name}` : shiftId;
+  };
+  const columns = useColumns(t, shiftLabel);
 
   if (!canView) {
     return (
@@ -115,6 +135,18 @@ export function AttendanceShiftAssignmentsPage() {
         title={t("shiftAssignments.title")}
         description={t("shiftAssignments.description")}
         icon={CalendarClock}
+        actions={
+          canCreate ? (
+            <Button
+              size="sm"
+              onClick={() => setCreateOpen(true)}
+              data-testid="assignment-create-btn"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {t("shiftAssignments.actions.create")}
+            </Button>
+          ) : undefined
+        }
       />
 
       <DataTable
@@ -128,6 +160,14 @@ export function AttendanceShiftAssignmentsPage() {
           />
         }
       />
+
+      {canCreate && (
+        <ShiftAssignmentFormDialog
+          open={createOpen}
+          onClose={() => setCreateOpen(false)}
+          shifts={shifts ?? []}
+        />
+      )}
     </div>
   );
 }

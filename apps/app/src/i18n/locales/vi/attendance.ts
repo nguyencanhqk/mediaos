@@ -148,10 +148,44 @@ export default {
     },
   },
 
+  // ── Form CRUD dùng chung (S3-FE-ATT-5) ────────────────────────────────────────
+  form: {
+    buttons: {
+      save: "Lưu",
+      cancel: "Huỷ",
+      saving: "Đang lưu…",
+    },
+    errors: {
+      forbidden: "Bạn không có quyền thực hiện thao tác này.",
+      conflict: "Dữ liệu bị trùng hoặc xung đột. Vui lòng kiểm tra lại.",
+      validation: "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.",
+      server: "Lỗi máy chủ. Vui lòng thử lại sau.",
+      generic: "Không thể lưu. Vui lòng thử lại.",
+    },
+  },
+
   // ── Ca làm việc (S3-FE-ATT-5) ─────────────────────────────────────────────────
   shifts: {
     title: "Ca làm việc",
     description: "Danh mục ca làm việc của công ty",
+    actions: {
+      create: "Thêm ca",
+      edit: "Sửa",
+      columnHeader: "Thao tác",
+    },
+    form: {
+      createTitle: "Thêm ca làm việc",
+      editTitle: "Sửa ca làm việc",
+      code: "Mã ca",
+      name: "Tên ca",
+      type: "Loại ca",
+      startTime: "Giờ bắt đầu",
+      endTime: "Giờ kết thúc",
+      requiredMinutes: "Số phút yêu cầu",
+      breakMinutes: "Phút nghỉ",
+      status: "Trạng thái",
+      isDefault: "Đặt làm ca mặc định",
+    },
     columns: {
       code: "Mã ca",
       name: "Tên ca",
@@ -178,6 +212,20 @@ export default {
   shiftAssignments: {
     title: "Gán ca",
     description: "Danh sách gán ca theo công ty / phòng ban / nhân viên",
+    actions: {
+      create: "Thêm gán ca",
+    },
+    form: {
+      createTitle: "Thêm gán ca",
+      shift: "Ca làm việc",
+      scope: "Phạm vi",
+      scopeTarget: "Phạm vi Phòng ban/Nhân viên cần chọn đối tượng.",
+      departmentId: "ID phòng ban",
+      employeeId: "ID nhân viên",
+      effectiveFrom: "Hiệu lực từ",
+      effectiveTo: "Hiệu lực đến",
+      priority: "Độ ưu tiên",
+    },
     columns: {
       shift: "Ca làm việc",
       scope: "Phạm vi",
@@ -205,6 +253,27 @@ export default {
   rules: {
     title: "Rule chấm công",
     description: "Danh sách rule chấm công theo phạm vi",
+    actions: {
+      create: "Thêm rule",
+      edit: "Sửa",
+      columnHeader: "Thao tác",
+    },
+    form: {
+      createTitle: "Thêm rule chấm công",
+      editTitle: "Sửa rule chấm công",
+      code: "Mã rule",
+      name: "Tên rule",
+      scope: "Phạm vi",
+      scopeTarget: "Phạm vi Phòng ban/Nhân viên cần chọn đối tượng.",
+      departmentId: "ID phòng ban",
+      employeeId: "ID nhân viên",
+      effectiveFrom: "Hiệu lực từ",
+      effectiveTo: "Hiệu lực đến",
+      priority: "Độ ưu tiên",
+      requireCheckIn: "Bắt buộc check-in",
+      requireCheckOut: "Bắt buộc check-out",
+      status: "Trạng thái",
+    },
     columns: {
       code: "Mã rule",
       name: "Tên rule",

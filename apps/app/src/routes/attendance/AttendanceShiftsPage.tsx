@@ -1,27 +1,27 @@
 /**
- * AttendanceShiftsPage — danh mục ca làm việc (UI-02 §9.6 `/attendance/shifts`, S3-FE-ATT-5).
+ * AttendanceShiftsPage — danh mục ca làm việc + CRUD tối thiểu (UI-02 §9.6 `/attendance/shifts`, S3-FE-ATT-5).
  *
- * Gate: useCan('view','shift') — cặp KHÔNG sensitive (attendance-permissions.const.ts) nên wildcard
- * (vd `*:shift`, `*:*`) vẫn hợp lệ, khớp hành vi BE (@RequirePermission view:shift, isSensitive=false).
- * Read-only minimum: list only — CRUD (create/update/delete) carry-over CO-S4-007 (giữ tối thiểu, xem
- * done_when S3-FE-ATT-5 + harness/backlog.mjs). Masking là việc server; danh mục nhỏ theo company
- * (KHÔNG phân trang server) — DataTable tự phân trang client-side.
- *
- * BE-3 (S3-ATT-BE-3) CHƯA build (harness/backlog.mjs status=todo) lúc viết lane này: query có thể trả
- * lỗi mạng/404 tới khi BE land — trạng thái error EmptyState phủ đúng nhánh này.
+ * Nối S3-ATT-BE-3 (PR #69): GET/POST /attendance/shifts + PATCH /attendance/shifts/:id.
+ * Gate xem: useCan('view','shift') — cặp KHÔNG sensitive (attendance-permissions.const.ts) nên wildcard OK,
+ * khớp BE @RequirePermission view:shift (isSensitive=false). Gate tạo/sửa: useCan create/update:shift (cặp
+ * is_sensitive) → nút chỉ hiện khi có quyền; BE vẫn là cổng thật. Advanced admin = carry-over CO-S4-007.
  */
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Clock, RefreshCw } from "lucide-react";
-import { useCan, type AttShiftListItem } from "@mediaos/web-core";
+import { Clock, RefreshCw, Plus, Pencil } from "lucide-react";
+import type { ShiftDto } from "@mediaos/contracts";
+import { useCan } from "@mediaos/web-core";
 import { PageHeader, DataTable, EmptyState, Button } from "@mediaos/ui";
 import { useShifts } from "./hooks/useAttendanceAdmin";
 import { ATT_ENGINE_PAIRS } from "./constants";
+import { ShiftFormDialog } from "./admin/ShiftFormDialog";
 
 function useColumns(
   t: ReturnType<typeof useTranslation<"attendance">>["t"],
-): ColumnDef<AttShiftListItem>[] {
-  return [
+  onEdit: ((shift: ShiftDto) => void) | null,
+): ColumnDef<ShiftDto>[] {
+  const cols: ColumnDef<ShiftDto>[] = [
     {
       accessorKey: "shiftCode",
       header: t("shifts.columns.code"),
@@ -54,7 +54,7 @@ function useColumns(
       accessorKey: "requiredWorkingMinutes",
       header: t("shifts.columns.requiredMinutes"),
       cell: ({ row }) => (
-        <span className="text-sm tabular-nums">{row.original.requiredWorkingMinutes ?? "—"}</span>
+        <span className="text-sm tabular-nums">{row.original.requiredWorkingMinutes}</span>
       ),
     },
     {
@@ -63,6 +63,24 @@ function useColumns(
       cell: ({ row }) => <span className="text-sm">{row.original.status}</span>,
     },
   ];
+  if (onEdit) {
+    cols.push({
+      id: "actions",
+      header: t("shifts.actions.columnHeader"),
+      cell: ({ row }) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onEdit(row.original)}
+          data-testid="shift-edit-btn"
+        >
+          <Pencil className="mr-1 h-3.5 w-3.5" />
+          {t("shifts.actions.edit")}
+        </Button>
+      ),
+    });
+  }
+  return cols;
 }
 
 export function AttendanceShiftsPage() {
@@ -73,9 +91,20 @@ export function AttendanceShiftsPage() {
     ATT_ENGINE_PAIRS.SHIFT_VIEW.action,
     ATT_ENGINE_PAIRS.SHIFT_VIEW.resourceType,
   );
+  const canCreate = useCan(
+    ATT_ENGINE_PAIRS.SHIFT_CREATE.action,
+    ATT_ENGINE_PAIRS.SHIFT_CREATE.resourceType,
+  );
+  const canUpdate = useCan(
+    ATT_ENGINE_PAIRS.SHIFT_UPDATE.action,
+    ATT_ENGINE_PAIRS.SHIFT_UPDATE.resourceType,
+  );
 
   const { data, isLoading, isError, refetch } = useShifts(canView);
-  const columns = useColumns(t);
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<ShiftDto | null>(null);
+  const columns = useColumns(t, canUpdate ? (s) => setEditing(s) : null);
 
   if (!canView) {
     return (
@@ -110,7 +139,19 @@ export function AttendanceShiftsPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <PageHeader title={t("shifts.title")} description={t("shifts.description")} icon={Clock} />
+      <PageHeader
+        title={t("shifts.title")}
+        description={t("shifts.description")}
+        icon={Clock}
+        actions={
+          canCreate ? (
+            <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="shift-create-btn">
+              <Plus className="mr-2 h-4 w-4" />
+              {t("shifts.actions.create")}
+            </Button>
+          ) : undefined
+        }
+      />
 
       <DataTable
         columns={columns}
@@ -120,6 +161,11 @@ export function AttendanceShiftsPage() {
           <EmptyState title={t("shifts.empty.title")} description={t("shifts.empty.description")} />
         }
       />
+
+      {canCreate && <ShiftFormDialog open={createOpen} onClose={() => setCreateOpen(false)} />}
+      {canUpdate && editing && (
+        <ShiftFormDialog open onClose={() => setEditing(null)} shift={editing} />
+      )}
     </div>
   );
 }

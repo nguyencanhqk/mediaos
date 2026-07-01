@@ -11,11 +11,19 @@ import i18n from "@/i18n";
 
 vi.mock("@mediaos/web-core", () => ({
   useCanExact: vi.fn(() => false),
+  // useCan (canViewShift) — mặc định false: KHÔNG load danh mục ca trong test deny/happy tối thiểu.
+  useCan: vi.fn(() => false),
   attendanceApi: {
     listShiftAssignments: vi.fn(),
+    listShifts: vi.fn(),
+    createShiftAssignment: vi.fn(),
   },
   attendanceKeys: {
-    shiftAssignments: { list: () => ["attendance", "shift-assignments", "list"] },
+    shiftAssignments: {
+      all: ["attendance", "shift-assignments"],
+      list: () => ["attendance", "shift-assignments", "list"],
+    },
+    shifts: { all: ["attendance", "shifts"], list: () => ["attendance", "shifts", "list"] },
   },
 }));
 
@@ -58,11 +66,11 @@ import { AttendanceShiftAssignmentsPage } from "./AttendanceShiftAssignmentsPage
 const mockUseCanExact = useCanExact as ReturnType<typeof vi.fn>;
 const mockListShiftAssignments = attendanceApi.listShiftAssignments as ReturnType<typeof vi.fn>;
 
+// Shape khớp shiftAssignmentSchema thật (KHÔNG có shiftName — DTO chỉ có shiftId).
 const ASSIGNMENTS_RESPONSE = [
   {
     id: "sa-1",
     shiftId: "shift-1",
-    shiftName: "Ca hành chính",
     assignmentScope: "Company",
     departmentId: null,
     employeeId: null,
@@ -70,6 +78,9 @@ const ASSIGNMENTS_RESPONSE = [
     effectiveTo: null,
     priority: 100,
     status: "Active",
+    note: null,
+    createdAt: "2026-07-01T00:00:00.000Z",
+    updatedAt: "2026-07-01T00:00:00.000Z",
   },
 ];
 

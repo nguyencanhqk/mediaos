@@ -15,10 +15,14 @@ export const ATT_ENGINE_PAIRS = {
   ADJUST_DIRECT: { action: "adjust-direct", resourceType: "attendance" },
   CREATE_OWN_ADJUSTMENT: { action: "create-own", resourceType: "adjustment" },
   VIEW_OWN_ADJUSTMENT: { action: "view-own", resourceType: "adjustment" },
-  // S3-FE-ATT-5 — ca làm việc / gán ca / rule (admin, read-only minimum).
+  // S3-FE-ATT-5 — ca làm việc / gán ca / rule (admin). view + CRUD tối thiểu (create/update/config).
   SHIFT_VIEW: { action: "view", resourceType: "shift" },
+  SHIFT_CREATE: { action: "create", resourceType: "shift" },
+  SHIFT_UPDATE: { action: "update", resourceType: "shift" },
   SHIFT_ASSIGNMENT_VIEW: { action: "view", resourceType: "shift-assignment" },
+  SHIFT_ASSIGNMENT_UPDATE: { action: "update", resourceType: "shift-assignment" },
   RULE_VIEW: { action: "view", resourceType: "attendance-rule" },
+  RULE_CONFIG: { action: "config", resourceType: "attendance-rule" },
 } as const;
 
 /**

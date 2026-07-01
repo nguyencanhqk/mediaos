@@ -1,9 +1,15 @@
-import { z } from "zod";
 import {
   attendanceTodayV2Schema,
   attendanceRecordV2Schema,
   attendanceRecordListResponseSchema,
   attendanceRecordDetailSchema,
+  // S3-ATT-BE-3 real DTOs (nguồn sự thật = packages/contracts/src/attendance.ts) — thay cho schema đoán cũ.
+  shiftSchema,
+  shiftListResponseSchema,
+  shiftAssignmentSchema,
+  shiftAssignmentListResponseSchema,
+  attendanceRuleSchema,
+  attendanceRuleListResponseSchema,
   type AttendanceTodayV2Dto,
   type AttendanceRecordV2Dto,
   type AttendanceRecordListResponse,
@@ -11,62 +17,20 @@ import {
   type AttendanceRecordDetail,
   type CheckInRequest,
   type CheckOutRequest,
+  type ShiftDto,
+  type ShiftAssignmentDto,
+  type AttendanceRuleDto,
+  type CreateShiftRequest,
+  type UpdateShiftRequest,
+  type CreateShiftAssignmentRequest,
+  type CreateRuleRequest,
+  type UpdateRuleRequest,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
 
 /**
- * S3-FE-ATT-5 — Shift / Shift-assignment / Rule (read-only minimum, danh mục nhỏ theo company).
- *
- * BE-3 (S3-ATT-BE-3, harness/backlog.mjs) CHƯA build lúc viết lane này (status=todo) → schema dưới đây
- * là PROVISIONAL, suy từ DB-04 §7.1–§7.3 (cấu trúc cột) + API-04 §11.11–§11.13 (request body tạo mới,
- * suy ngược field response) + FRONTEND-09 §"Attendance rule". KHÔNG đặt trong packages/contracts (ngoài
- * phạm vi lane này) — khi BE-3 land, promote sang @mediaos/contracts + xoá bản local. CRUD (create/update/
- * delete) carry-over CO-S4-007 (giữ tối thiểu = list, theo done_when S3-FE-ATT-5).
- */
-const attShiftListItemSchema = z.object({
-  id: z.string().uuid(),
-  shiftCode: z.string(),
-  name: z.string(),
-  shiftType: z.string(),
-  startTime: z.string().nullable().optional(),
-  endTime: z.string().nullable().optional(),
-  requiredWorkingMinutes: z.number().nullable().optional(),
-  isDefault: z.boolean().optional(),
-  status: z.string(),
-});
-export type AttShiftListItem = z.infer<typeof attShiftListItemSchema>;
-
-const attShiftAssignmentListItemSchema = z.object({
-  id: z.string().uuid(),
-  shiftId: z.string().uuid(),
-  shiftName: z.string().nullable().optional(),
-  assignmentScope: z.string(),
-  departmentId: z.string().uuid().nullable().optional(),
-  employeeId: z.string().uuid().nullable().optional(),
-  effectiveFrom: z.string(),
-  effectiveTo: z.string().nullable().optional(),
-  priority: z.number(),
-  status: z.string(),
-});
-export type AttShiftAssignmentListItem = z.infer<typeof attShiftAssignmentListItemSchema>;
-
-const attRuleListItemSchema = z.object({
-  id: z.string().uuid(),
-  ruleCode: z.string(),
-  name: z.string(),
-  ruleScope: z.string(),
-  departmentId: z.string().uuid().nullable().optional(),
-  employeeId: z.string().uuid().nullable().optional(),
-  priority: z.number(),
-  effectiveFrom: z.string().nullable().optional(),
-  effectiveTo: z.string().nullable().optional(),
-  status: z.string(),
-});
-export type AttRuleListItem = z.infer<typeof attRuleListItemSchema>;
-
-/**
- * ATT API client — S3-FE-REGISTRY-1. Tất cả endpoint cần Bearer (apiFetch gắn tự động).
+ * ATT API client — S3-FE-REGISTRY-1 + S3-FE-ATT-5.
  *
  * BẤT BIẾN: company_id do SERVER resolve từ auth context — client KHÔNG nhận/forward.
  * Masking (location/gps/ip/device) là việc của SERVER — client chỉ render field nhận được (detail có
@@ -74,6 +38,11 @@ export type AttRuleListItem = z.infer<typeof attRuleListItemSchema>;
  *
  * Scope gate là việc của SERVER (@RequirePermission view-own/team/company:attendance): 403 = thiếu grant,
  * out-of-scope-nhưng-tồn-tại = 404 (không lộ tồn tại). Client chỉ chọn endpoint theo cặp user có.
+ *
+ * Shift / Shift-assignment / Rule (S3-ATT-BE-3, PR #69): DTO thật từ @mediaos/contracts. GET trả envelope
+ * `{ items: [...] }` (shiftListResponseSchema / shiftAssignmentListResponseSchema / attendanceRuleListResponseSchema)
+ * → validate envelope rồi unwrap `.items` cho caller. CRUD tối thiểu (create/update) khớp POST/PATCH đã gated ở
+ * AttendanceShiftController; nâng cao (bulk/delete UX) = carry-over CO-S4-007.
  */
 export const attendanceApi = {
   // ── Hôm nay + check-in/out ─────────────────────────────────────────────────
@@ -151,26 +120,77 @@ export const attendanceApi = {
   getRecord: (id: string): Promise<AttendanceRecordDetail> =>
     apiFetch(`/attendance/records/${id}`, attendanceRecordDetailSchema),
 
-  // ── Ca làm việc / Gán ca / Rule chấm công (Company, read-only minimum) ─────
+  // ── Ca làm việc (S3-ATT-BE-3, ATT-API-017/018/019) ──────────────────────────
 
   /**
-   * GET /attendance/shifts — danh mục ca làm việc công ty (không phân trang, danh mục nhỏ).
-   * Permission: view:shift (non-sensitive).
+   * GET /attendance/shifts — danh mục ca làm việc công ty. BE trả `{ items: ShiftDto[] }` → validate
+   * envelope rồi trả mảng. Permission: view:shift (non-sensitive).
    */
-  listShifts: (): Promise<AttShiftListItem[]> =>
-    apiFetch("/attendance/shifts", z.array(attShiftListItemSchema)),
+  listShifts: (): Promise<ShiftDto[]> =>
+    apiFetch("/attendance/shifts", shiftListResponseSchema).then((r) => r.items),
 
   /**
-   * GET /attendance/shift-assignments — danh sách gán ca (Company/Department/Employee scope).
+   * POST /attendance/shifts — tạo ca (MVP: Fixed/Flexible). Permission: create:shift.
+   */
+  createShift: (body: CreateShiftRequest): Promise<ShiftDto> =>
+    apiFetch("/attendance/shifts", shiftSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * PATCH /attendance/shifts/:id — sửa ca (partial). Permission: update:shift.
+   */
+  updateShift: (id: string, body: UpdateShiftRequest): Promise<ShiftDto> =>
+    apiFetch(`/attendance/shifts/${id}`, shiftSchema, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  // ── Gán ca (S3-ATT-BE-3, ATT-API-021/022) ───────────────────────────────────
+
+  /**
+   * GET /attendance/shift-assignments — danh sách gán ca. BE trả `{ items: ShiftAssignmentDto[] }`.
    * Permission: view:shift-assignment (sensitive).
    */
-  listShiftAssignments: (): Promise<AttShiftAssignmentListItem[]> =>
-    apiFetch("/attendance/shift-assignments", z.array(attShiftAssignmentListItemSchema)),
+  listShiftAssignments: (): Promise<ShiftAssignmentDto[]> =>
+    apiFetch("/attendance/shift-assignments", shiftAssignmentListResponseSchema).then(
+      (r) => r.items,
+    ),
 
   /**
-   * GET /attendance/rules — danh sách rule chấm công theo phạm vi.
+   * POST /attendance/shift-assignments — tạo gán ca. Permission: update:shift-assignment.
+   */
+  createShiftAssignment: (body: CreateShiftAssignmentRequest): Promise<ShiftAssignmentDto> =>
+    apiFetch("/attendance/shift-assignments", shiftAssignmentSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  // ── Rule chấm công (S3-ATT-BE-3, ATT-API-023/024/025) ───────────────────────
+
+  /**
+   * GET /attendance/rules — danh sách rule chấm công. BE trả `{ items: AttendanceRuleDto[] }`.
    * Permission: view:attendance-rule (sensitive).
    */
-  listRules: (): Promise<AttRuleListItem[]> =>
-    apiFetch("/attendance/rules", z.array(attRuleListItemSchema)),
+  listRules: (): Promise<AttendanceRuleDto[]> =>
+    apiFetch("/attendance/rules", attendanceRuleListResponseSchema).then((r) => r.items),
+
+  /**
+   * POST /attendance/rules — tạo rule. Permission: config:attendance-rule.
+   */
+  createRule: (body: CreateRuleRequest): Promise<AttendanceRuleDto> =>
+    apiFetch("/attendance/rules", attendanceRuleSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * PATCH /attendance/rules/:id — sửa rule (partial, KHÔNG đổi scope/target). Permission: config:attendance-rule.
+   */
+  updateRule: (id: string, body: UpdateRuleRequest): Promise<AttendanceRuleDto> =>
+    apiFetch(`/attendance/rules/${id}`, attendanceRuleSchema, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
 };

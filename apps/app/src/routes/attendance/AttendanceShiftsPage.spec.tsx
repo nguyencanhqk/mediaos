@@ -17,9 +17,11 @@ vi.mock("@mediaos/web-core", () => ({
   useCan: vi.fn(() => false),
   attendanceApi: {
     listShifts: vi.fn(),
+    createShift: vi.fn(),
+    updateShift: vi.fn(),
   },
   attendanceKeys: {
-    shifts: { list: () => ["attendance", "shifts", "list"] },
+    shifts: { all: ["attendance", "shifts"], list: () => ["attendance", "shifts", "list"] },
   },
 }));
 

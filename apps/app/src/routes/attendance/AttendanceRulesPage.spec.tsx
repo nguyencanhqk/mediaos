@@ -13,9 +13,11 @@ vi.mock("@mediaos/web-core", () => ({
   useCanExact: vi.fn(() => false),
   attendanceApi: {
     listRules: vi.fn(),
+    createRule: vi.fn(),
+    updateRule: vi.fn(),
   },
   attendanceKeys: {
-    rules: { list: () => ["attendance", "rules", "list"] },
+    rules: { all: ["attendance", "rules"], list: () => ["attendance", "rules", "list"] },
   },
 }));
 
