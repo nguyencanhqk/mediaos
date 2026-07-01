@@ -7,3 +7,6 @@
  */
 export * from "./company";
 export * from "./module-catalog";
+// S2-FND-BE-3 (L2) — retention-policy + file-access-log DTO (WHITELIST, KHÔNG secret). Append-only.
+export * from "./retention";
+export * from "./file-access-log";
