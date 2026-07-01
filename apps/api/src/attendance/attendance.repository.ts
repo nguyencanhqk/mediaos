@@ -261,6 +261,31 @@ export class AttendanceRepository {
   }
 
   /**
+   * S3-ATT-BE-3 — hồ sơ nhân sự theo employee_profiles.id (tenant-scoped), dùng khi HR/Admin xem rule
+   * hiệu lực CỦA NGƯỜI KHÁC (GET /attendance/rules/effective?employeeId=). Trả null nếu không tồn tại
+   * hoặc thuộc company khác (404 ở caller — KHÔNG lộ tồn tại xuyên tenant).
+   */
+  async resolveEmployeeByIdTx(companyId: string, employeeId: string, tx: TenantTx) {
+    const rows = await tx
+      .select({
+        id: employeeProfiles.id,
+        status: employeeProfiles.status,
+        orgUnitId: employeeProfiles.orgUnitId,
+        positionId: employeeProfiles.positionId,
+      })
+      .from(employeeProfiles)
+      .where(
+        and(
+          eq(employeeProfiles.companyId, companyId),
+          eq(employeeProfiles.id, employeeId),
+          isNull(employeeProfiles.deletedAt),
+        ),
+      )
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  /**
    * Ca làm hiệu lực cho ngày `workDate` theo độ ưu tiên Employee≻Department≻Company (DB-04 §10): lọc Active +
    * còn hiệu lực, sort specificity DESC → priority DESC → effective_from DESC, lấy 1. Join shift_assignments→shifts.
    */

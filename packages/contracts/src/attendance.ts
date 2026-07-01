@@ -416,3 +416,247 @@ export const attendanceLogListResponseSchema = z.object({
   items: z.array(attendanceLogListItemSchema),
 });
 export type AttendanceLogListResponse = z.infer<typeof attendanceLogListResponseSchema>;
+
+// ─── S3-ATT-BE-3 (DB-04 §7.1/7.2/7.3, API-10 §5.4) — shift/rule minimum CRUD + effective resolve ────
+// GET /attendance/shifts + /attendance/rules/effective reuse the SAME resolve-effective repo methods as
+// S3-ATT-BE-1 (today/check-in/check-out) — one source of truth for Employee≻Department≻Company(≻System)
+// priority (§10). CRUD (shift/rule/assignment) is MINIMUM scope — advanced UX/bulk ops = carry-over CO-S4-007.
+
+/** DB-04 §7.1: shift_type CHECK — MVP scope chỉ Fixed/Flexible dùng thật; Split/Night reserved phase sau. */
+export const shiftTypeSchema = z.enum(["Fixed", "Flexible", "Split", "Night"]);
+export type ShiftTypeDto = z.infer<typeof shiftTypeSchema>;
+
+export const shiftStatusSchema = z.enum(["Active", "Inactive"]);
+export type ShiftStatusDto = z.infer<typeof shiftStatusSchema>;
+
+const timeHHMMSS = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "Expected HH:MM[:SS]");
+
+/** GET /attendance/shifts item — full shift config (DB-04 §7.1) for HR/Admin management screens. */
+export const shiftSchema = z.object({
+  id: z.string().uuid(),
+  shiftCode: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  shiftType: shiftTypeSchema,
+  startTime: timeHHMMSS.nullable(),
+  endTime: timeHHMMSS.nullable(),
+  breakStartTime: timeHHMMSS.nullable(),
+  breakEndTime: timeHHMMSS.nullable(),
+  breakMinutes: z.number().int().min(0),
+  requiredWorkingMinutes: z.number().int().positive(),
+  flexibleCheckInFrom: timeHHMMSS.nullable(),
+  flexibleCheckInTo: timeHHMMSS.nullable(),
+  graceLateMinutes: z.number().int().min(0),
+  graceEarlyLeaveMinutes: z.number().int().min(0),
+  allowEarlyCheckIn: z.boolean(),
+  allowLateCheckOut: z.boolean(),
+  crossDay: z.boolean(),
+  workDays: z.array(z.number().int().min(1).max(7)).nullable(),
+  status: shiftStatusSchema,
+  isDefault: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type ShiftDto = z.infer<typeof shiftSchema>;
+
+export const shiftListResponseSchema = z.object({ items: z.array(shiftSchema) });
+export type ShiftListResponse = z.infer<typeof shiftListResponseSchema>;
+
+/** POST /attendance/shifts (ATT.SHIFT.CREATE) — MVP scope: Fixed/Flexible only (Split/Night reserved). */
+export const createShiftSchema = z.object({
+  shiftCode: z.string().min(1).max(50),
+  name: z.string().min(1).max(200),
+  description: z.string().max(1000).optional(),
+  shiftType: z.enum(["Fixed", "Flexible"]).default("Fixed"),
+  startTime: timeHHMMSS.optional(),
+  endTime: timeHHMMSS.optional(),
+  breakStartTime: timeHHMMSS.optional(),
+  breakEndTime: timeHHMMSS.optional(),
+  breakMinutes: z.number().int().min(0).default(0),
+  requiredWorkingMinutes: z.number().int().positive(),
+  flexibleCheckInFrom: timeHHMMSS.optional(),
+  flexibleCheckInTo: timeHHMMSS.optional(),
+  graceLateMinutes: z.number().int().min(0).default(0),
+  graceEarlyLeaveMinutes: z.number().int().min(0).default(0),
+  allowEarlyCheckIn: z.boolean().default(true),
+  allowLateCheckOut: z.boolean().default(true),
+  crossDay: z.boolean().default(false),
+  workDays: z.array(z.number().int().min(1).max(7)).min(1).max(7).optional(),
+  isDefault: z.boolean().default(false),
+});
+export type CreateShiftRequest = z.infer<typeof createShiftSchema>;
+
+/** PUT /attendance/shifts/{id} (ATT.SHIFT.UPDATE) — partial patch. */
+export const updateShiftSchema = createShiftSchema.partial().extend({
+  status: shiftStatusSchema.optional(),
+});
+export type UpdateShiftRequest = z.infer<typeof updateShiftSchema>;
+
+// ─── attendance_rules (DB-04 §7.3) ────────────────────────────────────────────
+
+export const ruleScopeSchema = z.enum(["System", "Company", "Department", "Employee"]);
+export type RuleScopeDto = z.infer<typeof ruleScopeSchema>;
+
+export const ruleStatusSchema = z.enum(["Active", "Inactive"]);
+export type RuleStatusDto = z.infer<typeof ruleStatusSchema>;
+
+/** GET /attendance/rules item — full rule config (DB-04 §7.3) for HR/Admin management screens. */
+export const attendanceRuleSchema = z.object({
+  id: z.string().uuid(),
+  ruleCode: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  ruleScope: ruleScopeSchema,
+  departmentId: z.string().uuid().nullable(),
+  employeeId: z.string().uuid().nullable(),
+  priority: z.number().int(),
+  effectiveFrom: z.string().date(),
+  effectiveTo: z.string().date().nullable(),
+  requireCheckIn: z.boolean(),
+  requireCheckOut: z.boolean(),
+  allowWebCheckIn: z.boolean(),
+  allowMobileCheckIn: z.boolean(),
+  allowRemoteCheckIn: z.boolean(),
+  allowAdjustmentRequest: z.boolean(),
+  requireGps: z.boolean(),
+  requireNote: z.boolean(),
+  requirePhoto: z.boolean(),
+  allowHolidayAttendance: z.boolean(),
+  allowWeekendAttendance: z.boolean(),
+  autoAttendanceEnabled: z.boolean(),
+  autoCheckOutEnabled: z.boolean(),
+  autoAttendanceWorkingMinutes: z.number().int().nullable(),
+  status: ruleStatusSchema,
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type AttendanceRuleDto = z.infer<typeof attendanceRuleSchema>;
+
+export const attendanceRuleListResponseSchema = z.object({ items: z.array(attendanceRuleSchema) });
+export type AttendanceRuleListResponse = z.infer<typeof attendanceRuleListResponseSchema>;
+
+/**
+ * POST /attendance/rules (ATT.RULE.CONFIG). target_type/target_id ép theo scope (DB-04 chk_*_target):
+ * Department/Employee scope BẮT BUỘC departmentId/employeeId tương ứng; System/Company thì KHÔNG.
+ */
+export const createRuleSchema = z
+  .object({
+    ruleCode: z.string().min(1).max(50),
+    name: z.string().min(1).max(200),
+    description: z.string().max(1000).optional(),
+    ruleScope: ruleScopeSchema.default("Company"),
+    departmentId: z.string().uuid().optional(),
+    employeeId: z.string().uuid().optional(),
+    priority: z.number().int().default(0),
+    effectiveFrom: z.string().date(),
+    effectiveTo: z.string().date().optional(),
+    requireCheckIn: z.boolean().default(true),
+    requireCheckOut: z.boolean().default(true),
+    allowWebCheckIn: z.boolean().default(true),
+    allowMobileCheckIn: z.boolean().default(true),
+    allowRemoteCheckIn: z.boolean().default(false),
+    allowAdjustmentRequest: z.boolean().default(true),
+    requireGps: z.boolean().default(false),
+    requireNote: z.boolean().default(false),
+    requirePhoto: z.boolean().default(false),
+    allowHolidayAttendance: z.boolean().default(false),
+    allowWeekendAttendance: z.boolean().default(false),
+    autoAttendanceEnabled: z.boolean().default(false),
+    autoCheckOutEnabled: z.boolean().default(false),
+    autoAttendanceWorkingMinutes: z.number().int().min(0).optional(),
+  })
+  .refine(
+    (v) =>
+      (v.ruleScope !== "Department" && v.ruleScope !== "Employee") ||
+      (v.ruleScope === "Department" ? Boolean(v.departmentId) : Boolean(v.employeeId)),
+    { message: "Department/Employee scope cần đúng departmentId/employeeId" },
+  );
+export type CreateRuleRequest = z.infer<typeof createRuleSchema>;
+
+/** PUT /attendance/rules/{id} (ATT.RULE.CONFIG) — partial patch (KHÔNG đổi ruleScope/target — tạo rule mới thay vì đổi phạm vi). */
+export const updateRuleSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  description: z.string().max(1000).optional(),
+  priority: z.number().int().optional(),
+  effectiveFrom: z.string().date().optional(),
+  effectiveTo: z.string().date().nullable().optional(),
+  requireCheckIn: z.boolean().optional(),
+  requireCheckOut: z.boolean().optional(),
+  allowWebCheckIn: z.boolean().optional(),
+  allowMobileCheckIn: z.boolean().optional(),
+  allowRemoteCheckIn: z.boolean().optional(),
+  allowAdjustmentRequest: z.boolean().optional(),
+  requireGps: z.boolean().optional(),
+  requireNote: z.boolean().optional(),
+  requirePhoto: z.boolean().optional(),
+  allowHolidayAttendance: z.boolean().optional(),
+  allowWeekendAttendance: z.boolean().optional(),
+  autoAttendanceEnabled: z.boolean().optional(),
+  autoCheckOutEnabled: z.boolean().optional(),
+  autoAttendanceWorkingMinutes: z.number().int().min(0).nullable().optional(),
+  status: ruleStatusSchema.optional(),
+});
+export type UpdateRuleRequest = z.infer<typeof updateRuleSchema>;
+
+// ─── shift_assignments (DB-04 §7.2) ───────────────────────────────────────────
+
+export const shiftAssignmentScopeSchema = z.enum(["Company", "Department", "Employee"]);
+export type ShiftAssignmentScopeDto = z.infer<typeof shiftAssignmentScopeSchema>;
+
+export const shiftAssignmentSchema = z.object({
+  id: z.string().uuid(),
+  shiftId: z.string().uuid(),
+  assignmentScope: shiftAssignmentScopeSchema,
+  departmentId: z.string().uuid().nullable(),
+  employeeId: z.string().uuid().nullable(),
+  effectiveFrom: z.string().date(),
+  effectiveTo: z.string().date().nullable(),
+  priority: z.number().int(),
+  status: shiftStatusSchema,
+  note: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type ShiftAssignmentDto = z.infer<typeof shiftAssignmentSchema>;
+
+export const shiftAssignmentListResponseSchema = z.object({
+  items: z.array(shiftAssignmentSchema),
+});
+export type ShiftAssignmentListResponse = z.infer<typeof shiftAssignmentListResponseSchema>;
+
+/** POST /attendance/shift-assignments (ATT.SHIFT_ASSIGNMENT.UPDATE — spec API-10 dùng action `update` cho gán ca). */
+export const createShiftAssignmentSchema = z
+  .object({
+    shiftId: z.string().uuid(),
+    assignmentScope: shiftAssignmentScopeSchema.default("Company"),
+    departmentId: z.string().uuid().optional(),
+    employeeId: z.string().uuid().optional(),
+    effectiveFrom: z.string().date(),
+    effectiveTo: z.string().date().optional(),
+    priority: z.number().int().default(0),
+    note: z.string().max(500).optional(),
+  })
+  .refine(
+    (v) =>
+      (v.assignmentScope !== "Department" && v.assignmentScope !== "Employee") ||
+      (v.assignmentScope === "Department" ? Boolean(v.departmentId) : Boolean(v.employeeId)),
+    { message: "Department/Employee scope cần đúng departmentId/employeeId" },
+  );
+export type CreateShiftAssignmentRequest = z.infer<typeof createShiftAssignmentSchema>;
+
+// ─── GET /attendance/rules/effective — resolve-effective (dùng chung resolve-effective của S3-ATT-BE-1) ──
+
+/** employeeId tuỳ chọn (mặc định = hồ sơ của caller — HR/Admin có ATT.RULE.VIEW có thể xem nhân viên khác). */
+export const effectiveShiftRuleQuerySchema = z.object({
+  employeeId: z.string().uuid().optional(),
+  workDate: z.string().date().optional(),
+});
+export type EffectiveShiftRuleQuery = z.infer<typeof effectiveShiftRuleQuerySchema>;
+
+export const effectiveShiftRuleResponseSchema = z.object({
+  workDate: z.string().date(),
+  employeeId: z.string().uuid(),
+  shift: attendanceShiftSummarySchema.nullable(),
+  rule: attendanceRuleSummarySchema.nullable(),
+});
+export type EffectiveShiftRuleResponse = z.infer<typeof effectiveShiftRuleResponseSchema>;
