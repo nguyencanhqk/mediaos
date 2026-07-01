@@ -17,6 +17,17 @@
  *       (wildcard nhạy-cảm KHÔNG kế thừa — mirror sensitive gate can()); '*:*' VẪN có (non-sensitive surface).
  *   N3  employee (role 0008) trơn → KHÔNG có key 'view:audit-log' (deny-default).
  *
+ * S3-FE-REGISTRY-1 (beCapExpose) — APPEND 4 cặp ATT/LEAVE view NHẠY CẢM vào SENSITIVE_CAPABILITY_ALLOWLIST
+ * để FE dựng cờ hiển thị nav (att.team-records / att.records / leave). Cặp seed THẬT is_sensitive=true
+ * (attendance-permissions.const mig 0454 + leave-permissions.const mig 0455). Chỉ mở CỜ HIỂN THỊ — enforcement
+ * (can()/PermissionGuard per-resource) KHÔNG đổi. KHÔNG gồm view-own:leave / approve:leave (đã non-sensitive ⇒
+ * lộ qua getCapabilities, KHÔNG cần allowlist).
+ *   P4  user grant ĐÚNG 4 cặp {view-own,view-team,view-company}:attendance + view:leave → me.capabilities CÓ đủ 4.
+ *   P5  employee (role 0008, seed grant CHỈ view-own:attendance) → view-own hiện; view-team/view-company/view:leave
+ *       VẮNG (allowlist bám ĐÚNG grant per-pair — KHÔNG over-expose).
+ *   P6  manager (role 0010) → view-own + view-team:attendance + view:leave hiện; view-company:attendance VẮNG.
+ *   N5  user CHỈ '*:*' → KHÔNG kế thừa 4 cặp NHẠY CẢM (sensitive gate); view:audit-log VẪN vắng (no-regress).
+ *
  * PIN theo CẶP SEED THẬT ('view','audit-log') — KHÔNG theo mã FE AUTH.AUDIT_LOG.VIEW (drift S1-FND-MODULE).
  */
 
@@ -47,10 +58,26 @@ import {
 const LOGIN_PW = "Passw0rd!test99";
 const COMPANY_ADMIN_ROLE = "00000000-0000-0000-0000-000000000001"; // có ('view','audit-log') (mig 0340)
 const EMPLOYEE_ROLE = "00000000-0000-0000-0000-000000000008"; // KHÔNG có ('view','audit-log')
+// S3-FE-REGISTRY-1 — role seed THẬT (mig 0454/0455): manager có view-own+view-team:attendance + view:leave
+// (Team), KHÔNG có view-company:attendance. Dùng chứng minh allowlist bám ĐÚNG grant per-role (granularity).
+const MANAGER_ROLE = "00000000-0000-0000-0000-000000000010";
 
 /** Cặp seed THẬT (mig 0340: is_sensitive=true). Key map = "action:resourceType". */
 const AUDIT_LOG_CAP_KEY = "view:audit-log";
 const WILDCARD_CAP_KEY = "*:*";
+
+/**
+ * S3-FE-REGISTRY-1 — 4 cặp ATT/LEAVE view NHẠY CẢM (is_sensitive=true, seed mig 0454/0455) mới APPEND vào
+ * allowlist. Tuple (action, resourceType) tránh split(":") nhập nhằng. KHÔNG có view-own:leave / approve:leave
+ * (đã non-sensitive ⇒ lộ sẵn qua getCapabilities, KHÔNG thuộc allowlist).
+ */
+const ATT_LEAVE_SENSITIVE_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ["view-own", "attendance"],
+  ["view-team", "attendance"],
+  ["view-company", "attendance"],
+  ["view", "leave"],
+];
+const ATT_LEAVE_SENSITIVE_KEYS = ATT_LEAVE_SENSITIVE_PAIRS.map(([a, r]) => `${a}:${r}`);
 
 /** Gate cứng: Postgres THẬT VÀ DB cô lập lane (KHÔNG phải DB dev chung). */
 const runDb = hasDb && Boolean(process.env.LANE_DB);
@@ -85,6 +112,9 @@ describe.skipIf(!runDb)("S2-AUTH-BE-5 FIX-1-CAP-EXPOSE /auth/me allowlisted sens
   let adminToken: string;
   let wildcardToken: string;
   let employeeToken: string;
+  let attLeaveToken: string;
+  let managerToken: string;
+  let bareWildToken: string;
   const companyIds: string[] = [];
 
   beforeAll(async () => {
@@ -113,14 +143,42 @@ describe.skipIf(!runDb)("S2-AUTH-BE-5 FIX-1-CAP-EXPOSE /auth/me allowlisted sens
     await seedRolePermission(direct, wildRole, wildPerm, "ALLOW");
     await seedUserRole(direct, wild, wildRole, A.companyId);
 
-    // N3: employee trơn (role 0008) — không có grant view:audit-log.
+    // P5: employee trơn (role 0008) — seed THẬT grant CHỈ view-own:attendance (Own, self-service). Chứng minh
+    // allowlist bám ĐÚNG grant per-pair: view-own present, view-team/view-company/view:leave VẮNG (không over-expose).
+    // (N3 tái dùng token này: KHÔNG có grant view:audit-log ⇒ vắng.)
     const empEmail = `emp-${TAG}@a.test`;
     const emp = await seedUser(direct, A.companyId, empEmail, pw);
     await seedUserRole(direct, emp, EMPLOYEE_ROLE, A.companyId);
 
+    // P4 (S3-FE-REGISTRY-1): user được grant ĐÚNG 4 cặp ATT/LEAVE view NHẠY CẢM (is_sensitive=true) qua role
+    // riêng DUY NHẤT (KHÔNG kèm employee role → cô lập đúng 4 cặp). getCapabilities() lọc sensitive ⇒ chỉ
+    // allowlist surface được → RED trước khi APPEND allowlist.
+    const attLeaveEmail = `attlv-${TAG}@a.test`;
+    const attLeaveUser = await seedUser(direct, A.companyId, attLeaveEmail, pw);
+    const attLeaveRole = await seedRole(direct, A.companyId, `attlv-${TAG}`);
+    for (const [action, resourceType] of ATT_LEAVE_SENSITIVE_PAIRS) {
+      const permId = await seedPermissionCatalog(direct, action, resourceType, true);
+      await seedRolePermission(direct, attLeaveRole, permId, "ALLOW");
+    }
+    await seedUserRole(direct, attLeaveUser, attLeaveRole, A.companyId);
+
+    // P6: manager (role 0010) — seed THẬT view-own + view-team:attendance + view:leave (Team), KHÔNG view-company.
+    const mgrEmail = `mgr-${TAG}@a.test`;
+    const mgr = await seedUser(direct, A.companyId, mgrEmail, pw);
+    await seedUserRole(direct, mgr, MANAGER_ROLE, A.companyId);
+
+    // N5: user CHỈ có wildcard '*:*' (KHÔNG employee role) — cô lập cổng sensitive: wildcard KHÔNG kế thừa cặp
+    // nhạy cảm nào (KHÔNG lẫn view-own:attendance của employee role). Tái dùng wildRole (đã grant *:*).
+    const bareWildEmail = `bw-${TAG}@a.test`;
+    const bareWild = await seedUser(direct, A.companyId, bareWildEmail, pw);
+    await seedUserRole(direct, bareWild, wildRole, A.companyId);
+
     adminToken = await login(app, A.slug, adminEmail);
     wildcardToken = await login(app, A.slug, wildEmail);
     employeeToken = await login(app, A.slug, empEmail);
+    attLeaveToken = await login(app, A.slug, attLeaveEmail);
+    managerToken = await login(app, A.slug, mgrEmail);
+    bareWildToken = await login(app, A.slug, bareWildEmail);
   });
 
   afterAll(async () => {
@@ -143,5 +201,42 @@ describe.skipIf(!runDb)("S2-AUTH-BE-5 FIX-1-CAP-EXPOSE /auth/me allowlisted sens
   it("N3 — employee trơn → KHÔNG có 'view:audit-log' (deny-default)", async () => {
     const caps = await meCapabilities(app, employeeToken);
     expect(AUDIT_LOG_CAP_KEY in caps).toBe(false);
+  });
+
+  it("P4 — user grant ĐÚNG 4 cặp ATT/LEAVE view nhạy cảm → /auth/me.capabilities CÓ đủ 4 cặp", async () => {
+    const caps = await meCapabilities(app, attLeaveToken);
+    for (const key of ATT_LEAVE_SENSITIVE_KEYS) {
+      expect(caps[key], `thiếu cặp allowlist ${key}`).toBe(true);
+    }
+  });
+
+  it("P5 — employee (view-own:attendance) → CHỈ view-own hiện; view-team/view-company/view:leave VẮNG", async () => {
+    const caps = await meCapabilities(app, employeeToken);
+    expect(
+      caps["view-own:attendance"],
+      "employee phải thấy cờ view-own:attendance (self-service)",
+    ).toBe(true);
+    for (const key of ["view-team:attendance", "view-company:attendance", "view:leave"]) {
+      expect(key in caps, `employee KHÔNG được lộ cặp ${key} (per-pair granularity)`).toBe(false);
+    }
+  });
+
+  it("P6 — manager → view-own + view-team:attendance + view:leave hiện; view-company:attendance VẮNG", async () => {
+    const caps = await meCapabilities(app, managerToken);
+    for (const key of ["view-own:attendance", "view-team:attendance", "view:leave"]) {
+      expect(caps[key], `manager thiếu cờ ${key}`).toBe(true);
+    }
+    expect("view-company:attendance" in caps, "manager KHÔNG được lộ view-company:attendance").toBe(
+      false,
+    );
+  });
+
+  it("N5 — user CHỈ '*:*' → KHÔNG kế thừa 4 cặp ATT/LEAVE nhạy cảm; view:audit-log vẫn vắng", async () => {
+    const caps = await meCapabilities(app, bareWildToken);
+    expect(caps[WILDCARD_CAP_KEY]).toBe(true); // non-sensitive wildcard vẫn surface
+    for (const key of ATT_LEAVE_SENSITIVE_KEYS) {
+      expect(key in caps, `cặp nhạy cảm ${key} KHÔNG kế thừa qua *:*`).toBe(false);
+    }
+    expect(AUDIT_LOG_CAP_KEY in caps).toBe(false); // no-regress S2-AUTH-BE-5
   });
 });

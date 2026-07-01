@@ -29,6 +29,7 @@ import {
   type SidebarItemMeta,
   type UserPermission,
 } from "@mediaos/web-core";
+import { ATT_SIDEBAR, LEAVE_SIDEBAR } from "@/layouts/workspace/sidebar-registry";
 
 // ---------------------------------------------------------------------------
 // Minimal i18n mock (nav namespace)
@@ -71,6 +72,31 @@ function makeSession(overrides: Partial<SessionContext> = {}): SessionContext {
 function makePerms(permissions: string[]): UserPermission[] {
   return permissions.map((p) => ({ permission: p, scopes: [] as never }));
 }
+
+/** Cặp-engine + scope THẬT (per-permission) — mô phỏng /auth/me capabilities+scopes (KHÔNG []). */
+function makeScopedPerms(entries: UserPermission[]): UserPermission[] {
+  return entries.map((e) => ({ permission: e.permission, scopes: [...e.scopes] }));
+}
+
+// Persona theo cặp ENGINE THẬT + scope THẬT (pair-as-gate + defense-in-depth).
+const EMPLOYEE_PERMS = makeScopedPerms([
+  { permission: "view-own:attendance", scopes: ["Own"] },
+  { permission: "view-own:leave", scopes: ["Own"] },
+]);
+const MANAGER_PERMS = makeScopedPerms([
+  { permission: "view-own:attendance", scopes: ["Own"] },
+  { permission: "view-team:attendance", scopes: ["Team"] },
+  { permission: "view-own:leave", scopes: ["Own"] },
+  { permission: "approve:leave", scopes: ["Team"] },
+]);
+const HR_PERMS = makeScopedPerms([
+  { permission: "view-own:attendance", scopes: ["Own"] },
+  { permission: "view-team:attendance", scopes: ["Team"] },
+  { permission: "view-company:attendance", scopes: ["Company"] },
+  { permission: "view-own:leave", scopes: ["Own"] },
+  { permission: "view:leave", scopes: ["Company"] },
+  { permission: "approve:leave", scopes: ["Company"] },
+]);
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -270,6 +296,66 @@ describe("filterSidebarItems — Sidebar", () => {
     );
     const filtered = filterSidebarItems(leaveSidebar, c, lockedSession);
     expect(filtered).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CROWN — ATT scoped sidebar (real registry) pair-as-gate deny-path matrix
+// filterSidebarItems chạy trên ATT_SIDEBAR/LEAVE_SIDEBAR THẬT (không fixture cục bộ) → khoá registry.
+// employee ẩn Team/Company + approvals; manager thấy Team ẩn Company; hr thấy Company.
+// ---------------------------------------------------------------------------
+
+describe("filterSidebarItems — ATT scoped (real registry) deny-path", () => {
+  const attActive = makeSession({ modules: [{ moduleCode: "ATT", status: "active" }] });
+  const leaveActive = makeSession({ modules: [{ moduleCode: "LEAVE", status: "active" }] });
+
+  it("employee → ẩn att.team-records + att.records + leave.approvals", () => {
+    const att = filterSidebarItems(ATT_SIDEBAR, createPermissionChecker(EMPLOYEE_PERMS), attActive);
+    expect(att.find((i) => i.sidebarKey === "att.today")).toBeDefined();
+    expect(att.find((i) => i.sidebarKey === "att.my-records")).toBeDefined();
+    expect(att.find((i) => i.sidebarKey === "att.team-records")).toBeUndefined();
+    expect(att.find((i) => i.sidebarKey === "att.records")).toBeUndefined();
+
+    const leave = filterSidebarItems(
+      LEAVE_SIDEBAR,
+      createPermissionChecker(EMPLOYEE_PERMS),
+      leaveActive,
+    );
+    expect(leave.find((i) => i.sidebarKey === "leave.approvals")).toBeUndefined();
+  });
+
+  it("manager (view-team:attendance) → thấy att.team-records, ẩn att.records; thấy leave.approvals", () => {
+    const att = filterSidebarItems(ATT_SIDEBAR, createPermissionChecker(MANAGER_PERMS), attActive);
+    expect(att.find((i) => i.sidebarKey === "att.team-records")).toBeDefined();
+    expect(att.find((i) => i.sidebarKey === "att.records")).toBeUndefined();
+
+    const leave = filterSidebarItems(
+      LEAVE_SIDEBAR,
+      createPermissionChecker(MANAGER_PERMS),
+      leaveActive,
+    );
+    expect(leave.find((i) => i.sidebarKey === "leave.approvals")).toBeDefined();
+  });
+
+  it("hr (view-company:attendance) → thấy att.records (+ att.team-records)", () => {
+    const att = filterSidebarItems(ATT_SIDEBAR, createPermissionChecker(HR_PERMS), attActive);
+    expect(att.find((i) => i.sidebarKey === "att.records")).toBeDefined();
+    expect(att.find((i) => i.sidebarKey === "att.team-records")).toBeDefined();
+  });
+});
+
+describe("getVisibleApps — company-admin thấy attendance + leave", () => {
+  it("caps company-admin THẬT → attendance & leave hiển thị", () => {
+    const session = makeSession({
+      modules: [
+        { moduleCode: "ATT", status: "active" },
+        { moduleCode: "LEAVE", status: "active" },
+      ],
+    });
+    const c = createPermissionChecker(HR_PERMS);
+    const visible = getVisibleApps(APP_REGISTRY, session, c);
+    expect(visible.find((a) => a.appKey === "attendance")).toBeDefined();
+    expect(visible.find((a) => a.appKey === "leave")).toBeDefined();
   });
 });
 
