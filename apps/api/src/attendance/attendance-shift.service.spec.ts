@@ -6,8 +6,10 @@
  * AttendanceService.resolveShiftAndRule (the shared S3-ATT-BE-1 resolve-effective implementation)
  * rather than re-deriving the priority order itself.
  *
- * NO audit assertions here — see attendance-shift.service.ts class doc: audit_logs object_type CHECK
- * doesn't yet allow 'shift'/'attendance_rule'/'shift_assignment' (carry-over for lane db-migration).
+ * S3-ATT-BE-3-FIX-AUDIT-WIRE: also pins the AuditService.record() WIRING at the 5 config-mutation
+ * sites — correct object_type/action, written on the SAME tx as the mutation, before/after carrying
+ * ONLY config fields (NO secret/PII — BẤT BIẾN #3), and NO audit when a mutation is short-circuited
+ * (404). The DB CHECK for the new object_type values (mig 0457) is proven in att-core-tenant-deny.int-spec.ts.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -81,11 +83,14 @@ function makeRuleRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** Stable tx sentinel so audit-wiring tests can assert audit.record was called on the SAME tx. */
+const TX_SENTINEL = { __txSentinel: true } as const;
+
 function makeDb() {
   return {
     withTenant: vi
       .fn()
-      .mockImplementation((_c: string, fn: (tx: unknown) => Promise<unknown>) => fn({})),
+      .mockImplementation((_c: string, fn: (tx: unknown) => Promise<unknown>) => fn(TX_SENTINEL)),
   };
 }
 
@@ -142,13 +147,15 @@ function build(
     }),
     ...overrides.attendanceService,
   };
+  const audit = { record: vi.fn().mockResolvedValue(undefined) };
   const service = new AttendanceShiftService(
     db as never,
     repo as never,
     shiftRepo as never,
     attendanceService as never,
+    audit as never,
   );
-  return { service, repo, shiftRepo, attendanceService };
+  return { service, repo, shiftRepo, attendanceService, audit };
 }
 
 // ─── shift CRUD ────────────────────────────────────────────────────────────────
@@ -313,5 +320,146 @@ describe("AttendanceShiftService — getEffectiveShiftRule (shared resolve-effec
     await expect(
       service.getEffectiveShiftRule(actor, { employeeId: "unknown-id" }),
     ).rejects.toThrow(NotFoundException);
+  });
+});
+
+// ─── audit-in-tx wiring (S3-ATT-BE-3-FIX-AUDIT-WIRE) ─────────────────────────────
+
+describe("AttendanceShiftService — audit-in-tx wiring", () => {
+  // Keys that must NEVER surface in an audit snapshot (secret/PII sentinels — BẤT BIẾN #3).
+  const FORBIDDEN_SNAPSHOT_KEYS = [
+    "password",
+    "passwordHash",
+    "token",
+    "secret",
+    "secretRef",
+    "identityNumber",
+    "bankAccount",
+    "salary",
+    "createdAt",
+    "updatedAt",
+  ];
+
+  function assertConfigOnly(...snapshots: unknown[]) {
+    for (const snap of snapshots) {
+      if (!snap || typeof snap !== "object") continue;
+      for (const k of Object.keys(snap)) {
+        expect(FORBIDDEN_SNAPSHOT_KEYS).not.toContain(k);
+      }
+    }
+  }
+
+  function entryOf(audit: { record: ReturnType<typeof vi.fn> }) {
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    const [tx, entry] = audit.record.mock.calls[0];
+    expect(tx).toBe(TX_SENTINEL); // audit written on the SAME withTenant tx as the mutation
+    return entry as Record<string, unknown>;
+  }
+
+  it("createShift → ShiftCreated / object_type=shift, config-only after", async () => {
+    const { service, audit } = build();
+    await service.createShift(actor, {
+      shiftCode: "OFFICE_8H",
+      name: "x",
+      shiftType: "Fixed",
+      requiredWorkingMinutes: 480,
+      breakMinutes: 0,
+      graceLateMinutes: 0,
+      graceEarlyLeaveMinutes: 0,
+      allowEarlyCheckIn: true,
+      allowLateCheckOut: true,
+      crossDay: false,
+      isDefault: false,
+    });
+    const e = entryOf(audit);
+    expect(e.objectType).toBe("shift");
+    expect(e.action).toBe("ShiftCreated");
+    expect(e.actorUserId).toBe(ACTOR_ID);
+    expect((e.after as Record<string, unknown>).shiftCode).toBe("OFFICE_8H");
+    assertConfigOnly(e.after, e.newValues);
+  });
+
+  it("updateShift → ShiftUpdated with before+after config snapshots", async () => {
+    const { service, audit } = build({
+      shiftRepo: {
+        findShiftByIdTx: vi.fn().mockResolvedValue([makeShiftRow({ name: "old" })]),
+        updateShiftTx: vi.fn().mockResolvedValue([makeShiftRow({ name: "new" })]),
+      },
+    });
+    await service.updateShift(actor, makeShiftRow().id, { name: "new" });
+    const e = entryOf(audit);
+    expect(e.objectType).toBe("shift");
+    expect(e.action).toBe("ShiftUpdated");
+    expect((e.before as Record<string, unknown>).name).toBe("old");
+    expect((e.after as Record<string, unknown>).name).toBe("new");
+    assertConfigOnly(e.before, e.after, e.oldValues, e.newValues);
+  });
+
+  it("createRule → RuleCreated / object_type=attendance_rule", async () => {
+    const { service, audit } = build();
+    await service.createRule(actor, {
+      ruleCode: "OFFICE_RULE",
+      name: "x",
+      ruleScope: "Company",
+      priority: 0,
+      effectiveFrom: "2024-01-01",
+      requireCheckIn: true,
+      requireCheckOut: true,
+      allowWebCheckIn: true,
+      allowMobileCheckIn: true,
+      allowRemoteCheckIn: false,
+      allowAdjustmentRequest: true,
+      requireGps: false,
+      requireNote: false,
+      requirePhoto: false,
+      allowHolidayAttendance: false,
+      allowWeekendAttendance: false,
+      autoAttendanceEnabled: false,
+      autoCheckOutEnabled: false,
+    });
+    const e = entryOf(audit);
+    expect(e.objectType).toBe("attendance_rule");
+    expect(e.action).toBe("RuleCreated");
+    assertConfigOnly(e.after, e.newValues);
+  });
+
+  it("updateRule → RuleUpdated with before+after", async () => {
+    const { service, audit } = build({
+      shiftRepo: {
+        findRuleByIdTx: vi.fn().mockResolvedValue([makeRuleRow({ name: "old" })]),
+        updateRuleTx: vi.fn().mockResolvedValue([makeRuleRow({ name: "new" })]),
+      },
+    });
+    await service.updateRule(actor, makeRuleRow().id, { name: "new" });
+    const e = entryOf(audit);
+    expect(e.objectType).toBe("attendance_rule");
+    expect(e.action).toBe("RuleUpdated");
+    expect((e.before as Record<string, unknown>).name).toBe("old");
+    expect((e.after as Record<string, unknown>).name).toBe("new");
+    assertConfigOnly(e.before, e.after, e.oldValues, e.newValues);
+  });
+
+  it("createShiftAssignment → ShiftAssignmentCreated / object_type=shift_assignment", async () => {
+    const { service, audit } = build();
+    await service.createShiftAssignment(actor, {
+      shiftId: makeShiftRow().id,
+      assignmentScope: "Company",
+      priority: 0,
+      effectiveFrom: "2024-01-01",
+    });
+    const e = entryOf(audit);
+    expect(e.objectType).toBe("shift_assignment");
+    expect(e.action).toBe("ShiftAssignmentCreated");
+    assertConfigOnly(e.after, e.newValues);
+  });
+
+  it("updateShift on unknown id → NO audit written (fail-closed, no false trail)", async () => {
+    const { service, audit } = build({
+      shiftRepo: { findShiftByIdTx: vi.fn().mockResolvedValue([]) },
+    });
+    await expect(service.updateShift(actor, "missing", { name: "x" })).rejects.toThrow(
+      NotFoundException,
+    );
+    expect(audit.record).not.toHaveBeenCalled();
   });
 });

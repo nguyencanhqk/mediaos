@@ -15,12 +15,32 @@ import type {
 } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { isUniqueViolation } from "../common/db-error";
+import { AuditService } from "../events/audit.service";
+import type { AttendanceRule, Shift, ShiftAssignment } from "../db/schema/attendance";
 import { AttendanceRepository } from "./attendance.repository";
 import { AttendanceService } from "./attendance.service";
 import { AttendanceShiftRepository } from "./attendance-shift.repository";
 import { toRuleDto, toShiftAssignmentDto, toShiftDto } from "./attendance-shift.mappers";
 import { toEffectiveShiftRuleDto } from "./attendance.mappers";
 import type { Actor } from "./attendance.types";
+
+/**
+ * Audit snapshot = config-only projection of a row (BẤT BIẾN #3): reuse the DTO mapper (which already
+ * carries ONLY shift/rule/assignment config fields — the tables hold NO secret/PII columns), then strip
+ * createdAt/updatedAt (not config; always-changed noise that would pollute changed_fields on every update).
+ */
+function shiftSnapshot(row: Shift): Record<string, unknown> {
+  const { createdAt: _c, updatedAt: _u, ...cfg } = toShiftDto(row);
+  return cfg;
+}
+function ruleSnapshot(row: AttendanceRule): Record<string, unknown> {
+  const { createdAt: _c, updatedAt: _u, ...cfg } = toRuleDto(row);
+  return cfg;
+}
+function assignmentSnapshot(row: ShiftAssignment): Record<string, unknown> {
+  const { createdAt: _c, updatedAt: _u, ...cfg } = toShiftAssignmentDto(row);
+  return cfg;
+}
 
 /**
  * S3-ATT-BE-3 — shift/rule/assignment CRUD (minimum scope, DB-04 §7.1/7.2/7.3) + effective resolve.
@@ -31,18 +51,13 @@ import type { Actor } from "./attendance.types";
  * intentionally minimal (create/update only, no delete/list-filter/bulk) — advanced ops are
  * carry-over CO-S4-007.
  *
- * KNOWN GAP (carry-over, NOT silently dropped): create/update here do NOT call AuditService yet.
- * `audit_logs.object_type` is a DB CHECK constraint (append-only #2) whose current allowed set
- * (migration history up to 0456) does NOT include 'shift' / 'attendance_rule' / 'shift_assignment' —
- * writing those values today would either (a) violate the CHECK on real Postgres (rolls back the
- * whole tx, breaking the create/update itself) or (b) require mislabeling under an unrelated existing
- * object_type, which corrupts the audit trail's accuracy. Neither is acceptable. This lane's declared
- * scope is `apps/api/src/attendance/**` + `packages/contracts/src/**` — extending the CHECK requires a
- * migration, which is explicitly OUT of scope here (CLAUDE.md rule #8: schema changes → lane
- * db-migration). CARRY-OVER: db-migration lane adds `shift`/`attendance_rule`/`shift_assignment` to the
- * audit_logs object_type CHECK (UNION ADD-only, clone migration 0456's DO-block pattern) + the same
- * values to `AUDIT_OBJECT_TYPES` (db/schema/audit.ts) in the SAME commit; this service then wires
- * `AuditService.record()` at the 5 marked TODO call sites below.
+ * AUDIT (SPEC-01 §16.3 / BẤT BIẾN #2): config của shift/rule/assignment đổi cách tính công TOÀN công ty
+ * = 'hành động quan trọng' ⇒ create/update ghi audit IN-TX (cùng withTenant tx → cùng commit/rollback,
+ * không audit nửa vời). object_type ∈ {'shift','attendance_rule','shift_assignment'} — đã nạp vào
+ * AUDIT_OBJECT_TYPES + CHECK DB (migration 0457, UNION ADD-only, append-only #2 nguyên vẹn). before/after
+ * = snapshot cấu hình ONLY (shiftSnapshot/ruleSnapshot/assignmentSnapshot — bảng KHÔNG có cột secret/PII;
+ * AuditService cũng mask lần nữa trước insert — BẤT BIẾN #3). 404 (row không tồn tại/tenant khác) → throw
+ * TRƯỚC audit ⇒ KHÔNG ghi audit giả cho mutation không xảy ra.
  */
 @Injectable()
 export class AttendanceShiftService {
@@ -53,6 +68,7 @@ export class AttendanceShiftService {
     private readonly repo: AttendanceRepository,
     private readonly shiftRepo: AttendanceShiftRepository,
     private readonly attendanceService: AttendanceService,
+    private readonly audit: AuditService,
   ) {}
 
   // ─── shifts ──────────────────────────────────────────────────────────────────
@@ -93,8 +109,23 @@ export class AttendanceShiftService {
           tx,
         );
         if (!row) throw new InternalServerErrorException("Failed to create shift");
-        // TODO(carry-over db-migration): AuditService.record(tx, { action: "ShiftCreated",
-        // objectType: "shift", objectId: row.id, actorUserId: actor.id, after: {...} }) — see class doc.
+        await this.audit.record(tx, {
+          action: "ShiftCreated",
+          actionGroup: "CREATE",
+          objectType: "shift",
+          objectId: row.id,
+          actorUserId: actor.id,
+          actorType: "User",
+          moduleCode: "ATT",
+          entityType: "shift",
+          entityId: row.id,
+          after: shiftSnapshot(row),
+          newValues: shiftSnapshot(row),
+          sensitivityLevel: "Sensitive",
+          resultStatus: "Success",
+          dataScope: "Company",
+          permissionCode: "ATT.SHIFT.CREATE",
+        });
         return toShiftDto(row);
       })
       .catch((err: unknown) => this.mapCreateError(err, "createShift", "shiftCode", actor));
@@ -112,8 +143,25 @@ export class AttendanceShiftService {
           tx,
         );
         if (!row) throw new InternalServerErrorException("Failed to update shift");
-        // TODO(carry-over db-migration): AuditService.record(tx, { action: "ShiftUpdated",
-        // objectType: "shift", objectId: id, actorUserId: actor.id, before: {...}, after: {...} }).
+        await this.audit.record(tx, {
+          action: "ShiftUpdated",
+          actionGroup: "CONFIG_UPDATE",
+          objectType: "shift",
+          objectId: id,
+          actorUserId: actor.id,
+          actorType: "User",
+          moduleCode: "ATT",
+          entityType: "shift",
+          entityId: id,
+          before: shiftSnapshot(existing),
+          after: shiftSnapshot(row),
+          oldValues: shiftSnapshot(existing),
+          newValues: shiftSnapshot(row),
+          sensitivityLevel: "Sensitive",
+          resultStatus: "Success",
+          dataScope: "Company",
+          permissionCode: "ATT.SHIFT.UPDATE",
+        });
         return toShiftDto(row);
       })
       .catch((err: unknown) =>
@@ -163,8 +211,23 @@ export class AttendanceShiftService {
           tx,
         );
         if (!row) throw new InternalServerErrorException("Failed to create rule");
-        // TODO(carry-over db-migration): AuditService.record(tx, { action: "RuleCreated",
-        // objectType: "attendance_rule", objectId: row.id, actorUserId: actor.id, after: {...} }).
+        await this.audit.record(tx, {
+          action: "RuleCreated",
+          actionGroup: "CREATE",
+          objectType: "attendance_rule",
+          objectId: row.id,
+          actorUserId: actor.id,
+          actorType: "User",
+          moduleCode: "ATT",
+          entityType: "attendance_rule",
+          entityId: row.id,
+          after: ruleSnapshot(row),
+          newValues: ruleSnapshot(row),
+          sensitivityLevel: "Sensitive",
+          resultStatus: "Success",
+          dataScope: "Company",
+          permissionCode: "ATT.RULE.CONFIG",
+        });
         return toRuleDto(row);
       })
       .catch((err: unknown) => this.mapCreateError(err, "createRule", "ruleCode", actor));
@@ -182,8 +245,25 @@ export class AttendanceShiftService {
           tx,
         );
         if (!row) throw new InternalServerErrorException("Failed to update rule");
-        // TODO(carry-over db-migration): AuditService.record(tx, { action: "RuleUpdated",
-        // objectType: "attendance_rule", objectId: id, actorUserId: actor.id, before: {...}, after: {...} }).
+        await this.audit.record(tx, {
+          action: "RuleUpdated",
+          actionGroup: "CONFIG_UPDATE",
+          objectType: "attendance_rule",
+          objectId: id,
+          actorUserId: actor.id,
+          actorType: "User",
+          moduleCode: "ATT",
+          entityType: "attendance_rule",
+          entityId: id,
+          before: ruleSnapshot(existing),
+          after: ruleSnapshot(row),
+          oldValues: ruleSnapshot(existing),
+          newValues: ruleSnapshot(row),
+          sensitivityLevel: "Sensitive",
+          resultStatus: "Success",
+          dataScope: "Company",
+          permissionCode: "ATT.RULE.CONFIG",
+        });
         return toRuleDto(row);
       })
       .catch((err: unknown) =>
@@ -220,8 +300,23 @@ export class AttendanceShiftService {
           tx,
         );
         if (!row) throw new InternalServerErrorException("Failed to create shift assignment");
-        // TODO(carry-over db-migration): AuditService.record(tx, { action: "ShiftAssignmentCreated",
-        // objectType: "shift_assignment", objectId: row.id, actorUserId: actor.id, after: {...} }).
+        await this.audit.record(tx, {
+          action: "ShiftAssignmentCreated",
+          actionGroup: "CREATE",
+          objectType: "shift_assignment",
+          objectId: row.id,
+          actorUserId: actor.id,
+          actorType: "User",
+          moduleCode: "ATT",
+          entityType: "shift_assignment",
+          entityId: row.id,
+          after: assignmentSnapshot(row),
+          newValues: assignmentSnapshot(row),
+          sensitivityLevel: "Sensitive",
+          resultStatus: "Success",
+          dataScope: "Company",
+          permissionCode: "ATT.SHIFT_ASSIGNMENT.UPDATE",
+        });
         return toShiftAssignmentDto(row);
       })
       .catch((err: unknown) =>
