@@ -60,7 +60,7 @@ const CROWN_JEWEL =
 const RED_PATHS =
   /(\/permission\/|\/auth\/|\/crypto\/|\/security-policy\/|\/break-glass\/|drizzle|_journal|migration|audit|outbox|\/adr\/|\.permission\.)/i;
 const pathsTouchRed = (L) => Array.isArray(L.paths) && L.paths.some((p) => RED_PATHS.test(p));
-const PLANNER_MODEL = 'opus'; // model cho bước plan của crown-jewel (đổi 'sonnet' nếu muốn rẻ hơn)
+const PLANNER_MODEL = 'sonnet'; // 2026-07-01: Sonnet 5 + effort xhigh để giảm chi phí (plan vẫn qua plan-reviewer đối kháng); đổi lại 'opus' nếu muốn thận trọng hơn. IMPLEMENT/REVIEW crown/red giữ Opus (pickModel), không đụng.
 
 // Đỏ nếu: ép tier='crown' · tiêu đề khớp CROWN_JEWEL · HOẶC paths chạm vùng đỏ (fail-closed, thiên Opus).
 const isCrown = (L) => L.tier === 'crown' || CROWN_JEWEL.test(L.task || '') || pathsTouchRed(L);
