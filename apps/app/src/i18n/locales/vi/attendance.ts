@@ -77,4 +77,86 @@ export default {
       },
     },
   },
+
+  // ── Bảng công của tôi (ATT-SCREEN-002) ────────────────────────────────────────
+  records: {
+    title: "Bảng công của tôi",
+    description: "Lịch sử chấm công theo tháng",
+    columns: {
+      date: "Ngày",
+      shift: "Ca",
+      checkIn: "Check-in",
+      checkOut: "Check-out",
+      totalHours: "Tổng giờ",
+      status: "Trạng thái",
+      source: "Nguồn",
+      actions: "Hành động",
+    },
+    filters: {
+      month: "Tháng",
+      fromDate: "Từ ngày",
+      toDate: "Đến ngày",
+      allStatuses: "Tất cả trạng thái",
+    },
+    empty: {
+      title: "Không có dữ liệu",
+      description: "Chưa có bản ghi chấm công trong khoảng thời gian này.",
+    },
+    error: {
+      title: "Không thể tải dữ liệu",
+      description: "Có lỗi khi tải bảng công. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem bảng công.",
+    },
+  },
+
+  // ── Bảng công nhóm (ATT-SCREEN-003) ──────────────────────────────────────────
+  team: {
+    title: "Bảng công nhóm",
+    description: "Chấm công theo nhóm/phòng ban",
+    empty: {
+      title: "Không có dữ liệu",
+      description: "Chưa có bản ghi chấm công cho nhóm trong khoảng thời gian này.",
+    },
+    error: {
+      title: "Không thể tải dữ liệu",
+      description: "Có lỗi khi tải bảng công nhóm. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem bảng công nhóm.",
+    },
+  },
+
+  // ── Chi tiết bản ghi (ATT-SCREEN-004) ────────────────────────────────────────
+  detail: {
+    title: "Chi tiết chấm công",
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem chi tiết bản ghi này.",
+    },
+    notFound: {
+      title: "Không tìm thấy",
+      description: "Bản ghi chấm công không tồn tại hoặc đã bị xoá.",
+    },
+    error: {
+      title: "Không thể tải dữ liệu",
+      description: "Có lỗi khi tải chi tiết chấm công. Vui lòng thử lại.",
+    },
+    backToList: "Quay lại danh sách",
+    fields: {
+      date: "Ngày làm việc",
+      shift: "Ca làm việc",
+      checkIn: "Check-in",
+      checkOut: "Check-out",
+      totalHours: "Tổng giờ",
+      status: "Trạng thái",
+      source: "Nguồn chấm công",
+      location: "Vị trí",
+      employee: "Nhân viên",
+      department: "Phòng ban",
+    },
+  },
 } as const;
