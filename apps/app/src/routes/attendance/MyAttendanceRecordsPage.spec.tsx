@@ -95,10 +95,19 @@ vi.mock("@mediaos/ui", async (importOriginal) => {
         </div>
       );
     },
-    EmptyState: ({ title, description }: { title: string; description?: string }) => (
+    EmptyState: ({
+      title,
+      description,
+      action,
+    }: {
+      title: string;
+      description?: string;
+      action?: React.ReactNode;
+    }) => (
       <div data-testid="empty-state">
         <p>{title}</p>
         {description && <p>{description}</p>}
+        {action}
       </div>
     ),
     Skeleton: () => <div data-testid="skeleton" />,
@@ -298,6 +307,49 @@ describe("MyAttendanceRecordsPage", () => {
       const calls = mockListMyRecords.mock.calls;
       const lastCall = calls[calls.length - 1][0] as Record<string, unknown>;
       expect(lastCall.attendanceStatus).toBe("Late");
+    });
+  });
+
+  // ── Filter: month change → monthToDateRange params ─────────────────────────
+
+  it("changing month filter → listMyRecords called with monthToDateRange fromDate/toDate (half-open)", async () => {
+    mockListMyRecords.mockResolvedValue(makeResponse());
+    renderPage(buildQC());
+
+    await waitFor(() => {
+      expect(screen.getByTestId("data-table")).toBeInTheDocument();
+    });
+
+    const monthInput = screen.getByTestId("filter-month");
+    fireEvent.change(monthInput, { target: { value: "2026-06" } });
+
+    await waitFor(() => {
+      const calls = mockListMyRecords.mock.calls;
+      const lastCall = calls[calls.length - 1][0] as Record<string, unknown>;
+      expect(lastCall.fromDate).toBe("2026-06-01");
+      expect(lastCall.toDate).toBe("2026-07-01");
+    });
+  });
+
+  // ── Error retry ────────────────────────────────────────────────────────────
+
+  it("error state renders retry button; clicking it triggers refetch (listMyRecords called again)", async () => {
+    mockListMyRecords.mockRejectedValue(new Error("Network error"));
+    renderPage(buildQC());
+
+    await waitFor(() => {
+      expect(screen.getByTestId("empty-state")).toBeInTheDocument();
+    });
+
+    // retry button must be rendered inside the EmptyState action prop
+    const retryBtn = screen.getByRole("button", { name: /retry|thử lại/i });
+    expect(retryBtn).toBeInTheDocument();
+
+    const callsBefore = mockListMyRecords.mock.calls.length;
+    fireEvent.click(retryBtn);
+
+    await waitFor(() => {
+      expect(mockListMyRecords.mock.calls.length).toBeGreaterThan(callsBefore);
     });
   });
 });
