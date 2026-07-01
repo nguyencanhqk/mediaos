@@ -37,6 +37,7 @@ export default {
     leave: "Nghỉ phép",
     leaveMyRequests: "Đơn nghỉ của tôi",
     leaveApprovals: "Đơn cần duyệt",
+    leaveAllRequests: "Tất cả đơn nghỉ phép",
     tasks: "Công việc",
     taskMyTasks: "Việc của tôi",
     notifications: "Thông báo",

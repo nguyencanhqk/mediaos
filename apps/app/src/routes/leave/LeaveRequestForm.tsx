@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Info, AlertTriangle } from "lucide-react";
 import type { LeaveCalculateResponse, LeaveTypeView } from "@mediaos/contracts";
-import { leaveApi, leaveKeys, ApiError } from "@mediaos/web-core";
+import { leaveApi, leaveKeys, leaveInvalidation, ApiError } from "@mediaos/web-core";
 import { Button, Card, CardContent, Input, Select } from "@mediaos/ui";
 import { useDirtyFormGuard } from "@/hooks/use-dirty-form-guard";
 import {
@@ -14,6 +14,7 @@ import {
   leaveFormSchema,
   toCalculateBody,
   toCreateDraftBody,
+  toUpdateDraftBody,
   type LeaveFormValues,
 } from "./leave-form-schema";
 import { LEAVE_DURATION_TYPE, LEAVE_HALF_DAY_SESSION } from "./constants";
@@ -138,11 +139,24 @@ function PreviewBox({
 export interface LeaveRequestFormProps {
   onSuccess: (id: string, status: string) => void;
   onCancel: () => void;
+  /** "create" (mặc định) → POST /leave/requests. "edit" → PATCH /leave/requests/:id (chỉ Draft). */
+  mode?: "create" | "edit";
+  /** BẮT BUỘC khi mode="edit" — id đơn nháp đang sửa. */
+  requestId?: string;
+  /** BẮT BUỘC khi mode="edit" — giá trị pre-fill từ đơn đã fetch (detailToFormValues). */
+  initialValues?: LeaveFormValues;
 }
 
-export function LeaveRequestForm({ onSuccess, onCancel }: LeaveRequestFormProps) {
+export function LeaveRequestForm({
+  onSuccess,
+  onCancel,
+  mode = "create",
+  requestId,
+  initialValues,
+}: LeaveRequestFormProps) {
   const { t } = useTranslation("leave");
   const queryClient = useQueryClient();
+  const isEdit = mode === "edit";
 
   // Leave types (for select)
   const { data: leaveTypes, isLoading: typesLoading } = useQuery({
@@ -151,10 +165,10 @@ export function LeaveRequestForm({ onSuccess, onCancel }: LeaveRequestFormProps)
     staleTime: 5 * 60_000,
   });
 
-  // Form
+  // Form — edit mode pre-fills từ initialValues (parent chỉ mount form SAU KHI đơn đã fetch xong).
   const form = useForm<LeaveFormValues>({
     resolver: zodResolver(leaveFormSchema),
-    defaultValues: EMPTY_LEAVE_FORM,
+    defaultValues: isEdit && initialValues ? initialValues : EMPTY_LEAVE_FORM,
     mode: "onBlur",
   });
 
@@ -213,7 +227,7 @@ export function LeaveRequestForm({ onSuccess, onCancel }: LeaveRequestFormProps)
     }
   }, [durationType, isHalfDay, isHourly, setValue, watch]);
 
-  // Submit handler
+  // Submit handler — create: POST /leave/requests. edit: PATCH /leave/requests/:id (Draft-only).
   const createMutation = useMutation({
     mutationFn: (values: LeaveFormValues) =>
       leaveApi.createDraft(toCreateDraftBody(values) as Parameters<typeof leaveApi.createDraft>[0]),
@@ -224,6 +238,22 @@ export function LeaveRequestForm({ onSuccess, onCancel }: LeaveRequestFormProps)
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: (values: LeaveFormValues) =>
+      leaveApi.updateDraft(
+        requestId as string,
+        toUpdateDraftBody(values) as Parameters<typeof leaveApi.updateDraft>[1],
+      ),
+    onSuccess: (result) => {
+      for (const queryKey of leaveInvalidation.updateDraft(result.id)) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+      onSuccess(result.id, result.status);
+    },
+  });
+
+  const activeMutation = isEdit ? updateMutation : createMutation;
+
   const fieldError = useCallback(
     (err: { message?: string } | undefined): string | undefined =>
       err ? t(err.message ?? "", { defaultValue: err.message ?? "" }) : undefined,
@@ -232,6 +262,9 @@ export function LeaveRequestForm({ onSuccess, onCancel }: LeaveRequestFormProps)
 
   function mapApiError(err: unknown): string {
     if (err instanceof ApiError) {
+      // Edit-only: đơn không còn Draft (đã bị gửi/hủy ở tab/phiên khác) hoặc không tìm thấy (404 own-scope).
+      if (isEdit && err.code === "LEAVE-ERR-INVALID-STATE") return t("form.errors.draftLocked");
+      if (isEdit && err.status === 404) return t("form.errors.notFoundDraft");
       if (err.status === 403) return t("form.errors.forbidden");
       if (err.status === 409) {
         // Could be overlap OR balance
@@ -249,7 +282,7 @@ export function LeaveRequestForm({ onSuccess, onCancel }: LeaveRequestFormProps)
 
   async function onSubmit(values: LeaveFormValues) {
     try {
-      await createMutation.mutateAsync(values);
+      await activeMutation.mutateAsync(values);
     } catch (err) {
       // Map server overlap / balance errors onto form fields
       if (err instanceof ApiError && err.status === 409) {
@@ -264,7 +297,7 @@ export function LeaveRequestForm({ onSuccess, onCancel }: LeaveRequestFormProps)
     }
   }
 
-  const globalError = createMutation.error ? mapApiError(createMutation.error) : null;
+  const globalError = activeMutation.error ? mapApiError(activeMutation.error) : null;
 
   return (
     <form
@@ -468,23 +501,35 @@ export function LeaveRequestForm({ onSuccess, onCancel }: LeaveRequestFormProps)
           </CardContent>
         </Card>
 
-        {/* Actions */}
+        {/* Actions — edit mode: chỉ 1 nút "Lưu thay đổi" (PATCH), disable khi form chưa dirty. */}
         <div className="flex items-center justify-end gap-3">
           <Button type="button" variant="ghost" onClick={onCancel} disabled={isSubmitting}>
             {t("form.buttons.cancel")}
           </Button>
-          <Button
-            type="submit"
-            variant="outline"
-            disabled={isSubmitting}
-            onClick={() => setValue("submitNow", false)}
-          >
-            {isSubmitting ? t("form.buttons.saving") : t("form.buttons.saveDraft")}
-          </Button>
-          <Button type="submit" disabled={isSubmitting} onClick={() => setValue("submitNow", true)}>
-            <CalendarDays className="mr-2 h-4 w-4" />
-            {isSubmitting ? t("form.buttons.submitting") : t("form.buttons.submit")}
-          </Button>
+          {isEdit ? (
+            <Button type="submit" disabled={isSubmitting || !formState.isDirty}>
+              {isSubmitting ? t("form.buttons.saving") : t("form.buttons.saveChanges")}
+            </Button>
+          ) : (
+            <>
+              <Button
+                type="submit"
+                variant="outline"
+                disabled={isSubmitting}
+                onClick={() => setValue("submitNow", false)}
+              >
+                {isSubmitting ? t("form.buttons.saving") : t("form.buttons.saveDraft")}
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                onClick={() => setValue("submitNow", true)}
+              >
+                <CalendarDays className="mr-2 h-4 w-4" />
+                {isSubmitting ? t("form.buttons.submitting") : t("form.buttons.submit")}
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </form>

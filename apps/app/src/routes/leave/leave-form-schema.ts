@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { LeaveRequestDetailView } from "@mediaos/contracts";
 import { LEAVE_DURATION_TYPE, LEAVE_HALF_DAY_SESSION } from "./constants";
 
 // Clock-time regex (HH:MM)
@@ -133,6 +134,54 @@ export function toCreateDraftBody(values: LeaveFormValues): {
     handoverNote: values.handoverNote || undefined,
     contactDuringLeave: values.contactDuringLeave || undefined,
     submitNow: values.submitNow,
+  };
+}
+
+/** Chuyển form values → body PATCH /leave/requests/:id (S3-FE-LEAVE-3 — sửa đơn nháp, KHÔNG có submitNow). */
+export function toUpdateDraftBody(values: LeaveFormValues): {
+  leaveTypeId: string;
+  durationType: string;
+  startDate: string;
+  endDate: string;
+  halfDaySession?: string;
+  startTime?: string;
+  endTime?: string;
+  reason?: string;
+  handoverNote?: string;
+  contactDuringLeave?: string;
+} {
+  return {
+    leaveTypeId: values.leaveTypeId,
+    durationType: values.durationType,
+    startDate: values.startDate,
+    endDate: values.endDate,
+    halfDaySession: values.halfDaySession,
+    startTime: values.startTime,
+    endTime: values.endTime,
+    reason: values.reason || undefined,
+    handoverNote: values.handoverNote || undefined,
+    contactDuringLeave: values.contactDuringLeave || undefined,
+  };
+}
+
+/**
+ * Chuyển 1 đơn nháp (GET /leave/me/requests/:id) → form values để pre-fill form sửa (S3-FE-LEAVE-3).
+ * Server-authoritative: chỉ đọc lại field mà form cần — KHÔNG bịa field form không có trong contract.
+ */
+export function detailToFormValues(detail: LeaveRequestDetailView): LeaveFormValues {
+  return {
+    leaveTypeId: detail.leaveTypeId,
+    durationType: (detail.durationType ??
+      LEAVE_DURATION_TYPE.FULL_DAY) as LeaveFormValues["durationType"],
+    startDate: detail.startDate,
+    endDate: detail.endDate,
+    halfDaySession: (detail.halfDaySession ?? undefined) as LeaveFormValues["halfDaySession"],
+    startTime: detail.startTime ?? undefined,
+    endTime: detail.endTime ?? undefined,
+    reason: detail.reason ?? "",
+    handoverNote: detail.handoverNote ?? "",
+    contactDuringLeave: detail.contactDuringLeave ?? "",
+    submitNow: false,
   };
 }
 

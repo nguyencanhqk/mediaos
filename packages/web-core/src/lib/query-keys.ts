@@ -152,6 +152,9 @@ export const notificationKeys = {
 
 const attendanceMyRecordsPrefix = [...rootKeys.attendance, "my", "records"] as const;
 const leaveRequestsListPrefix = [...rootKeys.leave, "requests", "list"] as const;
+// Prefix TRUE (KHÔNG gọi leaveKeys.requests.my() không tham số — params slot sẽ là `undefined` và
+// partialMatchKey KHÔNG khớp với key thật có params object, xem leaveInvalidation.updateDraft bên dưới).
+const leaveMyRequestsListPrefix = [...rootKeys.leave, "requests", "my"] as const;
 
 export const attendanceInvalidation = {
   checkIn: () => [attendanceKeys.myToday(), attendanceMyRecordsPrefix] as const,
@@ -166,4 +169,8 @@ export const leaveInvalidation = {
     [leaveRequestsListPrefix, leaveKeys.requests.detail(requestId)] as const,
   reject: (requestId: string) =>
     [leaveRequestsListPrefix, leaveKeys.requests.detail(requestId)] as const,
+  // S3-FE-LEAVE-3: sửa đơn nháp (PATCH /leave/requests/:id) — làm mới "đơn nghỉ của tôi" (mọi biến thể
+  // param'd qua list-prefix) + chi tiết đúng đơn vừa sửa (both /me/requests/:id detail cache).
+  updateDraft: (requestId: string) =>
+    [leaveMyRequestsListPrefix, leaveKeys.requests.detail(requestId)] as const,
 };

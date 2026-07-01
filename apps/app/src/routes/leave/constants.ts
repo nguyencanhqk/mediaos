@@ -94,4 +94,8 @@ export const LEAVE_PATHS = {
   CREATE: "/leave/me/requests/new",
   DETAIL: (id: string) => `/leave/me/requests/${id}`,
   APPROVALS: "/leave/approvals",
+  /** LEAVE-SCREEN-006 — Tất cả đơn nghỉ phép (HR/Admin, data_scope Company/Team theo BE). */
+  ALL_REQUESTS: "/leave/requests",
+  /** LEAVE-SCREEN-002E — Sửa đơn nháp (chỉ khi status='Draft'; PATCH /leave/requests/:id). */
+  EDIT: (id: string) => `/leave/requests/${id}/edit`,
 } as const;

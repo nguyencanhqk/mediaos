@@ -132,6 +132,8 @@ import { MyLeaveRequestsPage } from "@/routes/leave/MyLeaveRequestsPage";
 import { CreateLeaveRequestPage } from "@/routes/leave/CreateLeaveRequestPage";
 import { LeaveRequestDetailPage } from "@/routes/leave/LeaveRequestDetailPage";
 import { LeaveApprovalPage } from "@/routes/leave/LeaveApprovalPage";
+import { AllLeaveRequestsPage } from "@/routes/leave/AllLeaveRequestsPage";
+import { EditLeaveDraftPage } from "@/routes/leave/EditLeaveDraftPage";
 
 // System
 import { UsersPage } from "@/routes/system/UsersPage";
@@ -282,6 +284,14 @@ const leaveApprovalsRoute = makeModuleRoute(
   "LEAVE",
   LeaveApprovalPage,
 );
+// LEAVE-SCREEN-006 — "/leave/requests" static path declared BEFORE "/leave/requests/$requestId/edit"
+// (same parent segment; TanStack Router resolves static-vs-param the same as Express: static first).
+const leaveAllRequestsRoute = makeModuleRoute(
+  "/leave/requests",
+  "leave.all-requests",
+  "LEAVE",
+  AllLeaveRequestsPage,
+);
 
 // Leave create — static "new" segment before "$requestId" param route
 const leaveCreateMeta = getMeta("leave.my-requests");
@@ -305,6 +315,23 @@ const leaveDetailRoute = createRoute({
       leaveDetailMeta,
       "LEAVE",
       <LeaveRequestDetailPage requestId={requestId} />,
+    );
+  },
+});
+
+// Leave edit-draft (LEAVE-SCREEN-002E) — local RouteMeta reusing leave.my-requests (VIEW_OWN); the
+// finer update-draft:leave gate + Draft-only guard runs inside EditLeaveDraftPage (mirrors leaveDetailRoute).
+const leaveEditMeta = getMeta("leave.my-requests");
+const leaveEditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/leave/requests/$requestId/edit",
+  beforeLoad: authGuard,
+  component: () => {
+    const { requestId } = leaveEditRoute.useParams();
+    return buildModuleRouteContent(
+      leaveEditMeta,
+      "LEAVE",
+      <EditLeaveDraftPage requestId={requestId} />,
     );
   },
 });
@@ -397,6 +424,8 @@ const routeTree = rootRoute.addChildren([
   leaveCreateRoute,
   leaveDetailRoute,
   leaveApprovalsRoute,
+  leaveAllRequestsRoute,
+  leaveEditRoute,
   tasksRoute,
   tasksMyTasksRoute,
   notificationsRoute,

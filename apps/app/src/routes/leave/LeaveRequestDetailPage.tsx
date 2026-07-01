@@ -2,9 +2,18 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, RefreshCw, CheckCircle2, Clock, XCircle, Ban, RotateCcw } from "lucide-react";
+import {
+  ArrowLeft,
+  RefreshCw,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  Ban,
+  RotateCcw,
+  Pencil,
+} from "lucide-react";
 import type { LeaveRequestDetailView, LeaveRequestApprovalView } from "@mediaos/contracts";
-import { leaveApi, leaveKeys, useCan, ApiError } from "@mediaos/web-core";
+import { leaveApi, leaveKeys, useCan, PermissionGate, ApiError } from "@mediaos/web-core";
 import { PageHeader, EmptyState, Button, Card, CardContent, Badge } from "@mediaos/ui";
 import { LEAVE_ENGINE_PAIRS, LEAVE_PATHS, LEAVE_STATUS, type LeaveStatus } from "./constants";
 
@@ -395,16 +404,35 @@ export function LeaveRequestDetailPage({ requestId }: LeaveRequestDetailPageProp
       </Card>
 
       {/* Actions */}
-      {canCancel && (
-        <div className="flex justify-end">
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setShowCancelDialog(true)}
-            disabled={cancelMutation.isPending}
-          >
-            {t("detail.actions.cancel")}
-          </Button>
+      {(req.status === LEAVE_STATUS.DRAFT || canCancel) && (
+        <div className="flex justify-end gap-3">
+          {/* Sửa nháp (LEAVE-SCREEN-002E) — CHỈ khi đơn còn Draft. Gate = update-draft:leave (UI-hint);
+              BE vẫn ép status='Draft' + own-scope thật (409/404) khi PATCH. */}
+          {req.status === LEAVE_STATUS.DRAFT && (
+            <PermissionGate
+              action={LEAVE_ENGINE_PAIRS.UPDATE_DRAFT.action}
+              resourceType={LEAVE_ENGINE_PAIRS.UPDATE_DRAFT.resourceType}
+            >
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void navigate({ to: LEAVE_PATHS.EDIT(req.id) as "/" })}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                {t("detail.actions.editDraft")}
+              </Button>
+            </PermissionGate>
+          )}
+          {canCancel && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowCancelDialog(true)}
+              disabled={cancelMutation.isPending}
+            >
+              {t("detail.actions.cancel")}
+            </Button>
+          )}
         </div>
       )}
 

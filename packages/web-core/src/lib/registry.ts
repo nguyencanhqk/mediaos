@@ -784,6 +784,20 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 42,
   },
+  // S3-FE-LEAVE-3 (LEAVE-SCREEN-006): "Tất cả đơn nghỉ phép" — HR/Admin, CÙNG endpoint+cặp gate với
+  // leave.approvals (GET /leave/requests, view:leave SENSITIVE, mig 0455); khác approvals ở chỗ mặc định
+  // hiển thị MỌI trạng thái (không chỉ Pending) + thêm bộ lọc phòng ban (client-side).
+  {
+    routeKey: "leave.all-requests",
+    path: "/leave/requests",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "LEAVE",
+    screenCode: "LEAVE-SCREEN-006",
+    titleKey: "routeTitle.leaveAllRequests",
+    requiredAnyPermissions: ["LEAVE.REQUEST.VIEW"],
+    showInSidebar: true,
+    order: 43,
+  },
 
   // Tasks
   {

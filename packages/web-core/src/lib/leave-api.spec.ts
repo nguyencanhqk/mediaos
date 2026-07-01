@@ -76,3 +76,34 @@ describe("leaveApi — management/approval endpoints (URL + method + Zod validat
     expect(JSON.parse(opts?.body ?? "{}")).toEqual({ reason: "thiếu chứng từ" });
   });
 });
+
+// ── updateDraft (S3-FE-LEAVE-3 — sửa đơn nháp) ─────────────────────────────────
+
+describe("leaveApi.updateDraft — PATCH /leave/requests/:id (URL + method + Zod validator)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.apiFetch).mockReset();
+    vi.mocked(apiClient.apiFetch).mockResolvedValue({} as never);
+  });
+
+  it("PATCH /leave/requests/:id + detail schema validator + body server-authoritative (KHÔNG company/status)", async () => {
+    await leaveApi.updateDraft("lr-9", {
+      leaveTypeId: "lt-1",
+      startDate: "2026-07-10",
+      endDate: "2026-07-11",
+      durationType: "FullDay",
+      reason: "Việc gia đình",
+    });
+    const [url, schema, opts] = lastCall();
+    expect(url).toBe("/leave/requests/lr-9");
+    expect(schema).toBe(leaveRequestDetailViewSchema);
+    expect(opts?.method).toBe("PATCH");
+    const body = JSON.parse(opts?.body ?? "{}");
+    expect(body).toMatchObject({
+      leaveTypeId: "lt-1",
+      startDate: "2026-07-10",
+      endDate: "2026-07-11",
+    });
+    expect(opts?.body ?? "").not.toContain("company");
+    expect(opts?.body ?? "").not.toContain("status");
+  });
+});
