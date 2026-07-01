@@ -131,6 +131,7 @@ import { MyLeaveBalancePage } from "@/routes/leave/MyLeaveBalancePage";
 import { MyLeaveRequestsPage } from "@/routes/leave/MyLeaveRequestsPage";
 import { CreateLeaveRequestPage } from "@/routes/leave/CreateLeaveRequestPage";
 import { LeaveRequestDetailPage } from "@/routes/leave/LeaveRequestDetailPage";
+import { LeaveApprovalPage } from "@/routes/leave/LeaveApprovalPage";
 
 // System
 import { UsersPage } from "@/routes/system/UsersPage";
@@ -279,7 +280,7 @@ const leaveApprovalsRoute = makeModuleRoute(
   "/leave/approvals",
   "leave.approvals",
   "LEAVE",
-  ModulePlaceholder,
+  LeaveApprovalPage,
 );
 
 // Leave create — static "new" segment before "$requestId" param route
