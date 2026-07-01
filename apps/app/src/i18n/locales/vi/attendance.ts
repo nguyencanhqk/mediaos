@@ -130,6 +130,104 @@ export default {
     },
   },
 
+  // ── Bảng công toàn công ty (S3-FE-ATT-5) ─────────────────────────────────────
+  company: {
+    title: "Bảng công toàn công ty",
+    description: "Chấm công toàn bộ nhân viên trong công ty",
+    empty: {
+      title: "Không có dữ liệu",
+      description: "Chưa có bản ghi chấm công trong khoảng thời gian này.",
+    },
+    error: {
+      title: "Không thể tải dữ liệu",
+      description: "Có lỗi khi tải bảng công công ty. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem bảng công toàn công ty.",
+    },
+  },
+
+  // ── Ca làm việc (S3-FE-ATT-5) ─────────────────────────────────────────────────
+  shifts: {
+    title: "Ca làm việc",
+    description: "Danh mục ca làm việc của công ty",
+    columns: {
+      code: "Mã ca",
+      name: "Tên ca",
+      type: "Loại ca",
+      time: "Giờ làm việc",
+      requiredMinutes: "Số phút yêu cầu",
+      status: "Trạng thái",
+    },
+    empty: {
+      title: "Chưa có ca làm việc",
+      description: "Công ty chưa cấu hình ca làm việc nào.",
+    },
+    error: {
+      title: "Không thể tải dữ liệu",
+      description: "Có lỗi khi tải danh mục ca làm việc. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem ca làm việc.",
+    },
+  },
+
+  // ── Gán ca (S3-FE-ATT-5) ───────────────────────────────────────────────────────
+  shiftAssignments: {
+    title: "Gán ca",
+    description: "Danh sách gán ca theo công ty / phòng ban / nhân viên",
+    columns: {
+      shift: "Ca làm việc",
+      scope: "Phạm vi",
+      target: "Đối tượng",
+      effectiveFrom: "Hiệu lực từ",
+      effectiveTo: "Hiệu lực đến",
+      priority: "Độ ưu tiên",
+      status: "Trạng thái",
+    },
+    empty: {
+      title: "Chưa có gán ca",
+      description: "Công ty chưa cấu hình gán ca nào.",
+    },
+    error: {
+      title: "Không thể tải dữ liệu",
+      description: "Có lỗi khi tải danh sách gán ca. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem gán ca.",
+    },
+  },
+
+  // ── Rule chấm công (S3-FE-ATT-5) ───────────────────────────────────────────────
+  rules: {
+    title: "Rule chấm công",
+    description: "Danh sách rule chấm công theo phạm vi",
+    columns: {
+      code: "Mã rule",
+      name: "Tên rule",
+      scope: "Phạm vi",
+      effectiveFrom: "Hiệu lực từ",
+      effectiveTo: "Hiệu lực đến",
+      priority: "Độ ưu tiên",
+      status: "Trạng thái",
+    },
+    empty: {
+      title: "Chưa có rule chấm công",
+      description: "Công ty chưa cấu hình rule chấm công nào.",
+    },
+    error: {
+      title: "Không thể tải dữ liệu",
+      description: "Có lỗi khi tải danh sách rule chấm công. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem rule chấm công.",
+    },
+  },
+
   // ── Chi tiết bản ghi (ATT-SCREEN-004) ────────────────────────────────────────
   detail: {
     title: "Chi tiết chấm công",

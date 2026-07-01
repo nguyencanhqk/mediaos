@@ -112,6 +112,38 @@ export const ATT_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 40,
     requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_COMPANY"],
   },
+  // S3-FE-ATT-5 — ca làm việc / gán ca / rule (admin, read-only minimum). Gate = CẶP ENGINE THỰC trực
+  // tiếp (KHÔNG FE code qua PERMISSION_CODE_TO_PAIR — tránh drift, cùng kỹ thuật system.login-logs).
+  {
+    sidebarKey: "att.shifts",
+    moduleCode: "ATT",
+    label: "Ca làm việc",
+    path: "/attendance/shifts",
+    icon: "clock",
+    group: "management",
+    order: 50,
+    requiredAnyPermissions: ["view:shift"],
+  },
+  {
+    sidebarKey: "att.shift-assignments",
+    moduleCode: "ATT",
+    label: "Gán ca",
+    path: "/attendance/shift-assignments",
+    icon: "calendar-clock",
+    group: "management",
+    order: 60,
+    requiredAnyPermissions: ["view:shift-assignment"],
+  },
+  {
+    sidebarKey: "att.rules",
+    moduleCode: "ATT",
+    label: "Rule chấm công",
+    path: "/attendance/rules",
+    icon: "shield-check",
+    group: "management",
+    order: 70,
+    requiredAnyPermissions: ["view:attendance-rule"],
+  },
 ];
 
 // ---------------------------------------------------------------------------

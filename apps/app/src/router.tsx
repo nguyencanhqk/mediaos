@@ -124,7 +124,11 @@ import { MyProfilePage } from "@/routes/hr/me/MyProfilePage";
 import { AttendanceTodayPage } from "@/routes/attendance/AttendanceTodayPage";
 import { MyAttendanceRecordsPage } from "@/routes/attendance/MyAttendanceRecordsPage";
 import { TeamAttendanceRecordsPage } from "@/routes/attendance/TeamAttendanceRecordsPage";
+import { AttendanceCompanyRecordsPage } from "@/routes/attendance/AttendanceCompanyRecordsPage";
 import { AttendanceRecordDetailPage } from "@/routes/attendance/AttendanceRecordDetailPage";
+import { AttendanceShiftsPage } from "@/routes/attendance/AttendanceShiftsPage";
+import { AttendanceShiftAssignmentsPage } from "@/routes/attendance/AttendanceShiftAssignmentsPage";
+import { AttendanceRulesPage } from "@/routes/attendance/AttendanceRulesPage";
 
 // Leave
 import { MyLeaveBalancePage } from "@/routes/leave/MyLeaveBalancePage";
@@ -232,13 +236,28 @@ const attTeamRecordsRoute = makeModuleRoute(
   "ATT",
   TeamAttendanceRecordsPage,
 );
-// Company-wide records (att.records) — out-of-scope S3-FE-ATT-5; remains placeholder.
+// Company-wide records (att.records) — S3-FE-ATT-5.
 const attRecordsRoute = makeModuleRoute(
   "/attendance/records",
   "att.records",
   "ATT",
-  ModulePlaceholder,
+  AttendanceCompanyRecordsPage,
 );
+
+// Shift / shift-assignment / rule (admin, read-only minimum) — S3-FE-ATT-5. CRUD carry-over CO-S4-007.
+const attShiftsRoute = makeModuleRoute(
+  "/attendance/shifts",
+  "att.shifts",
+  "ATT",
+  AttendanceShiftsPage,
+);
+const attShiftAssignmentsRoute = makeModuleRoute(
+  "/attendance/shift-assignments",
+  "att.shift-assignments",
+  "ATT",
+  AttendanceShiftAssignmentsPage,
+);
+const attRulesRoute = makeModuleRoute("/attendance/rules", "att.rules", "ATT", AttendanceRulesPage);
 
 // Attendance record detail — local RouteMeta (no sidebar entry).
 // ANY of VIEW_OWN/VIEW_TEAM/VIEW_COMPANY grants route access; actual 403/404 from server.
@@ -420,6 +439,9 @@ const routeTree = rootRoute.addChildren([
   attMyRecordsRoute,
   attTeamRecordsRoute,
   attRecordsRoute,
+  attShiftsRoute,
+  attShiftAssignmentsRoute,
+  attRulesRoute,
   attRecordDetailRoute,
   leaveRoute,
   leaveMyRequestsRoute,

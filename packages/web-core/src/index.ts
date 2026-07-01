@@ -85,7 +85,12 @@ export { twoFactorApi } from "./lib/two-factor-api";
 export { notificationApi } from "./lib/notification-api";
 export { hrApi } from "./lib/hr-api";
 export { leaveApi } from "./lib/leave-api";
-export { attendanceApi } from "./lib/attendance-api";
+export {
+  attendanceApi,
+  type AttShiftListItem,
+  type AttShiftAssignmentListItem,
+  type AttRuleListItem,
+} from "./lib/attendance-api";
 
 // Permission
 export { useCan, useCanExact } from "./hooks/use-can";

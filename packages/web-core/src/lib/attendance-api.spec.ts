@@ -79,4 +79,25 @@ describe("attendanceApi — scoped record endpoints (URL + Zod validator)", () =
     expect(url).toBe("/attendance/check-out");
     expect(opts?.method).toBe("POST");
   });
+
+  // ── S3-FE-ATT-5: Shift / Shift-assignment / Rule (read-only minimum) ──────
+
+  it("listShifts → GET /attendance/shifts + schema validator array", async () => {
+    await attendanceApi.listShifts();
+    const [url, schema] = lastCall();
+    expect(url).toBe("/attendance/shifts");
+    expect(typeof schema.parse).toBe("function");
+  });
+
+  it("listShiftAssignments → GET /attendance/shift-assignments", async () => {
+    await attendanceApi.listShiftAssignments();
+    const [url] = lastCall();
+    expect(url).toBe("/attendance/shift-assignments");
+  });
+
+  it("listRules → GET /attendance/rules", async () => {
+    await attendanceApi.listRules();
+    const [url] = lastCall();
+    expect(url).toBe("/attendance/rules");
+  });
 });

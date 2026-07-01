@@ -746,6 +746,43 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 33,
   },
+  // S3-FE-ATT-5 — ca làm việc / gán ca / rule chấm công (Company, admin, read-only minimum).
+  // Gate = CẶP ENGINE THỰC trực tiếp (view:shift / view:shift-assignment / view:attendance-rule, nguồn
+  // attendance-permissions.const.ts) — KHÔNG qua PERMISSION_CODE_TO_PAIR (tránh drift đã gặp ở
+  // S1-FND-MODULE / S3-FE-wave2), cùng kỹ thuật system.login-logs (AUDIT_LOG_VIEW_PERMISSION).
+  {
+    routeKey: "att.shifts",
+    path: "/attendance/shifts",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ATT",
+    screenCode: "ATT-SCREEN-SHIFTS",
+    titleKey: "routeTitle.attShifts",
+    requiredAnyPermissions: ["view:shift"],
+    showInSidebar: true,
+    order: 34,
+  },
+  {
+    routeKey: "att.shift-assignments",
+    path: "/attendance/shift-assignments",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ATT",
+    screenCode: "ATT-SCREEN-SHIFT-ASSIGNMENTS",
+    titleKey: "routeTitle.attShiftAssignments",
+    requiredAnyPermissions: ["view:shift-assignment"],
+    showInSidebar: true,
+    order: 35,
+  },
+  {
+    routeKey: "att.rules",
+    path: "/attendance/rules",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ATT",
+    screenCode: "ATT-SCREEN-RULES",
+    titleKey: "routeTitle.attRules",
+    requiredAnyPermissions: ["view:attendance-rule"],
+    showInSidebar: true,
+    order: 36,
+  },
 
   // Leave
   {

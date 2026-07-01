@@ -457,6 +457,37 @@ describe("ROUTE_REGISTRY — ATT scoped routes", () => {
     expect(meta?.requiredScopes).toBeUndefined();
   });
 
+  // S3-FE-ATT-5 — shift/shift-assignment/rule: gate = CẶP ENGINE THỰC trực tiếp (KHÔNG FE code qua
+  // PERMISSION_CODE_TO_PAIR — tránh drift). Deny-path: session không có cặp này → SHOW_403.
+  it("att.shifts gate cặp engine thực view:shift", () => {
+    const meta = getRouteMeta("att.shifts");
+    expect(meta?.path).toBe("/attendance/shifts");
+    expect(meta?.requiredAnyPermissions).toEqual(["view:shift"]);
+    expect(meta?.requiredScopes).toBeUndefined();
+  });
+
+  it("att.shift-assignments gate cặp engine thực view:shift-assignment", () => {
+    const meta = getRouteMeta("att.shift-assignments");
+    expect(meta?.path).toBe("/attendance/shift-assignments");
+    expect(meta?.requiredAnyPermissions).toEqual(["view:shift-assignment"]);
+  });
+
+  it("att.rules gate cặp engine thực view:attendance-rule", () => {
+    const meta = getRouteMeta("att.rules");
+    expect(meta?.path).toBe("/attendance/rules");
+    expect(meta?.requiredAnyPermissions).toEqual(["view:attendance-rule"]);
+  });
+
+  it("deny-path: session thiếu view:shift / view:shift-assignment / view:attendance-rule → SHOW_403", () => {
+    const session = makeSession(ATT_LEAVE_SESSION());
+    const c = createPermissionChecker(EMPLOYEE_PERMS);
+    expect(evaluateRouteAccess(session, getRouteMeta("att.shifts")!, c).action).toBe("SHOW_403");
+    expect(evaluateRouteAccess(session, getRouteMeta("att.shift-assignments")!, c).action).toBe(
+      "SHOW_403",
+    );
+    expect(evaluateRouteAccess(session, getRouteMeta("att.rules")!, c).action).toBe("SHOW_403");
+  });
+
   // S3-FE-LEAVE-2: leave.approvals gate = CHỈ view:leave (LEAVE.REQUEST.VIEW), khớp BE GET /leave/requests
   // (VIEW_LEAVE). KHÔNG còn LEAVE.REQUEST.APPROVE ở cổng route (approve chỉ gate 2 nút trong page).
   it("leave.approvals gate CHỈ LEAVE.REQUEST.VIEW (KHÔNG APPROVE ở cổng route)", () => {

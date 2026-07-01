@@ -15,6 +15,10 @@ export const ATT_ENGINE_PAIRS = {
   ADJUST_DIRECT: { action: "adjust-direct", resourceType: "attendance" },
   CREATE_OWN_ADJUSTMENT: { action: "create-own", resourceType: "adjustment" },
   VIEW_OWN_ADJUSTMENT: { action: "view-own", resourceType: "adjustment" },
+  // S3-FE-ATT-5 — ca làm việc / gán ca / rule (admin, read-only minimum).
+  SHIFT_VIEW: { action: "view", resourceType: "shift" },
+  SHIFT_ASSIGNMENT_VIEW: { action: "view", resourceType: "shift-assignment" },
+  RULE_VIEW: { action: "view", resourceType: "attendance-rule" },
 } as const;
 
 /**
@@ -49,6 +53,9 @@ export const ATT_PATHS = {
   TEAM_RECORDS: "/attendance/team-records",
   RECORDS: "/attendance/records",
   RECORD_DETAIL: (id: string) => `/attendance/records/${id}`,
+  SHIFTS: "/attendance/shifts",
+  SHIFT_ASSIGNMENTS: "/attendance/shift-assignments",
+  RULES: "/attendance/rules",
 } as const;
 
 /** Page size mặc định cho danh sách bảng công */
