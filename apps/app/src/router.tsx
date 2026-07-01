@@ -132,6 +132,8 @@ import { MyLeaveRequestsPage } from "@/routes/leave/MyLeaveRequestsPage";
 import { CreateLeaveRequestPage } from "@/routes/leave/CreateLeaveRequestPage";
 import { LeaveRequestDetailPage } from "@/routes/leave/LeaveRequestDetailPage";
 import { LeaveApprovalPage } from "@/routes/leave/LeaveApprovalPage";
+import { AllLeaveRequestsPage } from "@/routes/leave/AllLeaveRequestsPage";
+import { EditLeaveDraftPage } from "@/routes/leave/EditLeaveDraftPage";
 
 // System
 import { UsersPage } from "@/routes/system/UsersPage";
@@ -283,6 +285,33 @@ const leaveApprovalsRoute = makeModuleRoute(
   LeaveApprovalPage,
 );
 
+// S3-FE-LEAVE-3 — LEAVE-SCREEN-006 (tất cả đơn nghỉ, HR/Admin).
+const leaveAllRequestsRoute = makeModuleRoute(
+  "/leave/requests",
+  "leave.all-requests",
+  "LEAVE",
+  AllLeaveRequestsPage,
+);
+
+// Leave edit draft — static "$requestId/edit" ranks BELOW the exact "/leave/requests" list route
+// (TanStack router disambiguates static-segment routes from param routes automatically). Reuses
+// leave.my-requests meta (route-level gate = LEAVE.REQUEST.VIEW_OWN, đủ để render workspace; gate
+// TINH hơn — update-draft:leave — áp trong EditLeaveDraftPage, khớp pattern hrEmployeeEditRoute).
+const leaveEditMeta = getMeta("leave.my-requests");
+const leaveEditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/leave/requests/$requestId/edit",
+  beforeLoad: authGuard,
+  component: () => {
+    const { requestId } = leaveEditRoute.useParams();
+    return buildModuleRouteContent(
+      leaveEditMeta,
+      "LEAVE",
+      <EditLeaveDraftPage requestId={requestId} />,
+    );
+  },
+});
+
 // Leave create — static "new" segment before "$requestId" param route
 const leaveCreateMeta = getMeta("leave.my-requests");
 const leaveCreateRoute = createRoute({
@@ -397,6 +426,8 @@ const routeTree = rootRoute.addChildren([
   leaveCreateRoute,
   leaveDetailRoute,
   leaveApprovalsRoute,
+  leaveAllRequestsRoute,
+  leaveEditRoute,
   tasksRoute,
   tasksMyTasksRoute,
   notificationsRoute,

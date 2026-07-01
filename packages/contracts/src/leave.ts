@@ -496,6 +496,8 @@ export const pendingLeaveRequestListQuerySchema = z.object({
   leaveTypeId: z.string().uuid().optional(),
   /** Lọc theo employee (UUID của employee_profiles.id). */
   employeeId: z.string().uuid().optional(),
+  /** Lọc theo phòng ban (UUID của org_units.id = employee_profiles.org_unit_id). Server-side, nằm TRONG scope. */
+  departmentId: z.string().uuid().optional(),
   /** [fromDate, toDate] inclusive trên start_date. */
   fromDate: z.string().date().optional(),
   toDate: z.string().date().optional(),
