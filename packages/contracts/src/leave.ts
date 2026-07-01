@@ -463,3 +463,92 @@ export const leaveRequestListResponseSchema = z.object({
   }),
 });
 export type LeaveRequestListResponse = z.infer<typeof leaveRequestListResponseSchema>;
+
+// ─── S3-LEAVE-BE-3: approval workflow (approve / reject / management list) ────────
+//
+// ADDITIVE — KHÔNG sửa schema BE-2 trở về trước. Các schema dưới đây phục vụ
+// luồng HR/manager duyệt / từ chối đơn + danh sách quản lý (GET /leave/requests).
+// Body server-authoritative: status/approvedBy/employeeId/companyId client gửi đều
+// BỊ Zod strip (object mặc định strip key lạ) — resolve actor ở server.
+
+/** POST /leave/requests/:id/approve — HR/manager duyệt đơn Pending → Approved. note tuỳ chọn. */
+export const approveLeaveRequestSchema = z.object({
+  note: z.string().max(1000).optional(),
+});
+export type ApproveLeaveRequest = z.infer<typeof approveLeaveRequestSchema>;
+
+/** POST /leave/requests/:id/reject — HR/manager từ chối đơn Pending → Rejected. reason BẮT BUỘC (min 1 ký tự). */
+export const rejectLeaveRequestSchema = z.object({
+  reason: z.string().min(1, "Lý do từ chối là bắt buộc").max(2000),
+});
+export type RejectLeaveRequest = z.infer<typeof rejectLeaveRequestSchema>;
+
+/**
+ * GET /leave/requests — query danh sách đơn nghỉ cho HR/manager. status mặc định 'Pending'
+ * (mặt quản lý — phê duyệt đơn chờ). Hỗ trợ phân trang page/pageSize + bộ lọc tiêu chuẩn.
+ * Zod strip bảo đảm client không truyền được companyId/approvedBy vào tầng query.
+ */
+export const pendingLeaveRequestListQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().positive().max(100).default(20),
+  /** Lọc theo trạng thái. Mặc định 'Pending' — trang quản lý. */
+  status: z.string().min(1).max(32).default("Pending"),
+  leaveTypeId: z.string().uuid().optional(),
+  /** Lọc theo employee (UUID của employee_profiles.id). */
+  employeeId: z.string().uuid().optional(),
+  /** [fromDate, toDate] inclusive trên start_date. */
+  fromDate: z.string().date().optional(),
+  toDate: z.string().date().optional(),
+});
+export type PendingLeaveRequestListQuery = z.infer<typeof pendingLeaveRequestListQuerySchema>;
+
+/**
+ * 1 dòng danh sách quản lý đơn nghỉ (GET /leave/requests). Gồm thông tin đơn + requester
+ * (employeeCode/fullName/department từ employee_profiles + org_units) + kết quả phê duyệt
+ * (nullable cho đơn Pending). approvedBy/rejectedBy là UUID — FE tự resolve tên khi cần.
+ */
+export const leaveManagementListItemViewSchema = z.object({
+  // ── Thông tin đơn nghỉ ──────────────────────────────────────────────────────
+  id: z.string().uuid(),
+  leaveTypeId: z.string().uuid(),
+  leaveTypeCode: z.string().nullable(),
+  leaveTypeName: z.string().nullable(),
+  startDate: z.string().date(),
+  endDate: z.string().date(),
+  durationType: z.string().nullable(),
+  totalDays: z.number(),
+  totalHours: z.number().nullable(),
+  status: z.string(),
+  reason: z.string().nullable(),
+  balanceEffectStatus: z.string().nullable(),
+  submittedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  // ── Thông tin người gửi (enriched: employee_profiles + users + org_units) ──
+  requester: z.object({
+    userId: z.string().uuid(),
+    employeeCode: z.string().nullable(),
+    fullName: z.string().nullable(),
+    department: z.string().nullable(),
+  }),
+  // ── Kết quả phê duyệt (nullable khi đơn Pending / Draft) ────────────────────
+  approvedBy: z.string().uuid().nullable(),
+  approvedAt: z.string().datetime().nullable(),
+  rejectedBy: z.string().uuid().nullable(),
+  rejectedAt: z.string().datetime().nullable(),
+  rejectionReason: z.string().nullable(),
+});
+export type LeaveManagementListItemView = z.infer<typeof leaveManagementListItemViewSchema>;
+
+/** Envelope danh sách quản lý ({items, meta} — khớp pattern leaveRequestListResponseSchema). */
+export const leaveManagementListResponseSchema = z.object({
+  items: z.array(leaveManagementListItemViewSchema),
+  meta: z.object({
+    page: z.number().int().positive(),
+    pageSize: z.number().int().positive(),
+    total: z.number().int().nonnegative(),
+    totalPages: z.number().int().nonnegative(),
+    hasNext: z.boolean(),
+    hasPrev: z.boolean(),
+  }),
+});
+export type LeaveManagementListResponse = z.infer<typeof leaveManagementListResponseSchema>;
