@@ -5,6 +5,8 @@ import { PermissionModule } from "../../permission/permission.module";
 import { PermissionService } from "../../permission/permission.service";
 import { StorageModule } from "../../storage/storage.module";
 import { SettingsModule } from "../settings/settings.module";
+import { FileAccessLogReadService } from "./file-access-log-read.service";
+import { FileAccessLogController } from "./file-access-log.controller";
 import { FileAccessLogService } from "./file-access-log.service";
 import { FileLinkRepository } from "./file-link.repository";
 import { FilePolicyService } from "./file-policy.service";
@@ -29,11 +31,13 @@ import { FileService } from "./files.service";
  */
 @Module({
   imports: [DatabaseModule, PermissionModule, EventsModule, StorageModule, SettingsModule],
-  controllers: [FilesController],
+  // S2-FND-BE-3 (L4) — FileAccessLogController: GET-only viewer (APPEND-ONLY, KHÔNG mutate route). ADDITIVE.
+  controllers: [FilesController, FileAccessLogController],
   providers: [
     FileRepository,
     FileLinkRepository,
     FileAccessLogService,
+    FileAccessLogReadService,
     FileService,
     {
       provide: FilePolicyService,
