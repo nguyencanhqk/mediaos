@@ -29,6 +29,12 @@ vi.mock("@mediaos/web-core", () => ({
     },
     types: { list: (p?: unknown) => ["leave", "types", "list", p] },
   },
+  hrApi: {
+    listDepartments: vi.fn().mockResolvedValue([]),
+  },
+  hrKeys: {
+    departments: { list: () => ["hr", "departments", "list"] },
+  },
 }));
 
 vi.mock("@mediaos/ui", async (importOriginal) => {
@@ -53,11 +59,17 @@ vi.mock("@mediaos/ui", async (importOriginal) => {
   };
 });
 
-import { useCan, leaveApi } from "@mediaos/web-core";
+import { useCan, leaveApi, hrApi } from "@mediaos/web-core";
 import { AllLeaveRequestsPage } from "./AllLeaveRequestsPage";
 
 const mockUseCan = useCan as ReturnType<typeof vi.fn>;
 const mockListRequests = leaveApi.listRequests as ReturnType<typeof vi.fn>;
+const mockListDepartments = hrApi.listDepartments as ReturnType<typeof vi.fn>;
+
+const DEPARTMENTS = [
+  { id: "dept-1", name: "Kỹ thuật", code: "TECH", parentId: null },
+  { id: "dept-2", name: "Kinh doanh", code: "SALES", parentId: null },
+];
 
 const PENDING_ITEM = {
   id: "req-1",
@@ -115,6 +127,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockUseCan.mockReturnValue(true);
   (leaveApi.listTypes as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+  mockListDepartments.mockResolvedValue(DEPARTMENTS);
 });
 
 // ── Gate ──────────────────────────────────────────────────────────────────────
@@ -187,6 +200,25 @@ describe("AllLeaveRequestsPage — filters (status / kỳ / phòng ban)", () => 
     await waitFor(() =>
       expect(mockListRequests).toHaveBeenLastCalledWith(
         expect.objectContaining({ fromDate: "2026-07-01", toDate: "2026-07-31" }),
+      ),
+    );
+  });
+
+  it("chọn phòng ban → gọi listDepartments để đổ options + gọi lại listRequests với departmentId (server-side, nối GET /leave/requests)", async () => {
+    mockListRequests.mockResolvedValue(LIST_EMPTY);
+    renderPage(buildQC());
+    await waitFor(() => expect(mockListRequests).toHaveBeenCalled());
+    await waitFor(() => expect(mockListDepartments).toHaveBeenCalled());
+
+    const departmentSelect = screen.getByLabelText(/phòng ban/i);
+    // Options đổ từ hrApi.listDepartments() — KHÔNG suy từ items trang hiện tại.
+    expect(screen.getByRole("option", { name: "Kinh doanh" })).toBeTruthy();
+
+    fireEvent.change(departmentSelect, { target: { value: "dept-2" } });
+
+    await waitFor(() =>
+      expect(mockListRequests).toHaveBeenLastCalledWith(
+        expect.objectContaining({ departmentId: "dept-2" }),
       ),
     );
   });

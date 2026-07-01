@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { ClipboardList, RefreshCw } from "lucide-react";
 import type { LeaveManagementListItemView, LeaveTypeView } from "@mediaos/contracts";
-import { leaveApi, leaveKeys, useCan } from "@mediaos/web-core";
+import { leaveApi, leaveKeys, hrApi, hrKeys, useCan } from "@mediaos/web-core";
 import {
   PageHeader,
   DataTable,
@@ -29,9 +29,10 @@ import { LEAVE_ENGINE_PAIRS, LEAVE_STATUS } from "./constants";
  * "tất cả trạng thái" trong 1 lần gọi): dropdown Trạng thái chọn ĐÚNG 1 giá trị mỗi lần, mặc định
  * 'Pending'. TODO(BE): cân nhắc thêm status=ALL hoặc bỏ qua điều kiện khi rỗng nếu nghiệp vụ cần.
  *
- * Bộ lọc "Phòng ban" KHÔNG có query param phía server (GET /leave/requests chưa hỗ trợ departmentId) —
- * lọc phía CLIENT trên danh sách requester.department của TRANG hiện tại (best-effort, không đổi
- * pageSize/total). TODO(BE): thêm departmentId vào PendingLeaveRequestListQuery cho lọc server-side thật.
+ * Bộ lọc "Phòng ban" gọi SERVER-SIDE qua query param `departmentId` (PendingLeaveRequestListQuery,
+ * S3-FE-LEAVE-3-FIX-BE) — repo AND departmentId vào org_unit_id SAU scopeCond, chỉ THU HẸP trong
+ * phạm vi data-scope hiện có (không mở rộng ngoài Team/Department/Company). Options đổ từ
+ * hrApi.listDepartments() (danh mục phòng ban, non-sensitive) — KHÔNG suy từ items trang hiện tại.
  */
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -226,7 +227,7 @@ export function AllLeaveRequestsPage() {
   const [leaveTypeId, setLeaveTypeId] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [departmentFilter, setDepartmentFilter] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
   const [selected, setSelected] = useState<LeaveManagementListItemView | null>(null);
 
   const queryParams = useMemo(
@@ -235,10 +236,11 @@ export function AllLeaveRequestsPage() {
       pageSize: 20,
       status,
       ...(leaveTypeId ? { leaveTypeId } : {}),
+      ...(departmentId ? { departmentId } : {}),
       ...(fromDate ? { fromDate } : {}),
       ...(toDate ? { toDate } : {}),
     }),
-    [page, status, leaveTypeId, fromDate, toDate],
+    [page, status, leaveTypeId, departmentId, fromDate, toDate],
   );
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -255,21 +257,16 @@ export function AllLeaveRequestsPage() {
     enabled: canView,
   });
 
+  const { data: departments } = useQuery({
+    queryKey: hrKeys.departments.list(),
+    queryFn: () => hrApi.listDepartments(),
+    staleTime: 5 * 60_000,
+    enabled: canView,
+  });
+
   const items = data?.items ?? [];
   const meta = data?.meta;
   const totalPages = meta?.totalPages ?? 1;
-
-  // Lọc "Phòng ban" phía CLIENT trên trang hiện tại (server chưa hỗ trợ departmentId — xem ghi chú trên).
-  const departmentOptions = useMemo(
-    () =>
-      Array.from(new Set(items.map((r) => r.requester.department).filter((d): d is string => !!d))),
-    [items],
-  );
-  const visibleItems = useMemo(
-    () =>
-      departmentFilter ? items.filter((r) => r.requester.department === departmentFilter) : items,
-    [items, departmentFilter],
-  );
 
   const columns = useColumns(t, (row) => setSelected(row));
 
@@ -345,15 +342,18 @@ export function AllLeaveRequestsPage() {
           </Select>
 
           <Select
-            value={departmentFilter}
-            onChange={(e) => setDepartmentFilter(e.target.value)}
+            value={departmentId}
+            onChange={(e) => {
+              setDepartmentId(e.target.value);
+              setPage(1);
+            }}
             className="w-44"
             aria-label={t("allRequests.filters.allDepartments")}
           >
             <option value="">{t("allRequests.filters.allDepartments")}</option>
-            {departmentOptions.map((d) => (
-              <option key={d} value={d}>
-                {d}
+            {(departments ?? []).map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
               </option>
             ))}
           </Select>
@@ -383,7 +383,7 @@ export function AllLeaveRequestsPage() {
 
       <DataTable
         columns={columns}
-        data={visibleItems}
+        data={items}
         isLoading={isLoading}
         emptyState={
           <EmptyState
