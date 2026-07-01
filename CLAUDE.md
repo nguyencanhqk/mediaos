@@ -106,7 +106,7 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 | Loại việc | Phát hiện | Model | Plan-step |
 | --- | --- | --- | --- |
-| **Crown-jewel** | `tier:'crown'` HOẶC task khớp: permission/RLS/policy · secret/encrypt/KMS · audit append-only · auth/token · workflow phê duyệt (FSM nghỉ phép/điều chỉnh công) · ADR · **(Phase 2: payroll/payslip)** | **Opus** | ✅ planner (Opus) lập micro-plan trước khi code |
+| **Crown-jewel** | `tier:'crown'` HOẶC task khớp: permission/RLS/policy · secret/encrypt/KMS · audit append-only · auth/token · workflow phê duyệt (FSM nghỉ phép/điều chỉnh công) · ADR · **(Phase 2: payroll/payslip)** | **Opus** (code + review) | ✅ planner **Sonnet 5 + effort `xhigh`** lập micro-plan trước khi code — đổi 2026-07-01 để giảm chi phí; plan vẫn qua `plan-reviewer` đối kháng trước khi cho code chạy, IMPLEMENT/REVIEW vẫn Opus |
 | **Việc thường** (CRUD/UI/docs) | mặc định | **Sonnet** | ❌ code thẳng |
 | **Override tay** | `lane.model` · `skipPlan:true` | dùng đúng giá trị | theo tier |
 

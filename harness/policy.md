@@ -74,7 +74,7 @@ hạ cấp tay bằng `skipPlan:true` + `noReview:true` (hoặc `model:'sonnet'`
 
 ## Routing — mỗi sub-task chọn 4 thứ (⑤)
 
-- **pickModel** (bộ não nào): red→Opus · else Sonnet (KHÔNG Haiku — thận trọng chất lượng, 2026-06-12).
+- **pickModel** (bộ não nào): red→Opus (code + review) · else Sonnet (KHÔNG Haiku — thận trọng chất lượng, 2026-06-12). **Ngoại lệ 2026-07-01:** bước PLAN của crown/red dùng `PLANNER_MODEL = 'sonnet'` (Sonnet 5) + effort `xhigh` thay vì Opus, để giảm chi phí — chỉ đổi phần lập kế hoạch (vẫn qua `plan-reviewer` đối kháng trước khi cho code chạy), IMPLEMENT/REVIEW của crown/red giữ nguyên Opus.
 - **pickEffort** (nghĩ sâu tới đâu — TÁCH BẠCH với model): theo zone (fast→`low` · green/yellow→`medium` · crown→`high`) × stage (PLAN crown→`xhigh` là nơi reasoning trả giá nhất · REVIEW đối kháng→`high`). Override BASE bằng `lane.effort`. Escalation L1: mỗi vòng kẹt (`lane.retry`) +1 nấc TRƯỚC khi ↑ Opus (rẻ hơn nhảy model). Thang: `low<medium<high<xhigh<max`.
 - **pickReviewers** (auto theo domain): db→`database-reviewer` · sec/payroll/audit hoặc gate=FULL→`security-reviewer`+`silent-failure-hunter` · FE→`react-reviewer` · baseline `typescript-reviewer`.
 - **pickSkills**: tĩnh = field `skills` của Work Order (`backlog.mjs`); crown → `santa-method`; mọi lane → `quality-gate`.
