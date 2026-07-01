@@ -2448,7 +2448,7 @@ export const backlog = [
     title:
       "FE ATT Today: AttendanceTodayPage + AttendanceStatusCard + CheckInOutActions + useAttendanceToday/useCheckIn/useCheckOut + disabled reason + invalidate + toast + state",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S3-ATT-BE-1", "S3-FE-REGISTRY-1"],
