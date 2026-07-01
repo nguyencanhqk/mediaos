@@ -295,4 +295,26 @@ describe("AttendanceAdjustmentService — reject + direct deny-paths", () => {
       }),
     ).rejects.toThrow(NotFoundException);
   });
+
+  it("blocks adjust-direct into a locked period → 409 (checked BEFORE the adjust-direct scope gate)", async () => {
+    const { service, dataScope } = build({
+      attendanceRepo: {
+        findRecordByIdForUpdateTx: vi
+          .fn()
+          .mockResolvedValue([
+            { id: "rec-1", userId: ACTOR, employeeId: OWN_EMP, workDate: "2024-06-03" },
+          ]),
+        isPeriodLockedTx: vi.fn().mockResolvedValue(true),
+      },
+    });
+    await expect(
+      service.adjustDirect(actor, "rec-1", {
+        recordId: "rec-1",
+        items: [{ fieldName: "note", newValue: "x" }],
+        reason: "fix",
+      }),
+    ).rejects.toThrow(ConflictException);
+    // The lock guard short-circuits before the scope check is even consulted.
+    expect(dataScope.resolveAndAssert).not.toHaveBeenCalled();
+  });
 });

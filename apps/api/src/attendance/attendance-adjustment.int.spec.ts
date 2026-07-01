@@ -59,6 +59,10 @@ describe.skipIf(!runDb)("S3-ATT-BE-4 adjustment surface (DB cô lập, đường
   let empProfile = "";
   let otherProfile = "";
   let empRecordId = "";
+  // Captured from the out-of-scope 404 (test 17) to prove the cross-tenant 404 (test 18) has the SAME
+  // shape — no existence leak via a different error code/message when the tenant differs vs. same-tenant
+  // out-of-scope.
+  let outOfScopeDetailBody: { error?: { code?: string; message?: string } } = {};
 
   async function seedOrgUnit(companyId: string, name: string): Promise<string> {
     const r = await direct.query(
@@ -225,10 +229,14 @@ describe.skipIf(!runDb)("S3-ATT-BE-4 adjustment surface (DB cô lập, đường
       ["adjust-direct", "attendance", "Company"],
     ]);
 
-    // Tenant B — cross-tenant approver.
+    // Tenant B — cross-tenant approver. Carries view-own too (like every other seeded actor) so the
+    // cross-tenant GET /:id 404 test isolates the RLS/tenant-isolation path (reaches getDetail's
+    // NotFoundException) instead of tripping the controller's VIEW_OWN permission gate first — that
+    // would be a DIFFERENT 403 shape, not the "no existence leak" 404-parity this test proves.
     const bUser = await seedUser(direct, B.companyId, `admin@${B.slug}.test`, hash);
     await seedEmp(B.companyId, bUser, null, null);
     await grant(B.companyId, bUser, "badmin", [
+      ["view-own", "adjustment", "Own"],
       ["view-company", "adjustment", "Company"],
       ["approve", "adjustment", "Company"],
     ]);
@@ -540,5 +548,134 @@ describe.skipIf(!runDb)("S3-ATT-BE-4 adjustment surface (DB cô lập, đường
       [id],
     );
     expect(applied.rows[0].n).toBeGreaterThanOrEqual(1);
+  });
+
+  // ── 16a/b/c · GET /:id detail in scope: Own(self) · Team(manager on report) · Company(hr) → 200 ──
+  // Split into 3 separate cases (rather than one combined test) so a single broken scope does not mask
+  // the other two passing ones — precise signal for the fix lane below.
+  it("GET /:id detail in scope: self (Own) → 200", async () => {
+    const empToken = await login(A.slug, `emp@${A.slug}.test`);
+    const created = await createAs(empToken, "2024-07-13");
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const id = created.body.data.id as string;
+
+    const ownRes = await authGet(empToken, `/attendance/adjustment-requests/${id}`);
+    expect(ownRes.status, JSON.stringify(ownRes.body)).toBe(200);
+    expect(ownRes.body.data.id).toBe(id);
+    expect(ownRes.body.data.employeeId).toBe(empProfile);
+  });
+
+  // KNOWN BROKEN (pre-existing bug, NOT introduced by this test — out of scope for this test-only lane
+  // to fix): attendance-adjustment.service.ts `detailInScope()` builds the scope-check target with
+  // HARDCODED `orgUnitId: null, directManagerUserId: null` instead of loading the real employee row
+  // (unlike listTeam/listCompany, which query employeeProfiles.directManagerId for real). Team's
+  // isEmployeeInScope compares `target.directManagerUserId === ctx.userId`, which is always
+  // `null === ctx.userId` here → always false for a genuine report who isn't also EMR-managed or the
+  // requester's own row. Manager cannot GET /:id a report's request even though listTeam correctly
+  // includes it. Needs a service-layer fix (load target via findEmployeeScopeByIdTx/ByUserIdTx before
+  // detailInScope) in a follow-up lane that owns attendance-adjustment.service.ts.
+  it("GET /:id detail in scope: manager on report (Team) → 200 [BLOCKED — see comment above, service.ts bug]", async () => {
+    const empToken = await login(A.slug, `emp@${A.slug}.test`);
+    const created = await createAs(empToken, "2024-07-16");
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const id = created.body.data.id as string;
+
+    const mgrToken = await login(A.slug, `mgr@${A.slug}.test`);
+    const teamRes = await authGet(mgrToken, `/attendance/adjustment-requests/${id}`);
+    expect(teamRes.status, JSON.stringify(teamRes.body)).toBe(200);
+    expect(teamRes.body.data.id).toBe(id);
+  });
+
+  it("GET /:id detail in scope: hr (Company) → 200", async () => {
+    const empToken = await login(A.slug, `emp@${A.slug}.test`);
+    const created = await createAs(empToken, "2024-07-17");
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const id = created.body.data.id as string;
+
+    const hrToken = await login(A.slug, `hr@${A.slug}.test`);
+    const companyRes = await authGet(hrToken, `/attendance/adjustment-requests/${id}`);
+    expect(companyRes.status, JSON.stringify(companyRes.body)).toBe(200);
+    expect(companyRes.body.data.id).toBe(id);
+  });
+
+  // ── 17 · GET /:id detail out-of-scope (same tenant, target outside actor's granted scope) → 404 ──
+  it("GET /:id detail out of scope (manager viewing a non-report's request) → 404 (no existence leak)", async () => {
+    const otherToken = await login(A.slug, `other@${A.slug}.test`);
+    const created = await createAs(otherToken, "2024-07-14");
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const id = created.body.data.id as string;
+
+    // mgr only holds Team scope (their reports); otherProfile (Sales) is NOT a report → 404, not 403 —
+    // the actor genuinely has view-own/view-team grants, just not covering this target (parity w/ list).
+    const mgrToken = await login(A.slug, `mgr@${A.slug}.test`);
+    const res = await authGet(mgrToken, `/attendance/adjustment-requests/${id}`);
+    expect(res.status, JSON.stringify(res.body)).toBe(404);
+    outOfScopeDetailBody = res.body;
+  });
+
+  // ── 18 · GET /:id detail cross-tenant → 404, SAME shape as the out-of-scope 404 above ──
+  it("GET /:id detail cross-tenant (company B viewing company A's request) → 404 same shape as out-of-scope", async () => {
+    const empToken = await login(A.slug, `emp@${A.slug}.test`);
+    const created = await createAs(empToken, "2024-07-15");
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const id = created.body.data.id as string;
+
+    // Tenant B's admin holds view-company:adjustment(Company) in THEIR company — RLS FORCE means the
+    // row is simply invisible cross-tenant, same 404 as any other out-of-scope target.
+    const bToken = await login(B.slug, `admin@${B.slug}.test`);
+    const res = await authGet(bToken, `/attendance/adjustment-requests/${id}`);
+    expect(res.status, JSON.stringify(res.body)).toBe(404);
+    expect(outOfScopeDetailBody.error?.code, JSON.stringify(outOfScopeDetailBody)).toBeTruthy();
+    // Same error CODE (no different signal between "row exists but is out of scope" and "row does not
+    // exist in this tenant") and same message PREFIX — the id-suffix a cross-tenant 404 appends is not
+    // itself an existence leak (the caller already supplied that id in the URL), so we compare the
+    // leak-relevant fields (status + code + message prefix) rather than requiring byte-identical text.
+    expect(res.body.error?.code).toBe(outOfScopeDetailBody.error?.code);
+    expect(String(res.body.error?.message)).toMatch(/^Adjustment request not found/);
+    expect(String(outOfScopeDetailBody.error?.message)).toMatch(/^Adjustment request not found/);
+  });
+
+  // ── 19 · period-locked APPROVE → 409 ──────────────────────────────────────────
+  it("approve a Pending request whose work_date falls in a locked period (2024-08) → 409, stays Pending", async () => {
+    // Bypasses the HTTP create route (which itself 409s on a locked period — test 4) by planting the
+    // Pending row directly, so the approve-path's OWN lock check (assertPeriodOpenForDate, invoked
+    // AFTER the scope/self-approval gate) is what's under test here, not create's.
+    const planted = await direct.query(
+      `INSERT INTO attendance_adjustment_requests
+         (company_id, user_id, employee_id, work_date, request_type, requested_check_in_at,
+          reason, status, submitted_at, requested_by, created_by)
+       VALUES ($1,$2,$3,$4,'UPDATE_CHECK_IN',$5,'plant: locked-period approve','Pending',now(),$2,$2)
+       RETURNING id`,
+      [A.companyId, empUser, empProfile, WD_LOCKED, `${WD_LOCKED}T02:00:00Z`],
+    );
+    const id = planted.rows[0].id as string;
+
+    const mgrToken = await login(A.slug, `mgr@${A.slug}.test`);
+    const res = await authPost(mgrToken, `/attendance/adjustment-requests/${id}/approve`).send({});
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
+
+    const row = await direct.query(
+      "SELECT status FROM attendance_adjustment_requests WHERE id=$1",
+      [id],
+    );
+    expect(row.rows[0].status).toBe("Pending");
+  });
+
+  // ── 20 · period-locked ADJUST-DIRECT → 409 ────────────────────────────────────
+  it("adjust-direct on a record whose work_date falls in a locked period (2024-08) → 409, record untouched", async () => {
+    const recordId = await plantRecord(A.companyId, empUser, empProfile, WD_LOCKED);
+
+    const hrToken = await login(A.slug, `hr@${A.slug}.test`);
+    const res = await authPost(hrToken, `/attendance/records/${recordId}/adjust-direct`).send({
+      recordId,
+      reason: "plant: locked-period adjust-direct",
+      items: [{ fieldName: "note", newValue: "x" }],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
+
+    const rec = await direct.query("SELECT attendance_status FROM attendance_records WHERE id=$1", [
+      recordId,
+    ]);
+    expect(rec.rows[0].attendance_status).not.toBe("Adjusted");
   });
 });
