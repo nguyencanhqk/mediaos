@@ -1525,7 +1525,13 @@ export const backlog = [
       "Role write API (P1): POST/PATCH /auth/roles (create/update, KHÔNG sửa system role) + assign/revoke permission cho role (role_permissions) có audit — unblock S2-FE-AUTH-4",
     zone: "red",
     status: "todo",
-    paths: ["apps/api/src/permission/**", "apps/api/src/users/**", "packages/contracts/src/**"],
+    paths: [
+      "apps/api/src/permission/**",
+      "apps/api/src/users/**",
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "packages/contracts/src/**",
+    ],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-BE-3"],
     src: [
