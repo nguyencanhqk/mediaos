@@ -180,13 +180,20 @@ export interface PendingListFilters {
   status: string;
   leaveTypeId?: string;
   employeeId?: string;
+  /** org_units.id — narrows to owners in that department (employee_profiles.org_unit_id). */
+  departmentId?: string;
   fromDate?: string;
   toDate?: string;
   limit: number;
   offset: number;
 }
 
-/** Shared WHERE conds for the scoped list + count (DRY — list/count must agree exactly). */
+/**
+ * Shared WHERE conds for the scoped list + count (DRY — list/count must agree exactly). ANDed AFTER the
+ * caller's scopeCond, so departmentId can only ever NARROW within the granted data-scope (never widen it):
+ * a manager filtering by a department outside their Team still sees nothing (scopeCond wins). Both the list
+ * and count queries INNER JOIN employee_profiles, so filtering on its org_unit_id is valid for both.
+ */
 function pendingConds(companyId: string, filters: PendingListFilters) {
   const conds = [
     eq(leaveRequests.companyId, companyId),
@@ -195,6 +202,7 @@ function pendingConds(companyId: string, filters: PendingListFilters) {
   ];
   if (filters.leaveTypeId) conds.push(eq(leaveRequests.leaveTypeId, filters.leaveTypeId));
   if (filters.employeeId) conds.push(eq(leaveRequests.employeeId, filters.employeeId));
+  if (filters.departmentId) conds.push(eq(employeeProfiles.orgUnitId, filters.departmentId));
   if (filters.fromDate) conds.push(gte(leaveRequests.startDate, filters.fromDate));
   if (filters.toDate) conds.push(lte(leaveRequests.startDate, filters.toDate));
   return conds;
