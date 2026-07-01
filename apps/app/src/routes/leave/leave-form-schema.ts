@@ -136,6 +136,65 @@ export function toCreateDraftBody(values: LeaveFormValues): {
   };
 }
 
+/** Chuyển form values → body PATCH /leave/requests/:id (update-draft — KHÔNG có submitNow). */
+export function toUpdateDraftBody(values: LeaveFormValues): {
+  leaveTypeId: string;
+  durationType: string;
+  startDate: string;
+  endDate: string;
+  halfDaySession?: string;
+  startTime?: string;
+  endTime?: string;
+  reason?: string;
+  handoverNote?: string;
+  contactDuringLeave?: string;
+} {
+  return {
+    leaveTypeId: values.leaveTypeId,
+    durationType: values.durationType,
+    startDate: values.startDate,
+    endDate: values.endDate,
+    halfDaySession: values.halfDaySession,
+    startTime: values.startTime,
+    endTime: values.endTime,
+    reason: values.reason || undefined,
+    handoverNote: values.handoverNote || undefined,
+    contactDuringLeave: values.contactDuringLeave || undefined,
+  };
+}
+
+/**
+ * Chuyển 1 đơn nghỉ (GET /leave/me/requests/:id, status='Draft') → giá trị mặc định cho form edit.
+ * Chỉ dùng field form cần — server vẫn authoritative cho mọi field khác (id/status/employeeId/...).
+ */
+export function fromDraftDetailToFormValues(detail: {
+  leaveTypeId: string;
+  durationType: string | null;
+  startDate: string;
+  endDate: string;
+  halfDaySession: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  reason: string | null;
+  handoverNote: string | null;
+  contactDuringLeave: string | null;
+}): LeaveFormValues {
+  return {
+    leaveTypeId: detail.leaveTypeId,
+    durationType: (detail.durationType ??
+      LEAVE_DURATION_TYPE.FULL_DAY) as LeaveFormValues["durationType"],
+    startDate: detail.startDate,
+    endDate: detail.endDate,
+    halfDaySession: (detail.halfDaySession ?? undefined) as LeaveFormValues["halfDaySession"],
+    startTime: detail.startTime ?? undefined,
+    endTime: detail.endTime ?? undefined,
+    reason: detail.reason ?? "",
+    handoverNote: detail.handoverNote ?? "",
+    contactDuringLeave: detail.contactDuringLeave ?? "",
+    submitNow: false,
+  };
+}
+
 /** Chuyển form values → body POST /leave/requests/calculate */
 export function toCalculateBody(
   values: Pick<

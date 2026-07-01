@@ -784,6 +784,20 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 42,
   },
+  // S3-FE-LEAVE-3 — LEAVE-SCREEN-006 (tất cả đơn nghỉ, HR/Admin). Cổng CÙNG cặp view:leave với
+  // leave.approvals (BE GET /leave/requests dùng chung endpoint) — màn hình này chỉ ĐỌC (không
+  // approve/reject), nên KHÔNG cần thêm requiredAny khác.
+  {
+    routeKey: "leave.all-requests",
+    path: "/leave/requests",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "LEAVE",
+    screenCode: "LEAVE-SCREEN-006",
+    titleKey: "routeTitle.leaveAllRequests",
+    requiredAnyPermissions: ["LEAVE.REQUEST.VIEW"],
+    showInSidebar: true,
+    order: 43,
+  },
 
   // Tasks
   {

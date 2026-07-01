@@ -152,6 +152,18 @@ export const LEAVE_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 30,
     requiredAnyPermissions: ["LEAVE.REQUEST.VIEW"],
   },
+  // S3-FE-LEAVE-3 — LEAVE-SCREEN-006. Gate sidebar = CÙNG cặp view:leave với leave.approvals
+  // (BE GET /leave/requests dùng chung endpoint) — màn hình này chỉ ĐỌC toàn bộ đơn trong phạm vi.
+  {
+    sidebarKey: "leave.all-requests",
+    moduleCode: "LEAVE",
+    label: "Tất cả đơn nghỉ",
+    path: "/leave/requests",
+    icon: "clipboard-list",
+    group: "management",
+    order: 40,
+    requiredAnyPermissions: ["LEAVE.REQUEST.VIEW"],
+  },
 ];
 
 // ---------------------------------------------------------------------------
