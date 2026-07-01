@@ -279,7 +279,7 @@ export class AttendanceAdjustmentService {
     const { scope, ctx } = await this.resolveViewScope(actor);
     return this.db.withTenant(actor.companyId, async (tx) => {
       const detail = await this.loadDetailTx(actor.companyId, id, tx);
-      if (!detail || !this.detailInScope(actor, scope, ctx, detail)) {
+      if (!detail || !(await this.detailInScope(actor, scope, ctx, detail, tx))) {
         throw new NotFoundException("Adjustment request not found");
       }
       return detail;
@@ -649,22 +649,26 @@ export class AttendanceAdjustmentService {
     return { scope, ctx };
   }
 
-  private detailInScope(
+  private async detailInScope(
     actor: Actor,
     scope: DataScope,
     ctx: ScopeContext,
     detail: AttendanceAdjustmentRequestDetail & { userId?: string },
-  ): boolean {
+    tx: TenantTx,
+  ): Promise<boolean> {
     // Own: the actor's own request (by requestedBy or the subject user) is always visible.
     if (detail.requestedBy === actor.id) return true;
-    return this.inScope(scope, ctx, {
-      id: detail.employeeId ?? "",
-      userId: (detail as { userId?: string | null }).userId ?? null,
-      companyId: actor.companyId,
-      orgUnitId: null,
-      directManagerUserId: null,
-      status: "active",
-    });
+    // Team/Company: resolve the REAL target employee (orgUnitId/directManagerUserId) — a hardcoded
+    // null here always fails Team-scope membership, 404-ing managers viewing their reports' requests.
+    const userId = (detail as { userId?: string | null }).userId;
+    if (!userId) return false;
+    const target = await this.resolveRequestEmployee(
+      actor.companyId,
+      { employeeId: detail.employeeId ?? null, userId },
+      tx,
+    ).catch(() => null);
+    if (!target) return false;
+    return this.inScope(scope, ctx, target);
   }
 
   private inScope(scope: DataScope | null, ctx: ScopeContext, target: EmployeeScope): boolean {
