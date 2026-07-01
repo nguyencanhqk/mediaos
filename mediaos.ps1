@@ -375,6 +375,39 @@ function Invoke-DevOnlineTunnel {
   & (Join-Path $Root "scripts\windows\07-tunnel-dev.ps1")
 }
 
+# ── Dashboard tiến độ (báo cáo dự án, CHẠY ẨN cổng 5180) ─────────────────────
+# Server zero-dep đọc LIVE harness/backlog.mjs + git. Khởi động bằng tay qua VBS
+# (cửa sổ ẩn, chạy nền) — KHÔNG còn dịch vụ tự khởi động cùng Windows.
+function Invoke-Dashboard {
+  Write-Step "Dashboard tiến độ — chạy ẨN (http://localhost:5180)"
+  if (Test-Port 5180) {
+    Write-Ok "Đã chạy sẵn → http://localhost:5180"
+    Start-Process "http://localhost:5180" | Out-Null
+    return
+  }
+  $vbs = Join-Path $Root "dev\dashboard-hidden.vbs"
+  if (-not (Test-Path $vbs)) { Write-Err "không thấy $vbs"; return }
+  Start-Process "wscript.exe" -ArgumentList "`"$vbs`"" | Out-Null
+  Start-Sleep -Seconds 2
+  if (Test-Port 5180) {
+    Write-Ok "Dashboard đang chạy ẩn → http://localhost:5180"
+    Start-Process "http://localhost:5180" | Out-Null
+  } else {
+    Write-Warn "Chưa thấy cổng 5180 mở — chờ thêm vài giây rồi mở http://localhost:5180."
+  }
+}
+
+function Invoke-DashboardStop {
+  Write-Step "Tắt Dashboard (cổng 5180)"
+  $procIds = Get-NetTCPConnection -LocalPort 5180 -State Listen -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess -Unique
+  if (-not $procIds) { Write-Warn "Dashboard không chạy (cổng 5180 đóng)."; return }
+  foreach ($procId in $procIds) {
+    if ($procId -and $procId -ne 0) { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue }
+  }
+  Write-Ok "Đã tắt Dashboard."
+}
+
 # ── Help ────────────────────────────────────────────────────────────────────
 function Show-Help {
   Write-Host ""
@@ -416,6 +449,10 @@ function Show-Help {
   Write-Host "    dev-online-db       tạo + migrate + seed DB cô lập mediaos_dev (1 lần)"
   Write-Host "    dev-online-tunnel   tạo ingress cloudflared + DNS cho cian-dev.* (1 lần, Administrator)"
   Write-Host ""
+  Write-Host "  DASHBOARD (tiến độ dự án — chạy ẩn cổng 5180)" -ForegroundColor Yellow
+  Write-Host "    dashboard         bật dashboard tiến độ (cửa sổ ẩn) -> http://localhost:5180"
+  Write-Host "    dashboard-stop    tắt dashboard"
+  Write-Host ""
   Write-Host "  menu              menu tương tác (dev/dev.bat gọi cái này)"
   Write-Host ""
 }
@@ -446,9 +483,13 @@ function Show-Menu {
     Write-Host "  [12] Dừng dev-online"
     Write-Host "  [13] Dev-online: tạo DB mediaos_dev      (1 lần)"
     Write-Host "  [14] Dev-online: ingress tunnel          (1 lần, Administrator)"
+    Write-Host ""
+    Write-Host "  --- DASHBOARD tiến độ (chạy ẩn, cổng 5180) ---" -ForegroundColor DarkCyan
+    Write-Host "  [15] Bật DASHBOARD (ẩn)    http://localhost:5180"
+    Write-Host "  [16] Tắt DASHBOARD"
     Write-Host "   [0] Thoát"
     Write-Host ""
-    $choice = Read-Host "Chọn (0-14)"
+    $choice = Read-Host "Chọn (0-16)"
     switch ($choice) {
       "1"  { Invoke-Dev }
       "2"  { Invoke-Up }
@@ -464,6 +505,8 @@ function Show-Menu {
       "12" { Invoke-DevOnlineStop }
       "13" { Invoke-DevOnlineDb }
       "14" { Invoke-DevOnlineTunnel }
+      "15" { Invoke-Dashboard }
+      "16" { Invoke-DashboardStop }
       "0"  { return }
       default { }
     }
@@ -505,5 +548,7 @@ switch ($Command.ToLower()) {
   "dev-online-stop"   { Invoke-DevOnlineStop }
   "dev-online-db"     { Invoke-DevOnlineDb }
   "dev-online-tunnel" { Invoke-DevOnlineTunnel }
+  "dashboard"         { Invoke-Dashboard }
+  "dashboard-stop"    { Invoke-DashboardStop }
   default      { Write-Err "Lệnh không hợp lệ: $Command"; Show-Help; exit 1 }
 }

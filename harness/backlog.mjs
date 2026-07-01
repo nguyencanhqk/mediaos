@@ -1455,6 +1455,576 @@ export const backlog = [
   //     • IMP02-STORY-037 (P2) org chart cơ bản — đọc cây department/direct_manager (data ĐÃ có qua S2-INT-2 manager-tree)
   //       + FE tree theo scope (không lộ người ngoài quyền). Thấp nhất. KHÔNG có ticket §18.5.
 
+  // ════════════════════ CARRY-OVER — AUTH FE screens (self-service + RBAC admin CRUD) ════════════════════
+  // SEED 2026-07-01 (owner): bù các màn AUTH còn THIẾU so với FRONTEND-06 §7 (route map) + SPEC-02 §14 (screen).
+  //   ĐÃ có: /login (S2-FE-AUTH-1) · /hr/me MyProfile read-only + /system/users·/system/roles READ-ONLY placeholder
+  //     (S2-FE-HR-3) · /system/login-logs + /system/security-events (S2-AUTH-BE-5).
+  //   BE SẴN (build FE được ngay): forgot/reset/change-password (S2-AUTH-BE-4 ✅) · user admin CRUD /auth/users +
+  //     /auth/roles + /auth/permissions (S2-AUTH-BE-3 ✅).
+  //   BE CHƯA có (→ chặn FE, seed BE trước): role WRITE + assign-permission (→ S2-AUTH-BE-6) · self-profile update +
+  //     user_sessions list/revoke (DEFERRED — xem memory s2-auth-be1-shipped) → S2-FE-AUTH-5 blocked.
+  //   Ưu tiên P1 — KHÔNG chặn Sprint 3 (ATT/LEAVE spine); chạy xen khi rảnh. Reconcile-first: thay read-only
+  //   placeholder ở /system/users·/system/roles bằng CRUD thật, KHÔNG dựng route/layout mới trùng.
+  {
+    id: "S2-FE-AUTH-2",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      "FE Auth self-service: forgot-password + reset-password + session-expired (apps/auth) + /account/change-password nối API thật",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/auth/**", "apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S2-AUTH-BE-4", "S2-FE-AUTH-1"],
+    src: [
+      "FRONTEND-06 §7.1/§7.2 (UI-AUTH-SCREEN-002/003/004 · UI-ACCOUNT-SCREEN-003)",
+      "SPEC-02 §14.2-14.4",
+      "API-02",
+      "IMP02-STORY-015/016",
+      "UI-04",
+    ],
+    done_when: [
+      "/forgot-password (apps/auth): form email (RHF+Zod) → POST /auth/forgot-password (skipAuth); thông báo GENERIC KHÔNG tiết lộ email tồn tại; link quay lại /login; lỗi rate-limit hiển thị mềm",
+      "/reset-password (apps/auth): token lấy từ query-string → POST /auth/reset-password; validate rule mật khẩu + confirm; token sai/hết hạn/đã dùng → lỗi chuẩn KHÔNG lộ user; thành công → điều hướng /login",
+      "/session-expired (apps/auth): trang tĩnh + CTA đăng nhập lại (redirect SSO qua getAuthRedirectUrl); wire nhánh refresh-fail của web-core",
+      "/account/change-password (apps/app): mật khẩu cũ + mới + confirm → POST /auth/change-password; thành công → BE revoke session → điều hướng /login; loading/error rõ; PermissionGate AUTH.PASSWORD.CHANGE",
+      "token KHÔNG vào localStorage/sessionStorage + KHÔNG console.log (BẤT BIẾN #3 — grep chặn); loading/empty/error; web test apps/auth + apps/app xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S2-FE-AUTH-3",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      "FE User admin CRUD (/system/users): create + detail + edit + assign-roles nối /auth/users (thay read-only placeholder)",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S2-AUTH-BE-3", "S2-FE-HR-3"],
+    src: [
+      "FRONTEND-06 §7.3 (UI-AUTH-SCREEN-006/007/008/009)",
+      "SPEC-02 §14.7-14.9/§14.13",
+      "API-02",
+      "IMP02-STORY-018/019/020/021",
+      "UI-09",
+    ],
+    done_when: [
+      "/system/users/new: form tạo user (RHF+Zod) → POST /auth/users; mật khẩu hash ở SERVER; validation + error state; PermissionGate AUTH.USER.CREATE",
+      "/system/users/:id: detail đọc GET /auth/users/:id — thông tin + roles + trạng thái; nút lock/unlock → POST /auth/users/:id/lock|unlock (PermissionGate AUTH.USER.*); invalidate detail sau thao tác",
+      "/system/users/:id/edit: PATCH /auth/users/:id CHỈ dirty fields; dirty-form guard; thành công → invalidate list/detail",
+      "/system/users/:id/roles: gán/gỡ role cho user từ catalog GET /auth/roles; PermissionGate AUTH.USER.ASSIGN_ROLE",
+      "KHÔNG hard-code role (PermissionGate/useCan); direct URL thiếu quyền → ForbiddenState 403; loading/empty/error; web test xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S2-AUTH-BE-6",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "Role write API (P1): POST/PATCH /auth/roles (create/update, KHÔNG sửa system role) + assign/revoke permission cho role (role_permissions) có audit — unblock S2-FE-AUTH-4",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/permission/**", "apps/api/src/users/**", "packages/contracts/src/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-AUTH-BE-3"],
+    src: [
+      "API-02",
+      "SPEC-02 §12 (roles/permissions)",
+      "DB-02",
+      "IMP02-STORY-020",
+      "ISSUE-BOARD-01 §18.3 (AUTH-BE)",
+    ],
+    done_when: [
+      "POST /auth/roles tạo role (company-scope) + PATCH /auth/roles/:id sửa name/description; role system-defined → KHÔNG cho sửa/xoá; permission guard AUTH.ROLE.CREATE/UPDATE",
+      "assign/revoke permission cho role (ghi role_permissions add/remove) qua AUTH.PERMISSION.ASSIGN; ghi audit RoleUpdated/PermissionAssigned trong tx withTenant; permission sensitive KHÔNG auto-grant qua wildcard",
+      "deny-path RED viết-TRƯỚC: thiếu quyền → 403 + 0 audit; 2-tenant KHÔNG sửa role công ty khác (withTenant+RLS); FULL gate (security-reviewer) + người chốt",
+    ],
+  },
+  {
+    id: "S2-FE-AUTH-4",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      "FE Role & Permission admin: /system/roles create/detail/edit + assign-permissions + /system/permissions catalog",
+    zone: "yellow",
+    // WAITING S2-AUTH-BE-6 (role WRITE + assign-permission) — todo, tự lên 'ready' khi BE-6 done. Phần ĐỌC
+    //   (/system/permissions catalog + RoleDetail đọc GET /auth/roles) build được ngay; nếu cần chạy sớm, TÁCH
+    //   read-part thành S2-FE-AUTH-4a.
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S2-AUTH-BE-6", "S2-FE-HR-3"],
+    src: [
+      "FRONTEND-06 §7.3 (UI-AUTH-SCREEN-010..015)",
+      "SPEC-02 §14.10-14.14",
+      "API-02",
+      "IMP02-STORY-020",
+      "UI-09",
+    ],
+    done_when: [
+      "/system/roles/new + /:id/edit: form role (RHF+Zod) → POST/PATCH /auth/roles; system role read-only; PermissionGate AUTH.ROLE.CREATE/UPDATE",
+      "/system/roles/:id: detail role + danh sách permission đã gán (đọc); /:id/permissions: ma trận gán/gỡ permission → API S2-AUTH-BE-6; PermissionGate AUTH.PERMISSION.ASSIGN",
+      "/system/permissions: catalog permission (đọc GET /auth/permissions) filter/search/pagination; PermissionGate AUTH.PERMISSION.VIEW",
+      "KHÔNG hard-code role; thiếu quyền → 403; loading/empty/error; web test xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S2-AUTH-BE-7",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "Session management API (P1): GET /auth/sessions (phiên của CHÍNH user) + revoke 1 phiên + revoke-all-others — hoàn tất user_sessions (DEFERRED ở BE-1) — unblock S2-FE-AUTH-5",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/auth/**", "apps/api/migrations/**", "packages/contracts/src/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-AUTH-BE-1"],
+    src: [
+      "API-02",
+      "SPEC-02 §14 (session self-service)",
+      "DB-02 (user_sessions §12.1)",
+      "ISSUE-BOARD-01 §18.3 (AUTH-BE P1)",
+    ],
+    done_when: [
+      "reconcile user_sessions: login đã dual-write (BE-1) — nếu shape thiếu field cho list (device/ip/last_seen/created) thì migration bổ sung NỐI TIẾP head; GET /auth/sessions liệt kê phiên ACTIVE của CHÍNH user (Own scope, Authenticated), KHÔNG lộ session/refresh token/hash",
+      "POST /auth/sessions/:id/revoke thu hồi 1 phiên của CHÍNH user + POST /auth/sessions/revoke-others (giữ phiên hiện tại); phiên bị revoke → refresh/next request fail-closed; ghi audit SessionRevoked trong tx withTenant",
+      "deny-path RED viết-TRƯỚC: revoke phiên user khác → 403/404; 2-tenant KHÔNG thấy/thu hồi phiên công ty khác (withTenant+RLS); no-secret-log; FULL gate (auth crown — security-reviewer) + người chốt",
+    ],
+  },
+  {
+    id: "S2-FE-AUTH-5",
+    module: "FRONTEND",
+    layer: "FE",
+    title: "FE Account self-service: /account/sessions (list + revoke phiên của chính user)",
+    zone: "yellow",
+    // RECONCILE 2026-07-01: BỎ /account/profile/edit khỏi WO này — self-edit hồ sơ đi qua WORKFLOW change-request
+    //   (BE /hr/profile-change-requests ĐÃ có) chứ KHÔNG direct-PATCH → màn đó nay thuộc S2-FE-HR-4 (/hr/me/change-request).
+    //   Đã XOÁ S2-HR-BE-5 (direct self-PATCH) vì thừa/sai hướng. WO này chỉ còn /account/sessions.
+    //   WAITING S2-AUTH-BE-7 (user_sessions list/revoke) — todo, tự lên 'ready' khi BE-7 done.
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S2-AUTH-BE-7", "S2-FE-AUTH-1"],
+    src: ["FRONTEND-06 §7.2 (UI-ACCOUNT-SCREEN-004)", "SPEC-02 §14", "API-02", "UI-09"],
+    done_when: [
+      "/account/sessions: bảng phiên đăng nhập của chính user (GET /auth/sessions) + nút thu hồi (POST /auth/sessions/:id/revoke / revoke-others); phiên hiện tại đánh dấu rõ; loading/empty/error",
+      "KHÔNG hard-code (PermissionGate/useCan); token KHÔNG vào storage/console (BẤT BIẾN #3); web test xanh; typecheck xanh",
+    ],
+  },
+
+  // ════════════════════ CARRY-OVER — FOUNDATION System admin FE (console /system/*) ════════════════════
+  // SEED 2026-07-01 (owner, từ ảnh UI-02 §9.10 + doc chuẩn FRONTEND-13 §7.1 SYSTEM/FOUNDATION admin routes).
+  //   Phần AUTH admin trong bảng (/system/users·roles·permissions) ĐÃ có WO (S2-FE-AUTH-3/4) — FRONTEND-13 §5.2 xác
+  //   nhận CRUD user/role/permission thuộc FRONTEND-06, System workspace chỉ đặt menu/link. CÒN THIẾU = phần
+  //   FOUNDATION: /system (overview) · company · settings · modules · files · audit-logs. Router apps/app hiện chỉ có
+  //   /system + /system/audit-logs = ModulePlaceholder; company/modules/settings/files CHƯA có route.
+  //   BE readiness (grep controllers foundation/*): company GET/PATCH /foundation/company/current ✅ · settings
+  //   GET public + POST resolve + PATCH company-settings/:key ✅ · audit GET /foundation/audit-logs(+/all,+/:id) ✅ ·
+  //   files GET /foundation/files(+/:id,+download) ✅ · modules CHỈ GET /modules/my-apps (lọc theo user) → THIẾU
+  //   endpoint admin-catalog (tất cả module) ⇒ S2-FND-BE-1.
+  //   ⚠️ Permission-pair drift (memory s1-fnd-module-metadata-seed-drift): Foundation gate theo cặp (action,resource
+  //   _type) ĐÃ SEED THẬT (vd view:foundation-company), KHÔNG theo nhãn 'FOUNDATION.COMPANY.VIEW' trong FRONTEND-13 —
+  //   pin PermissionGate theo seed thật.  P1 — KHÔNG chặn Sprint 3.
+  //   ĐÃ seed nốt (2026-07-01, owner chốt kéo vào): public-holidays · health · sequences · seeds · retention ·
+  //   file-access-logs → S2-FE-FND-4/5/6 + S2-FND-BE-2/3 (khối "FOUNDATION ops/security admin" dưới). *-detail
+  //   (audit/file/module) đã gộp vào FND-2/3.
+  {
+    id: "S2-FE-FND-1",
+    module: "FOUNDATION",
+    layer: "FE",
+    title:
+      "FE FOUNDATION admin: System Overview (/system) + Company info view/edit (/system/company) + Company Settings (/system/settings) nối API thật",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S1-FND-MODULE-1", "S1-FND-SETTING-1", "S1-FE-REGISTRY-1"],
+    src: [
+      "FRONTEND-13 §7.1 (UI-SYSTEM-SCREEN-001/002/003/004)",
+      "UI-02 §9.10",
+      "API-09 (FOUNDATION)",
+      "UI-09",
+      "DB-08 §8.2-8.4",
+    ],
+    done_when: [
+      "/system: System Overview landing (thẻ tóm tắt company/module/health + link tới các trang con); PermissionGate theo cặp quyền ĐÃ SEED (verify pair seed thật — KHÔNG hard-code nhãn FRONTEND-13, bài học s1-fnd-module drift)",
+      "/system/company: view + edit thông tin công ty nối GET/PATCH /foundation/company/current; dirty-form guard; confirm hậu quả trước mutation (FRONTEND-13 §6.6); invalidate sau lưu; PermissionGate view/update company",
+      "/system/settings (+ /system/company/settings): đọc config qua POST /foundation/settings/resolve (batch known keys) + sửa qua PATCH /foundation/company-settings/:key; field is_sensitive do SERVER mask (§6.3); confirm khi đổi giá trị nhạy cảm",
+      "KHÔNG hard-code role (PermissionGate/useCan); loading/empty/error/forbidden; web test xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S2-FE-FND-2",
+    module: "FOUNDATION",
+    layer: "FE",
+    title:
+      "FE FOUNDATION admin: Audit log viewer (/system/audit-logs + detail, thay ModulePlaceholder) + File metadata viewer (/system/files + detail)",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S1-FND-AUDIT-1", "S1-FND-FILE-1", "S1-FE-REGISTRY-1"],
+    src: [
+      "FRONTEND-13 §7.1 (UI-SYSTEM-SCREEN-007/008/010/011)",
+      "UI-02 §9.10",
+      "API-09 (FOUNDATION)",
+      "SPEC-01 §16 (audit)",
+      "DB-08 §8.5-8.8",
+    ],
+    done_when: [
+      "/system/audit-logs (+ /:id detail): THAY ModulePlaceholder — bảng audit nối GET /foundation/audit-logs (Company) + /all (System scope nếu đủ quyền) filter module/action/actor/entity/from-to + pagination/sort whitelist; detail GET /foundation/audit-logs/:id; field nhạy cảm ĐÃ mask do server (§6.5)",
+      "/system/files (+ /:id detail): bảng file metadata GET /foundation/files + detail /:id; KHÔNG lộ storage_path/signed-url dài hạn; download qua GET /foundation/files/:id/download (backend-mediated, §6.4)",
+      "KHÔNG hard-code (PermissionGate/useCan); loading/empty/error/forbidden; web test xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S2-FND-BE-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Admin module catalog API (P1): GET /foundation/modules (TẤT CẢ module, KHÁC my-apps đã lọc theo user) + GET /foundation/modules/:code detail — unblock S2-FE-FND-3 (toggle enable/disable = follow-up)",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/api/src/foundation/module-catalog/**", "packages/contracts/src/**"],
+    skills: ["code-review"],
+    depends_on: ["S1-FND-MODULE-1"],
+    src: [
+      "API-09 (FOUNDATION)",
+      "BACKEND-04 §8/§9",
+      "DB-08 §8.2",
+      "FRONTEND-13 §7.1 (UI-SYSTEM-SCREEN-005/006)",
+    ],
+    done_when: [
+      "GET /foundation/modules trả TẤT CẢ module (active + inactive, deleted_at IS NULL) + trạng thái enabled resolve theo setting module.<code>.enabled; permission FOUNDATION.MODULE.VIEW (cặp seed THẬT); KHÁC /modules/my-apps (my-apps lọc theo permission user + enabled)",
+      "GET /foundation/modules/:code detail (metadata/required_permissions hằng MODULE_APP_METADATA + enabled); response envelope chuẩn; contracts Zod dual-build",
+      "deny-path RED: thiếu quyền → 403; 2-tenant KHÔNG thấy module công ty khác (withTenant+RLS); toggle enable/disable + audit CONFIG_UPDATE = TÁCH follow-up (crown/red) — WO này READ-ONLY (yellow)",
+    ],
+  },
+  {
+    id: "S2-FE-FND-3",
+    module: "FOUNDATION",
+    layer: "FE",
+    title:
+      "FE FOUNDATION admin: Module Catalog (/system/modules + /:code detail) nối admin module API — read-only trước",
+    zone: "yellow",
+    // WAITING S2-FND-BE-1 (admin module list) — todo, tự lên 'ready' khi BE done. my-apps hiện có KHÔNG đủ (lọc theo user).
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S2-FND-BE-1", "S1-FE-REGISTRY-1"],
+    src: [
+      "FRONTEND-13 §7.1 (UI-SYSTEM-SCREEN-005/006)",
+      "UI-02 §9.10",
+      "API-09 (FOUNDATION)",
+      "UI-09",
+    ],
+    done_when: [
+      "/system/modules: bảng module catalog nối GET /foundation/modules (admin, tất cả module) — code/name/active/enabled; filter/search; PermissionGate FOUNDATION.MODULE.VIEW (cặp seed thật)",
+      "/system/modules/:code: detail module (metadata/required-permissions/enabled); toggle enable/disable CHỜ BE follow-up (read-only trước — KHÔNG dựng nút mutation chết)",
+      "KHÔNG hard-code (PermissionGate/useCan); loading/empty/error/forbidden; web test xanh; typecheck xanh",
+    ],
+  },
+  // ── FOUNDATION ops/security admin — 6 màn còn lại FRONTEND-13 §7.1 (seed 2026-07-01, owner chốt kéo vào) ──
+  //   BE (grep): public-holidays GET/POST/PATCH/DELETE ✅ · health GET+db ✅ · sequences/retention CHƯA wire
+  //   controller (SequenceService/RetentionService CÓ) · seeds CHƯA có endpoint status · file_access_logs table
+  //   CÓ nhưng CHƯA có viewer endpoint → 2 BE wire-over-service (S2-FND-BE-2 yellow · S2-FND-BE-3 red security).
+  {
+    id: "S2-FE-FND-4",
+    module: "FOUNDATION",
+    layer: "FE",
+    title:
+      "FE FOUNDATION admin: Public Holidays (/system/public-holidays list+CRUD) + Health Check (/system/health read-only status) — BE sẵn",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S1-FE-REGISTRY-1"],
+    src: [
+      "FRONTEND-13 §7.1 (UI-SYSTEM-SCREEN-012/016)",
+      "API-09 (FOUNDATION)",
+      "DB-08 §8.10",
+      "UI-09",
+    ],
+    done_when: [
+      "/system/public-holidays: list + CRUD nối GET/POST/PATCH/DELETE /foundation/public-holidays; PermissionGate FOUNDATION.HOLIDAY.VIEW + manage (cặp seed THẬT — KHÔNG hard-code nhãn); confirm khi xoá",
+      "/system/health: đọc GET /health + /health/db hiển thị trạng thái (db/uptime); PermissionGate FOUNDATION.HEALTH.VIEW (System); read-only",
+      "KHÔNG hard-code (PermissionGate/useCan); loading/empty/error/forbidden; web test xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S2-FND-BE-2",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Foundation ops admin API (P1): Sequences (GET list + preview + PATCH config over SequenceService) + Seed status (GET) — wire controller over service có sẵn — unblock S2-FE-FND-5",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/foundation/sequences/**",
+      "apps/api/src/foundation/seed/**",
+      "packages/contracts/src/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S1-FND-SEQ-1", "S1-FND-WIRE-1"],
+    src: [
+      "API-09 (FOUNDATION)",
+      "BACKEND-04 §14.5",
+      "FRONTEND-13 §7.1 (UI-SYSTEM-SCREEN-013/015)",
+      "DB-08 §8.9",
+    ],
+    done_when: [
+      "GET /foundation/sequences list counters + GET /foundation/sequences/:id/preview (KHÔNG mutate counter — previewNextCode); PATCH /foundation/sequences/:id config ghi audit SequenceUpdated trong tx (SequenceService có sẵn — CHỈ wire controller); permission FOUNDATION.SEQUENCE.VIEW + manage (cặp seed thật)",
+      "GET /foundation/seeds trả seed run status (checksum/last-run, read-only); permission FOUNDATION.SEED.VIEW (System scope)",
+      "deny-path RED: thiếu quyền → 403 + 0 audit; 2-tenant deny (withTenant+RLS); envelope chuẩn + contracts Zod dual-build",
+    ],
+  },
+  {
+    id: "S2-FE-FND-5",
+    module: "FOUNDATION",
+    layer: "FE",
+    title:
+      "FE FOUNDATION admin: Sequence Counters (/system/sequences list+preview+config) + Seed Status (/system/seeds read-only)",
+    zone: "yellow",
+    // WAITING S2-FND-BE-2 — todo, tự lên 'ready' khi BE-2 done.
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S2-FND-BE-2", "S1-FE-REGISTRY-1"],
+    src: ["FRONTEND-13 §7.1 (UI-SYSTEM-SCREEN-013/015)", "API-09 (FOUNDATION)", "UI-09"],
+    done_when: [
+      "/system/sequences: list counters + preview live + form sửa config nối /foundation/sequences; preview KHÔNG mutate; PermissionGate FOUNDATION.SEQUENCE.VIEW; confirm khi đổi config",
+      "/system/seeds: seed run status (read-only, checksum/last-run) nối GET /foundation/seeds; PermissionGate FOUNDATION.SEED.VIEW (System)",
+      "KHÔNG hard-code (PermissionGate/useCan); loading/empty/error/forbidden; web test xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S2-FND-BE-3",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Foundation security-admin API (P1): Retention policies (GET + PATCH over RetentionService, governs purge) + File Access Logs viewer (GET masked, append-only) — unblock S2-FE-FND-6",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/foundation/retention/**",
+      "apps/api/src/foundation/files/**",
+      "packages/contracts/src/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S1-FND-WIRE-1", "S1-FND-FILE-1"],
+    src: [
+      "API-09 (FOUNDATION)",
+      "BACKEND-04 §14",
+      "FRONTEND-13 §7.1 (UI-SYSTEM-SCREEN-009/014)",
+      "DB-08 §8.6-8.8",
+    ],
+    done_when: [
+      "GET /foundation/retention-policies + PATCH (System scope, FOUNDATION.RETENTION.VIEW + manage); thay đổi ghi audit trong tx; retention governs data purge → KHÔNG cho purge bảng append-only (audit/ledger/access-log) ngoài policy (BẤT BIẾN #2)",
+      "GET /foundation/file-access-logs list (filter file/user/action/from-to + pagination) + MASK (KHÔNG lộ storage_path/signed-url/secret); append-only — KHÔNG endpoint sửa/xoá; permission FOUNDATION.FILE_ACCESS_LOG.VIEW",
+      "deny-path RED viết-TRƯỚC: thiếu quyền → 403; 2-tenant deny (withTenant+RLS); no-secret-log; FULL gate (security-reviewer — retention purge + access-log security) + người chốt",
+    ],
+  },
+  {
+    id: "S2-FE-FND-6",
+    module: "FOUNDATION",
+    layer: "FE",
+    title:
+      "FE FOUNDATION admin: Retention Policies (/system/retention config) + File Access Logs viewer (/system/file-access-logs)",
+    zone: "yellow",
+    // WAITING S2-FND-BE-3 — todo, tự lên 'ready' khi BE-3 done.
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S2-FND-BE-3", "S1-FE-REGISTRY-1"],
+    src: [
+      "FRONTEND-13 §7.1 (UI-SYSTEM-SCREEN-009/014)",
+      "API-09 (FOUNDATION)",
+      "SPEC-01 §16 (audit)",
+      "UI-09",
+    ],
+    done_when: [
+      "/system/retention: form config retention policies nối GET/PATCH /foundation/retention-policies; confirm hậu quả rõ (governs purge — FRONTEND-13 §6.6); PermissionGate FOUNDATION.RETENTION.VIEW (System)",
+      "/system/file-access-logs: bảng access log nối GET /foundation/file-access-logs + filter/pagination; field nhạy cảm mask do server (KHÔNG lộ storage_path); PermissionGate FOUNDATION.FILE_ACCESS_LOG.VIEW",
+      "KHÔNG hard-code (PermissionGate/useCan); loading/empty/error/forbidden; web test xanh; typecheck xanh",
+    ],
+  },
+
+  // ════════════════════ CARRY-OVER — HR FE screens (§9.5 HR routes) ════════════════════
+  // SEED 2026-07-01 (owner, từ ảnh UI-02 §9.5 HR routes). ĐÃ có FE: /hr (overview→EmployeeList) · /hr/employees
+  //   (+new/:id/edit) (S2-FE-HR-1/2) · /hr/me MyProfile read-only (S2-FE-HR-3). CÒN THIẾU = các WO dưới.
+  //   KIỂM BE (grep controllers): profile-change-request FULL ✅ (POST/GET me/GET/GET :id/approve/reject/cancel @
+  //   hr/profile-change-requests) · departments CRUD ✅ (hr/departments) · positions CRUD ✅ (org/positions) ·
+  //   job-levels + contract-types CRUD ✅ (hr/master-data) · org units/tree ✅ (org/units/tree) · foundation audit
+  //   filter module=HR ✅. THIẾU: employee_contracts table KHÔNG tồn tại → S2-HR-BE-6 (STORY-031) · employee-code
+  //   admin-edit → S2-HR-BE-7 (STORY-035, bảng employee_code_configs có ở S2-HR-DB-1, chỉ thiếu endpoint sửa).
+  //   RECONCILE: self-edit hồ sơ = WORKFLOW change-request (S2-FE-HR-4), KHÔNG direct-PATCH (đã xoá S2-HR-BE-5).
+  //   Override quyết-định 2026-06-26 "KHÔNG seed HR carry-over đợt này" — owner nay chốt seed. P1, KHÔNG chặn Sprint 3.
+  //   /hr Overview hiện alias EmployeeList (chấp nhận MVP) — KHÔNG seed WO riêng.
+  {
+    id: "S2-FE-HR-4",
+    module: "HR",
+    layer: "FE",
+    title:
+      "FE HR Profile change-request workflow: /hr/me/change-request (self gửi YC) + /hr/profile-change-requests (HR duyệt list) + /:id (detail + approve/reject/cancel)",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S2-FE-HR-3", "S2-INT-2"],
+    src: [
+      "UI-02 §9.5 (HR routes)",
+      "FRONTEND-06",
+      "SPEC-03 (hồ sơ nhân sự · self-service change request)",
+      "API-03",
+      "permission-matrix-spec (create/view:profile-change-request)",
+    ],
+    done_when: [
+      "/hr/me/change-request: form user tự gửi yêu cầu sửa hồ sơ → POST /hr/profile-change-requests (Own scope); chọn field + giá trị mới + lý do; user tự xem YC của mình qua GET /hr/profile-change-requests/me",
+      "/hr/profile-change-requests: HR list GET /hr/profile-change-requests theo scope (Company/System) + filter status; PermissionGate HR.PROFILE_CHANGE_REQUEST.VIEW (cặp seed THẬT, KHÔNG hard-code nhãn)",
+      "/hr/profile-change-requests/:id: detail GET /:id + duyệt POST /:id/approve · từ chối POST /:id/reject(reason bắt buộc) · self-cancel POST /:id/cancel; PermissionGate approve/reject; confirm hậu quả trước mutation",
+      "KHÔNG hard-code (PermissionGate/useCan); loading/empty/error/forbidden; invalidate list+detail sau action; web test xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S2-FE-HR-5",
+    module: "HR",
+    layer: "FE",
+    title:
+      "FE HR Master data mgmt: /hr/departments + /hr/positions + /hr/job-levels + /hr/contract-types (list + CRUD) nối API thật",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S2-FE-HR-1"],
+    src: ["UI-02 §9.5 (HR routes)", "FRONTEND-13", "SPEC-03", "API-03", "UI-09"],
+    done_when: [
+      "/hr/departments: list + CRUD nối /hr/departments (GET/POST/PATCH/DELETE); PermissionGate HR.DEPARTMENT.VIEW + manage (cặp seed thật)",
+      "/hr/positions: list + CRUD nối /org/positions (GET/POST/PATCH/DELETE); PermissionGate HR.POSITION.VIEW + manage",
+      "/hr/job-levels + /hr/contract-types: list + CRUD nối /hr/master-data/job-levels + /hr/master-data/contract-types; PermissionGate HR.MASTER_DATA.MANAGE",
+      "soft-delete KHÔNG hard-delete (server); confirm khi xoá; KHÔNG hard-code; loading/empty/error; web test xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S2-FE-HR-6",
+    module: "HR",
+    layer: "FE",
+    title:
+      "FE HR Org chart (/hr/org-chart, theo data-scope) + HR audit-logs (/hr/audit-logs, tái dùng foundation audit filter module=HR)",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S2-FE-HR-1", "S2-INT-2"],
+    src: [
+      "UI-02 §9.5 (HR routes)",
+      "FRONTEND-13",
+      "SPEC-03",
+      "API-03",
+      "API-09 (audit)",
+      "IMP02-STORY-037",
+    ],
+    done_when: [
+      "/hr/org-chart: sơ đồ tổ chức đọc GET /org/units/tree (+ manager-tree S2-INT-2) theo data-scope (Team/Company/System) — KHÔNG lộ người ngoài quyền; PermissionGate HR.ORG_CHART.VIEW",
+      "/hr/audit-logs: lịch sử thay đổi HR — bảng nối GET /foundation/audit-logs?module=HR (tái dùng, KHÔNG dựng endpoint mới) + filter/pagination; field nhạy cảm mask do server; PermissionGate HR.AUDIT_LOG.VIEW",
+      "KHÔNG hard-code (PermissionGate/useCan); loading/empty/error/forbidden; web test xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S2-HR-BE-6",
+    module: "HR",
+    layer: "DB",
+    title:
+      "Employee contracts (carry-over STORY-031): migration employee_contracts (RLS+FORCE) + CRUD API /hr/contracts + /hr/employees/:id/contracts + file link + cảnh báo hết hạn — unblock S2-FE-HR-7",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "apps/api/src/employees/**",
+      "packages/contracts/src/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S2-HR-DB-1", "S1-FND-FILE-1"],
+    src: [
+      "IMP02-STORY-031 (P1 hợp đồng lao động)",
+      "DB-03",
+      "SPEC-03",
+      "API-03",
+      "UI-02 §9.5 (HR routes)",
+    ],
+    done_when: [
+      "migration tạo bảng employee_contracts khớp DB-03: company_id NOT NULL · UUID PK · soft-delete · audit cols; RLS ENABLE+FORCE + policy company_id TRƯỚC backfill; rls-registry đăng ký (BẤT BIẾN #1); index (employee_id, status, effective dates)",
+      "CRUD API GET /hr/contracts + GET /hr/employees/:id/contracts + POST/PATCH; permission HR.CONTRACT.VIEW + manage; file hợp đồng link qua FileService (S1-FND-FILE-1) entity 'contract'; cảnh báo sắp hết hạn",
+      "deny-path RED viết-TRƯỚC: thiếu quyền → 403; 2-tenant deny (withTenant+RLS); audit thao tác; migration NỐI TIẾP head (1 lane db-migration); FULL gate (migration + PII) + người chốt",
+    ],
+  },
+  {
+    id: "S2-FE-HR-7",
+    module: "HR",
+    layer: "FE",
+    title:
+      "FE HR Contracts: /hr/contracts (DS hợp đồng) + /hr/employees/:id/contracts (HĐ của nhân viên) nối contract API",
+    zone: "yellow",
+    // WAITING S2-HR-BE-6 (employee_contracts table + CRUD) — todo, tự lên 'ready' khi BE-6 done.
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S2-HR-BE-6", "S2-FE-HR-1"],
+    src: ["UI-02 §9.5 (HR routes)", "FRONTEND-13", "SPEC-03", "API-03", "UI-09"],
+    done_when: [
+      "/hr/contracts: DS hợp đồng nối GET /hr/contracts + filter/pagination; cảnh báo sắp hết hạn; PermissionGate HR.CONTRACT.VIEW",
+      "/hr/employees/:id/contracts: hợp đồng của 1 NV nối GET /hr/employees/:id/contracts; CRUD nếu đủ quyền; download file HĐ qua backend (KHÔNG lộ storage_path)",
+      "KHÔNG hard-code (PermissionGate/useCan); loading/empty/error; web test xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S2-HR-BE-7",
+    module: "HR",
+    layer: "BE",
+    title:
+      "Employee-code config admin API (carry-over STORY-035): GET/PATCH /hr/settings/employee-code (sửa employee_code_configs) + lock manual-edit + audit — unblock S2-FE-HR-8",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/employees/**",
+      "apps/api/src/foundation/sequences/**",
+      "packages/contracts/src/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S2-HR-DB-1", "S1-FND-SEQ-1"],
+    src: [
+      "IMP02-STORY-035 (P1 cấu hình mã NV)",
+      "DB-03",
+      "API-03",
+      "SPEC-03",
+      "UI-02 §9.5 (HR routes)",
+    ],
+    done_when: [
+      "GET /hr/settings/employee-code đọc + PATCH sửa employee_code_configs (prefix/padding/reset policy); permission HR.EMPLOYEE_CODE_CONFIG.VIEW + manage; preview qua previewNextCode (S1-FND-SEQ-1 — KHÔNG mutate counter)",
+      "lock manual-edit khi policy yêu cầu; audit thay đổi config trong tx withTenant (config-only, KHÔNG current_value)",
+      "deny-path RED: thiếu quyền → 403 + 0 audit; 2-tenant deny; validate value_type",
+    ],
+  },
+  {
+    id: "S2-FE-HR-8",
+    module: "HR",
+    layer: "FE",
+    title:
+      "FE HR Employee-code config: /hr/settings/employee-code (form cấu hình mã NV + preview live) nối admin API",
+    zone: "yellow",
+    // WAITING S2-HR-BE-7 (employee-code admin edit) — todo, tự lên 'ready' khi BE-7 done.
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S2-HR-BE-7", "S2-FE-HR-1"],
+    src: ["UI-02 §9.5 (HR routes)", "FRONTEND-13", "SPEC-03", "API-03"],
+    done_when: [
+      "/hr/settings/employee-code: form cấu hình mã NV (prefix/padding/reset) nối GET/PATCH /hr/settings/employee-code + preview live (KHÔNG mutate); PermissionGate HR.EMPLOYEE_CODE_CONFIG.VIEW",
+      "confirm khi đổi cấu hình; KHÔNG hard-code; loading/empty/error; web test xanh; typecheck xanh",
+    ],
+  },
+
   // ════════════════════ SPRINT 3 — Attendance Core + Leave Core + LEAVE→ATT Sync ════════════════════
   // IMPLEMENTATION-06 · EPIC-04 ATT (111pt) + EPIC-05 LEAVE (117pt) + EPIC-10 sync story-100/064 (13pt) = 241pt.
   // PULL 2026-06-26: Sprint 2 (AUTH+HR core) đã HỘI TỤ — toàn bộ S2 WO merged master (#28..#50, follow-up #38/#40/#41/#42;
@@ -1467,10 +2037,11 @@ export const backlog = [
   //   velocity 1 sprint). Quyết định vận hành (khớp harness v2 "1 WO/phiên, tuần tự"): KHÔNG ép 2 tuần — chạy P0-spine
   //   TRƯỚC theo dependency, P1 (yellow) sau, P2 = CARRY-OVER (KHÔNG seed đợt này). Cutline §17 + carry-over §21 áp dụng.
   //
-  // KHÔNG seed đợt này (carry-over §21 → Sprint 4 hoặc khi P0 spine xanh): adjustment workflow đầy đủ (CO-S4-003) ·
-  //   remote-work workflow (CO-S4-004) · leave calendar (CO-S4-005, LEAVE-FE-004=Sprint 4) · export ATT/LEAVE (CO-S4-006) ·
-  //   shift/rule + leave-policy admin UI nâng cao (CO-S4-007/008) · hourly-leave nếu giảm scope. Bảng adjustment/remote-work
-  //   VẪN migrate ở S3-ATT-DB-1 (đủ schema) nhưng API/UI để Sprint sau.
+  // Carry-over §21 (CO-S4-003..008): adjustment · remote-work · leave calendar · export/reports · shift/rule +
+  //   leave-policy admin UI. ĐÃ ĐẢO CHIỀU 2026-07-01 (owner chốt kéo lên): nay SEED thành WO ở khối "CARRY-OVER —
+  //   ATT/LEAVE P1/P2" cuối file (S3-ATT-BE-4/5/6 · S3-FE-ATT-3..6 · S3-LEAVE-BE-5/6 · S3-FE-LEAVE-3..6) — waiting
+  //   sau P0-spine (không giành lane với check-in/approval core). Bảng adjustment/remote-work skeleton ở S3-ATT-DB-1;
+  //   BE-4/5 hoàn thiện cột nếu thiếu. hourly-leave vẫn để ngỏ nếu giảm scope.
   //
   // RECONCILE-FIRST: code media-era đã có apps/api/src/attendance/** + apps/api/src/leave/** (logic/controller/repo/dto/spec)
   //   → đối chiếu DB-04/05·API-04/05·SPEC-04/05, GIỮ phần khớp, build/sửa phần lệch. SPEC THẮNG khi mâu thuẫn. Bảng ATT/LEAVE
@@ -2002,6 +2573,301 @@ export const backlog = [
       "API test LEAVE: balance (own/HR/insufficient-permission/ledger integrity) + request (draft/update/submit/validation/overlap-422/cancel) + approval (manager approve team/reject reason/HR company/outside-scope forbidden/no-double-approve) trên DB cô lập lane",
       "integration LEAVE→ATT: Approved full-day → attendance status Leave + disable check-in; half-day reduce minutes; cancel/revoke đơn đã Approved → recalc attendance + restore balance idempotent (S3-SYNC-004)",
       "FE smoke (login→leave balance→create→submit→approve) + regression Auth/HR mapping xanh; `pnpm --filter @mediaos/api test` xanh phạm vi THẬT; coverage vùng nhạy cảm ≥80%",
+    ],
+  },
+
+  // ════════════════════ CARRY-OVER — ATT/LEAVE P1/P2 (CO-S4 kéo lên, seed 2026-07-01 owner chốt) ════════════════════
+  // Đối chiếu FRONTEND-09 (ATT 19 màn) + FRONTEND-10 (LEAVE 14 màn) vs P0-spine đã có (S3-FE-ATT-1/2, S3-FE-LEAVE-1/2).
+  //   P0 spine PHỦ ĐỦ; đây là P1/P2 owner từng defer sang Sprint 4 (§21 CO-S4-003..008) — nay chốt kéo lên board.
+  //   BE đã có (FE build được khi BE done): ATT records company (S3-ATT-BE-2 ✅) · shift/rule min (S3-ATT-BE-3 todo) ·
+  //   LEAVE edit-draft (S3-LEAVE-BE-2 ✅) · all-requests+approval (S3-LEAVE-BE-3 todo) · types/policies/balances
+  //   (S3-LEAVE-BE-4 todo). BE CHƯA có → seed mới: ATT adjustment (BE-4) · ATT remote-work (BE-5) · ATT reports+audit
+  //   (BE-6) · LEAVE calendar (BE-5) · LEAVE reports/transactions/audit (BE-6).
+  //   ⚠️ Doc gắn P0 cho ATT-009 (tạo điều chỉnh) + LEAVE calendar nhưng backlog defer — pull nay giải quyết lệch đó.
+  //   BE adjustment/remote-work: bảng skeleton ĐÃ migrate 0452 — hoàn thiện cột + API (migration nối head nếu thiếu).
+
+  // ── ATT carry-over ──
+  {
+    id: "S3-ATT-BE-4",
+    module: "ATT",
+    layer: "BE",
+    title:
+      "ATT Adjustment workflow API (CO-S4-003): adjustment_requests create/list/detail + approve/reject + direct-adjust + recalc attendance_records + audit + event (skeleton 0452 → hoàn thiện cột nếu thiếu)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/attendance/**",
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "packages/contracts/src/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S3-ATT-BE-2", "S2-INT-2"],
+    src: [
+      "IMPLEMENTATION-06 §21 (CO-S4-003)",
+      "FRONTEND-09 §7 (UI-ATT-SCREEN-006..010)",
+      "API-04",
+      "SPEC-04",
+    ],
+    done_when: [
+      "POST /attendance/adjustment-requests (create Own) + GET my + GET list (scope Team/Company) + GET :id + POST :id/approve + :id/reject(reason); state-machine + row-lock chống double-approve; approve → recalc attendance_records (giữ log, không mất dữ liệu); direct-adjust ATT.ATTENDANCE.ADJUST_DIRECT",
+      "hoàn thiện shape adjustment_requests (migration NỐI TIẾP head nếu skeleton 0452 thiếu cột; RLS+FORCE đã có); audit + event mỗi action; balance/attendance mutation trong tx nhất quán",
+      "deny-path RED viết-TRƯỚC: tạo hộ người khác → chặn; duyệt ngoài scope → 403; cross-tenant deny; FULL gate (workflow + attendance mutation) + người chốt",
+    ],
+  },
+  {
+    id: "S3-ATT-BE-5",
+    module: "ATT",
+    layer: "BE",
+    title:
+      "ATT Remote/Onsite-work request workflow API (CO-S4-004): remote_work_requests create/list/detail + approve/reject + ảnh hưởng tính công + audit + event (skeleton 0452 → hoàn thiện)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/attendance/**",
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "packages/contracts/src/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S3-ATT-BE-2", "S2-INT-2"],
+    src: [
+      "IMPLEMENTATION-06 §21 (CO-S4-004)",
+      "FRONTEND-09 §7 (UI-ATT-SCREEN-011..014)",
+      "API-04",
+      "SPEC-04",
+    ],
+    done_when: [
+      "POST /attendance/remote-work-requests (create Own) + GET my + GET list (scope) + GET :id + approve/reject; state-machine + audit + event; Approved ảnh hưởng cách tính công ngày remote/công tác theo rule",
+      "hoàn thiện shape remote_work_requests (migration nối head nếu skeleton thiếu; RLS+FORCE); mutation trong tx",
+      "deny-path RED: tạo hộ người khác → chặn; duyệt ngoài scope → 403; cross-tenant deny; FULL gate + người chốt",
+    ],
+  },
+  {
+    id: "S3-ATT-BE-6",
+    module: "ATT",
+    layer: "BE",
+    title:
+      "ATT Reports + audit read (CO-S4-006, P2): GET /attendance/reports (tổng hợp theo scope) + /attendance/audit-logs (tái dùng foundation audit filter module=ATT)",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/api/src/attendance/**", "packages/contracts/src/**"],
+    skills: ["code-review"],
+    depends_on: ["S3-ATT-BE-2", "S1-FND-AUDIT-1"],
+    src: [
+      "IMPLEMENTATION-06 §21 (CO-S4-006)",
+      "FRONTEND-09 §7 (UI-ATT-SCREEN-018/019)",
+      "API-04",
+      "SPEC-04",
+    ],
+    done_when: [
+      "GET /attendance/reports tổng hợp công theo scope Team/Company (present/late/missing/leave) + filter kỳ; permission ATT.ATTENDANCE.VIEW_TEAM/COMPANY; no N+1",
+      "GET /attendance/audit-logs = tái dùng foundation audit filter module_code=ATT (KHÔNG dựng store mới); mask + append-only; permission ATT.AUDIT_LOG.VIEW",
+      "deny-path RED: thiếu quyền → 403; 2-tenant deny; export lớn/streaming = carry-over nếu vượt phạm vi",
+    ],
+  },
+  {
+    id: "S3-FE-ATT-3",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      "FE ATT Adjustment (/attendance/adjustment-requests my/list/new/:id + /records/:id/adjust): tạo/duyệt/điều chỉnh trực tiếp",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S3-ATT-BE-4", "S3-FE-ATT-2"],
+    src: ["FRONTEND-09 §7 (UI-ATT-SCREEN-006..010)", "IMPLEMENTATION-06 §21 (CO-S4-003)", "UI-03"],
+    done_when: [
+      "/attendance/adjustment-requests/new (tạo, P0) + /my + list + /:id (detail/duyệt) + /records/:id/adjust (direct) nối API S3-ATT-BE-4; form RHF+Zod; PermissionGate ATT.ADJUSTMENT.* / ADJUST_DIRECT (cặp seed thật)",
+      "approve/reject confirmation + reason; invalidate records/list/detail sau mutation; menu ẩn theo scope",
+      "KHÔNG hard-code; loading/empty/error/forbidden; web test xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S3-FE-ATT-4",
+    module: "FRONTEND",
+    layer: "FE",
+    title: "FE ATT Remote/Onsite (/attendance/remote-work-requests my/list/new/:id): tạo + duyệt",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S3-ATT-BE-5", "S3-FE-ATT-2"],
+    src: ["FRONTEND-09 §7 (UI-ATT-SCREEN-011..014)", "IMPLEMENTATION-06 §21 (CO-S4-004)", "UI-03"],
+    done_when: [
+      "/attendance/remote-work-requests/new + /my + list + /:id (detail/duyệt) nối API S3-ATT-BE-5; PermissionGate ATT.REMOTE_REQUEST.*; approve/reject confirmation",
+      "invalidate list/detail sau mutation; menu ẩn theo scope; KHÔNG hard-code",
+      "loading/empty/error/forbidden; web test xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S3-FE-ATT-5",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      "FE ATT admin + company records: /attendance/records (công ty, 004) + /attendance/shifts + /shift-assignments + /rules",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S3-ATT-BE-3", "S3-FE-ATT-2"],
+    src: [
+      "FRONTEND-09 §7 (UI-ATT-SCREEN-004/015/016/017)",
+      "IMPLEMENTATION-06 §21 (CO-S4-007)",
+      "UI-03",
+    ],
+    done_when: [
+      "/attendance/records (bảng công công ty, Company scope) nối GET /attendance/records (S3-ATT-BE-2); filter/pagination; PermissionGate ATT.ATTENDANCE.VIEW_COMPANY",
+      "/attendance/shifts + /shift-assignments + /rules: list + CRUD mức tối thiểu nối S3-ATT-BE-3; PermissionGate ATT.SHIFT.* / SHIFT_ASSIGNMENT.* / RULE.* (cặp seed thật); admin nâng cao = CO-S4-007 (giữ tối thiểu)",
+      "KHÔNG hard-code; loading/empty/error/forbidden; web test xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S3-FE-ATT-6",
+    module: "FRONTEND",
+    layer: "FE",
+    title: "FE ATT Reports (/attendance/reports) + Audit logs (/attendance/audit-logs)",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S3-ATT-BE-6", "S3-FE-ATT-2"],
+    src: ["FRONTEND-09 §7 (UI-ATT-SCREEN-018/019)", "IMPLEMENTATION-06 §21 (CO-S4-006)", "UI-03"],
+    done_when: [
+      "/attendance/reports: bảng/biểu tổng hợp công theo scope nối GET /attendance/reports; filter kỳ; PermissionGate ATT.ATTENDANCE.VIEW_TEAM/COMPANY",
+      "/attendance/audit-logs: bảng audit nối GET /attendance/audit-logs (foundation audit filter ATT); field mask do server; PermissionGate ATT.AUDIT_LOG.VIEW",
+      "KHÔNG hard-code; loading/empty/error/forbidden; web test xanh; typecheck xanh",
+    ],
+  },
+
+  // ── LEAVE carry-over ──
+  {
+    id: "S3-LEAVE-BE-5",
+    module: "LEAVE",
+    layer: "BE",
+    title:
+      "LEAVE Calendar API (CO-S4-005): GET /leave/calendar theo data-scope Own/Team/Company (đơn Approved/Pending trong khoảng) + mask ngoài quyền",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/api/src/leave/**", "packages/contracts/src/**"],
+    skills: ["code-review"],
+    depends_on: ["S3-LEAVE-BE-3", "S2-INT-2"],
+    src: [
+      "IMPLEMENTATION-06 §21 (CO-S4-005)",
+      "FRONTEND-10 §7 (UI-LEAVE-SCREEN-007/008/009)",
+      "API-05",
+      "SPEC-05",
+    ],
+    done_when: [
+      "GET /leave/calendar?scope=own|team|company&from&to trả đơn nghỉ theo data-scope (tái dùng S2-INT-2 manager-tree); Own chỉ của mình, Team/Company theo quyền; permission LEAVE.CALENDAR.VIEW_OWN/TEAM/COMPANY",
+      "KHÔNG lộ người ngoài scope; mask lý do nhạy cảm nếu thiếu quyền; no N+1",
+      "deny-path RED: employee KHÔNG thấy calendar ngoài scope; cross-tenant deny; 403 khi thiếu quyền",
+    ],
+  },
+  {
+    id: "S3-LEAVE-BE-6",
+    module: "LEAVE",
+    layer: "BE",
+    title:
+      "LEAVE Reports + balance transactions + audit read (P2): GET /leave/balances/:id/transactions (ledger) + /leave/reports + /leave/audit-logs (foundation audit filter LEAVE)",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/api/src/leave/**", "packages/contracts/src/**"],
+    skills: ["code-review"],
+    depends_on: ["S3-LEAVE-BE-4", "S1-FND-AUDIT-1"],
+    src: [
+      "IMPLEMENTATION-06 §21 (CO-S4-006)",
+      "FRONTEND-10 §7 (UI-LEAVE-SCREEN-014/014A/REPORT)",
+      "API-05",
+      "SPEC-05",
+    ],
+    done_when: [
+      "GET /leave/balances/:id/transactions: ledger append-only theo scope (không sửa/xoá — BẤT BIẾN #2); permission LEAVE.BALANCE.TRANSACTION_VIEW",
+      "GET /leave/reports tổng hợp nghỉ theo scope + filter kỳ; GET /leave/audit-logs = tái dùng foundation audit filter module_code=LEAVE (mask + append-only); permission LEAVE.REQUEST.EXPORT / LEAVE.AUDIT_LOG.VIEW",
+      "deny-path RED: thiếu quyền → 403; 2-tenant deny; no-secret-log",
+    ],
+  },
+  {
+    id: "S3-FE-LEAVE-3",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      "FE LEAVE all-requests (/leave/requests, 006) + edit draft (/leave/requests/:id/edit, 002E)",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S3-LEAVE-BE-3", "S3-FE-LEAVE-1"],
+    src: ["FRONTEND-10 §7 (UI-LEAVE-SCREEN-006/002E)", "IMPLEMENTATION-06 §8.6", "UI-04"],
+    done_when: [
+      "/leave/requests (AllLeaveRequestsPage): list mọi đơn theo scope (Team/Dept/Company) nối GET /leave/requests; filter status/kỳ/phòng ban; PermissionGate LEAVE.REQUEST.VIEW",
+      "/leave/requests/:id/edit (EditLeaveDraftPage): sửa đơn Draft nối PATCH /leave/requests/:id (Draft-only, S3-LEAVE-BE-2); dirty-form guard; PermissionGate LEAVE.REQUEST.UPDATE_DRAFT",
+      "KHÔNG hard-code; loading/empty/error/forbidden; web test xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S3-FE-LEAVE-4",
+    module: "FRONTEND",
+    layer: "FE",
+    title: "FE LEAVE Calendar (/leave/calendar, own/team/company theo scope)",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S3-LEAVE-BE-5", "S3-FE-LEAVE-1"],
+    src: [
+      "FRONTEND-10 §7 (UI-LEAVE-SCREEN-007/008/009)",
+      "IMPLEMENTATION-06 §21 (CO-S4-005)",
+      "UI-04",
+    ],
+    done_when: [
+      "/leave/calendar (LeaveCalendarPage): lịch nghỉ theo scope nối GET /leave/calendar; toggle own/team/company theo quyền; PermissionGate LEAVE.CALENDAR.VIEW_OWN/TEAM/COMPANY",
+      "KHÔNG lộ người ngoài scope (server đã lọc); loading/empty/error/forbidden",
+      "KHÔNG hard-code; web test xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S3-FE-LEAVE-5",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      "FE LEAVE admin: /leave/types + /leave/policies + /leave/balances (HR) + /leave/balances/:id/transactions",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S3-LEAVE-BE-4", "S3-LEAVE-BE-6", "S3-FE-LEAVE-1"],
+    src: [
+      "FRONTEND-10 §7 (UI-LEAVE-SCREEN-010/011/012/014)",
+      "IMPLEMENTATION-06 §21 (CO-S4-008)",
+      "UI-04",
+    ],
+    done_when: [
+      "/leave/types + /leave/policies: list + CRUD nối S3-LEAVE-BE-4; PermissionGate LEAVE.TYPE.* / LEAVE.POLICY.* (cặp seed thật); soft-delete confirm",
+      "/leave/balances (HR view theo scope) + /leave/balances/:id/transactions (ledger read-only): nối S3-LEAVE-BE-4/6; adjust balance qua ledger (PermissionGate LEAVE.BALANCE.ADJUST); KHÔNG sửa số dư ngoài ledger",
+      "KHÔNG hard-code; loading/empty/error/forbidden; web test xanh; typecheck xanh",
+    ],
+  },
+  {
+    id: "S3-FE-LEAVE-6",
+    module: "FRONTEND",
+    layer: "FE",
+    title: "FE LEAVE Reports (/leave/reports) + Audit logs (/leave/audit-logs)",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S3-LEAVE-BE-6", "S3-FE-LEAVE-1"],
+    src: [
+      "FRONTEND-10 §7 (UI-LEAVE-SCREEN-REPORT/014A)",
+      "IMPLEMENTATION-06 §21 (CO-S4-006)",
+      "UI-04",
+    ],
+    done_when: [
+      "/leave/reports: tổng hợp nghỉ theo scope nối GET /leave/reports; filter kỳ; PermissionGate LEAVE.REQUEST.EXPORT",
+      "/leave/audit-logs: bảng audit nối GET /leave/audit-logs (foundation audit filter LEAVE); field mask do server; PermissionGate LEAVE.AUDIT_LOG.VIEW",
+      "KHÔNG hard-code; loading/empty/error/forbidden; web test xanh; typecheck xanh",
     ],
   },
 ];
