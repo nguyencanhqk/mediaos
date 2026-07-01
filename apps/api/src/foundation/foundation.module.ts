@@ -5,6 +5,7 @@ import { CompanyModule } from "./company/company.module";
 import { ModuleCatalogModule } from "./module-catalog/module-catalog.module";
 import { FilesModule } from "./files/files.module";
 import { HolidaysModule } from "./holidays/holidays.module";
+import { RetentionModule } from "./retention/retention.module";
 import { SeedModule } from "./seed/seed.module";
 
 /**
@@ -30,6 +31,9 @@ import { SeedModule } from "./seed/seed.module";
     // S3-FND-SEEDRUN-1 (additive): runtime per-company master-data seed runner + registry +
     // OnApplicationBootstrap trigger. Re-export registry/runner để ATT/LEAVE/HR đăng ký seeder.
     SeedModule,
+    // S2-FND-BE-3 (L3, additive): data-retention governance HTTP surface (GET list + PATCH manage,
+    // audit-in-tx). Re-export RetentionService/CleanupJob cho cron/consumer.
+    RetentionModule,
   ],
   exports: [
     AuditModule,
@@ -39,6 +43,7 @@ import { SeedModule } from "./seed/seed.module";
     FilesModule,
     HolidaysModule,
     SeedModule,
+    RetentionModule,
   ],
 })
 export class FoundationModule {}
