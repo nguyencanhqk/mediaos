@@ -2470,7 +2470,7 @@ export const backlog = [
     layer: "FE",
     title:
       "FE ATT records (P0/P1): MyAttendanceRecordsPage + TeamAttendanceRecordsPage + AttendanceRecordDetailPage + filter tháng/khoảng/status + StatusBadge + permission menu visibility",
-    zone: "green",
+    zone: "yellow",
     status: "todo",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
@@ -2518,7 +2518,7 @@ export const backlog = [
     layer: "FE",
     title:
       "FE LEAVE approval: LeaveApprovalPage + pending table + approval detail drawer + approve/reject confirmation + reject reason + invalidate list/detail/balance",
-    zone: "green",
+    zone: "yellow",
     status: "todo",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
@@ -2530,10 +2530,10 @@ export const backlog = [
       "UI-04",
     ],
     done_when: [
-      "LeaveApprovalPage + pending request table (theo scope) + approval detail drawer/modal + approve/reject confirmation + reject reason textarea; approve/reject button ẩn nếu thiếu quyền (PermissionGate)",
-      "PIN CẶP SEED THẬT (spine #59 + BE S3-LEAVE-BE-3 #61 ĐÃ MERGE): pending-list nối GET /leave/requests?status=Pending (scope Manager=Team/HR=Company do BE ép qua data-scope — FE KHÔNG tự lọc); nút approve/reject gate FE code LEAVE.REQUEST.APPROVE (map approve:leave — non-sensitive, đã lộ /auth/me); reject-reason bắt buộc khi reject; KHÔNG mã bịa. (reject:leave is_sensitive do BE ép fail-closed — KHÔNG cần thêm allowlist ở WO này)",
-      "DENY-PATH TEST RED-TRƯỚC: (a) user thiếu approve:leave → nút approve/reject KHÔNG render (PermissionGate deny) + item sidebar/route approvals ẩn; (b) server 403 khi approve ngoài scope → UI hiển thị lỗi mềm, KHÔNG crash, KHÔNG optimistic-apply; (c) session.modules + UserPermission.scopes populate THẬT (KHÔNG [] = xanh-giả)",
-      "invalidate list/detail/balance sau mutation; loading/empty/error/forbidden",
+      "LeaveApprovalPage + pending request table (theo scope) + approval detail drawer/modal + approve/reject confirmation + reject reason textarea (bắt buộc khi reject); loading/empty/error/forbidden",
+      "PIN CỔNG PHÂN 3 TẦNG (verified nguồn THẬT — leave.controller.ts + leave-permissions.const.ts + mig 0455, chống bẫy pair-drift S1-FND-MODULE FE-permit/BE-403): (i) route + sidebar entry + LIST-load LeaveApprovalPage gate = view:leave (BE GET /leave/requests gate view:leave, đã trong SENSITIVE_CAPABILITY_ALLOWLIST → lộ /auth/me) — KHÔNG phải approve:leave; (ii) nút approve = approve:leave (non-sensitive, đã lộ); (iii) nút reject = approve:leave Ở FE (UI-hint) — CỐ Ý vì reject:leave is_sensitive KHÔNG trong allowlist ⇒ useCan('reject:leave') LUÔN false; BE ép reject:leave fail-closed (leave.controller.ts). Ghi chú rõ đây là chủ ý, KHÔNG bỏ sót",
+      "DENY-PATH TEST RED-TRƯỚC (nhân pattern apps/app/src/test/registry-guard.spec.tsx): (a) user thiếu view:leave → route/sidebar/list LeaveApprovalPage ẨN hoặc 403 mềm; (b) user thiếu approve:leave → nút approve/reject KHÔNG render (PermissionGate deny); (c) user CÓ approve:leave NHƯNG thiếu reject:leave → bấm reject nhận BE 403 → lỗi mềm, KHÔNG optimistic-apply, KHÔNG crash; (d) approve ngoài scope (manager duyệt đơn ngoài team) → 403 mềm; (e) session.modules + UserPermission.scopes populate THẬT — assert !== [] (chống xanh-giả)",
+      "invalidate list + detail của trang approval sau approve/reject (BỎ 'balance' — approver KHÔNG giữ balance key của requester, invalidate balance là no-op; balance của requester tự cập nhật ở phiên họ)",
       "web test xanh; typecheck xanh",
     ],
   },
