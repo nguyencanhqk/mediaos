@@ -6,8 +6,11 @@ import { HrTasksService } from "../tasks/hr-tasks.service";
 import { AttMasterDataSeeder } from "./att-master-data.seeder";
 import { AttSeedRegistrar } from "./att-seed.registrar";
 import { AttendanceController } from "./attendance.controller";
+import { AttendanceAdjustmentController } from "./attendance-adjustment.controller";
 import { AttendanceReadRepository } from "./attendance-read.repository";
 import { AttendanceReadService } from "./attendance-read.service";
+import { AttendanceAdjustmentRepository } from "./attendance-adjustment.repository";
+import { AttendanceAdjustmentService } from "./attendance-adjustment.service";
 import { AttendanceRepository } from "./attendance.repository";
 import { AttendanceService } from "./attendance.service";
 // S3-ATT-BE-3 (additive): shift/rule/assignment CRUD (minimum) + GET /attendance/rules/effective.
@@ -26,7 +29,7 @@ import { AttendanceShiftService } from "./attendance-shift.service";
  */
 @Module({
   imports: [DatabaseModule, PermissionModule, SeedModule],
-  controllers: [AttendanceController, AttendanceShiftController],
+  controllers: [AttendanceController, AttendanceAdjustmentController, AttendanceShiftController],
   providers: [
     AttendanceService,
     AttendanceRepository,
@@ -34,6 +37,10 @@ import { AttendanceShiftService } from "./attendance-shift.service";
     // PermissionService (PermissionModule exports both) + DatabaseService (@Global) + the read repo.
     AttendanceReadService,
     AttendanceReadRepository,
+    // S3-ATT-BE-4 (additive): canonical adjustment surface (create/list/detail/approve/reject/direct).
+    // Reuses AttendanceRepository (record/log/period) + DataScopeService + HrTasksService (Task Hub).
+    AttendanceAdjustmentService,
+    AttendanceAdjustmentRepository,
     // S3-ATT-BE-3 (additive): AttendanceShiftService injects AttendanceService to REUSE
     // resolveShiftAndRule (one implementation of the effective shift/rule priority, shared with
     // today/check-in/check-out — see attendance.service.ts).
@@ -43,6 +50,11 @@ import { AttendanceShiftService } from "./attendance-shift.service";
     AttMasterDataSeeder,
     AttSeedRegistrar,
   ],
-  exports: [AttendanceService, AttendanceReadService, AttendanceShiftService],
+  exports: [
+    AttendanceService,
+    AttendanceReadService,
+    AttendanceAdjustmentService,
+    AttendanceShiftService,
+  ],
 })
 export class AttendanceModule {}

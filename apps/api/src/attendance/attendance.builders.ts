@@ -12,16 +12,12 @@ import {
   type DerivedStatus,
   checkInTitleStatus,
   deriveAttendanceStatus,
-  earlyLeaveMinutesFor,
-  lateMinutesFor,
 } from "./attendance.logic";
-import { toScheduleCalc } from "./attendance.mappers";
 import type {
   Actor,
   AttendanceLogInsert,
   EffectiveRule,
   ResolvedEmployee,
-  ScheduleRow,
   ShiftRow,
 } from "./attendance.types";
 
@@ -201,41 +197,5 @@ export function buildAttendanceEvent(
     employeeId: employee.id,
     workDate,
     status,
-  };
-}
-
-/** Giá trị áp vào attendance_records khi duyệt đơn bổ sung công (requested ≻ existing). */
-export function buildAdjustmentRecordValues(
-  request: {
-    requestedCheckInAt: Date | null;
-    requestedCheckOutAt: Date | null;
-    workDate: string;
-  },
-  existing:
-    | {
-        checkInAt: Date | null;
-        checkOutAt: Date | null;
-        checkInMethod: string | null;
-        checkOutMethod: string | null;
-        workScheduleId: string | null;
-      }
-    | undefined,
-  schedule: ScheduleRow | null,
-) {
-  const calc = schedule ? toScheduleCalc(schedule) : null;
-  const checkInAt = request.requestedCheckInAt ?? existing?.checkInAt ?? null;
-  const checkOutAt = request.requestedCheckOutAt ?? existing?.checkOutAt ?? null;
-  const lateMinutes = calc && checkInAt ? lateMinutesFor(checkInAt, request.workDate, calc) : 0;
-  const earlyLeaveMinutes =
-    calc && checkOutAt ? earlyLeaveMinutesFor(checkOutAt, request.workDate, calc) : 0;
-  return {
-    checkInAt,
-    checkOutAt,
-    checkInMethod: request.requestedCheckInAt ? "adjustment" : (existing?.checkInMethod ?? null),
-    checkOutMethod: request.requestedCheckOutAt ? "adjustment" : (existing?.checkOutMethod ?? null),
-    lateMinutes,
-    earlyLeaveMinutes,
-    status: "approved_adjustment" as const,
-    workScheduleId: schedule?.id ?? existing?.workScheduleId ?? null,
   };
 }
