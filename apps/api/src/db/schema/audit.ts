@@ -87,7 +87,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451+0456). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -234,5 +234,11 @@ export const AUDIT_OBJECT_TYPES = [
   // 'profile_change_request' audit-in-tx app-tenant. UNION ADD-only (BẤT BIẾN #2). KHÔNG ghi
   // identity_number/bank_account/secret vào before/after (BẤT BIẾN #3 — masker che).
   "profile_change_request",
+  // S2-FND-BE-3 (mig 0456): data-retention governance — admin PATCH /foundation/retention-policies/:id
+  // (RetentionService.updatePolicy) ghi audit CONFIG_UPDATE object_type='retention_policy' audit-in-tx
+  // app-tenant. old/new = snapshot cấu hình policy (entity_type/retention_days/action/is_enabled/dry_run…),
+  // KHÔNG secret/PII vào before/after (BẤT BIẾN #3 — masker che). 0456 UNION ADD-only vào CHECK (clone
+  // 0446/0440), append-only #2 nguyên vẹn; INSERT audit KHÔNG vỡ audit_logs_object_type_chk trên Postgres thật.
+  "retention_policy",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
