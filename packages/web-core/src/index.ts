@@ -71,6 +71,8 @@ export {
   leaveKeys,
   taskKeys,
   notificationKeys,
+  attendanceInvalidation,
+  leaveInvalidation,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -83,6 +85,7 @@ export { twoFactorApi } from "./lib/two-factor-api";
 export { notificationApi } from "./lib/notification-api";
 export { hrApi } from "./lib/hr-api";
 export { leaveApi } from "./lib/leave-api";
+export { attendanceApi } from "./lib/attendance-api";
 
 // Permission
 export { useCan } from "./hooks/use-can";

@@ -5,10 +5,12 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  attendanceInvalidation,
   attendanceKeys,
   authKeys,
   dashboardKeys,
   hrKeys,
+  leaveInvalidation,
   leaveKeys,
   notificationKeys,
   taskKeys,
@@ -53,6 +55,43 @@ describe("attendanceKeys", () => {
 
   it("myToday() ổn định", () => {
     expect(attendanceKeys.myToday()).toEqual(attendanceKeys.myToday());
+  });
+
+  // S3-FE-REGISTRY-1 — APPEND keys mới, KHÔNG rename key cũ.
+  it("KHÔNG rename key cũ: myToday/mySummary/list/detail giữ nguyên hình dạng", () => {
+    expect(attendanceKeys.myToday()).toEqual(["attendance", "my", "today"]);
+    expect(attendanceKeys.mySummary({})).toEqual(["attendance", "my", "summary", {}]);
+    expect(attendanceKeys.list({})).toEqual(["attendance", "list", {}]);
+    expect(attendanceKeys.detail("a1")).toEqual(["attendance", "detail", "a1"]);
+  });
+
+  it("myRecords() = ['attendance','my','records', params]", () => {
+    expect(attendanceKeys.myRecords()).toEqual(["attendance", "my", "records", undefined]);
+    expect(attendanceKeys.myRecords({ page: 1 })[1]).toBe("my");
+  });
+
+  it("teamRecords() = ['attendance','team','records', params]", () => {
+    expect(attendanceKeys.teamRecords()).toEqual(["attendance", "team", "records", undefined]);
+  });
+
+  it("records.detail(id) chứa id (records group tách khỏi detail top-level)", () => {
+    expect(attendanceKeys.records.detail("r9")).toEqual(["attendance", "records", "detail", "r9"]);
+  });
+});
+
+describe("mutation invalidation matrix", () => {
+  it("check-in/out → today + prefix my-records (khớp mọi biến thể param'd)", () => {
+    const keys = attendanceInvalidation.checkIn();
+    expect(keys).toContainEqual(["attendance", "my", "today"]);
+    expect(keys).toContainEqual(["attendance", "my", "records"]);
+    expect(attendanceInvalidation.checkOut()).toEqual(keys);
+  });
+
+  it("leave approve → list prefix + detail(id) + balances", () => {
+    const keys = leaveInvalidation.approve("lr1");
+    expect(keys).toContainEqual(["leave", "requests", "list"]);
+    expect(keys).toContainEqual(["leave", "requests", "detail", "lr1"]);
+    expect(keys).toContainEqual(["leave", "balances"]);
   });
 });
 

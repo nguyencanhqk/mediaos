@@ -31,6 +31,40 @@ function makePerms(permissions: string[], scopes: string[] = []): UserPermission
   return permissions.map((p) => ({ permission: p, scopes: scopes as never }));
 }
 
+/** Fixture cặp-engine + scope THẬT (per-permission), mô phỏng /auth/me capabilities+scopes. */
+function makeScopedPerms(entries: UserPermission[]): UserPermission[] {
+  return entries.map((e) => ({ permission: e.permission, scopes: [...e.scopes] }));
+}
+
+// Ma trận persona theo cặp ENGINE THẬT + scope THẬT (KHÔNG [] — pair-as-gate + defense-in-depth).
+// employee: chỉ đọc của mình. manager: thêm view-team (Team) + duyệt nghỉ. hr: thêm view-company (Company).
+const EMPLOYEE_PERMS = makeScopedPerms([
+  { permission: "view-own:attendance", scopes: ["Own"] },
+  { permission: "view-own:leave", scopes: ["Own"] },
+]);
+const MANAGER_PERMS = makeScopedPerms([
+  { permission: "view-own:attendance", scopes: ["Own"] },
+  { permission: "view-team:attendance", scopes: ["Team"] },
+  { permission: "view-own:leave", scopes: ["Own"] },
+  { permission: "approve:leave", scopes: ["Team"] },
+]);
+const HR_PERMS = makeScopedPerms([
+  { permission: "view-own:attendance", scopes: ["Own"] },
+  { permission: "view-team:attendance", scopes: ["Team"] },
+  { permission: "view-company:attendance", scopes: ["Company"] },
+  { permission: "view-own:leave", scopes: ["Own"] },
+  { permission: "view:leave", scopes: ["Company"] },
+  { permission: "approve:leave", scopes: ["Company"] },
+]);
+
+// Session có ATT + LEAVE active (populate THẬT — deny-path phải qua nhánh module-active).
+const ATT_LEAVE_SESSION = () => ({
+  modules: [
+    { moduleCode: "ATT" as const, status: "active" as const },
+    { moduleCode: "LEAVE" as const, status: "active" as const },
+  ],
+});
+
 // ---------------------------------------------------------------------------
 // normalizeUserStatus — vá lệch hoa/thường BE('active') vs guard('Active')
 // ---------------------------------------------------------------------------
@@ -79,18 +113,23 @@ describe("createPermissionChecker", () => {
     expect(c.can("AUTH.ROLE.VIEW")).toBe(false); // không có read:role
   });
 
-  it("getVisibleApps hiện đủ 7 app cho company-admin (capabilities = cặp engine non-sensitive)", () => {
+  it("getVisibleApps hiện đủ 7 app cho company-admin (capabilities = cặp engine THẬT)", () => {
+    // Cặp company-admin THẬT từ seed (ATT view-own/team/company:attendance đã lộ qua allowlist sensitive;
+    // LEAVE view-own/view/approve:leave; AUTH view:user/view:role) — KHÔNG dùng cặp giả read:attendance/read:leave.
     const caps = makePerms([
       "read:dashboard",
       "read:employee",
-      "read:attendance",
-      "read:leave",
+      "view-own:attendance",
+      "view-team:attendance",
+      "view-company:attendance",
+      "view-own:leave",
+      "view:leave",
       "approve:leave",
       "read:task",
       "read:project",
       "read:notification",
-      "read:user",
-      "read:role",
+      "view:user",
+      "view:role",
       "view:foundation-setting",
       "view:foundation-audit-log",
     ]);
@@ -332,6 +371,126 @@ describe("evaluateRouteAccess", () => {
     const r = evaluateRouteAccess(session, routeWithFlag, c);
     expect(r.action).toBe("SHOW_DISABLED");
     expect(r.reason).toBe("FEATURE_DISABLED");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CROWN — pair-drift deny-path (ATT scoped + LEAVE approvals)
+// Cặp scope-level ATT (view-own/team/company:attendance) = cặp RIÊNG is_sensitive → pair-as-gate.
+// employee KHÔNG được vào Team/Company; manager Team-only; hr Company. Route gate = requiredAny cặp ĐÚNG,
+// KHÔNG dùng requiredScopes làm cổng-cứng (scope /auth/me lọc sensitive nên có thể rỗng).
+// ---------------------------------------------------------------------------
+
+describe("evaluateRouteAccess — ATT scoped pair-as-gate (deny-path matrix)", () => {
+  const attTeamRoute = {
+    routeKey: "att.team-records",
+    path: "/attendance/team-records",
+    layout: "MODULE_WORKSPACE" as const,
+    moduleCode: "ATT" as const,
+    titleKey: "routeTitle.attTeamRecords",
+    requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_TEAM"],
+  };
+  const attCompanyRoute = {
+    routeKey: "att.records",
+    path: "/attendance/records",
+    layout: "MODULE_WORKSPACE" as const,
+    moduleCode: "ATT" as const,
+    titleKey: "routeTitle.attRecords",
+    requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_COMPANY"],
+  };
+  const leaveApprovalsRoute = {
+    routeKey: "leave.approvals",
+    path: "/leave/approvals",
+    layout: "MODULE_WORKSPACE" as const,
+    moduleCode: "LEAVE" as const,
+    titleKey: "routeTitle.leaveApprovals",
+    requiredAnyPermissions: ["LEAVE.REQUEST.APPROVE", "LEAVE.REQUEST.VIEW"],
+  };
+
+  it("employee (view-own only) → KHÔNG ALLOW team-records / records / approvals", () => {
+    const session = makeSession(ATT_LEAVE_SESSION());
+    const c = createPermissionChecker(EMPLOYEE_PERMS);
+    expect(evaluateRouteAccess(session, attTeamRoute, c).action).toBe("SHOW_403");
+    expect(evaluateRouteAccess(session, attCompanyRoute, c).action).toBe("SHOW_403");
+    expect(evaluateRouteAccess(session, leaveApprovalsRoute, c).action).toBe("SHOW_403");
+  });
+
+  it("manager (view-team:attendance) → ALLOW team-records + approvals, KHÔNG company records", () => {
+    const session = makeSession(ATT_LEAVE_SESSION());
+    const c = createPermissionChecker(MANAGER_PERMS);
+    expect(evaluateRouteAccess(session, attTeamRoute, c).action).toBe("ALLOW");
+    expect(evaluateRouteAccess(session, leaveApprovalsRoute, c).action).toBe("ALLOW");
+    expect(evaluateRouteAccess(session, attCompanyRoute, c).action).toBe("SHOW_403");
+  });
+
+  it("hr (view-company:attendance) → ALLOW company records + team-records", () => {
+    const session = makeSession(ATT_LEAVE_SESSION());
+    const c = createPermissionChecker(HR_PERMS);
+    expect(evaluateRouteAccess(session, attCompanyRoute, c).action).toBe("ALLOW");
+    expect(evaluateRouteAccess(session, attTeamRoute, c).action).toBe("ALLOW");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ROUTE_REGISTRY — ATT scoped routes gate theo cặp ĐÚNG (integrity)
+// ---------------------------------------------------------------------------
+
+describe("ROUTE_REGISTRY — ATT scoped routes", () => {
+  it("att.team-records gate ATT.ATTENDANCE.VIEW_TEAM, KHÔNG requiredScopes cổng-cứng", () => {
+    const meta = getRouteMeta("att.team-records");
+    expect(meta?.path).toBe("/attendance/team-records");
+    expect(meta?.moduleCode).toBe("ATT");
+    expect(meta?.requiredAnyPermissions).toEqual(["ATT.ATTENDANCE.VIEW_TEAM"]);
+    expect(meta?.requiredScopes).toBeUndefined();
+  });
+
+  it("att.records gate ATT.ATTENDANCE.VIEW_COMPANY, KHÔNG requiredScopes cổng-cứng", () => {
+    const meta = getRouteMeta("att.records");
+    expect(meta?.path).toBe("/attendance/records");
+    expect(meta?.moduleCode).toBe("ATT");
+    expect(meta?.requiredAnyPermissions).toEqual(["ATT.ATTENDANCE.VIEW_COMPANY"]);
+    expect(meta?.requiredScopes).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PERMISSION_CODE_TO_PAIR — ATT/LEAVE scope-level = cặp RIÊNG (pin chống drift)
+// ---------------------------------------------------------------------------
+
+describe("PERMISSION_CODE_TO_PAIR — ATT/LEAVE scope pairs", () => {
+  it("mỗi scope-level ATT = cặp engine RIÊNG (KHÔNG gộp read:attendance)", () => {
+    // view-team KHÁC view-own → manager (chỉ view-team) KHÔNG kế thừa view-own gate và ngược lại.
+    const own = createPermissionChecker(EMPLOYEE_PERMS);
+    expect(own.can("ATT.ATTENDANCE.VIEW_OWN")).toBe(true);
+    expect(own.can("ATT.ATTENDANCE.VIEW_TEAM")).toBe(false);
+    expect(own.can("ATT.ATTENDANCE.VIEW_COMPANY")).toBe(false);
+
+    const team = createPermissionChecker(MANAGER_PERMS);
+    expect(team.can("ATT.ATTENDANCE.VIEW_TEAM")).toBe(true);
+    expect(team.can("ATT.ATTENDANCE.VIEW_COMPANY")).toBe(false);
+
+    const company = createPermissionChecker(HR_PERMS);
+    expect(company.can("ATT.ATTENDANCE.VIEW_COMPANY")).toBe(true);
+  });
+
+  it("LEAVE view-own / view / approve = 3 cặp engine RIÊNG", () => {
+    const employee = createPermissionChecker(EMPLOYEE_PERMS);
+    expect(employee.can("LEAVE.REQUEST.VIEW_OWN")).toBe(true);
+    expect(employee.can("LEAVE.REQUEST.VIEW")).toBe(false);
+    expect(employee.can("LEAVE.REQUEST.APPROVE")).toBe(false);
+
+    const hr = createPermissionChecker(HR_PERMS);
+    expect(hr.can("LEAVE.REQUEST.VIEW")).toBe(true); // view:leave
+    expect(hr.can("LEAVE.REQUEST.APPROVE")).toBe(true); // approve:leave
+  });
+
+  it("cặp giả read:attendance / read:leave KHÔNG còn khớp bất kỳ FE code nào", () => {
+    const stale = createPermissionChecker(makePerms(["read:attendance", "read:leave"]));
+    expect(stale.can("ATT.ATTENDANCE.VIEW_OWN")).toBe(false);
+    expect(stale.can("ATT.ATTENDANCE.VIEW_TEAM")).toBe(false);
+    expect(stale.can("ATT.ATTENDANCE.VIEW_COMPANY")).toBe(false);
+    expect(stale.can("LEAVE.REQUEST.VIEW_OWN")).toBe(false);
+    expect(stale.can("LEAVE.REQUEST.VIEW")).toBe(false);
   });
 });
 

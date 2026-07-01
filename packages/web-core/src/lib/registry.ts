@@ -104,18 +104,23 @@ export interface UserPermission {
  *
  * LÝ DO: bảng `permissions` chỉ có (action, resource_type), KHÔNG có cột `code`. FE gate HIỂN THỊ theo code,
  * BE enforce theo cặp → cần cầu nối ở TẦNG HIỂN THỊ (KHÔNG đụng engine enforcement — BE vẫn là cổng thật).
- * Cặp lấy từ seed thật (migrations *_permissions_seed.sql). Scope variant (VIEW_OWN/TEAM/COMPANY) gộp cùng
- * cặp đọc — phân biệt scope do `requiredScopes` lo riêng. Code chưa có trong bảng → checker thử khớp TRỰC
- * TIẾP (phòng khi BE trả thẳng cặp). Bổ sung code mới ở đây khi thêm app/route.
+ * Cặp lấy từ seed thật (migrations *_permissions_seed.sql + attendance/leave-permissions.const).
+ *
+ * QUAN TRỌNG (pair-as-gate): mỗi SCOPE-LEVEL là MỘT CẶP RIÊNG trong catalog `permissions`, KHÔNG gộp về một
+ * "cặp đọc" chung. ATT: view-own / view-team / view-company : attendance là 3 cặp is_sensitive độc lập ⇒ chính
+ * SỰ HIỆN DIỆN của cặp = cổng (manager có view-team KHÔNG kế thừa view-company). LEAVE: view-own:leave (self)
+ * KHÁC view:leave (đọc chéo, sensitive) KHÁC approve:leave. `requiredScopes` chỉ là gợi ý UX phụ (scope từ
+ * /auth/me lọc bỏ cặp sensitive nên có thể rỗng) — KHÔNG dùng làm cổng-cứng cho cặp scope-level. Code chưa có
+ * trong bảng → checker thử khớp TRỰC TIẾP (phòng khi BE trả thẳng cặp). Bổ sung code mới ở đây khi thêm app/route.
  */
 export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> = {
   "DASH.DASHBOARD.VIEW": "read:dashboard",
   "HR.EMPLOYEE.VIEW": "read:employee",
-  "ATT.ATTENDANCE.VIEW_OWN": "read:attendance",
-  "ATT.ATTENDANCE.VIEW_TEAM": "read:attendance",
-  "ATT.ATTENDANCE.VIEW_COMPANY": "read:attendance",
-  "LEAVE.REQUEST.VIEW_OWN": "read:leave",
-  "LEAVE.REQUEST.VIEW": "read:leave",
+  "ATT.ATTENDANCE.VIEW_OWN": "view-own:attendance",
+  "ATT.ATTENDANCE.VIEW_TEAM": "view-team:attendance",
+  "ATT.ATTENDANCE.VIEW_COMPANY": "view-company:attendance",
+  "LEAVE.REQUEST.VIEW_OWN": "view-own:leave",
+  "LEAVE.REQUEST.VIEW": "view:leave",
   "LEAVE.REQUEST.APPROVE": "approve:leave",
   "TASK.TASK.VIEW": "read:task",
   "TASK.PROJECT.VIEW": "read:project",
@@ -716,6 +721,30 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_OWN"],
     showInSidebar: true,
     order: 31,
+  },
+  // Scoped records (pair-as-gate). VIEW_TEAM/VIEW_COMPANY là cặp is_sensitive RIÊNG → gate = requiredAny
+  // cặp ĐÚNG (KHÔNG requiredScopes cổng-cứng: scope /auth/me lọc sensitive nên có thể rỗng ⇒ 403 sai).
+  {
+    routeKey: "att.team-records",
+    path: "/attendance/team-records",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ATT",
+    screenCode: "ATT-SCREEN-TEAM-RECORDS",
+    titleKey: "routeTitle.attTeamRecords",
+    requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_TEAM"],
+    showInSidebar: true,
+    order: 32,
+  },
+  {
+    routeKey: "att.records",
+    path: "/attendance/records",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ATT",
+    screenCode: "ATT-SCREEN-RECORDS",
+    titleKey: "routeTitle.attRecords",
+    requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_COMPANY"],
+    showInSidebar: true,
+    order: 33,
   },
 
   // Leave

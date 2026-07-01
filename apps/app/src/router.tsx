@@ -217,6 +217,19 @@ const attMyRecordsRoute = makeModuleRoute(
   "ATT",
   ModulePlaceholder,
 );
+// Scoped records — gate ở tầng route qua ProtectedRoute (cặp VIEW_TEAM/VIEW_COMPANY). Trang thật ở WO sau.
+const attTeamRecordsRoute = makeModuleRoute(
+  "/attendance/team-records",
+  "att.team-records",
+  "ATT",
+  ModulePlaceholder,
+);
+const attRecordsRoute = makeModuleRoute(
+  "/attendance/records",
+  "att.records",
+  "ATT",
+  ModulePlaceholder,
+);
 
 // Leave
 const leaveRoute = makeModuleRoute("/leave", "leave.overview", "LEAVE", MyLeaveBalancePage);
@@ -339,6 +352,8 @@ const routeTree = rootRoute.addChildren([
   hrMeRoute,
   attTodayRoute,
   attMyRecordsRoute,
+  attTeamRecordsRoute,
+  attRecordsRoute,
   leaveRoute,
   leaveMyRequestsRoute,
   leaveCreateRoute,

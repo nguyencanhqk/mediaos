@@ -32,6 +32,8 @@ export default {
     hrMe: "Hồ sơ của tôi",
     attToday: "Chấm công hôm nay",
     attMyRecords: "Bảng công của tôi",
+    attTeamRecords: "Bảng công nhóm",
+    attRecords: "Bảng công toàn công ty",
     leave: "Nghỉ phép",
     leaveMyRequests: "Đơn nghỉ của tôi",
     leaveApprovals: "Đơn cần duyệt",
