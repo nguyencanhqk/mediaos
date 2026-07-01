@@ -264,4 +264,73 @@ export default {
       description: "Bạn không có quyền xem chi tiết đơn nghỉ này.",
     },
   },
+
+  // ── Duyệt / từ chối đơn nghỉ (LEAVE-SCREEN-APPROVALS · S3-FE-LEAVE-2) ─────────
+  approval: {
+    title: "Đơn nghỉ cần duyệt",
+    description: "Danh sách đơn nghỉ chờ phê duyệt",
+    columns: {
+      requester: "Người gửi",
+      leaveType: "Loại nghỉ",
+      period: "Thời gian",
+      days: "Số ngày",
+      status: "Trạng thái",
+      actions: "Hành động",
+    },
+    filters: {
+      allStatuses: "Tất cả trạng thái",
+      allTypes: "Tất cả loại",
+    },
+    actions: {
+      view: "Xem chi tiết",
+      approve: "Duyệt",
+      reject: "Từ chối",
+      back: "Quay lại",
+    },
+    detail: {
+      title: "Chi tiết đơn nghỉ",
+      requester: "Người gửi",
+      employeeCode: "Mã nhân viên",
+      department: "Phòng ban",
+      leaveType: "Loại nghỉ",
+      period: "Thời gian",
+      totalDays: "Số ngày",
+      totalHours: "Số giờ",
+      status: "Trạng thái",
+      reason: "Lý do nghỉ",
+      submittedAt: "Ngày gửi",
+    },
+    approve: {
+      title: "Xác nhận duyệt đơn",
+      confirm: "Bạn có chắc muốn duyệt đơn nghỉ này không?",
+      note: "Ghi chú (không bắt buộc)",
+      notePlaceholder: "Nhập ghi chú cho người gửi…",
+      submit: "Xác nhận duyệt",
+      submitting: "Đang duyệt…",
+      error: "Duyệt đơn thất bại. Vui lòng thử lại.",
+      forbidden: "Bạn không có quyền duyệt đơn nghỉ này.",
+    },
+    reject: {
+      title: "Từ chối đơn nghỉ",
+      reason: "Lý do từ chối",
+      reasonPlaceholder: "Nhập lý do từ chối (bắt buộc)…",
+      reasonRequired: "Lý do từ chối là bắt buộc.",
+      submit: "Xác nhận từ chối",
+      submitting: "Đang từ chối…",
+      error: "Từ chối đơn thất bại. Vui lòng thử lại.",
+      forbidden: "Bạn không có quyền từ chối đơn nghỉ này.",
+    },
+    empty: {
+      title: "Không có đơn cần duyệt",
+      description: "Hiện không có đơn nghỉ nào chờ phê duyệt.",
+    },
+    error: {
+      title: "Không thể tải danh sách",
+      description: "Có lỗi khi tải danh sách đơn cần duyệt. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem đơn nghỉ cần duyệt.",
+    },
+  },
 };
