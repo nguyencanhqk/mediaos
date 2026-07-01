@@ -2413,7 +2413,7 @@ export const backlog = [
     layer: "FE",
     title:
       "FE registry + API layer ATT/LEAVE: app/sidebar/route registry (permission-driven) + attendanceApi/leaveApi + query-key factory + mutation invalidation matrix",
-    zone: "green",
+    zone: "red",
     status: "todo",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["code-review"],
@@ -2429,10 +2429,13 @@ export const backlog = [
     ],
     done_when: [
       "ĐỘI 1 LƯU Ý: web-core (CORE) + apps/app (APP) KHÔNG độc lập (APP import web-core, router gọi getMeta đọc ROUTE_REGISTRY của CORE) → phân rã 1 LANE DUY NHẤT (frontend-builder, cùng cây tuần tự), KHÔNG 2 lane worktree song song",
-      "app registry + sidebar registry thêm ATT/LEAVE sinh menu từ metadata (permission/scope/module/status — KHÔNG hard-code role); route registry cho routes §8.8 (/attendance/*, /leave/*); app inactive/thiếu setting → ẩn; cặp (action,resource_type)+data_scope cho route mới khớp NGUỒN CHUẨN seed §11 đã land — pin test theo seed THẬT (bài học S1-FND-MODULE), KHÔNG theo mã FE",
-      "FAIL-CLOSED scope: route+sidebar Team/Company (team-records, /records company, /leave approvals, calendar) BẮT BUỘC requiredScopes:[Team]/[Company] (vì VIEW_* map về read:attendance/read:leave — thiếu scope = lọt); test data-scope RED-trước cho CẢ route guard LẪN filterSidebarItems với session.modules ĐƯỢC populate (active/inactive/hidden — modules:[] = test xanh-giả)",
-      "attendanceApi + leaveApi service modules (web-core, typed apiFetch — KHÔNG nhận/forward company_id, KHÔNG đụng token-storage) + query-key factory ATT/LEAVE (APPEND key mới today/team/records.detail — KHÔNG đổi tên key cũ) + mutation invalidation matrix (check-in/out → today+my-records; approve → list+detail+balance)",
-      "DEFER chống scope-creep: /leave/calculate preview (chưa có contract @mediaos/contracts) → hoãn sang S3-FE-LEAVE-1; /leave/settings/policies giữ ModulePlaceholder (KHÔNG dựng leaveApi.policy ở WO này); web test registry+guard xanh; typecheck xanh",
+      "SỬA PAIR-DRIFT (crown, bài học S1-FND-MODULE): PERMISSION_CODE_TO_PAIR (packages/web-core/src/lib/registry.ts ~L111-128) map ATT/LEAVE view codes sang cặp SEED THẬT (nguồn: apps/api/.../attendance-permissions.const.ts + leave-permissions.const.ts, mig 0454/0455), KHÔNG 'read:attendance'/'read:leave' (KHÔNG tồn tại trong catalog → hiện app ẩn với MỌI user). Map ĐÚNG: ATT.ATTENDANCE.VIEW_OWN→'view-own:attendance', VIEW_TEAM→'view-team:attendance', VIEW_COMPANY→'view-company:attendance'; LEAVE.REQUEST.VIEW_OWN→'view-own:leave', LEAVE.REQUEST.VIEW→'view:leave', LEAVE.REQUEST.APPROVE→'approve:leave' (giữ). MÔ HÌNH pair-as-gate: mỗi scope-level = cặp riêng (is_sensitive=true) mang data_scope riêng → cặp CHÍNH là cổng; requiredScopes chỉ defense-in-depth. Sửa comment L107-108 bỏ giả định sai 'VIEW_OWN/TEAM/COMPANY gộp cùng cặp đọc'",
+      "EXPOSE cap nhạy cảm cho /auth/me (crown, RED-PATH apps/api/src/permission/permission.service.ts — cần security review): APPEND vào SENSITIVE_CAPABILITY_ALLOWLIST (L29) các cặp gate FE: 'view-own:attendance','view-team:attendance','view-company:attendance','view:leave' (view-own:leave/approve:leave đã non-sensitive → đã lộ). Lý do: cặp is_sensitive=true bị lọc khỏi /auth/me → thiếu → app/route ẩn với TẤT CẢ. CHỈ mở CỜ HIỂN THỊ (UI-hint capabilities), enforcement KHÔNG đổi (PermissionGuard trên controller vẫn cổng thật). GIỮ 'view:audit-log' đang có (APPEND, KHÔNG rewrite Set)",
+      "SPEC KHÔNG XANH-GIẢ: registry.spec.ts:82-107 ('getVisibleApps 7 app cho company-admin') thay caps GIẢ read:attendance/read:leave bằng cặp company-admin THẬT (view-own/view-team/view-company:attendance + view-own:leave/view:leave/approve:leave) rồi VẪN khẳng định 7 app gồm attendance+leave. Pin theo const seed THẬT, KHÔNG mã FE (nếu không: ship với ATT/LEAVE ẩn ngoài đời mà test vẫn xanh)",
+      "DENY-PATH TEST RED-TRƯỚC (BẮT BUỘC — cả packages/web-core registry.spec.ts LẪN apps/app/src/test/registry-guard.spec.tsx): (a) employee (chỉ view-own:attendance+view-own:leave, scope Own) → evaluateRouteAccess /attendance/team-records + /attendance/records(company) + /leave/approvals + /leave/calendar(team/company) = SHOW_403/404 VÀ filterSidebarItems ẨN các item Team/Company/approvals/calendar-team; (b) manager (view-team:attendance Team, KHÔNG view-company) → THẤY Team, KHÔNG Company; (c) hr/company-admin (view-company) → THẤY Company; (d) session.modules ĐƯỢC populate (active/inactive/hidden — modules:[] = xanh-giả) VÀ UserPermission.scopes populate THẬT (scopes:[] = xanh-giả)",
+      "Route/sidebar metadata ATT/LEAVE (routes §8.8 /attendance/*, /leave/*) gate bằng requiredAny theo FE code đã map đúng cặp (VIEW_TEAM tự chặn employee vì KHÔNG có view-team:attendance) + requiredScopes:[Team]/[Company] giữ như defense-in-depth; app inactive/thiếu setting → ẩn; KHÔNG hard-code role",
+      "attendanceApi + leaveApi service modules (web-core, typed apiFetch — KHÔNG nhận/forward company_id, KHÔNG đụng token-storage) + query-key factory ATT/LEAVE APPEND key mới (KIỂM tên THẬT trong web-core trước — đã có myToday/mySummary/requests.detail/balances.my → thêm teamRecords/records.detail, KHÔNG rename key cũ) + mutation invalidation matrix (check-in/out → today+my-records; approve → list+detail+balance)",
+      "DEFER chống scope-creep: /leave/calculate preview (chưa có contract @mediaos/contracts) → hoãn sang S3-FE-LEAVE-1; /leave/settings/policies giữ ModulePlaceholder (KHÔNG dựng leaveApi.policy ở WO này); web test registry+guard (web-core + apps/app) xanh; typecheck xanh",
     ],
   },
   {
@@ -2488,7 +2491,7 @@ export const backlog = [
     title:
       "FE LEAVE me: MyLeaveBalancePage/LeaveBalanceCard + MyLeaveRequestsPage + CreateLeaveRequestPage/LeaveRequestForm (date-range/half-day/preview) + LeaveRequestDetailPage + submit/cancel",
     zone: "green",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S3-LEAVE-BE-2", "S3-FE-REGISTRY-1"],
