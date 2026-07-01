@@ -5,6 +5,8 @@ import { SeedModule } from "../foundation/seed/seed.module";
 import { PermissionModule } from "../permission/permission.module";
 import { HrTasksService } from "../tasks/hr-tasks.service";
 import { LeaveController } from "./leave.controller";
+import { LeaveApprovalRepository } from "./leave-approval.repository";
+import { LeaveApprovalService } from "./leave-approval.service";
 import { LeaveMasterDataSeeder } from "./leave-master-data.seeder";
 import { LeaveReadRepository } from "./leave-read.repository";
 import { LeaveReadService } from "./leave-read.service";
@@ -37,6 +39,10 @@ import { LeaveService } from "./leave.service";
     // S3-LEAVE-BE-2 — request workflow (draft/submit/cancel) service + repo.
     LeaveRequestService,
     LeaveRequestRepository,
+    // S3-LEAVE-BE-3 (additive) — approval workflow (approve/reject/management-list). DataScopeService is
+    // injected from PermissionModule (exported, line 137) — reuses the S2-INT-2 Team/Company resolver.
+    LeaveApprovalService,
+    LeaveApprovalRepository,
     HrTasksService,
     LeaveMasterDataSeeder,
     LeaveSeedRegistrar,
