@@ -2484,6 +2484,8 @@ export const backlog = [
     done_when: [
       "MyAttendanceRecordsPage (Own) + TeamAttendanceRecordsPage (Team, ẩn nếu thiếu quyền) + AttendanceRecordDetailPage nối API thật; columns ngày/ca/check-in/check-out/tổng giờ/status/nguồn; filter tháng/khoảng ngày/status",
       "StatusBadge Present/Late/Early/Missing/Leave; menu team/company hiện/ẩn theo permission; loading/empty/error/forbidden",
+      "PIN CẶP SEED THẬT (spine S3-FE-REGISTRY-1 #59 ĐÃ MERGE — PERMISSION_CODE_TO_PAIR đã đúng view-*): menu/route ATT records gate qua FE code map đúng cặp view-team:attendance (Team) / view-company:attendance (Company) — KHÔNG tự chế mã 'ATT.RECORD.VIEW_TEAM'; requiredScopes chỉ defense-in-depth. useCan cho cặp NHẠY CẢM KHÔNG dựa wildcard (BE is_sensitive=true → không chấp *:*; FE fail-closed khớp BE, tránh FE-permit/BE-403)",
+      "DENY-PATH TEST RED-TRƯỚC (nhân pattern apps/app/src/test/registry-guard.spec.tsx): (a) employee (chỉ view-own:attendance, scope Own) → route /attendance/team-records + /attendance/records(company) = SHOW_403/ForbiddenPage VÀ filterSidebarItems ẨN item Team/Company; (b) manager (view-team:attendance Team) → THẤY Team, KHÔNG Company; (c) session.modules ĐƯỢC populate (active/inactive/hidden — modules:[] = xanh-giả) + UserPermission.scopes populate THẬT (scopes:[] = xanh-giả)",
       "web test list+detail xanh; typecheck xanh",
     ],
   },
@@ -2529,6 +2531,8 @@ export const backlog = [
     ],
     done_when: [
       "LeaveApprovalPage + pending request table (theo scope) + approval detail drawer/modal + approve/reject confirmation + reject reason textarea; approve/reject button ẩn nếu thiếu quyền (PermissionGate)",
+      "PIN CẶP SEED THẬT (spine #59 + BE S3-LEAVE-BE-3 #61 ĐÃ MERGE): pending-list nối GET /leave/requests?status=Pending (scope Manager=Team/HR=Company do BE ép qua data-scope — FE KHÔNG tự lọc); nút approve/reject gate FE code LEAVE.REQUEST.APPROVE (map approve:leave — non-sensitive, đã lộ /auth/me); reject-reason bắt buộc khi reject; KHÔNG mã bịa. (reject:leave is_sensitive do BE ép fail-closed — KHÔNG cần thêm allowlist ở WO này)",
+      "DENY-PATH TEST RED-TRƯỚC: (a) user thiếu approve:leave → nút approve/reject KHÔNG render (PermissionGate deny) + item sidebar/route approvals ẩn; (b) server 403 khi approve ngoài scope → UI hiển thị lỗi mềm, KHÔNG crash, KHÔNG optimistic-apply; (c) session.modules + UserPermission.scopes populate THẬT (KHÔNG [] = xanh-giả)",
       "invalidate list/detail/balance sau mutation; loading/empty/error/forbidden",
       "web test xanh; typecheck xanh",
     ],
