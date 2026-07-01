@@ -7,28 +7,8 @@ import { useTranslation } from "react-i18next";
 import { Clock, Calendar } from "lucide-react";
 import type { AttendanceTodayV2Dto } from "@mediaos/contracts";
 import { formatDateTime } from "@mediaos/web-core";
-import { Badge, Card, CardContent, CardHeader, CardTitle } from "@mediaos/ui";
-
-// ── Status badge variant map ───────────────────────────────────────────────────
-
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  "Not Checked-in": "secondary",
-  "Checked-in": "default",
-  "Checked-out": "default",
-  Present: "default",
-  Late: "destructive",
-  "Early Leave": "destructive",
-  "Missing Hours": "destructive",
-  "Missing Check-in": "destructive",
-  "Missing Check-out": "destructive",
-  Absent: "destructive",
-  Leave: "outline",
-  "Remote Work": "outline",
-  "Auto Attendance": "outline",
-  Adjusted: "secondary",
-  "Pending Adjustment": "secondary",
-  Invalid: "destructive",
-};
+import { Card, CardContent, CardHeader, CardTitle } from "@mediaos/ui";
+import { AttendanceStatusBadge } from "./AttendanceStatusBadge";
 
 // ── Helper: minutes display ────────────────────────────────────────────────────
 
@@ -66,8 +46,6 @@ export function AttendanceStatusCard({ data }: AttendanceStatusCardProps) {
 
   // Display status: prefer attendanceStatus (TitleCase DB-04) over legacy status.
   const displayStatus = record?.attendanceStatus ?? (record ? "Checked-in" : "Not Checked-in");
-  const statusLabel = t(`status.${displayStatus}`, { defaultValue: displayStatus });
-  const badgeVariant = STATUS_VARIANT[displayStatus] ?? "secondary";
 
   return (
     <Card data-testid="attendance-status-card">
@@ -77,7 +55,7 @@ export function AttendanceStatusCard({ data }: AttendanceStatusCardProps) {
             <Clock className="h-4 w-4 text-muted-foreground" />
             {t("today.statusCard.title")}
           </CardTitle>
-          <Badge variant={badgeVariant}>{statusLabel}</Badge>
+          <AttendanceStatusBadge status={displayStatus} />
         </div>
       </CardHeader>
 

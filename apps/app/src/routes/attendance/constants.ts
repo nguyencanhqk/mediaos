@@ -48,4 +48,28 @@ export const ATT_PATHS = {
   MY_RECORDS: "/attendance/my-records",
   TEAM_RECORDS: "/attendance/team-records",
   RECORDS: "/attendance/records",
+  RECORD_DETAIL: (id: string) => `/attendance/records/${id}`,
 } as const;
+
+/** Page size mặc định cho danh sách bảng công */
+export const ATT_RECORDS_PAGE_SIZE = 20;
+
+/**
+ * Filter tháng → fromDate / toDate half-open [đầu tháng, đầu tháng kế).
+ * toDate exclusive (backend: work_date >= fromDate AND work_date < toDate).
+ */
+export function monthToDateRange(month: string): { fromDate: string; toDate: string } {
+  const [year, mon] = month.split("-").map(Number);
+  const from = new Date(year, mon - 1, 1);
+  const to = new Date(year, mon, 1); // exclusive start of next month
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return { fromDate: fmt(from), toDate: fmt(to) };
+}
+
+/** Tháng hiện tại dạng 'YYYY-MM' */
+export function currentMonth(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+}

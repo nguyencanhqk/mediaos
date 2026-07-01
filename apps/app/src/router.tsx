@@ -122,6 +122,9 @@ import { MyProfilePage } from "@/routes/hr/me/MyProfilePage";
 
 // Attendance
 import { AttendanceTodayPage } from "@/routes/attendance/AttendanceTodayPage";
+import { MyAttendanceRecordsPage } from "@/routes/attendance/MyAttendanceRecordsPage";
+import { TeamAttendanceRecordsPage } from "@/routes/attendance/TeamAttendanceRecordsPage";
+import { AttendanceRecordDetailPage } from "@/routes/attendance/AttendanceRecordDetailPage";
 
 // Leave
 import { MyLeaveBalancePage } from "@/routes/leave/MyLeaveBalancePage";
@@ -218,21 +221,51 @@ const attMyRecordsRoute = makeModuleRoute(
   "/attendance/my-records",
   "att.my-records",
   "ATT",
-  ModulePlaceholder,
+  MyAttendanceRecordsPage,
 );
-// Scoped records — gate ở tầng route qua ProtectedRoute (cặp VIEW_TEAM/VIEW_COMPANY). Trang thật ở WO sau.
 const attTeamRecordsRoute = makeModuleRoute(
   "/attendance/team-records",
   "att.team-records",
   "ATT",
-  ModulePlaceholder,
+  TeamAttendanceRecordsPage,
 );
+// Company-wide records (att.records) — out-of-scope S3-FE-ATT-5; remains placeholder.
 const attRecordsRoute = makeModuleRoute(
   "/attendance/records",
   "att.records",
   "ATT",
   ModulePlaceholder,
 );
+
+// Attendance record detail — local RouteMeta (no sidebar entry).
+// ANY of VIEW_OWN/VIEW_TEAM/VIEW_COMPANY grants route access; actual 403/404 from server.
+// Pattern: systemLoginLogsRoute (local meta, buildModuleRouteContent → ProtectedRoute guard).
+const attRecordDetailMeta: RouteMeta = {
+  routeKey: "att.record-detail",
+  path: "/attendance/records/:recordId",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-004",
+  titleKey: "routeTitle.attRecordDetail",
+  requiredAnyPermissions: [
+    "ATT.ATTENDANCE.VIEW_OWN",
+    "ATT.ATTENDANCE.VIEW_TEAM",
+    "ATT.ATTENDANCE.VIEW_COMPANY",
+  ],
+};
+const attRecordDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/records/$recordId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { recordId } = attRecordDetailRoute.useParams();
+    return buildModuleRouteContent(
+      attRecordDetailMeta,
+      "ATT",
+      <AttendanceRecordDetailPage recordId={recordId} />,
+    );
+  },
+});
 
 // Leave
 const leaveRoute = makeModuleRoute("/leave", "leave.overview", "LEAVE", MyLeaveBalancePage);
@@ -357,6 +390,7 @@ const routeTree = rootRoute.addChildren([
   attMyRecordsRoute,
   attTeamRecordsRoute,
   attRecordsRoute,
+  attRecordDetailRoute,
   leaveRoute,
   leaveMyRequestsRoute,
   leaveCreateRoute,

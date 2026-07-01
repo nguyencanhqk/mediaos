@@ -88,7 +88,7 @@ export { leaveApi } from "./lib/leave-api";
 export { attendanceApi } from "./lib/attendance-api";
 
 // Permission
-export { useCan } from "./hooks/use-can";
+export { useCan, useCanExact } from "./hooks/use-can";
 export { PermissionGate } from "./components/permission-gate";
 
 // CS-9 idle auto-logout (client UX layer; backstop = short access-token TTL + server refresh enforce)
