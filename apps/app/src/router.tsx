@@ -120,6 +120,9 @@ import { EmployeeDetailPage } from "@/routes/hr/employees/EmployeeDetailPage";
 import { EmployeeFormPage } from "@/routes/hr/employees/EmployeeFormPage";
 import { MyProfilePage } from "@/routes/hr/me/MyProfilePage";
 
+// Attendance
+import { AttendanceTodayPage } from "@/routes/attendance/AttendanceTodayPage";
+
 // Leave
 import { MyLeaveBalancePage } from "@/routes/leave/MyLeaveBalancePage";
 import { MyLeaveRequestsPage } from "@/routes/leave/MyLeaveRequestsPage";
@@ -210,7 +213,7 @@ const hrEmployeeEditRoute = createRoute({
 });
 
 // Attendance
-const attTodayRoute = makeModuleRoute("/attendance/today", "att.today", "ATT", ModulePlaceholder);
+const attTodayRoute = makeModuleRoute("/attendance/today", "att.today", "ATT", AttendanceTodayPage);
 const attMyRecordsRoute = makeModuleRoute(
   "/attendance/my-records",
   "att.my-records",

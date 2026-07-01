@@ -5,7 +5,13 @@ import { i18n, registerI18nResources } from "@mediaos/web-core";
 import hrVi from "./locales/vi/hr";
 import systemVi from "./locales/vi/system";
 import leaveVi from "./locales/vi/leave";
+import attendanceVi from "./locales/vi/attendance";
 
-registerI18nResources("vi", { hr: hrVi, system: systemVi, leave: leaveVi });
+registerI18nResources("vi", {
+  hr: hrVi,
+  system: systemVi,
+  leave: leaveVi,
+  attendance: attendanceVi,
+});
 
 export default i18n;
