@@ -960,6 +960,13 @@
       "when": 1717500675000,
       "tag": "0456_s2_fndbe3_retention_audit_object_type",
       "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "7",
+      "when": 1717500680000,
+      "tag": "0457_s3_attbe3_shift_rule_audit_object_type",
+      "breakpoints": true
     }
   ]
 }
