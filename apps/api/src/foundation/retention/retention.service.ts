@@ -1,12 +1,14 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { TenantTx } from "../../db/db.service";
 import { DatabaseService } from "../../db/db.service";
 import { dataRetentionPolicies } from "../../db/schema/retention";
+import { AuditService } from "../../events/audit.service";
 import type {
   CleanupAction,
   CleanupResult,
   CreatePolicyInput,
+  RetentionActor,
   RetentionPolicyRow,
   RunCleanupOptions,
   SimulateResult,
@@ -29,20 +31,60 @@ import { DEFAULT_CLEANUP_BATCH_SIZE } from "./retention.types";
 export class RetentionService {
   private readonly logger = new Logger(RetentionService.name);
 
-  /** Bảng append-only không bao giờ được xóa (BẤT BIẾN #2). */
+  /**
+   * Bảng append-only / ledger / snapshot — runCleanup TUYỆT ĐỐI KHÔNG được xóa (BẤT BIẾN #2, CLAUDE §2).
+   * Kể cả policy is_enabled=true + cleanup_action=Delete + dryRun=false ⇒ vẫn no-op (deletedRecords=0).
+   *
+   * Nguồn tập append-only (CLAUDE §2 + erd-current §9 / Phụ lục A): audit/log/ledger/snapshot mà app role
+   * KHÔNG có quyền UPDATE/DELETE ở DB (REVOKE ở migration). PROTECTED_TABLES là LỚP APP phòng-thủ-thứ-hai
+   * (defense-in-depth) TRÊN REVOKE-ở-DB: chặn ngay trước khi phát lệnh, không dựa vào DB ném lỗi.
+   */
   private static readonly PROTECTED_TABLES = new Set([
+    // Audit trail (CLAUDE §2 core append-only).
     "audit_logs",
+    // AUTH security/login logs (mig REVOKE UPDATE/DELETE — S2-AUTH-DB-2 / G16-1b).
+    "login_logs",
+    "user_security_events",
+    "security_alerts",
+    // Foundation file access trail (mig 0433 REVOKE UPDATE/DELETE — append-only).
+    "file_access_logs",
+    // API key usage ledger (AC-5 — mig 0310 append-only).
+    "api_key_usages",
+    // ATT / LEAVE ledgers + logs (CLAUDE §2 — DB-04/DB-05 append-only).
+    "attendance_logs",
+    "leave_balance_transactions",
+    // TASK activity trail (CLAUDE §2 — DB-06 append-only).
+    "task_activity_logs",
+    // NOTI delivery trail (CLAUDE §2 — DB-08 append-only).
+    "notification_delivery_logs",
+    // HR employee status history (CLAUDE §2 — DB-03 append-only snapshot).
+    "employee_status_histories",
+    // Payroll snapshots + finance ledgers (Phase 2 / G12-G13 — append-only, GIỮ).
     "payslips",
     "payslip_items",
     "kpi_results",
     "profit_snapshots",
     "revenue_records",
     "cost_records",
+    // Seed provenance (FOUNDATION — append-only batch/item).
     "seed_batches",
     "seed_items",
   ]);
 
-  constructor(private readonly db: DatabaseService) {}
+  /**
+   * true nếu `entityType` là bảng append-only/ledger được bảo vệ (BẤT BIẾN #2). Public để test set-membership
+   * trực tiếp (chứng minh phủ ĐỦ tập) + cho consumer (job/UI) kiểm tra trước khi chạy cleanup.
+   */
+  static isProtectedTable(entityType: string): boolean {
+    return RetentionService.PROTECTED_TABLES.has(entityType);
+  }
+
+  constructor(
+    private readonly db: DatabaseService,
+    // EventsModule cung cấp AuditService (Nest DI). Default new AuditService() giữ >0 call-site
+    // `new RetentionService(db)` trong test/legacy không vỡ (mirror AuditService×masker).
+    private readonly audit: AuditService = new AuditService(),
+  ) {}
 
   /** Tạo chính sách lưu trữ cho tenant. company_id = companyId (KHÔNG global NULL). */
   async createPolicy(input: CreatePolicyInput): Promise<RetentionPolicyRow> {
@@ -86,15 +128,43 @@ export class RetentionService {
     });
   }
 
-  /** Patch chính sách (soft-update — BẤT BIẾN #2, KHÔNG DELETE). */
+  /**
+   * PATCH chính sách (soft-update — BẤT BIẾN #2, KHÔNG DELETE). CÙNG tx: đọc old → update → ghi audit
+   * CONFIG_UPDATE object_type='retention_policy' (append-only, cùng commit — BẤT BIẾN #2).
+   *
+   *  - FAIL-CLOSED: policy không tồn tại / thuộc tenant khác (RLS che) / đã soft-delete ⇒ 0 row → NotFound
+   *    (KHÔNG NPE/500). Read TRƯỚC update để có old-snapshot + xác định tồn tại trong CÙNG tenant-tx.
+   *  - Audit old/new = SNAPSHOT CẤU HÌNH (KHÔNG secret/PII); AuditService mask + auto changed_fields.
+   *    permissionCode='FOUNDATION.RETENTION.MANAGE' (is_sensitive). actorUserId = actor.id (nếu có).
+   */
   async updatePolicy(
     companyId: string,
     policyId: string,
     input: UpdatePolicyInput,
+    actor?: RetentionActor,
   ): Promise<RetentionPolicyRow> {
     return this.db.withTenant(companyId, async (tx) => {
+      // (1) Đọc old TRONG tenant-tx (RLS ép company_id). deleted_at IS NULL ⇒ soft-deleted coi như không tồn tại.
+      const existingRows = await tx
+        .select()
+        .from(dataRetentionPolicies)
+        .where(
+          and(
+            eq(dataRetentionPolicies.id, policyId),
+            eq(dataRetentionPolicies.companyId, companyId),
+            isNull(dataRetentionPolicies.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      const existing = existingRows[0] as RetentionPolicyRow | undefined;
+      // FAIL-CLOSED: 0 row (không tồn tại / tenant khác / đã xóa) → 404, KHÔNG NPE/500 khi audit snapshot.
+      if (!existing) {
+        throw new NotFoundException(`Không tìm thấy chính sách lưu trữ id=${policyId}.`);
+      }
+
       const now = new Date();
-      const updated = await tx
+      const updatedRows = await tx
         .update(dataRetentionPolicies)
         .set({
           ...(input.retentionDays !== undefined && { retentionDays: input.retentionDays }),
@@ -106,7 +176,7 @@ export class RetentionService {
           }),
           ...(input.isEnabled !== undefined && { isEnabled: input.isEnabled }),
           ...(input.description !== undefined && { description: input.description }),
-          ...(input.updatedBy !== undefined && { updatedBy: input.updatedBy }),
+          updatedBy: actor?.id ?? input.updatedBy ?? null,
           updatedAt: now,
         })
         .where(
@@ -118,7 +188,49 @@ export class RetentionService {
         )
         .returning();
 
-      return updated[0] as RetentionPolicyRow;
+      const updated = updatedRows[0] as RetentionPolicyRow;
+
+      // (3) Audit CÙNG tx (append-only). object_type ∈ AUDIT_OBJECT_TYPES + CHECK DB (mig 0456).
+      await this.audit.record(tx, {
+        action: "RetentionPolicyUpdated",
+        actionGroup: "CONFIG_UPDATE",
+        objectType: "retention_policy",
+        objectId: updated.id,
+        actorUserId: actor?.id ?? input.updatedBy ?? undefined,
+        actorType: "User",
+        moduleCode: updated.moduleCode,
+        entityType: "retention_policy",
+        entityId: updated.id,
+        oldValues: toRetentionAuditSnapshot(existing),
+        newValues: toRetentionAuditSnapshot(updated),
+        sensitivityLevel: "Sensitive",
+        resultStatus: "Success",
+        dataScope: "Company",
+        permissionCode: "FOUNDATION.RETENTION.MANAGE",
+      });
+
+      return updated;
+    });
+  }
+
+  /**
+   * Danh sách MỌI chính sách của tenant (deleted_at IS NULL), GỒM CẢ policy disabled (is_enabled=false) —
+   * cho màn hình quản trị retention (S2-FE-FND-6). withTenant + RLS ép company_id. company_id = companyId
+   * tường minh (KHÔNG kèm global NULL — chỉ policy của tenant). Sắp module_code, entity_type ổn định.
+   */
+  async listPolicies(companyId: string): Promise<RetentionPolicyRow[]> {
+    return this.db.withTenant(companyId, async (tx) => {
+      const rows = await tx
+        .select()
+        .from(dataRetentionPolicies)
+        .where(
+          and(
+            eq(dataRetentionPolicies.companyId, companyId),
+            isNull(dataRetentionPolicies.deletedAt),
+          ),
+        )
+        .orderBy(asc(dataRetentionPolicies.moduleCode), asc(dataRetentionPolicies.entityType));
+      return rows as RetentionPolicyRow[];
     });
   }
 
@@ -259,12 +371,7 @@ export class RetentionService {
         };
       }
 
-      const eligibleCount = await this._countEligible(
-        tx,
-        companyId,
-        policy.entityType,
-        cutoffTime,
-      );
+      const eligibleCount = await this._countEligible(tx, companyId, policy.entityType, cutoffTime);
 
       // BẤT BIẾN #2: bảng append-only KHÔNG bao giờ được xóa.
       if (RetentionService.PROTECTED_TABLES.has(policy.entityType)) {
@@ -386,4 +493,23 @@ export class RetentionService {
     );
     return (result as { rowCount?: number }).rowCount ?? 0;
   }
+}
+
+/**
+ * Snapshot cấu hình policy cho audit before/after (BẤT BIẾN #3). CHỈ field CẤU HÌNH — KHÔNG id/companyId/
+ * createdBy/updatedBy/metadata/deletedAt (nội bộ). data_retention_policies KHÔNG có cột secret/PII nên
+ * snapshot an toàn; AuditService vẫn mask + tính changed_fields (chỉ TÊN field) như phòng thủ chiều sâu.
+ */
+function toRetentionAuditSnapshot(row: RetentionPolicyRow): Record<string, unknown> {
+  return {
+    moduleCode: row.moduleCode,
+    entityType: row.entityType,
+    retentionDays: row.retentionDays,
+    cleanupAction: row.cleanupAction,
+    archiveAfterDays: row.archiveAfterDays,
+    deleteAfterDays: row.deleteAfterDays,
+    isLegalHoldSupported: row.isLegalHoldSupported,
+    isEnabled: row.isEnabled,
+    description: row.description,
+  };
 }

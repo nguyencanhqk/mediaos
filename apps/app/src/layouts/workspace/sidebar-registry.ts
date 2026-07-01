@@ -90,6 +90,28 @@ export const ATT_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 20,
     requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_OWN"],
   },
+  // Scoped records — pair-as-gate (VIEW_TEAM/VIEW_COMPANY là cặp is_sensitive RIÊNG). filterSidebarItems ẩn
+  // theo requiredAny cặp ĐÚNG; KHÔNG hard-code role. Employee (chỉ view-own) không thấy 2 item dưới đây.
+  {
+    sidebarKey: "att.team-records",
+    moduleCode: "ATT",
+    label: "Bảng công nhóm",
+    path: "/attendance/team-records",
+    icon: "users",
+    group: "management",
+    order: 30,
+    requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_TEAM"],
+  },
+  {
+    sidebarKey: "att.records",
+    moduleCode: "ATT",
+    label: "Bảng công toàn công ty",
+    path: "/attendance/records",
+    icon: "table",
+    group: "management",
+    order: 40,
+    requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_COMPANY"],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -116,6 +138,10 @@ export const LEAVE_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 20,
     requiredAnyPermissions: ["LEAVE.REQUEST.VIEW_OWN"],
   },
+  // S3-FE-LEAVE-2 PIN CỔNG: gate sidebar = CHỈ view:leave (LEAVE.REQUEST.VIEW) — khớp route
+  // leave.approvals + BE GET /leave/requests (VIEW_LEAVE, SENSITIVE, mig 0455). KHÔNG gate
+  // LEAVE.REQUEST.APPROVE: người chỉ có approve mà thiếu view sẽ 403 ở list-load ⇒ menu phải đòi
+  // ĐÚNG cặp đọc chéo (manager/hr/company-admin có view:leave; employee KHÔNG → ẩn).
   {
     sidebarKey: "leave.approvals",
     moduleCode: "LEAVE",
@@ -124,7 +150,7 @@ export const LEAVE_SIDEBAR: readonly SidebarItemMeta[] = [
     icon: "check-circle",
     group: "operation",
     order: 30,
-    requiredAnyPermissions: ["LEAVE.REQUEST.APPROVE", "LEAVE.REQUEST.VIEW"],
+    requiredAnyPermissions: ["LEAVE.REQUEST.VIEW"],
   },
 ];
 

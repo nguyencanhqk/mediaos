@@ -120,6 +120,19 @@ import { EmployeeDetailPage } from "@/routes/hr/employees/EmployeeDetailPage";
 import { EmployeeFormPage } from "@/routes/hr/employees/EmployeeFormPage";
 import { MyProfilePage } from "@/routes/hr/me/MyProfilePage";
 
+// Attendance
+import { AttendanceTodayPage } from "@/routes/attendance/AttendanceTodayPage";
+import { MyAttendanceRecordsPage } from "@/routes/attendance/MyAttendanceRecordsPage";
+import { TeamAttendanceRecordsPage } from "@/routes/attendance/TeamAttendanceRecordsPage";
+import { AttendanceRecordDetailPage } from "@/routes/attendance/AttendanceRecordDetailPage";
+
+// Leave
+import { MyLeaveBalancePage } from "@/routes/leave/MyLeaveBalancePage";
+import { MyLeaveRequestsPage } from "@/routes/leave/MyLeaveRequestsPage";
+import { CreateLeaveRequestPage } from "@/routes/leave/CreateLeaveRequestPage";
+import { LeaveRequestDetailPage } from "@/routes/leave/LeaveRequestDetailPage";
+import { LeaveApprovalPage } from "@/routes/leave/LeaveApprovalPage";
+
 // System
 import { UsersPage } from "@/routes/system/UsersPage";
 import { RolesPage } from "@/routes/system/RolesPage";
@@ -204,28 +217,97 @@ const hrEmployeeEditRoute = createRoute({
 });
 
 // Attendance
-const attTodayRoute = makeModuleRoute("/attendance/today", "att.today", "ATT", ModulePlaceholder);
+const attTodayRoute = makeModuleRoute("/attendance/today", "att.today", "ATT", AttendanceTodayPage);
 const attMyRecordsRoute = makeModuleRoute(
   "/attendance/my-records",
   "att.my-records",
   "ATT",
+  MyAttendanceRecordsPage,
+);
+const attTeamRecordsRoute = makeModuleRoute(
+  "/attendance/team-records",
+  "att.team-records",
+  "ATT",
+  TeamAttendanceRecordsPage,
+);
+// Company-wide records (att.records) — out-of-scope S3-FE-ATT-5; remains placeholder.
+const attRecordsRoute = makeModuleRoute(
+  "/attendance/records",
+  "att.records",
+  "ATT",
   ModulePlaceholder,
 );
 
+// Attendance record detail — local RouteMeta (no sidebar entry).
+// ANY of VIEW_OWN/VIEW_TEAM/VIEW_COMPANY grants route access; actual 403/404 from server.
+// Pattern: systemLoginLogsRoute (local meta, buildModuleRouteContent → ProtectedRoute guard).
+const attRecordDetailMeta: RouteMeta = {
+  routeKey: "att.record-detail",
+  path: "/attendance/records/:recordId",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-004",
+  titleKey: "routeTitle.attRecordDetail",
+  requiredAnyPermissions: [
+    "ATT.ATTENDANCE.VIEW_OWN",
+    "ATT.ATTENDANCE.VIEW_TEAM",
+    "ATT.ATTENDANCE.VIEW_COMPANY",
+  ],
+};
+const attRecordDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/records/$recordId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { recordId } = attRecordDetailRoute.useParams();
+    return buildModuleRouteContent(
+      attRecordDetailMeta,
+      "ATT",
+      <AttendanceRecordDetailPage recordId={recordId} />,
+    );
+  },
+});
+
 // Leave
-const leaveRoute = makeModuleRoute("/leave", "leave.overview", "LEAVE", ModulePlaceholder);
+const leaveRoute = makeModuleRoute("/leave", "leave.overview", "LEAVE", MyLeaveBalancePage);
 const leaveMyRequestsRoute = makeModuleRoute(
   "/leave/me/requests",
   "leave.my-requests",
   "LEAVE",
-  ModulePlaceholder,
+  MyLeaveRequestsPage,
 );
 const leaveApprovalsRoute = makeModuleRoute(
   "/leave/approvals",
   "leave.approvals",
   "LEAVE",
-  ModulePlaceholder,
+  LeaveApprovalPage,
 );
+
+// Leave create — static "new" segment before "$requestId" param route
+const leaveCreateMeta = getMeta("leave.my-requests");
+const leaveCreateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/leave/me/requests/new",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(leaveCreateMeta, "LEAVE", <CreateLeaveRequestPage />),
+});
+
+// Leave detail — local RouteMeta (no sidebar entry; reuses leave.my-requests permission).
+// Pattern mirrors systemLoginLogsRoute: local meta, buildModuleRouteContent → ProtectedRoute guard.
+const leaveDetailMeta = getMeta("leave.my-requests");
+const leaveDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/leave/me/requests/$requestId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { requestId } = leaveDetailRoute.useParams();
+    return buildModuleRouteContent(
+      leaveDetailMeta,
+      "LEAVE",
+      <LeaveRequestDetailPage requestId={requestId} />,
+    );
+  },
+});
 
 // Tasks
 const tasksRoute = makeModuleRoute("/tasks", "task.overview", "TASK", ModulePlaceholder);
@@ -307,8 +389,13 @@ const routeTree = rootRoute.addChildren([
   hrMeRoute,
   attTodayRoute,
   attMyRecordsRoute,
+  attTeamRecordsRoute,
+  attRecordsRoute,
+  attRecordDetailRoute,
   leaveRoute,
   leaveMyRequestsRoute,
+  leaveCreateRoute,
+  leaveDetailRoute,
   leaveApprovalsRoute,
   tasksRoute,
   tasksMyTasksRoute,

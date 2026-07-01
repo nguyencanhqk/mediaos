@@ -1,5 +1,6 @@
 import { createZodDto } from "nestjs-zod";
 import {
+  approveLeaveRequestSchema,
   cancelLeaveRequestSchema,
   createLeaveRequestDraftSchema,
   createLeaveRequestSchema,
@@ -8,6 +9,8 @@ import {
   leaveCalendarQuerySchema,
   leaveListQuerySchema,
   leaveRequestListQuerySchema,
+  pendingLeaveRequestListQuerySchema,
+  rejectLeaveRequestSchema,
   reviewNoteSchema,
   submitLeaveRequestSchema,
   updateLeaveRequestDraftSchema,
@@ -31,3 +34,10 @@ export class UpdateLeaveRequestDraftDto extends createZodDto(updateLeaveRequestD
 export class SubmitLeaveRequestDto extends createZodDto(submitLeaveRequestSchema) {}
 export class CancelLeaveRequestDto extends createZodDto(cancelLeaveRequestSchema) {}
 export class LeaveRequestListQueryDto extends createZodDto(leaveRequestListQuerySchema) {}
+// S3-LEAVE-BE-3: approval workflow (approve/reject/management-list). Server-authoritative — client
+// status/approvedBy/companyId stripped by Zod. reject reason REQUIRED (min 1); approve note optional.
+export class ApproveLeaveRequestDto extends createZodDto(approveLeaveRequestSchema) {}
+export class RejectLeaveRequestDto extends createZodDto(rejectLeaveRequestSchema) {}
+export class PendingLeaveRequestListQueryDto extends createZodDto(
+  pendingLeaveRequestListQuerySchema,
+) {}

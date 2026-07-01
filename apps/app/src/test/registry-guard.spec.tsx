@@ -24,11 +24,13 @@ import {
   evaluateRouteAccess,
   filterSidebarItems,
   getVisibleApps,
+  getRouteMeta,
   APP_REGISTRY,
   type SessionContext,
   type SidebarItemMeta,
   type UserPermission,
 } from "@mediaos/web-core";
+import { ATT_SIDEBAR, LEAVE_SIDEBAR } from "@/layouts/workspace/sidebar-registry";
 
 // ---------------------------------------------------------------------------
 // Minimal i18n mock (nav namespace)
@@ -71,6 +73,34 @@ function makeSession(overrides: Partial<SessionContext> = {}): SessionContext {
 function makePerms(permissions: string[]): UserPermission[] {
   return permissions.map((p) => ({ permission: p, scopes: [] as never }));
 }
+
+/** Cặp-engine + scope THẬT (per-permission) — mô phỏng /auth/me capabilities+scopes (KHÔNG []). */
+function makeScopedPerms(entries: UserPermission[]): UserPermission[] {
+  return entries.map((e) => ({ permission: e.permission, scopes: [...e.scopes] }));
+}
+
+// Persona theo cặp ENGINE THẬT + scope THẬT (pair-as-gate + defense-in-depth).
+const EMPLOYEE_PERMS = makeScopedPerms([
+  { permission: "view-own:attendance", scopes: ["Own"] },
+  { permission: "view-own:leave", scopes: ["Own"] },
+]);
+const MANAGER_PERMS = makeScopedPerms([
+  { permission: "view-own:attendance", scopes: ["Own"] },
+  { permission: "view-team:attendance", scopes: ["Team"] },
+  { permission: "view-own:leave", scopes: ["Own"] },
+  // S3-FE-LEAVE-2: mig 0455 grant manager view:leave@Team + approve:leave@Team (đọc chéo/duyệt phạm vi nhóm).
+  // view:leave là cổng của leave.approvals (route + sidebar) — phải có để manager thấy menu + qua route.
+  { permission: "view:leave", scopes: ["Team"] },
+  { permission: "approve:leave", scopes: ["Team"] },
+]);
+const HR_PERMS = makeScopedPerms([
+  { permission: "view-own:attendance", scopes: ["Own"] },
+  { permission: "view-team:attendance", scopes: ["Team"] },
+  { permission: "view-company:attendance", scopes: ["Company"] },
+  { permission: "view-own:leave", scopes: ["Own"] },
+  { permission: "view:leave", scopes: ["Company"] },
+  { permission: "approve:leave", scopes: ["Company"] },
+]);
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -270,6 +300,115 @@ describe("filterSidebarItems — Sidebar", () => {
     );
     const filtered = filterSidebarItems(leaveSidebar, c, lockedSession);
     expect(filtered).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CROWN — ATT scoped sidebar (real registry) pair-as-gate deny-path matrix
+// filterSidebarItems chạy trên ATT_SIDEBAR/LEAVE_SIDEBAR THẬT (không fixture cục bộ) → khoá registry.
+// employee ẩn Team/Company + approvals; manager thấy Team ẩn Company; hr thấy Company.
+// ---------------------------------------------------------------------------
+
+describe("filterSidebarItems — ATT scoped (real registry) deny-path", () => {
+  const attActive = makeSession({ modules: [{ moduleCode: "ATT", status: "active" }] });
+  const leaveActive = makeSession({ modules: [{ moduleCode: "LEAVE", status: "active" }] });
+
+  it("employee → ẩn att.team-records + att.records + leave.approvals", () => {
+    const att = filterSidebarItems(ATT_SIDEBAR, createPermissionChecker(EMPLOYEE_PERMS), attActive);
+    expect(att.find((i) => i.sidebarKey === "att.today")).toBeDefined();
+    expect(att.find((i) => i.sidebarKey === "att.my-records")).toBeDefined();
+    expect(att.find((i) => i.sidebarKey === "att.team-records")).toBeUndefined();
+    expect(att.find((i) => i.sidebarKey === "att.records")).toBeUndefined();
+
+    const leave = filterSidebarItems(
+      LEAVE_SIDEBAR,
+      createPermissionChecker(EMPLOYEE_PERMS),
+      leaveActive,
+    );
+    expect(leave.find((i) => i.sidebarKey === "leave.approvals")).toBeUndefined();
+  });
+
+  it("manager (view:leave@Team) → thấy att.team-records, ẩn att.records; thấy leave.approvals", () => {
+    const att = filterSidebarItems(ATT_SIDEBAR, createPermissionChecker(MANAGER_PERMS), attActive);
+    expect(att.find((i) => i.sidebarKey === "att.team-records")).toBeDefined();
+    expect(att.find((i) => i.sidebarKey === "att.records")).toBeUndefined();
+
+    // S3-FE-LEAVE-2: leave.approvals gate = LEAVE.REQUEST.VIEW (view:leave). Manager có view:leave@Team → hiện.
+    const leave = filterSidebarItems(
+      LEAVE_SIDEBAR,
+      createPermissionChecker(MANAGER_PERMS),
+      leaveActive,
+    );
+    expect(leave.find((i) => i.sidebarKey === "leave.approvals")).toBeDefined();
+  });
+
+  it("hr (view:leave@Company) → thấy att.records (+ att.team-records) + leave.approvals", () => {
+    const att = filterSidebarItems(ATT_SIDEBAR, createPermissionChecker(HR_PERMS), attActive);
+    expect(att.find((i) => i.sidebarKey === "att.records")).toBeDefined();
+    expect(att.find((i) => i.sidebarKey === "att.team-records")).toBeDefined();
+
+    const leave = filterSidebarItems(LEAVE_SIDEBAR, createPermissionChecker(HR_PERMS), leaveActive);
+    expect(leave.find((i) => i.sidebarKey === "leave.approvals")).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S3-FE-LEAVE-2 — leave.approvals PIN CỔNG (view:leave) trên REGISTRY THẬT
+// Route guard + sidebar gate ĐỀU đòi LEAVE.REQUEST.VIEW (KHÔNG approve:leave). employee (view-own:leave,
+// KHÔNG view:leave) → ẩn menu + SHOW_403 ở route; manager(view:leave@Team) / hr(view:leave@Company) → ALLOW.
+// scopes THẬT (per-permission) + modules không rỗng → chống xanh-giả (fixture rỗng có thể pass sai).
+// ---------------------------------------------------------------------------
+
+describe("leave.approvals gate = view:leave (registry thật)", () => {
+  const leaveActive = makeSession({ modules: [{ moduleCode: "LEAVE", status: "active" }] });
+  const approvalsMeta = getRouteMeta("leave.approvals")!;
+
+  it("pin cổng: meta yêu cầu ĐÚNG LEAVE.REQUEST.VIEW (không approve)", () => {
+    expect(approvalsMeta.requiredAnyPermissions).toEqual(["LEAVE.REQUEST.VIEW"]);
+    const approvalsSidebar = LEAVE_SIDEBAR.find((i) => i.sidebarKey === "leave.approvals");
+    expect(approvalsSidebar?.requiredAnyPermissions).toEqual(["LEAVE.REQUEST.VIEW"]);
+  });
+
+  it("employee (không view:leave) → LEAVE_SIDEBAR ẩn leave.approvals + route SHOW_403", () => {
+    const c = createPermissionChecker(EMPLOYEE_PERMS);
+    const leave = filterSidebarItems(LEAVE_SIDEBAR, c, leaveActive);
+    expect(leave.find((i) => i.sidebarKey === "leave.approvals")).toBeUndefined();
+    expect(evaluateRouteAccess(leaveActive, approvalsMeta, c).action).toBe("SHOW_403");
+  });
+
+  it("manager (view:leave@Team) → hiện leave.approvals + route ALLOW", () => {
+    const c = createPermissionChecker(MANAGER_PERMS);
+    const leave = filterSidebarItems(LEAVE_SIDEBAR, c, leaveActive);
+    expect(leave.find((i) => i.sidebarKey === "leave.approvals")).toBeDefined();
+    expect(evaluateRouteAccess(leaveActive, approvalsMeta, c).action).toBe("ALLOW");
+  });
+
+  it("hr (view:leave@Company) → hiện leave.approvals + route ALLOW", () => {
+    const c = createPermissionChecker(HR_PERMS);
+    const leave = filterSidebarItems(LEAVE_SIDEBAR, c, leaveActive);
+    expect(leave.find((i) => i.sidebarKey === "leave.approvals")).toBeDefined();
+    expect(evaluateRouteAccess(leaveActive, approvalsMeta, c).action).toBe("ALLOW");
+  });
+
+  it("anti-false-green: MANAGER_PERMS có scope THẬT (≠[]) + có view:leave; session.modules ≠ []", () => {
+    expect(MANAGER_PERMS.every((p) => p.scopes.length > 0)).toBe(true);
+    expect(MANAGER_PERMS.some((p) => p.permission === "view:leave")).toBe(true);
+    expect(leaveActive.modules.length).toBeGreaterThan(0);
+  });
+});
+
+describe("getVisibleApps — company-admin thấy attendance + leave", () => {
+  it("caps company-admin THẬT → attendance & leave hiển thị", () => {
+    const session = makeSession({
+      modules: [
+        { moduleCode: "ATT", status: "active" },
+        { moduleCode: "LEAVE", status: "active" },
+      ],
+    });
+    const c = createPermissionChecker(HR_PERMS);
+    const visible = getVisibleApps(APP_REGISTRY, session, c);
+    expect(visible.find((a) => a.appKey === "attendance")).toBeDefined();
+    expect(visible.find((a) => a.appKey === "leave")).toBeDefined();
   });
 });
 

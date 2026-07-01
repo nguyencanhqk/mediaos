@@ -81,6 +81,17 @@ export const attendanceKeys = {
   myToday: () => [...rootKeys.attendance, "my", "today"] as const,
   mySummary: (params?: Record<string, unknown>) =>
     [...rootKeys.attendance, "my", "summary", params] as const,
+  // S3-FE-REGISTRY-1 — APPEND (không rename key cũ). Scoped records: my / team / company(records).
+  myRecords: (params?: Record<string, unknown>) =>
+    [...rootKeys.attendance, "my", "records", params] as const,
+  teamRecords: (params?: Record<string, unknown>) =>
+    [...rootKeys.attendance, "team", "records", params] as const,
+  records: {
+    all: [...rootKeys.attendance, "records"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "records", "list", params] as const,
+    detail: (id: string) => [...rootKeys.attendance, "records", "detail", id] as const,
+  },
 };
 
 // ── Leave keys ────────────────────────────────────────────────────────────────
@@ -129,4 +140,30 @@ export const notificationKeys = {
   list: (params?: Record<string, unknown>) => [...rootKeys.notifications, "list", params] as const,
   detail: (id: string) => [...rootKeys.notifications, "detail", id] as const,
   unreadCount: () => [...rootKeys.notifications, "unread-count"] as const,
+};
+
+// ── Mutation → query-key invalidation matrix (FRONTEND-04 §17.3) ──────────────
+//
+// Mỗi entry trả về DANH SÁCH prefix key để `queryClient.invalidateQueries({ queryKey })`. Prefix (BỎ slot
+// params) nên khớp mọi biến thể param'd (TanStack matches theo prefix). Nguồn sự thật DUY NHẤT để hook
+// mutation không rải string tay — check-in/out làm mới today + bảng công của tôi; duyệt/từ chối nghỉ làm
+// mới danh sách đơn quản lý + chi tiết đơn (KHÔNG số dư phép — balance thuộc requester, không nằm trong
+// cache của người duyệt).
+
+const attendanceMyRecordsPrefix = [...rootKeys.attendance, "my", "records"] as const;
+const leaveRequestsListPrefix = [...rootKeys.leave, "requests", "list"] as const;
+
+export const attendanceInvalidation = {
+  checkIn: () => [attendanceKeys.myToday(), attendanceMyRecordsPrefix] as const,
+  checkOut: () => [attendanceKeys.myToday(), attendanceMyRecordsPrefix] as const,
+};
+
+// S3-FE-LEAVE-2: approver KHÔNG giữ balance key của requester (balance thuộc user gửi đơn, không nằm
+// trong cache của người duyệt) → BỎ leaveKeys.balances.all. Chỉ làm mới danh sách quản lý (mọi biến thể
+// param'd qua list-prefix) + chi tiết đúng đơn vừa duyệt/từ chối.
+export const leaveInvalidation = {
+  approve: (requestId: string) =>
+    [leaveRequestsListPrefix, leaveKeys.requests.detail(requestId)] as const,
+  reject: (requestId: string) =>
+    [leaveRequestsListPrefix, leaveKeys.requests.detail(requestId)] as const,
 };

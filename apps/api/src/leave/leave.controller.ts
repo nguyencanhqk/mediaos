@@ -21,10 +21,12 @@ import {
   type LeavePermissionPair,
   type LeaveResourceType,
 } from "./leave-permissions.const";
+import { LeaveApprovalService } from "./leave-approval.service";
 import { LeaveReadService } from "./leave-read.service";
 import { LeaveRequestService } from "./leave-request.service";
 import { LeaveService } from "./leave.service";
 import {
+  ApproveLeaveRequestDto,
   CancelLeaveRequestDto,
   CreateLeaveRequestDraftDto,
   CreateLeaveTypeDto,
@@ -32,7 +34,8 @@ import {
   LeaveCalendarQueryDto,
   LeaveListQueryDto,
   LeaveRequestListQueryDto,
-  ReviewNoteDto,
+  PendingLeaveRequestListQueryDto,
+  RejectLeaveRequestDto,
   SubmitLeaveRequestDto,
   UpdateLeaveRequestDraftDto,
   UpdateLeaveTypeDto,
@@ -68,6 +71,12 @@ const SUBMIT_LEAVE = leavePair("submit", LEAVE_RESOURCES.LEAVE);
 const UPDATE_DRAFT_LEAVE = leavePair("update-draft", LEAVE_RESOURCES.LEAVE);
 const CANCEL_OWN_LEAVE = leavePair("cancel-own", LEAVE_RESOURCES.LEAVE);
 const VIEW_OWN_LEAVE = leavePair("view-own", LEAVE_RESOURCES.LEAVE);
+// S3-LEAVE-BE-3 — management/approval pairs (mig 0455). view:leave + reject:leave are SENSITIVE (cross-read
+// / management) → wildcard grant does NOT satisfy; approve:leave is non-sensitive. Scope (Team/Company) is
+// enforced in LeaveApprovalService (resolveContext + isEmployeeInScope), NOT here.
+const VIEW_LEAVE = leavePair("view", LEAVE_RESOURCES.LEAVE);
+const APPROVE_LEAVE = leavePair("approve", LEAVE_RESOURCES.LEAVE);
+const REJECT_LEAVE = leavePair("reject", LEAVE_RESOURCES.LEAVE);
 
 /**
  * G11-2 — Leave HTTP surface. Every route gated by PermissionGuard (@RequirePermission, fail-closed).
@@ -82,6 +91,7 @@ export class LeaveController {
     private readonly leave: LeaveService,
     private readonly leaveRead: LeaveReadService,
     private readonly leaveRequest: LeaveRequestService,
+    private readonly leaveApproval: LeaveApprovalService,
   ) {}
 
   // ─── Leave types ─────────────────────────────────────────────────────────────
@@ -160,10 +170,15 @@ export class LeaveController {
 
   // ─── Leave requests (→ Task Hub) ─────────────────────────────────────────────
 
+  // S3-LEAVE-BE-3 REPOINT: management list for approvers. Was ('read','leave') (orphaned pair) → view:leave
+  // (SENSITIVE, mig 0455). SCOPED in LeaveApprovalService: manager=Team, hr/company-admin=Company; employees
+  // (no view:leave grant) → 403 at the guard. status defaults to 'Pending' + pagination/filters.
   @Get("requests")
-  @RequirePermission("read", "leave")
-  listRequests(@Req() req: AuthenticatedRequest, @Query() query: LeaveListQueryDto) {
-    return this.leave.listRequests(req.user, query);
+  @RequirePermission(VIEW_LEAVE.action, VIEW_LEAVE.resourceType, {
+    isSensitive: VIEW_LEAVE.sensitive,
+  })
+  listRequests(@Req() req: AuthenticatedRequest, @Query() query: PendingLeaveRequestListQueryDto) {
+    return this.leaveApproval.listPending(req.user, query);
   }
 
   // S3-LEAVE-BE-2 REPOINT: create now produces a Draft via LeaveRequestService (FSM Draft→Pending→Cancelled).
@@ -216,24 +231,35 @@ export class LeaveController {
     return this.leaveRequest.submit(req.user, id, dto.note);
   }
 
+  // S3-LEAVE-BE-3 REPOINT: FSM Pending → Approved. approve:leave gate + scope-check + self-approval block in
+  // LeaveApprovalService (ngoài scope → 403, cross-tenant → 404, self → 422 LEAVE-ERR-APPROVER-INVALID).
   @Post("requests/:id/approve")
-  @RequirePermission("approve", "leave")
+  @HttpCode(200)
+  @RequirePermission(APPROVE_LEAVE.action, APPROVE_LEAVE.resourceType, {
+    isSensitive: APPROVE_LEAVE.sensitive,
+  })
   approveRequest(
     @Req() req: AuthenticatedRequest,
     @Param("id") id: string,
-    @Body() dto: ReviewNoteDto,
+    @Body() dto: ApproveLeaveRequestDto,
   ) {
-    return this.leave.approveRequest(req.user, id, dto.note);
+    return this.leaveApproval.approve(req.user, id, dto.note);
   }
 
+  // S3-LEAVE-BE-3 REPOINT + REGATE: FSM Pending → Rejected. Gate CHANGED ('approve' → 'reject':leave,
+  // SENSITIVE). reason REQUIRED (Zod min(1)) + scope-check + self-approval block. Releases the reserve;
+  // NO attendance record, NO sync event.
   @Post("requests/:id/reject")
-  @RequirePermission("approve", "leave")
+  @HttpCode(200)
+  @RequirePermission(REJECT_LEAVE.action, REJECT_LEAVE.resourceType, {
+    isSensitive: REJECT_LEAVE.sensitive,
+  })
   rejectRequest(
     @Req() req: AuthenticatedRequest,
     @Param("id") id: string,
-    @Body() dto: ReviewNoteDto,
+    @Body() dto: RejectLeaveRequestDto,
   ) {
-    return this.leave.rejectRequest(req.user, id, dto.note);
+    return this.leaveApproval.reject(req.user, id, dto.reason);
   }
 
   // S3-LEAVE-BE-2 REPOINT + REGATE: cancel own request (Draft|Pending → Cancelled; releases reserve on
