@@ -2610,7 +2610,7 @@ export const backlog = [
     title:
       "ATT Adjustment workflow API (CO-S4-003): adjustment_requests create/list/detail + approve/reject + direct-adjust + recalc attendance_records + audit + event (skeleton 0452 → hoàn thiện cột nếu thiếu)",
     zone: "red",
-    status: "todo",
+    status: "in_review",
     paths: [
       "apps/api/src/attendance/**",
       "apps/api/src/db/schema/**",

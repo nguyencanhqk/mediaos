@@ -6,8 +6,11 @@ import { HrTasksService } from "../tasks/hr-tasks.service";
 import { AttMasterDataSeeder } from "./att-master-data.seeder";
 import { AttSeedRegistrar } from "./att-seed.registrar";
 import { AttendanceController } from "./attendance.controller";
+import { AttendanceAdjustmentController } from "./attendance-adjustment.controller";
 import { AttendanceReadRepository } from "./attendance-read.repository";
 import { AttendanceReadService } from "./attendance-read.service";
+import { AttendanceAdjustmentRepository } from "./attendance-adjustment.repository";
+import { AttendanceAdjustmentService } from "./attendance-adjustment.service";
 import { AttendanceRepository } from "./attendance.repository";
 import { AttendanceService } from "./attendance.service";
 
@@ -22,7 +25,7 @@ import { AttendanceService } from "./attendance.service";
  */
 @Module({
   imports: [DatabaseModule, PermissionModule, SeedModule],
-  controllers: [AttendanceController],
+  controllers: [AttendanceController, AttendanceAdjustmentController],
   providers: [
     AttendanceService,
     AttendanceRepository,
@@ -30,10 +33,14 @@ import { AttendanceService } from "./attendance.service";
     // PermissionService (PermissionModule exports both) + DatabaseService (@Global) + the read repo.
     AttendanceReadService,
     AttendanceReadRepository,
+    // S3-ATT-BE-4 (additive): canonical adjustment surface (create/list/detail/approve/reject/direct).
+    // Reuses AttendanceRepository (record/log/period) + DataScopeService + HrTasksService (Task Hub).
+    AttendanceAdjustmentService,
+    AttendanceAdjustmentRepository,
     HrTasksService,
     AttMasterDataSeeder,
     AttSeedRegistrar,
   ],
-  exports: [AttendanceService, AttendanceReadService],
+  exports: [AttendanceService, AttendanceReadService, AttendanceAdjustmentService],
 })
 export class AttendanceModule {}

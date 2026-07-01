@@ -1198,7 +1198,7 @@ export const RLS_TABLES: RlsTableCase[] = [
       const r = await direct.query(
         `INSERT INTO attendance_adjustment_requests
            (company_id, user_id, work_date, requested_check_in_at, reason, status, task_id)
-         VALUES ($1, $2, '2024-06-03', '2024-06-03T02:00:00Z', 'rls-reason', 'pending', $3) RETURNING id`,
+         VALUES ($1, $2, '2024-06-03', '2024-06-03T02:00:00Z', 'rls-reason', 'Pending', $3) RETURNING id`,
         [t.companyId, u, taskRes.rows[0].id],
       );
       return r.rows[0].id as string;
@@ -1297,7 +1297,7 @@ export const RLS_TABLES: RlsTableCase[] = [
       const req = await direct.query(
         `INSERT INTO attendance_adjustment_requests
            (company_id, user_id, employee_id, work_date, request_type, reason, status, requested_check_in_at)
-         VALUES ($1, $2, $3, '2026-06-03', 'MISSING_CHECK_IN', 'rls', 'pending', '2026-06-03T02:00:00Z')
+         VALUES ($1, $2, $3, '2026-06-03', 'MISSING_CHECK_IN', 'rls', 'Pending', '2026-06-03T02:00:00Z')
          RETURNING id`,
         [t.companyId, u, emp.rows[0].id],
       );

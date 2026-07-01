@@ -76,7 +76,7 @@ async function seedAttRowsForTenant(
   const req = await direct.query(
     `INSERT INTO attendance_adjustment_requests
        (company_id, user_id, employee_id, work_date, request_type, reason, status, requested_check_in_at)
-     VALUES ($1, $2, $3, '2026-06-03', 'MISSING_CHECK_IN', 'reason', 'pending', '2026-06-03T02:00:00Z')
+     VALUES ($1, $2, $3, '2026-06-03', 'MISSING_CHECK_IN', 'reason', 'Pending', '2026-06-03T02:00:00Z')
      RETURNING id`,
     [companyId, userId, employeeId],
   );

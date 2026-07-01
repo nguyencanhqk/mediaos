@@ -18,7 +18,6 @@ import { AttendanceService } from "./attendance.service";
 const COMPANY_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc";
 const ACTOR_ID = "11111111-1111-1111-1111-111111111111";
 const OTHER_ID = "22222222-2222-2222-2222-222222222222";
-const REQ_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd";
 const actor = { id: ACTOR_ID, companyId: COMPANY_ID };
 
 function makeRecord(overrides: Record<string, unknown> = {}) {
@@ -35,25 +34,6 @@ function makeRecord(overrides: Record<string, unknown> = {}) {
     earlyLeaveMinutes: 0,
     status: "missing_checkin",
     note: null,
-    ...overrides,
-  };
-}
-
-function makeAdjustment(overrides: Record<string, unknown> = {}) {
-  return {
-    id: REQ_ID,
-    userId: ACTOR_ID,
-    attendanceRecordId: null,
-    workDate: "2024-06-03",
-    requestedCheckInAt: new Date("2024-06-03T02:00:00Z"),
-    requestedCheckOutAt: new Date("2024-06-03T11:00:00Z"),
-    reason: "Quên chấm công",
-    status: "pending",
-    taskId: "tttttttt-tttt-tttt-tttt-tttttttttttt",
-    approvedBy: null,
-    approvedAt: null,
-    reviewNote: null,
-    createdAt: new Date("2024-06-03T12:00:00Z"),
     ...overrides,
   };
 }
@@ -91,24 +71,17 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     updateRecordTx: vi
       .fn()
       .mockResolvedValue([makeRecord({ checkOutAt: new Date(), status: "present" })]),
-    findAdjustmentByIdTx: vi.fn().mockResolvedValue([makeAdjustment()]),
-    findAdjustmentByIdForUpdateTx: vi.fn().mockResolvedValue([makeAdjustment()]),
-    findAdjustments: vi.fn().mockResolvedValue([]),
-    insertAdjustmentTx: vi.fn().mockResolvedValue([makeAdjustment()]),
-    updateAdjustmentTx: vi.fn().mockResolvedValue([makeAdjustment({ status: "approved" })]),
     findPeriods: vi.fn().mockResolvedValue([]),
     findPeriodTx: vi.fn().mockResolvedValue([]),
-    lockPeriodTx: vi
-      .fn()
-      .mockResolvedValue([
-        {
-          id: "p",
-          periodMonth: "2024-06",
-          status: "locked",
-          lockedBy: ACTOR_ID,
-          lockedAt: new Date(),
-        },
-      ]),
+    lockPeriodTx: vi.fn().mockResolvedValue([
+      {
+        id: "p",
+        periodMonth: "2024-06",
+        status: "locked",
+        lockedBy: ACTOR_ID,
+        lockedAt: new Date(),
+      },
+    ]),
     ...overrides,
   };
 }
@@ -126,27 +99,20 @@ const makePermission = (allow: boolean) => ({
     .fn()
     .mockResolvedValue({ allow, reason: allow ? "allow" : "deny-default", auditRequired: false }),
 });
-const makeHrTasks = () => ({
-  createApprovalTaskTx: vi.fn().mockResolvedValue({ id: "task-1" }),
-  closeTaskTx: vi.fn().mockResolvedValue(undefined),
-  cancelTaskTx: vi.fn().mockResolvedValue(undefined),
-});
 const makeAudit = () => ({ record: vi.fn().mockResolvedValue(undefined) });
 const makeOutbox = () => ({ enqueue: vi.fn().mockResolvedValue(undefined) });
 
 function build(repo: ReturnType<typeof makeRepo>, permissionAllow = true) {
   const audit = makeAudit();
   const outbox = makeOutbox();
-  const hrTasks = makeHrTasks();
   const service = new AttendanceService(
     makeDb(repo) as never,
     repo as never,
     makePermission(permissionAllow) as never,
-    hrTasks as never,
     audit as never,
     outbox as never,
   );
-  return { service, audit, outbox, hrTasks };
+  return { service, audit, outbox };
 }
 
 describe("AttendanceService — check-in/out guards", () => {
@@ -197,80 +163,6 @@ describe("AttendanceService — check-in/out guards", () => {
   });
 });
 
-describe("AttendanceService — adjustment lifecycle", () => {
-  it("blocks creating an adjustment for a locked period", async () => {
-    const repo = makeRepo({ isPeriodLockedTx: vi.fn().mockResolvedValue(true) });
-    const { service, hrTasks } = build(repo);
-    await expect(
-      service.createAdjustment(actor, {
-        workDate: "2024-06-03",
-        requestedCheckInAt: "2024-06-03T02:00:00Z",
-        reason: "x",
-      }),
-    ).rejects.toThrow(ConflictException);
-    expect(hrTasks.createApprovalTaskTx).not.toHaveBeenCalled();
-  });
-
-  it("blocks approving an adjustment that is not pending", async () => {
-    const repo = makeRepo({
-      findAdjustmentByIdForUpdateTx: vi
-        .fn()
-        .mockResolvedValue([makeAdjustment({ status: "approved" })]),
-    });
-    const { service } = build(repo);
-    await expect(service.approveAdjustment(actor, REQ_ID)).rejects.toThrow(ConflictException);
-  });
-
-  it("blocks approving an adjustment when the period is locked", async () => {
-    const repo = makeRepo({ isPeriodLockedTx: vi.fn().mockResolvedValue(true) });
-    const { service } = build(repo);
-    await expect(service.approveAdjustment(actor, REQ_ID)).rejects.toThrow(ConflictException);
-  });
-
-  it("blocks approving an adjustment for a month whose period is locked even when the current month is open (cross-month lock)", async () => {
-    // Đơn cho 2024-05; tháng 2024-05 ĐÃ khoá, dù tháng hiện tại (now) có thể open. assertPeriodOpen
-    // của approve dùng monthOfDate(request.workDate) ⇒ phải tra ĐÚNG '2024-05', không phải tháng now.
-    const isPeriodLockedTx = vi
-      .fn()
-      .mockImplementation(async (_c: string, month: string) => month === "2024-05");
-    const repo = makeRepo({
-      isPeriodLockedTx,
-      findAdjustmentByIdForUpdateTx: vi
-        .fn()
-        .mockResolvedValue([makeAdjustment({ workDate: "2024-05-20" })]),
-    });
-    const { service } = build(repo);
-    await expect(service.approveAdjustment(actor, REQ_ID)).rejects.toThrow(ConflictException);
-    expect(isPeriodLockedTx).toHaveBeenCalledWith(COMPANY_ID, "2024-05", expect.anything());
-  });
-
-  it("blocks rejecting an adjustment that is not pending", async () => {
-    const repo = makeRepo({
-      findAdjustmentByIdForUpdateTx: vi
-        .fn()
-        .mockResolvedValue([makeAdjustment({ status: "cancelled" })]),
-    });
-    const { service } = build(repo);
-    await expect(service.rejectAdjustment(actor, REQ_ID)).rejects.toThrow(ConflictException);
-  });
-
-  it("blocks cancelling someone else's adjustment", async () => {
-    const repo = makeRepo({
-      findAdjustmentByIdTx: vi.fn().mockResolvedValue([makeAdjustment({ userId: OTHER_ID })]),
-    });
-    const { service } = build(repo);
-    await expect(service.cancelAdjustment(actor, REQ_ID)).rejects.toThrow(ForbiddenException);
-  });
-
-  it("blocks cancelling an adjustment that is not pending", async () => {
-    const repo = makeRepo({
-      findAdjustmentByIdTx: vi.fn().mockResolvedValue([makeAdjustment({ status: "approved" })]),
-    });
-    const { service } = build(repo);
-    await expect(service.cancelAdjustment(actor, REQ_ID)).rejects.toThrow(ConflictException);
-  });
-});
-
 describe("AttendanceService — period lock + scope", () => {
   it("blocks re-locking an already-locked period", async () => {
     const repo = makeRepo({ findPeriodTx: vi.fn().mockResolvedValue([{ status: "locked" }]) });
@@ -285,50 +177,10 @@ describe("AttendanceService — period lock + scope", () => {
       service.listMonthly(actor, { month: "2024-06", userId: OTHER_ID, limit: 50, offset: 0 }),
     ).rejects.toThrow(ForbiddenException);
   });
-
-  it("blocks listing all adjustments (scope=all) without approve permission", async () => {
-    const repo = makeRepo();
-    const { service } = build(repo, false);
-    await expect(
-      service.listAdjustments(actor, { scope: "all", limit: 50, offset: 0 }),
-    ).rejects.toThrow(ForbiddenException);
-  });
-
-  it("allows listing my own adjustments (scope=me) without elevated permission", async () => {
-    const repo = makeRepo();
-    const { service } = build(repo, false);
-    await expect(
-      service.listAdjustments(actor, { scope: "me", limit: 50, offset: 0 }),
-    ).resolves.toEqual([]);
-    expect(repo.findAdjustments).toHaveBeenCalledWith(COMPANY_ID, {
-      userId: ACTOR_ID,
-      status: undefined,
-      limit: 50,
-      offset: 0,
-    });
-  });
 });
 
 describe("AttendanceService — audit-on-mutation contract", () => {
   // BẤT BIẾN audit: mọi ghi/sửa công quan trọng PHẢI ghi audit TRONG cùng tx (mock đếm số lần gọi).
-  it("approveAdjustment records BOTH AdjustmentApproved + RecordAdjusted (2 audit) and enqueues outbox once", async () => {
-    const repo = makeRepo({
-      updateAdjustmentTx: vi
-        .fn()
-        .mockResolvedValue([makeAdjustment({ status: "approved", attendanceRecordId: "rec-1" })]),
-    });
-    const { service, audit, outbox, hrTasks } = build(repo);
-    await service.approveAdjustment(actor, REQ_ID, "ok");
-    // F1: the request is re-read under FOR UPDATE inside the tx (not the pre-tx unlocked read).
-    expect(repo.findAdjustmentByIdForUpdateTx).toHaveBeenCalledWith(COMPANY_ID, REQ_ID, repo);
-    expect(audit.record).toHaveBeenCalledTimes(2);
-    const actions = audit.record.mock.calls.map((c) => (c[1] as { action: string }).action);
-    expect(actions).toEqual(["AttendanceAdjustmentApproved", "AttendanceRecordAdjusted"]);
-    expect(outbox.enqueue).toHaveBeenCalledTimes(1);
-    // Đơn duyệt → đóng task Hub (task_type='hr') trong cùng tx.
-    expect(hrTasks.closeTaskTx).toHaveBeenCalledTimes(1);
-  });
-
   it("lockPeriod records exactly one AttendancePeriodLocked audit + one outbox event", async () => {
     const repo = makeRepo();
     const { service, audit, outbox } = build(repo);
@@ -338,28 +190,5 @@ describe("AttendanceService — audit-on-mutation contract", () => {
       "AttendancePeriodLocked",
     );
     expect(outbox.enqueue).toHaveBeenCalledTimes(1);
-  });
-
-  it("createAdjustment creates an hr task in the shared tasks table and links task_id", async () => {
-    // BẤT BIẾN #4 Task Hub: đơn → task_type='hr' INSERT vào CHUNG bảng tasks; request.task_id trỏ task.
-    const repo = makeRepo();
-    const { service, hrTasks } = build(repo);
-    await service.createAdjustment(actor, {
-      workDate: "2024-06-03",
-      requestedCheckInAt: "2024-06-03T02:00:00Z",
-      reason: "Quên chấm công",
-    });
-    expect(hrTasks.createApprovalTaskTx).toHaveBeenCalledTimes(1);
-    expect(repo.insertAdjustmentTx).toHaveBeenCalledTimes(1);
-    const insertArgs = repo.insertAdjustmentTx.mock.calls[0][1] as { taskId: string };
-    expect(insertArgs.taskId).toBe("task-1");
-  });
-
-  it("cancelAdjustment soft-deletes the linked hr task (cancelTaskTx, never hard-delete)", async () => {
-    const repo = makeRepo();
-    const { service, hrTasks } = build(repo);
-    await service.cancelAdjustment(actor, REQ_ID);
-    expect(hrTasks.cancelTaskTx).toHaveBeenCalledTimes(1);
-    expect(hrTasks.closeTaskTx).not.toHaveBeenCalled();
   });
 });

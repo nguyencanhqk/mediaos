@@ -193,24 +193,6 @@ export function buildTodayDto(args: {
   };
 }
 
-export function toAdjustmentDto(row: {
-  id: string;
-  userId: string;
-  attendanceRecordId: string | null;
-  workDate: string;
-  requestedCheckInAt: Date | null;
-  requestedCheckOutAt: Date | null;
-  reason: string;
-  status: string;
-  taskId: string | null;
-  approvedBy: string | null;
-  approvedAt: Date | null;
-  reviewNote: string | null;
-  createdAt: Date;
-}) {
-  return row;
-}
-
 export function toPeriodDto(row: {
   id: string;
   periodMonth: string;
