@@ -36,8 +36,20 @@ import {
   isDecidable,
   recomputeRecord,
   type AdjustmentItemProposal,
+  type AppliedItem,
 } from "./attendance-adjustment.logic";
+import type { ScheduleCalc } from "./attendance.logic";
 import { deriveRequestedTimes, eqUserId, toCalcInput } from "./attendance-adjustment.helpers";
+import {
+  buildAppliedItemRows,
+  buildProposalRows,
+  buildRecordValues,
+  emitAdjustmentApproved,
+  emitAdjustmentRequested,
+  emitRecordAdjustedDirect,
+  toProposals,
+  toScheduleCalc,
+} from "./attendance-adjustment.apply";
 import { toAdjustmentDetailDto, toAdjustmentListItem } from "./attendance-adjustment.mappers";
 
 const ADJUSTMENT = ATT_RESOURCES.ADJUSTMENT;
@@ -56,6 +68,24 @@ type EmployeeScope = {
   directManagerUserId: string | null;
   status: string;
 };
+
+/** attendance_records view the recalc reads (id + method columns) — shared by find-by-date/by-id. */
+type AttendanceRecordRow = Awaited<
+  ReturnType<AttendanceRepository["findRecordByUserDateTx"]>
+>[number];
+
+/** Everything applyToRecord needs to recalc + persist a record from an approved/direct adjustment. */
+interface ApplyRecordInput {
+  userId: string;
+  employeeId: string;
+  departmentId: string | null;
+  workDate: string;
+  requestId: string;
+  proposals: AdjustmentItemProposal[];
+  requestedCheckInAt: Date | null;
+  requestedCheckOutAt: Date | null;
+  reason: string;
+}
 
 /**
  * S3-ATT-BE-4 — canonical adjustment-request application service (ATT-FUNC-018..022).
@@ -81,86 +111,79 @@ export class AttendanceAdjustmentService {
     private readonly outbox: OutboxService,
   ) {}
 
+  /** The append-only event sinks bundled for the extracted emitter helpers (attendance-adjustment.apply). */
+  private get sinks() {
+    return { audit: this.audit, outbox: this.outbox };
+  }
+
   // ─── Create (create-own:adjustment; create-thay gated by wider-than-Own scope) ─────
 
   async createRequest(actor: Actor, dto: CreateAdjustmentRequest) {
     return this.db
       .withTenant(actor.companyId, async (tx) => {
         const target = await this.resolveCreateTarget(actor, dto, tx);
-        this.assertPeriodOpen(
-          await this.attendanceRepo.isPeriodLockedTx(
-            actor.companyId,
-            monthOfDate(dto.workDate),
-            tx,
-          ),
-          dto.workDate,
-        );
-
+        await this.assertPeriodOpenForDate(actor.companyId, dto.workDate, tx);
         const task = await this.hrTasks.createApprovalTaskTx(tx, actor.companyId, {
           title: `Duyệt điều chỉnh công ${dto.workDate}`,
           assigneeUserId: null,
         });
-        const proposals = this.proposals(dto);
-        const requested = deriveRequestedTimes(dto.workDate, {
-          explicitIn: dto.requestedCheckInAt,
-          explicitOut: dto.requestedCheckOutAt,
-          proposals,
-        });
-        const [row] = await this.repo.insertRequestTx(
-          actor.companyId,
-          {
-            companyId: actor.companyId,
-            userId: target.userId ?? actor.id,
-            employeeId: target.id,
-            workDate: dto.workDate,
-            requestType: dto.requestType,
-            requestedCheckInAt: requested.checkInAt,
-            requestedCheckOutAt: requested.checkOutAt,
-            reason: dto.reason,
-            status: ADJUSTMENT_STATUS.PENDING,
-            submittedAt: new Date(),
-            requestedBy: actor.id,
-            attachmentFileId: dto.attachmentFileId ?? null,
-            taskId: task.id,
-            createdBy: actor.id,
-          },
-          tx,
-        );
-        if (!row) throw new InternalServerErrorException("Failed to create adjustment request");
-
-        // Proposed items are recorded up-front as NOT-yet-applied ledger rows (is_applied=false).
-        await this.repo.insertItemsTx(
-          actor.companyId,
-          this.proposalRows(row.id, proposals, false, actor.id),
-          tx,
-        );
-
-        await this.audit.record(tx, {
-          action: "AttendanceAdjustmentRequested",
-          objectType: "attendance_adjustment_request",
-          objectId: row.id,
-          actorUserId: actor.id,
-          after: {
-            employeeId: target.id,
-            workDate: dto.workDate,
-            requestType: dto.requestType,
-            onBehalf: (target.userId ?? actor.id) !== actor.id,
-          },
-        });
-        await this.outbox.enqueue(tx, {
-          eventType: "attendance.adjustment_requested",
-          payload: {
-            requestId: row.id,
-            employeeId: target.id,
-            userId: target.userId ?? actor.id,
-            workDate: dto.workDate,
-            requestType: dto.requestType,
-            taskId: task.id,
-          },
+        const row = await this.insertRequestWithProposals(actor, dto, target, task.id, tx);
+        await emitAdjustmentRequested(this.sinks, tx, {
+          requestId: row.id,
+          employeeId: target.id,
+          userId: target.userId ?? actor.id,
+          workDate: dto.workDate,
+          requestType: dto.requestType,
+          taskId: task.id,
+          actorId: actor.id,
+          onBehalf: (target.userId ?? actor.id) !== actor.id,
         });
         return this.loadDetailTx(actor.companyId, row.id, tx);
       })
       .catch((err: unknown) => this.mapConflict(err, "createRequest", actor, dto.workDate));
+  }
+
+  /** Insert the Pending request row + its up-front (is_applied=false) proposal ledger entries. */
+  private async insertRequestWithProposals(
+    actor: Actor,
+    dto: CreateAdjustmentRequest,
+    target: EmployeeScope,
+    taskId: string,
+    tx: TenantTx,
+  ): Promise<{ id: string }> {
+    const proposals = toProposals(dto.items);
+    const requested = deriveRequestedTimes(dto.workDate, {
+      explicitIn: dto.requestedCheckInAt,
+      explicitOut: dto.requestedCheckOutAt,
+      proposals,
+    });
+    const [row] = await this.repo.insertRequestTx(
+      actor.companyId,
+      {
+        companyId: actor.companyId,
+        userId: target.userId ?? actor.id,
+        employeeId: target.id,
+        workDate: dto.workDate,
+        requestType: dto.requestType,
+        requestedCheckInAt: requested.checkInAt,
+        requestedCheckOutAt: requested.checkOutAt,
+        reason: dto.reason,
+        status: ADJUSTMENT_STATUS.PENDING,
+        submittedAt: new Date(),
+        requestedBy: actor.id,
+        attachmentFileId: dto.attachmentFileId ?? null,
+        taskId,
+        createdBy: actor.id,
+      },
+      tx,
+    );
+    if (!row) throw new InternalServerErrorException("Failed to create adjustment request");
+    await this.repo.insertItemsTx(
+      actor.companyId,
+      buildProposalRows(row.id, proposals, false, actor.id),
+      tx,
+    );
+    return row;
   }
 
   /** Own employee unless targetEmployeeId is set AND the actor holds a wider-than-Own create scope. */
@@ -269,15 +292,7 @@ export class AttendanceAdjustmentService {
     return this.db
       .withTenant(actor.companyId, async (tx) => {
         const request = await this.lockDecidable(actor, id, "approve", tx);
-        this.assertPeriodOpen(
-          await this.attendanceRepo.isPeriodLockedTx(
-            actor.companyId,
-            monthOfDate(request.workDate),
-            tx,
-          ),
-          request.workDate,
-        );
-
+        await this.assertPeriodOpenForDate(actor.companyId, request.workDate, tx);
         const target = await this.resolveRequestEmployee(actor.companyId, request, tx);
         const { recordId } = await this.applyToRecord(actor, tx, {
           userId: request.userId,
@@ -290,46 +305,44 @@ export class AttendanceAdjustmentService {
           requestedCheckOutAt: request.requestedCheckOutAt,
           reason: request.reason,
         });
-
-        await this.repo.updateRequestTx(
-          actor.companyId,
-          id,
-          {
-            status: ADJUSTMENT_STATUS.APPROVED,
-            attendanceRecordId: recordId,
-            approvedBy: actor.id,
-            approvedAt: new Date(),
-            reviewedBy: actor.id,
-            reviewedAt: new Date(),
-            reviewNote: dto.note ?? null,
-            updatedBy: actor.id,
-          },
-          tx,
-        );
-        if (request.taskId)
-          await this.hrTasks.closeTaskTx(tx, actor.companyId, request.taskId, "approved");
-
-        await this.audit.record(tx, {
-          action: "AttendanceAdjustmentApproved",
-          objectType: "attendance_adjustment_request",
-          objectId: id,
-          actorUserId: actor.id,
-          after: { recordId, workDate: request.workDate },
-        });
-        await this.audit.record(tx, {
-          action: "AttendanceRecordAdjusted",
-          objectType: "attendance_record",
-          objectId: recordId,
-          actorUserId: actor.id,
-          after: { fromRequestId: id, workDate: request.workDate },
-        });
-        await this.outbox.enqueue(tx, {
-          eventType: "attendance.adjustment_approved",
-          payload: { requestId: id, recordId, userId: request.userId, approvedBy: actor.id },
-        });
+        await this.finalizeApproval(actor, tx, request, recordId, dto);
         return this.loadDetailTx(actor.companyId, id, tx);
       })
       .catch((err: unknown) => this.mapError(err, "approve", { companyId: actor.companyId, id }));
+  }
+
+  /** Persist the Approved transition + close the task + audit/outbox — all inside the approve tx. */
+  private async finalizeApproval(
+    actor: Actor,
+    tx: TenantTx,
+    request: { id: string; workDate: string; userId: string; taskId: string | null },
+    recordId: string,
+    dto: ApproveAdjustmentRequest,
+  ): Promise<void> {
+    await this.repo.updateRequestTx(
+      actor.companyId,
+      request.id,
+      {
+        status: ADJUSTMENT_STATUS.APPROVED,
+        attendanceRecordId: recordId,
+        approvedBy: actor.id,
+        approvedAt: new Date(),
+        reviewedBy: actor.id,
+        reviewedAt: new Date(),
+        reviewNote: dto.note ?? null,
+        updatedBy: actor.id,
+      },
+      tx,
+    );
+    if (request.taskId)
+      await this.hrTasks.closeTaskTx(tx, actor.companyId, request.taskId, "approved");
+    await emitAdjustmentApproved(this.sinks, tx, {
+      requestId: request.id,
+      recordId,
+      userId: request.userId,
+      workDate: request.workDate,
+      actorId: actor.id,
+    });
   }
 
   // ─── Reject (reject:adjustment; reason required — Zod) ───────────────────────────
@@ -374,59 +387,13 @@ export class AttendanceAdjustmentService {
   async adjustDirect(actor: Actor, recordId: string, dto: DirectAdjustRequest) {
     return this.db
       .withTenant(actor.companyId, async (tx) => {
-        const [record] = await this.attendanceRepo.findRecordByIdForUpdateTx(
-          actor.companyId,
-          recordId,
-          tx,
-        );
-        if (!record) throw new NotFoundException("Attendance record not found");
-        this.assertPeriodOpen(
-          await this.attendanceRepo.isPeriodLockedTx(
-            actor.companyId,
-            monthOfDate(record.workDate),
-            tx,
-          ),
-          record.workDate,
-        );
-
+        const record = await this.lockRecord(actor.companyId, recordId, tx);
+        await this.assertPeriodOpenForDate(actor.companyId, record.workDate, tx);
         const target = await this.resolveRecordEmployee(actor.companyId, record, tx);
         await this.assertScope(actor, "adjust-direct", ATTENDANCE, target);
 
-        const proposals = dto.items.map((i) => ({
-          fieldName: i.fieldName,
-          newValue: i.newValue,
-          note: i.note,
-        }));
-        const requested = deriveRequestedTimes(record.workDate, {
-          proposals,
-          existingCheckIn: record.checkInAt,
-        });
-        // adjust-direct anchors its ledger to an auto-approved request row (items.request_id is NOT NULL).
-        const [request] = await this.repo.insertRequestTx(
-          actor.companyId,
-          {
-            companyId: actor.companyId,
-            userId: record.userId,
-            employeeId: target.id,
-            attendanceRecordId: record.id,
-            workDate: record.workDate,
-            requestType: "OTHER",
-            reason: dto.reason,
-            status: ADJUSTMENT_STATUS.APPROVED,
-            submittedAt: new Date(),
-            requestedBy: actor.id,
-            approvedBy: actor.id,
-            approvedAt: new Date(),
-            reviewedBy: actor.id,
-            reviewedAt: new Date(),
-            requestedCheckInAt: requested.checkInAt,
-            requestedCheckOutAt: requested.checkOutAt,
-            createdBy: actor.id,
-          },
-          tx,
-        );
-        if (!request) throw new InternalServerErrorException("Failed to record direct adjustment");
-
+        const proposals = toProposals(dto.items);
+        const request = await this.insertDirectRequest(actor, record, target, dto, proposals, tx);
         await this.applyToRecord(actor, tx, {
           userId: record.userId,
           employeeId: target.id,
@@ -438,22 +405,12 @@ export class AttendanceAdjustmentService {
           requestedCheckOutAt: null,
           reason: dto.reason,
         });
-
-        await this.audit.record(tx, {
-          action: "AttendanceRecordAdjusted",
-          objectType: "attendance_record",
-          objectId: record.id,
-          actorUserId: actor.id,
-          after: { fromRequestId: request.id, workDate: record.workDate, direct: true },
-        });
-        await this.outbox.enqueue(tx, {
-          eventType: "attendance.record_adjusted",
-          payload: {
-            requestId: request.id,
-            recordId: record.id,
-            userId: record.userId,
-            adjustedBy: actor.id,
-          },
+        await emitRecordAdjustedDirect(this.sinks, tx, {
+          recordId: record.id,
+          requestId: request.id,
+          userId: record.userId,
+          workDate: record.workDate,
+          actorId: actor.id,
         });
         return this.loadDetailTx(actor.companyId, request.id, tx);
       })
@@ -462,22 +419,63 @@ export class AttendanceAdjustmentService {
       );
   }
 
+  /** Lock the record row (FOR UPDATE) or 404 — the anchor for a direct adjustment. */
+  private async lockRecord(
+    companyId: string,
+    recordId: string,
+    tx: TenantTx,
+  ): Promise<AttendanceRecordRow> {
+    const [record] = await this.attendanceRepo.findRecordByIdForUpdateTx(companyId, recordId, tx);
+    if (!record) throw new NotFoundException("Attendance record not found");
+    return record;
+  }
+
+  /** adjust-direct anchors its ledger to an auto-approved request row (items.request_id is NOT NULL). */
+  private async insertDirectRequest(
+    actor: Actor,
+    record: { id: string; userId: string; workDate: string; checkInAt: Date | null },
+    target: EmployeeScope,
+    dto: DirectAdjustRequest,
+    proposals: AdjustmentItemProposal[],
+    tx: TenantTx,
+  ): Promise<{ id: string }> {
+    const requested = deriveRequestedTimes(record.workDate, {
+      proposals,
+      existingCheckIn: record.checkInAt,
+    });
+    const [request] = await this.repo.insertRequestTx(
+      actor.companyId,
+      {
+        companyId: actor.companyId,
+        userId: record.userId,
+        employeeId: target.id,
+        attendanceRecordId: record.id,
+        workDate: record.workDate,
+        requestType: "OTHER",
+        reason: dto.reason,
+        status: ADJUSTMENT_STATUS.APPROVED,
+        submittedAt: new Date(),
+        requestedBy: actor.id,
+        approvedBy: actor.id,
+        approvedAt: new Date(),
+        reviewedBy: actor.id,
+        reviewedAt: new Date(),
+        requestedCheckInAt: requested.checkInAt,
+        requestedCheckOutAt: requested.checkOutAt,
+        createdBy: actor.id,
+      },
+      tx,
+    );
+    if (!request) throw new InternalServerErrorException("Failed to record direct adjustment");
+    return request;
+  }
+
   // ─── Shared apply (recalc record + append log + append applied items) ─────────────
 
   private async applyToRecord(
     actor: Actor,
     tx: TenantTx,
-    input: {
-      userId: string;
-      employeeId: string;
-      departmentId: string | null;
-      workDate: string;
-      requestId: string;
-      proposals: AdjustmentItemProposal[];
-      requestedCheckInAt: Date | null;
-      requestedCheckOutAt: Date | null;
-      reason: string;
-    },
+    input: ApplyRecordInput,
   ): Promise<{ recordId: string }> {
     const [existing] = await this.attendanceRepo.findRecordByUserDateTx(
       actor.companyId,
@@ -485,20 +483,53 @@ export class AttendanceAdjustmentService {
       input.workDate,
       tx,
     );
-    const calcInput = toCalcInput(existing);
-    const { patch, appliedItems } = recomputeRecord(calcInput, input.proposals, {
+    // Load the subject's schedule so late/early are RECOMPUTED when check-in/out moves (SPEC-04 §14) —
+    // otherwise a UPDATE_CHECK_IN would leave a stale lateness while status flips to Adjusted.
+    const schedule = await this.loadScheduleCalc(actor.companyId, input.userId, input.workDate, tx);
+    const { patch, appliedItems } = recomputeRecord(toCalcInput(existing), input.proposals, {
       requestedCheckInAt: input.requestedCheckInAt,
       requestedCheckOutAt: input.requestedCheckOutAt,
+      workDate: input.workDate,
+      schedule,
     });
+    const record = await this.persistRecord(actor, tx, existing, input, patch);
+    await this.appendAdjustmentArtifacts(actor, tx, record.id, input, appliedItems);
+    return { recordId: record.id };
+  }
 
-    const recordValues = {
-      ...patch,
-      checkInMethod: patch.checkInAt ? "adjustment" : (existing?.checkInMethod ?? null),
-      checkOutMethod: patch.checkOutAt ? "adjustment" : (existing?.checkOutMethod ?? null),
+  /**
+   * Resolve the subject user's work schedule → pure ScheduleCalc. A missing schedule is a SAFE
+   * fallback: we log a warning and return null so recomputeRecord keeps the stored late/early (never
+   * swallowed, never a 500). Assigned schedule wins, else the company default (repo-side).
+   */
+  private async loadScheduleCalc(
+    companyId: string,
+    userId: string,
+    workDate: string,
+    tx: TenantTx,
+  ): Promise<ScheduleCalc | null> {
+    const row = await this.attendanceRepo.resolveScheduleForUserTx(companyId, userId, tx);
+    if (!row) {
+      this.logger.warn(
+        `No work schedule for user=${userId} on ${workDate}; late/early recompute skipped (stored figures kept)`,
+      );
+      return null;
+    }
+    return toScheduleCalc(row);
+  }
+
+  private async persistRecord(
+    actor: Actor,
+    tx: TenantTx,
+    existing: AttendanceRecordRow | undefined,
+    input: ApplyRecordInput,
+    patch: Parameters<typeof buildRecordValues>[0],
+  ): Promise<{ id: string }> {
+    const recordValues = buildRecordValues(patch, existing, {
       employeeId: input.employeeId,
       departmentId: input.departmentId,
-      updatedBy: actor.id,
-    };
+      actorId: actor.id,
+    });
     const [record] = existing
       ? await this.attendanceRepo.updateRecordTx(actor.companyId, existing.id, recordValues, tx)
       : await this.attendanceRepo.insertRecordTx(
@@ -513,12 +544,21 @@ export class AttendanceAdjustmentService {
           tx,
         );
     if (!record) throw new InternalServerErrorException("Failed to apply adjustment to record");
+    return record;
+  }
 
-    // APPEND a log_type='Adjustment' row — attendance_logs is APPEND-ONLY, existing logs are untouched.
+  /** APPEND the log_type='Adjustment' row + the applied (is_applied=true) ledger — append-only. */
+  private async appendAdjustmentArtifacts(
+    actor: Actor,
+    tx: TenantTx,
+    recordId: string,
+    input: ApplyRecordInput,
+    appliedItems: AppliedItem[],
+  ): Promise<void> {
     await this.attendanceRepo.insertAttendanceLogTx(
       actor.companyId,
       {
-        attendanceRecordId: record.id,
+        attendanceRecordId: recordId,
         employeeId: input.employeeId,
         userId: input.userId,
         workDate: input.workDate,
@@ -530,24 +570,15 @@ export class AttendanceAdjustmentService {
       },
       tx,
     );
-
-    // APPEND the applied ledger entries (is_applied=true) — proposal rows from create stay as history.
     await this.repo.insertItemsTx(
       actor.companyId,
-      appliedItems.map((item) => ({
+      buildAppliedItemRows(appliedItems, {
         companyId: actor.companyId,
         requestId: input.requestId,
-        fieldName: item.fieldName,
-        oldValue: item.oldValue,
-        newValue: item.newValue,
-        appliedValue: item.appliedValue,
-        isApplied: true,
-        note: item.note,
-        createdBy: actor.id,
-      })),
+        actorId: actor.id,
+      }),
       tx,
     );
-    return { recordId: record.id };
   }
 
   // ─── Scope helpers ───────────────────────────────────────────────────────────────
@@ -671,14 +702,6 @@ export class AttendanceAdjustmentService {
 
   // ─── Ledger / DTO helpers ────────────────────────────────────────────────────────
 
-  private proposals(dto: CreateAdjustmentRequest): AdjustmentItemProposal[] {
-    return (dto.items ?? []).map((i) => ({
-      fieldName: i.fieldName,
-      newValue: i.newValue,
-      note: i.note,
-    }));
-  }
-
   private async storedProposals(
     companyId: string,
     requestId: string,
@@ -688,24 +711,6 @@ export class AttendanceAdjustmentService {
     return rows
       .filter((r) => r.isApplied === false)
       .map((r) => ({ fieldName: r.fieldName, newValue: r.newValue, note: r.note }));
-  }
-
-  private proposalRows(
-    requestId: string,
-    proposals: AdjustmentItemProposal[],
-    isApplied: boolean,
-    actorId: string,
-  ) {
-    return proposals.map((p) => ({
-      requestId,
-      fieldName: p.fieldName,
-      oldValue: null,
-      newValue: p.newValue,
-      appliedValue: null,
-      isApplied,
-      note: p.note ?? null,
-      createdBy: actorId,
-    }));
   }
 
   private async loadDetailTx(companyId: string, id: string, tx: TenantTx) {
@@ -749,6 +754,16 @@ export class AttendanceAdjustmentService {
   }
 
   // ─── Error mapping ────────────────────────────────────────────────────────────────
+
+  /** 409 if the attendance period covering `workDate` is locked (create/approve/adjust-direct guard). */
+  private async assertPeriodOpenForDate(
+    companyId: string,
+    workDate: string,
+    tx: TenantTx,
+  ): Promise<void> {
+    const locked = await this.attendanceRepo.isPeriodLockedTx(companyId, monthOfDate(workDate), tx);
+    this.assertPeriodOpen(locked, workDate);
+  }
 
   private assertPeriodOpen(locked: boolean, workDate: string): void {
     if (locked) {

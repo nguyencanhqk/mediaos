@@ -100,6 +100,18 @@ describe.skipIf(!runDb)("S3-ATT-BE-4 adjustment surface (DB cô lập, đường
     await seedUserRole(direct, userId, roleId, companyId);
   }
 
+  // Default company schedule 08:00–17:00 Asia/Ho_Chi_Minh, no grace — the recalc reads it to RECOMPUTE
+  // late/early when an approved check-in/out moves (SPEC-04 §14). Falls back for every user w/o an
+  // assigned schedule (employee_profiles.work_schedule_id NULL here).
+  async function seedDefaultSchedule(companyId: string): Promise<void> {
+    await direct.query(
+      `INSERT INTO work_schedules
+         (company_id, name, work_type, start_time, end_time, working_days_json, timezone, grace_minutes, is_default, status)
+       VALUES ($1,'Giờ hành chính','fixed','08:00','17:00','[1,2,3,4,5]','Asia/Ho_Chi_Minh',0,true,'active')`,
+      [companyId],
+    );
+  }
+
   async function plantRecord(
     companyId: string,
     userId: string,
@@ -165,6 +177,7 @@ describe.skipIf(!runDb)("S3-ATT-BE-4 adjustment surface (DB cô lập, đường
     B = await seedCompany(direct, "attbe4b");
     companyIds.push(A.companyId, B.companyId);
 
+    await seedDefaultSchedule(A.companyId);
     const ouEng = await seedOrgUnit(A.companyId, "Engineering");
     const ouSales = await seedOrgUnit(A.companyId, "Sales");
 
@@ -300,10 +313,13 @@ describe.skipIf(!runDb)("S3-ATT-BE-4 adjustment surface (DB cô lập, đường
 
     // Record recalculated + marked Adjusted; the ORIGINAL Check-in log kept, one Adjustment appended.
     const rec = await direct.query(
-      "SELECT attendance_status, is_adjusted FROM attendance_records WHERE id=$1",
+      "SELECT attendance_status, is_adjusted, late_minutes FROM attendance_records WHERE id=$1",
       [empRecordId],
     );
     expect(rec.rows[0].attendance_status).toBe("Adjusted");
+    // SPEC-04 §14 recompute: the approved check-in moved to 02:00Z = 09:00 local (08:00 start) → 60m
+    // late. The stored 0 (planted) must be OVERWRITTEN from the schedule, not left stale.
+    expect(rec.rows[0].late_minutes).toBe(60);
     const after = await countLogs(empRecordId);
     expect(after).toBe(before + 1);
     const adj = await direct.query(

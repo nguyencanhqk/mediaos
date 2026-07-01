@@ -7,7 +7,13 @@
  * value — an unset field keeps its existing value. Deterministic: same inputs → same patch.
  */
 
-import { computeMissingMinutes, computeWorkingMinutes } from "./attendance.logic";
+import {
+  computeMissingMinutes,
+  computeWorkingMinutes,
+  earlyLeaveMinutesFor,
+  lateMinutesFor,
+  type ScheduleCalc,
+} from "./attendance.logic";
 
 /** FSM canonical (DB-04 §7.6): Draft → Pending → Approved | Rejected | Cancelled (all three terminal). */
 export const ADJUSTMENT_STATUS = {
@@ -156,10 +162,19 @@ function applyField(working: WorkingRecord, field: string, value: unknown): unkn
  * break UNLESS an item set it explicitly; missing_minutes follows from working vs. required. The record
  * is marked Adjusted. Throws on an out-of-range coercion (surfaced by the caller as a 400/500).
  */
+export interface RecalcOptions {
+  requestedCheckInAt?: Date | null;
+  requestedCheckOutAt?: Date | null;
+  /** Local 'YYYY-MM-DD' of the record — required (with `schedule`) to recompute late/early. */
+  workDate?: string;
+  /** Work schedule for the subject user; null/absent ⇒ late/early are NOT recomputed (safe fallback). */
+  schedule?: ScheduleCalc | null;
+}
+
 export function recomputeRecord(
   existing: RecordCalcInput,
   items: AdjustmentItemProposal[],
-  opts: { requestedCheckInAt?: Date | null; requestedCheckOutAt?: Date | null } = {},
+  opts: RecalcOptions = {},
 ): RecalcResult {
   const working: WorkingRecord = { ...existing };
   const appliedItems: AppliedItem[] = [];
@@ -185,6 +200,8 @@ export function recomputeRecord(
       note: item.note ?? null,
     });
   }
+
+  recomputeLateEarly(working, setFields, opts);
 
   // Re-derive working_minutes unless the caller pinned it explicitly.
   if (!setFields.has("workingMinutes") && working.checkInAt && working.checkOutAt) {
@@ -218,6 +235,29 @@ export function recomputeRecord(
     },
     appliedItems,
   };
+}
+
+/**
+ * Recompute lateMinutes/earlyLeaveMinutes from the schedule when the corresponding check-in/out was
+ * adjusted — otherwise the stored figure goes stale (a UPDATE_CHECK_IN would leave the OLD lateness).
+ * Only recomputes when: a schedule + workDate are supplied, the check-in/out field was actually set in
+ * THIS adjustment, and the client did NOT pin the minute field explicitly. Missing schedule ⇒ no-op
+ * (the caller logs a warning and keeps the stored value — a safe fallback, never a swallowed error).
+ */
+function recomputeLateEarly(
+  working: WorkingRecord,
+  setFields: Set<string>,
+  opts: RecalcOptions,
+): void {
+  const { schedule, workDate } = opts;
+  if (!schedule || !workDate) return;
+
+  if (setFields.has("checkInAt") && !setFields.has("lateMinutes") && working.checkInAt) {
+    working.lateMinutes = lateMinutesFor(working.checkInAt, workDate, schedule);
+  }
+  if (setFields.has("checkOutAt") && !setFields.has("earlyLeaveMinutes") && working.checkOutAt) {
+    working.earlyLeaveMinutes = earlyLeaveMinutesFor(working.checkOutAt, workDate, schedule);
+  }
 }
 
 /** jsonb-safe snapshot: Date → ISO string, everything else passthrough (primitives only reach here). */
