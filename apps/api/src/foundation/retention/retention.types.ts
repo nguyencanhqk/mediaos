@@ -54,7 +54,13 @@ export interface RetentionPolicyRow {
   isLegalHoldSupported: boolean;
   isEnabled: boolean;
   description: string | null;
+  updatedAt: Date;
   deletedAt: Date | null;
+}
+
+/** Actor thực hiện thao tác (audit) — id user từ ngữ cảnh HTTP (req.user.id). */
+export interface RetentionActor {
+  id: string;
 }
 
 /** Kết quả simulate (§17.3) — đếm eligible, KHÔNG mutate. */
