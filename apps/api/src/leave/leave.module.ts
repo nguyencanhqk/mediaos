@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { AttendanceModule } from "../attendance/attendance.module";
 import { DatabaseModule } from "../db/db.module";
+import { AuditRepository } from "../foundation/audit/audit.repository";
 import { HolidaysModule } from "../foundation/holidays/holidays.module";
 import { SeedModule } from "../foundation/seed/seed.module";
 import { PermissionModule } from "../permission/permission.module";
@@ -10,6 +11,14 @@ import { LeaveAdminRepository } from "./leave-admin.repository";
 import { LeaveAdminService } from "./leave-admin.service";
 import { LeaveApprovalRepository } from "./leave-approval.repository";
 import { LeaveApprovalService } from "./leave-approval.service";
+// S3-LEAVE-BE-6 (additive): GET /leave/reports (scoped aggregate) + LEAVE's own audit reader
+// (GET /leave/audit-logs, TÁI DÙNG AuditRepository — provided locally below since it has no DI deps of
+// its own; foundation AuditModule itself is NOT imported here — KHÔNG tái dùng route/guard).
+import { LeaveAuditController } from "./leave-audit.controller";
+import { LeaveAuditService } from "./leave-audit.service";
+import { LeaveReportController } from "./leave-report.controller";
+import { LeaveReportRepository } from "./leave-report.repository";
+import { LeaveReportService } from "./leave-report.service";
 import { LeaveCalendarRepository } from "./leave-calendar.repository";
 import { LeaveCalendarService } from "./leave-calendar.service";
 import { LeaveMasterDataSeeder } from "./leave-master-data.seeder";
@@ -39,7 +48,7 @@ import { LeaveService } from "./leave.service";
   // S3-INT-1: + AttendanceModule (exports AttendanceLeaveSyncService — no cycle: AttendanceModule loads
   // BEFORE LeaveModule in app.module.ts and never imports LeaveModule).
   imports: [DatabaseModule, PermissionModule, SeedModule, HolidaysModule, AttendanceModule],
-  controllers: [LeaveController],
+  controllers: [LeaveController, LeaveReportController, LeaveAuditController],
   providers: [
     LeaveService,
     LeaveRepository,
@@ -66,6 +75,14 @@ import { LeaveService } from "./leave.service";
     HrTasksService,
     LeaveMasterDataSeeder,
     LeaveSeedRegistrar,
+    // S3-LEAVE-BE-6 (additive): LeaveReportService injects DataScopeService (PermissionModule) +
+    // DatabaseService (@Global) + LeaveReportRepository. LeaveAuditService REUSES AuditRepository (no DI
+    // deps of its own — provided locally, KHÔNG import AuditModule/its route) + AuditMaskerService
+    // (EventsModule export, @Global).
+    LeaveReportService,
+    LeaveReportRepository,
+    LeaveAuditService,
+    AuditRepository,
   ],
   exports: [LeaveService],
 })

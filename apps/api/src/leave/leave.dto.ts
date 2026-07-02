@@ -12,6 +12,7 @@ import {
   leaveCalculateRequestSchema,
   leaveCalendarQuerySchema,
   leaveListQuerySchema,
+  leaveMyBalanceTransactionsQuerySchema,
   leavePolicyListQuerySchema,
   leaveRequestListQuerySchema,
   pendingLeaveRequestListQuerySchema,
@@ -62,3 +63,8 @@ export class UpdateLeavePolicyDto extends createZodDto(updateLeavePolicySchema) 
 export class LeavePolicyListQueryDto extends createZodDto(leavePolicyListQuerySchema) {}
 export class LeaveBalanceAdminListQueryDto extends createZodDto(leaveBalanceAdminListQuerySchema) {}
 export class AdjustLeaveBalanceDto extends createZodDto(adjustLeaveBalanceSchema) {}
+
+// S3-LEAVE-BE-6: self-service ledger (GET /leave/me/balance-transactions, view-own:leave-balance).
+export class MyBalanceTransactionsQueryDto extends createZodDto(
+  leaveMyBalanceTransactionsQuerySchema,
+) {}
