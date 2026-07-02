@@ -160,6 +160,13 @@ import { CompanyProfilePage } from "@/routes/system/foundation/CompanyProfilePag
 import { CompanySettingsPage } from "@/routes/system/foundation/CompanySettingsPage";
 import { SystemSettingsPage } from "@/routes/system/foundation/SystemSettingsPage";
 import { FOUNDATION_PATH, FOUNDATION_SCREEN } from "@/routes/system/foundation/constants";
+// System / Foundation — Audit log viewer (S2-FE-FND-2)
+import { AuditLogsPage } from "@/routes/system/foundation/audit-logs/AuditLogsPage";
+import { AuditLogDetailPage } from "@/routes/system/foundation/audit-logs/AuditLogDetailPage";
+// System / Foundation — File metadata viewer (S2-FE-FND-2)
+import { FilesPage } from "@/routes/system/files/FilesPage";
+import { FileDetailPage } from "@/routes/system/files/FileDetailPage";
+import { FILES_PATH } from "@/routes/system/files/constants";
 // Account — self-service (S2-FE-AUTH-2)
 import { ChangePasswordPage } from "@/routes/account/ChangePasswordPage";
 
@@ -530,12 +537,32 @@ const systemUserRolesRoute = createRoute({
   },
 });
 
+// S2-FE-FND-2 — THAY ModulePlaceholder = AuditLogsPage (route đã có sẵn trong ROUTE_REGISTRY,
+// gate FOUNDATION.AUDIT_LOG.VIEW → view:audit-log, đã sửa drift trong registry.ts).
 const systemAuditLogsRoute = makeModuleRoute(
   "/system/audit-logs",
   "system.audit-logs",
   "FOUNDATION",
-  ModulePlaceholder,
+  AuditLogsPage,
 );
+
+// Audit log detail — local RouteMeta (no sidebar entry; reuses system.audit-logs permission).
+// Pattern mirrors hrEmployeeDetailRoute/attRecordDetailRoute: local meta, buildModuleRouteContent →
+// ProtectedRoute guard tiêu thụ guardResult.
+const systemAuditLogDetailMeta = getMeta("system.audit-logs");
+const systemAuditLogDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/audit-logs/$auditLogId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { auditLogId } = systemAuditLogDetailRoute.useParams();
+    return buildModuleRouteContent(
+      systemAuditLogDetailMeta,
+      "FOUNDATION",
+      <AuditLogDetailPage auditLogId={auditLogId} />,
+    );
+  },
+});
 
 // System / Foundation — viewer nhật ký bảo mật (S2-AUTH-BE-5). RouteMeta CỤC BỘ (KHÔNG ở
 // ROUTE_REGISTRY web-core — lane không sửa web-core); dùng CÙNG buildModuleRouteContent →
@@ -552,6 +579,26 @@ const systemSecurityEventsRoute = createRoute({
   beforeLoad: authGuard,
   component: () =>
     buildModuleRouteContent(SECURITY_EVENTS_ROUTE_META, "FOUNDATION", <SecurityEventsPage />),
+});
+
+// S2-FE-FND-2 — File metadata viewer. Route ADDITIVE trong ROUTE_REGISTRY (system.files, gate
+// FOUNDATION.FILE.VIEW → view:foundation-file).
+const systemFilesRoute = makeModuleRoute(FILES_PATH, "system.files", "FOUNDATION", FilesPage);
+
+// File detail — local RouteMeta (no sidebar entry; reuses system.files permission).
+const systemFileDetailMeta = getMeta("system.files");
+const systemFileDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/files/$fileId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { fileId } = systemFileDetailRoute.useParams();
+    return buildModuleRouteContent(
+      systemFileDetailMeta,
+      "FOUNDATION",
+      <FileDetailPage fileId={fileId} />,
+    );
+  },
 });
 
 // Account self-service — /auth/change-password là endpoint JwtAuthGuard-only (KHÔNG PermissionGuard,
@@ -631,8 +678,11 @@ const routeTree = rootRoute.addChildren([
   systemUserRolesRoute,
   systemRolesRoute,
   systemAuditLogsRoute,
+  systemAuditLogDetailRoute,
   systemLoginLogsRoute,
   systemSecurityEventsRoute,
+  systemFilesRoute,
+  systemFileDetailRoute,
   accountChangePasswordRoute,
   notFoundRoute,
 ]);

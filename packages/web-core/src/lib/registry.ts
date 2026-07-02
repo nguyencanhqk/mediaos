@@ -138,7 +138,14 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "AUTH.USER.VIEW": "view:user",
   "AUTH.ROLE.VIEW": "view:role",
   "FOUNDATION.SETTING.VIEW": "view:foundation-setting",
-  "FOUNDATION.AUDIT_LOG.VIEW": "view:foundation-audit-log",
+  // S2-FE-FND-2: cặp seed THẬT dùng bởi AuditController (mig 0340, is_sensitive=true) là `view:audit-log`
+  // (KHÔNG `view:foundation-audit-log` — cặp đó chỉ seed ở mig 0435 nhưng KHÔNG controller nào enforce nó;
+  // dùng nhầm sẽ tạo hố FE-cho-phép/BE-403). PIN đúng cặp AuditController thật đọc — cùng kỹ thuật
+  // system.login-logs (AUTH_AUDIT_LOG từ packages/contracts).
+  "FOUNDATION.AUDIT_LOG.VIEW": "view:audit-log",
+  // S2-FE-FND-2: cặp seed THẬT mig 0435 — FilesController dùng view:foundation-file (is_sensitive=false,
+  // bulk-grant company-admin qua LIKE 'foundation-%').
+  "FOUNDATION.FILE.VIEW": "view:foundation-file",
   // S2-FE-FND-1 (FND1-WC): cặp seed THẬT mig 0435 — controller Foundation dùng *:foundation-* (view/update:
   // foundation-company, update:foundation-setting). KHÔNG dùng nhãn-ma FRONTEND-13 §7.1 (FOUNDATION.SYSTEM.VIEW /
   // SETTING.SYSTEM_MANAGE chưa seed) và KHÔNG namespace CŨ read/update:company (0005). Đọc≠sửa (pair-as-gate).
@@ -932,6 +939,18 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["FOUNDATION.AUDIT_LOG.VIEW"],
     showInSidebar: true,
     order: 73,
+  },
+  // S2-FE-FND-2 — cặp seed THẬT mig 0435 (view:foundation-file, is_sensitive=false, bulk-grant company-admin).
+  {
+    routeKey: "system.files",
+    path: "/system/files",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "FOUNDATION",
+    screenCode: "SYSTEM-SCREEN-FILES",
+    titleKey: "routeTitle.systemFiles",
+    requiredAnyPermissions: ["FOUNDATION.FILE.VIEW"],
+    showInSidebar: true,
+    order: 74,
   },
 
   // Account

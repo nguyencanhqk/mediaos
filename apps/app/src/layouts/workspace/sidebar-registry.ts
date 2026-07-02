@@ -9,6 +9,7 @@
  */
 import { type SidebarItemMeta } from "@mediaos/web-core";
 import { AUDIT_LOG_VIEW_PERMISSION } from "@/routes/system/auth-logs/constants";
+import { FOUNDATION_FILE_VIEW_PERMISSION } from "@/routes/system/files/constants";
 
 // ---------------------------------------------------------------------------
 // DASH
@@ -297,6 +298,10 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 30,
     requiredAnyPermissions: ["AUTH.ROLE.VIEW"],
   },
+  // S2-FE-FND-2: gate theo cặp ENGINE THỰC ('view:audit-log', seed mig 0340, grant company-admin) —
+  // literal pair (cùng kỹ thuật system.login-logs), KHÔNG dùng mã FE FOUNDATION.AUDIT_LOG.VIEW qua
+  // PERMISSION_CODE_TO_PAIR (bài học drift: cặp map cũ 'view:foundation-audit-log' KHÔNG được
+  // AuditController enforce — sẽ tạo hố FE-hiện-BE-403).
   {
     sidebarKey: "system.audit-logs",
     moduleCode: "FOUNDATION",
@@ -305,7 +310,7 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     icon: "file-clock",
     group: "report",
     order: 40,
-    requiredAnyPermissions: ["FOUNDATION.AUDIT_LOG.VIEW"],
+    requiredAnyPermissions: [AUDIT_LOG_VIEW_PERMISSION],
   },
   // S2-AUTH-BE-5 — viewer nhật ký bảo mật. Gate theo cặp ENGINE THỰC ('view:audit-log',
   // seed mig 0340, grant company-admin), KHÔNG mã FE → filterSidebarItems khớp trực tiếp
@@ -329,6 +334,18 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     group: "report",
     order: 42,
     requiredAnyPermissions: [AUDIT_LOG_VIEW_PERMISSION],
+  },
+  // S2-FE-FND-2 — viewer file metadata. Cặp seed THẬT view:foundation-file (mig 0435, is_sensitive=false,
+  // bulk-grant company-admin qua LIKE 'foundation-%').
+  {
+    sidebarKey: "system.files",
+    moduleCode: "FOUNDATION",
+    label: "Tệp tin",
+    path: "/system/files",
+    icon: "file",
+    group: "report",
+    order: 43,
+    requiredAnyPermissions: [FOUNDATION_FILE_VIEW_PERMISSION],
   },
 ];
 

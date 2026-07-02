@@ -383,4 +383,139 @@ export default {
     deferredDescription:
       "Màn hình cấu hình cấp hệ thống đang chờ endpoint backend (SYSTEM_MANAGE). Sẽ được bổ sung trong đợt tiếp theo.",
   },
+
+  // S2-FE-FND-2 — bộ lọc dùng cho viewer Audit log.
+  auditLogFilters: {
+    module: "Module",
+    modulePlaceholder: "VD: HR, ATT, AUTH",
+    action: "Hành động",
+    actionPlaceholder: "VD: create, update, delete",
+    actor: "Người thực hiện",
+    actorPlaceholder: "UUID người dùng",
+    entity: "Đối tượng",
+    entityPlaceholder: "VD: Employee, LeaveRequest",
+    fromDate: "Từ ngày",
+    toDate: "Đến ngày",
+    apply: "Lọc",
+    reset: "Xóa lọc",
+    page: "Trang {{page}}",
+  },
+
+  // S2-FE-FND-2 — SYSTEM-SCREEN-AUDIT-LOGS (/system/audit-logs + /:id).
+  auditLogs: {
+    title: "Audit log",
+    description: "Nhật ký thay đổi dữ liệu của công ty (chỉ đọc, append-only)",
+    columns: {
+      createdAt: "Thời gian",
+      module: "Module",
+      action: "Hành động",
+      entity: "Đối tượng",
+      actor: "Người thực hiện",
+      actions: "",
+      viewDetail: "Xem chi tiết",
+    },
+    empty: {
+      title: "Không có audit log",
+      description: "Chưa có bản ghi audit nào khớp bộ lọc.",
+    },
+    error: {
+      title: "Không thể tải audit log",
+      description: "Có lỗi khi tải audit log. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem audit log của công ty.",
+    },
+    detail: {
+      title: "Chi tiết audit log",
+      backToList: "Quay lại danh sách",
+      entityId: "Mã đối tượng",
+      dataScope: "Phạm vi dữ liệu",
+      ip: "Địa chỉ IP",
+      userAgent: "Thiết bị / Trình duyệt",
+      requestId: "Mã yêu cầu",
+      errorCode: "Mã lỗi",
+      errorMessage: "Thông báo lỗi",
+      changedFields: "Trường đã đổi",
+      oldValues: "Giá trị cũ",
+      newValues: "Giá trị mới",
+      notFound: {
+        title: "Không tìm thấy bản ghi",
+        description: "Bản ghi audit log này không tồn tại hoặc đã bị xoá.",
+      },
+    },
+  },
+
+  // S2-FE-FND-2 — SYSTEM-SCREEN-FILES (/system/files + /:id).
+  files: {
+    title: "Tệp tin",
+    description: "Metadata tệp tin đã tải lên hệ thống (chỉ đọc)",
+    columns: {
+      name: "Tên tệp",
+      mimeType: "Loại tệp",
+      size: "Dung lượng",
+      visibility: "Hiển thị",
+      uploadStatus: "Trạng thái",
+      scanStatus: "Quét virus",
+      uploadedAt: "Ngày tải lên",
+      actions: "",
+      viewDetail: "Xem chi tiết",
+    },
+    visibility: {
+      Private: "Riêng tư",
+      Internal: "Nội bộ",
+      Public: "Công khai",
+    },
+    uploadStatus: {
+      Pending: "Đang xử lý",
+      Uploaded: "Đã tải lên",
+      Failed: "Thất bại",
+      Deleted: "Đã xoá",
+    },
+    scanStatus: {
+      NotRequired: "Không yêu cầu",
+      Pending: "Đang quét",
+      Clean: "Sạch",
+      Infected: "Nhiễm mã độc",
+      Failed: "Quét lỗi",
+    },
+    empty: {
+      title: "Không có tệp tin",
+      description: "Chưa có tệp tin nào khớp bộ lọc.",
+    },
+    error: {
+      title: "Không thể tải danh sách tệp tin",
+      description: "Có lỗi khi tải danh sách tệp tin. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem tệp tin của công ty.",
+    },
+    filters: {
+      moduleCode: "Module",
+      moduleCodePlaceholder: "VD: HR, ATT, TASK",
+      entityType: "Đối tượng",
+      entityTypePlaceholder: "VD: Employee, Task",
+      visibility: "Hiển thị",
+      allVisibility: "Mọi mức hiển thị",
+      apply: "Lọc",
+      reset: "Xóa lọc",
+    },
+    detail: {
+      title: "Chi tiết tệp tin",
+      backToList: "Quay lại danh sách",
+      downloadCount: "Số lần tải",
+      owner: "Chủ sở hữu",
+      isTemporary: "Tệp tạm",
+      yes: "Có",
+      no: "Không",
+      links: "Liên kết đối tượng",
+      noLinks: "Chưa gắn với đối tượng nào.",
+      download: "Tải xuống",
+      notFound: {
+        title: "Không tìm thấy tệp tin",
+        description: "Tệp tin này không tồn tại hoặc đã bị xoá.",
+      },
+    },
+  },
 };
