@@ -131,6 +131,9 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "LEAVE.REQUEST.VIEW_OWN": "view-own:leave",
   "LEAVE.REQUEST.VIEW": "view:leave",
   "LEAVE.REQUEST.APPROVE": "approve:leave",
+  // S3-FE-LEAVE-4 lịch nghỉ — CẶP SEED THẬT mig 0455: view-own:leave-calendar @Own cho CẢ 4 role
+  // (cổng route/sidebar thô); view-team/view-company là sensitive, gate TRONG page qua useCanExact.
+  "LEAVE.CALENDAR.VIEW_OWN": "view-own:leave-calendar",
   "TASK.TASK.VIEW": "read:task",
   "TASK.PROJECT.VIEW": "read:project",
   "NOTI.NOTIFICATION.VIEW_OWN": "read:notification",
@@ -910,6 +913,20 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["LEAVE.REQUEST.VIEW"],
     showInSidebar: true,
     order: 43,
+  },
+  // S3-FE-LEAVE-4 — LEAVE-SCREEN-007/008/009 (lịch nghỉ own/team/company). Cổng route = CHỈ VIEW_OWN
+  // (mọi role có Own) — đủ để render workspace; gate TINH hơn (team/company) áp trong LeaveCalendarPage
+  // qua useCanExact (sensitive pair, không wildcard fallback), mirror TeamAttendanceRecordsPage.
+  {
+    routeKey: "leave.calendar",
+    path: "/leave/calendar",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "LEAVE",
+    screenCode: "LEAVE-SCREEN-007",
+    titleKey: "routeTitle.leaveCalendar",
+    requiredAnyPermissions: ["LEAVE.CALENDAR.VIEW_OWN"],
+    showInSidebar: true,
+    order: 44,
   },
 
   // Tasks

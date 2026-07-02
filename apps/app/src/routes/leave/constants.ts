@@ -97,4 +97,16 @@ export const LEAVE_PATHS = {
   // S3-FE-LEAVE-3: LEAVE-SCREEN-006 (tất cả đơn nghỉ, HR/Admin) + edit đơn nháp (Draft-only).
   ALL_REQUESTS: "/leave/requests",
   EDIT: (id: string) => `/leave/requests/${id}/edit`,
+  // S3-FE-LEAVE-4: LEAVE-SCREEN-007/008/009 (lịch nghỉ own/team/company).
+  CALENDAR: "/leave/calendar",
 } as const;
+
+/** Phạm vi lịch nghỉ (khớp leaveCalendarScopeSchema — contracts). */
+export const LEAVE_CALENDAR_SCOPE = {
+  OWN: "own",
+  TEAM: "team",
+  COMPANY: "company",
+} as const;
+
+export type LeaveCalendarScopeConst =
+  (typeof LEAVE_CALENDAR_SCOPE)[keyof typeof LEAVE_CALENDAR_SCOPE];

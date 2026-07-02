@@ -142,6 +142,7 @@ import { LeaveRequestDetailPage } from "@/routes/leave/LeaveRequestDetailPage";
 import { LeaveApprovalPage } from "@/routes/leave/LeaveApprovalPage";
 import { AllLeaveRequestsPage } from "@/routes/leave/AllLeaveRequestsPage";
 import { EditLeaveDraftPage } from "@/routes/leave/EditLeaveDraftPage";
+import { LeaveCalendarPage } from "@/routes/leave/LeaveCalendarPage";
 
 // System
 import { UsersPage } from "@/routes/system/UsersPage";
@@ -337,6 +338,14 @@ const leaveAllRequestsRoute = makeModuleRoute(
   "leave.all-requests",
   "LEAVE",
   AllLeaveRequestsPage,
+);
+
+// S3-FE-LEAVE-4 — LEAVE-SCREEN-007/008/009 (lịch nghỉ own/team/company).
+const leaveCalendarRoute = makeModuleRoute(
+  "/leave/calendar",
+  "leave.calendar",
+  "LEAVE",
+  LeaveCalendarPage,
 );
 
 // Leave edit draft — static "$requestId/edit" ranks BELOW the exact "/leave/requests" list route
@@ -538,6 +547,7 @@ const routeTree = rootRoute.addChildren([
   leaveApprovalsRoute,
   leaveAllRequestsRoute,
   leaveEditRoute,
+  leaveCalendarRoute,
   tasksRoute,
   tasksMyTasksRoute,
   notificationsRoute,
