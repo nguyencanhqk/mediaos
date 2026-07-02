@@ -26,6 +26,9 @@ import { AppModule } from "../../src/app.module";
 import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
+import { DatabaseService } from "../../src/db/db.service";
+import { AuditService } from "../../src/events/audit.service";
+import { EmployeeCodeConfigRepository } from "../../src/employees/employee-code-config.repository";
 import { appPool, directPool, hasDb, withClient } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -109,6 +112,20 @@ async function counterValue(direct: Pool, companyId: string): Promise<string> {
   return r.rows[0].v as string;
 }
 
+/** Read the raw config row (prefix + number_length) directly (superuser, bypasses RLS) — for cross-tenant
+ *  and rollback assertions where we must see the row's ACTUAL persisted state, not the API projection. */
+async function rawConfig(
+  direct: Pool,
+  companyId: string,
+): Promise<{ prefix: string | null; numberLength: number } | undefined> {
+  const r = await direct.query(
+    `SELECT prefix, number_length AS "numberLength" FROM employee_code_configs
+       WHERE company_id = $1 AND deleted_at IS NULL LIMIT 1`,
+    [companyId],
+  );
+  return r.rows[0];
+}
+
 const VIEW_UPDATE: Array<[string, string]> = [
   ["view", "employee-code-config"],
   ["update", "employee-code-config"],
@@ -125,6 +142,7 @@ describe.skipIf(!hasLaneDb)(
     let A: SeededTenant;
     let B: SeededTenant;
     let hrEmail = "";
+    let hrUserId = "";
     let noPermEmail = "";
     let bHrEmail = "";
 
@@ -136,7 +154,7 @@ describe.skipIf(!hasLaneDb)(
       await seedEmployeeCodeCounter(direct, B.companyId);
 
       hrEmail = `hr@${A.slug}.test`;
-      const hrUserId = await seedUser(direct, A.companyId, hrEmail, hash);
+      hrUserId = await seedUser(direct, A.companyId, hrEmail, hash);
       await grant(direct, A.companyId, hrUserId, VIEW_UPDATE);
 
       noPermEmail = `noperm@${A.slug}.test`;
@@ -279,6 +297,75 @@ describe.skipIf(!hasLaneDb)(
       // A's config is STAFF (patched above), never B's BSECRET/number_length 7.
       expect(get.body.data.prefix).not.toBe("BSECRET");
       expect(get.body.data.companyId).toBe(A.companyId);
+    });
+
+    it("RLS: tenant A's PATCH never mutates tenant B's config row (cross-tenant write isolation)", async () => {
+      // B's row is the distinctive BSECRET / number_length 7 seeded in beforeAll.
+      const bBefore = await rawConfig(direct, B.companyId);
+      expect(bBefore?.prefix).toBe("BSECRET");
+
+      // A patches (again with a hostile body company_id = B). The write must land in A only.
+      const token = await login(nest, A.slug, hrEmail);
+      const patch = await api(nest)
+        .patch("/hr/employee-code-config")
+        .set(bearer(token))
+        .send({ prefix: "AWRITE", numberLength: 6, companyId: B.companyId });
+      expect(patch.status, JSON.stringify(patch.body)).toBe(200);
+
+      // B's raw row is byte-for-byte untouched — A can neither read nor write across the tenant boundary.
+      const bAfter = await rawConfig(direct, B.companyId);
+      expect(bAfter?.prefix).toBe("BSECRET");
+      expect(bAfter?.numberLength).toBe(7);
+
+      // A's own row did change (sanity: the PATCH actually persisted somewhere — in A).
+      const aAfter = await rawConfig(direct, A.companyId);
+      expect(aAfter?.prefix).toBe("AWRITE");
+    });
+
+    it("audit-in-tx (BẤT BIẾN #2): a failure AFTER audit.record rolls back BOTH the config write AND the audit row", async () => {
+      // Drive the REAL container services (no mocks) through withTenant exactly like the service does, then
+      // throw a sentinel AFTER audit.record. The transactional wrapper must roll back config + audit together
+      // — a committed audit row (or a committed config change) without the other would break atomicity.
+      const db = nest.get(DatabaseService, { strict: false });
+      const audit = nest.get(AuditService, { strict: false });
+      const repo = nest.get(EmployeeCodeConfigRepository, { strict: false });
+
+      const cfgBefore = await rawConfig(direct, A.companyId);
+      const auditBefore = await countConfigAudit(direct, A.companyId);
+
+      await expect(
+        db.withTenant(A.companyId, async (tx) => {
+          const existing = await repo.findConfigTx(tx, A.companyId);
+          const after = existing
+            ? await repo.updateConfigTx(tx, A.companyId, existing.id, { prefix: "ROLLBACK_ME" })
+            : await repo.insertConfigTx(tx, A.companyId, {
+                prefix: "ROLLBACK_ME",
+                pattern: null,
+                numberLength: 4,
+                allowManualOverride: true,
+                status: "active",
+              });
+          if (!after) throw new Error("setup: config write returned no row");
+          await audit.record(tx, {
+            action: "CONFIG_UPDATE",
+            objectType: "employee_code_config",
+            objectId: after.id,
+            actorUserId: hrUserId,
+            before: cfgBefore ?? null,
+            after: { prefix: "ROLLBACK_ME" },
+            oldValues: cfgBefore ?? null,
+            newValues: { prefix: "ROLLBACK_ME" },
+          });
+          // Simulate a post-audit failure in the same business tx.
+          throw new Error("SENTINEL: forced failure after audit.record");
+        }),
+      ).rejects.toThrow(/SENTINEL/);
+
+      // Both writes rolled back together: config prefix unchanged AND no new audit row.
+      const cfgAfter = await rawConfig(direct, A.companyId);
+      expect(cfgAfter?.prefix).toBe(cfgBefore?.prefix ?? null);
+      expect(cfgAfter?.prefix).not.toBe("ROLLBACK_ME");
+      expect(await countConfigAudit(direct, A.companyId)).toBe(auditBefore);
     });
 
     it("append-only (BẤT BIẾN #2): mediaos_app UPDATE/DELETE of the config audit row is DENIED", async () => {
