@@ -1472,7 +1472,7 @@ export const backlog = [
     title:
       "FE Auth self-service: forgot-password + reset-password + session-expired (apps/auth) + /account/change-password nối API thật",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/auth/**", "apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-AUTH-BE-4", "S2-FE-AUTH-1"],
@@ -1498,7 +1498,7 @@ export const backlog = [
     title:
       "FE User admin CRUD (/system/users): create + detail + edit + assign-roles nối /auth/users (thay read-only placeholder)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-AUTH-BE-3", "S2-FE-HR-3"],
@@ -1524,7 +1524,7 @@ export const backlog = [
     title:
       "Role write API (P1): POST/PATCH /auth/roles (create/update, KHÔNG sửa system role) + assign/revoke permission cho role (role_permissions) có audit — unblock S2-FE-AUTH-4",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/permission/**",
       "apps/api/src/users/**",
@@ -1585,7 +1585,7 @@ export const backlog = [
     title:
       "Session management API (P1): GET /auth/sessions (phiên của CHÍNH user) + revoke 1 phiên + revoke-all-others — hoàn tất user_sessions (DEFERRED ở BE-1) — unblock S2-FE-AUTH-5",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/auth/**",
       "apps/api/src/db/schema/audit.ts",
@@ -1678,7 +1678,7 @@ export const backlog = [
     title:
       "FE FOUNDATION admin: Audit log viewer (/system/audit-logs + detail, thay ModulePlaceholder) + File metadata viewer (/system/files + detail)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S1-FND-AUDIT-1", "S1-FND-FILE-1", "S1-FE-REGISTRY-1"],
@@ -1726,7 +1726,7 @@ export const backlog = [
       "FE FOUNDATION admin: Module Catalog (/system/modules + /:code detail) nối admin module API — read-only trước",
     zone: "yellow",
     // WAITING S2-FND-BE-1 (admin module list) — todo, tự lên 'ready' khi BE done. my-apps hiện có KHÔNG đủ (lọc theo user).
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-FND-BE-1", "S1-FE-REGISTRY-1"],
@@ -1753,7 +1753,7 @@ export const backlog = [
     title:
       "FE FOUNDATION admin: Public Holidays (/system/public-holidays list+CRUD) + Health Check (/system/health read-only status) — BE sẵn",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S1-FE-REGISTRY-1"],
@@ -1850,7 +1850,7 @@ export const backlog = [
       "FE FOUNDATION admin: Retention Policies (/system/retention config) + File Access Logs viewer (/system/file-access-logs)",
     zone: "yellow",
     // WAITING S2-FND-BE-3 — todo, tự lên 'ready' khi BE-3 done.
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-FND-BE-3", "S1-FE-REGISTRY-1"],
@@ -1885,7 +1885,7 @@ export const backlog = [
     title:
       "FE HR Profile change-request workflow: /hr/me/change-request (self gửi YC) + /hr/profile-change-requests (HR duyệt list) + /:id (detail + approve/reject/cancel)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-FE-HR-3", "S2-INT-2"],
@@ -1929,7 +1929,7 @@ export const backlog = [
     title:
       "FE HR Org chart (/hr/org-chart, theo data-scope) + HR audit-logs (/hr/audit-logs, tái dùng foundation audit filter module=HR)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-FE-HR-1", "S2-INT-2"],
@@ -1954,7 +1954,7 @@ export const backlog = [
     title:
       "Employee contracts (carry-over STORY-031): migration employee_contracts (RLS+FORCE) + CRUD API /hr/contracts + /hr/employees/:id/contracts + file link + cảnh báo hết hạn — unblock S2-FE-HR-7",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/db/schema/**",
       "apps/api/migrations/**",
@@ -2034,7 +2034,7 @@ export const backlog = [
       "FE HR Employee-code config: /hr/settings/employee-code (form cấu hình mã NV + preview live) nối admin API",
     zone: "yellow",
     // WAITING S2-HR-BE-7 (employee-code admin edit) — todo, tự lên 'ready' khi BE-7 done.
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-HR-BE-7", "S2-FE-HR-1"],
@@ -2383,7 +2383,7 @@ export const backlog = [
     title:
       "LEAVE type/policy management + HR balance view/adjust + ledger (P1): CRUD type/policy + HR view balances + adjust balance (mọi thay đổi qua leave_balance_transactions, no negative ngoài policy)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/leave/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S3-LEAVE-SEED-1", "S2-AUTH-BE-2"],
@@ -2409,7 +2409,7 @@ export const backlog = [
     title:
       "LEAVE→ATT sync: onLeaveApproved handler + AttendanceLeaveSyncService (full-day=Leave/required 0 · half-day/hourly reduce · recalc existing check-in) + sync_status/retry + onLeaveCancelled/Revoked recalc + balance restore idempotent (S3-SYNC-004)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/attendance/**", "apps/api/src/leave/**", "apps/api/test/**"],
     skills: ["code-review"],
     depends_on: ["S3-ATT-BE-1", "S3-LEAVE-BE-3"],
@@ -2651,7 +2651,7 @@ export const backlog = [
     title:
       "ATT Remote/Onsite-work request workflow API (CO-S4-004): remote_work_requests create/list/detail + approve/reject + ảnh hưởng tính công + audit + event (skeleton 0452 → hoàn thiện)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/attendance/**",
       "apps/api/src/db/schema/**",
@@ -2667,10 +2667,11 @@ export const backlog = [
       "SPEC-04",
     ],
     done_when: [
-      "POST /attendance/remote-work-requests (create Own) + GET my + GET list (scope) + GET :id + approve/reject/cancel-own; state-machine (create → Pending, set submitted_at) + audit + event; Approved ảnh hưởng cách tính công ngày remote/công tác theo rule; Approved sinh/cập nhật attendance_records UPSERT-BY (company_id,employee_id,date) IDEMPOTENT — re-approve KHÔNG nhân đôi record",
+      "STATE-MACHINE (CHỐT LẠI 2026-07-02, owner override — GHI ĐÈ mọi bản done_when trước đó nói 'create → Pending'): create → **Draft** (KHÔNG Pending); action **submit** RIÊNG (Draft→Pending) trong contract/API — POST /attendance/remote-work-requests/:id/submit. Lúc submit: người tạo chọn current_approver_user_id là người duyệt TRỰC TIẾP HOẶC người duyệt THAY THẾ (delegate) + danh sách watcher_user_ids (theo dõi, nhận thông báo liên quan qua NOTI). Draft có thể sửa/xoá bởi chủ; chỉ request ở trạng thái Pending mới approve/reject được.",
+      "POST /attendance/remote-work-requests (create Own → Draft) + GET my + GET list (scope) + GET :id + approve/reject/cancel-own; audit + event mỗi chuyển trạng thái (Draft→Pending qua submit, Pending→Approved/Rejected); Approved ảnh hưởng cách tính công ngày remote/công tác theo rule; Approved sinh/cập nhật attendance_records UPSERT-BY (company_id,employee_id,date) IDEMPOTENT — re-approve KHÔNG nhân đôi record",
       "hoàn thiện shape remote_work_requests (migration nối head nếu skeleton thiếu; RLS+FORCE); mutation trong tx; permission pair PIN đúng resource_type='remote-request' (seed 0454): create-own/view-own/view-team/view-company/cancel-own/approve/reject đều gate trên 'remote-request', reject dùng cặp reject:remote-request RIÊNG (không tái dùng approve)",
       "AUDIT object_type (CHỐT 2026-07-02): union-add 'remote_work_request' vào AUDIT_OBJECT_TYPES (apps/api/src/db/schema/audit.ts) + CHECK audit_logs CÙNG commit migration (mẫu UNION-ADD 0456)",
-      "deny-path RED viết-TRƯỚC: tạo hộ người khác → chặn; duyệt ngoài scope → 403; cross-tenant deny; cancel đơn người khác / cancel khi ≠Pending → chặn; FULL gate + người chốt",
+      "deny-path RED viết-TRƯỚC: tạo hộ người khác → chặn; submit hộ người khác / submit khi ≠Draft → chặn; approve/reject khi ≠Pending (vd còn Draft) → chặn; duyệt ngoài scope → 403; cross-tenant deny (gồm current_approver_user_id/watcher_user_ids PHẢI cùng company); cancel đơn người khác / cancel khi ≠Draft/Pending → chặn; FULL gate + người chốt",
     ],
   },
   {
@@ -2680,7 +2681,7 @@ export const backlog = [
     title:
       "ATT Reports + audit read (CO-S4-006, P2): GET /attendance/reports (tổng hợp theo scope) + /attendance/audit-logs (tái dùng foundation audit filter module=ATT)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/attendance/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S3-ATT-BE-2", "S1-FND-AUDIT-1"],
@@ -2704,7 +2705,7 @@ export const backlog = [
     title:
       "FE ATT Adjustment (/attendance/adjustment-requests my/list/new/:id + /records/:id/adjust): tạo/duyệt/điều chỉnh trực tiếp",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S3-ATT-BE-4", "S3-FE-ATT-2"],
@@ -2843,7 +2844,7 @@ export const backlog = [
     layer: "FE",
     title: "FE LEAVE Calendar (/leave/calendar, own/team/company theo scope)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S3-LEAVE-BE-5", "S3-FE-LEAVE-1"],
