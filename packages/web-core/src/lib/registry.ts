@@ -130,6 +130,19 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "AUTH.ROLE.VIEW": "view:role",
   "FOUNDATION.SETTING.VIEW": "view:foundation-setting",
   "FOUNDATION.AUDIT_LOG.VIEW": "view:foundation-audit-log",
+  // S2-FE-HR-5 (lane HR5-WC) — HR master-data CRUD. CẶP SEED THẬT lấy từ controller (chống pair-drift
+  // s1-fnd-module): hr-department.controller (read/create/update/delete:department) · positions.controller
+  // (read/create/update/delete:position) · hr-master-data.controller (manage:master-data cho CẢ đọc lẫn ghi
+  // job-levels + contract-types — SPEC-03 §13.12b/c: 1 cặp DUY NHẤT, KHÔNG có cặp "view" master-data riêng).
+  "HR.DEPARTMENT.VIEW": "read:department",
+  "HR.DEPARTMENT.CREATE": "create:department",
+  "HR.DEPARTMENT.UPDATE": "update:department",
+  "HR.DEPARTMENT.DELETE": "delete:department",
+  "HR.POSITION.VIEW": "read:position",
+  "HR.POSITION.CREATE": "create:position",
+  "HR.POSITION.UPDATE": "update:position",
+  "HR.POSITION.DELETE": "delete:position",
+  "HR.MASTER_DATA.MANAGE": "manage:master-data",
 };
 
 export function createPermissionChecker(userPermissions: readonly UserPermission[]) {
@@ -697,6 +710,54 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["HR.EMPLOYEE.VIEW"],
     showInSidebar: true,
     order: 22,
+  },
+  // S2-FE-HR-5 (lane HR5-WC) — HR master-data admin screens. Gate = cặp SEED THẬT (qua PERMISSION_CODE_TO_PAIR).
+  // Departments/Positions: cổng route = cặp ĐỌC (read:department / read:position); nút mutation gate riêng trong
+  // page. Job-levels/Contract-types: TOÀN BỘ route (kể cả đọc) gate manage:master-data — 1 cặp DUY NHẤT (SPEC-03
+  // §13.12b/c), KHÔNG có cặp "view" master-data riêng.
+  {
+    routeKey: "hr.departments",
+    path: "/hr/departments",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "HR",
+    screenCode: "HR-SCREEN-DEPARTMENTS",
+    titleKey: "routeTitle.hrDepartments",
+    requiredAnyPermissions: ["HR.DEPARTMENT.VIEW"],
+    showInSidebar: true,
+    order: 23,
+  },
+  {
+    routeKey: "hr.positions",
+    path: "/hr/positions",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "HR",
+    screenCode: "HR-SCREEN-POSITIONS",
+    titleKey: "routeTitle.hrPositions",
+    requiredAnyPermissions: ["HR.POSITION.VIEW"],
+    showInSidebar: true,
+    order: 24,
+  },
+  {
+    routeKey: "hr.job-levels",
+    path: "/hr/job-levels",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "HR",
+    screenCode: "HR-SCREEN-JOB-LEVELS",
+    titleKey: "routeTitle.hrJobLevels",
+    requiredAnyPermissions: ["HR.MASTER_DATA.MANAGE"],
+    showInSidebar: true,
+    order: 25,
+  },
+  {
+    routeKey: "hr.contract-types",
+    path: "/hr/contract-types",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "HR",
+    screenCode: "HR-SCREEN-CONTRACT-TYPES",
+    titleKey: "routeTitle.hrContractTypes",
+    requiredAnyPermissions: ["HR.MASTER_DATA.MANAGE"],
+    showInSidebar: true,
+    order: 26,
   },
 
   // Attendance

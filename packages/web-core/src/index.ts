@@ -73,6 +73,8 @@ export {
   notificationKeys,
   attendanceInvalidation,
   leaveInvalidation,
+  // S2-FE-HR-5 (lane HR5-WC): HR master-data mutation → list invalidation.
+  hrMasterDataInvalidation,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -84,6 +86,8 @@ export { usersApi } from "./lib/users-api";
 export { twoFactorApi } from "./lib/two-factor-api";
 export { notificationApi } from "./lib/notification-api";
 export { hrApi } from "./lib/hr-api";
+// S2-FE-HR-5 (lane HR5-WC): HR master-data CRUD spine (departments/positions/job-levels/contract-types).
+export { hrMasterDataApi, type HrDepartment } from "./lib/hr-master-data-api";
 export { leaveApi } from "./lib/leave-api";
 export { attendanceApi } from "./lib/attendance-api";
 
