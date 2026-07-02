@@ -25,3 +25,40 @@ export type MyAppItem = z.infer<typeof myAppItemSchema>;
 /** Response /modules/my-apps = mảng app (envelope bọc ở interceptor; chuẩn hoá envelope = WIRE-DRIFT-1). */
 export const myAppsResponseSchema = z.array(myAppItemSchema);
 export type MyAppsResponse = z.infer<typeof myAppsResponseSchema>;
+
+/**
+ * S2-FND-BE-1 — Admin module-catalog response DTO (nguồn sự thật contracts cho GET
+ * /api/v1/foundation/modules). KHÁC my-apps: admin thấy TẤT CẢ module (active + inactive,
+ * deleted_at IS NULL) — KHÔNG lọc theo capability user. `enabled` = cờ resolve theo setting
+ * module.<code>.enabled per-tenant (default true). route/icon/required_permissions từ hằng
+ * MODULE_APP_METADATA (apps/api foundation/module-catalog). KHÔNG có secret; KHÔNG có field
+ * per-user của my-apps (is_favorite/is_recent/badges/allowed_actions).
+ */
+export const adminModuleItemSchema = z.object({
+  module_code: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  group: z.string().nullable(),
+  is_active: z.boolean(),
+  enabled: z.boolean(),
+  required_permissions: z.array(z.string()),
+  route: z.string(),
+  icon: z.string(),
+});
+
+export type AdminModuleItem = z.infer<typeof adminModuleItemSchema>;
+
+/**
+ * Detail GET /foundation/modules/:code — cùng shape item (metadata/required_permissions/enabled).
+ * Tách tên để phân biệt endpoint list vs detail + mở rộng độc lập về sau.
+ */
+export const adminModuleDetailSchema = adminModuleItemSchema;
+export type AdminModuleDetail = z.infer<typeof adminModuleDetailSchema>;
+
+/** Response GET /foundation/modules = mảng (envelope {success,message,data,meta} bọc ở interceptor). */
+export const adminModulesResponseSchema = z.array(adminModuleItemSchema);
+export type AdminModulesResponse = z.infer<typeof adminModulesResponseSchema>;
+
+/** Response GET /foundation/modules/:code = 1 detail (envelope bọc ở interceptor). */
+export const adminModuleDetailResponseSchema = adminModuleDetailSchema;
+export type AdminModuleDetailResponse = z.infer<typeof adminModuleDetailResponseSchema>;
