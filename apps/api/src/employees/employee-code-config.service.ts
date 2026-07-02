@@ -93,6 +93,22 @@ export class EmployeeCodeConfigService {
           });
       if (!after) throw new Error("Failed to persist employee code config");
 
+      // OWNER CHỐT 2026-07-03 (S2-FND-SEED-2): sync the FULL current state (not just the PATCH delta) into
+      // sequence_counters — a PATCH touching only `prefix` still must carry the UNCHANGED numberLength/status
+      // so the counter never drifts from the config. current_value is preserved by syncCounterConfigTx
+      // (counter stays the single render source — the running number never resets on a config edit).
+      await this.sequence.syncCounterConfigTx(
+        tx,
+        user.companyId,
+        { sequenceKey: EMPLOYEE_CODE_SEQUENCE_KEY },
+        {
+          moduleCode: "HR",
+          prefix: after.prefix,
+          paddingLength: after.numberLength,
+          status: after.status === "active" ? "Active" : "Inactive",
+        },
+      );
+
       const beforeSnap = before ? this.snapshot(before) : null;
       const afterSnap = this.snapshot(after);
 

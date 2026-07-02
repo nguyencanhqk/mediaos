@@ -409,23 +409,73 @@ export class HrWriteService {
   // ── Helpers ────────────────────────────────────────────────────────────────────────
 
   /**
-   * Allocate the next employee code via SequenceService in its OWN tx. A missing/inactive counter
-   * (the counter is provisioned by a seed; see plan) maps to 422 — never a 500.
+   * Allocate the next employee code via SequenceService in its OWN tx. A missing counter triggers
+   * ensure-on-miss (S2-FND-SEED-2, OWNER CHỐT 2026-07-03) EXACTLY ONCE: read the tenant's REAL
+   * employee_code_config (seeded by HrMasterDataSeeder at reconcile-time, or set by admin PATCH) and, only
+   * when that row exists, provision the counter from it and retry once. An Inactive counter
+   * (SequenceInactiveError) is NEVER auto-re-enabled — it 422s immediately, same as a genuinely
+   * unconfigured tenant (no config row at all — CẤM hard-code EMP/4 as a fallback).
    */
   private async allocateEmployeeCode(companyId: string): Promise<string> {
     try {
-      const { code } = await this.sequence.nextCode(companyId, {
-        sequenceKey: EMPLOYEE_CODE_SEQUENCE_KEY,
-      });
-      return code;
+      return await this.requestNextEmployeeCode(companyId);
     } catch (err) {
-      if (err instanceof SequenceNotFoundError || err instanceof SequenceInactiveError) {
-        throw new UnprocessableEntityException(
-          "HR-ERR-EMPLOYEE-CODE-CONFIG-INVALID: cannot generate an employee code — provide one manually or configure the code sequence",
-        );
+      if (err instanceof SequenceNotFoundError) {
+        const ensured = await this.ensureEmployeeCodeCounterFromConfig(companyId);
+        if (ensured) {
+          try {
+            return await this.requestNextEmployeeCode(companyId);
+          } catch (retryErr) {
+            throw this.toCodeAllocationError(retryErr);
+          }
+        }
       }
-      throw err;
+      throw this.toCodeAllocationError(err);
     }
+  }
+
+  private async requestNextEmployeeCode(companyId: string): Promise<string> {
+    const { code } = await this.sequence.nextCode(companyId, {
+      sequenceKey: EMPLOYEE_CODE_SEQUENCE_KEY,
+    });
+    return code;
+  }
+
+  private toCodeAllocationError(err: unknown): Error {
+    if (err instanceof SequenceNotFoundError || err instanceof SequenceInactiveError) {
+      return new UnprocessableEntityException(
+        "HR-ERR-EMPLOYEE-CODE-CONFIG-INVALID: cannot generate an employee code — provide one manually or configure the code sequence",
+      );
+    }
+    return err instanceof Error ? err : new Error(String(err));
+  }
+
+  /**
+   * Ensure-on-miss: reads employee_code_configs (the ONLY source of prefix/padding/status here — never
+   * hard-coded) and, ONLY when a row exists, provisions the sequence_counters row to match it
+   * (module_code='HR', reset_policy='Never', current_value starts at 0 ⇒ first code renders correctly).
+   * Returns false (no side effect) when no config row exists — the caller keeps the original 422.
+   */
+  private async ensureEmployeeCodeCounterFromConfig(companyId: string): Promise<boolean> {
+    return this.db.withTenant(companyId, async (tx) => {
+      const config = await this.repo.findEmployeeCodeConfigTx(tx, companyId);
+      if (!config) return false;
+
+      await this.sequence.ensureCounterTx(
+        tx,
+        companyId,
+        { sequenceKey: EMPLOYEE_CODE_SEQUENCE_KEY },
+        {
+          sequenceKey: EMPLOYEE_CODE_SEQUENCE_KEY,
+          moduleCode: "HR",
+          prefix: config.prefix,
+          paddingLength: config.numberLength,
+          resetPolicy: "Never",
+          status: config.status === "active" ? "Active" : "Inactive",
+        },
+      );
+      return true;
+    });
   }
 
   /**

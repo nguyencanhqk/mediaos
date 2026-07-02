@@ -49,6 +49,8 @@ function makeSequence() {
       .fn()
       .mockResolvedValue({ sequenceKey: "EMPLOYEE_CODE", value: 1, code: "EMP0001" }),
     nextCode: vi.fn(),
+    // S2-FND-SEED-2 (PATCH-sync): updateConfig always calls this in the SAME tx after computing `after`.
+    syncCounterConfigTx: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -151,6 +153,46 @@ describe("EmployeeCodeConfigService.updateConfig — audit-in-tx, config-only sn
     expect(repo.updateConfigTx).not.toHaveBeenCalled();
     const [, entry] = audit.record.mock.calls[0];
     expect(entry.before).toBeNull();
+  });
+});
+
+describe("EmployeeCodeConfigService.updateConfig — PATCH-sync (OWNER CHỐT 2026-07-03)", () => {
+  it("syncs prefix/paddingLength/status into sequence_counters in the SAME tx, moduleCode='HR'", async () => {
+    const { svc, seq } = makeService();
+    await svc.updateConfig(actorA, { prefix: "STAFF" });
+    expect(seq.syncCounterConfigTx).toHaveBeenCalledOnce();
+    const [tx, companyId, key, sync] = seq.syncCounterConfigTx.mock.calls[0];
+    expect(tx).toBe(FAKE_TX); // same tx as the config write + audit (atomic)
+    expect(companyId).toBe(COMPANY_A);
+    expect(key).toEqual({ sequenceKey: "EMPLOYEE_CODE" });
+    expect(sync).toEqual({ moduleCode: "HR", prefix: "STAFF", paddingLength: 4, status: "Active" });
+  });
+
+  it("carries the FULL current state (not just the PATCH delta) — untouched fields stay unchanged", async () => {
+    // Only `prefix` is patched; numberLength/status are UNCHANGED on the row (updateConfigTx mock keeps
+    // dbRow's numberLength=4/status='active') — sync must still report them (never partial/undefined).
+    const { svc, seq } = makeService();
+    await svc.updateConfig(actorA, { prefix: "STAFF" });
+    const [, , , sync] = seq.syncCounterConfigTx.mock.calls[0];
+    expect(sync.paddingLength).toBe(4);
+    expect(sync.status).toBe("Active");
+  });
+
+  it("maps config status 'inactive' → counter status 'Inactive' (TitleCase, CHECK-compatible)", async () => {
+    const repo = makeRepo({
+      updateConfigTx: vi.fn().mockResolvedValue({ ...dbRow, status: "inactive" }),
+    });
+    const { svc, seq } = makeService(repo);
+    await svc.updateConfig(actorA, { status: "inactive" });
+    const [, , , sync] = seq.syncCounterConfigTx.mock.calls[0];
+    expect(sync.status).toBe("Inactive");
+  });
+
+  it("syncs even on first-write (insert path, before=null)", async () => {
+    const repo = makeRepo({ findConfigTx: vi.fn().mockResolvedValue(undefined) });
+    const { svc, seq } = makeService(repo);
+    await svc.updateConfig(actorA, { prefix: "NEW" });
+    expect(seq.syncCounterConfigTx).toHaveBeenCalledOnce();
   });
 });
 

@@ -1,15 +1,17 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { DatabaseService } from "../../db/db.service";
+import { DatabaseService, type TenantTx } from "../../db/db.service";
 import { AuditService } from "../../events/audit.service";
 import type { SequenceCounter } from "../../db/schema/sequences";
 import { buildCode, DEFAULT_TIME_ZONE, resetPeriodKey } from "./sequence-formatter";
 import { SequenceRepository } from "./sequence.repository";
 import {
+  type EnsureSequenceCounterInput,
   type NextCodeInput,
   type NextCodeResult,
   type PreviewNextCodeInput,
   type ResetPolicy,
   type SequenceCounterKey,
+  type SequenceStatus,
   SequenceInactiveError,
   SequenceNotFoundError,
   type UpdateSequenceInput,
@@ -186,6 +188,71 @@ export class SequenceService {
       const code = this.renderCode(row, nextValue, now, timeZone);
       return { sequenceKey: input.sequenceKey, value: Number(nextValue), code };
     });
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // S2-FND-SEED-2 — ensure-on-miss (allocateEmployeeCode) + PATCH-sync (EmployeeCodeConfigService).
+  // Cả hai chạy TRONG tx của caller (mirror HrTasksService.cancelTaskTx) — KHÔNG tự mở withTenant riêng,
+  // để atomic với write/audit của caller khi cần (BẤT BIẾN #1 — vẫn qua RLS+FORCE của tx đã set GUC).
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Idempotent "insert-if-missing" trong tx do CALLER cấp. Row đã tồn tại (Active HAY Inactive) ⇒ trả về
+   * NGUYÊN VẸN — KHÔNG re-enable, KHÔNG reset current_value. Dùng cho ensure-on-miss (allocateEmployeeCode
+   * đọc employee_code_config thật rồi truyền vào `defaults` — CẤM hard-code prefix/padding).
+   */
+  async ensureCounterTx(
+    tx: TenantTx,
+    companyId: string,
+    key: SequenceCounterKey,
+    defaults: EnsureSequenceCounterInput,
+  ): Promise<SequenceCounter> {
+    return this.repo.ensureCounterTx(companyId, key, defaults, tx);
+  }
+
+  /**
+   * OWNER CHỐT 2026-07-03 — PATCH-sync: đồng bộ prefix/paddingLength/status từ 1 config module (vd
+   * employee_code_configs) → sequence_counters TRONG CÙNG tx của caller. GIỮ NGUYÊN current_value (số đã
+   * cấp KHÔNG reset) — counter vẫn là NGUỒN RENDER DUY NHẤT (nextCode/previewNextCode chỉ đọc counter,
+   * KHÔNG đọc config module). Counter CHƯA tồn tại (company mới / seeder chưa reconcile) ⇒ tạo mới GIỮ
+   * current_value=0 với đúng prefix/padding/status vừa PATCH — mã đầu tiên vẫn đúng format ngay từ counter
+   * đầu tiên (KHÔNG cần 1 lượt ensure-on-miss riêng sau đó).
+   */
+  async syncCounterConfigTx(
+    tx: TenantTx,
+    companyId: string,
+    key: SequenceCounterKey,
+    sync: {
+      moduleCode: string;
+      prefix: string | null;
+      paddingLength: number;
+      status: SequenceStatus;
+    },
+  ): Promise<void> {
+    const existing = await this.repo.findCounterTx(companyId, key, tx);
+    if (!existing) {
+      await this.repo.ensureCounterTx(
+        companyId,
+        key,
+        {
+          ...key,
+          moduleCode: sync.moduleCode,
+          prefix: sync.prefix,
+          paddingLength: sync.paddingLength,
+          resetPolicy: "Never",
+          status: sync.status,
+        },
+        tx,
+      );
+      return;
+    }
+
+    await this.repo.updateConfigTx(
+      companyId,
+      key,
+      { prefix: sync.prefix, paddingLength: sync.paddingLength, status: sync.status },
+      tx,
+    );
   }
 
   /** Snapshot cấu hình (audit-safe — KHÔNG current_value/secret/PII). */

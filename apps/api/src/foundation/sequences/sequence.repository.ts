@@ -1,8 +1,13 @@
 import { Injectable } from "@nestjs/common";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import type { TenantTx } from "../../db/db.service";
+import { isUniqueViolation } from "../../common/db-error";
 import { sequenceCounters, type SequenceCounter } from "../../db/schema/sequences";
-import type { SequenceCounterKey, UpdateSequenceInput } from "./sequence.types";
+import type {
+  EnsureSequenceCounterInput,
+  SequenceCounterKey,
+  UpdateSequenceInput,
+} from "./sequence.types";
 
 /**
  * FOUNDATION-BE-2 — persistence cho sequence_counters (DB-08 §8.9). MỌI method nhận `companyId` + `tx`:
@@ -63,6 +68,61 @@ export class SequenceRepository {
       .where(this.counterWhere(companyId, key))
       .limit(1);
     return row;
+  }
+
+  /**
+   * S2-FND-SEED-2 — Idempotent "insert-if-missing" (KHÔNG phải upsert): row ĐÃ tồn tại (Active HAY Inactive)
+   * ⇒ trả về NGUYÊN VẸN, KHÔNG động tới (giữ nguyên current_value/status — ensure KHÔNG được phép reset số
+   * đã cấp hay tự ý bật lại 1 counter admin đã tắt). CHỈ INSERT khi THỰC SỰ thiếu.
+   *
+   * VÌ SAO SELECT-then-INSERT (KHÔNG onConflictDoNothing): unique index `uq_sequence_counters_company_key_
+   * scope_active` (mig 0434) là BIỂU THỨC partial — COALESCE(company_id,…), COALESCE(scope_reference_id,…) —
+   * KHÔNG phải cột thuần. drizzle `onConflictDoNothing({ target })` chỉ nhận `Column | Column[]` (KHÔNG SQL
+   * expression) ⇒ target cột-thuần SẼ nổ "no unique or exclusion constraint matching the specified columns".
+   *
+   * RACE (2 request đầu cùng miss counter, ví dụ 2 employee đầu tiên tạo song song): INSERT thứ 2 nhận
+   * unique_violation (23505) — bắt lỗi, SELECT lại (không throw, không 500) — thấy row của request thắng.
+   */
+  async ensureCounterTx(
+    companyId: string,
+    key: SequenceCounterKey,
+    defaults: EnsureSequenceCounterInput,
+    tx: TenantTx,
+  ): Promise<SequenceCounter> {
+    const existing = await this.findCounterTx(companyId, key, tx);
+    if (existing) return existing;
+
+    try {
+      const [row] = await tx
+        .insert(sequenceCounters)
+        .values({
+          companyId,
+          moduleCode: defaults.moduleCode,
+          sequenceKey: key.sequenceKey,
+          scopeType: key.scopeType ?? "Company",
+          scopeReferenceId: key.scopeReferenceId ?? null,
+          prefix: defaults.prefix ?? null,
+          suffix: defaults.suffix ?? null,
+          // paddingLength mặc định 0 khi KHÔNG truyền — CHỦ Ý (formatter): 0 = KHÔNG pad ⇒ 'EMP1' sai định
+          // dạng thay vì 'EMP0001'. Caller PHẢI truyền đúng paddingLength (đọc từ config thật — CẤM hard-code).
+          currentValue: BigInt(defaults.startValue ?? 0),
+          incrementBy: defaults.incrementBy ?? 1,
+          paddingLength: defaults.paddingLength ?? 0,
+          resetPolicy: defaults.resetPolicy ?? "Never",
+          formatPattern: defaults.datePattern ?? null,
+          status: defaults.status ?? "Active",
+          createdBy: defaults.actorUserId ?? null,
+        })
+        .returning();
+      if (!row) throw new Error("ensureCounterTx: INSERT trả về 0 row (không rõ nguyên nhân)");
+      return row;
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err;
+      const raced = await this.findCounterTx(companyId, key, tx);
+      if (raced) return raced;
+      // Vẫn không thấy sau unique_violation — lỗi thật (khác race dự kiến), ném nguyên err gốc.
+      throw err;
+    }
   }
 
   /**
