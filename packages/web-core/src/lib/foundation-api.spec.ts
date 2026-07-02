@@ -14,8 +14,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { companyViewSchema } from "@mediaos/contracts";
 import {
   foundationApi,
+  holidayApi,
+  holidayViewSchema,
   safeSettingViewSchema,
   settingsResolveResponseSchema,
+  retentionApi,
+  fileAccessLogApi,
 } from "./foundation-api";
 import * as apiClient from "./api-client";
 
@@ -107,6 +111,89 @@ describe("foundationApi — settings resolve + company-settings PATCH", () => {
 });
 
 // ---------------------------------------------------------------------------
+// holidayApi — S2-FE-FND-4 (URL + method + Zod validator + company_id KHÔNG forward).
+// ---------------------------------------------------------------------------
+
+describe("holidayApi — public-holidays (URL + method + Zod validator)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.apiFetch).mockReset();
+    vi.mocked(apiClient.apiFetch).mockResolvedValue([] as never);
+  });
+
+  it("list() → GET /foundation/public-holidays KHÔNG query khi không truyền params", async () => {
+    await holidayApi.list();
+    const [url, , opts] = lastCall();
+    expect(url).toBe("/foundation/public-holidays");
+    expect(opts?.method ?? "GET").toBe("GET");
+  });
+
+  it("list({year, month}) → gắn query string đúng", async () => {
+    await holidayApi.list({ year: 2026, month: 9 });
+    const [url] = lastCall();
+    expect(url).toBe("/foundation/public-holidays?year=2026&month=9");
+  });
+
+  it("create() → POST /foundation/public-holidays + holidayViewSchema + body KHÔNG company_id", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue({} as never);
+    await holidayApi.create({
+      holidayCode: "TET-2026",
+      name: "Tết Nguyên Đán",
+      holidayDate: "2026-02-17",
+    });
+    const [url, schema, opts] = lastCall();
+    expect(url).toBe("/foundation/public-holidays");
+    expect(schema).toBe(holidayViewSchema);
+    expect(opts?.method).toBe("POST");
+    const body = opts?.body ?? "";
+    expect(body).not.toContain("company_id");
+    expect(body).not.toContain("companyId");
+  });
+
+  it("update(id) → PATCH /foundation/public-holidays/:id", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue({} as never);
+    await holidayApi.update("hol-1", { name: "Đổi tên" });
+    const [url, schema, opts] = lastCall();
+    expect(url).toBe("/foundation/public-holidays/hol-1");
+    expect(schema).toBe(holidayViewSchema);
+    expect(opts?.method).toBe("PATCH");
+    expect(JSON.parse(opts?.body ?? "{}")).toEqual({ name: "Đổi tên" });
+  });
+
+  it("remove(id) → DELETE /foundation/public-holidays/:id", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue({ id: "hol-1", deleted: true } as never);
+    await holidayApi.remove("hol-1");
+    const [url, , opts] = lastCall();
+    expect(url).toBe("/foundation/public-holidays/hol-1");
+    expect(opts?.method).toBe("DELETE");
+  });
+});
+
+describe("holidayViewSchema", () => {
+  it("parse holiday scope 'global' (companyId null, hệ thống — KHÔNG sửa/xoá được ở FE)", () => {
+    const parsed = holidayViewSchema.parse({
+      id: "hol-g1",
+      scope: "global",
+      companyId: null,
+      holidayCode: "TET",
+      name: "Tết",
+      holidayDate: "2026-02-17",
+      holidayType: "PublicHoliday",
+      countryCode: "VN",
+      regionCode: null,
+      isRecurring: true,
+      affectsAttendance: true,
+      affectsLeaveCalculation: true,
+      isPaidHoliday: true,
+      status: "Active",
+      source: "seed",
+      description: null,
+    });
+    expect(parsed.scope).toBe("global");
+    expect(parsed.companyId).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Zod schemas — masking (QA-06): SafeSettingView KHÔNG có field secret_ref;
 // resolve trả giá trị đã mask từ server (client chỉ validate shape đã nhận).
 // ---------------------------------------------------------------------------
@@ -156,5 +243,68 @@ describe("foundation-api Zod schemas", () => {
       ],
     });
     expect("settings" in asSettings).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// retentionApi — S2-FE-FND-6 (URL + method + Zod validator + no company_id leak)
+// ---------------------------------------------------------------------------
+
+describe("retentionApi (URL + method + Zod validator)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.apiFetch).mockReset();
+    vi.mocked(apiClient.apiFetch).mockResolvedValue({} as never);
+  });
+
+  it("list → GET /foundation/retention-policies", async () => {
+    await retentionApi.list();
+    const [url, , opts] = lastCall();
+    expect(url).toBe("/foundation/retention-policies");
+    expect(opts?.method ?? "GET").toBe("GET");
+  });
+
+  it("update → PATCH /foundation/retention-policies/:id + body KHÔNG chứa companyId/id", async () => {
+    await retentionApi.update("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", {
+      retentionDays: 90,
+      isEnabled: true,
+    });
+    const [url, , opts] = lastCall();
+    expect(url).toBe("/foundation/retention-policies/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    expect(opts?.method).toBe("PATCH");
+    const body = JSON.parse(opts?.body ?? "{}");
+    expect(body).toEqual({ retentionDays: 90, isEnabled: true });
+    expect(body).not.toHaveProperty("companyId");
+    expect(body).not.toHaveProperty("id");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fileAccessLogApi — S2-FE-FND-6 (URL + query string, append-only — chỉ có method list)
+// ---------------------------------------------------------------------------
+
+describe("fileAccessLogApi (URL + query string; append-only — KHÔNG có mutate method)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.apiFetch).mockReset();
+    vi.mocked(apiClient.apiFetch).mockResolvedValue([] as never);
+  });
+
+  it("list() không tham số → GET /foundation/file-access-logs (không query string)", async () => {
+    await fileAccessLogApi.list();
+    const [url] = lastCall();
+    expect(url).toBe("/foundation/file-access-logs");
+  });
+
+  it("list(params) → gắn query string filter + phân trang, KHÔNG companyId", async () => {
+    await fileAccessLogApi.list({ page: 2, limit: 20, action: "Download" });
+    const [url] = lastCall();
+    expect(url).toContain("/foundation/file-access-logs?");
+    expect(url).toContain("page=2");
+    expect(url).toContain("limit=20");
+    expect(url).toContain("action=Download");
+    expect(url).not.toContain("companyId");
+  });
+
+  it("append-only — module KHÔNG export create/update/remove", () => {
+    expect(Object.keys(fileAccessLogApi)).toEqual(["list"]);
   });
 });

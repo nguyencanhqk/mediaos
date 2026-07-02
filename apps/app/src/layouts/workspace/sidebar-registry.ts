@@ -9,6 +9,12 @@
  */
 import { type SidebarItemMeta } from "@mediaos/web-core";
 import { AUDIT_LOG_VIEW_PERMISSION } from "@/routes/system/auth-logs/constants";
+import { HR_ENGINE_PAIRS } from "@/routes/hr/constants";
+import { HR_AUDIT_LOG_VIEW_PERMISSION } from "@/routes/hr/audit-logs/constants";
+import {
+  EMPLOYEE_CODE_CONFIG_PATH,
+  EMPLOYEE_CODE_CONFIG_VIEW_PERMISSION,
+} from "@/routes/hr/settings/constants";
 import { FOUNDATION_FILE_VIEW_PERMISSION } from "@/routes/system/files/constants";
 import { FOUNDATION_MODULE_VIEW_PERMISSION } from "@/routes/system/modules/constants";
 import {
@@ -17,6 +23,8 @@ import {
   PCR_ME_PATH,
   PCR_LIST_PATH,
 } from "@/routes/hr/profile-change-requests/constants";
+
+const HR_ORG_CHART_VIEW_PERMISSION = `${HR_ENGINE_PAIRS.ORG_CHART_VIEW.action}:${HR_ENGINE_PAIRS.ORG_CHART_VIEW.resourceType}`;
 
 // ---------------------------------------------------------------------------
 // DASH
@@ -80,6 +88,17 @@ export const HR_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 40,
     requiredAnyPermissions: [PCR_CREATE_PERMISSION],
   },
+  // S2-FE-HR-6 — Sơ đồ tổ chức. Gate = read:department (cặp seed thật, CÙNG cặp "phòng ban" HR).
+  {
+    sidebarKey: "hr.org-chart",
+    moduleCode: "HR",
+    label: "Sơ đồ tổ chức",
+    path: "/hr/org-chart",
+    icon: "network",
+    group: "operation",
+    order: 45,
+    requiredAnyPermissions: [HR_ORG_CHART_VIEW_PERMISSION],
+  },
   {
     sidebarKey: "hr.profile-change-requests",
     moduleCode: "HR",
@@ -90,6 +109,30 @@ export const HR_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 50,
     requiredAnyPermissions: [PCR_APPROVE_PERMISSION],
   },
+  // S2-FE-HR-6 — Lịch sử thay đổi HR (tái dùng /foundation/audit-logs?moduleCode=HR). Gate =
+  // view:audit-log (cặp seed thật mig 0340, sensitive) — literal, KHÔNG qua PERMISSION_CODE_TO_PAIR
+  // (tránh drift, cùng kỹ thuật system.login-logs).
+  {
+    sidebarKey: "hr.audit-logs",
+    moduleCode: "HR",
+    label: "Lịch sử thay đổi",
+    path: "/hr/audit-logs",
+    icon: "history",
+    group: "report",
+    order: 50,
+    requiredAnyPermissions: [HR_AUDIT_LOG_VIEW_PERMISSION],
+  },
+  // S2-FE-HR-8 — Cấu hình mã nhân viên. Gate = view:employee-code-config (cặp seed thật mig 0459).
+  {
+    sidebarKey: "hr.employee-code-config",
+    moduleCode: "HR",
+    label: "Cấu hình mã nhân viên",
+    path: EMPLOYEE_CODE_CONFIG_PATH,
+    icon: "hash",
+    group: "admin",
+    order: 60,
+    requiredAnyPermissions: [EMPLOYEE_CODE_CONFIG_VIEW_PERMISSION],
+  },
   // S2-FE-HR-5 — dữ liệu gốc HR. Gate theo cặp SEED THẬT (qua PERMISSION_CODE_TO_PAIR):
   // phòng ban/chức vụ = cặp ĐỌC; cấp bậc/loại hợp đồng = manage:master-data DUY NHẤT (SPEC-03 §13.12b/c).
   {
@@ -99,7 +142,7 @@ export const HR_SIDEBAR: readonly SidebarItemMeta[] = [
     path: "/hr/departments",
     icon: "building-2",
     group: "master-data",
-    order: 40,
+    order: 70,
     requiredAnyPermissions: ["HR.DEPARTMENT.VIEW"],
   },
   {
@@ -109,7 +152,7 @@ export const HR_SIDEBAR: readonly SidebarItemMeta[] = [
     path: "/hr/positions",
     icon: "briefcase",
     group: "master-data",
-    order: 41,
+    order: 71,
     requiredAnyPermissions: ["HR.POSITION.VIEW"],
   },
   {
@@ -119,7 +162,7 @@ export const HR_SIDEBAR: readonly SidebarItemMeta[] = [
     path: "/hr/job-levels",
     icon: "layers",
     group: "master-data",
-    order: 42,
+    order: 72,
     requiredAnyPermissions: ["HR.MASTER_DATA.MANAGE"],
   },
   {
@@ -129,7 +172,7 @@ export const HR_SIDEBAR: readonly SidebarItemMeta[] = [
     path: "/hr/contract-types",
     icon: "file-text",
     group: "master-data",
-    order: 43,
+    order: 73,
     requiredAnyPermissions: ["HR.MASTER_DATA.MANAGE"],
   },
 ];
@@ -215,6 +258,29 @@ export const ATT_SIDEBAR: readonly SidebarItemMeta[] = [
     group: "management",
     order: 70,
     requiredAnyPermissions: ["view:attendance-rule"],
+  },
+  // S3-FE-ATT-3 — Đơn điều chỉnh công. view-own/view-team/view-company:adjustment là cặp SENSITIVE
+  // KHÔNG allowlisted (permission.service.ts) → dùng cặp ALLOWLISTED liên quan (view-own/team/company:
+  // attendance) làm reach-permission gợi ý ẩn/hiện menu — cổng thật vẫn ở server (xem adjustment/constants.ts).
+  {
+    sidebarKey: "att.adjustment-requests.my",
+    moduleCode: "ATT",
+    label: "Đơn điều chỉnh của tôi",
+    path: "/attendance/adjustment-requests/my",
+    icon: "file-edit",
+    group: "operation",
+    order: 25,
+    requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_OWN"],
+  },
+  {
+    sidebarKey: "att.adjustment-requests",
+    moduleCode: "ATT",
+    label: "Đơn điều chỉnh cần duyệt",
+    path: "/attendance/adjustment-requests",
+    icon: "check-circle",
+    group: "management",
+    order: 45,
+    requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_TEAM", "ATT.ATTENDANCE.VIEW_COMPANY"],
   },
 ];
 

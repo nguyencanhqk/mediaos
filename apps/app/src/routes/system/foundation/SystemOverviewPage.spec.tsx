@@ -149,4 +149,27 @@ describe("SystemOverviewPage", () => {
     // company is not fetched (no view:foundation-company)
     expect(foundationApi.getCompany).not.toHaveBeenCalled();
   });
+
+  // ── S2-FE-FND-4: holidays card gated by view:foundation-holiday ────────────
+  it("shows the public-holidays card ONLY when user has view:foundation-holiday", () => {
+    setCapabilities({ "view:foundation-setting": true });
+    renderWithQuery(<SystemOverviewPage />);
+    expect(screen.queryByText(/ngày nghỉ lễ/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the public-holidays card when user has view:foundation-holiday", () => {
+    setCapabilities({ "view:foundation-holiday": true });
+    renderWithQuery(<SystemOverviewPage />);
+    expect(screen.getAllByText(/ngày nghỉ lễ/i).length).toBeGreaterThan(0);
+  });
+
+  // ── S2-FE-FND-4: health card links to /system/health for every user with access ─
+  it("health card links to /system/health", () => {
+    setCapabilities({ "view:foundation-setting": true });
+    renderWithQuery(<SystemOverviewPage />);
+    expect(screen.getByRole("link", { name: /xem chi tiết/i })).toHaveAttribute(
+      "href",
+      "/system/health",
+    );
+  });
 });

@@ -177,6 +177,108 @@ export default {
     Terminated: "Chấm dứt",
     Onboarding: "Đang onboarding",
   },
+  orgChart: {
+    title: "Sơ đồ tổ chức",
+    description: "Cơ cấu phòng ban của công ty (chỉ đọc)",
+    headLabel: "Trưởng đơn vị",
+    expand: "Mở rộng",
+    collapse: "Thu gọn",
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem sơ đồ tổ chức.",
+    },
+    error: {
+      title: "Không thể tải sơ đồ tổ chức",
+      description: "Có lỗi khi tải cơ cấu tổ chức. Vui lòng thử lại.",
+    },
+    empty: {
+      title: "Chưa có cơ cấu tổ chức",
+      description: "Công ty chưa thiết lập phòng ban nào.",
+    },
+  },
+  auditLogs: {
+    title: "Lịch sử thay đổi HR",
+    description: "Nhật ký audit các thao tác trên dữ liệu nhân sự",
+    columns: {
+      createdAt: "Thời gian",
+      action: "Hành động",
+      entityType: "Đối tượng",
+      actor: "Người thực hiện",
+      changedFields: "Trường thay đổi",
+    },
+    filters: {
+      action: "Hành động",
+      actionPlaceholder: "vd: update",
+      entityType: "Đối tượng",
+      entityTypePlaceholder: "vd: employee",
+      dateFrom: "Từ ngày",
+      dateTo: "Đến ngày",
+    },
+    pagination: {
+      summary: "{{from}}–{{to}} trên {{total}}",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem lịch sử thay đổi HR.",
+    },
+    error: {
+      title: "Không thể tải lịch sử",
+      description: "Có lỗi khi tải lịch sử thay đổi. Vui lòng thử lại.",
+    },
+    empty: {
+      title: "Chưa có lịch sử",
+      description: "Chưa có thay đổi nào được ghi nhận cho dữ liệu HR.",
+    },
+  },
+  employeeCodeConfig: {
+    title: "Cấu hình mã nhân viên",
+    description: "Quy tắc sinh mã nhân viên tự động khi tạo hồ sơ mới",
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem cấu hình mã nhân viên.",
+    },
+    error: {
+      title: "Không thể tải cấu hình",
+      description: "Có lỗi khi tải cấu hình mã nhân viên. Vui lòng thử lại.",
+    },
+    form: {
+      prefix: "Tiền tố (prefix)",
+      prefixPlaceholder: "vd: NV",
+      pattern: "Mẫu (pattern)",
+      patternPlaceholder: "Tuỳ chọn — quy tắc ghép mã nâng cao",
+      numberLength: "Độ dài số thứ tự",
+      allowManualOverride: "Cho phép nhập tay mã nhân viên khi tạo mới",
+      status: "Trạng thái",
+      statusActive: "Đang áp dụng",
+      statusInactive: "Ngừng áp dụng",
+      save: "Lưu cấu hình",
+      saving: "Đang lưu…",
+      cancel: "Huỷ",
+      errors: {
+        forbidden: "Bạn không có quyền sửa cấu hình này.",
+        validation: "Giá trị nhập không hợp lệ. Vui lòng kiểm tra lại.",
+        server: "Có lỗi hệ thống khi lưu cấu hình. Vui lòng thử lại sau.",
+        generic: "Không thể lưu cấu hình. Vui lòng thử lại.",
+      },
+    },
+    notice:
+      "Thay đổi cấu hình mã nhân viên chỉ áp dụng cho nhân viên tạo mới. Mã nhân viên cũ không bị thay đổi.",
+    confirm: {
+      title: "Xác nhận đổi cấu hình mã nhân viên",
+      description:
+        "Cấu hình mới sẽ áp dụng ngay cho nhân viên tạo mới sau khi lưu. Mã nhân viên đã cấp trước đó KHÔNG bị ảnh hưởng.",
+      confirmLabel: "Xác nhận lưu",
+      cancelLabel: "Huỷ",
+    },
+    preview: {
+      title: "Xem trước mã tiếp theo",
+      description: "Mã nhân viên sẽ được cấp cho hồ sơ tạo tiếp theo (không thay đổi bộ đếm)",
+      refresh: "Làm mới",
+      loading: "Đang tải…",
+      unavailable: "Chưa cấu hình bộ đếm mã nhân viên — liên hệ quản trị hệ thống.",
+      forbidden: "Bạn không có quyền xem trước mã nhân viên.",
+    },
+  },
   // S2-FE-HR-4 — Yêu cầu cập nhật hồ sơ (HR-SCREEN-016/017/018/019, SPEC-03 §13.13-16).
   changeRequest: {
     status: {

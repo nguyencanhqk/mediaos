@@ -1,6 +1,18 @@
 import { z } from "zod";
-import { companyViewSchema, type CompanyView } from "@mediaos/contracts";
+import {
+  companyViewSchema,
+  type CompanyView,
+  retentionPolicyViewSchema,
+  retentionPolicyListResponseSchema,
+  type RetentionPolicyView,
+  type PatchRetentionPolicyDto,
+  fileAccessLogListResponseSchema,
+  type FileAccessLogView,
+  type ListFileAccessLogsQuery,
+  type FileAccessActionDto,
+} from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
+import { buildQueryString } from "./api-params";
 
 /**
  * FOUNDATION API client — S2-FE-FND-1 (lane FND1-WC).
@@ -56,6 +68,86 @@ export const settingsResolveResponseSchema = z.union([
   z.object({ values: z.record(z.string(), z.unknown()) }),
 ]);
 export type SettingsResolveResponse = z.infer<typeof settingsResolveResponseSchema>;
+
+// ── Public holidays (S2-FE-FND-4) ──────────────────────────────────────────────
+//
+// Mirror HolidayView (apps/api/src/foundation/holidays/holidays.service.ts) — boundary Zod cục bộ
+// (holidays CHƯA có contract trong packages/contracts, cùng lý do settings ở trên). Cặp quyền seed THẬT
+// mig 0435: view:foundation-holiday (list) / manage:foundation-holiday (create/update/delete).
+// scope 'global' = holiday hệ thống (KHÔNG sửa/xoá được — CRUD chỉ áp cho scope 'company').
+
+export const HOLIDAY_TYPES = [
+  "PublicHoliday",
+  "CompanyHoliday",
+  "WorkingDayOverride",
+  "SpecialDay",
+] as const;
+export const holidayTypeSchema = z.enum(HOLIDAY_TYPES);
+export type HolidayType = (typeof HOLIDAY_TYPES)[number];
+
+export const holidayViewSchema = z.object({
+  id: z.string(),
+  scope: z.enum(["company", "global"]),
+  companyId: z.string().nullable(),
+  holidayCode: z.string(),
+  name: z.string(),
+  holidayDate: z.string(),
+  holidayType: z.string(),
+  countryCode: z.string().nullable(),
+  regionCode: z.string().nullable(),
+  isRecurring: z.boolean(),
+  affectsAttendance: z.boolean(),
+  affectsLeaveCalculation: z.boolean(),
+  isPaidHoliday: z.boolean(),
+  status: z.string(),
+  source: z.string().nullable(),
+  description: z.string().nullable(),
+});
+export type HolidayView = z.infer<typeof holidayViewSchema>;
+
+const holidayListSchema = z.array(holidayViewSchema);
+
+/** GET /foundation/public-holidays query — year mặc định năm hiện tại (server tự suy khi thiếu). */
+export interface HolidayListParams {
+  year?: number;
+  month?: number;
+  countryCode?: string;
+  companyOnly?: boolean;
+}
+
+/** POST /foundation/public-holidays body — chỉ tạo holiday RIÊNG CÔNG TY (server gán scope). */
+export interface CreateHolidayBody {
+  holidayCode: string;
+  name: string;
+  holidayDate: string;
+  holidayType?: HolidayType;
+  countryCode?: string;
+  regionCode?: string;
+  isRecurring?: boolean;
+  affectsAttendance?: boolean;
+  affectsLeaveCalculation?: boolean;
+  isPaidHoliday?: boolean;
+  description?: string;
+}
+
+export type UpdateHolidayBody = Partial<CreateHolidayBody>;
+
+export interface DeleteHolidayResult {
+  id: string;
+  deleted: true;
+}
+const deleteHolidayResultSchema = z.object({ id: z.string(), deleted: z.literal(true) });
+
+function holidayListQueryString(params?: HolidayListParams): string {
+  if (!params) return "";
+  const search = new URLSearchParams();
+  if (params.year !== undefined) search.set("year", String(params.year));
+  if (params.month !== undefined) search.set("month", String(params.month));
+  if (params.countryCode) search.set("countryCode", params.countryCode);
+  if (params.companyOnly !== undefined) search.set("companyOnly", String(params.companyOnly));
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
 
 // ── Request bodies ───────────────────────────────────────────────────────────────
 
@@ -128,3 +220,94 @@ export const foundationApi = {
       body: JSON.stringify(body),
     }),
 };
+
+/**
+ * holidayApi — S2-FE-FND-4. Ranh giới HTTP cho /system/public-holidays.
+ * Permission (seed THẬT mig 0435): view:foundation-holiday (list) / manage:foundation-holiday (CUD).
+ * company_id KHÔNG bao giờ trong body/query (server resolve từ AuthContext — BẤT BIẾN #1).
+ */
+export const holidayApi = {
+  /** GET /foundation/public-holidays — holiday công ty + global hiệu dụng theo year/month. */
+  list: (params?: HolidayListParams): Promise<HolidayView[]> =>
+    apiFetch(`/foundation/public-holidays${holidayListQueryString(params)}`, holidayListSchema),
+
+  /** POST /foundation/public-holidays — tạo holiday riêng công ty. */
+  create: (body: CreateHolidayBody): Promise<HolidayView> =>
+    apiFetch("/foundation/public-holidays", holidayViewSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** PATCH /foundation/public-holidays/:id — chỉ sửa holiday riêng công ty (server chặn global). */
+  update: (id: string, body: UpdateHolidayBody): Promise<HolidayView> =>
+    apiFetch(`/foundation/public-holidays/${encodeURIComponent(id)}`, holidayViewSchema, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  /** DELETE /foundation/public-holidays/:id — soft-delete (BẤT BIẾN #2). */
+  remove: (id: string): Promise<DeleteHolidayResult> =>
+    apiFetch(`/foundation/public-holidays/${encodeURIComponent(id)}`, deleteHolidayResultSchema, {
+      method: "DELETE",
+    }),
+};
+
+/**
+ * retentionApi — S2-FE-FND-6. Ranh giới HTTP cho /system/retention (config data-retention).
+ * Permission (seed THẬT mig 0435): view:foundation-retention (list, KHÔNG sensitive) /
+ * manage:foundation-retention (PATCH, is_sensitive=true — System-scope, KHÔNG tự động cấp company-admin).
+ * DTO tái dùng THẲNG từ @mediaos/contracts (S2-FND-BE-3 L2) — nguồn sự thật DUY NHẤT với BE, không
+ * duplicate boundary schema cục bộ (khác holidays/settings — các DTO đó predate contracts migration).
+ * company_id KHÔNG bao giờ trong body (server resolve từ AuthContext — BẤT BIẾN #1).
+ */
+export const retentionApi = {
+  /** GET /foundation/retention-policies — mọi policy tenant (kể cả disabled). */
+  list: (): Promise<RetentionPolicyView[]> =>
+    apiFetch("/foundation/retention-policies", retentionPolicyListResponseSchema),
+
+  /** PATCH /foundation/retention-policies/:id — CHỈ field mutable (contract .strict() chặn leo thang). */
+  update: (id: string, body: PatchRetentionPolicyDto): Promise<RetentionPolicyView> =>
+    apiFetch(
+      `/foundation/retention-policies/${encodeURIComponent(id)}`,
+      retentionPolicyViewSchema,
+      {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      },
+    ),
+};
+
+/**
+ * Query params GỬI ĐI cho fileAccessLogApi.list — `from`/`to` là chuỗi "yyyy-mm-dd" (từ <input type=date>,
+ * KHÔNG phải Date object) vì client chỉ build QUERY STRING (KHÔNG tự Zod-parse như server); server coerce
+ * sang Date qua listFileAccessLogsQuerySchema (z.coerce.date()) ở ranh giới controller. Các field khác
+ * khớp ListFileAccessLogsQuery.
+ */
+export type FileAccessLogListParams = Omit<Partial<ListFileAccessLogsQuery>, "from" | "to"> & {
+  from?: string;
+  to?: string;
+};
+
+/**
+ * fileAccessLogApi — S2-FE-FND-6. Ranh giới HTTP cho /system/file-access-logs (viewer, APPEND-ONLY).
+ * Permission (seed THẬT mig 0435): view:foundation-file-access-log (KHÔNG sensitive, company-admin có sẵn).
+ * BẤT BIẾN #2: KHÔNG có method create/update/delete — server chỉ có route GET (revoked UPDATE/DELETE ở
+ * mig 0433). Field nhạy cảm (storage_path/signed-url/ip/user-agent/metadata) đã WHITELIST-loại ở contract
+ * — client KHÔNG thể render field đó dù có cố (BẤT BIẾN #3).
+ */
+export const fileAccessLogApi = {
+  /** GET /foundation/file-access-logs — masked + phân trang + filter fileId/actorUserId/action/from-to. */
+  list: (params?: FileAccessLogListParams): Promise<FileAccessLogView[]> =>
+    apiFetch(
+      `/foundation/file-access-logs${buildQueryString(params as Record<string, unknown>)}`,
+      fileAccessLogListResponseSchema,
+    ),
+};
+
+export type {
+  RetentionPolicyView,
+  PatchRetentionPolicyDto,
+  FileAccessLogView,
+  FileAccessActionDto,
+};
+export { CLEANUP_ACTIONS, cleanupActionSchema, FILE_ACCESS_ACTIONS } from "@mediaos/contracts";
