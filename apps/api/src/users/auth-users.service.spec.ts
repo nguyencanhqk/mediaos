@@ -52,6 +52,8 @@ describe("AuthUsersService", () => {
   let db: { withTenant: ReturnType<typeof vi.fn> };
   let password: { hash: ReturnType<typeof vi.fn> };
   let permissions: { resolveStrongestScope: ReturnType<typeof vi.fn> };
+  // S2-AUTH-BE-9: AuthService.revokeAllForUserTx — thu hồi phiên trong CÙNG tx của lock. Trả count.
+  let auth: { revokeAllForUserTx: ReturnType<typeof vi.fn> };
   let service: AuthUsersService;
   const TX = Symbol("tx");
 
@@ -64,6 +66,7 @@ describe("AuthUsersService", () => {
     };
     password = { hash: vi.fn(async () => HASHED) };
     permissions = { resolveStrongestScope: vi.fn(async () => "Company") };
+    auth = { revokeAllForUserTx: vi.fn(async () => 2) };
     repo = {
       findManyTx: vi.fn(async () => ({ rows: [makeUser()], total: 1 })),
       findByIdTx: vi.fn(async () => makeUser()),
@@ -79,6 +82,7 @@ describe("AuthUsersService", () => {
       audit as never,
       password as never,
       permissions as never,
+      auth as never,
     );
   });
 
@@ -154,17 +158,38 @@ describe("AuthUsersService", () => {
     );
   });
 
-  it("lock: tự khoá chính mình → BadRequest (no-op, 0 audit)", async () => {
+  // S2-AUTH-BE-9: lock = thu hồi MỌI phiên (refresh_tokens + user_sessions) TRONG cùng tx qua
+  // AuthService.revokeAllForUserTx; count vào audit after.revokedSessionCount.
+  it("lock: gọi auth.revokeAllForUserTx(TX, id, 'locked') ĐÚNG 1 lần + audit after.revokedSessionCount = count", async () => {
+    auth.revokeAllForUserTx = vi.fn(async () => 3);
+    service = new AuthUsersService(
+      db as never,
+      repo,
+      audit as never,
+      password as never,
+      permissions as never,
+      auth as never,
+    );
+    await service.lockUser(ACTOR, TARGET_ID, "abuse");
+    expect(auth.revokeAllForUserTx).toHaveBeenCalledTimes(1);
+    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, TARGET_ID, "locked");
+    const entry = audit.record.mock.calls[0][1];
+    expect(entry.after.revokedSessionCount).toBe(3);
+  });
+
+  it("lock: tự khoá chính mình → BadRequest (no-op, 0 audit, KHÔNG revoke phiên)", async () => {
     await expect(service.lockUser(ACTOR, ACTOR.id)).rejects.toBeInstanceOf(BadRequestException);
     expect(repo.setLockTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
+    expect(auth.revokeAllForUserTx).not.toHaveBeenCalled();
   });
 
-  it("lock: đã 'locked' → BadRequest (no-op, 0 audit)", async () => {
+  it("lock: đã 'locked' → BadRequest (no-op, 0 audit, KHÔNG revoke phiên)", async () => {
     repo.findByIdTx = vi.fn(async () => makeUser({ status: "locked" })) as never;
     await expect(service.lockUser(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(BadRequestException);
     expect(repo.setLockTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
+    expect(auth.revokeAllForUserTx).not.toHaveBeenCalled();
   });
 
   it("lock: target không thấy → NotFound TRƯỚC audit", async () => {
@@ -185,6 +210,8 @@ describe("AuthUsersService", () => {
       TX,
       expect.objectContaining({ action: "user.unlocked", objectType: "user" }),
     );
+    // NO-RESTORE: unlock KHÔNG re-issue/khôi phục phiên — chỉ đổi status. User phải đăng nhập lại.
+    expect(auth.revokeAllForUserTx).not.toHaveBeenCalled();
   });
 
   it("unlock: chưa 'locked' → BadRequest (no-op, 0 audit)", async () => {

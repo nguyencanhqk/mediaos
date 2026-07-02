@@ -48,6 +48,8 @@ describe("AdminUsersService", () => {
   let repo: AdminUsersRepository;
   let audit: { record: ReturnType<typeof vi.fn> };
   let db: { withTenant: ReturnType<typeof vi.fn> };
+  // S2-AUTH-BE-9: AuthService.revokeAllForUserTx — thu hồi phiên trong CÙNG tx của suspend. Trả count.
+  let auth: { revokeAllForUserTx: ReturnType<typeof vi.fn> };
   let service: AdminUsersService;
   const TX = Symbol("tx");
 
@@ -59,6 +61,7 @@ describe("AdminUsersService", () => {
         fn(TX),
       ),
     };
+    auth = { revokeAllForUserTx: vi.fn(async () => 2) };
     repo = {
       findManyTx: vi.fn(async () => ({ rows: [makeUser()], total: 1 })),
       findByIdTx: vi.fn(async () => makeUser()),
@@ -66,7 +69,7 @@ describe("AdminUsersService", () => {
       setStatusTx: vi.fn(async (_tx, _cid, _id, status: string) => makeUser({ status })),
       softDeleteTx: vi.fn(async () => makeUser({ status: "suspended", deletedAt: new Date() })),
     } as unknown as AdminUsersRepository;
-    service = new AdminUsersService(db as never, repo, audit as never);
+    service = new AdminUsersService(db as never, repo, audit as never, auth as never);
   });
 
   // ── list / get — DTO không secret ─────────────────────────────────────────
@@ -117,12 +120,25 @@ describe("AdminUsersService", () => {
     expect(audit.record.mock.calls[0][1].objectType).toBe("user");
   });
 
-  it("suspendUser: self → BadRequest (no-op, KHÔNG chạm DB/audit)", async () => {
+  // S2-AUTH-BE-9: suspend = thu hồi MỌI phiên TRONG cùng tx qua AuthService.revokeAllForUserTx; count →
+  // audit after.revokedSessionCount (đối xứng lock).
+  it("suspendUser: gọi auth.revokeAllForUserTx(TX, id, 'suspended') ĐÚNG 1 lần + audit after.revokedSessionCount = count", async () => {
+    auth.revokeAllForUserTx = vi.fn(async () => 4);
+    service = new AdminUsersService(db as never, repo, audit as never, auth as never);
+    await service.suspendUser(ACTOR, TARGET_ID, "vi phạm");
+    expect(auth.revokeAllForUserTx).toHaveBeenCalledTimes(1);
+    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, TARGET_ID, "suspended");
+    const entry = audit.record.mock.calls[0][1];
+    expect(entry.after.revokedSessionCount).toBe(4);
+  });
+
+  it("suspendUser: self → BadRequest (no-op, KHÔNG chạm DB/audit/revoke)", async () => {
     await expect(service.suspendUser(ACTOR, ACTOR.id, "self")).rejects.toBeInstanceOf(
       BadRequestException,
     );
     expect(repo.setStatusTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
+    expect(auth.revokeAllForUserTx).not.toHaveBeenCalled();
   });
 
   it("reactivateUser: chỉ hợp lệ khi status hiện='suspended' → set 'active' + audit 'user.reactivated'", async () => {
@@ -132,6 +148,8 @@ describe("AdminUsersService", () => {
     await service.reactivateUser(ACTOR, TARGET_ID);
     expect((repo.setStatusTx as ReturnType<typeof vi.fn>).mock.calls[0][3]).toBe("active");
     expect(audit.record.mock.calls[0][1].action).toBe("user.reactivated");
+    // NO-RESTORE: reactivate KHÔNG re-issue/khôi phục phiên cũ — chỉ đổi status. User phải đăng nhập lại.
+    expect(auth.revokeAllForUserTx).not.toHaveBeenCalled();
   });
 
   it("reactivateUser: status hiện KHÔNG suspended → BadRequest, KHÔNG audit", async () => {

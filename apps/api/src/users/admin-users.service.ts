@@ -8,6 +8,7 @@ import type {
 import { DatabaseService } from "../db/db.service";
 import type { User } from "../db/schema";
 import { AuditService } from "../events/audit.service";
+import { AuthService } from "../auth/auth.service";
 import { AdminUsersRepository, adminUserSnapshot } from "./admin-users.repository";
 
 /** Actor = admin đang thao tác (id/companyId từ JWT — KHÔNG nhận từ body — BẤT BIẾN #1). */
@@ -44,6 +45,9 @@ export class AdminUsersService {
     private readonly db: DatabaseService,
     private readonly repo: AdminUsersRepository,
     private readonly audit: AuditService,
+    // S2-AUTH-BE-9: suspend = thu hồi MỌI phiên qua AuthService.revokeAllForUserTx (đối xứng lock).
+    // UsersModule đã imports forwardRef(AuthModule) + AuthModule export AuthService.
+    private readonly auth: AuthService,
   ) {}
 
   /** GET /users — danh sách LIVE + tổng. Chỉ đọc (không audit). */
@@ -94,13 +98,16 @@ export class AdminUsersService {
       if (!before) throw new NotFoundException(USER_NOT_FOUND);
       const updated = await this.repo.setStatusTx(tx, actor.companyId, id, "suspended");
       if (!updated) throw new NotFoundException(USER_NOT_FOUND);
+      // S2-AUTH-BE-9: tạm khoá = thu hồi MỌI phiên (refresh_tokens + user_sessions) NGAY trong CÙNG tx
+      // (đối xứng lock). Refresh token cũ trình lại → 401 tức thì. count vào audit after.
+      const revokedSessionCount = await this.auth.revokeAllForUserTx(tx, id, "suspended");
       await this.audit.record(tx, {
         action: "user.suspended",
         objectType: "user",
         actorUserId: actor.id,
         objectId: id,
         before: adminUserSnapshot(before),
-        after: { ...adminUserSnapshot(updated), reason: reason ?? null },
+        after: { ...adminUserSnapshot(updated), reason: reason ?? null, revokedSessionCount },
       });
       return toDto(updated);
     });
