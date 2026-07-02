@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, Module, OnModuleInit, forwardRef } from "@nestjs/common";
+import { ModuleRef } from "@nestjs/core";
 import { DatabaseModule } from "../db/db.module";
 import { EventsModule } from "../events/events.module";
 import { EventBus, type EventContext } from "../events/event-bus";
@@ -151,4 +152,26 @@ class PermissionCacheInvalidator implements OnModuleInit {
     DataScopeService,
   ],
 })
-export class PermissionModule {}
+export class PermissionModule implements OnModuleInit {
+  constructor(private readonly moduleRef: ModuleRef) {}
+
+  /**
+   * Boot-time fail-fast assertion (S2-AUTH-BE-8-FIX-2 — chống dual-write timeline degrade âm thầm).
+   * `PermissionAdminService` dual-write `user_security_events` (ROLE_ASSIGNED/ROLE_REMOVED) qua
+   * `securityEvents?.record` — param optional (`?.`) để KHÔNG vỡ int-spec dựng service bằng tay (5 arg).
+   * Nhược điểm: nếu tương lai ai đó GỠ `SecurityEventWriter` khỏi providers, DI inject `undefined` ⇒ nhánh
+   * ghi timeline bị NUỐT LẶNG (audit_logs vẫn ghi ⇒ lỗi ẩn, viewer AUTH-API-402 mất event). Khẳng định
+   * provider resolve được NGAY lúc boot ⇒ app crash rõ ràng thay vì mất event runtime. KHÔNG đổi emit-site.
+   */
+  onModuleInit(): void {
+    try {
+      this.moduleRef.get(SecurityEventWriter, { strict: true });
+    } catch (err) {
+      throw new Error(
+        "PermissionModule: SecurityEventWriter provider không resolve được lúc boot — dual-write " +
+          "user_security_events (ROLE_ASSIGNED/ROLE_REMOVED) sẽ degrade âm thầm. Đăng ký lại provider trong " +
+          `PermissionModule.providers. (cause: ${err instanceof Error ? err.message : String(err)})`,
+      );
+    }
+  }
+}
