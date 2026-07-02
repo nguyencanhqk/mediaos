@@ -19,6 +19,7 @@ export const rootKeys = {
   leave: ["leave"] as const,
   tasks: ["tasks"] as const,
   notifications: ["notifications"] as const,
+  foundation: ["foundation"] as const,
 } as const;
 
 // ── Auth keys ─────────────────────────────────────────────────────────────────
@@ -28,6 +29,19 @@ export const authKeys = {
   me: () => [...rootKeys.auth, "me"] as const,
   profile: () => [...rootKeys.auth, "profile"] as const,
   permissions: () => [...rootKeys.auth, "permissions"] as const,
+};
+
+// ── Auth admin keys (S2-FE-AUTH-3) — /system/users + /system/roles(assign) ────
+//
+// Tách khỏi authKeys (self-service /auth/me) — namespace riêng "auth-admin" tránh đụng invalidation
+// của phiên hiện tại khi admin thao tác trên user KHÁC.
+
+export const authUsersKeys = {
+  all: [...rootKeys.auth, "admin", "users"] as const,
+  list: (params?: Record<string, unknown>) =>
+    [...rootKeys.auth, "admin", "users", "list", params] as const,
+  detail: (id: string) => [...rootKeys.auth, "admin", "users", "detail", id] as const,
+  roles: () => [...rootKeys.auth, "admin", "roles"] as const,
 };
 
 // ── Dashboard keys ────────────────────────────────────────────────────────────
@@ -76,6 +90,33 @@ export const hrKeys = {
     // S2-FE-HR-5 (lane HR5-WC) — APPEND detail (GET/PATCH /hr/master-data/contract-types/:id).
     detail: (id: string) => [...rootKeys.hr, "contract-types", "detail", id] as const,
   },
+  // S2-FE-HR-6 — Org chart (danh mục nhỏ, không phân trang server) + HR audit-logs (phân trang offset/limit).
+  orgChart: {
+    all: [...rootKeys.hr, "org-chart"] as const,
+    tree: () => [...rootKeys.hr, "org-chart", "tree"] as const,
+  },
+  auditLogs: {
+    all: [...rootKeys.hr, "audit-logs"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "audit-logs", "list", params] as const,
+  },
+  // S2-FE-HR-8 — Employee-code CONFIG admin (danh mục 1 record/company, KHÔNG phân trang). preview()
+  // TÁCH khỏi config() (2 endpoint khác nhau: GET config vs POST preview) — invalidate riêng.
+  employeeCodeConfig: {
+    all: [...rootKeys.hr, "employee-code-config"] as const,
+    config: () => [...rootKeys.hr, "employee-code-config", "config"] as const,
+    preview: () => [...rootKeys.hr, "employee-code-config", "preview"] as const,
+  },
+  // S2-FE-HR-4 — Profile change request (self-service + HR duyệt). "mine" tách khỏi "list" (Company scope,
+  // HR/Admin) vì cùng resource nhưng scope khác nhau — invalidate riêng tránh làm mới nhầm cache của người khác.
+  profileChangeRequests: {
+    all: [...rootKeys.hr, "profile-change-requests"] as const,
+    mine: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "profile-change-requests", "mine", params] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "profile-change-requests", "list", params] as const,
+    detail: (id: string) => [...rootKeys.hr, "profile-change-requests", "detail", id] as const,
+  },
 };
 
 // S2-FE-HR-5 (lane HR5-WC) — mutation → invalidation cho HR master-data. Sau create/update/delete:
@@ -112,6 +153,30 @@ export const attendanceKeys = {
       [...rootKeys.attendance, "records", "list", params] as const,
     detail: (id: string) => [...rootKeys.attendance, "records", "detail", id] as const,
   },
+  // S3-FE-ATT-5 — APPEND. Danh mục nhỏ (không phân trang server): list() không nhận params.
+  shifts: {
+    all: [...rootKeys.attendance, "shifts"] as const,
+    list: () => [...rootKeys.attendance, "shifts", "list"] as const,
+  },
+  shiftAssignments: {
+    all: [...rootKeys.attendance, "shift-assignments"] as const,
+    list: () => [...rootKeys.attendance, "shift-assignments", "list"] as const,
+  },
+  rules: {
+    all: [...rootKeys.attendance, "rules"] as const,
+    list: () => [...rootKeys.attendance, "rules", "list"] as const,
+  },
+  // S3-FE-ATT-3 — APPEND. Đơn điều chỉnh công: my/team/company (phân trang server) + detail.
+  adjustments: {
+    all: [...rootKeys.attendance, "adjustments"] as const,
+    my: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "adjustments", "my", params] as const,
+    team: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "adjustments", "team", params] as const,
+    company: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "adjustments", "company", params] as const,
+    detail: (id: string) => [...rootKeys.attendance, "adjustments", "detail", id] as const,
+  },
 };
 
 // ── Leave keys ────────────────────────────────────────────────────────────────
@@ -135,6 +200,12 @@ export const leaveKeys = {
     all: [...rootKeys.leave, "balances"] as const,
     my: () => [...rootKeys.leave, "balances", "my"] as const,
     employee: (id: string) => [...rootKeys.leave, "balances", "employee", id] as const,
+  },
+  // S3-FE-LEAVE-4 — lịch nghỉ (own/team/company). params gồm scope+from+to (mirror BE query).
+  calendar: {
+    all: [...rootKeys.leave, "calendar"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.leave, "calendar", "list", params] as const,
   },
 };
 
@@ -162,6 +233,41 @@ export const notificationKeys = {
   unreadCount: () => [...rootKeys.notifications, "unread-count"] as const,
 };
 
+// ── Foundation keys (S2-FE-FND-1 · FND1-WC) ─────────────────────────────────────
+//
+// /system màn quản trị foundation: hồ sơ công ty (current) + company settings (resolve batch). Key ổn định
+// cho invalidate sau PATCH. company_id KHÔNG vào key (server-scoped theo AuthContext).
+
+export const foundationKeys = {
+  all: rootKeys.foundation,
+  company: {
+    all: [...rootKeys.foundation, "company"] as const,
+    current: () => [...rootKeys.foundation, "company", "current"] as const,
+  },
+  settings: {
+    all: [...rootKeys.foundation, "settings"] as const,
+    resolve: (params?: Record<string, unknown>) =>
+      [...rootKeys.foundation, "settings", "resolve", params] as const,
+  },
+  // S2-FE-FND-4 — Public Holidays. Danh mục nhỏ theo company/năm (KHÔNG phân trang server).
+  holidays: {
+    all: [...rootKeys.foundation, "holidays"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.foundation, "holidays", "list", params] as const,
+  },
+  // S2-FE-FND-6 — Retention policies. Danh mục nhỏ theo company (KHÔNG phân trang server).
+  retentionPolicies: {
+    all: [...rootKeys.foundation, "retention-policies"] as const,
+    list: () => [...rootKeys.foundation, "retention-policies", "list"] as const,
+  },
+  // S2-FE-FND-6 — File access logs (append-only viewer, phân trang server-side).
+  fileAccessLogs: {
+    all: [...rootKeys.foundation, "file-access-logs"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.foundation, "file-access-logs", "list", params] as const,
+  },
+} as const;
+
 // ── Mutation → query-key invalidation matrix (FRONTEND-04 §17.3) ──────────────
 //
 // Mỗi entry trả về DANH SÁCH prefix key để `queryClient.invalidateQueries({ queryKey })`. Prefix (BỎ slot
@@ -176,6 +282,54 @@ const leaveRequestsListPrefix = [...rootKeys.leave, "requests", "list"] as const
 export const attendanceInvalidation = {
   checkIn: () => [attendanceKeys.myToday(), attendanceMyRecordsPrefix] as const,
   checkOut: () => [attendanceKeys.myToday(), attendanceMyRecordsPrefix] as const,
+  // S3-FE-ATT-3 — create làm mới CẢ prefix "adjustments" (mọi biến thể scope/param: my/team/company).
+  // approve/adjust-direct còn ÁP DỤNG vào attendance_records → làm mới thêm prefix "records" (list +
+  // detail đúng bản ghi khi biết recordId) để bảng công không hiển thị giá trị cũ trước điều chỉnh.
+  createAdjustment: () => [attendanceKeys.adjustments.all] as const,
+  approveAdjustment: (id: string) =>
+    [
+      attendanceKeys.adjustments.all,
+      attendanceKeys.adjustments.detail(id),
+      attendanceKeys.records.all,
+    ] as const,
+  rejectAdjustment: (id: string) =>
+    [attendanceKeys.adjustments.all, attendanceKeys.adjustments.detail(id)] as const,
+  adjustDirect: (recordId: string) =>
+    [
+      attendanceKeys.adjustments.all,
+      attendanceKeys.records.all,
+      attendanceKeys.records.detail(recordId),
+    ] as const,
+};
+
+// S2-FE-HR-4: create/cancel làm mới "mine" (self list) + detail của chính đơn đó — KHÔNG đụng "list"
+// (Company-scope, thuộc cache của HR khác). approve/reject (HR) làm mới "list" + detail — "mine" thuộc
+// cache của người gửi yêu cầu, HR không giữ trong phiên của mình.
+const hrProfileChangeRequestsMinePrefix = [
+  ...rootKeys.hr,
+  "profile-change-requests",
+  "mine",
+] as const;
+const hrProfileChangeRequestsListPrefix = [
+  ...rootKeys.hr,
+  "profile-change-requests",
+  "list",
+] as const;
+
+// hrInvalidation — hợp nhất invalidation helper cho toàn module HR (một export DUY NHẤT, tránh
+// redeclare): S2-FE-HR-8 (employee-code-config) + S2-FE-HR-4 (profile-change-requests).
+export const hrInvalidation = {
+  // S2-FE-HR-8: PATCH /hr/employee-code-config làm mới CẢ config() lẫn preview() (mã tiếp theo có thể
+  // đổi hình dạng theo prefix/pattern/numberLength mới dù counter không đổi).
+  updateEmployeeCodeConfig: () =>
+    [hrKeys.employeeCodeConfig.config(), hrKeys.employeeCodeConfig.preview()] as const,
+  createChangeRequest: () => [hrProfileChangeRequestsMinePrefix] as const,
+  cancelChangeRequest: (id: string) =>
+    [hrProfileChangeRequestsMinePrefix, hrKeys.profileChangeRequests.detail(id)] as const,
+  approveChangeRequest: (id: string) =>
+    [hrProfileChangeRequestsListPrefix, hrKeys.profileChangeRequests.detail(id)] as const,
+  rejectChangeRequest: (id: string) =>
+    [hrProfileChangeRequestsListPrefix, hrKeys.profileChangeRequests.detail(id)] as const,
 };
 
 // S3-FE-LEAVE-2: approver KHÔNG giữ balance key của requester (balance thuộc user gửi đơn, không nằm
@@ -186,4 +340,19 @@ export const leaveInvalidation = {
     [leaveRequestsListPrefix, leaveKeys.requests.detail(requestId)] as const,
   reject: (requestId: string) =>
     [leaveRequestsListPrefix, leaveKeys.requests.detail(requestId)] as const,
+};
+
+// S2-FE-FND-1 (FND1-WC): PATCH company/current → làm mới current-company; PATCH company-settings/:key →
+// làm mới MỌI biến thể resolve(params) qua prefix (bỏ slot params — TanStack match theo prefix).
+const foundationSettingsResolvePrefix = [...rootKeys.foundation, "settings", "resolve"] as const;
+
+export const foundationInvalidation = {
+  updateCompany: () => [foundationKeys.company.current()] as const,
+  updateSetting: () => [foundationSettingsResolvePrefix] as const,
+  // S2-FE-FND-4 — create/update/delete holiday đều làm mới MỌI biến thể list(params) qua prefix.
+  createHoliday: () => [foundationKeys.holidays.all] as const,
+  updateHoliday: () => [foundationKeys.holidays.all] as const,
+  deleteHoliday: () => [foundationKeys.holidays.all] as const,
+  // S2-FE-FND-6 — PATCH retention-policy làm mới list (danh mục nhỏ, không phân trang).
+  updateRetentionPolicy: () => [foundationKeys.retentionPolicies.all] as const,
 };

@@ -9,6 +9,8 @@ import {
   hrContractTypeLookupSchema,
   createHrEmployeeResponseSchema,
   updateHrEmployeeResponseSchema,
+  profileChangeRequestListResponseSchema,
+  profileChangeRequestDetailSchema,
   type HrEmployeeListQuery,
   type HrEmployeeListResponse,
   type HrEmployeeDetail,
@@ -21,6 +23,11 @@ import {
   type CreateHrEmployeeResponse,
   type UpdateHrEmployeeRequest,
   type UpdateHrEmployeeResponse,
+  type CreateProfileChangeRequest,
+  type ApproveProfileChangeRequest,
+  type ProfileChangeRequestListQuery,
+  type ProfileChangeRequestListResponse,
+  type ProfileChangeRequestDetail,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -95,4 +102,86 @@ export const hrApi = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
+
+  // ── Profile change request (S2-FE-HR-4 · S2-HR-BE-4, API-03 §16.7) ──────────────
+  // create:profile-change-request (Own, all roles) · approve:profile-change-request (Company, hr/company-admin).
+
+  /**
+   * POST /hr/profile-change-requests — employee tự gửi yêu cầu sửa hồ sơ (Own scope).
+   */
+  createProfileChangeRequest: (
+    body: CreateProfileChangeRequest,
+  ): Promise<{ id: string; status: string }> =>
+    apiFetch(
+      "/hr/profile-change-requests",
+      z.object({ id: z.string().uuid(), status: z.string() }),
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+    ),
+
+  /**
+   * GET /hr/profile-change-requests/me — danh sách yêu cầu CỦA CHÍNH user hiện tại.
+   */
+  listMyProfileChangeRequests: (
+    query?: Partial<Omit<ProfileChangeRequestListQuery, "employeeId">>,
+  ): Promise<ProfileChangeRequestListResponse> => {
+    const qs = buildQueryString(query ?? {});
+    return apiFetch(`/hr/profile-change-requests/me${qs}`, profileChangeRequestListResponseSchema);
+  },
+
+  /**
+   * GET /hr/profile-change-requests — HR/Admin xem danh sách theo scope Company (approve:profile-change-request).
+   */
+  listProfileChangeRequests: (
+    query?: Partial<ProfileChangeRequestListQuery>,
+  ): Promise<ProfileChangeRequestListResponse> => {
+    const qs = buildQueryString(query ?? {});
+    return apiFetch(`/hr/profile-change-requests${qs}`, profileChangeRequestListResponseSchema);
+  },
+
+  /**
+   * GET /hr/profile-change-requests/:id — chi tiết (Own-scope ở server: chỉ chủ yêu cầu xem được — BE
+   * `getRequestDetail` cố ý KHÔNG mở cho HR xem yêu cầu người khác qua route này, xem
+   * profile-change-request.service.ts). HR duyệt/từ chối trực tiếp bằng id lấy từ danh sách.
+   */
+  getProfileChangeRequestDetail: (id: string): Promise<ProfileChangeRequestDetail> =>
+    apiFetch(`/hr/profile-change-requests/${id}`, profileChangeRequestDetailSchema),
+
+  /**
+   * POST /hr/profile-change-requests/:id/approve — HR duyệt (approve:profile-change-request).
+   */
+  approveProfileChangeRequest: (
+    id: string,
+    body?: ApproveProfileChangeRequest,
+  ): Promise<{ id: string; status: string }> =>
+    apiFetch(
+      `/hr/profile-change-requests/${id}/approve`,
+      z.object({ id: z.string().uuid(), status: z.string() }),
+      { method: "POST", body: JSON.stringify(body ?? {}) },
+    ),
+
+  /**
+   * POST /hr/profile-change-requests/:id/reject — HR từ chối; rejectionReason bắt buộc (HR-ERR-042).
+   */
+  rejectProfileChangeRequest: (
+    id: string,
+    rejectionReason: string,
+  ): Promise<{ id: string; status: string }> =>
+    apiFetch(
+      `/hr/profile-change-requests/${id}/reject`,
+      z.object({ id: z.string().uuid(), status: z.string() }),
+      { method: "POST", body: JSON.stringify({ rejectionReason }) },
+    ),
+
+  /**
+   * POST /hr/profile-change-requests/:id/cancel — employee tự hủy yêu cầu của mình khi còn Pending.
+   */
+  cancelProfileChangeRequest: (id: string): Promise<{ id: string; status: string }> =>
+    apiFetch(
+      `/hr/profile-change-requests/${id}/cancel`,
+      z.object({ id: z.string().uuid(), status: z.string() }),
+      { method: "POST" },
+    ),
 };

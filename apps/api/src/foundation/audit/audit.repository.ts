@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, gte, lte, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../../db/db.service";
 import { auditLogs } from "../../db/schema";
 
@@ -11,6 +11,13 @@ import { auditLogs } from "../../db/schema";
 export interface AuditFilter {
   action?: string;
   objectType?: string;
+  /**
+   * S3-ATT-BE-6 — allowlist of object_type (IN, ANDed with objectType if both given). Used by module
+   * scoped audit readers (e.g. AttendanceAuditService) to bound the read to THEIR object types
+   * server-side (NOT client-controlled — module_code is not consistently populated by every writer, so
+   * an object_type allowlist is the reliable module boundary).
+   */
+  objectTypes?: string[];
   objectId?: string;
   actorUserId?: string;
   moduleCode?: string;
@@ -39,6 +46,8 @@ export class AuditRepository {
     const conds: SQL[] = [];
     if (filter.action) conds.push(eq(auditLogs.action, filter.action));
     if (filter.objectType) conds.push(eq(auditLogs.objectType, filter.objectType));
+    if (filter.objectTypes && filter.objectTypes.length > 0)
+      conds.push(inArray(auditLogs.objectType, filter.objectTypes));
     if (filter.objectId) conds.push(eq(auditLogs.objectId, filter.objectId));
     if (filter.actorUserId) conds.push(eq(auditLogs.actorUserId, filter.actorUserId));
     if (filter.moduleCode) conds.push(eq(auditLogs.moduleCode, filter.moduleCode));

@@ -1,0 +1,173 @@
+/**
+ * Thành phần UI dùng chung cho viewer Audit log (S2-FE-FND-2):
+ *   - FilterShell        : khung lưới các ô lọc + nút Lọc / Xóa lọc.
+ *   - LabeledField        : nhãn + control.
+ *   - DateField           : input type=date.
+ *   - TextField           : input text (vd module, action, actor).
+ *   - AuditLogPagination  : footer phân trang server-side offset/limit (prev/next).
+ *
+ * Tái dùng primitives @mediaos/ui (Input/Button) — DRY, cùng phong cách system/auth-logs.
+ */
+import { type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import { ChevronLeft, ChevronRight, Filter, X } from "lucide-react";
+import { Button, Input } from "@mediaos/ui";
+
+// ---------------------------------------------------------------------------
+// Field primitives
+// ---------------------------------------------------------------------------
+export function LabeledField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+interface DateFieldProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}
+
+export function DateField({ label, value, onChange }: DateFieldProps) {
+  return (
+    <LabeledField label={label}>
+      <Input type="date" value={value} onChange={(e) => onChange(e.target.value)} />
+    </LabeledField>
+  );
+}
+
+interface TextFieldProps {
+  label: string;
+  value: string;
+  placeholder?: string;
+  onChange: (value: string) => void;
+}
+
+export function TextField({ label, value, placeholder, onChange }: TextFieldProps) {
+  return (
+    <LabeledField label={label}>
+      <Input
+        type="text"
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </LabeledField>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Filter shell — grid of fields + apply/reset buttons
+// ---------------------------------------------------------------------------
+interface FilterShellProps {
+  children: ReactNode;
+  onApply: () => void;
+  onReset: () => void;
+}
+
+export function FilterShell({ children, onApply, onReset }: FilterShellProps) {
+  const { t } = useTranslation("system");
+  return (
+    <form
+      className="rounded-xl border border-border bg-card p-4 shadow-sm"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onApply();
+      }}
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">{children}</div>
+      <div className="mt-4 flex items-center gap-2">
+        <Button type="submit" size="sm">
+          <Filter className="mr-2 h-4 w-4" />
+          {t("auditLogFilters.apply")}
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={onReset}>
+          <X className="mr-2 h-4 w-4" />
+          {t("auditLogFilters.reset")}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Server-side pagination footer (offset/limit)
+// ---------------------------------------------------------------------------
+interface AuditLogPaginationProps {
+  offset: number;
+  /** Số dòng của trang hiện tại (suy ra hasNext: === pageSize ⇒ còn trang sau). */
+  currentCount: number;
+  pageSize: number;
+  onOffsetChange: (offset: number) => void;
+}
+
+/**
+ * Phân trang offset/limit (server-side). Total tổng KHÔNG khả dụng ở client (apiFetch/unwrapEnvelope
+ * chỉ trả `data`, bỏ block `pagination` đỉnh), nên dùng heuristic: trang đầy (count === pageSize)
+ * ⇒ còn trang sau. offset > 0 ⇒ có trang trước. Cùng kỹ thuật AuthLogPagination (system/auth-logs).
+ */
+export function AuditLogPagination({
+  offset,
+  currentCount,
+  pageSize,
+  onOffsetChange,
+}: AuditLogPaginationProps) {
+  const { t } = useTranslation("common");
+  const { t: ts } = useTranslation("system");
+  const hasPrev = offset > 0;
+  const hasNext = currentCount === pageSize;
+  const page = Math.floor(offset / pageSize) + 1;
+
+  // Trang 1 mà chưa đầy → không cần phân trang.
+  if (!hasPrev && !hasNext) return null;
+
+  return (
+    <div className="flex items-center justify-end gap-3">
+      <span className="text-xs text-muted-foreground">{ts("auditLogFilters.page", { page })}</span>
+      <div className="flex items-center gap-1">
+        <PageButton
+          label={t("pagination.prev")}
+          disabled={!hasPrev}
+          onClick={() => onOffsetChange(Math.max(0, offset - pageSize))}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </PageButton>
+        <PageButton
+          label={t("pagination.next")}
+          disabled={!hasNext}
+          onClick={() => onOffsetChange(offset + pageSize)}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </PageButton>
+      </div>
+    </div>
+  );
+}
+
+function PageButton({
+  onClick,
+  disabled,
+  label,
+  children,
+}: {
+  onClick: () => void;
+  disabled: boolean;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      {children}
+    </button>
+  );
+}

@@ -1,18 +1,25 @@
 import { Module } from "@nestjs/common";
+import { AttendanceModule } from "../attendance/attendance.module";
 import { DatabaseModule } from "../db/db.module";
 import { HolidaysModule } from "../foundation/holidays/holidays.module";
 import { SeedModule } from "../foundation/seed/seed.module";
 import { PermissionModule } from "../permission/permission.module";
 import { HrTasksService } from "../tasks/hr-tasks.service";
 import { LeaveController } from "./leave.controller";
+import { LeaveAdminRepository } from "./leave-admin.repository";
+import { LeaveAdminService } from "./leave-admin.service";
 import { LeaveApprovalRepository } from "./leave-approval.repository";
 import { LeaveApprovalService } from "./leave-approval.service";
+import { LeaveCalendarRepository } from "./leave-calendar.repository";
+import { LeaveCalendarService } from "./leave-calendar.service";
 import { LeaveMasterDataSeeder } from "./leave-master-data.seeder";
 import { LeaveReadRepository } from "./leave-read.repository";
 import { LeaveReadService } from "./leave-read.service";
 import { LeaveRepository } from "./leave.repository";
 import { LeaveRequestRepository } from "./leave-request.repository";
 import { LeaveRequestService } from "./leave-request.service";
+// S3-INT-1 (additive): CANCEL(Approved)/REVOKE — needs AttendanceLeaveSyncService (AttendanceModule export).
+import { LeaveRevokeService } from "./leave-revoke.service";
 import { LeaveSeedRegistrar } from "./leave-seed.registrar";
 import { LeaveService } from "./leave.service";
 
@@ -29,7 +36,9 @@ import { LeaveService } from "./leave.service";
 @Module({
   // S3-LEAVE-BE-1: + HolidaysModule (self-contained, exports HolidaysService) → leave-specific holiday
   // exclusion in calculate preview. + LeaveReadService/LeaveReadRepository (read/preview surface).
-  imports: [DatabaseModule, PermissionModule, SeedModule, HolidaysModule],
+  // S3-INT-1: + AttendanceModule (exports AttendanceLeaveSyncService — no cycle: AttendanceModule loads
+  // BEFORE LeaveModule in app.module.ts and never imports LeaveModule).
+  imports: [DatabaseModule, PermissionModule, SeedModule, HolidaysModule, AttendanceModule],
   controllers: [LeaveController],
   providers: [
     LeaveService,
@@ -43,6 +52,17 @@ import { LeaveService } from "./leave.service";
     // injected from PermissionModule (exported, line 137) — reuses the S2-INT-2 Team/Company resolver.
     LeaveApprovalService,
     LeaveApprovalRepository,
+    // S3-LEAVE-BE-5 (additive) — GET /leave/calendar (own/team/company data-scope). DataScopeService already
+    // exported by PermissionModule (reused by LeaveApprovalService above).
+    LeaveCalendarService,
+    LeaveCalendarRepository,
+    // S3-LEAVE-BE-4 (additive) — admin surface (type/policy CRUD + balance view/adjust ledger). DataScopeService
+    // already exported by PermissionModule (reused by LeaveApprovalService/LeaveCalendarService above).
+    LeaveAdminService,
+    LeaveAdminRepository,
+    // S3-INT-1 (additive) — CANCEL(Approved)/REVOKE (ATT-revert + balance refund, idempotent). Reuses
+    // LeaveRepository/LeaveRequestRepository/LeaveApprovalRepository (already provided above).
+    LeaveRevokeService,
     HrTasksService,
     LeaveMasterDataSeeder,
     LeaveSeedRegistrar,

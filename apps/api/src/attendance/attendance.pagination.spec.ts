@@ -68,7 +68,10 @@ describe("monthDateRange — half-open [from, toExclusive) boundaries", () => {
 
 describe("findRecordsByMonth — pagination wired through", () => {
   function makeRepoWithSpy() {
-    const rows = Array.from({ length: 10 }, (_, i) => ({ id: `r${i}`, workDate: `2024-06-${String(i + 1).padStart(2, "0")}` }));
+    const rows = Array.from({ length: 10 }, (_, i) => ({
+      id: `r${i}`,
+      workDate: `2024-06-${String(i + 1).padStart(2, "0")}`,
+    }));
     const limitSpy = vi.fn().mockReturnThis();
     const offsetSpy = vi.fn().mockReturnThis();
     const whereSpy = vi.fn().mockReturnThis();
@@ -119,10 +122,6 @@ describe("AttendanceService.listMonthly — pagination threading", () => {
       isPeriodLockedTx: vi.fn(),
       findRecordByUserDateTx: vi.fn(),
     };
-    const permission = { can: vi.fn().mockResolvedValue({ allow: true }) };
-    const db = {
-      withTenant: vi.fn((_, fn: (tx: unknown) => unknown) => fn({})),
-    };
     // Inline minimal service stub that mirrors the real listMonthly signature
     return {
       listMonthly: async (
@@ -158,10 +157,13 @@ describe("AttendanceService.listMonthly — pagination threading", () => {
 
     await svc.listMonthly(actor, { month: "2024-06", limit: 50, offset: 0 });
 
-    expect(spy).toHaveBeenCalledWith("c1", expect.objectContaining({
-      from: "2024-06-01",
-      toExclusive: "2024-07-01",
-    }));
+    expect(spy).toHaveBeenCalledWith(
+      "c1",
+      expect.objectContaining({
+        from: "2024-06-01",
+        toExclusive: "2024-07-01",
+      }),
+    );
   });
 
   it("defaults userId to actor.id when not provided", async () => {
@@ -217,7 +219,6 @@ describe("LeaveService.listRequests — pagination threading", () => {
 // ─── F6: Zod schema clamp tests ─────────────────────────────────────────────
 
 describe("attendanceListQuerySchema — limit/offset clamp", () => {
-
   it("default limit is 50", () => {
     const r = attendanceListQuerySchema.parse({ month: "2024-06" });
     expect(r.limit).toBe(50);
@@ -258,7 +259,6 @@ describe("attendanceListQuerySchema — limit/offset clamp", () => {
 });
 
 describe("leaveListQuerySchema — limit/offset clamp", () => {
-
   it("default limit is 50", () => {
     const r = leaveListQuerySchema.parse({ scope: "me" });
     expect(r.limit).toBe(50);
@@ -273,14 +273,16 @@ describe("leaveListQuerySchema — limit/offset clamp", () => {
   });
 });
 
-describe("adjustmentListQuerySchema — limit/offset clamp", () => {
-
-  it("default limit is 50", () => {
-    const r = adjustmentListQuerySchema.parse({ scope: "me" });
-    expect(r.limit).toBe(50);
+describe("adjustmentListQuerySchema — page/pageSize clamp (S3-ATT-BE-4 canonical)", () => {
+  it("defaults scope=me, page=1, pageSize=20", () => {
+    const r = adjustmentListQuerySchema.parse({});
+    expect(r.scope).toBe("me");
+    expect(r.page).toBe(1);
+    expect(r.pageSize).toBe(20);
   });
 
-  it("rejects limit=0", () => {
-    expect(() => adjustmentListQuerySchema.parse({ scope: "me", limit: 0 })).toThrow();
+  it("rejects page=0 and pageSize>100", () => {
+    expect(() => adjustmentListQuerySchema.parse({ page: 0 })).toThrow();
+    expect(() => adjustmentListQuerySchema.parse({ pageSize: 101 })).toThrow();
   });
 });

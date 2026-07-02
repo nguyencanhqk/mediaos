@@ -9,12 +9,41 @@ import {
   attendanceKeys,
   authKeys,
   dashboardKeys,
+  foundationInvalidation,
+  foundationKeys,
+  hrInvalidation,
   hrKeys,
   leaveInvalidation,
   leaveKeys,
   notificationKeys,
   taskKeys,
 } from "./query-keys";
+
+describe("foundationKeys", () => {
+  it("company.current() = ['foundation', 'company', 'current']", () => {
+    expect(foundationKeys.company.current()).toEqual(["foundation", "company", "current"]);
+  });
+
+  it("settings.resolve(params) chứa 'foundation', 'settings', 'resolve' và params", () => {
+    const params = { keys: ["general.timezone"] };
+    const key = foundationKeys.settings.resolve(params);
+    expect(key).toContain("foundation");
+    expect(key).toContain("settings");
+    expect(key).toContain("resolve");
+    expect(key).toContain(params);
+  });
+
+  it("updateCompany invalidation nhắm current-company key", () => {
+    const keys = foundationInvalidation.updateCompany();
+    expect(keys).toContainEqual(foundationKeys.company.current());
+  });
+
+  it("updateSetting invalidation dùng prefix resolve (bỏ slot params) — khớp mọi biến thể", () => {
+    const keys = foundationInvalidation.updateSetting();
+    // Prefix KHÔNG có slot params → là prefix của mọi resolve(params).
+    expect(keys[0]).toEqual(["foundation", "settings", "resolve"]);
+  });
+});
 
 describe("authKeys", () => {
   it("me() = ['auth', 'me']", () => {
@@ -44,6 +73,46 @@ describe("hrKeys", () => {
     const k1 = hrKeys.employees.list({ page: 1 });
     const k2 = hrKeys.employees.list({ page: 2 });
     expect(JSON.stringify(k1)).not.toBe(JSON.stringify(k2));
+  });
+
+  // S2-FE-HR-4 — "mine" (self scope) KHÁC "list" (Company scope, HR) dù cùng resource.
+  it("profileChangeRequests.mine(params) KHÁC .list(params) (scope khác nhau)", () => {
+    const mine = hrKeys.profileChangeRequests.mine({ page: 1 });
+    const list = hrKeys.profileChangeRequests.list({ page: 1 });
+    expect(mine).toContain("mine");
+    expect(list).toContain("list");
+    expect(JSON.stringify(mine)).not.toBe(JSON.stringify(list));
+  });
+
+  it("profileChangeRequests.detail(id) chứa id", () => {
+    expect(hrKeys.profileChangeRequests.detail("pcr-1")).toContain("pcr-1");
+  });
+});
+
+describe("hrInvalidation (profile change request)", () => {
+  it("createChangeRequest → chỉ prefix 'mine' (KHÔNG đụng 'list' của HR)", () => {
+    const keys = hrInvalidation.createChangeRequest();
+    expect(keys).toContainEqual(["hr", "profile-change-requests", "mine"]);
+    expect(keys).not.toContainEqual(["hr", "profile-change-requests", "list"]);
+  });
+
+  it("cancelChangeRequest(id) → prefix 'mine' + detail(id)", () => {
+    const keys = hrInvalidation.cancelChangeRequest("pcr-1");
+    expect(keys).toContainEqual(["hr", "profile-change-requests", "mine"]);
+    expect(keys).toContainEqual(["hr", "profile-change-requests", "detail", "pcr-1"]);
+  });
+
+  it("approveChangeRequest(id) → prefix 'list' (KHÔNG 'mine' — thuộc cache requester)", () => {
+    const keys = hrInvalidation.approveChangeRequest("pcr-2");
+    expect(keys).toContainEqual(["hr", "profile-change-requests", "list"]);
+    expect(keys).toContainEqual(["hr", "profile-change-requests", "detail", "pcr-2"]);
+    expect(keys).not.toContainEqual(["hr", "profile-change-requests", "mine"]);
+  });
+
+  it("rejectChangeRequest(id) → prefix 'list' + detail(id)", () => {
+    const keys = hrInvalidation.rejectChangeRequest("pcr-3");
+    expect(keys).toContainEqual(["hr", "profile-change-requests", "list"]);
+    expect(keys).toContainEqual(["hr", "profile-change-requests", "detail", "pcr-3"]);
   });
 });
 

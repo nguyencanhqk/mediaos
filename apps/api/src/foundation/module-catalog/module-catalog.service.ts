@@ -1,6 +1,8 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { PermissionService } from "../../permission/permission.service";
-import { SettingService } from "../settings/setting.service";
+import { SettingService, type ResolvedSetting } from "../settings/setting.service";
+import type { Module } from "../../db/schema/seed-tracking";
+import type { AdminModuleDetail, AdminModuleItem } from "./module-admin.dto";
 import type { MyAppItem } from "./module-catalog.dto";
 import { ModuleCatalogRepository } from "./module-catalog.repository";
 import { MODULE_APP_METADATA, hasAnyCapability } from "./module-app-metadata";
@@ -81,6 +83,61 @@ export class ModuleCatalogService {
       });
     }
     return items; // giữ thứ tự sort_order từ repo
+  }
+
+  /**
+   * S2-FND-BE-1 — Admin module catalog (GET /foundation/modules). KHÁC getMyApps:
+   *  - Trả TẤT CẢ module (active + inactive, deleted_at IS NULL) — quản trị viên thấy hết để bật/tắt.
+   *  - KHÔNG lọc theo capability user (KHÔNG gọi getCapabilities) — gate ở PermissionGuard
+   *    (view:foundation-module) TRƯỚC service; ai vào được là thấy toàn bộ catalog.
+   *  - enabled resolve BATCH qua SettingService.resolveMany key `module.<code>.enabled`
+   *    (precedence company→system→default=true) keyed actor.companyId ⇒ cờ enabled theo TENANT (BẤT BIẾN #1:
+   *    company A tắt module KHÔNG ảnh hưởng B).
+   *  - Module thiếu MODULE_APP_METADATA (vd PAYROLL/extension) VẪN hiện: route/icon rỗng, required_permissions=[]
+   *    (KHÔNG bịa — nguồn route/icon là hằng metadata, chưa khai báo ⇒ để trống).
+   */
+  async getAllModules(actor: Actor): Promise<AdminModuleItem[]> {
+    const mods = await this.repo.findAllModules();
+    if (mods.length === 0) return [];
+
+    const keys = mods.map((m) => settingKey(m.moduleCode));
+    const resolved = await this.settings.resolveMany(actor.companyId, keys);
+    const resolvedByKey = new Map(resolved.map((r) => [r.key, r]));
+
+    return mods.map((m) => this.toAdminItem(m, resolvedByKey)); // giữ thứ tự sort_order từ repo
+  }
+
+  /**
+   * S2-FND-BE-1 — Admin module detail (GET /foundation/modules/:code). NotFoundException nếu code không tồn
+   * tại (hoặc đã soft-delete). enabled resolve theo actor.companyId như list.
+   */
+  async getModuleDetail(actor: Actor, code: string): Promise<AdminModuleDetail> {
+    const [m] = await this.repo.findByCode(code);
+    if (!m) {
+      throw new NotFoundException(`Module '${code}' không tồn tại.`);
+    }
+    const resolved = await this.settings.resolveMany(actor.companyId, [settingKey(m.moduleCode)]);
+    const resolvedByKey = new Map(resolved.map((r) => [r.key, r]));
+    return this.toAdminItem(m, resolvedByKey);
+  }
+
+  /** Map 1 row `modules` → AdminModuleItem (merge metadata + enabled-flag đã resolve). PURE. */
+  private toAdminItem(m: Module, resolvedByKey: Map<string, ResolvedSetting>): AdminModuleItem {
+    const meta = MODULE_APP_METADATA[m.moduleCode];
+    const r = resolvedByKey.get(settingKey(m.moduleCode));
+    // default=true: chưa seed/không thấy → enabled. Chỉ tắt khi setting tồn tại và = false.
+    const enabled = r?.found ? r.value === true || r.value === "true" : true;
+    return {
+      module_code: m.moduleCode,
+      name: m.name,
+      description: m.description,
+      group: m.moduleGroup,
+      is_active: m.isActive,
+      enabled,
+      route: meta?.route ?? "",
+      icon: meta?.icon ?? "",
+      required_permissions: meta ? [...meta.feCodes] : [],
+    };
   }
 }
 

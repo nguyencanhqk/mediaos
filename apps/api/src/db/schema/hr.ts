@@ -225,7 +225,9 @@ export const attendanceAdjustmentRequests = pgTable(
     requestedCheckInAt: timestamp("requested_check_in_at", { withTimezone: true }),
     requestedCheckOutAt: timestamp("requested_check_out_at", { withTimezone: true }),
     reason: text("reason").notNull(),
-    status: text("status").notNull().default("pending"),
+    // S3-ATT-BE-4 (mig 0457): status reconcile lowercase→TitleCase canonical DB-04 §7.6.
+    // Draft/Pending/Approved/Rejected/Cancelled (CHECK chk_att_adj_requests_status). Default 'Pending'.
+    status: text("status").notNull().default("Pending"),
     taskId: uuid("task_id").references(() => tasks.id, { onDelete: "set null" }),
     approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
@@ -254,13 +256,19 @@ export const attendanceAdjustmentRequests = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [
-    uniqueIndex("att_adj_requests_pending_uq")
-      .on(t.companyId, t.userId, t.workDate)
-      .where(sql`status = 'pending' AND deleted_at IS NULL`),
+    // S3-ATT-BE-4 (mig 0457): unique-pending-guard §7.6.1 theo request_type (thay att_adj_requests_pending_uq
+    // cũ trên user_id — chết sau reconcile lowercase + quá chặt). 1 pending / (company,employee,work_date,type).
+    uniqueIndex("uq_att_adj_pending_employee_date_type")
+      .on(t.companyId, t.employeeId, t.workDate, t.requestType)
+      .where(sql`deleted_at IS NULL AND status = 'Pending'`),
     index("att_adj_requests_company_id_idx").on(t.companyId),
     index("att_adj_requests_user_id_idx").on(t.userId),
     index("att_adj_requests_status_idx").on(t.companyId, t.status),
-    check("att_adj_status_check", sql`status IN ('pending','approved','rejected','cancelled')`),
+    // S3-ATT-BE-4 (mig 0457): status CHECK canonical TitleCase (thay att_adj_status_check lowercase cũ).
+    check(
+      "chk_att_adj_requests_status",
+      sql`status IN ('Draft','Pending','Approved','Rejected','Cancelled')`,
+    ),
     check(
       "att_adj_has_request_check",
       sql`requested_check_in_at IS NOT NULL OR requested_check_out_at IS NOT NULL`,

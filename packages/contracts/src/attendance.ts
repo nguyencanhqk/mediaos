@@ -219,58 +219,19 @@ export const attendanceListQuerySchema = z.object({
 });
 export type AttendanceListQuery = z.infer<typeof attendanceListQuerySchema>;
 
-// ─── attendance_adjustment_requests ──────────────────────────────────────────
-
-export const adjustmentRequestSchema = z.object({
-  id: z.string().uuid(),
-  userId: z.string().uuid(),
-  userFullName: z.string().nullable().optional(),
-  attendanceRecordId: z.string().uuid().nullable(),
-  workDate: z.string().date(),
-  requestedCheckInAt: z.string().datetime().nullable(),
-  requestedCheckOutAt: z.string().datetime().nullable(),
-  reason: z.string(),
-  status: hrRequestStatusSchema,
-  taskId: z.string().uuid().nullable(),
-  approvedBy: z.string().uuid().nullable(),
-  approvedAt: z.string().datetime().nullable(),
-  reviewNote: z.string().nullable(),
-  createdAt: z.string().datetime(),
-});
-export type AdjustmentRequestDto = z.infer<typeof adjustmentRequestSchema>;
-
-export const createAdjustmentRequestSchema = z
-  .object({
-    workDate: z.string().date(),
-    requestedCheckInAt: z.string().datetime().nullable().optional(),
-    requestedCheckOutAt: z.string().datetime().nullable().optional(),
-    reason: z.string().min(3).max(1000),
-  })
-  .refine((v) => v.requestedCheckInAt != null || v.requestedCheckOutAt != null, {
-    message: "Cần ít nhất một mốc check-in hoặc check-out đề nghị",
-  })
-  .refine(
-    (v) =>
-      v.requestedCheckInAt == null ||
-      v.requestedCheckOutAt == null ||
-      v.requestedCheckOutAt >= v.requestedCheckInAt,
-    { message: "Check-out đề nghị phải sau check-in đề nghị" },
-  );
-export type CreateAdjustmentRequest = z.infer<typeof createAdjustmentRequestSchema>;
+// ─── attendance_adjustment_requests (LEGACY response shape — superseded S3-ATT-BE-4) ────
+// reviewNoteSchema là SHARED với LEAVE (leave.dto.ts ReviewNoteDto dùng cùng schema) —
+// KHÔNG xoá/đổi tên/đổi hình dạng ở đây. Canonical create/list/approve/reject/direct-adjust/
+// detail DTO cho attendance_adjustment_requests (DB-04 §7.6, ATT-FUNC-018..022) chuyển XUỐNG
+// CUỐI FILE (mục "S3-ATT-BE-4"), THAY THẾ createAdjustmentRequestSchema/adjustmentListQuerySchema/
+// adjustmentRequestSchema cũ ở đây (lowercase status, scope me|all — không còn dùng). Writer cũ
+// /attendance/adjustments (attendance.service.ts) converge sang canonical ở lane SVC kế tiếp
+// (WO S3-ATT-BE-4 bước 3-4) — KHÔNG được giữ 2 hình dạng DTO song song sau converge.
 
 export const reviewNoteSchema = z.object({
   note: z.string().max(1000).optional(),
 });
 export type ReviewNoteRequest = z.infer<typeof reviewNoteSchema>;
-
-export const adjustmentListQuerySchema = z.object({
-  status: hrRequestStatusSchema.optional(),
-  /** 'me' (mặc định) = đơn của tôi; 'all' = mọi đơn (cần quyền approve/manage). */
-  scope: z.enum(["me", "all"]).default("me"),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
-});
-export type AdjustmentListQuery = z.infer<typeof adjustmentListQuerySchema>;
 
 // ─── attendance_periods (khoá kỳ công) ────────────────────────────────────────
 
@@ -416,3 +377,710 @@ export const attendanceLogListResponseSchema = z.object({
   items: z.array(attendanceLogListItemSchema),
 });
 export type AttendanceLogListResponse = z.infer<typeof attendanceLogListResponseSchema>;
+
+// ─── S3-ATT-BE-4 (DB-04 §7.6/§7.7, ATT-FUNC-018..022) — canonical adjustment-request DTOs ────
+//
+// Thay thế createAdjustmentRequestSchema/adjustmentListQuerySchema/adjustmentRequestSchema cũ
+// (khai báo phía trên, lowercase status, scope me|all) — canonical status TitleCase
+// (Draft/Pending/Approved/Rejected/Cancelled, mig 0457 chk_att_adj_requests_status) + request_type
+// 9-enum (mig 0452/0457 chk_att_adj_requests_request_type) + items[] ledger (attendance_adjustment_items
+// §7.7, APPEND-ONLY — is_applied/appliedValue server-set, KHÔNG nhận từ client).
+// reviewNoteSchema (phía trên) GIỮ NGUYÊN cho LEAVE — không dùng lại ở đây (approve/reject dưới
+// đây có schema riêng, review_note là 1 cột DUY NHẤT ở DB nhưng client gọi 2 field tên khác nhau
+// approve.note / reject.reason, giống pattern approveLeaveRequestSchema/rejectLeaveRequestSchema).
+
+/** 9 loại yêu cầu điều chỉnh công (ATT-FUNC-018 bảng "Loại yêu cầu điều chỉnh"). */
+export const ATTENDANCE_ADJUSTMENT_REQUEST_TYPES = [
+  "MISSING_CHECK_IN",
+  "MISSING_CHECK_OUT",
+  "UPDATE_CHECK_IN",
+  "UPDATE_CHECK_OUT",
+  "EXPLAIN_LATE",
+  "EXPLAIN_EARLY_LEAVE",
+  "UPDATE_STATUS",
+  "REMOTE_CORRECTION",
+  "OTHER",
+] as const;
+export const attendanceAdjustmentRequestTypeSchema = z.enum(ATTENDANCE_ADJUSTMENT_REQUEST_TYPES);
+export type AttendanceAdjustmentRequestType = z.infer<typeof attendanceAdjustmentRequestTypeSchema>;
+
+/** FSM canonical (DB-04 §7.6): Draft → Pending → Approved | Rejected | Cancelled (terminal). */
+export const ATTENDANCE_ADJUSTMENT_STATUSES = [
+  "Draft",
+  "Pending",
+  "Approved",
+  "Rejected",
+  "Cancelled",
+] as const;
+export const attendanceAdjustmentStatusSchema = z.enum(ATTENDANCE_ADJUSTMENT_STATUSES);
+export type AttendanceAdjustmentStatus = z.infer<typeof attendanceAdjustmentStatusSchema>;
+
+/**
+ * Field cho phép trong 1 item điều chỉnh (ATT-FUNC-021 "Trường được phép điều chỉnh" — camelCase
+ * khớp attendanceRecordV2Schema; KHÔNG gồm adjustment_reason — đó là `reason` top-level của request).
+ */
+export const ATTENDANCE_ADJUSTMENT_ITEM_FIELDS = [
+  "checkInAt",
+  "checkOutAt",
+  "attendanceStatus",
+  "workingMinutes",
+  "requiredWorkingMinutes",
+  "lateMinutes",
+  "earlyLeaveMinutes",
+  "missingMinutes",
+  "note",
+] as const;
+export const attendanceAdjustmentItemFieldSchema = z.enum(ATTENDANCE_ADJUSTMENT_ITEM_FIELDS);
+export type AttendanceAdjustmentItemField = z.infer<typeof attendanceAdjustmentItemFieldSchema>;
+
+/** newValue nguyên thuỷ (jsonb ở DB) — giới hạn primitive để tránh object lồng tuỳ ý qua input. */
+const adjustmentItemValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+
+/**
+ * 1 item field-change đề xuất trong create-request/direct-adjust. oldValue/appliedValue/isApplied
+ * KHÔNG nhận từ client (server tự đọc bản ghi hiện tại + set is_applied khi Approved/direct-adjust —
+ * attendance_adjustment_items §7.7 APPEND-ONLY, client không được giả mạo old/applied value).
+ */
+export const adjustmentItemInputSchema = z.object({
+  fieldName: attendanceAdjustmentItemFieldSchema,
+  newValue: adjustmentItemValueSchema,
+  note: z.string().max(500).optional(),
+});
+export type AdjustmentItemInput = z.infer<typeof adjustmentItemInputSchema>;
+
+const CHECK_IN_REQUEST_TYPES = ["MISSING_CHECK_IN", "UPDATE_CHECK_IN"] as const;
+const CHECK_OUT_REQUEST_TYPES = ["MISSING_CHECK_OUT", "UPDATE_CHECK_OUT"] as const;
+
+/**
+ * POST /attendance/adjustment-requests (ATT-FUNC-018). employee_id/status/submitted_at/requested_by
+ * là server-authoritative — KHÔNG có trong body (Zod strip key lạ). targetEmployeeId CHỈ dùng khi actor
+ * có quyền tạo thay (vd HR/Admin) — server gate ở tầng Service/Guard, KHÔNG tự suy ra quyền từ trường
+ * này có mặt hay không (thiếu quyền mà vẫn gửi → 403, KHÔNG âm thầm bỏ qua).
+ */
+export const createAdjustmentRequestSchema = z
+  .object({
+    workDate: z.string().date(),
+    requestType: attendanceAdjustmentRequestTypeSchema,
+    reason: z.string().min(3).max(1000),
+    requestedCheckInAt: z.string().datetime().nullable().optional(),
+    requestedCheckOutAt: z.string().datetime().nullable().optional(),
+    items: z.array(adjustmentItemInputSchema).max(20).optional(),
+    attachmentFileId: z.string().uuid().optional(),
+    /** Tạo hộ nhân viên khác — optional, gate quyền ở server (create-thay). */
+    targetEmployeeId: z.string().uuid().optional(),
+  })
+  .refine(
+    (v) =>
+      v.requestedCheckInAt == null ||
+      v.requestedCheckOutAt == null ||
+      v.requestedCheckOutAt >= v.requestedCheckInAt,
+    { message: "Check-out đề nghị phải sau check-in đề nghị", path: ["requestedCheckOutAt"] },
+  )
+  .refine(
+    (v) =>
+      !(CHECK_IN_REQUEST_TYPES as readonly string[]).includes(v.requestType) ||
+      v.requestedCheckInAt != null,
+    { message: "Loại yêu cầu này bắt buộc requestedCheckInAt", path: ["requestedCheckInAt"] },
+  )
+  .refine(
+    (v) =>
+      !(CHECK_OUT_REQUEST_TYPES as readonly string[]).includes(v.requestType) ||
+      v.requestedCheckOutAt != null,
+    { message: "Loại yêu cầu này bắt buộc requestedCheckOutAt", path: ["requestedCheckOutAt"] },
+  );
+export type CreateAdjustmentRequest = z.infer<typeof createAdjustmentRequestSchema>;
+
+/**
+ * GET /attendance/adjustment-requests(/my) query — scope me|team|company (DataScope, ATT-FUNC-022);
+ * status filter TitleCase canonical; page/pageSize khớp pattern attendanceRecordListQuerySchema.
+ */
+export const adjustmentListQuerySchema = z.object({
+  /** 'me' (mặc định) = đơn của tôi; 'team'/'company' cần view-team/view-company:adjustment. */
+  scope: z.enum(["me", "team", "company"]).default("me"),
+  status: attendanceAdjustmentStatusSchema.optional(),
+  requestType: attendanceAdjustmentRequestTypeSchema.optional(),
+  /** Chỉ có hiệu lực khi scope team/company (bỏ qua trên scope me). */
+  employeeId: z.string().uuid().optional(),
+  /** [fromDate, toDate] inclusive trên work_date. */
+  fromDate: z.string().date().optional(),
+  toDate: z.string().date().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(ATTENDANCE_RECORD_PAGE_SIZE_MAX)
+    .default(ATTENDANCE_RECORD_PAGE_SIZE_DEFAULT),
+});
+export type AdjustmentListQuery = z.infer<typeof adjustmentListQuerySchema>;
+
+/**
+ * POST /attendance/adjustment-requests/:id/approve (ATT-FUNC-019). note tuỳ chọn — map DB review_note.
+ * Pending→Approved CHỈ (FSM terminal Approved/Rejected/Cancelled — approve lại → 409, service layer).
+ */
+export const approveAdjustmentSchema = z.object({
+  note: z.string().max(1000).optional(),
+});
+export type ApproveAdjustmentRequest = z.infer<typeof approveAdjustmentSchema>;
+
+/**
+ * POST /attendance/adjustment-requests/:id/reject (ATT-FUNC-020). reason BẮT BUỘC (DB-04 §7.6 quy tắc 7
+ * "Khi Rejected, bắt buộc có review_note") — map DB review_note. Pending→Rejected CHỈ.
+ */
+export const rejectAdjustmentSchema = z.object({
+  reason: z.string().min(1, "Lý do từ chối là bắt buộc").max(2000),
+});
+export type RejectAdjustmentRequest = z.infer<typeof rejectAdjustmentSchema>;
+
+/**
+ * POST /attendance/records/:id/adjust-direct HOẶC theo (employeeId, workDate) khi chưa có record
+ * (ATT-FUNC-021, quyền adjust-direct:attendance). reason BẮT BUỘC (adjustment_reason). items[] ≥1 —
+ * mọi field áp dụng ngay (is_applied=true) trong cùng transaction, KHÔNG qua vòng duyệt Pending.
+ */
+export const directAdjustSchema = z
+  .object({
+    recordId: z.string().uuid().optional(),
+    employeeId: z.string().uuid().optional(),
+    workDate: z.string().date().optional(),
+    items: z.array(adjustmentItemInputSchema).min(1).max(20),
+    reason: z.string().min(3).max(1000),
+  })
+  .refine((v) => v.recordId != null || (v.employeeId != null && v.workDate != null), {
+    message: "Cần recordId hoặc (employeeId + workDate) để xác định bản ghi công",
+    path: ["recordId"],
+  });
+export type DirectAdjustRequest = z.infer<typeof directAdjustSchema>;
+
+/** 1 item lịch sử điều chỉnh (response — attendance_adjustment_items §7.7, APPEND-ONLY ledger). */
+export const attendanceAdjustmentItemDtoSchema = z.object({
+  id: z.string().uuid(),
+  fieldName: z.string(),
+  oldValue: z.unknown().nullable(),
+  newValue: z.unknown(),
+  appliedValue: z.unknown().nullable(),
+  isApplied: z.boolean(),
+  note: z.string().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type AttendanceAdjustmentItemDto = z.infer<typeof attendanceAdjustmentItemDtoSchema>;
+
+/**
+ * GET /attendance/adjustment-requests/:id detail (ATT-FUNC-022) — request đầy đủ + items[] ledger.
+ * reviewNote null cho đơn Pending/Draft; requestedBy/currentApproverUserId để FE resolve tên.
+ */
+export const attendanceAdjustmentRequestDetailSchema = z.object({
+  id: z.string().uuid(),
+  requestCode: z.string().nullable(),
+  employeeId: z.string().uuid().nullable(),
+  employeeCode: z.string().nullable(),
+  fullName: z.string().nullable(),
+  attendanceRecordId: z.string().uuid().nullable(),
+  workDate: z.string().date(),
+  requestType: attendanceAdjustmentRequestTypeSchema,
+  requestedCheckInAt: z.string().datetime().nullable(),
+  requestedCheckOutAt: z.string().datetime().nullable(),
+  reason: z.string(),
+  status: attendanceAdjustmentStatusSchema,
+  submittedAt: z.string().datetime().nullable(),
+  requestedBy: z.string().uuid().nullable(),
+  currentApproverUserId: z.string().uuid().nullable(),
+  reviewedBy: z.string().uuid().nullable(),
+  reviewedAt: z.string().datetime().nullable(),
+  reviewNote: z.string().nullable(),
+  attachmentFileId: z.string().uuid().nullable(),
+  items: z.array(attendanceAdjustmentItemDtoSchema),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type AttendanceAdjustmentRequestDetail = z.infer<
+  typeof attendanceAdjustmentRequestDetailSchema
+>;
+
+/** 1 dòng danh sách (GET /attendance/adjustment-requests) — detail KHÔNG kèm items[] (gọn cho list). */
+export const attendanceAdjustmentListItemSchema = attendanceAdjustmentRequestDetailSchema.omit({
+  items: true,
+});
+export type AttendanceAdjustmentListItem = z.infer<typeof attendanceAdjustmentListItemSchema>;
+
+/** Envelope danh sách — {items, meta} khớp pattern attendanceRecordListResponseSchema. */
+export const attendanceAdjustmentListResponseSchema = z.object({
+  items: z.array(attendanceAdjustmentListItemSchema),
+  meta: attendanceRecordPageMetaSchema,
+});
+export type AttendanceAdjustmentListResponse = z.infer<
+  typeof attendanceAdjustmentListResponseSchema
+>;
+
+// ─── S3-ATT-BE-3 (DB-04 §7.1/7.2/7.3, API-10 §5.4) — shift/rule minimum CRUD + effective resolve ────
+// GET /attendance/shifts + /attendance/rules/effective reuse the SAME resolve-effective repo methods as
+// S3-ATT-BE-1 (today/check-in/check-out) — one source of truth for Employee≻Department≻Company(≻System)
+// priority (§10). CRUD (shift/rule/assignment) is MINIMUM scope — advanced UX/bulk ops = carry-over CO-S4-007.
+
+/** DB-04 §7.1: shift_type CHECK — MVP scope chỉ Fixed/Flexible dùng thật; Split/Night reserved phase sau. */
+export const shiftTypeSchema = z.enum(["Fixed", "Flexible", "Split", "Night"]);
+export type ShiftTypeDto = z.infer<typeof shiftTypeSchema>;
+
+export const shiftStatusSchema = z.enum(["Active", "Inactive"]);
+export type ShiftStatusDto = z.infer<typeof shiftStatusSchema>;
+
+const timeHHMMSS = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "Expected HH:MM[:SS]");
+
+/** GET /attendance/shifts item — full shift config (DB-04 §7.1) for HR/Admin management screens. */
+export const shiftSchema = z.object({
+  id: z.string().uuid(),
+  shiftCode: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  shiftType: shiftTypeSchema,
+  startTime: timeHHMMSS.nullable(),
+  endTime: timeHHMMSS.nullable(),
+  breakStartTime: timeHHMMSS.nullable(),
+  breakEndTime: timeHHMMSS.nullable(),
+  breakMinutes: z.number().int().min(0),
+  requiredWorkingMinutes: z.number().int().positive(),
+  flexibleCheckInFrom: timeHHMMSS.nullable(),
+  flexibleCheckInTo: timeHHMMSS.nullable(),
+  graceLateMinutes: z.number().int().min(0),
+  graceEarlyLeaveMinutes: z.number().int().min(0),
+  allowEarlyCheckIn: z.boolean(),
+  allowLateCheckOut: z.boolean(),
+  crossDay: z.boolean(),
+  workDays: z.array(z.number().int().min(1).max(7)).nullable(),
+  status: shiftStatusSchema,
+  isDefault: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type ShiftDto = z.infer<typeof shiftSchema>;
+
+export const shiftListResponseSchema = z.object({ items: z.array(shiftSchema) });
+export type ShiftListResponse = z.infer<typeof shiftListResponseSchema>;
+
+/** POST /attendance/shifts (ATT.SHIFT.CREATE) — MVP scope: Fixed/Flexible only (Split/Night reserved). */
+export const createShiftSchema = z.object({
+  shiftCode: z.string().min(1).max(50),
+  name: z.string().min(1).max(200),
+  description: z.string().max(1000).optional(),
+  shiftType: z.enum(["Fixed", "Flexible"]).default("Fixed"),
+  startTime: timeHHMMSS.optional(),
+  endTime: timeHHMMSS.optional(),
+  breakStartTime: timeHHMMSS.optional(),
+  breakEndTime: timeHHMMSS.optional(),
+  breakMinutes: z.number().int().min(0).default(0),
+  requiredWorkingMinutes: z.number().int().positive(),
+  flexibleCheckInFrom: timeHHMMSS.optional(),
+  flexibleCheckInTo: timeHHMMSS.optional(),
+  graceLateMinutes: z.number().int().min(0).default(0),
+  graceEarlyLeaveMinutes: z.number().int().min(0).default(0),
+  allowEarlyCheckIn: z.boolean().default(true),
+  allowLateCheckOut: z.boolean().default(true),
+  crossDay: z.boolean().default(false),
+  workDays: z.array(z.number().int().min(1).max(7)).min(1).max(7).optional(),
+  isDefault: z.boolean().default(false),
+});
+export type CreateShiftRequest = z.infer<typeof createShiftSchema>;
+
+/** PUT /attendance/shifts/{id} (ATT.SHIFT.UPDATE) — partial patch. */
+export const updateShiftSchema = createShiftSchema.partial().extend({
+  status: shiftStatusSchema.optional(),
+});
+export type UpdateShiftRequest = z.infer<typeof updateShiftSchema>;
+
+// ─── attendance_rules (DB-04 §7.3) ────────────────────────────────────────────
+
+export const ruleScopeSchema = z.enum(["System", "Company", "Department", "Employee"]);
+export type RuleScopeDto = z.infer<typeof ruleScopeSchema>;
+
+export const ruleStatusSchema = z.enum(["Active", "Inactive"]);
+export type RuleStatusDto = z.infer<typeof ruleStatusSchema>;
+
+/** GET /attendance/rules item — full rule config (DB-04 §7.3) for HR/Admin management screens. */
+export const attendanceRuleSchema = z.object({
+  id: z.string().uuid(),
+  ruleCode: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  ruleScope: ruleScopeSchema,
+  departmentId: z.string().uuid().nullable(),
+  employeeId: z.string().uuid().nullable(),
+  priority: z.number().int(),
+  effectiveFrom: z.string().date(),
+  effectiveTo: z.string().date().nullable(),
+  requireCheckIn: z.boolean(),
+  requireCheckOut: z.boolean(),
+  allowWebCheckIn: z.boolean(),
+  allowMobileCheckIn: z.boolean(),
+  allowRemoteCheckIn: z.boolean(),
+  allowAdjustmentRequest: z.boolean(),
+  requireGps: z.boolean(),
+  requireNote: z.boolean(),
+  requirePhoto: z.boolean(),
+  allowHolidayAttendance: z.boolean(),
+  allowWeekendAttendance: z.boolean(),
+  autoAttendanceEnabled: z.boolean(),
+  autoCheckOutEnabled: z.boolean(),
+  autoAttendanceWorkingMinutes: z.number().int().nullable(),
+  status: ruleStatusSchema,
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type AttendanceRuleDto = z.infer<typeof attendanceRuleSchema>;
+
+export const attendanceRuleListResponseSchema = z.object({ items: z.array(attendanceRuleSchema) });
+export type AttendanceRuleListResponse = z.infer<typeof attendanceRuleListResponseSchema>;
+
+/**
+ * POST /attendance/rules (ATT.RULE.CONFIG). target_type/target_id ép theo scope (DB-04 chk_*_target):
+ * Department/Employee scope BẮT BUỘC departmentId/employeeId tương ứng; System/Company thì KHÔNG.
+ */
+export const createRuleSchema = z
+  .object({
+    ruleCode: z.string().min(1).max(50),
+    name: z.string().min(1).max(200),
+    description: z.string().max(1000).optional(),
+    ruleScope: ruleScopeSchema.default("Company"),
+    departmentId: z.string().uuid().optional(),
+    employeeId: z.string().uuid().optional(),
+    priority: z.number().int().default(0),
+    effectiveFrom: z.string().date(),
+    effectiveTo: z.string().date().optional(),
+    requireCheckIn: z.boolean().default(true),
+    requireCheckOut: z.boolean().default(true),
+    allowWebCheckIn: z.boolean().default(true),
+    allowMobileCheckIn: z.boolean().default(true),
+    allowRemoteCheckIn: z.boolean().default(false),
+    allowAdjustmentRequest: z.boolean().default(true),
+    requireGps: z.boolean().default(false),
+    requireNote: z.boolean().default(false),
+    requirePhoto: z.boolean().default(false),
+    allowHolidayAttendance: z.boolean().default(false),
+    allowWeekendAttendance: z.boolean().default(false),
+    autoAttendanceEnabled: z.boolean().default(false),
+    autoCheckOutEnabled: z.boolean().default(false),
+    autoAttendanceWorkingMinutes: z.number().int().min(0).optional(),
+  })
+  .refine(
+    (v) =>
+      (v.ruleScope !== "Department" && v.ruleScope !== "Employee") ||
+      (v.ruleScope === "Department" ? Boolean(v.departmentId) : Boolean(v.employeeId)),
+    { message: "Department/Employee scope cần đúng departmentId/employeeId" },
+  );
+export type CreateRuleRequest = z.infer<typeof createRuleSchema>;
+
+/** PUT /attendance/rules/{id} (ATT.RULE.CONFIG) — partial patch (KHÔNG đổi ruleScope/target — tạo rule mới thay vì đổi phạm vi). */
+export const updateRuleSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  description: z.string().max(1000).optional(),
+  priority: z.number().int().optional(),
+  effectiveFrom: z.string().date().optional(),
+  effectiveTo: z.string().date().nullable().optional(),
+  requireCheckIn: z.boolean().optional(),
+  requireCheckOut: z.boolean().optional(),
+  allowWebCheckIn: z.boolean().optional(),
+  allowMobileCheckIn: z.boolean().optional(),
+  allowRemoteCheckIn: z.boolean().optional(),
+  allowAdjustmentRequest: z.boolean().optional(),
+  requireGps: z.boolean().optional(),
+  requireNote: z.boolean().optional(),
+  requirePhoto: z.boolean().optional(),
+  allowHolidayAttendance: z.boolean().optional(),
+  allowWeekendAttendance: z.boolean().optional(),
+  autoAttendanceEnabled: z.boolean().optional(),
+  autoCheckOutEnabled: z.boolean().optional(),
+  autoAttendanceWorkingMinutes: z.number().int().min(0).nullable().optional(),
+  status: ruleStatusSchema.optional(),
+});
+export type UpdateRuleRequest = z.infer<typeof updateRuleSchema>;
+
+// ─── shift_assignments (DB-04 §7.2) ───────────────────────────────────────────
+
+export const shiftAssignmentScopeSchema = z.enum(["Company", "Department", "Employee"]);
+export type ShiftAssignmentScopeDto = z.infer<typeof shiftAssignmentScopeSchema>;
+
+export const shiftAssignmentSchema = z.object({
+  id: z.string().uuid(),
+  shiftId: z.string().uuid(),
+  assignmentScope: shiftAssignmentScopeSchema,
+  departmentId: z.string().uuid().nullable(),
+  employeeId: z.string().uuid().nullable(),
+  effectiveFrom: z.string().date(),
+  effectiveTo: z.string().date().nullable(),
+  priority: z.number().int(),
+  status: shiftStatusSchema,
+  note: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type ShiftAssignmentDto = z.infer<typeof shiftAssignmentSchema>;
+
+export const shiftAssignmentListResponseSchema = z.object({
+  items: z.array(shiftAssignmentSchema),
+});
+export type ShiftAssignmentListResponse = z.infer<typeof shiftAssignmentListResponseSchema>;
+
+/** POST /attendance/shift-assignments (ATT.SHIFT_ASSIGNMENT.UPDATE — spec API-10 dùng action `update` cho gán ca). */
+export const createShiftAssignmentSchema = z
+  .object({
+    shiftId: z.string().uuid(),
+    assignmentScope: shiftAssignmentScopeSchema.default("Company"),
+    departmentId: z.string().uuid().optional(),
+    employeeId: z.string().uuid().optional(),
+    effectiveFrom: z.string().date(),
+    effectiveTo: z.string().date().optional(),
+    priority: z.number().int().default(0),
+    note: z.string().max(500).optional(),
+  })
+  .refine(
+    (v) =>
+      (v.assignmentScope !== "Department" && v.assignmentScope !== "Employee") ||
+      (v.assignmentScope === "Department" ? Boolean(v.departmentId) : Boolean(v.employeeId)),
+    { message: "Department/Employee scope cần đúng departmentId/employeeId" },
+  );
+export type CreateShiftAssignmentRequest = z.infer<typeof createShiftAssignmentSchema>;
+
+// ─── GET /attendance/rules/effective — resolve-effective (dùng chung resolve-effective của S3-ATT-BE-1) ──
+
+/** employeeId tuỳ chọn (mặc định = hồ sơ của caller — HR/Admin có ATT.RULE.VIEW có thể xem nhân viên khác). */
+export const effectiveShiftRuleQuerySchema = z.object({
+  employeeId: z.string().uuid().optional(),
+  workDate: z.string().date().optional(),
+});
+export type EffectiveShiftRuleQuery = z.infer<typeof effectiveShiftRuleQuerySchema>;
+
+export const effectiveShiftRuleResponseSchema = z.object({
+  workDate: z.string().date(),
+  employeeId: z.string().uuid(),
+  shift: attendanceShiftSummarySchema.nullable(),
+  rule: attendanceRuleSummarySchema.nullable(),
+});
+export type EffectiveShiftRuleResponse = z.infer<typeof effectiveShiftRuleResponseSchema>;
+
+// ─── S3-INT-1: POST /internal/v1/attendance/recalculate (manual/retry LEAVE→ATT sync) ────────────
+// Internal route: JwtAuthGuard→CompanyGuard→PermissionGuard(manage:attendance) + InternalGuard
+// (x-internal-key). Body is server-authoritative other than requestId — company_id from the token.
+
+export const recalculateAttendanceRequestSchema = z.object({
+  leaveRequestId: z.string().uuid(),
+});
+export type RecalculateAttendanceRequest = z.infer<typeof recalculateAttendanceRequestSchema>;
+
+export const recalculateAttendanceResponseSchema = z.object({
+  leaveRequestId: z.string().uuid(),
+  processedDays: z.number().int().nonnegative(),
+});
+export type RecalculateAttendanceResponse = z.infer<typeof recalculateAttendanceResponseSchema>;
+
+// ─── S3-ATT-BE-5 (DB-04 §7.8/7.9, API-04, CO-S4-004) — Remote/Onsite-work request workflow ────────────
+// STATE-MACHINE (CHỐT 2026-07-02, owner override): create → Draft (KHÔNG Pending). submit RIÊNG
+// (Draft→Pending) chọn current_approver_user_id (trực tiếp/delegate) + watcher_user_ids. Chỉ Pending mới
+// approve/reject được. Draft sửa/xoá bởi chủ. mig 0452 shape base + 0464 ALTER-ADD watcher_user_ids jsonb.
+
+/** DB-04 §7.8 chk_remote_requests_type. */
+export const REMOTE_REQUEST_TYPES = ["Remote", "BusinessTrip", "Offsite"] as const;
+export const remoteRequestTypeSchema = z.enum(REMOTE_REQUEST_TYPES);
+export type RemoteRequestType = z.infer<typeof remoteRequestTypeSchema>;
+
+/** DB-04 §7.8 chk_remote_requests_mode. */
+export const REMOTE_REQUEST_ATTENDANCE_MODES = [
+  "SELF_CHECK_IN",
+  "AUTO_ATTENDANCE",
+  "NO_ATTENDANCE",
+] as const;
+export const remoteRequestAttendanceModeSchema = z.enum(REMOTE_REQUEST_ATTENDANCE_MODES);
+export type RemoteRequestAttendanceMode = z.infer<typeof remoteRequestAttendanceModeSchema>;
+
+/** FSM canonical (DB-04 §7.8 + done_when 2026-07-02): Draft → Pending → Approved | Rejected | Cancelled. */
+export const REMOTE_REQUEST_STATUSES = [
+  "Draft",
+  "Pending",
+  "Approved",
+  "Rejected",
+  "Cancelled",
+] as const;
+export const remoteRequestStatusSchema = z.enum(REMOTE_REQUEST_STATUSES);
+export type RemoteRequestStatus = z.infer<typeof remoteRequestStatusSchema>;
+
+/**
+ * POST /attendance/remote-work-requests (create Own → Draft). employeeId/status/submittedAt/requestedBy/
+ * currentApproverUserId/watcherUserIds là server-authoritative KHÔNG nhận ở create (chọn ở submit riêng —
+ * STATE-MACHINE done_when). targetEmployeeId CHỈ dùng khi actor có quyền tạo thay (create-own scope > Own),
+ * gate ở Service — KHÔNG tự suy quyền từ trường này có mặt hay không.
+ */
+export const createRemoteWorkRequestSchema = z
+  .object({
+    requestType: remoteRequestTypeSchema,
+    startDate: z.string().date(),
+    endDate: z.string().date(),
+    startTime: z.string().time().nullable().optional(),
+    endTime: z.string().time().nullable().optional(),
+    attendanceMode: remoteRequestAttendanceModeSchema.default("SELF_CHECK_IN"),
+    locationText: z.string().max(255).optional(),
+    reason: z.string().min(3).max(1000),
+    taskId: z.string().uuid().optional(),
+    projectId: z.string().uuid().optional(),
+    attachmentFileId: z.string().uuid().optional(),
+    /** Tạo hộ nhân viên khác — optional, gate quyền ở server (create-own scope > Own). */
+    targetEmployeeId: z.string().uuid().optional(),
+  })
+  .refine((v) => v.endDate >= v.startDate, {
+    message: "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu",
+    path: ["endDate"],
+  });
+export type CreateRemoteWorkRequest = z.infer<typeof createRemoteWorkRequestSchema>;
+
+/**
+ * POST /attendance/remote-work-requests/:id/submit (Draft→Pending, done_when STATE-MACHINE). Người tạo
+ * chọn approver (trực tiếp HOẶC delegate) + watcher list — server chỉ chấp nhận id CÙNG company (Service
+ * validate cross-tenant deny, done_when). watcherUserIds tối đa 20 — tránh spam NOTI không giới hạn.
+ */
+export const submitRemoteWorkRequestSchema = z.object({
+  currentApproverUserId: z.string().uuid(),
+  watcherUserIds: z.array(z.string().uuid()).max(20).default([]),
+});
+export type SubmitRemoteWorkRequest = z.infer<typeof submitRemoteWorkRequestSchema>;
+
+/**
+ * GET /attendance/remote-work-requests(/my) query — scope me|team|company (DataScope), status/type filter,
+ * page/pageSize khớp pattern adjustmentListQuerySchema.
+ */
+export const remoteWorkRequestListQuerySchema = z.object({
+  /** 'me' (mặc định) = đơn của tôi; 'team'/'company' cần view-team/view-company:remote-request. */
+  scope: z.enum(["me", "team", "company"]).default("me"),
+  status: remoteRequestStatusSchema.optional(),
+  requestType: remoteRequestTypeSchema.optional(),
+  /** Chỉ có hiệu lực khi scope team/company (bỏ qua trên scope me). */
+  employeeId: z.string().uuid().optional(),
+  /** [fromDate, toDate] inclusive trên start_date. */
+  fromDate: z.string().date().optional(),
+  toDate: z.string().date().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(ATTENDANCE_RECORD_PAGE_SIZE_MAX)
+    .default(ATTENDANCE_RECORD_PAGE_SIZE_DEFAULT),
+});
+export type RemoteWorkRequestListQuery = z.infer<typeof remoteWorkRequestListQuerySchema>;
+
+/**
+ * POST /attendance/remote-work-requests/:id/approve (Pending→Approved CHỈ — approve lại → 409 ở Service).
+ * note tuỳ chọn.
+ */
+export const approveRemoteWorkRequestSchema = z.object({
+  note: z.string().max(1000).optional(),
+});
+export type ApproveRemoteWorkRequest = z.infer<typeof approveRemoteWorkRequestSchema>;
+
+/**
+ * POST /attendance/remote-work-requests/:id/reject (Pending→Rejected CHỈ). rejectReason BẮT BUỘC (mirror
+ * rejectAdjustmentSchema) — map DB reject_reason.
+ */
+export const rejectRemoteWorkRequestSchema = z.object({
+  rejectReason: z.string().min(1, "Lý do từ chối là bắt buộc").max(2000),
+});
+export type RejectRemoteWorkRequest = z.infer<typeof rejectRemoteWorkRequestSchema>;
+
+/**
+ * GET /attendance/remote-work-requests/:id detail + list item — Draft/Pending/Approved/Rejected/Cancelled.
+ * watcherUserIds luôn mảng (rỗng nếu Draft chưa submit). currentApproverUserId null cho Draft.
+ */
+export const remoteWorkRequestDetailSchema = z.object({
+  id: z.string().uuid(),
+  requestCode: z.string().nullable(),
+  employeeId: z.string().uuid().nullable(),
+  employeeCode: z.string().nullable(),
+  fullName: z.string().nullable(),
+  requestType: remoteRequestTypeSchema,
+  startDate: z.string().date(),
+  endDate: z.string().date(),
+  startTime: z.string().nullable(),
+  endTime: z.string().nullable(),
+  attendanceMode: remoteRequestAttendanceModeSchema,
+  locationText: z.string().nullable(),
+  reason: z.string(),
+  taskId: z.string().uuid().nullable(),
+  projectId: z.string().uuid().nullable(),
+  status: remoteRequestStatusSchema,
+  submittedAt: z.string().datetime().nullable(),
+  requestedBy: z.string().uuid().nullable(),
+  currentApproverUserId: z.string().uuid().nullable(),
+  watcherUserIds: z.array(z.string().uuid()),
+  approvedBy: z.string().uuid().nullable(),
+  approvedAt: z.string().datetime().nullable(),
+  rejectedBy: z.string().uuid().nullable(),
+  rejectedAt: z.string().datetime().nullable(),
+  rejectReason: z.string().nullable(),
+  cancelledAt: z.string().datetime().nullable(),
+  cancelledBy: z.string().uuid().nullable(),
+  attachmentFileId: z.string().uuid().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type RemoteWorkRequestDetail = z.infer<typeof remoteWorkRequestDetailSchema>;
+
+/** Envelope danh sách — {items, meta} khớp pattern attendanceAdjustmentListResponseSchema. */
+export const remoteWorkRequestListResponseSchema = z.object({
+  items: z.array(remoteWorkRequestDetailSchema),
+  meta: attendanceRecordPageMetaSchema,
+});
+export type RemoteWorkRequestListResponse = z.infer<typeof remoteWorkRequestListResponseSchema>;
+
+// ─── S3-ATT-BE-6 (IMPLEMENTATION-06 §21 CO-S4-006, API-04, view-team/view-company:attendance) ────
+// GET /attendance/reports — per-employee aggregate (present/late/missing/leave count) over
+// [fromDate, toDate), scoped Team (manager-tree, S2-INT-2) or Company. ONE fixed group-by aggregate
+// query (no N+1 — count doesn't grow with record volume); paginated over EMPLOYEE rows (not raw
+// records). NO export/CSV/stream here (carry-over — spec ATT.ATTENDANCE.EXPORT is a separate WO).
+
+/**
+ * GET /attendance/reports query — [fromDate,toDate) half-open over work_date (mirrors
+ * attendanceRecordListQuerySchema), optional department filter (Company scope only — ignored under
+ * Team, mirrors departmentId semantics on team/company records lists), page-based pagination.
+ */
+export const attendanceReportQuerySchema = z
+  .object({
+    fromDate: z.string().date(),
+    toDate: z.string().date(),
+    departmentId: z.string().uuid().optional(),
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(ATTENDANCE_RECORD_PAGE_SIZE_MAX)
+      .default(ATTENDANCE_RECORD_PAGE_SIZE_DEFAULT),
+  })
+  .refine((v) => v.toDate >= v.fromDate, {
+    message: "toDate phải >= fromDate",
+    path: ["toDate"],
+  });
+export type AttendanceReportQuery = z.infer<typeof attendanceReportQuerySchema>;
+
+/**
+ * 1 dòng tổng hợp công của 1 nhân viên trong kỳ. Bucket cố định từ attendance_status TitleCase
+ * (DB-04 §7.4): present = Present|Checked-in|Early Leave (đã chấm công) · late = Late ·
+ * missing = Missing Hours|Not Checked-in · leave = Leave (S3-INT-1 sync). totalDays = tổng số bản ghi
+ * work_date trong kỳ đã khớp scope (present+late+missing+leave, KHÔNG double-count).
+ */
+export const attendanceReportRowSchema = z.object({
+  employeeId: z.string().uuid(),
+  userId: z.string().uuid(),
+  employeeCode: z.string().nullable(),
+  fullName: z.string().nullable(),
+  orgUnitId: z.string().uuid().nullable(),
+  orgUnitName: z.string().nullable(),
+  totalDays: z.number().int().nonnegative(),
+  presentDays: z.number().int().nonnegative(),
+  lateDays: z.number().int().nonnegative(),
+  missingDays: z.number().int().nonnegative(),
+  leaveDays: z.number().int().nonnegative(),
+});
+export type AttendanceReportRow = z.infer<typeof attendanceReportRowSchema>;
+
+export const attendanceReportResponseSchema = z.object({
+  fromDate: z.string().date(),
+  toDate: z.string().date(),
+  items: z.array(attendanceReportRowSchema),
+  meta: attendanceRecordPageMetaSchema,
+});
+export type AttendanceReportResponse = z.infer<typeof attendanceReportResponseSchema>;

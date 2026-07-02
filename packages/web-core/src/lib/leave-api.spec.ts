@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   leaveManagementListResponseSchema,
   leaveRequestDetailViewSchema,
+  leaveCalendarResponseSchema,
 } from "@mediaos/contracts";
 import { leaveApi } from "./leave-api";
 import * as apiClient from "./api-client";
@@ -74,5 +75,20 @@ describe("leaveApi — management/approval endpoints (URL + method + Zod validat
     expect(schema).toBe(leaveRequestDetailViewSchema);
     expect(opts?.method).toBe("POST");
     expect(JSON.parse(opts?.body ?? "{}")).toEqual({ reason: "thiếu chứng từ" });
+  });
+
+  // ── S3-FE-LEAVE-4: lịch nghỉ ────────────────────────────────────────────────
+
+  it("getCalendar(query) → GET /leave/calendar + leaveCalendarResponseSchema validator + forward scope/from/to, KHÔNG company_id", async () => {
+    await leaveApi.getCalendar({ scope: "team", from: "2026-07-01", to: "2026-07-31" });
+    const [url, schema, opts] = lastCall();
+    expect(url.startsWith("/leave/calendar")).toBe(true);
+    const qs = new URLSearchParams(url.split("?")[1]);
+    expect(qs.get("scope")).toBe("team");
+    expect(qs.get("from")).toBe("2026-07-01");
+    expect(qs.get("to")).toBe("2026-07-31");
+    expect(url).not.toContain("company_id");
+    expect(schema).toBe(leaveCalendarResponseSchema);
+    expect(opts?.method ?? "GET").toBe("GET");
   });
 });

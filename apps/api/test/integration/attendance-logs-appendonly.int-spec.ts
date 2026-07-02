@@ -54,7 +54,7 @@ describe.skipIf(!hasLaneDb)("S3-ATT-DB-1 ATT ledger append-only (mediaos_app)", 
     const req = await direct.query(
       `INSERT INTO attendance_adjustment_requests
          (company_id, user_id, employee_id, work_date, request_type, reason, status, requested_check_in_at)
-       VALUES ($1, $2, $3, '2026-06-03', 'MISSING_CHECK_IN', 'ao-reason', 'pending', '2026-06-03T02:00:00Z')
+       VALUES ($1, $2, $3, '2026-06-03', 'MISSING_CHECK_IN', 'ao-reason', 'Pending', '2026-06-03T02:00:00Z')
        RETURNING id`,
       [A.companyId, userId, employeeId],
     );

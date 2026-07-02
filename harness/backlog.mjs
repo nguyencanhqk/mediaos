@@ -1702,7 +1702,7 @@ export const backlog = [
     title:
       "Admin module catalog API (P1): GET /foundation/modules (TẤT CẢ module, KHÁC my-apps đã lọc theo user) + GET /foundation/modules/:code detail — unblock S2-FE-FND-3 (toggle enable/disable = follow-up)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/foundation/module-catalog/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S1-FND-MODULE-1"],
@@ -1954,6 +1954,22 @@ export const backlog = [
     title:
       "Employee contracts (carry-over STORY-031): migration employee_contracts (RLS+FORCE) + CRUD API /hr/contracts + /hr/employees/:id/contracts + file link + cảnh báo hết hạn — unblock S2-FE-HR-7",
     zone: "red",
+    // CLOSE 2026-07-02 (worktree auto/s3wave3-batch6-blocked-wos): mig 0462 (idx 142, nối tiếp head 0461)
+    //   tạo employee_contracts (RLS ENABLE+FORCE + policy tenant_isolation TRƯỚC backfill, BẤT BIẾN #1;
+    //   employee_id→employee_profiles CASCADE + contract_type_id→contract_types + file_id→files SET NULL;
+    //   soft-delete + created_by/updated_by/deleted_by; index employee/expiring; ≤1 primary+Active/employee)
+    //   + UNION-ADD 'employee_contract' vào CHECK audit_logs + AUDIT_OBJECT_TYPES (schema/audit.ts) CÙNG commit
+    //   + seed (view,contract)+(manage,contract) scope=Company cho hr/company-admin (per-pair). rls-registry
+    //   đăng ký employee_contracts. CRUD /hr/contracts(+:id) + /hr/employees/:id/contracts (view:contract) +
+    //   POST/PATCH/DELETE + POST :id/file (manage:contract) link qua FileService entity 'contract'; cảnh báo
+    //   hết hạn 30 ngày (expiringSoon + ?expiringOnly).
+    //   REWORK 2026-07-02 (commit 1906559, theo handoff.md owner decision): scope SỬA LẠI thành Own(employee)
+    //   + Team(manager) — KHÔNG phải Company-only/403 như mô tả ban đầu ở trên; ngưỡng cảnh báo hết hạn đổi
+    //   thành company-configurable 2 mốc [30,7] ngày (SettingService, fallback [30,7]). FULL gate PASS lần 2.
+    //   Verify lane DB mediaos_batch6 (chain 0000→0462): int hr-contract ✓14 (deny 403 ×4 · audit-in-tx 1 row ·
+    //   soft-delete · RLS 2-tenant read/write/contract_type cross-tenant 400 · PII allowlist · expiry · append-only
+    //   UPDATE/DELETE DENIED) + unit contract.service ✓7 + rls-guards/coverage/tenant-isolation ✓412 (0 regression)
+    //   + migration-smoke ✓115. typecheck + eslint xanh.
     status: "done",
     paths: [
       "apps/api/src/db/schema/**",
@@ -2285,8 +2301,31 @@ export const backlog = [
     title:
       "Shift/rule minimum (P1): GET /attendance/shifts + /rules/effective + resolve-effective service + applied-rule snapshot (+ CRUD shift/rule/assignment mức tối thiểu nếu đủ thời gian)",
     zone: "yellow",
-    status: "todo",
-    paths: ["apps/api/src/attendance/**", "packages/contracts/src/**"],
+    // DONE 2026-07-01 (feat/s3-wave3, worktree auto/S3-ATT-BE-3). CRUD shift/rule/assignment (min) + GET
+    //   /attendance/shifts + /rules/effective (reuse S3-ATT-BE-1 resolveShiftAndRule) shipped earlier;
+    //   S3-ATT-BE-3-FIX-AUDIT-WIRE closes AC#3: wired AuditService.record() IN-TX at the 5 config-mutation
+    //   sites (createShift/updateShift → ShiftCreated/Updated 'shift'; createRule/updateRule →
+    //   RuleCreated/Updated 'attendance_rule'; createShiftAssignment → ShiftAssignmentCreated
+    //   'shift_assignment'). before/after = config-only snapshot (shiftSnapshot/ruleSnapshot/
+    //   assignmentSnapshot — strip createdAt/updatedAt; tables carry NO secret/PII; masker re-masks —
+    //   BẤT BIẾN #3). Config đổi cách tính công toàn công ty = 'hành động quan trọng' (SPEC-01 §16.3).
+    //   SCOPE RECONCILED: paths extended to migrations/** + db/schema/audit.ts — the audit_logs object_type
+    //   CHECK needs 'shift'/'attendance_rule'/'shift_assignment' (mig 0457 UNION ADD-only, clone 0456; +
+    //   AUDIT_OBJECT_TYPES sync) delivered in THIS WO (option (a) of the reviewer's paths↔done_when fix).
+    //   Tests: attendance-shift.service.spec.ts +6 audit-wiring (same-tx, config-only, no-audit-on-404);
+    //   att-core-tenant-deny.int-spec.ts +6 HTTP (audit ShiftCreated/Updated/RuleCreated/AssignmentCreated
+    //   land with correct object_type via 0457 CHECK; QA-06 2-tenant WRITE deny: B PATCH A's shift/rule →
+    //   404, A row unchanged, NO cross-tenant audit row). Verify lane mediaos_s3attbe3fix: attendance 336
+    //   PASS · typecheck green. Advanced CRUD (delete/bulk/filter) = carry-over CO-S4-007.
+    status: "done",
+    paths: [
+      "apps/api/src/attendance/**",
+      "packages/contracts/src/**",
+      // SCOPE RECONCILE (S3-ATT-BE-3-FIX-AUDIT-WIRE): audit-in-tx needs the audit_logs object_type CHECK
+      // widened → migration + schema constant. UNION ADD-only (append-only #2 nguyên vẹn, KHÔNG rewrite).
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/audit.ts",
+    ],
     skills: ["code-review"],
     depends_on: ["S3-ATT-SEED-1"],
     src: [
@@ -2298,7 +2337,7 @@ export const backlog = [
     done_when: [
       "GET /attendance/shifts (list) + GET /attendance/rules/effective (rule hiệu lực) permission ATT.SHIFT.VIEW/ATT.RULE.VIEW; service resolveEffectiveShiftRule dùng chung với S3-ATT-BE-1",
       "applied_rule/calculation snapshot lưu khi tính attendance_records (rule đổi KHÔNG sai dữ liệu quá khứ — §16); CRUD shift/rule/assignment (HR/Admin, permission CREATE/UPDATE/CONFIG) chỉ làm mức tối thiểu — phần nâng cao = carry-over CO-S4-007",
-      "deny-path: thiếu permission → 403; 2-tenant deny; audit cho config shift/rule",
+      "deny-path: thiếu permission → 403; 2-tenant deny (WRITE: tenant B dùng shiftId/ruleId của A → 404, KHÔNG lộ/ghi xuyên tenant); audit-in-tx cho config shift/rule (object_type shift/attendance_rule/shift_assignment, mig 0457 CHECK; before/after config-only, KHÔNG secret/PII)",
     ],
   },
 
@@ -2623,7 +2662,7 @@ export const backlog = [
     title:
       "ATT Adjustment workflow API (CO-S4-003): adjustment_requests create/list/detail + approve/reject + direct-adjust + recalc attendance_records + audit + event (skeleton 0452 → hoàn thiện cột nếu thiếu)",
     zone: "red",
-    status: "todo",
+    status: "in_review",
     paths: [
       "apps/api/src/attendance/**",
       "apps/api/src/db/schema/**",

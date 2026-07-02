@@ -5,6 +5,8 @@ import type {
   LogoutResponse,
   MeResponse,
   RedirectAllowedResponse,
+  SessionListItem,
+  SessionRevokeResponse,
   TwoFactorEnrollResponse,
   TwoFactorStatus,
 } from "@mediaos/contracts";
@@ -16,6 +18,7 @@ import {
   Get,
   Headers,
   HttpCode,
+  Param,
   Post,
   Query,
   Req,
@@ -42,9 +45,9 @@ import { TwoFactorService } from "./two-factor.service";
 import { Public } from "../permission/public.decorator";
 import { AllowWithoutTwoFactor } from "./two-factor-enforcement.decorator";
 
-/** Request đã qua JwtAuthGuard (global) — user gắn ở req.user. */
+/** Request đã qua JwtAuthGuard (global) — user gắn ở req.user. sessionId: xem AuthenticatedUser (S2-AUTH-BE-7). */
 interface AuthenticatedRequest extends Request {
-  user: { id: string; companyId: string; email: string };
+  user: { id: string; companyId: string; email: string; sessionId?: string };
 }
 
 // @AllowWithoutTwoFactor ở cấp controller: TẤT CẢ route auth (me/2fa enroll/enable/disable/status) phải
@@ -163,10 +166,7 @@ export class AuthController {
   @Public()
   @Post("forgot-password")
   @HttpCode(202)
-  async forgotPassword(
-    @Body() dto: ForgotPasswordDto,
-    @Req() req: Request,
-  ): Promise<{ ok: true }> {
+  async forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: Request): Promise<{ ok: true }> {
     await this.auth.forgotPassword(dto, this.meta(req));
     // Phản hồi ĐỒNG NHẤT dù email tồn tại hay không (không lộ enumeration).
     return { ok: true };
@@ -210,7 +210,11 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthTokens> {
-    const tokens = await this.auth.completeTwoFactorLogin(dto.challengeToken, dto.code, this.meta(req));
+    const tokens = await this.auth.completeTwoFactorLogin(
+      dto.challengeToken,
+      dto.code,
+      this.meta(req),
+    );
     // SSO: phiên thành công sau bước 2 → đặt refresh + CSRF cookie (mirror /login nhánh tokens).
     this.setSessionCookies(res, tokens.refreshToken);
     return tokens;
@@ -249,6 +253,37 @@ export class AuthController {
   @Get("2fa/status")
   twoFactorStatus(@Req() req: AuthenticatedRequest): Promise<TwoFactorStatus> {
     return this.twoFactor.status(req.user.id, req.user.companyId);
+  }
+
+  // ── S2-AUTH-BE-7: session self-service (Own scope — CHỈ Authenticated, KHÔNG permission pair riêng) ──
+
+  /** Liệt kê phiên ACTIVE của CHÍNH user (KHÔNG lộ token/hash — BẤT BIẾN #3). `is_current` từ jti request. */
+  @Get("sessions")
+  listSessions(@Req() req: AuthenticatedRequest): Promise<SessionListItem[]> {
+    return this.auth.listSessions(req.user.companyId, req.user.id, req.user.sessionId);
+  }
+
+  /** Thu hồi 1 phiên của CHÍNH user. Phiên KHÔNG tồn tại/thuộc user khác → 404 (owner-check ở service). */
+  @Post("sessions/:id/revoke")
+  @HttpCode(200)
+  async revokeSession(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+  ): Promise<SessionRevokeResponse> {
+    await this.auth.revokeSession(req.user.companyId, req.user.id, id);
+    return { ok: true, revoked_count: 1 };
+  }
+
+  /** Thu hồi MỌI phiên khác của CHÍNH user, GIỮ phiên hiện tại (từ jti access-token của request). */
+  @Post("sessions/revoke-others")
+  @HttpCode(200)
+  async revokeOtherSessions(@Req() req: AuthenticatedRequest): Promise<SessionRevokeResponse> {
+    const revokedCount = await this.auth.revokeOtherSessions(
+      req.user.companyId,
+      req.user.id,
+      req.user.sessionId,
+    );
+    return { ok: true, revoked_count: revokedCount };
   }
 
   private meta(req: Request): RequestMeta {

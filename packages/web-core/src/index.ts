@@ -65,14 +65,18 @@ export { buildQueryString } from "./lib/api-params";
 export {
   rootKeys,
   authKeys,
+  authUsersKeys,
   dashboardKeys,
   hrKeys,
   attendanceKeys,
   leaveKeys,
   taskKeys,
   notificationKeys,
+  foundationKeys,
   attendanceInvalidation,
   leaveInvalidation,
+  foundationInvalidation,
+  hrInvalidation,
   // S2-FE-HR-5 (lane HR5-WC): HR master-data mutation → list invalidation.
   hrMasterDataInvalidation,
 } from "./lib/query-keys";
@@ -80,16 +84,64 @@ export {
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
 export { shouldRetryQuery } from "./lib/query-retry";
 export { bootstrapSession } from "./lib/session";
-export { getHealth, type Health } from "./lib/api";
+export { getHealth, type Health, getHealthDb, type HealthDb } from "./lib/api";
 export { authApi } from "./lib/auth-api";
 export { usersApi } from "./lib/users-api";
+export { authUsersApi } from "./lib/auth-users-api";
 export { twoFactorApi } from "./lib/two-factor-api";
 export { notificationApi } from "./lib/notification-api";
 export { hrApi } from "./lib/hr-api";
+// S2-FE-HR-6 — Org chart (GET /org/units/tree, read mở) + HR audit-logs (tái dùng /foundation/audit-logs).
+export { orgApi, orgTreeNodeSchema, type OrgTreeNode } from "./lib/hr-org-api";
+export { hrAuditApi, type HrAuditLogQuery } from "./lib/hr-audit-api";
+// S2-FE-HR-8 — Employee-code CONFIG admin (view/update config + read-only preview mã tiếp theo).
+export {
+  employeeCodeConfigApi,
+  EMPLOYEE_CODE_NUMBER_LENGTH_MIN,
+  EMPLOYEE_CODE_NUMBER_LENGTH_MAX,
+  type EmployeeCodeConfigDto,
+  type EmployeeCodePreviewResponse,
+  type UpdateEmployeeCodeConfigRequest,
+} from "./lib/hr-employee-code-config-api";
 // S2-FE-HR-5 (lane HR5-WC): HR master-data CRUD spine (departments/positions/job-levels/contract-types).
 export { hrMasterDataApi, type HrDepartment } from "./lib/hr-master-data-api";
 export { leaveApi } from "./lib/leave-api";
 export { attendanceApi } from "./lib/attendance-api";
+export {
+  foundationApi,
+  safeSettingViewSchema,
+  settingsResolveResponseSchema,
+  settingValueTypeSchema,
+  SETTING_VALUE_TYPES,
+  type SafeSettingView,
+  type SettingsResolveResponse,
+  type SettingValueType,
+  type ResolveSettingsBody,
+  type UpdateCompanySettingBody,
+  type UpdateCompanyBody,
+  // S2-FE-FND-4 — Public Holidays
+  holidayApi,
+  holidayViewSchema,
+  holidayTypeSchema,
+  HOLIDAY_TYPES,
+  type HolidayView,
+  type HolidayType,
+  type HolidayListParams,
+  type CreateHolidayBody,
+  type UpdateHolidayBody,
+  type DeleteHolidayResult,
+  // S2-FE-FND-6 — Retention Policies + File Access Logs
+  retentionApi,
+  fileAccessLogApi,
+  CLEANUP_ACTIONS,
+  cleanupActionSchema,
+  FILE_ACCESS_ACTIONS,
+  type RetentionPolicyView,
+  type PatchRetentionPolicyDto,
+  type FileAccessLogView,
+  type FileAccessActionDto,
+  type FileAccessLogListParams,
+} from "./lib/foundation-api";
 
 // Permission
 export { useCan, useCanExact } from "./hooks/use-can";

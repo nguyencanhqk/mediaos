@@ -573,6 +573,32 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
 
+  {
+    // S2-HR-BE-6 (mig 0462): employee_contracts. company_id NOT NULL + RLS+FORCE → PHẢI ở harness.
+    // KHÔNG skipNoContext (mọi hàng tenant-scoped). FK employee_id→employee_profiles, contract_type_id→
+    // contract_types (cùng company). start_date NOT NULL.
+    name: "employee_contracts",
+    table: "employee_contracts",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `ec-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const ct = await direct.query(
+        `INSERT INTO contract_types (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-ec-ct-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO employee_contracts
+           (company_id, employee_id, contract_type_id, start_date, status)
+         VALUES ($1, $2, $3, '2024-01-01', 'Draft') RETURNING id`,
+        [t.companyId, emp.rows[0].id, ct.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
   // ── G4-2 Media ──────────────────────────────────────────────────────────────
   {
     name: "channels",
@@ -1198,7 +1224,7 @@ export const RLS_TABLES: RlsTableCase[] = [
       const r = await direct.query(
         `INSERT INTO attendance_adjustment_requests
            (company_id, user_id, work_date, requested_check_in_at, reason, status, task_id)
-         VALUES ($1, $2, '2024-06-03', '2024-06-03T02:00:00Z', 'rls-reason', 'pending', $3) RETURNING id`,
+         VALUES ($1, $2, '2024-06-03', '2024-06-03T02:00:00Z', 'rls-reason', 'Pending', $3) RETURNING id`,
         [t.companyId, u, taskRes.rows[0].id],
       );
       return r.rows[0].id as string;
@@ -1297,7 +1323,7 @@ export const RLS_TABLES: RlsTableCase[] = [
       const req = await direct.query(
         `INSERT INTO attendance_adjustment_requests
            (company_id, user_id, employee_id, work_date, request_type, reason, status, requested_check_in_at)
-         VALUES ($1, $2, $3, '2026-06-03', 'MISSING_CHECK_IN', 'rls', 'pending', '2026-06-03T02:00:00Z')
+         VALUES ($1, $2, $3, '2026-06-03', 'MISSING_CHECK_IN', 'rls', 'Pending', '2026-06-03T02:00:00Z')
          RETURNING id`,
         [t.companyId, u, emp.rows[0].id],
       );

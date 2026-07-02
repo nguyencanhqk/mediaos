@@ -5,6 +5,9 @@ import { PasswordService } from "../auth/password.service";
 import { PermissionModule } from "../permission/permission.module";
 import { SecurityPolicyModule } from "../security-policy/security-policy.module";
 import { SequenceModule } from "../foundation/sequences/sequence.module";
+import { FilesModule } from "../foundation/files/files.module";
+// S2-HR-BE-6 scope FIX (additive): SettingService for company-configurable contract expiry milestones.
+import { SettingsModule } from "../foundation/settings/settings.module";
 import { EmployeesController } from "./employees.controller";
 import { EmployeesRepository } from "./employees.repository";
 import { EmployeesService } from "./employees.service";
@@ -21,6 +24,14 @@ import { HrWriteService } from "./hr-write.service";
 import { ProfileChangeRequestController } from "./profile-change-request.controller";
 import { ProfileChangeRequestRepository } from "./profile-change-request.repository";
 import { ProfileChangeRequestService } from "./profile-change-request.service";
+// S2-HR-BE-7 (additive): employee-code CONFIG admin (GET/PATCH config + POST preview via SequenceService).
+import { EmployeeCodeConfigController } from "./employee-code-config.controller";
+import { EmployeeCodeConfigRepository } from "./employee-code-config.repository";
+import { EmployeeCodeConfigService } from "./employee-code-config.service";
+// S2-HR-BE-6 (additive): employee contracts (hợp đồng lao động) CRUD + file link.
+import { ContractController } from "./contract.controller";
+import { ContractRepository } from "./contract.repository";
+import { ContractService } from "./contract.service";
 
 @Module({
   imports: [
@@ -31,6 +42,10 @@ import { ProfileChangeRequestService } from "./profile-change-request.service";
     SecurityPolicyModule,
     // S2-HR-BE-2: SequenceService cho auto-sinh employee_code (FOR UPDATE, 0-dup).
     SequenceModule,
+    // S2-HR-BE-6: FileService cho link file hợp đồng (entity 'contract').
+    FilesModule,
+    // S2-HR-BE-6 scope FIX: SettingService cho ngưỡng cảnh báo hết hạn company-configurable.
+    SettingsModule,
     MulterModule.register({ limits: { fileSize: 5 * 1024 * 1024 } }),
   ],
   controllers: [
@@ -38,6 +53,10 @@ import { ProfileChangeRequestService } from "./profile-change-request.service";
     HrReadController,
     HrWriteController,
     ProfileChangeRequestController,
+    // S2-HR-BE-7 (additive): employee-code config admin controller.
+    EmployeeCodeConfigController,
+    // S2-HR-BE-6 (additive): employee contracts controller.
+    ContractController,
   ],
   // PasswordService is stateless (argon2) — provided locally to hash generated login passwords (F7).
   providers: [
@@ -53,7 +72,19 @@ import { ProfileChangeRequestService } from "./profile-change-request.service";
     // S2-HR-BE-4 (additive): profile change request providers.
     ProfileChangeRequestService,
     ProfileChangeRequestRepository,
+    // S2-HR-BE-7 (additive): employee-code config admin providers.
+    EmployeeCodeConfigService,
+    EmployeeCodeConfigRepository,
+    // S2-HR-BE-6 (additive): employee contracts providers.
+    ContractService,
+    ContractRepository,
   ],
-  exports: [EmployeesService, HrReadService, HrWriteService, ProfileChangeRequestService],
+  exports: [
+    EmployeesService,
+    HrReadService,
+    HrWriteService,
+    ProfileChangeRequestService,
+    ContractService,
+  ],
 })
 export class EmployeesModule {}

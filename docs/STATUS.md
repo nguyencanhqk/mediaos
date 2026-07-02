@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-02 08:25Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-02 08:32Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -27,8 +27,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `wip/s2-fe-hr-5-hr5-wc` · **file đang đổi (dirty)**: 2
-- **migration head**: idx 136 — `0456_s2_fndbe3_retention_audit_object_type` (137 migration)
+- **branch**: `wip/s2-fe-hr-5-hr5-wc` · **file đang đổi (dirty)**: 314
+- **migration head**: idx 145 — `0465_s2_hrbe6_contract_scope_fix` (146 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
 
@@ -36,6 +36,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `5689ee1` | 2026-07-02 | chore(harness): mark 18 WOs done (PR #82/83/84/85 merged) + regen STATUS |
 | `46038a0` | 2026-07-02 | chore(harness): stamp pr_opened for fe-batch-a (PR #84) + fe-batch-b (PR #85) + regen STATUS |
 | `5ff5f26` | 2026-07-02 | chore(harness): stamp pr_opened for batch6 (PR #82) + regen STATUS |
 | `087ba4f` | 2026-07-02 | chore(harness): sync ledger for batch6 (7/7 done) + fe-batch-a/b progress (7/10 done) + regen STATUS |
@@ -47,7 +48,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `271bc40` | 2026-07-02 | chore(harness): reconcile S3-ATT-BE-4 + S2-FND-BE-1 stale ledger entries + reopen S2-FND-BE-2 + regen STATUS (#75) |
 | `df6d468` | 2026-07-02 | chore(harness): regen STATUS after wave3 round 1 (#71) |
 | `b91f9bd` | 2026-07-01 | chore(harness): commit stray plan docs from prior wave + regen STATUS (#67) |
-| `602fa2b` | 2026-07-01 | chore(harness): move crown-jewel PLAN stage to Sonnet 5 to cut cost (#66) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

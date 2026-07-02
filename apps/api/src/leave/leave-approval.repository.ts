@@ -88,6 +88,34 @@ export class LeaveApprovalRepository {
     return row;
   }
 
+  /**
+   * S3-INT-1 — race-safe REFUND: used_days -= delta on ONE balance row, guarded by
+   * `used_days - delta >= 0` in the WHERE so a concurrent/duplicate refund can NEVER drive used_days
+   * negative (returns undefined when the guard fails — caller treats as "already refunded / nothing to
+   * refund", part of the idempotency contract for Cancel/Revoke of an Approved+Used request).
+   */
+  async refundUsedByBalanceIdTx(
+    companyId: string,
+    data: { balanceId: string; delta: string },
+    tx: TenantTx,
+  ): Promise<typeof leaveBalances.$inferSelect | undefined> {
+    const [row] = await tx
+      .update(leaveBalances)
+      .set({
+        usedDays: sql`${leaveBalances.usedDays} - ${data.delta}::numeric`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(leaveBalances.companyId, companyId),
+          eq(leaveBalances.id, data.balanceId),
+          sql`${leaveBalances.usedDays} - ${data.delta}::numeric >= 0`,
+        ),
+      )
+      .returning();
+    return row;
+  }
+
   // ─── ATT-sync handoff mark (S3-INT-1 consumes) ───────────────────────────────
 
   /**
@@ -180,13 +208,20 @@ export interface PendingListFilters {
   status: string;
   leaveTypeId?: string;
   employeeId?: string;
+  /** org_units.id — narrows to owners in that department (employee_profiles.org_unit_id). */
+  departmentId?: string;
   fromDate?: string;
   toDate?: string;
   limit: number;
   offset: number;
 }
 
-/** Shared WHERE conds for the scoped list + count (DRY — list/count must agree exactly). */
+/**
+ * Shared WHERE conds for the scoped list + count (DRY — list/count must agree exactly). ANDed AFTER the
+ * caller's scopeCond, so departmentId can only ever NARROW within the granted data-scope (never widen it):
+ * a manager filtering by a department outside their Team still sees nothing (scopeCond wins). Both the list
+ * and count queries INNER JOIN employee_profiles, so filtering on its org_unit_id is valid for both.
+ */
 function pendingConds(companyId: string, filters: PendingListFilters) {
   const conds = [
     eq(leaveRequests.companyId, companyId),
@@ -195,6 +230,7 @@ function pendingConds(companyId: string, filters: PendingListFilters) {
   ];
   if (filters.leaveTypeId) conds.push(eq(leaveRequests.leaveTypeId, filters.leaveTypeId));
   if (filters.employeeId) conds.push(eq(leaveRequests.employeeId, filters.employeeId));
+  if (filters.departmentId) conds.push(eq(employeeProfiles.orgUnitId, filters.departmentId));
   if (filters.fromDate) conds.push(gte(leaveRequests.startDate, filters.fromDate));
   if (filters.toDate) conds.push(lte(leaveRequests.startDate, filters.toDate));
   return conds;

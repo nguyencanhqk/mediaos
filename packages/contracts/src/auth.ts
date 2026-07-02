@@ -315,3 +315,42 @@ export const securityEventListResponseSchema = z.lazy(() =>
   apiResponseSchema(z.array(securityEventListItemSchema)),
 );
 export type SecurityEventListResponse = z.infer<typeof securityEventListResponseSchema>;
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * S2-AUTH-BE-7 — Session self-service DTOs (GET /auth/sessions + revoke).
+ *
+ * NGUỒN SỰ THẬT: API-02 (session self-service) · SPEC-02 §14 · DB-02 §12.1 (user_sessions).
+ *
+ * BẤT BIẾN #3: TUYỆT ĐỐI KHÔNG phơi `refresh_token_hash`/`access_token_jti` (secret material) —
+ * list-item CHỈ chứa field forensic an toàn (device/ip/last_seen/created/current). Own-scope CHỈ:
+ * mỗi user CHỈ xem/thu hồi phiên của CHÍNH mình (owner-check ở service, KHÔNG cần permission pair
+ * riêng — pattern giống /auth/me, CHỐT 2026-07-02).
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** 1 phiên đăng nhập ACTIVE của chính user (KHÔNG lộ token/hash — BẤT BIẾN #3). */
+export const sessionListItemSchema = z.object({
+  id: z.string().uuid(),
+  device_name: z.string().nullable(),
+  platform: z.string().nullable(),
+  ip_address: z.string().nullable(),
+  user_agent: z.string().nullable(),
+  last_used_at: z.string().datetime({ offset: true }).nullable(),
+  created_at: z.string().datetime({ offset: true }),
+  expired_at: z.string().datetime({ offset: true }),
+  /** true = phiên của request hiện tại (từ jti access-token) — FE đánh dấu "phiên này". */
+  is_current: z.boolean(),
+});
+export type SessionListItem = z.infer<typeof sessionListItemSchema>;
+
+/** Envelope list session {success,message,data,error,meta} (API-01/02). z.lazy: tránh circular-init TDZ (xem note loginLogListResponseSchema). */
+export const sessionListResponseSchema = z.lazy(() =>
+  apiResponseSchema(z.array(sessionListItemSchema)),
+);
+export type SessionListResponse = z.infer<typeof sessionListResponseSchema>;
+
+/** Phản hồi revoke 1 phiên / revoke-others — {ok:true, revoked_count}. */
+export const sessionRevokeResponseSchema = z.object({
+  ok: z.literal(true),
+  revoked_count: z.number().int().nonnegative(),
+});
+export type SessionRevokeResponse = z.infer<typeof sessionRevokeResponseSchema>;

@@ -8,6 +8,7 @@ import {
   APP_REGISTRY,
   ROUTE_REGISTRY,
   getRouteMeta,
+  PERMISSION_CODE_TO_PAIR,
   type SessionContext,
   type SidebarItemMeta,
   type UserPermission,
@@ -457,6 +458,37 @@ describe("ROUTE_REGISTRY — ATT scoped routes", () => {
     expect(meta?.requiredScopes).toBeUndefined();
   });
 
+  // S3-FE-ATT-5 — shift/shift-assignment/rule: gate = CẶP ENGINE THỰC trực tiếp (KHÔNG FE code qua
+  // PERMISSION_CODE_TO_PAIR — tránh drift). Deny-path: session không có cặp này → SHOW_403.
+  it("att.shifts gate cặp engine thực view:shift", () => {
+    const meta = getRouteMeta("att.shifts");
+    expect(meta?.path).toBe("/attendance/shifts");
+    expect(meta?.requiredAnyPermissions).toEqual(["view:shift"]);
+    expect(meta?.requiredScopes).toBeUndefined();
+  });
+
+  it("att.shift-assignments gate cặp engine thực view:shift-assignment", () => {
+    const meta = getRouteMeta("att.shift-assignments");
+    expect(meta?.path).toBe("/attendance/shift-assignments");
+    expect(meta?.requiredAnyPermissions).toEqual(["view:shift-assignment"]);
+  });
+
+  it("att.rules gate cặp engine thực view:attendance-rule", () => {
+    const meta = getRouteMeta("att.rules");
+    expect(meta?.path).toBe("/attendance/rules");
+    expect(meta?.requiredAnyPermissions).toEqual(["view:attendance-rule"]);
+  });
+
+  it("deny-path: session thiếu view:shift / view:shift-assignment / view:attendance-rule → SHOW_403", () => {
+    const session = makeSession(ATT_LEAVE_SESSION());
+    const c = createPermissionChecker(EMPLOYEE_PERMS);
+    expect(evaluateRouteAccess(session, getRouteMeta("att.shifts")!, c).action).toBe("SHOW_403");
+    expect(evaluateRouteAccess(session, getRouteMeta("att.shift-assignments")!, c).action).toBe(
+      "SHOW_403",
+    );
+    expect(evaluateRouteAccess(session, getRouteMeta("att.rules")!, c).action).toBe("SHOW_403");
+  });
+
   // S3-FE-LEAVE-2: leave.approvals gate = CHỈ view:leave (LEAVE.REQUEST.VIEW), khớp BE GET /leave/requests
   // (VIEW_LEAVE). KHÔNG còn LEAVE.REQUEST.APPROVE ở cổng route (approve chỉ gate 2 nút trong page).
   it("leave.approvals gate CHỈ LEAVE.REQUEST.VIEW (KHÔNG APPROVE ở cổng route)", () => {
@@ -507,6 +539,71 @@ describe("PERMISSION_CODE_TO_PAIR — ATT/LEAVE scope pairs", () => {
     expect(stale.can("ATT.ATTENDANCE.VIEW_COMPANY")).toBe(false);
     expect(stale.can("LEAVE.REQUEST.VIEW_OWN")).toBe(false);
     expect(stale.can("LEAVE.REQUEST.VIEW")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PERMISSION_CODE_TO_PAIR — FOUNDATION company/setting (drift-guard, S2-FE-FND-1 · FND1-WC)
+// Mirror company.controller.spec: FE gate code → ĐÚNG cặp engine seed THẬT (mig 0435), KHÔNG
+// nhãn-ma FRONTEND-13 §7.1 (FOUNDATION.SYSTEM.VIEW / SETTING.SYSTEM_MANAGE chưa seed). Happy-path
+// KHÔNG bắt được drift này (admin có mọi cặp) ⇒ phải assert ánh xạ từng cặp.
+// ---------------------------------------------------------------------------
+
+describe("PERMISSION_CODE_TO_PAIR — FOUNDATION company/setting pairs (drift-guard)", () => {
+  it("FOUNDATION.COMPANY.VIEW khớp khi user có view:foundation-company (mig 0435)", () => {
+    const c = createPermissionChecker(makePerms(["view:foundation-company"]));
+    expect(c.can("FOUNDATION.COMPANY.VIEW")).toBe(true);
+    // KHÔNG kế thừa update.
+    expect(c.can("FOUNDATION.COMPANY.UPDATE")).toBe(false);
+  });
+
+  it("FOUNDATION.COMPANY.UPDATE khớp khi user có update:foundation-company", () => {
+    const c = createPermissionChecker(makePerms(["update:foundation-company"]));
+    expect(c.can("FOUNDATION.COMPANY.UPDATE")).toBe(true);
+  });
+
+  it("FOUNDATION.SETTING.UPDATE khớp khi user có update:foundation-setting", () => {
+    const c = createPermissionChecker(makePerms(["update:foundation-setting"]));
+    expect(c.can("FOUNDATION.SETTING.UPDATE")).toBe(true);
+    // view riêng biệt với update (pair-as-gate).
+    expect(c.can("FOUNDATION.SETTING.VIEW")).toBe(false);
+  });
+
+  it("view:foundation-setting KHÔNG mở khoá được UPDATE (đọc ≠ sửa)", () => {
+    const readOnly = createPermissionChecker(makePerms(["view:foundation-setting"]));
+    expect(readOnly.can("FOUNDATION.SETTING.VIEW")).toBe(true);
+    expect(readOnly.can("FOUNDATION.SETTING.UPDATE")).toBe(false);
+  });
+
+  it("cặp namespace CŨ read/update:company KHÔNG khớp FE code FOUNDATION.COMPANY.* (chống drift)", () => {
+    // mig 0005 read/update:company là namespace cũ — Foundation routes dùng *:foundation-* (mig 0435).
+    const stale = createPermissionChecker(makePerms(["read:company", "update:company"]));
+    expect(stale.can("FOUNDATION.COMPANY.VIEW")).toBe(false);
+    expect(stale.can("FOUNDATION.COMPANY.UPDATE")).toBe(false);
+  });
+
+  it("ánh xạ tường minh khớp cặp engine của controller Foundation", () => {
+    expect(PERMISSION_CODE_TO_PAIR["FOUNDATION.COMPANY.VIEW"]).toBe("view:foundation-company");
+    expect(PERMISSION_CODE_TO_PAIR["FOUNDATION.COMPANY.UPDATE"]).toBe("update:foundation-company");
+    expect(PERMISSION_CODE_TO_PAIR["FOUNDATION.SETTING.UPDATE"]).toBe("update:foundation-setting");
+  });
+
+  // S2-FE-FND-2 — regression: khoá đúng cặp engine THẬT mà AuditController/FilesController enforce
+  // (bài học drift: mapping cũ FOUNDATION.AUDIT_LOG.VIEW từng trỏ 'view:foundation-audit-log', cặp
+  // seed ở mig 0435 nhưng KHÔNG controller nào @RequirePermission nó — tạo hố FE-cho-phép/BE-403).
+  it("FOUNDATION.AUDIT_LOG.VIEW ánh xạ đúng cặp AuditController thật enforce (view:audit-log)", () => {
+    expect(PERMISSION_CODE_TO_PAIR["FOUNDATION.AUDIT_LOG.VIEW"]).toBe("view:audit-log");
+    const withRealPair = createPermissionChecker(makePerms(["view:audit-log"]));
+    expect(withRealPair.can("FOUNDATION.AUDIT_LOG.VIEW")).toBe(true);
+    // Cặp seed-nhưng-KHÔNG-enforce KHÔNG được mở khoá code FE (chống tái diễn drift).
+    const withStalePair = createPermissionChecker(makePerms(["view:foundation-audit-log"]));
+    expect(withStalePair.can("FOUNDATION.AUDIT_LOG.VIEW")).toBe(false);
+  });
+
+  it("FOUNDATION.FILE.VIEW ánh xạ đúng cặp FilesController thật enforce (view:foundation-file)", () => {
+    expect(PERMISSION_CODE_TO_PAIR["FOUNDATION.FILE.VIEW"]).toBe("view:foundation-file");
+    const c = createPermissionChecker(makePerms(["view:foundation-file"]));
+    expect(c.can("FOUNDATION.FILE.VIEW")).toBe(true);
   });
 });
 
