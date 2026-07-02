@@ -35,6 +35,8 @@ export default {
     hrPositions: "Chức vụ",
     hrJobLevels: "Cấp bậc",
     hrContractTypes: "Loại hợp đồng",
+    // S2-FE-HR-7 — Hợp đồng lao động
+    hrContracts: "Hợp đồng lao động",
     attToday: "Chấm công hôm nay",
     attMyRecords: "Bảng công của tôi",
     attTeamRecords: "Bảng công nhóm",

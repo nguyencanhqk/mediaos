@@ -77,6 +77,30 @@ export const hrKeys = {
     // S2-FE-HR-5 (lane HR5-WC) — APPEND detail (GET/PATCH /hr/master-data/contract-types/:id).
     detail: (id: string) => [...rootKeys.hr, "contract-types", "detail", id] as const,
   },
+  // S2-FE-HR-7 — APPEND. Employee contracts (hợp đồng lao động): danh sách toàn công ty + theo nhân viên.
+  contracts: {
+    all: [...rootKeys.hr, "contracts"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "contracts", "list", params] as const,
+    byEmployee: (employeeId: string, params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "contracts", "by-employee", employeeId, params] as const,
+    detail: (id: string) => [...rootKeys.hr, "contracts", "detail", id] as const,
+  },
+};
+
+// S2-FE-HR-7 — mutation → invalidation cho hợp đồng nhân viên. Prefix (bỏ slot params) khớp mọi biến
+// thể param'd. Sau create/update/delete/link-file: làm mới cả danh sách công ty lẫn danh sách theo NV.
+const hrContractsListPrefix = [...rootKeys.hr, "contracts", "list"] as const;
+const hrContractsByEmployeePrefix = [...rootKeys.hr, "contracts", "by-employee"] as const;
+
+export const hrContractsInvalidation = {
+  mutate: (employeeId?: string): readonly (readonly unknown[])[] => {
+    const keys: (readonly unknown[])[] = [hrContractsListPrefix];
+    keys.push(
+      employeeId ? [...hrContractsByEmployeePrefix, employeeId] : hrContractsByEmployeePrefix,
+    );
+    return keys;
+  },
 };
 
 // S2-FE-HR-5 (lane HR5-WC) — mutation → invalidation cho HR master-data. Sau create/update/delete:

@@ -123,6 +123,9 @@ import { DepartmentsPage } from "@/routes/hr/departments/DepartmentsPage";
 import { PositionsPage } from "@/routes/hr/positions/PositionsPage";
 import { JobLevelsPage } from "@/routes/hr/job-levels/JobLevelsPage";
 import { ContractTypesPage } from "@/routes/hr/contract-types/ContractTypesPage";
+// S2-FE-HR-7 — Hợp đồng lao động (company-wide + theo nhân viên)
+import { ContractsPage } from "@/routes/hr/contracts/ContractsPage";
+import { EmployeeContractsPage } from "@/routes/hr/employees/EmployeeContractsPage";
 
 // Attendance
 import { AttendanceTodayPage } from "@/routes/attendance/AttendanceTodayPage";
@@ -181,6 +184,8 @@ const hrContractTypesRoute = makeModuleRoute(
   "HR",
   ContractTypesPage,
 );
+// S2-FE-HR-7 — Hợp đồng lao động toàn công ty (đọc, theo data-scope). Cổng route = HR.CONTRACT.VIEW.
+const hrContractsRoute = makeModuleRoute("/hr/contracts", "hr.contracts", "HR", ContractsPage);
 
 // HR employee create — static "new" segment ranks above the "$employeeId" param route, so it never
 // collides with detail. Reuses hr.employees meta (route-level VIEW gate); EmployeeFormPage applies the
@@ -225,6 +230,9 @@ const hrEmployeeDetailRoute = createRoute({
         onEdit={() =>
           void navigate({ to: "/hr/employees/$employeeId/edit", params: { employeeId } })
         }
+        onContracts={() =>
+          void navigate({ to: "/hr/employees/$employeeId/contracts", params: { employeeId } })
+        }
       />,
     );
   },
@@ -245,6 +253,28 @@ const hrEmployeeEditRoute = createRoute({
       hrEmployeeEditMeta,
       "HR",
       <EmployeeFormPage employeeId={employeeId} onSuccess={toDetail} onCancel={toDetail} />,
+    );
+  },
+});
+
+// HR employee contracts — /hr/employees/:id/contracts (S2-FE-HR-7). Reuses hr.employees meta (route-level
+// HR.EMPLOYEE.VIEW gate); EmployeeContractsPage applies the finer view/manage:contract useCan checks —
+// server PermissionGuard is the real gate (mirrors hrEmployeeEditRoute pattern).
+const hrEmployeeContractsMeta = getMeta("hr.employees");
+const hrEmployeeContractsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/employees/$employeeId/contracts",
+  beforeLoad: authGuard,
+  component: () => {
+    const { employeeId } = hrEmployeeContractsRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      hrEmployeeContractsMeta,
+      "HR",
+      <EmployeeContractsPage
+        employeeId={employeeId}
+        onBack={() => void navigate({ to: "/hr/employees/$employeeId", params: { employeeId } })}
+      />,
     );
   },
 });
@@ -518,11 +548,13 @@ const routeTree = rootRoute.addChildren([
   hrEmployeeCreateRoute,
   hrEmployeeDetailRoute,
   hrEmployeeEditRoute,
+  hrEmployeeContractsRoute,
   hrMeRoute,
   hrDepartmentsRoute,
   hrPositionsRoute,
   hrJobLevelsRoute,
   hrContractTypesRoute,
+  hrContractsRoute,
   attTodayRoute,
   attMyRecordsRoute,
   attTeamRecordsRoute,

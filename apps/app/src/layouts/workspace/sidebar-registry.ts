@@ -102,6 +102,17 @@ export const HR_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 43,
     requiredAnyPermissions: ["HR.MASTER_DATA.MANAGE"],
   },
+  // S2-FE-HR-7 — Hợp đồng lao động (đọc, theo data-scope Own/Team/Company qua cặp view:contract).
+  {
+    sidebarKey: "hr.contracts",
+    moduleCode: "HR",
+    label: "Hợp đồng lao động",
+    path: "/hr/contracts",
+    icon: "file-signature",
+    group: "operation",
+    order: 50,
+    requiredAnyPermissions: ["HR.CONTRACT.VIEW"],
+  },
 ];
 
 // ---------------------------------------------------------------------------

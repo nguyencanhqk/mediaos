@@ -77,6 +77,8 @@ export {
   // S2-FE-HR-5 (lane HR5-WC): HR master-data mutation → list invalidation.
   hrMasterDataInvalidation,
   foundationInvalidation,
+  // S2-FE-HR-7: employee contracts mutation → list invalidation.
+  hrContractsInvalidation,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -92,6 +94,10 @@ export { hrApi } from "./lib/hr-api";
 export { hrMasterDataApi, type HrDepartment } from "./lib/hr-master-data-api";
 export { leaveApi } from "./lib/leave-api";
 export { attendanceApi } from "./lib/attendance-api";
+// S2-FE-HR-7: employee contracts (hợp đồng lao động) CRUD client.
+export { contractsApi } from "./lib/contracts-api";
+// S2-FE-HR-7: file download-url client (foundation file subsystem, TTL-ngắn, KHÔNG lộ storage_path).
+export { filesApi } from "./lib/files-api";
 export {
   foundationApi,
   safeSettingViewSchema,
