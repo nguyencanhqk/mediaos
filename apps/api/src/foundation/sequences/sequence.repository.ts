@@ -66,6 +66,74 @@ export class SequenceRepository {
   }
 
   /**
+   * S2-FND-BE-2 — Liệt kê MỌI counter của tenant (admin ops surface). READ-ONLY: SELECT eq(company_id) +
+   * deleted_at IS NULL (KHÔNG global NULL — chỉ counter tenant, mirror listPolicies). Sắp module_code,
+   * sequence_key ổn định. KHÔNG mutate.
+   */
+  async listCountersTx(companyId: string, tx: TenantTx): Promise<SequenceCounter[]> {
+    return tx
+      .select()
+      .from(sequenceCounters)
+      .where(and(eq(sequenceCounters.companyId, companyId), isNull(sequenceCounters.deletedAt)))
+      .orderBy(sequenceCounters.moduleCode, sequenceCounters.sequenceKey);
+  }
+
+  /**
+   * S2-FND-BE-2 — Đọc 1 counter theo id trong tenant (cho GET :id/preview + PATCH :id). READ-ONLY, KHÔNG
+   * lock. eq(company_id) tường minh + deleted_at IS NULL (RLS+FORCE là lớp cuối). Cross-tenant / id lạ ⇒
+   * undefined ⇒ service ném NotFound (404, KHÔNG lộ tồn tại hàng tenant khác).
+   */
+  async findCounterByIdTx(
+    companyId: string,
+    id: string,
+    tx: TenantTx,
+  ): Promise<SequenceCounter | undefined> {
+    const [row] = await tx
+      .select()
+      .from(sequenceCounters)
+      .where(
+        and(
+          eq(sequenceCounters.id, id),
+          eq(sequenceCounters.companyId, companyId),
+          isNull(sequenceCounters.deletedAt),
+        ),
+      )
+      .limit(1);
+    return row;
+  }
+
+  /**
+   * S2-FND-BE-2 — Admin PATCH cấu hình counter THEO id (mirror updateConfigTx nhưng khoá theo id +
+   * company_id). CHỈ field cấu hình — KHÔNG current_value (anti-tamper). `actorUserId` ghi updated_by.
+   */
+  async updateConfigByIdTx(
+    companyId: string,
+    id: string,
+    input: UpdateSequenceInput,
+    tx: TenantTx,
+  ): Promise<void> {
+    const values: Record<string, unknown> = { updatedAt: new Date() };
+    if (input.prefix !== undefined) values["prefix"] = input.prefix;
+    if (input.suffix !== undefined) values["suffix"] = input.suffix;
+    if (input.datePattern !== undefined) values["formatPattern"] = input.datePattern;
+    if (input.paddingLength !== undefined) values["paddingLength"] = input.paddingLength;
+    if (input.incrementBy !== undefined) values["incrementBy"] = input.incrementBy;
+    if (input.resetPolicy !== undefined) values["resetPolicy"] = input.resetPolicy;
+    if (input.status !== undefined) values["status"] = input.status;
+    if (input.actorUserId !== undefined) values["updatedBy"] = input.actorUserId;
+    await tx
+      .update(sequenceCounters)
+      .set(values)
+      .where(
+        and(
+          eq(sequenceCounters.id, id),
+          eq(sequenceCounters.companyId, companyId),
+          isNull(sequenceCounters.deletedAt),
+        ),
+      );
+  }
+
+  /**
    * Ghi giá trị mới + mã vừa sinh + mốc reset (nextCode). CHỈ cột giá trị runtime — KHÔNG đụng cấu hình.
    * `lastResetAt` truyền khi kỳ reset đổi (kỳ mới); undefined = giữ nguyên.
    */

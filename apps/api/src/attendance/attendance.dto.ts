@@ -1,16 +1,13 @@
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
 import {
-  adjustmentListQuerySchema,
   attendanceListQuerySchema,
   attendanceRecordListQuerySchema,
   checkInSchema,
   checkOutSchema,
-  createAdjustmentRequestSchema,
   createWorkScheduleSchema,
   listPaginationSchema,
   periodMonthSchema,
-  reviewNoteSchema,
   updateWorkScheduleSchema,
 } from "@mediaos/contracts";
 
@@ -18,10 +15,8 @@ export class CheckInDto extends createZodDto(checkInSchema) {}
 export class CheckOutDto extends createZodDto(checkOutSchema) {}
 export class CreateWorkScheduleDto extends createZodDto(createWorkScheduleSchema) {}
 export class UpdateWorkScheduleDto extends createZodDto(updateWorkScheduleSchema) {}
-export class CreateAdjustmentDto extends createZodDto(createAdjustmentRequestSchema) {}
-export class ReviewNoteDto extends createZodDto(reviewNoteSchema) {}
+// S3-ATT-BE-4: adjustment DTOs (create/list/approve/reject/direct) moved to attendance-adjustment.dto.ts.
 export class AttendanceListQueryDto extends createZodDto(attendanceListQuerySchema) {}
-export class AdjustmentListQueryDto extends createZodDto(adjustmentListQuerySchema) {}
 /** S3-ATT-BE-2 — GET /attendance/{my-records,team-records,records} query (page-based + filter + sort). */
 export class AttendanceRecordListQueryDto extends createZodDto(attendanceRecordListQuerySchema) {}
 /** GET /attendance/periods — phân trang danh sách kỳ công. */

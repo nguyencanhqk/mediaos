@@ -210,6 +210,12 @@ export function LeaveRequestDetailPage({ requestId }: LeaveRequestDetailPageProp
     LEAVE_ENGINE_PAIRS.CANCEL_OWN.resourceType,
   );
 
+  // S3-FE-LEAVE-3 — nút "Sửa" liên kết tới /leave/requests/:id/edit (chỉ khả dụng khi Draft).
+  const canUpdateDraft = useCan(
+    LEAVE_ENGINE_PAIRS.UPDATE_DRAFT.action,
+    LEAVE_ENGINE_PAIRS.UPDATE_DRAFT.resourceType,
+  );
+
   // QA05-LEAVE-004: gate view-own:leave — block fetch + show forbidden when missing
   const canViewRequest = useCan(
     LEAVE_ENGINE_PAIRS.VIEW_OWN_REQUEST.action,
@@ -304,6 +310,7 @@ export function LeaveRequestDetailPage({ requestId }: LeaveRequestDetailPageProp
   const req: LeaveRequestDetailView = data;
   const canCancel =
     canCancelOwn && (req.status === LEAVE_STATUS.DRAFT || req.status === LEAVE_STATUS.PENDING);
+  const canEdit = canUpdateDraft && req.status === LEAVE_STATUS.DRAFT;
   const cancelError = cancelMutation.error ? t("detail.cancelError") : null;
 
   return (
@@ -395,16 +402,27 @@ export function LeaveRequestDetailPage({ requestId }: LeaveRequestDetailPageProp
       </Card>
 
       {/* Actions */}
-      {canCancel && (
-        <div className="flex justify-end">
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setShowCancelDialog(true)}
-            disabled={cancelMutation.isPending}
-          >
-            {t("detail.actions.cancel")}
-          </Button>
+      {(canEdit || canCancel) && (
+        <div className="flex justify-end gap-3">
+          {canEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void navigate({ to: LEAVE_PATHS.EDIT(requestId) as "/" })}
+            >
+              {t("detail.actions.edit")}
+            </Button>
+          )}
+          {canCancel && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowCancelDialog(true)}
+              disabled={cancelMutation.isPending}
+            >
+              {t("detail.actions.cancel")}
+            </Button>
+          )}
         </div>
       )}
 

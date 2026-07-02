@@ -23,6 +23,7 @@ export class UpdateLeaveTypeDto extends createZodDto(updateLeaveTypeSchema) {}
 export class UpsertLeaveBalanceDto extends createZodDto(upsertLeaveBalanceSchema) {}
 export class CreateLeaveRequestDto extends createZodDto(createLeaveRequestSchema) {}
 export class LeaveListQueryDto extends createZodDto(leaveListQuerySchema) {}
+// S3-LEAVE-BE-5: scope=own|team|company + [from,to] (replaces the old unscoped month-only query).
 export class LeaveCalendarQueryDto extends createZodDto(leaveCalendarQuerySchema) {}
 export class ReviewNoteDto extends createZodDto(reviewNoteSchema) {}
 // S3-LEAVE-BE-1: preview body (server-authoritative — client employee_id/calculated_* stripped by Zod).

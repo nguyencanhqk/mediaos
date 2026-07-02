@@ -109,6 +109,7 @@ export default {
     titleCreate: "Tạo đơn nghỉ phép",
     titleEdit: "Chỉnh sửa đơn nghỉ",
     descriptionCreate: "Điền thông tin để tạo đơn nghỉ phép",
+    descriptionEdit: "Chỉnh sửa đơn nghỉ đang ở trạng thái nháp",
     sections: {
       basic: "Thông tin nghỉ",
       timing: "Thời gian nghỉ",
@@ -159,6 +160,7 @@ export default {
     },
     buttons: {
       saveDraft: "Lưu nháp",
+      saveChanges: "Lưu thay đổi",
       submit: "Gửi đơn",
       cancel: "Hủy",
       submitting: "Đang gửi…",
@@ -175,6 +177,7 @@ export default {
       validation: "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.",
       server: "Lỗi máy chủ. Vui lòng thử lại sau.",
       generic: "Đã có lỗi xảy ra. Vui lòng thử lại.",
+      notDraft: "Đơn không còn ở trạng thái nháp nên không thể sửa. Vui lòng tải lại trang.",
     },
     dirty: "Bạn có thay đổi chưa lưu trong form đơn nghỉ. Nếu rời trang, dữ liệu sẽ bị mất.",
     forbidden: {
@@ -233,6 +236,7 @@ export default {
       },
     },
     actions: {
+      edit: "Sửa đơn",
       cancel: "Hủy đơn",
       cancelConfirm: "Bạn có chắc muốn hủy đơn nghỉ này không?",
       cancelReason: "Lý do hủy",
@@ -331,6 +335,80 @@ export default {
     forbidden: {
       title: "Không có quyền truy cập",
       description: "Bạn không có quyền xem đơn nghỉ cần duyệt.",
+    },
+  },
+
+  // ── Tất cả đơn nghỉ phép (LEAVE-SCREEN-006 · S3-FE-LEAVE-3) ───────────────────
+  allRequests: {
+    title: "Tất cả đơn nghỉ phép",
+    description: "Toàn bộ đơn nghỉ phép trong phạm vi quyền của bạn",
+    columns: {
+      requester: "Người gửi",
+      leaveType: "Loại nghỉ",
+      period: "Thời gian",
+      days: "Số ngày",
+      status: "Trạng thái",
+      actions: "Hành động",
+    },
+    filters: {
+      status: "Trạng thái",
+      allTypes: "Tất cả loại",
+      allDepartments: "Tất cả phòng ban",
+      fromDate: "Từ ngày",
+      toDate: "Đến ngày",
+    },
+    actions: {
+      view: "Xem chi tiết",
+      back: "Đóng",
+    },
+    detail: {
+      title: "Chi tiết đơn nghỉ",
+      requester: "Người gửi",
+      employeeCode: "Mã nhân viên",
+      department: "Phòng ban",
+      leaveType: "Loại nghỉ",
+      period: "Thời gian",
+      totalDays: "Số ngày",
+      totalHours: "Số giờ",
+      status: "Trạng thái",
+      reason: "Lý do nghỉ",
+      submittedAt: "Ngày gửi",
+      approvedAt: "Ngày duyệt",
+      rejectedAt: "Ngày từ chối",
+      rejectionReason: "Lý do từ chối",
+    },
+    empty: {
+      title: "Không có đơn nghỉ",
+      description: "Không tìm thấy đơn nghỉ nào phù hợp với bộ lọc hiện tại.",
+    },
+    error: {
+      title: "Không thể tải danh sách",
+      description: "Có lỗi khi tải danh sách đơn nghỉ. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem tất cả đơn nghỉ phép.",
+    },
+  },
+
+  // ── Sửa đơn nghỉ nháp (LEAVE-SCREEN-002E · S3-FE-LEAVE-3) ─────────────────────
+  editForm: {
+    error: {
+      title: "Không thể tải đơn nghỉ",
+      description: "Có lỗi khi tải đơn nghỉ để sửa. Vui lòng thử lại.",
+    },
+    notFound: {
+      title: "Không tìm thấy đơn nghỉ",
+      description: "Đơn nghỉ không tồn tại hoặc bạn không có quyền sửa.",
+    },
+    notDraft: {
+      title: "Không thể sửa đơn này",
+      description: "Chỉ sửa được đơn nghỉ đang ở trạng thái nháp (Draft).",
+    },
+    backToDetail: "Xem chi tiết đơn",
+    forbidden: {
+      title: "Không có quyền sửa đơn",
+      description: "Bạn không có quyền sửa đơn nghỉ nháp.",
     },
   },
 };

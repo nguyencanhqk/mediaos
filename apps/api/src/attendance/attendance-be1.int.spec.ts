@@ -108,7 +108,6 @@ function buildService(): AttendanceService {
     db,
     new AttendanceRepository(db),
     { can: async () => ({ allow: true }) } as never, // controller-level gate covered by HTTP test
-    {} as never, // hrTasks unused by today/check-in/check-out
     new AuditService(),
     new OutboxService(),
   );
