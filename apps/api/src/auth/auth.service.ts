@@ -409,11 +409,10 @@ export class AuthService {
     }
     await this.rateLimiter.reset(rlKey);
 
-    const {
-      tokens,
-      userId: twoFaUserId,
-      email: twoFaEmail,
-    } = await this.dbsvc.withTenant(claims.companyId, async (tx) => {
+    // S2-AUTH-BE-10 (PLAN-FIX #3): khối withTenant trả DISCRIMINATED UNION sentinel THAY VÌ ném trong tx.
+    // Nhánh company-inactive PHẢI ghi audit login_blocked TRONG tx rồi COMMIT (ném 401 NGOÀI block) — nếu
+    // ném-trong-tx thì db.service rollback nuốt luôn audit (int-spec b2 chứng minh audit COMMIT không rollback).
+    const result = await this.dbsvc.withTenant(claims.companyId, async (tx) => {
       const [user] = await tx
         .select({
           id: users.id,
@@ -424,10 +423,32 @@ export class AuthService {
         .from(users)
         .where(eq(users.id, claims.sub))
         .limit(1);
-      // AUTH-FIX-1: đóng path login THỨ 3 (2FA bước 2). Trước đây chỉ check deletedAt → user suspended có
-      // bật 2FA VẪN cấp token. Cộng allow-list status==='active' (fail-closed) → 401 ĐỒNG NHẤT, KHÔNG cấp token.
+      // AUTH-FIX-1: đóng path login THỨ 3 (2FA bước 2). user suspended/deleted có bật 2FA → 401 ĐỒNG NHẤT,
+      // KHÔNG cấp token. Nhánh này KHÔNG ghi audit (không có vết cần commit) → return sentinel, ném ngoài block.
       if (!user || user.deletedAt || !isAuthorizedStatus(user.status)) {
-        throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
+        return { kind: "invalid" as const };
+      }
+      // S2-AUTH-BE-10: cổng COMPANY-active cho path login THỨ 3. user active nhưng CÔNG TY 'suspended' (hoặc
+      // row companies VẮNG do RLS lọc/soft-delete/race) ⇒ CHẶN cấp token. Đọc companies bằng PREDICATE TƯỜNG
+      // MINH eq(companies.id, claims.companyId) (mirror me()). FAIL-CLOSED: company undefined ⇒ inactive. GHI
+      // audit login_blocked reason='company_inactive' TRONG tx (append-only) + return sentinel → ném 401 NGOÀI
+      // block để tx COMMIT KÈM audit. Login MỚI: KHÔNG có family refresh để thu hồi (chưa cấp token bước-2).
+      const [company] = await tx
+        .select({ status: companies.status })
+        .from(companies)
+        .where(eq(companies.id, claims.companyId))
+        .limit(1);
+      if (!company || !isAuthorizedStatus(company.status)) {
+        await this.audit.record(tx, {
+          action: "auth.login_blocked",
+          objectType: "auth",
+          actorUserId: user.id,
+          objectId: user.id,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+          after: { reason: "company_inactive" },
+        });
+        return { kind: "blocked_company" as const };
       }
       const issued = await this.issueTokens(
         tx,
@@ -446,8 +467,15 @@ export class AuthService {
         userAgent: meta.userAgent,
         after: { via: "2fa" },
       });
-      return { tokens: issued.tokens, userId: user.id, email: user.email };
+      return { kind: "ok" as const, tokens: issued.tokens, userId: user.id, email: user.email };
     });
+
+    // Ném 401 ĐỒNG NHẤT NGOÀI tx: với blocked_company, tx đã COMMIT kèm audit login_blocked (bằng chứng ở
+    // int-spec b2); với invalid, tx rỗng nên commit vô hại. reason KHÔNG lộ vào HTTP body (anti status-probing).
+    if (result.kind === "invalid" || result.kind === "blocked_company") {
+      throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
+    }
+    const { tokens, userId: twoFaUserId, email: twoFaEmail } = result;
     // CS-7: ghi last_login_at + reset failed_login_count BEST-EFFORT (2FA path — không block login nếu lỗi).
     this.writeLastLoginAt(claims.companyId, twoFaUserId).catch((err) => {
       this.logger.warn(
@@ -646,6 +674,36 @@ export class AuthService {
           ip: meta.ip,
           userAgent: meta.userAgent,
           after: { reason: "suspended", familyRevoked: true },
+        });
+        return { kind: "invalid" as const };
+      }
+
+      // S2-AUTH-BE-10: cổng COMPANY-active. Token còn sống + user active nhưng CÔNG TY 'suspended' (hoặc
+      // row companies VẮNG do RLS lọc / soft-delete / race) ⇒ CHẶN xoay token y như user-suspended. Đọc
+      // companies bằng PREDICATE TƯỜNG MINH eq(companies.id, companyId) trong CÙNG tx (mirror me()) —
+      // defense-in-depth, KHÔNG dựa thuần RLS. FAIL-CLOSED: company undefined ⇒ coi như inactive (KHÔNG
+      // dereference row undefined → tránh TypeError/500). Thu hồi CẢ HỌ token (family, RLS tự lọc company_id)
+      // + user_sessions (revoked_reason='company_inactive') + audit deny (cùng tx, append-only; reason CHỈ ở
+      // audit_logs). return invalid → caller ném 401 ĐỒNG NHẤT ngoài tx (controller xoá cookie).
+      const [company] = await tx
+        .select({ status: companies.status })
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .limit(1);
+      if (!company || !isAuthorizedStatus(company.status)) {
+        await tx
+          .update(refreshTokens)
+          .set({ revokedAt: new Date() })
+          .where(and(eq(refreshTokens.familyId, row.familyId), isNull(refreshTokens.revokedAt)));
+        await this.revokeAllSessionsForUserTx(tx, user.id, "company_inactive");
+        await this.audit.record(tx, {
+          action: "auth.refresh_blocked",
+          objectType: "auth",
+          actorUserId: user.id,
+          objectId: user.id,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+          after: { reason: "company_inactive", familyRevoked: true },
         });
         return { kind: "invalid" as const };
       }
