@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-02 10:02Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-02 10:06Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -41,7 +41,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `wip/s2-fe-hr-5-hr5-wc` · **file đang đổi (dirty)**: 82
+- **branch**: `wip/s2-fe-hr-5-hr5-wc` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 145 — `0465_s2_hrbe6_contract_scope_fix` (146 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -50,18 +50,18 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `74f989a` | 2026-07-02 | Merge remote-tracking branch 'origin/master' into wip/s2-fe-hr-5-hr5-wc |
 | `421105e` | 2026-07-02 | chore(harness): seed 15 WO carry-over từ audit Foundation/System 2026-07-02 + báo cáo audit + regen STATUS |
+| `efc3399` | 2026-07-02 | chore(harness): regen STATUS sau reconcile 31 WO shipped qua batch-squash (#68/#72/#82/#84/#85/#87/#88) — board còn 4 ready thật (QA-1/QA-2/LEAVE-5/LEAVE-6) (#89) |
+| `76794c4` | 2026-07-02 | feat(sprint2): FE Role/Permission admin + account sessions + FND sequences/seeds (#88) |
+| `e9ad014` | 2026-07-02 | feat(sprint2/3): FE HR contracts + ATT remote-work (Draft→submit FSM) + ATT reports/audit-logs (#87) |
+| `be576d7` | 2026-07-02 | feat(S3-LEAVE-BE-6): LEAVE reports + balance transactions + audit read (P2) (#86) |
 | `5ba414f` | 2026-07-02 | chore(harness): reflect parallel session progress (S3-LEAVE-BE-6 PR#86 open, 5 WO committed in fe-batch-c/d) + regen STATUS |
 | `1e44be3` | 2026-07-02 | merge: sync wip/s2-fe-hr-5-hr5-wc with origin/master |
 | `5689ee1` | 2026-07-02 | chore(harness): mark 18 WOs done (PR #82/83/84/85 merged) + regen STATUS |
 | `5268d30` | 2026-07-02 | feat(sprint2/3): FE FND holidays/retention/file-access + HR org-chart/employee-code + ATT adjustment (#85) |
 | `9b5be4b` | 2026-07-02 | feat(sprint2): FE Auth self-service + User admin + FND audit/module-catalog + HR change-request (#84) |
 | `f250446` | 2026-07-02 | feat(S3-FE-LEAVE-4): FE Lịch nghỉ /leave/calendar (own/team/company theo scope) (#83) |
-| `46038a0` | 2026-07-02 | chore(harness): stamp pr_opened for fe-batch-a (PR #84) + fe-batch-b (PR #85) + regen STATUS |
-| `e71117f` | 2026-07-02 | feat(sprint2/3): unblock 7 crown-jewel WOs — role/session/contracts/leave-admin/sync/remote-work/att-reports (#82) |
-| `80a1bcd` | 2026-07-02 | feat(s3): Sprint 3 wave 3 — ATT shift/rule + adjustment FSM, LEAVE calendar, FND module catalog + seq/seed ops, HR master-data admin, FE ATT/LEAVE/FND/HR screens (#81) |
-| `5ff5f26` | 2026-07-02 | chore(harness): stamp pr_opened for batch6 (PR #82) + regen STATUS |
-| `087ba4f` | 2026-07-02 | chore(harness): sync ledger for batch6 (7/7 done) + fe-batch-a/b progress (7/10 done) + regen STATUS |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
