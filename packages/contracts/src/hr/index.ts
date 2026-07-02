@@ -12,3 +12,5 @@ export * from "./master-data";
 export * from "./profile-change-request";
 // S2-HR-BE-7 (additive): employee-code CONFIG admin DTOs (API-03 §10.10 HR-API-901/902/903).
 export * from "./employee-code-config";
+// S2-HR-BE-6 (additive): employee contracts (hợp đồng lao động) DTOs (DB-03 §7.7).
+export * from "./contracts";
