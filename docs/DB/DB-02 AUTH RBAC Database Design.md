@@ -168,10 +168,10 @@ NOTI.NOTIFICATION.READ
 
 > **CHỐT 2026-07-02: code thắng** — `data_scope` canonical = `Own/Team/Department/Company/System` (5 bậc). `ROLE_DATA_SCOPES` (apps/api/src/db/schema/permissions.ts:153) khớp contracts `DATA_SCOPES` (packages/contracts/src/auth.ts:95), CHECK ở mig 0441. Giá trị `Project` ở bảng dưới ĐÃ BỎ CÓ CHỦ Ý trong code. Lý do: TASK định phạm vi dự án qua project-membership, không nhồi thành một bậc trong thang data_scope tuyến-tính.
 >
-> **OWNER-DECISION (data_scope 'Project') — BLOCKED-on-owner (chờ owner chốt):**
-> - Đề xuất mặc định (khớp code hiện tại): GIỮ 5 bậc `Own/Team/Department/Company/System`; TASK dùng bảng `project_members` / project-membership để lọc phạm vi dự án, KHÔNG thêm bậc `data_scope = 'Project'` (tránh vỡ thứ tự "mạnh nhất" tuyến tính System > Company > Department > Team > Own).
-> - Phương án thay thế (chỉ nếu owner yêu cầu): thêm lại `'Project'` vào `ROLE_DATA_SCOPES` + CHECK (migration mới) + contracts `DATA_SCOPES` + `DataScopeResolver` — đồng bộ 3 nơi.
-> - Trạng thái: CHƯA có owner sign-off → mục 'Project' BLOCKED-on-owner; các pin còn lại vẫn ship.
+> **OWNER-DECISION (data_scope 'Project') — ĐÃ CHỐT 2026-07-02 (Cian, Product Owner):**
+> - **GIỮ 5 bậc** `Own/Team/Department/Company/System`. TASK định phạm vi dự án qua **project-membership** (bảng `project_members`, check ở service layer của TASK) — KHÔNG thêm bậc `data_scope = 'Project'`.
+> - Lý do: Project là quan hệ THÀNH VIÊN (một dự án có thể xuyên phòng ban), không xếp được vào trục phân cấp tuyến tính System > Company > Department > Team > Own của `resolveStrongestScope`; thêm bậc engine-level cho giá trị chưa module nào dùng là speculative (YAGNI).
+> - Nếu Sprint TASK phát hiện thật sự cần scope engine-level: thêm lại `'Project'` vào `ROLE_DATA_SCOPES` + CHECK (migration mới) + contracts `DATA_SCOPES` + `DataScopeResolver` — additive, không phá gì; phải kèm thiết kế semantics riêng (membership-based, KHÔNG so sánh "mạnh nhất" với các bậc org).
 
 Data scope quyết định phạm vi dữ liệu mà permission được áp dụng:
 

@@ -343,6 +343,7 @@ Khu vực này dành cho các quyết định **chưa thuộc 15 câu hỏi SPEC
 | D-19  | Chính sách lưu giữ (retention) log & audit           | **COMPLIANCE-01**             | Chờ        | Liên kết D-15 |
 | D-20  | Cơ chế ủy quyền duyệt khi manager vắng               | DECISIONS-02 (phase sau)      | Chờ        | Liên kết D-04 |
 | D-21  | Quét virus file upload                               | **DEVOPS-01** / BACKEND-11    | Chờ        | BACKEND-01 §20.6 "có thể đưa phase sau" |
+| D-22  | data_scope `'Project'`: widen CHECK hay dùng project-membership cho TASK | **DB-02 §4.7** | **Đã chốt 02/07/2026** | Cian chốt: GIỮ 5 bậc data_scope; TASK phân quyền dự án qua `project_members` ở service layer, KHÔNG thêm bậc engine-level (chi tiết + đường mở lại: DB-02 §4.7) |
 | ...   | *(thêm khi phát sinh)*                               |                               |            |         |
 
 > **Lưu ý:** **DEVOPS-01** (hạ tầng/triển khai) và **COMPLIANCE-01** (pháp lý/tuân thủ NĐ13, bảo vệ dữ liệu cá nhân, retention, RPO/RTO) là **hai tài liệu song hành đang được tạo**. Các quyết định hạ tầng và pháp lý được giữ ở đó để tránh trùng lặp; DECISIONS-01 chỉ giữ con trỏ tham chiếu.
