@@ -119,6 +119,17 @@ import { EmployeeListPage } from "@/routes/hr/employees/EmployeeListPage";
 import { EmployeeDetailPage } from "@/routes/hr/employees/EmployeeDetailPage";
 import { EmployeeFormPage } from "@/routes/hr/employees/EmployeeFormPage";
 import { MyProfilePage } from "@/routes/hr/me/MyProfilePage";
+// HR — Profile change request workflow (S2-FE-HR-4)
+import { MyChangeRequestPage } from "@/routes/hr/profile-change-requests/MyChangeRequestPage";
+import { ProfileChangeRequestListPage } from "@/routes/hr/profile-change-requests/ProfileChangeRequestListPage";
+import { ProfileChangeRequestDetailPage } from "@/routes/hr/profile-change-requests/ProfileChangeRequestDetailPage";
+import {
+  PCR_ME_PATH,
+  PCR_LIST_PATH,
+  PCR_ME_ROUTE_META,
+  PCR_LIST_ROUTE_META,
+  PCR_DETAIL_ROUTE_META,
+} from "@/routes/hr/profile-change-requests/constants";
 
 // Attendance
 import { AttendanceTodayPage } from "@/routes/attendance/AttendanceTodayPage";
@@ -177,6 +188,35 @@ import { ChangePasswordPage } from "@/routes/account/ChangePasswordPage";
 const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", EmployeeListPage);
 const hrEmployeesRoute = makeModuleRoute("/hr/employees", "hr.employees", "HR", EmployeeListPage);
 const hrMeRoute = makeModuleRoute("/hr/me", "hr.me", "HR", MyProfilePage);
+
+// Profile change request workflow (S2-FE-HR-4) — RouteMeta CỤC BỘ (literal engine pair, KHÔNG đụng
+// ROUTE_REGISTRY của web-core — cùng kỹ thuật system.login-logs/system.files).
+const hrMeChangeRequestRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: PCR_ME_PATH,
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(PCR_ME_ROUTE_META, "HR", <MyChangeRequestPage />),
+});
+const hrProfileChangeRequestsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: PCR_LIST_PATH,
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(PCR_LIST_ROUTE_META, "HR", <ProfileChangeRequestListPage />),
+});
+const hrProfileChangeRequestDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/profile-change-requests/$id",
+  beforeLoad: authGuard,
+  component: () => {
+    const { id } = hrProfileChangeRequestDetailRoute.useParams();
+    return buildModuleRouteContent(
+      PCR_DETAIL_ROUTE_META,
+      "HR",
+      <ProfileChangeRequestDetailPage requestId={id} />,
+    );
+  },
+});
 
 // HR employee create — static "new" segment ranks above the "$employeeId" param route, so it never
 // collides with detail. Reuses hr.employees meta (route-level VIEW gate); EmployeeFormPage applies the
@@ -678,6 +718,9 @@ const routeTree = rootRoute.addChildren([
   hrEmployeeDetailRoute,
   hrEmployeeEditRoute,
   hrMeRoute,
+  hrMeChangeRequestRoute,
+  hrProfileChangeRequestsRoute,
+  hrProfileChangeRequestDetailRoute,
   attTodayRoute,
   attMyRecordsRoute,
   attTeamRecordsRoute,

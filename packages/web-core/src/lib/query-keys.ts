@@ -84,6 +84,16 @@ export const hrKeys = {
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.hr, "contract-types", "list", params] as const,
   },
+  // S2-FE-HR-4 — Profile change request (self-service + HR duyệt). "mine" tách khỏi "list" (Company scope,
+  // HR/Admin) vì cùng resource nhưng scope khác nhau — invalidate riêng tránh làm mới nhầm cache của người khác.
+  profileChangeRequests: {
+    all: [...rootKeys.hr, "profile-change-requests"] as const,
+    mine: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "profile-change-requests", "mine", params] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "profile-change-requests", "list", params] as const,
+    detail: (id: string) => [...rootKeys.hr, "profile-change-requests", "detail", id] as const,
+  },
 };
 
 // ── Attendance keys ───────────────────────────────────────────────────────────
@@ -201,6 +211,30 @@ const leaveRequestsListPrefix = [...rootKeys.leave, "requests", "list"] as const
 export const attendanceInvalidation = {
   checkIn: () => [attendanceKeys.myToday(), attendanceMyRecordsPrefix] as const,
   checkOut: () => [attendanceKeys.myToday(), attendanceMyRecordsPrefix] as const,
+};
+
+// S2-FE-HR-4: create/cancel làm mới "mine" (self list) + detail của chính đơn đó — KHÔNG đụng "list"
+// (Company-scope, thuộc cache của HR khác). approve/reject (HR) làm mới "list" + detail — "mine" thuộc
+// cache của người gửi yêu cầu, HR không giữ trong phiên của mình.
+const hrProfileChangeRequestsMinePrefix = [
+  ...rootKeys.hr,
+  "profile-change-requests",
+  "mine",
+] as const;
+const hrProfileChangeRequestsListPrefix = [
+  ...rootKeys.hr,
+  "profile-change-requests",
+  "list",
+] as const;
+
+export const hrInvalidation = {
+  createChangeRequest: () => [hrProfileChangeRequestsMinePrefix] as const,
+  cancelChangeRequest: (id: string) =>
+    [hrProfileChangeRequestsMinePrefix, hrKeys.profileChangeRequests.detail(id)] as const,
+  approveChangeRequest: (id: string) =>
+    [hrProfileChangeRequestsListPrefix, hrKeys.profileChangeRequests.detail(id)] as const,
+  rejectChangeRequest: (id: string) =>
+    [hrProfileChangeRequestsListPrefix, hrKeys.profileChangeRequests.detail(id)] as const,
 };
 
 // S3-FE-LEAVE-2: approver KHÔNG giữ balance key của requester (balance thuộc user gửi đơn, không nằm

@@ -76,6 +76,7 @@ export {
   attendanceInvalidation,
   leaveInvalidation,
   foundationInvalidation,
+  hrInvalidation,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
