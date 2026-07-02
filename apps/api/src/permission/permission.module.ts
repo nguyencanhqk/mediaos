@@ -26,6 +26,10 @@ import { SuperAdminBootstrapService } from "./super-admin-bootstrap.service";
 import { SuperAdminBootstrapRepository } from "./super-admin-bootstrap.repository";
 import { DataScopeService } from "./data-scope.service";
 import { DataScopeRepository } from "./data-scope.repository";
+// S2-AUTH-BE-8 (additive): SecurityEventWriter cho dual-write ROLE_ASSIGNED/ROLE_REMOVED tại
+// PermissionAdminService. Đăng ký LÀM PROVIDER cục bộ (KHÔNG import AuthModule export) — writer stateless,
+// chỉ phụ thuộc AuditMaskerService (@Global từ EventsModule đã import) → tránh import-cycle Auth↔Permission.
+import { SecurityEventWriter } from "../auth/security-event-writer.service";
 
 const CACHED_REPO = "CACHED_PERMISSION_REPO";
 
@@ -135,6 +139,8 @@ class PermissionCacheInvalidator implements OnModuleInit {
     // Exported so HR-BE-1 (and later ATT/LEAVE/TASK) can inject it. KHÔNG đụng factory cũ (hot-file APPEND).
     DataScopeRepository,
     DataScopeService,
+    // S2-AUTH-BE-8 (additive): local provider cho PermissionAdminService dual-write security-event.
+    SecurityEventWriter,
   ],
   exports: [
     PermissionService,

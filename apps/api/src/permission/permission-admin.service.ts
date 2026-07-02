@@ -17,6 +17,7 @@ import type {
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
+import { SecurityEventWriter } from "../auth/security-event-writer.service";
 import { PermissionService } from "./permission.service";
 import { PermissionAdminRepository, type ObjectPermissionKey } from "./permission-admin.repository";
 import {
@@ -64,6 +65,13 @@ export class PermissionAdminService {
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
     private readonly repo: PermissionAdminRepository,
+    // S2-AUTH-BE-8: writer timeline `user_security_events` (dual-write cạnh audit_logs — ROLE_ASSIGNED/
+    // ROLE_REMOVED cho viewer AUTH-API-402). SecurityEventWriter stateless (chỉ phụ thuộc AuditMaskerService
+    // @Global) → đăng ký LÀM PROVIDER cục bộ ở PermissionModule (KHÔNG lấy từ AuthModule export) để tránh
+    // import-cycle Auth↔Permission (đã forwardRef). Optional theo convention codebase: Nest LUÔN inject
+    // (provider đã đăng ký) ⇒ production luôn emit; chỉ vắng khi int-spec dựng service bằng tay với 5 arg →
+    // guard `?.` bỏ qua để KHÔNG vỡ regression — KHÔNG phải nuốt lỗi.
+    private readonly securityEvents?: SecurityEventWriter,
   ) {}
 
   // ── (A) gán / thu role cho user (user_roles) ─────────────────────────────────
@@ -124,6 +132,16 @@ export class PermissionAdminService {
             : null,
           after: { userId: targetUserId, roleId: dto.roleId, expiresAt },
         });
+        // S2-AUTH-BE-8: dual-write timeline bảo mật TRONG cùng tx (rollback ⇒ 0 orphan). subject=target
+        // (userId NOT NULL), actor=admin. payload CHỈ roleId (non-sensitive — KHÔNG PII/secret); masker vẫn
+        // che phòng thủ theo tên khóa. severity gán từ contracts map (ROLE_ASSIGNED='medium'). Cả assign lẫn
+        // reassign đều là ROLE_ASSIGNED (không có ROLE_REASSIGNED trong contracts union).
+        await this.securityEvents?.record(tx, {
+          eventType: "ROLE_ASSIGNED",
+          userId: targetUserId,
+          actorUserId: actor.id,
+          payload: { roleId: dto.roleId },
+        });
         await this.emitPermissionChangedForUser(tx, actor.companyId, targetUserId);
 
         return inserted;
@@ -155,6 +173,14 @@ export class PermissionAdminService {
             grantedBy: existing.grantedBy,
             expiresAt: existing.expiresAt,
           },
+        });
+        // S2-AUTH-BE-8: dual-write timeline bảo mật TRONG cùng tx (rollback ⇒ 0 orphan). subject=target,
+        // actor=admin, payload={roleId} non-sensitive. severity từ contracts map (ROLE_REMOVED='medium').
+        await this.securityEvents?.record(tx, {
+          eventType: "ROLE_REMOVED",
+          userId: targetUserId,
+          actorUserId: actor.id,
+          payload: { roleId },
         });
         await this.emitPermissionChangedForUser(tx, actor.companyId, targetUserId);
       });
