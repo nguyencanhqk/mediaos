@@ -14,6 +14,7 @@ import {
   leaveFormSchema,
   toCalculateBody,
   toCreateDraftBody,
+  toUpdateDraftBody,
   type LeaveFormValues,
 } from "./leave-form-schema";
 import { LEAVE_DURATION_TYPE, LEAVE_HALF_DAY_SESSION } from "./constants";
@@ -138,11 +139,27 @@ function PreviewBox({
 export interface LeaveRequestFormProps {
   onSuccess: (id: string, status: string) => void;
   onCancel: () => void;
+  /**
+   * "create" (mặc định) → POST /leave/requests. "edit" → PATCH /leave/requests/:id (chỉ Draft,
+   * S3-LEAVE-BE-2 update-draft:leave, luôn OWN — server 404 nếu request.userId khác actor).
+   * `requestId` BẮT BUỘC khi mode="edit".
+   */
+  mode?: "create" | "edit";
+  requestId?: string;
+  /** Giá trị khởi tạo form khi edit (map từ LeaveRequestDetailView qua fromDraftDetailToFormValues). */
+  initialValues?: LeaveFormValues;
 }
 
-export function LeaveRequestForm({ onSuccess, onCancel }: LeaveRequestFormProps) {
+export function LeaveRequestForm({
+  onSuccess,
+  onCancel,
+  mode = "create",
+  requestId,
+  initialValues,
+}: LeaveRequestFormProps) {
   const { t } = useTranslation("leave");
   const queryClient = useQueryClient();
+  const isEdit = mode === "edit";
 
   // Leave types (for select)
   const { data: leaveTypes, isLoading: typesLoading } = useQuery({
@@ -154,7 +171,7 @@ export function LeaveRequestForm({ onSuccess, onCancel }: LeaveRequestFormProps)
   // Form
   const form = useForm<LeaveFormValues>({
     resolver: zodResolver(leaveFormSchema),
-    defaultValues: EMPTY_LEAVE_FORM,
+    defaultValues: initialValues ?? EMPTY_LEAVE_FORM,
     mode: "onBlur",
   });
 
@@ -213,13 +230,23 @@ export function LeaveRequestForm({ onSuccess, onCancel }: LeaveRequestFormProps)
     }
   }, [durationType, isHalfDay, isHourly, setValue, watch]);
 
-  // Submit handler
+  // Submit handler — create (POST) hoặc edit (PATCH update-draft), tuỳ `mode`.
   const createMutation = useMutation({
     mutationFn: (values: LeaveFormValues) =>
-      leaveApi.createDraft(toCreateDraftBody(values) as Parameters<typeof leaveApi.createDraft>[0]),
+      isEdit
+        ? leaveApi.updateDraft(
+            requestId as string,
+            toUpdateDraftBody(values) as Parameters<typeof leaveApi.updateDraft>[1],
+          )
+        : leaveApi.createDraft(
+            toCreateDraftBody(values) as Parameters<typeof leaveApi.createDraft>[0],
+          ),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: leaveKeys.requests.my() });
       void queryClient.invalidateQueries({ queryKey: leaveKeys.balances.my() });
+      if (isEdit && requestId) {
+        void queryClient.invalidateQueries({ queryKey: leaveKeys.requests.detail(requestId) });
+      }
       onSuccess(result.id, result.status);
     },
   });
@@ -234,11 +261,13 @@ export function LeaveRequestForm({ onSuccess, onCancel }: LeaveRequestFormProps)
     if (err instanceof ApiError) {
       if (err.status === 403) return t("form.errors.forbidden");
       if (err.status === 409) {
-        // Could be overlap OR balance
+        // Could be overlap / balance / (edit-only) đơn không còn ở trạng thái Draft (LEAVE-ERR-INVALID-STATE)
         const msg = err.message?.toLowerCase() ?? "";
         if (msg.includes("overlap") || msg.includes("trùng")) return t("form.errors.overlap");
         if (msg.includes("balance") || msg.includes("số dư") || msg.includes("phép"))
           return t("form.errors.insufficientBalance");
+        if (isEdit && (msg.includes("nháp") || msg.includes("trạng thái")))
+          return t("form.errors.notDraft");
         return t("form.errors.conflict");
       }
       if (err.status === 422 || err.status === 400) return t("form.errors.validation");
@@ -473,18 +502,35 @@ export function LeaveRequestForm({ onSuccess, onCancel }: LeaveRequestFormProps)
           <Button type="button" variant="ghost" onClick={onCancel} disabled={isSubmitting}>
             {t("form.buttons.cancel")}
           </Button>
-          <Button
-            type="submit"
-            variant="outline"
-            disabled={isSubmitting}
-            onClick={() => setValue("submitNow", false)}
-          >
-            {isSubmitting ? t("form.buttons.saving") : t("form.buttons.saveDraft")}
-          </Button>
-          <Button type="submit" disabled={isSubmitting} onClick={() => setValue("submitNow", true)}>
-            <CalendarDays className="mr-2 h-4 w-4" />
-            {isSubmitting ? t("form.buttons.submitting") : t("form.buttons.submit")}
-          </Button>
+          {isEdit ? (
+            // Edit mode: PATCH update-draft KHÔNG có submitNow (S3-LEAVE-BE-2 contract) — 1 nút lưu duy nhất.
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              onClick={() => setValue("submitNow", false)}
+            >
+              {isSubmitting ? t("form.buttons.saving") : t("form.buttons.saveChanges")}
+            </Button>
+          ) : (
+            <>
+              <Button
+                type="submit"
+                variant="outline"
+                disabled={isSubmitting}
+                onClick={() => setValue("submitNow", false)}
+              >
+                {isSubmitting ? t("form.buttons.saving") : t("form.buttons.saveDraft")}
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                onClick={() => setValue("submitNow", true)}
+              >
+                <CalendarDays className="mr-2 h-4 w-4" />
+                {isSubmitting ? t("form.buttons.submitting") : t("form.buttons.submit")}
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </form>

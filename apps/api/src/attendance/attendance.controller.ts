@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  HttpCode,
   Param,
   Patch,
   Post,
@@ -24,16 +23,13 @@ import {
 import { AttendanceReadService } from "./attendance-read.service";
 import { AttendanceService } from "./attendance.service";
 import {
-  AdjustmentListQueryDto,
   AttendanceListQueryDto,
   AttendanceRecordListQueryDto,
   CheckInDto,
   CheckOutDto,
-  CreateAdjustmentDto,
   CreateWorkScheduleDto,
   LockPeriodDto,
   PeriodListQueryDto,
-  ReviewNoteDto,
   UpdateWorkScheduleDto,
 } from "./attendance.dto";
 
@@ -174,46 +170,11 @@ export class AttendanceController {
     return this.attendance.updateSchedule(req.user, id, dto);
   }
 
-  // ─── Adjustment requests (→ Task Hub) ──────────────────────────────────────
-
-  @Get("adjustments")
-  @RequirePermission("read", "attendance")
-  listAdjustments(@Req() req: AuthenticatedRequest, @Query() query: AdjustmentListQueryDto) {
-    return this.attendance.listAdjustments(req.user, query);
-  }
-
-  @Post("adjustments")
-  @RequirePermission("adjust", "attendance")
-  createAdjustment(@Req() req: AuthenticatedRequest, @Body() dto: CreateAdjustmentDto) {
-    return this.attendance.createAdjustment(req.user, dto);
-  }
-
-  @Post("adjustments/:id/approve")
-  @RequirePermission("approve", "attendance")
-  approveAdjustment(
-    @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
-    @Body() dto: ReviewNoteDto,
-  ) {
-    return this.attendance.approveAdjustment(req.user, id, dto.note);
-  }
-
-  @Post("adjustments/:id/reject")
-  @RequirePermission("approve", "attendance")
-  rejectAdjustment(
-    @Req() req: AuthenticatedRequest,
-    @Param("id") id: string,
-    @Body() dto: ReviewNoteDto,
-  ) {
-    return this.attendance.rejectAdjustment(req.user, id, dto.note);
-  }
-
-  @Post("adjustments/:id/cancel")
-  @HttpCode(200)
-  @RequirePermission("adjust", "attendance")
-  cancelAdjustment(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
-    return this.attendance.cancelAdjustment(req.user, id);
-  }
+  // ─── Adjustment requests ─────────────────────────────────────────────────────
+  // S3-ATT-BE-4: the adjustment write surface (create/list/detail/approve/reject/direct) was CONVERGED
+  // to AttendanceAdjustmentController (/attendance/adjustment-requests, canonical TitleCase FSM + engine
+  // pairs create-own/view-*/approve/reject:adjustment). The old lowercase /attendance/adjustments routes
+  // (generic read/adjust/approve pairs) were REMOVED — there is no second, divergent writer.
 
   // ─── Period lock ───────────────────────────────────────────────────────────
 

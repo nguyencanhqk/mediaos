@@ -38,6 +38,20 @@ export function useTeamAttendanceRecords(
   });
 }
 
+// ── Bảng công toàn công ty (Company) — S3-FE-ATT-5 ────────────────────────────
+
+export function useCompanyAttendanceRecords(
+  params: Partial<AttendanceRecordListQuery> = {},
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: attendanceKeys.records.list(params),
+    queryFn: () => attendanceApi.listRecords(params),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
 // ── Chi tiết bản ghi ───────────────────────────────────────────────────────────
 
 export function useAttendanceRecordDetail(id: string, enabled = true) {

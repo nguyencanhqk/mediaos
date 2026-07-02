@@ -124,7 +124,11 @@ import { MyProfilePage } from "@/routes/hr/me/MyProfilePage";
 import { AttendanceTodayPage } from "@/routes/attendance/AttendanceTodayPage";
 import { MyAttendanceRecordsPage } from "@/routes/attendance/MyAttendanceRecordsPage";
 import { TeamAttendanceRecordsPage } from "@/routes/attendance/TeamAttendanceRecordsPage";
+import { AttendanceCompanyRecordsPage } from "@/routes/attendance/AttendanceCompanyRecordsPage";
 import { AttendanceRecordDetailPage } from "@/routes/attendance/AttendanceRecordDetailPage";
+import { AttendanceShiftsPage } from "@/routes/attendance/AttendanceShiftsPage";
+import { AttendanceShiftAssignmentsPage } from "@/routes/attendance/AttendanceShiftAssignmentsPage";
+import { AttendanceRulesPage } from "@/routes/attendance/AttendanceRulesPage";
 
 // Leave
 import { MyLeaveBalancePage } from "@/routes/leave/MyLeaveBalancePage";
@@ -132,6 +136,8 @@ import { MyLeaveRequestsPage } from "@/routes/leave/MyLeaveRequestsPage";
 import { CreateLeaveRequestPage } from "@/routes/leave/CreateLeaveRequestPage";
 import { LeaveRequestDetailPage } from "@/routes/leave/LeaveRequestDetailPage";
 import { LeaveApprovalPage } from "@/routes/leave/LeaveApprovalPage";
+import { AllLeaveRequestsPage } from "@/routes/leave/AllLeaveRequestsPage";
+import { EditLeaveDraftPage } from "@/routes/leave/EditLeaveDraftPage";
 
 // System
 import { UsersPage } from "@/routes/system/UsersPage";
@@ -236,13 +242,28 @@ const attTeamRecordsRoute = makeModuleRoute(
   "ATT",
   TeamAttendanceRecordsPage,
 );
-// Company-wide records (att.records) — out-of-scope S3-FE-ATT-5; remains placeholder.
+// Company-wide records (att.records) — S3-FE-ATT-5.
 const attRecordsRoute = makeModuleRoute(
   "/attendance/records",
   "att.records",
   "ATT",
-  ModulePlaceholder,
+  AttendanceCompanyRecordsPage,
 );
+
+// Shift / shift-assignment / rule (admin, read-only minimum) — S3-FE-ATT-5. CRUD carry-over CO-S4-007.
+const attShiftsRoute = makeModuleRoute(
+  "/attendance/shifts",
+  "att.shifts",
+  "ATT",
+  AttendanceShiftsPage,
+);
+const attShiftAssignmentsRoute = makeModuleRoute(
+  "/attendance/shift-assignments",
+  "att.shift-assignments",
+  "ATT",
+  AttendanceShiftAssignmentsPage,
+);
+const attRulesRoute = makeModuleRoute("/attendance/rules", "att.rules", "ATT", AttendanceRulesPage);
 
 // Attendance record detail — local RouteMeta (no sidebar entry).
 // ANY of VIEW_OWN/VIEW_TEAM/VIEW_COMPANY grants route access; actual 403/404 from server.
@@ -288,6 +309,33 @@ const leaveApprovalsRoute = makeModuleRoute(
   "LEAVE",
   LeaveApprovalPage,
 );
+
+// S3-FE-LEAVE-3 — LEAVE-SCREEN-006 (tất cả đơn nghỉ, HR/Admin).
+const leaveAllRequestsRoute = makeModuleRoute(
+  "/leave/requests",
+  "leave.all-requests",
+  "LEAVE",
+  AllLeaveRequestsPage,
+);
+
+// Leave edit draft — static "$requestId/edit" ranks BELOW the exact "/leave/requests" list route
+// (TanStack router disambiguates static-segment routes from param routes automatically). Reuses
+// leave.my-requests meta (route-level gate = LEAVE.REQUEST.VIEW_OWN, đủ để render workspace; gate
+// TINH hơn — update-draft:leave — áp trong EditLeaveDraftPage, khớp pattern hrEmployeeEditRoute).
+const leaveEditMeta = getMeta("leave.my-requests");
+const leaveEditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/leave/requests/$requestId/edit",
+  beforeLoad: authGuard,
+  component: () => {
+    const { requestId } = leaveEditRoute.useParams();
+    return buildModuleRouteContent(
+      leaveEditMeta,
+      "LEAVE",
+      <EditLeaveDraftPage requestId={requestId} />,
+    );
+  },
+});
 
 // Leave create — static "new" segment before "$requestId" param route
 const leaveCreateMeta = getMeta("leave.my-requests");
@@ -454,12 +502,17 @@ const routeTree = rootRoute.addChildren([
   attMyRecordsRoute,
   attTeamRecordsRoute,
   attRecordsRoute,
+  attShiftsRoute,
+  attShiftAssignmentsRoute,
+  attRulesRoute,
   attRecordDetailRoute,
   leaveRoute,
   leaveMyRequestsRoute,
   leaveCreateRoute,
   leaveDetailRoute,
   leaveApprovalsRoute,
+  leaveAllRequestsRoute,
+  leaveEditRoute,
   tasksRoute,
   tasksMyTasksRoute,
   notificationsRoute,

@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-02 00:50Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-02 00:13Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -11,9 +11,10 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 **READY (phụ thuộc đã xong — làm được ngay):**
 - 🟡 `S2-FE-AUTH-2` FE Auth self-service: forgot-password + reset-password + session-expired (apps/auth) + /account/change-password nối API thật
 - 🟡 `S2-FE-AUTH-3` FE User admin CRUD (/system/users): create + detail + edit + assign-roles nối /auth/users (thay read-only placeholder)
+- 🔴 `S2-AUTH-BE-7` Session management API (P1): GET /auth/sessions (phiên của CHÍNH user) + revoke 1 phiên + revoke-all-others — hoàn tất user_sessions (DEFERRED ở BE-1) — unblock S2-FE-AUTH-5
 - 🟡 `S2-FE-FND-1` FE FOUNDATION admin: System Overview (/system) + Company info view/edit (/system/company) + Company Settings (/system/settings) nối API thật
 - 🟡 `S2-FE-FND-2` FE FOUNDATION admin: Audit log viewer (/system/audit-logs + detail, thay ModulePlaceholder) + File metadata viewer (/system/files + detail)
-- 🟡 `S2-FE-FND-3` FE FOUNDATION admin: Module Catalog (/system/modules + /:code detail) nối admin module API — read-only trước
+- 🟡 `S2-FND-BE-1` Admin module catalog API (P1): GET /foundation/modules (TẤT CẢ module, KHÁC my-apps đã lọc theo user) + GET /foundation/modules/:code detail — unblock S2-FE-FND-3 (toggle enable/disable = follow-up)
 - 🟡 `S2-FE-FND-4` FE FOUNDATION admin: Public Holidays (/system/public-holidays list+CRUD) + Health Check (/system/health read-only status) — BE sẵn
 - 🟡 `S2-FND-BE-2` Foundation ops admin API (P1): Sequences (GET list + preview + PATCH config over SequenceService) + Seed status (GET) — wire controller over service có sẵn — unblock S2-FE-FND-5
 - 🟡 `S2-FE-FND-6` FE FOUNDATION admin: Retention Policies (/system/retention config) + File Access Logs viewer (/system/file-access-logs)
@@ -27,6 +28,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 **CHỜ (kẹt phụ thuộc):**
 - `S2-FE-AUTH-4` FE Role & Permission admin: /system/roles create/detail/edit + assign-permissions + /system/permissions catalog ⏳ cần: S2-AUTH-BE-6
 - `S2-FE-AUTH-5` FE Account self-service: /account/sessions (list + revoke phiên của chính user) ⏳ cần: S2-AUTH-BE-7
+- `S2-FE-FND-3` FE FOUNDATION admin: Module Catalog (/system/modules + /:code detail) nối admin module API — read-only trước ⏳ cần: S2-FND-BE-1
 - `S2-FE-FND-5` FE FOUNDATION admin: Sequence Counters (/system/sequences list+preview+config) + Seed Status (/system/seeds read-only) ⏳ cần: S2-FND-BE-2
 - `S2-FE-HR-7` FE HR Contracts: /hr/contracts (DS hợp đồng) + /hr/employees/:id/contracts (HĐ của nhân viên) nối contract API ⏳ cần: S2-HR-BE-6
 - `S2-FE-HR-8` FE HR Employee-code config: /hr/settings/employee-code (form cấu hình mã NV + preview live) nối admin API ⏳ cần: S2-HR-BE-7
@@ -40,7 +42,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 **🛑 BLOCKED:**
 - `S2-AUTH-BE-6` Role write API (P1): POST/PATCH /auth/roles (create/update, KHÔNG sửa system role) + assign/revoke permission cho role (role_permissions) có audit — unblock S2-FE-AUTH-4
-- `S2-AUTH-BE-7` Session management API (P1): GET /auth/sessions (phiên của CHÍNH user) + revoke 1 phiên + revoke-all-others — hoàn tất user_sessions (DEFERRED ở BE-1) — unblock S2-FE-AUTH-5
 - `S3-LEAVE-BE-4` LEAVE type/policy management + HR balance view/adjust + ledger (P1): CRUD type/policy + HR view balances + adjust balance (mọi thay đổi qua leave_balance_transactions, no negative ngoài policy)
 - `S3-INT-1` LEAVE→ATT sync: onLeaveApproved handler + AttendanceLeaveSyncService (full-day=Leave/required 0 · half-day/hourly reduce · recalc existing check-in) + sync_status/retry + onLeaveCancelled/Revoked recalc + balance restore idempotent (S3-SYNC-004)
 - `S3-ATT-BE-5` ATT Remote/Onsite-work request workflow API (CO-S4-004): remote_work_requests create/list/detail + approve/reject + ảnh hưởng tính công + audit + event (skeleton 0452 → hoàn thiện)
@@ -48,7 +49,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 - `S3-FE-LEAVE-3` FE LEAVE all-requests (/leave/requests, 006) + edit draft (/leave/requests/:id/edit, 002E)
 - `S3-FE-LEAVE-4` FE LEAVE Calendar (/leave/calendar, own/team/company theo scope)
 
-**Đã xong (v2):** `S0-GOV-1`, `S0-CI-1`, `S0-CI-2`, `S0-ENV-1`, `S0-FND-DB-1`, `S0-FND-SEED-1`, `S0-AUTH-DB-1`, `S0-API-CORE-1`, `S0-FE-CORE-1`, `S0-FE-API-1`, `S0-QA-1`, `S1-FND-AUDIT-1`, `S1-FND-SETTING-1`, `S1-FND-FILE-1`, `S1-FND-SEQ-1`, `S1-FND-MODULE-1`, `S1-FND-WIRE-1`, `S1-FE-LAYOUT-1`, `S1-FE-REGISTRY-1`, `S1-FE-QUERY-WIRE-1`, `S1-QA-FND-1`, `S1-QA-DEBT-1`, `S1-INT-MOUNT-1`, `S2-AUTH-DB-1`, `S2-AUTH-DB-2`, `S2-AUTH-SEED-1`, `S2-AUTH-BE-1`, `S2-AUTH-BE-2`, `S2-AUTH-BE-3`, `S2-AUTH-BE-4`, `S2-AUTH-BE-5`, `S2-HR-DB-1`, `S2-HR-SEED-1`, `S2-HR-BE-1`, `S2-HR-BE-2`, `S2-HR-BE-3`, `S2-HR-BE-4`, `S2-FE-AUTH-1`, `S2-FE-HR-1`, `S2-FE-HR-2`, `S2-FE-HR-3`, `S2-INT-1`, `S2-INT-2`, `S2-QA-1`, `S2-QA-2`, `S2-QA-DEBT-1`, `S2-AUTH-HARDEN-1`, `S2-HR-MASK-1`, `S2-HR-EMP-LEGACY-LOCK-1`, `S2-AUTH-BRAND-1`, `S2-FND-BE-1`, `S2-FND-BE-3`, `S3-ATT-DB-1`, `S3-LEAVE-DB-1`, `S3-FND-SEEDRUN-1`, `S3-ATT-SEED-1`, `S3-LEAVE-SEED-1`, `S3-ATT-BE-1`, `S3-ATT-BE-2`, `S3-ATT-BE-3`, `S3-LEAVE-BE-1`, `S3-LEAVE-BE-2`, `S3-LEAVE-BE-3`, `S3-FE-REGISTRY-1`, `S3-FE-ATT-1`, `S3-FE-ATT-2`, `S3-FE-LEAVE-1`, `S3-FE-LEAVE-2`, `S3-ATT-BE-4`, `S3-FE-ATT-5`, `S3-LEAVE-BE-5`
+**Đã xong (v2):** `S0-GOV-1`, `S0-CI-1`, `S0-CI-2`, `S0-ENV-1`, `S0-FND-DB-1`, `S0-FND-SEED-1`, `S0-AUTH-DB-1`, `S0-API-CORE-1`, `S0-FE-CORE-1`, `S0-FE-API-1`, `S0-QA-1`, `S1-FND-AUDIT-1`, `S1-FND-SETTING-1`, `S1-FND-FILE-1`, `S1-FND-SEQ-1`, `S1-FND-MODULE-1`, `S1-FND-WIRE-1`, `S1-FE-LAYOUT-1`, `S1-FE-REGISTRY-1`, `S1-FE-QUERY-WIRE-1`, `S1-QA-FND-1`, `S1-QA-DEBT-1`, `S1-INT-MOUNT-1`, `S2-AUTH-DB-1`, `S2-AUTH-DB-2`, `S2-AUTH-SEED-1`, `S2-AUTH-BE-1`, `S2-AUTH-BE-2`, `S2-AUTH-BE-3`, `S2-AUTH-BE-4`, `S2-AUTH-BE-5`, `S2-HR-DB-1`, `S2-HR-SEED-1`, `S2-HR-BE-1`, `S2-HR-BE-2`, `S2-HR-BE-3`, `S2-HR-BE-4`, `S2-FE-AUTH-1`, `S2-FE-HR-1`, `S2-FE-HR-2`, `S2-FE-HR-3`, `S2-INT-1`, `S2-INT-2`, `S2-QA-1`, `S2-QA-2`, `S2-QA-DEBT-1`, `S2-AUTH-HARDEN-1`, `S2-HR-MASK-1`, `S2-HR-EMP-LEGACY-LOCK-1`, `S2-AUTH-BRAND-1`, `S2-FND-BE-3`, `S3-ATT-DB-1`, `S3-LEAVE-DB-1`, `S3-FND-SEEDRUN-1`, `S3-ATT-SEED-1`, `S3-LEAVE-SEED-1`, `S3-ATT-BE-1`, `S3-ATT-BE-2`, `S3-ATT-BE-3`, `S3-LEAVE-BE-1`, `S3-LEAVE-BE-2`, `S3-LEAVE-BE-3`, `S3-FE-REGISTRY-1`, `S3-FE-ATT-1`, `S3-FE-ATT-2`, `S3-FE-LEAVE-1`, `S3-FE-LEAVE-2`, `S3-ATT-BE-4`, `S3-FE-ATT-5`, `S3-LEAVE-BE-5`
 
 ## Trạng thái repo
 
@@ -61,9 +62,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
-| `a3de08b` | 2026-07-02 | wip(L2-backend): S2-FND-BE-1 admin module catalog API (GET /foundation/modules[/:code]) |
-| `2dce314` | 2026-07-02 | wip(L1-contracts): add admin module-catalog Zod DTO (S2-FND-BE-1) |
-| `fc4a725` | 2026-07-02 | chore(harness): reconcile S3-ATT-BE-4 ledger (PR #73 merged, stale needs_human overwritten) + regen STATUS |
 | `01adfcd` | 2026-07-02 | chore(harness): commit S3 wave3 round2 micro-plans + regen STATUS |
 | `8427004` | 2026-07-01 | chore(harness): regen STATUS after S3 wave3 round 1 (ATT-BE-3/FE-LEAVE-3/LEAVE-BE-5 shipped) |
 | `b91f9bd` | 2026-07-01 | chore(harness): commit stray plan docs from prior wave + regen STATUS (#67) |
@@ -73,6 +71,9 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `8115bfa` | 2026-06-27 | feat(s3): Sprint 3 wave 1 — ATT + LEAVE backend spine + seeds (+ S2-AUTH-BE-5 viewer) (#56) |
 | `05cdcc4` | 2026-06-27 | feat(harness): auto-reconcile merged-but-unstamped WOs in gen-status (#47) |
 | `edd68c9` | 2026-06-27 | Update README.md (#7) |
+| `07254e3` | 2026-06-26 | feat(db): S3-ATT-DB-1 — ATT Core migration 0452 (DB-04 reconcile, evolve-additive) (#54) |
+| `1074b0f` | 2026-06-26 | chore(harness): open Sprint 3 (ATT+LEAVE+sync) + close Sprint 2 + fix story-matrix traces (#53) |
+| `35419e0` | 2026-06-26 | docs: reconcile ERD + contracts to docs/DB standard (#52) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

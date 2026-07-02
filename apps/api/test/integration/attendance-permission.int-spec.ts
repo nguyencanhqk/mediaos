@@ -6,6 +6,7 @@ import { PermissionService } from "../../src/permission/permission.service";
 import { PermissionRepository } from "../../src/permission/permission.repository";
 import { PermissionGuard } from "../../src/permission/guards/permission.guard";
 import { AttendanceController } from "../../src/attendance/attendance.controller";
+import { AttendanceAdjustmentController } from "../../src/attendance/attendance-adjustment.controller";
 import { directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -31,7 +32,10 @@ const EMPLOYEE_ROLE_ID = "00000000-0000-0000-0000-000000000008"; // system 'empl
 describe.skipIf(!hasDb)("G11-1 attendance permission deny-path (HTTP guard, fail-closed)", () => {
   const direct = directPool();
   const db = new DatabaseService();
-  const guard = new PermissionGuard(new Reflector(), new PermissionService(new PermissionRepository(db)));
+  const guard = new PermissionGuard(
+    new Reflector(),
+    new PermissionService(new PermissionRepository(db)),
+  );
 
   let A: SeededTenant;
   let employeeUserId: string; // có role 'employee' → thiếu approve/lock-period/manage
@@ -51,7 +55,11 @@ describe.skipIf(!hasDb)("G11-1 attendance permission deny-path (HTTP guard, fail
   });
 
   /** Dựng ExecutionContext giả gắn handler thật của controller + user đã seed (sau JwtAuthGuard). */
-  function ctxFor(methodName: keyof AttendanceController, userId: string, params: Record<string, string> = {}): ExecutionContext {
+  function ctxFor(
+    methodName: keyof AttendanceController,
+    userId: string,
+    params: Record<string, string> = {},
+  ): ExecutionContext {
     const handler = AttendanceController.prototype[methodName] as (...a: unknown[]) => unknown;
     const req = { user: { id: userId, companyId: A.companyId }, params };
     return {
@@ -61,24 +69,34 @@ describe.skipIf(!hasDb)("G11-1 attendance permission deny-path (HTTP guard, fail
     } as unknown as ExecutionContext;
   }
 
-  it("approveAdjustment (approve:attendance) — user thiếu grant ⇒ 403", async () => {
-    await expect(
-      guard.canActivate(ctxFor("approveAdjustment", employeeUserId, { id: "00000000-0000-0000-0000-0000000000aa" })),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+  it("approve (approve:adjustment) — user thiếu grant ⇒ 403 (S3-ATT-BE-4 canonical controller)", async () => {
+    const handler = AttendanceAdjustmentController.prototype.approve as (
+      ...a: unknown[]
+    ) => unknown;
+    const req = {
+      user: { id: employeeUserId, companyId: A.companyId },
+      params: { id: "00000000-0000-0000-0000-0000000000aa" },
+    };
+    const ctx = {
+      getHandler: () => handler,
+      getClass: () => AttendanceAdjustmentController,
+      switchToHttp: () => ({ getRequest: () => req }),
+    } as unknown as ExecutionContext;
+    await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("lockPeriod (lock-period:attendance) — user thiếu grant ⇒ 403", async () => {
-    await expect(
-      guard.canActivate(ctxFor("lockPeriod", employeeUserId)),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(guard.canActivate(ctxFor("lockPeriod", employeeUserId))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
   it("listMonthly (read:attendance) route IS guarded; user không role nào ⇒ 403 (fail-closed)", async () => {
     // 'manage:attendance' (xem nhân sự khác) enforce ở service; ở guard chứng minh route được bảo vệ:
     // user 0 role thiếu cả 'read:attendance' ⇒ guard deny trước khi tới service.
-    await expect(
-      guard.canActivate(ctxFor("listMonthly", noRoleUserId)),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(guard.canActivate(ctxFor("listMonthly", noRoleUserId))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
   it("user 'employee' ĐƯỢC phép self check-in (check-in:attendance) — guard cho qua (sanity allow-path)", async () => {
