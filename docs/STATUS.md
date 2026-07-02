@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-02 07:00Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-02 07:47Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -10,7 +10,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 **READY (phụ thuộc đã xong — làm được ngay):**
 - 🟡 `S2-FE-AUTH-2` FE Auth self-service: forgot-password + reset-password + session-expired (apps/auth) + /account/change-password nối API thật
-- 🟡 `S2-FE-AUTH-3` FE User admin CRUD (/system/users): create + detail + edit + assign-roles nối /auth/users (thay read-only placeholder)
 - 🔴 `S2-AUTH-BE-6` Role write API (P1): POST/PATCH /auth/roles (create/update, KHÔNG sửa system role) + assign/revoke permission cho role (role_permissions) có audit — unblock S2-FE-AUTH-4
 - 🟡 `S2-FE-AUTH-5` FE Account self-service: /account/sessions (list + revoke phiên của chính user)
 - 🟡 `S2-FE-FND-2` FE FOUNDATION admin: Audit log viewer (/system/audit-logs + detail, thay ModulePlaceholder) + File metadata viewer (/system/files + detail)
@@ -47,11 +46,11 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 - `S3-FE-LEAVE-5` FE LEAVE admin: /leave/types + /leave/policies + /leave/balances (HR) + /leave/balances/:id/transactions ⏳ cần: S3-LEAVE-BE-4, S3-LEAVE-BE-6
 - `S3-FE-LEAVE-6` FE LEAVE Reports (/leave/reports) + Audit logs (/leave/audit-logs) ⏳ cần: S3-LEAVE-BE-6
 
-**Đã xong (v2):** `S0-GOV-1`, `S0-CI-1`, `S0-CI-2`, `S0-ENV-1`, `S0-FND-DB-1`, `S0-FND-SEED-1`, `S0-AUTH-DB-1`, `S0-API-CORE-1`, `S0-FE-CORE-1`, `S0-FE-API-1`, `S0-QA-1`, `S1-FND-AUDIT-1`, `S1-FND-SETTING-1`, `S1-FND-FILE-1`, `S1-FND-SEQ-1`, `S1-FND-MODULE-1`, `S1-FND-WIRE-1`, `S1-FE-LAYOUT-1`, `S1-FE-REGISTRY-1`, `S1-FE-QUERY-WIRE-1`, `S1-QA-FND-1`, `S1-QA-DEBT-1`, `S1-INT-MOUNT-1`, `S2-AUTH-DB-1`, `S2-AUTH-DB-2`, `S2-AUTH-SEED-1`, `S2-AUTH-BE-1`, `S2-AUTH-BE-2`, `S2-AUTH-BE-3`, `S2-AUTH-BE-4`, `S2-AUTH-BE-5`, `S2-HR-DB-1`, `S2-HR-SEED-1`, `S2-HR-BE-1`, `S2-HR-BE-2`, `S2-HR-BE-3`, `S2-HR-BE-4`, `S2-FE-AUTH-1`, `S2-FE-HR-1`, `S2-FE-HR-2`, `S2-FE-HR-3`, `S2-INT-1`, `S2-INT-2`, `S2-QA-1`, `S2-QA-2`, `S2-QA-DEBT-1`, `S2-AUTH-HARDEN-1`, `S2-HR-MASK-1`, `S2-HR-EMP-LEGACY-LOCK-1`, `S2-AUTH-BRAND-1`, `S2-AUTH-BE-7`, `S2-FE-FND-1`, `S2-FND-BE-1`, `S2-FND-BE-2`, `S2-FE-HR-5`, `S2-HR-BE-6`, `S3-ATT-DB-1`, `S3-LEAVE-DB-1`, `S3-FND-SEEDRUN-1`, `S3-ATT-SEED-1`, `S3-LEAVE-SEED-1`, `S3-ATT-BE-1`, `S3-ATT-BE-2`, `S3-ATT-BE-3`, `S3-LEAVE-BE-1`, `S3-LEAVE-BE-2`, `S3-FE-ATT-1`, `S3-FE-LEAVE-1`, `S3-ATT-BE-4`, `S3-ATT-BE-5`
+**Đã xong (v2):** `S0-GOV-1`, `S0-CI-1`, `S0-CI-2`, `S0-ENV-1`, `S0-FND-DB-1`, `S0-FND-SEED-1`, `S0-AUTH-DB-1`, `S0-API-CORE-1`, `S0-FE-CORE-1`, `S0-FE-API-1`, `S0-QA-1`, `S1-FND-AUDIT-1`, `S1-FND-SETTING-1`, `S1-FND-FILE-1`, `S1-FND-SEQ-1`, `S1-FND-MODULE-1`, `S1-FND-WIRE-1`, `S1-FE-LAYOUT-1`, `S1-FE-REGISTRY-1`, `S1-FE-QUERY-WIRE-1`, `S1-QA-FND-1`, `S1-QA-DEBT-1`, `S1-INT-MOUNT-1`, `S2-AUTH-DB-1`, `S2-AUTH-DB-2`, `S2-AUTH-SEED-1`, `S2-AUTH-BE-1`, `S2-AUTH-BE-2`, `S2-AUTH-BE-3`, `S2-AUTH-BE-4`, `S2-AUTH-BE-5`, `S2-HR-DB-1`, `S2-HR-SEED-1`, `S2-HR-BE-1`, `S2-HR-BE-2`, `S2-HR-BE-3`, `S2-HR-BE-4`, `S2-FE-AUTH-1`, `S2-FE-HR-1`, `S2-FE-HR-2`, `S2-FE-HR-3`, `S2-INT-1`, `S2-INT-2`, `S2-QA-1`, `S2-QA-2`, `S2-QA-DEBT-1`, `S2-AUTH-HARDEN-1`, `S2-HR-MASK-1`, `S2-HR-EMP-LEGACY-LOCK-1`, `S2-AUTH-BRAND-1`, `S2-FE-AUTH-3`, `S2-AUTH-BE-7`, `S2-FE-FND-1`, `S2-FND-BE-1`, `S2-FND-BE-2`, `S2-FE-HR-5`, `S2-HR-BE-6`, `S3-ATT-DB-1`, `S3-LEAVE-DB-1`, `S3-FND-SEEDRUN-1`, `S3-ATT-SEED-1`, `S3-LEAVE-SEED-1`, `S3-ATT-BE-1`, `S3-ATT-BE-2`, `S3-ATT-BE-3`, `S3-LEAVE-BE-1`, `S3-LEAVE-BE-2`, `S3-FE-ATT-1`, `S3-FE-LEAVE-1`, `S3-ATT-BE-4`, `S3-ATT-BE-5`
 
 ## Trạng thái repo
 
-- **branch**: `auto/s3wave3-batch6-blocked-wos` · **file đang đổi (dirty)**: 52
+- **branch**: `auto/fe-batch-a` · **file đang đổi (dirty)**: 114
 - **migration head**: idx 145 — `0465_s2_hrbe6_contract_scope_fix` (146 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -60,18 +59,18 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
-| `1906559` | 2026-07-02 | fix(S2-HR-BE-6): correct contract view scope — employee=Own, manager=Team |
-| `35fac47` | 2026-07-02 | feat(audit): additive objectTypes allowlist filter on AuditRepository (S3-ATT-BE-6) |
-| `238d9e1` | 2026-07-02 | feat(ATT): GET /attendance/reports (Team/Company aggregate) + /attendance/audit-logs (S3-ATT-BE-6) |
-| `2cdff86` | 2026-07-02 | feat(S3-ATT-BE-5): remote/onsite-work request workflow API (CO-S4-004) |
-| `ac9b259` | 2026-07-02 | feat(S3-ATT-BE-5): migration 0464 union-add remote_work_request audit object_type + watcher_user_ids |
-| `a6256bc` | 2026-07-02 | feat(S3-INT-1): LEAVE cancel(Approved)/revoke — ATT-revert + balance refund, idempotent |
-| `8bd10f7` | 2026-07-02 | feat(S3-INT-1): LEAVE->ATT sync — onLeaveApproved + AttendanceLeaveSyncService + internal recalculate |
-| `ab968b0` | 2026-07-02 | test(LEAVE-BE-4): RED-first integration coverage for admin surface |
-| `e4a080b` | 2026-07-02 | chore(harness): bake owner override for S3-ATT-BE-5 state-machine (Draft+submit+approver/watcher) into done_when |
-| `689a4aa` | 2026-07-02 | feat(LEAVE-BE-4): type/policy admin CRUD + HR balance view/adjust ledger |
-| `e16a4ea` | 2026-07-02 | feat(LEAVE-BE-4): admin CRUD contracts + audit object_type union-add |
-| `7f80206` | 2026-07-02 | docs(hr): mark employee_contracts built (mig 0462) in ERD + close S2-HR-BE-6 [S2-HR-BE-6] |
+| `d267c78` | 2026-07-02 | feat(S2-FE-HR-4): HR profile change-request workflow (self + HR approve/reject) |
+| `e5ba72b` | 2026-07-02 | feat(S2-FE-FND-3): Module Catalog admin (/system/modules + /:code) read-only |
+| `6d2cf0d` | 2026-07-02 | feat(S2-FE-FND-2): Audit log viewer + File metadata viewer (/system/audit-logs, /system/files) |
+| `3ace9e9` | 2026-07-02 | feat(S2-FE-AUTH-3): FE User admin CRUD (/system/users) — create/detail/edit/assign-roles |
+| `d98368c` | 2026-07-02 | feat(S2-FE-AUTH-2): forgot/reset-password + session-expired (apps/auth) + change-password (apps/app) |
+| `67d8f16` | 2026-07-02 | rescue: S2-FE-FND-1 (Foundation admin FE) + S2-HR-BE-7 verify-mode additions (#79) |
+| `6db736d` | 2026-07-02 | fix(db): remove orphaned pre-renumber migration file on feat/s3-wave3 (#76) |
+| `87731c2` | 2026-07-02 | feat(S2-FND-BE-1): admin module catalog API (GET /foundation/modules[/:code]) (#74) |
+| `9049231` | 2026-07-02 | feat(S3-ATT-BE-4): ATT Adjustment workflow API (create/list/detail/approve/reject/direct-adjust) (#73) |
+| `0545d17` | 2026-07-02 | auto/S3 FE ATT 5 (#72) |
+| `2727e49` | 2026-07-01 | wip(S3-LEAVE-BE-5): GET /leave/calendar scoped (own/team/company) + reason masking (#70) |
+| `448e628` | 2026-07-01 | feat(s3-att-be3): shift/rule minimum spine + audit-in-tx wiring + QA-06 tenant deny (#69) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

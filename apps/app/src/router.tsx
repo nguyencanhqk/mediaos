@@ -119,6 +119,18 @@ import { EmployeeListPage } from "@/routes/hr/employees/EmployeeListPage";
 import { EmployeeDetailPage } from "@/routes/hr/employees/EmployeeDetailPage";
 import { EmployeeFormPage } from "@/routes/hr/employees/EmployeeFormPage";
 import { MyProfilePage } from "@/routes/hr/me/MyProfilePage";
+// HR — Profile change request workflow (S2-FE-HR-4)
+import { MyChangeRequestPage } from "@/routes/hr/profile-change-requests/MyChangeRequestPage";
+import { ProfileChangeRequestListPage } from "@/routes/hr/profile-change-requests/ProfileChangeRequestListPage";
+import { ProfileChangeRequestDetailPage } from "@/routes/hr/profile-change-requests/ProfileChangeRequestDetailPage";
+import {
+  PCR_ME_PATH,
+  PCR_LIST_PATH,
+  PCR_ME_ROUTE_META,
+  PCR_LIST_ROUTE_META,
+  PCR_DETAIL_ROUTE_META,
+} from "@/routes/hr/profile-change-requests/constants";
+// HR — Master-data admin screens (S2-FE-HR-5)
 import { DepartmentsPage } from "@/routes/hr/departments/DepartmentsPage";
 import { PositionsPage } from "@/routes/hr/positions/PositionsPage";
 import { JobLevelsPage } from "@/routes/hr/job-levels/JobLevelsPage";
@@ -147,6 +159,10 @@ import { LeaveCalendarPage } from "@/routes/leave/LeaveCalendarPage";
 // System
 import { UsersPage } from "@/routes/system/UsersPage";
 import { RolesPage } from "@/routes/system/RolesPage";
+// System / Users CRUD — S2-FE-AUTH-3
+import { UserFormPage } from "@/routes/system/users/UserFormPage";
+import { UserDetailPage } from "@/routes/system/users/UserDetailPage";
+import { UserRolesPage } from "@/routes/system/users/UserRolesPage";
 import { LoginLogsPage } from "@/routes/system/auth-logs/LoginLogsPage";
 import { SecurityEventsPage } from "@/routes/system/auth-logs/SecurityEventsPage";
 import {
@@ -161,11 +177,52 @@ import { CompanyProfilePage } from "@/routes/system/foundation/CompanyProfilePag
 import { CompanySettingsPage } from "@/routes/system/foundation/CompanySettingsPage";
 import { SystemSettingsPage } from "@/routes/system/foundation/SystemSettingsPage";
 import { FOUNDATION_PATH, FOUNDATION_SCREEN } from "@/routes/system/foundation/constants";
+// System / Foundation — Audit log viewer (S2-FE-FND-2)
+import { AuditLogsPage } from "@/routes/system/foundation/audit-logs/AuditLogsPage";
+import { AuditLogDetailPage } from "@/routes/system/foundation/audit-logs/AuditLogDetailPage";
+// System / Foundation — File metadata viewer (S2-FE-FND-2)
+import { FilesPage } from "@/routes/system/files/FilesPage";
+import { FileDetailPage } from "@/routes/system/files/FileDetailPage";
+import { FILES_PATH } from "@/routes/system/files/constants";
+// System / Foundation — Module catalog admin (S2-FE-FND-3)
+import { ModulesPage } from "@/routes/system/modules/ModulesPage";
+import { ModuleDetailPage } from "@/routes/system/modules/ModuleDetailPage";
+import { MODULES_PATH } from "@/routes/system/modules/constants";
+// Account — self-service (S2-FE-AUTH-2)
+import { ChangePasswordPage } from "@/routes/account/ChangePasswordPage";
 
 const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", EmployeeListPage);
 const hrEmployeesRoute = makeModuleRoute("/hr/employees", "hr.employees", "HR", EmployeeListPage);
 const hrMeRoute = makeModuleRoute("/hr/me", "hr.me", "HR", MyProfilePage);
 
+// Profile change request workflow (S2-FE-HR-4) — RouteMeta CỤC BỘ (literal engine pair, KHÔNG đụng
+// ROUTE_REGISTRY của web-core — cùng kỹ thuật system.login-logs/system.files).
+const hrMeChangeRequestRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: PCR_ME_PATH,
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(PCR_ME_ROUTE_META, "HR", <MyChangeRequestPage />),
+});
+const hrProfileChangeRequestsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: PCR_LIST_PATH,
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(PCR_LIST_ROUTE_META, "HR", <ProfileChangeRequestListPage />),
+});
+const hrProfileChangeRequestDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/profile-change-requests/$id",
+  beforeLoad: authGuard,
+  component: () => {
+    const { id } = hrProfileChangeRequestDetailRoute.useParams();
+    return buildModuleRouteContent(
+      PCR_DETAIL_ROUTE_META,
+      "HR",
+      <ProfileChangeRequestDetailPage requestId={id} />,
+    );
+  },
+});
 // S2-FE-HR-5 — HR master-data admin screens (list + CRUD). Cổng route = cặp ĐỌC (departments/positions)
 // hoặc manage:master-data DUY NHẤT (job-levels/contract-types) qua RouteMeta trong ROUTE_REGISTRY.
 const hrDepartmentsRoute = makeModuleRoute(
@@ -471,12 +528,115 @@ const systemSettingsRoute = createRoute({
 
 const systemUsersRoute = makeModuleRoute("/system/users", "system.users", "FOUNDATION", UsersPage);
 const systemRolesRoute = makeModuleRoute("/system/roles", "system.roles", "FOUNDATION", RolesPage);
+
+// User CRUD — S2-FE-AUTH-3. Reuses "system.users" meta (route-level gate = AUTH.USER.VIEW); finer
+// per-action gate (create/update/lock/unlock/assign-role) applied inside each page via useCan —
+// mirrors hrEmployeeCreateRoute/hrEmployeeDetailRoute/hrEmployeeEditRoute pattern.
+const systemUsersMeta = getMeta("system.users");
+
+// Static "new" segment ranks above the "$userId" param route — never collides with detail.
+const systemUserCreateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/users/new",
+  beforeLoad: authGuard,
+  component: () => {
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      systemUsersMeta,
+      "FOUNDATION",
+      <UserFormPage
+        onSuccess={(id) => void navigate({ to: "/system/users/$userId", params: { userId: id } })}
+        onCancel={() => void navigate({ to: "/system/users" as "/" })}
+      />,
+    );
+  },
+});
+
+// Detail — no sidebar entry; path param resolved via useParams.
+const systemUserDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/users/$userId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { userId } = systemUserDetailRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      systemUsersMeta,
+      "FOUNDATION",
+      <UserDetailPage
+        userId={userId}
+        onBack={() => void navigate({ to: "/system/users" as "/" })}
+        onEdit={() => void navigate({ to: "/system/users/$userId/edit", params: { userId } })}
+        onManageRoles={() =>
+          void navigate({ to: "/system/users/$userId/roles", params: { userId } })
+        }
+      />,
+    );
+  },
+});
+
+// Edit — reuses systemUsersMeta; UserFormPage applies the update:user useCan gate.
+const systemUserEditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/users/$userId/edit",
+  beforeLoad: authGuard,
+  component: () => {
+    const { userId } = systemUserEditRoute.useParams();
+    const navigate = useNavigate();
+    const toDetail = () => void navigate({ to: "/system/users/$userId", params: { userId } });
+    return buildModuleRouteContent(
+      systemUsersMeta,
+      "FOUNDATION",
+      <UserFormPage userId={userId} onSuccess={toDetail} onCancel={toDetail} />,
+    );
+  },
+});
+
+// Assign-roles — reuses systemUsersMeta; UserRolesPage applies the assign-role:user useCan gate.
+const systemUserRolesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/users/$userId/roles",
+  beforeLoad: authGuard,
+  component: () => {
+    const { userId } = systemUserRolesRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      systemUsersMeta,
+      "FOUNDATION",
+      <UserRolesPage
+        userId={userId}
+        onBack={() => void navigate({ to: "/system/users/$userId", params: { userId } })}
+      />,
+    );
+  },
+});
+
+// S2-FE-FND-2 — THAY ModulePlaceholder = AuditLogsPage (route đã có sẵn trong ROUTE_REGISTRY,
+// gate FOUNDATION.AUDIT_LOG.VIEW → view:audit-log, đã sửa drift trong registry.ts).
 const systemAuditLogsRoute = makeModuleRoute(
   "/system/audit-logs",
   "system.audit-logs",
   "FOUNDATION",
-  ModulePlaceholder,
+  AuditLogsPage,
 );
+
+// Audit log detail — local RouteMeta (no sidebar entry; reuses system.audit-logs permission).
+// Pattern mirrors hrEmployeeDetailRoute/attRecordDetailRoute: local meta, buildModuleRouteContent →
+// ProtectedRoute guard tiêu thụ guardResult.
+const systemAuditLogDetailMeta = getMeta("system.audit-logs");
+const systemAuditLogDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/audit-logs/$auditLogId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { auditLogId } = systemAuditLogDetailRoute.useParams();
+    return buildModuleRouteContent(
+      systemAuditLogDetailMeta,
+      "FOUNDATION",
+      <AuditLogDetailPage auditLogId={auditLogId} />,
+    );
+  },
+});
 
 // System / Foundation — viewer nhật ký bảo mật (S2-AUTH-BE-5). RouteMeta CỤC BỘ (KHÔNG ở
 // ROUTE_REGISTRY web-core — lane không sửa web-core); dùng CÙNG buildModuleRouteContent →
@@ -493,6 +653,66 @@ const systemSecurityEventsRoute = createRoute({
   beforeLoad: authGuard,
   component: () =>
     buildModuleRouteContent(SECURITY_EVENTS_ROUTE_META, "FOUNDATION", <SecurityEventsPage />),
+});
+
+// S2-FE-FND-2 — File metadata viewer. Route ADDITIVE trong ROUTE_REGISTRY (system.files, gate
+// FOUNDATION.FILE.VIEW → view:foundation-file).
+const systemFilesRoute = makeModuleRoute(FILES_PATH, "system.files", "FOUNDATION", FilesPage);
+
+// File detail — local RouteMeta (no sidebar entry; reuses system.files permission).
+const systemFileDetailMeta = getMeta("system.files");
+const systemFileDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/files/$fileId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { fileId } = systemFileDetailRoute.useParams();
+    return buildModuleRouteContent(
+      systemFileDetailMeta,
+      "FOUNDATION",
+      <FileDetailPage fileId={fileId} />,
+    );
+  },
+});
+
+// S2-FE-FND-3 — Module catalog admin. Route ADDITIVE trong ROUTE_REGISTRY (system.modules, gate
+// FOUNDATION.MODULE.VIEW → view:foundation-module).
+const systemModulesRoute = makeModuleRoute(
+  MODULES_PATH,
+  "system.modules",
+  "FOUNDATION",
+  ModulesPage,
+);
+
+// Module detail — local RouteMeta (no sidebar entry; reuses system.modules permission).
+const systemModuleDetailMeta = getMeta("system.modules");
+const systemModuleDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/modules/$moduleCode",
+  beforeLoad: authGuard,
+  component: () => {
+    const { moduleCode } = systemModuleDetailRoute.useParams();
+    return buildModuleRouteContent(
+      systemModuleDetailMeta,
+      "FOUNDATION",
+      <ModuleDetailPage moduleCode={moduleCode} />,
+    );
+  },
+});
+
+// Account self-service — /auth/change-password là endpoint JwtAuthGuard-only (KHÔNG PermissionGuard,
+// KHÔNG cặp permission `password:*` trong catalog thật) ⇒ route KHÔNG dùng buildModuleRouteContent/
+// ProtectedRoute (không có moduleCode/permission để gate) — chỉ cần ProtectedShell (đăng nhập là đủ),
+// giống pattern homeRoute/indexRoute.
+const accountChangePasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/account/change-password",
+  beforeLoad: authGuard,
+  component: () => (
+    <ProtectedShell>
+      <ChangePasswordPage />
+    </ProtectedShell>
+  ),
 });
 
 // ---------------------------------------------------------------------------
@@ -528,6 +748,9 @@ const routeTree = rootRoute.addChildren([
   hrEmployeeDetailRoute,
   hrEmployeeEditRoute,
   hrMeRoute,
+  hrMeChangeRequestRoute,
+  hrProfileChangeRequestsRoute,
+  hrProfileChangeRequestDetailRoute,
   hrDepartmentsRoute,
   hrPositionsRoute,
   hrJobLevelsRoute,
@@ -556,10 +779,20 @@ const routeTree = rootRoute.addChildren([
   systemCompanySettingsRoute,
   systemSettingsRoute,
   systemUsersRoute,
+  systemUserCreateRoute,
+  systemUserDetailRoute,
+  systemUserEditRoute,
+  systemUserRolesRoute,
   systemRolesRoute,
   systemAuditLogsRoute,
+  systemAuditLogDetailRoute,
   systemLoginLogsRoute,
   systemSecurityEventsRoute,
+  systemFilesRoute,
+  systemFileDetailRoute,
+  systemModulesRoute,
+  systemModuleDetailRoute,
+  accountChangePasswordRoute,
   notFoundRoute,
 ]);
 

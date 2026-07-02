@@ -15,7 +15,9 @@ export default {
     },
     status: {
       active: "Đang hoạt động",
+      invited: "Chờ kích hoạt",
       suspended: "Đã tạm khóa",
+      locked: "Đã khoá",
     },
     empty: {
       title: "Không có người dùng",
@@ -28,6 +30,120 @@ export default {
     forbidden: {
       title: "Không có quyền truy cập",
       description: "Bạn không có quyền xem danh sách người dùng.",
+    },
+    actions: {
+      create: "Tạo người dùng",
+    },
+
+    // S2-FE-AUTH-3 — form tạo/sửa user (/system/users/new · /system/users/:id/edit)
+    form: {
+      createTitle: "Tạo người dùng",
+      createDescription: "Tạo tài khoản người dùng mới cho công ty",
+      editTitle: "Chỉnh sửa người dùng",
+      editDescription: "Cập nhật thông tin tài khoản người dùng",
+      cancel: "Huỷ",
+      submitCreate: "Tạo người dùng",
+      submitSave: "Lưu thay đổi",
+      submitting: "Đang xử lý…",
+      fields: {
+        email: "Email",
+        fullName: "Họ tên",
+        initialPassword: "Mật khẩu ban đầu",
+      },
+      hints: {
+        initialPassword: "Tối thiểu 10 ký tự, có chữ hoa, chữ thường và số.",
+        emailImmutable: "Email là định danh, không thể thay đổi sau khi tạo.",
+      },
+      forbidden: {
+        description: "Bạn không có quyền tạo hoặc chỉnh sửa người dùng.",
+      },
+      validation: {
+        emailRequired: "Vui lòng nhập email.",
+        emailInvalid: "Email không hợp lệ.",
+        fullNameRequired: "Vui lòng nhập họ tên.",
+        fullNameTooLong: "Họ tên tối đa 200 ký tự.",
+        passwordTooShort: "Mật khẩu tối thiểu 10 ký tự.",
+        passwordTooLong: "Mật khẩu tối đa 128 ký tự.",
+        passwordNeedsLower: "Mật khẩu phải có chữ thường.",
+        passwordNeedsUpper: "Mật khẩu phải có chữ hoa.",
+        passwordNeedsDigit: "Mật khẩu phải có chữ số.",
+      },
+      errors: {
+        conflict: "Email đã tồn tại trong công ty.",
+        forbidden: "Bạn không có quyền thực hiện thao tác này.",
+        validation: "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.",
+        server: "Có lỗi hệ thống. Vui lòng thử lại sau.",
+        generic: "Có lỗi xảy ra. Vui lòng thử lại.",
+      },
+    },
+
+    // S2-FE-AUTH-3 — chi tiết user (/system/users/:id)
+    detail: {
+      backToList: "Quay lại danh sách",
+      fields: {
+        email: "Email",
+        fullName: "Họ tên",
+        status: "Trạng thái",
+        lastLogin: "Lần đăng nhập cuối",
+        lockedReason: "Lý do khoá",
+        createdAt: "Ngày tạo",
+      },
+      actions: {
+        edit: "Chỉnh sửa",
+        lock: "Khoá tài khoản",
+        unlock: "Mở khoá",
+        manageRoles: "Quản lý vai trò",
+      },
+      confirm: {
+        lockTitle: "Xác nhận khoá tài khoản",
+        lockDescription:
+          "Người dùng sẽ không thể đăng nhập cho đến khi được mở khoá. Bạn có chắc muốn tiếp tục?",
+        unlockTitle: "Xác nhận mở khoá tài khoản",
+        unlockDescription: "Người dùng sẽ có thể đăng nhập trở lại. Bạn có chắc muốn tiếp tục?",
+      },
+      error: {
+        title: "Không thể tải thông tin người dùng",
+        description: "Có lỗi khi tải thông tin người dùng. Vui lòng thử lại.",
+      },
+      errors: {
+        badRequest:
+          "Không thể thực hiện: tài khoản đã ở trạng thái này hoặc bạn đang thao tác trên chính mình.",
+      },
+    },
+
+    // S2-FE-AUTH-3 — gán/gỡ role (/system/users/:id/roles)
+    roles: {
+      title: "Quản lý vai trò",
+      description: "Gán hoặc gỡ vai trò phân quyền cho người dùng này",
+      limitationNotice:
+        "Màn hình hiện chưa hiển thị được vai trò ĐANG giữ (backend chưa có API đọc role theo user) — chỉ hỗ trợ thao tác Gán/Gỡ trên danh mục vai trò bên dưới; kết quả thao tác hiển thị ở nhật ký phiên.",
+      systemRole: "Vai trò hệ thống",
+      forbidden: {
+        description: "Bạn không có quyền gán vai trò cho người dùng.",
+      },
+      empty: {
+        title: "Không có vai trò",
+        description: "Chưa có vai trò nào trong danh mục.",
+      },
+      error: {
+        title: "Không thể tải danh mục vai trò",
+        description: "Có lỗi khi tải danh mục vai trò. Vui lòng thử lại.",
+      },
+      actions: {
+        assign: "Gán",
+        revoke: "Gỡ",
+      },
+      sessionLog: {
+        title: "Nhật ký thao tác (phiên này)",
+        assigned: 'Đã gán vai trò "{{role}}".',
+        revoked: 'Đã gỡ vai trò "{{role}}".',
+        error: 'Lỗi với vai trò "{{role}}": {{detail}}',
+      },
+      errors: {
+        notAssigned: "Người dùng chưa có vai trò này — không thể gỡ.",
+        conflict: "Vai trò này đã được gán trước đó.",
+        badRequest: "Yêu cầu không hợp lệ (có thể bạn đang thao tác trên chính mình).",
+      },
     },
   },
   roles: {
@@ -266,5 +382,193 @@ export default {
     deferredTitle: "Sắp ra mắt",
     deferredDescription:
       "Màn hình cấu hình cấp hệ thống đang chờ endpoint backend (SYSTEM_MANAGE). Sẽ được bổ sung trong đợt tiếp theo.",
+  },
+
+  // S2-FE-FND-2 — bộ lọc dùng cho viewer Audit log.
+  auditLogFilters: {
+    module: "Module",
+    modulePlaceholder: "VD: HR, ATT, AUTH",
+    action: "Hành động",
+    actionPlaceholder: "VD: create, update, delete",
+    actor: "Người thực hiện",
+    actorPlaceholder: "UUID người dùng",
+    entity: "Đối tượng",
+    entityPlaceholder: "VD: Employee, LeaveRequest",
+    fromDate: "Từ ngày",
+    toDate: "Đến ngày",
+    apply: "Lọc",
+    reset: "Xóa lọc",
+    page: "Trang {{page}}",
+  },
+
+  // S2-FE-FND-2 — SYSTEM-SCREEN-AUDIT-LOGS (/system/audit-logs + /:id).
+  auditLogs: {
+    title: "Audit log",
+    description: "Nhật ký thay đổi dữ liệu của công ty (chỉ đọc, append-only)",
+    columns: {
+      createdAt: "Thời gian",
+      module: "Module",
+      action: "Hành động",
+      entity: "Đối tượng",
+      actor: "Người thực hiện",
+      actions: "",
+      viewDetail: "Xem chi tiết",
+    },
+    empty: {
+      title: "Không có audit log",
+      description: "Chưa có bản ghi audit nào khớp bộ lọc.",
+    },
+    error: {
+      title: "Không thể tải audit log",
+      description: "Có lỗi khi tải audit log. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem audit log của công ty.",
+    },
+    detail: {
+      title: "Chi tiết audit log",
+      backToList: "Quay lại danh sách",
+      entityId: "Mã đối tượng",
+      dataScope: "Phạm vi dữ liệu",
+      ip: "Địa chỉ IP",
+      userAgent: "Thiết bị / Trình duyệt",
+      requestId: "Mã yêu cầu",
+      errorCode: "Mã lỗi",
+      errorMessage: "Thông báo lỗi",
+      changedFields: "Trường đã đổi",
+      oldValues: "Giá trị cũ",
+      newValues: "Giá trị mới",
+      notFound: {
+        title: "Không tìm thấy bản ghi",
+        description: "Bản ghi audit log này không tồn tại hoặc đã bị xoá.",
+      },
+    },
+  },
+
+  // S2-FE-FND-2 — SYSTEM-SCREEN-FILES (/system/files + /:id).
+  files: {
+    title: "Tệp tin",
+    description: "Metadata tệp tin đã tải lên hệ thống (chỉ đọc)",
+    columns: {
+      name: "Tên tệp",
+      mimeType: "Loại tệp",
+      size: "Dung lượng",
+      visibility: "Hiển thị",
+      uploadStatus: "Trạng thái",
+      scanStatus: "Quét virus",
+      uploadedAt: "Ngày tải lên",
+      actions: "",
+      viewDetail: "Xem chi tiết",
+    },
+    visibility: {
+      Private: "Riêng tư",
+      Internal: "Nội bộ",
+      Public: "Công khai",
+    },
+    uploadStatus: {
+      Pending: "Đang xử lý",
+      Uploaded: "Đã tải lên",
+      Failed: "Thất bại",
+      Deleted: "Đã xoá",
+    },
+    scanStatus: {
+      NotRequired: "Không yêu cầu",
+      Pending: "Đang quét",
+      Clean: "Sạch",
+      Infected: "Nhiễm mã độc",
+      Failed: "Quét lỗi",
+    },
+    empty: {
+      title: "Không có tệp tin",
+      description: "Chưa có tệp tin nào khớp bộ lọc.",
+    },
+    error: {
+      title: "Không thể tải danh sách tệp tin",
+      description: "Có lỗi khi tải danh sách tệp tin. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem tệp tin của công ty.",
+    },
+    filters: {
+      moduleCode: "Module",
+      moduleCodePlaceholder: "VD: HR, ATT, TASK",
+      entityType: "Đối tượng",
+      entityTypePlaceholder: "VD: Employee, Task",
+      visibility: "Hiển thị",
+      allVisibility: "Mọi mức hiển thị",
+      apply: "Lọc",
+      reset: "Xóa lọc",
+    },
+    detail: {
+      title: "Chi tiết tệp tin",
+      backToList: "Quay lại danh sách",
+      downloadCount: "Số lần tải",
+      owner: "Chủ sở hữu",
+      isTemporary: "Tệp tạm",
+      yes: "Có",
+      no: "Không",
+      links: "Liên kết đối tượng",
+      noLinks: "Chưa gắn với đối tượng nào.",
+      download: "Tải xuống",
+      notFound: {
+        title: "Không tìm thấy tệp tin",
+        description: "Tệp tin này không tồn tại hoặc đã bị xoá.",
+      },
+    },
+  },
+
+  // S2-FE-FND-3 — SYSTEM-SCREEN-MODULES (/system/modules + /:code). Read-only trước (toggle chờ BE).
+  modules: {
+    title: "Danh mục module",
+    description: "Toàn bộ module của hệ thống — tên, nhóm, trạng thái kích hoạt (chỉ đọc)",
+    columns: {
+      code: "Mã module",
+      name: "Tên module",
+      group: "Nhóm",
+      active: "Trạng thái",
+      enabled: "Bật/Tắt",
+      actions: "",
+      viewDetail: "Xem chi tiết",
+    },
+    active: {
+      yes: "Đang hoạt động",
+      no: "Ngừng hoạt động",
+    },
+    enabled: {
+      yes: "Đã bật",
+      no: "Đã tắt",
+    },
+    empty: {
+      title: "Không có module",
+      description: "Chưa có module nào khớp tìm kiếm.",
+    },
+    error: {
+      title: "Không thể tải danh mục module",
+      description: "Có lỗi khi tải danh mục module. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem danh mục module của hệ thống.",
+    },
+    filters: {
+      search: "Tìm kiếm",
+      searchPlaceholder: "Tìm theo mã hoặc tên module",
+    },
+    detail: {
+      title: "Chi tiết module",
+      backToList: "Quay lại danh sách",
+      description: "Mô tả",
+      route: "Đường dẫn",
+      requiredPermissions: "Quyền yêu cầu",
+      noPermissions: "Module này không yêu cầu quyền riêng — mọi user đều thấy được.",
+      toggleDeferredNotice:
+        "Bật/tắt module sẽ được bổ sung ở đợt sau (backend chưa có API thao tác). Trạng thái hiển thị ở đây chỉ để tham khảo.",
+      notFound: {
+        title: "Không tìm thấy module",
+        description: "Module này không tồn tại hoặc đã bị xoá.",
+      },
+    },
   },
 };

@@ -9,6 +9,14 @@
  */
 import { type SidebarItemMeta } from "@mediaos/web-core";
 import { AUDIT_LOG_VIEW_PERMISSION } from "@/routes/system/auth-logs/constants";
+import { FOUNDATION_FILE_VIEW_PERMISSION } from "@/routes/system/files/constants";
+import { FOUNDATION_MODULE_VIEW_PERMISSION } from "@/routes/system/modules/constants";
+import {
+  PCR_CREATE_PERMISSION,
+  PCR_APPROVE_PERMISSION,
+  PCR_ME_PATH,
+  PCR_LIST_PATH,
+} from "@/routes/hr/profile-change-requests/constants";
 
 // ---------------------------------------------------------------------------
 // DASH
@@ -59,6 +67,28 @@ export const HR_SIDEBAR: readonly SidebarItemMeta[] = [
     group: "operation",
     order: 30,
     requiredAnyPermissions: ["HR.EMPLOYEE.VIEW"],
+  },
+  // S2-FE-HR-4 — cặp seed THẬT mig 0444 (create/approve:profile-change-request) — literal, KHÔNG
+  // qua PERMISSION_CODE_TO_PAIR (tránh drift, cùng kỹ thuật system.login-logs/system.files).
+  {
+    sidebarKey: "hr.me-change-request",
+    moduleCode: "HR",
+    label: "Yêu cầu sửa hồ sơ",
+    path: PCR_ME_PATH,
+    icon: "file-edit",
+    group: "operation",
+    order: 40,
+    requiredAnyPermissions: [PCR_CREATE_PERMISSION],
+  },
+  {
+    sidebarKey: "hr.profile-change-requests",
+    moduleCode: "HR",
+    label: "Duyệt yêu cầu hồ sơ",
+    path: PCR_LIST_PATH,
+    icon: "clipboard-check",
+    group: "management",
+    order: 50,
+    requiredAnyPermissions: [PCR_APPROVE_PERMISSION],
   },
   // S2-FE-HR-5 — dữ liệu gốc HR. Gate theo cặp SEED THẬT (qua PERMISSION_CODE_TO_PAIR):
   // phòng ban/chức vụ = cặp ĐỌC; cấp bậc/loại hợp đồng = manage:master-data DUY NHẤT (SPEC-03 §13.12b/c).
@@ -351,6 +381,10 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 30,
     requiredAnyPermissions: ["AUTH.ROLE.VIEW"],
   },
+  // S2-FE-FND-2: gate theo cặp ENGINE THỰC ('view:audit-log', seed mig 0340, grant company-admin) —
+  // literal pair (cùng kỹ thuật system.login-logs), KHÔNG dùng mã FE FOUNDATION.AUDIT_LOG.VIEW qua
+  // PERMISSION_CODE_TO_PAIR (bài học drift: cặp map cũ 'view:foundation-audit-log' KHÔNG được
+  // AuditController enforce — sẽ tạo hố FE-hiện-BE-403).
   {
     sidebarKey: "system.audit-logs",
     moduleCode: "FOUNDATION",
@@ -359,7 +393,7 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     icon: "file-clock",
     group: "report",
     order: 40,
-    requiredAnyPermissions: ["FOUNDATION.AUDIT_LOG.VIEW"],
+    requiredAnyPermissions: [AUDIT_LOG_VIEW_PERMISSION],
   },
   // S2-AUTH-BE-5 — viewer nhật ký bảo mật. Gate theo cặp ENGINE THỰC ('view:audit-log',
   // seed mig 0340, grant company-admin), KHÔNG mã FE → filterSidebarItems khớp trực tiếp
@@ -383,6 +417,31 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     group: "report",
     order: 42,
     requiredAnyPermissions: [AUDIT_LOG_VIEW_PERMISSION],
+  },
+  // S2-FE-FND-2 — viewer file metadata. Cặp seed THẬT view:foundation-file (mig 0435, is_sensitive=false,
+  // bulk-grant company-admin qua LIKE 'foundation-%').
+  {
+    sidebarKey: "system.files",
+    moduleCode: "FOUNDATION",
+    label: "Tệp tin",
+    path: "/system/files",
+    icon: "file",
+    group: "report",
+    order: 43,
+    requiredAnyPermissions: [FOUNDATION_FILE_VIEW_PERMISSION],
+  },
+  // S2-FE-FND-3 — Module Catalog admin. Cặp seed THẬT view:foundation-module (mig 0435 dòng 338,
+  // is_sensitive=false, bulk-grant company-admin qua LIKE 'foundation-%') — cặp ModuleAdminController
+  // thật sự @RequirePermission (S2-FND-BE-1).
+  {
+    sidebarKey: "system.modules",
+    moduleCode: "FOUNDATION",
+    label: "Danh mục module",
+    path: "/system/modules",
+    icon: "layout-grid",
+    group: "admin",
+    order: 21,
+    requiredAnyPermissions: [FOUNDATION_MODULE_VIEW_PERMISSION],
   },
 ];
 

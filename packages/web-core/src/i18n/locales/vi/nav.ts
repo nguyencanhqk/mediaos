@@ -52,6 +52,8 @@ export default {
     systemUsers: "Người dùng",
     systemRoles: "Vai trò",
     systemAuditLogs: "Audit log",
+    systemFiles: "Tệp tin",
+    systemModules: "Danh mục module",
     accountProfile: "Hồ sơ tài khoản",
     forbidden: "Không có quyền truy cập",
     notFound: "Không tìm thấy trang",

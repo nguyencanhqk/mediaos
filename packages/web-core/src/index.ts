@@ -65,6 +65,7 @@ export { buildQueryString } from "./lib/api-params";
 export {
   rootKeys,
   authKeys,
+  authUsersKeys,
   dashboardKeys,
   hrKeys,
   attendanceKeys,
@@ -74,9 +75,10 @@ export {
   foundationKeys,
   attendanceInvalidation,
   leaveInvalidation,
+  foundationInvalidation,
+  hrInvalidation,
   // S2-FE-HR-5 (lane HR5-WC): HR master-data mutation → list invalidation.
   hrMasterDataInvalidation,
-  foundationInvalidation,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -85,6 +87,7 @@ export { bootstrapSession } from "./lib/session";
 export { getHealth, type Health } from "./lib/api";
 export { authApi } from "./lib/auth-api";
 export { usersApi } from "./lib/users-api";
+export { authUsersApi } from "./lib/auth-users-api";
 export { twoFactorApi } from "./lib/two-factor-api";
 export { notificationApi } from "./lib/notification-api";
 export { hrApi } from "./lib/hr-api";

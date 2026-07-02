@@ -1,53 +1,39 @@
 /**
- * HR-SCREEN-SYSTEM-USERS (S2-FE-HR-3 P1) — User list read-only placeholder.
+ * SYSTEM-SCREEN-USERS (S2-FE-AUTH-3) — User list, nối /auth/users (thay read-only placeholder cũ
+ * dùng /users/admin — S2-FE-HR-3 P1).
  *
- * Scope: read-only view placeholder; full CRUD deferred to Sprint 3 (S3-FE-SYSTEM-USERS).
  * Permission gate: useCan("view", "user") — canonical engine pair AUTH.USER.VIEW → view:user
- *   (DB-02 §9.1 + seed §13 migration 0444; hr + company-admin được view:user/Company).
+ *   (DB-02 §9.1 + seed §13 migration 0444/0450; hr + company-admin được view:user/Company).
  * Server enforces all data-scope; client only renders what server returns.
  *
  * States covered: loading · error · empty · forbidden.
  */
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Users, RefreshCw, Clock } from "lucide-react";
-import { usersApi, useCan } from "@mediaos/web-core";
+import { Users, RefreshCw, ChevronRight } from "lucide-react";
+import type { AuthUserDto } from "@mediaos/contracts";
+import { authUsersApi, authUsersKeys, useCan, PermissionGate } from "@mediaos/web-core";
 import { PageHeader, DataTable, EmptyState, Button, Badge } from "@mediaos/ui";
 import { SYSTEM_ENGINE_PAIRS } from "./constants";
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-type UserStatus = "active" | "suspended";
-
-interface UserRow {
-  id: string;
-  email: string;
-  fullName: string | null;
-  status: UserStatus;
-  lastLoginAt: string | null;
-  createdAt: string;
-}
-
-// ---------------------------------------------------------------------------
-// Query key factory (local — not global yet; extend query-keys.ts in Sprint 3)
-// ---------------------------------------------------------------------------
-const USER_QUERY_KEY = ["system", "users"] as const;
-
-// ---------------------------------------------------------------------------
 // Status badge
 // ---------------------------------------------------------------------------
-function UserStatusBadge({ status }: { status: UserStatus }) {
+function UserStatusBadge({ status }: { status: AuthUserDto["status"] }) {
   const { t } = useTranslation("system");
-  const variant = status === "active" ? "default" : "secondary";
+  const variant = status === "active" ? "default" : status === "invited" ? "secondary" : "danger";
   return <Badge variant={variant}>{t(`users.status.${status}`)}</Badge>;
 }
 
 // ---------------------------------------------------------------------------
 // Column definitions — moved out of component to avoid recreation on render
 // ---------------------------------------------------------------------------
-function useUserColumns(t: ReturnType<typeof useTranslation<"system">>["t"]): ColumnDef<UserRow>[] {
+function useUserColumns(
+  t: ReturnType<typeof useTranslation<"system">>["t"],
+  onOpenDetail: (id: string) => void,
+): ColumnDef<AuthUserDto>[] {
   return [
     {
       accessorKey: "email",
@@ -79,6 +65,15 @@ function useUserColumns(t: ReturnType<typeof useTranslation<"system">>["t"]): Co
         </span>
       ),
     },
+    {
+      id: "actions",
+      header: "",
+      cell: ({ row }) => (
+        <Button variant="ghost" size="sm" onClick={() => onOpenDetail(row.original.id)}>
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      ),
+    },
   ];
 }
 
@@ -88,21 +83,22 @@ function useUserColumns(t: ReturnType<typeof useTranslation<"system">>["t"]): Co
 export function UsersPage() {
   const { t } = useTranslation("system");
   const { t: tc } = useTranslation("common");
-  // READ_USER = { action: "view", resourceType: "user" } → view:user (seed §13).
+  const navigate = useNavigate();
+  // READ_USER = { action: "view", resourceType: "user" } → view:user (seed §13/§0450).
   const { action, resourceType } = SYSTEM_ENGINE_PAIRS.READ_USER;
   const canView = useCan(action, resourceType);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: USER_QUERY_KEY,
-    queryFn: async () => {
-      const result = await usersApi.listUsers({ limit: 50, offset: 0 });
-      return result;
-    },
+    queryKey: authUsersKeys.list({ limit: 50, offset: 0 }),
+    queryFn: () => authUsersApi.listUsers({ limit: 50, offset: 0 }),
     enabled: canView,
     staleTime: 30_000,
   });
 
-  const columns = useUserColumns(t);
+  const openDetail = (id: string) =>
+    void navigate({ to: "/system/users/$userId", params: { userId: id } });
+
+  const columns = useUserColumns(t, openDetail);
 
   // ── Forbidden ──────────────────────────────────────────────────────────────
   if (!canView) {
@@ -137,23 +133,19 @@ export function UsersPage() {
     );
   }
 
-  const items: UserRow[] = (data?.users ?? []).map((u) => ({
-    id: u.id,
-    email: u.email,
-    fullName: u.fullName,
-    status: u.status,
-    lastLoginAt: u.lastLoginAt,
-    createdAt: u.createdAt,
-  }));
+  const items: AuthUserDto[] = data?.users ?? [];
 
   return (
     <div className="space-y-6 p-6">
       <PageHeader title={t("users.title")} description={t("users.description")} icon={Users}>
-        {/* Sprint-3 notice — placeholder badge so QA knows this is read-only */}
-        <div className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-700">
-          <Clock className="h-3.5 w-3.5 shrink-0" />
-          <span>{t("users.sprint3Notice")}</span>
-        </div>
+        <PermissionGate
+          action={SYSTEM_ENGINE_PAIRS.CREATE_USER.action}
+          resourceType={SYSTEM_ENGINE_PAIRS.CREATE_USER.resourceType}
+        >
+          <Button size="sm" onClick={() => void navigate({ to: "/system/users/new" })}>
+            {t("users.actions.create")}
+          </Button>
+        </PermissionGate>
       </PageHeader>
 
       <DataTable
