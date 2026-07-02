@@ -156,6 +156,8 @@ import { CompanyProfilePage } from "@/routes/system/foundation/CompanyProfilePag
 import { CompanySettingsPage } from "@/routes/system/foundation/CompanySettingsPage";
 import { SystemSettingsPage } from "@/routes/system/foundation/SystemSettingsPage";
 import { FOUNDATION_PATH, FOUNDATION_SCREEN } from "@/routes/system/foundation/constants";
+// Account — self-service (S2-FE-AUTH-2)
+import { ChangePasswordPage } from "@/routes/account/ChangePasswordPage";
 
 const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", EmployeeListPage);
 const hrEmployeesRoute = makeModuleRoute("/hr/employees", "hr.employees", "HR", EmployeeListPage);
@@ -465,6 +467,21 @@ const systemSecurityEventsRoute = createRoute({
     buildModuleRouteContent(SECURITY_EVENTS_ROUTE_META, "FOUNDATION", <SecurityEventsPage />),
 });
 
+// Account self-service — /auth/change-password là endpoint JwtAuthGuard-only (KHÔNG PermissionGuard,
+// KHÔNG cặp permission `password:*` trong catalog thật) ⇒ route KHÔNG dùng buildModuleRouteContent/
+// ProtectedRoute (không có moduleCode/permission để gate) — chỉ cần ProtectedShell (đăng nhập là đủ),
+// giống pattern homeRoute/indexRoute.
+const accountChangePasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/account/change-password",
+  beforeLoad: authGuard,
+  component: () => (
+    <ProtectedShell>
+      <ChangePasswordPage />
+    </ProtectedShell>
+  ),
+});
+
 // ---------------------------------------------------------------------------
 // Error / public routes
 // ---------------------------------------------------------------------------
@@ -525,6 +542,7 @@ const routeTree = rootRoute.addChildren([
   systemAuditLogsRoute,
   systemLoginLogsRoute,
   systemSecurityEventsRoute,
+  accountChangePasswordRoute,
   notFoundRoute,
 ]);
 
