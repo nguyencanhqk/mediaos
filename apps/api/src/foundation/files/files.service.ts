@@ -27,7 +27,12 @@ import { FileAccessLogService } from "./file-access-log.service";
 import { FileLinkRepository } from "./file-link.repository";
 import { FilePolicyService } from "./file-policy.service";
 import { FileRepository } from "./file.repository";
-import { FilePolicyAction, type FileLinkRef, type FilePermissionInput } from "./file-policy.types";
+import {
+  FilePolicyAction,
+  FOUNDATION_FILE_PERMISSION,
+  type FileLinkRef,
+  type FilePermissionInput,
+} from "./file-policy.types";
 
 /** Acting user resolved from the authenticated request (JwtAuthGuard + CompanyGuard). */
 interface RequestUser {
@@ -268,7 +273,8 @@ export class FileService {
       await this.logDeny(user, {
         fileId,
         action: "Download",
-        permissionCode: "FOUNDATION.FILE.DOWNLOAD",
+        // Parametrized from the action map (single source of truth) — not a scattered literal.
+        permissionCode: this.foundationPermissionCode(FilePolicyAction.Download),
         reason: stateDeny,
       });
       throw new ConflictException(`FOUNDATION-FILE-ERR-NOT-DOWNLOADABLE: ${stateDeny}`);
@@ -662,6 +668,16 @@ export class FileService {
     if (row.scanStatus === "Infected") return "infected";
     if (row.uploadStatus !== "Uploaded") return "not-uploaded";
     return null;
+  }
+
+  /**
+   * The MODULE.RESOURCE.ACTION permission code logged on a foundation-file access-log row for `action`,
+   * derived from the FOUNDATION_FILE_PERMISSION action map (single source of truth) — e.g. Download →
+   * "FOUNDATION.FILE.DOWNLOAD". Keeps the H2 state-guard deny-log parametrized, not a scattered literal
+   * (CLAUDE.md §5; convention SPEC-01 §9).
+   */
+  private foundationPermissionCode(action: FilePolicyAction): string {
+    return `FOUNDATION.FILE.${FOUNDATION_FILE_PERMISSION[action].action.toUpperCase()}`;
   }
 
   /** Ghi 1 dòng file_access_log DENY (access_granted=false + denied_reason) trong tx tenant RIÊNG. */

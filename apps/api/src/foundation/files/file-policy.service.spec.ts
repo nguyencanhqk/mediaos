@@ -475,4 +475,69 @@ describe("FilePolicyService", () => {
       expect(decision.reason).toBe("deny-tenant");
     });
   });
+
+  // 12. S2-FND-BE-4 (fix-blastradius-realpair-test) — the REAL production pair ('HR','contract') ─────
+  // The ONLY production call-site of FileService.link is ContractService.linkFile, which emits the
+  // lowercase pair (moduleCode='HR', entityType='contract'). These cases pin that the resolver
+  // registered for that REAL pair dispatches (allow/deny-resolver), while the FICTITIOUS PascalCase
+  // 'EmployeeContract' pair stays UNREGISTERED and fail-closes to deny-no-resolver — the exact drift
+  // trap (memory: s1-fnd-module perm-pair drift) that masked the shipped Download-contract regression.
+  describe("real production pair ('HR','contract') — drift-trap guard", () => {
+    const foundationInput = () =>
+      baseInput({ moduleCode: "FOUNDATION", entityType: "File", entityId: "file-1" });
+
+    it("hasResolver: REAL 'contract' true (case/whitespace-insensitive); fictitious 'EmployeeContract' false", () => {
+      service.registerResolver(makeResolver("HR", ["contract"], true));
+      expect(service.hasResolver("HR", "contract")).toBe(true);
+      expect(service.hasResolver("  hr ", "CONTRACT")).toBe(true); // normalized like registration
+      // The PascalCase entity nobody registers remains unregistered → would deny-no-resolver.
+      expect(service.hasResolver("HR", "EmployeeContract")).toBe(false);
+    });
+
+    it("registered 'contract' + in-scope resolver → allow-resolver (FOUNDATION.FILE.* fallback NOT reached)", async () => {
+      // A GRANTING fallback proves the resolver verdict is final for the real pair.
+      const grant = makePermissionMock(allowDecision());
+      service = new FilePolicyService(grant.service);
+      const hr = makeResolver("HR", ["contract"], true);
+      service.registerResolver(hr);
+
+      const decision = await service.decideForLinkedFile(
+        foundationInput(),
+        [{ moduleCode: "HR", entityType: "contract", entityId: "c1" }],
+        FilePolicyAction.Download,
+      );
+      expect(decision).toEqual({ allow: true, reason: "allow-resolver" });
+      expect(hr.calls).toEqual(["download:contract"]); // dispatched on the link's OWN lowercase entity
+      expect(grant.calls).toHaveLength(0); // never escalated to the fallback
+    });
+
+    it("registered 'contract' + resolver denies → deny-resolver (out-of-scope, no fallback escalation)", async () => {
+      const grant = makePermissionMock(allowDecision());
+      service = new FilePolicyService(grant.service);
+      service.registerResolver(makeResolver("HR", ["contract"], false));
+
+      const decision = await service.decideForLinkedFile(
+        foundationInput(),
+        [{ moduleCode: "HR", entityType: "contract", entityId: "c1" }],
+        FilePolicyAction.Download,
+      );
+      expect(decision).toEqual({ allow: false, reason: "deny-resolver" });
+      expect(grant.calls).toHaveLength(0);
+    });
+
+    it("fictitious 'EmployeeContract' link (never registered) → deny-no-resolver (the masked regression)", async () => {
+      // Only the REAL pair is registered; a link seeded with the drifted PascalCase name fails-closed.
+      const grant = makePermissionMock(allowDecision());
+      service = new FilePolicyService(grant.service);
+      service.registerResolver(makeResolver("HR", ["contract"], true));
+
+      const decision = await service.decideForLinkedFile(
+        foundationInput(),
+        [{ moduleCode: "HR", entityType: "EmployeeContract", entityId: "c1" }],
+        FilePolicyAction.Download,
+      );
+      expect(decision).toEqual({ allow: false, reason: "deny-no-resolver" });
+      expect(grant.calls).toHaveLength(0); // must NOT fall back to a broad file grant
+    });
+  });
 });
