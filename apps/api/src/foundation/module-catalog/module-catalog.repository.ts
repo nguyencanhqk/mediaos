@@ -24,4 +24,25 @@ export class ModuleCatalogRepository {
         .orderBy(asc(modules.sortOrder)),
     );
   }
+
+  /**
+   * S2-FND-BE-1 (admin catalog) — TẤT CẢ module chưa soft-delete (KỂ CẢ inactive), ORDER BY sort_order.
+   * KHÁC findActiveModules (my-apps): admin view thấy hết để quản trị bật/tắt. deleted_at IS NULL vẫn giữ.
+   */
+  findAllModules(): Promise<Module[]> {
+    return this.db.withTransaction((tx) =>
+      tx.select().from(modules).where(isNull(modules.deletedAt)).orderBy(asc(modules.sortOrder)),
+    );
+  }
+
+  /** S2-FND-BE-1 — 1 module theo code (chưa soft-delete). Rỗng ⇒ service ném NotFound. */
+  findByCode(code: string): Promise<Module[]> {
+    return this.db.withTransaction((tx) =>
+      tx
+        .select()
+        .from(modules)
+        .where(and(eq(modules.moduleCode, code), isNull(modules.deletedAt)))
+        .limit(1),
+    );
+  }
 }

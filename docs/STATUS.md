@@ -1,36 +1,10 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-02 02:42Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-02 02:25Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-### 🟡 S2-FE-FND-1 — FE FOUNDATION admin: System Overview (/system) + Company info view/edit (/system/company) + Company Settings (/system/settings) nối API thật
-- **zone**: yellow · **skills**: frontend-design, code-review
-- **sửa ở đâu (paths)**: `apps/app/**`, `packages/web-core/**`
-- **phụ thuộc**: S1-FND-MODULE-1✓, S1-FND-SETTING-1✓, S1-FE-REGISTRY-1✓
-- **done_when (đích hội tụ)**:
-  - [ ] /system: System Overview landing (thẻ tóm tắt company/module/health + link tới các trang con); PermissionGate theo cặp quyền ĐÃ SEED (verify pair seed thật — KHÔNG hard-code nhãn FRONTEND-13, bài học s1-fnd-module drift)
-  - [ ] /system/company: view + edit thông tin công ty nối GET/PATCH /foundation/company/current; dirty-form guard; confirm hậu quả trước mutation (FRONTEND-13 §6.6); invalidate sau lưu; PermissionGate view/update company
-  - [ ] /system/settings (+ /system/company/settings): đọc config qua POST /foundation/settings/resolve (batch known keys) + sửa qua PATCH /foundation/company-settings/:key; field is_sensitive do SERVER mask (§6.3); confirm khi đổi giá trị nhạy cảm
-  - [ ] KHÔNG hard-code role (PermissionGate/useCan); loading/empty/error/forbidden; web test xanh; typecheck xanh
-
-### 🟡 S2-HR-BE-7 — Employee-code config admin API (carry-over STORY-035): GET/PATCH /hr/settings/employee-code (sửa employee_code_configs) + lock manual-edit + audit — unblock S2-FE-HR-8
-- **zone**: yellow · **skills**: code-review
-- **sửa ở đâu (paths)**: `apps/api/src/employees/**`, `apps/api/src/foundation/sequences/**`, `packages/contracts/src/**`
-- **phụ thuộc**: S2-HR-DB-1✓, S1-FND-SEQ-1✓
-- **done_when (đích hội tụ)**:
-  - [ ] GET /hr/settings/employee-code đọc + PATCH sửa employee_code_configs (prefix/padding/reset policy); permission HR.EMPLOYEE_CODE_CONFIG.VIEW + manage; preview qua previewNextCode (S1-FND-SEQ-1 — KHÔNG mutate counter)
-  - [ ] lock manual-edit khi policy yêu cầu; audit thay đổi config trong tx withTenant (config-only, KHÔNG current_value)
-  - [ ] deny-path RED: thiếu quyền → 403 + 0 audit; 2-tenant deny; validate value_type
-
-### 🟡 S3-FE-LEAVE-3 — FE LEAVE all-requests (/leave/requests, 006) + edit draft (/leave/requests/:id/edit, 002E)
-- **zone**: yellow · **skills**: frontend-design, code-review
-- **sửa ở đâu (paths)**: `apps/app/**`, `packages/web-core/**`
-- **phụ thuộc**: S3-LEAVE-BE-3✓, S3-FE-LEAVE-1✓
-- **done_when (đích hội tụ)**:
-  - [ ] /leave/requests (AllLeaveRequestsPage): list mọi đơn theo scope (Team/Dept/Company) nối GET /leave/requests; filter status/kỳ/phòng ban; PermissionGate LEAVE.REQUEST.VIEW
-  - [ ] /leave/requests/:id/edit (EditLeaveDraftPage): sửa đơn Draft nối PATCH /leave/requests/:id (Draft-only, S3-LEAVE-BE-2); dirty-form guard; PermissionGate LEAVE.REQUEST.UPDATE_DRAFT
-  - [ ] KHÔNG hard-code; loading/empty/error/forbidden; web test xanh; typecheck xanh
+_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
 
 ## Hàng đợi
 
@@ -63,19 +37,22 @@
 **🛑 BLOCKED:**
 - `S2-AUTH-BE-6` Role write API (P1): POST/PATCH /auth/roles (create/update, KHÔNG sửa system role) + assign/revoke permission cho role (role_permissions) có audit — unblock S2-FE-AUTH-4
 - `S2-AUTH-BE-7` Session management API (P1): GET /auth/sessions (phiên của CHÍNH user) + revoke 1 phiên + revoke-all-others — hoàn tất user_sessions (DEFERRED ở BE-1) — unblock S2-FE-AUTH-5
+- `S2-FE-FND-1` FE FOUNDATION admin: System Overview (/system) + Company info view/edit (/system/company) + Company Settings (/system/settings) nối API thật
 - `S2-HR-BE-6` Employee contracts (carry-over STORY-031): migration employee_contracts (RLS+FORCE) + CRUD API /hr/contracts + /hr/employees/:id/contracts + file link + cảnh báo hết hạn — unblock S2-FE-HR-7
+- `S2-HR-BE-7` Employee-code config admin API (carry-over STORY-035): GET/PATCH /hr/settings/employee-code (sửa employee_code_configs) + lock manual-edit + audit — unblock S2-FE-HR-8
 - `S3-LEAVE-BE-4` LEAVE type/policy management + HR balance view/adjust + ledger (P1): CRUD type/policy + HR view balances + adjust balance (mọi thay đổi qua leave_balance_transactions, no negative ngoài policy)
 - `S3-INT-1` LEAVE→ATT sync: onLeaveApproved handler + AttendanceLeaveSyncService (full-day=Leave/required 0 · half-day/hourly reduce · recalc existing check-in) + sync_status/retry + onLeaveCancelled/Revoked recalc + balance restore idempotent (S3-SYNC-004)
 - `S3-ATT-BE-5` ATT Remote/Onsite-work request workflow API (CO-S4-004): remote_work_requests create/list/detail + approve/reject + ảnh hưởng tính công + audit + event (skeleton 0452 → hoàn thiện)
 - `S3-ATT-BE-6` ATT Reports + audit read (CO-S4-006, P2): GET /attendance/reports (tổng hợp theo scope) + /attendance/audit-logs (tái dùng foundation audit filter module=ATT)
+- `S3-FE-LEAVE-3` FE LEAVE all-requests (/leave/requests, 006) + edit draft (/leave/requests/:id/edit, 002E)
 - `S3-FE-LEAVE-4` FE LEAVE Calendar (/leave/calendar, own/team/company theo scope)
 
 **Đã xong (v2):** `S0-GOV-1`, `S0-CI-1`, `S0-CI-2`, `S0-ENV-1`, `S0-FND-DB-1`, `S0-FND-SEED-1`, `S0-AUTH-DB-1`, `S0-API-CORE-1`, `S0-FE-CORE-1`, `S0-FE-API-1`, `S0-QA-1`, `S1-FND-AUDIT-1`, `S1-FND-SETTING-1`, `S1-FND-FILE-1`, `S1-FND-SEQ-1`, `S1-FND-MODULE-1`, `S1-FND-WIRE-1`, `S1-FE-LAYOUT-1`, `S1-FE-REGISTRY-1`, `S1-FE-QUERY-WIRE-1`, `S1-QA-FND-1`, `S1-QA-DEBT-1`, `S1-INT-MOUNT-1`, `S2-AUTH-DB-1`, `S2-AUTH-DB-2`, `S2-AUTH-SEED-1`, `S2-AUTH-BE-1`, `S2-AUTH-BE-2`, `S2-AUTH-BE-3`, `S2-AUTH-BE-4`, `S2-AUTH-BE-5`, `S2-HR-DB-1`, `S2-HR-SEED-1`, `S2-HR-BE-1`, `S2-HR-BE-2`, `S2-HR-BE-3`, `S2-HR-BE-4`, `S2-FE-AUTH-1`, `S2-FE-HR-1`, `S2-FE-HR-2`, `S2-FE-HR-3`, `S2-INT-1`, `S2-INT-2`, `S2-QA-1`, `S2-QA-2`, `S2-QA-DEBT-1`, `S2-AUTH-HARDEN-1`, `S2-HR-MASK-1`, `S2-HR-EMP-LEGACY-LOCK-1`, `S2-AUTH-BRAND-1`, `S2-FND-BE-1`, `S2-FND-BE-2`, `S2-FND-BE-3`, `S3-ATT-DB-1`, `S3-LEAVE-DB-1`, `S3-FND-SEEDRUN-1`, `S3-ATT-SEED-1`, `S3-LEAVE-SEED-1`, `S3-ATT-BE-1`, `S3-ATT-BE-2`, `S3-ATT-BE-3`, `S3-LEAVE-BE-1`, `S3-LEAVE-BE-2`, `S3-LEAVE-BE-3`, `S3-FE-REGISTRY-1`, `S3-FE-ATT-1`, `S3-FE-ATT-2`, `S3-FE-LEAVE-1`, `S3-FE-LEAVE-2`, `S3-ATT-BE-4`, `S3-FE-ATT-5`, `S3-LEAVE-BE-5`
 
 ## Trạng thái repo
 
-- **branch**: `wip/s2-fe-hr-5-hr5-wc` · **file đang đổi (dirty)**: 3
-- **migration head**: idx 136 — `0456_s2_fndbe3_retention_audit_object_type` (137 migration)
+- **branch**: `rescue/s2-fefnd1-hrbe7-verify` · **file đang đổi (dirty)**: 0
+- **migration head**: idx 139 — `0459_s2_hrbe7_employee_code_config` (140 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
 
@@ -83,18 +60,18 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
-| `899f48a` | 2026-07-02 | wip(HR5-WC): web-core HR master-data spine (api + pairs + routes + i18n + drift-guard) |
+| `84e077f` | 2026-07-02 | merge feat/s3-wave3 into rescue branch to bring in 0457/0458 + resolve migration numbering |
+| `7bbdb06` | 2026-07-02 | fix(db): renumber rescue branch migration 0457→0459 (pre-merge self-consistency) |
+| `7ef0393` | 2026-07-02 | wip(FND1-APP): 3 màn System/Foundation trong apps/app (overview + company view/edit + settings) |
+| `9388885` | 2026-07-02 | wip(FND1-WC): foundation web-core plumbing — PERMISSION_CODE_TO_PAIR foundation-company/setting pairs + foundationApi/keys + drift-guard tests |
+| `c4bf948` | 2026-07-02 | wip(hrbe7-int): add cross-tenant PATCH isolation + audit-in-tx rollback integration coverage |
+| `1030975` | 2026-07-02 | wip(hrbe7-api): employee-code config admin API (GET/PATCH config + preview) |
+| `4fcf014` | 2026-07-02 | wip(hrbe7-mig): migration 0457 employee-code-config audit CHECK + permission seed |
 | `271bc40` | 2026-07-02 | chore(harness): reconcile S3-ATT-BE-4 + S2-FND-BE-1 stale ledger entries + reopen S2-FND-BE-2 + regen STATUS (#75) |
+| `6db736d` | 2026-07-02 | fix(db): remove orphaned pre-renumber migration file on feat/s3-wave3 (#76) |
+| `87731c2` | 2026-07-02 | feat(S2-FND-BE-1): admin module catalog API (GET /foundation/modules[/:code]) (#74) |
 | `df6d468` | 2026-07-02 | chore(harness): regen STATUS after wave3 round 1 (#71) |
-| `b91f9bd` | 2026-07-01 | chore(harness): commit stray plan docs from prior wave + regen STATUS (#67) |
-| `602fa2b` | 2026-07-01 | chore(harness): move crown-jewel PLAN stage to Sonnet 5 to cut cost (#66) |
-| `3c89694` | 2026-07-01 | feat(sprint3): S3 ATT/LEAVE core slice — registry spine + FE screens + approval FSM + foundation retention (#65) |
-| `3b132ef` | 2026-07-01 | chore(harness): seed FE screen-coverage WOs + master-plan update (#57) |
-| `8115bfa` | 2026-06-27 | feat(s3): Sprint 3 wave 1 — ATT + LEAVE backend spine + seeds (+ S2-AUTH-BE-5 viewer) (#56) |
-| `05cdcc4` | 2026-06-27 | feat(harness): auto-reconcile merged-but-unstamped WOs in gen-status (#47) |
-| `edd68c9` | 2026-06-27 | Update README.md (#7) |
-| `07254e3` | 2026-06-26 | feat(db): S3-ATT-DB-1 — ATT Core migration 0452 (DB-04 reconcile, evolve-additive) (#54) |
-| `1074b0f` | 2026-06-26 | chore(harness): open Sprint 3 (ATT+LEAVE+sync) + close Sprint 2 + fix story-matrix traces (#53) |
+| `9049231` | 2026-07-02 | feat(S3-ATT-BE-4): ATT Adjustment workflow API (create/list/detail/approve/reject/direct-adjust) (#73) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

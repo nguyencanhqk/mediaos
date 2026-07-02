@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../../db/db.service";
 import { AuditService } from "../../events/audit.service";
 import type { SequenceCounter } from "../../db/schema/sequences";
@@ -24,6 +24,29 @@ interface SequenceConfigSnapshot {
   incrementBy: number;
   resetPolicy: string;
   status: string;
+}
+
+/**
+ * S2-FND-BE-2 — view an toàn cho admin ops surface (GET /foundation/sequences). WHITELIST: cấu hình +
+ * trạng thái + mã đã sinh gần nhất (đã emit — KHÔNG secret). TUYỆT ĐỐI KHÔNG `currentValue` (QA-06) —
+ * giá trị runtime không lộ. `updatedAt`/`lastResetAt` = ISO-8601 string trên wire (khớp contract).
+ */
+export interface SequenceCounterView {
+  id: string;
+  moduleCode: string;
+  sequenceKey: string;
+  scopeType: string;
+  scopeReferenceId: string | null;
+  prefix: string | null;
+  suffix: string | null;
+  datePattern: string | null;
+  paddingLength: number;
+  incrementBy: number;
+  resetPolicy: string;
+  status: string;
+  lastGeneratedCode: string | null;
+  lastResetAt: string | null;
+  updatedAt: string;
 }
 
 /**
@@ -210,6 +233,105 @@ export class SequenceService {
       );
 
       const after = await this.repo.findCounterTx(actor.companyId, counterKey, tx);
+      const beforeSnap = this.configSnapshot(before);
+      const afterSnap = after ? this.configSnapshot(after) : beforeSnap;
+
+      await this.audit.record(tx, {
+        objectType: "sequence_counter",
+        action: "SequenceUpdated",
+        objectId: before.id,
+        actorUserId: actor.id,
+        before: beforeSnap,
+        after: afterSnap,
+      });
+
+      return afterSnap;
+    });
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // S2-FND-BE-2 — HTTP ops surface (admin) THEO id. READ list/preview KHÔNG mutate; PATCH id ghi audit
+  // CÙNG tx (mirror updateSequence). MỌI method qua withTenant (BẤT BIẾN #1). NotFoundException (404) khi
+  // 0 row (cross-tenant / id lạ / soft-deleted) — RLS che, KHÔNG lộ tồn tại hàng tenant khác.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /** Map row → view WHITELIST an toàn (KHÔNG current_value/secret — QA-06). */
+  private toCounterView(row: SequenceCounter): SequenceCounterView {
+    return {
+      id: row.id,
+      moduleCode: row.moduleCode,
+      sequenceKey: row.sequenceKey,
+      scopeType: row.scopeType,
+      scopeReferenceId: row.scopeReferenceId,
+      prefix: row.prefix,
+      suffix: row.suffix,
+      datePattern: row.formatPattern,
+      paddingLength: row.paddingLength,
+      incrementBy: row.incrementBy,
+      resetPolicy: row.resetPolicy,
+      status: row.status,
+      lastGeneratedCode: row.lastGeneratedCode,
+      lastResetAt: row.lastResetAt ? row.lastResetAt.toISOString() : null,
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  /**
+   * Liệt kê counter của tenant (admin ops). READ-ONLY (withTenant + RLS). Trả view WHITELIST — KHÔNG
+   * current_value/secret. company_id ép ở repo (eq) + RLS (defense-in-depth).
+   */
+  async listSequences(companyId: string): Promise<SequenceCounterView[]> {
+    return this.db.withTenant(companyId, async (tx) => {
+      const rows = await this.repo.listCountersTx(companyId, tx);
+      return rows.map((r) => this.toCounterView(r));
+    });
+  }
+
+  /**
+   * Xem trước mã kế tiếp THEO id counter (GET /:id/preview). Đọc KHÔNG lock → tính value/reset (reuse
+   * computeNextValue/renderCode) → KHÔNG updateCounterValueTx (TUYỆT ĐỐI KHÔNG mutate). id lạ/cross-tenant
+   * ⇒ NotFoundException (404). Preview cho phép cả counter Inactive (read-only, admin xem mã kế tiếp).
+   */
+  async previewNextCodeById(companyId: string, id: string): Promise<NextCodeResult> {
+    const now = new Date();
+    const timeZone = this.resolveTimeZone(companyId);
+
+    return this.db.withTenant(companyId, async (tx) => {
+      const row = await this.repo.findCounterByIdTx(companyId, id, tx);
+      if (!row) {
+        throw new NotFoundException(`Không tìm thấy sequence counter id=${id}.`);
+      }
+      const { nextValue } = this.computeNextValue(row, now, timeZone);
+      const code = this.renderCode(row, nextValue, now, timeZone);
+      return { sequenceKey: row.sequenceKey, value: Number(nextValue), code };
+    });
+  }
+
+  /**
+   * Admin PATCH cấu hình counter THEO id (PATCH /:id). CÙNG tx withTenant: đọc before → UPDATE config →
+   * ghi audit 'sequence_counter'/SequenceUpdated (append-only, before/after = cấu hình — KHÔNG
+   * current_value/secret/PII). id lạ/cross-tenant ⇒ NotFoundException (404, RLS che). `actor` đã được
+   * controller xác thực + PermissionGuard gate (update:foundation-sequence) — service KHÔNG tự guard.
+   */
+  async updateSequenceById(
+    actor: { id: string; companyId: string },
+    id: string,
+    input: UpdateSequenceInput,
+  ): Promise<SequenceConfigSnapshot> {
+    return this.db.withTenant(actor.companyId, async (tx) => {
+      const before = await this.repo.findCounterByIdTx(actor.companyId, id, tx);
+      if (!before) {
+        throw new NotFoundException(`Không tìm thấy sequence counter id=${id}.`);
+      }
+
+      await this.repo.updateConfigByIdTx(
+        actor.companyId,
+        id,
+        { ...input, actorUserId: actor.id },
+        tx,
+      );
+
+      const after = await this.repo.findCounterByIdTx(actor.companyId, id, tx);
       const beforeSnap = this.configSnapshot(before);
       const afterSnap = after ? this.configSnapshot(after) : beforeSnap;
 

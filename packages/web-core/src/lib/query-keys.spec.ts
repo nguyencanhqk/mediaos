@@ -9,12 +9,40 @@ import {
   attendanceKeys,
   authKeys,
   dashboardKeys,
+  foundationInvalidation,
+  foundationKeys,
   hrKeys,
   leaveInvalidation,
   leaveKeys,
   notificationKeys,
   taskKeys,
 } from "./query-keys";
+
+describe("foundationKeys", () => {
+  it("company.current() = ['foundation', 'company', 'current']", () => {
+    expect(foundationKeys.company.current()).toEqual(["foundation", "company", "current"]);
+  });
+
+  it("settings.resolve(params) chứa 'foundation', 'settings', 'resolve' và params", () => {
+    const params = { keys: ["general.timezone"] };
+    const key = foundationKeys.settings.resolve(params);
+    expect(key).toContain("foundation");
+    expect(key).toContain("settings");
+    expect(key).toContain("resolve");
+    expect(key).toContain(params);
+  });
+
+  it("updateCompany invalidation nhắm current-company key", () => {
+    const keys = foundationInvalidation.updateCompany();
+    expect(keys).toContainEqual(foundationKeys.company.current());
+  });
+
+  it("updateSetting invalidation dùng prefix resolve (bỏ slot params) — khớp mọi biến thể", () => {
+    const keys = foundationInvalidation.updateSetting();
+    // Prefix KHÔNG có slot params → là prefix của mọi resolve(params).
+    expect(keys[0]).toEqual(["foundation", "settings", "resolve"]);
+  });
+});
 
 describe("authKeys", () => {
   it("me() = ['auth', 'me']", () => {

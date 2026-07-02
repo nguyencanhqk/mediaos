@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../../db/db.module";
 import { PermissionModule } from "../../permission/permission.module";
 import { SettingsModule } from "../settings/settings.module";
+import { ModuleAdminController } from "./module-admin.controller";
 import { ModuleCatalogController } from "./module-catalog.controller";
 import { ModuleCatalogRepository } from "./module-catalog.repository";
 import { ModuleCatalogService } from "./module-catalog.service";
@@ -16,7 +17,9 @@ import { ModuleCatalogService } from "./module-catalog.service";
  */
 @Module({
   imports: [DatabaseModule, PermissionModule, SettingsModule],
-  controllers: [ModuleCatalogController],
+  // ORDER load-bearing: ModuleCatalogController TRƯỚC ModuleAdminController ⇒ route TĨNH `modules/my-apps`
+  // đăng ký trước route param `modules/:code` (Express match theo thứ tự) → my-apps KHÔNG bị :code nuốt.
+  controllers: [ModuleCatalogController, ModuleAdminController],
   providers: [ModuleCatalogService, ModuleCatalogRepository],
   exports: [ModuleCatalogService],
 })

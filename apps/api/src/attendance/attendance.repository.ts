@@ -4,7 +4,6 @@ import { DatabaseService, type TenantTx } from "../db/db.service";
 import { attendanceLogs, attendanceRules, shiftAssignments, shifts } from "../db/schema/attendance";
 import { employeeProfiles } from "../db/schema/employees";
 import {
-  attendanceAdjustmentRequests,
   attendancePeriods,
   attendanceRecords,
   leaveRequests,
@@ -147,6 +146,25 @@ export class AttendanceRepository {
   }
 
   /**
+   * S3-ATT-BE-4 — a single record by id under a `FOR UPDATE` row-lock (adjust-direct serialisation).
+   * Tenant-scoped: a cross-tenant id returns no row (RLS + explicit company_id) → caller maps to 404.
+   */
+  findRecordByIdForUpdateTx(companyId: string, id: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(attendanceRecords)
+      .where(
+        and(
+          eq(attendanceRecords.companyId, companyId),
+          eq(attendanceRecords.id, id),
+          isNull(attendanceRecords.deletedAt),
+        ),
+      )
+      .limit(1)
+      .for("update");
+  }
+
+  /**
    * Most recent OPEN record (checked-in, not yet checked-out) for a user. Used by check-out so an
    * overnight shift (check-in on day D, check-out on D+1 local) resolves the in-progress record
    * regardless of today's local date — fixes the dropped-checkout bug for cross-midnight shifts.
@@ -253,6 +271,31 @@ export class AttendanceRepository {
         and(
           eq(employeeProfiles.companyId, companyId),
           eq(employeeProfiles.userId, userId),
+          isNull(employeeProfiles.deletedAt),
+        ),
+      )
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  /**
+   * S3-ATT-BE-3 — hồ sơ nhân sự theo employee_profiles.id (tenant-scoped), dùng khi HR/Admin xem rule
+   * hiệu lực CỦA NGƯỜI KHÁC (GET /attendance/rules/effective?employeeId=). Trả null nếu không tồn tại
+   * hoặc thuộc company khác (404 ở caller — KHÔNG lộ tồn tại xuyên tenant).
+   */
+  async resolveEmployeeByIdTx(companyId: string, employeeId: string, tx: TenantTx) {
+    const rows = await tx
+      .select({
+        id: employeeProfiles.id,
+        status: employeeProfiles.status,
+        orgUnitId: employeeProfiles.orgUnitId,
+        positionId: employeeProfiles.positionId,
+      })
+      .from(employeeProfiles)
+      .where(
+        and(
+          eq(employeeProfiles.companyId, companyId),
+          eq(employeeProfiles.id, employeeId),
           isNull(employeeProfiles.deletedAt),
         ),
       )
@@ -461,107 +504,8 @@ export class AttendanceRepository {
   }
 
   // ─── attendance_adjustment_requests ──────────────────────────────────────────
-
-  findAdjustmentByIdTx(companyId: string, id: string, tx: TenantTx) {
-    return tx
-      .select()
-      .from(attendanceAdjustmentRequests)
-      .where(
-        and(
-          eq(attendanceAdjustmentRequests.companyId, companyId),
-          eq(attendanceAdjustmentRequests.id, id),
-          isNull(attendanceAdjustmentRequests.deletedAt),
-        ),
-      )
-      .limit(1);
-  }
-
-  /**
-   * Same as findAdjustmentByIdTx but takes a row-level `FOR UPDATE` lock — the caller re-reads
-   * `status` under the lock so two concurrent approve/reject requests serialize (the second blocks,
-   * then sees status≠pending). Closes the TOCTOU double-approval window.
-   */
-  findAdjustmentByIdForUpdateTx(companyId: string, id: string, tx: TenantTx) {
-    return tx
-      .select()
-      .from(attendanceAdjustmentRequests)
-      .where(
-        and(
-          eq(attendanceAdjustmentRequests.companyId, companyId),
-          eq(attendanceAdjustmentRequests.id, id),
-          isNull(attendanceAdjustmentRequests.deletedAt),
-        ),
-      )
-      .limit(1)
-      .for("update");
-  }
-
-  findAdjustments(
-    companyId: string,
-    opts: { userId?: string; status?: string; limit: number; offset: number },
-  ) {
-    return this.db.withTenant(companyId, (tx) => {
-      const conds = [
-        eq(attendanceAdjustmentRequests.companyId, companyId),
-        isNull(attendanceAdjustmentRequests.deletedAt),
-      ];
-      if (opts.userId) conds.push(eq(attendanceAdjustmentRequests.userId, opts.userId));
-      if (opts.status) conds.push(eq(attendanceAdjustmentRequests.status, opts.status));
-      return tx
-        .select({
-          id: attendanceAdjustmentRequests.id,
-          userId: attendanceAdjustmentRequests.userId,
-          userFullName: users.fullName,
-          attendanceRecordId: attendanceAdjustmentRequests.attendanceRecordId,
-          workDate: attendanceAdjustmentRequests.workDate,
-          requestedCheckInAt: attendanceAdjustmentRequests.requestedCheckInAt,
-          requestedCheckOutAt: attendanceAdjustmentRequests.requestedCheckOutAt,
-          reason: attendanceAdjustmentRequests.reason,
-          status: attendanceAdjustmentRequests.status,
-          taskId: attendanceAdjustmentRequests.taskId,
-          approvedBy: attendanceAdjustmentRequests.approvedBy,
-          approvedAt: attendanceAdjustmentRequests.approvedAt,
-          reviewNote: attendanceAdjustmentRequests.reviewNote,
-          createdAt: attendanceAdjustmentRequests.createdAt,
-        })
-        .from(attendanceAdjustmentRequests)
-        .innerJoin(users, eq(attendanceAdjustmentRequests.userId, users.id))
-        .where(and(...conds))
-        .orderBy(desc(attendanceAdjustmentRequests.createdAt))
-        .limit(opts.limit)
-        .offset(opts.offset);
-    });
-  }
-
-  insertAdjustmentTx(
-    companyId: string,
-    data: typeof attendanceAdjustmentRequests.$inferInsert,
-    tx: TenantTx,
-  ) {
-    return tx
-      .insert(attendanceAdjustmentRequests)
-      .values({ ...data, companyId })
-      .returning();
-  }
-
-  updateAdjustmentTx(
-    companyId: string,
-    id: string,
-    data: Partial<typeof attendanceAdjustmentRequests.$inferInsert>,
-    tx: TenantTx,
-  ) {
-    return tx
-      .update(attendanceAdjustmentRequests)
-      .set({ ...data, updatedAt: new Date() })
-      .where(
-        and(
-          eq(attendanceAdjustmentRequests.companyId, companyId),
-          eq(attendanceAdjustmentRequests.id, id),
-          isNull(attendanceAdjustmentRequests.deletedAt),
-        ),
-      )
-      .returning();
-  }
+  // S3-ATT-BE-4: the adjustment-request CRUD moved to AttendanceAdjustmentRepository (canonical
+  // employee_id + items ledger + DataScope join). Removed here to keep a single writer.
 
   // ─── attendance_periods ──────────────────────────────────────────────────────
 

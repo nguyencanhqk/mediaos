@@ -95,7 +95,6 @@ function makeDb(repo: ReturnType<typeof makeRepo>) {
 }
 
 const makePermission = () => ({ can: vi.fn().mockResolvedValue({ allow: true }) });
-const makeHrTasks = () => ({});
 const makeAudit = () => ({ record: vi.fn().mockResolvedValue(undefined) });
 const makeOutbox = () => ({ enqueue: vi.fn().mockResolvedValue(undefined) });
 
@@ -106,7 +105,6 @@ function build(repo: ReturnType<typeof makeRepo>) {
     makeDb(repo) as never,
     repo as never,
     makePermission() as never,
-    makeHrTasks() as never,
     audit as never,
     outbox as never,
   );

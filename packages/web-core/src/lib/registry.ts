@@ -119,6 +119,15 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "ATT.ATTENDANCE.VIEW_OWN": "view-own:attendance",
   "ATT.ATTENDANCE.VIEW_TEAM": "view-team:attendance",
   "ATT.ATTENDANCE.VIEW_COMPANY": "view-company:attendance",
+  // S3-ATT-BE-3 shift/rule/assignment (attendance-permissions.const.ts — mig 0454). Cặp scope-level RIÊNG,
+  // KHÔNG gộp: view:shift (non-sensitive) khác create/update:shift; view/update:shift-assignment; view/config:attendance-rule.
+  "ATT.SHIFT.VIEW": "view:shift",
+  "ATT.SHIFT.CREATE": "create:shift",
+  "ATT.SHIFT.UPDATE": "update:shift",
+  "ATT.SHIFT_ASSIGNMENT.VIEW": "view:shift-assignment",
+  "ATT.SHIFT_ASSIGNMENT.UPDATE": "update:shift-assignment",
+  "ATT.RULE.VIEW": "view:attendance-rule",
+  "ATT.RULE.CONFIG": "config:attendance-rule",
   "LEAVE.REQUEST.VIEW_OWN": "view-own:leave",
   "LEAVE.REQUEST.VIEW": "view:leave",
   "LEAVE.REQUEST.APPROVE": "approve:leave",
@@ -143,6 +152,12 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "HR.POSITION.UPDATE": "update:position",
   "HR.POSITION.DELETE": "delete:position",
   "HR.MASTER_DATA.MANAGE": "manage:master-data",
+  // S2-FE-FND-1 (FND1-WC): cặp seed THẬT mig 0435 — controller Foundation dùng *:foundation-* (view/update:
+  // foundation-company, update:foundation-setting). KHÔNG dùng nhãn-ma FRONTEND-13 §7.1 (FOUNDATION.SYSTEM.VIEW /
+  // SETTING.SYSTEM_MANAGE chưa seed) và KHÔNG namespace CŨ read/update:company (0005). Đọc≠sửa (pair-as-gate).
+  "FOUNDATION.COMPANY.VIEW": "view:foundation-company",
+  "FOUNDATION.COMPANY.UPDATE": "update:foundation-company",
+  "FOUNDATION.SETTING.UPDATE": "update:foundation-setting",
 };
 
 export function createPermissionChecker(userPermissions: readonly UserPermission[]) {
@@ -807,6 +822,43 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 33,
   },
+  // S3-FE-ATT-5 — ca làm việc / gán ca / rule chấm công (Company, admin, read-only minimum).
+  // Gate = CẶP ENGINE THỰC trực tiếp (view:shift / view:shift-assignment / view:attendance-rule, nguồn
+  // attendance-permissions.const.ts) — KHÔNG qua PERMISSION_CODE_TO_PAIR (tránh drift đã gặp ở
+  // S1-FND-MODULE / S3-FE-wave2), cùng kỹ thuật system.login-logs (AUDIT_LOG_VIEW_PERMISSION).
+  {
+    routeKey: "att.shifts",
+    path: "/attendance/shifts",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ATT",
+    screenCode: "ATT-SCREEN-SHIFTS",
+    titleKey: "routeTitle.attShifts",
+    requiredAnyPermissions: ["view:shift"],
+    showInSidebar: true,
+    order: 34,
+  },
+  {
+    routeKey: "att.shift-assignments",
+    path: "/attendance/shift-assignments",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ATT",
+    screenCode: "ATT-SCREEN-SHIFT-ASSIGNMENTS",
+    titleKey: "routeTitle.attShiftAssignments",
+    requiredAnyPermissions: ["view:shift-assignment"],
+    showInSidebar: true,
+    order: 35,
+  },
+  {
+    routeKey: "att.rules",
+    path: "/attendance/rules",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ATT",
+    screenCode: "ATT-SCREEN-RULES",
+    titleKey: "routeTitle.attRules",
+    requiredAnyPermissions: ["view:attendance-rule"],
+    showInSidebar: true,
+    order: 36,
+  },
 
   // Leave
   {
@@ -844,6 +896,20 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["LEAVE.REQUEST.VIEW"],
     showInSidebar: true,
     order: 42,
+  },
+  // S3-FE-LEAVE-3 — LEAVE-SCREEN-006 (tất cả đơn nghỉ, HR/Admin). Cổng CÙNG cặp view:leave với
+  // leave.approvals (BE GET /leave/requests dùng chung endpoint) — màn hình này chỉ ĐỌC (không
+  // approve/reject), nên KHÔNG cần thêm requiredAny khác.
+  {
+    routeKey: "leave.all-requests",
+    path: "/leave/requests",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "LEAVE",
+    screenCode: "LEAVE-SCREEN-006",
+    titleKey: "routeTitle.leaveAllRequests",
+    requiredAnyPermissions: ["LEAVE.REQUEST.VIEW"],
+    showInSidebar: true,
+    order: 43,
   },
 
   // Tasks

@@ -193,22 +193,23 @@ export function buildTodayDto(args: {
   };
 }
 
-export function toAdjustmentDto(row: {
-  id: string;
-  userId: string;
-  attendanceRecordId: string | null;
+/**
+ * S3-ATT-BE-3 — GET /attendance/rules/effective response. Reuses the SAME toShiftSummary/toRuleSummary
+ * projections as buildTodayDto (one DTO shape for "effective ca/rule", regardless of caller).
+ */
+export function toEffectiveShiftRuleDto(args: {
   workDate: string;
-  requestedCheckInAt: Date | null;
-  requestedCheckOutAt: Date | null;
-  reason: string;
-  status: string;
-  taskId: string | null;
-  approvedBy: string | null;
-  approvedAt: Date | null;
-  reviewNote: string | null;
-  createdAt: Date;
+  employeeId: string;
+  shift: ShiftRow | null;
+  rule: EffectiveRule;
+  tz: string;
 }) {
-  return row;
+  return {
+    workDate: args.workDate,
+    employeeId: args.employeeId,
+    shift: args.shift ? toShiftSummary(args.shift, args.tz) : null,
+    rule: toRuleSummary(args.rule),
+  };
 }
 
 export function toPeriodDto(row: {

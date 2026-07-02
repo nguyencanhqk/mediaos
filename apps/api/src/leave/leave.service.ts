@@ -18,7 +18,6 @@ import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { PermissionService } from "../permission/permission.service";
 import { HrTasksService } from "../tasks/hr-tasks.service";
-import { monthDateRange } from "../common/tz.util";
 import { LeaveRepository } from "./leave.repository";
 import { countLeaveDays } from "./leave.logic";
 import { isUniqueViolation } from "../common/db-error";
@@ -414,13 +413,6 @@ export class LeaveService {
       .catch((err: unknown) =>
         this.mapError(err, "cancelRequest", { companyId: actor.companyId, id }),
       );
-  }
-
-  // ─── Team calendar (read:leave) ──────────────────────────────────────────────
-
-  listCalendar(companyId: string, month: string) {
-    const range = monthDateRange(month);
-    return this.repo.findCalendar(companyId, range);
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────────

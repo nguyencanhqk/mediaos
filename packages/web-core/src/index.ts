@@ -71,10 +71,12 @@ export {
   leaveKeys,
   taskKeys,
   notificationKeys,
+  foundationKeys,
   attendanceInvalidation,
   leaveInvalidation,
   // S2-FE-HR-5 (lane HR5-WC): HR master-data mutation → list invalidation.
   hrMasterDataInvalidation,
+  foundationInvalidation,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -90,6 +92,19 @@ export { hrApi } from "./lib/hr-api";
 export { hrMasterDataApi, type HrDepartment } from "./lib/hr-master-data-api";
 export { leaveApi } from "./lib/leave-api";
 export { attendanceApi } from "./lib/attendance-api";
+export {
+  foundationApi,
+  safeSettingViewSchema,
+  settingsResolveResponseSchema,
+  settingValueTypeSchema,
+  SETTING_VALUE_TYPES,
+  type SafeSettingView,
+  type SettingsResolveResponse,
+  type SettingValueType,
+  type ResolveSettingsBody,
+  type UpdateCompanySettingBody,
+  type UpdateCompanyBody,
+} from "./lib/foundation-api";
 
 // Permission
 export { useCan, useCanExact } from "./hooks/use-can";
