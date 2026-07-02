@@ -76,6 +76,9 @@ export default {
     systemSeeds: "Trạng thái Seed",
     systemPublicHolidays: "Ngày nghỉ lễ",
     systemHealth: "Tình trạng hệ thống",
+    // S2-FE-FND-7 — routeTitle cho 2 màn wired sẵn (S2-FE-FND-6) còn thiếu key i18n.
+    systemRetention: "Chính sách lưu trữ",
+    systemFileAccessLogs: "Nhật ký truy cập tệp",
     systemFiles: "Tệp tin",
     systemModules: "Danh mục module",
     accountProfile: "Hồ sơ tài khoản",

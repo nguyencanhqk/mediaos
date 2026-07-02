@@ -89,3 +89,94 @@ export const COMPANY_EDITABLE_FIELDS = [
   "website",
 ] as const;
 export type CompanyEditableField = (typeof COMPANY_EDITABLE_FIELDS)[number];
+
+// ---------------------------------------------------------------------------
+// S2-FE-FND-7 (H8 + §7) — NGUỒN CHUNG cặp quyền cho route meta + sidebar entry.
+//
+// Bài học pair-drift (S1-FND-MODULE / S3-FE-wave2): sidebar và route-meta gõ literal
+// RỜI NHAU → dễ lệch cặp → hố "FE hiện / BE 403" hoặc "ẩn nhầm". Ở đây route meta (router.tsx)
+// VÀ sidebar entry (sidebar-registry.ts) CÙNG import 1 nguồn = FOUNDATION_ENGINE_PAIRS, chống drift.
+// Spec registry-guard khẳng định sidebar.requiredAnyPermissions === route-meta.requiredAnyPermissions.
+// ---------------------------------------------------------------------------
+import { type RouteMeta } from "@mediaos/web-core";
+import { SYSTEM_ENGINE_PAIRS } from "../constants";
+
+type EnginePair = { action: string; resourceType: string };
+
+/** Cặp engine → chuỗi quyền literal "action:resourceType" (khớp thẳng capabilities map /auth/me). */
+export function foundationPairToPermission(pair: EnginePair): string {
+  return `${pair.action}:${pair.resourceType}`;
+}
+
+// Chuỗi quyền dẫn xuất từ FOUNDATION_ENGINE_PAIRS (KHÔNG literal magic-string).
+export const FOUNDATION_HOLIDAY_VIEW_PERMISSION = foundationPairToPermission(
+  FOUNDATION_ENGINE_PAIRS.VIEW_HOLIDAY,
+);
+export const FOUNDATION_RETENTION_VIEW_PERMISSION = foundationPairToPermission(
+  FOUNDATION_ENGINE_PAIRS.VIEW_RETENTION,
+);
+export const FOUNDATION_FILE_ACCESS_LOG_VIEW_PERMISSION = foundationPairToPermission(
+  FOUNDATION_ENGINE_PAIRS.VIEW_FILE_ACCESS_LOG,
+);
+
+/**
+ * requiredAnyPermissions cho MỖI route/sidebar — 1 mảng DUY NHẤT dùng chung cả router + sidebar.
+ * Health: ĐỦ CẢ 2 cặp (view:foundation-setting + view:user) khớp systemHealthMeta gốc — 1 cặp = mismatch.
+ * Retention: view:foundation-retention (KHÔNG dùng manage — manage sensitive, ẩn nhầm với company-admin thường).
+ */
+export const FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS: string[] = [FOUNDATION_HOLIDAY_VIEW_PERMISSION];
+export const FOUNDATION_HEALTH_ROUTE_PERMISSIONS: string[] = [
+  foundationPairToPermission(FOUNDATION_ENGINE_PAIRS.VIEW_SETTING_BASELINE),
+  foundationPairToPermission(SYSTEM_ENGINE_PAIRS.READ_USER),
+];
+export const FOUNDATION_RETENTION_ROUTE_PERMISSIONS: string[] = [
+  FOUNDATION_RETENTION_VIEW_PERMISSION,
+];
+export const FOUNDATION_FILE_ACCESS_LOG_ROUTE_PERMISSIONS: string[] = [
+  FOUNDATION_FILE_ACCESS_LOG_VIEW_PERMISSION,
+];
+
+/**
+ * RouteMeta 4 màn đã wired sẵn (S2-FE-FND-4/6) — CHUYỂN về constants để router.tsx VÀ sidebar dùng
+ * chung nguồn requiredAnyPermissions (chống pair-drift). KHÔNG định nghĩa lại route (createRoute vẫn ở
+ * router.tsx) — chỉ tập trung meta. Không set order/showInSidebar (giữ nguyên hành vi meta gốc).
+ */
+export const SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META: RouteMeta = {
+  routeKey: "system.public-holidays",
+  path: FOUNDATION_PATH.PUBLIC_HOLIDAYS,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "FOUNDATION",
+  screenCode: FOUNDATION_SCREEN.PUBLIC_HOLIDAYS,
+  titleKey: "routeTitle.systemPublicHolidays",
+  requiredAnyPermissions: FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS,
+};
+
+export const SYSTEM_HEALTH_ROUTE_META: RouteMeta = {
+  routeKey: "system.health",
+  path: FOUNDATION_PATH.HEALTH,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "FOUNDATION",
+  screenCode: FOUNDATION_SCREEN.HEALTH,
+  titleKey: "routeTitle.systemHealth",
+  requiredAnyPermissions: FOUNDATION_HEALTH_ROUTE_PERMISSIONS,
+};
+
+export const SYSTEM_RETENTION_ROUTE_META: RouteMeta = {
+  routeKey: "system.retention",
+  path: FOUNDATION_PATH.RETENTION,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "FOUNDATION",
+  screenCode: FOUNDATION_SCREEN.RETENTION,
+  titleKey: "routeTitle.systemRetention",
+  requiredAnyPermissions: FOUNDATION_RETENTION_ROUTE_PERMISSIONS,
+};
+
+export const SYSTEM_FILE_ACCESS_LOGS_ROUTE_META: RouteMeta = {
+  routeKey: "system.file-access-logs",
+  path: FOUNDATION_PATH.FILE_ACCESS_LOGS,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "FOUNDATION",
+  screenCode: FOUNDATION_SCREEN.FILE_ACCESS_LOGS,
+  titleKey: "routeTitle.systemFileAccessLogs",
+  requiredAnyPermissions: FOUNDATION_FILE_ACCESS_LOG_ROUTE_PERMISSIONS,
+};
