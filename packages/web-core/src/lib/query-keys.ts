@@ -172,6 +172,12 @@ export const foundationKeys = {
     resolve: (params?: Record<string, unknown>) =>
       [...rootKeys.foundation, "settings", "resolve", params] as const,
   },
+  // S2-FE-FND-4 — Public Holidays. Danh mục nhỏ theo company/năm (KHÔNG phân trang server).
+  holidays: {
+    all: [...rootKeys.foundation, "holidays"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.foundation, "holidays", "list", params] as const,
+  },
 } as const;
 
 // ── Mutation → query-key invalidation matrix (FRONTEND-04 §17.3) ──────────────
@@ -207,4 +213,8 @@ const foundationSettingsResolvePrefix = [...rootKeys.foundation, "settings", "re
 export const foundationInvalidation = {
   updateCompany: () => [foundationKeys.company.current()] as const,
   updateSetting: () => [foundationSettingsResolvePrefix] as const,
+  // S2-FE-FND-4 — create/update/delete holiday đều làm mới MỌI biến thể list(params) qua prefix.
+  createHoliday: () => [foundationKeys.holidays.all] as const,
+  updateHoliday: () => [foundationKeys.holidays.all] as const,
+  deleteHoliday: () => [foundationKeys.holidays.all] as const,
 };

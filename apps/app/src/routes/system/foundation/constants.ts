@@ -14,6 +14,16 @@ export const FOUNDATION_ENGINE_PAIRS = {
   UPDATE_COMPANY: { action: "update", resourceType: "foundation-company" },
   VIEW_SETTING: { action: "view", resourceType: "foundation-setting" },
   UPDATE_SETTING: { action: "update", resourceType: "foundation-setting" },
+  // S2-FE-FND-4 — Public Holidays. Cặp seed THẬT mig 0435 (is_sensitive=false cả 2 → wildcard OK, dùng useCan).
+  VIEW_HOLIDAY: { action: "view", resourceType: "foundation-holiday" },
+  MANAGE_HOLIDAY: { action: "manage", resourceType: "foundation-holiday" },
+  // S2-FE-FND-4 — /system/health: KHÔNG có cặp 'foundation-health'/'system-health' seed ở BE (controller
+  // HealthController @Public(), KHÔNG @RequirePermission — liveness/readiness probe cố ý mở, xem BE code).
+  // done_when yêu cầu PermissionGate FOUNDATION.HEALTH.VIEW nhưng cặp đó CHƯA seed → dùng baseline "đang ở
+  // khu vực quản trị hệ thống" GIỐNG HỆT system.overview (ROUTE_REGISTRY: FOUNDATION.SETTING.VIEW OR
+  // AUTH.USER.VIEW) thay vì bịa cặp không tồn tại (gate phải phản ánh cặp THẬT — CLAUDE.md §5). Nếu BE seed
+  // cặp foundation-health sau này, đổi route meta + đây cho khớp (KHÔNG đổi HealthController @Public()).
+  VIEW_SETTING_BASELINE: { action: "view", resourceType: "foundation-setting" },
 } as const;
 
 /** Mã màn hình (SPEC-01 §9). */
@@ -21,6 +31,9 @@ export const FOUNDATION_SCREEN = {
   COMPANY: "SYSTEM-SCREEN-COMPANY",
   COMPANY_SETTINGS: "SYSTEM-SCREEN-COMPANY-SETTINGS",
   SYSTEM_SETTINGS: "SYSTEM-SCREEN-SETTINGS",
+  // S2-FE-FND-4 — FRONTEND-13 §7.1 UI-SYSTEM-SCREEN-012/016.
+  PUBLIC_HOLIDAYS: "SYSTEM-SCREEN-PUBLIC-HOLIDAYS",
+  HEALTH: "SYSTEM-SCREEN-HEALTH",
 } as const;
 
 /** Đường dẫn route (thêm ADDITIVE vào router + sidebar). */
@@ -29,6 +42,9 @@ export const FOUNDATION_PATH = {
   COMPANY: "/system/company",
   COMPANY_SETTINGS: "/system/company/settings",
   SYSTEM_SETTINGS: "/system/settings",
+  // S2-FE-FND-4
+  PUBLIC_HOLIDAYS: "/system/public-holidays",
+  HEALTH: "/system/health",
 } as const;
 
 /**

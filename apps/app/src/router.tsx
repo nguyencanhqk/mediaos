@@ -155,6 +155,9 @@ import { SystemOverviewPage } from "@/routes/system/foundation/SystemOverviewPag
 import { CompanyProfilePage } from "@/routes/system/foundation/CompanyProfilePage";
 import { CompanySettingsPage } from "@/routes/system/foundation/CompanySettingsPage";
 import { SystemSettingsPage } from "@/routes/system/foundation/SystemSettingsPage";
+// System / Foundation — Public Holidays + Health — S2-FE-FND-4
+import { PublicHolidaysPage } from "@/routes/system/foundation/PublicHolidaysPage";
+import { HealthPage } from "@/routes/system/foundation/HealthPage";
 import { FOUNDATION_PATH, FOUNDATION_SCREEN } from "@/routes/system/foundation/constants";
 
 const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", EmployeeListPage);
@@ -439,6 +442,43 @@ const systemSettingsRoute = createRoute({
     buildModuleRouteContent(systemSettingsMeta, "FOUNDATION", <SystemSettingsPage />),
 });
 
+// Public Holidays (list + CRUD) — S2-FE-FND-4. Gate = cặp seed THẬT mig 0435 (view:foundation-holiday).
+const systemPublicHolidaysMeta: RouteMeta = {
+  routeKey: "system.public-holidays",
+  path: FOUNDATION_PATH.PUBLIC_HOLIDAYS,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "FOUNDATION",
+  screenCode: FOUNDATION_SCREEN.PUBLIC_HOLIDAYS,
+  titleKey: "routeTitle.systemPublicHolidays",
+  requiredAnyPermissions: ["view:foundation-holiday"],
+};
+const systemPublicHolidaysRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: FOUNDATION_PATH.PUBLIC_HOLIDAYS,
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(systemPublicHolidaysMeta, "FOUNDATION", <PublicHolidaysPage />),
+});
+
+// Health (read-only) — S2-FE-FND-4. HealthController BE @Public() (KHÔNG @RequirePermission, KHÔNG cặp
+// 'foundation-health' seed) → gate route bằng baseline "khu vực quản trị hệ thống" GIỐNG system.overview
+// (xem constants.ts VIEW_SETTING_BASELINE) thay vì bịa permission code không tồn tại.
+const systemHealthMeta: RouteMeta = {
+  routeKey: "system.health",
+  path: FOUNDATION_PATH.HEALTH,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "FOUNDATION",
+  screenCode: FOUNDATION_SCREEN.HEALTH,
+  titleKey: "routeTitle.systemHealth",
+  requiredAnyPermissions: ["view:foundation-setting", "view:user"],
+};
+const systemHealthRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: FOUNDATION_PATH.HEALTH,
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(systemHealthMeta, "FOUNDATION", <HealthPage />),
+});
+
 const systemUsersRoute = makeModuleRoute("/system/users", "system.users", "FOUNDATION", UsersPage);
 const systemRolesRoute = makeModuleRoute("/system/roles", "system.roles", "FOUNDATION", RolesPage);
 const systemAuditLogsRoute = makeModuleRoute(
@@ -520,6 +560,8 @@ const routeTree = rootRoute.addChildren([
   systemCompanyRoute,
   systemCompanySettingsRoute,
   systemSettingsRoute,
+  systemPublicHolidaysRoute,
+  systemHealthRoute,
   systemUsersRoute,
   systemRolesRoute,
   systemAuditLogsRoute,

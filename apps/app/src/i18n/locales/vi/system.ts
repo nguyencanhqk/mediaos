@@ -158,12 +158,18 @@ export default {
         description: "Vai trò phân quyền",
         manage: "Xem vai trò",
       },
+      holidays: {
+        title: "Ngày nghỉ lễ",
+        description: "Danh sách ngày nghỉ lễ công ty và hệ thống",
+        manage: "Quản lý ngày nghỉ",
+      },
       health: {
         title: "Tình trạng dịch vụ",
         description: "Trạng thái API backend",
         ok: "Hoạt động bình thường",
         error: "Không kết nối được dịch vụ",
         checking: "Đang kiểm tra…",
+        manage: "Xem chi tiết",
       },
     },
   },
@@ -266,5 +272,104 @@ export default {
     deferredTitle: "Sắp ra mắt",
     deferredDescription:
       "Màn hình cấu hình cấp hệ thống đang chờ endpoint backend (SYSTEM_MANAGE). Sẽ được bổ sung trong đợt tiếp theo.",
+  },
+
+  // S2-FE-FND-4 — /system/public-holidays (list + CRUD).
+  publicHolidays: {
+    title: "Ngày nghỉ lễ",
+    description: "Danh sách ngày nghỉ lễ công ty và hệ thống, dùng cho chấm công và tính phép",
+    columns: {
+      date: "Ngày",
+      name: "Tên ngày nghỉ",
+      code: "Mã",
+      type: "Loại",
+      scope: "Phạm vi",
+    },
+    scope: {
+      company: "Công ty",
+      global: "Hệ thống",
+    },
+    actions: {
+      columnHeader: "Thao tác",
+      create: "Thêm ngày nghỉ",
+      edit: "Sửa",
+      delete: "Xoá",
+    },
+    form: {
+      createTitle: "Thêm ngày nghỉ lễ",
+      editTitle: "Sửa ngày nghỉ lễ",
+      code: "Mã ngày nghỉ",
+      name: "Tên ngày nghỉ",
+      date: "Ngày",
+      type: "Loại",
+      description: "Ghi chú",
+      isPaidHoliday: "Nghỉ có lương",
+      affectsAttendance: "Ảnh hưởng chấm công",
+      affectsLeaveCalculation: "Ảnh hưởng tính phép",
+      cancel: "Huỷ",
+      save: "Lưu",
+      saving: "Đang lưu…",
+      errors: {
+        forbidden: "Bạn không có quyền thực hiện thao tác này.",
+        conflict: "Ngày nghỉ trùng (mã + ngày đã tồn tại trong công ty).",
+        validation: "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.",
+        server: "Có lỗi hệ thống. Vui lòng thử lại.",
+        generic: "Không thể lưu ngày nghỉ. Vui lòng thử lại.",
+      },
+      validation: {
+        dateFormat: "Ngày phải đúng định dạng YYYY-MM-DD",
+      },
+    },
+    confirmDelete: {
+      title: "Xác nhận xoá ngày nghỉ",
+      description:
+        'Bạn có chắc muốn xoá ngày nghỉ "{{name}}"? Hành động này có thể ảnh hưởng chấm công/tính phép liên quan.',
+      confirmLabel: "Xoá",
+      cancelLabel: "Huỷ",
+      busyLabel: "Đang xoá…",
+    },
+    empty: {
+      title: "Chưa có ngày nghỉ lễ",
+      description: "Chưa có ngày nghỉ lễ nào trong năm hiện tại.",
+    },
+    error: {
+      title: "Không thể tải danh sách ngày nghỉ",
+      description: "Có lỗi khi tải danh sách ngày nghỉ lễ. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem danh sách ngày nghỉ lễ.",
+    },
+  },
+
+  // S2-FE-FND-4 — /system/health (read-only, liveness + readiness).
+  health: {
+    title: "Tình trạng hệ thống",
+    description: "Trạng thái dịch vụ backend và kết nối cơ sở dữ liệu — chỉ đọc",
+    status: {
+      checking: "Đang kiểm tra…",
+      ok: "Hoạt động bình thường",
+      down: "Không hoạt động",
+    },
+    cards: {
+      api: {
+        title: "Dịch vụ API",
+        description: "Trạng thái liveness của backend",
+        timestamp: "Cập nhật lúc {{time}}",
+      },
+      db: {
+        title: "Cơ sở dữ liệu",
+        description: "Trạng thái kết nối đến PostgreSQL",
+        latency: "Độ trễ: {{ms}}ms",
+      },
+    },
+    error: {
+      title: "Không thể kiểm tra tình trạng hệ thống",
+      description: "Có lỗi khi kiểm tra tình trạng dịch vụ. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem tình trạng hệ thống.",
+    },
   },
 };

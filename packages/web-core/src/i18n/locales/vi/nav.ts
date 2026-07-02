@@ -47,6 +47,8 @@ export default {
     systemUsers: "Người dùng",
     systemRoles: "Vai trò",
     systemAuditLogs: "Audit log",
+    systemPublicHolidays: "Ngày nghỉ lễ",
+    systemHealth: "Tình trạng hệ thống",
     accountProfile: "Hồ sơ tài khoản",
     forbidden: "Không có quyền truy cập",
     notFound: "Không tìm thấy trang",

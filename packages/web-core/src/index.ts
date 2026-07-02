@@ -80,7 +80,7 @@ export {
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
 export { shouldRetryQuery } from "./lib/query-retry";
 export { bootstrapSession } from "./lib/session";
-export { getHealth, type Health } from "./lib/api";
+export { getHealth, type Health, getHealthDb, type HealthDb } from "./lib/api";
 export { authApi } from "./lib/auth-api";
 export { usersApi } from "./lib/users-api";
 export { twoFactorApi } from "./lib/two-factor-api";
@@ -100,6 +100,17 @@ export {
   type ResolveSettingsBody,
   type UpdateCompanySettingBody,
   type UpdateCompanyBody,
+  // S2-FE-FND-4 — Public Holidays
+  holidayApi,
+  holidayViewSchema,
+  holidayTypeSchema,
+  HOLIDAY_TYPES,
+  type HolidayView,
+  type HolidayType,
+  type HolidayListParams,
+  type CreateHolidayBody,
+  type UpdateHolidayBody,
+  type DeleteHolidayResult,
 } from "./lib/foundation-api";
 
 // Permission

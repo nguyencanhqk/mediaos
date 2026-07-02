@@ -14,6 +14,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { companyViewSchema } from "@mediaos/contracts";
 import {
   foundationApi,
+  holidayApi,
+  holidayViewSchema,
   safeSettingViewSchema,
   settingsResolveResponseSchema,
 } from "./foundation-api";
@@ -103,6 +105,89 @@ describe("foundationApi — settings resolve + company-settings PATCH", () => {
     await foundationApi.updateCompanySetting("a b/c", { settingValue: 1, valueType: "Number" });
     const [url] = lastCall();
     expect(url).toBe(`/foundation/company-settings/${encodeURIComponent("a b/c")}`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// holidayApi — S2-FE-FND-4 (URL + method + Zod validator + company_id KHÔNG forward).
+// ---------------------------------------------------------------------------
+
+describe("holidayApi — public-holidays (URL + method + Zod validator)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.apiFetch).mockReset();
+    vi.mocked(apiClient.apiFetch).mockResolvedValue([] as never);
+  });
+
+  it("list() → GET /foundation/public-holidays KHÔNG query khi không truyền params", async () => {
+    await holidayApi.list();
+    const [url, , opts] = lastCall();
+    expect(url).toBe("/foundation/public-holidays");
+    expect(opts?.method ?? "GET").toBe("GET");
+  });
+
+  it("list({year, month}) → gắn query string đúng", async () => {
+    await holidayApi.list({ year: 2026, month: 9 });
+    const [url] = lastCall();
+    expect(url).toBe("/foundation/public-holidays?year=2026&month=9");
+  });
+
+  it("create() → POST /foundation/public-holidays + holidayViewSchema + body KHÔNG company_id", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue({} as never);
+    await holidayApi.create({
+      holidayCode: "TET-2026",
+      name: "Tết Nguyên Đán",
+      holidayDate: "2026-02-17",
+    });
+    const [url, schema, opts] = lastCall();
+    expect(url).toBe("/foundation/public-holidays");
+    expect(schema).toBe(holidayViewSchema);
+    expect(opts?.method).toBe("POST");
+    const body = opts?.body ?? "";
+    expect(body).not.toContain("company_id");
+    expect(body).not.toContain("companyId");
+  });
+
+  it("update(id) → PATCH /foundation/public-holidays/:id", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue({} as never);
+    await holidayApi.update("hol-1", { name: "Đổi tên" });
+    const [url, schema, opts] = lastCall();
+    expect(url).toBe("/foundation/public-holidays/hol-1");
+    expect(schema).toBe(holidayViewSchema);
+    expect(opts?.method).toBe("PATCH");
+    expect(JSON.parse(opts?.body ?? "{}")).toEqual({ name: "Đổi tên" });
+  });
+
+  it("remove(id) → DELETE /foundation/public-holidays/:id", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue({ id: "hol-1", deleted: true } as never);
+    await holidayApi.remove("hol-1");
+    const [url, , opts] = lastCall();
+    expect(url).toBe("/foundation/public-holidays/hol-1");
+    expect(opts?.method).toBe("DELETE");
+  });
+});
+
+describe("holidayViewSchema", () => {
+  it("parse holiday scope 'global' (companyId null, hệ thống — KHÔNG sửa/xoá được ở FE)", () => {
+    const parsed = holidayViewSchema.parse({
+      id: "hol-g1",
+      scope: "global",
+      companyId: null,
+      holidayCode: "TET",
+      name: "Tết",
+      holidayDate: "2026-02-17",
+      holidayType: "PublicHoliday",
+      countryCode: "VN",
+      regionCode: null,
+      isRecurring: true,
+      affectsAttendance: true,
+      affectsLeaveCalculation: true,
+      isPaidHoliday: true,
+      status: "Active",
+      source: "seed",
+      description: null,
+    });
+    expect(parsed.scope).toBe("global");
+    expect(parsed.companyId).toBeNull();
   });
 });
 
