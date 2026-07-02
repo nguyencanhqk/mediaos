@@ -1,4 +1,4 @@
--- Migration 0457: S2-HR-BE-7 — Employee-code config admin API foundation.
+-- Migration 0459: S2-HR-BE-7 — Employee-code config admin API foundation.
 --   (a) UNION ADD-only 'employee_code_config' vào CHECK object_type của audit_logs.
 --       Lý do: HR admin PATCH /hr/employee-code-config (EmployeeCodeConfigService.update — API-03 §10.10
 --       HR-API-902) ghi audit CONFIG_UPDATE object_type='employee_code_config' audit-in-tx app-tenant
@@ -27,10 +27,11 @@
 --   • Idempotent đo BỘ BA (role_id, permission_id, data_scope): chạy lại = no-op.
 --   • is_sensitive=false (admin config CRUD thường, mirror 0445 manage:master-data).
 --
--- BAND 0457 (lane S2-HR-BE-7 / hrbe7-mig / db-migration). Journal: idx 137, when 1717500680000
---   (> head 0456 idx 136 / 1717500675000). NỐI TIẾP ĐƠN ĐIỆU forward-only/no-gap sau head thực tế
---   0456_s2_fndbe3_retention_audit_object_type. Drizzle migrator áp theo THỨ TỰ mảng journal (resolve
---   file theo `tag`). KHÔNG db:generate cho file này.
+-- BAND 0459 (lane S2-HR-BE-7 / hrbe7-mig / db-migration). Journal: idx 139, when 1717500690000
+--   (> head 0458 idx 138 / 1717500685000). Renumbered 0457→0459 on rescue (rescue/s2-fefnd1-hrbe7-verify
+--   was branched before S3-ATT-BE-3's 0457 + S3-ATT-BE-4's 0458 landed on feat/s3-wave3). NỐI TIẾP
+--   ĐƠN ĐIỆU forward-only/no-gap sau head thực tế 0458_s3_attbe4_att_adj_status_reconcile. Drizzle
+--   migrator áp theo THỨ TỰ mảng journal (resolve file theo `tag`). KHÔNG db:generate cho file này.
 -- ════════════════════════════════════════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -53,7 +54,7 @@ BEGIN
    LIMIT 1;
 
   IF v_oid IS NULL THEN
-    RAISE NOTICE '[0457] khong tim thay CHECK object_type tren audit_logs — bo qua (idempotent)';
+    RAISE NOTICE '[0459] khong tim thay CHECK object_type tren audit_logs — bo qua (idempotent)';
     RETURN;
   END IF;
 
@@ -72,7 +73,7 @@ BEGIN
    WHERE NOT (v_cur @> ARRAY[t]);
 
   IF v_add IS NULL OR array_length(v_add, 1) = 0 THEN
-    RAISE NOTICE '[0457] employee_code_config da co trong CHECK — idempotent skip';
+    RAISE NOTICE '[0459] employee_code_config da co trong CHECK — idempotent skip';
     RETURN;
   END IF;
 
@@ -84,7 +85,7 @@ BEGIN
     'ALTER TABLE audit_logs ADD CONSTRAINT %I CHECK (object_type = ANY(%L::text[]))',
     v_con, v_union
   );
-  RAISE NOTICE '[0457] da them % vao CHECK object_type cua audit_logs', array_to_string(v_add, ', ');
+  RAISE NOTICE '[0459] da them % vao CHECK object_type cua audit_logs', array_to_string(v_add, ', ');
 END;
 $$;
 --> statement-breakpoint
@@ -128,7 +129,7 @@ BEGIN
       FROM roles
      WHERE name = g[1] AND company_id IS NULL AND deleted_at IS NULL;
     IF v_role_id IS NULL THEN
-      RAISE EXCEPTION '[0457] role canonical % không tồn tại — seed 0444/0005 phải chạy trước', g[1];
+      RAISE EXCEPTION '[0459] role canonical % không tồn tại — seed 0444/0005 phải chạy trước', g[1];
     END IF;
 
     -- resolve permission (catalog gap (b) phải đã chạy)
@@ -136,7 +137,7 @@ BEGIN
       FROM permissions
      WHERE action = g[2] AND resource_type = g[3];
     IF v_perm_id IS NULL THEN
-      RAISE EXCEPTION '[0457] permission (%:%) không có trong catalog — seed (b) phải chạy trước', g[2], g[3];
+      RAISE EXCEPTION '[0459] permission (%:%) không có trong catalog — seed (b) phải chạy trước', g[2], g[3];
     END IF;
 
     -- DELETE đúng bộ (role_id, permission_id, 'ALLOW') có scope SAI (per-pair, KHÔNG blanket).
@@ -156,7 +157,7 @@ BEGIN
     v_seeded := v_seeded + v_del;
   END LOOP;
 
-  RAISE NOTICE '[0457] EMPLOYEE_CODE_CONFIG perms seed: % cặp INSERT mới, % cặp re-scope (DELETE wrong-scope+INSERT)',
+  RAISE NOTICE '[0459] EMPLOYEE_CODE_CONFIG perms seed: % cặp INSERT mới, % cặp re-scope (DELETE wrong-scope+INSERT)',
     v_seeded, v_rescoped;
 END;
 $$;
