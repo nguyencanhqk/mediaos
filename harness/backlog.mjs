@@ -2703,10 +2703,11 @@ export const backlog = [
       "SPEC-04",
     ],
     done_when: [
-      "POST /attendance/remote-work-requests (create Own) + GET my + GET list (scope) + GET :id + approve/reject/cancel-own; state-machine (create → Pending, set submitted_at) + audit + event; Approved ảnh hưởng cách tính công ngày remote/công tác theo rule; Approved sinh/cập nhật attendance_records UPSERT-BY (company_id,employee_id,date) IDEMPOTENT — re-approve KHÔNG nhân đôi record",
+      "STATE-MACHINE (CHỐT LẠI 2026-07-02, owner override — GHI ĐÈ mọi bản done_when trước đó nói 'create → Pending'): create → **Draft** (KHÔNG Pending); action **submit** RIÊNG (Draft→Pending) trong contract/API — POST /attendance/remote-work-requests/:id/submit. Lúc submit: người tạo chọn current_approver_user_id là người duyệt TRỰC TIẾP HOẶC người duyệt THAY THẾ (delegate) + danh sách watcher_user_ids (theo dõi, nhận thông báo liên quan qua NOTI). Draft có thể sửa/xoá bởi chủ; chỉ request ở trạng thái Pending mới approve/reject được.",
+      "POST /attendance/remote-work-requests (create Own → Draft) + GET my + GET list (scope) + GET :id + approve/reject/cancel-own; audit + event mỗi chuyển trạng thái (Draft→Pending qua submit, Pending→Approved/Rejected); Approved ảnh hưởng cách tính công ngày remote/công tác theo rule; Approved sinh/cập nhật attendance_records UPSERT-BY (company_id,employee_id,date) IDEMPOTENT — re-approve KHÔNG nhân đôi record",
       "hoàn thiện shape remote_work_requests (migration nối head nếu skeleton thiếu; RLS+FORCE); mutation trong tx; permission pair PIN đúng resource_type='remote-request' (seed 0454): create-own/view-own/view-team/view-company/cancel-own/approve/reject đều gate trên 'remote-request', reject dùng cặp reject:remote-request RIÊNG (không tái dùng approve)",
       "AUDIT object_type (CHỐT 2026-07-02): union-add 'remote_work_request' vào AUDIT_OBJECT_TYPES (apps/api/src/db/schema/audit.ts) + CHECK audit_logs CÙNG commit migration (mẫu UNION-ADD 0456)",
-      "deny-path RED viết-TRƯỚC: tạo hộ người khác → chặn; duyệt ngoài scope → 403; cross-tenant deny; cancel đơn người khác / cancel khi ≠Pending → chặn; FULL gate + người chốt",
+      "deny-path RED viết-TRƯỚC: tạo hộ người khác → chặn; submit hộ người khác / submit khi ≠Draft → chặn; approve/reject khi ≠Pending (vd còn Draft) → chặn; duyệt ngoài scope → 403; cross-tenant deny (gồm current_approver_user_id/watcher_user_ids PHẢI cùng company); cancel đơn người khác / cancel khi ≠Draft/Pending → chặn; FULL gate + người chốt",
     ],
   },
   {
