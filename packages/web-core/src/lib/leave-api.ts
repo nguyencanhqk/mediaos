@@ -7,6 +7,10 @@ import {
   leaveManagementListResponseSchema,
   leaveCalculateResponseSchema,
   leaveCalendarResponseSchema,
+  leaveTypeAdminViewSchema,
+  leavePolicyViewSchema,
+  leaveBalanceAdminViewSchema,
+  leaveBalanceTransactionViewSchema,
   type LeaveTypeView,
   type LeaveBalanceView,
   type LeaveRequestDetailView,
@@ -20,6 +24,17 @@ import {
   type UpdateLeaveRequestDraft,
   type LeaveCalendarQuery,
   type LeaveCalendarResponse,
+  type LeaveTypeAdminView,
+  type CreateLeaveTypeAdminRequest,
+  type UpdateLeaveTypeAdminRequest,
+  type LeavePolicyView,
+  type LeavePolicyListQuery,
+  type CreateLeavePolicyRequest,
+  type UpdateLeavePolicyRequest,
+  type LeaveBalanceAdminView,
+  type LeaveBalanceAdminListQuery,
+  type LeaveBalanceTransactionView,
+  type AdjustLeaveBalanceRequest,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -175,4 +190,109 @@ export const leaveApi = {
     const qs = buildQueryString(query);
     return apiFetch(`/leave/calendar${qs}`, leaveCalendarResponseSchema);
   },
+
+  // ── Admin: loại nghỉ (S3-FE-LEAVE-5 · LEAVE-SCREEN-010) ──────────────────
+  // Cổng SERVER: view:leave-type (đọc, KHÔNG sensitive) · create/update/delete:leave-type (SENSITIVE,
+  // Company-scope hr/company-admin — mig 0455). Client chỉ chọn endpoint + validate response.
+
+  /**
+   * GET /leave/types — nguồn ĐỌC DUY NHẤT hiện có cho màn quản trị Loại nghỉ. Validate qua
+   * `leaveTypeViewSchema` (schema THẬT server trả cho route này — KHÔNG có `allowNegativeBalance`, BE
+   * chưa có endpoint list riêng cho mặt admin/S3-LEAVE-BE-4) rồi map thêm `allowNegativeBalance: null`
+   * để khớp shape `LeaveTypeAdminView` (admin create/update TRẢ field này).
+   * HẠN CHẾ ĐÃ BIẾT (BE gap): route chỉ trả loại ĐANG active (findActiveTypesTx) — loại inactive sẽ
+   * KHÔNG hiện trong danh sách quản trị cho tới khi BE bổ sung endpoint list-admin riêng.
+   */
+  listTypesAdmin: (): Promise<LeaveTypeAdminView[]> =>
+    apiFetch("/leave/types", z.array(leaveTypeViewSchema)).then((rows) =>
+      rows.map((r) => ({ ...r, allowNegativeBalance: null })),
+    ),
+
+  /** POST /leave/admin/types — tạo loại nghỉ (đủ field cấu hình). Permission: create:leave-type. */
+  createTypeAdmin: (body: CreateLeaveTypeAdminRequest): Promise<LeaveTypeAdminView> =>
+    apiFetch("/leave/admin/types", leaveTypeAdminViewSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** PATCH /leave/admin/types/:id — sửa loại nghỉ. Permission: update:leave-type. code immutable. */
+  updateTypeAdmin: (id: string, body: UpdateLeaveTypeAdminRequest): Promise<LeaveTypeAdminView> =>
+    apiFetch(`/leave/admin/types/${id}`, leaveTypeAdminViewSchema, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * POST /leave/admin/types/:id/delete — vô hiệu hoá (soft-delete, KHÔNG xóa cứng). Permission:
+   * delete:leave-type. Server trả envelope data:null (HttpCode 200, KHÔNG 204) → validate `z.null()`.
+   */
+  deleteTypeAdmin: (id: string): Promise<void> =>
+    apiFetch(`/leave/admin/types/${id}/delete`, z.null(), { method: "POST" }).then(() => undefined),
+
+  // ── Admin: chính sách nghỉ phép (S3-FE-LEAVE-5 · LEAVE-SCREEN-011) ────────
+  // Cổng SERVER: view/create/update/delete:leave-policy — CẢ 4 đều SENSITIVE (Company-scope, mig 0455).
+
+  /** GET /leave/admin/policies — danh sách chính sách nghỉ. Permission: view:leave-policy. */
+  listPolicies: (query?: Partial<LeavePolicyListQuery>): Promise<LeavePolicyView[]> => {
+    const qs = buildQueryString(query ?? {});
+    return apiFetch(`/leave/admin/policies${qs}`, z.array(leavePolicyViewSchema));
+  },
+
+  /** POST /leave/admin/policies — tạo chính sách. Permission: create:leave-policy. */
+  createPolicy: (body: CreateLeavePolicyRequest): Promise<LeavePolicyView> =>
+    apiFetch("/leave/admin/policies", leavePolicyViewSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** PATCH /leave/admin/policies/:id — cập nhật chính sách. Permission: update:leave-policy. */
+  updatePolicy: (id: string, body: UpdateLeavePolicyRequest): Promise<LeavePolicyView> =>
+    apiFetch(`/leave/admin/policies/${id}`, leavePolicyViewSchema, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * POST /leave/admin/policies/:id/delete — xoá mềm chính sách. Permission: delete:leave-policy.
+   * Server trả envelope data:null (HttpCode 200) → validate `z.null()`.
+   */
+  deletePolicy: (id: string): Promise<void> =>
+    apiFetch(`/leave/admin/policies/${id}/delete`, z.null(), { method: "POST" }).then(
+      () => undefined,
+    ),
+
+  // ── Admin: số dư phép (HR) — S3-FE-LEAVE-5 · LEAVE-SCREEN-012/013 ─────────
+  // Cổng SERVER: view/view-transaction/adjust:leave-balance — CẢ 3 đều SENSITIVE (Company-scope, mig 0455).
+
+  /** GET /leave/admin/balances — số dư phép theo employee/loại/năm. Permission: view:leave-balance. */
+  listBalancesAdmin: (
+    query?: Partial<LeaveBalanceAdminListQuery>,
+  ): Promise<LeaveBalanceAdminView[]> => {
+    const qs = buildQueryString(query ?? {});
+    return apiFetch(`/leave/admin/balances${qs}`, z.array(leaveBalanceAdminViewSchema));
+  },
+
+  /**
+   * GET /leave/balances/:id/transactions — ledger append-only (route canonical, API-05 §12.8, khớp
+   * FRONTEND sitemap /leave/balances/:balanceId/transactions). Permission: view-transaction:leave-balance.
+   */
+  listBalanceTransactions: (balanceId: string): Promise<LeaveBalanceTransactionView[]> =>
+    apiFetch(
+      `/leave/balances/${balanceId}/transactions`,
+      z.array(leaveBalanceTransactionViewSchema),
+    ),
+
+  /**
+   * POST /leave/admin/balances/:id/adjust — điều chỉnh số dư QUA LEDGER (amountDays +/-, reason bắt buộc).
+   * Permission: adjust:leave-balance. Server LUÔN ghi 1 dòng leave_balance_transactions kèm UPDATE — KHÔNG
+   * endpoint nào khác sửa total_days trực tiếp (bất biến #2 — audit/ledger append-only).
+   */
+  adjustBalance: (
+    balanceId: string,
+    body: AdjustLeaveBalanceRequest,
+  ): Promise<LeaveBalanceAdminView> =>
+    apiFetch(`/leave/admin/balances/${balanceId}/adjust`, leaveBalanceAdminViewSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 };

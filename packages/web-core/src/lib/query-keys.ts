@@ -315,6 +315,9 @@ export const leaveKeys = {
     all: [...rootKeys.leave, "types"] as const,
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.leave, "types", "list", params] as const,
+    // S3-FE-LEAVE-5 — danh sách mặt admin (LEAVE-SCREEN-010). TÁCH khỏi `list` (cùng endpoint GET
+    // /leave/types nhưng validate/adapt khác — leaveApi.listTypesAdmin) để invalidate không lẫn cache.
+    adminList: () => [...rootKeys.leave, "types", "admin-list"] as const,
   },
   requests: {
     all: [...rootKeys.leave, "requests"] as const,
@@ -334,6 +337,21 @@ export const leaveKeys = {
     all: [...rootKeys.leave, "calendar"] as const,
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.leave, "calendar", "list", params] as const,
+  },
+  // S3-FE-LEAVE-5 — Chính sách nghỉ phép (LEAVE-SCREEN-011, admin).
+  policies: {
+    all: [...rootKeys.leave, "policies"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.leave, "policies", "list", params] as const,
+  },
+  // S3-FE-LEAVE-5 — Số dư phép (HR, LEAVE-SCREEN-012/013). TÁCH khỏi `balances` (self-service) vì khác
+  // endpoint (/leave/admin/balances) + khác shape (LeaveBalanceAdminView).
+  balancesAdmin: {
+    all: [...rootKeys.leave, "balances-admin"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.leave, "balances-admin", "list", params] as const,
+    transactions: (balanceId: string) =>
+      [...rootKeys.leave, "balances-admin", "transactions", balanceId] as const,
   },
 };
 
@@ -478,6 +496,13 @@ export const leaveInvalidation = {
     [leaveRequestsListPrefix, leaveKeys.requests.detail(requestId)] as const,
   reject: (requestId: string) =>
     [leaveRequestsListPrefix, leaveKeys.requests.detail(requestId)] as const,
+  // S3-FE-LEAVE-5 — admin CRUD (LEAVE-SCREEN-010/011/012/013). types/policies làm mới đúng list-prefix
+  // của mặt admin; adjustBalance làm mới CẢ danh sách số dư (tổng đổi) LẪN ledger giao dịch của đúng
+  // balance vừa điều chỉnh (KHÔNG mutate total_days ngoài ledger — bất biến #2).
+  types: () => [leaveKeys.types.adminList()] as const,
+  policies: () => [leaveKeys.policies.all] as const,
+  adjustBalance: (balanceId: string) =>
+    [leaveKeys.balancesAdmin.all, leaveKeys.balancesAdmin.transactions(balanceId)] as const,
 };
 
 // S2-FE-FND-1 (FND1-WC): PATCH company/current → làm mới current-company; PATCH company-settings/:key →

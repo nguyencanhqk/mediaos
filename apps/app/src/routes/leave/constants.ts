@@ -54,6 +54,18 @@ export const LEAVE_ENGINE_PAIRS = {
   VIEW_OWN_CALENDAR: { action: "view-own", resourceType: "leave-calendar" },
   VIEW_TEAM_CALENDAR: { action: "view-team", resourceType: "leave-calendar" },
   VIEW_COMPANY_CALENDAR: { action: "view-company", resourceType: "leave-calendar" },
+  // S3-FE-LEAVE-5 — admin (LEAVE-SCREEN-010/011/012/013). Cặp SEED THẬT (apps/api/src/leave/
+  // leave-permissions.const.ts, mig 0455) — view:leave-type KHÔNG sensitive; mọi cặp còn lại SENSITIVE
+  // (Company-scope, chỉ hr/company-admin) → gate bằng useCanExact (KHÔNG useCan wildcard-fallback).
+  CREATE_LEAVE_TYPE: { action: "create", resourceType: "leave-type" },
+  UPDATE_LEAVE_TYPE: { action: "update", resourceType: "leave-type" },
+  DELETE_LEAVE_TYPE: { action: "delete", resourceType: "leave-type" },
+  VIEW_LEAVE_POLICY: { action: "view", resourceType: "leave-policy" },
+  CREATE_LEAVE_POLICY: { action: "create", resourceType: "leave-policy" },
+  UPDATE_LEAVE_POLICY: { action: "update", resourceType: "leave-policy" },
+  DELETE_LEAVE_POLICY: { action: "delete", resourceType: "leave-policy" },
+  VIEW_TRANSACTION_BALANCE: { action: "view-transaction", resourceType: "leave-balance" },
+  ADJUST_BALANCE: { action: "adjust", resourceType: "leave-balance" },
 } as const;
 
 /** Trạng thái đơn nghỉ — SPEC-05 §8 + API-05 §10.1 (TitleCase). */
@@ -99,6 +111,11 @@ export const LEAVE_PATHS = {
   EDIT: (id: string) => `/leave/requests/${id}/edit`,
   // S3-FE-LEAVE-4: LEAVE-SCREEN-007/008/009 (lịch nghỉ own/team/company).
   CALENDAR: "/leave/calendar",
+  // S3-FE-LEAVE-5: admin (LEAVE-SCREEN-010/011/012/013).
+  TYPES: "/leave/types",
+  POLICIES: "/leave/policies",
+  BALANCES: "/leave/balances",
+  BALANCE_TRANSACTIONS: (balanceId: string) => `/leave/balances/${balanceId}/transactions`,
 } as const;
 
 /** Phạm vi lịch nghỉ (khớp leaveCalendarScopeSchema — contracts). */

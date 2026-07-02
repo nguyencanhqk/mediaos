@@ -49,12 +49,15 @@ export function TextField<TValues extends FieldValues>({
   label,
   required,
   type = "text",
+  disabled,
 }: {
   form: UseFormReturn<TValues>;
   name: Path<TValues>;
   label: string;
   required?: boolean;
   type?: "text" | "number";
+  /** Vô hiệu hoá field (vd trường immutable sau khi tạo — code của loại nghỉ/chính sách). */
+  disabled?: boolean;
 }) {
   const resolveErr = useFieldError();
   const err = form.formState.errors[name] as FieldError | undefined;
@@ -64,6 +67,7 @@ export function TextField<TValues extends FieldValues>({
         id={name}
         type={type}
         autoComplete="off"
+        disabled={disabled}
         {...form.register(name, type === "number" ? { valueAsNumber: false } : undefined)}
       />
     </FieldShell>
