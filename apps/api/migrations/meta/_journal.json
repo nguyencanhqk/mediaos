@@ -981,6 +981,13 @@
       "when": 1717500690000,
       "tag": "0459_s2_hrbe7_employee_code_config",
       "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1717500695000,
+      "tag": "0460_s2_authbe6_role_write_assign_permission",
+      "breakpoints": true
     }
   ]
 }

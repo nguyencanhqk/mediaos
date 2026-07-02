@@ -259,5 +259,15 @@ export const AUDIT_OBJECT_TYPES = [
   // ADD-only vào CHECK (clone 0458/0457/0456/0446/0440), append-only #2 nguyên vẹn; INSERT audit
   // KHÔNG vỡ audit_logs_object_type_chk trên Postgres thật.
   "employee_code_config",
+  // S2-AUTH-BE-6 (mig 0460): Role write API — RoleAdminService.createRole/updateRole ghi audit
+  // RoleCreated/RoleUpdated object_type='role' objectId=role.id; assignPermissionToRole/
+  // revokePermissionFromRole ghi audit PermissionAssigned/PermissionRevoked object_type=
+  // 'role_permission' objectId=role.id (role_permissions KHÔNG có uuid PK riêng — key hợp thành
+  // role_id/permission_id/effect, dùng role.id làm objectId để truy vết được, KHÔNG NULL).
+  // before/after CHỈ {action,resourceType,effect,dataScope} đã mask (BẤT BIẾN #3 — KHÔNG salary/
+  // secret). 0460 UNION ADD-only vào CHECK (clone 0459/0458/0457/0456/0446/0440), append-only #2
+  // nguyên vẹn; INSERT audit KHÔNG vỡ audit_logs_object_type_chk trên Postgres thật.
+  "role",
+  "role_permission",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
