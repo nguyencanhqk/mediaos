@@ -854,3 +854,18 @@ export const effectiveShiftRuleResponseSchema = z.object({
   rule: attendanceRuleSummarySchema.nullable(),
 });
 export type EffectiveShiftRuleResponse = z.infer<typeof effectiveShiftRuleResponseSchema>;
+
+// ─── S3-INT-1: POST /internal/v1/attendance/recalculate (manual/retry LEAVE→ATT sync) ────────────
+// Internal route: JwtAuthGuard→CompanyGuard→PermissionGuard(manage:attendance) + InternalGuard
+// (x-internal-key). Body is server-authoritative other than requestId — company_id from the token.
+
+export const recalculateAttendanceRequestSchema = z.object({
+  leaveRequestId: z.string().uuid(),
+});
+export type RecalculateAttendanceRequest = z.infer<typeof recalculateAttendanceRequestSchema>;
+
+export const recalculateAttendanceResponseSchema = z.object({
+  leaveRequestId: z.string().uuid(),
+  processedDays: z.number().int().nonnegative(),
+});
+export type RecalculateAttendanceResponse = z.infer<typeof recalculateAttendanceResponseSchema>;
