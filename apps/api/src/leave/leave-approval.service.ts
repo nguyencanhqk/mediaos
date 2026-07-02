@@ -87,6 +87,7 @@ export class LeaveApprovalService {
       status: query.status,
       leaveTypeId: query.leaveTypeId,
       employeeId: query.employeeId,
+      departmentId: query.departmentId,
       fromDate: query.fromDate,
       toDate: query.toDate,
       limit,

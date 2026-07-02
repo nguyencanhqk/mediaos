@@ -21,6 +21,10 @@ import { HrWriteService } from "./hr-write.service";
 import { ProfileChangeRequestController } from "./profile-change-request.controller";
 import { ProfileChangeRequestRepository } from "./profile-change-request.repository";
 import { ProfileChangeRequestService } from "./profile-change-request.service";
+// S2-HR-BE-7 (additive): employee-code CONFIG admin (GET/PATCH config + POST preview via SequenceService).
+import { EmployeeCodeConfigController } from "./employee-code-config.controller";
+import { EmployeeCodeConfigRepository } from "./employee-code-config.repository";
+import { EmployeeCodeConfigService } from "./employee-code-config.service";
 
 @Module({
   imports: [
@@ -38,6 +42,8 @@ import { ProfileChangeRequestService } from "./profile-change-request.service";
     HrReadController,
     HrWriteController,
     ProfileChangeRequestController,
+    // S2-HR-BE-7 (additive): employee-code config admin controller.
+    EmployeeCodeConfigController,
   ],
   // PasswordService is stateless (argon2) — provided locally to hash generated login passwords (F7).
   providers: [
@@ -53,6 +59,9 @@ import { ProfileChangeRequestService } from "./profile-change-request.service";
     // S2-HR-BE-4 (additive): profile change request providers.
     ProfileChangeRequestService,
     ProfileChangeRequestRepository,
+    // S2-HR-BE-7 (additive): employee-code config admin providers.
+    EmployeeCodeConfigService,
+    EmployeeCodeConfigRepository,
   ],
   exports: [EmployeesService, HrReadService, HrWriteService, ProfileChangeRequestService],
 })

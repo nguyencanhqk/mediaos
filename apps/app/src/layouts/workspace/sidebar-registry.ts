@@ -112,6 +112,38 @@ export const ATT_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 40,
     requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_COMPANY"],
   },
+  // S3-FE-ATT-5 — ca làm việc / gán ca / rule (admin, read-only minimum). Gate = CẶP ENGINE THỰC trực
+  // tiếp (KHÔNG FE code qua PERMISSION_CODE_TO_PAIR — tránh drift, cùng kỹ thuật system.login-logs).
+  {
+    sidebarKey: "att.shifts",
+    moduleCode: "ATT",
+    label: "Ca làm việc",
+    path: "/attendance/shifts",
+    icon: "clock",
+    group: "management",
+    order: 50,
+    requiredAnyPermissions: ["view:shift"],
+  },
+  {
+    sidebarKey: "att.shift-assignments",
+    moduleCode: "ATT",
+    label: "Gán ca",
+    path: "/attendance/shift-assignments",
+    icon: "calendar-clock",
+    group: "management",
+    order: 60,
+    requiredAnyPermissions: ["view:shift-assignment"],
+  },
+  {
+    sidebarKey: "att.rules",
+    moduleCode: "ATT",
+    label: "Rule chấm công",
+    path: "/attendance/rules",
+    icon: "shield-check",
+    group: "management",
+    order: 70,
+    requiredAnyPermissions: ["view:attendance-rule"],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -150,6 +182,18 @@ export const LEAVE_SIDEBAR: readonly SidebarItemMeta[] = [
     icon: "check-circle",
     group: "operation",
     order: 30,
+    requiredAnyPermissions: ["LEAVE.REQUEST.VIEW"],
+  },
+  // S3-FE-LEAVE-3 — LEAVE-SCREEN-006. Gate sidebar = CÙNG cặp view:leave với leave.approvals
+  // (BE GET /leave/requests dùng chung endpoint) — màn hình này chỉ ĐỌC toàn bộ đơn trong phạm vi.
+  {
+    sidebarKey: "leave.all-requests",
+    moduleCode: "LEAVE",
+    label: "Tất cả đơn nghỉ",
+    path: "/leave/requests",
+    icon: "clipboard-list",
+    group: "management",
+    order: 40,
     requiredAnyPermissions: ["LEAVE.REQUEST.VIEW"],
   },
 ];
@@ -209,6 +253,29 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     group: "overview",
     order: 10,
     requiredAnyPermissions: ["FOUNDATION.SETTING.VIEW", "AUTH.USER.VIEW"],
+  },
+  // S2-FE-FND-1 (FND1-APP) — ADDITIVE. Gate theo cặp seed THẬT mig 0435 (FOUNDATION.COMPANY.VIEW →
+  // view:foundation-company; FOUNDATION.SETTING.VIEW → view:foundation-setting). filterSidebarItems ẩn
+  // khi thiếu — KHÔNG hard-code role.
+  {
+    sidebarKey: "system.company",
+    moduleCode: "FOUNDATION",
+    label: "Hồ sơ công ty",
+    path: "/system/company",
+    icon: "building-2",
+    group: "admin",
+    order: 15,
+    requiredAnyPermissions: ["FOUNDATION.COMPANY.VIEW"],
+  },
+  {
+    sidebarKey: "system.company-settings",
+    moduleCode: "FOUNDATION",
+    label: "Cấu hình công ty",
+    path: "/system/company/settings",
+    icon: "sliders-horizontal",
+    group: "admin",
+    order: 16,
+    requiredAnyPermissions: ["FOUNDATION.SETTING.VIEW"],
   },
   {
     sidebarKey: "system.users",

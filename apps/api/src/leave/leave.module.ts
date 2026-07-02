@@ -7,6 +7,8 @@ import { HrTasksService } from "../tasks/hr-tasks.service";
 import { LeaveController } from "./leave.controller";
 import { LeaveApprovalRepository } from "./leave-approval.repository";
 import { LeaveApprovalService } from "./leave-approval.service";
+import { LeaveCalendarRepository } from "./leave-calendar.repository";
+import { LeaveCalendarService } from "./leave-calendar.service";
 import { LeaveMasterDataSeeder } from "./leave-master-data.seeder";
 import { LeaveReadRepository } from "./leave-read.repository";
 import { LeaveReadService } from "./leave-read.service";
@@ -43,6 +45,10 @@ import { LeaveService } from "./leave.service";
     // injected from PermissionModule (exported, line 137) — reuses the S2-INT-2 Team/Company resolver.
     LeaveApprovalService,
     LeaveApprovalRepository,
+    // S3-LEAVE-BE-5 (additive) — GET /leave/calendar (own/team/company data-scope). DataScopeService already
+    // exported by PermissionModule (reused by LeaveApprovalService above).
+    LeaveCalendarService,
+    LeaveCalendarRepository,
     HrTasksService,
     LeaveMasterDataSeeder,
     LeaveSeedRegistrar,
