@@ -5,6 +5,8 @@ import { SeedModule } from "../foundation/seed/seed.module";
 import { PermissionModule } from "../permission/permission.module";
 import { HrTasksService } from "../tasks/hr-tasks.service";
 import { LeaveController } from "./leave.controller";
+import { LeaveAdminRepository } from "./leave-admin.repository";
+import { LeaveAdminService } from "./leave-admin.service";
 import { LeaveApprovalRepository } from "./leave-approval.repository";
 import { LeaveApprovalService } from "./leave-approval.service";
 import { LeaveCalendarRepository } from "./leave-calendar.repository";
@@ -49,6 +51,10 @@ import { LeaveService } from "./leave.service";
     // exported by PermissionModule (reused by LeaveApprovalService above).
     LeaveCalendarService,
     LeaveCalendarRepository,
+    // S3-LEAVE-BE-4 (additive) — admin surface (type/policy CRUD + balance view/adjust ledger). DataScopeService
+    // already exported by PermissionModule (reused by LeaveApprovalService/LeaveCalendarService above).
+    LeaveAdminService,
+    LeaveAdminRepository,
     HrTasksService,
     LeaveMasterDataSeeder,
     LeaveSeedRegistrar,

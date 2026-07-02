@@ -1,19 +1,26 @@
 import { createZodDto } from "nestjs-zod";
 import {
+  adjustLeaveBalanceSchema,
   approveLeaveRequestSchema,
   cancelLeaveRequestSchema,
+  createLeavePolicySchema,
   createLeaveRequestDraftSchema,
   createLeaveRequestSchema,
+  createLeaveTypeAdminSchema,
   createLeaveTypeSchema,
+  leaveBalanceAdminListQuerySchema,
   leaveCalculateRequestSchema,
   leaveCalendarQuerySchema,
   leaveListQuerySchema,
+  leavePolicyListQuerySchema,
   leaveRequestListQuerySchema,
   pendingLeaveRequestListQuerySchema,
   rejectLeaveRequestSchema,
   reviewNoteSchema,
   submitLeaveRequestSchema,
+  updateLeavePolicySchema,
   updateLeaveRequestDraftSchema,
+  updateLeaveTypeAdminSchema,
   updateLeaveTypeSchema,
   upsertLeaveBalanceSchema,
 } from "@mediaos/contracts";
@@ -42,3 +49,13 @@ export class RejectLeaveRequestDto extends createZodDto(rejectLeaveRequestSchema
 export class PendingLeaveRequestListQueryDto extends createZodDto(
   pendingLeaveRequestListQuerySchema,
 ) {}
+
+// S3-LEAVE-BE-4: admin surface (type/policy CRUD + balance view/adjust ledger). Server-authoritative —
+// client status/companyId/created_by/etc. stripped by Zod (object strip).
+export class CreateLeaveTypeAdminDto extends createZodDto(createLeaveTypeAdminSchema) {}
+export class UpdateLeaveTypeAdminDto extends createZodDto(updateLeaveTypeAdminSchema) {}
+export class CreateLeavePolicyDto extends createZodDto(createLeavePolicySchema) {}
+export class UpdateLeavePolicyDto extends createZodDto(updateLeavePolicySchema) {}
+export class LeavePolicyListQueryDto extends createZodDto(leavePolicyListQuerySchema) {}
+export class LeaveBalanceAdminListQueryDto extends createZodDto(leaveBalanceAdminListQuerySchema) {}
+export class AdjustLeaveBalanceDto extends createZodDto(adjustLeaveBalanceSchema) {}

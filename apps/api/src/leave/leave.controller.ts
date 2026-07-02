@@ -21,24 +21,32 @@ import {
   type LeavePermissionPair,
   type LeaveResourceType,
 } from "./leave-permissions.const";
+import { LeaveAdminService } from "./leave-admin.service";
 import { LeaveApprovalService } from "./leave-approval.service";
 import { LeaveCalendarService } from "./leave-calendar.service";
 import { LeaveReadService } from "./leave-read.service";
 import { LeaveRequestService } from "./leave-request.service";
 import { LeaveService } from "./leave.service";
 import {
+  AdjustLeaveBalanceDto,
   ApproveLeaveRequestDto,
   CancelLeaveRequestDto,
+  CreateLeavePolicyDto,
   CreateLeaveRequestDraftDto,
+  CreateLeaveTypeAdminDto,
   CreateLeaveTypeDto,
+  LeaveBalanceAdminListQueryDto,
   LeaveCalculateDto,
   LeaveCalendarQueryDto,
   LeaveListQueryDto,
+  LeavePolicyListQueryDto,
   LeaveRequestListQueryDto,
   PendingLeaveRequestListQueryDto,
   RejectLeaveRequestDto,
   SubmitLeaveRequestDto,
+  UpdateLeavePolicyDto,
   UpdateLeaveRequestDraftDto,
+  UpdateLeaveTypeAdminDto,
   UpdateLeaveTypeDto,
   UpsertLeaveBalanceDto,
 } from "./leave.dto";
@@ -82,6 +90,18 @@ const REJECT_LEAVE = leavePair("reject", LEAVE_RESOURCES.LEAVE);
 // canonical roles) — the REAL per-scope gate (view-own/view-team/view-company) runs in
 // LeaveCalendarService via DataScopeService.resolveAndAssert, mirroring the BE-3 listPending 2-tier gate.
 const VIEW_OWN_CALENDAR = leavePair("view-own", LEAVE_RESOURCES.LEAVE_CALENDAR);
+// S3-LEAVE-BE-4 — admin surface (mig 0455). Controller gates the coarse pair; the REAL Company-scope gate
+// runs in LeaveAdminService via DataScopeService.resolveAndAssert (mirrors BE-3/BE-5 2-tier pattern).
+const CREATE_LEAVE_TYPE = leavePair("create", LEAVE_RESOURCES.LEAVE_TYPE);
+const UPDATE_LEAVE_TYPE = leavePair("update", LEAVE_RESOURCES.LEAVE_TYPE);
+const DELETE_LEAVE_TYPE = leavePair("delete", LEAVE_RESOURCES.LEAVE_TYPE);
+const VIEW_LEAVE_POLICY = leavePair("view", LEAVE_RESOURCES.LEAVE_POLICY);
+const CREATE_LEAVE_POLICY = leavePair("create", LEAVE_RESOURCES.LEAVE_POLICY);
+const UPDATE_LEAVE_POLICY = leavePair("update", LEAVE_RESOURCES.LEAVE_POLICY);
+const DELETE_LEAVE_POLICY = leavePair("delete", LEAVE_RESOURCES.LEAVE_POLICY);
+const VIEW_LEAVE_BALANCE = leavePair("view", LEAVE_RESOURCES.LEAVE_BALANCE);
+const VIEW_TRANSACTION_LEAVE_BALANCE = leavePair("view-transaction", LEAVE_RESOURCES.LEAVE_BALANCE);
+const ADJUST_LEAVE_BALANCE = leavePair("adjust", LEAVE_RESOURCES.LEAVE_BALANCE);
 
 /**
  * G11-2 — Leave HTTP surface. Every route gated by PermissionGuard (@RequirePermission, fail-closed).
@@ -98,6 +118,7 @@ export class LeaveController {
     private readonly leaveRequest: LeaveRequestService,
     private readonly leaveApproval: LeaveApprovalService,
     private readonly leaveCalendar: LeaveCalendarService,
+    private readonly leaveAdmin: LeaveAdminService,
   ) {}
 
   // ─── Leave types ─────────────────────────────────────────────────────────────
@@ -295,5 +316,115 @@ export class LeaveController {
   })
   listCalendar(@Req() req: AuthenticatedRequest, @Query() query: LeaveCalendarQueryDto) {
     return this.leaveCalendar.listCalendar(req.user, query);
+  }
+
+  // ─── Admin: leave types (S3-LEAVE-BE-4 · create/update/delete:leave-type) ────
+  // Distinct `admin/` prefix — never shadows the legacy /leave/types (GET+POST+PATCH `manage:leave`) routes
+  // above; both surfaces coexist during migration (legacy DEFERRED, not removed this WO).
+
+  @Post("admin/types")
+  @RequirePermission(CREATE_LEAVE_TYPE.action, CREATE_LEAVE_TYPE.resourceType, {
+    isSensitive: CREATE_LEAVE_TYPE.sensitive,
+  })
+  createTypeAdmin(@Req() req: AuthenticatedRequest, @Body() dto: CreateLeaveTypeAdminDto) {
+    return this.leaveAdmin.createType(req.user, dto);
+  }
+
+  @Patch("admin/types/:id")
+  @RequirePermission(UPDATE_LEAVE_TYPE.action, UPDATE_LEAVE_TYPE.resourceType, {
+    isSensitive: UPDATE_LEAVE_TYPE.sensitive,
+  })
+  updateTypeAdmin(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Body() dto: UpdateLeaveTypeAdminDto,
+  ) {
+    return this.leaveAdmin.updateType(req.user, id, dto);
+  }
+
+  @Post("admin/types/:id/delete")
+  @HttpCode(200)
+  @RequirePermission(DELETE_LEAVE_TYPE.action, DELETE_LEAVE_TYPE.resourceType, {
+    isSensitive: DELETE_LEAVE_TYPE.sensitive,
+  })
+  deleteTypeAdmin(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+    return this.leaveAdmin.deleteType(req.user, id);
+  }
+
+  // ─── Admin: leave policies (S3-LEAVE-BE-4 · view/create/update/delete:leave-policy) ──
+
+  @Get("admin/policies")
+  @RequirePermission(VIEW_LEAVE_POLICY.action, VIEW_LEAVE_POLICY.resourceType, {
+    isSensitive: VIEW_LEAVE_POLICY.sensitive,
+  })
+  listPolicies(@Req() req: AuthenticatedRequest, @Query() query: LeavePolicyListQueryDto) {
+    return this.leaveAdmin.listPolicies(req.user, query);
+  }
+
+  @Post("admin/policies")
+  @RequirePermission(CREATE_LEAVE_POLICY.action, CREATE_LEAVE_POLICY.resourceType, {
+    isSensitive: CREATE_LEAVE_POLICY.sensitive,
+  })
+  createPolicy(@Req() req: AuthenticatedRequest, @Body() dto: CreateLeavePolicyDto) {
+    return this.leaveAdmin.createPolicy(req.user, dto);
+  }
+
+  @Patch("admin/policies/:id")
+  @RequirePermission(UPDATE_LEAVE_POLICY.action, UPDATE_LEAVE_POLICY.resourceType, {
+    isSensitive: UPDATE_LEAVE_POLICY.sensitive,
+  })
+  updatePolicy(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Body() dto: UpdateLeavePolicyDto,
+  ) {
+    return this.leaveAdmin.updatePolicy(req.user, id, dto);
+  }
+
+  @Post("admin/policies/:id/delete")
+  @HttpCode(200)
+  @RequirePermission(DELETE_LEAVE_POLICY.action, DELETE_LEAVE_POLICY.resourceType, {
+    isSensitive: DELETE_LEAVE_POLICY.sensitive,
+  })
+  deletePolicy(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+    return this.leaveAdmin.deletePolicy(req.user, id);
+  }
+
+  // ─── Admin: leave balances (S3-LEAVE-BE-4 · view/view-transaction/adjust:leave-balance) ──
+
+  @Get("admin/balances")
+  @RequirePermission(VIEW_LEAVE_BALANCE.action, VIEW_LEAVE_BALANCE.resourceType, {
+    isSensitive: VIEW_LEAVE_BALANCE.sensitive,
+  })
+  listBalancesAdmin(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: LeaveBalanceAdminListQueryDto,
+  ) {
+    return this.leaveAdmin.listBalances(req.user, query);
+  }
+
+  @Get("admin/balances/:id/transactions")
+  @RequirePermission(
+    VIEW_TRANSACTION_LEAVE_BALANCE.action,
+    VIEW_TRANSACTION_LEAVE_BALANCE.resourceType,
+    {
+      isSensitive: VIEW_TRANSACTION_LEAVE_BALANCE.sensitive,
+    },
+  )
+  listBalanceTransactions(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+    return this.leaveAdmin.listBalanceTransactions(req.user, id);
+  }
+
+  @Post("admin/balances/:id/adjust")
+  @HttpCode(200)
+  @RequirePermission(ADJUST_LEAVE_BALANCE.action, ADJUST_LEAVE_BALANCE.resourceType, {
+    isSensitive: ADJUST_LEAVE_BALANCE.sensitive,
+  })
+  adjustBalance(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Body() dto: AdjustLeaveBalanceDto,
+  ) {
+    return this.leaveAdmin.adjustBalance(req.user, id, dto);
   }
 }
