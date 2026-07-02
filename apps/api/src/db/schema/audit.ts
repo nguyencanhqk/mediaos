@@ -269,5 +269,12 @@ export const AUDIT_OBJECT_TYPES = [
   // nguyên vẹn; INSERT audit KHÔNG vỡ audit_logs_object_type_chk trên Postgres thật.
   "role",
   "role_permission",
+  // S2-AUTH-BE-7 (mig 0461): session self-service — AuthService.revokeSession/revokeOtherSessions ghi
+  // audit SessionRevoked object_type='user_session' objectId=session.id (single) hoặc objectId=userId
+  // (scope='others', bulk). after CHỈ {scope,count?} — KHÔNG refresh_token_hash/access_token_jti/ip/
+  // user_agent thô (BẤT BIẾN #3 — masker che nếu lọt). 0461 UNION ADD-only vào CHECK (clone 0460/0459/
+  // 0458/0457/0456/0446/0440), append-only #2 nguyên vẹn; INSERT audit KHÔNG vỡ
+  // audit_logs_object_type_chk trên Postgres thật.
+  "user_session",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

@@ -988,6 +988,13 @@
       "when": 1717500695000,
       "tag": "0460_s2_authbe6_role_write_assign_permission",
       "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "7",
+      "when": 1717500700000,
+      "tag": "0461_s2_authbe7_session_selfservice",
+      "breakpoints": true
     }
   ]
 }
