@@ -18,6 +18,7 @@
 import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
   PayloadTooLargeException,
@@ -96,6 +97,7 @@ interface Harness {
     canLink: ReturnType<typeof vi.fn>;
     canUnlink: ReturnType<typeof vi.fn>;
     canDelete: ReturnType<typeof vi.fn>;
+    decideForLinkedFile: ReturnType<typeof vi.fn>;
   };
   storage: {
     get: ReturnType<typeof vi.fn>;
@@ -153,6 +155,10 @@ function makeHarness(policyDecision: FilePolicyDecision = ALLOW): Harness {
     canLink: vi.fn(async () => policyDecision),
     canUnlink: vi.fn(async () => policyDecision),
     canDelete: vi.fn(async () => policyDecision),
+    // S2-FND-BE-4 (H1): view/download/delete now go through the link-aware decision point. The default
+    // mirrors the single-file decision (returns policyDecision) so existing ALLOW/DENY cases still hold;
+    // link-aware branching itself is unit-tested in file-policy.service.spec.ts.
+    decideForLinkedFile: vi.fn(async () => policyDecision),
   };
 
   const storage = {
@@ -257,20 +263,20 @@ describe("FileService (deny-path / validation RED)", () => {
       h.fileRepo.findByIdTx.mockResolvedValue(undefined);
       await expect(h.service.getDownloadUrl(user, FILE)).rejects.toBeInstanceOf(NotFoundException);
       expect(h.storage.get).not.toHaveBeenCalled();
-      expect(h.policy.canDownload).not.toHaveBeenCalled();
+      expect(h.policy.decideForLinkedFile).not.toHaveBeenCalled();
     });
 
     it("getMetadata: row undefined → NotFound, policy NOT consulted", async () => {
       h.fileRepo.findByIdTx.mockResolvedValue(undefined);
       await expect(h.service.getMetadata(user, FILE)).rejects.toBeInstanceOf(NotFoundException);
-      expect(h.policy.canView).not.toHaveBeenCalled();
+      expect(h.policy.decideForLinkedFile).not.toHaveBeenCalled();
     });
 
     it("delete: row undefined → NotFound, softDelete NOT called, policy NOT consulted", async () => {
       h.fileRepo.findByIdTx.mockResolvedValue(undefined);
       await expect(h.service.deleteFile(user, FILE)).rejects.toBeInstanceOf(NotFoundException);
       expect(h.fileRepo.softDeleteTx).not.toHaveBeenCalled();
-      expect(h.policy.canDelete).not.toHaveBeenCalled();
+      expect(h.policy.decideForLinkedFile).not.toHaveBeenCalled();
     });
   });
 
@@ -430,7 +436,11 @@ describe("FileService (deny-path / validation RED)", () => {
     });
 
     it("download ALLOW → DownloadUrlDto {url, expiresAt} short-TTL + Download log granted", async () => {
-      h.fileRepo.findByIdTx.mockResolvedValue(makeFileRow());
+      // S2-FND-BE-4 (H2): a downloadable file MUST be upload_status='Uploaded' AND not scan_status='Infected'.
+      // The fixture now reflects a ready file (Uploaded/Clean) so the ALLOW path reaches storage.get.
+      h.fileRepo.findByIdTx.mockResolvedValue(
+        makeFileRow({ uploadStatus: "Uploaded", scanStatus: "Clean" }),
+      );
       const dto = await h.service.getDownloadUrl(user, FILE);
       expect(dto.url).toMatch(/^https:\/\//);
       expect(typeof dto.expiresAt).toBe("string");
@@ -468,6 +478,125 @@ describe("FileService (deny-path / validation RED)", () => {
       h.linkRepo.findByIdTx.mockResolvedValue(undefined);
       await expect(h.service.unlink(user, "nope")).rejects.toThrow();
       expect(h.policy.canUnlink).not.toHaveBeenCalled();
+    });
+  });
+
+  // S2-FND-BE-4 — H1 link-aware fail-closed + H2 download state-guard ─────────────────
+  // H1: view/download/delete load file_links and hand the decision to FilePolicy.decideForLinkedFile
+  //     (the link-aware decision lives in the POLICY layer; the service is thin and does NOT re-implement
+  //     a fallback for linked files). A link with no registered resolver → deny-no-resolver → 403.
+  // H2: getDownloadUrl, AFTER authz ALLOW, blocks non-downloadable states (upload_status != 'Uploaded'
+  //     OR scan_status == 'Infected') BEFORE storage.get → 409 + deny-log (never a signed URL for those).
+  describe("H1 link-aware DENY + H2 download state-guard", () => {
+    const twoLinks = [
+      {
+        id: "l1",
+        fileId: FILE,
+        moduleCode: "HR",
+        entityType: "EmployeeContract",
+        entityId: randomUUID(),
+        linkType: "Contract",
+        accessScope: "Company",
+        isPrimary: true,
+        purpose: null,
+        createdAt: new Date(),
+      },
+      {
+        id: "l2",
+        fileId: FILE,
+        moduleCode: "LEAVE",
+        entityType: "LeaveAttachment",
+        entityId: randomUUID(),
+        linkType: "Attachment",
+        accessScope: "Company",
+        isPrimary: false,
+        purpose: null,
+        createdAt: new Date(),
+      },
+    ];
+
+    it("getDownloadUrl: linked file → decideForLinkedFile(links) DENY (deny-no-resolver) → 403, storage NOT called, deny-log", async () => {
+      h.fileRepo.findByIdTx.mockResolvedValue(
+        makeFileRow({ uploadStatus: "Uploaded", scanStatus: "Clean" }),
+      );
+      h.linkRepo.listByFileTx.mockResolvedValue(twoLinks);
+      h.policy.decideForLinkedFile.mockResolvedValue({ allow: false, reason: "deny-no-resolver" });
+
+      await expect(h.service.getDownloadUrl(user, FILE)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(h.storage.get).not.toHaveBeenCalled();
+      // policy received the loaded links (link-aware decision is made in the POLICY layer, not the service).
+      const call = h.policy.decideForLinkedFile.mock.calls[0];
+      expect(call[1]).toHaveLength(2);
+      const denyLog = h.accessLogSpy.mock.calls.find((c) => c[1].action === "Download");
+      expect(denyLog![1].accessGranted).toBe(false);
+      expect(denyLog![1].deniedReason).toBe("deny-no-resolver");
+    });
+
+    it("getMetadata: linked file → decideForLinkedFile DENY → 403 (view is link-aware too)", async () => {
+      h.fileRepo.findByIdTx.mockResolvedValue(makeFileRow());
+      h.linkRepo.listByFileTx.mockResolvedValue(twoLinks);
+      h.policy.decideForLinkedFile.mockResolvedValue({ allow: false, reason: "deny-no-resolver" });
+      await expect(h.service.getMetadata(user, FILE)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(h.policy.decideForLinkedFile).toHaveBeenCalledTimes(1);
+    });
+
+    it("deleteFile: linked file → decideForLinkedFile DENY → 403, softDelete NOT called", async () => {
+      h.fileRepo.findByIdTx.mockResolvedValue(makeFileRow());
+      h.linkRepo.listByFileTx.mockResolvedValue(twoLinks);
+      h.policy.decideForLinkedFile.mockResolvedValue({ allow: false, reason: "deny-no-resolver" });
+      await expect(h.service.deleteFile(user, FILE)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(h.fileRepo.softDeleteTx).not.toHaveBeenCalled();
+    });
+
+    it("H2: authz ALLOW but upload_status='Pending' → 409, storage NOT called, deny-log 'not-uploaded'", async () => {
+      // default harness policy = ALLOW; 0 links ⇒ foundation-owned; state-guard is the ONLY blocker.
+      h.fileRepo.findByIdTx.mockResolvedValue(
+        makeFileRow({ uploadStatus: "Pending", scanStatus: "NotRequired" }),
+      );
+      await expect(h.service.getDownloadUrl(user, FILE)).rejects.toBeInstanceOf(ConflictException);
+      expect(h.storage.get).not.toHaveBeenCalled();
+      const denyLog = h.accessLogSpy.mock.calls.find((c) => c[1].action === "Download");
+      expect(denyLog![1].accessGranted).toBe(false);
+      expect(denyLog![1].deniedReason).toBe("not-uploaded");
+    });
+
+    it("H2: authz ALLOW but scan_status='Infected' → 409, storage NOT called, deny-log 'infected'", async () => {
+      h.fileRepo.findByIdTx.mockResolvedValue(
+        makeFileRow({ uploadStatus: "Uploaded", scanStatus: "Infected" }),
+      );
+      await expect(h.service.getDownloadUrl(user, FILE)).rejects.toBeInstanceOf(ConflictException);
+      expect(h.storage.get).not.toHaveBeenCalled();
+      const denyLog = h.accessLogSpy.mock.calls.find((c) => c[1].action === "Download");
+      expect(denyLog![1].deniedReason).toBe("infected");
+    });
+
+    // S2-FND-BE-4 (H2, acceptance-criterion lock): ONLY 'Infected' blocks a fully-Uploaded file. AV is
+    // not yet wired (default scan_status='NotRequired'), so an Uploaded file whose scan is still
+    // Pending/Failed — or Clean/NotRequired — MUST still presign. This locks "scan Pending/Failed vẫn
+    // tải" against a future over-restrictive regression (Đội-3 flagged only Clean/NotRequired was tested).
+    it.each(["Pending", "Failed", "NotRequired", "Clean"] as const)(
+      "H2: Uploaded + scan_status='%s' (not Infected) still presigns → DownloadUrlDto + Download log granted",
+      async (scanStatus) => {
+        h.fileRepo.findByIdTx.mockResolvedValue(
+          makeFileRow({ uploadStatus: "Uploaded", scanStatus }),
+        );
+        const dto = await h.service.getDownloadUrl(user, FILE);
+        expect(dto.url).toMatch(/^https:\/\//);
+        expect(typeof dto.expiresAt).toBe("string");
+        expect(h.storage.get).toHaveBeenCalledTimes(1);
+        const log = h.accessLogSpy.mock.calls.find((c) => c[1].action === "Download");
+        expect(log![1].accessGranted).toBe(true);
+      },
+    );
+
+    it("H2 does NOT restrict view: metadata of a Pending/Infected file (authz ALLOW) → 200 DTO", async () => {
+      h.fileRepo.findByIdTx.mockResolvedValue(
+        makeFileRow({ uploadStatus: "Pending", scanStatus: "Infected" }),
+      );
+      const dto = await h.service.getMetadata(user, FILE);
+      expect(dto.id).toBe(FILE);
+      expect(dto.uploadStatus).toBe("Pending");
+      expect(dto.scanStatus).toBe("Infected");
     });
   });
 });
