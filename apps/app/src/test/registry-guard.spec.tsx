@@ -472,7 +472,7 @@ describe("S2-FE-FND-7 — 4 System sidebar entries (registry thật)", () => {
     );
   });
 
-  it("KHÔNG có entry /system/settings (chờ S2-FND-BE-8)", () => {
+  it("KHÔNG có entry /system/settings (chờ WO BE system-settings admin)", () => {
     expect(SYSTEM_SIDEBAR.find((i) => i.path === "/system/settings")).toBeUndefined();
   });
 
