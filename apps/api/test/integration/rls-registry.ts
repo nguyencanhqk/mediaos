@@ -573,6 +573,32 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
 
+  {
+    // S2-HR-BE-6 (mig 0462): employee_contracts. company_id NOT NULL + RLS+FORCE → PHẢI ở harness.
+    // KHÔNG skipNoContext (mọi hàng tenant-scoped). FK employee_id→employee_profiles, contract_type_id→
+    // contract_types (cùng company). start_date NOT NULL.
+    name: "employee_contracts",
+    table: "employee_contracts",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `ec-${randomUUID().slice(0, 8)}@x.test`);
+      const emp = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, u],
+      );
+      const ct = await direct.query(
+        `INSERT INTO contract_types (company_id, name) VALUES ($1, $2) RETURNING id`,
+        [t.companyId, `rls-ec-ct-${randomUUID().slice(0, 8)}`],
+      );
+      const r = await direct.query(
+        `INSERT INTO employee_contracts
+           (company_id, employee_id, contract_type_id, start_date, status)
+         VALUES ($1, $2, $3, '2024-01-01', 'Draft') RETURNING id`,
+        [t.companyId, emp.rows[0].id, ct.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
   // ── G4-2 Media ──────────────────────────────────────────────────────────────
   {
     name: "channels",

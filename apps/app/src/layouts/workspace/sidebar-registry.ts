@@ -60,6 +60,48 @@ export const HR_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 30,
     requiredAnyPermissions: ["HR.EMPLOYEE.VIEW"],
   },
+  // S2-FE-HR-5 — dữ liệu gốc HR. Gate theo cặp SEED THẬT (qua PERMISSION_CODE_TO_PAIR):
+  // phòng ban/chức vụ = cặp ĐỌC; cấp bậc/loại hợp đồng = manage:master-data DUY NHẤT (SPEC-03 §13.12b/c).
+  {
+    sidebarKey: "hr.departments",
+    moduleCode: "HR",
+    label: "Phòng ban",
+    path: "/hr/departments",
+    icon: "building-2",
+    group: "master-data",
+    order: 40,
+    requiredAnyPermissions: ["HR.DEPARTMENT.VIEW"],
+  },
+  {
+    sidebarKey: "hr.positions",
+    moduleCode: "HR",
+    label: "Chức vụ",
+    path: "/hr/positions",
+    icon: "briefcase",
+    group: "master-data",
+    order: 41,
+    requiredAnyPermissions: ["HR.POSITION.VIEW"],
+  },
+  {
+    sidebarKey: "hr.job-levels",
+    moduleCode: "HR",
+    label: "Cấp bậc",
+    path: "/hr/job-levels",
+    icon: "layers",
+    group: "master-data",
+    order: 42,
+    requiredAnyPermissions: ["HR.MASTER_DATA.MANAGE"],
+  },
+  {
+    sidebarKey: "hr.contract-types",
+    moduleCode: "HR",
+    label: "Loại hợp đồng",
+    path: "/hr/contract-types",
+    icon: "file-text",
+    group: "master-data",
+    order: 43,
+    requiredAnyPermissions: ["HR.MASTER_DATA.MANAGE"],
+  },
 ];
 
 // ---------------------------------------------------------------------------

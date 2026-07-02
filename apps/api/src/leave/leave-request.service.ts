@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   HttpException,
   Injectable,
   InternalServerErrorException,
@@ -21,6 +22,7 @@ import { OutboxService } from "../events/outbox.service";
 import { HolidaysService } from "../foundation/holidays/holidays.service";
 import { LeaveRepository } from "./leave.repository";
 import { LeaveRequestRepository } from "./leave-request.repository";
+import { LeaveRevokeService } from "./leave-revoke.service";
 import { calculateLeave } from "./leave-calc.logic";
 import {
   DEFAULT_COMPANY_TZ,
@@ -65,6 +67,8 @@ export class LeaveRequestService {
     private readonly holidays: HolidaysService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    // S3-INT-1 (additive): Approved-cancel delegates to LeaveRevokeService (ATT-revert + balance refund).
+    private readonly revokeService: LeaveRevokeService,
   ) {}
 
   // ─── POST /leave/requests (create draft; submitNow → submit cùng tx) ──────────
@@ -243,13 +247,40 @@ export class LeaveRequestService {
       .catch((err: unknown) => this.mapError(err, "submit", { companyId: actor.companyId, id }));
   }
 
-  // ─── POST /leave/requests/:id/cancel (Draft|Pending → Cancelled) ─────────────
+  // ─── POST /leave/requests/:id/cancel (Draft|Pending → Cancelled ; Approved → LeaveRevokeService) ──
 
+  /**
+   * S3-INT-1: thin dispatcher. Approved requests need ATT-revert + balance refund (LeaveRevokeService,
+   * its OWN withTenant tx — nesting `db.transaction()` calls is unsafe, so this is a SEPARATE read then
+   * a SEPARATE write tx, not one nested transaction). Draft/Pending keep the original single-tx FSM
+   * below. OWNERSHIP gate is 403 (NOT 404) in BOTH branches — "exists but not mine" must deny explicitly
+   * (cancel-own:leave is Own-scope self-service); cross-tenant stays 404 (RLS, never leaks existence).
+   */
   async cancel(actor: Actor, id: string, cancelReason?: string): Promise<LeaveRequestDetailView> {
+    const peeked = await this.db.withTenant(actor.companyId, (tx) =>
+      this.reqRepo.findRequestForUpdateTx(actor.companyId, id, tx),
+    );
+    if (!peeked) {
+      throw new NotFoundException({
+        code: LEAVE_ERR.NOT_FOUND,
+        message: "Không tìm thấy đơn nghỉ",
+      });
+    }
+    if (peeked.userId !== actor.id) {
+      throw new ForbiddenException({
+        code: LEAVE_ERR.OUT_OF_SCOPE,
+        message: "Chỉ người tạo đơn mới được huỷ đơn của mình",
+      });
+    }
+    if (peeked.status === "Approved") {
+      return this.revokeService.cancelApproved(actor, id, cancelReason);
+    }
+
     return this.db
       .withTenant(actor.companyId, async (tx) => {
         const request = await this.reqRepo.findRequestForUpdateTx(actor.companyId, id, tx);
         if (!request || request.userId !== actor.id) {
+          // Re-checked under the FOR UPDATE lock (TOCTOU) — same 404/403 split as the peek above.
           throw new NotFoundException({
             code: LEAVE_ERR.NOT_FOUND,
             message: "Không tìm thấy đơn nghỉ",

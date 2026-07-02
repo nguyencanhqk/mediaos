@@ -83,3 +83,65 @@ export const objectPermissionSchema = z.object({
   createdAt: z.string().datetime(),
 });
 export type ObjectPermissionDto = z.infer<typeof objectPermissionSchema>;
+
+// ─── (C) role write (S2-AUTH-BE-6) — create/update role + assign/revoke permission cho role ────
+
+/**
+ * POST /auth/roles — tạo role company-scope. system role (is_system=true) KHÔNG tạo qua đây (server
+ * luôn set is_system=false — field không nhận từ client, chống giả mạo role hệ thống).
+ */
+export const createRoleSchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().max(500).nullable().optional(),
+});
+export type CreateRoleRequest = z.infer<typeof createRoleSchema>;
+
+/**
+ * PATCH /auth/roles/:id — sửa name/description. role system-defined (is_system=true) → server REJECT
+ * (400) — KHÔNG cho sửa. Cả 2 field optional (dirty-fields patch).
+ */
+export const updateRoleSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().max(500).nullable().optional(),
+});
+export type UpdateRoleRequest = z.infer<typeof updateRoleSchema>;
+
+/** DTO 1 role trả về sau khi create/update (KHÔNG lộ role operator-audience qua đường write này). */
+export const roleWriteResultSchema = z.object({
+  id: z.string().uuid(),
+  companyId: z.string().uuid().nullable(),
+  name: z.string(),
+  description: z.string().nullable(),
+  isSystem: z.boolean(),
+});
+export type RoleWriteResultDto = z.infer<typeof roleWriteResultSchema>;
+
+/**
+ * POST /auth/roles/:id/permissions — gán 1 cặp permission (action+resourceType) cho role, kèm data_scope.
+ * SCOPE CEILING (CHỐT 2026-07-02): dataScope PHẢI ≤ Company — 'System' → REJECT 400 (tenant-admin KHÔNG
+ * được gán System = mở lại đúng cái mig 0441 tránh nới scope role hệ thống).
+ */
+export const assignRolePermissionSchema = z.object({
+  action: z.string().min(1).max(100),
+  resourceType: z.string().min(1).max(100),
+  dataScope: z.enum(["Own", "Team", "Department", "Company"]),
+});
+export type AssignRolePermissionRequest = z.infer<typeof assignRolePermissionSchema>;
+
+/** DELETE /auth/roles/:id/permissions — body xác định chính xác cặp cần gỡ (action+resourceType). */
+export const revokeRolePermissionSchema = z.object({
+  action: z.string().min(1).max(100),
+  resourceType: z.string().min(1).max(100),
+});
+export type RevokeRolePermissionRequest = z.infer<typeof revokeRolePermissionSchema>;
+
+/** DTO 1 role_permission grant trả về sau khi assign (role_permissions không có uuid PK riêng). */
+export const rolePermissionGrantSchema = z.object({
+  roleId: z.string().uuid(),
+  permissionId: z.string().uuid(),
+  action: z.string(),
+  resourceType: z.string(),
+  effect: permissionEffectEnum,
+  dataScope: z.enum(["Own", "Team", "Department", "Company", "System"]),
+});
+export type RolePermissionGrantDto = z.infer<typeof rolePermissionGrantSchema>;

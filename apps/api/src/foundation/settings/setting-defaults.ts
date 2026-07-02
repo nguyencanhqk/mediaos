@@ -61,6 +61,18 @@ export const SETTING_DEFAULTS: Readonly<Record<string, SettingDefault>> = Object
     moduleCode: "SYSTEM",
     isPublic: true,
   },
+  // S2-HR-BE-6 scope FIX (2026-07-02, owner-chốt session 1849d064): ngưỡng cảnh báo hợp đồng sắp hết hạn
+  // là company-configurable qua company_settings (PATCH /settings/company/:key, S1-FND-SETTING-1) — CHƯA
+  // có UI cấu hình riêng (follow-up nếu cần). 2 mốc mặc định [30,7] ngày (DB-03 §7.7 quy tắc 5): milestone
+  // rộng nhất (30) quyết định EmployeeContractDto.expiringSoon (giữ nguyên hợp đồng DTO boolean hiện có);
+  // cả 2 mốc lộ qua GET /hr/contracts/expiry-thresholds cho FE hiển thị nhiều cấp cảnh báo.
+  "hr.contract_expiring_warning_days": {
+    value: [30, 7],
+    valueType: "Array",
+    category: "HR",
+    moduleCode: "HR",
+    isPublic: true,
+  },
 });
 
 /** Default cho 1 key (undefined nếu không có default — caller xử lý "không tìm thấy"). */

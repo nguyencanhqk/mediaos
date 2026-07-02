@@ -119,6 +119,10 @@ import { EmployeeListPage } from "@/routes/hr/employees/EmployeeListPage";
 import { EmployeeDetailPage } from "@/routes/hr/employees/EmployeeDetailPage";
 import { EmployeeFormPage } from "@/routes/hr/employees/EmployeeFormPage";
 import { MyProfilePage } from "@/routes/hr/me/MyProfilePage";
+import { DepartmentsPage } from "@/routes/hr/departments/DepartmentsPage";
+import { PositionsPage } from "@/routes/hr/positions/PositionsPage";
+import { JobLevelsPage } from "@/routes/hr/job-levels/JobLevelsPage";
+import { ContractTypesPage } from "@/routes/hr/contract-types/ContractTypesPage";
 
 // Attendance
 import { AttendanceTodayPage } from "@/routes/attendance/AttendanceTodayPage";
@@ -161,6 +165,23 @@ import { FOUNDATION_PATH, FOUNDATION_SCREEN } from "@/routes/system/foundation/c
 const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", EmployeeListPage);
 const hrEmployeesRoute = makeModuleRoute("/hr/employees", "hr.employees", "HR", EmployeeListPage);
 const hrMeRoute = makeModuleRoute("/hr/me", "hr.me", "HR", MyProfilePage);
+
+// S2-FE-HR-5 — HR master-data admin screens (list + CRUD). Cổng route = cặp ĐỌC (departments/positions)
+// hoặc manage:master-data DUY NHẤT (job-levels/contract-types) qua RouteMeta trong ROUTE_REGISTRY.
+const hrDepartmentsRoute = makeModuleRoute(
+  "/hr/departments",
+  "hr.departments",
+  "HR",
+  DepartmentsPage,
+);
+const hrPositionsRoute = makeModuleRoute("/hr/positions", "hr.positions", "HR", PositionsPage);
+const hrJobLevelsRoute = makeModuleRoute("/hr/job-levels", "hr.job-levels", "HR", JobLevelsPage);
+const hrContractTypesRoute = makeModuleRoute(
+  "/hr/contract-types",
+  "hr.contract-types",
+  "HR",
+  ContractTypesPage,
+);
 
 // HR employee create — static "new" segment ranks above the "$employeeId" param route, so it never
 // collides with detail. Reuses hr.employees meta (route-level VIEW gate); EmployeeFormPage applies the
@@ -507,6 +528,10 @@ const routeTree = rootRoute.addChildren([
   hrEmployeeDetailRoute,
   hrEmployeeEditRoute,
   hrMeRoute,
+  hrDepartmentsRoute,
+  hrPositionsRoute,
+  hrJobLevelsRoute,
+  hrContractTypesRoute,
   attTodayRoute,
   attMyRecordsRoute,
   attTeamRecordsRoute,

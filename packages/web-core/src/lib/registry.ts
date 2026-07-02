@@ -131,6 +131,9 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "LEAVE.REQUEST.VIEW_OWN": "view-own:leave",
   "LEAVE.REQUEST.VIEW": "view:leave",
   "LEAVE.REQUEST.APPROVE": "approve:leave",
+  // S3-FE-LEAVE-4 lịch nghỉ — CẶP SEED THẬT mig 0455: view-own:leave-calendar @Own cho CẢ 4 role
+  // (cổng route/sidebar thô); view-team/view-company là sensitive, gate TRONG page qua useCanExact.
+  "LEAVE.CALENDAR.VIEW_OWN": "view-own:leave-calendar",
   "TASK.TASK.VIEW": "read:task",
   "TASK.PROJECT.VIEW": "read:project",
   "NOTI.NOTIFICATION.VIEW_OWN": "read:notification",
@@ -139,6 +142,19 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "AUTH.ROLE.VIEW": "view:role",
   "FOUNDATION.SETTING.VIEW": "view:foundation-setting",
   "FOUNDATION.AUDIT_LOG.VIEW": "view:foundation-audit-log",
+  // S2-FE-HR-5 (lane HR5-WC) — HR master-data CRUD. CẶP SEED THẬT lấy từ controller (chống pair-drift
+  // s1-fnd-module): hr-department.controller (read/create/update/delete:department) · positions.controller
+  // (read/create/update/delete:position) · hr-master-data.controller (manage:master-data cho CẢ đọc lẫn ghi
+  // job-levels + contract-types — SPEC-03 §13.12b/c: 1 cặp DUY NHẤT, KHÔNG có cặp "view" master-data riêng).
+  "HR.DEPARTMENT.VIEW": "read:department",
+  "HR.DEPARTMENT.CREATE": "create:department",
+  "HR.DEPARTMENT.UPDATE": "update:department",
+  "HR.DEPARTMENT.DELETE": "delete:department",
+  "HR.POSITION.VIEW": "read:position",
+  "HR.POSITION.CREATE": "create:position",
+  "HR.POSITION.UPDATE": "update:position",
+  "HR.POSITION.DELETE": "delete:position",
+  "HR.MASTER_DATA.MANAGE": "manage:master-data",
   // S2-FE-FND-1 (FND1-WC): cặp seed THẬT mig 0435 — controller Foundation dùng *:foundation-* (view/update:
   // foundation-company, update:foundation-setting). KHÔNG dùng nhãn-ma FRONTEND-13 §7.1 (FOUNDATION.SYSTEM.VIEW /
   // SETTING.SYSTEM_MANAGE chưa seed) và KHÔNG namespace CŨ read/update:company (0005). Đọc≠sửa (pair-as-gate).
@@ -712,6 +728,54 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["HR.EMPLOYEE.VIEW"],
     showInSidebar: true,
     order: 22,
+  },
+  // S2-FE-HR-5 (lane HR5-WC) — HR master-data admin screens. Gate = cặp SEED THẬT (qua PERMISSION_CODE_TO_PAIR).
+  // Departments/Positions: cổng route = cặp ĐỌC (read:department / read:position); nút mutation gate riêng trong
+  // page. Job-levels/Contract-types: TOÀN BỘ route (kể cả đọc) gate manage:master-data — 1 cặp DUY NHẤT (SPEC-03
+  // §13.12b/c), KHÔNG có cặp "view" master-data riêng.
+  {
+    routeKey: "hr.departments",
+    path: "/hr/departments",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "HR",
+    screenCode: "HR-SCREEN-DEPARTMENTS",
+    titleKey: "routeTitle.hrDepartments",
+    requiredAnyPermissions: ["HR.DEPARTMENT.VIEW"],
+    showInSidebar: true,
+    order: 23,
+  },
+  {
+    routeKey: "hr.positions",
+    path: "/hr/positions",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "HR",
+    screenCode: "HR-SCREEN-POSITIONS",
+    titleKey: "routeTitle.hrPositions",
+    requiredAnyPermissions: ["HR.POSITION.VIEW"],
+    showInSidebar: true,
+    order: 24,
+  },
+  {
+    routeKey: "hr.job-levels",
+    path: "/hr/job-levels",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "HR",
+    screenCode: "HR-SCREEN-JOB-LEVELS",
+    titleKey: "routeTitle.hrJobLevels",
+    requiredAnyPermissions: ["HR.MASTER_DATA.MANAGE"],
+    showInSidebar: true,
+    order: 25,
+  },
+  {
+    routeKey: "hr.contract-types",
+    path: "/hr/contract-types",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "HR",
+    screenCode: "HR-SCREEN-CONTRACT-TYPES",
+    titleKey: "routeTitle.hrContractTypes",
+    requiredAnyPermissions: ["HR.MASTER_DATA.MANAGE"],
+    showInSidebar: true,
+    order: 26,
   },
 
   // Attendance

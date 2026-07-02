@@ -1,8 +1,10 @@
 import { Module } from "@nestjs/common";
+import { PermissionModule } from "../../permission/permission.module";
 import { MASTER_DATA_SEED_CONFIG, loadMasterDataSeedConfig } from "./master-data-seed.config";
 import { MasterDataSeedBootstrapService } from "./master-data-seed-bootstrap.service";
 import { MasterDataSeedRunner } from "./master-data-seed-runner.service";
 import { MasterDataSeederRegistry } from "./master-data-seeder.registry";
+import { SeedController } from "./seed.controller";
 import { SeedTrackingService } from "./seed-tracking.service";
 
 /**
@@ -17,6 +19,11 @@ import { SeedTrackingService } from "./seed-tracking.service";
  * KHÔNG import ATT/LEAVE). Wire vào FoundationModule ADDITIVE (CLAUDE §9.3) → app.module (đã có FoundationModule).
  */
 @Module({
+  // S2-FND-BE-2 (ADDITIVE): PermissionModule cho PermissionGuard stack (GET /foundation/seeds gate
+  // view:foundation-seed, is_sensitive). DatabaseModule/EventsModule là @Global (SeedTrackingService dùng
+  // DatabaseService.withTenant sẵn có).
+  imports: [PermissionModule],
+  controllers: [SeedController],
   providers: [
     SeedTrackingService,
     MasterDataSeederRegistry,
