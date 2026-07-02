@@ -87,7 +87,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451+0456+0457+0459+0460+0461+0462+0463). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451+0456+0457+0459+0460+0461+0462+0463+0464). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -290,5 +290,12 @@ export const AUDIT_OBJECT_TYPES = [
   // (BẤT BIẾN #3 — masker che nếu lọt). 0463 UNION ADD-only vào CHECK (clone 0462/0461/0460/0459/0456/
   // 0446/0440), append-only #2 nguyên vẹn; INSERT audit KHÔNG vỡ audit_logs_object_type_chk trên Postgres thật.
   "leave_policy",
+  // S3-ATT-BE-5 (mig 0464): remote/onsite-work request workflow — create/submit/approve/reject/cancel
+  // ghi audit object_type='remote_work_request' audit-in-tx app-tenant (RemoteWorkRequestService). before/
+  // after = snapshot request (request_type/start-end date/attendance_mode/location/reason/approver/
+  // watcher_user_ids/status) — KHÔNG salary/PII/secret (BẤT BIẾN #3 — masker che nếu lọt). 0464 UNION
+  // ADD-only vào CHECK (clone 0463/0462/0461/0460/0459/0456/0446/0440), append-only #2 nguyên vẹn; INSERT
+  // audit KHÔNG vỡ audit_logs_object_type_chk trên Postgres thật.
+  "remote_work_request",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
