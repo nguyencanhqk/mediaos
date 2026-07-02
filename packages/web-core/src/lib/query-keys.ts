@@ -161,6 +161,19 @@ export const attendanceKeys = {
       [...rootKeys.attendance, "remote-work-requests", "company", params] as const,
     detail: (id: string) => [...rootKeys.attendance, "remote-work-requests", "detail", id] as const,
   },
+  // S3-FE-ATT-6 — APPEND. Báo cáo tổng hợp công (team/company) + audit log viewer ATT.
+  reports: {
+    all: [...rootKeys.attendance, "reports"] as const,
+    team: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "reports", "team", params] as const,
+    company: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "reports", "company", params] as const,
+  },
+  auditLogs: {
+    all: [...rootKeys.attendance, "audit-logs"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "audit-logs", "list", params] as const,
+  },
 };
 
 // S3-FE-ATT-4 — mutation → invalidation cho remote-work-requests. Prefix (bỏ slot params) khớp mọi

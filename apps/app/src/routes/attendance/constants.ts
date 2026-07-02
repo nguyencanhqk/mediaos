@@ -32,6 +32,8 @@ export const ATT_ENGINE_PAIRS = {
   REMOTE_APPROVE: { action: "approve", resourceType: "remote-request" },
   REMOTE_REJECT: { action: "reject", resourceType: "remote-request" },
   REMOTE_CANCEL_OWN: { action: "cancel-own", resourceType: "remote-request" },
+  // S3-FE-ATT-6 — audit log ATT RIÊNG (KHÔNG dùng chung cặp foundation view:audit-log).
+  AUDIT_LOG_VIEW: { action: "view", resourceType: "attendance-audit-log" },
 } as const;
 
 /** Trạng thái đơn remote/onsite-work — DB-04 §7.8 (STATE-MACHINE chốt 2026-07-02). */
@@ -82,6 +84,9 @@ export const ATT_PATHS = {
   REMOTE_WORK_REQUESTS: "/attendance/remote-work-requests",
   REMOTE_WORK_REQUEST_NEW: "/attendance/remote-work-requests/new",
   REMOTE_WORK_REQUEST_DETAIL: (id: string) => `/attendance/remote-work-requests/${id}`,
+  // S3-FE-ATT-6
+  REPORTS: "/attendance/reports",
+  AUDIT_LOGS: "/attendance/audit-logs",
 } as const;
 
 /** Page size mặc định cho danh sách bảng công */

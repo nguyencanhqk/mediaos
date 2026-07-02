@@ -46,6 +46,9 @@ export default {
     attRules: "Rule chấm công",
     // S3-FE-ATT-4 — Remote/onsite-work requests
     attRemoteWorkRequests: "Đơn làm việc từ xa/công tác",
+    // S3-FE-ATT-6 — Báo cáo + audit log
+    attReports: "Báo cáo tổng hợp công",
+    attAuditLogs: "Audit log chấm công",
     leave: "Nghỉ phép",
     leaveMyRequests: "Đơn nghỉ của tôi",
     leaveApprovals: "Đơn cần duyệt",

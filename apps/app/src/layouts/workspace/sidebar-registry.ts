@@ -214,6 +214,28 @@ export const ATT_SIDEBAR: readonly SidebarItemMeta[] = [
       "view-company:remote-request",
     ],
   },
+  // S3-FE-ATT-6 — báo cáo tổng hợp công + audit log ATT (report dùng chung cặp view-team/view-company:
+  // attendance; audit log là cặp RIÊNG view:attendance-audit-log, KHÔNG chung với foundation audit-log).
+  {
+    sidebarKey: "att.reports",
+    moduleCode: "ATT",
+    label: "Báo cáo tổng hợp công",
+    path: "/attendance/reports",
+    icon: "bar-chart-3",
+    group: "management",
+    order: 80,
+    requiredAnyPermissions: ["view-team:attendance", "view-company:attendance"],
+  },
+  {
+    sidebarKey: "att.audit-logs",
+    moduleCode: "ATT",
+    label: "Audit log chấm công",
+    path: "/attendance/audit-logs",
+    icon: "file-clock",
+    group: "management",
+    order: 90,
+    requiredAnyPermissions: ["view:attendance-audit-log"],
+  },
 ];
 
 // ---------------------------------------------------------------------------

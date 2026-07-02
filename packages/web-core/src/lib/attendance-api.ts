@@ -13,6 +13,9 @@ import {
   // S3-ATT-BE-5 remote/onsite-work request DTOs.
   remoteWorkRequestDetailSchema,
   remoteWorkRequestListResponseSchema,
+  // S3-ATT-BE-6 report + audit-log DTOs.
+  attendanceReportResponseSchema,
+  auditLogListResponseSchema,
   type AttendanceTodayV2Dto,
   type AttendanceRecordV2Dto,
   type AttendanceRecordListResponse,
@@ -35,6 +38,10 @@ import {
   type SubmitRemoteWorkRequest,
   type ApproveRemoteWorkRequest,
   type RejectRemoteWorkRequest,
+  type AttendanceReportResponse,
+  type AttendanceReportQuery,
+  type AuditLogListResponse,
+  type AuditLogQuery,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -287,4 +294,23 @@ export const attendanceApi = {
     apiFetch(`/attendance/remote-work-requests/${id}/cancel`, remoteWorkRequestDetailSchema, {
       method: "POST",
     }),
+
+  // ── Báo cáo tổng hợp công (S3-ATT-BE-6, S3-FE-ATT-6) ─────────────────────────
+
+  /** GET /attendance/reports/team — tổng hợp công phạm vi Team. Permission: view-team:attendance. */
+  getTeamAttendanceReport: (query: AttendanceReportQuery): Promise<AttendanceReportResponse> =>
+    apiFetch(`/attendance/reports/team${buildQueryString(query)}`, attendanceReportResponseSchema),
+
+  /** GET /attendance/reports — tổng hợp công phạm vi Company. Permission: view-company:attendance. */
+  getCompanyAttendanceReport: (query: AttendanceReportQuery): Promise<AttendanceReportResponse> =>
+    apiFetch(`/attendance/reports${buildQueryString(query)}`, attendanceReportResponseSchema),
+
+  // ── Audit log ATT (S3-ATT-BE-6, S3-FE-ATT-6) ─────────────────────────────────
+
+  /**
+   * GET /attendance/audit-logs — viewer audit RIÊNG của ATT (KHÔNG dùng chung route/guard với foundation
+   * audit-logs — cặp view:attendance-audit-log RIÊNG). Permission: view:attendance-audit-log (sensitive).
+   */
+  listAttendanceAuditLogs: (query?: Partial<AuditLogQuery>): Promise<AuditLogListResponse> =>
+    apiFetch(`/attendance/audit-logs${buildQueryString(query ?? {})}`, auditLogListResponseSchema),
 };

@@ -140,6 +140,9 @@ import { AttendanceRulesPage } from "@/routes/attendance/AttendanceRulesPage";
 import { RemoteWorkRequestsPage } from "@/routes/attendance/remote-work/RemoteWorkRequestsPage";
 import { CreateRemoteWorkRequestPage } from "@/routes/attendance/remote-work/CreateRemoteWorkRequestPage";
 import { RemoteWorkRequestDetailPage } from "@/routes/attendance/remote-work/RemoteWorkRequestDetailPage";
+// S3-FE-ATT-6 — Reports + audit logs
+import { AttendanceReportsPage } from "@/routes/attendance/reports/AttendanceReportsPage";
+import { AttendanceAuditLogsPage } from "@/routes/attendance/audit/AttendanceAuditLogsPage";
 
 // Leave
 import { MyLeaveBalancePage } from "@/routes/leave/MyLeaveBalancePage";
@@ -419,6 +422,40 @@ const attRemoteWorkRequestDetailRoute = createRoute({
   },
 });
 
+// Reports + audit logs — S3-FE-ATT-6. Gate = CẶP ENGINE THỰC trực tiếp (view-team/view-company:attendance
+// dùng chung với records; view:attendance-audit-log RIÊNG của ATT).
+const attReportsMeta: RouteMeta = {
+  routeKey: "att.reports",
+  path: "/attendance/reports",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-018",
+  titleKey: "routeTitle.attReports",
+  requiredAnyPermissions: ["view-team:attendance", "view-company:attendance"],
+};
+const attReportsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/reports",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(attReportsMeta, "ATT", <AttendanceReportsPage />),
+});
+
+const attAuditLogsMeta: RouteMeta = {
+  routeKey: "att.audit-logs",
+  path: "/attendance/audit-logs",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-019",
+  titleKey: "routeTitle.attAuditLogs",
+  requiredAnyPermissions: ["view:attendance-audit-log"],
+};
+const attAuditLogsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/audit-logs",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(attAuditLogsMeta, "ATT", <AttendanceAuditLogsPage />),
+});
+
 // Leave
 const leaveRoute = makeModuleRoute("/leave", "leave.overview", "LEAVE", MyLeaveBalancePage);
 const leaveMyRequestsRoute = makeModuleRoute(
@@ -639,6 +676,8 @@ const routeTree = rootRoute.addChildren([
   attRemoteWorkRequestsRoute,
   attRemoteWorkRequestNewRoute,
   attRemoteWorkRequestDetailRoute,
+  attReportsRoute,
+  attAuditLogsRoute,
   leaveRoute,
   leaveMyRequestsRoute,
   leaveCreateRoute,

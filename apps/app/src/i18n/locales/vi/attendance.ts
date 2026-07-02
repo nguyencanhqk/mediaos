@@ -479,4 +479,77 @@ export default {
       },
     },
   },
+
+  // ── Báo cáo tổng hợp công (S3-FE-ATT-6, ATT-SCREEN-018) ───────────────────────
+  reports: {
+    title: "Báo cáo tổng hợp công",
+    description: "Tổng hợp số ngày công/đi muộn/thiếu công/nghỉ phép theo kỳ.",
+    scopeTabs: {
+      team: "Nhóm",
+      company: "Công ty",
+    },
+    filters: {
+      fromDate: "Từ ngày",
+      toDate: "Đến ngày",
+      apply: "Xem báo cáo",
+    },
+    columns: {
+      employeeCode: "Mã NV",
+      employee: "Nhân viên",
+      department: "Phòng ban",
+      totalDays: "Tổng số ngày",
+      presentDays: "Có mặt",
+      lateDays: "Đi muộn",
+      missingDays: "Thiếu công",
+      leaveDays: "Nghỉ phép",
+    },
+    empty: {
+      title: "Không có dữ liệu",
+      description: "Chưa có dữ liệu tổng hợp công trong khoảng thời gian này.",
+    },
+    error: {
+      title: "Không thể tải báo cáo",
+      description: "Có lỗi khi tải báo cáo tổng hợp công. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem báo cáo tổng hợp công.",
+    },
+    validation: {
+      dateRangeInvalid: "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu.",
+    },
+  },
+
+  // ── Audit log ATT (S3-FE-ATT-6, ATT-SCREEN-019) ───────────────────────────────
+  auditLogs: {
+    title: "Audit log chấm công",
+    description: "Nhật ký thao tác trên dữ liệu chấm công (bảng công, ca, rule, đơn từ).",
+    filters: {
+      action: "Hành động",
+      objectType: "Loại đối tượng",
+      fromDate: "Từ ngày",
+      toDate: "Đến ngày",
+      apply: "Lọc",
+      reset: "Xoá lọc",
+    },
+    columns: {
+      createdAt: "Thời gian",
+      action: "Hành động",
+      objectType: "Loại đối tượng",
+      objectId: "Đối tượng",
+      actor: "Người thực hiện",
+    },
+    empty: {
+      title: "Không có audit log",
+      description: "Chưa có bản ghi audit log nào phù hợp với bộ lọc.",
+    },
+    error: {
+      title: "Không thể tải dữ liệu",
+      description: "Có lỗi khi tải audit log. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem audit log chấm công.",
+    },
+  },
 } as const;
