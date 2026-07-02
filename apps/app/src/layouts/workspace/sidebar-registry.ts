@@ -11,6 +11,10 @@ import { type SidebarItemMeta } from "@mediaos/web-core";
 import { AUDIT_LOG_VIEW_PERMISSION } from "@/routes/system/auth-logs/constants";
 import { HR_ENGINE_PAIRS } from "@/routes/hr/constants";
 import { HR_AUDIT_LOG_VIEW_PERMISSION } from "@/routes/hr/audit-logs/constants";
+import {
+  EMPLOYEE_CODE_CONFIG_PATH,
+  EMPLOYEE_CODE_CONFIG_VIEW_PERMISSION,
+} from "@/routes/hr/settings/constants";
 
 const HR_ORG_CHART_VIEW_PERMISSION = `${HR_ENGINE_PAIRS.ORG_CHART_VIEW.action}:${HR_ENGINE_PAIRS.ORG_CHART_VIEW.resourceType}`;
 
@@ -87,6 +91,17 @@ export const HR_SIDEBAR: readonly SidebarItemMeta[] = [
     group: "report",
     order: 50,
     requiredAnyPermissions: [HR_AUDIT_LOG_VIEW_PERMISSION],
+  },
+  // S2-FE-HR-8 — Cấu hình mã nhân viên. Gate = view:employee-code-config (cặp seed thật mig 0459).
+  {
+    sidebarKey: "hr.employee-code-config",
+    moduleCode: "HR",
+    label: "Cấu hình mã nhân viên",
+    path: EMPLOYEE_CODE_CONFIG_PATH,
+    icon: "hash",
+    group: "admin",
+    order: 60,
+    requiredAnyPermissions: [EMPLOYEE_CODE_CONFIG_VIEW_PERMISSION],
   },
 ];
 

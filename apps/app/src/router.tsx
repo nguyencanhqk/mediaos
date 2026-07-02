@@ -123,6 +123,11 @@ import { OrgChartPage } from "@/routes/hr/org-chart/OrgChartPage";
 import { HrAuditLogsPage } from "@/routes/hr/audit-logs/HrAuditLogsPage";
 import { HR_ENGINE_PAIRS } from "@/routes/hr/constants";
 import { HR_AUDIT_LOG_VIEW_PERMISSION } from "@/routes/hr/audit-logs/constants";
+import { EmployeeCodeConfigPage } from "@/routes/hr/settings/EmployeeCodeConfigPage";
+import {
+  EMPLOYEE_CODE_CONFIG_PATH,
+  EMPLOYEE_CODE_CONFIG_ROUTE_META,
+} from "@/routes/hr/settings/constants";
 
 // Attendance
 import { AttendanceTodayPage } from "@/routes/attendance/AttendanceTodayPage";
@@ -213,6 +218,16 @@ const hrAuditLogsRoute = createRoute({
   path: "/hr/audit-logs",
   beforeLoad: authGuard,
   component: () => buildModuleRouteContent(hrAuditLogsMeta, "HR", <HrAuditLogsPage />),
+});
+
+// HR employee-code config (S2-FE-HR-8) — /hr/settings/employee-code. Local RouteMeta (KHÔNG ở
+// ROUTE_REGISTRY web-core, cùng pattern hrOrgChartRoute/hrAuditLogsRoute).
+const hrEmployeeCodeConfigRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: EMPLOYEE_CODE_CONFIG_PATH,
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(EMPLOYEE_CODE_CONFIG_ROUTE_META, "HR", <EmployeeCodeConfigPage />),
 });
 
 // HR employee create — static "new" segment ranks above the "$employeeId" param route, so it never
@@ -630,6 +645,7 @@ const routeTree = rootRoute.addChildren([
   hrMeRoute,
   hrOrgChartRoute,
   hrAuditLogsRoute,
+  hrEmployeeCodeConfigRoute,
   attTodayRoute,
   attMyRecordsRoute,
   attTeamRecordsRoute,

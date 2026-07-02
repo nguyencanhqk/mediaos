@@ -46,6 +46,11 @@ export const HR_PERMS = {
     REJECT: "HR.PROFILE_CHANGE_REQUEST.REJECT",
     CANCEL_OWN: "HR.PROFILE_CHANGE_REQUEST.CANCEL_OWN",
   },
+  // S2-FE-HR-8 — /hr/settings/employee-code (cấu hình mã NV). Cặp seed THẬT mig 0459.
+  EMPLOYEE_CODE_CONFIG: {
+    VIEW: "HR.EMPLOYEE_CODE_CONFIG.VIEW",
+    UPDATE: "HR.EMPLOYEE_CODE_CONFIG.UPDATE",
+  },
 } as const;
 
 /**
@@ -71,4 +76,10 @@ export const HR_ENGINE_PAIRS = {
   // (view:audit-log, is_sensitive=true, hiện chỉ grant company-admin). PIN theo cặp seed (bài học
   // drift S1-FND-MODULE) — KHÔNG dùng nhãn "HR.AUDIT_LOG.VIEW" làm cổng-cứng (chưa có pair riêng).
   AUDIT_LOG_VIEW: { action: "view", resourceType: "audit-log" },
+  // S2-FE-HR-8 — /hr/settings/employee-code. Cặp seed THẬT mig 0459 (view/update:employee-code-config,
+  // is_sensitive=false, grant hr + company-admin, data_scope=Company) + mig 0445 (preview:employee-code,
+  // cùng nhóm grant). Controller thật: apps/api/src/employees/employee-code-config.controller.ts.
+  VIEW_EMPLOYEE_CODE_CONFIG: { action: "view", resourceType: "employee-code-config" },
+  UPDATE_EMPLOYEE_CODE_CONFIG: { action: "update", resourceType: "employee-code-config" },
+  PREVIEW_EMPLOYEE_CODE: { action: "preview", resourceType: "employee-code" },
 } as const;

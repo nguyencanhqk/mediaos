@@ -75,6 +75,7 @@ export {
   attendanceInvalidation,
   leaveInvalidation,
   foundationInvalidation,
+  hrInvalidation,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -89,6 +90,15 @@ export { hrApi } from "./lib/hr-api";
 // S2-FE-HR-6 — Org chart (GET /org/units/tree, read mở) + HR audit-logs (tái dùng /foundation/audit-logs).
 export { orgApi, orgTreeNodeSchema, type OrgTreeNode } from "./lib/hr-org-api";
 export { hrAuditApi, type HrAuditLogQuery } from "./lib/hr-audit-api";
+// S2-FE-HR-8 — Employee-code CONFIG admin (view/update config + read-only preview mã tiếp theo).
+export {
+  employeeCodeConfigApi,
+  EMPLOYEE_CODE_NUMBER_LENGTH_MIN,
+  EMPLOYEE_CODE_NUMBER_LENGTH_MAX,
+  type EmployeeCodeConfigDto,
+  type EmployeeCodePreviewResponse,
+  type UpdateEmployeeCodeConfigRequest,
+} from "./lib/hr-employee-code-config-api";
 export { leaveApi } from "./lib/leave-api";
 export { attendanceApi } from "./lib/attendance-api";
 export {

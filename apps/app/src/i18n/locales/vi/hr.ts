@@ -230,4 +230,53 @@ export default {
       description: "Chưa có thay đổi nào được ghi nhận cho dữ liệu HR.",
     },
   },
+  employeeCodeConfig: {
+    title: "Cấu hình mã nhân viên",
+    description: "Quy tắc sinh mã nhân viên tự động khi tạo hồ sơ mới",
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem cấu hình mã nhân viên.",
+    },
+    error: {
+      title: "Không thể tải cấu hình",
+      description: "Có lỗi khi tải cấu hình mã nhân viên. Vui lòng thử lại.",
+    },
+    form: {
+      prefix: "Tiền tố (prefix)",
+      prefixPlaceholder: "vd: NV",
+      pattern: "Mẫu (pattern)",
+      patternPlaceholder: "Tuỳ chọn — quy tắc ghép mã nâng cao",
+      numberLength: "Độ dài số thứ tự",
+      allowManualOverride: "Cho phép nhập tay mã nhân viên khi tạo mới",
+      status: "Trạng thái",
+      statusActive: "Đang áp dụng",
+      statusInactive: "Ngừng áp dụng",
+      save: "Lưu cấu hình",
+      saving: "Đang lưu…",
+      cancel: "Huỷ",
+      errors: {
+        forbidden: "Bạn không có quyền sửa cấu hình này.",
+        validation: "Giá trị nhập không hợp lệ. Vui lòng kiểm tra lại.",
+        server: "Có lỗi hệ thống khi lưu cấu hình. Vui lòng thử lại sau.",
+        generic: "Không thể lưu cấu hình. Vui lòng thử lại.",
+      },
+    },
+    notice:
+      "Thay đổi cấu hình mã nhân viên chỉ áp dụng cho nhân viên tạo mới. Mã nhân viên cũ không bị thay đổi.",
+    confirm: {
+      title: "Xác nhận đổi cấu hình mã nhân viên",
+      description:
+        "Cấu hình mới sẽ áp dụng ngay cho nhân viên tạo mới sau khi lưu. Mã nhân viên đã cấp trước đó KHÔNG bị ảnh hưởng.",
+      confirmLabel: "Xác nhận lưu",
+      cancelLabel: "Huỷ",
+    },
+    preview: {
+      title: "Xem trước mã tiếp theo",
+      description: "Mã nhân viên sẽ được cấp cho hồ sơ tạo tiếp theo (không thay đổi bộ đếm)",
+      refresh: "Làm mới",
+      loading: "Đang tải…",
+      unavailable: "Chưa cấu hình bộ đếm mã nhân viên — liên hệ quản trị hệ thống.",
+      forbidden: "Bạn không có quyền xem trước mã nhân viên.",
+    },
+  },
 };

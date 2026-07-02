@@ -81,6 +81,13 @@ export const hrKeys = {
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.hr, "audit-logs", "list", params] as const,
   },
+  // S2-FE-HR-8 — Employee-code CONFIG admin (danh mục 1 record/company, KHÔNG phân trang). preview()
+  // TÁCH khỏi config() (2 endpoint khác nhau: GET config vs POST preview) — invalidate riêng.
+  employeeCodeConfig: {
+    all: [...rootKeys.hr, "employee-code-config"] as const,
+    config: () => [...rootKeys.hr, "employee-code-config", "config"] as const,
+    preview: () => [...rootKeys.hr, "employee-code-config", "preview"] as const,
+  },
 };
 
 // ── Attendance keys ───────────────────────────────────────────────────────────
@@ -215,6 +222,13 @@ const leaveRequestsListPrefix = [...rootKeys.leave, "requests", "list"] as const
 export const attendanceInvalidation = {
   checkIn: () => [attendanceKeys.myToday(), attendanceMyRecordsPrefix] as const,
   checkOut: () => [attendanceKeys.myToday(), attendanceMyRecordsPrefix] as const,
+};
+
+// S2-FE-HR-8: PATCH /hr/employee-code-config làm mới CẢ config() lẫn preview() (mã tiếp theo có thể
+// đổi hình dạng theo prefix/pattern/numberLength mới dù counter không đổi).
+export const hrInvalidation = {
+  updateEmployeeCodeConfig: () =>
+    [hrKeys.employeeCodeConfig.config(), hrKeys.employeeCodeConfig.preview()] as const,
 };
 
 // S3-FE-LEAVE-2: approver KHÔNG giữ balance key của requester (balance thuộc user gửi đơn, không nằm
