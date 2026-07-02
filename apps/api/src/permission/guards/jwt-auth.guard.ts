@@ -1,9 +1,9 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-import type { Request } from 'express';
-import { TokenService, type TokenAudience } from '../../auth/token.service';
-import { OPERATOR_ONLY } from '../../auth/operator-only.decorator';
-import { IS_PUBLIC } from '../public.decorator';
+import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import type { Request } from "express";
+import { TokenService, type TokenAudience } from "../../auth/token.service";
+import { OPERATOR_ONLY } from "../../auth/operator-only.decorator";
+import { IS_PUBLIC } from "../public.decorator";
 
 export interface AuthenticatedUser {
   id: string;
@@ -11,6 +11,12 @@ export interface AuthenticatedUser {
   email: string;
   /** AC-0b: audience của access token đã verify ('operator' phiên platform-admin, 'tenant' phiên thường). */
   aud: TokenAudience;
+  /**
+   * S2-AUTH-BE-7: id phiên (user_sessions.id, từ claim jti của access token) — CHỈ định danh "phiên hiện
+   * tại" cho revoke-others (KHÔNG cấp quyền). undefined khi token legacy thiếu jti (ký trước WO này) hoặc
+   * qua ApiKeyAuthGuard (PAT KHÔNG có session).
+   */
+  sessionId?: string;
 }
 
 /** Extend Express Request to carry the resolved user after JWT validation. */
@@ -48,9 +54,9 @@ export class JwtAuthGuard implements CanActivate {
     const existing = (req as Partial<AuthRequest>).user as { viaApiKey?: boolean } | undefined;
     if (existing?.viaApiKey) return true;
 
-    const authHeader = req.headers['authorization'];
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Missing or invalid Authorization header');
+    const authHeader = req.headers["authorization"];
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      throw new UnauthorizedException("Missing or invalid Authorization header");
     }
 
     // AC-0b: route @OperatorOnly ⇒ audience='operator'; còn lại mặc định 'tenant' (route cũ KHÔNG đổi).
@@ -60,7 +66,7 @@ export class JwtAuthGuard implements CanActivate {
       ctx.getHandler(),
       ctx.getClass(),
     ]);
-    const expectedAudience: TokenAudience = operatorOnly ? 'operator' : 'tenant';
+    const expectedAudience: TokenAudience = operatorOnly ? "operator" : "tenant";
 
     const token = authHeader.slice(7);
     try {
@@ -70,10 +76,11 @@ export class JwtAuthGuard implements CanActivate {
         companyId: claims.companyId,
         email: claims.email,
         aud: claims.aud,
+        sessionId: claims.jti,
       };
       return true;
     } catch {
-      throw new UnauthorizedException('Invalid or expired access token');
+      throw new UnauthorizedException("Invalid or expired access token");
     }
   }
 }

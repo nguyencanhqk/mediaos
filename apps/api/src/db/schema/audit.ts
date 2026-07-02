@@ -87,7 +87,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451+0456+0457). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451+0456+0457+0459+0460+0461+0462+0463+0464). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -259,5 +259,43 @@ export const AUDIT_OBJECT_TYPES = [
   // ADD-only vào CHECK (clone 0458/0457/0456/0446/0440), append-only #2 nguyên vẹn; INSERT audit
   // KHÔNG vỡ audit_logs_object_type_chk trên Postgres thật.
   "employee_code_config",
+  // S2-AUTH-BE-6 (mig 0460): Role write API — RoleAdminService.createRole/updateRole ghi audit
+  // RoleCreated/RoleUpdated object_type='role' objectId=role.id; assignPermissionToRole/
+  // revokePermissionFromRole ghi audit PermissionAssigned/PermissionRevoked object_type=
+  // 'role_permission' objectId=role.id (role_permissions KHÔNG có uuid PK riêng — key hợp thành
+  // role_id/permission_id/effect, dùng role.id làm objectId để truy vết được, KHÔNG NULL).
+  // before/after CHỈ {action,resourceType,effect,dataScope} đã mask (BẤT BIẾN #3 — KHÔNG salary/
+  // secret). 0460 UNION ADD-only vào CHECK (clone 0459/0458/0457/0456/0446/0440), append-only #2
+  // nguyên vẹn; INSERT audit KHÔNG vỡ audit_logs_object_type_chk trên Postgres thật.
+  "role",
+  "role_permission",
+  // S2-AUTH-BE-7 (mig 0461): session self-service — AuthService.revokeSession/revokeOtherSessions ghi
+  // audit SessionRevoked object_type='user_session' objectId=session.id (single) hoặc objectId=userId
+  // (scope='others', bulk). after CHỈ {scope,count?} — KHÔNG refresh_token_hash/access_token_jti/ip/
+  // user_agent thô (BẤT BIẾN #3 — masker che nếu lọt). 0461 UNION ADD-only vào CHECK (clone 0460/0459/
+  // 0458/0457/0456/0446/0440), append-only #2 nguyên vẹn; INSERT audit KHÔNG vỡ
+  // audit_logs_object_type_chk trên Postgres thật.
+  "user_session",
+  // S2-HR-BE-6 (mig 0462): employee_contracts CRUD — HR/company-admin create/update/link/delete ghi audit
+  // create/update/FileLinked/delete object_type='employee_contract' audit-in-tx app-tenant. before/after =
+  // snapshot hợp đồng KHÔNG lộ PII chưa mask (note/title/metadata không chứa lương/identity — masker che nếu
+  // lọt, BẤT BIẾN #3). 0462 UNION ADD-only vào CHECK (clone 0461/0460/0459/0458/0457/0456/0446/0440),
+  // append-only #2 nguyên vẹn; INSERT audit KHÔNG vỡ audit_logs_object_type_chk trên Postgres thật.
+  "employee_contract",
+  // S3-LEAVE-BE-4 (mig 0463): leave type/policy admin CRUD (create/update/delete:leave-type,
+  // create/update/delete:leave-policy — mig 0455 catalog) ghi audit create/update/delete object_type=
+  // 'leave_type' (TÁI DÙNG — đã có ở G11) / 'leave_policy' (MỚI). HR balance adjust ghi 'leave_balance'
+  // (TÁI DÙNG) + luôn kèm 1 dòng leave_balance_transactions cùng tx (ledger append-only, BẤT BIẾN #2).
+  // before/after CHỈ cấu hình loại nghỉ/chính sách + số dư (before/after days) — KHÔNG salary/PII/secret
+  // (BẤT BIẾN #3 — masker che nếu lọt). 0463 UNION ADD-only vào CHECK (clone 0462/0461/0460/0459/0456/
+  // 0446/0440), append-only #2 nguyên vẹn; INSERT audit KHÔNG vỡ audit_logs_object_type_chk trên Postgres thật.
+  "leave_policy",
+  // S3-ATT-BE-5 (mig 0464): remote/onsite-work request workflow — create/submit/approve/reject/cancel
+  // ghi audit object_type='remote_work_request' audit-in-tx app-tenant (RemoteWorkRequestService). before/
+  // after = snapshot request (request_type/start-end date/attendance_mode/location/reason/approver/
+  // watcher_user_ids/status) — KHÔNG salary/PII/secret (BẤT BIẾN #3 — masker che nếu lọt). 0464 UNION
+  // ADD-only vào CHECK (clone 0463/0462/0461/0460/0459/0456/0446/0440), append-only #2 nguyên vẹn; INSERT
+  // audit KHÔNG vỡ audit_logs_object_type_chk trên Postgres thật.
+  "remote_work_request",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

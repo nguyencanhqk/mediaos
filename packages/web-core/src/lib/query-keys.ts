@@ -60,16 +60,22 @@ export const hrKeys = {
     all: [...rootKeys.hr, "positions"] as const,
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.hr, "positions", "list", params] as const,
+    // S2-FE-HR-5 (lane HR5-WC) — APPEND detail (GET/PATCH /org/positions/:id).
+    detail: (id: string) => [...rootKeys.hr, "positions", "detail", id] as const,
   },
   jobLevels: {
     all: [...rootKeys.hr, "job-levels"] as const,
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.hr, "job-levels", "list", params] as const,
+    // S2-FE-HR-5 (lane HR5-WC) — APPEND detail (GET/PATCH /hr/master-data/job-levels/:id).
+    detail: (id: string) => [...rootKeys.hr, "job-levels", "detail", id] as const,
   },
   contractTypes: {
     all: [...rootKeys.hr, "contract-types"] as const,
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.hr, "contract-types", "list", params] as const,
+    // S2-FE-HR-5 (lane HR5-WC) — APPEND detail (GET/PATCH /hr/master-data/contract-types/:id).
+    detail: (id: string) => [...rootKeys.hr, "contract-types", "detail", id] as const,
   },
   // S2-FE-HR-6 — Org chart (danh mục nhỏ, không phân trang server) + HR audit-logs (phân trang offset/limit).
   orgChart: {
@@ -88,6 +94,20 @@ export const hrKeys = {
     config: () => [...rootKeys.hr, "employee-code-config", "config"] as const,
     preview: () => [...rootKeys.hr, "employee-code-config", "preview"] as const,
   },
+};
+
+// S2-FE-HR-5 (lane HR5-WC) — mutation → invalidation cho HR master-data. Sau create/update/delete:
+// làm mới danh sách (prefix list) của đúng resource. Prefix (bỏ slot params) khớp mọi biến thể param'd.
+const hrDepartmentsListPrefix = [...rootKeys.hr, "departments", "list"] as const;
+const hrPositionsListPrefix = [...rootKeys.hr, "positions", "list"] as const;
+const hrJobLevelsListPrefix = [...rootKeys.hr, "job-levels", "list"] as const;
+const hrContractTypesListPrefix = [...rootKeys.hr, "contract-types", "list"] as const;
+
+export const hrMasterDataInvalidation = {
+  departments: () => [hrDepartmentsListPrefix] as const,
+  positions: () => [hrPositionsListPrefix] as const,
+  jobLevels: () => [hrJobLevelsListPrefix] as const,
+  contractTypes: () => [hrContractTypesListPrefix] as const,
 };
 
 // ── Attendance keys ───────────────────────────────────────────────────────────

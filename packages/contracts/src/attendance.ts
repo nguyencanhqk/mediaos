@@ -854,3 +854,233 @@ export const effectiveShiftRuleResponseSchema = z.object({
   rule: attendanceRuleSummarySchema.nullable(),
 });
 export type EffectiveShiftRuleResponse = z.infer<typeof effectiveShiftRuleResponseSchema>;
+
+// ─── S3-INT-1: POST /internal/v1/attendance/recalculate (manual/retry LEAVE→ATT sync) ────────────
+// Internal route: JwtAuthGuard→CompanyGuard→PermissionGuard(manage:attendance) + InternalGuard
+// (x-internal-key). Body is server-authoritative other than requestId — company_id from the token.
+
+export const recalculateAttendanceRequestSchema = z.object({
+  leaveRequestId: z.string().uuid(),
+});
+export type RecalculateAttendanceRequest = z.infer<typeof recalculateAttendanceRequestSchema>;
+
+export const recalculateAttendanceResponseSchema = z.object({
+  leaveRequestId: z.string().uuid(),
+  processedDays: z.number().int().nonnegative(),
+});
+export type RecalculateAttendanceResponse = z.infer<typeof recalculateAttendanceResponseSchema>;
+
+// ─── S3-ATT-BE-5 (DB-04 §7.8/7.9, API-04, CO-S4-004) — Remote/Onsite-work request workflow ────────────
+// STATE-MACHINE (CHỐT 2026-07-02, owner override): create → Draft (KHÔNG Pending). submit RIÊNG
+// (Draft→Pending) chọn current_approver_user_id (trực tiếp/delegate) + watcher_user_ids. Chỉ Pending mới
+// approve/reject được. Draft sửa/xoá bởi chủ. mig 0452 shape base + 0464 ALTER-ADD watcher_user_ids jsonb.
+
+/** DB-04 §7.8 chk_remote_requests_type. */
+export const REMOTE_REQUEST_TYPES = ["Remote", "BusinessTrip", "Offsite"] as const;
+export const remoteRequestTypeSchema = z.enum(REMOTE_REQUEST_TYPES);
+export type RemoteRequestType = z.infer<typeof remoteRequestTypeSchema>;
+
+/** DB-04 §7.8 chk_remote_requests_mode. */
+export const REMOTE_REQUEST_ATTENDANCE_MODES = [
+  "SELF_CHECK_IN",
+  "AUTO_ATTENDANCE",
+  "NO_ATTENDANCE",
+] as const;
+export const remoteRequestAttendanceModeSchema = z.enum(REMOTE_REQUEST_ATTENDANCE_MODES);
+export type RemoteRequestAttendanceMode = z.infer<typeof remoteRequestAttendanceModeSchema>;
+
+/** FSM canonical (DB-04 §7.8 + done_when 2026-07-02): Draft → Pending → Approved | Rejected | Cancelled. */
+export const REMOTE_REQUEST_STATUSES = [
+  "Draft",
+  "Pending",
+  "Approved",
+  "Rejected",
+  "Cancelled",
+] as const;
+export const remoteRequestStatusSchema = z.enum(REMOTE_REQUEST_STATUSES);
+export type RemoteRequestStatus = z.infer<typeof remoteRequestStatusSchema>;
+
+/**
+ * POST /attendance/remote-work-requests (create Own → Draft). employeeId/status/submittedAt/requestedBy/
+ * currentApproverUserId/watcherUserIds là server-authoritative KHÔNG nhận ở create (chọn ở submit riêng —
+ * STATE-MACHINE done_when). targetEmployeeId CHỈ dùng khi actor có quyền tạo thay (create-own scope > Own),
+ * gate ở Service — KHÔNG tự suy quyền từ trường này có mặt hay không.
+ */
+export const createRemoteWorkRequestSchema = z
+  .object({
+    requestType: remoteRequestTypeSchema,
+    startDate: z.string().date(),
+    endDate: z.string().date(),
+    startTime: z.string().time().nullable().optional(),
+    endTime: z.string().time().nullable().optional(),
+    attendanceMode: remoteRequestAttendanceModeSchema.default("SELF_CHECK_IN"),
+    locationText: z.string().max(255).optional(),
+    reason: z.string().min(3).max(1000),
+    taskId: z.string().uuid().optional(),
+    projectId: z.string().uuid().optional(),
+    attachmentFileId: z.string().uuid().optional(),
+    /** Tạo hộ nhân viên khác — optional, gate quyền ở server (create-own scope > Own). */
+    targetEmployeeId: z.string().uuid().optional(),
+  })
+  .refine((v) => v.endDate >= v.startDate, {
+    message: "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu",
+    path: ["endDate"],
+  });
+export type CreateRemoteWorkRequest = z.infer<typeof createRemoteWorkRequestSchema>;
+
+/**
+ * POST /attendance/remote-work-requests/:id/submit (Draft→Pending, done_when STATE-MACHINE). Người tạo
+ * chọn approver (trực tiếp HOẶC delegate) + watcher list — server chỉ chấp nhận id CÙNG company (Service
+ * validate cross-tenant deny, done_when). watcherUserIds tối đa 20 — tránh spam NOTI không giới hạn.
+ */
+export const submitRemoteWorkRequestSchema = z.object({
+  currentApproverUserId: z.string().uuid(),
+  watcherUserIds: z.array(z.string().uuid()).max(20).default([]),
+});
+export type SubmitRemoteWorkRequest = z.infer<typeof submitRemoteWorkRequestSchema>;
+
+/**
+ * GET /attendance/remote-work-requests(/my) query — scope me|team|company (DataScope), status/type filter,
+ * page/pageSize khớp pattern adjustmentListQuerySchema.
+ */
+export const remoteWorkRequestListQuerySchema = z.object({
+  /** 'me' (mặc định) = đơn của tôi; 'team'/'company' cần view-team/view-company:remote-request. */
+  scope: z.enum(["me", "team", "company"]).default("me"),
+  status: remoteRequestStatusSchema.optional(),
+  requestType: remoteRequestTypeSchema.optional(),
+  /** Chỉ có hiệu lực khi scope team/company (bỏ qua trên scope me). */
+  employeeId: z.string().uuid().optional(),
+  /** [fromDate, toDate] inclusive trên start_date. */
+  fromDate: z.string().date().optional(),
+  toDate: z.string().date().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(ATTENDANCE_RECORD_PAGE_SIZE_MAX)
+    .default(ATTENDANCE_RECORD_PAGE_SIZE_DEFAULT),
+});
+export type RemoteWorkRequestListQuery = z.infer<typeof remoteWorkRequestListQuerySchema>;
+
+/**
+ * POST /attendance/remote-work-requests/:id/approve (Pending→Approved CHỈ — approve lại → 409 ở Service).
+ * note tuỳ chọn.
+ */
+export const approveRemoteWorkRequestSchema = z.object({
+  note: z.string().max(1000).optional(),
+});
+export type ApproveRemoteWorkRequest = z.infer<typeof approveRemoteWorkRequestSchema>;
+
+/**
+ * POST /attendance/remote-work-requests/:id/reject (Pending→Rejected CHỈ). rejectReason BẮT BUỘC (mirror
+ * rejectAdjustmentSchema) — map DB reject_reason.
+ */
+export const rejectRemoteWorkRequestSchema = z.object({
+  rejectReason: z.string().min(1, "Lý do từ chối là bắt buộc").max(2000),
+});
+export type RejectRemoteWorkRequest = z.infer<typeof rejectRemoteWorkRequestSchema>;
+
+/**
+ * GET /attendance/remote-work-requests/:id detail + list item — Draft/Pending/Approved/Rejected/Cancelled.
+ * watcherUserIds luôn mảng (rỗng nếu Draft chưa submit). currentApproverUserId null cho Draft.
+ */
+export const remoteWorkRequestDetailSchema = z.object({
+  id: z.string().uuid(),
+  requestCode: z.string().nullable(),
+  employeeId: z.string().uuid().nullable(),
+  employeeCode: z.string().nullable(),
+  fullName: z.string().nullable(),
+  requestType: remoteRequestTypeSchema,
+  startDate: z.string().date(),
+  endDate: z.string().date(),
+  startTime: z.string().nullable(),
+  endTime: z.string().nullable(),
+  attendanceMode: remoteRequestAttendanceModeSchema,
+  locationText: z.string().nullable(),
+  reason: z.string(),
+  taskId: z.string().uuid().nullable(),
+  projectId: z.string().uuid().nullable(),
+  status: remoteRequestStatusSchema,
+  submittedAt: z.string().datetime().nullable(),
+  requestedBy: z.string().uuid().nullable(),
+  currentApproverUserId: z.string().uuid().nullable(),
+  watcherUserIds: z.array(z.string().uuid()),
+  approvedBy: z.string().uuid().nullable(),
+  approvedAt: z.string().datetime().nullable(),
+  rejectedBy: z.string().uuid().nullable(),
+  rejectedAt: z.string().datetime().nullable(),
+  rejectReason: z.string().nullable(),
+  cancelledAt: z.string().datetime().nullable(),
+  cancelledBy: z.string().uuid().nullable(),
+  attachmentFileId: z.string().uuid().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type RemoteWorkRequestDetail = z.infer<typeof remoteWorkRequestDetailSchema>;
+
+/** Envelope danh sách — {items, meta} khớp pattern attendanceAdjustmentListResponseSchema. */
+export const remoteWorkRequestListResponseSchema = z.object({
+  items: z.array(remoteWorkRequestDetailSchema),
+  meta: attendanceRecordPageMetaSchema,
+});
+export type RemoteWorkRequestListResponse = z.infer<typeof remoteWorkRequestListResponseSchema>;
+
+// ─── S3-ATT-BE-6 (IMPLEMENTATION-06 §21 CO-S4-006, API-04, view-team/view-company:attendance) ────
+// GET /attendance/reports — per-employee aggregate (present/late/missing/leave count) over
+// [fromDate, toDate), scoped Team (manager-tree, S2-INT-2) or Company. ONE fixed group-by aggregate
+// query (no N+1 — count doesn't grow with record volume); paginated over EMPLOYEE rows (not raw
+// records). NO export/CSV/stream here (carry-over — spec ATT.ATTENDANCE.EXPORT is a separate WO).
+
+/**
+ * GET /attendance/reports query — [fromDate,toDate) half-open over work_date (mirrors
+ * attendanceRecordListQuerySchema), optional department filter (Company scope only — ignored under
+ * Team, mirrors departmentId semantics on team/company records lists), page-based pagination.
+ */
+export const attendanceReportQuerySchema = z
+  .object({
+    fromDate: z.string().date(),
+    toDate: z.string().date(),
+    departmentId: z.string().uuid().optional(),
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(ATTENDANCE_RECORD_PAGE_SIZE_MAX)
+      .default(ATTENDANCE_RECORD_PAGE_SIZE_DEFAULT),
+  })
+  .refine((v) => v.toDate >= v.fromDate, {
+    message: "toDate phải >= fromDate",
+    path: ["toDate"],
+  });
+export type AttendanceReportQuery = z.infer<typeof attendanceReportQuerySchema>;
+
+/**
+ * 1 dòng tổng hợp công của 1 nhân viên trong kỳ. Bucket cố định từ attendance_status TitleCase
+ * (DB-04 §7.4): present = Present|Checked-in|Early Leave (đã chấm công) · late = Late ·
+ * missing = Missing Hours|Not Checked-in · leave = Leave (S3-INT-1 sync). totalDays = tổng số bản ghi
+ * work_date trong kỳ đã khớp scope (present+late+missing+leave, KHÔNG double-count).
+ */
+export const attendanceReportRowSchema = z.object({
+  employeeId: z.string().uuid(),
+  userId: z.string().uuid(),
+  employeeCode: z.string().nullable(),
+  fullName: z.string().nullable(),
+  orgUnitId: z.string().uuid().nullable(),
+  orgUnitName: z.string().nullable(),
+  totalDays: z.number().int().nonnegative(),
+  presentDays: z.number().int().nonnegative(),
+  lateDays: z.number().int().nonnegative(),
+  missingDays: z.number().int().nonnegative(),
+  leaveDays: z.number().int().nonnegative(),
+});
+export type AttendanceReportRow = z.infer<typeof attendanceReportRowSchema>;
+
+export const attendanceReportResponseSchema = z.object({
+  fromDate: z.string().date(),
+  toDate: z.string().date(),
+  items: z.array(attendanceReportRowSchema),
+  meta: attendanceRecordPageMetaSchema,
+});
+export type AttendanceReportResponse = z.infer<typeof attendanceReportResponseSchema>;

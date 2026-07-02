@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../../db/db.service";
 import { seedBatches, seedItems } from "../../db/schema/seed-tracking";
 import { computeChecksum } from "./seed-checksum.util";
@@ -11,6 +11,7 @@ import type {
   MarkItemSkippedInput,
   SeedBatchHandle,
   SeedBatchStatus,
+  SeedBatchStatusView,
   SeedItemOperation,
   SeedItemStatus,
   StartBatchInput,
@@ -60,7 +61,13 @@ export class SeedTrackingService {
         .returning();
 
       if (inserted.length > 0) {
-        const row = inserted[0] as { id: string; companyId: string | null; seedKey: string; seedVersion: string; status: string };
+        const row = inserted[0] as {
+          id: string;
+          companyId: string | null;
+          seedKey: string;
+          seedVersion: string;
+          status: string;
+        };
         this.logger.log(`startBatch: new batch id=${row.id} seedKey=${seedKey}`);
         return {
           id: row.id,
@@ -85,7 +92,13 @@ export class SeedTrackingService {
         )
         .limit(1);
 
-      const row = existing[0] as { id: string; companyId: string | null; seedKey: string; seedVersion: string; status: string };
+      const row = existing[0] as {
+        id: string;
+        companyId: string | null;
+        seedKey: string;
+        seedVersion: string;
+        status: string;
+      };
       this.logger.log(`startBatch: reused batch id=${row.id} seedKey=${seedKey}`);
       return {
         id: row.id,
@@ -224,8 +237,14 @@ export class SeedTrackingService {
 
   /** Ghi item thất bại kèm thông điệp lỗi (KHÔNG chứa secret). */
   async markItemFailed(input: MarkItemFailedInput): Promise<MarkItemResult> {
-    const { companyId, batchId, targetTable, targetKey, errorMessage, operation = "Upsert" } =
-      input;
+    const {
+      companyId,
+      batchId,
+      targetTable,
+      targetKey,
+      errorMessage,
+      operation = "Upsert",
+    } = input;
 
     return this.db.withTenant(companyId, async (tx) => {
       const inserted = await tx
@@ -275,6 +294,47 @@ export class SeedTrackingService {
 
       this.logger.log(`finishBatch: batch id=${batchId} status=${batchStatus}`);
       return { batchId, status: batchStatus, finishedAt };
+    });
+  }
+
+  /**
+   * S2-FND-BE-2 — trạng thái RUN các batch seed của tenant (GET /foundation/seeds). READ-ONLY: SELECT
+   * seed_batches WHERE company_id = tenant (isNotNull + eq — CHỉ batch tenant, KHÔNG global NULL) trong
+   * withTenant (RLS+FORCE là lớp cuối). Sắp created_at DESC (mới nhất trước). WHITELIST an toàn: KHÔNG
+   * secret/payload/metadata/executedBy/errorMessage (BẤT BIẾN #3). checksum = hash cấu hình (KHÔNG secret).
+   * KHÔNG mutation.
+   */
+  async listBatches(companyId: string): Promise<SeedBatchStatusView[]> {
+    return this.db.withTenant(companyId, async (tx) => {
+      const rows = await tx
+        .select({
+          id: seedBatches.id,
+          seedKey: seedBatches.seedKey,
+          seedVersion: seedBatches.seedVersion,
+          environment: seedBatches.environment,
+          status: seedBatches.status,
+          checksum: seedBatches.checksum,
+          startedAt: seedBatches.startedAt,
+          finishedAt: seedBatches.finishedAt,
+          createdAt: seedBatches.createdAt,
+          updatedAt: seedBatches.updatedAt,
+        })
+        .from(seedBatches)
+        .where(and(isNotNull(seedBatches.companyId), eq(seedBatches.companyId, companyId)))
+        .orderBy(desc(seedBatches.createdAt));
+
+      return rows.map((r) => ({
+        id: r.id,
+        seedKey: r.seedKey,
+        seedVersion: r.seedVersion,
+        environment: r.environment,
+        status: r.status as SeedBatchStatus,
+        checksum: r.checksum,
+        startedAt: r.startedAt ? r.startedAt.toISOString() : null,
+        finishedAt: r.finishedAt ? r.finishedAt.toISOString() : null,
+        createdAt: r.createdAt.toISOString(),
+        updatedAt: r.updatedAt.toISOString(),
+      }));
     });
   }
 

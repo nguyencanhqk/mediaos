@@ -35,6 +35,13 @@ export const LEAVE_ERR = {
   OUT_OF_SCOPE: "LEAVE-ERR-OUT-OF-SCOPE",
   // reject BẮT BUỘC lý do (Zod chặn ở boundary; backstop tại service khi reason rỗng).
   REASON_MISSING: "LEAVE-ERR-REJECT-REASON-REQUIRED",
+  // ─── S3-LEAVE-BE-4 (type/policy admin CRUD + HR balance adjust ledger) ───────
+  TYPE_CODE_DUPLICATE: "LEAVE-ERR-TYPE-CODE-DUPLICATE",
+  POLICY_CODE_DUPLICATE: "LEAVE-ERR-POLICY-CODE-DUPLICATE",
+  POLICY_NOT_FOUND: "LEAVE-ERR-POLICY-NOT-FOUND",
+  BALANCE_NOT_FOUND: "LEAVE-ERR-BALANCE-NOT-FOUND",
+  // adjust đưa remaining < 0 khi allow_negative_balance=false (chốt trong WHERE — race-safe).
+  ADJUST_NEGATIVE_BALANCE: "LEAVE-ERR-ADJUST-NEGATIVE-BALANCE",
 } as const;
 
 /** TZ công ty mặc định (SPEC-01; SettingService per-company DEFERRED — dùng default VN). */

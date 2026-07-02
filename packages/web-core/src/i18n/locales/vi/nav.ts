@@ -30,6 +30,11 @@ export default {
     hr: "Nhân sự",
     hrEmployees: "Danh sách nhân viên",
     hrMe: "Hồ sơ của tôi",
+    // S2-FE-HR-5 (lane HR5-WC) — HR master-data admin screens
+    hrDepartments: "Phòng ban",
+    hrPositions: "Chức vụ",
+    hrJobLevels: "Cấp bậc",
+    hrContractTypes: "Loại hợp đồng",
     attToday: "Chấm công hôm nay",
     attMyRecords: "Bảng công của tôi",
     attTeamRecords: "Bảng công nhóm",
