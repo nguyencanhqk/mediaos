@@ -140,6 +140,28 @@ async function countActiveRefreshTokens(direct: Pool, userId: string): Promise<n
   return r.rows[0].n as number;
 }
 
+/**
+ * Read-your-writes barrier (S2-AUTH-BE-9 · FL-BE9-2): poll NGẮN một count đọc qua `direct` pool sau khi
+ * mutation HTTP (lock) đã trả 200. Revoke chạy ĐỒNG BỘ trong CÙNG withTenant tx với đổi status ⇒ ngay khi
+ * 200 trả, dữ liệu đã COMMIT và hiển thị trên mọi kết nối mới (MVCC) — lần đọc ĐẦU thường đã đúng. Poll chỉ
+ * trung hoà độ trễ hiển thị nhất thời hiếm gặp lúc pool khởi động lạnh (reviewer quan sát 1 lần đọc-trước-ghi
+ * KHÔNG tái hiện qua 12+ lần chạy). KHÔNG che regression: hết hạn (~500ms) vẫn trả giá trị THẬT nên revoke
+ * hỏng (count kẹt >0) vẫn để assert đỏ. CHỈ test, KHÔNG đụng logic revoke (BẤT BIẾN #2 mirror giữ nguyên).
+ */
+async function pollCount(
+  read: () => Promise<number>,
+  expected: number,
+  timeoutMs = 500,
+): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+  let n = await read();
+  while (n !== expected && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    n = await read();
+  }
+  return n;
+}
+
 /** `after` jsonb của bản audit MỚI NHẤT cho 1 action trên objectId (để đọc revokedSessionCount). */
 async function latestAuditAfter(
   direct: Pool,
@@ -457,8 +479,9 @@ describe.skipIf(!hasLaneDb)("S2-AUTH-BE-3 /auth/users admin API", () => {
       expect(after.status).toBe(401);
 
       // MỌI phiên + refresh token của victim đã revoked (revoked_at NOT NULL) → count active = 0.
-      expect(await countActiveSessions(direct, victim)).toBe(0);
-      expect(await countActiveRefreshTokens(direct, victim)).toBe(0);
+      // pollCount = read-your-writes barrier đóng nghi ngờ flaky cold-pool; vẫn assert giá trị THẬT (0).
+      expect(await pollCount(() => countActiveSessions(direct, victim), 0)).toBe(0);
+      expect(await pollCount(() => countActiveRefreshTokens(direct, victim), 0)).toBe(0);
 
       // Audit 'user.locked'.after.revokedSessionCount = ĐÚNG số phiên active bị thu hồi (2, đếm chính xác).
       const auditAfter = await latestAuditAfter(direct, victim, "user.locked");
@@ -496,7 +519,7 @@ describe.skipIf(!hasLaneDb)("S2-AUTH-BE-3 /auth/users admin API", () => {
         .set("Authorization", `Bearer ${adminToken}`)
         .send({ reason: "nr" });
       expect(lock.status).toBe(200);
-      expect(await countActiveSessions(direct, victim)).toBe(0);
+      expect(await pollCount(() => countActiveSessions(direct, victim), 0)).toBe(0);
 
       const unlock = await api(app)
         .post(`/auth/users/${victim}/unlock`)
