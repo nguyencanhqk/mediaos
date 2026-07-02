@@ -469,6 +469,21 @@ export interface AppRegistryItem extends PermissionRequirement {
   order: number;
 }
 
+/**
+ * S2-FE-FND-7 (H8) — cặp quyền mở khu System (app-visibility). NGUỒN CHUNG cho:
+ *   - APP_REGISTRY 'system'.requiredAnyPermissions (điều kiện hiện app trong App Switcher).
+ *   - ROUTE_REGISTRY 'system.overview'.requiredAnyPermissions (gate route landing /system).
+ * Dùng CHUNG 1 mảng → mọi persona thấy app System đều landing /system KHÔNG 403 (parity route↔app),
+ * xoá lỗ hổng cũ: app visible qua {user|role|setting|audit} nhưng overview chỉ đòi {setting|user}
+ * ⇒ persona chỉ-role / chỉ-audit-log bị SHOW_403 khi mở app.
+ */
+const SYSTEM_APP_PERMISSIONS: PermissionCode[] = [
+  "AUTH.USER.VIEW",
+  "AUTH.ROLE.VIEW",
+  "FOUNDATION.SETTING.VIEW",
+  "FOUNDATION.AUDIT_LOG.VIEW",
+];
+
 /** App Registry MVP — khớp FRONTEND-03 §16.3 + UI-02 §10. */
 export const APP_REGISTRY: readonly AppRegistryItem[] = [
   {
@@ -570,15 +585,12 @@ export const APP_REGISTRY: readonly AppRegistryItem[] = [
     descKey: "appDesc.system",
     icon: "settings",
     rootPath: "/system",
-    defaultRoute: "/system/settings",
+    // S2-FE-FND-7 (H8): landing = /system (Overview) thay /system/settings. Overview render theo-thẻ
+    // per-quyền + fail-closed; route đòi CHUNG SYSTEM_APP_PERMISSIONS ⇒ mọi persona thấy app đều vào được.
+    defaultRoute: "/system",
     category: "system",
     aliases: ["he thong", "system", "settings", "admin"],
-    requiredAnyPermissions: [
-      "AUTH.USER.VIEW",
-      "AUTH.ROLE.VIEW",
-      "FOUNDATION.SETTING.VIEW",
-      "FOUNDATION.AUDIT_LOG.VIEW",
-    ],
+    requiredAnyPermissions: SYSTEM_APP_PERMISSIONS,
     status: "active",
     order: 70,
   },
@@ -1016,7 +1028,9 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     moduleCode: "FOUNDATION",
     screenCode: "SYSTEM-SCREEN-OVERVIEW",
     titleKey: "routeTitle.system",
-    requiredAnyPermissions: ["FOUNDATION.SETTING.VIEW", "AUTH.USER.VIEW"],
+    // S2-FE-FND-7 (H8): CHUNG SYSTEM_APP_PERMISSIONS với APP_REGISTRY 'system' → mọi persona thấy
+    // app System landing /system KHÔNG 403 (parity route↔app-visibility). Widen từ {setting|user}.
+    requiredAnyPermissions: SYSTEM_APP_PERMISSIONS,
     showInSidebar: true,
     order: 70,
   },

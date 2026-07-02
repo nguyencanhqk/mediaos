@@ -213,7 +213,14 @@ import { HealthPage } from "@/routes/system/foundation/HealthPage";
 // System / Foundation — Retention Policies + File Access Logs — S2-FE-FND-6
 import { RetentionPoliciesPage } from "@/routes/system/foundation/RetentionPoliciesPage";
 import { FileAccessLogsPage } from "@/routes/system/foundation/FileAccessLogsPage";
-import { FOUNDATION_PATH, FOUNDATION_SCREEN } from "@/routes/system/foundation/constants";
+import {
+  FOUNDATION_PATH,
+  FOUNDATION_SCREEN,
+  SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META,
+  SYSTEM_HEALTH_ROUTE_META,
+  SYSTEM_RETENTION_ROUTE_META,
+  SYSTEM_FILE_ACCESS_LOGS_ROUTE_META,
+} from "@/routes/system/foundation/constants";
 // System / Roles + Permissions admin — S2-FE-AUTH-4 (lane FE batch C)
 import { RoleFormPage } from "@/routes/system/roles/RoleFormPage";
 import { RoleDetailPage } from "@/routes/system/roles/RoleDetailPage";
@@ -984,15 +991,8 @@ const systemSettingsRoute = createRoute({
 });
 
 // Public Holidays (list + CRUD) — S2-FE-FND-4. Gate = cặp seed THẬT mig 0435 (view:foundation-holiday).
-const systemPublicHolidaysMeta: RouteMeta = {
-  routeKey: "system.public-holidays",
-  path: FOUNDATION_PATH.PUBLIC_HOLIDAYS,
-  layout: "MODULE_WORKSPACE",
-  moduleCode: "FOUNDATION",
-  screenCode: FOUNDATION_SCREEN.PUBLIC_HOLIDAYS,
-  titleKey: "routeTitle.systemPublicHolidays",
-  requiredAnyPermissions: ["view:foundation-holiday"],
-};
+// S2-FE-FND-7: meta CHUYỂN về foundation/constants (nguồn CHUNG với sidebar entry — chống pair-drift).
+const systemPublicHolidaysMeta: RouteMeta = SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META;
 const systemPublicHolidaysRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: FOUNDATION_PATH.PUBLIC_HOLIDAYS,
@@ -1004,15 +1004,9 @@ const systemPublicHolidaysRoute = createRoute({
 // Health (read-only) — S2-FE-FND-4. HealthController BE @Public() (KHÔNG @RequirePermission, KHÔNG cặp
 // 'foundation-health' seed) → gate route bằng baseline "khu vực quản trị hệ thống" GIỐNG system.overview
 // (xem constants.ts VIEW_SETTING_BASELINE) thay vì bịa permission code không tồn tại.
-const systemHealthMeta: RouteMeta = {
-  routeKey: "system.health",
-  path: FOUNDATION_PATH.HEALTH,
-  layout: "MODULE_WORKSPACE",
-  moduleCode: "FOUNDATION",
-  screenCode: FOUNDATION_SCREEN.HEALTH,
-  titleKey: "routeTitle.systemHealth",
-  requiredAnyPermissions: ["view:foundation-setting", "view:user"],
-};
+// S2-FE-FND-7: meta CHUYỂN về foundation/constants — sidebar entry health dùng CHUNG cả 2 cặp
+// (view:foundation-setting + view:user); 1 cặp = mismatch route↔sidebar.
+const systemHealthMeta: RouteMeta = SYSTEM_HEALTH_ROUTE_META;
 const systemHealthRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: FOUNDATION_PATH.HEALTH,
@@ -1023,15 +1017,8 @@ const systemHealthRoute = createRoute({
 // Retention Policies (config, governs purge) — S2-FE-FND-6. Gate = cặp seed THẬT mig 0435
 // (view:foundation-retention — KHÔNG sensitive). Nút Sửa trong page gate riêng bằng
 // manage:foundation-retention (is_sensitive=true, System-scope — KHÔNG tự động cấp company-admin).
-const systemRetentionMeta: RouteMeta = {
-  routeKey: "system.retention",
-  path: FOUNDATION_PATH.RETENTION,
-  layout: "MODULE_WORKSPACE",
-  moduleCode: "FOUNDATION",
-  screenCode: FOUNDATION_SCREEN.RETENTION,
-  titleKey: "routeTitle.systemRetention",
-  requiredAnyPermissions: ["view:foundation-retention"],
-};
+// S2-FE-FND-7: meta CHUYỂN về foundation/constants (nguồn CHUNG với sidebar entry).
+const systemRetentionMeta: RouteMeta = SYSTEM_RETENTION_ROUTE_META;
 const systemRetentionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: FOUNDATION_PATH.RETENTION,
@@ -1042,15 +1029,8 @@ const systemRetentionRoute = createRoute({
 
 // File Access Logs (viewer, append-only) — S2-FE-FND-6. Gate = cặp seed THẬT mig 0435
 // (view:foundation-file-access-log — KHÔNG sensitive).
-const systemFileAccessLogsMeta: RouteMeta = {
-  routeKey: "system.file-access-logs",
-  path: FOUNDATION_PATH.FILE_ACCESS_LOGS,
-  layout: "MODULE_WORKSPACE",
-  moduleCode: "FOUNDATION",
-  screenCode: FOUNDATION_SCREEN.FILE_ACCESS_LOGS,
-  titleKey: "routeTitle.systemFileAccessLogs",
-  requiredAnyPermissions: ["view:foundation-file-access-log"],
-};
+// S2-FE-FND-7: meta CHUYỂN về foundation/constants (nguồn CHUNG với sidebar entry).
+const systemFileAccessLogsMeta: RouteMeta = SYSTEM_FILE_ACCESS_LOGS_ROUTE_META;
 const systemFileAccessLogsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: FOUNDATION_PATH.FILE_ACCESS_LOGS,

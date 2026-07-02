@@ -10,6 +10,7 @@
  * Phân trang server-side (limit/offset) — cùng heuristic prev/next như system/login-logs
  * (page đầy = còn trang sau) vì apiFetch/unwrapEnvelope chỉ giữ `data`, bỏ block `pagination` đỉnh.
  */
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -27,32 +28,18 @@ import {
   auditLogDetailPath,
 } from "./constants";
 import { AuditLogPagination, DateField, FilterShell, TextField } from "./AuditLogControls";
-import { emptyToUndefined, toDateFromIso, toIsoRangeStart, toIsoRangeEnd } from "./audit-log-utils";
+import {
+  type AuditLogFilters,
+  createInitialAuditFilters,
+  emptyToUndefined,
+  toDateFromIso,
+  toIsoRangeStart,
+  toIsoRangeEnd,
+} from "./audit-log-utils";
 import { useAuditLogFilters } from "./use-audit-log-filters";
 
 // Response sau unwrapEnvelope = mảng item (pagination block đỉnh bị tách ở apiFetch).
 const auditLogListSchema = z.array(auditLogDtoSchema);
-
-// ---------------------------------------------------------------------------
-// Filter shape
-// ---------------------------------------------------------------------------
-type AuditLogFilters = {
-  moduleCode: string;
-  action: string;
-  actorUserId: string;
-  entityType: string;
-  fromDate: string; // yyyy-mm-dd (date-only input)
-  toDate: string;
-};
-
-const INITIAL_FILTERS: AuditLogFilters = {
-  moduleCode: "",
-  action: "",
-  actorUserId: "",
-  entityType: "",
-  fromDate: "",
-  toDate: "",
-};
 
 // ---------------------------------------------------------------------------
 // Columns
@@ -126,8 +113,11 @@ export function AuditLogsPage() {
   const navigate = useNavigate();
   const canView = useCan(AUDIT_LOG_VIEW.action, AUDIT_LOG_VIEW.resourceType);
 
+  // S2-FE-FND-7 — mặc định lọc 30 ngày gần nhất (áp cho CẢ draft LẪN applied). useMemo([]) → tính
+  // 1 lần/mount, ổn định để resetFilters trả về ĐÚNG mặc-định-30-ngày (không phải rỗng).
+  const initialFilters = useMemo<AuditLogFilters>(() => createInitialAuditFilters(), []);
   const { offset, draft, applied, setOffset, setDraftField, applyFilters, resetFilters } =
-    useAuditLogFilters<AuditLogFilters>(INITIAL_FILTERS);
+    useAuditLogFilters<AuditLogFilters>(initialFilters);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: [...AUDIT_LOGS_QUERY_KEY, offset, applied] as const,

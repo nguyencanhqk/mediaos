@@ -30,7 +30,13 @@ import {
   type SidebarItemMeta,
   type UserPermission,
 } from "@mediaos/web-core";
-import { ATT_SIDEBAR, LEAVE_SIDEBAR } from "@/layouts/workspace/sidebar-registry";
+import { ATT_SIDEBAR, LEAVE_SIDEBAR, SYSTEM_SIDEBAR } from "@/layouts/workspace/sidebar-registry";
+import {
+  SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META,
+  SYSTEM_HEALTH_ROUTE_META,
+  SYSTEM_RETENTION_ROUTE_META,
+  SYSTEM_FILE_ACCESS_LOGS_ROUTE_META,
+} from "@/routes/system/foundation/constants";
 
 // ---------------------------------------------------------------------------
 // Minimal i18n mock (nav namespace)
@@ -415,6 +421,128 @@ describe("getVisibleApps — company-admin thấy attendance + leave", () => {
 // ---------------------------------------------------------------------------
 // NavItem backward compat — status/permission/module fields optional
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// S2-FE-FND-7 (H8/§7) — 4 màn System (public-holidays/health/retention/file-access-logs) visibility
+// trong SYSTEM_SIDEBAR THẬT. Kiểm: (1) sidebar pair === route-meta pair (chống drift); (2) deny-path
+// PER-ENTRY — persona thiếu ĐÚNG cặp của entry đó (nhưng có các cặp entry khác) → entry ẨN; có cặp → hiện.
+// admin-full-quyền KHÔNG đủ để chứng minh (phải per-entry mới bắt được pair-drift).
+// ---------------------------------------------------------------------------
+
+describe("S2-FE-FND-7 — 4 System sidebar entries (registry thật)", () => {
+  const foundationActive = makeSession({
+    modules: [{ moduleCode: "FOUNDATION", status: "active" }],
+  });
+
+  // sidebarKey → { meta, allPairs của entry }.
+  const NEW_ENTRIES = [
+    { key: "system.public-holidays", meta: SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META },
+    { key: "system.health", meta: SYSTEM_HEALTH_ROUTE_META },
+    { key: "system.retention", meta: SYSTEM_RETENTION_ROUTE_META },
+    { key: "system.file-access-logs", meta: SYSTEM_FILE_ACCESS_LOGS_ROUTE_META },
+  ] as const;
+
+  // Tập cặp của mọi entry mới (để dựng persona "thiếu ĐÚNG entry X").
+  const ALL_NEW_PAIRS = Array.from(
+    new Set(NEW_ENTRIES.flatMap((e) => e.meta.requiredAnyPermissions ?? [])),
+  );
+
+  it("cả 4 entry tồn tại trong SYSTEM_SIDEBAR + sidebar pair === route-meta pair", () => {
+    for (const { key, meta } of NEW_ENTRIES) {
+      const entry = SYSTEM_SIDEBAR.find((i) => i.sidebarKey === key);
+      expect(entry, `sidebar entry ${key} phải tồn tại`).toBeDefined();
+      // Nguồn CHUNG → cùng mảng requiredAnyPermissions (chống pair-drift route↔sidebar).
+      expect(entry?.requiredAnyPermissions).toEqual(meta.requiredAnyPermissions);
+    }
+  });
+
+  it("entry health gate ĐỦ CẢ 2 cặp [view:foundation-setting, view:user]", () => {
+    expect(SYSTEM_HEALTH_ROUTE_META.requiredAnyPermissions).toEqual([
+      "view:foundation-setting",
+      "view:user",
+    ]);
+  });
+
+  it("entry retention gate view:foundation-retention (KHÔNG manage — tránh ẩn nhầm company-admin)", () => {
+    expect(SYSTEM_RETENTION_ROUTE_META.requiredAnyPermissions).toEqual([
+      "view:foundation-retention",
+    ]);
+    expect(SYSTEM_RETENTION_ROUTE_META.requiredAnyPermissions).not.toContain(
+      "manage:foundation-retention",
+    );
+  });
+
+  it("KHÔNG có entry /system/settings (chờ S2-FND-BE-8)", () => {
+    expect(SYSTEM_SIDEBAR.find((i) => i.path === "/system/settings")).toBeUndefined();
+  });
+
+  for (const { key, meta } of NEW_ENTRIES) {
+    const requiredPairs = meta.requiredAnyPermissions ?? [];
+
+    it(`${key}: persona CÓ cặp → hiện entry`, () => {
+      const c = createPermissionChecker(makePerms([requiredPairs[0]]));
+      const filtered = filterSidebarItems(SYSTEM_SIDEBAR, c, foundationActive);
+      expect(filtered.find((i) => i.sidebarKey === key)).toBeDefined();
+    });
+
+    it(`${key}: persona THIẾU cặp của entry (có cặp entry khác) → ẨN entry (per-entry deny)`, () => {
+      // Grant mọi cặp entry-mới TRỪ cặp của entry đang xét → chứng minh gate theo ĐÚNG cặp, không "admin-full".
+      const withoutThisEntry = ALL_NEW_PAIRS.filter((p) => !requiredPairs.includes(p));
+      const c = createPermissionChecker(makePerms(withoutThisEntry));
+      const filtered = filterSidebarItems(SYSTEM_SIDEBAR, c, foundationActive);
+      expect(filtered.find((i) => i.sidebarKey === key)).toBeUndefined();
+    });
+
+    it(`${key}: persona rỗng quyền → ẨN entry`, () => {
+      const c = createPermissionChecker(makePerms([]));
+      const filtered = filterSidebarItems(SYSTEM_SIDEBAR, c, foundationActive);
+      expect(filtered.find((i) => i.sidebarKey === key)).toBeUndefined();
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// S2-FE-FND-7 (H8) — app 'system' landing KHÔNG 403. defaultRoute = /system (Overview). MỌI persona
+// thấy app System (có ≥1 cặp app-visibility) → evaluateRouteAccess(system.overview) === ALLOW.
+// Trước fix: system.overview chỉ đòi {setting|user} trong khi app visible qua {user|role|setting|audit}
+// → persona chỉ-role / chỉ-audit landing SHOW_403. Test này khoá parity route↔app.
+// ---------------------------------------------------------------------------
+
+describe("S2-FE-FND-7 — system app landing không 403", () => {
+  const systemApp = APP_REGISTRY.find((a) => a.appKey === "system")!;
+  const overviewMeta = getRouteMeta("system.overview")!;
+  const foundationActive = makeSession({
+    modules: [{ moduleCode: "FOUNDATION", status: "active" }],
+  });
+
+  // Cặp engine THẬT mỗi mã app-visibility ánh xạ tới (qua PERMISSION_CODE_TO_PAIR).
+  const APP_VISIBILITY_ENGINE_PAIRS: Record<string, string> = {
+    "AUTH.USER.VIEW": "view:user",
+    "AUTH.ROLE.VIEW": "view:role",
+    "FOUNDATION.SETTING.VIEW": "view:foundation-setting",
+    "FOUNDATION.AUDIT_LOG.VIEW": "view:audit-log",
+  };
+
+  it("defaultRoute = /system = path của system.overview", () => {
+    expect(systemApp.defaultRoute).toBe("/system");
+    expect(systemApp.defaultRoute).toBe(overviewMeta.path);
+  });
+
+  it("route system.overview requiredAny === app-visibility (parity, chống landing-403)", () => {
+    expect(overviewMeta.requiredAnyPermissions).toEqual(systemApp.requiredAnyPermissions);
+  });
+
+  for (const [code, pair] of Object.entries(APP_VISIBILITY_ENGINE_PAIRS)) {
+    it(`persona chỉ có ${pair} (${code}) → app System hiện + landing /system ALLOW (không 403)`, () => {
+      const c = createPermissionChecker(makePerms([pair]));
+      const visible = getVisibleApps(APP_REGISTRY, foundationActive, c);
+      expect(visible.find((a) => a.appKey === "system")).toBeDefined();
+
+      const guard = evaluateRouteAccess(foundationActive, overviewMeta, c);
+      expect(guard.action).toBe("ALLOW");
+    });
+  }
+});
 
 describe("NavItem registry metadata — backward compat", () => {
   it("NavItem không có status/permission/module vẫn valid (tương thích ngược)", async () => {
