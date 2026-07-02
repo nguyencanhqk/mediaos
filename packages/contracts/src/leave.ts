@@ -517,6 +517,16 @@ export const rejectLeaveRequestSchema = z.object({
 export type RejectLeaveRequest = z.infer<typeof rejectLeaveRequestSchema>;
 
 /**
+ * S3-INT-1 — POST /leave/requests/:id/revoke — HR/company-admin thu hồi đơn ĐÃ Approved → Revoked
+ * (ATT-revert + balance refund, S3-SYNC-004). manager KHÔNG có grant revoke:leave (Company-scope only) —
+ * PermissionGuard 403 trước khi vào service. revokeReason tuỳ chọn.
+ */
+export const revokeLeaveRequestSchema = z.object({
+  revokeReason: z.string().max(2000).optional(),
+});
+export type RevokeLeaveRequest = z.infer<typeof revokeLeaveRequestSchema>;
+
+/**
  * GET /leave/requests — query danh sách đơn nghỉ cho HR/manager. status mặc định 'Pending'
  * (mặt quản lý — phê duyệt đơn chờ). Hỗ trợ phân trang page/pageSize + bộ lọc tiêu chuẩn.
  * Zod strip bảo đảm client không truyền được companyId/approvedBy vào tầng query.

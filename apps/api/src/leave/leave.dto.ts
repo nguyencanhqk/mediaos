@@ -16,6 +16,7 @@ import {
   leaveRequestListQuerySchema,
   pendingLeaveRequestListQuerySchema,
   rejectLeaveRequestSchema,
+  revokeLeaveRequestSchema,
   reviewNoteSchema,
   submitLeaveRequestSchema,
   updateLeavePolicySchema,
@@ -46,6 +47,8 @@ export class LeaveRequestListQueryDto extends createZodDto(leaveRequestListQuery
 // status/approvedBy/companyId stripped by Zod. reject reason REQUIRED (min 1); approve note optional.
 export class ApproveLeaveRequestDto extends createZodDto(approveLeaveRequestSchema) {}
 export class RejectLeaveRequestDto extends createZodDto(rejectLeaveRequestSchema) {}
+// S3-INT-1: revoke an Approved request (hr/company-admin — revoke:leave, Company-scope only).
+export class RevokeLeaveRequestDto extends createZodDto(revokeLeaveRequestSchema) {}
 export class PendingLeaveRequestListQueryDto extends createZodDto(
   pendingLeaveRequestListQuerySchema,
 ) {}

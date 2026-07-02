@@ -26,6 +26,7 @@ import { LeaveApprovalService } from "./leave-approval.service";
 import { LeaveCalendarService } from "./leave-calendar.service";
 import { LeaveReadService } from "./leave-read.service";
 import { LeaveRequestService } from "./leave-request.service";
+import { LeaveRevokeService } from "./leave-revoke.service";
 import { LeaveService } from "./leave.service";
 import {
   AdjustLeaveBalanceDto,
@@ -43,6 +44,7 @@ import {
   LeaveRequestListQueryDto,
   PendingLeaveRequestListQueryDto,
   RejectLeaveRequestDto,
+  RevokeLeaveRequestDto,
   SubmitLeaveRequestDto,
   UpdateLeavePolicyDto,
   UpdateLeaveRequestDraftDto,
@@ -86,6 +88,10 @@ const VIEW_OWN_LEAVE = leavePair("view-own", LEAVE_RESOURCES.LEAVE);
 const VIEW_LEAVE = leavePair("view", LEAVE_RESOURCES.LEAVE);
 const APPROVE_LEAVE = leavePair("approve", LEAVE_RESOURCES.LEAVE);
 const REJECT_LEAVE = leavePair("reject", LEAVE_RESOURCES.LEAVE);
+// S3-INT-1 — revoke:leave (sensitive, Company-scope ONLY on hr/company-admin — manager NEVER holds this
+// grant, mig 0455). PermissionGuard alone denies a manager's revoke attempt (done_when "REVOKE chỉ
+// manager|HR" — enforced by the ABSENCE of the grant, not extra service logic).
+const REVOKE_LEAVE = leavePair("revoke", LEAVE_RESOURCES.LEAVE);
 // S3-LEAVE-BE-5 — calendar (own/team/company). Controller gates the COARSE Own pair (granted to all 4
 // canonical roles) — the REAL per-scope gate (view-own/view-team/view-company) runs in
 // LeaveCalendarService via DataScopeService.resolveAndAssert, mirroring the BE-3 listPending 2-tier gate.
@@ -119,6 +125,7 @@ export class LeaveController {
     private readonly leaveApproval: LeaveApprovalService,
     private readonly leaveCalendar: LeaveCalendarService,
     private readonly leaveAdmin: LeaveAdminService,
+    private readonly leaveRevoke: LeaveRevokeService,
   ) {}
 
   // ─── Leave types ─────────────────────────────────────────────────────────────
@@ -302,6 +309,21 @@ export class LeaveController {
     @Body() dto: CancelLeaveRequestDto,
   ) {
     return this.leaveRequest.cancel(req.user, id, dto.cancelReason);
+  }
+
+  // S3-INT-1: revoke an APPROVED request (hr/company-admin ONLY — manager has no revoke:leave grant).
+  // ATT-revert + balance refund, idempotent (LeaveRevokeService).
+  @Post("requests/:id/revoke")
+  @HttpCode(200)
+  @RequirePermission(REVOKE_LEAVE.action, REVOKE_LEAVE.resourceType, {
+    isSensitive: REVOKE_LEAVE.sensitive,
+  })
+  revokeRequest(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Body() dto: RevokeLeaveRequestDto,
+  ) {
+    return this.leaveRevoke.revoke(req.user, id, dto.revokeReason);
   }
 
   // ─── Leave calendar (S3-LEAVE-BE-5 · CO-S4-005) ──────────────────────────────
