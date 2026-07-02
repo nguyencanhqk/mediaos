@@ -995,6 +995,13 @@
       "when": 1717500700000,
       "tag": "0461_s2_authbe7_session_selfservice",
       "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "7",
+      "when": 1717500705000,
+      "tag": "0462_s2_hrbe6_employee_contracts",
+      "breakpoints": true
     }
   ]
 }
