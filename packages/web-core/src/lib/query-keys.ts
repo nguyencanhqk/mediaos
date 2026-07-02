@@ -99,6 +99,33 @@ export const hrKeys = {
       [...rootKeys.hr, "contracts", "by-employee", employeeId, params] as const,
     detail: (id: string) => [...rootKeys.hr, "contracts", "detail", id] as const,
   },
+  // S2-FE-HR-6 — Org chart (danh mục nhỏ, không phân trang server) + HR audit-logs (phân trang offset/limit).
+  orgChart: {
+    all: [...rootKeys.hr, "org-chart"] as const,
+    tree: () => [...rootKeys.hr, "org-chart", "tree"] as const,
+  },
+  auditLogs: {
+    all: [...rootKeys.hr, "audit-logs"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "audit-logs", "list", params] as const,
+  },
+  // S2-FE-HR-8 — Employee-code CONFIG admin (danh mục 1 record/company, KHÔNG phân trang). preview()
+  // TÁCH khỏi config() (2 endpoint khác nhau: GET config vs POST preview) — invalidate riêng.
+  employeeCodeConfig: {
+    all: [...rootKeys.hr, "employee-code-config"] as const,
+    config: () => [...rootKeys.hr, "employee-code-config", "config"] as const,
+    preview: () => [...rootKeys.hr, "employee-code-config", "preview"] as const,
+  },
+  // S2-FE-HR-4 — Profile change request (self-service + HR duyệt). "mine" tách khỏi "list" (Company scope,
+  // HR/Admin) vì cùng resource nhưng scope khác nhau — invalidate riêng tránh làm mới nhầm cache của người khác.
+  profileChangeRequests: {
+    all: [...rootKeys.hr, "profile-change-requests"] as const,
+    mine: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "profile-change-requests", "mine", params] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "profile-change-requests", "list", params] as const,
+    detail: (id: string) => [...rootKeys.hr, "profile-change-requests", "detail", id] as const,
+  },
 };
 
 // S2-FE-HR-7 — mutation → invalidation cho hợp đồng nhân viên. Prefix (bỏ slot params) khớp mọi biến
@@ -213,6 +240,17 @@ export const attendanceKeys = {
     all: [...rootKeys.attendance, "audit-logs"] as const,
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.attendance, "audit-logs", "list", params] as const,
+  },
+  // S3-FE-ATT-3 — APPEND. Đơn điều chỉnh công: my/team/company (phân trang server) + detail.
+  adjustments: {
+    all: [...rootKeys.attendance, "adjustments"] as const,
+    my: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "adjustments", "my", params] as const,
+    team: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "adjustments", "team", params] as const,
+    company: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "adjustments", "company", params] as const,
+    detail: (id: string) => [...rootKeys.attendance, "adjustments", "detail", id] as const,
   },
 };
 

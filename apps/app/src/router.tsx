@@ -308,109 +308,6 @@ const hrProfileChangeRequestDetailRoute = createRoute({
     );
   },
 });
-
-// Remote/onsite-work requests — S3-FE-ATT-4. Gate = CẶP ENGINE THỰC trực tiếp (KHÔNG qua
-// PERMISSION_CODE_TO_PAIR — cùng kỹ thuật att.shifts/att.rules, tránh drift).
-const attRemoteWorkRequestsMeta: RouteMeta = {
-  routeKey: "att.remote-work-requests",
-  path: "/attendance/remote-work-requests",
-  layout: "MODULE_WORKSPACE",
-  moduleCode: "ATT",
-  screenCode: "ATT-SCREEN-012",
-  titleKey: "routeTitle.attRemoteWorkRequests",
-  requiredAnyPermissions: [
-    "create-own:remote-request",
-    "view-own:remote-request",
-    "view-team:remote-request",
-    "view-company:remote-request",
-  ],
-};
-const attRemoteWorkRequestsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/attendance/remote-work-requests",
-  beforeLoad: authGuard,
-  component: () =>
-    buildModuleRouteContent(attRemoteWorkRequestsMeta, "ATT", <RemoteWorkRequestsPage />),
-});
-
-// Create — static "new" segment ranks above the "$requestId" param route.
-const attRemoteWorkRequestNewMeta: RouteMeta = {
-  routeKey: "att.remote-work-requests.new",
-  path: "/attendance/remote-work-requests/new",
-  layout: "MODULE_WORKSPACE",
-  moduleCode: "ATT",
-  screenCode: "ATT-SCREEN-011",
-  titleKey: "routeTitle.attRemoteWorkRequests",
-  requiredAnyPermissions: ["create-own:remote-request"],
-};
-const attRemoteWorkRequestNewRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/attendance/remote-work-requests/new",
-  beforeLoad: authGuard,
-  component: () =>
-    buildModuleRouteContent(attRemoteWorkRequestNewMeta, "ATT", <CreateRemoteWorkRequestPage />),
-});
-
-const attRemoteWorkRequestDetailMeta: RouteMeta = {
-  routeKey: "att.remote-work-requests.detail",
-  path: "/attendance/remote-work-requests/:requestId",
-  layout: "MODULE_WORKSPACE",
-  moduleCode: "ATT",
-  screenCode: "ATT-SCREEN-013",
-  titleKey: "routeTitle.attRemoteWorkRequests",
-  requiredAnyPermissions: [
-    "view-own:remote-request",
-    "view-team:remote-request",
-    "view-company:remote-request",
-  ],
-};
-const attRemoteWorkRequestDetailRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/attendance/remote-work-requests/$requestId",
-  beforeLoad: authGuard,
-  component: () => {
-    const { requestId } = attRemoteWorkRequestDetailRoute.useParams();
-    return buildModuleRouteContent(
-      attRemoteWorkRequestDetailMeta,
-      "ATT",
-      <RemoteWorkRequestDetailPage requestId={requestId} />,
-    );
-  },
-});
-
-// Reports + audit logs — S3-FE-ATT-6. Gate = CẶP ENGINE THỰC trực tiếp (view-team/view-company:attendance
-// dùng chung với records; view:attendance-audit-log RIÊNG của ATT).
-const attReportsMeta: RouteMeta = {
-  routeKey: "att.reports",
-  path: "/attendance/reports",
-  layout: "MODULE_WORKSPACE",
-  moduleCode: "ATT",
-  screenCode: "ATT-SCREEN-018",
-  titleKey: "routeTitle.attReports",
-  requiredAnyPermissions: ["view-team:attendance", "view-company:attendance"],
-};
-const attReportsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/attendance/reports",
-  beforeLoad: authGuard,
-  component: () => buildModuleRouteContent(attReportsMeta, "ATT", <AttendanceReportsPage />),
-});
-
-const attAuditLogsMeta: RouteMeta = {
-  routeKey: "att.audit-logs",
-  path: "/attendance/audit-logs",
-  layout: "MODULE_WORKSPACE",
-  moduleCode: "ATT",
-  screenCode: "ATT-SCREEN-019",
-  titleKey: "routeTitle.attAuditLogs",
-  requiredAnyPermissions: ["view:attendance-audit-log"],
-};
-const attAuditLogsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/attendance/audit-logs",
-  beforeLoad: authGuard,
-  component: () => buildModuleRouteContent(attAuditLogsMeta, "ATT", <AttendanceAuditLogsPage />),
-});
 // S2-FE-HR-5 — HR master-data admin screens (list + CRUD). Cổng route = cặp ĐỌC (departments/positions)
 // hoặc manage:master-data DUY NHẤT (job-levels/contract-types) qua RouteMeta trong ROUTE_REGISTRY.
 const hrDepartmentsRoute = makeModuleRoute(
@@ -587,6 +484,109 @@ const attRecordDetailRoute = createRoute({
       <AttendanceRecordDetailPage recordId={recordId} />,
     );
   },
+});
+
+// Remote/onsite-work requests — S3-FE-ATT-4. Gate = CẶP ENGINE THỰC trực tiếp (KHÔNG qua
+// PERMISSION_CODE_TO_PAIR — cùng kỹ thuật att.shifts/att.rules, tránh drift).
+const attRemoteWorkRequestsMeta: RouteMeta = {
+  routeKey: "att.remote-work-requests",
+  path: "/attendance/remote-work-requests",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-012",
+  titleKey: "routeTitle.attRemoteWorkRequests",
+  requiredAnyPermissions: [
+    "create-own:remote-request",
+    "view-own:remote-request",
+    "view-team:remote-request",
+    "view-company:remote-request",
+  ],
+};
+const attRemoteWorkRequestsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/remote-work-requests",
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(attRemoteWorkRequestsMeta, "ATT", <RemoteWorkRequestsPage />),
+});
+
+// Create — static "new" segment ranks above the "$requestId" param route.
+const attRemoteWorkRequestNewMeta: RouteMeta = {
+  routeKey: "att.remote-work-requests.new",
+  path: "/attendance/remote-work-requests/new",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-011",
+  titleKey: "routeTitle.attRemoteWorkRequests",
+  requiredAnyPermissions: ["create-own:remote-request"],
+};
+const attRemoteWorkRequestNewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/remote-work-requests/new",
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(attRemoteWorkRequestNewMeta, "ATT", <CreateRemoteWorkRequestPage />),
+});
+
+const attRemoteWorkRequestDetailMeta: RouteMeta = {
+  routeKey: "att.remote-work-requests.detail",
+  path: "/attendance/remote-work-requests/:requestId",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-013",
+  titleKey: "routeTitle.attRemoteWorkRequests",
+  requiredAnyPermissions: [
+    "view-own:remote-request",
+    "view-team:remote-request",
+    "view-company:remote-request",
+  ],
+};
+const attRemoteWorkRequestDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/remote-work-requests/$requestId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { requestId } = attRemoteWorkRequestDetailRoute.useParams();
+    return buildModuleRouteContent(
+      attRemoteWorkRequestDetailMeta,
+      "ATT",
+      <RemoteWorkRequestDetailPage requestId={requestId} />,
+    );
+  },
+});
+
+// Reports + audit logs — S3-FE-ATT-6. Gate = CẶP ENGINE THỰC trực tiếp (view-team/view-company:attendance
+// dùng chung với records; view:attendance-audit-log RIÊNG của ATT).
+const attReportsMeta: RouteMeta = {
+  routeKey: "att.reports",
+  path: "/attendance/reports",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-018",
+  titleKey: "routeTitle.attReports",
+  requiredAnyPermissions: ["view-team:attendance", "view-company:attendance"],
+};
+const attReportsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/reports",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(attReportsMeta, "ATT", <AttendanceReportsPage />),
+});
+
+const attAuditLogsMeta: RouteMeta = {
+  routeKey: "att.audit-logs",
+  path: "/attendance/audit-logs",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-019",
+  titleKey: "routeTitle.attAuditLogs",
+  requiredAnyPermissions: ["view:attendance-audit-log"],
+};
+const attAuditLogsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/audit-logs",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(attAuditLogsMeta, "ATT", <AttendanceAuditLogsPage />),
 });
 
 // Đơn điều chỉnh công (S3-FE-ATT-3, ATT-SCREEN-006..010) — local RouteMeta (cùng kỹ thuật

@@ -91,109 +91,6 @@ export const attendanceApi = {
       body: JSON.stringify(body),
     }),
 
-  // ── Remote/Onsite-work requests (S3-ATT-BE-5, S3-FE-ATT-4) ──────────────────
-  // STATE-MACHINE (CHỐT 2026-07-02): create → Draft; submit RIÊNG (Draft→Pending, chọn approver +
-  // watchers); chỉ Pending mới approve/reject; Draft/Pending mới cancel-own (chủ đơn).
-
-  /** POST /attendance/remote-work-requests — tạo đơn (Draft). Permission: create-own:remote-request. */
-  createRemoteWorkRequest: (body: CreateRemoteWorkRequest): Promise<RemoteWorkRequestDetail> =>
-    apiFetch("/attendance/remote-work-requests", remoteWorkRequestDetailSchema, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  /**
-   * POST /attendance/remote-work-requests/:id/submit — Draft→Pending, chọn approver + watchers.
-   * Permission: create-own:remote-request (owner-only continuation of create lifecycle).
-   */
-  submitRemoteWorkRequest: (
-    id: string,
-    body: SubmitRemoteWorkRequest,
-  ): Promise<RemoteWorkRequestDetail> =>
-    apiFetch(`/attendance/remote-work-requests/${id}/submit`, remoteWorkRequestDetailSchema, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  /** GET /attendance/remote-work-requests/my — đơn của tôi. Permission: view-own:remote-request. */
-  listMyRemoteWorkRequests: (
-    query?: Partial<RemoteWorkRequestListQuery>,
-  ): Promise<RemoteWorkRequestListResponse> =>
-    apiFetch(
-      `/attendance/remote-work-requests/my${buildQueryString(query ?? {})}`,
-      remoteWorkRequestListResponseSchema,
-    ),
-
-  /** GET /attendance/remote-work-requests/team — đơn phạm vi Team. Permission: view-team:remote-request. */
-  listTeamRemoteWorkRequests: (
-    query?: Partial<RemoteWorkRequestListQuery>,
-  ): Promise<RemoteWorkRequestListResponse> =>
-    apiFetch(
-      `/attendance/remote-work-requests/team${buildQueryString(query ?? {})}`,
-      remoteWorkRequestListResponseSchema,
-    ),
-
-  /** GET /attendance/remote-work-requests — đơn phạm vi Company. Permission: view-company:remote-request. */
-  listCompanyRemoteWorkRequests: (
-    query?: Partial<RemoteWorkRequestListQuery>,
-  ): Promise<RemoteWorkRequestListResponse> =>
-    apiFetch(
-      `/attendance/remote-work-requests${buildQueryString(query ?? {})}`,
-      remoteWorkRequestListResponseSchema,
-    ),
-
-  /** GET /attendance/remote-work-requests/:id — chi tiết. Permission: view-own:remote-request (gate coarse). */
-  getRemoteWorkRequest: (id: string): Promise<RemoteWorkRequestDetail> =>
-    apiFetch(`/attendance/remote-work-requests/${id}`, remoteWorkRequestDetailSchema),
-
-  /** POST /attendance/remote-work-requests/:id/approve — Pending→Approved. Permission: approve:remote-request. */
-  approveRemoteWorkRequest: (
-    id: string,
-    body: ApproveRemoteWorkRequest,
-  ): Promise<RemoteWorkRequestDetail> =>
-    apiFetch(`/attendance/remote-work-requests/${id}/approve`, remoteWorkRequestDetailSchema, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  /** POST /attendance/remote-work-requests/:id/reject — Pending→Rejected. Permission: reject:remote-request. */
-  rejectRemoteWorkRequest: (
-    id: string,
-    body: RejectRemoteWorkRequest,
-  ): Promise<RemoteWorkRequestDetail> =>
-    apiFetch(`/attendance/remote-work-requests/${id}/reject`, remoteWorkRequestDetailSchema, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  /**
-   * POST /attendance/remote-work-requests/:id/cancel — Draft|Pending→Cancelled (chủ đơn).
-   * Permission: cancel-own:remote-request.
-   */
-  cancelOwnRemoteWorkRequest: (id: string): Promise<RemoteWorkRequestDetail> =>
-    apiFetch(`/attendance/remote-work-requests/${id}/cancel`, remoteWorkRequestDetailSchema, {
-      method: "POST",
-    }),
-
-  // ── Báo cáo tổng hợp công (S3-ATT-BE-6, S3-FE-ATT-6) ─────────────────────────
-
-  /** GET /attendance/reports/team — tổng hợp công phạm vi Team. Permission: view-team:attendance. */
-  getTeamAttendanceReport: (query: AttendanceReportQuery): Promise<AttendanceReportResponse> =>
-    apiFetch(`/attendance/reports/team${buildQueryString(query)}`, attendanceReportResponseSchema),
-
-  /** GET /attendance/reports — tổng hợp công phạm vi Company. Permission: view-company:attendance. */
-  getCompanyAttendanceReport: (query: AttendanceReportQuery): Promise<AttendanceReportResponse> =>
-    apiFetch(`/attendance/reports${buildQueryString(query)}`, attendanceReportResponseSchema),
-
-  // ── Audit log ATT (S3-ATT-BE-6, S3-FE-ATT-6) ─────────────────────────────────
-
-  /**
-   * GET /attendance/audit-logs — viewer audit RIÊNG của ATT (KHÔNG dùng chung route/guard với foundation
-   * audit-logs — cặp view:attendance-audit-log RIÊNG). Permission: view:attendance-audit-log (sensitive).
-   */
-  listAttendanceAuditLogs: (query?: Partial<AuditLogQuery>): Promise<AuditLogListResponse> =>
-    apiFetch(`/attendance/audit-logs${buildQueryString(query ?? {})}`, auditLogListResponseSchema),
-
   /**
    * POST /attendance/check-out — chấm ra.
    * Permission: check-out:attendance.
@@ -323,6 +220,109 @@ export const attendanceApi = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
+
+  // ── Remote/Onsite-work requests (S3-ATT-BE-5, S3-FE-ATT-4) ──────────────────
+  // STATE-MACHINE (CHỐT 2026-07-02): create → Draft; submit RIÊNG (Draft→Pending, chọn approver +
+  // watchers); chỉ Pending mới approve/reject; Draft/Pending mới cancel-own (chủ đơn).
+
+  /** POST /attendance/remote-work-requests — tạo đơn (Draft). Permission: create-own:remote-request. */
+  createRemoteWorkRequest: (body: CreateRemoteWorkRequest): Promise<RemoteWorkRequestDetail> =>
+    apiFetch("/attendance/remote-work-requests", remoteWorkRequestDetailSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * POST /attendance/remote-work-requests/:id/submit — Draft→Pending, chọn approver + watchers.
+   * Permission: create-own:remote-request (owner-only continuation of create lifecycle).
+   */
+  submitRemoteWorkRequest: (
+    id: string,
+    body: SubmitRemoteWorkRequest,
+  ): Promise<RemoteWorkRequestDetail> =>
+    apiFetch(`/attendance/remote-work-requests/${id}/submit`, remoteWorkRequestDetailSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** GET /attendance/remote-work-requests/my — đơn của tôi. Permission: view-own:remote-request. */
+  listMyRemoteWorkRequests: (
+    query?: Partial<RemoteWorkRequestListQuery>,
+  ): Promise<RemoteWorkRequestListResponse> =>
+    apiFetch(
+      `/attendance/remote-work-requests/my${buildQueryString(query ?? {})}`,
+      remoteWorkRequestListResponseSchema,
+    ),
+
+  /** GET /attendance/remote-work-requests/team — đơn phạm vi Team. Permission: view-team:remote-request. */
+  listTeamRemoteWorkRequests: (
+    query?: Partial<RemoteWorkRequestListQuery>,
+  ): Promise<RemoteWorkRequestListResponse> =>
+    apiFetch(
+      `/attendance/remote-work-requests/team${buildQueryString(query ?? {})}`,
+      remoteWorkRequestListResponseSchema,
+    ),
+
+  /** GET /attendance/remote-work-requests — đơn phạm vi Company. Permission: view-company:remote-request. */
+  listCompanyRemoteWorkRequests: (
+    query?: Partial<RemoteWorkRequestListQuery>,
+  ): Promise<RemoteWorkRequestListResponse> =>
+    apiFetch(
+      `/attendance/remote-work-requests${buildQueryString(query ?? {})}`,
+      remoteWorkRequestListResponseSchema,
+    ),
+
+  /** GET /attendance/remote-work-requests/:id — chi tiết. Permission: view-own:remote-request (gate coarse). */
+  getRemoteWorkRequest: (id: string): Promise<RemoteWorkRequestDetail> =>
+    apiFetch(`/attendance/remote-work-requests/${id}`, remoteWorkRequestDetailSchema),
+
+  /** POST /attendance/remote-work-requests/:id/approve — Pending→Approved. Permission: approve:remote-request. */
+  approveRemoteWorkRequest: (
+    id: string,
+    body: ApproveRemoteWorkRequest,
+  ): Promise<RemoteWorkRequestDetail> =>
+    apiFetch(`/attendance/remote-work-requests/${id}/approve`, remoteWorkRequestDetailSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** POST /attendance/remote-work-requests/:id/reject — Pending→Rejected. Permission: reject:remote-request. */
+  rejectRemoteWorkRequest: (
+    id: string,
+    body: RejectRemoteWorkRequest,
+  ): Promise<RemoteWorkRequestDetail> =>
+    apiFetch(`/attendance/remote-work-requests/${id}/reject`, remoteWorkRequestDetailSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * POST /attendance/remote-work-requests/:id/cancel — Draft|Pending→Cancelled (chủ đơn).
+   * Permission: cancel-own:remote-request.
+   */
+  cancelOwnRemoteWorkRequest: (id: string): Promise<RemoteWorkRequestDetail> =>
+    apiFetch(`/attendance/remote-work-requests/${id}/cancel`, remoteWorkRequestDetailSchema, {
+      method: "POST",
+    }),
+
+  // ── Báo cáo tổng hợp công (S3-ATT-BE-6, S3-FE-ATT-6) ─────────────────────────
+
+  /** GET /attendance/reports/team — tổng hợp công phạm vi Team. Permission: view-team:attendance. */
+  getTeamAttendanceReport: (query: AttendanceReportQuery): Promise<AttendanceReportResponse> =>
+    apiFetch(`/attendance/reports/team${buildQueryString(query)}`, attendanceReportResponseSchema),
+
+  /** GET /attendance/reports — tổng hợp công phạm vi Company. Permission: view-company:attendance. */
+  getCompanyAttendanceReport: (query: AttendanceReportQuery): Promise<AttendanceReportResponse> =>
+    apiFetch(`/attendance/reports${buildQueryString(query)}`, attendanceReportResponseSchema),
+
+  // ── Audit log ATT (S3-ATT-BE-6, S3-FE-ATT-6) ─────────────────────────────────
+
+  /**
+   * GET /attendance/audit-logs — viewer audit RIÊNG của ATT (KHÔNG dùng chung route/guard với foundation
+   * audit-logs — cặp view:attendance-audit-log RIÊNG). Permission: view:attendance-audit-log (sensitive).
+   */
+  listAttendanceAuditLogs: (query?: Partial<AuditLogQuery>): Promise<AuditLogListResponse> =>
+    apiFetch(`/attendance/audit-logs${buildQueryString(query ?? {})}`, auditLogListResponseSchema),
 
   // ── Đơn điều chỉnh công (S3-FE-ATT-3, S3-ATT-BE-4 — ATT-FUNC-018..022) ──────
   //

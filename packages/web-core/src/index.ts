@@ -79,7 +79,6 @@ export {
   hrInvalidation,
   // S2-FE-HR-5 (lane HR5-WC): HR master-data mutation → list invalidation.
   hrMasterDataInvalidation,
-  foundationInvalidation,
   // S2-FE-HR-7: employee contracts mutation → list invalidation.
   hrContractsInvalidation,
   // S3-FE-ATT-4: remote-work-request mutation → list/detail invalidation.
