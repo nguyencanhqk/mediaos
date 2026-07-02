@@ -130,6 +130,12 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "AUTH.ROLE.VIEW": "view:role",
   "FOUNDATION.SETTING.VIEW": "view:foundation-setting",
   "FOUNDATION.AUDIT_LOG.VIEW": "view:foundation-audit-log",
+  // S2-FE-FND-1 (FND1-WC): cặp seed THẬT mig 0435 — controller Foundation dùng *:foundation-* (view/update:
+  // foundation-company, update:foundation-setting). KHÔNG dùng nhãn-ma FRONTEND-13 §7.1 (FOUNDATION.SYSTEM.VIEW /
+  // SETTING.SYSTEM_MANAGE chưa seed) và KHÔNG namespace CŨ read/update:company (0005). Đọc≠sửa (pair-as-gate).
+  "FOUNDATION.COMPANY.VIEW": "view:foundation-company",
+  "FOUNDATION.COMPANY.UPDATE": "update:foundation-company",
+  "FOUNDATION.SETTING.UPDATE": "update:foundation-setting",
 };
 
 export function createPermissionChecker(userPermissions: readonly UserPermission[]) {
