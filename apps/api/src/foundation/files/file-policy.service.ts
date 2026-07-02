@@ -26,6 +26,7 @@ import type { CanInput } from "../../permission/permission.types";
 import {
   FOUNDATION_FILE_PERMISSION,
   FilePolicyAction,
+  type FileLinkRef,
   type FilePermissionInput,
   type FilePolicyDecision,
 } from "./file-policy.types";
@@ -133,6 +134,79 @@ export class FilePolicyService {
 
   canDelete(input: FilePermissionInput): Promise<FilePolicyDecision> {
     return this.decide({ ...input, action: FilePolicyAction.Delete });
+  }
+
+  // ─── Link-aware decision (S2-FND-BE-4 · H1) ─────────────────────────────────────
+
+  /**
+   * True iff a resolver is registered for `(moduleCode, entityType)` — via the exact key or the owning
+   * module's wildcard. Used by `decideForLinkedFile` to fail-closed BEFORE any decision when a link's
+   * owning module has not (yet) registered a resolver. Reuses the SAME lookup+normalize as dispatch so a
+   * probe can never disagree with the actual dispatch (no split-brain).
+   */
+  hasResolver(moduleCode: string, entityType: string): boolean {
+    return this.lookupResolver(moduleCode, entityType) !== undefined;
+  }
+
+  /**
+   * Decide access for a file that may be LINKED to one or more business entities (H1, fail-closed):
+   *
+   *   • `links` EMPTY (foundation-owned file) → delegate to the normal single-file pipeline
+   *     (`decide`): tenant guard → resolver dispatch on the base (module,entity) → FOUNDATION.FILE.*
+   *     fallback. Behaviour is IDENTICAL to the pre-H1 canView/canDownload/canDelete path.
+   *   • `links` NON-EMPTY → the file is module-owned. If ANY link's `(module,entity)` has no registered
+   *     resolver → DENY `deny-no-resolver` (NEVER escalate to FOUNDATION.FILE.* — a broad file grant must
+   *     not read a module-owned file). If every link HAS a resolver → dispatch each link on its OWN
+   *     `(module,entity,entityId)` and AND the verdicts (most-restrictive): ALLOW only when ALL allow;
+   *     the FIRST deny (resolver-deny / deny-error) wins.
+   *
+   * Tenant scope is guarded first (fail-closed). Any unexpected throw ⇒ DENY `deny-error`. The policy
+   * layer performs NO DB access — `links` are loaded by the service and passed in (CLAUDE.md §2).
+   */
+  async decideForLinkedFile(
+    input: FilePermissionInput,
+    links: readonly FileLinkRef[],
+    action: FilePolicyAction,
+  ): Promise<FilePolicyDecision> {
+    // Tenant guard first — consistent with decide(), runs before any resolver probe/dispatch.
+    if (!input.companyId || !input.userId) {
+      this.logger.warn(
+        `file-policy deny-tenant (linked): missing tenant scope ` +
+          `(requestId=${input.requestId ?? "-"} module=${input.moduleCode} entity=${input.entityType})`,
+      );
+      return { allow: false, reason: "deny-tenant" };
+    }
+
+    try {
+      // Foundation-owned (no links) → unchanged single-file decision (FOUNDATION.FILE.* fallback).
+      if (links.length === 0) {
+        return this.decide({ ...input, action });
+      }
+
+      // Any link whose owning module has NOT registered a resolver → fail-closed DENY (no fallback).
+      for (const link of links) {
+        if (!this.hasResolver(link.moduleCode, link.entityType)) {
+          return { allow: false, reason: "deny-no-resolver" };
+        }
+      }
+
+      // Every link has a resolver → dispatch each on its OWN (module,entity,entityId); AND the verdicts.
+      for (const link of links) {
+        const decision = await this.decide({
+          ...input,
+          moduleCode: link.moduleCode,
+          entityType: link.entityType,
+          entityId: link.entityId,
+          action,
+        });
+        // Most-restrictive: the first deny (resolver-deny / deny-error / deny-tenant) is final.
+        if (!decision.allow) return decision;
+      }
+      return { allow: true, reason: "allow-resolver" };
+    } catch (err) {
+      this.logError("decideForLinkedFile threw", { ...input, action }, err);
+      return { allow: false, reason: "deny-error" };
+    }
   }
 
   // ─── Core pipeline ────────────────────────────────────────────────────────────

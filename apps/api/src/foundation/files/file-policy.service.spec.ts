@@ -342,4 +342,137 @@ describe("FilePolicyService", () => {
       expect(() => service.registerResolver(b)).toThrow();
     });
   });
+
+  // 10. H1 (S2-FND-BE-4) — hasResolver registry probe ─────────────────────────────
+  // The service dispatches a LINKED file to its owning module's resolver. A link whose (module,entity)
+  // has NO registered resolver must fail-closed (deny-no-resolver), NOT fall back to FOUNDATION.FILE.*
+  // (which would let a broad file-download grant read an HR contract). hasResolver is the probe used by
+  // decideForLinkedFile to detect that gap BEFORE any decision runs.
+  describe("hasResolver (link-aware registry probe)", () => {
+    it("true only for a registered (module,entity); false otherwise; normalizes case/whitespace", () => {
+      service.registerResolver(makeResolver("HR", ["EmployeeContract"], true));
+      expect(service.hasResolver("HR", "EmployeeContract")).toBe(true);
+      expect(service.hasResolver("  hr ", "employeecontract")).toBe(true); // normalized like registration
+      expect(service.hasResolver("HR", "SomethingElse")).toBe(false); // no module-wildcard registered
+      expect(service.hasResolver("UNKNOWN", "Mystery")).toBe(false);
+    });
+
+    it("module-wildcard resolver → hasResolver true for ANY entity of that module", () => {
+      service.registerResolver(makeResolver("TASK", undefined, true)); // entityTypes empty ⇒ wildcard
+      expect(service.hasResolver("TASK", "AnyEntity")).toBe(true);
+      expect(service.hasResolver("HR", "AnyEntity")).toBe(false);
+    });
+  });
+
+  // 11. H1 (S2-FND-BE-4) — decideForLinkedFile (fail-closed link-aware dispatch, most-restrictive AND) ──
+  describe("decideForLinkedFile (fail-closed link-aware dispatch)", () => {
+    const foundationInput = () =>
+      baseInput({ moduleCode: "FOUNDATION", entityType: "File", entityId: "file-1" });
+
+    it("empty links → falls back to FOUNDATION.FILE.* (allow-foundation when granted)", async () => {
+      const grant = makePermissionMock(allowDecision());
+      service = new FilePolicyService(grant.service);
+      const decision = await service.decideForLinkedFile(
+        foundationInput(),
+        [],
+        FilePolicyAction.Download,
+      );
+      expect(decision.allow).toBe(true);
+      expect(decision.reason).toBe("allow-foundation");
+      expect(grant.calls[0].action).toBe("download");
+      expect(grant.calls[0].resourceType).toBe("foundation-file");
+    });
+
+    it("empty links → deny-foundation when the fallback permission is not granted (behaviour unchanged)", async () => {
+      // beforeEach: service uses denyDecision().
+      const decision = await service.decideForLinkedFile(
+        foundationInput(),
+        [],
+        FilePolicyAction.View,
+      );
+      expect(decision.allow).toBe(false);
+      expect(decision.reason).toBe("deny-foundation");
+    });
+
+    it("≥1 link whose (module,entity) has NO registered resolver → deny-no-resolver, NEVER fallback", async () => {
+      // A GRANTING fallback proves fail-closed: it must NOT be consulted for a linked file with a gap.
+      const grant = makePermissionMock(allowDecision());
+      service = new FilePolicyService(grant.service);
+      service.registerResolver(makeResolver("HR", ["EmployeeContract"], true)); // only HR registered
+      const links = [
+        { moduleCode: "HR", entityType: "EmployeeContract", entityId: "e1" },
+        { moduleCode: "LEAVE", entityType: "LeaveAttachment", entityId: "e2" }, // NO resolver
+      ];
+      const decision = await service.decideForLinkedFile(
+        foundationInput(),
+        links,
+        FilePolicyAction.Download,
+      );
+      expect(decision.allow).toBe(false);
+      expect(decision.reason).toBe("deny-no-resolver");
+      expect(grant.calls).toHaveLength(0); // fallback never reached
+    });
+
+    it("all links have resolvers + ALL allow → allow-resolver (dispatches each link's own module/entity)", async () => {
+      const hr = makeResolver("HR", ["EmployeeContract"], true);
+      const leave = makeResolver("LEAVE", ["LeaveAttachment"], true);
+      service.registerResolver(hr);
+      service.registerResolver(leave);
+      const links = [
+        { moduleCode: "HR", entityType: "EmployeeContract", entityId: "e1" },
+        { moduleCode: "LEAVE", entityType: "LeaveAttachment", entityId: "e2" },
+      ];
+      const decision = await service.decideForLinkedFile(
+        foundationInput(),
+        links,
+        FilePolicyAction.Download,
+      );
+      expect(decision.allow).toBe(true);
+      expect(decision.reason).toBe("allow-resolver");
+      expect(hr.calls).toEqual(["download:EmployeeContract"]);
+      expect(leave.calls).toEqual(["download:LeaveAttachment"]);
+    });
+
+    it("all links have resolvers but ONE denies → DENY (most-restrictive AND)", async () => {
+      const hr = makeResolver("HR", ["EmployeeContract"], true);
+      const leave = makeResolver("LEAVE", ["LeaveAttachment"], false); // denies
+      service.registerResolver(hr);
+      service.registerResolver(leave);
+      const links = [
+        { moduleCode: "HR", entityType: "EmployeeContract", entityId: "e1" },
+        { moduleCode: "LEAVE", entityType: "LeaveAttachment", entityId: "e2" },
+      ];
+      const decision = await service.decideForLinkedFile(
+        foundationInput(),
+        links,
+        FilePolicyAction.Download,
+      );
+      expect(decision.allow).toBe(false);
+      expect(decision.reason).toBe("deny-resolver");
+    });
+
+    it("a registered resolver that THROWS → fail-closed DENY (deny-error), never a false-ALLOW", async () => {
+      service.registerResolver(makeResolver("HR", ["EmployeeContract"], "throw"));
+      const links = [{ moduleCode: "HR", entityType: "EmployeeContract", entityId: "e1" }];
+      const decision = await service.decideForLinkedFile(
+        foundationInput(),
+        links,
+        FilePolicyAction.Download,
+      );
+      expect(decision.allow).toBe(false);
+      expect(decision.reason).toBe("deny-error");
+    });
+
+    it("missing tenant scope → deny-tenant (guard runs before resolver dispatch)", async () => {
+      service.registerResolver(makeResolver("HR", ["EmployeeContract"], true));
+      const links = [{ moduleCode: "HR", entityType: "EmployeeContract", entityId: "e1" }];
+      const decision = await service.decideForLinkedFile(
+        baseInput({ companyId: "", moduleCode: "FOUNDATION", entityType: "File" }),
+        links,
+        FilePolicyAction.Download,
+      );
+      expect(decision.allow).toBe(false);
+      expect(decision.reason).toBe("deny-tenant");
+    });
+  });
 });
