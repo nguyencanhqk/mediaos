@@ -139,11 +139,5 @@ class LeaveApprovedSyncRegistrar implements OnModuleInit {
     AttendanceReportService,
     AttendanceAuditService,
   ],
-  exports: [
-    AttendanceService,
-    AttendanceReadService,
-    AttendanceAdjustmentService,
-    AttendanceShiftService,
-  ],
 })
 export class AttendanceModule {}
