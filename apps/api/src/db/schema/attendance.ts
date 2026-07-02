@@ -270,6 +270,12 @@ export const remoteWorkRequests = pgTable(
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     cancelledBy: uuid("cancelled_by").references(() => users.id, { onDelete: "set null" }),
     attachmentFileId: uuid("attachment_file_id"),
+    /**
+     * S3-ATT-BE-5 (mig 0464, ALTER-ADD additive) — người theo dõi chọn lúc submit (Draft→Pending), nhận
+     * NOTI liên quan. jsonb array of user_id (uuid string) — KHÔNG hard-FK (mirror metadata pattern),
+     * validate cross-tenant ở service (mọi id PHẢI thuộc cùng company_id, S3-ATT-BE-5 done_when).
+     */
+    watcherUserIds: jsonb("watcher_user_ids").$type<string[]>(),
     metadata: jsonb("metadata"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),

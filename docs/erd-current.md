@@ -207,9 +207,9 @@ erDiagram
 
 `id` PK · company_id · code · name · (loại hợp đồng).
 
-### employee_contracts 🗑️
+### employee_contracts ✅ (mig 0462, S2-HR-BE-6)
 
-`id` PK · company_id · employee_id FK→employees · contract_code · contract_type_id FK→contract_types · start_date · end_date · signed_date · status(Draft/Active/Expired/Terminated) · file_id FK→files 🔒 · note.
+`id` PK · company_id (RLS+FORCE) · employee_id FK→**employee_profiles** ON DELETE CASCADE · contract_type_id FK→contract_types · contract_code (unique/company khi có + chưa xoá) · title · start_date · end_date · signed_date · status(Draft/Active/Expired/Terminated/Cancelled) · is_primary (≤1 primary+Active/employee) · file_id FK→files (SET NULL, link qua FileService entity 'contract') 🔒 · note · metadata · created_by/updated_by/deleted_by (soft-delete). Perm pair (view,contract)+(manage,contract) scope=Company hr/company-admin (mig 0462). audit object_type='employee_contract'.
 
 ### employee_files
 
@@ -407,7 +407,7 @@ erDiagram
 
 ### A4. Thiết kế CÓ nhưng code CHƯA build
 
-`employee_contracts` · `employee_files` · `shift_assignments` · `attendance_rules` · `remote_work_requests`(+approvals) · `leave_policies` · `leave_balance_transactions` · `leave_request_approvals` · `leave_request_days` · `notification_events` · `notification_templates` · `notification_delivery_logs` · toàn bộ **DASH** (`dashboard_widgets`/`_configs`/`_cache`). *(ATT/LEAVE/TASK/NOTI ở code mới là bản rút gọn hướng cũ, chưa reconcile.)*
+`employee_files` · `shift_assignments` · `attendance_rules` · `remote_work_requests`(+approvals) · `leave_policies` · `leave_balance_transactions` · `leave_request_approvals` · `leave_request_days` · `notification_events` · `notification_templates` · `notification_delivery_logs` · toàn bộ **DASH** (`dashboard_widgets`/`_configs`/`_cache`). *(ATT/LEAVE/TASK/NOTI ở code mới là bản rút gọn hướng cũ, chưa reconcile.)* — `employee_contracts` ĐÃ build (mig 0462, S2-HR-BE-6).
 
 ### A5. Code CÒN bảng HƯỚNG CŨ — out-of-scope, cần DỌN (de-media-fy, CLAUDE.md §1)
 

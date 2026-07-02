@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-02 05:24Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-02 07:47Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -50,8 +50,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `auto/fe-batch-a` · **file đang đổi (dirty)**: 11
-- **migration head**: idx 139 — `0459_s2_hrbe7_employee_code_config` (140 migration)
+- **branch**: `auto/fe-batch-a` · **file đang đổi (dirty)**: 114
+- **migration head**: idx 145 — `0465_s2_hrbe6_contract_scope_fix` (146 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
 
@@ -59,6 +59,10 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `d267c78` | 2026-07-02 | feat(S2-FE-HR-4): HR profile change-request workflow (self + HR approve/reject) |
+| `e5ba72b` | 2026-07-02 | feat(S2-FE-FND-3): Module Catalog admin (/system/modules + /:code) read-only |
+| `6d2cf0d` | 2026-07-02 | feat(S2-FE-FND-2): Audit log viewer + File metadata viewer (/system/audit-logs, /system/files) |
+| `3ace9e9` | 2026-07-02 | feat(S2-FE-AUTH-3): FE User admin CRUD (/system/users) — create/detail/edit/assign-roles |
 | `d98368c` | 2026-07-02 | feat(S2-FE-AUTH-2): forgot/reset-password + session-expired (apps/auth) + change-password (apps/app) |
 | `67d8f16` | 2026-07-02 | rescue: S2-FE-FND-1 (Foundation admin FE) + S2-HR-BE-7 verify-mode additions (#79) |
 | `6db736d` | 2026-07-02 | fix(db): remove orphaned pre-renumber migration file on feat/s3-wave3 (#76) |
@@ -67,10 +71,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `0545d17` | 2026-07-02 | auto/S3 FE ATT 5 (#72) |
 | `2727e49` | 2026-07-01 | wip(S3-LEAVE-BE-5): GET /leave/calendar scoped (own/team/company) + reason masking (#70) |
 | `448e628` | 2026-07-01 | feat(s3-att-be3): shift/rule minimum spine + audit-in-tx wiring + QA-06 tenant deny (#69) |
-| `bc690c2` | 2026-07-01 | feat(s3): S3-FE-LEAVE-3 — all-requests screen + edit draft + department filter (#68) |
-| `b91f9bd` | 2026-07-01 | chore(harness): commit stray plan docs from prior wave + regen STATUS (#67) |
-| `602fa2b` | 2026-07-01 | chore(harness): move crown-jewel PLAN stage to Sonnet 5 to cut cost (#66) |
-| `3c89694` | 2026-07-01 | feat(sprint3): S3 ATT/LEAVE core slice — registry spine + FE screens + approval FSM + foundation retention (#65) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

@@ -14,6 +14,11 @@ import { PermissionAdminService } from "./permission-admin.service";
 import { PermissionAdminRepository } from "./permission-admin.repository";
 // S2-AUTH-BE-3 (additive): read-only catalogs cho UI gán quyền (GET /auth/roles · /auth/permissions).
 import { AuthRolesPermissionsController } from "./auth-roles-permissions.controller";
+// S2-AUTH-BE-6 (additive): role WRITE (create/update, KHÔNG sửa system role) + assign/revoke permission
+// cho role (POST/PATCH /auth/roles·/:id/permissions). KHÔNG đụng factory permission cũ (hot-file APPEND).
+import { RoleAdminController } from "./role-admin.controller";
+import { RoleAdminService } from "./role-admin.service";
+import { RoleAdminRepository } from "./role-admin.repository";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { CompanyGuard } from "./guards/company.guard";
 import { PermissionGuard } from "./guards/permission.guard";
@@ -95,12 +100,15 @@ class PermissionCacheInvalidator implements OnModuleInit {
  */
 @Module({
   imports: [DatabaseModule, EventsModule, forwardRef(() => AuthModule)],
-  controllers: [PermissionAdminController, AuthRolesPermissionsController],
+  controllers: [PermissionAdminController, AuthRolesPermissionsController, RoleAdminController],
   providers: [
     ValkeyService,
     PermissionRepository,
     PermissionAdminRepository,
     PermissionAdminService,
+    // S2-AUTH-BE-6 (additive): role WRITE stack.
+    RoleAdminRepository,
+    RoleAdminService,
     {
       provide: CACHED_REPO,
       useFactory: (repo: PermissionRepository, valkey: ValkeyService): CachedPermissionRepository =>

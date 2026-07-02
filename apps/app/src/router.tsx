@@ -130,6 +130,11 @@ import {
   PCR_LIST_ROUTE_META,
   PCR_DETAIL_ROUTE_META,
 } from "@/routes/hr/profile-change-requests/constants";
+// HR — Master-data admin screens (S2-FE-HR-5)
+import { DepartmentsPage } from "@/routes/hr/departments/DepartmentsPage";
+import { PositionsPage } from "@/routes/hr/positions/PositionsPage";
+import { JobLevelsPage } from "@/routes/hr/job-levels/JobLevelsPage";
+import { ContractTypesPage } from "@/routes/hr/contract-types/ContractTypesPage";
 
 // Attendance
 import { AttendanceTodayPage } from "@/routes/attendance/AttendanceTodayPage";
@@ -217,6 +222,22 @@ const hrProfileChangeRequestDetailRoute = createRoute({
     );
   },
 });
+// S2-FE-HR-5 — HR master-data admin screens (list + CRUD). Cổng route = cặp ĐỌC (departments/positions)
+// hoặc manage:master-data DUY NHẤT (job-levels/contract-types) qua RouteMeta trong ROUTE_REGISTRY.
+const hrDepartmentsRoute = makeModuleRoute(
+  "/hr/departments",
+  "hr.departments",
+  "HR",
+  DepartmentsPage,
+);
+const hrPositionsRoute = makeModuleRoute("/hr/positions", "hr.positions", "HR", PositionsPage);
+const hrJobLevelsRoute = makeModuleRoute("/hr/job-levels", "hr.job-levels", "HR", JobLevelsPage);
+const hrContractTypesRoute = makeModuleRoute(
+  "/hr/contract-types",
+  "hr.contract-types",
+  "HR",
+  ContractTypesPage,
+);
 
 // HR employee create — static "new" segment ranks above the "$employeeId" param route, so it never
 // collides with detail. Reuses hr.employees meta (route-level VIEW gate); EmployeeFormPage applies the
@@ -721,6 +742,10 @@ const routeTree = rootRoute.addChildren([
   hrMeChangeRequestRoute,
   hrProfileChangeRequestsRoute,
   hrProfileChangeRequestDetailRoute,
+  hrDepartmentsRoute,
+  hrPositionsRoute,
+  hrJobLevelsRoute,
+  hrContractTypesRoute,
   attTodayRoute,
   attMyRecordsRoute,
   attTeamRecordsRoute,

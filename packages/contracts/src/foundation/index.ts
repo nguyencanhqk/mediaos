@@ -10,3 +10,6 @@ export * from "./module-catalog";
 // S2-FND-BE-3 (L2) — retention-policy + file-access-log DTO (WHITELIST, KHÔNG secret). Append-only.
 export * from "./retention";
 export * from "./file-access-log";
+// S2-FND-BE-2 — sequence-counter + seed-run status DTO (WHITELIST, KHÔNG secret/current_value). Append-only.
+export * from "./sequences";
+export * from "./seeds";

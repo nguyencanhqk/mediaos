@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
   HttpException,
@@ -5,6 +6,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  NotFoundException,
   UnauthorizedException,
   forwardRef,
 } from "@nestjs/common";
@@ -14,9 +16,10 @@ import type {
   LoginRequest,
   MeResponse,
   ResetPasswordRequest,
+  SessionListItem,
   TwoFactorChallenge,
 } from "@mediaos/contracts";
-import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index";
 import { DatabaseService, type TenantTx } from "../db/db.service";
@@ -28,6 +31,7 @@ import {
   refreshTokens,
   roles,
   userRoles,
+  userSessions,
   users,
 } from "../db/schema";
 import { AuditService } from "../events/audit.service";
@@ -296,7 +300,7 @@ export class AuthService {
         return { kind: "2fa" as const, userId: user.id };
       }
 
-      const issued = await this.issueTokens(tx, companyId, user.id, user.email);
+      const issued = await this.issueTokens(tx, companyId, user.id, user.email, undefined, meta);
       await this.audit.record(tx, {
         action: "auth.login_success",
         objectType: "auth",
@@ -425,7 +429,14 @@ export class AuthService {
       if (!user || user.deletedAt || !isAuthorizedStatus(user.status)) {
         throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
       }
-      const issued = await this.issueTokens(tx, claims.companyId, user.id, user.email);
+      const issued = await this.issueTokens(
+        tx,
+        claims.companyId,
+        user.id,
+        user.email,
+        undefined,
+        meta,
+      );
       await this.audit.record(tx, {
         action: "auth.login_success",
         objectType: "auth",
@@ -524,6 +535,7 @@ export class AuthService {
         .update(refreshTokens)
         .set({ revokedAt: new Date() })
         .where(and(eq(refreshTokens.userId, user.id), isNull(refreshTokens.revokedAt)));
+      await this.revokeAllSessionsForUserTx(tx, user.id, "password_changed");
       await this.audit.record(tx, {
         action: "auth.password_changed",
         objectType: "auth",
@@ -599,6 +611,7 @@ export class AuthService {
           .update(refreshTokens)
           .set({ revokedAt: new Date() })
           .where(and(eq(refreshTokens.familyId, row.familyId), isNull(refreshTokens.revokedAt)));
+        await this.revokeAllSessionsForUserTx(tx, row.userId, "reuse_detected");
         await this.audit.record(tx, {
           action: "auth.token_reuse_detected",
           objectType: "auth",
@@ -624,6 +637,7 @@ export class AuthService {
           .update(refreshTokens)
           .set({ revokedAt: new Date() })
           .where(and(eq(refreshTokens.familyId, row.familyId), isNull(refreshTokens.revokedAt)));
+        await this.revokeAllSessionsForUserTx(tx, user.id, "suspended");
         await this.audit.record(tx, {
           action: "auth.refresh_blocked",
           objectType: "auth",
@@ -658,11 +672,17 @@ export class AuthService {
       }
 
       // Rotation: token mới KẾ THỪA family_id; revoke token cũ + trỏ replaced_by.
-      const issued = await this.issueTokens(tx, companyId, user.id, user.email, row.familyId);
+      const issued = await this.issueTokens(tx, companyId, user.id, user.email, row.familyId, meta);
       await tx
         .update(refreshTokens)
         .set({ revokedAt: new Date(), replacedBy: issued.newTokenId })
         .where(eq(refreshTokens.id, row.id));
+      // S2-AUTH-BE-7: rotation = phiên CŨ kết thúc (user_sessions song song refreshTokens) — revoke hàng
+      // session cũ (khớp theo tokenHash vừa xoay, KHÔNG phải id — user_sessions.id ≠ refreshTokens.id).
+      await tx
+        .update(userSessions)
+        .set({ revokedAt: new Date(), revokedReason: "rotated" })
+        .where(and(eq(userSessions.refreshTokenHash, tokenHash), isNull(userSessions.revokedAt)));
       await this.audit.record(tx, {
         action: "auth.token_refreshed",
         objectType: "auth",
@@ -713,6 +733,7 @@ export class AuthService {
         .update(refreshTokens)
         .set({ revokedAt: new Date() })
         .where(and(eq(refreshTokens.familyId, row.familyId), isNull(refreshTokens.revokedAt)));
+      await this.revokeAllSessionsForUserTx(tx, row.userId, "logout");
       await this.audit.record(tx, {
         action: "auth.logout",
         objectType: "auth",
@@ -720,6 +741,147 @@ export class AuthService {
         objectId: row.userId,
         after: { scope: "family" },
       });
+    });
+  }
+
+  // ── S2-AUTH-BE-7: session self-service (CHỈ Authenticated + owner-check, KHÔNG permission pair riêng —
+  //    pattern giống /auth/me, CHỐT 2026-07-02) ──────────────────────────────────────────────────────
+
+  /**
+   * Liệt kê phiên ACTIVE (chưa revoke, chưa hết hạn) của CHÍNH user gọi API — Own scope tuyệt đối (userId
+   * lấy từ req.user đã qua JwtAuthGuard, KHÔNG nhận tham số từ client). KHÔNG bao giờ chọn refresh_token_hash/
+   * access_token_jti thô ra DTO (BẤT BIẾN #3) — chỉ trả field forensic an toàn. `currentSessionId` (từ jti
+   * access-token của request hiện tại) đánh dấu `is_current` — KHÔNG suy đoán theo thiết bị/IP.
+   */
+  async listSessions(
+    companyId: string,
+    userId: string,
+    currentSessionId: string | undefined,
+  ): Promise<SessionListItem[]> {
+    const rows = await this.dbsvc.withTenant(companyId, async (tx) =>
+      tx
+        .select({
+          id: userSessions.id,
+          deviceName: userSessions.deviceName,
+          platform: userSessions.platform,
+          ipAddress: userSessions.ipAddress,
+          userAgent: userSessions.userAgent,
+          lastUsedAt: userSessions.lastUsedAt,
+          createdAt: userSessions.createdAt,
+          expiredAt: userSessions.expiredAt,
+        })
+        .from(userSessions)
+        .where(
+          and(
+            eq(userSessions.userId, userId),
+            isNull(userSessions.revokedAt),
+            gt(userSessions.expiredAt, new Date()),
+          ),
+        )
+        .orderBy(desc(userSessions.createdAt)),
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      device_name: r.deviceName,
+      platform: r.platform,
+      ip_address: r.ipAddress,
+      user_agent: r.userAgent,
+      last_used_at: r.lastUsedAt ? r.lastUsedAt.toISOString() : null,
+      created_at: r.createdAt.toISOString(),
+      expired_at: r.expiredAt.toISOString(),
+      is_current: r.id === currentSessionId,
+    }));
+  }
+
+  /**
+   * Thu hồi 1 phiên của CHÍNH user (deny-path: phiên KHÔNG tồn tại/thuộc user khác → 404 — KHÔNG lộ
+   * tồn-tại-hay-không của phiên user khác qua 403 vs 404, mirror UserNotFound style). Owner-check ở
+   * WHERE (userId=… AND id=…) — RLS chỉ ép company_id, KHÔNG ép owner; app PHẢI tự khoanh Own scope.
+   * revoke = UPDATE revoked_at (KHÔNG hard-delete, BẤT BIẾN #2 mirror — session mutable theo thiết kế DB-02).
+   */
+  async revokeSession(companyId: string, userId: string, sessionId: string): Promise<void> {
+    const parsed = uuidSchema.safeParse(sessionId);
+    if (!parsed.success) throw new NotFoundException("Không tìm thấy phiên đăng nhập.");
+
+    await this.dbsvc.withTenant(companyId, async (tx) => {
+      const [row] = await tx
+        .select({
+          id: userSessions.id,
+          revokedAt: userSessions.revokedAt,
+          refreshTokenHash: userSessions.refreshTokenHash,
+        })
+        .from(userSessions)
+        .where(and(eq(userSessions.id, sessionId), eq(userSessions.userId, userId)))
+        .limit(1);
+      if (!row) throw new NotFoundException("Không tìm thấy phiên đăng nhập.");
+      if (row.revokedAt) return; // idempotent — phiên đã thu hồi trước đó.
+
+      await tx
+        .update(userSessions)
+        .set({ revokedAt: new Date(), revokedBy: userId, revokedReason: "self_revoke" })
+        .where(eq(userSessions.id, sessionId));
+      // Fail-closed thật sự: khoá luôn refresh token tương ứng (revoke session KHÔNG chỉ ẩn khỏi list —
+      // request refresh KẾ TIẾP bằng token của phiên này PHẢI 401, mirror logout/reuse-detection).
+      await tx
+        .update(refreshTokens)
+        .set({ revokedAt: new Date() })
+        .where(
+          and(eq(refreshTokens.tokenHash, row.refreshTokenHash), isNull(refreshTokens.revokedAt)),
+        );
+      await this.audit.record(tx, {
+        action: "auth.session_revoked",
+        objectType: "user_session",
+        actorUserId: userId,
+        objectId: sessionId,
+        after: { scope: "single" },
+      });
+    });
+  }
+
+  /**
+   * Thu hồi MỌI phiên khác của CHÍNH user, GIỮ phiên hiện tại (currentSessionId — từ jti access-token của
+   * request đã auth). currentSessionId undefined (token legacy thiếu jti) → thu hồi TẤT CẢ (fail-closed:
+   * KHÔNG có phiên nào để loại trừ an toàn) + audit ghi rõ. Trả revoked_count cho FE hiển thị.
+   */
+  async revokeOtherSessions(
+    companyId: string,
+    userId: string,
+    currentSessionId: string | undefined,
+  ): Promise<number> {
+    return this.dbsvc.withTenant(companyId, async (tx) => {
+      const conds = [eq(userSessions.userId, userId), isNull(userSessions.revokedAt)];
+      if (currentSessionId) conds.push(sql`${userSessions.id} <> ${currentSessionId}`);
+
+      const targets = await tx
+        .select({ id: userSessions.id, refreshTokenHash: userSessions.refreshTokenHash })
+        .from(userSessions)
+        .where(and(...conds));
+      if (targets.length === 0) return 0;
+
+      const targetIds = targets.map((t) => t.id);
+      await tx
+        .update(userSessions)
+        .set({ revokedAt: new Date(), revokedBy: userId, revokedReason: "self_revoke_others" })
+        .where(and(eq(userSessions.userId, userId), inArray(userSessions.id, targetIds)));
+
+      const hashes = targets.map((t) => t.refreshTokenHash);
+      await tx
+        .update(refreshTokens)
+        .set({ revokedAt: new Date() })
+        .where(and(inArray(refreshTokens.tokenHash, hashes), isNull(refreshTokens.revokedAt)));
+
+      await this.audit.record(tx, {
+        action: "auth.session_revoked",
+        objectType: "user_session",
+        actorUserId: userId,
+        objectId: userId,
+        after: {
+          scope: "others",
+          count: targets.length,
+          hadCurrentSession: currentSessionId != null,
+        },
+      });
+      return targets.length;
     });
   }
 
@@ -986,6 +1148,7 @@ export class AuthService {
         .update(refreshTokens)
         .set({ revokedAt: new Date() })
         .where(and(eq(refreshTokens.userId, row.userId), isNull(refreshTokens.revokedAt)));
+      await this.revokeAllSessionsForUserTx(tx, row.userId, "password_reset");
       await this.audit.record(tx, {
         action: "auth.password_reset",
         objectType: "auth",
@@ -1059,6 +1222,12 @@ export class AuthService {
    *
    * FS-1a: `familyId` — rotation truyền family_id của token cũ để token mới KẾ THỪA cùng họ; login KHÔNG
    * truyền ⇒ DB DEFAULT gen_random_uuid() cấp HỌ MỚI (phiên mới độc lập). Reuse/logout thu hồi theo family_id.
+   *
+   * S2-AUTH-BE-7: dual-write `user_sessions` CÙNG tx (BE-1 deferred, hoàn tất ở đây) — mỗi lần cấp token
+   * MỚI (login/2fa/refresh-rotation) = 1 hàng session mới (refresh_token_hash UNIQUE khớp refreshTokens
+   * đang xoay). `accessTokenJti` = id hàng session (gen TRƯỚC insert để nhúng vào access token claim `jti`
+   * — currentSessionId lấy TỪ claim này, KHÔNG suy đoán theo thiết bị/IP, CHỐT 2026-07-02). meta (ip/
+   * userAgent) optional — refresh() default {} nên vẫn ghi hàng session (ip/userAgent null khi thiếu).
    */
   private async issueTokens(
     tx: TenantTx,
@@ -1066,25 +1235,50 @@ export class AuthService {
     userId: string,
     email: string,
     familyId?: string,
+    meta: RequestMeta = {},
   ): Promise<{ tokens: AuthTokens; newTokenId: string }> {
     // AC-0b: operator (platform-admin) ⇒ aud='operator' + TTL ngắn; còn lại ⇒ aud='tenant' + TTL thường.
     const isOperator = await this.isOperatorTx(tx, userId);
     const aud = isOperator ? ("operator" as const) : ("tenant" as const);
-    const accessToken = this.tokens.signAccessToken({ sub: userId, companyId, email, aud });
     const expiresIn = isOperator ? this.tokens.operatorAccessTtlSec : this.tokens.accessTtlSec;
     const plain = this.tokens.generateOpaqueToken();
     const scoped = this.scopeToken(companyId, plain);
+    const tokenHash = this.tokens.hashToken(scoped);
     const expiresAt = new Date(Date.now() + this.tokens.refreshTtlSec * 1000);
+
+    // sessionId sinh TRƯỚC insert (uuid app-side) để dùng làm PK user_sessions VÀ jti access-token trong
+    // CÙNG 1 lần ký (tránh round-trip 2 bước). randomUUID native — KHÔNG phải secret, chỉ định danh.
+    const sessionId = randomUUID();
+    const accessToken = this.tokens.signAccessToken({
+      sub: userId,
+      companyId,
+      email,
+      aud,
+      jti: sessionId,
+    });
+
     const [inserted] = await tx
       .insert(refreshTokens)
       // familyId undefined → bỏ qua khỏi INSERT ⇒ DB DEFAULT (họ mới). Có giá trị → kế thừa (rotation).
       .values({
         userId,
-        tokenHash: this.tokens.hashToken(scoped),
+        tokenHash,
         expiresAt,
         ...(familyId ? { familyId } : {}),
       })
       .returning({ id: refreshTokens.id });
+
+    await tx.insert(userSessions).values({
+      id: sessionId,
+      userId,
+      refreshTokenHash: tokenHash,
+      accessTokenJti: sessionId,
+      ipAddress: meta.ip,
+      userAgent: meta.userAgent,
+      expiredAt: expiresAt,
+      lastUsedAt: new Date(),
+    });
+
     return {
       tokens: {
         accessToken,
@@ -1093,6 +1287,23 @@ export class AuthService {
       },
       newTokenId: inserted.id,
     };
+  }
+
+  /**
+   * S2-AUTH-BE-7: thu hồi TOÀN BỘ hàng `user_sessions` còn sống của 1 user — mirror các nhánh bulk-revoke
+   * `refreshTokens` sẵn có (đổi/reset mật khẩu, reuse-detection, suspended, logout). `user_sessions` KHÔNG
+   * có cột family_id (khác refreshTokens) nên thu hồi theo userId (khớp phạm vi "đăng xuất MỌI phiên" —
+   * rộng hơn 1 family nhưng ĐÚNG Ý các nhánh này, KHÔNG hẹp hơn = fail-closed).
+   */
+  private async revokeAllSessionsForUserTx(
+    tx: TenantTx,
+    userId: string,
+    reason: string,
+  ): Promise<void> {
+    await tx
+      .update(userSessions)
+      .set({ revokedAt: new Date(), revokedReason: reason })
+      .where(and(eq(userSessions.userId, userId), isNull(userSessions.revokedAt)));
   }
 
   /** Gắn companyId làm tiền tố token (không phải secret — có sẵn trong JWT) để mở withTenant khi refresh/reset. */
