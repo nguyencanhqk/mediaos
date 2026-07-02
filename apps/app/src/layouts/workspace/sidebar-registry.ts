@@ -383,6 +383,28 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 42,
     requiredAnyPermissions: [AUDIT_LOG_VIEW_PERMISSION],
   },
+  // S2-FE-FND-5 (lane FE batch C) — Sequence counters + Seed status (ops admin). Gate theo cặp SEED
+  // THẬT mig 0435 (view:foundation-sequence / view:foundation-seed) qua PERMISSION_CODE_TO_PAIR.
+  {
+    sidebarKey: "system.sequences",
+    moduleCode: "FOUNDATION",
+    label: "Bộ đếm mã",
+    path: "/system/sequences",
+    icon: "hash",
+    group: "admin",
+    order: 35,
+    requiredAnyPermissions: ["FOUNDATION.SEQUENCE.VIEW"],
+  },
+  {
+    sidebarKey: "system.seeds",
+    moduleCode: "FOUNDATION",
+    label: "Trạng thái Seed",
+    path: "/system/seeds",
+    icon: "database",
+    group: "admin",
+    order: 36,
+    requiredAnyPermissions: ["FOUNDATION.SEED.VIEW"],
+  },
 ];
 
 // ---------------------------------------------------------------------------

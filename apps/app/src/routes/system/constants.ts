@@ -29,6 +29,14 @@ export const SYSTEM_PERMS = {
     VIEW: "FOUNDATION.SETTING.VIEW",
     UPDATE: "FOUNDATION.SETTING.UPDATE",
   },
+  // S2-FE-FND-5 (lane FE batch C) — sequence counters + seed run status (ops admin).
+  SEQUENCE: {
+    VIEW: "FOUNDATION.SEQUENCE.VIEW",
+    UPDATE: "FOUNDATION.SEQUENCE.UPDATE",
+  },
+  SEED: {
+    VIEW: "FOUNDATION.SEED.VIEW",
+  },
 } as const;
 
 /**
@@ -49,4 +57,10 @@ export const SYSTEM_ENGINE_PAIRS = {
   UPDATE_ROLE: { action: "update", resourceType: "role" },
   READ_PERMISSION: { action: "view", resourceType: "permission" },
   ASSIGN_PERMISSION: { action: "assign", resourceType: "permission" },
+  // S2-FE-FND-5 (lane FE batch C) — nguồn: apps/api/src/foundation/sequences/sequence.controller.ts +
+  // apps/api/src/foundation/seed/seed.controller.ts (mig 0435). view:foundation-seed is_sensitive=true
+  // (System scope) — component dùng useCanExact.
+  READ_SEQUENCE: { action: "view", resourceType: "foundation-sequence" },
+  UPDATE_SEQUENCE: { action: "update", resourceType: "foundation-sequence" },
+  READ_SEED: { action: "view", resourceType: "foundation-seed" },
 } as const;

@@ -383,4 +383,103 @@ export default {
     deferredDescription:
       "Màn hình cấu hình cấp hệ thống đang chờ endpoint backend (SYSTEM_MANAGE). Sẽ được bổ sung trong đợt tiếp theo.",
   },
+
+  // S2-FE-FND-5 (lane FE batch C) — Sequence counters (/system/sequences) + Seed status (/system/seeds).
+  sequences: {
+    title: "Bộ đếm mã (Sequence)",
+    description: "Danh sách bộ đếm sinh mã tự động (nhân sự, hợp đồng…) — xem trước mã kế tiếp",
+    search: "Tìm theo module/khoá…",
+    preview: "Xem mã kế tiếp",
+    previewing: "Đang tính…",
+    edit: "Sửa cấu hình",
+    columns: {
+      moduleCode: "Module",
+      sequenceKey: "Khoá",
+      scopeType: "Phạm vi",
+      lastGeneratedCode: "Mã gần nhất",
+      status: "Trạng thái",
+      resetPolicy: "Chu kỳ reset",
+    },
+    status: {
+      Active: "Đang dùng",
+      Inactive: "Ngừng dùng",
+    },
+    previewResult: 'Mã kế tiếp: "{{code}}"',
+    previewError: "Không thể tính mã kế tiếp. Vui lòng thử lại.",
+    form: {
+      title: "Sửa cấu hình bộ đếm",
+      fields: {
+        prefix: "Tiền tố",
+        suffix: "Hậu tố",
+        datePattern: "Mẫu ngày",
+        paddingLength: "Độ dài đệm số",
+        incrementBy: "Bước tăng",
+        resetPolicy: "Chu kỳ reset",
+        status: "Trạng thái",
+      },
+      cancel: "Huỷ",
+      save: "Lưu",
+      saving: "Đang lưu…",
+      confirm: {
+        title: "Xác nhận đổi cấu hình bộ đếm",
+        description: "Thay đổi cấu hình bộ đếm sẽ ảnh hưởng đến mã sinh ra kế tiếp. Tiếp tục?",
+        confirmLabel: "Lưu cấu hình",
+        cancelLabel: "Xem lại",
+      },
+      errors: {
+        forbidden: "Bạn không có quyền sửa cấu hình bộ đếm.",
+        conflict: "Cấu hình xung đột. Vui lòng tải lại.",
+        validation: "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.",
+        server: "Có lỗi hệ thống. Vui lòng thử lại sau.",
+        generic: "Không thể lưu cấu hình. Vui lòng thử lại.",
+      },
+    },
+    empty: {
+      title: "Không có bộ đếm",
+      description: "Chưa có bộ đếm mã nào được cấu hình.",
+    },
+    error: {
+      title: "Không thể tải danh sách bộ đếm",
+      description: "Có lỗi khi tải danh sách bộ đếm. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem bộ đếm mã.",
+    },
+  },
+
+  seeds: {
+    title: "Trạng thái Seed dữ liệu",
+    description: "Lịch sử chạy seed dữ liệu gốc (chỉ đọc)",
+    search: "Tìm theo khoá/phiên bản seed…",
+    columns: {
+      seedKey: "Khoá seed",
+      seedVersion: "Phiên bản",
+      environment: "Môi trường",
+      status: "Trạng thái",
+      checksum: "Checksum",
+      startedAt: "Bắt đầu",
+      finishedAt: "Kết thúc",
+    },
+    status: {
+      Pending: "Chờ chạy",
+      Running: "Đang chạy",
+      Success: "Thành công",
+      Failed: "Thất bại",
+      Skipped: "Đã bỏ qua",
+      RolledBack: "Đã hoàn tác",
+    },
+    empty: {
+      title: "Không có dữ liệu seed",
+      description: "Chưa có batch seed nào được ghi nhận cho công ty này.",
+    },
+    error: {
+      title: "Không thể tải trạng thái seed",
+      description: "Có lỗi khi tải trạng thái seed. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem trạng thái seed (yêu cầu quyền cấp hệ thống).",
+    },
+  },
 };

@@ -626,6 +626,36 @@ describe("PERMISSION_CODE_TO_PAIR — AUTH role/permission admin pairs (drift-gu
 });
 
 // ---------------------------------------------------------------------------
+// PERMISSION_CODE_TO_PAIR — FOUNDATION sequence/seed ops (drift-guard, S2-FE-FND-5 · lane FE batch C).
+// Cặp nguồn: apps/api/src/foundation/sequences/sequence.controller.ts + seed/seed.controller.ts (mig
+// 0435). view:foundation-seed is_sensitive=true (System scope, KHÔNG kế thừa wildcard bulk-grant).
+// ---------------------------------------------------------------------------
+
+describe("PERMISSION_CODE_TO_PAIR — FOUNDATION sequence/seed pairs (drift-guard, S2-FE-FND-5)", () => {
+  it("FOUNDATION.SEQUENCE.VIEW/UPDATE khớp view:foundation-sequence / update:foundation-sequence", () => {
+    const viewer = createPermissionChecker(makePerms(["view:foundation-sequence"]));
+    expect(viewer.can("FOUNDATION.SEQUENCE.VIEW")).toBe(true);
+    expect(viewer.can("FOUNDATION.SEQUENCE.UPDATE")).toBe(false);
+
+    const updater = createPermissionChecker(makePerms(["update:foundation-sequence"]));
+    expect(updater.can("FOUNDATION.SEQUENCE.UPDATE")).toBe(true);
+  });
+
+  it("FOUNDATION.SEED.VIEW khớp view:foundation-seed (System scope, sensitive)", () => {
+    const c = createPermissionChecker(makePerms(["view:foundation-seed"]));
+    expect(c.can("FOUNDATION.SEED.VIEW")).toBe(true);
+  });
+
+  it("ánh xạ tường minh khớp cặp engine của sequence/seed controller", () => {
+    expect(PERMISSION_CODE_TO_PAIR["FOUNDATION.SEQUENCE.VIEW"]).toBe("view:foundation-sequence");
+    expect(PERMISSION_CODE_TO_PAIR["FOUNDATION.SEQUENCE.UPDATE"]).toBe(
+      "update:foundation-sequence",
+    );
+    expect(PERMISSION_CODE_TO_PAIR["FOUNDATION.SEED.VIEW"]).toBe("view:foundation-seed");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // getVisibleApps
 // ---------------------------------------------------------------------------
 

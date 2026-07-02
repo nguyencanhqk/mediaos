@@ -165,6 +165,9 @@ import { RoleFormPage } from "@/routes/system/roles/RoleFormPage";
 import { RoleDetailPage } from "@/routes/system/roles/RoleDetailPage";
 import { RolePermissionsPage } from "@/routes/system/roles/RolePermissionsPage";
 import { PermissionsPage } from "@/routes/system/PermissionsPage";
+// System / Foundation ops admin — S2-FE-FND-5 (lane FE batch C)
+import { SequencesPage } from "@/routes/system/ops/SequencesPage";
+import { SeedsPage } from "@/routes/system/ops/SeedsPage";
 // Account self-service — S2-FE-AUTH-5 (lane FE batch C)
 import { AccountSessionsPage } from "@/routes/account/AccountSessionsPage";
 
@@ -557,6 +560,15 @@ const systemRolePermissionsRoute = createRoute({
   },
 });
 
+// S2-FE-FND-5 (lane FE batch C) — Sequence counters + Seed status (ops admin, read-mostly).
+const systemSequencesRoute = makeModuleRoute(
+  "/system/sequences",
+  "system.sequences",
+  "FOUNDATION",
+  SequencesPage,
+);
+const systemSeedsRoute = makeModuleRoute("/system/seeds", "system.seeds", "FOUNDATION", SeedsPage);
+
 // S2-FE-AUTH-5 (lane FE batch C) — /account/sessions. Authenticated-only (KHÔNG ModuleWorkspaceLayout/
 // ProtectedRoute meta-gate — session self-service KHÔNG có permission pair, mirror homeRoute wiring).
 const accountSessionsRoute = createRoute({
@@ -660,6 +672,8 @@ const routeTree = rootRoute.addChildren([
   systemRoleDetailRoute,
   systemRoleEditRoute,
   systemRolePermissionsRoute,
+  systemSequencesRoute,
+  systemSeedsRoute,
   accountSessionsRoute,
   systemAuditLogsRoute,
   systemLoginLogsRoute,

@@ -54,6 +54,9 @@ export default {
     // S2-FE-AUTH-4 (lane FE batch C).
     systemPermissions: "Danh mục quyền",
     systemAuditLogs: "Audit log",
+    // S2-FE-FND-5 (lane FE batch C).
+    systemSequences: "Bộ đếm mã",
+    systemSeeds: "Trạng thái Seed",
     accountProfile: "Hồ sơ tài khoản",
     // S2-FE-AUTH-5 (lane FE batch C).
     accountSessions: "Phiên đăng nhập",

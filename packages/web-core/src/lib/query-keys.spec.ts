@@ -42,6 +42,25 @@ describe("foundationKeys", () => {
     // Prefix KHÔNG có slot params → là prefix của mọi resolve(params).
     expect(keys[0]).toEqual(["foundation", "settings", "resolve"]);
   });
+
+  // S2-FE-FND-5 (lane FE batch C) — sequence counters + seed run status.
+  it("sequences.list()/preview(id) ổn định", () => {
+    expect(foundationKeys.sequences.list()).toEqual(["foundation", "sequences", "list"]);
+    expect(foundationKeys.sequences.preview("seq-1")).toEqual([
+      "foundation",
+      "sequences",
+      "preview",
+      "seq-1",
+    ]);
+  });
+
+  it("seeds.list() ổn định", () => {
+    expect(foundationKeys.seeds.list()).toEqual(["foundation", "seeds", "list"]);
+  });
+
+  it("updateSequence invalidation nhắm sequences.list()", () => {
+    expect(foundationInvalidation.updateSequence()).toContainEqual(foundationKeys.sequences.list());
+  });
 });
 
 describe("authKeys", () => {

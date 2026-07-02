@@ -36,6 +36,8 @@ import {
   Lock,
   Circle,
   KeyRound,
+  Hash,
+  Database,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@mediaos/ui";
@@ -72,6 +74,9 @@ const ICON_MAP: Record<string, LucideIcon> = {
   circle: Circle,
   // S2-FE-AUTH-4 (lane FE batch C).
   "key-round": KeyRound,
+  // S2-FE-FND-5 (lane FE batch C).
+  hash: Hash,
+  database: Database,
 };
 
 interface DynamicIconProps {

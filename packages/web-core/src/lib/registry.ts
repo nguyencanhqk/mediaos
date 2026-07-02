@@ -165,6 +165,12 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "AUTH.ROLE.UPDATE": "update:role",
   "AUTH.PERMISSION.VIEW": "view:permission",
   "AUTH.PERMISSION.ASSIGN": "assign:permission",
+  // S2-FE-FND-5 (lane FE batch C) — sequence/seed ops admin (nguồn: apps/api/src/foundation/sequences/
+  // sequence.controller.ts + apps/api/src/foundation/seed/seed.controller.ts, mig 0435). view:foundation-seed
+  // is_sensitive=true (System scope, KHÔNG kế thừa wildcard).
+  "FOUNDATION.SEQUENCE.VIEW": "view:foundation-sequence",
+  "FOUNDATION.SEQUENCE.UPDATE": "update:foundation-sequence",
+  "FOUNDATION.SEED.VIEW": "view:foundation-seed",
 };
 
 export function createPermissionChecker(userPermissions: readonly UserPermission[]) {
@@ -1013,6 +1019,30 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["FOUNDATION.AUDIT_LOG.VIEW"],
     showInSidebar: true,
     order: 73,
+  },
+  // S2-FE-FND-5 (lane FE batch C) — Sequence counters (view/update:foundation-sequence) + Seed status
+  // (view:foundation-seed, is_sensitive=true — System scope).
+  {
+    routeKey: "system.sequences",
+    path: "/system/sequences",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "FOUNDATION",
+    screenCode: "SYSTEM-SCREEN-SEQUENCES",
+    titleKey: "routeTitle.systemSequences",
+    requiredAnyPermissions: ["FOUNDATION.SEQUENCE.VIEW"],
+    showInSidebar: true,
+    order: 76,
+  },
+  {
+    routeKey: "system.seeds",
+    path: "/system/seeds",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "FOUNDATION",
+    screenCode: "SYSTEM-SCREEN-SEEDS",
+    titleKey: "routeTitle.systemSeeds",
+    requiredAnyPermissions: ["FOUNDATION.SEED.VIEW"],
+    showInSidebar: true,
+    order: 77,
   },
 
   // Account

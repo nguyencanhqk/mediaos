@@ -206,6 +206,16 @@ export const foundationKeys = {
     resolve: (params?: Record<string, unknown>) =>
       [...rootKeys.foundation, "settings", "resolve", params] as const,
   },
+  // S2-FE-FND-5 (lane FE batch C) — sequence counters + seed run status (GET /foundation/sequences·/seeds).
+  sequences: {
+    all: [...rootKeys.foundation, "sequences"] as const,
+    list: () => [...rootKeys.foundation, "sequences", "list"] as const,
+    preview: (id: string) => [...rootKeys.foundation, "sequences", "preview", id] as const,
+  },
+  seeds: {
+    all: [...rootKeys.foundation, "seeds"] as const,
+    list: () => [...rootKeys.foundation, "seeds", "list"] as const,
+  },
 } as const;
 
 // ── Mutation → query-key invalidation matrix (FRONTEND-04 §17.3) ──────────────
@@ -241,4 +251,6 @@ const foundationSettingsResolvePrefix = [...rootKeys.foundation, "settings", "re
 export const foundationInvalidation = {
   updateCompany: () => [foundationKeys.company.current()] as const,
   updateSetting: () => [foundationSettingsResolvePrefix] as const,
+  // S2-FE-FND-5 — PATCH /foundation/sequences/:id → làm mới list counter.
+  updateSequence: () => [foundationKeys.sequences.list()] as const,
 };
