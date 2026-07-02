@@ -51,4 +51,51 @@ export default {
     invalidCode: "Mã không đúng hoặc đã hết hạn.",
     unknown: "Đã xảy ra lỗi.",
   },
+  forgotPassword: {
+    heading: "Quên mật khẩu",
+    subtitle:
+      "Nhập email đăng nhập — chúng tôi sẽ gửi hướng dẫn đặt lại mật khẩu nếu tài khoản tồn tại.",
+    submit: "Gửi hướng dẫn",
+    submitting: "Đang gửi…",
+    backToLogin: "Quay lại đăng nhập",
+    // Thông báo ĐỒNG NHẤT dù email tồn tại hay không — chống lộ thông tin tài khoản (email enumeration).
+    genericSuccess:
+      "Nếu email này tồn tại trong hệ thống, chúng tôi đã gửi hướng dẫn đặt lại mật khẩu. Vui lòng kiểm tra hộp thư.",
+  },
+  resetPassword: {
+    heading: "Đặt lại mật khẩu",
+    subtitle: "Nhập mật khẩu mới cho tài khoản của bạn.",
+    submit: "Đặt lại mật khẩu",
+    submitting: "Đang xử lý…",
+    successTitle: "Đặt lại mật khẩu thành công",
+    successDescription: "Mật khẩu đã được cập nhật. Vui lòng đăng nhập lại.",
+    goToLogin: "Đến trang đăng nhập",
+    invalidToken: "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.",
+    missingToken: "Thiếu liên kết đặt lại mật khẩu. Vui lòng dùng lại email hướng dẫn.",
+  },
+  sessionExpired: {
+    heading: "Phiên đăng nhập đã hết hạn",
+    description: "Vì lý do bảo mật, phiên làm việc của bạn đã kết thúc. Vui lòng đăng nhập lại.",
+    cta: "Đăng nhập lại",
+  },
+  changePassword: {
+    heading: "Đổi mật khẩu",
+    subtitle: "Đổi mật khẩu đăng nhập của bạn. Sau khi đổi, mọi phiên đang mở sẽ bị đăng xuất.",
+    fields: {
+      currentPassword: "Mật khẩu hiện tại",
+      newPassword: "Mật khẩu mới",
+      confirmPassword: "Xác nhận mật khẩu mới",
+    },
+    submit: "Đổi mật khẩu",
+    submitting: "Đang xử lý…",
+    successRedirecting: "Đổi mật khẩu thành công. Đang chuyển đến trang đăng nhập…",
+  },
+  validationShared: {
+    tokenRequired: "Liên kết không hợp lệ.",
+    passwordMinLength: "Mật khẩu phải có ít nhất 8 ký tự.",
+    passwordRequired: "Vui lòng nhập mật khẩu.",
+    confirmPasswordRequired: "Vui lòng xác nhận mật khẩu.",
+    passwordMismatch: "Mật khẩu xác nhận không khớp.",
+    samePassword: "Mật khẩu mới phải khác mật khẩu hiện tại.",
+  },
 };

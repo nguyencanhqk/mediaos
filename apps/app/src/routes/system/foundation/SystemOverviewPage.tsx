@@ -11,7 +11,17 @@
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Building2, Settings, Users, Shield, Activity, ArrowRight } from "lucide-react";
+import {
+  Building2,
+  Settings,
+  Users,
+  Shield,
+  Activity,
+  ArrowRight,
+  CalendarDays,
+  Archive,
+  FileSearch,
+} from "lucide-react";
 import { foundationApi, foundationKeys, getHealth, rootKeys, useCan } from "@mediaos/web-core";
 import { PageHeader, EmptyState, Card, CardContent, Badge, Button } from "@mediaos/ui";
 import { SYSTEM_ENGINE_PAIRS } from "../constants";
@@ -97,6 +107,14 @@ function HealthCard({ t }: { t: TF }) {
             <Badge variant={status.variant}>{status.label}</Badge>
           </div>
         </div>
+        <div className="flex justify-end">
+          <Button asChild variant="outline" size="sm">
+            <Link to={FOUNDATION_PATH.HEALTH as "/"}>
+              {t("overview.cards.health.manage")}
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -124,8 +142,30 @@ export function SystemOverviewPage() {
     SYSTEM_ENGINE_PAIRS.READ_ROLE.action,
     SYSTEM_ENGINE_PAIRS.READ_ROLE.resourceType,
   );
+  // S2-FE-FND-4 — cặp seed thật mig 0435 (view:foundation-holiday, is_sensitive=false).
+  const canViewHoliday = useCan(
+    FOUNDATION_ENGINE_PAIRS.VIEW_HOLIDAY.action,
+    FOUNDATION_ENGINE_PAIRS.VIEW_HOLIDAY.resourceType,
+  );
+  // S2-FE-FND-6 — cặp seed thật mig 0435 (S2-FND-BE-3): view:foundation-retention /
+  // view:foundation-file-access-log (cả 2 KHÔNG sensitive → company-admin có sẵn).
+  const canViewRetention = useCan(
+    FOUNDATION_ENGINE_PAIRS.VIEW_RETENTION.action,
+    FOUNDATION_ENGINE_PAIRS.VIEW_RETENTION.resourceType,
+  );
+  const canViewFileAccessLog = useCan(
+    FOUNDATION_ENGINE_PAIRS.VIEW_FILE_ACCESS_LOG.action,
+    FOUNDATION_ENGINE_PAIRS.VIEW_FILE_ACCESS_LOG.resourceType,
+  );
 
-  const hasAnyAccess = canViewCompany || canViewSetting || canViewUser || canViewRole;
+  const hasAnyAccess =
+    canViewCompany ||
+    canViewSetting ||
+    canViewUser ||
+    canViewRole ||
+    canViewHoliday ||
+    canViewRetention ||
+    canViewFileAccessLog;
 
   // Company summary — CHỈ fetch khi có quyền đọc (enabled=canViewCompany).
   const companyQuery = useQuery({
@@ -202,6 +242,36 @@ export function SystemOverviewPage() {
             description={t("overview.cards.roles.description")}
             to="/system/roles"
             actionLabel={t("overview.cards.roles.manage")}
+          />
+        )}
+
+        {canViewHoliday && (
+          <SummaryCard
+            icon={CalendarDays}
+            title={t("overview.cards.holidays.title")}
+            description={t("overview.cards.holidays.description")}
+            to={FOUNDATION_PATH.PUBLIC_HOLIDAYS}
+            actionLabel={t("overview.cards.holidays.manage")}
+          />
+        )}
+
+        {canViewRetention && (
+          <SummaryCard
+            icon={Archive}
+            title={t("overview.cards.retention.title")}
+            description={t("overview.cards.retention.description")}
+            to={FOUNDATION_PATH.RETENTION}
+            actionLabel={t("overview.cards.retention.manage")}
+          />
+        )}
+
+        {canViewFileAccessLog && (
+          <SummaryCard
+            icon={FileSearch}
+            title={t("overview.cards.fileAccessLogs.title")}
+            description={t("overview.cards.fileAccessLogs.description")}
+            to={FOUNDATION_PATH.FILE_ACCESS_LOGS}
+            actionLabel={t("overview.cards.fileAccessLogs.manage")}
           />
         )}
 

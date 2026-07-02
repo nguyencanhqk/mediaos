@@ -11,6 +11,7 @@ import {
   dashboardKeys,
   foundationInvalidation,
   foundationKeys,
+  hrInvalidation,
   hrKeys,
   leaveInvalidation,
   leaveKeys,
@@ -72,6 +73,46 @@ describe("hrKeys", () => {
     const k1 = hrKeys.employees.list({ page: 1 });
     const k2 = hrKeys.employees.list({ page: 2 });
     expect(JSON.stringify(k1)).not.toBe(JSON.stringify(k2));
+  });
+
+  // S2-FE-HR-4 — "mine" (self scope) KHÁC "list" (Company scope, HR) dù cùng resource.
+  it("profileChangeRequests.mine(params) KHÁC .list(params) (scope khác nhau)", () => {
+    const mine = hrKeys.profileChangeRequests.mine({ page: 1 });
+    const list = hrKeys.profileChangeRequests.list({ page: 1 });
+    expect(mine).toContain("mine");
+    expect(list).toContain("list");
+    expect(JSON.stringify(mine)).not.toBe(JSON.stringify(list));
+  });
+
+  it("profileChangeRequests.detail(id) chứa id", () => {
+    expect(hrKeys.profileChangeRequests.detail("pcr-1")).toContain("pcr-1");
+  });
+});
+
+describe("hrInvalidation (profile change request)", () => {
+  it("createChangeRequest → chỉ prefix 'mine' (KHÔNG đụng 'list' của HR)", () => {
+    const keys = hrInvalidation.createChangeRequest();
+    expect(keys).toContainEqual(["hr", "profile-change-requests", "mine"]);
+    expect(keys).not.toContainEqual(["hr", "profile-change-requests", "list"]);
+  });
+
+  it("cancelChangeRequest(id) → prefix 'mine' + detail(id)", () => {
+    const keys = hrInvalidation.cancelChangeRequest("pcr-1");
+    expect(keys).toContainEqual(["hr", "profile-change-requests", "mine"]);
+    expect(keys).toContainEqual(["hr", "profile-change-requests", "detail", "pcr-1"]);
+  });
+
+  it("approveChangeRequest(id) → prefix 'list' (KHÔNG 'mine' — thuộc cache requester)", () => {
+    const keys = hrInvalidation.approveChangeRequest("pcr-2");
+    expect(keys).toContainEqual(["hr", "profile-change-requests", "list"]);
+    expect(keys).toContainEqual(["hr", "profile-change-requests", "detail", "pcr-2"]);
+    expect(keys).not.toContainEqual(["hr", "profile-change-requests", "mine"]);
+  });
+
+  it("rejectChangeRequest(id) → prefix 'list' + detail(id)", () => {
+    const keys = hrInvalidation.rejectChangeRequest("pcr-3");
+    expect(keys).toContainEqual(["hr", "profile-change-requests", "list"]);
+    expect(keys).toContainEqual(["hr", "profile-change-requests", "detail", "pcr-3"]);
   });
 });
 

@@ -119,6 +119,27 @@ import { EmployeeListPage } from "@/routes/hr/employees/EmployeeListPage";
 import { EmployeeDetailPage } from "@/routes/hr/employees/EmployeeDetailPage";
 import { EmployeeFormPage } from "@/routes/hr/employees/EmployeeFormPage";
 import { MyProfilePage } from "@/routes/hr/me/MyProfilePage";
+import { OrgChartPage } from "@/routes/hr/org-chart/OrgChartPage";
+import { HrAuditLogsPage } from "@/routes/hr/audit-logs/HrAuditLogsPage";
+import { HR_ENGINE_PAIRS } from "@/routes/hr/constants";
+import { HR_AUDIT_LOG_VIEW_PERMISSION } from "@/routes/hr/audit-logs/constants";
+import { EmployeeCodeConfigPage } from "@/routes/hr/settings/EmployeeCodeConfigPage";
+import {
+  EMPLOYEE_CODE_CONFIG_PATH,
+  EMPLOYEE_CODE_CONFIG_ROUTE_META,
+} from "@/routes/hr/settings/constants";
+// HR — Profile change request workflow (S2-FE-HR-4)
+import { MyChangeRequestPage } from "@/routes/hr/profile-change-requests/MyChangeRequestPage";
+import { ProfileChangeRequestListPage } from "@/routes/hr/profile-change-requests/ProfileChangeRequestListPage";
+import { ProfileChangeRequestDetailPage } from "@/routes/hr/profile-change-requests/ProfileChangeRequestDetailPage";
+import {
+  PCR_ME_PATH,
+  PCR_LIST_PATH,
+  PCR_ME_ROUTE_META,
+  PCR_LIST_ROUTE_META,
+  PCR_DETAIL_ROUTE_META,
+} from "@/routes/hr/profile-change-requests/constants";
+// HR — Master-data admin screens (S2-FE-HR-5)
 import { DepartmentsPage } from "@/routes/hr/departments/DepartmentsPage";
 import { PositionsPage } from "@/routes/hr/positions/PositionsPage";
 import { JobLevelsPage } from "@/routes/hr/job-levels/JobLevelsPage";
@@ -133,6 +154,12 @@ import { AttendanceRecordDetailPage } from "@/routes/attendance/AttendanceRecord
 import { AttendanceShiftsPage } from "@/routes/attendance/AttendanceShiftsPage";
 import { AttendanceShiftAssignmentsPage } from "@/routes/attendance/AttendanceShiftAssignmentsPage";
 import { AttendanceRulesPage } from "@/routes/attendance/AttendanceRulesPage";
+// Attendance — Đơn điều chỉnh công (S3-FE-ATT-3)
+import { CreateAdjustmentRequestPage } from "@/routes/attendance/adjustment/CreateAdjustmentRequestPage";
+import { MyAdjustmentRequestsPage } from "@/routes/attendance/adjustment/MyAdjustmentRequestsPage";
+import { AdjustmentRequestsPage } from "@/routes/attendance/adjustment/AdjustmentRequestsPage";
+import { AdjustmentRequestDetailPage } from "@/routes/attendance/adjustment/AdjustmentRequestDetailPage";
+import { DirectAdjustPage } from "@/routes/attendance/adjustment/DirectAdjustPage";
 
 // Leave
 import { MyLeaveBalancePage } from "@/routes/leave/MyLeaveBalancePage";
@@ -142,10 +169,15 @@ import { LeaveRequestDetailPage } from "@/routes/leave/LeaveRequestDetailPage";
 import { LeaveApprovalPage } from "@/routes/leave/LeaveApprovalPage";
 import { AllLeaveRequestsPage } from "@/routes/leave/AllLeaveRequestsPage";
 import { EditLeaveDraftPage } from "@/routes/leave/EditLeaveDraftPage";
+import { LeaveCalendarPage } from "@/routes/leave/LeaveCalendarPage";
 
 // System
 import { UsersPage } from "@/routes/system/UsersPage";
 import { RolesPage } from "@/routes/system/RolesPage";
+// System / Users CRUD — S2-FE-AUTH-3
+import { UserFormPage } from "@/routes/system/users/UserFormPage";
+import { UserDetailPage } from "@/routes/system/users/UserDetailPage";
+import { UserRolesPage } from "@/routes/system/users/UserRolesPage";
 import { LoginLogsPage } from "@/routes/system/auth-logs/LoginLogsPage";
 import { SecurityEventsPage } from "@/routes/system/auth-logs/SecurityEventsPage";
 import {
@@ -159,12 +191,113 @@ import { SystemOverviewPage } from "@/routes/system/foundation/SystemOverviewPag
 import { CompanyProfilePage } from "@/routes/system/foundation/CompanyProfilePage";
 import { CompanySettingsPage } from "@/routes/system/foundation/CompanySettingsPage";
 import { SystemSettingsPage } from "@/routes/system/foundation/SystemSettingsPage";
+// System / Foundation — Public Holidays + Health — S2-FE-FND-4
+import { PublicHolidaysPage } from "@/routes/system/foundation/PublicHolidaysPage";
+import { HealthPage } from "@/routes/system/foundation/HealthPage";
+// System / Foundation — Retention Policies + File Access Logs — S2-FE-FND-6
+import { RetentionPoliciesPage } from "@/routes/system/foundation/RetentionPoliciesPage";
+import { FileAccessLogsPage } from "@/routes/system/foundation/FileAccessLogsPage";
 import { FOUNDATION_PATH, FOUNDATION_SCREEN } from "@/routes/system/foundation/constants";
+// System / Foundation — Audit log viewer (S2-FE-FND-2)
+import { AuditLogsPage } from "@/routes/system/foundation/audit-logs/AuditLogsPage";
+import { AuditLogDetailPage } from "@/routes/system/foundation/audit-logs/AuditLogDetailPage";
+// System / Foundation — File metadata viewer (S2-FE-FND-2)
+import { FilesPage } from "@/routes/system/files/FilesPage";
+import { FileDetailPage } from "@/routes/system/files/FileDetailPage";
+import { FILES_PATH } from "@/routes/system/files/constants";
+// System / Foundation — Module catalog admin (S2-FE-FND-3)
+import { ModulesPage } from "@/routes/system/modules/ModulesPage";
+import { ModuleDetailPage } from "@/routes/system/modules/ModuleDetailPage";
+import { MODULES_PATH } from "@/routes/system/modules/constants";
+// Account — self-service (S2-FE-AUTH-2)
+import { ChangePasswordPage } from "@/routes/account/ChangePasswordPage";
 
 const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", EmployeeListPage);
 const hrEmployeesRoute = makeModuleRoute("/hr/employees", "hr.employees", "HR", EmployeeListPage);
 const hrMeRoute = makeModuleRoute("/hr/me", "hr.me", "HR", MyProfilePage);
 
+// HR Org chart (S2-FE-HR-6) — RouteMeta CỤC BỘ (KHÔNG ở ROUTE_REGISTRY web-core, cùng pattern
+// systemLoginLogsRoute). Gate = read:department (cặp seed thật — CÙNG cặp "phòng ban" HR đang dùng,
+// KHÔNG bịa permission "org-chart" chưa seed).
+const hrOrgChartMeta: RouteMeta = {
+  routeKey: "hr.org-chart",
+  path: "/hr/org-chart",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "HR",
+  screenCode: "HR-SCREEN-ORG-CHART",
+  titleKey: "routeTitle.hrOrgChart",
+  requiredAnyPermissions: [
+    `${HR_ENGINE_PAIRS.ORG_CHART_VIEW.action}:${HR_ENGINE_PAIRS.ORG_CHART_VIEW.resourceType}`,
+  ],
+  showInSidebar: true,
+  order: 23,
+};
+const hrOrgChartRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/org-chart",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(hrOrgChartMeta, "HR", <OrgChartPage />),
+});
+
+// HR audit-logs (S2-FE-HR-6) — tái dùng GET /foundation/audit-logs?moduleCode=HR. Gate = view:audit-log
+// (cặp seed thật mig 0340, is_sensitive=true) — literal engine pair, cùng kỹ thuật
+// LOGIN_LOGS_ROUTE_META (constants.ts cục bộ).
+const hrAuditLogsMeta: RouteMeta = {
+  routeKey: "hr.audit-logs",
+  path: "/hr/audit-logs",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "HR",
+  screenCode: "HR-SCREEN-AUDIT-LOGS",
+  titleKey: "routeTitle.hrAuditLogs",
+  requiredAnyPermissions: [HR_AUDIT_LOG_VIEW_PERMISSION],
+  showInSidebar: true,
+  order: 24,
+};
+const hrAuditLogsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/audit-logs",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(hrAuditLogsMeta, "HR", <HrAuditLogsPage />),
+});
+
+// HR employee-code config (S2-FE-HR-8) — /hr/settings/employee-code. Local RouteMeta (KHÔNG ở
+// ROUTE_REGISTRY web-core, cùng pattern hrOrgChartRoute/hrAuditLogsRoute).
+const hrEmployeeCodeConfigRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: EMPLOYEE_CODE_CONFIG_PATH,
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(EMPLOYEE_CODE_CONFIG_ROUTE_META, "HR", <EmployeeCodeConfigPage />),
+});
+
+// Profile change request workflow (S2-FE-HR-4) — RouteMeta CỤC BỘ (literal engine pair, KHÔNG đụng
+// ROUTE_REGISTRY của web-core — cùng kỹ thuật system.login-logs/system.files).
+const hrMeChangeRequestRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: PCR_ME_PATH,
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(PCR_ME_ROUTE_META, "HR", <MyChangeRequestPage />),
+});
+const hrProfileChangeRequestsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: PCR_LIST_PATH,
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(PCR_LIST_ROUTE_META, "HR", <ProfileChangeRequestListPage />),
+});
+const hrProfileChangeRequestDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/profile-change-requests/$id",
+  beforeLoad: authGuard,
+  component: () => {
+    const { id } = hrProfileChangeRequestDetailRoute.useParams();
+    return buildModuleRouteContent(
+      PCR_DETAIL_ROUTE_META,
+      "HR",
+      <ProfileChangeRequestDetailPage requestId={id} />,
+    );
+  },
+});
 // S2-FE-HR-5 — HR master-data admin screens (list + CRUD). Cổng route = cặp ĐỌC (departments/positions)
 // hoặc manage:master-data DUY NHẤT (job-levels/contract-types) qua RouteMeta trong ROUTE_REGISTRY.
 const hrDepartmentsRoute = makeModuleRoute(
@@ -316,6 +449,116 @@ const attRecordDetailRoute = createRoute({
   },
 });
 
+// Đơn điều chỉnh công (S3-FE-ATT-3, ATT-SCREEN-006..010) — local RouteMeta (cùng kỹ thuật
+// attRecordDetailMeta). view-own/view-team/view-company/approve/reject:adjustment + adjust-direct:attendance
+// đều SENSITIVE nhưng KHÔNG allowlisted (permission.service.ts SENSITIVE_CAPABILITY_ALLOWLIST) → dùng
+// reach-permission ALLOWLISTED liên quan (view-own/team/company:attendance) làm gợi ý hiển thị route; cổng
+// thật vẫn ở server (403/404 theo response — xem adjustment/constants.ts).
+const attAdjustmentNewMeta: RouteMeta = {
+  routeKey: "att.adjustment-requests.new",
+  path: "/attendance/adjustment-requests/new",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-006",
+  titleKey: "routeTitle.attAdjustmentNew",
+  requiredAnyPermissions: ["create-own:adjustment"],
+};
+const attAdjustmentNewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/adjustment-requests/new",
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(attAdjustmentNewMeta, "ATT", <CreateAdjustmentRequestPage />),
+});
+
+const attAdjustmentMyMeta: RouteMeta = {
+  routeKey: "att.adjustment-requests.my",
+  path: "/attendance/adjustment-requests/my",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-007",
+  titleKey: "routeTitle.attAdjustmentMy",
+  requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_OWN"],
+  showInSidebar: true,
+  order: 37,
+};
+const attAdjustmentMyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/adjustment-requests/my",
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(attAdjustmentMyMeta, "ATT", <MyAdjustmentRequestsPage />),
+});
+
+const attAdjustmentListMeta: RouteMeta = {
+  routeKey: "att.adjustment-requests",
+  path: "/attendance/adjustment-requests",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-008",
+  titleKey: "routeTitle.attAdjustmentList",
+  requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_TEAM", "ATT.ATTENDANCE.VIEW_COMPANY"],
+  showInSidebar: true,
+  order: 38,
+};
+const attAdjustmentListRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/adjustment-requests",
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(attAdjustmentListMeta, "ATT", <AdjustmentRequestsPage />),
+});
+
+const attAdjustmentDetailMeta: RouteMeta = {
+  routeKey: "att.adjustment-requests.detail",
+  path: "/attendance/adjustment-requests/:requestId",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-009",
+  titleKey: "routeTitle.attAdjustmentDetail",
+  requiredAnyPermissions: [
+    "ATT.ATTENDANCE.VIEW_OWN",
+    "ATT.ATTENDANCE.VIEW_TEAM",
+    "ATT.ATTENDANCE.VIEW_COMPANY",
+  ],
+};
+const attAdjustmentDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/adjustment-requests/$requestId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { requestId } = attAdjustmentDetailRoute.useParams();
+    return buildModuleRouteContent(
+      attAdjustmentDetailMeta,
+      "ATT",
+      <AdjustmentRequestDetailPage requestId={requestId} />,
+    );
+  },
+});
+
+const attRecordAdjustMeta: RouteMeta = {
+  routeKey: "att.records.adjust",
+  path: "/attendance/records/:recordId/adjust",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-010",
+  titleKey: "routeTitle.attRecordAdjust",
+  requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_TEAM", "ATT.ATTENDANCE.VIEW_COMPANY"],
+};
+const attRecordAdjustRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/records/$recordId/adjust",
+  beforeLoad: authGuard,
+  component: () => {
+    const { recordId } = attRecordAdjustRoute.useParams();
+    return buildModuleRouteContent(
+      attRecordAdjustMeta,
+      "ATT",
+      <DirectAdjustPage recordId={recordId} />,
+    );
+  },
+});
+
 // Leave
 const leaveRoute = makeModuleRoute("/leave", "leave.overview", "LEAVE", MyLeaveBalancePage);
 const leaveMyRequestsRoute = makeModuleRoute(
@@ -337,6 +580,14 @@ const leaveAllRequestsRoute = makeModuleRoute(
   "leave.all-requests",
   "LEAVE",
   AllLeaveRequestsPage,
+);
+
+// S3-FE-LEAVE-4 — LEAVE-SCREEN-007/008/009 (lịch nghỉ own/team/company).
+const leaveCalendarRoute = makeModuleRoute(
+  "/leave/calendar",
+  "leave.calendar",
+  "LEAVE",
+  LeaveCalendarPage,
 );
 
 // Leave edit draft — static "$requestId/edit" ranks BELOW the exact "/leave/requests" list route
@@ -460,14 +711,193 @@ const systemSettingsRoute = createRoute({
     buildModuleRouteContent(systemSettingsMeta, "FOUNDATION", <SystemSettingsPage />),
 });
 
+// Public Holidays (list + CRUD) — S2-FE-FND-4. Gate = cặp seed THẬT mig 0435 (view:foundation-holiday).
+const systemPublicHolidaysMeta: RouteMeta = {
+  routeKey: "system.public-holidays",
+  path: FOUNDATION_PATH.PUBLIC_HOLIDAYS,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "FOUNDATION",
+  screenCode: FOUNDATION_SCREEN.PUBLIC_HOLIDAYS,
+  titleKey: "routeTitle.systemPublicHolidays",
+  requiredAnyPermissions: ["view:foundation-holiday"],
+};
+const systemPublicHolidaysRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: FOUNDATION_PATH.PUBLIC_HOLIDAYS,
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(systemPublicHolidaysMeta, "FOUNDATION", <PublicHolidaysPage />),
+});
+
+// Health (read-only) — S2-FE-FND-4. HealthController BE @Public() (KHÔNG @RequirePermission, KHÔNG cặp
+// 'foundation-health' seed) → gate route bằng baseline "khu vực quản trị hệ thống" GIỐNG system.overview
+// (xem constants.ts VIEW_SETTING_BASELINE) thay vì bịa permission code không tồn tại.
+const systemHealthMeta: RouteMeta = {
+  routeKey: "system.health",
+  path: FOUNDATION_PATH.HEALTH,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "FOUNDATION",
+  screenCode: FOUNDATION_SCREEN.HEALTH,
+  titleKey: "routeTitle.systemHealth",
+  requiredAnyPermissions: ["view:foundation-setting", "view:user"],
+};
+const systemHealthRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: FOUNDATION_PATH.HEALTH,
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(systemHealthMeta, "FOUNDATION", <HealthPage />),
+});
+
+// Retention Policies (config, governs purge) — S2-FE-FND-6. Gate = cặp seed THẬT mig 0435
+// (view:foundation-retention — KHÔNG sensitive). Nút Sửa trong page gate riêng bằng
+// manage:foundation-retention (is_sensitive=true, System-scope — KHÔNG tự động cấp company-admin).
+const systemRetentionMeta: RouteMeta = {
+  routeKey: "system.retention",
+  path: FOUNDATION_PATH.RETENTION,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "FOUNDATION",
+  screenCode: FOUNDATION_SCREEN.RETENTION,
+  titleKey: "routeTitle.systemRetention",
+  requiredAnyPermissions: ["view:foundation-retention"],
+};
+const systemRetentionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: FOUNDATION_PATH.RETENTION,
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(systemRetentionMeta, "FOUNDATION", <RetentionPoliciesPage />),
+});
+
+// File Access Logs (viewer, append-only) — S2-FE-FND-6. Gate = cặp seed THẬT mig 0435
+// (view:foundation-file-access-log — KHÔNG sensitive).
+const systemFileAccessLogsMeta: RouteMeta = {
+  routeKey: "system.file-access-logs",
+  path: FOUNDATION_PATH.FILE_ACCESS_LOGS,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "FOUNDATION",
+  screenCode: FOUNDATION_SCREEN.FILE_ACCESS_LOGS,
+  titleKey: "routeTitle.systemFileAccessLogs",
+  requiredAnyPermissions: ["view:foundation-file-access-log"],
+};
+const systemFileAccessLogsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: FOUNDATION_PATH.FILE_ACCESS_LOGS,
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(systemFileAccessLogsMeta, "FOUNDATION", <FileAccessLogsPage />),
+});
+
 const systemUsersRoute = makeModuleRoute("/system/users", "system.users", "FOUNDATION", UsersPage);
 const systemRolesRoute = makeModuleRoute("/system/roles", "system.roles", "FOUNDATION", RolesPage);
+
+// User CRUD — S2-FE-AUTH-3. Reuses "system.users" meta (route-level gate = AUTH.USER.VIEW); finer
+// per-action gate (create/update/lock/unlock/assign-role) applied inside each page via useCan —
+// mirrors hrEmployeeCreateRoute/hrEmployeeDetailRoute/hrEmployeeEditRoute pattern.
+const systemUsersMeta = getMeta("system.users");
+
+// Static "new" segment ranks above the "$userId" param route — never collides with detail.
+const systemUserCreateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/users/new",
+  beforeLoad: authGuard,
+  component: () => {
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      systemUsersMeta,
+      "FOUNDATION",
+      <UserFormPage
+        onSuccess={(id) => void navigate({ to: "/system/users/$userId", params: { userId: id } })}
+        onCancel={() => void navigate({ to: "/system/users" as "/" })}
+      />,
+    );
+  },
+});
+
+// Detail — no sidebar entry; path param resolved via useParams.
+const systemUserDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/users/$userId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { userId } = systemUserDetailRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      systemUsersMeta,
+      "FOUNDATION",
+      <UserDetailPage
+        userId={userId}
+        onBack={() => void navigate({ to: "/system/users" as "/" })}
+        onEdit={() => void navigate({ to: "/system/users/$userId/edit", params: { userId } })}
+        onManageRoles={() =>
+          void navigate({ to: "/system/users/$userId/roles", params: { userId } })
+        }
+      />,
+    );
+  },
+});
+
+// Edit — reuses systemUsersMeta; UserFormPage applies the update:user useCan gate.
+const systemUserEditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/users/$userId/edit",
+  beforeLoad: authGuard,
+  component: () => {
+    const { userId } = systemUserEditRoute.useParams();
+    const navigate = useNavigate();
+    const toDetail = () => void navigate({ to: "/system/users/$userId", params: { userId } });
+    return buildModuleRouteContent(
+      systemUsersMeta,
+      "FOUNDATION",
+      <UserFormPage userId={userId} onSuccess={toDetail} onCancel={toDetail} />,
+    );
+  },
+});
+
+// Assign-roles — reuses systemUsersMeta; UserRolesPage applies the assign-role:user useCan gate.
+const systemUserRolesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/users/$userId/roles",
+  beforeLoad: authGuard,
+  component: () => {
+    const { userId } = systemUserRolesRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      systemUsersMeta,
+      "FOUNDATION",
+      <UserRolesPage
+        userId={userId}
+        onBack={() => void navigate({ to: "/system/users/$userId", params: { userId } })}
+      />,
+    );
+  },
+});
+
+// S2-FE-FND-2 — THAY ModulePlaceholder = AuditLogsPage (route đã có sẵn trong ROUTE_REGISTRY,
+// gate FOUNDATION.AUDIT_LOG.VIEW → view:audit-log, đã sửa drift trong registry.ts).
 const systemAuditLogsRoute = makeModuleRoute(
   "/system/audit-logs",
   "system.audit-logs",
   "FOUNDATION",
-  ModulePlaceholder,
+  AuditLogsPage,
 );
+
+// Audit log detail — local RouteMeta (no sidebar entry; reuses system.audit-logs permission).
+// Pattern mirrors hrEmployeeDetailRoute/attRecordDetailRoute: local meta, buildModuleRouteContent →
+// ProtectedRoute guard tiêu thụ guardResult.
+const systemAuditLogDetailMeta = getMeta("system.audit-logs");
+const systemAuditLogDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/audit-logs/$auditLogId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { auditLogId } = systemAuditLogDetailRoute.useParams();
+    return buildModuleRouteContent(
+      systemAuditLogDetailMeta,
+      "FOUNDATION",
+      <AuditLogDetailPage auditLogId={auditLogId} />,
+    );
+  },
+});
 
 // System / Foundation — viewer nhật ký bảo mật (S2-AUTH-BE-5). RouteMeta CỤC BỘ (KHÔNG ở
 // ROUTE_REGISTRY web-core — lane không sửa web-core); dùng CÙNG buildModuleRouteContent →
@@ -484,6 +914,66 @@ const systemSecurityEventsRoute = createRoute({
   beforeLoad: authGuard,
   component: () =>
     buildModuleRouteContent(SECURITY_EVENTS_ROUTE_META, "FOUNDATION", <SecurityEventsPage />),
+});
+
+// S2-FE-FND-2 — File metadata viewer. Route ADDITIVE trong ROUTE_REGISTRY (system.files, gate
+// FOUNDATION.FILE.VIEW → view:foundation-file).
+const systemFilesRoute = makeModuleRoute(FILES_PATH, "system.files", "FOUNDATION", FilesPage);
+
+// File detail — local RouteMeta (no sidebar entry; reuses system.files permission).
+const systemFileDetailMeta = getMeta("system.files");
+const systemFileDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/files/$fileId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { fileId } = systemFileDetailRoute.useParams();
+    return buildModuleRouteContent(
+      systemFileDetailMeta,
+      "FOUNDATION",
+      <FileDetailPage fileId={fileId} />,
+    );
+  },
+});
+
+// S2-FE-FND-3 — Module catalog admin. Route ADDITIVE trong ROUTE_REGISTRY (system.modules, gate
+// FOUNDATION.MODULE.VIEW → view:foundation-module).
+const systemModulesRoute = makeModuleRoute(
+  MODULES_PATH,
+  "system.modules",
+  "FOUNDATION",
+  ModulesPage,
+);
+
+// Module detail — local RouteMeta (no sidebar entry; reuses system.modules permission).
+const systemModuleDetailMeta = getMeta("system.modules");
+const systemModuleDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/modules/$moduleCode",
+  beforeLoad: authGuard,
+  component: () => {
+    const { moduleCode } = systemModuleDetailRoute.useParams();
+    return buildModuleRouteContent(
+      systemModuleDetailMeta,
+      "FOUNDATION",
+      <ModuleDetailPage moduleCode={moduleCode} />,
+    );
+  },
+});
+
+// Account self-service — /auth/change-password là endpoint JwtAuthGuard-only (KHÔNG PermissionGuard,
+// KHÔNG cặp permission `password:*` trong catalog thật) ⇒ route KHÔNG dùng buildModuleRouteContent/
+// ProtectedRoute (không có moduleCode/permission để gate) — chỉ cần ProtectedShell (đăng nhập là đủ),
+// giống pattern homeRoute/indexRoute.
+const accountChangePasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/account/change-password",
+  beforeLoad: authGuard,
+  component: () => (
+    <ProtectedShell>
+      <ChangePasswordPage />
+    </ProtectedShell>
+  ),
 });
 
 // ---------------------------------------------------------------------------
@@ -519,6 +1009,12 @@ const routeTree = rootRoute.addChildren([
   hrEmployeeDetailRoute,
   hrEmployeeEditRoute,
   hrMeRoute,
+  hrOrgChartRoute,
+  hrAuditLogsRoute,
+  hrEmployeeCodeConfigRoute,
+  hrMeChangeRequestRoute,
+  hrProfileChangeRequestsRoute,
+  hrProfileChangeRequestDetailRoute,
   hrDepartmentsRoute,
   hrPositionsRoute,
   hrJobLevelsRoute,
@@ -531,6 +1027,11 @@ const routeTree = rootRoute.addChildren([
   attShiftAssignmentsRoute,
   attRulesRoute,
   attRecordDetailRoute,
+  attAdjustmentNewRoute,
+  attAdjustmentMyRoute,
+  attAdjustmentListRoute,
+  attAdjustmentDetailRoute,
+  attRecordAdjustRoute,
   leaveRoute,
   leaveMyRequestsRoute,
   leaveCreateRoute,
@@ -538,6 +1039,7 @@ const routeTree = rootRoute.addChildren([
   leaveApprovalsRoute,
   leaveAllRequestsRoute,
   leaveEditRoute,
+  leaveCalendarRoute,
   tasksRoute,
   tasksMyTasksRoute,
   notificationsRoute,
@@ -545,11 +1047,25 @@ const routeTree = rootRoute.addChildren([
   systemCompanyRoute,
   systemCompanySettingsRoute,
   systemSettingsRoute,
+  systemPublicHolidaysRoute,
+  systemHealthRoute,
+  systemRetentionRoute,
+  systemFileAccessLogsRoute,
   systemUsersRoute,
+  systemUserCreateRoute,
+  systemUserDetailRoute,
+  systemUserEditRoute,
+  systemUserRolesRoute,
   systemRolesRoute,
   systemAuditLogsRoute,
+  systemAuditLogDetailRoute,
   systemLoginLogsRoute,
   systemSecurityEventsRoute,
+  systemFilesRoute,
+  systemFileDetailRoute,
+  systemModulesRoute,
+  systemModuleDetailRoute,
+  accountChangePasswordRoute,
   notFoundRoute,
 ]);
 
