@@ -426,6 +426,100 @@ export default {
     },
   },
 
+  // ── Số dư phép nhân viên (LEAVE-SCREEN-012 · S3-FE-LEAVE-5) ───────────────────
+  balancesAdmin: {
+    title: "Số dư phép nhân viên",
+    description: "Xem số dư phép của nhân viên theo năm và loại nghỉ.",
+    filters: {
+      year: "Năm",
+      leaveType: "Loại phép",
+      allTypes: "Tất cả loại",
+      employeeSearch: "Tìm nhân viên",
+      employeeSearchPlaceholder: "Tìm theo tên nhân viên…",
+    },
+    columns: {
+      employee: "Nhân viên",
+      leaveType: "Loại phép",
+      year: "Năm",
+      granted: "Được cấp",
+      used: "Đã dùng",
+      pending: "Chờ duyệt",
+      adjusted: "Điều chỉnh",
+      remaining: "Còn lại",
+      actions: "Hành động",
+    },
+    actions: {
+      viewTransactions: "Xem giao dịch",
+      adjust: "Điều chỉnh",
+    },
+    empty: {
+      title: "Không có số dư phép",
+      description: "Không tìm thấy số dư phép nào phù hợp với bộ lọc hiện tại.",
+    },
+    error: {
+      title: "Không thể tải danh sách",
+      description: "Có lỗi khi tải số dư phép. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem số dư phép nhân viên.",
+    },
+  },
+
+  // ── Lịch sử giao dịch số dư phép (LEAVE-SCREEN-013 · S3-FE-LEAVE-5) ───────────
+  balanceTransactions: {
+    title: "Lịch sử giao dịch số dư phép",
+    description: "Nhật ký thay đổi số dư (append-only) — không thể sửa/xoá.",
+    backToList: "Quay lại danh sách",
+    columns: {
+      type: "Loại giao dịch",
+      date: "Ngày",
+      amount: "Số ngày",
+      before: "Trước",
+      after: "Sau",
+      reason: "Lý do",
+      createdBy: "Nguồn",
+      createdAt: "Thời điểm ghi",
+    },
+    createdByType: {
+      User: "Người dùng",
+      System: "Hệ thống",
+    },
+    empty: {
+      title: "Chưa có giao dịch",
+      description: "Số dư này chưa có giao dịch nào.",
+    },
+    error: {
+      title: "Không thể tải lịch sử giao dịch",
+      description: "Có lỗi khi tải lịch sử giao dịch. Vui lòng thử lại.",
+    },
+    notFound: {
+      title: "Không tìm thấy số dư phép",
+      description: "Số dư phép không tồn tại hoặc bạn không có quyền xem.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem lịch sử giao dịch số dư phép.",
+    },
+  },
+
+  // ── Điều chỉnh số dư phép (LEAVE-SCREEN-013 · S3-FE-LEAVE-5) ─────────────────
+  adjustBalance: {
+    title: "Điều chỉnh số dư phép",
+    description: "Cộng hoặc trừ số ngày phép thủ công — ghi lại qua sổ giao dịch (ledger).",
+    amountLabel: "Số ngày điều chỉnh (âm = trừ, dương = cộng)",
+    amountPlaceholder: "Vd: -1.5 hoặc 2",
+    reasonLabel: "Lý do điều chỉnh",
+    reasonPlaceholder: "Nhập lý do điều chỉnh (bắt buộc)…",
+    submit: "Xác nhận điều chỉnh",
+    submitting: "Đang điều chỉnh…",
+    cancel: "Huỷ",
+    amountRequired: "Vui lòng nhập số ngày điều chỉnh khác 0.",
+    reasonRequired: "Lý do điều chỉnh là bắt buộc.",
+    error: "Điều chỉnh số dư thất bại. Vui lòng thử lại.",
+    forbidden: "Bạn không có quyền điều chỉnh số dư phép.",
+  },
+
   // ── Sửa đơn nghỉ nháp (LEAVE-SCREEN-002E · S3-FE-LEAVE-3) ─────────────────────
   editForm: {
     error: {

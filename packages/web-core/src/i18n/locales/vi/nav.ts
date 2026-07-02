@@ -57,6 +57,11 @@ export default {
     leave: "Nghỉ phép",
     leaveMyRequests: "Đơn nghỉ của tôi",
     leaveApprovals: "Đơn cần duyệt",
+    // S3-FE-LEAVE-5 — admin (LEAVE-SCREEN-010/011/012/013).
+    leaveTypes: "Loại nghỉ phép",
+    leavePolicies: "Chính sách nghỉ phép",
+    leaveBalances: "Số dư phép nhân viên",
+    leaveBalanceTransactions: "Lịch sử giao dịch số dư phép",
     tasks: "Công việc",
     taskMyTasks: "Việc của tôi",
     notifications: "Thông báo",

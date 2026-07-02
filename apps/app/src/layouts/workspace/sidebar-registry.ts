@@ -396,6 +396,40 @@ export const LEAVE_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 15,
     requiredAnyPermissions: ["LEAVE.CALENDAR.VIEW_OWN"],
   },
+  // S3-FE-LEAVE-5 — admin (LEAVE-SCREEN-010/011/012). Gate = CẶP ENGINE THỰC trực tiếp (KHÔNG qua
+  // PERMISSION_CODE_TO_PAIR — cùng kỹ thuật att.shifts/hr.org-chart, tránh drift). view:leave-type
+  // KHÔNG sensitive (mọi role đọc được danh mục); view:leave-policy/view:leave-balance SENSITIVE
+  // (Company-scope, chỉ hr/company-admin có grant thật).
+  {
+    sidebarKey: "leave.types",
+    moduleCode: "LEAVE",
+    label: "Loại nghỉ phép",
+    path: "/leave/types",
+    icon: "list-checks",
+    group: "admin",
+    order: 60,
+    requiredAnyPermissions: ["view:leave-type"],
+  },
+  {
+    sidebarKey: "leave.policies",
+    moduleCode: "LEAVE",
+    label: "Chính sách nghỉ phép",
+    path: "/leave/policies",
+    icon: "shield-check",
+    group: "admin",
+    order: 61,
+    requiredAnyPermissions: ["view:leave-policy"],
+  },
+  {
+    sidebarKey: "leave.balances",
+    moduleCode: "LEAVE",
+    label: "Số dư phép nhân viên",
+    path: "/leave/balances",
+    icon: "wallet",
+    group: "admin",
+    order: 62,
+    requiredAnyPermissions: ["view:leave-balance"],
+  },
 ];
 
 // ---------------------------------------------------------------------------

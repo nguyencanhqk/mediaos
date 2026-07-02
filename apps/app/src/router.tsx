@@ -180,6 +180,12 @@ import { LeaveApprovalPage } from "@/routes/leave/LeaveApprovalPage";
 import { AllLeaveRequestsPage } from "@/routes/leave/AllLeaveRequestsPage";
 import { EditLeaveDraftPage } from "@/routes/leave/EditLeaveDraftPage";
 import { LeaveCalendarPage } from "@/routes/leave/LeaveCalendarPage";
+// S3-FE-LEAVE-5 — admin (LEAVE-SCREEN-010/011/012/013): loại nghỉ / chính sách / số dư phép + ledger.
+import { LeaveTypesPage } from "@/routes/leave/LeaveTypesPage";
+import { LeavePoliciesPage } from "@/routes/leave/LeavePoliciesPage";
+import { LeaveBalancesPage } from "@/routes/leave/LeaveBalancesPage";
+import { LeaveBalanceTransactionsPage } from "@/routes/leave/LeaveBalanceTransactionsPage";
+import { LEAVE_ENGINE_PAIRS, LEAVE_PATHS } from "@/routes/leave/constants";
 
 // System
 import { UsersPage } from "@/routes/system/UsersPage";
@@ -785,6 +791,118 @@ const leaveDetailRoute = createRoute({
   },
 });
 
+// S3-FE-LEAVE-5 — admin: Loại nghỉ phép (LEAVE-SCREEN-010). Gate = view:leave-type (KHÔNG sensitive,
+// mig 0455) — cặp ENGINE THỰC trực tiếp (KHÔNG qua PERMISSION_CODE_TO_PAIR, tránh drift đã gặp
+// S1-FND-MODULE — cùng kỹ thuật att.shifts/hr.org-chart).
+const leaveTypesMeta: RouteMeta = {
+  routeKey: "leave.types",
+  path: LEAVE_PATHS.TYPES,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "LEAVE",
+  screenCode: "LEAVE-SCREEN-010",
+  titleKey: "routeTitle.leaveTypes",
+  requiredAnyPermissions: [
+    `${LEAVE_ENGINE_PAIRS.VIEW_LEAVE_TYPE.action}:${LEAVE_ENGINE_PAIRS.VIEW_LEAVE_TYPE.resourceType}`,
+  ],
+  showInSidebar: true,
+  order: 60,
+};
+const leaveTypesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: LEAVE_PATHS.TYPES,
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(leaveTypesMeta, "LEAVE", <LeaveTypesPage />),
+});
+
+// S3-FE-LEAVE-5 — admin: Chính sách nghỉ phép (LEAVE-SCREEN-011). Gate = view:leave-policy (SENSITIVE,
+// Company-scope hr/company-admin, mig 0455).
+const leavePoliciesMeta: RouteMeta = {
+  routeKey: "leave.policies",
+  path: LEAVE_PATHS.POLICIES,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "LEAVE",
+  screenCode: "LEAVE-SCREEN-011",
+  titleKey: "routeTitle.leavePolicies",
+  requiredAnyPermissions: [
+    `${LEAVE_ENGINE_PAIRS.VIEW_LEAVE_POLICY.action}:${LEAVE_ENGINE_PAIRS.VIEW_LEAVE_POLICY.resourceType}`,
+  ],
+  showInSidebar: true,
+  order: 61,
+};
+const leavePoliciesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: LEAVE_PATHS.POLICIES,
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(leavePoliciesMeta, "LEAVE", <LeavePoliciesPage />),
+});
+
+// S3-FE-LEAVE-5 — admin: Số dư phép nhân viên (LEAVE-SCREEN-012). Gate = view:leave-balance (SENSITIVE,
+// Company-scope hr/company-admin, mig 0455).
+const leaveBalancesMeta: RouteMeta = {
+  routeKey: "leave.balances",
+  path: LEAVE_PATHS.BALANCES,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "LEAVE",
+  screenCode: "LEAVE-SCREEN-012",
+  titleKey: "routeTitle.leaveBalances",
+  requiredAnyPermissions: [
+    `${LEAVE_ENGINE_PAIRS.VIEW_BALANCE.action}:${LEAVE_ENGINE_PAIRS.VIEW_BALANCE.resourceType}`,
+  ],
+  showInSidebar: true,
+  order: 62,
+};
+const leaveBalancesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: LEAVE_PATHS.BALANCES,
+  beforeLoad: authGuard,
+  component: () => {
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      leaveBalancesMeta,
+      "LEAVE",
+      <LeaveBalancesPage
+        onViewTransactions={(balanceId) =>
+          void navigate({
+            to: "/leave/balances/$balanceId/transactions",
+            params: { balanceId },
+          })
+        }
+      />,
+    );
+  },
+});
+
+// Ledger giao dịch số dư (LEAVE-SCREEN-013) — local RouteMeta (no sidebar entry, path param). Gate =
+// view-transaction:leave-balance (SENSITIVE, mirrors leaveBalancesMeta pattern).
+const leaveBalanceTransactionsMeta: RouteMeta = {
+  routeKey: "leave.balances.transactions",
+  path: "/leave/balances/:balanceId/transactions",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "LEAVE",
+  screenCode: "LEAVE-SCREEN-013",
+  titleKey: "routeTitle.leaveBalanceTransactions",
+  requiredAnyPermissions: [
+    `${LEAVE_ENGINE_PAIRS.VIEW_TRANSACTION_BALANCE.action}:${LEAVE_ENGINE_PAIRS.VIEW_TRANSACTION_BALANCE.resourceType}`,
+  ],
+};
+const leaveBalanceTransactionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/leave/balances/$balanceId/transactions",
+  beforeLoad: authGuard,
+  component: () => {
+    const { balanceId } = leaveBalanceTransactionsRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      leaveBalanceTransactionsMeta,
+      "LEAVE",
+      <LeaveBalanceTransactionsPage
+        balanceId={balanceId}
+        onBack={() => void navigate({ to: LEAVE_PATHS.BALANCES as "/" })}
+      />,
+    );
+  },
+});
+
 // Tasks
 const tasksRoute = makeModuleRoute("/tasks", "task.overview", "TASK", ModulePlaceholder);
 const tasksMyTasksRoute = makeModuleRoute(
@@ -1306,6 +1424,10 @@ const routeTree = rootRoute.addChildren([
   leaveAllRequestsRoute,
   leaveEditRoute,
   leaveCalendarRoute,
+  leaveTypesRoute,
+  leavePoliciesRoute,
+  leaveBalancesRoute,
+  leaveBalanceTransactionsRoute,
   tasksRoute,
   tasksMyTasksRoute,
   notificationsRoute,
