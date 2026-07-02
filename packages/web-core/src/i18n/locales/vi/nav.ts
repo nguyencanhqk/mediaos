@@ -35,6 +35,8 @@ export default {
     hrPositions: "Chức vụ",
     hrJobLevels: "Cấp bậc",
     hrContractTypes: "Loại hợp đồng",
+    // S2-FE-HR-7 — Hợp đồng lao động
+    hrContracts: "Hợp đồng lao động",
     attToday: "Chấm công hôm nay",
     attMyRecords: "Bảng công của tôi",
     attTeamRecords: "Bảng công nhóm",
@@ -42,6 +44,11 @@ export default {
     attShifts: "Ca làm việc",
     attShiftAssignments: "Gán ca",
     attRules: "Rule chấm công",
+    // S3-FE-ATT-4 — Remote/onsite-work requests
+    attRemoteWorkRequests: "Đơn làm việc từ xa/công tác",
+    // S3-FE-ATT-6 — Báo cáo + audit log
+    attReports: "Báo cáo tổng hợp công",
+    attAuditLogs: "Audit log chấm công",
     attAdjustmentNew: "Tạo đơn điều chỉnh công",
     attAdjustmentMy: "Đơn điều chỉnh của tôi",
     attAdjustmentList: "Đơn điều chỉnh cần duyệt",
