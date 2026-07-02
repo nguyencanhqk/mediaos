@@ -43,6 +43,7 @@ import { PasswordService } from "./password.service";
 import { ReplayGuardService } from "./replay-guard.service";
 import { ResetPasswordMailService } from "./reset-password-mail.service";
 import { SecurityAlertService } from "./security-alert.service";
+import { SecurityEventWriter } from "./security-event-writer.service";
 import { TokenService } from "./token.service";
 import { TwoFactorService } from "./two-factor.service";
 import { SecretEncryptionService } from "../crypto/secret-encryption.service";
@@ -136,6 +137,9 @@ function deserializeResetEnvelope(raw: unknown): EncryptedColumns {
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  // S2-AUTH-BE-8: writer timeline user_security_events (dual-write cạnh audit). Field + default-construct
+  // trong body (mirror AuditService.masker) để int-spec dựng AuthService bằng tay (không truyền) vẫn ghi event.
+  private readonly securityEvents: SecurityEventWriter;
 
   constructor(
     private readonly dbsvc: DatabaseService,
@@ -157,7 +161,12 @@ export class AuthService {
     // S2-AUTH-BE-4: gửi email "đặt lại mật khẩu" (mock MVP). Optional để các int-spec dựng AuthService bằng
     // tay (KHÔNG truyền) vẫn chạy — vắng ⇒ forgotPassword bỏ qua bước gửi mail (đường outbox durable vẫn còn).
     private readonly resetMail?: ResetPasswordMailService,
-  ) {}
+    // S2-AUTH-BE-8: optional-với-default (mirror AuditService.masker) — DI luôn truyền instance đã đăng ký ở
+    // AuthModule; hand-built int-spec (không truyền) → default-construct (cùng logic mask/severity).
+    securityEvents?: SecurityEventWriter,
+  ) {
+    this.securityEvents = securityEvents ?? new SecurityEventWriter();
+  }
 
   /**
    * CS-9 — chính sách bảo mật per-company chặn cấp token khi sai IP / ngoài giờ. 403 ĐỒNG NHẤT
@@ -542,6 +551,12 @@ export class AuthService {
         actorUserId: user.id,
         objectId: user.id,
       });
+      // S2-AUTH-BE-8: dual-write timeline bảo mật TRONG cùng tx (rollback ⇒ 0 orphan). subject=actor=user.
+      await this.securityEvents.record(tx, {
+        eventType: "PASSWORD_CHANGED",
+        userId: user.id,
+        actorUserId: user.id,
+      });
       return true;
     });
 
@@ -618,6 +633,16 @@ export class AuthService {
           actorUserId: row.userId,
           objectId: row.userId,
           after: { reason: "refresh_token_reuse", familyRevoked: true },
+        });
+        // S2-AUTH-BE-8: REFRESH_TOKEN_REUSE_DETECTED = 'critical' (map). actor=null (hệ thống phát hiện replay —
+        // KHÔNG quy cho chủ tài khoản). Ghi TRONG tx đã revoke family (commit, caller ném 401 ngoài tx).
+        await this.securityEvents.record(tx, {
+          eventType: "REFRESH_TOKEN_REUSE_DETECTED",
+          userId: row.userId,
+          actorUserId: null,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+          payload: { reason: "refresh_token_reuse", familyRevoked: true },
         });
         return { kind: "reuse" as const };
       }
@@ -741,6 +766,13 @@ export class AuthService {
         objectId: row.userId,
         after: { scope: "family" },
       });
+      // S2-AUTH-BE-8: logout = thu hồi phiên (family) → SESSION_REVOKED (dual-write cùng tx).
+      await this.securityEvents.record(tx, {
+        eventType: "SESSION_REVOKED",
+        userId: row.userId,
+        actorUserId: row.userId,
+        payload: { scope: "family" },
+      });
     });
   }
 
@@ -835,6 +867,13 @@ export class AuthService {
         objectId: sessionId,
         after: { scope: "single" },
       });
+      // S2-AUTH-BE-8: self-revoke 1 phiên → SESSION_REVOKED (dual-write cùng tx). subject=actor=user (Own).
+      await this.securityEvents.record(tx, {
+        eventType: "SESSION_REVOKED",
+        userId,
+        actorUserId: userId,
+        payload: { scope: "single", sessionId },
+      });
     });
   }
 
@@ -876,6 +915,17 @@ export class AuthService {
         actorUserId: userId,
         objectId: userId,
         after: {
+          scope: "others",
+          count: targets.length,
+          hadCurrentSession: currentSessionId != null,
+        },
+      });
+      // S2-AUTH-BE-8: self-revoke phiên khác → SESSION_REVOKED (dual-write cùng tx). count non-sensitive.
+      await this.securityEvents.record(tx, {
+        eventType: "SESSION_REVOKED",
+        userId,
+        actorUserId: userId,
+        payload: {
           scope: "others",
           count: targets.length,
           hadCurrentSession: currentSessionId != null,
@@ -1075,6 +1125,14 @@ export class AuthService {
           ip: meta.ip,
           userAgent: meta.userAgent,
         });
+        // S2-AUTH-BE-8: PASSWORD_RESET_REQUESTED (dual-write cùng tx). KHÔNG payload token/envelope (BẤT BIẾN #3).
+        await this.securityEvents.record(tx, {
+          eventType: "PASSWORD_RESET_REQUESTED",
+          userId: user.id,
+          actorUserId: user.id,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        });
       });
     } catch (err) {
       // Uniform-void (không lộ email tồn tại): mọi lỗi xử lý (vd KMS/encrypt down) ⇒ withTenant tx đã rollback
@@ -1154,6 +1212,18 @@ export class AuthService {
         objectType: "auth",
         actorUserId: row.userId,
         objectId: row.userId,
+      });
+      // S2-AUTH-BE-8: reset hoàn tất = đổi mật khẩu + thu hồi MỌI phiên → 2 event (dual-write cùng tx).
+      await this.securityEvents.record(tx, {
+        eventType: "PASSWORD_RESET_COMPLETED",
+        userId: row.userId,
+        actorUserId: row.userId,
+      });
+      await this.securityEvents.record(tx, {
+        eventType: "ALL_SESSIONS_REVOKED",
+        userId: row.userId,
+        actorUserId: row.userId,
+        payload: { reason: "password_reset" },
       });
       return true;
     });

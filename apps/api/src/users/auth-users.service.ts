@@ -18,6 +18,7 @@ import { users, type User } from "../db/schema";
 import { AuditService } from "../events/audit.service";
 import { AuthService } from "../auth/auth.service";
 import { PasswordService } from "../auth/password.service";
+import { SecurityEventWriter } from "../auth/security-event-writer.service";
 import { PermissionService } from "../permission/permission.service";
 import { AuthUsersRepository, authUserSnapshot } from "./auth-users.repository";
 
@@ -72,6 +73,12 @@ export class AuthUsersService {
     // PasswordService (AuthModule forwardRef + export) — KHÔNG cần forwardRef param (AuthModule KHÔNG
     // import UsersModule ⇒ không có vòng thật).
     private readonly auth: AuthService,
+    // S2-AUTH-BE-8: writer timeline user_security_events (dual-write cạnh audit). SecurityEventWriter
+    // stateless, chỉ phụ thuộc AuditMaskerService (@Global) → đăng ký LÀM PROVIDER ở UsersModule (tránh
+    // import-cycle với AuthModule đã forwardRef). Optional theo convention `resetMail?` của codebase: Nest
+    // LUÔN inject (provider đã đăng ký) ⇒ production luôn emit; chỉ vắng khi unit-spec dựng service bằng
+    // tay (mock `tx` không có `.insert`) → guard bỏ qua để KHÔNG vỡ test — KHÔNG phải nuốt lỗi.
+    private readonly securityEvents?: SecurityEventWriter,
   ) {}
 
   /**
@@ -194,6 +201,15 @@ export class AuthUsersService {
         before: authUserSnapshot(before),
         after: { ...authUserSnapshot(updated), revokedSessionCount },
       });
+      // S2-AUTH-BE-8: dual-write timeline bảo mật TRONG cùng tx (rollback ⇒ 0 orphan). subject=target,
+      // actor=admin. payload CHỈ reason-code (KHÔNG PII của subject — email/fullName/hash không đưa vào);
+      // masker vẫn che phòng thủ theo tên khóa nhạy cảm.
+      await this.securityEvents?.record(tx, {
+        eventType: "USER_LOCKED",
+        userId: id,
+        actorUserId: actor.id,
+        payload: { reason: reason ?? null },
+      });
       return toDto(updated);
     });
   }
@@ -217,6 +233,13 @@ export class AuthUsersService {
         objectId: id,
         before: authUserSnapshot(before),
         after: authUserSnapshot(updated),
+      });
+      // S2-AUTH-BE-8: dual-write timeline bảo mật TRONG cùng tx (rollback ⇒ 0 orphan). subject=target,
+      // actor=admin. Không có reason cho unlock → payload rỗng (writer default {}), KHÔNG PII.
+      await this.securityEvents?.record(tx, {
+        eventType: "USER_UNLOCKED",
+        userId: id,
+        actorUserId: actor.id,
       });
       return toDto(updated);
     });

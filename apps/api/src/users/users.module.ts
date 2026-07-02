@@ -1,7 +1,9 @@
-import { Module, forwardRef } from "@nestjs/common";
+import { Module, OnModuleInit, forwardRef } from "@nestjs/common";
+import { ModuleRef } from "@nestjs/core";
 import { DatabaseModule } from "../db/db.module";
 import { PermissionModule } from "../permission/permission.module";
 import { AuthModule } from "../auth/auth.module";
+import { SecurityEventWriter } from "../auth/security-event-writer.service";
 import { AdminUsersController } from "./admin-users.controller";
 import { AdminUsersRepository } from "./admin-users.repository";
 import { AdminUsersService } from "./admin-users.service";
@@ -18,6 +20,9 @@ import { UsersService } from "./users.service";
  *  - DatabaseModule cho withTenant. PermissionModule → PermissionGuard + PermissionService (exported).
  *  - AuthModule (forwardRef) → PasswordService cho create (hash mật khẩu, BẤT BIẾN #3). forwardRef vì
  *    AuthModule import PermissionModule (vòng tham chiếu gián tiếp khi UsersModule cũng kéo cả hai).
+ *  - SecurityEventWriter (S2-AUTH-BE-8): đăng ký LÀM PROVIDER cục bộ (KHÔNG lấy từ AuthModule export) —
+ *    writer stateless, chỉ phụ thuộc AuditMaskerService (@Global từ EventsModule) → tránh import-cycle với
+ *    AuthModule (đã forwardRef). AuthUsersService dual-write USER_LOCKED/USER_UNLOCKED qua writer này.
  */
 @Module({
   imports: [DatabaseModule, PermissionModule, forwardRef(() => AuthModule)],
@@ -28,6 +33,29 @@ import { UsersService } from "./users.service";
     AdminUsersRepository,
     AuthUsersService,
     AuthUsersRepository,
+    SecurityEventWriter,
   ],
 })
-export class UsersModule {}
+export class UsersModule implements OnModuleInit {
+  constructor(private readonly moduleRef: ModuleRef) {}
+
+  /**
+   * Boot-time fail-fast assertion (S2-AUTH-BE-8-FIX-2 — chống dual-write timeline degrade âm thầm).
+   * `AuthUsersService` dual-write `user_security_events` (USER_LOCKED/USER_UNLOCKED) qua `securityEvents?.record`
+   * — param optional (`?.`) để KHÔNG vỡ hand-built unit-spec (mock `tx` không có `.insert`). Nhược điểm: nếu
+   * tương lai ai đó GỠ `SecurityEventWriter` khỏi providers, DI inject `undefined` ⇒ nhánh ghi timeline bị
+   * NUỐT LẶNG (audit_logs vẫn ghi ⇒ lỗi ẩn, viewer AUTH-API-402 mất event). Khẳng định provider resolve được
+   * NGAY lúc boot ⇒ app crash rõ ràng thay vì mất event runtime. KHÔNG đổi hành vi emit-site (vẫn `?.`).
+   */
+  onModuleInit(): void {
+    try {
+      this.moduleRef.get(SecurityEventWriter, { strict: true });
+    } catch (err) {
+      throw new Error(
+        "UsersModule: SecurityEventWriter provider không resolve được lúc boot — dual-write " +
+          "user_security_events (USER_LOCKED/USER_UNLOCKED) sẽ degrade âm thầm. Đăng ký lại provider trong " +
+          `UsersModule.providers. (cause: ${err instanceof Error ? err.message : String(err)})`,
+      );
+    }
+  }
+}
