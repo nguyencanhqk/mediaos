@@ -144,6 +144,8 @@ User nhận quyền qua bảng `user_roles`. Ví dụ một user có thể vừa
 
 ### 4.6 Permission là đơn vị quyền nhỏ nhất
 
+> **CHỐT 2026-07-02: code thắng** — permission KHÔNG lưu chuỗi `MODULE.RESOURCE.ACTION` làm khóa; engine khớp/deny theo CẶP `(action, resource_type)` với `uniqueIndex('permissions_action_resource_uq', [action, resource_type])` (apps/api/src/db/schema/permissions.ts:39-47). Chuỗi `MODULE.RESOURCE.ACTION` chỉ còn là quy ước ĐẶT TÊN hiển thị (CLAUDE.md §5). Lý do: seed catalog + khớp quyền theo cặp engine, đồng bộ backend↔DB không lệ thuộc chuỗi.
+
 Permission dùng format:
 
 ```text
@@ -163,6 +165,13 @@ NOTI.NOTIFICATION.READ
 ```
 
 ### 4.7 Data scope nằm ở `role_permissions`
+
+> **CHỐT 2026-07-02: code thắng** — `data_scope` canonical = `Own/Team/Department/Company/System` (5 bậc). `ROLE_DATA_SCOPES` (apps/api/src/db/schema/permissions.ts:153) khớp contracts `DATA_SCOPES` (packages/contracts/src/auth.ts:95), CHECK ở mig 0441. Giá trị `Project` ở bảng dưới ĐÃ BỎ CÓ CHỦ Ý trong code. Lý do: TASK định phạm vi dự án qua project-membership, không nhồi thành một bậc trong thang data_scope tuyến-tính.
+>
+> **OWNER-DECISION (data_scope 'Project') — ĐÃ CHỐT 2026-07-02 (Cian, Product Owner):**
+> - **GIỮ 5 bậc** `Own/Team/Department/Company/System`. TASK định phạm vi dự án qua **project-membership** (bảng `project_members`, check ở service layer của TASK) — KHÔNG thêm bậc `data_scope = 'Project'`.
+> - Lý do: Project là quan hệ THÀNH VIÊN (một dự án có thể xuyên phòng ban), không xếp được vào trục phân cấp tuyến tính System > Company > Department > Team > Own của `resolveStrongestScope`; thêm bậc engine-level cho giá trị chưa module nào dùng là speculative (YAGNI).
+> - Nếu Sprint TASK phát hiện thật sự cần scope engine-level: thêm lại `'Project'` vào `ROLE_DATA_SCOPES` + CHECK (migration mới) + contracts `DATA_SCOPES` + `DataScopeResolver` — additive, không phá gì; phải kèm thiết kế semantics riêng (membership-based, KHÔNG so sánh "mạnh nhất" với các bậc org).
 
 Data scope quyết định phạm vi dữ liệu mà permission được áp dụng:
 
@@ -374,6 +383,8 @@ WHERE deleted_at IS NULL;
 
 ### 7.2 Bảng `roles`
 
+> **CHỐT 2026-07-02: code thắng** — bảng `roles` KHÔNG có cột `role_code` (cũng không `role_type`/`status`/`is_default`/`metadata`); định danh role = cột `name` (name ĐÓNG VAI code, ví dụ `company-admin`, `super-admin`) + cờ `is_system` + `requires_two_factor` + soft-delete `deleted_at`, UNIQUE partial trên `name` khi `deleted_at IS NULL` (apps/api/src/db/schema/permissions.ts:11-30, mig 0005). Các cột `role_code`/`role_type` ở bảng "Role mặc định MVP" bên dưới không tồn tại. Lý do: đơn-định-danh (`name`) giảm drift seed↔code.
+
 #### Mục đích
 
 Lưu vai trò của hệ thống hoặc của từng công ty.
@@ -435,6 +446,8 @@ WHERE deleted_at IS NULL;
 ---
 
 ### 7.3 Bảng `permissions`
+
+> **CHỐT 2026-07-02: code thắng** — `permissions` chỉ có `id` + `action` + `resource_type` + `is_sensitive`; KHÔNG có `permission_code`/`module_code`/`resource`/`is_active`/`sort_order`. UNIQUE = cặp `uniqueIndex('permissions_action_resource_uq', [action, resource_type])` (apps/api/src/db/schema/permissions.ts:39-47), KHÔNG UNIQUE trên `permission_code`. Catalog global (không `company_id`, không RLS); app role chỉ SELECT. Lý do: cặp `(action, resource_type)` là khóa nghiệp vụ engine dùng để khớp quyền.
 
 #### Mục đích
 
@@ -529,6 +542,8 @@ ON user_roles (company_id, role_id);
 ---
 
 ### 7.5 Bảng `role_permissions`
+
+> **CHỐT 2026-07-02: code thắng** — `role_permissions` = `(role_id, permission_id, effect, data_scope)`. THÊM cột `effect` IN ('ALLOW','DENY') (`PERMISSION_EFFECTS`) — ALLOW+DENY cùng cặp co-exist, deny-overrides ở app layer; `data_scope` NOT NULL DEFAULT 'Company' PER-grant (`ROLE_DATA_SCOPES` = Own/Team/Department/Company/System, không Project). UNIQUE = `(role_id, permission_id, effect)` (KHÔNG gồm data_scope); KHÔNG có `is_active`/`conditions`/soft-delete → đổi effect/scope = DELETE+INSERT (không có grant UPDATE) (apps/api/src/db/schema/permissions.ts:62-76, mig 0005/0441). Lý do: grant append-only + deny-override cần `effect` tách bạch.
 
 #### Mục đích
 
@@ -640,6 +655,8 @@ ON user_sessions (company_id, created_at DESC);
 ---
 
 ### 7.7 Bảng `password_reset_tokens`
+
+> **CHỐT 2026-07-02: code thắng** — `password_reset_tokens` KHÔNG có cột `purpose` (cũng không `sent_to_email`/`revoked_at`/`request_ip`): chỉ `id`/`company_id`/`user_id`/`token_hash`/`expires_at`/`used_at`/`created_at`, single-use + hash-at-rest (apps/api/src/db/schema/auth.ts:54-75, mig 0004). Luồng mời/kích-hoạt tài khoản KHÔNG dùng reset-token đa-purpose mà tách sang bảng RIÊNG `user_invites` (per-tenant `company_id` DEFAULT current_setting + FORCE-RLS; status pending→accepted→approved/rejected; mig 0410; apps/api/src/db/schema/user-invites.ts). Lý do: vòng đời invite (email/full_name/password đặt-ở-accept) khác reset → tách bảng để RLS + audit rạch ròi.
 
 #### Mục đích
 
@@ -817,6 +834,8 @@ WHERE deleted_at IS NULL;
 ---
 
 ### 7.11 Bảng `user_mfa_methods` - phase sau
+
+> **CHỐT 2026-07-02: code thắng** — 2FA KHÔNG phải "phase sau" và KHÔNG dùng bảng gộp `user_mfa_methods`; đã LIVE (mig 0120) bằng HAI bảng: `user_totp` (1 dòng/user, secret TOTP RFC-6238 **envelope-encrypted** 7 cột — BẤT BIẾN #3, KHÔNG plaintext; `enabled_at` NULL = đã enroll nhưng CHƯA xác nhận) + `user_recovery_codes` (mã 1-lần, chỉ lưu HASH SHA-256, `used_at` khi tiêu thụ). Cả hai FORCE-RLS theo `company_id` (apps/api/src/db/schema/two-factor.ts; export ở schema/index.ts:47). MVP chỉ TOTP → không cần cột `method_type` đa-method. Lý do: tách secret-envelope khỏi recovery-hash, giữ BẤT BIẾN #3.
 
 #### Mục đích
 
