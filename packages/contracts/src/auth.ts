@@ -188,6 +188,59 @@ export const SECURITY_EVENT_SEVERITIES = ["info", "low", "medium", "high", "crit
 export type SecurityEventSeverity = (typeof SECURITY_EVENT_SEVERITIES)[number];
 
 /**
+ * SECURITY_EVENT_TYPES — union `event_type` (SPEC-02 §22.2) = danh mục CANONICAL mà
+ * SecurityEventWriter được phép ghi vào `user_security_events.event_type` (cột text tự do ở DB;
+ * writer + validation input CHỈ chấp nhận 1 trong các mã này). Nguồn sự thật cho lane b/c/d
+ * (auth writer · users-lock · perm-role) + viewer filter.
+ *
+ * APPEND-ONLY (BẤT BIẾN #2): CHỈ được THÊM mã mới ở cuối — KHÔNG xoá/đổi tên. Giá trị đã ghi vào
+ * bảng append-only là bất biến forensic; đổi tên mã sẽ mồ côi lịch sử event cũ.
+ */
+export const SECURITY_EVENT_TYPES = [
+  "PASSWORD_CHANGED",
+  "PASSWORD_RESET_REQUESTED",
+  "PASSWORD_RESET_COMPLETED",
+  "REFRESH_TOKEN_REUSE_DETECTED",
+  "SESSION_REVOKED",
+  "ALL_SESSIONS_REVOKED",
+  "USER_LOCKED",
+  "USER_UNLOCKED",
+  "ROLE_ASSIGNED",
+  "ROLE_REMOVED",
+  "TOTP_ENABLED",
+  "TOTP_DISABLED",
+] as const;
+export type SecurityEventType = (typeof SECURITY_EVENT_TYPES)[number];
+
+/**
+ * SECURITY_EVENT_SEVERITY — map `event_type` → `severity` (∈ SECURITY_EVENT_SEVERITIES).
+ * SecurityEventWriter LẤY severity từ map này (KHÔNG hard-code rải rác ở emit-site) → mọi giá trị
+ * nằm trong allowlist ⇒ KHÔNG vỡ CHECK `user_security_events_severity_check` (mig 0443).
+ *
+ * Quy ước rủi ro:
+ *   - REFRESH_TOKEN_REUSE_DETECTED = "critical" — replay refresh-token = dấu hiệu tấn công/đánh cắp phiên.
+ *   - USER_LOCKED = "high" — khoá tài khoản (sự cố bảo mật / hành động can thiệp).
+ *   - còn lại low/medium tuỳ mức thay đổi credential/quyền (không dùng "info" ở đợt này).
+ *
+ * `Record<SecurityEventType, …>` ép TypeScript kiểm exhaustiveness: thêm mã mới ở SECURITY_EVENT_TYPES
+ * mà quên gán severity ⇒ typecheck ĐỎ (fail-closed, không để severity mặc định lọt).
+ */
+export const SECURITY_EVENT_SEVERITY: Record<SecurityEventType, SecurityEventSeverity> = {
+  PASSWORD_CHANGED: "medium",
+  PASSWORD_RESET_REQUESTED: "low",
+  PASSWORD_RESET_COMPLETED: "medium",
+  REFRESH_TOKEN_REUSE_DETECTED: "critical",
+  SESSION_REVOKED: "low",
+  ALL_SESSIONS_REVOKED: "medium",
+  USER_LOCKED: "high",
+  USER_UNLOCKED: "medium",
+  ROLE_ASSIGNED: "medium",
+  ROLE_REMOVED: "medium",
+  TOTP_ENABLED: "low",
+  TOTP_DISABLED: "medium",
+};
+
+/**
  * Cột được phép ORDER BY (allowlist — repo map sang ORDER BY cố định; chặn SQL-injection
  * qua tham số sort). Mặc định created_at DESC (forensic mới nhất trước).
  */
