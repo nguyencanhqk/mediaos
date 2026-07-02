@@ -31,6 +31,14 @@ const SCOPE_STRENGTH: Record<DataScope, number> = {
  * mig 0454: view-own/view-team/view-company·attendance; leave-permissions.const mig 0455: view·leave). KHÔNG
  * thêm view-own:leave / approve:leave (đã non-sensitive ⇒ lộ qua getCapabilities, không thuộc allowlist).
  * Enforcement KHÔNG đổi — chỉ mở cờ hiển thị (UI-hint).
+ *
+ * S2-AUTH-CAP-1 — APPEND 3 cặp NHẠY CẢM để FE dựng CỜ HIỂN THỊ: nút export nghỉ phép + viewer audit-log
+ * LEAVE/ATT. Cặp seed THẬT is_sensitive=true, grant Company CHỈ hr(0011)+company-admin(0001):
+ *   export:leave              — leave-permissions.const:60 / mig 0455
+ *   view:leave-audit-log      — leave-permissions.const:85 / mig 0455
+ *   view:attendance-audit-log — attendance-permissions.const:84 / mig 0454
+ * employee(0008)/manager(0010) KHÔNG có grant ⇒ least-privilege; wildcard *:* KHÔNG thuộc allowlist ⇒ KHÔNG
+ * kế thừa. Enforcement (can()/PermissionGuard per-resource) KHÔNG đổi — chỉ mở cờ hiển thị (UI-hint).
  */
 const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   "view:audit-log",
@@ -39,6 +47,10 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   "view-team:attendance",
   "view-company:attendance",
   "view:leave",
+  // S2-AUTH-CAP-1 — APPEND-only (giữ 5 cặp trên nguyên vẹn):
+  "export:leave",
+  "view:leave-audit-log",
+  "view:attendance-audit-log",
 ]);
 
 @Injectable()
