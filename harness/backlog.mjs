@@ -1545,7 +1545,7 @@ export const backlog = [
       "POST /auth/roles tạo role (company-scope) + PATCH /auth/roles/:id sửa name/description; role system-defined → KHÔNG cho sửa/xoá; permission guard AUTH.ROLE.CREATE/UPDATE",
       "assign/revoke permission cho role (ghi role_permissions add/remove) qua AUTH.PERMISSION.ASSIGN; ghi audit RoleUpdated/PermissionAssigned trong tx withTenant; permission sensitive KHÔNG auto-grant qua wildcard",
       "SCOPE CEILING (crown — chống leo thang, plan-review 2026-07-01): data_scope gán cho role BẮT BUỘC ≤ Company (canonical Own<Team<Department<Company<System; mig 0441 CỐ Ý DEFAULT 'Company' KHÔNG 'System' để không nới scope). Service REJECT 400 khi dataScope='System' (tenant-admin KHÔNG được gán System = mở lại đúng cái 0441 tránh); lý tưởng CLAMP dataScope ≤ scope actor THỰC giữ (fail-closed, mirror AC-5 userGrantsPermissionIds). RED test: 'assign dataScope=System → 400, 0 role_permissions, 0 audit'",
-      "ANTI-ESCALATION (crown): tập (action,resourceType) gán được ≤ grant THỰC của actor (userGrantsPermissionIds, fail-closed) HOẶC pin (assign,permission) CHỈ company-admin — chốt 1 trong 2 + ghi chú. Cặp KHÔNG có trong catalog (findPermissionId=undefined) → 400 (KHÔNG 500/FK error). RED test: 'assign perm actor KHÔNG giữ → deny' + 'unknown pair → 400, 0 row, 0 audit'",
+      "ANTI-ESCALATION (crown, CHỐT 2026-07-02): pin (assign,permission) CHỈ company-admin (KHÔNG ép ≤ grant thực actor — N=1 chưa có non-admin giữ assign:permission, để dành phòng xa cho lúc thực sự cấp per-user). Cặp KHÔNG có trong catalog (findPermissionId=undefined) → 400 (KHÔNG 500/FK error). RED test: 'unknown pair → 400, 0 row, 0 audit'",
       "AUDIT truy vết được: PermissionAssigned/Revoked objectType='role_permission' NHƯNG objectId=role.id (role_permissions không có uuid PK — key = role_id/permission_id/effect) + before/after={action,resourceType,effect,dataScope} đã mask; KHÔNG objectId NULL. Migration (audit object_type CHECK UNION-ADD 'role_permission' + sync AUDIT_OBJECT_TYPES cùng commit) đánh số SAU head ĐÃ MERGE (0456 đã thuộc PR #60 chưa merge → chờ #60 merge rồi số 0457+; verify meta/_journal.json idx+when đơn điệu trên LANE_DB cô lập)",
       "deny-path RED viết-TRƯỚC: thiếu quyền → 403 + 0 audit; 2-tenant KHÔNG sửa role công ty khác (withTenant+RLS); FULL gate (security-reviewer) + người chốt",
     ],
@@ -1586,7 +1586,12 @@ export const backlog = [
       "Session management API (P1): GET /auth/sessions (phiên của CHÍNH user) + revoke 1 phiên + revoke-all-others — hoàn tất user_sessions (DEFERRED ở BE-1) — unblock S2-FE-AUTH-5",
     zone: "red",
     status: "todo",
-    paths: ["apps/api/src/auth/**", "apps/api/migrations/**", "packages/contracts/src/**"],
+    paths: [
+      "apps/api/src/auth/**",
+      "apps/api/src/db/schema/audit.ts",
+      "apps/api/migrations/**",
+      "packages/contracts/src/**",
+    ],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-BE-1"],
     src: [
@@ -1598,6 +1603,9 @@ export const backlog = [
     done_when: [
       "reconcile user_sessions: login đã dual-write (BE-1) — nếu shape thiếu field cho list (device/ip/last_seen/created) thì migration bổ sung NỐI TIẾP head; GET /auth/sessions liệt kê phiên ACTIVE của CHÍNH user (Own scope, Authenticated), KHÔNG lộ session/refresh token/hash",
       "POST /auth/sessions/:id/revoke thu hồi 1 phiên của CHÍNH user + POST /auth/sessions/revoke-others (giữ phiên hiện tại); phiên bị revoke → refresh/next request fail-closed; ghi audit SessionRevoked trong tx withTenant",
+      "AUDIT object_type (CHỐT 2026-07-02): union-add 'user_session' vào AUDIT_OBJECT_TYPES (apps/api/src/db/schema/audit.ts) + CHECK audit_logs CÙNG commit migration (mẫu UNION-ADD 0456); apps/api/src/db/schema/audit.ts PHẢI nằm trong paths lane DB (không out-of-scope guard-scope)",
+      "PERMISSION (CHỐT 2026-07-02): session self-service = CHỈ Authenticated + owner-check ở service (KHÔNG cần permission pair riêng, giống pattern /auth/me) — KHÔNG seed pair mới",
+      "currentSessionId (CHỐT 2026-07-02): lấy từ session id trong access-token claim/jti của request ĐÃ auth (KHÔNG suy đoán theo thiết bị/IP) — revoke-others dùng giá trị này để loại trừ phiên hiện tại",
       "deny-path RED viết-TRƯỚC: revoke phiên user khác → 403/404; 2-tenant KHÔNG thấy/thu hồi phiên công ty khác (withTenant+RLS); no-secret-log; FULL gate (auth crown — security-reviewer) + người chốt",
     ],
   },
@@ -1963,9 +1971,12 @@ export const backlog = [
       "UI-02 §9.5 (HR routes)",
     ],
     done_when: [
-      "migration tạo bảng employee_contracts khớp DB-03: company_id NOT NULL · UUID PK · soft-delete · audit cols; RLS ENABLE+FORCE + policy company_id TRƯỚC backfill; rls-registry đăng ký (BẤT BIẾN #1); index (employee_id, status, effective dates)",
-      "CRUD API GET /hr/contracts + GET /hr/employees/:id/contracts + POST/PATCH; permission HR.CONTRACT.VIEW + manage; file hợp đồng link qua FileService (S1-FND-FILE-1) entity 'contract'; cảnh báo sắp hết hạn",
-      "deny-path RED viết-TRƯỚC: thiếu quyền → 403; 2-tenant deny (withTenant+RLS); audit thao tác; migration NỐI TIẾP head (1 lane db-migration); FULL gate (migration + PII) + người chốt",
+      "migration tạo bảng employee_contracts khớp DB-03: company_id NOT NULL · UUID PK · soft-delete · audit cols; employee_id UUID NOT NULL REFERENCES employee_profiles(id) ON DELETE CASCADE (KHÔNG bảng 'employees' — không tồn tại, đã reconcile sang employee_profiles); contract_type_id NOT NULL REFERENCES contract_types(id); RLS ENABLE+FORCE + policy company_id TRƯỚC backfill; rls-registry đăng ký (BẤT BIẾN #1); index (employee_id, status, effective dates)",
+      "CRUD API GET /hr/contracts + GET /hr/employees/:id/contracts + POST/PATCH; permission pair (CHỐT 2026-07-02, pin đúng resource_type='contract'): ('view','contract') cho VIEW + ('manage','contract') cho create/update/delete — @RequirePermission dùng đúng cặp này, KHÔNG hard-code chuỗi khác; file hợp đồng link qua FileService (S1-FND-FILE-1) entity 'contract'; cảnh báo sắp hết hạn (ngưỡng 30 ngày mặc định)",
+      "SCOPE (CHỐT 2026-07-02): view:contract CHỈ data_scope='Company' cho hr/company-admin — employee/manager KHÔNG có Own/Team, gọi GET contract → 403 (KHÔNG lọc rỗng). Deny-path RED: employee/manager gọi GET /hr/contracts hoặc /hr/employees/:id/contracts → 403",
+      "AUDIT object_type (CHỐT 2026-07-02): union-add 'employee_contract' vào AUDIT_OBJECT_TYPES (apps/api/src/db/schema/audit.ts) + CHECK audit_logs CÙNG commit migration (mẫu UNION-ADD 0456); mỗi Create/Update/Link/Delete PHẢI ghi 1 audit row trong tx (KHÔNG audit-ma khi mutation fail rollback)",
+      "DTO list/detail KHÔNG lộ trường nhạy cảm ngoài allowlist (note/metadata/title không chứa lương/PII chưa mask) — test khẳng định",
+      "deny-path RED viết-TRƯỚC: thiếu quyền → 403; 2-tenant deny (withTenant+RLS, gồm contract_type cross-tenant); audit thao tác; migration NỐI TIẾP head THEO journal idx thực tế (verify _journal.json, KHÔNG tin tên file/STATUS); FULL gate (migration + PII) + người chốt",
     ],
   },
   {
@@ -2383,9 +2394,10 @@ export const backlog = [
       "IMP02-STORY-061/062/063",
     ],
     done_when: [
-      "CRUD leave types + leave policies (HR, permission LEAVE.TYPE.* / LEAVE.POLICY.*); soft-delete KHÔNG hard-delete; audit thao tác",
-      "HR view balances theo scope + adjust balance (permission LEAVE.BALANCE.ADJUST) — KHÔNG sửa số dư nếu KHÔNG tạo leave_balance_transactions (ledger); balance KHÔNG âm nếu leave type không cho phép (transaction + row-lock)",
-      "deny-path: thiếu permission → 403; 2-tenant deny; phần admin UI nâng cao = carry-over CO-S4-008",
+      "CRUD leave types + leave policies (HR); permission pair THẬT (leave-permissions.const.ts, KHÔNG hard-code mã người-đọc): (create|update|delete,'leave-type') + (view|create|update|delete,'leave-policy'); soft-delete KHÔNG hard-delete; audit thao tác",
+      "HR view balances theo scope + adjust balance qua cặp (adjust,'leave-balance') — KHÔNG sửa số dư nếu KHÔNG tạo leave_balance_transactions (ledger, migration 0453 chỉ GRANT SELECT,INSERT app role — append-only); balance KHÔNG âm nếu allow_negative_balance=false (transaction + SELECT...FOR UPDATE row-lock chống race); balance_before/balance_after ledger liên tục khớp tail; audit_logs ghi khi adjust (DoD §16.3)",
+      "deny-path RED viết-TRƯỚC: thiếu adjust:leave-balance → 403 + 0 ledger row; thiếu create/update/delete:leave-type hoặc :leave-policy → 403; 2-tenant deny (adjust/view balance nhân viên công ty khác → 403/404); append-only: app role UPDATE/DELETE leave_balance_transactions PHẢI fail; âm-số-dư: vượt số dư khi allow_negative_balance=false → reject + concurrency test; đổi số dư KHÔNG insert ledger row → không thể xảy ra (test qua repository trực tiếp)",
+      "phần admin UI nâng cao = carry-over CO-S4-008; migration mới (nếu cần cột) PHẢI tạo RLS policy + FORCE TRƯỚC backfill; bảng đã có từ 0453 — xác nhận rõ trong plan có/không cần migration mới",
     ],
   },
 
@@ -2410,8 +2422,9 @@ export const backlog = [
     done_when: [
       "internal handler onLeaveApproved + AttendanceLeaveSyncService map leave_request_days→attendance_records: full-day → status Leave + required_working_minutes 0; half-day → reduce required minutes; hourly → reduce theo minutes; nếu record đã có check-in/out → recalculate (KHÔNG mất dữ liệu chấm công); KHÔNG tạo trùng record (employee/date/shift)",
       "cập nhật leave_request_days.attendance_sync_status; lưu sync error nếu fail + log; POST /internal/v1/attendance/recalculate (retry/manual); attendance/today + check-in đọc Approved leave để chặn full-day",
-      "onLeaveCancelled/onLeaveRevoked cho đơn ĐÃ Approved+đã sync: recalc attendance_records (gỡ Leave, khôi phục required minutes về shift/rule hiệu lực, tính lại late/early/missing nếu có check-in) + release/restore balance ĐÚNG SỐ; IDEMPOTENT (retry KHÔNG hoàn phép 2 lần — idempotency key / kiểm sync state) — S3-SYNC-004",
-      "deny-path RED viết-TRƯỚC: full-day leave date → check-in/out disabled + status Leave trong bảng công; sync fail → trạng thái lưu + log; cross-tenant KHÔNG sync chéo; FULL gate (crown) + người chốt; coverage ≥80%",
+      "onLeaveCancelled/onLeaveRevoked cho đơn ĐÃ Approved+đã sync: recalc attendance_records (gỡ Leave, khôi phục required minutes về shift/rule hiệu lực, tính lại late/early/missing nếu có check-in) + release/restore balance ĐÚNG SỐ; IDEMPOTENT (retry KHÔNG hoàn phép 2 lần — idempotency key / kiểm sync state) — S3-SYNC-004; FSM CANCEL chỉ owner (self) gọi được, REVOKE chỉ manager|HR (action REVOKE)",
+      "deny-path RED viết-TRƯỚC (CHỐT 2026-07-02, bổ sung sau plan_block): actor KHÔNG phải owner gọi CANCEL → 403 + KHÔNG đổi status/KHÔNG refund/KHÔNG phát revert-event; actor KHÔNG phải manager|HR gọi REVOKE → 403 tương tự; POST /internal/v1/attendance/recalculate không auth / thiếu manage:attendance / thiếu internal-guard → 403, KHÔNG reprocess; full-day leave date → check-in/out disabled + status Leave trong bảng công; sync fail → trạng thái lưu + log; cross-tenant KHÔNG sync chéo; FULL gate (crown) + người chốt; coverage ≥80%",
+      "AUDIT (CHỐT 2026-07-02): mọi attendance_record do sync/revert tạo/sửa/gỡ PHẢI append audit_logs (object_type=attendance_record) TRONG cùng tx app-pool — test khẳng định audit row tồn tại + rollback ⇒ không audit-ma",
     ],
   },
 
@@ -2654,9 +2667,10 @@ export const backlog = [
       "SPEC-04",
     ],
     done_when: [
-      "POST /attendance/remote-work-requests (create Own) + GET my + GET list (scope) + GET :id + approve/reject; state-machine + audit + event; Approved ảnh hưởng cách tính công ngày remote/công tác theo rule",
-      "hoàn thiện shape remote_work_requests (migration nối head nếu skeleton thiếu; RLS+FORCE); mutation trong tx",
-      "deny-path RED: tạo hộ người khác → chặn; duyệt ngoài scope → 403; cross-tenant deny; FULL gate + người chốt",
+      "POST /attendance/remote-work-requests (create Own) + GET my + GET list (scope) + GET :id + approve/reject/cancel-own; state-machine (create → Pending, set submitted_at) + audit + event; Approved ảnh hưởng cách tính công ngày remote/công tác theo rule; Approved sinh/cập nhật attendance_records UPSERT-BY (company_id,employee_id,date) IDEMPOTENT — re-approve KHÔNG nhân đôi record",
+      "hoàn thiện shape remote_work_requests (migration nối head nếu skeleton thiếu; RLS+FORCE); mutation trong tx; permission pair PIN đúng resource_type='remote-request' (seed 0454): create-own/view-own/view-team/view-company/cancel-own/approve/reject đều gate trên 'remote-request', reject dùng cặp reject:remote-request RIÊNG (không tái dùng approve)",
+      "AUDIT object_type (CHỐT 2026-07-02): union-add 'remote_work_request' vào AUDIT_OBJECT_TYPES (apps/api/src/db/schema/audit.ts) + CHECK audit_logs CÙNG commit migration (mẫu UNION-ADD 0456)",
+      "deny-path RED viết-TRƯỚC: tạo hộ người khác → chặn; duyệt ngoài scope → 403; cross-tenant deny; cancel đơn người khác / cancel khi ≠Pending → chặn; FULL gate + người chốt",
     ],
   },
   {
@@ -2677,9 +2691,10 @@ export const backlog = [
       "SPEC-04",
     ],
     done_when: [
-      "GET /attendance/reports tổng hợp công theo scope Team/Company (present/late/missing/leave) + filter kỳ; permission ATT.ATTENDANCE.VIEW_TEAM/COMPANY; no N+1",
-      "GET /attendance/audit-logs = tái dùng foundation audit filter module_code=ATT (KHÔNG dựng store mới); mask + append-only; permission ATT.AUDIT_LOG.VIEW",
-      "deny-path RED: thiếu quyền → 403; 2-tenant deny; export lớn/streaming = carry-over nếu vượt phạm vi",
+      "GET /attendance/reports tổng hợp công theo scope Team/Company (present/late/missing/leave) + filter kỳ; permission pair THẬT (attendance-permissions.const.ts, KHÔNG mã người-đọc): (view-team,'attendance') + (view-company,'attendance'); report Team PHẢI giới hạn theo cây quản lý (DataScopeService/manager-tree, S2-INT-2) — KHÔNG phải mọi nhân viên công ty; report = 1 aggregate query group-by cố định (no N+1, khẳng định số query không đổi theo N record); trả tổng hợp có phân trang, KHÔNG kèm export CSV/stream (carry-over ngoài WO này)",
+      "GET /attendance/audit-logs: TÁI DÙNG AuditRepository/AuditFilter (lọc module_code=ATT) nhưng route/controller/guard RIÊNG của ATT — KHÔNG dùng chung route/guard với foundation AuditController (cặp (view,'audit-log') của foundation KHÁC cặp ATT, tái dùng thẳng sẽ over-grant: ai có view audit-log foundation sẽ đọc được audit ATT). Gate bằng cặp (view,'attendance-audit-log'); dùng ĐÚNG masking layer của foundation audit read (audit_logs có thể chứa PII/salary ở old/new value)",
+      "deny-path RED viết-TRƯỚC (BẮT BUỘC — plan trước bị BLOCK vì testTasks/steps rỗng): (a) GET /attendance/reports thiếu view-team/view-company:attendance → 403; (b) GET /attendance/audit-logs thiếu (view,attendance-audit-log) → 403; (c) 2-tenant: user tenant B gọi report/audit tenant A → 0 row/403; (d) manager scope Team chỉ thấy cây quản lý của mình, KHÔNG thấy team khác cùng công ty (IDOR); (e) append-only: không route UPDATE/DELETE trên audit; (f) grant foundation-audit (view,audit-log) KHÔNG mở được /attendance/audit-logs (test khẳng định KHÔNG over-grant); (g) 1 dòng audit chứa field nhạy cảm bị mask khi đọc qua /attendance/audit-logs",
+      "PLAN BẮT BUỘC có micro-plan steps đầy đủ (route/guard pair/service scope/reuse foundation repo) TRƯỚC khi code — không được nộp steps rỗng lần nữa",
     ],
   },
   {
