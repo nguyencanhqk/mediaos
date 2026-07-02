@@ -37,11 +37,12 @@ export function HealthPage() {
   const { t } = useTranslation("system");
   const { t: tc } = useTranslation("common");
 
-  const canView =
-    useCan(
-      FOUNDATION_ENGINE_PAIRS.VIEW_SETTING_BASELINE.action,
-      FOUNDATION_ENGINE_PAIRS.VIEW_SETTING_BASELINE.resourceType,
-    ) || useCan("view", "user");
+  const canViewSetting = useCan(
+    FOUNDATION_ENGINE_PAIRS.VIEW_SETTING_BASELINE.action,
+    FOUNDATION_ENGINE_PAIRS.VIEW_SETTING_BASELINE.resourceType,
+  );
+  const canViewUser = useCan("view", "user");
+  const canView = canViewSetting || canViewUser;
 
   const apiQuery = useQuery({
     queryKey: [...rootKeys.foundation, "health", "liveness"],
