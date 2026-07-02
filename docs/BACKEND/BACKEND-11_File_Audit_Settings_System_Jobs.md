@@ -393,6 +393,8 @@ Internal/job API dùng prefix:
 | DELETE | `/api/v1/foundation/files/{file_id}/links/{link_id}` | `FOUNDATION.FILE.UNLINK` | Gỡ link file |
 | GET | `/api/v1/foundation/file-links` | `FOUNDATION.FILE.VIEW` | Lấy file theo entity |
 
+> **CHỐT 2026-07-02:** Notation `FOUNDATION.FILE.DOWNLOAD` (dòng 389-390) map → tuple engine `(action="download", resource_type="foundation-file")` — khớp seed `0435:350 ('download','foundation-file',false)` và `@RequirePermission("download","foundation-file")` ở `files.controller.ts`. Cả hai endpoint `download-url` và `download` cùng gate tuple này; `download` KHÔNG stream binary mà `res.redirect(302, signedUrl)` (bỏ cụm "stream token"/"backend stream" ở mô tả — xem §11.9).
+
 ### 9.5 Audit API
 
 | Method | Endpoint | Permission | Mục đích |
@@ -655,6 +657,8 @@ User gọi GET /files/{file_id}/download-url hoặc /download
   -> Ghi file_access_logs nếu file private/sensitive
   -> Trả signed URL ngắn hạn hoặc stream file
 ```
+
+> **CHỐT 2026-07-02:** Triển khai thật KHÔNG stream binary qua backend — `download` = `res.redirect(302, signedUrl)` với TTL-ngắn (`files.controller.ts`; storage adapter chỉ presign, KHÔNG đọc byte). Điều này ĐẠT mục tiêu §11.1.6-7 (không lộ `storage_path`/private URL) qua presigned-redirect thay vì proxy-stream. Các cụm "backend stream"/"stream download" ở §11.1.7, §11.8.2, §20.1 (dòng ~518/641/1401) và checklist Sprint 1 (dòng ~1686) là phrasing cũ; hành vi chuẩn = presign-redirect 302. Permission-gate `download:foundation-file` + `FilePolicy.canDownload` + ghi `file_access_logs` vẫn chạy TRƯỚC khi cấp URL.
 
 ### 11.10 File policy resolver
 
@@ -1215,6 +1219,8 @@ Trước khi chạy retention delete thật, service nên hỗ trợ simulate:
 5. Mỗi job cleanup phải giới hạn batch size.
 6. Job phải ghi summary log sau khi chạy.
 7. Nếu lỗi giữa chừng, job có thể retry an toàn.
+
+> **CHỐT 2026-07-02:** Triển khai thật AN TOÀN HƠN doc — `audit_logs` và `file_access_logs` nằm trong `RetentionService.PROTECTED_TABLES` (defense-in-depth trên REVOKE-DELETE ở DB, BẤT BIẾN #2 append-only) ⇒ retention job KHÔNG BAO GIỜ delete hai bảng này, bất kể policy active. Do đó hàng "Archive trước, delete sau" ở bảng §17.2 (audit_logs 365-1095 ngày, file_access_logs 365 ngày) chỉ đúng phần ARCHIVE; nhánh delete bị chặn cứng. Archive-then-purge cho append-only = FUTURE (cần lối archive riêng, ngoài MVP). Cùng tập bảo vệ: `login_logs`, `user_security_events`, `security_alerts`, `api_key_usages`, `attendance_logs`, `leave_balance_transactions`, `task_activity_logs`, `notification_delivery_logs`, `employee_status_histories`, `seed_batches`, `seed_items`.
 
 ---
 

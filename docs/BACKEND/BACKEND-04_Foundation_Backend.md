@@ -724,6 +724,8 @@ error_message
 
 Seed runner không tạo trùng dữ liệu nếu chạy lại.
 
+> **CHỐT 2026-07-02:** Seed master-data company-scoped (settings/holiday/sequence/module app-metadata…) triển khai qua **RUNTIME seeder** `MasterDataSeedRunner` (`apps/api/src/foundation/seed/`), KHÔNG qua SQL migration. Idempotent 2 tầng: `startBatch` dedup theo `(company_id, seed_key, seed_version)` (uq) ⇒ reuse batch; `markItem` dedup theo **checksum SHA-256** của payload chuẩn-hoá (`seed-checksum.util.ts`, DB-08 §8.13) ⇒ skip item không đổi. Ghi provenance vào `seed_batches`/`seed_items` (append-only, thuộc `PROTECTED_TABLES`). Lý do chọn runtime-seeder thay migration: seed phụ thuộc `company_id` (N=1 hiện tại, mở rộng multi-company không phải rewrite migration) và cần re-run an toàn theo checksum. Chỉ permission catalog + object-type/action giữ ở migration (`ON CONFLICT DO NOTHING`).
+
 ---
 
 ## 9. API design Foundation
@@ -806,6 +808,8 @@ Endpoint/permission settings chuẩn ở **BACKEND-11 §9.3**. Bản tóm tắt:
 | GET | `/api/v1/foundation/system-settings` | Danh sách system setting | `FOUNDATION.SETTING.SYSTEM_MANAGE` |
 | PATCH | `/api/v1/foundation/system-settings/{setting_key}` | Cập nhật system setting | `FOUNDATION.SETTING.SYSTEM_MANAGE` |
 | POST | `/api/v1/foundation/settings/resolve` | Resolve nhiều setting theo key | `FOUNDATION.SETTING.VIEW` |
+
+> **CHỐT 2026-07-02:** Triển khai thật của `GET /settings/public` gate CHẶT HƠN doc — code đòi `@RequirePermission("view","foundation-setting")` (tuple `view:foundation-setting`), KHÔNG phải chỉ "Authenticated" như bảng ghi. Đây là lệch **ĐÃ BIẾT (audit H6)**: hệ quả là màn chưa-đăng-nhập/role thiếu `view:foundation-setting` không đọc được setting public. Quyết định về gate đúng (nới về Authenticated-only cho nhánh public-nonsensitive hay giữ chặt) **HOÃN sang WO `FND-SETTINGS-PUBLIC-GATE`** — WO này CHỈ pin doc, KHÔNG đổi gate/code.
 
 Rule:
 
