@@ -55,7 +55,9 @@ function api(app: INestApplication) {
 }
 
 async function login(app: INestApplication, slug: string, email: string): Promise<string> {
-  const res = await api(app).post("/auth/login").send({ companySlug: slug, email, password: PASSWORD });
+  const res = await api(app)
+    .post("/auth/login")
+    .send({ companySlug: slug, email, password: PASSWORD });
   expect(res.status, `login failed for ${email}: ${JSON.stringify(res.body)}`).toBe(200);
   return res.body.data.accessToken as string;
 }
@@ -88,6 +90,50 @@ async function countUsers(direct: Pool, companyId: string): Promise<number> {
   return r.rows[0].n as number;
 }
 
+// S2-AUTH-BE-9 — login THẬT trả cả access + refresh token (dual-write refresh_tokens + user_sessions).
+async function loginFull(
+  app: INestApplication,
+  slug: string,
+  email: string,
+): Promise<{ accessToken: string; refreshToken: string }> {
+  const res = await api(app)
+    .post("/auth/login")
+    .send({ companySlug: slug, email, password: PASSWORD });
+  expect(res.status, `login failed for ${email}: ${JSON.stringify(res.body)}`).toBe(200);
+  return {
+    accessToken: res.body.data.accessToken as string,
+    refreshToken: res.body.data.refreshToken as string,
+  };
+}
+
+async function countActiveSessions(direct: Pool, userId: string): Promise<number> {
+  const r = await direct.query(
+    `SELECT count(*)::int AS n FROM user_sessions WHERE user_id = $1 AND revoked_at IS NULL`,
+    [userId],
+  );
+  return r.rows[0].n as number;
+}
+
+async function countActiveRefreshTokens(direct: Pool, userId: string): Promise<number> {
+  const r = await direct.query(
+    `SELECT count(*)::int AS n FROM refresh_tokens WHERE user_id = $1 AND revoked_at IS NULL`,
+    [userId],
+  );
+  return r.rows[0].n as number;
+}
+
+async function latestAuditAfter(
+  direct: Pool,
+  objectId: string,
+  action: string,
+): Promise<Record<string, unknown> | null> {
+  const r = await direct.query(
+    `SELECT after FROM audit_logs WHERE object_type='user' AND object_id=$1 AND action=$2 ORDER BY created_at DESC LIMIT 1`,
+    [objectId, action],
+  );
+  return (r.rows[0]?.after as Record<string, unknown> | undefined) ?? null;
+}
+
 describe.skipIf(!hasDb)("ACCT-2 admin users controller HTTP deny-path", () => {
   let app: INestApplication;
   let direct: Pool;
@@ -117,24 +163,49 @@ describe.skipIf(!hasDb)("ACCT-2 admin users controller HTTP deny-path", () => {
     const pw = await hashedPw();
 
     // noPermUser: role rỗng → không có manage:user
-    const noPermId = await seedUser(direct, A.companyId, `au-noperm-${randomUUID().slice(0, 8)}@a.test`, pw);
+    const noPermId = await seedUser(
+      direct,
+      A.companyId,
+      `au-noperm-${randomUUID().slice(0, 8)}@a.test`,
+      pw,
+    );
     const emptyRole = await seedRole(direct, A.companyId, `au-empty-${randomUUID().slice(0, 8)}`);
     await seedUserRole(direct, noPermId, emptyRole, A.companyId);
 
     // wildcardUser: '*:*' ALLOW (non-sensitive) → KHÔNG được kế thừa suspend/delete sensitive.
-    const wildId = await seedUser(direct, A.companyId, `au-wild-${randomUUID().slice(0, 8)}@a.test`, pw);
+    const wildId = await seedUser(
+      direct,
+      A.companyId,
+      `au-wild-${randomUUID().slice(0, 8)}@a.test`,
+      pw,
+    );
     const wildRole = await seedRole(direct, A.companyId, `au-wild-${randomUUID().slice(0, 8)}`);
     const wildPerm = await seedPermissionCatalog(direct, "*", "*", false);
     await seedRolePermission(direct, wildRole, wildPerm, "ALLOW");
     await seedUserRole(direct, wildId, wildRole, A.companyId);
 
     // adminUser: company-admin (role 0001 → mọi non-sensitive + 2 sensitive grant ở trên).
-    adminId = await seedUser(direct, A.companyId, `au-admin-${randomUUID().slice(0, 8)}@a.test`, pw);
+    adminId = await seedUser(
+      direct,
+      A.companyId,
+      `au-admin-${randomUUID().slice(0, 8)}@a.test`,
+      pw,
+    );
     await seedUserRole(direct, adminId, COMPANY_ADMIN_ROLE_ID, A.companyId);
 
     // Targets
-    targetAId = await seedUser(direct, A.companyId, `au-tgt-${randomUUID().slice(0, 8)}@a.test`, pw);
-    targetBId = await seedUser(direct, B.companyId, `au-tgtB-${randomUUID().slice(0, 8)}@b.test`, pw);
+    targetAId = await seedUser(
+      direct,
+      A.companyId,
+      `au-tgt-${randomUUID().slice(0, 8)}@a.test`,
+      pw,
+    );
+    targetBId = await seedUser(
+      direct,
+      B.companyId,
+      `au-tgtB-${randomUUID().slice(0, 8)}@b.test`,
+      pw,
+    );
 
     // Login từng actor bằng email THẬT đã seed (đọc lại từ DB).
     const noPermEmail = await emailOf(direct, noPermId);
@@ -306,7 +377,12 @@ describe.skipIf(!hasDb)("ACCT-2 admin users controller HTTP deny-path", () => {
     });
 
     it("POST suspend → 200 status='suspended'; reactivate → 'active'", async () => {
-      const victim = await seedUser(direct, A.companyId, `au-v-${randomUUID().slice(0, 8)}@a.test`, await hashedPw());
+      const victim = await seedUser(
+        direct,
+        A.companyId,
+        `au-v-${randomUUID().slice(0, 8)}@a.test`,
+        await hashedPw(),
+      );
       const sus = await api(app)
         .post(`/users/admin/${victim}/suspend`)
         .set("Authorization", `Bearer ${adminToken}`)
@@ -323,7 +399,12 @@ describe.skipIf(!hasDb)("ACCT-2 admin users controller HTTP deny-path", () => {
     });
 
     it("DELETE = soft-delete: deleted_at set + row VẪN tồn tại vật lý (count KHÔNG giảm)", async () => {
-      const victim = await seedUser(direct, A.companyId, `au-d-${randomUUID().slice(0, 8)}@a.test`, await hashedPw());
+      const victim = await seedUser(
+        direct,
+        A.companyId,
+        `au-d-${randomUUID().slice(0, 8)}@a.test`,
+        await hashedPw(),
+      );
       const before = await countUsers(direct, A.companyId);
       const res = await api(app)
         .delete(`/users/admin/${victim}`)
@@ -332,6 +413,98 @@ describe.skipIf(!hasDb)("ACCT-2 admin users controller HTTP deny-path", () => {
       const row = await userRow(direct, victim);
       expect(row?.deleted_at).not.toBeNull(); // soft-delete
       expect(await countUsers(direct, A.companyId)).toBe(before); // KHÔNG hard-delete (row vẫn còn)
+    });
+  });
+
+  // ── §revoke-on-suspend (S2-AUTH-BE-9) — suspend thu hồi MỌI phiên NGAY trong cùng tx (đối xứng lock) ──
+  describe("§revoke-on-suspend — suspend = thu hồi phiên tức thì + audit revoked_session_count", () => {
+    it("suspend → refresh token CŨ → /auth/refresh 401 NGAY; phiên revoked; audit revokedSessionCount = số phiên", async () => {
+      const email = `au-rv-${randomUUID().slice(0, 8)}@a.test`;
+      const victim = await seedUser(direct, A.companyId, email, await hashedPw());
+
+      // Seed ≥2 phiên active (login THẬT 2 lần → dual-write refresh_tokens + user_sessions).
+      const s1 = await loginFull(app, A.slug, email);
+      await loginFull(app, A.slug, email);
+      expect(await countActiveSessions(direct, victim)).toBe(2);
+      expect(await countActiveRefreshTokens(direct, victim)).toBe(2);
+
+      const sus = await api(app)
+        .post(`/users/admin/${victim}/suspend`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ reason: "revoke-all suspend" });
+      expect(sus.status, JSON.stringify(sus.body)).toBe(200);
+
+      // Refresh token cũ → 401 NGAY (đã thu hồi bởi suspend).
+      const after = await api(app).post("/auth/refresh").send({ refreshToken: s1.refreshToken });
+      expect(after.status).toBe(401);
+
+      expect(await countActiveSessions(direct, victim)).toBe(0);
+      expect(await countActiveRefreshTokens(direct, victim)).toBe(0);
+
+      const auditAfter = await latestAuditAfter(direct, victim, "user.suspended");
+      expect(auditAfter?.revokedSessionCount).toBe(2);
+      expect(JSON.stringify(auditAfter)).not.toContain("passwordHash");
+      expect(JSON.stringify(auditAfter)).not.toContain("token");
+    });
+
+    it("cross-tenant: admin A suspend user B → 404 + phiên B KHÔNG bị revoke", async () => {
+      const emailB = `au-b-${randomUUID().slice(0, 8)}@b.test`;
+      const victimB = await seedUser(direct, B.companyId, emailB, await hashedPw());
+      await loginFull(app, B.slug, emailB);
+      expect(await countActiveSessions(direct, victimB)).toBe(1);
+
+      const res = await api(app)
+        .post(`/users/admin/${victimB}/suspend`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ reason: "cross" });
+      expect(res.status).toBe(404);
+      expect(await countActiveSessions(direct, victimB)).toBe(1);
+    });
+
+    it("NO-RESTORE: reactivate KHÔNG hồi phiên cũ — user_sessions vẫn revoked (phải login lại)", async () => {
+      const email = `au-nr-${randomUUID().slice(0, 8)}@a.test`;
+      const victim = await seedUser(direct, A.companyId, email, await hashedPw());
+      await loginFull(app, A.slug, email);
+      expect(await countActiveSessions(direct, victim)).toBe(1);
+
+      const sus = await api(app)
+        .post(`/users/admin/${victim}/suspend`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ reason: "nr" });
+      expect(sus.status).toBe(200);
+      expect(await countActiveSessions(direct, victim)).toBe(0);
+
+      const re = await api(app)
+        .post(`/users/admin/${victim}/reactivate`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({});
+      expect(re.status).toBe(200);
+      expect(await countActiveSessions(direct, victim)).toBe(0); // phiên cũ vẫn revoked
+    });
+
+    it("thiếu suspend:user → 403 + phiên target KHÔNG bị revoke", async () => {
+      const email = `au-d3-${randomUUID().slice(0, 8)}@a.test`;
+      const victim = await seedUser(direct, A.companyId, email, await hashedPw());
+      await loginFull(app, A.slug, email);
+      expect(await countActiveSessions(direct, victim)).toBe(1);
+
+      const res = await api(app)
+        .post(`/users/admin/${victim}/suspend`)
+        .set("Authorization", `Bearer ${noPermToken}`)
+        .send({ reason: "deny" });
+      expect(res.status).toBe(403);
+      // Deny TRƯỚC service → phiên nguyên vẹn.
+      expect(await countActiveSessions(direct, victim)).toBe(1);
+    });
+
+    it("self-suspend chính mình → 400 + phiên admin KHÔNG bị revoke", async () => {
+      const before = await countActiveSessions(direct, adminId);
+      const res = await api(app)
+        .post(`/users/admin/${adminId}/suspend`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ reason: "self" });
+      expect([400, 409]).toContain(res.status);
+      expect(await countActiveSessions(direct, adminId)).toBe(before);
     });
   });
 });

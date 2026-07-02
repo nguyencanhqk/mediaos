@@ -106,6 +106,53 @@ async function auditSnapshotJson(direct: Pool, objectId: string): Promise<string
   return JSON.stringify(r.rows[0] ?? {});
 }
 
+// S2-AUTH-BE-9 — login THẬT trả cả access + refresh token (dual-write refresh_tokens + user_sessions).
+async function loginFull(
+  app: INestApplication,
+  slug: string,
+  email: string,
+): Promise<{ accessToken: string; refreshToken: string }> {
+  const res = await api(app)
+    .post("/auth/login")
+    .send({ companySlug: slug, email, password: PASSWORD });
+  expect(res.status, `login failed for ${email}: ${JSON.stringify(res.body)}`).toBe(200);
+  return {
+    accessToken: res.body.data.accessToken as string,
+    refreshToken: res.body.data.refreshToken as string,
+  };
+}
+
+/** Số phiên còn sống (user_sessions.revoked_at IS NULL) của 1 user. */
+async function countActiveSessions(direct: Pool, userId: string): Promise<number> {
+  const r = await direct.query(
+    `SELECT count(*)::int AS n FROM user_sessions WHERE user_id = $1 AND revoked_at IS NULL`,
+    [userId],
+  );
+  return r.rows[0].n as number;
+}
+
+/** Số refresh token còn sống (revoked_at IS NULL) của 1 user. */
+async function countActiveRefreshTokens(direct: Pool, userId: string): Promise<number> {
+  const r = await direct.query(
+    `SELECT count(*)::int AS n FROM refresh_tokens WHERE user_id = $1 AND revoked_at IS NULL`,
+    [userId],
+  );
+  return r.rows[0].n as number;
+}
+
+/** `after` jsonb của bản audit MỚI NHẤT cho 1 action trên objectId (để đọc revokedSessionCount). */
+async function latestAuditAfter(
+  direct: Pool,
+  objectId: string,
+  action: string,
+): Promise<Record<string, unknown> | null> {
+  const r = await direct.query(
+    `SELECT after FROM audit_logs WHERE object_type='user' AND object_id=$1 AND action=$2 ORDER BY created_at DESC LIMIT 1`,
+    [objectId, action],
+  );
+  return (r.rows[0]?.after as Record<string, unknown> | undefined) ?? null;
+}
+
 // Gate hasDb && LANE_DB: thiếu DB lane cô lập → SKIP (KHÔNG chạm 'mediaos' dev chung). CLAUDE.md §9.5.
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 
@@ -380,6 +427,99 @@ describe.skipIf(!hasLaneDb)("S2-AUTH-BE-3 /auth/users admin API", () => {
       expect(unlock.status).toBe(200);
       const ok1 = await login(app, A.slug, email);
       expect(ok1.status).toBe(200);
+    });
+  });
+
+  // ── §revoke-on-lock (S2-AUTH-BE-9) — lock thu hồi MỌI phiên (refresh + session) NGAY trong cùng tx ──
+  describe("§revoke-on-lock — lock = thu hồi phiên tức thì + audit revoked_session_count", () => {
+    it("lock → refresh token CŨ → /auth/refresh 401 NGAY; user_sessions/refresh_tokens đều revoked; audit revokedSessionCount = số phiên", async () => {
+      const email = `be9-rv-${randomUUID().slice(0, 8)}@a.test`;
+      const victim = await seedUser(direct, A.companyId, email, await hashedPw());
+
+      // Seed ≥2 phiên active: login THẬT 2 lần (mỗi lần dual-write refresh_tokens + user_sessions).
+      const s1 = await loginFull(app, A.slug, email);
+      const s2 = await loginFull(app, A.slug, email);
+      expect(await countActiveSessions(direct, victim)).toBe(2);
+      expect(await countActiveRefreshTokens(direct, victim)).toBe(2);
+
+      // Sanity: refresh token còn sống → /auth/refresh xoay OK (200) trước khi khoá.
+      const pre = await api(app).post("/auth/refresh").send({ refreshToken: s2.refreshToken });
+      expect(pre.status).toBe(200);
+
+      const lock = await api(app)
+        .post(`/auth/users/${victim}/lock`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ reason: "revoke-all test" });
+      expect(lock.status, JSON.stringify(lock.body)).toBe(200);
+
+      // Refresh token CŨ (s1 — chưa từng xoay) → 401 NGAY (đã bị thu hồi bởi lock, không chờ reuse-detection).
+      const after = await api(app).post("/auth/refresh").send({ refreshToken: s1.refreshToken });
+      expect(after.status).toBe(401);
+
+      // MỌI phiên + refresh token của victim đã revoked (revoked_at NOT NULL) → count active = 0.
+      expect(await countActiveSessions(direct, victim)).toBe(0);
+      expect(await countActiveRefreshTokens(direct, victim)).toBe(0);
+
+      // Audit 'user.locked'.after.revokedSessionCount = ĐÚNG số phiên active bị thu hồi (2, đếm chính xác).
+      const auditAfter = await latestAuditAfter(direct, victim, "user.locked");
+      expect(auditAfter?.revokedSessionCount).toBe(2);
+      // KHÔNG lộ secret trong audit (BẤT BIẾN #3).
+      expect(JSON.stringify(auditAfter)).not.toContain("passwordHash");
+      expect(JSON.stringify(auditAfter)).not.toContain("token");
+    });
+
+    it("cross-tenant: admin A lock user B → 404 + phiên B KHÔNG bị revoke (không rò)", async () => {
+      const emailB = `be9-b-${randomUUID().slice(0, 8)}@b.test`;
+      const victimB = await seedUser(direct, B.companyId, emailB, await hashedPw());
+      await loginFull(app, B.slug, emailB);
+      expect(await countActiveSessions(direct, victimB)).toBe(1);
+
+      const res = await api(app)
+        .post(`/auth/users/${victimB}/lock`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ reason: "cross" });
+      expect(res.status).toBe(404);
+
+      // Phiên tenant B nguyên vẹn — lock cross-tenant KHÔNG chạm phiên (RLS che).
+      expect(await countActiveSessions(direct, victimB)).toBe(1);
+      expect(await countActiveRefreshTokens(direct, victimB)).toBe(1);
+    });
+
+    it("NO-RESTORE: unlock KHÔNG hồi phiên cũ — user_sessions vẫn revoked_at IS NOT NULL (phải login lại)", async () => {
+      const email = `be9-nr-${randomUUID().slice(0, 8)}@a.test`;
+      const victim = await seedUser(direct, A.companyId, email, await hashedPw());
+      await loginFull(app, A.slug, email);
+      expect(await countActiveSessions(direct, victim)).toBe(1);
+
+      const lock = await api(app)
+        .post(`/auth/users/${victim}/lock`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ reason: "nr" });
+      expect(lock.status).toBe(200);
+      expect(await countActiveSessions(direct, victim)).toBe(0);
+
+      const unlock = await api(app)
+        .post(`/auth/users/${victim}/unlock`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({});
+      expect(unlock.status).toBe(200);
+      // Phiên cũ VẪN revoked sau unlock — user phải đăng nhập lại mới có phiên mới.
+      expect(await countActiveSessions(direct, victim)).toBe(0);
+
+      // Đăng nhập lại → phiên mới xuất hiện (chứng minh chỉ có đường login mới cấp phiên).
+      await loginFull(app, A.slug, email);
+      expect(await countActiveSessions(direct, victim)).toBe(1);
+    });
+
+    it("self-lock chính mình → 400 (chống lockout) + phiên admin KHÔNG bị revoke", async () => {
+      const before = await countActiveSessions(direct, adminId);
+      const res = await api(app)
+        .post(`/auth/users/${adminId}/lock`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ reason: "self" });
+      expect([400, 409]).toContain(res.status);
+      // Guard chặn TRƯỚC mọi mutation → phiên admin nguyên vẹn.
+      expect(await countActiveSessions(direct, adminId)).toBe(before);
     });
   });
 });
