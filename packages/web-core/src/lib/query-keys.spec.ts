@@ -61,6 +61,11 @@ describe("authKeys", () => {
   it("permissionCatalog.list() = ['auth', 'permission-catalog', 'list']", () => {
     expect(authKeys.permissionCatalog.list()).toEqual(["auth", "permission-catalog", "list"]);
   });
+
+  // S2-FE-AUTH-5 (lane FE batch C) — session self-service.
+  it("sessions.list() = ['auth', 'sessions', 'list']", () => {
+    expect(authKeys.sessions.list()).toEqual(["auth", "sessions", "list"]);
+  });
 });
 
 describe("hrKeys", () => {

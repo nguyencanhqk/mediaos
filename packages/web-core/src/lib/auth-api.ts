@@ -1,14 +1,19 @@
+import { z } from "zod";
 import {
   loginResponseSchema,
   logoutResponseSchema,
   meResponseSchema,
   redirectAllowedResponseSchema,
+  sessionListItemSchema,
+  sessionRevokeResponseSchema,
   type ChangePasswordRequest,
   type LoginRequest,
   type LoginResponse,
   type LogoutResponse,
   type MeResponse,
   type RedirectAllowedResponse,
+  type SessionListItem,
+  type SessionRevokeResponse,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { getAccessToken } from "../stores/auth";
@@ -66,4 +71,19 @@ export const authApi = {
       undefined,
       { skipAuth: true },
     ),
+
+  // ── S2-AUTH-BE-7 — session self-service (Own scope, CHỈ Authenticated — KHÔNG permission pair riêng,
+  //    giống pattern /auth/me. `is_current` do SERVER đánh dấu từ jti access-token của request). ──────
+
+  /** GET /auth/sessions — phiên ACTIVE của CHÍNH user (KHÔNG lộ token/hash — BẤT BIẾN #3). */
+  listSessions: (): Promise<SessionListItem[]> =>
+    apiFetch("/auth/sessions", z.array(sessionListItemSchema)),
+
+  /** POST /auth/sessions/:id/revoke — thu hồi 1 phiên của CHÍNH user (owner-check ở service). */
+  revokeSession: (id: string): Promise<SessionRevokeResponse> =>
+    apiFetch(`/auth/sessions/${id}/revoke`, sessionRevokeResponseSchema, { method: "POST" }),
+
+  /** POST /auth/sessions/revoke-others — thu hồi MỌI phiên khác, GIỮ phiên hiện tại (từ jti request). */
+  revokeOtherSessions: (): Promise<SessionRevokeResponse> =>
+    apiFetch("/auth/sessions/revoke-others", sessionRevokeResponseSchema, { method: "POST" }),
 };

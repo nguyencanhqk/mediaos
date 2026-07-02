@@ -38,6 +38,11 @@ export const authKeys = {
     all: [...rootKeys.auth, "permission-catalog"] as const,
     list: () => [...rootKeys.auth, "permission-catalog", "list"] as const,
   },
+  // S2-FE-AUTH-5 (lane FE batch C) — session self-service (Own scope, GET /auth/sessions).
+  sessions: {
+    all: [...rootKeys.auth, "sessions"] as const,
+    list: () => [...rootKeys.auth, "sessions", "list"] as const,
+  },
 };
 
 // ── Dashboard keys ────────────────────────────────────────────────────────────

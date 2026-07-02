@@ -55,6 +55,8 @@ export default {
     systemPermissions: "Danh mục quyền",
     systemAuditLogs: "Audit log",
     accountProfile: "Hồ sơ tài khoản",
+    // S2-FE-AUTH-5 (lane FE batch C).
+    accountSessions: "Phiên đăng nhập",
     forbidden: "Không có quyền truy cập",
     notFound: "Không tìm thấy trang",
   },

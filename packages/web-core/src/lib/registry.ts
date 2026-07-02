@@ -1022,6 +1022,14 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     layout: "ACCOUNT",
     titleKey: "routeTitle.accountProfile",
   },
+  // S2-FE-AUTH-5 (lane FE batch C) — session self-service. Authenticated-only (KHÔNG requiredAnyPermissions
+  // — S2-AUTH-BE-7: Own scope, owner-check ở service, giống pattern /auth/me — KHÔNG seed pair mới).
+  {
+    routeKey: "account.sessions",
+    path: "/account/sessions",
+    layout: "ACCOUNT",
+    titleKey: "routeTitle.accountSessions",
+  },
 
   // Error pages (public — router renders without guard)
   {

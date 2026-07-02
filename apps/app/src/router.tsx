@@ -165,6 +165,8 @@ import { RoleFormPage } from "@/routes/system/roles/RoleFormPage";
 import { RoleDetailPage } from "@/routes/system/roles/RoleDetailPage";
 import { RolePermissionsPage } from "@/routes/system/roles/RolePermissionsPage";
 import { PermissionsPage } from "@/routes/system/PermissionsPage";
+// Account self-service — S2-FE-AUTH-5 (lane FE batch C)
+import { AccountSessionsPage } from "@/routes/account/AccountSessionsPage";
 
 const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", EmployeeListPage);
 const hrEmployeesRoute = makeModuleRoute("/hr/employees", "hr.employees", "HR", EmployeeListPage);
@@ -555,6 +557,19 @@ const systemRolePermissionsRoute = createRoute({
   },
 });
 
+// S2-FE-AUTH-5 (lane FE batch C) — /account/sessions. Authenticated-only (KHÔNG ModuleWorkspaceLayout/
+// ProtectedRoute meta-gate — session self-service KHÔNG có permission pair, mirror homeRoute wiring).
+const accountSessionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/account/sessions",
+  beforeLoad: authGuard,
+  component: () => (
+    <ProtectedShell>
+      <AccountSessionsPage />
+    </ProtectedShell>
+  ),
+});
+
 const systemAuditLogsRoute = makeModuleRoute(
   "/system/audit-logs",
   "system.audit-logs",
@@ -645,6 +660,7 @@ const routeTree = rootRoute.addChildren([
   systemRoleDetailRoute,
   systemRoleEditRoute,
   systemRolePermissionsRoute,
+  accountSessionsRoute,
   systemAuditLogsRoute,
   systemLoginLogsRoute,
   systemSecurityEventsRoute,
