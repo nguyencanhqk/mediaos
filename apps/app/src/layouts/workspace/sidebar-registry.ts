@@ -9,6 +9,10 @@
  */
 import { type SidebarItemMeta } from "@mediaos/web-core";
 import { AUDIT_LOG_VIEW_PERMISSION } from "@/routes/system/auth-logs/constants";
+import { HR_ENGINE_PAIRS } from "@/routes/hr/constants";
+import { HR_AUDIT_LOG_VIEW_PERMISSION } from "@/routes/hr/audit-logs/constants";
+
+const HR_ORG_CHART_VIEW_PERMISSION = `${HR_ENGINE_PAIRS.ORG_CHART_VIEW.action}:${HR_ENGINE_PAIRS.ORG_CHART_VIEW.resourceType}`;
 
 // ---------------------------------------------------------------------------
 // DASH
@@ -59,6 +63,30 @@ export const HR_SIDEBAR: readonly SidebarItemMeta[] = [
     group: "operation",
     order: 30,
     requiredAnyPermissions: ["HR.EMPLOYEE.VIEW"],
+  },
+  // S2-FE-HR-6 — Sơ đồ tổ chức. Gate = read:department (cặp seed thật, CÙNG cặp "phòng ban" HR).
+  {
+    sidebarKey: "hr.org-chart",
+    moduleCode: "HR",
+    label: "Sơ đồ tổ chức",
+    path: "/hr/org-chart",
+    icon: "network",
+    group: "operation",
+    order: 40,
+    requiredAnyPermissions: [HR_ORG_CHART_VIEW_PERMISSION],
+  },
+  // S2-FE-HR-6 — Lịch sử thay đổi HR (tái dùng /foundation/audit-logs?moduleCode=HR). Gate =
+  // view:audit-log (cặp seed thật mig 0340, sensitive) — literal, KHÔNG qua PERMISSION_CODE_TO_PAIR
+  // (tránh drift, cùng kỹ thuật system.login-logs).
+  {
+    sidebarKey: "hr.audit-logs",
+    moduleCode: "HR",
+    label: "Lịch sử thay đổi",
+    path: "/hr/audit-logs",
+    icon: "history",
+    group: "report",
+    order: 50,
+    requiredAnyPermissions: [HR_AUDIT_LOG_VIEW_PERMISSION],
   },
 ];
 

@@ -63,4 +63,12 @@ export const HR_ENGINE_PAIRS = {
   READ_POSITION: { action: "read", resourceType: "position" },
   // job-level / contract-type lookups are gated by manage:master-data on the BE (hr-read.controller).
   MANAGE_MASTER_DATA: { action: "manage", resourceType: "master-data" },
+  // S2-FE-HR-6 — /hr/org-chart đọc GET /org/units/tree (BE để READ mở, KHÔNG PermissionGuard riêng —
+  // xem org.controller.ts). FE gate hiển thị bằng CÙNG cặp "phòng ban" (read:department, seed mig
+  // 0444/0005) để nhất quán trong module HR — KHÔNG bịa cặp "org-chart"/"org_unit" chưa seed.
+  ORG_CHART_VIEW: { action: "read", resourceType: "department" },
+  // /hr/audit-logs tái dùng GET /foundation/audit-logs?moduleCode=HR — cặp seed THẬT mig 0340
+  // (view:audit-log, is_sensitive=true, hiện chỉ grant company-admin). PIN theo cặp seed (bài học
+  // drift S1-FND-MODULE) — KHÔNG dùng nhãn "HR.AUDIT_LOG.VIEW" làm cổng-cứng (chưa có pair riêng).
+  AUDIT_LOG_VIEW: { action: "view", resourceType: "audit-log" },
 } as const;

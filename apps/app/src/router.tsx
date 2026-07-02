@@ -119,6 +119,10 @@ import { EmployeeListPage } from "@/routes/hr/employees/EmployeeListPage";
 import { EmployeeDetailPage } from "@/routes/hr/employees/EmployeeDetailPage";
 import { EmployeeFormPage } from "@/routes/hr/employees/EmployeeFormPage";
 import { MyProfilePage } from "@/routes/hr/me/MyProfilePage";
+import { OrgChartPage } from "@/routes/hr/org-chart/OrgChartPage";
+import { HrAuditLogsPage } from "@/routes/hr/audit-logs/HrAuditLogsPage";
+import { HR_ENGINE_PAIRS } from "@/routes/hr/constants";
+import { HR_AUDIT_LOG_VIEW_PERMISSION } from "@/routes/hr/audit-logs/constants";
 
 // Attendance
 import { AttendanceTodayPage } from "@/routes/attendance/AttendanceTodayPage";
@@ -166,6 +170,50 @@ import { FOUNDATION_PATH, FOUNDATION_SCREEN } from "@/routes/system/foundation/c
 const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", EmployeeListPage);
 const hrEmployeesRoute = makeModuleRoute("/hr/employees", "hr.employees", "HR", EmployeeListPage);
 const hrMeRoute = makeModuleRoute("/hr/me", "hr.me", "HR", MyProfilePage);
+
+// HR Org chart (S2-FE-HR-6) — RouteMeta CỤC BỘ (KHÔNG ở ROUTE_REGISTRY web-core, cùng pattern
+// systemLoginLogsRoute). Gate = read:department (cặp seed thật — CÙNG cặp "phòng ban" HR đang dùng,
+// KHÔNG bịa permission "org-chart" chưa seed).
+const hrOrgChartMeta: RouteMeta = {
+  routeKey: "hr.org-chart",
+  path: "/hr/org-chart",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "HR",
+  screenCode: "HR-SCREEN-ORG-CHART",
+  titleKey: "routeTitle.hrOrgChart",
+  requiredAnyPermissions: [
+    `${HR_ENGINE_PAIRS.ORG_CHART_VIEW.action}:${HR_ENGINE_PAIRS.ORG_CHART_VIEW.resourceType}`,
+  ],
+  showInSidebar: true,
+  order: 23,
+};
+const hrOrgChartRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/org-chart",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(hrOrgChartMeta, "HR", <OrgChartPage />),
+});
+
+// HR audit-logs (S2-FE-HR-6) — tái dùng GET /foundation/audit-logs?moduleCode=HR. Gate = view:audit-log
+// (cặp seed thật mig 0340, is_sensitive=true) — literal engine pair, cùng kỹ thuật
+// LOGIN_LOGS_ROUTE_META (constants.ts cục bộ).
+const hrAuditLogsMeta: RouteMeta = {
+  routeKey: "hr.audit-logs",
+  path: "/hr/audit-logs",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "HR",
+  screenCode: "HR-SCREEN-AUDIT-LOGS",
+  titleKey: "routeTitle.hrAuditLogs",
+  requiredAnyPermissions: [HR_AUDIT_LOG_VIEW_PERMISSION],
+  showInSidebar: true,
+  order: 24,
+};
+const hrAuditLogsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/audit-logs",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(hrAuditLogsMeta, "HR", <HrAuditLogsPage />),
+});
 
 // HR employee create — static "new" segment ranks above the "$employeeId" param route, so it never
 // collides with detail. Reuses hr.employees meta (route-level VIEW gate); EmployeeFormPage applies the
@@ -580,6 +628,8 @@ const routeTree = rootRoute.addChildren([
   hrEmployeeDetailRoute,
   hrEmployeeEditRoute,
   hrMeRoute,
+  hrOrgChartRoute,
+  hrAuditLogsRoute,
   attTodayRoute,
   attMyRecordsRoute,
   attTeamRecordsRoute,

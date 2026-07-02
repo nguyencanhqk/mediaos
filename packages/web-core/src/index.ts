@@ -86,6 +86,9 @@ export { usersApi } from "./lib/users-api";
 export { twoFactorApi } from "./lib/two-factor-api";
 export { notificationApi } from "./lib/notification-api";
 export { hrApi } from "./lib/hr-api";
+// S2-FE-HR-6 — Org chart (GET /org/units/tree, read mở) + HR audit-logs (tái dùng /foundation/audit-logs).
+export { orgApi, orgTreeNodeSchema, type OrgTreeNode } from "./lib/hr-org-api";
+export { hrAuditApi, type HrAuditLogQuery } from "./lib/hr-audit-api";
 export { leaveApi } from "./lib/leave-api";
 export { attendanceApi } from "./lib/attendance-api";
 export {

@@ -71,6 +71,16 @@ export const hrKeys = {
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.hr, "contract-types", "list", params] as const,
   },
+  // S2-FE-HR-6 — Org chart (danh mục nhỏ, không phân trang server) + HR audit-logs (phân trang offset/limit).
+  orgChart: {
+    all: [...rootKeys.hr, "org-chart"] as const,
+    tree: () => [...rootKeys.hr, "org-chart", "tree"] as const,
+  },
+  auditLogs: {
+    all: [...rootKeys.hr, "audit-logs"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "audit-logs", "list", params] as const,
+  },
 };
 
 // ── Attendance keys ───────────────────────────────────────────────────────────
