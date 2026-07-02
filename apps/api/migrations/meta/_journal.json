@@ -981,6 +981,48 @@
       "when": 1717500690000,
       "tag": "0459_s2_hrbe7_employee_code_config",
       "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1717500695000,
+      "tag": "0460_s2_authbe6_role_write_assign_permission",
+      "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "7",
+      "when": 1717500700000,
+      "tag": "0461_s2_authbe7_session_selfservice",
+      "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "7",
+      "when": 1717500705000,
+      "tag": "0462_s2_hrbe6_employee_contracts",
+      "breakpoints": true
+    },
+    {
+      "idx": 143,
+      "version": "7",
+      "when": 1717500710000,
+      "tag": "0463_s3_leavebe4_type_policy_balance_admin",
+      "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "7",
+      "when": 1717500715000,
+      "tag": "0464_s3_attbe5_remote_request_audit_object_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1717500720000,
+      "tag": "0465_s2_hrbe6_contract_scope_fix",
+      "breakpoints": true
     }
   ]
 }

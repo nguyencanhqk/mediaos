@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-02 06:42Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-02 07:00Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -51,8 +51,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `feat/s3-wave3` · **file đang đổi (dirty)**: 2
-- **migration head**: idx 139 — `0459_s2_hrbe7_employee_code_config` (140 migration)
+- **branch**: `auto/s3wave3-batch6-blocked-wos` · **file đang đổi (dirty)**: 52
+- **migration head**: idx 145 — `0465_s2_hrbe6_contract_scope_fix` (146 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
 
@@ -60,18 +60,18 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
-| `f5dfb33` | 2026-07-02 | feat(S2-FE-HR-5): HR master-data spine + admin screens (departments/positions/job-levels/contract-types) (#80) |
-| `71cd693` | 2026-07-02 | feat(S2-FND-BE-2): Foundation sequence + seed ops HTTP surface (#77) |
-| `67d8f16` | 2026-07-02 | rescue: S2-FE-FND-1 (Foundation admin FE) + S2-HR-BE-7 verify-mode additions (#79) |
-| `6db736d` | 2026-07-02 | fix(db): remove orphaned pre-renumber migration file on feat/s3-wave3 (#76) |
-| `87731c2` | 2026-07-02 | feat(S2-FND-BE-1): admin module catalog API (GET /foundation/modules[/:code]) (#74) |
-| `9049231` | 2026-07-02 | feat(S3-ATT-BE-4): ATT Adjustment workflow API (create/list/detail/approve/reject/direct-adjust) (#73) |
-| `0545d17` | 2026-07-02 | auto/S3 FE ATT 5 (#72) |
-| `2727e49` | 2026-07-01 | wip(S3-LEAVE-BE-5): GET /leave/calendar scoped (own/team/company) + reason masking (#70) |
-| `448e628` | 2026-07-01 | feat(s3-att-be3): shift/rule minimum spine + audit-in-tx wiring + QA-06 tenant deny (#69) |
-| `bc690c2` | 2026-07-01 | feat(s3): S3-FE-LEAVE-3 — all-requests screen + edit draft + department filter (#68) |
-| `b91f9bd` | 2026-07-01 | chore(harness): commit stray plan docs from prior wave + regen STATUS (#67) |
-| `602fa2b` | 2026-07-01 | chore(harness): move crown-jewel PLAN stage to Sonnet 5 to cut cost (#66) |
+| `1906559` | 2026-07-02 | fix(S2-HR-BE-6): correct contract view scope — employee=Own, manager=Team |
+| `35fac47` | 2026-07-02 | feat(audit): additive objectTypes allowlist filter on AuditRepository (S3-ATT-BE-6) |
+| `238d9e1` | 2026-07-02 | feat(ATT): GET /attendance/reports (Team/Company aggregate) + /attendance/audit-logs (S3-ATT-BE-6) |
+| `2cdff86` | 2026-07-02 | feat(S3-ATT-BE-5): remote/onsite-work request workflow API (CO-S4-004) |
+| `ac9b259` | 2026-07-02 | feat(S3-ATT-BE-5): migration 0464 union-add remote_work_request audit object_type + watcher_user_ids |
+| `a6256bc` | 2026-07-02 | feat(S3-INT-1): LEAVE cancel(Approved)/revoke — ATT-revert + balance refund, idempotent |
+| `8bd10f7` | 2026-07-02 | feat(S3-INT-1): LEAVE->ATT sync — onLeaveApproved + AttendanceLeaveSyncService + internal recalculate |
+| `ab968b0` | 2026-07-02 | test(LEAVE-BE-4): RED-first integration coverage for admin surface |
+| `e4a080b` | 2026-07-02 | chore(harness): bake owner override for S3-ATT-BE-5 state-machine (Draft+submit+approver/watcher) into done_when |
+| `689a4aa` | 2026-07-02 | feat(LEAVE-BE-4): type/policy admin CRUD + HR balance view/adjust ledger |
+| `e16a4ea` | 2026-07-02 | feat(LEAVE-BE-4): admin CRUD contracts + audit object_type union-add |
+| `7f80206` | 2026-07-02 | docs(hr): mark employee_contracts built (mig 0462) in ERD + close S2-HR-BE-6 [S2-HR-BE-6] |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

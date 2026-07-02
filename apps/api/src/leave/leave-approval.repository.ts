@@ -88,6 +88,34 @@ export class LeaveApprovalRepository {
     return row;
   }
 
+  /**
+   * S3-INT-1 — race-safe REFUND: used_days -= delta on ONE balance row, guarded by
+   * `used_days - delta >= 0` in the WHERE so a concurrent/duplicate refund can NEVER drive used_days
+   * negative (returns undefined when the guard fails — caller treats as "already refunded / nothing to
+   * refund", part of the idempotency contract for Cancel/Revoke of an Approved+Used request).
+   */
+  async refundUsedByBalanceIdTx(
+    companyId: string,
+    data: { balanceId: string; delta: string },
+    tx: TenantTx,
+  ): Promise<typeof leaveBalances.$inferSelect | undefined> {
+    const [row] = await tx
+      .update(leaveBalances)
+      .set({
+        usedDays: sql`${leaveBalances.usedDays} - ${data.delta}::numeric`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(leaveBalances.companyId, companyId),
+          eq(leaveBalances.id, data.balanceId),
+          sql`${leaveBalances.usedDays} - ${data.delta}::numeric >= 0`,
+        ),
+      )
+      .returning();
+    return row;
+  }
+
   // ─── ATT-sync handoff mark (S3-INT-1 consumes) ───────────────────────────────
 
   /**

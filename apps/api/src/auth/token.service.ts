@@ -17,6 +17,12 @@ export interface AccessTokenClaims {
   email: string;
   /** Optional khi ký: vắng ⇒ ký KHÔNG kèm aud (legacy). Khi verify ⇒ luôn trả 'tenant' nếu token thiếu. */
   aud?: TokenAudience;
+  /**
+   * S2-AUTH-BE-7: id phiên (user_sessions.id) — CHỈ định danh, KHÔNG cấp quyền. Optional để token
+   * legacy (ký trước WO này, hoặc test dựng tay) vẫn verify được (jti vắng ⇒ verify trả undefined,
+   * currentSessionId ở FE/BE coi như "không xác định được phiên hiện tại" — KHÔNG throw).
+   */
+  jti?: string;
 }
 
 /** Claims của challenge 2FA (bước-1 login đã qua password, chờ verify mã). KHÔNG cấp quyền API. */
@@ -107,7 +113,17 @@ export class TokenService {
     if (expectedAudience !== "any" && aud !== expectedAudience) {
       throw new Error("token sai audience (operator/tenant không khớp route)");
     }
-    return { sub: String(decoded.sub), companyId: String(decoded.companyId), email: decoded.email, aud };
+    // S2-AUTH-BE-7: jti — token cũ (ký trước WO này) không có claim → undefined (KHÔNG throw, giữ
+    // backward-compat). jwt.sign KHÔNG tự sinh 'jti' trừ khi truyền option `jwtid`; ở đây jti nằm
+    // trong payload thường (do signAccessToken set), nên decoded.jti là string thuần | undefined.
+    const jti = typeof decoded.jti === "string" ? decoded.jti : undefined;
+    return {
+      sub: String(decoded.sub),
+      companyId: String(decoded.companyId),
+      email: decoded.email,
+      aud,
+      jti,
+    };
   }
 
   /**
