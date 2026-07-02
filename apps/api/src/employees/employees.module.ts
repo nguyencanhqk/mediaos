@@ -9,6 +9,11 @@ import { FilesModule } from "../foundation/files/files.module";
 import { FilePolicyService } from "../foundation/files/file-policy.service";
 // S2-HR-BE-6 scope FIX (additive): SettingService for company-configurable contract expiry milestones.
 import { SettingsModule } from "../foundation/settings/settings.module";
+// S2-FND-SEED-2 (additive): SeedModule exports MasterDataSeederRegistry — HrSeedRegistrar registers
+// HrMasterDataSeeder (job_levels/contract_types/employee_code_configs) at onModuleInit (mirror ATT/LEAVE).
+import { SeedModule } from "../foundation/seed/seed.module";
+import { HrMasterDataSeeder } from "./hr-master-data.seeder";
+import { HrSeedRegistrar } from "./hr-seed.registrar";
 import { EmployeesController } from "./employees.controller";
 import { EmployeesRepository } from "./employees.repository";
 import { EmployeesService } from "./employees.service";
@@ -50,6 +55,8 @@ import { HrContractFileResolver } from "./hr-contract-file.resolver";
     FilesModule,
     // S2-HR-BE-6 scope FIX: SettingService cho ngưỡng cảnh báo hết hạn company-configurable.
     SettingsModule,
+    // S2-FND-SEED-2: MasterDataSeederRegistry cho HrSeedRegistrar (đăng ký HrMasterDataSeeder).
+    SeedModule,
     MulterModule.register({ limits: { fileSize: 5 * 1024 * 1024 } }),
   ],
   controllers: [
@@ -84,6 +91,9 @@ import { HrContractFileResolver } from "./hr-contract-file.resolver";
     ContractRepository,
     // S2-FND-BE-4 (additive): HR contract file-access resolver (registered in onModuleInit below).
     HrContractFileResolver,
+    // S2-FND-SEED-2 (additive): HR master-data seeder + self-registering registrar (mirror ATT/LEAVE).
+    HrMasterDataSeeder,
+    HrSeedRegistrar,
   ],
   exports: [
     EmployeesService,

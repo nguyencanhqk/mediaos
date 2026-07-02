@@ -249,15 +249,30 @@ describe.skipIf(!hasLaneDb)(
       expect(blob).not.toContain("currentValue");
       // The write landed in tenant A, NOT tenant B (body company_id ignored).
       expect(get.body.data.companyId).toBe(A.companyId);
+
+      // S2-FND-SEED-2 (OWNER CHỐT 2026-07-03) — PATCH-sync: the SAME tx also syncs prefix/paddingLength
+      // into sequence_counters (counter is the single render source) — GIỮ NGUYÊN current_value (0, seeded
+      // in beforeAll) — a config edit must never reset the running number.
+      const counterRow = await direct.query(
+        `SELECT prefix, padding_length, current_value FROM sequence_counters
+           WHERE company_id = $1 AND sequence_key = $2`,
+        [A.companyId, EMPLOYEE_CODE_SEQUENCE_KEY],
+      );
+      expect(counterRow.rows[0]).toMatchObject({ prefix: "STAFF", padding_length: 5 });
+      expect(counterRow.rows[0].current_value).toBe("0");
     });
 
     it("QA02-HR-CODE-001: POST preview → next code WITHOUT mutating the counter", async () => {
       const token = await login(nest, A.slug, hrEmail);
       const valBefore = await counterValue(direct, A.companyId);
 
+      // S2-FND-SEED-2 (OWNER CHỐT 2026-07-03, PATCH-sync): the PREVIOUS test PATCHed A's config to
+      // prefix='STAFF'/numberLength=5 — that write now syncs INTO sequence_counters in the SAME tx (the
+      // counter is the single render source), so the preview reflects STAFF + 5-digit padding, NOT the
+      // raw-seeded 'EMP'/4 anymore. current_value itself still must NOT mutate (non-mutation proof below).
       const res = await api(nest).post("/hr/employee-code/preview").set(bearer(token));
       expect(res.status, JSON.stringify(res.body)).toBe(201);
-      expect(res.body.data.code).toBe("EMP0001");
+      expect(res.body.data.code).toBe("STAFF00001");
       expect(res.body.data.value).toBe(1);
 
       // Non-mutation proof: current_value unchanged.

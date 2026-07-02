@@ -67,7 +67,11 @@ export interface PreviewNextCodeInput extends SequenceCounterKey {
   now?: Date;
 }
 
-/** Input đảm bảo tồn tại counter (idempotent upsert) — dùng khi seed/khởi tạo theo module. */
+/**
+ * Input đảm bảo tồn tại counter (idempotent "insert-if-missing") — dùng khi seed/khởi tạo theo module
+ * (S2-FND-SEED-2). `status` mặc định 'Active' khi KHÔNG truyền — truyền 'Inactive' để mirror 1 config đã
+ * bị tắt (PATCH-sync employee-code) NGAY TỪ LẦN TẠO ĐẦU (KHÔNG tự ý bật lại — BẤT BIẾN thiết kế counter).
+ */
 export interface EnsureSequenceCounterInput extends SequenceCounterKey {
   moduleCode: string;
   prefix?: string | null;
@@ -76,6 +80,7 @@ export interface EnsureSequenceCounterInput extends SequenceCounterKey {
   paddingLength?: number;
   incrementBy?: number;
   resetPolicy?: ResetPolicy;
+  status?: SequenceStatus;
   startValue?: number;
   actorUserId?: string;
 }

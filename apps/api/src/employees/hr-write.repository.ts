@@ -125,6 +125,27 @@ export class HrWriteRepository {
     return row;
   }
 
+  /**
+   * S2-FND-SEED-2 — the tenant's non-deleted employee_code_config row (prefix/numberLength/status),
+   * REGARDLESS of status (allocateEmployeeCode's ensure-on-miss needs the REAL row to mirror status too —
+   * an Inactive config must produce an Inactive counter, never silently Active). undefined ⇒ genuinely
+   * unconfigured — the caller MUST NOT fabricate defaults (CẤM hard-code EMP/4, see HR-BE-2 note).
+   */
+  async findEmployeeCodeConfigTx(tx: TenantTx, companyId: string) {
+    const [row] = await tx
+      .select({
+        prefix: employeeCodeConfigs.prefix,
+        numberLength: employeeCodeConfigs.numberLength,
+        status: employeeCodeConfigs.status,
+      })
+      .from(employeeCodeConfigs)
+      .where(
+        and(eq(employeeCodeConfigs.companyId, companyId), isNull(employeeCodeConfigs.deletedAt)),
+      )
+      .limit(1);
+    return row;
+  }
+
   async createTx(tx: TenantTx, companyId: string, data: EmployeeWriteData) {
     const [row] = await tx
       .insert(employeeProfiles)
