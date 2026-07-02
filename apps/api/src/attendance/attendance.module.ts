@@ -2,6 +2,7 @@ import { Injectable, Logger, Module, OnModuleInit } from "@nestjs/common";
 import { DatabaseModule } from "../db/db.module";
 import { EventsModule } from "../events/events.module";
 import { EventBus, type EventContext } from "../events/event-bus";
+import { AuditRepository } from "../foundation/audit/audit.repository";
 import { SeedModule } from "../foundation/seed/seed.module";
 import { PermissionModule } from "../permission/permission.module";
 import { HrTasksService } from "../tasks/hr-tasks.service";
@@ -27,6 +28,14 @@ import { AttendanceLeaveSyncService } from "./attendance-leave-sync.service";
 import { RemoteWorkRequestController } from "./remote-work-request.controller";
 import { RemoteWorkRequestRepository } from "./remote-work-request.repository";
 import { RemoteWorkRequestService } from "./remote-work-request.service";
+// S3-ATT-BE-6 (additive): scoped attendance report aggregate (GET /attendance/reports) + ATT's own
+// audit-log reader (GET /attendance/audit-logs, TÁI DÙNG AuditRepository — provided locally below since
+// it has no DI deps of its own; AuditModule itself is NOT imported here — KHÔNG tái dùng route/guard).
+import { AttendanceReportController } from "./attendance-report.controller";
+import { AttendanceReportRepository } from "./attendance-report.repository";
+import { AttendanceReportService } from "./attendance-report.service";
+import { AttendanceAuditController } from "./attendance-audit.controller";
+import { AttendanceAuditService } from "./attendance-audit.service";
 
 /**
  * S3-INT-1 — binds AttendanceLeaveSyncService.onLeaveApproved as an EventBus consumer of
@@ -80,6 +89,8 @@ class LeaveApprovedSyncRegistrar implements OnModuleInit {
     AttendanceShiftController,
     AttendanceInternalController,
     RemoteWorkRequestController,
+    AttendanceReportController,
+    AttendanceAuditController,
   ],
   providers: [
     AttendanceService,
@@ -109,6 +120,14 @@ class LeaveApprovedSyncRegistrar implements OnModuleInit {
     AttendanceLeaveSyncService,
     AttendanceLeaveSyncRepository,
     LeaveApprovedSyncRegistrar,
+    // S3-ATT-BE-6 (additive): AttendanceReportService injects DataScopeService (PermissionModule) +
+    // DatabaseService (@Global) + AttendanceReportRepository. AttendanceAuditService REUSES
+    // AuditRepository (no DI deps of its own — provided locally, KHÔNG import AuditModule/its route)
+    // + AuditMaskerService (EventsModule export).
+    AttendanceReportService,
+    AttendanceReportRepository,
+    AttendanceAuditService,
+    AuditRepository,
   ],
   exports: [
     AttendanceService,
@@ -117,6 +136,8 @@ class LeaveApprovedSyncRegistrar implements OnModuleInit {
     AttendanceShiftService,
     AttendanceLeaveSyncService,
     RemoteWorkRequestService,
+    AttendanceReportService,
+    AttendanceAuditService,
   ],
 })
 export class AttendanceModule {}

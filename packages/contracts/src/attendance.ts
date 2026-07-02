@@ -1025,3 +1025,62 @@ export const remoteWorkRequestListResponseSchema = z.object({
   meta: attendanceRecordPageMetaSchema,
 });
 export type RemoteWorkRequestListResponse = z.infer<typeof remoteWorkRequestListResponseSchema>;
+
+// ─── S3-ATT-BE-6 (IMPLEMENTATION-06 §21 CO-S4-006, API-04, view-team/view-company:attendance) ────
+// GET /attendance/reports — per-employee aggregate (present/late/missing/leave count) over
+// [fromDate, toDate), scoped Team (manager-tree, S2-INT-2) or Company. ONE fixed group-by aggregate
+// query (no N+1 — count doesn't grow with record volume); paginated over EMPLOYEE rows (not raw
+// records). NO export/CSV/stream here (carry-over — spec ATT.ATTENDANCE.EXPORT is a separate WO).
+
+/**
+ * GET /attendance/reports query — [fromDate,toDate) half-open over work_date (mirrors
+ * attendanceRecordListQuerySchema), optional department filter (Company scope only — ignored under
+ * Team, mirrors departmentId semantics on team/company records lists), page-based pagination.
+ */
+export const attendanceReportQuerySchema = z
+  .object({
+    fromDate: z.string().date(),
+    toDate: z.string().date(),
+    departmentId: z.string().uuid().optional(),
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(ATTENDANCE_RECORD_PAGE_SIZE_MAX)
+      .default(ATTENDANCE_RECORD_PAGE_SIZE_DEFAULT),
+  })
+  .refine((v) => v.toDate >= v.fromDate, {
+    message: "toDate phải >= fromDate",
+    path: ["toDate"],
+  });
+export type AttendanceReportQuery = z.infer<typeof attendanceReportQuerySchema>;
+
+/**
+ * 1 dòng tổng hợp công của 1 nhân viên trong kỳ. Bucket cố định từ attendance_status TitleCase
+ * (DB-04 §7.4): present = Present|Checked-in|Early Leave (đã chấm công) · late = Late ·
+ * missing = Missing Hours|Not Checked-in · leave = Leave (S3-INT-1 sync). totalDays = tổng số bản ghi
+ * work_date trong kỳ đã khớp scope (present+late+missing+leave, KHÔNG double-count).
+ */
+export const attendanceReportRowSchema = z.object({
+  employeeId: z.string().uuid(),
+  userId: z.string().uuid(),
+  employeeCode: z.string().nullable(),
+  fullName: z.string().nullable(),
+  orgUnitId: z.string().uuid().nullable(),
+  orgUnitName: z.string().nullable(),
+  totalDays: z.number().int().nonnegative(),
+  presentDays: z.number().int().nonnegative(),
+  lateDays: z.number().int().nonnegative(),
+  missingDays: z.number().int().nonnegative(),
+  leaveDays: z.number().int().nonnegative(),
+});
+export type AttendanceReportRow = z.infer<typeof attendanceReportRowSchema>;
+
+export const attendanceReportResponseSchema = z.object({
+  fromDate: z.string().date(),
+  toDate: z.string().date(),
+  items: z.array(attendanceReportRowSchema),
+  meta: attendanceRecordPageMetaSchema,
+});
+export type AttendanceReportResponse = z.infer<typeof attendanceReportResponseSchema>;
