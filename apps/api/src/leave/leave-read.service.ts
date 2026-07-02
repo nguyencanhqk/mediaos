@@ -3,6 +3,8 @@ import type {
   LeaveBalanceView,
   LeaveCalculateRequest,
   LeaveCalculateResponse,
+  LeaveMyBalanceTransactionsQuery,
+  LeaveMyBalanceTransactionsResponse,
   LeaveTypeView,
 } from "@mediaos/contracts";
 import { addDaysToLocalDate } from "../common/tz.util";
@@ -62,6 +64,45 @@ export class LeaveReadService {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const rows = await this.readRepo.findOwnBalancesTx(actor.companyId, actor.id, tx);
       return rows.map(toLeaveBalanceView);
+    });
+  }
+
+  // ─── GET /leave/me/balance-transactions (view-own:leave-balance, API-05 §13.2) ───────────────
+
+  /**
+   * S3-LEAVE-BE-6 — OWN balance transactions (ledger). Self-locked by user_id (leaveRead.findOwn
+   * BalanceTransactionsTx joins leave_balances.user_id — NEVER a scope query). Empty → {items:[],...}
+   * (never 500).
+   */
+  async listMyBalanceTransactions(
+    actor: Actor,
+    query: LeaveMyBalanceTransactionsQuery,
+  ): Promise<LeaveMyBalanceTransactionsResponse> {
+    return this.db.withTenant(actor.companyId, async (tx) => {
+      const filters = { periodYear: query.periodYear, leaveTypeId: query.leaveTypeId };
+      const [rows, total] = await Promise.all([
+        this.readRepo.findOwnBalanceTransactionsTx(
+          actor.companyId,
+          actor.id,
+          filters,
+          query.page,
+          query.pageSize,
+          tx,
+        ),
+        this.readRepo.countOwnBalanceTransactionsTx(actor.companyId, actor.id, filters, tx),
+      ]);
+      const totalPages = query.pageSize > 0 ? Math.ceil(total / query.pageSize) : 0;
+      return {
+        items: rows.map(toBalanceTransactionView),
+        meta: {
+          page: query.page,
+          pageSize: query.pageSize,
+          total,
+          totalPages,
+          hasNext: query.page < totalPages,
+          hasPrev: query.page > 1,
+        },
+      };
     });
   }
 
@@ -182,6 +223,35 @@ function toLeaveTypeView(row: LeaveTypeRow): LeaveTypeView {
     maxDaysPerRequest: numOrNull(row.maxDaysPerRequest),
     maxHoursPerRequest: numOrNull(row.maxHoursPerRequest),
     sortOrder: row.sortOrder,
+  };
+}
+
+interface OwnBalanceTransactionRow {
+  id: string;
+  transactionType: string;
+  transactionDate: string;
+  amountDays: string;
+  balanceBeforeDays: string | null;
+  balanceAfterDays: string | null;
+  reason: string | null;
+  createdByType: string;
+  createdBy: string | null;
+  createdAt: Date;
+}
+
+/** Mirrors leave-admin.service.ts toTransactionView (SAME view schema, admin vs self-service source). */
+function toBalanceTransactionView(row: OwnBalanceTransactionRow) {
+  return {
+    id: row.id,
+    transactionType: row.transactionType,
+    transactionDate: row.transactionDate,
+    amountDays: Number(row.amountDays),
+    balanceBeforeDays: numOrNull(row.balanceBeforeDays),
+    balanceAfterDays: numOrNull(row.balanceAfterDays),
+    reason: row.reason,
+    createdByType: row.createdByType,
+    createdBy: row.createdBy,
+    createdAt: row.createdAt.toISOString(),
   };
 }
 
