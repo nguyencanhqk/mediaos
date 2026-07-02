@@ -164,6 +164,10 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "HR.POSITION.UPDATE": "update:position",
   "HR.POSITION.DELETE": "delete:position",
   "HR.MASTER_DATA.MANAGE": "manage:master-data",
+  // S2-FE-HR-7 — Employee contracts (hợp đồng lao động). Cặp seed THẬT từ contract.controller.ts:
+  // view:contract (đọc, data-scope Own/Team/Company) — manage:contract (CRUD) gate riêng trong page,
+  // KHÔNG cần route-level vì chỉ chặn nút, không chặn cả trang.
+  "HR.CONTRACT.VIEW": "view:contract",
   // S2-FE-FND-1 (FND1-WC): cặp seed THẬT mig 0435 — controller Foundation dùng *:foundation-* (view/update:
   // foundation-company, update:foundation-setting). KHÔNG dùng nhãn-ma FRONTEND-13 §7.1 (FOUNDATION.SYSTEM.VIEW /
   // SETTING.SYSTEM_MANAGE chưa seed) và KHÔNG namespace CŨ read/update:company (0005). Đọc≠sửa (pair-as-gate).
@@ -802,6 +806,18 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["HR.MASTER_DATA.MANAGE"],
     showInSidebar: true,
     order: 26,
+  },
+  // S2-FE-HR-7 — Hợp đồng lao động toàn công ty (đọc, theo data-scope Own/Team/Company).
+  {
+    routeKey: "hr.contracts",
+    path: "/hr/contracts",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "HR",
+    screenCode: "HR-SCREEN-CONTRACTS",
+    titleKey: "routeTitle.hrContracts",
+    requiredAnyPermissions: ["HR.CONTRACT.VIEW"],
+    showInSidebar: true,
+    order: 27,
   },
 
   // Attendance

@@ -42,6 +42,7 @@ import {
   LeaveListQueryDto,
   LeavePolicyListQueryDto,
   LeaveRequestListQueryDto,
+  MyBalanceTransactionsQueryDto,
   PendingLeaveRequestListQueryDto,
   RejectLeaveRequestDto,
   RevokeLeaveRequestDto,
@@ -169,6 +170,20 @@ export class LeaveController {
     return this.leaveRead.listMyBalances(req.user);
   }
 
+  // S3-LEAVE-BE-6 NEW: API-05 §13.2 LEAVE-API-003 — OWN balance ledger history (view-own:leave-balance,
+  // Own, mig 0455). Self-locked by user_id in the service — NEVER a scope query. Declared BEFORE the
+  // Company-scope "balances/:id/transactions" route below (distinct path — "me" is not a UUID param).
+  @Get("me/balance-transactions")
+  @RequirePermission(VIEW_OWN_BALANCE.action, VIEW_OWN_BALANCE.resourceType, {
+    isSensitive: VIEW_OWN_BALANCE.sensitive,
+  })
+  listMyBalanceTransactions(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: MyBalanceTransactionsQueryDto,
+  ) {
+    return this.leaveRead.listMyBalanceTransactions(req.user, query);
+  }
+
   // ─── My leave requests (S3-LEAVE-BE-2 self-service) ──────────────────────────
   // Static "me/requests" declared BEFORE "me/requests/:id" (Express order: static before param, same verb).
   // view-own:leave (Own) — list/detail SELF-LOCKED by user_id in the service (not a scope query). 404 (not
@@ -200,6 +215,21 @@ export class LeaveController {
   @RequirePermission("manage", "leave")
   upsertBalance(@Req() req: AuthenticatedRequest, @Body() dto: UpsertLeaveBalanceDto) {
     return this.leave.upsertBalance(req.user, dto);
+  }
+
+  // S3-LEAVE-BE-6 NEW: canonical route per API-05 §12.8 LEAVE-API-703 (KHÔNG "admin/" prefix, khớp
+  // FRONTEND-10 §7 sitemap /leave/balances/:balanceId/transactions). REUSES LeaveAdminService.
+  // listBalanceTransactions (S3-LEAVE-BE-4) — SAME gate (view-transaction:leave-balance, Company-scope
+  // ONLY hr/company-admin, mig 0455) — KHÔNG trùng logic. /leave/admin/balances/:id/transactions VẪN GIỮ
+  // (không phá đường cũ nếu có consumer khác).
+  @Get("balances/:id/transactions")
+  @RequirePermission(
+    VIEW_TRANSACTION_LEAVE_BALANCE.action,
+    VIEW_TRANSACTION_LEAVE_BALANCE.resourceType,
+    { isSensitive: VIEW_TRANSACTION_LEAVE_BALANCE.sensitive },
+  )
+  listBalanceTransactionsCanonical(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+    return this.leaveAdmin.listBalanceTransactions(req.user, id);
   }
 
   // ─── Leave requests (→ Task Hub) ─────────────────────────────────────────────

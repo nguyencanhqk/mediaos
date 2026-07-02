@@ -23,6 +23,26 @@ export const ATT_ENGINE_PAIRS = {
   SHIFT_ASSIGNMENT_UPDATE: { action: "update", resourceType: "shift-assignment" },
   RULE_VIEW: { action: "view", resourceType: "attendance-rule" },
   RULE_CONFIG: { action: "config", resourceType: "attendance-rule" },
+  // S3-FE-ATT-4 — remote/onsite-work request (DB-04 §7.8/7.9). Mỗi scope-level là 1 cặp RIÊNG
+  // (nguồn: apps/api/src/attendance/attendance-permissions.const.ts REMOTE_REQUEST group).
+  REMOTE_CREATE_OWN: { action: "create-own", resourceType: "remote-request" },
+  REMOTE_VIEW_OWN: { action: "view-own", resourceType: "remote-request" },
+  REMOTE_VIEW_TEAM: { action: "view-team", resourceType: "remote-request" },
+  REMOTE_VIEW_COMPANY: { action: "view-company", resourceType: "remote-request" },
+  REMOTE_APPROVE: { action: "approve", resourceType: "remote-request" },
+  REMOTE_REJECT: { action: "reject", resourceType: "remote-request" },
+  REMOTE_CANCEL_OWN: { action: "cancel-own", resourceType: "remote-request" },
+  // S3-FE-ATT-6 — audit log ATT RIÊNG (KHÔNG dùng chung cặp foundation view:audit-log).
+  AUDIT_LOG_VIEW: { action: "view", resourceType: "attendance-audit-log" },
+} as const;
+
+/** Trạng thái đơn remote/onsite-work — DB-04 §7.8 (STATE-MACHINE chốt 2026-07-02). */
+export const REMOTE_REQUEST_STATUS = {
+  DRAFT: "Draft",
+  PENDING: "Pending",
+  APPROVED: "Approved",
+  REJECTED: "Rejected",
+  CANCELLED: "Cancelled",
 } as const;
 
 /**
@@ -60,6 +80,13 @@ export const ATT_PATHS = {
   SHIFTS: "/attendance/shifts",
   SHIFT_ASSIGNMENTS: "/attendance/shift-assignments",
   RULES: "/attendance/rules",
+  // S3-FE-ATT-4
+  REMOTE_WORK_REQUESTS: "/attendance/remote-work-requests",
+  REMOTE_WORK_REQUEST_NEW: "/attendance/remote-work-requests/new",
+  REMOTE_WORK_REQUEST_DETAIL: (id: string) => `/attendance/remote-work-requests/${id}`,
+  // S3-FE-ATT-6
+  REPORTS: "/attendance/reports",
+  AUDIT_LOGS: "/attendance/audit-logs",
   // S3-FE-ATT-3 — đơn điều chỉnh công (adjustment-requests) + điều chỉnh trực tiếp trên 1 bản ghi.
   ADJUSTMENT_NEW: "/attendance/adjustment-requests/new",
   ADJUSTMENT_MY: "/attendance/adjustment-requests/my",

@@ -175,6 +175,17 @@ export const HR_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 73,
     requiredAnyPermissions: ["HR.MASTER_DATA.MANAGE"],
   },
+  // S2-FE-HR-7 — Hợp đồng lao động (đọc, theo data-scope Own/Team/Company qua cặp view:contract).
+  {
+    sidebarKey: "hr.contracts",
+    moduleCode: "HR",
+    label: "Hợp đồng lao động",
+    path: "/hr/contracts",
+    icon: "file-signature",
+    group: "operation",
+    order: 50,
+    requiredAnyPermissions: ["HR.CONTRACT.VIEW"],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -281,6 +292,45 @@ export const ATT_SIDEBAR: readonly SidebarItemMeta[] = [
     group: "management",
     order: 45,
     requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_TEAM", "ATT.ATTENDANCE.VIEW_COMPANY"],
+  },
+  // S3-FE-ATT-4 — đơn làm việc từ xa/công tác. Gate = requiredAny CẶP ENGINE THỰC (mỗi scope-level
+  // RIÊNG) — ai có ÍT NHẤT 1 trong 4 (tạo/xem-own/xem-team/xem-company) đều thấy mục.
+  {
+    sidebarKey: "att.remote-work-requests",
+    moduleCode: "ATT",
+    label: "Làm việc từ xa/công tác",
+    path: "/attendance/remote-work-requests",
+    icon: "plane",
+    group: "operation",
+    order: 25,
+    requiredAnyPermissions: [
+      "create-own:remote-request",
+      "view-own:remote-request",
+      "view-team:remote-request",
+      "view-company:remote-request",
+    ],
+  },
+  // S3-FE-ATT-6 — báo cáo tổng hợp công + audit log ATT (report dùng chung cặp view-team/view-company:
+  // attendance; audit log là cặp RIÊNG view:attendance-audit-log, KHÔNG chung với foundation audit-log).
+  {
+    sidebarKey: "att.reports",
+    moduleCode: "ATT",
+    label: "Báo cáo tổng hợp công",
+    path: "/attendance/reports",
+    icon: "bar-chart-3",
+    group: "management",
+    order: 80,
+    requiredAnyPermissions: ["view-team:attendance", "view-company:attendance"],
+  },
+  {
+    sidebarKey: "att.audit-logs",
+    moduleCode: "ATT",
+    label: "Audit log chấm công",
+    path: "/attendance/audit-logs",
+    icon: "file-clock",
+    group: "management",
+    order: 90,
+    requiredAnyPermissions: ["view:attendance-audit-log"],
   },
 ];
 

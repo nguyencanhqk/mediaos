@@ -1,12 +1,15 @@
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { Users, RefreshCw, ArrowLeft, Pencil } from "lucide-react";
+import { Users, RefreshCw, ArrowLeft, Pencil, FileText } from "lucide-react";
 import type { HrEmployeeDetail } from "@mediaos/contracts";
 import { hrApi, hrKeys, useCan, formatDate, PermissionGate } from "@mediaos/web-core";
 import { PageHeader, EmptyState, Button, Card, CardContent } from "@mediaos/ui";
 import { HR_ENGINE_PAIRS } from "../constants";
 import { EmployeeStatusBadge } from "../employee-status";
+// S2-FE-HR-7 — nút điều hướng "Hợp đồng" (ẩn nếu không truyền onContracts).
+import { CONTRACT_ENGINE_PAIRS } from "../contracts/constants";
+import "../contracts/contracts-i18n";
 
 // ---------------------------------------------------------------------------
 // Field row — label + value with masked fallback
@@ -167,9 +170,16 @@ interface EmployeeDetailPageProps {
   employeeId: string;
   onBack?: () => void;
   onEdit?: () => void;
+  /** S2-FE-HR-7 — điều hướng tới /hr/employees/:id/contracts (ẩn nếu không truyền). */
+  onContracts?: () => void;
 }
 
-export function EmployeeDetailPage({ employeeId, onBack, onEdit }: EmployeeDetailPageProps) {
+export function EmployeeDetailPage({
+  employeeId,
+  onBack,
+  onEdit,
+  onContracts,
+}: EmployeeDetailPageProps) {
   const { t } = useTranslation("hr");
   const { t: tc } = useTranslation("common");
   const [activeTab, setActiveTab] = useState<Tab>("overview");
@@ -263,6 +273,17 @@ export function EmployeeDetailPage({ employeeId, onBack, onEdit }: EmployeeDetai
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 {t("detail.backToList")}
               </Button>
+            )}
+            {onContracts && (
+              <PermissionGate
+                action={CONTRACT_ENGINE_PAIRS.VIEW.action}
+                resourceType={CONTRACT_ENGINE_PAIRS.VIEW.resourceType}
+              >
+                <Button variant="outline" size="sm" onClick={onContracts}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  {t("contracts.title")}
+                </Button>
+              </PermissionGate>
             )}
             {onEdit && (
               <PermissionGate
