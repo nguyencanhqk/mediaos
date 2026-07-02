@@ -82,4 +82,9 @@ export const HR_ENGINE_PAIRS = {
   VIEW_EMPLOYEE_CODE_CONFIG: { action: "view", resourceType: "employee-code-config" },
   UPDATE_EMPLOYEE_CODE_CONFIG: { action: "update", resourceType: "employee-code-config" },
   PREVIEW_EMPLOYEE_CODE: { action: "preview", resourceType: "employee-code" },
+  // S2-FE-HR-4 — cặp seed THẬT mig 0444 (ProfileChangeRequestController):
+  //   create:profile-change-request (Own, cả 4 role) · approve:profile-change-request (Company, hr/company-admin).
+  // GET :id + POST reject/cancel dùng CÙNG 2 cặp này ở tầng controller — KHÔNG có cặp "view" riêng.
+  CREATE_PROFILE_CHANGE_REQUEST: { action: "create", resourceType: "profile-change-request" },
+  APPROVE_PROFILE_CHANGE_REQUEST: { action: "approve", resourceType: "profile-change-request" },
 } as const;

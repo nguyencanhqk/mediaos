@@ -131,6 +131,9 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "LEAVE.REQUEST.VIEW_OWN": "view-own:leave",
   "LEAVE.REQUEST.VIEW": "view:leave",
   "LEAVE.REQUEST.APPROVE": "approve:leave",
+  // S3-FE-LEAVE-4 lịch nghỉ — CẶP SEED THẬT mig 0455: view-own:leave-calendar @Own cho CẢ 4 role
+  // (cổng route/sidebar thô); view-team/view-company là sensitive, gate TRONG page qua useCanExact.
+  "LEAVE.CALENDAR.VIEW_OWN": "view-own:leave-calendar",
   "TASK.TASK.VIEW": "read:task",
   "TASK.PROJECT.VIEW": "read:project",
   "NOTI.NOTIFICATION.VIEW_OWN": "read:notification",
@@ -138,7 +141,16 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "AUTH.USER.VIEW": "view:user",
   "AUTH.ROLE.VIEW": "view:role",
   "FOUNDATION.SETTING.VIEW": "view:foundation-setting",
-  "FOUNDATION.AUDIT_LOG.VIEW": "view:foundation-audit-log",
+  // S2-FE-FND-2: cặp seed THẬT dùng bởi AuditController (mig 0340, is_sensitive=true) là `view:audit-log`
+  // (KHÔNG `view:foundation-audit-log` — cặp đó chỉ seed ở mig 0435 nhưng KHÔNG controller nào enforce nó;
+  // dùng nhầm sẽ tạo hố FE-cho-phép/BE-403). PIN đúng cặp AuditController thật đọc — cùng kỹ thuật
+  // system.login-logs (AUTH_AUDIT_LOG từ packages/contracts). (Ghi đè giá trị cũ
+  // `view:foundation-audit-log` từng đăng ký tạm cho route placeholder /system/audit-logs — S2-FE-FND-2
+  // thay placeholder bằng AuditLogsPage thật + sửa drift cặp này.)
+  "FOUNDATION.AUDIT_LOG.VIEW": "view:audit-log",
+  // S2-FE-FND-2: cặp seed THẬT mig 0435 — FilesController dùng view:foundation-file (is_sensitive=false,
+  // bulk-grant company-admin qua LIKE 'foundation-%').
+  "FOUNDATION.FILE.VIEW": "view:foundation-file",
   // S2-FE-HR-5 (lane HR5-WC) — HR master-data CRUD. CẶP SEED THẬT lấy từ controller (chống pair-drift
   // s1-fnd-module): hr-department.controller (read/create/update/delete:department) · positions.controller
   // (read/create/update/delete:position) · hr-master-data.controller (manage:master-data cho CẢ đọc lẫn ghi
@@ -158,6 +170,10 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "FOUNDATION.COMPANY.VIEW": "view:foundation-company",
   "FOUNDATION.COMPANY.UPDATE": "update:foundation-company",
   "FOUNDATION.SETTING.UPDATE": "update:foundation-setting",
+  // S2-FE-FND-3: cặp seed THẬT mig 0435 dòng 338 — ModuleAdminController dùng view:foundation-module
+  // (is_sensitive=false, bulk-grant company-admin qua LIKE 'foundation-%'). KHÁC my-apps (Authenticated-only,
+  // KHÔNG PermissionGuard) — admin catalog GET /foundation/modules[/:code] gated đúng cặp này.
+  "FOUNDATION.MODULE.VIEW": "view:foundation-module",
 };
 
 export function createPermissionChecker(userPermissions: readonly UserPermission[]) {
@@ -911,6 +927,20 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 43,
   },
+  // S3-FE-LEAVE-4 — LEAVE-SCREEN-007/008/009 (lịch nghỉ own/team/company). Cổng route = CHỈ VIEW_OWN
+  // (mọi role có Own) — đủ để render workspace; gate TINH hơn (team/company) áp trong LeaveCalendarPage
+  // qua useCanExact (sensitive pair, không wildcard fallback), mirror TeamAttendanceRecordsPage.
+  {
+    routeKey: "leave.calendar",
+    path: "/leave/calendar",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "LEAVE",
+    screenCode: "LEAVE-SCREEN-007",
+    titleKey: "routeTitle.leaveCalendar",
+    requiredAnyPermissions: ["LEAVE.CALENDAR.VIEW_OWN"],
+    showInSidebar: true,
+    order: 44,
+  },
 
   // Tasks
   {
@@ -993,6 +1023,31 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["FOUNDATION.AUDIT_LOG.VIEW"],
     showInSidebar: true,
     order: 73,
+  },
+  // S2-FE-FND-2 — cặp seed THẬT mig 0435 (view:foundation-file, is_sensitive=false, bulk-grant company-admin).
+  {
+    routeKey: "system.files",
+    path: "/system/files",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "FOUNDATION",
+    screenCode: "SYSTEM-SCREEN-FILES",
+    titleKey: "routeTitle.systemFiles",
+    requiredAnyPermissions: ["FOUNDATION.FILE.VIEW"],
+    showInSidebar: true,
+    order: 74,
+  },
+  // S2-FE-FND-3 — cặp seed THẬT mig 0435 dòng 338 (view:foundation-module, is_sensitive=false, bulk-grant
+  // company-admin). GET /foundation/modules (S2-FND-BE-1, ModuleAdminController).
+  {
+    routeKey: "system.modules",
+    path: "/system/modules",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "FOUNDATION",
+    screenCode: "SYSTEM-SCREEN-MODULES",
+    titleKey: "routeTitle.systemModules",
+    requiredAnyPermissions: ["FOUNDATION.MODULE.VIEW"],
+    showInSidebar: true,
+    order: 75,
   },
 
   // Account

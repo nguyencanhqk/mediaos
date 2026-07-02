@@ -65,6 +65,7 @@ export { buildQueryString } from "./lib/api-params";
 export {
   rootKeys,
   authKeys,
+  authUsersKeys,
   dashboardKeys,
   hrKeys,
   attendanceKeys,
@@ -86,6 +87,7 @@ export { bootstrapSession } from "./lib/session";
 export { getHealth, type Health, getHealthDb, type HealthDb } from "./lib/api";
 export { authApi } from "./lib/auth-api";
 export { usersApi } from "./lib/users-api";
+export { authUsersApi } from "./lib/auth-users-api";
 export { twoFactorApi } from "./lib/two-factor-api";
 export { notificationApi } from "./lib/notification-api";
 export { hrApi } from "./lib/hr-api";

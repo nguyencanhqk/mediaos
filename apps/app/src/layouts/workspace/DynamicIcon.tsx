@@ -43,6 +43,7 @@ import {
   LogIn,
   Building2,
   SlidersHorizontal,
+  File,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@mediaos/ui";
@@ -85,6 +86,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "log-in": LogIn,
   "building-2": Building2,
   "sliders-horizontal": SlidersHorizontal,
+  file: File,
 };
 
 interface DynamicIconProps {
