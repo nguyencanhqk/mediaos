@@ -18,6 +18,19 @@ import { UnauthorizedException } from "@nestjs/common";
  *     TRONG cùng tx (append-only). reason CHỈ ở audit — KHÔNG vào HTTP body.
  *
  * Mock theo style withTenant + tx của admin-users.service.spec.ts (không cần Postgres).
+ *
+ * ── S2-AUTH-BE-10 (crown, auth — RED viết TRƯỚC) ────────────────────────────────────────────────
+ * Mở rộng cổng trạng thái từ USER sang COMPANY: token còn sống nhưng CÔNG TY bị 'suspended' (hoặc row
+ * companies VẮNG do RLS lọc / soft-delete / race) ⇒ CHẶN cấp/xoay token y như user-suspended. Áp cho
+ * refresh() + completeTwoFactorLogin() (KHÔNG đổi login() — resolveCompanyId đã là cổng company ở đó).
+ *   - refresh() company ≠ 'active' → 401 UNIFORM + THU HỒI family + audit 'auth.refresh_blocked'
+ *     after.reason='company_inactive'. KHÔNG xoay (0 insert refreshTokens).
+ *   - FAIL-CLOSED: companies SELECT trả 0 hàng (row undefined) ⇒ coi như inactive ⇒ 401 + revoke, KHÔNG
+ *     ném TypeError/500 (deny-path riêng).
+ *   - completeTwoFactorLogin() company ≠ 'active' → 401 UNIFORM + audit 'auth.login_blocked'
+ *     reason='company_inactive'. KHÔNG cấp token (0 insert refreshTokens).
+ * makeTx phục vụ thêm hàng `companies` (DEFAULT status='active') để MỌI regression user-suspended/active
+ * cũ GIỮ xanh khi code GREEN bắt đầu đọc companies. reason CHỈ ở audit_logs — KHÔNG vào HTTP body.
  */
 
 // db/index.ts gọi loadEnv() lúc module-load → mock để không crash; resolveCompanyId dùng db.execute nên
@@ -29,7 +42,7 @@ vi.mock("../db/index", () => ({
 }));
 
 import { AuthService } from "./auth.service";
-import { refreshTokens, users } from "../db/schema";
+import { companies, refreshTokens, users } from "../db/schema";
 import type { AuditEntry } from "../events/audit.service";
 
 /** Tìm 1 audit entry theo action trong các lần gọi audit.record (calls = [tx, entry][]). */
@@ -74,6 +87,16 @@ function makeRefreshRow(over: Record<string, unknown> = {}) {
   };
 }
 
+/** S2-AUTH-BE-10: hàng companies mà refresh()/2FA (GREEN) đọc bằng eq(companies.id, companyId). */
+function makeCompanyRow(over: Record<string, unknown> = {}) {
+  return {
+    id: COMPANY_ID,
+    name: "Acme",
+    status: "active",
+    ...over,
+  };
+}
+
 interface TxCalls {
   refreshInserts: number;
   refreshUpdates: number;
@@ -86,14 +109,21 @@ interface TxCalls {
 function makeTx(opts: {
   userRow?: Record<string, unknown> | null;
   refreshRow?: Record<string, unknown> | null;
+  /**
+   * S2-AUTH-BE-10: hàng companies do refresh()/2FA (GREEN) đọc. KEY VẮNG (undefined) → DEFAULT active
+   * (giữ xanh regression cũ). `null` → SELECT trả 0 hàng (FAIL-CLOSED — mô phỏng RLS lọc/soft-delete/race).
+   */
+  companyRow?: Record<string, unknown> | null;
 }): { tx: unknown; calls: TxCalls } {
   const calls: TxCalls = { refreshInserts: 0, refreshUpdates: 0 };
+  const companyRow = opts.companyRow === undefined ? makeCompanyRow() : opts.companyRow;
   const tx = {
     select: (_cols?: unknown) => ({
       from: (table: unknown) => {
         const rowsFor = () => {
           if (table === users) return opts.userRow ? [opts.userRow] : [];
           if (table === refreshTokens) return opts.refreshRow ? [opts.refreshRow] : [];
+          if (table === companies) return companyRow ? [companyRow] : [];
           return []; // userRoles (isOperatorTx) → KHÔNG operator
         };
         const limitChain = {
@@ -304,6 +334,89 @@ describe("completeTwoFactorLogin() — guard status='suspended'", () => {
 
   it("step-2 user active → cấp token (regression)", async () => {
     const { tx, calls } = makeTx({ userRow: makeUserRow({ status: "active" }) });
+    const { service } = makeDeps(tx);
+    const res = await service.completeTwoFactorLogin("challenge", "123456", META);
+    expect(res).toHaveProperty("accessToken");
+    expect(calls.refreshInserts).toBe(1);
+  });
+});
+
+// ── S2-AUTH-BE-10: cổng COMPANY-active (refresh + 2FA) — RED viết TRƯỚC ─────────────────────────
+// Token còn sống + user active nhưng CÔNG TY 'suspended' (hoặc row companies vắng) ⇒ CHẶN. Đây là
+// nhánh MỚI so với cổng user-status: code hiện tại CHƯA đọc companies trong refresh()/2FA ⇒ các case
+// deny (1)(3)(4) FAIL trên code hiện tại (RED thật). Case (2)(5) là regression/control giữ xanh.
+
+describe("refresh() — guard company status='active' (S2-AUTH-BE-10)", () => {
+  const REFRESH_TOKEN = `${COMPANY_ID}.opaque`;
+
+  it("(1) user active NHƯNG company='suspended' → 401 UNIFORM, THU HỒI family, KHÔNG xoay + audit refresh_blocked reason='company_inactive'", async () => {
+    const { tx, calls } = makeTx({
+      userRow: makeUserRow({ status: "active" }),
+      refreshRow: makeRefreshRow(),
+      companyRow: makeCompanyRow({ status: "suspended" }),
+    });
+    const { service, audit } = makeDeps(tx);
+    await expect(service.refresh(REFRESH_TOKEN, META)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    // KHÔNG cấp token mới; thu hồi family (ít nhất 1 update refreshTokens).
+    expect(calls.refreshInserts).toBe(0);
+    expect(calls.refreshUpdates).toBeGreaterThanOrEqual(1);
+    const entry = findAudit(audit.record.mock.calls, "auth.refresh_blocked");
+    expect(entry).toBeDefined();
+    expect(entry?.objectType).toBe("auth");
+    expect((entry?.after as { reason: string }).reason).toBe("company_inactive");
+  });
+
+  it("(2) user active + company='active' → xoay token bình thường (regression, 1 insert)", async () => {
+    const { tx, calls } = makeTx({
+      userRow: makeUserRow({ status: "active" }),
+      refreshRow: makeRefreshRow(),
+      companyRow: makeCompanyRow({ status: "active" }),
+    });
+    const { service } = makeDeps(tx);
+    const res = await service.refresh(REFRESH_TOKEN, META);
+    expect(res).toHaveProperty("accessToken");
+    expect(calls.refreshInserts).toBe(1);
+  });
+
+  it("(3) FAIL-CLOSED: companies SELECT trả 0 hàng (row undefined) → 401, KHÔNG xoay, KHÔNG ném TypeError/500", async () => {
+    // companyRow=null ⇒ SELECT companies trả [] ⇒ const [company] = ... → undefined. GREEN PHẢI coi như
+    // inactive (RLS lọc / soft-delete / race) → 401 UNIFORM + thu hồi, KHÔNG dereference row undefined.
+    const { tx, calls } = makeTx({
+      userRow: makeUserRow({ status: "active" }),
+      refreshRow: makeRefreshRow(),
+      companyRow: null,
+    });
+    const { service } = makeDeps(tx);
+    const err = await service.refresh(REFRESH_TOKEN, META).catch((e) => e);
+    expect(err).toBeInstanceOf(UnauthorizedException); // KHÔNG phải TypeError (fail-closed, không crash 500)
+    expect(calls.refreshInserts).toBe(0);
+  });
+});
+
+describe("completeTwoFactorLogin() — guard company status='active' (S2-AUTH-BE-10)", () => {
+  it("(4) user active NHƯNG company='suspended' → 401 UNIFORM, KHÔNG cấp token + audit login_blocked reason='company_inactive'", async () => {
+    const { tx, calls } = makeTx({
+      userRow: makeUserRow({ status: "active" }),
+      companyRow: makeCompanyRow({ status: "suspended" }),
+    });
+    const { service, audit } = makeDeps(tx);
+    await expect(
+      service.completeTwoFactorLogin("challenge", "123456", META),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(calls.refreshInserts).toBe(0);
+    const entry = findAudit(audit.record.mock.calls, "auth.login_blocked");
+    expect(entry).toBeDefined();
+    expect(entry?.objectType).toBe("auth");
+    expect((entry?.after as { reason: string }).reason).toBe("company_inactive");
+  });
+
+  it("(5) user active + company='active' → cấp token (regression)", async () => {
+    const { tx, calls } = makeTx({
+      userRow: makeUserRow({ status: "active" }),
+      companyRow: makeCompanyRow({ status: "active" }),
+    });
     const { service } = makeDeps(tx);
     const res = await service.completeTwoFactorLogin("challenge", "123456", META);
     expect(res).toHaveProperty("accessToken");
