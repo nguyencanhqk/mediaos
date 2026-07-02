@@ -570,6 +570,25 @@ describe("FileService (deny-path / validation RED)", () => {
       expect(denyLog![1].deniedReason).toBe("infected");
     });
 
+    // S2-FND-BE-4 (H2, acceptance-criterion lock): ONLY 'Infected' blocks a fully-Uploaded file. AV is
+    // not yet wired (default scan_status='NotRequired'), so an Uploaded file whose scan is still
+    // Pending/Failed — or Clean/NotRequired — MUST still presign. This locks "scan Pending/Failed vẫn
+    // tải" against a future over-restrictive regression (Đội-3 flagged only Clean/NotRequired was tested).
+    it.each(["Pending", "Failed", "NotRequired", "Clean"] as const)(
+      "H2: Uploaded + scan_status='%s' (not Infected) still presigns → DownloadUrlDto + Download log granted",
+      async (scanStatus) => {
+        h.fileRepo.findByIdTx.mockResolvedValue(
+          makeFileRow({ uploadStatus: "Uploaded", scanStatus }),
+        );
+        const dto = await h.service.getDownloadUrl(user, FILE);
+        expect(dto.url).toMatch(/^https:\/\//);
+        expect(typeof dto.expiresAt).toBe("string");
+        expect(h.storage.get).toHaveBeenCalledTimes(1);
+        const log = h.accessLogSpy.mock.calls.find((c) => c[1].action === "Download");
+        expect(log![1].accessGranted).toBe(true);
+      },
+    );
+
     it("H2 does NOT restrict view: metadata of a Pending/Infected file (authz ALLOW) → 200 DTO", async () => {
       h.fileRepo.findByIdTx.mockResolvedValue(
         makeFileRow({ uploadStatus: "Pending", scanStatus: "Infected" }),
