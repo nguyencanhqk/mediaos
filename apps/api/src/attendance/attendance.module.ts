@@ -23,6 +23,10 @@ import { AttendanceShiftService } from "./attendance-shift.service";
 // S3-INT-1 (additive): LEAVE→ATT sync (onLeaveApproved consumer + revert for LeaveModule to call inline).
 import { AttendanceLeaveSyncRepository } from "./attendance-leave-sync.repository";
 import { AttendanceLeaveSyncService } from "./attendance-leave-sync.service";
+// S3-ATT-BE-5 (additive): remote/onsite-work request workflow (Draft→Pending→Approved/Rejected/Cancelled).
+import { RemoteWorkRequestController } from "./remote-work-request.controller";
+import { RemoteWorkRequestRepository } from "./remote-work-request.repository";
+import { RemoteWorkRequestService } from "./remote-work-request.service";
 
 /**
  * S3-INT-1 — binds AttendanceLeaveSyncService.onLeaveApproved as an EventBus consumer of
@@ -75,10 +79,15 @@ class LeaveApprovedSyncRegistrar implements OnModuleInit {
     AttendanceAdjustmentController,
     AttendanceShiftController,
     AttendanceInternalController,
+    RemoteWorkRequestController,
   ],
   providers: [
     AttendanceService,
     AttendanceRepository,
+    // S3-ATT-BE-5 (additive): remote/onsite-work request workflow — reuses DataScopeService +
+    // PermissionService (PermissionModule exports both) + AuditService/OutboxService (EventsModule).
+    RemoteWorkRequestService,
+    RemoteWorkRequestRepository,
     // S3-ATT-BE-2 (additive): scoped records read. AttendanceReadService injects DataScopeService +
     // PermissionService (PermissionModule exports both) + DatabaseService (@Global) + the read repo.
     AttendanceReadService,
@@ -107,6 +116,7 @@ class LeaveApprovedSyncRegistrar implements OnModuleInit {
     AttendanceAdjustmentService,
     AttendanceShiftService,
     AttendanceLeaveSyncService,
+    RemoteWorkRequestService,
   ],
 })
 export class AttendanceModule {}
