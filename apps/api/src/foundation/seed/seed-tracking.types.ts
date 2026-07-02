@@ -97,3 +97,21 @@ export interface FinishBatchResult {
   status: SeedBatchStatus;
   finishedAt: Date;
 }
+
+/**
+ * S2-FND-BE-2 — view trạng thái RUN 1 batch seed (GET /foundation/seeds). WHITELIST vận hành — KHÔNG
+ * secret/payload/metadata/executedBy/errorMessage (BẤT BIẾN #3). Mốc thời gian = ISO-8601 string trên
+ * wire (khớp contract seedBatchStatusViewSchema). checksum = hash cấu hình seed (KHÔNG secret).
+ */
+export interface SeedBatchStatusView {
+  id: string;
+  seedKey: string;
+  seedVersion: string;
+  environment: string | null;
+  status: SeedBatchStatus;
+  checksum: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

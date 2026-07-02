@@ -4,6 +4,12 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
+## Quyết định người-chốt chờ áp dụng (2026-07-02, session 1849d064) — auto-loop live nên CHƯA kịp bake vào retry đang chạy
+
+- **S2-HR-BE-6** (Employee contracts): (1) GIỮ kỳ vọng ban đầu — seed grant RIÊNG Own cho employee + Team cho manager (không đổi QA-05 thành Company-only như plan-reviewer đề xuất phương án b). (2) Ngưỡng cảnh báo sắp hết hạn HĐ = company-configurable, mặc định 2 mốc: 30 ngày và 7 ngày (không phải 1 số cố định). ⚠️ Auto-loop đã retry S2-HR-BE-6 LẦN 2 (block khác: audit object_type 'employee_contract' thiếu trong AUDIT_OBJECT_TYPES/CHECK + permission pair chưa pin) — 2 quyết định trên CHƯA được bake vào round đó vì loop chạy live không có kênh inject giữa chừng. Áp dụng khi WO này tới điểm dừng (needs_human hoặc round kế).
+- **S3-ATT-BE-5** (ATT Remote/Onsite): trạng thái khởi tạo = **Draft** (không phải default Pending hiện tại của bảng), cần action **submit** riêng (Draft→Pending) trong contract/API. Khi submit: người tạo chọn người duyệt trực tiếp HOẶC người duyệt thay thế, + danh sách người theo dõi (watcher) để nhận thông báo liên quan. Đây là thay đổi so với plan hiện có ở `docs/plans/S3-ATT-BE-5.md` (đang giả định create→Pending luôn, không có bước submit/watcher). WO chưa được auto-loop chạm lại trong phiên này — áp dụng khi pick up.
+- **S2-AUTH-BE-7** (Session management API): CHỐT — KHÔNG seed permission pair riêng. Route GET/revoke sessions chỉ cần `Authenticated + owner-check` ở service layer (session.user_id === caller), giống pattern `/auth/me` + `/account/change-password` — không có phạm vi cross-user cần gate nên permission pair sẽ thừa. Route KHÔNG dùng `@RequirePermission`/`PermissionGuard` cho các endpoint self-service này.
+
 ## Phiên gần nhất (2026-06-20) — WAVE 2a fan-out 2 lane → merged master `2c1ac49`
 
 - **Đã xong (Wave 2a, 2 lane song song)**:
