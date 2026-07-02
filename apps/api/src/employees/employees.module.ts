@@ -5,6 +5,7 @@ import { PasswordService } from "../auth/password.service";
 import { PermissionModule } from "../permission/permission.module";
 import { SecurityPolicyModule } from "../security-policy/security-policy.module";
 import { SequenceModule } from "../foundation/sequences/sequence.module";
+import { FilesModule } from "../foundation/files/files.module";
 import { EmployeesController } from "./employees.controller";
 import { EmployeesRepository } from "./employees.repository";
 import { EmployeesService } from "./employees.service";
@@ -25,6 +26,10 @@ import { ProfileChangeRequestService } from "./profile-change-request.service";
 import { EmployeeCodeConfigController } from "./employee-code-config.controller";
 import { EmployeeCodeConfigRepository } from "./employee-code-config.repository";
 import { EmployeeCodeConfigService } from "./employee-code-config.service";
+// S2-HR-BE-6 (additive): employee contracts (hợp đồng lao động) CRUD + file link.
+import { ContractController } from "./contract.controller";
+import { ContractRepository } from "./contract.repository";
+import { ContractService } from "./contract.service";
 
 @Module({
   imports: [
@@ -35,6 +40,8 @@ import { EmployeeCodeConfigService } from "./employee-code-config.service";
     SecurityPolicyModule,
     // S2-HR-BE-2: SequenceService cho auto-sinh employee_code (FOR UPDATE, 0-dup).
     SequenceModule,
+    // S2-HR-BE-6: FileService cho link file hợp đồng (entity 'contract').
+    FilesModule,
     MulterModule.register({ limits: { fileSize: 5 * 1024 * 1024 } }),
   ],
   controllers: [
@@ -44,6 +51,8 @@ import { EmployeeCodeConfigService } from "./employee-code-config.service";
     ProfileChangeRequestController,
     // S2-HR-BE-7 (additive): employee-code config admin controller.
     EmployeeCodeConfigController,
+    // S2-HR-BE-6 (additive): employee contracts controller.
+    ContractController,
   ],
   // PasswordService is stateless (argon2) — provided locally to hash generated login passwords (F7).
   providers: [
@@ -62,7 +71,16 @@ import { EmployeeCodeConfigService } from "./employee-code-config.service";
     // S2-HR-BE-7 (additive): employee-code config admin providers.
     EmployeeCodeConfigService,
     EmployeeCodeConfigRepository,
+    // S2-HR-BE-6 (additive): employee contracts providers.
+    ContractService,
+    ContractRepository,
   ],
-  exports: [EmployeesService, HrReadService, HrWriteService, ProfileChangeRequestService],
+  exports: [
+    EmployeesService,
+    HrReadService,
+    HrWriteService,
+    ProfileChangeRequestService,
+    ContractService,
+  ],
 })
 export class EmployeesModule {}
