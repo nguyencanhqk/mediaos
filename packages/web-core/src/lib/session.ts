@@ -19,6 +19,8 @@ async function doBootstrap(): Promise<boolean> {
   try {
     const me = await authApi.me();
     useAuthStore.getState().setUser(me, me.capabilities);
+    // Cờ ép-enroll-2FA (AUTH-003) — set RIÊNG (setUser giữ nguyên chữ ký cho các call site khác không đổi).
+    useAuthStore.getState().setMustSetupTwoFactor(me.mustSetupTwoFactor);
     return true;
   } catch (err) {
     // Refresh OK nhưng /me lỗi → xoá access token mồ côi (chỉ store action, không chạm mạng). Caller redirect.
