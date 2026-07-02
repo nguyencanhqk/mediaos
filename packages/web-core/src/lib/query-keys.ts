@@ -19,6 +19,7 @@ export const rootKeys = {
   leave: ["leave"] as const,
   tasks: ["tasks"] as const,
   notifications: ["notifications"] as const,
+  foundation: ["foundation"] as const,
 } as const;
 
 // ── Auth keys ─────────────────────────────────────────────────────────────────
@@ -155,6 +156,24 @@ export const notificationKeys = {
   unreadCount: () => [...rootKeys.notifications, "unread-count"] as const,
 };
 
+// ── Foundation keys (S2-FE-FND-1 · FND1-WC) ─────────────────────────────────────
+//
+// /system màn quản trị foundation: hồ sơ công ty (current) + company settings (resolve batch). Key ổn định
+// cho invalidate sau PATCH. company_id KHÔNG vào key (server-scoped theo AuthContext).
+
+export const foundationKeys = {
+  all: rootKeys.foundation,
+  company: {
+    all: [...rootKeys.foundation, "company"] as const,
+    current: () => [...rootKeys.foundation, "company", "current"] as const,
+  },
+  settings: {
+    all: [...rootKeys.foundation, "settings"] as const,
+    resolve: (params?: Record<string, unknown>) =>
+      [...rootKeys.foundation, "settings", "resolve", params] as const,
+  },
+} as const;
+
 // ── Mutation → query-key invalidation matrix (FRONTEND-04 §17.3) ──────────────
 //
 // Mỗi entry trả về DANH SÁCH prefix key để `queryClient.invalidateQueries({ queryKey })`. Prefix (BỎ slot
@@ -179,4 +198,13 @@ export const leaveInvalidation = {
     [leaveRequestsListPrefix, leaveKeys.requests.detail(requestId)] as const,
   reject: (requestId: string) =>
     [leaveRequestsListPrefix, leaveKeys.requests.detail(requestId)] as const,
+};
+
+// S2-FE-FND-1 (FND1-WC): PATCH company/current → làm mới current-company; PATCH company-settings/:key →
+// làm mới MỌI biến thể resolve(params) qua prefix (bỏ slot params — TanStack match theo prefix).
+const foundationSettingsResolvePrefix = [...rootKeys.foundation, "settings", "resolve"] as const;
+
+export const foundationInvalidation = {
+  updateCompany: () => [foundationKeys.company.current()] as const,
+  updateSetting: () => [foundationSettingsResolvePrefix] as const,
 };

@@ -150,6 +150,12 @@ import {
   SECURITY_EVENTS_PATH,
   SECURITY_EVENTS_ROUTE_META,
 } from "@/routes/system/auth-logs/constants";
+// System / Foundation — S2-FE-FND-1 (FND1-APP)
+import { SystemOverviewPage } from "@/routes/system/foundation/SystemOverviewPage";
+import { CompanyProfilePage } from "@/routes/system/foundation/CompanyProfilePage";
+import { CompanySettingsPage } from "@/routes/system/foundation/CompanySettingsPage";
+import { SystemSettingsPage } from "@/routes/system/foundation/SystemSettingsPage";
+import { FOUNDATION_PATH, FOUNDATION_SCREEN } from "@/routes/system/foundation/constants";
 
 const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", EmployeeListPage);
 const hrEmployeesRoute = makeModuleRoute("/hr/employees", "hr.employees", "HR", EmployeeListPage);
@@ -374,8 +380,65 @@ const notificationsRoute = makeModuleRoute(
   ModulePlaceholder,
 );
 
-// System / Foundation
-const systemRoute = makeModuleRoute("/system", "system.overview", "FOUNDATION", ModulePlaceholder);
+// System / Foundation — /system landing THAY ModulePlaceholder = System Overview (S2-FE-FND-1).
+const systemRoute = makeModuleRoute("/system", "system.overview", "FOUNDATION", SystemOverviewPage);
+
+// Company profile view+edit — RouteMeta CỤC BỘ (KHÔNG ở ROUTE_REGISTRY web-core). Gate = FOUNDATION.COMPANY.VIEW
+// (→ view:foundation-company, cặp seed thật mig 0435). ProtectedRoute tiêu thụ guardResult (thiếu → 403).
+const systemCompanyMeta: RouteMeta = {
+  routeKey: "system.company",
+  path: FOUNDATION_PATH.COMPANY,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "FOUNDATION",
+  screenCode: FOUNDATION_SCREEN.COMPANY,
+  titleKey: "routeTitle.systemCompany",
+  requiredAnyPermissions: ["FOUNDATION.COMPANY.VIEW"],
+};
+const systemCompanyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: FOUNDATION_PATH.COMPANY,
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(systemCompanyMeta, "FOUNDATION", <CompanyProfilePage />),
+});
+
+// Company settings — gate = FOUNDATION.SETTING.VIEW (→ view:foundation-setting). Path tĩnh sâu hơn
+// /system/company nên rank cao hơn (không đụng nhau).
+const systemCompanySettingsMeta: RouteMeta = {
+  routeKey: "system.company-settings",
+  path: FOUNDATION_PATH.COMPANY_SETTINGS,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "FOUNDATION",
+  screenCode: FOUNDATION_SCREEN.COMPANY_SETTINGS,
+  titleKey: "routeTitle.systemCompanySettings",
+  requiredAnyPermissions: ["FOUNDATION.SETTING.VIEW"],
+};
+const systemCompanySettingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: FOUNDATION_PATH.COMPANY_SETTINGS,
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(systemCompanySettingsMeta, "FOUNDATION", <CompanySettingsPage />),
+});
+
+// System settings (SYSTEM_MANAGE) — DEFER: chưa có BE endpoint. Gate tạm bằng cặp seed thật
+// FOUNDATION.SETTING.VIEW (admin reach placeholder); KHÔNG nút mutation chết trong page.
+const systemSettingsMeta: RouteMeta = {
+  routeKey: "system.settings",
+  path: FOUNDATION_PATH.SYSTEM_SETTINGS,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "FOUNDATION",
+  screenCode: FOUNDATION_SCREEN.SYSTEM_SETTINGS,
+  titleKey: "routeTitle.systemSettings",
+  requiredAnyPermissions: ["FOUNDATION.SETTING.VIEW"],
+};
+const systemSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: FOUNDATION_PATH.SYSTEM_SETTINGS,
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(systemSettingsMeta, "FOUNDATION", <SystemSettingsPage />),
+});
+
 const systemUsersRoute = makeModuleRoute("/system/users", "system.users", "FOUNDATION", UsersPage);
 const systemRolesRoute = makeModuleRoute("/system/roles", "system.roles", "FOUNDATION", RolesPage);
 const systemAuditLogsRoute = makeModuleRoute(
@@ -454,6 +517,9 @@ const routeTree = rootRoute.addChildren([
   tasksMyTasksRoute,
   notificationsRoute,
   systemRoute,
+  systemCompanyRoute,
+  systemCompanySettingsRoute,
+  systemSettingsRoute,
   systemUsersRoute,
   systemRolesRoute,
   systemAuditLogsRoute,

@@ -254,6 +254,29 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 10,
     requiredAnyPermissions: ["FOUNDATION.SETTING.VIEW", "AUTH.USER.VIEW"],
   },
+  // S2-FE-FND-1 (FND1-APP) — ADDITIVE. Gate theo cặp seed THẬT mig 0435 (FOUNDATION.COMPANY.VIEW →
+  // view:foundation-company; FOUNDATION.SETTING.VIEW → view:foundation-setting). filterSidebarItems ẩn
+  // khi thiếu — KHÔNG hard-code role.
+  {
+    sidebarKey: "system.company",
+    moduleCode: "FOUNDATION",
+    label: "Hồ sơ công ty",
+    path: "/system/company",
+    icon: "building-2",
+    group: "admin",
+    order: 15,
+    requiredAnyPermissions: ["FOUNDATION.COMPANY.VIEW"],
+  },
+  {
+    sidebarKey: "system.company-settings",
+    moduleCode: "FOUNDATION",
+    label: "Cấu hình công ty",
+    path: "/system/company/settings",
+    icon: "sliders-horizontal",
+    group: "admin",
+    order: 16,
+    requiredAnyPermissions: ["FOUNDATION.SETTING.VIEW"],
+  },
   {
     sidebarKey: "system.users",
     moduleCode: "FOUNDATION",

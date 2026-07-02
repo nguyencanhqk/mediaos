@@ -8,6 +8,7 @@ import {
   APP_REGISTRY,
   ROUTE_REGISTRY,
   getRouteMeta,
+  PERMISSION_CODE_TO_PAIR,
   type SessionContext,
   type SidebarItemMeta,
   type UserPermission,
@@ -538,6 +539,53 @@ describe("PERMISSION_CODE_TO_PAIR — ATT/LEAVE scope pairs", () => {
     expect(stale.can("ATT.ATTENDANCE.VIEW_COMPANY")).toBe(false);
     expect(stale.can("LEAVE.REQUEST.VIEW_OWN")).toBe(false);
     expect(stale.can("LEAVE.REQUEST.VIEW")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PERMISSION_CODE_TO_PAIR — FOUNDATION company/setting (drift-guard, S2-FE-FND-1 · FND1-WC)
+// Mirror company.controller.spec: FE gate code → ĐÚNG cặp engine seed THẬT (mig 0435), KHÔNG
+// nhãn-ma FRONTEND-13 §7.1 (FOUNDATION.SYSTEM.VIEW / SETTING.SYSTEM_MANAGE chưa seed). Happy-path
+// KHÔNG bắt được drift này (admin có mọi cặp) ⇒ phải assert ánh xạ từng cặp.
+// ---------------------------------------------------------------------------
+
+describe("PERMISSION_CODE_TO_PAIR — FOUNDATION company/setting pairs (drift-guard)", () => {
+  it("FOUNDATION.COMPANY.VIEW khớp khi user có view:foundation-company (mig 0435)", () => {
+    const c = createPermissionChecker(makePerms(["view:foundation-company"]));
+    expect(c.can("FOUNDATION.COMPANY.VIEW")).toBe(true);
+    // KHÔNG kế thừa update.
+    expect(c.can("FOUNDATION.COMPANY.UPDATE")).toBe(false);
+  });
+
+  it("FOUNDATION.COMPANY.UPDATE khớp khi user có update:foundation-company", () => {
+    const c = createPermissionChecker(makePerms(["update:foundation-company"]));
+    expect(c.can("FOUNDATION.COMPANY.UPDATE")).toBe(true);
+  });
+
+  it("FOUNDATION.SETTING.UPDATE khớp khi user có update:foundation-setting", () => {
+    const c = createPermissionChecker(makePerms(["update:foundation-setting"]));
+    expect(c.can("FOUNDATION.SETTING.UPDATE")).toBe(true);
+    // view riêng biệt với update (pair-as-gate).
+    expect(c.can("FOUNDATION.SETTING.VIEW")).toBe(false);
+  });
+
+  it("view:foundation-setting KHÔNG mở khoá được UPDATE (đọc ≠ sửa)", () => {
+    const readOnly = createPermissionChecker(makePerms(["view:foundation-setting"]));
+    expect(readOnly.can("FOUNDATION.SETTING.VIEW")).toBe(true);
+    expect(readOnly.can("FOUNDATION.SETTING.UPDATE")).toBe(false);
+  });
+
+  it("cặp namespace CŨ read/update:company KHÔNG khớp FE code FOUNDATION.COMPANY.* (chống drift)", () => {
+    // mig 0005 read/update:company là namespace cũ — Foundation routes dùng *:foundation-* (mig 0435).
+    const stale = createPermissionChecker(makePerms(["read:company", "update:company"]));
+    expect(stale.can("FOUNDATION.COMPANY.VIEW")).toBe(false);
+    expect(stale.can("FOUNDATION.COMPANY.UPDATE")).toBe(false);
+  });
+
+  it("ánh xạ tường minh khớp cặp engine của controller Foundation", () => {
+    expect(PERMISSION_CODE_TO_PAIR["FOUNDATION.COMPANY.VIEW"]).toBe("view:foundation-company");
+    expect(PERMISSION_CODE_TO_PAIR["FOUNDATION.COMPANY.UPDATE"]).toBe("update:foundation-company");
+    expect(PERMISSION_CODE_TO_PAIR["FOUNDATION.SETTING.UPDATE"]).toBe("update:foundation-setting");
   });
 });
 
