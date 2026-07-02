@@ -405,6 +405,12 @@ export default {
         description: "Lịch sử truy cập tệp — chỉ đọc",
         manage: "Xem nhật ký",
       },
+      // S2-FE-FND-7 (RC2) — thẻ audit-log để persona chỉ view:audit-log không rơi soft-403.
+      auditLogs: {
+        title: "Nhật ký kiểm toán",
+        description: "Lịch sử thao tác quan trọng trong hệ thống — chỉ đọc",
+        manage: "Xem nhật ký kiểm toán",
+      },
       health: {
         title: "Tình trạng dịch vụ",
         description: "Trạng thái API backend",

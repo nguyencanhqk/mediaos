@@ -172,4 +172,30 @@ describe("SystemOverviewPage", () => {
       "/system/health",
     );
   });
+
+  // ── S2-FE-FND-7 (RC2): audit-log-only persona — NO soft-403, audit card shown ──
+  // Route-guard cho /system (SYSTEM_APP_PERMISSIONS) ALLOW persona chỉ view:audit-log
+  // ⇒ thân trang PHẢI landing overview (KHÔNG forbidden EmptyState) + có thẻ Nhật ký kiểm toán.
+  it("does NOT show forbidden and shows the audit-logs card for an audit-log-only user", () => {
+    setCapabilities({ "view:audit-log": true });
+    renderWithQuery(<SystemOverviewPage />);
+    // KHÔNG rơi vào soft-403
+    expect(screen.queryByText("Không có quyền truy cập")).not.toBeInTheDocument();
+    // Đã landing overview thật
+    expect(screen.getByText(/tổng quan hệ thống/i)).toBeInTheDocument();
+    // Thẻ audit-logs hiện + link tới /system/audit-logs
+    expect(screen.getByRole("link", { name: /xem nhật ký kiểm toán/i })).toHaveAttribute(
+      "href",
+      "/system/audit-logs",
+    );
+    // Không có quyền company → KHÔNG fetch company
+    expect(foundationApi.getCompany).not.toHaveBeenCalled();
+  });
+
+  // ── audit-logs card is HIDDEN for a user without view:audit-log (deny-path) ──
+  it("does NOT show the audit-logs card for a settings-only user", () => {
+    setCapabilities({ "view:foundation-setting": true });
+    renderWithQuery(<SystemOverviewPage />);
+    expect(screen.queryByRole("link", { name: /xem nhật ký kiểm toán/i })).not.toBeInTheDocument();
+  });
 });
