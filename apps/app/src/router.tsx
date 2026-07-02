@@ -142,6 +142,10 @@ import { EditLeaveDraftPage } from "@/routes/leave/EditLeaveDraftPage";
 // System
 import { UsersPage } from "@/routes/system/UsersPage";
 import { RolesPage } from "@/routes/system/RolesPage";
+// System / Users CRUD — S2-FE-AUTH-3
+import { UserFormPage } from "@/routes/system/users/UserFormPage";
+import { UserDetailPage } from "@/routes/system/users/UserDetailPage";
+import { UserRolesPage } from "@/routes/system/users/UserRolesPage";
 import { LoginLogsPage } from "@/routes/system/auth-logs/LoginLogsPage";
 import { SecurityEventsPage } from "@/routes/system/auth-logs/SecurityEventsPage";
 import {
@@ -443,6 +447,89 @@ const systemSettingsRoute = createRoute({
 
 const systemUsersRoute = makeModuleRoute("/system/users", "system.users", "FOUNDATION", UsersPage);
 const systemRolesRoute = makeModuleRoute("/system/roles", "system.roles", "FOUNDATION", RolesPage);
+
+// User CRUD — S2-FE-AUTH-3. Reuses "system.users" meta (route-level gate = AUTH.USER.VIEW); finer
+// per-action gate (create/update/lock/unlock/assign-role) applied inside each page via useCan —
+// mirrors hrEmployeeCreateRoute/hrEmployeeDetailRoute/hrEmployeeEditRoute pattern.
+const systemUsersMeta = getMeta("system.users");
+
+// Static "new" segment ranks above the "$userId" param route — never collides with detail.
+const systemUserCreateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/users/new",
+  beforeLoad: authGuard,
+  component: () => {
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      systemUsersMeta,
+      "FOUNDATION",
+      <UserFormPage
+        onSuccess={(id) => void navigate({ to: "/system/users/$userId", params: { userId: id } })}
+        onCancel={() => void navigate({ to: "/system/users" as "/" })}
+      />,
+    );
+  },
+});
+
+// Detail — no sidebar entry; path param resolved via useParams.
+const systemUserDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/users/$userId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { userId } = systemUserDetailRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      systemUsersMeta,
+      "FOUNDATION",
+      <UserDetailPage
+        userId={userId}
+        onBack={() => void navigate({ to: "/system/users" as "/" })}
+        onEdit={() => void navigate({ to: "/system/users/$userId/edit", params: { userId } })}
+        onManageRoles={() =>
+          void navigate({ to: "/system/users/$userId/roles", params: { userId } })
+        }
+      />,
+    );
+  },
+});
+
+// Edit — reuses systemUsersMeta; UserFormPage applies the update:user useCan gate.
+const systemUserEditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/users/$userId/edit",
+  beforeLoad: authGuard,
+  component: () => {
+    const { userId } = systemUserEditRoute.useParams();
+    const navigate = useNavigate();
+    const toDetail = () => void navigate({ to: "/system/users/$userId", params: { userId } });
+    return buildModuleRouteContent(
+      systemUsersMeta,
+      "FOUNDATION",
+      <UserFormPage userId={userId} onSuccess={toDetail} onCancel={toDetail} />,
+    );
+  },
+});
+
+// Assign-roles — reuses systemUsersMeta; UserRolesPage applies the assign-role:user useCan gate.
+const systemUserRolesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/users/$userId/roles",
+  beforeLoad: authGuard,
+  component: () => {
+    const { userId } = systemUserRolesRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      systemUsersMeta,
+      "FOUNDATION",
+      <UserRolesPage
+        userId={userId}
+        onBack={() => void navigate({ to: "/system/users/$userId", params: { userId } })}
+      />,
+    );
+  },
+});
+
 const systemAuditLogsRoute = makeModuleRoute(
   "/system/audit-logs",
   "system.audit-logs",
@@ -538,6 +625,10 @@ const routeTree = rootRoute.addChildren([
   systemCompanySettingsRoute,
   systemSettingsRoute,
   systemUsersRoute,
+  systemUserCreateRoute,
+  systemUserDetailRoute,
+  systemUserEditRoute,
+  systemUserRolesRoute,
   systemRolesRoute,
   systemAuditLogsRoute,
   systemLoginLogsRoute,

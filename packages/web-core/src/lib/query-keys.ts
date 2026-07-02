@@ -31,6 +31,19 @@ export const authKeys = {
   permissions: () => [...rootKeys.auth, "permissions"] as const,
 };
 
+// ── Auth admin keys (S2-FE-AUTH-3) — /system/users + /system/roles(assign) ────
+//
+// Tách khỏi authKeys (self-service /auth/me) — namespace riêng "auth-admin" tránh đụng invalidation
+// của phiên hiện tại khi admin thao tác trên user KHÁC.
+
+export const authUsersKeys = {
+  all: [...rootKeys.auth, "admin", "users"] as const,
+  list: (params?: Record<string, unknown>) =>
+    [...rootKeys.auth, "admin", "users", "list", params] as const,
+  detail: (id: string) => [...rootKeys.auth, "admin", "users", "detail", id] as const,
+  roles: () => [...rootKeys.auth, "admin", "roles"] as const,
+};
+
 // ── Dashboard keys ────────────────────────────────────────────────────────────
 
 export const dashboardKeys = {

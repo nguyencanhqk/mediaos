@@ -15,7 +15,9 @@ export default {
     },
     status: {
       active: "Đang hoạt động",
+      invited: "Chờ kích hoạt",
       suspended: "Đã tạm khóa",
+      locked: "Đã khoá",
     },
     empty: {
       title: "Không có người dùng",
@@ -28,6 +30,120 @@ export default {
     forbidden: {
       title: "Không có quyền truy cập",
       description: "Bạn không có quyền xem danh sách người dùng.",
+    },
+    actions: {
+      create: "Tạo người dùng",
+    },
+
+    // S2-FE-AUTH-3 — form tạo/sửa user (/system/users/new · /system/users/:id/edit)
+    form: {
+      createTitle: "Tạo người dùng",
+      createDescription: "Tạo tài khoản người dùng mới cho công ty",
+      editTitle: "Chỉnh sửa người dùng",
+      editDescription: "Cập nhật thông tin tài khoản người dùng",
+      cancel: "Huỷ",
+      submitCreate: "Tạo người dùng",
+      submitSave: "Lưu thay đổi",
+      submitting: "Đang xử lý…",
+      fields: {
+        email: "Email",
+        fullName: "Họ tên",
+        initialPassword: "Mật khẩu ban đầu",
+      },
+      hints: {
+        initialPassword: "Tối thiểu 10 ký tự, có chữ hoa, chữ thường và số.",
+        emailImmutable: "Email là định danh, không thể thay đổi sau khi tạo.",
+      },
+      forbidden: {
+        description: "Bạn không có quyền tạo hoặc chỉnh sửa người dùng.",
+      },
+      validation: {
+        emailRequired: "Vui lòng nhập email.",
+        emailInvalid: "Email không hợp lệ.",
+        fullNameRequired: "Vui lòng nhập họ tên.",
+        fullNameTooLong: "Họ tên tối đa 200 ký tự.",
+        passwordTooShort: "Mật khẩu tối thiểu 10 ký tự.",
+        passwordTooLong: "Mật khẩu tối đa 128 ký tự.",
+        passwordNeedsLower: "Mật khẩu phải có chữ thường.",
+        passwordNeedsUpper: "Mật khẩu phải có chữ hoa.",
+        passwordNeedsDigit: "Mật khẩu phải có chữ số.",
+      },
+      errors: {
+        conflict: "Email đã tồn tại trong công ty.",
+        forbidden: "Bạn không có quyền thực hiện thao tác này.",
+        validation: "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.",
+        server: "Có lỗi hệ thống. Vui lòng thử lại sau.",
+        generic: "Có lỗi xảy ra. Vui lòng thử lại.",
+      },
+    },
+
+    // S2-FE-AUTH-3 — chi tiết user (/system/users/:id)
+    detail: {
+      backToList: "Quay lại danh sách",
+      fields: {
+        email: "Email",
+        fullName: "Họ tên",
+        status: "Trạng thái",
+        lastLogin: "Lần đăng nhập cuối",
+        lockedReason: "Lý do khoá",
+        createdAt: "Ngày tạo",
+      },
+      actions: {
+        edit: "Chỉnh sửa",
+        lock: "Khoá tài khoản",
+        unlock: "Mở khoá",
+        manageRoles: "Quản lý vai trò",
+      },
+      confirm: {
+        lockTitle: "Xác nhận khoá tài khoản",
+        lockDescription:
+          "Người dùng sẽ không thể đăng nhập cho đến khi được mở khoá. Bạn có chắc muốn tiếp tục?",
+        unlockTitle: "Xác nhận mở khoá tài khoản",
+        unlockDescription: "Người dùng sẽ có thể đăng nhập trở lại. Bạn có chắc muốn tiếp tục?",
+      },
+      error: {
+        title: "Không thể tải thông tin người dùng",
+        description: "Có lỗi khi tải thông tin người dùng. Vui lòng thử lại.",
+      },
+      errors: {
+        badRequest:
+          "Không thể thực hiện: tài khoản đã ở trạng thái này hoặc bạn đang thao tác trên chính mình.",
+      },
+    },
+
+    // S2-FE-AUTH-3 — gán/gỡ role (/system/users/:id/roles)
+    roles: {
+      title: "Quản lý vai trò",
+      description: "Gán hoặc gỡ vai trò phân quyền cho người dùng này",
+      limitationNotice:
+        "Màn hình hiện chưa hiển thị được vai trò ĐANG giữ (backend chưa có API đọc role theo user) — chỉ hỗ trợ thao tác Gán/Gỡ trên danh mục vai trò bên dưới; kết quả thao tác hiển thị ở nhật ký phiên.",
+      systemRole: "Vai trò hệ thống",
+      forbidden: {
+        description: "Bạn không có quyền gán vai trò cho người dùng.",
+      },
+      empty: {
+        title: "Không có vai trò",
+        description: "Chưa có vai trò nào trong danh mục.",
+      },
+      error: {
+        title: "Không thể tải danh mục vai trò",
+        description: "Có lỗi khi tải danh mục vai trò. Vui lòng thử lại.",
+      },
+      actions: {
+        assign: "Gán",
+        revoke: "Gỡ",
+      },
+      sessionLog: {
+        title: "Nhật ký thao tác (phiên này)",
+        assigned: 'Đã gán vai trò "{{role}}".',
+        revoked: 'Đã gỡ vai trò "{{role}}".',
+        error: 'Lỗi với vai trò "{{role}}": {{detail}}',
+      },
+      errors: {
+        notAssigned: "Người dùng chưa có vai trò này — không thể gỡ.",
+        conflict: "Vai trò này đã được gán trước đó.",
+        badRequest: "Yêu cầu không hợp lệ (có thể bạn đang thao tác trên chính mình).",
+      },
     },
   },
   roles: {
