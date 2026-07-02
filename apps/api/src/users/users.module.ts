@@ -2,6 +2,7 @@ import { Module, forwardRef } from "@nestjs/common";
 import { DatabaseModule } from "../db/db.module";
 import { PermissionModule } from "../permission/permission.module";
 import { AuthModule } from "../auth/auth.module";
+import { SecurityEventWriter } from "../auth/security-event-writer.service";
 import { AdminUsersController } from "./admin-users.controller";
 import { AdminUsersRepository } from "./admin-users.repository";
 import { AdminUsersService } from "./admin-users.service";
@@ -18,6 +19,9 @@ import { UsersService } from "./users.service";
  *  - DatabaseModule cho withTenant. PermissionModule → PermissionGuard + PermissionService (exported).
  *  - AuthModule (forwardRef) → PasswordService cho create (hash mật khẩu, BẤT BIẾN #3). forwardRef vì
  *    AuthModule import PermissionModule (vòng tham chiếu gián tiếp khi UsersModule cũng kéo cả hai).
+ *  - SecurityEventWriter (S2-AUTH-BE-8): đăng ký LÀM PROVIDER cục bộ (KHÔNG lấy từ AuthModule export) —
+ *    writer stateless, chỉ phụ thuộc AuditMaskerService (@Global từ EventsModule) → tránh import-cycle với
+ *    AuthModule (đã forwardRef). AuthUsersService dual-write USER_LOCKED/USER_UNLOCKED qua writer này.
  */
 @Module({
   imports: [DatabaseModule, PermissionModule, forwardRef(() => AuthModule)],
@@ -28,6 +32,7 @@ import { UsersService } from "./users.service";
     AdminUsersRepository,
     AuthUsersService,
     AuthUsersRepository,
+    SecurityEventWriter,
   ],
 })
 export class UsersModule {}
