@@ -100,6 +100,8 @@ FRONTEND-06 bám theo các quyết định đã chốt:
 | Mock API | MSW handler cho login, me, users, roles, permissions |
 | Testing | Unit/component test cho form, hook, route guard integration, permission UI |
 
+> **CHỐT 2026-07-02: code thắng** — self-profile-edit KHÔNG phải direct PATCH hồ sơ; là **change-request workflow** (`apps/app/src/routes/hr/profile-change-requests/*` ↔ BE `hr/profile-change-requests` POST/approve/reject/cancel). "Account Self-service" ở đây = xem hồ sơ + đổi mật khẩu + xem phiên; sửa trường hồ sơ đi qua yêu-cầu-thay-đổi có duyệt (lý do: code có controller change-request, KHÔNG có endpoint PATCH tự-sửa hồ sơ).
+
 ### 5.2 Không bao gồm trong MVP
 
 | Nội dung | Giai đoạn đề xuất |
@@ -156,6 +158,8 @@ FRONTEND-06 bám theo các quyết định đã chốt:
 | `/forgot-password` | UI-AUTH-SCREEN-002 | AuthLayout | Public | Không tiết lộ email tồn tại |
 | `/reset-password` | UI-AUTH-SCREEN-003 | AuthLayout | Public token | Token lấy từ query string |
 | `/session-expired` | UI-AUTH-SCREEN-004 | Auth/System | Public | Có CTA đăng nhập lại |
+
+> **CHỐT 2026-07-02: code thắng** — SSO 3-app (`apps/auth` → `apps/app`/`apps/console`) điều hướng qua query `?redirect=<url>` + **server allowlist** `GET /auth/redirect-allowed` (auth.controller.ts:148 `redirectAllowed` → `cookies.resolveSafeRedirect`), KHÔNG dùng `returnUrl` tự-quyết ở client. Server là nguồn allowlist DUY NHẤT: `apps/auth` gọi endpoint này TRƯỚC khi điều hướng, chỉ nhận `target` khi `allowed=true` (chống open-redirect).
 
 ### 7.2 Account routes
 
@@ -339,6 +343,8 @@ export interface AuthUserMe {
 ```
 
 Lưu ý: `/auth/me/permissions` và `/auth/me/menu` chỉ là endpoint granular bổ trợ; bootstrap dùng trực tiếp payload đầy đủ `/auth/me`, không cần gọi thêm để lấy permission/menu.
+
+> **CHỐT 2026-07-02: code thắng** — `LoginResponse` là **UNION**: `AuthTokens` (`accessToken`/`refreshToken`/…) HOẶC `{ twoFactorRequired: true, challengeToken }` (auth.service.ts:344; controller phân nhánh qua `"accessToken" in result`, auth.controller.ts:77). Auth session model phải xử lý nhánh `twoFactorChallenge`: khi `twoFactorRequired` → điều hướng bước-2 (`POST /auth/2fa/verify` với `challengeToken`, single-use), CHƯA có phiên/cookie cho tới khi verify mã. Lý do: code login() trả sentinel 2FA, không cấp token ở bước-1.
 
 ### 10.2 User admin model
 
@@ -688,6 +694,8 @@ export const roleApi = {
 import { z } from 'zod';
 
 export const loginSchema = z.object({
+  // BẮT BUỘC: email chỉ unique THEO tenant → cần companySlug để resolve company trước withTenant.
+  companySlug: z.string().min(1, 'Vui lòng nhập mã công ty').max(100),
   email: z.string().min(1, 'Vui lòng nhập email').email('Email không đúng định dạng'),
   password: z.string().min(1, 'Vui lòng nhập mật khẩu'),
   remember_me: z.boolean().optional(),
@@ -695,6 +703,8 @@ export const loginSchema = z.object({
 
 export type LoginFormValues = z.infer<typeof loginSchema>;
 ```
+
+> **CHỐT 2026-07-02: code thắng** — Login DTO có `companySlug` **BẮT BUỘC** (`z.string().min(1).max(100)`, contracts/auth.ts:10), KHÔNG optional: email chỉ unique theo tenant nên server resolve `companySlug → company → withTenant → user`. Schema FE phải gồm `companySlug` required (lý do: contract nguồn-sự-thật bắt buộc, thiếu → 401 đồng nhất).
 
 ### 15.2 Reset password schema
 
@@ -782,6 +792,10 @@ Quy tắc:
 4. Disable submit khi mutation pending.
 5. Sau 401/invalid credentials, không clear password nếu UX muốn user sửa nhanh; nhưng không persist.
 
+> **CHỐT 2026-07-02: code thắng** — Đích redirect sau login KHÔNG do `returnUrl` client tự-quyết; dùng `?redirect` + **server allowlist** `GET /auth/redirect-allowed` (auth.controller.ts:148). FE chỉ điều hướng tới `target` server trả (`allowed=true`), fallback `/home`. Lý do: `resolveSafeRedirect` là điểm chống open-redirect DUY NHẤT (SSO 3-app).
+>
+> **CHỐT 2026-07-02: code thắng** — Login thất bại là **401 ĐỒNG NHẤT** (`UNIFORM_LOGIN_ERROR`, auth.service.ts:61/219/332): sai-mật-khẩu, không-tồn-tại, companySlug-sai, VÀ tài-khoản-khóa/inactive (`isAuthorizedStatus`=false, kind `blocked`) đều 401 y hệt (anti user-enumeration/status-probing). Nhánh 403 CHỈ dành cho **`ACCESS_RESTRICTED`** — vi phạm **chính sách bảo mật** (IP allowlist/khung giờ, `securityPolicy.evaluateAccessTx`, auth.service.ts:336-338), KHÔNG cho USER-LOCKED/INACTIVE. Do đó state "locked"/"inactive" ở §16.1 và error-map §19 "Account locked"/"Account inactive" KHÔNG map từ status-code riêng (không phân biệt được trên body) → giữ nhánh 403 nhưng **narrow về `ACCESS_RESTRICTED` (code)**, không dùng cho khóa/inactive. Lý do: FE không có tín hiệu phân biệt khóa/inactive khỏi 401 chung.
+
 ### 16.2 Forgot Password Page
 
 | Thuộc tính | Nội dung |
@@ -830,6 +844,8 @@ Nội dung:
 5. Lần đăng nhập gần nhất nếu API trả.
 6. CTA đổi mật khẩu nếu có quyền.
 
+> **CHỐT 2026-07-02: code thắng** — `/account/profile/edit` (sửa trường hồ sơ nhân sự) KHÔNG gọi direct PATCH; là **change-request workflow**: FE `apps/app/src/routes/hr/profile-change-requests/*` (MyChangeRequestPage/ChangeRequestForm) → BE `POST hr/profile-change-requests` (profile-change-request.controller.ts:55) + approve/reject/cancel. Trang này chỉ đọc `/auth/me`; sửa hồ sơ = tạo yêu-cầu-thay-đổi có duyệt. Lý do: code KHÔNG có endpoint tự-PATCH hồ sơ, chỉ có controller change-request.
+
 ### 16.5 Change Password Page
 
 | Thuộc tính | Nội dung |
@@ -860,6 +876,8 @@ Nếu request gửi `logout_other_sessions = true` và response trả `other_ses
 Các phiên khác đã bị đăng xuất. Phiên hiện tại vẫn giữ; nếu backend yêu cầu đăng nhập lại thì
 clear session -> redirect /login?reason=password_changed.
 ```
+
+> **CHỐT 2026-07-02: code thắng** — Đổi mật khẩu thành công **thu hồi MỌI phiên của user, KỂ CẢ phiên hiện tại** = **logout cưỡng bức** (`revokeAllSessionsForUserTx(tx, user.id, "password_changed")`, auth.service.ts:538 — không loại current). Do đó sau đổi mật khẩu FE PHẢI clear session + `redirect /login?reason=password_changed` (không phụ thuộc `logout_other_sessions`; cờ đó chỉ tinh chỉnh copy phiên-khác). Lý do: server revoke toàn bộ refresh-token family → access token hiện tại hết hiệu lực ngay lượt refresh kế.
 
 ### 16.6 User List Page
 
