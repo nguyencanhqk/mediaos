@@ -1694,7 +1694,7 @@ export const backlog = [
     title:
       "Admin module catalog API (P1): GET /foundation/modules (TẤT CẢ module, KHÁC my-apps đã lọc theo user) + GET /foundation/modules/:code detail — unblock S2-FE-FND-3 (toggle enable/disable = follow-up)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/foundation/module-catalog/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S1-FND-MODULE-1"],
