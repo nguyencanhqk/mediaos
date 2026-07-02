@@ -16,6 +16,7 @@ import type {
 import { DatabaseService } from "../db/db.service";
 import { users, type User } from "../db/schema";
 import { AuditService } from "../events/audit.service";
+import { AuthService } from "../auth/auth.service";
 import { PasswordService } from "../auth/password.service";
 import { PermissionService } from "../permission/permission.service";
 import { AuthUsersRepository, authUserSnapshot } from "./auth-users.repository";
@@ -67,6 +68,10 @@ export class AuthUsersService {
     private readonly audit: AuditService,
     private readonly password: PasswordService,
     private readonly permissions: PermissionService,
+    // S2-AUTH-BE-9: lock = thu hồi MỌI phiên qua AuthService.revokeAllForUserTx. Cùng cách inject
+    // PasswordService (AuthModule forwardRef + export) — KHÔNG cần forwardRef param (AuthModule KHÔNG
+    // import UsersModule ⇒ không có vòng thật).
+    private readonly auth: AuthService,
   ) {}
 
   /**
@@ -178,13 +183,16 @@ export class AuthUsersService {
       if (before.status === "locked") throw new BadRequestException(ALREADY_LOCKED);
       const updated = await this.repo.setLockTx(tx, actor.companyId, id, actor.id, reason ?? null);
       if (!updated) throw new NotFoundException(USER_NOT_FOUND);
+      // S2-AUTH-BE-9: khoá tài khoản = thu hồi MỌI phiên (refresh_tokens + user_sessions) NGAY trong CÙNG
+      // tx (cùng commit/rollback với status). Refresh token cũ trình lại → 401 tức thì. count vào audit.
+      const revokedSessionCount = await this.auth.revokeAllForUserTx(tx, id, "locked");
       await this.audit.record(tx, {
         action: "user.locked",
         objectType: "user",
         actorUserId: actor.id,
         objectId: id,
         before: authUserSnapshot(before),
-        after: authUserSnapshot(updated),
+        after: { ...authUserSnapshot(updated), revokedSessionCount },
       });
       return toDto(updated);
     });

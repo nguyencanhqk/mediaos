@@ -1306,6 +1306,32 @@ export class AuthService {
       .where(and(eq(userSessions.userId, userId), isNull(userSessions.revokedAt)));
   }
 
+  /**
+   * S2-AUTH-BE-9 (PUBLIC helper cho lock/suspend) — thu hồi MỌI phiên còn sống của 1 user TRONG tx caller:
+   *   (a) refresh_tokens (mọi họ) → revoked_at set (TÁI DÙNG pattern bulk-revoke theo userId sẵn có), và
+   *   (b) user_sessions còn sống → revoked_at set qua revokeAllSessionsForUserTx (KHÔNG nhân bản match).
+   * Trả `revoked_session_count` = số user_sessions active ĐẾM TRƯỚC khi thu hồi (cùng tx, không có ghi
+   * đồng thời trên phiên của user này ⇒ = đúng số phiên bị thu hồi). Gọi TRONG cùng withTenant(companyId)
+   * tx của caller ⇒ RLS lọc company_id (BẤT BIẾN #1) + cùng commit/rollback với đổi status. Chỉ UPDATE
+   * revoked_at — KHÔNG hard-delete (BẤT BIẾN #2 mirror). Sau khi thu hồi, refresh token cũ trình lại
+   * /auth/refresh → 401 NGAY (đã revoked).
+   *
+   * OUT-OF-SCOPE: access token STATELESS đã cấp còn hiệu lực tối đa ACCESS_TOKEN_TTL_SEC (~900s / ≤15');
+   * chặn tức thì hoàn toàn cần denylist theo `jti` (Valkey) — DEFER sang follow-up WO, KHÔNG làm ở đây.
+   */
+  async revokeAllForUserTx(tx: TenantTx, userId: string, reason: string): Promise<number> {
+    const [counted] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(userSessions)
+      .where(and(eq(userSessions.userId, userId), isNull(userSessions.revokedAt)));
+    await tx
+      .update(refreshTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
+    await this.revokeAllSessionsForUserTx(tx, userId, reason);
+    return counted?.count ?? 0;
+  }
+
   /** Gắn companyId làm tiền tố token (không phải secret — có sẵn trong JWT) để mở withTenant khi refresh/reset. */
   private scopeToken(companyId: string, opaque: string): string {
     return `${companyId}.${opaque}`;
