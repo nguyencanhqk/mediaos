@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, type OnModuleInit } from "@nestjs/common";
 import { MulterModule } from "@nestjs/platform-express";
 import { DatabaseModule } from "../db/db.module";
 import { PasswordService } from "../auth/password.service";
@@ -6,6 +6,7 @@ import { PermissionModule } from "../permission/permission.module";
 import { SecurityPolicyModule } from "../security-policy/security-policy.module";
 import { SequenceModule } from "../foundation/sequences/sequence.module";
 import { FilesModule } from "../foundation/files/files.module";
+import { FilePolicyService } from "../foundation/files/file-policy.service";
 // S2-HR-BE-6 scope FIX (additive): SettingService for company-configurable contract expiry milestones.
 import { SettingsModule } from "../foundation/settings/settings.module";
 import { EmployeesController } from "./employees.controller";
@@ -32,6 +33,9 @@ import { EmployeeCodeConfigService } from "./employee-code-config.service";
 import { ContractController } from "./contract.controller";
 import { ContractRepository } from "./contract.repository";
 import { ContractService } from "./contract.service";
+// S2-FND-BE-4 (additive): HR contract file-access resolver — registered into the shared FilePolicyService
+// so contract-linked files (module='HR', entity='contract') no longer fail-closed to 'deny-no-resolver'.
+import { HrContractFileResolver } from "./hr-contract-file.resolver";
 
 @Module({
   imports: [
@@ -78,6 +82,8 @@ import { ContractService } from "./contract.service";
     // S2-HR-BE-6 (additive): employee contracts providers.
     ContractService,
     ContractRepository,
+    // S2-FND-BE-4 (additive): HR contract file-access resolver (registered in onModuleInit below).
+    HrContractFileResolver,
   ],
   exports: [
     EmployeesService,
@@ -87,4 +93,19 @@ import { ContractService } from "./contract.service";
     ContractService,
   ],
 })
-export class EmployeesModule {}
+export class EmployeesModule implements OnModuleInit {
+  /**
+   * S2-FND-BE-4 — register the HR contract file-access resolver into the shared singleton
+   * FilePolicyService at bootstrap. FilePolicyService comes from FilesModule (imported above, same
+   * container instance), so this governs view/download/link/delete/unlink for module='HR' entity='contract'
+   * link rows. ADDITIVE — no app.module.ts touch, no rewrite of the FilePolicy registry (append-only wiring).
+   */
+  constructor(
+    private readonly filePolicy: FilePolicyService,
+    private readonly hrContractFileResolver: HrContractFileResolver,
+  ) {}
+
+  onModuleInit(): void {
+    this.filePolicy.registerResolver(this.hrContractFileResolver);
+  }
+}
