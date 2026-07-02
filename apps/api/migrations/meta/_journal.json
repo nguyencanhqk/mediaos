@@ -1016,6 +1016,13 @@
       "when": 1717500715000,
       "tag": "0464_s3_attbe5_remote_request_audit_object_type",
       "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1717500720000,
+      "tag": "0465_s2_hrbe6_contract_scope_fix",
+      "breakpoints": true
     }
   ]
 }

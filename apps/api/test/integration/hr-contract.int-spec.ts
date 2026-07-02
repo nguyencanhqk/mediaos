@@ -4,16 +4,21 @@
  * (JwtAuthGuard → CompanyGuard → 2FA → PermissionGuard → ContractController → ContractService) with the
  * REAL permission engine. No mocks. Verifies at the DB layer:
  *
- *   deny-path RED (done_when SCOPE + #6): employee/manager (no view:contract grant) → GET /hr/contracts
- *     AND GET /hr/employees/:id/contracts → 403 (NOT filtered-empty) AND no audit row; manage without
- *     grant → POST/PATCH/DELETE → 403 + no audit row.
+ *   SCOPE FIX (owner-chốt 2026-07-02, session 1849d064, harness/handoff.md, mig 0465 — supersedes the
+ *     mig 0462 "employee/manager 403" scope which was WRONG vs the original expectation): employee holds
+ *     view:contract@Own → sees/detail ONLY their own contract, 404 on anyone else's; manager holds
+ *     view:contract@Team → sees/detail ONLY their direct reports' contracts (S2-INT-2 manager-tree via
+ *     DataScopeService, reused — no new scope logic), 404 on an outsider's; hr/company-admin stay
+ *     view+manage:contract@Company (unchanged, mig 0462). manage:contract stays Company-only — employee/
+ *     manager (view-only) still 403 on POST/PATCH/DELETE/link-file. noPerm (no grant at all) → 403.
  *   happy: hr can list/create/update/delete; create writes EXACTLY one audit row object_type=
  *     'employee_contract' in-tx; delete is SOFT (row stays, deleted_at set) with an audit row.
  *   RLS 2-tenant: tenant A cannot read/mutate tenant B's contracts; contract_type cross-tenant → 400.
  *   PII allowlist (done_when #5): list/detail DTO exposes only the allowlisted fields (no raw salary/PII).
  *   audit-in-tx (BẤT BIẾN #2): a post-audit failure rolls back BOTH the contract write and the audit row.
  *   append-only (BẤT BIẾN #2): mediaos_app UPDATE/DELETE of a contract audit row → DENIED.
- *   expiry warning: an Active contract with end_date within 30 days → expiringSoon=true.
+ *   expiry warning: an Active contract with end_date within 30 days (company-configurable, default
+ *     milestones [30,7] — hr.contract_expiring_warning_days) → expiringSoon=true.
  *
  * Gate hasDb && LANE_DB (memory integration-test-LANE_DB-gate): .env points DATABASE_URL at the shared dev
  * DB (hasDb=true) → run ONLY on an isolated lane DB, else false-red.
@@ -71,17 +76,22 @@ function bearer(token: string) {
   return { Authorization: `Bearer ${token}` };
 }
 
-/** Grant a fresh company-scoped role carrying the given pairs to `userId`. */
+/** Grant a fresh company-scoped role carrying the given pairs to `userId` at `scope` (default Company). */
 async function grant(
   direct: Pool,
   companyId: string,
   userId: string,
   pairs: Array<[string, string]>,
+  scope: "Own" | "Team" | "Department" | "Company" | "System" = "Company",
 ): Promise<void> {
-  const roleId = await seedRole(direct, companyId, `qa-contract-${userId.slice(0, 8)}`);
+  const roleId = await seedRole(
+    direct,
+    companyId,
+    `qa-contract-${scope.toLowerCase()}-${userId.slice(0, 8)}`,
+  );
   for (const [action, resourceType] of pairs) {
     const permId = await seedPermissionCatalog(direct, action, resourceType, false);
-    await seedRolePermission(direct, roleId, permId, "ALLOW", "Company");
+    await seedRolePermission(direct, roleId, permId, "ALLOW", scope);
   }
   await seedUserRole(direct, userId, roleId, companyId);
 }
@@ -95,6 +105,20 @@ async function seedEmployee(direct: Pool, companyId: string): Promise<string> {
   const r = await direct.query(
     `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
     [companyId, u],
+  );
+  return r.rows[0].id as string;
+}
+
+/** employee_profiles row for a GIVEN userId (Own/Team scope fixtures need the profile pinned to the actor). */
+async function seedEmployeeForUser(
+  direct: Pool,
+  companyId: string,
+  userId: string,
+  directManagerUserId: string | null = null,
+): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO employee_profiles (company_id, user_id, direct_manager_id) VALUES ($1, $2, $3) RETURNING id`,
+    [companyId, userId, directManagerUserId],
   );
   return r.rows[0].id as string;
 }
@@ -147,13 +171,23 @@ describe.skipIf(!hasLaneDb)("S2-HR-BE-6 employee contracts (HTTP, real permissio
   let B: SeededTenant;
   let hrEmail = "";
   let hrUserId = "";
-  let employeeEmail = ""; // has NO contract grant
-  let managerEmail = ""; // has some HR-ish grant but NOT contract → still 403
+  let employeeEmail = ""; // view:contract @ Own — sees ONLY their own contract
+  let managerEmail = ""; // view:contract @ Team — sees ONLY their reports' contracts (S2-INT-2 direct-manager)
+  let outsiderEmail = ""; // employee profile OUTSIDE the manager's team + not self — for Team 404
   let noPermEmail = "";
-  let empA = ""; // employee_profile id in A
+  let empA = ""; // employee_profile id in A (HR-created fixture, unrelated to any actor)
   let ctA = ""; // contract_type id in A
   let ctB = ""; // contract_type id in B
   let empB = ""; // employee_profile id in B
+
+  let empUserId = ""; // users.id for employeeEmail
+  let empProfileId = ""; // employee_profiles.id for employeeEmail (Own target)
+  let empOwnContractId = ""; // contract belonging to employeeEmail
+  let mgrUserId = ""; // users.id for managerEmail
+  let reportProfileId = ""; // employee_profiles.id whose direct_manager_id = mgrUserId (Team target)
+  let reportContractId = ""; // contract belonging to the manager's report
+  let outsiderProfileId = ""; // employee_profiles.id NOT managed by mgrUserId, NOT self
+  let outsiderContractId = ""; // contract belonging to the outsider — Own/Team callers must 404 on this
 
   beforeAll(async () => {
     const hash = await hashedPw();
@@ -162,16 +196,46 @@ describe.skipIf(!hasLaneDb)("S2-HR-BE-6 employee contracts (HTTP, real permissio
 
     hrEmail = `hr@${A.slug}.test`;
     hrUserId = await seedUser(direct, A.companyId, hrEmail, hash);
-    await grant(direct, A.companyId, hrUserId, VIEW_MANAGE);
+    await grant(direct, A.companyId, hrUserId, VIEW_MANAGE, "Company");
 
+    // ── employee (Own scope, S2-HR-BE-6 fix) ────────────────────────────────────
     employeeEmail = `emp-user@${A.slug}.test`;
-    const empUserId = await seedUser(direct, A.companyId, employeeEmail, hash);
-    // employee: grant an unrelated HR read pair to prove it's the contract pair (not "any grant") that gates.
-    await grant(direct, A.companyId, empUserId, [["view", "employee"]]);
+    empUserId = await seedUser(direct, A.companyId, employeeEmail, hash);
+    await grant(direct, A.companyId, empUserId, VIEW, "Own");
+    empProfileId = await seedEmployeeForUser(direct, A.companyId, empUserId);
+    const ctOwn = await seedContractType(direct, A.companyId);
+    const ownRow = await direct.query(
+      `INSERT INTO employee_contracts (company_id, employee_id, contract_type_id, contract_code, start_date, status)
+       VALUES ($1, $2, $3, 'OWN-CODE', '2025-01-01', 'Active') RETURNING id`,
+      [A.companyId, empProfileId, ctOwn],
+    );
+    empOwnContractId = ownRow.rows[0].id as string;
 
+    // ── manager (Team scope, S2-HR-BE-6 fix) — a direct report + an outsider ────
     managerEmail = `mgr@${A.slug}.test`;
-    const mgrUserId = await seedUser(direct, A.companyId, managerEmail, hash);
-    await grant(direct, A.companyId, mgrUserId, [["view", "employee"]]);
+    mgrUserId = await seedUser(direct, A.companyId, managerEmail, hash);
+    await grant(direct, A.companyId, mgrUserId, VIEW, "Team");
+
+    const reportUserId = await seedUser(direct, A.companyId, `report@${A.slug}.test`, hash);
+    reportProfileId = await seedEmployeeForUser(direct, A.companyId, reportUserId, mgrUserId);
+    const ctReport = await seedContractType(direct, A.companyId);
+    const reportRow = await direct.query(
+      `INSERT INTO employee_contracts (company_id, employee_id, contract_type_id, contract_code, start_date, status)
+       VALUES ($1, $2, $3, 'REPORT-CODE', '2025-01-01', 'Active') RETURNING id`,
+      [A.companyId, reportProfileId, ctReport],
+    );
+    reportContractId = reportRow.rows[0].id as string;
+
+    outsiderEmail = `outsider@${A.slug}.test`;
+    const outsiderUserId = await seedUser(direct, A.companyId, outsiderEmail, hash);
+    outsiderProfileId = await seedEmployeeForUser(direct, A.companyId, outsiderUserId, null);
+    const ctOutsider = await seedContractType(direct, A.companyId);
+    const outsiderRow = await direct.query(
+      `INSERT INTO employee_contracts (company_id, employee_id, contract_type_id, contract_code, start_date, status)
+       VALUES ($1, $2, $3, 'OUTSIDER-CODE', '2025-01-01', 'Active') RETURNING id`,
+      [A.companyId, outsiderProfileId, ctOutsider],
+    );
+    outsiderContractId = outsiderRow.rows[0].id as string;
 
     noPermEmail = `noperm@${A.slug}.test`;
     await seedUser(direct, A.companyId, noPermEmail, hash);
@@ -208,20 +272,57 @@ describe.skipIf(!hasLaneDb)("S2-HR-BE-6 employee contracts (HTTP, real permissio
     if (nest) await nest.close();
   });
 
-  // ── deny-path RED (SCOPE chốt: employee/manager → 403, NOT filtered-empty) ──────────────────
+  // ── S2-HR-BE-6 scope FIX (owner-chốt 2026-07-02, session 1849d064, harness/handoff.md, mig 0465) ──
+  // employee (Own) sees ONLY their own contract; manager (Team) sees ONLY their reports' contracts;
+  // out-of-scope reads 404 (never a leak). hr/company-admin stay Company (unchanged, mig 0462).
 
-  it("deny: employee (no view:contract) → GET /hr/contracts → 403 and NO audit row", async () => {
+  it("employee (view:contract @ Own) → GET /hr/contracts → 200, sees ONLY own contract", async () => {
     const token = await login(nest, A.slug, employeeEmail);
+    const res = await api(nest).get("/hr/contracts").set(bearer(token));
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const ids = (res.body.data as Array<{ id: string }>).map((c) => c.id);
+    expect(ids).toContain(empOwnContractId);
+    expect(ids).not.toContain(reportContractId);
+    expect(ids).not.toContain(outsiderContractId);
+  });
+
+  it("employee (Own) → GET /hr/contracts/:id own → 200; someone else's → 404 (no leak)", async () => {
+    const token = await login(nest, A.slug, employeeEmail);
+    const own = await api(nest).get(`/hr/contracts/${empOwnContractId}`).set(bearer(token));
+    expect(own.status).toBe(200);
+    expect(own.body.data.id).toBe(empOwnContractId);
+
+    const other = await api(nest).get(`/hr/contracts/${outsiderContractId}`).set(bearer(token));
+    expect(other.status).toBe(404);
+  });
+
+  it("manager (view:contract @ Team) → GET /hr/employees/:id/contracts → 200 for a direct report", async () => {
+    const token = await login(nest, A.slug, managerEmail);
+    const res = await api(nest)
+      .get(`/hr/employees/${reportProfileId}/contracts`)
+      .set(bearer(token));
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const ids = (res.body.data as Array<{ id: string }>).map((c) => c.id);
+    expect(ids).toContain(reportContractId);
+  });
+
+  it("manager (Team) → GET /hr/contracts/:id for an OUTSIDER (not their report) → 404 (not empty/leak)", async () => {
+    const token = await login(nest, A.slug, managerEmail);
+    const res = await api(nest).get(`/hr/contracts/${outsiderContractId}`).set(bearer(token));
+    expect(res.status).toBe(404);
+    // Own contract list must not include the outsider's contract either.
+    const list = await api(nest).get("/hr/contracts").set(bearer(token));
+    expect(list.status).toBe(200);
+    const ids = (list.body.data as Array<{ id: string }>).map((c) => c.id);
+    expect(ids).not.toContain(outsiderContractId);
+  });
+
+  it("deny: noPerm (no view/manage:contract at all) → GET /hr/contracts → 403 and NO audit row", async () => {
+    const token = await login(nest, A.slug, noPermEmail);
     const before = await countContractAudit(direct, A.companyId);
     const res = await api(nest).get("/hr/contracts").set(bearer(token));
     expect(res.status).toBe(403);
     expect(await countContractAudit(direct, A.companyId)).toBe(before);
-  });
-
-  it("deny: manager (no view:contract) → GET /hr/employees/:id/contracts → 403 (not empty list)", async () => {
-    const token = await login(nest, A.slug, managerEmail);
-    const res = await api(nest).get(`/hr/employees/${empA}/contracts`).set(bearer(token));
-    expect(res.status).toBe(403);
   });
 
   it("deny: noPerm → POST /hr/contracts → 403 and NO audit row", async () => {
@@ -235,22 +336,33 @@ describe.skipIf(!hasLaneDb)("S2-HR-BE-6 employee contracts (HTTP, real permissio
     expect(await countContractAudit(direct, A.companyId)).toBe(before);
   });
 
-  it("deny: employee with only view:contract → PATCH/DELETE → 403 (manage required)", async () => {
-    // fresh user carrying VIEW only
-    const hash = await hashedPw();
-    const viewOnlyEmail = `viewonly@${A.slug}.test`;
-    const viewOnlyId = await seedUser(direct, A.companyId, viewOnlyEmail, hash);
-    await grant(direct, A.companyId, viewOnlyId, VIEW);
-    const token = await login(nest, A.slug, viewOnlyEmail);
+  it("deny: employee (view:contract @ Own only, NO manage) → POST/PATCH/DELETE → 403 (manage required)", async () => {
+    const token = await login(nest, A.slug, employeeEmail);
+
+    const create = await api(nest)
+      .post("/hr/contracts")
+      .set(bearer(token))
+      .send({ employeeId: empProfileId, contractTypeId: ctA, startDate: "2025-01-01" });
+    expect(create.status).toBe(403);
 
     const patch = await api(nest)
-      .patch("/hr/contracts/00000000-0000-0000-0000-000000000000")
+      .patch(`/hr/contracts/${empOwnContractId}`)
       .set(bearer(token))
       .send({ note: "x" });
     expect(patch.status).toBe(403);
-    const del = await api(nest)
-      .delete("/hr/contracts/00000000-0000-0000-0000-000000000000")
-      .set(bearer(token));
+
+    const del = await api(nest).delete(`/hr/contracts/${empOwnContractId}`).set(bearer(token));
+    expect(del.status).toBe(403);
+  });
+
+  it("deny: manager (view:contract @ Team only, NO manage) → PATCH/DELETE a report's contract → 403", async () => {
+    const token = await login(nest, A.slug, managerEmail);
+    const patch = await api(nest)
+      .patch(`/hr/contracts/${reportContractId}`)
+      .set(bearer(token))
+      .send({ note: "x" });
+    expect(patch.status).toBe(403);
+    const del = await api(nest).delete(`/hr/contracts/${reportContractId}`).set(bearer(token));
     expect(del.status).toBe(403);
   });
 

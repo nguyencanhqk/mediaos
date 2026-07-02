@@ -14,18 +14,28 @@ import type {
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { FileService } from "../foundation/files/files.service";
+import { SettingService } from "../foundation/settings/setting.service";
+import { DataScopeService } from "../permission/data-scope.service";
 import { isUniqueViolation } from "../common/db-error";
 import { contractTypes, employeeProfiles, type EmployeeContract } from "../db/schema";
 import { ContractRepository, type ContractPatch } from "./contract.repository";
 
 type RequestUser = { id: string; companyId: string };
 
-/** Ngưỡng cảnh báo hết hạn mặc định (ngày) — DB-03 §7.7 quy tắc 5. */
-const DEFAULT_EXPIRING_DAYS = 30;
+/**
+ * Ngưỡng cảnh báo hết hạn MẶC ĐỊNH (ngày) khi company_settings/system_settings đều vắng — DB-03 §7.7
+ * quy tắc 5. S2-HR-BE-6 scope FIX (2026-07-02): 2 mốc mặc định [30,7], company-configurable qua
+ * SettingService (key 'hr.contract_expiring_warning_days', setting-defaults.ts). Mốc RỘNG NHẤT quyết
+ * định EmployeeContractDto.expiringSoon (giữ nguyên shape DTO hiện có — KHÔNG đổi thành mảng).
+ */
+const DEFAULT_EXPIRING_MILESTONES = [30, 7];
+const CONTRACT_EXPIRY_SETTING_KEY = "hr.contract_expiring_warning_days";
 
 /** Module/entity dùng khi link file hợp đồng qua FileService (polymorphic file_links). */
 const HR_MODULE = "HR";
 const CONTRACT_ENTITY = "contract";
+/** view:contract resourceType dùng để resolve data_scope qua DataScopeService (S2-INT-2 pattern). */
+const CONTRACT_RESOURCE = "contract";
 
 /**
  * S2-HR-BE-6 — Employee contracts service (hợp đồng lao động). Crown-jewel touch points:
@@ -35,8 +45,12 @@ const CONTRACT_ENTITY = "contract";
  *    link/delete) — both commit or both roll back. audit_logs is append-only.
  *  - BẤT BIẾN #3: audit before/after snapshot carries note/title/metadata only — masker che PII nếu lọt.
  *
- * The controller has authenticated + gated the pair (PermissionGuard: view/manage:contract) — this
- * service does NOT re-guard. File linking delegates to FileService.link (entity 'contract').
+ * SCOPE (S2-HR-BE-6 FIX, 2026-07-02, owner-chốt session 1849d064 / harness/handoff.md / PR #78 / mig
+ * 0465): the controller's `@RequirePermission("view"|"manage","contract")` is the COARSE gate (403 when
+ * no grant at all). This service adds the FINE data_scope filter for READS via DataScopeService (S2-INT-2
+ * reused, no new scope logic): employee → Own (chỉ hợp đồng chính mình), manager → Team (multi-manager
+ * tree), hr/company-admin → Company (unchanged, mig 0462). `manage:contract` stays Company-only (no
+ * Own/Team grant seeded) — employee/manager CANNOT create/update/delete/link-file (still 403).
  */
 @Injectable()
 export class ContractService {
@@ -45,6 +59,8 @@ export class ContractService {
     private readonly repo: ContractRepository,
     private readonly audit: AuditService,
     private readonly files: FileService,
+    private readonly settings: SettingService,
+    private readonly dataScope: DataScopeService,
   ) {}
 
   // ── Read ────────────────────────────────────────────────────────────────────
@@ -56,7 +72,19 @@ export class ContractService {
     data: EmployeeContractDto[];
     meta: { total: number; page: number; limit: number };
   }> {
-    const thresholdDays = query.expiringWithinDays ?? DEFAULT_EXPIRING_DAYS;
+    // GATE (403 already passed at controller for the "view" pair) — resolve the STRONGEST granted
+    // scope, then translate to a query predicate (Own/Team/Company). Never widened past the grant.
+    const scope = await this.dataScope.resolveAndAssert(
+      user.id,
+      user.companyId,
+      "view",
+      CONTRACT_RESOURCE,
+    );
+    const ctx = await this.dataScope.resolveContext(user.id, user.companyId);
+    const scopeCond = this.dataScope.buildEmployeeScopeCondition(scope, ctx);
+
+    const milestones = await this.resolveExpiringMilestones(user.companyId);
+    const thresholdDays = query.expiringWithinDays ?? Math.max(...milestones);
     const expiringBefore = query.expiringOnly ? this.addDays(thresholdDays) : undefined;
     const offset = (query.page - 1) * query.limit;
     return this.db.withTenant(user.companyId, async (tx) => {
@@ -68,8 +96,8 @@ export class ContractService {
         offset,
       };
       const [rows, total] = await Promise.all([
-        this.repo.listTx(tx, user.companyId, filter),
-        this.repo.countTx(tx, user.companyId, filter),
+        this.repo.listTx(tx, user.companyId, filter, scopeCond),
+        this.repo.countTx(tx, user.companyId, filter, scopeCond),
       ]);
       return {
         data: rows.map((r) => this.toDto(r, thresholdDays)),
@@ -90,11 +118,34 @@ export class ContractService {
   }
 
   async getById(user: RequestUser, id: string): Promise<EmployeeContractDto> {
-    const row = await this.db.withTenant(user.companyId, (tx) =>
-      this.repo.findByIdTx(tx, user.companyId, id),
+    const scope = await this.dataScope.resolveAndAssert(
+      user.id,
+      user.companyId,
+      "view",
+      CONTRACT_RESOURCE,
     );
-    if (!row) throw new NotFoundException("Contract not found");
-    return this.toDto(row, DEFAULT_EXPIRING_DAYS);
+    const ctx = await this.dataScope.resolveContext(user.id, user.companyId);
+
+    return this.db.withTenant(user.companyId, async (tx) => {
+      const row = await this.repo.findByIdTx(tx, user.companyId, id);
+      if (!row) throw new NotFoundException("Contract not found");
+
+      // In-scope check (defense-in-depth, mirrors hr-read.service.ts): cross-tenant/out-of-scope → 404,
+      // NEVER leak that the row exists outside the caller's scope (Own/Team fail closed, not 403-after-200).
+      const target = await this.repo.findScopeTargetTx(tx, user.companyId, id);
+      const inScope = target
+        ? this.dataScope.isEmployeeInScope(scope, ctx, {
+            userId: target.userId,
+            companyId: target.companyId,
+            orgUnitId: target.orgUnitId,
+            directManagerUserId: target.directManagerUserId,
+          })
+        : false;
+      if (!inScope) throw new NotFoundException("Contract not found");
+
+      const milestones = await this.resolveExpiringMilestones(user.companyId);
+      return this.toDto(row, Math.max(...milestones));
+    });
   }
 
   // ── Create ───────────────────────────────────────────────────────────────────
@@ -142,7 +193,8 @@ export class ContractService {
           after: this.snapshot(created),
         });
 
-        return this.toDto(created, DEFAULT_EXPIRING_DAYS);
+        const milestones = await this.resolveExpiringMilestones(user.companyId);
+        return this.toDto(created, Math.max(...milestones));
       });
     } catch (err) {
       throw this.mapDbError(err);
@@ -206,7 +258,8 @@ export class ContractService {
           newValues: afterSnap,
         });
 
-        return this.toDto(after, DEFAULT_EXPIRING_DAYS);
+        const milestones = await this.resolveExpiringMilestones(user.companyId);
+        return this.toDto(after, Math.max(...milestones));
       });
     } catch (err) {
       throw this.mapDbError(err);
@@ -287,11 +340,30 @@ export class ContractService {
         after: { fileId },
       });
 
-      return this.toDto(after, DEFAULT_EXPIRING_DAYS);
+      const milestones = await this.resolveExpiringMilestones(user.companyId);
+      return this.toDto(after, Math.max(...milestones));
     });
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Company-configurable expiry-warning milestones (S1-FND-SETTING-1 precedence: company_settings →
+   * system_settings → DEFAULT_EXPIRING_MILESTONES). Falls back to the hard-coded default on any
+   * malformed/missing override (fail-safe, never throws — expiry warning is advisory, not a gate).
+   */
+  private async resolveExpiringMilestones(companyId: string): Promise<number[]> {
+    const resolved = await this.settings.resolveSetting(companyId, CONTRACT_EXPIRY_SETTING_KEY);
+    const value = resolved.value;
+    if (
+      Array.isArray(value) &&
+      value.length > 0 &&
+      value.every((v) => typeof v === "number" && Number.isFinite(v) && v > 0)
+    ) {
+      return value as number[];
+    }
+    return DEFAULT_EXPIRING_MILESTONES;
+  }
 
   private async assertEmployeeInTenant(
     tx: TenantTx,

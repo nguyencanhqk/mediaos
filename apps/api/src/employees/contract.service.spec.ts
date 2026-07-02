@@ -24,9 +24,38 @@ function makeService(opts: {
   };
   const audit = { record: vi.fn().mockResolvedValue(undefined) };
   const files = { link: vi.fn().mockResolvedValue(undefined) };
+  // S2-HR-BE-6 scope FIX: SettingService/DataScopeService collaborators. resolveSetting defaults to the
+  // hard-coded [30,7] fallback (no company override in these pure unit specs — precedence is proven in
+  // setting.service.spec.ts). resolveAndAssert/buildEmployeeScopeCondition/isEmployeeInScope are stubbed
+  // permissive (Company scope, always in-scope) — the REAL scope-filter behaviour is proven in
+  // hr-contract.int-spec.ts (real permission engine, no mocks).
+  const settings = {
+    resolveSetting: vi.fn().mockResolvedValue({ value: undefined, scope: "default", found: false }),
+  };
+  const dataScope = {
+    resolveAndAssert: vi.fn().mockResolvedValue("Company"),
+    resolveContext: vi.fn().mockResolvedValue({ userId: USER.id, companyId: USER.companyId }),
+    buildEmployeeScopeCondition: vi.fn().mockReturnValue(undefined),
+    isEmployeeInScope: vi.fn().mockReturnValue(true),
+  };
   const repo = opts.repo ?? {};
+  if (repo["findScopeTargetTx"] === undefined) {
+    (repo as Record<string, unknown>)["findScopeTargetTx"] = vi.fn().mockResolvedValue({
+      userId: "target-user",
+      companyId: USER.companyId,
+      orgUnitId: null,
+      directManagerUserId: null,
+    });
+  }
 
-  const svc = new ContractService(db as never, repo as never, audit as never, files as never);
+  const svc = new ContractService(
+    db as never,
+    repo as never,
+    audit as never,
+    files as never,
+    settings as never,
+    dataScope as never,
+  );
 
   // Stub the tenant-scoped SELECTs that assertEmployeeInTenant / assertContractTypeInTenant issue.
   // Both use tx.select().from().where().limit() → return the controlled row.
@@ -41,7 +70,7 @@ function makeService(opts: {
     return selectResult(opts.employeeExists === false ? [] : [{ id: "emp-1" }]);
   });
 
-  return { svc, audit, files, repo };
+  return { svc, audit, files, repo, settings, dataScope };
 }
 
 function contractRow(over: Partial<EmployeeContract> = {}): EmployeeContract {

@@ -6,6 +6,8 @@ import { PermissionModule } from "../permission/permission.module";
 import { SecurityPolicyModule } from "../security-policy/security-policy.module";
 import { SequenceModule } from "../foundation/sequences/sequence.module";
 import { FilesModule } from "../foundation/files/files.module";
+// S2-HR-BE-6 scope FIX (additive): SettingService for company-configurable contract expiry milestones.
+import { SettingsModule } from "../foundation/settings/settings.module";
 import { EmployeesController } from "./employees.controller";
 import { EmployeesRepository } from "./employees.repository";
 import { EmployeesService } from "./employees.service";
@@ -42,6 +44,8 @@ import { ContractService } from "./contract.service";
     SequenceModule,
     // S2-HR-BE-6: FileService cho link file hợp đồng (entity 'contract').
     FilesModule,
+    // S2-HR-BE-6 scope FIX: SettingService cho ngưỡng cảnh báo hết hạn company-configurable.
+    SettingsModule,
     MulterModule.register({ limits: { fileSize: 5 * 1024 * 1024 } }),
   ],
   controllers: [
