@@ -87,7 +87,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451+0456). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451+0456+0457). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -240,5 +240,12 @@ export const AUDIT_OBJECT_TYPES = [
   // KHÔNG secret/PII vào before/after (BẤT BIẾN #3 — masker che). 0456 UNION ADD-only vào CHECK (clone
   // 0446/0440), append-only #2 nguyên vẹn; INSERT audit KHÔNG vỡ audit_logs_object_type_chk trên Postgres thật.
   "retention_policy",
+  // S2-HR-BE-7 (mig 0457): employee-code config admin — HR PATCH /hr/employee-code-config
+  // (EmployeeCodeConfigService.update — API-03 §10.10 HR-API-902) ghi audit CONFIG_UPDATE
+  // object_type='employee_code_config' audit-in-tx app-tenant. old/new = snapshot cấu hình
+  // (prefix/pattern/number_length/allow_manual_override/status), KHÔNG current_value/counter/secret/PII
+  // vào before/after (BẤT BIẾN #3 — masker che). 0457 UNION ADD-only vào CHECK (clone 0456/0446/0440),
+  // append-only #2 nguyên vẹn; INSERT audit KHÔNG vỡ audit_logs_object_type_chk trên Postgres thật.
+  "employee_code_config",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
