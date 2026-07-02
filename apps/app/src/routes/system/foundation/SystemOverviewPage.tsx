@@ -19,6 +19,8 @@ import {
   Activity,
   ArrowRight,
   CalendarDays,
+  Archive,
+  FileSearch,
 } from "lucide-react";
 import { foundationApi, foundationKeys, getHealth, rootKeys, useCan } from "@mediaos/web-core";
 import { PageHeader, EmptyState, Card, CardContent, Badge, Button } from "@mediaos/ui";
@@ -145,9 +147,25 @@ export function SystemOverviewPage() {
     FOUNDATION_ENGINE_PAIRS.VIEW_HOLIDAY.action,
     FOUNDATION_ENGINE_PAIRS.VIEW_HOLIDAY.resourceType,
   );
+  // S2-FE-FND-6 — cặp seed thật mig 0435 (S2-FND-BE-3): view:foundation-retention /
+  // view:foundation-file-access-log (cả 2 KHÔNG sensitive → company-admin có sẵn).
+  const canViewRetention = useCan(
+    FOUNDATION_ENGINE_PAIRS.VIEW_RETENTION.action,
+    FOUNDATION_ENGINE_PAIRS.VIEW_RETENTION.resourceType,
+  );
+  const canViewFileAccessLog = useCan(
+    FOUNDATION_ENGINE_PAIRS.VIEW_FILE_ACCESS_LOG.action,
+    FOUNDATION_ENGINE_PAIRS.VIEW_FILE_ACCESS_LOG.resourceType,
+  );
 
   const hasAnyAccess =
-    canViewCompany || canViewSetting || canViewUser || canViewRole || canViewHoliday;
+    canViewCompany ||
+    canViewSetting ||
+    canViewUser ||
+    canViewRole ||
+    canViewHoliday ||
+    canViewRetention ||
+    canViewFileAccessLog;
 
   // Company summary — CHỈ fetch khi có quyền đọc (enabled=canViewCompany).
   const companyQuery = useQuery({
@@ -234,6 +252,26 @@ export function SystemOverviewPage() {
             description={t("overview.cards.holidays.description")}
             to={FOUNDATION_PATH.PUBLIC_HOLIDAYS}
             actionLabel={t("overview.cards.holidays.manage")}
+          />
+        )}
+
+        {canViewRetention && (
+          <SummaryCard
+            icon={Archive}
+            title={t("overview.cards.retention.title")}
+            description={t("overview.cards.retention.description")}
+            to={FOUNDATION_PATH.RETENTION}
+            actionLabel={t("overview.cards.retention.manage")}
+          />
+        )}
+
+        {canViewFileAccessLog && (
+          <SummaryCard
+            icon={FileSearch}
+            title={t("overview.cards.fileAccessLogs.title")}
+            description={t("overview.cards.fileAccessLogs.description")}
+            to={FOUNDATION_PATH.FILE_ACCESS_LOGS}
+            actionLabel={t("overview.cards.fileAccessLogs.manage")}
           />
         )}
 

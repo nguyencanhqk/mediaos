@@ -178,6 +178,17 @@ export const foundationKeys = {
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.foundation, "holidays", "list", params] as const,
   },
+  // S2-FE-FND-6 — Retention policies. Danh mục nhỏ theo company (KHÔNG phân trang server).
+  retentionPolicies: {
+    all: [...rootKeys.foundation, "retention-policies"] as const,
+    list: () => [...rootKeys.foundation, "retention-policies", "list"] as const,
+  },
+  // S2-FE-FND-6 — File access logs (append-only viewer, phân trang server-side).
+  fileAccessLogs: {
+    all: [...rootKeys.foundation, "file-access-logs"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.foundation, "file-access-logs", "list", params] as const,
+  },
 } as const;
 
 // ── Mutation → query-key invalidation matrix (FRONTEND-04 §17.3) ──────────────
@@ -217,4 +228,6 @@ export const foundationInvalidation = {
   createHoliday: () => [foundationKeys.holidays.all] as const,
   updateHoliday: () => [foundationKeys.holidays.all] as const,
   deleteHoliday: () => [foundationKeys.holidays.all] as const,
+  // S2-FE-FND-6 — PATCH retention-policy làm mới list (danh mục nhỏ, không phân trang).
+  updateRetentionPolicy: () => [foundationKeys.retentionPolicies.all] as const,
 };

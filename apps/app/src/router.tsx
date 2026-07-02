@@ -158,6 +158,9 @@ import { SystemSettingsPage } from "@/routes/system/foundation/SystemSettingsPag
 // System / Foundation — Public Holidays + Health — S2-FE-FND-4
 import { PublicHolidaysPage } from "@/routes/system/foundation/PublicHolidaysPage";
 import { HealthPage } from "@/routes/system/foundation/HealthPage";
+// System / Foundation — Retention Policies + File Access Logs — S2-FE-FND-6
+import { RetentionPoliciesPage } from "@/routes/system/foundation/RetentionPoliciesPage";
+import { FileAccessLogsPage } from "@/routes/system/foundation/FileAccessLogsPage";
 import { FOUNDATION_PATH, FOUNDATION_SCREEN } from "@/routes/system/foundation/constants";
 
 const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", EmployeeListPage);
@@ -479,6 +482,45 @@ const systemHealthRoute = createRoute({
   component: () => buildModuleRouteContent(systemHealthMeta, "FOUNDATION", <HealthPage />),
 });
 
+// Retention Policies (config, governs purge) — S2-FE-FND-6. Gate = cặp seed THẬT mig 0435
+// (view:foundation-retention — KHÔNG sensitive). Nút Sửa trong page gate riêng bằng
+// manage:foundation-retention (is_sensitive=true, System-scope — KHÔNG tự động cấp company-admin).
+const systemRetentionMeta: RouteMeta = {
+  routeKey: "system.retention",
+  path: FOUNDATION_PATH.RETENTION,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "FOUNDATION",
+  screenCode: FOUNDATION_SCREEN.RETENTION,
+  titleKey: "routeTitle.systemRetention",
+  requiredAnyPermissions: ["view:foundation-retention"],
+};
+const systemRetentionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: FOUNDATION_PATH.RETENTION,
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(systemRetentionMeta, "FOUNDATION", <RetentionPoliciesPage />),
+});
+
+// File Access Logs (viewer, append-only) — S2-FE-FND-6. Gate = cặp seed THẬT mig 0435
+// (view:foundation-file-access-log — KHÔNG sensitive).
+const systemFileAccessLogsMeta: RouteMeta = {
+  routeKey: "system.file-access-logs",
+  path: FOUNDATION_PATH.FILE_ACCESS_LOGS,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "FOUNDATION",
+  screenCode: FOUNDATION_SCREEN.FILE_ACCESS_LOGS,
+  titleKey: "routeTitle.systemFileAccessLogs",
+  requiredAnyPermissions: ["view:foundation-file-access-log"],
+};
+const systemFileAccessLogsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: FOUNDATION_PATH.FILE_ACCESS_LOGS,
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(systemFileAccessLogsMeta, "FOUNDATION", <FileAccessLogsPage />),
+});
+
 const systemUsersRoute = makeModuleRoute("/system/users", "system.users", "FOUNDATION", UsersPage);
 const systemRolesRoute = makeModuleRoute("/system/roles", "system.roles", "FOUNDATION", RolesPage);
 const systemAuditLogsRoute = makeModuleRoute(
@@ -562,6 +604,8 @@ const routeTree = rootRoute.addChildren([
   systemSettingsRoute,
   systemPublicHolidaysRoute,
   systemHealthRoute,
+  systemRetentionRoute,
+  systemFileAccessLogsRoute,
   systemUsersRoute,
   systemRolesRoute,
   systemAuditLogsRoute,

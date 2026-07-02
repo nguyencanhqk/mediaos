@@ -111,6 +111,17 @@ export {
   type CreateHolidayBody,
   type UpdateHolidayBody,
   type DeleteHolidayResult,
+  // S2-FE-FND-6 — Retention Policies + File Access Logs
+  retentionApi,
+  fileAccessLogApi,
+  CLEANUP_ACTIONS,
+  cleanupActionSchema,
+  FILE_ACCESS_ACTIONS,
+  type RetentionPolicyView,
+  type PatchRetentionPolicyDto,
+  type FileAccessLogView,
+  type FileAccessActionDto,
+  type FileAccessLogListParams,
 } from "./lib/foundation-api";
 
 // Permission

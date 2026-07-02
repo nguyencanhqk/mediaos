@@ -18,6 +18,8 @@ import {
   holidayViewSchema,
   safeSettingViewSchema,
   settingsResolveResponseSchema,
+  retentionApi,
+  fileAccessLogApi,
 } from "./foundation-api";
 import * as apiClient from "./api-client";
 
@@ -241,5 +243,68 @@ describe("foundation-api Zod schemas", () => {
       ],
     });
     expect("settings" in asSettings).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// retentionApi — S2-FE-FND-6 (URL + method + Zod validator + no company_id leak)
+// ---------------------------------------------------------------------------
+
+describe("retentionApi (URL + method + Zod validator)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.apiFetch).mockReset();
+    vi.mocked(apiClient.apiFetch).mockResolvedValue({} as never);
+  });
+
+  it("list → GET /foundation/retention-policies", async () => {
+    await retentionApi.list();
+    const [url, , opts] = lastCall();
+    expect(url).toBe("/foundation/retention-policies");
+    expect(opts?.method ?? "GET").toBe("GET");
+  });
+
+  it("update → PATCH /foundation/retention-policies/:id + body KHÔNG chứa companyId/id", async () => {
+    await retentionApi.update("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", {
+      retentionDays: 90,
+      isEnabled: true,
+    });
+    const [url, , opts] = lastCall();
+    expect(url).toBe("/foundation/retention-policies/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    expect(opts?.method).toBe("PATCH");
+    const body = JSON.parse(opts?.body ?? "{}");
+    expect(body).toEqual({ retentionDays: 90, isEnabled: true });
+    expect(body).not.toHaveProperty("companyId");
+    expect(body).not.toHaveProperty("id");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fileAccessLogApi — S2-FE-FND-6 (URL + query string, append-only — chỉ có method list)
+// ---------------------------------------------------------------------------
+
+describe("fileAccessLogApi (URL + query string; append-only — KHÔNG có mutate method)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.apiFetch).mockReset();
+    vi.mocked(apiClient.apiFetch).mockResolvedValue([] as never);
+  });
+
+  it("list() không tham số → GET /foundation/file-access-logs (không query string)", async () => {
+    await fileAccessLogApi.list();
+    const [url] = lastCall();
+    expect(url).toBe("/foundation/file-access-logs");
+  });
+
+  it("list(params) → gắn query string filter + phân trang, KHÔNG companyId", async () => {
+    await fileAccessLogApi.list({ page: 2, limit: 20, action: "Download" });
+    const [url] = lastCall();
+    expect(url).toContain("/foundation/file-access-logs?");
+    expect(url).toContain("page=2");
+    expect(url).toContain("limit=20");
+    expect(url).toContain("action=Download");
+    expect(url).not.toContain("companyId");
+  });
+
+  it("append-only — module KHÔNG export create/update/remove", () => {
+    expect(Object.keys(fileAccessLogApi)).toEqual(["list"]);
   });
 });

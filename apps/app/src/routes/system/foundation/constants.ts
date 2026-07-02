@@ -24,6 +24,14 @@ export const FOUNDATION_ENGINE_PAIRS = {
   // AUTH.USER.VIEW) thay vì bịa cặp không tồn tại (gate phải phản ánh cặp THẬT — CLAUDE.md §5). Nếu BE seed
   // cặp foundation-health sau này, đổi route meta + đây cho khớp (KHÔNG đổi HealthController @Public()).
   VIEW_SETTING_BASELINE: { action: "view", resourceType: "foundation-setting" },
+  // S2-FE-FND-6 — Retention Policies + File Access Logs. Cặp seed THẬT mig 0435 (S2-FND-BE-3):
+  //   view:foundation-retention (KHÔNG sensitive, company-admin có sẵn) / manage:foundation-retention
+  //   (is_sensitive=true — KHÔNG tự động cấp qua role seed, chỉ System-scope per-user → nút Sửa
+  //   ẨN với company-admin thường, ĐÚNG thiết kế "confirm hậu quả rõ", KHÔNG phải bug FE).
+  //   view:foundation-file-access-log (KHÔNG sensitive, company-admin có sẵn — viewer append-only).
+  VIEW_RETENTION: { action: "view", resourceType: "foundation-retention" },
+  MANAGE_RETENTION: { action: "manage", resourceType: "foundation-retention" },
+  VIEW_FILE_ACCESS_LOG: { action: "view", resourceType: "foundation-file-access-log" },
 } as const;
 
 /** Mã màn hình (SPEC-01 §9). */
@@ -34,6 +42,9 @@ export const FOUNDATION_SCREEN = {
   // S2-FE-FND-4 — FRONTEND-13 §7.1 UI-SYSTEM-SCREEN-012/016.
   PUBLIC_HOLIDAYS: "SYSTEM-SCREEN-PUBLIC-HOLIDAYS",
   HEALTH: "SYSTEM-SCREEN-HEALTH",
+  // S2-FE-FND-6 — FRONTEND-13 §7.1 UI-SYSTEM-SCREEN-009/014.
+  RETENTION: "SYSTEM-SCREEN-RETENTION",
+  FILE_ACCESS_LOGS: "SYSTEM-SCREEN-FILE-ACCESS-LOGS",
 } as const;
 
 /** Đường dẫn route (thêm ADDITIVE vào router + sidebar). */
@@ -45,6 +56,9 @@ export const FOUNDATION_PATH = {
   // S2-FE-FND-4
   PUBLIC_HOLIDAYS: "/system/public-holidays",
   HEALTH: "/system/health",
+  // S2-FE-FND-6
+  RETENTION: "/system/retention",
+  FILE_ACCESS_LOGS: "/system/file-access-logs",
 } as const;
 
 /**

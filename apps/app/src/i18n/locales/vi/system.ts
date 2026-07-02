@@ -163,6 +163,16 @@ export default {
         description: "Danh sách ngày nghỉ lễ công ty và hệ thống",
         manage: "Quản lý ngày nghỉ",
       },
+      retention: {
+        title: "Chính sách lưu trữ",
+        description: "Số ngày lưu trữ dữ liệu và hành động dọn dẹp theo module",
+        manage: "Quản lý chính sách",
+      },
+      fileAccessLogs: {
+        title: "Nhật ký truy cập tệp",
+        description: "Lịch sử truy cập tệp — chỉ đọc",
+        manage: "Xem nhật ký",
+      },
       health: {
         title: "Tình trạng dịch vụ",
         description: "Trạng thái API backend",
@@ -370,6 +380,106 @@ export default {
     forbidden: {
       title: "Không có quyền truy cập",
       description: "Bạn không có quyền xem tình trạng hệ thống.",
+    },
+  },
+
+  // S2-FE-FND-6 — /system/retention (config data-retention, governs purge).
+  retention: {
+    title: "Chính sách lưu trữ",
+    description: "Số ngày lưu trữ dữ liệu và hành động dọn dẹp theo từng module/loại dữ liệu",
+    columns: {
+      module: "Module",
+      entity: "Loại dữ liệu",
+      retentionDays: "Số ngày lưu",
+      cleanupAction: "Hành động dọn dẹp",
+      status: "Trạng thái",
+    },
+    cleanupAction: {
+      None: "Không dọn dẹp",
+      Archive: "Lưu trữ",
+      Delete: "Xoá",
+      Anonymize: "Ẩn danh hoá",
+    },
+    status: {
+      enabled: "Đang áp dụng",
+      disabled: "Tạm tắt",
+    },
+    actions: {
+      columnHeader: "Thao tác",
+      edit: "Sửa",
+    },
+    form: {
+      editTitle: "Sửa chính sách lưu trữ — {{module}} / {{entity}}",
+      retentionDays: "Số ngày lưu trữ",
+      cleanupAction: "Hành động dọn dẹp",
+      archiveAfterDays: "Lưu trữ sau (ngày)",
+      deleteAfterDays: "Xoá sau (ngày)",
+      isEnabled: "Đang áp dụng chính sách này",
+      description: "Ghi chú",
+      cancel: "Huỷ",
+      save: "Lưu",
+      saving: "Đang lưu…",
+      errors: {
+        forbidden: "Bạn không có quyền thực hiện thao tác này.",
+        notFound: "Không tìm thấy chính sách lưu trữ.",
+        validation: "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.",
+        server: "Có lỗi hệ thống. Vui lòng thử lại.",
+        generic: "Không thể lưu chính sách lưu trữ. Vui lòng thử lại.",
+      },
+    },
+    confirm: {
+      title: "Xác nhận thay đổi chính sách lưu trữ",
+      description:
+        "Chính sách lưu trữ chi phối việc dọn dẹp/xoá dữ liệu (retention governs purge). Thay đổi có thể ảnh hưởng dữ liệu module liên quan. Tiếp tục?",
+      confirmLabel: "Xác nhận lưu",
+      cancelLabel: "Xem lại",
+    },
+    empty: {
+      title: "Chưa có chính sách lưu trữ",
+      description: "Chưa có chính sách lưu trữ nào được cấu hình.",
+    },
+    error: {
+      title: "Không thể tải chính sách lưu trữ",
+      description: "Có lỗi khi tải danh sách chính sách lưu trữ. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem chính sách lưu trữ.",
+    },
+  },
+
+  // S2-FE-FND-6 — /system/file-access-logs (viewer, append-only).
+  fileAccessLogs: {
+    title: "Nhật ký truy cập tệp",
+    description: "Lịch sử truy cập tệp (tải lên, tải xuống, xem, xoá…) — chỉ đọc",
+    columns: {
+      createdAt: "Thời gian",
+      action: "Hành động",
+      result: "Kết quả",
+      deniedReason: "Lý do từ chối",
+      actor: "Người thực hiện",
+      module: "Module / Đối tượng",
+    },
+    result: {
+      granted: "Cho phép",
+      denied: "Từ chối",
+    },
+    filters: {
+      action: "Hành động",
+      fileId: "Mã tệp",
+      fileIdPlaceholder: "UUID tệp",
+    },
+    empty: {
+      title: "Không có nhật ký truy cập tệp",
+      description: "Chưa có bản ghi truy cập tệp nào khớp bộ lọc.",
+    },
+    error: {
+      title: "Không thể tải nhật ký truy cập tệp",
+      description: "Có lỗi khi tải nhật ký truy cập tệp. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem nhật ký truy cập tệp.",
     },
   },
 };

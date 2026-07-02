@@ -1,6 +1,18 @@
 import { z } from "zod";
-import { companyViewSchema, type CompanyView } from "@mediaos/contracts";
+import {
+  companyViewSchema,
+  type CompanyView,
+  retentionPolicyViewSchema,
+  retentionPolicyListResponseSchema,
+  type RetentionPolicyView,
+  type PatchRetentionPolicyDto,
+  fileAccessLogListResponseSchema,
+  type FileAccessLogView,
+  type ListFileAccessLogsQuery,
+  type FileAccessActionDto,
+} from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
+import { buildQueryString } from "./api-params";
 
 /**
  * FOUNDATION API client — S2-FE-FND-1 (lane FND1-WC).
@@ -239,3 +251,63 @@ export const holidayApi = {
       method: "DELETE",
     }),
 };
+
+/**
+ * retentionApi — S2-FE-FND-6. Ranh giới HTTP cho /system/retention (config data-retention).
+ * Permission (seed THẬT mig 0435): view:foundation-retention (list, KHÔNG sensitive) /
+ * manage:foundation-retention (PATCH, is_sensitive=true — System-scope, KHÔNG tự động cấp company-admin).
+ * DTO tái dùng THẲNG từ @mediaos/contracts (S2-FND-BE-3 L2) — nguồn sự thật DUY NHẤT với BE, không
+ * duplicate boundary schema cục bộ (khác holidays/settings — các DTO đó predate contracts migration).
+ * company_id KHÔNG bao giờ trong body (server resolve từ AuthContext — BẤT BIẾN #1).
+ */
+export const retentionApi = {
+  /** GET /foundation/retention-policies — mọi policy tenant (kể cả disabled). */
+  list: (): Promise<RetentionPolicyView[]> =>
+    apiFetch("/foundation/retention-policies", retentionPolicyListResponseSchema),
+
+  /** PATCH /foundation/retention-policies/:id — CHỈ field mutable (contract .strict() chặn leo thang). */
+  update: (id: string, body: PatchRetentionPolicyDto): Promise<RetentionPolicyView> =>
+    apiFetch(
+      `/foundation/retention-policies/${encodeURIComponent(id)}`,
+      retentionPolicyViewSchema,
+      {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      },
+    ),
+};
+
+/**
+ * Query params GỬI ĐI cho fileAccessLogApi.list — `from`/`to` là chuỗi "yyyy-mm-dd" (từ <input type=date>,
+ * KHÔNG phải Date object) vì client chỉ build QUERY STRING (KHÔNG tự Zod-parse như server); server coerce
+ * sang Date qua listFileAccessLogsQuerySchema (z.coerce.date()) ở ranh giới controller. Các field khác
+ * khớp ListFileAccessLogsQuery.
+ */
+export type FileAccessLogListParams = Omit<Partial<ListFileAccessLogsQuery>, "from" | "to"> & {
+  from?: string;
+  to?: string;
+};
+
+/**
+ * fileAccessLogApi — S2-FE-FND-6. Ranh giới HTTP cho /system/file-access-logs (viewer, APPEND-ONLY).
+ * Permission (seed THẬT mig 0435): view:foundation-file-access-log (KHÔNG sensitive, company-admin có sẵn).
+ * BẤT BIẾN #2: KHÔNG có method create/update/delete — server chỉ có route GET (revoked UPDATE/DELETE ở
+ * mig 0433). Field nhạy cảm (storage_path/signed-url/ip/user-agent/metadata) đã WHITELIST-loại ở contract
+ * — client KHÔNG thể render field đó dù có cố (BẤT BIẾN #3).
+ */
+export const fileAccessLogApi = {
+  /** GET /foundation/file-access-logs — masked + phân trang + filter fileId/actorUserId/action/from-to. */
+  list: (params?: FileAccessLogListParams): Promise<FileAccessLogView[]> =>
+    apiFetch(
+      `/foundation/file-access-logs${buildQueryString(params as Record<string, unknown>)}`,
+      fileAccessLogListResponseSchema,
+    ),
+};
+
+export type {
+  RetentionPolicyView,
+  PatchRetentionPolicyDto,
+  FileAccessLogView,
+  FileAccessActionDto,
+};
+export { CLEANUP_ACTIONS, cleanupActionSchema, FILE_ACCESS_ACTIONS } from "@mediaos/contracts";
