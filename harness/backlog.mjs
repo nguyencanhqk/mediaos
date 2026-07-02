@@ -1954,7 +1954,20 @@ export const backlog = [
     title:
       "Employee contracts (carry-over STORY-031): migration employee_contracts (RLS+FORCE) + CRUD API /hr/contracts + /hr/employees/:id/contracts + file link + cảnh báo hết hạn — unblock S2-FE-HR-7",
     zone: "red",
-    status: "todo",
+    // CLOSE 2026-07-02 (worktree auto/s3wave3-batch6-blocked-wos): mig 0462 (idx 142, nối tiếp head 0461)
+    //   tạo employee_contracts (RLS ENABLE+FORCE + policy tenant_isolation TRƯỚC backfill, BẤT BIẾN #1;
+    //   employee_id→employee_profiles CASCADE + contract_type_id→contract_types + file_id→files SET NULL;
+    //   soft-delete + created_by/updated_by/deleted_by; index employee/expiring; ≤1 primary+Active/employee)
+    //   + UNION-ADD 'employee_contract' vào CHECK audit_logs + AUDIT_OBJECT_TYPES (schema/audit.ts) CÙNG commit
+    //   + seed (view,contract)+(manage,contract) scope=Company cho hr/company-admin (per-pair). rls-registry
+    //   đăng ký employee_contracts. CRUD /hr/contracts(+:id) + /hr/employees/:id/contracts (view:contract) +
+    //   POST/PATCH/DELETE + POST :id/file (manage:contract) link qua FileService entity 'contract'; cảnh báo
+    //   hết hạn 30 ngày (expiringSoon + ?expiringOnly). SCOPE: employee/manager KHÔNG grant → 403 (fail-closed).
+    //   Verify lane DB mediaos_batch6 (chain 0000→0462): int hr-contract ✓14 (deny 403 ×4 · audit-in-tx 1 row ·
+    //   soft-delete · RLS 2-tenant read/write/contract_type cross-tenant 400 · PII allowlist · expiry · append-only
+    //   UPDATE/DELETE DENIED) + unit contract.service ✓7 + rls-guards/coverage/tenant-isolation ✓412 (0 regression)
+    //   + migration-smoke ✓115. typecheck + eslint xanh.
+    status: "done",
     paths: [
       "apps/api/src/db/schema/**",
       "apps/api/migrations/**",
