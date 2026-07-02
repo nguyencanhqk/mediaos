@@ -587,3 +587,298 @@ export const leaveManagementListResponseSchema = z.object({
   }),
 });
 export type LeaveManagementListResponse = z.infer<typeof leaveManagementListResponseSchema>;
+
+// ─── S3-LEAVE-BE-4: type/policy admin CRUD + HR balance view/adjust (ledger) ──────
+//
+// ADDITIVE — KHÔNG sửa leaveTypeSchema/createLeaveTypeSchema/updateLeaveTypeSchema legacy ở trên (route
+// legacy /leave/types POST|PATCH vẫn dùng `manage:leave`, giữ nguyên). Bộ schema dưới đây phục vụ MẶT ADMIN
+// MỚI (HR/company-admin) gắn cặp permission THẬT (create/update/delete:leave-type — mig 0455), CRUD
+// leave_policies (bảng mới mig 0453), và xem/điều-chỉnh leave_balances qua ledger leave_balance_transactions
+// (append-only, BẤT BIẾN #2 — KHÔNG method nào sửa balance trực tiếp mà không kèm 1 dòng ledger).
+
+/** Body tạo loại nghỉ (mặt admin — đủ field cấu hình DB-05 §7.1, mig 0453). code immutable sau khi tạo. */
+export const createLeaveTypeAdminSchema = z.object({
+  name: z.string().min(1).max(200),
+  code: z
+    .string()
+    .min(1)
+    .max(50)
+    .regex(/^[a-z0-9_-]+$/, "Code chỉ gồm a-z, 0-9, '-', '_'"),
+  paid: z.boolean().default(true),
+  description: z.string().max(1000).optional(),
+  deductBalance: z.boolean().default(true),
+  balanceUnit: z.enum(["Day", "Hour"]).default("Day"),
+  allowFullDay: z.boolean().default(true),
+  allowHalfDay: z.boolean().default(false),
+  allowHourly: z.boolean().default(false),
+  allowMultipleDays: z.boolean().default(true),
+  requireReason: z.boolean().default(false),
+  requireAttachment: z.boolean().default(false),
+  minNoticeDays: z.number().int().min(0).max(365).optional(),
+  maxDaysPerRequest: z.number().positive().max(366).optional(),
+  maxHoursPerRequest: z
+    .number()
+    .positive()
+    .max(24 * 366)
+    .optional(),
+  allowNegativeBalance: z.boolean().default(false),
+  sortOrder: z.number().int().min(0).optional(),
+});
+export type CreateLeaveTypeAdminRequest = z.infer<typeof createLeaveTypeAdminSchema>;
+
+/** Body sửa loại nghỉ (mặt admin). Mọi field optional — PATCH bán phần. code KHÔNG sửa được (immutable). */
+export const updateLeaveTypeAdminSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  paid: z.boolean().optional(),
+  status: z.enum(["active", "inactive"]).optional(),
+  description: z.string().max(1000).nullable().optional(),
+  deductBalance: z.boolean().optional(),
+  balanceUnit: z.enum(["Day", "Hour"]).optional(),
+  allowFullDay: z.boolean().optional(),
+  allowHalfDay: z.boolean().optional(),
+  allowHourly: z.boolean().optional(),
+  allowMultipleDays: z.boolean().optional(),
+  requireReason: z.boolean().optional(),
+  requireAttachment: z.boolean().optional(),
+  minNoticeDays: z.number().int().min(0).max(365).nullable().optional(),
+  maxDaysPerRequest: z.number().positive().max(366).nullable().optional(),
+  maxHoursPerRequest: z
+    .number()
+    .positive()
+    .max(24 * 366)
+    .nullable()
+    .optional(),
+  allowNegativeBalance: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+export type UpdateLeaveTypeAdminRequest = z.infer<typeof updateLeaveTypeAdminSchema>;
+
+/** View đầy đủ mặt admin (bao gồm status/soft-delete flag, KHÔNG lộ deleted_by/created_by). */
+export const leaveTypeAdminViewSchema = leaveTypeViewSchema.extend({
+  allowNegativeBalance: z.boolean().nullable(),
+});
+export type LeaveTypeAdminView = z.infer<typeof leaveTypeAdminViewSchema>;
+
+// ─── leave_policies (mig 0453 — mới hoàn toàn) ────────────────────────────────
+
+export const leavePolicyScopeSchema = z.enum([
+  "Company",
+  "Department",
+  "Employee",
+  "JobLevel",
+  "ContractType",
+]);
+export type LeavePolicyScope = z.infer<typeof leavePolicyScopeSchema>;
+
+export const leavePolicyAccrualMethodSchema = z.enum([
+  "None",
+  "Monthly",
+  "Yearly",
+  "Manual",
+  "Prorated",
+]);
+export type LeavePolicyAccrualMethod = z.infer<typeof leavePolicyAccrualMethodSchema>;
+
+/**
+ * Body tạo/sửa chính sách nghỉ. `target` bọc chk_leave_policies_target (đúng 1 field khớp policyScope) —
+ * validate ở Zod TRƯỚC khi chạm DB (fail-fast, tránh lộ lỗi CHECK thô).
+ */
+const leavePolicyBaseSchema = z.object({
+  leaveTypeId: z.string().uuid(),
+  policyCode: z
+    .string()
+    .min(1)
+    .max(50)
+    .regex(/^[A-Za-z0-9_-]+$/, "Mã chính sách chỉ gồm chữ, số, '-', '_'"),
+  name: z.string().min(1).max(200),
+  description: z.string().max(1000).optional(),
+  policyScope: leavePolicyScopeSchema,
+  departmentId: z.string().uuid().optional(),
+  employeeId: z.string().uuid().optional(),
+  jobLevelId: z.string().uuid().optional(),
+  contractTypeId: z.string().uuid().optional(),
+  yearlyQuotaDays: z.number().min(0).max(366).optional(),
+  yearlyQuotaHours: z
+    .number()
+    .min(0)
+    .max(24 * 366)
+    .optional(),
+  accrualMethod: leavePolicyAccrualMethodSchema.default("None"),
+  accrualDayOfMonth: z.number().int().min(1).max(31).optional(),
+  prorateOnJoinDate: z.boolean().default(false),
+  includeWeekends: z.boolean().default(false),
+  includePublicHolidays: z.boolean().default(false),
+  reserveBalanceOnPending: z.boolean().default(true),
+  allowNegativeBalance: z.boolean().default(false),
+  maxNegativeDays: z.number().min(0).max(366).optional(),
+  allowCancelAfterApproved: z.boolean().default(true),
+  cancelBeforeDays: z.number().int().min(0).max(365).optional(),
+  requiresManagerApproval: z.boolean().default(true),
+  requiresHrApproval: z.boolean().default(false),
+  effectiveFrom: z.string().date(),
+  effectiveTo: z.string().date().optional(),
+  priority: z.number().int().min(0).max(1000).default(0),
+});
+
+function refineLeavePolicyTarget<
+  Shape extends z.ZodRawShape,
+  Out extends {
+    policyScope: LeavePolicyScope;
+    departmentId?: string;
+    employeeId?: string;
+    jobLevelId?: string;
+    contractTypeId?: string;
+  },
+>(schema: z.ZodObject<Shape, "strip", z.ZodTypeAny, Out>) {
+  return schema
+    .refine(
+      (v) =>
+        v.policyScope !== "Company" ||
+        (v.departmentId == null &&
+          v.employeeId == null &&
+          v.jobLevelId == null &&
+          v.contractTypeId == null),
+      { message: "policyScope Company không được gắn target khác", path: ["policyScope"] },
+    )
+    .refine((v) => v.policyScope !== "Department" || v.departmentId != null, {
+      message: "policyScope Department bắt buộc departmentId",
+      path: ["departmentId"],
+    })
+    .refine((v) => v.policyScope !== "Employee" || v.employeeId != null, {
+      message: "policyScope Employee bắt buộc employeeId",
+      path: ["employeeId"],
+    })
+    .refine((v) => v.policyScope !== "JobLevel" || v.jobLevelId != null, {
+      message: "policyScope JobLevel bắt buộc jobLevelId",
+      path: ["jobLevelId"],
+    })
+    .refine((v) => v.policyScope !== "ContractType" || v.contractTypeId != null, {
+      message: "policyScope ContractType bắt buộc contractTypeId",
+      path: ["contractTypeId"],
+    });
+}
+
+export const createLeavePolicySchema = refineLeavePolicyTarget(leavePolicyBaseSchema);
+export type CreateLeavePolicyRequest = z.infer<typeof createLeavePolicySchema>;
+
+/** PATCH bán phần — policyCode/leaveTypeId immutable sau khi tạo. status thêm ở đây (Active/Inactive). */
+export const updateLeavePolicySchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  description: z.string().max(1000).nullable().optional(),
+  status: z.enum(["Active", "Inactive"]).optional(),
+  yearlyQuotaDays: z.number().min(0).max(366).nullable().optional(),
+  yearlyQuotaHours: z
+    .number()
+    .min(0)
+    .max(24 * 366)
+    .nullable()
+    .optional(),
+  accrualMethod: leavePolicyAccrualMethodSchema.optional(),
+  accrualDayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+  prorateOnJoinDate: z.boolean().optional(),
+  includeWeekends: z.boolean().optional(),
+  includePublicHolidays: z.boolean().optional(),
+  reserveBalanceOnPending: z.boolean().optional(),
+  allowNegativeBalance: z.boolean().optional(),
+  maxNegativeDays: z.number().min(0).max(366).nullable().optional(),
+  allowCancelAfterApproved: z.boolean().optional(),
+  cancelBeforeDays: z.number().int().min(0).max(365).nullable().optional(),
+  requiresManagerApproval: z.boolean().optional(),
+  requiresHrApproval: z.boolean().optional(),
+  effectiveFrom: z.string().date().optional(),
+  effectiveTo: z.string().date().nullable().optional(),
+  priority: z.number().int().min(0).max(1000).optional(),
+});
+export type UpdateLeavePolicyRequest = z.infer<typeof updateLeavePolicySchema>;
+
+export const leavePolicyViewSchema = z.object({
+  id: z.string().uuid(),
+  leaveTypeId: z.string().uuid(),
+  leaveTypeCode: z.string().nullable(),
+  leaveTypeName: z.string().nullable(),
+  policyCode: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  policyScope: leavePolicyScopeSchema,
+  departmentId: z.string().uuid().nullable(),
+  employeeId: z.string().uuid().nullable(),
+  jobLevelId: z.string().uuid().nullable(),
+  contractTypeId: z.string().uuid().nullable(),
+  yearlyQuotaDays: z.number().nullable(),
+  yearlyQuotaHours: z.number().nullable(),
+  accrualMethod: leavePolicyAccrualMethodSchema,
+  reserveBalanceOnPending: z.boolean(),
+  allowNegativeBalance: z.boolean(),
+  maxNegativeDays: z.number().nullable(),
+  requiresManagerApproval: z.boolean(),
+  requiresHrApproval: z.boolean(),
+  effectiveFrom: z.string().date(),
+  effectiveTo: z.string().date().nullable(),
+  priority: z.number().int(),
+  status: z.enum(["Active", "Inactive"]),
+});
+export type LeavePolicyView = z.infer<typeof leavePolicyViewSchema>;
+
+export const leavePolicyListQuerySchema = z.object({
+  leaveTypeId: z.string().uuid().optional(),
+  policyScope: leavePolicyScopeSchema.optional(),
+  status: z.enum(["Active", "Inactive"]).optional(),
+});
+export type LeavePolicyListQuery = z.infer<typeof leavePolicyListQuerySchema>;
+
+// ─── leave_balances admin view + adjust (ledger append-only) ─────────────────
+
+/** GET /leave/admin/balances query — theo employee/năm (Company scope; year mặc định năm hiện tại). */
+export const leaveBalanceAdminListQuerySchema = z.object({
+  employeeId: z.string().uuid().optional(),
+  leaveTypeId: z.string().uuid().optional(),
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
+});
+export type LeaveBalanceAdminListQuery = z.infer<typeof leaveBalanceAdminListQuerySchema>;
+
+export const leaveBalanceAdminViewSchema = z.object({
+  id: z.string().uuid(),
+  employeeId: z.string().uuid().nullable(),
+  userId: z.string().uuid(),
+  userFullName: z.string().nullable(),
+  leaveTypeId: z.string().uuid(),
+  leaveTypeCode: z.string().nullable(),
+  leaveTypeName: z.string().nullable(),
+  year: z.number().int(),
+  totalDays: z.number(),
+  usedDays: z.number(),
+  pendingDays: z.number(),
+  adjustedDays: z.number(),
+  remainingDays: z.number(),
+  allowNegativeBalance: z.boolean().nullable(),
+});
+export type LeaveBalanceAdminView = z.infer<typeof leaveBalanceAdminViewSchema>;
+
+/**
+ * POST /leave/admin/balances/:balanceId/adjust — HR điều chỉnh số dư phép. amountDays có thể ÂM (trừ) hoặc
+ * DƯƠNG (cộng); reason BẮT BUỘC (audit trail rõ lý do). Mọi thay đổi PHẢI qua leave_balance_transactions
+ * (ledger append-only) — KHÔNG endpoint nào set total_days trực tiếp mà không kèm 1 dòng ledger ADJUSTMENT.
+ */
+export const adjustLeaveBalanceSchema = z.object({
+  amountDays: z
+    .number()
+    .refine((v) => v !== 0, "Số ngày điều chỉnh không được bằng 0")
+    .refine((v) => Math.abs(v) <= 366, "Số ngày điều chỉnh vượt giới hạn hợp lý (366 ngày)"),
+  reason: z.string().min(1, "Lý do điều chỉnh là bắt buộc").max(1000),
+});
+export type AdjustLeaveBalanceRequest = z.infer<typeof adjustLeaveBalanceSchema>;
+
+/** 1 dòng ledger (GET /leave/admin/balances/:balanceId/transactions — view-transaction:leave-balance). */
+export const leaveBalanceTransactionViewSchema = z.object({
+  id: z.string().uuid(),
+  transactionType: z.string(),
+  transactionDate: z.string().date(),
+  amountDays: z.number(),
+  balanceBeforeDays: z.number().nullable(),
+  balanceAfterDays: z.number().nullable(),
+  reason: z.string().nullable(),
+  createdByType: z.string(),
+  createdBy: z.string().uuid().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type LeaveBalanceTransactionView = z.infer<typeof leaveBalanceTransactionViewSchema>;
