@@ -123,6 +123,17 @@ export const attendanceKeys = {
     all: [...rootKeys.attendance, "rules"] as const,
     list: () => [...rootKeys.attendance, "rules", "list"] as const,
   },
+  // S3-FE-ATT-3 — APPEND. Đơn điều chỉnh công: my/team/company (phân trang server) + detail.
+  adjustments: {
+    all: [...rootKeys.attendance, "adjustments"] as const,
+    my: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "adjustments", "my", params] as const,
+    team: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "adjustments", "team", params] as const,
+    company: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "adjustments", "company", params] as const,
+    detail: (id: string) => [...rootKeys.attendance, "adjustments", "detail", id] as const,
+  },
 };
 
 // ── Leave keys ────────────────────────────────────────────────────────────────
@@ -222,6 +233,24 @@ const leaveRequestsListPrefix = [...rootKeys.leave, "requests", "list"] as const
 export const attendanceInvalidation = {
   checkIn: () => [attendanceKeys.myToday(), attendanceMyRecordsPrefix] as const,
   checkOut: () => [attendanceKeys.myToday(), attendanceMyRecordsPrefix] as const,
+  // S3-FE-ATT-3 — create làm mới CẢ prefix "adjustments" (mọi biến thể scope/param: my/team/company).
+  // approve/adjust-direct còn ÁP DỤNG vào attendance_records → làm mới thêm prefix "records" (list +
+  // detail đúng bản ghi khi biết recordId) để bảng công không hiển thị giá trị cũ trước điều chỉnh.
+  createAdjustment: () => [attendanceKeys.adjustments.all] as const,
+  approveAdjustment: (id: string) =>
+    [
+      attendanceKeys.adjustments.all,
+      attendanceKeys.adjustments.detail(id),
+      attendanceKeys.records.all,
+    ] as const,
+  rejectAdjustment: (id: string) =>
+    [attendanceKeys.adjustments.all, attendanceKeys.adjustments.detail(id)] as const,
+  adjustDirect: (recordId: string) =>
+    [
+      attendanceKeys.adjustments.all,
+      attendanceKeys.records.all,
+      attendanceKeys.records.detail(recordId),
+    ] as const,
 };
 
 // S2-FE-HR-8: PATCH /hr/employee-code-config làm mới CẢ config() lẫn preview() (mã tiếp theo có thể

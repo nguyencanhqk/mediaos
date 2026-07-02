@@ -281,3 +281,117 @@ describe("attendanceApi — shift/rule/assignment vs REAL S3-ATT-BE-3 shape", ()
     expect(opts?.method).toBe("PATCH");
   });
 });
+
+// ── Adjustment requests (S3-FE-ATT-3 · S3-ATT-BE-4) ─────────────────────────────
+
+const ADJUSTMENT_DETAIL = {
+  id: UUID,
+  requestCode: "ADJ-0001",
+  employeeId: UUID,
+  employeeCode: "EMP001",
+  fullName: "Nguyen Van A",
+  attendanceRecordId: null,
+  workDate: "2026-07-01",
+  requestType: "MISSING_CHECK_IN",
+  requestedCheckInAt: ISO,
+  requestedCheckOutAt: null,
+  reason: "Quen check-in",
+  status: "Pending",
+  submittedAt: ISO,
+  requestedBy: UUID,
+  currentApproverUserId: null,
+  reviewedBy: null,
+  reviewedAt: null,
+  reviewNote: null,
+  attachmentFileId: null,
+  items: [],
+  createdAt: ISO,
+  updatedAt: ISO,
+};
+
+describe("attendanceApi — adjustment requests (S3-ATT-BE-4 canonical DTOs)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.apiFetch).mockReset();
+    vi.mocked(apiClient.apiFetch).mockResolvedValue(ADJUSTMENT_DETAIL as never);
+  });
+
+  it("createAdjustmentRequest → POST /attendance/adjustment-requests, validator = detail schema", async () => {
+    await attendanceApi.createAdjustmentRequest({
+      workDate: "2026-07-01",
+      requestType: "MISSING_CHECK_IN",
+      requestedCheckInAt: ISO,
+      reason: "Quen check-in",
+    });
+    const [url, schema, opts] = lastCall();
+    expect(url).toBe("/attendance/adjustment-requests");
+    expect(opts?.method).toBe("POST");
+    expect(opts?.body ?? "").not.toContain("company");
+    expect(() => schema.parse(ADJUSTMENT_DETAIL)).not.toThrow();
+  });
+
+  it("listMyAdjustmentRequests → path bắt đầu /attendance/adjustment-requests/my", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue({
+      items: [ADJUSTMENT_DETAIL],
+      meta: { page: 1, pageSize: 20, total: 1, totalPages: 1, hasNext: false, hasPrev: false },
+    } as never);
+    await attendanceApi.listMyAdjustmentRequests({ page: 1 });
+    const [url] = lastCall();
+    expect(url.startsWith("/attendance/adjustment-requests/my")).toBe(true);
+    expect(new URLSearchParams(url.split("?")[1]).get("page")).toBe("1");
+  });
+
+  it("listTeamAdjustmentRequests → path bắt đầu /attendance/adjustment-requests/team", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue({
+      items: [],
+      meta: { page: 1, pageSize: 20, total: 0, totalPages: 0, hasNext: false, hasPrev: false },
+    } as never);
+    await attendanceApi.listTeamAdjustmentRequests();
+    const [url] = lastCall();
+    expect(url.startsWith("/attendance/adjustment-requests/team")).toBe(true);
+  });
+
+  it("listCompanyAdjustmentRequests → GET /attendance/adjustment-requests (KHÔNG /team, KHÔNG /my)", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue({
+      items: [],
+      meta: { page: 1, pageSize: 20, total: 0, totalPages: 0, hasNext: false, hasPrev: false },
+    } as never);
+    await attendanceApi.listCompanyAdjustmentRequests();
+    const [url] = lastCall();
+    expect(url.startsWith("/attendance/adjustment-requests")).toBe(true);
+    expect(url.startsWith("/attendance/adjustment-requests/team")).toBe(false);
+    expect(url.startsWith("/attendance/adjustment-requests/my")).toBe(false);
+  });
+
+  it("getAdjustmentRequest(id) → GET /attendance/adjustment-requests/:id", async () => {
+    await attendanceApi.getAdjustmentRequest(UUID);
+    const [url] = lastCall();
+    expect(url).toBe(`/attendance/adjustment-requests/${UUID}`);
+  });
+
+  it("approveAdjustmentRequest → POST .../approve", async () => {
+    await attendanceApi.approveAdjustmentRequest(UUID, { note: "OK" });
+    const [url, , opts] = lastCall();
+    expect(url).toBe(`/attendance/adjustment-requests/${UUID}/approve`);
+    expect(opts?.method).toBe("POST");
+  });
+
+  it("rejectAdjustmentRequest → POST .../reject với reason bắt buộc", async () => {
+    await attendanceApi.rejectAdjustmentRequest(UUID, { reason: "Thiếu chứng từ" });
+    const [url, , opts] = lastCall();
+    expect(url).toBe(`/attendance/adjustment-requests/${UUID}/reject`);
+    expect(opts?.method).toBe("POST");
+    expect(opts?.body ?? "").toContain("Thiếu chứng từ");
+  });
+
+  it("adjustRecordDirect → POST /attendance/records/:id/adjust-direct", async () => {
+    await attendanceApi.adjustRecordDirect(UUID, {
+      recordId: UUID,
+      items: [{ fieldName: "checkInAt", newValue: ISO }],
+      reason: "Sửa trực tiếp",
+    });
+    const [url, schema, opts] = lastCall();
+    expect(url).toBe(`/attendance/records/${UUID}/adjust-direct`);
+    expect(opts?.method).toBe("POST");
+    expect(() => schema.parse(ADJUSTMENT_DETAIL)).not.toThrow();
+  });
+});

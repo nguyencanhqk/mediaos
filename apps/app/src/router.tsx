@@ -138,6 +138,12 @@ import { AttendanceRecordDetailPage } from "@/routes/attendance/AttendanceRecord
 import { AttendanceShiftsPage } from "@/routes/attendance/AttendanceShiftsPage";
 import { AttendanceShiftAssignmentsPage } from "@/routes/attendance/AttendanceShiftAssignmentsPage";
 import { AttendanceRulesPage } from "@/routes/attendance/AttendanceRulesPage";
+// Attendance — Đơn điều chỉnh công (S3-FE-ATT-3)
+import { CreateAdjustmentRequestPage } from "@/routes/attendance/adjustment/CreateAdjustmentRequestPage";
+import { MyAdjustmentRequestsPage } from "@/routes/attendance/adjustment/MyAdjustmentRequestsPage";
+import { AdjustmentRequestsPage } from "@/routes/attendance/adjustment/AdjustmentRequestsPage";
+import { AdjustmentRequestDetailPage } from "@/routes/attendance/adjustment/AdjustmentRequestDetailPage";
+import { DirectAdjustPage } from "@/routes/attendance/adjustment/DirectAdjustPage";
 
 // Leave
 import { MyLeaveBalancePage } from "@/routes/leave/MyLeaveBalancePage";
@@ -360,6 +366,116 @@ const attRecordDetailRoute = createRoute({
       attRecordDetailMeta,
       "ATT",
       <AttendanceRecordDetailPage recordId={recordId} />,
+    );
+  },
+});
+
+// Đơn điều chỉnh công (S3-FE-ATT-3, ATT-SCREEN-006..010) — local RouteMeta (cùng kỹ thuật
+// attRecordDetailMeta). view-own/view-team/view-company/approve/reject:adjustment + adjust-direct:attendance
+// đều SENSITIVE nhưng KHÔNG allowlisted (permission.service.ts SENSITIVE_CAPABILITY_ALLOWLIST) → dùng
+// reach-permission ALLOWLISTED liên quan (view-own/team/company:attendance) làm gợi ý hiển thị route; cổng
+// thật vẫn ở server (403/404 theo response — xem adjustment/constants.ts).
+const attAdjustmentNewMeta: RouteMeta = {
+  routeKey: "att.adjustment-requests.new",
+  path: "/attendance/adjustment-requests/new",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-006",
+  titleKey: "routeTitle.attAdjustmentNew",
+  requiredAnyPermissions: ["create-own:adjustment"],
+};
+const attAdjustmentNewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/adjustment-requests/new",
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(attAdjustmentNewMeta, "ATT", <CreateAdjustmentRequestPage />),
+});
+
+const attAdjustmentMyMeta: RouteMeta = {
+  routeKey: "att.adjustment-requests.my",
+  path: "/attendance/adjustment-requests/my",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-007",
+  titleKey: "routeTitle.attAdjustmentMy",
+  requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_OWN"],
+  showInSidebar: true,
+  order: 37,
+};
+const attAdjustmentMyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/adjustment-requests/my",
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(attAdjustmentMyMeta, "ATT", <MyAdjustmentRequestsPage />),
+});
+
+const attAdjustmentListMeta: RouteMeta = {
+  routeKey: "att.adjustment-requests",
+  path: "/attendance/adjustment-requests",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-008",
+  titleKey: "routeTitle.attAdjustmentList",
+  requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_TEAM", "ATT.ATTENDANCE.VIEW_COMPANY"],
+  showInSidebar: true,
+  order: 38,
+};
+const attAdjustmentListRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/adjustment-requests",
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(attAdjustmentListMeta, "ATT", <AdjustmentRequestsPage />),
+});
+
+const attAdjustmentDetailMeta: RouteMeta = {
+  routeKey: "att.adjustment-requests.detail",
+  path: "/attendance/adjustment-requests/:requestId",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-009",
+  titleKey: "routeTitle.attAdjustmentDetail",
+  requiredAnyPermissions: [
+    "ATT.ATTENDANCE.VIEW_OWN",
+    "ATT.ATTENDANCE.VIEW_TEAM",
+    "ATT.ATTENDANCE.VIEW_COMPANY",
+  ],
+};
+const attAdjustmentDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/adjustment-requests/$requestId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { requestId } = attAdjustmentDetailRoute.useParams();
+    return buildModuleRouteContent(
+      attAdjustmentDetailMeta,
+      "ATT",
+      <AdjustmentRequestDetailPage requestId={requestId} />,
+    );
+  },
+});
+
+const attRecordAdjustMeta: RouteMeta = {
+  routeKey: "att.records.adjust",
+  path: "/attendance/records/:recordId/adjust",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-010",
+  titleKey: "routeTitle.attRecordAdjust",
+  requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_TEAM", "ATT.ATTENDANCE.VIEW_COMPANY"],
+};
+const attRecordAdjustRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/records/$recordId/adjust",
+  beforeLoad: authGuard,
+  component: () => {
+    const { recordId } = attRecordAdjustRoute.useParams();
+    return buildModuleRouteContent(
+      attRecordAdjustMeta,
+      "ATT",
+      <DirectAdjustPage recordId={recordId} />,
     );
   },
 });
@@ -654,6 +770,11 @@ const routeTree = rootRoute.addChildren([
   attShiftAssignmentsRoute,
   attRulesRoute,
   attRecordDetailRoute,
+  attAdjustmentNewRoute,
+  attAdjustmentMyRoute,
+  attAdjustmentListRoute,
+  attAdjustmentDetailRoute,
+  attRecordAdjustRoute,
   leaveRoute,
   leaveMyRequestsRoute,
   leaveCreateRoute,

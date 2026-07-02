@@ -187,6 +187,29 @@ export const ATT_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 70,
     requiredAnyPermissions: ["view:attendance-rule"],
   },
+  // S3-FE-ATT-3 — Đơn điều chỉnh công. view-own/view-team/view-company:adjustment là cặp SENSITIVE
+  // KHÔNG allowlisted (permission.service.ts) → dùng cặp ALLOWLISTED liên quan (view-own/team/company:
+  // attendance) làm reach-permission gợi ý ẩn/hiện menu — cổng thật vẫn ở server (xem adjustment/constants.ts).
+  {
+    sidebarKey: "att.adjustment-requests.my",
+    moduleCode: "ATT",
+    label: "Đơn điều chỉnh của tôi",
+    path: "/attendance/adjustment-requests/my",
+    icon: "file-edit",
+    group: "operation",
+    order: 25,
+    requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_OWN"],
+  },
+  {
+    sidebarKey: "att.adjustment-requests",
+    moduleCode: "ATT",
+    label: "Đơn điều chỉnh cần duyệt",
+    path: "/attendance/adjustment-requests",
+    icon: "check-circle",
+    group: "management",
+    order: 45,
+    requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_TEAM", "ATT.ATTENDANCE.VIEW_COMPANY"],
+  },
 ];
 
 // ---------------------------------------------------------------------------
