@@ -518,4 +518,57 @@ export default {
       },
     },
   },
+
+  // S2-FE-FND-3 — SYSTEM-SCREEN-MODULES (/system/modules + /:code). Read-only trước (toggle chờ BE).
+  modules: {
+    title: "Danh mục module",
+    description: "Toàn bộ module của hệ thống — tên, nhóm, trạng thái kích hoạt (chỉ đọc)",
+    columns: {
+      code: "Mã module",
+      name: "Tên module",
+      group: "Nhóm",
+      active: "Trạng thái",
+      enabled: "Bật/Tắt",
+      actions: "",
+      viewDetail: "Xem chi tiết",
+    },
+    active: {
+      yes: "Đang hoạt động",
+      no: "Ngừng hoạt động",
+    },
+    enabled: {
+      yes: "Đã bật",
+      no: "Đã tắt",
+    },
+    empty: {
+      title: "Không có module",
+      description: "Chưa có module nào khớp tìm kiếm.",
+    },
+    error: {
+      title: "Không thể tải danh mục module",
+      description: "Có lỗi khi tải danh mục module. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem danh mục module của hệ thống.",
+    },
+    filters: {
+      search: "Tìm kiếm",
+      searchPlaceholder: "Tìm theo mã hoặc tên module",
+    },
+    detail: {
+      title: "Chi tiết module",
+      backToList: "Quay lại danh sách",
+      description: "Mô tả",
+      route: "Đường dẫn",
+      requiredPermissions: "Quyền yêu cầu",
+      noPermissions: "Module này không yêu cầu quyền riêng — mọi user đều thấy được.",
+      toggleDeferredNotice:
+        "Bật/tắt module sẽ được bổ sung ở đợt sau (backend chưa có API thao tác). Trạng thái hiển thị ở đây chỉ để tham khảo.",
+      notFound: {
+        title: "Không tìm thấy module",
+        description: "Module này không tồn tại hoặc đã bị xoá.",
+      },
+    },
+  },
 };

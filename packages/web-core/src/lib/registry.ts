@@ -152,6 +152,10 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "FOUNDATION.COMPANY.VIEW": "view:foundation-company",
   "FOUNDATION.COMPANY.UPDATE": "update:foundation-company",
   "FOUNDATION.SETTING.UPDATE": "update:foundation-setting",
+  // S2-FE-FND-3: cặp seed THẬT mig 0435 dòng 338 — ModuleAdminController dùng view:foundation-module
+  // (is_sensitive=false, bulk-grant company-admin qua LIKE 'foundation-%'). KHÁC my-apps (Authenticated-only,
+  // KHÔNG PermissionGuard) — admin catalog GET /foundation/modules[/:code] gated đúng cặp này.
+  "FOUNDATION.MODULE.VIEW": "view:foundation-module",
 };
 
 export function createPermissionChecker(userPermissions: readonly UserPermission[]) {
@@ -951,6 +955,19 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["FOUNDATION.FILE.VIEW"],
     showInSidebar: true,
     order: 74,
+  },
+  // S2-FE-FND-3 — cặp seed THẬT mig 0435 dòng 338 (view:foundation-module, is_sensitive=false, bulk-grant
+  // company-admin). GET /foundation/modules (S2-FND-BE-1, ModuleAdminController).
+  {
+    routeKey: "system.modules",
+    path: "/system/modules",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "FOUNDATION",
+    screenCode: "SYSTEM-SCREEN-MODULES",
+    titleKey: "routeTitle.systemModules",
+    requiredAnyPermissions: ["FOUNDATION.MODULE.VIEW"],
+    showInSidebar: true,
+    order: 75,
   },
 
   // Account

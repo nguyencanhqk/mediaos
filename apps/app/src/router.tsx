@@ -167,6 +167,10 @@ import { AuditLogDetailPage } from "@/routes/system/foundation/audit-logs/AuditL
 import { FilesPage } from "@/routes/system/files/FilesPage";
 import { FileDetailPage } from "@/routes/system/files/FileDetailPage";
 import { FILES_PATH } from "@/routes/system/files/constants";
+// System / Foundation — Module catalog admin (S2-FE-FND-3)
+import { ModulesPage } from "@/routes/system/modules/ModulesPage";
+import { ModuleDetailPage } from "@/routes/system/modules/ModuleDetailPage";
+import { MODULES_PATH } from "@/routes/system/modules/constants";
 // Account — self-service (S2-FE-AUTH-2)
 import { ChangePasswordPage } from "@/routes/account/ChangePasswordPage";
 
@@ -601,6 +605,31 @@ const systemFileDetailRoute = createRoute({
   },
 });
 
+// S2-FE-FND-3 — Module catalog admin. Route ADDITIVE trong ROUTE_REGISTRY (system.modules, gate
+// FOUNDATION.MODULE.VIEW → view:foundation-module).
+const systemModulesRoute = makeModuleRoute(
+  MODULES_PATH,
+  "system.modules",
+  "FOUNDATION",
+  ModulesPage,
+);
+
+// Module detail — local RouteMeta (no sidebar entry; reuses system.modules permission).
+const systemModuleDetailMeta = getMeta("system.modules");
+const systemModuleDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/modules/$moduleCode",
+  beforeLoad: authGuard,
+  component: () => {
+    const { moduleCode } = systemModuleDetailRoute.useParams();
+    return buildModuleRouteContent(
+      systemModuleDetailMeta,
+      "FOUNDATION",
+      <ModuleDetailPage moduleCode={moduleCode} />,
+    );
+  },
+});
+
 // Account self-service — /auth/change-password là endpoint JwtAuthGuard-only (KHÔNG PermissionGuard,
 // KHÔNG cặp permission `password:*` trong catalog thật) ⇒ route KHÔNG dùng buildModuleRouteContent/
 // ProtectedRoute (không có moduleCode/permission để gate) — chỉ cần ProtectedShell (đăng nhập là đủ),
@@ -683,6 +712,8 @@ const routeTree = rootRoute.addChildren([
   systemSecurityEventsRoute,
   systemFilesRoute,
   systemFileDetailRoute,
+  systemModulesRoute,
+  systemModuleDetailRoute,
   accountChangePasswordRoute,
   notFoundRoute,
 ]);

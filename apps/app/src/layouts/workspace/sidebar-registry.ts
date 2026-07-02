@@ -10,6 +10,7 @@
 import { type SidebarItemMeta } from "@mediaos/web-core";
 import { AUDIT_LOG_VIEW_PERMISSION } from "@/routes/system/auth-logs/constants";
 import { FOUNDATION_FILE_VIEW_PERMISSION } from "@/routes/system/files/constants";
+import { FOUNDATION_MODULE_VIEW_PERMISSION } from "@/routes/system/modules/constants";
 
 // ---------------------------------------------------------------------------
 // DASH
@@ -346,6 +347,19 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     group: "report",
     order: 43,
     requiredAnyPermissions: [FOUNDATION_FILE_VIEW_PERMISSION],
+  },
+  // S2-FE-FND-3 — Module Catalog admin. Cặp seed THẬT view:foundation-module (mig 0435 dòng 338,
+  // is_sensitive=false, bulk-grant company-admin qua LIKE 'foundation-%') — cặp ModuleAdminController
+  // thật sự @RequirePermission (S2-FND-BE-1).
+  {
+    sidebarKey: "system.modules",
+    moduleCode: "FOUNDATION",
+    label: "Danh mục module",
+    path: "/system/modules",
+    icon: "layout-grid",
+    group: "admin",
+    order: 21,
+    requiredAnyPermissions: [FOUNDATION_MODULE_VIEW_PERMISSION],
   },
 ];
 
