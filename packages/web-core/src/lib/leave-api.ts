@@ -6,6 +6,7 @@ import {
   leaveRequestListResponseSchema,
   leaveManagementListResponseSchema,
   leaveCalculateResponseSchema,
+  leaveCalendarResponseSchema,
   type LeaveTypeView,
   type LeaveBalanceView,
   type LeaveRequestDetailView,
@@ -17,6 +18,8 @@ import {
   type LeaveCalculateResponse,
   type CreateLeaveRequestDraft,
   type UpdateLeaveRequestDraft,
+  type LeaveCalendarQuery,
+  type LeaveCalendarResponse,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -157,4 +160,19 @@ export const leaveApi = {
       method: "POST",
       body: JSON.stringify({ reason }),
     }),
+
+  // ── Lịch nghỉ (S3-FE-LEAVE-4) ─────────────────────────────────────────────
+  // Cổng SERVER 2 tầng (xem apps/api/src/leave/leave.controller.ts listCalendar):
+  //   coarse = view-own:leave-calendar (mọi role có Own); THẬT = view-own/view-team/view-company theo
+  //   `scope` query — thiếu quyền cho scope yêu cầu → 403. Client CHỈ chọn scope, KHÔNG tự lọc dữ liệu.
+  // MASK: `reason` chỉ có ở dòng của chính người gọi — mọi dòng khác LUÔN null (server quyết định).
+
+  /**
+   * GET /leave/calendar?scope=own|team|company&from&to — lịch nghỉ theo phạm vi (own/team/company).
+   * Permission: view-own:leave-calendar (coarse) + view-{scope}:leave-calendar (thật, server-side).
+   */
+  getCalendar: (query: LeaveCalendarQuery): Promise<LeaveCalendarResponse> => {
+    const qs = buildQueryString(query);
+    return apiFetch(`/leave/calendar${qs}`, leaveCalendarResponseSchema);
+  },
 };

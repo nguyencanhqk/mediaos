@@ -850,6 +850,20 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 43,
   },
+  // S3-FE-LEAVE-4 — LEAVE-SCREEN-007/008/009 (lịch nghỉ own/team/company). Cổng route = CHỈ VIEW_OWN
+  // (mọi role có Own) — đủ để render workspace; gate TINH hơn (team/company) áp trong LeaveCalendarPage
+  // qua useCanExact (sensitive pair, không wildcard fallback), mirror TeamAttendanceRecordsPage.
+  {
+    routeKey: "leave.calendar",
+    path: "/leave/calendar",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "LEAVE",
+    screenCode: "LEAVE-SCREEN-007",
+    titleKey: "routeTitle.leaveCalendar",
+    requiredAnyPermissions: ["LEAVE.CALENDAR.VIEW_OWN"],
+    showInSidebar: true,
+    order: 44,
+  },
 
   // Tasks
   {

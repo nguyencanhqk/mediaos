@@ -130,6 +130,12 @@ export const leaveKeys = {
     my: () => [...rootKeys.leave, "balances", "my"] as const,
     employee: (id: string) => [...rootKeys.leave, "balances", "employee", id] as const,
   },
+  // S3-FE-LEAVE-4 — lịch nghỉ (own/team/company). params gồm scope+from+to (mirror BE query).
+  calendar: {
+    all: [...rootKeys.leave, "calendar"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.leave, "calendar", "list", params] as const,
+  },
 };
 
 // ── Task keys ─────────────────────────────────────────────────────────────────

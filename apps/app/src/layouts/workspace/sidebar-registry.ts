@@ -196,6 +196,18 @@ export const LEAVE_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 40,
     requiredAnyPermissions: ["LEAVE.REQUEST.VIEW"],
   },
+  // S3-FE-LEAVE-4 — LEAVE-SCREEN-007/008/009. Gate sidebar = CHỈ VIEW_OWN (mọi role có Own) — mọi
+  // người thấy menu "Lịch nghỉ" (own luôn khả dụng); toggle team/company gate TINH hơn TRONG page.
+  {
+    sidebarKey: "leave.calendar",
+    moduleCode: "LEAVE",
+    label: "Lịch nghỉ",
+    path: "/leave/calendar",
+    icon: "calendar-days",
+    group: "overview",
+    order: 15,
+    requiredAnyPermissions: ["LEAVE.CALENDAR.VIEW_OWN"],
+  },
 ];
 
 // ---------------------------------------------------------------------------
