@@ -35,6 +35,15 @@ import {
   AlertTriangle,
   Lock,
   Circle,
+  Network,
+  History,
+  ClipboardList,
+  FileSearch,
+  ShieldAlert,
+  LogIn,
+  Building2,
+  SlidersHorizontal,
+  File,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@mediaos/ui";
@@ -69,6 +78,15 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "alert-triangle": AlertTriangle,
   lock: Lock,
   circle: Circle,
+  network: Network,
+  history: History,
+  "clipboard-list": ClipboardList,
+  "file-search": FileSearch,
+  "shield-alert": ShieldAlert,
+  "log-in": LogIn,
+  "building-2": Building2,
+  "sliders-horizontal": SlidersHorizontal,
+  file: File,
 };
 
 interface DynamicIconProps {

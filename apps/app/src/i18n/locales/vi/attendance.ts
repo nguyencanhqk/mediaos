@@ -161,6 +161,12 @@ export default {
       validation: "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.",
       server: "Lỗi máy chủ. Vui lòng thử lại sau.",
       generic: "Không thể lưu. Vui lòng thử lại.",
+      // S3-FE-ATT-3 — thông điệp validate form đơn điều chỉnh (adjustment-form-schema.ts).
+      workDateRequired: "Vui lòng chọn ngày làm việc.",
+      reasonMin: "Lý do phải có ít nhất 3 ký tự.",
+      reasonMax: "Lý do tối đa 1000 ký tự.",
+      checkInRequired: "Loại yêu cầu này bắt buộc nhập giờ check-in đề nghị.",
+      checkOutRequired: "Loại yêu cầu này bắt buộc nhập giờ check-out đề nghị.",
     },
   },
 
@@ -324,6 +330,173 @@ export default {
       location: "Vị trí",
       employee: "Nhân viên",
       department: "Phòng ban",
+    },
+    actions: {
+      adjustDirect: "Điều chỉnh trực tiếp",
+    },
+  },
+
+  // ── Đơn điều chỉnh công (ATT-SCREEN-006..010, S3-FE-ATT-3, ATT-FUNC-018..022) ───
+  adjustment: {
+    myTitle: "Đơn điều chỉnh của tôi",
+    myDescription: "Danh sách đơn điều chỉnh công bạn đã gửi",
+    manageTitle: "Đơn điều chỉnh cần duyệt",
+    manageDescription: "Duyệt đơn điều chỉnh công theo phạm vi nhóm/công ty",
+
+    status: {
+      Draft: "Nháp",
+      Pending: "Chờ duyệt",
+      Approved: "Đã duyệt",
+      Rejected: "Từ chối",
+      Cancelled: "Đã huỷ",
+    },
+
+    requestType: {
+      MISSING_CHECK_IN: "Thiếu check-in",
+      MISSING_CHECK_OUT: "Thiếu check-out",
+      UPDATE_CHECK_IN: "Sửa giờ check-in",
+      UPDATE_CHECK_OUT: "Sửa giờ check-out",
+      EXPLAIN_LATE: "Giải trình đi muộn",
+      EXPLAIN_EARLY_LEAVE: "Giải trình về sớm",
+      UPDATE_STATUS: "Sửa trạng thái công",
+      REMOTE_CORRECTION: "Điều chỉnh làm remote",
+      OTHER: "Khác",
+    },
+
+    scope: {
+      team: "Nhóm",
+      company: "Công ty",
+    },
+
+    columns: {
+      requester: "Người gửi",
+      workDate: "Ngày làm việc",
+      requestType: "Loại yêu cầu",
+      reason: "Lý do",
+      status: "Trạng thái",
+      submittedAt: "Ngày gửi",
+      actions: "Hành động",
+      view: "Xem",
+    },
+
+    filters: {
+      allTypes: "Tất cả loại yêu cầu",
+      allStatuses: "Tất cả trạng thái",
+    },
+
+    actions: {
+      create: "Tạo đơn điều chỉnh",
+      approve: "Duyệt",
+      reject: "Từ chối",
+      dismiss: "Đóng",
+    },
+
+    empty: {
+      title: "Không có đơn điều chỉnh",
+      description: "Chưa có đơn điều chỉnh công nào trong danh sách này.",
+    },
+    error: {
+      title: "Không thể tải dữ liệu",
+      description: "Có lỗi khi tải danh sách đơn điều chỉnh. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem đơn điều chỉnh công.",
+    },
+
+    form: {
+      titleCreate: "Tạo đơn điều chỉnh công",
+      descriptionCreate: "Gửi yêu cầu điều chỉnh giờ công / trạng thái cho 1 ngày làm việc",
+      submit: "Gửi đơn",
+      submitting: "Đang gửi…",
+      forbidden: {
+        title: "Không có quyền tạo đơn",
+        description: "Bạn không có quyền tạo đơn điều chỉnh công.",
+      },
+      fields: {
+        requestType: "Loại yêu cầu",
+        workDate: "Ngày làm việc",
+        requestedCheckInAt: "Giờ check-in đề nghị",
+        requestedCheckOutAt: "Giờ check-out đề nghị",
+        reason: "Lý do",
+        reasonPlaceholder: "Mô tả lý do cần điều chỉnh…",
+      },
+    },
+
+    approve: {
+      title: "Duyệt đơn điều chỉnh",
+      confirm: "Xác nhận duyệt đơn điều chỉnh này? Bản ghi công sẽ được cập nhật ngay.",
+      note: "Ghi chú (tuỳ chọn)",
+      notePlaceholder: "Ghi chú khi duyệt…",
+      submit: "Xác nhận duyệt",
+      submitting: "Đang duyệt…",
+      forbidden: "Bạn không có quyền duyệt đơn này.",
+      error: "Không thể duyệt đơn. Vui lòng thử lại.",
+    },
+
+    reject: {
+      title: "Từ chối đơn điều chỉnh",
+      reasonPlaceholder: "Nhập lý do từ chối…",
+      reasonRequired: "Lý do từ chối là bắt buộc.",
+      submit: "Xác nhận từ chối",
+      submitting: "Đang từ chối…",
+      forbidden: "Bạn không có quyền từ chối đơn này.",
+      error: "Không thể từ chối đơn. Vui lòng thử lại.",
+    },
+
+    detail: {
+      title: "Chi tiết đơn điều chỉnh",
+      backToList: "Quay lại danh sách",
+      itemsTitle: "Lịch sử điều chỉnh (từng trường)",
+      itemsEmpty: "Chưa có điều chỉnh nào được ghi nhận.",
+      applied: "Đã áp dụng",
+      notApplied: "Chưa áp dụng",
+      itemsColumns: {
+        field: "Trường",
+        oldValue: "Giá trị cũ",
+        newValue: "Giá trị mới",
+        applied: "Trạng thái",
+      },
+      fields: {
+        requestCode: "Mã đơn",
+        employee: "Nhân viên",
+        workDate: "Ngày làm việc",
+        requestType: "Loại yêu cầu",
+        status: "Trạng thái",
+        reason: "Lý do",
+        requestedCheckInAt: "Giờ check-in đề nghị",
+        requestedCheckOutAt: "Giờ check-out đề nghị",
+        submittedAt: "Ngày gửi",
+        reviewedAt: "Ngày xử lý",
+        reviewNote: "Ghi chú xử lý",
+      },
+      forbidden: {
+        title: "Không có quyền truy cập",
+        description: "Bạn không có quyền xem đơn điều chỉnh này.",
+      },
+      notFound: {
+        title: "Không tìm thấy",
+        description: "Đơn điều chỉnh không tồn tại hoặc đã bị xoá.",
+      },
+      error: {
+        title: "Không thể tải dữ liệu",
+        description: "Có lỗi khi tải chi tiết đơn điều chỉnh. Vui lòng thử lại.",
+      },
+    },
+
+    directAdjust: {
+      title: "Điều chỉnh trực tiếp",
+      description: "Sửa giờ công NGAY (không qua vòng duyệt) — cần lý do",
+      currentCheckIn: "Check-in hiện tại",
+      currentCheckOut: "Check-out hiện tại",
+      newCheckIn: "Check-in mới",
+      newCheckOut: "Check-out mới",
+      reason: "Lý do điều chỉnh",
+      reasonPlaceholder: "Mô tả lý do điều chỉnh trực tiếp…",
+      atLeastOne: "Cần thay đổi ít nhất 1 giá trị (check-in hoặc check-out).",
+      submit: "Áp dụng điều chỉnh",
+      submitting: "Đang áp dụng…",
+      forbidden: "Bạn không có quyền điều chỉnh trực tiếp bản ghi này.",
     },
   },
 

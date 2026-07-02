@@ -2,6 +2,18 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LoginPage } from "./login";
 
+// LoginPage render đơn lẻ (không có <RouterProvider>) — link "quên mật khẩu" chỉ cần render tĩnh trong test
+// này, KHÔNG cần điều hướng thật. Mock Link → <a> (cùng pattern ProtectedRoute.spec.tsx).
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-router")>();
+  return {
+    ...actual,
+    Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
+      <a href={to}>{children}</a>
+    ),
+  };
+});
+
 // --- 2FA challenge form mock (đơn giản hoá: nút verify gọi onSuccess không tham số) ---
 vi.mock("@/components/TwoFactorChallengeForm", () => ({
   TwoFactorChallengeForm: ({

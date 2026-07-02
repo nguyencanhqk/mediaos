@@ -116,3 +116,65 @@ describe("authApi.me", () => {
     );
   });
 });
+
+describe("authApi.forgotPassword", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.apiFetch).mockReset();
+  });
+
+  it("posts to /auth/forgot-password with skipAuth (no session yet)", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValueOnce({ ok: true });
+
+    const result = await authApi.forgotPassword({ companySlug: "demo", email: "u@co.com" });
+
+    expect(result).toEqual({ ok: true });
+    expect(apiClient.apiFetch).toHaveBeenCalledWith(
+      "/auth/forgot-password",
+      expect.anything(),
+      expect.objectContaining({ method: "POST" }),
+      { skipAuth: true },
+    );
+  });
+
+  it("propagates ApiError on rate-limit (429)", async () => {
+    const { ApiError } = await import("./api-client");
+    vi.mocked(apiClient.apiFetch).mockRejectedValueOnce(
+      new ApiError(429, "RATE_LIMIT", "Too many"),
+    );
+
+    await expect(
+      authApi.forgotPassword({ companySlug: "demo", email: "u@co.com" }),
+    ).rejects.toMatchObject({ status: 429 });
+  });
+});
+
+describe("authApi.resetPassword", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.apiFetch).mockReset();
+  });
+
+  it("posts to /auth/reset-password with skipAuth", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValueOnce({ ok: true });
+
+    const result = await authApi.resetPassword({ token: "tok-123", newPassword: "newpass123" });
+
+    expect(result).toEqual({ ok: true });
+    expect(apiClient.apiFetch).toHaveBeenCalledWith(
+      "/auth/reset-password",
+      expect.anything(),
+      expect.objectContaining({ method: "POST" }),
+      { skipAuth: true },
+    );
+  });
+
+  it("propagates ApiError on invalid/expired token", async () => {
+    const { ApiError } = await import("./api-client");
+    vi.mocked(apiClient.apiFetch).mockRejectedValueOnce(
+      new ApiError(400, "INVALID_TOKEN", "Invalid or expired token"),
+    );
+
+    await expect(
+      authApi.resetPassword({ token: "bad-tok", newPassword: "newpass123" }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+});

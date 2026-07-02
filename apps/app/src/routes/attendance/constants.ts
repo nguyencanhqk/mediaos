@@ -87,6 +87,12 @@ export const ATT_PATHS = {
   // S3-FE-ATT-6
   REPORTS: "/attendance/reports",
   AUDIT_LOGS: "/attendance/audit-logs",
+  // S3-FE-ATT-3 — đơn điều chỉnh công (adjustment-requests) + điều chỉnh trực tiếp trên 1 bản ghi.
+  ADJUSTMENT_NEW: "/attendance/adjustment-requests/new",
+  ADJUSTMENT_MY: "/attendance/adjustment-requests/my",
+  ADJUSTMENT_LIST: "/attendance/adjustment-requests",
+  ADJUSTMENT_DETAIL: (id: string) => `/attendance/adjustment-requests/${id}`,
+  RECORD_ADJUST: (id: string) => `/attendance/records/${id}/adjust`,
 } as const;
 
 /** Page size mặc định cho danh sách bảng công */

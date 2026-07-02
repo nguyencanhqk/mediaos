@@ -587,6 +587,24 @@ describe("PERMISSION_CODE_TO_PAIR — FOUNDATION company/setting pairs (drift-gu
     expect(PERMISSION_CODE_TO_PAIR["FOUNDATION.COMPANY.UPDATE"]).toBe("update:foundation-company");
     expect(PERMISSION_CODE_TO_PAIR["FOUNDATION.SETTING.UPDATE"]).toBe("update:foundation-setting");
   });
+
+  // S2-FE-FND-2 — regression: khoá đúng cặp engine THẬT mà AuditController/FilesController enforce
+  // (bài học drift: mapping cũ FOUNDATION.AUDIT_LOG.VIEW từng trỏ 'view:foundation-audit-log', cặp
+  // seed ở mig 0435 nhưng KHÔNG controller nào @RequirePermission nó — tạo hố FE-cho-phép/BE-403).
+  it("FOUNDATION.AUDIT_LOG.VIEW ánh xạ đúng cặp AuditController thật enforce (view:audit-log)", () => {
+    expect(PERMISSION_CODE_TO_PAIR["FOUNDATION.AUDIT_LOG.VIEW"]).toBe("view:audit-log");
+    const withRealPair = createPermissionChecker(makePerms(["view:audit-log"]));
+    expect(withRealPair.can("FOUNDATION.AUDIT_LOG.VIEW")).toBe(true);
+    // Cặp seed-nhưng-KHÔNG-enforce KHÔNG được mở khoá code FE (chống tái diễn drift).
+    const withStalePair = createPermissionChecker(makePerms(["view:foundation-audit-log"]));
+    expect(withStalePair.can("FOUNDATION.AUDIT_LOG.VIEW")).toBe(false);
+  });
+
+  it("FOUNDATION.FILE.VIEW ánh xạ đúng cặp FilesController thật enforce (view:foundation-file)", () => {
+    expect(PERMISSION_CODE_TO_PAIR["FOUNDATION.FILE.VIEW"]).toBe("view:foundation-file");
+    const c = createPermissionChecker(makePerms(["view:foundation-file"]));
+    expect(c.can("FOUNDATION.FILE.VIEW")).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

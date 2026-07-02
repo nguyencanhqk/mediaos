@@ -4,11 +4,13 @@ import {
   meResponseSchema,
   redirectAllowedResponseSchema,
   type ChangePasswordRequest,
+  type ForgotPasswordRequest,
   type LoginRequest,
   type LoginResponse,
   type LogoutResponse,
   type MeResponse,
   type RedirectAllowedResponse,
+  type ResetPasswordRequest,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { getAccessToken } from "../stores/auth";
@@ -64,6 +66,31 @@ export const authApi = {
       `/auth/redirect-allowed?redirect=${encodeURIComponent(redirect ?? "")}`,
       redirectAllowedResponseSchema,
       undefined,
+      { skipAuth: true },
+    ),
+
+  /**
+   * S2-FE-AUTH-2 — yêu cầu email đặt lại mật khẩu (@Public, apps/auth chưa có phiên → skipAuth). Server LUÔN
+   * trả `{ ok: true }` (HTTP 202, cùng shape `logoutResponseSchema`) dù email tồn tại hay không (chống email
+   * enumeration) — FE hiển thị thông báo GENERIC, KHÔNG suy luận từ response.
+   */
+  forgotPassword: (body: ForgotPasswordRequest): Promise<LogoutResponse> =>
+    apiFetch(
+      "/auth/forgot-password",
+      logoutResponseSchema,
+      { method: "POST", body: JSON.stringify(body) },
+      { skipAuth: true },
+    ),
+
+  /**
+   * S2-FE-AUTH-2 — đặt lại mật khẩu bằng token từ email (@Public, skipAuth). Token sai/hết hạn/đã dùng →
+   * ApiError (400/401) — FE map sang thông điệp chuẩn KHÔNG lộ chi tiết user.
+   */
+  resetPassword: (body: ResetPasswordRequest): Promise<LogoutResponse> =>
+    apiFetch(
+      "/auth/reset-password",
+      logoutResponseSchema,
+      { method: "POST", body: JSON.stringify(body) },
       { skipAuth: true },
     ),
 };
