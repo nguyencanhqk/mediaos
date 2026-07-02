@@ -51,6 +51,8 @@ export default {
     system: "Hệ thống",
     systemUsers: "Người dùng",
     systemRoles: "Vai trò",
+    // S2-FE-AUTH-4 (lane FE batch C).
+    systemPermissions: "Danh mục quyền",
     systemAuditLogs: "Audit log",
     accountProfile: "Hồ sơ tài khoản",
     forbidden: "Không có quyền truy cập",

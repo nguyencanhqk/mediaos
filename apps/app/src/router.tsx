@@ -160,6 +160,11 @@ import { CompanyProfilePage } from "@/routes/system/foundation/CompanyProfilePag
 import { CompanySettingsPage } from "@/routes/system/foundation/CompanySettingsPage";
 import { SystemSettingsPage } from "@/routes/system/foundation/SystemSettingsPage";
 import { FOUNDATION_PATH, FOUNDATION_SCREEN } from "@/routes/system/foundation/constants";
+// System / Roles + Permissions admin — S2-FE-AUTH-4 (lane FE batch C)
+import { RoleFormPage } from "@/routes/system/roles/RoleFormPage";
+import { RoleDetailPage } from "@/routes/system/roles/RoleDetailPage";
+import { RolePermissionsPage } from "@/routes/system/roles/RolePermissionsPage";
+import { PermissionsPage } from "@/routes/system/PermissionsPage";
 
 const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", EmployeeListPage);
 const hrEmployeesRoute = makeModuleRoute("/hr/employees", "hr.employees", "HR", EmployeeListPage);
@@ -462,6 +467,94 @@ const systemSettingsRoute = createRoute({
 
 const systemUsersRoute = makeModuleRoute("/system/users", "system.users", "FOUNDATION", UsersPage);
 const systemRolesRoute = makeModuleRoute("/system/roles", "system.roles", "FOUNDATION", RolesPage);
+
+// S2-FE-AUTH-4 (lane FE batch C) — permission catalog (sidebar) + role create/detail/edit/permissions
+// sub-routes. Sub-routes TÁI DÙNG meta "system.roles" (route-level gate = AUTH.ROLE.VIEW) — mirror
+// hrEmployeeDetailRoute/hrEmployeeEditRoute (finer create/update/assign gate áp trong page).
+const systemPermissionsRoute = makeModuleRoute(
+  "/system/permissions",
+  "system.permissions",
+  "FOUNDATION",
+  PermissionsPage,
+);
+
+const systemRoleCreateMeta = getMeta("system.roles");
+const systemRoleCreateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/roles/new",
+  beforeLoad: authGuard,
+  component: () => {
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      systemRoleCreateMeta,
+      "FOUNDATION",
+      <RoleFormPage
+        onSuccess={(id) => void navigate({ to: "/system/roles/$roleId", params: { roleId: id } })}
+        onCancel={() => void navigate({ to: "/system/roles" as "/" })}
+      />,
+    );
+  },
+});
+
+const systemRoleDetailMeta = getMeta("system.roles");
+const systemRoleDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/roles/$roleId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { roleId } = systemRoleDetailRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      systemRoleDetailMeta,
+      "FOUNDATION",
+      <RoleDetailPage
+        roleId={roleId}
+        onBack={() => void navigate({ to: "/system/roles" as "/" })}
+        onEdit={() => void navigate({ to: "/system/roles/$roleId/edit", params: { roleId } })}
+        onManagePermissions={() =>
+          void navigate({ to: "/system/roles/$roleId/permissions", params: { roleId } })
+        }
+      />,
+    );
+  },
+});
+
+const systemRoleEditMeta = getMeta("system.roles");
+const systemRoleEditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/roles/$roleId/edit",
+  beforeLoad: authGuard,
+  component: () => {
+    const { roleId } = systemRoleEditRoute.useParams();
+    const navigate = useNavigate();
+    const toDetail = () => void navigate({ to: "/system/roles/$roleId", params: { roleId } });
+    return buildModuleRouteContent(
+      systemRoleEditMeta,
+      "FOUNDATION",
+      <RoleFormPage roleId={roleId} onSuccess={toDetail} onCancel={toDetail} />,
+    );
+  },
+});
+
+const systemRolePermissionsMeta = getMeta("system.roles");
+const systemRolePermissionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/system/roles/$roleId/permissions",
+  beforeLoad: authGuard,
+  component: () => {
+    const { roleId } = systemRolePermissionsRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      systemRolePermissionsMeta,
+      "FOUNDATION",
+      <RolePermissionsPage
+        roleId={roleId}
+        onBack={() => void navigate({ to: "/system/roles/$roleId", params: { roleId } })}
+      />,
+    );
+  },
+});
+
 const systemAuditLogsRoute = makeModuleRoute(
   "/system/audit-logs",
   "system.audit-logs",
@@ -547,6 +640,11 @@ const routeTree = rootRoute.addChildren([
   systemSettingsRoute,
   systemUsersRoute,
   systemRolesRoute,
+  systemPermissionsRoute,
+  systemRoleCreateRoute,
+  systemRoleDetailRoute,
+  systemRoleEditRoute,
+  systemRolePermissionsRoute,
   systemAuditLogsRoute,
   systemLoginLogsRoute,
   systemSecurityEventsRoute,

@@ -158,6 +158,13 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "FOUNDATION.COMPANY.VIEW": "view:foundation-company",
   "FOUNDATION.COMPANY.UPDATE": "update:foundation-company",
   "FOUNDATION.SETTING.UPDATE": "update:foundation-setting",
+  // S2-FE-AUTH-4 (lane FE batch C) — role WRITE + permission catalog + assign (nguồn: apps/api/src/
+  // permission/role-admin.controller.ts + auth-roles-permissions.controller.ts, mig 0005/0444/0460).
+  // assign:permission is_sensitive=true (ANTI-ESCALATION) — component dùng useCanExact, KHÔNG useCan.
+  "AUTH.ROLE.CREATE": "create:role",
+  "AUTH.ROLE.UPDATE": "update:role",
+  "AUTH.PERMISSION.VIEW": "view:permission",
+  "AUTH.PERMISSION.ASSIGN": "assign:permission",
 };
 
 export function createPermissionChecker(userPermissions: readonly UserPermission[]) {
@@ -980,6 +987,19 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     screenCode: "SYSTEM-SCREEN-ROLES",
     titleKey: "routeTitle.systemRoles",
     requiredAnyPermissions: ["AUTH.ROLE.VIEW"],
+    showInSidebar: true,
+    order: 72,
+  },
+  // S2-FE-AUTH-4 (lane FE batch C) — catalog quyền toàn cục (read-only). Role create/detail/edit/permissions
+  // sub-route TÁI DÙNG meta "system.roles" (route-level gate = AUTH.ROLE.VIEW, khớp pattern hr.employees).
+  {
+    routeKey: "system.permissions",
+    path: "/system/permissions",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "FOUNDATION",
+    screenCode: "SYSTEM-SCREEN-PERMISSIONS",
+    titleKey: "routeTitle.systemPermissions",
+    requiredAnyPermissions: ["AUTH.PERMISSION.VIEW"],
     showInSidebar: true,
     order: 72,
   },

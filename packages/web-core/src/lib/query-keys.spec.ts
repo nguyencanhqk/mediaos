@@ -52,6 +52,15 @@ describe("authKeys", () => {
   it("profile() chứa 'auth'", () => {
     expect(authKeys.profile()[0]).toBe("auth");
   });
+
+  // S2-FE-AUTH-4 (lane FE batch C) — role & permission admin catalogs.
+  it("roles.list() = ['auth', 'roles', 'list']", () => {
+    expect(authKeys.roles.list()).toEqual(["auth", "roles", "list"]);
+  });
+
+  it("permissionCatalog.list() = ['auth', 'permission-catalog', 'list']", () => {
+    expect(authKeys.permissionCatalog.list()).toEqual(["auth", "permission-catalog", "list"]);
+  });
 });
 
 describe("hrKeys", () => {

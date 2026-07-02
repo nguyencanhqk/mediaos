@@ -33,10 +33,14 @@ export default {
   roles: {
     title: "Vai trò",
     description: "Danh sách vai trò phân quyền trong hệ thống",
-    sprint3Notice: "Quản lý quyền chi tiết theo vai trò sẽ có trong Sprint 3",
+    addRole: "Tạo vai trò",
+    search: "Tìm theo tên vai trò…",
     columns: {
       name: "Tên vai trò",
       id: "ID",
+      description: "Mô tả",
+      type: "Loại",
+      actions: "Thao tác",
     },
     empty: {
       title: "Không có vai trò",
@@ -49,6 +53,118 @@ export default {
     forbidden: {
       title: "Không có quyền truy cập",
       description: "Bạn không có quyền xem danh sách vai trò.",
+    },
+  },
+
+  // S2-FE-AUTH-4 (lane FE batch C) — role create/detail/edit + assign-permission + permission catalog.
+  roleForm: {
+    createTitle: "Tạo vai trò",
+    createDescription: "Tạo một vai trò mới cho công ty",
+    editTitle: "Sửa vai trò",
+    editDescription: "Cập nhật tên/mô tả vai trò",
+    fields: {
+      name: "Tên vai trò",
+      description: "Mô tả",
+    },
+    cancel: "Huỷ",
+    submitCreate: "Tạo vai trò",
+    submitSave: "Lưu thay đổi",
+    submitting: "Đang lưu…",
+    systemLockedNotice: "Vai trò hệ thống — không thể chỉnh sửa.",
+    forbidden: {
+      description: "Bạn không có quyền tạo/sửa vai trò.",
+    },
+    errors: {
+      nameRequired: "Tên vai trò là bắt buộc",
+      nameTooLong: "Tên vai trò tối đa 100 ký tự",
+      descriptionTooLong: "Mô tả tối đa 500 ký tự",
+      systemRole: "Vai trò hệ thống không thể chỉnh sửa.",
+      conflict: "Tên vai trò đã tồn tại.",
+      forbidden: "Bạn không có quyền thực hiện thao tác này.",
+      validation: "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.",
+      server: "Có lỗi hệ thống. Vui lòng thử lại sau.",
+      generic: "Không thể lưu. Vui lòng thử lại.",
+    },
+  },
+
+  roleDetail: {
+    backToList: "Quay lại danh sách",
+    edit: "Sửa vai trò",
+    managePermissions: "Quản lý quyền",
+    systemBadge: "Hệ thống",
+    systemRole: "Vai trò hệ thống",
+    companyRole: "Vai trò công ty",
+    assignedPermissionsNotice:
+      "Chưa thể hiển thị danh sách quyền đã gán trực tiếp tại đây — dùng công cụ Quản lý quyền để gán/thu hồi quyền cho vai trò này.",
+    fields: {
+      name: "Tên vai trò",
+      description: "Mô tả",
+      type: "Loại",
+    },
+    error: {
+      title: "Không tìm thấy vai trò",
+      description: "Vai trò không tồn tại hoặc có lỗi khi tải. Vui lòng thử lại.",
+    },
+  },
+
+  rolePermissions: {
+    title: "Quản lý quyền — {{role}}",
+    description: "Gán hoặc thu hồi quyền cho vai trò này theo danh mục quyền hệ thống",
+    search: "Tìm theo action/resource…",
+    dataScope: "Phạm vi dữ liệu",
+    assign: "Gán",
+    revoke: "Thu hồi",
+    assignedListNotice:
+      "Backend hiện chưa cung cấp API xem danh sách quyền ĐÃ gán cho vai trò — bảng dưới đây là danh mục quyền toàn hệ thống để gán/thu hồi, KHÔNG phản ánh trạng thái đã gán.",
+    assignSuccess: 'Đã gán quyền "{{pair}}" phạm vi {{scope}} cho vai trò.',
+    revokeSuccess: 'Đã thu hồi quyền "{{pair}}" khỏi vai trò.',
+    scope: {
+      Own: "Cá nhân",
+      Team: "Nhóm",
+      Department: "Phòng ban",
+      Company: "Công ty",
+    },
+    columns: {
+      actions: "Thao tác",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền gán/thu hồi quyền cho vai trò.",
+    },
+    error: {
+      title: "Không thể tải dữ liệu",
+      description: "Có lỗi khi tải vai trò hoặc danh mục quyền. Vui lòng thử lại.",
+    },
+    errors: {
+      badPair: "Cặp quyền không hợp lệ hoặc không tồn tại trong danh mục.",
+      forbidden: "Bạn không có quyền thực hiện thao tác này.",
+      notFound: "Vai trò chưa có quyền này để thu hồi.",
+      server: "Có lỗi hệ thống. Vui lòng thử lại sau.",
+      generic: "Thao tác thất bại. Vui lòng thử lại.",
+    },
+  },
+
+  permissions: {
+    title: "Danh mục quyền",
+    description: "Danh sách toàn bộ quyền (action/resource) trong hệ thống — chỉ đọc",
+    search: "Tìm theo action/resource…",
+    sensitive: "Nhạy cảm",
+    columns: {
+      resourceType: "Đối tượng",
+      action: "Hành động",
+      sensitive: "Nhạy cảm",
+    },
+    empty: {
+      title: "Không có quyền",
+      description: "Chưa có quyền nào trong danh mục.",
+    },
+    error: {
+      title: "Không thể tải danh mục quyền",
+      description: "Có lỗi khi tải danh mục quyền. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem danh mục quyền.",
     },
   },
 

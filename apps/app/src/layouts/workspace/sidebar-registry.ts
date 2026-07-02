@@ -339,6 +339,17 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 30,
     requiredAnyPermissions: ["AUTH.ROLE.VIEW"],
   },
+  // S2-FE-AUTH-4 (lane FE batch C) — danh mục quyền toàn cục (đọc).
+  {
+    sidebarKey: "system.permissions",
+    moduleCode: "FOUNDATION",
+    label: "Danh mục quyền",
+    path: "/system/permissions",
+    icon: "key-round",
+    group: "admin",
+    order: 31,
+    requiredAnyPermissions: ["AUTH.PERMISSION.VIEW"],
+  },
   {
     sidebarKey: "system.audit-logs",
     moduleCode: "FOUNDATION",

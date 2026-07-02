@@ -35,6 +35,7 @@ import {
   AlertTriangle,
   Lock,
   Circle,
+  KeyRound,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@mediaos/ui";
@@ -69,6 +70,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "alert-triangle": AlertTriangle,
   lock: Lock,
   circle: Circle,
+  // S2-FE-AUTH-4 (lane FE batch C).
+  "key-round": KeyRound,
 };
 
 interface DynamicIconProps {

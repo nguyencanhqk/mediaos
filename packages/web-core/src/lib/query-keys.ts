@@ -29,6 +29,15 @@ export const authKeys = {
   me: () => [...rootKeys.auth, "me"] as const,
   profile: () => [...rootKeys.auth, "profile"] as const,
   permissions: () => [...rootKeys.auth, "permissions"] as const,
+  // S2-FE-AUTH-4 (lane FE batch C) — role & permission admin catalogs (GET /auth/roles·/auth/permissions).
+  roles: {
+    all: [...rootKeys.auth, "roles"] as const,
+    list: () => [...rootKeys.auth, "roles", "list"] as const,
+  },
+  permissionCatalog: {
+    all: [...rootKeys.auth, "permission-catalog"] as const,
+    list: () => [...rootKeys.auth, "permission-catalog", "list"] as const,
+  },
 };
 
 // ── Dashboard keys ────────────────────────────────────────────────────────────

@@ -84,6 +84,8 @@ export { shouldRetryQuery } from "./lib/query-retry";
 export { bootstrapSession } from "./lib/session";
 export { getHealth, type Health } from "./lib/api";
 export { authApi } from "./lib/auth-api";
+// S2-FE-AUTH-4 (lane FE batch C) — role & permission admin (create/update role, assign/revoke permission).
+export { roleAdminApi } from "./lib/role-admin-api";
 export { usersApi } from "./lib/users-api";
 export { twoFactorApi } from "./lib/two-factor-api";
 export { notificationApi } from "./lib/notification-api";
