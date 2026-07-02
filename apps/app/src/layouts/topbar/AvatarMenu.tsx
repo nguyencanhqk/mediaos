@@ -5,14 +5,14 @@
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { LogOut, User } from "lucide-react";
+import { KeyRound, LogOut, User } from "lucide-react";
 import { useAuthStore, logoutSession, getAuthRedirectUrl } from "@mediaos/web-core";
 import { Avatar, cn } from "@mediaos/ui";
 import { useLayoutStore } from "@/stores/layout.store";
 import { DirtyFormConfirmDialog } from "../shared/DirtyFormConfirmDialog";
 
 export function AvatarMenu() {
-  const { t } = useTranslation(["common", "nav"]);
+  const { t } = useTranslation(["common", "nav", "auth"]);
   const [open, setOpen] = React.useState(false);
   const [showDirtyConfirm, setShowDirtyConfirm] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -63,6 +63,11 @@ export function AvatarMenu() {
     void navigate({ to: "/home" });
   };
 
+  const handleChangePasswordClick = () => {
+    setOpen(false);
+    void navigate({ to: "/account/change-password" as "/" });
+  };
+
   return (
     <>
       <div ref={menuRef} className="relative">
@@ -97,6 +102,18 @@ export function AvatarMenu() {
             >
               <User className="h-4 w-4 text-muted-foreground" />
               {t("nav:myAccount")}
+            </button>
+
+            <button
+              role="menuitem"
+              onClick={handleChangePasswordClick}
+              className={cn(
+                "flex w-full items-center gap-2 px-3 py-2 text-sm",
+                "text-foreground hover:bg-accent",
+              )}
+            >
+              <KeyRound className="h-4 w-4 text-muted-foreground" />
+              {t("auth:changePassword.heading")}
             </button>
 
             <div className="my-1 border-t border-border" />

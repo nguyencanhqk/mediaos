@@ -391,6 +391,41 @@ export default {
     },
   },
 
+  // ── Lịch nghỉ (LEAVE-SCREEN-007/008/009 · S3-FE-LEAVE-4) ──────────────────────
+  calendar: {
+    title: "Lịch nghỉ",
+    description: "Lịch nghỉ phép theo phạm vi bạn có quyền xem",
+    scope: {
+      own: "Của tôi",
+      team: "Nhóm",
+      company: "Công ty",
+    },
+    filters: {
+      fromDate: "Từ ngày",
+      toDate: "Đến ngày",
+    },
+    columns: {
+      date: "Ngày",
+      employee: "Nhân viên",
+      leaveType: "Loại nghỉ",
+      status: "Trạng thái",
+      reason: "Lý do",
+    },
+    reasonMasked: "— (riêng tư)",
+    empty: {
+      title: "Không có lịch nghỉ",
+      description: "Không có đơn nghỉ nào trong khoảng thời gian đã chọn.",
+    },
+    error: {
+      title: "Không thể tải lịch nghỉ",
+      description: "Có lỗi khi tải lịch nghỉ. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem lịch nghỉ ở phạm vi này.",
+    },
+  },
+
   // ── Sửa đơn nghỉ nháp (LEAVE-SCREEN-002E · S3-FE-LEAVE-3) ─────────────────────
   editForm: {
     error: {

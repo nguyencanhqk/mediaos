@@ -10,6 +10,9 @@ import {
   shiftAssignmentListResponseSchema,
   attendanceRuleSchema,
   attendanceRuleListResponseSchema,
+  // S3-ATT-BE-4 canonical adjustment-request DTOs (nguồn sự thật attendance.ts §"S3-ATT-BE-4").
+  attendanceAdjustmentListResponseSchema,
+  attendanceAdjustmentRequestDetailSchema,
   type AttendanceTodayV2Dto,
   type AttendanceRecordV2Dto,
   type AttendanceRecordListResponse,
@@ -25,6 +28,13 @@ import {
   type CreateShiftAssignmentRequest,
   type CreateRuleRequest,
   type UpdateRuleRequest,
+  type AdjustmentListQuery,
+  type CreateAdjustmentRequest,
+  type ApproveAdjustmentRequest,
+  type RejectAdjustmentRequest,
+  type DirectAdjustRequest,
+  type AttendanceAdjustmentListResponse,
+  type AttendanceAdjustmentRequestDetail,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -193,4 +203,108 @@ export const attendanceApi = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
+
+  // ── Đơn điều chỉnh công (S3-FE-ATT-3, S3-ATT-BE-4 — ATT-FUNC-018..022) ──────
+  //
+  // create/approve/reject/adjust-direct đều trả về `AttendanceAdjustmentRequestDetail` đầy đủ (BE
+  // service.loadDetailTx) — cùng 1 schema validator cho mọi mutation + getDetail. view-own/view-team/
+  // view-company/approve/reject:adjustment là cặp SENSITIVE nhưng KHÔNG nằm trong
+  // SENSITIVE_CAPABILITY_ALLOWLIST (permission.service.ts) → FE useCan/useCanExact trên các cặp này LUÔN
+  // false (kể cả người có quyền thật) — component gọi các hàm dưới đây KHÔNG được front-gate render bằng
+  // useCan trên các cặp đó (xem AttendanceRecordDetailPage.tsx cho pattern tương tự); server 403/404 là
+  // cổng thật, FE chỉ hiển thị theo response.
+
+  /**
+   * POST /attendance/adjustment-requests — tạo đơn điều chỉnh (Own, hoặc thay nhân viên khác nếu actor có
+   * scope rộng hơn Own). Permission: create-own:adjustment (non-sensitive → useCan an toàn).
+   */
+  createAdjustmentRequest: (
+    body: CreateAdjustmentRequest,
+  ): Promise<AttendanceAdjustmentRequestDetail> =>
+    apiFetch("/attendance/adjustment-requests", attendanceAdjustmentRequestDetailSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * GET /attendance/adjustment-requests/my — đơn của tôi. Permission: view-own:adjustment (sensitive,
+   * KHÔNG allowlisted — KHÔNG front-gate bằng useCan, xem ghi chú đầu mục).
+   */
+  listMyAdjustmentRequests: (
+    query?: Partial<AdjustmentListQuery>,
+  ): Promise<AttendanceAdjustmentListResponse> =>
+    apiFetch(
+      `/attendance/adjustment-requests/my${buildQueryString(query ?? {})}`,
+      attendanceAdjustmentListResponseSchema,
+    ),
+
+  /**
+   * GET /attendance/adjustment-requests/team — đơn phạm vi Team. Permission: view-team:adjustment
+   * (sensitive, KHÔNG allowlisted).
+   */
+  listTeamAdjustmentRequests: (
+    query?: Partial<AdjustmentListQuery>,
+  ): Promise<AttendanceAdjustmentListResponse> =>
+    apiFetch(
+      `/attendance/adjustment-requests/team${buildQueryString(query ?? {})}`,
+      attendanceAdjustmentListResponseSchema,
+    ),
+
+  /**
+   * GET /attendance/adjustment-requests — đơn phạm vi Company. Permission: view-company:adjustment
+   * (sensitive, KHÔNG allowlisted).
+   */
+  listCompanyAdjustmentRequests: (
+    query?: Partial<AdjustmentListQuery>,
+  ): Promise<AttendanceAdjustmentListResponse> =>
+    apiFetch(
+      `/attendance/adjustment-requests${buildQueryString(query ?? {})}`,
+      attendanceAdjustmentListResponseSchema,
+    ),
+
+  /** GET /attendance/adjustment-requests/:id — chi tiết + items[] ledger (append-only). */
+  getAdjustmentRequest: (id: string): Promise<AttendanceAdjustmentRequestDetail> =>
+    apiFetch(`/attendance/adjustment-requests/${id}`, attendanceAdjustmentRequestDetailSchema),
+
+  /**
+   * POST /attendance/adjustment-requests/:id/approve — Pending→Approved (áp dụng vào attendance_records).
+   * Permission: approve:adjustment (sensitive, KHÔNG allowlisted).
+   */
+  approveAdjustmentRequest: (
+    id: string,
+    body: ApproveAdjustmentRequest,
+  ): Promise<AttendanceAdjustmentRequestDetail> =>
+    apiFetch(
+      `/attendance/adjustment-requests/${id}/approve`,
+      attendanceAdjustmentRequestDetailSchema,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+
+  /**
+   * POST /attendance/adjustment-requests/:id/reject — Pending→Rejected (reason bắt buộc, contract validate).
+   * Permission: reject:adjustment (sensitive, KHÔNG allowlisted).
+   */
+  rejectAdjustmentRequest: (
+    id: string,
+    body: RejectAdjustmentRequest,
+  ): Promise<AttendanceAdjustmentRequestDetail> =>
+    apiFetch(
+      `/attendance/adjustment-requests/${id}/reject`,
+      attendanceAdjustmentRequestDetailSchema,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+
+  /**
+   * POST /attendance/records/:id/adjust-direct — áp dụng NGAY (KHÔNG qua vòng duyệt Pending).
+   * Permission: adjust-direct:attendance (sensitive, KHÔNG allowlisted).
+   */
+  adjustRecordDirect: (
+    recordId: string,
+    body: DirectAdjustRequest,
+  ): Promise<AttendanceAdjustmentRequestDetail> =>
+    apiFetch(
+      `/attendance/records/${recordId}/adjust-direct`,
+      attendanceAdjustmentRequestDetailSchema,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
 };

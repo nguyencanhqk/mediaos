@@ -42,6 +42,11 @@ export default {
     attShifts: "Ca làm việc",
     attShiftAssignments: "Gán ca",
     attRules: "Rule chấm công",
+    attAdjustmentNew: "Tạo đơn điều chỉnh công",
+    attAdjustmentMy: "Đơn điều chỉnh của tôi",
+    attAdjustmentList: "Đơn điều chỉnh cần duyệt",
+    attAdjustmentDetail: "Chi tiết đơn điều chỉnh",
+    attRecordAdjust: "Điều chỉnh trực tiếp",
     leave: "Nghỉ phép",
     leaveMyRequests: "Đơn nghỉ của tôi",
     leaveApprovals: "Đơn cần duyệt",
@@ -57,6 +62,10 @@ export default {
     // S2-FE-FND-5 (lane FE batch C).
     systemSequences: "Bộ đếm mã",
     systemSeeds: "Trạng thái Seed",
+    systemPublicHolidays: "Ngày nghỉ lễ",
+    systemHealth: "Tình trạng hệ thống",
+    systemFiles: "Tệp tin",
+    systemModules: "Danh mục module",
     accountProfile: "Hồ sơ tài khoản",
     // S2-FE-AUTH-5 (lane FE batch C).
     accountSessions: "Phiên đăng nhập",

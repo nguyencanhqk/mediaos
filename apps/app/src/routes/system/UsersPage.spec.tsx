@@ -1,8 +1,9 @@
 /**
- * [RED-trước · deny-path] UsersPage — S2-FE-HR-3.
+ * [RED-trước · deny-path] UsersPage — S2-FE-AUTH-3.
  * Gate: view:user — canonical engine pair AUTH.USER.VIEW → view:user
- *   (DB-02 §9.1 + seed §13 migration 0444: hr + company-admin được view:user/Company).
+ *   (DB-02 §9.1 + seed §13 migration 0444/0450: hr + company-admin được view:user/Company).
  * Deny-path dùng read:employee (HR.EMPLOYEE.VIEW, KHÔNG mở được system users).
+ * Nối /auth/users (authUsersApi) — thay legacy /users/admin (usersApi) của S2-FE-HR-3 P1.
  * States: loading · error · empty · forbidden · list render.
  */
 import React from "react";
@@ -10,9 +11,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore } from "@mediaos/web-core";
-import { usersApi } from "@mediaos/web-core";
+import { authUsersApi } from "@mediaos/web-core";
 import { UsersPage } from "./UsersPage";
-import type { AdminUserListDto } from "@mediaos/contracts";
+import type { AuthUserListDto } from "@mediaos/contracts";
+import systemVi from "@/i18n/locales/vi/system";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -21,7 +23,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
     ...actual,
-    usersApi: {
+    authUsersApi: {
       listUsers: vi.fn(),
     },
   };
@@ -78,25 +80,27 @@ function renderWithQuery(ui: React.ReactElement) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
-const MOCK_LIST: AdminUserListDto = {
+const MOCK_LIST: AuthUserListDto = {
   users: [
     {
       id: "user-001",
       email: "admin@demo.local",
       fullName: "Super Admin",
       status: "active",
+      lockedAt: null,
+      lockedReason: null,
       lastLoginAt: "2026-06-25T10:00:00.000Z",
       createdAt: "2026-01-01T00:00:00.000Z",
-      deletedAt: null,
     },
     {
       id: "user-002",
       email: "hr@demo.local",
       fullName: "HR Manager",
       status: "active",
+      lockedAt: null,
+      lockedReason: null,
       lastLoginAt: null,
       createdAt: "2026-01-01T00:00:00.000Z",
-      deletedAt: null,
     },
   ],
   total: 2,
@@ -134,7 +138,7 @@ describe("UsersPage", () => {
     setCapabilities({});
     renderWithQuery(<UsersPage />);
     expect(screen.getByText(/không có quyền truy cập/i)).toBeInTheDocument();
-    expect(usersApi.listUsers).not.toHaveBeenCalled();
+    expect(authUsersApi.listUsers).not.toHaveBeenCalled();
   });
 
   // ── DENY-PATH: read:employee but not view:user → still forbidden ──────────
@@ -143,13 +147,13 @@ describe("UsersPage", () => {
     setCapabilities({ "read:employee": true });
     renderWithQuery(<UsersPage />);
     expect(screen.getByText(/không có quyền truy cập/i)).toBeInTheDocument();
-    expect(usersApi.listUsers).not.toHaveBeenCalled();
+    expect(authUsersApi.listUsers).not.toHaveBeenCalled();
   });
 
   // ── ALLOW-PATH: view:user → list renders ─────────────────────────────────
   it("renders user list when user has view:user", async () => {
     setCapabilities({ "view:user": true });
-    vi.mocked(usersApi.listUsers).mockResolvedValue(MOCK_LIST);
+    vi.mocked(authUsersApi.listUsers).mockResolvedValue(MOCK_LIST);
     renderWithQuery(<UsersPage />);
     await waitFor(() => expect(screen.getByText("admin@demo.local")).toBeInTheDocument());
     expect(screen.getByText("Super Admin")).toBeInTheDocument();
@@ -159,7 +163,7 @@ describe("UsersPage", () => {
   // ── LOADING state ─────────────────────────────────────────────────────────
   it("shows loading skeleton while fetching", () => {
     setCapabilities({ "view:user": true });
-    vi.mocked(usersApi.listUsers).mockReturnValue(new Promise(() => {}));
+    vi.mocked(authUsersApi.listUsers).mockReturnValue(new Promise(() => {}));
     renderWithQuery(<UsersPage />);
     const table = document.querySelector("table");
     expect(table).toBeInTheDocument();
@@ -168,7 +172,7 @@ describe("UsersPage", () => {
   // ── ERROR state ───────────────────────────────────────────────────────────
   it("shows error state when API fails", async () => {
     setCapabilities({ "view:user": true });
-    vi.mocked(usersApi.listUsers).mockRejectedValue(new Error("network error"));
+    vi.mocked(authUsersApi.listUsers).mockRejectedValue(new Error("network error"));
     renderWithQuery(<UsersPage />);
     await waitFor(() => expect(screen.getByText(/không thể tải danh sách/i)).toBeInTheDocument());
   });
@@ -176,17 +180,26 @@ describe("UsersPage", () => {
   // ── EMPTY state ───────────────────────────────────────────────────────────
   it("shows empty state when no users returned", async () => {
     setCapabilities({ "view:user": true });
-    vi.mocked(usersApi.listUsers).mockResolvedValue({ users: [], total: 0 });
+    vi.mocked(authUsersApi.listUsers).mockResolvedValue({ users: [], total: 0 });
     renderWithQuery(<UsersPage />);
     await waitFor(() => expect(screen.getByText(/không có người dùng/i)).toBeInTheDocument());
   });
 
-  // ── Sprint-3 notice visible ───────────────────────────────────────────────
-  it("shows Sprint 3 placeholder notice when user has permission", async () => {
+  // ── CREATE button gated by create:user (PermissionGate) ───────────────────
+  it("hides the create button without create:user, shows it with the grant", async () => {
     setCapabilities({ "view:user": true });
-    vi.mocked(usersApi.listUsers).mockResolvedValue(MOCK_LIST);
-    renderWithQuery(<UsersPage />);
+    vi.mocked(authUsersApi.listUsers).mockResolvedValue(MOCK_LIST);
+    const { rerender } = renderWithQuery(<UsersPage />);
     await waitFor(() => expect(screen.getByText("admin@demo.local")).toBeInTheDocument());
-    expect(screen.getByText(/sprint 3/i)).toBeInTheDocument();
+    expect(screen.queryByText(systemVi.users.actions.create)).not.toBeInTheDocument();
+
+    setCapabilities({ "view:user": true, "create:user": true });
+    rerender(
+      <QueryClientProvider client={makeQueryClient()}>
+        <UsersPage />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("admin@demo.local")).toBeInTheDocument());
+    expect(screen.getByText(systemVi.users.actions.create)).toBeInTheDocument();
   });
 });

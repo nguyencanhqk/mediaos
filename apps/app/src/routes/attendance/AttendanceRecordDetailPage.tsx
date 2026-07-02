@@ -9,7 +9,7 @@
  */
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, RefreshCw } from "lucide-react";
+import { ArrowLeft, RefreshCw, Wrench } from "lucide-react";
 import { ApiError, formatDateTime } from "@mediaos/web-core";
 import { PageHeader, EmptyState, Button, Card, CardContent } from "@mediaos/ui";
 import { AttendanceStatusBadge } from "./AttendanceStatusBadge";
@@ -141,10 +141,22 @@ export function AttendanceRecordDetailPage({ recordId }: AttendanceRecordDetailP
         title={t("detail.title")}
         icon={undefined}
         actions={
-          <Button variant="ghost" size="sm" onClick={goBack}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            {t("detail.backToList")}
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* S3-FE-ATT-3 — điều chỉnh trực tiếp (adjust-direct:attendance). KHÔNG gate useCan (sensitive
+                KHÔNG allowlisted, xem adjustment/constants.ts) — server 403 là cổng thật. */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void navigate({ to: ATT_PATHS.RECORD_ADJUST(recordId) as "/" })}
+            >
+              <Wrench className="mr-2 h-4 w-4" />
+              {t("detail.actions.adjustDirect")}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={goBack}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              {t("detail.backToList")}
+            </Button>
+          </div>
         }
       />
 

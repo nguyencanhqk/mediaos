@@ -38,6 +38,15 @@ import {
   KeyRound,
   Hash,
   Database,
+  Network,
+  History,
+  ClipboardList,
+  FileSearch,
+  ShieldAlert,
+  LogIn,
+  Building2,
+  SlidersHorizontal,
+  File,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@mediaos/ui";
@@ -77,6 +86,15 @@ const ICON_MAP: Record<string, LucideIcon> = {
   // S2-FE-FND-5 (lane FE batch C).
   hash: Hash,
   database: Database,
+  network: Network,
+  history: History,
+  "clipboard-list": ClipboardList,
+  "file-search": FileSearch,
+  "shield-alert": ShieldAlert,
+  "log-in": LogIn,
+  "building-2": Building2,
+  "sliders-horizontal": SlidersHorizontal,
+  file: File,
 };
 
 interface DynamicIconProps {

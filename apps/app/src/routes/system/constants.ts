@@ -7,7 +7,11 @@
 export const SYSTEM_PERMS = {
   USER: {
     VIEW: "AUTH.USER.VIEW",
+    CREATE: "AUTH.USER.CREATE",
     UPDATE: "AUTH.USER.UPDATE",
+    LOCK: "AUTH.USER.LOCK",
+    UNLOCK: "AUTH.USER.UNLOCK",
+    ASSIGN_ROLE: "AUTH.USER.ASSIGN_ROLE",
     SUSPEND: "AUTH.USER.SUSPEND",
     DELETE: "AUTH.USER.DELETE",
   },
@@ -41,14 +45,26 @@ export const SYSTEM_PERMS = {
 
 /**
  * Engine pairs (action:resourceType) — CANONICAL theo DB-02 §9.1 + seed §13
- * (migration 0444_s2_authseed1_canonical_roles_perms.sql):
- *   - AUTH.USER.VIEW  → view:user  (hr + company-admin được cấp scope Company)
- *   - AUTH.ROLE.VIEW  → view:role  (chỉ company-admin được cấp scope Company)
- * BE enforce theo đúng cặp seed thật; FE PHẢI khớp cặp này (KHÔNG manage:user/read:role).
+ * (migration 0444_s2_authseed1_canonical_roles_perms.sql) + S2-AUTH-BE-3 (0450, controller
+ * AuthUsersController @Controller('auth/users')) + G3-4 mutation-path (PermissionAdminController
+ * @Controller('permissions'), assign-role:user isSensitive=true):
+ *   - AUTH.USER.VIEW        → view:user          (hr + company-admin, scope Company)
+ *   - AUTH.USER.CREATE      → create:user
+ *   - AUTH.USER.UPDATE      → update:user
+ *   - AUTH.USER.LOCK        → lock:user
+ *   - AUTH.USER.UNLOCK      → unlock:user
+ *   - AUTH.USER.ASSIGN_ROLE → assign-role:user   (SENSITIVE — useCanExact ở BE, KHÔNG wildcard kế thừa)
+ *   - AUTH.ROLE.VIEW        → view:role          (chỉ company-admin, scope Company)
+ * BE enforce theo đúng cặp seed thật; FE PHẢI khớp cặp này (KHÔNG manage:user/read:role/suspend-user cũ).
  * Đồng bộ với PERMISSION_CODE_TO_PAIR trong packages/web-core/src/lib/registry.ts.
  */
 export const SYSTEM_ENGINE_PAIRS = {
   READ_USER: { action: "view", resourceType: "user" },
+  CREATE_USER: { action: "create", resourceType: "user" },
+  UPDATE_USER: { action: "update", resourceType: "user" },
+  LOCK_USER: { action: "lock", resourceType: "user" },
+  UNLOCK_USER: { action: "unlock", resourceType: "user" },
+  ASSIGN_ROLE: { action: "assign-role", resourceType: "user" },
   READ_ROLE: { action: "view", resourceType: "role" },
   // S2-FE-AUTH-4 (lane FE batch C) — nguồn: apps/api/src/permission/role-admin.controller.ts +
   // auth-roles-permissions.controller.ts (mig 0005/0444/0460). assign:permission is_sensitive=true
