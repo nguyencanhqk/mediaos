@@ -164,12 +164,29 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "HR.POSITION.UPDATE": "update:position",
   "HR.POSITION.DELETE": "delete:position",
   "HR.MASTER_DATA.MANAGE": "manage:master-data",
+  // S2-FE-HR-7 — Employee contracts (hợp đồng lao động). Cặp seed THẬT từ contract.controller.ts:
+  // view:contract (đọc, data-scope Own/Team/Company) — manage:contract (CRUD) gate riêng trong page,
+  // KHÔNG cần route-level vì chỉ chặn nút, không chặn cả trang.
+  "HR.CONTRACT.VIEW": "view:contract",
   // S2-FE-FND-1 (FND1-WC): cặp seed THẬT mig 0435 — controller Foundation dùng *:foundation-* (view/update:
   // foundation-company, update:foundation-setting). KHÔNG dùng nhãn-ma FRONTEND-13 §7.1 (FOUNDATION.SYSTEM.VIEW /
   // SETTING.SYSTEM_MANAGE chưa seed) và KHÔNG namespace CŨ read/update:company (0005). Đọc≠sửa (pair-as-gate).
   "FOUNDATION.COMPANY.VIEW": "view:foundation-company",
   "FOUNDATION.COMPANY.UPDATE": "update:foundation-company",
   "FOUNDATION.SETTING.UPDATE": "update:foundation-setting",
+  // S2-FE-AUTH-4 (lane FE batch C) — role WRITE + permission catalog + assign (nguồn: apps/api/src/
+  // permission/role-admin.controller.ts + auth-roles-permissions.controller.ts, mig 0005/0444/0460).
+  // assign:permission is_sensitive=true (ANTI-ESCALATION) — component dùng useCanExact, KHÔNG useCan.
+  "AUTH.ROLE.CREATE": "create:role",
+  "AUTH.ROLE.UPDATE": "update:role",
+  "AUTH.PERMISSION.VIEW": "view:permission",
+  "AUTH.PERMISSION.ASSIGN": "assign:permission",
+  // S2-FE-FND-5 (lane FE batch C) — sequence/seed ops admin (nguồn: apps/api/src/foundation/sequences/
+  // sequence.controller.ts + apps/api/src/foundation/seed/seed.controller.ts, mig 0435). view:foundation-seed
+  // is_sensitive=true (System scope, KHÔNG kế thừa wildcard).
+  "FOUNDATION.SEQUENCE.VIEW": "view:foundation-sequence",
+  "FOUNDATION.SEQUENCE.UPDATE": "update:foundation-sequence",
+  "FOUNDATION.SEED.VIEW": "view:foundation-seed",
   // S2-FE-FND-3: cặp seed THẬT mig 0435 dòng 338 — ModuleAdminController dùng view:foundation-module
   // (is_sensitive=false, bulk-grant company-admin qua LIKE 'foundation-%'). KHÁC my-apps (Authenticated-only,
   // KHÔNG PermissionGuard) — admin catalog GET /foundation/modules[/:code] gated đúng cặp này.
@@ -790,6 +807,18 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 26,
   },
+  // S2-FE-HR-7 — Hợp đồng lao động toàn công ty (đọc, theo data-scope Own/Team/Company).
+  {
+    routeKey: "hr.contracts",
+    path: "/hr/contracts",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "HR",
+    screenCode: "HR-SCREEN-CONTRACTS",
+    titleKey: "routeTitle.hrContracts",
+    requiredAnyPermissions: ["HR.CONTRACT.VIEW"],
+    showInSidebar: true,
+    order: 27,
+  },
 
   // Attendance
   {
@@ -1013,6 +1042,19 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 72,
   },
+  // S2-FE-AUTH-4 (lane FE batch C) — catalog quyền toàn cục (read-only). Role create/detail/edit/permissions
+  // sub-route TÁI DÙNG meta "system.roles" (route-level gate = AUTH.ROLE.VIEW, khớp pattern hr.employees).
+  {
+    routeKey: "system.permissions",
+    path: "/system/permissions",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "FOUNDATION",
+    screenCode: "SYSTEM-SCREEN-PERMISSIONS",
+    titleKey: "routeTitle.systemPermissions",
+    requiredAnyPermissions: ["AUTH.PERMISSION.VIEW"],
+    showInSidebar: true,
+    order: 72,
+  },
   {
     routeKey: "system.audit-logs",
     path: "/system/audit-logs",
@@ -1049,6 +1091,30 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 75,
   },
+  // S2-FE-FND-5 (lane FE batch C) — Sequence counters (view/update:foundation-sequence) + Seed status
+  // (view:foundation-seed, is_sensitive=true — System scope).
+  {
+    routeKey: "system.sequences",
+    path: "/system/sequences",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "FOUNDATION",
+    screenCode: "SYSTEM-SCREEN-SEQUENCES",
+    titleKey: "routeTitle.systemSequences",
+    requiredAnyPermissions: ["FOUNDATION.SEQUENCE.VIEW"],
+    showInSidebar: true,
+    order: 76,
+  },
+  {
+    routeKey: "system.seeds",
+    path: "/system/seeds",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "FOUNDATION",
+    screenCode: "SYSTEM-SCREEN-SEEDS",
+    titleKey: "routeTitle.systemSeeds",
+    requiredAnyPermissions: ["FOUNDATION.SEED.VIEW"],
+    showInSidebar: true,
+    order: 77,
+  },
 
   // Account
   {
@@ -1056,6 +1122,14 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     path: "/account/profile",
     layout: "ACCOUNT",
     titleKey: "routeTitle.accountProfile",
+  },
+  // S2-FE-AUTH-5 (lane FE batch C) — session self-service. Authenticated-only (KHÔNG requiredAnyPermissions
+  // — S2-AUTH-BE-7: Own scope, owner-check ở service, giống pattern /auth/me — KHÔNG seed pair mới).
+  {
+    routeKey: "account.sessions",
+    path: "/account/sessions",
+    layout: "ACCOUNT",
+    titleKey: "routeTitle.accountSessions",
   },
 
   // Error pages (public — router renders without guard)

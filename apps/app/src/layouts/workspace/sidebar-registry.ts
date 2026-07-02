@@ -175,6 +175,17 @@ export const HR_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 73,
     requiredAnyPermissions: ["HR.MASTER_DATA.MANAGE"],
   },
+  // S2-FE-HR-7 — Hợp đồng lao động (đọc, theo data-scope Own/Team/Company qua cặp view:contract).
+  {
+    sidebarKey: "hr.contracts",
+    moduleCode: "HR",
+    label: "Hợp đồng lao động",
+    path: "/hr/contracts",
+    icon: "file-signature",
+    group: "operation",
+    order: 50,
+    requiredAnyPermissions: ["HR.CONTRACT.VIEW"],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -281,6 +292,45 @@ export const ATT_SIDEBAR: readonly SidebarItemMeta[] = [
     group: "management",
     order: 45,
     requiredAnyPermissions: ["ATT.ATTENDANCE.VIEW_TEAM", "ATT.ATTENDANCE.VIEW_COMPANY"],
+  },
+  // S3-FE-ATT-4 — đơn làm việc từ xa/công tác. Gate = requiredAny CẶP ENGINE THỰC (mỗi scope-level
+  // RIÊNG) — ai có ÍT NHẤT 1 trong 4 (tạo/xem-own/xem-team/xem-company) đều thấy mục.
+  {
+    sidebarKey: "att.remote-work-requests",
+    moduleCode: "ATT",
+    label: "Làm việc từ xa/công tác",
+    path: "/attendance/remote-work-requests",
+    icon: "plane",
+    group: "operation",
+    order: 25,
+    requiredAnyPermissions: [
+      "create-own:remote-request",
+      "view-own:remote-request",
+      "view-team:remote-request",
+      "view-company:remote-request",
+    ],
+  },
+  // S3-FE-ATT-6 — báo cáo tổng hợp công + audit log ATT (report dùng chung cặp view-team/view-company:
+  // attendance; audit log là cặp RIÊNG view:attendance-audit-log, KHÔNG chung với foundation audit-log).
+  {
+    sidebarKey: "att.reports",
+    moduleCode: "ATT",
+    label: "Báo cáo tổng hợp công",
+    path: "/attendance/reports",
+    icon: "bar-chart-3",
+    group: "management",
+    order: 80,
+    requiredAnyPermissions: ["view-team:attendance", "view-company:attendance"],
+  },
+  {
+    sidebarKey: "att.audit-logs",
+    moduleCode: "ATT",
+    label: "Audit log chấm công",
+    path: "/attendance/audit-logs",
+    icon: "file-clock",
+    group: "management",
+    order: 90,
+    requiredAnyPermissions: ["view:attendance-audit-log"],
   },
 ];
 
@@ -447,6 +497,17 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 30,
     requiredAnyPermissions: ["AUTH.ROLE.VIEW"],
   },
+  // S2-FE-AUTH-4 (lane FE batch C) — danh mục quyền toàn cục (đọc).
+  {
+    sidebarKey: "system.permissions",
+    moduleCode: "FOUNDATION",
+    label: "Danh mục quyền",
+    path: "/system/permissions",
+    icon: "key-round",
+    group: "admin",
+    order: 31,
+    requiredAnyPermissions: ["AUTH.PERMISSION.VIEW"],
+  },
   // S2-FE-FND-2: gate theo cặp ENGINE THỰC ('view:audit-log', seed mig 0340, grant company-admin) —
   // literal pair (cùng kỹ thuật system.login-logs), KHÔNG dùng mã FE FOUNDATION.AUDIT_LOG.VIEW qua
   // PERMISSION_CODE_TO_PAIR (bài học drift: cặp map cũ 'view:foundation-audit-log' KHÔNG được
@@ -508,6 +569,28 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     group: "admin",
     order: 21,
     requiredAnyPermissions: [FOUNDATION_MODULE_VIEW_PERMISSION],
+  },
+  // S2-FE-FND-5 (lane FE batch C) — Sequence counters + Seed status (ops admin). Gate theo cặp SEED
+  // THẬT mig 0435 (view:foundation-sequence / view:foundation-seed) qua PERMISSION_CODE_TO_PAIR.
+  {
+    sidebarKey: "system.sequences",
+    moduleCode: "FOUNDATION",
+    label: "Bộ đếm mã",
+    path: "/system/sequences",
+    icon: "hash",
+    group: "admin",
+    order: 35,
+    requiredAnyPermissions: ["FOUNDATION.SEQUENCE.VIEW"],
+  },
+  {
+    sidebarKey: "system.seeds",
+    moduleCode: "FOUNDATION",
+    label: "Trạng thái Seed",
+    path: "/system/seeds",
+    icon: "database",
+    group: "admin",
+    order: 36,
+    requiredAnyPermissions: ["FOUNDATION.SEED.VIEW"],
   },
 ];
 

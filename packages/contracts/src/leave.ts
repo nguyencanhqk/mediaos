@@ -892,3 +892,92 @@ export const leaveBalanceTransactionViewSchema = z.object({
   createdAt: z.string().datetime(),
 });
 export type LeaveBalanceTransactionView = z.infer<typeof leaveBalanceTransactionViewSchema>;
+
+// ─── S3-LEAVE-BE-6: reports + balance transactions (self) + audit read (P2, read-only) ────────────
+//
+// GET /leave/me/balance-transactions (view-own:leave-balance, Own — API-05 §13.2 LEAVE-API-003).
+// Self-locked by user_id via leave_balances (mirrors findOwnBalancesTx) — KHÔNG scope query.
+export const leaveMyBalanceTransactionsQuerySchema = z.object({
+  periodYear: z.coerce.number().int().min(2000).max(2100).optional(),
+  leaveTypeId: z.string().uuid().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().positive().max(100).default(20),
+});
+export type LeaveMyBalanceTransactionsQuery = z.infer<typeof leaveMyBalanceTransactionsQuerySchema>;
+
+/** Envelope phân trang cho GET /leave/me/balance-transactions (mirror leaveRequestListResponseSchema). */
+export const leaveMyBalanceTransactionsResponseSchema = z.object({
+  items: z.array(leaveBalanceTransactionViewSchema),
+  meta: z.object({
+    page: z.number().int().positive(),
+    pageSize: z.number().int().positive(),
+    total: z.number().int().nonnegative(),
+    totalPages: z.number().int().nonnegative(),
+    hasNext: z.boolean(),
+    hasPrev: z.boolean(),
+  }),
+});
+export type LeaveMyBalanceTransactionsResponse = z.infer<
+  typeof leaveMyBalanceTransactionsResponseSchema
+>;
+
+export const LEAVE_REPORT_PAGE_SIZE_MAX = 100;
+export const LEAVE_REPORT_PAGE_SIZE_DEFAULT = 20;
+
+/**
+ * GET /leave/reports query (export:leave, Company-scope — mig 0455). Half-open [fromDate, toDate]
+ * inclusive trên leave_request_days.work_date (mirror attendanceReportQuerySchema). leaveTypeId/
+ * departmentId lọc thêm — KHÔNG bắt buộc.
+ */
+export const leaveReportQuerySchema = z
+  .object({
+    fromDate: z.string().date(),
+    toDate: z.string().date(),
+    leaveTypeId: z.string().uuid().optional(),
+    departmentId: z.string().uuid().optional(),
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(LEAVE_REPORT_PAGE_SIZE_MAX)
+      .default(LEAVE_REPORT_PAGE_SIZE_DEFAULT),
+  })
+  .refine((v) => v.toDate >= v.fromDate, {
+    message: "toDate phải >= fromDate",
+    path: ["toDate"],
+  });
+export type LeaveReportQuery = z.infer<typeof leaveReportQuerySchema>;
+
+/**
+ * 1 dòng tổng hợp nghỉ phép của 1 nhân viên trong kỳ — nguồn leave_request_days (status='Active') ⋈
+ * leave_requests (status='Approved') để chỉ tính phép ĐÃ duyệt, chia theo work_date (chính xác hơn
+ * total_days của cả đơn khi đơn cắt ngang khoảng lọc).
+ */
+export const leaveReportRowSchema = z.object({
+  employeeId: z.string().uuid(),
+  // employee_profiles.user_id là NULLABLE (nhân viên chưa liên kết tài khoản) — KHÔNG giả định non-null.
+  userId: z.string().uuid().nullable(),
+  employeeCode: z.string().nullable(),
+  fullName: z.string().nullable(),
+  orgUnitId: z.string().uuid().nullable(),
+  orgUnitName: z.string().nullable(),
+  totalRequests: z.number().int().nonnegative(),
+  totalLeaveDays: z.number(),
+});
+export type LeaveReportRow = z.infer<typeof leaveReportRowSchema>;
+
+export const leaveReportResponseSchema = z.object({
+  fromDate: z.string().date(),
+  toDate: z.string().date(),
+  items: z.array(leaveReportRowSchema),
+  meta: z.object({
+    page: z.number().int().positive(),
+    pageSize: z.number().int().positive(),
+    total: z.number().int().nonnegative(),
+    totalPages: z.number().int().nonnegative(),
+    hasNext: z.boolean(),
+    hasPrev: z.boolean(),
+  }),
+});
+export type LeaveReportResponse = z.infer<typeof leaveReportResponseSchema>;

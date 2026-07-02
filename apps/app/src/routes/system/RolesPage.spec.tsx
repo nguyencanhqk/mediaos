@@ -1,85 +1,50 @@
 /**
- * [RED-trước · deny-path] RolesPage — S2-FE-HR-3.
+ * RolesPage — S2-FE-AUTH-4 (lane FE batch C).
  * Gate: view:role — canonical engine pair AUTH.ROLE.VIEW → view:role
  *   (DB-02 §9.1 + seed §13 migration 0444: chỉ company-admin được view:role/Company).
  * Deny-path dùng view:user (role hr có view:user nhưng KHÔNG có view:role) — bắt đúng drift
  *   theo cặp seed-truth, KHÔNG khớp cặp FE sai để xanh giả.
- * States: loading · error · empty · forbidden · list render.
+ * States: loading · error · empty · forbidden · list render · create button gate (create:role).
  */
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useAuthStore, apiFetch } from "@mediaos/web-core";
+import { useAuthStore, roleAdminApi } from "@mediaos/web-core";
 import { RolesPage } from "./RolesPage";
 
 // ---------------------------------------------------------------------------
-// Mocks
+// Mocks — giữ web-core thật (useCan/store/PermissionGate/i18n), chỉ stub API surface.
 // ---------------------------------------------------------------------------
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
     ...actual,
-    apiFetch: vi.fn(),
-  };
-});
-
-// Mock react-i18next — factory uses dynamic import to avoid hoisting TDZ error.
-vi.mock("react-i18next", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("react-i18next")>();
-  // Dynamic import inside factory avoids top-level variable hoisting issue.
-  const { default: systemVi } = await import("@/i18n/locales/vi/system");
-  const bundles: Record<string, Record<string, unknown>> = {
-    system: systemVi as unknown as Record<string, unknown>,
-  };
-  function resolve(ns: string, key: string): string {
-    const bundle = bundles[ns] ?? {};
-    return (
-      (key.split(".").reduce<unknown>((acc, k) => {
-        if (acc && typeof acc === "object") return (acc as Record<string, unknown>)[k];
-        return undefined;
-      }, bundle) as string) ?? key
-    );
-  }
-  return {
-    ...actual,
-    useTranslation: (ns: string | string[] = "common") => {
-      const namespace = Array.isArray(ns) ? ns[0] : ns;
-      return {
-        t: (key: string, opts?: Record<string, unknown>) => {
-          const nsKey = key.includes(":") ? key : `${namespace}:${key}`;
-          const [resolvedNs, resolvedKey] = nsKey.split(":");
-          const result = resolve(resolvedNs, resolvedKey);
-          if (opts?.defaultValue && result === resolvedKey) return opts.defaultValue as string;
-          return result;
-        },
-        i18n: { language: "vi", changeLanguage: vi.fn() },
-        ready: true,
-      };
+    roleAdminApi: {
+      listRoles: vi.fn(),
+      listPermissions: vi.fn(),
+      createRole: vi.fn(),
+      updateRole: vi.fn(),
+      assignPermission: vi.fn(),
+      revokePermission: vi.fn(),
     },
-    I18nextProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    Trans: ({ i18nKey }: { i18nKey: string }) => <>{i18nKey}</>,
   };
 });
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-function makeQueryClient() {
-  return new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-}
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-router")>();
+  return { ...actual, useNavigate: () => vi.fn() };
+});
 
 function renderWithQuery(ui: React.ReactElement) {
-  const client = makeQueryClient();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
 const MOCK_ROLES = [
-  { id: "role-001", name: "Super Admin" },
-  { id: "role-002", name: "HR Manager" },
-  { id: "role-003", name: "Employee" },
+  { id: "role-001", name: "Super Admin", description: null, isSystem: true },
+  { id: "role-002", name: "HR Manager", description: "Quản lý nhân sự", isSystem: false },
+  { id: "role-003", name: "Employee", description: null, isSystem: false },
 ];
 
 function setCapabilities(caps: Record<string, boolean>) {
@@ -100,13 +65,11 @@ function clearCapabilities() {
   useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 describe("RolesPage", () => {
   beforeEach(() => {
     clearCapabilities();
     vi.clearAllMocks();
+    vi.mocked(roleAdminApi.listRoles).mockResolvedValue(MOCK_ROLES);
   });
 
   // ── DENY-PATH: no view:role → forbidden, API not called ──────────────────
@@ -114,41 +77,40 @@ describe("RolesPage", () => {
     setCapabilities({});
     renderWithQuery(<RolesPage />);
     expect(screen.getByText(/không có quyền truy cập/i)).toBeInTheDocument();
-    expect(apiFetch).not.toHaveBeenCalled();
+    expect(roleAdminApi.listRoles).not.toHaveBeenCalled();
   });
 
   // ── DENY-PATH: view:user (hr) but not view:role → still forbidden ─────────
-  //   role hr được §13 cấp view:user(Company) nhưng KHÔNG có view:role → Roles vẫn bị chặn.
   it("renders forbidden when user has view:user but not view:role", () => {
     setCapabilities({ "view:user": true });
     renderWithQuery(<RolesPage />);
     expect(screen.getByText(/không có quyền truy cập/i)).toBeInTheDocument();
-    expect(apiFetch).not.toHaveBeenCalled();
+    expect(roleAdminApi.listRoles).not.toHaveBeenCalled();
   });
 
-  // ── ALLOW-PATH: view:role → list renders ─────────────────────────────────
+  // ── ALLOW-PATH: view:role → list renders (name/description/isSystem badge) ─
   it("renders roles list when user has view:role", async () => {
     setCapabilities({ "view:role": true });
-    vi.mocked(apiFetch).mockResolvedValue(MOCK_ROLES);
     renderWithQuery(<RolesPage />);
     await waitFor(() => expect(screen.getByText("Super Admin")).toBeInTheDocument());
     expect(screen.getByText("HR Manager")).toBeInTheDocument();
     expect(screen.getByText("Employee")).toBeInTheDocument();
+    expect(screen.getByText("Quản lý nhân sự")).toBeInTheDocument();
+    expect(screen.getByText("Hệ thống")).toBeInTheDocument();
   });
 
   // ── LOADING state ─────────────────────────────────────────────────────────
   it("shows loading skeleton while fetching", () => {
     setCapabilities({ "view:role": true });
-    vi.mocked(apiFetch).mockReturnValue(new Promise(() => {}));
+    vi.mocked(roleAdminApi.listRoles).mockReturnValue(new Promise(() => {}));
     renderWithQuery(<RolesPage />);
-    const table = document.querySelector("table");
-    expect(table).toBeInTheDocument();
+    expect(document.querySelector("table")).toBeInTheDocument();
   });
 
   // ── ERROR state ───────────────────────────────────────────────────────────
   it("shows error state when API fails", async () => {
     setCapabilities({ "view:role": true });
-    vi.mocked(apiFetch).mockRejectedValue(new Error("network error"));
+    vi.mocked(roleAdminApi.listRoles).mockRejectedValue(new Error("network error"));
     renderWithQuery(<RolesPage />);
     await waitFor(() => expect(screen.getByText(/không thể tải danh sách/i)).toBeInTheDocument());
   });
@@ -156,17 +118,38 @@ describe("RolesPage", () => {
   // ── EMPTY state ───────────────────────────────────────────────────────────
   it("shows empty state when no roles returned", async () => {
     setCapabilities({ "view:role": true });
-    vi.mocked(apiFetch).mockResolvedValue([]);
+    vi.mocked(roleAdminApi.listRoles).mockResolvedValue([]);
     renderWithQuery(<RolesPage />);
     await waitFor(() => expect(screen.getByText(/không có vai trò/i)).toBeInTheDocument());
   });
 
-  // ── Sprint-3 notice visible ───────────────────────────────────────────────
-  it("shows Sprint 3 placeholder notice when user has permission", async () => {
+  // ── PermissionGate: create button ──────────────────────────────────────────
+  it("hides 'Tạo vai trò' button when user lacks create:role", async () => {
     setCapabilities({ "view:role": true });
-    vi.mocked(apiFetch).mockResolvedValue(MOCK_ROLES);
     renderWithQuery(<RolesPage />);
     await waitFor(() => expect(screen.getByText("Super Admin")).toBeInTheDocument());
-    expect(screen.getByText(/sprint 3/i)).toBeInTheDocument();
+    expect(screen.queryByText("Tạo vai trò")).not.toBeInTheDocument();
+  });
+
+  it("shows 'Tạo vai trò' button when user has create:role", async () => {
+    setCapabilities({ "view:role": true, "create:role": true });
+    renderWithQuery(<RolesPage />);
+    await waitFor(() => expect(screen.getByText("Super Admin")).toBeInTheDocument());
+    expect(screen.getByText("Tạo vai trò")).toBeInTheDocument();
+  });
+
+  // ── PermissionGate: manage-permissions row action ───────────────────────────
+  it("hides per-row 'Quản lý quyền' action when user lacks assign:permission", async () => {
+    setCapabilities({ "view:role": true });
+    renderWithQuery(<RolesPage />);
+    await waitFor(() => expect(screen.getByText("Super Admin")).toBeInTheDocument());
+    expect(screen.queryByLabelText("Quản lý quyền")).not.toBeInTheDocument();
+  });
+
+  it("shows per-row 'Quản lý quyền' action when user has assign:permission", async () => {
+    setCapabilities({ "view:role": true, "assign:permission": true });
+    renderWithQuery(<RolesPage />);
+    await waitFor(() => expect(screen.getByText("Super Admin")).toBeInTheDocument());
+    expect(screen.getAllByLabelText("Quản lý quyền").length).toBeGreaterThan(0);
   });
 });

@@ -29,6 +29,20 @@ export const authKeys = {
   me: () => [...rootKeys.auth, "me"] as const,
   profile: () => [...rootKeys.auth, "profile"] as const,
   permissions: () => [...rootKeys.auth, "permissions"] as const,
+  // S2-FE-AUTH-4 (lane FE batch C) — role & permission admin catalogs (GET /auth/roles·/auth/permissions).
+  roles: {
+    all: [...rootKeys.auth, "roles"] as const,
+    list: () => [...rootKeys.auth, "roles", "list"] as const,
+  },
+  permissionCatalog: {
+    all: [...rootKeys.auth, "permission-catalog"] as const,
+    list: () => [...rootKeys.auth, "permission-catalog", "list"] as const,
+  },
+  // S2-FE-AUTH-5 (lane FE batch C) — session self-service (Own scope, GET /auth/sessions).
+  sessions: {
+    all: [...rootKeys.auth, "sessions"] as const,
+    list: () => [...rootKeys.auth, "sessions", "list"] as const,
+  },
 };
 
 // ── Auth admin keys (S2-FE-AUTH-3) — /system/users + /system/roles(assign) ────
@@ -89,6 +103,57 @@ export const hrKeys = {
       [...rootKeys.hr, "contract-types", "list", params] as const,
     // S2-FE-HR-5 (lane HR5-WC) — APPEND detail (GET/PATCH /hr/master-data/contract-types/:id).
     detail: (id: string) => [...rootKeys.hr, "contract-types", "detail", id] as const,
+  },
+  // S2-FE-HR-7 — APPEND. Employee contracts (hợp đồng lao động): danh sách toàn công ty + theo nhân viên.
+  contracts: {
+    all: [...rootKeys.hr, "contracts"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "contracts", "list", params] as const,
+    byEmployee: (employeeId: string, params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "contracts", "by-employee", employeeId, params] as const,
+    detail: (id: string) => [...rootKeys.hr, "contracts", "detail", id] as const,
+  },
+  // S2-FE-HR-6 — Org chart (danh mục nhỏ, không phân trang server) + HR audit-logs (phân trang offset/limit).
+  orgChart: {
+    all: [...rootKeys.hr, "org-chart"] as const,
+    tree: () => [...rootKeys.hr, "org-chart", "tree"] as const,
+  },
+  auditLogs: {
+    all: [...rootKeys.hr, "audit-logs"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "audit-logs", "list", params] as const,
+  },
+  // S2-FE-HR-8 — Employee-code CONFIG admin (danh mục 1 record/company, KHÔNG phân trang). preview()
+  // TÁCH khỏi config() (2 endpoint khác nhau: GET config vs POST preview) — invalidate riêng.
+  employeeCodeConfig: {
+    all: [...rootKeys.hr, "employee-code-config"] as const,
+    config: () => [...rootKeys.hr, "employee-code-config", "config"] as const,
+    preview: () => [...rootKeys.hr, "employee-code-config", "preview"] as const,
+  },
+  // S2-FE-HR-4 — Profile change request (self-service + HR duyệt). "mine" tách khỏi "list" (Company scope,
+  // HR/Admin) vì cùng resource nhưng scope khác nhau — invalidate riêng tránh làm mới nhầm cache của người khác.
+  profileChangeRequests: {
+    all: [...rootKeys.hr, "profile-change-requests"] as const,
+    mine: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "profile-change-requests", "mine", params] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.hr, "profile-change-requests", "list", params] as const,
+    detail: (id: string) => [...rootKeys.hr, "profile-change-requests", "detail", id] as const,
+  },
+};
+
+// S2-FE-HR-7 — mutation → invalidation cho hợp đồng nhân viên. Prefix (bỏ slot params) khớp mọi biến
+// thể param'd. Sau create/update/delete/link-file: làm mới cả danh sách công ty lẫn danh sách theo NV.
+const hrContractsListPrefix = [...rootKeys.hr, "contracts", "list"] as const;
+const hrContractsByEmployeePrefix = [...rootKeys.hr, "contracts", "by-employee"] as const;
+
+export const hrContractsInvalidation = {
+  mutate: (employeeId?: string): readonly (readonly unknown[])[] => {
+    const keys: (readonly unknown[])[] = [hrContractsListPrefix];
+    keys.push(
+      employeeId ? [...hrContractsByEmployeePrefix, employeeId] : hrContractsByEmployeePrefix,
+    );
+    return keys;
   },
   // S2-FE-HR-6 — Org chart (danh mục nhỏ, không phân trang server) + HR audit-logs (phân trang offset/limit).
   orgChart: {
@@ -166,6 +231,69 @@ export const attendanceKeys = {
     all: [...rootKeys.attendance, "rules"] as const,
     list: () => [...rootKeys.attendance, "rules", "list"] as const,
   },
+  // S3-FE-ATT-4 — APPEND. Remote/onsite-work requests (my/team/company + detail).
+  remoteWorkRequests: {
+    all: [...rootKeys.attendance, "remote-work-requests"] as const,
+    my: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "remote-work-requests", "my", params] as const,
+    team: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "remote-work-requests", "team", params] as const,
+    company: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "remote-work-requests", "company", params] as const,
+    detail: (id: string) => [...rootKeys.attendance, "remote-work-requests", "detail", id] as const,
+  },
+  // S3-FE-ATT-6 — APPEND. Báo cáo tổng hợp công (team/company) + audit log viewer ATT.
+  reports: {
+    all: [...rootKeys.attendance, "reports"] as const,
+    team: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "reports", "team", params] as const,
+    company: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "reports", "company", params] as const,
+  },
+  auditLogs: {
+    all: [...rootKeys.attendance, "audit-logs"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "audit-logs", "list", params] as const,
+  },
+  // S3-FE-ATT-3 — APPEND. Đơn điều chỉnh công: my/team/company (phân trang server) + detail.
+  adjustments: {
+    all: [...rootKeys.attendance, "adjustments"] as const,
+    my: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "adjustments", "my", params] as const,
+    team: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "adjustments", "team", params] as const,
+    company: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "adjustments", "company", params] as const,
+    detail: (id: string) => [...rootKeys.attendance, "adjustments", "detail", id] as const,
+  },
+};
+
+// S3-FE-ATT-4 — mutation → invalidation cho remote-work-requests. Prefix (bỏ slot params) khớp mọi
+// biến thể param'd. Sau submit/approve/reject/cancel: làm mới cả 3 scope list + chi tiết đúng đơn.
+const attRemoteWorkRequestsMyPrefix = [
+  ...rootKeys.attendance,
+  "remote-work-requests",
+  "my",
+] as const;
+const attRemoteWorkRequestsTeamPrefix = [
+  ...rootKeys.attendance,
+  "remote-work-requests",
+  "team",
+] as const;
+const attRemoteWorkRequestsCompanyPrefix = [
+  ...rootKeys.attendance,
+  "remote-work-requests",
+  "company",
+] as const;
+
+export const remoteWorkRequestInvalidation = {
+  mutate: (id: string) =>
+    [
+      attRemoteWorkRequestsMyPrefix,
+      attRemoteWorkRequestsTeamPrefix,
+      attRemoteWorkRequestsCompanyPrefix,
+      attendanceKeys.remoteWorkRequests.detail(id),
+    ] as const,
   // S3-FE-ATT-3 — APPEND. Đơn điều chỉnh công: my/team/company (phân trang server) + detail.
   adjustments: {
     all: [...rootKeys.attendance, "adjustments"] as const,
@@ -248,6 +376,16 @@ export const foundationKeys = {
     all: [...rootKeys.foundation, "settings"] as const,
     resolve: (params?: Record<string, unknown>) =>
       [...rootKeys.foundation, "settings", "resolve", params] as const,
+  },
+  // S2-FE-FND-5 (lane FE batch C) — sequence counters + seed run status (GET /foundation/sequences·/seeds).
+  sequences: {
+    all: [...rootKeys.foundation, "sequences"] as const,
+    list: () => [...rootKeys.foundation, "sequences", "list"] as const,
+    preview: (id: string) => [...rootKeys.foundation, "sequences", "preview", id] as const,
+  },
+  seeds: {
+    all: [...rootKeys.foundation, "seeds"] as const,
+    list: () => [...rootKeys.foundation, "seeds", "list"] as const,
   },
   // S2-FE-FND-4 — Public Holidays. Danh mục nhỏ theo company/năm (KHÔNG phân trang server).
   holidays: {
@@ -349,6 +487,8 @@ const foundationSettingsResolvePrefix = [...rootKeys.foundation, "settings", "re
 export const foundationInvalidation = {
   updateCompany: () => [foundationKeys.company.current()] as const,
   updateSetting: () => [foundationSettingsResolvePrefix] as const,
+  // S2-FE-FND-5 — PATCH /foundation/sequences/:id → làm mới list counter.
+  updateSequence: () => [foundationKeys.sequences.list()] as const,
   // S2-FE-FND-4 — create/update/delete holiday đều làm mới MỌI biến thể list(params) qua prefix.
   createHoliday: () => [foundationKeys.holidays.all] as const,
   updateHoliday: () => [foundationKeys.holidays.all] as const,

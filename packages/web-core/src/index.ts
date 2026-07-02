@@ -79,6 +79,10 @@ export {
   hrInvalidation,
   // S2-FE-HR-5 (lane HR5-WC): HR master-data mutation → list invalidation.
   hrMasterDataInvalidation,
+  // S2-FE-HR-7: employee contracts mutation → list invalidation.
+  hrContractsInvalidation,
+  // S3-FE-ATT-4: remote-work-request mutation → list/detail invalidation.
+  remoteWorkRequestInvalidation,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -86,6 +90,10 @@ export { shouldRetryQuery } from "./lib/query-retry";
 export { bootstrapSession } from "./lib/session";
 export { getHealth, type Health, getHealthDb, type HealthDb } from "./lib/api";
 export { authApi } from "./lib/auth-api";
+// S2-FE-AUTH-4 (lane FE batch C) — role & permission admin (create/update role, assign/revoke permission).
+export { roleAdminApi } from "./lib/role-admin-api";
+// S2-FE-FND-5 (lane FE batch C) — sequence counters + seed run status (ops admin).
+export { foundationOpsApi } from "./lib/foundation-ops-api";
 export { usersApi } from "./lib/users-api";
 export { authUsersApi } from "./lib/auth-users-api";
 export { twoFactorApi } from "./lib/two-factor-api";
@@ -107,6 +115,10 @@ export {
 export { hrMasterDataApi, type HrDepartment } from "./lib/hr-master-data-api";
 export { leaveApi } from "./lib/leave-api";
 export { attendanceApi } from "./lib/attendance-api";
+// S2-FE-HR-7: employee contracts (hợp đồng lao động) CRUD client.
+export { contractsApi } from "./lib/contracts-api";
+// S2-FE-HR-7: file download-url client (foundation file subsystem, TTL-ngắn, KHÔNG lộ storage_path).
+export { filesApi } from "./lib/files-api";
 export {
   foundationApi,
   safeSettingViewSchema,

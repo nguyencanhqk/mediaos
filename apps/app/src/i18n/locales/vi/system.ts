@@ -149,10 +149,14 @@ export default {
   roles: {
     title: "Vai trò",
     description: "Danh sách vai trò phân quyền trong hệ thống",
-    sprint3Notice: "Quản lý quyền chi tiết theo vai trò sẽ có trong Sprint 3",
+    addRole: "Tạo vai trò",
+    search: "Tìm theo tên vai trò…",
     columns: {
       name: "Tên vai trò",
       id: "ID",
+      description: "Mô tả",
+      type: "Loại",
+      actions: "Thao tác",
     },
     empty: {
       title: "Không có vai trò",
@@ -165,6 +169,118 @@ export default {
     forbidden: {
       title: "Không có quyền truy cập",
       description: "Bạn không có quyền xem danh sách vai trò.",
+    },
+  },
+
+  // S2-FE-AUTH-4 (lane FE batch C) — role create/detail/edit + assign-permission + permission catalog.
+  roleForm: {
+    createTitle: "Tạo vai trò",
+    createDescription: "Tạo một vai trò mới cho công ty",
+    editTitle: "Sửa vai trò",
+    editDescription: "Cập nhật tên/mô tả vai trò",
+    fields: {
+      name: "Tên vai trò",
+      description: "Mô tả",
+    },
+    cancel: "Huỷ",
+    submitCreate: "Tạo vai trò",
+    submitSave: "Lưu thay đổi",
+    submitting: "Đang lưu…",
+    systemLockedNotice: "Vai trò hệ thống — không thể chỉnh sửa.",
+    forbidden: {
+      description: "Bạn không có quyền tạo/sửa vai trò.",
+    },
+    errors: {
+      nameRequired: "Tên vai trò là bắt buộc",
+      nameTooLong: "Tên vai trò tối đa 100 ký tự",
+      descriptionTooLong: "Mô tả tối đa 500 ký tự",
+      systemRole: "Vai trò hệ thống không thể chỉnh sửa.",
+      conflict: "Tên vai trò đã tồn tại.",
+      forbidden: "Bạn không có quyền thực hiện thao tác này.",
+      validation: "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.",
+      server: "Có lỗi hệ thống. Vui lòng thử lại sau.",
+      generic: "Không thể lưu. Vui lòng thử lại.",
+    },
+  },
+
+  roleDetail: {
+    backToList: "Quay lại danh sách",
+    edit: "Sửa vai trò",
+    managePermissions: "Quản lý quyền",
+    systemBadge: "Hệ thống",
+    systemRole: "Vai trò hệ thống",
+    companyRole: "Vai trò công ty",
+    assignedPermissionsNotice:
+      "Chưa thể hiển thị danh sách quyền đã gán trực tiếp tại đây — dùng công cụ Quản lý quyền để gán/thu hồi quyền cho vai trò này.",
+    fields: {
+      name: "Tên vai trò",
+      description: "Mô tả",
+      type: "Loại",
+    },
+    error: {
+      title: "Không tìm thấy vai trò",
+      description: "Vai trò không tồn tại hoặc có lỗi khi tải. Vui lòng thử lại.",
+    },
+  },
+
+  rolePermissions: {
+    title: "Quản lý quyền — {{role}}",
+    description: "Gán hoặc thu hồi quyền cho vai trò này theo danh mục quyền hệ thống",
+    search: "Tìm theo action/resource…",
+    dataScope: "Phạm vi dữ liệu",
+    assign: "Gán",
+    revoke: "Thu hồi",
+    assignedListNotice:
+      "Backend hiện chưa cung cấp API xem danh sách quyền ĐÃ gán cho vai trò — bảng dưới đây là danh mục quyền toàn hệ thống để gán/thu hồi, KHÔNG phản ánh trạng thái đã gán.",
+    assignSuccess: 'Đã gán quyền "{{pair}}" phạm vi {{scope}} cho vai trò.',
+    revokeSuccess: 'Đã thu hồi quyền "{{pair}}" khỏi vai trò.',
+    scope: {
+      Own: "Cá nhân",
+      Team: "Nhóm",
+      Department: "Phòng ban",
+      Company: "Công ty",
+    },
+    columns: {
+      actions: "Thao tác",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền gán/thu hồi quyền cho vai trò.",
+    },
+    error: {
+      title: "Không thể tải dữ liệu",
+      description: "Có lỗi khi tải vai trò hoặc danh mục quyền. Vui lòng thử lại.",
+    },
+    errors: {
+      badPair: "Cặp quyền không hợp lệ hoặc không tồn tại trong danh mục.",
+      forbidden: "Bạn không có quyền thực hiện thao tác này.",
+      notFound: "Vai trò chưa có quyền này để thu hồi.",
+      server: "Có lỗi hệ thống. Vui lòng thử lại sau.",
+      generic: "Thao tác thất bại. Vui lòng thử lại.",
+    },
+  },
+
+  permissions: {
+    title: "Danh mục quyền",
+    description: "Danh sách toàn bộ quyền (action/resource) trong hệ thống — chỉ đọc",
+    search: "Tìm theo action/resource…",
+    sensitive: "Nhạy cảm",
+    columns: {
+      resourceType: "Đối tượng",
+      action: "Hành động",
+      sensitive: "Nhạy cảm",
+    },
+    empty: {
+      title: "Không có quyền",
+      description: "Chưa có quyền nào trong danh mục.",
+    },
+    error: {
+      title: "Không thể tải danh mục quyền",
+      description: "Có lỗi khi tải danh mục quyền. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem danh mục quyền.",
     },
   },
 
@@ -398,6 +514,105 @@ export default {
     deferredTitle: "Sắp ra mắt",
     deferredDescription:
       "Màn hình cấu hình cấp hệ thống đang chờ endpoint backend (SYSTEM_MANAGE). Sẽ được bổ sung trong đợt tiếp theo.",
+  },
+
+  // S2-FE-FND-5 (lane FE batch C) — Sequence counters (/system/sequences) + Seed status (/system/seeds).
+  sequences: {
+    title: "Bộ đếm mã (Sequence)",
+    description: "Danh sách bộ đếm sinh mã tự động (nhân sự, hợp đồng…) — xem trước mã kế tiếp",
+    search: "Tìm theo module/khoá…",
+    preview: "Xem mã kế tiếp",
+    previewing: "Đang tính…",
+    edit: "Sửa cấu hình",
+    columns: {
+      moduleCode: "Module",
+      sequenceKey: "Khoá",
+      scopeType: "Phạm vi",
+      lastGeneratedCode: "Mã gần nhất",
+      status: "Trạng thái",
+      resetPolicy: "Chu kỳ reset",
+    },
+    status: {
+      Active: "Đang dùng",
+      Inactive: "Ngừng dùng",
+    },
+    previewResult: 'Mã kế tiếp: "{{code}}"',
+    previewError: "Không thể tính mã kế tiếp. Vui lòng thử lại.",
+    form: {
+      title: "Sửa cấu hình bộ đếm",
+      fields: {
+        prefix: "Tiền tố",
+        suffix: "Hậu tố",
+        datePattern: "Mẫu ngày",
+        paddingLength: "Độ dài đệm số",
+        incrementBy: "Bước tăng",
+        resetPolicy: "Chu kỳ reset",
+        status: "Trạng thái",
+      },
+      cancel: "Huỷ",
+      save: "Lưu",
+      saving: "Đang lưu…",
+      confirm: {
+        title: "Xác nhận đổi cấu hình bộ đếm",
+        description: "Thay đổi cấu hình bộ đếm sẽ ảnh hưởng đến mã sinh ra kế tiếp. Tiếp tục?",
+        confirmLabel: "Lưu cấu hình",
+        cancelLabel: "Xem lại",
+      },
+      errors: {
+        forbidden: "Bạn không có quyền sửa cấu hình bộ đếm.",
+        conflict: "Cấu hình xung đột. Vui lòng tải lại.",
+        validation: "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.",
+        server: "Có lỗi hệ thống. Vui lòng thử lại sau.",
+        generic: "Không thể lưu cấu hình. Vui lòng thử lại.",
+      },
+    },
+    empty: {
+      title: "Không có bộ đếm",
+      description: "Chưa có bộ đếm mã nào được cấu hình.",
+    },
+    error: {
+      title: "Không thể tải danh sách bộ đếm",
+      description: "Có lỗi khi tải danh sách bộ đếm. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem bộ đếm mã.",
+    },
+  },
+
+  seeds: {
+    title: "Trạng thái Seed dữ liệu",
+    description: "Lịch sử chạy seed dữ liệu gốc (chỉ đọc)",
+    search: "Tìm theo khoá/phiên bản seed…",
+    columns: {
+      seedKey: "Khoá seed",
+      seedVersion: "Phiên bản",
+      environment: "Môi trường",
+      status: "Trạng thái",
+      checksum: "Checksum",
+      startedAt: "Bắt đầu",
+      finishedAt: "Kết thúc",
+    },
+    status: {
+      Pending: "Chờ chạy",
+      Running: "Đang chạy",
+      Success: "Thành công",
+      Failed: "Thất bại",
+      Skipped: "Đã bỏ qua",
+      RolledBack: "Đã hoàn tác",
+    },
+    empty: {
+      title: "Không có dữ liệu seed",
+      description: "Chưa có batch seed nào được ghi nhận cho công ty này.",
+    },
+    error: {
+      title: "Không thể tải trạng thái seed",
+      description: "Có lỗi khi tải trạng thái seed. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem trạng thái seed (yêu cầu quyền cấp hệ thống).",
+    },
   },
 
   // S2-FE-FND-4 — /system/public-holidays (list + CRUD).
