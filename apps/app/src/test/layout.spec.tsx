@@ -53,6 +53,14 @@ vi.mock("react-i18next", () => ({
   I18nextProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+// navigateMock + routerPathnameRef: mutable qua vi.hoisted (factory vi.mock bị hoist lên đầu file) —
+// test ProtectedShell/2FA-enroll-enforcement cần điều khiển pathname hiện tại + assert navigate() gọi
+// đúng target, chứ không thể cố định "/home" như trước (S2-FE-AUTH-6).
+const { navigateMock, routerPathnameRef } = vi.hoisted(() => ({
+  navigateMock: vi.fn(),
+  routerPathnameRef: { current: "/home" },
+}));
+
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
   return {
@@ -70,9 +78,9 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
         {children}
       </a>
     ),
-    useNavigate: () => vi.fn(),
+    useNavigate: () => navigateMock,
     useRouterState: ({ select }: { select: (s: { location: { pathname: string } }) => unknown }) =>
-      select({ location: { pathname: "/home" } }),
+      select({ location: { pathname: routerPathnameRef.current } }),
   };
 });
 
@@ -119,6 +127,9 @@ function setAuthStore(
     accessToken: authenticated ? "tok" : null,
     refreshToken: null,
     capabilities,
+    // Reset MẶC ĐỊNH ở đây — test AUTH-003 (mustSetupTwoFactor) override RIÊNG sau lời gọi này để
+    // tránh leak trạng thái ép-enroll sang các describe block khác.
+    mustSetupTwoFactor: false,
   });
 }
 
@@ -136,6 +147,7 @@ afterEach(() => {
   vi.clearAllMocks();
   resetLayoutStore();
   setAuthStore(false);
+  routerPathnameRef.current = "/home";
 });
 
 // ---------------------------------------------------------------------------
@@ -546,6 +558,59 @@ describe("ProtectedShell", () => {
     );
     expect(screen.getByText("Tài khoản bị vô hiệu hóa")).toBeInTheDocument();
     expect(screen.queryByText("Content")).not.toBeInTheDocument();
+  });
+
+  // ── AUTH-003 (S2-FE-AUTH-6) — ép enroll 2FA khi mustSetupTwoFactor=true ──────────────────────────
+  describe("2FA enroll enforcement (AUTH-003)", () => {
+    it("mustSetupTwoFactor=true trên route khác /account/setup-2fa → điều hướng enroll, ẩn nội dung", () => {
+      setAuthStore(true, {});
+      useAuthStore.setState({ mustSetupTwoFactor: true });
+      routerPathnameRef.current = "/home";
+
+      render(
+        <Wrapper>
+          <ProtectedShell>
+            <p>Protected content</p>
+          </ProtectedShell>
+        </Wrapper>,
+      );
+
+      expect(navigateMock).toHaveBeenCalledWith({ to: "/account/setup-2fa" });
+      expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
+    });
+
+    it("mustSetupTwoFactor=false → KHÔNG điều hướng, nội dung render bình thường", () => {
+      setAuthStore(true, {});
+      routerPathnameRef.current = "/home";
+
+      render(
+        <Wrapper>
+          <ProtectedShell>
+            <p>Protected content</p>
+          </ProtectedShell>
+        </Wrapper>,
+      );
+
+      expect(navigateMock).not.toHaveBeenCalled();
+      expect(screen.getByText("Protected content")).toBeInTheDocument();
+    });
+
+    it("mustSetupTwoFactor=true nhưng ĐANG ở /account/setup-2fa → KHÔNG điều hướng (tránh vòng lặp), render trang enroll", () => {
+      setAuthStore(true, {});
+      useAuthStore.setState({ mustSetupTwoFactor: true });
+      routerPathnameRef.current = "/account/setup-2fa";
+
+      render(
+        <Wrapper>
+          <ProtectedShell>
+            <p>Enroll page content</p>
+          </ProtectedShell>
+        </Wrapper>,
+      );
+
+      expect(navigateMock).not.toHaveBeenCalled();
+      expect(screen.getByText("Enroll page content")).toBeInTheDocument();
+    });
   });
 });
 

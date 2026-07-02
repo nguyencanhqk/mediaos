@@ -69,6 +69,17 @@ describe("bootstrapSession", () => {
     expect(state.isAuthenticated).toBe(true);
     expect(state.user?.email).toBe("a@b.com");
     expect(state.capabilities).toEqual({ "read:tasks": true });
+    expect(state.mustSetupTwoFactor).toBe(false);
+  });
+
+  it("me.mustSetupTwoFactor=true → store.mustSetupTwoFactor=true (AUTH-003 ép enroll)", async () => {
+    stubBrowser();
+    fetchMock.mockResolvedValue(refreshOk("tok-2"));
+    const me = vi.fn().mockResolvedValue({ ...ME, mustSetupTwoFactor: true });
+    const { session, store } = await loadSession(me);
+
+    await expect(session.bootstrapSession()).resolves.toBe(true);
+    expect(store.useAuthStore.getState().mustSetupTwoFactor).toBe(true);
   });
 
   it("/me lỗi sau refresh ok → xoá state cục bộ, KHÔNG gọi /auth/logout, false", async () => {

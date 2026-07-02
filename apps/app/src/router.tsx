@@ -224,6 +224,10 @@ import { SequencesPage } from "@/routes/system/ops/SequencesPage";
 import { SeedsPage } from "@/routes/system/ops/SeedsPage";
 // Account self-service — S2-FE-AUTH-5 (lane FE batch C)
 import { AccountSessionsPage } from "@/routes/account/AccountSessionsPage";
+// Account self-service — S2-FE-AUTH-6: /account/setup-2fa (ép enroll, AUTH-003) + /account/profile (đọc).
+import { TwoFactorSetupPage } from "@/routes/account/TwoFactorSetupPage";
+import { AccountProfilePage } from "@/routes/account/AccountProfilePage";
+import { ACCOUNT_SETUP_2FA_PATH, ACCOUNT_PROFILE_PATH } from "@/routes/account/constants";
 // System / Foundation — Audit log viewer (S2-FE-FND-2)
 import { AuditLogsPage } from "@/routes/system/foundation/audit-logs/AuditLogsPage";
 import { AuditLogDetailPage } from "@/routes/system/foundation/audit-logs/AuditLogDetailPage";
@@ -1167,6 +1171,33 @@ const accountSessionsRoute = createRoute({
   ),
 });
 
+// S2-FE-AUTH-6 — /account/setup-2fa. Ép enroll khi `mustSetupTwoFactor` (AUTH-003); ProtectedShell TỰ
+// điều hướng tới đây, route content chỉ cần authGuard (không permission pair — self-service, giống
+// accountSessionsRoute/accountChangePasswordRoute).
+const accountSetupTwoFactorRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ACCOUNT_SETUP_2FA_PATH,
+  beforeLoad: authGuard,
+  component: () => (
+    <ProtectedShell>
+      <TwoFactorSetupPage />
+    </ProtectedShell>
+  ),
+});
+
+// S2-FE-AUTH-6 — /account/profile (đọc). Authenticated-only, KHÔNG permission pair (self-service, đọc
+// /auth/me của CHÍNH mình) — mirror accountSessionsRoute wiring.
+const accountProfileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ACCOUNT_PROFILE_PATH,
+  beforeLoad: authGuard,
+  component: () => (
+    <ProtectedShell>
+      <AccountProfilePage />
+    </ProtectedShell>
+  ),
+});
+
 // User CRUD — S2-FE-AUTH-3. Reuses "system.users" meta (route-level gate = AUTH.USER.VIEW); finer
 // per-action gate (create/update/lock/unlock/assign-role) applied inside each page via useCan —
 // mirrors hrEmployeeCreateRoute/hrEmployeeDetailRoute/hrEmployeeEditRoute pattern.
@@ -1453,6 +1484,8 @@ const routeTree = rootRoute.addChildren([
   systemSequencesRoute,
   systemSeedsRoute,
   accountSessionsRoute,
+  accountSetupTwoFactorRoute,
+  accountProfileRoute,
   systemAuditLogsRoute,
   systemAuditLogDetailRoute,
   systemLoginLogsRoute,
