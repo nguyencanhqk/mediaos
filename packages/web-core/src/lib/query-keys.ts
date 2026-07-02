@@ -150,6 +150,45 @@ export const attendanceKeys = {
     all: [...rootKeys.attendance, "rules"] as const,
     list: () => [...rootKeys.attendance, "rules", "list"] as const,
   },
+  // S3-FE-ATT-4 — APPEND. Remote/onsite-work requests (my/team/company + detail).
+  remoteWorkRequests: {
+    all: [...rootKeys.attendance, "remote-work-requests"] as const,
+    my: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "remote-work-requests", "my", params] as const,
+    team: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "remote-work-requests", "team", params] as const,
+    company: (params?: Record<string, unknown>) =>
+      [...rootKeys.attendance, "remote-work-requests", "company", params] as const,
+    detail: (id: string) => [...rootKeys.attendance, "remote-work-requests", "detail", id] as const,
+  },
+};
+
+// S3-FE-ATT-4 — mutation → invalidation cho remote-work-requests. Prefix (bỏ slot params) khớp mọi
+// biến thể param'd. Sau submit/approve/reject/cancel: làm mới cả 3 scope list + chi tiết đúng đơn.
+const attRemoteWorkRequestsMyPrefix = [
+  ...rootKeys.attendance,
+  "remote-work-requests",
+  "my",
+] as const;
+const attRemoteWorkRequestsTeamPrefix = [
+  ...rootKeys.attendance,
+  "remote-work-requests",
+  "team",
+] as const;
+const attRemoteWorkRequestsCompanyPrefix = [
+  ...rootKeys.attendance,
+  "remote-work-requests",
+  "company",
+] as const;
+
+export const remoteWorkRequestInvalidation = {
+  mutate: (id: string) =>
+    [
+      attRemoteWorkRequestsMyPrefix,
+      attRemoteWorkRequestsTeamPrefix,
+      attRemoteWorkRequestsCompanyPrefix,
+      attendanceKeys.remoteWorkRequests.detail(id),
+    ] as const,
 };
 
 // ── Leave keys ────────────────────────────────────────────────────────────────

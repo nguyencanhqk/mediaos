@@ -44,6 +44,8 @@ export default {
     attShifts: "Ca làm việc",
     attShiftAssignments: "Gán ca",
     attRules: "Rule chấm công",
+    // S3-FE-ATT-4 — Remote/onsite-work requests
+    attRemoteWorkRequests: "Đơn làm việc từ xa/công tác",
     leave: "Nghỉ phép",
     leaveMyRequests: "Đơn nghỉ của tôi",
     leaveApprovals: "Đơn cần duyệt",

@@ -136,6 +136,10 @@ import { AttendanceRecordDetailPage } from "@/routes/attendance/AttendanceRecord
 import { AttendanceShiftsPage } from "@/routes/attendance/AttendanceShiftsPage";
 import { AttendanceShiftAssignmentsPage } from "@/routes/attendance/AttendanceShiftAssignmentsPage";
 import { AttendanceRulesPage } from "@/routes/attendance/AttendanceRulesPage";
+// S3-FE-ATT-4 — Remote/onsite-work requests
+import { RemoteWorkRequestsPage } from "@/routes/attendance/remote-work/RemoteWorkRequestsPage";
+import { CreateRemoteWorkRequestPage } from "@/routes/attendance/remote-work/CreateRemoteWorkRequestPage";
+import { RemoteWorkRequestDetailPage } from "@/routes/attendance/remote-work/RemoteWorkRequestDetailPage";
 
 // Leave
 import { MyLeaveBalancePage } from "@/routes/leave/MyLeaveBalancePage";
@@ -342,6 +346,75 @@ const attRecordDetailRoute = createRoute({
       attRecordDetailMeta,
       "ATT",
       <AttendanceRecordDetailPage recordId={recordId} />,
+    );
+  },
+});
+
+// Remote/onsite-work requests — S3-FE-ATT-4. Gate = CẶP ENGINE THỰC trực tiếp (KHÔNG qua
+// PERMISSION_CODE_TO_PAIR — cùng kỹ thuật att.shifts/att.rules, tránh drift).
+const attRemoteWorkRequestsMeta: RouteMeta = {
+  routeKey: "att.remote-work-requests",
+  path: "/attendance/remote-work-requests",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-012",
+  titleKey: "routeTitle.attRemoteWorkRequests",
+  requiredAnyPermissions: [
+    "create-own:remote-request",
+    "view-own:remote-request",
+    "view-team:remote-request",
+    "view-company:remote-request",
+  ],
+};
+const attRemoteWorkRequestsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/remote-work-requests",
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(attRemoteWorkRequestsMeta, "ATT", <RemoteWorkRequestsPage />),
+});
+
+// Create — static "new" segment ranks above the "$requestId" param route.
+const attRemoteWorkRequestNewMeta: RouteMeta = {
+  routeKey: "att.remote-work-requests.new",
+  path: "/attendance/remote-work-requests/new",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-011",
+  titleKey: "routeTitle.attRemoteWorkRequests",
+  requiredAnyPermissions: ["create-own:remote-request"],
+};
+const attRemoteWorkRequestNewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/remote-work-requests/new",
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(attRemoteWorkRequestNewMeta, "ATT", <CreateRemoteWorkRequestPage />),
+});
+
+const attRemoteWorkRequestDetailMeta: RouteMeta = {
+  routeKey: "att.remote-work-requests.detail",
+  path: "/attendance/remote-work-requests/:requestId",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "ATT",
+  screenCode: "ATT-SCREEN-013",
+  titleKey: "routeTitle.attRemoteWorkRequests",
+  requiredAnyPermissions: [
+    "view-own:remote-request",
+    "view-team:remote-request",
+    "view-company:remote-request",
+  ],
+};
+const attRemoteWorkRequestDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/attendance/remote-work-requests/$requestId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { requestId } = attRemoteWorkRequestDetailRoute.useParams();
+    return buildModuleRouteContent(
+      attRemoteWorkRequestDetailMeta,
+      "ATT",
+      <RemoteWorkRequestDetailPage requestId={requestId} />,
     );
   },
 });
@@ -563,6 +636,9 @@ const routeTree = rootRoute.addChildren([
   attShiftAssignmentsRoute,
   attRulesRoute,
   attRecordDetailRoute,
+  attRemoteWorkRequestsRoute,
+  attRemoteWorkRequestNewRoute,
+  attRemoteWorkRequestDetailRoute,
   leaveRoute,
   leaveMyRequestsRoute,
   leaveCreateRoute,

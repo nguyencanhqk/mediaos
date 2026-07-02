@@ -79,6 +79,8 @@ export {
   foundationInvalidation,
   // S2-FE-HR-7: employee contracts mutation → list invalidation.
   hrContractsInvalidation,
+  // S3-FE-ATT-4: remote-work-request mutation → list/detail invalidation.
+  remoteWorkRequestInvalidation,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep

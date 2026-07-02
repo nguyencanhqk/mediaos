@@ -197,6 +197,23 @@ export const ATT_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 70,
     requiredAnyPermissions: ["view:attendance-rule"],
   },
+  // S3-FE-ATT-4 — đơn làm việc từ xa/công tác. Gate = requiredAny CẶP ENGINE THỰC (mỗi scope-level
+  // RIÊNG) — ai có ÍT NHẤT 1 trong 4 (tạo/xem-own/xem-team/xem-company) đều thấy mục.
+  {
+    sidebarKey: "att.remote-work-requests",
+    moduleCode: "ATT",
+    label: "Làm việc từ xa/công tác",
+    path: "/attendance/remote-work-requests",
+    icon: "plane",
+    group: "operation",
+    order: 25,
+    requiredAnyPermissions: [
+      "create-own:remote-request",
+      "view-own:remote-request",
+      "view-team:remote-request",
+      "view-company:remote-request",
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------
