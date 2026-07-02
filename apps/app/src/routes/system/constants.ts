@@ -21,12 +21,25 @@ export const SYSTEM_PERMS = {
     UPDATE: "AUTH.ROLE.UPDATE",
     DELETE: "AUTH.ROLE.DELETE",
   },
+  // S2-FE-AUTH-4 (lane FE batch C) — permission catalog (đọc) + assign/revoke cho role.
+  PERMISSION: {
+    VIEW: "AUTH.PERMISSION.VIEW",
+    ASSIGN: "AUTH.PERMISSION.ASSIGN",
+  },
   AUDIT_LOG: {
     VIEW: "FOUNDATION.AUDIT_LOG.VIEW",
   },
   SETTING: {
     VIEW: "FOUNDATION.SETTING.VIEW",
     UPDATE: "FOUNDATION.SETTING.UPDATE",
+  },
+  // S2-FE-FND-5 (lane FE batch C) — sequence counters + seed run status (ops admin).
+  SEQUENCE: {
+    VIEW: "FOUNDATION.SEQUENCE.VIEW",
+    UPDATE: "FOUNDATION.SEQUENCE.UPDATE",
+  },
+  SEED: {
+    VIEW: "FOUNDATION.SEED.VIEW",
   },
 } as const;
 
@@ -53,4 +66,17 @@ export const SYSTEM_ENGINE_PAIRS = {
   UNLOCK_USER: { action: "unlock", resourceType: "user" },
   ASSIGN_ROLE: { action: "assign-role", resourceType: "user" },
   READ_ROLE: { action: "view", resourceType: "role" },
+  // S2-FE-AUTH-4 (lane FE batch C) — nguồn: apps/api/src/permission/role-admin.controller.ts +
+  // auth-roles-permissions.controller.ts (mig 0005/0444/0460). assign:permission is_sensitive=true
+  // (ANTI-ESCALATION) — component dùng useCanExact, KHÔNG useCan (không kế thừa wildcard).
+  CREATE_ROLE: { action: "create", resourceType: "role" },
+  UPDATE_ROLE: { action: "update", resourceType: "role" },
+  READ_PERMISSION: { action: "view", resourceType: "permission" },
+  ASSIGN_PERMISSION: { action: "assign", resourceType: "permission" },
+  // S2-FE-FND-5 (lane FE batch C) — nguồn: apps/api/src/foundation/sequences/sequence.controller.ts +
+  // apps/api/src/foundation/seed/seed.controller.ts (mig 0435). view:foundation-seed is_sensitive=true
+  // (System scope) — component dùng useCanExact.
+  READ_SEQUENCE: { action: "view", resourceType: "foundation-sequence" },
+  UPDATE_SEQUENCE: { action: "update", resourceType: "foundation-sequence" },
+  READ_SEED: { action: "view", resourceType: "foundation-seed" },
 } as const;

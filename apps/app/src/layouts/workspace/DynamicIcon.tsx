@@ -35,6 +35,9 @@ import {
   AlertTriangle,
   Lock,
   Circle,
+  KeyRound,
+  Hash,
+  Database,
   Network,
   History,
   ClipboardList,
@@ -78,6 +81,11 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "alert-triangle": AlertTriangle,
   lock: Lock,
   circle: Circle,
+  // S2-FE-AUTH-4 (lane FE batch C).
+  "key-round": KeyRound,
+  // S2-FE-FND-5 (lane FE batch C).
+  hash: Hash,
+  database: Database,
   network: Network,
   history: History,
   "clipboard-list": ClipboardList,

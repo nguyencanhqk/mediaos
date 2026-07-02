@@ -29,6 +29,20 @@ export const authKeys = {
   me: () => [...rootKeys.auth, "me"] as const,
   profile: () => [...rootKeys.auth, "profile"] as const,
   permissions: () => [...rootKeys.auth, "permissions"] as const,
+  // S2-FE-AUTH-4 (lane FE batch C) — role & permission admin catalogs (GET /auth/roles·/auth/permissions).
+  roles: {
+    all: [...rootKeys.auth, "roles"] as const,
+    list: () => [...rootKeys.auth, "roles", "list"] as const,
+  },
+  permissionCatalog: {
+    all: [...rootKeys.auth, "permission-catalog"] as const,
+    list: () => [...rootKeys.auth, "permission-catalog", "list"] as const,
+  },
+  // S2-FE-AUTH-5 (lane FE batch C) — session self-service (Own scope, GET /auth/sessions).
+  sessions: {
+    all: [...rootKeys.auth, "sessions"] as const,
+    list: () => [...rootKeys.auth, "sessions", "list"] as const,
+  },
 };
 
 // ── Auth admin keys (S2-FE-AUTH-3) — /system/users + /system/roles(assign) ────
@@ -363,6 +377,16 @@ export const foundationKeys = {
     resolve: (params?: Record<string, unknown>) =>
       [...rootKeys.foundation, "settings", "resolve", params] as const,
   },
+  // S2-FE-FND-5 (lane FE batch C) — sequence counters + seed run status (GET /foundation/sequences·/seeds).
+  sequences: {
+    all: [...rootKeys.foundation, "sequences"] as const,
+    list: () => [...rootKeys.foundation, "sequences", "list"] as const,
+    preview: (id: string) => [...rootKeys.foundation, "sequences", "preview", id] as const,
+  },
+  seeds: {
+    all: [...rootKeys.foundation, "seeds"] as const,
+    list: () => [...rootKeys.foundation, "seeds", "list"] as const,
+  },
   // S2-FE-FND-4 — Public Holidays. Danh mục nhỏ theo company/năm (KHÔNG phân trang server).
   holidays: {
     all: [...rootKeys.foundation, "holidays"] as const,
@@ -463,6 +487,8 @@ const foundationSettingsResolvePrefix = [...rootKeys.foundation, "settings", "re
 export const foundationInvalidation = {
   updateCompany: () => [foundationKeys.company.current()] as const,
   updateSetting: () => [foundationSettingsResolvePrefix] as const,
+  // S2-FE-FND-5 — PATCH /foundation/sequences/:id → làm mới list counter.
+  updateSequence: () => [foundationKeys.sequences.list()] as const,
   // S2-FE-FND-4 — create/update/delete holiday đều làm mới MỌI biến thể list(params) qua prefix.
   createHoliday: () => [foundationKeys.holidays.all] as const,
   updateHoliday: () => [foundationKeys.holidays.all] as const,

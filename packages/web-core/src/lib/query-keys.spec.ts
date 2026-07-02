@@ -43,6 +43,25 @@ describe("foundationKeys", () => {
     // Prefix KHÔNG có slot params → là prefix của mọi resolve(params).
     expect(keys[0]).toEqual(["foundation", "settings", "resolve"]);
   });
+
+  // S2-FE-FND-5 (lane FE batch C) — sequence counters + seed run status.
+  it("sequences.list()/preview(id) ổn định", () => {
+    expect(foundationKeys.sequences.list()).toEqual(["foundation", "sequences", "list"]);
+    expect(foundationKeys.sequences.preview("seq-1")).toEqual([
+      "foundation",
+      "sequences",
+      "preview",
+      "seq-1",
+    ]);
+  });
+
+  it("seeds.list() ổn định", () => {
+    expect(foundationKeys.seeds.list()).toEqual(["foundation", "seeds", "list"]);
+  });
+
+  it("updateSequence invalidation nhắm sequences.list()", () => {
+    expect(foundationInvalidation.updateSequence()).toContainEqual(foundationKeys.sequences.list());
+  });
 });
 
 describe("authKeys", () => {
@@ -52,6 +71,20 @@ describe("authKeys", () => {
 
   it("profile() chứa 'auth'", () => {
     expect(authKeys.profile()[0]).toBe("auth");
+  });
+
+  // S2-FE-AUTH-4 (lane FE batch C) — role & permission admin catalogs.
+  it("roles.list() = ['auth', 'roles', 'list']", () => {
+    expect(authKeys.roles.list()).toEqual(["auth", "roles", "list"]);
+  });
+
+  it("permissionCatalog.list() = ['auth', 'permission-catalog', 'list']", () => {
+    expect(authKeys.permissionCatalog.list()).toEqual(["auth", "permission-catalog", "list"]);
+  });
+
+  // S2-FE-AUTH-5 (lane FE batch C) — session self-service.
+  it("sessions.list() = ['auth', 'sessions', 'list']", () => {
+    expect(authKeys.sessions.list()).toEqual(["auth", "sessions", "list"]);
   });
 });
 

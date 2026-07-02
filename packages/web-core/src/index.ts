@@ -90,6 +90,10 @@ export { shouldRetryQuery } from "./lib/query-retry";
 export { bootstrapSession } from "./lib/session";
 export { getHealth, type Health, getHealthDb, type HealthDb } from "./lib/api";
 export { authApi } from "./lib/auth-api";
+// S2-FE-AUTH-4 (lane FE batch C) — role & permission admin (create/update role, assign/revoke permission).
+export { roleAdminApi } from "./lib/role-admin-api";
+// S2-FE-FND-5 (lane FE batch C) — sequence counters + seed run status (ops admin).
+export { foundationOpsApi } from "./lib/foundation-ops-api";
 export { usersApi } from "./lib/users-api";
 export { authUsersApi } from "./lib/auth-users-api";
 export { twoFactorApi } from "./lib/two-factor-api";

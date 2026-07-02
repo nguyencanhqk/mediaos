@@ -117,6 +117,70 @@ describe("authApi.me", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// S2-AUTH-BE-7 — session self-service (S2-FE-AUTH-5 · lane FE batch C)
+// ---------------------------------------------------------------------------
+describe("authApi — session self-service (GET/POST /auth/sessions)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.apiFetch).mockReset();
+  });
+
+  it("listSessions → GET /auth/sessions, KHÔNG body", async () => {
+    const sessions = [
+      {
+        id: "sess-1",
+        device_name: "Chrome",
+        platform: "Windows",
+        ip_address: "127.0.0.1",
+        user_agent: "UA",
+        last_used_at: null,
+        created_at: "2026-07-01T00:00:00.000Z",
+        expired_at: "2026-07-08T00:00:00.000Z",
+        is_current: true,
+      },
+    ];
+    vi.mocked(apiClient.apiFetch).mockResolvedValueOnce(sessions);
+
+    const result = await authApi.listSessions();
+
+    expect(result).toEqual(sessions);
+    const [url, , opts] = vi.mocked(apiClient.apiFetch).mock.calls[0] as [
+      string,
+      unknown,
+      { method?: string; body?: string }?,
+    ];
+    expect(url).toBe("/auth/sessions");
+    expect(opts?.method ?? "GET").toBe("GET");
+    expect(opts?.body).toBeUndefined();
+  });
+
+  it("revokeSession → POST /auth/sessions/:id/revoke", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValueOnce({ ok: true, revoked_count: 1 });
+
+    const result = await authApi.revokeSession("sess-1");
+
+    expect(result).toEqual({ ok: true, revoked_count: 1 });
+    expect(apiClient.apiFetch).toHaveBeenCalledWith(
+      "/auth/sessions/sess-1/revoke",
+      expect.anything(),
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("revokeOtherSessions → POST /auth/sessions/revoke-others", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValueOnce({ ok: true, revoked_count: 2 });
+
+    const result = await authApi.revokeOtherSessions();
+
+    expect(result).toEqual({ ok: true, revoked_count: 2 });
+    expect(apiClient.apiFetch).toHaveBeenCalledWith(
+      "/auth/sessions/revoke-others",
+      expect.anything(),
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+});
+
 describe("authApi.forgotPassword", () => {
   beforeEach(() => {
     vi.mocked(apiClient.apiFetch).mockReset();

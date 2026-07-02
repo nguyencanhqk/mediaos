@@ -63,12 +63,19 @@ export default {
     system: "Hệ thống",
     systemUsers: "Người dùng",
     systemRoles: "Vai trò",
+    // S2-FE-AUTH-4 (lane FE batch C).
+    systemPermissions: "Danh mục quyền",
     systemAuditLogs: "Audit log",
+    // S2-FE-FND-5 (lane FE batch C).
+    systemSequences: "Bộ đếm mã",
+    systemSeeds: "Trạng thái Seed",
     systemPublicHolidays: "Ngày nghỉ lễ",
     systemHealth: "Tình trạng hệ thống",
     systemFiles: "Tệp tin",
     systemModules: "Danh mục module",
     accountProfile: "Hồ sơ tài khoản",
+    // S2-FE-AUTH-5 (lane FE batch C).
+    accountSessions: "Phiên đăng nhập",
     forbidden: "Không có quyền truy cập",
     notFound: "Không tìm thấy trang",
   },

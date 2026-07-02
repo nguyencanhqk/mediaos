@@ -497,6 +497,17 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 30,
     requiredAnyPermissions: ["AUTH.ROLE.VIEW"],
   },
+  // S2-FE-AUTH-4 (lane FE batch C) — danh mục quyền toàn cục (đọc).
+  {
+    sidebarKey: "system.permissions",
+    moduleCode: "FOUNDATION",
+    label: "Danh mục quyền",
+    path: "/system/permissions",
+    icon: "key-round",
+    group: "admin",
+    order: 31,
+    requiredAnyPermissions: ["AUTH.PERMISSION.VIEW"],
+  },
   // S2-FE-FND-2: gate theo cặp ENGINE THỰC ('view:audit-log', seed mig 0340, grant company-admin) —
   // literal pair (cùng kỹ thuật system.login-logs), KHÔNG dùng mã FE FOUNDATION.AUDIT_LOG.VIEW qua
   // PERMISSION_CODE_TO_PAIR (bài học drift: cặp map cũ 'view:foundation-audit-log' KHÔNG được
@@ -558,6 +569,28 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     group: "admin",
     order: 21,
     requiredAnyPermissions: [FOUNDATION_MODULE_VIEW_PERMISSION],
+  },
+  // S2-FE-FND-5 (lane FE batch C) — Sequence counters + Seed status (ops admin). Gate theo cặp SEED
+  // THẬT mig 0435 (view:foundation-sequence / view:foundation-seed) qua PERMISSION_CODE_TO_PAIR.
+  {
+    sidebarKey: "system.sequences",
+    moduleCode: "FOUNDATION",
+    label: "Bộ đếm mã",
+    path: "/system/sequences",
+    icon: "hash",
+    group: "admin",
+    order: 35,
+    requiredAnyPermissions: ["FOUNDATION.SEQUENCE.VIEW"],
+  },
+  {
+    sidebarKey: "system.seeds",
+    moduleCode: "FOUNDATION",
+    label: "Trạng thái Seed",
+    path: "/system/seeds",
+    icon: "database",
+    group: "admin",
+    order: 36,
+    requiredAnyPermissions: ["FOUNDATION.SEED.VIEW"],
   },
 ];
 
