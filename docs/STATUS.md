@@ -1,15 +1,21 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-03 07:01Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-03 08:16Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
+### 🔴 S3-QA-1 — QA ATT: today/check-in/out rule + blocked-leave-day + records scope Own/Team/Company + permission/data-scope cross-team/cross-company + 0-dup + server-time + regression Auth/HR
+- **zone**: red · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/api/src/attendance/**/*.spec.ts`, `apps/api/test/**`, `apps/app/**`
+- **phụ thuộc**: S3-ATT-BE-2✓, S3-INT-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] API test ATT: today (chưa/đã check-in/đã check-out/full-day-leave/no-shift) + check-in/out (success/double-click 0-dup/no-employee/resigned/server-time) trên DB cô lập lane
+  - [ ] records scope Own/Team/Company + pagination/filter + forbidden cross-scope; list KHÔNG lộ GPS/IP/device; check-in chặn khi full-day leave approved (integration với S3-INT-1)
+  - [ ] permission test Employee/Manager/HR/Admin + data-scope cross-team/cross-company deny; regression Auth/HR (login/mapping/manager-scope) xanh; coverage vùng nhạy cảm ≥80%
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
-- 🔴 `S3-QA-1` QA ATT: today/check-in/out rule + blocked-leave-day + records scope Own/Team/Company + permission/data-scope cross-team/cross-company + 0-dup + server-time + regression Auth/HR
 - 🔴 `S3-QA-2` QA LEAVE + integration: balance + request draft/submit/cancel/validation/overlap + approval approve/reject scope + LEAVE→ATT (Approved full-day→Leave record + check-in block + cancel/revoke recalc+balance restore) + regression
 - 🟡 `S2-FE-ACCT-SEC-1` FE Account Security: section Bảo mật trong /account/profile — trạng thái 2FA + bật (→ /account/setup-2fa) + tắt (dialog mật khẩu, ẨN khi bị ép)
 - 🟡 `S2-FE-SYS-SEC-1` FE Admin security: /system/roles form toggle 'Bắt buộc 2FA' + /system/users detail hiện 2FA (nguồn ép) + toggle ép tài khoản + nút Reset 2FA (PermissionGate reset-2fa:user)
@@ -32,7 +38,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `wip/s2-fe-hr-5-hr5-wc` · **file đang đổi (dirty)**: 0
+- **branch**: `wip/s2-fe-hr-5-hr5-wc` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 146 — `0466_s2_authdb4_user_require_2fa_reset_perm` (147 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -41,6 +47,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `4b3a033` | 2026-07-03 | chore(harness): regen STATUS sau merge master vào wip |
 | `6b1859d` | 2026-07-03 | merge: sync origin/master (wave security-wave1 #107) vào wip/s2-fe-hr-5-hr5-wc |
 | `58a6785` | 2026-07-03 | chore(harness): regen STATUS sau khi wave security-wave1 (DB-4+BE-11+BE-12) lên master (#107, squash e565b47) |
 | `e565b47` | 2026-07-03 | feat(security-wave1): 2FA per-user + admin reset (DB-4 + BE-11 + BE-12) (#107) |
@@ -52,7 +59,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `48382cd` | 2026-07-02 | chore(harness): sync literal 21 WO done theo ledger/board (PR #86-#89 merged) + regen STATUS |
 | `74f989a` | 2026-07-02 | Merge remote-tracking branch 'origin/master' into wip/s2-fe-hr-5-hr5-wc |
 | `421105e` | 2026-07-02 | chore(harness): seed 15 WO carry-over từ audit Foundation/System 2026-07-02 + báo cáo audit + regen STATUS |
-| `efc3399` | 2026-07-02 | chore(harness): regen STATUS sau reconcile 31 WO shipped qua batch-squash (#68/#72/#82/#84/#85/#87/#88) — board còn 4 ready thật (QA-1/QA-2/LEAVE-5/LEAVE-6) (#89) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
