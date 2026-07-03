@@ -26,14 +26,21 @@ export class AuditMaskerService {
    *   - `token`    → token · access_token · refresh_token · token_hash · csrf_token
    *   - `secret`   → secret · secret_ref · api_secret · client_secret · secret_key
    *   - `password` → password · password_hash
-   *   - `otp`      → otp · otp_secret · otpCode · totp_secret (mã/khoá OTP — BẤT BIẾN #3, phủ 2FA)
-   *   - `salary`   → salary · salary_amount · salaryAmount · base_salary · salaryType (lương nhạy cảm, ADR-0010)
-   *   - `health`   → health · personal_health_info · healthRecord (PII sức khỏe)
-   *   - `idcard`   → id_card · idCardNumber · id_card_number (CMND/CCCD — biến thể của identity_number)
+   *   - `otp`         → otp · otp_secret · otpCode · totp_secret (mã/khoá OTP — BẤT BIẾN #3, phủ 2FA)
+   *   - `salaryamount`→ salary_amount · salaryAmount (biến thể *amount của lương ad-hoc trong payload
+   *                     audit). CỐ Ý THU HẸP — KHÔNG bắt `base_salary`/`salaryType`: field `base_salary`
+   *                     của luồng update-salary CÓ kiểm soát riêng (permission gate view-salary/
+   *                     update-salary is_sensitive + audit before/after PHẢI là giá trị THẬT cho
+   *                     compliance, S2-QA-1). Stem `salary` trần khớp SUBSTRING 'basesalary' ⇒ che luôn
+   *                     base_salary, PHÁ audit trail đã ship → đã thu hẹp thành `salaryamount` (FIX-1).
+   *   - `health`      → health · personal_health_info · healthRecord (PII sức khỏe)
+   *   - `idcard`      → id_card · idCardNumber · id_card_number (CMND/CCCD — biến thể của identity_number)
    *   - identity_number / bank_account / storage_path / signed_url (ghép đặc thù, ít false-positive).
-   * Triết lý: FAIL TOWARD REDACTION (BẤT BIẾN #3) — thà che dư 1 field lành còn hơn lộ 1 secret. Mở rộng =
-   * thêm stem ở đây (1 nguồn sự thật cho cả mask-at-write lẫn redact-at-read). S2-FND-BE-6 thêm otp/salary/
-   * health/idcard (BE-11 §12.5) — KHÔNG sửa/bỏ stem cũ (append-only, không nới lỏng).
+   * Triết lý: FAIL TOWARD REDACTION (BẤT BIẾN #3) — thà che dư 1 field lành còn hơn lộ 1 secret. NGOẠI LỆ
+   * CÓ CHỦ Ý: base_salary KHÔNG mask cào bằng ở đây vì đã có tầng kiểm soát riêng (permission-gated
+   * reveal + controlled audit) — mask blanket sẽ phá chính audit trail đó. Mở rộng = thêm stem ở đây
+   * (1 nguồn sự thật cho cả mask-at-write lẫn redact-at-read). S2-FND-BE-6 thêm otp/salaryamount/health/
+   * idcard (BE-11 §12.5) — KHÔNG sửa/bỏ stem cũ (append-only, không nới lỏng).
    */
   private static readonly SENSITIVE_STEMS: readonly string[] = [
     "password",
@@ -45,7 +52,10 @@ export class AuditMaskerService {
     "signedurl",
     // S2-FND-BE-6 (thêm, KHÔNG bỏ stem cũ) — phủ biến thể snake_case + camelCase sau normalizeKey.
     "otp",
-    "salary",
+    // FIX-1: THU HẸP 'salary'→'salaryamount' — 'salary' trần khớp 'basesalary' (normalizeKey base_salary)
+    // ⇒ che base_salary, phá audit update-salary đã ship (S2-QA-1 before/after PHẢI là số thật). Vẫn phủ
+    // salary_amount/salaryAmount (biến thể *amount ad-hoc); base_salary có kiểm soát audit riêng.
+    "salaryamount",
     "health",
     "idcard",
   ];
