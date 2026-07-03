@@ -4,6 +4,13 @@
 > Ghi NGẮN gọn. Cũ đẩy xuống "Lịch sử". Quyết định kiến trúc → ghi vào `docs/DECISIONS/`, không nhồi vào đây.
 > Ô **Friction**: ghi cái gì làm tay/khó lặp lại — cùng một friction xuất hiện **≥2 lần** ⇒ gọi skill `skill-smith` để đóng băng thành skill.
 
+## Phiên 2026-07-02→03 (session eebe431a) — wave carry-over `feat/carryover-wave1`: 9 WO SHIPPED, 3 quyết định owner ĐÃ ÁP DỤNG
+
+- **Shipped (merged vào feat/carryover-wave1, chưa lên master):** S3-FE-LEAVE-5 (#90) · S2-FE-AUTH-6 (#91) · S2-FND-DOC-1 (#92) · S2-AUTH-BE-8 (#93) · S2-AUTH-BE-9 (#95, resolve conflict với BE-8 giữ cả revoke+emit) · S2-AUTH-DOC-1 (#96) · S2-AUTH-BE-10 (#97) · S2-FE-FND-7 (#98) · S2-FND-BE-4 (#99). Việc kế: PR gộp `feat/carryover-wave1` → `master` (đi qua branch protection + review người).
+- **Owner ĐÃ CHỐT + ĐÃ ÁP DỤNG (không còn pending):** (1) data_scope 'Project' = pin project-membership → D-22 DECISIONS-01 + DB-02 §4.7 (merged #96). (2) SENSITIVE_CAPABILITY_ALLOWLIST thêm 3 cặp export:leave · view:leave-audit-log · view:attendance-audit-log → WO mới S2-AUTH-CAP-1 (đã seed backlog, wave-1c đang chạy). (3) S2-FND-SEED-2 semantics: PATCH /hr/employee-code SYNC config→counter cùng tx, giữ current_value → bake vào re-run v3 wave-1c.
+- **Pattern hiệu quả:** plan-block của plan-reviewer → bake nguyên văn điểm BLOCKING vào done_when qua args re-run (KHÔNG cần sửa backlog literal giữa wave). S3-FE-LEAVE-6 còn chờ S2-AUTH-CAP-1 merge rồi re-run (worktree ../mediaos-s3-fe-leave-6 đã sync base fdbcd36).
+- **Bẫy lặp lại:** ship-agent fallback cắt branch từ wip HEAD → PR phồng + PR lạc base (#94 đã đóng) — xem memory harness-deploygate-pr-base (đã cập nhật cách cứu cherry-pick).
+
 ## Quyết định người-chốt chờ áp dụng (2026-07-02, session 1849d064) — auto-loop live nên CHƯA kịp bake vào retry đang chạy
 
 - **S2-HR-BE-6** (Employee contracts): (1) GIỮ kỳ vọng ban đầu — seed grant RIÊNG Own cho employee + Team cho manager (không đổi QA-05 thành Company-only như plan-reviewer đề xuất phương án b). (2) Ngưỡng cảnh báo sắp hết hạn HĐ = company-configurable, mặc định 2 mốc: 30 ngày và 7 ngày (không phải 1 số cố định). ⚠️ Auto-loop đã retry S2-HR-BE-6 LẦN 2 (block khác: audit object_type 'employee_contract' thiếu trong AUDIT_OBJECT_TYPES/CHECK + permission pair chưa pin) — 2 quyết định trên CHƯA được bake vào round đó vì loop chạy live không có kênh inject giữa chừng. Áp dụng khi WO này tới điểm dừng (needs_human hoặc round kế).

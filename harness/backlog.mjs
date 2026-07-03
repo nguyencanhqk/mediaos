@@ -3051,6 +3051,29 @@ export const backlog = [
     ],
   },
   {
+    id: "S2-AUTH-CAP-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "Phơi capability sensitive qua /auth/me: thêm export:leave + view:leave-audit-log + view:attendance-audit-log vào SENSITIVE_CAPABILITY_ALLOWLIST — mở khóa S3-FE-LEAVE-6 + sửa bug ngầm trang ATT audit-logs",
+    zone: "red",
+    // OWNER CHỐT 2026-07-03 (Cian, qua plan-review S3-FE-LEAVE-6 wave-1b): getCapabilities() lọc bỏ cặp
+    //   is_sensitive không nằm trong allowlist → FE front-gate (useCanExact) chết cho MỌI user ở prod dù
+    //   unit test xanh (setCaps() không đi qua allowlist thật). Đây là phơi CỜ hiển thị — server vẫn tự
+    //   check permission ở mọi API, KHÔNG nới quyền thực tế.
+    status: "todo",
+    paths: ["apps/api/src/permission/**", "apps/api/src/auth/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: ["plan-review S3-FE-LEAVE-6 wave-1b 2026-07-02", "owner-decision 2026-07-03"],
+    done_when: [
+      "SENSITIVE_CAPABILITY_ALLOWLIST (permission.service.ts) thêm APPEND-ONLY 3 cặp: export:leave · view:leave-audit-log · view:attendance-audit-log; KHÔNG đổi can()/PermissionGuard/data-scope",
+      "int-spec colocated: role giữ grant (seed 0454/0455) nhận đủ 3 cặp qua /auth/me; user không grant → không thấy; 2-tenant deny giữ nguyên",
+      "KHÔNG migration/đổi seed; regression permission + auth suite xanh LANE_DB cô lập",
+      "FULL gate (security-reviewer — permission crown) + người chốt",
+    ],
+  },
+  {
     id: "S2-AUTH-DB-3",
     module: "AUTH",
     layer: "DB",
