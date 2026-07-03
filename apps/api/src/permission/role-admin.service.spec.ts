@@ -322,4 +322,92 @@ describe("RoleAdminService", () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(audit.record).not.toHaveBeenCalled();
   });
+
+  // ── (E) S2-AUTH-BE-11 — requiresTwoFactor flag trên role thường (RED viết-TRƯỚC) ─
+  //  - insertRoleTx/updateRoleTx nhận + set cột requires_two_factor.
+  //  - audit RoleCreated/RoleUpdated before/after CHỨA requiresTwoFactor (diff cờ).
+  //  - roleWriteResult trả requiresTwoFactor (KHÔNG lộ deletedAt).
+  //  - system role (is_system=true) gửi requiresTwoFactor → BadRequest 400, 0 update, 0 audit
+  //    (rule isSystem hiện có bao trọn field mới — KHÔNG bypass).
+
+  it("createRole: requiresTwoFactor=true (role thường) → insertRoleTx nhận cờ + audit after chứa cờ", async () => {
+    (repo.insertRoleTx as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      makeRole({ requiresTwoFactor: true }),
+    );
+    await service.createRole(ACTOR, {
+      name: "role-2fa",
+      description: null,
+      requiresTwoFactor: true,
+    });
+    expect(repo.insertRoleTx).toHaveBeenCalledWith(
+      TX,
+      expect.objectContaining({ requiresTwoFactor: true }),
+    );
+    expect(audit.record.mock.calls[0][1].after).toEqual(
+      expect.objectContaining({ requiresTwoFactor: true }),
+    );
+  });
+
+  it("createRole: KHÔNG gửi requiresTwoFactor → mặc định false (non-breaking client cũ) + audit after=false", async () => {
+    await service.createRole(ACTOR, { name: "role-plain", description: null });
+    expect(repo.insertRoleTx).toHaveBeenCalledWith(
+      TX,
+      expect.objectContaining({ requiresTwoFactor: false }),
+    );
+    expect(audit.record.mock.calls[0][1].after).toEqual(
+      expect.objectContaining({ requiresTwoFactor: false }),
+    );
+  });
+
+  it("createRole: roleWriteResult trả requiresTwoFactor + KHÔNG lộ deletedAt", async () => {
+    (repo.insertRoleTx as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      makeRole({ requiresTwoFactor: true }),
+    );
+    const result = await service.createRole(ACTOR, { name: "r", requiresTwoFactor: true });
+    expect(result.requiresTwoFactor).toBe(true);
+    expect(result.id).toBe(ROLE_ID);
+    expect(result).not.toHaveProperty("deletedAt");
+  });
+
+  it("updateRole: role thường bật requiresTwoFactor → updateRoleTx set cờ + audit before/after diff", async () => {
+    (repo.findRoleByIdTx as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      makeRole({ requiresTwoFactor: false }),
+    );
+    (repo.updateRoleTx as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      makeRole({ requiresTwoFactor: true }),
+    );
+    await service.updateRole(ACTOR, ROLE_ID, { requiresTwoFactor: true });
+    expect(repo.updateRoleTx).toHaveBeenCalledWith(
+      TX,
+      ACTOR.companyId,
+      ROLE_ID,
+      expect.objectContaining({ requiresTwoFactor: true }),
+    );
+    const entry = audit.record.mock.calls[0][1];
+    expect(entry.before.requiresTwoFactor).toBe(false);
+    expect(entry.after.requiresTwoFactor).toBe(true);
+  });
+
+  it("updateRole: roleWriteResult trả requiresTwoFactor sau khi set + KHÔNG lộ deletedAt", async () => {
+    (repo.findRoleByIdTx as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      makeRole({ requiresTwoFactor: false }),
+    );
+    (repo.updateRoleTx as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      makeRole({ requiresTwoFactor: true }),
+    );
+    const result = await service.updateRole(ACTOR, ROLE_ID, { requiresTwoFactor: true });
+    expect(result.requiresTwoFactor).toBe(true);
+    expect(result).not.toHaveProperty("deletedAt");
+  });
+
+  it("updateRole: system role (is_system=true) gửi requiresTwoFactor → BadRequest 400, 0 update, 0 audit", async () => {
+    (repo.findRoleByIdTx as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      makeRole({ isSystem: true, companyId: null }),
+    );
+    await expect(
+      service.updateRole(ACTOR, ROLE_ID, { requiresTwoFactor: true }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(repo.updateRoleTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
 });

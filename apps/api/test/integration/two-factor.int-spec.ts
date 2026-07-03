@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { ConflictException, HttpException, UnauthorizedException } from "@nestjs/common";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { TwoFactorService } from "../../src/auth/two-factor.service";
+import { TwoFactorService, TWO_FACTOR_ENFORCED } from "../../src/auth/two-factor.service";
 import { TotpService } from "../../src/auth/totp.service";
 import { TokenService } from "../../src/auth/token.service";
 import { LoginRateLimiter } from "../../src/auth/login-rate-limiter";
@@ -18,7 +18,13 @@ import { NodeEnvelopeCipher } from "../../src/crypto/envelope-cipher";
 import { LocalKekProvider } from "../../src/crypto/local-kek.provider";
 import { AuditService } from "../../src/events/audit.service";
 import { directPool, hasDb } from "../helpers/integration-db";
-import { cleanupTenants, seedCompany, seedUser, seedUserRole, type SeededTenant } from "../helpers/seed";
+import {
+  cleanupTenants,
+  seedCompany,
+  seedUser,
+  seedUserRole,
+  type SeededTenant,
+} from "../helpers/seed";
 
 const COMPANY_ADMIN_ROLE_ID = "00000000-0000-0000-0000-000000000001"; // system role, requires_two_factor=true (mig 0120)
 
@@ -40,12 +46,24 @@ describe.skipIf(!hasDb)("G16-1 TwoFactorService — 2FA TOTP", () => {
   beforeAll(async () => {
     const db = new DatabaseService();
     const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
-    svc = new TwoFactorService(db, secrets, totp, new TokenService(), new AuditService(), new LoginRateLimiter(), new ReplayGuardService(new ValkeyService()));
+    svc = new TwoFactorService(
+      db,
+      secrets,
+      totp,
+      new TokenService(),
+      new AuditService(),
+      new LoginRateLimiter(),
+      new ReplayGuardService(new ValkeyService()),
+    );
 
     A = await seedCompany(direct, "g16a");
     B = await seedCompany(direct, "g16b");
     userA = await seedUser(direct, A.companyId, `g16a-${randomUUID().slice(0, 8)}@test.local`);
-    adminUserA = await seedUser(direct, A.companyId, `g16admin-${randomUUID().slice(0, 8)}@test.local`);
+    adminUserA = await seedUser(
+      direct,
+      A.companyId,
+      `g16admin-${randomUUID().slice(0, 8)}@test.local`,
+    );
     userB = await seedUser(direct, B.companyId, `g16b-${randomUUID().slice(0, 8)}@test.local`);
     await seedUserRole(direct, adminUserA, COMPANY_ADMIN_ROLE_ID, A.companyId);
   });
@@ -72,12 +90,20 @@ describe.skipIf(!hasDb)("G16-1 TwoFactorService — 2FA TOTP", () => {
   });
 
   it("DENY: verifyChallenge khi CHƯA enable (enabled_at null) → false", async () => {
-    expect(await svc.verifyChallenge(userA, A.companyId, totp.generate(secretFromUri((await reEnroll()).otpauthUri)))).toBe(false);
+    expect(
+      await svc.verifyChallenge(
+        userA,
+        A.companyId,
+        totp.generate(secretFromUri((await reEnroll()).otpauthUri)),
+      ),
+    ).toBe(false);
   });
 
   it("DENY: confirmEnable mã SAI → UnauthorizedException, enabled_at vẫn null", async () => {
     await reEnroll();
-    await expect(svc.confirmEnable(userA, A.companyId, "000000")).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(svc.confirmEnable(userA, A.companyId, "000000")).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
     const row = await direct.query("SELECT enabled_at FROM user_totp WHERE user_id = $1", [userA]);
     expect(row.rows[0].enabled_at).toBeNull();
   });
@@ -109,7 +135,9 @@ describe.skipIf(!hasDb)("G16-1 TwoFactorService — 2FA TOTP", () => {
     await svc.disable(userA, A.companyId);
     expect(await svc.isEnabled(userA, A.companyId)).toBe(false);
     const totpRows = await direct.query("SELECT 1 FROM user_totp WHERE user_id = $1", [userA]);
-    const recRows = await direct.query("SELECT 1 FROM user_recovery_codes WHERE user_id = $1", [userA]);
+    const recRows = await direct.query("SELECT 1 FROM user_recovery_codes WHERE user_id = $1", [
+      userA,
+    ]);
     expect(totpRows.rows).toHaveLength(0);
     expect(recRows.rows).toHaveLength(0);
   });
@@ -135,7 +163,9 @@ describe.skipIf(!hasDb)("G16-1 TwoFactorService — 2FA TOTP", () => {
         UnauthorizedException,
       );
     }
-    await expect(svc.confirmEnable(userB, B.companyId, "000000")).rejects.toBeInstanceOf(HttpException);
+    await expect(svc.confirmEnable(userB, B.companyId, "000000")).rejects.toBeInstanceOf(
+      HttpException,
+    );
   });
 
   /** Helper: disable (nếu có) + enroll lại, trả enroll result. Dùng cho các case cần trạng thái pending sạch. */
@@ -144,3 +174,142 @@ describe.skipIf(!hasDb)("G16-1 TwoFactorService — 2FA TOTP", () => {
     return svc.enroll(userA, A.companyId);
   }
 });
+
+/**
+ * S2-AUTH-BE-11 (l2-2fa-enforce-disable, CROWN auth) — enforcement 2FA:
+ *   - requiresTwoFactorTx = roles.requires_two_factor (mig 0120) OR users.require_two_factor (mig 0466).
+ *   - POST /auth/2fa/disable (svc.disable) khi bị ép ⇒ 409 TWO_FACTOR_ENFORCED, fail-closed TRƯỚC
+ *     delete/audit/security-event.
+ * Real Postgres (mediaos_app, RLS ENFORCED). Deny-path TRƯỚC (RED) — chứng minh trên DB thật, KHÔNG mock.
+ */
+describe.skipIf(!hasDb)(
+  "S2-AUTH-BE-11 — 2FA enforcement: disable fail-closed + per-user source",
+  () => {
+    const direct = directPool();
+    const totp = new TotpService();
+    let svc: TwoFactorService;
+    let C: SeededTenant;
+    let D: SeededTenant;
+    let uPerUser: string; // ép PER-USER (users.require_two_factor=true), role KHÔNG cờ
+    let uRole: string; // ép QUA ROLE (company-admin requires_two_factor=true)
+    let uPlain: string; // KHÔNG bị ép
+
+    /** Đếm audit_logs của user theo action (append-only) — chứng minh CÓ / KHÔNG ghi audit. */
+    async function countAudit(userId: string, action: string): Promise<number> {
+      const r = await direct.query(
+        "SELECT COUNT(*)::int AS n FROM audit_logs WHERE actor_user_id = $1 AND action = $2",
+        [userId, action],
+      );
+      return r.rows[0].n as number;
+    }
+
+    /** Đếm user_security_events của user theo event_type — chứng minh CÓ / KHÔNG ghi TOTP_DISABLED. */
+    async function countSecEvent(userId: string, eventType: string): Promise<number> {
+      const r = await direct.query(
+        "SELECT COUNT(*)::int AS n FROM user_security_events WHERE user_id = $1 AND event_type = $2",
+        [userId, eventType],
+      );
+      return r.rows[0].n as number;
+    }
+
+    async function enrollAndEnable(userId: string, companyId: string): Promise<void> {
+      const { otpauthUri } = await svc.enroll(userId, companyId);
+      await svc.confirmEnable(userId, companyId, totp.generate(secretFromUri(otpauthUri)));
+    }
+
+    beforeAll(async () => {
+      const db = new DatabaseService();
+      const secrets = new SecretEncryptionService(new NodeEnvelopeCipher(), new LocalKekProvider());
+      svc = new TwoFactorService(
+        db,
+        secrets,
+        totp,
+        new TokenService(),
+        new AuditService(),
+        new LoginRateLimiter(),
+        new ReplayGuardService(new ValkeyService()),
+      );
+
+      C = await seedCompany(direct, "be11c");
+      D = await seedCompany(direct, "be11d");
+      uPerUser = await seedUser(
+        direct,
+        C.companyId,
+        `be11p-${randomUUID().slice(0, 8)}@test.local`,
+      );
+      uRole = await seedUser(direct, C.companyId, `be11r-${randomUUID().slice(0, 8)}@test.local`);
+      uPlain = await seedUser(direct, C.companyId, `be11n-${randomUUID().slice(0, 8)}@test.local`);
+      // Nguồn PER-USER: bật cờ users.require_two_factor (mig 0466) — role KHÔNG cờ.
+      await direct.query("UPDATE users SET require_two_factor = true WHERE id = $1", [uPerUser]);
+      // Nguồn ROLE: gắn company-admin (system role, requires_two_factor=true mig 0120) — cờ per-user để mặc định false.
+      await seedUserRole(direct, uRole, COMPANY_ADMIN_ROLE_ID, C.companyId);
+    });
+
+    afterAll(async () => {
+      await cleanupTenants(direct, [C.companyId, D.companyId]);
+      await direct.end();
+    });
+
+    // (d) status.required ĐÚNG cho CẢ 3 nguồn — độc lập trạng thái enabled (chỉ đọc cờ). Đặt TRƯỚC các test disable.
+    it("(d) status.required: role=true, per-user=true, không-nguồn=false", async () => {
+      expect((await svc.status(uRole, C.companyId)).required).toBe(true);
+      expect((await svc.status(uPerUser, C.companyId)).required).toBe(true);
+      expect((await svc.status(uPlain, C.companyId)).required).toBe(false);
+    });
+
+    // (a) ép PER-USER → disable 409 fail-closed; vẫn enabled; KHÔNG audit/TOTP_DISABLED.
+    it("(a) ép PER-USER (users.require_two_factor) → disable 409 TWO_FACTOR_ENFORCED, vẫn enabled, KHÔNG audit/security-event", async () => {
+      await enrollAndEnable(uPerUser, C.companyId);
+      expect(await svc.isEnabled(uPerUser, C.companyId)).toBe(true);
+
+      const err = await svc.disable(uPerUser, C.companyId).catch((e) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as ConflictException).getStatus()).toBe(409);
+      expect((err as ConflictException).getResponse()).toMatchObject({ code: TWO_FACTOR_ENFORCED });
+
+      // fail-closed: secret KHÔNG bị xoá (vẫn enabled) + KHÔNG audit 2fa_disabled + KHÔNG TOTP_DISABLED.
+      expect(await svc.isEnabled(uPerUser, C.companyId)).toBe(true);
+      expect(await countAudit(uPerUser, "auth.2fa_disabled")).toBe(0);
+      expect(await countSecEvent(uPerUser, "TOTP_DISABLED")).toBe(0);
+    });
+
+    // (b) ép QUA ROLE → disable 409, vẫn enabled.
+    it("(b) ép QUA ROLE (roles.requires_two_factor) → disable 409 TWO_FACTOR_ENFORCED, vẫn enabled", async () => {
+      await enrollAndEnable(uRole, C.companyId);
+      const err = await svc.disable(uRole, C.companyId).catch((e) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as ConflictException).getResponse()).toMatchObject({ code: TWO_FACTOR_ENFORCED });
+      expect(await svc.isEnabled(uRole, C.companyId)).toBe(true);
+      expect(await countAudit(uRole, "auth.2fa_disabled")).toBe(0);
+      expect(await countSecEvent(uRole, "TOTP_DISABLED")).toBe(0);
+    });
+
+    // (c) KHÔNG bị ép → disable OK (regression wiring BE-8): xoá secret+recovery + audit + TOTP_DISABLED.
+    it("(c) KHÔNG bị ép → disable OK: xoá secret+recovery, audit auth.2fa_disabled + TOTP_DISABLED", async () => {
+      await enrollAndEnable(uPlain, C.companyId);
+      await svc.disable(uPlain, C.companyId);
+      expect(await svc.isEnabled(uPlain, C.companyId)).toBe(false);
+      const totpRows = await direct.query("SELECT 1 FROM user_totp WHERE user_id = $1", [uPlain]);
+      const recRows = await direct.query("SELECT 1 FROM user_recovery_codes WHERE user_id = $1", [
+        uPlain,
+      ]);
+      expect(totpRows.rows).toHaveLength(0);
+      expect(recRows.rows).toHaveLength(0);
+      expect(await countAudit(uPlain, "auth.2fa_disabled")).toBe(1);
+      expect(await countSecEvent(uPlain, "TOTP_DISABLED")).toBe(1);
+    });
+
+    // (f) 2-tenant deny: ngữ cảnh tenant D KHÔNG đọc/ghi được cờ 2FA của user tenant C (RLS); disable chéo = no-op.
+    it("(f) cross-tenant: tenant D KHÔNG thấy require/enabled của user C; disable chéo KHÔNG gỡ 2FA của C", async () => {
+      // uPerUser (tenant C) đang enabled (từ case a). Từ ngữ cảnh tenant D:
+      expect(await svc.requiresTwoFactor(uPerUser, D.companyId)).toBe(false); // cờ per-user KHÔNG rò chéo tenant
+      expect(await svc.isEnabled(uPerUser, D.companyId)).toBe(false); // RLS lọc → không lộ trạng thái
+
+      // disable chéo tenant: trong D, requiresTwoFactorTx=false (RLS) → không 409, nhưng delete lọc 0 hàng → no-op.
+      await svc.disable(uPerUser, D.companyId);
+      // 2FA của uPerUser trong tenant C KHÔNG bị đụng (không xoá xuyên tenant).
+      expect(await svc.isEnabled(uPerUser, C.companyId)).toBe(true);
+      expect(await countSecEvent(uPerUser, "TOTP_DISABLED")).toBe(0);
+    });
+  },
+);

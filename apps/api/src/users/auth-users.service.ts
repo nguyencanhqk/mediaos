@@ -6,8 +6,10 @@ import {
 } from "@nestjs/common";
 import { eq, sql, type SQL } from "drizzle-orm";
 import type {
+  AuthUserDetailDto,
   AuthUserDto,
   AuthUserListDto,
+  AuthUserTwoFactorResetDto,
   CreateAuthUserRequest,
   DataScope,
   ListAuthUsersQuery,
@@ -105,8 +107,12 @@ export class AuthUsersService {
     });
   }
 
-  /** GET /auth/users/:id — 1 user LIVE. Không thấy / cross-tenant (RLS) → NotFound. */
-  async getUser(actor: AuthUserActor, id: string): Promise<AuthUserDto> {
+  /**
+   * GET /auth/users/:id — 1 user LIVE + khối 2FA (S2-AUTH-BE-12). Không thấy / cross-tenant (RLS) → NotFound.
+   * twoFactor 3 CỜ TÁCH NGUỒN: enabled (user_totp.enabled_at), requiredByRole (join roles-only), requiredByUser
+   * (cột 0466 đọc thẳng từ row). KHÔNG lộ secret TOTP (repo SELECT cột tường minh + không kéo user_totp secret).
+   */
+  async getUserDetail(actor: AuthUserActor, id: string): Promise<AuthUserDetailDto> {
     const scope = await this.permissions.resolveStrongestScope(
       actor.id,
       actor.companyId,
@@ -118,7 +124,11 @@ export class AuthUsersService {
       if (!row) throw new NotFoundException(USER_NOT_FOUND);
       // data-scope: Own-scope chỉ thấy chính mình; cross-scope target → NotFound (KHÔNG lộ tồn tại).
       if (!this.isInScope(scope, actor, row)) throw new NotFoundException(USER_NOT_FOUND);
-      return toDto(row);
+      const { enabled, requiredByRole } = await this.repo.getTwoFactorStateTx(tx, id);
+      return {
+        ...toDto(row),
+        twoFactor: { enabled, requiredByRole, requiredByUser: row.requireTwoFactor },
+      };
     });
   }
 
@@ -149,7 +159,11 @@ export class AuthUsersService {
     });
   }
 
-  /** PATCH /auth/users/:id — sửa hồ sơ (fullName). Không khớp → NotFound, KHÔNG audit rác. */
+  /**
+   * PATCH /auth/users/:id — sửa hồ sơ (fullName) + cờ ép 2FA per-user (requireTwoFactor, mig 0466). Không
+   * khớp → NotFound, KHÔNG audit rác. S2-AUTH-BE-12 no-op guard: chỉ ghi DB + audit khi có field THỰC SỰ đổi
+   * (body rỗng / giá trị == cũ → trả trạng thái hiện tại, 0 audit rác — mẫu lock đã-locked). audit diff cờ.
+   */
   async updateUser(
     actor: AuthUserActor,
     id: string,
@@ -158,13 +172,18 @@ export class AuthUsersService {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const before = await this.repo.findByIdTx(tx, actor.companyId, id);
       if (!before) throw new NotFoundException(USER_NOT_FOUND);
-      const updated = await this.repo.updateProfileTx(
-        tx,
-        actor.companyId,
-        id,
-        dto.fullName,
-        actor.id,
-      );
+
+      // Lọc field THỰC SỰ thay đổi (so before/after). Object rỗng ⇒ no-op.
+      const patch: { fullName?: string; requireTwoFactor?: boolean } = {};
+      if (dto.fullName !== undefined && dto.fullName !== before.fullName) {
+        patch.fullName = dto.fullName;
+      }
+      if (dto.requireTwoFactor !== undefined && dto.requireTwoFactor !== before.requireTwoFactor) {
+        patch.requireTwoFactor = dto.requireTwoFactor;
+      }
+      if (Object.keys(patch).length === 0) return toDto(before); // no-op: KHÔNG chạm DB, KHÔNG audit
+
+      const updated = await this.repo.updateProfileTx(tx, actor.companyId, id, patch, actor.id);
       if (!updated) throw new NotFoundException(USER_NOT_FOUND);
       await this.audit.record(tx, {
         action: "user.updated",
@@ -175,6 +194,37 @@ export class AuthUsersService {
         after: authUserSnapshot(updated),
       });
       return toDto(updated);
+    });
+  }
+
+  /**
+   * POST /auth/users/:id/2fa/reset — admin gỡ 2FA của target (privileged, gate reset-2fa:user is_sensitive).
+   * Trong CÙNG withTenant tx: (1) xoá user_totp + user_recovery_codes; (2) TÁI DÙNG AuthService.revokeAllForUserTx
+   * thu hồi mọi phiên (refresh cũ → 401); (3) audit 'user.2fa_reset' kèm revoked_session_count (KHÔNG secret);
+   * (4) dual-write timeline TOTP_RESET. Self-reset CHO PHÉP (KHÔNG assertNotSelf — owner chốt 2026-07-03).
+   * Cross-tenant / không tồn tại → NotFound TRƯỚC mọi mutation (RLS che, no-op, 0 audit + 0 security-event).
+   */
+  async resetTwoFactor(actor: AuthUserActor, id: string): Promise<AuthUserTwoFactorResetDto> {
+    return this.db.withTenant(actor.companyId, async (tx) => {
+      const target = await this.repo.findByIdTx(tx, actor.companyId, id);
+      if (!target) throw new NotFoundException(USER_NOT_FOUND);
+
+      await this.repo.deleteTwoFactorTx(tx, actor.companyId, id);
+      const revokedSessionCount = await this.auth.revokeAllForUserTx(tx, id, "2fa_reset");
+      await this.audit.record(tx, {
+        action: "user.2fa_reset",
+        objectType: "user",
+        actorUserId: actor.id,
+        objectId: id,
+        after: { revokedSessionCount },
+      });
+      await this.securityEvents?.record(tx, {
+        eventType: "TOTP_RESET",
+        userId: id,
+        actorUserId: actor.id,
+        payload: { revokedSessionCount },
+      });
+      return { revokedSessionCount };
     });
   }
 

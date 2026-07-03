@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
+  ConflictException,
   HttpException,
   HttpStatus,
   Inject,
@@ -45,7 +46,7 @@ import { ResetPasswordMailService } from "./reset-password-mail.service";
 import { SecurityAlertService } from "./security-alert.service";
 import { SecurityEventWriter } from "./security-event-writer.service";
 import { TokenService } from "./token.service";
-import { TwoFactorService } from "./two-factor.service";
+import { TWO_FACTOR_ENFORCED, TwoFactorService } from "./two-factor.service";
 import { SecretEncryptionService } from "../crypto/secret-encryption.service";
 import type { EncryptedColumns } from "../crypto/secret-encryption.types";
 import { ACCESS_RESTRICTED_CODE } from "@mediaos/contracts";
@@ -504,6 +505,15 @@ export class AuthService {
 
   /** Tắt 2FA của chính user — PHẢI re-auth bằng mật khẩu (chống chiếm phiên gỡ 2FA), có rate-limit. */
   async disableTwoFactor(user: { id: string; companyId: string }, password: string): Promise<void> {
+    // FAIL-FAST (S2-AUTH-BE-11): user bị ÉP 2FA (role HOẶC per-user, mig 0466) → 409 TWO_FACTOR_ENFORCED
+    // TRƯỚC re-auth mật khẩu (không tiêu rate-limit/verify vô ích, deny sớm cho FE). twoFactor.disable()
+    // fail-closed LẦN 2 trong cùng tx (defense-in-depth) — kể cả khi role đổi giữa 2 lần đọc.
+    if (await this.twoFactor.requiresTwoFactor(user.id, user.companyId)) {
+      throw new ConflictException({
+        code: TWO_FACTOR_ENFORCED,
+        message: "Tài khoản của bạn bị bắt buộc bật xác thực 2 bước (2FA) — không thể tắt.",
+      });
+    }
     const rlKey = `2fa-disable|${user.companyId}|${user.id}`;
     if (await this.rateLimiter.isLocked(rlKey)) {
       throw new HttpException(
