@@ -42,15 +42,26 @@ describe.skipIf(!hasDb)("G3 permission mutation-path", () => {
   let assignableRole: string; // role sẽ gán cho targetUser
   let svc: PermissionAdminService;
 
-  async function countUserRoles(companyId: string, userId: string, roleId: string): Promise<number> {
+  // S2-AUTH-DB-3 (mig 0471): revoke role = SOFT-DELETE (UPDATE deleted_at), KHÔNG hard-delete. "User có role"
+  // = có hàng ACTIVE → đếm CHỈ deleted_at IS NULL (tombstone bị loại) khớp semantic reader findUserRole/can().
+  async function countUserRoles(
+    companyId: string,
+    userId: string,
+    roleId: string,
+  ): Promise<number> {
     const r = await direct.query(
-      `SELECT count(*)::int AS n FROM user_roles WHERE company_id=$1 AND user_id=$2 AND role_id=$3`,
+      `SELECT count(*)::int AS n FROM user_roles
+       WHERE company_id=$1 AND user_id=$2 AND role_id=$3 AND deleted_at IS NULL`,
       [companyId, userId, roleId],
     );
     return r.rows[0].n as number;
   }
 
-  async function countAudit(companyId: string, objectType: string, objectId: string): Promise<number> {
+  async function countAudit(
+    companyId: string,
+    objectType: string,
+    objectId: string,
+  ): Promise<number> {
     const r = await direct.query(
       `SELECT count(*)::int AS n FROM audit_logs WHERE company_id=$1 AND object_type=$2 AND object_id=$3`,
       [companyId, objectType, objectId],
@@ -95,14 +106,22 @@ describe.skipIf(!hasDb)("G3 permission mutation-path", () => {
 
     // wildcard A: *:* ALLOW (không được kế thừa quyền sensitive).
     wildcardUser = await seedUser(direct, A.companyId, `pwc-${randomUUID().slice(0, 8)}@a.test`);
-    const wildcardRole = await seedRole(direct, A.companyId, `pwc-role-${randomUUID().slice(0, 8)}`);
+    const wildcardRole = await seedRole(
+      direct,
+      A.companyId,
+      `pwc-role-${randomUUID().slice(0, 8)}`,
+    );
     const wildcardPerm = await seedPermissionCatalog(direct, "*", "*", false);
     await seedRolePermission(direct, wildcardRole, wildcardPerm, "ALLOW");
     await seedUserRole(direct, wildcardUser, wildcardRole, A.companyId);
 
     // admin B: cùng quyền (assign-role + grant-object-permission) nhưng tenant khác (cross-tenant deny).
     bAdminUser = await seedUser(direct, B.companyId, `pbadm-${randomUUID().slice(0, 8)}@b.test`);
-    const bAdminRole = await seedRole(direct, B.companyId, `pbadm-role-${randomUUID().slice(0, 8)}`);
+    const bAdminRole = await seedRole(
+      direct,
+      B.companyId,
+      `pbadm-role-${randomUUID().slice(0, 8)}`,
+    );
     await seedRolePermission(direct, bAdminRole, assignPerm, "ALLOW");
     await seedRolePermission(direct, bAdminRole, grantObjPerm, "ALLOW");
     await seedUserRole(direct, bAdminUser, bAdminRole, B.companyId);
@@ -225,10 +244,18 @@ describe.skipIf(!hasDb)("G3 permission mutation-path", () => {
     expect(await countAudit(A.companyId, "user_role", row!.id)).toBe(1);
   });
 
-  it("revokeRole removes user_role + audit (RoleRevoked) + outbox; unknown role → NotFound", async () => {
+  it("revokeRole soft-deletes user_role (tombstone giữ deleted_by=actor) + audit (RoleRevoked) + outbox; unknown role → NotFound", async () => {
     const oBefore = await countOutboxForUser(A.companyId, targetUser);
     await svc.revokeRole({ id: adminUser, companyId: A.companyId }, targetUser, assignableRole);
+    // Active row = 0 (user MẤT quyền); nhưng row VẪN tồn tại dưới dạng tombstone (BẤT BIẾN #2 — forensic).
     expect(await countUserRoles(A.companyId, targetUser, assignableRole)).toBe(0);
+    const tomb = await direct.query(
+      `SELECT deleted_at, deleted_by FROM user_roles
+       WHERE company_id=$1 AND user_id=$2 AND role_id=$3 AND deleted_at IS NOT NULL`,
+      [A.companyId, targetUser, assignableRole],
+    );
+    expect(tomb.rows).toHaveLength(1);
+    expect(tomb.rows[0].deleted_by).toBe(adminUser);
     expect(await countOutboxForUser(A.companyId, targetUser)).toBe(oBefore + 1);
 
     await expect(

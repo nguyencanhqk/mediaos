@@ -157,14 +157,18 @@ export class SuperAdminBootstrapRepository implements ISuperAdminBootstrapReposi
   }
 
   /**
-   * Gán role cho user (1 user_role). Idempotent qua ON CONFLICT(user_id, role_id, company_id) DO NOTHING
-   * (constraint user_roles_uq) → boot lần 2 KHÔNG nhân đôi.
+   * Gán role cho user (1 user_role). Idempotent qua ON CONFLICT(user_id, role_id, company_id)
+   * WHERE deleted_at IS NULL DO NOTHING → boot lần 2 KHÔNG nhân đôi.
+   *
+   * ⚠️ Inference-target PHẢI kèm `WHERE deleted_at IS NULL` để KHỚP PARTIAL UNIQUE index user_roles_active_uq
+   *    (mig 0471 thay constraint full user_roles_uq đã DROP). Thiếu predicate ⇒ Postgres KHÔNG tìm được
+   *    arbiter khớp và ném 42P10 (invalid ON CONFLICT specification) ngay lúc boot.
    */
   async assignRole(tx: TenantTx, userId: string, roleId: string, companyId: string): Promise<void> {
     await tx.execute(sql`
       INSERT INTO user_roles (user_id, role_id, company_id)
       VALUES (${userId}, ${roleId}, ${companyId})
-      ON CONFLICT (user_id, role_id, company_id) DO NOTHING
+      ON CONFLICT (user_id, role_id, company_id) WHERE deleted_at IS NULL DO NOTHING
     `);
   }
 }
