@@ -12,8 +12,10 @@ import type {
   AssignRolePermissionRequest,
   CreateRoleRequest,
   RevokeRolePermissionRequest,
+  RoleWriteResultDto,
   UpdateRoleRequest,
 } from "@mediaos/contracts";
+import type { Role } from "../db/schema";
 import { DatabaseService } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { PermissionService } from "./permission.service";
@@ -30,6 +32,21 @@ type RequestUser = { id: string; companyId: string };
 
 /** SCOPE CEILING (S2-AUTH-BE-6 done_when — CHỐT 2026-07-02): dataScope gán cho role PHẢI ≤ Company. */
 const MAX_ASSIGNABLE_DATA_SCOPE = "System";
+
+/**
+ * DTO write result cho create/update role — CHỈ field theo roleWriteResultSchema (S2-AUTH-BE-6/11),
+ * KHÔNG lộ deletedAt (soft-delete internal). requiresTwoFactor phản chiếu roles.requires_two_factor.
+ */
+function toRoleWriteResult(role: Role): RoleWriteResultDto {
+  return {
+    id: role.id,
+    companyId: role.companyId,
+    name: role.name,
+    description: role.description,
+    isSystem: role.isSystem,
+    requiresTwoFactor: role.requiresTwoFactor,
+  };
+}
 
 /**
  * RoleAdminService (S2-AUTH-BE-6) — quản lý role WRITE (create/update, KHÔNG sửa system role) + gán/gỡ
@@ -56,7 +73,7 @@ export class RoleAdminService {
 
   // ── (A) create / update role ─────────────────────────────────────────────────
 
-  async createRole(actor: RequestUser, dto: CreateRoleRequest) {
+  async createRole(actor: RequestUser, dto: CreateRoleRequest): Promise<RoleWriteResultDto> {
     await this.assertCan(actor, "create", "role", false);
     try {
       return await this.db.withTenant(actor.companyId, async (tx) => {
@@ -64,6 +81,8 @@ export class RoleAdminService {
           companyId: actor.companyId,
           name: dto.name,
           description: dto.description ?? null,
+          // Optional ⇒ client cũ không gửi → false (non-breaking). Chỉ role thường (insert is_system=false).
+          requiresTwoFactor: dto.requiresTwoFactor ?? false,
         });
 
         await this.audit.record(tx, {
@@ -72,17 +91,25 @@ export class RoleAdminService {
           objectId: inserted.id,
           actorUserId: actor.id,
           before: null,
-          after: { name: inserted.name, description: inserted.description },
+          after: {
+            name: inserted.name,
+            description: inserted.description,
+            requiresTwoFactor: inserted.requiresTwoFactor,
+          },
         });
 
-        return inserted;
+        return toRoleWriteResult(inserted);
       });
     } catch (err) {
       throw this.mapError(err, "Failed to create role");
     }
   }
 
-  async updateRole(actor: RequestUser, roleId: string, dto: UpdateRoleRequest) {
+  async updateRole(
+    actor: RequestUser,
+    roleId: string,
+    dto: UpdateRoleRequest,
+  ): Promise<RoleWriteResultDto> {
     await this.assertCan(actor, "update", "role", false);
     try {
       return await this.db.withTenant(actor.companyId, async (tx) => {
@@ -91,6 +118,7 @@ export class RoleAdminService {
           throw new NotFoundException("Role not found");
         }
         // system-defined role (is_system=true) → KHÔNG cho sửa (kể cả khi RLS lộ nó cho tenant đọc).
+        // Rule này bao trọn requiresTwoFactor: gửi cờ lên system role → REJECT 400 TRƯỚC mọi update/audit.
         if (existing.isSystem) {
           throw new BadRequestException("Cannot modify a system-defined role");
         }
@@ -99,12 +127,14 @@ export class RoleAdminService {
           throw new NotFoundException("Role not found");
         }
 
-        const patch: { name?: string; description?: string | null } = {};
+        const patch: { name?: string; description?: string | null; requiresTwoFactor?: boolean } =
+          {};
         if (dto.name !== undefined) patch.name = dto.name;
         if (dto.description !== undefined) patch.description = dto.description;
+        if (dto.requiresTwoFactor !== undefined) patch.requiresTwoFactor = dto.requiresTwoFactor;
 
         if (Object.keys(patch).length === 0) {
-          return existing;
+          return toRoleWriteResult(existing);
         }
 
         const updated = await this.repo.updateRoleTx(tx, actor.companyId, roleId, patch);
@@ -117,11 +147,19 @@ export class RoleAdminService {
           objectType: "role",
           objectId: updated.id,
           actorUserId: actor.id,
-          before: { name: existing.name, description: existing.description },
-          after: { name: updated.name, description: updated.description },
+          before: {
+            name: existing.name,
+            description: existing.description,
+            requiresTwoFactor: existing.requiresTwoFactor,
+          },
+          after: {
+            name: updated.name,
+            description: updated.description,
+            requiresTwoFactor: updated.requiresTwoFactor,
+          },
         });
 
-        return updated;
+        return toRoleWriteResult(updated);
       });
     } catch (err) {
       throw this.mapError(err, "Failed to update role");

@@ -32,6 +32,8 @@ export class RoleAdminRepository {
       companyId: string;
       name: string;
       description: string | null;
+      // S2-AUTH-BE-11: cờ ép 2FA theo ROLE (roles.requires_two_factor). Chỉ role thường (is_system=false).
+      requiresTwoFactor: boolean;
     },
   ): Promise<Role> {
     const [row] = await tx
@@ -41,6 +43,7 @@ export class RoleAdminRepository {
         name: data.name,
         description: data.description,
         isSystem: false,
+        requiresTwoFactor: data.requiresTwoFactor,
       })
       .returning();
     if (!row) {
@@ -53,7 +56,7 @@ export class RoleAdminRepository {
     tx: TenantTx,
     companyId: string,
     roleId: string,
-    patch: { name?: string; description?: string | null },
+    patch: { name?: string; description?: string | null; requiresTwoFactor?: boolean },
   ): Promise<Role | undefined> {
     const [row] = await tx
       .update(roles)
