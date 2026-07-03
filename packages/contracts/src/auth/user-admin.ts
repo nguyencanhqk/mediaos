@@ -26,6 +26,9 @@ export const AUTH_USER = {
   UPDATE: { action: "update", resource: AUTH_USER_RESOURCE_TYPE },
   LOCK: { action: "lock", resource: AUTH_USER_RESOURCE_TYPE },
   UNLOCK: { action: "unlock", resource: AUTH_USER_RESOURCE_TYPE },
+  // S2-AUTH-BE-12 — reset 2FA của user khác (privileged). Cặp seed THẬT is_sensitive=true (mig 0466) ⇒
+  // controller PHẢI khai isSensitive ở decorator (wildcard *:* KHÔNG thoả cổng sensitive).
+  RESET_2FA: { action: "reset-2fa", resource: AUTH_USER_RESOURCE_TYPE },
 } as const;
 
 /**
@@ -59,6 +62,33 @@ export const authUserListSchema = z.object({
   total: z.number().int().nonnegative(),
 });
 export type AuthUserListDto = z.infer<typeof authUserListSchema>;
+
+/**
+ * S2-AUTH-BE-12 — DTO view CHI TIẾT 1 user (GET /auth/users/:id). Mở rộng authUserSchema thêm khối
+ * `twoFactor` với 3 CỜ TÁCH NGUỒN (KHÔNG lẫn nhau):
+ *   - enabled        : user_totp.enabled_at != null (đã bật 2FA thật).
+ *   - requiredByRole : join roles.requires_two_factor (ÉP theo ROLE, mig 0120) qua active user_roles — CHỈ role.
+ *   - requiredByUser : users.require_two_factor (ÉP PER-USER, mig 0466) — đọc thẳng cột.
+ * DTO RIÊNG cho GET /:id (KHÔNG chạm authUserSchema dùng cho list → tránh N+1 lộ 2FA mỗi row). TUYỆT ĐỐI
+ * KHÔNG chứa secret TOTP (secret_ciphertext/encrypted_dek/iv_nonce/auth_tag) — mask ở SERVER (BẤT BIẾN #3).
+ */
+export const authUserTwoFactorSchema = z.object({
+  enabled: z.boolean(),
+  requiredByRole: z.boolean(),
+  requiredByUser: z.boolean(),
+});
+export type AuthUserTwoFactorDto = z.infer<typeof authUserTwoFactorSchema>;
+
+export const authUserDetailSchema = authUserSchema.extend({
+  twoFactor: authUserTwoFactorSchema,
+});
+export type AuthUserDetailDto = z.infer<typeof authUserDetailSchema>;
+
+/** POST /auth/users/:id/2fa/reset — kết quả reset (KHÔNG secret): số phiên bị thu hồi (forensic). */
+export const authUserTwoFactorResetSchema = z.object({
+  revokedSessionCount: z.number().int().nonnegative(),
+});
+export type AuthUserTwoFactorResetDto = z.infer<typeof authUserTwoFactorResetSchema>;
 
 const LIST_LIMIT_DEFAULT = 50;
 const LIST_LIMIT_MIN = 1;
@@ -116,12 +146,17 @@ export const createAuthUserRequestSchema = z
 export type CreateAuthUserRequest = z.infer<typeof createAuthUserRequestSchema>;
 
 /**
- * PATCH /auth/users/:id — CHỈ field non-sensitive (fullName). `email` immutable (định danh tenant);
- * `status` đổi qua lock/unlock (cổng riêng); KHÔNG bao giờ nhận password/role. `.strict` chống field lạ.
+ * PATCH /auth/users/:id — field non-sensitive (fullName) + cờ ép 2FA per-user (requireTwoFactor, mig 0466).
+ * `email` immutable (định danh tenant); `status` đổi qua lock/unlock (cổng riêng); KHÔNG bao giờ nhận
+ * password/role. `.strict` chống field lạ leo thang.
+ *
+ * S2-AUTH-BE-12: `fullName` → OPTIONAL (non-breaking — client có thể PATCH chỉ requireTwoFactor); thêm
+ * `requireTwoFactor` optional. Cả 2 optional ⇒ body rỗng {} hợp lệ (service phát hiện no-op → KHÔNG audit).
  */
 export const updateAuthUserRequestSchema = z
   .object({
-    fullName: z.string().trim().min(1).max(200),
+    fullName: z.string().trim().min(1).max(200).optional(),
+    requireTwoFactor: z.boolean().optional(),
   })
   .strict();
 export type UpdateAuthUserRequest = z.infer<typeof updateAuthUserRequestSchema>;

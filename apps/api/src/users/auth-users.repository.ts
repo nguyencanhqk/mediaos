@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
-import { users, type User } from "../db/schema";
+import { roles, userRecoveryCodes, userRoles, users, userTotp, type User } from "../db/schema";
 import type { AuthUserStatus } from "@mediaos/contracts";
 
 /**
@@ -23,6 +23,8 @@ export function authUserSnapshot(row: User | undefined | null) {
     status: row.status,
     lockedAt: row.lockedAt ? row.lockedAt.toISOString() : null,
     lockedReason: row.lockedReason ?? null,
+    // S2-AUTH-BE-12 (APPEND-only): cờ ép 2FA per-user (mig 0466) → diff before/after audit user.updated.
+    requireTwoFactor: row.requireTwoFactor,
   };
 }
 
@@ -116,20 +118,74 @@ export class AuthUsersRepository {
       .then((r) => r[0]);
   }
 
-  /** Cập nhật hồ sơ (fullName) — CHỈ user LIVE. Trả row sau cập nhật (undefined nếu không khớp). */
+  /**
+   * Cập nhật hồ sơ — CHỈ user LIVE. `patch` = tập field ĐÃ XÁC ĐỊNH có thay đổi (service lọc no-op TRƯỚC
+   * khi gọi ⇒ repo chỉ được gọi khi có ≥1 field đổi). S2-AUTH-BE-12: thêm requireTwoFactor (mig 0466) set
+   * CÙNG tx với fullName. Trả row sau cập nhật (undefined nếu không khớp).
+   */
   updateProfileTx(
     tx: TenantTx,
     companyId: string,
     id: string,
-    fullName: string,
+    patch: { fullName?: string; requireTwoFactor?: boolean },
     updatedBy: string,
   ): Promise<User | undefined> {
+    const set: Record<string, unknown> = { updatedBy, updatedAt: new Date() };
+    if (patch.fullName !== undefined) set.fullName = patch.fullName;
+    if (patch.requireTwoFactor !== undefined) set.requireTwoFactor = patch.requireTwoFactor;
     return tx
       .update(users)
-      .set({ fullName, updatedBy, updatedAt: new Date() })
+      .set(set)
       .where(and(eq(users.companyId, companyId), eq(users.id, id), isNull(users.deletedAt)))
       .returning()
       .then((r) => r[0]);
+  }
+
+  /**
+   * S2-AUTH-BE-12 — trạng thái 2FA cho GET /auth/users/:id (2 nguồn TÁCH BIỆT, KHÔNG lẫn requiredByUser):
+   *   - enabled        : user_totp.enabled_at != null (đã bật thật).
+   *   - requiredByRole : user giữ ≥1 role còn hiệu lực có roles.requires_two_factor (mig 0120) — CHỈ ROLE.
+   * KHÔNG tái dùng TwoFactorService.requiresTwoFactorTx (đã gộp OR users.require_two_factor) để requiredByRole
+   * phản ánh ĐÚNG nguồn role. Join role-only mirror requiresTwoFactorTx (loại deleted_at + expires_at). userId
+   * đã được caller xác thực in-tenant (findByIdTx company-scoped) + withTenant/RLS cô lập company (BẤT BIẾN #1).
+   */
+  async getTwoFactorStateTx(
+    tx: TenantTx,
+    userId: string,
+  ): Promise<{ enabled: boolean; requiredByRole: boolean }> {
+    const [totp] = await tx
+      .select({ enabledAt: userTotp.enabledAt })
+      .from(userTotp)
+      .where(eq(userTotp.userId, userId))
+      .limit(1);
+    const [roleRow] = await tx
+      .select({ one: sql<number>`1` })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(
+        and(
+          eq(userRoles.userId, userId),
+          eq(roles.requiresTwoFactor, true),
+          isNull(roles.deletedAt),
+          or(isNull(userRoles.expiresAt), gt(userRoles.expiresAt, new Date())),
+        ),
+      )
+      .limit(1);
+    return { enabled: totp?.enabledAt != null, requiredByRole: roleRow !== undefined };
+  }
+
+  /**
+   * S2-AUTH-BE-12 — reset 2FA: XOÁ CỨNG user_totp + user_recovery_codes của target trong CÙNG tx. Đây KHÔNG
+   * phải bảng append-only (BẤT BIẾN #2 chỉ ép audit/snapshot/ledger) — mig 0120 GRANT DELETE cho mediaos_app.
+   * Gỡ credential 2FA = xoá secret (đúng ý reset). WHERE company_id tường minh (phòng thủ kép trên RLS).
+   */
+  async deleteTwoFactorTx(tx: TenantTx, companyId: string, userId: string): Promise<void> {
+    await tx
+      .delete(userTotp)
+      .where(and(eq(userTotp.companyId, companyId), eq(userTotp.userId, userId)));
+    await tx
+      .delete(userRecoveryCodes)
+      .where(and(eq(userRecoveryCodes.companyId, companyId), eq(userRecoveryCodes.userId, userId)));
   }
 
   /**

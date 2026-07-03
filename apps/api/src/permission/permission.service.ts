@@ -51,6 +51,10 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   "export:leave",
   "view:leave-audit-log",
   "view:attendance-audit-log",
+  // S2-AUTH-BE-12 — APPEND-only: admin reset 2FA của user khác (is_sensitive=true, mig 0466). Mở CỜ HIỂN
+  // THỊ cho FE (nút reset-2FA trong màn user-admin); enforcement THẬT vẫn là PermissionGuard per-resource
+  // (@RequirePermission('reset-2fa','user',{isSensitive:true})) — allowlist KHÔNG nới cổng.
+  "reset-2fa:user",
 ]);
 
 @Injectable()
