@@ -5,6 +5,8 @@ import { sql } from "drizzle-orm";
  * companies — gốc tenant (ERD §6). DDL/RLS thật ở migration 0002 (hand-written); schema này CHỈ để
  * gõ kiểu cho query. `slug` ở DB là citext (case-insensitive, unique toàn cục khi chưa xoá mềm).
  * G5-1: thêm cột settings — DDL ở migration 0015.
+ * S2-FND-DB-1 (mig 0467): mediaos_app CHỈ SELECT/INSERT/UPDATE — DELETE đã REVOKE (BẤT BIẾN #2, không
+ *   hard-delete tenant gốc). Xoá công ty = soft-delete qua UPDATE `deletedAt`; KHÔNG bao giờ `.delete(companies)`.
  * Giữ ĐỒNG BỘ với 0002/0015 khi đổi cột.
  */
 export const companies = pgTable(
@@ -18,7 +20,9 @@ export const companies = pgTable(
     timezone: text("timezone").notNull().default("Asia/Ho_Chi_Minh"),
     currency: text("currency").notNull().default("VND"),
     language: text("language").notNull().default("vi"),
-    workingDaysJson: jsonb("working_days_json").notNull().default({ days: [1, 2, 3, 4, 5] }),
+    workingDaysJson: jsonb("working_days_json")
+      .notNull()
+      .default({ days: [1, 2, 3, 4, 5] }),
     payrollConfigJson: jsonb("payroll_config_json").notNull().default({ cutoffDay: 25, payDay: 5 }),
     schemaVersion: integer("schema_version").notNull().default(1),
     // CS-5: hồ sơ công ty đầy đủ (migration 0360 — additive, nullable).

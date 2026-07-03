@@ -1030,6 +1030,13 @@
       "when": 1717500725000,
       "tag": "0466_s2_authdb4_user_require_2fa_reset_perm",
       "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1717500730000,
+      "tag": "0467_s2_fnddb1_companies_users_revoke_delete",
+      "breakpoints": true
     }
   ]
 }

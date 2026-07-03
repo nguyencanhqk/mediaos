@@ -8,6 +8,8 @@ import { companies } from "./companies";
  * theo (company_id, email) khi chưa xoá mềm (KHÔNG unique toàn cục — nền cho login §3b).
  * `company_id` ở DB có DEFAULT current_setting('app.current_company_id') → app khỏi tự set.
  * KHÔNG bao giờ đưa `passwordHash` vào DTO (BẤT BIẾN #3).
+ * S2-FND-DB-1 (mig 0467): mediaos_app CHỈ SELECT/INSERT/UPDATE — DELETE đã REVOKE (BẤT BIẾN #2, không
+ *   hard-delete tài khoản). Gỡ user = soft-delete qua UPDATE `deletedAt`; KHÔNG bao giờ `.delete(users)`.
  */
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
