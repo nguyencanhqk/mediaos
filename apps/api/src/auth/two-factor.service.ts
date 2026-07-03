@@ -22,6 +22,14 @@ const RECOVERY_CODE_COUNT = 10;
 const RECOVERY_CODE_BYTES = 8; // ~11 ký tự base64url (64-bit) — đủ cho mã 1-lần có rate-limit
 const TOTP_PURPOSE = "totp_secret" as const;
 
+/**
+ * Machine-code (S2-AUTH-BE-11) khi user bị ÉP 2FA cố tự tắt → 409. MIRROR `TWO_FACTOR_SETUP_REQUIRED`
+ * của TwoFactorEnforcementGuard: FE map code → thông báo/redirect, KHÔNG hard-code message client. Đặt Ở
+ * ĐÂY (service) để tránh vòng import service↔guard (guard đã import service). Semantics KHÁC guard:
+ * SETUP_REQUIRED = bị ép nhưng CHƯA enroll (chặn tài nguyên); ENFORCED = bị ép nên KHÔNG cho GỠ 2FA.
+ */
+export const TWO_FACTOR_ENFORCED = "TWO_FACTOR_ENFORCED";
+
 export interface EnrollResult {
   /** otpauth:// URI để FE render QR. Chứa secret — trả 1 lần cho chính user, KHÔNG log/lưu plaintext. */
   otpauthUri: string;
@@ -69,8 +77,21 @@ export class TwoFactorService {
     return row?.enabledAt != null;
   }
 
-  /** User giữ ÍT NHẤT 1 role còn hiệu lực có `requires_two_factor` → bị ép 2FA. Dùng trong tx login. */
+  /**
+   * User bị ÉP 2FA khi (S2-AUTH-BE-11) `users.require_two_factor` (mig 0466 — cờ PER-USER) HOẶC giữ ÍT
+   * NHẤT 1 role còn hiệu lực có `roles.requires_two_factor` (mig 0120 — cờ theo ROLE). CẢ HAI nguồn đọc
+   * trong CÙNG tx (login/status/disable) để quyết định nhất quán. Per-user check trước (rẻ, thoát sớm).
+   */
   async requiresTwoFactorTx(tx: TenantTx, userId: string): Promise<boolean> {
+    // (1) Nguồn PER-USER: users.require_two_factor (mig 0466). withTenant/RLS đã cô lập company.
+    const [u] = await tx
+      .select({ requireTwoFactor: users.requireTwoFactor })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (u?.requireTwoFactor === true) return true;
+
+    // (2) Nguồn ROLE: user giữ ÍT NHẤT 1 role còn hiệu lực (chưa hết hạn, chưa soft-delete) có cờ.
     const [row] = await tx
       .select({ one: sql<number>`1` })
       .from(userRoles)
@@ -194,9 +215,22 @@ export class TwoFactorService {
     await this.rateLimiter.reset(rlKey);
   }
 
-  /** Tắt 2FA: xoá sạch secret + recovery codes. Controller PHẢI re-auth (password) trước khi gọi. */
+  /**
+   * Tắt 2FA: xoá sạch secret + recovery codes. Controller PHẢI re-auth (password) trước khi gọi.
+   *
+   * FAIL-CLOSED (S2-AUTH-BE-11): user bị ÉP 2FA (role HOẶC per-user) KHÔNG được tự tắt → 409
+   * `TWO_FACTOR_ENFORCED` NGAY ĐẦU tx, TRƯỚC mọi delete/audit/security-event (không xoá totp/recovery,
+   * không revoke, không audit, không ghi timeline). requiresTwoFactorTx đọc trong CÙNG tx (nhất quán với
+   * enforcement guard + status). Ném trước khi ghi ⇒ tx rollback không có gì để hoàn.
+   */
   async disable(userId: string, companyId: string): Promise<void> {
     await this.dbsvc.withTenant(companyId, async (tx) => {
+      if (await this.requiresTwoFactorTx(tx, userId)) {
+        throw new ConflictException({
+          code: TWO_FACTOR_ENFORCED,
+          message: "Tài khoản của bạn bị bắt buộc bật xác thực 2 bước (2FA) — không thể tắt.",
+        });
+      }
       const deleted = await tx
         .delete(userTotp)
         .where(eq(userTotp.userId, userId))
