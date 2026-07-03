@@ -3196,6 +3196,22 @@ export const backlog = [
     //   khác phải kèm predicate deleted_at, xác nhận 0 site trần còn sót; (4) findUserIdsWithRole
     //   (permission-admin.repository.ts:199-205) lọc thêm deleted_at IS NULL cho nhất quán (không phải lỗ bảo
     //   mật, chỉ over-invalidate cache — vẫn nên sửa cùng đợt).
+    // OWNER CHỐT round 2 (sau plan-BLOCK lần 2, round-1 fix ở trên ĐÃ ĐÚNG — giữ nguyên): 2 lỗi MỚI plan-reviewer
+    //   bắt được, BẮT BUỘC sửa: (5) deleteUserRole (permission-admin.repository.ts:118) chuyển DELETE→UPDATE
+    //   PHẢI có predicate `AND deleted_at IS NULL` trong WHERE — thiếu nó, chu kỳ grant→revoke→grant→revoke cùng
+    //   (user,role,company) sẽ khiến UPDATE ghi đè deleted_at/deleted_by của TOMBSTONE CŨ (mất forensic, phá
+    //   chính mục đích WO này); áp cho CẢ revokeRole (:163) VÀ nhánh reassign/đổi-expiry (:110); thêm regression
+    //   khẳng định tombstone cũ KHÔNG đổi sau 1 chu kỳ re-grant+re-revoke tiếp theo. (6) THIẾU deny-path cho
+    //   reader đặc quyền cao nhất `isOperatorTx` (auth.service.ts:1341-1356 — KHÔNG phải 'requiresTwoFactorTx'
+    //   như nhãn sai trong plan round trước; requiresTwoFactor thật ở two-factor.service.ts:97 +
+    //   auth-users.repository.ts:163): soft-delete assignment platform-admin PHẢI khiến login SAU ĐÓ không còn
+    //   mint được token operator-plane (aud=tenant, isOperatorTx=false) — thêm int-spec bắt buộc. (7) Drizzle
+    //   schema: CHỈ thêm 2 cột deletedAt/deletedBy (deletedBy .references(users.id,{onDelete:'set null'})) —
+    //   TUYỆT ĐỐI KHÔNG mirror partial-unique bằng uniqueIndex() thật (drizzle không biểu diễn được partial →
+    //   drizzle-kit coi là unique ĐẦY ĐỦ → drift, db:generate tương lai sinh migration thừa); partial unique CHỈ
+    //   tồn tại ở SQL tay + comment, giống pattern roles.ts:27-29. (8) getObjectGrants nhánh role-subject
+    //   (permission.repository.ts:111) thêm test: object grant (ALLOW/DENY) qua role KHÔNG còn hiệu lực sau khi
+    //   user_role của role đó bị soft-delete.
     status: "todo",
     paths: [
       "apps/api/src/db/schema/**",
@@ -3471,6 +3487,24 @@ export const backlog = [
     //   SuperAdminBootstrapService fail-fast khi company vắng (super-admin-bootstrap.service.ts:66-77) → dựng-từ-trống
     //   phải seed tay + restart. DB-10 §17.2 điểm 5: bootstrap admin phải must_change_password=true — grep 0 kết quả
     //   toàn repo (cột không tồn tại).
+    // OWNER CHỐT 2026-07-03 (checkpoint feat/debt-wave2, sau plan-BLOCK round 1) — bake TRƯỚC khi build (SECURITY
+    //   DEFINER hardening là BLOCKING, không phải tuỳ chọn): (1) `ensure_default_company` PHẢI có
+    //   `REVOKE ALL ON FUNCTION ensure_default_company(...) FROM PUBLIC` TRƯỚC khi GRANT EXECUTE cho app role —
+    //   thiếu dòng này, PUBLIC (mọi DB role) mặc định có EXECUTE ⇒ bất kỳ role nào cũng tạo được tenant-root.
+    //   (2) PHẢI `SET search_path = pg_catalog` + fully-qualify `public.companies` trong thân hàm (chống
+    //   search_path-injection leo thang quyền definer) — mirror ĐÚNG `resolve_company_by_slug` (mig 0002).
+    //   (3) Thêm deny-path THẬT: 1 role KHÁC app (không phải mediaos_app) gọi EXECUTE ensure_default_company PHẢI
+    //   bị permission-denied — không chỉ test positive 'app role EXECUTE được'. (4) BOOTSTRAP_COMPANY_LOCALE
+    //   default ĐỔI THÀNH 'vi' (KHÔNG 'vi-VN') — cột companies.language có CHECK CHỈ nhận 'vi'/'en' (mig 0015/0360),
+    //   insert 'vi-VN' sẽ THROW CHECK violation → sập boot dựng-từ-trống; xác nhận currency mặc định ∈
+    //   {'VND','USD'} (companies_currency_check) và param→cột mapping ghi rõ trong task. (5) OWNER CHỐT N=1 guard:
+    //   nếu ĐÃ CÓ BẤT KỲ company active nào (bất kể slug có khớp BOOTSTRAP_COMPANY_SLUG hay không) → KHÔNG tạo
+    //   company mới, bỏ qua bước này êm (không sập boot) — bảo vệ N=1 kể cả khi config slug lệch/bị đổi giữa
+    //   các lần deploy; thêm test kịch bản 'đã có company khác slug → không tạo thêm'. (6) Lane khai
+    //   `auth.service.spec.ts` (colocated) + int-spec me-flag PHẢI thêm 'apps/api/src/auth/**' +
+    //   'apps/api/test/**' vào paths (đang thiếu → guard-scope sẽ cảnh báo); xác nhận tên file int-spec không
+    //   đụng int-spec khác cùng chạy trong WO. (7) Audit: `auth.super_admin_bootstrapped` hiện có ĐÃ ĐỦ ghi dấu
+    //   company auto-create (không cần audit riêng — đây là 1 hành động bootstrap thống nhất).
     status: "todo",
     paths: [
       "apps/api/src/permission/super-admin-bootstrap.service.ts",
@@ -3489,7 +3523,7 @@ export const backlog = [
       "memory super-admin-bootstrap-flaky-count (int-spec hiện có)",
     ],
     done_when: [
-      "boot với DB trống-sau-migrate: company mặc định TỰ tạo idempotent (slug/name từ env BOOTSTRAP_COMPANY_* — có default; ON CONFLICT theo slug unique 0002) TRƯỚC SuperAdminBootstrap trong cùng bootstrap chain — hết fail-fast-rồi-restart; env thiếu → log hướng dẫn rõ, KHÔNG sập boot môi trường đã có company",
+      "boot với DB trống-sau-migrate: company mặc định TỰ tạo idempotent (slug/name từ env BOOTSTRAP_COMPANY_* — có default; ON CONFLICT theo slug unique 0002) TRƯỚC SuperAdminBootstrap trong cùng bootstrap chain — hết fail-fast-rồi-restart; env thiếu → log hướng dẫn rõ, KHÔNG sập boot môi trường đã có company; ĐÃ CÓ company active khác slug → bỏ qua tạo mới (N=1 guard, xem note owner-chốt)",
       "migration NỐI TIẾP head: users.must_change_password boolean NOT NULL DEFAULT false; bootstrap admin set true; /auth/me expose mustChangePassword (ADDITIVE — mẫu S2-AUTH-BE-1); change-password thành công → clear flag trong cùng tx; FE enforcement (redirect ép đổi) = follow-up FE, ghi TODO rõ KHÔNG dựng nút chết",
       "deny-path RED viết-TRƯỚC: bootstrap idempotent (chạy 2 lần → 1 company, 1 admin, grant-count không phình — vá luôn kịch bản flaky memory nếu chạm); secret env KHÔNG log; audit auth.super_admin_bootstrapped giữ nguyên",
       "FULL gate (bootstrap/auth = crown) + người chốt; int-spec super-admin-bootstrap + smoke dựng-từ-trống xanh trên LANE_DB cô lập",
@@ -3506,6 +3540,21 @@ export const backlog = [
     //   file.max_upload_size_mb=25 vs 20, default_locale='vi' vs 'vi-VN'; SETTING_DEFAULTS hard-code chỉ phủ 6 key
     //   (setting-defaults.ts:19-76) — attendance.*/leave.* defaults KHÔNG tồn tại. 3 nguồn (migration seed ·
     //   SETTING_DEFAULTS · doc) đang drift. Gate: diff chạm migration ⇒ FULL theo policy (zone giữ yellow — model).
+    // OWNER CHỐT 2026-07-03 (checkpoint feat/debt-wave2, sau plan-BLOCK round 1) — bake TRƯỚC khi build:
+    //   (1) `notification.in_app_enabled` bị DB-10 liệt kê ở CẢ §11.1 (system) LẪN §11.2 (company-default) —
+    //   ĐÃ seed system-scope từ 0435, GIỮ NGUYÊN (system thắng). Acceptance '12 company-default key scope=default'
+    //   CHỈ áp cho 11 key KHÔNG trùng system_settings; riêng notification.in_app_enabled assert scope='system'
+    //   value=true (KHÔNG đòi scope='default' cho key này) — ghi rõ trong task để không đỏ-giả/xanh-giả. Ghi chú
+    //   entry notification.in_app_enabled trong SETTING_DEFAULTS là fallback KHÔNG reachable trong thực tế.
+    //   (2) Deny-path /resolve cần role VIEW-ONLY (có view:foundation-setting, KHÔNG có update) để exercise nhánh
+    //   canSeeNonPublic=false — role seed sẵn (company-admin=cả 2, employee=không có view) không đủ. TẠO grant
+    //   ad-hoc CHỈ TRONG test setup (insert permission grant cho 1 user test, KHÔNG thêm role canonical mới vào
+    //   seed sản phẩm) để giữ catalog role sạch. (3) module_code cho 10 key mới: THEO ĐÚNG cột Module DB-10 §11.1
+    //   (security.*=AUTH, file.default_visibility=FOUNDATION, notification.*=NOTI, dashboard.*=DASH,
+    //   system.default_currency=SYSTEM) — KHÔNG blanket 'SYSTEM' cho tất cả (WO này CHÍNH LÀ để sửa deviation
+    //   audit, không lặp lại shortcut). (4) 'đủ 14 key canonical Active' = 4 key §11.1 sẵn có + 10 key mới;
+    //   file.allowed_mime_types (đã seed 0435) là key DÔI, KHÔNG tính vào 14 và KHÔNG bị xoá — presence-test
+    //   không được assert 'CHỈ đúng 14 rows Active'.
     status: "todo",
     paths: [
       "apps/api/migrations/**",
@@ -3716,8 +3765,9 @@ export const backlog = [
     ],
     done_when: [
       "migration NỐI TIẾP head: idx_files_company_status (company_id,upload_status,uploaded_at DESC) · idx_files_cleanup_deleted partial · idx_file_access_logs_company_time (company_id,created_at DESC — PIN tên canonical DB-09 §8.8, KHÔNG trùng/nhầm file_access_logs_company_id_idx sẵn có) · idx_sequence_counters_reset partial (Yearly/Monthly/Daily) — tên/shape theo DB-09, schema drizzle đồng bộ",
-      "uq_file_links_entity_file_active partial (deleted_at IS NULL), key ĐÚNG 6 cột (company_id,module_code,entity_type,entity_id,file_id,link_type): TRƯỚC khi ép — dedupe row trùng trong CÙNG migration, quy tắc GIỮ xác định: is_primary=true trước, else MIN(created_at)/MIN(id); phần còn lại soft-delete (deleted_at=now). SAU khi ép constraint: FileService.link() (files.service.ts:349, gọi FileLinkRepository.insertTx() hiện KHÔNG try/catch) PHẢI bọc bắt 23505 qua isUniqueViolation() (common/db-error.ts) → ConflictException('FOUNDATION-FILE-ERR-DUP-LINK'); colocated unit test khẳng định 409 (KHÔNG để lộ 500 thô)",
-      "trigger BEFORE UPDATE ON audit_logs → RAISE EXCEPTION lớp 2 (sau REVOKE — DB-08 header). BẮT BUỘC DENYLIST chặn current_user='mediaos_app' (chỉ app-role) — TUYỆT ĐỐI KHÔNG allowlist kiểu 'trừ mediaos_owner', vì mig/seed/LANE_DB chạy bằng SUPERUSER 'mediaos' (mig 0001), allowlist sẽ chặn nhầm cả migrator/seed → vỡ chain (chain-smoke không bắt được vì hiện chưa migration nào UPDATE audit_logs). RED test: (a) app role UPDATE audit_logs bị chặn CẢ khi lỡ có grant, assert message cụ thể (chứa 'append-only', không chỉ generic permission-denied); (b) POSITIVE: superuser/directPool UPDATE audit_logs THÀNH CÔNG (chứng minh trigger không chặn nhầm); test GRANT/REVOKE tạm trong try/finally (chống rò grant chéo sang spec khác dùng chung LANE_DB). idx_audit_logs_entity: thêm index mới (company_id,entity_type,entity_id,created_at DESC) ADDITIVE (giữ index cũ, không drop)",
+      "uq_file_links_entity_file_active partial (deleted_at IS NULL), key ĐÚNG 6 cột (company_id,module_code,entity_type,entity_id,file_id,link_type): TRƯỚC khi ép — dedupe PHẢI nhóm ĐÚNG 6 cột uq (KHÔNG dùng nhầm shape 5-cột is_primary cũ 0433:175 — sẽ soft-delete NHẦM link hợp lệ khác file_id), thứ tự GIỮ xác định `is_primary DESC, created_at ASC, id ASC` (id là tie-break cuối, tránh trường hợp ≥2 hàng is_primary=true cùng nhóm làm CREATE UNIQUE vẫn vỡ); phần còn lại soft-delete (deleted_at=now); thêm test khẳng định link hợp-lệ-khác-file KHÔNG bị soft-delete nhầm. SAU khi ép constraint: FileService.link() (files.service.ts:349) PHẢI bọc bắt 23505 qua isUniqueViolation() (common/db-error.ts) — PHÂN BIỆT qua constraint name (pgErrorField(err,'constraint')): vi phạm uq_file_links_entity_file_active MỚI → ConflictException('FOUNDATION-FILE-ERR-DUP-LINK'); vi phạm uq_file_links_primary_per_entity_type CŨ (0433) → mã KHÁC (vd 'FOUNDATION-FILE-ERR-DUP-PRIMARY') — KHÔNG gộp chung 1 mã cho 2 nguyên nhân khác nhau; đăng ký cả 2 mã trong error-codes.ts hiện có (S2-FND-CONTRACT-1 sẽ reconcile vào catalog canonical sau, append-only không xung đột); colocated unit test khẳng định đúng mã theo từng constraint",
+      "trigger BEFORE UPDATE ON audit_logs → RAISE EXCEPTION lớp 2 (sau REVOKE — DB-08 header). BẮT BUỘC DENYLIST chặn current_user='mediaos_app' (chỉ app-role; mediaos_worker đã chặn đủ ở lớp-1 REVOKE, KHÔNG cần thêm vào denylist — ghi comment rõ 2 lớp phòng thủ) — TUYỆT ĐỐI KHÔNG allowlist kiểu 'trừ mediaos_owner', vì mig/seed/LANE_DB chạy bằng SUPERUSER 'mediaos' (mig 0001), allowlist sẽ chặn nhầm cả migrator/seed → vỡ chain. RED test: (a) app role UPDATE audit_logs bị chặn CẢ khi lỡ có grant, assert message cụ thể (chứa 'append-only'); (b) POSITIVE: superuser/directPool UPDATE audit_logs THÀNH CÔNG; test GRANT/REVOKE tạm trong try/finally (chống rò grant chéo LANE_DB dùng chung). PIN tên cụ thể function+trigger, presence-test assert qua pg_trigger/pg_proc (không chỉ tên biến trong code). idx_sequence_counters_reset: predicate WHERE reset_policy IN (...) PHẢI khớp CHÍNH XÁC casing CHECK thật của sequence_counters.reset_policy (đối chiếu mig 0434/0437 — lệch hoa/thường → index rỗng, xanh-giả) — assert qua pg_indexes.indexdef",
+      "SỬA LỖI ROUND-1 (owner bake trước đó dùng nhầm tên trùng — plan-reviewer round 2 bắt được): `idx_audit_logs_entity` ĐÃ TỒN TẠI từ mig 0432 (module_code,entity_type,entity_id) — Postgres cấm tạo trùng tên. Index MỚI (company_id,entity_type,entity_id,created_at DESC) đặt tên KHÁC: `idx_audit_logs_entity_created`. PIN tên này vào task/acceptance/test; presence-test assert qua pg_indexes.indexdef (không chỉ match tên) để không xanh-giả nếu dùng IF NOT EXISTS. Đây là index MỚI cộng thêm (giữ nguyên idx_audit_logs_entity cũ, không drop, không đảo deviation đã park ở 0438:33-35)",
       "db:check chain 0000→head xanh LANE_DB (xác nhận idx/when kế tiếp đúng head hiện tại lúc land — có thể đã đổi vì lane khác trong cùng checkpoint); FULL gate (database-reviewer — chạm audit) + người chốt; lane db NỐI TIẾP",
     ],
   },
