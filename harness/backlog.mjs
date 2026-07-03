@@ -3185,6 +3185,17 @@ export const backlog = [
     //   song migration khác). ⚠️ ĐỔI READER TRƯỚC KHI SIẾT GRANT: permission.service/auth.service me()/mọi query
     //   user_roles phải filter deleted_at IS NULL, và code gỡ-role (permission-admin.service revoke) phải chuyển
     //   DELETE→UPDATE set deleted_at, RỒI migration mới REVOKE DELETE — sai thứ tự là vỡ runtime.
+    // OWNER CHỐT 2026-07-03 (checkpoint feat/debt-wave2, sau plan-BLOCK round 1): plan-reviewer bắt hidden-writer
+    //   super-admin-bootstrap.repository.ts:assignRole dùng raw `INSERT ... ON CONFLICT (user_id, role_id,
+    //   company_id) DO NOTHING` trỏ ĐÚNG cột constraint user_roles_uq bị DROP trong WO này → sau migrate sẽ
+    //   42P10 NGAY LÚC BOOT (bootstrap chạy mỗi lần khởi động). BẮT BUỘC: (1) đổi ON CONFLICT đó thành
+    //   `(user_id, role_id, company_id) WHERE deleted_at IS NULL DO NOTHING` (khớp tiền lệ seeder att/hr/leave),
+    //   sửa comment L155 (bỏ 'constraint user_roles_uq'); (2) deleteUserRole thêm param actorUserId, cập nhật
+    //   CẢ HAI caller (revokeRole permission-admin.service.ts:163 VÀ nhánh reassign/đổi-expiry :110 — không chỉ
+    //   revoke); (3) acceptance thêm grep toàn apps/api cho `ON CONFLICT (user_id` + mọi INSERT INTO user_roles
+    //   khác phải kèm predicate deleted_at, xác nhận 0 site trần còn sót; (4) findUserIdsWithRole
+    //   (permission-admin.repository.ts:199-205) lọc thêm deleted_at IS NULL cho nhất quán (không phải lỗ bảo
+    //   mật, chỉ over-invalidate cache — vẫn nên sửa cùng đợt).
     status: "todo",
     paths: [
       "apps/api/src/db/schema/**",
@@ -3333,10 +3344,11 @@ export const backlog = [
       "mig 0340 + 0435 + 0444",
     ],
     done_when: [
-      "OWNER CHỐT 1 cặp chuẩn cho audit-log viewer (đề xuất: GIỮ view:audit-log 0340 làm gate — sensitive, đã grant đúng; đổi my-apps metadata module-app-metadata.ts:37 sang cùng cặp; view/export:foundation-audit-log 0435 → deprecate có ghi chú HOẶC alias-grant migration) — kết luận pin vào docs/permission-matrix-spec.md + API-09",
-      "MODULE_APP_METADATA: ATT/LEAVE/AUTH đổi requiredAnyPermissions sang cặp canonical ĐÃ grant role 0444 (view-own/team/company:attendance · view-own/view:leave · view:user/role) — đối chiếu TỪNG cặp với seed thật (grep migration), sửa comment 'đã VERIFY' sai; int-test my-apps: user role canonical (employee/manager/hr/company-admin) thấy ĐỦ app được cấp",
-      "OWNER CHỐT /settings/public: mở về Authenticated (bỏ RequirePermission — GIỮ nguyên lọc is_public && !is_sensitive + secret-drop setting-mask.ts, KHÔNG nới mask) HOẶC giữ gate và pin vào spec (S2-FND-DOC-1); nếu mở → test: user 0 quyền foundation vẫn GET được public keys, KHÔNG lộ sensitive/secret",
-      "deny-path RED viết-TRƯỚC cho mọi nhánh đổi; FULL gate (security-reviewer — permission surface) + người chốt; regression permission suite xanh",
+      "CHỐT (không còn 'đề xuất'): audit-log viewer dùng view:audit-log (mig 0340) làm gate DUY NHẤT — đã verify grant TƯỜNG MINH chỉ cho company-admin (0340:36-40), KHÔNG có role 'audit-viewer' riêng trong spec nên không mơ hồ; đổi my-apps metadata module-app-metadata.ts:37 sang cùng cặp; view/export:foundation-audit-log 0435 → deprecate có ghi chú (KHÔNG xoá row seed, giữ append-only) HOẶC alias-grant migration; pin kết luận vào docs/permission-matrix-spec.md + API-09",
+      "MODULE_APP_METADATA: ATT/LEAVE/AUTH đổi requiredAnyPermissions sang cặp canonical ĐÃ grant role 0444 (view-own/team/company:attendance · view-own/view:leave · view:user/role) — đối chiếu TỪNG cặp với seed thật (grep migration), sửa comment 'đã VERIFY' sai; int-test my-apps: user role canonical (employee/manager/hr/company-admin) thấy ĐỦ app được cấp; FE web-core registry.ts:141-142 ĐÃ map view:user/view:role đúng canonical (verify 2026-07-03, không cần đổi FE)",
+      "OWNER CHỐT /settings/public — CƠ CHẾ BẮT BUỘC (plan-BLOCK round 1 đã bác bỏ @Public()): KHÔNG được bỏ @RequirePermission mà giữ nguyên @UseGuards(PermissionGuard) cấp lớp trên SettingsController (fail-closed 403 khi thiếu metadata) VÀ TUYỆT ĐỐI KHÔNG dùng @Public() (bỏ luôn JwtAuthGuard → mất tenant-scoping, vi phạm BẤT BIẾN #1). Làm ĐÚNG 1 trong 2: (a) tách getPublic sang controller/route KHÔNG áp PermissionGuard cấp lớp (mẫu route change-password trong AuthController — vẫn còn JwtAuthGuard+CompanyGuard, chỉ bỏ permission-check), hoặc (b) gỡ class-level guard, áp @RequirePermission per-method cho resolve/patch, để getPublic không có decorator nhưng vẫn qua JwtAuthGuard. GIỮ nguyên lọc is_public && !is_sensitive + secret-drop setting-mask.ts (KHÔNG nới mask)",
+      "deny-path RED viết-TRƯỚC bắt buộc cho /settings/public: (a) KHÔNG Bearer token → 401 (không phải 200/403); (b) user companyA chỉ nhận public settings companyA (chứng minh withTenant/companyId vẫn ép sau khi đổi gate); test đặt ở int-spec (LANE_DB), KHÔNG để .spec.ts colocated cho case cần guard+DB thật",
+      "FULL gate (security-reviewer — permission surface) + người chốt; regression permission suite xanh",
     ],
   },
   {
@@ -3684,8 +3696,17 @@ export const backlog = [
     //   (không gì chặn link TRÙNG cùng file vào cùng entity khi non-primary — 0433:175-177 chỉ ép primary).
     //   audit_logs: header DB-08 dòng 1 yêu cầu 'REVOKE + trigger' — hiện chỉ grant-level, thiếu trigger lớp 2.
     //   idx_audit_logs_entity thiếu company_id-first + created_at (deviation kế thừa 0438:33-35) — chốt cùng đợt.
+    // OWNER CHỐT 2026-07-03 (checkpoint feat/debt-wave2, sau plan-BLOCK round 1): MỞ RỘNG paths sang service layer
+    //   để làm trọn map 409 trong CÙNG WO (quyết định chủ động — KHÔNG tách follow-up), xem done_when #2.
     status: "todo",
-    paths: ["apps/api/migrations/**", "apps/api/src/db/schema/**", "apps/api/test/**"],
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/**",
+      "apps/api/src/foundation/files/files.service.ts",
+      "apps/api/src/foundation/files/**/*.repository.ts",
+      "apps/api/src/common/db-error.ts",
+      "apps/api/test/**",
+    ],
     skills: ["code-review"],
     depends_on: [],
     src: [
@@ -3694,10 +3715,10 @@ export const backlog = [
       "DB-08 header (REVOKE + trigger)",
     ],
     done_when: [
-      "migration NỐI TIẾP head: idx_files_company_status (company_id,upload_status,uploaded_at DESC) · idx_files_cleanup_deleted partial · idx_file_access_logs (company_id,created_at DESC) · idx_sequence_counters_reset partial (Yearly/Monthly/Daily) — tên/shape theo DB-09, schema drizzle đồng bộ",
-      "uq_file_links_entity_file_active partial (deleted_at IS NULL): TRƯỚC khi ép — query kiểm dữ liệu trùng hiện có, dedupe (soft-delete row thừa) trong cùng migration nếu có; sau ép: link trùng → 409 ở app (bắt lỗi unique)",
-      "trigger BEFORE UPDATE ON audit_logs → RAISE EXCEPTION (lớp 2 sau REVOKE — DB-08 header); KHÔNG chặn role owner/migrator (trigger check current_user hoặc dùng session flag) — RED test: app role UPDATE audit_logs bị chặn CẢ khi lỡ có grant; idx_audit_logs_entity: chốt thêm index mới (company_id,entity_type,entity_id,created_at DESC) ADDITIVE (giữ index cũ, không drop)",
-      "db:check chain 0000→head xanh LANE_DB; FULL gate (database-reviewer — chạm audit) + người chốt; lane db NỐI TIẾP",
+      "migration NỐI TIẾP head: idx_files_company_status (company_id,upload_status,uploaded_at DESC) · idx_files_cleanup_deleted partial · idx_file_access_logs_company_time (company_id,created_at DESC — PIN tên canonical DB-09 §8.8, KHÔNG trùng/nhầm file_access_logs_company_id_idx sẵn có) · idx_sequence_counters_reset partial (Yearly/Monthly/Daily) — tên/shape theo DB-09, schema drizzle đồng bộ",
+      "uq_file_links_entity_file_active partial (deleted_at IS NULL), key ĐÚNG 6 cột (company_id,module_code,entity_type,entity_id,file_id,link_type): TRƯỚC khi ép — dedupe row trùng trong CÙNG migration, quy tắc GIỮ xác định: is_primary=true trước, else MIN(created_at)/MIN(id); phần còn lại soft-delete (deleted_at=now). SAU khi ép constraint: FileService.link() (files.service.ts:349, gọi FileLinkRepository.insertTx() hiện KHÔNG try/catch) PHẢI bọc bắt 23505 qua isUniqueViolation() (common/db-error.ts) → ConflictException('FOUNDATION-FILE-ERR-DUP-LINK'); colocated unit test khẳng định 409 (KHÔNG để lộ 500 thô)",
+      "trigger BEFORE UPDATE ON audit_logs → RAISE EXCEPTION lớp 2 (sau REVOKE — DB-08 header). BẮT BUỘC DENYLIST chặn current_user='mediaos_app' (chỉ app-role) — TUYỆT ĐỐI KHÔNG allowlist kiểu 'trừ mediaos_owner', vì mig/seed/LANE_DB chạy bằng SUPERUSER 'mediaos' (mig 0001), allowlist sẽ chặn nhầm cả migrator/seed → vỡ chain (chain-smoke không bắt được vì hiện chưa migration nào UPDATE audit_logs). RED test: (a) app role UPDATE audit_logs bị chặn CẢ khi lỡ có grant, assert message cụ thể (chứa 'append-only', không chỉ generic permission-denied); (b) POSITIVE: superuser/directPool UPDATE audit_logs THÀNH CÔNG (chứng minh trigger không chặn nhầm); test GRANT/REVOKE tạm trong try/finally (chống rò grant chéo sang spec khác dùng chung LANE_DB). idx_audit_logs_entity: thêm index mới (company_id,entity_type,entity_id,created_at DESC) ADDITIVE (giữ index cũ, không drop)",
+      "db:check chain 0000→head xanh LANE_DB (xác nhận idx/when kế tiếp đúng head hiện tại lúc land — có thể đã đổi vì lane khác trong cùng checkpoint); FULL gate (database-reviewer — chạm audit) + người chốt; lane db NỐI TIẾP",
     ],
   },
   {
