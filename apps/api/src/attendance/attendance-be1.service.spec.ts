@@ -241,6 +241,20 @@ describe("AttendanceService BE-1 — getToday", () => {
     expect(out.allowedActions).toEqual({ canCheckIn: false, canCheckOut: false });
     expect(out.disabledReason).toContain("hoàn tất");
   });
+
+  // S3-QA-1: đã check-in nhưng CHƯA check-out → canCheckOut=true, canCheckIn=false (không có
+  // disabledReason vì checkedOut=false — chỉ 2 case trên có reason, case này KHÔNG bị chặn).
+  it("already checked-in but NOT checked-out → canCheckOut:true, canCheckIn:false", async () => {
+    const repo = makeRepo({
+      findRecordByUserDateTx: vi
+        .fn()
+        .mockResolvedValue([makeRecord({ checkInAt: new Date(), checkOutAt: null })]),
+    });
+    const { service } = build(repo);
+    const out = await service.getToday(actor);
+    expect(out.allowedActions).toEqual({ canCheckIn: false, canCheckOut: true });
+    expect(out.disabledReason).toBeNull();
+  });
 });
 
 // ─── Persisted column values + append-only log + audit/outbox once ────────────────

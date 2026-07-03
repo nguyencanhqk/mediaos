@@ -295,6 +295,46 @@ describe.skipIf(!runDb)("S3-ATT-BE-1 Today/check-in/check-out (DB cô lập, đ�
     expect(log.rows[0].client_timezone).toBe("Asia/Tokyo");
   });
 
+  // ── S3-QA-1: race 0-dup THẬT (Promise.all, KHÔNG tuần tự) ───────────────────────
+  // CHỈ assert invariant (đúng 1 fulfilled + 1 rejected(Conflict) + 1 row DB) — KHÔNG assert đã đi
+  // qua nhánh cụ thể nào (app-guard findRecordByUserDateTx hay unique-constraint backstop đều hợp lệ,
+  // không deterministic theo timing thật).
+  it("race — 2 lệnh check-in đồng thời (Promise.all) cùng ngày ⇒ đúng 1 fulfilled + 1 rejected(Conflict) + 1 row", async () => {
+    const userId = await seedUser(direct, A.companyId, `race-${A.slug}@x.test`);
+    await insertEmployee(direct, A.companyId, userId);
+    const actor = { id: userId, companyId: A.companyId };
+
+    const results = await freezeDate(CHECK_IN, () =>
+      Promise.allSettled([
+        service.checkIn(actor, { method: "web" }),
+        service.checkIn(actor, { method: "web" }),
+      ]),
+    );
+
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+    expect(fulfilled.length).toBe(1);
+    expect(rejected.length).toBe(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(ConflictException);
+
+    const rec = await direct.query(
+      "SELECT count(*)::int AS c FROM attendance_records WHERE company_id=$1 AND user_id=$2 AND work_date=$3 AND deleted_at IS NULL",
+      [A.companyId, userId, WD],
+    );
+    expect(rec.rows[0].c).toBe(1);
+  });
+
+  // ── S3-QA-1: resigned real-DB round-trip (không mock) ───────────────────────────
+  it("resigned (real-DB, không mock) ⇒ check-in Forbidden", async () => {
+    const userId = await seedUser(direct, A.companyId, `resigned-${A.slug}@x.test`);
+    await insertEmployee(direct, A.companyId, userId, "resigned");
+    const actor = { id: userId, companyId: A.companyId };
+
+    await expect(service.checkIn(actor, { method: "web" })).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
   // ── G: HTTP view-own gate lets a normal employee GET /today ────────────────────
   it("G — employee (view-own:attendance) GET /attendance/today ⇒ 200", async () => {
     const pw = await new PasswordService().hash(LOGIN_PW);
