@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ConflictException } from "@nestjs/common";
 import { AuthService, redactEmailFromDetail } from "./auth.service";
 import { TWO_FACTOR_ENFORCED } from "./two-factor.service";
+import { companies, employeeProfiles, userRoles, users } from "../db/schema";
 
 /**
  * G6-2f residual M3 — forgotPassword ghi `err.stack` để quan sát (silent-failure F3) nhưng stack
@@ -143,5 +144,197 @@ describe("AuthService.disableTwoFactor — fail-fast khi bị ÉP 2FA (S2-AUTH-B
     expect(ctx.password.verify).toHaveBeenCalledWith("argon2-hash", "pw");
     expect(ctx.rateLimiter.reset).toHaveBeenCalledTimes(1);
     expect(ctx.twoFactor.disable).toHaveBeenCalledWith(user.id, user.companyId);
+  });
+});
+
+/**
+ * S2-FND-SEED-3 (LANE SEED3-C-authme) — /auth/me PHẢI expose `mustChangePassword` (ADDITIVE, mẫu
+ * S2-AUTH-BE-1: KHÔNG phá contract cũ). Super-admin bootstrap upsert đặt cờ = true (mig 0469 +
+ * super-admin-bootstrap.repository), FE dùng cờ này để ép đổi mật khẩu lần đầu (enforcement = follow-up FE).
+ *
+ * Chứng minh RED-trước-GREEN: nếu me() KHÔNG select/return users.must_change_password thì
+ * `result.mustChangePassword` = undefined ⇒ assertion `toBe(true)/toBe(false)` vỡ.
+ *
+ * Cô lập bằng unit-mock: `dbsvc.withTenant` dispatch theo BẢNG (`from(table)`) — users → row có
+ * mustChangePassword; companies → 1 row; employee/roles → [] (không hồ sơ). KHÔNG chạm DB (đường me()
+ * đầy đủ đã có int-spec riêng dưới LANE_DB).
+ */
+describe("AuthService.me — expose mustChangePassword (S2-FND-SEED-3)", () => {
+  const CLAIMS = { sub: "user-1", companyId: "co-1" } as const;
+
+  // tx stub dispatch theo bảng: users/companies kết ở `.limit(1)`; userRoles kết ở `.where(...)` (await
+  // trực tiếp). `whereResult` vừa CHAINABLE (.limit cho users/company/emp) vừa THENABLE (roleRows).
+  function makeMeTx(row: Record<string, unknown>, company: Record<string, unknown>) {
+    let table: unknown = null;
+    const rowsFor = (): unknown[] => {
+      if (table === users) return [row];
+      if (table === companies) return [company];
+      if (table === employeeProfiles) return []; // không hồ sơ nhân sự
+      if (table === userRoles) return []; // không role (không load-bearing cho test cờ)
+      return [];
+    };
+    const whereResult = {
+      limit: vi.fn(() => Promise.resolve(rowsFor())),
+      then: (resolve: (v: unknown) => void) => resolve(rowsFor()),
+    };
+    const tx = {
+      select: vi.fn(() => tx),
+      from: vi.fn((t: unknown) => {
+        table = t;
+        return tx;
+      }),
+      innerJoin: vi.fn(() => tx),
+      where: vi.fn(() => whereResult),
+      limit: vi.fn(() => Promise.resolve(rowsFor())),
+    };
+    return tx;
+  }
+
+  function makeService(row: Record<string, unknown>) {
+    const company = { id: CLAIMS.companyId, name: "ACME", status: "active" };
+    const tx = makeMeTx(row, company);
+    const dbsvc = {
+      withTenant: vi.fn(async (_c: string, fn: (tx: unknown) => unknown) => fn(tx)),
+    };
+    const tokens = { verifyAccessToken: vi.fn(() => ({ ...CLAIMS })) };
+    const twoFactor = {
+      requiresTwoFactorTx: vi.fn().mockResolvedValue(false),
+      isEnabledTx: vi.fn().mockResolvedValue(false),
+    };
+    const permissions = {
+      getCapabilities: vi.fn().mockResolvedValue({}),
+      getAllowlistedSensitiveCapabilities: vi.fn().mockResolvedValue({}),
+      getCapabilityScopes: vi.fn().mockResolvedValue({}),
+    };
+    const modules = { getMyApps: vi.fn().mockResolvedValue([]) };
+
+    const Ctor = AuthService as unknown as new (...args: unknown[]) => AuthService;
+    const service = new Ctor(
+      dbsvc, // 1 dbsvc
+      {}, // 2 password
+      tokens, // 3 tokens
+      {}, // 4 rateLimiter
+      {}, // 5 audit
+      {}, // 6 outbox
+      permissions, // 7 permissions
+      {}, // 8 secrets
+      twoFactor, // 9 twoFactor
+      {}, // 10 replayGuard
+      {}, // 11 securityAlerts
+      {}, // 12 securityPolicy
+      modules, // 13 modules
+    );
+    return { service };
+  }
+
+  const baseRow = {
+    id: CLAIMS.sub,
+    companyId: CLAIMS.companyId,
+    email: "admin@acme.local",
+    fullName: "Admin",
+    status: "active",
+    deletedAt: null,
+  };
+
+  it("must_change_password=true (admin sau bootstrap) → me().mustChangePassword=true", async () => {
+    const { service } = makeService({ ...baseRow, mustChangePassword: true });
+    const result = await service.me("access-token");
+    expect(result.mustChangePassword).toBe(true);
+  });
+
+  it("must_change_password=false (đã đổi) → me().mustChangePassword=false (mặc định, KHÔNG phá contract cũ)", async () => {
+    const { service } = makeService({ ...baseRow, mustChangePassword: false });
+    const result = await service.me("access-token");
+    expect(result.mustChangePassword).toBe(false);
+    // ADDITIVE: field cũ (mustSetupTwoFactor) giữ nguyên semantics.
+    expect(result.mustSetupTwoFactor).toBe(false);
+  });
+});
+
+/**
+ * S2-FND-SEED-3 (LANE SEED3-C-authme) — change-password thành công PHẢI clear `must_change_password`
+ * TRONG CÙNG tx (cùng câu UPDATE users với password_hash) ⇒ đổi mật khẩu = hết bị ép + rollback nguyên tử.
+ *
+ * Chứng minh RED-trước-GREEN: nếu changePassword() KHÔNG set `mustChangePassword: false` thì set-call
+ * chứa `passwordHash` KHÔNG có key `mustChangePassword` ⇒ `=== false` vỡ (undefined).
+ *
+ * tx stub: chain thenable cho UPDATE/INSERT (await trực tiếp); `.limit(1)` trả hash hiện tại cho SELECT.
+ * securityEvents default-construct (constructor) → record() gọi tx.insert(...).values(...) → chain nuốt êm.
+ */
+describe("AuthService.changePassword — clear must_change_password cùng tx (S2-FND-SEED-3)", () => {
+  const user = { id: "user-1", companyId: "co-1" } as const;
+
+  function makeChangePwTx() {
+    const setCalls: Array<Record<string, unknown>> = [];
+    const chain = {
+      select: vi.fn(() => chain),
+      from: vi.fn(() => chain),
+      where: vi.fn(() => chain),
+      limit: vi.fn(() => Promise.resolve([{ passwordHash: "argon2-current-hash" }])),
+      update: vi.fn(() => chain),
+      set: vi.fn((obj: Record<string, unknown>) => {
+        setCalls.push(obj);
+        return chain;
+      }),
+      insert: vi.fn(() => chain),
+      values: vi.fn(() => chain),
+      // UPDATE/INSERT được `await` trực tiếp ở service → chain là thenable resolve êm.
+      then: (resolve: (v: unknown) => void) => resolve(undefined),
+    };
+    return { tx: chain, setCalls };
+  }
+
+  function makeService() {
+    const { tx, setCalls } = makeChangePwTx();
+    const dbsvc = {
+      withTenant: vi.fn(async (_c: string, fn: (tx: unknown) => unknown) => fn(tx)),
+    };
+    const password = {
+      verify: vi.fn().mockResolvedValue(true),
+      hash: vi.fn().mockResolvedValue("argon2-new-hash"),
+    };
+    const rateLimiter = {
+      isLocked: vi.fn().mockResolvedValue(false),
+      recordFailure: vi.fn().mockResolvedValue(undefined),
+      reset: vi.fn().mockResolvedValue(undefined),
+    };
+    const audit = { record: vi.fn().mockResolvedValue(undefined) };
+
+    const Ctor = AuthService as unknown as new (...args: unknown[]) => AuthService;
+    const service = new Ctor(
+      dbsvc, // 1 dbsvc
+      password, // 2 password
+      {}, // 3 tokens
+      rateLimiter, // 4 rateLimiter
+      audit, // 5 audit
+      {}, // 6 outbox
+      {}, // 7 permissions
+      {}, // 8 secrets
+      {}, // 9 twoFactor
+      {}, // 10 replayGuard
+      {}, // 11 securityAlerts
+      {}, // 12 securityPolicy
+      {}, // 13 modules
+    );
+    return { service, setCalls, password, audit };
+  }
+
+  it("đổi thành công → set mustChangePassword:false trong CÙNG update với password_hash", async () => {
+    const { service, setCalls, password, audit } = makeService();
+
+    await expect(service.changePassword(user, "old-pw", "new-pw")).resolves.toBeUndefined();
+
+    // Câu UPDATE users mang password_hash mới PHẢI đồng thời clear cờ (cùng tx, cùng statement).
+    const pwUpdate = setCalls.find((c) => "passwordHash" in c);
+    expect(pwUpdate).toBeDefined();
+    expect(pwUpdate?.passwordHash).toBe("argon2-new-hash");
+    expect(pwUpdate?.mustChangePassword).toBe(false);
+
+    // Băm mật khẩu MỚI (KHÔNG log/return plaintext — BẤT BIẾN #3) + audit hành động (DoD §8).
+    expect(password.hash).toHaveBeenCalledWith("new-pw");
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ action: "auth.password_changed" }),
+    );
   });
 });

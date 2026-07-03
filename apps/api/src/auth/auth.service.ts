@@ -575,7 +575,9 @@ export class AuthService {
       const newHash = await this.password.hash(newPassword);
       await tx
         .update(users)
-        .set({ passwordHash: newHash, updatedAt: new Date() })
+        // S2-FND-SEED-3: clear cờ ép-đổi TRONG CÙNG statement/tx với password_hash mới ⇒ nguyên tử
+        // (rollback ⇒ cả hai không đổi). Đổi mật khẩu = hết bị ép; /auth/me sau đó trả mustChangePassword=false.
+        .set({ passwordHash: newHash, updatedAt: new Date(), mustChangePassword: false })
         .where(eq(users.id, user.id));
       // Đổi mật khẩu = đăng xuất MỌI phiên: thu hồi mọi refresh token còn sống (mirror resetPassword).
       await tx
@@ -1023,6 +1025,9 @@ export class AuthService {
           fullName: users.fullName,
           status: users.status,
           deletedAt: users.deletedAt,
+          // S2-FND-SEED-3: cờ ép đổi mật khẩu lần đầu (mig 0469). Cột công khai (KHÔNG nhạy cảm) → an toàn
+          // trả cho chính chủ; FE dùng để điều hướng ép đổi. KHÔNG bao giờ chọn password_hash (BẤT BIẾN #3).
+          mustChangePassword: users.mustChangePassword,
         })
         .from(users)
         .where(eq(users.id, claims.sub))
@@ -1074,6 +1079,8 @@ export class AuthService {
           status: row.status,
         },
         mustSetupTwoFactor: required && !enabled,
+        // S2-FND-SEED-3: expose cờ ép đổi mật khẩu lần đầu (ADDITIVE, mẫu mustSetupTwoFactor).
+        mustChangePassword: row.mustChangePassword,
         company: company ?? undefined,
         employee: emp
           ? {
@@ -1116,6 +1123,10 @@ export class AuthService {
       ...ctx.base,
       capabilities,
       mustSetupTwoFactor: ctx.mustSetupTwoFactor,
+      // S2-FND-SEED-3: cờ ép đổi mật khẩu lần đầu (ADDITIVE — /auth/me không phá contract S2-AUTH-BE-1).
+      // TODO(FE-enforcement, follow-up FE WO): apps/app đọc cờ này để REDIRECT ép đổi mật khẩu trước khi
+      // vào nghiệp vụ (chặn ở router guard). CỐ Ý KHÔNG dựng nút/route chết ở đây — chỉ phơi dữ liệu.
+      mustChangePassword: ctx.mustChangePassword,
       company: ctx.company,
       employee: ctx.employee,
       roles: ctx.roles,

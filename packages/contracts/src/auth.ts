@@ -116,6 +116,13 @@ export const meResponseSchema = z.object({
   capabilities: z.record(z.boolean()),
   /** true khi role ép 2FA (requires_two_factor) nhưng user CHƯA bật → FE buộc enroll (G16-1, AUTH-003). */
   mustSetupTwoFactor: z.boolean(),
+  /**
+   * S2-FND-SEED-3 — true khi tài khoản bị ép đổi mật khẩu lần đầu (users.must_change_password, mig 0469).
+   * Super-admin bootstrap upsert đặt = true; change-password thành công clear cờ (cùng tx) ⇒ /auth/me trả
+   * false. ADDITIVE (mẫu mustSetupTwoFactor) — KHÔNG phá contract S2-AUTH-BE-1. FE dùng làm cờ TƯ VẤN để
+   * điều hướng ép đổi (enforcement thật là follow-up FE, KHÔNG phải cổng BE per-request).
+   */
+  mustChangePassword: z.boolean(),
   /** Company hiện tại (tenant của phiên). */
   company: z.object({ id: z.string().uuid(), name: z.string(), status: z.string() }).optional(),
   /**
