@@ -93,7 +93,7 @@ DB-09 tham chiếu cột không tồn tại trong chính DB-08: `file_access_log
 | --- | --- |
 | Sequence counters (§14) | **0 — không tầng nào seed** (H7) |
 | Default company (§17.1) | **Bước psql tay** (`scripts/windows/03-migrate.ps1:32-38`); bootstrap admin fail-fast khi company vắng → seed tay + restart |
-| System settings (§11.1) | **5/14 key**; lệch giá trị: `file.max_upload_size_mb` 25 vs doc 20, `default_locale` `vi` vs `vi-VN`; fallback hard-code chỉ phủ 6 key |
+| System settings (§11.1) | ✅ **ĐÃ GIẢI (mig `0470` S2-FND-SEED-4)** — 14/14 key canonical Active (4 sẵn `0435` + 10 mới); 2 giá trị lệch **PIN code-thắng** ở DB-10 §11.1 (`file.max_upload_size_mb`=25 không 20, `default_locale`=`vi` không `vi-VN` — KHÔNG đổi giá trị đang chạy); `file.allowed_mime_types` là DÔI (giữ). Fallback `SETTING_DEFAULTS` mở rộng 11 company-default key ở lane `seed4-defaults` |
 | Company settings (§11.2) | **0/12** (giảm nhẹ bởi precedence + defaults, nhưng `attendance.*`/`leave.*` defaults không tồn tại) |
 | HR master (job_levels 8, contract_types 5, employee_code_config) | **0** — 0445 chủ đích dời runtime nhưng lane chưa làm |
 | Leave types (§14.3) | **4/8** (`ANNUAL/SICK/UNPAID/OTHER`; mã khác doc `ANNUAL` vs `ANNUAL_LEAVE`; thiếu MATERNITY/MARRIAGE/BEREAVEMENT/COMPENSATORY; ANNUAL `allowHourly:false` vs doc true) |

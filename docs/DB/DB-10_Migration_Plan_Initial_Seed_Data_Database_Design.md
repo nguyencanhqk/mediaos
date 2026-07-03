@@ -650,6 +650,8 @@ Secret phải lấy từ environment variable hoặc secret manager.
 | `notification.email_enabled` | NOTI | Notification | `false` | false | false |
 | `dashboard.cache_default_ttl_seconds` | DASH | Dashboard | `300` | false | false |
 
+> **CHỐT 2026-07-03 (code thắng — WO S2-FND-SEED-4, mig `0470`):** 2 giá trị lệch giữ theo CODE đang chạy, **KHÔNG đổi giá trị runtime**: `file.max_upload_size_mb` = **`25`** (không `20`) vì seed `0435` + fallback `SETTING_DEFAULTS` đã dùng 25MB trên môi trường đang chạy, hạ về 20 = đổi hành vi upload không cần thiết; `system.default_locale` = **`vi`** (không `vi-VN`) vì `companies.language` CHECK `IN ('vi','en')` (mig `0015`) chỉ nhận mã 2 ký tự và `react-i18next` dùng `'vi'`, `'vi-VN'` sẽ vi phạm CHECK khi đồng bộ `company.language`. Bảng trên giữ nguyên GIÁ TRỊ ĐỀ XUẤT gốc để tham chiếu; runtime canonical = code. 10 key còn thiếu (`system.default_currency`, `security.*` ×5, `file.default_visibility`, `notification.*` ×2, `dashboard.cache_default_ttl_seconds`) seed đúng §11.1 ở mig `0470` (idempotent `ON CONFLICT (setting_key) WHERE status='Active' DO NOTHING`). `file.allowed_mime_types` là key DÔI (ngoài 14-key §11.1, seed `0435`) — giữ, KHÔNG xoá.
+
 ### 11.2 Company settings mặc định
 
 | Setting key | Module | Giá trị đề xuất |
