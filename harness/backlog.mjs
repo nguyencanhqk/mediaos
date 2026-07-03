@@ -3351,7 +3351,11 @@ export const backlog = [
     //   đã cập nhật hiện trạng). Kèm (BACKEND-11 §12.5): audit-masker.service.ts:33-41 thiếu stems otp ·
     //   salary_amount · personal_health_info; stem 'identitynumber' KHÔNG khớp biến thể 'id_card_number' — hiện dựa
     //   kỷ luật DTO-at-source (tiền lệ lọt: S2-HR-BE-2).
-    status: "todo",
+    // SHIPPED 2026-07-03 qua auto-loop checkpoint (feat/debt-wave2, commit 75236b1): Đội3 PASS vòng2 (~93) rồi
+    //   người chốt duyệt trực tiếp (không PR riêng — commit nằm sẵn trên nhánh tích hợp). Stem 'salary' thu hẹp
+    //   còn 'salaryamount' để KHÔNG che base_salary (tránh regression audit trail update-salary/S2-QA-1); verify
+    //   employees-salary-sensitive.int-spec.ts 7/7 pass trên LANE_DB cô lập.
+    status: "done",
     paths: [
       "apps/api/src/foundation/holidays/**",
       "apps/api/src/events/audit-masker.service.ts",
@@ -3387,7 +3391,9 @@ export const backlog = [
     //   Mọi bảng foundation band 0431+ đều đã bỏ DELETE. (user_roles = S2-AUTH-DB-3 riêng — KHÔNG trùng.)
     //   LANE NỐI TIẾP db-migration. ⚠️ ĐỔI WRITER TRƯỚC KHI SIẾT GRANT (bài học S2-AUTH-DB-3): grep mọi .delete(
     //   trên companies/users → chuyển soft-delete TRƯỚC, RỒI migration REVOKE — sai thứ tự là vỡ runtime.
-    status: "todo",
+    // SHIPPED 2026-07-03 qua auto-loop checkpoint (feat/debt-wave2, commit 40acc91): migration 0467, FULL gate
+    //   PASS, push thẳng nhánh tích hợp (không PR riêng — HEAD đã ở mergeBase lúc ship).
+    status: "done",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/db/schema/**",
