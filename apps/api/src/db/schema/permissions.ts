@@ -80,6 +80,10 @@ export type RolePermission = typeof rolePermissions.$inferSelect;
 /**
  * user_roles -- assigns a role to a user within a company context.
  * expires_at enables temporary role grants. RLS on company_id.
+ * Soft-delete via deleted_at/deleted_by (S2-AUTH-DB-3, mig 0471): revoking a role is an UPDATE that sets
+ * deleted_at (app role has UPDATE, NOT DELETE — hard-delete revoked) so the tombstone preserves who held
+ * which role for forensics. Partial unique index (user_id, role_id, company_id) WHERE deleted_at IS NULL
+ * (migration SQL only) allows re-grant after soft-delete without violating uniqueness on active rows.
  */
 export const userRoles = pgTable(
   "user_roles",
@@ -97,11 +101,16 @@ export const userRoles = pgTable(
     grantedBy: uuid("granted_by").references(() => users.id),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // Soft-delete (mig 0471). deleted_at NULL = active. deleted_by = actor who revoked (FK users, SET NULL).
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedBy: uuid("deleted_by").references(() => users.id, { onDelete: "set null" }),
   },
   (t) => [
     index("user_roles_user_company_idx").on(t.userId, t.companyId),
     index("user_roles_role_idx").on(t.roleId),
-    // UNIQUE (user_id, role_id, company_id) enforced via CONSTRAINT in migration SQL.
+    // Partial UNIQUE (user_id, role_id, company_id) WHERE deleted_at IS NULL is defined in migration SQL
+    // only (mig 0471, replaces full constraint user_roles_uq from 0005). Drizzle cannot express partial
+    // unique indexes; enforced at DB level.
   ],
 );
 
