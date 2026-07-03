@@ -1,8 +1,32 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ConflictException } from "@nestjs/common";
+import { Column, SQL } from "drizzle-orm";
 import { AuthService, redactEmailFromDetail } from "./auth.service";
 import { TWO_FACTOR_ENFORCED } from "./two-factor.service";
 import { companies, employeeProfiles, userRoles, users } from "../db/schema";
+
+/**
+ * S2-AUTH-DB-3 Lane C — RED-first (kiểm chứng CẤU TRÚC WHERE, không cần Postgres). Reader `user_roles`
+ * ngoài permission-engine (me() roleRows, isOperatorTx) PHẢI lọc `isNull(userRoles.deletedAt)`. Duyệt
+ * `queryChunks` đệ quy tìm Column `deleted_at` THUỘC ĐÚNG bảng — phân biệt userRoles.deleted_at với
+ * roles.deleted_at (reader CŨ chỉ lọc roles ⇒ RED; sau fix lọc CẢ HAI ⇒ GREEN).
+ */
+function whereFiltersSoftDelete(where: unknown, table: unknown): boolean {
+  let found = false;
+  const walk = (node: unknown): void => {
+    if (node instanceof Column) {
+      if (node.table === table && node.name === "deleted_at") found = true;
+      return;
+    }
+    if (node instanceof SQL) {
+      for (const chunk of node.queryChunks) walk(chunk);
+      return;
+    }
+    if (Array.isArray(node)) for (const item of node) walk(item);
+  };
+  walk(where);
+  return found;
+}
 
 /**
  * G6-2f residual M3 — forgotPassword ghi `err.stack` để quan sát (silent-failure F3) nhưng stack
@@ -164,7 +188,11 @@ describe("AuthService.me — expose mustChangePassword (S2-FND-SEED-3)", () => {
 
   // tx stub dispatch theo bảng: users/companies kết ở `.limit(1)`; userRoles kết ở `.where(...)` (await
   // trực tiếp). `whereResult` vừa CHAINABLE (.limit cho users/company/emp) vừa THENABLE (roleRows).
-  function makeMeTx(row: Record<string, unknown>, company: Record<string, unknown>) {
+  function makeMeTx(
+    row: Record<string, unknown>,
+    company: Record<string, unknown>,
+    captures: { userRolesWhere?: unknown } = {},
+  ) {
     let table: unknown = null;
     const rowsFor = (): unknown[] => {
       if (table === users) return [row];
@@ -184,7 +212,11 @@ describe("AuthService.me — expose mustChangePassword (S2-FND-SEED-3)", () => {
         return tx;
       }),
       innerJoin: vi.fn(() => tx),
-      where: vi.fn(() => whereResult),
+      // S2-AUTH-DB-3 Lane C: bắt WHERE của reader roleRows (from userRoles) để assert lọc soft-delete.
+      where: vi.fn((cond?: unknown) => {
+        if (table === userRoles) captures.userRolesWhere = cond;
+        return whereResult;
+      }),
       limit: vi.fn(() => Promise.resolve(rowsFor())),
     };
     return tx;
@@ -192,7 +224,8 @@ describe("AuthService.me — expose mustChangePassword (S2-FND-SEED-3)", () => {
 
   function makeService(row: Record<string, unknown>) {
     const company = { id: CLAIMS.companyId, name: "ACME", status: "active" };
-    const tx = makeMeTx(row, company);
+    const captures: { userRolesWhere?: unknown } = {};
+    const tx = makeMeTx(row, company, captures);
     const dbsvc = {
       withTenant: vi.fn(async (_c: string, fn: (tx: unknown) => unknown) => fn(tx)),
     };
@@ -224,7 +257,7 @@ describe("AuthService.me — expose mustChangePassword (S2-FND-SEED-3)", () => {
       {}, // 12 securityPolicy
       modules, // 13 modules
     );
-    return { service };
+    return { service, captures };
   }
 
   const baseRow = {
@@ -235,6 +268,14 @@ describe("AuthService.me — expose mustChangePassword (S2-FND-SEED-3)", () => {
     status: "active",
     deletedAt: null,
   };
+
+  // S2-AUTH-DB-3 Lane C: me() roleRows reader PHẢI lọc soft-delete assignment (isNull(userRoles.deletedAt)).
+  it("roleRows lọc isNull(userRoles.deletedAt) — RED nếu chỉ lọc roles.deletedAt", async () => {
+    const { service, captures } = makeService({ ...baseRow, mustChangePassword: false });
+    await service.me("access-token");
+    expect(captures.userRolesWhere).toBeDefined();
+    expect(whereFiltersSoftDelete(captures.userRolesWhere, userRoles)).toBe(true);
+  });
 
   it("must_change_password=true (admin sau bootstrap) → me().mustChangePassword=true", async () => {
     const { service } = makeService({ ...baseRow, mustChangePassword: true });
@@ -336,5 +377,52 @@ describe("AuthService.changePassword — clear must_change_password cùng tx (S2
       expect.anything(),
       expect.objectContaining({ action: "auth.password_changed" }),
     );
+  });
+});
+
+/**
+ * S2-AUTH-DB-3 Lane C (round-2 #6) — isOperatorTx (login-path) quyết `aud=operator` khi user giữ role
+ * platform-admin CÒN HIỆU LỰC. Soft-delete assignment platform-admin (deleted_at set) ⇒ login SAU KHÔNG
+ * còn là operator. Reader PHẢI lọc `isNull(userRoles.deletedAt)` (trước fix chỉ lọc roles.deletedAt).
+ *
+ * RED-first: bắt WHERE của query user_roles (private method, gọi qua cast) rồi khẳng định có
+ * userRoles.deletedAt trong predicate. Mock trả 0 hàng ⇒ isOperatorTx=false (không load-bearing cho assert
+ * cấu trúc). Không cần Postgres — đường tx-thật đã có int-spec riêng dưới LANE_DB (Lane D).
+ */
+describe("AuthService.isOperatorTx — lọc soft-delete user_roles (S2-AUTH-DB-3 Lane C)", () => {
+  function makeOperatorTx() {
+    const captures: { userRolesWhere?: unknown } = {};
+    const tx = {
+      select: (_cols?: unknown) => ({
+        from: (table: unknown) => {
+          const whereChain = {
+            where: (cond?: unknown) => {
+              if (table === userRoles) captures.userRolesWhere = cond;
+              return { limit: () => Promise.resolve([] as unknown[]) };
+            },
+          };
+          // isOperatorTx: select().from(userRoles).innerJoin(roles).where().limit()
+          return { ...whereChain, innerJoin: () => whereChain };
+        },
+      }),
+    };
+    return { tx, captures };
+  }
+
+  function bareService(): { isOperatorTx: (tx: unknown, userId: string) => Promise<boolean> } {
+    const Ctor = AuthService as unknown as new (...args: unknown[]) => AuthService;
+    // isOperatorTx chỉ đọc `tx` (const module PLATFORM_ADMIN_ROLE_ID) — KHÔNG chạm this.dep ⇒ stub rỗng an toàn.
+    const service = new Ctor({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});
+    return service as unknown as {
+      isOperatorTx: (tx: unknown, userId: string) => Promise<boolean>;
+    };
+  }
+
+  it("WHERE isOperatorTx có isNull(userRoles.deletedAt) — RED nếu chỉ lọc roles.deletedAt", async () => {
+    const { tx, captures } = makeOperatorTx();
+    const result = await bareService().isOperatorTx(tx, "33333333-3333-3333-3333-333333333333");
+    expect(result).toBe(false); // 0 hàng (mock) ⇒ không operator
+    expect(captures.userRolesWhere).toBeDefined();
+    expect(whereFiltersSoftDelete(captures.userRolesWhere, userRoles)).toBe(true);
   });
 });

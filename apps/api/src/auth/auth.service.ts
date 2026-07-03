@@ -1056,7 +1056,9 @@ export class AuthService {
         .where(and(eq(employeeProfiles.userId, row.id), isNull(employeeProfiles.deletedAt)))
         .limit(1);
 
-      // roles active (mirror RBAC §16.2: chưa xoá + chưa hết hạn). roles không có cột code → name = code.
+      // roles active (mirror RBAC §16.2: chưa xoá + chưa hết hạn). S2-AUTH-DB-3: lọc CẢ assignment
+      // (userRoles.deleted_at — gỡ role = soft-delete, mig 0471) LẪN role (roles.deleted_at). roles không
+      // có cột code → name = code.
       const roleRows = await tx
         .select({ id: roles.id, name: roles.name })
         .from(userRoles)
@@ -1065,6 +1067,7 @@ export class AuthService {
           and(
             eq(userRoles.userId, row.id),
             eq(userRoles.companyId, row.companyId),
+            isNull(userRoles.deletedAt),
             isNull(roles.deletedAt),
             or(isNull(userRoles.expiresAt), gt(userRoles.expiresAt, new Date())),
           ),
@@ -1346,8 +1349,10 @@ export class AuthService {
 
   /**
    * AC-0b: user giữ role hệ thống `platform-admin` (id …f0) CÒN HIỆU LỰC ⇒ phiên OPERATOR (control-plane
-   * chéo tenant). Join y hệt requiresTwoFactorTx (userRoles ⋈ roles, lọc deleted_at + expires_at) nhưng
-   * khoá theo id role platform-admin cố định. Chạy TRONG tx login (cùng 1 transaction, không round-trip thừa).
+   * chéo tenant). Join y hệt requiresTwoFactorTx (userRoles ⋈ roles, lọc deleted_at CẢ assignment + role +
+   * expires_at) nhưng khoá theo id role platform-admin cố định. S2-AUTH-DB-3 (round-2 #6): gỡ assignment
+   * platform-admin = soft-delete (userRoles.deleted_at, mig 0471) ⇒ login SAU KHÔNG mint token operator.
+   * Chạy TRONG tx login (cùng 1 transaction, không round-trip thừa).
    */
   private async isOperatorTx(tx: TenantTx, userId: string): Promise<boolean> {
     const [row] = await tx
@@ -1358,6 +1363,7 @@ export class AuthService {
         and(
           eq(userRoles.userId, userId),
           eq(roles.id, PLATFORM_ADMIN_ROLE_ID),
+          isNull(userRoles.deletedAt),
           isNull(roles.deletedAt),
           or(isNull(userRoles.expiresAt), gt(userRoles.expiresAt, new Date())),
         ),
