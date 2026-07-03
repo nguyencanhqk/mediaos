@@ -1023,6 +1023,13 @@
       "when": 1717500720000,
       "tag": "0465_s2_hrbe6_contract_scope_fix",
       "breakpoints": true
+    },
+    {
+      "idx": 146,
+      "version": "7",
+      "when": 1717500725000,
+      "tag": "0466_s2_authdb4_user_require_2fa_reset_perm",
+      "breakpoints": true
     }
   ]
 }
