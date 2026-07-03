@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-03 17:50Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-03 17:51Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -28,7 +28,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `feat/debt-wave2` · **file đang đổi (dirty)**: 1
+- **branch**: `feat/debt-wave2` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 150 — `0470_s2_fndseed4_settings_seed` (151 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -37,6 +37,9 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `69bd091` | 2026-07-04 | merge: sync origin/feat/debt-wave2 (PR #110 S2-FND-SEED-4 squash-merged) vào local |
+| `d3c627a` | 2026-07-04 | chore(harness): chốt hướng round 3 cho 4 WO plan-blocked (checkpoint 3 → 4) |
+| `bad36d0` | 2026-07-04 | feat(S2-FND-SEED-4): seed settings đủ theo DB-10 §11 (10 system key + 11 company-default + pin 2 lệch code-thắng) (#110) |
 | `60c6e14` | 2026-07-04 | wip(seed4-defaults): mở rộng SETTING_DEFAULTS phủ 11 company-default (DB-10 §11.2) + int-spec resolve/deny/drift |
 | `090541f` | 2026-07-04 | wip(seed4-mig): mig 0470 seed 10 system_settings canonical §11.1 + pin 2 lệch code-thắng |
 | `abdba1d` | 2026-07-03 | wip(S2-FND-SEED-3-FIX-2): unit spec EnsureDefaultCompanyBootstrapService (4 nhánh onApplicationBootstrap, vá lỗ 0% coverage crown/red) |
@@ -46,9 +49,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `b4d5ec6` | 2026-07-03 | wip(SEED3-C-authme): /auth/me expose mustChangePassword (ADDITIVE) + clear-on-change-password |
 | `9b63b65` | 2026-07-03 | wip(SEED3-B-bootstrap): auto-dựng default company + must_change_password chain |
 | `2594a6f` | 2026-07-03 | wip(SEED3-A-mig): mig 0469 ensure_default_company SECURITY DEFINER + users.must_change_password |
-| `a11233a` | 2026-07-03 | chore(harness): chốt hướng round 2 cho 4 WO plan-blocked (checkpoint 2 → 3) |
-| `a06c596` | 2026-07-03 | wip(be-settings-public): GET /foundation/settings/public → Authenticated (per-method PermissionGuard) |
-| `695899e` | 2026-07-03 | wip(be-permsurface): reconcile my-apps permission surface + audit-log sole-gate (S2-FND-BE-5) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
