@@ -100,6 +100,43 @@ describe("loadEnv", () => {
     expect(env.WORKERS_SCHEDULER_ENABLED).toBe("false");
   });
 
+  // ── S2-FND-SEED-3 bootstrap default company (owner-chốt #4 — mapping param→cột companies) ──────────
+  it("defaults BOOTSTRAP_COMPANY_* to a CHECK-safe demo tenant (language='vi' NOT 'vi-VN', currency='VND')", () => {
+    const env = loadEnv({});
+    expect(env.BOOTSTRAP_COMPANY_SLUG).toBe("demo"); // khớp PLATFORM_SUPERADMIN_COMPANY_SLUG → chuỗi bootstrap khép kín
+    expect(env.BOOTSTRAP_COMPANY_NAME).toBe("Demo Company");
+    expect(env.BOOTSTRAP_COMPANY_TIMEZONE).toBe("Asia/Ho_Chi_Minh");
+    // language 'vi' (KHÔNG 'vi-VN') để qua companies_language_check IN ('vi','en') (mig 0015).
+    expect(env.BOOTSTRAP_COMPANY_LANGUAGE).toBe("vi");
+    expect(env.BOOTSTRAP_COMPANY_CURRENCY).toBe("VND");
+  });
+
+  it("rejects BOOTSTRAP_COMPANY_LANGUAGE='vi-VN' at the boundary (fail-fast trước CHECK companies.language)", () => {
+    // 'vi-VN' vi phạm companies_language_check ⇒ enum ép loadEnv throw NGAY (không để function chạm CHECK runtime).
+    expect(() =>
+      loadEnv({ BOOTSTRAP_COMPANY_LANGUAGE: "vi-VN" } as unknown as NodeJS.ProcessEnv),
+    ).toThrow(/Invalid environment variables/);
+  });
+
+  it("rejects BOOTSTRAP_COMPANY_CURRENCY outside {VND,USD} (khớp companies_currency_check)", () => {
+    expect(() =>
+      loadEnv({ BOOTSTRAP_COMPANY_CURRENCY: "EUR" } as unknown as NodeJS.ProcessEnv),
+    ).toThrow(/Invalid environment variables/);
+  });
+
+  it("accepts an overridden BOOTSTRAP_COMPANY config (slug/name/language en)", () => {
+    const env = loadEnv({
+      BOOTSTRAP_COMPANY_SLUG: "acme",
+      BOOTSTRAP_COMPANY_NAME: "Acme Corp",
+      BOOTSTRAP_COMPANY_LANGUAGE: "en",
+      BOOTSTRAP_COMPANY_CURRENCY: "USD",
+    } as NodeJS.ProcessEnv);
+    expect(env.BOOTSTRAP_COMPANY_SLUG).toBe("acme");
+    expect(env.BOOTSTRAP_COMPANY_NAME).toBe("Acme Corp");
+    expect(env.BOOTSTRAP_COMPANY_LANGUAGE).toBe("en");
+    expect(env.BOOTSTRAP_COMPANY_CURRENCY).toBe("USD");
+  });
+
   it("rejects a non-positive or non-numeric poll interval", () => {
     expect(() => loadEnv({ OUTBOX_POLL_MS: "0" } as NodeJS.ProcessEnv)).toThrow(
       /Invalid environment variables/,
