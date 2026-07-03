@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-03 06:52Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-03 07:01Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -32,8 +32,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `wip/s2-fe-hr-5-hr5-wc` · **file đang đổi (dirty)**: 5
-- **migration head**: idx 145 — `0465_s2_hrbe6_contract_scope_fix` (146 migration)
+- **branch**: `wip/s2-fe-hr-5-hr5-wc` · **file đang đổi (dirty)**: 0
+- **migration head**: idx 146 — `0466_s2_authdb4_user_require_2fa_reset_perm` (147 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
 
@@ -41,6 +41,9 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `6b1859d` | 2026-07-03 | merge: sync origin/master (wave security-wave1 #107) vào wip/s2-fe-hr-5-hr5-wc |
+| `58a6785` | 2026-07-03 | chore(harness): regen STATUS sau khi wave security-wave1 (DB-4+BE-11+BE-12) lên master (#107, squash e565b47) |
+| `e565b47` | 2026-07-03 | feat(security-wave1): 2FA per-user + admin reset (DB-4 + BE-11 + BE-12) (#107) |
 | `68616f9` | 2026-07-03 | chore(harness): seed 5 WO security-wave (2FA per-user + admin reset + FE security UI) theo owner-decision 2026-07-03 |
 | `808bc6a` | 2026-07-03 | chore(harness): regen STATUS sau khi wave carryover-wave1 lên master (#103, squash 9961849) |
 | `2827e5a` | 2026-07-03 | merge: sync origin/master (wave carryover-wave1 #103) vào wip/s2-fe-hr-5-hr5-wc — audit report lấy bản master (đã cập nhật bởi S2-FND-DOC-1) |
@@ -50,9 +53,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `74f989a` | 2026-07-02 | Merge remote-tracking branch 'origin/master' into wip/s2-fe-hr-5-hr5-wc |
 | `421105e` | 2026-07-02 | chore(harness): seed 15 WO carry-over từ audit Foundation/System 2026-07-02 + báo cáo audit + regen STATUS |
 | `efc3399` | 2026-07-02 | chore(harness): regen STATUS sau reconcile 31 WO shipped qua batch-squash (#68/#72/#82/#84/#85/#87/#88) — board còn 4 ready thật (QA-1/QA-2/LEAVE-5/LEAVE-6) (#89) |
-| `76794c4` | 2026-07-02 | feat(sprint2): FE Role/Permission admin + account sessions + FND sequences/seeds (#88) |
-| `e9ad014` | 2026-07-02 | feat(sprint2/3): FE HR contracts + ATT remote-work (Draft→submit FSM) + ATT reports/audit-logs (#87) |
-| `be576d7` | 2026-07-02 | feat(S3-LEAVE-BE-6): LEAVE reports + balance transactions + audit read (P2) (#86) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
