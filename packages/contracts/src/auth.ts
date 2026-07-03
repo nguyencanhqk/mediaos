@@ -119,10 +119,15 @@ export const meResponseSchema = z.object({
   /**
    * S2-FND-SEED-3 — true khi tài khoản bị ép đổi mật khẩu lần đầu (users.must_change_password, mig 0469).
    * Super-admin bootstrap upsert đặt = true; change-password thành công clear cờ (cùng tx) ⇒ /auth/me trả
-   * false. ADDITIVE (mẫu mustSetupTwoFactor) — KHÔNG phá contract S2-AUTH-BE-1. FE dùng làm cờ TƯ VẤN để
-   * điều hướng ép đổi (enforcement thật là follow-up FE, KHÔNG phải cổng BE per-request).
+   * false. FE dùng làm cờ TƯ VẤN để điều hướng ép đổi (enforcement thật là follow-up FE, KHÔNG phải cổng
+   * BE per-request).
+   *
+   * `.optional()` — ADDITIVE Y HỆT các field bổ sung khác của schema này (`company`/`employee`/`roles`/
+   * `scopes`/`modules`, S2-AUTH-BE-1): fixture FE có TRƯỚC field này (meResponseSchema.parse không truyền
+   * mustChangePassword) vẫn parse hợp lệ ⇒ KHÔNG phá contract S2-AUTH-BE-1. BE LUÔN populate (Lane C) nên
+   * field vẫn hiện diện thực tế; optional chỉ nới ràng buộc parse, không đổi hành vi server.
    */
-  mustChangePassword: z.boolean(),
+  mustChangePassword: z.boolean().optional(),
   /** Company hiện tại (tenant của phiên). */
   company: z.object({ id: z.string().uuid(), name: z.string(), status: z.string() }).optional(),
   /**

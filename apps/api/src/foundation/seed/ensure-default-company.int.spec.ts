@@ -13,7 +13,7 @@
  *   • idempotent (DB10-TC-003): gọi 2 lần → cùng id, status active, KHÔNG phình company.
  *   • N=1 guard (owner-chốt #5): đã có company active khác slug → KHÔNG tạo tenant thứ 2 (probe slug không đẻ).
  *   • locale/currency CHECK (owner-chốt #4): 'vi'/'VND' pass; 'vi-VN' bị companies_language_check reject (23514).
- *   • must_change_password lifecycle (repo, DB10-TC-004): SuperAdminBootstrapRepository.upsertSuperAdminUser →
+ *   • must_change_password lifecycle (repo, §17.2 điểm 5): SuperAdminBootstrapRepository.upsertSuperAdminUser →
  *     must_change_password=true (INSERT + re-upsert), idempotent (cùng id). /auth/me + change-password = Lane C.
  */
 
@@ -220,7 +220,7 @@ describe.skipIf(!runDb)("S2-FND-SEED-3 — ensure_default_company bootstrap (cro
     expect((err as { code?: string }).code).toBe(PG_CHECK_VIOLATION);
   });
 
-  // ── must_change_password lifecycle (repo — DB10-TC-004): admin bootstrap → true, idempotent ───
+  // ── must_change_password lifecycle (repo — §17.2 điểm 5): admin bootstrap → true, idempotent ───
   it("must_change_password — upsertSuperAdminUser set true (INSERT + re-upsert), cùng id", async () => {
     const slug = `mcp-${TAG}`;
     const c = await direct.query(

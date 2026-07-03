@@ -32,7 +32,9 @@ import { LocalKekProvider } from "../../src/crypto/local-kek.provider";
  * Postgres THẬT, DB CÔ LẬP `mediaos_<lane>` (CLAUDE §9.5), gate CỨNG `hasDb && LANE_DB` (đỏ-giả trên DB
  * dev chung). Đặt ở test/ (KHÔNG colocated) — case dựng AuthService/BootstrapService thật + login + capture log.
  *
- * PHỦ (DB10-TC-001/002/003/004 + §19.3 + BẤT BIẾN #3 + owner-chốt #7):
+ * PHỦ (DB10-TC-001/002/003 + §17.2 điểm 5 + §19.3 + BẤT BIẾN #3 + owner-chốt #7):
+ *   (DB10-TC-004 THẬT = "Thiếu extension pgcrypto" — KHÔNG liên quan must_change_password; must_change_password
+ *    thuộc DB-10 §17.2 điểm 5 "Bắt buộc đổi mật khẩu ở lần đăng nhập đầu tiên").
  *   • bootstrap chain: SuperAdminBootstrapService seed super-admin vào company (đại diện tenant-root vừa
  *     ensure) → user must_change_password=true (§17.2 điểm 5) + audit auth.super_admin_bootstrapped GIỮ
  *     NGUYÊN, KHÔNG audit riêng company auto-create (owner-chốt #7).
@@ -166,7 +168,7 @@ describe.skipIf(!runDb)(
     });
 
     // ── bootstrap seed super-admin + must_change_password=true + secret non-leak ──────────────────
-    it("bootstrap — super-admin tạo với must_change_password=true (DB10-TC-004, §17.2 điểm 5)", async () => {
+    it("bootstrap — super-admin tạo với must_change_password=true (§17.2 điểm 5)", async () => {
       expect(userId, "super-admin phải được seed vào company theo slug").toBeTruthy();
       const u = await direct.query<{ must_change_password: boolean; status: string }>(
         "SELECT must_change_password, status FROM users WHERE id=$1",
@@ -238,10 +240,16 @@ describe.skipIf(!runDb)(
         [companyId],
       );
       const roleId = roleRow.rows[0].id;
-      const grantsBefore = await direct.query<{ n: number }>(
-        "SELECT COUNT(*)::int AS n FROM role_permissions WHERE role_id=$1",
+      // ROOT-FIX flaky grant-count (memory super-admin-bootstrap-flaky-count): super-admin được cấp TOÀN BỘ
+      // catalog `permissions` — nếu file test khác chạy SONG SONG bơm permission MỚI vào catalog global giữa
+      // 2 lượt boot thì COUNT(*) toàn role sẽ phình (327→333) dù bootstrap idempotent. Chốt tập permission_id
+      // đã cấp TRƯỚC boot-2 rồi CHỈ đếm trong tập đó ⇒ miễn nhiễm pollution song song; vẫn chứng minh idempotent
+      // (tập cũ KHÔNG bị xoá/nhân đôi — role_permissions có UNIQUE(role_id,permission_id)).
+      const grantedBefore = await direct.query<{ permission_id: string }>(
+        "SELECT permission_id FROM role_permissions WHERE role_id=$1",
         [roleId],
       );
+      const grantedBeforeIds = grantedBefore.rows.map((r) => r.permission_id);
 
       await makeBootstrapService(bootstrapEnv).onApplicationBootstrap();
 
@@ -251,14 +259,14 @@ describe.skipIf(!runDb)(
       );
       expect(userCount.rows[0].n, "vẫn ĐÚNG 1 super-admin (KHÔNG nhân đôi)").toBe(1);
 
-      const grantsAfter = await direct.query<{ n: number }>(
-        "SELECT COUNT(*)::int AS n FROM role_permissions WHERE role_id=$1",
-        [roleId],
+      const stillGranted = await direct.query<{ n: number }>(
+        "SELECT COUNT(*)::int AS n FROM role_permissions WHERE role_id=$1 AND permission_id = ANY($2::uuid[])",
+        [roleId, grantedBeforeIds],
       );
       expect(
-        grantsAfter.rows[0].n,
-        "grant-count bất biến (idempotent — vá flaky grant-count)",
-      ).toBe(grantsBefore.rows[0].n);
+        stillGranted.rows[0].n,
+        "grant cũ giữ nguyên sau boot-2 (idempotent — đếm theo tập permission_id cụ thể, né flaky pollution)",
+      ).toBe(grantedBeforeIds.length);
     });
 
     // ── change-password → clear cờ CÙNG tx → /auth/me trả false (QA-04/QA-05) ─────────────────────
