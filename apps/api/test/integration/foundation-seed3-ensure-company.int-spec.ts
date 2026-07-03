@@ -28,9 +28,20 @@ import { EnsureDefaultCompanyService } from "../../src/foundation/seed/ensure-de
 const runDb = hasDb && Boolean(process.env.LANE_DB);
 const TAG = randomUUID().slice(0, 8);
 
-// SQLSTATE: privilege check (chạy TRƯỚC RLS) + CHECK-constraint violation.
+// SQLSTATE: privilege check (chạy TRƯỚC RLS) + CHECK-constraint violation + serialization failure.
 const PG_INSUFFICIENT_PRIVILEGE = "42501";
 const PG_CHECK_VIOLATION = "23514";
+const PG_SERIALIZATION_FAILURE = "40001";
+// Bounded-retry cho case create-from-empty: UPDATE rộng (ẩn active) chạy dưới REPEATABLE READ có thể va
+// cleanupTenants (hard-delete company test khác trên LANE_DB dùng chung) → serialization_failure hợp lệ,
+// không phải bug — retry ≤3 LẦN (sau lần thử đầu, tổng ≤4 lần thử) thay vì để flaky (S2-FND-SEED-3-FIX-1).
+const MAX_SERIALIZATION_RETRIES = 3;
+/** Backoff nhỏ + jitter TRƯỚC mỗi lần retry — giảm khả năng va lại NGAY vào transaction gây 40001 khi
+ *  full-suite chạy song song liên tục ghi bảng companies (retry tức thời dễ đụng cùng cửa sổ xung đột). */
+function serializationBackoff(retryIndex: number): Promise<void> {
+  const ms = 20 * retryIndex + Math.floor(Math.random() * 30);
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 // Tên bảng dựng runtime để scan tĩnh (guard-immutability) KHÔNG hiểu nhầm UPDATE deleted_at là hard-delete.
 const COMPANIES = ["compan", "ies"].join("");
@@ -156,33 +167,58 @@ describe.skipIf(!runDb)(
     });
 
     // ── (DB10-TC-001) create-from-empty — guard MISS → nhánh INSERT tenant-root ───────────────────
+    // FIX (S2-FND-SEED-3-FIX-1, flaky dưới full-suite parallelism): BEGIN mặc định là READ COMMITTED →
+    // MỖI statement lấy snapshot MỚI. UPDATE ẩn-active của TX này chỉ ẩn trong TX; nhưng SELECT guard N=1
+    // bên trong ensure_default_company (SECURITY DEFINER, statement RIÊNG cùng TX) lấy snapshot TƯƠI ⇒ có
+    // thể THẤY company active vừa được file test song song khác (super-admin-bootstrap/tenant-isolation)
+    // COMMIT giữa lúc UPDATE và lúc gọi hàm ⇒ guard HIT sai (không đi nhánh INSERT) ⇒ đỏ ngẫu nhiên.
+    // Fix: BEGIN ISOLATION LEVEL REPEATABLE READ — snapshot cố định TẠI statement đầu tiên (UPDATE); mọi
+    // statement SAU trong CÙNG transaction (kể cả SELECT nội bộ của ensure_default_company) dùng CHUNG
+    // snapshot đó ⇒ KHÔNG thấy commit của session khác xảy ra sau thời điểm snapshot ⇒ guard MISS deterministic.
+    // Bọc bounded-retry ≤3 trên 40001 (serialization_failure): UPDATE rộng (WHERE status='active', không giới
+    // hạn theo id) dưới REPEATABLE READ có thể xung đột ghi với cleanupTenants (hard-delete company test khác
+    // đang chạy song song trên cùng LANE_DB) — retry là xử lý đúng cho race hợp lệ, không che giấu bug thật.
     it("create-from-empty — guard MISS (không active) → tạo tenant-root mới (INSERT branch)", async () => {
       const slug = `empty-d-${TAG}`;
-      const client: PoolClient = await direct.connect();
-      try {
-        await client.query("BEGIN");
-        await client.query("SET LOCAL lock_timeout = '4s'");
-        // Ẩn MỌI company active TRONG TX này (uncommitted, MVCC cô lập — không ảnh hưởng session khác) để
-        // guard MISS ⇒ đi nhánh CREATE. ROLLBACK cuối undo cả ẩn lẫn company vừa tạo (không pollution DB chung).
-        await client.query(
-          `UPDATE ${COMPANIES} SET deleted_at = now() WHERE deleted_at IS NULL AND status = 'active'`,
-        );
-        const r = await client.query(
-          `SELECT id, status FROM ensure_default_company($1::citext, 'Empty Co D', 'Asia/Ho_Chi_Minh', 'vi', 'VND')`,
-          [slug],
-        );
-        expect(r.rowCount).toBe(1);
-        expect(r.rows[0].status, "tenant-root vừa tạo phải active").toBe("active");
-        const created = await client.query(
-          `SELECT id FROM ${COMPANIES} WHERE slug = $1 AND deleted_at IS NULL`,
-          [slug],
-        );
-        expect(created.rowCount, "đúng 1 company slug mới trong nhánh CREATE").toBe(1);
-        expect(created.rows[0].id).toBe(r.rows[0].id);
-      } finally {
-        await client.query("ROLLBACK");
-        client.release();
+      let lastErr: unknown;
+      for (let retry = 0; retry <= MAX_SERIALIZATION_RETRIES; retry++) {
+        if (retry > 0) await serializationBackoff(retry);
+        const client: PoolClient = await direct.connect();
+        try {
+          await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
+          await client.query("SET LOCAL lock_timeout = '4s'");
+          // Ẩn MỌI company active TRONG TX này (uncommitted, MVCC cô lập — không ảnh hưởng session khác) để
+          // guard MISS ⇒ đi nhánh CREATE. ROLLBACK cuối undo cả ẩn lẫn company vừa tạo (không pollution DB chung).
+          await client.query(
+            `UPDATE ${COMPANIES} SET deleted_at = now() WHERE deleted_at IS NULL AND status = 'active'`,
+          );
+          const r = await client.query(
+            `SELECT id, status FROM ensure_default_company($1::citext, 'Empty Co D', 'Asia/Ho_Chi_Minh', 'vi', 'VND')`,
+            [slug],
+          );
+          expect(r.rowCount).toBe(1);
+          expect(r.rows[0].status, "tenant-root vừa tạo phải active").toBe("active");
+          const created = await client.query(
+            `SELECT id FROM ${COMPANIES} WHERE slug = $1 AND deleted_at IS NULL`,
+            [slug],
+          );
+          expect(created.rowCount, "đúng 1 company slug mới trong nhánh CREATE").toBe(1);
+          expect(created.rows[0].id).toBe(r.rows[0].id);
+          await client.query("ROLLBACK");
+          return; // PASS — thoát retry loop
+        } catch (err) {
+          await client.query("ROLLBACK").catch(() => {
+            // TX có thể đã abort bởi 40001 — ROLLBACK vẫn hợp lệ; nuốt lỗi kép an toàn.
+          });
+          lastErr = err;
+          const code = (err as { code?: string } | undefined)?.code;
+          if (code !== PG_SERIALIZATION_FAILURE) throw err; // lỗi thật (không phải race) → fail ngay, không retry
+          // 40001 và còn lượt retry → vòng lặp tiếp tục với client mới.
+        } finally {
+          client.release();
+        }
       }
+      throw lastErr; // hết MAX_SERIALIZATION_RETRIES mà vẫn 40001 → thất bại thật, không nuốt lỗi
     });
 
     // ── (DB10-TC-003) idempotent — EnsureDefaultCompanyService gọi 2 lần → cùng id ────────────────
