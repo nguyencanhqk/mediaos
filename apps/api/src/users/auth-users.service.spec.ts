@@ -55,11 +55,14 @@ describe("AuthUsersService", () => {
   let permissions: { resolveStrongestScope: ReturnType<typeof vi.fn> };
   // S2-AUTH-BE-9: AuthService.revokeAllForUserTx — thu hồi phiên trong CÙNG tx của lock. Trả count.
   let auth: { revokeAllForUserTx: ReturnType<typeof vi.fn> };
+  // S2-AUTH-BE-8/12: SecurityEventWriter.record — timeline dual-write (TOTP_RESET).
+  let securityEvents: { record: ReturnType<typeof vi.fn> };
   let service: AuthUsersService;
   const TX = Symbol("tx");
 
   beforeEach(() => {
     audit = { record: vi.fn(async () => undefined) };
+    securityEvents = { record: vi.fn(async () => undefined) };
     db = {
       withTenant: vi.fn(async (_companyId: string, fn: (tx: unknown) => Promise<unknown>) =>
         fn(TX),
@@ -76,6 +79,9 @@ describe("AuthUsersService", () => {
       updateProfileTx: vi.fn(async () => makeUser({ fullName: "Tên Mới" })),
       setLockTx: vi.fn(async () => makeUser({ status: "locked", lockedAt: new Date() })),
       setUnlockTx: vi.fn(async () => makeUser({ status: "active", lockedAt: null })),
+      // S2-AUTH-BE-12
+      getTwoFactorStateTx: vi.fn(async () => ({ enabled: false, requiredByRole: false })),
+      deleteTwoFactorTx: vi.fn(async () => undefined),
     } as unknown as AuthUsersRepository;
     service = new AuthUsersService(
       db as never,
@@ -84,6 +90,7 @@ describe("AuthUsersService", () => {
       password as never,
       permissions as never,
       auth as never,
+      securityEvents as never,
     );
   });
 
@@ -170,6 +177,7 @@ describe("AuthUsersService", () => {
       password as never,
       permissions as never,
       auth as never,
+      securityEvents as never,
     );
     await service.lockUser(ACTOR, TARGET_ID, "abuse");
     expect(auth.revokeAllForUserTx).toHaveBeenCalledTimes(1);
@@ -238,9 +246,101 @@ describe("AuthUsersService", () => {
     );
   });
 
-  it("get: Own-scope + target khác actor → NotFound (KHÔNG lộ tồn tại)", async () => {
+  it("getUserDetail: Own-scope + target khác actor → NotFound (KHÔNG lộ tồn tại)", async () => {
     permissions.resolveStrongestScope = vi.fn(async () => "Own") as never;
     repo.findByIdTx = vi.fn(async () => makeUser({ id: TARGET_ID })) as never;
-    await expect(service.getUser(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.getUserDetail(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  // ── S2-AUTH-BE-12: getUserDetail twoFactor 3 nguồn TÁCH BIỆT ─────────────────────
+  it("getUserDetail: twoFactor 3 cờ đúng nguồn (enabled/requiredByRole từ repo state; requiredByUser từ cột row)", async () => {
+    repo.findByIdTx = vi.fn(async () => makeUser({ requireTwoFactor: true })) as never;
+    repo.getTwoFactorStateTx = vi.fn(async () => ({
+      enabled: true,
+      requiredByRole: false,
+    })) as never;
+    const detail = await service.getUserDetail(ACTOR, TARGET_ID);
+    expect(detail.twoFactor).toEqual({
+      enabled: true, // user_totp.enabled_at (repo)
+      requiredByRole: false, // join roles-only (repo)
+      requiredByUser: true, // cột users.require_two_factor (row)
+    });
+    // KHÔNG lộ secret/hash trong DTO detail.
+    expect(detail).not.toHaveProperty("passwordHash");
+    expect(JSON.stringify(detail)).not.toContain("secret_ciphertext");
+  });
+
+  // ── S2-AUTH-BE-12: updateUser requireTwoFactor + no-op ───────────────────────────
+  it("update: requireTwoFactor=true (khác cũ false) → repo patch có cờ + audit diff before/after", async () => {
+    repo.findByIdTx = vi.fn(async () => makeUser({ requireTwoFactor: false })) as never;
+    repo.updateProfileTx = vi.fn(async () => makeUser({ requireTwoFactor: true })) as never;
+    await service.updateUser(ACTOR, TARGET_ID, { requireTwoFactor: true });
+    const patchArg = (repo.updateProfileTx as unknown as ReturnType<typeof vi.fn>).mock.calls[0][3];
+    expect(patchArg).toEqual({ requireTwoFactor: true });
+    const entry = audit.record.mock.calls[0][1];
+    expect(entry.action).toBe("user.updated");
+    expect(entry.before.requireTwoFactor).toBe(false);
+    expect(entry.after.requireTwoFactor).toBe(true);
+  });
+
+  it("update: no-op (body rỗng) → KHÔNG gọi updateProfileTx, KHÔNG audit (0 audit rác)", async () => {
+    repo.findByIdTx = vi.fn(async () => makeUser({ fullName: "Giữ Nguyên" })) as never;
+    await service.updateUser(ACTOR, TARGET_ID, {});
+    expect(repo.updateProfileTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("update: no-op (requireTwoFactor == giá trị cũ) → KHÔNG gọi updateProfileTx, KHÔNG audit", async () => {
+    repo.findByIdTx = vi.fn(async () => makeUser({ requireTwoFactor: true })) as never;
+    await service.updateUser(ACTOR, TARGET_ID, { requireTwoFactor: true });
+    expect(repo.updateProfileTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  // ── S2-AUTH-BE-12: resetTwoFactor ────────────────────────────────────────────────
+  it("resetTwoFactor: xoá 2FA + revokeAllForUserTx đúng 1 lần + audit user.2fa_reset (KHÔNG secret) + emit TOTP_RESET", async () => {
+    auth.revokeAllForUserTx = vi.fn(async () => 3);
+    service = new AuthUsersService(
+      db as never,
+      repo,
+      audit as never,
+      password as never,
+      permissions as never,
+      auth as never,
+      securityEvents as never,
+    );
+    const res = await service.resetTwoFactor(ACTOR, TARGET_ID);
+    expect(res.revokedSessionCount).toBe(3);
+    expect(repo.deleteTwoFactorTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID);
+    expect(auth.revokeAllForUserTx).toHaveBeenCalledTimes(1);
+    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, TARGET_ID, "2fa_reset");
+    const auditEntry = audit.record.mock.calls[0][1];
+    expect(auditEntry.action).toBe("user.2fa_reset");
+    expect(auditEntry.objectType).toBe("user");
+    expect(auditEntry.after.revokedSessionCount).toBe(3);
+    expect(JSON.stringify(auditEntry)).not.toContain("secret_ciphertext");
+    expect(JSON.stringify(auditEntry)).not.toContain("encrypted_dek");
+    const evEntry = securityEvents.record.mock.calls[0][1];
+    expect(evEntry.eventType).toBe("TOTP_RESET");
+    expect(evEntry.userId).toBe(TARGET_ID);
+    expect(evEntry.actorUserId).toBe(ACTOR.id);
+  });
+
+  it("resetTwoFactor: self-reset (actor==target) CHO PHÉP (KHÔNG BadRequest)", async () => {
+    repo.findByIdTx = vi.fn(async () => makeUser({ id: ACTOR.id })) as never;
+    const res = await service.resetTwoFactor(ACTOR, ACTOR.id);
+    expect(res.revokedSessionCount).toBeGreaterThanOrEqual(0);
+    expect(repo.deleteTwoFactorTx).toHaveBeenCalled();
+  });
+
+  it("resetTwoFactor: target không thấy / cross-tenant → NotFound TRƯỚC mọi mutation (0 audit, 0 revoke)", async () => {
+    repo.findByIdTx = vi.fn(async () => undefined) as never;
+    await expect(service.resetTwoFactor(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(repo.deleteTwoFactorTx).not.toHaveBeenCalled();
+    expect(auth.revokeAllForUserTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+    expect(securityEvents.record).not.toHaveBeenCalled();
   });
 });

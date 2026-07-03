@@ -14,7 +14,13 @@ import {
 } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
 import type { Request } from "express";
-import { AUTH_USER, type AuthUserDto, type AuthUserListDto } from "@mediaos/contracts";
+import {
+  AUTH_USER,
+  type AuthUserDetailDto,
+  type AuthUserDto,
+  type AuthUserListDto,
+  type AuthUserTwoFactorResetDto,
+} from "@mediaos/contracts";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import { AuthUsersService } from "./auth-users.service";
@@ -63,8 +69,8 @@ export class AuthUsersController {
   getOne(
     @Req() req: AuthenticatedRequest,
     @Param("id", new ParseUUIDPipe()) id: string,
-  ): Promise<AuthUserDto> {
-    return this.users.getUser(req.user, id);
+  ): Promise<AuthUserDetailDto> {
+    return this.users.getUserDetail(req.user, id);
   }
 
   @Post()
@@ -103,5 +109,22 @@ export class AuthUsersController {
     @Param("id", new ParseUUIDPipe()) id: string,
   ): Promise<AuthUserDto> {
     return this.users.unlockUser(req.user, id);
+  }
+
+  /**
+   * S2-AUTH-BE-12 — POST /auth/users/:id/2fa/reset: admin gỡ 2FA của target (xoá user_totp +
+   * user_recovery_codes + thu hồi phiên). Gate CẶP CANONICAL reset-2fa:user is_sensitive=true (mig 0466) —
+   * khai isSensitive để wildcard *:* KHÔNG thoả cổng. Self-reset cho phép. Cross-tenant/không tồn tại → 404.
+   */
+  @Post(":id/2fa/reset")
+  @HttpCode(200)
+  @RequirePermission(AUTH_USER.RESET_2FA.action, AUTH_USER.RESET_2FA.resource, {
+    isSensitive: true,
+  })
+  resetTwoFactor(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", new ParseUUIDPipe()) id: string,
+  ): Promise<AuthUserTwoFactorResetDto> {
+    return this.users.resetTwoFactor(req.user, id);
   }
 }

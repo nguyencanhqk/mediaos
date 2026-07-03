@@ -209,6 +209,9 @@ export const SECURITY_EVENT_TYPES = [
   "ROLE_REMOVED",
   "TOTP_ENABLED",
   "TOTP_DISABLED",
+  // S2-AUTH-BE-12 (APPEND-only): admin reset/gỡ 2FA của user khác (POST /auth/users/:id/2fa/reset).
+  // Forensic: xoá user_totp + user_recovery_codes + thu hồi phiên ⇒ dấu hiệu can thiệp bảo mật.
+  "TOTP_RESET",
 ] as const;
 export type SecurityEventType = (typeof SECURITY_EVENT_TYPES)[number];
 
@@ -238,6 +241,9 @@ export const SECURITY_EVENT_SEVERITY: Record<SecurityEventType, SecurityEventSev
   ROLE_REMOVED: "medium",
   TOTP_ENABLED: "low",
   TOTP_DISABLED: "medium",
+  // S2-AUTH-BE-12: admin reset 2FA của user khác = "high" (mirror USER_LOCKED — hành động can thiệp
+  // bảo mật privileged: gỡ credential 2FA + thu hồi mọi phiên của victim).
+  TOTP_RESET: "high",
 };
 
 /**

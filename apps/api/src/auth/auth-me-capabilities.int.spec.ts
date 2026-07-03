@@ -417,3 +417,73 @@ describe.skipIf(!runDb)(
     });
   },
 );
+
+// ────────────────────────────────────────────────────────────────────────────
+// S2-AUTH-BE-12 — APPEND 'reset-2fa:user' vào SENSITIVE_CAPABILITY_ALLOWLIST.
+// Cặp seed THẬT is_sensitive=true, grant Company CHỈ company-admin(0001) (mig 0466). getCapabilities() lọc
+// bỏ sensitive ⇒ chỉ allowlist surface được. Enforcement (PermissionGuard per-resource) KHÔNG đổi.
+// ────────────────────────────────────────────────────────────────────────────
+
+const RESET_2FA_CAP_KEY = "reset-2fa:user";
+
+describe.skipIf(!runDb)("S2-AUTH-BE-12 /auth/me reset-2fa:user (company-admin only)", () => {
+  let app: INestApplication;
+  let direct: Pool;
+  let A: SeededTenant;
+  let adminToken: string;
+  let employeeToken: string;
+  let managerToken: string;
+  const companyIds: string[] = [];
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    app = moduleRef.createNestApplication();
+    app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
+    app.useGlobalFilters(new AllExceptionsFilter());
+    await app.init();
+    direct = directPool();
+    const pw = await new PasswordService().hash(LOGIN_PW);
+
+    A = await seedCompany(direct, "r2facap");
+    companyIds.push(A.companyId);
+
+    // company-admin (0001) — grant Company reset-2fa:user (mig 0466).
+    const adminEmail = `ca-${TAG}@r2fa.test`;
+    const admin = await seedUser(direct, A.companyId, adminEmail, pw);
+    await seedUserRole(direct, admin, COMPANY_ADMIN_ROLE, A.companyId);
+
+    // employee (0008) + manager (0010) — KHÔNG có grant reset-2fa:user (least-privilege).
+    const empEmail = `emp-${TAG}@r2fa.test`;
+    const emp = await seedUser(direct, A.companyId, empEmail, pw);
+    await seedUserRole(direct, emp, EMPLOYEE_ROLE, A.companyId);
+
+    const mgrEmail = `mgr-${TAG}@r2fa.test`;
+    const mgr = await seedUser(direct, A.companyId, mgrEmail, pw);
+    await seedUserRole(direct, mgr, MANAGER_ROLE, A.companyId);
+
+    adminToken = await login(app, A.slug, adminEmail);
+    employeeToken = await login(app, A.slug, empEmail);
+    managerToken = await login(app, A.slug, mgrEmail);
+  });
+
+  afterAll(async () => {
+    await app?.close();
+    if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
+    await direct?.end();
+  });
+
+  it("company-admin (0001) → /auth/me.capabilities['reset-2fa:user'] === true", async () => {
+    const caps = await meCapabilities(app, adminToken);
+    expect(caps[RESET_2FA_CAP_KEY]).toBe(true);
+  });
+
+  it("employee (0008) → KHÔNG có 'reset-2fa:user' (least-privilege)", async () => {
+    const caps = await meCapabilities(app, employeeToken);
+    expect(RESET_2FA_CAP_KEY in caps).toBe(false);
+  });
+
+  it("manager (0010) → KHÔNG có 'reset-2fa:user' (least-privilege)", async () => {
+    const caps = await meCapabilities(app, managerToken);
+    expect(RESET_2FA_CAP_KEY in caps).toBe(false);
+  });
+});
