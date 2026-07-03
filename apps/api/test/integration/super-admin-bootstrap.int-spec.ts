@@ -191,13 +191,28 @@ describe.skipIf(!runIsolatedDb)(
       );
     });
 
-    it("EMAIL set + company slug không tồn tại → throw (fail-fast, KHÔNG seed)", async () => {
+    it("EMAIL set + company slug không tồn tại → BỎ QUA (log-skip, KHÔNG seed, KHÔNG throw — owner-chốt #5)", async () => {
+      // S2-FND-SEED-3 (owner-chốt #5): SuperAdminBootstrapService KHÔNG còn fail-fast khi company vắng theo
+      // slug (N=1 guard có thể trả tenant active KHÁC slug, hoặc PLATFORM_SUPERADMIN_COMPANY_SLUG ≠
+      // BOOTSTRAP_COMPANY_SLUG). Thay throw-rồi-restart bằng log-skip + boot TIẾP TỤC → KHÔNG sập boot,
+      // KHÔNG seed super-admin. (Trước SEED-3 test này kỳ vọng rejects.toThrow — đã lệch sau owner-chốt #5.)
+      const ghostEmail = `ghost-${randomUUID().slice(0, 8)}@nowhere.local`;
       const svc = await makeService({
-        PLATFORM_SUPERADMIN_EMAIL: "ghost@nowhere.local",
+        PLATFORM_SUPERADMIN_EMAIL: ghostEmail,
         PLATFORM_SUPERADMIN_PASSWORD: password,
         PLATFORM_SUPERADMIN_COMPANY_SLUG: `ghost-${randomUUID().slice(0, 8)}`,
       });
-      await expect(svc.onApplicationBootstrap()).rejects.toThrow();
+      // KHÔNG throw (boot không sập).
+      await expect(svc.onApplicationBootstrap()).resolves.toBeUndefined();
+      // KHÔNG seed: company vắng ⇒ withTenant không chạy ⇒ 0 user super-admin cho ghost email.
+      const ghost = await direct.query<{ n: number }>(
+        "SELECT COUNT(*)::int AS n FROM users WHERE normalized_email = lower($1)",
+        [ghostEmail],
+      );
+      expect(
+        ghost.rows[0].n,
+        "company vắng → KHÔNG seed super-admin (log-skip, owner-chốt #5)",
+      ).toBe(0);
     });
   },
 );
