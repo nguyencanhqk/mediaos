@@ -439,6 +439,29 @@ export const LEAVE_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 62,
     requiredAnyPermissions: ["view:leave-balance"],
   },
+  // S3-FE-LEAVE-6 — báo cáo tổng hợp nghỉ + audit log LEAVE. Gate = CẶP ENGINE THỰC trực tiếp (KHÔNG qua
+  // PERMISSION_CODE_TO_PAIR): export:leave (Company-scope hr/company-admin) · view:leave-audit-log RIÊNG
+  // (KHÔNG chung foundation view:audit-log). Cả 2 SENSITIVE → phơi qua /auth/me nhờ S2-AUTH-CAP-1.
+  {
+    sidebarKey: "leave.reports",
+    moduleCode: "LEAVE",
+    label: "Báo cáo tổng hợp nghỉ",
+    path: "/leave/reports",
+    icon: "bar-chart-3",
+    group: "admin",
+    order: 63,
+    requiredAnyPermissions: ["export:leave"],
+  },
+  {
+    sidebarKey: "leave.audit-logs",
+    moduleCode: "LEAVE",
+    label: "Audit log nghỉ phép",
+    path: "/leave/audit-logs",
+    icon: "file-clock",
+    group: "admin",
+    order: 64,
+    requiredAnyPermissions: ["view:leave-audit-log"],
+  },
 ];
 
 // ---------------------------------------------------------------------------

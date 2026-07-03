@@ -540,4 +540,66 @@ export default {
       description: "Bạn không có quyền sửa đơn nghỉ nháp.",
     },
   },
+
+  // ── Báo cáo tổng hợp nghỉ (S3-FE-LEAVE-6, LEAVE-SCREEN-013) ────────────────────
+  reports: {
+    title: "Báo cáo tổng hợp nghỉ phép",
+    description: "Tổng hợp số đơn và số ngày nghỉ ĐÃ duyệt của từng nhân viên theo kỳ.",
+    filters: {
+      fromDate: "Từ ngày",
+      toDate: "Đến ngày",
+    },
+    columns: {
+      employeeCode: "Mã NV",
+      employee: "Nhân viên",
+      department: "Phòng ban",
+      totalRequests: "Số đơn",
+      totalLeaveDays: "Tổng ngày nghỉ",
+    },
+    empty: {
+      title: "Không có dữ liệu",
+      description: "Chưa có nghỉ phép đã duyệt trong khoảng thời gian này.",
+    },
+    error: {
+      title: "Không thể tải báo cáo",
+      description: "Có lỗi khi tải báo cáo tổng hợp nghỉ phép. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem báo cáo tổng hợp nghỉ phép.",
+    },
+  },
+
+  // ── Audit log LEAVE (S3-FE-LEAVE-6, LEAVE-SCREEN-014A) ─────────────────────────
+  auditLogs: {
+    title: "Audit log nghỉ phép",
+    description: "Nhật ký thao tác trên dữ liệu nghỉ phép (đơn nghỉ, duyệt, số dư, cấu hình).",
+    filters: {
+      action: "Hành động",
+      objectType: "Loại đối tượng",
+      fromDate: "Từ ngày",
+      toDate: "Đến ngày",
+      apply: "Lọc",
+      reset: "Xoá lọc",
+    },
+    columns: {
+      createdAt: "Thời gian",
+      action: "Hành động",
+      objectType: "Loại đối tượng",
+      objectId: "Đối tượng",
+      actor: "Người thực hiện",
+    },
+    empty: {
+      title: "Không có audit log",
+      description: "Chưa có bản ghi audit log nào phù hợp với bộ lọc.",
+    },
+    error: {
+      title: "Không thể tải dữ liệu",
+      description: "Có lỗi khi tải audit log. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem audit log nghỉ phép.",
+    },
+  },
 };

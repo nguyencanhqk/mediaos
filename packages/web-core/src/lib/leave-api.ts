@@ -11,6 +11,13 @@ import {
   leavePolicyViewSchema,
   leaveBalanceAdminViewSchema,
   leaveBalanceTransactionViewSchema,
+  // S3-FE-LEAVE-6 — báo cáo tổng hợp nghỉ + audit log LEAVE (reuse audit contract của foundation).
+  leaveReportResponseSchema,
+  auditLogListResponseSchema,
+  type LeaveReportQuery,
+  type LeaveReportResponse,
+  type AuditLogQuery,
+  type AuditLogListResponse,
   type LeaveTypeView,
   type LeaveBalanceView,
   type LeaveRequestDetailView,
@@ -295,4 +302,30 @@ export const leaveApi = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+
+  // ── Báo cáo tổng hợp nghỉ phép (S3-LEAVE-BE-6 · LEAVE-SCREEN-013) — S3-FE-LEAVE-6 ────────
+  // Cổng SERVER: export:leave (SENSITIVE, Company-scope — CHỈ hr/company-admin, mig 0455; manager
+  // KHÔNG có grant). GET /leave/reports trả JSON tổng hợp per-employee (KHÔNG file CSV/export). Client
+  // chỉ chọn endpoint + validate; company_id resolve từ auth context — client KHÔNG truyền.
+
+  /** GET /leave/reports — tổng hợp nghỉ ĐÃ duyệt theo kỳ [fromDate,toDate]. Permission: export:leave. */
+  getLeaveReport: (query: LeaveReportQuery): Promise<LeaveReportResponse> => {
+    const qs = buildQueryString(query);
+    return apiFetch(`/leave/reports${qs}`, leaveReportResponseSchema);
+  },
+
+  // ── Audit log LEAVE (S3-LEAVE-BE-6 · LEAVE-SCREEN-014A) — S3-FE-LEAVE-6 ──────────────────
+  // Route/guard RIÊNG của LEAVE (KHÔNG dùng chung foundation /foundation/audit-logs) — cặp
+  // view:leave-audit-log (SENSITIVE, Company-scope hr/company-admin mig 0455), server bound thêm vào
+  // object-type allowlist của LEAVE. Field before/after/oldValues/newValues ĐÃ redact ở server
+  // (AuditMaskerService, bất biến #3) — client CHỈ render field top-level nhận được.
+
+  /**
+   * GET /leave/audit-logs — viewer audit RIÊNG của LEAVE. Reuse AuditLogQuery/AuditLogListResponse
+   * (KHÔNG contract mới). Permission: view:leave-audit-log (SENSITIVE).
+   */
+  listLeaveAuditLogs: (query?: Partial<AuditLogQuery>): Promise<AuditLogListResponse> => {
+    const qs = buildQueryString(query ?? {});
+    return apiFetch(`/leave/audit-logs${qs}`, auditLogListResponseSchema);
+  },
 };

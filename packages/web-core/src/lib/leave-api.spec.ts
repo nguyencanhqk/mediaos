@@ -16,6 +16,8 @@ import {
   leaveTypeAdminViewSchema,
   leavePolicyViewSchema,
   leaveBalanceAdminViewSchema,
+  leaveReportResponseSchema,
+  auditLogListResponseSchema,
 } from "@mediaos/contracts";
 import { leaveApi } from "./leave-api";
 import * as apiClient from "./api-client";
@@ -239,5 +241,35 @@ describe("leaveApi — management/approval endpoints (URL + method + Zod validat
       amountDays: -2,
       reason: "Nghỉ ốm bổ sung",
     });
+  });
+
+  // ── S3-FE-LEAVE-6: báo cáo tổng hợp nghỉ + audit log LEAVE ────────────────────
+
+  it("getLeaveReport(query) → GET /leave/reports + leaveReportResponseSchema validator, forward kỳ, KHÔNG company_id", async () => {
+    await leaveApi.getLeaveReport({
+      fromDate: "2026-07-01",
+      toDate: "2026-07-31",
+      page: 1,
+      pageSize: 20,
+    });
+    const [url, schema, opts] = lastCall();
+    expect(url.startsWith("/leave/reports")).toBe(true);
+    const qs = new URLSearchParams(url.split("?")[1]);
+    expect(qs.get("fromDate")).toBe("2026-07-01");
+    expect(qs.get("toDate")).toBe("2026-07-31");
+    expect(url).not.toContain("company");
+    expect(schema).toBe(leaveReportResponseSchema);
+    expect(opts?.method ?? "GET").toBe("GET");
+  });
+
+  it("listLeaveAuditLogs(query) → GET /leave/audit-logs + auditLogListResponseSchema validator (route RIÊNG, KHÔNG /foundation/audit-logs)", async () => {
+    await leaveApi.listLeaveAuditLogs({ action: "leave.approve", limit: 50, offset: 0 });
+    const [url, schema, opts] = lastCall();
+    expect(url.startsWith("/leave/audit-logs")).toBe(true);
+    expect(url).not.toContain("/foundation/");
+    const qs = new URLSearchParams(url.split("?")[1]);
+    expect(qs.get("action")).toBe("leave.approve");
+    expect(schema).toBe(auditLogListResponseSchema);
+    expect(opts?.method ?? "GET").toBe("GET");
   });
 });

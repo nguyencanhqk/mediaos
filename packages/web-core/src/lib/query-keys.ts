@@ -353,6 +353,18 @@ export const leaveKeys = {
     transactions: (balanceId: string) =>
       [...rootKeys.leave, "balances-admin", "transactions", balanceId] as const,
   },
+  // S3-FE-LEAVE-6 — Báo cáo tổng hợp nghỉ (LEAVE-SCREEN-013) + audit log LEAVE (LEAVE-SCREEN-014A).
+  // Mirror attendanceKeys.reports/auditLogs. params = filter kỳ / offset+limit (plain, JSON-serialisable).
+  reports: {
+    all: [...rootKeys.leave, "reports"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.leave, "reports", "list", params] as const,
+  },
+  auditLogs: {
+    all: [...rootKeys.leave, "audit-logs"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.leave, "audit-logs", "list", params] as const,
+  },
 };
 
 // ── Task keys ─────────────────────────────────────────────────────────────────

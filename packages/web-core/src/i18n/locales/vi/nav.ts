@@ -62,6 +62,9 @@ export default {
     leavePolicies: "Chính sách nghỉ phép",
     leaveBalances: "Số dư phép nhân viên",
     leaveBalanceTransactions: "Lịch sử giao dịch số dư phép",
+    // S3-FE-LEAVE-6 — báo cáo tổng hợp nghỉ (LEAVE-SCREEN-013) + audit log nghỉ phép (LEAVE-SCREEN-014A).
+    leaveReports: "Báo cáo tổng hợp nghỉ phép",
+    leaveAuditLogs: "Audit log nghỉ phép",
     tasks: "Công việc",
     taskMyTasks: "Việc của tôi",
     notifications: "Thông báo",
