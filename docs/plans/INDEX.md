@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**126 WO** · có micro-plan: **37/126** · ⬜ 25 chờ · 🔵 0 đang làm · ✅ 101 xong · 🔴 0 chặn
+**132 WO** · có micro-plan: **47/132** · ⬜ 16 chờ · 🔵 1 đang làm · ✅ 115 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -92,26 +92,32 @@
 | `S2-FE-HR-7` | 🟡 | ✅ xong | — *(chưa)* | ✅S2-HR-BE-6 ✅S2-FE-HR-1 | FE HR Contracts: /hr/contracts (DS hợp đồng) + /hr/employees/:id/contr |
 | `S2-HR-BE-7` | 🟡 | ✅ xong | [📄](S2-HR-BE-7.md) | ✅S2-HR-DB-1 ✅S1-FND-SEQ-1 | Employee-code config admin API (carry-over STORY-035): GET/PATCH /hr/s |
 | `S2-FE-HR-8` | 🟡 | ✅ xong | — *(chưa)* | ✅S2-HR-BE-7 ✅S2-FE-HR-1 | FE HR Employee-code config: /hr/settings/employee-code (form cấu hình  |
-| `S2-AUTH-BE-8` | 🔴 | ⬜ chờ | — *(chưa)* | — | user_security_events WRITER (audit gap #1): ghi sự kiện bảo mật BACKEN |
-| `S2-AUTH-BE-9` | 🔴 | ⬜ chờ | — *(chưa)* | — | Lock/suspend user → REVOKE toàn bộ session/refresh NGAY (audit gap #2) |
-| `S2-AUTH-BE-10` | 🔴 | ⬜ chờ | — *(chưa)* | — | refresh() kiểm company active (audit gap #3): company suspended → KHÔN |
+| `S2-AUTH-BE-8` | 🔴 | ✅ xong | [📄](S2-AUTH-BE-8.md) | — | user_security_events WRITER (audit gap #1): ghi sự kiện bảo mật BACKEN |
+| `S2-AUTH-BE-9` | 🔴 | ✅ xong | [📄](S2-AUTH-BE-9.md) | — | Lock/suspend user → REVOKE toàn bộ session/refresh NGAY (audit gap #2) |
+| `S2-AUTH-BE-10` | 🔴 | ✅ xong | [📄](S2-AUTH-BE-10.md) | — | refresh() kiểm company active (audit gap #3): company suspended → KHÔN |
+| `S2-AUTH-CAP-1` | 🔴 | ✅ xong | [📄](S2-AUTH-CAP-1.md) | — | Phơi capability sensitive qua /auth/me: thêm export:leave + view:leave |
+| `S2-AUTH-DB-4` | 🔴 | ✅ xong | [📄](S2-AUTH-DB-4.md) | — | 2FA per-user + pair reset-2fa:user (OWNER CHỐT 2026-07-03): cột users. |
+| `S2-AUTH-BE-11` | 🔴 | ✅ xong | [📄](S2-AUTH-BE-11.md) | ✅S2-AUTH-DB-4 | 2FA self-service hardening + role-write cờ ép: status trả required · d |
+| `S2-AUTH-BE-12` | 🔴 | 🔵 đang làm | [📄](S2-AUTH-BE-12.md) | ✅S2-AUTH-DB-4 ✅S2-AUTH-BE-11 | Admin 2FA controls: PATCH user requireTwoFactor + detail DTO twoFactor |
+| `S2-FE-ACCT-SEC-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S2-AUTH-BE-11 | FE Account Security: section Bảo mật trong /account/profile — trạng th |
+| `S2-FE-SYS-SEC-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S2-AUTH-BE-11 ⏳S2-AUTH-BE-12 | FE Admin security: /system/roles form toggle 'Bắt buộc 2FA' + /system/ |
 | `S2-AUTH-DB-3` | 🔴 | ⬜ chờ | — *(chưa)* | — | user_roles soft-delete (audit gap #4): thêm deleted_at/deleted_by + RE |
-| `S2-FE-AUTH-6` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S2-FE-AUTH-1 | FE Account-layer còn thiếu: màn enroll 2FA trong apps/app khi mustSetu |
-| `S2-AUTH-DOC-1` | 🟢 | ⬜ chờ | — *(chưa)* | — | Pin lệch-có-chủ-đích vào docs AUTH (DB-02 · BACKEND-03 · API-02 · FRON |
-| `S2-FND-BE-4` | 🔴 | ⬜ chờ | — *(chưa)* | — | File-access hardening (audit H1+H2): FilePolicy fallback FAIL-CLOSED c |
+| `S2-FE-AUTH-6` | 🟡 | ✅ xong | — *(chưa)* | ✅S2-FE-AUTH-1 | FE Account-layer còn thiếu: màn enroll 2FA trong apps/app khi mustSetu |
+| `S2-AUTH-DOC-1` | 🟢 | ✅ xong | [📄](S2-AUTH-DOC-1.md) | — | Pin lệch-có-chủ-đích vào docs AUTH (DB-02 · BACKEND-03 · API-02 · FRON |
+| `S2-FND-BE-4` | 🔴 | ✅ xong | [📄](S2-FND-BE-4.md) | — | File-access hardening (audit H1+H2): FilePolicy fallback FAIL-CLOSED c |
 | `S2-FND-BE-5` | 🔴 | ⬜ chờ | — *(chưa)* | — | Permission-surface reconcile (audit H4+H6): chốt cặp audit-log viewer  |
 | `S2-FND-BE-6` | 🔴 | ⬜ chờ | — *(chưa)* | — | Trả nợ audit CONFIG holiday (BE-6→BE-9, audit H5) + mở rộng audit-mask |
 | `S2-FND-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | REVOKE DELETE app-role trên companies + users (audit sát-HIGH, BẤT BIẾ |
-| `S2-FND-SEED-2` | 🟡 | ⬜ chờ | — *(chưa)* | — | Runtime seeder HR + Sequences (audit H7, DB-10 §14): job_levels 8 + co |
+| `S2-FND-SEED-2` | 🟡 | ✅ xong | — *(chưa)* | — | Runtime seeder HR + Sequences (audit H7, DB-10 §14): job_levels 8 + co |
 | `S2-FND-SEED-3` | 🔴 | ⬜ chờ | — *(chưa)* | — | Bootstrap dựng-từ-trống tự động (audit §4.2): seed default company ide |
 | `S2-FND-SEED-4` | 🟡 | ⬜ chờ | — *(chưa)* | — | Seed settings đủ theo DB-10 §11 (audit §4.2): bổ sung 9/14 system key  |
 | `S2-FND-BE-8` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S2-FND-BE-5 | Đóng permission-seed orphan (audit §6.3): system-settings GET/PATCH +  |
 | `S2-FND-JOBS-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | System Jobs khung tối thiểu (audit §5.2, DB-08 §8.14-15 + BACKEND-11 § |
-| `S2-FND-FILE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S2-FND-BE-4 | Upload file E2E (audit H3, BACKEND-11 §11.4): chốt mô hình presigned-P |
-| `S2-FE-FND-7` | 🟡 | ⬜ chờ | — *(chưa)* | — | FE System sửa nhỏ theo audit (H8 + §7): defaultRoute app Hệ thống → /s |
+| `S2-FND-FILE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S2-FND-BE-4 | Upload file E2E (audit H3, BACKEND-11 §11.4): chốt mô hình presigned-P |
+| `S2-FE-FND-7` | 🟡 | ✅ xong | — *(chưa)* | — | FE System sửa nhỏ theo audit (H8 + §7): defaultRoute app Hệ thống → /s |
 | `S2-FND-DB-2` | 🔴 | ⬜ chờ | — *(chưa)* | — | DB hygiene theo DB-09 (audit §3.2, P2): index bổ sung (files/file_acce |
 | `S2-FND-CONTRACT-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | API contract hygiene theo BACKEND-12 (audit §6.2, P2): Swagger/OpenAPI |
-| `S2-FND-DOC-1` | 🟢 | ⬜ chờ | — *(chưa)* | — | Pin lệch-có-chủ-đích Foundation vào docs (DB-08/09/10 · BACKEND-04/11/ |
+| `S2-FND-DOC-1` | 🟢 | ✅ xong | [📄](S2-FND-DOC-1.md) | — | Pin lệch-có-chủ-đích Foundation vào docs (DB-08/09/10 · BACKEND-04/11/ |
 
 ## Sprint 3
 
@@ -148,8 +154,8 @@
 | `S3-LEAVE-BE-6` | 🟡 | ✅ xong | — *(chưa)* | ✅S3-LEAVE-BE-4 ✅S1-FND-AUDIT-1 | LEAVE Reports + balance transactions + audit read (P2): GET /leave/bal |
 | `S3-FE-LEAVE-3` | 🟡 | ✅ xong | — *(chưa)* | ✅S3-LEAVE-BE-3 ✅S3-FE-LEAVE-1 | FE LEAVE all-requests (/leave/requests, 006) + edit draft (/leave/requ |
 | `S3-FE-LEAVE-4` | 🟡 | ✅ xong | — *(chưa)* | ✅S3-LEAVE-BE-5 ✅S3-FE-LEAVE-1 | FE LEAVE Calendar (/leave/calendar, own/team/company theo scope) |
-| `S3-FE-LEAVE-5` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S3-LEAVE-BE-4 ✅S3-LEAVE-BE-6 ✅S3-FE-LEAVE-1 | FE LEAVE admin: /leave/types + /leave/policies + /leave/balances (HR)  |
-| `S3-FE-LEAVE-6` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S3-LEAVE-BE-6 ✅S3-FE-LEAVE-1 | FE LEAVE Reports (/leave/reports) + Audit logs (/leave/audit-logs) |
+| `S3-FE-LEAVE-5` | 🟡 | ✅ xong | — *(chưa)* | ✅S3-LEAVE-BE-4 ✅S3-LEAVE-BE-6 ✅S3-FE-LEAVE-1 | FE LEAVE admin: /leave/types + /leave/policies + /leave/balances (HR)  |
+| `S3-FE-LEAVE-6` | 🟡 | ✅ xong | — *(chưa)* | ✅S3-LEAVE-BE-6 ✅S3-FE-LEAVE-1 | FE LEAVE Reports (/leave/reports) + Audit logs (/leave/audit-logs) |
 | `S3-LEAVE-SEED-2` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S3-LEAVE-SEED-1 | Leave types 8/8 + pin mã (audit §4.2, DB-10 §14.3): thêm MATERNITY/MAR |
 
 ---
