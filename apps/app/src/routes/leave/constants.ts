@@ -66,6 +66,13 @@ export const LEAVE_ENGINE_PAIRS = {
   DELETE_LEAVE_POLICY: { action: "delete", resourceType: "leave-policy" },
   VIEW_TRANSACTION_BALANCE: { action: "view-transaction", resourceType: "leave-balance" },
   ADJUST_BALANCE: { action: "adjust", resourceType: "leave-balance" },
+  // S3-FE-LEAVE-6 — báo cáo tổng hợp nghỉ + audit log LEAVE. CẶP SEED THẬT mig 0455 (apps/api/src/leave/
+  // leave-permissions.const.ts): export:leave (Company-scope, CHỈ hr/company-admin — LEAST-PRIVILEGE,
+  // manager KHÔNG có grant) · view:leave-audit-log (RIÊNG, KHÔNG tái dùng foundation view:audit-log).
+  // CẢ HAI SENSITIVE ⇒ phơi qua /auth/me nhờ S2-AUTH-CAP-1 (allowlist) ⇒ gate bằng useCanExact.
+  // Mã 'LEAVE.REQUEST.EXPORT' (LEAVE_PERMS) KHÔNG có trong PERMISSION_CODE_TO_PAIR — dùng cặp THẬT trực tiếp.
+  EXPORT_LEAVE: { action: "export", resourceType: "leave" },
+  VIEW_AUDIT_LOG: { action: "view", resourceType: "leave-audit-log" },
 } as const;
 
 /** Trạng thái đơn nghỉ — SPEC-05 §8 + API-05 §10.1 (TitleCase). */
@@ -116,7 +123,34 @@ export const LEAVE_PATHS = {
   POLICIES: "/leave/policies",
   BALANCES: "/leave/balances",
   BALANCE_TRANSACTIONS: (balanceId: string) => `/leave/balances/${balanceId}/transactions`,
+  // S3-FE-LEAVE-6: báo cáo tổng hợp nghỉ (LEAVE-SCREEN-013) + audit log nghỉ phép (LEAVE-SCREEN-014A).
+  REPORTS: "/leave/reports",
+  AUDIT_LOGS: "/leave/audit-logs",
 } as const;
+
+/** Page size mặc định cho báo cáo/audit LEAVE (mirror ATT_RECORDS_PAGE_SIZE). */
+export const LEAVE_REPORT_PAGE_SIZE = 20;
+export const LEAVE_AUDIT_PAGE_LIMIT = 50;
+
+/**
+ * Filter tháng → fromDate / toDate INCLUSIVE [đầu tháng, cuối tháng] cho GET /leave/reports
+ * (leaveReportQuerySchema refine `toDate >= fromDate`, toDate INCLUSIVE — KHÁC half-open của ATT).
+ */
+export function monthToInclusiveRange(month: string): { fromDate: string; toDate: string } {
+  const [year, mon] = month.split("-").map(Number);
+  const from = new Date(year, mon - 1, 1);
+  const to = new Date(year, mon, 0); // ngày cuối cùng của tháng
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return { fromDate: fmt(from), toDate: fmt(to) };
+}
+
+/** Tháng hiện tại dạng 'YYYY-MM'. */
+export function currentMonth(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+}
 
 /** Phạm vi lịch nghỉ (khớp leaveCalendarScopeSchema — contracts). */
 export const LEAVE_CALENDAR_SCOPE = {

@@ -185,6 +185,9 @@ import { LeaveTypesPage } from "@/routes/leave/LeaveTypesPage";
 import { LeavePoliciesPage } from "@/routes/leave/LeavePoliciesPage";
 import { LeaveBalancesPage } from "@/routes/leave/LeaveBalancesPage";
 import { LeaveBalanceTransactionsPage } from "@/routes/leave/LeaveBalanceTransactionsPage";
+// S3-FE-LEAVE-6 — báo cáo tổng hợp nghỉ (LEAVE-SCREEN-013) + audit log nghỉ phép (LEAVE-SCREEN-014A).
+import { LeaveReportsPage } from "@/routes/leave/reports/LeaveReportsPage";
+import { LeaveAuditLogsPage } from "@/routes/leave/audit/LeaveAuditLogsPage";
 import { LEAVE_ENGINE_PAIRS, LEAVE_PATHS } from "@/routes/leave/constants";
 
 // System
@@ -914,6 +917,47 @@ const leaveBalanceTransactionsRoute = createRoute({
   },
 });
 
+// S3-FE-LEAVE-6 — Báo cáo tổng hợp nghỉ (LEAVE-SCREEN-013) + Audit log nghỉ phép (LEAVE-SCREEN-014A).
+// Gate = CẶP ENGINE THỰC trực tiếp (KHÔNG qua PERMISSION_CODE_TO_PAIR — cùng kỹ thuật att.reports/
+// att.audit-logs, tránh drift). export:leave + view:leave-audit-log là cặp SENSITIVE seed Company-scope
+// hr/company-admin (mig 0455) — phơi qua /auth/me nhờ S2-AUTH-CAP-1 (allowlist) nên route-guard resolve
+// được; page tự gate lại bằng useCanExact. KHÔNG dựng biến thể team/manager (seed KHÔNG grant manager).
+const leaveReportsMeta: RouteMeta = {
+  routeKey: "leave.reports",
+  path: LEAVE_PATHS.REPORTS,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "LEAVE",
+  screenCode: "LEAVE-SCREEN-013",
+  titleKey: "routeTitle.leaveReports",
+  requiredAnyPermissions: [
+    `${LEAVE_ENGINE_PAIRS.EXPORT_LEAVE.action}:${LEAVE_ENGINE_PAIRS.EXPORT_LEAVE.resourceType}`,
+  ],
+};
+const leaveReportsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: LEAVE_PATHS.REPORTS,
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(leaveReportsMeta, "LEAVE", <LeaveReportsPage />),
+});
+
+const leaveAuditLogsMeta: RouteMeta = {
+  routeKey: "leave.audit-logs",
+  path: LEAVE_PATHS.AUDIT_LOGS,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "LEAVE",
+  screenCode: "LEAVE-SCREEN-014A",
+  titleKey: "routeTitle.leaveAuditLogs",
+  requiredAnyPermissions: [
+    `${LEAVE_ENGINE_PAIRS.VIEW_AUDIT_LOG.action}:${LEAVE_ENGINE_PAIRS.VIEW_AUDIT_LOG.resourceType}`,
+  ],
+};
+const leaveAuditLogsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: LEAVE_PATHS.AUDIT_LOGS,
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(leaveAuditLogsMeta, "LEAVE", <LeaveAuditLogsPage />),
+});
+
 // Tasks
 const tasksRoute = makeModuleRoute("/tasks", "task.overview", "TASK", ModulePlaceholder);
 const tasksMyTasksRoute = makeModuleRoute(
@@ -1439,6 +1483,8 @@ const routeTree = rootRoute.addChildren([
   leavePoliciesRoute,
   leaveBalancesRoute,
   leaveBalanceTransactionsRoute,
+  leaveReportsRoute,
+  leaveAuditLogsRoute,
   tasksRoute,
   tasksMyTasksRoute,
   notificationsRoute,
