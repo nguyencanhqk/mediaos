@@ -26,9 +26,14 @@ export class AuditMaskerService {
    *   - `token`    → token · access_token · refresh_token · token_hash · csrf_token
    *   - `secret`   → secret · secret_ref · api_secret · client_secret · secret_key
    *   - `password` → password · password_hash
+   *   - `otp`      → otp · otp_secret · otpCode · totp_secret (mã/khoá OTP — BẤT BIẾN #3, phủ 2FA)
+   *   - `salary`   → salary · salary_amount · salaryAmount · base_salary · salaryType (lương nhạy cảm, ADR-0010)
+   *   - `health`   → health · personal_health_info · healthRecord (PII sức khỏe)
+   *   - `idcard`   → id_card · idCardNumber · id_card_number (CMND/CCCD — biến thể của identity_number)
    *   - identity_number / bank_account / storage_path / signed_url (ghép đặc thù, ít false-positive).
    * Triết lý: FAIL TOWARD REDACTION (BẤT BIẾN #3) — thà che dư 1 field lành còn hơn lộ 1 secret. Mở rộng =
-   * thêm stem ở đây (1 nguồn sự thật cho cả mask-at-write lẫn redact-at-read).
+   * thêm stem ở đây (1 nguồn sự thật cho cả mask-at-write lẫn redact-at-read). S2-FND-BE-6 thêm otp/salary/
+   * health/idcard (BE-11 §12.5) — KHÔNG sửa/bỏ stem cũ (append-only, không nới lỏng).
    */
   private static readonly SENSITIVE_STEMS: readonly string[] = [
     "password",
@@ -38,6 +43,11 @@ export class AuditMaskerService {
     "bankaccount",
     "storagepath",
     "signedurl",
+    // S2-FND-BE-6 (thêm, KHÔNG bỏ stem cũ) — phủ biến thể snake_case + camelCase sau normalizeKey.
+    "otp",
+    "salary",
+    "health",
+    "idcard",
   ];
 
   /** Chuẩn hóa tên khóa: lowercase + bỏ underscore ⇒ khớp snake_case & camelCase cùng lúc. */

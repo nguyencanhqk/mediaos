@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { addDaysToLocalDate, monthDateRange } from "../../common/tz.util";
-import { DatabaseService } from "../../db/db.service";
+import { DatabaseService, type TenantTx } from "../../db/db.service";
+import { AuditService } from "../../events/audit.service";
 import { publicHolidays } from "../../db/schema/holidays";
 import type {
   CheckWorkingDayQuery,
@@ -44,6 +45,27 @@ export interface HolidayView {
   description: string | null;
 }
 
+/**
+ * Snapshot cấu hình ngày lễ cho audit old/new_values (BẤT BIẾN #3 — CHỈ cấu hình public, KHÔNG secret/PII;
+ * masker vẫn che phòng thủ chiều sâu nếu lọt). Dùng chung create/update/delete để changed_fields nhất quán.
+ */
+function toHolidayAuditSnapshot(row: HolidayRow): Record<string, unknown> {
+  return {
+    holidayCode: row.holidayCode,
+    name: row.name,
+    holidayDate: row.holidayDate,
+    holidayType: row.holidayType,
+    countryCode: row.countryCode,
+    regionCode: row.regionCode,
+    isRecurring: row.isRecurring,
+    affectsAttendance: row.affectsAttendance,
+    affectsLeaveCalculation: row.affectsLeaveCalculation,
+    isPaidHoliday: row.isPaidHoliday,
+    status: row.status,
+    description: row.description,
+  };
+}
+
 function toHolidayView(row: HolidayRow): HolidayView {
   return {
     id: row.id,
@@ -72,15 +94,18 @@ function toHolidayView(row: HolidayRow): HolidayView {
  * global cùng ngày (DB-08 §8.10 rule 1). `isWorkingDay` / `getHolidaysInRange` là HỢP ĐỒNG NỘI BỘ cho
  * ATT/LEAVE (chấm công, tính phép). CRUD chỉ tạo/sửa/xoá holiday RIÊNG CÔNG TY (global do seed/system).
  *
- * GHI CHÚ: chưa ghi audit ở WO này — AuditService v2 (FOUNDATION-BE-3) đang được xây song song; wiring
- * audit cho CONFIG_UPDATE holiday để FOUNDATION-BE-9 (gom FoundationModule) làm khi API audit ổn định.
- * weekend lấy mặc định Thứ 2–Thứ 6; caller (ATT/LEAVE) truyền workingDays riêng khi SettingService (BE-1) sẵn.
+ * AUDIT (S2-FND-BE-6, SPEC-01 §16.3 · BACKEND-04 §17.4 / BACKEND-11 §12.6): create/update/delete ghi audit
+ * CONFIG object_type='public_holiday' (HOLIDAY_CREATED/UPDATED/DELETED) BÊN TRONG cùng withTenant tx — audit
+ * và thay đổi nghiệp vụ cùng commit/rollback (BẤT BIẾN #2 append-only, KHÔNG orphan). old/new = snapshot cấu
+ * hình ngày lễ đã mask (BẤT BIẾN #3). Cấu hình ngày nghỉ toàn công ty ảnh hưởng chấm công/nghỉ phép = hành
+ * động quan trọng. weekend mặc định Thứ 2–Thứ 6; caller (ATT/LEAVE) truyền workingDays riêng khi cần.
  */
 @Injectable()
 export class HolidaysService {
   constructor(
     private readonly db: DatabaseService,
     private readonly repo: HolidaysRepository,
+    private readonly audit: AuditService,
   ) {}
 
   // ─── Internal contract cho ATT/LEAVE ─────────────────────────────────────────
@@ -150,8 +175,9 @@ export class HolidaysService {
 
   createHoliday(actor: Actor, dto: CreateHolidayInput): Promise<HolidayView> {
     return this.db.withTenant(actor.companyId, async (tx) => {
+      let row: HolidayRow;
       try {
-        const [row] = await this.repo.insertTx(
+        [row] = await this.repo.insertTx(
           actor.companyId,
           {
             holidayCode: dto.holidayCode,
@@ -171,13 +197,15 @@ export class HolidaysService {
           },
           tx,
         );
-        return toHolidayView(row);
       } catch (err) {
         if (isUniqueViolation(err)) {
           throw new ConflictException("Ngày nghỉ trùng (mã + ngày đã tồn tại trong công ty).");
         }
         throw err;
       }
+      // Audit CÙNG tx (BẤT BIẾN #2). Insert lỗi → throw TRƯỚC đây ⇒ 0 orphan.
+      await this.recordConfigAudit(tx, actor, "HOLIDAY_CREATED", row.id, null, row);
+      return toHolidayView(row);
     });
   }
 
@@ -200,14 +228,17 @@ export class HolidaysService {
       if (dto.isPaidHoliday !== undefined) patch.isPaidHoliday = dto.isPaidHoliday;
       if (dto.description !== undefined) patch.description = dto.description;
 
+      let row: HolidayRow | undefined;
       try {
-        const [row] = await this.repo.updateOwnTx(actor.companyId, id, patch, tx);
-        if (!row) throw new NotFoundException("Không tìm thấy ngày nghỉ.");
-        return toHolidayView(row);
+        [row] = await this.repo.updateOwnTx(actor.companyId, id, patch, tx);
       } catch (err) {
         if (isUniqueViolation(err)) throw new ConflictException("Ngày nghỉ trùng (mã + ngày).");
         throw err;
       }
+      if (!row) throw new NotFoundException("Không tìm thấy ngày nghỉ.");
+      // Audit CÙNG tx: old = snapshot trước sửa, new = snapshot sau sửa (changed_fields auto).
+      await this.recordConfigAudit(tx, actor, "HOLIDAY_UPDATED", row.id, existing, row);
+      return toHolidayView(row);
     });
   }
 
@@ -215,7 +246,41 @@ export class HolidaysService {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const [row] = await this.repo.softDeleteOwnTx(actor.companyId, id, actor.id, tx);
       if (!row) throw new NotFoundException("Không tìm thấy ngày nghỉ.");
+      // Audit CÙNG tx: old = snapshot ngày lễ bị xoá, new = null (đã soft-delete).
+      await this.recordConfigAudit(tx, actor, "HOLIDAY_DELETED", row.id, row, null);
       return { id: row.id, deleted: true as const };
+    });
+  }
+
+  /**
+   * Ghi 1 dòng audit CONFIG cho vòng đời ngày lễ (BẤT BIẾN #2 append-only + BẤT BIẾN #3 mask). PHẢI gọi
+   * BÊN TRONG cùng withTenant tx của mutation → audit + thay đổi nghiệp vụ cùng commit/rollback (0 orphan).
+   * old/new = snapshot cấu hình (KHÔNG secret/PII; AuditService cũng mask phòng thủ chiều sâu + auto changed_fields).
+   */
+  private recordConfigAudit(
+    tx: TenantTx,
+    actor: Actor,
+    action: "HOLIDAY_CREATED" | "HOLIDAY_UPDATED" | "HOLIDAY_DELETED",
+    objectId: string,
+    oldRow: HolidayRow | null,
+    newRow: HolidayRow | null,
+  ): Promise<void> {
+    return this.audit.record(tx, {
+      action,
+      actionGroup: "CONFIG",
+      objectType: "public_holiday",
+      objectId,
+      actorUserId: actor.id,
+      actorType: "User",
+      dataScope: "Company",
+      sensitivityLevel: "Normal",
+      resultStatus: "Success",
+      entityType: "public_holiday",
+      entityId: objectId,
+      entityCode: (newRow ?? oldRow)?.holidayCode,
+      permissionCode: "FOUNDATION.HOLIDAY.MANAGE",
+      oldValues: oldRow ? toHolidayAuditSnapshot(oldRow) : null,
+      newValues: newRow ? toHolidayAuditSnapshot(newRow) : null,
     });
   }
 }

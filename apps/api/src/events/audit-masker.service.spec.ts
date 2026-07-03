@@ -70,21 +70,81 @@ describe("AuditMaskerService.mask (bất biến #3)", () => {
   });
 
   it("mask token + secret (snake/single)", () => {
-    const out = masker.mask({ token: SAMPLE, secret: SAMPLE, secret_ref: SAMPLE, name: "keep" }) as Record<
-      string,
-      unknown
-    >;
+    const out = masker.mask({
+      token: SAMPLE,
+      secret: SAMPLE,
+      secret_ref: SAMPLE,
+      name: "keep",
+    }) as Record<string, unknown>;
     expect(out["token"]).toBe(MASK);
     expect(out["secret"]).toBe(MASK);
     expect(out["secret_ref"]).toBe(MASK);
     expect(out["name"]).toBe("keep");
   });
 
+  // S2-FND-BE-6 (BE-11 §12.5) — mở rộng stem: otp · salary · health · idcard. Phủ biến thể GHÉP
+  // snake_case + camelCase (salary_amount↔salaryAmount, id_card_number↔idCardNumber, otp_secret↔otpCode,
+  // personal_health_info). FAIL TOWARD REDACTION (BẤT BIẾN #3).
+  it("mask stem MỚI salary/health/idcard (salary_amount/salaryAmount/id_card_number/idCardNumber/personal_health_info)", () => {
+    const out = masker.mask({
+      salary_amount: SAMPLE,
+      salaryAmount: SAMPLE,
+      id_card_number: SAMPLE,
+      idCardNumber: SAMPLE,
+      personal_health_info: SAMPLE,
+      name: "keep",
+      email: "a@b.c",
+    }) as Record<string, unknown>;
+    expect(out["salary_amount"]).toBe(MASK);
+    expect(out["salaryAmount"]).toBe(MASK);
+    expect(out["id_card_number"]).toBe(MASK);
+    expect(out["idCardNumber"]).toBe(MASK);
+    expect(out["personal_health_info"]).toBe(MASK);
+    expect(out["name"]).toBe("keep");
+    expect(out["email"]).toBe("a@b.c");
+  });
+
+  it("mask stem MỚI otp + biến thể ghép (otp/otp_secret/otpCode)", () => {
+    const out = masker.mask({
+      otp: SAMPLE,
+      otp_secret: SAMPLE,
+      otpCode: SAMPLE,
+      keep: "ok",
+    }) as Record<string, unknown>;
+    expect(out["otp"]).toBe(MASK);
+    expect(out["otp_secret"]).toBe(MASK);
+    expect(out["otpCode"]).toBe(MASK);
+    expect(out["keep"]).toBe("ok");
+  });
+
+  it("regression — 8 stem cũ VẪN mask sau khi thêm stem mới (KHÔNG nới lỏng)", () => {
+    const out = masker.mask({
+      password: SAMPLE,
+      token: SAMPLE,
+      secret: SAMPLE,
+      identity_number: SAMPLE,
+      bank_account: SAMPLE,
+      storage_path: SAMPLE,
+      signed_url: SAMPLE,
+      keep: "ok",
+    }) as Record<string, unknown>;
+    expect(out["password"]).toBe(MASK);
+    expect(out["token"]).toBe(MASK);
+    expect(out["secret"]).toBe(MASK);
+    expect(out["identity_number"]).toBe(MASK);
+    expect(out["bank_account"]).toBe(MASK);
+    expect(out["storage_path"]).toBe(MASK);
+    expect(out["signed_url"]).toBe(MASK);
+    expect(out["keep"]).toBe("ok");
+  });
+
   it("match case-insensitive (PASSWORD / Token / Secret)", () => {
-    const out = masker.mask({ PASSWORD: SAMPLE, Token: SAMPLE, Secret: SAMPLE, Name: "keep" }) as Record<
-      string,
-      unknown
-    >;
+    const out = masker.mask({
+      PASSWORD: SAMPLE,
+      Token: SAMPLE,
+      Secret: SAMPLE,
+      Name: "keep",
+    }) as Record<string, unknown>;
     expect(out["PASSWORD"]).toBe(MASK);
     expect(out["Token"]).toBe(MASK);
     expect(out["Secret"]).toBe(MASK);
