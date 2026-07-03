@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -26,7 +27,12 @@ import { FileAccessLogService } from "./file-access-log.service";
 import { FileLinkRepository } from "./file-link.repository";
 import { FilePolicyService } from "./file-policy.service";
 import { FileRepository } from "./file.repository";
-import { FilePolicyAction, type FilePermissionInput } from "./file-policy.types";
+import {
+  FilePolicyAction,
+  FOUNDATION_FILE_PERMISSION,
+  type FileLinkRef,
+  type FilePermissionInput,
+} from "./file-policy.types";
 
 /** Acting user resolved from the authenticated request (JwtAuthGuard + CompanyGuard). */
 interface RequestUser {
@@ -177,8 +183,16 @@ export class FileService {
     );
     if (!row) throw new NotFoundException("File không tồn tại");
 
-    const policyInput = this.policyInputForFile(user, fileId, FilePolicyAction.View);
-    const decision = await this.policy.canView(policyInput);
+    // S2-FND-BE-4 (H1): load links BEFORE the decision — a module-owned file must be authorized by its
+    // owning module's resolver (link-aware), not the FOUNDATION.FILE.* fallback (deny-no-resolver otherwise).
+    const links = await this.db.withTenant(user.companyId, (tx) =>
+      this.linkRepo.listByFileTx(user.companyId, fileId, tx),
+    );
+    const decision = await this.policy.decideForLinkedFile(
+      this.policyInputForFile(user, fileId, FilePolicyAction.View),
+      links.map((l) => this.toLinkRef(l)),
+      FilePolicyAction.View,
+    );
     if (!decision.allow) {
       await this.logDeny(user, {
         fileId,
@@ -189,9 +203,6 @@ export class FileService {
       throw new ForbiddenException(`FOUNDATION-FILE-ERR-FORBIDDEN: ${decision.reason}`);
     }
 
-    const links = await this.db.withTenant(user.companyId, (tx) =>
-      this.linkRepo.listByFileTx(user.companyId, fileId, tx),
-    );
     return this.toMetadataDto(row, links);
   }
 
@@ -234,8 +245,15 @@ export class FileService {
     );
     if (!row) throw new NotFoundException("File không tồn tại");
 
-    const decision = await this.policy.canDownload(
+    // S2-FND-BE-4 (H1): link-aware authorization — a module-owned file with no registered resolver is
+    // fail-closed (deny-no-resolver); foundation-owned (0-link) keeps the FOUNDATION.FILE.* fallback.
+    const links = await this.db.withTenant(user.companyId, (tx) =>
+      this.linkRepo.listByFileTx(user.companyId, fileId, tx),
+    );
+    const decision = await this.policy.decideForLinkedFile(
       this.policyInputForFile(user, fileId, FilePolicyAction.Download),
+      links.map((l) => this.toLinkRef(l)),
+      FilePolicyAction.Download,
     );
     if (!decision.allow) {
       await this.logDeny(user, {
@@ -247,7 +265,22 @@ export class FileService {
       throw new ForbiddenException(`FOUNDATION-FILE-ERR-FORBIDDEN: ${decision.reason}`);
     }
 
-    // Presign sau khi ALLOW. Key đã thuộc tenant (server-derived); adapter re-assert prefix (#2.1).
+    // S2-FND-BE-4 (H2): state-guard AFTER authz ALLOW (so we don't leak state to a user without access).
+    // A file that is not fully Uploaded, or is Infected, must NEVER be presigned — write a deny access-log
+    // BEFORE storage.get, then 409. (View metadata is intentionally NOT restricted — see getMetadata.)
+    const stateDeny = this.downloadStateDenyReason(row);
+    if (stateDeny) {
+      await this.logDeny(user, {
+        fileId,
+        action: "Download",
+        // Parametrized from the action map (single source of truth) — not a scattered literal.
+        permissionCode: this.foundationPermissionCode(FilePolicyAction.Download),
+        reason: stateDeny,
+      });
+      throw new ConflictException(`FOUNDATION-FILE-ERR-NOT-DOWNLOADABLE: ${stateDeny}`);
+    }
+
+    // Presign sau khi ALLOW + state-guard. Key đã thuộc tenant (server-derived); adapter re-assert prefix (#2.1).
     const signed = await this.storage.get({ key: row.storagePath, companyId: user.companyId });
 
     await this.db.withTenant(user.companyId, (tx) =>
@@ -446,8 +479,16 @@ export class FileService {
     );
     if (!row) throw new NotFoundException("File không tồn tại");
 
-    const decision = await this.policy.canDelete(
+    // S2-FND-BE-4 (H1): deleting a module-owned file is also link-aware (fail-closed no-resolver). A
+    // module-owned file cannot be deleted through the foundation surface until its module registers a
+    // resolver — orphaned-file cleanup is the owning module's responsibility (S2-FND-BE-5+).
+    const links = await this.db.withTenant(user.companyId, (tx) =>
+      this.linkRepo.listByFileTx(user.companyId, fileId, tx),
+    );
+    const decision = await this.policy.decideForLinkedFile(
       this.policyInputForFile(user, fileId, FilePolicyAction.Delete),
+      links.map((l) => this.toLinkRef(l)),
+      FilePolicyAction.Delete,
     );
     if (!decision.allow) {
       await this.logDeny(user, {
@@ -603,6 +644,40 @@ export class FileService {
       entityId: parts.entityId,
       action: parts.action,
     };
+  }
+
+  /**
+   * S2-FND-BE-4 (H1) — map a `file_links` row to the minimal FileLinkRef the policy layer dispatches on.
+   * Only the dispatch key + entity instance travel to the policy (no storage_path / secret — #2.3).
+   */
+  private toLinkRef(link: FileLink): FileLinkRef {
+    return {
+      moduleCode: link.moduleCode,
+      entityType: link.entityType,
+      entityId: link.entityId,
+    };
+  }
+
+  /**
+   * S2-FND-BE-4 (H2) — return the deny reason if a file must NOT be presigned for download, else null.
+   * Infected takes precedence (security-relevant) over not-uploaded. AV is not yet wired ⇒ the default
+   * scan_status is 'NotRequired' — only 'Infected' blocks; Pending/Failed/Clean/NotRequired stay
+   * downloadable (chỉ Infected chặn). upload_status MUST be 'Uploaded' (Pending/Failed/Deleted ⇒ not-uploaded).
+   */
+  private downloadStateDenyReason(row: FileRecord): "infected" | "not-uploaded" | null {
+    if (row.scanStatus === "Infected") return "infected";
+    if (row.uploadStatus !== "Uploaded") return "not-uploaded";
+    return null;
+  }
+
+  /**
+   * The MODULE.RESOURCE.ACTION permission code logged on a foundation-file access-log row for `action`,
+   * derived from the FOUNDATION_FILE_PERMISSION action map (single source of truth) — e.g. Download →
+   * "FOUNDATION.FILE.DOWNLOAD". Keeps the H2 state-guard deny-log parametrized, not a scattered literal
+   * (CLAUDE.md §5; convention SPEC-01 §9).
+   */
+  private foundationPermissionCode(action: FilePolicyAction): string {
+    return `FOUNDATION.FILE.${FOUNDATION_FILE_PERMISSION[action].action.toUpperCase()}`;
   }
 
   /** Ghi 1 dòng file_access_log DENY (access_granted=false + denied_reason) trong tx tenant RIÊNG. */

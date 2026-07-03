@@ -21,11 +21,15 @@ import {
   CalendarDays,
   Archive,
   FileSearch,
+  FileClock,
 } from "lucide-react";
 import { foundationApi, foundationKeys, getHealth, rootKeys, useCan } from "@mediaos/web-core";
 import { PageHeader, EmptyState, Card, CardContent, Badge, Button } from "@mediaos/ui";
 import { SYSTEM_ENGINE_PAIRS } from "../constants";
 import { FOUNDATION_ENGINE_PAIRS, FOUNDATION_PATH } from "./constants";
+// S2-FE-FND-7 (RC2) — cặp ENGINE THẬT view:audit-log (seed mig 0340, AuditController enforce). Dùng CHUNG
+// nguồn với AuditLogsPage + route system.audit-logs (KHÔNG re-derive orphan view:foundation-audit-log).
+import { AUDIT_LOG_VIEW, AUDIT_LOGS_PATH } from "./audit-logs/constants";
 
 type TF = ReturnType<typeof useTranslation<"system">>["t"];
 
@@ -157,6 +161,9 @@ export function SystemOverviewPage() {
     FOUNDATION_ENGINE_PAIRS.VIEW_FILE_ACCESS_LOG.action,
     FOUNDATION_ENGINE_PAIRS.VIEW_FILE_ACCESS_LOG.resourceType,
   );
+  // S2-FE-FND-7 (RC2) — cặp view:audit-log nằm trong SYSTEM_APP_PERMISSIONS (route /system ALLOW persona
+  // chỉ-audit-log). Thiếu ở hasAnyAccess ⇒ soft-403 landing dù route-guard cho qua → thêm để khớp visibility.
+  const canViewAuditLog = useCan(AUDIT_LOG_VIEW.action, AUDIT_LOG_VIEW.resourceType);
 
   const hasAnyAccess =
     canViewCompany ||
@@ -165,7 +172,8 @@ export function SystemOverviewPage() {
     canViewRole ||
     canViewHoliday ||
     canViewRetention ||
-    canViewFileAccessLog;
+    canViewFileAccessLog ||
+    canViewAuditLog;
 
   // Company summary — CHỈ fetch khi có quyền đọc (enabled=canViewCompany).
   const companyQuery = useQuery({
@@ -272,6 +280,16 @@ export function SystemOverviewPage() {
             description={t("overview.cards.fileAccessLogs.description")}
             to={FOUNDATION_PATH.FILE_ACCESS_LOGS}
             actionLabel={t("overview.cards.fileAccessLogs.manage")}
+          />
+        )}
+
+        {canViewAuditLog && (
+          <SummaryCard
+            icon={FileClock}
+            title={t("overview.cards.auditLogs.title")}
+            description={t("overview.cards.auditLogs.description")}
+            to={AUDIT_LOGS_PATH}
+            actionLabel={t("overview.cards.auditLogs.manage")}
           />
         )}
 

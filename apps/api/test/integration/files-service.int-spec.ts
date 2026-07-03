@@ -43,6 +43,14 @@ const allowPolicy = {
   canLink: async (): Promise<FilePolicyDecision> => ({ allow: true, reason: "allow-foundation" }),
   canUnlink: async (): Promise<FilePolicyDecision> => ({ allow: true, reason: "allow-foundation" }),
   canDelete: async (): Promise<FilePolicyDecision> => ({ allow: true, reason: "allow-foundation" }),
+  // S2-FND-BE-4 (H1): getMetadata/getDownloadUrl/deleteFile now route through the link-aware decision
+  // point instead of canView/canDownload/canDelete. This stub keeps ALLOWing (link-aware deny-path is
+  // covered by file-policy.service.spec.ts + files.service.spec.ts). Without it the real service throws
+  // "decideForLinkedFile is not a function" at runtime (the `as never` cast hides it from tsc).
+  decideForLinkedFile: async (): Promise<FilePolicyDecision> => ({
+    allow: true,
+    reason: "allow-foundation",
+  }),
 };
 
 /** Stub storage adapter — presign returns a fake short-lived URL (no real S3 in integration). */
@@ -206,6 +214,15 @@ describe.skipIf(!hasLaneDb)(
         sizeBytes: 256,
         visibility: "Private",
       });
+
+      // S2-FND-BE-4 (H2): a fresh upload is upload_status='Pending' and the download state-guard now
+      // 409s any non-'Uploaded' (or 'Infected') file BEFORE presign. Promote to a downloadable state
+      // (Uploaded/Clean) so this happy-path reaches storage.get — mirrors the unit fixture 'download
+      // ALLOW → DownloadUrlDto'. (S2-FND-BE-5 will flip upload_status to 'Uploaded' via confirm.)
+      await direct.query(
+        `UPDATE files SET upload_status = 'Uploaded', scan_status = 'Clean' WHERE id = $1`,
+        [file.id],
+      );
 
       const dl = await service.getDownloadUrl(actor(), file.id);
       expect(dl.url).toMatch(/^https:\/\//);

@@ -177,6 +177,8 @@ Role chỉ dùng để seed quyền mặc định và hiển thị nghiệp vụ
 
 **Ngoại lệ hợp lệ duy nhất — SUPER_ADMIN/System:** Guard được phép short-circuit theo `System` scope cho SUPER_ADMIN, tức là khi grant của user chứa scope `System` thì coi như thỏa mọi permission/scope check (khớp API-02 §3.4). Đây là ngoại lệ được chốt, không phải hard-code theo role name nghiệp vụ. Mọi role khác vẫn phải đi qua permission + scope như thường.
 
+> **CHỐT 2026-07-02: code thắng, permission engine dùng CẶP `(action, resource_type)` làm định danh — KHÔNG phải chuỗi `MODULE.RESOURCE.ACTION`.** `assertCan(ctx, 'HR.EMPLOYEE.UPDATE', ...)` ở trên là **cách viết minh hoạ**; check thật resolve về cặp `(action, resource_type)`: bảng `permissions` có `uniqueIndex('permissions_action_resource_uq', [action, resource_type])`, `role_permissions.effect ∈ {ALLOW, DENY}` (deny-overrides ở app layer) — `apps/api/src/db/schema/permissions.ts`. `/auth/me` serialize `capabilities`/`scopes` keyed `"action:resourceType"`. Lý do: chuỗi `MODULE.RESOURCE.ACTION` chỉ là nhãn đọc; guard/seed/serialize đều đi theo cặp engine → tránh drift cặp-quyền (khớp API-02 §3.4).
+
 ### 6.3 Không tin dữ liệu định danh từ frontend
 
 Frontend không được quyết định:
@@ -476,6 +478,8 @@ Nếu phát hiện refresh token cũ đã bị dùng lại sau khi rotate:
 | Role/permission thay đổi | Invalidate permission cache; không bắt buộc revoke session |
 | Suspicious login | Có thể revoke session và ghi security event |
 
+> **CHỐT 2026-07-02: code thắng, `refresh_tokens` (rotation/family) SONG SONG `user_sessions` — CẢ HAI đang live, không drop cái nào.** `apps/api/src/db/schema/auth.ts` giữ đồng thời: (1) `refresh_tokens` với `family_id` (login phát family mới; rotation kế thừa; reuse/logout thu hồi cả họ) và (2) `user_sessions` (bảng phiên canonical `refresh_token_hash`). Code chú thích rõ "KHÔNG drop refresh_tokens". Ngoài ra, **đổi mật khẩu thu hồi MỌI phiên** (code hiện KHÔNG giữ phiên hiện tại): `auth.service.ts` thu hồi tất cả `refresh_tokens` còn sống + `revokeAllSessionsForUserTx(..., "password_changed")` cho `user_sessions` (mirror reset password). Hàng "Change password" ở bảng §10.4 trên là thiết kế cho phép "revoke session cũ, CÓ THỂ giữ phiên hiện tại theo cấu hình"; code hiện thực ở phương án chặt hơn = revoke-ALL. **Đây là HARDENING tầng BE/API, KHÔNG phải rule tầng SPEC** — SPEC-02 KHÔNG có rule tường minh về thu-hồi-phiên khi đổi mật khẩu (§14.5 = AUTH-SCREEN-005 Hồ sơ tài khoản cá nhân, KHÔNG liên quan); nguồn hành vi = bảng §10.4 này + API-02 AUTH-API-007 (+ §13.4 uniform-401). Lý do: hai lớp phiên cùng tồn tại tới khi hợp nhất (S2-OQ-001); mọi thao tác thu hồi phải quét cả hai.
+
 ---
 
 ## 11. Password strategy
@@ -517,6 +521,8 @@ SHA256 plain hash không salt chuyên dụng
 | Login thành công | Reset `failed_login_count = 0`, update `last_login_at`, `last_login_ip` |
 | Login fail nhiều lần | Ghi `login_logs` và `user_security_events` |
 
+> **CHỐT 2026-07-02: code thắng, lỗi login là 401 ĐỒNG NHẤT cho mọi nhánh (sai mật khẩu · user không tồn tại · Locked · Inactive · company Inactive).** `auth.service.ts` ném cùng `UnauthorizedException(UNIFORM_LOGIN_ERROR)` (const dòng 61) → anti-enumeration, KHÔNG lộ trạng thái tài khoản qua HTTP code/message. Việc tăng `failed_login_count` / khoá tạm vẫn diễn ra ở tầng service nhưng KHÔNG phản ánh khác biệt ra response. 403 trạng thái (locked/inactive) chỉ dùng cho API protected sau xác thực. Lý do: mọi thông điệp login khác nhau đều là kênh dò tài khoản.
+
 ---
 
 ## 12. API Auth public/protected
@@ -530,6 +536,8 @@ SHA256 plain hash không salt chuyên dụng
 | POST | `/api/v1/auth/forgot-password` | Yêu cầu reset password | Public |
 | POST | `/api/v1/auth/reset-password` | Đặt lại password bằng token | Public |
 | GET | `/api/v1/health` | Health check | Public |
+
+> **CHỐT 2026-07-02: code thắng, path THẬT (`apps/api/src/auth/auth.controller.ts`).** Refresh = `/api/v1/auth/refresh` (`@Post("refresh")`), KHÔNG phải `/refresh-token`. Thêm public/near-public: `POST /api/v1/auth/2fa/verify` (bước 2 login bằng `challengeToken`) và `GET /api/v1/auth/redirect-allowed` (allowlist SSO redirect). Ở §12.2, path THẬT là `GET /api/v1/auth/sessions` + `POST /api/v1/auth/sessions/:id/revoke` + `POST /api/v1/auth/sessions/revoke-others` (thay `/auth/my-sessions` và `/auth/logout-all`). Lý do: pin route thật để FE/QA gọi đúng.
 
 ### 12.2 Protected user endpoints
 
@@ -627,6 +635,8 @@ Content-Type: application/json
 
 Nếu refresh token dùng HttpOnly cookie, response body không cần trả `refresh_token`.
 
+> **CHỐT 2026-07-02: code thắng, login response là UNION hai nhánh.** Khi user CHƯA bật 2FA → trả token như trên. Khi user ĐÃ bật 2FA → `login()` trả `{ twoFactorRequired: true, challengeToken }` (`auth.service.ts:343-344`) thay vì token; client gọi tiếp `POST /api/v1/auth/2fa/verify` (verify `challengeToken` + mã TOTP/recovery, single-use) để lấy token. Ngoài ra login request THẬT cần `companySlug` bắt buộc (`loginRequestSchema` = `{ companySlug, email, password }`, `contracts/auth.ts:10`). Lý do: BE trả 2 hình dạng response tuỳ trạng thái 2FA — client phải xử lý cả hai.
+
 ### 13.4 Lỗi login
 
 | HTTP | Code | Trường hợp | Message |
@@ -639,6 +649,8 @@ Nếu refresh token dùng HttpOnly cookie, response body không cần trả `ref
 | 429 | `AUTH-ERR-TOO-MANY-ATTEMPTS` | Login fail quá nhiều | Vui lòng thử lại sau |
 
 Không nên thông báo rõ email có tồn tại hay không.
+
+> **CHỐT 2026-07-02: code thắng — 3 nhánh 403 (`USER-LOCKED`, `USER-INACTIVE`, `MUST-CHANGE-PASSWORD`) ở nhánh LOGIN được GỘP về 401 ĐỒNG NHẤT.** `auth.service.ts` login ném cùng `UnauthorizedException(UNIFORM_LOGIN_ERROR)` cho mọi lý do thất bại (sai mật khẩu · không tồn tại · Locked · Inactive · company Inactive) → anti-enumeration. 403 trạng thái chỉ dùng cho **API protected** sau khi đã xác thực (guard trạng thái user/company), KHÔNG cho `/auth/login`. `must_change_password` được surface qua `/auth/me` + response sau login, không phải 403 tại login. Lý do: khác biệt HTTP code/message ở login = kênh dò trạng thái tài khoản. Khớp API-02 §7 AUTH-API-001.
 
 ---
 

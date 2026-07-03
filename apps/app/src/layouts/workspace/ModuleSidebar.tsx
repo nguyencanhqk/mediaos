@@ -32,6 +32,7 @@ interface ModuleSidebarProps {
 const GROUP_LABELS: Record<string, string> = {
   overview: "Tổng quan",
   operation: "Nghiệp vụ",
+  "master-data": "Dữ liệu gốc",
   management: "Quản lý",
   report: "Báo cáo",
   settings: "Thiết lập",
@@ -128,7 +129,15 @@ export function ModuleSidebar({
     return acc;
   }, {});
 
-  const groupOrder = ["overview", "operation", "management", "report", "settings", "admin"];
+  const groupOrder = [
+    "overview",
+    "operation",
+    "master-data",
+    "management",
+    "report",
+    "settings",
+    "admin",
+  ];
   const orderedGroups = [
     ...groupOrder.filter((g) => grouped[g]),
     ...Object.keys(grouped).filter((g) => !groupOrder.includes(g)),

@@ -43,6 +43,7 @@ import { PasswordService } from "./password.service";
 import { ReplayGuardService } from "./replay-guard.service";
 import { ResetPasswordMailService } from "./reset-password-mail.service";
 import { SecurityAlertService } from "./security-alert.service";
+import { SecurityEventWriter } from "./security-event-writer.service";
 import { TokenService } from "./token.service";
 import { TwoFactorService } from "./two-factor.service";
 import { SecretEncryptionService } from "../crypto/secret-encryption.service";
@@ -136,6 +137,9 @@ function deserializeResetEnvelope(raw: unknown): EncryptedColumns {
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  // S2-AUTH-BE-8: writer timeline user_security_events (dual-write cạnh audit). Field + default-construct
+  // trong body (mirror AuditService.masker) để int-spec dựng AuthService bằng tay (không truyền) vẫn ghi event.
+  private readonly securityEvents: SecurityEventWriter;
 
   constructor(
     private readonly dbsvc: DatabaseService,
@@ -157,7 +161,12 @@ export class AuthService {
     // S2-AUTH-BE-4: gửi email "đặt lại mật khẩu" (mock MVP). Optional để các int-spec dựng AuthService bằng
     // tay (KHÔNG truyền) vẫn chạy — vắng ⇒ forgotPassword bỏ qua bước gửi mail (đường outbox durable vẫn còn).
     private readonly resetMail?: ResetPasswordMailService,
-  ) {}
+    // S2-AUTH-BE-8: optional-với-default (mirror AuditService.masker) — DI luôn truyền instance đã đăng ký ở
+    // AuthModule; hand-built int-spec (không truyền) → default-construct (cùng logic mask/severity).
+    securityEvents?: SecurityEventWriter,
+  ) {
+    this.securityEvents = securityEvents ?? new SecurityEventWriter();
+  }
 
   /**
    * CS-9 — chính sách bảo mật per-company chặn cấp token khi sai IP / ngoài giờ. 403 ĐỒNG NHẤT
@@ -409,11 +418,10 @@ export class AuthService {
     }
     await this.rateLimiter.reset(rlKey);
 
-    const {
-      tokens,
-      userId: twoFaUserId,
-      email: twoFaEmail,
-    } = await this.dbsvc.withTenant(claims.companyId, async (tx) => {
+    // S2-AUTH-BE-10 (PLAN-FIX #3): khối withTenant trả DISCRIMINATED UNION sentinel THAY VÌ ném trong tx.
+    // Nhánh company-inactive PHẢI ghi audit login_blocked TRONG tx rồi COMMIT (ném 401 NGOÀI block) — nếu
+    // ném-trong-tx thì db.service rollback nuốt luôn audit (int-spec b2 chứng minh audit COMMIT không rollback).
+    const result = await this.dbsvc.withTenant(claims.companyId, async (tx) => {
       const [user] = await tx
         .select({
           id: users.id,
@@ -424,10 +432,32 @@ export class AuthService {
         .from(users)
         .where(eq(users.id, claims.sub))
         .limit(1);
-      // AUTH-FIX-1: đóng path login THỨ 3 (2FA bước 2). Trước đây chỉ check deletedAt → user suspended có
-      // bật 2FA VẪN cấp token. Cộng allow-list status==='active' (fail-closed) → 401 ĐỒNG NHẤT, KHÔNG cấp token.
+      // AUTH-FIX-1: đóng path login THỨ 3 (2FA bước 2). user suspended/deleted có bật 2FA → 401 ĐỒNG NHẤT,
+      // KHÔNG cấp token. Nhánh này KHÔNG ghi audit (không có vết cần commit) → return sentinel, ném ngoài block.
       if (!user || user.deletedAt || !isAuthorizedStatus(user.status)) {
-        throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
+        return { kind: "invalid" as const };
+      }
+      // S2-AUTH-BE-10: cổng COMPANY-active cho path login THỨ 3. user active nhưng CÔNG TY 'suspended' (hoặc
+      // row companies VẮNG do RLS lọc/soft-delete/race) ⇒ CHẶN cấp token. Đọc companies bằng PREDICATE TƯỜNG
+      // MINH eq(companies.id, claims.companyId) (mirror me()). FAIL-CLOSED: company undefined ⇒ inactive. GHI
+      // audit login_blocked reason='company_inactive' TRONG tx (append-only) + return sentinel → ném 401 NGOÀI
+      // block để tx COMMIT KÈM audit. Login MỚI: KHÔNG có family refresh để thu hồi (chưa cấp token bước-2).
+      const [company] = await tx
+        .select({ status: companies.status })
+        .from(companies)
+        .where(eq(companies.id, claims.companyId))
+        .limit(1);
+      if (!company || !isAuthorizedStatus(company.status)) {
+        await this.audit.record(tx, {
+          action: "auth.login_blocked",
+          objectType: "auth",
+          actorUserId: user.id,
+          objectId: user.id,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+          after: { reason: "company_inactive" },
+        });
+        return { kind: "blocked_company" as const };
       }
       const issued = await this.issueTokens(
         tx,
@@ -446,8 +476,15 @@ export class AuthService {
         userAgent: meta.userAgent,
         after: { via: "2fa" },
       });
-      return { tokens: issued.tokens, userId: user.id, email: user.email };
+      return { kind: "ok" as const, tokens: issued.tokens, userId: user.id, email: user.email };
     });
+
+    // Ném 401 ĐỒNG NHẤT NGOÀI tx: với blocked_company, tx đã COMMIT kèm audit login_blocked (bằng chứng ở
+    // int-spec b2); với invalid, tx rỗng nên commit vô hại. reason KHÔNG lộ vào HTTP body (anti status-probing).
+    if (result.kind === "invalid" || result.kind === "blocked_company") {
+      throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
+    }
+    const { tokens, userId: twoFaUserId, email: twoFaEmail } = result;
     // CS-7: ghi last_login_at + reset failed_login_count BEST-EFFORT (2FA path — không block login nếu lỗi).
     this.writeLastLoginAt(claims.companyId, twoFaUserId).catch((err) => {
       this.logger.warn(
@@ -542,6 +579,12 @@ export class AuthService {
         actorUserId: user.id,
         objectId: user.id,
       });
+      // S2-AUTH-BE-8: dual-write timeline bảo mật TRONG cùng tx (rollback ⇒ 0 orphan). subject=actor=user.
+      await this.securityEvents.record(tx, {
+        eventType: "PASSWORD_CHANGED",
+        userId: user.id,
+        actorUserId: user.id,
+      });
       return true;
     });
 
@@ -619,6 +662,16 @@ export class AuthService {
           objectId: row.userId,
           after: { reason: "refresh_token_reuse", familyRevoked: true },
         });
+        // S2-AUTH-BE-8: REFRESH_TOKEN_REUSE_DETECTED = 'critical' (map). actor=null (hệ thống phát hiện replay —
+        // KHÔNG quy cho chủ tài khoản). Ghi TRONG tx đã revoke family (commit, caller ném 401 ngoài tx).
+        await this.securityEvents.record(tx, {
+          eventType: "REFRESH_TOKEN_REUSE_DETECTED",
+          userId: row.userId,
+          actorUserId: null,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+          payload: { reason: "refresh_token_reuse", familyRevoked: true },
+        });
         return { kind: "reuse" as const };
       }
 
@@ -646,6 +699,36 @@ export class AuthService {
           ip: meta.ip,
           userAgent: meta.userAgent,
           after: { reason: "suspended", familyRevoked: true },
+        });
+        return { kind: "invalid" as const };
+      }
+
+      // S2-AUTH-BE-10: cổng COMPANY-active. Token còn sống + user active nhưng CÔNG TY 'suspended' (hoặc
+      // row companies VẮNG do RLS lọc / soft-delete / race) ⇒ CHẶN xoay token y như user-suspended. Đọc
+      // companies bằng PREDICATE TƯỜNG MINH eq(companies.id, companyId) trong CÙNG tx (mirror me()) —
+      // defense-in-depth, KHÔNG dựa thuần RLS. FAIL-CLOSED: company undefined ⇒ coi như inactive (KHÔNG
+      // dereference row undefined → tránh TypeError/500). Thu hồi CẢ HỌ token (family, RLS tự lọc company_id)
+      // + user_sessions (revoked_reason='company_inactive') + audit deny (cùng tx, append-only; reason CHỈ ở
+      // audit_logs). return invalid → caller ném 401 ĐỒNG NHẤT ngoài tx (controller xoá cookie).
+      const [company] = await tx
+        .select({ status: companies.status })
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .limit(1);
+      if (!company || !isAuthorizedStatus(company.status)) {
+        await tx
+          .update(refreshTokens)
+          .set({ revokedAt: new Date() })
+          .where(and(eq(refreshTokens.familyId, row.familyId), isNull(refreshTokens.revokedAt)));
+        await this.revokeAllSessionsForUserTx(tx, user.id, "company_inactive");
+        await this.audit.record(tx, {
+          action: "auth.refresh_blocked",
+          objectType: "auth",
+          actorUserId: user.id,
+          objectId: user.id,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+          after: { reason: "company_inactive", familyRevoked: true },
         });
         return { kind: "invalid" as const };
       }
@@ -741,6 +824,13 @@ export class AuthService {
         objectId: row.userId,
         after: { scope: "family" },
       });
+      // S2-AUTH-BE-8: logout = thu hồi phiên (family) → SESSION_REVOKED (dual-write cùng tx).
+      await this.securityEvents.record(tx, {
+        eventType: "SESSION_REVOKED",
+        userId: row.userId,
+        actorUserId: row.userId,
+        payload: { scope: "family" },
+      });
     });
   }
 
@@ -835,6 +925,13 @@ export class AuthService {
         objectId: sessionId,
         after: { scope: "single" },
       });
+      // S2-AUTH-BE-8: self-revoke 1 phiên → SESSION_REVOKED (dual-write cùng tx). subject=actor=user (Own).
+      await this.securityEvents.record(tx, {
+        eventType: "SESSION_REVOKED",
+        userId,
+        actorUserId: userId,
+        payload: { scope: "single", sessionId },
+      });
     });
   }
 
@@ -876,6 +973,17 @@ export class AuthService {
         actorUserId: userId,
         objectId: userId,
         after: {
+          scope: "others",
+          count: targets.length,
+          hadCurrentSession: currentSessionId != null,
+        },
+      });
+      // S2-AUTH-BE-8: self-revoke phiên khác → SESSION_REVOKED (dual-write cùng tx). count non-sensitive.
+      await this.securityEvents.record(tx, {
+        eventType: "SESSION_REVOKED",
+        userId,
+        actorUserId: userId,
+        payload: {
           scope: "others",
           count: targets.length,
           hadCurrentSession: currentSessionId != null,
@@ -1075,6 +1183,14 @@ export class AuthService {
           ip: meta.ip,
           userAgent: meta.userAgent,
         });
+        // S2-AUTH-BE-8: PASSWORD_RESET_REQUESTED (dual-write cùng tx). KHÔNG payload token/envelope (BẤT BIẾN #3).
+        await this.securityEvents.record(tx, {
+          eventType: "PASSWORD_RESET_REQUESTED",
+          userId: user.id,
+          actorUserId: user.id,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        });
       });
     } catch (err) {
       // Uniform-void (không lộ email tồn tại): mọi lỗi xử lý (vd KMS/encrypt down) ⇒ withTenant tx đã rollback
@@ -1154,6 +1270,18 @@ export class AuthService {
         objectType: "auth",
         actorUserId: row.userId,
         objectId: row.userId,
+      });
+      // S2-AUTH-BE-8: reset hoàn tất = đổi mật khẩu + thu hồi MỌI phiên → 2 event (dual-write cùng tx).
+      await this.securityEvents.record(tx, {
+        eventType: "PASSWORD_RESET_COMPLETED",
+        userId: row.userId,
+        actorUserId: row.userId,
+      });
+      await this.securityEvents.record(tx, {
+        eventType: "ALL_SESSIONS_REVOKED",
+        userId: row.userId,
+        actorUserId: row.userId,
+        payload: { reason: "password_reset" },
       });
       return true;
     });
@@ -1304,6 +1432,32 @@ export class AuthService {
       .update(userSessions)
       .set({ revokedAt: new Date(), revokedReason: reason })
       .where(and(eq(userSessions.userId, userId), isNull(userSessions.revokedAt)));
+  }
+
+  /**
+   * S2-AUTH-BE-9 (PUBLIC helper cho lock/suspend) — thu hồi MỌI phiên còn sống của 1 user TRONG tx caller:
+   *   (a) refresh_tokens (mọi họ) → revoked_at set (TÁI DÙNG pattern bulk-revoke theo userId sẵn có), và
+   *   (b) user_sessions còn sống → revoked_at set qua revokeAllSessionsForUserTx (KHÔNG nhân bản match).
+   * Trả `revoked_session_count` = số user_sessions active ĐẾM TRƯỚC khi thu hồi (cùng tx, không có ghi
+   * đồng thời trên phiên của user này ⇒ = đúng số phiên bị thu hồi). Gọi TRONG cùng withTenant(companyId)
+   * tx của caller ⇒ RLS lọc company_id (BẤT BIẾN #1) + cùng commit/rollback với đổi status. Chỉ UPDATE
+   * revoked_at — KHÔNG hard-delete (BẤT BIẾN #2 mirror). Sau khi thu hồi, refresh token cũ trình lại
+   * /auth/refresh → 401 NGAY (đã revoked).
+   *
+   * OUT-OF-SCOPE: access token STATELESS đã cấp còn hiệu lực tối đa ACCESS_TOKEN_TTL_SEC (~900s / ≤15');
+   * chặn tức thì hoàn toàn cần denylist theo `jti` (Valkey) — DEFER sang follow-up WO, KHÔNG làm ở đây.
+   */
+  async revokeAllForUserTx(tx: TenantTx, userId: string, reason: string): Promise<number> {
+    const [counted] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(userSessions)
+      .where(and(eq(userSessions.userId, userId), isNull(userSessions.revokedAt)));
+    await tx
+      .update(refreshTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
+    await this.revokeAllSessionsForUserTx(tx, userId, reason);
+    return counted?.count ?? 0;
   }
 
   /** Gắn companyId làm tiền tố token (không phải secret — có sẵn trong JWT) để mở withTenant khi refresh/reset. */

@@ -180,6 +180,15 @@ import { LeaveApprovalPage } from "@/routes/leave/LeaveApprovalPage";
 import { AllLeaveRequestsPage } from "@/routes/leave/AllLeaveRequestsPage";
 import { EditLeaveDraftPage } from "@/routes/leave/EditLeaveDraftPage";
 import { LeaveCalendarPage } from "@/routes/leave/LeaveCalendarPage";
+// S3-FE-LEAVE-5 — admin (LEAVE-SCREEN-010/011/012/013): loại nghỉ / chính sách / số dư phép + ledger.
+import { LeaveTypesPage } from "@/routes/leave/LeaveTypesPage";
+import { LeavePoliciesPage } from "@/routes/leave/LeavePoliciesPage";
+import { LeaveBalancesPage } from "@/routes/leave/LeaveBalancesPage";
+import { LeaveBalanceTransactionsPage } from "@/routes/leave/LeaveBalanceTransactionsPage";
+// S3-FE-LEAVE-6 — báo cáo tổng hợp nghỉ (LEAVE-SCREEN-013) + audit log nghỉ phép (LEAVE-SCREEN-014A).
+import { LeaveReportsPage } from "@/routes/leave/reports/LeaveReportsPage";
+import { LeaveAuditLogsPage } from "@/routes/leave/audit/LeaveAuditLogsPage";
+import { LEAVE_ENGINE_PAIRS, LEAVE_PATHS } from "@/routes/leave/constants";
 
 // System
 import { UsersPage } from "@/routes/system/UsersPage";
@@ -207,7 +216,14 @@ import { HealthPage } from "@/routes/system/foundation/HealthPage";
 // System / Foundation — Retention Policies + File Access Logs — S2-FE-FND-6
 import { RetentionPoliciesPage } from "@/routes/system/foundation/RetentionPoliciesPage";
 import { FileAccessLogsPage } from "@/routes/system/foundation/FileAccessLogsPage";
-import { FOUNDATION_PATH, FOUNDATION_SCREEN } from "@/routes/system/foundation/constants";
+import {
+  FOUNDATION_PATH,
+  FOUNDATION_SCREEN,
+  SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META,
+  SYSTEM_HEALTH_ROUTE_META,
+  SYSTEM_RETENTION_ROUTE_META,
+  SYSTEM_FILE_ACCESS_LOGS_ROUTE_META,
+} from "@/routes/system/foundation/constants";
 // System / Roles + Permissions admin — S2-FE-AUTH-4 (lane FE batch C)
 import { RoleFormPage } from "@/routes/system/roles/RoleFormPage";
 import { RoleDetailPage } from "@/routes/system/roles/RoleDetailPage";
@@ -218,6 +234,10 @@ import { SequencesPage } from "@/routes/system/ops/SequencesPage";
 import { SeedsPage } from "@/routes/system/ops/SeedsPage";
 // Account self-service — S2-FE-AUTH-5 (lane FE batch C)
 import { AccountSessionsPage } from "@/routes/account/AccountSessionsPage";
+// Account self-service — S2-FE-AUTH-6: /account/setup-2fa (ép enroll, AUTH-003) + /account/profile (đọc).
+import { TwoFactorSetupPage } from "@/routes/account/TwoFactorSetupPage";
+import { AccountProfilePage } from "@/routes/account/AccountProfilePage";
+import { ACCOUNT_SETUP_2FA_PATH, ACCOUNT_PROFILE_PATH } from "@/routes/account/constants";
 // System / Foundation — Audit log viewer (S2-FE-FND-2)
 import { AuditLogsPage } from "@/routes/system/foundation/audit-logs/AuditLogsPage";
 import { AuditLogDetailPage } from "@/routes/system/foundation/audit-logs/AuditLogDetailPage";
@@ -785,6 +805,159 @@ const leaveDetailRoute = createRoute({
   },
 });
 
+// S3-FE-LEAVE-5 — admin: Loại nghỉ phép (LEAVE-SCREEN-010). Gate = view:leave-type (KHÔNG sensitive,
+// mig 0455) — cặp ENGINE THỰC trực tiếp (KHÔNG qua PERMISSION_CODE_TO_PAIR, tránh drift đã gặp
+// S1-FND-MODULE — cùng kỹ thuật att.shifts/hr.org-chart).
+const leaveTypesMeta: RouteMeta = {
+  routeKey: "leave.types",
+  path: LEAVE_PATHS.TYPES,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "LEAVE",
+  screenCode: "LEAVE-SCREEN-010",
+  titleKey: "routeTitle.leaveTypes",
+  requiredAnyPermissions: [
+    `${LEAVE_ENGINE_PAIRS.VIEW_LEAVE_TYPE.action}:${LEAVE_ENGINE_PAIRS.VIEW_LEAVE_TYPE.resourceType}`,
+  ],
+  showInSidebar: true,
+  order: 60,
+};
+const leaveTypesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: LEAVE_PATHS.TYPES,
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(leaveTypesMeta, "LEAVE", <LeaveTypesPage />),
+});
+
+// S3-FE-LEAVE-5 — admin: Chính sách nghỉ phép (LEAVE-SCREEN-011). Gate = view:leave-policy (SENSITIVE,
+// Company-scope hr/company-admin, mig 0455).
+const leavePoliciesMeta: RouteMeta = {
+  routeKey: "leave.policies",
+  path: LEAVE_PATHS.POLICIES,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "LEAVE",
+  screenCode: "LEAVE-SCREEN-011",
+  titleKey: "routeTitle.leavePolicies",
+  requiredAnyPermissions: [
+    `${LEAVE_ENGINE_PAIRS.VIEW_LEAVE_POLICY.action}:${LEAVE_ENGINE_PAIRS.VIEW_LEAVE_POLICY.resourceType}`,
+  ],
+  showInSidebar: true,
+  order: 61,
+};
+const leavePoliciesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: LEAVE_PATHS.POLICIES,
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(leavePoliciesMeta, "LEAVE", <LeavePoliciesPage />),
+});
+
+// S3-FE-LEAVE-5 — admin: Số dư phép nhân viên (LEAVE-SCREEN-012). Gate = view:leave-balance (SENSITIVE,
+// Company-scope hr/company-admin, mig 0455).
+const leaveBalancesMeta: RouteMeta = {
+  routeKey: "leave.balances",
+  path: LEAVE_PATHS.BALANCES,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "LEAVE",
+  screenCode: "LEAVE-SCREEN-012",
+  titleKey: "routeTitle.leaveBalances",
+  requiredAnyPermissions: [
+    `${LEAVE_ENGINE_PAIRS.VIEW_BALANCE.action}:${LEAVE_ENGINE_PAIRS.VIEW_BALANCE.resourceType}`,
+  ],
+  showInSidebar: true,
+  order: 62,
+};
+const leaveBalancesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: LEAVE_PATHS.BALANCES,
+  beforeLoad: authGuard,
+  component: () => {
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      leaveBalancesMeta,
+      "LEAVE",
+      <LeaveBalancesPage
+        onViewTransactions={(balanceId) =>
+          void navigate({
+            to: "/leave/balances/$balanceId/transactions",
+            params: { balanceId },
+          })
+        }
+      />,
+    );
+  },
+});
+
+// Ledger giao dịch số dư (LEAVE-SCREEN-013) — local RouteMeta (no sidebar entry, path param). Gate =
+// view-transaction:leave-balance (SENSITIVE, mirrors leaveBalancesMeta pattern).
+const leaveBalanceTransactionsMeta: RouteMeta = {
+  routeKey: "leave.balances.transactions",
+  path: "/leave/balances/:balanceId/transactions",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "LEAVE",
+  screenCode: "LEAVE-SCREEN-013",
+  titleKey: "routeTitle.leaveBalanceTransactions",
+  requiredAnyPermissions: [
+    `${LEAVE_ENGINE_PAIRS.VIEW_TRANSACTION_BALANCE.action}:${LEAVE_ENGINE_PAIRS.VIEW_TRANSACTION_BALANCE.resourceType}`,
+  ],
+};
+const leaveBalanceTransactionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/leave/balances/$balanceId/transactions",
+  beforeLoad: authGuard,
+  component: () => {
+    const { balanceId } = leaveBalanceTransactionsRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      leaveBalanceTransactionsMeta,
+      "LEAVE",
+      <LeaveBalanceTransactionsPage
+        balanceId={balanceId}
+        onBack={() => void navigate({ to: LEAVE_PATHS.BALANCES as "/" })}
+      />,
+    );
+  },
+});
+
+// S3-FE-LEAVE-6 — Báo cáo tổng hợp nghỉ (LEAVE-SCREEN-013) + Audit log nghỉ phép (LEAVE-SCREEN-014A).
+// Gate = CẶP ENGINE THỰC trực tiếp (KHÔNG qua PERMISSION_CODE_TO_PAIR — cùng kỹ thuật att.reports/
+// att.audit-logs, tránh drift). export:leave + view:leave-audit-log là cặp SENSITIVE seed Company-scope
+// hr/company-admin (mig 0455) — phơi qua /auth/me nhờ S2-AUTH-CAP-1 (allowlist) nên route-guard resolve
+// được; page tự gate lại bằng useCanExact. KHÔNG dựng biến thể team/manager (seed KHÔNG grant manager).
+const leaveReportsMeta: RouteMeta = {
+  routeKey: "leave.reports",
+  path: LEAVE_PATHS.REPORTS,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "LEAVE",
+  screenCode: "LEAVE-SCREEN-013",
+  titleKey: "routeTitle.leaveReports",
+  requiredAnyPermissions: [
+    `${LEAVE_ENGINE_PAIRS.EXPORT_LEAVE.action}:${LEAVE_ENGINE_PAIRS.EXPORT_LEAVE.resourceType}`,
+  ],
+};
+const leaveReportsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: LEAVE_PATHS.REPORTS,
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(leaveReportsMeta, "LEAVE", <LeaveReportsPage />),
+});
+
+const leaveAuditLogsMeta: RouteMeta = {
+  routeKey: "leave.audit-logs",
+  path: LEAVE_PATHS.AUDIT_LOGS,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "LEAVE",
+  screenCode: "LEAVE-SCREEN-014A",
+  titleKey: "routeTitle.leaveAuditLogs",
+  requiredAnyPermissions: [
+    `${LEAVE_ENGINE_PAIRS.VIEW_AUDIT_LOG.action}:${LEAVE_ENGINE_PAIRS.VIEW_AUDIT_LOG.resourceType}`,
+  ],
+};
+const leaveAuditLogsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: LEAVE_PATHS.AUDIT_LOGS,
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(leaveAuditLogsMeta, "LEAVE", <LeaveAuditLogsPage />),
+});
+
 // Tasks
 const tasksRoute = makeModuleRoute("/tasks", "task.overview", "TASK", ModulePlaceholder);
 const tasksMyTasksRoute = makeModuleRoute(
@@ -862,15 +1035,8 @@ const systemSettingsRoute = createRoute({
 });
 
 // Public Holidays (list + CRUD) — S2-FE-FND-4. Gate = cặp seed THẬT mig 0435 (view:foundation-holiday).
-const systemPublicHolidaysMeta: RouteMeta = {
-  routeKey: "system.public-holidays",
-  path: FOUNDATION_PATH.PUBLIC_HOLIDAYS,
-  layout: "MODULE_WORKSPACE",
-  moduleCode: "FOUNDATION",
-  screenCode: FOUNDATION_SCREEN.PUBLIC_HOLIDAYS,
-  titleKey: "routeTitle.systemPublicHolidays",
-  requiredAnyPermissions: ["view:foundation-holiday"],
-};
+// S2-FE-FND-7: meta CHUYỂN về foundation/constants (nguồn CHUNG với sidebar entry — chống pair-drift).
+const systemPublicHolidaysMeta: RouteMeta = SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META;
 const systemPublicHolidaysRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: FOUNDATION_PATH.PUBLIC_HOLIDAYS,
@@ -882,15 +1048,9 @@ const systemPublicHolidaysRoute = createRoute({
 // Health (read-only) — S2-FE-FND-4. HealthController BE @Public() (KHÔNG @RequirePermission, KHÔNG cặp
 // 'foundation-health' seed) → gate route bằng baseline "khu vực quản trị hệ thống" GIỐNG system.overview
 // (xem constants.ts VIEW_SETTING_BASELINE) thay vì bịa permission code không tồn tại.
-const systemHealthMeta: RouteMeta = {
-  routeKey: "system.health",
-  path: FOUNDATION_PATH.HEALTH,
-  layout: "MODULE_WORKSPACE",
-  moduleCode: "FOUNDATION",
-  screenCode: FOUNDATION_SCREEN.HEALTH,
-  titleKey: "routeTitle.systemHealth",
-  requiredAnyPermissions: ["view:foundation-setting", "view:user"],
-};
+// S2-FE-FND-7: meta CHUYỂN về foundation/constants — sidebar entry health dùng CHUNG cả 2 cặp
+// (view:foundation-setting + view:user); 1 cặp = mismatch route↔sidebar.
+const systemHealthMeta: RouteMeta = SYSTEM_HEALTH_ROUTE_META;
 const systemHealthRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: FOUNDATION_PATH.HEALTH,
@@ -901,15 +1061,8 @@ const systemHealthRoute = createRoute({
 // Retention Policies (config, governs purge) — S2-FE-FND-6. Gate = cặp seed THẬT mig 0435
 // (view:foundation-retention — KHÔNG sensitive). Nút Sửa trong page gate riêng bằng
 // manage:foundation-retention (is_sensitive=true, System-scope — KHÔNG tự động cấp company-admin).
-const systemRetentionMeta: RouteMeta = {
-  routeKey: "system.retention",
-  path: FOUNDATION_PATH.RETENTION,
-  layout: "MODULE_WORKSPACE",
-  moduleCode: "FOUNDATION",
-  screenCode: FOUNDATION_SCREEN.RETENTION,
-  titleKey: "routeTitle.systemRetention",
-  requiredAnyPermissions: ["view:foundation-retention"],
-};
+// S2-FE-FND-7: meta CHUYỂN về foundation/constants (nguồn CHUNG với sidebar entry).
+const systemRetentionMeta: RouteMeta = SYSTEM_RETENTION_ROUTE_META;
 const systemRetentionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: FOUNDATION_PATH.RETENTION,
@@ -920,15 +1073,8 @@ const systemRetentionRoute = createRoute({
 
 // File Access Logs (viewer, append-only) — S2-FE-FND-6. Gate = cặp seed THẬT mig 0435
 // (view:foundation-file-access-log — KHÔNG sensitive).
-const systemFileAccessLogsMeta: RouteMeta = {
-  routeKey: "system.file-access-logs",
-  path: FOUNDATION_PATH.FILE_ACCESS_LOGS,
-  layout: "MODULE_WORKSPACE",
-  moduleCode: "FOUNDATION",
-  screenCode: FOUNDATION_SCREEN.FILE_ACCESS_LOGS,
-  titleKey: "routeTitle.systemFileAccessLogs",
-  requiredAnyPermissions: ["view:foundation-file-access-log"],
-};
+// S2-FE-FND-7: meta CHUYỂN về foundation/constants (nguồn CHUNG với sidebar entry).
+const systemFileAccessLogsMeta: RouteMeta = SYSTEM_FILE_ACCESS_LOGS_ROUTE_META;
 const systemFileAccessLogsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: FOUNDATION_PATH.FILE_ACCESS_LOGS,
@@ -1045,6 +1191,33 @@ const accountSessionsRoute = createRoute({
   component: () => (
     <ProtectedShell>
       <AccountSessionsPage />
+    </ProtectedShell>
+  ),
+});
+
+// S2-FE-AUTH-6 — /account/setup-2fa. Ép enroll khi `mustSetupTwoFactor` (AUTH-003); ProtectedShell TỰ
+// điều hướng tới đây, route content chỉ cần authGuard (không permission pair — self-service, giống
+// accountSessionsRoute/accountChangePasswordRoute).
+const accountSetupTwoFactorRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ACCOUNT_SETUP_2FA_PATH,
+  beforeLoad: authGuard,
+  component: () => (
+    <ProtectedShell>
+      <TwoFactorSetupPage />
+    </ProtectedShell>
+  ),
+});
+
+// S2-FE-AUTH-6 — /account/profile (đọc). Authenticated-only, KHÔNG permission pair (self-service, đọc
+// /auth/me của CHÍNH mình) — mirror accountSessionsRoute wiring.
+const accountProfileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: ACCOUNT_PROFILE_PATH,
+  beforeLoad: authGuard,
+  component: () => (
+    <ProtectedShell>
+      <AccountProfilePage />
     </ProtectedShell>
   ),
 });
@@ -1306,6 +1479,12 @@ const routeTree = rootRoute.addChildren([
   leaveAllRequestsRoute,
   leaveEditRoute,
   leaveCalendarRoute,
+  leaveTypesRoute,
+  leavePoliciesRoute,
+  leaveBalancesRoute,
+  leaveBalanceTransactionsRoute,
+  leaveReportsRoute,
+  leaveAuditLogsRoute,
   tasksRoute,
   tasksMyTasksRoute,
   notificationsRoute,
@@ -1331,6 +1510,8 @@ const routeTree = rootRoute.addChildren([
   systemSequencesRoute,
   systemSeedsRoute,
   accountSessionsRoute,
+  accountSetupTwoFactorRoute,
+  accountProfileRoute,
   systemAuditLogsRoute,
   systemAuditLogDetailRoute,
   systemLoginLogsRoute,

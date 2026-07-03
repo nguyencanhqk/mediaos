@@ -64,6 +64,14 @@ const allowPolicy = {
   canLink: async (): Promise<FilePolicyDecision> => ({ allow: true, reason: "allow-foundation" }),
   canUnlink: async (): Promise<FilePolicyDecision> => ({ allow: true, reason: "allow-foundation" }),
   canDelete: async (): Promise<FilePolicyDecision> => ({ allow: true, reason: "allow-foundation" }),
+  // S2-FND-BE-4 (H1): getMetadata/getDownloadUrl/deleteFile now route through the link-aware decision
+  // point instead of canView/canDownload/canDelete. This stub keeps ALLOWing (link-aware deny-path is
+  // covered by file-policy.service.spec.ts + files.service.spec.ts). Without it the real service throws
+  // "decideForLinkedFile is not a function" at runtime (the `as never` cast hides it from tsc).
+  decideForLinkedFile: async (): Promise<FilePolicyDecision> => ({
+    allow: true,
+    reason: "allow-foundation",
+  }),
 };
 
 /** Stub SettingService — returns file.* defaults (precedence resolution covered elsewhere). */
@@ -310,6 +318,16 @@ describe.skipIf(!hasLaneDb)(
         for (const leak of ["storagePath", "storedName", "checksumSha256"]) {
           expect(meta).not.toHaveProperty(leak);
         }
+
+        // S2-FND-BE-4 (H2): a fresh upload is upload_status='Pending' and the download state-guard now
+        // 409s any non-'Uploaded' (or 'Infected') file BEFORE presign. This F4a case asserts the DTO
+        // shape of a SUCCESSFUL download, so promote the file to a downloadable state (Uploaded/Clean)
+        // first — mirrors the unit fixture 'download ALLOW → DownloadUrlDto'. (S2-FND-BE-5 will flip
+        // upload_status to 'Uploaded' via confirm; here we set it directly to reach the presign branch.)
+        await direct.query(
+          `UPDATE files SET upload_status = 'Uploaded', scan_status = 'Clean' WHERE id = $1`,
+          [dto.id],
+        );
 
         const dl = await service.getDownloadUrl(actor(), dto.id);
         // Short-lived url only — never the raw key; expiresAt present (TTL-bounded).

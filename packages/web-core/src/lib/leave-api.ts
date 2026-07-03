@@ -7,6 +7,17 @@ import {
   leaveManagementListResponseSchema,
   leaveCalculateResponseSchema,
   leaveCalendarResponseSchema,
+  leaveTypeAdminViewSchema,
+  leavePolicyViewSchema,
+  leaveBalanceAdminViewSchema,
+  leaveBalanceTransactionViewSchema,
+  // S3-FE-LEAVE-6 — báo cáo tổng hợp nghỉ + audit log LEAVE (reuse audit contract của foundation).
+  leaveReportResponseSchema,
+  auditLogListResponseSchema,
+  type LeaveReportQuery,
+  type LeaveReportResponse,
+  type AuditLogQuery,
+  type AuditLogListResponse,
   type LeaveTypeView,
   type LeaveBalanceView,
   type LeaveRequestDetailView,
@@ -20,6 +31,17 @@ import {
   type UpdateLeaveRequestDraft,
   type LeaveCalendarQuery,
   type LeaveCalendarResponse,
+  type LeaveTypeAdminView,
+  type CreateLeaveTypeAdminRequest,
+  type UpdateLeaveTypeAdminRequest,
+  type LeavePolicyView,
+  type LeavePolicyListQuery,
+  type CreateLeavePolicyRequest,
+  type UpdateLeavePolicyRequest,
+  type LeaveBalanceAdminView,
+  type LeaveBalanceAdminListQuery,
+  type LeaveBalanceTransactionView,
+  type AdjustLeaveBalanceRequest,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -174,5 +196,136 @@ export const leaveApi = {
   getCalendar: (query: LeaveCalendarQuery): Promise<LeaveCalendarResponse> => {
     const qs = buildQueryString(query);
     return apiFetch(`/leave/calendar${qs}`, leaveCalendarResponseSchema);
+  },
+
+  // ── Admin: loại nghỉ (S3-FE-LEAVE-5 · LEAVE-SCREEN-010) ──────────────────
+  // Cổng SERVER: view:leave-type (đọc, KHÔNG sensitive) · create/update/delete:leave-type (SENSITIVE,
+  // Company-scope hr/company-admin — mig 0455). Client chỉ chọn endpoint + validate response.
+
+  /**
+   * GET /leave/types — nguồn ĐỌC DUY NHẤT hiện có cho màn quản trị Loại nghỉ. Validate qua
+   * `leaveTypeViewSchema` (schema THẬT server trả cho route này — KHÔNG có `allowNegativeBalance`, BE
+   * chưa có endpoint list riêng cho mặt admin/S3-LEAVE-BE-4) rồi map thêm `allowNegativeBalance: null`
+   * để khớp shape `LeaveTypeAdminView` (admin create/update TRẢ field này).
+   * HẠN CHẾ ĐÃ BIẾT (BE gap): route chỉ trả loại ĐANG active (findActiveTypesTx) — loại inactive sẽ
+   * KHÔNG hiện trong danh sách quản trị cho tới khi BE bổ sung endpoint list-admin riêng.
+   */
+  listTypesAdmin: (): Promise<LeaveTypeAdminView[]> =>
+    apiFetch("/leave/types", z.array(leaveTypeViewSchema)).then((rows) =>
+      rows.map((r) => ({ ...r, allowNegativeBalance: null })),
+    ),
+
+  /** POST /leave/admin/types — tạo loại nghỉ (đủ field cấu hình). Permission: create:leave-type. */
+  createTypeAdmin: (body: CreateLeaveTypeAdminRequest): Promise<LeaveTypeAdminView> =>
+    apiFetch("/leave/admin/types", leaveTypeAdminViewSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** PATCH /leave/admin/types/:id — sửa loại nghỉ. Permission: update:leave-type. code immutable. */
+  updateTypeAdmin: (id: string, body: UpdateLeaveTypeAdminRequest): Promise<LeaveTypeAdminView> =>
+    apiFetch(`/leave/admin/types/${id}`, leaveTypeAdminViewSchema, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * POST /leave/admin/types/:id/delete — vô hiệu hoá (soft-delete, KHÔNG xóa cứng). Permission:
+   * delete:leave-type. Server trả envelope data:null (HttpCode 200, KHÔNG 204) → validate `z.null()`.
+   */
+  deleteTypeAdmin: (id: string): Promise<void> =>
+    apiFetch(`/leave/admin/types/${id}/delete`, z.null(), { method: "POST" }).then(() => undefined),
+
+  // ── Admin: chính sách nghỉ phép (S3-FE-LEAVE-5 · LEAVE-SCREEN-011) ────────
+  // Cổng SERVER: view/create/update/delete:leave-policy — CẢ 4 đều SENSITIVE (Company-scope, mig 0455).
+
+  /** GET /leave/admin/policies — danh sách chính sách nghỉ. Permission: view:leave-policy. */
+  listPolicies: (query?: Partial<LeavePolicyListQuery>): Promise<LeavePolicyView[]> => {
+    const qs = buildQueryString(query ?? {});
+    return apiFetch(`/leave/admin/policies${qs}`, z.array(leavePolicyViewSchema));
+  },
+
+  /** POST /leave/admin/policies — tạo chính sách. Permission: create:leave-policy. */
+  createPolicy: (body: CreateLeavePolicyRequest): Promise<LeavePolicyView> =>
+    apiFetch("/leave/admin/policies", leavePolicyViewSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** PATCH /leave/admin/policies/:id — cập nhật chính sách. Permission: update:leave-policy. */
+  updatePolicy: (id: string, body: UpdateLeavePolicyRequest): Promise<LeavePolicyView> =>
+    apiFetch(`/leave/admin/policies/${id}`, leavePolicyViewSchema, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * POST /leave/admin/policies/:id/delete — xoá mềm chính sách. Permission: delete:leave-policy.
+   * Server trả envelope data:null (HttpCode 200) → validate `z.null()`.
+   */
+  deletePolicy: (id: string): Promise<void> =>
+    apiFetch(`/leave/admin/policies/${id}/delete`, z.null(), { method: "POST" }).then(
+      () => undefined,
+    ),
+
+  // ── Admin: số dư phép (HR) — S3-FE-LEAVE-5 · LEAVE-SCREEN-012/013 ─────────
+  // Cổng SERVER: view/view-transaction/adjust:leave-balance — CẢ 3 đều SENSITIVE (Company-scope, mig 0455).
+
+  /** GET /leave/admin/balances — số dư phép theo employee/loại/năm. Permission: view:leave-balance. */
+  listBalancesAdmin: (
+    query?: Partial<LeaveBalanceAdminListQuery>,
+  ): Promise<LeaveBalanceAdminView[]> => {
+    const qs = buildQueryString(query ?? {});
+    return apiFetch(`/leave/admin/balances${qs}`, z.array(leaveBalanceAdminViewSchema));
+  },
+
+  /**
+   * GET /leave/balances/:id/transactions — ledger append-only (route canonical, API-05 §12.8, khớp
+   * FRONTEND sitemap /leave/balances/:balanceId/transactions). Permission: view-transaction:leave-balance.
+   */
+  listBalanceTransactions: (balanceId: string): Promise<LeaveBalanceTransactionView[]> =>
+    apiFetch(
+      `/leave/balances/${balanceId}/transactions`,
+      z.array(leaveBalanceTransactionViewSchema),
+    ),
+
+  /**
+   * POST /leave/admin/balances/:id/adjust — điều chỉnh số dư QUA LEDGER (amountDays +/-, reason bắt buộc).
+   * Permission: adjust:leave-balance. Server LUÔN ghi 1 dòng leave_balance_transactions kèm UPDATE — KHÔNG
+   * endpoint nào khác sửa total_days trực tiếp (bất biến #2 — audit/ledger append-only).
+   */
+  adjustBalance: (
+    balanceId: string,
+    body: AdjustLeaveBalanceRequest,
+  ): Promise<LeaveBalanceAdminView> =>
+    apiFetch(`/leave/admin/balances/${balanceId}/adjust`, leaveBalanceAdminViewSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  // ── Báo cáo tổng hợp nghỉ phép (S3-LEAVE-BE-6 · LEAVE-SCREEN-013) — S3-FE-LEAVE-6 ────────
+  // Cổng SERVER: export:leave (SENSITIVE, Company-scope — CHỈ hr/company-admin, mig 0455; manager
+  // KHÔNG có grant). GET /leave/reports trả JSON tổng hợp per-employee (KHÔNG file CSV/export). Client
+  // chỉ chọn endpoint + validate; company_id resolve từ auth context — client KHÔNG truyền.
+
+  /** GET /leave/reports — tổng hợp nghỉ ĐÃ duyệt theo kỳ [fromDate,toDate]. Permission: export:leave. */
+  getLeaveReport: (query: LeaveReportQuery): Promise<LeaveReportResponse> => {
+    const qs = buildQueryString(query);
+    return apiFetch(`/leave/reports${qs}`, leaveReportResponseSchema);
+  },
+
+  // ── Audit log LEAVE (S3-LEAVE-BE-6 · LEAVE-SCREEN-014A) — S3-FE-LEAVE-6 ──────────────────
+  // Route/guard RIÊNG của LEAVE (KHÔNG dùng chung foundation /foundation/audit-logs) — cặp
+  // view:leave-audit-log (SENSITIVE, Company-scope hr/company-admin mig 0455), server bound thêm vào
+  // object-type allowlist của LEAVE. Field before/after/oldValues/newValues ĐÃ redact ở server
+  // (AuditMaskerService, bất biến #3) — client CHỈ render field top-level nhận được.
+
+  /**
+   * GET /leave/audit-logs — viewer audit RIÊNG của LEAVE. Reuse AuditLogQuery/AuditLogListResponse
+   * (KHÔNG contract mới). Permission: view:leave-audit-log (SENSITIVE).
+   */
+  listLeaveAuditLogs: (query?: Partial<AuditLogQuery>): Promise<AuditLogListResponse> => {
+    const qs = buildQueryString(query ?? {});
+    return apiFetch(`/leave/audit-logs${qs}`, auditLogListResponseSchema);
   },
 };

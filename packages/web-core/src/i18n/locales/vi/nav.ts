@@ -57,6 +57,14 @@ export default {
     leave: "Nghỉ phép",
     leaveMyRequests: "Đơn nghỉ của tôi",
     leaveApprovals: "Đơn cần duyệt",
+    // S3-FE-LEAVE-5 — admin (LEAVE-SCREEN-010/011/012/013).
+    leaveTypes: "Loại nghỉ phép",
+    leavePolicies: "Chính sách nghỉ phép",
+    leaveBalances: "Số dư phép nhân viên",
+    leaveBalanceTransactions: "Lịch sử giao dịch số dư phép",
+    // S3-FE-LEAVE-6 — báo cáo tổng hợp nghỉ (LEAVE-SCREEN-013) + audit log nghỉ phép (LEAVE-SCREEN-014A).
+    leaveReports: "Báo cáo tổng hợp nghỉ phép",
+    leaveAuditLogs: "Audit log nghỉ phép",
     tasks: "Công việc",
     taskMyTasks: "Việc của tôi",
     notifications: "Thông báo",
@@ -71,6 +79,9 @@ export default {
     systemSeeds: "Trạng thái Seed",
     systemPublicHolidays: "Ngày nghỉ lễ",
     systemHealth: "Tình trạng hệ thống",
+    // S2-FE-FND-7 — routeTitle cho 2 màn wired sẵn (S2-FE-FND-6) còn thiếu key i18n.
+    systemRetention: "Chính sách lưu trữ",
+    systemFileAccessLogs: "Nhật ký truy cập tệp",
     systemFiles: "Tệp tin",
     systemModules: "Danh mục module",
     accountProfile: "Hồ sơ tài khoản",
