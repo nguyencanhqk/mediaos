@@ -21,6 +21,17 @@ interface AuthenticatedRequest extends Request {
  *
  * isSensitive:true ⇒ wildcard *:* KHÔNG kế thừa (PermissionGuard). THỨ TỰ route: '/all' + '/all/:id' khai
  * báo TRƯỚC '/:id' để '/all' không bị param ':id' nuốt. Controller KHÔNG tự chọn DB-context (service lo).
+ *
+ * ── S2-FND-BE-5: audit-log gate CANONICAL ────────────────────────────────────────────────────────────
+ * Cổng DUY NHẤT của audit viewer COMPANY = @RequirePermission('view','audit-log',{isSensitive:true})
+ * (permission seed mig 0340, grant company-admin 0001). grep toàn apps/api xác nhận KHÔNG route nào enforce
+ * (view|export):foundation-audit-log.
+ *
+ * ⚠️ DEPRECATE (app-surface): cặp view:foundation-audit-log + export:foundation-audit-log (seed mig
+ * 0435:345-346, is_sensitive=false, granted company-admin qua blanket foundation-*) KHÔNG được dùng làm cổng
+ * ở BẤT KỲ route audit nào — chúng bị BỎ QUA. Seed row 0435 GIỮ NGUYÊN (audit/seed append-only, BẤT BIẾN #2
+ * — KHÔNG DELETE/rewrite CHECK), chỉ ĐÁNH DẤU deprecated. MODULE_APP_METADATA.AUTH đã đổi
+ * view:foundation-audit-log → view:audit-log để app-surface khớp cổng thật. Chốt: docs/permission-matrix-spec.md.
  */
 @Controller("foundation/audit-logs")
 @UseGuards(PermissionGuard)

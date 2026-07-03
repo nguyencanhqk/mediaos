@@ -98,6 +98,7 @@ describe.skipIf(!runDb)("S1-QA-FND-1 audit permission + scope deny-path", () => 
   let adminToken: string; // company-admin A (CÓ view:audit-log)
   let employeeToken: string; // employee A (KHÔNG có view:audit-log)
   let wildcardToken: string; // user A có '*:*' non-sensitive (KHÔNG kế thừa sensitive)
+  let foundationAuditToken: string; // user A có view:foundation-audit-log (0435) — cặp DEPRECATE, KHÔNG mở cổng
   let auditIdB: string; // audit row của tenant B (cross-tenant target)
   const companyIds: string[] = [];
 
@@ -132,6 +133,15 @@ describe.skipIf(!runDb)("S1-QA-FND-1 audit permission + scope deny-path", () => 
     await seedRolePermission(direct, wildRole, wildPerm, "ALLOW");
     await seedUserRole(direct, wild, wildRole, A.companyId);
 
+    // foundation-audit user A — role riêng + grant view:foundation-audit-log (mig 0435, non-sensitive) NHƯNG
+    // KHÔNG view:audit-log. Chứng minh cặp DEPRECATE KHÔNG phải cổng: audit viewer gate DUY NHẤT = view:audit-log.
+    const fauEmail = `fau-${randomUUID().slice(0, 8)}@a.test`;
+    const fau = await seedUser(direct, A.companyId, fauEmail, pw);
+    const fauRole = await seedRole(direct, A.companyId, `fau-${randomUUID().slice(0, 8)}`);
+    const fauPerm = await seedPermissionCatalog(direct, "view", "foundation-audit-log", false);
+    await seedRolePermission(direct, fauRole, fauPerm, "ALLOW");
+    await seedUserRole(direct, fau, fauRole, A.companyId);
+
     // audit rows: 1 của A (admin xem được), 1 của B (cross-tenant target cho D4).
     await insertAudit(direct, A.companyId, `${TAG}-a`);
     auditIdB = await insertAudit(direct, B.companyId, `${TAG}-b`);
@@ -139,6 +149,7 @@ describe.skipIf(!runDb)("S1-QA-FND-1 audit permission + scope deny-path", () => 
     adminToken = await login(app, A.slug, adminEmail);
     employeeToken = await login(app, A.slug, empEmail);
     wildcardToken = await login(app, A.slug, wildEmail);
+    foundationAuditToken = await login(app, A.slug, fauEmail);
   });
 
   afterAll(async () => {
@@ -173,6 +184,18 @@ describe.skipIf(!runDb)("S1-QA-FND-1 audit permission + scope deny-path", () => 
       .set("Authorization", `Bearer ${wildcardToken}`);
     expect(res.status, JSON.stringify(res.body)).toBe(403);
     expect(res.body.success).toBe(false);
+  });
+
+  // ── D2b: view:foundation-audit-log (mig 0435, DEPRECATE) KHÔNG mở cổng audit viewer ──
+  // S2-FND-BE-5: cổng DUY NHẤT = view:audit-log (0340). Cặp foundation-audit-log tồn tại trong catalog + được
+  // grant, NHƯNG KHÔNG route nào enforce ⇒ user chỉ có nó vẫn 403. Chứng minh sole-gate + tính DEPRECATE.
+  it("D2b — view:foundation-audit-log (deprecated pair) GET /foundation/audit-logs → 403 (KHÔNG mở cổng)", async () => {
+    const res = await api(app)
+      .get(`/foundation/audit-logs`)
+      .set("Authorization", `Bearer ${foundationAuditToken}`);
+    expect(res.status, JSON.stringify(res.body)).toBe(403);
+    expect(res.body.success).toBe(false);
+    expect(res.body.data ?? null).toBeNull();
   });
 
   // ── D3: ALLOW sanity — company-admin có grant → 200 (cổng MỞ đúng) ─────────────
