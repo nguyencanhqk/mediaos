@@ -47,6 +47,10 @@ Ngoài ra 2 vấn đề sát ngưỡng HIGH:
 - **`GRANT ... DELETE ON companies TO mediaos_app`** (`apps/api/migrations/0002_companies_users.sql:34`) — app role hard-delete được company, trái DB-08 §8.1 rule 4 + tinh thần bất biến #2; mọi bảng foundation mới đều đã bỏ DELETE, riêng `companies` (và `users`) còn giữ.
 - **Bảng `companies` chưa reconcile theo DB-08 §8.1** — `company_code` nullable không unique (code dùng `slug`), status CHECK chỉ `active/suspended`, thiếu `legal_name/country_code/default_locale/currency_code/logo_file_id/metadata/created_by...`, thừa cột hướng cũ (`working_days_json`, `payroll_config_json`...).
 
+> **CHỐT 2026-07-02 (OWNER-DECISION — WO S2-FND-DOC-1, đã PIN vào DB-08; cần owner chốt lần cuối trước merge):**
+> - **#1 `companies` §8.1 = PIN code-thắng ở N=1 single-tenant.** Lý do: ở một-công-ty các lệch (business key `slug` thay `company_code`; status CHECK `active/suspended`; thiếu cột pháp lý `legal_name/country_code/default_locale/currency_code`; cột legacy `working_days_json`/`payroll_config_json`) KHÔNG ảnh hưởng cô lập tenant hay nghiệp vụ. Reconcile về §8.1 (thêm cột pháp lý, đổi status enum, gỡ DELETE grant) **HOÃN tới khi mở multi-company**. Lưu ý: `GRANT DELETE companies/users` **KHÔNG đóng ở WO này** — vẫn là WO hành vi riêng (REVOKE migration).
+> - **#2 `modules.sort_order` = PIN code (cosmetic).** Lý do: seed 0435 dùng `1..15` liền thay khoảng cách 10-70 kiểu doc; chỉ ảnh hưởng thứ tự hiển thị (`ORDER BY sort_order`), không có tác động nghiệp vụ/khoá ⇒ không đổi lại.
+
 ---
 
 ## 3. Tầng DB (DB-08 + DB-09)
@@ -70,6 +74,8 @@ Ngoài ra 2 vấn đề sát ngưỡng HIGH:
 ### 3.3 Doc-drift nội bộ cần pin vào spec (không phải lỗi code)
 
 DB-09 tham chiếu cột không tồn tại trong chính DB-08: `file_access_logs.accessed_at` (DB-08 = `created_at`), `files.checksum` (DB-08 = `checksum_sha256`/`content_hash`), uq holiday theo `name` (DB-08 = `holiday_code`), index audit actor có/không company_id-first.
+
+> **CHỐT 2026-07-02 (ĐÃ SỬA — WO S2-FND-DOC-1):** doc-drift nội bộ DB-08↔DB-09 đã được sửa/pin trong `docs/DB/DB-09`: `file_access_logs.accessed_at`→`created_at` (mốc thời gian thật; index `idx_file_access_logs_file_created`/`_actor_created`/`_entity`), `files.checksum`→`checksum_sha256`/`content_hash` (dedup thật = `idx_files_content_hash` trên `(company_id, content_hash)`), uq `public_holidays` `name`→`holiday_code` (tách 2 partial: global `company_id IS NULL` vs company). Index audit không company_id-first ghi là **lệch-kế-thừa code-thắng** (cô lập ép ở RLS+FORCE, không phụ thuộc thứ tự cột — không re-create để tránh DROP index đang dùng). DB-09 giờ khớp DB-08/code.
 
 ---
 
@@ -125,6 +131,8 @@ DB-09 tham chiếu cột không tồn tại trong chính DB-08: `file_access_log
 
 Download = 302 presigned TTL-ngắn thay stream (đạt mục tiêu không lộ storage_path) · audit_logs + file_access_logs nằm PROTECTED_TABLES → retention không bao giờ xóa (an toàn hơn doc, nhưng chưa có archive path) · `/settings/public` lọc đúng nhưng gate chặt hơn doc (H6 — cần chốt hướng).
 
+> **CHỐT 2026-07-02 (PINNED — WO S2-FND-DOC-1):** download=302 presigned TTL-ngắn (không stream binary, không lộ `storage_path`) và `audit_logs`/`file_access_logs` ∈ `PROTECTED_TABLES` (retention KHÔNG BAO GIỜ xóa append-only, bất biến #2) đã pin vào `docs/BACKEND/BACKEND-11` (§11.9 + PROTECTED_TABLES) và `docs/DB/DB-08`. `/settings/public` gate chặt-hơn-doc (**H6**) CHỈ pin là **lệch-đã-biết HOÃN** sang WO `FND-SETTINGS-PUBLIC-GATE` tại `docs/BACKEND/BACKEND-04` — WO này **KHÔNG đổi gate/code**, quyết định hướng gate vẫn MỞ.
+
 ---
 
 ## 6. Tầng API contract (API-09 + BACKEND-12 + API-10)
@@ -134,6 +142,8 @@ Download = 302 presigned TTL-ngắn thay stream (đạt mục tiêu không lộ 
 - **21 đúng** — toàn bộ company/current, modules (read), settings resolve/patch, files 8 route, file-access-logs, sequences (read/patch/preview), holidays CRUD + check, retention, seeds đều đúng quyền tuple `(action, foundation-*)` khớp seed 0435.
 - **23 thiếu** = 16 public (cụm system-settings 4 endpoint, PATCH modules, audit export/entity, POST sequences, holiday import, GET file-links, seed-batches detail/items, nhóm multi-company 4 endpoint — lệch-có-chủ-đích single-tenant) + 7 internal REST (`/internal/v1/foundation/*` — thay bằng in-process call, hợp kiến trúc; riêng `cleanup-jobs/run` + `seeds/run` là thiếu thật vì không có trigger nào).
 - **Lệch nhỏ:** path/method (preview POST→GET, `check`→`check-working-day`, `seed-batches`→`seeds`, file-links nested) — đều hợp lý hoặc chặt hơn, nên pin.
+
+> **CHỐT 2026-07-02 (PINNED — WO S2-FND-DOC-1):** đã pin vào `docs/API Design/API-09`: (a) mô hình quyền engine = tuple `(action, foundation-*)` khớp seed 0435 (dotted `MODULE.RESOURCE.ACTION` chỉ là nhãn); (b) nhóm multi-company (`GET`/`POST /companies`, suspend, activate) OUT-OF-SCOPE ở N=1 (không implement/seed route, reconcile khi mở multi-company); (c) 5 internal REST `/internal/v1/foundation/*` → in-process call, **RIÊNG `retention/cleanup-jobs/run` + `seeds/run` là GAP THẬT** (chưa có route/trigger — không phải điểm pin); (d) path/method lệch nhỏ (preview `GET`, `check-working-day`, `seeds`, file-links nested) chấp nhận code-thắng; (e) my-apps Authenticated-only (self-filter theo capability); (f) download 302.
 
 ### 6.2 Cross-cutting (BACKEND-12)
 
@@ -153,6 +163,8 @@ Download = 302 presigned TTL-ngắn thay stream (đạt mục tiêu không lộ 
 - **7 seed orphan** (đã seed, không endpoint dùng): module.update, setting.system-manage, audit.export, job.view, job.run, seed.run (+ audit-log.view bị drift H4).
 - Drift cũ `read/update:company` (0005) đã hết ở phía controller — giờ chỉ là catalog-noise (admin giữ cả 2 cặp).
 - **0 route thiếu guard** — không CRITICAL.
+
+> **CHỐT 2026-07-02 (PINNED — WO S2-FND-DOC-1):** ma trận quyền tuple `(action, foundation-*)` seed 0435 + cờ `is_sensitive` đã pin authoritative vào `docs/API Design/API-10` (Matrix + Audit Report). **7 seed-orphan + pair-drift audit-log (H4)** ghi là gap ĐÃ BIẾT — xử lý ở WO `FND-AUDIT-PAIR-PIN`, **KHÔNG đóng ở WO này**. Drift `read`/`update:company` (seed 0005) nay chỉ còn catalog-noise (route dùng `('view'/'update','foundation-company')`).
 
 ---
 
@@ -206,7 +218,18 @@ Download = 302 presigned TTL-ngắn thay stream (đạt mục tiêu không lộ 
 17. Migrate DTO settings/holidays/company-patch vào packages/contracts.
 18. Index bổ sung DB-09 (files status/cleanup, file_access_logs company_time, uq_file_links_entity_file_active) + trigger chặn UPDATE audit_logs lớp 2.
 19. Audit masker: thêm stems `otp/salary/health/id_card`.
-20. **Pin vào spec** các lệch-có-chủ-đích: tuple permission, single-tenant cắt multi-company + internal REST, download 302, PROTECTED_TABLES, `is_paid_holiday`, doc-drift DB-08↔DB-09, path/method lệch nhỏ, my-apps Authenticated-only.
+20. ✅ **DONE — CHỐT 2026-07-02 (WO S2-FND-DOC-1):** **Pin vào spec** các lệch-có-chủ-đích: tuple permission, single-tenant cắt multi-company + internal REST, download 302, PROTECTED_TABLES, `is_paid_holiday`, doc-drift DB-08↔DB-09, path/method lệch nhỏ, my-apps Authenticated-only. Đã ghi CHỐT vào từng doc nguồn — bản đồ chéo dưới.
+
+> **CHỐT 2026-07-02 — bản đồ chéo #20 (doc nào nhận pin nào · WO S2-FND-DOC-1, 3 lane dbdocs/apidocs/bedocs + hợp nhất reviewsync):**
+> - **DB-08** (`docs/DB/DB-08 Audit Files Settings Seeds Database Design.md`): OWNER-DECISION #1 `companies` §8.1 (PIN code-thắng N=1) · OWNER-DECISION #2 `modules.sort_order` (PIN code, cosmetic) · `audit_logs` Option-A (`company_id` NOT NULL + cột legacy `object_type/object_id/before/after/ip` + CHECK UNION append-only) · `is_paid_holiday` · PROTECTED_TABLES (`audit_logs` + `file_access_logs`) · `seed_batches.status` enum ('Success').
+> - **DB-09** (`docs/DB/DB-09 ...`): doc-drift nội bộ ĐÃ SỬA — `file_access_logs.accessed_at`→`created_at`, `files.checksum`→`checksum_sha256`/`content_hash`, uq holiday `name`→`holiday_code`; + ghi chú index audit không company_id-first (lệch kế thừa, cô lập ép ở RLS+FORCE).
+> - **DB-10** (`docs/DB/DB-10_...`): seed company-scoped chạy **RUNTIME** (`MasterDataSeedRunner`) không migration · `seed_batches` status 'Applied'→'Success' (doc-fix).
+> - **API-09** (`docs/API Design/API-09_FOUNDATION_API_Design.md`): tuple `(action, foundation-*)` là engine thật (dotted chỉ là nhãn) · 5 internal REST→in-process (RIÊNG `cleanup-jobs/run` + `seeds/run` = GAP thật) · path/method lệch nhỏ · multi-company GET/POST `/companies` + suspend/activate OUT-OF-SCOPE N=1 · my-apps Authenticated-only · download 302.
+> - **API-10** (Matrix + Audit Report): tuple catalog + cờ `is_sensitive` authoritative · 7 seed-orphan + pair-drift audit-log (H4) ghi là gap ĐÃ BIẾT — KHÔNG sửa ở WO này.
+> - **BACKEND-11** (`docs/BACKEND/BACKEND-11_...`): download=302 presigned TTL-ngắn (không stream) · notation `FOUNDATION.FILE.DOWNLOAD`→tuple `(download, foundation-file)` · PROTECTED_TABLES `audit_logs` + `file_access_logs`.
+> - **BACKEND-04** (`docs/BACKEND/BACKEND-04_...`): runtime-seeder pin · `/settings/public` gate chặt-hơn-doc ghi là lệch-đã-biết **HOÃN** sang WO `FND-SETTINGS-PUBLIC-GATE` (KHÔNG đổi gate).
+
+> **CHỐT 2026-07-02 — phạm vi WO S2-FND-DOC-1 (CHỈ đóng hành động #20):** các HIGH/nợ hành vi dưới **KHÔNG được đóng bởi WO này** — đều là WO hành vi riêng (đổi code/migration/gate), WO này chỉ PIN doc: **H1** file-policy resolver registry rỗng · **H2** download bỏ qua `scan_status`/`upload_status` · **H3** upload E2E chưa hoàn chỉnh · **H4** pair-drift audit-log 0435↔0340 · **H5** holiday CRUD chưa ghi audit CONFIG · **H7** sequence counters chưa seed · **H8** FE `defaultRoute` placeholder · **DELETE-grant `companies`/`users`** (mục 2 sát-HIGH #1, cần REVOKE migration) · **`/settings/public` gate (H6)** (chờ `FND-SETTINGS-PUBLIC-GATE`). Chỉ hành động #20 chuyển DONE.
 
 ---
 

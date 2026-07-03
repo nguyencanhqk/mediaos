@@ -5,6 +5,8 @@
  *   Session loading → ProtectedShellSkeleton
  *   401 / unauthenticated → redirect /login
  *   account locked / company inactive → render error state (không crash)
+ *   mustSetupTwoFactor (AUTH-003, S2-FE-AUTH-6) → điều hướng /account/setup-2fa (BE đã enforce ở
+ *     TwoFactorEnforcementGuard — đây là UX, KHÔNG phải cổng quyền thật)
  *   success → GlobalTopbar + route content + AppSwitcher overlay
  *
  * Quy tắc:
@@ -14,6 +16,7 @@
  */
 import * as React from "react";
 import { useEffect } from "react";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Skeleton } from "@mediaos/ui";
 import { ShieldX } from "lucide-react";
 import { useAuthStore, getAuthRedirectUrl } from "@mediaos/web-core";
@@ -21,6 +24,7 @@ import { GlobalTopbar } from "../topbar/GlobalTopbar";
 import { AppSwitcher } from "../home/AppSwitcher";
 import { useLayoutStore } from "@/stores/layout.store";
 import { useCurrentRouteMeta } from "@/hooks/use-current-route-meta";
+import { ACCOUNT_SETUP_2FA_PATH } from "@/routes/account/constants";
 
 // ---------------------------------------------------------------------------
 // Shell loading skeleton
@@ -72,8 +76,11 @@ interface ProtectedShellProps {
 export function ProtectedShell({ children }: ProtectedShellProps) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
+  const mustSetupTwoFactor = useAuthStore((s) => s.mustSetupTwoFactor);
   const resetTransient = useLayoutStore((s) => s.resetTransientLayoutState);
   const routeMeta = useCurrentRouteMeta();
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   // Reset transient layout state on route change
   useEffect(() => {
@@ -88,6 +95,16 @@ export function ProtectedShell({ children }: ProtectedShellProps) {
     }
   }, [isAuthenticated]);
 
+  // AUTH-003 — role/company ép 2FA (BE TwoFactorEnforcementGuard) nhưng user CHƯA enroll: buộc điều
+  // hướng màn /account/setup-2fa TRƯỚC khi vào bất kỳ route nào khác (kể cả /home). Loại trừ CHÍNH
+  // route enroll để tránh vòng lặp redirect — cổng quyền THẬT vẫn ở server, đây chỉ là UX.
+  const forcedToSetupTwoFactor = mustSetupTwoFactor && pathname !== ACCOUNT_SETUP_2FA_PATH;
+  useEffect(() => {
+    if (forcedToSetupTwoFactor) {
+      void navigate({ to: ACCOUNT_SETUP_2FA_PATH as "/" });
+    }
+  }, [forcedToSetupTwoFactor, navigate]);
+
   // Still booting (isAuthenticated===false chưa có redirect)
   if (!isAuthenticated || !user) {
     return <ProtectedShellSkeleton />;
@@ -97,6 +114,11 @@ export function ProtectedShell({ children }: ProtectedShellProps) {
   const userStatus = user.status as string;
   if (userStatus === "Inactive" || userStatus === "Locked") {
     return <AccountBlockedState />;
+  }
+
+  // Redirect tới /account/setup-2fa đang bay — không flash nội dung protected trước khi điều hướng.
+  if (forcedToSetupTwoFactor) {
+    return <ProtectedShellSkeleton />;
   }
 
   return (

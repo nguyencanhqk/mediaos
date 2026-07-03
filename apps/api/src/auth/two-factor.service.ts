@@ -14,6 +14,7 @@ import { SecretEncryptionService } from "../crypto/secret-encryption.service";
 import type { EncryptedColumns } from "../crypto/secret-encryption.types";
 import { LoginRateLimiter } from "./login-rate-limiter";
 import { ReplayGuardService } from "./replay-guard.service";
+import { SecurityEventWriter } from "./security-event-writer.service";
 import { TokenService } from "./token.service";
 import { TotpService } from "./totp.service";
 
@@ -38,6 +39,9 @@ export interface EnrollResult {
  */
 @Injectable()
 export class TwoFactorService {
+  // S2-AUTH-BE-8: writer timeline user_security_events (dual-write cạnh audit) cho TOTP enable/disable.
+  private readonly securityEvents: SecurityEventWriter;
+
   constructor(
     private readonly dbsvc: DatabaseService,
     private readonly secrets: SecretEncryptionService,
@@ -46,7 +50,12 @@ export class TwoFactorService {
     private readonly audit: AuditService,
     private readonly rateLimiter: LoginRateLimiter,
     private readonly replayGuard: ReplayGuardService,
-  ) {}
+    // Optional-với-default (mirror AuditService.masker): DI luôn truyền instance từ AuthModule; hand-built
+    // int-spec (dựng TwoFactorService bằng tay, 7 arg) → default-construct (cùng logic mask/severity).
+    securityEvents?: SecurityEventWriter,
+  ) {
+    this.securityEvents = securityEvents ?? new SecurityEventWriter();
+  }
 
   // ── login-path helpers (chạy TRONG tx của login để cùng 1 transaction) ────────────────────────
 
@@ -89,7 +98,10 @@ export class TwoFactorService {
   }
 
   /** Trạng thái cho FE: đã bật + có bị ép không. */
-  async status(userId: string, companyId: string): Promise<{ enabled: boolean; required: boolean }> {
+  async status(
+    userId: string,
+    companyId: string,
+  ): Promise<{ enabled: boolean; required: boolean }> {
     return this.dbsvc.withTenant(companyId, async (tx) => ({
       enabled: await this.isEnabledTx(tx, userId),
       required: await this.requiresTwoFactorTx(tx, userId),
@@ -147,7 +159,10 @@ export class TwoFactorService {
   async confirmEnable(userId: string, companyId: string, token: string): Promise<void> {
     const rlKey = `2fa-enable|${companyId}|${userId}`;
     if (await this.rateLimiter.isLocked(rlKey)) {
-      throw new HttpException("Quá nhiều lần thử. Vui lòng thử lại sau.", HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        "Quá nhiều lần thử. Vui lòng thử lại sau.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
     const verified = await this.dbsvc.withTenant(companyId, async (tx) => {
       const row = await this.loadTotp(tx, userId);
@@ -163,6 +178,12 @@ export class TwoFactorService {
         objectType: "auth",
         actorUserId: userId,
         objectId: userId,
+      });
+      // S2-AUTH-BE-8: TOTP_ENABLED (dual-write cùng tx). subject=actor=user (Own self-enroll).
+      await this.securityEvents.record(tx, {
+        eventType: "TOTP_ENABLED",
+        userId,
+        actorUserId: userId,
       });
       return true;
     });
@@ -187,6 +208,12 @@ export class TwoFactorService {
           objectType: "auth",
           actorUserId: userId,
           objectId: userId,
+        });
+        // S2-AUTH-BE-8: TOTP_DISABLED (dual-write cùng tx) — chỉ khi thực sự có bản ghi bị xoá (đã bật).
+        await this.securityEvents.record(tx, {
+          eventType: "TOTP_DISABLED",
+          userId,
+          actorUserId: userId,
         });
       }
     });
@@ -306,6 +333,8 @@ export class TwoFactorService {
   }
 
   private generateRecoveryCodes(count: number = RECOVERY_CODE_COUNT): string[] {
-    return Array.from({ length: count }, () => randomBytes(RECOVERY_CODE_BYTES).toString("base64url"));
+    return Array.from({ length: count }, () =>
+      randomBytes(RECOVERY_CODE_BYTES).toString("base64url"),
+    );
   }
 }

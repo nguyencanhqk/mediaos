@@ -60,7 +60,9 @@ export function AvatarMenu() {
 
   const handleProfileClick = () => {
     setOpen(false);
-    void navigate({ to: "/home" });
+    // S2-FE-AUTH-6: "Tài khoản của tôi" trỏ /account/profile (đọc user+employee+roles từ /auth/me) —
+    // TRƯỚC ĐÂY trỏ nhầm /home (Home Portal, không phải trang tài khoản).
+    void navigate({ to: "/account/profile" as "/" });
   };
 
   const handleChangePasswordClick = () => {

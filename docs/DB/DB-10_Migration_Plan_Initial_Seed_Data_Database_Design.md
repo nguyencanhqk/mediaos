@@ -563,6 +563,8 @@ Rule:
 | S08 | DASH seed | Dashboard widgets và widget configs |
 | S09 | Dev-only seed | Sample employees/tasks/leaves cho local, không chạy production |
 
+> **CHỐT 2026-07-02 (code thắng — nơi chạy seed):** seed **company-scoped** (S01/S03-S08: sequence counters, HR job levels/contract types, ATT shifts/rules, LEAVE types…) triển khai chạy ở **RUNTIME** qua `MasterDataSeedRunner.reconcileAllCompanies()` (S3-FND-SEEDRUN-1) — enumerate mọi company chưa xoá × mỗi seeder module `register()` lúc `onModuleInit`, mỗi (company, seeder) một `seed_batches` idempotent (uq company+seed_key+version) trong `withTenant`. KHÔNG bake vào migration SQL (migration không có `company_id` runtime). CHỈ seed **global/catalog** (S00: modules/permissions/system_settings — mig 0435; S02 canonical roles+perms — mig 0444) nằm trong migration. Lý do: seed theo tenant phải chạy sau khi company tồn tại + qua RLS `withTenant`.
+
 ### 9.2 Seed tracking
 
 Mỗi lần chạy seed cần ghi:
@@ -578,7 +580,7 @@ Thông tin nên lưu:
 2. `seed_key`.
 3. `seed_version`.
 4. `checksum`.
-5. `status`: Pending/Applied/Skipped/Failed.
+5. `status`: Pending/Running/Success/Failed/Skipped/RolledBack. <!-- CHỐT 2026-07-02 (doc-fix, khớp DB-08 §8.12 + code seed-tracking.ts): trước ghi 'Applied' là DRIFT — enum thật là 'Success' (Pending→Running→Success/Failed/Skipped/RolledBack). -->
 6. `applied_at`.
 7. `environment`.
 8. `error_message` nếu lỗi.

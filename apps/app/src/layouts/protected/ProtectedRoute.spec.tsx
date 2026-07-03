@@ -149,28 +149,45 @@ describe("ProtectedRoute tiêu thụ guardResult (consumer thật)", () => {
 // (B) Wiring router THẬT: buildModuleRouteContent + getMeta (factory router.tsx dùng cho MỌI route module)
 //     → đảm bảo router→ProtectedRoute còn sống. Nếu router bỏ ProtectedRoute (regression cũ), các case này đỏ.
 // ---------------------------------------------------------------------------
+// timeout 20s: import("@/router") nạp CẢ module-graph router thật — test ĐẦU TIÊN trả giá toàn bộ,
+// >5s (trần vitest mặc định) trên runner CI chậm → timeout giữa chừng còn làm bẩn DOM của test kế.
+// Đặt cho cả 3 test vì test nào chạy trước cũng có thể là người trả giá import.
+const ROUTER_IMPORT_TIMEOUT = 20_000;
+
 describe("router wires ProtectedRoute (buildModuleRouteContent THẬT)", () => {
-  it("module DASH thiếu quyền qua factory router → SHOW_403, nội dung module ẨN", async () => {
-    const { buildModuleRouteContent, getMeta } = await import("@/router");
-    seedAuth({ status: "Active", capabilities: {} }); // không có read:dashboard
-    render(buildModuleRouteContent(getMeta("dashboard"), "DASH", <ModulePage />));
-    expect(screen.getByText("forbidden.reason.NO_PERMISSION")).toBeInTheDocument();
-    expect(screen.queryByText(MODULE_CONTENT)).not.toBeInTheDocument();
-  });
+  it(
+    "module DASH thiếu quyền qua factory router → SHOW_403, nội dung module ẨN",
+    async () => {
+      const { buildModuleRouteContent, getMeta } = await import("@/router");
+      seedAuth({ status: "Active", capabilities: {} }); // không có read:dashboard
+      render(buildModuleRouteContent(getMeta("dashboard"), "DASH", <ModulePage />));
+      expect(screen.getByText("forbidden.reason.NO_PERMISSION")).toBeInTheDocument();
+      expect(screen.queryByText(MODULE_CONTENT)).not.toBeInTheDocument();
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
 
-  it("module DASH đủ quyền qua factory router → render nội dung module", async () => {
-    const { buildModuleRouteContent, getMeta } = await import("@/router");
-    seedAuth({ status: "Active", capabilities: { "read:dashboard": true } });
-    render(buildModuleRouteContent(getMeta("dashboard"), "DASH", <ModulePage />));
-    expect(screen.getByText(MODULE_CONTENT)).toBeInTheDocument();
-    expect(screen.queryByText("forbidden.title")).not.toBeInTheDocument();
-  });
+  it(
+    "module DASH đủ quyền qua factory router → render nội dung module",
+    async () => {
+      const { buildModuleRouteContent, getMeta } = await import("@/router");
+      seedAuth({ status: "Active", capabilities: { "read:dashboard": true } });
+      render(buildModuleRouteContent(getMeta("dashboard"), "DASH", <ModulePage />));
+      expect(screen.getByText(MODULE_CONTENT)).toBeInTheDocument();
+      expect(screen.queryByText("forbidden.title")).not.toBeInTheDocument();
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
 
-  it("HR detail dùng CÙNG factory → thiếu HR.EMPLOYEE.VIEW vẫn bị chặn (không authGuard trần)", async () => {
-    const { buildModuleRouteContent, getMeta } = await import("@/router");
-    seedAuth({ status: "Active", capabilities: {} }); // không có read:employee
-    render(buildModuleRouteContent(getMeta("hr.employees"), "HR", <ModulePage />));
-    expect(screen.getByText("forbidden.reason.NO_PERMISSION")).toBeInTheDocument();
-    expect(screen.queryByText(MODULE_CONTENT)).not.toBeInTheDocument();
-  });
+  it(
+    "HR detail dùng CÙNG factory → thiếu HR.EMPLOYEE.VIEW vẫn bị chặn (không authGuard trần)",
+    async () => {
+      const { buildModuleRouteContent, getMeta } = await import("@/router");
+      seedAuth({ status: "Active", capabilities: {} }); // không có read:employee
+      render(buildModuleRouteContent(getMeta("hr.employees"), "HR", <ModulePage />));
+      expect(screen.getByText("forbidden.reason.NO_PERMISSION")).toBeInTheDocument();
+      expect(screen.queryByText(MODULE_CONTENT)).not.toBeInTheDocument();
+    },
+    ROUTER_IMPORT_TIMEOUT,
+  );
 });

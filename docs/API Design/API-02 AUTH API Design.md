@@ -149,6 +149,8 @@ Không hard-code logic theo role, trừ role đặc biệt như `SUPER_ADMIN`.
 
 Role chỉ là nhóm permission đã seed sẵn.
 
+> **CHỐT 2026-07-02: code thắng, permission engine kiểm tra bằng CẶP `(action, resource_type)` — KHÔNG phải chuỗi `MODULE.RESOURCE.ACTION`.** Bảng `permissions` có `uniqueIndex('permissions_action_resource_uq', [action, resource_type])` và `role_permissions.effect ∈ {ALLOW, DENY}` (deny-overrides ở app layer) — `apps/api/src/db/schema/permissions.ts`. Chuỗi `MODULE.RESOURCE.ACTION` (ví dụ `AUTH.USER.VIEW`) chỉ là **nhãn hiển thị/legacy** để đọc; định danh thật khi seed/guard/serialize là cặp `(action, resource_type)` (xem `/auth/me` trả `capabilities`/`scopes` keyed `"action:resourceType"`). Lý do: khớp schema đã land + tránh drift cặp-quyền giữa FE/BE/seed.
+
 ---
 
 ## 3.5 Data scope
@@ -174,6 +176,8 @@ Trong API-02, scope chủ yếu dùng cho user/role/audit:
 | Permission management | Company/System     |
 | Session management    | Own/Company/System |
 | Audit/Security log    | Own/Company/System |
+
+> **CHỐT 2026-07-02: code thắng, `DataScope` engine = `Own | Team | Department | Company | System` — KHÔNG có `Project`.** `DATA_SCOPES` (`packages/contracts/src/auth.ts:95`) và `ROLE_DATA_SCOPES` (schema, test đồng bộ) chỉ gồm 5 scope; hàng `Project` trong bảng scope trên là thiết kế dự phòng **CHƯA hiện thực**. Nghiệp vụ theo project (TASK) dùng project-membership, không dùng `data_scope = Project`. Việc có bổ sung `Project` hay không là OWNER-DECISION chốt tại DB-02 §4.7. Lý do: giữ API-02 khớp enum thật để guard/serialize không lệch.
 
 ---
 
@@ -340,6 +344,20 @@ Trong MVP, có thể chỉ ghi in-app notification hoặc audit log. Email có t
 | AUTH-API-006 | POST   | `/api/v1/auth/reset-password`  | Đặt lại mật khẩu           | Public with reset token   |
 | AUTH-API-007 | POST   | `/api/v1/auth/change-password` | Đổi mật khẩu               | `AUTH.PASSWORD.CHANGE`    |
 
+> **CHỐT 2026-07-02: code thắng, danh sách endpoint THẬT (`apps/api/src/auth/auth.controller.ts`, `@Controller("auth")` + global prefix `/api/v1`).** Bảng thiết kế trên giữ nguyên; bổ sung các path đã land trong code:
+>
+> | Method | Endpoint THẬT | Ghi chú vs thiết kế |
+> | ------ | ------------- | ------------------- |
+> | POST | `/api/v1/auth/refresh` | **Thay** `/auth/refresh-token` (AUTH-API-002) — code dùng `@Post("refresh")` |
+> | GET  | `/api/v1/auth/redirect-allowed` | SSO redirect allowlist server-side (chống open-redirect) — mới, chưa gán mã AUTH-API |
+> | GET  | `/api/v1/auth/sessions` | Danh sách phiên của tôi (`@Get("sessions")`) |
+> | POST | `/api/v1/auth/sessions/:id/revoke` | Thu hồi 1 phiên (`@Post("sessions/:id/revoke")`) |
+> | POST | `/api/v1/auth/sessions/revoke-others` | Thu hồi mọi phiên KHÁC — **thay** `/auth/logout-all` (AUTH-API-004) |
+> | POST | `/api/v1/auth/2fa/enroll` · `/2fa/enable` · `/2fa/disable` · `/2fa/verify` | Vòng đời 2FA (TOTP + recovery codes) — xem §5.7 |
+> | GET  | `/api/v1/auth/2fa/status` | Trạng thái 2FA của user |
+>
+> Lý do: pin path thật để FE/QA gọi đúng, tránh 404 do lệch tên (`refresh` vs `refresh-token`, `sessions/revoke-others` vs `logout-all`).
+
 ---
 
 ### 5.2 Current user API
@@ -412,6 +430,22 @@ Không cho Admin công ty tự tạo permission mới bằng API. Permission nê
 | AUTH-API-401 | GET    | `/api/v1/auth/login-logs`      | Xem login log      | `AUTH.AUDIT_LOG.VIEW` |
 | AUTH-API-402 | GET    | `/api/v1/auth/security-events` | Xem security event | `AUTH.AUDIT_LOG.VIEW` |
 | AUTH-API-403 | GET    | `/api/v1/auth/audit-logs`      | Xem audit log AUTH | `AUTH.AUDIT_LOG.VIEW` |
+
+---
+
+### 5.7 2FA — Two-Factor / MFA API
+
+> Bổ sung 2026-07-02 (additive): mục này pin các endpoint 2FA đã land trong code (`apps/api/src/auth/auth.controller.ts`; secret envelope-encrypted ở `user_totp` + `user_recovery_codes`). MVP dùng **TOTP + recovery codes**.
+
+| Method | Endpoint                          | Mục đích                                            | Permission    |
+| ------ | --------------------------------- | --------------------------------------------------- | ------------- |
+| GET    | `/api/v1/auth/2fa/status`         | Xem trạng thái 2FA (đã bật / bắt buộc enroll)       | Authenticated |
+| POST   | `/api/v1/auth/2fa/enroll`         | Sinh secret + QR/otpauth để user quét (chưa bật)    | Authenticated |
+| POST   | `/api/v1/auth/2fa/enable`         | Xác nhận mã đầu tiên → bật 2FA + phát recovery codes | Authenticated |
+| POST   | `/api/v1/auth/2fa/disable`        | Tắt 2FA (re-auth theo policy)                       | Authenticated |
+| POST   | `/api/v1/auth/2fa/verify`         | Bước 2 login: verify `challengeToken` + mã TOTP/recovery | Public with challenge token |
+
+Ghi chú: khi user đã bật 2FA, `POST /auth/login` KHÔNG trả token ngay mà trả `{ twoFactorRequired: true, challengeToken }` (xem §6.5 và AUTH-API-001). Frontend gọi tiếp `/auth/2fa/verify` để lấy token.
 
 ---
 
@@ -509,6 +543,35 @@ Không cho Admin công ty tự tạo permission mới bằng API. Permission nê
 
 ---
 
+### 6.5 LoginRequest & Login response DTO
+
+Nguồn sự thật: `packages/contracts/src/auth.ts` (`loginRequestSchema`).
+
+```json
+{
+  "companySlug": "demo",
+  "email": "user@company.com",
+  "password": "P@ssword123"
+}
+```
+
+| Field       | Rule                                          |
+| ----------- | --------------------------------------------- |
+| companySlug | **Bắt buộc**, `z.string().min(1).max(100)`    |
+| email       | Bắt buộc, `z.string().email().max(255)`       |
+| password    | Bắt buộc, `z.string().min(1).max(200)`        |
+
+Login response là **UNION** hai nhánh:
+
+```text
+A. Chưa bật 2FA → { access_token, refresh_token?, token_type, expires_in, user, ... }
+B. Đã bật 2FA   → { twoFactorRequired: true, challengeToken }
+```
+
+> **CHỐT 2026-07-02: code thắng, `companySlug` BẮT BUỘC (`z.string().min(1)`, `contracts/auth.ts:10`) và login response là UNION `tokens | { twoFactorRequired, challengeToken }`.** Email chỉ unique theo tenant nên login cần `{companySlug, email}` → resolve company → `withTenant` → tìm user. Khi user đã bật TOTP, `login()` trả `{ twoFactorRequired: true, challengeToken }` (`auth.service.ts:343-344`) thay vì token — buộc bước 2 (`/auth/2fa/verify`). Contract THẬT là `{ companySlug, email, password }` (KHÔNG có `remember_me`). Lý do: FE phải gửi `companySlug` + xử lý cả 2 nhánh response, nếu không sẽ đăng nhập fail / parse sai.
+
+---
+
 ## 7. Chi tiết Authentication API
 
 ---
@@ -551,19 +614,21 @@ X-Client-Version: 1.0.0
 
 ```json
 {
+  "companySlug": "demo",
   "email": "user@company.com",
-  "password": "P@ssword123",
-  "remember_me": true
+  "password": "P@ssword123"
 }
 ```
 
 #### Validation
 
-| Field       | Rule                                    |
-| ----------- | --------------------------------------- |
-| email       | Bắt buộc, đúng định dạng email, max 255 |
-| password    | Bắt buộc                                |
-| remember_me | Boolean, optional                       |
+| Field       | Rule                                            |
+| ----------- | ----------------------------------------------- |
+| companySlug | **Bắt buộc**, `z.string().min(1).max(100)`      |
+| email       | Bắt buộc, đúng định dạng email, max 255         |
+| password    | Bắt buộc                                        |
+
+> Contract THẬT (`contracts/auth.ts` `loginRequestSchema`) = `{ companySlug, email, password }` — `remember_me` KHÔNG có trong DTO hiện tại. Chi tiết + login response UNION: xem §6.5.
 
 #### Business validation
 
@@ -625,17 +690,22 @@ X-Client-Version: 1.0.0
 }
 ```
 
+> Response success là **UNION**: nếu user đã bật 2FA, `data` KHÔNG chứa token mà là `{ "twoFactorRequired": true, "challengeToken": "..." }` — FE phải gọi tiếp `POST /auth/2fa/verify`. Xem §6.5.
+
 #### Error cases
 
 | HTTP | Error code                   | Trường hợp                     |
 | ---: | ---------------------------- | ------------------------------ |
 |  400 | AUTH-ERR-EMAIL-REQUIRED      | Thiếu email                    |
 |  400 | AUTH-ERR-PASSWORD-REQUIRED   | Thiếu password                 |
-|  401 | AUTH-ERR-INVALID-CREDENTIALS | Email hoặc mật khẩu không đúng |
-|  403 | AUTH-ERR-USER-LOCKED         | Tài khoản bị khóa              |
-|  403 | AUTH-ERR-USER-INACTIVE       | Tài khoản không hoạt động      |
-|  403 | AUTH-ERR-COMPANY-INACTIVE    | Công ty không hoạt động        |
+|  401 | AUTH-ERR-INVALID-CREDENTIALS | Email/mật khẩu sai · user không tồn tại · **user Locked** · **user Inactive** · **company Inactive** (GỘP hết về 401 đồng nhất) |
 |  429 | AUTH-ERR-TOO-MANY-ATTEMPTS   | Đăng nhập sai quá nhiều lần    |
+
+> ~~\| 403 \| AUTH-ERR-USER-LOCKED \| Tài khoản bị khóa \|~~
+> ~~\| 403 \| AUTH-ERR-USER-INACTIVE \| Tài khoản không hoạt động \|~~
+> ~~\| 403 \| AUTH-ERR-COMPANY-INACTIVE \| Công ty không hoạt động \|~~ — **GẠCH BỎ ở nhánh login.**
+>
+> **CHỐT 2026-07-02: code thắng — login trả 401 ĐỒNG NHẤT cho mọi nhánh (sai mật khẩu · không tồn tại · Locked · Inactive · company Inactive), KHÔNG dùng 403 riêng.** `auth.service.ts` ném cùng một `UnauthorizedException(UNIFORM_LOGIN_ERROR)` (const dòng 61, dùng ở các nhánh login) → chống dò trạng thái tài khoản (anti-enumeration). 403 USER-LOCKED/USER-INACTIVE/COMPANY-INACTIVE **chỉ áp dụng cho các API protected sau khi đã xác thực** (guard trạng thái), KHÔNG áp cho endpoint `/auth/login` public. Lý do: lộ "tài khoản bị khóa" ở màn login = leak sự tồn tại/tình trạng account.
 
 #### Audit log
 
@@ -669,6 +739,8 @@ Không yêu cầu `Idempotency-Key`.
 ```http
 POST /api/v1/auth/refresh-token
 ```
+
+> **CHỐT 2026-07-02: code thắng, path THẬT `/api/v1/auth/refresh` (không phải `/refresh-token`).** Controller dùng `@Post("refresh")` (`auth.controller.ts`). Web đọc refresh token từ HttpOnly cookie `mediaos_rt` (body `refreshToken` OPTIONAL, chỉ cho mobile/Bearer). Mô hình lưu THẬT = bảng `refresh_tokens` (rotation + `family_id`) SONG SONG `user_sessions` — cả hai đang live (xem BACKEND-03 §10.4). Lý do: FE/QA gọi `/refresh` mới đúng route.
 
 #### Mục đích
 
@@ -811,6 +883,8 @@ Nên chấp nhận gọi lặp. Nếu session đã revoke, vẫn trả success.
 ```http
 POST /api/v1/auth/logout-all
 ```
+
+> **CHỐT 2026-07-02: code thắng, logout-all THẬT = `/api/v1/auth/sessions/revoke-others` (`@Post("sessions/revoke-others")`).** Không có route `/auth/logout-all` trong code. Quản lý phiên THẬT nằm dưới `/auth/sessions`: `GET /auth/sessions` (liệt kê) · `POST /auth/sessions/:id/revoke` (thu hồi 1 phiên) · `POST /auth/sessions/revoke-others` (thu hồi mọi phiên khác). Lý do: pin path thật để FE/QA không gọi nhầm `logout-all`.
 
 #### Required permission
 
@@ -1050,8 +1124,10 @@ Own
 5. Mật khẩu mới không nên trùng mật khẩu hiện tại.
 6. Cập nhật `password_hash`.
 7. Set `password_changed_at`.
-8. Nếu `logout_other_sessions = true`, revoke session khác.
+8. Thu hồi **MỌI** phiên của user (không phụ thuộc cờ nào).
 9. Ghi audit log.
+
+> **CHỐT 2026-07-02: code thắng, đổi mật khẩu thu hồi MỌI phiên (KHÔNG có tuỳ chọn `logout_other_sessions`).** DTO THẬT (`changePasswordRequestSchema`) chỉ có `{ currentPassword, newPassword }`. `auth.service.ts` (đổi mật khẩu, dòng ~533-538) thu hồi TẤT CẢ `refresh_tokens` còn sống + gọi `revokeAllSessionsForUserTx(tx, user.id, "password_changed")` cho toàn bộ `user_sessions` (code hiện thu hồi TẤT CẢ, không giữ phiên hiện tại). **Đây là HARDENING tầng BE/API, KHÔNG phải rule tầng SPEC:** SPEC-02 KHÔNG có rule tường minh về thu-hồi-phiên khi đổi mật khẩu — §13.5 (AUTH-FUNC-005) chỉ nghiệm thu "sau khi đổi, đăng nhập được bằng mật khẩu mới"; §14.4 (AUTH-SCREEN-004) điều hướng success = "hiển thị thông báo thành công"; §14.5 = AUTH-SCREEN-005 (Hồ sơ tài khoản cá nhân), KHÔNG liên quan. Nguồn hành vi = BACKEND-03 §10.4 (bảng revoke, dòng "Change password" ở thiết kế cho phép "revoke session cũ, CÓ THỂ giữ phiên hiện tại theo cấu hình") + cờ `logout_other_sessions`/step 8 ở trên; code hiện thực ở phương án chặt hơn = revoke-ALL. Lý do: đổi mật khẩu là phản ứng bảo mật, cắt mọi phiên cũ; muốn nới ("giữ phiên hiện tại") thì chỉnh ở BE, KHÔNG phải sửa SPEC.
 
 #### Response success
 

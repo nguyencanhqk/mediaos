@@ -473,6 +473,8 @@ users
 
 Lưu thông tin công ty/tenant trong hệ thống.
 
+> **CHỐT 2026-07-02 (OWNER-DECISION #1 — PIN code thắng ở N=1 single-tenant; reconcile khi mở multi-company):** bảng `companies` triển khai (mig 0002) LỆCH §8.1 có chủ đích cho single-tenant: (a) business key = `slug` (text NOT NULL, unique khi chưa xoá mềm) thay `company_code` — cột `company_code` chỉ là additive nullable (mig 0360); (b) `status` CHECK = **('active','suspended')** (lowercase, 2 giá trị) thay 'Active/Inactive/Suspended/Deleted'; (c) THIẾU `legal_name`(code có `legal_rep_name`)/`country_code`/`default_locale`(code `language`)/`currency_code`(code `currency`); (d) còn `GRANT DELETE` cho `mediaos_app` (mig 0002) — lệch quy tắc #4 no-hard-delete, ghi nhận là nợ; (e) cột legacy hướng cũ `working_days_json`/`payroll_config_json`/`schema_version`. Ở N=1 các lệch này KHÔNG ảnh hưởng cô lập/nghiệp vụ. **Cần owner chốt lần cuối trước merge.** Khi mở multi-company: reconcile về §8.1 (thêm cột pháp lý, đổi status enum, gỡ DELETE grant).
+
 Trong MVP có thể chỉ có một công ty, nhưng vẫn thiết kế `companies` để chuẩn bị cho SaaS/multi-tenant.
 
 #### Cấu trúc cột
@@ -561,6 +563,8 @@ Lưu danh mục module hệ thống để:
 | `updated_at` | TIMESTAMP | Có | Thời điểm cập nhật |
 | `deleted_at` | TIMESTAMP | Không | Soft delete nếu cần |
 | `deleted_by` | UUID | Không | FK `users.id`, thêm sau AUTH |
+
+> **CHỐT 2026-07-02 (OWNER-DECISION #2 — PIN code, cosmetic):** seed `modules.sort_order` triển khai (mig 0435) dùng **1..15 LIỀN** (AUTH=1, HR=2, ATT=3, LEAVE=4, TASK=5, DASH=6, NOTI=7, PAYROLL=8…AI=15) thay khoảng cách 10-70 kiểu doc. Chỉ ảnh hưởng thứ tự hiển thị (`ORDER BY sort_order`), KHÔNG có tác động nghiệp vụ/khoá — PIN code, không đổi lại. Cần owner chốt lần cuối trước merge.
 
 #### Constraint/index đề xuất
 
@@ -777,6 +781,8 @@ WHERE deleted_at IS NULL;
 #### Mục đích
 
 Ghi nhật ký các thao tác quan trọng toàn hệ thống.
+
+> **CHỐT 2026-07-02 (Option-A, code thắng — mạnh hơn doc):** bảng `audit_logs` triển khai (mig 0003 tạo + RLS/FORCE, 0432/0438 shape §8.5) với: (1) `company_id` **NOT NULL** — mạnh hơn §8.5 (spec cho nullable "system event"); ở N=1 không có sự kiện không-công-ty, mọi writer chạy trong `withTenant` (DB DEFAULT điền `company_id`), bất biến #1 cấm nới. (2) GIỮ cột legacy `object_type`(NOT NULL)/`object_id`/`before`/`after`/`ip_address` cho AuditService v1 song song 23 cột §8.5 (đều nullable) — writer cũ + v2 KHÔNG vỡ. (3) `object_type` có CHECK = **UNION append-only** (0011…0464, ADD-only). (4) append-only: REVOKE UPDATE/DELETE + GRANT SELECT,INSERT cho `mediaos_app` — ghi-rồi-update PHẢI FAIL. Nới `company_id` sang nullable = FOLLOW-UP Phase sau (audit platform-level), KHÔNG làm ở N=1.
 
 Audit log dùng để:
 
@@ -1342,6 +1348,8 @@ Lưu ngày nghỉ lễ/ngày không làm việc dùng chung cho ATT, LEAVE, DASH
 | `deleted_at` | TIMESTAMP | Không | Soft delete |
 | `deleted_by` | UUID | Không | FK `users.id` |
 
+> **CHỐT 2026-07-02 (code thắng):** cột `is_paid` (dòng trên) ĐÃ triển khai với tên `is_paid_holiday` (`boolean NOT NULL DEFAULT true`) theo HỢP ĐỒNG WO — ép ở migration 0434 + `schema/holidays.ts`. Ngữ nghĩa không đổi (ngày nghỉ có hưởng lương). Đọc code là `is_paid_holiday`.
+
 #### Constraint/index đề xuất
 
 ```sql
@@ -1386,6 +1394,8 @@ WHERE deleted_at IS NULL;
 #### Mục đích
 
 Lưu chính sách lưu trữ, archive và cleanup dữ liệu.
+
+> **CHỐT 2026-07-02 (code thắng — an toàn hơn doc):** `RetentionService.PROTECTED_TABLES` (app-layer defense-in-depth TRÊN REVOKE-ở-DB) liệt kê `audit_logs` + `file_access_logs` (cùng login_logs/user_security_events/security_alerts/api_key_usages/các ledger ATT-LEAVE-TASK-NOTI/employee_status_histories/payslips/kpi_results/seed_batches/seed_items) → **KHÔNG BAO GIỜ purge** dù policy `cleanup_action=Delete` + `is_enabled=true` + `dryRun=false` (no-op, deletedRecords=0). Chặt hơn §8.11. `archive_after_days`/archive/anonymize = tính năng future (chưa nối job). Retention hiện chỉ chạy Delete cho bảng KHÔNG-append-only.
 
 Trong MVP, bảng này có thể ở mức cơ bản để định nghĩa retention cho:
 
@@ -1466,6 +1476,8 @@ WHERE deleted_at IS NULL;
 #### Mục đích
 
 Theo dõi các batch seed data đã chạy.
+
+> **CHỐT 2026-07-02 (xác nhận — code khớp doc, KHÔNG sửa):** `seed_batches.status` enum §8.12 = Pending/Running/Success/Failed/Skipped/RolledBack đã KHỚP code (`schema/seed-tracking.ts` default 'Pending' + CHECK migration; runner mark 'Success'/'Failed'). Đây là mốc chuẩn cho DB-10 §9.2 (doc DB-10 ghi 'Applied' là DRIFT → đã sửa về 'Success').
 
 Seed batch giúp:
 

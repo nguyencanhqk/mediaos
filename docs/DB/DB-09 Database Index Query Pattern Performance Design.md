@@ -499,6 +499,8 @@ ON company_settings (company_id, module_code, category, status);
 2. Lọc theo module, action, entity, actor, thời gian.
 3. Truy vết theo `correlation_id`.
 
+> **CHỐT 2026-07-02 (ghi chú lệch kế thừa — code thắng):** index audit thực tế (mig 0432/0438) có 2 index KHÔNG dẫn đầu bằng `company_id`: `idx_audit_logs_actor_created (actor_user_id, created_at DESC)` và `idx_audit_logs_entity (module_code, entity_type, entity_id)` — khác mẫu §8.5 (company_id-first). Chấp nhận: cô lập tenant ép ở RLS+FORCE (không phụ thuộc thứ tự cột index); các truy vấn có `company_id` vẫn dùng `idx_audit_logs_company_created`/`idx_audit_logs_action` (đều company_id-first). Không re-create ở WO này (tránh DROP index đang dùng).
+
 #### Index đề xuất
 
 ```sql
@@ -551,9 +553,10 @@ CREATE INDEX idx_files_company_status
 ON files (company_id, upload_status, uploaded_at DESC)
 WHERE deleted_at IS NULL;
 
-CREATE INDEX idx_files_company_checksum
-ON files (company_id, checksum)
-WHERE checksum IS NOT NULL AND deleted_at IS NULL;
+<!-- CHỐT 2026-07-02 (doc-fix, khớp DB-08/code): bảng `files` KHÔNG có cột `checksum`; code (schema/files.ts) dùng `checksum_sha256` + `content_hash`. Index dedup thật = `idx_files_content_hash` trên (company_id, content_hash). Sửa dưới đây cho khớp code. -->
+CREATE INDEX idx_files_content_hash
+ON files (company_id, content_hash)
+WHERE content_hash IS NOT NULL AND deleted_at IS NULL;
 
 CREATE INDEX idx_files_cleanup_deleted
 ON files (deleted_at)
@@ -594,21 +597,23 @@ WHERE deleted_at IS NULL;
 
 #### Index đề xuất
 
+<!-- CHỐT 2026-07-02 (doc-fix, khớp DB-08/code): `file_access_logs` KHÔNG có cột thời-gian-truy-cập riêng; code (schema/files.ts, mig 0433) dùng `created_at` (timestamptz) làm mốc thời gian. Đã đổi cột index/partition dưới đây sang `created_at`. Index thật: idx_file_access_logs_file_created / _actor_created / _entity. -->
+
 ```sql
 CREATE INDEX idx_file_access_logs_company_time
-ON file_access_logs (company_id, accessed_at DESC);
+ON file_access_logs (company_id, created_at DESC);
 
 CREATE INDEX idx_file_access_logs_file_time
-ON file_access_logs (file_id, accessed_at DESC);
+ON file_access_logs (file_id, created_at DESC);
 
 CREATE INDEX idx_file_access_logs_actor_time
-ON file_access_logs (company_id, actor_user_id, accessed_at DESC);
+ON file_access_logs (company_id, actor_user_id, created_at DESC);
 ```
 
 #### Partition khuyến nghị
 
 ```text
-Partition by RANGE(accessed_at), theo tháng.
+Partition by RANGE(created_at), theo tháng.
 ```
 
 ### 8.9 `sequence_counters`
@@ -659,9 +664,14 @@ CREATE INDEX idx_public_holidays_country_date
 ON public_holidays (country_code, holiday_date)
 WHERE deleted_at IS NULL;
 
-CREATE UNIQUE INDEX uq_public_holidays_company_date_name_active
-ON public_holidays (company_id, holiday_date, name)
-WHERE deleted_at IS NULL;
+<!-- CHỐT 2026-07-02 (doc-fix, khớp DB-08/code mig 0434): uq public_holidays key trên `holiday_code` (KHÔNG `name`), và tách 2 partial theo scope tenant: global (company_id IS NULL) vs company (company_id IS NOT NULL). -->
+CREATE UNIQUE INDEX uq_public_holidays_global_date_code_active
+ON public_holidays (country_code, holiday_date, holiday_code)
+WHERE company_id IS NULL AND deleted_at IS NULL;
+
+CREATE UNIQUE INDEX uq_public_holidays_company_date_code_active
+ON public_holidays (company_id, holiday_date, holiday_code)
+WHERE company_id IS NOT NULL AND deleted_at IS NULL;
 ```
 
 ### 8.11 `system_job_runs`
@@ -2216,7 +2226,7 @@ Các bảng log nên partition theo cột thời gian:
 | `audit_logs` | `created_at` | Monthly/Quarterly |
 | `attendance_logs` | `log_time` | Monthly |
 | `login_logs` | `created_at` | Monthly/Quarterly |
-| `file_access_logs` | `accessed_at` | Monthly |
+| `file_access_logs` | `created_at` | Monthly |
 | `notification_delivery_logs` | `created_at` | Monthly |
 | `task_activity_logs` | `created_at` | Monthly/Quarterly |
 | `system_job_runs` | `started_at` | Monthly (khi job chạy dày) |

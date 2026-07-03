@@ -62,8 +62,27 @@ export type FilePolicyReason =
   | "allow-foundation" // fallback FOUNDATION.FILE.* permission granted access
   | "deny-resolver" // a registered module resolver denied access (final, no escalation)
   | "deny-foundation" // no resolver + FOUNDATION.FILE.* permission not granted
+  | "deny-no-resolver" // S2-FND-BE-4 (H1): a LINKED file whose owning (module,entity) has NO registered
+  // resolver → fail-closed DENY. Must NOT fall back to FOUNDATION.FILE.* — a broad file-download grant
+  // must never read a module-owned file (e.g. HR contract) until that module registers its resolver.
   | "deny-tenant" // missing/invalid tenant scope (companyId/userId)
   | "deny-error"; // exception while deciding — fail-closed
+
+/**
+ * S2-FND-BE-4 (H1) — the minimal shape of a `file_links` row the POLICY layer needs to make a
+ * link-aware decision. The service loads real `file_links` (via linkRepo) and maps them to this shape;
+ * the policy layer performs NO DB access — links are always passed IN (CLAUDE.md §2: policy stays
+ * decoupled from persistence). Only the dispatch key + entity instance travel here — no storage_path,
+ * checksum, or secret (CLAUDE.md §2.3).
+ */
+export interface FileLinkRef {
+  /** Owning module code of the link (e.g. "HR", "LEAVE"). */
+  moduleCode: string;
+  /** Owning entity type of the link (e.g. "EmployeeContract"). */
+  entityType: string;
+  /** Owning entity instance id of the link. */
+  entityId: string;
+}
 
 /**
  * Maps each FilePolicyAction to the (action, resourceType) tuple consumed by

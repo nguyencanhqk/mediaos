@@ -17,7 +17,10 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { HrWriteService } from "./hr-write.service";
-import { SequenceNotFoundError } from "../foundation/sequences/sequence.types";
+import {
+  SequenceInactiveError,
+  SequenceNotFoundError,
+} from "../foundation/sequences/sequence.types";
 
 const COMPANY_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const ACTOR_ID = "11111111-1111-1111-1111-111111111111";
@@ -51,6 +54,9 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     }),
     findStructuralByIdTx: vi.fn().mockResolvedValue({ status: "active", orgUnitId: null }),
     getActiveEmployeeCodeConfigTx: vi.fn().mockResolvedValue(null),
+    // S2-FND-SEED-2 (ensure-on-miss): undefined ⇒ genuinely unconfigured tenant — allocateEmployeeCode
+    // must NOT fabricate EMP/4 defaults (see the dedicated describe block below for the config-exists path).
+    findEmployeeCodeConfigTx: vi.fn().mockResolvedValue(undefined),
     createTx: vi.fn().mockResolvedValue({ id: EMP_ID, employeeCode: "EMP0001" }),
     updateTx: vi.fn().mockResolvedValue({ id: EMP_ID }),
     setStatusTx: vi.fn().mockResolvedValue(undefined),
@@ -284,15 +290,80 @@ describe("HrWriteService.unlinkUser", () => {
 // ─── create ──────────────────────────────────────────────────────────────────────────
 
 describe("HrWriteService.createEmployee", () => {
-  it("422 (not 500) when no code counter is provisioned and no code is supplied", async () => {
+  it("422 (not 500) when no code counter AND no employee_code_config exists — no hard-coded EMP/4 fallback", async () => {
     const sequence = {
       nextCode: vi.fn().mockRejectedValue(new SequenceNotFoundError("EMPLOYEE_CODE")),
+      ensureCounterTx: vi.fn(),
     };
     const { svc, repo } = makeService({ sequence });
     await expect(svc.createEmployee(actorA, { userId: OTHER_USER } as never)).rejects.toThrow(
       UnprocessableEntityException,
     );
     expect(repo.createTx).not.toHaveBeenCalled();
+    // repo.findEmployeeCodeConfigTx (default mock) resolves undefined ⇒ ensure-on-miss must bail out
+    // WITHOUT ever calling ensureCounterTx (CẤM fabricate EMP/4 when there is no real config row).
+    expect(sequence.ensureCounterTx).not.toHaveBeenCalled();
+  });
+
+  it("422 (not 500) when the counter exists but is Inactive — never auto re-enabled, no ensure attempt", async () => {
+    const sequence = {
+      nextCode: vi.fn().mockRejectedValue(new SequenceInactiveError("EMPLOYEE_CODE")),
+      ensureCounterTx: vi.fn(),
+    };
+    const { svc } = makeService({ sequence });
+    await expect(svc.createEmployee(actorA, { userId: OTHER_USER } as never)).rejects.toThrow(
+      UnprocessableEntityException,
+    );
+    expect(sequence.ensureCounterTx).not.toHaveBeenCalled();
+  });
+
+  it("ensure-on-miss: reads employee_code_config, provisions the counter, retries nextCode ONCE", async () => {
+    const nextCode = vi
+      .fn()
+      .mockRejectedValueOnce(new SequenceNotFoundError("EMPLOYEE_CODE"))
+      .mockResolvedValueOnce({ sequenceKey: "EMPLOYEE_CODE", value: 1, code: "EMP0001" });
+    const ensureCounterTx = vi.fn().mockResolvedValue(undefined);
+    const sequence = { nextCode, ensureCounterTx };
+    const repo = makeRepo({
+      findEmployeeCodeConfigTx: vi
+        .fn()
+        .mockResolvedValue({ prefix: "EMP", numberLength: 4, status: "active" }),
+    });
+    const { svc } = makeService({ repo, sequence });
+
+    const result = await svc.createEmployee(actorA, { userId: OTHER_USER } as never);
+
+    expect(ensureCounterTx).toHaveBeenCalledOnce();
+    const [tx, companyId, key, defaults] = ensureCounterTx.mock.calls[0];
+    expect(tx).toBe(FAKE_TX);
+    expect(companyId).toBe(COMPANY_A);
+    expect(key).toEqual({ sequenceKey: "EMPLOYEE_CODE" });
+    expect(defaults).toMatchObject({
+      moduleCode: "HR",
+      prefix: "EMP",
+      paddingLength: 4,
+      status: "Active",
+    });
+    expect(nextCode).toHaveBeenCalledTimes(2);
+    expect(result.employeeCode).toBe("EMP0001");
+  });
+
+  it("ensure-on-miss retry STILL fails (race/edge) → maps to 422, never 500", async () => {
+    const nextCode = vi.fn().mockRejectedValue(new SequenceNotFoundError("EMPLOYEE_CODE"));
+    const ensureCounterTx = vi.fn().mockResolvedValue(undefined);
+    const sequence = { nextCode, ensureCounterTx };
+    const repo = makeRepo({
+      findEmployeeCodeConfigTx: vi
+        .fn()
+        .mockResolvedValue({ prefix: "EMP", numberLength: 4, status: "active" }),
+    });
+    const { svc } = makeService({ repo, sequence });
+
+    await expect(svc.createEmployee(actorA, { userId: OTHER_USER } as never)).rejects.toThrow(
+      UnprocessableEntityException,
+    );
+    expect(ensureCounterTx).toHaveBeenCalledOnce();
+    expect(nextCode).toHaveBeenCalledTimes(2); // original + exactly 1 retry, no loop
   });
 
   it("403 when a manual code is supplied but the active config forbids manual override", async () => {

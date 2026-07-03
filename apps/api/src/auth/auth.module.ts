@@ -9,6 +9,7 @@ import { AuthLogsViewerController } from "./auth-logs-viewer.controller";
 import { AuthLogsViewerService } from "./auth-logs-viewer.service";
 import { LoginLogRepository } from "./login-log.repository";
 import { SecurityEventRepository } from "./security-event.repository";
+import { SecurityEventWriter } from "./security-event-writer.service";
 import { AuthService } from "./auth.service";
 import { LoginRateLimiter } from "./login-rate-limiter";
 import { PasswordService } from "./password.service";
@@ -47,6 +48,9 @@ import { TwoFactorEnforcementGuard } from "./two-factor-enforcement.guard";
     AuthLogsViewerService,
     LoginLogRepository,
     SecurityEventRepository,
+    // S2-AUTH-BE-8 (APPEND): writer append-only user_security_events (dual-write cạnh audit) — dùng ở
+    // AuthService + TwoFactorService; export cho lane users-lock/perm-role (mỗi module tự đăng ký provider).
+    SecurityEventWriter,
     AuthService,
     PasswordService,
     TokenService,
@@ -67,6 +71,7 @@ import { TwoFactorEnforcementGuard } from "./two-factor-enforcement.guard";
     TwoFactorService,
     ReplayGuardService,
     SecurityAlertService,
+    SecurityEventWriter,
     TwoFactorEnforcementGuard,
   ],
 })

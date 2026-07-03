@@ -17,6 +17,15 @@ import {
 } from "@/routes/hr/settings/constants";
 import { FOUNDATION_FILE_VIEW_PERMISSION } from "@/routes/system/files/constants";
 import { FOUNDATION_MODULE_VIEW_PERMISSION } from "@/routes/system/modules/constants";
+// S2-FE-FND-7 — 4 màn wired sẵn (S2-FE-FND-4/6): visibility trong sidebar. requiredAnyPermissions
+// dùng CHUNG route-meta (nguồn foundation/constants) → sidebar pair === route-meta pair (chống drift).
+import {
+  SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META,
+  SYSTEM_HEALTH_ROUTE_META,
+  SYSTEM_RETENTION_ROUTE_META,
+  SYSTEM_FILE_ACCESS_LOGS_ROUTE_META,
+  FOUNDATION_PATH,
+} from "@/routes/system/foundation/constants";
 import {
   PCR_CREATE_PERMISSION,
   PCR_APPROVE_PERMISSION,
@@ -396,6 +405,63 @@ export const LEAVE_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 15,
     requiredAnyPermissions: ["LEAVE.CALENDAR.VIEW_OWN"],
   },
+  // S3-FE-LEAVE-5 — admin (LEAVE-SCREEN-010/011/012). Gate = CẶP ENGINE THỰC trực tiếp (KHÔNG qua
+  // PERMISSION_CODE_TO_PAIR — cùng kỹ thuật att.shifts/hr.org-chart, tránh drift). view:leave-type
+  // KHÔNG sensitive (mọi role đọc được danh mục); view:leave-policy/view:leave-balance SENSITIVE
+  // (Company-scope, chỉ hr/company-admin có grant thật).
+  {
+    sidebarKey: "leave.types",
+    moduleCode: "LEAVE",
+    label: "Loại nghỉ phép",
+    path: "/leave/types",
+    icon: "list-checks",
+    group: "admin",
+    order: 60,
+    requiredAnyPermissions: ["view:leave-type"],
+  },
+  {
+    sidebarKey: "leave.policies",
+    moduleCode: "LEAVE",
+    label: "Chính sách nghỉ phép",
+    path: "/leave/policies",
+    icon: "shield-check",
+    group: "admin",
+    order: 61,
+    requiredAnyPermissions: ["view:leave-policy"],
+  },
+  {
+    sidebarKey: "leave.balances",
+    moduleCode: "LEAVE",
+    label: "Số dư phép nhân viên",
+    path: "/leave/balances",
+    icon: "wallet",
+    group: "admin",
+    order: 62,
+    requiredAnyPermissions: ["view:leave-balance"],
+  },
+  // S3-FE-LEAVE-6 — báo cáo tổng hợp nghỉ + audit log LEAVE. Gate = CẶP ENGINE THỰC trực tiếp (KHÔNG qua
+  // PERMISSION_CODE_TO_PAIR): export:leave (Company-scope hr/company-admin) · view:leave-audit-log RIÊNG
+  // (KHÔNG chung foundation view:audit-log). Cả 2 SENSITIVE → phơi qua /auth/me nhờ S2-AUTH-CAP-1.
+  {
+    sidebarKey: "leave.reports",
+    moduleCode: "LEAVE",
+    label: "Báo cáo tổng hợp nghỉ",
+    path: "/leave/reports",
+    icon: "bar-chart-3",
+    group: "admin",
+    order: 63,
+    requiredAnyPermissions: ["export:leave"],
+  },
+  {
+    sidebarKey: "leave.audit-logs",
+    moduleCode: "LEAVE",
+    label: "Audit log nghỉ phép",
+    path: "/leave/audit-logs",
+    icon: "file-clock",
+    group: "admin",
+    order: 64,
+    requiredAnyPermissions: ["view:leave-audit-log"],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -592,6 +658,55 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 36,
     requiredAnyPermissions: ["FOUNDATION.SEED.VIEW"],
   },
+  // S2-FE-FND-7 (H8/§7) — 4 màn System đã wired (S2-FE-FND-4/6) nhưng THIẾU visibility trong sidebar.
+  // requiredAnyPermissions = CHÍNH mảng của route-meta (foundation/constants) → sidebar pair ===
+  // route-meta pair, chống pair-drift. filterSidebarItems ẩn theo cặp — KHÔNG hard-code role.
+  {
+    sidebarKey: "system.public-holidays",
+    moduleCode: "FOUNDATION",
+    label: "Ngày nghỉ lễ",
+    path: FOUNDATION_PATH.PUBLIC_HOLIDAYS,
+    icon: "calendar-days",
+    group: "admin",
+    order: 17,
+    requiredAnyPermissions: SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META.requiredAnyPermissions,
+  },
+  // Retention: gate view:foundation-retention (KHÔNG manage — manage sensitive, ẩn nhầm company-admin).
+  {
+    sidebarKey: "system.retention",
+    moduleCode: "FOUNDATION",
+    label: "Chính sách lưu trữ",
+    path: FOUNDATION_PATH.RETENTION,
+    icon: "archive",
+    group: "admin",
+    order: 37,
+    requiredAnyPermissions: SYSTEM_RETENTION_ROUTE_META.requiredAnyPermissions,
+  },
+  // Health: gate ĐỦ CẢ 2 cặp [view:foundation-setting, view:user] khớp systemHealthMeta (1 cặp = mismatch).
+  {
+    sidebarKey: "system.health",
+    moduleCode: "FOUNDATION",
+    label: "Tình trạng hệ thống",
+    path: FOUNDATION_PATH.HEALTH,
+    icon: "activity",
+    group: "report",
+    order: 44,
+    requiredAnyPermissions: SYSTEM_HEALTH_ROUTE_META.requiredAnyPermissions,
+  },
+  {
+    sidebarKey: "system.file-access-logs",
+    moduleCode: "FOUNDATION",
+    label: "Nhật ký truy cập tệp",
+    path: FOUNDATION_PATH.FILE_ACCESS_LOGS,
+    icon: "file-search",
+    group: "report",
+    order: 45,
+    requiredAnyPermissions: SYSTEM_FILE_ACCESS_LOGS_ROUTE_META.requiredAnyPermissions,
+  },
+  // NOTE: KHÔNG thêm entry /system/settings ở đây. Route /system/settings ĐÃ wired (S2-FE-FND-1, gate
+  // FOUNDATION.SETTING.VIEW) nhưng đọc cấu hình qua POST /foundation/settings/resolve — CHƯA có màn
+  // "System Settings admin" riêng (system-wide, tách khỏi company-settings). Entry sidebar cho nó hiện
+  // gộp vào "Cấu hình công ty" (system.company-settings). Tách entry khi có WO BE cho system-settings admin.
 ];
 
 // ---------------------------------------------------------------------------
