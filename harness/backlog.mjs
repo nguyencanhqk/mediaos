@@ -3212,6 +3212,22 @@ export const backlog = [
     //   tồn tại ở SQL tay + comment, giống pattern roles.ts:27-29. (8) getObjectGrants nhánh role-subject
     //   (permission.repository.ts:111) thêm test: object grant (ALLOW/DENY) qua role KHÔNG còn hiệu lực sau khi
     //   user_role của role đó bị soft-delete.
+    // OWNER CHỐT round 3 (sau plan-BLOCK lần 3, round 1+2 fix ở trên ĐÃ ĐÚNG — giữ nguyên): 2 lỗi MỚI, CẢ HAI BẮT
+    //   BUỘC (không có gì cần chốt sản phẩm, thuần kỹ thuật): (9) `findUserRole` (permission-admin.repository.ts:66-84)
+    //   THIẾU trong danh sách sửa — dùng làm idempotency-check trong assignRole (:97)/revokeRole (:159), KHÔNG lọc
+    //   deleted_at ⇒ trả về TOMBSTONE sau soft-delete ⇒ (a) re-grant cùng expiry null bị NO-OP im lặng (return
+    //   tombstone, KHÔNG insert row mới/audit/cache-invalidate — user không lấy lại được quyền dù API trả 200);
+    //   (b) re-revoke role đã gỡ ghi audit RoleRevoked LẦN 2 (nhiễu forensic). SỬA: thêm `isNull(deletedAt)` vào
+    //   findUserRole, đưa vào reader-list + acceptance grep; RED test BẮT BUỘC dùng CÙNG expiry (null cả hai) để
+    //   chạm đúng nhánh sameExpiry lỗi (khác expiry sẽ pass-giả qua nhánh delete+insert khác). (10) Grant SAI hiện
+    //   trạng — mig 0005 CHỈ cấp SELECT,INSERT,DELETE trên user_roles cho mediaos_app, KHÔNG có UPDATE (khác
+    //   companies/users vốn có UPDATE từ 0002 → 0467 mới 'giữ' được; user_roles KHÔNG cùng tiền lệ). Migration
+    //   PHẢI `GRANT UPDATE ON user_roles TO mediaos_app` (quyền MỚI, KHÔNG PHẢI 'giữ nguyên' như note round 1/2
+    //   ghi nhầm) + REVOKE DELETE + giữ SELECT/INSERT; thêm DO-block fail-loud kiểu 0467 assert
+    //   has_table_privilege(...,'UPDATE')=true và DELETE=false; thêm test DƯƠNG (soft-delete UPDATE thành công
+    //   dưới role mediaos_app thật — không phải superuser, để bắt đúng thiếu-grant); cập nhật 2 comment stale
+    //   (permission-admin.repository.ts:11-12, service.ts:108 'KHÔNG có UPDATE grant') thành đúng hiện trạng mới;
+    //   sửa tham chiếu sai 'roles.ts:27-29' (file không tồn tại) → đúng là permissions.ts:27-29.
     status: "todo",
     paths: [
       "apps/api/src/db/schema/**",
@@ -3505,6 +3521,25 @@ export const backlog = [
     //   'apps/api/test/**' vào paths (đang thiếu → guard-scope sẽ cảnh báo); xác nhận tên file int-spec không
     //   đụng int-spec khác cùng chạy trong WO. (7) Audit: `auth.super_admin_bootstrapped` hiện có ĐÃ ĐỦ ghi dấu
     //   company auto-create (không cần audit riêng — đây là 1 hành động bootstrap thống nhất).
+    // OWNER CHỐT round 3 (sau 3 vòng Đội3 FAIL, exhausted maxReviewIterations) — LỖ CRITICAL đã tái hiện được
+    //   THẬT (không phải giả định): `ensure_default_company` (SECURITY DEFINER) KHÔNG concurrency-safe — guard
+    //   SELECT rồi INSERT chạy READ COMMITTED, KHÔNG lock. 2 instance API cùng boot lần đầu (kịch bản HA thật) có
+    //   thể cả hai đều thấy 0 company active rồi cả hai INSERT (slug khác nhau) đều COMMIT ⇒ 2 company ACTIVE
+    //   cùng lúc, vỡ N=1. Đã verify bằng test-lặp song song (27 lần, fail ~3.7%) VÀ trực tiếp ở tầng SQL (2
+    //   session function-owner). BẮT BUỘC vá ở TẦNG PRODUCT (không phải test-only retry):
+    //   (8) Thêm `CREATE UNIQUE INDEX uq_companies_single_active ON companies((true)) WHERE status='active' AND
+    //   deleted_at IS NULL` — DB tự chặn CỨNG >1 company active bất kể đường code nào ghi, kể cả path tương lai
+    //   chưa viết. Hàm ensure_default_company bắt lỗi unique-violation (23505) từ INSERT này → coi như 'company
+    //   khác đã thắng race' → SELECT lại + return company đó (KHÔNG throw ra ngoài) — giữ đúng ngữ nghĩa
+    //   idempotent kể cả dưới race thật. (9) Test 'idempotent' (DB10-TC-003, dòng ~207) phải DETERMINISTIC —
+    //   dùng SELECT có tiebreaker `ORDER BY created_at ASC, id ASC` (không chỉ created_at) HOẶC bọc 2 lần gọi
+    //   trong 1 phiên/tx snapshot cố định — pattern giống REPEATABLE-READ fix đã áp cho test 'create-from-empty'
+    //   (FIX-1), MỞ RỘNG sang test idempotent (chưa được áp). (10) GỘP 2 file test gần-trùng
+    //   apps/api/src/foundation/seed/ensure-default-company.int.spec.ts và
+    //   apps/api/test/integration/foundation-seed3-ensure-company.int-spec.ts thành 1 file canonical (2 file chạy
+    //   song song trên CÙNG bảng companies chính là nguyên nhân gây race giữa 2 suite) — xoá bloat + xoá nguồn
+    //   race test-tự-gây. (11) BẮT BUỘC mở PR + chạy FULL gate (security-reviewer + database-reviewer) THẬT trên
+    //   commit fix — vòng trước code còn nằm local trên feat/debt-wave2, chưa qua gate.
     status: "todo",
     paths: [
       "apps/api/src/permission/super-admin-bootstrap.service.ts",
@@ -3625,10 +3660,10 @@ export const backlog = [
       "BACKEND-11 §9.8 (retention API)",
     ],
     done_when: [
-      "GET/PATCH /foundation/system-settings(/:key): gate system-manage:foundation-setting (sensitive, System-scope); PATCH validate value_type/schema như company path + audit SYSTEM_SETTING_UPDATED in-tx (object_type 'system_setting' đã dành chỗ trong CHECK 0439 — verify, thiếu thì migration UNION); mask sensitive khi đọc như company",
-      "PATCH /foundation/modules/:code (enable/disable qua company_settings 'module.<code>.enabled'): gate update:foundation-module + audit CONFIG in-tx; my-apps/admin-list phản ánh ngay (SettingService precedence sẵn có); KHÔNG cho tắt module lõi nếu doc/owner định nghĩa danh sách khóa (chốt khi làm)",
+      "GET/PATCH /foundation/system-settings(/:key): gate system-manage:foundation-setting (sensitive, System-scope); PATCH validate value_type/schema như company path + audit SYSTEM_SETTING_UPDATED — BẮT BUỘC dùng `withTenant(actor.companyId)` cho CẢ mutation lẫn audit trong CÙNG tx (KHÔNG `withTransaction` — audit_logs có RLS WITH CHECK theo app.current_company_id GUC mà withTransaction KHÔNG set ⇒ audit insert fail-closed 500; system_settings tự thân no-RLS nên withTenant vẫn áp được, mirror y hệt company path); object_type 'system_setting' đã dành chỗ trong CHECK 0439 — verify, thiếu thì migration UNION; mask sensitive khi đọc như company; test positive-path PHẢI dùng principal super-admin/được-grant-tường-minh (company-admin 0435 KHÔNG có cặp is_sensitive=true này — chỉ super-admin bootstrap giữ)",
+      "PATCH /foundation/modules/:code (enable/disable qua company_settings 'module.<code>.enabled'): gate update:foundation-module (company-admin KHÔNG có — is_sensitive=true, dùng super-admin cho test positive) + audit CONFIG in-tx với object_type/permissionCode PHẢN ÁNH ĐÚNG hành động toggle module (KHÔNG mislabel thành 'company_setting'/'FOUNDATION.SETTING.UPDATE' generic của SettingService — ghi rõ context module toggle); my-apps/admin-list phản ánh ngay; KHÔNG cho tắt module lõi nếu doc/owner định nghĩa danh sách khóa (chốt khi làm); NẾU lanes B/C/D chạy song song, cả 3 cùng append packages/contracts/src/foundation/index.ts (barrel) — nối tiếp bước sửa barrel hoặc merge tay điểm đụng, đừng để 3 agent ghi đè nhau",
       "POST /foundation/audit-logs/export: gate theo cặp ĐÃ CHỐT ở S2-FND-BE-5; CSV/JSON stream ĐÃ mask (dùng chung redact-at-read), bắt buộc filter khoảng ngày (chặn dump toàn bảng), audit hành động export; HOẶC owner chốt defer → pin ở S2-FND-DOC-1 + gỡ cặp orphan",
-      "Retention: POST /foundation/retention-policies (create) + POST /:id/simulate expose service sẵn; simulate/runCleanup guard not-found → 404 (hết 500); giữ PROTECTED_TABLES + isSensitive như S2-FND-BE-3",
+      "Retention: POST /foundation/retention-policies (create) + POST /:id/simulate expose service sẵn; createPolicy (retention.service.ts:90-129) HIỆN THIẾU audit (updatePolicy đã có) — tạo policy retention là hành động quan trọng (điều khiển xoá dữ liệu, DoD §16.3) → BẮT BUỘC thêm audit RETENTION_POLICY_CREATED in-tx (object_type 'retention_policy' đã có trong CHECK 0456, KHÔNG cần migration); simulate/runCleanup guard not-found → 404 (hết 500) — verify retention-cleanup.job.ts (gọi runCleanup) CHỊU ĐƯỢC NotFoundException khi policy bị soft-delete giữa list và run (race), không làm vỡ vòng cleanup job; giữ PROTECTED_TABLES + isSensitive như S2-FND-BE-3",
       "deny-path RED viết-TRƯỚC từng route (403 thiếu quyền + 0 audit · 2-tenant deny); FULL gate + người chốt; contracts Zod dual-build",
     ],
   },
@@ -3766,8 +3801,8 @@ export const backlog = [
     done_when: [
       "migration NỐI TIẾP head: idx_files_company_status (company_id,upload_status,uploaded_at DESC) · idx_files_cleanup_deleted partial · idx_file_access_logs_company_time (company_id,created_at DESC — PIN tên canonical DB-09 §8.8, KHÔNG trùng/nhầm file_access_logs_company_id_idx sẵn có) · idx_sequence_counters_reset partial (Yearly/Monthly/Daily) — tên/shape theo DB-09, schema drizzle đồng bộ",
       "uq_file_links_entity_file_active partial (deleted_at IS NULL), key ĐÚNG 6 cột (company_id,module_code,entity_type,entity_id,file_id,link_type): TRƯỚC khi ép — dedupe PHẢI nhóm ĐÚNG 6 cột uq (KHÔNG dùng nhầm shape 5-cột is_primary cũ 0433:175 — sẽ soft-delete NHẦM link hợp lệ khác file_id), thứ tự GIỮ xác định `is_primary DESC, created_at ASC, id ASC` (id là tie-break cuối, tránh trường hợp ≥2 hàng is_primary=true cùng nhóm làm CREATE UNIQUE vẫn vỡ); phần còn lại soft-delete (deleted_at=now); thêm test khẳng định link hợp-lệ-khác-file KHÔNG bị soft-delete nhầm. SAU khi ép constraint: FileService.link() (files.service.ts:349) PHẢI bọc bắt 23505 qua isUniqueViolation() (common/db-error.ts) — PHÂN BIỆT qua constraint name (pgErrorField(err,'constraint')): vi phạm uq_file_links_entity_file_active MỚI → ConflictException('FOUNDATION-FILE-ERR-DUP-LINK'); vi phạm uq_file_links_primary_per_entity_type CŨ (0433) → mã KHÁC (vd 'FOUNDATION-FILE-ERR-DUP-PRIMARY') — KHÔNG gộp chung 1 mã cho 2 nguyên nhân khác nhau; đăng ký cả 2 mã trong error-codes.ts hiện có (S2-FND-CONTRACT-1 sẽ reconcile vào catalog canonical sau, append-only không xung đột); colocated unit test khẳng định đúng mã theo từng constraint",
-      "trigger BEFORE UPDATE ON audit_logs → RAISE EXCEPTION lớp 2 (sau REVOKE — DB-08 header). BẮT BUỘC DENYLIST chặn current_user='mediaos_app' (chỉ app-role; mediaos_worker đã chặn đủ ở lớp-1 REVOKE, KHÔNG cần thêm vào denylist — ghi comment rõ 2 lớp phòng thủ) — TUYỆT ĐỐI KHÔNG allowlist kiểu 'trừ mediaos_owner', vì mig/seed/LANE_DB chạy bằng SUPERUSER 'mediaos' (mig 0001), allowlist sẽ chặn nhầm cả migrator/seed → vỡ chain. RED test: (a) app role UPDATE audit_logs bị chặn CẢ khi lỡ có grant, assert message cụ thể (chứa 'append-only'); (b) POSITIVE: superuser/directPool UPDATE audit_logs THÀNH CÔNG; test GRANT/REVOKE tạm trong try/finally (chống rò grant chéo LANE_DB dùng chung). PIN tên cụ thể function+trigger, presence-test assert qua pg_trigger/pg_proc (không chỉ tên biến trong code). idx_sequence_counters_reset: predicate WHERE reset_policy IN (...) PHẢI khớp CHÍNH XÁC casing CHECK thật của sequence_counters.reset_policy (đối chiếu mig 0434/0437 — lệch hoa/thường → index rỗng, xanh-giả) — assert qua pg_indexes.indexdef",
-      "SỬA LỖI ROUND-1 (owner bake trước đó dùng nhầm tên trùng — plan-reviewer round 2 bắt được): `idx_audit_logs_entity` ĐÃ TỒN TẠI từ mig 0432 (module_code,entity_type,entity_id) — Postgres cấm tạo trùng tên. Index MỚI (company_id,entity_type,entity_id,created_at DESC) đặt tên KHÁC: `idx_audit_logs_entity_created`. PIN tên này vào task/acceptance/test; presence-test assert qua pg_indexes.indexdef (không chỉ match tên) để không xanh-giả nếu dùng IF NOT EXISTS. Đây là index MỚI cộng thêm (giữ nguyên idx_audit_logs_entity cũ, không drop, không đảo deviation đã park ở 0438:33-35)",
+      "trigger BEFORE UPDATE OR DELETE ON audit_logs → RAISE EXCEPTION lớp 2 (sau REVOKE — DB-08 header) — round 3 FIX: PHẢI phủ CẢ UPDATE VÀ DELETE (round 2 chỉ ghi UPDATE — nếu 1 migration sau lỡ GRANT DELETE cho mediaos_app, hard-delete audit_logs sẽ THÀNH CÔNG vì chỉ có lớp-1 REVOKE, không lớp-2; append-only nghĩa là chặn CẢ 2 hành vi). BẮT BUỘC DENYLIST chặn current_user='mediaos_app' (chỉ app-role; mediaos_worker đã chặn đủ ở lớp-1 REVOKE, KHÔNG cần thêm vào denylist — ghi comment rõ 2 lớp phòng thủ) — TUYỆT ĐỐI KHÔNG allowlist kiểu 'trừ mediaos_owner'. RED test: (a) app role UPDATE audit_logs bị chặn, assert message chứa 'append-only'; (a2) SONG SONG: app role DELETE audit_logs CŨNG bị chặn cùng cơ chế (temp-GRANT DELETE cho mediaos_app trong try/finally → xác nhận vẫn bị trigger chặn dù có grant); (b) POSITIVE: superuser/directPool UPDATE VÀ DELETE audit_logs đều THÀNH CÔNG. PIN tên cụ thể function+trigger, presence-test assert qua pg_trigger/pg_proc. idx_sequence_counters_reset: predicate WHERE reset_policy IN (...) PHẢI khớp CHÍNH XÁC casing CHECK thật (đối chiếu mig 0434/0437) — assert qua pg_indexes.indexdef",
+      "SỬA LỖI round 2 (owner bake trước dùng tên KHÔNG theo canonical — plan-reviewer round 3 bắt được): index mới (company_id,entity_type,entity_id,created_at DESC) đặt tên ĐÚNG canonical DB-09 §8.5 = `idx_audit_logs_company_entity` (KHÔNG phải `idx_audit_logs_entity_created` như round 2 tạm đặt để né trùng tên — tên đó không sai về mặt kỹ thuật nhưng lệch nguồn-sự-thật DB-09, sẽ đẻ reconcile-WO sau nếu giữ). `idx_audit_logs_entity` (module_code-led, mig 0432) GIỮ NGUYÊN không đụng — 2 tên khác nhau, không trùng. PIN `idx_audit_logs_company_entity` vào task/acceptance/test; presence-test assert qua pg_indexes.indexdef (không chỉ match tên). Thêm 1 case integration xác nhận uq_file_links_entity_file_active đổi hành vi re-link-trùng từ THÀNH CÔNG (hiện tại) sang 409 là CÓ CHỦ ĐÍCH (grep FE/service hiện tại xác nhận không luồng nào phụ thuộc re-link idempotent-thành-công; nếu có thì đây là finding MỚI cần báo trước khi land, không tự ý đổi test cho khớp)",
       "db:check chain 0000→head xanh LANE_DB (xác nhận idx/when kế tiếp đúng head hiện tại lúc land — có thể đã đổi vì lane khác trong cùng checkpoint); FULL gate (database-reviewer — chạm audit) + người chốt; lane db NỐI TIẾP",
     ],
   },
