@@ -93,6 +93,9 @@ export type ObjectPermissionDto = z.infer<typeof objectPermissionSchema>;
 export const createRoleSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(500).nullable().optional(),
+  // S2-AUTH-BE-11 (additive): cờ ép 2FA cho MỌI user mang role này (roles.requires_two_factor).
+  // Optional ⇒ client cũ không gửi vẫn hợp lệ (server mặc định false) — non-breaking.
+  requiresTwoFactor: z.boolean().optional(),
 });
 export type CreateRoleRequest = z.infer<typeof createRoleSchema>;
 
@@ -103,6 +106,9 @@ export type CreateRoleRequest = z.infer<typeof createRoleSchema>;
 export const updateRoleSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).nullable().optional(),
+  // S2-AUTH-BE-11 (additive): bật/tắt ép 2FA cho role. Optional (dirty-fields patch); gửi kèm cho role
+  // system-defined (is_system=true) vẫn bị server REJECT 400 như các field khác — non-breaking.
+  requiresTwoFactor: z.boolean().optional(),
 });
 export type UpdateRoleRequest = z.infer<typeof updateRoleSchema>;
 
@@ -113,6 +119,8 @@ export const roleWriteResultSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   isSystem: z.boolean(),
+  // S2-AUTH-BE-11 (additive): phản chiếu roles.requires_two_factor sau create/update để FE render trạng thái.
+  requiresTwoFactor: z.boolean(),
 });
 export type RoleWriteResultDto = z.infer<typeof roleWriteResultSchema>;
 
