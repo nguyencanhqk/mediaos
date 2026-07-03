@@ -41,6 +41,10 @@ export const users = pgTable("users", {
   // S2-AUTH-DB-4 (mig 0466): cờ ép 2FA PER-USER (khác roles.requires_two_factor = ép theo ROLE ở mig 0120).
   // NOT NULL DEFAULT false — không backfill. Nền cho enforcement + admin reset-2fa:user.
   requireTwoFactor: boolean("require_two_factor").notNull().default(false),
+  // S2-FND-SEED-3 (mig 0469): ép đổi mật khẩu lần đầu. Super-admin bootstrap upsert set true (DB-10 §17.2
+  // điểm 5); change-password clear cờ cùng tx; /auth/me expose mustChangePassword. NOT NULL DEFAULT false —
+  // không backfill. Function ensure_default_company là SQL-only (không biểu diễn trong drizzle).
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
 });
 
 export type User = typeof users.$inferSelect;

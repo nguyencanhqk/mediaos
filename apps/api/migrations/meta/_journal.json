@@ -1044,6 +1044,13 @@
       "when": 1717500735000,
       "tag": "0468_s2_fndbe6_public_holiday_audit_object_type",
       "breakpoints": true
+    },
+    {
+      "idx": 149,
+      "version": "7",
+      "when": 1717500740000,
+      "tag": "0469_s2_fndseed3_ensure_default_company",
+      "breakpoints": true
     }
   ]
 }
