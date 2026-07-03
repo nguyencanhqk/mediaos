@@ -28,6 +28,19 @@
  *   P6  manager (role 0010) → view-own + view-team:attendance + view:leave hiện; view-company:attendance VẮNG.
  *   N5  user CHỈ '*:*' → KHÔNG kế thừa 4 cặp NHẠY CẢM (sensitive gate); view:audit-log VẪN vắng (no-regress).
  *
+ * S2-AUTH-CAP-1 — APPEND 3 cặp NHẠY CẢM (export:leave · view:leave-audit-log · view:attendance-audit-log)
+ * vào SENSITIVE_CAPABILITY_ALLOWLIST để FE dựng cờ hiển thị (export nghỉ phép, viewer audit-log LEAVE/ATT).
+ * Cặp seed THẬT is_sensitive=true, grant Company CHỈ cho hr(0011)+company-admin(0001) — mig 0455
+ * (export:leave leave-permissions.const:60, view:leave-audit-log :85) + mig 0454 (view:attendance-audit-log
+ * attendance-permissions.const:84). getCapabilities() lọc bỏ sensitive ⇒ RED (3 key vắng) TRƯỚC khi APPEND
+ * allowlist; chỉ getAllowlistedSensitiveCapabilities surface được ⇒ allowlist là điểm mở khóa DUY NHẤT.
+ *   CAP1-P1/P2  company-admin(0001) + hr(0011) → /auth/me CÓ đủ 3 cặp === true (grant Company mig 0454/0455).
+ *   CAP1-N1/N2  employee(0008) + manager(0010) → KHÔNG có bất kỳ cặp nào trong 3 (least-privilege đúng seed).
+ *   CAP1-N3     user CHỈ '*:*' → KHÔNG kế thừa 3 cặp (sensitive gate); '*:*' vẫn có; view:audit-log vẫn vắng.
+ *   CAP1-N4     cross-tenant: user tenant B trơn → KHÔNG chứa 3 cặp của tenant A (company isolation, BẤT BIẾN #1).
+ *   CAP1-N5     DENY-override: grant 3 cặp CAP-1 + DENY 'export:leave' → export:leave suppress; 2 cặp còn lại vẫn hiện.
+ * Enforcement (can()/PermissionGuard per-resource) KHÔNG đổi — chỉ mở cờ hiển thị (UI-hint).
+ *
  * PIN theo CẶP SEED THẬT ('view','audit-log') — KHÔNG theo mã FE AUTH.AUDIT_LOG.VIEW (drift S1-FND-MODULE).
  */
 
@@ -240,3 +253,167 @@ describe.skipIf(!runDb)("S2-AUTH-BE-5 FIX-1-CAP-EXPOSE /auth/me allowlisted sens
     expect(AUDIT_LOG_CAP_KEY in caps).toBe(false); // no-regress S2-AUTH-BE-5
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// S2-AUTH-CAP-1 — APPEND 3 cặp NHẠY CẢM vào SENSITIVE_CAPABILITY_ALLOWLIST.
+// Cặp seed THẬT is_sensitive=true, grant Company CHỈ hr(0011)+company-admin(0001) (mig 0454/0455).
+// ────────────────────────────────────────────────────────────────────────────
+
+/** hr — grant Company đủ 3 cặp CAP-1 (mig 0454 view:attendance-audit-log · mig 0455 export:leave + view:leave-audit-log). */
+const HR_ROLE = "00000000-0000-0000-0000-000000000011";
+
+/**
+ * 3 cặp CAP-1 (action, resource_type) mới APPEND — seed THẬT is_sensitive=true. Tuple tránh split(":") nhập nhằng.
+ *   export:leave              — leave-permissions.const:60 / mig 0455 (hr+company-admin, Company)
+ *   view:leave-audit-log      — leave-permissions.const:85 / mig 0455 (hr+company-admin, Company)
+ *   view:attendance-audit-log — attendance-permissions.const:84 / mig 0454 (hr+company-admin, Company)
+ */
+const CAP1_SENSITIVE_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ["export", "leave"],
+  ["view", "leave-audit-log"],
+  ["view", "attendance-audit-log"],
+];
+const CAP1_SENSITIVE_KEYS = CAP1_SENSITIVE_PAIRS.map(([a, r]) => `${a}:${r}`);
+
+describe.skipIf(!runDb)(
+  "S2-AUTH-CAP-1 /auth/me export:leave · view:leave-audit-log · view:attendance-audit-log",
+  () => {
+    let app: INestApplication;
+    let direct: Pool;
+    let A: SeededTenant;
+    let B: SeededTenant;
+    let adminToken: string;
+    let hrToken: string;
+    let employeeToken: string;
+    let managerToken: string;
+    let wildcardToken: string;
+    let denyOverrideToken: string;
+    let tenantBToken: string;
+    const companyIds: string[] = [];
+
+    beforeAll(async () => {
+      const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+      app = moduleRef.createNestApplication();
+      app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
+      app.useGlobalFilters(new AllExceptionsFilter());
+      await app.init();
+      direct = directPool();
+      const pw = await new PasswordService().hash(LOGIN_PW);
+
+      // ── Tenant A ────────────────────────────────────────────────────────────
+      A = await seedCompany(direct, "cap1a");
+      companyIds.push(A.companyId);
+
+      // CAP1-P1/P2: company-admin (0001) + hr (0011) — CẢ HAI có grant Company 3 cặp CAP-1 (mig 0454/0455).
+      const adminEmail = `ca-${TAG}@cap1.test`;
+      const admin = await seedUser(direct, A.companyId, adminEmail, pw);
+      await seedUserRole(direct, admin, COMPANY_ADMIN_ROLE, A.companyId);
+
+      const hrEmail = `hr-${TAG}@cap1.test`;
+      const hr = await seedUser(direct, A.companyId, hrEmail, pw);
+      await seedUserRole(direct, hr, HR_ROLE, A.companyId);
+
+      // CAP1-N1/N2: employee (0008) + manager (0010) — KHÔNG có bất kỳ cặp CAP-1 (least-privilege seed).
+      const empEmail = `emp-${TAG}@cap1.test`;
+      const emp = await seedUser(direct, A.companyId, empEmail, pw);
+      await seedUserRole(direct, emp, EMPLOYEE_ROLE, A.companyId);
+
+      const mgrEmail = `mgr-${TAG}@cap1.test`;
+      const mgr = await seedUser(direct, A.companyId, mgrEmail, pw);
+      await seedUserRole(direct, mgr, MANAGER_ROLE, A.companyId);
+
+      // CAP1-N3: wildcard-only — role có '*:*' ALLOW non-sensitive → KHÔNG kế thừa cặp nhạy cảm CAP-1.
+      const wildEmail = `wild-${TAG}@cap1.test`;
+      const wild = await seedUser(direct, A.companyId, wildEmail, pw);
+      const wildRole = await seedRole(direct, A.companyId, `cap1-wild-${TAG}`);
+      const wildPerm = await seedPermissionCatalog(direct, "*", "*", false);
+      await seedRolePermission(direct, wildRole, wildPerm, "ALLOW");
+      await seedUserRole(direct, wild, wildRole, A.companyId);
+
+      // CAP1-N5: deny-override — role ALLOW cả 3 cặp CAP-1 (Company) + DENY 'export:leave' → export:leave bị
+      // suppress (deny-override per-pair, mirror isDenied wildcard-aware); 2 cặp còn lại vẫn hiện.
+      const denyEmail = `deny-${TAG}@cap1.test`;
+      const denyUser = await seedUser(direct, A.companyId, denyEmail, pw);
+      const denyRole = await seedRole(direct, A.companyId, `cap1-deny-${TAG}`);
+      for (const [action, resourceType] of CAP1_SENSITIVE_PAIRS) {
+        const permId = await seedPermissionCatalog(direct, action, resourceType, true);
+        await seedRolePermission(direct, denyRole, permId, "ALLOW");
+      }
+      const exportLeavePerm = await seedPermissionCatalog(direct, "export", "leave", true);
+      await seedRolePermission(direct, denyRole, exportLeavePerm, "DENY");
+      await seedUserRole(direct, denyUser, denyRole, A.companyId);
+
+      // ── Tenant B (cross-tenant, BẤT BIẾN #1) ─────────────────────────────────
+      // CAP1-N4: user trơn (KHÔNG role) — grant CAP-1 của tenant A KHÔNG rò sang tenant B.
+      B = await seedCompany(direct, "cap1b");
+      companyIds.push(B.companyId);
+      const bEmail = `bare-${TAG}@cap1b.test`;
+      await seedUser(direct, B.companyId, bEmail, pw);
+
+      adminToken = await login(app, A.slug, adminEmail);
+      hrToken = await login(app, A.slug, hrEmail);
+      employeeToken = await login(app, A.slug, empEmail);
+      managerToken = await login(app, A.slug, mgrEmail);
+      wildcardToken = await login(app, A.slug, wildEmail);
+      denyOverrideToken = await login(app, A.slug, denyEmail);
+      tenantBToken = await login(app, B.slug, bEmail);
+    });
+
+    afterAll(async () => {
+      await app?.close();
+      if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
+      await direct?.end();
+    });
+
+    it("CAP1-P1 — company-admin (0001) → /auth/me CÓ đủ 3 cặp CAP-1 === true", async () => {
+      const caps = await meCapabilities(app, adminToken);
+      for (const key of CAP1_SENSITIVE_KEYS) {
+        expect(caps[key], `company-admin thiếu cặp allowlist ${key}`).toBe(true);
+      }
+    });
+
+    it("CAP1-P2 — hr (0011) → /auth/me CÓ đủ 3 cặp CAP-1 === true", async () => {
+      const caps = await meCapabilities(app, hrToken);
+      for (const key of CAP1_SENSITIVE_KEYS) {
+        expect(caps[key], `hr thiếu cặp allowlist ${key}`).toBe(true);
+      }
+    });
+
+    it("CAP1-N1 — employee (0008) → KHÔNG có bất kỳ cặp CAP-1 nào (least-privilege)", async () => {
+      const caps = await meCapabilities(app, employeeToken);
+      for (const key of CAP1_SENSITIVE_KEYS) {
+        expect(key in caps, `employee KHÔNG được lộ cặp ${key}`).toBe(false);
+      }
+    });
+
+    it("CAP1-N2 — manager (0010) → KHÔNG có bất kỳ cặp CAP-1 nào (least-privilege)", async () => {
+      const caps = await meCapabilities(app, managerToken);
+      for (const key of CAP1_SENSITIVE_KEYS) {
+        expect(key in caps, `manager KHÔNG được lộ cặp ${key}`).toBe(false);
+      }
+    });
+
+    it("CAP1-N3 — wildcard '*:*' → KHÔNG kế thừa 3 cặp CAP-1 (sensitive gate); '*:*' vẫn có", async () => {
+      const caps = await meCapabilities(app, wildcardToken);
+      expect(caps[WILDCARD_CAP_KEY]).toBe(true); // non-sensitive wildcard vẫn surface
+      for (const key of CAP1_SENSITIVE_KEYS) {
+        expect(key in caps, `cặp nhạy cảm ${key} KHÔNG kế thừa qua *:*`).toBe(false);
+      }
+      expect(AUDIT_LOG_CAP_KEY in caps).toBe(false); // no-regress S2-AUTH-BE-5
+    });
+
+    it("CAP1-N4 — cross-tenant: user tenant B trơn → KHÔNG chứa 3 cặp CAP-1 của tenant A", async () => {
+      const caps = await meCapabilities(app, tenantBToken);
+      for (const key of CAP1_SENSITIVE_KEYS) {
+        expect(key in caps, `tenant B KHÔNG được thấy ${key} của tenant A`).toBe(false);
+      }
+    });
+
+    it("CAP1-N5 — DENY-override: grant 3 cặp + DENY 'export:leave' → export:leave suppress; 2 cặp còn lại vẫn hiện", async () => {
+      const caps = await meCapabilities(app, denyOverrideToken);
+      expect("export:leave" in caps, "export:leave phải bị DENY-override suppress").toBe(false);
+      expect(caps["view:leave-audit-log"], "view:leave-audit-log vẫn hiện").toBe(true);
+      expect(caps["view:attendance-audit-log"], "view:attendance-audit-log vẫn hiện").toBe(true);
+    });
+  },
+);
