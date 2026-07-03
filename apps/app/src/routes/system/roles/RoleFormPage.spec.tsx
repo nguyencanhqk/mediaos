@@ -66,6 +66,7 @@ describe("RoleFormPage — create mode", () => {
       name: "Kế toán",
       description: null,
       isSystem: false,
+      requiresTwoFactor: false,
     });
     const onSuccess = vi.fn();
     const { container } = renderWithQuery(<RoleFormPage onSuccess={onSuccess} />);
@@ -119,6 +120,7 @@ describe("RoleFormPage — edit mode", () => {
       name: "Kế toán trưởng",
       description: "Vai trò kế toán",
       isSystem: false,
+      requiresTwoFactor: false,
     });
     const onSuccess = vi.fn();
     const { container } = renderWithQuery(<RoleFormPage roleId="role-1" onSuccess={onSuccess} />);
