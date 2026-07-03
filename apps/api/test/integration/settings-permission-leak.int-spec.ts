@@ -117,12 +117,12 @@ describe.skipIf(!runIsolatedDb)("S1-FND-SETTING-1 settings permission + leak + a
   }
 
   // ── (QA-05/QA-06) deny-path: no permission → 403 (PermissionGuard fail-closed) ──
-  it("getPublic (view:foundation-setting) — user thiếu grant ⇒ 403", async () => {
-    await expect(guard.canActivate(ctxFor("getPublic", noRoleUserId))).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
-  });
-
+  // S2-FND-BE-5: getPublic đã CHỐT sang 'Authenticated' — KHÔNG @UseGuards(PermissionGuard) cấp lớp, KHÔNG
+  // @RequirePermission ⇒ route KHÔNG còn đi qua PermissionGuard. Deny/allow + tenant-isolation + secret
+  // non-leak cho GET /settings/public giờ phủ ở test/foundation/settings-public-gate.int-spec.ts (HTTP thật:
+  // no-Bearer→401, authenticated-không-grant→200, cross-tenant, secret non-leak). Cổng PermissionGuard per-method
+  // CHỈ còn resolve (view:foundation-setting) + updateCompanySetting (update:foundation-setting) — unit-test guard
+  // ở đây giữ ĐÚNG 2 route đó (KHÔNG unit-test guard cho getPublic vì route không qua PermissionGuard).
   it("resolve (view:foundation-setting) — user thiếu grant ⇒ 403", async () => {
     await expect(guard.canActivate(ctxFor("resolve", noRoleUserId))).rejects.toBeInstanceOf(
       ForbiddenException,
@@ -135,8 +135,7 @@ describe.skipIf(!runIsolatedDb)("S1-FND-SETTING-1 settings permission + leak + a
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it("company-admin có view + update foundation-setting ⇒ guard ALLOW (sanity)", async () => {
-    expect(await guard.canActivate(ctxFor("getPublic", adminUserId))).toBe(true);
+  it("company-admin có update:foundation-setting ⇒ guard ALLOW updateCompanySetting (sanity)", async () => {
     expect(
       await guard.canActivate(ctxFor("updateCompanySetting", adminUserId, { key: "co.public.ok" })),
     ).toBe(true);
