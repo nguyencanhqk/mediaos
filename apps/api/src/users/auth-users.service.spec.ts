@@ -42,6 +42,7 @@ function makeUser(over: Partial<User> = {}): User {
     createdBy: null,
     updatedBy: null,
     deletedBy: null,
+    requireTwoFactor: false, // S2-AUTH-DB-4 (mig 0466): cờ ép 2FA per-user, NOT NULL DEFAULT false
     ...over,
   };
 }

@@ -357,5 +357,113 @@ describe.skipIf(!runIsolatedDb)(
         expect(sessionsExists, "Bảng 'sessions' phải tồn tại sau khi S0-AUTH-DB-1 land").toBe(true);
       });
     });
+
+    // ── 7. S2-AUTH-DB-4 — users.require_two_factor + reset-2fa:user perm + grant ──────
+    // Migration 0466 (ADDITIVE, red-zone): (a) cột users.require_two_factor NOT NULL DEFAULT false;
+    // (b) catalog pair (reset-2fa,user) is_sensitive=true; (c) grant company-admin × reset-2fa:user
+    // × ALLOW × Company. Verify sau chain-migrate tới head mới + idempotent (ON CONFLICT DO NOTHING).
+    describe("7. S2-AUTH-DB-4 — require_two_factor + reset-2fa:user (mig 0466)", () => {
+      it("7a. users.require_two_factor NOT NULL DEFAULT false", async () => {
+        const res = await direct.query<{
+          data_type: string;
+          is_nullable: string;
+          column_default: string | null;
+        }>(
+          `SELECT data_type, is_nullable, column_default
+             FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'users'
+              AND column_name = 'require_two_factor'`,
+        );
+        expect(res.rows.length, "cột users.require_two_factor phải tồn tại sau mig 0466").toBe(1);
+        expect(res.rows[0].data_type).toBe("boolean");
+        expect(res.rows[0].is_nullable, "require_two_factor phải NOT NULL").toBe("NO");
+        expect(
+          (res.rows[0].column_default ?? "").toLowerCase(),
+          "require_two_factor DEFAULT phải là false",
+        ).toContain("false");
+      });
+
+      it("7b. permissions catalog có (reset-2fa,user) is_sensitive=true", async () => {
+        const res = await direct.query<{ is_sensitive: boolean }>(
+          `SELECT is_sensitive FROM permissions
+            WHERE action = 'reset-2fa' AND resource_type = 'user'`,
+        );
+        expect(res.rows.length, "pair (reset-2fa,user) phải có trong catalog sau mig 0466").toBe(1);
+        expect(res.rows[0].is_sensitive, "reset-2fa:user phải is_sensitive=true (§13)").toBe(true);
+      });
+
+      it("7c. grant company-admin × reset-2fa:user × ALLOW × Company — đúng 1 hàng", async () => {
+        const res = await direct.query<{ n: number }>(
+          `SELECT COUNT(*)::int AS n
+             FROM role_permissions rp
+             JOIN roles r       ON r.id = rp.role_id
+             JOIN permissions p ON p.id = rp.permission_id
+            WHERE r.name = 'company-admin' AND r.company_id IS NULL AND r.is_system = true
+              AND r.deleted_at IS NULL
+              AND p.action = 'reset-2fa' AND p.resource_type = 'user'
+              AND rp.effect = 'ALLOW' AND rp.data_scope = 'Company'`,
+        );
+        expect(
+          res.rows[0].n,
+          "phải có ĐÚNG 1 grant company-admin × reset-2fa:user × ALLOW × Company",
+        ).toBe(1);
+      });
+
+      it("7d. re-seed permission + grant idempotent (COUNT không tăng)", async () => {
+        const beforePerm = await direct.query<{ n: number }>(
+          `SELECT COUNT(*)::int AS n FROM permissions
+            WHERE action = 'reset-2fa' AND resource_type = 'user'`,
+        );
+        const beforeGrant = await direct.query<{ n: number }>(
+          `SELECT COUNT(*)::int AS n
+             FROM role_permissions rp
+             JOIN roles r ON r.id = rp.role_id
+            WHERE r.name = 'company-admin' AND r.company_id IS NULL
+              AND rp.permission_id = (
+                SELECT id FROM permissions WHERE action = 'reset-2fa' AND resource_type = 'user'
+              )
+              AND rp.effect = 'ALLOW'`,
+        );
+
+        // Re-chạy 2 câu seed (mirror mig 0466) — ON CONFLICT DO NOTHING ⇒ không nhân đôi.
+        await direct.query(
+          `INSERT INTO permissions (action, resource_type, is_sensitive)
+             VALUES ('reset-2fa', 'user', true)
+           ON CONFLICT (action, resource_type) DO NOTHING`,
+        );
+        await direct.query(`
+          DO $$
+          DECLARE v_role uuid; v_perm uuid;
+          BEGIN
+            SELECT id INTO v_role FROM roles
+              WHERE name = 'company-admin' AND company_id IS NULL AND is_system = true
+                AND deleted_at IS NULL;
+            SELECT id INTO v_perm FROM permissions
+              WHERE action = 'reset-2fa' AND resource_type = 'user';
+            INSERT INTO role_permissions (role_id, permission_id, effect, data_scope)
+              VALUES (v_role, v_perm, 'ALLOW', 'Company')
+            ON CONFLICT (role_id, permission_id, effect) DO NOTHING;
+          END $$;
+        `);
+
+        const afterPerm = await direct.query<{ n: number }>(
+          `SELECT COUNT(*)::int AS n FROM permissions
+            WHERE action = 'reset-2fa' AND resource_type = 'user'`,
+        );
+        const afterGrant = await direct.query<{ n: number }>(
+          `SELECT COUNT(*)::int AS n
+             FROM role_permissions rp
+             JOIN roles r ON r.id = rp.role_id
+            WHERE r.name = 'company-admin' AND r.company_id IS NULL
+              AND rp.permission_id = (
+                SELECT id FROM permissions WHERE action = 'reset-2fa' AND resource_type = 'user'
+              )
+              AND rp.effect = 'ALLOW'`,
+        );
+
+        expect(afterPerm.rows[0].n, "re-seed permission KHÔNG nhân đôi").toBe(beforePerm.rows[0].n);
+        expect(afterGrant.rows[0].n, "re-seed grant KHÔNG nhân đôi").toBe(beforeGrant.rows[0].n);
+      });
+    });
   },
 );

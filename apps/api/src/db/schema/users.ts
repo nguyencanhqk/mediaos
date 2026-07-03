@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { currentCompanyDefault } from "./_helpers";
 import { companies } from "./companies";
 
@@ -36,6 +36,9 @@ export const users = pgTable("users", {
   createdBy: uuid("created_by"),
   updatedBy: uuid("updated_by"),
   deletedBy: uuid("deleted_by"),
+  // S2-AUTH-DB-4 (mig 0466): cờ ép 2FA PER-USER (khác roles.requires_two_factor = ép theo ROLE ở mig 0120).
+  // NOT NULL DEFAULT false — không backfill. Nền cho enforcement + admin reset-2fa:user.
+  requireTwoFactor: boolean("require_two_factor").notNull().default(false),
 });
 
 export type User = typeof users.$inferSelect;
