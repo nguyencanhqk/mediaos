@@ -79,3 +79,7 @@ export * from "./retention";
 // no-RLS, KHÁC system_modules SaaS) + seed_batches/seed_items (company_id NULLABLE, RLS+FORCE nullable-tenant,
 // tracking mutable — KHÔNG DELETE, giữ lịch sử seed idempotent). Seed catalog+settings+permission ở 0435.
 export * from "./seed-tracking";
+// S2-FND-JOBS-1 (DB-08 §8.14/§8.15, mig 0475): system_job_runs (company_id NULLABLE, RLS+FORCE per-role
+// app-tenant/worker-all — worker ghi nhật ký, app SELECT-only) + system_job_locks (KHÔNG company_id,
+// no-RLS worker-infra mẫu processed_events). GRANT no-DELETE mọi role (release lock = UPDATE, không DELETE).
+export * from "./system-jobs";
