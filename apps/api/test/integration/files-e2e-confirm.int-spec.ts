@@ -131,11 +131,14 @@ describe.skipIf(!runDb)("S2-FND-FILE-2 upload E2E (presigned-PUT + confirm)", ()
     const emailB = `b-${randomUUID().slice(0, 8)}@b.test`;
     const uidB = await seedUser(direct, B.companyId, emailB, pw);
     fileB = randomUUID();
+    const storedNameB = `${fileB}-b.txt`; // separate placeholder from id — avoids "inconsistent types
+    // deduced for parameter $1" (uuid vs varchar) when Postgres infers a single param's type from ALL
+    // its usages in one statement.
     await direct.query(
       `INSERT INTO files (id, company_id, original_name, stored_name, mime_type, file_size_bytes,
          storage_provider, storage_path, visibility, upload_status, scan_status, uploaded_by)
-       VALUES ($1,$2,'b.txt',$1,'text/plain',4,'MinIO',$3,'Private','Pending','NotRequired',$4)`,
-      [fileB, B.companyId, `${B.companyId}/files/${fileB}`, uidB],
+       VALUES ($1,$2,'b.txt',$3,'text/plain',4,'MinIO',$4,'Private','Pending','NotRequired',$5)`,
+      [fileB, B.companyId, storedNameB, `${B.companyId}/files/${fileB}`, uidB],
     );
 
     uploaderToken = await login(app, A.slug, uploaderEmail);
