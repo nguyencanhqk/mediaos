@@ -87,11 +87,39 @@ export const patchCompanySettingSchema = z.object({
   reason: z.string().max(1000).optional(),
 });
 
+/**
+ * S2-FND-BE-8 — GET /foundation/system-settings — LIST global system_settings (masked). Filter tuỳ chọn
+ * category/module (khử nhiễu). KHÔNG keys (list toàn bộ theo filter; detail dùng /:key). GLOBAL no-RLS.
+ */
+export const systemSettingsQuerySchema = z.object({
+  category: z.string().min(1).max(100).optional(),
+  moduleCode: z.string().min(1).max(50).optional(),
+});
+
+/**
+ * S2-FND-BE-8 — PATCH /foundation/system-settings/:key — upsert GLOBAL system_settings (KHÔNG company_settings).
+ * Mẫu patchCompanySettingSchema NHƯNG value_type/validation_schema ép ở service ĐỌC TỪ HÀNG system_settings
+ * (KHÔNG company override): sai type → 400, sai schema → 422. reason → audit SYSTEM_SETTING_UPDATED.
+ */
+export const patchSystemSettingSchema = z.object({
+  settingValue: z.unknown(),
+  valueType: valueTypeEnum.optional(),
+  category: z.string().min(1).max(100).optional(),
+  moduleCode: z.string().min(1).max(50).optional(),
+  description: z.string().max(2000).optional(),
+  status: settingStatusEnum.optional(),
+  reason: z.string().max(1000).optional(),
+});
+
 export type PublicQuery = z.infer<typeof publicQuerySchema>;
 export type ResolveBody = z.infer<typeof resolveBodySchema>;
 export type ResolveQuery = z.infer<typeof resolveQuerySchema>;
 export type PatchCompanySettingInput = z.infer<typeof patchCompanySettingSchema>;
+export type SystemSettingsQuery = z.infer<typeof systemSettingsQuerySchema>;
+export type PatchSystemSettingInput = z.infer<typeof patchSystemSettingSchema>;
 
 export class PublicQueryDto extends createZodDto(publicQuerySchema) {}
 export class ResolveBodyDto extends createZodDto(resolveBodySchema) {}
 export class PatchCompanySettingDto extends createZodDto(patchCompanySettingSchema) {}
+export class SystemSettingsQueryDto extends createZodDto(systemSettingsQuerySchema) {}
+export class PatchSystemSettingDto extends createZodDto(patchSystemSettingSchema) {}

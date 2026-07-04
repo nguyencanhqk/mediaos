@@ -14,7 +14,13 @@ import type { Request } from "express";
 import { ZodValidationPipe } from "nestjs-zod";
 import { PermissionGuard } from "../../permission/guards/permission.guard";
 import { RequirePermission } from "../../permission/require-permission.decorator";
-import { PatchCompanySettingDto, PublicQueryDto, ResolveBodyDto } from "./settings.dto";
+import {
+  PatchCompanySettingDto,
+  PatchSystemSettingDto,
+  PublicQueryDto,
+  ResolveBodyDto,
+  SystemSettingsQueryDto,
+} from "./settings.dto";
 import { SettingService } from "./setting.service";
 
 interface AuthenticatedRequest extends Request {
@@ -74,5 +80,38 @@ export class SettingsController {
     @Body() dto: PatchCompanySettingDto,
   ) {
     return this.settings.updateCompanySetting(req.user, key, dto);
+  }
+
+  // ─── S2-FND-BE-8 — GLOBAL system_settings (cổng system-manage:foundation-setting, is_sensitive=TRUE) ────
+  // Cặp KHÔNG seed cho role (cấp tường minh per-user); wildcard '*:*'/super-admin KHÔNG kế thừa quyền nhạy
+  // cảm (permission.service sensitive gate). isSensitive: true tường minh (defense-in-depth + đồng bộ catalog).
+  // System-scope: đọc/ghi TẦNG GLOBAL (mọi tenant chung 1 hàng), KHÔNG chạm company_settings.
+
+  @Get("system-settings")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("system-manage", "foundation-setting", { isSensitive: true })
+  getSystemSettings(@Req() req: AuthenticatedRequest, @Query() query: SystemSettingsQueryDto) {
+    return this.settings.getSystemSettings(req.user, {
+      category: query.category,
+      moduleCode: query.moduleCode,
+    });
+  }
+
+  @Get("system-settings/:key")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("system-manage", "foundation-setting", { isSensitive: true })
+  getSystemSetting(@Req() req: AuthenticatedRequest, @Param("key") key: string) {
+    return this.settings.getSystemSetting(req.user, key);
+  }
+
+  @Patch("system-settings/:key")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("system-manage", "foundation-setting", { isSensitive: true })
+  updateSystemSetting(
+    @Req() req: AuthenticatedRequest,
+    @Param("key") key: string,
+    @Body() dto: PatchSystemSettingDto,
+  ) {
+    return this.settings.updateSystemSetting(req.user, key, dto);
   }
 }
