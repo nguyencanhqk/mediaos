@@ -10,10 +10,10 @@ import { SuperAdminBootstrapRepository } from "../../src/permission/super-admin-
 
 /**
  * S2-FND-SEED-3 (Lane D — deny-path RED TRƯỚC) — bộ NGHIỆM THU DB-hardening CANONICAL cho dựng-từ-trống tự
- * động: function `ensure_default_company` (mig 0469 → CREATE OR REPLACE mig 0473, SECURITY DEFINER) +
- * `uq_companies_single_active` (mig 0473) + cột `users.must_change_password`. Postgres THẬT, DB CÔ LẬP
- * `mediaos_<lane>` (CLAUDE §9.5). Đặt ở test/ (KHÔNG colocated .spec.ts) — case cần guard + DB thật +
- * role-switch + 2-session race KHÔNG được lọt vào no-DB unit run.
+ * động: function `ensure_default_company` (mig 0469 → CREATE OR REPLACE mig 0473, SECURITY DEFINER +
+ * pg_advisory_xact_lock) + cột `users.must_change_password`. Postgres THẬT, DB CÔ LẬP `mediaos_<lane>`
+ * (CLAUDE §9.5). Đặt ở test/ (KHÔNG colocated .spec.ts) — case cần guard + DB thật + role-switch + 2-session
+ * race KHÔNG được lọt vào no-DB unit run.
  *
  * (SEED3-B-test — dọn nợ test) File này GỘP 2 bản gần-trùng từng chạy SONG SONG trên CÙNG bảng `companies`
  * (nguồn race test-tự-gây, memory vitest-colocated + super-admin-bootstrap-flaky-count):
@@ -24,13 +24,15 @@ import { SuperAdminBootstrapRepository } from "../../src/permission/super-admin-
  * Gate CỨNG `hasDb && LANE_DB` (memory integration-test-lane-db-gate): .env local trỏ DB dev chung làm
  * hasDb=true → deny-path/CHECK chạy trên DB chung ⇒ đỏ-giả + nhiễu. Chỉ chạy trên DB cô lập theo LANE_DB.
  *
- * BẤT BIẾN MỚI (mig 0473, single-active TOÀN DB — CHỨ KHÔNG PHẢI CHỈ N=1-GUARD-Ở-TẦNG-CODE): tối đa 1 hàng
- * `companies` có (status='active' AND deleted_at IS NULL) CÙNG LÚC, ép bởi `uq_companies_single_active`
- * (UNIQUE INDEX partial trên biểu thức hằng `(true)`). Mọi test TRONG FILE NÀY cần chiếm "slot active" (N=1
- * guard / idempotent / concurrent-race) PHẢI trả lại slot NGAY sau khi dùng xong (helper `deactivate` —
- * soft-delete THẬT, KHÔNG chờ tới afterAll) để KHÔNG khoá suite khác chạy song song trên cùng LANE_DB. Test
- * KHÔNG cần semantics "active" thật (CHECK ngôn ngữ/tiền tệ, must_change_password lifecycle) dùng
- * status='suspended' để KHÔNG bao giờ đụng slot (companies_status_chk cho phép 'active'|'suspended').
+ * THIẾT KẾ RACE-SAFETY (mig 0473 — DESIGN-CORRECTION S2-FND-SEED-3): an-toàn "2 bootstrap khác slug cùng lúc
+ * → 2 company active" được ép bằng `pg_advisory_xact_lock(hashtext('ensure_default_company'))` là câu ĐẦU
+ * TIÊN của function — tuần-tự-hoá mọi lần GỌI ĐỒNG THỜI: chỉ 1 caller vào critical-section (guard-SELECT N=1
+ * → INSERT); caller khác CHỜ tới khi tx trước kết thúc rồi guard HIT trên winner đã commit ⇒ KHÔNG đẻ tenant
+ * thứ 2. KHÔNG đặt ràng buộc lên bảng `companies` — nhiều company active KHÁC slug VẪN được phép (kiến-trúc
+ * đa-tenant sẵn-sàng-mở-rộng, CLAUDE.md §2 #1). (Bản trước của mig 0473 dùng `uq_companies_single_active`
+ * UNIQUE partial "một-active-toàn-DB" — QUÁ RỘNG, phá cô lập-tenant 2-company của db-rls.int-spec + ~141 file
+ * dùng seedCompany(); đã BỎ.) Vì multi-active giờ HỢP LỆ, test KHÔNG assert "đúng 1 active TOÀN DB" và KHÔNG
+ * soft-delete active TOÀN DB (sẽ phá suite chạy song song trên cùng LANE_DB) — mọi assert đều SCOPE theo TAG.
  *
  * PHỦ (owner-chốt #1..#5 + DB10-TC-001/003 + §17.2 + QA-05/QA-06 race):
  *   • presence catalog: prosecdef=true · proconfig SET search_path=pg_catalog · proacl non-null · EXECUTE
@@ -38,35 +40,37 @@ import { SuperAdminBootstrapRepository } from "../../src/permission/super-admin-
  *   • cột users.must_change_password NOT NULL DEFAULT false tồn tại sau migrate (§17.2 điểm 5).
  *   • deny-path RED (QA-05): role DB ≠ mediaos_app EXECUTE → permission-denied 42501.                  #3
  *   • create-from-empty (DB10-TC-001): guard MISS (ẩn active trong TX cô lập) → nhánh INSERT tenant-root.
- *   • idempotent (DB10-TC-003) DETERMINISTIC: EnsureDefaultCompanyService gọi 2 lần → cùng id, active,
- *     KHÔNG phình; xác nhận winner khớp tie-break TẤT ĐỊNH `ORDER BY created_at ASC, id ASC` (mig 0473) —
- *     khử flake (memory super-admin-bootstrap-flaky-count).
+ *   • idempotent (DB10-TC-003): EnsureDefaultCompanyService gọi 2 lần → cùng id, active, KHÔNG đẻ >1 hàng
+ *     cho slug của test (advisory-lock tuần-tự-hoá; idempotent).
  *   • N=1 guard: active KHÁC slug → probe slug KHÔNG được đẻ (không tạo tenant thứ 2).                  #5
  *   • locale/currency CHECK: 'vi'/'VND' pass; 'vi-VN' + currency lạ bị reject (23514) — code CHECK thắng. #4
  *   • must_change_password lifecycle (repo): SuperAdminBootstrapRepository.upsertSuperAdminUser →
  *     must_change_password=true (INSERT + re-upsert, cùng id — idempotent).
- *   • CONCURRENT RACE (QA-06 security/race, RED-trước — S2-FND-SEED-3-FIX-2):
- *     - SQL 2-session (function-owner) đua ensure_default_company KHÁC slug trên slate rỗng → đúng 1 active,
- *       CẢ HAI caller KHÔNG nhận lỗi (23505 đã bắt nội bộ), đồng thuận CÙNG 1 winner.
- *     - SQL 2-session RAW INSERT (bỏ qua function) đua trực tiếp vào uq_companies_single_active →
- *       INSERT thua dính ĐÚNG 23505 (deterministic qua BEGIN/giữ-mở/COMMIT, KHÔNG phụ thuộc timing).
- *     - API parallel-loop ≥25 lần (EnsureDefaultCompanyService, khác slug) → fail=0, đồng thuận 1 winner —
+ *   • CONCURRENT RACE (QA-06 security/race, RED-trước — S2-FND-SEED-3-FIX-2 / advisory-lock):
+ *     - SQL 2-session (function-owner): A giữ advisory-lock trong tx MỞ → B gọi ensure_default_company CHẶN
+ *       tại câu đầu (không chạy đồng thời critical-section) → A commit → B mở khoá, guard HIT → KHÔNG đẻ
+ *       tenant thứ 2 (đồng thuận winner). Deterministic (giữ-mở/COMMIT), KHÔNG phụ thuộc timing.
+ *     - RAW INSERT (bỏ qua function): 2 company active KHÁC slug đều INSERT thành công — KHÔNG còn ràng buộc
+ *       single-active toàn DB (regression guard chống tái-introduce `uq_companies_single_active`).
+ *     - API parallel-loop ≥25 lần (EnsureDefaultCompanyService, khác slug) → fail=0, tối đa 1 slug tạo mới —
  *       tái hiện & khử flake ~3.7% (memory super-admin-bootstrap-flaky-count).
  */
 
 const runDb = hasDb && Boolean(process.env.LANE_DB);
 const TAG = randomUUID().slice(0, 8);
 
-// SQLSTATE: privilege check (chạy TRƯỚC RLS) + CHECK-constraint violation + serialization/unique conflict.
+// SQLSTATE: privilege check (chạy TRƯỚC RLS) + CHECK-constraint violation + serialization/lock contention.
 const PG_INSUFFICIENT_PRIVILEGE = "42501";
 const PG_CHECK_VIOLATION = "23514";
 const PG_SERIALIZATION_FAILURE = "40001";
-const PG_UNIQUE_VIOLATION = "23505";
-// Bounded-retry cho case create-from-empty: UPDATE rộng (ẩn active) chạy dưới REPEATABLE READ có thể va
-// cleanupTenants (hard-delete company test khác trên LANE_DB dùng chung) → serialization_failure hợp lệ,
-// không phải bug — retry ≤3 LẦN (sau lần thử đầu, tổng ≤4 lần thử) thay vì để flaky (S2-FND-SEED-3-FIX-1).
+// mig 0473 thêm pg_advisory_xact_lock ĐẦU function ⇒ dưới lock_timeout, chờ khoá tư vấn quá hạn cho 55P03
+// (lock_not_available) — contention hợp lệ khi nhiều suite song song bootstrap, KHÔNG phải bug → retry như 40001.
+const PG_LOCK_NOT_AVAILABLE = "55P03";
+// Bounded-retry cho case create-from-empty: UPDATE rộng (ẩn active) dưới REPEATABLE READ có thể va cleanupTenants
+// (hard-delete company test khác trên LANE_DB dùng chung) → 40001; hoặc chờ advisory-lock quá lock_timeout → 55P03.
+// Cả hai là contention hợp lệ (không phải bug) — retry ≤3 LẦN thay vì để flaky (S2-FND-SEED-3-FIX-1 + FIX-2).
 const MAX_SERIALIZATION_RETRIES = 3;
-/** Backoff nhỏ + jitter TRƯỚC mỗi lần retry — giảm khả năng va lại NGAY vào transaction gây 40001 khi
+/** Backoff nhỏ + jitter TRƯỚC mỗi lần retry — giảm khả năng va lại NGAY vào transaction gây 40001/55P03 khi
  *  full-suite chạy song song liên tục ghi bảng companies (retry tức thời dễ đụng cùng cửa sổ xung đột). */
 function serializationBackoff(retryIndex: number): Promise<void> {
   const ms = 20 * retryIndex + Math.floor(Math.random() * 30);
@@ -89,18 +93,8 @@ function ensureServiceWith(slug: string): EnsureDefaultCompanyService {
   return svc;
 }
 
-/**
- * Soft-delete 1 company NGAY sau khi test dùng xong "slot active" — mig 0473 giới hạn TOÀN DB tối đa 1 hàng
- * (status='active' AND deleted_at IS NULL); giữ hàng active lâu (tới afterAll) sẽ CHẶN mọi suite khác chạy
- * song song trên cùng LANE_DB. Vẫn track qua companyIds[] để hard-cleanup ở afterAll (idempotent, an toàn
- * gọi lại trên hàng đã soft-delete).
- */
-async function deactivate(pool: Pool, id: string): Promise<void> {
-  await pool.query(`UPDATE ${COMPANIES} SET deleted_at = now() WHERE id = $1`, [id]);
-}
-
 describe.skipIf(!runDb)(
-  "S2-FND-SEED-3 — ensure_default_company bootstrap + uq_companies_single_active (crown, DB thật)",
+  "S2-FND-SEED-3 — ensure_default_company bootstrap + advisory-lock race-safety (crown, DB thật)",
   () => {
     let direct: Pool;
     const companyIds: string[] = [];
@@ -175,6 +169,7 @@ describe.skipIf(!runDb)(
     // ── deny-path (RED TRƯỚC): role ≠ mediaos_app EXECUTE → 42501 (owner-chốt #3) ─────────────────
     // Viết TRƯỚC (RED-first cho việc NHẠY CẢM): mã hoá kỳ vọng "chỉ mediaos_app EXECUTE được". Nếu REVOKE
     // ALL FROM PUBLIC trượt (PUBLIC vẫn có EXECUTE mặc định) → call KHÔNG lỗi ⇒ test đỏ ⇒ bắt được regress.
+    // Permission-denied kiểm ở BƯỚC GỌI hàm (TRƯỚC khi thân hàm chạy) ⇒ chưa tới pg_advisory_xact_lock.
     it("deny-path — role DB ≠ mediaos_app EXECUTE ensure_default_company → permission-denied (42501)", async () => {
       const client = await direct.connect();
       let err: unknown;
@@ -208,17 +203,13 @@ describe.skipIf(!runDb)(
     });
 
     // ── (DB10-TC-001) create-from-empty — guard MISS → nhánh INSERT tenant-root ───────────────────
-    // FIX (S2-FND-SEED-3-FIX-1, flaky dưới full-suite parallelism): BEGIN mặc định là READ COMMITTED →
-    // MỖI statement lấy snapshot MỚI. UPDATE ẩn-active của TX này chỉ ẩn trong TX; nhưng SELECT guard N=1
-    // bên trong ensure_default_company (SECURITY DEFINER, statement RIÊNG cùng TX) lấy snapshot TƯƠI ⇒ có
-    // thể THẤY company active vừa được file test song song khác COMMIT giữa lúc UPDATE và lúc gọi hàm ⇒
-    // guard HIT sai (không đi nhánh INSERT) ⇒ đỏ ngẫu nhiên.
-    // Fix: BEGIN ISOLATION LEVEL REPEATABLE READ — snapshot cố định TẠI statement đầu tiên (UPDATE); mọi
-    // statement SAU trong CÙNG transaction (kể cả SELECT nội bộ của ensure_default_company) dùng CHUNG
-    // snapshot đó ⇒ KHÔNG thấy commit của session khác xảy ra sau thời điểm snapshot ⇒ guard MISS deterministic.
-    // Bọc bounded-retry ≤3 trên 40001 (serialization_failure): UPDATE rộng (WHERE status='active', không giới
-    // hạn theo id) dưới REPEATABLE READ có thể xung đột ghi với cleanupTenants (hard-delete company test khác
-    // đang chạy song song trên cùng LANE_DB) — retry là xử lý đúng cho race hợp lệ, không che giấu bug thật.
+    // FIX (S2-FND-SEED-3-FIX-1, flaky dưới full-suite parallelism): BEGIN ISOLATION LEVEL REPEATABLE READ —
+    // snapshot cố định TẠI statement đầu tiên (UPDATE ẩn active); mọi statement SAU trong CÙNG transaction (kể
+    // cả guard-SELECT nội bộ của ensure_default_company) dùng CHUNG snapshot đó ⇒ KHÔNG thấy commit của session
+    // khác sau thời điểm snapshot ⇒ guard MISS deterministic ⇒ đi nhánh INSERT tenant-root. ROLLBACK cuối undo
+    // cả ẩn lẫn company vừa tạo (không pollution DB chung — an toàn cho suite chạy song song).
+    // Bọc bounded-retry ≤3 trên 40001 (UPDATE rộng va cleanupTenants) HOẶC 55P03 (chờ advisory-lock quá
+    // lock_timeout dưới contention song song, mig 0473) — cả hai là race hợp lệ, không che giấu bug thật.
     it("create-from-empty — guard MISS (không active) → tạo tenant-root mới (INSERT branch)", async () => {
       const slug = `empty-${TAG}`;
       let lastErr: unknown;
@@ -249,65 +240,53 @@ describe.skipIf(!runDb)(
           return; // PASS — thoát retry loop
         } catch (err) {
           await client.query("ROLLBACK").catch(() => {
-            // TX có thể đã abort bởi 40001 — ROLLBACK vẫn hợp lệ; nuốt lỗi kép an toàn.
+            // TX có thể đã abort bởi 40001/55P03 — ROLLBACK vẫn hợp lệ; nuốt lỗi kép an toàn.
           });
           lastErr = err;
           const code = (err as { code?: string } | undefined)?.code;
-          if (code !== PG_SERIALIZATION_FAILURE) throw err; // lỗi thật (không phải race) → fail ngay, không retry
-          // 40001 và còn lượt retry → vòng lặp tiếp tục với client mới.
+          // Chỉ retry contention hợp lệ (serialization/lock-timeout); lỗi thật → fail ngay, không retry.
+          if (code !== PG_SERIALIZATION_FAILURE && code !== PG_LOCK_NOT_AVAILABLE) throw err;
+          // 40001/55P03 và còn lượt retry → vòng lặp tiếp tục với client mới.
         } finally {
           client.release();
         }
       }
-      throw lastErr; // hết MAX_SERIALIZATION_RETRIES mà vẫn 40001 → thất bại thật, không nuốt lỗi
+      throw lastErr; // hết MAX_SERIALIZATION_RETRIES mà vẫn contention → thất bại thật, không nuốt lỗi
     });
 
-    // ── (DB10-TC-003) idempotent DETERMINISTIC — tie-break created_at ASC, id ASC (mig 0473) ───────
-    it("idempotent — ensure gọi 2 lần trả CÙNG company id (active), khớp tie-break created_at ASC/id ASC", async () => {
+    // ── (DB10-TC-003) idempotent — ensure gọi 2 lần trả CÙNG company id, KHÔNG đẻ >1 hàng cho slug test ──
+    // multi-active TOÀN DB giờ HỢP LỆ (không còn uq_companies_single_active) ⇒ KHÔNG assert "đúng 1 active
+    // toàn DB": suite khác chạy song song trên cùng LANE_DB có thể có company active riêng. Chỉ assert bất
+    // biến idempotent SCOPE-theo-TAG: 2 lần gọi đồng thuận cùng id + slug idem-TAG KHÔNG bị nhân đôi.
+    it("idempotent — ensure gọi 2 lần trả CÙNG company id (active), KHÔNG nhân đôi slug test", async () => {
       const svc = ensureServiceWith(`idem-${TAG}`);
       const a = await svc.ensureDefaultCompany();
       const b = await svc.ensureDefaultCompany();
       expect(a, "ensure phải trả company (LANE_DB đã cấu hình db)").not.toBeNull();
       expect(a?.status).toBe("active");
-      expect(b?.id, "gọi lần 2 trả CÙNG id (idempotent + N=1)").toBe(a?.id);
+      expect(b?.id, "gọi lần 2 trả CÙNG id (idempotent + N=1 guard)").toBe(a?.id);
 
-      // DETERMINISTIC: winner PHẢI khớp tie-break tất định của function (mig 0473 ORDER BY created_at ASC,
-      // id ASC) — xác nhận qua chính truy vấn đó trên toàn bảng active, KHÔNG chỉ tin service trả gì.
-      const winner = await direct.query(
-        `SELECT id FROM ${COMPANIES} WHERE status='active' AND deleted_at IS NULL
-          ORDER BY created_at ASC, id ASC LIMIT 1`,
+      // SCOPE-theo-TAG: slug idem-TAG KHÔNG bị đẻ >1 hàng (guard-MISS tạo tối đa 1; guard-HIT tạo 0). Miễn
+      // nhiễm số company active của suite song song. KHÔNG assert winner khớp tie-break toàn DB (winner có thể
+      // là company active của suite khác) — tie-break created_at ASC, id ASC được nghiệm ở deny/create branch.
+      const mine = await direct.query(
+        `SELECT COUNT(*)::int AS n FROM ${COMPANIES} WHERE slug = $1 AND deleted_at IS NULL`,
+        [`idem-${TAG}`],
       );
-      expect(
-        winner.rows[0]?.id,
-        "winner PHẢI khớp tie-break tất định created_at ASC, id ASC (mig 0473)",
-      ).toBe(a?.id);
+      expect(mine.rows[0].n, "slug idem-TAG KHÔNG bị nhân đôi (idempotent)").toBeLessThanOrEqual(1);
 
-      // Bất biến DB (mig 0473): KHÔNG BAO GIỜ >1 active sau 2 lần gọi liên tiếp — không phình.
-      const activeCount = await direct.query(
-        `SELECT COUNT(*)::int AS n FROM ${COMPANIES} WHERE status='active' AND deleted_at IS NULL`,
-      );
-      expect(activeCount.rows[0].n, "KHÔNG phình — vẫn đúng 1 active sau 2 lần idempotent").toBe(1);
-
-      // Guard-MISS đã tạo idem-TAG (DB trống lúc chạy) → dọn + TRẢ SLOT NGAY (không chờ afterAll — mig 0473
-      // single-active toàn DB, giữ lâu sẽ chặn suite khác). Guard-HIT (trả active có sẵn) → không tạo, bỏ qua.
+      // Track slug idem-TAG cho hard-cleanup afterAll (nếu guard-MISS đã tạo). Guard-HIT → 0 hàng, bỏ qua.
       const created = await direct.query(`SELECT id FROM ${COMPANIES} WHERE slug = $1`, [
         `idem-${TAG}`,
       ]);
-      if (created.rowCount && created.rows[0].id) {
-        const id = created.rows[0].id as string;
-        companyIds.push(id);
-        await deactivate(direct, id);
-      }
+      if (created.rowCount && created.rows[0].id) companyIds.push(created.rows[0].id as string);
     });
 
     // ── (owner-chốt #5) N=1 guard — active KHÁC slug → KHÔNG tạo tenant thứ 2 ─────────────────────
-    // Defensive clear TRƯỚC INSERT: mig 0473 giới hạn TOÀN DB tối đa 1 active — nếu 1 hàng active SÓT LẠI
-    // (leftover từ lượt chạy trước bị lỗi giữa chừng / suite khác chưa kịp dọn) thì INSERT trực tiếp bên
-    // dưới sẽ dính 23505 dù KHÔNG liên quan bug đang test (false-red). Clear slot cho CHÍNH test này chiếm.
+    // Seed 1 company active (existingSlug) rồi ensure(probeSlug): guard tìm THẤY company active (ít nhất là
+    // existingSlug, có thể thêm của suite khác) ⇒ trả winner, KHÔNG đẻ probeSlug. multi-active hợp lệ nên
+    // INSERT active này KHÔNG cần "clear slot trước" (bản cũ cần vì uq_companies_single_active — đã BỎ).
     it("N=1 guard — đã có company active khác slug → ensure KHÔNG tạo tenant mới cho probe slug", async () => {
-      await direct.query(
-        `UPDATE ${COMPANIES} SET deleted_at = now() WHERE status = 'active' AND deleted_at IS NULL`,
-      );
       const existingSlug = `n1-existing-${TAG}`;
       const seed = await direct.query(
         `INSERT INTO ${COMPANIES} (name, slug, status, language, currency)
@@ -323,15 +302,12 @@ describe.skipIf(!runDb)(
       expect(res?.status).toBe("active");
       // guard HIT (có active) → probe slug KHÔNG được tạo (không đẻ tenant thứ 2).
       const probe = await direct.query(`SELECT id FROM ${COMPANIES} WHERE slug = $1`, [probeSlug]);
-      expect(probe.rowCount, "probe slug KHÔNG được đẻ khi đã có active (single-company)").toBe(0);
-
-      // Trả slot NGAY (mig 0473 single-active toàn DB) — không chờ afterAll.
-      await deactivate(direct, existingId);
+      expect(probe.rowCount, "probe slug KHÔNG được đẻ khi đã có active (N=1 guard)").toBe(0);
     });
 
     // ── locale/currency CHECK (owner-chốt #4): code CHECK thắng DB-10 §17.1 ────────────────────────
-    // Dùng status='suspended' (companies_status_chk cho phép 'active'|'suspended') — CHECK ngôn ngữ/tiền
-    // tệ ĐỘC LẬP với status, nên KHÔNG cần chiếm "slot active" (mig 0473 single-active toàn DB) cho test này.
+    // Dùng status='suspended' (companies_status_chk cho phép 'active'|'suspended') — CHECK ngôn ngữ/tiền tệ
+    // ĐỘC LẬP với status; 'suspended' hay 'active' đều được (không còn ràng buộc single-active để né).
     it("CHECK — language 'vi'/'VND' pass; 'vi-VN' bị companies_language_check reject (23514)", async () => {
       const okSlug = `chk-ok-${TAG}`;
       const ok = await direct.query(
@@ -372,8 +348,8 @@ describe.skipIf(!runDb)(
     });
 
     // ── must_change_password lifecycle (repo — §17.2 điểm 5): admin bootstrap → true, idempotent ───
-    // status='suspended' — withTenant chỉ set GUC company_id cho RLS (KHÔNG đọc company.status), nên
-    // KHÔNG cần chiếm "slot active" (mig 0473 single-active toàn DB) cho test thuần repo-level này.
+    // status='suspended' — withTenant chỉ set GUC company_id cho RLS (KHÔNG đọc company.status), nên status
+    // là incidental cho test thuần repo-level này.
     it("must_change_password — upsertSuperAdminUser set true (INSERT + re-upsert), cùng id", async () => {
       const slug = `mcp-${TAG}`;
       const c = await direct.query(
@@ -424,162 +400,126 @@ describe.skipIf(!runDb)(
       expect(u2.rows[0].must_change_password).toBe(true);
     });
 
-    // ═══ CONCURRENT RACE (QA-06 security/race, RED-trước — S2-FND-SEED-3-FIX-2 / mig 0473) ═══════════
+    // ═══ CONCURRENT RACE (QA-06 security/race, RED-trước — S2-FND-SEED-3-FIX-2 / mig 0473 advisory-lock) ═══
 
-    // ── SQL 2-session (function-owner) đua ensure_default_company KHÁC slug ──────────────────────
-    it("concurrent — 2 session function-owner đua ensure_default_company KHÁC slug → đúng 1 active, KHÔNG throw", async () => {
-      // Best-effort tạo slate rỗng ngay trước race — cửa sổ hẹp còn lại (suite khác chen vào) KHÔNG làm sai
-      // bất biến được assert bên dưới: DB tự chặn CỨNG qua uq_companies_single_active bất kể ai thắng, và
-      // cả 2 caller LUÔN đồng thuận CÙNG 1 winner dù đó là company thứ 3 (không phải slugA/slugB).
-      await direct.query(
-        `UPDATE ${COMPANIES} SET deleted_at = now() WHERE status = 'active' AND deleted_at IS NULL`,
-      );
-
+    // ── SQL 2-session (function-owner): advisory-lock tuần-tự-hoá critical-section — B CHẶN khi A giữ khoá ──
+    // Deterministic (KHÔNG phụ thuộc timing network): A mở tx + gọi ensure_default_company → giành
+    // pg_advisory_xact_lock (câu ĐẦU function), GIỮ tới khi A commit. B gọi ensure_default_company KHÁC slug →
+    // CHẶN tại câu đầu (KHÔNG chạy đồng thời critical-section với A). A commit → khoá nhả → B mở khoá, guard
+    // HIT trên trạng thái A đã commit → B trả winner, KHÔNG đẻ tenant thứ 2 (đồng thuận, không tạo rival).
+    it("concurrent — A giữ advisory-lock (tx mở) → B ensure KHÁC slug bị CHẶN; A commit → B guard HIT, KHÔNG đẻ tenant 2", async () => {
       const slugA = `race-fn-a-${TAG}`;
       const slugB = `race-fn-b-${TAG}`;
       const clientA = await direct.connect();
       const clientB = await direct.connect();
-      let errA: unknown;
-      let errB: unknown;
-      let rowsA: Array<{ id: string; status: string }> = [];
-      let rowsB: Array<{ id: string; status: string }> = [];
-      try {
-        const [outA, outB] = await Promise.all([
-          clientA
-            .query(
-              `SELECT id, status FROM ensure_default_company($1::citext, 'Race FN A', 'Asia/Ho_Chi_Minh', 'vi', 'VND')`,
-              [slugA],
-            )
-            .then((r) => r.rows as Array<{ id: string; status: string }>)
-            .catch((e: unknown) => {
-              errA = e;
-              return [] as Array<{ id: string; status: string }>;
-            }),
-          clientB
-            .query(
-              `SELECT id, status FROM ensure_default_company($1::citext, 'Race FN B', 'Asia/Ho_Chi_Minh', 'vi', 'VND')`,
-              [slugB],
-            )
-            .then((r) => r.rows as Array<{ id: string; status: string }>)
-            .catch((e: unknown) => {
-              errB = e;
-              return [] as Array<{ id: string; status: string }>;
-            }),
-        ]);
-        rowsA = outA;
-        rowsB = outB;
-      } finally {
-        clientA.release();
-        clientB.release();
-      }
-
-      expect(
-        errA,
-        "caller A KHÔNG được nhận lỗi — function PHẢI tự bắt 23505 nội bộ",
-      ).toBeUndefined();
-      expect(
-        errB,
-        "caller B KHÔNG được nhận lỗi — function PHẢI tự bắt 23505 nội bộ",
-      ).toBeUndefined();
-      expect(rowsA[0]?.id).toBeTruthy();
-      expect(rowsB[0]?.id).toBeTruthy();
-      expect(
-        rowsB[0]?.id,
-        "2 caller đua NHƯNG đồng thuận CÙNG 1 winner (idempotent dưới race thật)",
-      ).toBe(rowsA[0]?.id);
-      expect(rowsA[0]?.status).toBe("active");
-
-      const winnerId = rowsA[0]?.id as string;
-      companyIds.push(winnerId);
-
-      const activeCount = await direct.query(
-        `SELECT COUNT(*)::int AS n FROM ${COMPANIES} WHERE status = 'active' AND deleted_at IS NULL`,
-      );
-      expect(
-        activeCount.rows[0].n,
-        "KHÔNG BAO GIỜ >1 company active cùng lúc (uq_companies_single_active)",
-      ).toBe(1);
-
-      // Đúng tối đa 1 trong 2 slug đua thắng thật (INSERT thành công) — slug thua KHÔNG để lại row dở dang
-      // (EXCEPTION nuốt sạch, không retry-insert phần lỡ). Company thứ 3 (pre-existing) thắng vẫn hợp lệ.
-      const createdSlugs = await direct.query(
-        `SELECT slug FROM ${COMPANIES} WHERE slug = ANY($1::text[]) AND deleted_at IS NULL`,
-        [[slugA, slugB]],
-      );
-      expect(
-        createdSlugs.rowCount,
-        "tối đa 1 trong 2 slug đua thắng thật (slug thua KHÔNG để lại row)",
-      ).toBeLessThanOrEqual(1);
-
-      await deactivate(direct, winnerId);
-    });
-
-    // ── SQL 2-session RAW INSERT (bỏ qua function) — chứng minh 23505 THẬT trên uq_companies_single_active ──
-    // Deterministic (KHÔNG phụ thuộc timing network như race qua function ở trên): A giữ transaction MỞ sau
-    // INSERT (chưa commit) → B fire INSERT khác slug (sẽ BLOCK chờ khoá của A trên cùng entry index partial
-    // `(true)`) → A COMMIT → B được nhả khoá, re-check uniqueness, dính 23505 (A đã thắng, đã commit thật).
-    it("SQL — 2 session RAW INSERT khác slug đua vào uq_companies_single_active → INSERT thua dính 23505", async () => {
-      await direct.query(
-        `UPDATE ${COMPANIES} SET deleted_at = now() WHERE status = 'active' AND deleted_at IS NULL`,
-      );
-
-      const slugA = `raw-race-a-${TAG}`;
-      const slugB = `raw-race-b-${TAG}`;
-      const clientA = await direct.connect();
-      const clientB = await direct.connect();
-      let insertedAId = "";
-      let errB: unknown;
+      let bResolved = false;
+      let bError: unknown;
+      let bRows: Array<{ id: string; status: string }> = [];
       try {
         await clientA.query("BEGIN");
-        const insA = await clientA.query(
-          `INSERT INTO ${COMPANIES} (name, slug, status, language, currency)
-           VALUES ($1, $2, 'active', 'vi', 'VND') RETURNING id`,
-          [`Raw Race A ${TAG}`, slugA],
+        // A gọi hàm → giành advisory-lock (câu đầu thân hàm), GIỮ tới COMMIT. (A có thể INSERT slugA nếu slate
+        // rỗng, hoặc guard-HIT company active có sẵn — đều giữ khoá tới hết tx A.)
+        await clientA.query(
+          `SELECT id, status FROM ensure_default_company($1::citext, 'Race FN A', 'Asia/Ho_Chi_Minh', 'vi', 'VND')`,
+          [slugA],
         );
-        insertedAId = insA.rows[0].id as string;
 
         await clientB.query("BEGIN");
         const pB = clientB
           .query(
-            `INSERT INTO ${COMPANIES} (name, slug, status, language, currency)
-             VALUES ($1, $2, 'active', 'vi', 'VND') RETURNING id`,
-            [`Raw Race B ${TAG}`, slugB],
+            `SELECT id, status FROM ensure_default_company($1::citext, 'Race FN B', 'Asia/Ho_Chi_Minh', 'vi', 'VND')`,
+            [slugB],
           )
+          .then((r) => {
+            bResolved = true;
+            bRows = r.rows as Array<{ id: string; status: string }>;
+          })
           .catch((e: unknown) => {
-            errB = e;
-            return undefined;
+            bResolved = true;
+            bError = e;
           });
 
-        // Nhường thời gian để statement B thực sự gửi đi + bắt đầu CHỜ khoá của A TRƯỚC khi A commit —
-        // nếu commit A trước khi B kịp gửi, B có thể chạy sau và tự thấy conflict ngay (vẫn ra 23505, chỉ
-        // khác đường chờ khoá vs. re-check tức thời — cả 2 đều hợp lệ cho assertion bên dưới).
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        // B PHẢI bị CHẶN trên advisory-lock trong khi A còn giữ (chưa commit) — chờ 1 cửa sổ rồi xác nhận
+        // B chưa resolve. Đây là bằng chứng critical-section KHÔNG chạy đồng thời (tuần-tự-hoá).
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        expect(
+          bResolved,
+          "B PHẢI bị CHẶN tại pg_advisory_xact_lock khi A đang giữ khoá (chưa commit)",
+        ).toBe(false);
+
+        // A commit → advisory-lock nhả → B mở khoá, guard-SELECT (snapshot tươi) thấy trạng thái A đã commit.
         await clientA.query("COMMIT");
         await pB;
+
+        expect(
+          bError,
+          "B KHÔNG lỗi sau khi được nhả khoá (không 23505 — đua đã tuần-tự-hoá)",
+        ).toBeUndefined();
+        expect(bResolved).toBe(true);
+        expect(bRows[0]?.id).toBeTruthy();
+        expect(bRows[0]?.status, "B đồng thuận về 1 company active").toBe("active");
       } finally {
         await clientB.query("ROLLBACK").catch(() => {
-          // B có thể đã tự abort do 23505 — ROLLBACK vẫn hợp lệ; nuốt lỗi kép an toàn.
+          // B có thể đã tự abort — ROLLBACK vẫn hợp lệ; nuốt lỗi kép an toàn.
         });
         clientA.release();
         clientB.release();
       }
 
+      // slugB KHÔNG được tạo: sau khi A commit chắc chắn có ≥1 company active ⇒ B guard HIT → KHÔNG INSERT
+      // slugB. Chứng minh advisory-lock chặn "2 bootstrap khác slug → 2 tenant" (đồng thuận, không tạo rival).
+      const bCreated = await direct.query(
+        `SELECT id FROM ${COMPANIES} WHERE slug = $1 AND deleted_at IS NULL`,
+        [slugB],
+      );
       expect(
-        errB,
-        "INSERT thứ 2 (B, khác slug) PHẢI dính lỗi trên uq_companies_single_active",
-      ).toBeDefined();
-      expect((errB as { code?: string }).code).toBe(PG_UNIQUE_VIOLATION);
+        bCreated.rowCount,
+        "B (khác slug) KHÔNG đẻ tenant thứ 2 — advisory-lock tuần-tự-hoá ⇒ guard HIT",
+      ).toBe(0);
 
-      companyIds.push(insertedAId);
-      await deactivate(direct, insertedAId);
+      // Track mọi company đua đã tạo (slugA nếu A INSERT khi slate rỗng) cho hard-cleanup afterAll.
+      const created = await direct.query(
+        `SELECT id FROM ${COMPANIES} WHERE slug = ANY($1::text[])`,
+        [[slugA, slugB]],
+      );
+      for (const row of created.rows) companyIds.push(row.id as string);
     });
 
-    // ── API parallel-loop ≥25 bootstrap song song khác slug → fail=0 (khử flake ~3.7%) ──────────────
-    it("API parallel-loop — ≥25 bootstrap song song khác slug (EnsureDefaultCompanyService) → fail=0, đồng thuận 1 winner", async () => {
-      await direct.query(
-        `UPDATE ${COMPANIES} SET deleted_at = now() WHERE status = 'active' AND deleted_at IS NULL`,
+    // ── RAW INSERT (bỏ qua function) — nhiều company active KHÁC slug đều được phép (regression guard) ──────
+    // Bản trước của mig 0473 dùng uq_companies_single_active (UNIQUE partial "một-active-toàn-DB") ⇒ INSERT
+    // active thứ 2 dính 23505. Đã BỎ (quá rộng, phá cô lập-tenant 2-company của db-rls + ~141 file seedCompany).
+    // Test NÀY chốt hành vi ĐÚNG hiện tại: 2 company active KHÁC slug cùng tồn tại — chống tái-introduce ràng buộc.
+    it("raw INSERT — 2 company active KHÁC slug cùng tồn tại (KHÔNG còn single-active toàn DB)", async () => {
+      const s1 = `multi-active-a-${TAG}`;
+      const s2 = `multi-active-b-${TAG}`;
+      const r1 = await direct.query(
+        `INSERT INTO ${COMPANIES} (name, slug, status, language, currency)
+         VALUES ($1, $2, 'active', 'vi', 'VND') RETURNING id`,
+        [`Multi A ${TAG}`, s1],
       );
+      const r2 = await direct.query(
+        `INSERT INTO ${COMPANIES} (name, slug, status, language, currency)
+         VALUES ($1, $2, 'active', 'vi', 'VND') RETURNING id`,
+        [`Multi B ${TAG}`, s2],
+      );
+      companyIds.push(r1.rows[0].id as string, r2.rows[0].id as string);
 
+      const both = await direct.query(
+        `SELECT COUNT(*)::int AS n FROM ${COMPANIES}
+          WHERE slug = ANY($1::text[]) AND status = 'active' AND deleted_at IS NULL`,
+        [[s1, s2]],
+      );
+      expect(
+        both.rows[0].n,
+        "2 company active KHÁC slug cùng tồn tại (đa-tenant sẵn-sàng-mở-rộng) — chống tái-introduce single-active",
+      ).toBe(2);
+    });
+
+    // ── API parallel-loop ≥25 bootstrap song song khác slug → fail=0 + tối đa 1 slug tạo mới (khử flake) ──
+    // advisory-lock tuần-tự-hoá 25 caller: caller đầu tạo (nếu slate rỗng) hoặc guard-HIT; các caller sau
+    // guard-HIT ⇒ TỐI ĐA 1 trong 25 slug được INSERT. fail=0 = không caller nào ném (không 23505/deadlock).
+    // KHÔNG assert "đúng 1 active toàn DB" (multi-active hợp lệ + suite song song) — scope theo tập 25 slug.
+    it("API parallel-loop — ≥25 bootstrap song song khác slug → fail=0, tối đa 1 slug tạo mới", async () => {
       const N = 25;
       const slugs = Array.from({ length: N }, (_, i) => `loop-${TAG}-${i}`);
       const settled = await Promise.allSettled(
@@ -589,27 +529,28 @@ describe.skipIf(!runDb)(
       const failures = settled.filter((r): r is PromiseRejectedResult => r.status === "rejected");
       expect(
         failures.length,
-        `fail=0 dưới race ${N} bootstrap song song (khử flake ~3.7%, memory super-admin-bootstrap-flaky-count)`,
+        `fail=0 dưới race ${N} bootstrap song song (advisory-lock; khử flake ~3.7%, memory super-admin-bootstrap-flaky-count)`,
       ).toBe(0);
 
-      const ids = new Set(
-        settled
-          .filter(
-            (r): r is PromiseFulfilledResult<EnsuredCompany | null> => r.status === "fulfilled",
-          )
-          .map((r) => r.value?.id)
-          .filter((id): id is string => Boolean(id)),
-      );
-      expect(ids.size, `TẤT CẢ ${N} lần gọi đồng thuận CÙNG 1 winner`).toBe(1);
+      // Mọi caller thành công trả company active (đồng thuận về 1 company sống).
+      const values = settled
+        .filter((r): r is PromiseFulfilledResult<EnsuredCompany | null> => r.status === "fulfilled")
+        .map((r) => r.value);
+      for (const v of values) {
+        expect(v?.status, "mỗi bootstrap trả company active").toBe("active");
+      }
 
-      const activeCount = await direct.query(
-        `SELECT COUNT(*)::int AS n FROM ${COMPANIES} WHERE status = 'active' AND deleted_at IS NULL`,
+      // TỐI ĐA 1 trong 25 slug được INSERT (advisory-lock tuần-tự-hoá guard→INSERT ⇒ không đẻ nhiều tenant).
+      const created = await direct.query(
+        `SELECT id FROM ${COMPANIES} WHERE slug = ANY($1::text[]) AND deleted_at IS NULL`,
+        [slugs],
       );
-      expect(activeCount.rows[0].n, "KHÔNG BAO GIỜ >1 active sau parallel-loop").toBe(1);
+      expect(
+        created.rowCount ?? 0,
+        "tối đa 1 slug trong 25 được đẻ (advisory-lock chặn đua tạo nhiều tenant)",
+      ).toBeLessThanOrEqual(1);
 
-      const winnerId = [...ids][0] as string;
-      companyIds.push(winnerId);
-      await deactivate(direct, winnerId);
+      for (const row of created.rows) companyIds.push(row.id as string);
     });
   },
 );
