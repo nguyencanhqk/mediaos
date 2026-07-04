@@ -47,6 +47,17 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────────────────────────────────────────────────────────────
+-- HỘI TỤ PHÒNG VỆ (security-reviewer round SEED-3 fix): DROP index bản-cũ-đã-bỏ nếu có. Journal 'when' của
+--   migration NÀY không đổi so với bản trung gian (commit 14e0785, chỉ tồn tại trên nhánh làm việc — CHƯA
+--   lên master) từng tạo uq_companies_single_active — nếu 1 DB dev/LANE nào đã lỡ áp bản trung gian đó TRƯỚC
+--   khi rewrite này ra đời, drizzle sẽ KHÔNG re-apply (đã ghi journal cùng idx/when) ⇒ index cũ có thể còn sót,
+--   tái phá 2-tenant test + chặn nhầm company thứ 2. DROP IF EXISTS ở đây đảm bảo MỌI DB (sạch lẫn đã lỡ áp bản
+--   cũ) đều hội tụ về cùng 1 trạng thái cuối — vô hại trên DB sạch (chưa từng có index này).
+-- ────────────────────────────────────────────────────────────────────────────────────────────────
+DROP INDEX IF EXISTS public.uq_companies_single_active;
+--> statement-breakpoint
+
+-- ────────────────────────────────────────────────────────────────────────────────────────────────
 -- CREATE OR REPLACE ensure_default_company — GIỮ NGUYÊN chữ ký (citext,text,text,text,text) ⇒ ACL (REVOKE/
 --   GRANT 0469) được bảo toàn qua replace; ta vẫn RE-APPLY REVOKE/GRANT bên dưới cho tự-chứa & idempotent.
 --   THÊM: pg_advisory_xact_lock(hashtext('ensure_default_company')) là câu ĐẦU TIÊN — tuần-tự-hoá mọi lần gọi

@@ -1276,7 +1276,7 @@ export class AuthService {
       const newHash = await this.password.hash(req.newPassword);
       await tx
         .update(users)
-        .set({ passwordHash: newHash, updatedAt: new Date() })
+        .set({ passwordHash: newHash, updatedAt: new Date(), mustChangePassword: false })
         .where(eq(users.id, row.userId));
       // single-use: đánh dấu đã dùng.
       await tx
