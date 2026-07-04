@@ -3786,6 +3786,13 @@ export const backlog = [
     //   idx_audit_logs_entity thiếu company_id-first + created_at (deviation kế thừa 0438:33-35) — chốt cùng đợt.
     // OWNER CHỐT 2026-07-03 (checkpoint feat/debt-wave2, sau plan-BLOCK round 1): MỞ RỘNG paths sang service layer
     //   để làm trọn map 409 trong CÙNG WO (quyết định chủ động — KHÔNG tách follow-up), xem done_when #2.
+    // LANE A (mig 0472, commit ba3527e) + LANE B (service-layer 409 map) đã code xong trên feat/debt-wave2
+    //   2026-07-04: files.service.ts link() bọc 23505 phân biệt uq_file_links_entity_file_active →
+    //   FOUNDATION-FILE-ERR-DUP-LINK / uq_file_links_primary_per_entity_type → FOUNDATION-FILE-ERR-DUP-PRIMARY
+    //   (2 mã đăng ký error-codes.ts, append-only); colocated unit spec (5 case) + int-spec re-link→409 +
+    //   DUP-PRIMARY (2 file khác nhau) + 2-tenant isolation (3 case). Full suite LANE_DB: 283 file/4330 test
+    //   pass. Đang CHỜ FULL gate (database-reviewer, chạm audit_logs = crown) + người chốt red-zone trước khi
+    //   flip status "done" (mig 0472 KHÔNG auto-merge — red zone).
     status: "todo",
     paths: [
       "apps/api/migrations/**",
