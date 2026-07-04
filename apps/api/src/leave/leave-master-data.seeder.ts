@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { LEAVE_TYPE_CODES } from "@mediaos/contracts";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { leaveTypes } from "../db/schema/hr";
 import { leavePolicies } from "../db/schema/leave";
@@ -15,17 +16,24 @@ import type {
  * LeaveSeedRegistrar) → MasterDataSeedRunner chạy cho MỖI company trong tenant tx (RLS+FORCE ép company_id ở
  * DB, BẤT BIẾN #1).
  *
- * PHẠM VI: 4 loại nghỉ mặc định (ANNUAL/SICK/UNPAID/OTHER) + 1 chính sách phép năm Company (DEFAULT_ANNUAL).
- * Số dư phép theo nhân viên (leave_balances per-employee) NẰM NGOÀI phạm vi WO (DEFERRED).
+ * PHẠM VI (S3-LEAVE-SEED-2): 8 loại nghỉ system-default (ANNUAL/SICK/UNPAID/OTHER + MATERNITY/MARRIAGE/
+ * BEREAVEMENT/COMPENSATORY — DB-10 §14.3) + 1 chính sách phép năm Company (DEFAULT_ANNUAL). KHÔNG thêm
+ * default policy cho loại mới (DB-10 chỉ yêu cầu DEFAULT_ANNUAL); thai sản/nghỉ bù có workflow riêng =
+ * Phase sau (SPEC-05 §245/§297-300) — lane này CHỈ seed master-data. Số dư phép theo nhân viên
+ * (leave_balances per-employee) NẰM NGOÀI phạm vi WO (DEFERRED).
+ *
+ * MÃ LOẠI NGHỈ: import từ @mediaos/contracts (`LEAVE_TYPE_CODES`) — NGUỒN SỰ THẬT DUY NHẤT, KHÔNG hard-code
+ * chuỗi cục bộ (chống lệch FE↔seeder). CHỐT 2026-07-04 (DB-10 §14.3): code-wins mã NGẮN (ANNUAL/SICK/UNPAID/
+ * OTHER + 4 mã ngắn mới) thay bản nháp `_LEAVE` — đổi mã dài cần migration DATA riêng, KHÔNG làm ở lane này.
  *
  * IDEMPOTENT: INSERT … ON CONFLICT DO NOTHING theo PARTIAL UNIQUE (company_id, code/policy_code) WHERE
  * deleted_at IS NULL (leave_types_company_code_active_uq / uq_leave_policies_company_code_active, mig 0062/0453)
- * → chạy lại KHÔNG dup. ctx.track() payload CHỈ master/config data (KHÔNG secret — BẤT BIẾN #3; checksum ổn
- * định ⇒ lần 2 Skipped).
+ * → chạy lại KHÔNG dup, KHÔNG đụng row đã sửa tay. ctx.track() payload CHỈ master/config data (KHÔNG secret —
+ * BẤT BIẾN #3; checksum ổn định ⇒ lần 2 Skipped).
  */
 
-/** Business key idempotent — loại nghỉ phép năm (deduct balance). */
-export const LEAVE_TYPE_ANNUAL_CODE = "ANNUAL";
+/** Business key idempotent — loại nghỉ phép năm (deduct balance). Re-export cho int-spec. */
+export const LEAVE_TYPE_ANNUAL_CODE = LEAVE_TYPE_CODES.ANNUAL;
 /** Business key idempotent — chính sách phép năm Company mặc định (DB-05 §7.2). */
 export const LEAVE_DEFAULT_POLICY_CODE = "DEFAULT_ANNUAL";
 
@@ -33,8 +41,9 @@ export const LEAVE_DEFAULT_POLICY_CODE = "DEFAULT_ANNUAL";
 const DEFAULT_ANNUAL_QUOTA_DAYS = "12";
 
 /**
- * 4 loại nghỉ mặc định (DB-05 §7.1). status='active' lowercase (leave_types_status_check = active/inactive).
- * Mọi cột khớp schema hr.ts (S3-LEAVE-DB-1 mig 0453 đã ALTER-ADD). KHÔNG set annual_quota (đặt ở policy).
+ * 8 loại nghỉ system-default (DB-05 §7.1 + DB-10 §14.3). status='active' lowercase
+ * (leave_types_status_check = active/inactive). Mọi cột khớp schema hr.ts (S3-LEAVE-DB-1 mig 0453 đã
+ * ALTER-ADD). KHÔNG set annual_quota (đặt ở policy).
  */
 interface LeaveTypeSeed {
   code: string;
@@ -54,13 +63,15 @@ interface LeaveTypeSeed {
 
 const LEAVE_TYPE_SEEDS: readonly LeaveTypeSeed[] = [
   {
-    code: LEAVE_TYPE_ANNUAL_CODE,
+    code: LEAVE_TYPE_CODES.ANNUAL,
     name: "Nghỉ phép năm",
     paid: true,
     deductBalance: true,
     balanceUnit: "Day",
     allowFullDay: true,
     allowHalfDay: true,
+    // CHỐT 2026-07-04 (code-wins): allowHourly=false — KHÔNG cho nghỉ phép năm theo giờ ở mặc định.
+    // (DB-10 §14.3 policy allow_hourly=true là bản nháp; nếu owner lật, int-spec assert phải đổi theo.)
     allowHourly: false,
     allowMultipleDays: true,
     requireReason: false,
@@ -69,7 +80,7 @@ const LEAVE_TYPE_SEEDS: readonly LeaveTypeSeed[] = [
     sortOrder: 1,
   },
   {
-    code: "SICK",
+    code: LEAVE_TYPE_CODES.SICK,
     name: "Nghỉ ốm",
     paid: true,
     deductBalance: true,
@@ -79,7 +90,7 @@ const LEAVE_TYPE_SEEDS: readonly LeaveTypeSeed[] = [
     sortOrder: 2,
   },
   {
-    code: "UNPAID",
+    code: LEAVE_TYPE_CODES.UNPAID,
     name: "Nghỉ không lương",
     paid: false,
     deductBalance: false,
@@ -88,13 +99,67 @@ const LEAVE_TYPE_SEEDS: readonly LeaveTypeSeed[] = [
     sortOrder: 3,
   },
   {
-    code: "OTHER",
+    code: LEAVE_TYPE_CODES.OTHER,
     name: "Nghỉ khác",
     paid: true,
     deductBalance: false,
     requireReason: true,
     minNoticeDays: 0,
     sortOrder: 4,
+  },
+  // ── S3-LEAVE-SEED-2: 4 loại đặc biệt (DB-10 §14.3). Chỉ seed master-data; workflow riêng = Phase sau. ──
+  {
+    // Nghỉ thai sản — KHÔNG trừ phép năm, có lương, BẮT BUỘC minh chứng (giấy xác nhận, SPEC-05 §15.9).
+    code: LEAVE_TYPE_CODES.MATERNITY,
+    name: "Nghỉ thai sản",
+    paid: true,
+    deductBalance: false,
+    allowFullDay: true,
+    allowMultipleDays: true,
+    requireReason: true,
+    requireAttachment: true,
+    minNoticeDays: 0,
+    sortOrder: 5,
+  },
+  {
+    // Nghỉ kết hôn — KHÔNG trừ phép, có lương, BẮT BUỘC minh chứng (giấy đăng ký kết hôn, SPEC-05 §15.9).
+    code: LEAVE_TYPE_CODES.MARRIAGE,
+    name: "Nghỉ kết hôn",
+    paid: true,
+    deductBalance: false,
+    allowFullDay: true,
+    allowMultipleDays: true,
+    requireReason: true,
+    requireAttachment: true,
+    minNoticeDays: 0,
+    sortOrder: 6,
+  },
+  {
+    // Nghỉ tang — KHÔNG trừ phép, có lương, KHÔNG bắt buộc minh chứng.
+    code: LEAVE_TYPE_CODES.BEREAVEMENT,
+    name: "Nghỉ tang",
+    paid: true,
+    deductBalance: false,
+    allowFullDay: true,
+    allowMultipleDays: true,
+    requireReason: true,
+    requireAttachment: false,
+    minNoticeDays: 0,
+    sortOrder: 7,
+  },
+  {
+    // Nghỉ bù — TRỪ quỹ nghỉ bù (deduct=true), có lương, KHÔNG bắt buộc minh chứng.
+    code: LEAVE_TYPE_CODES.COMPENSATORY,
+    name: "Nghỉ bù",
+    paid: true,
+    deductBalance: true,
+    balanceUnit: "Day",
+    allowFullDay: true,
+    allowMultipleDays: true,
+    requireReason: true,
+    requireAttachment: false,
+    minNoticeDays: 0,
+    sortOrder: 8,
   },
 ];
 

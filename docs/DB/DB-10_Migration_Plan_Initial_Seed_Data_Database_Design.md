@@ -955,28 +955,34 @@ Secret phải lấy từ environment variable hoặc secret manager.
 
 ## 14.3 LEAVE defaults
 
+> **CHỐT 2026-07-04 (S3-LEAVE-SEED-2, code thắng):** giữ mã **NGẮN** `ANNUAL/SICK/UNPAID/OTHER` + 4 mã ngắn mới `MATERNITY/MARRIAGE/BEREAVEMENT/COMPENSATORY` thay hậu tố `_LEAVE` (bản nháp cũ) — vì `leave_requests.leave_type_id` đã tham chiếu mã ngắn ở môi trường đang chạy; đổi sang mã dài cần 1 migration DATA riêng (KHÔNG làm ở lane này). Nguồn sự thật mã = `packages/contracts` (`LEAVE_TYPE_CODES` — 8 mã) → seeder `apps/api/src/leave/leave-master-data.seeder.ts` import từ đó, KHÔNG hard-code. Ngoài ra **`ANNUAL.allow_hourly = false`** (code thắng bảng policy `allow_hourly=true` dưới đây — nghỉ phép năm KHÔNG cho theo giờ ở mặc định); nếu owner lật, int-spec `leave-master-data-seeder.int.spec.ts` là điểm assert phải cập nhật đo được.
+
 ### Leave types
+
+Mã ngắn (code-wins); thuộc tính `deduct/paid/attachment` là bất biến CHỐT do seeder ép (S3-LEAVE-SEED-2). `sortOrder` 1–8, `is_system_default=true`.
 
 | Code | Name | Deduct balance | Paid | Requires attachment |
 | --- | --- | --- | --- | --- |
-| `ANNUAL_LEAVE` | Nghỉ phép năm | true | true | false |
-| `UNPAID_LEAVE` | Nghỉ không lương | false | false | false |
-| `SICK_LEAVE` | Nghỉ ốm | true hoặc theo policy | true | true tùy cấu hình |
-| `MATERNITY_LEAVE` | Nghỉ thai sản | false | true | true |
-| `MARRIAGE_LEAVE` | Nghỉ kết hôn | false | true | true |
-| `BEREAVEMENT_LEAVE` | Nghỉ tang | false | true | false |
-| `COMPENSATORY_LEAVE` | Nghỉ bù | true | true | false |
+| `ANNUAL` | Nghỉ phép năm | true | true | false |
+| `SICK` | Nghỉ ốm | true hoặc theo policy | true | true tùy cấu hình |
+| `UNPAID` | Nghỉ không lương | false | false | false |
 | `OTHER` | Khác | theo cấu hình | theo cấu hình | false |
+| `MATERNITY` | Nghỉ thai sản | false | true | true |
+| `MARRIAGE` | Nghỉ kết hôn | false | true | true |
+| `BEREAVEMENT` | Nghỉ tang | false | true | false |
+| `COMPENSATORY` | Nghỉ bù | true | true | false |
 
 ### Leave policy mặc định
 
+Chỉ seed **DEFAULT_ANNUAL** (loại `ANNUAL`) — KHÔNG seed default policy cho loại mới (thai sản/nghỉ bù có workflow riêng, Phase sau — SPEC-05 §245/§297-300).
+
 | Field | Giá trị |
 | --- | --- |
-| `policy_code` | `DEFAULT_ANNUAL_LEAVE_POLICY` |
+| `policy_code` | `DEFAULT_ANNUAL` |
 | `scope_type` | `Company` |
 | `annual_days` | 12 |
 | `allow_half_day` | true |
-| `allow_hourly` | true |
+| `allow_hourly` | true _(bản nháp — loại `ANNUAL` CHỐT `allow_hourly=false`, xem CHỐT ở đầu §14.3)_ |
 | `allow_negative_balance` | false |
 | `exclude_weekends` | true |
 | `exclude_public_holidays` | true |
