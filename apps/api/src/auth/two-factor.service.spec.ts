@@ -1,7 +1,31 @@
 import { ConflictException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
+import { Column, SQL } from "drizzle-orm";
 import { TwoFactorService, TWO_FACTOR_ENFORCED } from "./two-factor.service";
 import { userRecoveryCodes, userRoles, users, userTotp } from "../db/schema";
+
+/**
+ * S2-AUTH-DB-3 Lane C — RED-first (kiểm chứng CẤU TRÚC WHERE, không cần Postgres). Reader `user_roles`
+ * ngoài permission-engine PHẢI lọc `isNull(userRoles.deletedAt)` (assignment soft-deleted = hết hiệu lực).
+ * Duyệt `queryChunks` đệ quy tìm Column `deleted_at` THUỘC ĐÚNG bảng — phân biệt userRoles.deleted_at với
+ * roles.deleted_at (reader CŨ chỉ lọc roles ⇒ RED; sau fix lọc CẢ HAI ⇒ GREEN).
+ */
+function whereFiltersSoftDelete(where: unknown, table: unknown): boolean {
+  let found = false;
+  const walk = (node: unknown): void => {
+    if (node instanceof Column) {
+      if (node.table === table && node.name === "deleted_at") found = true;
+      return;
+    }
+    if (node instanceof SQL) {
+      for (const chunk of node.queryChunks) walk(chunk);
+      return;
+    }
+    if (Array.isArray(node)) for (const item of node) walk(item);
+  };
+  walk(where);
+  return found;
+}
 
 /**
  * S2-AUTH-BE-11 (l2-2fa-enforce-disable, CROWN auth — RED viết TRƯỚC theo §5.5 / gate-6).
@@ -34,8 +58,10 @@ function makeTx(opts: {
   hasEnforcedRole?: boolean;
   /** hàng user_totp bị xoá (disable): [{id}] = đang bật ⇒ audit+TOTP_DISABLED; [] = chưa bật ⇒ không. */
   deletedTotp?: { id: string }[];
-}): { tx: unknown; calls: TxCalls } {
+}): { tx: unknown; calls: TxCalls; captures: { userRolesWhere?: unknown } } {
   const calls: TxCalls = { totpDeletes: 0, recoveryDeletes: 0 };
+  // S2-AUTH-DB-3 Lane C: bắt WHERE của reader user_roles để assert lọc soft-delete (không cần DB).
+  const captures: { userRolesWhere?: unknown } = {};
   const tx = {
     select: (_cols?: unknown) => ({
       from: (table: unknown) => {
@@ -45,7 +71,12 @@ function makeTx(opts: {
           return [];
         };
         const limitChain = { limit: () => Promise.resolve(rowsFor()) };
-        const whereChain = { where: () => limitChain };
+        const whereChain = {
+          where: (cond?: unknown) => {
+            if (table === userRoles) captures.userRolesWhere = cond;
+            return limitChain;
+          },
+        };
         // userRoles path: .from(userRoles).innerJoin(roles).where().limit()
         return { ...whereChain, innerJoin: () => whereChain };
       },
@@ -68,7 +99,7 @@ function makeTx(opts: {
       },
     }),
   };
-  return { tx, calls };
+  return { tx, calls, captures };
 }
 
 function makeSvc(tx: unknown) {
@@ -111,6 +142,18 @@ describe("TwoFactorService.requiresTwoFactorTx — role OR per-user (mig 0466)",
     const { tx } = makeTx({ userRequireTwoFactor: false, hasEnforcedRole: false });
     const { svc } = makeSvc(tx);
     expect(await svc.requiresTwoFactorTx(tx as never, USER_ID)).toBe(false);
+  });
+});
+
+// ── S2-AUTH-DB-3 Lane C: reader user_roles PHẢI lọc soft-delete assignment (isNull(userRoles.deletedAt)) ─
+describe("TwoFactorService.requiresTwoFactorTx — lọc soft-delete user_roles (S2-AUTH-DB-3 Lane C)", () => {
+  it("WHERE nhánh role có isNull(userRoles.deletedAt) — RED nếu chỉ lọc roles.deletedAt", async () => {
+    // per-user=false ⇒ đi tiếp xuống nhánh ROLE (chạm query user_roles); role-không-cờ giữ nhánh trung tính.
+    const { tx, captures } = makeTx({ userRequireTwoFactor: false, hasEnforcedRole: false });
+    const { svc } = makeSvc(tx);
+    await svc.requiresTwoFactorTx(tx as never, USER_ID);
+    expect(captures.userRolesWhere).toBeDefined();
+    expect(whereFiltersSoftDelete(captures.userRolesWhere, userRoles)).toBe(true);
   });
 });
 

@@ -73,6 +73,95 @@ export const SETTING_DEFAULTS: Readonly<Record<string, SettingDefault>> = Object
     moduleCode: "HR",
     isPublic: true,
   },
+
+  // ─── S2-FND-SEED-4 — 11 COMPANY-DEFAULT key (DB-10 §11.2) ở TẦNG FALLBACK ───────────────────────
+  // Precedence company_settings → system_settings → DEFAULT (đây). KHÔNG seed per-company (bài học
+  // 0445:14-18 — per-company seed = drift), KHÔNG migration company-scoped: chỉ mở rộng fallback hard-coded.
+  // value/valueType/moduleCode theo DB-10 §11.2. isPublic=true = cấu hình vận hành an toàn (KHÔNG secret) để
+  // FE bootstrap (timezone/locale/currency/shift/checkin/leave/task/dashboard). TUYỆT ĐỐI KHÔNG SecretRef
+  // (BẤT BIẾN #3). resolveMany/resolveSetting trả scope='default' cho các key này khi cả 2 bảng vắng.
+  //
+  // LƯU Ý — notification.in_app_enabled (§11.2) CỐ Ý KHÔNG có entry ở đây: system_settings LUÔN seed key này
+  // (mig 0470, is_public=true) ⇒ tầng system THẮNG trong resolveMany trước khi chạm default. Một entry default
+  // cho notification.in_app_enabled sẽ là fallback KHÔNG BAO GIỜ reachable (system luôn phủ) → bỏ để tránh
+  // nguồn drift thứ 4. resolveSetting('notification.in_app_enabled') → scope='system' value=true (owner-note 1).
+  "company.timezone": {
+    value: "Asia/Ho_Chi_Minh",
+    valueType: "String",
+    category: "General",
+    moduleCode: "SYSTEM",
+    isPublic: true,
+  },
+  "company.locale": {
+    value: "vi-VN",
+    valueType: "String",
+    category: "General",
+    moduleCode: "SYSTEM",
+    isPublic: true,
+  },
+  "company.currency": {
+    value: "VND",
+    valueType: "String",
+    category: "General",
+    moduleCode: "SYSTEM",
+    isPublic: true,
+  },
+  "attendance.default_shift_code": {
+    value: "OFFICE_8H",
+    valueType: "String",
+    category: "Attendance",
+    moduleCode: "ATT",
+    isPublic: true,
+  },
+  "attendance.allow_web_checkin": {
+    value: true,
+    valueType: "Boolean",
+    category: "Attendance",
+    moduleCode: "ATT",
+    isPublic: true,
+  },
+  "attendance.allow_mobile_checkin": {
+    value: true,
+    valueType: "Boolean",
+    category: "Attendance",
+    moduleCode: "ATT",
+    isPublic: true,
+  },
+  "attendance.block_checkin_when_leave_approved": {
+    value: true,
+    valueType: "Boolean",
+    category: "Attendance",
+    moduleCode: "ATT",
+    isPublic: true,
+  },
+  "leave.allow_negative_balance": {
+    value: false,
+    valueType: "Boolean",
+    category: "Leave",
+    moduleCode: "LEAVE",
+    isPublic: true,
+  },
+  "leave.default_annual_leave_days": {
+    value: 12,
+    valueType: "Number",
+    category: "Leave",
+    moduleCode: "LEAVE",
+    isPublic: true,
+  },
+  "task.allow_personal_task": {
+    value: true,
+    valueType: "Boolean",
+    category: "Task",
+    moduleCode: "TASK",
+    isPublic: true,
+  },
+  "dashboard.cache_enabled": {
+    value: true,
+    valueType: "Boolean",
+    category: "Dashboard",
+    moduleCode: "DASH",
+    isPublic: true,
+  },
 });
 
 /** Default cho 1 key (undefined nếu không có default — caller xử lý "không tìm thấy"). */

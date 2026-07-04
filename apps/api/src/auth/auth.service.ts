@@ -575,7 +575,9 @@ export class AuthService {
       const newHash = await this.password.hash(newPassword);
       await tx
         .update(users)
-        .set({ passwordHash: newHash, updatedAt: new Date() })
+        // S2-FND-SEED-3: clear cờ ép-đổi TRONG CÙNG statement/tx với password_hash mới ⇒ nguyên tử
+        // (rollback ⇒ cả hai không đổi). Đổi mật khẩu = hết bị ép; /auth/me sau đó trả mustChangePassword=false.
+        .set({ passwordHash: newHash, updatedAt: new Date(), mustChangePassword: false })
         .where(eq(users.id, user.id));
       // Đổi mật khẩu = đăng xuất MỌI phiên: thu hồi mọi refresh token còn sống (mirror resetPassword).
       await tx
@@ -1023,6 +1025,9 @@ export class AuthService {
           fullName: users.fullName,
           status: users.status,
           deletedAt: users.deletedAt,
+          // S2-FND-SEED-3: cờ ép đổi mật khẩu lần đầu (mig 0469). Cột công khai (KHÔNG nhạy cảm) → an toàn
+          // trả cho chính chủ; FE dùng để điều hướng ép đổi. KHÔNG bao giờ chọn password_hash (BẤT BIẾN #3).
+          mustChangePassword: users.mustChangePassword,
         })
         .from(users)
         .where(eq(users.id, claims.sub))
@@ -1051,7 +1056,9 @@ export class AuthService {
         .where(and(eq(employeeProfiles.userId, row.id), isNull(employeeProfiles.deletedAt)))
         .limit(1);
 
-      // roles active (mirror RBAC §16.2: chưa xoá + chưa hết hạn). roles không có cột code → name = code.
+      // roles active (mirror RBAC §16.2: chưa xoá + chưa hết hạn). S2-AUTH-DB-3: lọc CẢ assignment
+      // (userRoles.deleted_at — gỡ role = soft-delete, mig 0471) LẪN role (roles.deleted_at). roles không
+      // có cột code → name = code.
       const roleRows = await tx
         .select({ id: roles.id, name: roles.name })
         .from(userRoles)
@@ -1060,6 +1067,7 @@ export class AuthService {
           and(
             eq(userRoles.userId, row.id),
             eq(userRoles.companyId, row.companyId),
+            isNull(userRoles.deletedAt),
             isNull(roles.deletedAt),
             or(isNull(userRoles.expiresAt), gt(userRoles.expiresAt, new Date())),
           ),
@@ -1074,6 +1082,8 @@ export class AuthService {
           status: row.status,
         },
         mustSetupTwoFactor: required && !enabled,
+        // S2-FND-SEED-3: expose cờ ép đổi mật khẩu lần đầu (ADDITIVE, mẫu mustSetupTwoFactor).
+        mustChangePassword: row.mustChangePassword,
         company: company ?? undefined,
         employee: emp
           ? {
@@ -1116,6 +1126,10 @@ export class AuthService {
       ...ctx.base,
       capabilities,
       mustSetupTwoFactor: ctx.mustSetupTwoFactor,
+      // S2-FND-SEED-3: cờ ép đổi mật khẩu lần đầu (ADDITIVE — /auth/me không phá contract S2-AUTH-BE-1).
+      // TODO(FE-enforcement, follow-up FE WO): apps/app đọc cờ này để REDIRECT ép đổi mật khẩu trước khi
+      // vào nghiệp vụ (chặn ở router guard). CỐ Ý KHÔNG dựng nút/route chết ở đây — chỉ phơi dữ liệu.
+      mustChangePassword: ctx.mustChangePassword,
       company: ctx.company,
       employee: ctx.employee,
       roles: ctx.roles,
@@ -1262,7 +1276,7 @@ export class AuthService {
       const newHash = await this.password.hash(req.newPassword);
       await tx
         .update(users)
-        .set({ passwordHash: newHash, updatedAt: new Date() })
+        .set({ passwordHash: newHash, updatedAt: new Date(), mustChangePassword: false })
         .where(eq(users.id, row.userId));
       // single-use: đánh dấu đã dùng.
       await tx
@@ -1335,8 +1349,10 @@ export class AuthService {
 
   /**
    * AC-0b: user giữ role hệ thống `platform-admin` (id …f0) CÒN HIỆU LỰC ⇒ phiên OPERATOR (control-plane
-   * chéo tenant). Join y hệt requiresTwoFactorTx (userRoles ⋈ roles, lọc deleted_at + expires_at) nhưng
-   * khoá theo id role platform-admin cố định. Chạy TRONG tx login (cùng 1 transaction, không round-trip thừa).
+   * chéo tenant). Join y hệt requiresTwoFactorTx (userRoles ⋈ roles, lọc deleted_at CẢ assignment + role +
+   * expires_at) nhưng khoá theo id role platform-admin cố định. S2-AUTH-DB-3 (round-2 #6): gỡ assignment
+   * platform-admin = soft-delete (userRoles.deleted_at, mig 0471) ⇒ login SAU KHÔNG mint token operator.
+   * Chạy TRONG tx login (cùng 1 transaction, không round-trip thừa).
    */
   private async isOperatorTx(tx: TenantTx, userId: string): Promise<boolean> {
     const [row] = await tx
@@ -1347,6 +1363,7 @@ export class AuthService {
         and(
           eq(userRoles.userId, userId),
           eq(roles.id, PLATFORM_ADMIN_ROLE_ID),
+          isNull(userRoles.deletedAt),
           isNull(roles.deletedAt),
           or(isNull(userRoles.expiresAt), gt(userRoles.expiresAt, new Date())),
         ),

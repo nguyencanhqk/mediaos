@@ -19,7 +19,12 @@ interface Actor {
  *  (1) đọc `modules` active (catalog no-RLS) — đã ORDER BY sort_order.
  *  (2) enabled BATCH: SettingService.resolveMany key `module.<code>.enabled` (precedence company→system→
  *      default; default=true) — KHÔNG N+1.
- *  (3) caps = PermissionService.getCapabilities (1 lần, chỉ non-sensitive ALLOW — đủ phủ mọi cặp module).
+ *  (3) caps = MERGE getCapabilities() (non-sensitive ALLOW) + getAllowlistedSensitiveCapabilities()
+ *      (cặp NHẠY CẢM curated trong SENSITIVE_CAPABILITY_ALLOWLIST — vd view-*:attendance, view:audit-log).
+ *      LÝ DO (S2-FND-BE-5 / Option B): metadata ATT/AUTH gate bằng cặp is_sensitive=true (0454/0340) mà
+ *      getCapabilities() CỐ Ý lọc sensitive ⇒ nếu chỉ dùng nó, app ATT ẩn-ngầm cho MỌI role. Merge =
+ *      surface CÓ KIỂM SOÁT ĐÚNG cặp allowlist để dựng app card (cờ HIỂN THỊ, KHÔNG phải enforcement —
+ *      cổng THẬT vẫn là PermissionGuard per-resource ở từng controller).
  *  (4) LỌC: enabled AND (requiredAny rỗng → HIỆN | có ≥1 cap khớp → HIỆN | thiếu hết → ẨN). Module active mà
  *      thiếu metadata → bỏ qua + warn (không dựng app card, KHÔNG bịa).
  *
@@ -41,10 +46,14 @@ export class ModuleCatalogService {
     if (mods.length === 0) return [];
 
     const keys = mods.map((m) => settingKey(m.moduleCode));
-    const [resolved, caps] = await Promise.all([
+    // Option B: MERGE non-sensitive caps + allowlisted sensitive caps (view-*:attendance / view:audit-log).
+    // Cả 2 method fail-safe → {} khi lỗi hạ tầng ⇒ merge KHÔNG throw; thiếu cap ⇒ chỉ ẩn app (an toàn, không rò).
+    const [resolved, caps, sensitiveCaps] = await Promise.all([
       this.settings.resolveMany(actor.companyId, keys),
       this.permission.getCapabilities(actor.id, actor.companyId),
+      this.permission.getAllowlistedSensitiveCapabilities(actor.id, actor.companyId),
     ]);
+    const mergedCaps: Record<string, boolean> = { ...caps, ...sensitiveCaps };
     const resolvedByKey = new Map(resolved.map((r) => [r.key, r]));
 
     const items: MyAppItem[] = [];
@@ -62,8 +71,9 @@ export class ModuleCatalogService {
       const enabled = r?.found ? r.value === true || r.value === "true" : true;
       if (!enabled) continue;
 
-      // Lọc quyền: requiredAny rỗng → HIỆN; ngược lại cần ≥1 cap khớp (wildcard-aware).
-      if (!hasAnyCapability(caps, meta.requiredAny)) continue;
+      // Lọc quyền: requiredAny rỗng → HIỆN; ngược lại cần ≥1 cap khớp (wildcard-aware). caps = merged
+      // (non-sensitive + allowlisted sensitive) ⇒ cặp sensitive-canonical (ATT/audit) surface đúng.
+      if (!hasAnyCapability(mergedCaps, meta.requiredAny)) continue;
 
       items.push({
         module_code: m.moduleCode,

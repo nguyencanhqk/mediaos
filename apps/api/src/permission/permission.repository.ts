@@ -42,6 +42,8 @@ export class PermissionRepository implements IPermissionRepository {
           and(
             eq(userRoles.userId, userId),
             eq(userRoles.companyId, companyId),
+            // mig 0471: bỏ hàng user_role đã soft-delete (gỡ role) — user mất quyền NGAY (không còn qua cache).
+            isNull(userRoles.deletedAt),
             isNull(roles.deletedAt),
           ),
         );
@@ -82,6 +84,8 @@ export class PermissionRepository implements IPermissionRepository {
           and(
             eq(userRoles.userId, userId),
             eq(userRoles.companyId, companyId),
+            // mig 0471: bỏ hàng user_role đã soft-delete — /auth/me `scopes` khớp can() (không rò scope đã gỡ).
+            isNull(userRoles.deletedAt),
             isNull(roles.deletedAt),
           ),
         );
@@ -107,10 +111,18 @@ export class PermissionRepository implements IPermissionRepository {
     resourceId: string,
   ): Promise<ObjectGrant[]> {
     return this.db.withTenant(companyId, async (tx) => {
+      // mig 0471 (round-2 #8): CHỈ role user còn giữ ACTIVE (deleted_at IS NULL) — sau khi user_role bị
+      // soft-delete, object_permission cấp theo role-subject của role đó HẾT hiệu lực với user này.
       const userRoleRows = await tx
         .select({ roleId: userRoles.roleId })
         .from(userRoles)
-        .where(and(eq(userRoles.userId, userId), eq(userRoles.companyId, companyId)));
+        .where(
+          and(
+            eq(userRoles.userId, userId),
+            eq(userRoles.companyId, companyId),
+            isNull(userRoles.deletedAt),
+          ),
+        );
 
       const roleIds = userRoleRows.map((r) => r.roleId);
 

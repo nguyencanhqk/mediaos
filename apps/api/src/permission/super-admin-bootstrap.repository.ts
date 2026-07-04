@@ -87,6 +87,11 @@ export class SuperAdminBootstrapRepository implements ISuperAdminBootstrapReposi
    * UPSERT user super-admin. Khoá idempotency = (company_id, normalized_email) — normalized_email là
    * GENERATED STORED `lower(email)` ⇒ unique theo cặp đó (mig users). Boot lần 2 cập nhật password_hash +
    * full_name (xoay mật khẩu theo env), giữ id ổn định. KHÔNG bao giờ ghi/đụng plaintext (BẤT BIẾN #3).
+   *
+   * S2-FND-SEED-3 (mig 0469 cột users.must_change_password): ÉP đổi mật khẩu lần đầu (DB-10 §17.2 điểm 5) —
+   * SET must_change_password = true CẢ khi INSERT lẫn UPDATE. Mật khẩu env-seed là tạm; admin PHẢI đổi (FE
+   * enforce redirect — Lane C /auth/me expose + change-password clear cờ). Mỗi lần bootstrap xoay mật khẩu
+   * env ⇒ tái-ép đổi (đặt lại true) — nhất quán.
    */
   async upsertSuperAdminUser(
     tx: TenantTx,
@@ -96,13 +101,14 @@ export class SuperAdminBootstrapRepository implements ISuperAdminBootstrapReposi
     fullName: string,
   ): Promise<string> {
     const res = await tx.execute(sql`
-      INSERT INTO users (company_id, email, password_hash, full_name, status)
-      VALUES (${companyId}, ${email}, ${passwordHash}, ${fullName}, 'active')
+      INSERT INTO users (company_id, email, password_hash, full_name, status, must_change_password)
+      VALUES (${companyId}, ${email}, ${passwordHash}, ${fullName}, 'active', true)
       ON CONFLICT (company_id, normalized_email) WHERE deleted_at IS NULL DO UPDATE
-        SET password_hash = EXCLUDED.password_hash,
-            full_name     = EXCLUDED.full_name,
-            status        = 'active',
-            updated_at    = now()
+        SET password_hash        = EXCLUDED.password_hash,
+            full_name            = EXCLUDED.full_name,
+            status               = 'active',
+            must_change_password = true,
+            updated_at           = now()
       RETURNING id
     `);
     const row = res.rows[0] as { id: string } | undefined;
@@ -151,14 +157,18 @@ export class SuperAdminBootstrapRepository implements ISuperAdminBootstrapReposi
   }
 
   /**
-   * Gán role cho user (1 user_role). Idempotent qua ON CONFLICT(user_id, role_id, company_id) DO NOTHING
-   * (constraint user_roles_uq) → boot lần 2 KHÔNG nhân đôi.
+   * Gán role cho user (1 user_role). Idempotent qua ON CONFLICT(user_id, role_id, company_id)
+   * WHERE deleted_at IS NULL DO NOTHING → boot lần 2 KHÔNG nhân đôi.
+   *
+   * ⚠️ Inference-target PHẢI kèm `WHERE deleted_at IS NULL` để KHỚP PARTIAL UNIQUE index user_roles_active_uq
+   *    (mig 0471 thay constraint full user_roles_uq đã DROP). Thiếu predicate ⇒ Postgres KHÔNG tìm được
+   *    arbiter khớp và ném 42P10 (invalid ON CONFLICT specification) ngay lúc boot.
    */
   async assignRole(tx: TenantTx, userId: string, roleId: string, companyId: string): Promise<void> {
     await tx.execute(sql`
       INSERT INTO user_roles (user_id, role_id, company_id)
       VALUES (${userId}, ${roleId}, ${companyId})
-      ON CONFLICT (user_id, role_id, company_id) DO NOTHING
+      ON CONFLICT (user_id, role_id, company_id) WHERE deleted_at IS NULL DO NOTHING
     `);
   }
 }

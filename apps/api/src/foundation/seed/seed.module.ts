@@ -6,6 +6,9 @@ import { MasterDataSeedRunner } from "./master-data-seed-runner.service";
 import { MasterDataSeederRegistry } from "./master-data-seeder.registry";
 import { SeedController } from "./seed.controller";
 import { SeedTrackingService } from "./seed-tracking.service";
+// S2-FND-SEED-3 (additive): dựng-từ-trống tự động tenant-ROOT mặc định (ensure_default_company mig 0469).
+import { EnsureDefaultCompanyService } from "./ensure-default-company.service";
+import { EnsureDefaultCompanyBootstrapService } from "./ensure-default-company-bootstrap.service";
 
 /**
  * S3-FND-SEEDRUN-1 — SeedModule: hạ tầng RUNTIME per-company master-data seed.
@@ -30,7 +33,15 @@ import { SeedTrackingService } from "./seed-tracking.service";
     MasterDataSeedRunner,
     { provide: MASTER_DATA_SEED_CONFIG, useFactory: loadMasterDataSeedConfig },
     MasterDataSeedBootstrapService,
+    // S2-FND-SEED-3 (additive): tenant-ROOT mặc định + trigger OnApplicationBootstrap (fail-safe, gated test).
+    EnsureDefaultCompanyService,
+    EnsureDefaultCompanyBootstrapService,
   ],
-  exports: [SeedTrackingService, MasterDataSeederRegistry, MasterDataSeedRunner],
+  exports: [
+    SeedTrackingService,
+    MasterDataSeederRegistry,
+    MasterDataSeedRunner,
+    EnsureDefaultCompanyService,
+  ],
 })
 export class SeedModule {}

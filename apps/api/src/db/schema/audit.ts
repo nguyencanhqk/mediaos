@@ -76,6 +76,14 @@ export const auditLogs = pgTable(
     // DB-08 §8.5 index (mig 0438) — parity với SQL.
     index("idx_audit_logs_actor_created").on(t.actorUserId, desc(t.createdAt)),
     index("idx_audit_logs_action").on(t.companyId, t.moduleCode, t.action, desc(t.createdAt)),
+    // DB-09 §8.5 index (mig 0472) — truy vết theo entity + thời gian, company_id-led (GIỮ idx_audit_logs_entity
+    // module_code-led 0432, KHÔNG DROP). audit_logs append-only lớp-2 (trigger) sống ở SQL — không biểu diễn Drizzle.
+    index("idx_audit_logs_company_entity").on(
+      t.companyId,
+      t.entityType,
+      t.entityId,
+      desc(t.createdAt),
+    ),
   ],
 );
 
@@ -87,7 +95,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451+0456+0457+0459+0460+0461+0462+0463+0464). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451+0456+0457+0459+0460+0461+0462+0463+0464+0468). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -297,5 +305,13 @@ export const AUDIT_OBJECT_TYPES = [
   // ADD-only vào CHECK (clone 0463/0462/0461/0460/0459/0456/0446/0440), append-only #2 nguyên vẹn; INSERT
   // audit KHÔNG vỡ audit_logs_object_type_chk trên Postgres thật.
   "remote_work_request",
+  // S2-FND-BE-6 (mig 0468): public holiday config governance — HR/Admin CRUD ngày nghỉ lễ
+  // (HolidaysService.createHoliday/updateHoliday/deleteHoliday) ghi audit CREATE/CONFIG_UPDATE/DELETE
+  // object_type='public_holiday' audit-in-tx app-tenant. old/new = snapshot cấu hình ngày lễ (date/name/
+  // type/is_paid/recurrence…) — KHÔNG salary/PII/secret (BẤT BIẾN #3 — masker che nếu lọt). Cấu hình ngày
+  // nghỉ toàn công ty ảnh hưởng chấm công/nghỉ phép = hành động quan trọng (SPEC-01 §16.3). 0468 UNION
+  // ADD-only vào CHECK (clone 0464/0463/0462/0461/0460/0459/0456/0446/0440), append-only #2 nguyên vẹn;
+  // INSERT audit KHÔNG vỡ audit_logs_object_type_chk trên Postgres thật.
+  "public_holiday",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

@@ -63,17 +63,29 @@ export class SuperAdminBootstrapService implements OnApplicationBootstrap {
       return;
     }
 
+    // S2-FND-SEED-3: BẢO ĐẢM company mặc định tồn tại TRƯỚC khi resolve. Hook OnApplicationBootstrap giữa các
+    // module KHÔNG có thứ tự đảm bảo (PermissionModule là dependency SÂU hơn SeedModule ⇒ hook SuperAdmin chạy
+    // TRƯỚC trigger EnsureDefaultCompanyBootstrapService). Tự-ensure ở đây khép kín chuỗi single-boot
+    // (idempotent + N=1 guard trong hàm SQL). Best-effort — KHÔNG sập boot (bỏ fail-fast-rồi-restart cũ).
+    await this.ensureDefaultCompany();
+
     const company = await this.resolveCompanyBySlug(config.companySlug);
     if (!company) {
-      // Fail-fast: KHÔNG seed god-mode account vào tenant không tồn tại (KHÔNG log email/slug nhạy cảm thừa).
-      throw new Error(
-        `SuperAdminBootstrap: company slug '${config.companySlug}' không tồn tại — không thể seed super-admin.`,
+      // S2-FND-SEED-3 (owner-chốt #5): KHÔNG còn fail-fast. Company vắng theo slug (vd N=1 guard trả tenant
+      // active KHÁC slug, hoặc PLATFORM_SUPERADMIN_COMPANY_SLUG ≠ BOOTSTRAP_COMPANY_SLUG) → log hướng dẫn +
+      // BỎ QUA êm, boot TIẾP TỤC. KHÔNG log email/slug nhạy cảm (chỉ tên biến env).
+      this.logger.warn(
+        "super-admin BỎ QUA: không resolve được company theo PLATFORM_SUPERADMIN_COMPANY_SLUG — kiểm tra biến " +
+          "khớp BOOTSTRAP_COMPANY_SLUG (hoặc đã có tenant active khác slug). Boot tiếp tục, KHÔNG sập.",
       );
+      return;
     }
     if (company.status !== "active") {
-      throw new Error(
-        `SuperAdminBootstrap: company '${config.companySlug}' không active (status=${company.status}) — bỏ seed.`,
+      // KHÔNG còn fail-fast: company không active → log + bỏ qua (kích hoạt lại rồi khởi động lại). Boot tiếp tục.
+      this.logger.warn(
+        `super-admin BỎ QUA: company không active (status=${company.status}) — kích hoạt lại tenant rồi khởi động lại. Boot tiếp tục.`,
       );
+      return;
     }
 
     const companyId = company.id;
@@ -149,6 +161,33 @@ export class SuperAdminBootstrapService implements OnApplicationBootstrap {
       fullName: env.PLATFORM_SUPERADMIN_NAME ?? "Super Admin",
       companySlug: env.PLATFORM_SUPERADMIN_COMPANY_SLUG ?? "demo",
     };
+  }
+
+  /**
+   * S2-FND-SEED-3: ensure tenant-ROOT mặc định tồn tại TRƯỚC khi seed super-admin. Gọi hàm SECURITY DEFINER
+   * ensure_default_company (mig 0469) — idempotent + N=1 guard NẰM TRONG SQL (một nguồn sự thật; mirror caller
+   * EnsureDefaultCompanyService). Đọc BOOTSTRAP_COMPANY_* (đã validate ở env.schema: LANGUAGE ∈ {vi,en},
+   * CURRENCY ∈ {VND,USD}). Best-effort: nuốt lỗi + log (KHÔNG sập boot — resolveCompanyBySlug sau tự log-skip
+   * nếu company vẫn vắng). KHÔNG log secret (BẤT BIẾN #3). Tách method để unit-test override seam.
+   */
+  protected async ensureDefaultCompany(): Promise<void> {
+    if (!db) return;
+    const env = this.loadConfig();
+    const slug = env.BOOTSTRAP_COMPANY_SLUG ?? "demo";
+    const name = env.BOOTSTRAP_COMPANY_NAME ?? "Demo Company";
+    const timezone = env.BOOTSTRAP_COMPANY_TIMEZONE ?? "Asia/Ho_Chi_Minh";
+    const language = env.BOOTSTRAP_COMPANY_LANGUAGE ?? "vi";
+    const currency = env.BOOTSTRAP_COMPANY_CURRENCY ?? "VND";
+    try {
+      await db.execute(
+        sql`SELECT id, status FROM ensure_default_company(${slug}, ${name}, ${timezone}, ${language}, ${currency})`,
+      );
+    } catch (err) {
+      // Best-effort: KHÔNG sập boot. Log tên lỗi (KHÔNG secret) — resolveCompanyBySlug sau sẽ log-skip nếu vắng.
+      this.logger.warn(
+        `ensure default company lỗi (bỏ qua, KHÔNG sập boot): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   /**

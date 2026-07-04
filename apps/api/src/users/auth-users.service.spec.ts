@@ -43,6 +43,7 @@ function makeUser(over: Partial<User> = {}): User {
     updatedBy: null,
     deletedBy: null,
     requireTwoFactor: false, // S2-AUTH-DB-4 (mig 0466): cờ ép 2FA per-user, NOT NULL DEFAULT false
+    mustChangePassword: false, // S2-FND-SEED-3 (mig 0469): ép đổi mật khẩu lần đầu, NOT NULL DEFAULT false
     ...over,
   };
 }

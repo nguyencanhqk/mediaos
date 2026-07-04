@@ -6,7 +6,9 @@
  *  - setting module.<code>.enabled=false → LỌC dù có quyền; default (không seed) → enabled=true.
  *  - wildcard cap (*:*) → HIỆN dù thiếu cap exact.
  *  - module active thiếu metadata → bỏ qua (warn), KHÔNG bịa.
- *  - 2-tenant: resolveMany/getCapabilities keyed actor.companyId/id.
+ *  - 2-tenant: resolveMany/getCapabilities/getAllowlistedSensitiveCapabilities keyed actor.companyId/id.
+ * + S2-FND-BE-5 Option B: getMyApps MERGE getCapabilities()+getAllowlistedSensitiveCapabilities() ⇒ app gate
+ *   bằng cặp SENSITIVE-canonical (vd ATT view-own:attendance) HIỆN khi cap ở nhánh allowlist-sensitive.
  * + hasAnyCapability thuần (requiredAny rỗng → HIỆN).
  */
 
@@ -59,11 +61,14 @@ function makeService(opts: {
   modules?: ReturnType<typeof mod>[];
   resolveMany?: ReturnType<typeof vi.fn>;
   caps?: Record<string, boolean>;
+  /** Cặp NHẠY CẢM đã allowlist (view-*:attendance / view:audit-log) — nhánh Option B. */
+  sensitiveCaps?: Record<string, boolean>;
 }) {
   const repo = { findActiveModules: vi.fn().mockResolvedValue(opts.modules ?? []) };
   const settings = { resolveMany: opts.resolveMany ?? resolveManyImpl() };
   const permission = {
     getCapabilities: vi.fn().mockResolvedValue(opts.caps ?? {}),
+    getAllowlistedSensitiveCapabilities: vi.fn().mockResolvedValue(opts.sensitiveCaps ?? {}),
   };
   const svc = new ModuleCatalogService(repo as never, settings as never, permission as never);
   return { svc, repo, settings, permission };
@@ -103,13 +108,28 @@ describe("ModuleCatalogService.getMyApps — permission filter (RED)", () => {
     const { svc } = makeService({ modules: [mod("UNKNOWN_X", 9)], caps: { "*:*": true } });
     expect(await svc.getMyApps(actor)).toEqual([]);
   });
+
+  // S2-FND-BE-5 Option B: ATT gate CHỈ bằng cặp SENSITIVE (view-*:attendance). getCapabilities() lọc sensitive
+  // ⇒ nếu chỉ dùng nhánh đó, ATT ẨN-NGẦM. Merge getAllowlistedSensitiveCapabilities() làm cap surface → HIỆN.
+  it("ATT (gate sensitive-canonical) HIỆN khi cap ở nhánh allowlist-sensitive, ẨN khi cả 2 nhánh trống", async () => {
+    const shown = makeService({
+      modules: [mod("ATT", 3)],
+      caps: {}, // getCapabilities() rỗng (view-own:attendance is_sensitive=true → bị lọc)
+      sensitiveCaps: { "view-own:attendance": true }, // allowlisted sensitive surface
+    });
+    expect((await shown.svc.getMyApps(actor)).map((a) => a.module_code)).toEqual(["ATT"]);
+
+    const hidden = makeService({ modules: [mod("ATT", 3)], caps: {}, sensitiveCaps: {} });
+    expect(await hidden.svc.getMyApps(actor)).toEqual([]);
+  });
 });
 
 describe("ModuleCatalogService.getMyApps — shape + isolation", () => {
   it("giữ thứ tự sort_order + shape my-apps đúng (is_favorite/is_recent=false, allowed_actions)", async () => {
     const { svc } = makeService({
       modules: [mod("LEAVE", 4), mod("HR", 2)], // repo đã sort; service giữ nguyên
-      caps: { "read:employee": true, "read:leave": true },
+      // LEAVE canonical (0455) = view-own:leave (non-sensitive); HR = read:employee.
+      caps: { "read:employee": true, "view-own:leave": true },
     });
     const apps = await svc.getMyApps(actor);
     expect(apps.map((a) => a.module_code)).toEqual(["LEAVE", "HR"]);
@@ -130,6 +150,10 @@ describe("ModuleCatalogService.getMyApps — shape + isolation", () => {
     await svc.getMyApps(actor);
     expect(settings.resolveMany).toHaveBeenCalledWith(COMPANY_A, expect.any(Array));
     expect(permission.getCapabilities).toHaveBeenCalledWith(ACTOR_ID, COMPANY_A);
+    expect(permission.getAllowlistedSensitiveCapabilities).toHaveBeenCalledWith(
+      ACTOR_ID,
+      COMPANY_A,
+    );
   });
 
   it("không có module active → []", async () => {

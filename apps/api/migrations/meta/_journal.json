@@ -1030,6 +1030,55 @@
       "when": 1717500725000,
       "tag": "0466_s2_authdb4_user_require_2fa_reset_perm",
       "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1717500730000,
+      "tag": "0467_s2_fnddb1_companies_users_revoke_delete",
+      "breakpoints": true
+    },
+    {
+      "idx": 148,
+      "version": "7",
+      "when": 1717500735000,
+      "tag": "0468_s2_fndbe6_public_holiday_audit_object_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 149,
+      "version": "7",
+      "when": 1717500740000,
+      "tag": "0469_s2_fndseed3_ensure_default_company",
+      "breakpoints": true
+    },
+    {
+      "idx": 150,
+      "version": "7",
+      "when": 1717500745000,
+      "tag": "0470_s2_fndseed4_settings_seed",
+      "breakpoints": true
+    },
+    {
+      "idx": 151,
+      "version": "7",
+      "when": 1717500750000,
+      "tag": "0471_s2_authdb3_user_roles_soft_delete",
+      "breakpoints": true
+    },
+    {
+      "idx": 152,
+      "version": "7",
+      "when": 1717500755000,
+      "tag": "0472_s2_fnddb2_index_uq_audit_trigger",
+      "breakpoints": true
+    },
+    {
+      "idx": 153,
+      "version": "7",
+      "when": 1717500760000,
+      "tag": "0473_s2_fndseed3_single_active_company_guard",
+      "breakpoints": true
     }
   ]
 }

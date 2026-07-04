@@ -169,6 +169,30 @@ export const envSchema = z
     // Slug công ty của super-admin. Công ty PHẢI tồn tại & active TRƯỚC khi seed. Default "demo".
     PLATFORM_SUPERADMIN_COMPANY_SLUG: z.string().min(1).default("demo"),
 
+    // ── Bootstrap default company (dựng-từ-trống tự động, S2-FND-SEED-3) ───────────────────────────────
+    // Khi DB TRỐNG-sau-migrate (0 company), EnsureDefaultCompanyBootstrapService + SuperAdminBootstrapService
+    // gọi hàm ensure_default_company (mig 0469, SECURITY DEFINER · idempotent · N=1 guard) tạo tenant-ROOT từ
+    // các biến dưới đây → BỎ bước `psql` tay dựng company + restart (audit §4.2 / DB-10 §17.2). MỌI biến CÓ
+    // DEFAULT ⇒ zero-config boot vẫn dựng được company mặc định.
+    //
+    // MAPPING param → cột `companies` (owner-chốt #4 — code CHECK THẮNG DB-10 §17.1):
+    //   BOOTSTRAP_COMPANY_SLUG     → companies.slug     (citext, UNIQUE WHERE deleted_at IS NULL)
+    //   BOOTSTRAP_COMPANY_NAME     → companies.name     (text)
+    //   BOOTSTRAP_COMPANY_TIMEZONE → companies.timezone (KHÔNG CHECK; mig 0015 default 'Asia/Ho_Chi_Minh')
+    //   BOOTSTRAP_COMPANY_LANGUAGE → companies.language (CHECK language IN ('vi','en') — mig 0015)
+    //   BOOTSTRAP_COMPANY_CURRENCY → companies.currency (CHECK currency IN ('VND','USD') — mig 0015)
+    //
+    // ⚠️ LANGUAGE default 'vi' (KHÔNG 'vi-VN'): 'vi-VN' VI PHẠM companies_language_check ⇒ ensure_default_company
+    //    ném lỗi CHECK, vỡ boot. Dùng z.enum(['vi','en']) để FAIL-FAST TẠI BIÊN (env sai → loadEnv throw NGAY,
+    //    không để function chạm CHECK lúc runtime). CURRENCY z.enum(['VND','USD']) cùng lý do (companies_currency_check).
+    //    Slug default 'demo' KHỚP PLATFORM_SUPERADMIN_COMPANY_SLUG default 'demo' ⇒ super-admin resolve trúng
+    //    tenant vừa dựng (chuỗi bootstrap khép kín, single-boot).
+    BOOTSTRAP_COMPANY_SLUG: z.string().min(1).default("demo"),
+    BOOTSTRAP_COMPANY_NAME: z.string().min(1).default("Demo Company"),
+    BOOTSTRAP_COMPANY_TIMEZONE: z.string().min(1).default("Asia/Ho_Chi_Minh"),
+    BOOTSTRAP_COMPANY_LANGUAGE: z.enum(["vi", "en"]).default("vi"),
+    BOOTSTRAP_COMPANY_CURRENCY: z.enum(["VND", "USD"]).default("VND"),
+
     // ── AI Insight (AI-1) — Claude API tóm tắt KPI + chi phí (read-only) ──────────────────────────────
     // ANTHROPIC_API_KEY: khoá Claude API. OPTIONAL để API vẫn boot khi AI chưa cấu hình (mirror DATABASE_URL).
     // AiClient fail-fast (ServiceUnavailable) KHI DÙNG nếu thiếu — KHÔNG fail-open gọi với key rỗng. BẤT BIẾN

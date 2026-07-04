@@ -83,6 +83,7 @@ function makeService(opts: {
   hashSpy: ReturnType<typeof vi.fn>;
   enqueueSpy: ReturnType<typeof vi.fn>;
   resolveSpy: ReturnType<typeof vi.fn>;
+  ensureSpy: ReturnType<typeof vi.fn>;
   withTenantSpy: ReturnType<typeof vi.fn>;
 } {
   const repo = new FakeRepo();
@@ -94,6 +95,9 @@ function makeService(opts: {
   const resolveSpy = vi.fn(async () =>
     opts.resolveResult === undefined ? { id: COMPANY_ID, status: "active" } : opts.resolveResult,
   );
+  // S2-FND-SEED-3: ensureDefaultCompany() là seam mới — stub no-op để unit-test KHÔNG chạm DB thật (SQL
+  // ensure_default_company chỉ kiểm ở int-spec). Giữ nguyên đảm bảo: được gọi TRƯỚC resolveCompanyBySlug.
+  const ensureSpy = vi.fn(async () => undefined);
   const withTenantSpy = vi.fn(async (_companyId: string, fn: (tx: unknown) => Promise<unknown>) =>
     fn({} as unknown),
   );
@@ -106,12 +110,14 @@ function makeService(opts: {
     audit as never,
     outbox as never,
   );
-  // Inject test seams: env loader + company resolver (protected methods overridden via cast).
+  // Inject test seams: env loader + ensure-default-company + company resolver (protected, overridden via cast).
   (service as unknown as { loadConfig: () => typeof opts.env }).loadConfig = () => opts.env;
+  (service as unknown as { ensureDefaultCompany: typeof ensureSpy }).ensureDefaultCompany =
+    ensureSpy;
   (service as unknown as { resolveCompanyBySlug: typeof resolveSpy }).resolveCompanyBySlug =
     resolveSpy;
 
-  return { service, repo, hashSpy, enqueueSpy, resolveSpy, withTenantSpy };
+  return { service, repo, hashSpy, enqueueSpy, resolveSpy, ensureSpy, withTenantSpy };
 }
 
 describe("SuperAdminBootstrapService", () => {
@@ -141,8 +147,8 @@ describe("SuperAdminBootstrapService", () => {
     expect(repo.upsertRoleCalls).toHaveLength(0);
   });
 
-  it("EMAIL set + company KHÔNG active → throw (fail-fast, KHÔNG ghi)", async () => {
-    const { service, repo, hashSpy } = makeService({
+  it("S2-FND-SEED-3: EMAIL set + company KHÔNG active → log-skip (KHÔNG còn fail-fast, KHÔNG ghi, boot tiếp tục)", async () => {
+    const { service, repo, hashSpy, ensureSpy } = makeService({
       env: {
         PLATFORM_SUPERADMIN_EMAIL: "sa@demo.local",
         PLATFORM_SUPERADMIN_PASSWORD: PLAINTEXT,
@@ -151,23 +157,28 @@ describe("SuperAdminBootstrapService", () => {
       resolveResult: { id: COMPANY_ID, status: "suspended" },
     });
 
-    await expect(service.onApplicationBootstrap()).rejects.toThrow();
+    // KHÔNG còn fail-fast (owner-chốt #5): resolve trả company không active → BỎ QUA êm, KHÔNG throw.
+    await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();
+    expect(ensureSpy).toHaveBeenCalledTimes(1); // vẫn tự-ensure trước khi resolve
     expect(repo.upsertUserCalls).toHaveLength(0);
     expect(hashSpy).not.toHaveBeenCalled();
   });
 
-  it("EMAIL set + company không tồn tại → throw (fail-fast)", async () => {
-    const { service, repo } = makeService({
+  it("S2-FND-SEED-3: EMAIL set + company vắng theo slug → log-skip (owner-chốt #5, KHÔNG sập boot)", async () => {
+    const { service, repo, hashSpy, ensureSpy } = makeService({
       env: {
         PLATFORM_SUPERADMIN_EMAIL: "sa@demo.local",
         PLATFORM_SUPERADMIN_PASSWORD: PLAINTEXT,
+        // slug lệch BOOTSTRAP_COMPANY_SLUG (hoặc N=1 guard trả tenant khác slug) → resolve null.
         PLATFORM_SUPERADMIN_COMPANY_SLUG: "ghost",
       },
       resolveResult: null,
     });
 
-    await expect(service.onApplicationBootstrap()).rejects.toThrow();
+    await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();
+    expect(ensureSpy).toHaveBeenCalledTimes(1);
     expect(repo.upsertUserCalls).toHaveLength(0);
+    expect(hashSpy).not.toHaveBeenCalled();
   });
 
   it("BẤT BIẾN #3: EMAIL set NHƯNG thiếu PASSWORD → throw fail-fast (KHÔNG resolve company, KHÔNG hash, KHÔNG ghi)", async () => {
@@ -190,16 +201,23 @@ describe("SuperAdminBootstrapService", () => {
   });
 
   it("EMAIL set + company active → tạo role + user (hash argon2id) + grant catalog TRỪ reveal-secret + 1 user_role + emit permission.changed", async () => {
-    const { service, repo, hashSpy, enqueueSpy, withTenantSpy } = makeService({
-      env: {
-        PLATFORM_SUPERADMIN_EMAIL: "sa@demo.local",
-        PLATFORM_SUPERADMIN_PASSWORD: PLAINTEXT,
-        PLATFORM_SUPERADMIN_COMPANY_SLUG: "demo",
-        PLATFORM_SUPERADMIN_NAME: "Super Admin",
-      },
-    });
+    const { service, repo, hashSpy, enqueueSpy, resolveSpy, ensureSpy, withTenantSpy } =
+      makeService({
+        env: {
+          PLATFORM_SUPERADMIN_EMAIL: "sa@demo.local",
+          PLATFORM_SUPERADMIN_PASSWORD: PLAINTEXT,
+          PLATFORM_SUPERADMIN_COMPANY_SLUG: "demo",
+          PLATFORM_SUPERADMIN_NAME: "Super Admin",
+        },
+      });
 
     await service.onApplicationBootstrap();
+
+    // S2-FND-SEED-3: tự-ensure default company TRƯỚC khi resolve (khép kín chuỗi single-boot).
+    expect(ensureSpy).toHaveBeenCalledTimes(1);
+    expect(ensureSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      resolveSpy.mock.invocationCallOrder[0],
+    );
 
     // mọi ghi đi qua withTenant (BẤT BIẾN #1 — company_id ép ở DB)
     expect(withTenantSpy).toHaveBeenCalledWith(COMPANY_ID, expect.any(Function));

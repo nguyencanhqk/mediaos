@@ -105,9 +105,10 @@ export class PermissionAdminService {
         if (existing && sameExpiry(existing.expiresAt, expiresAt)) {
           return existing;
         }
-        // Đổi expiry: KHÔNG có UPDATE grant ⇒ DELETE + INSERT.
+        // Đổi expiry: SOFT-DELETE hàng active (deleted_by=actor) + INSERT hàng mới (mig 0471; partial-unique
+        // chỉ chặn active nên INSERT sau soft-delete không vỡ). KHÔNG hard-delete → giữ tombstone forensic.
         if (existing) {
-          await this.repo.deleteUserRole(tx, actor.companyId, targetUserId, dto.roleId);
+          await this.repo.deleteUserRole(tx, actor.companyId, targetUserId, dto.roleId, actor.id);
         }
 
         const inserted = await this.repo.insertUserRole(tx, {
@@ -160,7 +161,8 @@ export class PermissionAdminService {
         if (!existing) {
           throw new NotFoundException("User does not have this role");
         }
-        await this.repo.deleteUserRole(tx, actor.companyId, targetUserId, roleId);
+        // Gỡ role = SOFT-DELETE (UPDATE set deleted_at/deleted_by=actor, mig 0471) — KHÔNG hard-delete.
+        await this.repo.deleteUserRole(tx, actor.companyId, targetUserId, roleId, actor.id);
 
         await this.audit.record(tx, {
           action: "RoleRevoked",

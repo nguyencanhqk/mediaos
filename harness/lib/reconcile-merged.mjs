@@ -53,6 +53,11 @@ const esc = (s) => s.replace(RE_SPECIAL, "\\$&");
 // ranh giới token: ký tự trước/sau mã WO không được là chữ-số-gạch (tránh S2-HR-BE-1 ⊂ S2-HR-BE-12).
 const tokenRe = (id) => new RegExp(`(^|[^\\w-])${esc(id)}([^\\w-]|$)`);
 
+// chore(harness) = commit ghi sổ/bookkeeping (STATUS/ledger/backlog/decisions) — KHÔNG BAO GIỜ là commit
+// "WO này đã ship". Loại trừ để tránh false-positive khi commit chỉ NHẮC TÊN nhiều WO id trong ghi chú
+// (vd "record human decisions (S2-HR-BE-6/S3-ATT-BE-5/S2-AUTH-BE-7)") — đã gặp thật, xem harness/handoff.md.
+const CHORE_HARNESS_RE = /^chore\(harness\)/i;
+
 // Map<woId, {sha,subject}> — commit MỚI NHẤT trên ref tích hợp có subject chứa mã WO.
 export function mergedCommits(ids, ref = integrationRef()) {
   const out = new Map();
@@ -67,7 +72,8 @@ export function mergedCommits(ids, ref = integrationRef()) {
     .map((l) => {
       const i = l.indexOf("::");
       return { sha: l.slice(0, i), subject: l.slice(i + 2) };
-    });
+    })
+    .filter((c) => !CHORE_HARNESS_RE.test(c.subject));
   for (const id of ids) {
     const re = tokenRe(id);
     const hit = commits.find((c) => re.test(c.subject)); // log mới→cũ ⇒ commit gần nhất

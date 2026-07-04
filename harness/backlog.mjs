@@ -893,7 +893,7 @@ export const backlog = [
     //     ép qua script test:cov:sensitive (apps/api/package.json).
     //   CHỈ flip 'done' SAU: PR mở + FULL gate (security-reviewer + silent-failure-hunter) PASS + người chốt + merge
     //   (red-zone, no auto-merge) — KHÔNG fabricate done sớm.
-    status: "in_progress",
+    status: "done",
     paths: ["apps/api/src/auth/**", "packages/contracts/src/**", "apps/app/**"],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-DB-2", "S2-AUTH-BE-3"],
@@ -1472,7 +1472,7 @@ export const backlog = [
     title:
       "FE Auth self-service: forgot-password + reset-password + session-expired (apps/auth) + /account/change-password nối API thật",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/auth/**", "apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-AUTH-BE-4", "S2-FE-AUTH-1"],
@@ -1498,7 +1498,7 @@ export const backlog = [
     title:
       "FE User admin CRUD (/system/users): create + detail + edit + assign-roles nối /auth/users (thay read-only placeholder)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-AUTH-BE-3", "S2-FE-HR-3"],
@@ -1524,7 +1524,7 @@ export const backlog = [
     title:
       "Role write API (P1): POST/PATCH /auth/roles (create/update, KHÔNG sửa system role) + assign/revoke permission cho role (role_permissions) có audit — unblock S2-FE-AUTH-4",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/permission/**",
       "apps/api/src/users/**",
@@ -1560,7 +1560,7 @@ export const backlog = [
     // WAITING S2-AUTH-BE-6 (role WRITE + assign-permission) — todo, tự lên 'ready' khi BE-6 done. Phần ĐỌC
     //   (/system/permissions catalog + RoleDetail đọc GET /auth/roles) build được ngay; nếu cần chạy sớm, TÁCH
     //   read-part thành S2-FE-AUTH-4a.
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-AUTH-BE-6", "S2-FE-HR-3"],
@@ -1585,7 +1585,7 @@ export const backlog = [
     title:
       "Session management API (P1): GET /auth/sessions (phiên của CHÍNH user) + revoke 1 phiên + revoke-all-others — hoàn tất user_sessions (DEFERRED ở BE-1) — unblock S2-FE-AUTH-5",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/auth/**",
       "apps/api/src/db/schema/audit.ts",
@@ -1619,7 +1619,7 @@ export const backlog = [
     //   (BE /hr/profile-change-requests ĐÃ có) chứ KHÔNG direct-PATCH → màn đó nay thuộc S2-FE-HR-4 (/hr/me/change-request).
     //   Đã XOÁ S2-HR-BE-5 (direct self-PATCH) vì thừa/sai hướng. WO này chỉ còn /account/sessions.
     //   WAITING S2-AUTH-BE-7 (user_sessions list/revoke) — todo, tự lên 'ready' khi BE-7 done.
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-AUTH-BE-7", "S2-FE-AUTH-1"],
@@ -1653,7 +1653,7 @@ export const backlog = [
     title:
       "FE FOUNDATION admin: System Overview (/system) + Company info view/edit (/system/company) + Company Settings (/system/settings) nối API thật",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S1-FND-MODULE-1", "S1-FND-SETTING-1", "S1-FE-REGISTRY-1"],
@@ -1678,7 +1678,7 @@ export const backlog = [
     title:
       "FE FOUNDATION admin: Audit log viewer (/system/audit-logs + detail, thay ModulePlaceholder) + File metadata viewer (/system/files + detail)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S1-FND-AUDIT-1", "S1-FND-FILE-1", "S1-FE-REGISTRY-1"],
@@ -1726,7 +1726,7 @@ export const backlog = [
       "FE FOUNDATION admin: Module Catalog (/system/modules + /:code detail) nối admin module API — read-only trước",
     zone: "yellow",
     // WAITING S2-FND-BE-1 (admin module list) — todo, tự lên 'ready' khi BE done. my-apps hiện có KHÔNG đủ (lọc theo user).
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-FND-BE-1", "S1-FE-REGISTRY-1"],
@@ -1753,7 +1753,7 @@ export const backlog = [
     title:
       "FE FOUNDATION admin: Public Holidays (/system/public-holidays list+CRUD) + Health Check (/system/health read-only status) — BE sẵn",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S1-FE-REGISTRY-1"],
@@ -1776,7 +1776,12 @@ export const backlog = [
     title:
       "Foundation ops admin API (P1): Sequences (GET list + preview + PATCH config over SequenceService) + Seed status (GET) — wire controller over service có sẵn — unblock S2-FE-FND-5",
     zone: "yellow",
-    status: "todo",
+    // AUDIT 2026-07-02 (FOUNDATION-SYSTEM-AUDIT): controllers ĐÃ TỒN TẠI trên nhánh hiện tại — sequence.controller.ts
+    //   (GET list ẩn current_value + GET :id/preview + PATCH :id audit-in-tx) + seed.controller.ts (GET /foundation/seeds,
+    //   view:foundation-seed sensitive). ỨNG VIÊN VERIFY-CLOSE: chạy gate + int-spec (sequence-ops-api.int-spec /
+    //   master-data-seed-runner.int-spec) rồi đóng qua ledger. Lệch nhỏ vs done_when: preview theo :id (không :key),
+    //   preview là GET (doc POST) — chấp nhận, pin ở S2-FND-DOC-1.
+    status: "done",
     paths: [
       "apps/api/src/foundation/sequences/**",
       "apps/api/src/foundation/seed/**",
@@ -1804,7 +1809,7 @@ export const backlog = [
       "FE FOUNDATION admin: Sequence Counters (/system/sequences list+preview+config) + Seed Status (/system/seeds read-only)",
     zone: "yellow",
     // WAITING S2-FND-BE-2 — todo, tự lên 'ready' khi BE-2 done.
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-FND-BE-2", "S1-FE-REGISTRY-1"],
@@ -1822,7 +1827,13 @@ export const backlog = [
     title:
       "Foundation security-admin API (P1): Retention policies (GET + PATCH over RetentionService, governs purge) + File Access Logs viewer (GET masked, append-only) — unblock S2-FE-FND-6",
     zone: "red",
-    status: "todo",
+    // AUDIT 2026-07-02 (FOUNDATION-SYSTEM-AUDIT): ĐÃ BUILD phần lớn — retention.controller.ts (GET list +
+    //   PATCH manage {isSensitive:true}, audit-in-tx; PROTECTED_TABLES chặn purge audit/access-log = BẤT BIẾN #2 giữ)
+    //   + file-access-log.controller.ts (GET masked, không ip/UA/metadata). CÒN THIẾU vs API-09: POST create +
+    //   POST /:id/simulate (RetentionService CÓ createPolicy/simulate — route không expose) + guard not-found (hiện
+    //   500 thay 404) → ĐÃ CHUYỂN sang S2-FND-BE-8. WO này ứng viên VERIFY-CLOSE sau khi chạy gate + int-spec
+    //   retention-api.int-spec / file-access-log-api.int-spec.
+    status: "done",
     paths: [
       "apps/api/src/foundation/retention/**",
       "apps/api/src/foundation/files/**",
@@ -1850,7 +1861,7 @@ export const backlog = [
       "FE FOUNDATION admin: Retention Policies (/system/retention config) + File Access Logs viewer (/system/file-access-logs)",
     zone: "yellow",
     // WAITING S2-FND-BE-3 — todo, tự lên 'ready' khi BE-3 done.
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-FND-BE-3", "S1-FE-REGISTRY-1"],
@@ -1885,7 +1896,7 @@ export const backlog = [
     title:
       "FE HR Profile change-request workflow: /hr/me/change-request (self gửi YC) + /hr/profile-change-requests (HR duyệt list) + /:id (detail + approve/reject/cancel)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-FE-HR-3", "S2-INT-2"],
@@ -1910,7 +1921,7 @@ export const backlog = [
     title:
       "FE HR Master data mgmt: /hr/departments + /hr/positions + /hr/job-levels + /hr/contract-types (list + CRUD) nối API thật",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-FE-HR-1"],
@@ -1929,7 +1940,7 @@ export const backlog = [
     title:
       "FE HR Org chart (/hr/org-chart, theo data-scope) + HR audit-logs (/hr/audit-logs, tái dùng foundation audit filter module=HR)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-FE-HR-1", "S2-INT-2"],
@@ -1962,7 +1973,10 @@ export const backlog = [
     //   + seed (view,contract)+(manage,contract) scope=Company cho hr/company-admin (per-pair). rls-registry
     //   đăng ký employee_contracts. CRUD /hr/contracts(+:id) + /hr/employees/:id/contracts (view:contract) +
     //   POST/PATCH/DELETE + POST :id/file (manage:contract) link qua FileService entity 'contract'; cảnh báo
-    //   hết hạn 30 ngày (expiringSoon + ?expiringOnly). SCOPE: employee/manager KHÔNG grant → 403 (fail-closed).
+    //   hết hạn 30 ngày (expiringSoon + ?expiringOnly).
+    //   REWORK 2026-07-02 (commit 1906559, theo handoff.md owner decision): scope SỬA LẠI thành Own(employee)
+    //   + Team(manager) — KHÔNG phải Company-only/403 như mô tả ban đầu ở trên; ngưỡng cảnh báo hết hạn đổi
+    //   thành company-configurable 2 mốc [30,7] ngày (SettingService, fallback [30,7]). FULL gate PASS lần 2.
     //   Verify lane DB mediaos_batch6 (chain 0000→0462): int hr-contract ✓14 (deny 403 ×4 · audit-in-tx 1 row ·
     //   soft-delete · RLS 2-tenant read/write/contract_type cross-tenant 400 · PII allowlist · expiry · append-only
     //   UPDATE/DELETE DENIED) + unit contract.service ✓7 + rls-guards/coverage/tenant-isolation ✓412 (0 regression)
@@ -2000,7 +2014,7 @@ export const backlog = [
       "FE HR Contracts: /hr/contracts (DS hợp đồng) + /hr/employees/:id/contracts (HĐ của nhân viên) nối contract API",
     zone: "yellow",
     // WAITING S2-HR-BE-6 (employee_contracts table + CRUD) — todo, tự lên 'ready' khi BE-6 done.
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-HR-BE-6", "S2-FE-HR-1"],
@@ -2018,7 +2032,7 @@ export const backlog = [
     title:
       "Employee-code config admin API (carry-over STORY-035): GET/PATCH /hr/settings/employee-code (sửa employee_code_configs) + lock manual-edit + audit — unblock S2-FE-HR-8",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/employees/**",
       "apps/api/src/foundation/sequences/**",
@@ -2047,7 +2061,7 @@ export const backlog = [
       "FE HR Employee-code config: /hr/settings/employee-code (form cấu hình mã NV + preview live) nối admin API",
     zone: "yellow",
     // WAITING S2-HR-BE-7 (employee-code admin edit) — todo, tự lên 'ready' khi BE-7 done.
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S2-HR-BE-7", "S2-FE-HR-1"],
@@ -2395,7 +2409,7 @@ export const backlog = [
     title:
       "LEAVE approval workflow: pending-list theo scope + approve + reject(reason) + state-machine Pending→Approved/Rejected + balance reserve→use/release (row-lock, no double-approve) + approval history + audit + event + trigger ATT sync",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/leave/**", "apps/api/src/permission/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S3-LEAVE-BE-2", "S2-INT-2"],
@@ -2419,7 +2433,7 @@ export const backlog = [
     title:
       "LEAVE type/policy management + HR balance view/adjust + ledger (P1): CRUD type/policy + HR view balances + adjust balance (mọi thay đổi qua leave_balance_transactions, no negative ngoài policy)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/leave/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S3-LEAVE-SEED-1", "S2-AUTH-BE-2"],
@@ -2445,7 +2459,7 @@ export const backlog = [
     title:
       "LEAVE→ATT sync: onLeaveApproved handler + AttendanceLeaveSyncService (full-day=Leave/required 0 · half-day/hourly reduce · recalc existing check-in) + sync_status/retry + onLeaveCancelled/Revoked recalc + balance restore idempotent (S3-SYNC-004)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/attendance/**", "apps/api/src/leave/**", "apps/api/test/**"],
     skills: ["code-review"],
     depends_on: ["S3-ATT-BE-1", "S3-LEAVE-BE-3"],
@@ -2472,7 +2486,7 @@ export const backlog = [
     title:
       "FE registry + API layer ATT/LEAVE: app/sidebar/route registry (permission-driven) + attendanceApi/leaveApi + query-key factory + mutation invalidation matrix",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["code-review"],
     // depends_on +S3-ATT-SEED-1/+S3-LEAVE-SEED-1 (chốt owner 2026-06-26): cặp (action,resource_type) cho route mới
@@ -2526,7 +2540,7 @@ export const backlog = [
     title:
       "FE ATT records (P0/P1): MyAttendanceRecordsPage + TeamAttendanceRecordsPage + AttendanceRecordDetailPage + filter tháng/khoảng/status + StatusBadge + permission menu visibility",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S3-ATT-BE-2", "S3-FE-ATT-1"],
@@ -2574,7 +2588,7 @@ export const backlog = [
     title:
       "FE LEAVE approval: LeaveApprovalPage + pending table + approval detail drawer + approve/reject confirmation + reject reason + invalidate list/detail/balance",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S3-LEAVE-BE-3", "S3-FE-LEAVE-1"],
@@ -2659,7 +2673,7 @@ export const backlog = [
     title:
       "ATT Adjustment workflow API (CO-S4-003): adjustment_requests create/list/detail + approve/reject + direct-adjust + recalc attendance_records + audit + event (skeleton 0452 → hoàn thiện cột nếu thiếu)",
     zone: "red",
-    status: "in_review",
+    status: "done",
     paths: [
       "apps/api/src/attendance/**",
       "apps/api/src/db/schema/**",
@@ -2687,7 +2701,7 @@ export const backlog = [
     title:
       "ATT Remote/Onsite-work request workflow API (CO-S4-004): remote_work_requests create/list/detail + approve/reject + ảnh hưởng tính công + audit + event (skeleton 0452 → hoàn thiện)",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/attendance/**",
       "apps/api/src/db/schema/**",
@@ -2717,7 +2731,7 @@ export const backlog = [
     title:
       "ATT Reports + audit read (CO-S4-006, P2): GET /attendance/reports (tổng hợp theo scope) + /attendance/audit-logs (tái dùng foundation audit filter module=ATT)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/attendance/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S3-ATT-BE-2", "S1-FND-AUDIT-1"],
@@ -2741,7 +2755,7 @@ export const backlog = [
     title:
       "FE ATT Adjustment (/attendance/adjustment-requests my/list/new/:id + /records/:id/adjust): tạo/duyệt/điều chỉnh trực tiếp",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S3-ATT-BE-4", "S3-FE-ATT-2"],
@@ -2758,7 +2772,7 @@ export const backlog = [
     layer: "FE",
     title: "FE ATT Remote/Onsite (/attendance/remote-work-requests my/list/new/:id): tạo + duyệt",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S3-ATT-BE-5", "S3-FE-ATT-2"],
@@ -2776,7 +2790,7 @@ export const backlog = [
     title:
       "FE ATT admin + company records: /attendance/records (công ty, 004) + /attendance/shifts + /shift-assignments + /rules",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S3-ATT-BE-3", "S3-FE-ATT-2"],
@@ -2797,7 +2811,7 @@ export const backlog = [
     layer: "FE",
     title: "FE ATT Reports (/attendance/reports) + Audit logs (/attendance/audit-logs)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S3-ATT-BE-6", "S3-FE-ATT-2"],
@@ -2817,7 +2831,7 @@ export const backlog = [
     title:
       "LEAVE Calendar API (CO-S4-005): GET /leave/calendar theo data-scope Own/Team/Company (đơn Approved/Pending trong khoảng) + mask ngoài quyền",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/leave/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S3-LEAVE-BE-3", "S2-INT-2"],
@@ -2840,7 +2854,7 @@ export const backlog = [
     title:
       "LEAVE Reports + balance transactions + audit read (P2): GET /leave/balances/:id/transactions (ledger) + /leave/reports + /leave/audit-logs (foundation audit filter LEAVE)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/src/leave/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S3-LEAVE-BE-4", "S1-FND-AUDIT-1"],
@@ -2863,7 +2877,7 @@ export const backlog = [
     title:
       "FE LEAVE all-requests (/leave/requests, 006) + edit draft (/leave/requests/:id/edit, 002E)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S3-LEAVE-BE-3", "S3-FE-LEAVE-1"],
@@ -2880,7 +2894,7 @@ export const backlog = [
     layer: "FE",
     title: "FE LEAVE Calendar (/leave/calendar, own/team/company theo scope)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["frontend-design", "code-review"],
     depends_on: ["S3-LEAVE-BE-5", "S3-FE-LEAVE-1"],
@@ -2936,6 +2950,955 @@ export const backlog = [
       "/leave/reports: tổng hợp nghỉ theo scope nối GET /leave/reports; filter kỳ; PermissionGate LEAVE.REQUEST.EXPORT",
       "/leave/audit-logs: bảng audit nối GET /leave/audit-logs (foundation audit filter LEAVE); field mask do server; PermissionGate LEAVE.AUDIT_LOG.VIEW",
       "KHÔNG hard-code; loading/empty/error/forbidden; web test xanh; typecheck xanh",
+    ],
+  },
+
+  // ════════════════════ CARRY-OVER — AUTH/ACCOUNT audit follow-ups (seed 2026-07-02) ════════════════════
+  // Nguồn: audit 4-lớp AUTH/ACCOUNT vs DB-02 · BACKEND-03 · API-02 · FRONTEND-06 (memory auth-account-audit-2026-07).
+  //   Kết quả: bất biến an ninh 100% PASS; gap THẬT chưa có WO nào cover được seed dưới đây.
+  //   KHÔNG seed trùng việc đã có WO: /account/sessions = S2-FE-AUTH-5 (BE-7 done → tự ready) · role/permission
+  //   admin FE = S2-FE-AUTH-4 · self-profile-edit = change-request (S2-FE-HR-4). Lệch-CÓ-CHỦ-ĐÍCH (uniform 401,
+  //   cặp engine action:resourceType, change-password revoke-all, SSO 3-app redirect, 2FA đã ship, companySlug,
+  //   refresh_tokens family model) → S2-AUTH-DOC-1 pin vào docs, KHÔNG "sửa" code theo doc cũ.
+  //   Ưu tiên P1, KHÔNG chặn Sprint 3 spine; BE-8/9/10 + DB-3 là auth crown → FULL gate + người chốt.
+  {
+    id: "S2-AUTH-BE-8",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "user_security_events WRITER (audit gap #1): ghi sự kiện bảo mật BACKEND-03 §22.2 vào bảng user_security_events — viewer /auth/security-events hết rỗng-vĩnh-viễn",
+    zone: "red",
+    // AUDIT 2026-07-02: bảng + RLS + append-only + viewer API + FE page ĐỦ cả, nhưng grep toàn src KHÔNG có
+    //   insert(userSecurityEvents) nào → màn Security events trống vĩnh viễn trong prod. Sự kiện hiện rải ở
+    //   audit_logs (auth.password_changed/token_reuse_detected/session_revoked/user.locked…) + security_alerts.
+    //   GIỮ audit_logs như cũ (append-only, không di trú lịch sử) — WO này THÊM writer song song, không thay thế.
+    status: "todo",
+    paths: [
+      "apps/api/src/auth/**",
+      "apps/api/src/users/**",
+      "apps/api/src/permission/**",
+      "packages/contracts/src/**",
+      "apps/api/test/**",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "audit AUTH/ACCOUNT 2026-07-02 (HIGH #1: no writer)",
+      "BACKEND-03 §22.2",
+      "DB-02 §7.9 (user_security_events)",
+      "SPEC-02",
+    ],
+    done_when: [
+      "SecurityEventWriter (service dùng chung) ghi user_security_events TRONG CÙNG tx withTenant với mutation gốc, tối thiểu các event §22.2 đã có điểm phát: PASSWORD_CHANGED · PASSWORD_RESET · PASSWORD_RESET_REQUESTED · REFRESH_TOKEN_REUSE_DETECTED · SESSION_REVOKED (self-service + logout) · USER_LOCKED/UNLOCKED · ROLE_ASSIGNED/REVOKED · TOTP enable/disable; severity map theo contracts AUTH_AUDIT_LOG",
+      "payload jsonb KHÔNG chứa secret/token/hash (đi qua masking allowlist như audit masker); company_id + user_id đúng tenant; KHÔNG đổi shape bảng (đã chuẩn ~95% DB-02 — không migration trừ khi thiếu enum event_type)",
+      "GIỮ append-only: chỉ INSERT (grant hiện có SELECT,INSERT — không xin thêm); audit_logs hiện hữu GIỮ NGUYÊN (dual-write, không bỏ nguồn cũ)",
+      "deny-path/RED viết-TRƯỚC: mutation gốc rollback ⇒ event rollback CÙNG tx (không event mồ côi); event không lộ secret; viewer /auth/security-events trả được event mới ghi (end-to-end hết rỗng); 2-tenant deny",
+      "FULL gate (auth crown — security-reviewer) + người chốt; regression auth suite xanh trên LANE_DB cô lập",
+    ],
+  },
+  {
+    id: "S2-AUTH-BE-9",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "Lock/suspend user → REVOKE toàn bộ session/refresh NGAY (audit gap #2): đóng cửa sổ access-token ≤15' sau khi khóa",
+    zone: "red",
+    // AUDIT 2026-07-02 (HIGH #2): lockUser chỉ set status + audit (auth-users.service.ts:173-191) — KHÔNG đụng
+    //   user_sessions/refresh_tokens; user bị khóa vẫn dùng API bằng access token còn hạn, chỉ bị chặn ở refresh kế.
+    //   BACKEND-03 §10.4 + API-02 §18.8 yêu cầu revoke ngay khi lock. ⚠️ HAI surface song song cùng chức năng
+    //   (bẫy S2-INT-1): /auth/users/:id/lock (locked) VÀ /users/admin/:id/suspend (suspended) — vá CẢ HAI.
+    status: "todo",
+    paths: ["apps/api/src/users/**", "apps/api/src/auth/**", "apps/api/test/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "audit AUTH/ACCOUNT 2026-07-02 (HIGH #2: lock-no-revoke)",
+      "BACKEND-03 §10.4/§35",
+      "API-02 AUTH-API-105 + §18.8",
+      "memory s2-int1-shipped (TWO routes trap)",
+    ],
+    done_when: [
+      "lockUser (POST /auth/users/:id/lock) VÀ suspend (POST /users/admin/:id/suspend): trong CÙNG tx set status → revoke MỌI refresh_tokens family + user_sessions active của target; tái dùng helper revoke sẵn có của auth.service (KHÔNG viết lại logic revoke)",
+      "audit user.locked/suspended ghi kèm revoked_session_count; unlock/reactivate KHÔNG tự hồi phiên cũ (user login lại)",
+      "deny-path/RED viết-TRƯỚC: sau lock → refresh token cũ 401 NGAY (không đợi reuse-detection) + session list của target rỗng/revoked; self-lock guard giữ nguyên; cross-tenant deny; 403 khi thiếu lock:user",
+      "access token còn sống: ghi nhận giới hạn JWT stateless (chặn hoàn toàn cần denylist jti — NGOÀI scope, ghi note nếu không làm); FULL gate + người chốt",
+    ],
+  },
+  {
+    id: "S2-AUTH-BE-10",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "refresh() kiểm company active (audit gap #3): company suspended → KHÔNG cấp access token mới (chặn cửa sổ 30 ngày)",
+    zone: "red",
+    // AUDIT 2026-07-02 (MEDIUM-HIGH): refresh() check user active nhưng KHÔNG đọc companies.status — company bị
+    //   suspend thì user còn refresh token vẫn xin token mới tới hết TTL 30d. BACKEND-03 §14.2 bước 6. Login đã
+    //   check qua resolveCompanyId (mig 0430 allow-list 'active') — tái dùng cùng semantics, đừng chế mới.
+    status: "todo",
+    paths: ["apps/api/src/auth/**", "apps/api/test/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "audit AUTH/ACCOUNT 2026-07-02 (gap #3)",
+      "BACKEND-03 §14.2 (b6)",
+      "mig 0002 companies_status_chk ('active','suspended' CHỮ THƯỜNG)",
+    ],
+    done_when: [
+      "refresh(): sau check user active, đọc companies.status — ≠'active' → 401 + thu hồi family (mirror nhánh user-không-active :635-651) + audit auth.refresh_blocked reason=company_inactive",
+      "2FA challenge-verify + mọi đường cấp-token khác cũng qua cùng check (không chỉ 1 nhánh); KHÔNG đổi hành vi login (đã check)",
+      "deny-path/RED viết-TRƯỚC: company suspended → refresh 401 + family revoked; company active → refresh bình thường (regression); test trên LANE_DB cô lập",
+      "FULL gate (auth crown) + người chốt",
+    ],
+  },
+  {
+    id: "S2-AUTH-CAP-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "Phơi capability sensitive qua /auth/me: thêm export:leave + view:leave-audit-log + view:attendance-audit-log vào SENSITIVE_CAPABILITY_ALLOWLIST — mở khóa S3-FE-LEAVE-6 + sửa bug ngầm trang ATT audit-logs",
+    zone: "red",
+    // OWNER CHỐT 2026-07-03 (Cian, qua plan-review S3-FE-LEAVE-6 wave-1b): getCapabilities() lọc bỏ cặp
+    //   is_sensitive không nằm trong allowlist → FE front-gate (useCanExact) chết cho MỌI user ở prod dù
+    //   unit test xanh (setCaps() không đi qua allowlist thật). Đây là phơi CỜ hiển thị — server vẫn tự
+    //   check permission ở mọi API, KHÔNG nới quyền thực tế.
+    status: "todo",
+    paths: ["apps/api/src/permission/**", "apps/api/src/auth/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: ["plan-review S3-FE-LEAVE-6 wave-1b 2026-07-02", "owner-decision 2026-07-03"],
+    done_when: [
+      "SENSITIVE_CAPABILITY_ALLOWLIST (permission.service.ts) thêm APPEND-ONLY 3 cặp: export:leave · view:leave-audit-log · view:attendance-audit-log; KHÔNG đổi can()/PermissionGuard/data-scope",
+      "int-spec colocated: role giữ grant (seed 0454/0455) nhận đủ 3 cặp qua /auth/me; user không grant → không thấy; 2-tenant deny giữ nguyên",
+      "KHÔNG migration/đổi seed; regression permission + auth suite xanh LANE_DB cô lập",
+      "FULL gate (security-reviewer — permission crown) + người chốt",
+    ],
+  },
+  {
+    id: "S2-AUTH-DB-4",
+    module: "AUTH",
+    layer: "DB",
+    title:
+      "2FA per-user + pair reset-2fa:user (OWNER CHỐT 2026-07-03): cột users.require_two_factor + seed permission reset-2fa:user grant company-admin",
+    zone: "red",
+    // OWNER CHỐT 2026-07-03 (Cian): ép 2FA = role (hiện có) + ĐÍCH DANH tài khoản (cờ mới, OR);
+    //   admin được reset 2FA cho user (mất điện thoại) qua pair riêng reset-2fa:user (is_sensitive).
+    status: "todo",
+    paths: ["apps/api/migrations/**", "apps/api/src/db/schema/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: ["owner-decision 2026-07-03", "mig 0120 (roles.requires_two_factor)"],
+    done_when: [
+      "Migration 0466 (đánh số tiếp head 0465, additive): ALTER users ADD require_two_factor boolean NOT NULL DEFAULT false; KHÔNG đổi RLS (users đã có)",
+      "Seed permission catalog UNION: pair (reset-2fa, user) is_sensitive=true + grant company-admin Company-scope, ON CONFLICT DO NOTHING idempotent + fail-loud check (mẫu mig 0120)",
+      "Drizzle schema users additive cột mới; schema/index giữ khối additive; suite api xanh LANE_DB cô lập",
+      "FULL gate (database-reviewer + security-reviewer) + người chốt",
+    ],
+  },
+  {
+    id: "S2-AUTH-BE-11",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "2FA self-service hardening + role-write cờ ép: status trả required · disable chặn khi bị ép (409) · POST/PATCH /auth/roles nhận requiresTwoFactor",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/auth/**", "packages/contracts/src/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-AUTH-DB-4"],
+    src: ["owner-decision 2026-07-03"],
+    done_when: [
+      "requiresTwoFactorTx = role-flag OR users.require_two_factor (cột 0466); /auth/2fa/status trả thêm required (additive contract)",
+      "/auth/2fa/disable: user đang bị ép (role HOẶC per-user) → 409, KHÔNG tắt; audit + security event TOTP_DISABLED chỉ khi disable thành công",
+      "POST/PATCH /auth/roles nhận requiresTwoFactor optional (CHỈ role thường — system role giữ rule cấm sửa của BE-6); audit role diff cờ; contracts RoleDto + requests additive",
+      "deny-path RED-trước: bị ép → disable 409; system role toggle → 4xx; regression auth suite LANE_DB; FULL gate + người chốt",
+    ],
+  },
+  {
+    id: "S2-AUTH-BE-12",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "Admin 2FA controls: PATCH user requireTwoFactor + detail DTO twoFactor{enabled,requiredByRole,requiredByUser} + POST /auth/users/:id/2fa/reset (revoke sessions + audit + security event)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/users/**",
+      "apps/api/src/auth/**",
+      "apps/api/src/permission/**",
+      "packages/contracts/src/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S2-AUTH-DB-4", "S2-AUTH-BE-11"],
+    src: ["owner-decision 2026-07-03"],
+    done_when: [
+      "PATCH /auth/users/:id nhận requireTwoFactor (gate update:user hiện có) + audit user.updated diff; GET detail trả twoFactor {enabled, requiredByRole, requiredByUser} (additive)",
+      "POST /auth/users/:id/2fa/reset gate pair MỚI reset-2fa:user (seed 0466): xoá user_totp + user_recovery_codes trong tx + revoke MỌI session/refresh (tái dùng revokeAllForUserTx) + audit user.2fa_reset + security event additive; self-reset CHO PHÉP (không lockout — user vẫn login được, bị ép enroll lại nếu required)",
+      "SENSITIVE_CAPABILITY_ALLOWLIST append reset-2fa:user (FE cần front-gate nút Reset — bài học lớp-3 pair-drift) + int-spec /auth/me phơi pair cho company-admin",
+      "deny-path RED-trước: thiếu pair → 403; cross-tenant → 404; sau reset: login không còn challenge + mustSetupTwoFactor=true nếu required + phiên cũ 401; FULL gate + người chốt",
+    ],
+  },
+  {
+    id: "S2-FE-ACCT-SEC-1",
+    module: "AUTH",
+    layer: "FE",
+    title:
+      "FE Account Security: section Bảo mật trong /account/profile — trạng thái 2FA + bật (→ /account/setup-2fa) + tắt (dialog mật khẩu, ẨN khi bị ép)",
+    zone: "yellow",
+    // SHIPPED 2026-07-04 qua PR #114 (merged vào feat/debt-wave2). LIGHT gate PASS (Đội3 ~92).
+    status: "done",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-AUTH-BE-11"],
+    src: ["owner-decision 2026-07-03"],
+    done_when: [
+      "AccountProfilePage thêm card Bảo mật: twoFactorApi.status → enabled/required; chưa bật → nút 'Bật 2FA' link /account/setup-2fa (trang enroll dùng chung — voluntary vào trực tiếp được); required hiển thị nhãn 'bắt buộc theo chính sách'",
+      "Tắt 2FA: dialog nhập mật khẩu → twoFactorApi.disable; nút ẨN khi status.required=true; lỗi 409 → thông báo rõ; KHÔNG ghi mật khẩu/recovery vào storage/console (BẤT BIẾN #3)",
+      "test-first colocated: required → không thấy nút tắt; disable 409 → message; chưa bật → thấy nút bật; loading/error/empty; web test + typecheck xanh; LIGHT gate",
+    ],
+  },
+  {
+    id: "S2-FE-SYS-SEC-1",
+    module: "AUTH",
+    layer: "FE",
+    title:
+      "FE Admin security: /system/roles form toggle 'Bắt buộc 2FA' + /system/users detail hiện 2FA (nguồn ép) + toggle ép tài khoản + nút Reset 2FA (PermissionGate reset-2fa:user)",
+    zone: "yellow",
+    // SHIPPED 2026-07-04 qua PR #115 (merged vào feat/debt-wave2). LIGHT gate PASS (typecheck+full suite+permission cross-check).
+    status: "done",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["code-review"],
+    depends_on: ["S2-AUTH-BE-11", "S2-AUTH-BE-12"],
+    src: ["owner-decision 2026-07-03"],
+    done_when: [
+      "RoleFormPage (create/edit role thường): switch requiresTwoFactor nối role write API; system role read-only giữ nguyên",
+      "UserDetailPage: khối 2FA hiện enabled + nguồn ép (role/tài khoản); toggle 'Ép 2FA tài khoản này' (PATCH requireTwoFactor, gate update:user); nút 'Reset 2FA' confirm-dialog gate ĐÚNG pair reset-2fa:user (đã allowlist ở BE-12 — KHÔNG mượn pair khác), sau reset toast + refetch",
+      "test-first colocated deny-path: không có reset-2fa:user → nút Reset ẨN; không update:user → toggle ẩn/disabled; pair pin theo seed thật; web test + typecheck xanh; LIGHT gate",
+    ],
+  },
+  {
+    id: "S2-AUTH-DB-3",
+    module: "AUTH",
+    layer: "DB",
+    title:
+      "user_roles soft-delete (audit gap #4): thêm deleted_at/deleted_by + REVOKE DELETE app-role — gỡ role không còn xóa cứng (DB-02 §4.9, BẤT BIẾN #2)",
+    zone: "red",
+    // AUDIT 2026-07-02 (HIGH #3 DB): app role có GRANT DELETE trên user_roles (mig 0005:142), bảng không có
+    //   deleted_at — gỡ role = HARD DELETE, mất forensic trail bậc-1 RBAC. LANE NỐI TIẾP db-migration (không song
+    //   song migration khác). ⚠️ ĐỔI READER TRƯỚC KHI SIẾT GRANT: permission.service/auth.service me()/mọi query
+    //   user_roles phải filter deleted_at IS NULL, và code gỡ-role (permission-admin.service revoke) phải chuyển
+    //   DELETE→UPDATE set deleted_at, RỒI migration mới REVOKE DELETE — sai thứ tự là vỡ runtime.
+    // OWNER CHỐT 2026-07-03 (checkpoint feat/debt-wave2, sau plan-BLOCK round 1): plan-reviewer bắt hidden-writer
+    //   super-admin-bootstrap.repository.ts:assignRole dùng raw `INSERT ... ON CONFLICT (user_id, role_id,
+    //   company_id) DO NOTHING` trỏ ĐÚNG cột constraint user_roles_uq bị DROP trong WO này → sau migrate sẽ
+    //   42P10 NGAY LÚC BOOT (bootstrap chạy mỗi lần khởi động). BẮT BUỘC: (1) đổi ON CONFLICT đó thành
+    //   `(user_id, role_id, company_id) WHERE deleted_at IS NULL DO NOTHING` (khớp tiền lệ seeder att/hr/leave),
+    //   sửa comment L155 (bỏ 'constraint user_roles_uq'); (2) deleteUserRole thêm param actorUserId, cập nhật
+    //   CẢ HAI caller (revokeRole permission-admin.service.ts:163 VÀ nhánh reassign/đổi-expiry :110 — không chỉ
+    //   revoke); (3) acceptance thêm grep toàn apps/api cho `ON CONFLICT (user_id` + mọi INSERT INTO user_roles
+    //   khác phải kèm predicate deleted_at, xác nhận 0 site trần còn sót; (4) findUserIdsWithRole
+    //   (permission-admin.repository.ts:199-205) lọc thêm deleted_at IS NULL cho nhất quán (không phải lỗ bảo
+    //   mật, chỉ over-invalidate cache — vẫn nên sửa cùng đợt).
+    // OWNER CHỐT round 2 (sau plan-BLOCK lần 2, round-1 fix ở trên ĐÃ ĐÚNG — giữ nguyên): 2 lỗi MỚI plan-reviewer
+    //   bắt được, BẮT BUỘC sửa: (5) deleteUserRole (permission-admin.repository.ts:118) chuyển DELETE→UPDATE
+    //   PHẢI có predicate `AND deleted_at IS NULL` trong WHERE — thiếu nó, chu kỳ grant→revoke→grant→revoke cùng
+    //   (user,role,company) sẽ khiến UPDATE ghi đè deleted_at/deleted_by của TOMBSTONE CŨ (mất forensic, phá
+    //   chính mục đích WO này); áp cho CẢ revokeRole (:163) VÀ nhánh reassign/đổi-expiry (:110); thêm regression
+    //   khẳng định tombstone cũ KHÔNG đổi sau 1 chu kỳ re-grant+re-revoke tiếp theo. (6) THIẾU deny-path cho
+    //   reader đặc quyền cao nhất `isOperatorTx` (auth.service.ts:1341-1356 — KHÔNG phải 'requiresTwoFactorTx'
+    //   như nhãn sai trong plan round trước; requiresTwoFactor thật ở two-factor.service.ts:97 +
+    //   auth-users.repository.ts:163): soft-delete assignment platform-admin PHẢI khiến login SAU ĐÓ không còn
+    //   mint được token operator-plane (aud=tenant, isOperatorTx=false) — thêm int-spec bắt buộc. (7) Drizzle
+    //   schema: CHỈ thêm 2 cột deletedAt/deletedBy (deletedBy .references(users.id,{onDelete:'set null'})) —
+    //   TUYỆT ĐỐI KHÔNG mirror partial-unique bằng uniqueIndex() thật (drizzle không biểu diễn được partial →
+    //   drizzle-kit coi là unique ĐẦY ĐỦ → drift, db:generate tương lai sinh migration thừa); partial unique CHỈ
+    //   tồn tại ở SQL tay + comment, giống pattern roles.ts:27-29. (8) getObjectGrants nhánh role-subject
+    //   (permission.repository.ts:111) thêm test: object grant (ALLOW/DENY) qua role KHÔNG còn hiệu lực sau khi
+    //   user_role của role đó bị soft-delete.
+    // OWNER CHỐT round 3 (sau plan-BLOCK lần 3, round 1+2 fix ở trên ĐÃ ĐÚNG — giữ nguyên): 2 lỗi MỚI, CẢ HAI BẮT
+    //   BUỘC (không có gì cần chốt sản phẩm, thuần kỹ thuật): (9) `findUserRole` (permission-admin.repository.ts:66-84)
+    //   THIẾU trong danh sách sửa — dùng làm idempotency-check trong assignRole (:97)/revokeRole (:159), KHÔNG lọc
+    //   deleted_at ⇒ trả về TOMBSTONE sau soft-delete ⇒ (a) re-grant cùng expiry null bị NO-OP im lặng (return
+    //   tombstone, KHÔNG insert row mới/audit/cache-invalidate — user không lấy lại được quyền dù API trả 200);
+    //   (b) re-revoke role đã gỡ ghi audit RoleRevoked LẦN 2 (nhiễu forensic). SỬA: thêm `isNull(deletedAt)` vào
+    //   findUserRole, đưa vào reader-list + acceptance grep; RED test BẮT BUỘC dùng CÙNG expiry (null cả hai) để
+    //   chạm đúng nhánh sameExpiry lỗi (khác expiry sẽ pass-giả qua nhánh delete+insert khác). (10) Grant SAI hiện
+    //   trạng — mig 0005 CHỈ cấp SELECT,INSERT,DELETE trên user_roles cho mediaos_app, KHÔNG có UPDATE (khác
+    //   companies/users vốn có UPDATE từ 0002 → 0467 mới 'giữ' được; user_roles KHÔNG cùng tiền lệ). Migration
+    //   PHẢI `GRANT UPDATE ON user_roles TO mediaos_app` (quyền MỚI, KHÔNG PHẢI 'giữ nguyên' như note round 1/2
+    //   ghi nhầm) + REVOKE DELETE + giữ SELECT/INSERT; thêm DO-block fail-loud kiểu 0467 assert
+    //   has_table_privilege(...,'UPDATE')=true và DELETE=false; thêm test DƯƠNG (soft-delete UPDATE thành công
+    //   dưới role mediaos_app thật — không phải superuser, để bắt đúng thiếu-grant); cập nhật 2 comment stale
+    //   (permission-admin.repository.ts:11-12, service.ts:108 'KHÔNG có UPDATE grant') thành đúng hiện trạng mới;
+    //   sửa tham chiếu sai 'roles.ts:27-29' (file không tồn tại) → đúng là permissions.ts:27-29.
+    // SHIPPED 2026-07-04 qua PR #111 (squash 1c4849c vào feat/debt-wave2, mig 0471): FULL gate security-reviewer
+    //   + database-reviewer PASS, 0 finding chặn (2 LOW không chặn) sau đúng 3 vòng owner-chốt ở trên.
+    status: "done",
+    paths: [
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "apps/api/src/permission/**",
+      "apps/api/src/auth/**",
+      "apps/api/src/users/**",
+      "apps/api/test/**",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "audit AUTH/ACCOUNT 2026-07-02 (HIGH: user_roles hard-delete)",
+      "DB-02 §4.9/§7.4",
+      "CLAUDE.md §2 (BẤT BIẾN #2)",
+      "mig 0005 (GRANT DELETE user_roles)",
+    ],
+    done_when: [
+      "migration NỐI TIẾP head: user_roles + deleted_at timestamptz NULL + deleted_by uuid FK SET NULL; UNIQUE (user_id,role_id,company_id) → partial WHERE deleted_at IS NULL (re-grant sau khi gỡ không vỡ unique); REVOKE DELETE ON user_roles FROM app-role (giữ SELECT,INSERT,UPDATE)",
+      "MỌI reader user_roles filter deleted_at IS NULL (permission.service can/getCapabilities/getCapabilityScopes · auth.service me() · data-scope · users list roles nếu có) — grep khẳng định không sót; revoke-role (permission-admin) chuyển DELETE → UPDATE set deleted_at/deleted_by trong tx + audit như cũ",
+      "RLS+FORCE giữ nguyên policy hiện có; RED test: app-role DELETE user_roles → DENIED; gỡ role → row còn (deleted_at set) + user MẤT quyền ngay (cache invalidate như cũ); re-assign lại role đã gỡ → OK không unique-vỡ",
+      "verify chain migrate 0000→head trên LANE_DB cô lập + regression permission suite xanh; FULL gate (database-reviewer + security-reviewer) + người chốt",
+    ],
+  },
+  {
+    id: "S2-FE-AUTH-6",
+    module: "FRONTEND",
+    layer: "FE",
+    title:
+      "FE Account-layer còn thiếu: màn enroll 2FA trong apps/app khi mustSetupTwoFactor (BE đã enforce) + /account/profile (read) + sửa AvatarMenu trỏ đúng",
+    zone: "yellow",
+    // AUDIT 2026-07-02: BE TwoFactorEnforcementGuard đã chặn user bị ép 2FA chưa enroll, nhưng apps/app KHÔNG có
+    //   màn enroll (chỉ console có TwoFactorSettings) → user kẹt không lối ra. /account/profile: ROUTE_REGISTRY có
+    //   meta account.profile nhưng router chưa đăng ký; AvatarMenu "Tài khoản của tôi" đang trỏ /home.
+    //   Self-EDIT hồ sơ vẫn = change-request workflow (S2-FE-HR-4) — màn này CHỈ read + link.
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**", "packages/ui/**"],
+    skills: ["frontend-design", "code-review"],
+    depends_on: ["S2-FE-AUTH-1"],
+    src: [
+      "audit AUTH/ACCOUNT 2026-07-02 (FE gaps)",
+      "FRONTEND-06 §7.2 (UI-ACCOUNT-SCREEN-001)",
+      "SPEC-02 (2FA)",
+      "API-02 (/auth/2fa/*)",
+      "memory admin-hr-fe-screen-wos-seeded (self-edit = change-request)",
+    ],
+    done_when: [
+      "luồng enroll 2FA trong apps/app: mustSetupTwoFactor=true từ /auth/me → điều hướng màn enroll (QR otpauth + verify TOTP + recovery codes hiện 1 LẦN) nối POST /auth/2fa/enroll|enable; enroll xong → refetch /auth/me → vào app bình thường; user KHÔNG bị ép → không thấy màn này",
+      "/account/profile (read-only): thông tin tài khoản từ /auth/me (user + employee + roles hiển thị, KHÔNG gọi API mới) + link 'đề nghị thay đổi hồ sơ' → /hr/me/change-request + link đổi mật khẩu + link /account/sessions; AvatarMenu 'Tài khoản của tôi' trỏ /account/profile (hết trỏ /home)",
+      "recovery codes KHÔNG vào localStorage/console (BẤT BIẾN #3); KHÔNG hard-code quyền; loading/error/empty; web test xanh (gồm test: mustSetupTwoFactor → redirect enroll; không ép → không redirect); typecheck xanh",
+    ],
+  },
+  {
+    id: "S2-AUTH-DOC-1",
+    module: "AUTH",
+    layer: "DOC",
+    title:
+      "Pin lệch-có-chủ-đích vào docs AUTH (DB-02 · BACKEND-03 · API-02 · FRONTEND-06): code thắng ở các điểm đã chốt — chặn audit sau báo 'lệch' giả",
+    zone: "green",
+    status: "todo",
+    paths: ["docs/DB/**", "docs/BACKEND/**", "docs/API Design/**", "docs/FRONTEND/**"],
+    skills: [],
+    depends_on: [],
+    src: [
+      "audit AUTH/ACCOUNT 2026-07-02 (danh sách lệch-có-chủ-đích — memory auth-account-audit-2026-07)",
+      "SPEC-02",
+    ],
+    done_when: [
+      "API-02 + BACKEND-03 cập nhật: uniform 401 login (bỏ 403 USER-LOCKED/INACTIVE phân biệt — anti-enumeration đã chốt) · cặp engine (action,resource_type) thay MODULE.RESOURCE.ACTION · companySlug bắt buộc · change-password thu hồi MỌI phiên (khớp SPEC-02 §14.5) · path thật /auth/refresh · /auth/sessions(+/:id/revoke,+/revoke-others) · bộ 2FA /auth/2fa/* + login response union twoFactorChallenge · refresh_tokens family model song song user_sessions",
+      "FRONTEND-06 cập nhật: SSO 3-app redirect qua ?redirect + server allowlist /auth/redirect-allowed (thay returnUrl client-side) · change-password → logout cưỡng bức · self-profile-edit = change-request workflow · FE bỏ nhánh 403 'tài khoản khóa' ở login (dead code với uniform 401) hoặc ghi rõ chỉ dành cho 403 ACCESS_RESTRICTED (security policy)",
+      "DB-02 ghi chú hiện trạng đã chốt: user_totp+user_recovery_codes thay user_mfa_methods · user_invites thay purpose ở password_reset_tokens · roles không role_code (name = code) · role_permissions effect ALLOW/DENY; OWNER CHỐT 1 QUYẾT ĐỊNH: data_scope 'Project' — widen CHECK trước Sprint TASK HAY pin 'TASK dùng project-membership, KHÔNG dùng data_scope Project' (engine + contracts hiện bỏ Project có chủ ý) — ghi kết luận vào DB-02 + DECISIONS nếu cần",
+      "mỗi điểm pin ghi 1 dòng 'CHỐT <ngày>: code thắng, lý do' ngay tại mục liên quan (KHÔNG viết lại cả doc — sửa đúng chỗ, giữ cấu trúc); KHÔNG đổi hành vi code trong WO này",
+    ],
+  },
+
+  // ════════════════════ CARRY-OVER — FOUNDATION/SYSTEM audit follow-ups (seed 2026-07-02) ════════════════════
+  // Nguồn: audit 6-lane Foundation vs DB-08/09/10 · BACKEND-04/11/12 · API-09/10 · FRONTEND-13/05
+  //   → báo cáo docs/_review/FOUNDATION-SYSTEM-AUDIT-2026-07-02.md (memory foundation-system-audit-2026-07).
+  //   Bất biến 100% PASS (0 CRITICAL); WO dưới = 8 HIGH + cụm THIẾU chưa có WO nào cover.
+  //   KHÔNG seed trùng: màn FE Sequences/Seeds = S2-FE-FND-5 (chờ S2-FND-BE-2 — audit thấy BE ĐÃ build, xem note
+  //   tại WO) · retention GET/PATCH + file-access viewer = S2-FND-BE-3 (đã build phần lớn, note tại WO) ·
+  //   user_roles hard-delete = S2-AUTH-DB-3. P0 = red-zone FULL gate + người chốt; migration lane NỐI TIẾP.
+  //   Lệch-có-chủ-đích (tuple permission · single-tenant cắt multi-company+internal-REST · download 302 presigned ·
+  //   PROTECTED_TABLES · is_paid_holiday · doc-drift DB-08↔DB-09 · path/method lệch nhỏ) → S2-FND-DOC-1 pin docs,
+  //   KHÔNG "sửa" code theo doc cũ.
+  {
+    id: "S2-FND-BE-4",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "File-access hardening (audit H1+H2): FilePolicy fallback FAIL-CLOSED cho file gắn entity module chưa đăng ký resolver + download chặn Infected/Pending",
+    zone: "red",
+    // AUDIT 2026-07-02 (HIGH #1+#2): registry resolver RỖNG ở production (grep registerResolver chỉ có trong spec;
+    //   file-policy.service.ts:154-161) ⇒ mọi file — kể cả gắn entity HR nhạy cảm — chỉ gate bằng fallback
+    //   FOUNDATION.FILE.* mức company (trái BACKEND-11 §11.10 deny-by-default). Download/download-url KHÔNG kiểm
+    //   scan_status/upload_status (files.service.ts:231-263) — file Infected/Pending vẫn presign; chỉ luồng link
+    //   chặn Infected. Upload hiện chưa E2E (file không lên được 'Uploaded') → siết fail-closed KHÔNG phá luồng
+    //   thật nào — verify bằng grep usage trước khi siết.
+    status: "todo",
+    paths: ["apps/api/src/foundation/files/**", "apps/api/test/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "audit FOUNDATION 2026-07-02 (H1/H2 — docs/_review/FOUNDATION-SYSTEM-AUDIT-2026-07-02.md §2)",
+      "BACKEND-11 §11.2/§11.9/§11.10/§25.1",
+      "BACKEND-04 §5.6 (file private by default)",
+    ],
+    done_when: [
+      "FilePolicy fallback fail-closed: file CÓ file_links trỏ entity (module_code,entity_type) KHÔNG có resolver đăng ký → DENY (không rơi về FOUNDATION.FILE.* company-wide); file KHÔNG link (đứng một mình, foundation-owned) giữ gate FOUNDATION.FILE.* như hiện tại; mọi deny ghi file_access_logs (allow+deny như đang có)",
+      "getDownloadUrl + download (302): upload_status !== 'Uploaded' HOẶC scan_status === 'Infected' → từ chối (404/409 theo convention lỗi hiện có), KHÔNG presign; luồng link giữ chặn Infected như cũ; view metadata KHÔNG bị siết (chỉ chặn lấy nội dung)",
+      "deny-path RED viết-TRƯỚC: (a) file link entity HR + user chỉ có download:foundation-file → DENY + access-log deny; (b) file Infected/Pending → không presign; (c) regression: file foundation thuần + Uploaded + Clean/NotRequired vẫn tải bình thường; 2-tenant deny giữ nguyên",
+      "FULL gate (security-reviewer — file access = crown) + người chốt; int-spec files/file-policy cập nhật, suite xanh LANE_DB cô lập",
+    ],
+  },
+  {
+    id: "S2-FND-BE-5",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Permission-surface reconcile (audit H4+H6): chốt cặp audit-log viewer (0435↔0340) + MODULE_APP_METADATA sang cặp canonical + chốt gate /settings/public",
+    zone: "red",
+    // AUDIT 2026-07-02 (HIGH #4+#6 + FE-lane): (1) AuditController gate view:audit-log (mig 0340, sensitive) nhưng
+    //   seed Foundation + my-apps metadata dùng view:foundation-audit-log (0435:345) → user có cặp foundation THẤY
+    //   app Audit mà API 403; export:foundation-audit-log orphan. Đúng lớp bẫy S1-FND-MODULE (pin 1 cặp!).
+    //   (2) MODULE_APP_METADATA (module-app-metadata.ts:30-63) còn cặp legacy read:attendance/read:leave/read:user —
+    //   KHÔNG grant cho 4 role canonical 0444 → my-apps ẨN app ATT/LEAVE/AUTH (tiềm ẩn: apps/app chưa consume
+    //   my-apps; sẽ nổ khi chuyển sang). FE PERMISSION_CODE_TO_PAIR đã SẠCH (PR #59) — drift còn lại ở BE.
+    //   (3) GET /foundation/settings/public gate view:foundation-setting nhưng doc = Authenticated → user thường
+    //   không bootstrap được public settings (timezone/locale/file limits).
+    // SHIPPED 2026-07-03 qua PR #109 (feat/debt-wave2, commit 695899e+a06c596): FULL gate PASS ~92 sau round-1
+    //   chốt hướng (cấm @Public(), tách controller giữ JwtAuthGuard+CompanyGuard bỏ PermissionGuard per-method).
+    status: "done",
+    paths: [
+      "apps/api/src/foundation/module-catalog/**",
+      "apps/api/src/foundation/audit/**",
+      "apps/api/src/foundation/settings/**",
+      "apps/api/migrations/**",
+      "docs/permission-matrix-spec.md",
+      "apps/api/test/**",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "audit FOUNDATION 2026-07-02 (H4/H6 + §7.3)",
+      "API-09 §6.3",
+      "API-10 (AUD-008)",
+      "memory s1-fnd-module-metadata-seed-drift (pin pair in spec)",
+      "mig 0340 + 0435 + 0444",
+    ],
+    done_when: [
+      "CHỐT (không còn 'đề xuất'): audit-log viewer dùng view:audit-log (mig 0340) làm gate DUY NHẤT — đã verify grant TƯỜNG MINH chỉ cho company-admin (0340:36-40), KHÔNG có role 'audit-viewer' riêng trong spec nên không mơ hồ; đổi my-apps metadata module-app-metadata.ts:37 sang cùng cặp; view/export:foundation-audit-log 0435 → deprecate có ghi chú (KHÔNG xoá row seed, giữ append-only) HOẶC alias-grant migration; pin kết luận vào docs/permission-matrix-spec.md + API-09",
+      "MODULE_APP_METADATA: ATT/LEAVE/AUTH đổi requiredAnyPermissions sang cặp canonical ĐÃ grant role 0444 (view-own/team/company:attendance · view-own/view:leave · view:user/role) — đối chiếu TỪNG cặp với seed thật (grep migration), sửa comment 'đã VERIFY' sai; int-test my-apps: user role canonical (employee/manager/hr/company-admin) thấy ĐỦ app được cấp; FE web-core registry.ts:141-142 ĐÃ map view:user/view:role đúng canonical (verify 2026-07-03, không cần đổi FE)",
+      "OWNER CHỐT /settings/public — CƠ CHẾ BẮT BUỘC (plan-BLOCK round 1 đã bác bỏ @Public()): KHÔNG được bỏ @RequirePermission mà giữ nguyên @UseGuards(PermissionGuard) cấp lớp trên SettingsController (fail-closed 403 khi thiếu metadata) VÀ TUYỆT ĐỐI KHÔNG dùng @Public() (bỏ luôn JwtAuthGuard → mất tenant-scoping, vi phạm BẤT BIẾN #1). Làm ĐÚNG 1 trong 2: (a) tách getPublic sang controller/route KHÔNG áp PermissionGuard cấp lớp (mẫu route change-password trong AuthController — vẫn còn JwtAuthGuard+CompanyGuard, chỉ bỏ permission-check), hoặc (b) gỡ class-level guard, áp @RequirePermission per-method cho resolve/patch, để getPublic không có decorator nhưng vẫn qua JwtAuthGuard. GIỮ nguyên lọc is_public && !is_sensitive + secret-drop setting-mask.ts (KHÔNG nới mask)",
+      "deny-path RED viết-TRƯỚC bắt buộc cho /settings/public: (a) KHÔNG Bearer token → 401 (không phải 200/403); (b) user companyA chỉ nhận public settings companyA (chứng minh withTenant/companyId vẫn ép sau khi đổi gate); test đặt ở int-spec (LANE_DB), KHÔNG để .spec.ts colocated cho case cần guard+DB thật",
+      "FULL gate (security-reviewer — permission surface) + người chốt; regression permission suite xanh",
+    ],
+  },
+  {
+    id: "S2-FND-BE-6",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Trả nợ audit CONFIG holiday (BE-6→BE-9, audit H5) + mở rộng audit-masker stems (otp/salary/health/id_card)",
+    zone: "red",
+    // AUDIT 2026-07-02 (HIGH #5): holidays.service.ts create/update/delete (:151-220) KHÔNG gọi AuditService —
+    //   comment defer ':75-76' còn nguyên; nợ FOUNDATION-BE-6 → BE-9 chưa trả (memory foundation-be6-holiday-deferrals
+    //   đã cập nhật hiện trạng). Kèm (BACKEND-11 §12.5): audit-masker.service.ts:33-41 thiếu stems otp ·
+    //   salary_amount · personal_health_info; stem 'identitynumber' KHÔNG khớp biến thể 'id_card_number' — hiện dựa
+    //   kỷ luật DTO-at-source (tiền lệ lọt: S2-HR-BE-2).
+    // SHIPPED 2026-07-03 qua auto-loop checkpoint (feat/debt-wave2, commit 75236b1): Đội3 PASS vòng2 (~93) rồi
+    //   người chốt duyệt trực tiếp (không PR riêng — commit nằm sẵn trên nhánh tích hợp). Stem 'salary' thu hẹp
+    //   còn 'salaryamount' để KHÔNG che base_salary (tránh regression audit trail update-salary/S2-QA-1); verify
+    //   employees-salary-sensitive.int-spec.ts 7/7 pass trên LANE_DB cô lập.
+    status: "done",
+    paths: [
+      "apps/api/src/foundation/holidays/**",
+      "apps/api/src/events/audit-masker.service.ts",
+      "apps/api/src/db/schema/audit.ts",
+      "apps/api/migrations/**",
+      "apps/api/test/**",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "audit FOUNDATION 2026-07-02 (H5 + §5.2 masker)",
+      "BACKEND-04 §17.4",
+      "BACKEND-11 §12.5",
+      "SPEC-01 §16.3 (audit hành động quan trọng)",
+      "memory foundation-be6-holiday-deferrals",
+    ],
+    done_when: [
+      "create/update/delete public-holiday ghi AuditService.record TRONG CÙNG tx withTenant (old/new/changed_fields auto-mask); object_type 'public_holiday' — nếu CHƯA có trong CHECK audit_logs.object_type → migration UNION add-only nối head (hot-file append, CLAUDE.md §9.3); gỡ comment defer ':75-76'",
+      "audit-masker: thêm stems otp · salary (phủ salary_amount/salaryAmount) · health (personal_health_info) · idcard (phủ id_card_number/idCardNumber — normalize bỏ '_' trước khi so stem); unit test mask từng biến thể; KHÔNG nới lỏng stem hiện có",
+      "deny-path RED viết-TRƯỚC: mutation holiday rollback → audit rollback CÙNG tx (0 row mồ côi); audit payload không lộ field nhạy cảm; regression holidays suite + audit-masker spec xanh",
+      "FULL gate (audit = crown) + người chốt; verify trên LANE_DB cô lập (migration CHECK mới)",
+    ],
+  },
+  {
+    id: "S2-FND-DB-1",
+    module: "FOUNDATION",
+    layer: "DB",
+    title:
+      "REVOKE DELETE app-role trên companies + users (audit sát-HIGH, BẤT BIẾN #2): chặn hard-delete tenant gốc + tài khoản",
+    zone: "red",
+    // AUDIT 2026-07-02: mig 0002:34 GRANT SELECT,INSERT,UPDATE,DELETE ON companies TO mediaos_app (users tương tự
+    //   band cũ) — app role hard-delete được company/user dù cả 2 bảng có deleted_at; trái DB-08 §8.1 rule 4.
+    //   Mọi bảng foundation band 0431+ đều đã bỏ DELETE. (user_roles = S2-AUTH-DB-3 riêng — KHÔNG trùng.)
+    //   LANE NỐI TIẾP db-migration. ⚠️ ĐỔI WRITER TRƯỚC KHI SIẾT GRANT (bài học S2-AUTH-DB-3): grep mọi .delete(
+    //   trên companies/users → chuyển soft-delete TRƯỚC, RỒI migration REVOKE — sai thứ tự là vỡ runtime.
+    // SHIPPED 2026-07-03 qua auto-loop checkpoint (feat/debt-wave2, commit 40acc91): migration 0467, FULL gate
+    //   PASS, push thẳng nhánh tích hợp (không PR riêng — HEAD đã ở mergeBase lúc ship).
+    status: "done",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/**",
+      "apps/api/src/**",
+      "apps/api/test/**",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "audit FOUNDATION 2026-07-02 (§2 sát-HIGH + §3.1 companies)",
+      "DB-08 §8.1 rule 4",
+      "CLAUDE.md §2 (BẤT BIẾN #2)",
+      "mig 0002 (grant companies)",
+    ],
+    done_when: [
+      "grep toàn src khẳng định KHÔNG writer nào hard-DELETE companies/users (drizzle .delete(companies|users)) — nếu có → chuyển UPDATE set deleted_at trong tx TRƯỚC; test suite/seed dùng role owner/postgres KHÔNG bị ảnh hưởng (chỉ siết mediaos_app)",
+      "migration NỐI TIẾP head: REVOKE DELETE ON companies, users FROM mediaos_app (GIỮ SELECT,INSERT,UPDATE); RED test: app-role DELETE companies/users → DENIED (mẫu append-only test hiện có)",
+      "db:check chain 0000→head xanh trên LANE_DB cô lập + regression auth/hr suite xanh; FULL gate (database-reviewer + security-reviewer) + người chốt",
+    ],
+  },
+  {
+    id: "S2-FND-SEED-2",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Runtime seeder HR + Sequences (audit H7, DB-10 §14): job_levels 8 + contract_types 5 + employee_code_config EMP + sequence counter + SequenceService.ensureCounter — DB sạch tự sinh employee_code",
+    zone: "yellow",
+    // AUDIT 2026-07-02 (HIGH #7): sequence_counters KHÔNG được seed ở tầng nào (0434 chỉ DDL; không seeder; không
+    //   POST API; ensureCounter có TYPE sequence.types.ts:71-81 nhưng KHÔNG method) → hr-write.service.ts:412-425
+    //   throw trên DB sạch — smoke DB-10 §19.3 FAIL. HR master (job_levels/contract_types/employee_code_config) =
+    //   0 seed (mig 0445:12-17 chủ đích dời runtime nhưng lane chưa làm). Mẫu sẵn: att/leave-master-data.seeder +
+    //   registrar + SeedTracking checksum idempotent.
+    status: "todo",
+    paths: [
+      "apps/api/src/employees/**",
+      "apps/api/src/foundation/sequences/**",
+      "apps/api/src/foundation/seed/**",
+      "apps/api/test/**",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "audit FOUNDATION 2026-07-02 (H7 + §4.2)",
+      "DB-10 §14.1/§19.3",
+      "BACKEND-04 §11.5 rule 3 (ensureCounter)",
+      "mẫu att-master-data.seeder.ts + leave-master-data.seeder.ts",
+    ],
+    done_when: [
+      "seeder 'hr.master-data' đăng ký registry (mẫu att/leave): job_levels 8 + contract_types 5 + employee_code_config (prefix EMP, padding 4) — giá trị theo DB-10 §14.1, idempotent qua SeedTracking checksum, KHÔNG đụng row user đã sửa (checksum Skip/Update đúng semantics hiện có)",
+      "SequenceService.ensureCounter(input) hiện thực theo type sẵn có (tạo-nếu-chưa-có trong tx, ON CONFLICT DO NOTHING, trả counter) — hr-write/consumer gọi ensureCounter thay vì để SequenceNotFoundError nổ 500; chốt 1 đường (ensure-on-use), seeder KHÔNG cần seed counter trùng cơ chế",
+      "smoke DB-10 §19.3 pass: DB sạch → migrate → boot (seed runner chạy) → tạo employee → employee_code = EMP0001 (int-spec trên LANE_DB cô lập)",
+      "LIGHT gate (typescript-reviewer + quality-gate) — không đổi permission/RLS; suite api xanh",
+    ],
+  },
+  {
+    id: "S2-FND-SEED-3",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Bootstrap dựng-từ-trống tự động (audit §4.2): seed default company idempotent (thay bước psql tay) + must_change_password cho super-admin bootstrap",
+    zone: "red",
+    // AUDIT 2026-07-02: default company = bước psql tay (scripts/windows/03-migrate.ps1:32-38);
+    //   SuperAdminBootstrapService fail-fast khi company vắng (super-admin-bootstrap.service.ts:66-77) → dựng-từ-trống
+    //   phải seed tay + restart. DB-10 §17.2 điểm 5: bootstrap admin phải must_change_password=true — grep 0 kết quả
+    //   toàn repo (cột không tồn tại).
+    // OWNER CHỐT 2026-07-03 (checkpoint feat/debt-wave2, sau plan-BLOCK round 1) — bake TRƯỚC khi build (SECURITY
+    //   DEFINER hardening là BLOCKING, không phải tuỳ chọn): (1) `ensure_default_company` PHẢI có
+    //   `REVOKE ALL ON FUNCTION ensure_default_company(...) FROM PUBLIC` TRƯỚC khi GRANT EXECUTE cho app role —
+    //   thiếu dòng này, PUBLIC (mọi DB role) mặc định có EXECUTE ⇒ bất kỳ role nào cũng tạo được tenant-root.
+    //   (2) PHẢI `SET search_path = pg_catalog` + fully-qualify `public.companies` trong thân hàm (chống
+    //   search_path-injection leo thang quyền definer) — mirror ĐÚNG `resolve_company_by_slug` (mig 0002).
+    //   (3) Thêm deny-path THẬT: 1 role KHÁC app (không phải mediaos_app) gọi EXECUTE ensure_default_company PHẢI
+    //   bị permission-denied — không chỉ test positive 'app role EXECUTE được'. (4) BOOTSTRAP_COMPANY_LOCALE
+    //   default ĐỔI THÀNH 'vi' (KHÔNG 'vi-VN') — cột companies.language có CHECK CHỈ nhận 'vi'/'en' (mig 0015/0360),
+    //   insert 'vi-VN' sẽ THROW CHECK violation → sập boot dựng-từ-trống; xác nhận currency mặc định ∈
+    //   {'VND','USD'} (companies_currency_check) và param→cột mapping ghi rõ trong task. (5) OWNER CHỐT N=1 guard:
+    //   nếu ĐÃ CÓ BẤT KỲ company active nào (bất kể slug có khớp BOOTSTRAP_COMPANY_SLUG hay không) → KHÔNG tạo
+    //   company mới, bỏ qua bước này êm (không sập boot) — bảo vệ N=1 kể cả khi config slug lệch/bị đổi giữa
+    //   các lần deploy; thêm test kịch bản 'đã có company khác slug → không tạo thêm'. (6) Lane khai
+    //   `auth.service.spec.ts` (colocated) + int-spec me-flag PHẢI thêm 'apps/api/src/auth/**' +
+    //   'apps/api/test/**' vào paths (đang thiếu → guard-scope sẽ cảnh báo); xác nhận tên file int-spec không
+    //   đụng int-spec khác cùng chạy trong WO. (7) Audit: `auth.super_admin_bootstrapped` hiện có ĐÃ ĐỦ ghi dấu
+    //   company auto-create (không cần audit riêng — đây là 1 hành động bootstrap thống nhất).
+    // OWNER CHỐT round 3 (sau 3 vòng Đội3 FAIL, exhausted maxReviewIterations) — LỖ CRITICAL đã tái hiện được
+    //   THẬT (không phải giả định): `ensure_default_company` (SECURITY DEFINER) KHÔNG concurrency-safe — guard
+    //   SELECT rồi INSERT chạy READ COMMITTED, KHÔNG lock. 2 instance API cùng boot lần đầu (kịch bản HA thật) có
+    //   thể cả hai đều thấy 0 company active rồi cả hai INSERT (slug khác nhau) đều COMMIT ⇒ 2 company ACTIVE
+    //   cùng lúc, vỡ N=1. Đã verify bằng test-lặp song song (27 lần, fail ~3.7%) VÀ trực tiếp ở tầng SQL (2
+    //   session function-owner). BẮT BUỘC vá ở TẦNG PRODUCT (không phải test-only retry):
+    //   (8) Thêm `CREATE UNIQUE INDEX uq_companies_single_active ON companies((true)) WHERE status='active' AND
+    //   deleted_at IS NULL` — DB tự chặn CỨNG >1 company active bất kể đường code nào ghi, kể cả path tương lai
+    //   chưa viết. Hàm ensure_default_company bắt lỗi unique-violation (23505) từ INSERT này → coi như 'company
+    //   khác đã thắng race' → SELECT lại + return company đó (KHÔNG throw ra ngoài) — giữ đúng ngữ nghĩa
+    //   idempotent kể cả dưới race thật. (9) Test 'idempotent' (DB10-TC-003, dòng ~207) phải DETERMINISTIC —
+    //   dùng SELECT có tiebreaker `ORDER BY created_at ASC, id ASC` (không chỉ created_at) HOẶC bọc 2 lần gọi
+    //   trong 1 phiên/tx snapshot cố định — pattern giống REPEATABLE-READ fix đã áp cho test 'create-from-empty'
+    //   (FIX-1), MỞ RỘNG sang test idempotent (chưa được áp). (10) GỘP 2 file test gần-trùng
+    //   apps/api/src/foundation/seed/ensure-default-company.int.spec.ts và
+    //   apps/api/test/integration/foundation-seed3-ensure-company.int-spec.ts thành 1 file canonical (2 file chạy
+    //   song song trên CÙNG bảng companies chính là nguyên nhân gây race giữa 2 suite) — xoá bloat + xoá nguồn
+    //   race test-tự-gây. (11) BẮT BUỘC mở PR + chạy FULL gate (security-reviewer + database-reviewer) THẬT trên
+    //   commit fix — vòng trước code còn nằm local trên feat/debt-wave2, chưa qua gate.
+    // SHIPPED 2026-07-04 (commit fb318b5, feat/debt-wave2): design-correction unique-index→advisory-lock
+    //   (round-3 owner-chốt sai, tự sửa lại sau khi test-lane phát hiện phá ~141 file 2-tenant). FULL gate
+    //   security-reviewer + database-reviewer (2 review độc lập, tự chạy lại verify) PASS; 2 LOW đã fix.
+    status: "done",
+    paths: [
+      "apps/api/src/permission/super-admin-bootstrap.service.ts",
+      "apps/api/src/foundation/seed/**",
+      "apps/api/src/auth/**",
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "apps/api/src/config/**",
+      "apps/api/test/**",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "audit FOUNDATION 2026-07-02 (§4.2 seed data)",
+      "DB-10 §17.1/§17.2",
+      "memory super-admin-bootstrap-flaky-count (int-spec hiện có)",
+    ],
+    done_when: [
+      "boot với DB trống-sau-migrate: company mặc định TỰ tạo idempotent (slug/name từ env BOOTSTRAP_COMPANY_* — có default; ON CONFLICT theo slug unique 0002) TRƯỚC SuperAdminBootstrap trong cùng bootstrap chain — hết fail-fast-rồi-restart; env thiếu → log hướng dẫn rõ, KHÔNG sập boot môi trường đã có company; ĐÃ CÓ company active khác slug → bỏ qua tạo mới (N=1 guard, xem note owner-chốt)",
+      "migration NỐI TIẾP head: users.must_change_password boolean NOT NULL DEFAULT false; bootstrap admin set true; /auth/me expose mustChangePassword (ADDITIVE — mẫu S2-AUTH-BE-1); change-password thành công → clear flag trong cùng tx; FE enforcement (redirect ép đổi) = follow-up FE, ghi TODO rõ KHÔNG dựng nút chết",
+      "deny-path RED viết-TRƯỚC: bootstrap idempotent (chạy 2 lần → 1 company, 1 admin, grant-count không phình — vá luôn kịch bản flaky memory nếu chạm); secret env KHÔNG log; audit auth.super_admin_bootstrapped giữ nguyên",
+      "FULL gate (bootstrap/auth = crown) + người chốt; int-spec super-admin-bootstrap + smoke dựng-từ-trống xanh trên LANE_DB cô lập",
+    ],
+  },
+  {
+    id: "S2-FND-SEED-4",
+    module: "FOUNDATION",
+    layer: "DB",
+    title:
+      "Seed settings đủ theo DB-10 §11 (audit §4.2): bổ sung 9/14 system key + cơ chế company-defaults 12 key + chốt giá trị lệch (25MB vs 20 · 'vi' vs 'vi-VN')",
+    zone: "yellow",
+    // AUDIT 2026-07-02: system_settings seed 5/14 key (0435:311-324); company_settings 0/12; giá trị lệch doc:
+    //   file.max_upload_size_mb=25 vs 20, default_locale='vi' vs 'vi-VN'; SETTING_DEFAULTS hard-code chỉ phủ 6 key
+    //   (setting-defaults.ts:19-76) — attendance.*/leave.* defaults KHÔNG tồn tại. 3 nguồn (migration seed ·
+    //   SETTING_DEFAULTS · doc) đang drift. Gate: diff chạm migration ⇒ FULL theo policy (zone giữ yellow — model).
+    // OWNER CHỐT 2026-07-03 (checkpoint feat/debt-wave2, sau plan-BLOCK round 1) — bake TRƯỚC khi build:
+    //   (1) `notification.in_app_enabled` bị DB-10 liệt kê ở CẢ §11.1 (system) LẪN §11.2 (company-default) —
+    //   ĐÃ seed system-scope từ 0435, GIỮ NGUYÊN (system thắng). Acceptance '12 company-default key scope=default'
+    //   CHỈ áp cho 11 key KHÔNG trùng system_settings; riêng notification.in_app_enabled assert scope='system'
+    //   value=true (KHÔNG đòi scope='default' cho key này) — ghi rõ trong task để không đỏ-giả/xanh-giả. Ghi chú
+    //   entry notification.in_app_enabled trong SETTING_DEFAULTS là fallback KHÔNG reachable trong thực tế.
+    //   (2) Deny-path /resolve cần role VIEW-ONLY (có view:foundation-setting, KHÔNG có update) để exercise nhánh
+    //   canSeeNonPublic=false — role seed sẵn (company-admin=cả 2, employee=không có view) không đủ. TẠO grant
+    //   ad-hoc CHỈ TRONG test setup (insert permission grant cho 1 user test, KHÔNG thêm role canonical mới vào
+    //   seed sản phẩm) để giữ catalog role sạch. (3) module_code cho 10 key mới: THEO ĐÚNG cột Module DB-10 §11.1
+    //   (security.*=AUTH, file.default_visibility=FOUNDATION, notification.*=NOTI, dashboard.*=DASH,
+    //   system.default_currency=SYSTEM) — KHÔNG blanket 'SYSTEM' cho tất cả (WO này CHÍNH LÀ để sửa deviation
+    //   audit, không lặp lại shortcut). (4) 'đủ 14 key canonical Active' = 4 key §11.1 sẵn có + 10 key mới;
+    //   file.allowed_mime_types (đã seed 0435) là key DÔI, KHÔNG tính vào 14 và KHÔNG bị xoá — presence-test
+    //   không được assert 'CHỈ đúng 14 rows Active'.
+    status: "todo",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/foundation/settings/setting-defaults.ts",
+      "apps/api/test/**",
+      "docs/DB/**",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: ["audit FOUNDATION 2026-07-02 (§4.2)", "DB-10 §11.1/§11.2", "DB-08 §8.3-8.4"],
+    done_when: [
+      "OWNER CHỐT giá trị lệch: file.max_upload_size_mb (20 doc vs 25 code) + default_locale ('vi-VN' doc vs 'vi' code — ảnh hưởng i18n key FE) — kết luận ghi vào DB-10 (1 dòng CHỐT) rồi seed theo; KHÔNG đổi ngầm giá trị đang chạy nếu chốt code-thắng",
+      "migration seed NỐI TIẾP head bổ sung system key còn thiếu (security.* · notification.* · file.default_visibility · system.default_currency · dashboard.cache_*) ON CONFLICT DO NOTHING — key nào thuộc module CHƯA build (NOTI/DASH) vẫn seed được vì là config nền (theo DB-10), value_type/validation đúng DB-08 §8.3",
+      "company 12 key: CHỐT 1 cơ chế — mở rộng SETTING_DEFAULTS (precedence default đã có, KHÔNG cần seed per-company) là mặc định đề xuất; nếu chọn seed per-company → qua runtime seeder registry (KHÔNG migration company-scoped, bài học 0445:14-18); setting-defaults.ts đồng bộ hết drift 3-nguồn (test đối chiếu key-list)",
+      "int-spec resolve các key mới theo precedence; db:check chain xanh; FULL gate theo migration + quality-gate",
+    ],
+  },
+  {
+    id: "S3-LEAVE-SEED-2",
+    module: "LEAVE",
+    layer: "BE",
+    title:
+      "Leave types 8/8 + pin mã (audit §4.2, DB-10 §14.3): thêm MATERNITY/MARRIAGE/BEREAVEMENT/COMPENSATORY + chốt ANNUAL↔ANNUAL_LEAVE + allowHourly",
+    zone: "yellow",
+    // AUDIT 2026-07-02: leave-master-data.seeder.ts:55-99 seed 4/8 loại, mã KHÁC doc (ANNUAL vs ANNUAL_LEAVE...);
+    //   ANNUAL allowHourly:false vs doc policy allow_hourly:true. Mã đã có dữ liệu tham chiếu (leave_requests) →
+    //   ĐỔI MÃ = migration data, tránh nếu được. Pin mã TRƯỚC khi FE bind constants.
+    status: "todo",
+    paths: ["apps/api/src/leave/**", "packages/contracts/src/**", "apps/api/test/**", "docs/DB/**"],
+    skills: ["code-review"],
+    depends_on: ["S3-LEAVE-SEED-1"],
+    src: ["audit FOUNDATION 2026-07-02 (§4.2)", "DB-10 §14.3", "SPEC-05"],
+    done_when: [
+      "OWNER CHỐT bộ mã leave type (đề xuất: code-thắng GIỮ ANNUAL/SICK/UNPAID/OTHER — ngắn, đã có dữ liệu; pin vào DB-10 §14.3 1 dòng CHỐT) + chốt ANNUAL allowHourly (doc true vs code false — ảnh hưởng FE form nghỉ theo giờ)",
+      "seeder mở rộng thêm 4 loại MATERNITY/MARRIAGE/BEREAVEMENT/COMPENSATORY (thuộc tính paid/quota theo DB-10 §14.3) idempotent checksum; policy mặc định các loại mới nếu doc yêu cầu; KHÔNG đụng row đã sửa tay",
+      "mã leave type expose qua packages/contracts constants (FE bind từ contracts, KHÔNG hard-code chuỗi); int-spec seeder xanh trên LANE_DB",
+      "LIGHT gate; nếu chốt đổi-mã (không khuyến nghị) → nâng FULL + migration data + người chốt",
+    ],
+  },
+  {
+    id: "S2-FND-BE-8",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Đóng permission-seed orphan (audit §6.3): system-settings GET/PATCH + PATCH modules/:code toggle (audit CONFIG) + audit export + retention POST create/simulate + not-found guard",
+    zone: "red",
+    // AUDIT 2026-07-02: 7 cặp đã seed 0435 nhưng KHÔNG endpoint nào dùng → màn console admin không có BE:
+    //   system-manage:foundation-setting (0435:343) · update:foundation-module (0435:339 — S2-FND-BE-1 đã note
+    //   'toggle = follow-up crown/red') · export:foundation-audit-log (0435:346 — chờ chốt cặp ở S2-FND-BE-5) ·
+    //   run:foundation-seed + view/run:foundation-job (job = S2-FND-JOBS-1). Retention: service CÓ createPolicy/
+    //   simulate (retention.service.ts:90-129, 296-323) nhưng controller không expose; simulate/runCleanup thiếu
+    //   guard policy-not-found → 500 thay 404 (:309-310, :350-351).
+    // OWNER CHỐT 2026-07-04 (sau plan-BLOCK round 4, không có phản hồi trong 60s → tiến hành theo phương án
+    //   khuyến nghị đã đề xuất): (1) audit-export DEFER — KHÔNG build route ở WO này; pin vào S2-FND-DOC-1 +
+    //   gỡ cặp orphan export:foundation-audit-log (0435:346, deprecated từ S2-FND-BE-5) khỏi app-surface (không
+    //   route chết). (2) module-toggle audit: THÊM migration nhỏ UNION-add object_type 'module' vào CHECK
+    //   audit_logs + sync mảng AUDIT_OBJECT_TYPES (schema/audit.ts) — KHÔNG tái dùng 'company_setting' (audit
+    //   trail phải phản ánh đúng hành động). (3) Lock-list module-lõi KHÔNG được tắt = CHỐT CỨNG cả 7 module MVP
+    //   hiện có (AUTH/HR/ATT/LEAVE/TASK/DASH/NOTI) — toggle này thực chất nhắm module Phase 2 tương lai
+    //   (PAYROLL/RECRUIT/ASSET/ROOM/CHAT/SOCIAL/...), chưa module MVP nào nên được phép tắt.
+    // Sửa thêm theo plan-reviewer round 4: (4) step-1 ghi SAI cặp quyền — retention dùng 363 (manage:foundation-
+    //   retention), KHÔNG PHẢI 346 (đó là export orphan, giờ đã defer hẳn). (5) module-toggle PHẢI tự viết+audit
+    //   TRONG module-catalog/** (KHÔNG gọi SettingService.updateCompanySetting của lane settings — tránh đụng
+    //   file chéo lane + tránh mislabel object_type). (6) barrel packages/contracts/src/foundation/index.ts: SERIALIZE
+    //   (1 lane cuối cùng append, không chạy 4 lane song song rồi merge tay) để tránh ghi đè export lẫn nhau.
+    status: "todo",
+    paths: [
+      "apps/api/src/foundation/settings/**",
+      "apps/api/src/foundation/module-catalog/**",
+      "apps/api/src/foundation/retention/**",
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/audit.ts",
+      "packages/contracts/src/**",
+      "apps/api/test/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S2-FND-BE-5"],
+    src: [
+      "audit FOUNDATION 2026-07-02 (§6.1/§6.3 orphan)",
+      "API-09 §10 (settings) + §9.5 (export)",
+      "BACKEND-04 §9.3/§9.4 + §11.7",
+      "BACKEND-11 §9.8 (retention API)",
+    ],
+    done_when: [
+      "GET/PATCH /foundation/system-settings(/:key): gate system-manage:foundation-setting (sensitive, System-scope); PATCH validate value_type/schema như company path + audit SYSTEM_SETTING_UPDATED — BẮT BUỘC dùng `withTenant(actor.companyId)` cho CẢ mutation lẫn audit trong CÙNG tx (KHÔNG `withTransaction`); object_type 'system_setting' đã dành chỗ trong CHECK 0439 — verify, thiếu thì migration UNION; mask sensitive khi đọc như company; test positive-path PHẢI dùng principal super-admin/được-grant-tường-minh (company-admin 0435 KHÔNG có cặp is_sensitive=true này)",
+      "PATCH /foundation/modules/:code (enable/disable qua company_settings 'module.<code>.enabled'): gate update:foundation-module (super-admin cho test positive) + audit CONFIG TỰ VIẾT trong module-catalog/** (KHÔNG mượn SettingService) với object_type='module' MỚI (migration UNION-add vào CHECK audit_logs + sync AUDIT_OBJECT_TYPES, cùng đợt với WO này — không tách follow-up) + permissionCode phản ánh đúng module-toggle; my-apps/admin-list phản ánh ngay; module-lõi KHÓA CỨNG = 7 module MVP (AUTH/HR/ATT/LEAVE/TASK/DASH/NOTI) — toggle 7 module này PHẢI 400/403, có test đo được; barrel packages/contracts/src/foundation/index.ts SERIALIZE 1 lane cuối append (không parallel-rồi-merge)",
+      "Audit-export: KHÔNG build (owner chốt DEFER 2026-07-04) — xoá/không-route cặp export:foundation-audit-log (0435:346, đã deprecated ở S2-FND-BE-5) khỏi mọi nơi tham chiếu app-surface (my-apps metadata, docs) nếu còn sót; pin quyết định defer vào S2-FND-DOC-1",
+      "Retention: POST /foundation/retention-policies (create, gate manage:foundation-retention — cặp 363, KHÔNG PHẢI 346) + POST /:id/simulate expose service sẵn; createPolicy (retention.service.ts:90-129) HIỆN THIẾU audit (updatePolicy đã có) → BẮT BUỘC thêm audit RETENTION_POLICY_CREATED in-tx (object_type 'retention_policy' đã có trong CHECK 0456, KHÔNG cần migration riêng); simulate/runCleanup guard not-found → 404 (hết 500) — verify retention-cleanup.job.ts CHỊU ĐƯỢC NotFoundException khi policy bị soft-delete giữa list và run (race); giữ PROTECTED_TABLES + isSensitive như S2-FND-BE-3",
+      "deny-path RED viết-TRƯỚC từng route (403 thiếu quyền + 0 audit · 2-tenant deny); FULL gate + người chốt; contracts Zod dual-build; migration UNION-add object_type 'module' verify chain 0000→head xanh LANE_DB",
+    ],
+  },
+  {
+    id: "S2-FND-JOBS-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "System Jobs khung tối thiểu (audit §5.2, DB-08 §8.14-15 + BACKEND-11 §18): bảng system_job_runs/locks + JobRunner trên WorkerScheduler + schedule RetentionCleanupJob + TEMP_FILE_CLEANUP",
+    zone: "red",
+    // AUDIT 2026-07-02 (HIGH gộp): khung §18 THIẾU toàn bộ — không system_job_runs/system_job_locks (DB-08 §8.14/8.15),
+    //   không JobRegistry/JobLock, không API /system-jobs; scheduler duy nhất = setInterval outbox
+    //   (scheduler/worker-scheduler.service.ts:44-73, cố ý không @nestjs/schedule). RetentionCleanupJob skeleton CÓ
+    //   (dry-run default TRUE) nhưng CHƯA schedule (retention.module.ts:13 'wire ở BE-9'). TEMP_FILE_CLEANUP: cột
+    //   is_temporary/expires_at + index CÓ SẴN (schema/files.ts:65-66,84-86) nhưng không job đọc; file 'Pending'
+    //   mồ côi không ai dọn. API /system-jobs (view/run:foundation-job đã seed) = OPTIONAL đợt này — chốt khi làm.
+    status: "todo",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/**",
+      "apps/api/src/scheduler/**",
+      "apps/api/src/foundation/retention/**",
+      "apps/api/src/foundation/files/**",
+      "apps/api/test/**",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "audit FOUNDATION 2026-07-02 (§5.2 SYSTEM JOBS)",
+      "DB-08 §8.14/§8.15",
+      "DB-09 §8.11/§8.12",
+      "BACKEND-11 §17/§18",
+    ],
+    done_when: [
+      "migration NỐI TIẾP head: system_job_runs + system_job_locks đúng shape DB-08 §8.14/8.15 + index DB-09 §8.11/8.12; RLS mẫu nullable-tenant (job global company_id NULL); grant app KHÔNG DELETE; db:check chain xanh",
+      "JobRunner tối thiểu trên WorkerSchedulerService hiện có (GIỮ setInterval — không đổi cơ chế): trước khi chạy lấy lock system_job_locks (locked_until, chống 2 instance chạy trùng), ghi system_job_runs start→success/error (đếm affected, error message KHÔNG secret); job fail KHÔNG sập app (mẫu outbox)",
+      "RetentionCleanupJob wire lịch qua JobRunner: dry-run default TRUE giữ nguyên + kill-switch env; PROTECTED_TABLES giữ nguyên (audit/file_access_logs KHÔNG BAO GIỜ purge — BẤT BIẾN #2); chạy thật per-tenant có ghi run",
+      "TEMP_FILE_CLEANUP job: soft-delete + storage delete file is_temporary hết expires_at VÀ file upload_status='Pending' quá TTL (setting 'file.pending_ttl_hours' — thêm default); ghi file_access_logs/audit theo mẫu delete hiện có",
+      "RED test: 2 runner song song → 1 chạy 1 skip (lock); job error → run ghi 'error' + app sống; FULL gate (migration + append-only kề audit) + người chốt; lane db NỐI TIẾP",
+    ],
+  },
+  {
+    id: "S2-FND-FILE-2",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "Upload file E2E (audit H3, BACKEND-11 §11.4): chốt mô hình presigned-PUT + POST /:id/confirm → upload_status 'Uploaded' + checksum + extension↔MIME + blocked_extensions",
+    zone: "red",
+    // AUDIT 2026-07-02 (HIGH #3): POST /foundation/files/upload CHỈ đăng ký metadata (Pending) — không đường binary
+    //   (không multipart, không presigned-PUT; port storage.signedUrl chỉ TASK dùng), không confirm → file kẹt
+    //   Pending vĩnh viễn; checksum_sha256/content_hash (schema/files.ts:52-53) không bao giờ tính;
+    //   download_count/last_accessed_at không bao giờ ghi; extension↔MIME không đối chiếu; blocked_extensions
+    //   setting không tồn tại (§11.6.4/6.6/6.7). Sau WO này download-guard (S2-FND-BE-4) có dữ liệu Uploaded thật.
+    status: "todo",
+    paths: [
+      "apps/api/src/foundation/files/**",
+      "apps/api/src/storage/**",
+      "apps/api/src/foundation/settings/setting-defaults.ts",
+      "packages/contracts/src/**",
+      "apps/api/test/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S2-FND-BE-4"],
+    src: [
+      "audit FOUNDATION 2026-07-02 (H3 + §5.2 FILE)",
+      "BACKEND-11 §11.4/§11.6/§11.9/§25.1",
+      "DB-08 §8.6",
+    ],
+    done_when: [
+      "OWNER CHỐT mô hình (đề xuất: presigned-PUT TTL-ngắn + POST /foundation/files/:id/confirm — khớp StorageAdapter sẵn có, không stream binary qua NestJS); kết luận pin vào BACKEND-11 (1 dòng CHỐT) nếu lệch multipart doc",
+      "luồng E2E: register (Pending, validate size/MIME/extension↔MIME/blocked_extensions từ settings — thêm key 'file.blocked_extensions' default exe/bat/cmd/sh/js…) → client PUT presigned → confirm: HEAD/GET storage verify tồn tại + size khớp khai báo + tính checksum_sha256 server-side → set 'Uploaded'; confirm sai size/không tồn tại → 'Failed' + lý do",
+      "download/download-url tăng download_count + last_accessed_at (best-effort, không chặn luồng); file Pending quá TTL → TEMP_FILE_CLEANUP dọn (S2-FND-JOBS-1 — nếu JOBS-1 chưa land thì ghi TODO trỏ, KHÔNG tự chế job)",
+      "int-spec E2E trên MinIO local (docker compose sẵn) + LANE_DB: upload→confirm→download OK; confirm sai size → Failed; presign TTL clamp giữ (adapter :67-71); FULL gate (file = crown) + người chốt",
+    ],
+  },
+  {
+    id: "S2-FE-FND-7",
+    module: "FOUNDATION",
+    layer: "FE",
+    title:
+      "FE System sửa nhỏ theo audit (H8 + §7): defaultRoute app Hệ thống → /system + 4 sidebar entry FOUNDATION + GROUP_LABELS 'master-data' + audit-logs default date-range",
+    zone: "yellow",
+    // AUDIT 2026-07-02 (HIGH #8 UX, sửa 1 dòng + phụ kiện): registry.ts:556 defaultRoute '/system/settings' =
+    //   SystemSettingsPage placeholder 'sắp ra mắt' → mở app Hệ thống từ Home Portal/AppSwitcher rơi màn trống.
+    //   Sidebar FOUNDATION (sidebar-registry.ts:396-512) thiếu entry Public Holidays · Health · Retention ·
+    //   File Access Logs (chỉ vào được qua quick-link Overview); entry System Settings THÊM SAU S2-FND-BE-8 (đừng
+    //   trỏ placeholder). GROUP_LABELS thiếu 'master-data' → HR hiện label thô (ModuleSidebar.tsx:32-39).
+    //   AuditLogsPage thiếu default date-range 7/30 ngày (FRONTEND-13 §21.2).
+    status: "todo",
+    paths: ["apps/app/**", "packages/web-core/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "audit FOUNDATION 2026-07-02 (H8 + §7.1/§7.2)",
+      "FRONTEND-13 §7.1/§8/§21.2",
+      "FRONTEND-05 (sidebar registry)",
+    ],
+    done_when: [
+      "APP_REGISTRY app 'system' defaultRoute → '/system' (Overview); test route-authz/registry-guard cập nhật khớp",
+      "sidebar-registry FOUNDATION thêm 4 entry: /system/public-holidays · /system/health · /system/retention · /system/file-access-logs — gate bằng ĐÚNG cặp quyền route-meta hiện có (KHÔNG hard-code nhãn doc); KHÔNG thêm entry /system/settings (placeholder) — ghi comment chờ S2-FND-BE-8",
+      "GROUP_LABELS thêm 'master-data' (nhãn vi); AuditLogsPage default filter from=30-ngày-gần-nhất (giữ đổi được); i18n vi đủ key mới",
+      "KHÔNG hard-code role; web test + typecheck xanh; LIGHT gate",
+    ],
+  },
+  {
+    id: "S2-FND-DB-2",
+    module: "FOUNDATION",
+    layer: "DB",
+    title:
+      "DB hygiene theo DB-09 (audit §3.2, P2): index bổ sung (files/file_access_logs/sequence) + uq_file_links_entity_file_active + trigger chặn UPDATE audit_logs lớp 2",
+    zone: "red",
+    // AUDIT 2026-07-02: thiếu idx_files_company_status · idx_files_cleanup_deleted · idx_file_access_logs
+    //   (company_id, created_at DESC) composite · idx_sequence_counters_reset · uq_file_links_entity_file_active
+    //   (không gì chặn link TRÙNG cùng file vào cùng entity khi non-primary — 0433:175-177 chỉ ép primary).
+    //   audit_logs: header DB-08 dòng 1 yêu cầu 'REVOKE + trigger' — hiện chỉ grant-level, thiếu trigger lớp 2.
+    //   idx_audit_logs_entity thiếu company_id-first + created_at (deviation kế thừa 0438:33-35) — chốt cùng đợt.
+    // OWNER CHỐT 2026-07-03 (checkpoint feat/debt-wave2, sau plan-BLOCK round 1): MỞ RỘNG paths sang service layer
+    //   để làm trọn map 409 trong CÙNG WO (quyết định chủ động — KHÔNG tách follow-up), xem done_when #2.
+    // LANE A (mig 0472, commit ba3527e) + LANE B (service-layer 409 map) đã code xong trên feat/debt-wave2
+    //   2026-07-04: files.service.ts link() bọc 23505 phân biệt uq_file_links_entity_file_active →
+    //   FOUNDATION-FILE-ERR-DUP-LINK / uq_file_links_primary_per_entity_type → FOUNDATION-FILE-ERR-DUP-PRIMARY
+    //   (2 mã đăng ký error-codes.ts, append-only); colocated unit spec (5 case) + int-spec re-link→409 +
+    //   DUP-PRIMARY (2 file khác nhau) + 2-tenant isolation (3 case). Full suite LANE_DB: 283 file/4330 test
+    //   pass. Đang CHỜ FULL gate (database-reviewer, chạm audit_logs = crown) + người chốt red-zone trước khi
+    //   flip status "done" (mig 0472 KHÔNG auto-merge — red zone).
+    // SHIPPED 2026-07-04 qua PR #113 (merged vào feat/debt-wave2).
+    status: "done",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/**",
+      "apps/api/src/foundation/files/files.service.ts",
+      "apps/api/src/foundation/files/**/*.repository.ts",
+      "apps/api/src/common/db-error.ts",
+      "apps/api/test/**",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "audit FOUNDATION 2026-07-02 (§3.2)",
+      "DB-09 §8.5-8.10",
+      "DB-08 header (REVOKE + trigger)",
+    ],
+    done_when: [
+      "migration NỐI TIẾP head: idx_files_company_status (company_id,upload_status,uploaded_at DESC) · idx_files_cleanup_deleted partial · idx_file_access_logs_company_time (company_id,created_at DESC — PIN tên canonical DB-09 §8.8, KHÔNG trùng/nhầm file_access_logs_company_id_idx sẵn có) · idx_sequence_counters_reset partial (Yearly/Monthly/Daily) — tên/shape theo DB-09, schema drizzle đồng bộ",
+      "uq_file_links_entity_file_active partial (deleted_at IS NULL), key ĐÚNG 6 cột (company_id,module_code,entity_type,entity_id,file_id,link_type): TRƯỚC khi ép — dedupe PHẢI nhóm ĐÚNG 6 cột uq (KHÔNG dùng nhầm shape 5-cột is_primary cũ 0433:175 — sẽ soft-delete NHẦM link hợp lệ khác file_id), thứ tự GIỮ xác định `is_primary DESC, created_at ASC, id ASC` (id là tie-break cuối, tránh trường hợp ≥2 hàng is_primary=true cùng nhóm làm CREATE UNIQUE vẫn vỡ); phần còn lại soft-delete (deleted_at=now); thêm test khẳng định link hợp-lệ-khác-file KHÔNG bị soft-delete nhầm. SAU khi ép constraint: FileService.link() (files.service.ts:349) PHẢI bọc bắt 23505 qua isUniqueViolation() (common/db-error.ts) — PHÂN BIỆT qua constraint name (pgErrorField(err,'constraint')): vi phạm uq_file_links_entity_file_active MỚI → ConflictException('FOUNDATION-FILE-ERR-DUP-LINK'); vi phạm uq_file_links_primary_per_entity_type CŨ (0433) → mã KHÁC (vd 'FOUNDATION-FILE-ERR-DUP-PRIMARY') — KHÔNG gộp chung 1 mã cho 2 nguyên nhân khác nhau; đăng ký cả 2 mã trong error-codes.ts hiện có (S2-FND-CONTRACT-1 sẽ reconcile vào catalog canonical sau, append-only không xung đột); colocated unit test khẳng định đúng mã theo từng constraint",
+      "trigger BEFORE UPDATE OR DELETE ON audit_logs → RAISE EXCEPTION lớp 2 (sau REVOKE — DB-08 header) — round 3 FIX: PHẢI phủ CẢ UPDATE VÀ DELETE (round 2 chỉ ghi UPDATE — nếu 1 migration sau lỡ GRANT DELETE cho mediaos_app, hard-delete audit_logs sẽ THÀNH CÔNG vì chỉ có lớp-1 REVOKE, không lớp-2; append-only nghĩa là chặn CẢ 2 hành vi). BẮT BUỘC DENYLIST chặn current_user='mediaos_app' (chỉ app-role; mediaos_worker đã chặn đủ ở lớp-1 REVOKE, KHÔNG cần thêm vào denylist — ghi comment rõ 2 lớp phòng thủ) — TUYỆT ĐỐI KHÔNG allowlist kiểu 'trừ mediaos_owner'. RED test: (a) app role UPDATE audit_logs bị chặn, assert message chứa 'append-only'; (a2) SONG SONG: app role DELETE audit_logs CŨNG bị chặn cùng cơ chế (temp-GRANT DELETE cho mediaos_app trong try/finally → xác nhận vẫn bị trigger chặn dù có grant); (b) POSITIVE: superuser/directPool UPDATE VÀ DELETE audit_logs đều THÀNH CÔNG. PIN tên cụ thể function+trigger, presence-test assert qua pg_trigger/pg_proc. idx_sequence_counters_reset: predicate WHERE reset_policy IN (...) PHẢI khớp CHÍNH XÁC casing CHECK thật (đối chiếu mig 0434/0437) — assert qua pg_indexes.indexdef",
+      "SỬA LỖI round 2 (owner bake trước dùng tên KHÔNG theo canonical — plan-reviewer round 3 bắt được): index mới (company_id,entity_type,entity_id,created_at DESC) đặt tên ĐÚNG canonical DB-09 §8.5 = `idx_audit_logs_company_entity` (KHÔNG phải `idx_audit_logs_entity_created` như round 2 tạm đặt để né trùng tên — tên đó không sai về mặt kỹ thuật nhưng lệch nguồn-sự-thật DB-09, sẽ đẻ reconcile-WO sau nếu giữ). `idx_audit_logs_entity` (module_code-led, mig 0432) GIỮ NGUYÊN không đụng — 2 tên khác nhau, không trùng. PIN `idx_audit_logs_company_entity` vào task/acceptance/test; presence-test assert qua pg_indexes.indexdef (không chỉ match tên). Thêm 1 case integration xác nhận uq_file_links_entity_file_active đổi hành vi re-link-trùng từ THÀNH CÔNG (hiện tại) sang 409 là CÓ CHỦ ĐÍCH (grep FE/service hiện tại xác nhận không luồng nào phụ thuộc re-link idempotent-thành-công; nếu có thì đây là finding MỚI cần báo trước khi land, không tự ý đổi test cho khớp)",
+      "db:check chain 0000→head xanh LANE_DB (xác nhận idx/when kế tiếp đúng head hiện tại lúc land — có thể đã đổi vì lane khác trong cùng checkpoint); FULL gate (database-reviewer — chạm audit) + người chốt; lane db NỐI TIẾP",
+    ],
+  },
+  {
+    id: "S2-FND-CONTRACT-1",
+    module: "BACKEND",
+    layer: "API",
+    title:
+      "API contract hygiene theo BACKEND-12 (audit §6.2, P2): Swagger/OpenAPI /docs + bộ mã FOUNDATION-ERR-* + chốt pagination request + migrate DTO cục bộ vào contracts",
+    zone: "yellow",
+    // AUDIT 2026-07-02: Swagger/OpenAPI KHÔNG TỒN TẠI (main.ts không SwaggerModule, không @nestjs/swagger,
+    //   không openapi/ artifact — kể cả openapi/enterprise-api.yaml mà API-10 AUD-005 nói 'đã áp dụng');
+    //   FOUNDATION-ERR-* 0/18 dùng (error-codes.ts:10-20 chỉ generic); pagination request lệch chuẩn §15.1
+    //   (code page+limit, audit limit+offset vs doc page+per_page); DTO settings/holidays/company-patch còn Zod
+    //   cục bộ apps/api (contracts/src/foundation/index.ts:4-6 tự nhận nợ).
+    status: "todo",
+    paths: [
+      "apps/api/src/main.ts",
+      "apps/api/src/common/**",
+      "apps/api/src/foundation/**",
+      "apps/api/package.json",
+      "packages/contracts/src/**",
+      "docs/BACKEND/**",
+      "apps/api/test/**",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "audit FOUNDATION 2026-07-02 (§6.2)",
+      "BACKEND-12 §8/§12/§15/§21",
+      "API-09 §21 (FOUNDATION-ERR)",
+    ],
+    done_when: [
+      "SwaggerModule (hoặc OpenAPI từ nestjs-zod) mount /docs — env-gate (bật dev/staging, tắt prod theo owner); artifact openapi.json sinh được bằng script; operationId + tag theo module; x-required-permission best-effort từ @RequirePermission (không chặn nếu khó — ghi TODO)",
+      "bộ mã FOUNDATION-ERR-* ADDITIVE vào error filter/catalog (403 foundation phân biệt được với AUTH-ERR-FORBIDDEN; SETTING-INVALID-VALUE, FILE-NOT-FOUND… theo API-09 §21); KHÔNG đổi HTTP status hiện hành TRỪ chốt 422→400 cho validation_schema (theo doc — hoặc pin 422 vào doc, owner chọn)",
+      "OWNER CHỐT pagination request: pin 'page+limit' của code vào BACKEND-12 §15.1 (đề xuất — ít vỡ FE) HOẶC đổi code sang per_page (kèm alias tương thích); audit-logs limit+offset chốt cùng đợt; response block pagination giữ nguyên (đã đúng)",
+      "DTO settings/holidays/company-patch migrate vào packages/contracts (dual-build, apps/api import lại — KHÔNG đổi shape); gỡ ghi chú nợ ở contracts/src/foundation/index.ts; typecheck + suite xanh; LIGHT gate",
+    ],
+  },
+  {
+    id: "S2-FND-DOC-1",
+    module: "FOUNDATION",
+    layer: "DOC",
+    title:
+      "Pin lệch-có-chủ-đích Foundation vào docs (DB-08/09/10 · BACKEND-04/11/12 · API-09/10 · FRONTEND-13): code thắng ở các điểm đã chốt — chặn audit sau báo 'lệch' giả",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "docs/DB/**",
+      "docs/BACKEND/**",
+      "docs/API Design/**",
+      "docs/FRONTEND/**",
+      "docs/_review/**",
+    ],
+    skills: [],
+    depends_on: [],
+    src: [
+      "audit FOUNDATION 2026-07-02 (§3.3/§5.3/§6.1 + §8 mục 20 — memory foundation-system-audit-2026-07)",
+      "CLAUDE.md §1 (docs là chuẩn — pin để doc PHẢN ÁNH quyết định)",
+    ],
+    done_when: [
+      "API-09/API-10/BACKEND-11 pin: permission = tuple (action,resource_type) namespace foundation-* thay MODULE.RESOURCE.ACTION · single-tenant v2 CẮT multi-company endpoints (GET/POST /companies, suspend/activate) + 7 internal REST /internal/v1/foundation/* (in-process service call thay thế — modular monolith) · download = 302 presigned TTL-ngắn thay stream · my-apps Authenticated-only tự lọc capability · path/method lệch nhỏ đã chấp nhận (preview GET theo :id · check-working-day · /seeds · file-links nested)",
+      "DB-08/DB-09/DB-10 pin + sửa doc-drift NỘI BỘ: DB-09 tham chiếu cột không tồn tại (accessed_at→created_at · files.checksum→checksum_sha256/content_hash · uq holiday theo name→holiday_code) — sửa DB-09 khớp DB-08; is_paid→is_paid_holiday · audit_logs Option-A (company_id NOT NULL mạnh hơn doc + cột legacy giữ) · retention PROTECTED_TABLES (audit/file_access_logs không purge — archive path = future) · seed company-scoped qua RUNTIME seeder thay migration (0445:14-18) · seed_batches status enum Success thay Applied",
+      "OWNER CHỐT 2 quyết định còn treo rồi ghi vào doc: (1) bảng companies reconcile theo DB-08 §8.1 (company_code unique/status enum/cột thiếu) HAY pin code-thắng ở N=1 single-tenant (đề xuất: pin, reconcile khi mở multi-company); (2) module sort_order 1-15 vs doc 10-70 (cosmetic — pin code)",
+      "mỗi điểm pin ghi 1 dòng 'CHỐT <ngày>: code thắng/doc sửa, lý do' đúng chỗ (KHÔNG viết lại cả doc); cập nhật trạng thái các mục tương ứng trong docs/_review/FOUNDATION-SYSTEM-AUDIT-2026-07-02.md; KHÔNG đổi hành vi code trong WO này",
     ],
   },
 ];

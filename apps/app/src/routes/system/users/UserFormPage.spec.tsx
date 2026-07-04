@@ -9,7 +9,7 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, ApiError } from "@mediaos/web-core";
 import { authUsersApi } from "@mediaos/web-core";
-import type { AuthUserDto } from "@mediaos/contracts";
+import type { AuthUserDetailDto } from "@mediaos/contracts";
 import { UserFormPage } from "./UserFormPage";
 
 // ---------------------------------------------------------------------------
@@ -62,7 +62,8 @@ function clearCapabilities() {
   useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
 }
 
-const DETAIL: AuthUserDto = {
+// getUser (S2-AUTH-BE-12) trả detail schema (superset + twoFactor) — form chỉ đọc fullName/email.
+const DETAIL: AuthUserDetailDto = {
   id: "22222222-2222-2222-2222-222222222222",
   email: "existing@demo.local",
   fullName: "Existing User",
@@ -71,6 +72,7 @@ const DETAIL: AuthUserDto = {
   lockedReason: null,
   lastLoginAt: null,
   createdAt: "2024-01-01T00:00:00.000Z",
+  twoFactor: { enabled: false, requiredByRole: false, requiredByUser: false },
 };
 
 // ---------------------------------------------------------------------------

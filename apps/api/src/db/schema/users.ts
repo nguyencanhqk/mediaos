@@ -8,6 +8,8 @@ import { companies } from "./companies";
  * theo (company_id, email) khi chưa xoá mềm (KHÔNG unique toàn cục — nền cho login §3b).
  * `company_id` ở DB có DEFAULT current_setting('app.current_company_id') → app khỏi tự set.
  * KHÔNG bao giờ đưa `passwordHash` vào DTO (BẤT BIẾN #3).
+ * S2-FND-DB-1 (mig 0467): mediaos_app CHỈ SELECT/INSERT/UPDATE — DELETE đã REVOKE (BẤT BIẾN #2, không
+ *   hard-delete tài khoản). Gỡ user = soft-delete qua UPDATE `deletedAt`; KHÔNG bao giờ `.delete(users)`.
  */
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -39,6 +41,10 @@ export const users = pgTable("users", {
   // S2-AUTH-DB-4 (mig 0466): cờ ép 2FA PER-USER (khác roles.requires_two_factor = ép theo ROLE ở mig 0120).
   // NOT NULL DEFAULT false — không backfill. Nền cho enforcement + admin reset-2fa:user.
   requireTwoFactor: boolean("require_two_factor").notNull().default(false),
+  // S2-FND-SEED-3 (mig 0469): ép đổi mật khẩu lần đầu. Super-admin bootstrap upsert set true (DB-10 §17.2
+  // điểm 5); change-password clear cờ cùng tx; /auth/me expose mustChangePassword. NOT NULL DEFAULT false —
+  // không backfill. Function ensure_default_company là SQL-only (không biểu diễn trong drizzle).
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
 });
 
 export type User = typeof users.$inferSelect;

@@ -5,9 +5,19 @@
  * requiredAny = HẰNG này (merge trên row DB). KHÔNG bịa cột modules.required_permissions.
  *
  * ⚠️ DRIFT-GUARD (memory: 'leave-request' ≠ seeded 'leave'): backend LỌC theo **cặp engine** (action,
- * resourceType) — KHÔNG theo FE display code. Mỗi cặp dưới đây đã VERIFY tồn tại trong
- * apps/api/migrations/*permissions_seed*.sql VÀ là non-sensitive (⇒ getCapabilities() phủ đủ). `feCodes` chỉ
- * để TRẢ RA trường `required_permissions` (FE display) + truy vết — KHÔNG dùng để enforce.
+ * resourceType) — KHÔNG theo FE display code. Mỗi cặp dưới đây grep-verified KHỚP SEED THẬT (mig 0340
+ * view:audit-log · 0435 view:foundation-setting · 0444 view:user/view:role · 0454 view-*:attendance ·
+ * 0455 view-own:leave) — KHÔNG bịa, KHÔNG dùng cặp legacy read:user/read:role/read:attendance/read:leave.
+ *
+ * ⚠️ SENSITIVE MIX (S2-FND-BE-5 — sửa khẳng định 'đã VERIFY … non-sensitive' TRƯỚC ĐÂY SAI): một số cặp
+ * LÀ is_sensitive=true (view:audit-log 0340, view-own/team/company:attendance 0454). getCapabilities() CỐ Ý
+ * lọc bỏ MỌI grant sensitive ⇒ nếu getMyApps chỉ dùng getCapabilities() thì app ATT (chỉ gate bằng cặp
+ * sensitive) BỊ ẨN-NGẦM cho MỌI role. Vì vậy getMyApps hiện MERGE getCapabilities() +
+ * getAllowlistedSensitiveCapabilities() (Option B) — 3 cặp view-*:attendance + view:audit-log đã nằm trong
+ * SENSITIVE_CAPABILITY_ALLOWLIST (permission.service.ts). Đây là cờ HIỂN THỊ (UI-hint), KHÔNG phải cổng
+ * enforcement — cổng THẬT vẫn là can()/PermissionGuard per-resource ở từng controller.
+ *
+ * `feCodes` chỉ để TRẢ RA trường `required_permissions` (FE display) + truy vết — KHÔNG dùng để enforce.
  */
 
 export interface EnginePair {
@@ -27,21 +37,20 @@ export interface ModuleAppMeta {
 /** Keyed theo module_code của bảng `modules` (mig 0435): AUTH HR ATT LEAVE TASK DASH NOTI. */
 export const MODULE_APP_METADATA: Readonly<Record<string, ModuleAppMeta>> = {
   // AUTH = app "Hệ thống/Quản trị" (FE app FOUNDATION/system) — gom user/role/setting/audit.
+  // requiredAny KHỚP SEED THẬT: view:user/view:role (0444, non-sensitive, hr+company-admin/company-admin),
+  // view:foundation-setting (0435, non-sensitive, company-admin), view:audit-log (0340, SENSITIVE,
+  // company-admin) — cặp audit CANONICAL = view:audit-log; foundation-audit-log (0435) DEPRECATE cho
+  // app-surface (KHÔNG route nào enforce — xem audit.controller.ts). ⇒ AUTH hiện cho hr + company-admin.
   AUTH: {
     route: "/system",
     icon: "settings",
     requiredAny: [
-      { action: "read", resourceType: "user" }, // AUTH.USER.VIEW
-      { action: "read", resourceType: "role" }, // AUTH.ROLE.VIEW
-      { action: "view", resourceType: "foundation-setting" }, // FOUNDATION.SETTING.VIEW
-      { action: "view", resourceType: "foundation-audit-log" }, // FOUNDATION.AUDIT_LOG.VIEW
+      { action: "view", resourceType: "user" }, // AUTH.USER.VIEW (mig 0444)
+      { action: "view", resourceType: "role" }, // AUTH.ROLE.VIEW (mig 0444)
+      { action: "view", resourceType: "foundation-setting" }, // FOUNDATION.SETTING.VIEW (mig 0435)
+      { action: "view", resourceType: "audit-log" }, // AUTH.AUDIT_LOG.VIEW (mig 0340, SENSITIVE)
     ],
-    feCodes: [
-      "AUTH.USER.VIEW",
-      "AUTH.ROLE.VIEW",
-      "FOUNDATION.SETTING.VIEW",
-      "FOUNDATION.AUDIT_LOG.VIEW",
-    ],
+    feCodes: ["AUTH.USER.VIEW", "AUTH.ROLE.VIEW", "FOUNDATION.SETTING.VIEW", "AUTH.AUDIT_LOG.VIEW"],
   },
   HR: {
     route: "/hr",
@@ -49,16 +58,25 @@ export const MODULE_APP_METADATA: Readonly<Record<string, ModuleAppMeta>> = {
     requiredAny: [{ action: "read", resourceType: "employee" }], // HR.EMPLOYEE.VIEW
     feCodes: ["HR.EMPLOYEE.VIEW"],
   },
+  // ATT — CANONICAL 0454: view-own/view-team/view-company:attendance (TẤT CẢ is_sensitive=true). view-own
+  // grant Own cho CẢ 4 role ⇒ ATT hiện cho mọi role — NHƯNG chỉ khi getMyApps merge sensitive-allowlist
+  // (Option B), vì getCapabilities() lọc sensitive. Cặp legacy read:attendance KHÔNG tồn tại trong seed.
   ATT: {
     route: "/attendance",
     icon: "clock",
-    requiredAny: [{ action: "read", resourceType: "attendance" }], // ATT.ATTENDANCE.VIEW_*
-    feCodes: ["ATT.ATTENDANCE.VIEW_OWN"],
+    requiredAny: [
+      { action: "view-own", resourceType: "attendance" }, // ATT.ATTENDANCE.VIEW_OWN (mig 0454, SENSITIVE)
+      { action: "view-team", resourceType: "attendance" }, // ATT.ATTENDANCE.VIEW_TEAM (mig 0454, SENSITIVE)
+      { action: "view-company", resourceType: "attendance" }, // ATT.ATTENDANCE.VIEW_COMPANY (mig 0454, SENSITIVE)
+    ],
+    feCodes: ["ATT.ATTENDANCE.VIEW_OWN", "ATT.ATTENDANCE.VIEW_TEAM", "ATT.ATTENDANCE.VIEW_COMPANY"],
   },
+  // LEAVE — CANONICAL 0455: view-own:leave (is_sensitive=false, grant Own cho CẢ 4 role) ⇒ LEAVE hiện cho
+  // mọi role qua getCapabilities() (KHÔNG cần allowlist). Cặp legacy read:leave KHÔNG khớp (0455 dùng view-own).
   LEAVE: {
     route: "/leave",
     icon: "calendar-days",
-    requiredAny: [{ action: "read", resourceType: "leave" }], // LEAVE.REQUEST.VIEW_*
+    requiredAny: [{ action: "view-own", resourceType: "leave" }], // LEAVE.REQUEST.VIEW_OWN (mig 0455)
     feCodes: ["LEAVE.REQUEST.VIEW_OWN"],
   },
   TASK: {
