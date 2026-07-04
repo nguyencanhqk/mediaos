@@ -1065,6 +1065,13 @@
       "when": 1717500750000,
       "tag": "0471_s2_authdb3_user_roles_soft_delete",
       "breakpoints": true
+    },
+    {
+      "idx": 152,
+      "version": "7",
+      "when": 1717500755000,
+      "tag": "0472_s2_fnddb2_index_uq_audit_trigger",
+      "breakpoints": true
     }
   ]
 }
