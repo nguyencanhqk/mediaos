@@ -14,8 +14,13 @@ import { directPool, hasDb, workerPool } from "../helpers/integration-db";
  * run-row với company_id TƯỜNG MINH.
  *
  * Chạy trên Postgres THẬT (LANE_DB=mediaos_jobs). Role-safety chỉ kiểm chứng được với role thật — KHÔNG mock.
+ *
+ * Gate cứng `hasDb && LANE_DB` (memory integration-test-lane-db-gate): .env làm hasDb=true → thiếu LANE_DB
+ * ⇒ đỏ-giả trên DB dev chung (mẫu temp-file-cleanup.int-spec.ts).
  */
-describe.skipIf(!hasDb)(
+const runDb = hasDb && Boolean(process.env.LANE_DB);
+
+describe.skipIf(!runDb)(
   "JobRunner worker-role fail-closed (assertWorkerRoleSafe điều-kiện-thật)",
   () => {
     const direct = directPool();

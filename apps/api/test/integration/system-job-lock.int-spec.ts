@@ -10,8 +10,13 @@ import { directPool, hasDb, workerPool } from "../helpers/integration-db";
  * LANE_DB=mediaos_jobs). Ghi qua mediaos_worker. 2 runner song song cùng job_code ⇒ ĐÚNG 1 chiếm được
  * (RETURNING non-empty), 1 skip (RETURNING rỗng). Release = UPDATE locked_until quá khứ (KHÔNG DELETE —
  * BẤT BIẾN #2): row còn nguyên, lock hết hạn ⇒ acquire lại được.
+ *
+ * Gate cứng `hasDb && LANE_DB` (memory integration-test-lane-db-gate): .env làm hasDb=true → thiếu LANE_DB
+ * ⇒ đỏ-giả trên DB dev chung (mẫu temp-file-cleanup.int-spec.ts).
  */
-describe.skipIf(!hasDb)("system_job_locks single-active (JobLockService)", () => {
+const runDb = hasDb && Boolean(process.env.LANE_DB);
+
+describe.skipIf(!runDb)("system_job_locks single-active (JobLockService)", () => {
   const direct = directPool();
   // 2 pool worker riêng (max=1) → 2 kết nối THẬT ⇒ song song thật, DB serialize trên unique(job_code).
   const workerA = workerPool(1);

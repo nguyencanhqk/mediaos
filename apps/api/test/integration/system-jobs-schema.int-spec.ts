@@ -60,7 +60,11 @@ async function insertRunAsWorker(
   return r.rows[0].id as string;
 }
 
-describe.skipIf(!hasDb)("S2-FND-JOBS-1 system_job_runs/locks — RLS + grant + structure", () => {
+// Gate cứng `hasDb && LANE_DB` (memory integration-test-lane-db-gate): .env làm hasDb=true → thiếu
+// LANE_DB ⇒ đỏ-giả trên DB dev chung (mẫu temp-file-cleanup.int-spec.ts).
+const runDb = hasDb && Boolean(process.env.LANE_DB);
+
+describe.skipIf(!runDb)("S2-FND-JOBS-1 system_job_runs/locks — RLS + grant + structure", () => {
   const direct = directPool();
   const app = appPool(2);
   const worker = workerPool(2);
