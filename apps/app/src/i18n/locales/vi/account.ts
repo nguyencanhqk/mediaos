@@ -42,6 +42,28 @@ export default {
       changePassword: "Đổi mật khẩu",
       sessions: "Phiên đăng nhập",
     },
+    // S2-FE-ACCT-SEC-1 — Card "Bảo mật" (trạng thái 2FA từ GET /auth/2fa/status, KHÔNG API mới).
+    security: {
+      title: "Bảo mật",
+      statusEnabled: "Đã bật xác thực 2 lớp",
+      statusDisabled: "Chưa bật xác thực 2 lớp",
+      requiredPolicyLabel: "bắt buộc theo chính sách",
+      enableButton: "Bật 2FA",
+      disableButton: "Tắt 2FA",
+      loadError: "Không thể tải trạng thái bảo mật. Vui lòng thử lại sau.",
+      disableSuccess: "Đã tắt xác thực 2 lớp.",
+      dialog: {
+        title: "Xác nhận tắt xác thực 2 lớp",
+        description: "Nhập mật khẩu hiện tại để xác nhận tắt xác thực 2 lớp (2FA).",
+        passwordLabel: "Mật khẩu hiện tại",
+        confirm: "Xác nhận",
+        cancel: "Huỷ",
+      },
+      error: {
+        enforced: "Không thể tắt 2FA — vai trò của bạn yêu cầu bắt buộc bật xác thực 2 lớp.",
+        generic: "Tắt xác thực 2 lớp thất bại. Vui lòng thử lại.",
+      },
+    },
   },
   sessions: {
     title: "Phiên đăng nhập",
