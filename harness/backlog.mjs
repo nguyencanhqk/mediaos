@@ -3646,12 +3646,26 @@ export const backlog = [
     //   run:foundation-seed + view/run:foundation-job (job = S2-FND-JOBS-1). Retention: service CÓ createPolicy/
     //   simulate (retention.service.ts:90-129, 296-323) nhưng controller không expose; simulate/runCleanup thiếu
     //   guard policy-not-found → 500 thay 404 (:309-310, :350-351).
+    // OWNER CHỐT 2026-07-04 (sau plan-BLOCK round 4, không có phản hồi trong 60s → tiến hành theo phương án
+    //   khuyến nghị đã đề xuất): (1) audit-export DEFER — KHÔNG build route ở WO này; pin vào S2-FND-DOC-1 +
+    //   gỡ cặp orphan export:foundation-audit-log (0435:346, deprecated từ S2-FND-BE-5) khỏi app-surface (không
+    //   route chết). (2) module-toggle audit: THÊM migration nhỏ UNION-add object_type 'module' vào CHECK
+    //   audit_logs + sync mảng AUDIT_OBJECT_TYPES (schema/audit.ts) — KHÔNG tái dùng 'company_setting' (audit
+    //   trail phải phản ánh đúng hành động). (3) Lock-list module-lõi KHÔNG được tắt = CHỐT CỨNG cả 7 module MVP
+    //   hiện có (AUTH/HR/ATT/LEAVE/TASK/DASH/NOTI) — toggle này thực chất nhắm module Phase 2 tương lai
+    //   (PAYROLL/RECRUIT/ASSET/ROOM/CHAT/SOCIAL/...), chưa module MVP nào nên được phép tắt.
+    // Sửa thêm theo plan-reviewer round 4: (4) step-1 ghi SAI cặp quyền — retention dùng 363 (manage:foundation-
+    //   retention), KHÔNG PHẢI 346 (đó là export orphan, giờ đã defer hẳn). (5) module-toggle PHẢI tự viết+audit
+    //   TRONG module-catalog/** (KHÔNG gọi SettingService.updateCompanySetting của lane settings — tránh đụng
+    //   file chéo lane + tránh mislabel object_type). (6) barrel packages/contracts/src/foundation/index.ts: SERIALIZE
+    //   (1 lane cuối cùng append, không chạy 4 lane song song rồi merge tay) để tránh ghi đè export lẫn nhau.
     status: "todo",
     paths: [
       "apps/api/src/foundation/settings/**",
       "apps/api/src/foundation/module-catalog/**",
-      "apps/api/src/foundation/audit/**",
       "apps/api/src/foundation/retention/**",
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/audit.ts",
       "packages/contracts/src/**",
       "apps/api/test/**",
     ],
@@ -3664,11 +3678,11 @@ export const backlog = [
       "BACKEND-11 §9.8 (retention API)",
     ],
     done_when: [
-      "GET/PATCH /foundation/system-settings(/:key): gate system-manage:foundation-setting (sensitive, System-scope); PATCH validate value_type/schema như company path + audit SYSTEM_SETTING_UPDATED — BẮT BUỘC dùng `withTenant(actor.companyId)` cho CẢ mutation lẫn audit trong CÙNG tx (KHÔNG `withTransaction` — audit_logs có RLS WITH CHECK theo app.current_company_id GUC mà withTransaction KHÔNG set ⇒ audit insert fail-closed 500; system_settings tự thân no-RLS nên withTenant vẫn áp được, mirror y hệt company path); object_type 'system_setting' đã dành chỗ trong CHECK 0439 — verify, thiếu thì migration UNION; mask sensitive khi đọc như company; test positive-path PHẢI dùng principal super-admin/được-grant-tường-minh (company-admin 0435 KHÔNG có cặp is_sensitive=true này — chỉ super-admin bootstrap giữ)",
-      "PATCH /foundation/modules/:code (enable/disable qua company_settings 'module.<code>.enabled'): gate update:foundation-module (company-admin KHÔNG có — is_sensitive=true, dùng super-admin cho test positive) + audit CONFIG in-tx với object_type/permissionCode PHẢN ÁNH ĐÚNG hành động toggle module (KHÔNG mislabel thành 'company_setting'/'FOUNDATION.SETTING.UPDATE' generic của SettingService — ghi rõ context module toggle); my-apps/admin-list phản ánh ngay; KHÔNG cho tắt module lõi nếu doc/owner định nghĩa danh sách khóa (chốt khi làm); NẾU lanes B/C/D chạy song song, cả 3 cùng append packages/contracts/src/foundation/index.ts (barrel) — nối tiếp bước sửa barrel hoặc merge tay điểm đụng, đừng để 3 agent ghi đè nhau",
-      "POST /foundation/audit-logs/export: gate theo cặp ĐÃ CHỐT ở S2-FND-BE-5; CSV/JSON stream ĐÃ mask (dùng chung redact-at-read), bắt buộc filter khoảng ngày (chặn dump toàn bảng), audit hành động export; HOẶC owner chốt defer → pin ở S2-FND-DOC-1 + gỡ cặp orphan",
-      "Retention: POST /foundation/retention-policies (create) + POST /:id/simulate expose service sẵn; createPolicy (retention.service.ts:90-129) HIỆN THIẾU audit (updatePolicy đã có) — tạo policy retention là hành động quan trọng (điều khiển xoá dữ liệu, DoD §16.3) → BẮT BUỘC thêm audit RETENTION_POLICY_CREATED in-tx (object_type 'retention_policy' đã có trong CHECK 0456, KHÔNG cần migration); simulate/runCleanup guard not-found → 404 (hết 500) — verify retention-cleanup.job.ts (gọi runCleanup) CHỊU ĐƯỢC NotFoundException khi policy bị soft-delete giữa list và run (race), không làm vỡ vòng cleanup job; giữ PROTECTED_TABLES + isSensitive như S2-FND-BE-3",
-      "deny-path RED viết-TRƯỚC từng route (403 thiếu quyền + 0 audit · 2-tenant deny); FULL gate + người chốt; contracts Zod dual-build",
+      "GET/PATCH /foundation/system-settings(/:key): gate system-manage:foundation-setting (sensitive, System-scope); PATCH validate value_type/schema như company path + audit SYSTEM_SETTING_UPDATED — BẮT BUỘC dùng `withTenant(actor.companyId)` cho CẢ mutation lẫn audit trong CÙNG tx (KHÔNG `withTransaction`); object_type 'system_setting' đã dành chỗ trong CHECK 0439 — verify, thiếu thì migration UNION; mask sensitive khi đọc như company; test positive-path PHẢI dùng principal super-admin/được-grant-tường-minh (company-admin 0435 KHÔNG có cặp is_sensitive=true này)",
+      "PATCH /foundation/modules/:code (enable/disable qua company_settings 'module.<code>.enabled'): gate update:foundation-module (super-admin cho test positive) + audit CONFIG TỰ VIẾT trong module-catalog/** (KHÔNG mượn SettingService) với object_type='module' MỚI (migration UNION-add vào CHECK audit_logs + sync AUDIT_OBJECT_TYPES, cùng đợt với WO này — không tách follow-up) + permissionCode phản ánh đúng module-toggle; my-apps/admin-list phản ánh ngay; module-lõi KHÓA CỨNG = 7 module MVP (AUTH/HR/ATT/LEAVE/TASK/DASH/NOTI) — toggle 7 module này PHẢI 400/403, có test đo được; barrel packages/contracts/src/foundation/index.ts SERIALIZE 1 lane cuối append (không parallel-rồi-merge)",
+      "Audit-export: KHÔNG build (owner chốt DEFER 2026-07-04) — xoá/không-route cặp export:foundation-audit-log (0435:346, đã deprecated ở S2-FND-BE-5) khỏi mọi nơi tham chiếu app-surface (my-apps metadata, docs) nếu còn sót; pin quyết định defer vào S2-FND-DOC-1",
+      "Retention: POST /foundation/retention-policies (create, gate manage:foundation-retention — cặp 363, KHÔNG PHẢI 346) + POST /:id/simulate expose service sẵn; createPolicy (retention.service.ts:90-129) HIỆN THIẾU audit (updatePolicy đã có) → BẮT BUỘC thêm audit RETENTION_POLICY_CREATED in-tx (object_type 'retention_policy' đã có trong CHECK 0456, KHÔNG cần migration riêng); simulate/runCleanup guard not-found → 404 (hết 500) — verify retention-cleanup.job.ts CHỊU ĐƯỢC NotFoundException khi policy bị soft-delete giữa list và run (race); giữ PROTECTED_TABLES + isSensitive như S2-FND-BE-3",
+      "deny-path RED viết-TRƯỚC từng route (403 thiếu quyền + 0 audit · 2-tenant deny); FULL gate + người chốt; contracts Zod dual-build; migration UNION-add object_type 'module' verify chain 0000→head xanh LANE_DB",
     ],
   },
   {
