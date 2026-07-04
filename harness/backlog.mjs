@@ -3228,7 +3228,9 @@ export const backlog = [
     //   dưới role mediaos_app thật — không phải superuser, để bắt đúng thiếu-grant); cập nhật 2 comment stale
     //   (permission-admin.repository.ts:11-12, service.ts:108 'KHÔNG có UPDATE grant') thành đúng hiện trạng mới;
     //   sửa tham chiếu sai 'roles.ts:27-29' (file không tồn tại) → đúng là permissions.ts:27-29.
-    status: "todo",
+    // SHIPPED 2026-07-04 qua PR #111 (squash 1c4849c vào feat/debt-wave2, mig 0471): FULL gate security-reviewer
+    //   + database-reviewer PASS, 0 finding chặn (2 LOW không chặn) sau đúng 3 vòng owner-chốt ở trên.
+    status: "done",
     paths: [
       "apps/api/src/db/schema/**",
       "apps/api/migrations/**",
@@ -3357,7 +3359,9 @@ export const backlog = [
     //   my-apps; sẽ nổ khi chuyển sang). FE PERMISSION_CODE_TO_PAIR đã SẠCH (PR #59) — drift còn lại ở BE.
     //   (3) GET /foundation/settings/public gate view:foundation-setting nhưng doc = Authenticated → user thường
     //   không bootstrap được public settings (timezone/locale/file limits).
-    status: "todo",
+    // SHIPPED 2026-07-03 qua PR #109 (feat/debt-wave2, commit 695899e+a06c596): FULL gate PASS ~92 sau round-1
+    //   chốt hướng (cấm @Public(), tách controller giữ JwtAuthGuard+CompanyGuard bỏ PermissionGuard per-method).
+    status: "done",
     paths: [
       "apps/api/src/foundation/module-catalog/**",
       "apps/api/src/foundation/audit/**",
