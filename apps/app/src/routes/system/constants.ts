@@ -14,6 +14,8 @@ export const SYSTEM_PERMS = {
     ASSIGN_ROLE: "AUTH.USER.ASSIGN_ROLE",
     SUSPEND: "AUTH.USER.SUSPEND",
     DELETE: "AUTH.USER.DELETE",
+    // S2-FE-SYS-SEC-1 — admin gỡ 2FA của user khác (privileged, is_sensitive=true — mig 0466).
+    RESET_2FA: "AUTH.USER.RESET_2FA",
   },
   ROLE: {
     VIEW: "AUTH.ROLE.VIEW",
@@ -65,6 +67,10 @@ export const SYSTEM_ENGINE_PAIRS = {
   LOCK_USER: { action: "lock", resourceType: "user" },
   UNLOCK_USER: { action: "unlock", resourceType: "user" },
   ASSIGN_ROLE: { action: "assign-role", resourceType: "user" },
+  // S2-FE-SYS-SEC-1 — nguồn: apps/api AuthUsersController POST /auth/users/:id/2fa/reset (S2-AUTH-BE-12).
+  // Cặp seed THẬT reset-2fa:user is_sensitive=true (mig 0466) → component dùng useCanExact, KHÔNG useCan
+  // (wildcard '*:*' KHÔNG thoả cổng sensitive — chống leo thang; mirror ASSIGN_ROLE/ASSIGN_PERMISSION).
+  RESET_2FA_USER: { action: "reset-2fa", resourceType: "user" },
   READ_ROLE: { action: "view", resourceType: "role" },
   // S2-FE-AUTH-4 (lane FE batch C) — nguồn: apps/api/src/permission/role-admin.controller.ts +
   // auth-roles-permissions.controller.ts (mig 0005/0444/0460). assign:permission is_sensitive=true

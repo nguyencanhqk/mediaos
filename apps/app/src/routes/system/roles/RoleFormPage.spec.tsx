@@ -80,9 +80,38 @@ describe("RoleFormPage — create mode", () => {
       expect(roleAdminApi.createRole).toHaveBeenCalledWith({
         name: "Kế toán",
         description: null,
+        requiresTwoFactor: false,
       }),
     );
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("role-new"));
+  });
+
+  // ── S2-FE-SYS-SEC-1: switch requiresTwoFactor → create payload chứa requiresTwoFactor:true ──
+  it("includes requiresTwoFactor in create payload when switch is toggled on", async () => {
+    setCaps({ "create:role": true });
+    vi.mocked(roleAdminApi.createRole).mockResolvedValue({
+      id: "role-new",
+      companyId: "co1",
+      name: "Bảo mật",
+      description: null,
+      isSystem: false,
+      requiresTwoFactor: true,
+    });
+    const { container } = renderWithQuery(<RoleFormPage />);
+
+    fireEvent.change(container.querySelector("#name") as HTMLInputElement, {
+      target: { value: "Bảo mật" },
+    });
+    fireEvent.click(container.querySelector("#requiresTwoFactor") as HTMLInputElement);
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+
+    await waitFor(() =>
+      expect(roleAdminApi.createRole).toHaveBeenCalledWith({
+        name: "Bảo mật",
+        description: null,
+        requiresTwoFactor: true,
+      }),
+    );
   });
 });
 
@@ -147,6 +176,34 @@ describe("RoleFormPage — edit mode", () => {
     await waitFor(() => expect(screen.getByText(/vai trò hệ thống/i)).toBeInTheDocument());
     expect(container.querySelector("#name")).toBeDisabled();
     expect(container.querySelector("#description")).toBeDisabled();
+    // S2-FE-SYS-SEC-1: switch requiresTwoFactor cũng DISABLED cho role hệ thống.
+    expect(container.querySelector("#requiresTwoFactor")).toBeDisabled();
     expect(screen.getByRole("button", { name: /lưu thay đổi/i })).toBeDisabled();
+  });
+
+  // ── S2-FE-SYS-SEC-1: edit → PATCH chứa requiresTwoFactor CHỈ khi dirty (toggle) ──────────
+  it("includes requiresTwoFactor in PATCH only when the switch is changed", async () => {
+    setCaps({ "update:role": true });
+    vi.mocked(roleAdminApi.updateRole).mockResolvedValue({
+      id: "role-1",
+      companyId: "co1",
+      name: "Kế toán",
+      description: "Vai trò kế toán",
+      isSystem: false,
+      requiresTwoFactor: true,
+    });
+    const { container } = renderWithQuery(<RoleFormPage roleId="role-1" />);
+
+    await waitFor(() =>
+      expect((container.querySelector("#name") as HTMLInputElement).value).toBe("Kế toán"),
+    );
+
+    // Chỉ đổi switch (name/description KHÔNG dirty) → patch chỉ chứa requiresTwoFactor.
+    fireEvent.click(container.querySelector("#requiresTwoFactor") as HTMLInputElement);
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+
+    await waitFor(() =>
+      expect(roleAdminApi.updateRole).toHaveBeenCalledWith("role-1", { requiresTwoFactor: true }),
+    );
   });
 });

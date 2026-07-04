@@ -108,6 +108,29 @@ export default {
       errors: {
         badRequest:
           "Không thể thực hiện: tài khoản đã ở trạng thái này hoặc bạn đang thao tác trên chính mình.",
+        notFound: "Không tìm thấy tài khoản (có thể đã bị xoá).",
+        conflict: "Không thể thực hiện: trạng thái đã thay đổi. Vui lòng tải lại.",
+      },
+
+      // S2-FE-SYS-SEC-1 — card xác thực 2 lớp (2FA). CHỈ hiển thị trạng thái + nguồn ép; KHÔNG secret.
+      twoFactor: {
+        title: "Xác thực 2 lớp (2FA)",
+        enabled: "Đã bật",
+        disabled: "Chưa bật",
+        enforcement: "Bắt buộc:",
+        notRequired: "Không bắt buộc",
+        byRole: "Theo vai trò",
+        byUser: "Theo tài khoản",
+        forceLabel: "Ép 2FA tài khoản này",
+        forceHint: "Người dùng phải bật 2FA mới đăng nhập được, không phụ thuộc vai trò.",
+        reset: "Đặt lại 2FA",
+        resetHint: "Gỡ 2FA khỏi tài khoản và thu hồi mọi phiên đăng nhập hiện có.",
+        resetSuccess: "Đã đặt lại 2FA. Đã thu hồi {{count}} phiên đăng nhập.",
+        confirm: {
+          resetTitle: "Xác nhận đặt lại 2FA",
+          resetDescription:
+            "Tài khoản sẽ bị gỡ xác thực 2 lớp và mọi phiên đăng nhập hiện có sẽ bị thu hồi. Bạn có chắc muốn tiếp tục?",
+        },
       },
     },
 
@@ -181,6 +204,9 @@ export default {
     fields: {
       name: "Tên vai trò",
       description: "Mô tả",
+      requiresTwoFactor: "Bắt buộc 2FA",
+      requiresTwoFactorHint:
+        "Mọi người dùng mang vai trò này phải bật xác thực 2 lớp mới đăng nhập được.",
     },
     cancel: "Huỷ",
     submitCreate: "Tạo vai trò",

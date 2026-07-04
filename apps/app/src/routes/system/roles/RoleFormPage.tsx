@@ -216,6 +216,30 @@ export function RoleFormPage({ roleId, onSuccess, onCancel }: RoleFormPageProps)
                 </p>
               )}
             </div>
+
+            {/*
+              Ép 2FA cho MỌI user mang role này (roles.requires_two_factor). Checkbox native (semantics
+              role=checkbox) styled switch — @mediaos/ui chưa có Switch primitive; register() map trực
+              tiếp boolean. DISABLED khi role hệ thống (defense-in-depth; server cũng REJECT 400).
+              GIỚI HẠN: prefill edit luôn false (list/detail BE chưa mang cờ) — xem role-form-schema.ts.
+            */}
+            <div className="flex items-start gap-3 rounded-md border border-border p-3">
+              <input
+                id="requiresTwoFactor"
+                type="checkbox"
+                disabled={isSystemLocked}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+                {...register("requiresTwoFactor")}
+              />
+              <label htmlFor="requiresTwoFactor" className="space-y-0.5">
+                <span className="block text-sm font-medium text-foreground">
+                  {t("roleForm.fields.requiresTwoFactor")}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {t("roleForm.fields.requiresTwoFactorHint")}
+                </span>
+              </label>
+            </div>
           </CardContent>
         </Card>
 
