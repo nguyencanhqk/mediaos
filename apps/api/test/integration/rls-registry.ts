@@ -271,6 +271,23 @@ export const RLS_TABLES: RlsTableCase[] = [
     },
   },
   {
+    name: "system_job_runs",
+    table: "system_job_runs",
+    // S2-FND-JOBS-1 (mig 0475) — nhật ký system job, company_id NULLABLE (worker ghi per-tenant + global
+    // NULL). App SELECT-only, policy USING (company_id = GUC OR company_id IS NULL) ⇒ hàng GLOBAL (company_id
+    // NULL) hiển thị ở MỌI ngữ cảnh ⇒ skipNoContext (như roles/role_permissions có system rows). Seed 1 hàng
+    // TENANT-scoped (company_id = t) để kiểm cô lập chéo tenant: A KHÔNG thấy hàng của B (và ngược lại).
+    skipNoContext: true,
+    seedRow: async (direct, t) => {
+      const r = await direct.query(
+        `INSERT INTO system_job_runs (company_id, job_code, status, triggered_by)
+         VALUES ($1, 'RLS_ISO_TEST', 'Running', 'Scheduler') RETURNING id`,
+        [t.companyId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
     name: "refresh_tokens",
     table: "refresh_tokens",
     seedRow: async (direct, t) => {
