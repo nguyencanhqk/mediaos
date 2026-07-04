@@ -86,8 +86,18 @@ export class RetentionService {
     private readonly audit: AuditService = new AuditService(),
   ) {}
 
-  /** Tạo chính sách lưu trữ cho tenant. company_id = companyId (KHÔNG global NULL). */
-  async createPolicy(input: CreatePolicyInput): Promise<RetentionPolicyRow> {
+  /**
+   * Tạo chính sách lưu trữ cho tenant. company_id = companyId (KHÔNG global NULL — BẤT BIẾN #1).
+   *
+   * CÙNG tx (withTenant): insert policy → ghi audit CREATE (append-only, cùng commit/rollback — BẤT BIẾN #2).
+   * Audit action='RetentionPolicyCreated' actionGroup='CONFIG_UPDATE' object_type='retention_policy' (CHECK
+   * mig 0456). newValues = SNAPSHOT CẤU HÌNH (KHÔNG secret/PII/companyId/createdBy — BẤT BIẾN #3); oldValues
+   * bỏ trống (đối tượng mới). actor?.id → actorUserId + created_by (nếu có).
+   */
+  async createPolicy(
+    input: CreatePolicyInput,
+    actor?: RetentionActor,
+  ): Promise<RetentionPolicyRow> {
     const {
       companyId,
       moduleCode,
@@ -116,11 +126,30 @@ export class RetentionService {
           isLegalHoldSupported,
           isEnabled,
           description,
-          createdBy: createdBy ?? null,
+          createdBy: actor?.id ?? createdBy ?? null,
         })
         .returning();
 
       const row = inserted[0] as RetentionPolicyRow;
+
+      // Audit CÙNG tx (append-only — rollback ⇒ 0 audit). object_type ∈ AUDIT_OBJECT_TYPES + CHECK (mig 0456).
+      await this.audit.record(tx, {
+        action: "RetentionPolicyCreated",
+        actionGroup: "CONFIG_UPDATE",
+        objectType: "retention_policy",
+        objectId: row.id,
+        actorUserId: actor?.id ?? createdBy ?? undefined,
+        actorType: "User",
+        moduleCode: row.moduleCode,
+        entityType: "retention_policy",
+        entityId: row.id,
+        newValues: toRetentionAuditSnapshot(row),
+        sensitivityLevel: "Sensitive",
+        resultStatus: "Success",
+        dataScope: "Company",
+        permissionCode: "FOUNDATION.RETENTION.MANAGE",
+      });
+
       this.logger.log(
         `createPolicy: id=${row.id} module=${moduleCode} entity=${entityType} enabled=${isEnabled}`,
       );
@@ -306,7 +335,11 @@ export class RetentionService {
         )
         .limit(1);
 
-      const policy = policyRows[0] as RetentionPolicyRow;
+      // FAIL-CLOSED: 0 row (không tồn tại / tenant khác — RLS che / đã xoá) → 404, KHÔNG cast NPE → 500.
+      const policy = policyRows[0] as RetentionPolicyRow | undefined;
+      if (!policy) {
+        throw new NotFoundException(`Không tìm thấy chính sách lưu trữ id=${policyId}.`);
+      }
       const cutoffTime = this._cutoff(policy.retentionDays);
       const eligibleCount = await this._countEligible(tx, companyId, policy.entityType, cutoffTime);
 
@@ -347,7 +380,11 @@ export class RetentionService {
         )
         .limit(1);
 
-      const policy = policyRows[0] as RetentionPolicyRow;
+      // FAIL-CLOSED: 0 row (không tồn tại / tenant khác — RLS che / đã xoá) → 404, KHÔNG cast NPE → 500.
+      const policy = policyRows[0] as RetentionPolicyRow | undefined;
+      if (!policy) {
+        throw new NotFoundException(`Không tìm thấy chính sách lưu trữ id=${policyId}.`);
+      }
       const cutoffTime = this._cutoff(policy.retentionDays);
 
       // §17.4.1: policy chưa active → skip, KHÔNG xóa.

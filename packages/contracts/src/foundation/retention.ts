@@ -61,3 +61,47 @@ export const patchRetentionPolicySchema = z
     message: "Phải có ít nhất một trường để cập nhật.",
   });
 export type PatchRetentionPolicyDto = z.infer<typeof patchRetentionPolicySchema>;
+
+/**
+ * S2-FND-BE-8 (be-retention-create-simulate) — POST /foundation/retention-policies body (create). APPEND
+ * vào file đã-export (barrel không đổi). BẤT BIẾN #1/#3: KHÔNG nhận companyId (lấy từ ngữ cảnh tenant) và
+ * KHÔNG nhận createdBy/updatedBy/id (server gán từ actor) — `.strict()` chặn field lạ/leo thang. entityType
+ * ép `^[a-z_][a-z0-9_]*$` (khớp guard `_countEligible` service — chống SQL identifier injection ở ranh giới).
+ * cleanupAction/retentionDays khớp CHECK mig 0435; default áp Ở SERVICE (schema chỉ optional). KHÔNG secret.
+ */
+export const createRetentionPolicySchema = z
+  .object({
+    moduleCode: z.string().min(1).max(50),
+    entityType: z
+      .string()
+      .min(1)
+      .max(63)
+      .regex(/^[a-z_][a-z0-9_]*$/, "entityType phải là snake_case identifier hợp lệ."),
+    retentionDays: z.number().int().min(0),
+    cleanupAction: cleanupActionSchema.optional(),
+    archiveAfterDays: z.number().int().min(0).nullable().optional(),
+    deleteAfterDays: z.number().int().min(0).nullable().optional(),
+    isLegalHoldSupported: z.boolean().optional(),
+    isEnabled: z.boolean().optional(),
+    description: z.string().max(2000).nullable().optional(),
+  })
+  .strict();
+export type CreateRetentionPolicyDto = z.infer<typeof createRetentionPolicySchema>;
+
+/**
+ * S2-FND-BE-8 — response POST /foundation/retention-policies/:id/simulate (§17.3, READ-ONLY đếm eligible).
+ * `.strip()` loại field lạ (phòng thủ chiều sâu). cutoffTime = ISO-8601 string trên wire (khớp updatedAt).
+ * KHÔNG lộ companyId — chỉ policyId/moduleCode/entityType + số đếm + cờ isEnabled (an toàn, không secret).
+ */
+export const simulateResultSchema = z
+  .object({
+    policyId: z.string().uuid(),
+    moduleCode: z.string(),
+    entityType: z.string(),
+    eligibleRecords: z.number().int(),
+    action: cleanupActionSchema,
+    cutoffTime: z.string(),
+    isEnabled: z.boolean(),
+  })
+  .strip();
+export type SimulateResultView = z.infer<typeof simulateResultSchema>;
