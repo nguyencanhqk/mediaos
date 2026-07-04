@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-04 04:31Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-04 04:32Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -32,6 +32,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `786cf57` | 2026-07-04 | chore(harness): chốt S2-FND-SEED-3 (FULL gate PASS, merged trên feat/debt-wave2) |
 | `fb318b5` | 2026-07-04 | fix(S2-FND-SEED-3): 2 LOW từ FULL gate — resetPassword clear must_change_password + DROP INDEX phòng vệ |
 | `adc9562` | 2026-07-04 | chore(harness): chốt hướng round 4 cho S2-FND-BE-8 + dọn auto-start nhầm JOBS-1 |
 | `ee123f7` | 2026-07-04 | fix(db): S2-FND-SEED-3 mig 0473 — advisory-lock thay UNIQUE INDEX single-active (design-correction) |
@@ -43,7 +44,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `dfedd49` | 2026-07-04 | wip(SEED3-B-test): gộp 2 int-spec ensure-company thành 1 canonical + race tests + FIX N=1 guard |
 | `14e0785` | 2026-07-04 | wip(SEED3-A-mig): mig 0473 (idx 153) uq_companies_single_active + ensure_default_company EXCEPTION 23505->winner idempotent |
 | `c677edd` | 2026-07-04 | S2-FND-DB-2: file_links/audit_logs DB-09 hardening (mig 0472) + FileService.link() 409 phân biệt (#113) |
-| `1b5b563` | 2026-07-04 | wip(fix-schema-parity-file-access-logs): thêm idx_file_access_logs_company_time vào drizzle fileAccessLogs khớp mig 0472 |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

@@ -3144,7 +3144,8 @@ export const backlog = [
     title:
       "FE Account Security: section Bảo mật trong /account/profile — trạng thái 2FA + bật (→ /account/setup-2fa) + tắt (dialog mật khẩu, ẨN khi bị ép)",
     zone: "yellow",
-    status: "todo",
+    // SHIPPED 2026-07-04 qua PR #114 (merged vào feat/debt-wave2). LIGHT gate PASS (Đội3 ~92).
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-BE-11"],
@@ -3162,7 +3163,8 @@ export const backlog = [
     title:
       "FE Admin security: /system/roles form toggle 'Bắt buộc 2FA' + /system/users detail hiện 2FA (nguồn ép) + toggle ép tài khoản + nút Reset 2FA (PermissionGate reset-2fa:user)",
     zone: "yellow",
-    status: "todo",
+    // SHIPPED 2026-07-04 qua PR #115 (merged vào feat/debt-wave2). LIGHT gate PASS (typecheck+full suite+permission cross-check).
+    status: "done",
     paths: ["apps/app/**", "packages/web-core/**"],
     skills: ["code-review"],
     depends_on: ["S2-AUTH-BE-11", "S2-AUTH-BE-12"],
