@@ -8,9 +8,10 @@ import { files, type FileRecord, type NewFileRecord } from "../../db/schema/file
  * TRONG transaction `withTenant` của FileService (1 chốt tenant duy nhất, BẤT BIẾN #1). Lọc
  * `eq(company_id)` tường minh (defense-in-depth) DÙ RLS+FORCE (mig 0433) đã ép ở DB.
  *
- * BẤT BIẾN #2: KHÔNG hard-delete — `softDeleteTx` set `deleted_at`/`deleted_by` (app role có
- * column-UPDATE(deleted_at, deleted_by, upload_status), KHÔNG có DELETE row). KHÔNG trả storage_path ra
- * ngoài repo cho DTO; service map sang FileMetadataDto an toàn (storage_path KHÔNG bao giờ leak — #2.3).
+ * BẤT BIẾN #2: KHÔNG hard-delete — `softDeleteTx` set `deleted_at`/`deleted_by` (app role có table-level
+ * UPDATE trên `files` — mig 0433:117 `GRANT SELECT, INSERT, UPDATE ON files TO mediaos_app` — KHÔNG có
+ * DELETE row). KHÔNG trả storage_path ra ngoài repo cho DTO; service map sang FileMetadataDto an toàn
+ * (storage_path KHÔNG bao giờ leak — #2.3).
  */
 @Injectable()
 export class FileRepository {
