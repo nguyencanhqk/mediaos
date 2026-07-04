@@ -17,11 +17,13 @@ import type {
   ListFilesQuery,
   UploadFileInput,
 } from "@mediaos/contracts";
-import { DatabaseService } from "../../db/db.service";
+import { DatabaseService, type TenantTx } from "../../db/db.service";
+import { isUniqueViolation, pgErrorField } from "../../common/db-error";
+import { FOUNDATION_FILE_ERROR_CODES } from "../../common/errors/error-codes";
 import { AuditService } from "../../events/audit.service";
 import { STORAGE_ADAPTER, type StorageAdapter } from "../../storage/storage-adapter.port";
 import { buildFileKey, InvalidStorageKeyError } from "../../storage/file-storage-key";
-import type { FileLink, FileRecord, NewFileRecord } from "../../db/schema/files";
+import type { FileLink, FileRecord, NewFileLink, NewFileRecord } from "../../db/schema/files";
 import { SettingService } from "../settings/setting.service";
 import { FileAccessLogService } from "./file-access-log.service";
 import { FileLinkRepository } from "./file-link.repository";
@@ -49,6 +51,17 @@ const DEFAULT_MAX_UPLOAD_MB = 25; // mirror setting-defaults.ts — only used if
 /** Module/entity used when an upload is not linked to any business entity (foundation-owned file). */
 const FOUNDATION_MODULE = "FOUNDATION";
 const FOUNDATION_ENTITY = "File";
+
+/**
+ * Tên 2 constraint UNIQUE trên `file_links` mà `link()` phải PHÂN BIỆT khi bắt 23505 (S2-FND-DB-2-B) —
+ * KHÔNG gộp chung 1 mã lỗi cho 2 nguyên nhân khác nhau:
+ *  - `uq_file_links_entity_file_active` (6 cột: company_id, module_code, entity_type, entity_id, file_id,
+ *    link_type — WHERE deleted_at IS NULL, mig 0472): file NÀY đã gắn vào ĐÚNG entity + link_type này rồi.
+ *  - `uq_file_links_primary_per_entity_type` (5 cột is_primary=true, mig 0433): entity này ĐÃ có 1 file
+ *    KHÁC primary cho cùng link_type — không thể có 2 primary song song.
+ */
+const UQ_FILE_LINKS_ENTITY_FILE_ACTIVE = "uq_file_links_entity_file_active";
+const UQ_FILE_LINKS_PRIMARY_PER_ENTITY_TYPE = "uq_file_links_primary_per_entity_type";
 
 /**
  * S1-FND-FILE-1 — FileService (crown-jewel). Quản lý vòng đời metadata file: upload → getMetadata/list →
@@ -346,7 +359,7 @@ export class FileService {
         );
       }
 
-      const created = await this.linkRepo.insertTx(
+      const created = await this.insertLinkOrThrow(
         {
           companyId: user.companyId,
           fileId: input.fileId,
@@ -530,6 +543,38 @@ export class FileService {
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────────────────
+
+  /**
+   * Insert `file_links` bọc bắt 23505 (unique-violation) — PHÂN BIỆT theo TÊN constraint
+   * (`pgErrorField(err,'constraint')`), KHÔNG gộp chung 1 mã lỗi cho 2 nguyên nhân khác nhau
+   * (S2-FND-DB-2-B):
+   *  - `uq_file_links_entity_file_active` (6 cột, mig 0472) → 409 FOUNDATION-FILE-ERR-DUP-LINK (file NÀY
+   *    đã gắn vào ĐÚNG entity + link_type này, còn active).
+   *  - `uq_file_links_primary_per_entity_type` (5 cột is_primary, mig 0433) → 409
+   *    FOUNDATION-FILE-ERR-DUP-PRIMARY (entity đã có 1 file KHÁC làm primary cho cùng link_type).
+   * Vi phạm 23505 với constraint KHÁC (không nhận diện được) hoặc lỗi khác 23505 → rethrow nguyên vẹn
+   * (KHÔNG nuốt lỗi — silent-failure-hunter).
+   */
+  private async insertLinkOrThrow(data: NewFileLink, tx: TenantTx): Promise<FileLink> {
+    try {
+      return await this.linkRepo.insertTx(data, tx);
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        const constraint = pgErrorField(err, "constraint");
+        if (constraint === UQ_FILE_LINKS_ENTITY_FILE_ACTIVE) {
+          throw new ConflictException(
+            `${FOUNDATION_FILE_ERROR_CODES.DUP_LINK}: file đã được gắn vào entity này với cùng link_type (chưa gỡ).`,
+          );
+        }
+        if (constraint === UQ_FILE_LINKS_PRIMARY_PER_ENTITY_TYPE) {
+          throw new ConflictException(
+            `${FOUNDATION_FILE_ERROR_CODES.DUP_PRIMARY}: entity này đã có 1 file khác làm primary cho cùng link_type.`,
+          );
+        }
+      }
+      throw err;
+    }
+  }
 
   /**
    * Sanitize originalName chống path-traversal: bỏ NUL + ASCII control chars, lấy basename (phần sau dấu
