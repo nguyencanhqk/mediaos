@@ -91,7 +91,8 @@ export class TwoFactorService {
       .limit(1);
     if (u?.requireTwoFactor === true) return true;
 
-    // (2) Nguồn ROLE: user giữ ÍT NHẤT 1 role còn hiệu lực (chưa hết hạn, chưa soft-delete) có cờ.
+    // (2) Nguồn ROLE: user giữ ÍT NHẤT 1 role còn hiệu lực (chưa hết hạn, assignment + role chưa soft-delete)
+    // có cờ. S2-AUTH-DB-3: lọc userRoles.deleted_at (gỡ role = soft-delete, mig 0471) LẪN roles.deleted_at.
     const [row] = await tx
       .select({ one: sql<number>`1` })
       .from(userRoles)
@@ -100,6 +101,7 @@ export class TwoFactorService {
         and(
           eq(userRoles.userId, userId),
           eq(roles.requiresTwoFactor, true),
+          isNull(userRoles.deletedAt),
           isNull(roles.deletedAt),
           or(isNull(userRoles.expiresAt), gt(userRoles.expiresAt, new Date())),
         ),

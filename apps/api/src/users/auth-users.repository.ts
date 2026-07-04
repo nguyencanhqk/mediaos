@@ -146,8 +146,9 @@ export class AuthUsersRepository {
    *   - enabled        : user_totp.enabled_at != null (đã bật thật).
    *   - requiredByRole : user giữ ≥1 role còn hiệu lực có roles.requires_two_factor (mig 0120) — CHỈ ROLE.
    * KHÔNG tái dùng TwoFactorService.requiresTwoFactorTx (đã gộp OR users.require_two_factor) để requiredByRole
-   * phản ánh ĐÚNG nguồn role. Join role-only mirror requiresTwoFactorTx (loại deleted_at + expires_at). userId
-   * đã được caller xác thực in-tenant (findByIdTx company-scoped) + withTenant/RLS cô lập company (BẤT BIẾN #1).
+   * phản ánh ĐÚNG nguồn role. Join role-only mirror requiresTwoFactorTx (lọc deleted_at CẢ assignment
+   * userRoles.deleted_at LẪN role roles.deleted_at + expires_at — S2-AUTH-DB-3 mig 0471). userId đã được
+   * caller xác thực in-tenant (findByIdTx company-scoped) + withTenant/RLS cô lập company (BẤT BIẾN #1).
    */
   async getTwoFactorStateTx(
     tx: TenantTx,
@@ -166,6 +167,7 @@ export class AuthUsersRepository {
         and(
           eq(userRoles.userId, userId),
           eq(roles.requiresTwoFactor, true),
+          isNull(userRoles.deletedAt),
           isNull(roles.deletedAt),
           or(isNull(userRoles.expiresAt), gt(userRoles.expiresAt, new Date())),
         ),

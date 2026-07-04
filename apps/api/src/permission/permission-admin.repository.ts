@@ -8,8 +8,10 @@ import { notOperatorRole } from "./operator-roles";
 /**
  * PermissionAdminRepository (G3 mutation-path) — write-side cho quản lý phân quyền runtime.
  *
- * ⚠️ GRANT (migration 0005): `user_roles` và `object_permissions` chỉ có SELECT/INSERT/DELETE —
- *    KHÔNG có UPDATE cho app role. Đổi expiry/effect ⇒ DELETE rồi INSERT (KHÔNG upsert-update).
+ * ⚠️ GRANT `user_roles` (mig 0005 → SỬA mig 0471, S2-AUTH-DB-3): app role có SELECT/INSERT/**UPDATE**,
+ *    KHÔNG có DELETE. Gỡ role = SOFT-DELETE (UPDATE set deleted_at/deleted_by) — KHÔNG hard-delete
+ *    (BẤT BIẾN #2, giữ tombstone forensic). Đổi expiry ⇒ soft-delete rồi INSERT (partial-unique chỉ chặn
+ *    hàng active). `object_permissions` vẫn SELECT/INSERT/DELETE (đổi effect = DELETE+INSERT).
  * Mọi method nhận `tx` (TenantTx) từ service: ghi row + audit + outbox PHẢI cùng 1 transaction.
  */
 @Injectable()
@@ -63,6 +65,11 @@ export class PermissionAdminRepository {
 
   // ── role assignment (user_roles) ─────────────────────────────────────────────
 
+  /**
+   * Hàng user_role ACTIVE (chưa soft-delete). `deleted_at IS NULL` LOẠI tombstone (mig 0471) — bắt buộc để
+   * re-grant CÙNG (user,role) với CÙNG expiry SAU khi soft-delete KHÔNG bị coi là no-op-giả (round-3 #9):
+   * caller assignRole thấy undefined ⇒ INSERT hàng active mới + audit RoleAssigned thay vì bỏ qua.
+   */
   async findUserRole(
     tx: TenantTx,
     companyId: string,
@@ -77,6 +84,7 @@ export class PermissionAdminRepository {
           eq(userRoles.companyId, companyId),
           eq(userRoles.userId, userId),
           eq(userRoles.roleId, roleId),
+          isNull(userRoles.deletedAt),
         ),
       )
       .limit(1);
@@ -108,20 +116,30 @@ export class PermissionAdminRepository {
     return row;
   }
 
-  /** DELETE user_roles. Trả về id đã xoá (undefined = không có hàng nào). */
+  /**
+   * SOFT-DELETE user_roles (mig 0471, BẤT BIẾN #2 — KHÔNG hard-delete): gỡ role = UPDATE set deleted_at=now()
+   * + deleted_by=actor. App role có UPDATE, KHÔNG có DELETE (REVOKE DELETE) → hard-delete sẽ 42501.
+   *
+   * `AND deleted_at IS NULL` (round-2 #5): CHỈ đụng hàng ACTIVE. Sau chu kỳ re-grant→re-revoke có nhiều
+   * tombstone cùng (user,role,company); nếu thiếu predicate này, UPDATE sẽ GHI ĐÈ deleted_at/deleted_by
+   * của tombstone CŨ (mất dấu vết forensic ai/khi gỡ). Trả về id đã soft-delete (undefined = 0 hàng active).
+   */
   async deleteUserRole(
     tx: TenantTx,
     companyId: string,
     userId: string,
     roleId: string,
+    actorUserId: string,
   ): Promise<string | undefined> {
     const [row] = await tx
-      .delete(userRoles)
+      .update(userRoles)
+      .set({ deletedAt: new Date(), deletedBy: actorUserId })
       .where(
         and(
           eq(userRoles.companyId, companyId),
           eq(userRoles.userId, userId),
           eq(userRoles.roleId, roleId),
+          isNull(userRoles.deletedAt),
         ),
       )
       .returning({ id: userRoles.id });
@@ -195,12 +213,21 @@ export class PermissionAdminRepository {
 
   // ── invalidation fan-out ──────────────────────────────────────────────────────
 
-  /** userIds đang giữ role (để emit permission.changed cho từng user khi grant theo role). */
+  /**
+   * userIds đang giữ role ACTIVE (để emit permission.changed cho từng user khi grant theo role). Lọc
+   * `deleted_at IS NULL` (mig 0471) — user đã bị soft-delete role KHÔNG cần invalidate cache theo role đó.
+   */
   async findUserIdsWithRole(tx: TenantTx, companyId: string, roleId: string): Promise<string[]> {
     const rows = await tx
       .select({ userId: userRoles.userId })
       .from(userRoles)
-      .where(and(eq(userRoles.companyId, companyId), eq(userRoles.roleId, roleId)));
+      .where(
+        and(
+          eq(userRoles.companyId, companyId),
+          eq(userRoles.roleId, roleId),
+          isNull(userRoles.deletedAt),
+        ),
+      );
     return rows.map((r) => r.userId);
   }
 
