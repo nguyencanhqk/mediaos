@@ -209,10 +209,14 @@ describe.skipIf(!hasLaneDb)(
 
     // ── F2: path-traversal filename sanitize ─────────────────────────────────────────
     describe("F2 — filename path-traversal sanitized to tenant prefix", () => {
-      it("F2a — '../../secret.txt' but pdf MIME → stored basename, storage_path = {companyId}/files/{uuid}", async () => {
-        // Use a pdf MIME so the upload passes the allowlist; the point is the FILENAME sanitisation.
+      it("F2a — '../../secret.pdf' path-traversal → stored basename, storage_path = {companyId}/files/{uuid}", async () => {
+        // Fixture name uses a .pdf extension so it is CONSISTENT with declaredMimeType 'application/pdf'
+        // (S2-FND-FILE-2 extension↔MIME cross-check in mime-extension.ts rejects '.txt' + application/pdf
+        // as spoof — that path is covered by F1b). F2a's assertion target is FILENAME path-traversal
+        // sanitisation, so keep a valid-MIME name and prove '../../' never survives into the stored basename
+        // or the server-derived storage key.
         const dto = await service.upload(actor(), {
-          originalName: "../../secret.txt",
+          originalName: "../../secret.pdf",
           declaredMimeType: "application/pdf",
           sizeBytes: 32,
           visibility: "Private",
@@ -223,7 +227,7 @@ describe.skipIf(!hasLaneDb)(
           [dto.fileId],
         );
         // Basename only — no traversal segment kept.
-        expect(row.rows[0].original_name).toBe("secret.txt");
+        expect(row.rows[0].original_name).toBe("secret.pdf");
         // Server-derived key: exactly {companyId}/files/{uuid}; the name never leaks into the path.
         expect(row.rows[0].storage_path).toBe(`${A.companyId}/files/${dto.fileId}`);
         expect(String(row.rows[0].storage_path)).not.toContain("..");
