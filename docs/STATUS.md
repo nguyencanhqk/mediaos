@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-04 11:06Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-04 11:22Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -22,7 +22,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `feat/debt-wave2` · **file đang đổi (dirty)**: 2
+- **branch**: `feat/debt-wave2` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 154 — `0474_s2_fndbe8_module_audit_object_type` (155 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -31,6 +31,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `cdb266b` | 2026-07-04 | chore(harness): chốt S2-FND-BE-8 (auto-loop, pushed feat/debt-wave2) + lưu micro-plan S2-FND-JOBS-1 (block round2: secret-scrub/lane-wiring/link-safety) |
 | `a45bd45` | 2026-07-04 | wip(be-retention-create-simulate): POST create + simulate với audit-in-tx + 404 guard |
 | `78eb6a9` | 2026-07-04 | wip(be-module-toggle): PATCH /foundation/modules/:code enable/disable (S2-FND-BE-8) |
 | `f3fb93b` | 2026-07-04 | wip(be-system-settings): GET/PATCH /foundation/system-settings(/:key) + system-manage gate |
@@ -42,7 +43,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `d2c884d` | 2026-07-04 | wip(S2-FND-FILE-2-FIX-C): unit-test resolveTtl clamp on get()/signedUrl() (QA06-FILE-003) |
 | `71e0653` | 2026-07-04 | wip(S2-FND-FILE-2-FIX-B): fix F2a regression fixture — rename ../../secret.txt→.pdf so name is MIME-consistent (no check loosening) |
 | `d582694` | 2026-07-04 | wip(S2-FND-FILE-2-FIX-A): sửa bug SQL seed tenant-B trong files-e2e-confirm.int-spec |
-| `9725bbc` | 2026-07-04 | wip(FILE2-B-files-e2e): presigned-PUT register + POST /:id/confirm (checksum/size verify) + extension↔MIME/blocked_extensions + download-count best-effort |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
