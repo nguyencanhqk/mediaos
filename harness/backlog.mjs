@@ -3544,7 +3544,10 @@ export const backlog = [
     //   song song trên CÙNG bảng companies chính là nguyên nhân gây race giữa 2 suite) — xoá bloat + xoá nguồn
     //   race test-tự-gây. (11) BẮT BUỘC mở PR + chạy FULL gate (security-reviewer + database-reviewer) THẬT trên
     //   commit fix — vòng trước code còn nằm local trên feat/debt-wave2, chưa qua gate.
-    status: "todo",
+    // SHIPPED 2026-07-04 (commit fb318b5, feat/debt-wave2): design-correction unique-index→advisory-lock
+    //   (round-3 owner-chốt sai, tự sửa lại sau khi test-lane phát hiện phá ~141 file 2-tenant). FULL gate
+    //   security-reviewer + database-reviewer (2 review độc lập, tự chạy lại verify) PASS; 2 LOW đã fix.
+    status: "done",
     paths: [
       "apps/api/src/permission/super-admin-bootstrap.service.ts",
       "apps/api/src/foundation/seed/**",
