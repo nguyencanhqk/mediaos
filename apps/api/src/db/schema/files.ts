@@ -193,6 +193,9 @@ export const fileAccessLogs = pgTable(
       t.createdAt.desc(),
     ),
     index("file_access_logs_company_id_idx").on(t.companyId),
+    // DB-09 §8.8 (mig 0472) — audit ai xem/tải file theo company + thời gian mới→cũ. KHÔNG partial (log
+    // append-only, không soft-delete). KHÔNG trùng file_access_logs_company_id_idx (0433, chỉ company_id).
+    index("idx_file_access_logs_company_time").on(t.companyId, t.createdAt.desc()),
   ],
 );
 
