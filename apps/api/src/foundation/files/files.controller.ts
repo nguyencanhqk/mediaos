@@ -15,9 +15,11 @@ import {
 import type { Request, Response } from "express";
 import { ZodValidationPipe } from "nestjs-zod";
 import {
+  confirmUploadInputSchema,
   linkFileInputSchema,
   listFilesQuerySchema,
   uploadFileInputSchema,
+  type ConfirmUploadInput,
   type LinkFileInput,
   type ListFilesQuery,
   type UploadFileInput,
@@ -47,12 +49,32 @@ interface AuthenticatedRequest extends Request {
 export class FilesController {
   constructor(private readonly files: FileService) {}
 
-  /** POST /foundation/files/upload — đăng ký metadata upload (Private/Pending). Gate upload:foundation-file. */
+  /**
+   * POST /foundation/files/upload — REGISTER (pha 1): đăng ký metadata (Private/Pending) + trả presigned-PUT
+   * {fileId, uploadStatus:'Pending', uploadUrl, expiresAt} để client PUT bytes trực tiếp. Gate upload:foundation-file.
+   */
   @Post("upload")
   @RequirePermission("upload", "foundation-file")
   upload(@Req() req: AuthenticatedRequest, @Body() body: UploadFileInput) {
     const input = uploadFileInputSchema.parse(body);
     return this.files.upload(req.user, input);
+  }
+
+  /**
+   * POST /foundation/files/:id/confirm — CONFIRM (pha 3): sau khi client PUT bytes, verify object tồn tại +
+   * size khớp + tính checksum server-side → upload_status='Uploaded'. Sai size/absent → 'Failed' + 409/422.
+   * Gate upload:foundation-file. Body rỗng hợp lệ (fileId lấy từ route). 200 (idempotent nếu đã Uploaded).
+   */
+  @Post(":id/confirm")
+  @HttpCode(200)
+  @RequirePermission("upload", "foundation-file")
+  confirm(
+    @Req() req: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Body() body: ConfirmUploadInput,
+  ) {
+    const input = confirmUploadInputSchema.parse(body ?? {});
+    return this.files.confirmUpload(req.user, id, input);
   }
 
   /** GET /foundation/files — liệt kê metadata file của tenant (pagination block). Gate view:foundation-file. */

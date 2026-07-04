@@ -90,8 +90,14 @@ const COMPANY_DEFAULT_KEYS_SYSTEM_WINS = ["notification.in_app_enabled"];
  * và/hoặc migration-seed mà KHÔNG tính là drift:
  *   • file.allowed_mime_types           — seed 0435, DB-10 §11.1 CHỐT "DÔI, giữ, KHÔNG xoá".
  *   • hr.contract_expiring_warning_days — S2-HR-BE-6 company-configurable fallback (không thuộc §11 seed).
+ *   • file.blocked_extensions           — S2-FND-FILE-2 code-default-ONLY (fallback tier, KHÔNG migration
+ *     seed): blocklist extension nguy hiểm cho register-upload; company override qua company_settings.
  */
-const AGREED_EXTRA_DEFAULT_KEYS = ["file.allowed_mime_types", "hr.contract_expiring_warning_days"];
+const AGREED_EXTRA_DEFAULT_KEYS = [
+  "file.allowed_mime_types",
+  "hr.contract_expiring_warning_days",
+  "file.blocked_extensions",
+];
 const AGREED_EXTRA_MIGRATION_KEYS = ["file.allowed_mime_types"];
 
 /** Tập key system_settings mà migration THẬT seed (0435 5 key + 0470 10 key) = 14 canonical + DÔI. */

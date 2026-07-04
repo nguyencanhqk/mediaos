@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  confirmUploadInputSchema,
+  confirmUploadResponseSchema,
   downloadUrlSchema,
   fileLinkSchema,
   fileMetadataSchema,
+  FOUNDATION_FILE_ERROR_CODES,
   linkFileInputSchema,
   listFilesQuerySchema,
+  registerFileResponseSchema,
   uploadFileInputSchema,
 } from "./files";
 
@@ -249,6 +253,110 @@ describe("DownloadUrlDto — anti-leak guard", () => {
     });
     expect(parsed).not.toHaveProperty("storage_path");
     expect(parsed).not.toHaveProperty("storagePath");
+  });
+});
+
+// ─── S2-FND-FILE-2 — RegisterFileResponse (presigned-PUT) ────────────────────────
+
+describe("registerFileResponseSchema (QA06-FILE-001)", () => {
+  const schemaKeys = Object.keys(registerFileResponseSchema.shape);
+
+  it("exposes file_id + uploadUrl (presigned-PUT) + expiresAt + upload_status", () => {
+    expect(schemaKeys.sort()).toEqual(["expiresAt", "fileId", "uploadStatus", "uploadUrl"].sort());
+  });
+
+  it.each(FORBIDDEN_KEYS)("KHÔNG có storage internal key '%s'", (key) => {
+    expect(schemaKeys).not.toContain(key);
+  });
+
+  it("parses a valid register response (Pending + presigned url)", () => {
+    const parsed = registerFileResponseSchema.parse({
+      fileId: UUID,
+      uploadStatus: "Pending",
+      uploadUrl: "https://s3.example.com/bucket/key?X-Amz-Signature=abc",
+      expiresAt: ISO_DT,
+    });
+    expect(parsed.fileId).toBe(UUID);
+    expect(parsed.uploadStatus).toBe("Pending");
+  });
+
+  it("strips an injected storage_path (Zod strips unknown keys)", () => {
+    const parsed = registerFileResponseSchema.parse({
+      fileId: UUID,
+      uploadStatus: "Pending",
+      uploadUrl: "https://s3.example.com/bucket/key?sig=x",
+      expiresAt: ISO_DT,
+      storage_path: "/internal/bucket/key",
+    });
+    expect(parsed).not.toHaveProperty("storage_path");
+    expect(parsed).not.toHaveProperty("storagePath");
+  });
+
+  it("rejects a non-url uploadUrl", () => {
+    expect(() =>
+      registerFileResponseSchema.parse({
+        fileId: UUID,
+        uploadStatus: "Pending",
+        uploadUrl: "not-a-url",
+        expiresAt: ISO_DT,
+      }),
+    ).toThrow();
+  });
+});
+
+// ─── S2-FND-FILE-2 — Confirm upload (request/response) ───────────────────────────
+
+describe("confirmUploadInputSchema", () => {
+  it("accepts an empty body (fileId comes from route, size from row)", () => {
+    expect(() => confirmUploadInputSchema.parse({})).not.toThrow();
+  });
+
+  it("accepts an optional client checksum for cross-check", () => {
+    const parsed = confirmUploadInputSchema.parse({ checksumSha256: "a".repeat(64) });
+    expect(parsed.checksumSha256).toBe("a".repeat(64));
+  });
+
+  it("rejects a malformed checksum", () => {
+    expect(() => confirmUploadInputSchema.parse({ checksumSha256: "xyz" })).toThrow();
+  });
+});
+
+describe("confirmUploadResponseSchema — anti-leak", () => {
+  const schemaKeys = Object.keys(confirmUploadResponseSchema.shape);
+
+  it.each(FORBIDDEN_KEYS)("KHÔNG có storage internal key '%s' (checksum không lộ)", (key) => {
+    expect(schemaKeys).not.toContain(key);
+  });
+
+  it("parses a valid confirm response (Uploaded + verified size)", () => {
+    const parsed = confirmUploadResponseSchema.parse({
+      fileId: UUID,
+      uploadStatus: "Uploaded",
+      sizeBytes: 2048,
+    });
+    expect(parsed.uploadStatus).toBe("Uploaded");
+    expect(parsed.sizeBytes).toBe(2048);
+  });
+});
+
+describe("FOUNDATION_FILE_ERROR_CODES (append-only registry)", () => {
+  it("registers the new S2-FND-FILE-2 codes (append-only, keeps existing)", () => {
+    expect(FOUNDATION_FILE_ERROR_CODES.EXTENSION).toBe("FOUNDATION-FILE-ERR-EXTENSION");
+    expect(FOUNDATION_FILE_ERROR_CODES.BLOCKED).toBe("FOUNDATION-FILE-ERR-BLOCKED");
+    expect(FOUNDATION_FILE_ERROR_CODES.CONFIRM_ABSENT).toBe("FOUNDATION-FILE-ERR-CONFIRM-ABSENT");
+    expect(FOUNDATION_FILE_ERROR_CODES.CONFIRM_MISMATCH).toBe(
+      "FOUNDATION-FILE-ERR-CONFIRM-MISMATCH",
+    );
+    expect(FOUNDATION_FILE_ERROR_CODES.NOT_PENDING).toBe("FOUNDATION-FILE-ERR-NOT-PENDING");
+    // existing codes preserved (not renamed/removed).
+    expect(FOUNDATION_FILE_ERROR_CODES.DUP_LINK).toBe("FOUNDATION-FILE-ERR-DUP-LINK");
+    expect(FOUNDATION_FILE_ERROR_CODES.DUP_PRIMARY).toBe("FOUNDATION-FILE-ERR-DUP-PRIMARY");
+  });
+
+  it("every code follows the FOUNDATION-FILE-ERR-* convention (SPEC-01 §9)", () => {
+    for (const code of Object.values(FOUNDATION_FILE_ERROR_CODES)) {
+      expect(code).toMatch(/^FOUNDATION-FILE-ERR-[A-Z-]+$/);
+    }
   });
 });
 

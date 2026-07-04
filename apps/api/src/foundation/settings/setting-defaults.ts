@@ -61,6 +61,55 @@ export const SETTING_DEFAULTS: Readonly<Record<string, SettingDefault>> = Object
     moduleCode: "SYSTEM",
     isPublic: true,
   },
+  // S2-FND-FILE-2 — blocklist phần mở rộng nguy hiểm (executable/script/markup có thể chứa payload). Đối
+  // chiếu Ở TẦNG SERVICE lúc register (FileService.upload): extension ĐÃ sanitize ∈ blocked → reject
+  // FOUNDATION-FILE-ERR-BLOCKED (KHÔNG tạo row/không audit). Bổ trợ MIME-allowlist (file.allowed_mime_types)
+  // + đối chiếu extension↔MIME chống spoof. Company có thể override qua company_settings (precedence
+  // company>system>default — S1-FND-SETTING-1). isPublic=true (cấu hình vận hành, KHÔNG secret — BẤT BIẾN #3).
+  "file.blocked_extensions": {
+    value: [
+      "exe",
+      "bat",
+      "cmd",
+      "com",
+      "sh",
+      "bash",
+      "js",
+      "jse",
+      "mjs",
+      "vbs",
+      "vbe",
+      "ps1",
+      "psm1",
+      "msi",
+      "scr",
+      "pif",
+      "jar",
+      "dll",
+      "so",
+      "app",
+      "deb",
+      "rpm",
+      "html",
+      "htm",
+      "xhtml",
+      "shtml",
+      "svg",
+      "php",
+      "phtml",
+      "asp",
+      "aspx",
+      "jsp",
+      "py",
+      "pl",
+      "rb",
+      "cgi",
+    ],
+    valueType: "Array",
+    category: "File",
+    moduleCode: "SYSTEM",
+    isPublic: true,
+  },
   // S2-HR-BE-6 scope FIX (2026-07-02, owner-chốt session 1849d064): ngưỡng cảnh báo hợp đồng sắp hết hạn
   // là company-configurable qua company_settings (PATCH /settings/company/:key, S1-FND-SETTING-1) — CHƯA
   // có UI cấu hình riêng (follow-up nếu cần). 2 mốc mặc định [30,7] ngày (DB-03 §7.7 quy tắc 5): milestone

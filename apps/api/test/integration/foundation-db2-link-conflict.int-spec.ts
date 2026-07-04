@@ -133,7 +133,9 @@ describe.skipIf(!hasLaneDb)(
     });
 
     async function uploadFile(companyId: string, userId: string, name: string) {
-      return service.upload(
+      // S2-FND-FILE-2: upload() (register) now returns {fileId, uploadStatus, uploadUrl, expiresAt}. This
+      // helper adapts to `{ id }` so the existing DUP-link callers (which only need the file id) stay intact.
+      const res = await service.upload(
         { id: userId, companyId },
         {
           originalName: name,
@@ -142,6 +144,7 @@ describe.skipIf(!hasLaneDb)(
           visibility: "Private",
         },
       );
+      return { id: res.fileId };
     }
 
     it("(A) re-link ĐÚNG cùng (entity, file_id, link_type) lần 2 → 409 FOUNDATION-FILE-ERR-DUP-LINK", async () => {
