@@ -6,7 +6,16 @@
  * G3-4 mutation-path (/permissions/users/:userId/roles) — chống trôi path (route sai → 404 runtime).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AuthUserDto, AuthUserListDto, RoleListDto, UserRoleDto } from "@mediaos/contracts";
+import {
+  authUserDetailSchema,
+  authUserTwoFactorResetSchema,
+  type AuthUserDto,
+  type AuthUserDetailDto,
+  type AuthUserListDto,
+  type AuthUserTwoFactorResetDto,
+  type RoleListDto,
+  type UserRoleDto,
+} from "@mediaos/contracts";
 import { authUsersApi } from "./auth-users-api";
 import * as apiClient from "./api-client";
 
@@ -25,6 +34,17 @@ const USER: AuthUserDto = {
   lastLoginAt: null,
   createdAt: "2024-01-01T00:00:00.000Z",
 };
+
+// S2-FE-SYS-SEC-1 — detail DTO (GET /auth/users/:id) = superset của authUserSchema + khối twoFactor.
+// requiredByRole/requiredByUser TÁCH nguồn ép (KHÔNG lẫn); KHÔNG chứa secret TOTP/recovery-code.
+// id = UUID hợp lệ để parse thật qua authUserDetailSchema (z.string().uuid()).
+const USER_DETAIL: AuthUserDetailDto = {
+  ...USER,
+  id: "11111111-1111-4111-8111-111111111111",
+  twoFactor: { enabled: true, requiredByRole: false, requiredByUser: true },
+};
+// POST /auth/users/:id/2fa/reset → chỉ phơi revokedSessionCount (forensic), KHÔNG secret (BẤT BIẾN #3).
+const TWO_FACTOR_RESET: AuthUserTwoFactorResetDto = { revokedSessionCount: 3 };
 
 const USER_LIST: AuthUserListDto = { users: [USER], total: 1 };
 const ROLE_LIST: RoleListDto = {
@@ -51,6 +71,15 @@ function firstCallInit(): RequestInit | undefined {
   return calls[0][2] as RequestInit | undefined;
 }
 
+// Schema truyền ở ranh giới apiFetch (arg thứ 2) — chống trôi: getUser PHẢI parse detail schema (twoFactor),
+// resetTwoFactor PHẢI parse reset schema (revokedSessionCount). apiFetch bị mock nên parse thật không chạy,
+// nên khẳng định danh tính schema tại boundary + parse fixture riêng để chứng minh shape.
+function firstCallSchema(): unknown {
+  const calls = vi.mocked(apiClient.apiFetch).mock.calls;
+  expect(calls.length).toBeGreaterThan(0);
+  return calls[0][1];
+}
+
 describe("authUsersApi — contract/URL boundary", () => {
   beforeEach(() => {
     vi.mocked(apiClient.apiFetch).mockReset();
@@ -74,10 +103,19 @@ describe("authUsersApi — contract/URL boundary", () => {
     expect(params.get("status")).toBe("active");
   });
 
-  it("getUser → GET /auth/users/:id", async () => {
-    vi.mocked(apiClient.apiFetch).mockResolvedValue(USER);
-    await authUsersApi.getUser(USER.id);
+  it("getUser → GET /auth/users/:id parses detail schema (khối twoFactor present)", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue(USER_DETAIL);
+    const result = await authUsersApi.getUser(USER.id);
     expect(firstCallUrl()).toBe(`/auth/users/${USER.id}`);
+    // Ranh giới contract: getUser dùng authUserDetailSchema (superset authUserSchema) → có twoFactor.
+    expect(firstCallSchema()).toBe(authUserDetailSchema);
+    const parsed = authUserDetailSchema.parse(USER_DETAIL);
+    expect(parsed.twoFactor).toEqual({
+      enabled: true,
+      requiredByRole: false,
+      requiredByUser: true,
+    });
+    expect(result.twoFactor.requiredByUser).toBe(true);
   });
 
   it("createUser → POST /auth/users", async () => {
@@ -106,6 +144,18 @@ describe("authUsersApi — contract/URL boundary", () => {
     await authUsersApi.unlockUser(USER.id);
     expect(firstCallUrl()).toBe(`/auth/users/${USER.id}/unlock`);
     expect(firstCallInit()?.method).toBe("POST");
+  });
+
+  it("resetTwoFactor → POST /auth/users/:id/2fa/reset parses reset schema (revokedSessionCount)", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue(TWO_FACTOR_RESET);
+    const result = await authUsersApi.resetTwoFactor(USER.id);
+    expect(firstCallUrl()).toBe(`/auth/users/${USER.id}/2fa/reset`);
+    expect(firstCallInit()?.method).toBe("POST");
+    // Ranh giới contract: chỉ parse revokedSessionCount — KHÔNG secret/recovery-code (BẤT BIẾN #3).
+    expect(firstCallSchema()).toBe(authUserTwoFactorResetSchema);
+    const parsed = authUserTwoFactorResetSchema.parse(TWO_FACTOR_RESET);
+    expect(parsed.revokedSessionCount).toBe(3);
+    expect(result.revokedSessionCount).toBe(3);
   });
 
   it("listRoles → GET /auth/roles (catalog, NOT /org/roles)", async () => {

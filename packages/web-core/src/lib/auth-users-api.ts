@@ -1,11 +1,15 @@
 import { z } from "zod";
 import {
   authUserSchema,
+  authUserDetailSchema,
   authUserListSchema,
+  authUserTwoFactorResetSchema,
   roleListSchema,
   userRoleSchema,
   type AuthUserDto,
+  type AuthUserDetailDto,
   type AuthUserListDto,
+  type AuthUserTwoFactorResetDto,
   type CreateAuthUserRequest,
   type ListAuthUsersQuery,
   type LockAuthUserRequest,
@@ -35,8 +39,13 @@ export const authUsersApi = {
     return apiFetch(`/auth/users${qs}`, authUserListSchema);
   },
 
-  /** GET /auth/users/:id — chi tiết 1 user. */
-  getUser: (id: string): Promise<AuthUserDto> => apiFetch(`/auth/users/${id}`, authUserSchema),
+  /**
+   * GET /auth/users/:id — chi tiết 1 user (S2-AUTH-BE-12). Parse authUserDetailSchema = superset của
+   * authUserSchema + khối `twoFactor` {enabled, requiredByRole, requiredByUser}. Prefill form KHÔNG vỡ
+   * (detail là superset). masking = SERVER: DTO KHÔNG chứa secret TOTP/recovery-code (BẤT BIẾN #3).
+   */
+  getUser: (id: string): Promise<AuthUserDetailDto> =>
+    apiFetch(`/auth/users/${id}`, authUserDetailSchema),
 
   /** POST /auth/users — tạo user (mật khẩu hash ở SERVER). */
   createUser: (body: CreateAuthUserRequest): Promise<AuthUserDto> =>
@@ -62,6 +71,18 @@ export const authUsersApi = {
   /** POST /auth/users/:id/unlock — mở khoá tài khoản. */
   unlockUser: (id: string): Promise<AuthUserDto> =>
     apiFetch(`/auth/users/${id}/unlock`, authUserSchema, {
+      method: "POST",
+      body: "{}",
+    }),
+
+  /**
+   * POST /auth/users/:id/2fa/reset — admin gỡ 2FA của target (S2-AUTH-BE-12, privileged). Gate cặp
+   * CANONICAL reset-2fa:user is_sensitive=true (mig 0466) — server tự chặn. Không body (route chỉ nhận :id).
+   * Kết quả CHỈ revokedSessionCount (forensic) — KHÔNG secret/recovery-code (BẤT BIẾN #3). Self-reset OK;
+   * cross-tenant/không tồn tại → 404 (caller surface message rõ).
+   */
+  resetTwoFactor: (id: string): Promise<AuthUserTwoFactorResetDto> =>
+    apiFetch(`/auth/users/${id}/2fa/reset`, authUserTwoFactorResetSchema, {
       method: "POST",
       body: "{}",
     }),
