@@ -84,6 +84,13 @@ export const files = pgTable(
     index("idx_files_temporary_expiry")
       .on(t.companyId, t.isTemporary, t.expiresAt)
       .where(sql`deleted_at IS NULL`),
+    // DB-09 §8.6 (mig 0472) — lọc file theo trạng thái upload mới→cũ (chỉ hàng sống) + cleanup file đã xoá.
+    index("idx_files_company_status")
+      .on(t.companyId, t.uploadStatus, t.uploadedAt.desc())
+      .where(sql`deleted_at IS NULL`),
+    index("idx_files_cleanup_deleted")
+      .on(t.deletedAt)
+      .where(sql`deleted_at IS NOT NULL`),
     index("files_company_id_idx").on(t.companyId),
   ],
 );
@@ -132,6 +139,11 @@ export const fileLinks = pgTable(
     uniqueIndex("uq_file_links_primary_per_entity_type")
       .on(t.companyId, t.moduleCode, t.entityType, t.entityId, t.linkType)
       .where(sql`is_primary = true AND deleted_at IS NULL`),
+    // DB-09 §8.7 (mig 0472) — chặn LINK TRÙNG: 1 file gắn 1 lần / (entity, link_type). ĐÚNG 6 cột (thêm
+    // file_id so với uq is_primary 5 cột ở trên). Partial WHERE deleted_at IS NULL (re-link sau soft-delete OK).
+    uniqueIndex("uq_file_links_entity_file_active")
+      .on(t.companyId, t.moduleCode, t.entityType, t.entityId, t.fileId, t.linkType)
+      .where(sql`deleted_at IS NULL`),
     index("file_links_company_id_idx").on(t.companyId),
   ],
 );
@@ -181,6 +193,9 @@ export const fileAccessLogs = pgTable(
       t.createdAt.desc(),
     ),
     index("file_access_logs_company_id_idx").on(t.companyId),
+    // DB-09 §8.8 (mig 0472) — audit ai xem/tải file theo company + thời gian mới→cũ. KHÔNG partial (log
+    // append-only, không soft-delete). KHÔNG trùng file_access_logs_company_id_idx (0433, chỉ company_id).
+    index("idx_file_access_logs_company_time").on(t.companyId, t.createdAt.desc()),
   ],
 );
 

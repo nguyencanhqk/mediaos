@@ -399,6 +399,98 @@ describe("FileService (deny-path / validation RED)", () => {
     });
   });
 
+  // 5. S2-FND-DB-2-B — link() 23505 unique-violation phân biệt theo TÊN constraint ─────────
+  // uq_file_links_entity_file_active (6 cột, mig 0472) → DUP_LINK ; uq_file_links_primary_per_entity_type
+  // (5 cột is_primary, mig 0433) → DUP_PRIMARY. KHÔNG gộp chung 1 mã cho 2 nguyên nhân khác nhau.
+  describe("link() unique-violation (23505) — phân biệt theo constraint name", () => {
+    const linkInput = {
+      fileId: FILE,
+      moduleCode: "HR",
+      entityType: "EmployeeContract",
+      entityId: randomUUID(),
+      linkType: "Attachment" as const,
+      accessScope: "Company" as const,
+      isPrimary: false,
+    };
+
+    /** Mock a drizzle-wrapped pg unique-violation error (code lives at `.cause`, like DrizzleQueryError). */
+    function uniqueViolation(constraint: string) {
+      return { name: "DrizzleQueryError", cause: { code: "23505", constraint } };
+    }
+
+    beforeEach(() => {
+      // Must clear the earlier guards (file exists in tenant, not Infected, policy ALLOW) so `link()`
+      // reaches `insertLinkOrThrow` — the 23505 branch under test happens AFTER those guards.
+      h.fileRepo.findByIdTx.mockResolvedValue(makeFileRow());
+    });
+
+    it("uq_file_links_entity_file_active → ConflictException FOUNDATION-FILE-ERR-DUP-LINK (409)", async () => {
+      h.linkRepo.insertTx.mockRejectedValue(uniqueViolation("uq_file_links_entity_file_active"));
+      let caught: unknown;
+      try {
+        await h.service.link(user, linkInput);
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(ConflictException);
+      expect((caught as ConflictException).getStatus()).toBe(409);
+      expect((caught as Error).message).toContain("FOUNDATION-FILE-ERR-DUP-LINK");
+    });
+
+    it("uq_file_links_primary_per_entity_type → ConflictException FOUNDATION-FILE-ERR-DUP-PRIMARY (409)", async () => {
+      h.linkRepo.insertTx.mockRejectedValue(
+        uniqueViolation("uq_file_links_primary_per_entity_type"),
+      );
+      let caught: unknown;
+      try {
+        await h.service.link(user, linkInput);
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(ConflictException);
+      expect((caught as ConflictException).getStatus()).toBe(409);
+      expect((caught as Error).message).toContain("FOUNDATION-FILE-ERR-DUP-PRIMARY");
+    });
+
+    it("2 mã KHÁC NHAU cho 2 constraint khác nhau (KHÔNG gộp chung 1 mã)", async () => {
+      h.linkRepo.insertTx.mockRejectedValueOnce(
+        uniqueViolation("uq_file_links_entity_file_active"),
+      );
+      let dupLinkMessage = "";
+      try {
+        await h.service.link(user, linkInput);
+      } catch (err) {
+        dupLinkMessage = (err as Error).message;
+      }
+
+      h.linkRepo.insertTx.mockRejectedValueOnce(
+        uniqueViolation("uq_file_links_primary_per_entity_type"),
+      );
+      let dupPrimaryMessage = "";
+      try {
+        await h.service.link(user, linkInput);
+      } catch (err) {
+        dupPrimaryMessage = (err as Error).message;
+      }
+
+      expect(dupLinkMessage).not.toBe("");
+      expect(dupPrimaryMessage).not.toBe("");
+      expect(dupLinkMessage).not.toBe(dupPrimaryMessage);
+    });
+
+    it("23505 với constraint KHÁC/không nhận diện → rethrow nguyên vẹn (KHÔNG nuốt lỗi, KHÔNG map nhầm mã)", async () => {
+      const original = uniqueViolation("some_other_unrelated_constraint");
+      h.linkRepo.insertTx.mockRejectedValue(original);
+      await expect(h.service.link(user, linkInput)).rejects.toBe(original);
+    });
+
+    it("lỗi KHÔNG phải 23505 (ví dụ lỗi kết nối) → rethrow nguyên vẹn, KHÔNG bị bọc thành ConflictException", async () => {
+      const original = new Error("connection terminated unexpectedly");
+      h.linkRepo.insertTx.mockRejectedValue(original);
+      await expect(h.service.link(user, linkInput)).rejects.toBe(original);
+    });
+  });
+
   // ALLOW-path mapping coverage (DTO never leaks storage internals) ─────────────────
   describe("allow-path DTO mapping (no storage leak)", () => {
     it("getMetadata ALLOW → eager-loads links + DTO has no storagePath/storedName", async () => {

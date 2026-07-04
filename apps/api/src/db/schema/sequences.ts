@@ -68,6 +68,11 @@ export const sequenceCounters = pgTable(
     index("idx_sequence_counters_company_module")
       .on(t.companyId, t.moduleCode, t.status)
       .where(sql`deleted_at IS NULL`),
+    // DB-09 §8.9 (mig 0472) — quét counter cần reset (job đầu năm/tháng/ngày). Predicate PascalCase
+    // 'Yearly'/'Monthly'/'Daily' KHỚP CHECK chk_sequence_counters_reset_policy (0434) + seed DB-10.
+    index("idx_sequence_counters_reset")
+      .on(t.resetPolicy, t.lastResetAt)
+      .where(sql`reset_policy IN ('Yearly', 'Monthly', 'Daily')`),
     index("sequence_counters_company_id_idx").on(t.companyId),
   ],
 );

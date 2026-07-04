@@ -76,6 +76,14 @@ export const auditLogs = pgTable(
     // DB-08 §8.5 index (mig 0438) — parity với SQL.
     index("idx_audit_logs_actor_created").on(t.actorUserId, desc(t.createdAt)),
     index("idx_audit_logs_action").on(t.companyId, t.moduleCode, t.action, desc(t.createdAt)),
+    // DB-09 §8.5 index (mig 0472) — truy vết theo entity + thời gian, company_id-led (GIỮ idx_audit_logs_entity
+    // module_code-led 0432, KHÔNG DROP). audit_logs append-only lớp-2 (trigger) sống ở SQL — không biểu diễn Drizzle.
+    index("idx_audit_logs_company_entity").on(
+      t.companyId,
+      t.entityType,
+      t.entityId,
+      desc(t.createdAt),
+    ),
   ],
 );
 
