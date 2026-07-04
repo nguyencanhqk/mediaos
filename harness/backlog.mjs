@@ -3793,7 +3793,8 @@ export const backlog = [
     //   DUP-PRIMARY (2 file khác nhau) + 2-tenant isolation (3 case). Full suite LANE_DB: 283 file/4330 test
     //   pass. Đang CHỜ FULL gate (database-reviewer, chạm audit_logs = crown) + người chốt red-zone trước khi
     //   flip status "done" (mig 0472 KHÔNG auto-merge — red zone).
-    status: "todo",
+    // SHIPPED 2026-07-04 qua PR #113 (merged vào feat/debt-wave2).
+    status: "done",
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/db/schema/**",
