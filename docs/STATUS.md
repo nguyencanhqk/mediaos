@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-04 04:32Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-04 04:43Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -23,7 +23,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `feat/debt-wave2` · **file đang đổi (dirty)**: 1
+- **branch**: `feat/debt-wave2` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 153 — `0473_s2_fndseed3_single_active_company_guard` (154 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -32,6 +32,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `4def2cf` | 2026-07-04 | chore(harness): chốt S2-FE-ACCT-SEC-1 (PR #114) + S2-FE-SYS-SEC-1 (PR #115) merged |
 | `786cf57` | 2026-07-04 | chore(harness): chốt S2-FND-SEED-3 (FULL gate PASS, merged trên feat/debt-wave2) |
 | `fb318b5` | 2026-07-04 | fix(S2-FND-SEED-3): 2 LOW từ FULL gate — resetPassword clear must_change_password + DROP INDEX phòng vệ |
 | `adc9562` | 2026-07-04 | chore(harness): chốt hướng round 4 cho S2-FND-BE-8 + dọn auto-start nhầm JOBS-1 |
@@ -43,7 +44,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `6d6de8c` | 2026-07-04 | wip(fe-acct-sec): card Bảo mật (2FA) trên AccountProfilePage — S2-FE-ACCT-SEC-1 |
 | `dfedd49` | 2026-07-04 | wip(SEED3-B-test): gộp 2 int-spec ensure-company thành 1 canonical + race tests + FIX N=1 guard |
 | `14e0785` | 2026-07-04 | wip(SEED3-A-mig): mig 0473 (idx 153) uq_companies_single_active + ensure_default_company EXCEPTION 23505->winner idempotent |
-| `c677edd` | 2026-07-04 | S2-FND-DB-2: file_links/audit_logs DB-09 hardening (mig 0472) + FileService.link() 409 phân biệt (#113) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
