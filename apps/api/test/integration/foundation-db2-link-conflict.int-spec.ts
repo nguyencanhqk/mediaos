@@ -70,6 +70,10 @@ const stubStorage: StorageAdapter = {
     url: "https://signed.example/x",
     expiresAt: new Date(Date.now() + 300_000),
   }),
+  // S2-FND-FILE-2 (storage-port): confirm-upload flow only — unused by this suite (link() never
+  // touches storage). Kept minimal so the stub still satisfies StorageAdapter.
+  stat: async () => ({ exists: true, sizeBytes: 0 }),
+  getBytes: async () => new Uint8Array(),
 };
 
 /** Stub SettingService — returns the file.* defaults (precedence resolution covered elsewhere). */
