@@ -110,6 +110,16 @@ export const SETTING_DEFAULTS: Readonly<Record<string, SettingDefault>> = Object
     moduleCode: "SYSTEM",
     isPublic: true,
   },
+  // S2-FND-JOBS-1 (jobs_tempfile) — TTL (giờ) cho file upload_status='Pending' bị treo (client bỏ dở confirm).
+  // TEMP_FILE_CLEANUP soft-delete file Pending có created_at cũ hơn ngưỡng này (precedence company>system>
+  // default — S1-FND-SETTING-1). Number/isPublic=true (cấu hình vận hành, KHÔNG secret — BẤT BIẾN #3).
+  "file.pending_ttl_hours": {
+    value: 24,
+    valueType: "Number",
+    category: "File",
+    moduleCode: "SYSTEM",
+    isPublic: true,
+  },
   // S2-HR-BE-6 scope FIX (2026-07-02, owner-chốt session 1849d064): ngưỡng cảnh báo hợp đồng sắp hết hạn
   // là company-configurable qua company_settings (PATCH /settings/company/:key, S1-FND-SETTING-1) — CHƯA
   // có UI cấu hình riêng (follow-up nếu cần). 2 mốc mặc định [30,7] ngày (DB-03 §7.7 quy tắc 5): milestone
