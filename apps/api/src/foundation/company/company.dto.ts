@@ -1,55 +1,19 @@
 import { createZodDto } from "nestjs-zod";
-import { z } from "zod";
+import { patchCompanySchema } from "@mediaos/contracts";
 
 /**
- * S1-FND-MODULE-1 — Zod DTO CỤC BỘ cho CompanyService (mẫu settings.dto/holidays.dto). KHÔNG sửa
- * packages/contracts ở WO này (envelope/contracts = S1-FND-WIRE-1). Validate ở ranh giới HTTP (BẤT BIẾN:
- * không trust input).
+ * S1-FND-MODULE-1 / S2-FND-CONTRACT-1 — Zod DTO cho CompanyService. patchCompanySchema (allow-list PATCH) là
+ * NGUỒN SỰ THẬT ở packages/contracts (foundation/company.ts) — file này CHỈ re-export schema/type + bọc
+ * `createZodDto` (nestjs-zod là dep của api). KHÔNG khai báo schema cục bộ để tránh drift (CLAUDE §4).
  *
- * PATCH chỉ nhận field hồ sơ EDITABLE (allow-list). Key lạ (id/slug/status/company_id/...) bị Zod STRIP
- * (object mặc định strip unknown) ⇒ body `company_id` lạ tự bị bỏ — tenant LẤY TỪ AuthContext, không từ body.
- * currency/language ép enum khớp CHECK DB (mig 0002: currency IN VND/USD, language IN vi/en).
+ * PATCH chỉ nhận field hồ sơ EDITABLE (allow-list). Key lạ (id/slug/status/company_id/...) bị Zod STRIP ⇒
+ * body `company_id` lạ tự bị bỏ — tenant LẤY TỪ AuthContext, không từ body (BẤT BIẾN #1).
  */
 
-export const companyCurrencyEnum = z.enum(["VND", "USD"]);
-export const companyLanguageEnum = z.enum(["vi", "en"]);
-
-/** YYYY-MM-DD cho cột `date` (drizzle date mode string). */
-const isoDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "date phải dạng YYYY-MM-DD")
-  .nullable();
-
-/**
- * Field hồ sơ company được phép cập nhật (mig 0002 + 0360 CS-5). KHÔNG gồm: id/slug/status/schema_version/
- * working_days_json (BE-1) / payroll_config_json (PAYROLL) / created_at/updated_at/deleted_at / company_id.
- */
-export const patchCompanySchema = z
-  .object({
-    name: z.string().min(1).max(255),
-    shortName: z.string().max(255).nullable(),
-    logoUrl: z.string().url().max(2048).nullable(),
-    timezone: z.string().min(1).max(64),
-    currency: companyCurrencyEnum,
-    language: companyLanguageEnum,
-    taxCode: z.string().max(50).nullable(),
-    businessType: z.string().max(255).nullable(),
-    regNumber: z.string().max(100).nullable(),
-    regDate: isoDate,
-    regPlace: z.string().max(255).nullable(),
-    legalRepName: z.string().max(255).nullable(),
-    legalRepTitle: z.string().max(255).nullable(),
-    establishedDate: isoDate,
-    address: z.string().max(1024).nullable(),
-    phone: z.string().max(50).nullable(),
-    fax: z.string().max(50).nullable(),
-    email: z.string().email().max(255).nullable(),
-    website: z.string().url().max(2048).nullable(),
-  })
-  .partial();
+export { patchCompanySchema, companyCurrencyEnum, companyLanguageEnum } from "@mediaos/contracts";
+export type { PatchCompanyInput } from "@mediaos/contracts";
 
 export class PatchCompanyDto extends createZodDto(patchCompanySchema) {}
-export type PatchCompanyInput = z.infer<typeof patchCompanySchema>;
 
 /** Field hiển thị cho GET/response (read-only id/slug/status + hồ sơ). KHÔNG lộ secret (company không có). */
 export interface CompanyView {

@@ -6,6 +6,7 @@
  */
 
 import { ConflictException, NotFoundException } from "@nestjs/common";
+import { FOUNDATION_ERROR_CODES } from "@mediaos/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HolidaysService } from "./holidays.service";
 
@@ -147,6 +148,57 @@ describe("HolidaysService CRUD deny paths", () => {
   it("delete → missing own row → NotFoundException", async () => {
     const svc = makeService(makeRepo({ softDeleteOwnTx: vi.fn().mockResolvedValue([]) }));
     await expect(svc.deleteHoliday(actor, "nope")).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+/**
+ * S2-FND-CONTRACT-1 (testTask#8 — message-preservation): mỗi throw ĐÃ chuyển sang payload {code,message}
+ * (holidays.service.ts:203/244 = 409 HOLIDAY_DUPLICATE · 219/251/265 = 404 HOLIDAY_NOT_FOUND) vẫn TRẢ
+ * message GỐC bên cạnh mã FOUNDATION-ERR-* — client KHÔNG mất ngữ cảnh, KHÔNG bị thay bằng class-name mặc
+ * định. Cần ≥1 case 404 VÀ ≥1 case 409 (ghép với case 404 sẵn có ở "CRUD deny paths").
+ */
+describe("HolidaysService message-preservation (payload {code,message} — testTask#8)", () => {
+  const HOLIDAY_ID = "rrrrrrrr-rrrr-rrrr-rrrr-rrrrrrrrrrrr";
+
+  it("409 create → HOLIDAY_DUPLICATE giữ mã + message gốc (unique violation 23505)", async () => {
+    const svc = makeService(makeRepo({ insertTx: vi.fn().mockRejectedValue({ code: "23505" }) }));
+    try {
+      await svc.createHoliday(actor, { holidayCode: "TET", name: "Tết", holidayDate: MON });
+      throw new Error("expected ConflictException");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ConflictException);
+      const body = (err as ConflictException).getResponse() as { code: string; message: string };
+      expect(body.code).toBe(FOUNDATION_ERROR_CODES.HOLIDAY_DUPLICATE);
+      expect(body.message).toBe("Ngày nghỉ trùng (mã + ngày đã tồn tại trong công ty).");
+    }
+  });
+
+  it("409 update → HOLIDAY_DUPLICATE giữ mã + message gốc (unique violation trên updateOwnTx)", async () => {
+    const svc = makeService(
+      makeRepo({ updateOwnTx: vi.fn().mockRejectedValue({ code: "23505" }) }),
+    );
+    try {
+      await svc.updateHoliday(actor, HOLIDAY_ID, { name: "Đổi tên" });
+      throw new Error("expected ConflictException");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ConflictException);
+      const body = (err as ConflictException).getResponse() as { code: string; message: string };
+      expect(body.code).toBe(FOUNDATION_ERROR_CODES.HOLIDAY_DUPLICATE);
+      expect(body.message).toBe("Ngày nghỉ trùng (mã + ngày).");
+    }
+  });
+
+  it("404 update → HOLIDAY_NOT_FOUND giữ mã + message gốc (row không tồn tại)", async () => {
+    const svc = makeService(makeRepo({ findOwnByIdTx: vi.fn().mockResolvedValue([]) }));
+    try {
+      await svc.updateHoliday(actor, "nope", { name: "x" });
+      throw new Error("expected NotFoundException");
+    } catch (err) {
+      expect(err).toBeInstanceOf(NotFoundException);
+      const body = (err as NotFoundException).getResponse() as { code: string; message: string };
+      expect(body.code).toBe(FOUNDATION_ERROR_CODES.HOLIDAY_NOT_FOUND);
+      expect(body.message).toBe("Không tìm thấy ngày nghỉ.");
+    }
   });
 });
 
