@@ -653,6 +653,16 @@ Quy tắc:
 4. `404` có thể dùng thay `403` nếu cần tránh lộ resource tồn tại ở company/scope khác.
 5. `422` dùng cho business rule hợp lệ về mặt request nhưng không được phép theo nghiệp vụ.
 
+> **Reconcile thực thi (S2-FND-CONTRACT-1) — chốt biên `400` vs `422` cho FOUNDATION settings:**
+> - **`400`** = sai **kiểu dữ liệu** so với `value_type` khai báo (vd gửi string cho `Number`), hoặc không
+>   xác định được `value_type`. Mã: `FOUNDATION-ERR-SETTING-VALUE-TYPE` / `-VALUE-TYPE-UNKNOWN`.
+> - **`422`** = request đúng kiểu nhưng vi phạm **`validation_schema`** của setting (min/max/enum/pattern/length).
+>   Mã **GIỮ `VALIDATION-ERR-*`** (KHÔNG đổi sang `FOUNDATION-ERR-*`) — vì `packages/web-core`
+>   `mapStatusToErrorKind` prefix-match `code.startsWith('VALIDATION-ERR')` để style riêng lỗi validation.
+>   Đây là tiền lệ CHỦ Ý (`setting.service.assertSchema`), pin ở đây để không bị "chuẩn hoá nhầm" về 400.
+> - **Ranh giới `403`:** guard-level (PermissionGuard) trả `AUTH-ERR-FORBIDDEN`; business-rule 403 do
+>   SERVICE tự ném (company Suspended, module core-lock) trả `FOUNDATION-ERR-*` (xem §21 catalog).
+
 ---
 
 ## 14. Chuẩn header contract
@@ -694,6 +704,20 @@ GET /api/v1/hr/employees?page=1&per_page=20
 | --- | --- | ---: | ---: | --- |
 | `page` | integer | 1 | - | Bắt đầu từ 1 |
 | `per_page` | integer | 20 | 100 | Endpoint đặc biệt có thể thấp hơn |
+
+> **Reconcile thực thi (S2-FND-CONTRACT-1) — quy ước REQUEST hiện có, chốt song song (KHÔNG đổi code):**
+> `page`/`per_page` ở trên là **response envelope chuẩn** (khối `pagination`, API-01 §16.1 — `paginationSchema`
+> trong `packages/contracts`). Về **tham số REQUEST**, code hiện tồn tại **hai quy ước có chủ ý**, không hợp
+> nhất cơ học vì ngữ nghĩa khác nhau:
+>
+> 1. **Entity/file list** (`GET /foundation/files`, `/file-access-logs`, HR employees…): dùng **`page` + `limit`**
+>    (page-based; `limit` = kích thước trang, coerce từ query-string, `.catch` fallback default để list KHÔNG
+>    bao giờ 400 vì tham số rác). Đây là dạng "trang" quen thuộc cho bảng UI.
+> 2. **Audit/log cursor** (`GET /foundation/audit`, log endpoints): dùng **`limit` + `offset`** (offset-based) vì
+>    consumer log/audit cuộn theo cửa sổ tuyến tính, không cần tổng số trang.
+>
+> Cả hai đều hợp lệ; endpoint mới **nên** ưu tiên `page`/`per_page` (canonical). Việc gộp `limit`↔`per_page` là
+> nợ kỹ thuật ở tầng đặt tên, **để lại cho đợt chuẩn hoá envelope sau** (không thuộc phạm vi WO này).
 
 ### 15.2 Search
 
@@ -1206,8 +1230,29 @@ Nội dung:
 
 | Code | Type | HTTP status | Message mặc định | Module | Ghi chú |
 | --- | --- | ---: | --- | --- | --- |
-| AUTH-ERR-FORBIDDEN | ForbiddenError | 403 | Bạn không có quyền thực hiện thao tác này | AUTH | Dùng chung |
+| AUTH-ERR-FORBIDDEN | ForbiddenError | 403 | Bạn không có quyền thực hiện thao tác này | AUTH | Guard-level (PermissionGuard) |
 | LEAVE-ERR-INSUFFICIENT-BALANCE | BusinessRuleError | 422 | Số ngày phép còn lại không đủ | LEAVE | Submit leave |
+| FOUNDATION-ERR-COMPANY-NOT-FOUND | NotFoundError | 404 | Không tìm thấy công ty. | FOUNDATION | company.service |
+| FOUNDATION-ERR-COMPANY-SUSPENDED | ForbiddenError | 403 | Công ty đang bị tạm ngưng… | FOUNDATION | Business-rule 403 (service, KHÔNG guard) |
+| FOUNDATION-ERR-SETTING-NOT-FOUND | NotFoundError | 404 | system_setting '…' không tồn tại. | FOUNDATION | setting.service |
+| FOUNDATION-ERR-SETTING-VALUE-TYPE | ValidationError | 400 | value phải là … | FOUNDATION | Sai value_type (≠422 schema) |
+| FOUNDATION-ERR-SETTING-VALUE-TYPE-UNKNOWN | ValidationError | 400 | Không xác định được value_type… | FOUNDATION | Thiếu value_type |
+| FOUNDATION-ERR-SETTING-SECRET-STICKY | ValidationError | 400 | Không thể đổi value_type … khỏi SecretRef | FOUNDATION | Sticky secret guard |
+| FOUNDATION-ERR-AUDIT-NOT-FOUND | NotFoundError | 404 | Audit log không tồn tại | FOUNDATION | audit.service (RLS-ẩn tenant khác) |
+| FOUNDATION-ERR-MODULE-NOT-FOUND | NotFoundError | 404 | Module '…' không tồn tại. | FOUNDATION | module-catalog / toggle |
+| FOUNDATION-ERR-MODULE-CORE-LOCKED | BusinessRuleError | 400 | Module lõi … không thể bật/tắt | FOUNDATION | 7 module MVP khoá cứng |
+| FOUNDATION-ERR-HOLIDAY-NOT-FOUND | NotFoundError | 404 | Không tìm thấy ngày nghỉ. | FOUNDATION | holidays.service |
+| FOUNDATION-ERR-HOLIDAY-DUPLICATE | ConflictError | 409 | Ngày nghỉ trùng (mã + ngày). | FOUNDATION | holidays.service |
+| FOUNDATION-ERR-RETENTION-POLICY-NOT-FOUND | NotFoundError | 404 | Không tìm thấy chính sách lưu trữ… | FOUNDATION | retention.service |
+| VALIDATION-ERR-001 | ValidationError | 422 | Dữ liệu không hợp lệ | (chung) | validation_schema setting → GIỮ prefix VALIDATION-ERR (web-core kind-match) |
+
+> **Nguồn sự thật catalog FOUNDATION-ERR-*** = `packages/contracts/src/foundation/error-codes.ts`
+> (`FOUNDATION_ERROR_CODES`, append-only). Domain file có catalog RIÊNG `FOUNDATION_FILE_ERROR_CODES`
+> (`packages/contracts/src/files.ts`). apps/api import LẠI (KHÔNG khai báo bản cục bộ — chống drift).
+> **CÒN NỢ (deferred, không phải bug):** `files.service.ts` (23 throw, catalog file) + `sequence.service.ts`
+> (2 throw domain-error class) GIỮ mã hiện tại — ngoài phạm vi WO S2-FND-CONTRACT-1; Swagger `/docs` +
+> migrate DTO cục bộ (settings/holidays/company) vào contracts = follow-up (cần thêm dep `@nestjs/swagger`
+> + lockfile, ngoài paths lane).
 
 ---
 

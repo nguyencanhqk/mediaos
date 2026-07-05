@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { FOUNDATION_ERROR_CODES } from "@mediaos/contracts";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { TenantTx } from "../../db/db.service";
 import { DatabaseService } from "../../db/db.service";
@@ -189,7 +190,10 @@ export class RetentionService {
       const existing = existingRows[0] as RetentionPolicyRow | undefined;
       // FAIL-CLOSED: 0 row (không tồn tại / tenant khác / đã xóa) → 404, KHÔNG NPE/500 khi audit snapshot.
       if (!existing) {
-        throw new NotFoundException(`Không tìm thấy chính sách lưu trữ id=${policyId}.`);
+        throw new NotFoundException({
+          code: FOUNDATION_ERROR_CODES.RETENTION_POLICY_NOT_FOUND,
+          message: `Không tìm thấy chính sách lưu trữ id=${policyId}.`,
+        });
       }
 
       const now = new Date();
@@ -338,7 +342,10 @@ export class RetentionService {
       // FAIL-CLOSED: 0 row (không tồn tại / tenant khác — RLS che / đã xoá) → 404, KHÔNG cast NPE → 500.
       const policy = policyRows[0] as RetentionPolicyRow | undefined;
       if (!policy) {
-        throw new NotFoundException(`Không tìm thấy chính sách lưu trữ id=${policyId}.`);
+        throw new NotFoundException({
+          code: FOUNDATION_ERROR_CODES.RETENTION_POLICY_NOT_FOUND,
+          message: `Không tìm thấy chính sách lưu trữ id=${policyId}.`,
+        });
       }
       const cutoffTime = this._cutoff(policy.retentionDays);
       const eligibleCount = await this._countEligible(tx, companyId, policy.entityType, cutoffTime);
@@ -383,7 +390,10 @@ export class RetentionService {
       // FAIL-CLOSED: 0 row (không tồn tại / tenant khác — RLS che / đã xoá) → 404, KHÔNG cast NPE → 500.
       const policy = policyRows[0] as RetentionPolicyRow | undefined;
       if (!policy) {
-        throw new NotFoundException(`Không tìm thấy chính sách lưu trữ id=${policyId}.`);
+        throw new NotFoundException({
+          code: FOUNDATION_ERROR_CODES.RETENTION_POLICY_NOT_FOUND,
+          message: `Không tìm thấy chính sách lưu trữ id=${policyId}.`,
+        });
       }
       const cutoffTime = this._cutoff(policy.retentionDays);
 

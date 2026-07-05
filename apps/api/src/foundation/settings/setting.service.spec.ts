@@ -14,6 +14,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
+import { FOUNDATION_ERROR_CODES } from "@mediaos/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { SettingService } from "./setting.service";
 
@@ -842,5 +843,75 @@ describe("SettingService.updateSystemSetting (validate + system upsert + audit-i
     expect(JSON.stringify(entry.oldValues)).not.toContain("old-secret");
     expect(JSON.stringify(entry.newValues)).not.toContain("new-secret");
     expect(JSON.stringify(entry.oldValues)).toContain("***");
+  });
+});
+
+// ─── S2-FND-CONTRACT-1: payload.code FOUNDATION-ERR-* + secret-strip trên error body ────────────────
+describe("SettingService error-code payload (S2-FND-CONTRACT-1)", () => {
+  async function catchErr(p: Promise<unknown>): Promise<{ code?: string; message?: string }> {
+    try {
+      await p;
+    } catch (e) {
+      return (e as { getResponse(): { code?: string; message?: string } }).getResponse();
+    }
+    throw new Error("expected throw");
+  }
+
+  it("wrong value_type → 400 code SETTING_VALUE_TYPE, message gốc GIỮ, KHÔNG lộ giá trị nhập", async () => {
+    const repo = makeRepo({
+      findOneSystemTx: vi.fn().mockResolvedValue([row({ valueType: "Number" })]),
+    });
+    const { svc } = makeService({ repo });
+    const res = await catchErr(
+      svc.updateCompanySetting(actor, "file.max_upload_size_mb", {
+        settingValue: "super-secret-raw-value",
+      }),
+    );
+    expect(res.code).toBe(FOUNDATION_ERROR_CODES.SETTING_VALUE_TYPE);
+    expect(res.message).toContain("value phải là number");
+    // BẤT BIẾN #3: giá trị client gửi KHÔNG được nội suy vào error body.
+    expect(JSON.stringify(res)).not.toContain("super-secret-raw-value");
+  });
+
+  it("system_setting absent → 404 code SETTING_NOT_FOUND + message gốc (key name, không phải secret)", async () => {
+    const repo = makeRepo({ findOneSystemTx: vi.fn().mockResolvedValue([]) });
+    const { svc } = makeService({ repo });
+    const res = await catchErr(svc.getSystemSetting(actor, "missing.key"));
+    expect(res.code).toBe(FOUNDATION_ERROR_CODES.SETTING_NOT_FOUND);
+    expect(res.message).toBe("system_setting 'missing.key' không tồn tại.");
+  });
+
+  it("sticky secret guard → 400 code SETTING_SECRET_STICKY, KHÔNG lộ settingValue nhạy cảm", async () => {
+    const existing = row({
+      settingKey: "smtp.password",
+      settingValue: "old-plaintext-pw",
+      valueType: "SecretRef",
+      isSensitive: true,
+    });
+    const repo = makeRepo({ findOneCompanyTx: vi.fn().mockResolvedValue([existing]) });
+    const { svc } = makeService({ repo });
+    const res = await catchErr(
+      svc.updateCompanySetting(actor, "smtp.password", {
+        settingValue: "leak-me",
+        valueType: "String",
+      }),
+    );
+    expect(res.code).toBe(FOUNDATION_ERROR_CODES.SETTING_SECRET_STICKY);
+    expect(JSON.stringify(res)).not.toContain("old-plaintext-pw");
+    expect(JSON.stringify(res)).not.toContain("leak-me");
+  });
+
+  it("validation_schema (422) GIỮ mã VALIDATION-ERR-* — KHÔNG mang code FOUNDATION-ERR-*", async () => {
+    const repo = makeRepo({
+      findOneSystemTx: vi
+        .fn()
+        .mockResolvedValue([row({ valueType: "Number", validationSchema: { min: 10 } })]),
+    });
+    const { svc } = makeService({ repo });
+    // assertSchema fail → UnprocessableEntity KHÔNG gắn code ⇒ AllExceptionsFilter map 422→VALIDATION-ERR-001.
+    const res = await catchErr(
+      svc.updateCompanySetting(actor, "file.max_upload_size_mb", { settingValue: 5 }),
+    );
+    expect(res.code).toBeUndefined();
   });
 });

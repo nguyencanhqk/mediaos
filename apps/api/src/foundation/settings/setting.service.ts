@@ -4,6 +4,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
+import { FOUNDATION_ERROR_CODES } from "@mediaos/contracts";
 import { DatabaseService } from "../../db/db.service";
 import { AuditService } from "../../events/audit.service";
 import { PermissionService } from "../../permission/permission.service";
@@ -212,9 +213,10 @@ export class SettingService {
         dto.valueType !== undefined &&
         dto.valueType !== "SecretRef"
       ) {
-        throw new BadRequestException(
-          `Không thể đổi value_type của setting nhạy cảm '${key}' ra khỏi SecretRef.`,
-        );
+        throw new BadRequestException({
+          code: FOUNDATION_ERROR_CODES.SETTING_SECRET_STICKY,
+          message: `Không thể đổi value_type của setting nhạy cảm '${key}' ra khỏi SecretRef.`,
+        });
       }
 
       // value_type: dto > existing > system > default. valueType ép phải có để validate.
@@ -224,9 +226,10 @@ export class SettingService {
         systemRef?.valueType ??
         defaultMeta?.valueType) as SettingValueType | undefined;
       if (!valueType) {
-        throw new BadRequestException(
-          `Không xác định được value_type cho '${key}' — cung cấp valueType trong body.`,
-        );
+        throw new BadRequestException({
+          code: FOUNDATION_ERROR_CODES.SETTING_VALUE_TYPE_UNKNOWN,
+          message: `Không xác định được value_type cho '${key}' — cung cấp valueType trong body.`,
+        });
       }
 
       // validation_schema: ưu tiên existing rồi system (nguồn cấu hình hợp lệ; dto KHÔNG đổi schema ở WO này).
@@ -367,7 +370,10 @@ export class SettingService {
       this.repo.findOneSystemTx(key, tx),
     );
     if (!row) {
-      throw new NotFoundException(`system_setting '${key}' không tồn tại.`);
+      throw new NotFoundException({
+        code: FOUNDATION_ERROR_CODES.SETTING_NOT_FOUND,
+        message: `system_setting '${key}' không tồn tại.`,
+      });
     }
     return toSafeView(toRaw(row), "system");
   }
@@ -396,9 +402,10 @@ export class SettingService {
         dto.valueType !== undefined &&
         dto.valueType !== "SecretRef"
       ) {
-        throw new BadRequestException(
-          `Không thể đổi value_type của system_setting nhạy cảm '${key}' ra khỏi SecretRef.`,
-        );
+        throw new BadRequestException({
+          code: FOUNDATION_ERROR_CODES.SETTING_SECRET_STICKY,
+          message: `Không thể đổi value_type của system_setting nhạy cảm '${key}' ra khỏi SecretRef.`,
+        });
       }
 
       // value_type: dto > existing(system) > default. ĐỌC TỪ HÀNG system_settings (existing), KHÔNG company.
@@ -407,9 +414,10 @@ export class SettingService {
         | SettingValueType
         | undefined;
       if (!valueType) {
-        throw new BadRequestException(
-          `Không xác định được value_type cho system_setting '${key}' — cung cấp valueType trong body.`,
-        );
+        throw new BadRequestException({
+          code: FOUNDATION_ERROR_CODES.SETTING_VALUE_TYPE_UNKNOWN,
+          message: `Không xác định được value_type cho system_setting '${key}' — cung cấp valueType trong body.`,
+        });
       }
 
       // validation_schema: CHỈ từ hàng system_settings (existing) — KHÔNG company override (đúng nguồn cấu hình).
@@ -521,7 +529,11 @@ export class SettingService {
 
   private assertValueType(value: unknown, valueType: SettingValueType): void {
     const fail = (m: string): never => {
-      throw new BadRequestException(m);
+      // 400 sai value_type → mã FOUNDATION-ERR-* (giữ nguyên message chi tiết theo từng loại).
+      throw new BadRequestException({
+        code: FOUNDATION_ERROR_CODES.SETTING_VALUE_TYPE,
+        message: m,
+      });
     };
     switch (valueType) {
       case "String":

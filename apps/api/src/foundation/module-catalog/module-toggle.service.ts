@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { FOUNDATION_ERROR_CODES } from "@mediaos/contracts";
 import { DatabaseService } from "../../db/db.service";
 import { AuditService } from "../../events/audit.service";
 import type { AdminModuleDetail } from "./module-admin.dto";
@@ -56,14 +57,18 @@ export class ModuleToggleService {
     // 1. Module tồn tại? (catalog GLOBAL no-RLS). Code lạ / soft-deleted → 404 (không side-effect).
     const [m] = await this.repo.findByCode(code);
     if (!m) {
-      throw new NotFoundException(`Module '${code}' không tồn tại.`);
+      throw new NotFoundException({
+        code: FOUNDATION_ERROR_CODES.MODULE_NOT_FOUND,
+        message: `Module '${code}' không tồn tại.`,
+      });
     }
 
     // 2. Core-lock: 7 module MVP KHÓA CỨNG → 400 TRƯỚC mọi write/audit (BẤT BIẾN #2: deny KHÔNG ghi audit).
     if (CORE_MODULE_CODES.has(m.moduleCode)) {
-      throw new BadRequestException(
-        `Module lõi '${m.moduleCode}' không thể bật/tắt (7 module MVP luôn bật).`,
-      );
+      throw new BadRequestException({
+        code: FOUNDATION_ERROR_CODES.MODULE_CORE_LOCKED,
+        message: `Module lõi '${m.moduleCode}' không thể bật/tắt (7 module MVP luôn bật).`,
+      });
     }
 
     // 3. withTenant tx: đọc old → upsert company_settings 'module.<code>.enabled' → audit CÙNG tx.
