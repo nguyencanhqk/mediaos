@@ -10,6 +10,7 @@ import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { ResponseEnvelopeInterceptor } from "./common/interceptors/response-envelope.interceptor";
 import { requestIdMiddleware } from "./common/middleware/request-id.middleware";
 import { loadEnv } from "./config/env.schema";
+import { SWAGGER_PATH, setupSwagger } from "./config/swagger";
 
 /**
  * CS-9: diễn giải env TRUST_PROXY sang giá trị Express `trust proxy`.
@@ -47,10 +48,16 @@ async function bootstrap(): Promise<void> {
   app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
   app.useGlobalFilters(new AllExceptionsFilter());
 
+  // S2-FND-CONTRACT-1: OpenAPI /docs — env-gate, CHỈ mount ngoài production (dev/staging/test). Mount
+  // TRƯỚC listen; đường /docs nằm NGOÀI global prefix. Production KHÔNG mount ⇒ GET /docs → 404.
+  const swaggerMounted = setupSwagger(app, env.NODE_ENV);
+
   await app.listen(env.API_PORT);
-  new Logger("Bootstrap").log(
-    `MediaOS API → http://localhost:${env.API_PORT}/${env.API_PREFIX}/${env.API_VERSION}`,
-  );
+  const logger = new Logger("Bootstrap");
+  logger.log(`MediaOS API → http://localhost:${env.API_PORT}/${env.API_PREFIX}/${env.API_VERSION}`);
+  if (swaggerMounted) {
+    logger.log(`OpenAPI docs → http://localhost:${env.API_PORT}/${SWAGGER_PATH}`);
+  }
 }
 
 void bootstrap();

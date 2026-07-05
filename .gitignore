@@ -12,6 +12,10 @@ build/
 .turbo/
 *.tsbuildinfo
 
+# OpenAPI artifact (S2-FND-CONTRACT-1) — sinh bằng `pnpm --filter @mediaos/api gen:openapi`, KHÔNG commit
+openapi.json
+apps/api/openapi.json
+
 # env & secrets
 .env
 .env.*
