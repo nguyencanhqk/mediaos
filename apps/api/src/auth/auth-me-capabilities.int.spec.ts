@@ -38,6 +38,7 @@
  *   CAP2-P1  company-admin (0001) → /auth/me CÓ đủ 2 cặp === true.
  *   CAP2-N1/N2  employee (0008) + manager (0010) → KHÔNG có cặp nào (least-privilege).
  *   CAP2-N3  user CHỈ '*:*' → KHÔNG kế thừa 2 cặp (sensitive gate); '*:*' vẫn có.
+ *   CAP2-N4  DENY-override: ALLOW 2 cặp + DENY 'assign-role:user' → suppress; assign:permission vẫn hiện.
  *
  * S2-AUTH-CAP-1 — APPEND 3 cặp NHẠY CẢM (export:leave · view:leave-audit-log · view:attendance-audit-log)
  * vào SENSITIVE_CAPABILITY_ALLOWLIST để FE dựng cờ hiển thị (export nghỉ phép, viewer audit-log LEAVE/ATT).
@@ -461,6 +462,7 @@ describe.skipIf(!runDb)(
     let employeeToken: string;
     let managerToken: string;
     let wildcardToken: string;
+    let denyOverrideToken: string;
     const companyIds: string[] = [];
 
     beforeAll(async () => {
@@ -497,10 +499,24 @@ describe.skipIf(!runDb)(
       await seedRolePermission(direct, wildRole, wildPerm, "ALLOW");
       await seedUserRole(direct, wild, wildRole, A.companyId);
 
+      // CAP2-N4 (gate LOW finding): role ALLOW CẢ 2 cặp CAP-2 + DENY 'assign-role:user' → cờ leo-thang
+      // cao-rủi-ro nhất bị suppress (deny-override per-pair); assign:permission còn lại vẫn hiện.
+      const denyEmail = `deny-${TAG}@cap2.test`;
+      const denyUser = await seedUser(direct, A.companyId, denyEmail, pw);
+      const denyRole = await seedRole(direct, A.companyId, `cap2-deny-${TAG}`);
+      for (const [action, resourceType] of CAP2_SENSITIVE_PAIRS) {
+        const permId = await seedPermissionCatalog(direct, action, resourceType, true);
+        await seedRolePermission(direct, denyRole, permId, "ALLOW");
+      }
+      const assignRolePerm = await seedPermissionCatalog(direct, "assign-role", "user", true);
+      await seedRolePermission(direct, denyRole, assignRolePerm, "DENY");
+      await seedUserRole(direct, denyUser, denyRole, A.companyId);
+
       adminToken = await login(app, A.slug, adminEmail);
       employeeToken = await login(app, A.slug, empEmail);
       managerToken = await login(app, A.slug, mgrEmail);
       wildcardToken = await login(app, A.slug, wildEmail);
+      denyOverrideToken = await login(app, A.slug, denyEmail);
     });
 
     afterAll(async () => {
@@ -536,6 +552,14 @@ describe.skipIf(!runDb)(
       for (const key of CAP2_SENSITIVE_KEYS) {
         expect(key in caps, `cặp nhạy cảm ${key} KHÔNG kế thừa qua *:*`).toBe(false);
       }
+    });
+
+    it("CAP2-N4 — DENY-override: ALLOW 2 cặp + DENY 'assign-role:user' → assign-role:user suppress; assign:permission vẫn hiện", async () => {
+      const caps = await meCapabilities(app, denyOverrideToken);
+      expect("assign-role:user" in caps, "assign-role:user phải bị DENY-override suppress").toBe(
+        false,
+      );
+      expect(caps["assign:permission"], "assign:permission vẫn hiện").toBe(true);
     });
   },
 );
