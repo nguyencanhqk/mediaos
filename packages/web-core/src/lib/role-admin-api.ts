@@ -2,11 +2,13 @@ import { z } from "zod";
 import {
   roleListSchema,
   roleMemberListSchema,
+  rolePermissionGrantsSchema,
   permissionListSchema,
   roleWriteResultSchema,
   rolePermissionGrantSchema,
   type RoleDto,
   type RoleMemberListDto,
+  type RolePermissionGrantsDto,
   type PermissionCatalogDto,
   type RoleWriteResultDto,
   type RolePermissionGrantDto,
@@ -43,6 +45,13 @@ export const roleAdminApi = {
    */
   getMembers: (roleId: string): Promise<RoleMemberListDto> =>
     apiFetch(`/auth/roles/${roleId}/members`, roleMemberListSchema),
+
+  /**
+   * S2-AUTH-PERMUX-1 — GET /auth/roles/:id/permissions: grants ĐÃ GÁN của role (ALLOW + DENY).
+   * Nền cho RolePermissionsPage v2 (trạng thái thật) + nhân bản vai trò.
+   */
+  getRolePermissions: (roleId: string): Promise<RolePermissionGrantsDto> =>
+    apiFetch(`/auth/roles/${roleId}/permissions`, rolePermissionGrantsSchema),
 
   /** GET /auth/roles — catalog role (own-tenant + system, loại operator). Trả mảng đã unwrap `.roles`. */
   listRoles: (): Promise<RoleDto[]> =>

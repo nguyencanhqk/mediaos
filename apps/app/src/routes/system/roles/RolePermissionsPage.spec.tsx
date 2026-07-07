@@ -1,9 +1,9 @@
 /**
  * RolePermissionsPage — S2-FE-AUTH-4 (lane FE batch C).
  * Gate: assign:permission (is_sensitive=true) — useCanExact (KHÔNG wildcard kế thừa qua useCan).
- * Bảng = TOÀN BỘ danh mục quyền (GET /auth/permissions) dùng làm nguồn gán/thu hồi — KHÔNG phản ánh
- * trạng thái ĐÃ gán (BE chưa có API list-by-role — banner ghi rõ, test bắt banner tồn tại).
- * States: forbidden · loading · error/role-not-found · list + assign/revoke actions.
+ * v2 (S2-AUTH-PERMUX-1): trang hiện TRẠNG THÁI ĐÃ GÁN thật (GET :id/permissions) — nhóm theo
+ * resourceType, badge Đã gán + scope, bulk. Test bắt state-render thay banner mù-trạng-thái cũ.
+ * States: forbidden · loading · error/role-not-found · grouped list + assign/revoke actions.
  */
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -19,6 +19,7 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     roleAdminApi: {
       listRoles: vi.fn(),
       listPermissions: vi.fn(),
+      getRolePermissions: vi.fn(),
       createRole: vi.fn(),
       updateRole: vi.fn(),
       assignPermission: vi.fn(),
@@ -52,6 +53,18 @@ describe("RolePermissionsPage", () => {
     vi.clearAllMocks();
     vi.mocked(roleAdminApi.listRoles).mockResolvedValue(ROLES);
     vi.mocked(roleAdminApi.listPermissions).mockResolvedValue(PERMISSIONS);
+    // v2: grants đã gán — mặc định 1 grant view:department Company (trạng thái thật).
+    vi.mocked(roleAdminApi.getRolePermissions).mockResolvedValue({
+      grants: [
+        {
+          action: "view",
+          resourceType: "department",
+          effect: "ALLOW",
+          dataScope: "Company",
+          isSensitive: false,
+        },
+      ],
+    });
   });
 
   // ── DENY-PATH: wildcard KHÔNG mở khoá cặp sensitive (useCanExact) ─────────
@@ -75,16 +88,22 @@ describe("RolePermissionsPage", () => {
     await waitFor(() => expect(screen.getByText(/không thể tải dữ liệu/i)).toBeInTheDocument());
   });
 
-  it("renders permission catalog + assigned-list-missing notice", async () => {
+  it("v2: renders grouped catalog VỚI trạng thái đã gán (badge + đếm nhóm), KHÔNG còn banner mù-trạng-thái", async () => {
     setCaps({ "assign:permission": true });
     renderWithQuery(<RolePermissionsPage roleId="role-1" />);
     await waitFor(() => expect(screen.getByText("department")).toBeInTheDocument());
-    expect(screen.getByText("permission")).toBeInTheDocument();
-    expect(screen.getByText(/chưa cung cấp api xem danh sách quyền đã gán/i)).toBeInTheDocument();
+    // Badge trạng thái thật từ GET :id/permissions.
+    expect(screen.getByText(/Đã gán · Công ty/)).toBeInTheDocument();
+    // Đếm nhóm đã gán/tổng.
+    expect(screen.getByText(/đã gán 1\/1/)).toBeInTheDocument();
+    // Banner cũ phải biến mất.
+    expect(screen.queryByText(/chưa cung cấp api xem danh sách quyền đã gán/i)).not.toBeInTheDocument();
   });
 
   it("assigns a permission and shows success feedback", async () => {
     setCaps({ "assign:permission": true });
+    // Trường hợp chưa gán gì: mọi hàng đều có nút Gán (nhóm mặc định đóng → mở qua header).
+    vi.mocked(roleAdminApi.getRolePermissions).mockResolvedValue({ grants: [] });
     vi.mocked(roleAdminApi.assignPermission).mockResolvedValue({
       roleId: "role-1",
       permissionId: "p1",
@@ -95,6 +114,7 @@ describe("RolePermissionsPage", () => {
     });
     renderWithQuery(<RolePermissionsPage roleId="role-1" />);
     await waitFor(() => expect(screen.getByText("department")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("department")); // mở nhóm
 
     const assignButtons = screen.getAllByText("Gán");
     fireEvent.click(assignButtons[0]);
@@ -113,7 +133,8 @@ describe("RolePermissionsPage", () => {
     setCaps({ "assign:permission": true });
     vi.mocked(roleAdminApi.revokePermission).mockResolvedValue(undefined);
     renderWithQuery(<RolePermissionsPage roleId="role-1" />);
-    await waitFor(() => expect(screen.getByText("department")).toBeInTheDocument());
+    // Nhóm có grant mở sẵn (assigned>0) → nút Thu hồi hiện ngay.
+    await waitFor(() => expect(screen.getByText(/Đã gán · Công ty/)).toBeInTheDocument());
 
     const revokeButtons = screen.getAllByText("Thu hồi");
     fireEvent.click(revokeButtons[0]);

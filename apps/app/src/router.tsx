@@ -1132,6 +1132,9 @@ const systemRoleDetailRoute = createRoute({
         onManagePermissions={() =>
           void navigate({ to: "/system/roles/$roleId/permissions", params: { roleId } })
         }
+        onOpenRole={(newRoleId) =>
+          void navigate({ to: "/system/roles/$roleId", params: { roleId: newRoleId } })
+        }
       />,
     );
   },
