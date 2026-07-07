@@ -28,6 +28,17 @@
  *   P6  manager (role 0010) → view-own + view-team:attendance + view:leave hiện; view-company:attendance VẮNG.
  *   N5  user CHỈ '*:*' → KHÔNG kế thừa 4 cặp NHẠY CẢM (sensitive gate); view:audit-log VẪN vắng (no-regress).
  *
+ * S2-AUTH-CAP-2 — APPEND 2 cặp NHẠY CẢM (assign-role:user · assign:permission) vào
+ * SENSITIVE_CAPABILITY_ALLOWLIST. FE gate nút "Quản lý vai trò" (UserDetailPage/UserRolesPage,
+ * PermissionGate assign-role:user) + nút "Phân quyền" (RoleDetailPage/RolesPage/RolePermissionsPage,
+ * assign:permission) — cặp seed THẬT is_sensitive=true, grant Company CHỈ company-admin(0001). TRƯỚC fix:
+ * getCapabilities() lọc sensitive + allowlist thiếu 2 cặp ⇒ nút ẨN với CẢ company-admin dù grant thật tồn
+ * tại (phát hiện 2026-07-07 trên dev-online). Chỉ mở CỜ HIỂN THỊ — enforcement (PermissionGuard
+ * assign-role:user isSensitive / assign:permission ANTI-ESCALATION per-resource) KHÔNG đổi.
+ *   CAP2-P1  company-admin (0001) → /auth/me CÓ đủ 2 cặp === true.
+ *   CAP2-N1/N2  employee (0008) + manager (0010) → KHÔNG có cặp nào (least-privilege).
+ *   CAP2-N3  user CHỈ '*:*' → KHÔNG kế thừa 2 cặp (sensitive gate); '*:*' vẫn có.
+ *
  * S2-AUTH-CAP-1 — APPEND 3 cặp NHẠY CẢM (export:leave · view:leave-audit-log · view:attendance-audit-log)
  * vào SENSITIVE_CAPABILITY_ALLOWLIST để FE dựng cờ hiển thị (export nghỉ phép, viewer audit-log LEAVE/ATT).
  * Cặp seed THẬT is_sensitive=true, grant Company CHỈ cho hr(0011)+company-admin(0001) — mig 0455
@@ -425,6 +436,109 @@ describe.skipIf(!runDb)(
 // ────────────────────────────────────────────────────────────────────────────
 
 const RESET_2FA_CAP_KEY = "reset-2fa:user";
+
+// ────────────────────────────────────────────────────────────────────────────
+// S2-AUTH-CAP-2 — APPEND 'assign-role:user' + 'assign:permission' vào SENSITIVE_CAPABILITY_ALLOWLIST.
+// Cặp seed THẬT is_sensitive=true, grant Company CHỈ company-admin(0001). FE gate nút "Quản lý vai trò"
+// (assign-role:user) + "Phân quyền" (assign:permission) — thiếu allowlist ⇒ nút ẩn với cả admin.
+// Enforcement (PermissionGuard per-resource, sensitive gate) KHÔNG đổi — chỉ mở cờ hiển thị.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** 2 cặp CAP-2 (action, resourceType) — tuple tránh split(":") nhập nhằng. */
+const CAP2_SENSITIVE_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ["assign-role", "user"],
+  ["assign", "permission"],
+];
+const CAP2_SENSITIVE_KEYS = CAP2_SENSITIVE_PAIRS.map(([a, r]) => `${a}:${r}`);
+
+describe.skipIf(!runDb)(
+  "S2-AUTH-CAP-2 /auth/me assign-role:user · assign:permission (company-admin only)",
+  () => {
+    let app: INestApplication;
+    let direct: Pool;
+    let A: SeededTenant;
+    let adminToken: string;
+    let employeeToken: string;
+    let managerToken: string;
+    let wildcardToken: string;
+    const companyIds: string[] = [];
+
+    beforeAll(async () => {
+      const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+      app = moduleRef.createNestApplication();
+      app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
+      app.useGlobalFilters(new AllExceptionsFilter());
+      await app.init();
+      direct = directPool();
+      const pw = await new PasswordService().hash(LOGIN_PW);
+
+      A = await seedCompany(direct, "cap2");
+      companyIds.push(A.companyId);
+
+      // CAP2-P1: company-admin (0001) — grant Company assign-role:user + assign:permission (seed canonical).
+      const adminEmail = `ca-${TAG}@cap2.test`;
+      const admin = await seedUser(direct, A.companyId, adminEmail, pw);
+      await seedUserRole(direct, admin, COMPANY_ADMIN_ROLE, A.companyId);
+
+      // CAP2-N1/N2: employee (0008) + manager (0010) — KHÔNG có grant 2 cặp CAP-2 (least-privilege).
+      const empEmail = `emp-${TAG}@cap2.test`;
+      const emp = await seedUser(direct, A.companyId, empEmail, pw);
+      await seedUserRole(direct, emp, EMPLOYEE_ROLE, A.companyId);
+
+      const mgrEmail = `mgr-${TAG}@cap2.test`;
+      const mgr = await seedUser(direct, A.companyId, mgrEmail, pw);
+      await seedUserRole(direct, mgr, MANAGER_ROLE, A.companyId);
+
+      // CAP2-N3: user CHỈ '*:*' ALLOW non-sensitive — wildcard KHÔNG kế thừa cặp nhạy cảm.
+      const wildEmail = `wild-${TAG}@cap2.test`;
+      const wild = await seedUser(direct, A.companyId, wildEmail, pw);
+      const wildRole = await seedRole(direct, A.companyId, `cap2-wild-${TAG}`);
+      const wildPerm = await seedPermissionCatalog(direct, "*", "*", false);
+      await seedRolePermission(direct, wildRole, wildPerm, "ALLOW");
+      await seedUserRole(direct, wild, wildRole, A.companyId);
+
+      adminToken = await login(app, A.slug, adminEmail);
+      employeeToken = await login(app, A.slug, empEmail);
+      managerToken = await login(app, A.slug, mgrEmail);
+      wildcardToken = await login(app, A.slug, wildEmail);
+    });
+
+    afterAll(async () => {
+      await app?.close();
+      if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
+      await direct?.end();
+    });
+
+    it("CAP2-P1 — company-admin (0001) → /auth/me CÓ đủ 2 cặp CAP-2 === true", async () => {
+      const caps = await meCapabilities(app, adminToken);
+      for (const key of CAP2_SENSITIVE_KEYS) {
+        expect(caps[key], `company-admin thiếu cặp allowlist ${key}`).toBe(true);
+      }
+    });
+
+    it("CAP2-N1 — employee (0008) → KHÔNG có cặp CAP-2 nào (least-privilege)", async () => {
+      const caps = await meCapabilities(app, employeeToken);
+      for (const key of CAP2_SENSITIVE_KEYS) {
+        expect(key in caps, `employee KHÔNG được lộ cặp ${key}`).toBe(false);
+      }
+    });
+
+    it("CAP2-N2 — manager (0010) → KHÔNG có cặp CAP-2 nào (least-privilege)", async () => {
+      const caps = await meCapabilities(app, managerToken);
+      for (const key of CAP2_SENSITIVE_KEYS) {
+        expect(key in caps, `manager KHÔNG được lộ cặp ${key}`).toBe(false);
+      }
+    });
+
+    it("CAP2-N3 — wildcard '*:*' → KHÔNG kế thừa 2 cặp CAP-2 (sensitive gate); '*:*' vẫn có", async () => {
+      const caps = await meCapabilities(app, wildcardToken);
+      expect(caps[WILDCARD_CAP_KEY]).toBe(true);
+      for (const key of CAP2_SENSITIVE_KEYS) {
+        expect(key in caps, `cặp nhạy cảm ${key} KHÔNG kế thừa qua *:*`).toBe(false);
+      }
+    });
+  },
+);
 
 describe.skipIf(!runDb)("S2-AUTH-BE-12 /auth/me reset-2fa:user (company-admin only)", () => {
   let app: INestApplication;
