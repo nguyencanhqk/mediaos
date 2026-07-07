@@ -55,6 +55,12 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   // THỊ cho FE (nút reset-2FA trong màn user-admin); enforcement THẬT vẫn là PermissionGuard per-resource
   // (@RequirePermission('reset-2fa','user',{isSensitive:true})) — allowlist KHÔNG nới cổng.
   "reset-2fa:user",
+  // S2-AUTH-CAP-2 — APPEND-only: FE gate nút "Quản lý vai trò" (UserDetailPage/UserRolesPage,
+  // PermissionGate assign-role:user) + nút "Phân quyền" (RoleDetailPage/RolesPage/RolePermissionsPage,
+  // assign:permission). Cặp seed THẬT is_sensitive=true, grant Company CHỈ company-admin — thiếu allowlist
+  // ⇒ nút ẨN với CẢ admin dù grant thật tồn tại (phát hiện 2026-07-07). Enforcement KHÔNG đổi.
+  "assign-role:user",
+  "assign:permission",
 ]);
 
 @Injectable()
