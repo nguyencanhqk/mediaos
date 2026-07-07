@@ -20,4 +20,11 @@ export default defineConfig({
       ? { host: process.env.VITE_TUNNEL_HOST, protocol: "wss", clientPort: 443 }
       : undefined,
   },
+  // dev-online-fast (m dev-online-fast): serve BẢN BUILD qua `vite preview` trên CÙNG cổng dev → tunnel
+  // ingress giữ nguyên. Bundle ⇒ 2-3 request/trang thay vì hàng trăm module rời (dev-mode waterfall qua
+  // tunnel ~200-350ms/request là nguồn "chuyển trang chậm"). Không HMR — cần HMR dùng `m dev-online`.
+  preview: {
+    port: 5273,
+    allowedHosts: [".localhost", ".funtimemediacorp.com"],
+  },
 });

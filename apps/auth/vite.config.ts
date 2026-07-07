@@ -21,4 +21,9 @@ export default defineConfig({
       ? { host: process.env.VITE_TUNNEL_HOST, protocol: "wss", clientPort: 443 }
       : undefined,
   },
+  // dev-online-fast: serve bản build qua `vite preview` cùng cổng dev (xem apps/app/vite.config.ts).
+  preview: {
+    port: 5275,
+    allowedHosts: [".localhost", ".funtimemediacorp.com"],
+  },
 });
