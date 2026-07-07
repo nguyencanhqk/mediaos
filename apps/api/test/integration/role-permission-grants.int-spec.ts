@@ -136,6 +136,24 @@ describe.skipIf(!runDb)("S2-AUTH-PERMUX-1 GET /auth/roles/:id/permissions", () =
     }
   });
 
+  it("P2 — system role non-operator (company-admin 0001) → 200 (đọc config chung CÓ CHỦ ĐÍCH — pin regression)", async () => {
+    const res = await api(app)
+      .get(`/auth/roles/${COMPANY_ADMIN_ROLE}/permissions`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(Array.isArray(res.body.data.grants)).toBe(true);
+    expect((res.body.data.grants as unknown[]).length).toBeGreaterThan(0);
+  });
+
+  it("P3 — role 0 grant → grants:[] (không lỗi)", async () => {
+    const emptyRole = await seedRole(direct, A.companyId, `px-empty-${TAG}`);
+    const res = await api(app)
+      .get(`/auth/roles/${emptyRole}/permissions`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.grants).toEqual([]);
+  });
+
   it("N1 — employee (không view:permission) → 403", async () => {
     const res = await api(app)
       .get(`/auth/roles/${targetRole}/permissions`)
