@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-05 05:59Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-07 02:57Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -18,7 +18,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `feat/debt-wave2` · **file đang đổi (dirty)**: 2
+- **branch**: `master` · **file đang đổi (dirty)**: 0
 - **migration head**: idx 155 — `0475_s2_fndjobs1_system_jobs` (156 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -27,18 +27,18 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
-| `5237836` | 2026-07-05 | wip(fix-contract1-dto-migrate): migrate settings/holidays/company-patch DTO vào @mediaos/contracts + test |
-| `a9fb5d9` | 2026-07-05 | wip(fix-contract1-swagger): mount OpenAPI /docs env-gated + deny-path schema test |
-| `257c717` | 2026-07-05 | wip(S2-FND-CONTRACT-1): FOUNDATION-ERR-* catalog + wire service throw codes + reconcile file-error drift + doc |
-| `0a0b4ed` | 2026-07-05 | chore(harness): chốt S2-FND-JOBS-1 (round4, push thủ công sau safety-classifier chặn ship agent) |
-| `abf60df` | 2026-07-04 | wip(fix-jobs1-lanedb-gate): cứng hoá gate LANE_DB cho 3 int-spec jobs_db/jobs_runner |
-| `8bb9138` | 2026-07-04 | wip(fix-jobs1-drift-allowlist): register file.pending_ttl_hours vào AGREED_EXTRA_DEFAULT_KEYS |
-| `f038259` | 2026-07-04 | wip(jobs_tempfile): TEMP_FILE_CLEANUP handler — eligibility + system soft-delete (deleted_by=NULL) + audit System/null |
-| `33e84fd` | 2026-07-04 | wip(jobs_retention): RetentionCleanupJobHandler bọc RetentionCleanupJob thành JobHandler |
-| `d3e5959` | 2026-07-04 | wip(jobs_runner): SchedulerModule system-jobs runner (crown) — lock/logger/scrub/runner + wiring |
-| `a9679ec` | 2026-07-04 | wip(jobs_db): mig 0475 system_job_runs (RLS+FORCE per-role app/worker, no-DELETE grant) + system_job_locks (no-RLS worker-infra) + drizzle parity + int-spec |
-| `bdb0dba` | 2026-07-04 | chore(harness): regen STATUS (bỏ sót ở commit trước) — dọn cache plan S2-FND-JOBS-1 để re-decompose round 4 |
-| `aa8f3e9` | 2026-07-04 | chore(harness): lưu micro-plan S2-FND-JOBS-1 round3 (block lần 3 — thiếu 2-tenant isolation test cho system_job_runs + vài điểm cần chốt hợp đồng JobHandler/withTenant) |
+| `42affe9` | 2026-07-07 | feat(debt-wave2): Foundation jobs/contract wave — system-jobs runner, error catalog, swagger, DTO migration + fixes (#116) |
+| `8c542fe` | 2026-07-04 | feat(debt-wave2): audit-debt remediation wave — DB-1/BE-6/SEED-4/BE-5/AUTH-DB-3 (#112) |
+| `fb07ddb` | 2026-07-03 | test(S3-QA-1): QA ATT — today/check-in-out gaps + records filters + canonical-role permission gate (#108) |
+| `e565b47` | 2026-07-03 | feat(security-wave1): 2FA per-user + admin reset (DB-4 + BE-11 + BE-12) (#107) |
+| `9961849` | 2026-07-03 | feat(carryover-wave1): 12 WO carry-over audit AUTH/FOUNDATION + FE LEAVE/System (#103) |
+| `efc3399` | 2026-07-02 | chore(harness): regen STATUS sau reconcile 31 WO shipped qua batch-squash (#68/#72/#82/#84/#85/#87/#88) — board còn 4 ready thật (QA-1/QA-2/LEAVE-5/LEAVE-6) (#89) |
+| `76794c4` | 2026-07-02 | feat(sprint2): FE Role/Permission admin + account sessions + FND sequences/seeds (#88) |
+| `e9ad014` | 2026-07-02 | feat(sprint2/3): FE HR contracts + ATT remote-work (Draft→submit FSM) + ATT reports/audit-logs (#87) |
+| `be576d7` | 2026-07-02 | feat(S3-LEAVE-BE-6): LEAVE reports + balance transactions + audit read (P2) (#86) |
+| `5268d30` | 2026-07-02 | feat(sprint2/3): FE FND holidays/retention/file-access + HR org-chart/employee-code + ATT adjustment (#85) |
+| `9b5be4b` | 2026-07-02 | feat(sprint2): FE Auth self-service + User admin + FND audit/module-catalog + HR change-request (#84) |
+| `f250446` | 2026-07-02 | feat(S3-FE-LEAVE-4): FE Lịch nghỉ /leave/calendar (own/team/company theo scope) (#83) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
