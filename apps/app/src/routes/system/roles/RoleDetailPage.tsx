@@ -10,11 +10,12 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { Shield, RefreshCw, ArrowLeft, Pencil, KeyRound } from "lucide-react";
+import { Shield, RefreshCw, ArrowLeft, Pencil, KeyRound, Copy } from "lucide-react";
 import { roleAdminApi, authKeys, useCan, PermissionGate } from "@mediaos/web-core";
 import { PageHeader, EmptyState, Button, Card, CardContent, Badge } from "@mediaos/ui";
 import { SYSTEM_ENGINE_PAIRS } from "../constants";
 import { RoleMembersTab } from "./RoleMembersTab";
+import { CloneRoleDialog } from "./CloneRoleDialog";
 
 function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -30,6 +31,8 @@ interface RoleDetailPageProps {
   onBack?: () => void;
   onEdit?: () => void;
   onManagePermissions?: () => void;
+  /** S2-AUTH-PERMUX-1 — điều hướng sang role khác (sau nhân bản). */
+  onOpenRole?: (roleId: string) => void;
 }
 
 export function RoleDetailPage({
@@ -37,12 +40,15 @@ export function RoleDetailPage({
   onBack,
   onEdit,
   onManagePermissions,
+  onOpenRole,
 }: RoleDetailPageProps) {
   const { t } = useTranslation("system");
   const { t: tc } = useTranslation("common");
   // S2-AUTH-ROLEMEM-1 — tab switcher cục bộ (Thông tin | Thành viên). Không có Tabs primitive
   // trong packages/ui → 2 Button + state, không thêm dependency.
   const [tab, setTab] = useState<"info" | "members">("info");
+  // S2-AUTH-PERMUX-1 (#3) — dialog nhân bản vai trò.
+  const [cloneOpen, setCloneOpen] = useState(false);
   const canView = useCan(
     SYSTEM_ENGINE_PAIRS.READ_ROLE.action,
     SYSTEM_ENGINE_PAIRS.READ_ROLE.resourceType,
@@ -129,6 +135,17 @@ export function RoleDetailPage({
                 </Button>
               </PermissionGate>
             )}
+            {/* S2-AUTH-PERMUX-1 (#3) — nhân bản: cần create:role (tạo) + assign:permission (copy grants);
+                gate nút theo create:role, bước copy server-gated per-request. */}
+            <PermissionGate
+              action={SYSTEM_ENGINE_PAIRS.CREATE_ROLE.action}
+              resourceType={SYSTEM_ENGINE_PAIRS.CREATE_ROLE.resourceType}
+            >
+              <Button variant="outline" size="sm" onClick={() => setCloneOpen(true)}>
+                <Copy className="mr-2 h-4 w-4" />
+                {t("roleClone.button")}
+              </Button>
+            </PermissionGate>
             {onEdit && !role.isSystem && (
               <PermissionGate
                 action={SYSTEM_ENGINE_PAIRS.UPDATE_ROLE.action}
@@ -200,6 +217,17 @@ export function RoleDetailPage({
       ) : (
         <RoleMembersTab roleId={roleId} />
       )}
+
+      <CloneRoleDialog
+        open={cloneOpen}
+        onClose={() => setCloneOpen(false)}
+        sourceRoleId={roleId}
+        sourceRoleName={role.name}
+        onCloned={(newRoleId) => {
+          setCloneOpen(false);
+          onOpenRole?.(newRoleId);
+        }}
+      />
     </div>
   );
 }

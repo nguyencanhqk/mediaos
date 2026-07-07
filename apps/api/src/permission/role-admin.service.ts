@@ -13,6 +13,7 @@ import type {
   CreateRoleRequest,
   RevokeRolePermissionRequest,
   RoleMemberListDto,
+  RolePermissionGrantsDto,
   RoleWriteResultDto,
   UpdateRoleRequest,
 } from "@mediaos/contracts";
@@ -91,6 +92,34 @@ export class RoleAdminService {
       });
     } catch (err) {
       throw this.mapError(err, "Failed to list role members");
+    }
+  }
+
+  /**
+   * S2-AUTH-PERMUX-1 — GET /auth/roles/:id/permissions: toàn bộ grant (ALLOW + DENY) của role.
+   * Gate view:permission (non-sensitive — cùng cặp catalog GET /auth/permissions; topology quyền
+   * là admin-only theo seed). READ-ONLY. Role lạ/cross-tenant/operator → 404 (mirror listMembers).
+   */
+  async listRolePermissions(actor: RequestUser, roleId: string): Promise<RolePermissionGrantsDto> {
+    await this.assertCan(actor, "view", "permission", false);
+    try {
+      return await this.db.withTenant(actor.companyId, async (tx) => {
+        if (!(await this.repo.findRoleByIdTx(tx, roleId))) {
+          throw new NotFoundException("Role not found");
+        }
+        const rows = await this.repo.listRolePermissionsTx(tx, roleId);
+        return {
+          grants: rows.map((r) => ({
+            action: r.action,
+            resourceType: r.resourceType,
+            effect: r.effect === "DENY" ? ("DENY" as const) : ("ALLOW" as const),
+            dataScope: r.dataScope,
+            isSensitive: r.isSensitive,
+          })),
+        };
+      });
+    } catch (err) {
+      throw this.mapError(err, "Failed to list role permissions");
     }
   }
 

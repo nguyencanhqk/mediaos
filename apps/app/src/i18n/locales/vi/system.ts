@@ -311,6 +311,24 @@ export default {
     },
   },
 
+  // S2-AUTH-PERMUX-1 (#3) — nhân bản vai trò.
+  roleClone: {
+    button: "Nhân bản",
+    title: "Nhân bản vai trò — {{source}}",
+    description:
+      "Tạo vai trò mới sao chép toàn bộ quyền ALLOW từ vai trò nguồn (bỏ qua quyền DENY và phạm vi Hệ thống).",
+    namePlaceholder: "Tên vai trò mới...",
+    submit: "Tạo + sao chép quyền",
+    openNewRole: "Mở vai trò mới",
+    copiedFrom: "Sao chép từ {{source}}",
+    skipDeny: "quyền DENY — không sao chép",
+    skipSystemScope: "phạm vi Hệ thống — vượt trần gán qua API",
+    skippedLine: "⊘ {{label}} — {{detail}}",
+    errors: {
+      nameConflict: "Tên vai trò đã tồn tại",
+    },
+  },
+
   rolePermissions: {
     title: "Quản lý quyền — {{role}}",
     description: "Gán hoặc thu hồi quyền cho vai trò này theo danh mục quyền hệ thống",
@@ -318,8 +336,15 @@ export default {
     dataScope: "Phạm vi dữ liệu",
     assign: "Gán",
     revoke: "Thu hồi",
-    assignedListNotice:
-      "Backend hiện chưa cung cấp API xem danh sách quyền ĐÃ gán cho vai trò — bảng dưới đây là danh mục quyền toàn hệ thống để gán/thu hồi, KHÔNG phản ánh trạng thái đã gán.",
+    // S2-AUTH-PERMUX-1 v2 — trang đã hiện trạng thái ĐÃ GÁN thật (GET :id/permissions).
+    summaryAssigned: "Vai trò đang có {{count}} quyền được gán",
+    groupAssigned: "đã gán {{assigned}}/{{total}}",
+    assignedBadge: "Đã gán · {{scope}}",
+    bulk: {
+      selected: "Đã chọn {{count}} quyền",
+      assign: "Gán {{count}} quyền",
+      checkboxLabel: "Chọn quyền {{pair}}",
+    },
     assignSuccess: 'Đã gán quyền "{{pair}}" phạm vi {{scope}} cho vai trò.',
     revokeSuccess: 'Đã thu hồi quyền "{{pair}}" khỏi vai trò.',
     scope: {

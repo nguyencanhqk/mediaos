@@ -175,6 +175,37 @@ export class RoleAdminRepository {
       .orderBy(users.email);
   }
 
+  /**
+   * S2-AUTH-PERMUX-1 — toàn bộ grant của 1 role (RolePermissionsPage v2 đọc trạng thái đã gán).
+   * Tenant-isolation: caller PHẢI 404-guard qua findRoleByIdTx TRƯỚC (RLS roles + notOperatorRole);
+   * role_permissions không có company_id — RLS bảng (policy join roles own-tenant-or-NULL) là lớp 2.
+   */
+  async listRolePermissionsTx(
+    tx: TenantTx,
+    roleId: string,
+  ): Promise<
+    Array<{
+      action: string;
+      resourceType: string;
+      effect: string;
+      dataScope: string;
+      isSensitive: boolean;
+    }>
+  > {
+    return tx
+      .select({
+        action: permissions.action,
+        resourceType: permissions.resourceType,
+        effect: rolePermissions.effect,
+        dataScope: rolePermissions.dataScope,
+        isSensitive: permissions.isSensitive,
+      })
+      .from(rolePermissions)
+      .innerJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
+      .where(eq(rolePermissions.roleId, roleId))
+      .orderBy(permissions.resourceType, permissions.action);
+  }
+
   /** DELETE role_permissions theo (roleId, permissionId, effect). Trả row đã xoá (undefined = 0 hàng). */
   async deleteRolePermissionReturningTx(
     tx: TenantTx,
