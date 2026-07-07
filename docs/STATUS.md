@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-07 02:57Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-07 07:19Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -27,6 +27,9 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `46b0aaf` | 2026-07-07 | chore(dev-online): thêm 'm dev-online-fast' — 3 SPA serve bản build qua vite preview (#118) |
+| `c4b8cd7` | 2026-07-07 | fix(auth): S2-AUTH-CAP-2 — expose assign-role:user + assign:permission qua /auth/me allowlist (#117) |
+| `9be69ff` | 2026-07-07 | chore(harness): regen STATUS sau merge PR #116 (feat/debt-wave2 → master) |
 | `42affe9` | 2026-07-07 | feat(debt-wave2): Foundation jobs/contract wave — system-jobs runner, error catalog, swagger, DTO migration + fixes (#116) |
 | `8c542fe` | 2026-07-04 | feat(debt-wave2): audit-debt remediation wave — DB-1/BE-6/SEED-4/BE-5/AUTH-DB-3 (#112) |
 | `fb07ddb` | 2026-07-03 | test(S3-QA-1): QA ATT — today/check-in-out gaps + records filters + canonical-role permission gate (#108) |
@@ -36,9 +39,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `76794c4` | 2026-07-02 | feat(sprint2): FE Role/Permission admin + account sessions + FND sequences/seeds (#88) |
 | `e9ad014` | 2026-07-02 | feat(sprint2/3): FE HR contracts + ATT remote-work (Draft→submit FSM) + ATT reports/audit-logs (#87) |
 | `be576d7` | 2026-07-02 | feat(S3-LEAVE-BE-6): LEAVE reports + balance transactions + audit read (P2) (#86) |
-| `5268d30` | 2026-07-02 | feat(sprint2/3): FE FND holidays/retention/file-access + HR org-chart/employee-code + ATT adjustment (#85) |
-| `9b5be4b` | 2026-07-02 | feat(sprint2): FE Auth self-service + User admin + FND audit/module-catalog + HR change-request (#84) |
-| `f250446` | 2026-07-02 | feat(S3-FE-LEAVE-4): FE Lịch nghỉ /leave/calendar (own/team/company theo scope) (#83) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
