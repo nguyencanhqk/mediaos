@@ -33,6 +33,8 @@ export const authKeys = {
   roles: {
     all: [...rootKeys.auth, "roles"] as const,
     list: () => [...rootKeys.auth, "roles", "list"] as const,
+    // S2-AUTH-ROLEMEM-1 — thành viên của 1 role (tab Thành viên, GET /auth/roles/:id/members).
+    members: (roleId: string) => [...rootKeys.auth, "roles", roleId, "members"] as const,
   },
   permissionCatalog: {
     all: [...rootKeys.auth, "permission-catalog"] as const,

@@ -7,12 +7,14 @@
  *
  * States: forbidden · loading · error/not-found · detail.
  */
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Shield, RefreshCw, ArrowLeft, Pencil, KeyRound } from "lucide-react";
 import { roleAdminApi, authKeys, useCan, PermissionGate } from "@mediaos/web-core";
 import { PageHeader, EmptyState, Button, Card, CardContent, Badge } from "@mediaos/ui";
 import { SYSTEM_ENGINE_PAIRS } from "../constants";
+import { RoleMembersTab } from "./RoleMembersTab";
 
 function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -38,6 +40,9 @@ export function RoleDetailPage({
 }: RoleDetailPageProps) {
   const { t } = useTranslation("system");
   const { t: tc } = useTranslation("common");
+  // S2-AUTH-ROLEMEM-1 — tab switcher cục bộ (Thông tin | Thành viên). Không có Tabs primitive
+  // trong packages/ui → 2 Button + state, không thêm dependency.
+  const [tab, setTab] = useState<"info" | "members">("info");
   const canView = useCan(
     SYSTEM_ENGINE_PAIRS.READ_ROLE.action,
     SYSTEM_ENGINE_PAIRS.READ_ROLE.resourceType,
@@ -141,24 +146,60 @@ export function RoleDetailPage({
         {role.isSystem && <Badge variant="warning">{t("roleDetail.systemBadge")}</Badge>}
       </PageHeader>
 
-      <Card>
-        <CardContent className="divide-y divide-border pt-4">
-          <FieldRow label={t("roleDetail.fields.name")} value={role.name} />
-          <FieldRow label={t("roleDetail.fields.description")} value={role.description} />
-          <FieldRow
-            label={t("roleDetail.fields.type")}
-            value={role.isSystem ? t("roleDetail.systemRole") : t("roleDetail.companyRole")}
-          />
-        </CardContent>
-      </Card>
+      {/* S2-AUTH-ROLEMEM-1 — tab switcher */}
+      <div className="flex items-center gap-1 border-b border-border" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "info"}
+          className={`border-b-2 px-3 py-2 text-sm font-medium ${
+            tab === "info"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+          onClick={() => setTab("info")}
+        >
+          {t("roleDetail.tabs.info")}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "members"}
+          className={`border-b-2 px-3 py-2 text-sm font-medium ${
+            tab === "members"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+          onClick={() => setTab("members")}
+        >
+          {t("roleDetail.tabs.members")}
+        </button>
+      </div>
 
-      <Card>
-        <CardContent className="pt-4">
-          <p className="text-sm text-muted-foreground">
-            {t("roleDetail.assignedPermissionsNotice")}
-          </p>
-        </CardContent>
-      </Card>
+      {tab === "info" ? (
+        <>
+          <Card>
+            <CardContent className="divide-y divide-border pt-4">
+              <FieldRow label={t("roleDetail.fields.name")} value={role.name} />
+              <FieldRow label={t("roleDetail.fields.description")} value={role.description} />
+              <FieldRow
+                label={t("roleDetail.fields.type")}
+                value={role.isSystem ? t("roleDetail.systemRole") : t("roleDetail.companyRole")}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-sm text-muted-foreground">
+                {t("roleDetail.assignedPermissionsNotice")}
+              </p>
+            </CardContent>
+          </Card>
+        </>
+      ) : (
+        <RoleMembersTab roleId={roleId} />
+      )}
     </div>
   );
 }
