@@ -60,3 +60,22 @@ export const roleMemberListSchema = z.object({
   members: z.array(roleMemberSchema),
 });
 export type RoleMemberListDto = z.infer<typeof roleMemberListSchema>;
+
+/**
+ * S2-AUTH-PERMUX-1 — GET /auth/roles/:id/permissions (RolePermissionsPage v2 đọc trạng thái
+ * ĐÃ GÁN thật). effect gồm cả DENY (hiển thị read-only ở UI — mutation vẫn ALLOW-only qua
+ * POST/DELETE :id/permissions sẵn có).
+ */
+export const rolePermissionGrantRowSchema = z.object({
+  action: z.string(),
+  resourceType: z.string(),
+  effect: z.enum(["ALLOW", "DENY"]),
+  dataScope: z.string(),
+  isSensitive: z.boolean(),
+});
+export type RolePermissionGrantRowDto = z.infer<typeof rolePermissionGrantRowSchema>;
+
+export const rolePermissionGrantsSchema = z.object({
+  grants: z.array(rolePermissionGrantRowSchema),
+});
+export type RolePermissionGrantsDto = z.infer<typeof rolePermissionGrantsSchema>;

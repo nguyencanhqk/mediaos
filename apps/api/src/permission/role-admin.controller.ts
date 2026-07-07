@@ -53,6 +53,16 @@ export class RoleAdminController {
     return this.roleAdmin.listMembers(req.user, id);
   }
 
+  /**
+   * S2-AUTH-PERMUX-1 — grants đã gán của role (RolePermissionsPage v2). READ-ONLY, gate
+   * view:permission (cùng cặp catalog). Mutation vẫn qua POST/DELETE :id/permissions bên dưới.
+   */
+  @Get(":id/permissions")
+  @RequirePermission("view", "permission")
+  listRolePermissions(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
+    return this.roleAdmin.listRolePermissions(req.user, id);
+  }
+
   @Post()
   @RequirePermission("create", "role")
   createRole(@Req() req: AuthenticatedRequest, @Body() dto: CreateRoleDto) {
