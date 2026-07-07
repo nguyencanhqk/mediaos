@@ -94,6 +94,14 @@ function Start-DevWindow([string]$name, [string]$dir) {
   Write-Ok "khởi động $name ($dir)"
 }
 
+# Cửa sổ `vite preview` — serve BẢN BUILD (dist/) trên cùng cổng dev (preview block trong vite.config.ts).
+function Start-PreviewWindow([string]$name, [string]$dir) {
+  $wd = Join-Path $Root $dir
+  if (-not (Test-Path $wd)) { Write-Err "không thấy thư mục $dir — bỏ qua $name"; return }
+  Start-Process -FilePath "cmd.exe" -ArgumentList "/k", "title MediaOS-$name && pnpm preview" -WorkingDirectory $wd | Out-Null
+  Write-Ok "khởi động $name ($dir, preview bản build)"
+}
+
 # ── Lệnh: hạ tầng + dev ─────────────────────────────────────────────────────
 function Invoke-Up   { Write-Step "Infra up"; Exec { docker compose up -d } "docker compose up" }
 function Invoke-Down { Write-Step "Infra down"; Exec { docker compose down } "docker compose down" }
@@ -375,6 +383,35 @@ function Invoke-DevOnlineTunnel {
   & (Join-Path $Root "scripts\windows\07-tunnel-dev.ps1")
 }
 
+# dev-online-fast — như dev-online nhưng 3 SPA serve BẢN BUILD (vite preview) thay vì dev server.
+# Lý do: dev-mode không bundle ⇒ mỗi trang nạp hàng trăm module rời, mỗi request ~200-350ms qua tunnel
+# ⇒ chuyển trang/lần vào đầu rất chậm. Bundle ⇒ 2-3 request/trang. Đổi lại KHÔNG có HMR — sửa code FE
+# phải chạy lại lệnh này (hoặc dùng `m dev-online` khi cần HMR). API vẫn chạy watch như cũ.
+function Invoke-DevOnlineFast {
+  Write-Step "DEV-ONLINE FAST — API :3200 (watch) + 3 SPA serve bản build (vite preview)"
+  Import-DevOnlineEnv
+  Write-Host "  dừng server dev-online cũ (nếu có) → re-run sạch ..." -ForegroundColor DarkGray
+  Stop-DevOnline
+  Build-SharedPackages
+  Write-Host "  build 3 SPA (env VITE_* dev-online bake vào bundle) ..." -ForegroundColor DarkGray
+  Exec {
+    pnpm exec turbo run build --filter=@mediaos/app --filter=@mediaos/auth --filter=@mediaos/console --force
+  } "build 3 SPA"
+  Exec { docker compose up -d } "docker compose up"
+  if (-not (Wait-Postgres)) { return }
+  Start-DevWindow "api-online" "apps\api"
+  Start-PreviewWindow "app-online" "apps\app"
+  Start-PreviewWindow "auth-online" "apps\auth"
+  Start-PreviewWindow "console-online" "apps\console"
+  Write-Host ""
+  Write-Ok "Dev-online FAST đang chạy (bản build — không HMR; sửa FE thì chạy lại 'm dev-online-fast')."
+  Write-Host "    app     https://cian-dev.funtimemediacorp.com"
+  Write-Host "    auth    https://cian-dev-auth.funtimemediacorp.com"
+  Write-Host "    console https://cian-dev-console.funtimemediacorp.com"
+  Write-Host ""
+  Write-Host "  Login: demo / admin@demo.local / Admin@12345" -ForegroundColor Magenta
+}
+
 # ── Dashboard tiến độ (báo cáo dự án, CHẠY ẨN cổng 5180) ─────────────────────
 # Server zero-dep đọc LIVE harness/backlog.mjs + git. Khởi động bằng tay qua VBS
 # (cửa sổ ẩn, chạy nền) — KHÔNG còn dịch vụ tự khởi động cùng Windows.
@@ -445,6 +482,7 @@ function Show-Help {
   Write-Host ""
   Write-Host "  DEV-ONLINE (lộ dev ra cian-dev.*.funtimemediacorp.com, song song prod)" -ForegroundColor Yellow
   Write-Host "    dev-online          chạy/restart dev stack lộ ra cian-dev.* (tự dừng cũ + rebuild shared)"
+  Write-Host "    dev-online-fast     như dev-online nhưng 3 SPA serve BẢN BUILD (nhanh qua tunnel, không HMR)"
   Write-Host "    dev-online-stop     dừng dev-online (giải phóng cổng 3200/5273/5275/5278)"
   Write-Host "    dev-online-db       tạo + migrate + seed DB cô lập mediaos_dev (1 lần)"
   Write-Host "    dev-online-tunnel   tạo ingress cloudflared + DNS cho cian-dev.* (1 lần, Administrator)"
@@ -545,6 +583,7 @@ switch ($Command.ToLower()) {
   "deploy-env" { Invoke-DeployEnv $Rest }
   "deploy-seed" { Invoke-DeploySeed }
   "dev-online"        { Invoke-DevOnline }
+  "dev-online-fast"   { Invoke-DevOnlineFast }
   "dev-online-stop"   { Invoke-DevOnlineStop }
   "dev-online-db"     { Invoke-DevOnlineDb }
   "dev-online-tunnel" { Invoke-DevOnlineTunnel }
