@@ -3937,7 +3937,8 @@ export const backlog = [
     title:
       "Tối ưu gán quyền: BE GET /auth/roles/:id/permissions + RolePermissionsPage v2 (trạng thái thật, nhóm module, bulk) + nhân bản vai trò + nhãn tiếng Việt (owner-request 2026-07-07)",
     zone: "red",
-    status: "in_progress",
+    // CLOSE 2026-07-07: MERGED PR #120 (squash b6dae39) — FULL gate PASS, 7 int-spec + 8 FE spec.
+    status: "done",
     paths: [
       "apps/api/src/permission/**",
       "apps/api/test/integration/**",
