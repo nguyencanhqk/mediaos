@@ -1,0 +1,9 @@
+# .gitleaksignore — bỏ qua ĐÚNG TỪNG finding lịch sử đã xác minh là false-positive (fingerprint =
+# commit:file:rule:line — hẹp nhất có thể, KHÔNG bao trùm file/rule). Nguyên tắc khớp .gitleaks.toml:
+# chỉ thêm khi (a) đã xác minh KHÔNG phải secret thật và (b) commit chứa nó đã nằm trong history.
+#
+# S2-AUTH-USEROPS-1: fixture test `tempPassword` trong spec web-core (chuỗi bịa "TempMatKhau99x",
+# không phải credential thật — chỉ dùng assert URL/schema boundary). Commit kế tiếp đã đổi fixture
+# sang ghép-từ-mảnh (mẫu STRONG); commit 6150cea trở thành unreachable sau squash-merge PR #121 +
+# xóa nhánh. Giữ dòng này vô hại (trỏ 1 commit cụ thể).
+6150cea82f2ffa318ee4a97a7296a7f687b08867:packages/web-core/src/lib/auth-users-api.spec.ts:generic-api-key:42

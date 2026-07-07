@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, gt, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, ilike, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { roles, userRecoveryCodes, userRoles, users, userTotp, type User } from "../db/schema";
 import type { AuthUserStatus } from "@mediaos/contracts";
@@ -25,6 +25,8 @@ export function authUserSnapshot(row: User | undefined | null) {
     lockedReason: row.lockedReason ?? null,
     // S2-AUTH-BE-12 (APPEND-only): cờ ép 2FA per-user (mig 0466) → diff before/after audit user.updated.
     requireTwoFactor: row.requireTwoFactor,
+    // S2-AUTH-USEROPS-1 (APPEND-only): mốc xóa mềm → diff before/after audit user.deleted/user.restored.
+    deletedAt: row.deletedAt ? row.deletedAt.toISOString() : null,
   };
 }
 
@@ -33,6 +35,8 @@ export interface ListAuthUsersFilter {
   q?: string;
   limit: number;
   offset: number;
+  /** S2-AUTH-USEROPS-1 — true: CHỈ user đã xóa mềm (view Đã xóa). Mặc định false = LIVE như cũ. */
+  deleted?: boolean;
 }
 
 @Injectable()
@@ -48,7 +52,12 @@ export class AuthUsersRepository {
     scope: SQL,
     filter: ListAuthUsersFilter,
   ): Promise<{ rows: User[]; total: number }> {
-    const conds: SQL[] = [eq(users.companyId, companyId), isNull(users.deletedAt), scope];
+    const conds: SQL[] = [
+      eq(users.companyId, companyId),
+      // S2-AUTH-USEROPS-1: nhánh deleted=true trả RIÊNG user đã xóa mềm (không bao giờ trộn 2 tập).
+      filter.deleted ? isNotNull(users.deletedAt) : isNull(users.deletedAt),
+      scope,
+    ];
     if (filter.status) conds.push(eq(users.status, filter.status));
     if (filter.q) {
       const pattern = `%${filter.q}%`;
@@ -226,6 +235,79 @@ export class AuthUsersRepository {
         updatedBy,
         updatedAt: new Date(),
       })
+      .where(and(eq(users.companyId, companyId), eq(users.id, id), isNull(users.deletedAt)))
+      .returning()
+      .then((r) => r[0]);
+  }
+
+  /**
+   * S2-AUTH-USEROPS-1 — 1 user ĐÃ xóa mềm theo id (đối ngẫu findByIdTx). Dùng cho restore: chỉ khớp
+   * row deleted_at IS NOT NULL. Cross-tenant: RLS + WHERE company_id ⇒ undefined (caller → NotFound).
+   */
+  findDeletedByIdTx(tx: TenantTx, companyId: string, id: string): Promise<User | undefined> {
+    return tx
+      .select()
+      .from(users)
+      .where(and(eq(users.companyId, companyId), eq(users.id, id), isNotNull(users.deletedAt)))
+      .limit(1)
+      .then((r) => r[0]);
+  }
+
+  /**
+   * S2-AUTH-USEROPS-1 — xóa MỀM: deleted_at=now + deleted_by=actor (BẤT BIẾN #2 — mig 0467 đã REVOKE
+   * DELETE trên users cho app role; gỡ user = UPDATE, KHÔNG BAO GIỜ .delete(users)). GIỮ NGUYÊN status
+   * (khôi phục trả về đúng trạng thái trước xóa; login đã bị chặn bởi deleted_at ở findActiveUserByEmail).
+   * CHỈ khớp row LIVE (đã xóa → undefined, caller NotFound — no-op, 0 audit rác).
+   */
+  softDeleteTx(
+    tx: TenantTx,
+    companyId: string,
+    id: string,
+    deletedBy: string,
+  ): Promise<User | undefined> {
+    const now = new Date();
+    return tx
+      .update(users)
+      .set({ deletedAt: now, deletedBy, updatedBy: deletedBy, updatedAt: now })
+      .where(and(eq(users.companyId, companyId), eq(users.id, id), isNull(users.deletedAt)))
+      .returning()
+      .then((r) => r[0]);
+  }
+
+  /**
+   * S2-AUTH-USEROPS-1 — KHÔI PHỤC user đã xóa mềm: clear deleted_at/deleted_by. CHỈ khớp row deleted
+   * (row live → undefined). Status GIỮ NGUYÊN như trước khi xóa. Caller PHẢI check email LIVE trùng
+   * TRƯỚC (unique (company_id, normalized_email) khi chưa xóa — vỡ constraint = 500 xấu).
+   */
+  restoreTx(
+    tx: TenantTx,
+    companyId: string,
+    id: string,
+    updatedBy: string,
+  ): Promise<User | undefined> {
+    return tx
+      .update(users)
+      .set({ deletedAt: null, deletedBy: null, updatedBy, updatedAt: new Date() })
+      .where(and(eq(users.companyId, companyId), eq(users.id, id), isNotNull(users.deletedAt)))
+      .returning()
+      .then((r) => r[0]);
+  }
+
+  /**
+   * S2-AUTH-USEROPS-1 — admin đặt lại mật khẩu: passwordHash ĐÃ hash ở service (BẤT BIẾN #3 — repo
+   * KHÔNG nhận plaintext) + must_change_password=true CÙNG update (user bị ép đổi ở lần login kế,
+   * flow mig 0469). CHỈ user LIVE.
+   */
+  setPasswordTx(
+    tx: TenantTx,
+    companyId: string,
+    id: string,
+    passwordHash: string,
+    updatedBy: string,
+  ): Promise<User | undefined> {
+    return tx
+      .update(users)
+      .set({ passwordHash, mustChangePassword: true, updatedBy, updatedAt: new Date() })
       .where(and(eq(users.companyId, companyId), eq(users.id, id), isNull(users.deletedAt)))
       .returning()
       .then((r) => r[0]);

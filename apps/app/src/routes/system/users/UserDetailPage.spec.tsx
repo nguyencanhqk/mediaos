@@ -66,6 +66,7 @@ const ACTIVE_USER: AuthUserDetailDto = {
   lockedReason: null,
   lastLoginAt: null,
   createdAt: "2024-01-01T00:00:00.000Z",
+  deletedAt: null, // S2-AUTH-USEROPS-1: mốc xóa mềm (null = LIVE)
   twoFactor: { enabled: false, requiredByRole: false, requiredByUser: false },
 };
 

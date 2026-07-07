@@ -4,17 +4,20 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { randomInt } from "node:crypto";
 import { eq, sql, type SQL } from "drizzle-orm";
 import type {
   AuthUserDetailDto,
   AuthUserDto,
   AuthUserListDto,
+  AuthUserPasswordResetResultDto,
   AuthUserTwoFactorResetDto,
   CreateAuthUserRequest,
   DataScope,
   ListAuthUsersQuery,
   UpdateAuthUserRequest,
 } from "@mediaos/contracts";
+import { isUniqueViolation } from "../common/db-error";
 import { DatabaseService } from "../db/db.service";
 import { users, type User } from "../db/schema";
 import { AuditService } from "../events/audit.service";
@@ -41,17 +44,44 @@ function toDto(row: User): AuthUserDto {
     lockedReason: row.lockedReason ?? null,
     lastLoginAt: row.lastLoginAt ? row.lastLoginAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
+    deletedAt: row.deletedAt ? row.deletedAt.toISOString() : null,
   };
 }
 
 const USER_NOT_FOUND = "Không tìm thấy người dùng.";
 const CANNOT_TARGET_SELF = "Không thể khoá/mở khoá chính tài khoản của bạn.";
+const CANNOT_DELETE_SELF = "Không thể xóa chính tài khoản của bạn.";
+const CANNOT_RESET_SELF = "Dùng chức năng đổi mật khẩu cho tài khoản của chính bạn.";
 const EMAIL_TAKEN = "Email đã tồn tại trong công ty.";
+const EMAIL_TAKEN_RESTORE = "Không thể khôi phục: đã có tài khoản đang dùng email này.";
 const ALREADY_LOCKED = "Tài khoản đã bị khoá.";
 const NOT_LOCKED = "Tài khoản chưa bị khoá.";
 
 const VIEW_ACTION = "view";
 const USER_RESOURCE = "user";
+
+/**
+ * S2-AUTH-USEROPS-1 — sinh mật khẩu tạm 16 ký tự CHẮC CHẮN đạt policy newPasswordSchema (≥1 thường +
+ * ≥1 hoa + ≥1 số) bằng crypto randomInt (KHÔNG Math.random). Bỏ ký tự dễ nhầm (i/l/o/I/L/O/0/1).
+ * Plaintext CHỈ tồn tại trong RAM → hash → response 1 lần; KHÔNG log/audit (BẤT BIẾN #3).
+ */
+const TEMP_PASSWORD_LENGTH = 16;
+const TEMP_LOWER = "abcdefghjkmnpqrstuvwxyz";
+const TEMP_UPPER = "ABCDEFGHJKMNPQRSTUVWXYZ";
+const TEMP_DIGITS = "23456789";
+const TEMP_ALL = TEMP_LOWER + TEMP_UPPER + TEMP_DIGITS;
+
+function generateTempPassword(): string {
+  const pick = (alphabet: string) => alphabet[randomInt(alphabet.length)];
+  const chars = [pick(TEMP_LOWER), pick(TEMP_UPPER), pick(TEMP_DIGITS)];
+  while (chars.length < TEMP_PASSWORD_LENGTH) chars.push(pick(TEMP_ALL));
+  // Fisher–Yates (crypto randomInt) — trộn để 3 ký tự bắt buộc không luôn đứng đầu.
+  for (let i = chars.length - 1; i > 0; i -= 1) {
+    const j = randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join("");
+}
 
 /**
  * S2-AUTH-BE-3 AuthUsersService — user admin (list/get/create/update/lock/unlock). MỌI thao tác qua
@@ -102,6 +132,8 @@ export class AuthUsersService {
         q: query.q,
         limit: query.limit,
         offset: query.offset,
+        // S2-AUTH-USEROPS-1: deleted=true → CHỈ user đã xóa mềm (view Đã xóa / khôi phục).
+        deleted: query.deleted === true,
       });
       return { users: rows.map(toDto), total };
     });
@@ -292,6 +324,127 @@ export class AuthUsersService {
         actorUserId: actor.id,
       });
       return toDto(updated);
+    });
+  }
+
+  /**
+   * S2-AUTH-USEROPS-1 — DELETE /auth/users/:id: XÓA MỀM (deleted_at + deleted_by, GIỮ NGUYÊN status —
+   * khôi phục trả về đúng trạng thái trước xóa; login đã bị chặn bởi lọc deleted_at ở AuthService).
+   * Self-guard 400 (chống tự xóa lockout). Thu hồi MỌI phiên CÙNG tx (mirror lock — refresh token cũ
+   * → 401 tức thì). Audit 'user.deleted' + dual-write USER_DELETED. Không thấy / cross-tenant / ĐÃ xóa
+   * → NotFound TRƯỚC mọi mutation (no-op, 0 audit rác).
+   */
+  async deleteUser(actor: AuthUserActor, id: string): Promise<AuthUserDto> {
+    if (actor.id === id) throw new BadRequestException(CANNOT_DELETE_SELF);
+    return this.db.withTenant(actor.companyId, async (tx) => {
+      const before = await this.repo.findByIdTx(tx, actor.companyId, id);
+      if (!before) throw new NotFoundException(USER_NOT_FOUND);
+      const deleted = await this.repo.softDeleteTx(tx, actor.companyId, id, actor.id);
+      if (!deleted) throw new NotFoundException(USER_NOT_FOUND);
+      const revokedSessionCount = await this.auth.revokeAllForUserTx(tx, id, "deleted");
+      await this.audit.record(tx, {
+        action: "user.deleted",
+        objectType: "user",
+        actorUserId: actor.id,
+        objectId: id,
+        before: authUserSnapshot(before),
+        after: { ...authUserSnapshot(deleted), revokedSessionCount },
+      });
+      await this.securityEvents?.record(tx, {
+        eventType: "USER_DELETED",
+        userId: id,
+        actorUserId: actor.id,
+        payload: { revokedSessionCount },
+      });
+      return toDto(deleted);
+    });
+  }
+
+  /**
+   * S2-AUTH-USEROPS-1 — POST /auth/users/:id/restore: KHÔI PHỤC user đã xóa mềm (clear deleted_at/
+   * deleted_by; status GIỮ NGUYÊN như trước xóa). Đòi row ĐANG deleted (lookup riêng) — row live/lạ/
+   * cross-tenant → NotFound. Email đã có user LIVE trùng (tạo mới sau khi xóa) → 409 TRƯỚC khi chạm
+   * unique (company_id, normalized_email). KHÔNG revoke phiên (user deleted không còn phiên sống —
+   * delete đã thu hồi). Audit 'user.restored' + dual-write USER_RESTORED.
+   */
+  async restoreUser(actor: AuthUserActor, id: string): Promise<AuthUserDto> {
+    return this.db.withTenant(actor.companyId, async (tx) => {
+      const before = await this.repo.findDeletedByIdTx(tx, actor.companyId, id);
+      if (!before) throw new NotFoundException(USER_NOT_FOUND);
+      if (await this.repo.emailExistsTx(tx, actor.companyId, before.email)) {
+        throw new ConflictException(EMAIL_TAKEN_RESTORE);
+      }
+      // Phòng thủ đua (plan-review 2026-07-07): precheck ↔ restore vẫn có thể thua CREATE song song
+      // cùng email ⇒ partial-unique (company_id, normalized_email) WHERE deleted_at IS NULL nổ 23505.
+      // Map về 409 rõ nghĩa thay vì 500.
+      let restored: User | undefined;
+      try {
+        restored = await this.repo.restoreTx(tx, actor.companyId, id, actor.id);
+      } catch (err) {
+        if (isUniqueViolation(err)) throw new ConflictException(EMAIL_TAKEN_RESTORE);
+        throw err;
+      }
+      if (!restored) throw new NotFoundException(USER_NOT_FOUND);
+      await this.audit.record(tx, {
+        action: "user.restored",
+        objectType: "user",
+        actorUserId: actor.id,
+        objectId: id,
+        before: authUserSnapshot(before),
+        after: authUserSnapshot(restored),
+      });
+      await this.securityEvents?.record(tx, {
+        eventType: "USER_RESTORED",
+        userId: id,
+        actorUserId: actor.id,
+      });
+      return toDto(restored);
+    });
+  }
+
+  /**
+   * S2-AUTH-USEROPS-1 — POST /auth/users/:id/password/reset: admin ĐẶT LẠI mật khẩu (privileged, gate
+   * reset-password:user is_sensitive mig 0476). Server sinh temp password (crypto, đạt policy) → hash
+   * argon2 NGOÀI tx (mirror createUser) → set password_hash + must_change_password=true CÙNG update
+   * (user bị ép đổi ở lần login kế — flow mig 0469) → thu hồi MỌI phiên CÙNG tx. Self-guard 400 (tự
+   * đổi → change-password, giữ nguyên re-auth bằng mật khẩu cũ). Audit 'user.password_reset_by_admin'
+   * + dual-write PASSWORD_RESET_BY_ADMIN — TUYỆT ĐỐI KHÔNG chứa temp password/hash (BẤT BIẾN #3);
+   * plaintext CHỈ trả 1 lần trong response.
+   */
+  async resetPassword(actor: AuthUserActor, id: string): Promise<AuthUserPasswordResetResultDto> {
+    if (actor.id === id) throw new BadRequestException(CANNOT_RESET_SELF);
+    const tempPassword = generateTempPassword();
+    const passwordHash = await this.password.hash(tempPassword);
+    return this.db.withTenant(actor.companyId, async (tx) => {
+      const target = await this.repo.findByIdTx(tx, actor.companyId, id);
+      if (!target) throw new NotFoundException(USER_NOT_FOUND);
+      const updated = await this.repo.setPasswordTx(
+        tx,
+        actor.companyId,
+        id,
+        passwordHash,
+        actor.id,
+      );
+      if (!updated) throw new NotFoundException(USER_NOT_FOUND);
+      const revokedSessionCount = await this.auth.revokeAllForUserTx(
+        tx,
+        id,
+        "admin_password_reset",
+      );
+      await this.audit.record(tx, {
+        action: "user.password_reset_by_admin",
+        objectType: "user",
+        actorUserId: actor.id,
+        objectId: id,
+        after: { revokedSessionCount, mustChangePassword: true },
+      });
+      await this.securityEvents?.record(tx, {
+        eventType: "PASSWORD_RESET_BY_ADMIN",
+        userId: id,
+        actorUserId: actor.id,
+        payload: { revokedSessionCount },
+      });
+      return { tempPassword, revokedSessionCount };
     });
   }
 

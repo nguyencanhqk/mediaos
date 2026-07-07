@@ -12,6 +12,7 @@ export default {
       fullName: "Họ tên",
       status: "Trạng thái",
       lastLogin: "Lần đăng nhập cuối",
+      deletedAt: "Đã xóa lúc",
     },
     status: {
       active: "Đang hoạt động",
@@ -23,6 +24,10 @@ export default {
       title: "Không có người dùng",
       description: "Chưa có tài khoản người dùng nào trong hệ thống.",
     },
+    emptyDeleted: {
+      title: "Không có tài khoản đã xóa",
+      description: "Chưa có tài khoản nào bị xóa mềm.",
+    },
     error: {
       title: "Không thể tải danh sách",
       description: "Có lỗi khi tải danh sách người dùng. Vui lòng thử lại.",
@@ -33,6 +38,74 @@ export default {
     },
     actions: {
       create: "Tạo người dùng",
+      // S2-AUTH-USEROPS-1 — thao tác trên danh sách
+      detail: "Chi tiết",
+      lock: "Khóa",
+      unlock: "Mở khóa",
+      resetPassword: "Đặt lại mật khẩu",
+      delete: "Xóa",
+      restore: "Khôi phục",
+    },
+    tabs: {
+      active: "Đang dùng",
+      deleted: "Đã xóa",
+    },
+    // S2-AUTH-USEROPS-1 — xác nhận thao tác đơn trên danh sách
+    confirm: {
+      lockTitle: "Khóa tài khoản?",
+      lockDescription:
+        "Tài khoản {{email}} sẽ bị chặn đăng nhập và mọi phiên hiện tại bị thu hồi ngay.",
+      unlockTitle: "Mở khóa tài khoản?",
+      unlockDescription: "Tài khoản {{email}} sẽ đăng nhập lại được bình thường.",
+      deleteTitle: "Xóa tài khoản?",
+      deleteDescription:
+        "Tài khoản {{email}} sẽ bị xóa mềm (chặn đăng nhập, thu hồi mọi phiên). Có thể khôi phục trong tab Đã xóa.",
+      restoreTitle: "Khôi phục tài khoản?",
+      restoreDescription: "Tài khoản {{email}} sẽ được khôi phục về trạng thái trước khi xóa.",
+      resetPasswordTitle: "Đặt lại mật khẩu?",
+      resetPasswordDescription:
+        "Hệ thống sẽ tạo mật khẩu tạm cho {{email}}, thu hồi mọi phiên đăng nhập và bắt buộc đổi mật khẩu ở lần đăng nhập kế tiếp.",
+    },
+    // S2-AUTH-USEROPS-1 — thao tác hàng loạt
+    bulk: {
+      selectAll: "Chọn tất cả",
+      selectRow: "Chọn {{email}}",
+      selfDisabled: "Không thể tự thao tác trên tài khoản của bạn",
+      selected: "Đã chọn {{count}} tài khoản",
+      clear: "Bỏ chọn",
+      actions: {
+        lock: "Khóa",
+        unlock: "Mở khóa",
+        delete: "Xóa",
+        restore: "Khôi phục",
+      },
+      confirmTitle: "{{action}} {{count}} tài khoản?",
+      confirmDescription:
+        "Thao tác {{action}} sẽ chạy lần lượt trên {{count}} tài khoản đã chọn. Kết quả từng tài khoản sẽ hiển thị sau khi hoàn tất.",
+      skippedNote: "({{count}} tài khoản không hợp lệ đã được bỏ qua.)",
+      nothingEligible: "Không có tài khoản hợp lệ cho thao tác này trong các dòng đã chọn.",
+      running: "Đang xử lý {{done}}/{{total}}…",
+      resultSummary: "{{action}}: {{ok}} thành công · {{failed}} lỗi.",
+    },
+    // S2-AUTH-USEROPS-1 — dialog mật khẩu tạm (hiện ĐÚNG 1 lần — BẤT BIẾN #3)
+    resetPw: {
+      dialogTitle: "Mật khẩu tạm đã được tạo",
+      dialogDescription: "Gửi mật khẩu tạm dưới đây cho {{email}} qua kênh an toàn.",
+      copy: "Sao chép",
+      copied: "Đã chép",
+      close: "Đóng",
+      showOnceWarning:
+        "Mật khẩu tạm chỉ hiển thị MỘT LẦN. Đóng hộp thoại này sẽ không xem lại được.",
+      mustChangeNote: "Người dùng sẽ bị bắt buộc đổi mật khẩu ở lần đăng nhập kế tiếp.",
+      revoked: "Đã thu hồi {{count}} phiên đăng nhập đang hoạt động.",
+    },
+    feedback: {
+      lockOk: "Đã khóa tài khoản.",
+      unlockOk: "Đã mở khóa tài khoản.",
+      deleteOk: "Đã xóa tài khoản (có thể khôi phục trong tab Đã xóa).",
+      restoreOk: "Đã khôi phục tài khoản.",
+      actionFailed: "Thao tác thất bại. Vui lòng thử lại.",
+      dismiss: "Đóng",
     },
 
     // S2-FE-AUTH-3 — form tạo/sửa user (/system/users/new · /system/users/:id/edit)

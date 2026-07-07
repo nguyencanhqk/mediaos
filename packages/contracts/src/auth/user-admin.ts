@@ -29,6 +29,11 @@ export const AUTH_USER = {
   // S2-AUTH-BE-12 — reset 2FA của user khác (privileged). Cặp seed THẬT is_sensitive=true (mig 0466) ⇒
   // controller PHẢI khai isSensitive ở decorator (wildcard *:* KHÔNG thoả cổng sensitive).
   RESET_2FA: { action: "reset-2fa", resource: AUTH_USER_RESOURCE_TYPE },
+  // S2-AUTH-USEROPS-1 — xóa mềm / khôi phục / admin reset mật khẩu. Cặp seed THẬT is_sensitive=true
+  // (mig 0476) ⇒ controller khai isSensitive + FE dùng useCanExact (wildcard *:* KHÔNG thoả cổng).
+  DELETE: { action: "delete", resource: AUTH_USER_RESOURCE_TYPE },
+  RESTORE: { action: "restore", resource: AUTH_USER_RESOURCE_TYPE },
+  RESET_PASSWORD: { action: "reset-password", resource: AUTH_USER_RESOURCE_TYPE },
 } as const;
 
 /**
@@ -53,6 +58,9 @@ export const authUserSchema = z.object({
   lockedReason: z.string().nullable(),
   lastLoginAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
+  // S2-AUTH-USEROPS-1 — mốc xóa mềm (view "Đã xóa" + nút Khôi phục). User LIVE → null. BE toDto LUÔN
+  // trả field này (FE/BE ship cùng monorepo — không cần catch() chống lệch; catch làm zod suy type unknown).
+  deletedAt: z.string().datetime().nullable(),
 });
 export type AuthUserDto = z.infer<typeof authUserSchema>;
 
@@ -101,6 +109,13 @@ const LIST_LIMIT_MAX = 100;
 export const listAuthUsersQuerySchema = z.object({
   status: z.enum(AUTH_USER_STATUSES).optional(),
   q: z.string().trim().min(1).max(200).optional(),
+  // S2-AUTH-USEROPS-1 — deleted=true: CHỈ user đã xóa mềm (view Đã xóa/khôi phục). KHÔNG z.coerce.boolean
+  // (coerce biến "false" → true). Enum chuỗi → boolean; thiếu → undefined = danh sách LIVE như cũ
+  // (giữ key OPTIONAL trong type — caller cũ không phải truyền).
+  deleted: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === "true")),
   limit: z.coerce
     .number()
     .int()
@@ -168,3 +183,16 @@ export const lockAuthUserRequestSchema = z
   })
   .strict();
 export type LockAuthUserRequest = z.infer<typeof lockAuthUserRequestSchema>;
+
+/**
+ * S2-AUTH-USEROPS-1 — POST /auth/users/:id/password/reset (admin đặt lại mật khẩu, gate
+ * reset-password:user is_sensitive=true mig 0476). `tempPassword` do SERVER sinh (đạt policy
+ * newPasswordSchema), CHỈ xuất hiện ĐÚNG 1 LẦN trong response này — KHÔNG vào audit/log/DB plaintext
+ * (BẤT BIẾN #3); user bị ép đổi ở lần đăng nhập kế (must_change_password=true, flow mig 0469).
+ * revokedSessionCount = forensic (mirror 2fa/reset).
+ */
+export const authUserPasswordResetResultSchema = z.object({
+  tempPassword: z.string(),
+  revokedSessionCount: z.number().int().nonnegative(),
+});
+export type AuthUserPasswordResetResultDto = z.infer<typeof authUserPasswordResetResultSchema>;

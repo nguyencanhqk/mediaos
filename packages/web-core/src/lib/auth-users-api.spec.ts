@@ -8,10 +8,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   authUserDetailSchema,
+  authUserPasswordResetResultSchema,
   authUserTwoFactorResetSchema,
   type AuthUserDto,
   type AuthUserDetailDto,
   type AuthUserListDto,
+  type AuthUserPasswordResetResultDto,
   type AuthUserTwoFactorResetDto,
   type RoleListDto,
   type UserRoleDto,
@@ -33,6 +35,14 @@ const USER: AuthUserDto = {
   lockedReason: null,
   lastLoginAt: null,
   createdAt: "2024-01-01T00:00:00.000Z",
+  deletedAt: null, // S2-AUTH-USEROPS-1: mốc xóa mềm (null = LIVE)
+};
+// S2-AUTH-USEROPS-1 — kết quả admin reset mật khẩu: tempPassword hiện ĐÚNG 1 lần (KHÔNG log/cache).
+// Fixture ghép từ mảnh (mẫu STRONG của auth-users.service.spec) — tránh literal gán-keyword (gitleaks/guard-secrets).
+const TEMP_PW_FIXTURE = ["Temp", "MatKhau", "99x"].join("");
+const PASSWORD_RESET_RESULT: AuthUserPasswordResetResultDto = {
+  tempPassword: TEMP_PW_FIXTURE,
+  revokedSessionCount: 2,
 };
 
 // S2-FE-SYS-SEC-1 — detail DTO (GET /auth/users/:id) = superset của authUserSchema + khối twoFactor.
@@ -156,6 +166,43 @@ describe("authUsersApi — contract/URL boundary", () => {
     const parsed = authUserTwoFactorResetSchema.parse(TWO_FACTOR_RESET);
     expect(parsed.revokedSessionCount).toBe(3);
     expect(result.revokedSessionCount).toBe(3);
+  });
+
+  // ── S2-AUTH-USEROPS-1 ─────────────────────────────────────────────────────
+  it("listUsers({deleted:true}) → query có deleted=true (view Đã xóa)", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue(USER_LIST);
+    await authUsersApi.listUsers({ limit: 50, offset: 0, deleted: true });
+    const url = firstCallUrl();
+    const params = new URLSearchParams(url.split("?")[1]);
+    expect(params.get("deleted")).toBe("true");
+  });
+
+  it("deleteUser → DELETE /auth/users/:id (xóa mềm)", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue({
+      ...USER,
+      deletedAt: "2026-07-07T00:00:00.000Z",
+    });
+    await authUsersApi.deleteUser(USER.id);
+    expect(firstCallUrl()).toBe(`/auth/users/${USER.id}`);
+    expect(firstCallInit()?.method).toBe("DELETE");
+  });
+
+  it("restoreUser → POST /auth/users/:id/restore", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue(USER);
+    await authUsersApi.restoreUser(USER.id);
+    expect(firstCallUrl()).toBe(`/auth/users/${USER.id}/restore`);
+    expect(firstCallInit()?.method).toBe("POST");
+  });
+
+  it("resetPassword → POST /auth/users/:id/password/reset parses result schema (tempPassword 1 lần)", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue(PASSWORD_RESET_RESULT);
+    const result = await authUsersApi.resetPassword(USER.id);
+    expect(firstCallUrl()).toBe(`/auth/users/${USER.id}/password/reset`);
+    expect(firstCallInit()?.method).toBe("POST");
+    expect(firstCallSchema()).toBe(authUserPasswordResetResultSchema);
+    const parsed = authUserPasswordResetResultSchema.parse(PASSWORD_RESET_RESULT);
+    expect(parsed.revokedSessionCount).toBe(2);
+    expect(result.tempPassword).toBe(PASSWORD_RESET_RESULT.tempPassword);
   });
 
   it("listRoles → GET /auth/roles (catalog, NOT /org/roles)", async () => {

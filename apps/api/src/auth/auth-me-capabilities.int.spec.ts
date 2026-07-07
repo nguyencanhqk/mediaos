@@ -625,3 +625,96 @@ describe.skipIf(!runDb)("S2-AUTH-BE-12 /auth/me reset-2fa:user (company-admin on
     expect(RESET_2FA_CAP_KEY in caps).toBe(false);
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// S2-AUTH-USEROPS-1 — APPEND 'delete:user' + 'restore:user' + 'reset-password:user' vào
+// SENSITIVE_CAPABILITY_ALLOWLIST. restore/reset-password = pair MỚI is_sensitive=true (mig 0476);
+// delete:user = pair 0005 NÂNG false→true (mig 0476). Grant Company CHỈ company-admin(0001)
+// (delete từ 0005/0441; restore/reset-password từ 0476). Thiếu allowlist ⇒ useCanExact false với
+// CẢ admin (bài học CAP-2). Enforcement (PermissionGuard isSensitive per-resource) KHÔNG đổi.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** 3 cặp USEROPS (action, resourceType) — tuple tránh split(":") nhập nhằng. */
+const USEROPS_SENSITIVE_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ["delete", "user"],
+  ["restore", "user"],
+  ["reset-password", "user"],
+];
+const USEROPS_SENSITIVE_KEYS = USEROPS_SENSITIVE_PAIRS.map(([a, r]) => `${a}:${r}`);
+
+describe.skipIf(!runDb)(
+  "S2-AUTH-USEROPS-1 /auth/me delete:user · restore:user · reset-password:user (company-admin only)",
+  () => {
+    let app: INestApplication;
+    let direct: Pool;
+    let A: SeededTenant;
+    let adminToken: string;
+    let employeeToken: string;
+    let wildcardToken: string;
+    const companyIds: string[] = [];
+
+    beforeAll(async () => {
+      const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+      app = moduleRef.createNestApplication();
+      app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
+      app.useGlobalFilters(new AllExceptionsFilter());
+      await app.init();
+      direct = directPool();
+      const pw = await new PasswordService().hash(LOGIN_PW);
+
+      A = await seedCompany(direct, "uopscap");
+      companyIds.push(A.companyId);
+
+      // company-admin (0001) — grant Company: delete:user (0005 bulk + 0441 backfill, sensitive-hóa 0476)
+      // + restore/reset-password:user (0476).
+      const adminEmail = `ca-${TAG}@uops.test`;
+      const admin = await seedUser(direct, A.companyId, adminEmail, pw);
+      await seedUserRole(direct, admin, COMPANY_ADMIN_ROLE, A.companyId);
+
+      // employee (0008) — KHÔNG có grant 3 cặp (least-privilege).
+      const empEmail = `emp-${TAG}@uops.test`;
+      const emp = await seedUser(direct, A.companyId, empEmail, pw);
+      await seedUserRole(direct, emp, EMPLOYEE_ROLE, A.companyId);
+
+      // wildcard-only '*:*' non-sensitive — KHÔNG kế thừa cặp sensitive (kể cả delete:user SAU sensitive-hóa).
+      const wildEmail = `wild-${TAG}@uops.test`;
+      const wild = await seedUser(direct, A.companyId, wildEmail, pw);
+      const wildRole = await seedRole(direct, A.companyId, `uops-wild-${TAG}`);
+      const wildPerm = await seedPermissionCatalog(direct, "*", "*", false);
+      await seedRolePermission(direct, wildRole, wildPerm, "ALLOW");
+      await seedUserRole(direct, wild, wildRole, A.companyId);
+
+      adminToken = await login(app, A.slug, adminEmail);
+      employeeToken = await login(app, A.slug, empEmail);
+      wildcardToken = await login(app, A.slug, wildEmail);
+    });
+
+    afterAll(async () => {
+      await app?.close();
+      if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
+      await direct?.end();
+    });
+
+    it("UOPS-P1 — company-admin (0001) → /auth/me CÓ đủ 3 cặp USEROPS === true", async () => {
+      const caps = await meCapabilities(app, adminToken);
+      for (const key of USEROPS_SENSITIVE_KEYS) {
+        expect(caps[key], `company-admin thiếu cặp allowlist ${key}`).toBe(true);
+      }
+    });
+
+    it("UOPS-N1 — employee (0008) → KHÔNG có cặp USEROPS nào (least-privilege)", async () => {
+      const caps = await meCapabilities(app, employeeToken);
+      for (const key of USEROPS_SENSITIVE_KEYS) {
+        expect(key in caps, `employee KHÔNG được lộ cặp ${key}`).toBe(false);
+      }
+    });
+
+    it("UOPS-N2 — wildcard '*:*' → KHÔNG kế thừa 3 cặp USEROPS (delete:user ĐÃ sensitive-hóa); '*:*' vẫn có", async () => {
+      const caps = await meCapabilities(app, wildcardToken);
+      expect(caps[WILDCARD_CAP_KEY]).toBe(true);
+      for (const key of USEROPS_SENSITIVE_KEYS) {
+        expect(key in caps, `cặp nhạy cảm ${key} KHÔNG kế thừa qua *:*`).toBe(false);
+      }
+    });
+  },
+);
