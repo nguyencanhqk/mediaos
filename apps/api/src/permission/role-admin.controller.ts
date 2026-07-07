@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   HttpCode,
   Param,
   ParseUUIDPipe,
@@ -40,6 +41,17 @@ interface AuthenticatedRequest extends Request {
 @UsePipes(ZodValidationPipe)
 export class RoleAdminController {
   constructor(private readonly roleAdmin: RoleAdminService) {}
+
+  /**
+   * S2-AUTH-ROLEMEM-1 — thành viên active của role (tab Thành viên). READ-ONLY, gate view:user
+   * (response = dữ liệu account-level như GET /auth/users). Thêm/gỡ member tái dùng
+   * POST/DELETE /permissions/users/:userId/roles (assign-role:user isSensitive — KHÔNG mở surface mới).
+   */
+  @Get(":id/members")
+  @RequirePermission("view", "user")
+  listMembers(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
+    return this.roleAdmin.listMembers(req.user, id);
+  }
 
   @Post()
   @RequirePermission("create", "role")

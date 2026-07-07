@@ -3901,4 +3901,32 @@ export const backlog = [
       "mỗi điểm pin ghi 1 dòng 'CHỐT <ngày>: code thắng/doc sửa, lý do' đúng chỗ (KHÔNG viết lại cả doc); cập nhật trạng thái các mục tương ứng trong docs/_review/FOUNDATION-SYSTEM-AUDIT-2026-07-02.md; KHÔNG đổi hành vi code trong WO này",
     ],
   },
+  {
+    id: "S2-AUTH-ROLEMEM-1",
+    module: "AUTH",
+    layer: "BE",
+    title:
+      "Tab Thành viên trên RoleDetailPage: BE GET /auth/roles/:id/members + FE xem/gỡ/thêm nhanh theo người hoặc phòng ban (owner-request 2026-07-07)",
+    zone: "red",
+    status: "in_progress",
+    paths: [
+      "apps/api/src/permission/**",
+      "apps/api/test/integration/**",
+      "packages/contracts/src/auth/**",
+      "packages/web-core/src/lib/**",
+      "apps/app/src/routes/system/roles/**",
+      "apps/app/src/i18n/**",
+      "docs/plans/S2-AUTH-ROLEMEM-1.md",
+    ],
+    skills: [],
+    depends_on: [],
+    src: ["owner-request 2026-07-07 (chat)", "S2-AUTH-CAP-2 (PR #117 — nút Quản lý vai trò)"],
+    plan: "docs/plans/S2-AUTH-ROLEMEM-1.md",
+    done_when: [
+      "BE: GET /auth/roles/:id/members (@RequirePermission view:user) trả members active (user_roles deleted_at NULL + chưa expires) join users (id/email/fullName/status/expiresAt/grantedAt); company-scoped qua withTenant + lọc tường minh company_id; role không tồn tại → 404; KHÔNG endpoint mutation mới (thêm/gỡ tái dùng POST/DELETE /permissions/users/:userId/roles sẵn có — giữ nguyên audit+SoD+sensitive gate)",
+      "Int-spec RED-trước: deny-path (employee thiếu view:user → 403) · cross-tenant (member tenant A không lộ qua tenant B, kể cả system role dùng chung) · soft-deleted + expired rows bị loại · happy-path admin thấy đúng member sau assign",
+      "FE: RoleDetailPage thêm tab switcher (Thông tin | Thành viên); tab Thành viên = bảng member + nút Gỡ (PermissionGate assign-role:user) + dialog 'Thêm người' (search /auth/users, multi-select, gọi tuần tự POST assign, báo kết quả) + dialog 'Thêm theo phòng ban' (org tree → GET /hr/employees?orgUnitId → lọc userId≠null, loại đã-là-member, gọi tuần tự, báo thành công/bỏ qua/lỗi)",
+      "contracts roleMemberListSchema dual-build; web-core roleAdminApi.getMembers; i18n vi đủ key; FE spec render + gating; check.sh xanh + FULL gate security-reviewer PASS",
+    ],
+  },
 ];

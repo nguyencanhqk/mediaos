@@ -247,6 +247,68 @@ export default {
       title: "Không tìm thấy vai trò",
       description: "Vai trò không tồn tại hoặc có lỗi khi tải. Vui lòng thử lại.",
     },
+    tabs: {
+      info: "Thông tin",
+      members: "Thành viên",
+    },
+  },
+
+  // S2-AUTH-ROLEMEM-1 — tab Thành viên trên trang chi tiết vai trò.
+  roleMembers: {
+    count: "{{count}} thành viên đang giữ vai trò này",
+    expiresAt: "hết hạn {{date}}",
+    forbidden: {
+      title: "Không có quyền xem",
+      description: "Bạn cần quyền xem người dùng để xem danh sách thành viên của vai trò.",
+    },
+    error: {
+      title: "Không tải được danh sách thành viên",
+      description: "Có lỗi khi tải danh sách thành viên. Vui lòng thử lại.",
+    },
+    empty: {
+      title: "Chưa có thành viên",
+      description: "Chưa có tài khoản nào được gán vai trò này.",
+    },
+    actions: {
+      addPerson: "Thêm người",
+      addOrgUnit: "Thêm theo phòng ban",
+      remove: "Gỡ",
+    },
+    removeConfirm: {
+      title: "Gỡ thành viên khỏi vai trò?",
+      description: "Tài khoản {{email}} sẽ mất các quyền do vai trò này cấp.",
+    },
+    addPerson: {
+      title: "Thêm người vào vai trò",
+      description: "Tìm và chọn tài khoản để gán vai trò này. Tài khoản đã là thành viên không hiển thị.",
+      searchPlaceholder: "Tìm theo email hoặc tên...",
+      empty: "Không có tài khoản phù hợp (hoặc tất cả đã là thành viên).",
+      submit: "Gán {{count}} tài khoản",
+    },
+    addOrgUnit: {
+      title: "Thêm cả phòng ban vào vai trò",
+      description:
+        "Chọn phòng ban/đội — mọi nhân viên ĐÃ có tài khoản và chưa giữ vai trò sẽ được gán.",
+      selectLabel: "Phòng ban",
+      selectPlaceholder: "— Chọn phòng ban —",
+      preview: {
+        toAssign: "Sẽ gán: {{count}} tài khoản",
+        alreadyMembers: "Bỏ qua (đã là thành viên): {{count}}",
+        unlinked: "Không gán được (nhân viên chưa liên kết tài khoản): {{count}}",
+        pageCap: "Phòng ban có ≥100 nhân viên — chỉ xử lý 100 người đầu, chạy lại để gán phần còn lại.",
+      },
+      submit: "Gán {{count}} tài khoản",
+    },
+    batch: {
+      running: "Đang gán...",
+      ok: "✓ {{label}} — đã gán",
+      error: "✗ {{label}} — {{detail}}",
+    },
+    errors: {
+      forbiddenRow: "Không đủ quyền (hoặc không thể tự gán cho chính mình)",
+      notFound: "Không tìm thấy (tài khoản/vai trò hoặc chưa giữ vai trò)",
+      conflict: "Xung đột — đã được gán song song",
+    },
   },
 
   rolePermissions: {

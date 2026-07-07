@@ -12,6 +12,7 @@ import type {
   AssignRolePermissionRequest,
   CreateRoleRequest,
   RevokeRolePermissionRequest,
+  RoleMemberListDto,
   RoleWriteResultDto,
   UpdateRoleRequest,
 } from "@mediaos/contracts";
@@ -70,6 +71,28 @@ export class RoleAdminService {
     private readonly audit: AuditService,
     private readonly repo: RoleAdminRepository,
   ) {}
+
+  // ── (A0) đọc thành viên role (S2-AUTH-ROLEMEM-1) ─────────────────────────────
+
+  /**
+   * GET /auth/roles/:id/members — user ACTIVE đang giữ role này trong tenant của actor.
+   * Gate view:user (non-sensitive — response là dữ liệu account-level đã lộ sẵn qua GET /auth/users;
+   * KHÔNG PII HR). READ-ONLY: không audit, không mutation. Role lạ/đã xoá/operator-audience → 404.
+   */
+  async listMembers(actor: RequestUser, roleId: string): Promise<RoleMemberListDto> {
+    await this.assertCan(actor, "view", "user", false);
+    try {
+      return await this.db.withTenant(actor.companyId, async (tx) => {
+        if (!(await this.repo.findRoleByIdTx(tx, roleId))) {
+          throw new NotFoundException("Role not found");
+        }
+        const members = await this.repo.listRoleMembersTx(tx, actor.companyId, roleId);
+        return { members };
+      });
+    } catch (err) {
+      throw this.mapError(err, "Failed to list role members");
+    }
+  }
 
   // ── (A) create / update role ─────────────────────────────────────────────────
 

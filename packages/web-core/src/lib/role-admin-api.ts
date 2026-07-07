@@ -1,10 +1,12 @@
 import { z } from "zod";
 import {
   roleListSchema,
+  roleMemberListSchema,
   permissionListSchema,
   roleWriteResultSchema,
   rolePermissionGrantSchema,
   type RoleDto,
+  type RoleMemberListDto,
   type PermissionCatalogDto,
   type RoleWriteResultDto,
   type RolePermissionGrantDto,
@@ -35,6 +37,13 @@ import { apiFetch } from "./api-client";
  * cần thêm GET /auth/roles/:id/permissions để hoàn thiện UX ma trận thật.
  */
 export const roleAdminApi = {
+  /**
+   * S2-AUTH-ROLEMEM-1 — GET /auth/roles/:id/members: thành viên ACTIVE của role trong tenant
+   * (tab Thành viên). Gate BE view:user. Thêm/gỡ member dùng authUsersApi.assignRole/revokeRole.
+   */
+  getMembers: (roleId: string): Promise<RoleMemberListDto> =>
+    apiFetch(`/auth/roles/${roleId}/members`, roleMemberListSchema),
+
   /** GET /auth/roles — catalog role (own-tenant + system, loại operator). Trả mảng đã unwrap `.roles`. */
   listRoles: (): Promise<RoleDto[]> =>
     apiFetch("/auth/roles", roleListSchema).then((res) => res.roles),

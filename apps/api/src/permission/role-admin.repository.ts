@@ -1,7 +1,15 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { type TenantTx } from "../db/db.service";
-import { permissions, roles, rolePermissions, type Role, type RoleDataScope } from "../db/schema";
+import {
+  permissions,
+  roles,
+  rolePermissions,
+  userRoles,
+  users,
+  type Role,
+  type RoleDataScope,
+} from "../db/schema";
 import { notOperatorRole } from "./operator-roles";
 
 /**
@@ -122,6 +130,49 @@ export class RoleAdminRepository {
       .onConflictDoNothing()
       .returning();
     return row;
+  }
+
+  /**
+   * S2-AUTH-ROLEMEM-1 — thành viên ACTIVE của 1 role trong TENANT hiện tại (tab Thành viên).
+   * Membership là PER-TENANT qua user_roles.company_id (system role company_id NULL dùng CHUNG
+   * cross-tenant — KHÔNG được lộ member tenant khác) ⇒ lọc company_id TƯỜNG MINH + RLS lớp 2.
+   * Active = user_roles.deleted_at NULL (soft-delete mig 0471) + chưa hết hạn + user chưa xoá mềm.
+   */
+  async listRoleMembersTx(
+    tx: TenantTx,
+    companyId: string,
+    roleId: string,
+  ): Promise<
+    Array<{
+      userId: string;
+      email: string;
+      fullName: string | null;
+      status: string;
+      expiresAt: Date | null;
+      grantedAt: Date;
+    }>
+  > {
+    return tx
+      .select({
+        userId: users.id,
+        email: sql<string>`${users.email}::text`,
+        fullName: users.fullName,
+        status: users.status,
+        expiresAt: userRoles.expiresAt,
+        grantedAt: userRoles.createdAt,
+      })
+      .from(userRoles)
+      .innerJoin(users, eq(users.id, userRoles.userId))
+      .where(
+        and(
+          eq(userRoles.roleId, roleId),
+          eq(userRoles.companyId, companyId),
+          isNull(userRoles.deletedAt),
+          or(isNull(userRoles.expiresAt), gt(userRoles.expiresAt, sql`now()`)),
+          isNull(users.deletedAt),
+        ),
+      )
+      .orderBy(users.email);
   }
 
   /** DELETE role_permissions theo (roleId, permissionId, effect). Trả row đã xoá (undefined = 0 hàng). */
