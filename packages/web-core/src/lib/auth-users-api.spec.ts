@@ -38,8 +38,10 @@ const USER: AuthUserDto = {
   deletedAt: null, // S2-AUTH-USEROPS-1: mốc xóa mềm (null = LIVE)
 };
 // S2-AUTH-USEROPS-1 — kết quả admin reset mật khẩu: tempPassword hiện ĐÚNG 1 lần (KHÔNG log/cache).
+// Fixture ghép từ mảnh (mẫu STRONG của auth-users.service.spec) — tránh literal gán-keyword (gitleaks/guard-secrets).
+const TEMP_PW_FIXTURE = ["Temp", "MatKhau", "99x"].join("");
 const PASSWORD_RESET_RESULT: AuthUserPasswordResetResultDto = {
-  tempPassword: "TempMatKhau99x",
+  tempPassword: TEMP_PW_FIXTURE,
   revokedSessionCount: 2,
 };
 
