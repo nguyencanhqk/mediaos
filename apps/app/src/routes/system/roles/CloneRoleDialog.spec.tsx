@@ -3,7 +3,6 @@
  * Flow: createRole → getRolePermissions(source) → assignPermission tuần tự cho grant ALLOW ≤ Company;
  * SKIP có báo: DENY + System-scope. Lỗi 1 dòng không chặn các dòng sau.
  */
-import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { roleAdminApi } from "@mediaos/web-core";
