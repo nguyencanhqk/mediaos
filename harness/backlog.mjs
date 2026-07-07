@@ -3908,7 +3908,8 @@ export const backlog = [
     title:
       "Tab Thành viên trên RoleDetailPage: BE GET /auth/roles/:id/members + FE xem/gỡ/thêm nhanh theo người hoặc phòng ban (owner-request 2026-07-07)",
     zone: "red",
-    status: "in_progress",
+    // CLOSE 2026-07-07: MERGED PR #119 (squash 23e1686) — FULL gate PASS, 6 int-spec + 5 FE spec.
+    status: "done",
     paths: [
       "apps/api/src/permission/**",
       "apps/api/test/integration/**",
