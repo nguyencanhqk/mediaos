@@ -185,4 +185,13 @@ describe.skipIf(!runDb)("S2-AUTH-ROLEMEM-1 GET /auth/roles/:id/members", () => {
       .set("Authorization", `Bearer ${adminToken}`);
     expect(res.status, JSON.stringify(res.body)).toBe(404);
   });
+
+  it("N5 — operator-audience role (platform-admin f0) → 404, KHÔNG liệt kê membership control-plane", async () => {
+    // notOperatorRole() trong findRoleByIdTx là lá chắn chống-leo-thang — pin trực tiếp (gate MEDIUM finding).
+    const PLATFORM_ADMIN_ROLE = "00000000-0000-0000-0000-0000000000f0";
+    const res = await api(app)
+      .get(`/auth/roles/${PLATFORM_ADMIN_ROLE}/members`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(res.status, JSON.stringify(res.body)).toBe(404);
+  });
 });
