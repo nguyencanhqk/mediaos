@@ -39,3 +39,24 @@ export const permissionListSchema = z.object({
   permissions: z.array(permissionSchema),
 });
 export type PermissionListDto = z.infer<typeof permissionListSchema>;
+
+/**
+ * S2-AUTH-ROLEMEM-1 — GET /auth/roles/:id/members (tab Thành viên trên RoleDetailPage).
+ * CHỈ trường account-level đã lộ sẵn qua GET /auth/users — KHÔNG PII HR (lương/CCCD…).
+ * Membership là PER-TENANT (user_roles.company_id) kể cả với system role dùng chung.
+ */
+export const roleMemberSchema = z.object({
+  userId: z.string().uuid(),
+  email: z.string(),
+  fullName: z.string().nullable(),
+  status: z.string(),
+  /** Hết hạn grant (null = vô hạn). Hàng đã hết hạn KHÔNG xuất hiện trong list. */
+  expiresAt: z.coerce.date().nullable(),
+  grantedAt: z.coerce.date(),
+});
+export type RoleMemberDto = z.infer<typeof roleMemberSchema>;
+
+export const roleMemberListSchema = z.object({
+  members: z.array(roleMemberSchema),
+});
+export type RoleMemberListDto = z.infer<typeof roleMemberListSchema>;
