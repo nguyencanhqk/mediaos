@@ -1,7 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { DatabaseService } from "../../db/db.service";
+import { DatabaseService, type TenantTx } from "../../db/db.service";
 import { modules, type Module } from "../../db/schema/seed-tracking";
+import { companySettings } from "../../db/schema/settings";
 
 /**
  * S1-FND-MODULE-1 — đọc catalog `modules` (mig 0435).
@@ -44,5 +45,75 @@ export class ModuleCatalogRepository {
         .where(and(eq(modules.moduleCode, code), isNull(modules.deletedAt)))
         .limit(1),
     );
+  }
+
+  // ─── S2-FND-BE-8 — bật/tắt module: ghi company_settings 'module.<code>.enabled' (TENANT-SCOPED) ─────
+  // RIÊNG khỏi SettingRepository (KHÔNG export/mượn SettingService.updateCompanySetting). company_settings
+  // RLS+FORCE keyed company_id ⇒ MỌI method PHẢI chạy TRONG withTenant(actor.companyId) của service (tx
+  // truyền vào) — BẤT BIẾN #1. Soft-delete/status theo lược đồ (KHÔNG hard-delete — BẤT BIẾN #2).
+
+  /** Đọc override 'module.<code>.enabled' Active (chưa soft-delete) của tenant (cho toggle: old + insert/update). */
+  findModuleSettingTx(companyId: string, key: string, tx: TenantTx) {
+    return tx
+      .select()
+      .from(companySettings)
+      .where(
+        and(
+          eq(companySettings.companyId, companyId),
+          eq(companySettings.settingKey, key),
+          eq(companySettings.status, "Active"),
+          isNull(companySettings.deletedAt),
+        ),
+      )
+      .limit(1);
+  }
+
+  /** INSERT override 'module.<code>.enabled' MỚI (Boolean, category 'Module', non-sensitive). Trả hàng đã tạo. */
+  insertModuleSettingTx(
+    companyId: string,
+    key: string,
+    enabled: boolean,
+    moduleCode: string,
+    actorId: string,
+    tx: TenantTx,
+  ) {
+    return tx
+      .insert(companySettings)
+      .values({
+        companyId,
+        settingKey: key,
+        settingValue: enabled,
+        valueType: "Boolean",
+        category: "Module",
+        moduleCode,
+        isPublic: true,
+        isSensitive: false,
+        isEncrypted: false,
+        status: "Active",
+        createdBy: actorId,
+        updatedBy: actorId,
+      })
+      .returning();
+  }
+
+  /** UPDATE override đã có (đổi cờ bật/tắt). updatedAt/updatedBy tự set. Trả hàng sau update. */
+  updateModuleSettingTx(
+    companyId: string,
+    id: string,
+    enabled: boolean,
+    actorId: string,
+    tx: TenantTx,
+  ) {
+    return tx
+      .update(companySettings)
+      .set({ settingValue: enabled, updatedBy: actorId, updatedAt: new Date() })
+      .where(
+        and(
+          eq(companySettings.companyId, companyId),
+          eq(companySettings.id, id),
+          isNull(companySettings.deletedAt),
+        ),
+      )
+      .returning();
   }
 }

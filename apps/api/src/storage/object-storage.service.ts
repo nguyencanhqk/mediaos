@@ -2,12 +2,14 @@ import { Injectable, Logger } from "@nestjs/common";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ATTACHMENT_ALLOWED_CONTENT_TYPES, ATTACHMENT_MAX_BYTES } from "@mediaos/contracts";
 import { assertKeyInTenant, validateKey } from "./storage-key";
+import type { StorageStatResult } from "./storage-adapter.port";
 
 /**
  * Thrown when object storage is not configured (S3_ENDPOINT/keys/bucket missing). Fail-CLOSED: the
@@ -25,6 +27,17 @@ export class UnsupportedAttachmentError extends Error {
   constructor(reason: string) {
     super(reason);
     this.name = "UnsupportedAttachmentError";
+  }
+}
+
+/**
+ * Thrown when GetObjectCommand succeeds but the SDK response has no readable Body (malformed /
+ * unexpected — fail-CLOSED rather than fabricating an empty buffer, per silent-failure-hunter guard).
+ */
+export class StorageObjectBodyMissingError extends Error {
+  constructor(key: string) {
+    super(`Object storage trả về response không có Body cho key: ${key}`);
+    this.name = "StorageObjectBodyMissingError";
   }
 }
 
@@ -175,5 +188,65 @@ export class ObjectStorageService {
     assertKeyInTenant(key, companyId);
     const command = new GetObjectCommand({ Bucket: config.bucket, Key: key });
     return getSignedUrl(this.getClient(), command, { expiresIn: config.presignTtlSec });
+  }
+
+  /**
+   * HEAD the object at `key` (S2-FND-FILE-2 confirm-upload flow) — verify a client's presigned-PUT
+   * actually landed BEFORE the caller (FileService.confirm) marks the file row 'Uploaded'. Re-asserts
+   * `key ∈ companyId` prefix (cross-tenant guard) BEFORE the SDK call — mirrors createDownloadUrl.
+   * Never throws for a genuinely-absent object (404/NotFound): returns
+   * `{ exists: false, sizeBytes: null }` so the caller can set upload_status='Failed' instead of
+   * crashing. Any OTHER error (transport/auth) is rethrown — an unknown failure is NEVER silently
+   * reinterpreted as "object missing" (silent-failure-hunter guard).
+   */
+  async statObject(key: string, companyId: string): Promise<StorageStatResult> {
+    const config = this.assertConfigured();
+    assertKeyInTenant(key, companyId);
+    try {
+      const result = await this.getClient().send(
+        new HeadObjectCommand({ Bucket: config.bucket, Key: key }),
+      );
+      const sizeBytes = typeof result.ContentLength === "number" ? result.ContentLength : null;
+      return { exists: true, sizeBytes };
+    } catch (err) {
+      if (this.isNotFoundError(err)) {
+        return { exists: false, sizeBytes: null };
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Reads the full object body as bytes (S2-FND-FILE-2 confirm-upload flow) — used ONLY to compute a
+   * server-side checksum (e.g. SHA-256) during confirm. Re-asserts `key ∈ companyId` prefix BEFORE
+   * the SDK call. NOT for general download (downloads always go through the ephemeral presigned
+   * `get` URL — see createDownloadUrl). Throws StorageObjectBodyMissingError if the SDK response has
+   * no Body (malformed/unexpected — fail-closed rather than fabricating an empty buffer); other SDK
+   * errors (e.g. NoSuchKey) propagate unchanged (NOT swallowed).
+   */
+  async getObjectBytes(key: string, companyId: string): Promise<Uint8Array> {
+    const config = this.assertConfigured();
+    assertKeyInTenant(key, companyId);
+    const result = await this.getClient().send(
+      new GetObjectCommand({ Bucket: config.bucket, Key: key }),
+    );
+    if (!result.Body) {
+      throw new StorageObjectBodyMissingError(key);
+    }
+    return result.Body.transformToByteArray();
+  }
+
+  /**
+   * True when `err` represents an S3 "object not found" response (404 / NotFound / NoSuchKey).
+   * Duck-typed (rather than a strict `instanceof NotFound`) so MinIO/R2 responses that surface a
+   * differently-named error class but the same 404 semantics are still recognized. Any error that
+   * does NOT match is treated as a genuine failure by the caller (rethrown, never swallowed).
+   */
+  private isNotFoundError(err: unknown): boolean {
+    if (!err || typeof err !== "object") return false;
+    const name = (err as { name?: unknown }).name;
+    if (name === "NotFound" || name === "NoSuchKey") return true;
+    const metadata = (err as { $metadata?: { httpStatusCode?: number } }).$metadata;
+    return metadata?.httpStatusCode === 404;
   }
 }

@@ -1,5 +1,10 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import type { AuditLogDto, AuditLogListResponse, AuditLogQuery } from "@mediaos/contracts";
+import {
+  FOUNDATION_ERROR_CODES,
+  type AuditLogDto,
+  type AuditLogListResponse,
+  type AuditLogQuery,
+} from "@mediaos/contracts";
 import { DatabaseService } from "../../db/db.service";
 import { AuditMaskerService } from "../../events/audit-masker.service";
 import type { AuditLog } from "../../db/schema/audit";
@@ -44,7 +49,11 @@ export class AuditQueryService {
   /** COMPANY scope: 1 dòng audit theo id (RLS ép — id của tenant khác → NotFound). */
   async getCompanyDetail(companyId: string, id: string): Promise<AuditLogDto> {
     const row = await this.db.withTenant(companyId, (tx) => this.repo.findByIdTx(tx, id));
-    if (!row) throw new NotFoundException("Audit log không tồn tại");
+    if (!row)
+      throw new NotFoundException({
+        code: FOUNDATION_ERROR_CODES.AUDIT_NOT_FOUND,
+        message: "Audit log không tồn tại",
+      });
     return this.toDto(row);
   }
 
@@ -68,7 +77,11 @@ export class AuditQueryService {
     const row = await this.db.withPlatformReadContext((tx) =>
       this.repo.findByIdTx(tx, id, companyId),
     );
-    if (!row) throw new NotFoundException("Audit log không tồn tại");
+    if (!row)
+      throw new NotFoundException({
+        code: FOUNDATION_ERROR_CODES.AUDIT_NOT_FOUND,
+        message: "Audit log không tồn tại",
+      });
     return this.toDto(row);
   }
 

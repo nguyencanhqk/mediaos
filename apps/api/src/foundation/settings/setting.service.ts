@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, UnprocessableEntityException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
+import { FOUNDATION_ERROR_CODES } from "@mediaos/contracts";
 import { DatabaseService } from "../../db/db.service";
 import { AuditService } from "../../events/audit.service";
 import { PermissionService } from "../../permission/permission.service";
@@ -11,7 +17,11 @@ import {
   toPublicMap,
   toSafeView,
 } from "./setting-mask";
-import type { PatchCompanySettingInput, SettingValueType } from "./settings.dto";
+import type {
+  PatchCompanySettingInput,
+  PatchSystemSettingInput,
+  SettingValueType,
+} from "./settings.dto";
 
 interface Actor {
   id: string;
@@ -203,9 +213,10 @@ export class SettingService {
         dto.valueType !== undefined &&
         dto.valueType !== "SecretRef"
       ) {
-        throw new BadRequestException(
-          `Không thể đổi value_type của setting nhạy cảm '${key}' ra khỏi SecretRef.`,
-        );
+        throw new BadRequestException({
+          code: FOUNDATION_ERROR_CODES.SETTING_SECRET_STICKY,
+          message: `Không thể đổi value_type của setting nhạy cảm '${key}' ra khỏi SecretRef.`,
+        });
       }
 
       // value_type: dto > existing > system > default. valueType ép phải có để validate.
@@ -215,9 +226,10 @@ export class SettingService {
         systemRef?.valueType ??
         defaultMeta?.valueType) as SettingValueType | undefined;
       if (!valueType) {
-        throw new BadRequestException(
-          `Không xác định được value_type cho '${key}' — cung cấp valueType trong body.`,
-        );
+        throw new BadRequestException({
+          code: FOUNDATION_ERROR_CODES.SETTING_VALUE_TYPE_UNKNOWN,
+          message: `Không xác định được value_type cho '${key}' — cung cấp valueType trong body.`,
+        });
       }
 
       // validation_schema: ưu tiên existing rồi system (nguồn cấu hình hợp lệ; dto KHÔNG đổi schema ở WO này).
@@ -330,6 +342,181 @@ export class SettingService {
     });
   }
 
+  // ─── (5) System settings — GET (masked) + PATCH (validate + upsert + audit-in-tx) ───────────────
+  //
+  // Cổng = system-manage:foundation-setting (mig 0435, is_sensitive=TRUE, System-scope) — enforce ở
+  // controller (PermissionGuard). system_settings là GLOBAL no-RLS (KHÔNG company_id) ⇒ mọi tenant thấy
+  // CÙNG hàng; đọc/ghi vẫn đi qua db.withTenant(actor.companyId) để (a) nhất quán 1 chốt data-access và
+  // (b) audit_logs.company_id = actor.companyId (audit ghi ở home-tenant của actor). RIÊNG company path:
+  // KHÔNG chạm company_settings ở đây (validate + upsert đọc/ghi CHỈ system_settings).
+
+  /**
+   * GET /system-settings — LIST system_settings (masked y hệt company path). sensitive/encrypted/SecretRef →
+   * value '***'; secret_ref KHÔNG BAO GIỜ ra (setting-mask.toSafeView drop). scope='system'.
+   */
+  async getSystemSettings(
+    actor: Actor,
+    filter: { category?: string; moduleCode?: string },
+  ): Promise<SafeSettingView[]> {
+    const rows = await this.db.withTenant(actor.companyId, (tx) =>
+      this.repo.findSystemByFilterTx(filter, tx),
+    );
+    return rows.map((r) => toSafeView(toRaw(r), "system"));
+  }
+
+  /** GET /system-settings/:key — 1 system_setting (masked). Không tồn tại → 404 (KHÔNG lộ/không 500). */
+  async getSystemSetting(actor: Actor, key: string): Promise<SafeSettingView> {
+    const [row] = await this.db.withTenant(actor.companyId, (tx) =>
+      this.repo.findOneSystemTx(key, tx),
+    );
+    if (!row) {
+      throw new NotFoundException({
+        code: FOUNDATION_ERROR_CODES.SETTING_NOT_FOUND,
+        message: `system_setting '${key}' không tồn tại.`,
+      });
+    }
+    return toSafeView(toRaw(row), "system");
+  }
+
+  /**
+   * PATCH /system-settings/:key — upsert GLOBAL system_settings (KHÔNG company_settings). validate value_type +
+   * validation_schema ĐỌC TỪ HÀNG system_settings (existing — KHÔNG company override) TRƯỚC mọi side-effect
+   * (sai type → 400, sai schema → 422; KHÔNG upsert, KHÔNG audit). Trong db.withTenant(actor.companyId):
+   * đọc old → upsert qua updateSystemTx/insertSystemTx → AuditService.record SYSTEM_SETTING_UPDATED
+   * object_type='system_setting' CÙNG tx ⇒ audit_logs.company_id = actor.companyId. KHÔNG withTransaction
+   * (audit_logs.company_id lấy từ GUC tenant). KHÔNG secret_ref vào audit/response (mask-at-source). BẤT BIẾN #1/#2/#3.
+   */
+  async updateSystemSetting(
+    actor: Actor,
+    key: string,
+    dto: PatchSystemSettingInput,
+  ): Promise<SafeSettingView> {
+    return this.db.withTenant(actor.companyId, async (tx) => {
+      const [existing] = await this.repo.findOneSystemTx(key, tx);
+
+      // Sticky secret guard (y hệt company path): KHÔNG cho đổi value_type của setting nhạy cảm ra khỏi
+      // SecretRef — chặn un-mask giá trị nhạy cảm thành plaintext. KHÔNG upsert, KHÔNG audit.
+      if (
+        existing &&
+        (existing.valueType === "SecretRef" || existing.isSensitive) &&
+        dto.valueType !== undefined &&
+        dto.valueType !== "SecretRef"
+      ) {
+        throw new BadRequestException({
+          code: FOUNDATION_ERROR_CODES.SETTING_SECRET_STICKY,
+          message: `Không thể đổi value_type của system_setting nhạy cảm '${key}' ra khỏi SecretRef.`,
+        });
+      }
+
+      // value_type: dto > existing(system) > default. ĐỌC TỪ HÀNG system_settings (existing), KHÔNG company.
+      const defaultMeta = getSettingDefault(key);
+      const valueType = (dto.valueType ?? existing?.valueType ?? defaultMeta?.valueType) as
+        | SettingValueType
+        | undefined;
+      if (!valueType) {
+        throw new BadRequestException({
+          code: FOUNDATION_ERROR_CODES.SETTING_VALUE_TYPE_UNKNOWN,
+          message: `Không xác định được value_type cho system_setting '${key}' — cung cấp valueType trong body.`,
+        });
+      }
+
+      // validation_schema: CHỈ từ hàng system_settings (existing) — KHÔNG company override (đúng nguồn cấu hình).
+      const validationSchema = existing?.validationSchema ?? null;
+      this.validateValue(dto.settingValue, valueType, validationSchema);
+
+      const category = dto.category ?? existing?.category ?? defaultMeta?.category ?? "General";
+      const moduleCode = dto.moduleCode ?? existing?.moduleCode ?? defaultMeta?.moduleCode ?? null;
+
+      const oldSnapshot = existing
+        ? toAuditSnapshot({
+            settingKey: existing.settingKey,
+            settingValue: existing.settingValue,
+            valueType: existing.valueType,
+            category: existing.category,
+            moduleCode: existing.moduleCode,
+            isPublic: existing.isPublic,
+            isSensitive: existing.isSensitive,
+            isEncrypted: existing.isEncrypted,
+            status: existing.status,
+          })
+        : null;
+
+      let savedRow: typeof existing;
+      if (existing) {
+        const [updated] = await this.repo.updateSystemTx(
+          existing.id,
+          {
+            settingValue: dto.settingValue as never,
+            valueType,
+            category,
+            moduleCode,
+            description: dto.description ?? existing.description,
+            status: dto.status ?? existing.status,
+            updatedBy: actor.id,
+          },
+          tx,
+        );
+        savedRow = updated;
+      } else {
+        const [inserted] = await this.repo.insertSystemTx(
+          {
+            settingKey: key,
+            settingValue: dto.settingValue as never,
+            valueType,
+            category,
+            moduleCode,
+            description: dto.description ?? null,
+            isPublic: defaultMeta?.isPublic ?? false,
+            isSensitive: false,
+            isEncrypted: false,
+            status: dto.status ?? "Active",
+            createdBy: actor.id,
+            updatedBy: actor.id,
+          },
+          tx,
+        );
+        savedRow = inserted;
+      }
+
+      const newSnapshot = toAuditSnapshot({
+        settingKey: savedRow.settingKey,
+        settingValue: savedRow.settingValue,
+        valueType: savedRow.valueType,
+        category: savedRow.category,
+        moduleCode: savedRow.moduleCode,
+        isPublic: savedRow.isPublic,
+        isSensitive: savedRow.isSensitive,
+        isEncrypted: savedRow.isEncrypted,
+        status: savedRow.status,
+      });
+
+      // Audit CÙNG tx (BẤT BIẾN #2 append-only). object_type='system_setting' ∈ CHECK (mig 0439). action=
+      // 'SYSTEM_SETTING_UPDATED' (nhánh system-manage). dataScope='System' (cấp toàn hệ). old/new đã mask-at-
+      // source; AuditService cũng mask (phòng thủ chiều sâu) + auto changedFields. company_id = actor.companyId
+      // (từ GUC tenant của withTenant) — audit ghi ở home-tenant của actor thực hiện.
+      await this.audit.record(tx, {
+        action: "SYSTEM_SETTING_UPDATED",
+        objectType: "system_setting",
+        objectId: savedRow.id,
+        actorUserId: actor.id,
+        actorType: "User",
+        moduleCode: savedRow.moduleCode ?? undefined,
+        entityType: "system_setting",
+        entityId: savedRow.id,
+        entityCode: savedRow.settingKey,
+        oldValues: oldSnapshot ?? {},
+        newValues: newSnapshot,
+        sensitivityLevel: savedRow.isSensitive ? "Sensitive" : "Normal",
+        resultStatus: "Success",
+        dataScope: "System",
+        permissionCode: "FOUNDATION.SETTING.SYSTEM_MANAGE",
+        metadata: dto.reason ? { reason: dto.reason } : undefined,
+      });
+
+      return toSafeView(toRaw(savedRow), "system");
+    });
+  }
+
   /** Validate value_type + validation_schema (PURE). Sai type → 400; sai schema → 422. KHÔNG side-effect. */
   private validateValue(
     value: unknown,
@@ -342,7 +529,11 @@ export class SettingService {
 
   private assertValueType(value: unknown, valueType: SettingValueType): void {
     const fail = (m: string): never => {
-      throw new BadRequestException(m);
+      // 400 sai value_type → mã FOUNDATION-ERR-* (giữ nguyên message chi tiết theo từng loại).
+      throw new BadRequestException({
+        code: FOUNDATION_ERROR_CODES.SETTING_VALUE_TYPE,
+        message: m,
+      });
     };
     switch (valueType) {
       case "String":

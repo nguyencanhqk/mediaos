@@ -130,6 +130,45 @@ describe("RetentionService", () => {
       expect(harness.insertedValues[0].companyId).toBe(COMPANY);
       expect(harness.insertedValues[0].companyId).not.toBeNull();
     });
+
+    // S2-FND-BE-8: create HIỆN THIẾU audit → PHẢI ghi audit-in-tx RetentionPolicyCreated (append-only,
+    // CÙNG tx nghiệp vụ ⇒ rollback tx ⇒ 0 audit). object_type='retention_policy' (CHECK mig 0456).
+    it("ghi audit-in-tx object_type='retention_policy' action='RetentionPolicyCreated' CÙNG tx (rollback ⇒ 0 audit)", async () => {
+      harness = makeTx({ policy: makePolicy() });
+      const { db } = makeDb(harness);
+      const { audit, record } = makeAudit();
+      const svc = new RetentionService(db, audit);
+
+      await svc.createPolicy(
+        {
+          companyId: COMPANY,
+          moduleCode: "AUTH",
+          entityType: "audit_logs",
+          retentionDays: 365,
+          cleanupAction: "Delete",
+        },
+        { id: "actor-create-1" },
+      );
+
+      expect(record).toHaveBeenCalledTimes(1);
+      const [txArg, entry] = record.mock.calls[0] as unknown as [unknown, Record<string, unknown>];
+      // CÙNG tx nghiệp vụ (chèn policy) ⇒ audit và policy cùng commit/rollback (chứng minh cùng tx).
+      expect(txArg).toBe(harness.tx);
+      expect(entry.action).toBe("RetentionPolicyCreated");
+      expect(entry.actionGroup).toBe("CONFIG_UPDATE");
+      expect(entry.objectType).toBe("retention_policy");
+      expect(entry.objectId).toBe(POLICY_ID);
+      expect(entry.actorUserId).toBe("actor-create-1");
+      expect(entry.permissionCode).toBe("FOUNDATION.RETENTION.MANAGE");
+      // newValues = snapshot CẤU HÌNH (KHÔNG secret/PII/companyId/createdBy).
+      const newSnap = entry.newValues as Record<string, unknown>;
+      expect(newSnap).toHaveProperty("retentionDays");
+      expect(newSnap).toHaveProperty("cleanupAction");
+      expect(newSnap).not.toHaveProperty("companyId");
+      expect(newSnap).not.toHaveProperty("createdBy");
+      const serialized = JSON.stringify(entry);
+      expect(serialized).not.toMatch(/password|secret|token|identity_number|bank_account/i);
+    });
   });
 
   describe("updatePolicy", () => {
@@ -231,6 +270,15 @@ describe("RetentionService", () => {
       const drift = Math.abs(res.cutoffTime.getTime() - before);
       expect(drift).toBeLessThan(60_000); // < 1 phút sai lệch
     });
+
+    // S2-FND-BE-8: policy KHÔNG tồn tại/tenant khác (RLS che) ⇒ NotFoundException (404), TUYỆT ĐỐI KHÔNG
+    // 500 do cast 'as RetentionPolicyRow' rồi đọc .retentionDays trên undefined (NPE).
+    it("0 row ⇒ NotFoundException (fail-closed, KHÔNG 500/NPE)", async () => {
+      harness = makeTx({}); // KHÔNG policy → select().limit() trả []
+      const { db } = makeDb(harness);
+      const svc = new RetentionService(db);
+      await expect(svc.simulate(COMPANY, POLICY_ID)).rejects.toBeInstanceOf(NotFoundException);
+    });
   });
 
   describe("runCleanup", () => {
@@ -329,6 +377,16 @@ describe("RetentionService", () => {
       // tasks KHÔNG trong PROTECTED_TABLES ⇒ _deleteEligible chạy ⇒ execute gọi 2 lần (count + DELETE).
       expect(harness.calls.execute).toBe(2);
       expect(RetentionService.isProtectedTable("tasks")).toBe(false);
+    });
+
+    // S2-FND-BE-8: policy KHÔNG tồn tại/tenant khác ⇒ NotFoundException (404), KHÔNG 500 (cast NPE).
+    it("0 row ⇒ NotFoundException (fail-closed, KHÔNG 500/NPE) — KHÔNG phát lệnh nào", async () => {
+      harness = makeTx({}); // KHÔNG policy
+      const { db } = makeDb(harness);
+      const svc = new RetentionService(db);
+      await expect(svc.runCleanup(COMPANY, POLICY_ID)).rejects.toBeInstanceOf(NotFoundException);
+      expect(harness.calls.execute).toBe(0);
+      expect(harness.calls.delete).toBe(0);
     });
   });
 });

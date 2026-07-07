@@ -95,7 +95,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451+0456+0457+0459+0460+0461+0462+0463+0464+0468). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451+0456+0457+0459+0460+0461+0462+0463+0464+0468+0474). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -313,5 +313,15 @@ export const AUDIT_OBJECT_TYPES = [
   // ADD-only vào CHECK (clone 0464/0463/0462/0461/0460/0459/0456/0446/0440), append-only #2 nguyên vẹn;
   // INSERT audit KHÔNG vỡ audit_logs_object_type_chk trên Postgres thật.
   "public_holiday",
+  // S2-FND-BE-8 (mig 0474): module enable/disable config governance — Admin PATCH /foundation/modules/:code
+  // (ModuleService.toggleModule) ghi audit action_group='CONFIG_UPDATE' object_type='module'
+  // permission_code='FOUNDATION.MODULE.UPDATE' audit-in-tx app-tenant. old/new = snapshot cờ bật/tắt module
+  // (code/enabled) — KHÔNG salary/PII/secret vào before/after (BẤT BIẾN #3 — masker che nếu lọt). 7 module
+  // MVP core (AUTH/HR/ATT/LEAVE/TASK/DASH/NOTI) hard-lock KHÔNG toggle. Bật/tắt module đổi bề mặt ứng dụng
+  // toàn công ty = hành động quan trọng (SPEC-01 §16.3). 0474 UNION ADD-only vào CHECK (clone 0468/0464/0463/
+  // 0462/0461/0460/0459/0456/0446/0440), append-only #2 nguyên vẹn; INSERT audit KHÔNG vỡ
+  // audit_logs_object_type_chk trên Postgres thật. VERIFY-ONLY: 'system_setting' (0439) + 'retention_policy'
+  // (0456) ĐÃ có trong CHECK — KHÔNG thêm lại (lane be-system-settings/be-retention chạy song song, không dựa 0474).
+  "module",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

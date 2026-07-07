@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { FOUNDATION_ERROR_CODES } from "@mediaos/contracts";
 import { DatabaseService } from "../../db/db.service";
 import { AuditService } from "../../events/audit.service";
 import { type Company } from "../../db/schema/companies";
@@ -58,7 +59,11 @@ export class CompanyService {
     const existing = await this.db.withTenant(actor.companyId, (tx) =>
       this.repo.findCurrentTx(actor.companyId, tx),
     );
-    if (!existing) throw new NotFoundException("Không tìm thấy công ty.");
+    if (!existing)
+      throw new NotFoundException({
+        code: FOUNDATION_ERROR_CODES.COMPANY_NOT_FOUND,
+        message: "Không tìm thấy công ty.",
+      });
     return toView(existing);
   }
 
@@ -67,7 +72,11 @@ export class CompanyService {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const existing = await this.repo.findCurrentTx(actor.companyId, tx);
       // Fail-closed: company không tồn tại cho tenant hợp lệ → 4xx sạch (KHÔNG NPE/500, KHÔNG write/audit).
-      if (!existing) throw new NotFoundException("Không tìm thấy công ty.");
+      if (!existing)
+        throw new NotFoundException({
+          code: FOUNDATION_ERROR_CODES.COMPANY_NOT_FOUND,
+          message: "Không tìm thấy công ty.",
+        });
       // Suspended ⇒ 403 TRƯỚC mọi write/audit (BACKEND-04 §8.1 rule 1; allow-list status==='active').
       assertCompanyActive(existing.status);
 
@@ -77,7 +86,11 @@ export class CompanyService {
 
       const updated = await this.repo.updateTx(actor.companyId, patch, tx);
       // Fail-closed: 0 row (soft-delete chen ngang) → 4xx sạch, KHÔNG audit (BẤT BIẾN #2 không ghi nửa vời).
-      if (!updated) throw new NotFoundException("Không tìm thấy công ty.");
+      if (!updated)
+        throw new NotFoundException({
+          code: FOUNDATION_ERROR_CODES.COMPANY_NOT_FOUND,
+          message: "Không tìm thấy công ty.",
+        });
 
       // Audit CÙNG tx (BẤT BIẾN #2 append-only). object_type='company' ∈ AUDIT_OBJECT_TYPES + CHECK (0003+).
       // old/new = snapshot field hồ sơ; AuditService MASK (BẤT BIẾN #3) + tự tính changed_fields (chỉ TÊN field).

@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**132 WO** · có micro-plan: **47/132** · ⬜ 16 chờ · 🔵 1 đang làm · ✅ 115 xong · 🔴 0 chặn
+**132 WO** · có micro-plan: **48/132** · ⬜ 6 chờ · 🔵 0 đang làm · ✅ 126 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -98,24 +98,24 @@
 | `S2-AUTH-CAP-1` | 🔴 | ✅ xong | [📄](S2-AUTH-CAP-1.md) | — | Phơi capability sensitive qua /auth/me: thêm export:leave + view:leave |
 | `S2-AUTH-DB-4` | 🔴 | ✅ xong | [📄](S2-AUTH-DB-4.md) | — | 2FA per-user + pair reset-2fa:user (OWNER CHỐT 2026-07-03): cột users. |
 | `S2-AUTH-BE-11` | 🔴 | ✅ xong | [📄](S2-AUTH-BE-11.md) | ✅S2-AUTH-DB-4 | 2FA self-service hardening + role-write cờ ép: status trả required · d |
-| `S2-AUTH-BE-12` | 🔴 | 🔵 đang làm | [📄](S2-AUTH-BE-12.md) | ✅S2-AUTH-DB-4 ✅S2-AUTH-BE-11 | Admin 2FA controls: PATCH user requireTwoFactor + detail DTO twoFactor |
-| `S2-FE-ACCT-SEC-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S2-AUTH-BE-11 | FE Account Security: section Bảo mật trong /account/profile — trạng th |
-| `S2-FE-SYS-SEC-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S2-AUTH-BE-11 ⏳S2-AUTH-BE-12 | FE Admin security: /system/roles form toggle 'Bắt buộc 2FA' + /system/ |
-| `S2-AUTH-DB-3` | 🔴 | ⬜ chờ | — *(chưa)* | — | user_roles soft-delete (audit gap #4): thêm deleted_at/deleted_by + RE |
+| `S2-AUTH-BE-12` | 🔴 | ✅ xong | [📄](S2-AUTH-BE-12.md) | ✅S2-AUTH-DB-4 ✅S2-AUTH-BE-11 | Admin 2FA controls: PATCH user requireTwoFactor + detail DTO twoFactor |
+| `S2-FE-ACCT-SEC-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S2-AUTH-BE-11 | FE Account Security: section Bảo mật trong /account/profile — trạng th |
+| `S2-FE-SYS-SEC-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S2-AUTH-BE-11 ✅S2-AUTH-BE-12 | FE Admin security: /system/roles form toggle 'Bắt buộc 2FA' + /system/ |
+| `S2-AUTH-DB-3` | 🔴 | ✅ xong | — *(chưa)* | — | user_roles soft-delete (audit gap #4): thêm deleted_at/deleted_by + RE |
 | `S2-FE-AUTH-6` | 🟡 | ✅ xong | — *(chưa)* | ✅S2-FE-AUTH-1 | FE Account-layer còn thiếu: màn enroll 2FA trong apps/app khi mustSetu |
 | `S2-AUTH-DOC-1` | 🟢 | ✅ xong | [📄](S2-AUTH-DOC-1.md) | — | Pin lệch-có-chủ-đích vào docs AUTH (DB-02 · BACKEND-03 · API-02 · FRON |
 | `S2-FND-BE-4` | 🔴 | ✅ xong | [📄](S2-FND-BE-4.md) | — | File-access hardening (audit H1+H2): FilePolicy fallback FAIL-CLOSED c |
-| `S2-FND-BE-5` | 🔴 | ⬜ chờ | — *(chưa)* | — | Permission-surface reconcile (audit H4+H6): chốt cặp audit-log viewer  |
-| `S2-FND-BE-6` | 🔴 | ⬜ chờ | — *(chưa)* | — | Trả nợ audit CONFIG holiday (BE-6→BE-9, audit H5) + mở rộng audit-mask |
-| `S2-FND-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | REVOKE DELETE app-role trên companies + users (audit sát-HIGH, BẤT BIẾ |
+| `S2-FND-BE-5` | 🔴 | ✅ xong | — *(chưa)* | — | Permission-surface reconcile (audit H4+H6): chốt cặp audit-log viewer  |
+| `S2-FND-BE-6` | 🔴 | ✅ xong | — *(chưa)* | — | Trả nợ audit CONFIG holiday (BE-6→BE-9, audit H5) + mở rộng audit-mask |
+| `S2-FND-DB-1` | 🔴 | ✅ xong | — *(chưa)* | — | REVOKE DELETE app-role trên companies + users (audit sát-HIGH, BẤT BIẾ |
 | `S2-FND-SEED-2` | 🟡 | ✅ xong | — *(chưa)* | — | Runtime seeder HR + Sequences (audit H7, DB-10 §14): job_levels 8 + co |
-| `S2-FND-SEED-3` | 🔴 | ⬜ chờ | — *(chưa)* | — | Bootstrap dựng-từ-trống tự động (audit §4.2): seed default company ide |
-| `S2-FND-SEED-4` | 🟡 | ⬜ chờ | — *(chưa)* | — | Seed settings đủ theo DB-10 §11 (audit §4.2): bổ sung 9/14 system key  |
-| `S2-FND-BE-8` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S2-FND-BE-5 | Đóng permission-seed orphan (audit §6.3): system-settings GET/PATCH +  |
+| `S2-FND-SEED-3` | 🔴 | ✅ xong | — *(chưa)* | — | Bootstrap dựng-từ-trống tự động (audit §4.2): seed default company ide |
+| `S2-FND-SEED-4` | 🟡 | ✅ xong | — *(chưa)* | — | Seed settings đủ theo DB-10 §11 (audit §4.2): bổ sung 9/14 system key  |
+| `S2-FND-BE-8` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S2-FND-BE-5 | Đóng permission-seed orphan (audit §6.3): system-settings GET/PATCH +  |
 | `S2-FND-JOBS-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | System Jobs khung tối thiểu (audit §5.2, DB-08 §8.14-15 + BACKEND-11 § |
 | `S2-FND-FILE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S2-FND-BE-4 | Upload file E2E (audit H3, BACKEND-11 §11.4): chốt mô hình presigned-P |
 | `S2-FE-FND-7` | 🟡 | ✅ xong | — *(chưa)* | — | FE System sửa nhỏ theo audit (H8 + §7): defaultRoute app Hệ thống → /s |
-| `S2-FND-DB-2` | 🔴 | ⬜ chờ | — *(chưa)* | — | DB hygiene theo DB-09 (audit §3.2, P2): index bổ sung (files/file_acce |
+| `S2-FND-DB-2` | 🔴 | ✅ xong | — *(chưa)* | — | DB hygiene theo DB-09 (audit §3.2, P2): index bổ sung (files/file_acce |
 | `S2-FND-CONTRACT-1` | 🟡 | ⬜ chờ | — *(chưa)* | — | API contract hygiene theo BACKEND-12 (audit §6.2, P2): Swagger/OpenAPI |
 | `S2-FND-DOC-1` | 🟢 | ✅ xong | [📄](S2-FND-DOC-1.md) | — | Pin lệch-có-chủ-đích Foundation vào docs (DB-08/09/10 · BACKEND-04/11/ |
 
@@ -141,7 +141,7 @@
 | `S3-FE-ATT-2` | 🟡 | ✅ xong | [📄](S3-FE-ATT-2.md) | ✅S3-ATT-BE-2 ✅S3-FE-ATT-1 | FE ATT records (P0/P1): MyAttendanceRecordsPage + TeamAttendanceRecord |
 | `S3-FE-LEAVE-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S3-LEAVE-BE-2 ✅S3-FE-REGISTRY-1 | FE LEAVE me: MyLeaveBalancePage/LeaveBalanceCard + MyLeaveRequestsPage |
 | `S3-FE-LEAVE-2` | 🟡 | ✅ xong | [📄](S3-FE-LEAVE-2.md) | ✅S3-LEAVE-BE-3 ✅S3-FE-LEAVE-1 | FE LEAVE approval: LeaveApprovalPage + pending table + approval detail |
-| `S3-QA-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S3-ATT-BE-2 ✅S3-INT-1 | QA ATT: today/check-in/out rule + blocked-leave-day + records scope Ow |
+| `S3-QA-1` | 🔴 | ✅ xong | [📄](S3-QA-1.md) | ✅S3-ATT-BE-2 ✅S3-INT-1 | QA ATT: today/check-in/out rule + blocked-leave-day + records scope Ow |
 | `S3-QA-2` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S3-LEAVE-BE-3 ✅S3-INT-1 | QA LEAVE + integration: balance + request draft/submit/cancel/validati |
 | `S3-ATT-BE-4` | 🔴 | ✅ xong | [📄](S3-ATT-BE-4.md) | ✅S3-ATT-BE-2 ✅S2-INT-2 | ATT Adjustment workflow API (CO-S4-003): adjustment_requests create/li |
 | `S3-ATT-BE-5` | 🔴 | ✅ xong | [📄](S3-ATT-BE-5.md) | ✅S3-ATT-BE-2 ✅S2-INT-2 | ATT Remote/Onsite-work request workflow API (CO-S4-004): remote_work_r |

@@ -6,6 +6,38 @@ import { hrRequestStatusSchema } from "./attendance";
  * Đơn nghỉ duyệt qua Task Hub (task_type='hr'); trừ phép CHỈ lúc duyệt.
  */
 
+// ─── Leave type codes (canonical) — S3-LEAVE-SEED-2 ───────────────────────────
+//
+// CHỐT 2026-07-04 (owner, DB-10 §14.3 reconcile): "code thắng" — giữ mã NGẮN hiện có (ANNUAL/SICK/UNPAID/
+// OTHER) vì `leave_requests.leave_type_id` (FK) đã có dữ liệu tham chiếu qua `leave_types.code` này ở môi
+// trường đang chạy; đổi sang mã dài `_LEAVE` (bản nháp DB-10 §14.3 cũ) sẽ cần 1 migration DATA riêng —
+// KHÔNG làm ở lane này. DB-10 §14.3 đã cập nhật dòng CHỐT khớp bảng mã ngắn này (xem doc).
+//
+// Đây là NGUỒN SỰ THẬT DUY NHẤT cho mã loại nghỉ — seeder (`apps/api/src/leave/leave-master-data.seeder.ts`)
+// và FE PHẢI import `LEAVE_TYPE_CODES`/`leaveTypeCodeSchema` từ đây, KHÔNG hard-code chuỗi trùng lặp.
+export const LEAVE_TYPE_CODES = {
+  ANNUAL: "ANNUAL",
+  SICK: "SICK",
+  UNPAID: "UNPAID",
+  OTHER: "OTHER",
+  MATERNITY: "MATERNITY",
+  MARRIAGE: "MARRIAGE",
+  BEREAVEMENT: "BEREAVEMENT",
+  COMPENSATORY: "COMPENSATORY",
+} as const;
+
+export const leaveTypeCodeSchema = z.enum([
+  LEAVE_TYPE_CODES.ANNUAL,
+  LEAVE_TYPE_CODES.SICK,
+  LEAVE_TYPE_CODES.UNPAID,
+  LEAVE_TYPE_CODES.OTHER,
+  LEAVE_TYPE_CODES.MATERNITY,
+  LEAVE_TYPE_CODES.MARRIAGE,
+  LEAVE_TYPE_CODES.BEREAVEMENT,
+  LEAVE_TYPE_CODES.COMPENSATORY,
+]);
+export type LeaveTypeCode = z.infer<typeof leaveTypeCodeSchema>;
+
 // ─── leave_types ──────────────────────────────────────────────────────────────
 
 export const leaveTypeSchema = z.object({

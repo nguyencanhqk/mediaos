@@ -7,7 +7,8 @@
  *   (1) migration-seed system_settings  — mig 0435 (5 key) + 0470 (10 key) = 14 canonical §11.1 + DÔI.
  *   (2) SETTING_DEFAULTS                 — fallback hard-coded (src/foundation/settings/setting-defaults.ts).
  *   (3) DB-10 §11.1 (system) + §11.2 (company) — NGUỒN SỰ THẬT.
- * Fail nếu THIẾU/THỪA key ngoài danh mục đã CHỐT (DÔI file.allowed_mime_types + hr.contract_expiring_warning_days).
+ * Fail nếu THIẾU/THỪA key ngoài danh mục đã CHỐT (DÔI file.allowed_mime_types + hr.contract_expiring_warning_days
+ * + file.blocked_extensions + file.pending_ttl_hours).
  *
  * PURE (KHÔNG cần Postgres) → chạy trong MỌI run (KHÔNG gate LANE_DB). Đọc file migration THẬT (fs) để
  * cross-check migration-seed KHÔNG lệch SQL↔declared. Đây là driver RED của WO: trước khi mở rộng
@@ -90,8 +91,18 @@ const COMPANY_DEFAULT_KEYS_SYSTEM_WINS = ["notification.in_app_enabled"];
  * và/hoặc migration-seed mà KHÔNG tính là drift:
  *   • file.allowed_mime_types           — seed 0435, DB-10 §11.1 CHỐT "DÔI, giữ, KHÔNG xoá".
  *   • hr.contract_expiring_warning_days — S2-HR-BE-6 company-configurable fallback (không thuộc §11 seed).
+ *   • file.blocked_extensions           — S2-FND-FILE-2 code-default-ONLY (fallback tier, KHÔNG migration
+ *     seed): blocklist extension nguy hiểm cho register-upload; company override qua company_settings.
+ *   • file.pending_ttl_hours            — S2-FND-JOBS-1 code-default-ONLY (fallback tier cho
+ *     TEMP_FILE_CLEANUP job, KHÔNG migration seed) — cùng nhóm với file.blocked_extensions: ngưỡng số giờ
+ *     file upload_status='Pending' quá hạn thì job dọn coi là hết hạn; company override qua company_settings.
  */
-const AGREED_EXTRA_DEFAULT_KEYS = ["file.allowed_mime_types", "hr.contract_expiring_warning_days"];
+const AGREED_EXTRA_DEFAULT_KEYS = [
+  "file.allowed_mime_types",
+  "hr.contract_expiring_warning_days",
+  "file.blocked_extensions",
+  "file.pending_ttl_hours",
+];
 const AGREED_EXTRA_MIGRATION_KEYS = ["file.allowed_mime_types"];
 
 /** Tập key system_settings mà migration THẬT seed (0435 5 key + 0470 10 key) = 14 canonical + DÔI. */

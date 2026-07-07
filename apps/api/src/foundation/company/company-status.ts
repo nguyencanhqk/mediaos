@@ -1,4 +1,5 @@
 import { ForbiddenException } from "@nestjs/common";
+import { FOUNDATION_ERROR_CODES } from "@mediaos/contracts";
 
 /**
  * S1-FND-MODULE-1 — company status gate (allow-list, fail-closed).
@@ -16,6 +17,11 @@ export function isCompanyActive(status: string | null | undefined): boolean {
 /** Ép company active TRƯỚC mọi ghi nghiệp vụ. Không active → 403 (KHÔNG ghi, KHÔNG audit). */
 export function assertCompanyActive(status: string | null | undefined): void {
   if (!isCompanyActive(status)) {
-    throw new ForbiddenException("Công ty đang bị tạm ngưng — không thể thực hiện thao tác này.");
+    // Service-level business rule 403 (KHÔNG phải guard) ⇒ mang mã FOUNDATION-ERR-* (ranh giới 403,
+    // S2-FND-CONTRACT-1). PermissionGuard giữ AUTH-ERR-FORBIDDEN riêng.
+    throw new ForbiddenException({
+      code: FOUNDATION_ERROR_CODES.COMPANY_SUSPENDED,
+      message: "Công ty đang bị tạm ngưng — không thể thực hiện thao tác này.",
+    });
   }
 }

@@ -110,6 +110,10 @@ describe.skipIf(!hasLaneDb)(
         expiresAt: new Date(),
       }),
       get: storageGet,
+      // S2-FND-FILE-2 (storage-port): confirm-upload flow only — unused by this suite (upload/download
+      // security cases don't exercise confirm). Kept minimal so the stub still satisfies StorageAdapter.
+      stat: async () => ({ exists: true, sizeBytes: 0 }),
+      getBytes: async () => new Uint8Array(),
     };
 
     const service = new FileService(
@@ -205,10 +209,14 @@ describe.skipIf(!hasLaneDb)(
 
     // ── F2: path-traversal filename sanitize ─────────────────────────────────────────
     describe("F2 — filename path-traversal sanitized to tenant prefix", () => {
-      it("F2a — '../../secret.txt' but pdf MIME → stored basename, storage_path = {companyId}/files/{uuid}", async () => {
-        // Use a pdf MIME so the upload passes the allowlist; the point is the FILENAME sanitisation.
+      it("F2a — '../../secret.pdf' path-traversal → stored basename, storage_path = {companyId}/files/{uuid}", async () => {
+        // Fixture name uses a .pdf extension so it is CONSISTENT with declaredMimeType 'application/pdf'
+        // (S2-FND-FILE-2 extension↔MIME cross-check in mime-extension.ts rejects '.txt' + application/pdf
+        // as spoof — that path is covered by F1b). F2a's assertion target is FILENAME path-traversal
+        // sanitisation, so keep a valid-MIME name and prove '../../' never survives into the stored basename
+        // or the server-derived storage key.
         const dto = await service.upload(actor(), {
-          originalName: "../../secret.txt",
+          originalName: "../../secret.pdf",
           declaredMimeType: "application/pdf",
           sizeBytes: 32,
           visibility: "Private",
@@ -216,12 +224,12 @@ describe.skipIf(!hasLaneDb)(
 
         const row = await direct.query(
           `SELECT original_name, storage_path FROM files WHERE id = $1`,
-          [dto.id],
+          [dto.fileId],
         );
         // Basename only — no traversal segment kept.
-        expect(row.rows[0].original_name).toBe("secret.txt");
+        expect(row.rows[0].original_name).toBe("secret.pdf");
         // Server-derived key: exactly {companyId}/files/{uuid}; the name never leaks into the path.
-        expect(row.rows[0].storage_path).toBe(`${A.companyId}/files/${dto.id}`);
+        expect(row.rows[0].storage_path).toBe(`${A.companyId}/files/${dto.fileId}`);
         expect(String(row.rows[0].storage_path)).not.toContain("..");
         expect(String(row.rows[0].storage_path)).not.toContain("secret");
       });
@@ -235,7 +243,7 @@ describe.skipIf(!hasLaneDb)(
         });
         const row = await direct.query(
           `SELECT original_name, storage_path FROM files WHERE id = $1`,
-          [dto.id],
+          [dto.fileId],
         );
         expect(row.rows[0].original_name).toBe("shadow");
         expect(row.rows[0].storage_path).toMatch(
@@ -266,25 +274,25 @@ describe.skipIf(!hasLaneDb)(
           sizeBytes: 64,
           visibility: "Private",
         });
-        await service.deleteFile(actor(), dto.id);
+        await service.deleteFile(actor(), dto.fileId);
 
         // Confirm soft-delete (row kept, deleted_at set) — invariant #2 (not hard-delete).
         const row = await direct.query(
           `SELECT deleted_at, upload_status FROM files WHERE id = $1`,
-          [dto.id],
+          [dto.fileId],
         );
         expect(row.rowCount).toBe(1);
         expect(row.rows[0].deleted_at).not.toBeNull();
         expect(row.rows[0].upload_status).toBe("Deleted");
 
         storageGet.mockClear();
-        await expect(service.getDownloadUrl(actor(), dto.id)).rejects.toBeInstanceOf(
+        await expect(service.getDownloadUrl(actor(), dto.fileId)).rejects.toBeInstanceOf(
           NotFoundException,
         );
         // Deleted file resolves to 0 row (findByIdTx filters deleted_at) → 404 BEFORE presign.
         expect(storageGet).not.toHaveBeenCalled();
         // No Download access_granted=true was written for a deleted file.
-        expect(await countDownloadLogs(dto.id)).toBe(0);
+        expect(await countDownloadLogs(dto.fileId)).toBe(0);
       });
 
       it("F3b — getMetadata on a soft-deleted file → 404 (not visible after delete)", async () => {
@@ -294,8 +302,8 @@ describe.skipIf(!hasLaneDb)(
           sizeBytes: 16,
           visibility: "Private",
         });
-        await service.deleteFile(actor(), dto.id);
-        await expect(service.getMetadata(actor(), dto.id)).rejects.toBeInstanceOf(
+        await service.deleteFile(actor(), dto.fileId);
+        await expect(service.getMetadata(actor(), dto.fileId)).rejects.toBeInstanceOf(
           NotFoundException,
         );
       });
@@ -314,7 +322,7 @@ describe.skipIf(!hasLaneDb)(
           expect(dto).not.toHaveProperty(leak);
         }
 
-        const meta = await service.getMetadata(actor(), dto.id);
+        const meta = await service.getMetadata(actor(), dto.fileId);
         for (const leak of ["storagePath", "storedName", "checksumSha256"]) {
           expect(meta).not.toHaveProperty(leak);
         }
@@ -326,10 +334,10 @@ describe.skipIf(!hasLaneDb)(
         // upload_status to 'Uploaded' via confirm; here we set it directly to reach the presign branch.)
         await direct.query(
           `UPDATE files SET upload_status = 'Uploaded', scan_status = 'Clean' WHERE id = $1`,
-          [dto.id],
+          [dto.fileId],
         );
 
-        const dl = await service.getDownloadUrl(actor(), dto.id);
+        const dl = await service.getDownloadUrl(actor(), dto.fileId);
         // Short-lived url only — never the raw key; expiresAt present (TTL-bounded).
         expect(dl.url).toMatch(/^https:\/\//);
         expect(dl).not.toHaveProperty("storagePath");
@@ -350,7 +358,7 @@ describe.skipIf(!hasLaneDb)(
         const r = await direct.query(
           `SELECT after, metadata, old_values, new_values FROM audit_logs
              WHERE object_id = $1 AND action = 'FileUploaded' AND object_type = 'file'`,
-          [dto.id],
+          [dto.fileId],
         );
         expect(r.rowCount).toBe(1);
         const row = r.rows[0] as Record<string, unknown>;
@@ -359,7 +367,7 @@ describe.skipIf(!hasLaneDb)(
         // change leaked it into `after`, AuditMasker's 'storagepath' stem would still redact it — this
         // asserts BOTH layers hold against the REAL DB write.
         const serialized = JSON.stringify(row);
-        expect(serialized).not.toContain(`${A.companyId}/files/${dto.id}`);
+        expect(serialized).not.toContain(`${A.companyId}/files/${dto.fileId}`);
         expect(serialized.toLowerCase()).not.toContain("storage_path");
         // Non-sensitive metadata IS preserved (audit still useful).
         const after = row.after as Record<string, unknown> | null;

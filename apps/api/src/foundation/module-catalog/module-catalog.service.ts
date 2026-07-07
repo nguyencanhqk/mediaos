@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { FOUNDATION_ERROR_CODES } from "@mediaos/contracts";
 import { PermissionService } from "../../permission/permission.service";
 import { SettingService, type ResolvedSetting } from "../settings/setting.service";
 import type { Module } from "../../db/schema/seed-tracking";
@@ -124,7 +125,10 @@ export class ModuleCatalogService {
   async getModuleDetail(actor: Actor, code: string): Promise<AdminModuleDetail> {
     const [m] = await this.repo.findByCode(code);
     if (!m) {
-      throw new NotFoundException(`Module '${code}' không tồn tại.`);
+      throw new NotFoundException({
+        code: FOUNDATION_ERROR_CODES.MODULE_NOT_FOUND,
+        message: `Module '${code}' không tồn tại.`,
+      });
     }
     const resolved = await this.settings.resolveMany(actor.companyId, [settingKey(m.moduleCode)]);
     const resolvedByKey = new Map(resolved.map((r) => [r.key, r]));

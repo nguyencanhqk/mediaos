@@ -70,6 +70,10 @@ const stubStorage: StorageAdapter = {
     url: "https://signed.example/x",
     expiresAt: new Date(Date.now() + 300_000),
   }),
+  // S2-FND-FILE-2 (storage-port): confirm-upload flow only — unused by this suite (link() never
+  // touches storage). Kept minimal so the stub still satisfies StorageAdapter.
+  stat: async () => ({ exists: true, sizeBytes: 0 }),
+  getBytes: async () => new Uint8Array(),
 };
 
 /** Stub SettingService — returns the file.* defaults (precedence resolution covered elsewhere). */
@@ -129,7 +133,9 @@ describe.skipIf(!hasLaneDb)(
     });
 
     async function uploadFile(companyId: string, userId: string, name: string) {
-      return service.upload(
+      // S2-FND-FILE-2: upload() (register) now returns {fileId, uploadStatus, uploadUrl, expiresAt}. This
+      // helper adapts to `{ id }` so the existing DUP-link callers (which only need the file id) stay intact.
+      const res = await service.upload(
         { id: userId, companyId },
         {
           originalName: name,
@@ -138,6 +144,7 @@ describe.skipIf(!hasLaneDb)(
           visibility: "Private",
         },
       );
+      return { id: res.fileId };
     }
 
     it("(A) re-link ĐÚNG cùng (entity, file_id, link_type) lần 2 → 409 FOUNDATION-FILE-ERR-DUP-LINK", async () => {

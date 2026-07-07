@@ -9,7 +9,12 @@
  *    đúng → upsert + audit COMPANY_SETTING_UPDATED object_type='company_setting' CÙNG tx (1 lần record).
  */
 
-import { BadRequestException, UnprocessableEntityException } from "@nestjs/common";
+import {
+  BadRequestException,
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
+import { FOUNDATION_ERROR_CODES } from "@mediaos/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { SettingService } from "./setting.service";
 
@@ -47,6 +52,8 @@ interface RepoOverrides {
   findOneSystemTx?: ReturnType<typeof vi.fn>;
   insertCompanyTx?: ReturnType<typeof vi.fn>;
   updateCompanyTx?: ReturnType<typeof vi.fn>;
+  insertSystemTx?: ReturnType<typeof vi.fn>;
+  updateSystemTx?: ReturnType<typeof vi.fn>;
 }
 
 function makeRepo(over: RepoOverrides = {}) {
@@ -59,6 +66,8 @@ function makeRepo(over: RepoOverrides = {}) {
     findOneSystemTx: vi.fn().mockResolvedValue([]),
     insertCompanyTx: vi.fn().mockResolvedValue([row()]),
     updateCompanyTx: vi.fn().mockResolvedValue([row()]),
+    insertSystemTx: vi.fn().mockResolvedValue([row()]),
+    updateSystemTx: vi.fn().mockResolvedValue([row()]),
     ...over,
   };
 }
@@ -648,5 +657,261 @@ describe("SettingService.updateCompanySetting (value_type branches)", () => {
       svc.updateCompanySetting(actor, "weird.key", { settingValue: "x" }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(repo.insertCompanyTx).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * S2-FND-BE-8 — getSystemSettings / getSystemSetting (masked read, no company override).
+ */
+describe("SettingService.getSystemSettings / getSystemSetting (masked read)", () => {
+  it("getSystemSettings masks sensitive value + drops secret_ref, scope='system'", async () => {
+    const { svc } = makeService({
+      repo: makeRepo({
+        findSystemByFilterTx: vi.fn().mockResolvedValue([
+          row({ settingKey: "pub", settingValue: "v", isSensitive: false }),
+          row({
+            settingKey: "smtp.pw",
+            settingValue: "leak-secret",
+            isSensitive: true,
+            secretRef: "vault://smtp",
+            valueType: "SecretRef",
+          }),
+        ]),
+      }),
+    });
+    const out = await svc.getSystemSettings(actor, {});
+    const sens = out.find((r) => r.key === "smtp.pw");
+    expect(sens?.masked).toBe(true);
+    expect(sens?.value).toBe("***");
+    expect(sens?.scope).toBe("system");
+    const pub = out.find((r) => r.key === "pub");
+    expect(pub?.value).toBe("v");
+    expect(JSON.stringify(out)).not.toContain("leak-secret");
+    expect(JSON.stringify(out)).not.toContain("vault://smtp");
+    expect(JSON.stringify(out)).not.toContain("secretRef");
+  });
+
+  it("getSystemSetting returns single masked view for existing key", async () => {
+    const { svc } = makeService({
+      repo: makeRepo({
+        findOneSystemTx: vi.fn().mockResolvedValue([row({ settingKey: "k", settingValue: "vi" })]),
+      }),
+    });
+    const out = await svc.getSystemSetting(actor, "k");
+    expect(out).toMatchObject({ key: "k", value: "vi", scope: "system", masked: false });
+  });
+
+  it("getSystemSetting throws NotFound when key absent (not 500)", async () => {
+    const { svc } = makeService({
+      repo: makeRepo({ findOneSystemTx: vi.fn().mockResolvedValue([]) }),
+    });
+    await expect(svc.getSystemSetting(actor, "missing")).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+/**
+ * S2-FND-BE-8 — updateSystemSetting (validate from system row + upsert system_settings + audit-in-tx).
+ * KHÔNG chạm company_settings (assert insertCompanyTx/updateCompanyTx never called).
+ */
+describe("SettingService.updateSystemSetting (validate + system upsert + audit-in-tx)", () => {
+  it("wrong value_type (read from system row) → BadRequest, NO write, NO audit, NO company touch", async () => {
+    const repo = makeRepo({
+      findOneSystemTx: vi.fn().mockResolvedValue([row({ valueType: "Number" })]),
+    });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await expect(
+      svc.updateSystemSetting(actor, "file.max_upload_size_mb", { settingValue: "nope" }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(repo.updateSystemTx).not.toHaveBeenCalled();
+    expect(repo.insertSystemTx).not.toHaveBeenCalled();
+    expect(repo.insertCompanyTx).not.toHaveBeenCalled();
+    expect(repo.updateCompanyTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("validation_schema mismatch (max) read from system row → UnprocessableEntity, NO write, NO audit", async () => {
+    const repo = makeRepo({
+      findOneSystemTx: vi
+        .fn()
+        .mockResolvedValue([row({ valueType: "Number", validationSchema: { max: 100 } })]),
+    });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await expect(
+      svc.updateSystemSetting(actor, "file.max_upload_size_mb", { settingValue: 999 }),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(repo.updateSystemTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("valid update → updateSystemTx + exactly ONE audit SYSTEM_SETTING_UPDATED system_setting; NO company touch", async () => {
+    const existing = row({ settingKey: "sys.k", settingValue: 10, valueType: "Number" });
+    const updated = row({ settingKey: "sys.k", settingValue: 50, valueType: "Number" });
+    const repo = makeRepo({
+      findOneSystemTx: vi.fn().mockResolvedValue([existing]),
+      updateSystemTx: vi.fn().mockResolvedValue([updated]),
+    });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    const out = await svc.updateSystemSetting(actor, "sys.k", {
+      settingValue: 50,
+      reason: "raise",
+    });
+    expect(repo.updateSystemTx).toHaveBeenCalledTimes(1);
+    expect(repo.insertCompanyTx).not.toHaveBeenCalled();
+    expect(repo.updateCompanyTx).not.toHaveBeenCalled();
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    const [, entry] = audit.record.mock.calls[0];
+    expect(entry).toMatchObject({
+      action: "SYSTEM_SETTING_UPDATED",
+      objectType: "system_setting",
+      dataScope: "System",
+      permissionCode: "FOUNDATION.SETTING.SYSTEM_MANAGE",
+      actorUserId: ACTOR_ID,
+    });
+    expect(out.scope).toBe("system");
+    expect(out.value).toBe(50);
+  });
+
+  it("valid insert (key absent) → insertSystemTx + ONE audit; NO company touch", async () => {
+    const inserted = row({ settingKey: "sys.new", settingValue: true, valueType: "Boolean" });
+    const repo = makeRepo({
+      findOneSystemTx: vi.fn().mockResolvedValue([]),
+      insertSystemTx: vi.fn().mockResolvedValue([inserted]),
+    });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await svc.updateSystemSetting(actor, "sys.new", { settingValue: true, valueType: "Boolean" });
+    expect(repo.insertSystemTx).toHaveBeenCalledTimes(1);
+    expect(repo.insertCompanyTx).not.toHaveBeenCalled();
+    expect(audit.record).toHaveBeenCalledTimes(1);
+  });
+
+  it("no value_type resolvable (absent + no dto + no default) → BadRequest, NO write", async () => {
+    const repo = makeRepo({ findOneSystemTx: vi.fn().mockResolvedValue([]) });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await expect(
+      svc.updateSystemSetting(actor, "totally.unknown.key", { settingValue: "x" }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(repo.insertSystemTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("sticky secret guard: existing sensitive SecretRef + dto.valueType='String' → BadRequest, NO write", async () => {
+    const existing = row({
+      settingKey: "sys.secret",
+      settingValue: "old",
+      valueType: "SecretRef",
+      isSensitive: true,
+    });
+    const repo = makeRepo({ findOneSystemTx: vi.fn().mockResolvedValue([existing]) });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await expect(
+      svc.updateSystemSetting(actor, "sys.secret", {
+        settingValue: "plain",
+        valueType: "String",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(repo.updateSystemTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("audit oldValues/newValues mask value for sensitive system setting", async () => {
+    const existing = row({
+      settingKey: "sys.secret",
+      settingValue: "old-secret",
+      valueType: "SecretRef",
+      isSensitive: true,
+    });
+    const updated = row({
+      settingKey: "sys.secret",
+      settingValue: "new-secret",
+      valueType: "SecretRef",
+      isSensitive: true,
+    });
+    const repo = makeRepo({
+      findOneSystemTx: vi.fn().mockResolvedValue([existing]),
+      updateSystemTx: vi.fn().mockResolvedValue([updated]),
+    });
+    const audit = makeAudit();
+    const { svc } = makeService({ repo, audit });
+    await svc.updateSystemSetting(actor, "sys.secret", { settingValue: "vault://new" });
+    const [, entry] = audit.record.mock.calls[0];
+    expect(JSON.stringify(entry.oldValues)).not.toContain("old-secret");
+    expect(JSON.stringify(entry.newValues)).not.toContain("new-secret");
+    expect(JSON.stringify(entry.oldValues)).toContain("***");
+  });
+});
+
+// ─── S2-FND-CONTRACT-1: payload.code FOUNDATION-ERR-* + secret-strip trên error body ────────────────
+describe("SettingService error-code payload (S2-FND-CONTRACT-1)", () => {
+  async function catchErr(p: Promise<unknown>): Promise<{ code?: string; message?: string }> {
+    try {
+      await p;
+    } catch (e) {
+      return (e as { getResponse(): { code?: string; message?: string } }).getResponse();
+    }
+    throw new Error("expected throw");
+  }
+
+  it("wrong value_type → 400 code SETTING_VALUE_TYPE, message gốc GIỮ, KHÔNG lộ giá trị nhập", async () => {
+    const repo = makeRepo({
+      findOneSystemTx: vi.fn().mockResolvedValue([row({ valueType: "Number" })]),
+    });
+    const { svc } = makeService({ repo });
+    const res = await catchErr(
+      svc.updateCompanySetting(actor, "file.max_upload_size_mb", {
+        settingValue: "super-secret-raw-value",
+      }),
+    );
+    expect(res.code).toBe(FOUNDATION_ERROR_CODES.SETTING_VALUE_TYPE);
+    expect(res.message).toContain("value phải là number");
+    // BẤT BIẾN #3: giá trị client gửi KHÔNG được nội suy vào error body.
+    expect(JSON.stringify(res)).not.toContain("super-secret-raw-value");
+  });
+
+  it("system_setting absent → 404 code SETTING_NOT_FOUND + message gốc (key name, không phải secret)", async () => {
+    const repo = makeRepo({ findOneSystemTx: vi.fn().mockResolvedValue([]) });
+    const { svc } = makeService({ repo });
+    const res = await catchErr(svc.getSystemSetting(actor, "missing.key"));
+    expect(res.code).toBe(FOUNDATION_ERROR_CODES.SETTING_NOT_FOUND);
+    expect(res.message).toBe("system_setting 'missing.key' không tồn tại.");
+  });
+
+  it("sticky secret guard → 400 code SETTING_SECRET_STICKY, KHÔNG lộ settingValue nhạy cảm", async () => {
+    const existing = row({
+      settingKey: "smtp.password",
+      settingValue: "old-plaintext-pw",
+      valueType: "SecretRef",
+      isSensitive: true,
+    });
+    const repo = makeRepo({ findOneCompanyTx: vi.fn().mockResolvedValue([existing]) });
+    const { svc } = makeService({ repo });
+    const res = await catchErr(
+      svc.updateCompanySetting(actor, "smtp.password", {
+        settingValue: "leak-me",
+        valueType: "String",
+      }),
+    );
+    expect(res.code).toBe(FOUNDATION_ERROR_CODES.SETTING_SECRET_STICKY);
+    expect(JSON.stringify(res)).not.toContain("old-plaintext-pw");
+    expect(JSON.stringify(res)).not.toContain("leak-me");
+  });
+
+  it("validation_schema (422) GIỮ mã VALIDATION-ERR-* — KHÔNG mang code FOUNDATION-ERR-*", async () => {
+    const repo = makeRepo({
+      findOneSystemTx: vi
+        .fn()
+        .mockResolvedValue([row({ valueType: "Number", validationSchema: { min: 10 } })]),
+    });
+    const { svc } = makeService({ repo });
+    // assertSchema fail → UnprocessableEntity KHÔNG gắn code ⇒ AllExceptionsFilter map 422→VALIDATION-ERR-001.
+    const res = await catchErr(
+      svc.updateCompanySetting(actor, "file.max_upload_size_mb", { settingValue: 5 }),
+    );
+    expect(res.code).toBeUndefined();
   });
 });

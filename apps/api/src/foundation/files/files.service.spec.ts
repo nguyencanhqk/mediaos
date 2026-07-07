@@ -22,6 +22,7 @@ import {
   ForbiddenException,
   NotFoundException,
   PayloadTooLargeException,
+  UnprocessableEntityException,
   UnsupportedMediaTypeException,
 } from "@nestjs/common";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -82,6 +83,9 @@ interface Harness {
     listTx: ReturnType<typeof vi.fn>;
     countTx: ReturnType<typeof vi.fn>;
     softDeleteTx: ReturnType<typeof vi.fn>;
+    markUploadedTx: ReturnType<typeof vi.fn>;
+    markFailedTx: ReturnType<typeof vi.fn>;
+    incrementDownloadCountTx: ReturnType<typeof vi.fn>;
   };
   linkRepo: {
     insertTx: ReturnType<typeof vi.fn>;
@@ -104,6 +108,8 @@ interface Harness {
     put: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
     signedUrl: ReturnType<typeof vi.fn>;
+    stat: ReturnType<typeof vi.fn>;
+    getBytes: ReturnType<typeof vi.fn>;
   };
   settings: { resolveMany: ReturnType<typeof vi.fn> };
   txInserts: { table: string; row: Record<string, unknown> }[];
@@ -134,6 +140,9 @@ function makeHarness(policyDecision: FilePolicyDecision = ALLOW): Harness {
     listTx: vi.fn(async () => []),
     countTx: vi.fn(async () => 0),
     softDeleteTx: vi.fn(async () => 1),
+    markUploadedTx: vi.fn(async () => 1),
+    markFailedTx: vi.fn(async () => 1),
+    incrementDownloadCountTx: vi.fn(async () => 1),
   };
   const linkRepo = {
     insertTx: vi.fn(),
@@ -168,7 +177,14 @@ function makeHarness(policyDecision: FilePolicyDecision = ALLOW): Harness {
     })),
     put: vi.fn(),
     delete: vi.fn(),
-    signedUrl: vi.fn(),
+    // S2-FND-FILE-2 — register presigned-PUT (upload()) returns {url, expiresAt}.
+    signedUrl: vi.fn(async () => ({
+      url: "https://signed.example/put",
+      expiresAt: new Date("2026-06-24T00:05:00Z"),
+    })),
+    // S2-FND-FILE-2 — confirm HEAD/GET. Defaults: object exists, size matches the register fixture (1024).
+    stat: vi.fn(async () => ({ exists: true, sizeBytes: 1024 })),
+    getBytes: vi.fn(async () => new Uint8Array([1, 2, 3, 4])),
   };
 
   const settings = {
@@ -180,6 +196,12 @@ function makeHarness(policyDecision: FilePolicyDecision = ALLOW): Harness {
         found: true,
       },
       { key: "file.max_upload_size_mb", value: 25, scope: "default", found: true },
+      {
+        key: "file.blocked_extensions",
+        value: ["exe", "bat", "sh", "html", "svg", "js"],
+        scope: "default",
+        found: true,
+      },
     ]),
   };
 
@@ -323,16 +345,97 @@ describe("FileService (deny-path / validation RED)", () => {
       expect(dto).not.toHaveProperty("storagePath");
       expect(dto).not.toHaveProperty("storedName");
     });
+
+    // S2-FND-FILE-2 — register returns presigned-PUT response {fileId, uploadStatus:'Pending', uploadUrl, expiresAt}.
+    it("register response = {fileId, uploadStatus:'Pending', uploadUrl (presigned-PUT), expiresAt} — NO storage_path", async () => {
+      h.fileRepo.insertTx.mockImplementation(async (row) => makeFileRow(row));
+      const res = await h.service.upload(user, baseUpload);
+
+      expect(res.fileId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(res.uploadStatus).toBe("Pending");
+      expect(res.uploadUrl).toMatch(/^https:\/\//);
+      expect(typeof res.expiresAt).toBe("string");
+      // presigned-PUT requested with server-derived key + declared content-type + size (no client path).
+      expect(h.storage.signedUrl).toHaveBeenCalledTimes(1);
+      const signArg = h.storage.signedUrl.mock.calls[0][0];
+      expect(signArg.contentType).toBe("application/pdf");
+      expect(signArg.sizeBytes).toBe(1024);
+      expect(String(signArg.key)).toMatch(new RegExp(`^${COMPANY}/files/[0-9a-f-]{36}$`));
+      // BẤT BIẾN #2.3 — no storage internals leak in the register response.
+      expect(res).not.toHaveProperty("storagePath");
+      expect(res).not.toHaveProperty("storage_path");
+      expect(res).not.toHaveProperty("checksumSha256");
+    });
+  });
+
+  // 2b. S2-FND-FILE-2 — blocked_extensions + extension↔MIME spoof (insecure-upload RED) ─────
+  describe("insecure-upload guards (blocked extension + MIME-spoof) — no row/no presign", () => {
+    const base = {
+      declaredMimeType: "image/png",
+      sizeBytes: 16,
+      visibility: "Private" as const,
+    };
+
+    it.each(["evil.exe", "run.sh", "page.html", "vector.svg"])(
+      "blocked extension %j → 415 FOUNDATION-FILE-ERR-BLOCKED, NO row/no presign",
+      async (originalName) => {
+        let caught: unknown;
+        try {
+          await h.service.upload(user, { ...base, originalName });
+        } catch (err) {
+          caught = err;
+        }
+        expect(caught).toBeInstanceOf(UnsupportedMediaTypeException);
+        expect((caught as UnsupportedMediaTypeException).getStatus()).toBe(415);
+        expect((caught as { getResponse(): { code?: string } }).getResponse().code).toBe(
+          "FOUNDATION-FILE-ERR-BLOCKED",
+        );
+        expect(h.fileRepo.insertTx).not.toHaveBeenCalled();
+        expect(h.storage.signedUrl).not.toHaveBeenCalled();
+      },
+    );
+
+    it("extension↔MIME mismatch (report.pdf declared image/png) → 415 FOUNDATION-FILE-ERR-EXTENSION, NO row", async () => {
+      let caught: unknown;
+      try {
+        await h.service.upload(user, { ...base, originalName: "report.pdf" });
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(UnsupportedMediaTypeException);
+      expect((caught as { getResponse(): { code?: string } }).getResponse().code).toBe(
+        "FOUNDATION-FILE-ERR-EXTENSION",
+      );
+      expect(h.fileRepo.insertTx).not.toHaveBeenCalled();
+    });
+
+    it("MIME reject / SIZE reject carry the FOUNDATION-FILE-ERR-* code in the exception payload (envelope surfacing)", async () => {
+      const mime = await h.service
+        .upload(user, { ...base, originalName: "x.png", declaredMimeType: "application/x-evil" })
+        .catch((e: unknown) => e);
+      expect((mime as { getResponse(): { code?: string } }).getResponse().code).toBe(
+        "FOUNDATION-FILE-ERR-MIME",
+      );
+      const size = await h.service
+        .upload(user, { ...base, originalName: "x.png", sizeBytes: 26 * 1024 * 1024 })
+        .catch((e: unknown) => e);
+      expect((size as { getResponse(): { code?: string } }).getResponse().code).toBe(
+        "FOUNDATION-FILE-ERR-SIZE",
+      );
+    });
   });
 
   // 3. path-traversal filename → key always inside tenant prefix ────────────────────
   describe("filename path-traversal → server-derived key inside {companyId}/files/", () => {
     const prefix = `${COMPANY}/files/`;
 
+    // NOTE (S2-FND-FILE-2): names use png / no-extension so the register extension↔MIME + blocked_extensions
+    // guards pass — this suite tests KEY DERIVATION (traversal stripped), not the extension guards (those have
+    // their own suite below). A '.exe' basename is now correctly rejected as blocked, so we use '.png' here.
     it.each([
       ["../../../etc/passwd", "passwd"],
       ["/etc/shadow", "shadow"],
-      ["..\\..\\windows\\system32\\cmd.exe", "cmd.exe"],
+      ["..\\..\\windows\\system32\\cmd.png", "cmd.png"],
       ["normal name.png", "normal name.png"],
     ])(
       "originalName %j → stored basename %j, storage_path inside tenant prefix",
@@ -690,6 +793,120 @@ describe("FileService (deny-path / validation RED)", () => {
       expect(dto.uploadStatus).toBe("Pending");
       expect(dto.scanStatus).toBe("Infected");
     });
+  });
+});
+
+// S2-FND-FILE-2 — confirmUpload state transitions (Pending → Uploaded / Failed) ─────────
+describe("FileService.confirmUpload (S2-FND-FILE-2)", () => {
+  let h: Harness;
+  beforeEach(() => {
+    h = makeHarness();
+  });
+
+  it("missing / cross-tenant file (row undefined) → NotFound, storage NOT touched, no state change", async () => {
+    h.fileRepo.findByIdTx.mockResolvedValue(undefined);
+    await expect(h.service.confirmUpload(user, FILE, {})).rejects.toBeInstanceOf(NotFoundException);
+    expect(h.storage.stat).not.toHaveBeenCalled();
+    expect(h.fileRepo.markUploadedTx).not.toHaveBeenCalled();
+    expect(h.fileRepo.markFailedTx).not.toHaveBeenCalled();
+  });
+
+  it("happy path: exists + size matches → stat+getBytes+sha256 → markUploaded, returns Uploaded", async () => {
+    h.fileRepo.findByIdTx.mockResolvedValue(
+      makeFileRow({ uploadStatus: "Pending", fileSizeBytes: 4 }),
+    );
+    h.storage.stat.mockResolvedValue({ exists: true, sizeBytes: 4 });
+    h.storage.getBytes.mockResolvedValue(new Uint8Array([1, 2, 3, 4]));
+
+    const res = await h.service.confirmUpload(user, FILE, {});
+    expect(res).toMatchObject({ fileId: FILE, uploadStatus: "Uploaded", sizeBytes: 4 });
+    expect(h.fileRepo.markUploadedTx).toHaveBeenCalledTimes(1);
+    // server-side checksum persisted; confirm RESPONSE must NOT leak the checksum (BẤT BIẾN #2.3).
+    const persisted = h.fileRepo.markUploadedTx.mock.calls[0][2];
+    expect(persisted.checksumSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(res).not.toHaveProperty("checksumSha256");
+    expect(h.fileRepo.markFailedTx).not.toHaveBeenCalled();
+  });
+
+  it("object absent → markFailed('object-absent') + 422 FOUNDATION-FILE-ERR-CONFIRM-ABSENT, checksum NOT persisted", async () => {
+    h.fileRepo.findByIdTx.mockResolvedValue(makeFileRow({ uploadStatus: "Pending" }));
+    h.storage.stat.mockResolvedValue({ exists: false, sizeBytes: null });
+
+    const caught = await h.service.confirmUpload(user, FILE, {}).catch((e: unknown) => e);
+    expect(caught).toBeInstanceOf(UnprocessableEntityException);
+    expect((caught as { getResponse(): { code?: string } }).getResponse().code).toBe(
+      "FOUNDATION-FILE-ERR-CONFIRM-ABSENT",
+    );
+    expect(h.fileRepo.markFailedTx).toHaveBeenCalledTimes(1);
+    expect(h.fileRepo.markFailedTx.mock.calls[0][2]).toBe("object-absent");
+    expect(h.fileRepo.markUploadedTx).not.toHaveBeenCalled();
+    expect(h.storage.getBytes).not.toHaveBeenCalled();
+  });
+
+  it("size mismatch → markFailed('size-mismatch') + 409 FOUNDATION-FILE-ERR-CONFIRM-MISMATCH, no checksum", async () => {
+    h.fileRepo.findByIdTx.mockResolvedValue(
+      makeFileRow({ uploadStatus: "Pending", fileSizeBytes: 1024 }),
+    );
+    h.storage.stat.mockResolvedValue({ exists: true, sizeBytes: 9999 });
+
+    const caught = await h.service.confirmUpload(user, FILE, {}).catch((e: unknown) => e);
+    expect(caught).toBeInstanceOf(ConflictException);
+    expect((caught as { getResponse(): { code?: string } }).getResponse().code).toBe(
+      "FOUNDATION-FILE-ERR-CONFIRM-MISMATCH",
+    );
+    expect(h.fileRepo.markFailedTx).toHaveBeenCalledTimes(1);
+    expect(h.fileRepo.markUploadedTx).not.toHaveBeenCalled();
+    expect(h.storage.getBytes).not.toHaveBeenCalled();
+  });
+
+  it("already Uploaded → idempotent 200 (returns Uploaded, no storage/mark)", async () => {
+    h.fileRepo.findByIdTx.mockResolvedValue(
+      makeFileRow({ uploadStatus: "Uploaded", fileSizeBytes: 1024 }),
+    );
+    const res = await h.service.confirmUpload(user, FILE, {});
+    expect(res).toMatchObject({ fileId: FILE, uploadStatus: "Uploaded" });
+    expect(h.storage.stat).not.toHaveBeenCalled();
+    expect(h.fileRepo.markUploadedTx).not.toHaveBeenCalled();
+  });
+
+  it("non-Pending non-Uploaded (Failed) → 409 FOUNDATION-FILE-ERR-NOT-PENDING", async () => {
+    h.fileRepo.findByIdTx.mockResolvedValue(makeFileRow({ uploadStatus: "Failed" }));
+    const caught = await h.service.confirmUpload(user, FILE, {}).catch((e: unknown) => e);
+    expect(caught).toBeInstanceOf(ConflictException);
+    expect((caught as { getResponse(): { code?: string } }).getResponse().code).toBe(
+      "FOUNDATION-FILE-ERR-NOT-PENDING",
+    );
+    expect(h.storage.stat).not.toHaveBeenCalled();
+  });
+});
+
+// S2-FND-FILE-2 — download bumps download_count best-effort (counter failure must not fail download) ──
+describe("getDownloadUrl download_count (best-effort)", () => {
+  let h: Harness;
+  beforeEach(() => {
+    h = makeHarness();
+  });
+
+  it("ALLOW + Uploaded → increments download_count once", async () => {
+    h.fileRepo.findByIdTx.mockResolvedValue(
+      makeFileRow({ uploadStatus: "Uploaded", scanStatus: "Clean" }),
+    );
+    await h.service.getDownloadUrl(user, FILE);
+    expect(h.fileRepo.incrementDownloadCountTx).toHaveBeenCalledTimes(1);
+    expect(h.fileRepo.incrementDownloadCountTx).toHaveBeenCalledWith(
+      COMPANY,
+      FILE,
+      expect.anything(),
+    );
+  });
+
+  it("counter update failure does NOT fail the download (best-effort, swallowed-with-log)", async () => {
+    h.fileRepo.findByIdTx.mockResolvedValue(
+      makeFileRow({ uploadStatus: "Uploaded", scanStatus: "Clean" }),
+    );
+    h.fileRepo.incrementDownloadCountTx.mockRejectedValue(new Error("counter update failed"));
+    const dto = await h.service.getDownloadUrl(user, FILE);
+    expect(dto.url).toMatch(/^https:\/\//); // download still succeeds despite counter failure
   });
 });
 

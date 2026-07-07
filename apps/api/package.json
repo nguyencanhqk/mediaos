@@ -13,7 +13,8 @@
     "test:cov:sensitive": "vitest run src/auth src/permission src/employees test/integration/auth.int-spec.ts test/integration/auth-me-bootstrap.int-spec.ts test/integration/two-factor-login.int-spec.ts test/integration/auth-logout.int-spec.ts test/integration/auth-blocked-status.int-spec.ts test/integration/auth-coverage.int-spec.ts test/integration/employees-rbac-scope.int-spec.ts test/integration/employees-salary-sensitive.int-spec.ts --coverage --coverage.include='src/permission/data-scope.service.ts' --coverage.include='src/auth/auth.service.ts' --coverage.include='src/permission/permission.service.ts' --coverage.include='src/auth/auth-logs-viewer.controller.ts' --coverage.include='src/auth/auth-logs-viewer.service.ts' --coverage.include='src/auth/login-log.repository.ts' --coverage.include='src/auth/security-event.repository.ts' --coverage.reporter=text-summary --coverage.reporter=text --no-file-parallelism --coverage.clean=true",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "db:check": "tsx src/db/check.ts"
+    "db:check": "tsx src/db/check.ts",
+    "gen:openapi": "nest build && node dist/scripts/gen-openapi.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.2",
@@ -26,6 +27,7 @@
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.1.24",
     "@nestjs/platform-socket.io": "^11.1.26",
+    "@nestjs/swagger": "^11.0.0",
     "@nestjs/websockets": "^11.1.26",
     "@node-rs/argon2": "^2.0.2",
     "@socket.io/redis-adapter": "^8.3.0",

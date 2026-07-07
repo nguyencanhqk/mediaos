@@ -1,25 +1,30 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   PayloadTooLargeException,
+  UnprocessableEntityException,
   UnsupportedMediaTypeException,
 } from "@nestjs/common";
-import type {
-  DownloadUrlDto,
-  FileLinkDto,
-  FileMetadataDto,
-  LinkFileInput,
-  ListFilesQuery,
-  UploadFileInput,
+import {
+  FOUNDATION_FILE_ERROR_CODES,
+  type ConfirmUploadInput,
+  type ConfirmUploadResponse,
+  type DownloadUrlDto,
+  type FileLinkDto,
+  type FileMetadataDto,
+  type LinkFileInput,
+  type ListFilesQuery,
+  type RegisterFileResponse,
+  type UploadFileInput,
 } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../../db/db.service";
 import { isUniqueViolation, pgErrorField } from "../../common/db-error";
-import { FOUNDATION_FILE_ERROR_CODES } from "../../common/errors/error-codes";
 import { AuditService } from "../../events/audit.service";
 import { STORAGE_ADAPTER, type StorageAdapter } from "../../storage/storage-adapter.port";
 import { buildFileKey, InvalidStorageKeyError } from "../../storage/file-storage-key";
@@ -29,6 +34,7 @@ import { FileAccessLogService } from "./file-access-log.service";
 import { FileLinkRepository } from "./file-link.repository";
 import { FilePolicyService } from "./file-policy.service";
 import { FileRepository } from "./file.repository";
+import { isExtensionConsistentWithMime } from "./mime-extension";
 import {
   FilePolicyAction,
   FOUNDATION_FILE_PERMISSION,
@@ -45,8 +51,16 @@ interface RequestUser {
 /** system_settings keys (precedence company > system > default via SettingService). */
 const SETTING_MAX_UPLOAD_MB = "file.max_upload_size_mb";
 const SETTING_ALLOWED_MIME = "file.allowed_mime_types";
+const SETTING_BLOCKED_EXT = "file.blocked_extensions";
 const BYTES_PER_MB = 1024 * 1024;
 const DEFAULT_MAX_UPLOAD_MB = 25; // mirror setting-defaults.ts — only used if resolve returns non-number.
+
+/**
+ * TODO(S2-FND-JOBS-1) — TEMP_FILE_CLEANUP: file register ở trạng thái 'Pending' mà client KHÔNG bao giờ
+ * PUT + confirm sẽ mồ côi (is_temporary/expires_at + index đã sẵn ở schema/files.ts). WO S2-FND-JOBS-1
+ * (System Jobs khung) sở hữu job dọn dẹp (soft-delete + storage delete khi Pending quá TTL 'file.pending_
+ * ttl_hours'). LANE NÀY KHÔNG tự chế job (tránh scheduler trùng) — chỉ để lại con trỏ. Không làm gì thêm ở đây.
+ */
 
 /** Module/entity used when an upload is not linked to any business entity (foundation-owned file). */
 const FOUNDATION_MODULE = "FOUNDATION";
@@ -80,6 +94,8 @@ const UQ_FILE_LINKS_PRIMARY_PER_ENTITY_TYPE = "uq_file_links_primary_per_entity_
  */
 @Injectable()
 export class FileService {
+  private readonly logger = new Logger(FileService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly fileRepo: FileRepository,
@@ -94,31 +110,54 @@ export class FileService {
   // ─── Upload ────────────────────────────────────────────────────────────────
 
   /**
-   * Đăng ký metadata file (visibility=Private default, upload_status=Pending). Gate `upload:foundation-
-   * file` đã ép ở controller (PermissionGuard). Validate size/MIME ở TẦNG SERVICE từ system_settings
-   * (KHÔNG tin Content-Type client để VƯỢT allowlist) → sanitize originalName chống path-traversal →
-   * server suy file_extension + storage key qua buildFileKey. Ghi files + audit 'file'/FileUploaded +
-   * file_access_log Upload — CÙNG tx withTenant (rollback nguyên khối nếu audit/log lỗi).
+   * S2-FND-FILE-2 — Đăng ký metadata (upload_status='Pending') + cấp PRESIGNED-PUT `uploadUrl` để client
+   * PUT bytes trực tiếp lên storage (2-pha: register → PUT → confirm). Gate `upload:foundation-file` ép ở
+   * controller (PermissionGuard). Validate Ở TẦNG SERVICE từ system_settings (KHÔNG tin Content-Type/tên
+   * client): MIME ∈ allowlist · size ≤ trần · extension NGOÀI blocklist · extension↔MIME nhất quán (chống
+   * spoof). Sai → 4xx + FOUNDATION-FILE-ERR-* + KHÔNG ghi row/không audit. Hợp lệ → sanitize tên chống
+   * path-traversal → server suy extension + storage key qua buildFileKey → ghi files + audit 'file'/
+   * FileUploaded + file_access_log Upload + presign PUT — CÙNG tx withTenant (presign lỗi ⇒ rollback nguyên
+   * khối, không để row Pending mồ côi). Response KHÔNG chứa storage_path (BẤT BIẾN #2.3).
    */
-  async upload(user: RequestUser, input: UploadFileInput): Promise<FileMetadataDto> {
+  async upload(user: RequestUser, input: UploadFileInput): Promise<RegisterFileResponse> {
     // 1. Validate MIME ∈ allowlist + size ≤ ceiling (TẦNG SERVICE, từ settings). Sai → 4xx, KHÔNG ghi.
-    const { allowedMime, maxBytes } = await this.loadUploadLimits(user.companyId);
+    const { allowedMime, maxBytes, blockedExtensions } = await this.loadUploadLimits(
+      user.companyId,
+    );
     if (!allowedMime.has(input.declaredMimeType)) {
       // FOUNDATION-FILE-ERR-MIME: MIME ngoài allowlist (server không tin Content-Type client).
-      throw new UnsupportedMediaTypeException(
-        `FOUNDATION-FILE-ERR-MIME: MIME không được phép: ${input.declaredMimeType}`,
-      );
+      throw new UnsupportedMediaTypeException({
+        code: FOUNDATION_FILE_ERROR_CODES.MIME,
+        message: `${FOUNDATION_FILE_ERROR_CODES.MIME}: MIME không được phép: ${input.declaredMimeType}`,
+      });
     }
     if (input.sizeBytes > maxBytes) {
       // FOUNDATION-FILE-ERR-SIZE: vượt trần dung lượng.
-      throw new PayloadTooLargeException(
-        `FOUNDATION-FILE-ERR-SIZE: file vượt giới hạn ${maxBytes} bytes.`,
-      );
+      throw new PayloadTooLargeException({
+        code: FOUNDATION_FILE_ERROR_CODES.SIZE,
+        message: `${FOUNDATION_FILE_ERROR_CODES.SIZE}: file vượt giới hạn ${maxBytes} bytes.`,
+      });
     }
 
     // 2. Sanitize originalName (chống path-traversal) + suy extension server-side.
     const safeName = this.sanitizeFilename(input.originalName);
     const fileExtension = this.deriveExtension(safeName);
+
+    // 2b. blocklist extension (exe/bat/sh/html/svg… — setting file.blocked_extensions). Reject TRƯỚC khi ghi.
+    if (fileExtension !== null && blockedExtensions.has(fileExtension)) {
+      throw new UnsupportedMediaTypeException({
+        code: FOUNDATION_FILE_ERROR_CODES.BLOCKED,
+        message: `${FOUNDATION_FILE_ERROR_CODES.BLOCKED}: phần mở rộng bị chặn: .${fileExtension}`,
+      });
+    }
+
+    // 2c. extension↔MIME nhất quán (chống MIME-spoof: report.pdf khai image/png, x.html khai application/pdf).
+    if (!isExtensionConsistentWithMime(fileExtension, input.declaredMimeType)) {
+      throw new UnsupportedMediaTypeException({
+        code: FOUNDATION_FILE_ERROR_CODES.EXTENSION,
+        message: `${FOUNDATION_FILE_ERROR_CODES.EXTENSION}: phần mở rộng không khớp MIME khai báo (${input.declaredMimeType}).`,
+      });
+    }
 
     // 3. Server-derive storage key {companyId}/files/{fileId} — client KHÔNG cấp path.
     const fileId = randomUUID();
@@ -180,7 +219,147 @@ export class FileService {
         permissionCode: "FOUNDATION.FILE.UPLOAD",
       });
 
-      return this.toMetadataDto(created, []);
+      // Presign PUT SAU khi ghi metadata (bên trong tx: presign lỗi ⇒ rollback insert/audit/log). Key
+      // server-derived, adapter re-assert prefix tenant + clamp TTL; URL ephemeral (KHÔNG persist — #2.3).
+      const signed = await this.storage.signedUrl({
+        key: created.storagePath,
+        contentType: created.mimeType,
+        sizeBytes: created.fileSizeBytes,
+      });
+
+      return {
+        fileId: created.id,
+        uploadStatus: created.uploadStatus as RegisterFileResponse["uploadStatus"],
+        uploadUrl: signed.url,
+        expiresAt: signed.expiresAt.toISOString(),
+      };
+    });
+  }
+
+  // ─── Confirm (S2-FND-FILE-2) ───────────────────────────────────────────────────
+
+  /**
+   * POST /foundation/files/:id/confirm — pha 3 của upload E2E. Gate `upload:foundation-file` ép ở controller.
+   * CHỈ file 'Pending' trong tenant (RLS + WHERE company_id + upload_status='Pending'). Verify object THẬT ở
+   * storage: tồn tại + ContentLength == size khai báo lúc register; tính checksum_sha256 server-side từ bytes
+   * (KHÔNG tin client). Khớp → 'Uploaded' + persist checksum. Absent → 'Failed'+lý do → 422 CONFIRM_ABSENT.
+   * Size lệch → 'Failed'+lý do → 409 CONFIRM_MISMATCH (KHÔNG persist checksum). Đã 'Uploaded' → idempotent 200.
+   * Non-Pending khác (Failed/Deleted) → 409 NOT_PENDING. Audit ghi CÙNG tx withTenant (BẤT BIẾN #1/#2).
+   */
+  async confirmUpload(
+    user: RequestUser,
+    fileId: string,
+    _input: ConfirmUploadInput,
+  ): Promise<ConfirmUploadResponse> {
+    const row = await this.db.withTenant(user.companyId, (tx) =>
+      this.fileRepo.findByIdTx(user.companyId, fileId, tx),
+    );
+    if (!row) throw new NotFoundException("File không tồn tại");
+
+    // Idempotent: đã Uploaded → trả trạng thái hiện tại (confirm gọi lại vô hại). Non-Pending khác → 409.
+    if (row.uploadStatus === "Uploaded") {
+      return { fileId: row.id, uploadStatus: "Uploaded", sizeBytes: row.fileSizeBytes };
+    }
+    if (row.uploadStatus !== "Pending") {
+      throw new ConflictException({
+        code: FOUNDATION_FILE_ERROR_CODES.NOT_PENDING,
+        message: `${FOUNDATION_FILE_ERROR_CODES.NOT_PENDING}: file không ở trạng thái Pending (hiện: ${row.uploadStatus}).`,
+      });
+    }
+
+    // Verify object THẬT ở storage (HEAD) — không throw khi absent (adapter trả exists=false).
+    const stat = await this.storage.stat({ key: row.storagePath, companyId: user.companyId });
+    if (!stat.exists) {
+      await this.failConfirm(user, row, "object-absent");
+      throw new UnprocessableEntityException({
+        code: FOUNDATION_FILE_ERROR_CODES.CONFIRM_ABSENT,
+        message: `${FOUNDATION_FILE_ERROR_CODES.CONFIRM_ABSENT}: object chưa tồn tại ở storage (client chưa PUT?).`,
+      });
+    }
+    if (stat.sizeBytes !== row.fileSizeBytes) {
+      await this.failConfirm(user, row, "size-mismatch");
+      throw new ConflictException({
+        code: FOUNDATION_FILE_ERROR_CODES.CONFIRM_MISMATCH,
+        message: `${FOUNDATION_FILE_ERROR_CODES.CONFIRM_MISMATCH}: size storage (${stat.sizeBytes}) khác khai báo (${row.fileSizeBytes}).`,
+      });
+    }
+
+    // Đọc bytes + tính checksum server-side (KHÔNG tin client). NOT dùng cho download (chỉ checksum).
+    const bytes = await this.storage.getBytes({ key: row.storagePath, companyId: user.companyId });
+    const checksum = createHash("sha256").update(bytes).digest("hex");
+
+    return this.db.withTenant(user.companyId, async (tx) => {
+      const affected = await this.fileRepo.markUploadedTx(
+        user.companyId,
+        fileId,
+        { checksumSha256: checksum, sizeBytes: row.fileSizeBytes },
+        tx,
+      );
+      // Race: một request khác đã đổi trạng thái giữa chừng → coi như không còn Pending → 409 (không audit).
+      if (affected === 0) {
+        throw new ConflictException({
+          code: FOUNDATION_FILE_ERROR_CODES.NOT_PENDING,
+          message: `${FOUNDATION_FILE_ERROR_CODES.NOT_PENDING}: file không còn ở trạng thái Pending.`,
+        });
+      }
+
+      // Audit 'file'/FileUploadConfirmed — CÙNG tx (BẤT BIẾN #2). checksum KHÔNG đưa vào after (masker che
+      // + tránh lộ; after chỉ metadata trạng thái). storage_path CỐ Ý không đưa vào.
+      await this.audit.record(tx, {
+        action: "FileUploadConfirmed",
+        objectType: "file",
+        objectId: fileId,
+        actorUserId: user.id,
+        actorType: "User",
+        resultStatus: "Success",
+        dataScope: "Company",
+        before: { uploadStatus: row.uploadStatus },
+        after: { uploadStatus: "Uploaded", fileSizeBytes: row.fileSizeBytes },
+      });
+
+      await this.accessLog.record(tx, {
+        fileId,
+        action: "Upload",
+        accessGranted: true,
+        actorUserId: user.id,
+        permissionCode: "FOUNDATION.FILE.UPLOAD",
+      });
+
+      return { fileId, uploadStatus: "Uploaded", sizeBytes: row.fileSizeBytes };
+    });
+  }
+
+  /**
+   * Ghi confirm THẤT BẠI: Pending → Failed + lý do (KHÔNG persist checksum) + audit CÙNG tx. Row đã đổi
+   * trạng thái (affected=0) → bỏ qua audit (không ghi trạng thái sai). Dùng bởi nhánh absent/size-mismatch.
+   */
+  private async failConfirm(user: RequestUser, row: FileRecord, reason: string): Promise<void> {
+    await this.db.withTenant(user.companyId, async (tx) => {
+      const affected = await this.fileRepo.markFailedTx(user.companyId, row.id, reason, tx);
+      if (affected === 0) return;
+      await this.audit.record(tx, {
+        action: "FileUploadFailed",
+        objectType: "file",
+        objectId: row.id,
+        actorUserId: user.id,
+        actorType: "User",
+        resultStatus: "Failure",
+        dataScope: "Company",
+        before: { uploadStatus: row.uploadStatus },
+        after: { uploadStatus: "Failed" },
+        errorCode:
+          reason === "object-absent"
+            ? FOUNDATION_FILE_ERROR_CODES.CONFIRM_ABSENT
+            : FOUNDATION_FILE_ERROR_CODES.CONFIRM_MISMATCH,
+      });
+      await this.accessLog.record(tx, {
+        fileId: row.id,
+        action: "Upload",
+        accessGranted: false,
+        actorUserId: user.id,
+        deniedReason: reason,
+        permissionCode: "FOUNDATION.FILE.UPLOAD",
+      });
     });
   }
 
@@ -213,7 +392,10 @@ export class FileService {
         permissionCode: "FOUNDATION.FILE.VIEW",
         reason: decision.reason,
       });
-      throw new ForbiddenException(`FOUNDATION-FILE-ERR-FORBIDDEN: ${decision.reason}`);
+      throw new ForbiddenException({
+        code: FOUNDATION_FILE_ERROR_CODES.FORBIDDEN,
+        message: `${FOUNDATION_FILE_ERROR_CODES.FORBIDDEN}: ${decision.reason}`,
+      });
     }
 
     return this.toMetadataDto(row, links);
@@ -275,7 +457,10 @@ export class FileService {
         permissionCode: "FOUNDATION.FILE.DOWNLOAD",
         reason: decision.reason,
       });
-      throw new ForbiddenException(`FOUNDATION-FILE-ERR-FORBIDDEN: ${decision.reason}`);
+      throw new ForbiddenException({
+        code: FOUNDATION_FILE_ERROR_CODES.FORBIDDEN,
+        message: `${FOUNDATION_FILE_ERROR_CODES.FORBIDDEN}: ${decision.reason}`,
+      });
     }
 
     // S2-FND-BE-4 (H2): state-guard AFTER authz ALLOW (so we don't leak state to a user without access).
@@ -290,7 +475,10 @@ export class FileService {
         permissionCode: this.foundationPermissionCode(FilePolicyAction.Download),
         reason: stateDeny,
       });
-      throw new ConflictException(`FOUNDATION-FILE-ERR-NOT-DOWNLOADABLE: ${stateDeny}`);
+      throw new ConflictException({
+        code: FOUNDATION_FILE_ERROR_CODES.NOT_DOWNLOADABLE,
+        message: `${FOUNDATION_FILE_ERROR_CODES.NOT_DOWNLOADABLE}: ${stateDeny}`,
+      });
     }
 
     // Presign sau khi ALLOW + state-guard. Key đã thuộc tenant (server-derived); adapter re-assert prefix (#2.1).
@@ -306,7 +494,27 @@ export class FileService {
       }),
     );
 
+    // S2-FND-FILE-2 — thống kê tải BEST-EFFORT: tăng download_count + last_accessed_at. Lỗi cập nhật counter
+    // KHÔNG được làm hỏng luồng download (URL đã cấp + đã log). Nuốt-CÓ-LOG (warn), KHÔNG rethrow, KHÔNG catch rỗng.
+    await this.bumpDownloadCount(user, fileId);
+
     return { url: signed.url, expiresAt: signed.expiresAt.toISOString() };
+  }
+
+  /**
+   * Tăng download_count + set last_accessed_at (best-effort). Chạy trong tx tenant RIÊNG (đã ngoài luồng
+   * cấp-URL). Lỗi → log warn + nuốt (download vẫn thành công); KHÔNG catch rỗng (silent-failure-hunter).
+   */
+  private async bumpDownloadCount(user: RequestUser, fileId: string): Promise<void> {
+    try {
+      await this.db.withTenant(user.companyId, (tx) =>
+        this.fileRepo.incrementDownloadCountTx(user.companyId, fileId, tx),
+      );
+    } catch (err) {
+      this.logger.warn(
+        `download_count bump failed for file ${fileId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   // ─── Link / Unlink ────────────────────────────────────────────────────────────
@@ -340,7 +548,10 @@ export class FileService {
         entityType: input.entityType,
         entityId: input.entityId,
       });
-      throw new ForbiddenException(`FOUNDATION-FILE-ERR-FORBIDDEN: ${decision.reason}`);
+      throw new ForbiddenException({
+        code: FOUNDATION_FILE_ERROR_CODES.FORBIDDEN,
+        message: `${FOUNDATION_FILE_ERROR_CODES.FORBIDDEN}: ${decision.reason}`,
+      });
     }
 
     return this.db.withTenant(user.companyId, async (tx) => {
@@ -348,15 +559,17 @@ export class FileService {
       const file = await this.fileRepo.findByIdTx(user.companyId, input.fileId, tx);
       if (!file) {
         // FOUNDATION-FILE-ERR-LINK: file không thuộc tenant / không tồn tại (cross-company → RLS 0 row).
-        throw new BadRequestException(
-          "FOUNDATION-FILE-ERR-LINK: file không thuộc công ty hiện tại hoặc không tồn tại.",
-        );
+        throw new BadRequestException({
+          code: FOUNDATION_FILE_ERROR_CODES.LINK,
+          message: `${FOUNDATION_FILE_ERROR_CODES.LINK}: file không thuộc công ty hiện tại hoặc không tồn tại.`,
+        });
       }
       // Không cho link file nhiễm mã độc (QA-06).
       if (file.scanStatus === "Infected") {
-        throw new BadRequestException(
-          "FOUNDATION-FILE-ERR-INFECTED: không thể link file đang ở trạng thái Infected.",
-        );
+        throw new BadRequestException({
+          code: FOUNDATION_FILE_ERROR_CODES.INFECTED,
+          message: `${FOUNDATION_FILE_ERROR_CODES.INFECTED}: không thể link file đang ở trạng thái Infected.`,
+        });
       }
 
       const created = await this.insertLinkOrThrow(
@@ -440,7 +653,10 @@ export class FileService {
         entityId: existing.entityId,
         fileLinkId: linkId,
       });
-      throw new ForbiddenException(`FOUNDATION-FILE-ERR-FORBIDDEN: ${decision.reason}`);
+      throw new ForbiddenException({
+        code: FOUNDATION_FILE_ERROR_CODES.FORBIDDEN,
+        message: `${FOUNDATION_FILE_ERROR_CODES.FORBIDDEN}: ${decision.reason}`,
+      });
     }
 
     await this.db.withTenant(user.companyId, async (tx) => {
@@ -510,7 +726,10 @@ export class FileService {
         permissionCode: "FOUNDATION.FILE.DELETE",
         reason: decision.reason,
       });
-      throw new ForbiddenException(`FOUNDATION-FILE-ERR-FORBIDDEN: ${decision.reason}`);
+      throw new ForbiddenException({
+        code: FOUNDATION_FILE_ERROR_CODES.FORBIDDEN,
+        message: `${FOUNDATION_FILE_ERROR_CODES.FORBIDDEN}: ${decision.reason}`,
+      });
     }
 
     await this.db.withTenant(user.companyId, async (tx) => {
@@ -562,14 +781,16 @@ export class FileService {
       if (isUniqueViolation(err)) {
         const constraint = pgErrorField(err, "constraint");
         if (constraint === UQ_FILE_LINKS_ENTITY_FILE_ACTIVE) {
-          throw new ConflictException(
-            `${FOUNDATION_FILE_ERROR_CODES.DUP_LINK}: file đã được gắn vào entity này với cùng link_type (chưa gỡ).`,
-          );
+          throw new ConflictException({
+            code: FOUNDATION_FILE_ERROR_CODES.DUP_LINK,
+            message: `${FOUNDATION_FILE_ERROR_CODES.DUP_LINK}: file đã được gắn vào entity này với cùng link_type (chưa gỡ).`,
+          });
         }
         if (constraint === UQ_FILE_LINKS_PRIMARY_PER_ENTITY_TYPE) {
-          throw new ConflictException(
-            `${FOUNDATION_FILE_ERROR_CODES.DUP_PRIMARY}: entity này đã có 1 file khác làm primary cho cùng link_type.`,
-          );
+          throw new ConflictException({
+            code: FOUNDATION_FILE_ERROR_CODES.DUP_PRIMARY,
+            message: `${FOUNDATION_FILE_ERROR_CODES.DUP_PRIMARY}: entity này đã có 1 file khác làm primary cho cùng link_type.`,
+          });
         }
       }
       throw err;
@@ -594,9 +815,10 @@ export class FileService {
     const base = noControl.split(/[/\\]/).pop() ?? "";
     const trimmed = base.trim();
     if (trimmed === "" || trimmed === "." || trimmed === "..") {
-      throw new BadRequestException(
-        "FOUNDATION-FILE-ERR-FILENAME: tên file không hợp lệ sau khi chuẩn hoá.",
-      );
+      throw new BadRequestException({
+        code: FOUNDATION_FILE_ERROR_CODES.FILENAME,
+        message: `${FOUNDATION_FILE_ERROR_CODES.FILENAME}: tên file không hợp lệ sau khi chuẩn hoá.`,
+      });
     }
     return trimmed.slice(0, 500);
   }
@@ -617,7 +839,10 @@ export class FileService {
       return buildFileKey({ companyId, fileId, originalName });
     } catch (err) {
       if (err instanceof InvalidStorageKeyError) {
-        throw new BadRequestException("FOUNDATION-FILE-ERR-KEY: không thể tạo storage key hợp lệ.");
+        throw new BadRequestException({
+          code: FOUNDATION_FILE_ERROR_CODES.KEY,
+          message: `${FOUNDATION_FILE_ERROR_CODES.KEY}: không thể tạo storage key hợp lệ.`,
+        });
       }
       throw err;
     }
@@ -628,12 +853,15 @@ export class FileService {
    * S1-FND-SETTING-1). Nếu resolve trả kiểu rác → fallback default size; allowlist FAIL-CLOSED (thiếu
    * allowlist ⇒ Set rỗng ⇒ mọi MIME bị từ chối, KHÔNG fail-open).
    */
-  private async loadUploadLimits(
-    companyId: string,
-  ): Promise<{ allowedMime: Set<string>; maxBytes: number }> {
+  private async loadUploadLimits(companyId: string): Promise<{
+    allowedMime: Set<string>;
+    maxBytes: number;
+    blockedExtensions: Set<string>;
+  }> {
     const resolved = await this.settings.resolveMany(companyId, [
       SETTING_ALLOWED_MIME,
       SETTING_MAX_UPLOAD_MB,
+      SETTING_BLOCKED_EXT,
     ]);
     const byKey = new Map(resolved.map((r) => [r.key, r.value]));
 
@@ -648,7 +876,18 @@ export class FileService {
     const maxMb =
       typeof sizeValue === "number" && sizeValue > 0 ? sizeValue : DEFAULT_MAX_UPLOAD_MB;
 
-    return { allowedMime, maxBytes: maxMb * BYTES_PER_MB };
+    // blocked_extensions normalize về lowercase, không dấu chấm (khớp deriveExtension). Thiếu setting →
+    // Set rỗng (không chặn theo extension; MIME-allowlist + extension↔MIME vẫn là hàng rào).
+    const blockedValue = byKey.get(SETTING_BLOCKED_EXT);
+    const blockedExtensions = new Set<string>(
+      Array.isArray(blockedValue)
+        ? (blockedValue as unknown[])
+            .filter((v): v is string => typeof v === "string")
+            .map((v) => v.replace(/^\./, "").toLowerCase())
+        : [],
+    );
+
+    return { allowedMime, maxBytes: maxMb * BYTES_PER_MB, blockedExtensions };
   }
 
   /**

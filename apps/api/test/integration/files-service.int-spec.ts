@@ -62,6 +62,10 @@ const stubStorage: StorageAdapter = {
     url: "https://signed.example/x",
     expiresAt: new Date(Date.now() + 300_000),
   }),
+  // S2-FND-FILE-2 (storage-port): confirm-upload flow only — unused by this suite. Kept minimal so
+  // the stub still satisfies StorageAdapter.
+  stat: async () => ({ exists: true, sizeBytes: 0 }),
+  getBytes: async () => new Uint8Array(),
 };
 
 /** Stub SettingService — returns the file.* defaults (precedence resolution covered elsewhere). */
@@ -143,14 +147,14 @@ describe.skipIf(!hasLaneDb)(
         visibility: "Private",
       });
 
-      const row = await direct.query(`SELECT * FROM files WHERE id = $1`, [dto.id]);
+      const row = await direct.query(`SELECT * FROM files WHERE id = $1`, [dto.fileId]);
       expect(row.rows[0].visibility).toBe("Private");
       expect(row.rows[0].upload_status).toBe("Pending");
       expect(row.rows[0].company_id).toBe(A.companyId);
-      expect(row.rows[0].storage_path).toBe(`${A.companyId}/files/${dto.id}`);
+      expect(row.rows[0].storage_path).toBe(`${A.companyId}/files/${dto.fileId}`);
 
-      expect(await countLogs(dto.id, "Upload")).toBe(1);
-      expect(await countAudit(dto.id, "FileUploaded", "file")).toBe(1);
+      expect(await countLogs(dto.fileId, "Upload")).toBe(1);
+      expect(await countAudit(dto.fileId, "FileUploaded", "file")).toBe(1);
     });
 
     it("I2/I3 — link then unlink: file_links inserted then SOFT-deleted (row kept); audit + logs written", async () => {
@@ -163,7 +167,7 @@ describe.skipIf(!hasLaneDb)(
       const entityId = randomUUID();
 
       const link = await service.link(actor(), {
-        fileId: file.id,
+        fileId: file.fileId,
         moduleCode: "HR",
         entityType: "EmployeeContract",
         entityId,
@@ -172,7 +176,7 @@ describe.skipIf(!hasLaneDb)(
         isPrimary: false,
       });
 
-      expect(await countLogs(file.id, "Link")).toBe(1);
+      expect(await countLogs(file.fileId, "Link")).toBe(1);
       expect(await countAudit(link.id, "FileLinked", "file_link")).toBe(1);
 
       await service.unlink(actor(), link.id);
@@ -183,7 +187,7 @@ describe.skipIf(!hasLaneDb)(
       expect(linkRow.rows[0].deleted_at).not.toBeNull();
       expect(linkRow.rows[0].deleted_by).toBe(userId);
 
-      expect(await countLogs(file.id, "Unlink")).toBe(1);
+      expect(await countLogs(file.fileId, "Unlink")).toBe(1);
       expect(await countAudit(link.id, "FileUnlinked", "file_link")).toBe(1);
     });
 
@@ -195,16 +199,16 @@ describe.skipIf(!hasLaneDb)(
         visibility: "Private",
       });
 
-      await service.deleteFile(actor(), file.id);
+      await service.deleteFile(actor(), file.fileId);
 
-      const row = await direct.query(`SELECT * FROM files WHERE id = $1`, [file.id]);
+      const row = await direct.query(`SELECT * FROM files WHERE id = $1`, [file.fileId]);
       expect(row.rowCount).toBe(1); // row kept (soft-delete)
       expect(row.rows[0].deleted_at).not.toBeNull();
       expect(row.rows[0].deleted_by).toBe(userId);
       expect(row.rows[0].upload_status).toBe("Deleted");
 
-      expect(await countLogs(file.id, "Delete")).toBe(1);
-      expect(await countAudit(file.id, "FileDeleted", "file")).toBe(1);
+      expect(await countLogs(file.fileId, "Delete")).toBe(1);
+      expect(await countAudit(file.fileId, "FileDeleted", "file")).toBe(1);
     });
 
     it("I5 — download (policy ALLOW) returns short-TTL url + logs Download access_granted=true", async () => {
@@ -221,15 +225,15 @@ describe.skipIf(!hasLaneDb)(
       // ALLOW → DownloadUrlDto'. (S2-FND-BE-5 will flip upload_status to 'Uploaded' via confirm.)
       await direct.query(
         `UPDATE files SET upload_status = 'Uploaded', scan_status = 'Clean' WHERE id = $1`,
-        [file.id],
+        [file.fileId],
       );
 
-      const dl = await service.getDownloadUrl(actor(), file.id);
+      const dl = await service.getDownloadUrl(actor(), file.fileId);
       expect(dl.url).toMatch(/^https:\/\//);
       expect(typeof dl.expiresAt).toBe("string");
       expect(dl).not.toHaveProperty("storagePath");
 
-      expect(await countLogs(file.id, "Download")).toBe(1);
+      expect(await countLogs(file.fileId, "Download")).toBe(1);
     });
   },
 );

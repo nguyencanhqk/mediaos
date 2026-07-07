@@ -20,3 +20,6 @@ allowBuilds:
   esbuild: true
   "@swc/core": true
   "@nestjs/core": true
+  # S2-FND-CONTRACT-1: @scarf/scarf kéo theo qua @nestjs/swagger→swagger-ui-dist. Chỉ là analytics
+  # install-ping (KHÔNG cần build native) → false = KHÔNG chạy postinstall + tắt gate ERR_PNPM_IGNORED_BUILDS.
+  "@scarf/scarf": false

@@ -7,9 +7,11 @@
  *   - `signedUrl` produces EPHEMERAL, short-lived URLs only (presign TTL configurable, default from env).
  *   - Server ALWAYS derives the key; callers supply only domain-level inputs (companyId, fileId, etc.).
  *   - `get` re-asserts cross-tenant key ownership before signing (belt-and-suspenders on top of RLS).
+ *   - `stat`/`getBytes` (S2-FND-FILE-2 confirm-upload flow) ALSO re-assert cross-tenant key ownership
+ *     before touching the SDK — same guard as `get`. Neither returns the raw key to the caller.
  *
- * Four methods (put / get / delete / signedUrl) are the only object-storage operations exposed to
- * upper layers. Implementations inject the token `STORAGE_ADAPTER` (see below).
+ * Six methods (put / get / delete / signedUrl / stat / getBytes) are the only object-storage
+ * operations exposed to upper layers. Implementations inject the token `STORAGE_ADAPTER` (see below).
  */
 
 /** Default TTL for presigned URLs when no explicit override is passed. Must come from env — never a
@@ -70,6 +72,41 @@ export interface StorageDeleteInput {
   key: string;
 }
 
+/**
+ * Input for a stat/HEAD check (S2-FND-FILE-2 confirm-upload flow) — verify an object landed in
+ * storage after a client presigned-PUT, WITHOUT reading its bytes.
+ */
+export interface StorageStatInput {
+  /** Storage key to check. */
+  key: string;
+  /** Owning company — used to assert the key is inside this tenant's prefix. */
+  companyId: string;
+}
+
+/**
+ * Result of a stat/HEAD check. `exists=false` ⇒ `sizeBytes` is `null` (object absent from storage —
+ * e.g. the client never completed the presigned-PUT). Implementations MUST NOT throw for a missing
+ * object; only genuine transport/auth errors should propagate.
+ */
+export interface StorageStatResult {
+  /** Whether the object exists at `key`. */
+  exists: boolean;
+  /** Actual ContentLength reported by storage, or `null` when `exists` is `false`. */
+  sizeBytes: number | null;
+}
+
+/**
+ * Input for a byte-read (S2-FND-FILE-2 confirm-upload flow) — read the full object body so the
+ * caller can compute a server-side checksum (e.g. SHA-256). NOT for general download: downloads
+ * always go through the ephemeral presigned `get` URL, never a server-side byte-proxy.
+ */
+export interface StorageReadBytesInput {
+  /** Storage key to read. */
+  key: string;
+  /** Owning company — used to assert the key is inside this tenant's prefix. */
+  companyId: string;
+}
+
 // ─── Port interface ──────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -109,4 +146,19 @@ export interface StorageAdapter {
    * Result URL is ephemeral — MUST NOT be persisted by the caller.
    */
   signedUrl(input: StorageSignedUploadInput): Promise<SignedUrlResult>;
+
+  /**
+   * HEAD the object at `key` — returns whether it exists and its actual ContentLength in storage
+   * (S2-FND-FILE-2 confirm-upload flow: verify a client's presigned-PUT actually landed BEFORE the
+   * caller marks a file row `Uploaded`). Re-asserts `key ∈ companyId` prefix before the SDK call.
+   * Never throws for a missing object — returns `{ exists: false, sizeBytes: null }`.
+   */
+  stat(input: StorageStatInput): Promise<StorageStatResult>;
+
+  /**
+   * Reads the full object body as bytes — used ONLY to compute a server-side checksum during confirm
+   * (S2-FND-FILE-2). Re-asserts `key ∈ companyId` prefix before the SDK call. NOT for general
+   * download (downloads always go through the ephemeral presigned `get` URL).
+   */
+  getBytes(input: StorageReadBytesInput): Promise<Uint8Array>;
 }

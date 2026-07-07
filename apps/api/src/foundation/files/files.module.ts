@@ -13,6 +13,8 @@ import { FilePolicyService } from "./file-policy.service";
 import { FileRepository } from "./file.repository";
 import { FilesController } from "./files.controller";
 import { FileService } from "./files.service";
+import { TempFileCleanupJobHandler } from "./temp-file-cleanup.job-handler";
+import { TempFileCleanupRepository } from "./temp-file-cleanup.repository";
 
 /**
  * S1-FND-FILE-1 — FilesModule (self-contained). Wiring:
@@ -28,6 +30,12 @@ import { FileService } from "./files.service";
  *
  * Wiring vào app: S1-FND-WIRE-1 gom module này vào FoundationModule (KHÔNG sửa app.module.ts ở WO này —
  * tránh va hot-file).
+ *
+ * S2-FND-JOBS-1 (jobs_tempfile · ADDITIVE): TempFileCleanupJobHandler (@SystemJobHandler) + TempFileCleanupRepository
+ * — dọn file tạm hết hạn / upload Pending treo qua JobRunner. SchedulerModule (DiscoveryService) tự gom handler
+ * qua metadata; module này KHÔNG import SchedulerModule (phụ thuộc MỘT HƯỚNG, KHÔNG cycle). Chỉ import file
+ * token `scheduler/job-handler`. Handler tái dùng SettingService (TTL Pending) + FileAccessLogService + AuditService
+ * + DatabaseService (withTenant) đã có sẵn trong module (KHÔNG thêm import).
  */
 @Module({
   imports: [DatabaseModule, PermissionModule, EventsModule, StorageModule, SettingsModule],
@@ -39,6 +47,9 @@ import { FileService } from "./files.service";
     FileAccessLogService,
     FileAccessLogReadService,
     FileService,
+    // S2-FND-JOBS-1 (jobs_tempfile) — ADDITIVE. Handler tự đăng ký qua @SystemJobHandler metadata.
+    TempFileCleanupRepository,
+    TempFileCleanupJobHandler,
     {
       provide: FilePolicyService,
       useFactory: (permission: PermissionService): FilePolicyService =>
@@ -46,6 +57,6 @@ import { FileService } from "./files.service";
       inject: [PermissionService],
     },
   ],
-  exports: [FileService, FilePolicyService],
+  exports: [FileService, FilePolicyService, TempFileCleanupJobHandler],
 })
 export class FilesModule {}

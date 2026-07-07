@@ -602,6 +602,18 @@ File binary gửi bằng `multipart/form-data` field `file`.
 }
 ```
 
+> **CHỐT 2026-07-04:** Triển khai thật THẮNG model `multipart/form-data` ở §11.4/§11.5 — model chuẩn là
+> **presigned-PUT + confirm** (2 bước, tương tự tinh thần CHỐT download 302-redirect ở §11.9): (1)
+> `POST /foundation/files/upload` (register) validate size/MIME/extension/blocked-extensions rồi tạo row
+> `upload_status:'Pending'` và trả `{file_id, upload_status:'Pending', uploadUrl (presigned S3 PUT),
+> expiresAt}` — **KHÔNG** nhận field `file` multipart, **KHÔNG** trả `storage_path`; (2) client `PUT` bytes
+> thẳng lên `uploadUrl`; (3) `POST /foundation/files/:id/confirm` verify object tồn tại + `ContentLength`
+> khớp `size_bytes` khai báo + tính `checksum_sha256` server-side rồi chuyển `Pending -> Uploaded` (persist
+> checksum/content_hash) hoặc `Pending -> Failed` + lý do nếu absent/mismatch. Câu "File binary gửi bằng
+> `multipart/form-data` field `file`" (§11.4) và `upload_status: "Uploaded"` ngay trong response upload
+> (§11.5) là phrasing cũ — backend KHÔNG nhận/lưu binary qua request upload, KHÔNG proxy-stream byte. DTO
+> `UploadFileRequest` (§11.4) vẫn dùng cho phần metadata (module_code/entity_type/…) của bước register.
+
 ### 11.6 Validation file
 
 File service phải validate:

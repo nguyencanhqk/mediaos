@@ -111,4 +111,23 @@ export class SettingRepository {
       )
       .returning();
   }
+
+  // ─── S2-FND-BE-8 — GHI system_settings (GLOBAL no-RLS, KHÔNG company_id, KHÔNG deleted_at) ─────────
+  // RIÊNG khỏi company_settings: PATCH /foundation/system-settings/:key upsert TẦNG GLOBAL, KHÔNG chạm
+  // company override. Không soft-delete (system_settings mutable-config; soft-disable = status='Inactive').
+  // Ghi phải nằm TRONG withTenant(actor.companyId) của service để audit_logs.company_id = actor.companyId.
+
+  /** INSERT 1 system_setting MỚI. Trả về hàng đã tạo (dùng cho audit new-snapshot + response). */
+  insertSystemTx(data: typeof systemSettings.$inferInsert, tx: TenantTx) {
+    return tx.insert(systemSettings).values(data).returning();
+  }
+
+  /** UPDATE 1 system_setting theo id (global). updatedAt tự set. Trả về hàng sau update. */
+  updateSystemTx(id: string, data: Partial<typeof systemSettings.$inferInsert>, tx: TenantTx) {
+    return tx
+      .update(systemSettings)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(systemSettings.id, id))
+      .returning();
+  }
 }

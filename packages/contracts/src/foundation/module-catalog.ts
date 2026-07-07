@@ -62,3 +62,20 @@ export type AdminModulesResponse = z.infer<typeof adminModulesResponseSchema>;
 /** Response GET /foundation/modules/:code = 1 detail (envelope bọc ở interceptor). */
 export const adminModuleDetailResponseSchema = adminModuleDetailSchema;
 export type AdminModuleDetailResponse = z.infer<typeof adminModuleDetailResponseSchema>;
+
+/**
+ * S2-FND-BE-8 — PATCH /foundation/modules/:code body (bật/tắt module theo tenant). Nguồn sự thật DTO cho
+ * ModuleToggleService.toggleModule → ghi company_settings 'module.<code>.enabled' + audit CONFIG_UPDATE
+ * (object_type='module') CÙNG tx withTenant. Cổng = update:foundation-module (mig 0435, is_sensitive=TRUE).
+ *
+ * .strict() chặn field lạ (chống leo thang input — BẤT BIẾN: không trust input). CHỈ `enabled` boolean.
+ * 7 module lõi MVP (AUTH/HR/ATT/LEAVE/TASK/DASH/NOTI) KHÓA CỨNG → service từ chối 400 (rule nghiệp vụ, KHÔNG
+ * biểu diễn ở Zod). KHÔNG có secret trong DTO. APPEND-only vào file đã-export (barrel index.ts KHÔNG đổi).
+ */
+export const patchModuleToggleSchema = z
+  .object({
+    enabled: z.boolean(),
+  })
+  .strict();
+
+export type PatchModuleToggleInput = z.infer<typeof patchModuleToggleSchema>;

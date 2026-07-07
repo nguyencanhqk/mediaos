@@ -16,6 +16,8 @@
  *   PORT `get`        → ObjectStorageService.createDownloadUrl(key, companyId)       [presigned GET]
  *   PORT `delete`     → ObjectStorageService.deleteObject(key)
  *   PORT `signedUrl`  → ObjectStorageService.createUploadUrl(key, contentType, size) [presigned PUT]
+ *   PORT `stat`       → ObjectStorageService.statObject(key, companyId)              [HEAD — S2-FND-FILE-2]
+ *   PORT `getBytes`   → ObjectStorageService.getObjectBytes(key, companyId)          [GET bytes — S2-FND-FILE-2]
  *
  * NOTE: ObjectStorageService.createDownloadUrl uses config.presignTtlSec internally (no TTL param).
  * For the PORT's `get` method we therefore use the adapter's resolved TTL only to compute `expiresAt`;
@@ -31,7 +33,10 @@ import {
   StorageDeleteInput,
   StorageGetInput,
   StoragePutInput,
+  StorageReadBytesInput,
   StorageSignedUploadInput,
+  StorageStatInput,
+  StorageStatResult,
   SignedUrlResult,
   DEFAULT_PRESIGN_TTL_SEC,
 } from "./storage-adapter.port";
@@ -94,6 +99,28 @@ export class S3StorageAdapter implements StorageAdapter {
       input.sizeBytes,
     );
     return { url, expiresAt: this.expiresAt(ttlSec) };
+  }
+
+  // ─── stat ───────────────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * HEAD the object at `key` (S2-FND-FILE-2 confirm-upload flow). Thin, argument-preserving delegate
+   * onto ObjectStorageService.statObject — no TTL/clamp involvement (not a presigned operation).
+   * ObjectStorageService re-asserts `key ∈ companyId` prefix before touching the SDK.
+   */
+  async stat(input: StorageStatInput): Promise<StorageStatResult> {
+    return this.objectStorage.statObject(input.key, input.companyId);
+  }
+
+  // ─── getBytes ───────────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Reads the full object body as bytes (S2-FND-FILE-2 confirm-upload flow) — used ONLY to compute a
+   * server-side checksum during confirm. Thin, argument-preserving delegate onto
+   * ObjectStorageService.getObjectBytes; re-asserts `key ∈ companyId` prefix before the SDK call.
+   */
+  async getBytes(input: StorageReadBytesInput): Promise<Uint8Array> {
+    return this.objectStorage.getObjectBytes(input.key, input.companyId);
   }
 
   // ─── helpers ─────────────────────────────────────────────────────────────────────────────────────

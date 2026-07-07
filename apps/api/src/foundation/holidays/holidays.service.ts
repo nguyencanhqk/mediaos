@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { FOUNDATION_ERROR_CODES } from "@mediaos/contracts";
 import { addDaysToLocalDate, monthDateRange } from "../../common/tz.util";
 import { DatabaseService, type TenantTx } from "../../db/db.service";
 import { AuditService } from "../../events/audit.service";
@@ -199,7 +200,10 @@ export class HolidaysService {
         );
       } catch (err) {
         if (isUniqueViolation(err)) {
-          throw new ConflictException("Ngày nghỉ trùng (mã + ngày đã tồn tại trong công ty).");
+          throw new ConflictException({
+            code: FOUNDATION_ERROR_CODES.HOLIDAY_DUPLICATE,
+            message: "Ngày nghỉ trùng (mã + ngày đã tồn tại trong công ty).",
+          });
         }
         throw err;
       }
@@ -212,7 +216,11 @@ export class HolidaysService {
   updateHoliday(actor: Actor, id: string, dto: UpdateHolidayInput): Promise<HolidayView> {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const [existing] = await this.repo.findOwnByIdTx(actor.companyId, id, tx);
-      if (!existing) throw new NotFoundException("Không tìm thấy ngày nghỉ.");
+      if (!existing)
+        throw new NotFoundException({
+          code: FOUNDATION_ERROR_CODES.HOLIDAY_NOT_FOUND,
+          message: "Không tìm thấy ngày nghỉ.",
+        });
 
       const patch: Partial<typeof publicHolidays.$inferInsert> = { updatedBy: actor.id };
       if (dto.holidayCode !== undefined) patch.holidayCode = dto.holidayCode;
@@ -232,10 +240,18 @@ export class HolidaysService {
       try {
         [row] = await this.repo.updateOwnTx(actor.companyId, id, patch, tx);
       } catch (err) {
-        if (isUniqueViolation(err)) throw new ConflictException("Ngày nghỉ trùng (mã + ngày).");
+        if (isUniqueViolation(err))
+          throw new ConflictException({
+            code: FOUNDATION_ERROR_CODES.HOLIDAY_DUPLICATE,
+            message: "Ngày nghỉ trùng (mã + ngày).",
+          });
         throw err;
       }
-      if (!row) throw new NotFoundException("Không tìm thấy ngày nghỉ.");
+      if (!row)
+        throw new NotFoundException({
+          code: FOUNDATION_ERROR_CODES.HOLIDAY_NOT_FOUND,
+          message: "Không tìm thấy ngày nghỉ.",
+        });
       // Audit CÙNG tx: old = snapshot trước sửa, new = snapshot sau sửa (changed_fields auto).
       await this.recordConfigAudit(tx, actor, "HOLIDAY_UPDATED", row.id, existing, row);
       return toHolidayView(row);
@@ -245,7 +261,11 @@ export class HolidaysService {
   deleteHoliday(actor: Actor, id: string): Promise<{ id: string; deleted: true }> {
     return this.db.withTenant(actor.companyId, async (tx) => {
       const [row] = await this.repo.softDeleteOwnTx(actor.companyId, id, actor.id, tx);
-      if (!row) throw new NotFoundException("Không tìm thấy ngày nghỉ.");
+      if (!row)
+        throw new NotFoundException({
+          code: FOUNDATION_ERROR_CODES.HOLIDAY_NOT_FOUND,
+          message: "Không tìm thấy ngày nghỉ.",
+        });
       // Audit CÙNG tx: old = snapshot ngày lễ bị xoá, new = null (đã soft-delete).
       await this.recordConfigAudit(tx, actor, "HOLIDAY_DELETED", row.id, row, null);
       return { id: row.id, deleted: true as const };
