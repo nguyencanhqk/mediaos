@@ -16,6 +16,9 @@ export const SYSTEM_PERMS = {
     DELETE: "AUTH.USER.DELETE",
     // S2-FE-SYS-SEC-1 — admin gỡ 2FA của user khác (privileged, is_sensitive=true — mig 0466).
     RESET_2FA: "AUTH.USER.RESET_2FA",
+    // S2-AUTH-USEROPS-1 — khôi phục user đã xóa mềm + admin đặt lại mật khẩu (is_sensitive=true — mig 0476).
+    RESTORE: "AUTH.USER.RESTORE",
+    RESET_PASSWORD: "AUTH.USER.RESET_PASSWORD",
   },
   ROLE: {
     VIEW: "AUTH.ROLE.VIEW",
@@ -71,6 +74,13 @@ export const SYSTEM_ENGINE_PAIRS = {
   // Cặp seed THẬT reset-2fa:user is_sensitive=true (mig 0466) → component dùng useCanExact, KHÔNG useCan
   // (wildcard '*:*' KHÔNG thoả cổng sensitive — chống leo thang; mirror ASSIGN_ROLE/ASSIGN_PERMISSION).
   RESET_2FA_USER: { action: "reset-2fa", resourceType: "user" },
+  // S2-AUTH-USEROPS-1 — nguồn: AuthUsersController DELETE /auth/users/:id · POST :id/restore ·
+  // POST :id/password/reset. Cặp seed THẬT is_sensitive=true (mig 0476: restore/reset-password INSERT
+  // mới; delete:user NÂNG từ 0005 false→true) + đã APPEND SENSITIVE_CAPABILITY_ALLOWLIST → component
+  // PHẢI dùng useCanExact (wildcard '*:*' KHÔNG thoả cổng sensitive; mirror RESET_2FA_USER).
+  DELETE_USER: { action: "delete", resourceType: "user" },
+  RESTORE_USER: { action: "restore", resourceType: "user" },
+  RESET_PASSWORD_USER: { action: "reset-password", resourceType: "user" },
   READ_ROLE: { action: "view", resourceType: "role" },
   // S2-FE-AUTH-4 (lane FE batch C) — nguồn: apps/api/src/permission/role-admin.controller.ts +
   // auth-roles-permissions.controller.ts (mig 0005/0444/0460). assign:permission is_sensitive=true

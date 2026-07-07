@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -19,6 +20,7 @@ import {
   type AuthUserDetailDto,
   type AuthUserDto,
   type AuthUserListDto,
+  type AuthUserPasswordResetResultDto,
   type AuthUserTwoFactorResetDto,
 } from "@mediaos/contracts";
 import { PermissionGuard } from "../permission/guards/permission.guard";
@@ -126,5 +128,51 @@ export class AuthUsersController {
     @Param("id", new ParseUUIDPipe()) id: string,
   ): Promise<AuthUserTwoFactorResetDto> {
     return this.users.resetTwoFactor(req.user, id);
+  }
+
+  /**
+   * S2-AUTH-USEROPS-1 — DELETE /auth/users/:id: XÓA MỀM (deleted_at, khôi phục được — KHÔNG hard-delete,
+   * BẤT BIẾN #2). Gate CẶP CANONICAL delete:user is_sensitive=true (mig 0476) — khai isSensitive để
+   * wildcard *:* KHÔNG thoả cổng. Self-delete → 400. Cross-tenant/không tồn tại/đã xóa → 404.
+   */
+  @Delete(":id")
+  @HttpCode(200)
+  @RequirePermission(AUTH_USER.DELETE.action, AUTH_USER.DELETE.resource, { isSensitive: true })
+  softDelete(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", new ParseUUIDPipe()) id: string,
+  ): Promise<AuthUserDto> {
+    return this.users.deleteUser(req.user, id);
+  }
+
+  /**
+   * S2-AUTH-USEROPS-1 — POST /auth/users/:id/restore: KHÔI PHỤC user đã xóa mềm. Gate restore:user
+   * is_sensitive=true (mig 0476). Row live/lạ/cross-tenant → 404; email đã bị chiếm bởi user live → 409.
+   */
+  @Post(":id/restore")
+  @HttpCode(200)
+  @RequirePermission(AUTH_USER.RESTORE.action, AUTH_USER.RESTORE.resource, { isSensitive: true })
+  restore(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", new ParseUUIDPipe()) id: string,
+  ): Promise<AuthUserDto> {
+    return this.users.restoreUser(req.user, id);
+  }
+
+  /**
+   * S2-AUTH-USEROPS-1 — POST /auth/users/:id/password/reset: admin đặt lại mật khẩu (temp password +
+   * must_change_password + thu hồi mọi phiên). Gate reset-password:user is_sensitive=true (mig 0476).
+   * Self → 400 (dùng change-password). Response chứa tempPassword ĐÚNG 1 LẦN — KHÔNG log (BẤT BIẾN #3).
+   */
+  @Post(":id/password/reset")
+  @HttpCode(200)
+  @RequirePermission(AUTH_USER.RESET_PASSWORD.action, AUTH_USER.RESET_PASSWORD.resource, {
+    isSensitive: true,
+  })
+  resetPassword(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", new ParseUUIDPipe()) id: string,
+  ): Promise<AuthUserPasswordResetResultDto> {
+    return this.users.resetPassword(req.user, id);
   }
 }

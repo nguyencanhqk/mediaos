@@ -3,12 +3,14 @@ import {
   authUserSchema,
   authUserDetailSchema,
   authUserListSchema,
+  authUserPasswordResetResultSchema,
   authUserTwoFactorResetSchema,
   roleListSchema,
   userRoleSchema,
   type AuthUserDto,
   type AuthUserDetailDto,
   type AuthUserListDto,
+  type AuthUserPasswordResetResultDto,
   type AuthUserTwoFactorResetDto,
   type CreateAuthUserRequest,
   type ListAuthUsersQuery,
@@ -83,6 +85,32 @@ export const authUsersApi = {
    */
   resetTwoFactor: (id: string): Promise<AuthUserTwoFactorResetDto> =>
     apiFetch(`/auth/users/${id}/2fa/reset`, authUserTwoFactorResetSchema, {
+      method: "POST",
+      body: "{}",
+    }),
+
+  /**
+   * S2-AUTH-USEROPS-1 — DELETE /auth/users/:id: XÓA MỀM (khôi phục được). Gate cặp CANONICAL
+   * delete:user is_sensitive=true (mig 0476) — FE gate nút bằng useCanExact. Self-delete → 400.
+   */
+  deleteUser: (id: string): Promise<AuthUserDto> =>
+    apiFetch(`/auth/users/${id}`, authUserSchema, { method: "DELETE" }),
+
+  /**
+   * S2-AUTH-USEROPS-1 — POST /auth/users/:id/restore: KHÔI PHỤC user đã xóa mềm. Gate restore:user
+   * is_sensitive=true (mig 0476). Email đã bị user LIVE chiếm → 409 (surface message rõ).
+   */
+  restoreUser: (id: string): Promise<AuthUserDto> =>
+    apiFetch(`/auth/users/${id}/restore`, authUserSchema, { method: "POST", body: "{}" }),
+
+  /**
+   * S2-AUTH-USEROPS-1 — POST /auth/users/:id/password/reset: admin đặt lại mật khẩu. Gate
+   * reset-password:user is_sensitive=true (mig 0476). Kết quả chứa tempPassword ĐÚNG 1 LẦN —
+   * caller CHỈ hiển thị trong dialog, TUYỆT ĐỐI không log/cache/persist (BẤT BIẾN #3); server đã
+   * ép must_change_password + thu hồi mọi phiên. Self → 400 (dùng change-password).
+   */
+  resetPassword: (id: string): Promise<AuthUserPasswordResetResultDto> =>
+    apiFetch(`/auth/users/${id}/password/reset`, authUserPasswordResetResultSchema, {
       method: "POST",
       body: "{}",
     }),

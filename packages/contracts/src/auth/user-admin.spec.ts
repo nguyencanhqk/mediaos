@@ -47,10 +47,19 @@ describe("S2-AUTH-BE-3 contracts — user-admin", () => {
       lockedReason: "policy",
       lastLoginAt: null,
       createdAt: "2026-06-25T00:00:00.000Z",
+      deletedAt: null, // S2-AUTH-USEROPS-1: mốc xóa mềm (null = LIVE)
     };
     const parsed = authUserSchema.parse(dto);
     expect(parsed).not.toHaveProperty("passwordHash");
     expect(parsed.status).toBe("locked");
+    expect(parsed.deletedAt).toBeNull();
+  });
+
+  // S2-AUTH-USEROPS-1 — query deleted: enum chuỗi → boolean (KHÔNG z.coerce.boolean vì "false"→true).
+  it("listAuthUsersQuerySchema: deleted='true'→true · 'false'→false · thiếu→undefined (LIVE mặc định)", () => {
+    expect(listAuthUsersQuerySchema.parse({ deleted: "true" }).deleted).toBe(true);
+    expect(listAuthUsersQuerySchema.parse({ deleted: "false" }).deleted).toBe(false);
+    expect(listAuthUsersQuerySchema.parse({}).deleted).toBeUndefined();
   });
 
   it("listAuthUsersQuerySchema clamp limit > max về 100", () => {

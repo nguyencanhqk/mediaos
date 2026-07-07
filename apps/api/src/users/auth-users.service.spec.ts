@@ -83,6 +83,11 @@ describe("AuthUsersService", () => {
       // S2-AUTH-BE-12
       getTwoFactorStateTx: vi.fn(async () => ({ enabled: false, requiredByRole: false })),
       deleteTwoFactorTx: vi.fn(async () => undefined),
+      // S2-AUTH-USEROPS-1
+      softDeleteTx: vi.fn(async () => makeUser({ deletedAt: new Date() })),
+      restoreTx: vi.fn(async () => makeUser({ deletedAt: null })),
+      findDeletedByIdTx: vi.fn(async () => makeUser({ deletedAt: new Date() })),
+      setPasswordTx: vi.fn(async () => makeUser({ mustChangePassword: true })),
     } as unknown as AuthUsersRepository;
     service = new AuthUsersService(
       db as never,
@@ -343,5 +348,168 @@ describe("AuthUsersService", () => {
     expect(auth.revokeAllForUserTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
     expect(securityEvents.record).not.toHaveBeenCalled();
+  });
+
+  // ── S2-AUTH-USEROPS-1: deleteUser (xóa mềm) ─────────────────────────────────────
+  it("delete: soft-delete + revoke phiên đúng 1 lần + audit 'user.deleted' (count vào after) + emit USER_DELETED", async () => {
+    auth.revokeAllForUserTx = vi.fn(async () => 4);
+    service = new AuthUsersService(
+      db as never,
+      repo,
+      audit as never,
+      password as never,
+      permissions as never,
+      auth as never,
+      securityEvents as never,
+    );
+    const dto = await service.deleteUser(ACTOR, TARGET_ID);
+    expect(repo.softDeleteTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID, ACTOR.id);
+    expect(auth.revokeAllForUserTx).toHaveBeenCalledTimes(1);
+    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, TARGET_ID, "deleted");
+    expect(dto.deletedAt).not.toBeNull();
+    const entry = audit.record.mock.calls[0][1];
+    expect(entry.action).toBe("user.deleted");
+    expect(entry.objectType).toBe("user");
+    expect(entry.after.revokedSessionCount).toBe(4);
+    const evEntry = securityEvents.record.mock.calls[0][1];
+    expect(evEntry.eventType).toBe("USER_DELETED");
+    expect(evEntry.userId).toBe(TARGET_ID);
+    expect(evEntry.actorUserId).toBe(ACTOR.id);
+  });
+
+  it("delete: GIỮ NGUYÊN status khi xóa (khôi phục trả về đúng trạng thái trước xóa)", async () => {
+    repo.findByIdTx = vi.fn(async () => makeUser({ status: "locked" })) as never;
+    repo.softDeleteTx = vi.fn(async () =>
+      makeUser({ status: "locked", deletedAt: new Date() }),
+    ) as never;
+    const dto = await service.deleteUser(ACTOR, TARGET_ID);
+    expect(dto.status).toBe("locked");
+  });
+
+  it("delete: tự xóa chính mình → BadRequest (no-op, 0 audit, 0 revoke)", async () => {
+    await expect(service.deleteUser(ACTOR, ACTOR.id)).rejects.toBeInstanceOf(BadRequestException);
+    expect(repo.softDeleteTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+    expect(auth.revokeAllForUserTx).not.toHaveBeenCalled();
+  });
+
+  it("delete: target không thấy / cross-tenant → NotFound TRƯỚC audit (0 audit rác)", async () => {
+    repo.findByIdTx = vi.fn(async () => undefined) as never;
+    await expect(service.deleteUser(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(NotFoundException);
+    expect(audit.record).not.toHaveBeenCalled();
+    expect(securityEvents.record).not.toHaveBeenCalled();
+  });
+
+  // ── S2-AUTH-USEROPS-1: restoreUser (khôi phục) ──────────────────────────────────
+  it("restore: đòi row ĐANG deleted + clear deletedAt + audit 'user.restored' + emit USER_RESTORED (KHÔNG revoke)", async () => {
+    const dto = await service.restoreUser(ACTOR, TARGET_ID);
+    expect(repo.findDeletedByIdTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID);
+    expect(repo.restoreTx).toHaveBeenCalledWith(TX, ACTOR.companyId, TARGET_ID, ACTOR.id);
+    expect(dto.deletedAt).toBeNull();
+    const entry = audit.record.mock.calls[0][1];
+    expect(entry.action).toBe("user.restored");
+    expect(entry.objectType).toBe("user");
+    const evEntry = securityEvents.record.mock.calls[0][1];
+    expect(evEntry.eventType).toBe("USER_RESTORED");
+    expect(auth.revokeAllForUserTx).not.toHaveBeenCalled();
+  });
+
+  it("restore: target KHÔNG ở trạng thái deleted (hoặc cross-tenant) → NotFound, 0 audit", async () => {
+    repo.findDeletedByIdTx = vi.fn(async () => undefined) as never;
+    await expect(service.restoreUser(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(NotFoundException);
+    expect(repo.restoreTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("restore: email đã có user LIVE trùng (tạo mới sau khi xóa) → 409 Conflict, KHÔNG restore", async () => {
+    repo.emailExistsTx = vi.fn(async () => true) as never;
+    await expect(service.restoreUser(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(ConflictException);
+    expect(repo.restoreTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("restore: thua ĐUA unique (precheck pass nhưng UPDATE nổ 23505 lồng trong cause) → 409, KHÔNG 500", async () => {
+    // Mirror DrizzleQueryError: pg error nằm ở .cause (db-error.ts walk cause-chain).
+    repo.restoreTx = vi.fn(async () => {
+      throw Object.assign(new Error("update failed"), {
+        cause: { code: "23505", constraint: "users_company_normalized_email_active_uq" },
+      });
+    }) as never;
+    await expect(service.restoreUser(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(ConflictException);
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  // ── S2-AUTH-USEROPS-1: resetPassword (admin đặt lại mật khẩu) ───────────────────
+  it("resetPassword: temp password đạt policy (≥12, hoa+thường+số) + hash + must_change + revoke + audit KHÔNG chứa secret", async () => {
+    auth.revokeAllForUserTx = vi.fn(async () => 2);
+    service = new AuthUsersService(
+      db as never,
+      repo,
+      audit as never,
+      password as never,
+      permissions as never,
+      auth as never,
+      securityEvents as never,
+    );
+    const res = await service.resetPassword(ACTOR, TARGET_ID);
+
+    // temp password trả về ĐÚNG 1 LẦN + đạt policy newPasswordSchema
+    expect(res.tempPassword.length).toBeGreaterThanOrEqual(12);
+    expect(res.tempPassword).toMatch(/[a-z]/);
+    expect(res.tempPassword).toMatch(/[A-Z]/);
+    expect(res.tempPassword).toMatch(/[0-9]/);
+    expect(res.revokedSessionCount).toBe(2);
+
+    // hash nhận ĐÚNG temp password; repo nhận HASH (không plaintext) + ép must_change_password
+    expect(password.hash).toHaveBeenCalledWith(res.tempPassword);
+    expect(repo.setPasswordTx).toHaveBeenCalledWith(
+      TX,
+      ACTOR.companyId,
+      TARGET_ID,
+      HASHED,
+      ACTOR.id,
+    );
+    expect(auth.revokeAllForUserTx).toHaveBeenCalledTimes(1);
+    expect(auth.revokeAllForUserTx).toHaveBeenCalledWith(TX, TARGET_ID, "admin_password_reset");
+
+    // audit + security event KHÔNG BAO GIỜ chứa temp password / hash (BẤT BIẾN #3)
+    const entry = audit.record.mock.calls[0][1];
+    expect(entry.action).toBe("user.password_reset_by_admin");
+    expect(entry.after.revokedSessionCount).toBe(2);
+    expect(JSON.stringify(entry)).not.toContain(res.tempPassword);
+    expect(JSON.stringify(entry)).not.toContain(HASHED);
+    const evEntry = securityEvents.record.mock.calls[0][1];
+    expect(evEntry.eventType).toBe("PASSWORD_RESET_BY_ADMIN");
+    expect(JSON.stringify(evEntry)).not.toContain(res.tempPassword);
+  });
+
+  it("resetPassword: mỗi lần gọi sinh temp password KHÁC nhau (crypto random, không tất định)", async () => {
+    const a = await service.resetPassword(ACTOR, TARGET_ID);
+    const b = await service.resetPassword(ACTOR, TARGET_ID);
+    expect(a.tempPassword).not.toBe(b.tempPassword);
+  });
+
+  it("resetPassword: tự reset chính mình → BadRequest (dùng change-password; no-op, 0 audit, 0 revoke)", async () => {
+    await expect(service.resetPassword(ACTOR, ACTOR.id)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(repo.setPasswordTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+    expect(auth.revokeAllForUserTx).not.toHaveBeenCalled();
+  });
+
+  it("resetPassword: target không thấy / cross-tenant → NotFound TRƯỚC mọi mutation (0 audit)", async () => {
+    repo.findByIdTx = vi.fn(async () => undefined) as never;
+    await expect(service.resetPassword(ACTOR, TARGET_ID)).rejects.toBeInstanceOf(NotFoundException);
+    expect(repo.setPasswordTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+    expect(securityEvents.record).not.toHaveBeenCalled();
+  });
+
+  // ── S2-AUTH-USEROPS-1: list deleted filter ──────────────────────────────────────
+  it("list: query.deleted=true → repo filter nhận deleted=true (view Đã xóa)", async () => {
+    await service.listUsers(ACTOR, { limit: 50, offset: 0, deleted: true });
+    const filterArg = (repo.findManyTx as unknown as ReturnType<typeof vi.fn>).mock.calls[0][3];
+    expect(filterArg.deleted).toBe(true);
   });
 });

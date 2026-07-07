@@ -61,6 +61,14 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   // ⇒ nút ẨN với CẢ admin dù grant thật tồn tại (phát hiện 2026-07-07). Enforcement KHÔNG đổi.
   "assign-role:user",
   "assign:permission",
+  // S2-AUTH-USEROPS-1 — APPEND-only: xóa mềm / khôi phục / admin đặt lại mật khẩu trên /system/users
+  // (nút Xóa · tab Đã xóa + Khôi phục · Đặt lại mật khẩu). Cặp seed THẬT is_sensitive=true (mig 0476:
+  // restore/reset-password INSERT mới; delete NÂNG từ false→true của mig 0005), grant Company CHỈ
+  // company-admin. Thiếu allowlist ⇒ useCanExact false với CẢ admin (bài học CAP-2). Enforcement KHÔNG
+  // đổi — PermissionGuard per-resource (@RequirePermission …, {isSensitive:true}) vẫn là cổng thật.
+  "delete:user",
+  "restore:user",
+  "reset-password:user",
 ]);
 
 @Injectable()
