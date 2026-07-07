@@ -3967,7 +3967,9 @@ export const backlog = [
     title:
       "Quản lý người dùng nâng cao: xóa mềm + khôi phục + admin reset mật khẩu + thao tác hàng loạt trên /system/users (owner-request 2026-07-07)",
     zone: "red",
-    status: "in_progress",
+    // CLOSE 2026-07-07: MERGED PR #121 (squash f0a78e2) — plan-review BLOCK→REVISED, FULL gate
+    // security+db PASS, api 4595 pass lane DB, gitleaks false-positive fixture đã gỡ (.gitleaksignore).
+    status: "done",
     paths: [
       "apps/api/src/users/**",
       "apps/api/migrations/**",
