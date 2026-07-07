@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Quét source của @mediaos/ui (Dialog/DataTable/…) — Tailwind v4 auto-detect BỎ QUA workspace package
+   (resolve qua node_modules symlink), nên utility CHỈ dùng trong packages/ui (vd max-w-lg · bg-black/40 ·
+   max-h-[90vh] của Dialog) KHÔNG được sinh ra ⇒ modal mất giới hạn bề rộng (thành w-full tràn sidebar) +
+   mất nền tối. @source ép quét thư mục ui để mọi class shared-component có mặt trong bundle. */
+@source "../../../packages/ui/src";
+
 /* ============================================================================
    Design language — "Control Room" (Phòng điều khiển) · Tailwind v4 @theme.
    apps/app = vỏ nghiệp vụ hợp nhất (Home Portal + module HR/ATT/LEAVE/TASK/…):

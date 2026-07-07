@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Quét source của @mediaos/ui (Dialog/DataTable/…) — Tailwind v4 auto-detect BỎ QUA workspace package
+   ⇒ utility CHỈ dùng trong packages/ui (vd max-w-lg · bg-black/40 của Dialog) không được sinh, làm modal
+   tràn full-width + mất nền tối. @source ép quét thư mục ui để mọi class shared-component có mặt. */
+@source "../../../packages/ui/src";
+
 /* ============================================================================
    Design language — "Control Room" (Phòng điều khiển) · Tailwind v4 @theme.
    Console = bàn điều khiển hệ thống: nền navy-đen tập trung, panel nổi, "phím"
