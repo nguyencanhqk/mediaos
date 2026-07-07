@@ -3930,4 +3930,33 @@ export const backlog = [
       "contracts roleMemberListSchema dual-build; web-core roleAdminApi.getMembers; i18n vi đủ key; FE spec render + gating; check.sh xanh + FULL gate security-reviewer PASS",
     ],
   },
+  {
+    id: "S2-AUTH-PERMUX-1",
+    module: "AUTH",
+    layer: "FE",
+    title:
+      "Tối ưu gán quyền: BE GET /auth/roles/:id/permissions + RolePermissionsPage v2 (trạng thái thật, nhóm module, bulk) + nhân bản vai trò + nhãn tiếng Việt (owner-request 2026-07-07)",
+    zone: "red",
+    status: "in_progress",
+    paths: [
+      "apps/api/src/permission/**",
+      "apps/api/test/integration/**",
+      "packages/contracts/src/auth/**",
+      "packages/web-core/src/lib/**",
+      "apps/app/src/routes/system/roles/**",
+      "apps/app/src/i18n/**",
+      "docs/plans/S2-AUTH-PERMUX-1.md",
+    ],
+    skills: [],
+    depends_on: ["S2-AUTH-ROLEMEM-1"],
+    src: ["owner-request 2026-07-07 (chat) — chọn 'Đủ bộ #1→#4'"],
+    plan: "docs/plans/S2-AUTH-PERMUX-1.md",
+    done_when: [
+      "BE: GET /auth/roles/:id/permissions (@RequirePermission view:permission) trả grants (action/resourceType/effect/dataScope/isSensitive) của role; role lạ/cross-tenant/operator → 404; KHÔNG mutation mới (gán/thu hồi/đổi-scope tái dùng POST/DELETE :id/permissions sẵn có — server đã idempotent + DELETE+INSERT đổi scope + scope-ceiling System)",
+      "Int-spec: P1 grants exact (gồm row DENY seed thẳng) · N1 employee 403 · N2b role tenant khác 404 · N3 UUID lạ 404 · N5 operator-role 404",
+      "FE RolePermissionsPage v2: mỗi dòng hiện TRẠNG THÁI ĐÃ GÁN + scope hiện tại (bỏ banner mù-trạng-thái); nhóm theo resourceType thu gọn/mở rộng; đổi scope ngay trên dropdown; bulk: tick nhiều dòng → 1 scope → Gán 1 lượt (tuần tự, kết quả từng dòng); search giữ nguyên",
+      "Nhân bản vai trò: nút trên RoleDetailPage (gate create:role + assign:permission) → dialog tên mới → createRole → copy grants ALLOW từ role nguồn (bỏ System-scope theo ceiling, bỏ DENY — báo rõ), điều hướng sang role mới",
+      "Nhãn tiếng Việt action/resource cho module MVP (fallback mã thô); spec FE cập nhật (bỏ assert banner cũ, thêm state-render + clone flow); check.sh xanh + FULL gate security-reviewer PASS",
+    ],
+  },
 ];
