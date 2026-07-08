@@ -109,6 +109,8 @@ export type LeaveHalfDaySessionConst =
 /** Routes trong module LEAVE. */
 export const LEAVE_PATHS = {
   OVERVIEW: "/leave",
+  // S3-FE-LEAVE-7 — số dư phép self-service DỜI khỏi /leave (nay là LeaveOverviewPage) → /leave/me/balances.
+  MY_BALANCES: "/leave/me/balances",
   MY_REQUESTS: "/leave/me/requests",
   CREATE: "/leave/me/requests/new",
   DETAIL: (id: string) => `/leave/me/requests/${id}`,
@@ -131,6 +133,18 @@ export const LEAVE_PATHS = {
 /** Page size mặc định cho báo cáo/audit LEAVE (mirror ATT_RECORDS_PAGE_SIZE). */
 export const LEAVE_REPORT_PAGE_SIZE = 20;
 export const LEAVE_AUDIT_PAGE_LIMIT = 50;
+
+/**
+ * S3-FE-LEAVE-7 — LeaveOverviewPage (LEAVE-SCREEN-001).
+ * Số dòng "gần đây" nạp cho hub tổng quan (dùng page/pageSize — KHÔNG per_page: contract
+ * leaveRequestListQuerySchema/pendingLeaveRequestListQuerySchema chỉ có page/pageSize,
+ * per_page bị Zod strip → server trả full 20 dòng).
+ */
+export const LEAVE_OVERVIEW_RECENT_SIZE = 5;
+/** Ngưỡng cảnh báo số dư phép sắp hết (ngày còn lại ≤ ngưỡng). */
+export const LEAVE_LOW_BALANCE_THRESHOLD = 2;
+/** Đơn chờ duyệt quá hạn: submittedAt cũ hơn N ngày → cảnh báo (cross-read, gate view:leave). */
+export const LEAVE_OVERDUE_PENDING_DAYS = 3;
 
 /**
  * Filter tháng → fromDate / toDate INCLUSIVE [đầu tháng, cuối tháng] cho GET /leave/reports

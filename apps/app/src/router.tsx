@@ -172,6 +172,7 @@ import { AdjustmentRequestDetailPage } from "@/routes/attendance/adjustment/Adju
 import { DirectAdjustPage } from "@/routes/attendance/adjustment/DirectAdjustPage";
 
 // Leave
+import { LeaveOverviewPage } from "@/routes/leave/LeaveOverviewPage";
 import { MyLeaveBalancePage } from "@/routes/leave/MyLeaveBalancePage";
 import { MyLeaveRequestsPage } from "@/routes/leave/MyLeaveRequestsPage";
 import { CreateLeaveRequestPage } from "@/routes/leave/CreateLeaveRequestPage";
@@ -730,7 +731,17 @@ const attRecordAdjustRoute = createRoute({
 });
 
 // Leave
-const leaveRoute = makeModuleRoute("/leave", "leave.overview", "LEAVE", MyLeaveBalancePage);
+// S3-FE-LEAVE-7 — /leave nay là LeaveOverviewPage (hub tổng quan). Số dư phép self-service DỜI sang
+// /leave/me/balances (leaveMyBalancesRoute) — REUSE meta leave.overview (requiredAny LEAVE.REQUEST.VIEW_OWN,
+// đã map PERMISSION_CODE_TO_PAIR → view-own:leave). KHÔNG dùng LEAVE.BALANCE.VIEW_OWN (chưa map → SHOW_403).
+const leaveRoute = makeModuleRoute("/leave", "leave.overview", "LEAVE", LeaveOverviewPage);
+const leaveMyBalancesMeta = getMeta("leave.overview");
+const leaveMyBalancesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/leave/me/balances",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(leaveMyBalancesMeta, "LEAVE", <MyLeaveBalancePage />),
+});
 const leaveMyRequestsRoute = makeModuleRoute(
   "/leave/me/requests",
   "leave.my-requests",
@@ -1475,6 +1486,7 @@ const routeTree = rootRoute.addChildren([
   attAdjustmentDetailRoute,
   attRecordAdjustRoute,
   leaveRoute,
+  leaveMyBalancesRoute,
   leaveMyRequestsRoute,
   leaveCreateRoute,
   leaveDetailRoute,

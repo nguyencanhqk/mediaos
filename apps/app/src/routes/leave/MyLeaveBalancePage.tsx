@@ -120,8 +120,8 @@ export function MyLeaveBalancePage() {
   return (
     <div className="space-y-6 p-6">
       <PageHeader
-        title={t("overview.title")}
-        description={t("overview.description") + " — " + t("overview.currentYear", { year })}
+        title={t("myBalances.title")}
+        description={t("myBalances.description") + " — " + t("overview.currentYear", { year })}
         icon={CalendarDays}
         actions={
           <div className="flex items-center gap-2">
