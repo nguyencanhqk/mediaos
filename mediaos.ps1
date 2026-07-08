@@ -517,17 +517,18 @@ function Show-Menu {
     Write-Host "  [10] Khôi phục .env PROD"
     Write-Host ""
     Write-Host "  --- DEV-ONLINE (lộ ra cian-dev.*, song song prod) ---" -ForegroundColor DarkCyan
-    Write-Host "  [11] DEV-ONLINE          chạy/restart (tự dừng cũ + rebuild shared)"
-    Write-Host "  [12] Dừng dev-online"
-    Write-Host "  [13] Dev-online: tạo DB mediaos_dev      (1 lần)"
-    Write-Host "  [14] Dev-online: ingress tunnel          (1 lần, Administrator)"
+    Write-Host "  [11] DEV-ONLINE          dev server + HMR (sửa FE thấy ngay)"
+    Write-Host "  [12] DEV-ONLINE FAST     serve bản build (nhanh/ổn định qua tunnel, KHÔNG HMR)"
+    Write-Host "  [13] Dừng dev-online"
+    Write-Host "  [14] Dev-online: tạo DB mediaos_dev      (1 lần)"
+    Write-Host "  [15] Dev-online: ingress tunnel          (1 lần, Administrator)"
     Write-Host ""
     Write-Host "  --- DASHBOARD tiến độ (chạy ẩn, cổng 5180) ---" -ForegroundColor DarkCyan
-    Write-Host "  [15] Bật DASHBOARD (ẩn)    http://localhost:5180"
-    Write-Host "  [16] Tắt DASHBOARD"
+    Write-Host "  [16] Bật DASHBOARD (ẩn)    http://localhost:5180"
+    Write-Host "  [17] Tắt DASHBOARD"
     Write-Host "   [0] Thoát"
     Write-Host ""
-    $choice = Read-Host "Chọn (0-16)"
+    $choice = Read-Host "Chọn (0-17)"
     switch ($choice) {
       "1"  { Invoke-Dev }
       "2"  { Invoke-Up }
@@ -540,11 +541,12 @@ function Show-Menu {
       "9"  { Invoke-Status }
       "10" { Invoke-ProdEnv }
       "11" { Invoke-DevOnline }
-      "12" { Invoke-DevOnlineStop }
-      "13" { Invoke-DevOnlineDb }
-      "14" { Invoke-DevOnlineTunnel }
-      "15" { Invoke-Dashboard }
-      "16" { Invoke-DashboardStop }
+      "12" { Invoke-DevOnlineFast }
+      "13" { Invoke-DevOnlineStop }
+      "14" { Invoke-DevOnlineDb }
+      "15" { Invoke-DevOnlineTunnel }
+      "16" { Invoke-Dashboard }
+      "17" { Invoke-DashboardStop }
       "0"  { return }
       default { }
     }

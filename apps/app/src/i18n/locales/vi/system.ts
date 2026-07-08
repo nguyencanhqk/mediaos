@@ -266,6 +266,23 @@ export default {
       title: "Không có quyền truy cập",
       description: "Bạn không có quyền xem danh sách vai trò.",
     },
+    delete: {
+      action: "Xoá vai trò",
+      systemDisabledHint: "Không thể xoá vai trò hệ thống.",
+      dialogTitle: "Xoá vai trò",
+      dialogDescription:
+        'Xoá vai trò "{{name}}"? Vai trò sẽ bị gỡ khỏi tất cả thành viên đang được gán và họ sẽ mất các quyền của vai trò này ngay lập tức. Thao tác này không thể hoàn tác từ giao diện.',
+      confirm: "Xoá vai trò",
+      cancel: "Huỷ",
+      success: "Đã xoá vai trò.",
+      successWithMembers: "Đã xoá vai trò và gỡ khỏi {{members}} thành viên.",
+      error: {
+        system: "Không thể xoá vai trò hệ thống.",
+        forbidden: "Bạn không có quyền xoá vai trò.",
+        notFound: "Vai trò không tồn tại hoặc đã bị xoá.",
+        generic: "Không thể xoá vai trò. Vui lòng thử lại.",
+      },
+    },
   },
 
   // S2-FE-AUTH-4 (lane FE batch C) — role create/detail/edit + assign-permission + permission catalog.
@@ -345,6 +362,7 @@ export default {
     actions: {
       addPerson: "Thêm người",
       addOrgUnit: "Thêm theo phòng ban",
+      addPosition: "Thêm theo chức vụ",
       remove: "Gỡ",
     },
     removeConfirm: {
@@ -353,7 +371,8 @@ export default {
     },
     addPerson: {
       title: "Thêm người vào vai trò",
-      description: "Tìm và chọn tài khoản để gán vai trò này. Tài khoản đã là thành viên không hiển thị.",
+      description:
+        "Tìm và chọn tài khoản để gán vai trò này. Tài khoản đã là thành viên không hiển thị.",
       searchPlaceholder: "Tìm theo email hoặc tên...",
       empty: "Không có tài khoản phù hợp (hoặc tất cả đã là thành viên).",
       submit: "Gán {{count}} tài khoản",
@@ -368,8 +387,17 @@ export default {
         toAssign: "Sẽ gán: {{count}} tài khoản",
         alreadyMembers: "Bỏ qua (đã là thành viên): {{count}}",
         unlinked: "Không gán được (nhân viên chưa liên kết tài khoản): {{count}}",
-        pageCap: "Phòng ban có ≥100 nhân viên — chỉ xử lý 100 người đầu, chạy lại để gán phần còn lại.",
+        pageCap:
+          "Phòng ban có ≥100 nhân viên — chỉ xử lý 100 người đầu, chạy lại để gán phần còn lại.",
       },
+      submit: "Gán {{count}} tài khoản",
+    },
+    addPosition: {
+      title: "Thêm theo chức vụ vào vai trò",
+      description:
+        "Chọn chức vụ — mọi nhân viên giữ chức vụ đó, ĐÃ có tài khoản và chưa giữ vai trò sẽ được gán.",
+      selectLabel: "Chức vụ",
+      selectPlaceholder: "— Chọn chức vụ —",
       submit: "Gán {{count}} tài khoản",
     },
     batch: {
@@ -443,6 +471,47 @@ export default {
       notFound: "Vai trò chưa có quyền này để thu hồi.",
       server: "Có lỗi hệ thống. Vui lòng thử lại sau.",
       generic: "Thao tác thất bại. Vui lòng thử lại.",
+    },
+    // S2-AUTH-PERMRULE-1 — gán quyền theo LUẬT khớp mẫu (rule builder).
+    rule: {
+      open: "Gán theo luật",
+      title: "Gán quyền theo luật — {{role}}",
+      description:
+        "Chọn tài nguyên + nhóm hành động + phạm vi; hệ thống bung ra các quyền khớp trong danh mục. Xem trước rồi mới áp.",
+      resources: "Tài nguyên (resource)",
+      resourcesAll: "Bỏ trống = áp cho MỌI tài nguyên",
+      actionPreset: "Nhóm hành động",
+      preset: {
+        "read-only": "Chỉ đọc (view/read/list)",
+        crud: "Đầy đủ CRUD (tạo/đọc/sửa/xoá)",
+        custom: "Tuỳ chọn hành động",
+      },
+      actionsCustom: "Chọn hành động (action)",
+      includeSensitive: "Gồm cả quyền nhạy cảm",
+      includeSensitiveHint:
+        "Chỉ bật khi đã giới hạn tài nguyên cụ thể; sẽ liệt kê rõ từng quyền nhạy cảm.",
+      dataScope: "Phạm vi dữ liệu áp cho quyền",
+      preview: "Xem trước",
+      previewing: "Đang tính…",
+      apply: "Áp dụng {{count}} thay đổi",
+      applying: "Đang áp dụng…",
+      summary:
+        "Thêm {{add}} · Đổi phạm vi {{change}} · Bỏ qua {{skip}} · Loại vì nhạy cảm {{excluded}}",
+      sectionAdd: "Sẽ thêm",
+      sectionChange: "Đổi phạm vi",
+      sectionSkip: "Bỏ qua",
+      sectionExcluded: "Loại vì nhạy cảm",
+      changeLine: "{{pair}}: {{from}} → {{to}}",
+      skipDenied: "đang có DENY",
+      skipGranted: "đã gán cùng phạm vi",
+      nothingToApply: "Không có thay đổi nào để áp (mọi quyền khớp đã được gán).",
+      done: "Đã áp dụng: {{ok}} thành công, {{err}} lỗi.",
+      close: "Đóng",
+      errors: {
+        sensitiveAllResource:
+          "Luật gồm quyền nhạy cảm phải giới hạn tài nguyên cụ thể (không áp cho mọi tài nguyên).",
+        customEmpty: "Luật 'tuỳ chọn' phải chọn ít nhất một hành động.",
+      },
     },
   },
 

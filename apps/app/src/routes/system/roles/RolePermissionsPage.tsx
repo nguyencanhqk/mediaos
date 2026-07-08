@@ -16,7 +16,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, RefreshCw, ArrowLeft, ChevronDown, ChevronRight } from "lucide-react";
+import { KeyRound, RefreshCw, ArrowLeft, ChevronDown, ChevronRight, Wand2 } from "lucide-react";
 import { roleAdminApi, authKeys, useCanExact, ApiError } from "@mediaos/web-core";
 import {
   PageHeader,
@@ -30,6 +30,7 @@ import {
 } from "@mediaos/ui";
 import { SYSTEM_ENGINE_PAIRS } from "../constants";
 import { labelAction, labelResource, labelScope } from "./permission-labels";
+import { PermissionRuleDialog } from "./PermissionRuleDialog";
 
 const ASSIGNABLE_DATA_SCOPES = ["Own", "Team", "Department", "Company"] as const;
 type AssignableDataScope = (typeof ASSIGNABLE_DATA_SCOPES)[number];
@@ -82,6 +83,7 @@ export function RolePermissionsPage({ roleId, onBack }: RolePermissionsPageProps
   );
 
   const [filter, setFilter] = useState("");
+  const [ruleOpen, setRuleOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [scopeByKey, setScopeByKey] = useState<Record<string, AssignableDataScope>>({});
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -304,12 +306,18 @@ export function RolePermissionsPage({ roleId, onBack }: RolePermissionsPageProps
         description={t("rolePermissions.summaryAssigned", { count: totalAssigned })}
         icon={KeyRound}
         actions={
-          onBack && (
-            <Button variant="outline" size="sm" onClick={onBack}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              {t("roleDetail.backToList")}
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => setRuleOpen(true)}>
+              <Wand2 className="mr-2 h-4 w-4" />
+              {t("rolePermissions.rule.open")}
             </Button>
-          )
+            {onBack && (
+              <Button variant="outline" size="sm" onClick={onBack}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                {t("roleDetail.backToList")}
+              </Button>
+            )}
+          </div>
         }
       />
 
@@ -540,6 +548,15 @@ export function RolePermissionsPage({ roleId, onBack }: RolePermissionsPageProps
           })}
         </div>
       )}
+
+      <PermissionRuleDialog
+        open={ruleOpen}
+        onClose={() => setRuleOpen(false)}
+        roleId={roleId}
+        roleName={role.name}
+        catalog={permissionsQuery.data ?? []}
+        onApplied={() => void invalidateGrants()}
+      />
     </div>
   );
 }

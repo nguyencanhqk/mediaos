@@ -15,12 +15,12 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Shield, RefreshCw, Plus, KeyRound } from "lucide-react";
+import { Shield, RefreshCw, Plus, KeyRound, Trash2 } from "lucide-react";
 import type { RoleDto } from "@mediaos/contracts";
-import { roleAdminApi, authKeys, useCan, PermissionGate } from "@mediaos/web-core";
-import { PageHeader, DataTable, EmptyState, Button, Input, Badge } from "@mediaos/ui";
+import { ApiError, roleAdminApi, authKeys, useCan, PermissionGate } from "@mediaos/web-core";
+import { PageHeader, DataTable, EmptyState, Button, Input, Badge, Dialog } from "@mediaos/ui";
 import { SYSTEM_ENGINE_PAIRS } from "./constants";
 
 // ---------------------------------------------------------------------------
@@ -29,6 +29,7 @@ import { SYSTEM_ENGINE_PAIRS } from "./constants";
 function useRoleColumns(
   t: ReturnType<typeof useTranslation<"system">>["t"],
   navigate: ReturnType<typeof useNavigate>,
+  onDelete: (role: RoleDto) => void,
 ): ColumnDef<RoleDto>[] {
   return [
     {
@@ -86,10 +87,42 @@ function useRoleColumns(
               <KeyRound className="h-4 w-4" />
             </Button>
           </PermissionGate>
+          {/* Xoá vai trò — chỉ vai trò công ty (ẨN với is_system; server cũng REJECT 400). Gate delete:role. */}
+          {!row.original.isSystem && (
+            <PermissionGate
+              action={SYSTEM_ENGINE_PAIRS.DELETE_ROLE.action}
+              resourceType={SYSTEM_ENGINE_PAIRS.DELETE_ROLE.resourceType}
+            >
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={t("roles.delete.action")}
+                className="text-destructive hover:text-destructive"
+                onClick={() => onDelete(row.original)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </PermissionGate>
+          )}
         </div>
       ),
     },
   ];
+}
+
+// ---------------------------------------------------------------------------
+// Delete error mapping — map ApiError status → thông báo rõ nghĩa (KHÔNG lộ chi tiết server).
+// ---------------------------------------------------------------------------
+function deleteRoleErrorMessage(
+  err: unknown,
+  t: ReturnType<typeof useTranslation<"system">>["t"],
+): string {
+  if (err instanceof ApiError) {
+    if (err.status === 400) return t("roles.delete.error.system");
+    if (err.status === 403) return t("roles.delete.error.forbidden");
+    if (err.status === 404) return t("roles.delete.error.notFound");
+  }
+  return t("roles.delete.error.generic");
 }
 
 // ---------------------------------------------------------------------------
@@ -99,9 +132,13 @@ export function RolesPage() {
   const { t } = useTranslation("system");
   const { t: tc } = useTranslation("common");
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { action, resourceType } = SYSTEM_ENGINE_PAIRS.READ_ROLE;
   const canView = useCan(action, resourceType);
   const [filter, setFilter] = useState("");
+  const [roleToDelete, setRoleToDelete] = useState<RoleDto | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: authKeys.roles.list(),
@@ -110,7 +147,34 @@ export function RolesPage() {
     staleTime: 30_000,
   });
 
-  const columns = useRoleColumns(t, navigate);
+  const deleteMutation = useMutation({
+    mutationFn: (roleId: string) => roleAdminApi.deleteRole(roleId),
+    onSuccess: async (result) => {
+      setRoleToDelete(null);
+      setDeleteError(null);
+      setFeedback(
+        result.revokedMembers > 0
+          ? t("roles.delete.successWithMembers", { members: result.revokedMembers })
+          : t("roles.delete.success"),
+      );
+      await queryClient.invalidateQueries({ queryKey: authKeys.roles.list() });
+    },
+    onError: (err) => setDeleteError(deleteRoleErrorMessage(err, t)),
+  });
+
+  const openDeleteDialog = (role: RoleDto) => {
+    setDeleteError(null);
+    setFeedback(null);
+    setRoleToDelete(role);
+  };
+
+  const closeDeleteDialog = () => {
+    if (deleteMutation.isPending) return;
+    setRoleToDelete(null);
+    setDeleteError(null);
+  };
+
+  const columns = useRoleColumns(t, navigate, openDeleteDialog);
 
   // ── Forbidden ──────────────────────────────────────────────────────────────
   if (!canView) {
@@ -173,6 +237,16 @@ export function RolesPage() {
         />
       </PageHeader>
 
+      {feedback && (
+        <p
+          role="status"
+          aria-live="polite"
+          className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
+        >
+          {feedback}
+        </p>
+      )}
+
       <DataTable
         columns={columns}
         data={items}
@@ -183,6 +257,44 @@ export function RolesPage() {
         }
         pageSize={50}
       />
+
+      {/* Dialog xác nhận xoá — cascade gỡ khỏi mọi thành viên. Chỉ mở cho vai trò công ty (nút ẩn với system). */}
+      <Dialog
+        open={roleToDelete !== null}
+        onClose={closeDeleteDialog}
+        title={t("roles.delete.dialogTitle")}
+        description={
+          roleToDelete
+            ? t("roles.delete.dialogDescription", { name: roleToDelete.name })
+            : undefined
+        }
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeDeleteDialog}
+              disabled={deleteMutation.isPending}
+            >
+              {t("roles.delete.cancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => roleToDelete && deleteMutation.mutate(roleToDelete.id)}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? tc("saving") : t("roles.delete.confirm")}
+            </Button>
+          </>
+        }
+      >
+        {deleteError && (
+          <p role="alert" className="text-sm text-destructive">
+            {deleteError}
+          </p>
+        )}
+      </Dialog>
     </div>
   );
 }

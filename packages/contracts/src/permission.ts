@@ -125,6 +125,18 @@ export const roleWriteResultSchema = z.object({
 export type RoleWriteResultDto = z.infer<typeof roleWriteResultSchema>;
 
 /**
+ * DELETE /auth/roles/:id — kết quả xoá MỀM role (soft-delete, BẤT BIẾN #2). CASCADE: mọi gán vai trò
+ * (user_roles) đang active bị soft-delete kèm ⇒ thành viên MẤT quyền của vai trò này ngay ở request kế
+ * (engine đọc thẳng DB, không cache). `revokedMembers` = số thành viên bị gỡ (FE báo lại). system role
+ * (is_system=true) → server REJECT 400 (KHÔNG cho xoá).
+ */
+export const roleDeleteResultSchema = z.object({
+  id: z.string().uuid(),
+  revokedMembers: z.number().int().nonnegative(),
+});
+export type RoleDeleteResultDto = z.infer<typeof roleDeleteResultSchema>;
+
+/**
  * POST /auth/roles/:id/permissions — gán 1 cặp permission (action+resourceType) cho role, kèm data_scope.
  * SCOPE CEILING (CHỐT 2026-07-02): dataScope PHẢI ≤ Company — 'System' → REJECT 400 (tenant-admin KHÔNG
  * được gán System = mở lại đúng cái mig 0441 tránh nới scope role hệ thống).
@@ -153,3 +165,70 @@ export const rolePermissionGrantSchema = z.object({
   dataScope: z.enum(["Own", "Team", "Department", "Company", "System"]),
 });
 export type RolePermissionGrantDto = z.infer<typeof rolePermissionGrantSchema>;
+
+// ─── (C.rule) S2-AUTH-PERMRULE-1 — gán quyền theo LUẬT khớp mẫu (rule builder) ──────────────────
+// Bung 1 luật (match trên catalog × action-preset × scope) → grant khớp; xem trước (dryRun) rồi áp.
+// KHÔNG cổng ghi mới: server áp qua assignPermissionToRole (assign:permission isSensitive, ceiling ≤ Company).
+
+/** Preset nhóm action: read-only (view/read/list*) · crud · custom (dùng match.actions). */
+export const permissionRuleActionPresetEnum = z.enum(["read-only", "crud", "custom"]);
+export type PermissionRuleActionPreset = z.infer<typeof permissionRuleActionPresetEnum>;
+
+/**
+ * POST /auth/roles/:id/permissions/apply-rule — request. effect CHỈ 'ALLOW' (MVP; DENY thủ công).
+ * dataScope KHÔNG có 'System' (scope-ceiling). includeSensitive default false; server CHẶN
+ * (includeSensitive && resourceTypes rỗng) để không "gán mọi quyền nhạy cảm 1 phát".
+ */
+export const applyPermissionRuleSchema = z.object({
+  match: z.object({
+    resourceTypes: z.array(z.string().min(1).max(100)).max(300).default([]),
+    actionPreset: permissionRuleActionPresetEnum,
+    actions: z.array(z.string().min(1).max(100)).max(300).default([]),
+    includeSensitive: z.boolean().default(false),
+  }),
+  effect: z.literal("ALLOW"),
+  dataScope: z.enum(["Own", "Team", "Department", "Company"]),
+  dryRun: z.boolean(),
+});
+export type ApplyPermissionRuleRequest = z.infer<typeof applyPermissionRuleSchema>;
+
+const permissionRulePairSchema = z.object({
+  action: z.string(),
+  resourceType: z.string(),
+  isSensitive: z.boolean(),
+});
+
+/** Kết quả bung luật (preview khi dryRun; kèm applied[] khi áp thật). */
+export const permissionRulePreviewSchema = z.object({
+  dryRun: z.boolean(),
+  /** Cặp chưa có ALLOW → sẽ thêm ở dataScope mục tiêu. */
+  toAdd: z.array(permissionRulePairSchema.extend({ dataScope: z.string() })),
+  /** Cặp đã có ALLOW khác scope → đổi (DELETE+INSERT); fromScope→toScope để FE nêu hướng. */
+  toChangeScope: z.array(
+    permissionRulePairSchema.extend({ fromScope: z.string(), toScope: z.string() }),
+  ),
+  /** Bỏ qua: 'already-granted' (đã ALLOW cùng scope) | 'denied' (đang có DENY, rule không ghi đè). */
+  skipped: z.array(
+    permissionRulePairSchema.extend({ reason: z.enum(["already-granted", "denied"]) }),
+  ),
+  /** Loại do nhạy cảm khi includeSensitive=false. */
+  excludedSensitive: z.array(permissionRulePairSchema),
+  counts: z.object({
+    toAdd: z.number().int().nonnegative(),
+    toChangeScope: z.number().int().nonnegative(),
+    skipped: z.number().int().nonnegative(),
+    excludedSensitive: z.number().int().nonnegative(),
+  }),
+  /** null khi dryRun; khi áp thật = kết quả từng grant. */
+  applied: z
+    .array(
+      z.object({
+        action: z.string(),
+        resourceType: z.string(),
+        status: z.enum(["ok", "error"]),
+        detail: z.string().nullable(),
+      }),
+    )
+    .nullable(),
+});
+export type PermissionRulePreview = z.infer<typeof permissionRulePreviewSchema>;

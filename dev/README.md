@@ -64,7 +64,12 @@ Lộ dev stack local ra internet qua cloudflared dưới `cian-dev.*`, chạy đ
 |------|------|
 | Tạo DB cô lập `mediaos_dev` (1 lần) | `m dev-online-db` |
 | Tạo ingress cloudflared + DNS (1 lần, **Administrator**) | `m dev-online-tunnel` |
-| Chạy dev stack lộ online | `m dev-online` |
+| Chạy dev stack lộ online — **dev server + HMR** (sửa FE thấy ngay) | `m dev-online` |
+| Chạy dev stack lộ online — **bản build** (nhanh/ổn định qua tunnel, KHÔNG HMR) | `m dev-online-fast` |
+
+Cùng có trong **menu** (`dev\dev.bat`): `[11]` DEV-ONLINE · `[12]` DEV-ONLINE FAST.
+
+> **Dùng `dev-online-fast` khi nào:** dev-mode nạp hàng trăm module rời/trang → qua tunnel rất chậm và hay rớt kết nối (`ERR_CONNECTION_CLOSED`). Bản build gộp còn 2–3 request/trang ⇒ ổn định. Đổi lại KHÔNG có HMR: sửa code FE phải chạy lại `m dev-online-fast`. API vẫn chạy watch như thường.
 
 URL (sau 3 bước trên): app `https://cian-dev.funtimemediacorp.com` · auth `https://cian-dev-auth…` · console `https://cian-dev-console…` · api `https://cian-dev-api…/api/v1/health`.
 

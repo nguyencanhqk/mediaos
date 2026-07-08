@@ -18,6 +18,7 @@ import { PermissionGuard } from "./guards/permission.guard";
 import { RequirePermission } from "./require-permission.decorator";
 import { RoleAdminService } from "./role-admin.service";
 import {
+  ApplyPermissionRuleDto,
   AssignRolePermissionDto,
   CreateRoleDto,
   RevokeRolePermissionDto,
@@ -79,6 +80,17 @@ export class RoleAdminController {
     return this.roleAdmin.updateRole(req.user, id, dto);
   }
 
+  /**
+   * DELETE /auth/roles/:id — xoá MỀM role company-scope + CASCADE gỡ khỏi mọi thành viên (soft-delete
+   * user_roles). Gate delete:role (seed 0005 is_sensitive=false — company-admin có sẵn ALLOW/Company).
+   * system role → 400. Path 1-segment KHÔNG đụng ":id/permissions" (2-segment, revokePermission).
+   */
+  @Delete(":id")
+  @RequirePermission("delete", "role")
+  deleteRole(@Req() req: AuthenticatedRequest, @Param("id", ParseUUIDPipe) id: string) {
+    return this.roleAdmin.deleteRole(req.user, id);
+  }
+
   @Post(":id/permissions")
   @RequirePermission("assign", "permission", { isSensitive: true })
   assignPermission(
@@ -98,5 +110,21 @@ export class RoleAdminController {
     @Body() dto: RevokeRolePermissionDto,
   ) {
     return this.roleAdmin.revokePermissionFromRole(req.user, id, dto);
+  }
+
+  /**
+   * S2-AUTH-PERMRULE-1 — POST /auth/roles/:id/permissions/apply-rule: bung 1 LUẬT (match catalog ×
+   * action-preset × scope) → grant khớp; dryRun=true xem trước (0 ghi), false áp qua assignPermissionToRole.
+   * Gate assign:permission isSensitive (CÙNG cặp assign thủ công — KHÔNG mở cổng mới). Path 3-segment
+   * KHÔNG đụng ":id/permissions" (2-segment) hay ":id" (delete role, 1-segment).
+   */
+  @Post(":id/permissions/apply-rule")
+  @RequirePermission("assign", "permission", { isSensitive: true })
+  applyPermissionRule(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: ApplyPermissionRuleDto,
+  ) {
+    return this.roleAdmin.applyPermissionRuleToRole(req.user, id, dto);
   }
 }

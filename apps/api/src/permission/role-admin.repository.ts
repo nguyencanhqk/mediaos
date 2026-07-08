@@ -225,4 +225,52 @@ export class RoleAdminRepository {
       .returning({ dataScope: rolePermissions.dataScope });
     return row;
   }
+
+  /**
+   * CASCADE khi xoá role — soft-delete MỌI gán vai trò (user_roles) đang active của role TRONG TENANT hiện
+   * tại (membership per-tenant qua company_id, mig 0471). App role có UPDATE (KHÔNG DELETE) trên user_roles
+   * → set deleted_at + deleted_by (giữ tombstone forensic). Trả SỐ hàng đã gỡ (để audit + báo FE). Người
+   * bị gỡ mất quyền của role NGAY ở request kế (getCompanyRoleGrants lọc deleted_at IS NULL, không qua cache).
+   */
+  async softDeleteRoleMembersTx(
+    tx: TenantTx,
+    companyId: string,
+    roleId: string,
+    actorUserId: string,
+  ): Promise<number> {
+    const revoked = await tx
+      .update(userRoles)
+      .set({ deletedAt: new Date(), deletedBy: actorUserId })
+      .where(
+        and(
+          eq(userRoles.roleId, roleId),
+          eq(userRoles.companyId, companyId),
+          isNull(userRoles.deletedAt),
+        ),
+      )
+      .returning({ id: userRoles.id });
+    return revoked.length;
+  }
+
+  /**
+   * Soft-delete role (BẤT BIẾN #2 — KHÔNG hard-delete). Chỉ company-scope own-tenant + chưa xoá (WHERE
+   * company_id=actor + deleted_at IS NULL). RLS WITH CHECK company_id=own-tenant chặn thêm ở tầng DB (system
+   * role company_id NULL không lọt). Trả row đã xoá (undefined = 0 hàng — đã xoá bởi request đua / race).
+   * roles KHÔNG có cột updated_at (chỉ set deleted_at). Partial-unique(name) WHERE deleted_at IS NULL cho
+   * phép tái dùng tên sau khi xoá.
+   */
+  async softDeleteRoleTx(
+    tx: TenantTx,
+    companyId: string,
+    roleId: string,
+  ): Promise<Role | undefined> {
+    const [row] = await tx
+      .update(roles)
+      .set({ deletedAt: new Date() })
+      .where(
+        and(eq(roles.id, roleId), eq(roles.companyId, companyId), isNull(roles.deletedAt)),
+      )
+      .returning();
+    return row;
+  }
 }

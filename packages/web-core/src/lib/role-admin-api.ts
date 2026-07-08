@@ -5,17 +5,22 @@ import {
   rolePermissionGrantsSchema,
   permissionListSchema,
   roleWriteResultSchema,
+  roleDeleteResultSchema,
   rolePermissionGrantSchema,
+  permissionRulePreviewSchema,
   type RoleDto,
   type RoleMemberListDto,
   type RolePermissionGrantsDto,
   type PermissionCatalogDto,
   type RoleWriteResultDto,
+  type RoleDeleteResultDto,
   type RolePermissionGrantDto,
+  type PermissionRulePreview,
   type CreateRoleRequest,
   type UpdateRoleRequest,
   type AssignRolePermissionRequest,
   type RevokeRolePermissionRequest,
+  type ApplyPermissionRuleRequest,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 
@@ -76,6 +81,15 @@ export const roleAdminApi = {
     }),
 
   /**
+   * DELETE /auth/roles/:id — xoá MỀM role company-scope + CASCADE gỡ khỏi mọi thành viên. Trả
+   * { id, revokedMembers } để FE báo "đã gỡ N thành viên". Role system-defined → server 400.
+   */
+  deleteRole: (id: string): Promise<RoleDeleteResultDto> =>
+    apiFetch(`/auth/roles/${id}`, roleDeleteResultSchema, {
+      method: "DELETE",
+    }),
+
+  /**
    * POST /auth/roles/:id/permissions — gán 1 cặp permission cho role kèm data_scope. SCOPE CEILING:
    * dataScope PHẢI ≤ Company ('System' bị Zod chặn ở request type + server REJECT 400 nếu lọt qua).
    */
@@ -92,6 +106,20 @@ export const roleAdminApi = {
   revokePermission: (roleId: string, body: RevokeRolePermissionRequest): Promise<void> =>
     apiFetch(`/auth/roles/${roleId}/permissions`, z.void(), {
       method: "DELETE",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * POST /auth/roles/:id/permissions/apply-rule — bung 1 LUẬT thành grant khớp. `dryRun:true` = xem
+   * trước (0 ghi); `false` = áp. Trả preview (toAdd/toChangeScope/skipped/excludedSensitive + counts;
+   * applied[] khi áp). Gate assign:permission (server) — chỉ company-admin.
+   */
+  applyPermissionRule: (
+    roleId: string,
+    body: ApplyPermissionRuleRequest,
+  ): Promise<PermissionRulePreview> =>
+    apiFetch(`/auth/roles/${roleId}/permissions/apply-rule`, permissionRulePreviewSchema, {
+      method: "POST",
       body: JSON.stringify(body),
     }),
 };
