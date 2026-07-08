@@ -98,6 +98,9 @@ export { usersApi } from "./lib/users-api";
 export { authUsersApi } from "./lib/auth-users-api";
 export { twoFactorApi } from "./lib/two-factor-api";
 export { notificationApi } from "./lib/notification-api";
+// S4-FE-REGISTRY-1 — TASK/DASH API skeleton typed qua @mediaos/contracts (page thật = S4-FE-TASK-1/DASH-1).
+export { tasksApi } from "./lib/tasks-api";
+export { dashboardApi } from "./lib/dashboard-api";
 export { hrApi } from "./lib/hr-api";
 // S2-FE-HR-6 — Org chart (GET /org/units/tree, read mở) + HR audit-logs (tái dùng /foundation/audit-logs).
 export { orgApi, orgTreeNodeSchema, type OrgTreeNode } from "./lib/hr-org-api";
