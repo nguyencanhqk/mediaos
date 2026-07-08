@@ -5126,6 +5126,7 @@ export const backlog = [
       "Seed cặp quyền file employee nếu thiếu (migration nối tiếp head, ON CONFLICT DO NOTHING; grant HR/Admin theo scope; allowlist nếu sensitive); KHÔNG đụng RLS employee_profiles",
       "Download TÔN TRỌNG scan_status (không trả file chưa quét sạch — bài học foundation-system-audit); file_access_logs ghi truy cập (append-only); audit upload/delete (không log nội dung file)",
       "Int-spec RED-trước: deny thiếu quyền 403 · cross-tenant/cross-employee 404 (IDOR) · download file scan pending bị chặn · soft-delete loại khỏi list; FULL gate security-reviewer + database-reviewer PASS",
+      "SHIPPED (lane s2hrempfile1-be): migration 0477 (mig lane) seed file-view/upload/delete:employee → hr/company-admin Company; contracts hr/employee-file.ts (linkEmployeeFileSchema{fileId,category?} · listEmployeeFilesQuerySchema · employeeFileDtoSchema); apps/api/src/employees/employee-file.{controller,service,repository,resolver}.ts + wired module (EmployeeFileResolver registered onModuleInit for HR/employee_profile, append). Routes /hr/employees/:id/files (POST link · GET list · GET :fileId metadata · GET :fileId/download 302 · DELETE :fileId 204). scan-guard Clean/NotRequired only (else 409); FileService owns file_link/file soft-delete + FileLinked/FileDeleted audit + Link/Download/Delete access-log. int-spec employee-file.int-spec.ts 12/12 GREEN trên LANE_DB=mediaos_s2hrempfile1; adjacent hr-contract/files 45/45 GREEN.",
     ],
   },
   {
