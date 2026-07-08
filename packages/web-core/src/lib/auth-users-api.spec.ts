@@ -56,7 +56,8 @@ const USER_DETAIL: AuthUserDetailDto = {
 // POST /auth/users/:id/2fa/reset → chỉ phơi revokedSessionCount (forensic), KHÔNG secret (BẤT BIẾN #3).
 const TWO_FACTOR_RESET: AuthUserTwoFactorResetDto = { revokedSessionCount: 3 };
 
-const USER_LIST: AuthUserListDto = { users: [USER], total: 1 };
+// List item = superset AuthUserDto + hasEmployeeProfile (đối soát AUTH↔HR do SERVER tính).
+const USER_LIST: AuthUserListDto = { users: [{ ...USER, hasEmployeeProfile: false }], total: 1 };
 const ROLE_LIST: RoleListDto = {
   roles: [{ id: "role-001", name: "HR", description: null, isSystem: false }],
 };

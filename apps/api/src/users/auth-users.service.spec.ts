@@ -512,4 +512,20 @@ describe("AuthUsersService", () => {
     const filterArg = (repo.findManyTx as unknown as ReturnType<typeof vi.fn>).mock.calls[0][3];
     expect(filterArg.deleted).toBe(true);
   });
+
+  // ── Đối soát AUTH↔HR: filter linkedProfile passthrough + map hasEmployeeProfile ──
+  it("list: query.linkedProfile=false → repo filter nhận linkedProfile=false", async () => {
+    await service.listUsers(ACTOR, { limit: 50, offset: 0, linkedProfile: false });
+    const filterArg = (repo.findManyTx as unknown as ReturnType<typeof vi.fn>).mock.calls[0][3];
+    expect(filterArg.linkedProfile).toBe(false);
+  });
+
+  it("list: map hasEmployeeProfile từ repo row vào DTO", async () => {
+    repo.findManyTx = vi.fn(async () => ({
+      rows: [{ ...makeUser(), hasEmployeeProfile: true }],
+      total: 1,
+    })) as never;
+    const result = await service.listUsers(ACTOR, { limit: 50, offset: 0 });
+    expect(result.users[0].hasEmployeeProfile).toBe(true);
+  });
 });

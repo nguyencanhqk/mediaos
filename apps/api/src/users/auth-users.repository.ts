@@ -1,7 +1,28 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, gt, ilike, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  exists,
+  getTableColumns,
+  gt,
+  ilike,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
-import { roles, userRecoveryCodes, userRoles, users, userTotp, type User } from "../db/schema";
+import {
+  employeeProfiles,
+  roles,
+  userRecoveryCodes,
+  userRoles,
+  users,
+  userTotp,
+  type User,
+} from "../db/schema";
 import type { AuthUserStatus } from "@mediaos/contracts";
 
 /**
@@ -37,6 +58,36 @@ export interface ListAuthUsersFilter {
   offset: number;
   /** S2-AUTH-USEROPS-1 — true: CHỈ user đã xóa mềm (view Đã xóa). Mặc định false = LIVE như cũ. */
   deleted?: boolean;
+  /**
+   * Đối soát AUTH↔HR — true: CHỈ user ĐÃ có hồ sơ nhân sự active; false: CHỈ user CHƯA có; undefined: tất cả.
+   * Lọc bằng cùng biểu thức EXISTS(employee_profiles active) dùng cho cột tính `hasEmployeeProfile`.
+   */
+  linkedProfile?: boolean;
+}
+
+/**
+ * EXISTS(employee_profiles active) tương quan theo user — dùng CHUNG cho cột tính `hasEmployeeProfile`
+ * lẫn filter `linkedProfile`. AND company_id tường minh (phòng thủ kép trên RLS — BẤT BIẾN #1); chỉ
+ * đếm hồ sơ chưa xóa mềm (deleted_at IS NULL) khớp định nghĩa "đồng bộ" (1 tài khoản ↔ ≤1 hồ sơ active).
+ *
+ * PHẢI dựng bằng query-builder `exists()` (KHÔNG raw sql`` nội suy cột): nội suy `${table.col}` trong raw
+ * sql render tên cột KHÔNG kèm bảng ⇒ trong subquery `user_id = id` cùng bind vào employee_profiles ⇒ EXISTS
+ * luôn false (bug int-spec bắt). Query-builder qualify đúng `"employee_profiles"."user_id" = "users"."id"`.
+ */
+function employeeProfileExists(tx: TenantTx): SQL<boolean> {
+  // exists() trả SQL<unknown>; EXISTS luôn cho boolean ⇒ cast an toàn để select suy đúng kiểu cột.
+  return exists(
+    tx
+      .select({ one: sql`1` })
+      .from(employeeProfiles)
+      .where(
+        and(
+          eq(employeeProfiles.userId, users.id),
+          eq(employeeProfiles.companyId, users.companyId),
+          isNull(employeeProfiles.deletedAt),
+        ),
+      ),
+  ) as SQL<boolean>;
 }
 
 @Injectable()
@@ -51,7 +102,8 @@ export class AuthUsersRepository {
     companyId: string,
     scope: SQL,
     filter: ListAuthUsersFilter,
-  ): Promise<{ rows: User[]; total: number }> {
+  ): Promise<{ rows: (User & { hasEmployeeProfile: boolean })[]; total: number }> {
+    const hasProfile = employeeProfileExists(tx);
     const conds: SQL[] = [
       eq(users.companyId, companyId),
       // S2-AUTH-USEROPS-1: nhánh deleted=true trả RIÊNG user đã xóa mềm (không bao giờ trộn 2 tập).
@@ -59,6 +111,9 @@ export class AuthUsersRepository {
       scope,
     ];
     if (filter.status) conds.push(eq(users.status, filter.status));
+    // Đối soát AUTH↔HR: bound theo có/chưa hồ sơ (cùng biểu thức EXISTS với cột tính bên dưới).
+    if (filter.linkedProfile === true) conds.push(hasProfile);
+    else if (filter.linkedProfile === false) conds.push(sql`not ${hasProfile}`);
     if (filter.q) {
       const pattern = `%${filter.q}%`;
       const like = or(ilike(users.email, pattern), ilike(users.fullName, pattern));
@@ -67,7 +122,7 @@ export class AuthUsersRepository {
     const where = and(...conds);
 
     const rows = await tx
-      .select()
+      .select({ ...getTableColumns(users), hasEmployeeProfile: hasProfile })
       .from(users)
       .where(where)
       .orderBy(desc(users.createdAt))

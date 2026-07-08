@@ -134,8 +134,13 @@ export class AuthUsersService {
         offset: query.offset,
         // S2-AUTH-USEROPS-1: deleted=true → CHỈ user đã xóa mềm (view Đã xóa / khôi phục).
         deleted: query.deleted === true,
+        // Đối soát AUTH↔HR: bound theo có/chưa hồ sơ nhân sự (undefined = tất cả).
+        linkedProfile: query.linkedProfile,
       });
-      return { users: rows.map(toDto), total };
+      return {
+        users: rows.map((row) => ({ ...toDto(row), hasEmployeeProfile: row.hasEmployeeProfile })),
+        total,
+      };
     });
   }
 

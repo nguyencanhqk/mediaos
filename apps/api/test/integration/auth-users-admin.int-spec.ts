@@ -140,6 +140,19 @@ async function countActiveRefreshTokens(direct: Pool, userId: string): Promise<n
   return r.rows[0].n as number;
 }
 
+/** Gán hồ sơ nhân sự active tối thiểu cho 1 user (đối soát AUTH↔HR). Các cột NOT NULL còn lại dùng default. */
+async function seedEmployeeProfile(
+  direct: Pool,
+  companyId: string,
+  userId: string,
+): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+    [companyId, userId],
+  );
+  return r.rows[0].id as string;
+}
+
 /**
  * Read-your-writes barrier (S2-AUTH-BE-9 · FL-BE9-2): poll NGẮN một count đọc qua `direct` pool sau khi
  * mutation HTTP (lock) đã trả 200. Revoke chạy ĐỒNG BỘ trong CÙNG withTenant tx với đổi status ⇒ ngay khi
@@ -543,6 +556,65 @@ describe.skipIf(!hasLaneDb)("S2-AUTH-BE-3 /auth/users admin API", () => {
       expect([400, 409]).toContain(res.status);
       // Guard chặn TRƯỚC mọi mutation → phiên admin nguyên vẹn.
       expect(await countActiveSessions(direct, adminId)).toBe(before);
+    });
+  });
+
+  // ── §hr-link — đối soát AUTH↔HR: hasEmployeeProfile (EXISTS thật) + filter linkedProfile ──
+  describe("§hr-link — hasEmployeeProfile + filter linkedProfile", () => {
+    it("list: hasEmployeeProfile đúng theo có/chưa hồ sơ; linkedProfile bound đúng tập", async () => {
+      // 1 user CÓ hồ sơ nhân sự active + 1 user CHƯA có (cùng tenant A).
+      const linkedEmail = `be3-hrl-${randomUUID().slice(0, 8)}@a.test`;
+      const linkedId = await seedUser(direct, A.companyId, linkedEmail, await hashedPw());
+      await seedEmployeeProfile(direct, A.companyId, linkedId);
+      const unlinkedEmail = `be3-hru-${randomUUID().slice(0, 8)}@a.test`;
+      const unlinkedId = await seedUser(direct, A.companyId, unlinkedEmail, await hashedPw());
+
+      // (a) Không filter → cột hasEmployeeProfile phản ánh đúng EXISTS(employee_profiles active).
+      const all = await api(app)
+        .get("/auth/users?limit=100")
+        .set("Authorization", `Bearer ${adminToken}`);
+      expect(all.status).toBe(200);
+      const flagById = new Map(
+        (all.body.data.users as Array<{ id: string; hasEmployeeProfile: boolean }>).map((u) => [
+          u.id,
+          u.hasEmployeeProfile,
+        ]),
+      );
+      expect(flagById.get(linkedId)).toBe(true);
+      expect(flagById.get(unlinkedId)).toBe(false);
+
+      // (b) linkedProfile=false → CHỈ user chưa có hồ sơ (bound WHERE NOT EXISTS).
+      const unlinked = await api(app)
+        .get("/auth/users?limit=100&linkedProfile=false")
+        .set("Authorization", `Bearer ${adminToken}`);
+      const unlinkedIds = (unlinked.body.data.users as Array<{ id: string }>).map((u) => u.id);
+      expect(unlinkedIds).toContain(unlinkedId);
+      expect(unlinkedIds).not.toContain(linkedId);
+
+      // (c) linkedProfile=true → CHỈ user đã có hồ sơ (bound WHERE EXISTS).
+      const linked = await api(app)
+        .get("/auth/users?limit=100&linkedProfile=true")
+        .set("Authorization", `Bearer ${adminToken}`);
+      const linkedIds = (linked.body.data.users as Array<{ id: string }>).map((u) => u.id);
+      expect(linkedIds).toContain(linkedId);
+      expect(linkedIds).not.toContain(unlinkedId);
+    });
+
+    it("soft-delete hồ sơ → hasEmployeeProfile=false (chỉ đếm hồ sơ active)", async () => {
+      const email = `be3-hrsd-${randomUUID().slice(0, 8)}@a.test`;
+      const uid = await seedUser(direct, A.companyId, email, await hashedPw());
+      const profileId = await seedEmployeeProfile(direct, A.companyId, uid);
+      // Xóa mềm hồ sơ → không còn active → EXISTS phải trả false.
+      await direct.query(`UPDATE employee_profiles SET deleted_at = now() WHERE id = $1`, [
+        profileId,
+      ]);
+      const res = await api(app)
+        .get("/auth/users?limit=100")
+        .set("Authorization", `Bearer ${adminToken}`);
+      const row = (res.body.data.users as Array<{ id: string; hasEmployeeProfile: boolean }>).find(
+        (u) => u.id === uid,
+      );
+      expect(row?.hasEmployeeProfile).toBe(false);
     });
   });
 });
