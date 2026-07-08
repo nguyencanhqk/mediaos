@@ -64,9 +64,20 @@ export const authUserSchema = z.object({
 });
 export type AuthUserDto = z.infer<typeof authUserSchema>;
 
+/**
+ * Item danh sách user — mở rộng authUserSchema thêm `hasEmployeeProfile`: đối soát AUTH↔HR (tài khoản đã
+ * gán hồ sơ nhân sự active hay chưa). SERVER tính bằng EXISTS(employee_profiles active) — chỉ true/false,
+ * KHÔNG lộ dữ liệu hồ sơ (BẤT BIẾN #3). Schema RIÊNG cho list (KHÔNG chạm authUserSchema dùng ở mutation
+ * → get/create/update/lock… giữ nguyên shape, tránh N+1 tính EXISTS ngoài luồng list).
+ */
+export const authUserListItemSchema = authUserSchema.extend({
+  hasEmployeeProfile: z.boolean(),
+});
+export type AuthUserListItemDto = z.infer<typeof authUserListItemSchema>;
+
 /** GET /auth/users — danh sách + tổng (pagination). */
 export const authUserListSchema = z.object({
-  users: z.array(authUserSchema),
+  users: z.array(authUserListItemSchema),
   total: z.number().int().nonnegative(),
 });
 export type AuthUserListDto = z.infer<typeof authUserListSchema>;
@@ -113,6 +124,12 @@ export const listAuthUsersQuerySchema = z.object({
   // (coerce biến "false" → true). Enum chuỗi → boolean; thiếu → undefined = danh sách LIVE như cũ
   // (giữ key OPTIONAL trong type — caller cũ không phải truyền).
   deleted: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === "true")),
+  // Đối soát AUTH↔HR: true = CHỈ tài khoản ĐÃ có hồ sơ nhân sự active; false = CHỈ tài khoản CHƯA có hồ sơ;
+  // thiếu = tất cả. Cùng khuôn `deleted` (enum chuỗi → boolean, KHÔNG z.coerce.boolean vì "false"→true).
+  linkedProfile: z
     .enum(["true", "false"])
     .optional()
     .transform((v) => (v === undefined ? undefined : v === "true")),

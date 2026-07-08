@@ -11,6 +11,7 @@ export default {
       email: "Email",
       fullName: "Họ tên",
       status: "Trạng thái",
+      hrProfile: "Hồ sơ HR",
       lastLogin: "Lần đăng nhập cuối",
       deletedAt: "Đã xóa lúc",
     },
@@ -19,6 +20,17 @@ export default {
       invited: "Chờ kích hoạt",
       suspended: "Đã tạm khóa",
       locked: "Đã khoá",
+    },
+    // Đối soát AUTH↔HR: badge cột "Hồ sơ HR" + bộ lọc tài khoản đã/chưa gán hồ sơ nhân sự.
+    hrProfile: {
+      linked: "Đã có",
+      unlinked: "Chưa có",
+    },
+    profileFilter: {
+      label: "Hồ sơ HR:",
+      all: "Tất cả",
+      linked: "Đã có hồ sơ",
+      unlinked: "Chưa có hồ sơ",
     },
     empty: {
       title: "Không có người dùng",

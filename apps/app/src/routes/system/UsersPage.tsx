@@ -33,7 +33,7 @@ import {
   Trash2,
   RotateCcw,
 } from "lucide-react";
-import type { AuthUserDto } from "@mediaos/contracts";
+import type { AuthUserDto, AuthUserListItemDto } from "@mediaos/contracts";
 import {
   authUsersApi,
   authUsersKeys,
@@ -78,6 +78,16 @@ function UserStatusBadge({ status }: { status: AuthUserDto["status"] }) {
   return <Badge variant={variant}>{t(`users.status.${status}`)}</Badge>;
 }
 
+// Badge đối soát AUTH↔HR: tài khoản đã gán hồ sơ nhân sự active (Đã có) hay chưa (Chưa có).
+function HrProfileBadge({ linked }: { linked: boolean }) {
+  const { t } = useTranslation("system");
+  return (
+    <Badge variant={linked ? "default" : "secondary"}>
+      {linked ? t("users.hrProfile.linked") : t("users.hrProfile.unlinked")}
+    </Badge>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -116,6 +126,8 @@ export function UsersPage() {
 
   // ── State ───────────────────────────────────────────────────────────────────
   const [tab, setTab] = React.useState<ViewTab>("active");
+  // Đối soát AUTH↔HR — lọc theo tài khoản đã/chưa gán hồ sơ nhân sự (chỉ áp ở tab "Đang dùng").
+  const [profileFilter, setProfileFilter] = React.useState<"all" | "linked" | "unlinked">("all");
   const [selected, setSelected] = React.useState<Record<string, boolean>>({});
   const [confirm, setConfirm] = React.useState<ConfirmState>(null);
   const [flash, setFlash] = React.useState<string | null>(null);
@@ -136,7 +148,12 @@ export function UsersPage() {
   const listParams = {
     limit: PAGE_LIMIT,
     offset: 0,
-    ...(tab === "deleted" ? { deleted: true } : {}),
+    // Tab "Đã xóa" và bộ lọc hồ sơ loại trừ nhau: deleted users có hồ sơ cũng đã bị ẩn theo.
+    ...(tab === "deleted"
+      ? { deleted: true }
+      : profileFilter !== "all"
+        ? { linkedProfile: profileFilter === "linked" }
+        : {}),
   };
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: authUsersKeys.list(listParams),
@@ -144,7 +161,7 @@ export function UsersPage() {
     enabled: canView,
     staleTime: 30_000,
   });
-  const items: AuthUserDto[] = React.useMemo(() => data?.users ?? [], [data]);
+  const items: AuthUserListItemDto[] = React.useMemo(() => data?.users ?? [], [data]);
 
   const invalidateList = React.useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: authUsersKeys.all });
@@ -274,8 +291,8 @@ export function UsersPage() {
     [navigate],
   );
 
-  const columns = React.useMemo<ColumnDef<AuthUserDto>[]>(() => {
-    const cols: ColumnDef<AuthUserDto>[] = [];
+  const columns = React.useMemo<ColumnDef<AuthUserListItemDto>[]>(() => {
+    const cols: ColumnDef<AuthUserListItemDto>[] = [];
 
     // Checkbox chọn nhiều — chỉ khi có ít nhất 1 hành động bulk khả dụng cho tab hiện tại.
     const showSelect = tab === "active" ? hasBulkActions : canRestore;
@@ -330,6 +347,15 @@ export function UsersPage() {
         cell: ({ row }) => <UserStatusBadge status={row.original.status} />,
       },
     );
+
+    // Cột đối soát AUTH↔HR — chỉ ở tab "Đang dùng" (deleted users' hồ sơ cũng đã ẩn ⇒ luôn "Chưa có").
+    if (tab === "active") {
+      cols.push({
+        id: "hrProfile",
+        header: t("users.columns.hrProfile"),
+        cell: ({ row }) => <HrProfileBadge linked={row.original.hasEmployeeProfile} />,
+      });
+    }
 
     if (tab === "deleted") {
       cols.push({
@@ -566,6 +592,30 @@ export function UsersPage() {
               {t(`users.tabs.${v}`)}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Bộ lọc đối soát AUTH↔HR — chỉ ở tab "Đang dùng" */}
+      {tab === "active" && (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">{t("users.profileFilter.label")}</span>
+          <div role="group" className="flex gap-1 rounded-lg border border-border p-1 w-fit">
+            {(["all", "linked", "unlinked"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={profileFilter === v}
+                onClick={() => setProfileFilter(v)}
+                className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+                  profileFilter === v
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {t(`users.profileFilter.${v}`)}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

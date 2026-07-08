@@ -105,6 +105,8 @@ const MOCK_LIST: AuthUserListDto = {
       lastLoginAt: "2026-06-25T10:00:00.000Z",
       createdAt: "2026-01-01T00:00:00.000Z",
       deletedAt: null,
+      // Đối soát AUTH↔HR: super-admin là tài khoản hệ thống, CHƯA gán hồ sơ nhân sự.
+      hasEmployeeProfile: false,
     },
     {
       id: "user-002",
@@ -116,6 +118,8 @@ const MOCK_LIST: AuthUserListDto = {
       lastLoginAt: null,
       createdAt: "2026-01-01T00:00:00.000Z",
       deletedAt: null,
+      // Đã gán hồ sơ nhân sự → badge "Đã có".
+      hasEmployeeProfile: true,
     },
   ],
   total: 2,
@@ -331,6 +335,57 @@ describe("UsersPage — S2-AUTH-USEROPS-1", () => {
       expect(
         screen.getByRole("button", { name: new RegExp(systemVi.users.actions.restore, "i") }),
       ).toBeInTheDocument(),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Đối soát AUTH↔HR — cột "Hồ sơ HR" (badge Đã có/Chưa có) + bộ lọc linkedProfile
+// ---------------------------------------------------------------------------
+describe("UsersPage — đối soát AUTH↔HR", () => {
+  beforeEach(() => {
+    clearCapabilities();
+    vi.clearAllMocks();
+    vi.mocked(authUsersApi.listUsers).mockResolvedValue(MOCK_LIST);
+  });
+
+  // ── Cột "Hồ sơ HR": user chưa hồ sơ → "Chưa có"; user đã hồ sơ → "Đã có" ────
+  it("render badge Hồ sơ HR đúng theo hasEmployeeProfile từng dòng", async () => {
+    setCapabilities({ "view:user": true });
+    renderWithQuery(<UsersPage />);
+    await waitFor(() => expect(screen.getByText("admin@demo.local")).toBeInTheDocument());
+    // user-001 hasEmployeeProfile=false → "Chưa có"; user-002 true → "Đã có".
+    expect(screen.getByText(systemVi.users.hrProfile.unlinked)).toBeInTheDocument();
+    expect(screen.getByText(systemVi.users.hrProfile.linked)).toBeInTheDocument();
+  });
+
+  // ── Bộ lọc "Chưa có hồ sơ" → refetch với linkedProfile:false ────────────────
+  it("chọn bộ lọc 'Chưa có hồ sơ' → listUsers({linkedProfile:false})", async () => {
+    setCapabilities({ "view:user": true });
+    renderWithQuery(<UsersPage />);
+    await waitFor(() => expect(screen.getByText("admin@demo.local")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: systemVi.users.profileFilter.unlinked }));
+
+    await waitFor(() =>
+      expect(authUsersApi.listUsers).toHaveBeenLastCalledWith(
+        expect.objectContaining({ linkedProfile: false }),
+      ),
+    );
+  });
+
+  // ── Bộ lọc "Đã có hồ sơ" → refetch với linkedProfile:true ───────────────────
+  it("chọn bộ lọc 'Đã có hồ sơ' → listUsers({linkedProfile:true})", async () => {
+    setCapabilities({ "view:user": true });
+    renderWithQuery(<UsersPage />);
+    await waitFor(() => expect(screen.getByText("admin@demo.local")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: systemVi.users.profileFilter.linked }));
+
+    await waitFor(() =>
+      expect(authUsersApi.listUsers).toHaveBeenLastCalledWith(
+        expect.objectContaining({ linkedProfile: true }),
+      ),
     );
   });
 });
