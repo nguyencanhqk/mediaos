@@ -110,12 +110,14 @@ export const listAuthUsersQuerySchema = z.object({
   status: z.enum(AUTH_USER_STATUSES).optional(),
   q: z.string().trim().min(1).max(200).optional(),
   // S2-AUTH-USEROPS-1 — deleted=true: CHỈ user đã xóa mềm (view Đã xóa/khôi phục). KHÔNG z.coerce.boolean
-  // (coerce biến "false" → true). Enum chuỗi → boolean; thiếu → undefined = danh sách LIVE như cũ
-  // (giữ key OPTIONAL trong type — caller cũ không phải truyền).
-  deleted: z
-    .enum(["true", "false"])
-    .optional()
-    .transform((v) => (v === undefined ? undefined : v === "true")),
+  // (coerce biến "false" → true). `preprocess` chấp nhận CẢ chuỗi "true"/"false" LẪN boolean → boolean|undefined:
+  // phải IDEMPOTENT vì ZodValidationPipe chạy 2 LẦN (global main.ts + @UsePipes controller). Với transform
+  // string→boolean cũ, lần 2 nhận boolean → enum vỡ "received boolean" (400 tab Đã xóa). Thiếu → undefined =
+  // danh sách LIVE như cũ (key OPTIONAL trong type — caller cũ không phải truyền).
+  deleted: z.preprocess(
+    (v) => (v === true || v === "true" ? true : v === false || v === "false" ? false : undefined),
+    z.boolean().optional(),
+  ),
   limit: z.coerce
     .number()
     .int()
