@@ -114,25 +114,29 @@ const LIST_LIMIT_MIN = 1;
 const LIST_LIMIT_MAX = 100;
 
 /**
+ * Boolean query-param IDEMPOTENT dưới ZodValidationPipe KÉP (global main.ts + @UsePipes controller): nhận
+ * CẢ chuỗi "true"/"false" LẪN boolean → boolean|undefined. Transform string→boolean thường KHÔNG idempotent
+ * → lần chạy pipe thứ 2 nhận boolean, z.enum(["true","false"]) vỡ "Expected true|false, received boolean" →
+ * 400 (bug tab Đã xóa + linkedProfile). KHÔNG z.coerce.boolean ("false" → true). Thiếu/rác → undefined = không lọc.
+ * Giữ key OPTIONAL trong type (caller cũ không phải truyền).
+ */
+const optionalBooleanParam = () =>
+  z.preprocess(
+    (v) => (v === true || v === "true" ? true : v === false || v === "false" ? false : undefined),
+    z.boolean().optional(),
+  );
+
+/**
  * Query GET /auth/users — filter status?/q? + phân trang. limit clamp [1..100] default 50; offset ≥0.
  * `coerce` để nhận query-string; `.catch` để input rác → default (list đọc KHÔNG nên 400 vì limit rác).
  */
 export const listAuthUsersQuerySchema = z.object({
   status: z.enum(AUTH_USER_STATUSES).optional(),
   q: z.string().trim().min(1).max(200).optional(),
-  // S2-AUTH-USEROPS-1 — deleted=true: CHỈ user đã xóa mềm (view Đã xóa/khôi phục). KHÔNG z.coerce.boolean
-  // (coerce biến "false" → true). Enum chuỗi → boolean; thiếu → undefined = danh sách LIVE như cũ
-  // (giữ key OPTIONAL trong type — caller cũ không phải truyền).
-  deleted: z
-    .enum(["true", "false"])
-    .optional()
-    .transform((v) => (v === undefined ? undefined : v === "true")),
-  // Đối soát AUTH↔HR: true = CHỈ tài khoản ĐÃ có hồ sơ nhân sự active; false = CHỈ tài khoản CHƯA có hồ sơ;
-  // thiếu = tất cả. Cùng khuôn `deleted` (enum chuỗi → boolean, KHÔNG z.coerce.boolean vì "false"→true).
-  linkedProfile: z
-    .enum(["true", "false"])
-    .optional()
-    .transform((v) => (v === undefined ? undefined : v === "true")),
+  // S2-AUTH-USEROPS-1 — deleted=true: CHỈ user đã xóa mềm (view Đã xóa/khôi phục). Idempotent (xem optionalBooleanParam).
+  deleted: optionalBooleanParam(),
+  // Đối soát AUTH↔HR: true = CHỈ tài khoản ĐÃ có hồ sơ; false = CHỈ CHƯA có; thiếu = tất cả. Idempotent (double-pipe safe).
+  linkedProfile: optionalBooleanParam(),
   limit: z.coerce
     .number()
     .int()
