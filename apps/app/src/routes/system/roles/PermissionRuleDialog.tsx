@@ -141,6 +141,7 @@ export function PermissionRuleDialog({
     <Dialog
       open={open}
       onClose={close}
+      className="max-w-2xl"
       title={t("rolePermissions.rule.title", { role: roleName })}
       description={t("rolePermissions.rule.description")}
       footer={
@@ -153,15 +154,24 @@ export function PermissionRuleDialog({
             <Button variant="outline" size="sm" disabled={busy} onClick={close}>
               {tc("actions.cancel")}
             </Button>
-            <Button variant="outline" size="sm" disabled={!canPreview} onClick={() => void runPreview()}>
-              {busy && !applied ? t("rolePermissions.rule.previewing") : t("rolePermissions.rule.preview")}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!canPreview}
+              onClick={() => void runPreview()}
+            >
+              {busy && !applied
+                ? t("rolePermissions.rule.previewing")
+                : t("rolePermissions.rule.preview")}
             </Button>
             <Button
               size="sm"
               disabled={busy || preview === null || applyCount === 0}
               onClick={() => void runApply()}
             >
-              {busy ? t("rolePermissions.rule.applying") : t("rolePermissions.rule.apply", { count: applyCount })}
+              {busy
+                ? t("rolePermissions.rule.applying")
+                : t("rolePermissions.rule.apply", { count: applyCount })}
             </Button>
           </>
         )
@@ -171,7 +181,9 @@ export function PermissionRuleDialog({
         {/* Tài nguyên */}
         <div>
           <label className="text-sm font-medium">{t("rolePermissions.rule.resources")}</label>
-          <p className="mb-1 text-xs text-muted-foreground">{t("rolePermissions.rule.resourcesAll")}</p>
+          <p className="mb-1 text-xs text-muted-foreground">
+            {t("rolePermissions.rule.resourcesAll")}
+          </p>
           <Input
             className="mb-2 w-full"
             placeholder={t("rolePermissions.search")}
@@ -293,10 +305,7 @@ export function PermissionRuleDialog({
               })}
             </p>
             {applied && preview.applied && (
-              <p
-                role="status"
-                className="rounded bg-emerald-50 px-2 py-1 text-sm text-emerald-700"
-              >
+              <p role="status" className="rounded bg-emerald-50 px-2 py-1 text-sm text-emerald-700">
                 {t("rolePermissions.rule.done", {
                   ok: preview.applied.filter((a) => a.status === "ok").length,
                   err: preview.applied.filter((a) => a.status === "error").length,
