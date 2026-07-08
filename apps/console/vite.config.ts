@@ -12,6 +12,8 @@ export default defineConfig({
     // FS-4 SSO dev: app Hệ thống (tenant, aud=user) phục vụ trên origin riêng `console.localhost:5278`
     // để cookie phiên `Domain=.localhost` chạy giống prod. TÁCH BẠCH operator plane apps/admin (:5274).
     port: 5278,
+    // dev-online (VITE_TUNNEL_HOST set): bind dual-stack `::` để cloudflared quay `localhost` không treo IPv4.
+    host: process.env.VITE_TUNNEL_HOST ? "::" : undefined,
     // dev-online: cho phép host cloudflared + HMR qua wss:443 khi VITE_TUNNEL_HOST set (m dev-online).
     allowedHosts: process.env.VITE_TUNNEL_HOST
       ? [".localhost", process.env.VITE_TUNNEL_HOST]
@@ -22,6 +24,8 @@ export default defineConfig({
   },
   // dev-online-fast: serve bản build qua `vite preview` cùng cổng dev (xem apps/app/vite.config.ts).
   preview: {
+    // Dual-stack (IPv4 + IPv6) để cloudflared quay `localhost` không treo IPv4 — xem apps/app/vite.config.ts.
+    host: "::",
     port: 5278,
     allowedHosts: [".localhost", ".funtimemediacorp.com"],
   },

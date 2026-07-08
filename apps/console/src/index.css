@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Quét class Tailwind trong package UI dùng chung (@mediaos/ui). Tailwind v4 tự dò
+   nguồn CHỈ trong cây app này → các class chỉ xuất hiện ở packages/ui (vd overlay
+   `bg-black/40`, `max-w-lg`, `max-h-[90vh]` của <Dialog/>) KHÔNG được sinh ra ⇒ modal
+   tràn full-width, mất nền mờ. @source ép quét nguồn UI để mọi box hiển thị đúng. */
+@source "../../../packages/ui/src";
+
 /* ============================================================================
    Design language — "Control Room" (Phòng điều khiển) · Tailwind v4 @theme.
    Console = bàn điều khiển hệ thống: nền navy-đen tập trung, panel nổi, "phím"

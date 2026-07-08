@@ -94,12 +94,23 @@ function Start-DevWindow([string]$name, [string]$dir) {
   Write-Ok "khởi động $name ($dir)"
 }
 
-# Cửa sổ `vite preview` — serve BẢN BUILD (dist/) trên cùng cổng dev (preview block trong vite.config.ts).
-function Start-PreviewWindow([string]$name, [string]$dir) {
+# Chạy 1 tiến trình dev-online ẨN (không cửa sổ) + gộp stdout+stderr vào dev\logs\<name>.log.
+# Mẫu WScript.Shell.Run(cmd, window=0 SW_HIDE, wait=$false detached) — giống dev/dashboard-hidden.vbs nhưng
+# gọi COM trực tiếp (khỏi cần .vbs riêng). Ẩn mà VẪN debug được nhờ log file (`m dev-online-logs`).
+# Dừng: `m dev-online-stop` (kill theo cổng — cmd /c thoát khi tiến trình con chết → không để lại orphan).
+function Start-HiddenApp([string]$name, [string]$dir, [string]$innerCmd) {
   $wd = Join-Path $Root $dir
   if (-not (Test-Path $wd)) { Write-Err "không thấy thư mục $dir — bỏ qua $name"; return }
-  Start-Process -FilePath "cmd.exe" -ArgumentList "/k", "title MediaOS-$name && pnpm preview" -WorkingDirectory $wd | Out-Null
-  Write-Ok "khởi động $name ($dir, preview bản build)"
+  $logDir = Join-Path $Root "dev\logs"
+  if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+  $log = Join-Path $logDir "$name.log"
+  # cmd /c có ký tự đặc biệt (`>` `&`) ⇒ cmd chỉ bóc cặp nháy NGOÀI cùng, giữ nháy quanh đường dẫn có dấu
+  # cách. CurrentDirectory thay cho `cd` (tránh nháy-trong-nháy). `>` ghi đè log mỗi lần chạy (khởi động sạch).
+  $cmd = 'cmd /c "' + $innerCmd + ' > "' + $log + '" 2>&1"'
+  $sh = New-Object -ComObject WScript.Shell
+  $sh.CurrentDirectory = $wd
+  $null = $sh.Run($cmd, 0, $false)
+  Write-Ok "khởi động $name ($dir, ẨN → log: dev\logs\$name.log)"
 }
 
 # ── Lệnh: hạ tầng + dev ─────────────────────────────────────────────────────
@@ -331,7 +342,31 @@ function Build-SharedPackages {
 function Invoke-DevOnlineStop {
   Write-Step "DỪNG dev-online (giải phóng cổng 3200/5273/5275/5278)"
   Stop-DevOnline
-  Write-Ok "Đã dừng server dev-online (cửa sổ cmd có thể tự đóng)."
+  Write-Ok "Đã dừng server dev-online (tiến trình ẩn đã bị kết thúc theo cổng)."
+}
+
+# Xem log tiến trình ẩn (dev\logs\). Không tham số → liệt kê; có tên → tail -f (Ctrl+C để thoát).
+function Invoke-DevOnlineLogs([string[]]$logArgs) {
+  $logDir = Join-Path $Root "dev\logs"
+  if (-not (Test-Path $logDir)) { Write-Warn "Chưa có log — chạy 'm dev-online' / 'm dev-online-fast' trước."; return }
+  $name = $null
+  if ($logArgs.Count -gt 0) { $name = $logArgs[0] }
+  if (-not $name) {
+    Write-Step "Log dev-online (dev\logs\)"
+    $logs = Get-ChildItem $logDir -Filter *.log -ErrorAction SilentlyContinue
+    if (-not $logs) { Write-Warn "Chưa có file log nào."; return }
+    foreach ($f in $logs) {
+      Write-Host ("  {0,-16} {1,9:N0} B  {2}" -f $f.BaseName, $f.Length, $f.LastWriteTime)
+    }
+    Write-Host ""
+    Write-Host "  Theo dõi 1 log:  m dev-online-logs api-online   (hoặc gõ tắt: api / app / auth / console)"
+    return
+  }
+  $log = Join-Path $logDir "$name.log"
+  if (-not (Test-Path $log)) { $log = Join-Path $logDir "$name-online.log" }  # cho gõ tắt: api → api-online
+  if (-not (Test-Path $log)) { Write-Err "Không thấy log: $name (xem danh sách bằng 'm dev-online-logs')"; return }
+  Write-Step "Tail $log  (Ctrl+C để thoát)"
+  Get-Content $log -Tail 40 -Wait
 }
 
 function Invoke-DevOnlineDb {
@@ -360,12 +395,12 @@ function Invoke-DevOnline {
   Build-SharedPackages
   Exec { docker compose up -d } "docker compose up"
   if (-not (Wait-Postgres)) { return }
-  Start-DevWindow "api-online" "apps\api"
-  # mỗi Vite cần VITE_TUNNEL_HOST riêng (Start-Process chụp env lúc spawn) → set tuần tự.
-  $env:VITE_TUNNEL_HOST = "cian-dev.funtimemediacorp.com";         Start-DevWindow "app-online" "apps\app"
-  $env:VITE_TUNNEL_HOST = "cian-dev-auth.funtimemediacorp.com";    Start-DevWindow "auth-online" "apps\auth"
-  $env:VITE_TUNNEL_HOST = "cian-dev-console.funtimemediacorp.com"; Start-DevWindow "console-online" "apps\console"
-  Remove-Item Env:VITE_TUNNEL_HOST -ErrorAction SilentlyContinue
+  # Chạy ẨN + log. Mỗi Vite bake VITE_TUNNEL_HOST riêng vào cmd (`set ...&& pnpm dev`) cho chắc, không phụ
+  # thuộc kế thừa env. LƯU Ý: `&&` dán ngay sau giá trị (không dấu cách) để tránh trailing-space vào host.
+  Start-HiddenApp "api-online"     "apps\api"     "pnpm dev"
+  Start-HiddenApp "app-online"     "apps\app"     "set VITE_TUNNEL_HOST=cian-dev.funtimemediacorp.com&& pnpm dev"
+  Start-HiddenApp "auth-online"    "apps\auth"    "set VITE_TUNNEL_HOST=cian-dev-auth.funtimemediacorp.com&& pnpm dev"
+  Start-HiddenApp "console-online" "apps\console" "set VITE_TUNNEL_HOST=cian-dev-console.funtimemediacorp.com&& pnpm dev"
   Write-Host ""
   Write-Ok "Dev-online local đang chạy (API :3200). Online qua cloudflared:"
   Write-Host "    app     https://cian-dev.funtimemediacorp.com"
@@ -376,6 +411,7 @@ function Invoke-DevOnline {
   Write-Host "  Login: demo / admin@demo.local / Admin@12345" -ForegroundColor Magenta
   Write-Warn "Lần đầu: 'm dev-online-db' (tạo mediaos_dev) + 'm dev-online-tunnel' (admin, tạo ingress+DNS)."
   Write-Warn "Cookie domain trùng prod → test bằng trình duyệt/profile KHÁC với prod."
+  Write-Warn "Chạy ẨN (không cửa sổ). Xem log: 'm dev-online-logs' · dừng: 'm dev-online-stop'."
 }
 
 function Invoke-DevOnlineTunnel {
@@ -383,33 +419,36 @@ function Invoke-DevOnlineTunnel {
   & (Join-Path $Root "scripts\windows\07-tunnel-dev.ps1")
 }
 
-# dev-online-fast — như dev-online nhưng 3 SPA serve BẢN BUILD (vite preview) thay vì dev server.
-# Lý do: dev-mode không bundle ⇒ mỗi trang nạp hàng trăm module rời, mỗi request ~200-350ms qua tunnel
-# ⇒ chuyển trang/lần vào đầu rất chậm. Bundle ⇒ 2-3 request/trang. Đổi lại KHÔNG có HMR — sửa code FE
-# phải chạy lại lệnh này (hoặc dùng `m dev-online` khi cần HMR). API vẫn chạy watch như cũ.
+# dev-online-fast — như dev-online nhưng phục vụ BẢN BUILD toàn stack (không watch/HMR).
+# Lý do FE: dev-mode không bundle ⇒ mỗi trang nạp hàng trăm module rời, mỗi request ~200-350ms qua tunnel
+# ⇒ chuyển trang/lần vào đầu rất chậm. Bundle (vite preview) ⇒ 2-3 request/trang.
+# Lý do API: `nest start --watch` mất ~16-30s biên dịch lại monolith khi khởi động/đổi file → request rơi
+# vào cửa sổ đó (kể cả ĐĂNG NHẬP) bị timeout 30s qua tunnel. Chạy bản build `node dist/main.js` listen ~2-3s.
+# Đổi lại KHÔNG có HMR/watch — sửa code (FE hay API) phải chạy lại lệnh này (hoặc `m dev-online` khi cần watch).
 function Invoke-DevOnlineFast {
-  Write-Step "DEV-ONLINE FAST — API :3200 (watch) + 3 SPA serve bản build (vite preview)"
+  Write-Step "DEV-ONLINE FAST — API :3200 + 3 SPA đều chạy BẢN BUILD (không watch/HMR)"
   Import-DevOnlineEnv
   Write-Host "  dừng server dev-online cũ (nếu có) → re-run sạch ..." -ForegroundColor DarkGray
   Stop-DevOnline
   Build-SharedPackages
-  Write-Host "  build 3 SPA (env VITE_* dev-online bake vào bundle) ..." -ForegroundColor DarkGray
+  Write-Host "  build API + 3 SPA (VITE_* dev-online bake vào bundle; API → dist/main.js) ..." -ForegroundColor DarkGray
   Exec {
-    pnpm exec turbo run build --filter=@mediaos/app --filter=@mediaos/auth --filter=@mediaos/console --force
-  } "build 3 SPA"
+    pnpm exec turbo run build --filter=@mediaos/api --filter=@mediaos/app --filter=@mediaos/auth --filter=@mediaos/console --force
+  } "build API + 3 SPA"
   Exec { docker compose up -d } "docker compose up"
   if (-not (Wait-Postgres)) { return }
-  Start-DevWindow "api-online" "apps\api"
-  Start-PreviewWindow "app-online" "apps\app"
-  Start-PreviewWindow "auth-online" "apps\auth"
-  Start-PreviewWindow "console-online" "apps\console"
+  Start-HiddenApp "api-online"     "apps\api"     "node dist\main.js"
+  Start-HiddenApp "app-online"     "apps\app"     "pnpm preview"
+  Start-HiddenApp "auth-online"    "apps\auth"    "pnpm preview"
+  Start-HiddenApp "console-online" "apps\console" "pnpm preview"
   Write-Host ""
-  Write-Ok "Dev-online FAST đang chạy (bản build — không HMR; sửa FE thì chạy lại 'm dev-online-fast')."
+  Write-Ok "Dev-online FAST đang chạy ẨN (bản build, API không watch — sửa code FE/API thì chạy lại 'm dev-online-fast')."
   Write-Host "    app     https://cian-dev.funtimemediacorp.com"
   Write-Host "    auth    https://cian-dev-auth.funtimemediacorp.com"
   Write-Host "    console https://cian-dev-console.funtimemediacorp.com"
   Write-Host ""
   Write-Host "  Login: demo / admin@demo.local / Admin@12345" -ForegroundColor Magenta
+  Write-Warn "Chạy ẨN (không cửa sổ). Xem log: 'm dev-online-logs' · dừng: 'm dev-online-stop'."
 }
 
 # ── Dashboard tiến độ (báo cáo dự án, CHẠY ẨN cổng 5180) ─────────────────────
@@ -482,8 +521,9 @@ function Show-Help {
   Write-Host ""
   Write-Host "  DEV-ONLINE (lộ dev ra cian-dev.*.funtimemediacorp.com, song song prod)" -ForegroundColor Yellow
   Write-Host "    dev-online          chạy/restart dev stack lộ ra cian-dev.* (tự dừng cũ + rebuild shared)"
-  Write-Host "    dev-online-fast     như dev-online nhưng 3 SPA serve BẢN BUILD (nhanh qua tunnel, không HMR)"
+  Write-Host "    dev-online-fast     như dev-online nhưng API + 3 SPA đều chạy BẢN BUILD (nhanh/ổn định qua tunnel, không watch/HMR)"
   Write-Host "    dev-online-stop     dừng dev-online (giải phóng cổng 3200/5273/5275/5278)"
+  Write-Host "    dev-online-logs     xem/tail log tiến trình ẩn (dev\logs\; vd: m dev-online-logs api)"
   Write-Host "    dev-online-db       tạo + migrate + seed DB cô lập mediaos_dev (1 lần)"
   Write-Host "    dev-online-tunnel   tạo ingress cloudflared + DNS cho cian-dev.* (1 lần, Administrator)"
   Write-Host ""
@@ -518,17 +558,18 @@ function Show-Menu {
     Write-Host ""
     Write-Host "  --- DEV-ONLINE (lộ ra cian-dev.*, song song prod) ---" -ForegroundColor DarkCyan
     Write-Host "  [11] DEV-ONLINE          dev server + HMR (sửa FE thấy ngay)"
-    Write-Host "  [12] DEV-ONLINE FAST     serve bản build (nhanh/ổn định qua tunnel, KHÔNG HMR)"
+    Write-Host "  [12] DEV-ONLINE FAST     API + 3 SPA chạy bản build (nhanh/ổn định qua tunnel, KHÔNG watch/HMR)"
     Write-Host "  [13] Dừng dev-online"
     Write-Host "  [14] Dev-online: tạo DB mediaos_dev      (1 lần)"
     Write-Host "  [15] Dev-online: ingress tunnel          (1 lần, Administrator)"
+    Write-Host "  [18] Dev-online: xem log tiến trình ẩn   (dev\logs\)"
     Write-Host ""
     Write-Host "  --- DASHBOARD tiến độ (chạy ẩn, cổng 5180) ---" -ForegroundColor DarkCyan
     Write-Host "  [16] Bật DASHBOARD (ẩn)    http://localhost:5180"
     Write-Host "  [17] Tắt DASHBOARD"
     Write-Host "   [0] Thoát"
     Write-Host ""
-    $choice = Read-Host "Chọn (0-17)"
+    $choice = Read-Host "Chọn (0-18)"
     switch ($choice) {
       "1"  { Invoke-Dev }
       "2"  { Invoke-Up }
@@ -545,6 +586,7 @@ function Show-Menu {
       "13" { Invoke-DevOnlineStop }
       "14" { Invoke-DevOnlineDb }
       "15" { Invoke-DevOnlineTunnel }
+      "18" { Invoke-DevOnlineLogs @() }
       "16" { Invoke-Dashboard }
       "17" { Invoke-DashboardStop }
       "0"  { return }
@@ -587,6 +629,7 @@ switch ($Command.ToLower()) {
   "dev-online"        { Invoke-DevOnline }
   "dev-online-fast"   { Invoke-DevOnlineFast }
   "dev-online-stop"   { Invoke-DevOnlineStop }
+  "dev-online-logs"   { Invoke-DevOnlineLogs $Rest }
   "dev-online-db"     { Invoke-DevOnlineDb }
   "dev-online-tunnel" { Invoke-DevOnlineTunnel }
   "dashboard"         { Invoke-Dashboard }
