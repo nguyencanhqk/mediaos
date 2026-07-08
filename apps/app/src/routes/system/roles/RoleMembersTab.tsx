@@ -12,7 +12,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, UserPlus, Building2 } from "lucide-react";
+import { RefreshCw, UserPlus, Building2, Briefcase } from "lucide-react";
 import {
   authKeys,
   authUsersApi,
@@ -71,6 +71,7 @@ export function RoleMembersTab({ roleId }: RoleMembersTabProps) {
 
   const [addPersonOpen, setAddPersonOpen] = useState(false);
   const [addOrgOpen, setAddOrgOpen] = useState(false);
+  const [addPositionOpen, setAddPositionOpen] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState<{ userId: string; email: string } | null>(
     null,
   );
@@ -126,6 +127,10 @@ export function RoleMembersTab({ roleId }: RoleMembersTabProps) {
             <Button variant="outline" size="sm" onClick={() => setAddOrgOpen(true)}>
               <Building2 className="mr-2 h-4 w-4" />
               {t("roleMembers.actions.addOrgUnit")}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setAddPositionOpen(true)}>
+              <Briefcase className="mr-2 h-4 w-4" />
+              {t("roleMembers.actions.addPosition")}
             </Button>
           </PermissionGate>
         </div>
@@ -226,6 +231,13 @@ export function RoleMembersTab({ roleId }: RoleMembersTabProps) {
       <AddOrgUnitDialog
         open={addOrgOpen}
         onClose={() => setAddOrgOpen(false)}
+        roleId={roleId}
+        memberIds={memberIds}
+        onDone={() => void invalidateMembers()}
+      />
+      <AddPositionDialog
+        open={addPositionOpen}
+        onClose={() => setAddPositionOpen(false)}
         roleId={roleId}
         memberIds={memberIds}
         onDone={() => void invalidateMembers()}
@@ -471,6 +483,112 @@ function AddOrgUnitDialog({ open, onClose, roleId, memberIds, onDone }: AddDialo
       )}
 
       {orgUnitId !== "" &&
+        (employeesQuery.isLoading ? (
+          <div className="h-16 animate-pulse rounded-md bg-muted" />
+        ) : (
+          <div className="space-y-1 text-sm text-muted-foreground">
+            <p>{t("roleMembers.addOrgUnit.preview.toAssign", { count: toAssign.length })}</p>
+            {alreadyMembers > 0 && (
+              <p>{t("roleMembers.addOrgUnit.preview.alreadyMembers", { count: alreadyMembers })}</p>
+            )}
+            {unlinked > 0 && (
+              <p>{t("roleMembers.addOrgUnit.preview.unlinked", { count: unlinked })}</p>
+            )}
+            {employees.length >= 100 && (
+              <p className="text-amber-600">{t("roleMembers.addOrgUnit.preview.pageCap")}</p>
+            )}
+          </div>
+        ))}
+      <BatchResultList results={batch.results} />
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Dialog "Thêm theo chức vụ" — chọn position → nhân viên giữ chức vụ, có tài khoản, chưa là member.
+// BE lọc GET /hr/employees?positionId (employees.repository conditions). Mirror AddOrgUnitDialog.
+// ---------------------------------------------------------------------------
+function AddPositionDialog({ open, onClose, roleId, memberIds, onDone }: AddDialogProps) {
+  const { t } = useTranslation("system");
+  const { t: tc } = useTranslation("common");
+  const [positionId, setPositionId] = useState("");
+  const batch = useAssignBatch(roleId, t, onDone);
+
+  const positionsQuery = useQuery({
+    queryKey: ["hr", "positions", "role-member-picker"],
+    queryFn: () => hrApi.listPositions(),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const positions = positionsQuery.data ?? [];
+
+  const employeesQuery = useQuery({
+    queryKey: ["hr", "employees", "role-member-picker-position", positionId],
+    queryFn: () => hrApi.listEmployees({ positionId, pageSize: 100 }),
+    enabled: open && positionId !== "",
+    staleTime: 10_000,
+  });
+  const employees = employeesQuery.data?.items ?? [];
+  const linked = employees.filter((e) => e.userId !== null);
+  const toAssign = linked.filter((e) => !memberIds.has(e.userId as string));
+  const alreadyMembers = linked.length - toAssign.length;
+  const unlinked = employees.length - linked.length;
+
+  const close = () => {
+    setPositionId("");
+    batch.reset();
+    onClose();
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={close}
+      title={t("roleMembers.addPosition.title")}
+      description={t("roleMembers.addPosition.description")}
+      footer={
+        <>
+          <Button variant="outline" size="sm" onClick={close}>
+            {tc("actions.cancel")}
+          </Button>
+          <Button
+            size="sm"
+            disabled={toAssign.length === 0 || batch.running}
+            onClick={() =>
+              void batch.run(
+                toAssign.map((e) => ({
+                  userId: e.userId as string,
+                  label: e.fullName ?? e.email ?? e.id,
+                })),
+              )
+            }
+          >
+            {batch.running
+              ? t("roleMembers.batch.running")
+              : t("roleMembers.addPosition.submit", { count: toAssign.length })}
+          </Button>
+        </>
+      }
+    >
+      {positionsQuery.isLoading ? (
+        <div className="h-10 animate-pulse rounded-md bg-muted" />
+      ) : (
+        <select
+          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          value={positionId}
+          onChange={(e) => setPositionId(e.target.value)}
+          aria-label={t("roleMembers.addPosition.selectLabel")}
+        >
+          <option value="">{t("roleMembers.addPosition.selectPlaceholder")}</option>
+          {positions.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {positionId !== "" &&
         (employeesQuery.isLoading ? (
           <div className="h-16 animate-pulse rounded-md bg-muted" />
         ) : (

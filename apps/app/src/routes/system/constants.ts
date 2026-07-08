@@ -87,6 +87,10 @@ export const SYSTEM_ENGINE_PAIRS = {
   // (ANTI-ESCALATION) — component dùng useCanExact, KHÔNG useCan (không kế thừa wildcard).
   CREATE_ROLE: { action: "create", resourceType: "role" },
   UPDATE_ROLE: { action: "update", resourceType: "role" },
+  // Nguồn: role-admin.controller.ts DELETE /auth/roles/:id (delete:role, seed 0005 is_sensitive=FALSE →
+  // PermissionGate/useCan thường dùng được, wildcard kế thừa; company-admin có ALLOW/Company sẵn). Xoá mềm
+  // + cascade gỡ khỏi mọi thành viên. Nút ẩn với vai trò hệ thống (row.isSystem) — server cũng REJECT 400.
+  DELETE_ROLE: { action: "delete", resourceType: "role" },
   READ_PERMISSION: { action: "view", resourceType: "permission" },
   ASSIGN_PERMISSION: { action: "assign", resourceType: "permission" },
   // S2-FE-FND-5 (lane FE batch C) — nguồn: apps/api/src/foundation/sequences/sequence.controller.ts +

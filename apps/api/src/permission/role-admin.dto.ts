@@ -1,5 +1,6 @@
 import { createZodDto } from "nestjs-zod";
 import {
+  applyPermissionRuleSchema,
   assignRolePermissionSchema,
   createRoleSchema,
   revokeRolePermissionSchema,
@@ -11,3 +12,5 @@ export class CreateRoleDto extends createZodDto(createRoleSchema) {}
 export class UpdateRoleDto extends createZodDto(updateRoleSchema) {}
 export class AssignRolePermissionDto extends createZodDto(assignRolePermissionSchema) {}
 export class RevokeRolePermissionDto extends createZodDto(revokeRolePermissionSchema) {}
+/** S2-AUTH-PERMRULE-1 — body DTO cho POST /auth/roles/:id/permissions/apply-rule (rule builder). */
+export class ApplyPermissionRuleDto extends createZodDto(applyPermissionRuleSchema) {}
