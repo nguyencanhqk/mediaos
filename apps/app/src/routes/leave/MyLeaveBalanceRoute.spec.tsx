@@ -14,7 +14,7 @@
  * factory router dùng cho MỌI route module) + store THẬT — KHÔNG mock web-core (guard thuần dễ xanh-giả).
  */
 import { render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuthStore, getRouteMeta } from "@mediaos/web-core";
 
 // Vỏ nặng (topbar/sidebar) → mock passthrough để cô lập đúng tầng AUTHZ (ProtectedRoute).
@@ -58,6 +58,13 @@ function seedAuth(capabilities: Record<string, boolean>) {
 }
 
 describe("S3-FE-LEAVE-7 — /leave/me/balances route gate reuses leave.overview (VIEW_OWN mapped)", () => {
+  // Nạp @/router MỘT LẦN: import kéo cả graph route (cold-import ~2-5s dưới full-suite) → nếu để
+  // trong từng it() dễ vượt testTimeout 5s. Hoist vào beforeAll (timeout rộng); test dùng ref đã cache.
+  let routerMod: typeof import("@/router");
+  beforeAll(async () => {
+    routerMod = await import("@/router");
+  }, 30000);
+
   beforeEach(() => {
     useAuthStore.getState().logout();
   });
@@ -72,16 +79,16 @@ describe("S3-FE-LEAVE-7 — /leave/me/balances route gate reuses leave.overview 
     expect(meta.requiredAnyPermissions).not.toContain("LEAVE.BALANCE.VIEW_OWN");
   });
 
-  it("(d) user view-own:leave → route ALLOW (render page, KHÔNG SHOW_403)", async () => {
-    const { buildModuleRouteContent, getMeta } = await import("@/router");
+  it("(d) user view-own:leave → route ALLOW (render page, KHÔNG SHOW_403)", () => {
+    const { buildModuleRouteContent, getMeta } = routerMod;
     seedAuth({ "view-own:leave": true });
     render(buildModuleRouteContent(getMeta("leave.overview"), "LEAVE", <BalancesPageStub />));
     expect(screen.getByText(MODULE_CONTENT)).toBeInTheDocument();
     expect(screen.queryByText("forbidden.reason.NO_PERMISSION")).not.toBeInTheDocument();
   });
 
-  it("deny-control: user KHÔNG có view-own:leave → SHOW_403 (route ép cặp mapped, không mở toang)", async () => {
-    const { buildModuleRouteContent, getMeta } = await import("@/router");
+  it("deny-control: user KHÔNG có view-own:leave → SHOW_403 (route ép cặp mapped, không mở toang)", () => {
+    const { buildModuleRouteContent, getMeta } = routerMod;
     seedAuth({}); // không có view-own:leave lẫn view:leave
     render(buildModuleRouteContent(getMeta("leave.overview"), "LEAVE", <BalancesPageStub />));
     expect(screen.getByText("forbidden.reason.NO_PERMISSION")).toBeInTheDocument();
