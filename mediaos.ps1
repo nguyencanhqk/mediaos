@@ -161,7 +161,34 @@ function Invoke-Clean {
 }
 
 # ── Lệnh: DB ────────────────────────────────────────────────────────────────
-function Invoke-Migrate { Write-Step "Migrate DB"; Exec { pnpm db:migrate } "pnpm db:migrate"; Write-Ok "Migrate xong" }
+# Đọc DB đích từ .env đang active, CHE mật khẩu. `pnpm db:migrate` im lặng đi theo .env hiện tại —
+# .env bị hoán đổi giữa prod/dev-online nên rất dễ migrate nhầm DB mà không hay.
+function Get-MigrateTarget {
+  $envPath = Join-Path $Root ".env"
+  if (-not (Test-Path $envPath)) { return "(KHÔNG có .env — chạy 'm prod-env' hoặc copy .env.example)" }
+  $line = Select-String -Path $envPath -Pattern '^\s*DATABASE_DIRECT_URL\s*=' | Select-Object -First 1
+  if (-not $line) { return "(.env THIẾU DATABASE_DIRECT_URL)" }
+  $url = ($line.Line -split '=', 2)[1].Trim().Trim('"').Trim("'")
+  return ($url -replace '://([^:]+):[^@]+@', '://$1:***@')
+}
+
+function Invoke-Migrate {
+  Write-Step "Migrate DB"
+  Write-Host ("  .env dang dung : " + (Get-ActiveEnv))
+  Write-Host ("  DB dich        : " + (Get-MigrateTarget))
+  Exec { pnpm db:migrate } "pnpm db:migrate"
+  Write-Ok "Migrate xong"
+}
+
+# Chỉ áp migration cho mediaos_dev — KHÔNG tạo DB, KHÔNG seed lại (khác 'dev-online-db').
+# Dùng khi mediaos_dev tụt migration so với repo (login 500 thay vì 401).
+function Invoke-DevOnlineMigrate {
+  Write-Step "DEV-ONLINE — chi MIGRATE mediaos_dev (khong tao DB, khong seed lai)"
+  Import-DevOnlineEnv
+  if (-not (Wait-Postgres)) { return }
+  Exec { pnpm db:migrate } "pnpm db:migrate (mediaos_dev)"
+  Write-Ok "mediaos_dev da o head migration"
+}
 
 function Invoke-Seed {
   Write-Step "Seed demo (base + full)"
@@ -514,7 +541,7 @@ function Show-Help {
   Write-Host "    clean             xoá node_modules · dist · .turbo (rebuild sạch)"
   Write-Host ""
   Write-Host "  DATABASE" -ForegroundColor Yellow
-  Write-Host "    migrate           áp migration (pnpm db:migrate)"
+  Write-Host "    migrate           áp migration lên DB của .env đang active (in rõ DB đích trước khi chạy)"
   Write-Host "    seed              seed công ty demo + dữ liệu"
   Write-Host "    roles             sync mật khẩu DB role về dev (khi login báo sai mật khẩu)"
   Write-Host "    reset             [XOÁ SẠCH] down -v + up + migrate + roles + seed"
@@ -537,7 +564,8 @@ function Show-Help {
   Write-Host "    dev-online-fast     như dev-online nhưng API + 3 SPA đều chạy BẢN BUILD (nhanh/ổn định qua tunnel, không watch/HMR)"
   Write-Host "    dev-online-stop     dừng dev-online (giải phóng cổng 3200/5273/5275/5278)"
   Write-Host "    dev-online-logs     xem/tail log tiến trình ẩn (dev\logs\; vd: m dev-online-logs api)"
-  Write-Host "    dev-online-db       tạo + migrate + seed DB cô lập mediaos_dev (1 lần)"
+  Write-Host "    dev-online-db       tạo + migrate + SEED LẠI DB cô lập mediaos_dev (1 lần)"
+  Write-Host "    dev-online-migrate  CHỈ migrate mediaos_dev (không tạo DB, không seed lại)"
   Write-Host "    dev-online-tunnel   tạo ingress cloudflared + DNS cho cian-dev.* (1 lần, Administrator)"
   Write-Host ""
   Write-Host "  DASHBOARD (tiến độ dự án — chạy ẩn cổng 5180)" -ForegroundColor Yellow
@@ -563,6 +591,7 @@ function Show-Menu {
     Write-Host "   [3] TEST một app          (vitest)"
     Write-Host "   [4] SEED dữ liệu demo"
     Write-Host "   [5] REBUILD               (install + build)"
+    Write-Host "  [19] MIGRATE DB           (áp migration mới — GIỮ NGUYÊN data)" -ForegroundColor Green
     Write-Host "   [6] RESET DB              [XOÁ SẠCH DATA]"
     Write-Host "   [7] Tắt INFRA             (docker compose down)"
     Write-Host "   [8] Sync DB roles -> dev  (khi login báo sai mật khẩu)"
@@ -573,7 +602,8 @@ function Show-Menu {
     Write-Host "  [11] DEV-ONLINE          dev server + HMR (sửa FE thấy ngay)"
     Write-Host "  [12] DEV-ONLINE FAST     API + 3 SPA chạy bản build (nhanh/ổn định qua tunnel, KHÔNG watch/HMR)"
     Write-Host "  [13] Dừng dev-online"
-    Write-Host "  [14] Dev-online: tạo DB mediaos_dev      (1 lần)"
+    Write-Host "  [14] Dev-online: tạo DB mediaos_dev      (1 lần — tạo + migrate + SEED LẠI)"
+    Write-Host "  [20] Dev-online: chỉ MIGRATE mediaos_dev (khi login báo 500 vì DB tụt migration)"
     Write-Host "  [15] Dev-online: ingress tunnel          (1 lần, Administrator)"
     Write-Host "  [18] Dev-online: xem log tiến trình ẩn   (dev\logs\)"
     Write-Host ""
@@ -582,7 +612,7 @@ function Show-Menu {
     Write-Host "  [17] Tắt DASHBOARD"
     Write-Host "   [0] Thoát"
     Write-Host ""
-    $choice = Read-Host "Chọn (0-18)"
+    $choice = Read-Host "Chọn (0-20)"
     switch ($choice) {
       "1"  { Invoke-Dev }
       "2"  { Invoke-Up }
@@ -602,6 +632,8 @@ function Show-Menu {
       "18" { Invoke-DevOnlineLogs @() }
       "16" { Invoke-Dashboard }
       "17" { Invoke-DashboardStop }
+      "19" { Invoke-Migrate }
+      "20" { Invoke-DevOnlineMigrate }
       "0"  { return }
       default { }
     }
@@ -643,8 +675,9 @@ switch ($Command.ToLower()) {
   "dev-online-fast"   { Invoke-DevOnlineFast }
   "dev-online-stop"   { Invoke-DevOnlineStop }
   "dev-online-logs"   { Invoke-DevOnlineLogs $Rest }
-  "dev-online-db"     { Invoke-DevOnlineDb }
-  "dev-online-tunnel" { Invoke-DevOnlineTunnel }
+  "dev-online-db"      { Invoke-DevOnlineDb }
+  "dev-online-migrate" { Invoke-DevOnlineMigrate }
+  "dev-online-tunnel"  { Invoke-DevOnlineTunnel }
   "dashboard"         { Invoke-Dashboard }
   "dashboard-stop"    { Invoke-DashboardStop }
   default      { Write-Err "Lệnh không hợp lệ: $Command"; Show-Help; exit 1 }
