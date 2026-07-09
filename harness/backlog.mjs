@@ -4421,6 +4421,7 @@ export const backlog = [
     paths: [
       "apps/api/src/foundation/seed/**",
       "apps/api/migrations/**",
+      "apps/api/test/integration/**",
       "docs/plans/S4-DASH-SEED-1.md",
     ],
     skills: ["code-review"],
@@ -4433,10 +4434,12 @@ export const backlog = [
     ],
     plan: "docs/plans/S4-DASH-SEED-1.md",
     done_when: [
-      "Seed dashboard_widgets đúng 7 widget In-sprint §11.3: ATTENDANCE_TODAY, MY_TASKS, TASK_ALERTS, NOTIFICATIONS, PENDING_LEAVE, PROJECT_PROGRESS, HR_OVERVIEW (mỗi widget có required_permission + source_modules); widget Catalog-only KHÔNG bật mặc định",
-      "Seed permission DASH (view dashboard type · view widget · config · cache refresh) + role mapping; seed default dashboard_widget_configs theo dashboard type (Employee/Manager/HR/Admin) chỉ widget in-sprint P0/P1",
-      "ON CONFLICT DO NOTHING idempotent; đổi config trên grant tồn tại → DELETE+INSERT",
-      "Int-spec: seed lại idempotent; widget catalog khớp §11.3; admin thấy cặp DASH qua /auth/me; FULL gate security-reviewer + database-reviewer PASS",
+      "OWNER CHỐT 2026-07-09 (Option B — gate widget bằng quyền MODULE NGUỒN): KHÔNG seed cặp engine per-widget ('*:dashboard-widget'). dashboard_widgets.required_permission_code lưu chuỗi SPEC verbatim 'DASH.WIDGET.VIEW_*' (thoả DB-07 §8.5); BE resolve → cặp read của module nguồn qua DASH_WIDGET_GATE_PAIR trong const registry. Lý do: permission-matrix-spec §7 là doc hợp nhất phân quyền, và Option A kéo theo follow-up sửa PERMISSION_CODE_TO_PAIR ở web-core (pair-drift đã cắn 3 lần). Chi tiết: docs/plans/S4-DASH-SEED-1.md §2.4",
+      "Seed dashboard_widgets đúng 7 widget In-sprint §11.3: ATTENDANCE_TODAY, MY_TASKS, TASK_ALERTS, NOTIFICATIONS, PENDING_LEAVE, PROJECT_PROGRESS, HR_OVERVIEW (mỗi widget có required_permission_code + source_modules); widget Catalog-only KHÔNG seed",
+      "Seed permission DASH cho 3 nhóm: view dashboard type (view-employee/manager/hr/admin:dashboard) · config (view/update:dashboard-config) · cache refresh (refresh:dashboard-cache) + role mapping; GIỮ NGUYÊN 'read:dashboard' (mig 0100). Seed default dashboard_widget_configs theo dashboard type chỉ widget in-sprint P0/P1 (HR_OVERVIEW=P2 → không default)",
+      "Migration đánh số nối tiếp head THẬT (meta/_journal.json: head idx 162 / when 1717500805000 → 0483, idx 163, when 1717500810000). ON CONFLICT chỉ dùng target CÓ THẬT: widgets = uq_dashboard_widgets_global_code_active; permissions = (action,resource_type); role_permissions = (role_id,permission_id,effect). dashboard_widget_configs KHÔNG có unique index → dùng WHERE NOT EXISTS, KHÔNG ON CONFLICT. Đổi data_scope grant = DELETE per-pair + INSERT",
+      "OWNER CHỐT 2026-07-09: mig 0483 thêm 'GRANT INSERT, DELETE ON dashboard_widget_configs TO mediaos_app' (0482 để app SELECT-only nên seeder chạy withTenant sẽ permission-denied). RLS+FORCE vẫn cô lập tenant; bảng này KHÔNG thuộc danh sách append-only. Default configs seed bằng CODE SEEDER post-boot (MasterDataSeedRunner), KHÔNG seed trong migration — company mặc định chỉ tồn tại sau BOOT",
+      "Int-spec RED-trước, deny-path đi đầu, gate `hasDb && LANE_DB` (chỉ skipIf(!hasDb) là đỏ-giả): seed lại idempotent (grant không drift); widget catalog khớp §11.3; KHÔNG tồn tại cặp '*:dashboard-widget' (invariant Option B); employee không có *:dashboard-config; admin thấy cặp DASH qua /auth/me; cross-tenant config không lộ. FULL gate security-reviewer + database-reviewer PASS",
     ],
   },
   {
