@@ -169,11 +169,17 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   // KHÔNG cần route-level vì chỉ chặn nút, không chặn cả trang.
   "HR.CONTRACT.VIEW": "view:contract",
   // S2-FE-FND-1 (FND1-WC): cặp seed THẬT mig 0435 — controller Foundation dùng *:foundation-* (view/update:
-  // foundation-company, update:foundation-setting). KHÔNG dùng nhãn-ma FRONTEND-13 §7.1 (FOUNDATION.SYSTEM.VIEW /
-  // SETTING.SYSTEM_MANAGE chưa seed) và KHÔNG namespace CŨ read/update:company (0005). Đọc≠sửa (pair-as-gate).
+  // foundation-company, update:foundation-setting). KHÔNG dùng nhãn-ma FRONTEND-13 §7.1 (FOUNDATION.SYSTEM.VIEW
+  // chưa seed) và KHÔNG namespace CŨ read/update:company (0005). Đọc≠sửa (pair-as-gate).
   "FOUNDATION.COMPANY.VIEW": "view:foundation-company",
   "FOUNDATION.COMPANY.UPDATE": "update:foundation-company",
   "FOUNDATION.SETTING.UPDATE": "update:foundation-setting",
+  // S2-FE-FND-8 — /system/settings (System Settings admin). Cặp seed THẬT mig 0435:343
+  // (system-manage:foundation-setting, is_sensitive=TRUE) — GATE DUY NHẤT cho CẢ GET và PATCH (BE KHÔNG
+  // tách view/manage cho system-scope; company-admin thường KHÔNG đọc được — chỉ per-user cấp tường minh,
+  // xem docs/plans/S2-FND-SYSSET-1.md RECONCILE DECISION). Comment cũ ở trên từng nói "SETTING.SYSTEM_MANAGE
+  // chưa seed" — ĐÃ STALE (0435 seed rồi từ S2-FND-BE-8); pin mapping đúng ở đây.
+  "FOUNDATION.SETTING.SYSTEM_MANAGE": "system-manage:foundation-setting",
   // S2-FE-AUTH-4 (lane FE batch C) — role WRITE + permission catalog + assign (nguồn: apps/api/src/
   // permission/role-admin.controller.ts + auth-roles-permissions.controller.ts, mig 0005/0444/0460).
   // assign:permission is_sensitive=true (ANTI-ESCALATION) — component dùng useCanExact, KHÔNG useCan.

@@ -780,13 +780,45 @@ export default {
     saveError: "Không thể lưu cấu hình. Vui lòng thử lại.",
   },
 
-  // /system/settings (SYSTEM_MANAGE) — DEFER: chưa có BE endpoint. KHÔNG nút mutation chết.
+  // /system/settings (S2-FE-FND-8 · UI-SYSTEM-SCREEN-004) — gate DUY NHẤT system-manage:foundation-setting.
   systemSettings: {
     title: "Cấu hình hệ thống",
-    description: "Tham số cấp hệ thống (vượt phạm vi công ty)",
-    deferredTitle: "Sắp ra mắt",
-    deferredDescription:
-      "Màn hình cấu hình cấp hệ thống đang chờ endpoint backend (SYSTEM_MANAGE). Sẽ được bổ sung trong đợt tiếp theo.",
+    description: "Tham số cấp hệ thống, áp dụng cho toàn hệ thống (vượt phạm vi công ty)",
+    columns: {
+      key: "Khoá",
+      value: "Giá trị",
+      category: "Nhóm",
+      moduleCode: "Module",
+    },
+    maskedHint: "Giá trị nhạy cảm — được che bởi máy chủ, không hiển thị nội dung thật.",
+    edit: "Sửa",
+    editValue: "Giá trị mới",
+    reason: "Lý do thay đổi",
+    reasonPlaceholder: "Ghi chú cho nhật ký kiểm toán (tuỳ chọn)",
+    save: "Lưu",
+    saving: "Đang lưu…",
+    cancel: "Huỷ",
+    confirm: {
+      title: "Xác nhận thay đổi cấu hình hệ thống",
+      description: "Thay đổi giá trị cấu hình sẽ áp dụng cho TOÀN HỆ THỐNG. Tiếp tục?",
+      sensitiveDescription:
+        "Đây là giá trị NHẠY CẢM cấp hệ thống. Thay đổi sẽ áp dụng cho toàn hệ thống và được ghi vào nhật ký kiểm toán. Tiếp tục?",
+      confirmLabel: "Lưu cấu hình",
+      cancelLabel: "Xem lại",
+    },
+    empty: {
+      title: "Không có cấu hình",
+      description: "Chưa có tham số cấu hình cấp hệ thống nào.",
+    },
+    error: {
+      title: "Không thể tải cấu hình",
+      description: "Có lỗi khi tải cấu hình hệ thống. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền quản lý cấu hình cấp hệ thống.",
+    },
+    saveError: "Không thể lưu cấu hình. Vui lòng thử lại.",
   },
 
   // S2-FE-FND-5 (lane FE batch C) — Sequence counters (/system/sequences) + Seed status (/system/seeds).

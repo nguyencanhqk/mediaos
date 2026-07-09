@@ -17,6 +17,7 @@ import {
   holidayApi,
   holidayViewSchema,
   safeSettingViewSchema,
+  safeSettingViewListSchema,
   settingsResolveResponseSchema,
   retentionApi,
   fileAccessLogApi,
@@ -107,6 +108,92 @@ describe("foundationApi — settings resolve + company-settings PATCH", () => {
     await foundationApi.updateCompanySetting("a b/c", { settingValue: 1, valueType: "Number" });
     const [url] = lastCall();
     expect(url).toBe(`/foundation/company-settings/${encodeURIComponent("a b/c")}`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// foundationApi — system-settings (S2-FE-FND-8) — GLOBAL, gate system-manage:foundation-setting.
+// ---------------------------------------------------------------------------
+
+describe("foundationApi — system-settings GET/PATCH (URL + method + Zod validator + no company_id)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.apiFetch).mockReset();
+    vi.mocked(apiClient.apiFetch).mockResolvedValue([] as never);
+  });
+
+  it("getSystemSettings() → GET /foundation/system-settings KHÔNG query khi không truyền params", async () => {
+    await foundationApi.getSystemSettings();
+    const [url, schema, opts] = lastCall();
+    expect(url).toBe("/foundation/system-settings");
+    expect(schema).toBe(safeSettingViewListSchema);
+    expect(opts?.method ?? "GET").toBe("GET");
+  });
+
+  it("getSystemSettings({category}) → gắn query string đúng, KHÔNG companyId", async () => {
+    await foundationApi.getSystemSettings({ category: "Mail" });
+    const [url] = lastCall();
+    expect(url).toBe("/foundation/system-settings?category=Mail");
+    expect(url).not.toContain("companyId");
+  });
+
+  it("getSystemSetting(key) → GET /foundation/system-settings/:key + safeSettingViewSchema", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue({} as never);
+    await foundationApi.getSystemSetting("mail.smtp_password");
+    const [url, schema, opts] = lastCall();
+    expect(url).toBe("/foundation/system-settings/mail.smtp_password");
+    expect(schema).toBe(safeSettingViewSchema);
+    expect(opts?.method ?? "GET").toBe("GET");
+  });
+
+  it("updateSystemSetting(key, body) → PATCH /foundation/system-settings/:key + SafeSettingView", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue({} as never);
+    await foundationApi.updateSystemSetting("mail.smtp_password", {
+      settingValue: "NEW_SECRET",
+      valueType: "SecretRef",
+      reason: "xoay secret định kỳ",
+    });
+    const [url, schema, opts] = lastCall();
+    expect(url).toBe("/foundation/system-settings/mail.smtp_password");
+    expect(schema).toBe(safeSettingViewSchema);
+    expect(opts?.method).toBe("PATCH");
+    const parsed = JSON.parse(opts?.body ?? "{}");
+    expect(parsed.settingValue).toBe("NEW_SECRET");
+    expect(opts?.body ?? "").not.toContain("company_id");
+    expect(opts?.body ?? "").not.toContain("companyId");
+  });
+
+  it("updateSystemSetting encode :key trong path (an toàn ký tự đặc biệt)", async () => {
+    vi.mocked(apiClient.apiFetch).mockResolvedValue({} as never);
+    await foundationApi.updateSystemSetting("a b/c", { settingValue: 1, valueType: "Number" });
+    const [url] = lastCall();
+    expect(url).toBe(`/foundation/system-settings/${encodeURIComponent("a b/c")}`);
+  });
+
+  it("safeSettingViewListSchema parse mảng SafeSettingView (masked + public trộn lẫn)", () => {
+    const parsed = safeSettingViewListSchema.parse([
+      {
+        key: "mail.smtp_password",
+        value: "***",
+        valueType: "SecretRef",
+        category: "Mail",
+        moduleCode: null,
+        scope: "system",
+        isSensitive: true,
+        masked: true,
+      },
+      {
+        key: "system.default_locale",
+        value: "vi-VN",
+        valueType: "String",
+        category: "General",
+        moduleCode: "SYSTEM",
+        scope: "system",
+        isSensitive: false,
+        masked: false,
+      },
+    ]);
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0].masked).toBe(true);
   });
 });
 

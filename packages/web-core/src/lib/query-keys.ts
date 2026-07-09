@@ -440,6 +440,13 @@ export const foundationKeys = {
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.foundation, "file-access-logs", "list", params] as const,
   },
+  // S2-FE-FND-8 — System settings GLOBAL (KHÔNG company_id trong key — gate system-manage:foundation-setting).
+  systemSettings: {
+    all: [...rootKeys.foundation, "system-settings"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.foundation, "system-settings", "list", params] as const,
+    detail: (key: string) => [...rootKeys.foundation, "system-settings", "detail", key] as const,
+  },
 } as const;
 
 // ── Mutation → query-key invalidation matrix (FRONTEND-04 §17.3) ──────────────
@@ -541,4 +548,7 @@ export const foundationInvalidation = {
   deleteHoliday: () => [foundationKeys.holidays.all] as const,
   // S2-FE-FND-6 — PATCH retention-policy làm mới list (danh mục nhỏ, không phân trang).
   updateRetentionPolicy: () => [foundationKeys.retentionPolicies.all] as const,
+  // S2-FE-FND-8 — PATCH /foundation/system-settings/:key làm mới CẢ prefix "system-settings" (list mọi
+  // biến thể filter + detail đúng key vừa sửa).
+  updateSystemSetting: () => [foundationKeys.systemSettings.all] as const,
 };

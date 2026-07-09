@@ -32,6 +32,11 @@ export const FOUNDATION_ENGINE_PAIRS = {
   VIEW_RETENTION: { action: "view", resourceType: "foundation-retention" },
   MANAGE_RETENTION: { action: "manage", resourceType: "foundation-retention" },
   VIEW_FILE_ACCESS_LOG: { action: "view", resourceType: "foundation-file-access-log" },
+  // S2-FE-FND-8 — /system/settings (System Settings admin, UI-SYSTEM-SCREEN-004). Cặp seed THẬT mig
+  // 0435:343 (system-manage:foundation-setting, is_sensitive=TRUE) — GATE DUY NHẤT cho CẢ đọc lẫn sửa (BE
+  // KHÔNG tách view/manage cho system-scope, xem docs/plans/S2-FND-SYSSET-1.md RECONCILE DECISION).
+  // company-admin thường KHÔNG có (chỉ per-user cấp tường minh) — ĐÚNG thiết kế, không phải bug FE.
+  SYSTEM_MANAGE_SETTING: { action: "system-manage", resourceType: "foundation-setting" },
 } as const;
 
 /** Mã màn hình (SPEC-01 §9). */
@@ -137,6 +142,18 @@ export const FOUNDATION_FILE_ACCESS_LOG_ROUTE_PERMISSIONS: string[] = [
 ];
 
 /**
+ * S2-FE-FND-8 — /system/settings. Dùng dot-code "FOUNDATION.SETTING.SYSTEM_MANAGE" (KHÔNG derive qua
+ * foundationPairToPermission như FND-4/6) để khớp namespace dot-code sẵn có của 2 màn sibling (system.company /
+ * system.company-settings) + FRONTEND-13 §224 — mapped qua PERMISSION_CODE_TO_PAIR (packages/web-core/src/lib/
+ * registry.ts) sang cặp engine THẬT system-manage:foundation-setting. Route-meta VÀ sidebar entry CÙNG dùng
+ * hằng này (chống pair-drift).
+ */
+export const FOUNDATION_SYSTEM_SETTINGS_MANAGE_PERMISSION = "FOUNDATION.SETTING.SYSTEM_MANAGE";
+export const FOUNDATION_SYSTEM_SETTINGS_ROUTE_PERMISSIONS: string[] = [
+  FOUNDATION_SYSTEM_SETTINGS_MANAGE_PERMISSION,
+];
+
+/**
  * RouteMeta 4 màn đã wired sẵn (S2-FE-FND-4/6) — CHUYỂN về constants để router.tsx VÀ sidebar dùng
  * chung nguồn requiredAnyPermissions (chống pair-drift). KHÔNG định nghĩa lại route (createRoute vẫn ở
  * router.tsx) — chỉ tập trung meta. Không set order/showInSidebar (giữ nguyên hành vi meta gốc).
@@ -179,4 +196,18 @@ export const SYSTEM_FILE_ACCESS_LOGS_ROUTE_META: RouteMeta = {
   screenCode: FOUNDATION_SCREEN.FILE_ACCESS_LOGS,
   titleKey: "routeTitle.systemFileAccessLogs",
   requiredAnyPermissions: FOUNDATION_FILE_ACCESS_LOG_ROUTE_PERMISSIONS,
+};
+
+/**
+ * S2-FE-FND-8 — /system/settings (System Settings admin, thay placeholder DEFER). router.tsx VÀ sidebar
+ * đều import hằng NÀY (KHÔNG gõ lại requiredAnyPermissions rời) → chống pair-drift.
+ */
+export const SYSTEM_SETTINGS_ROUTE_META: RouteMeta = {
+  routeKey: "system.settings",
+  path: FOUNDATION_PATH.SYSTEM_SETTINGS,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "FOUNDATION",
+  screenCode: FOUNDATION_SCREEN.SYSTEM_SETTINGS,
+  titleKey: "routeTitle.systemSettings",
+  requiredAnyPermissions: FOUNDATION_SYSTEM_SETTINGS_ROUTE_PERMISSIONS,
 };

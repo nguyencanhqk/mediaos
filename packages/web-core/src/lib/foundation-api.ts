@@ -59,6 +59,9 @@ export const safeSettingViewSchema = z.object({
 });
 export type SafeSettingView = z.infer<typeof safeSettingViewSchema>;
 
+/** GET /foundation/system-settings response — LIST (KHÔNG union như /resolve; luôn mảng SafeSettingView). */
+export const safeSettingViewListSchema = z.array(safeSettingViewSchema);
+
 /**
  * POST /resolve response — quyền-aware (server): admin (update:foundation-setting) nhận metadata đầy đủ qua
  * `settings[]` (value sensitive đã mask); user thường chỉ `values` (public-nonsensitive key→value).
@@ -178,6 +181,22 @@ export type UpdateCompanyBody = Partial<
   Omit<CompanyView, "id" | "slug" | "status" | "companyCode">
 >;
 
+// ── System settings (S2-FE-FND-8) ──────────────────────────────────────────────
+//
+// GET/PATCH /foundation/system-settings* — GLOBAL config (KHÔNG company_settings). Gate BE = MỘT quyền
+// DUY NHẤT system-manage:foundation-setting (is_sensitive=true) cho CẢ đọc lẫn ghi (KHÔNG có view riêng —
+// khác company-settings). Body mirror UpdateCompanySettingBody (shape khớp patchSystemSettingSchema ở
+// @mediaos/contracts) — alias thay vì khai báo lại để tránh trôi (DRY).
+
+/** GET /foundation/system-settings query — filter tuỳ chọn category/module (KHÔNG company_id). */
+export interface SystemSettingsQueryParams {
+  category?: string;
+  moduleCode?: string;
+}
+
+/** PATCH /foundation/system-settings/:key body — cùng shape company-setting (server đọc từ hàng GLOBAL). */
+export type UpdateSystemSettingBody = UpdateCompanySettingBody;
+
 export const foundationApi = {
   // ── Company hiện tại ─────────────────────────────────────────────────────────
 
@@ -216,6 +235,36 @@ export const foundationApi = {
    */
   updateCompanySetting: (key: string, body: UpdateCompanySettingBody): Promise<SafeSettingView> =>
     apiFetch(`/foundation/company-settings/${encodeURIComponent(key)}`, safeSettingViewSchema, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  // ── System settings (S2-FE-FND-8) — GLOBAL, gate system-manage:foundation-setting (sensitive) ──────
+
+  /**
+   * GET /foundation/system-settings — LIST toàn bộ system_settings (masked bởi server). Permission:
+   * system-manage:foundation-setting (is_sensitive=true — company-admin thường KHÔNG có, chỉ per-user
+   * cấp tường minh). Value sensitive đã '***'; secret_ref KHÔNG bao giờ trả.
+   */
+  getSystemSettings: (params?: SystemSettingsQueryParams): Promise<SafeSettingView[]> =>
+    apiFetch(
+      `/foundation/system-settings${buildQueryString(params as Record<string, unknown> | undefined)}`,
+      safeSettingViewListSchema,
+    ),
+
+  /**
+   * GET /foundation/system-settings/:key — 1 system_setting (masked). 404 khi key lạ (server, KHÔNG lộ 500).
+   * Permission: system-manage:foundation-setting.
+   */
+  getSystemSetting: (key: string): Promise<SafeSettingView> =>
+    apiFetch(`/foundation/system-settings/${encodeURIComponent(key)}`, safeSettingViewSchema),
+
+  /**
+   * PATCH /foundation/system-settings/:key — upsert GLOBAL system_settings (KHÔNG company_settings, KHÔNG
+   * company_id). KHÔNG log secret. Permission: system-manage:foundation-setting.
+   */
+  updateSystemSetting: (key: string, body: UpdateSystemSettingBody): Promise<SafeSettingView> =>
+    apiFetch(`/foundation/system-settings/${encodeURIComponent(key)}`, safeSettingViewSchema, {
       method: "PATCH",
       body: JSON.stringify(body),
     }),

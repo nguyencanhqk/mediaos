@@ -127,6 +127,7 @@ export { employeeFilesApi, type UploadEmployeeFileOptions } from "./lib/employee
 export {
   foundationApi,
   safeSettingViewSchema,
+  safeSettingViewListSchema,
   settingsResolveResponseSchema,
   settingValueTypeSchema,
   SETTING_VALUE_TYPES,
@@ -136,6 +137,9 @@ export {
   type ResolveSettingsBody,
   type UpdateCompanySettingBody,
   type UpdateCompanyBody,
+  // S2-FE-FND-8 — System settings GLOBAL (gate system-manage:foundation-setting)
+  type SystemSettingsQueryParams,
+  type UpdateSystemSettingBody,
   // S2-FE-FND-4 — Public Holidays
   holidayApi,
   holidayViewSchema,
