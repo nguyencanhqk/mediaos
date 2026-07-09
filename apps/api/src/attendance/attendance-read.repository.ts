@@ -150,7 +150,8 @@ export interface AttLogRow {
   rawPayload: unknown;
 }
 
-export interface AttendanceListFilters {
+/** The filter-only fields shared by the paged list and the export (no sort/pagination). */
+export interface AttendanceRecordFilterFields {
   fromDate?: string;
   toDate?: string;
   status?: string;
@@ -158,12 +159,18 @@ export interface AttendanceListFilters {
   shiftId?: string;
   departmentId?: string;
   employeeId?: string;
+}
+
+export interface AttendanceListFilters extends AttendanceRecordFilterFields {
   sort: AttendanceRecordSortField;
   order: "asc" | "desc";
   /** 1-based page number (already clamped by the DTO). */
   page: number;
   pageSize: number;
 }
+
+/** S3-ATT-EXPORT-1 — export filters = the shared filter fields only (fixed server-side sort + cap). */
+export type AttendanceExportFilters = AttendanceRecordFilterFields;
 
 @Injectable()
 export class AttendanceReadRepository {
@@ -233,7 +240,35 @@ export class AttendanceReadRepository {
     return { rows: rows as AttRecordListRow[], total: Number(count) };
   }
 
-  private buildWhere(companyId: string, rowCond: SQL, filters: AttendanceListFilters): SQL {
+  /**
+   * S3-ATT-EXPORT-1 — scoped rows for CSV export. Same scope predicate + filters + employee JOIN as the
+   * paged list (parity with listCompanyRecords), but a FIXED deterministic sort (workDate desc, id
+   * tiebreaker — no client sort/order) and a hard LIMIT. The service passes `limit = cap + 1` so it can
+   * detect "over cap" (rows.length > cap) and 422 BEFORE serialize — never a silently-truncated file.
+   * SELECTs the safe RECORD_COLUMNS only (NO location/gps/ip/device — BẤT BIẾN #3). Returns rows only.
+   */
+  async listScopedRecordsForExportTx(
+    tx: TenantTx,
+    companyId: string,
+    scopeCond: SQL,
+    filters: AttendanceExportFilters,
+    limit: number,
+  ): Promise<AttRecordListRow[]> {
+    const where = this.buildWhere(companyId, scopeCond, filters);
+    const rows = await tx
+      .select(RECORD_COLUMNS)
+      .from(attendanceRecords)
+      .innerJoin(employeeProfiles, this.employeeJoin)
+      .leftJoin(users, eq(employeeProfiles.userId, users.id))
+      .leftJoin(orgUnits, eq(employeeProfiles.orgUnitId, orgUnits.id))
+      .where(where)
+      // Stable, non-client-controlled order (blocks ORDER BY injection by never taking a sort param).
+      .orderBy(desc(attendanceRecords.workDate), desc(attendanceRecords.id))
+      .limit(limit);
+    return rows as AttRecordListRow[];
+  }
+
+  private buildWhere(companyId: string, rowCond: SQL, filters: AttendanceRecordFilterFields): SQL {
     const conditions: SQL[] = [
       eq(attendanceRecords.companyId, companyId),
       isNull(attendanceRecords.deletedAt),

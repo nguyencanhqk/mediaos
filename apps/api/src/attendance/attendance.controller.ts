@@ -2,16 +2,18 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   Patch,
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
   UsePipes,
 } from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import {
@@ -21,8 +23,10 @@ import {
   type AttResourceType,
 } from "./attendance-permissions.const";
 import { AttendanceReadService } from "./attendance-read.service";
+import { AttendanceExportService } from "./attendance-export.service";
 import { AttendanceService } from "./attendance.service";
 import {
+  AttendanceExportQueryDto,
   AttendanceListQueryDto,
   AttendanceRecordListQueryDto,
   CheckInDto,
@@ -57,6 +61,8 @@ const VIEW_OWN = attPair("view-own", ATT_RESOURCES.ATTENDANCE);
 const VIEW_TEAM = attPair("view-team", ATT_RESOURCES.ATTENDANCE);
 const VIEW_COMPANY = attPair("view-company", ATT_RESOURCES.ATTENDANCE);
 const VIEW_DETAIL = attPair("view-detail", ATT_RESOURCES.ATTENDANCE);
+// S3-ATT-EXPORT-1: CSV export of scoped records (mig 0454; is_sensitive=true, HR=Company).
+const EXPORT = attPair("export", ATT_RESOURCES.ATTENDANCE);
 
 /**
  * G11-1 — Attendance HTTP surface. Every route gated by PermissionGuard (@RequirePermission,
@@ -70,6 +76,7 @@ export class AttendanceController {
   constructor(
     private readonly attendance: AttendanceService,
     private readonly attendanceRead: AttendanceReadService,
+    private readonly attendanceExport: AttendanceExportService,
   ) {}
 
   // ─── Check-in / out + today ────────────────────────────────────────────────
@@ -128,6 +135,24 @@ export class AttendanceController {
     @Query() query: AttendanceRecordListQueryDto,
   ) {
     return this.attendanceRead.listCompanyRecords(req.user, query);
+  }
+
+  // S3-ATT-EXPORT-1: CSV export. Declared BEFORE records/:id so Express never resolves /records/export
+  // to the :id param route (route-collision guard). @Res library-mode ⇒ the response bypasses the
+  // envelope interceptor (CSV bytes, not a JSON envelope). Gate export:attendance (fail-closed); the
+  // service applies the SAME data-scope filter as the lists + a hard row cap (422 over-cap, no truncate).
+  @Get("records/export")
+  @RequirePermission(EXPORT.action, EXPORT.resourceType, { isSensitive: EXPORT.sensitive })
+  @Header("Content-Type", "text/csv; charset=utf-8")
+  async exportRecords(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: AttendanceExportQueryDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { csv, filename } = await this.attendanceExport.exportRecordsCsv(req.user, query);
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    // Send the exact UTF-8 bytes (BOM preserved) — res.send(string) would re-encode/parse.
+    res.send(Buffer.from(csv, "utf-8"));
   }
 
   @Get("records/:id/logs")

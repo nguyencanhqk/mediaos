@@ -13,6 +13,8 @@ import { AttendanceAdjustmentController } from "./attendance-adjustment.controll
 import { AttendanceInternalController } from "./attendance-internal.controller";
 import { AttendanceReadRepository } from "./attendance-read.repository";
 import { AttendanceReadService } from "./attendance-read.service";
+// S3-ATT-EXPORT-1 (additive): CSV export of scoped records (GET /attendance/records/export).
+import { AttendanceExportService } from "./attendance-export.service";
 import { AttendanceAdjustmentRepository } from "./attendance-adjustment.repository";
 import { AttendanceAdjustmentService } from "./attendance-adjustment.service";
 import { AttendanceRepository } from "./attendance.repository";
@@ -103,6 +105,9 @@ class LeaveApprovedSyncRegistrar implements OnModuleInit {
     // PermissionService (PermissionModule exports both) + DatabaseService (@Global) + the read repo.
     AttendanceReadService,
     AttendanceReadRepository,
+    // S3-ATT-EXPORT-1 (additive): CSV export service — reuses AttendanceReadRepository (export query),
+    // DataScopeService (PermissionModule) + AuditService (EventsModule) + DatabaseService (@Global).
+    AttendanceExportService,
     // S3-ATT-BE-4 (additive): canonical adjustment surface (create/list/detail/approve/reject/direct).
     // Reuses AttendanceRepository (record/log/period) + DataScopeService + HrTasksService (Task Hub).
     AttendanceAdjustmentService,
