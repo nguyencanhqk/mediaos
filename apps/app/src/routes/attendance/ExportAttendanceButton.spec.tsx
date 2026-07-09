@@ -1,10 +1,16 @@
 // @vitest-environment jsdom
 /**
- * ExportAttendanceButton — gate <PermissionGate export:attendance> + tải CSV (S3-ATT-EXPORT-1).
+ * ExportAttendanceButton — gate useCanExact('export','attendance') + tải CSV (S3-ATT-EXPORT-1).
  *
- * Deny-path (crown): thiếu export:attendance → nút KHÔNG render. Có quyền → click gọi
+ * Cặp NHẠY CẢM (is_sensitive) → gate fail-closed exact-match. Deny-path (crown): (a) không cap → ẩn;
+ * (b) CHỈ `*:*` wildcard → ẩn (chứng minh sensitive KHÔNG kế thừa wildcard, khớp BE fail-closed);
+ * (c) có cap khác nhưng KHÔNG export:attendance → ẩn. Có cap exact → nút render. Có quyền → click gọi
  * exportCompanyRecords → triggerBlobDownload. Lỗi (vd 422 vượt cap) → hiện thông điệp người-đọc, KHÔNG
- * tải file. PermissionGate/useCan/useAuthStore/mapApiErrorToUi = THẬT (chỉ mock attendanceApi + download).
+ * tải file.
+ *
+ * useCanExact/useAuthStore/mapApiErrorToUi = THẬT (KHÔNG mock hook gate, KHÔNG hand-inject cap giả):
+ * cap được nạp qua store setState (đường thật /me → store) rồi để useCanExact đọc; chỉ mock
+ * attendanceApi + download-blob (ranh giới I/O).
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
@@ -49,14 +55,28 @@ beforeEach(() => {
 });
 
 describe("ExportAttendanceButton", () => {
-  // ── CROWN deny-path: no export:attendance ──────────────────────────────────
-  it("[crown deny] thiếu export:attendance → nút KHÔNG render", () => {
-    setCaps({ "view-company:attendance": true }); // có xem company nhưng KHÔNG có export
+  // ── CROWN deny-path (fail-closed): cặp NHẠY CẢM cần cap EXACT ────────────────
+  it("[crown deny] không có cap nào → nút KHÔNG render", () => {
+    setCaps({}); // rỗng
     renderButton();
     expect(screen.queryByTestId("export-attendance-button")).not.toBeInTheDocument();
   });
 
-  it("có export:attendance → nút render", () => {
+  it("[crown deny] có cap khác nhưng KHÔNG export:attendance → nút KHÔNG render", () => {
+    setCaps({ "view-company:attendance": true }); // xem company nhưng KHÔNG export
+    renderButton();
+    expect(screen.queryByTestId("export-attendance-button")).not.toBeInTheDocument();
+  });
+
+  // RED-first: với <PermissionGate>/useCan cũ (wildcard-aware) case này SẼ render (fail);
+  // useCanExact fail-closed → ẩn. Chứng minh sensitive KHÔNG kế thừa `*:*`, khớp BE 403.
+  it("[crown deny] CHỈ `*:*` wildcard → nút KHÔNG render (sensitive không kế thừa wildcard)", () => {
+    setCaps({ "*:*": true });
+    renderButton();
+    expect(screen.queryByTestId("export-attendance-button")).not.toBeInTheDocument();
+  });
+
+  it("có cap EXACT export:attendance → nút render", () => {
     setCaps({ "export:attendance": true });
     renderButton();
     expect(screen.getByTestId("export-attendance-button")).toBeInTheDocument();
