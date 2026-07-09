@@ -44,8 +44,8 @@ const GUARDED_MUTATIONS: ReadonlyArray<{
   { handlerName: "createTask", action: "create", resourceType: "task" },
   { handlerName: "updateStatus", action: "update", resourceType: "task" },
   { handlerName: "deleteTask", action: "delete", resourceType: "task" },
-  // addComment là WRITE → gate comment:comment (G9-2 H-1), KHÔNG để ngỏ như read.
-  { handlerName: "addComment", action: "comment", resourceType: "comment" },
+  // addComment là WRITE → gate comment:task (G9-2 H-1; recon S4-TASK-RECON canonical hoá về resource `task`).
+  { handlerName: "addComment", action: "comment", resourceType: "task" },
   // getBoard (G9-3) là READ NHẠY CẢM hơn getMyTasks (xem việc của NGƯỜI KHÁC toàn tenant) →
   // PHẢI gate read:task (seed 0005, is_sensitive=false). User 0-quyền KHÔNG được đọc board.
   { handlerName: "getBoard", action: "read", resourceType: "task" },
@@ -55,10 +55,7 @@ const GUARDED_MUTATIONS: ReadonlyArray<{
  * Read intentionally open cho mọi user tenant (global JWT+Company guard vẫn ép tenant).
  * CHỈ getMyTasks (việc CỦA MÌNH) + getComments (thread). Board KHÔNG ở đây — nó gate read:task.
  */
-const OPEN_READS: ReadonlyArray<keyof TasksController> = [
-  "getMyTasks",
-  "getComments",
-];
+const OPEN_READS: ReadonlyArray<keyof TasksController> = ["getMyTasks", "getComments"];
 
 function handlerOf(name: keyof TasksController): (...args: unknown[]) => unknown {
   return TasksController.prototype[name] as (...args: unknown[]) => unknown;
@@ -96,7 +93,8 @@ describe("TasksController — permission guard (G9-2)", () => {
       });
 
       it("is wired with PermissionGuard via @UseGuards", () => {
-        const guards = (Reflect.getMetadata("__guards__", handlerOf(handlerName)) as unknown[]) ?? [];
+        const guards =
+          (Reflect.getMetadata("__guards__", handlerOf(handlerName)) as unknown[]) ?? [];
         expect(guards).toContain(PermissionGuard);
       });
 
