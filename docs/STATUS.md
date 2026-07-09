@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-09 06:32Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-09 06:40Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -16,6 +16,7 @@
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
+- 🔴 `S4-TASK-RECON-1` Đối soát pair-drift + grant tồn dư TASK: ánh xạ cặp legacy đang enforce → canonical DB-06 §12.1, gỡ grant ngoài ma trận §6 (chạy TRƯỚC S4-TASK-SEED-1)
 - 🔴 `S4-NOTI-SEED-1` Seed notification event catalog (Event code registry §9.5 canonical) + template IN_APP tiếng Việt + permission NOTI + role mapping idempotent
 - 🔴 `S4-DASH-DB-1` Schema + migration DASH (dashboard_widgets·dashboard_widget_configs·dashboard_widget_cache) theo DB-07 — RLS+FORCE, cache không lưu dữ liệu nhạy cảm chưa mask
 
@@ -60,7 +61,7 @@
 - `S4-FE-DASH-3` FE DashboardConfigPage (cấu hình widget theo role/user/dashboard-type: sort/enable/size) — P1/P2 (IMP02-STORY-091) ⏳ cần: S4-DASH-BE-3, S4-FE-DASH-1
 
 **🛑 BLOCKED:**
-- `S4-TASK-SEED-1` Seed permission TASK (project·member·task·assign·status·kanban·comment·checklist·file·report) + role-permission mapping (Employee/Manager/HR/Admin/Super Admin) idempotent
+- `S4-TASK-SEED-1` Seed permission TASK (23 mã canonical DB-06 §12.1) + role-permission mapping (Employee/Manager/HR/Admin/Super Admin) idempotent
 
 **Đã xong (v2):** `S0-GOV-1`, `S0-CI-1`, `S0-CI-2`, `S0-ENV-1`, `S0-FND-DB-1`, `S0-FND-SEED-1`, `S0-AUTH-DB-1`, `S0-API-CORE-1`, `S0-FE-CORE-1`, `S0-FE-API-1`, `S0-QA-1`, `S1-FND-AUDIT-1`, `S1-FND-SETTING-1`, `S1-FND-FILE-1`, `S1-FND-SEQ-1`, `S1-FND-MODULE-1`, `S1-FND-WIRE-1`, `S1-FE-LAYOUT-1`, `S1-FE-REGISTRY-1`, `S1-FE-QUERY-WIRE-1`, `S1-QA-FND-1`, `S1-QA-DEBT-1`, `S1-INT-MOUNT-1`, `S2-AUTH-DB-1`, `S2-AUTH-DB-2`, `S2-AUTH-SEED-1`, `S2-AUTH-BE-1`, `S2-AUTH-BE-2`, `S2-AUTH-BE-3`, `S2-AUTH-BE-4`, `S2-AUTH-BE-5`, `S2-HR-DB-1`, `S2-HR-SEED-1`, `S2-HR-BE-1`, `S2-HR-BE-2`, `S2-HR-BE-3`, `S2-HR-BE-4`, `S2-FE-AUTH-1`, `S2-FE-HR-1`, `S2-FE-HR-2`, `S2-FE-HR-3`, `S2-INT-1`, `S2-INT-2`, `S2-QA-1`, `S2-QA-2`, `S2-QA-DEBT-1`, `S2-AUTH-HARDEN-1`, `S2-HR-MASK-1`, `S2-HR-EMP-LEGACY-LOCK-1`, `S2-AUTH-BRAND-1`, `S2-FE-AUTH-2`, `S2-FE-AUTH-3`, `S2-AUTH-BE-6`, `S2-FE-AUTH-4`, `S2-AUTH-BE-7`, `S2-FE-AUTH-5`, `S2-FE-FND-1`, `S2-FE-FND-2`, `S2-FND-BE-1`, `S2-FE-FND-3`, `S2-FE-FND-4`, `S2-FND-BE-2`, `S2-FE-FND-5`, `S2-FND-BE-3`, `S2-FE-FND-6`, `S2-FE-HR-4`, `S2-FE-HR-5`, `S2-FE-HR-6`, `S2-HR-BE-6`, `S2-FE-HR-7`, `S2-HR-BE-7`, `S2-FE-HR-8`, `S3-ATT-DB-1`, `S3-LEAVE-DB-1`, `S3-FND-SEEDRUN-1`, `S3-ATT-SEED-1`, `S3-LEAVE-SEED-1`, `S3-ATT-BE-1`, `S3-ATT-BE-2`, `S3-ATT-BE-3`, `S3-LEAVE-BE-1`, `S3-LEAVE-BE-2`, `S3-LEAVE-BE-3`, `S3-LEAVE-BE-4`, `S3-INT-1`, `S3-FE-REGISTRY-1`, `S3-FE-ATT-1`, `S3-FE-ATT-2`, `S3-FE-LEAVE-1`, `S3-FE-LEAVE-2`, `S3-QA-1`, `S3-QA-2`, `S3-ATT-BE-4`, `S3-ATT-BE-5`, `S3-ATT-BE-6`, `S3-FE-ATT-3`, `S3-FE-ATT-4`, `S3-FE-ATT-5`, `S3-FE-ATT-6`, `S3-LEAVE-BE-5`, `S3-LEAVE-BE-6`, `S3-FE-LEAVE-3`, `S3-FE-LEAVE-4`, `S3-FE-LEAVE-5`, `S3-FE-LEAVE-6`, `S2-AUTH-BE-8`, `S2-AUTH-BE-9`, `S2-AUTH-BE-10`, `S2-AUTH-CAP-1`, `S2-AUTH-DB-4`, `S2-AUTH-BE-11`, `S2-AUTH-BE-12`, `S2-FE-ACCT-SEC-1`, `S2-FE-SYS-SEC-1`, `S2-AUTH-DB-3`, `S2-FE-AUTH-6`, `S2-AUTH-DOC-1`, `S2-FND-BE-4`, `S2-FND-BE-5`, `S2-FND-BE-6`, `S2-FND-DB-1`, `S2-FND-SEED-2`, `S2-FND-SEED-3`, `S2-FND-SEED-4`, `S3-LEAVE-SEED-2`, `S2-FND-BE-8`, `S2-FND-JOBS-1`, `S2-FND-FILE-2`, `S2-FE-FND-7`, `S2-FND-DB-2`, `S2-FND-CONTRACT-1`, `S2-FND-DOC-1`, `S2-AUTH-ROLEMEM-1`, `S2-AUTH-PERMUX-1`, `S2-AUTH-USEROPS-1`, `S4-TASK-DB-1`, `S4-NOTI-DB-1`, `S4-FE-REGISTRY-1`, `S3-FE-LEAVE-7`, `S2-HR-EMPFILE-1`, `S2-FE-HR-9`, `S2-FND-SYSSET-1`, `S2-FE-FND-8`, `S3-ATT-EXPORT-1`
 
@@ -75,6 +76,7 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `93d4a3b` | 2026-07-09 | chore(harness): ready-wave3 — micro-plan S4-TASK-SEED-1 (plan-block) + regen STATUS/INDEX |
 | `5833cce` | 2026-07-09 | wip(notidb1rlstest): rls-registry 3 case NOTI Core + int-spec deny-path/append-only (S4-NOTI-DB-1) |
 | `639fa62` | 2026-07-09 | wip(notidb1migration): NOTI Core migration 0479 (DB-07) — events/templates/delivery_logs + notifications ALTER-ADD |
 | `b19c953` | 2026-07-09 | feat(S2-FE-FND-8): SystemSettingsPage thay placeholder — nhóm theo category + mask sensitive + gate system-manage:foundation-setting |
@@ -86,7 +88,6 @@
 | `5965292` | 2026-07-08 | feat: đồng bộ — đối soát AUTH↔HR + quản trị vai trò + tailwind @source + dev-online (#124) |
 | `3b8e603` | 2026-07-08 | feat(auth): quản trị vai trò — xóa vai trò · gán quyền theo luật · thêm thành viên theo chức vụ (#123) |
 | `9604fc7` | 2026-07-07 | chore(harness): chốt S2-AUTH-USEROPS-1 (PR #121 merged, squash f0a78e2) + regen STATUS |
-| `f0a78e2` | 2026-07-07 | feat(auth): S2-AUTH-USEROPS-1 — xóa mềm/khôi phục + admin reset mật khẩu + thao tác hàng loạt trên /system/users (#121) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

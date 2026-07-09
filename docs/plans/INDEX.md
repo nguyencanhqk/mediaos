@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**186 WO** · có micro-plan: **62/186** · ⬜ 40 chờ · 🔵 1 đang làm · ✅ 144 xong · 🔴 1 chặn
+**187 WO** · có micro-plan: **62/187** · ⬜ 41 chờ · 🔵 1 đang làm · ✅ 144 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -172,7 +172,8 @@
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
 | `S4-TASK-DB-1` | 🔴 | ✅ xong | [📄](S4-TASK-DB-1.md) | — | Schema + migration TASK core (projects·project_members·tasks·task_assi |
-| `S4-TASK-SEED-1` | 🔴 | 🔴 chặn | [📄](S4-TASK-SEED-1.md) | ✅S4-TASK-DB-1 | Seed permission TASK (project·member·task·assign·status·kanban·comment |
+| `S4-TASK-RECON-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S4-TASK-DB-1 | Đối soát pair-drift + grant tồn dư TASK: ánh xạ cặp legacy đang enforc |
+| `S4-TASK-SEED-1` | 🔴 | 🔴 chặn | [📄](S4-TASK-SEED-1.md) | ✅S4-TASK-DB-1 ⏳S4-TASK-RECON-1 | Seed permission TASK (23 mã canonical DB-06 §12.1) + role-permission m |
 | `S4-TASK-BE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-SEED-1 | BE Project CRUD + close/delete mềm + quản lý member (GET/POST /project |
 | `S4-TASK-BE-2` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-1 | BE Task CRUD + My-tasks + filter (GET/POST /tasks, GET/PATCH/DELETE /t |
 | `S4-TASK-BE-3` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-2 | BE Task assignment + status workflow FSM (assign/đổi assignee, add/rem |
