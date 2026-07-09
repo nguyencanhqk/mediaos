@@ -150,6 +150,9 @@ const PLAN_REVIEW_SCHEMA = {
   required: ['verdict'],
   properties: { verdict: { type: 'string', enum: ['PASS', 'BLOCK'] }, issues: { type: 'array', items: { type: 'string' } } },
 };
+// maxLength KHÔNG phải trang trí: builder từng trả summary 2.5–3.3 KB nhiều dòng + dấu ngoặc kép ⇒
+// StructuredOutput nhận __unparsedToolInput (InputValidationError: không parse nổi JSON) ×5 ⇒ vượt retry
+// cap ⇒ GIẾT cả run dù code đã commit xong. Chặn độ dài ngay ở schema + nhắc ở prompt.
 const IMPL_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -157,9 +160,9 @@ const IMPL_SCHEMA = {
   properties: {
     lane: { type: 'string' },
     status: { type: 'string', enum: ['committed', 'needs_human', 'dropped'] },
-    summary: { type: 'string' },
-    commit: { type: 'string' },
-    blockers: { type: 'array', items: { type: 'string' } },
+    summary: { type: 'string', maxLength: 300, description: 'MỘT dòng, ≤300 ký tự, KHÔNG xuống dòng/ngoặc kép' },
+    commit: { type: 'string', maxLength: 60 },
+    blockers: { type: 'array', maxItems: 8, items: { type: 'string', maxLength: 200 } },
   },
 };
 const REVIEW_SCHEMA = {
@@ -362,6 +365,7 @@ const buildPrompt = (wo, lane, ctx, attempt, wt) =>
     `   Nếu kẹt build không tự sửa được → status=needs_human + blockers cụ thể.`,
     `BẤT BIẾN (luôn, do hook ép): company_id mọi query · RLS+FORCE TRƯỚC backfill · audit append-only (UNION/ON CONFLICT, KHÔNG rewrite CHECK) · không secret plaintext.`,
     `Hot-file APPEND, KHÔNG rewrite. Trả DUY NHẤT object theo schema (lane="${lane.id}").`,
+    `⚠️ summary PHẢI ≤300 ký tự, MỘT DÒNG, KHÔNG ký tự xuống dòng, KHÔNG dấu ngoặc kép/backtick, KHÔNG dán SQL/diff/log. Chi tiết dài đã nằm trong commit message rồi — đừng lặp lại ở đây. (Payload StructuredOutput quá dài/nhiều dòng từng không parse nổi JSON ⇒ vượt retry cap ⇒ GIẾT cả vòng chạy dù bạn đã commit xong.)`,
   ]
     .filter(Boolean)
     .join('\n');
