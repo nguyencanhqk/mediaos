@@ -83,3 +83,7 @@ export * from "./seed-tracking";
 // app-tenant/worker-all — worker ghi nhật ký, app SELECT-only) + system_job_locks (KHÔNG company_id,
 // no-RLS worker-infra mẫu processed_events). GRANT no-DELETE mọi role (release lock = UPDATE, không DELETE).
 export * from "./system-jobs";
+// S4-NOTI-DB-1 (DB-07 §7.1–7.4, mig 0479): NOTI Core 3 bảng MỚI — notification_events + notification_templates
+// (company_id NULLABLE, RLS+FORCE nullable-tenant, app SELECT-only) + notification_delivery_logs (company_id
+// NOT NULL, RLS+FORCE, APPEND-ONLY app SELECT,INSERT). notifications (mig 0010) ALTER-ADD additive ở ./communication.
+export * from "./noti";
