@@ -1,6 +1,9 @@
 /**
  * S3-FE-LEAVE-1 — MyLeaveBalancePage tests.
  * Covers: loading, empty, error, forbidden (useCan=false), balance cards rendered.
+ *
+ * S3-FE-LEAVE-7: trang này DỜI khỏi /leave (nay là LeaveOverviewPage hub) sang /leave/me/balances.
+ * Route mới REUSE meta leave.overview — xem MyLeaveBalanceRoute.spec.tsx (route-gate proof).
  */
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";

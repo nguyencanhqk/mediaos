@@ -15,6 +15,7 @@ import type { AttendanceRecordListItem } from "@mediaos/contracts";
 import { useCanExact, formatDateTime } from "@mediaos/web-core";
 import { PageHeader, DataTable, EmptyState, Button, Select } from "@mediaos/ui";
 import { AttendanceStatusBadge } from "./AttendanceStatusBadge";
+import { ExportAttendanceButton } from "./ExportAttendanceButton";
 import { useCompanyAttendanceRecords } from "./hooks/useAttendanceRecords";
 import {
   ATT_ENGINE_PAIRS,
@@ -139,6 +140,12 @@ export function AttendanceCompanyRecordsPage() {
     ...(attendanceStatus ? { attendanceStatus } : {}),
   };
 
+  // Export CSV (S3-ATT-EXPORT-1): parity filter với danh sách (KHÔNG page/pageSize — server cap + sort).
+  const exportQuery = {
+    ...dateRange,
+    ...(attendanceStatus ? { attendanceStatus } : {}),
+  };
+
   // enabled=canView — thiếu quyền: KHÔNG gọi API (avoid unnecessary 403 round-trip).
   const { data, isLoading, isError, refetch } = useCompanyAttendanceRecords(queryParams, canView);
 
@@ -239,6 +246,8 @@ export function AttendanceCompanyRecordsPage() {
               </option>
             ))}
           </Select>
+          {/* Nút Export gate export:attendance — chỉ render khi có quyền (server vẫn là cổng thật). */}
+          <ExportAttendanceButton query={exportQuery} />
         </div>
       </PageHeader>
 

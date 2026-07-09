@@ -1,6 +1,7 @@
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
 import {
+  attendanceExportQuerySchema,
   attendanceListQuerySchema,
   attendanceRecordListQuerySchema,
   checkInSchema,
@@ -19,6 +20,8 @@ export class UpdateWorkScheduleDto extends createZodDto(updateWorkScheduleSchema
 export class AttendanceListQueryDto extends createZodDto(attendanceListQuerySchema) {}
 /** S3-ATT-BE-2 — GET /attendance/{my-records,team-records,records} query (page-based + filter + sort). */
 export class AttendanceRecordListQueryDto extends createZodDto(attendanceRecordListQuerySchema) {}
+/** S3-ATT-EXPORT-1 — GET /attendance/records/export query (filter-only; no page/sort — server-owned). */
+export class AttendanceExportQueryDto extends createZodDto(attendanceExportQuerySchema) {}
 /** GET /attendance/periods — phân trang danh sách kỳ công. */
 export class PeriodListQueryDto extends createZodDto(listPaginationSchema) {}
 

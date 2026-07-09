@@ -420,3 +420,79 @@ export async function apiFetch<T>(
 
   return finishResponse(res, schema, path);
 }
+
+// ── apiFetchBlob (S3-ATT-EXPORT-1) ────────────────────────────────────────────
+//
+// Tải nhị phân (export CSV/file) — DÙNG LẠI đúng vòng đời SSO của apiFetch (Bearer + credentials +
+// refresh-on-401 single-flight + replay 1 lần), nhưng KHÔNG parse JSON/Zod: trả { blob, filename }.
+// Lỗi (!ok) vẫn đi qua toApiError → surface tường minh (vd 422 vượt cap "thu hẹp khoảng ngày") thay vì
+// tải về 1 file rỗng/HTML — KHÔNG silent truncate ở client.
+
+/** Kết quả tải nhị phân: bytes + tên file suy từ Content-Disposition (null nếu server không gửi). */
+export interface ApiBlobResult {
+  blob: Blob;
+  filename: string | null;
+}
+
+/**
+ * Bóc filename từ header Content-Disposition. Ưu tiên `filename*=UTF-8''...` (RFC 5987, có % -encode) rồi
+ * `filename="..."`. Trả null nếu vắng/không khớp — caller tự fallback tên mặc định.
+ */
+function parseContentDispositionFilename(header: string | null): string | null {
+  if (!header) return null;
+  const extended = /filename\*=(?:UTF-8'')?["']?([^"';\r\n]+)["']?/i.exec(header);
+  if (extended?.[1]) {
+    try {
+      return decodeURIComponent(extended[1]);
+    } catch {
+      return extended[1];
+    }
+  }
+  const plain = /filename=["']?([^"';\r\n]+)["']?/i.exec(header);
+  return plain?.[1] ?? null;
+}
+
+/** Hoàn tất 1 Response nhị phân (đã !401-handled) → { blob, filename }. Ném ApiError nếu !ok. */
+async function finishBlobResponse(res: Response, path: string): Promise<ApiBlobResult> {
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw toApiError(res.status, path, body);
+  }
+  const blob = await res.blob();
+  const filename = parseContentDispositionFilename(res.headers.get("Content-Disposition"));
+  return { blob, filename };
+}
+
+/**
+ * HTTP client cho tải nhị phân (export CSV/file). MIRROR apiFetch: gắn Bearer (trừ skipAuth) +
+ * credentials:'include'; 401 authed → refreshAccessToken() (single-flight) rồi REPLAY ĐÚNG 1 LẦN với token
+ * mới; refresh fail → redirectToAuth() + ném 401. KHÔNG vòng lặp (replay đi thẳng finishBlobResponse).
+ *
+ * Khác apiFetch: KHÔNG Zod-parse response — trả { blob, filename }. Lỗi HTTP vẫn ném ApiError (toApiError)
+ * nên caller phân biệt được 403/422/500 và hiện thông điệp người-đọc thay vì tải file lỗi.
+ */
+export async function apiFetchBlob(
+  path: string,
+  init?: RequestInit,
+  opts?: ApiFetchOpts,
+): Promise<ApiBlobResult> {
+  const token = opts?.skipAuth ? null : getAccessToken();
+  const res = await rawFetch(path, init, token, opts);
+
+  if (res.status === 401 && !opts?.skipAuth) {
+    const refreshed = await refreshAccessToken();
+    if (!refreshed) {
+      redirectToAuth();
+      throw new ApiError({
+        status: 401,
+        code: "AUTH-ERR-UNAUTHENTICATED",
+        kind: "UNAUTHENTICATED",
+        message: "Phiên đã hết hạn. Vui lòng đăng nhập lại.",
+      });
+    }
+    const replay = await rawFetch(path, init, getAccessToken(), opts);
+    return finishBlobResponse(replay, path);
+  }
+
+  return finishBlobResponse(res, path);
+}

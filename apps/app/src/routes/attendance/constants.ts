@@ -34,6 +34,8 @@ export const ATT_ENGINE_PAIRS = {
   REMOTE_CANCEL_OWN: { action: "cancel-own", resourceType: "remote-request" },
   // S3-FE-ATT-6 — audit log ATT RIÊNG (KHÔNG dùng chung cặp foundation view:audit-log).
   AUDIT_LOG_VIEW: { action: "view", resourceType: "attendance-audit-log" },
+  // S3-ATT-EXPORT-1 — xuất CSV bảng công (cặp seed 0454, HR=Company, sensitive). Gate nút Export.
+  EXPORT: { action: "export", resourceType: "attendance" },
 } as const;
 
 /** Trạng thái đơn remote/onsite-work — DB-04 §7.8 (STATE-MACHINE chốt 2026-07-02). */

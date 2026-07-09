@@ -53,6 +53,13 @@
  *   CAP1-N5     DENY-override: grant 3 cặp CAP-1 + DENY 'export:leave' → export:leave suppress; 2 cặp còn lại vẫn hiện.
  * Enforcement (can()/PermissionGuard per-resource) KHÔNG đổi — chỉ mở cờ hiển thị (UI-hint).
  *
+ * S3-ATT-EXPORT-1-FIX — APPEND cặp NHẠY CẢM 'export:attendance' vào bộ CAP1 (is_sensitive=true, seed mig
+ * 0454:124-125 — grant Company CHỈ hr(0011)+company-admin(0001)). Bằng chứng PIPELINE THẬT thay cho false-green
+ * FE: nút Export attendance dùng PermissionGate → capabilities['export:attendance'] mà /auth/me chỉ trả được
+ * SAU khi 'export:attendance' vào SENSITIVE_CAPABILITY_ALLOWLIST (permission.service.ts). RED trước allowlist
+ * (CAP1-P1/P2 vắng key) → GREEN sau; employee/manager/wildcard/cross-tenant KHÔNG có (CAP1-N1..N4, least-privilege
+ * + sensitive gate). Enforcement THẬT vẫn là @RequirePermission('export','attendance') per-resource.
+ *
  * PIN theo CẶP SEED THẬT ('view','audit-log') — KHÔNG theo mã FE AUTH.AUDIT_LOG.VIEW (drift S1-FND-MODULE).
  */
 
@@ -267,28 +274,39 @@ describe.skipIf(!runDb)("S2-AUTH-BE-5 FIX-1-CAP-EXPOSE /auth/me allowlisted sens
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// S2-AUTH-CAP-1 — APPEND 3 cặp NHẠY CẢM vào SENSITIVE_CAPABILITY_ALLOWLIST.
+// S2-AUTH-CAP-1 (+ S3-ATT-EXPORT-1-FIX) — APPEND 4 cặp NHẠY CẢM vào SENSITIVE_CAPABILITY_ALLOWLIST.
 // Cặp seed THẬT is_sensitive=true, grant Company CHỈ hr(0011)+company-admin(0001) (mig 0454/0455).
+// export:attendance (mig 0454:124-125) là bằng chứng pipeline THẬT của WO S3-ATT-EXPORT-1 (thay false-green FE).
 // ────────────────────────────────────────────────────────────────────────────
 
 /** hr — grant Company đủ 3 cặp CAP-1 (mig 0454 view:attendance-audit-log · mig 0455 export:leave + view:leave-audit-log). */
 const HR_ROLE = "00000000-0000-0000-0000-000000000011";
 
 /**
- * 3 cặp CAP-1 (action, resource_type) mới APPEND — seed THẬT is_sensitive=true. Tuple tránh split(":") nhập nhằng.
+ * 4 cặp CAP-1 (action, resource_type) — seed THẬT is_sensitive=true. Tuple tránh split(":") nhập nhằng.
  *   export:leave              — leave-permissions.const:60 / mig 0455 (hr+company-admin, Company)
  *   view:leave-audit-log      — leave-permissions.const:85 / mig 0455 (hr+company-admin, Company)
  *   view:attendance-audit-log — attendance-permissions.const:84 / mig 0454 (hr+company-admin, Company)
+ *   export:attendance         — attendance-permissions.const:55 / mig 0454:124-125 (hr+company-admin, Company)
+ *
+ * S3-ATT-EXPORT-1-FIX — APPEND cặp export:attendance (is_sensitive=true). Đây là BẰNG CHỨNG PIPELINE THẬT
+ * thay cho false-green FE (ExportAttendanceButton.spec hand-inject cap): /auth/me → getAllowlisted-
+ * SensitiveCapabilities chỉ surface được sau khi 'export:attendance' vào SENSITIVE_CAPABILITY_ALLOWLIST
+ * (permission.service.ts). RED trước allowlist (P1/P2 vắng key) → GREEN sau. Grant Company CHỈ hr(0011)+
+ * company-admin(0001) mig 0454:124-125; employee(0008)/manager(0010) KHÔNG grant ⇒ least-privilege; wildcard
+ * *:* KHÔNG kế thừa (sensitive gate). Enforcement THẬT vẫn là @RequirePermission('export','attendance').
  */
 const CAP1_SENSITIVE_PAIRS: ReadonlyArray<readonly [string, string]> = [
   ["export", "leave"],
   ["view", "leave-audit-log"],
   ["view", "attendance-audit-log"],
+  // S3-ATT-EXPORT-1-FIX — APPEND-only (giữ 3 cặp CAP-1 trên nguyên vẹn):
+  ["export", "attendance"],
 ];
 const CAP1_SENSITIVE_KEYS = CAP1_SENSITIVE_PAIRS.map(([a, r]) => `${a}:${r}`);
 
 describe.skipIf(!runDb)(
-  "S2-AUTH-CAP-1 /auth/me export:leave · view:leave-audit-log · view:attendance-audit-log",
+  "S2-AUTH-CAP-1 /auth/me export:leave · view:leave-audit-log · view:attendance-audit-log · export:attendance",
   () => {
     let app: INestApplication;
     let direct: Pool;

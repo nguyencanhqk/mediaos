@@ -64,6 +64,47 @@ export default {
       title: "Không có quyền truy cập",
       description: "Bạn không có quyền xem thông tin nghỉ phép.",
     },
+    // ── Hub tổng quan (LEAVE-SCREEN-001 · S3-FE-LEAVE-7) ────────────────────
+    hub: {
+      quickActions: {
+        title: "Thao tác nhanh",
+        createRequest: "Tạo đơn nghỉ",
+        myRequests: "Đơn nghỉ của tôi",
+        myBalances: "Số dư phép của tôi",
+        calendar: "Lịch nghỉ",
+        approvals: "Đơn cần duyệt",
+      },
+      balanceSummary: {
+        title: "Số dư phép",
+        viewAll: "Xem tất cả",
+      },
+      recent: {
+        title: "Đơn nghỉ gần đây",
+        viewAll: "Xem tất cả",
+        emptyTitle: "Chưa có đơn nghỉ",
+        empty: "Bạn chưa tạo đơn nghỉ nào.",
+        errorTitle: "Không thể tải",
+        error: "Có lỗi khi tải đơn nghỉ gần đây.",
+      },
+      pending: {
+        title: "Đơn chờ tôi duyệt",
+        viewAll: "Xem tất cả",
+        emptyTitle: "Không có đơn chờ duyệt",
+        empty: "Hiện không có đơn nghỉ nào chờ bạn duyệt.",
+        errorTitle: "Không thể tải",
+        error: "Có lỗi khi tải đơn chờ duyệt.",
+      },
+      warnings: {
+        lowBalance: "Bạn có {{count}} loại phép sắp hết (còn ≤ {{threshold}} ngày).",
+        overdue: "Có {{count}} đơn chờ duyệt quá {{days}} ngày.",
+      },
+    },
+  },
+
+  // ── Số dư phép của tôi (LEAVE-SCREEN-001B · S3-FE-LEAVE-7) ────────────────
+  myBalances: {
+    title: "Số dư phép của tôi",
+    description: "Chi tiết số ngày phép còn lại theo từng loại nghỉ",
   },
 
   // ── Danh sách đơn nghỉ của tôi (LEAVE-SCREEN-003) ────────────────────────

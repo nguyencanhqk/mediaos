@@ -38,6 +38,24 @@ function noContent() {
   return { ok: true, status: 204, json: async () => undefined, text: async () => "" };
 }
 
+/**
+ * Mock 1 Response nhị phân (export CSV): `.blob()` trả Blob + `.headers.get()` trả Content-Disposition.
+ * Dùng cho apiFetchBlob (S3-ATT-EXPORT-1) — client KHÔNG parse JSON, chỉ lấy bytes + filename.
+ */
+function blobOk(text = "col1,col2\n", filename = "attendance-records.csv") {
+  const disposition = `attachment; filename="${filename}"`;
+  return {
+    ok: true,
+    status: 200,
+    blob: async () => new Blob([text], { type: "text/csv" }),
+    headers: {
+      get: (k: string) => (k.toLowerCase() === "content-disposition" ? disposition : null),
+    },
+    text: async () => text,
+    json: async () => ({}),
+  };
+}
+
 /** Tải api-client + store TƯƠI (sau resetModules) — cùng đồ thị module để store khớp giữa client và test. */
 async function loadFresh() {
   vi.resetModules();
@@ -300,6 +318,110 @@ describe("refreshAccessToken — single-flight internals", () => {
 
     expect(ok).toBe(false);
     expect(store.getAccessToken()).toBe("keep-old"); // token mới KHÔNG được commit
+  });
+});
+
+// ─── apiFetchBlob (S3-ATT-EXPORT-1) ───────────────────────────────────────────
+// Tải nhị phân (CSV export) — MIRROR đúng refresh-on-401 single-flight + replay của apiFetch, nhưng KHÔNG
+// parse JSON/Zod: trả { blob, filename }. RED-first cho việc nhạy cảm (export dữ liệu chấm công).
+describe("apiFetchBlob — refresh-on-401 replay + surface lỗi (KHÔNG silent)", () => {
+  it("happy: trả Blob + filename bóc từ Content-Disposition", async () => {
+    stubBrowser();
+    const { api, store } = await loadFresh();
+    store.useAuthStore.getState().setAccessToken("tok-1");
+    fetchMock.mockResolvedValueOnce(blobOk("a,b\n1,2\n", "cham-cong.csv"));
+
+    const { blob, filename } = await api.apiFetchBlob("/attendance/records/export");
+    expect(blob).toBeInstanceOf(Blob);
+    expect(await blob.text()).toBe("a,b\n1,2\n");
+    expect(filename).toBe("cham-cong.csv");
+    // gắn Bearer + credentials như request nghiệp vụ thường.
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.credentials).toBe("include");
+    expect(init.headers.Authorization).toBe("Bearer tok-1");
+  });
+
+  it("[FE RED] 401 → refreshAccessToken 1 lần → REPLAY với Bearer mới (KHÔNG fail thẳng)", async () => {
+    stubBrowser();
+    const { api, store } = await loadFresh();
+    store.useAuthStore.getState().setAccessToken("old-tok");
+    let refreshed = false;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes("/auth/refresh")) {
+        refreshed = true;
+        return Promise.resolve(refreshOk("new-tok"));
+      }
+      return Promise.resolve(refreshed ? blobOk("ok\n") : errRes(401, "UNAUTHENTICATED"));
+    });
+
+    const { blob } = await api.apiFetchBlob("/attendance/records/export");
+    expect(await blob.text()).toBe("ok\n");
+    const refreshCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes("/auth/refresh"));
+    expect(refreshCalls).toHaveLength(1); // single-flight, KHÔNG thu hồi family
+    const dataCalls = fetchMock.mock.calls.filter((c) => !String(c[0]).includes("/auth/refresh"));
+    expect(dataCalls.at(-1)![1].headers.Authorization).toBe("Bearer new-tok"); // replay dùng token mới
+  });
+
+  it("refresh fail → redirectToAuth + ném 401 (KHÔNG trả blob rỗng)", async () => {
+    stubBrowser();
+    const { api, store } = await loadFresh();
+    store.useAuthStore.getState().setAccessToken("old-tok");
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(url.includes("/auth/refresh") ? errRes(401, "REUSE") : errRes(401, "UNAUTH")),
+    );
+
+    await expect(api.apiFetchBlob("/attendance/records/export")).rejects.toMatchObject({
+      status: 401,
+      code: "AUTH-ERR-UNAUTHENTICATED",
+    });
+    const assign = (
+      globalThis as unknown as { window: { location: { assign: ReturnType<typeof vi.fn> } } }
+    ).window.location.assign;
+    expect(assign).toHaveBeenCalledTimes(1);
+  });
+
+  it("[cap RED] 422 vượt cap → ném ApiError 422 tường minh (KHÔNG CSV cắt im lặng)", async () => {
+    stubBrowser();
+    const { api, store } = await loadFresh();
+    store.useAuthStore.getState().setAccessToken("tok-1");
+    fetchMock.mockResolvedValueOnce(
+      errRes(422, "ATT-ERR-EXPORT-TOO-LARGE", "Vui lòng thu hẹp khoảng ngày"),
+    );
+
+    await expect(api.apiFetchBlob("/attendance/records/export")).rejects.toMatchObject({
+      status: 422,
+      code: "ATT-ERR-EXPORT-TOO-LARGE",
+      message: "Vui lòng thu hẹp khoảng ngày",
+    });
+  });
+
+  it("skipAuth + 401 → KHÔNG refresh, ném 401 thẳng", async () => {
+    stubBrowser();
+    const { api } = await loadFresh();
+    fetchMock.mockResolvedValueOnce(errRes(401, "INVALID"));
+
+    await expect(
+      api.apiFetchBlob("/public/export", undefined, { skipAuth: true }),
+    ).rejects.toMatchObject({ status: 401 });
+    const refreshCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes("/auth/refresh"));
+    expect(refreshCalls).toHaveLength(0);
+  });
+
+  it("filename null khi vắng Content-Disposition", async () => {
+    stubBrowser();
+    const { api, store } = await loadFresh();
+    store.useAuthStore.getState().setAccessToken("tok-1");
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      blob: async () => new Blob(["x"], { type: "text/csv" }),
+      headers: { get: () => null },
+      text: async () => "x",
+      json: async () => ({}),
+    });
+
+    const { filename } = await api.apiFetchBlob("/attendance/records/export");
+    expect(filename).toBeNull();
   });
 });
 

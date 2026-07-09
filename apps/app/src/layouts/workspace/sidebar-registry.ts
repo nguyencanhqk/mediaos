@@ -367,6 +367,18 @@ export const LEAVE_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 20,
     requiredAnyPermissions: ["LEAVE.REQUEST.VIEW_OWN"],
   },
+  // S3-FE-LEAVE-7 — Số dư phép của tôi DỜI khỏi /leave (nay là hub tổng quan) → /leave/me/balances.
+  // Gate = VIEW_OWN (mọi role có Own); route REUSE meta leave.overview (KHÔNG LEAVE.BALANCE.VIEW_OWN chưa map).
+  {
+    sidebarKey: "leave.my-balances",
+    moduleCode: "LEAVE",
+    label: "Số dư phép của tôi",
+    path: "/leave/me/balances",
+    icon: "wallet",
+    group: "operation",
+    order: 25,
+    requiredAnyPermissions: ["LEAVE.REQUEST.VIEW_OWN"],
+  },
   // S3-FE-LEAVE-2 PIN CỔNG: gate sidebar = CHỈ view:leave (LEAVE.REQUEST.VIEW) — khớp route
   // leave.approvals + BE GET /leave/requests (VIEW_LEAVE, SENSITIVE, mig 0455). KHÔNG gate
   // LEAVE.REQUEST.APPROVE: người chỉ có approve mà thiếu view sẽ 403 ở list-load ⇒ menu phải đòi

@@ -190,6 +190,27 @@ async function seedWorkflowChain(
   return { userId, projectId, contentItemId, instanceId, stepId };
 }
 
+/**
+ * Seed 1 task office (legacy shape) + employee_profiles của tenant — nền FK cho 5 bảng TASK mới
+ * (S4-TASK-DB-1, mig 0478). Trả về taskId + employeeId + userId (FK-valid, cùng company).
+ */
+async function seedTaskWithEmployee(
+  direct: Pool,
+  t: SeededTenant,
+): Promise<{ taskId: string; employeeId: string; userId: string }> {
+  const userId = await seedUser(direct, t.companyId, `task-${randomUUID().slice(0, 8)}@x.test`);
+  const emp = await direct.query(
+    `INSERT INTO employee_profiles (company_id, user_id) VALUES ($1, $2) RETURNING id`,
+    [t.companyId, userId],
+  );
+  const task = await direct.query(
+    `INSERT INTO tasks (company_id, task_type, title, status, origin, revision_round)
+     VALUES ($1, 'office', 'rls-task-core', 'not_started', 'initial', 0) RETURNING id`,
+    [t.companyId],
+  );
+  return { taskId: task.rows[0].id as string, employeeId: emp.rows[0].id as string, userId };
+}
+
 // ─── Bảng đăng ký ──────────────────────────────────────────────────────────────
 
 export const RLS_TABLES: RlsTableCase[] = [
@@ -958,6 +979,82 @@ export const RLS_TABLES: RlsTableCase[] = [
            (company_id, task_id, uploaded_by, storage_key, file_name, content_type, size_bytes)
          VALUES ($1, $2, $3, $4, 'rls.pdf', 'application/pdf', 100) RETURNING id`,
         [t.companyId, taskId, u, `${t.companyId}/tasks/${taskId}/${randomUUID()}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── S4-TASK-DB-1 (mig 0478) TASK Core — 5 bảng MỚI DB-06 ─────────────────────
+  // company_id NOT NULL + RLS+FORCE → PHẢI ở harness (rls-guards "lưới không thủng im lặng").
+  // KHÔNG skipNoContext (mọi hàng tenant-scoped). task_activity_logs APPEND-ONLY (app SELECT,INSERT) →
+  // mutate-deny kiểm ở int-spec riêng; seedRow dùng direct (superuser) nên chèn OK.
+  {
+    name: "task_assignees",
+    table: "task_assignees",
+    seedRow: async (direct, t) => {
+      const { taskId, employeeId, userId } = await seedTaskWithEmployee(direct, t);
+      const r = await direct.query(
+        `INSERT INTO task_assignees (company_id, task_id, employee_id, assignee_role, status, assigned_by)
+         VALUES ($1, $2, $3, 'Main', 'Active', $4) RETURNING id`,
+        [t.companyId, taskId, employeeId, userId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "task_watchers",
+    table: "task_watchers",
+    seedRow: async (direct, t) => {
+      const { taskId, employeeId, userId } = await seedTaskWithEmployee(direct, t);
+      const r = await direct.query(
+        `INSERT INTO task_watchers (company_id, task_id, employee_id, watcher_type, status, added_by)
+         VALUES ($1, $2, $3, 'Manual', 'Active', $4) RETURNING id`,
+        [t.companyId, taskId, employeeId, userId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "task_checklists",
+    table: "task_checklists",
+    seedRow: async (direct, t) => {
+      const { taskId } = await seedTaskWithEmployee(direct, t);
+      const r = await direct.query(
+        `INSERT INTO task_checklists (company_id, task_id, title, order_index, is_required_for_done)
+         VALUES ($1, $2, 'rls-checklist', 0, false) RETURNING id`,
+        [t.companyId, taskId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "task_checklist_items",
+    table: "task_checklist_items",
+    seedRow: async (direct, t) => {
+      const { taskId } = await seedTaskWithEmployee(direct, t);
+      const cl = await direct.query(
+        `INSERT INTO task_checklists (company_id, task_id, title, order_index)
+         VALUES ($1, $2, 'rls-cl-for-item', 0) RETURNING id`,
+        [t.companyId, taskId],
+      );
+      const r = await direct.query(
+        `INSERT INTO task_checklist_items (company_id, task_id, checklist_id, title, is_done, order_index)
+         VALUES ($1, $2, $3, 'rls-item', false, 0) RETURNING id`,
+        [t.companyId, taskId, cl.rows[0].id],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "task_activity_logs",
+    table: "task_activity_logs",
+    seedRow: async (direct, t) => {
+      const { taskId, employeeId, userId } = await seedTaskWithEmployee(direct, t);
+      const r = await direct.query(
+        `INSERT INTO task_activity_logs
+           (company_id, task_id, actor_user_id, actor_employee_id, action, target_type, target_id)
+         VALUES ($1, $2, $3, $4, 'TASK_CREATED', 'Task', $2) RETURNING id`,
+        [t.companyId, taskId, userId, employeeId],
       );
       return r.rows[0].id as string;
     },

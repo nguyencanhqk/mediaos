@@ -1084,3 +1084,60 @@ export const attendanceReportResponseSchema = z.object({
   meta: attendanceRecordPageMetaSchema,
 });
 export type AttendanceReportResponse = z.infer<typeof attendanceReportResponseSchema>;
+
+// ─── S3-ATT-EXPORT-1 (ATT.ATTENDANCE.EXPORT, API-04 CO-S4-006) — CSV export of scoped records ────────
+// GET /attendance/records/export → text/csv. Gate export:attendance (mig 0454, HR=Company). The SAME
+// data-scope contract as the records lists (Own/Team/Company via resolveAndAssert + buildEmployeeScope
+// Condition) bounds the rows SERVER-side BEFORE serialize; a dataset larger than the cap is a 422 (never
+// a silently-truncated file). NO location/gps/ip/device leaves in the CSV (masked by construction — the
+// export reuses the list-item projection, which carries no sensitive columns).
+
+/** Hard cap on exported rows — a result exceeding it returns 422 (narrow the date range). */
+export const ATTENDANCE_EXPORT_MAX_ROWS = 10_000;
+
+/**
+ * GET /attendance/records/export query — mirrors attendanceRecordListQuerySchema's FILTER fields
+ * (departmentId/employeeId parity with the company records list) but carries NO page/pageSize/sort:
+ * the export is a single capped, deterministically-sorted (workDate desc, id tiebreaker) pull, not a page.
+ * Date filters form a half-open interval [fromDate, toDate) over work_date (toDate exclusive).
+ */
+export const attendanceExportQuerySchema = z.object({
+  /** Half-open [fromDate, toDate) over work_date. */
+  fromDate: z.string().date().optional(),
+  toDate: z.string().date().optional(),
+  /** Legacy lowercase record status (present/late/…). */
+  status: attendanceStatusSchema.optional(),
+  /** DB-04 TitleCase attendance_status (Present/Late/Missing Hours/…). */
+  attendanceStatus: z.string().min(1).max(64).optional(),
+  /** Filter by org_unit (Department) — honored only when scope permits (parity with company list). */
+  departmentId: z.string().uuid().optional(),
+  shiftId: z.string().uuid().optional(),
+  /** employee_profiles.id — honored only when scope permits (parity with company list). */
+  employeeId: z.string().uuid().optional(),
+});
+export type AttendanceExportQuery = z.infer<typeof attendanceExportQuerySchema>;
+
+/**
+ * Ordered CSV column set for the records export. `key` is a field of AttendanceRecordListItem (the safe,
+ * masked list projection) — this list is the SINGLE source of truth for both the column order and the
+ * header row, so the serializer and any FE preview stay in lockstep. Deliberately excludes
+ * location/gps/ip/device (they are not fields of the list item — masked by construction, BẤT BIẾN #3).
+ */
+export const ATTENDANCE_EXPORT_COLUMNS: ReadonlyArray<{
+  readonly key: keyof AttendanceRecordListItem;
+  readonly header: string;
+}> = [
+  { key: "workDate", header: "Ngày công" },
+  { key: "employeeCode", header: "Mã nhân viên" },
+  { key: "fullName", header: "Họ tên" },
+  { key: "orgUnitName", header: "Phòng ban" },
+  { key: "checkInAt", header: "Giờ vào" },
+  { key: "checkOutAt", header: "Giờ ra" },
+  { key: "checkInMethod", header: "Hình thức vào" },
+  { key: "checkOutMethod", header: "Hình thức ra" },
+  { key: "lateMinutes", header: "Đi muộn (phút)" },
+  { key: "earlyLeaveMinutes", header: "Về sớm (phút)" },
+  { key: "workingMinutes", header: "Số phút làm việc" },
+  { key: "status", header: "Trạng thái" },
+  { key: "attendanceStatus", header: "Trạng thái công" },
+] as const;

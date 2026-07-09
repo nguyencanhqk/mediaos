@@ -17,7 +17,7 @@
  * chỉ enforce nhánh permission/user-status. Bởi vậy deny-path test xoáy vào NO_PERMISSION/USER_INACTIVE.
  */
 import { render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuthStore } from "@mediaos/web-core";
 
 // ProtectedShell + ModuleWorkspaceLayout là vỏ nặng (topbar/sidebar/store) — mock passthrough để
@@ -67,6 +67,13 @@ function seedAuth(opts: { status?: string; capabilities?: Record<string, boolean
 }
 
 describe("router wires ProtectedRoute for module routes (authz at route level)", () => {
+  // Nạp @/router MỘT LẦN: import kéo cả graph route (cold-import ~2-5s dưới full-suite) → nếu để
+  // trong từng it() dễ vượt testTimeout 5s. Hoist vào beforeAll (timeout rộng); test dùng ref đã cache.
+  let routerMod: typeof import("@/router");
+  beforeAll(async () => {
+    routerMod = await import("@/router");
+  }, 30000);
+
   beforeEach(() => {
     useAuthStore.getState().logout();
   });
@@ -75,8 +82,8 @@ describe("router wires ProtectedRoute for module routes (authz at route level)",
     useAuthStore.getState().logout();
   });
 
-  it("module DASH thiếu quyền → SHOW_403, nội dung module ẨN", async () => {
-    const { buildModuleRouteContent, getMeta } = await import("@/router");
+  it("module DASH thiếu quyền → SHOW_403, nội dung module ẨN", () => {
+    const { buildModuleRouteContent, getMeta } = routerMod;
     seedAuth({ status: "Active", capabilities: {} }); // không có read:dashboard
     render(buildModuleRouteContent(getMeta("dashboard"), "DASH", <ModulePage />));
     expect(screen.getByText("forbidden.title")).toBeInTheDocument();
@@ -84,24 +91,24 @@ describe("router wires ProtectedRoute for module routes (authz at route level)",
     expect(screen.queryByText(MODULE_CONTENT)).not.toBeInTheDocument();
   });
 
-  it("user Locked → SHOW_403(USER_INACTIVE), nội dung module ẨN", async () => {
-    const { buildModuleRouteContent, getMeta } = await import("@/router");
+  it("user Locked → SHOW_403(USER_INACTIVE), nội dung module ẨN", () => {
+    const { buildModuleRouteContent, getMeta } = routerMod;
     seedAuth({ status: "Locked", capabilities: { "read:dashboard": true } });
     render(buildModuleRouteContent(getMeta("dashboard"), "DASH", <ModulePage />));
     expect(screen.getByText("forbidden.reason.USER_INACTIVE")).toBeInTheDocument();
     expect(screen.queryByText(MODULE_CONTENT)).not.toBeInTheDocument();
   });
 
-  it("đủ quyền → nội dung module render", async () => {
-    const { buildModuleRouteContent, getMeta } = await import("@/router");
+  it("đủ quyền → nội dung module render", () => {
+    const { buildModuleRouteContent, getMeta } = routerMod;
     seedAuth({ status: "Active", capabilities: { "read:dashboard": true } });
     render(buildModuleRouteContent(getMeta("dashboard"), "DASH", <ModulePage />));
     expect(screen.getByText(MODULE_CONTENT)).toBeInTheDocument();
     expect(screen.queryByText("forbidden.title")).not.toBeInTheDocument();
   });
 
-  it("HR detail dùng CÙNG ProtectedRoute → thiếu HR.EMPLOYEE.VIEW vẫn bị chặn", async () => {
-    const { buildModuleRouteContent, getMeta } = await import("@/router");
+  it("HR detail dùng CÙNG ProtectedRoute → thiếu HR.EMPLOYEE.VIEW vẫn bị chặn", () => {
+    const { buildModuleRouteContent, getMeta } = routerMod;
     seedAuth({ status: "Active", capabilities: {} }); // không có read:employee
     render(buildModuleRouteContent(getMeta("hr.employees"), "HR", <ModulePage />));
     expect(screen.getByText("forbidden.reason.NO_PERMISSION")).toBeInTheDocument();

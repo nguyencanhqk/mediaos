@@ -674,6 +674,180 @@ describe("PERMISSION_CODE_TO_PAIR — FOUNDATION sequence/seed pairs (drift-guar
 });
 
 // ---------------------------------------------------------------------------
+// S4-FE-REGISTRY-1 — TASK / NOTI / DASH registry reconcile (deny/allow + drift-guard)
+//
+// Base ĐÃ có (PERMISSION_CODE_TO_PAIR + APP/ROUTE/SIDEBAR + i18n). WO = reconcile-verify: pin cặp
+// engine THẬT non-sensitive (mig 0005: read:task/read:project/read:notification · mig 0100:
+// read:dashboard) làm cổng hiển thị, chống drift ẩn-app như S1-FND-MODULE / S3-wave2.
+//
+// Fixtures cặp ENGINE THẬT (KHÔNG cặp giả read:attendance-style, KHÔNG caps rỗng) + modules active.
+// ---------------------------------------------------------------------------
+
+// Session TASK/NOTI/DASH active (populate THẬT — deny-path phải qua nhánh module-active, không rơi
+// SHOW_404 sớm vì module hidden).
+const TASK_NOTI_DASH_SESSION = () => ({
+  modules: [
+    { moduleCode: "TASK" as const, status: "active" as const },
+    { moduleCode: "NOTI" as const, status: "active" as const },
+    { moduleCode: "DASH" as const, status: "active" as const },
+  ],
+});
+
+// Cặp engine THẬT (getCapabilities trả action:resourceType). read:task/read:project/read:notification
+// (mig 0005), read:dashboard (mig 0100) — tất cả is_sensitive=false → phơi qua /auth/me.
+const TASK_NOTI_DASH_CAPS = () =>
+  makePerms(["read:task", "read:project", "read:notification", "read:dashboard"]);
+
+// Inline sidebar fixtures MIRROR apps/app sidebar-registry.ts (TASK_SIDEBAR/NOTI_SIDEBAR/DASH_SIDEBAR)
+// — web-core KHÔNG import apps/app (chiều phụ thuộc); giữ cùng requiredAnyPermissions với bản thật.
+const TASK_SIDEBAR_FIXTURE: SidebarItemMeta[] = [
+  {
+    sidebarKey: "task.overview",
+    moduleCode: "TASK",
+    label: "Tổng quan",
+    path: "/tasks",
+    order: 10,
+    requiredAnyPermissions: ["TASK.TASK.VIEW", "TASK.PROJECT.VIEW"],
+  },
+  {
+    sidebarKey: "task.my-tasks",
+    moduleCode: "TASK",
+    label: "Việc của tôi",
+    path: "/tasks/my-tasks",
+    order: 20,
+    requiredAnyPermissions: ["TASK.TASK.VIEW"],
+  },
+];
+const NOTI_SIDEBAR_FIXTURE: SidebarItemMeta[] = [
+  {
+    sidebarKey: "noti.list",
+    moduleCode: "NOTI",
+    label: "Tất cả thông báo",
+    path: "/notifications",
+    order: 10,
+    requiredAnyPermissions: ["NOTI.NOTIFICATION.VIEW_OWN"],
+  },
+];
+const DASH_SIDEBAR_FIXTURE: SidebarItemMeta[] = [
+  {
+    sidebarKey: "dash.overview",
+    moduleCode: "DASH",
+    label: "Tổng quan",
+    path: "/dashboard",
+    order: 10,
+    requiredAnyPermissions: ["DASH.DASHBOARD.VIEW"],
+  },
+];
+
+describe("S4 registry reconcile — TASK/NOTI/DASH route access (deny/allow)", () => {
+  const taskOverview = getRouteMeta("task.overview")!;
+  const taskMyTasks = getRouteMeta("task.my-tasks")!;
+  const notiList = getRouteMeta("noti.list")!;
+  const dashboard = getRouteMeta("dashboard")!;
+
+  it("deny-path: KHÔNG có cặp → SHOW_403 (module active, không rơi SHOW_404 sớm)", () => {
+    const session = makeSession(TASK_NOTI_DASH_SESSION());
+    const c = createPermissionChecker(makePerms([])); // caps rỗng
+    expect(evaluateRouteAccess(session, taskOverview, c).action).toBe("SHOW_403");
+    expect(evaluateRouteAccess(session, taskMyTasks, c).action).toBe("SHOW_403");
+    expect(evaluateRouteAccess(session, notiList, c).action).toBe("SHOW_403");
+    expect(evaluateRouteAccess(session, dashboard, c).action).toBe("SHOW_403");
+  });
+
+  it("allow-path: có cặp engine THẬT + module active → ALLOW", () => {
+    const session = makeSession(TASK_NOTI_DASH_SESSION());
+    const c = createPermissionChecker(TASK_NOTI_DASH_CAPS());
+    expect(evaluateRouteAccess(session, taskOverview, c).action).toBe("ALLOW");
+    expect(evaluateRouteAccess(session, taskMyTasks, c).action).toBe("ALLOW");
+    expect(evaluateRouteAccess(session, notiList, c).action).toBe("ALLOW");
+    expect(evaluateRouteAccess(session, dashboard, c).action).toBe("ALLOW");
+  });
+
+  it("route gate pin đúng cặp FE code (integrity)", () => {
+    expect(taskOverview.requiredAnyPermissions).toEqual(["TASK.TASK.VIEW"]);
+    expect(taskMyTasks.requiredAnyPermissions).toEqual(["TASK.TASK.VIEW"]);
+    expect(notiList.requiredAnyPermissions).toEqual(["NOTI.NOTIFICATION.VIEW_OWN"]);
+    expect(dashboard.requiredAnyPermissions).toEqual(["DASH.DASHBOARD.VIEW"]);
+  });
+});
+
+describe("S4 registry reconcile — TASK/NOTI/DASH app visibility (getVisibleApps)", () => {
+  it("deny-path: KHÔNG có cặp → ẩn tasks/notifications/dashboard trong App Switcher", () => {
+    const session = makeSession(TASK_NOTI_DASH_SESSION());
+    const c = createPermissionChecker(makePerms([]));
+    const keys = getVisibleApps(APP_REGISTRY, session, c).map((a) => a.appKey);
+    expect(keys).not.toContain("tasks");
+    expect(keys).not.toContain("notifications");
+    expect(keys).not.toContain("dashboard");
+  });
+
+  it("allow-path: có cặp + module active → hiện tasks/notifications/dashboard", () => {
+    const session = makeSession(TASK_NOTI_DASH_SESSION());
+    const c = createPermissionChecker(TASK_NOTI_DASH_CAPS());
+    const keys = getVisibleApps(APP_REGISTRY, session, c).map((a) => a.appKey);
+    expect(keys).toContain("tasks");
+    expect(keys).toContain("notifications");
+    expect(keys).toContain("dashboard");
+  });
+});
+
+describe("S4 registry reconcile — TASK/NOTI/DASH sidebar (filterSidebarItems)", () => {
+  it("deny-path: checker thiếu cặp → filterSidebarItems trả [] cho cả 3 sidebar", () => {
+    const session = makeSession(TASK_NOTI_DASH_SESSION());
+    const c = createPermissionChecker(makePerms([]));
+    expect(filterSidebarItems(TASK_SIDEBAR_FIXTURE, c, session)).toEqual([]);
+    expect(filterSidebarItems(NOTI_SIDEBAR_FIXTURE, c, session)).toEqual([]);
+    expect(filterSidebarItems(DASH_SIDEBAR_FIXTURE, c, session)).toEqual([]);
+  });
+
+  it("allow-path: có cặp → hiện item (task.overview/my-tasks · noti.list · dash.overview)", () => {
+    const session = makeSession(TASK_NOTI_DASH_SESSION());
+    const c = createPermissionChecker(TASK_NOTI_DASH_CAPS());
+    expect(filterSidebarItems(TASK_SIDEBAR_FIXTURE, c, session).map((i) => i.sidebarKey)).toEqual([
+      "task.overview",
+      "task.my-tasks",
+    ]);
+    expect(filterSidebarItems(NOTI_SIDEBAR_FIXTURE, c, session).map((i) => i.sidebarKey)).toEqual([
+      "noti.list",
+    ]);
+    expect(filterSidebarItems(DASH_SIDEBAR_FIXTURE, c, session).map((i) => i.sidebarKey)).toEqual([
+      "dash.overview",
+    ]);
+  });
+});
+
+describe("PERMISSION_CODE_TO_PAIR — TASK/NOTI/DASH pairs (drift-guard, S4-FE-REGISTRY-1)", () => {
+  // Mirror block FOUNDATION/AUTH — pin ánh xạ tường minh để happy-path (admin có mọi cặp) KHÔNG che drift.
+  it("ánh xạ tường minh khớp cặp engine THẬT non-sensitive (mig 0005 · 0100)", () => {
+    expect(PERMISSION_CODE_TO_PAIR["TASK.TASK.VIEW"]).toBe("read:task");
+    expect(PERMISSION_CODE_TO_PAIR["TASK.PROJECT.VIEW"]).toBe("read:project");
+    expect(PERMISSION_CODE_TO_PAIR["NOTI.NOTIFICATION.VIEW_OWN"]).toBe("read:notification");
+    expect(PERMISSION_CODE_TO_PAIR["DASH.DASHBOARD.VIEW"]).toBe("read:dashboard");
+  });
+
+  it("checker khớp FE code khi user có cặp engine tương ứng (pair-as-gate)", () => {
+    const task = createPermissionChecker(makePerms(["read:task"]));
+    expect(task.can("TASK.TASK.VIEW")).toBe(true);
+    expect(task.can("TASK.PROJECT.VIEW")).toBe(false); // read:project là cặp RIÊNG
+
+    const project = createPermissionChecker(makePerms(["read:project"]));
+    expect(project.can("TASK.PROJECT.VIEW")).toBe(true);
+
+    const noti = createPermissionChecker(makePerms(["read:notification"]));
+    expect(noti.can("NOTI.NOTIFICATION.VIEW_OWN")).toBe(true);
+
+    const dash = createPermissionChecker(makePerms(["read:dashboard"]));
+    expect(dash.can("DASH.DASHBOARD.VIEW")).toBe(true);
+  });
+
+  it("cặp giả read:task-style KHÔNG mở chéo module khác (chống drift ẩn app)", () => {
+    const only = createPermissionChecker(makePerms(["read:notification"]));
+    expect(only.can("TASK.TASK.VIEW")).toBe(false);
+    expect(only.can("DASH.DASHBOARD.VIEW")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // getVisibleApps
 // ---------------------------------------------------------------------------
 
