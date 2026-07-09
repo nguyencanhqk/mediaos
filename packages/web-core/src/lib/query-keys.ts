@@ -80,6 +80,8 @@ export const hrKeys = {
       [...rootKeys.hr, "employees", "list", params] as const,
     detail: (id: string) => [...rootKeys.hr, "employees", "detail", id] as const,
     me: () => [...rootKeys.hr, "employees", "me"] as const,
+    // S2-FE-HR-9 — Employee Files tab (danh sách file đính kèm hồ sơ, GET /hr/employees/:id/files).
+    files: (employeeId: string) => [...rootKeys.hr, "employees", "files", employeeId] as const,
   },
   departments: {
     all: [...rootKeys.hr, "departments"] as const,
@@ -502,6 +504,9 @@ export const hrInvalidation = {
     [hrProfileChangeRequestsListPrefix, hrKeys.profileChangeRequests.detail(id)] as const,
   rejectChangeRequest: (id: string) =>
     [hrProfileChangeRequestsListPrefix, hrKeys.profileChangeRequests.detail(id)] as const,
+  // S2-FE-HR-9 — upload/delete file hồ sơ đều làm mới đúng danh sách file của nhân viên đó.
+  uploadEmployeeFile: (employeeId: string) => [hrKeys.employees.files(employeeId)] as const,
+  deleteEmployeeFile: (employeeId: string) => [hrKeys.employees.files(employeeId)] as const,
 };
 
 // S3-FE-LEAVE-2: approver KHÔNG giữ balance key của requester (balance thuộc user gửi đơn, không nằm

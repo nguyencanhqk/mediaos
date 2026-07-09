@@ -122,6 +122,8 @@ export { attendanceApi } from "./lib/attendance-api";
 export { contractsApi } from "./lib/contracts-api";
 // S2-FE-HR-7: file download-url client (foundation file subsystem, TTL-ngắn, KHÔNG lộ storage_path).
 export { filesApi } from "./lib/files-api";
+// S2-FE-HR-9: Employee Files tab client (list/upload 4-pha có tiến độ/xóa mềm, UI-HR-SCREEN-015).
+export { employeeFilesApi, type UploadEmployeeFileOptions } from "./lib/employee-file-api";
 export {
   foundationApi,
   safeSettingViewSchema,

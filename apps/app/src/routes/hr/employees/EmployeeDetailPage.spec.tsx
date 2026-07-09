@@ -1,9 +1,9 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore } from "@mediaos/web-core";
-import { hrApi } from "@mediaos/web-core";
+import { hrApi, employeeFilesApi } from "@mediaos/web-core";
 import { EmployeeDetailPage } from "./EmployeeDetailPage";
 import type { HrEmployeeDetail } from "@mediaos/contracts";
 
@@ -16,6 +16,10 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     ...actual,
     hrApi: {
       getEmployee: vi.fn(),
+    },
+    // S2-FE-HR-9 — Tab "File hồ sơ" gọi employeeFilesApi.getEmployeeFiles khi có file-view:employee.
+    employeeFilesApi: {
+      getEmployeeFiles: vi.fn(),
     },
   };
 });
@@ -163,5 +167,26 @@ describe("EmployeeDetailPage", () => {
     expect(screen.getByRole("button", { name: /tổng quan/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /thông tin cá nhân/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /công việc/i })).toBeInTheDocument();
+  });
+
+  // ── S2-FE-HR-9 — Tab "File hồ sơ" chỉ hiển thị nếu có file-view:employee ────
+  it("hides the files tab when user lacks file-view:employee", async () => {
+    setCapabilities({ "read:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    expect(screen.queryByRole("button", { name: /file hồ sơ/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the files tab and switches to it when user has file-view:employee", async () => {
+    setCapabilities({ "read:employee": true, "file-view:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
+    vi.mocked(employeeFilesApi.getEmployeeFiles).mockResolvedValue([]);
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    const filesTabButton = screen.getByRole("button", { name: /file hồ sơ/i });
+    expect(filesTabButton).toBeInTheDocument();
+    fireEvent.click(filesTabButton);
+    expect(screen.getByText(/tài liệu đính kèm hồ sơ nhân viên này/i)).toBeInTheDocument();
   });
 });

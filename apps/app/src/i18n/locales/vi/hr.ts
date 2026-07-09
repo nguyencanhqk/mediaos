@@ -48,6 +48,8 @@ export default {
       overview: "Tổng quan",
       personal: "Thông tin cá nhân",
       work: "Công việc",
+      // S2-FE-HR-9 — Tab File hồ sơ (UI-HR-SCREEN-015), chỉ hiển thị nếu có HR.EMPLOYEE.FILE_VIEW.
+      files: "File hồ sơ",
     },
     fields: {
       code: "Mã nhân viên",
@@ -76,6 +78,54 @@ export default {
     notFound: {
       title: "Không tìm thấy hồ sơ",
       description: "Hồ sơ nhân viên không tồn tại hoặc bạn không có quyền xem.",
+    },
+  },
+  // S2-FE-HR-9 — Tab "File hồ sơ" trong EmployeeDetailPage (UI-HR-SCREEN-015).
+  files: {
+    description: "Tài liệu đính kèm hồ sơ nhân viên này.",
+    uploadButton: "Tải lên",
+    uploadCategoryPlaceholder: "Phân loại (tùy chọn) — vd: CCCD, Bằng cấp…",
+    uploading: "Đang tải lên… {{percent}}%",
+    uploadError: "Không thể tải file lên. Vui lòng thử lại.",
+    columns: {
+      name: "Tên file",
+      type: "Loại tệp",
+      size: "Dung lượng",
+      category: "Phân loại",
+      scanStatus: "Trạng thái quét",
+      uploadedAt: "Ngày tải lên",
+      actions: "Hành động",
+    },
+    scanStatus: {
+      NotRequired: "Không cần quét",
+      Pending: "Đang quét",
+      Clean: "An toàn",
+      Infected: "Nhiễm mã độc",
+      Failed: "Quét lỗi",
+    },
+    download: "Tải xuống",
+    downloading: "Đang mở…",
+    downloadError: "Không thể tạo liên kết tải. Vui lòng thử lại.",
+    delete: {
+      button: "Xóa",
+      title: "Xóa file",
+      description: 'Bạn có chắc muốn xóa file "{{name}}"? Hành động này không thể hoàn tác.',
+      confirm: "Xác nhận xóa",
+      deleting: "Đang xóa…",
+      cancel: "Hủy",
+      error: "Không thể xóa file. Vui lòng thử lại.",
+    },
+    empty: {
+      title: "Chưa có file nào",
+      description: "Hồ sơ nhân viên này chưa có tài liệu đính kèm.",
+    },
+    error: {
+      title: "Không thể tải danh sách file",
+      description: "Có lỗi khi tải danh sách file. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem file hồ sơ của nhân viên này.",
     },
   },
   form: {

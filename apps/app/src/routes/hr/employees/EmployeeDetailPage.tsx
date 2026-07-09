@@ -10,6 +10,9 @@ import { EmployeeStatusBadge } from "../employee-status";
 // S2-FE-HR-7 — nút điều hướng "Hợp đồng" (ẩn nếu không truyền onContracts).
 import { CONTRACT_ENGINE_PAIRS } from "../contracts/constants";
 import "../contracts/contracts-i18n";
+// S2-FE-HR-9 — Tab "File hồ sơ" (UI-HR-SCREEN-015), chỉ hiển thị nếu có file-view:employee.
+import { EMPLOYEE_FILE_ENGINE_PAIRS } from "./employee-file-constants";
+import { EmployeeFilesTab } from "./EmployeeFilesTab";
 
 // ---------------------------------------------------------------------------
 // Field row — label + value with masked fallback
@@ -26,7 +29,7 @@ function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
 // ---------------------------------------------------------------------------
 // Tab types
 // ---------------------------------------------------------------------------
-type Tab = "overview" | "personal" | "work";
+type Tab = "overview" | "personal" | "work" | "files";
 
 // ---------------------------------------------------------------------------
 // Overview tab
@@ -196,6 +199,11 @@ export function EmployeeDetailPage({
     HR_ENGINE_PAIRS.VIEW_SALARY.action,
     HR_ENGINE_PAIRS.VIEW_SALARY.resourceType,
   );
+  // S2-FE-HR-9 — spec §18.7: tab "File hồ sơ" chỉ hiển thị nếu user có HR.EMPLOYEE.FILE_VIEW.
+  const canViewFiles = useCan(
+    EMPLOYEE_FILE_ENGINE_PAIRS.VIEW.action,
+    EMPLOYEE_FILE_ENGINE_PAIRS.VIEW.resourceType,
+  );
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: hrKeys.employees.detail(employeeId),
@@ -210,6 +218,7 @@ export function EmployeeDetailPage({
     { key: "overview", label: t("detail.tabs.overview") },
     { key: "personal", label: t("detail.tabs.personal") },
     { key: "work", label: t("detail.tabs.work") },
+    ...(canViewFiles ? [{ key: "files" as const, label: t("detail.tabs.files") }] : []),
   ];
 
   // ── Forbidden ──────────────────────────────────────────────────────────────
@@ -334,6 +343,7 @@ export function EmployeeDetailPage({
       {activeTab === "work" && (
         <WorkTab employee={data} t={t} canViewSensitive={canViewSensitive} />
       )}
+      {activeTab === "files" && canViewFiles && <EmployeeFilesTab employeeId={employeeId} />}
     </div>
   );
 }
