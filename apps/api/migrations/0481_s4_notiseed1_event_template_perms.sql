@@ -289,13 +289,13 @@ ON CONFLICT (action, resource_type) DO NOTHING;
 -- (3b) Catalog quyền NOTI OWN-SCOPE (owner chốt 2026-07-09). DB-02 §9.7 định nghĩa VIEW_OWN/READ_OWN/
 --      HIDE_OWN/MARK_ALL_READ; API-07 §301 thêm MARK_READ_OWN. Trước bản vá này CHỈ read:notification được
 --      grant ⇒ mark-read / mark-all-read / hide của S4-NOTI-BE-1 sẽ 403 cho MỌI role (silent-403, đúng class
---      lỗi pair-drift đã sửa ở TASK). Tuple pin theo convention SNAKE của cặp legacy 'mark_read' đã có trong
---      catalog (KHÔNG tạo bản sao gạch-nối 'mark-read'). is_sensitive=false: đây là hành động trên dữ liệu
+--      lỗi pair-drift đã sửa ở TASK). Tuple pin theo convention SNAKE của cặp legacy 'mark_read' có sẵn trong
+--      catalog từ mig 0051 (media-era) — KHÔNG tạo bản sao gạch-nối 'mark-read'. is_sensitive=false: hành động trên dữ liệu
 --      CỦA CHÍNH MÌNH, scope Own đã chặn; đánh sensitive sẽ buộc grant tường minh cho mọi role mới.
 --      S4-NOTI-BE-1 @RequirePermission PHẢI dùng ĐÚNG 4 tuple này.
 -- ────────────────────────────────────────────────────────────────────────────────────────────────
 INSERT INTO permissions (action, resource_type, is_sensitive) VALUES
-  ('mark_read',     'notification', false),   -- đã có từ 0005; giữ để block tự-chứa + idempotent
+  ('mark_read',     'notification', false),   -- đã có từ 0051 (media-era); giữ để block tự-chứa + idempotent
   ('mark_all_read', 'notification', false),
   ('hide',          'notification', false)
 ON CONFLICT (action, resource_type) DO NOTHING;
@@ -430,6 +430,6 @@ $$;
 -- DELETE FROM permissions WHERE (action,resource_type) IN
 --   (('view','notification-config'),('update','notification-config'),('view','notification-template'),
 --    ('update','notification-template'),('view','notification-delivery-log'),('view','notification-audit-log'),
---    ('mark_all_read','notification'),('hide','notification'));  -- mark_read:notification có từ 0005, KHÔNG xoá
+--    ('mark_all_read','notification'),('hide','notification'));  -- mark_read:notification có từ 0051, KHÔNG xoá
 -- DELETE FROM notification_templates WHERE company_id IS NULL AND template_code LIKE '%__IN_APP__vi-VN';
 -- DELETE FROM notification_events   WHERE company_id IS NULL;  -- chỉ khi 0 template/notification tham chiếu

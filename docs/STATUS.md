@@ -1,8 +1,23 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-09 09:23Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-09 10:32Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
+
+### 🔴 S4-NOTI-SEED-1 — Seed notification event catalog (Event code registry §9.5 canonical) + template IN_APP tiếng Việt + permission NOTI + role mapping idempotent
+- **zone**: red · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/api/src/foundation/seed/**`, `apps/api/migrations/**`, `docs/plans/S4-NOTI-SEED-1.md`
+- **phụ thuộc**: S4-NOTI-DB-1✓
+- **done_when (đích hội tụ)**:
+  - [ ] OWNER CHỐT 2026-07-09 — mã event mention = TASK_MENTIONED (KHÔNG phải TASK_COMMENT_MENTIONED). Lý do: docs/DB + docs/spec là chuẩn (CLAUDE.md) và DB-07 (3), SPEC-06 (2), SPEC-08 (3/4) đều dùng TASK_MENTIONED; chuỗi TASK_COMMENT_MENTIONED chỉ đến từ IMPLEMENTATION-07 và ĐÃ được rename toàn bộ về TASK_MENTIONED. Seed và producer S4-TASK PHẢI dùng CÙNG chuỗi — lệch = catalog lookup miss = thông báo mention IM LẶNG không bao giờ bắn.
+  - [ ] Seed notification_events theo Event code registry §9.5. LẤY DANH SÁCH MÃ ĐẦY ĐỦ TỪ SPEC-08 + DB-07 (đọc file, KHÔNG suy từ shorthand gạch chéo — tiền tố TASK_ dễ rơi mất). ĐÃ XÁC MINH 2 mã hay drift: TASK_COMMENT_CREATED (SPEC-08 ×2, DB-07 ×1, SPEC-06 ×2) và TASK_MENTIONED. Event chưa bật MVP để enabled=false (KHÔNG bỏ khỏi catalog). Liệt kê nguyên văn từng event_code trong plan để reviewer đối chiếu.
+  - [ ] Seed template IN_APP cho mọi event enabled=true (§10.4: title + short_template + variables_schema); ON CONFLICT DO NOTHING. locale = 'vi-VN' (ĐÚNG default + index của mig 0479 dòng 105), KHÔNG phải 'vi'. body_template NOT NULL (0479:107) ⇒ set tường minh; status='Active' + is_default=true để resolver findEnabled chọn được (mặc định schema là 'Draft').
+  - [ ] OWNER CHỐT 2026-07-09 — permission NOTI: PIN thành tuple (action, resource_type) TƯỜNG MINH theo convention lowercase của mig 0005, liệt kê từng cặp trong plan; phải khớp 3 nơi: seed THẬT ↔ cặp FE registry.ts map ↔ cặp NOTI-BE @RequirePermission (bài học pair-drift s1-fnd-module/s3-fe). BỎ cặp 'channel' — phantom, grep CHANNEL trong DB-02 §9.7 = 0 kết quả, và chính plan ghi out-of-scope 'KHÔNG tạo channel-config table'. Chỉ seed CONFIG.VIEW/UPDATE + TEMPLATE.VIEW/UPDATE + DELIVERY_LOG.VIEW (+AUDIT_LOG.VIEW nếu §9.7 có).
+  - [ ] OWNER CHỐT 2026-07-09 — HR KHÔNG nhận NOTI.CONFIG/NOTI.TEMPLATE. Chỉ company-admin + super-admin có config; HR chỉ có own-notification như mọi user (least-privilege). Int-spec phải assert HR KHÔNG có cặp config.
+  - [ ] Grant role-permission: enumerate TƯỜNG MINH mảng role slug (mirror 0480:62-66) — KHÔNG suy đoán. DO-block phải RAISE EXCEPTION fail-LOUD khi role của GRANT thiếu (mirror 0480:79-81), KHÔNG dùng CONTINUE im lặng như block park — nếu không, seed 0 row mà không ai biết.
+  - [ ] Int-spec: seed idempotent chạy lại; event/template khớp registry (không mã lạ); admin thấy cặp config NOTI qua /auth/me; HR + employee KHÔNG có cặp config (deny-path). POSITIVE test BẮT BUỘC: MỖI role canonical (employee/manager/hr/company-admin/super-admin) thực sự NHẬN được own-notification @Own qua getCapabilities — deny-path một mình KHÔNG bắt được lỗi grant 0 row.
+  - [ ] Bảng notification_events/templates tạo ở mig 0479 với company_id NULLABLE (NULL = global) và app role chỉ có SELECT ⇒ seed global rows PHẢI chạy qua table-owner (migration), KHÔNG qua app role.
+  - [ ] Gate int-spec = hasDb && LANE_DB (chỉ .env → hasDb=true = đỏ-giả). SỐ MIGRATION: chạy `ls apps/api/migrations/*.sql | tail -1` ngay trước khi tạo file, KHÔNG hard-code. FULL gate security-reviewer + database-reviewer PASS
 
 ### 🟡 S5-DEVOPS-1 — Staging/UAT readiness: env + deploy pipeline + migration/seed chạy từ DB trống + test account đủ role (Employee/Manager/HR/Admin/Super Admin) — đối chiếu topology PROD/DEV-ONLINE đang chạy
 - **zone**: yellow · **skills**: code-review
@@ -60,15 +75,14 @@
 
 **🛑 BLOCKED:**
 - `S4-TASK-SEED-1` Seed permission TASK (23 mã canonical DB-06 §12.1) + role-permission mapping (Employee/Manager/HR/Admin/Super Admin) idempotent
-- `S4-NOTI-SEED-1` Seed notification event catalog (Event code registry §9.5 canonical) + template IN_APP tiếng Việt + permission NOTI + role mapping idempotent
 - `S4-DASH-DB-1` Schema + migration DASH (dashboard_widgets·dashboard_widget_configs·dashboard_widget_cache) theo DB-07 — RLS+FORCE, cache không lưu dữ liệu nhạy cảm chưa mask
 
 **Đã xong (v2):** `S0-GOV-1`, `S0-CI-1`, `S0-CI-2`, `S0-ENV-1`, `S0-FND-DB-1`, `S0-FND-SEED-1`, `S0-AUTH-DB-1`, `S0-API-CORE-1`, `S0-FE-CORE-1`, `S0-FE-API-1`, `S0-QA-1`, `S1-FND-AUDIT-1`, `S1-FND-SETTING-1`, `S1-FND-FILE-1`, `S1-FND-SEQ-1`, `S1-FND-MODULE-1`, `S1-FND-WIRE-1`, `S1-FE-LAYOUT-1`, `S1-FE-REGISTRY-1`, `S1-FE-QUERY-WIRE-1`, `S1-QA-FND-1`, `S1-QA-DEBT-1`, `S1-INT-MOUNT-1`, `S2-AUTH-DB-1`, `S2-AUTH-DB-2`, `S2-AUTH-SEED-1`, `S2-AUTH-BE-1`, `S2-AUTH-BE-2`, `S2-AUTH-BE-3`, `S2-AUTH-BE-4`, `S2-AUTH-BE-5`, `S2-HR-DB-1`, `S2-HR-SEED-1`, `S2-HR-BE-1`, `S2-HR-BE-2`, `S2-HR-BE-3`, `S2-HR-BE-4`, `S2-FE-AUTH-1`, `S2-FE-HR-1`, `S2-FE-HR-2`, `S2-FE-HR-3`, `S2-INT-1`, `S2-INT-2`, `S2-QA-1`, `S2-QA-2`, `S2-QA-DEBT-1`, `S2-AUTH-HARDEN-1`, `S2-HR-MASK-1`, `S2-HR-EMP-LEGACY-LOCK-1`, `S2-AUTH-BRAND-1`, `S2-FE-AUTH-2`, `S2-FE-AUTH-3`, `S2-AUTH-BE-6`, `S2-FE-AUTH-4`, `S2-AUTH-BE-7`, `S2-FE-AUTH-5`, `S2-FE-FND-1`, `S2-FE-FND-2`, `S2-FND-BE-1`, `S2-FE-FND-3`, `S2-FE-FND-4`, `S2-FND-BE-2`, `S2-FE-FND-5`, `S2-FND-BE-3`, `S2-FE-FND-6`, `S2-FE-HR-4`, `S2-FE-HR-5`, `S2-FE-HR-6`, `S2-HR-BE-6`, `S2-FE-HR-7`, `S2-HR-BE-7`, `S2-FE-HR-8`, `S3-ATT-DB-1`, `S3-LEAVE-DB-1`, `S3-FND-SEEDRUN-1`, `S3-ATT-SEED-1`, `S3-LEAVE-SEED-1`, `S3-ATT-BE-1`, `S3-ATT-BE-2`, `S3-ATT-BE-3`, `S3-LEAVE-BE-1`, `S3-LEAVE-BE-2`, `S3-LEAVE-BE-3`, `S3-LEAVE-BE-4`, `S3-INT-1`, `S3-FE-REGISTRY-1`, `S3-FE-ATT-1`, `S3-FE-ATT-2`, `S3-FE-LEAVE-1`, `S3-FE-LEAVE-2`, `S3-QA-1`, `S3-QA-2`, `S3-ATT-BE-4`, `S3-ATT-BE-5`, `S3-ATT-BE-6`, `S3-FE-ATT-3`, `S3-FE-ATT-4`, `S3-FE-ATT-5`, `S3-FE-ATT-6`, `S3-LEAVE-BE-5`, `S3-LEAVE-BE-6`, `S3-FE-LEAVE-3`, `S3-FE-LEAVE-4`, `S3-FE-LEAVE-5`, `S3-FE-LEAVE-6`, `S2-AUTH-BE-8`, `S2-AUTH-BE-9`, `S2-AUTH-BE-10`, `S2-AUTH-CAP-1`, `S2-AUTH-DB-4`, `S2-AUTH-BE-11`, `S2-AUTH-BE-12`, `S2-FE-ACCT-SEC-1`, `S2-FE-SYS-SEC-1`, `S2-AUTH-DB-3`, `S2-FE-AUTH-6`, `S2-AUTH-DOC-1`, `S2-FND-BE-4`, `S2-FND-BE-5`, `S2-FND-BE-6`, `S2-FND-DB-1`, `S2-FND-SEED-2`, `S2-FND-SEED-3`, `S2-FND-SEED-4`, `S3-LEAVE-SEED-2`, `S2-FND-BE-8`, `S2-FND-JOBS-1`, `S2-FND-FILE-2`, `S2-FE-FND-7`, `S2-FND-DB-2`, `S2-FND-CONTRACT-1`, `S2-FND-DOC-1`, `S2-AUTH-ROLEMEM-1`, `S2-AUTH-PERMUX-1`, `S2-AUTH-USEROPS-1`, `S4-TASK-DB-1`, `S4-TASK-RECON-1`, `S4-NOTI-DB-1`, `S4-FE-REGISTRY-1`, `S3-FE-LEAVE-7`, `S2-HR-EMPFILE-1`, `S2-FE-HR-9`, `S2-FND-SYSSET-1`, `S2-FE-FND-8`, `S3-ATT-EXPORT-1`
 
 ## Trạng thái repo
 
-- **branch**: `feat/ready-wave4` · **file đang đổi (dirty)**: 8
-- **migration head**: idx 160 — `0480_s4_taskrecon1_task_pair_drift_grants` (161 migration)
+- **branch**: `feat/ready-wave4` · **file đang đổi (dirty)**: 3
+- **migration head**: idx 161 — `0481_s4_notiseed1_event_template_perms` (162 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
 
@@ -76,6 +90,11 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `58ff7d6` | 2026-07-09 | fix(S4-NOTI-SEED-1): đóng silent-403 own-notification (mark_read/mark_all_read/hide) |
+| `c520d1b` | 2026-07-09 | fix(harness): chặn summary dài giết cả run auto-loop |
+| `8e36da5` | 2026-07-09 | wip(notiSeedRegistryVerify): NOTI event-catalog registry const + seed int-spec (0481) |
+| `1f16119` | 2026-07-09 | wip(notiSeedMig): mig 0481 seed NOTI events(52)/templates(36 vi-VN)/6 config perms + grants |
+| `dbd43b3` | 2026-07-09 | fix(S4-TASK-RECON-1): tách contract khỏi 0480 (expand-only) + chốt TASK_MENTIONED canonical |
 | `0c78b28` | 2026-07-09 | wip(planDocFix): fix '11'->21 site/13 pair count + real markdown mapping+residual tables (S4-TASK-RECON-1) |
 | `db6cc51` | 2026-07-09 | wip(fullGateRecon): FULL gate PASS (3 reviewers+santa, 0 CRIT/HIGH) + RED->GREEN LANE_DB verify + fix mapping table (S4-TASK-RECON-1) |
 | `e0b29b1` | 2026-07-09 | wip(reconVerify): int-spec đối soát TASK grant + deny-path (S4-TASK-RECON-1, mig 0480) |
@@ -83,11 +102,6 @@
 | `d77e779` | 2026-07-09 | wip(reconMig): 0480 đối soát TASK pair-drift — seed (comment,task) + di quyền employee/company-admin + park residual |
 | `fbe8c59` | 2026-07-09 | fix(harness): stamp 'started' TRƯỚC Đội 1 để dashboard không trống lúc phân rã |
 | `dfdf3ce` | 2026-07-09 | feat(ready-wave3): Employee Files tab + SystemSettingsPage + NOTI Core migration 0479 (#130) |
-| `84b9986` | 2026-07-09 | feat(ready-wave2): TASK core migration 0478 + FE registry TASK/NOTI/DASH + LeaveOverviewPage (#129) |
-| `2d0cd00` | 2026-07-09 | feat(ready-wave1): Employee File BE (S2-HR-EMPFILE-1) + System Settings verify-close (S2-FND-SYSSET-1) (#126) |
-| `438f053` | 2026-07-08 | fix(auth): query filter deleted+linkedProfile idempotent dưới ZodValidationPipe kép (400) (#125) |
-| `5965292` | 2026-07-08 | feat: đồng bộ — đối soát AUTH↔HR + quản trị vai trò + tailwind @source + dev-online (#124) |
-| `3b8e603` | 2026-07-08 | feat(auth): quản trị vai trò — xóa vai trò · gán quyền theo luật · thêm thành viên theo chức vụ (#123) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

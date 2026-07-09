@@ -4375,6 +4375,8 @@ export const backlog = [
       "SPEC-08",
     ],
     done_when: [
+      "⚠️ CAP-2 (bug đã tái diễn 3 lần: CAP-2/USEROPS-1/EXPORT-1) — 6 cặp config NOTI seed ở mig 0481 đều is_sensitive=true nên KHÔNG surface qua getCapabilities ⇒ nút cấu hình sẽ ẨN với CẢ admin. WO này PHẢI append 6 cặp vào SENSITIVE_CAPABILITY_ALLOWLIST (permission.service.ts): view/update:notification-config · view/update:notification-template · view:notification-delivery-log · view:notification-audit-log. Có test khẳng định admin THẤY đủ 6 cặp qua /auth/me.",
+      "@RequirePermission dùng ĐÚNG tuple đã pin: 6 cặp config trên + own-scope NOTI_OWN_ACTIONS (read/mark_read/mark_all_read/hide : notification) trong apps/api/src/foundation/seed/notification-event-catalog.const.ts. Lệch một ký tự = 403 im lặng.",
       "GET /notifications/events · PATCH /events/:id (bật/tắt) · GET/PATCH /templates/:id · GET /delivery-logs — @RequirePermission config NOTI (admin); mọi query company-scoped; audit khi đổi cấu hình",
       "Reminder job TASK_DUE_SOON (sắp đến hạn) + TASK_OVERDUE (quá hạn) mức scheduled cơ bản qua scheduler hiện có: quét task đến hạn → phát event registry §9.5 → intake S4-NOTI-BE-2 tạo notification cho assignee (+manager nếu cấu hình overdue); idempotent, không gửi trùng trong ngày",
       "DTO contracts dual-build; job chạy lại an toàn (dedupe theo entity+ngày)",

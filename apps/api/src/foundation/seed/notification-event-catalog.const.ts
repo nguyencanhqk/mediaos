@@ -217,8 +217,10 @@ export const NOTI_READ_PAIR: NotiPermissionPair = NOTI_PERMISSION_PAIRS.find(
  * NOTI_CANONICAL_ROLES. S4-NOTI-BE-1 PHẢI @RequirePermission đúng các tuple này (action, 'notification'):
  * lệch một ký tự ⇒ 403 im lặng cho mọi role, không test nào bắt được.
  *
- * Convention SNAKE, bám cặp legacy 'mark_read' đã nằm trong catalog từ 0005 — KHÔNG tạo bản gạch-nối
- * 'mark-read' song song (đúng bài học pair-drift đã phải mở WO S4-TASK-RECON-1 để dọn).
+ * Convention SNAKE, bám cặp legacy 'mark_read' có sẵn trong catalog từ mig 0051 (media-era) — KHÔNG tạo bản
+ * gạch-nối 'mark-read' song song (đúng bài học pair-drift đã phải mở WO S4-TASK-RECON-1 để dọn).
+ * ⚠️ apps/api/src/notifications/notifications.service.ts (legacy) cũng tham chiếu mark_read — S4-NOTI-BE-1
+ * phải đối soát, KHÔNG để hai đường gate song song.
  */
 export const NOTI_OWN_ACTIONS = ["read", "mark_read", "mark_all_read", "hide"] as const;
 
