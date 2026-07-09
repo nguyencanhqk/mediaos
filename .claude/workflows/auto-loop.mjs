@@ -449,6 +449,10 @@ let round = 0;
 async function planWO(item) {
   const wo = { id: item.id, title: item.title, paths: item.paths || [], zone: item.zone, plan: item.plan };
   const planned = needsPlanning(item);
+  // Đóng dấu BẮT ĐẦU NGAY — TRƯỚC Đội 1. WO đỏ tốn 9–15' phân rã (tech-lead đọc docs/README §8 + DB-* + SPEC-*);
+  // nếu chỉ stamp trong executeWO (tức SAU planWO) thì dashboard TRỐNG suốt cửa sổ đó dù loop chạy hết công suất.
+  // Ngữ nghĩa ledger là start-on-touch: chạm tới WO là ghi sổ.
+  if (!dryRun) await stamp(item.id, 'started', planned ? 'Đội 1 đang phân rã (analyze)' : 'build thẳng (skip Đội 1)');
   let lanes, accept, tests, steps;
   if (planned && !dryRun) {
     phase('Analyze');
@@ -502,8 +506,8 @@ const shipSerialized = (fn) => {
 async function executeWO(plan, wt) {
   let { wo, lanes, accept, tests, steps, sensitive } = plan;
 
-  // mốc BẮT ĐẦU
-  await stamp(wo.id, 'started', `${lanes.length} lane (${lanes.map((l) => l.builder).join(',')})${sensitive ? ' · nhạy cảm' : ''}${wt ? ' · wt' : ''}`);
+  // mốc LANE — dấu 'started' ĐÃ ghi ở planWO (trước Đội 1), đây chỉ bổ sung chi tiết lane khi đã biết.
+  await stamp(wo.id, 'milestone', `${lanes.length} lane (${lanes.map((l) => l.builder).join(',')})${sensitive ? ' · nhạy cảm' : ''}${wt ? ' · wt' : ''}`);
 
   // ── plan-reviewer (chỉ lane nhạy cảm — gác deny-path + nghiệm thu đo được) ──
   if (sensitive) {
