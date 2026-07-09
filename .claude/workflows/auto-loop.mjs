@@ -150,6 +150,9 @@ const PLAN_REVIEW_SCHEMA = {
   required: ['verdict'],
   properties: { verdict: { type: 'string', enum: ['PASS', 'BLOCK'] }, issues: { type: 'array', items: { type: 'string' } } },
 };
+// maxLength KHÔNG phải trang trí: builder từng trả summary 2.5–3.3 KB nhiều dòng + dấu ngoặc kép ⇒
+// StructuredOutput nhận __unparsedToolInput (InputValidationError: không parse nổi JSON) ×5 ⇒ vượt retry
+// cap ⇒ GIẾT cả run dù code đã commit xong. Chặn độ dài ngay ở schema + nhắc ở prompt.
 const IMPL_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -157,9 +160,9 @@ const IMPL_SCHEMA = {
   properties: {
     lane: { type: 'string' },
     status: { type: 'string', enum: ['committed', 'needs_human', 'dropped'] },
-    summary: { type: 'string' },
-    commit: { type: 'string' },
-    blockers: { type: 'array', items: { type: 'string' } },
+    summary: { type: 'string', maxLength: 300, description: 'MỘT dòng, ≤300 ký tự, KHÔNG xuống dòng/ngoặc kép' },
+    commit: { type: 'string', maxLength: 60 },
+    blockers: { type: 'array', maxItems: 8, items: { type: 'string', maxLength: 200 } },
   },
 };
 const REVIEW_SCHEMA = {
@@ -362,6 +365,7 @@ const buildPrompt = (wo, lane, ctx, attempt, wt) =>
     `   Nếu kẹt build không tự sửa được → status=needs_human + blockers cụ thể.`,
     `BẤT BIẾN (luôn, do hook ép): company_id mọi query · RLS+FORCE TRƯỚC backfill · audit append-only (UNION/ON CONFLICT, KHÔNG rewrite CHECK) · không secret plaintext.`,
     `Hot-file APPEND, KHÔNG rewrite. Trả DUY NHẤT object theo schema (lane="${lane.id}").`,
+    `⚠️ summary PHẢI ≤300 ký tự, MỘT DÒNG, KHÔNG ký tự xuống dòng, KHÔNG dấu ngoặc kép/backtick, KHÔNG dán SQL/diff/log. Chi tiết dài đã nằm trong commit message rồi — đừng lặp lại ở đây. (Payload StructuredOutput quá dài/nhiều dòng từng không parse nổi JSON ⇒ vượt retry cap ⇒ GIẾT cả vòng chạy dù bạn đã commit xong.)`,
   ]
     .filter(Boolean)
     .join('\n');
@@ -449,6 +453,10 @@ let round = 0;
 async function planWO(item) {
   const wo = { id: item.id, title: item.title, paths: item.paths || [], zone: item.zone, plan: item.plan };
   const planned = needsPlanning(item);
+  // Đóng dấu BẮT ĐẦU NGAY — TRƯỚC Đội 1. WO đỏ tốn 9–15' phân rã (tech-lead đọc docs/README §8 + DB-* + SPEC-*);
+  // nếu chỉ stamp trong executeWO (tức SAU planWO) thì dashboard TRỐNG suốt cửa sổ đó dù loop chạy hết công suất.
+  // Ngữ nghĩa ledger là start-on-touch: chạm tới WO là ghi sổ.
+  if (!dryRun) await stamp(item.id, 'started', planned ? 'Đội 1 đang phân rã (analyze)' : 'build thẳng (skip Đội 1)');
   let lanes, accept, tests, steps;
   if (planned && !dryRun) {
     phase('Analyze');
@@ -502,8 +510,8 @@ const shipSerialized = (fn) => {
 async function executeWO(plan, wt) {
   let { wo, lanes, accept, tests, steps, sensitive } = plan;
 
-  // mốc BẮT ĐẦU
-  await stamp(wo.id, 'started', `${lanes.length} lane (${lanes.map((l) => l.builder).join(',')})${sensitive ? ' · nhạy cảm' : ''}${wt ? ' · wt' : ''}`);
+  // mốc LANE — dấu 'started' ĐÃ ghi ở planWO (trước Đội 1), đây chỉ bổ sung chi tiết lane khi đã biết.
+  await stamp(wo.id, 'milestone', `${lanes.length} lane (${lanes.map((l) => l.builder).join(',')})${sensitive ? ' · nhạy cảm' : ''}${wt ? ' · wt' : ''}`);
 
   // ── plan-reviewer (chỉ lane nhạy cảm — gác deny-path + nghiệm thu đo được) ──
   if (sensitive) {

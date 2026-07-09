@@ -228,6 +228,23 @@ async function seedNotiEvent(direct: Pool, companyId: string): Promise<string> {
   return r.rows[0].id as string;
 }
 
+/**
+ * Seed 1 dashboard_widget TENANT-scoped (company_id = companyId) — nền FK cho dashboard_widget_configs +
+ * dashboard_widget_cache (S4-DASH-DB-1, mig 0482). MỌI cột NOT NULL theo DB-07 §8.1 truyền tường minh.
+ * widget_code random để không đụng uq_dashboard_widgets_company_code_active. Trả về widgetId.
+ */
+async function seedDashboardWidget(direct: Pool, companyId: string): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO dashboard_widgets
+       (company_id, widget_code, module_code, name, widget_type, required_permission_code,
+        default_data_scope, data_source_key, component_key, is_cacheable, status, is_system_widget)
+     VALUES ($1, $2, 'TASK', 'RLS Iso Widget', 'List', 'DASH.WIDGET.VIEW_MY_TASKS',
+             'Own', 'my-tasks', 'MyTasksWidget', true, 'Active', false) RETURNING id`,
+    [companyId, `RLS_WGT_${randomUUID().slice(0, 8)}`],
+  );
+  return r.rows[0].id as string;
+}
+
 // ─── Bảng đăng ký ──────────────────────────────────────────────────────────────
 
 export const RLS_TABLES: RlsTableCase[] = [
@@ -2708,6 +2725,49 @@ export const RLS_TABLES: RlsTableCase[] = [
         `INSERT INTO user_security_events (company_id, user_id, event_type, severity)
          VALUES ($1, $2, 'PASSWORD_CHANGED', 'info') RETURNING id`,
         [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+
+  // ── S4-DASH-DB-1 (mig 0482) Dashboard Core — 3 bảng MỚI DB-07 §8.1/8.2/8.3 ────
+  // dashboard_widgets: company_id NULLABLE (catalog global + company custom). Policy NULLABLE-TENANT (USING
+  // company_id=GUC OR company_id IS NULL / WITH CHECK company_id=GUC) ⇒ hàng GLOBAL (company_id NULL) hiển thị
+  // ở MỌI ngữ cảnh ⇒ skipNoContext (như notification_events/system_job_runs). Seed 1 hàng TENANT-scoped (company
+  // = t) để kiểm cô lập chéo tenant. App GRANT SELECT-only (write company-custom = DASH-BE) → seedRow direct.
+  // dashboard_widget_configs + dashboard_widget_cache: company_id NOT NULL + policy literal-GUC → tenant-scoped
+  // KHÔNG skipNoContext (no-context ⇒ 0 row). configs app SELECT-only; cache app SELECT,INSERT,UPDATE.
+  {
+    name: "dashboard_widgets",
+    table: "dashboard_widgets",
+    skipNoContext: true,
+    seedRow: (direct, t) => seedDashboardWidget(direct, t.companyId),
+  },
+  {
+    name: "dashboard_widget_configs",
+    table: "dashboard_widget_configs",
+    seedRow: async (direct, t) => {
+      const widgetId = await seedDashboardWidget(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO dashboard_widget_configs
+           (company_id, widget_id, dashboard_type, config_scope, is_enabled, sort_order)
+         VALUES ($1, $2, 'Employee', 'Company', true, 0) RETURNING id`,
+        [t.companyId, widgetId],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "dashboard_widget_cache",
+    table: "dashboard_widget_cache",
+    seedRow: async (direct, t) => {
+      const widgetId = await seedDashboardWidget(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO dashboard_widget_cache
+           (company_id, widget_id, dashboard_type, cache_scope, cache_key, data, status, generated_at, expires_at)
+         VALUES ($1, $2, 'System', 'Company', $3, '{}'::jsonb, 'Fresh', now(), now() + interval '5 minutes')
+         RETURNING id`,
+        [t.companyId, widgetId, `rls-cache-${randomUUID().slice(0, 8)}`],
       );
       return r.rows[0].id as string;
     },

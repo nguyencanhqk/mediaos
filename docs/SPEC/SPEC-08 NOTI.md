@@ -1220,7 +1220,7 @@ Tất cả user đã đăng nhập.
 
 ## 15. Danh sách event thông báo MVP
 
-> **Registry chuẩn (nguồn sự thật):** Các bảng event ở §15.1–15.6 là **event registry chuẩn** của NOTI (convention `UPPER_SNAKE`, prefix module). Mọi mô tả/ví dụ ở các mục khác (kể cả §3.4) phải dùng đúng `event_code` ở đây; ví dụ ATT dùng `ATT_ADJUSTMENT_SUBMITTED` (không phải `ATTENDANCE_ADJUSTMENT_SUBMITTED`), TASK mention dùng `TASK_MENTIONED` (không phải `TASK_COMMENT_MENTIONED`). DB-07 seed và BACKEND-09 dùng verbatim cùng bộ mã.
+> **Registry chuẩn (nguồn sự thật):** Các bảng event ở §15.1–15.6 là **event registry chuẩn** của NOTI (convention `UPPER_SNAKE`, prefix module). Mọi mô tả/ví dụ ở các mục khác (kể cả §3.4) phải dùng đúng `event_code` ở đây; ví dụ ATT dùng `ATT_ADJUSTMENT_SUBMITTED` (không phải `ATTENDANCE_ADJUSTMENT_SUBMITTED`), TASK mention dùng `TASK_MENTIONED` (không phải `TASK_MENTIONED`). DB-07 seed và BACKEND-09 dùng verbatim cùng bộ mã.
 
 ### 15.0 Ánh xạ với bộ mã sự kiện chuẩn (SPEC-01 §20.2)
 

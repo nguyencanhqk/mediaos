@@ -198,12 +198,12 @@ export class TasksController {
 
   /**
    * POST /tasks/:taskId/comments — thêm bình luận.
-   * Là WRITE → gate `comment:comment` (mọi system role cần bình luận đều có sẵn quyền này ở seed 0005,
-   * gồm `employee`). KHÔNG để ngỏ như read — chặn user 0-quyền spam comment/audit (gate G9-2 H-1).
+   * Là WRITE → gate `comment:task` (recon S4-TASK-RECON canonical hoá về resource `task`; quyền được cấp
+   * cho role cần bình luận, gồm `employee`). KHÔNG để ngỏ như read — chặn user 0-quyền spam comment/audit (gate G9-2 H-1).
    */
   @Post(":taskId/comments")
   @UseGuards(PermissionGuard)
-  @RequirePermission("comment", "comment")
+  @RequirePermission("comment", "task")
   addComment(
     @Req() req: AuthenticatedRequest,
     @Param("taskId") taskId: string,
