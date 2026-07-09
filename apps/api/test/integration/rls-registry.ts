@@ -211,6 +211,23 @@ async function seedTaskWithEmployee(
   return { taskId: task.rows[0].id as string, employeeId: emp.rows[0].id as string, userId };
 }
 
+/**
+ * Seed 1 notification_event TENANT-scoped (company_id = companyId) — nền FK cho notification_templates
+ * (S4-NOTI-DB-1, mig 0479). MỌI cột NOT NULL theo DB-07 §7.1 truyền tường minh (KHÔNG phụ thuộc DEFAULT
+ * của migration). event_code random để không đụng uq_notification_events_company_code_active.
+ */
+async function seedNotiEvent(direct: Pool, companyId: string): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO notification_events
+       (company_id, module_code, event_code, event_name, notification_type,
+        default_priority, default_channels, dedupe_strategy, is_enabled, is_system_event)
+     VALUES ($1, 'TASK', $2, 'RLS Iso Event', 'Task', 'Normal',
+             '["IN_APP"]'::jsonb, 'None', true, false) RETURNING id`,
+    [companyId, `RLS_EVT_${randomUUID().slice(0, 8)}`],
+  );
+  return r.rows[0].id as string;
+}
+
 // ─── Bảng đăng ký ──────────────────────────────────────────────────────────────
 
 export const RLS_TABLES: RlsTableCase[] = [
@@ -1242,6 +1259,55 @@ export const RLS_TABLES: RlsTableCase[] = [
         `INSERT INTO notification_preferences (company_id, user_id, notification_type, enabled)
          VALUES ($1, $2, 'general', true) RETURNING id`,
         [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  // ── S4-NOTI-DB-1 (mig 0479) Notification Core — 3 bảng MỚI DB-07 §7.1/7.2/7.4 ──
+  // notification_events + notification_templates: company_id NULLABLE (catalog global + company override).
+  // Policy NULLABLE-TENANT (USING company_id=GUC OR company_id IS NULL / WITH CHECK company_id=GUC) ⇒ hàng
+  // GLOBAL (company_id NULL) hiển thị ở MỌI ngữ cảnh ⇒ skipNoContext (như system_job_runs/roles). Seed 1
+  // hàng TENANT-scoped (company_id = t) để kiểm cô lập chéo tenant. Grant events/templates SELECT-only cho
+  // app (write company-override = NOTI-BE-3) → seedRow dùng direct (superuser).
+  // notification_delivery_logs: company_id NOT NULL + APPEND-ONLY (app GRANT SELECT,INSERT — KHÔNG UPDATE/
+  // DELETE) → mutate-deny kiểm ở notification-delivery-append-only.int-spec; seedRow dùng direct (superuser).
+  {
+    name: "notification_events",
+    table: "notification_events",
+    skipNoContext: true,
+    seedRow: (direct, t) => seedNotiEvent(direct, t.companyId),
+  },
+  {
+    name: "notification_templates",
+    table: "notification_templates",
+    skipNoContext: true,
+    seedRow: async (direct, t) => {
+      const eventId = await seedNotiEvent(direct, t.companyId);
+      const r = await direct.query(
+        `INSERT INTO notification_templates
+           (company_id, event_id, template_code, channel, locale, title_template,
+            body_template, version, status, is_default)
+         VALUES ($1, $2, $3, 'IN_APP', 'vi-VN', 'RLS {{x}}', 'RLS body', 1, 'Active', false) RETURNING id`,
+        [t.companyId, eventId, `RLS_TPL_${randomUUID().slice(0, 8)}`],
+      );
+      return r.rows[0].id as string;
+    },
+  },
+  {
+    name: "notification_delivery_logs",
+    table: "notification_delivery_logs",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `ndl-${randomUUID().slice(0, 8)}@x.test`);
+      const noti = await direct.query(
+        `INSERT INTO notifications (company_id, user_id, type, body)
+         VALUES ($1, $2, 'general', 'rls-ndl-noti') RETURNING id`,
+        [t.companyId, u],
+      );
+      const r = await direct.query(
+        `INSERT INTO notification_delivery_logs
+           (company_id, notification_id, recipient_user_id, channel, delivery_status, attempt_no, max_attempts)
+         VALUES ($1, $2, $3, 'IN_APP', 'Sent', 1, 1) RETURNING id`,
+        [t.companyId, noti.rows[0].id, u],
       );
       return r.rows[0].id as string;
     },
