@@ -87,3 +87,8 @@ export * from "./system-jobs";
 // (company_id NULLABLE, RLS+FORCE nullable-tenant, app SELECT-only) + notification_delivery_logs (company_id
 // NOT NULL, RLS+FORCE, APPEND-ONLY app SELECT,INSERT). notifications (mig 0010) ALTER-ADD additive ở ./communication.
 export * from "./noti";
+// S4-DASH-DB-1 (DB-07 §8.1–8.3, mig 0482): DASH Core 3 bảng MỚI — dashboard_widgets (company_id NULLABLE,
+// RLS+FORCE nullable-tenant, app SELECT-only) + dashboard_widget_configs (company_id NOT NULL, RLS+FORCE
+// literal-GUC, app SELECT-only, config-update=DASH-BE) + dashboard_widget_cache (company_id NOT NULL, RLS+FORCE
+// literal-GUC, app SELECT,INSERT,UPDATE — runtime upsert + soft-delete invalidation, KHÔNG DELETE).
+export * from "./dashboard";

@@ -1135,6 +1135,13 @@
       "when": 1717500800000,
       "tag": "0481_s4_notiseed1_event_template_perms",
       "breakpoints": true
+    },
+    {
+      "idx": 162,
+      "version": "7",
+      "when": 1717500805000,
+      "tag": "0482_s4_dashdb1_dashboard_core",
+      "breakpoints": true
     }
   ]
 }
