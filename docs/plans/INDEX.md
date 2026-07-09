@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**187 WO** · có micro-plan: **62/187** · ⬜ 41 chờ · 🔵 1 đang làm · ✅ 144 xong · 🔴 1 chặn
+**188 WO** · có micro-plan: **65/188** · ⬜ 39 chờ · 🔵 1 đang làm · ✅ 145 xong · 🔴 3 chặn
 
 ## Sprint 0
 
@@ -172,18 +172,19 @@
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
 | `S4-TASK-DB-1` | 🔴 | ✅ xong | [📄](S4-TASK-DB-1.md) | — | Schema + migration TASK core (projects·project_members·tasks·task_assi |
-| `S4-TASK-RECON-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S4-TASK-DB-1 | Đối soát pair-drift + grant tồn dư TASK: ánh xạ cặp legacy đang enforc |
-| `S4-TASK-SEED-1` | 🔴 | 🔴 chặn | [📄](S4-TASK-SEED-1.md) | ✅S4-TASK-DB-1 ⏳S4-TASK-RECON-1 | Seed permission TASK (23 mã canonical DB-06 §12.1) + role-permission m |
+| `S4-TASK-RECON-1` | 🔴 | ✅ xong | [📄](S4-TASK-RECON-1.md) | ✅S4-TASK-DB-1 | Đối soát pair-drift + grant tồn dư TASK: ánh xạ cặp legacy đang enforc |
+| `S4-TASK-RECON-2` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S4-TASK-RECON-1 | CONTRACT pair-drift TASK: gỡ grant legacy ('comment','comment') khỏi e |
+| `S4-TASK-SEED-1` | 🔴 | 🔴 chặn | [📄](S4-TASK-SEED-1.md) | ✅S4-TASK-DB-1 ✅S4-TASK-RECON-1 | Seed permission TASK (23 mã canonical DB-06 §12.1) + role-permission m |
 | `S4-TASK-BE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-SEED-1 | BE Project CRUD + close/delete mềm + quản lý member (GET/POST /project |
 | `S4-TASK-BE-2` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-1 | BE Task CRUD + My-tasks + filter (GET/POST /tasks, GET/PATCH/DELETE /t |
 | `S4-TASK-BE-3` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-2 | BE Task assignment + status workflow FSM (assign/đổi assignee, add/rem |
 | `S4-TASK-BE-4` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-3 | BE Kanban (board + move) + comment/mention + checklist + activity log  |
 | `S4-NOTI-DB-1` | 🔴 | ✅ xong | [📄](S4-NOTI-DB-1.md) | ✅S4-TASK-DB-1 | Schema + migration NOTI (notification_events·notification_templates·no |
-| `S4-NOTI-SEED-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S4-NOTI-DB-1 | Seed notification event catalog (Event code registry §9.5 canonical) + |
+| `S4-NOTI-SEED-1` | 🔴 | 🔴 chặn | [📄](S4-NOTI-SEED-1.md) | ✅S4-NOTI-DB-1 | Seed notification event catalog (Event code registry §9.5 canonical) + |
 | `S4-NOTI-BE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-NOTI-SEED-1 | BE My-notification APIs (GET /notifications, /dropdown, /unread-count, |
 | `S4-NOTI-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S4-NOTI-SEED-1 | BE Event intake + notification engine (POST /internal/v1/notifications |
 | `S4-NOTI-BE-3` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-NOTI-BE-2 | BE Notification admin config (GET events/templates/delivery-logs, PATC |
-| `S4-DASH-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S4-NOTI-DB-1 | Schema + migration DASH (dashboard_widgets·dashboard_widget_configs·da |
+| `S4-DASH-DB-1` | 🔴 | 🔴 chặn | [📄](S4-DASH-DB-1.md) | ✅S4-NOTI-DB-1 | Schema + migration DASH (dashboard_widgets·dashboard_widget_configs·da |
 | `S4-DASH-SEED-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S4-DASH-DB-1 | Seed widget catalog 7 In-sprint (§11.3) + permission DASH + default co |
 | `S4-DASH-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S4-DASH-SEED-1 | BE Dashboard resolver (GET /dashboard/me, /types, /:type) + widget reg |
 | `S4-DASH-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S4-DASH-BE-1 ⏳S4-TASK-BE-2 ⏳S4-NOTI-BE-1 | BE Widget data services (GET /dashboard/widgets, /widgets/:slug) cho 7 |

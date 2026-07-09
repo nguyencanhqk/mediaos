@@ -26,7 +26,7 @@ import { PermissionService } from "../../src/permission/permission.service";
  *
  * RED-before-GREEN: chạy trên DB migrate tới TRƯỚC 0480 (head-1 = 0479) → ĐỎ vì:
  *   • catalog THIẾU cặp (comment,'task');
- *   • employee + company-admin còn (comment,'comment') legacy + residual submit/manage/assign;
+ *   • employee + company-admin còn residual submit/manage/assign (comment:comment giữ nguyên — expand-only);
  *   • grant-set task+project chưa hội tụ.
  *   Sau apply 0480 → GREEN.
  *
@@ -36,8 +36,10 @@ import { PermissionService } from "../../src/permission/permission.service";
  * BẤT BIẾN kiểm chứng:
  *   • (a) catalog: (comment,'task') is_sensitive=false — cặp canonical MỚI, KHÔNG đụng is_sensitive cặp khác.
  *   • (b) EXACT grant-set task+project cho 4 role canonical == kỳ vọng (đếm không dư/không thiếu).
- *   • (c) FORBIDDEN residual {submit:task,manage:task,manage:project,assign:project,comment:comment}
- *         KHÔNG còn grant cho BẤT KỲ role canonical nào; comment:comment đã gỡ khỏi employee+company-admin.
+ *   • (c) FORBIDDEN residual {submit:task,manage:task,manage:project,assign:project} KHÔNG còn grant cho
+ *         BẤT KỲ role canonical nào.
+ *   • (c') EXPAND-ONLY: (comment,'comment') VẪN CÒN cho employee+company-admin — cố ý, để code cũ (còn
+ *         enforce cặp legacy) không ăn 403 trong khe migrate→restart. Contract ở S4-TASK-RECON-2.
  *   • (d) Idempotent bộ-ba (role_id,permission_id,data_scope): re-INSERT ON CONFLICT KHÔNG drift scope;
  *         re-park DELETE = 0 row.
  *   • Deny-path: POST /tasks/:taskId/comments 2xx cho employee (comment:task) · 403 role KHÔNG grant;
@@ -53,10 +55,11 @@ const CANONICAL_ROLES = ["employee", "manager", "hr", "company-admin"] as const;
  * ĐÍCH HỘI TỤ mig 0480 — tập grant (action:resource) trên resource task+project của MỖI role canonical.
  * Nguồn: migration 0480 header + DB-06 §12.1. So EXACT (không dư/không thiếu) → phát hiện drift 2 chiều.
  *   • company-admin: 0005 cấp ALL is_sensitive=false ⇒ 7 task + 6 project; park gỡ submit/manage:task +
- *     manage/assign:project + comment:comment; grant thêm comment:task ⇒ {create,read,update,delete,assign,
+ *     manage/assign:project; grant thêm comment:task ⇒ {create,read,update,delete,assign,
  *     comment}:task ∪ {create,read,update,delete}:project.
- *   • employee: 0005 cấp read/submit:task + comment:comment; park gỡ submit:task + comment:comment; grant
+ *   • employee: 0005 cấp read/submit:task + comment:comment; park gỡ submit:task; grant
  *     comment:task ⇒ {read,comment}:task.
+ *   (comment:comment resource_type='comment' ⇒ NGOÀI tập task+project này, không ảnh hưởng EXPECTED bên dưới.)
  *   • manager/hr (0444, chỉ AUTH/HR): KHÔNG có grant task/project ⇒ ∅.
  */
 const EXPECTED_TASK_PROJECT: Record<(typeof CANONICAL_ROLES)[number], string[]> = {
@@ -78,12 +81,13 @@ const EXPECTED_TASK_PROJECT: Record<(typeof CANONICAL_ROLES)[number], string[]> 
 };
 
 // Cặp residual TUYỆT ĐỐI KHÔNG được grant cho BẤT KỲ role canonical nào sau 0480.
+// (comment,'comment') KHÔNG nằm ở đây: 0480 là EXPAND-ONLY, cố ý GIỮ grant legacy để code cũ còn enforce
+// nó không ăn 403 trong khe migrate→restart. Contract cặp đó ở S4-TASK-RECON-2 (release sau).
 const FORBIDDEN_RESIDUAL: ReadonlyArray<{ action: string; resourceType: string }> = [
   { action: "submit", resourceType: "task" },
   { action: "manage", resourceType: "task" },
   { action: "manage", resourceType: "project" },
   { action: "assign", resourceType: "project" },
-  { action: "comment", resourceType: "comment" },
 ];
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
@@ -169,7 +173,10 @@ describe.skipIf(!runIsolatedDb)(
       });
     }
 
-    it("(c') comment:comment đã gỡ khỏi CẢ employee VÀ company-admin (legacy park)", async () => {
+    // EXPAND-ONLY: 0480 CỐ Ý giữ grant legacy (comment,'comment') song song với (comment,'task') mới.
+    // Gỡ nó ở đây sẽ mở cửa sổ 403 cho code cũ (còn enforce comment:comment) giữa migrate và restart.
+    // Contract nằm ở S4-TASK-RECON-2. Test này KHOÁ trạng thái transitional đó lại.
+    it("(c') comment:comment VẪN CÒN cho employee + company-admin (expand-only, chưa contract)", async () => {
       const res = await direct.query<{ n: number }>(
         `SELECT COUNT(*)::int AS n
            FROM role_permissions rp
@@ -178,7 +185,10 @@ describe.skipIf(!runIsolatedDb)(
           WHERE r.name IN ('employee','company-admin') AND r.company_id IS NULL
             AND rp.effect='ALLOW' AND p.action='comment' AND p.resource_type='comment'`,
       );
-      expect(res.rows[0].n, "employee+company-admin KHÔNG còn comment:comment").toBe(0);
+      expect(
+        res.rows[0].n,
+        "employee+company-admin PHẢI còn comment:comment tới khi RECON-2 contract (tránh 403 khe deploy)",
+      ).toBe(2);
     });
 
     // ── (d) Idempotent bộ-ba: re-apply INSERT ON CONFLICT KHÔNG drift; re-park DELETE=0 row ──
@@ -212,13 +222,15 @@ describe.skipIf(!runIsolatedDb)(
          ON CONFLICT (role_id, permission_id, effect) DO NOTHING`,
       );
 
-      // Re-park residual đã gỡ (employee comment:comment) → DELETE khớp 0 row (đã không còn).
+      // Re-park residual ĐÃ gỡ (employee submit:task) → DELETE khớp 0 row (đã không còn).
+      // KHÔNG dùng comment:comment ở đây: 0480 expand-only cố ý GIỮ nó, DELETE sẽ khớp 1 row và
+      // phá trạng thái transitional mà test (c') vừa khoá.
       const del = await direct.query(
         `DELETE FROM role_permissions rp
            USING roles r, permissions p
           WHERE rp.role_id = r.id AND rp.permission_id = p.id
             AND r.name='employee' AND r.company_id IS NULL AND rp.effect='ALLOW'
-            AND p.action='comment' AND p.resource_type='comment'`,
+            AND p.action='submit' AND p.resource_type='task'`,
       );
 
       const after = await snapshot();
@@ -226,7 +238,7 @@ describe.skipIf(!runIsolatedDb)(
       expect(after, "employee comment:task vẫn = Own (KHÔNG bị Company ghi đè)").toContain(
         "employee|comment:task|Own",
       );
-      expect(del.rowCount, "re-park comment:comment (employee) đã gỡ ⇒ DELETE 0 row").toBe(0);
+      expect(del.rowCount, "re-park submit:task (employee) đã gỡ ⇒ DELETE 0 row").toBe(0);
     });
   },
 );

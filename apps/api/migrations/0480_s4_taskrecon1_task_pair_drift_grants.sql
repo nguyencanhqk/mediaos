@@ -4,23 +4,35 @@
 --
 -- BỐI CẢNH (drift): POST /tasks/:taskId/comments đang enforce cặp LEGACY (comment,'comment') — media-era
 --   (0005/0420). Canonical DB-06 §12.1 = (comment,'task'). Lane controllerSwap đổi decorator
---   tasks.controller.ts:206 sang ('comment','task') CÙNG release; migration này mở đường (seed cặp +
---   di quyền) TRƯỚC khi decorator đổi để KHÔNG mở cửa sổ 403 (single-node stop→migrate→start atomic).
+--   tasks.controller.ts:206 sang ('comment','task') CÙNG release.
 --
--- NỘI-THỨ-TỰ BẮT BUỘC (chỉ 3 bước ở migration — bước (3) đổi decorator ở lane controllerSwap):
---   (1) Catalog: INSERT (comment,'task') is_sensitive=false — cặp canonical MỚI thay (comment,'comment').
+-- ⚠️ EXPAND-ONLY (owner chốt 2026-07-09). Bản nháp đầu gộp cả contract (gỡ grant comment:comment) vào
+--   migration này, dựa trên giả định "single-node stop→migrate→start atomic". GIẢ ĐỊNH ĐÓ SAI:
+--   mediaos.ps1 Invoke-Migrate chỉ chạy `pnpm db:migrate` và KHÔNG stop service (Release job trong
+--   .github/workflows/api.yml còn là placeholder TODO). TasksModule CÓ mount (app.module.ts:53) ⇒ giữa
+--   lúc migrate xong và lúc rebuild+restart, code CŨ vẫn enforce (comment,'comment') trong khi grant đã
+--   bị gỡ ⇒ employee ăn 403 khi bình luận. Không có wildcard (*,*) trong 0005 để cứu.
+--   ⇒ Migration này CHỈ EXPAND: seed cặp mới + cấp grant mới, GIỮ NGUYÊN grant legacy (comment,'comment').
+--     Hai grant cùng tồn tại ⇒ KHÔNG có cửa sổ 403 theo BẤT KỲ thứ tự deploy nào (migrate trước hay sau).
+--   ⇒ CONTRACT (gỡ (comment,'comment') khỏi employee + company-admin) tách sang S4-TASK-RECON-2, chạy ở
+--     RELEASE SAU khi code gate (comment,'task') đã chạy ổn định. Đúng expand-contract.
+--
+-- NỘI-THỨ-TỰ BẮT BUỘC (bước (3) đổi decorator ở lane controllerSwap; bước (4) contract ở RECON-2):
+--   (1) Catalog: INSERT (comment,'task') is_sensitive=false — cặp canonical MỚI, SONG SONG (comment,'comment').
 --   (2) Grant  : cấp (comment,'task') ALLOW cho role đang GIỮ (comment,'comment') = employee(Own) +
 --                company-admin(Company) → giữ hành vi bình luận LIÊN TỤC qua khe đổi decorator.
---   (4) Park   : gỡ grant TỒN DƯ ngoài ma trận §6 cho 4 role canonical, PER-PAIR (resolve role_id+
---                permission_id, DELETE đúng bộ). KHÔNG blanket theo role_id (mirror 0444/0445).
---                • company-admin: (submit,task),(manage,task),(manage,project),(assign,project),(comment,comment)
---                • employee     : (submit,task),(comment,comment)
+--   (4') Park  : gỡ grant TỒN DƯ ngoài ma trận §6 mà KHÔNG route sống nào enforce, PER-PAIR (resolve
+--                role_id+permission_id, DELETE đúng bộ). KHÔNG blanket theo role_id (mirror 0444/0445).
+--                • company-admin: (submit,task),(manage,task),(manage,project),(assign,project)
+--                • employee     : (submit,task)
 --                • manager/hr   : KHÔNG có grant task/project để gỡ (0444/0445 chỉ cấp AUTH/HR).
+--                • (comment,'comment') CỐ Ý GIỮ LẠI ở migration này — xem EXPAND-ONLY ở trên.
 --
--- ĐÍCH HỘI TỤ (task+project grant-set MỖI role canonical, không dư/không thiếu):
+-- ĐÍCH HỘI TỤ (task+project grant-set MỖI role canonical sau 0480, không dư/không thiếu):
 --   company-admin = {create,read,update,delete,assign,comment}:task ∪ {create,read,update,delete}:project
---   employee      = {read,comment}:task
---   manager = ∅ · hr = ∅   (comment:comment đã gỡ khỏi employee+company-admin)
+--                   ∪ {(comment,'comment')}   ← legacy, gỡ ở RECON-2
+--   employee      = {read,comment}:task ∪ {(comment,'comment')}   ← legacy, gỡ ở RECON-2
+--   manager = ∅ · hr = ∅
 --
 -- HOT-FILE §9.3 / BẤT BIẾN:
 --   • THUẦN ADDITIVE DATA: chỉ INSERT/DELETE data (permissions/role_permissions). KHÔNG DDL, KHÔNG đụng
@@ -121,16 +133,17 @@ $$;
 -- ────────────────────────────────────────────────────────────────────────────────────────────────
 DO $$
 DECLARE
+  -- EXPAND-ONLY: chỉ gỡ grant tồn dư mà KHÔNG route sống nào enforce.
+  -- (comment,'comment') CỐ Ý KHÔNG có ở đây — code cũ còn enforce nó tới lúc restart ⇒ gỡ bây giờ = 403.
+  -- Contract cặp đó nằm ở S4-TASK-RECON-2 (release sau). Xem khối EXPAND-ONLY ở đầu file.
   revokes CONSTANT text[][] := ARRAY[
-    -- company-admin: gỡ 5 cặp tồn dư (submit/manage:task · manage/assign:project · comment:comment)
+    -- company-admin: gỡ 4 cặp tồn dư (submit/manage:task · manage/assign:project)
     ['company-admin', 'submit',  'task'],
     ['company-admin', 'manage',  'task'],
     ['company-admin', 'manage',  'project'],
     ['company-admin', 'assign',  'project'],
-    ['company-admin', 'comment', 'comment'],
-    -- employee: gỡ submit:task + comment:comment (legacy)
-    ['employee',      'submit',  'task'],
-    ['employee',      'comment', 'comment']
+    -- employee: gỡ submit:task (legacy over-grant, không route nào enforce)
+    ['employee',      'submit',  'task']
   ];
   r           text[];
   v_role_id   uuid;
