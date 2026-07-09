@@ -28,6 +28,7 @@ import {
   NOTI_CONFIG_RESOURCE_TYPES,
   NOTI_ENABLED_EVENTS,
   NOTI_ENABLED_EVENT_COUNT,
+  NOTI_OWN_ACTIONS,
   NOTI_EVENT_CATALOG,
   NOTI_EVENT_COUNT,
   NOTI_PERMISSION_PAIRS,
@@ -249,12 +250,18 @@ describe.skipIf(!runIsolatedDb)(
         });
       }
 
+      // OWN-SCOPE: mọi role canonical phải có ĐỦ 4 hành động @Own. Trước bản vá 2026-07-09 chỉ 'read'
+      // được grant ⇒ mark-read/mark-all-read/hide của S4-NOTI-BE-1 sẽ 403 cho MỌI role (silent-403).
+      // Test này khoá cả 4 tuple — regress một cái là đỏ ngay, không chờ tới lúc BE chạy mới phát hiện.
       for (const role of NOTI_CANONICAL_ROLES) {
-        it(`${role} read:notification = Own`, async () => {
-          expect(
-            await grantScope(direct, role, NOTI_READ_PAIR.action, NOTI_READ_PAIR.resourceType),
-          ).toBe("Own");
-        });
+        for (const action of NOTI_OWN_ACTIONS) {
+          it(`${role} ${action}:notification = Own`, async () => {
+            expect(
+              await grantScope(direct, role, action, NOTI_READ_PAIR.resourceType),
+              `${role} thiếu ${action}:notification @Own ⇒ endpoint own-scope NOTI-BE-1 sẽ 403`,
+            ).toBe("Own");
+          });
+        }
       }
 
       it("company-admin có ĐỦ 6/6 cặp config @Company", async () => {

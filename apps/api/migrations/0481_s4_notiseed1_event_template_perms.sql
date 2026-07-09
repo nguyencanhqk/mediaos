@@ -286,6 +286,22 @@ ON CONFLICT (action, resource_type) DO NOTHING;
 --> statement-breakpoint
 
 -- ────────────────────────────────────────────────────────────────────────────────────────────────
+-- (3b) Catalog quyền NOTI OWN-SCOPE (owner chốt 2026-07-09). DB-02 §9.7 định nghĩa VIEW_OWN/READ_OWN/
+--      HIDE_OWN/MARK_ALL_READ; API-07 §301 thêm MARK_READ_OWN. Trước bản vá này CHỈ read:notification được
+--      grant ⇒ mark-read / mark-all-read / hide của S4-NOTI-BE-1 sẽ 403 cho MỌI role (silent-403, đúng class
+--      lỗi pair-drift đã sửa ở TASK). Tuple pin theo convention SNAKE của cặp legacy 'mark_read' đã có trong
+--      catalog (KHÔNG tạo bản sao gạch-nối 'mark-read'). is_sensitive=false: đây là hành động trên dữ liệu
+--      CỦA CHÍNH MÌNH, scope Own đã chặn; đánh sensitive sẽ buộc grant tường minh cho mọi role mới.
+--      S4-NOTI-BE-1 @RequirePermission PHẢI dùng ĐÚNG 4 tuple này.
+-- ────────────────────────────────────────────────────────────────────────────────────────────────
+INSERT INTO permissions (action, resource_type, is_sensitive) VALUES
+  ('mark_read',     'notification', false),   -- đã có từ 0005; giữ để block tự-chứa + idempotent
+  ('mark_all_read', 'notification', false),
+  ('hide',          'notification', false)
+ON CONFLICT (action, resource_type) DO NOTHING;
+--> statement-breakpoint
+
+-- ────────────────────────────────────────────────────────────────────────────────────────────────
 -- (4a) Grant 6 cặp config @Company cho company-admin (mirror 0480/0444: resolve role+perm → RAISE EXCEPTION
 --      fail-LOUD nếu thiếu → DELETE scope SAI per-pair → INSERT scope §13 ON CONFLICT DO NOTHING). super-admin
 --      KHÔNG enumerate (company-scoped, runtime bootstrap phủ catalog). Idempotent bộ-ba.
@@ -347,52 +363,59 @@ $$;
 --> statement-breakpoint
 
 -- ────────────────────────────────────────────────────────────────────────────────────────────────
--- (4b) Grant read:notification @Own cho employee/manager/hr/company-admin (thông báo là dữ liệu CÁ NHÂN —
---      recipient_user_id = current user ⇒ Own). read:notification catalog có từ 0005. Enumerate role slug
---      TƯỜNG MINH + RAISE EXCEPTION fail-LOUD nếu role/perm thiếu. Per-pair rescope: employee (0005) đang
---      'Company' (backfill 0441 DEFAULT) → hạ về 'Own'. super-admin KHÔNG enumerate (runtime bootstrap).
+-- (4b) Grant 4 cặp OWN-SCOPE @Own cho employee/manager/hr/company-admin (thông báo là dữ liệu CÁ NHÂN —
+--      recipient_user_id = current user ⇒ Own): read · mark_read · mark_all_read · hide.
+--      OWNER CHỐT 2026-07-09: trước đây chỉ grant read ⇒ mark-read/mark-all-read/hide của S4-NOTI-BE-1
+--      403 cho MỌI role (không ai có mark_read:notification dù cặp đã nằm trong catalog từ 0005).
+--      Enumerate role slug TƯỜNG MINH + RAISE EXCEPTION fail-LOUD nếu role/perm thiếu. Per-pair rescope:
+--      employee (0005) đang 'Company' (backfill 0441 DEFAULT) → hạ về 'Own'. super-admin KHÔNG enumerate
+--      (không phải role trong bảng roles — bootstrap ở runtime).
 -- ────────────────────────────────────────────────────────────────────────────────────────────────
 DO $$
 DECLARE
-  own_roles CONSTANT text[] := ARRAY['employee', 'manager', 'hr', 'company-admin'];
+  own_roles   CONSTANT text[] := ARRAY['employee', 'manager', 'hr', 'company-admin'];
+  own_actions CONSTANT text[] := ARRAY['read', 'mark_read', 'mark_all_read', 'hide'];
   rn         text;
+  act        text;
   v_role_id  uuid;
   v_perm_id  uuid;
   v_seeded   int := 0;
   v_rescoped int := 0;
   v_del      int;
 BEGIN
-  SELECT id INTO v_perm_id
-    FROM permissions
-   WHERE action = 'read' AND resource_type = 'notification';
-  IF v_perm_id IS NULL THEN
-    RAISE EXCEPTION '[0481] permission (read:notification) không có trong catalog — seed 0005 phải chạy trước';
-  END IF;
-
-  FOREACH rn IN ARRAY own_roles LOOP
-    SELECT id INTO v_role_id
-      FROM roles
-     WHERE name = rn AND company_id IS NULL AND deleted_at IS NULL;
-    IF v_role_id IS NULL THEN
-      RAISE EXCEPTION '[0481] role canonical % không tồn tại — seed 0005/0444 phải chạy trước', rn;
+  FOREACH act IN ARRAY own_actions LOOP
+    SELECT id INTO v_perm_id
+      FROM permissions
+     WHERE action = act AND resource_type = 'notification';
+    IF v_perm_id IS NULL THEN
+      RAISE EXCEPTION '[0481] permission (%:notification) không có trong catalog — block (3b) phải chạy trước', act;
     END IF;
 
-    DELETE FROM role_permissions
-     WHERE role_id = v_role_id
-       AND permission_id = v_perm_id
-       AND effect = 'ALLOW'
-       AND data_scope <> 'Own';
-    GET DIAGNOSTICS v_del = ROW_COUNT;
-    v_rescoped := v_rescoped + v_del;
+    FOREACH rn IN ARRAY own_roles LOOP
+      SELECT id INTO v_role_id
+        FROM roles
+       WHERE name = rn AND company_id IS NULL AND deleted_at IS NULL;
+      IF v_role_id IS NULL THEN
+        RAISE EXCEPTION '[0481] role canonical % không tồn tại — seed 0005/0444 phải chạy trước', rn;
+      END IF;
 
-    INSERT INTO role_permissions (role_id, permission_id, effect, data_scope)
-    VALUES (v_role_id, v_perm_id, 'ALLOW', 'Own')
-    ON CONFLICT (role_id, permission_id, effect) DO NOTHING;
-    GET DIAGNOSTICS v_del = ROW_COUNT;
-    v_seeded := v_seeded + v_del;
+      DELETE FROM role_permissions
+       WHERE role_id = v_role_id
+         AND permission_id = v_perm_id
+         AND effect = 'ALLOW'
+         AND data_scope <> 'Own';
+      GET DIAGNOSTICS v_del = ROW_COUNT;
+      v_rescoped := v_rescoped + v_del;
+
+      INSERT INTO role_permissions (role_id, permission_id, effect, data_scope)
+      VALUES (v_role_id, v_perm_id, 'ALLOW', 'Own')
+      ON CONFLICT (role_id, permission_id, effect) DO NOTHING;
+      GET DIAGNOSTICS v_del = ROW_COUNT;
+      v_seeded := v_seeded + v_del;
+    END LOOP;
   END LOOP;
 
-  RAISE NOTICE '[0481] read:notification @Own grant: % INSERT mới, % re-scope', v_seeded, v_rescoped;
+  RAISE NOTICE '[0481] own-scope notification grant (read/mark_read/mark_all_read/hide): % INSERT mới, % re-scope', v_seeded, v_rescoped;
 END;
 $$;
 
@@ -402,9 +425,11 @@ $$;
 --   WHERE rp.role_id=r.id AND rp.permission_id=p.id AND r.company_id IS NULL
 --     AND ((r.name='company-admin' AND p.resource_type IN
 --            ('notification-config','notification-template','notification-delivery-log','notification-audit-log'))
---       OR (r.name IN ('employee','manager','hr','company-admin') AND (p.action,p.resource_type)=('read','notification')));
+--       OR (r.name IN ('employee','manager','hr','company-admin')
+--           AND p.resource_type='notification' AND p.action IN ('read','mark_read','mark_all_read','hide')));
 -- DELETE FROM permissions WHERE (action,resource_type) IN
 --   (('view','notification-config'),('update','notification-config'),('view','notification-template'),
---    ('update','notification-template'),('view','notification-delivery-log'),('view','notification-audit-log'));
+--    ('update','notification-template'),('view','notification-delivery-log'),('view','notification-audit-log'),
+--    ('mark_all_read','notification'),('hide','notification'));  -- mark_read:notification có từ 0005, KHÔNG xoá
 -- DELETE FROM notification_templates WHERE company_id IS NULL AND template_code LIKE '%__IN_APP__vi-VN';
 -- DELETE FROM notification_events   WHERE company_id IS NULL;  -- chỉ khi 0 template/notification tham chiếu
