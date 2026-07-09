@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**188 WO** · có micro-plan: **64/188** · ⬜ 39 chờ · 🔵 2 đang làm · ✅ 145 xong · 🔴 2 chặn
+**188 WO** · có micro-plan: **65/188** · ⬜ 39 chờ · 🔵 1 đang làm · ✅ 147 xong · 🔴 1 chặn
 
 ## Sprint 0
 
@@ -180,12 +180,12 @@
 | `S4-TASK-BE-3` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-2 | BE Task assignment + status workflow FSM (assign/đổi assignee, add/rem |
 | `S4-TASK-BE-4` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-3 | BE Kanban (board + move) + comment/mention + checklist + activity log  |
 | `S4-NOTI-DB-1` | 🔴 | ✅ xong | [📄](S4-NOTI-DB-1.md) | ✅S4-TASK-DB-1 | Schema + migration NOTI (notification_events·notification_templates·no |
-| `S4-NOTI-SEED-1` | 🔴 | 🔵 đang làm | [📄](S4-NOTI-SEED-1.md) | ✅S4-NOTI-DB-1 | Seed notification event catalog (Event code registry §9.5 canonical) + |
-| `S4-NOTI-BE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-NOTI-SEED-1 | BE My-notification APIs (GET /notifications, /dropdown, /unread-count, |
-| `S4-NOTI-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S4-NOTI-SEED-1 | BE Event intake + notification engine (POST /internal/v1/notifications |
+| `S4-NOTI-SEED-1` | 🔴 | ✅ xong | [📄](S4-NOTI-SEED-1.md) | ✅S4-NOTI-DB-1 | Seed notification event catalog (Event code registry §9.5 canonical) + |
+| `S4-NOTI-BE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S4-NOTI-SEED-1 | BE My-notification APIs (GET /notifications, /dropdown, /unread-count, |
+| `S4-NOTI-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S4-NOTI-SEED-1 | BE Event intake + notification engine (POST /internal/v1/notifications |
 | `S4-NOTI-BE-3` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-NOTI-BE-2 | BE Notification admin config (GET events/templates/delivery-logs, PATC |
-| `S4-DASH-DB-1` | 🔴 | 🔴 chặn | — *(chưa)* | ✅S4-NOTI-DB-1 | Schema + migration DASH (dashboard_widgets·dashboard_widget_configs·da |
-| `S4-DASH-SEED-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S4-DASH-DB-1 | Seed widget catalog 7 In-sprint (§11.3) + permission DASH + default co |
+| `S4-DASH-DB-1` | 🔴 | ✅ xong | [📄](S4-DASH-DB-1.md) | ✅S4-NOTI-DB-1 | Schema + migration DASH (dashboard_widgets·dashboard_widget_configs·da |
+| `S4-DASH-SEED-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S4-DASH-DB-1 | Seed widget catalog 7 In-sprint (§11.3) + permission DASH + default co |
 | `S4-DASH-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S4-DASH-SEED-1 | BE Dashboard resolver (GET /dashboard/me, /types, /:type) + widget reg |
 | `S4-DASH-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S4-DASH-BE-1 ⏳S4-TASK-BE-2 ⏳S4-NOTI-BE-1 | BE Widget data services (GET /dashboard/widgets, /widgets/:slug) cho 7 |
 | `S4-INT-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-3 ⏳S4-TASK-BE-4 ⏳S4-NOTI-BE-2 | Tích hợp TASK → NOTI: wiring event producer (outbox) → consumer intake |

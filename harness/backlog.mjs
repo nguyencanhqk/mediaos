@@ -4496,6 +4496,7 @@ export const backlog = [
     done_when: [
       "GET /dashboard/widgets (catalog khả dụng) · GET /dashboard/widgets/:slug (data 1 widget, hỗ trợ refresh=true) cho 7 widget In-sprint: MY_TASKS/TASK_ALERTS (TASK) · NOTIFICATIONS (NOTI) · ATTENDANCE_TODAY/PENDING_LEAVE (ATT/LEAVE đã build) · PROJECT_PROGRESS (TASK) · HR_OVERVIEW (HR)",
       "Widget data ÁP data-scope + permission TRƯỚC khi aggregate (Own/Team/Department/Company); cache TTL ngắn cho widget nặng, cache_key gồm user/scope khi data theo user — KHÔNG dùng chung cache giữa user nếu data Own/Team nhạy cảm",
+      "⚠️ NGHĨA VỤ CHUYỂN TỪ DDL SANG SERVICE (mig 0482 header §29-30 ghi rõ: 'ÉP ở tầng service S4-DASH-BE §9.7 step6, KHÔNG ở DDL'): dashboard_widget_cache CHỈ được ghi dữ liệu ĐÃ MASK + TRONG-SCOPE. DB không có constraint nào chặn việc này ⇒ nếu service ghi thẳng row chưa mask thì rò dữ liệu nhạy cảm qua cache mà không test nào bắt. Int-spec BẮT BUỘC: ghi cache cho user scope Own rồi đọc lại bằng user khác ⇒ KHÔNG thấy field nhạy cảm; và cache_key khác nhau giữa 2 user khác scope.",
       "Module nguồn lỗi → widget trả Degraded/Error, KHÔNG làm sập toàn dashboard; dashboard chỉ trả quick-action metadata (action thật gọi module gốc); last_updated_at khi cache hit",
       "Int-spec RED-trước: widget data đúng scope (employee chỉ thấy task/leave của mình) · cross-tenant deny · degraded khi module nguồn fail (không 500 toàn dashboard) · cache không rò dữ liệu user khác; FULL gate security-reviewer + silent-failure-hunter PASS",
     ],
