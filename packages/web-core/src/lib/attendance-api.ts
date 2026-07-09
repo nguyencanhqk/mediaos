@@ -52,8 +52,10 @@ import {
   type DirectAdjustRequest,
   type AttendanceAdjustmentListResponse,
   type AttendanceAdjustmentRequestDetail,
+  // S3-ATT-EXPORT-1 — CSV export query (filter-only parity với company records list; nguồn = attendance.ts).
+  type AttendanceExportQuery,
 } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch, apiFetchBlob, type ApiBlobResult } from "./api-client";
 import { buildQueryString } from "./api-params";
 
 /**
@@ -314,6 +316,17 @@ export const attendanceApi = {
   /** GET /attendance/reports — tổng hợp công phạm vi Company. Permission: view-company:attendance. */
   getCompanyAttendanceReport: (query: AttendanceReportQuery): Promise<AttendanceReportResponse> =>
     apiFetch(`/attendance/reports${buildQueryString(query)}`, attendanceReportResponseSchema),
+
+  // ── Export CSV bảng công (S3-ATT-EXPORT-1, ATT.ATTENDANCE.EXPORT) ────────────
+
+  /**
+   * GET /attendance/records/export — xuất CSV bảng công (data-scope Own/Team/Company do SERVER áp TRƯỚC
+   * kết xuất; masking location/gps/ip/device by construction; server cap MAX_ROWS → 422 vượt cap, KHÔNG
+   * cắt im lặng). Trả nhị phân qua apiFetchBlob (refresh-on-401 replay) — { blob, filename }.
+   * Permission: export:attendance (sensitive). company_id do SERVER resolve — client KHÔNG forward.
+   */
+  exportCompanyRecords: (query?: AttendanceExportQuery): Promise<ApiBlobResult> =>
+    apiFetchBlob(`/attendance/records/export${buildQueryString(query ?? {})}`),
 
   // ── Audit log ATT (S3-ATT-BE-6, S3-FE-ATT-6) ─────────────────────────────────
 

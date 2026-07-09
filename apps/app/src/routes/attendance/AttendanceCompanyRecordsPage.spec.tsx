@@ -34,6 +34,12 @@ vi.mock("@mediaos/web-core", () => ({
   formatDateTime: (v: string) => v,
 }));
 
+// ExportAttendanceButton có deps web-core riêng (PermissionGate/attendanceApi/mapApiErrorToUi) — stub để
+// spec này tập trung vào gate view-company + state của bảng; hành vi export test riêng ở ExportAttendanceButton.spec.
+vi.mock("./ExportAttendanceButton", () => ({
+  ExportAttendanceButton: () => <div data-testid="export-attendance-button" />,
+}));
+
 vi.mock("@mediaos/ui", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/ui")>();
   return {

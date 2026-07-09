@@ -17,7 +17,7 @@ import * as apiClient from "./api-client";
 
 vi.mock("./api-client", async (importOriginal) => {
   const mod = await importOriginal<typeof apiClient>();
-  return { ...mod, apiFetch: vi.fn() };
+  return { ...mod, apiFetch: vi.fn(), apiFetchBlob: vi.fn() };
 });
 
 function lastCall(): [
@@ -156,6 +156,44 @@ describe("attendanceApi — scoped record endpoints (URL + Zod validator)", () =
     const [url, , opts] = lastCall();
     expect(url).toBe("/attendance/check-out");
     expect(opts?.method).toBe("POST");
+  });
+});
+
+// ── Export CSV (S3-ATT-EXPORT-1) — ranh giới apiFetchBlob (KHÔNG apiFetch) ───────
+describe("attendanceApi — exportCompanyRecords (blob boundary)", () => {
+  beforeEach(() => {
+    vi.mocked(apiClient.apiFetchBlob).mockReset();
+    vi.mocked(apiClient.apiFetchBlob).mockResolvedValue({
+      blob: new Blob(["x"], { type: "text/csv" }),
+      filename: "attendance-records.csv",
+    });
+  });
+
+  it("gọi apiFetchBlob (KHÔNG apiFetch) tới GET /attendance/records/export", async () => {
+    vi.mocked(apiClient.apiFetch).mockClear();
+    await attendanceApi.exportCompanyRecords({ fromDate: "2026-07-01", toDate: "2026-08-01" });
+
+    expect(apiClient.apiFetchBlob).toHaveBeenCalledTimes(1);
+    expect(apiClient.apiFetch).not.toHaveBeenCalled(); // nhị phân → KHÔNG đi qua Zod-parse apiFetch
+    const [url] = vi.mocked(apiClient.apiFetchBlob).mock.calls[0];
+    expect(url.startsWith("/attendance/records/export")).toBe(true);
+    const qs = new URLSearchParams(url.split("?")[1]);
+    expect(qs.get("fromDate")).toBe("2026-07-01");
+    expect(qs.get("toDate")).toBe("2026-08-01");
+  });
+
+  it("KHÔNG forward company_id trong query (SERVER resolve từ auth context)", async () => {
+    await attendanceApi.exportCompanyRecords({
+      departmentId: "11111111-1111-4111-8111-111111111111",
+    });
+    const [url] = vi.mocked(apiClient.apiFetchBlob).mock.calls[0];
+    expect(url).not.toContain("company");
+  });
+
+  it("không filter → path không có query string thừa", async () => {
+    await attendanceApi.exportCompanyRecords();
+    const [url] = vi.mocked(apiClient.apiFetchBlob).mock.calls[0];
+    expect(url).toBe("/attendance/records/export");
   });
 });
 
