@@ -14,3 +14,5 @@ export * from "./profile-change-request";
 export * from "./employee-code-config";
 // S2-HR-BE-6 (additive): employee contracts (hợp đồng lao động) DTOs (DB-03 §7.7).
 export * from "./contracts";
+// S2-HR-EMPFILE-1 (additive): employee file (hồ sơ đính kèm) DTOs (API-03 HR-API-801..805 / DB-08 §8.7).
+export * from "./employee-file";

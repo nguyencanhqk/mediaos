@@ -57,8 +57,24 @@ const STORY_WO_OVERRIDE = {
   3: ["S0-GOV-1"],
   4: ["S0-QA-1"],
   11: ["__shipped:HolidayService đã ship (apps/api/src/foundation/holidays) — ngoài backlog hành"],
+  // ── trace-map bổ sung 2026-07-08: story ĐÃ có WO phủ nhưng src[] dùng mã ISSUE-BOARD/FRONTEND ──
+  36: ["S2-HR-EMPFILE-1", "S2-FE-HR-9"], // file hồ sơ NV (gap-closer audit FE)
+  46: ["S3-ATT-BE-4", "S3-FE-ATT-3"], // gửi YC điều chỉnh công
+  47: ["S3-ATT-BE-4", "S3-FE-ATT-3"], // duyệt/từ chối điều chỉnh công
+  48: ["S3-ATT-BE-4", "S3-FE-ATT-3"], // điều chỉnh công trực tiếp (HR/Admin)
+  49: ["S3-ATT-BE-5", "S3-FE-ATT-4"], // tạo request remote/công tác
+  50: ["S3-ATT-BE-5", "S3-FE-ATT-4"], // duyệt remote/công tác
+  59: ["S3-LEAVE-BE-2", "S3-INT-1"], // hủy/thu hồi đơn nghỉ đã duyệt + ATT sync
+  60: ["S3-LEAVE-BE-5", "S3-FE-LEAVE-4"], // lịch nghỉ cá nhân/team/phòng ban/company
+  80: ["S4-NOTI-BE-1", "S4-FE-NOTI-1"], // danh sách + chi tiết thông báo
+  83: ["S4-NOTI-BE-3"], // cấu hình bật/tắt event + template
+  84: ["S4-NOTI-BE-3"], // delivery log + retry
+  89: ["S4-DASH-BE-1", "S4-FE-DASH-2"], // Admin Dashboard (widget admin-specific = catalog-only defer §11.3)
+  92: ["S4-DASH-BE-2", "S4-INT-2"], // cache + invalidate dashboard widget
   93: ["S0-FE-CORE-1"],
   95: ["S0-FE-API-1", "S1-FE-QUERY-WIRE-1"],
+  97: ["S5-QA-REG-1"], // responsive mobile web P0 (verify qua responsive smoke)
+  101: ["S4-TASK-BE-3"], // TASK↔LEAVE cảnh báo giao việc khi assignee nghỉ phép
 };
 
 // Vite dev port mỗi app (apps/*/vite.config.ts) → link "chạy thử" FE.

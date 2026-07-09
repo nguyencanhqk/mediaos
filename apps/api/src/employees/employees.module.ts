@@ -41,6 +41,12 @@ import { ContractService } from "./contract.service";
 // S2-FND-BE-4 (additive): HR contract file-access resolver — registered into the shared FilePolicyService
 // so contract-linked files (module='HR', entity='contract') no longer fail-closed to 'deny-no-resolver'.
 import { HrContractFileResolver } from "./hr-contract-file.resolver";
+// S2-HR-EMPFILE-1 (additive): employee file (hồ sơ đính kèm) — controller/service/repo + resolver
+// (module='HR', entity='employee_profile') registered into the shared FilePolicyService in onModuleInit.
+import { EmployeeFileController } from "./employee-file.controller";
+import { EmployeeFileRepository } from "./employee-file.repository";
+import { EmployeeFileService } from "./employee-file.service";
+import { EmployeeFileResolver } from "./employee-file.resolver";
 
 @Module({
   imports: [
@@ -68,6 +74,8 @@ import { HrContractFileResolver } from "./hr-contract-file.resolver";
     EmployeeCodeConfigController,
     // S2-HR-BE-6 (additive): employee contracts controller.
     ContractController,
+    // S2-HR-EMPFILE-1 (additive): employee file controller (/hr/employees/:id/files).
+    EmployeeFileController,
   ],
   // PasswordService is stateless (argon2) — provided locally to hash generated login passwords (F7).
   providers: [
@@ -91,6 +99,10 @@ import { HrContractFileResolver } from "./hr-contract-file.resolver";
     ContractRepository,
     // S2-FND-BE-4 (additive): HR contract file-access resolver (registered in onModuleInit below).
     HrContractFileResolver,
+    // S2-HR-EMPFILE-1 (additive): employee file providers + resolver (registered in onModuleInit below).
+    EmployeeFileService,
+    EmployeeFileRepository,
+    EmployeeFileResolver,
     // S2-FND-SEED-2 (additive): HR master-data seeder + self-registering registrar (mirror ATT/LEAVE).
     HrMasterDataSeeder,
     HrSeedRegistrar,
@@ -113,9 +125,14 @@ export class EmployeesModule implements OnModuleInit {
   constructor(
     private readonly filePolicy: FilePolicyService,
     private readonly hrContractFileResolver: HrContractFileResolver,
+    // S2-HR-EMPFILE-1 (additive): employee-file resolver for (HR, employee_profile).
+    private readonly employeeFileResolver: EmployeeFileResolver,
   ) {}
 
   onModuleInit(): void {
     this.filePolicy.registerResolver(this.hrContractFileResolver);
+    // S2-HR-EMPFILE-1 (additive): register (HR, employee_profile) — distinct entity_type from 'contract',
+    // so no duplicate-key clash in FilePolicyService.registerResolver (append-only wiring).
+    this.filePolicy.registerResolver(this.employeeFileResolver);
   }
 }
