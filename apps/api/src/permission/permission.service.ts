@@ -69,6 +69,13 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   "delete:user",
   "restore:user",
   "reset-password:user",
+  // S3-ATT-EXPORT-1 — APPEND-only: FE gate nút "Xuất CSV" chấm công (AttendanceReportsPage/records,
+  // PermissionGate export:attendance). Cặp seed THẬT is_sensitive=true (attendance-permissions.const:55,
+  // mig 0454:42), grant Company CHỈ hr(0011)+company-admin(0001) (mig 0454:124-125). Thiếu allowlist ⇒
+  // getAllowlistedSensitiveCapabilities KHÔNG surface ⇒ nút Export ẨN với CẢ HR/company-admin dù grant thật
+  // tồn tại (bài học CAP-2/USEROPS-1). Enforcement KHÔNG đổi — @RequirePermission('export','attendance')
+  // per-resource vẫn là cổng THẬT (data-scope Own/Team/Company áp TRƯỚC kết xuất). Chỉ mở CỜ HIỂN THỊ.
+  "export:attendance",
 ]);
 
 @Injectable()
