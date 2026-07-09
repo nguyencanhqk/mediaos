@@ -36,6 +36,7 @@ import {
   SYSTEM_HEALTH_ROUTE_META,
   SYSTEM_RETENTION_ROUTE_META,
   SYSTEM_FILE_ACCESS_LOGS_ROUTE_META,
+  SYSTEM_SETTINGS_ROUTE_META,
 } from "@/routes/system/foundation/constants";
 
 // ---------------------------------------------------------------------------
@@ -472,10 +473,6 @@ describe("S2-FE-FND-7 — 4 System sidebar entries (registry thật)", () => {
     );
   });
 
-  it("KHÔNG có entry /system/settings (chờ WO BE system-settings admin)", () => {
-    expect(SYSTEM_SIDEBAR.find((i) => i.path === "/system/settings")).toBeUndefined();
-  });
-
   for (const { key, meta } of NEW_ENTRIES) {
     const requiredPairs = meta.requiredAnyPermissions ?? [];
 
@@ -499,6 +496,52 @@ describe("S2-FE-FND-7 — 4 System sidebar entries (registry thật)", () => {
       expect(filtered.find((i) => i.sidebarKey === key)).toBeUndefined();
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// S2-FE-FND-8 — /system/settings sidebar entry (System Settings admin, thay placeholder DEFER). Trước đây
+// KHÔNG có entry (chờ BE); BE đã ship S2-FND-BE-8 nên tách entry riêng. Gate DUY NHẤT
+// FOUNDATION.SETTING.SYSTEM_MANAGE (system-manage:foundation-setting, is_sensitive=TRUE) — CÙNG cặp cho
+// route-meta lẫn sidebar (chống pair-drift, cùng pattern FND-7). company-admin thường thiếu cặp này vẫn
+// ẨN entry (per-entry deny) — ĐÚNG thiết kế (chỉ per-user cấp tường minh), không phải bug.
+// ---------------------------------------------------------------------------
+
+describe("S2-FE-FND-8 — /system/settings sidebar entry (registry thật)", () => {
+  const foundationActive = makeSession({
+    modules: [{ moduleCode: "FOUNDATION", status: "active" }],
+  });
+  const requiredPairs = SYSTEM_SETTINGS_ROUTE_META.requiredAnyPermissions ?? [];
+
+  it("entry tồn tại trong SYSTEM_SIDEBAR + sidebar pair === route-meta pair", () => {
+    const entry = SYSTEM_SIDEBAR.find((i) => i.sidebarKey === "system.settings");
+    expect(entry, "sidebar entry system.settings phải tồn tại").toBeDefined();
+    expect(entry?.requiredAnyPermissions).toEqual(
+      SYSTEM_SETTINGS_ROUTE_META.requiredAnyPermissions,
+    );
+    expect(entry?.path).toBe("/system/settings");
+  });
+
+  it("gate = ĐÚNG FOUNDATION.SETTING.SYSTEM_MANAGE (KHÔNG dùng FOUNDATION.SETTING.VIEW của company-settings)", () => {
+    expect(requiredPairs).toEqual(["FOUNDATION.SETTING.SYSTEM_MANAGE"]);
+  });
+
+  it("persona CÓ system-manage:foundation-setting → hiện entry", () => {
+    const c = createPermissionChecker(makePerms([requiredPairs[0]]));
+    const filtered = filterSidebarItems(SYSTEM_SIDEBAR, c, foundationActive);
+    expect(filtered.find((i) => i.sidebarKey === "system.settings")).toBeDefined();
+  });
+
+  it("persona chỉ có FOUNDATION.SETTING.VIEW (company-settings pair) → ẨN entry (per-entry deny, khác cặp)", () => {
+    const c = createPermissionChecker(makePerms(["FOUNDATION.SETTING.VIEW"]));
+    const filtered = filterSidebarItems(SYSTEM_SIDEBAR, c, foundationActive);
+    expect(filtered.find((i) => i.sidebarKey === "system.settings")).toBeUndefined();
+  });
+
+  it("persona rỗng quyền → ẨN entry", () => {
+    const c = createPermissionChecker(makePerms([]));
+    const filtered = filterSidebarItems(SYSTEM_SIDEBAR, c, foundationActive);
+    expect(filtered.find((i) => i.sidebarKey === "system.settings")).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------

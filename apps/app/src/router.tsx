@@ -224,6 +224,7 @@ import {
   SYSTEM_HEALTH_ROUTE_META,
   SYSTEM_RETENTION_ROUTE_META,
   SYSTEM_FILE_ACCESS_LOGS_ROUTE_META,
+  SYSTEM_SETTINGS_ROUTE_META,
 } from "@/routes/system/foundation/constants";
 // System / Roles + Permissions admin — S2-FE-AUTH-4 (lane FE batch C)
 import { RoleFormPage } from "@/routes/system/roles/RoleFormPage";
@@ -1026,17 +1027,10 @@ const systemCompanySettingsRoute = createRoute({
     buildModuleRouteContent(systemCompanySettingsMeta, "FOUNDATION", <CompanySettingsPage />),
 });
 
-// System settings (SYSTEM_MANAGE) — DEFER: chưa có BE endpoint. Gate tạm bằng cặp seed thật
-// FOUNDATION.SETTING.VIEW (admin reach placeholder); KHÔNG nút mutation chết trong page.
-const systemSettingsMeta: RouteMeta = {
-  routeKey: "system.settings",
-  path: FOUNDATION_PATH.SYSTEM_SETTINGS,
-  layout: "MODULE_WORKSPACE",
-  moduleCode: "FOUNDATION",
-  screenCode: FOUNDATION_SCREEN.SYSTEM_SETTINGS,
-  titleKey: "routeTitle.systemSettings",
-  requiredAnyPermissions: ["FOUNDATION.SETTING.VIEW"],
-};
+// System settings (S2-FE-FND-8, UI-SYSTEM-SCREEN-004) — gate DUY NHẤT FOUNDATION.SETTING.SYSTEM_MANAGE
+// (→ system-manage:foundation-setting, cặp seed thật mig 0435:343, is_sensitive=TRUE). Meta CHUYỂN về
+// foundation/constants (nguồn CHUNG với sidebar entry — chống pair-drift, cùng pattern S2-FE-FND-7).
+const systemSettingsMeta: RouteMeta = SYSTEM_SETTINGS_ROUTE_META;
 const systemSettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: FOUNDATION_PATH.SYSTEM_SETTINGS,

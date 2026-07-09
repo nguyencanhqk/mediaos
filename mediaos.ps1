@@ -320,6 +320,7 @@ function Import-DevOnlineEnv {
 
 # Giải phóng cổng dev-online (API 3200 + Vite 5273/5275/5278) → re-run sạch, khỏi phải đóng cửa sổ tay.
 function Stop-DevOnline {
+  # 1) Kill theo cổng LISTENING — bắt tiến trình API/vite đang phục vụ.
   foreach ($port in @(3200, 5273, 5275, 5278)) {
     $procIds = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
       Select-Object -ExpandProperty OwningProcess -Unique
@@ -327,6 +328,18 @@ function Stop-DevOnline {
       if ($procId -and $procId -ne 0) { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue }
     }
   }
+  # 2) Dọn tiến trình dev-online MỒ CÔI KHÔNG còn listen: `nest start --watch` mà app con đã chết vẫn
+  #    sống + giữ mở dev\logs\api-online.log ⇒ lần chạy sau `>` không truncate được log → api-online chết
+  #    ngay, chỉ 3 SPA lên. Pass (1) theo cổng bỏ sót nó (không listen). Chỉ khớp node.exe của CHÍNH repo
+  #    này (apps\{api,app,auth,console}) + chữ ký watch/vite.
+  #    AN TOÀN với PROD: PROD API = `node dist/main` (KHÔNG có 'nest'/'--watch'); PROD web = Cloudflare Pages
+  #    (không có tiến trình node) ⇒ không khớp chữ ký, không bị kill.
+  $sig = [regex]::Escape($Root) + '\\apps\\(api|app|auth|console)\b'
+  Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -and ($_.CommandLine -match $sig) -and ($_.CommandLine -match '\bnest\b|--watch|\bvite\b') } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  # Cho OS nhả handle log + cổng trước khi khởi động lại (tránh sharing-violation lúc truncate log).
+  Start-Sleep -Milliseconds 600
 }
 
 # Rebuild package dùng chung (FE app consume DIST của chúng) → đổi code contracts/ui/web-core mới hiện online.

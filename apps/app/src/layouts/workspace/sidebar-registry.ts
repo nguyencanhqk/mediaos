@@ -24,6 +24,7 @@ import {
   SYSTEM_HEALTH_ROUTE_META,
   SYSTEM_RETENTION_ROUTE_META,
   SYSTEM_FILE_ACCESS_LOGS_ROUTE_META,
+  SYSTEM_SETTINGS_ROUTE_META,
   FOUNDATION_PATH,
 } from "@/routes/system/foundation/constants";
 import {
@@ -715,10 +716,19 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 45,
     requiredAnyPermissions: SYSTEM_FILE_ACCESS_LOGS_ROUTE_META.requiredAnyPermissions,
   },
-  // NOTE: KHÔNG thêm entry /system/settings ở đây. Route /system/settings ĐÃ wired (S2-FE-FND-1, gate
-  // FOUNDATION.SETTING.VIEW) nhưng đọc cấu hình qua POST /foundation/settings/resolve — CHƯA có màn
-  // "System Settings admin" riêng (system-wide, tách khỏi company-settings). Entry sidebar cho nó hiện
-  // gộp vào "Cấu hình công ty" (system.company-settings). Tách entry khi có WO BE cho system-settings admin.
+  // S2-FE-FND-8 — /system/settings (System Settings admin, UI-SYSTEM-SCREEN-004). Trước đây gộp vào
+  // "Cấu hình công ty" (system.company-settings) chờ BE endpoint riêng — BE đã ship (S2-FND-BE-8), tách
+  // entry riêng. requiredAnyPermissions dùng CHUNG route-meta (chống pair-drift, giống 4 entry S2-FE-FND-7).
+  {
+    sidebarKey: "system.settings",
+    moduleCode: "FOUNDATION",
+    label: "Cấu hình hệ thống",
+    path: FOUNDATION_PATH.SYSTEM_SETTINGS,
+    icon: "shield-alert",
+    group: "admin",
+    order: 17,
+    requiredAnyPermissions: SYSTEM_SETTINGS_ROUTE_META.requiredAnyPermissions,
+  },
 ];
 
 // ---------------------------------------------------------------------------

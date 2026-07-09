@@ -4035,11 +4035,44 @@ export const backlog = [
     ],
   },
   {
+    id: "S4-TASK-RECON-1",
+    module: "TASK",
+    layer: "DB",
+    title:
+      "Đối soát pair-drift + grant tồn dư TASK: ánh xạ cặp legacy đang enforce → canonical DB-06 §12.1, gỡ grant ngoài ma trận §6 (chạy TRƯỚC S4-TASK-SEED-1)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/tasks/**",
+      "apps/api/src/foundation/seed/**",
+      "apps/api/migrations/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S4-TASK-RECON-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S4-TASK-DB-1"],
+    src: [
+      "docs/DB/DB-06 §12.1 (23 mã TASK canonical)",
+      "docs/permission-matrix-spec.md §6",
+      "apps/api/migrations/0005_permissions.sql (seed gốc, L225/L251/L313-400)",
+      "apps/api/src/tasks/tasks.controller.ts:206 (legacy comment:comment)",
+    ],
+    plan: "docs/plans/S4-TASK-RECON-1.md",
+    done_when: [
+      "OWNER CHỐT 2026-07-09 (plan-block S4-TASK-SEED-1 → tách WO reconcile riêng): WO này CHỈ đối soát cặp + grant. KHÔNG seed catalog mới, KHÔNG đụng is_sensitive — hai việc đó thuộc S4-TASK-SEED-1.",
+      "Quét HẾT @RequirePermission trong apps/api/src/tasks (không bỏ sót route nào) → bảng ánh xạ tường minh trong plan: cặp legacy đang enforce ⇒ cặp canonical DB-06 §12.1. ĐÃ XÁC MINH: ('comment','comment') @tasks.controller.ts:206 ⇒ ('comment','task'). Các cặp legacy khác ở 0005 (('manage','project') · ('assign','project') · ('manage','task') · ('submit','task')) phải ĐỌC CODE xác định đích canonical, KHÔNG đoán từ tên.",
+      "Thứ tự migration AN TOÀN (không mở cửa sổ 403 cho route đang chạy): (1) seed cặp canonical còn thiếu ON CONFLICT DO NOTHING → (2) grant cặp canonical cho role theo §6 → (3) đổi @RequirePermission sang cặp canonical → (4) revoke/park grant legacy. KHÔNG đảo thứ tự.",
+      "Liệt kê + gỡ grant TASK/PROJECT tồn dư ngoài ma trận §6 cho 4 role canonical (0005 L313-400); int-spec ĐẾM tổng grant TASK của mỗi role đúng kỳ vọng (không dư, không thiếu)",
+      "Int-spec RED-trước: route comment task VẪN 2xx cho role được phép sau khi đổi cặp + 403 cho role không phép; employee DENY create/update/delete/close/archive:project; hr DENY close/delete/archive/manage-member:project và delete:task",
+      "Gate int-spec = hasDb && LANE_DB (chỉ .env → hasDb=true = đỏ-giả). FULL gate security-reviewer + database-reviewer PASS",
+    ],
+  },
+  {
     id: "S4-TASK-SEED-1",
     module: "TASK",
     layer: "DB",
     title:
-      "Seed permission TASK (project·member·task·assign·status·kanban·comment·checklist·file·report) + role-permission mapping (Employee/Manager/HR/Admin/Super Admin) idempotent",
+      "Seed permission TASK (23 mã canonical DB-06 §12.1) + role-permission mapping (Employee/Manager/HR/Admin/Super Admin) idempotent",
     zone: "red",
     status: "todo",
     paths: [
@@ -4048,7 +4081,7 @@ export const backlog = [
       "docs/plans/S4-TASK-SEED-1.md",
     ],
     skills: ["code-review"],
-    depends_on: ["S4-TASK-DB-1"],
+    depends_on: ["S4-TASK-DB-1", "S4-TASK-RECON-1"],
     src: [
       "ISSUE-BOARD-01 §18 (TASK)",
       "IMPLEMENTATION-07 §8.4",
@@ -4057,10 +4090,13 @@ export const backlog = [
     ],
     plan: "docs/plans/S4-TASK-SEED-1.md",
     done_when: [
-      "Migration seed catalog permission TASK theo cặp (action,resourceType) chuẩn SPEC-06/permission-matrix (project.create/read/update/close/delete · member.add/update/remove · task.create/read/update/delete · assign · status · kanban · comment · checklist · file · report); ON CONFLICT DO NOTHING (append-only hot-file)",
+      "OWNER CHỐT 2026-07-09 — CATALOG = ĐÚNG 23 mã canonical DB-06 §12.1, KHÔNG hơn: TASK.PROJECT.{VIEW,CREATE,UPDATE,DELETE,CLOSE,ARCHIVE,MANAGE_MEMBER,VIEW_REPORT} · TASK.TASK.{VIEW,CREATE,UPDATE,DELETE,ASSIGN,COMMENT,WATCH,EXPORT,VIEW_KANBAN,UPDATE_STATUS,UPDATE_PRIORITY,UPDATE_DEADLINE,FILE_UPLOAD,FILE_DELETE} · TASK.AUDIT_LOG.VIEW. BỎ cặp 'checklist' (KHÔNG có trong §12.1 — thao tác checklist gate bằng update:task). docs/DB là chuẩn, KHÔNG phải plan cũ. Migration đánh số nối tiếp head SAU S4-TASK-RECON-1; catalog dùng ON CONFLICT DO NOTHING.",
+      "OWNER CHỐT 2026-07-09 — is_sensitive=TRUE cho: delete/close/archive/manage-member/view-report:project + delete/export:task + view:task-audit-log. Còn lại false. ⚠️ ('delete','project') [0005 L225] và ('delete','task') [0005 L251] ĐÃ tồn tại is_sensitive=false ⇒ ON CONFLICT DO NOTHING KHÔNG nâng được. BẮT BUỘC bước idempotent riêng: UPDATE permissions SET is_sensitive=true WHERE (action,resource_type) IN (...) — mirror mig 0476 (đã nâng delete:user false→true).",
       "Grant role-permission theo data_scope PER-(permission,role) (bài học §13): Employee=Own/membership · Manager=Team · HR/Admin=Company; company-admin đủ bộ; resolve theo thuộc tính + verify fail-LOUD (mirror mig 0466/0476)",
       "Nếu đổi data_scope trên grant đã tồn tại → DELETE+INSERT (UNIQUE loại data_scope); KHÔNG re-seed module active (đã active ở S0-FND-SEED-1)",
-      "Int-spec: admin thấy đủ cặp TASK qua /auth/me; employee KHÔNG có cặp Manager-scope; SENSITIVE_CAPABILITY_ALLOWLIST cập nhật nếu có cặp sensitive (bài học CAP-2); seed chạy lại idempotent; FULL gate security-reviewer + database-reviewer PASS",
+      "Deny-path RED-trước (KHÔNG chỉ assert 'employee 0 cặp manager-scope' — over-grant Own-scope lọt lưới assert đó): employee can(create|update|delete|close|archive,'project')=DENY; hr can(close|delete|archive|manage-member,'project')=DENY và can('delete','task')=DENY; admin thấy đủ 23 cặp qua /auth/me",
+      "Cặp sensitive TASK sẽ KHÔNG surface qua getCapabilities nếu thiếu SENSITIVE_CAPABILITY_ALLOWLIST ⇒ nút FE ẩn với cả admin (bài học CAP-2/USEROPS-1/EXPORT-1). WO này PHẢI append allowlist các cặp sensitive TASK, HOẶC ghi debt tường minh + nêu đích danh S4-FE-TASK-1/2/3 phải append.",
+      "Gate int-spec = hasDb && LANE_DB (chỉ .env → hasDb=true = đỏ-giả); seed chạy lại idempotent; FULL gate security-reviewer + database-reviewer PASS",
     ],
   },
   {

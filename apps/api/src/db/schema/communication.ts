@@ -1,6 +1,7 @@
 import {
   bigint,
   boolean,
+  check,
   index,
   jsonb,
   pgTable,
@@ -8,6 +9,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  varchar,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { currentCompanyDefault } from "./_helpers";
@@ -48,6 +50,42 @@ export const notifications = pgTable(
     body: text("body").notNull(),
     isRead: boolean("is_read").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // ── S4-NOTI-DB-1 (DB-07 §7.3, mig 0479) ALTER-ADD additive — MỌI cột NULLABLE, GIỮ cột legacy trên.
+    // FK event_id/template_id/recipient_employee_id = uuid TRẦN (FK ép ở migration 0479) tránh import vòng
+    // communication ↔ noti/employees. recipient_user_id/*_by → users (đã import).
+    recipientUserId: uuid("recipient_user_id").references(() => users.id, { onDelete: "cascade" }),
+    recipientEmployeeId: uuid("recipient_employee_id"),
+    eventId: uuid("event_id"),
+    templateId: uuid("template_id"),
+    moduleCode: varchar("module_code", { length: 50 }),
+    eventCode: varchar("event_code", { length: 100 }),
+    notificationType: varchar("notification_type", { length: 50 }),
+    priority: varchar("priority", { length: 50 }),
+    status: varchar("status", { length: 50 }),
+    title: varchar("title", { length: 255 }),
+    shortBody: varchar("short_body", { length: 500 }),
+    sourceEntityType: varchar("source_entity_type", { length: 100 }),
+    sourceEntityId: uuid("source_entity_id"),
+    sourceEntityCode: varchar("source_entity_code", { length: 100 }),
+    targetModule: varchar("target_module", { length: 50 }),
+    targetType: varchar("target_type", { length: 100 }),
+    targetId: uuid("target_id"),
+    targetUrl: varchar("target_url", { length: 500 }),
+    payload: jsonb("payload").$type<Record<string, unknown>>(),
+    dedupeKey: varchar("dedupe_key", { length: 255 }),
+    batchKey: varchar("batch_key", { length: 255 }),
+    correlationId: varchar("correlation_id", { length: 100 }),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    hiddenAt: timestamp("hidden_at", { withTimezone: true }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedBy: uuid("deleted_by").references(() => users.id, { onDelete: "set null" }),
   },
   (t) => [
     index("notifications_company_id_idx").on(t.companyId),
@@ -57,6 +95,41 @@ export const notifications = pgTable(
     // index lets the planner skip the sort and avoids the company_id heap filter.
     // (countUnread stays on notifications_user_unread_idx — already optimal.)
     index("notifications_company_user_created_idx").on(t.companyId, t.userId, t.createdAt.desc()),
+    // ── S4-NOTI-DB-1 (mig 0479) NOTI index/uq trên cột mới — parity migration ──
+    index("idx_notifications_unread")
+      .on(t.companyId, t.recipientUserId)
+      .where(sql`status = 'Unread'`),
+    index("idx_notifications_recipient_list")
+      .on(t.companyId, t.recipientUserId, t.createdAt.desc())
+      .where(sql`deleted_at IS NULL`),
+    index("idx_notifications_recipient_status_created")
+      .on(t.companyId, t.recipientUserId, t.status, t.createdAt.desc())
+      .where(sql`deleted_at IS NULL`),
+    index("idx_notifications_source_entity")
+      .on(t.companyId, t.sourceEntityType, t.sourceEntityId)
+      .where(sql`deleted_at IS NULL`),
+    index("idx_notifications_batch_key")
+      .on(t.companyId, t.batchKey)
+      .where(sql`batch_key IS NOT NULL AND deleted_at IS NULL`),
+    uniqueIndex("uq_notifications_dedupe_active")
+      .on(t.companyId, t.recipientUserId, t.eventCode, t.dedupeKey)
+      .where(sql`dedupe_key IS NOT NULL AND deleted_at IS NULL`),
+    check(
+      "chk_notifications_status",
+      sql`status IS NULL OR status IN ('Unread','Read','Hidden','Archived','Deleted','Failed')`,
+    ),
+    check(
+      "chk_notifications_module_code",
+      sql`module_code IS NULL OR module_code IN ('AUTH','HR','ATT','LEAVE','TASK','DASH','NOTI','SYSTEM')`,
+    ),
+    check(
+      "chk_notifications_notification_type",
+      sql`notification_type IS NULL OR notification_type IN ('System','Account','HR','Attendance','Leave','Task','Project','Approval','Reminder','Warning','Error')`,
+    ),
+    check(
+      "chk_notifications_priority",
+      sql`priority IS NULL OR priority IN ('Low','Normal','High','Urgent','Critical')`,
+    ),
   ],
 );
 
