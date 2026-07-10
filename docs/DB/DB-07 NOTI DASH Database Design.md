@@ -2169,6 +2169,27 @@ Ví dụ template tiếng Việt:
 | Admin | Cảnh báo cấu hình | `CONFIG_WARNINGS` | 40 |
 | Admin | Log quan trọng gần đây | `SYSTEM_LOGS` | 50 |
 
+> **⚠ DRIFT — S4-DASH-SEED-1 (owner chốt 2026-07-10).** Migration `0484` **KHÔNG** seed đủ bảng trên. Nó seed
+> **7 widget in-sprint** (IMPLEMENTATION-07 §11.3): `ATTENDANCE_TODAY`, `MY_TASKS`, `TASK_ALERTS`,
+> `NOTIFICATIONS`, `PENDING_LEAVE`, `PROJECT_PROGRESS`, `HR_OVERVIEW`.
+>
+> Lý do: 11 widget còn lại (`LEAVE_BALANCE`, `TEAM_TASKS_TODAY`, `LEAVE_CALENDAR`, `ATTENDANCE_ALERTS`,
+> `NEW_EMPLOYEES`, `CONTRACT_EXPIRING`, `USER_SUMMARY`, `EMPLOYEE_SUMMARY`, `MODULE_STATUS`,
+> `CONFIG_WARNINGS`, `SYSTEM_LOGS`) **chưa có data source** ở sprint này. Seed chúng vào catalog sẽ tạo widget
+> luôn ở trạng thái degraded, và default config trỏ vào widget không có service.
+>
+> **Mâu thuẫn nội bộ của chính DB-07** (cần reconcile ở WO doc riêng): §8.5 chỉ liệt **12** widget có
+> `required_permission_code`. Năm widget Admin ở bảng trên (`USER_SUMMARY`, `EMPLOYEE_SUMMARY`,
+> `MODULE_STATUS`, `CONFIG_WARNINGS`, `SYSTEM_LOGS`) **không có** trong §8.5 — chúng chỉ có permission code ở
+> `API-10 PERMISSION MATRIX`.
+>
+> Default config thực tế seed = **(bảng này ∩ 7 widget đã seed) ∪ {`NOTIFICATIONS` cho mọi dashboard type}**.
+> Vế hai theo IMPLEMENTATION-07 §11.3 (cột Dashboard của `NOTIFICATIONS` = "All"). Hệ quả: dashboard **Admin
+> chỉ có 1 widget** cho tới khi seed nốt catalog. `PROJECT_PROGRESS` nằm trong catalog nhưng **không** có
+> default config nào, vì bảng trên không đặt nó vào dashboard nào.
+>
+> Bù đủ ở WO `S4-DASH-CATALOG-2` (chưa mở). Chi tiết: `docs/plans/S4-DASH-SEED-1.md` §2.5.
+
 ---
 
 ## 15. Query pattern quan trọng
