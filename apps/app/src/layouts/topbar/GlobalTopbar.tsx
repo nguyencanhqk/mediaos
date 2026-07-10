@@ -13,14 +13,14 @@
 import * as React from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { Grid3x3, Menu, Bell } from "lucide-react";
-import { useCan } from "@mediaos/web-core";
+import { Grid3x3, Menu } from "lucide-react";
 import { cn } from "@mediaos/ui";
 import { useLayoutStore } from "@/stores/layout.store";
 import { useCurrentRouteMeta } from "@/hooks/use-current-route-meta";
 import { AvatarMenu } from "./AvatarMenu";
 import { DirtyFormConfirmDialog } from "../shared/DirtyFormConfirmDialog";
 import { DynamicIcon } from "../workspace/DynamicIcon";
+import { NotificationBadge } from "@/components/notifications/NotificationBadge";
 import { APP_REGISTRY } from "@mediaos/web-core";
 
 // Module accent colors mapped from registry icon
@@ -67,7 +67,6 @@ export function GlobalTopbar() {
   const [showDirtyConfirm, setShowDirtyConfirm] = React.useState(false);
   const [pendingNav, setPendingNav] = React.useState<string | null>(null);
   const navigate = useNavigate();
-  const canViewNoti = useCan("VIEW_OWN", "NOTIFICATION");
 
   const handleHomeClick = (e: React.MouseEvent) => {
     if (dirtyFormState) {
@@ -104,7 +103,9 @@ export function GlobalTopbar() {
           className="flex items-center gap-2 rounded-lg px-2 py-1 text-slate-100 transition-colors hover:bg-white/10"
           aria-label="Về trang chủ"
         >
-          <span className="brand-gradient-text font-display text-base font-bold">FUNTIME MEDIA</span>
+          <span className="brand-gradient-text font-display text-base font-bold">
+            FUNTIME MEDIA
+          </span>
         </Link>
 
         {/* Divider */}
@@ -129,16 +130,8 @@ export function GlobalTopbar() {
             <span className="hidden text-sm md:inline">{t("nav:overview")}</span>
           </button>
 
-          {/* Notification badge — chỉ render khi có quyền */}
-          {canViewNoti && (
-            <a
-              href="/notifications"
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-200 transition-colors hover:bg-white/10"
-              aria-label="Thông báo"
-            >
-              <Bell className="h-4.5 w-4.5" />
-            </a>
-          )}
+          {/* Notification badge — tự gate read:notification (NOTI_ENGINE_PAIRS.READ), tự ẩn khi thiếu quyền */}
+          <NotificationBadge />
 
           <div className="mx-1 hidden h-5 w-px bg-white/20 sm:block" />
 
