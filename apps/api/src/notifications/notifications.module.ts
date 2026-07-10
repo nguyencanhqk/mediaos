@@ -28,11 +28,21 @@ import { NotificationDeliveryLogRepository } from "./notification-delivery-log.r
 import { NotificationRecipientResolverService } from "./notification-recipient-resolver.service";
 import { NotificationRendererService } from "./notification-renderer.service";
 import { NotificationDedupeService } from "./notification-dedupe.service";
+// S4-NOTI-BE-3 (additive): admin config READ-ONLY (GET events/templates/delivery-logs — xem
+// notification-admin.controller.ts header vì sao KHÔNG có PATCH ở vòng này) + reminder job TASK_DUE_SOON/
+// TASK_OVERDUE (@SystemJobHandler, gom bởi SchedulerModule qua DiscoveryService — KHÔNG cần
+// SchedulerModule import module này vì NotificationsModule đã ở AppModule root, xem app.module.ts).
+import { NotificationAdminController } from "./notification-admin.controller";
+import { TaskReminderJobHandler } from "./task-reminder.job-handler";
 
 @Module({
   imports: [DatabaseModule, EventsModule, RealtimeEmitterModule, PermissionModule],
   controllers: [
     NotificationsController,
+    // NotificationAdminController TRƯỚC MyNotificationsController: route tĩnh 1-segment "events"/
+    // "delivery-logs" sẽ bị MyNotificationsController.@Get(':id') (wildcard 1-segment) nuốt nếu đăng ký
+    // sau (Express khớp theo THỨ TỰ đăng ký — xem header notification-admin.controller.ts).
+    NotificationAdminController,
     MyNotificationsController,
     InternalNotificationsController,
   ],
@@ -51,6 +61,8 @@ import { NotificationDedupeService } from "./notification-dedupe.service";
     NotificationRecipientResolverService,
     NotificationRendererService,
     NotificationDedupeService,
+    // S4-NOTI-BE-3 (additive): reminder job handler (đọc tasks + gọi engine.intake in-process).
+    TaskReminderJobHandler,
   ],
   // Export engine cho S4-INT-1 (outbox consumer gọi intake() in-process).
   exports: [NotificationsService, DeviceTokenService, NotificationEngineService],

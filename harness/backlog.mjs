@@ -4399,6 +4399,29 @@ export const backlog = [
       "DTO contracts dual-build; job chạy lại an toàn (dedupe theo entity+ngày)",
       "Int-spec: employee không config được (403) · job phát đúng recipient · không gửi trùng; check.sh xanh + LIGHT gate",
     ],
+    // PHIÊN 2026-07-10 (lane notibe3) — SHIP MỘT PHẦN, CÒN LẠI BLOCKED (needs_human):
+    //   Đã xong: (1) CAP-2 fix — 6 cặp NOTI config APPEND vào SENSITIVE_CAPABILITY_ALLOWLIST
+    //   (permission.service.ts) + test /auth/me (auth-me-capabilities.int.spec.ts, describe S4-NOTI-BE-3).
+    //   (2) GET /notifications/events (list, filter module_code/event_code/enabled/search) · GET
+    //   /notifications/templates/:id (chi tiết) · GET /notifications/delivery-logs (list) —
+    //   notification-admin.controller.ts, @RequirePermission đúng 3/6 cặp view (config/template/
+    //   delivery-log). (3) Reminder job TASK_DUE_SOON/TASK_OVERDUE — task-reminder.job-handler.ts
+    //   (@SystemJobHandler, quét tasks task_type='office'), dedupe idempotent qua DEFAULT_DEDUPE
+    //   'DedupeKey' (notification-dedupe.const.ts) — dedupeKey="<taskId>:<ngày UTC>". Test:
+    //   notification-admin-config.int-spec.ts + task-reminder-job.int-spec.ts (RED-trước xác nhận).
+    //
+    //   BLOCKED (KHÔNG làm được trong lane này — cấm tạo migration): PATCH /notifications/events/:id
+    //   (bật/tắt event) + PATCH /notifications/templates/:id (sửa template). Ghi company-override đòi
+    //   GRANT INSERT,UPDATE MỚI trên notification_events/notification_templates cho mediaos_app — hiện
+    //   CHỈ có GRANT SELECT (migration 0479/0481/0482, comment sẵn "write company-override →
+    //   S4-NOTI-BE-3"). Đây là DDL (GRANT), không biểu diễn được bằng code app — cần 1 migration nối
+    //   tiếp head (band kế 0486+) TRƯỚC khi 1 lane BE khác build 2 route PATCH này. update:notification-
+    //   template cũng cần validate biến cấm (password/salary/token/…) theo API-07 §14.3 business rule #6
+    //   khi implement PATCH thật.
+    //   THỨ TỰ ĐÚNG: (a) migration nhỏ GRANT INSERT,UPDATE ON notification_events, notification_templates
+    //   TO mediaos_app (KHÔNG đổi RLS — policy nullable-tenant 0479 đã cho WITH CHECK company_id=GUC) →
+    //   (b) WO PATCH kế thừa notification-admin.controller.ts (đã có scaffold GET + tuple pin) thêm 2 route
+    //   PATCH + audit (object_type 'notification' tái dùng, KHÔNG cần CHECK mới).
   },
   {
     id: "S4-DASH-DB-1",

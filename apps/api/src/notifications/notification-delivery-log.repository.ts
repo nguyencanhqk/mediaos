@@ -1,7 +1,24 @@
 import { Injectable } from "@nestjs/common";
-import { sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { notificationDeliveryLogs, type NotificationDeliveryLog } from "../db/schema/noti";
+
+/** Bộ lọc GET /notifications/delivery-logs (NOTI-API-401, API-07 §15.1). */
+export interface DeliveryLogListFilter {
+  notificationId?: string;
+  recipientUserId?: string;
+  channel?: string;
+  deliveryStatus?: string;
+  createdFrom?: Date;
+  createdTo?: Date;
+}
+
+/** `and(...)` với điều kiện cụ thể (company_id luôn có) luôn trả SQL — throw thay vì rơi 0-row âm thầm. */
+function mustAnd(...conds: SQL[]): SQL {
+  const combined = and(...conds);
+  if (!combined) throw new Error("notification-delivery-log.repository: and() trả undefined");
+  return combined;
+}
 
 /** 3 trạng thái TERMINAL app role được phép ghi — KHÔNG bao giờ 'Pending'/'Delivered'/'Cancelled' ở đây
  * (những trạng thái đó thuộc luồng worker retry ngoài phạm vi S4-NOTI-BE-2). */
@@ -70,5 +87,48 @@ export class NotificationDeliveryLogRepository {
       throw new Error("NotificationDeliveryLogRepository.insertLog: INSERT không trả về hàng nào");
     }
     return row;
+  }
+
+  /**
+   * GET /notifications/delivery-logs (NOTI-API-401, S4-NOTI-BE-3) — CHỈ ĐỌC (SELECT, đã có GRANT 0479).
+   * KHÔNG vi phạm append-only (BẤT BIẾN #2): 2 method dưới đây KHÔNG ghi. company_id literal-GUC (bảng
+   * KHÔNG nullable-tenant, khác notification_events/templates) — filter tường minh (defense-in-depth).
+   */
+  private listWhere(companyId: string, filter: DeliveryLogListFilter): SQL {
+    const conds: SQL[] = [eq(notificationDeliveryLogs.companyId, companyId)];
+    if (filter.notificationId)
+      conds.push(eq(notificationDeliveryLogs.notificationId, filter.notificationId));
+    if (filter.recipientUserId)
+      conds.push(eq(notificationDeliveryLogs.recipientUserId, filter.recipientUserId));
+    if (filter.channel) conds.push(eq(notificationDeliveryLogs.channel, filter.channel));
+    if (filter.deliveryStatus)
+      conds.push(eq(notificationDeliveryLogs.deliveryStatus, filter.deliveryStatus));
+    if (filter.createdFrom) conds.push(gte(notificationDeliveryLogs.createdAt, filter.createdFrom));
+    if (filter.createdTo) conds.push(lte(notificationDeliveryLogs.createdAt, filter.createdTo));
+    return mustAnd(...conds);
+  }
+
+  async list(
+    tx: TenantTx,
+    companyId: string,
+    filter: DeliveryLogListFilter,
+    limit: number,
+    offset: number,
+  ): Promise<NotificationDeliveryLog[]> {
+    return tx
+      .select()
+      .from(notificationDeliveryLogs)
+      .where(this.listWhere(companyId, filter))
+      .orderBy(desc(notificationDeliveryLogs.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async count(tx: TenantTx, companyId: string, filter: DeliveryLogListFilter): Promise<number> {
+    const [row] = await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(notificationDeliveryLogs)
+      .where(this.listWhere(companyId, filter));
+    return row?.n ?? 0;
   }
 }

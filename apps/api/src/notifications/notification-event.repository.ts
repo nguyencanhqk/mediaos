@@ -49,4 +49,52 @@ export class NotificationEventRepository {
     if (!winner || !winner.isEnabled) return undefined;
     return winner;
   }
+
+  /** Bộ lọc GET /notifications/events (NOTI-API-301, API-07 §14.1) — admin catalog. */
+  async listCatalog(
+    tx: TenantTx,
+    companyId: string,
+    filter: NotificationEventCatalogFilter,
+  ): Promise<NotificationEvent[]> {
+    // Visibility = company override (company_id=GUC) ∪ global (company_id IS NULL), chưa xoá — RLS
+    // (nullable-tenant 0479) đã tự giới hạn; filter companyId tường minh = defense-in-depth (BẤT BIẾN #1).
+    const rows = await tx
+      .select()
+      .from(notificationEvents)
+      .where(
+        and(
+          isNull(notificationEvents.deletedAt),
+          or(eq(notificationEvents.companyId, companyId), isNull(notificationEvents.companyId)),
+        ),
+      )
+      // company_id NULLS LAST ⇒ hàng override (NOT NULL) đứng TRƯỚC hàng global cùng event_code — merge
+      // bên dưới lấy "trước tiên gặp mỗi eventCode" = company thắng global (mirror findEnabledEvent).
+      .orderBy(notificationEvents.eventCode, sql`${notificationEvents.companyId} NULLS LAST`);
+
+    const merged = new Map<string, NotificationEvent>();
+    for (const row of rows) {
+      if (!merged.has(row.eventCode)) merged.set(row.eventCode, row);
+    }
+
+    let list = [...merged.values()];
+    if (filter.moduleCode) list = list.filter((e) => e.moduleCode === filter.moduleCode);
+    if (filter.eventCode) list = list.filter((e) => e.eventCode === filter.eventCode);
+    if (filter.enabled !== undefined) list = list.filter((e) => e.isEnabled === filter.enabled);
+    if (filter.search) {
+      const q = filter.search.toLowerCase();
+      list = list.filter(
+        (e) => e.eventCode.toLowerCase().includes(q) || e.eventName.toLowerCase().includes(q),
+      );
+    }
+    list.sort((a, b) => a.eventCode.localeCompare(b.eventCode));
+    return list;
+  }
+}
+
+/** Bộ lọc admin catalog (NOTI-API-301) — trước khi in-memory phân trang (catalog nhỏ, <100 dòng). */
+export interface NotificationEventCatalogFilter {
+  moduleCode?: string;
+  eventCode?: string;
+  enabled?: boolean;
+  search?: string;
 }

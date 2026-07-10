@@ -885,3 +885,125 @@ describe.skipIf(!runDb)(
     });
   },
 );
+
+// ────────────────────────────────────────────────────────────────────────────
+// S4-NOTI-BE-3 — APPEND 6 cặp NHẠY CẢM NOTI config vào SENSITIVE_CAPABILITY_ALLOWLIST (seed mig 0481,
+// catalog pin ở notification-event-catalog.const.ts NOTI_CONFIG_PAIRS): view/update:notification-config ·
+// view/update:notification-template · view:notification-delivery-log · view:notification-audit-log.
+// Grant Company CHỈ company-admin (0001) — employee(0008)/manager(0010)/hr(0011) KHÔNG có grant (0 dòng
+// role_permissions cho 3 role này trên 6 cặp — least-privilege). Bug CAP-2 đã tái diễn 3 lần
+// (CAP-2/USEROPS-1/EXPORT-1): thiếu allowlist ⇒ nút cấu hình NOTI ẨN với CẢ admin dù grant thật tồn tại.
+// Enforcement (PermissionGuard per-resource, notification-admin.controller.ts) KHÔNG đổi.
+// ────────────────────────────────────────────────────────────────────────────
+
+const NOTI_CONFIG_SENSITIVE_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ["view", "notification-config"],
+  ["update", "notification-config"],
+  ["view", "notification-template"],
+  ["update", "notification-template"],
+  ["view", "notification-delivery-log"],
+  ["view", "notification-audit-log"],
+];
+const NOTI_CONFIG_SENSITIVE_KEYS = NOTI_CONFIG_SENSITIVE_PAIRS.map(([a, r]) => `${a}:${r}`);
+
+describe.skipIf(!runDb)(
+  "S4-NOTI-BE-3 /auth/me 6 cặp NOTI config (view/update:notification-config·template · view:notification-delivery-log·audit-log)",
+  () => {
+    let app: INestApplication;
+    let direct: Pool;
+    let A: SeededTenant;
+    let adminToken: string;
+    let hrToken: string;
+    let employeeToken: string;
+    let managerToken: string;
+    let wildcardToken: string;
+    const companyIds: string[] = [];
+
+    beforeAll(async () => {
+      const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+      app = moduleRef.createNestApplication();
+      app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
+      app.useGlobalFilters(new AllExceptionsFilter());
+      await app.init();
+      direct = directPool();
+      const pw = await new PasswordService().hash(LOGIN_PW);
+
+      A = await seedCompany(direct, "noticap");
+      companyIds.push(A.companyId);
+
+      // company-admin (0001) — grant Company đủ 6 cặp NOTI config (seed THẬT mig 0481).
+      const adminEmail = `ca-${TAG}@noticap.test`;
+      const admin = await seedUser(direct, A.companyId, adminEmail, pw);
+      await seedUserRole(direct, admin, COMPANY_ADMIN_ROLE, A.companyId);
+
+      // hr (0011) + employee (0008) + manager (0010) — KHÔNG có grant nào trong 6 cặp (least-privilege).
+      const hrEmail = `hr-${TAG}@noticap.test`;
+      const hr = await seedUser(direct, A.companyId, hrEmail, pw);
+      await seedUserRole(direct, hr, HR_ROLE, A.companyId);
+
+      const empEmail = `emp-${TAG}@noticap.test`;
+      const emp = await seedUser(direct, A.companyId, empEmail, pw);
+      await seedUserRole(direct, emp, EMPLOYEE_ROLE, A.companyId);
+
+      const mgrEmail = `mgr-${TAG}@noticap.test`;
+      const mgr = await seedUser(direct, A.companyId, mgrEmail, pw);
+      await seedUserRole(direct, mgr, MANAGER_ROLE, A.companyId);
+
+      // wildcard-only '*:*' non-sensitive → KHÔNG kế thừa 6 cặp sensitive NOTI (sensitive gate).
+      const wildEmail = `wild-${TAG}@noticap.test`;
+      const wild = await seedUser(direct, A.companyId, wildEmail, pw);
+      const wildRole = await seedRole(direct, A.companyId, `noticap-wild-${TAG}`);
+      const wildPerm = await seedPermissionCatalog(direct, "*", "*", false);
+      await seedRolePermission(direct, wildRole, wildPerm, "ALLOW");
+      await seedUserRole(direct, wild, wildRole, A.companyId);
+
+      adminToken = await login(app, A.slug, adminEmail);
+      hrToken = await login(app, A.slug, hrEmail);
+      employeeToken = await login(app, A.slug, empEmail);
+      managerToken = await login(app, A.slug, mgrEmail);
+      wildcardToken = await login(app, A.slug, wildEmail);
+    });
+
+    afterAll(async () => {
+      await app?.close();
+      if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
+      await direct?.end();
+    });
+
+    it("NOTICAP-P1 — company-admin (0001) → /auth/me CÓ ĐỦ 6 cặp NOTI config === true", async () => {
+      const caps = await meCapabilities(app, adminToken);
+      for (const key of NOTI_CONFIG_SENSITIVE_KEYS) {
+        expect(caps[key], `company-admin thiếu cặp allowlist ${key}`).toBe(true);
+      }
+    });
+
+    it("NOTICAP-N1 — hr (0011) → KHÔNG có cặp NOTI config nào (least-privilege, chỉ company-admin)", async () => {
+      const caps = await meCapabilities(app, hrToken);
+      for (const key of NOTI_CONFIG_SENSITIVE_KEYS) {
+        expect(key in caps, `hr KHÔNG được lộ cặp ${key}`).toBe(false);
+      }
+    });
+
+    it("NOTICAP-N2 — employee (0008) → KHÔNG có cặp NOTI config nào (least-privilege)", async () => {
+      const caps = await meCapabilities(app, employeeToken);
+      for (const key of NOTI_CONFIG_SENSITIVE_KEYS) {
+        expect(key in caps, `employee KHÔNG được lộ cặp ${key}`).toBe(false);
+      }
+    });
+
+    it("NOTICAP-N3 — manager (0010) → KHÔNG có cặp NOTI config nào (least-privilege)", async () => {
+      const caps = await meCapabilities(app, managerToken);
+      for (const key of NOTI_CONFIG_SENSITIVE_KEYS) {
+        expect(key in caps, `manager KHÔNG được lộ cặp ${key}`).toBe(false);
+      }
+    });
+
+    it("NOTICAP-N4 — wildcard '*:*' → KHÔNG kế thừa 6 cặp NOTI config nào (sensitive gate); '*:*' vẫn có", async () => {
+      const caps = await meCapabilities(app, wildcardToken);
+      expect(caps[WILDCARD_CAP_KEY]).toBe(true);
+      for (const key of NOTI_CONFIG_SENSITIVE_KEYS) {
+        expect(key in caps, `cặp sensitive ${key} KHÔNG kế thừa qua *:*`).toBe(false);
+      }
+    });
+  },
+);

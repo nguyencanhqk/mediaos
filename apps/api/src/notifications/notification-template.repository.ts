@@ -42,6 +42,33 @@ export class NotificationTemplateRepository {
     );
   }
 
+  /**
+   * GET /notifications/templates/{id} (NOTI-API-303 thu hẹp — detail, KHÔNG list). Visibility = company
+   * override (company_id=GUC) ∪ global (company_id IS NULL) — mirror findActiveTemplate; KHÔNG lọc status
+   * (admin cần xem CẢ Draft/Inactive/Archived, không chỉ 'Active'). `deleted_at IS NULL` vẫn áp.
+   */
+  async findByIdForCompany(
+    tx: TenantTx,
+    companyId: string,
+    id: string,
+  ): Promise<NotificationTemplate | undefined> {
+    const rows = await tx
+      .select()
+      .from(notificationTemplates)
+      .where(
+        and(
+          eq(notificationTemplates.id, id),
+          isNull(notificationTemplates.deletedAt),
+          or(
+            eq(notificationTemplates.companyId, companyId),
+            isNull(notificationTemplates.companyId),
+          ),
+        ),
+      )
+      .limit(1);
+    return rows[0];
+  }
+
   private async queryOne(
     tx: TenantTx,
     companyId: string,
