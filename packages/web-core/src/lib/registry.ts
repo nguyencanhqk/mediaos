@@ -136,6 +136,13 @@ export const PERMISSION_CODE_TO_PAIR: Readonly<Record<PermissionCode, string>> =
   "LEAVE.CALENDAR.VIEW_OWN": "view-own:leave-calendar",
   "TASK.TASK.VIEW": "read:task",
   "TASK.PROJECT.VIEW": "read:project",
+  // S4-FE-TASK-1 — CẶP SEED THẬT mig 0485 (verify chống pair-drift qua ProjectsController thật):
+  // create/update:project non-sensitive · close/delete/manage-member:project is_sensitive=true.
+  "TASK.PROJECT.CREATE": "create:project",
+  "TASK.PROJECT.UPDATE": "update:project",
+  "TASK.PROJECT.CLOSE": "close:project",
+  "TASK.PROJECT.DELETE": "delete:project",
+  "TASK.PROJECT.MANAGE_MEMBER": "manage-member:project",
   "NOTI.NOTIFICATION.VIEW_OWN": "read:notification",
   // Canonical theo DB-02 §9.1 + seed §13 (migration 0444): cặp đọc là view:user / view:role.
   "AUTH.USER.VIEW": "view:user",
@@ -1011,6 +1018,31 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["TASK.TASK.VIEW"],
     showInSidebar: true,
     order: 51,
+  },
+  // S4-FE-TASK-1 — Project List/Detail (SPEC-06 §13.1/§13.3, TASK-SCREEN-001/003). Cổng route =
+  // TASK.PROJECT.VIEW (read:project); nút Create/Edit/Close/Delete/Member gate finer bên trong page qua
+  // useCan/PermissionGate (TASK.PROJECT.CREATE/UPDATE/CLOSE/DELETE/MANAGE_MEMBER).
+  {
+    routeKey: "task.projects.list",
+    path: "/tasks/projects",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "TASK",
+    screenCode: "TASK-SCREEN-001",
+    titleKey: "routeTitle.taskProjects",
+    requiredAnyPermissions: ["TASK.PROJECT.VIEW"],
+    showInSidebar: true,
+    order: 52,
+  },
+  {
+    routeKey: "task.projects.detail",
+    path: "/tasks/projects/:projectId",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "TASK",
+    screenCode: "TASK-SCREEN-003",
+    titleKey: "routeTitle.taskProjectDetail",
+    requiredAnyPermissions: ["TASK.PROJECT.VIEW"],
+    showInSidebar: false,
+    order: 53,
   },
 
   // Notifications
