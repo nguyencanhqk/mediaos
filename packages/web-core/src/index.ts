@@ -77,6 +77,8 @@ export {
   leaveInvalidation,
   foundationInvalidation,
   hrInvalidation,
+  // S4-FE-NOTI-1: My-Notification mutation → list/dropdown/unread-count/detail invalidation.
+  notificationInvalidation,
   // S2-FE-HR-5 (lane HR5-WC): HR master-data mutation → list invalidation.
   hrMasterDataInvalidation,
   // S2-FE-HR-7: employee contracts mutation → list invalidation.
@@ -98,6 +100,9 @@ export { usersApi } from "./lib/users-api";
 export { authUsersApi } from "./lib/auth-users-api";
 export { twoFactorApi } from "./lib/two-factor-api";
 export { notificationApi } from "./lib/notification-api";
+// S4-FE-NOTI-1 — My-Notification API THẬT (MyNotificationsController, S4-NOTI-BE-1). TÁCH khỏi
+// `notificationApi` cũ ở trên (route/shape legacy G10-2 KHÔNG còn khớp BE — xem ghi chú trong file).
+export { myNotificationApi } from "./lib/my-notification-api";
 // S4-FE-REGISTRY-1 — TASK/DASH API skeleton typed qua @mediaos/contracts (page thật = S4-FE-TASK-1/DASH-1).
 export { tasksApi } from "./lib/tasks-api";
 export { dashboardApi } from "./lib/dashboard-api";

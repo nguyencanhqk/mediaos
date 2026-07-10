@@ -1,6 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { Server } from "socket.io";
-import { WS_EVENTS, wsNotificationEventSchema, type NotificationDto } from "@mediaos/contracts";
+import {
+  WS_EVENTS,
+  wsNotificationEventSchema,
+  wsNotificationReadEventSchema,
+  type NotificationDto,
+} from "@mediaos/contracts";
 import { userRoomName } from "./rooms";
 
 /**
@@ -32,6 +37,24 @@ export class RealtimeEmitterService {
       this.server.to(userRoomName(companyId, userId)).emit(WS_EVENTS.NOTIFICATION_NEW, payload);
     } catch (err) {
       this.logger.warn("emitNotification failed", {
+        userId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  /**
+   * S4-NOTI-BE-1 — đẩy unread_count mới sau mark-read/mark-all-read/xoá mềm (My-Notification API) để
+   * DASH/header badge invalidate mà không cần refetch full row (chuẩn bị INT với DASH — chưa consume ở
+   * lane này). Payload CHỈ số đếm — KHÔNG rò nội dung thông báo qua kênh phụ.
+   */
+  emitNotificationRead(companyId: string, userId: string, unreadCount: number): void {
+    if (!this.server) return;
+    try {
+      const payload = wsNotificationReadEventSchema.parse({ unreadCount });
+      this.server.to(userRoomName(companyId, userId)).emit(WS_EVENTS.NOTIFICATION_READ, payload);
+    } catch (err) {
+      this.logger.warn("emitNotificationRead failed", {
         userId,
         error: err instanceof Error ? err.message : String(err),
       });

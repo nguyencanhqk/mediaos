@@ -4298,10 +4298,15 @@ export const backlog = [
     layer: "BE",
     title:
       "BE My-notification APIs (GET /notifications, /dropdown, /unread-count, /:id, POST /:id/mark-read, /mark-all-read, DELETE /:id) — own-scope tuyệt đối, unread dùng partial index",
-    zone: "yellow",
+    // zone red (sửa 2026-07-09): WO này CHẠM permission — mig 0483 chuẩn hoá delete:notification về
+    // Own-scope (expand cho employee/manager/hr, contract cho company-admin vốn có @Company từ bulk-grant
+    // 0005:310-313). Khai yellow + paths thiếu migrations/** đã khiến auto-loop route nó vào LIGHT gate.
+    zone: "red",
     status: "todo",
     paths: [
       "apps/api/src/notifications/**",
+      "apps/api/src/realtime/**",
+      "apps/api/migrations/**",
       "apps/api/test/integration/**",
       "packages/contracts/src/**",
     ],
@@ -4328,15 +4333,18 @@ export const backlog = [
       "BE Event intake + notification engine (POST /internal/v1/notifications/events + /send) — recipient resolver, template renderer, delivery log, dedupe, actor-exclusion — crown trust boundary",
     zone: "red",
     status: "todo",
+    // paths hẹp có chủ đích: conflict() của auto-loop so prefix tĩnh của glob, nên "test/integration/**"
+    // sẽ bị coi là đụng int-spec của WO khác ⇒ mất song song. WO này chỉ viết đúng 1 int-spec.
     paths: [
       "apps/api/src/notifications/**",
       "apps/api/src/events/**",
-      "apps/api/test/integration/**",
+      "apps/api/test/integration/noti-event-intake.int-spec.ts",
       "packages/contracts/src/**",
       "docs/plans/S4-NOTI-BE-2.md",
     ],
     skills: ["code-review"],
-    depends_on: ["S4-NOTI-SEED-1"],
+    // PR #133 sửa notifications.module.ts + notifications.controller.ts → phải rebase sau khi #133 merge.
+    depends_on: ["S4-NOTI-SEED-1", "S4-NOTI-BE-1"],
     src: [
       "ISSUE-BOARD-01 §18 (NOTI-BE-001/002)",
       "API-07",
@@ -4346,10 +4354,15 @@ export const backlog = [
     ],
     plan: "docs/plans/S4-NOTI-BE-2.md",
     done_when: [
-      "Internal event intake (endpoint hoặc service method) tiêu thụ event từ outbox/TASK: resolve event catalog → recipient resolver (assignee/watcher/manager/requester, LOẠI actor trừ event system bắt buộc) → render template theo locale → tạo notification IN_APP + delivery log; internal chỉ nhận từ trusted context (service token/queue), KHÔNG public",
-      "Dedupe theo event+entity+recipient+window (dedupe_window_seconds) cho event dễ spam (comment/status); event disabled → delivery log Skipped; template missing/disabled → fallback mặc định hoặc Failed rõ ràng (không nuốt lỗi)",
-      "Target URL là route nội bộ hợp lệ (không nhận URL ngoài tùy ý); payload không chứa file URL private/comment dài/dữ liệu nhạy cảm; audit + delivery log đầy đủ",
-      "Int-spec RED-trước: intake từ context không trusted → deny · dedupe chặn trùng trong window · actor không tự nhận notify · recipient ngoài company không được tạo · disabled event → Skipped; FULL gate security-reviewer + silent-failure-hunter + plan-reviewer PASS trước code (crown)",
+      "ĐỌC docs/plans/S4-NOTI-BE-2.md §0 TRƯỚC KHI CODE — plan v1 bị plan-reviewer BLOCK, v2 đã sửa 3 lỗi. Đừng lặp lại.",
+      "SCOPE THU HẸP: chỉ làm POST /internal/v1/notifications/events. Route POST /send + internalDirectSendSchema ĐẨY SANG S4-NOTI-BE-3 (đường direct-send bỏ qua event catalog, admin tự soạn title/body/target_url → bề mặt rủi ro cao hơn /events, xứng đáng WO riêng có test riêng)",
+      "Internal event intake tiêu thụ event: resolve event catalog → recipient resolver (LOẠI actor trừ is_system_event) → render template theo locale → tạo notification IN_APP + delivery log. Trust boundary: JwtAuthGuard toàn cục (KHÔNG @Public) + InternalGuard (x-internal-key; env unset → 403 fail-closed); company_id LẤY TỪ TOKEN, body khác token → 400",
+      "DEDUPE PHẢI BỌC SAVEPOINT MỖI RECIPIENT. Postgres abort cả transaction khi unique-violation — bắt lỗi 23505 ở tầng JS trong CÙNG tx sẽ làm mọi lệnh sau ném 'current transaction is aborted', mất notification của recipient khác hoặc bật 500. Dùng SAVEPOINT sp_recipient + ROLLBACK TO khi 23505 → deduped_count++, tx ngoài sống. Ép 2 tầng: app query isDuplicate + backstop partial-unique uq_notifications_dedupe_active",
+      "createFromEngine PHẢI dual-write: cột MỚI (recipient_user_id, event_code, dedupe_key, status='Unread', ...) VÀ cột legacy NOT NULL (user_id, body, type='general', is_read=false). Index uq_notifications_dedupe_active đánh trên (company_id, recipient_user_id, event_code, dedupe_key) — toàn cột MỚI; bỏ chúng NULL thì partial-unique coi NULL là distinct ⇒ dedupe hỏng IM LẶNG. Quên cột legacy thì INSERT fail",
+      "notification_delivery_logs chỉ GRANT SELECT,INSERT → engine INSERT-terminal ('Sent'/'Skipped'/'Failed'), CẤM UPDATE trạng thái. 'Event disabled → delivery_log Skipped' BẤT KHẢ THI (FK notification_id NOT NULL) → event-level skip ghi audit_logs 'notification_skipped'; delivery_log Skipped chỉ dùng cho channel/recipient-level. Mọi event seed 0481 có dedupe_strategy='None' → dùng DEFAULT_DEDUPE const cho TASK_COMMENT_CREATED/TASK_STATUS_CHANGED, catalog override được",
+      "Target URL phải là route nội bộ (bắt đầu '/', chặn scheme http:/https:/javascript:/data: và '//') → ngoài whitelist reject 422 NOTI-ERR-TARGET-UNAVAILABLE. Payload chứa key nhạy cảm (password/token/salary/bank_account/identity_number) → 400. /events là fire-and-forget: disabled/dedupe trả 200 + summary, KHÔNG ném lỗi ⇒ 422 EVENT-DISABLED và 409 DEDUPE-CONFLICT thuộc /send (BE-3), không khai ở BE-2 (mã treo không có deny-path)",
+      "KHÔNG wiring TASK→NOTI (S4-INT-1) — test bằng event giả qua HTTP intake. KHÔNG đăng ký consumer eventType TASK. Mỗi file ≤400 dòng: tách engine/resolver/renderer/dedupe",
+      "Int-spec RED-trước, deny-path đi đầu, gate `hasDb && LANE_DB`: (a) không JWT→401, thiếu/sai x-internal-key→403, env unset→403 · (b) dedupe chặn trùng trong window, cho qua bucket kế · (b2) chèn TRƯỚC row xung đột qua directPool rồi intake 2 recipient: recipient trùng → deduped, recipient còn lại VẪN được tạo, KHÔNG 500; assert notification có recipient_user_id/event_code/dedupe_key NOT NULL · (c) actor không tự nhận notify, is_system_event thì có · (d) recipient company khác → không tạo; body.company_id≠token → 400 · (e) event disabled → 0 notification + 0 delivery_log + audit skip, KHÔNG 500 · (f) template missing → fallback non-silent · (g) target URL ngoài → 422. FULL gate security-reviewer + silent-failure-hunter + database-reviewer PASS",
     ],
   },
   {
@@ -4419,24 +4432,65 @@ export const backlog = [
     zone: "red",
     status: "todo",
     paths: [
-      "apps/api/src/foundation/seed/**",
+      "apps/api/src/dashboard/**",
       "apps/api/migrations/**",
+      "apps/api/test/integration/dash-seed-catalog-permissions.int-spec.ts",
       "docs/plans/S4-DASH-SEED-1.md",
     ],
     skills: ["code-review"],
-    depends_on: ["S4-DASH-DB-1"],
+    // PR #133 (S4-NOTI-BE-1) mint mig 0483. WO này phải rebase SAU khi #133 merge rồi mới đánh số 0484.
+    depends_on: ["S4-DASH-DB-1", "S4-NOTI-BE-1"],
     src: [
       "ISSUE-BOARD-01 §18 (DASH-DB-002)",
       "IMPLEMENTATION-07 §8.4/§11.3",
       "IMP02-STORY-085",
       "SPEC-07",
+      "DB-07 §8.5/§10.2",
     ],
     plan: "docs/plans/S4-DASH-SEED-1.md",
     done_when: [
-      "Seed dashboard_widgets đúng 7 widget In-sprint §11.3: ATTENDANCE_TODAY, MY_TASKS, TASK_ALERTS, NOTIFICATIONS, PENDING_LEAVE, PROJECT_PROGRESS, HR_OVERVIEW (mỗi widget có required_permission + source_modules); widget Catalog-only KHÔNG bật mặc định",
-      "Seed permission DASH (view dashboard type · view widget · config · cache refresh) + role mapping; seed default dashboard_widget_configs theo dashboard type (Employee/Manager/HR/Admin) chỉ widget in-sprint P0/P1",
-      "ON CONFLICT DO NOTHING idempotent; đổi config trên grant tồn tại → DELETE+INSERT",
-      "Int-spec: seed lại idempotent; widget catalog khớp §11.3; admin thấy cặp DASH qua /auth/me; FULL gate security-reviewer + database-reviewer PASS",
+      "ĐỌC docs/plans/S4-DASH-SEED-1.md §0 TRƯỚC KHI CODE — plan v1 VÀ v2 đều bị plan-reviewer BLOCK. v3 đã sửa 8 lỗi. Đừng lặp lại.",
+      "4 LANE CHẠY TUẦN TỰ, KHÔNG FAN-OUT: dashCatalogConst → dashSeedMig → dashConfigSeeder → dashSeedVerify. Chạy song song sẽ cho GREEN GIẢ: seeder trước migration thì thiếu widgets + thiếu GRANT INSERT; hai lane cùng chạm meta/_journal.json thì mint trùng số",
+      "OWNER CHỐT (Option B — gate widget bằng quyền MODULE NGUỒN): KHÔNG seed cặp engine per-widget ('*:dashboard-widget'). required_permission_code lưu chuỗi SPEC verbatim 'DASH.WIDGET.VIEW_*'; gate thật đi qua DASH_WIDGET_GATE_PAIR. Cặp đã xác minh tồn tại: ATTENDANCE_TODAY→view-own:attendance (0454) · MY_TASKS/TASK_ALERTS→read:task (0005) · NOTIFICATIONS→read:notification (0005) · PENDING_LEAVE→view:leave (0455) · PROJECT_PROGRESS→read:project (0005:223, CHỐT CỨNG, KHÔNG read:task) · HR_OVERVIEW→read:employee (0019). CẢNH BÁO: nhiều module có NHIỀU cặp cùng tồn tại (ATT có CẢ read:attendance ở 0063 LẪN view-own:attendance; LEAVE có 3 cặp) nên test E3 chỉ chứng 'cặp tồn tại', KHÔNG bắt được cặp có-thật-sai-ngữ-nghĩa → mỗi entry phải kèm comment trỏ migration:dòng + lý do, reviewer đối chiếu bằng mắt",
+      "Seed dashboard_widgets đúng 7 widget In-sprint §11.3: ATTENDANCE_TODAY, MY_TASKS, TASK_ALERTS, NOTIFICATIONS, PENDING_LEAVE, PROJECT_PROGRESS, HR_OVERVIEW; widget Catalog-only KHÔNG seed. Widgets GLOBAL (company_id NULL) → ghi qua migrator owner-bypass",
+      "OWNER CHỐT 2026-07-10: seed ĐÚNG 7 cặp quyền DASH mới — view-employee/manager/hr/admin:dashboard · view:dashboard-config · update:dashboard-config · view:dashboard-audit-log. KHÔNG seed 'refresh:dashboard-cache': DASH.CACHE.REFRESH chỉ có ở SPEC-07 §8.2, mà chính header SPEC-07 ghi 'DN-7 ... seed DB-07 §10.2/API-10 cần lane khác cập nhật' và 'khi mâu thuẫn, lấy DB-07/API-08 làm chuẩn'; DB-07 §10.2 + permission-matrix-spec đều KHÔNG có nó. Seed bây giờ = quyền phantom không deny-path. GIỮ NGUYÊN 'read:dashboard' (mig 0100). Chỉ enumerate 4 role canonical — super-admin KHÔNG enumerate (sẽ RAISE)",
+      "Test M (grant-matrix VÉT CẠN) phải đi ĐẦU, thay cho E1+D: với TỪNG role trong {employee, manager, hr, company-admin} assert tập (action,resource_type,data_scope) DASH bằng ĐÚNG ma trận §2.6, VÀ assert vắng mặt mọi cặp admin-only {view-admin:dashboard, view:dashboard-config, update:dashboard-config, view:dashboard-audit-log} mà role đó không được cấp. Lý do: v2 chỉ deny employee+manager, BỎ SÓT role 'hr' — role trung-quyền dễ leo thang nhất; DO-block lỡ grant nhầm hr thì toàn bộ suite vẫn XANH",
+      "Migration đánh số nối tiếp head THẬT — ĐỌC meta/_journal.json chứ đừng tin số trong plan. Sau khi PR #133 merge, head = idx 163 / 0483_s4_notibe1_delete_own_grant ⇒ file mới 0484, idx 164, when 1717500815000. ON CONFLICT chỉ dùng target CÓ THẬT: widgets = uq_dashboard_widgets_global_code_active; permissions = (action,resource_type); role_permissions = (role_id,permission_id,effect). dashboard_widget_configs KHÔNG có unique index → BẮT BUỘC WHERE NOT EXISTS. Đổi data_scope grant = DELETE per-pair + INSERT (trên role_permissions)",
+      "Mig chỉ 'GRANT INSERT ON dashboard_widget_configs TO mediaos_app' — KHÔNG DELETE, KHÔNG UPDATE. Lý do: bảng anh em dashboard_widget_cache (0482:231-232) cố ý không cấp DELETE với comment 'KHÔNG DELETE (BẤT BIẾN #2 soft-delete)'; configs cũng có deleted_at; và master-data-seeder.types.ts:15 ghi 'Seeder CHỈ làm INSERT'. Rút config default về sau = soft-delete UPDATE deleted_at, thuộc S4-DASH-BE",
+      "Seeder + registrar đặt TRONG module DASH (apps/api/src/dashboard/dashboard-config.seeder.ts + dash-seed.registrar.ts), tự register vào MasterDataSeederRegistry ở onModuleInit — mirror attendance/att-seed.registrar.ts. TUYỆT ĐỐI KHÔNG sửa foundation/seed/seed.module.ts (INVERSION OF DEPENDENCY: foundation không import module nghiệp vụ). seedKey='dash.default-configs', seedVersion='v1' (đúng convention att-master-data.seeder.ts:30, KHÔNG phải '1'). Default configs seed post-boot vì company mặc định chỉ tồn tại sau BOOT",
+      "Mệnh đề WHERE NOT EXISTS của seeder phải khoá trên (company_id, widget_id, dashboard_type, config_scope, role_id IS NULL, user_id IS NULL). Chỉ so (company_id, widget_id) sẽ chặn nhầm khi một widget xuất hiện ở nhiều dashboard_type (MY_TASKS có ở cả Employee lẫn Manager). Test F phải assert CẢ count KHÔNG đổi LẪN không phát sinh row trùng khoá nghiệp vụ",
+      "Int-spec RED-trước, deny-path đi đầu, gate `hasDb && LANE_DB`: (M grant-matrix vét cạn — xem done_when riêng, ĐI ĐẦU) · (E2) KHÔNG tồn tại cặp '*:dashboard-widget' và KHÔNG tồn tại 'refresh:dashboard-cache' · (E3 chống pair-drift) MỖI giá trị DASH_WIDGET_GATE_PAIR resolve ra row (action,resource_type) THẬT · catalog == đúng 7 widget · (F) seed lại 2-3 lần idempotent, data_scope không drift · (H) admin thấy cặp DASH qua /auth/me · (I cross-tenant) PHẢI plant company thứ 2 + 1 config row thật rồi assert vắng mặt dưới GUC company A — ở N=1 không plant thì test xanh-giả. FULL gate security-reviewer + database-reviewer PASS; bật santa-method cho lane dashCatalogConst",
+      "BÀN GIAO bắt buộc ghi vào PR: (1) gate widget = DASH_WIDGET_GATE_PAIR, KHÔNG phải required_permission_code — S4-DASH-BE-1/2 dễ nhầm vì hai khái niệm quyền chạy song song · (2) 4 cặp view-*:dashboard mới cần map trong packages/web-core PERMISSION_CODE_TO_PAIR nếu S4-FE-DASH-2 gate theo chúng, nếu không app sẽ ẩn (pair-drift đã cắn S3) · (3) refresh:dashboard-cache còn nợ: cập nhật DB-07 §10.2 rồi mới seed, WO riêng",
+    ],
+  },
+  {
+    id: "S4-DASH-CATALOG-2",
+    module: "DASH",
+    layer: "DB",
+    title:
+      "Bù đủ catalog widget DASH (11 widget còn lại của DB-07 §14.3) + reconcile mâu thuẫn nội bộ DB-07 §8.5 ↔ §14.3 + cặp refresh:dashboard-cache",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/dashboard/**",
+      "apps/api/migrations/**",
+      "apps/api/test/integration/dash-seed-catalog-permissions.int-spec.ts",
+      "docs/DB/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S4-DASH-SEED-1", "S4-DASH-BE-2"],
+    src: [
+      "docs/DB/DB-07 §14.3 (khối DRIFT do S4-DASH-SEED-1 ghi)",
+      "docs/DB/DB-07 §8.5 (chỉ 12 widget có required_permission_code)",
+      "docs/API Design/API-10 PERMISSION MATRIX.md:288-313",
+      "docs/plans/S4-DASH-SEED-1.md §2.5",
+    ],
+    done_when: [
+      "BỐI CẢNH: S4-DASH-SEED-1 (mig 0484) chỉ seed 7 widget in-sprint. DB-07 §14.3 còn 11 widget: LEAVE_BALANCE, TEAM_TASKS_TODAY, LEAVE_CALENDAR, ATTENDANCE_ALERTS, NEW_EMPLOYEES, CONTRACT_EXPIRING, USER_SUMMARY, EMPLOYEE_SUMMARY, MODULE_STATUS, CONFIG_WARNINGS, SYSTEM_LOGS. Dashboard Admin hiện chỉ có 1 widget (NOTIFICATIONS)",
+      "RECONCILE DOC TRƯỚC KHI CODE: DB-07 tự mâu thuẫn — §8.5 liệt 12 widget có required_permission_code, nhưng §14.3 xếp vào dashboard Admin 5 widget (USER_SUMMARY, EMPLOYEE_SUMMARY, MODULE_STATUS, CONFIG_WARNINGS, SYSTEM_LOGS) KHÔNG có trong §8.5; chúng chỉ có permission code ở API-10:288-313. Phải sửa DB-07 §8.5 cho đủ rồi mới seed, nếu không catalog sẽ có widget thiếu required_permission_code (cột NOT NULL)",
+      "Chỉ seed widget khi module nguồn đã có data source (DASH-BE-2 đăng ký service theo data_source_key), nếu không widget sẽ luôn degraded. Mỗi widget mới phải có entry trong DASH_WIDGET_GATE_PAIR với comment trỏ migration:dòng + lý do ngữ nghĩa — test E3 chỉ chứng cặp TỒN TẠI, không bắt được cặp có-thật-sai-ngữ-nghĩa",
+      "Cặp refresh:dashboard-cache (DASH.CACHE.REFRESH): API-10:313 cấp cho SA DUY NHẤT và 'không có endpoint'. Chỉ seed khi (a) DB-07 §10.2 được cập nhật để liệt nó, VÀ (b) có endpoint thật + role để grant. Trước đó nó là quyền phantom không deny-path",
+      "Cập nhật khối DRIFT trong DB-07 §14.3 (gỡ khi đã bù đủ). Int-spec: catalog == tập mới; default config == DB-07 §14.3 đầy đủ; grant-matrix vét cạn 4 role vẫn xanh; FULL gate security-reviewer + database-reviewer PASS",
     ],
   },
   {
@@ -4684,6 +4738,30 @@ export const backlog = [
       "Click notification → mark read → navigate target (module gốc kiểm quyền lại); mark-all-read invalidate unread + dropdown + DASH notification widget; deleted/hidden không hiện list mặc định",
       "Empty ('Bạn chưa có thông báo mới') + error state KHÔNG vỡ topbar (badge fallback); i18n vi; FE spec",
       "check.sh xanh; LIGHT gate",
+    ],
+  },
+  {
+    id: "S4-FE-NOTI-CLEANUP-1",
+    module: "NOTI",
+    layer: "FE",
+    title:
+      "Gỡ dứt điểm NotificationBell (@mediaos/ui) + notification-api legacy (web-core) — code chết gọi route BE đã xoá ở PR #133",
+    zone: "yellow",
+    status: "todo",
+    paths: ["packages/ui/src/components/**", "packages/web-core/src/lib/**", "apps/console/src/**"],
+    skills: ["code-review"],
+    depends_on: ["S4-FE-NOTI-1"],
+    src: [
+      "PR #133 (64d4787) gỡ PATCH /notifications/:id/read + /notifications/read-all khỏi NotificationsController",
+      "PR #134 (67b12b4) gỡ <NotificationBell/> khỏi apps/console (home.tsx + root-layout.tsx)",
+      "packages/ui/src/components/notification-bell.tsx (tự đánh dấu LEGACY/BROKEN)",
+      "packages/web-core/src/lib/notification-api.ts",
+    ],
+    done_when: [
+      "BỐI CẢNH: PR #133 gỡ 2 route legacy PATCH /notifications/:id/read + /notifications/read-all (thay bằng POST /:id/mark-read + /mark-all-read ở MyNotificationsController) mà KHÔNG khai trong PR body. Consumer sống lúc đó: packages/ui NotificationBell → web-core notificationApi → apps/console. PR #134 chữa cháy bằng cách gỡ chuông khỏi console. OWNER CHỐT 2026-07-10: chấp nhận console không có chuông (SPEC-08/FRONTEND-12 chỉ định NOTI cho apps/app)",
+      "Gỡ packages/ui/src/components/notification-bell.tsx + packages/web-core/src/lib/notification-api.ts (và export trong barrel) — chúng đang ship nhưng gọi route không còn tồn tại; app nào mount sẽ 404. Xác nhận bằng grep là KHÔNG còn consumer nào trước khi xoá",
+      "Dọn comment tạm S4-FE-NOTI-CONSOLE-BELL-1 trong apps/console/src/routes/home.tsx + root-layout.tsx; slot `notifications` của AppShell để trống hợp lệ (không để lại TODO mồ côi)",
+      "packages/ui + packages/web-core dual-build xanh; apps/console + apps/app build + test xanh; check.sh (TURBO_FORCE=1) xanh; LIGHT gate",
     ],
   },
   {

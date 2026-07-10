@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { LogOut, Search } from "lucide-react";
-import { Avatar, NotificationBell } from "@mediaos/ui";
+import { Avatar } from "@mediaos/ui";
 import { cn } from "@/lib/utils";
 import { getHealth, logoutSession } from "@mediaos/web-core";
 import { BrandLogo } from "@/components/brand/brand-mark";
@@ -74,8 +74,11 @@ export function HomePage() {
           </div>
 
           <div className="ml-auto flex items-center gap-1">
-            <NotificationBell />
-            <div className="mx-1 hidden h-6 w-px bg-border sm:block" />
+            {/* S4-FE-NOTI-CONSOLE-BELL-1: chuông NotificationBell (@mediaos/ui) gỡ khỏi console — nó
+                tiêu thụ notificationApi (web-core) trỏ route BE legacy đã gỡ ở PR #133 (PATCH
+                /notifications/:id/read, /read-all), gây chuông vỡ. Console (quản trị hệ thống) chưa
+                nằm trong phạm vi NOTI (SPEC-08/FRONTEND-12 chỉ chỉ định apps/app) nên không wire lại
+                sang my-notification-api ở đây — xem NotificationBadge/Dropdown thật ở apps/app. */}
             <Avatar name={username} size="sm" />
             <span className="ml-1.5 hidden max-w-[10rem] truncate text-sm text-muted-foreground md:block">
               {username}

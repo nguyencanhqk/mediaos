@@ -8,6 +8,9 @@ import leaveVi from "./locales/vi/leave";
 import attendanceVi from "./locales/vi/attendance";
 // S2-FE-AUTH-5 (lane FE batch C) — /account/sessions.
 import accountVi from "./locales/vi/account";
+// S4-FE-NOTI-1 — Badge/Dropdown/List/Detail. Deep-merge THÊM khoá vào bundle "notifications" đã có sẵn
+// ở @mediaos/web-core (title/ariaLabel/markAllRead/empty/types) — KHÔNG ghi đè (addResourceBundle deep=true).
+import notificationsVi from "./locales/vi/notifications";
 
 registerI18nResources("vi", {
   hr: hrVi,
@@ -15,6 +18,7 @@ registerI18nResources("vi", {
   leave: leaveVi,
   attendance: attendanceVi,
   account: accountVi,
+  notifications: notificationsVi,
 });
 
 export default i18n;

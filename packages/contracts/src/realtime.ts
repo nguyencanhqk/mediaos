@@ -25,6 +25,9 @@ export const WS_EVENTS = {
   CHAT_TYPING_EVENT: "chat:typing:event",
   CHAT_PRESENCE: "chat:presence",
   NOTIFICATION_NEW: "notification:new",
+  // S4-NOTI-BE-1 (additive): phát sau mark-read/mark-all-read/xoá mềm — payload CHỈ unread_count (không
+  // row) để DASH/header badge invalidate mà không rò nội dung thông báo qua kênh phụ.
+  NOTIFICATION_READ: "notification:read",
 } as const;
 export type WsEventName = (typeof WS_EVENTS)[keyof typeof WS_EVENTS];
 
@@ -84,6 +87,12 @@ export type WsChatPresenceEvent = z.infer<typeof wsChatPresenceEventSchema>;
 /** notification:new — đúng DTO REST (notificationSchema). */
 export const wsNotificationEventSchema = notificationSchema;
 export type WsNotificationEvent = z.infer<typeof wsNotificationEventSchema>;
+
+/** notification:read (S4-NOTI-BE-1) — unread_count mới sau mark-read/mark-all-read/xoá mềm. */
+export const wsNotificationReadEventSchema = z.object({
+  unreadCount: z.number().int().nonnegative(),
+});
+export type WsNotificationReadEvent = z.infer<typeof wsNotificationReadEventSchema>;
 
 // ─── ack chuẩn cho mọi event client → server ─────────────────────────────────
 

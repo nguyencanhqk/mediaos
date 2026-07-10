@@ -68,6 +68,9 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      # MinIO KHÔNG dựng ở đây — xem step "Start MinIO". Service container của GitHub Actions không override
+      # được `command`, mà `minio/minio` đòi đối số `server /data`. (`bitnami/minio` tự chạy server nhưng
+      # Bitnami đã dời image/tag ⇒ `manifest unknown`.) Dùng `docker run` ở step cho chắc.
 
     env:
       # DB ephemeral CI — KHÔNG phải secret thật. DIRECT = superuser (migrate + bootstrap role + seed test).
@@ -86,6 +89,15 @@ jobs:
       # Test crypto/2FA (LocalKekProvider) cần file KEK 32-byte tại path này. CI sinh KEK EPHEMERAL ở step dưới
       # (KHÔNG phải secret thật — prod dùng Vault transit, ADR-0004). Đặt env để cả gen-step lẫn test cùng đọc.
       KMS_LOCAL_KEK_PATH: ${{ github.workspace }}/.secrets/local-kek.bin
+      # Object storage ephemeral (service `minio` ở trên). Trước 2026-07-10 CI KHÔNG set S3_* nên
+      # employee-file.int-spec (download → 302 signed URL) ném StorageNotConfiguredError — nhưng không ai
+      # thấy vì spec đó bị `skipIf` bỏ qua khi thiếu LANE_DB. Bật LANE_DB thì phải cấp storage thật.
+      S3_ENDPOINT: http://localhost:9000
+      S3_ACCESS_KEY: ci_minio_user
+      S3_SECRET_KEY: ci_minio_password
+      S3_BUCKET: mediaos-test
+      S3_REGION: us-east-1
+      S3_FORCE_PATH_STYLE: "true"
 
     steps:
       - uses: actions/checkout@v4
@@ -130,13 +142,33 @@ jobs:
           mkdir -p "$(dirname "$KMS_LOCAL_KEK_PATH")"
           node -e "require('fs').writeFileSync(process.env.KMS_LOCAL_KEK_PATH, require('crypto').randomBytes(32))"
 
-      - name: Test (unit + integration RLS/auth)
-        run: pnpm --filter @mediaos/api test
+      # Object storage ephemeral. Chạy bằng `docker run` (KHÔNG service container) vì service container không
+      # override được `command`, mà `minio/minio` đòi `server /data`. Credential ephemeral — KHÔNG secret thật.
+      #
+      # Presign (getSignedUrl) là tính toán CỤC BỘ, không gọi mạng — nên riêng test "download → 302" chỉ cần
+      # env S3_*. Nhưng spec khác có thể gọi putObject/headObject thật, nên vẫn dựng MinIO + tạo bucket.
+      - name: Start MinIO (object storage cho integration test)
+        run: |
+          docker run -d --name minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER="$S3_ACCESS_KEY" \
+            -e MINIO_ROOT_PASSWORD="$S3_SECRET_KEY" \
+            minio/minio:latest server /data
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9000/minio/health/live >/dev/null; then echo "minio ready"; break; fi
+            if [ "$i" = "30" ]; then echo "MinIO không lên sau 60s" >&2; docker logs minio >&2; exit 1; fi
+            sleep 2
+          done
+          docker run --rm --network host --entrypoint sh minio/mc:latest -c "\
+            mc alias set local http://localhost:9000 '$S3_ACCESS_KEY' '$S3_SECRET_KEY' && \
+            mc mb --ignore-existing local/$S3_BUCKET"
 
-      # ── S2-AUTH-SEED-1 / FIX-SEED1-D — integration suite trên DB CÔ LẬP của CI ──────────
-      # 2 spec SEED-1 (canonical roles per-pair data_scope + super-admin bootstrap) gate
-      # `runIsolatedDb = hasDb && !!process.env.LANE_DB` → SKIP khi LANE_DB vắng. Step Test phía trên KHÔNG
-      # set LANE_DB nên 66+9 = 75 test SEED-1 đều SKIP (gốc FAIL #3 của QA: tests không THỰC SỰ chạy).
+      # ⚠ LANE_DB BẮT BUỘC ở step này — nếu thiếu, CI XANH MÀ KHÔNG CHẠY GÌ.
+      #
+      # 70/128 file int-spec gate `runIsolatedDb = hasDb && !!process.env.LANE_DB` rồi `describe.skipIf(...)`.
+      # Trước 2026-07-10 step này KHÔNG set LANE_DB ⇒ ~68 file (toàn bộ suite deny-path / IDOR / cross-tenant)
+      # bị SKIP IM LẶNG. Hệ quả đã đo được: permission-rule-apply.int-spec.ts ĐỎ 2 test từ PR #123 mà không ai
+      # thấy, vì nó chưa từng chạy ở đâu — CI skip, và `check.sh` cũng không set LANE_DB.
       #
       # LANE_DB=mediaos = CHÍNH DB ephemeral của job này (đã migrate 0000→head ở step "Apply migrations" +
       # db:check pass). Đây là DB CÔ LẬP/EPHEMERAL của CI, KHÔNG phải DB dev chung ⇒ KHÔNG vi phạm policy
@@ -144,8 +176,17 @@ jobs:
       # Precedence vitest.config laneDbEnv(): DATABASE_URL/DIRECT explicit (env job) > LANE_DB > fallback —
       # nên LANE_DB CHỈ bật gate, KHÔNG đổi connection string (vẫn trỏ DB ephemeral đã migrate tới head).
       #
-      # Filter ĐÚNG 2 file SEED-1 (KHÔNG bật blanket mọi spec hasDb&&LANE_DB chưa được CI kiểm chứng — ngoài
-      # scope lane). Log step này = artifact GREEN xác minh được cho QA (đối chiếu FAIL #3 + bằng chứng GREEN).
+      # Đã đo trước khi bật (nhánh feat/s4-noti-dash-wave, DB cô lập chain 0000→0483):
+      #   LANE_DB=<db> npx vitest run test/integration → 121 file pass · 1 file fail · 2126 test pass
+      # File fail duy nhất = permission-rule-apply (201 vs 200) → đã sửa bằng @HttpCode(200) trong PR này.
+      - name: Test (unit + integration RLS/auth)
+        env:
+          LANE_DB: mediaos
+        run: pnpm --filter @mediaos/api test
+
+      # ── S2-AUTH-SEED-1 / FIX-SEED1-D — canary tường minh cho 2 spec SEED-1 ──────────
+      # Step "Test" phía trên GIỜ đã bao trùm 2 file này (LANE_DB đã bật). Giữ step riêng làm check có TÊN
+      # trong danh sách PR: nếu ai lỡ gỡ LANE_DB khỏi step trên, step này vẫn đỏ và chỉ đúng nguyên nhân.
       # Dùng `exec vitest run <file>` (KHÔNG `test -- <file>`): qua `pnpm run test` thì `--` không truyền
       # đúng filter cho vitest (vitest coi `--` là token positional → chạy CẢ suite). `exec` gọi thẳng vitest
       # ⇒ 2 path là positional filter THẬT → đúng 75 test (66 canonical-roles + 9 super-admin-bootstrap).

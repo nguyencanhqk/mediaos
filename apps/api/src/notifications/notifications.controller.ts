@@ -1,16 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  Param,
-  Patch,
-  Post,
-  Put,
-  Query,
-  Req,
-} from "@nestjs/common";
+import { Body, Controller, Delete, HttpCode, Get, Param, Post, Put, Req } from "@nestjs/common";
 import type { Request } from "express";
 import { ZodValidationPipe } from "nestjs-zod";
 import {
@@ -19,7 +7,6 @@ import {
   type UpsertNotificationPreferenceDto,
   type RegisterDeviceDto,
 } from "@mediaos/contracts";
-import { NotificationsService } from "./notifications.service";
 import { NotificationPreferencesRepository } from "./notification-preferences.repository";
 import { DeviceTokenService } from "./device-token.service";
 
@@ -27,41 +14,19 @@ interface AuthenticatedRequest extends Request {
   user: { id: string; companyId: string };
 }
 
+/**
+ * NotificationsController — device tokens (push registration) + preferences (opt-in/out per type). Danh
+ * sách/unread-count/mark-read/mark-all-read đã CHUYỂN sang MyNotificationsController (S4-NOTI-BE-1, cột
+ * MỚI/API spec-compliant, xem my-notifications.controller.ts) — gỡ 4 route cũ ở đây để KHÔNG va route
+ * (Nest sẽ đăng ký trùng nếu 2 controller cùng khai báo `@Get() /notifications`). NotificationsService.create()
+ * (dùng bởi module khác để phát notification) KHÔNG đổi — chỉ HTTP surface đọc/mark của controller này gỡ.
+ */
 @Controller("notifications")
 export class NotificationsController {
   constructor(
-    private readonly notifications: NotificationsService,
     private readonly prefRepo: NotificationPreferencesRepository,
     private readonly deviceTokens: DeviceTokenService,
   ) {}
-
-  /** GET /notifications — danh sách thông báo; ?is_read=false để chỉ lấy chưa đọc */
-  @Get()
-  list(@Req() req: AuthenticatedRequest, @Query("is_read") isRead?: string) {
-    const filterRead =
-      isRead === "true" ? true : isRead === "false" ? false : undefined;
-    return this.notifications.listForUser(req.user.companyId, req.user.id, filterRead);
-  }
-
-  /** GET /notifications/unread-count */
-  @Get("unread-count")
-  unreadCount(@Req() req: AuthenticatedRequest) {
-    return this.notifications.countUnread(req.user.companyId, req.user.id);
-  }
-
-  /** PATCH /notifications/:id/read — đánh dấu đã đọc */
-  @Patch(":id/read")
-  @HttpCode(200)
-  markRead(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
-    return this.notifications.markRead(req.user.companyId, id, req.user.id);
-  }
-
-  /** PATCH /notifications/read-all — đánh dấu tất cả đã đọc */
-  @Patch("read-all")
-  @HttpCode(200)
-  markAllRead(@Req() req: AuthenticatedRequest) {
-    return this.notifications.markAllRead(req.user.companyId, req.user.id);
-  }
 
   // ─── Device tokens (push registration) ────────────────────────────────────
 
@@ -90,10 +55,7 @@ export class NotificationsController {
    */
   @Delete("devices/:token")
   @HttpCode(204)
-  unregisterDevice(
-    @Req() req: AuthenticatedRequest,
-    @Param("token") token: string,
-  ) {
+  unregisterDevice(@Req() req: AuthenticatedRequest, @Param("token") token: string) {
     return this.deviceTokens.unregister({
       companyId: req.user.companyId,
       token,

@@ -1,5 +1,5 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { AppShell, NotificationBell } from "@mediaos/ui";
+import { AppShell } from "@mediaos/ui";
 import { NAV_ITEMS } from "@/lib/nav";
 import { BrandLogo } from "@/components/brand/brand-mark";
 import { BRAND } from "@/lib/brand";
@@ -21,9 +21,13 @@ export function RootLayout() {
     return <Outlet />;
   }
 
-  // FS-5: chuông thông báo đã lên @mediaos/ui (notification-api ở web-core) → gắn lại slot `notifications`.
+  // S4-FE-NOTI-CONSOLE-BELL-1: slot `notifications` bỏ trống — <NotificationBell/> (@mediaos/ui) gỡ
+  // khỏi console vì nó tiêu thụ notificationApi (web-core) trỏ route BE legacy đã gỡ ở PR #133
+  // (PATCH /notifications/:id/read, /read-all → 404), làm chuông vỡ. Console (quản trị hệ thống)
+  // chưa nằm trong phạm vi NOTI (SPEC-08/FRONTEND-12 chỉ chỉ định apps/app) nên không wire lại sang
+  // my-notification-api ở đây — xem NotificationBadge/Dropdown thật ở apps/app/src/components/notifications.
   return (
-    <AppShell navItems={NAV_ITEMS} brand={brand} notifications={<NotificationBell />}>
+    <AppShell navItems={NAV_ITEMS} brand={brand}>
       <Outlet />
     </AppShell>
   );
