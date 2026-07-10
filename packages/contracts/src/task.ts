@@ -341,3 +341,186 @@ export const updateLabelSchema = z
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: "Cần ít nhất 1 field để cập nhật." });
 export type UpdateLabelRequest = z.infer<typeof updateLabelSchema>;
+
+// ─── S4-TASK-BE-1 (SPEC-06 §6.1/§6.5/§6.6/§15.1-2, mig 0478 — L1 sync PR trước): Project domain ────
+// (Owner/Manager/Member/Viewer). LƯU Ý: đây là project QUẢN LÝ DỰ ÁN (lifecycle Planning→Archived +
+// member role) — KHÁC với `projectStateSchema`/`labelSchema` ở trên (thuộc apps/projects kiểu Plane,
+// PM-1 mig 0420, board state tùy biến). Hai khái niệm cùng bảng `projects`/cột riêng, KHÔNG trộn field.
+//
+// ĐẶT TÊN `taskProject*` (không phải `project*` trần): packages/contracts/src/media.ts (park/out-of-scope
+// theo CLAUDE.md — code media-era, KHÔNG đụng ở WO này) ĐÃ export `projectStatusSchema`/`projectPrioritySchema`/
+// `createProjectSchema`/`updateProjectSchema`/`listProjectsQuerySchema` cho Project media-era khác hẳn (status
+// lowercase 'active'/'paused'/'archived'). Barrel `index.ts` dùng `export *` ⇒ trùng tên vỡ build (TS2308).
+// Prefix `taskProject` = Project của SPEC-06 TASK module, phân biệt tường minh — build đã verify KHÔNG đụng.
+//
+// Field ↔ cột DB (apps/api/src/db/schema/media.ts, cột TitleCase MỚI additive mig 0478):
+//   code → project_code · name → name (legacy, NOT NULL) · ownerEmployeeId → owner_employee_id (FK
+//   employee_profiles) · departmentId → department_id (FK org_units) · priority → project_priority ·
+//   status → project_status (CHECK: Planning/Active/On Hold/Completed/Cancelled/Archived, TitleCase —
+//   KHÔNG lẫn `status` legacy lowercase 'active'/'paused'/'archived').
+//
+// Permission pair (mig 0485, DB-06 §12.1): read/create/update:project (non-sensitive) ·
+// close/delete/manage-member/archive/view-report:project (sensitive). archive:project +
+// view-report:project NGOÀI PHẠM VI WO này (route chưa dựng — xem ghi chú backend).
+
+/** ISO date-only (YYYY-MM-DD) — cột DB là `date` (không giờ), KHÁC `z.string().datetime()` dùng cho
+ * timestamptz ở taskSchema phía trên. Mirror packages/contracts/src/hr/contracts.ts `isoDate`. */
+const TASK_PROJECT_ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+export const taskProjectStatusSchema = z.enum([
+  "Planning",
+  "Active",
+  "On Hold",
+  "Completed",
+  "Cancelled",
+  "Archived",
+]);
+export type TaskProjectStatusDto = z.infer<typeof taskProjectStatusSchema>;
+
+export const taskProjectPrioritySchema = z.enum(["Low", "Medium", "High", "Urgent"]);
+export type TaskProjectPriorityDto = z.infer<typeof taskProjectPrioritySchema>;
+
+export const projectRoleSchema = z.enum(["Owner", "Manager", "Member", "Viewer"]);
+export type ProjectRoleDto = z.infer<typeof projectRoleSchema>;
+
+/** `member_status` (CHECK mig 0478: Active/Inactive/Removed — Inactive dự phòng, chưa dùng trong WO này). */
+export const projectMemberStatusSchema = z.enum(["Active", "Inactive", "Removed"]);
+export type ProjectMemberStatusDto = z.infer<typeof projectMemberStatusSchema>;
+
+/**
+ * POST /api/v1/projects (TASK-API-003, create:project). `name` bắt buộc — mọi field khác optional
+ * (server set default: status/priority nếu thiếu; actor có employee mapping → auto-Owner-member —
+ * xem ProjectsService, KHÔNG thuộc DTO). `ownerEmployeeId` do client CHỌN owner (khác actor) — server
+ * validate employee tồn tại/active ở service layer, DTO chỉ kiểm hình dạng UUID.
+ */
+export const createTaskProjectSchema = z
+  .object({
+    name: z.string().min(1, "Tên dự án là bắt buộc").max(255),
+    code: z.string().min(1).max(50).optional(),
+    description: z.string().max(10000).nullable().optional(),
+    ownerEmployeeId: z.string().uuid().optional(),
+    departmentId: z.string().uuid().optional(),
+    priority: taskProjectPrioritySchema.optional(),
+    startDate: z.string().regex(TASK_PROJECT_ISO_DATE, "startDate phải là YYYY-MM-DD").optional(),
+    endDate: z.string().regex(TASK_PROJECT_ISO_DATE, "endDate phải là YYYY-MM-DD").optional(),
+  })
+  .refine((v) => !v.startDate || !v.endDate || v.endDate >= v.startDate, {
+    message: "endDate không được nhỏ hơn startDate",
+    path: ["endDate"],
+  });
+export type CreateTaskProjectRequest = z.infer<typeof createTaskProjectSchema>;
+
+/**
+ * PATCH /api/v1/projects/:id (TASK-API-004, update:project). Mọi field optional (partial update) —
+ * KHÔNG có `status` ở đây: đổi trạng thái lifecycle đi qua route verb riêng (close — API-006; archive/
+ * cancel NGOÀI PHẠM VI WO này), tránh PATCH trần đổi trạng thái không qua rule (TASK-ERR mirror TK-4).
+ */
+export const updateTaskProjectSchema = z
+  .object({
+    name: z.string().min(1, "Tên dự án là bắt buộc").max(255),
+    code: z.string().min(1).max(50).nullable(),
+    description: z.string().max(10000).nullable(),
+    ownerEmployeeId: z.string().uuid().nullable(),
+    departmentId: z.string().uuid().nullable(),
+    priority: taskProjectPrioritySchema.nullable(),
+    startDate: z.string().regex(TASK_PROJECT_ISO_DATE, "startDate phải là YYYY-MM-DD").nullable(),
+    endDate: z.string().regex(TASK_PROJECT_ISO_DATE, "endDate phải là YYYY-MM-DD").nullable(),
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: "Cần ít nhất 1 field để cập nhật." })
+  .refine((v) => !v.startDate || !v.endDate || v.endDate >= v.startDate, {
+    message: "endDate không được nhỏ hơn startDate",
+    path: ["endDate"],
+  });
+export type UpdateTaskProjectRequest = z.infer<typeof updateTaskProjectSchema>;
+
+/** POST /api/v1/projects/:id/close (TASK-API-006, close:project) → project_status='Completed'. `note`
+ * tuỳ chọn (mirror packages/contracts/src/leave.ts `approveLeaveRequestSchema`), ghi vào activity log. */
+export const closeTaskProjectSchema = z.object({
+  note: z.string().max(1000).optional(),
+});
+export type CloseTaskProjectRequest = z.infer<typeof closeTaskProjectSchema>;
+
+/** Chi tiết dự án (GET /:id) — DTO trả về server-side, join owner_employee_id → employee_profiles.full_name
+ * và department_id → org_units.name (ownerName/departmentName null nếu chưa gán/không tồn tại). */
+export const taskProjectResponseSchema = z.object({
+  id: z.string().uuid(),
+  companyId: z.string().uuid(),
+  code: z.string().nullable(),
+  name: z.string(),
+  description: z.string().nullable(),
+  ownerEmployeeId: z.string().uuid().nullable(),
+  ownerName: z.string().nullable(),
+  departmentId: z.string().uuid().nullable(),
+  departmentName: z.string().nullable(),
+  priority: taskProjectPrioritySchema.nullable(),
+  status: taskProjectStatusSchema.nullable(),
+  startDate: z.string().nullable(),
+  endDate: z.string().nullable(),
+  memberCount: z.number().int().nonnegative(),
+  createdBy: z.string().uuid().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  closedAt: z.string().datetime().nullable(),
+  closedBy: z.string().uuid().nullable(),
+});
+export type TaskProjectResponseDto = z.infer<typeof taskProjectResponseSchema>;
+
+/** Dòng danh sách (GET /projects, TASK-SCREEN-001 §Cột hiển thị) — nhẹ hơn detail: bỏ description/closedBy. */
+export const taskProjectListItemSchema = taskProjectResponseSchema.omit({
+  description: true,
+  closedBy: true,
+});
+export type TaskProjectListItemDto = z.infer<typeof taskProjectListItemSchema>;
+
+/**
+ * GET /api/v1/projects query (TASK-API-001, read:project). `limit`/`offset` dùng CÙNG pattern
+ * `z.coerce.number()` như `listTasksQuerySchema` phía trên — coerce số idempotent tự nhiên
+ * (Number(5) === 5 dù ZodValidationPipe chạy 2 lần; KHÁC boolean cần z.preprocess riêng — xem
+ * memory zod-query-param-double-pipe-idempotent / packages/contracts/src/my-notification.ts).
+ * Repo re-clamp TASK_PROJECT_PAGE_LIMIT_MAX lần nữa (defense-in-depth, mirror BOARD_PAGE_LIMIT_MAX).
+ */
+export const TASK_PROJECT_PAGE_LIMIT_MAX = 200;
+export const listTaskProjectsQuerySchema = z.object({
+  status: taskProjectStatusSchema.optional(),
+  ownerEmployeeId: z.string().uuid().optional(),
+  search: z.string().trim().min(1).max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(TASK_PROJECT_PAGE_LIMIT_MAX).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+export type ListTaskProjectsQueryRequest = z.infer<typeof listTaskProjectsQuerySchema>;
+
+// ─── S4-TASK-BE-1: Project member (SPEC-06 §6.6/§13.4/§15.2, TASK-API-101..104, manage-member:project) ──
+
+/**
+ * POST /api/v1/projects/:id/members (manage-member:project). `employeeId` là NGUỒN SỰ THẬT DUY NHẤT —
+ * `user_id` (project_members, legacy NOT NULL) KHÔNG bao giờ nhận từ client: server resolve
+ * employee_profiles.user_id ở service layer (fail-loud nếu NULL — nhân viên chưa có tài khoản).
+ */
+export const addMemberSchema = z.object({
+  employeeId: z.string().uuid(),
+  projectRole: projectRoleSchema,
+});
+export type AddMemberRequest = z.infer<typeof addMemberSchema>;
+
+/** PATCH /api/v1/projects/:id/members/:memberId (manage-member:project) — chỉ đổi project_role. */
+export const updateMemberRoleSchema = z.object({
+  projectRole: projectRoleSchema,
+});
+export type UpdateMemberRoleRequest = z.infer<typeof updateMemberRoleSchema>;
+
+/** DTO thành viên dự án (GET /:id/members, TASK-SCREEN-004 §Cột hiển thị). `employeeId`/`employeeName`
+ * null nếu hàng legacy (employee_id NULL, chưa cut-over) — KHÔNG lộ user_id nội bộ ra response. */
+export const memberResponseSchema = z.object({
+  id: z.string().uuid(),
+  projectId: z.string().uuid(),
+  employeeId: z.string().uuid().nullable(),
+  employeeName: z.string().nullable(),
+  employeeCode: z.string().nullable(),
+  departmentName: z.string().nullable(),
+  projectRole: projectRoleSchema.nullable(),
+  status: projectMemberStatusSchema.nullable(),
+  joinedAt: z.string().datetime().nullable(),
+  removedAt: z.string().datetime().nullable(),
+});
+export type MemberResponseDto = z.infer<typeof memberResponseSchema>;
