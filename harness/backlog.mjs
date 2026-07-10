@@ -4140,8 +4140,15 @@ export const backlog = [
     title:
       "BE Project CRUD + close/delete mềm + quản lý member (GET/POST /projects, GET/PATCH /projects/:id, close/delete, members add/update-role/remove) — withTenant, permission guard, activity log",
     zone: "yellow",
-    status: "todo",
-    paths: ["apps/api/src/tasks/**", "apps/api/test/integration/**", "packages/contracts/src/**"],
+    status: "done", // PR #144 (plan-review 2026-07-10 nâng gate LIGHT→FULL — docs/plans/S4-TASK-BE-1.md)
+    paths: [
+      "apps/api/src/tasks/**",
+      "apps/api/test/integration/**",
+      "packages/contracts/src/**",
+      // Mở rộng chủ đích (plan L1): sync Drizzle schema theo mig 0478 đã áp DB — KHÔNG migration mới.
+      "apps/api/src/db/schema/**",
+      "docs/plans/S4-TASK-BE-1.md",
+    ],
     skills: ["code-review"],
     depends_on: ["S4-TASK-SEED-1"],
     src: [
@@ -4150,11 +4157,12 @@ export const backlog = [
       "IMP02-STORY-065/066/067",
       "IMPLEMENTATION-07 §9.2/§9.3",
     ],
+    plan: "docs/plans/S4-TASK-BE-1.md",
     done_when: [
-      "GET/POST /api/v1/projects · GET/PATCH /api/v1/projects/:id · POST /:id/close · DELETE /:id (soft) · GET/POST /:id/members · PATCH/DELETE /:id/members/:memberId — mọi query qua withTenant + lọc company_id; @RequirePermission đúng cặp seed TASK-SEED-1",
-      "Business rule P0: chỉ TASK.PROJECT.CREATE mới tạo; người tạo = Owner nếu có employee mapping; KHÔNG thêm member là employee đã nghỉ/chấm dứt; KHÔNG trùng active member; project Closed/Cancelled/Archived chặn tạo task mới (trừ override)",
-      "Ghi task_activity_logs (PROJECT_CREATED/UPDATED/MEMBER_ADDED/MEMBER_REMOVED) + audit log hành động quan trọng; list có pagination/filter; DTO Zod ở packages/contracts (dual-build), validate input tại boundary",
-      "Int-spec RED-trước: deny-path (thiếu quyền tạo/sửa → 403) · cross-tenant (project/member tenant khác → 404, không lộ) · member trùng/nghỉ-việc bị chặn; check.sh xanh + LIGHT gate (typescript-reviewer + quality-gate)",
+      "GET/POST /api/v1/projects · GET/PATCH /api/v1/projects/:id · POST /:id/close · DELETE /:id (soft) · GET/POST /:id/members · PATCH/DELETE /:id/members/:memberId — mọi query qua withTenant + lọc company_id; @RequirePermission đúng cặp seed TASK-SEED-1; GET list/detail/members lọc data-scope (employee @Own membership · manager @Team · hr/admin @Company) qua DataScopeService",
+      "Business rule P0: chỉ TASK.PROJECT.CREATE mới tạo; người tạo = Owner nếu có employee mapping (set cả user_id legacy NOT NULL lẫn employee_id); KHÔNG thêm member là employee đã nghỉ/chấm dứt; employee chưa có user account → 400 fail-loud; KHÔNG trùng active member (đo cả 2 unique legacy user_id + mới employee_id); project Completed/Cancelled/Archived (cột project_status MỚI) chặn tạo task mới — MVP chặn cứng, không expose override API",
+      "Ghi task_activity_logs (PROJECT_CREATED/UPDATED/MEMBER_ADDED/MEMBER_REMOVED) + audit log hành động quan trọng; list có pagination/filter; DTO Zod ở packages/contracts (dual-build), validate input tại boundary; owner-check manager @Team = actor.employeeId === projects.owner_employee_id, NULL → 403 fail-closed",
+      "Int-spec RED-trước: deny-path (thiếu quyền tạo/sửa → 403, gồm hr thiếu pair close/delete/manage-member) · cross-tenant (project/member tenant khác → 404, không lộ) · data-scope trong-tenant (@Own membership/@Team — KHÔNG lộ project ngoài scope) · member trùng/nghỉ-việc bị chặn · append-only qua app-role; gate describe.skipIf(!(hasDb && process.env.LANE_DB)); check.sh xanh + FULL gate (permission/audit/RLS — plan-review 2026-07-10 nâng từ LIGHT; chi tiết docs/plans/S4-TASK-BE-1.md)",
     ],
   },
   {
