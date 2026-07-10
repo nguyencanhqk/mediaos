@@ -119,6 +119,8 @@ export class RoleAdminController {
    * KHÔNG đụng ":id/permissions" (2-segment) hay ":id" (delete role, 1-segment).
    */
   @Post(":id/permissions/apply-rule")
+  // 200, KHÔNG 201: route không tạo tài nguyên tại URL của nó (dryRun trả preview, apply trả summary).
+  @HttpCode(200)
   @RequirePermission("assign", "permission", { isSensitive: true })
   applyPermissionRule(
     @Req() req: AuthenticatedRequest,
