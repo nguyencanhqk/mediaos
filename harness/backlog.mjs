@@ -4424,6 +4424,36 @@ export const backlog = [
     //   PATCH + audit (object_type 'notification' tái dùng, KHÔNG cần CHECK mới).
   },
   {
+    id: "S4-NOTI-BE-4",
+    module: "NOTI",
+    layer: "BE",
+    title:
+      "NOTI admin config WRITE: migration GRANT-only (INSERT,UPDATE notification_events + notification_templates cho app role) + PATCH /notifications/events/:id (bật/tắt) + PATCH /templates/:id — hoàn tất phần blocked của S4-NOTI-BE-3",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/notifications/**",
+      "apps/api/test/integration/**",
+      "packages/contracts/src/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S4-NOTI-BE-3"],
+    src: [
+      "Ghi chú inline S4-NOTI-BE-3 (phiên 2026-07-10 — lý do blocked + thứ tự đúng, ngay phía trên)",
+      "apps/api/src/notifications/notification-admin.controller.ts (scaffold GET + tuple pin sẵn)",
+      "API-07 §14.3 (business rule #6 — biến cấm trong template)",
+      "migrations 0479/0481/0482 (comment 'write company-override → S4-NOTI-BE-3', GRANT SELECT-only)",
+    ],
+    done_when: [
+      "Migration đánh số nối tiếp head thật (đọc apps/api/migrations/meta/_journal.json lấy idx/when thật, when +5000): CHỈ `GRANT INSERT, UPDATE ON notification_events, notification_templates TO mediaos_app` — KHÔNG DDL khác, KHÔNG đổi RLS/policy (policy nullable-tenant 0479 đã WITH CHECK company_id=GUC — verify lại trước khi tin), KHÔNG grant DELETE (config là toggle/override, không xoá)",
+      "PATCH /notifications/events/:id (bật/tắt = ghi company-override row, TUYỆT ĐỐI KHÔNG UPDATE row global company_id IS NULL) + PATCH /notifications/templates/:id trên scaffold notification-admin.controller.ts; @RequirePermission update:notification-config / update:notification-template — tuple đã pin trong notification-event-catalog.const.ts và ĐÃ nằm trong SENSITIVE_CAPABILITY_ALLOWLIST từ BE-3, KHÔNG append thêm",
+      "PATCH template validate biến cấm theo API-07 §14.3 rule #6 (password/salary/token/…): payload chứa biến cấm → 422, KHÔNG ghi DB",
+      "Audit log khi đổi cấu hình (tái dùng object_type 'notification' — KHÔNG cần migration CHECK mới); withTenant mọi query; DTO contracts dual-build",
+      "Int-spec RED-trước (gate hasDb && LANE_DB): employee PATCH → 403 · admin toggle event → GET events phản ánh override còn row global KHÔNG đổi · template biến cấm → 422 · cross-tenant: override company A không rò sang company B; FULL gate security-reviewer + database-reviewer PASS",
+    ],
+  },
+  {
     id: "S4-DASH-DB-1",
     module: "DASH",
     layer: "DB",
