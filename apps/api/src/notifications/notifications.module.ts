@@ -15,10 +15,27 @@ import { DeviceTokenService } from "./device-token.service";
 import { MyNotificationsController } from "./my-notifications.controller";
 import { MyNotificationsService } from "./my-notifications.service";
 import { MyNotificationsRepository } from "./my-notifications.repository";
+// S4-NOTI-BE-2 (additive): event intake + notification engine. Đường HTTP nội bộ
+// (InternalNotificationsController → POST /internal/v1/notifications/events) + đường in-process
+// (NotificationEngineService.intake, S4-INT-1 outbox consumer gọi sau). Reuse AuditService/EventBus
+// (EventsModule) + RealtimeEmitterService (RealtimeEmitterModule) + DatabaseService (@Global) đã import.
+// KHÔNG đăng ký consumer eventType TASK ở đây (INT-1 làm) — chỉ cung cấp provider engine + 3 repo catalog.
+import { InternalNotificationsController } from "./internal-notifications.controller";
+import { NotificationEngineService } from "./notification-engine.service";
+import { NotificationEventRepository } from "./notification-event.repository";
+import { NotificationTemplateRepository } from "./notification-template.repository";
+import { NotificationDeliveryLogRepository } from "./notification-delivery-log.repository";
+import { NotificationRecipientResolverService } from "./notification-recipient-resolver.service";
+import { NotificationRendererService } from "./notification-renderer.service";
+import { NotificationDedupeService } from "./notification-dedupe.service";
 
 @Module({
   imports: [DatabaseModule, EventsModule, RealtimeEmitterModule, PermissionModule],
-  controllers: [NotificationsController, MyNotificationsController],
+  controllers: [
+    NotificationsController,
+    MyNotificationsController,
+    InternalNotificationsController,
+  ],
   providers: [
     NotificationsRepository,
     NotificationPreferencesRepository,
@@ -26,7 +43,16 @@ import { MyNotificationsRepository } from "./my-notifications.repository";
     DeviceTokenService,
     MyNotificationsRepository,
     MyNotificationsService,
+    // S4-NOTI-BE-2 (additive): engine pipeline + 3 repo đọc catalog + resolver/renderer/dedupe.
+    NotificationEngineService,
+    NotificationEventRepository,
+    NotificationTemplateRepository,
+    NotificationDeliveryLogRepository,
+    NotificationRecipientResolverService,
+    NotificationRendererService,
+    NotificationDedupeService,
   ],
-  exports: [NotificationsService, DeviceTokenService],
+  // Export engine cho S4-INT-1 (outbox consumer gọi intake() in-process).
+  exports: [NotificationsService, DeviceTokenService, NotificationEngineService],
 })
 export class NotificationsModule {}
