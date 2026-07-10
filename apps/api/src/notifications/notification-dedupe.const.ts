@@ -22,4 +22,12 @@ export const DEFAULT_DEDUPE_WINDOW_SECONDS = 300;
 export const DEFAULT_DEDUPE: Readonly<Record<string, DedupeDefaultConfig>> = {
   TASK_COMMENT_CREATED: { strategy: "TimeWindow", windowSeconds: DEFAULT_DEDUPE_WINDOW_SECONDS },
   TASK_STATUS_CHANGED: { strategy: "TimeWindow", windowSeconds: DEFAULT_DEDUPE_WINDOW_SECONDS },
+  // S4-NOTI-BE-3 — reminder job (task-reminder.job-handler.ts) tự tính `dedupeKey = "<taskId>:<YYYY-MM-DD
+  // theo UTC>"` rồi truyền qua InternalEventIntakeDto.dedupeKey. Cần strategy 'DedupeKey' (KHÔNG 'None')
+  // để NotificationDedupeService.computeKey THỰC SỰ set dedupe_key (ngược lại catalog='None' ⇒ key=null ⇒
+  // partial-unique coi NULL distinct ⇒ chạy job 2 lần/ngày sẽ gửi trùng — done_when "không gửi trùng trong
+  // ngày"). 'DedupeKey' (KHÔNG 'TimeWindow'): job tự chốt biên ngày lịch (UTC) thay vì bucket theo epoch/N
+  // giây (TimeWindow không align đúng "trong ngày" khi window=86400 và giờ chạy job lệch múi biên ngày).
+  TASK_DUE_SOON: { strategy: "DedupeKey", windowSeconds: null },
+  TASK_OVERDUE: { strategy: "DedupeKey", windowSeconds: null },
 };

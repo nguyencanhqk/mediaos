@@ -4399,6 +4399,59 @@ export const backlog = [
       "DTO contracts dual-build; job chạy lại an toàn (dedupe theo entity+ngày)",
       "Int-spec: employee không config được (403) · job phát đúng recipient · không gửi trùng; check.sh xanh + LIGHT gate",
     ],
+    // PHIÊN 2026-07-10 (lane notibe3) — SHIP MỘT PHẦN, CÒN LẠI BLOCKED (needs_human):
+    //   Đã xong: (1) CAP-2 fix — 6 cặp NOTI config APPEND vào SENSITIVE_CAPABILITY_ALLOWLIST
+    //   (permission.service.ts) + test /auth/me (auth-me-capabilities.int.spec.ts, describe S4-NOTI-BE-3).
+    //   (2) GET /notifications/events (list, filter module_code/event_code/enabled/search) · GET
+    //   /notifications/templates/:id (chi tiết) · GET /notifications/delivery-logs (list) —
+    //   notification-admin.controller.ts, @RequirePermission đúng 3/6 cặp view (config/template/
+    //   delivery-log). (3) Reminder job TASK_DUE_SOON/TASK_OVERDUE — task-reminder.job-handler.ts
+    //   (@SystemJobHandler, quét tasks task_type='office'), dedupe idempotent qua DEFAULT_DEDUPE
+    //   'DedupeKey' (notification-dedupe.const.ts) — dedupeKey="<taskId>:<ngày UTC>". Test:
+    //   notification-admin-config.int-spec.ts + task-reminder-job.int-spec.ts (RED-trước xác nhận).
+    //
+    //   BLOCKED (KHÔNG làm được trong lane này — cấm tạo migration): PATCH /notifications/events/:id
+    //   (bật/tắt event) + PATCH /notifications/templates/:id (sửa template). Ghi company-override đòi
+    //   GRANT INSERT,UPDATE MỚI trên notification_events/notification_templates cho mediaos_app — hiện
+    //   CHỈ có GRANT SELECT (migration 0479/0481/0482, comment sẵn "write company-override →
+    //   S4-NOTI-BE-3"). Đây là DDL (GRANT), không biểu diễn được bằng code app — cần 1 migration nối
+    //   tiếp head (band kế 0486+) TRƯỚC khi 1 lane BE khác build 2 route PATCH này. update:notification-
+    //   template cũng cần validate biến cấm (password/salary/token/…) theo API-07 §14.3 business rule #6
+    //   khi implement PATCH thật.
+    //   THỨ TỰ ĐÚNG: (a) migration nhỏ GRANT INSERT,UPDATE ON notification_events, notification_templates
+    //   TO mediaos_app (KHÔNG đổi RLS — policy nullable-tenant 0479 đã cho WITH CHECK company_id=GUC) →
+    //   (b) WO PATCH kế thừa notification-admin.controller.ts (đã có scaffold GET + tuple pin) thêm 2 route
+    //   PATCH + audit (object_type 'notification' tái dùng, KHÔNG cần CHECK mới).
+  },
+  {
+    id: "S4-NOTI-BE-4",
+    module: "NOTI",
+    layer: "BE",
+    title:
+      "NOTI admin config WRITE: migration GRANT-only (INSERT,UPDATE notification_events + notification_templates cho app role) + PATCH /notifications/events/:id (bật/tắt) + PATCH /templates/:id — hoàn tất phần blocked của S4-NOTI-BE-3",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/notifications/**",
+      "apps/api/test/integration/**",
+      "packages/contracts/src/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S4-NOTI-BE-3"],
+    src: [
+      "Ghi chú inline S4-NOTI-BE-3 (phiên 2026-07-10 — lý do blocked + thứ tự đúng, ngay phía trên)",
+      "apps/api/src/notifications/notification-admin.controller.ts (scaffold GET + tuple pin sẵn)",
+      "API-07 §14.3 (business rule #6 — biến cấm trong template)",
+      "migrations 0479/0481/0482 (comment 'write company-override → S4-NOTI-BE-3', GRANT SELECT-only)",
+    ],
+    done_when: [
+      "Migration đánh số nối tiếp head thật (đọc apps/api/migrations/meta/_journal.json lấy idx/when thật, when +5000): CHỈ `GRANT INSERT, UPDATE ON notification_events, notification_templates TO mediaos_app` — KHÔNG DDL khác, KHÔNG đổi RLS/policy (policy nullable-tenant 0479 đã WITH CHECK company_id=GUC — verify lại trước khi tin), KHÔNG grant DELETE (config là toggle/override, không xoá)",
+      "PATCH /notifications/events/:id (bật/tắt = ghi company-override row, TUYỆT ĐỐI KHÔNG UPDATE row global company_id IS NULL) + PATCH /notifications/templates/:id trên scaffold notification-admin.controller.ts; @RequirePermission update:notification-config / update:notification-template — tuple đã pin trong notification-event-catalog.const.ts và ĐÃ nằm trong SENSITIVE_CAPABILITY_ALLOWLIST từ BE-3, KHÔNG append thêm",
+      "PATCH template validate biến cấm theo API-07 §14.3 rule #6 (password/salary/token/…): payload chứa biến cấm → 422, KHÔNG ghi DB",
+      "Audit log khi đổi cấu hình (tái dùng object_type 'notification' — KHÔNG cần migration CHECK mới); withTenant mọi query; DTO contracts dual-build",
+      "Int-spec RED-trước (gate hasDb && LANE_DB): employee PATCH → 403 · admin toggle event → GET events phản ánh override còn row global KHÔNG đổi · template biến cấm → 422 · cross-tenant: override company A không rò sang company B; FULL gate security-reviewer + database-reviewer PASS",
+    ],
   },
   {
     id: "S4-DASH-DB-1",
