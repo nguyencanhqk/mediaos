@@ -68,6 +68,19 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      # Object storage ephemeral cho integration test (employee-file: download → 302 signed URL).
+      # Dùng `bitnami/minio` chứ KHÔNG `minio/minio`: service container của GitHub Actions KHÔNG override được
+      # `command`, mà image chính chủ đòi đối số `server /data`. Bitnami tự chạy server + tự tạo bucket qua
+      # MINIO_DEFAULT_BUCKETS. Credential ephemeral mỗi run — KHÔNG phải secret thật.
+      # Health-check để ở step riêng (image không chắc có curl); runner thì luôn có.
+      minio:
+        image: bitnami/minio:2024
+        env:
+          MINIO_ROOT_USER: ci_minio_user
+          MINIO_ROOT_PASSWORD: ci_minio_password
+          MINIO_DEFAULT_BUCKETS: mediaos-test
+        ports:
+          - 9000:9000
 
     env:
       # DB ephemeral CI — KHÔNG phải secret thật. DIRECT = superuser (migrate + bootstrap role + seed test).
@@ -86,6 +99,15 @@ jobs:
       # Test crypto/2FA (LocalKekProvider) cần file KEK 32-byte tại path này. CI sinh KEK EPHEMERAL ở step dưới
       # (KHÔNG phải secret thật — prod dùng Vault transit, ADR-0004). Đặt env để cả gen-step lẫn test cùng đọc.
       KMS_LOCAL_KEK_PATH: ${{ github.workspace }}/.secrets/local-kek.bin
+      # Object storage ephemeral (service `minio` ở trên). Trước 2026-07-10 CI KHÔNG set S3_* nên
+      # employee-file.int-spec (download → 302 signed URL) ném StorageNotConfiguredError — nhưng không ai
+      # thấy vì spec đó bị `skipIf` bỏ qua khi thiếu LANE_DB. Bật LANE_DB thì phải cấp storage thật.
+      S3_ENDPOINT: http://localhost:9000
+      S3_ACCESS_KEY: ci_minio_user
+      S3_SECRET_KEY: ci_minio_password
+      S3_BUCKET: mediaos-test
+      S3_REGION: us-east-1
+      S3_FORCE_PATH_STYLE: "true"
 
     steps:
       - uses: actions/checkout@v4
@@ -129,6 +151,17 @@ jobs:
         run: |
           mkdir -p "$(dirname "$KMS_LOCAL_KEK_PATH")"
           node -e "require('fs').writeFileSync(process.env.KMS_LOCAL_KEK_PATH, require('crypto').randomBytes(32))"
+
+      # Service container `minio` không khai health-check (image không chắc có curl). Đợi ở runner — nếu
+      # MinIO chưa lên thì employee-file.int-spec sẽ đỏ với StorageNotConfiguredError, rất khó đọc.
+      - name: Wait for MinIO
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9000/minio/health/live; then echo "minio ready"; exit 0; fi
+            sleep 2
+          done
+          echo "MinIO không lên sau 60s" >&2
+          exit 1
 
       # ⚠ LANE_DB BẮT BUỘC ở step này — nếu thiếu, CI XANH MÀ KHÔNG CHẠY GÌ.
       #
