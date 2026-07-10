@@ -5,10 +5,13 @@ import {
   createCommentSchema,
   createLabelSchema,
   createProjectStateSchema,
+  createTaskCoreSchema,
   createTaskSchema,
+  listTaskCoreQuerySchema,
   listTasksQuerySchema,
   updateLabelSchema,
   updateProjectStateSchema,
+  updateTaskCoreSchema,
   updateTaskFieldsSchema,
   updateTaskStatusSchema,
 } from "@mediaos/contracts";
@@ -59,3 +62,14 @@ export class CreateLabelDto extends createZodDto(createLabelSchema) {}
 
 /** PATCH /labels/:labelId — sửa nhãn (rename/recolor). */
 export class UpdateLabelDto extends createZodDto(updateLabelSchema) {}
+
+// ─── S4-TASK-BE-2 — Task core (SPEC-06 task CRUD + my-tasks + filter) ────────────
+
+/** GET /tasks — filter status/priority/assignee/project/due-range/overdue + pagination (read:task). */
+export class ListTaskCoreQueryDto extends createZodDto(listTaskCoreQuerySchema) {}
+
+/** POST /tasks — tạo task core (create:task). title bắt buộc, project optional (task cá nhân MVP). */
+export class CreateTaskCoreDto extends createZodDto(createTaskCoreSchema) {}
+
+/** PATCH /tasks/:id — cập nhật field task core (update:task, partial ≥1 field, KHÔNG đổi status). */
+export class UpdateTaskCoreDto extends createZodDto(updateTaskCoreSchema) {}

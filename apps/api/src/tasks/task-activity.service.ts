@@ -13,7 +13,7 @@ import { taskActivityLogs } from "../db/schema";
  * target_type PHẢI ∈ CHECK chk_task_activity_target_type (0478): Project/Task/Member/Comment/File/…
  */
 
-/** Action canonical cho project/member (SPEC-06 §16.3 activity feed). */
+/** Action canonical cho project/member (SPEC-06 §16.3 activity feed). S4-TASK-BE-2 (additive): TASK_*. */
 export type TaskActivityAction =
   | "PROJECT_CREATED"
   | "PROJECT_UPDATED"
@@ -21,10 +21,14 @@ export type TaskActivityAction =
   | "PROJECT_DELETED"
   | "MEMBER_ADDED"
   | "MEMBER_ROLE_CHANGED"
-  | "MEMBER_REMOVED";
+  | "MEMBER_REMOVED"
+  // S4-TASK-BE-2 — task core lifecycle (SPEC-06 §7.12).
+  | "TASK_CREATED"
+  | "TASK_UPDATED"
+  | "TASK_DELETED";
 
-/** target_type — tập con của CHECK 0478 dùng ở WO này (Project/Member). */
-export type TaskActivityTargetType = "Project" | "Member";
+/** target_type — tập con của CHECK 0478 (Project/Member/Task). S4-TASK-BE-2 (additive): Task. */
+export type TaskActivityTargetType = "Project" | "Member" | "Task";
 
 export interface TaskActivityEntry {
   action: TaskActivityAction;

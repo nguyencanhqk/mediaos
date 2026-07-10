@@ -13,6 +13,9 @@ import { ProjectsController } from "./projects.controller";
 import { ProjectsService } from "./projects.service";
 import { ProjectsRepository } from "./projects.repository";
 import { TaskActivityService } from "./task-activity.service";
+// S4-TASK-BE-2 (additive) — Task core (SPEC-06): CRUD + my-tasks + filter, tách khỏi Task Hub legacy.
+import { TaskCoreService } from "./task-core.service";
+import { TaskCoreRepository } from "./task-core.repository";
 import { EventsModule } from "../events/events.module";
 import { PermissionModule } from "../permission/permission.module";
 import { StorageModule } from "../storage/storage.module";
@@ -39,6 +42,9 @@ import { StorageModule } from "../storage/storage.module";
     ProjectsService,
     ProjectsRepository,
     TaskActivityService,
+    // S4-TASK-BE-2 — Task core stack (tái dùng TasksRepository cho project guard + TaskActivityService).
+    TaskCoreService,
+    TaskCoreRepository,
   ],
   exports: [TasksService],
 })
