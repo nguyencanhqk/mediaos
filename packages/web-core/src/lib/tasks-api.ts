@@ -18,7 +18,7 @@ import { buildQueryString } from "./api-params";
  * TASK API client — S4-FE-REGISTRY-1 (skeleton typed, page thật = S4-FE-TASK-1).
  *
  * BẤT BIẾN: company_id do SERVER resolve từ AuthContext — client KHÔNG nhận/forward (mirror
- * attendance-api.ts / notification-api.ts). Response validate Zod ở ranh giới (schema @mediaos/contracts
+ * attendance-api.ts / my-notification-api.ts). Response validate Zod ở ranh giới (schema @mediaos/contracts
  * task.ts). KHÔNG import token-storage (apiFetch tự gắn Bearer + refresh-on-401 + envelope unwrap).
  *
  * Gate là việc của SERVER: GET /tasks (My Tasks) read mở (việc của chính mình); GET /tasks/board +
