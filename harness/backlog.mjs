@@ -4172,7 +4172,7 @@ export const backlog = [
     title:
       "BE Task CRUD + My-tasks + filter (GET/POST /tasks, GET/PATCH/DELETE /tasks/:id, GET /tasks/my) — data-scope theo membership/assignee, validation title/project",
     zone: "yellow",
-    status: "todo",
+    status: "in_progress",
     paths: ["apps/api/src/tasks/**", "apps/api/test/integration/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S4-TASK-BE-1"],
@@ -4183,10 +4183,11 @@ export const backlog = [
       "IMPLEMENTATION-07 §9.2/§9.3",
     ],
     done_when: [
-      "GET /tasks (filter status/priority/assignee/project/due-range/overdue, pagination) · POST /tasks (bắt buộc title; project optional nếu MVP cho task cá nhân) · GET/PATCH/DELETE /tasks/:id (delete = soft) · GET /tasks/my (assigned + created + watched, sort overdue-first)",
-      "Data-scope: task list/detail lọc theo DataScopeService (Own/Team/Department/Company theo grant) + membership project; assignee phải employee active thuộc phạm vi được giao; withTenant + company_id mọi query",
-      "task_activity_logs TASK_CREATED/UPDATED + audit; DTO contracts dual-build; loading/empty/error được FE dựa vào (envelope chuẩn API-01)",
-      "Int-spec RED-trước: employee chỉ thấy task trong scope (không lộ task ngoài team) · cross-tenant 404 · my-tasks đúng 3 nguồn · deny tạo task thiếu quyền; check.sh xanh + LIGHT gate",
+      "✅ GET /tasks (filter status/priority/assignee/project/due-range/overdue, pagination) · POST /tasks (bắt buộc title; project optional task cá nhân) · GET/PATCH/DELETE /tasks/:id (delete = soft-delete deleted_at/by) · GET /tasks/my (assigned+created+watched, dedupe theo id, sort overdue-first) — TaskCoreController routes + TaskCoreService + TaskCoreRepository (raw sql cho cột 0478 chưa typed — schema/** ngoài path cho phép)",
+      "✅ Data-scope: list/detail lọc DataScopeService (Own/Team/Company) + membership project (assignee-scope OR active-member EXISTS); assignee phải employee active + có tài khoản + trong phạm vi người giao (400/403 fail-loud); withTenant + company_id mọi query (raw sql bind company_id tường minh trên RLS+FORCE 0478)",
+      "✅ task_activity_logs TASK_CREATED/UPDATED/DELETED target_type='Task' (append-only) + AuditService objectType='task'; DTO taskCore* APPEND contracts dual-build (KHÔNG rewrite export cũ); envelope API-01",
+      "✅ Int-spec 13 xanh trên LANE_DB cô lập (task-core.int-spec.ts): data-scope emp/mgr/admin · cross-tenant 404 · out-of-scope 404 · my-tasks 3 nguồn+dedupe+overdue · deny create emp/mgr (deferred 0485) · assignee resigned/terminated/inactive/deleted/no-account 400 · workflow task PATCH/DELETE 400 · append-only ledger deny; typecheck xanh; tasks.permissions.spec cập nhật (getMyTasks nay gate read:task, delete:task sensitive)",
+      "OUT-OF-SCOPE (WO nối tiếp): (a) FE web-core tasks-api.ts getMyTasks() gọi GET /tasks legacy shape → PHẢI chuyển GET /tasks/my (BREAKING — GET /tasks nay là list scoped + DTO taskCore* + gate read:task); (b) POST/DELETE watcher (watch:task seed 0485 dormant) — my-tasks CHỈ đọc watched, seed watcher qua SQL; (c) /tasks/board·by-project·by-team giữ pair-gate-only KHÔNG data-scope (gap S4-TASK-SEED-1); (d) update-status:task action riêng (S4-TASK-BE-3); (e) create/update:task cho emp/mgr vẫn HOÃN (TASK_DEFERRED_GRANTS) — 403 hôm nay ĐÚNG, scope-check đã impl fail-closed sẵn sàng khi grant mở",
     ],
   },
   {

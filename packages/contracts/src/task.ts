@@ -524,3 +524,142 @@ export const memberResponseSchema = z.object({
   removedAt: z.string().datetime().nullable(),
 });
 export type MemberResponseDto = z.infer<typeof memberResponseSchema>;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// S4-TASK-BE-2 — Task core (SPEC-06 §7/§9, TASK-API-201..210, DB-06 §7.4 cột TitleCase MỚI mig 0478).
+//
+// PHÂN BIỆT với 2 nhóm status/priority ĐÃ CÓ trên CÙNG bảng tasks (KHÔNG gộp/nhầm):
+//   • taskCoreStatus (Todo/In Progress/In Review/Done/Cancelled) = cột task_status MỚI (chk_tasks_task_status)
+//     — KHÁC HẲN legacy `status` (not_started/in_progress/waiting_review/revision/approved/completed) do FSM
+//     studio dùng (taskStatusSchema/officeTaskStatusSchema phía trên — GIỮ NGUYÊN, KHÔNG đụng).
+//   • taskCorePriority (Low/Medium/High/Urgent) = cột task_priority MỚI — KHÁC legacy `priority`
+//     (urgent/high/medium/low/none, prioritySchema phía trên).
+// Đặt tên `taskCore*` để tránh mọi va chạm export với taskSchema/taskProject* đã land ở BE-1.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Boolean query-param IDEMPOTENT dưới ZodValidationPipe KÉP (memory zod-query-param-double-pipe-idempotent):
+ * nhận CẢ "true"/"false" LẪN boolean → boolean|undefined. KHÔNG z.coerce.boolean. Mirror my-notification.ts. */
+const taskCoreOptionalBooleanParam = () =>
+  z.preprocess(
+    (v) => (v === true || v === "true" ? true : v === false || v === "false" ? false : undefined),
+    z.boolean().optional(),
+  );
+
+export const taskCoreStatusSchema = z.enum([
+  "Todo",
+  "In Progress",
+  "In Review",
+  "Done",
+  "Cancelled",
+]);
+export type TaskCoreStatusDto = z.infer<typeof taskCoreStatusSchema>;
+
+export const taskCorePrioritySchema = z.enum(["Low", "Medium", "High", "Urgent"]);
+export type TaskCorePriorityDto = z.infer<typeof taskCorePrioritySchema>;
+
+/** Nguồn của 1 dòng trong GET /tasks/my (TASK-API-210): được giao · tự tạo · đang theo dõi. */
+export const taskCoreSourceSchema = z.enum(["assigned", "created", "watched"]);
+export type TaskCoreSourceDto = z.infer<typeof taskCoreSourceSchema>;
+
+export const TASK_CORE_PAGE_LIMIT_MAX = 200;
+
+/**
+ * GET /api/v1/tasks query (TASK-API-201, read:task). Filter status/priority/assignee/project/due-range/
+ * overdue + pagination. `overdue` boolean idempotent (z.preprocess); `dueFrom`/`dueTo` ISO datetime.
+ * limit/offset coerce số (idempotent tự nhiên); repo re-clamp TASK_CORE_PAGE_LIMIT_MAX (defense-in-depth).
+ */
+export const listTaskCoreQuerySchema = z.object({
+  status: taskCoreStatusSchema.optional(),
+  priority: taskCorePrioritySchema.optional(),
+  assigneeEmployeeId: z.string().uuid().optional(),
+  projectId: z.string().uuid().optional(),
+  dueFrom: z.string().datetime({ offset: true }).optional(),
+  dueTo: z.string().datetime({ offset: true }).optional(),
+  overdue: taskCoreOptionalBooleanParam(),
+  limit: z.coerce.number().int().min(1).max(TASK_CORE_PAGE_LIMIT_MAX).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+export type ListTaskCoreQueryRequest = z.infer<typeof listTaskCoreQuerySchema>;
+
+/**
+ * POST /api/v1/tasks (TASK-API-202, create:task). `title` bắt buộc; project OPTIONAL (task cá nhân MVP).
+ * `assigneeEmployeeId` là NGUỒN SỰ THẬT — server resolve employee_profiles + validate active/có-tài-khoản
+ * + trong-phạm-vi-người-giao (fail-loud). KHÔNG nhận status (mặc định 'Todo' — đổi status là action riêng).
+ */
+export const createTaskCoreSchema = z
+  .object({
+    title: z.string().trim().min(1, "Tiêu đề là bắt buộc").max(500),
+    description: z.string().max(20000).optional(),
+    projectId: z.string().uuid().optional(),
+    assigneeEmployeeId: z.string().uuid().optional(),
+    departmentId: z.string().uuid().optional(),
+    priority: taskCorePrioritySchema.optional(),
+    dueAt: z.string().datetime({ offset: true }).optional(),
+    startAt: z.string().datetime({ offset: true }).optional(),
+  })
+  .strict()
+  .refine((v) => !v.startAt || !v.dueAt || v.dueAt >= v.startAt, {
+    message: "dueAt không được sớm hơn startAt",
+    path: ["dueAt"],
+  });
+export type CreateTaskCoreRequest = z.infer<typeof createTaskCoreSchema>;
+
+/**
+ * PATCH /api/v1/tasks/:id (TASK-API-204, update:task). Partial (≥1 field). KHÔNG có `status` — đổi trạng
+ * thái là action riêng (update-status:task) NGOÀI phạm vi WO này. `null` = xoá liên kết (assignee/project).
+ */
+export const updateTaskCoreSchema = z
+  .object({
+    title: z.string().trim().min(1).max(500),
+    description: z.string().max(20000).nullable(),
+    projectId: z.string().uuid().nullable(),
+    assigneeEmployeeId: z.string().uuid().nullable(),
+    departmentId: z.string().uuid().nullable(),
+    priority: taskCorePrioritySchema.nullable(),
+    dueAt: z.string().datetime({ offset: true }).nullable(),
+    startAt: z.string().datetime({ offset: true }).nullable(),
+  })
+  .partial()
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, { message: "Cần ít nhất 1 field để cập nhật." })
+  .refine((v) => !v.startAt || !v.dueAt || v.dueAt >= v.startAt, {
+    message: "dueAt không được sớm hơn startAt",
+    path: ["dueAt"],
+  });
+export type UpdateTaskCoreRequest = z.infer<typeof updateTaskCoreSchema>;
+
+/**
+ * Chi tiết/dòng task core (GET /tasks, GET /tasks/:id) — DTO server-side, join tên project/assignee/creator.
+ * `status`/`priority` là cột TitleCase MỚI (nullable — hàng legacy/FSM chưa set). `isOverdue` tính ở server.
+ */
+export const taskCoreResponseSchema = z.object({
+  id: z.string().uuid(),
+  companyId: z.string().uuid(),
+  title: z.string(),
+  description: z.string().nullable(),
+  taskType: z.string(),
+  status: taskCoreStatusSchema.nullable(),
+  priority: taskCorePrioritySchema.nullable(),
+  projectId: z.string().uuid().nullable(),
+  projectName: z.string().nullable(),
+  mainAssigneeEmployeeId: z.string().uuid().nullable(),
+  assigneeName: z.string().nullable(),
+  creatorUserId: z.string().uuid().nullable(),
+  creatorName: z.string().nullable(),
+  reporterEmployeeId: z.string().uuid().nullable(),
+  departmentId: z.string().uuid().nullable(),
+  dueAt: z.string().datetime().nullable(),
+  startAt: z.string().datetime().nullable(),
+  completedAt: z.string().datetime().nullable(),
+  isOverdue: z.boolean(),
+  createdBy: z.string().uuid().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type TaskCoreResponseDto = z.infer<typeof taskCoreResponseSchema>;
+
+/** GET /api/v1/tasks/my (TASK-API-210) — mỗi dòng kèm `source` (assigned|created|watched). */
+export const myTaskItemSchema = taskCoreResponseSchema.extend({
+  source: taskCoreSourceSchema,
+});
+export type MyTaskItemDto = z.infer<typeof myTaskItemSchema>;
