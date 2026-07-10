@@ -92,3 +92,7 @@ export * from "./noti";
 // literal-GUC, app SELECT-only, config-update=DASH-BE) + dashboard_widget_cache (company_id NOT NULL, RLS+FORCE
 // literal-GUC, app SELECT,INSERT,UPDATE — runtime upsert + soft-delete invalidation, KHÔNG DELETE).
 export * from "./dashboard";
+// S4-TASK-BE-1 (DB-06 §7.12, mig 0478 §5): task_activity_logs typed model — APPEND-ONLY ledger project/task
+// (company_id NOT NULL, RLS+FORCE, app GRANT SELECT,INSERT — KHÔNG UPDATE/DELETE, KHÔNG deleted_at). projects/
+// project_members cột TitleCase MỚI additive reconcile ở ./media (ALTER-ADD 0478 §6/§7). KHÔNG db:generate.
+export * from "./task-activity";
