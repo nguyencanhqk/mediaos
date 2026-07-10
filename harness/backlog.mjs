@@ -4464,6 +4464,36 @@ export const backlog = [
     ],
   },
   {
+    id: "S4-DASH-CATALOG-2",
+    module: "DASH",
+    layer: "DB",
+    title:
+      "Bù đủ catalog widget DASH (11 widget còn lại của DB-07 §14.3) + reconcile mâu thuẫn nội bộ DB-07 §8.5 ↔ §14.3 + cặp refresh:dashboard-cache",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/dashboard/**",
+      "apps/api/migrations/**",
+      "apps/api/test/integration/dash-seed-catalog-permissions.int-spec.ts",
+      "docs/DB/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S4-DASH-SEED-1", "S4-DASH-BE-2"],
+    src: [
+      "docs/DB/DB-07 §14.3 (khối DRIFT do S4-DASH-SEED-1 ghi)",
+      "docs/DB/DB-07 §8.5 (chỉ 12 widget có required_permission_code)",
+      "docs/API Design/API-10 PERMISSION MATRIX.md:288-313",
+      "docs/plans/S4-DASH-SEED-1.md §2.5",
+    ],
+    done_when: [
+      "BỐI CẢNH: S4-DASH-SEED-1 (mig 0484) chỉ seed 7 widget in-sprint. DB-07 §14.3 còn 11 widget: LEAVE_BALANCE, TEAM_TASKS_TODAY, LEAVE_CALENDAR, ATTENDANCE_ALERTS, NEW_EMPLOYEES, CONTRACT_EXPIRING, USER_SUMMARY, EMPLOYEE_SUMMARY, MODULE_STATUS, CONFIG_WARNINGS, SYSTEM_LOGS. Dashboard Admin hiện chỉ có 1 widget (NOTIFICATIONS)",
+      "RECONCILE DOC TRƯỚC KHI CODE: DB-07 tự mâu thuẫn — §8.5 liệt 12 widget có required_permission_code, nhưng §14.3 xếp vào dashboard Admin 5 widget (USER_SUMMARY, EMPLOYEE_SUMMARY, MODULE_STATUS, CONFIG_WARNINGS, SYSTEM_LOGS) KHÔNG có trong §8.5; chúng chỉ có permission code ở API-10:288-313. Phải sửa DB-07 §8.5 cho đủ rồi mới seed, nếu không catalog sẽ có widget thiếu required_permission_code (cột NOT NULL)",
+      "Chỉ seed widget khi module nguồn đã có data source (DASH-BE-2 đăng ký service theo data_source_key), nếu không widget sẽ luôn degraded. Mỗi widget mới phải có entry trong DASH_WIDGET_GATE_PAIR với comment trỏ migration:dòng + lý do ngữ nghĩa — test E3 chỉ chứng cặp TỒN TẠI, không bắt được cặp có-thật-sai-ngữ-nghĩa",
+      "Cặp refresh:dashboard-cache (DASH.CACHE.REFRESH): API-10:313 cấp cho SA DUY NHẤT và 'không có endpoint'. Chỉ seed khi (a) DB-07 §10.2 được cập nhật để liệt nó, VÀ (b) có endpoint thật + role để grant. Trước đó nó là quyền phantom không deny-path",
+      "Cập nhật khối DRIFT trong DB-07 §14.3 (gỡ khi đã bù đủ). Int-spec: catalog == tập mới; default config == DB-07 §14.3 đầy đủ; grant-matrix vét cạn 4 role vẫn xanh; FULL gate security-reviewer + database-reviewer PASS",
+    ],
+  },
+  {
     id: "S4-DASH-BE-1",
     module: "DASH",
     layer: "BE",
