@@ -74,11 +74,7 @@ export function HomePage() {
           </div>
 
           <div className="ml-auto flex items-center gap-1">
-            {/* S4-FE-NOTI-CONSOLE-BELL-1: chuông NotificationBell (@mediaos/ui) gỡ khỏi console — nó
-                tiêu thụ notificationApi (web-core) trỏ route BE legacy đã gỡ ở PR #133 (PATCH
-                /notifications/:id/read, /read-all), gây chuông vỡ. Console (quản trị hệ thống) chưa
-                nằm trong phạm vi NOTI (SPEC-08/FRONTEND-12 chỉ chỉ định apps/app) nên không wire lại
-                sang my-notification-api ở đây — xem NotificationBadge/Dropdown thật ở apps/app. */}
+            {/* Console không có chuông NOTI — SPEC-08/FRONTEND-12 chỉ định NOTI cho apps/app (owner chốt 2026-07-10). */}
             <Avatar name={username} size="sm" />
             <span className="ml-1.5 hidden max-w-[10rem] truncate text-sm text-muted-foreground md:block">
               {username}

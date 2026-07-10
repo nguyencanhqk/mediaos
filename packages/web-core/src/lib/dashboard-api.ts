@@ -19,7 +19,7 @@ import { buildQueryString } from "./api-params";
  * DASH API client — S4-FE-REGISTRY-1 (skeleton typed, page thật = S4-FE-DASH-1).
  *
  * BẤT BIẾN: company_id do SERVER resolve từ AuthContext — client KHÔNG nhận/forward (mirror
- * attendance-api.ts / notification-api.ts). Response validate Zod ở ranh giới (schema @mediaos/contracts
+ * attendance-api.ts / my-notification-api.ts). Response validate Zod ở ranh giới (schema @mediaos/contracts
  * dashboard.ts). KHÔNG import token-storage (apiFetch tự gắn Bearer + refresh-on-401 + envelope unwrap).
  *
  * MASKING là việc của SERVER: read-only aggregate, gated read:dashboard; các mảng nhạy cảm (finance/

@@ -21,11 +21,8 @@ export function RootLayout() {
     return <Outlet />;
   }
 
-  // S4-FE-NOTI-CONSOLE-BELL-1: slot `notifications` bỏ trống — <NotificationBell/> (@mediaos/ui) gỡ
-  // khỏi console vì nó tiêu thụ notificationApi (web-core) trỏ route BE legacy đã gỡ ở PR #133
-  // (PATCH /notifications/:id/read, /read-all → 404), làm chuông vỡ. Console (quản trị hệ thống)
-  // chưa nằm trong phạm vi NOTI (SPEC-08/FRONTEND-12 chỉ chỉ định apps/app) nên không wire lại sang
-  // my-notification-api ở đây — xem NotificationBadge/Dropdown thật ở apps/app/src/components/notifications.
+  // Slot `notifications` bỏ trống — console không có chuông NOTI; SPEC-08/FRONTEND-12 chỉ định NOTI
+  // cho apps/app (owner chốt 2026-07-10).
   return (
     <AppShell navItems={NAV_ITEMS} brand={brand}>
       <Outlet />

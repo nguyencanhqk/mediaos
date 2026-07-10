@@ -30,10 +30,9 @@ import { buildQueryString } from "./api-params";
  * khoá cứng recipient_user_id, client KHÔNG truyền/lọc theo user khác. company_id resolve từ auth
  * context — client KHÔNG tự truyền.
  *
- * TÁCH KHỎI `notificationApi` (./notification-api.ts, legacy G10-2 chat/device/preference contracts) —
- * route/shape HOÀN TOÀN KHÁC (cũ: PATCH /notifications/:id/read + camelCase NotificationDto; route cũ đã
- * gỡ khỏi NotificationsController). KHÔNG sửa file cũ ở đây (packages/ui NotificationBell còn tiêu thụ nó,
- * ngoài phạm vi lane này) — xem ghi chú blocker trong PR.
+ * `notificationApi` legacy G10-2 (./notification-api.ts) đã XOÁ HẲN ở S4-FE-NOTI-CLEANUP-1 — route cũ
+ * (PATCH /notifications/:id/read + /read-all) bị gỡ khỏi NotificationsController ở PR #133, consumer cuối
+ * (packages/ui NotificationBell) gỡ cùng đợt. Đây là API client NOTI duy nhất cho user hiện tại.
  *
  * Pagination: GET /notifications dùng cơ chế HOIST top-level (`paginated()` — API-01 §16.1), nhưng
  * `apiFetch`/`unwrapEnvelope` CHỈ trả field `data` (mảng), bỏ block `pagination` sibling (giới hạn đã biết,
