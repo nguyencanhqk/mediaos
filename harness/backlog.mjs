@@ -4108,6 +4108,10 @@ export const backlog = [
     paths: [
       "apps/api/src/foundation/seed/**",
       "apps/api/migrations/**",
+      // Mở rộng 2026-07-10 (plan §5, nhánh "PHẢI append" của done_when #6): allowlist 8 cặp sensitive
+      // TASK ở permission.service.ts + block TASK trong auth-me-capabilities.int.spec.ts — giữ FULL gate.
+      "apps/api/src/permission/**",
+      "apps/api/src/auth/**",
       "docs/plans/S4-TASK-SEED-1.md",
     ],
     skills: ["code-review"],

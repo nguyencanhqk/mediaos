@@ -17,6 +17,7 @@ import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.fil
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
 import { PermissionService } from "../../src/permission/permission.service";
+import { TASK_GRANT_MATRIX } from "../../src/foundation/seed/task-permissions.const";
 
 /**
  * S4-TASK-RECON-1 (lane reconVerify) — đối soát grant TASK pair-drift + deny-path (mig 0480), RED-trước.
@@ -52,33 +53,33 @@ const runIsolatedDb = hasDb && !!process.env.LANE_DB;
 const CANONICAL_ROLES = ["employee", "manager", "hr", "company-admin"] as const;
 
 /**
- * ĐÍCH HỘI TỤ mig 0480 — tập grant (action:resource) trên resource task+project của MỖI role canonical.
- * Nguồn: migration 0480 header + DB-06 §12.1. So EXACT (không dư/không thiếu) → phát hiện drift 2 chiều.
- *   • company-admin: 0005 cấp ALL is_sensitive=false ⇒ 7 task + 6 project; park gỡ submit/manage:task +
- *     manage/assign:project; grant thêm comment:task ⇒ {create,read,update,delete,assign,
- *     comment}:task ∪ {create,read,update,delete}:project.
- *   • employee: 0005 cấp read/submit:task + comment:comment; park gỡ submit:task; grant
- *     comment:task ⇒ {read,comment}:task.
- *   (comment:comment resource_type='comment' ⇒ NGOÀI tập task+project này, không ảnh hưởng EXPECTED bên dưới.)
- *   • manager/hr (0444, chỉ AUTH/HR): KHÔNG có grant task/project ⇒ ∅.
+ * ĐÍCH HỘI TỤ SAU 0480 ∪ 0485 — tập grant (action:resource) trên resource task+project của MỖI role
+ * canonical. So EXACT (không dư/không thiếu) → phát hiện drift 2 chiều.
+ *
+ * Lịch sử: bản gốc (RECON-1) pin trạng thái transitional hậu-0480 (company-admin 10 · employee
+ * {read,comment}:task · manager/hr ∅). S4-TASK-SEED-1 (mig 0485) mở rộng hợp lệ theo ma trận SPEC-06
+ * §9 ⇒ kỳ vọng CẬP NHẬT 2026-07-10, DẪN XUẤT từ TASK_GRANT_MATRIX (task-permissions.const — một nguồn
+ * sự thật; S4-TASK-BE-2 grant 5 hàng hoãn TASK_DEFERRED_GRANTS thì cập nhật matrix ⇒ spec tự theo).
+ * view:task-audit-log ngoài tập (query chỉ lấy resource task+project); comment:comment resource
+ * 'comment' ⇒ cũng ngoài tập. Ý nghĩa GIỮ NGUYÊN: residual legacy (submit/manage/assign) không được
+ * tái xuất — đã cover riêng ở (c).
  */
-const EXPECTED_TASK_PROJECT: Record<(typeof CANONICAL_ROLES)[number], string[]> = {
-  "company-admin": [
-    "assign:task",
-    "comment:task",
-    "create:project",
-    "create:task",
-    "delete:project",
-    "delete:task",
-    "read:project",
-    "read:task",
-    "update:project",
-    "update:task",
-  ],
-  employee: ["comment:task", "read:task"],
-  manager: [],
-  hr: [],
+const MATRIX_KEY_BY_ROLE: Record<(typeof CANONICAL_ROLES)[number], "emp" | "mgr" | "hr" | "ca"> = {
+  employee: "emp",
+  manager: "mgr",
+  hr: "hr",
+  "company-admin": "ca",
 };
+
+const EXPECTED_TASK_PROJECT: Record<(typeof CANONICAL_ROLES)[number], string[]> =
+  Object.fromEntries(
+    CANONICAL_ROLES.map((role) => [
+      role,
+      TASK_GRANT_MATRIX.filter(
+        (r) => (r.resource === "task" || r.resource === "project") && r[MATRIX_KEY_BY_ROLE[role]],
+      ).map((r) => `${r.action}:${r.resource}`),
+    ]),
+  ) as Record<(typeof CANONICAL_ROLES)[number], string[]>;
 
 // Cặp residual TUYỆT ĐỐI KHÔNG được grant cho BẤT KỲ role canonical nào sau 0480.
 // (comment,'comment') KHÔNG nằm ở đây: 0480 là EXPAND-ONLY, cố ý GIỮ grant legacy để code cũ còn enforce
@@ -133,7 +134,7 @@ describe.skipIf(!runIsolatedDb)(
         const expected = [...EXPECTED_TASK_PROJECT[role]].sort();
         expect(
           actual,
-          `${role} grant-set task+project phải hội tụ ĐÚNG (0480). actual=${JSON.stringify(actual)}`,
+          `${role} grant-set task+project phải hội tụ ĐÚNG (0480 ∪ 0485 matrix). actual=${JSON.stringify(actual)}`,
         ).toEqual(expected);
       });
     }
@@ -342,9 +343,12 @@ describe.skipIf(!runIsolatedDb)(
       expect(res.body.data?.body).toBe("recon deny-path comment");
     });
 
-    it("manager (KHÔNG grant task/project sau recon) POST /tasks/:id/comments → 403", async () => {
+    // CẬP NHẬT 2026-07-10 (S4-TASK-SEED-1/0485): manager ĐƯỢC grant comment:task @Team theo ma trận
+    // SPEC-06 §9 ⇒ 403 (hậu-0480) lật thành 201. Deny-path 403-do-thiếu-grant vẫn được chứng minh ở
+    // engine can() các mục (4)/(5) bên dưới (employee/hr project lifecycle + hr delete:task).
+    it("manager (comment:task @Team từ 0485) POST /tasks/:id/comments → 201", async () => {
       const res = await postComment(tokenMgr);
-      expect(res.status, JSON.stringify(res.body)).toBe(403);
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
     });
 
     // ── (2) Positive control — 403 do THIẾU grant, KHÔNG do user/role hỏng ──────────────

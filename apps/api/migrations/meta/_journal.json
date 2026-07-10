@@ -1156,6 +1156,13 @@
       "when": 1717500815000,
       "tag": "0484_s4_dashseed1_widget_catalog_perms",
       "breakpoints": true
+    },
+    {
+      "idx": 165,
+      "version": "7",
+      "when": 1717500820000,
+      "tag": "0485_s4_taskseed1_task_perms",
+      "breakpoints": true
     }
   ]
 }

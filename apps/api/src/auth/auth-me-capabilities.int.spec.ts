@@ -85,6 +85,11 @@ import {
   seedUserRole,
   type SeededTenant,
 } from "../../test/helpers/seed";
+import {
+  TASK_GRANT_MATRIX,
+  TASK_PERMISSIONS,
+  TASK_SENSITIVE_PAIRS,
+} from "../foundation/seed/task-permissions.const";
 
 // Credential test (KHÔNG phải secret thật) — tránh literal gán-keyword (guard-secrets, BẤT BIẾN #3).
 const LOGIN_PW = "Passw0rd!test99";
@@ -732,6 +737,150 @@ describe.skipIf(!runDb)(
       expect(caps[WILDCARD_CAP_KEY]).toBe(true);
       for (const key of USEROPS_SENSITIVE_KEYS) {
         expect(key in caps, `cặp nhạy cảm ${key} KHÔNG kế thừa qua *:*`).toBe(false);
+      }
+    });
+  },
+);
+
+// ────────────────────────────────────────────────────────────────────────────
+// S4-TASK-SEED-1 — APPEND 8 cặp NHẠY CẢM TASK vào SENSITIVE_CAPABILITY_ALLOWLIST (mig 0485:
+// delete/close/archive/manage-member/view-report:project + delete/export:task + view:task-audit-log).
+// done_when #5: company-admin thấy ĐỦ 23 cặp TASK qua /auth/me = 15 non-sensitive (getCapabilities)
+// + 8 sensitive (allowlist). RED trước allowlist (P1 thiếu 8 key) → GREEN sau. Grant-bound: manager
+// surface đúng các cặp @Team được grant (owner-check per-project là việc BE — S4-TASK-BE-1);
+// delete:task của manager HOÃN (TASK_DEFERRED_GRANTS) ⇒ PHẢI vắng tới khi S4-TASK-BE-2 grant.
+// Enforcement (can()/PermissionGuard per-resource) KHÔNG đổi — chỉ mở cờ hiển thị (UI-hint).
+// Ma trận kỳ vọng dẫn xuất từ TASK_GRANT_MATRIX (task-permissions.const) — một nguồn sự thật.
+// ────────────────────────────────────────────────────────────────────────────
+
+const TASK_ALL_KEYS = TASK_PERMISSIONS.map((p) => `${p.action}:${p.resourceType}`);
+const TASK_SENSITIVE_KEYS = [...TASK_SENSITIVE_PAIRS];
+
+/** Key TASK kỳ vọng hiện trên /auth/me cho 1 role — đúng bằng grant thật của ma trận seed. */
+function taskKeysFor(roleKey: "emp" | "mgr" | "hr" | "ca"): string[] {
+  return TASK_GRANT_MATRIX.filter((r) => r[roleKey]).map((r) => `${r.action}:${r.resource}`);
+}
+
+describe.skipIf(!runDb)(
+  "S4-TASK-SEED-1 /auth/me capabilities TASK (23 cặp — allowlist 8 sensitive, mig 0485)",
+  () => {
+    let app: INestApplication;
+    let direct: Pool;
+    let A: SeededTenant;
+    let adminToken: string;
+    let hrToken: string;
+    let employeeToken: string;
+    let managerToken: string;
+    let wildcardToken: string;
+    const companyIds: string[] = [];
+
+    beforeAll(async () => {
+      const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+      app = moduleRef.createNestApplication();
+      app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
+      app.useGlobalFilters(new AllExceptionsFilter());
+      await app.init();
+      direct = directPool();
+      const pw = await new PasswordService().hash(LOGIN_PW);
+
+      A = await seedCompany(direct, "taskcap");
+      companyIds.push(A.companyId);
+
+      const adminEmail = `ca-${TAG}@taskcap.test`;
+      const admin = await seedUser(direct, A.companyId, adminEmail, pw);
+      await seedUserRole(direct, admin, COMPANY_ADMIN_ROLE, A.companyId);
+
+      const hrEmail = `hr-${TAG}@taskcap.test`;
+      const hr = await seedUser(direct, A.companyId, hrEmail, pw);
+      await seedUserRole(direct, hr, HR_ROLE, A.companyId);
+
+      const empEmail = `emp-${TAG}@taskcap.test`;
+      const emp = await seedUser(direct, A.companyId, empEmail, pw);
+      await seedUserRole(direct, emp, EMPLOYEE_ROLE, A.companyId);
+
+      const mgrEmail = `mgr-${TAG}@taskcap.test`;
+      const mgr = await seedUser(direct, A.companyId, mgrEmail, pw);
+      await seedUserRole(direct, mgr, MANAGER_ROLE, A.companyId);
+
+      // wildcard-only: '*:*' non-sensitive → KHÔNG kế thừa cặp sensitive TASK (sensitive gate).
+      const wildEmail = `wild-${TAG}@taskcap.test`;
+      const wild = await seedUser(direct, A.companyId, wildEmail, pw);
+      const wildRole = await seedRole(direct, A.companyId, `taskcap-wild-${TAG}`);
+      const wildPerm = await seedPermissionCatalog(direct, "*", "*", false);
+      await seedRolePermission(direct, wildRole, wildPerm, "ALLOW");
+      await seedUserRole(direct, wild, wildRole, A.companyId);
+
+      adminToken = await login(app, A.slug, adminEmail);
+      hrToken = await login(app, A.slug, hrEmail);
+      employeeToken = await login(app, A.slug, empEmail);
+      managerToken = await login(app, A.slug, mgrEmail);
+      wildcardToken = await login(app, A.slug, wildEmail);
+    });
+
+    afterAll(async () => {
+      await app?.close();
+      if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
+      await direct?.end();
+    });
+
+    it("TASKCAP-P1 — company-admin → /auth/me CÓ ĐỦ 23 cặp TASK === true (done_when #5)", async () => {
+      const caps = await meCapabilities(app, adminToken);
+      expect(taskKeysFor("ca").length).toBe(23); // pin: ma trận admin đủ bộ
+      for (const key of TASK_ALL_KEYS) {
+        expect(caps[key], `company-admin thiếu cặp ${key} trên /auth/me`).toBe(true);
+      }
+    });
+
+    it("TASKCAP-P2 — hr → CÓ đúng 18 cặp grant (gồm view-report:project/export:task/view:task-audit-log); VẮNG 5 cặp không grant", async () => {
+      const caps = await meCapabilities(app, hrToken);
+      const granted = taskKeysFor("hr");
+      expect(granted.length).toBe(18);
+      for (const key of granted) {
+        expect(caps[key], `hr thiếu cặp đã grant ${key}`).toBe(true);
+      }
+      for (const key of TASK_ALL_KEYS.filter((k) => !granted.includes(k))) {
+        expect(key in caps, `hr KHÔNG được lộ cặp chưa grant ${key}`).toBe(false);
+      }
+    });
+
+    it("TASKCAP-P3 — manager → CÓ 19 cặp @Team (grant-bound, gồm sensitive project); VẮNG delete:task (HOÃN BE-2) + view:task-audit-log", async () => {
+      const caps = await meCapabilities(app, managerToken);
+      const granted = taskKeysFor("mgr");
+      expect(granted.length).toBe(19);
+      for (const key of granted) {
+        expect(caps[key], `manager thiếu cặp đã grant ${key}`).toBe(true);
+      }
+      expect("delete:task" in caps, "delete:task manager HOÃN sang BE-2 — không được lộ").toBe(
+        false,
+      );
+      expect("view:task-audit-log" in caps, "manager không có audit-log").toBe(false);
+      expect("create:task" in caps, "create:task manager HOÃN sang BE-2").toBe(false);
+      expect("update:task" in caps, "update:task manager HOÃN sang BE-2").toBe(false);
+    });
+
+    it("TASKCAP-N1 — employee → KHÔNG cặp sensitive nào; KHÔNG create:project; KHÔNG create/update:task (HOÃN); CÓ 7 cặp Own", async () => {
+      const caps = await meCapabilities(app, employeeToken);
+      for (const key of TASK_SENSITIVE_KEYS) {
+        expect(key in caps, `employee KHÔNG được lộ cặp sensitive ${key}`).toBe(false);
+      }
+      expect("create:project" in caps, "employee không có create:project (done_when #5)").toBe(
+        false,
+      );
+      expect("update:project" in caps).toBe(false);
+      expect("create:task" in caps, "create:task employee HOÃN sang BE-2").toBe(false);
+      expect("update:task" in caps, "update:task employee HOÃN sang BE-2").toBe(false);
+      const granted = taskKeysFor("emp");
+      expect(granted.length).toBe(7);
+      for (const key of granted) {
+        expect(caps[key], `employee thiếu cặp non-sensitive đã grant ${key}`).toBe(true);
+      }
+    });
+
+    it("TASKCAP-N2 — wildcard '*:*' → KHÔNG kế thừa cặp sensitive TASK nào (sensitive gate)", async () => {
+      const caps = await meCapabilities(app, wildcardToken);
+      expect(caps[WILDCARD_CAP_KEY]).toBe(true);
+      for (const key of TASK_SENSITIVE_KEYS) {
+        expect(key in caps, `cặp sensitive ${key} KHÔNG kế thừa qua *:*`).toBe(false);
       }
     });
   },

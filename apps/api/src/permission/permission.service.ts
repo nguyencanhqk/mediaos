@@ -76,6 +76,20 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   // tồn tại (bài học CAP-2/USEROPS-1). Enforcement KHÔNG đổi — @RequirePermission('export','attendance')
   // per-resource vẫn là cổng THẬT (data-scope Own/Team/Company áp TRƯỚC kết xuất). Chỉ mở CỜ HIỂN THỊ.
   "export:attendance",
+  // S4-TASK-SEED-1 — APPEND-only: 8 cặp NHẠY CẢM TASK (is_sensitive=true, mig 0485 — grant per ma trận
+  // SPEC-06 §9: company-admin đủ bộ @Company; manager các cặp project @Team [owner-check per-project ở
+  // BE S4-TASK-BE-1]; hr view-report:project + export:task + view:task-audit-log @Company). done_when #5
+  // yêu cầu admin thấy ĐỦ 23 cặp TASK qua /auth/me — thiếu allowlist thì 8 cặp này ẨN với CẢ admin (bài
+  // học CAP-2/USEROPS-1/EXPORT-1). Grant-bound + DENY-override giữ; wildcard *:* KHÔNG kế thừa.
+  // Enforcement KHÔNG đổi — @RequirePermission per-resource vẫn là cổng thật. Chỉ mở CỜ HIỂN THỊ.
+  "delete:project",
+  "close:project",
+  "archive:project",
+  "manage-member:project",
+  "view-report:project",
+  "delete:task",
+  "export:task",
+  "view:task-audit-log",
 ]);
 
 @Injectable()
