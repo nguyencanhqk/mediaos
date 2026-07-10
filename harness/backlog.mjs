@@ -4298,10 +4298,15 @@ export const backlog = [
     layer: "BE",
     title:
       "BE My-notification APIs (GET /notifications, /dropdown, /unread-count, /:id, POST /:id/mark-read, /mark-all-read, DELETE /:id) — own-scope tuyệt đối, unread dùng partial index",
-    zone: "yellow",
+    // zone red (sửa 2026-07-09): WO này CHẠM permission — mig 0483 chuẩn hoá delete:notification về
+    // Own-scope (expand cho employee/manager/hr, contract cho company-admin vốn có @Company từ bulk-grant
+    // 0005:310-313). Khai yellow + paths thiếu migrations/** đã khiến auto-loop route nó vào LIGHT gate.
+    zone: "red",
     status: "todo",
     paths: [
       "apps/api/src/notifications/**",
+      "apps/api/src/realtime/**",
+      "apps/api/migrations/**",
       "apps/api/test/integration/**",
       "packages/contracts/src/**",
     ],
