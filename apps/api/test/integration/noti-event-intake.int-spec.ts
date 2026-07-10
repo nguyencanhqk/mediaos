@@ -2,12 +2,17 @@
  * S4-NOTI-BE-2 — Event intake HTTP trust-boundary + engine pipeline (real Nest app, real DB).
  * Route: POST /internal/v1/notifications/events (InternalNotificationsController → NotificationEngineService).
  *
- * RED-first — deny-path đi đầu (docs/plans/S4-NOTI-BE-2.md §7), 8 nhóm a–h:
+ * RED-first — deny-path đi đầu (docs/plans/S4-NOTI-BE-2.md §7), nhóm a–j:
  *   (a) untrusted context: không Bearer → 401; JWT hợp lệ + thiếu/sai x-internal-key → 403; env unset → 403.
  *   (b) dedupe app (TimeWindow): TASK_COMMENT_CREATED cùng sourceEntityId + recipient 2 lần → created=1,deduped=1.
- *   (b2) dedupe backstop DB: row xung đột (cùng 4 cột uq_notifications_dedupe_active) chèn TRƯỚC qua directPool
- *        → intake 2 recipient: recipient trùng bị deduped (app-tier isDuplicate bắt trước; DB partial-unique là
- *        backstop-of-record cho race thật giữa 2 request đồng thời), recipient còn lại VẪN tạo, KHÔNG 500.
+ *   (b2) dedupe backstop DB — RACE THẬT (fix vòng 2, thay bản chèn+COMMIT trước intake vốn bị tầng-1 app-tier
+ *        isDuplicate bắt trước nên KHÔNG BAO GIỜ chạm nhánh SAVEPOINT/23505): mở 1 client blocker RIÊNG
+ *        (directPool), BEGIN + INSERT row trùng 4 cột uq_notifications_dedupe_active NHƯNG KHÔNG COMMIT →
+ *        READ COMMITTED khiến tầng-1 SELECT của intake KHÔNG thấy row này → intake đi tới SAVEPOINT + INSERT
+ *        thật → ĐỤNG lock trên row uncommitted → backend app-pool BLOCK (wait_event_type='Lock', poll bằng
+ *        client thứ 3 qua pg_stat_activity) → COMMIT blocker → INSERT của intake nhận 23505 → catch →
+ *        ROLLBACK TO savepoint → dedupedCount++. Bằng chứng độc lập: recipient bị race CHỈ giữ ĐÚNG row của
+ *        blocker (không phải row engine — engine INSERT đã bị rollback), recipient còn lại vẫn tạo, KHÔNG 500.
  *   (c) actor-exclusion: actor∈recipients non-system → actor 0; is_system_event=true → actor có.
  *   (d) cross-tenant: recipient company B → không tạo; body.company_id=B & token=A → 400.
  *   (e) event disabled → 0 notification, 0 delivery_log, audit 'notification_skipped', 200 + skippedCount≥1.
@@ -16,6 +21,9 @@
  *   (g) target_url ngoài whitelist (https://evil.com / //evil / javascript:) → 422 NOTI-ERR-TARGET-UNAVAILABLE;
  *       payload chứa khóa nhạy cảm (salary) → 400 NOTI-ERR-TEMPLATE-VARIABLE-INVALID.
  *   (h) happy path TASK_ASSIGNED + UserIds → 1 notification (legacy + cột mới) + 1 delivery_log 'Sent' attempt_no=1.
+ *   (i) recipient mode=EmployeeIds (notification-recipient-resolver.service.ts:66-85): profile active có
+ *       user_id → resolve + tạo 1 notification; profile KHÔNG có user_id liên kết → filter drop, 0 recipient.
+ *   (j) eventCode KHÔNG tồn tại trong catalog (khác disabled) → 404 NOTI-ERR-EVENT-NOT-FOUND.
  *
  * Gate CỨNG hasDb && LANE_DB (memory integration-test-lane-db-gate): .env chung → hasDb=true nhưng band
  * 0479-0481 chỉ có trên DB cô lập lane → CHỈ chạy khi LANE_DB set, nếu không xanh-giả/đỏ-giả.
@@ -29,6 +37,7 @@ import { randomUUID } from "node:crypto";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
+import type { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../../src/app.module";
 import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.filter";
@@ -69,6 +78,34 @@ function auth(token: string, key = INTERNAL_KEY) {
   return { Authorization: `Bearer ${token}`, "x-internal-key": key };
 }
 
+/**
+ * Poll `pg_stat_activity` (client mượn từ `direct` pool) tới khi thấy 1 backend KHÁC `excludePid` đang
+ * `state='active'` + `wait_event_type='Lock'` trên 1 câu lệnh đụng bảng `notifications` — bằng chứng ĐỘC LẬP
+ * app-pool (intake) đang thật sự bị Postgres chặn chờ transaction blocker kết thúc (race DB thật, KHÔNG phải
+ * app-tier isDuplicate bắt trước). Trả `false` nếu hết `maxWaitMs` mà chưa thấy — caller PHẢI fail rõ ràng,
+ * KHÔNG âm thầm coi là pass nhờ kết quả cuối trùng khớp ngẫu nhiên.
+ */
+async function waitForLockWait(
+  direct: Pool,
+  excludePid: number,
+  maxWaitMs: number,
+): Promise<boolean> {
+  const pollIntervalMs = 50;
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    const r = await direct.query(
+      `SELECT pid FROM pg_stat_activity
+       WHERE datname = current_database() AND state = 'active'
+         AND wait_event_type = 'Lock' AND pid <> $1
+         AND query ILIKE '%notifications%'`,
+      [excludePid],
+    );
+    if (r.rows.length > 0) return true;
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+  return false;
+}
+
 describe.skipIf(!runDb)("S4-NOTI-BE-2 event intake (HTTP trust-boundary + engine)", () => {
   const direct = directPool();
   let nest: INestApplication;
@@ -83,6 +120,7 @@ describe.skipIf(!runDb)("S4-NOTI-BE-2 event intake (HTTP trust-boundary + engine
   let recipient2 = "";
   let recipient3 = "";
   let recipient4 = "";
+  let recipientEmp = "";
   let recipientB = "";
 
   async function notifCount(companyId: string, recipientUserId: string, eventCode: string) {
@@ -107,6 +145,7 @@ describe.skipIf(!runDb)("S4-NOTI-BE-2 event intake (HTTP trust-boundary + engine
     recipient2 = await seedUser(direct, A.companyId, `r2@${A.slug}.test`, hash);
     recipient3 = await seedUser(direct, A.companyId, `r3@${A.slug}.test`, hash);
     recipient4 = await seedUser(direct, A.companyId, `r4@${A.slug}.test`, hash);
+    recipientEmp = await seedUser(direct, A.companyId, `remp@${A.slug}.test`, hash);
     recipientB = await seedUser(direct, B.companyId, `rb@${B.slug}.test`, hash);
 
     // (f) template missing — event RIÊNG của company A, is_enabled=true, KHÔNG seed template ⇒ engine
@@ -154,6 +193,11 @@ describe.skipIf(!runDb)("S4-NOTI-BE-2 event intake (HTTP trust-boundary + engine
       `DELETE FROM notification_delivery_logs WHERE company_id = ANY($1::uuid[])`,
       [companyIds],
     );
+    // (i) EmployeeIds — employee_profiles seed inline trong test; xoá tường minh TRƯỚC cleanupTenants (dù
+    // company_id → companies đã ON DELETE CASCADE, xoá rõ ràng ở đây theo đúng thứ tự con→cha).
+    await direct.query(`DELETE FROM employee_profiles WHERE company_id = ANY($1::uuid[])`, [
+      companyIds,
+    ]);
     await cleanupTenants(direct, companyIds);
     await direct.end();
     if (nest) await nest.close();
@@ -280,61 +324,105 @@ describe.skipIf(!runDb)("S4-NOTI-BE-2 event intake (HTTP trust-boundary + engine
     expect(await notifCount(A.companyId, recipient2, "TASK_COMMENT_CREATED")).toBe(1);
   });
 
-  // ── (b2) dedupe backstop DB (row xung đột chèn TRƯỚC qua directPool) ─────────────
-  it("(b2) row trùng dedupe_key chèn TRƯỚC qua directPool → recipient đó deduped, recipient khác VẪN tạo, KHÔNG 500", async () => {
+  // ── (b2) dedupe backstop DB — RACE THẬT qua SAVEPOINT/23505 ───────────────────────
+  it("(b2) race DB thật: row trùng UNCOMMITTED trong lúc intake chạy → app-pool BLOCK trên Lock → COMMIT blocker → 23505 → ROLLBACK TO savepoint, dedupedCount++, recipient khác VẪN tạo, KHÔNG 500", async () => {
     const token = await login(nest, A.slug, actorEmail);
     const sourceEntityId = randomUUID();
-    // Bucket TimeWindow 300s — khớp CHÍNH XÁC format NotificationDedupeService.computeKey (TimeWindow):
-    // `{eventCode}:{sourceEntityId}:{recipientUserId}:{floor(epochSeconds/window)}`. Chèn TRƯỚC request nên
-    // bucket tính tại đây PHẢI trùng bucket engine tính lúc intake (an toàn trừ khi rơi đúng biên 300s).
-    const bucket = Math.floor(Date.now() / 1000 / DEDUPE_WINDOW_SECONDS);
-    const conflictingDedupeKey = `TASK_COMMENT_CREATED:${sourceEntityId}:${recipient3}:${bucket}`;
+    // occurredAt CỐ ĐỊNH trong body → bucket TimeWindow (300s) TẤT ĐỊNH cho CẢ blocker lẫn engine (cùng công
+    // thức floor(epochSeconds/window) — NotificationDedupeService.computeKey) → hết flake biên 300s.
+    const occurredAt = new Date().toISOString();
+    const bucket = Math.floor(Date.parse(occurredAt) / 1000 / DEDUPE_WINDOW_SECONDS);
+    const raceDedupeKey = `TASK_COMMENT_CREATED:${sourceEntityId}:${recipient3}:${bucket}`;
 
-    await direct.query(
-      `INSERT INTO notifications
-         (company_id, user_id, type, body, is_read,
-          recipient_user_id, event_code, dedupe_key, notification_type, priority, status, title)
-       VALUES ($1, $2, 'general', $3, false, $2, $4, $5, 'Task', 'Low', 'Unread', $6)`,
-      [
-        A.companyId,
-        recipient3,
-        "pre-seeded conflict row (directPool)",
-        "TASK_COMMENT_CREATED",
-        conflictingDedupeKey,
-        "Pre-seeded conflict",
-      ],
-    );
+    // Client BLOCKER riêng (KHÔNG qua withClient — phải giữ transaction MỞ xuyên suốt lúc intake chạy).
+    // BEGIN + INSERT đúng 4 cột uq_notifications_dedupe_active NHƯNG KHÔNG COMMIT.
+    const blocker = await direct.connect();
+    let blockerDone = false;
+    try {
+      const pidRes = await blocker.query("SELECT pg_backend_pid() AS pid");
+      const blockerPid = pidRes.rows[0].pid as number;
 
-    const res = await api(nest)
-      .post("/internal/v1/notifications/events")
-      .set(auth(token))
-      .send(
-        body({
-          eventCode: "TASK_COMMENT_CREATED",
-          sourceEntityType: "task",
-          sourceEntityId,
-          recipient: { mode: "UserIds", userIds: [recipient3, recipient4] },
-        }),
+      await blocker.query("BEGIN");
+      await blocker.query(
+        `INSERT INTO notifications
+           (company_id, user_id, type, body, is_read,
+            recipient_user_id, event_code, dedupe_key, notification_type, priority, status, title)
+         VALUES ($1, $2, 'general', $3, false, $2, $4, $5, 'Task', 'Low', 'Unread', $6)`,
+        [
+          A.companyId,
+          recipient3,
+          "blocker row (uncommitted during race)",
+          "TASK_COMMENT_CREATED",
+          raceDedupeKey,
+          "Race blocker (uncommitted)",
+        ],
       );
 
-    expect(res.status, `expected 200 (KHÔNG 500): ${JSON.stringify(res.body)}`).toBe(200);
-    expect(res.body.data).toMatchObject({ createdCount: 1, dedupedCount: 1 });
+      // Bắn intake nhưng CHƯA await kết quả — chạy trên connection RIÊNG của app pool (withTenant mở 1 tx
+      // Postgres thật). READ COMMITTED ⇒ SELECT tầng-1 (isDuplicate) trong tx này KHÔNG thấy row blocker
+      // (chưa commit) ⇒ intake đi tới SAVEPOINT + INSERT thật cho recipient3 ⇒ ĐỤNG lock trên row uncommitted
+      // cùng unique index 4 cột ⇒ Postgres CHẶN backend app-pool (chờ transaction blocker kết thúc).
+      // QUAN TRỌNG: supertest/superagent Request CHỈ thật sự gọi `.end()` (bắn HTTP) khi `.then()`/`await`
+      // được gọi (request-base.js:243-270) — gán thẳng vào biến KHÔNG kích hoạt gì cả. Bọc trong async IIFE
+      // với `await` bên trong để ép request bắn NGAY (đồng bộ trong lượt thực thi này), không phải khi ta
+      // `await intakePromise` ở dưới (lúc đó blocker đã COMMIT — race sẽ KHÔNG bao giờ xảy ra).
+      const intakePromise = (async () =>
+        api(nest)
+          .post("/internal/v1/notifications/events")
+          .set(auth(token))
+          .send(
+            body({
+              eventCode: "TASK_COMMENT_CREATED",
+              sourceModule: "TASK",
+              sourceEntityType: "task",
+              sourceEntityId,
+              occurredAt,
+              recipient: { mode: "UserIds", userIds: [recipient3, recipient4] },
+            }),
+          ))();
 
-    // recipient3: vẫn CHỈ 1 row (row pre-seeded, không tạo thêm) — recipient4: 1 row mới tạo.
-    expect(await notifCount(A.companyId, recipient3, "TASK_COMMENT_CREATED")).toBe(1);
-    expect(await notifCount(A.companyId, recipient4, "TASK_COMMENT_CREATED")).toBe(1);
+      // Poll pg_stat_activity (client thứ 3, mượn từ `direct` pool) tới khi thấy backend app-pool
+      // wait_event_type='Lock' — PROBE ĐỘC LẬP: nếu race KHÔNG kích hoạt, fail RÕ RÀNG (không âm thầm pass
+      // nhờ kết quả cuối trùng khớp ngẫu nhiên). stdout probe cố ý (bằng chứng độc lập nhánh SAVEPOINT/23505
+      // notification-engine.service.ts:144-151 thật sự bị kích hoạt TRƯỚC khi blocker commit).
+      const sawBlocked = await waitForLockWait(direct, blockerPid, 8000);
+      process.stdout.write(
+        `[b2-race-probe] app-pool backend blocked on Lock before commit: ${sawBlocked}\n`,
+      );
+      expect(
+        sawBlocked,
+        "app-pool backend KHÔNG block trên Lock trong 8s — race DB không kích hoạt (test vô hiệu)",
+      ).toBe(true);
 
-    const rows = await direct.query(
-      `SELECT recipient_user_id, event_code, dedupe_key FROM notifications
-       WHERE company_id=$1 AND event_code='TASK_COMMENT_CREATED' AND recipient_user_id = ANY($2::uuid[])
-         AND deleted_at IS NULL`,
-      [A.companyId, [recipient3, recipient4]],
-    );
-    expect(rows.rows).toHaveLength(2);
-    for (const row of rows.rows) {
-      expect(row.recipient_user_id).toBeTruthy();
-      expect(row.event_code).toBe("TASK_COMMENT_CREATED");
-      expect(row.dedupe_key).toBeTruthy();
+      // Chỉ COMMIT blocker SAU KHI đã xác nhận app-pool đang bị chặn — buộc INSERT của intake nhận 23505
+      // (unique-violation) khi row blocker trở nên visible.
+      await blocker.query("COMMIT");
+      blockerDone = true;
+      blocker.release();
+
+      const res = await intakePromise;
+      expect(res.status, `expected 200 (KHÔNG 500): ${JSON.stringify(res.body)}`).toBe(200);
+      expect(res.body.data).toMatchObject({ createdCount: 1, dedupedCount: 1 });
+
+      // recipient3: VẪN CHỈ 1 row — ĐÚNG row của BLOCKER (marker body/dedupe_key khớp) — engine INSERT cho
+      // recipient3 đã 23505 + ROLLBACK TO savepoint nên KHÔNG để lại row nào (bằng chứng tự thân).
+      const raceRow = await direct.query(
+        `SELECT body, title, dedupe_key FROM notifications
+         WHERE company_id=$1 AND recipient_user_id=$2 AND event_code='TASK_COMMENT_CREATED'
+           AND deleted_at IS NULL`,
+        [A.companyId, recipient3],
+      );
+      expect(raceRow.rows).toHaveLength(1);
+      expect(raceRow.rows[0].body).toBe("blocker row (uncommitted during race)");
+      expect(raceRow.rows[0].dedupe_key).toBe(raceDedupeKey);
+
+      // recipient4: KHÔNG đụng blocker → engine tạo notification MỚI bình thường, tx ngoài sống, KHÔNG 500.
+      expect(await notifCount(A.companyId, recipient4, "TASK_COMMENT_CREATED")).toBe(1);
+    } finally {
+      if (!blockerDone) {
+        await blocker.query("ROLLBACK").catch(() => undefined);
+        blocker.release();
+      }
     }
   });
 
@@ -494,5 +582,63 @@ describe.skipIf(!runDb)("S4-NOTI-BE-2 event intake (HTTP trust-boundary + engine
       .send(body({ payload: { salary: 99_000_000 } }));
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe("NOTI-ERR-TEMPLATE-VARIABLE-INVALID");
+  });
+
+  // ── (i) recipient mode=EmployeeIds — collectCandidates join employeeProfiles ─────
+  // (notification-recipient-resolver.service.ts:66-85). employee_profiles seed INLINE qua direct.query
+  // (company_id=A, status='active') — chỉ 2 mode BE-2 thật sự resolve (UserIds đã phủ ở (a)-(h)).
+  it("(i) recipient mode=EmployeeIds, profile active có user_id → resolve + tạo 1 notification", async () => {
+    const token = await login(nest, A.slug, actorEmail);
+    const emp = await direct.query(
+      `INSERT INTO employee_profiles (company_id, user_id, status) VALUES ($1, $2, 'active') RETURNING id`,
+      [A.companyId, recipientEmp],
+    );
+    const employeeId = emp.rows[0].id as string;
+
+    const res = await api(nest)
+      .post("/internal/v1/notifications/events")
+      .set(auth(token))
+      .send(
+        body({
+          eventCode: "TASK_ASSIGNED",
+          recipient: { mode: "EmployeeIds", employeeIds: [employeeId] },
+        }),
+      );
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data).toMatchObject({ createdCount: 1, dedupedCount: 0 });
+    expect(await notifCount(A.companyId, recipientEmp, "TASK_ASSIGNED")).toBe(1);
+  });
+
+  it("(i) recipient mode=EmployeeIds, profile KHÔNG có user_id liên kết → filter drop, 0 recipient, KHÔNG 500", async () => {
+    const token = await login(nest, A.slug, actorEmail);
+    const emp = await direct.query(
+      `INSERT INTO employee_profiles (company_id, user_id, status) VALUES ($1, NULL, 'active') RETURNING id`,
+      [A.companyId],
+    );
+    const employeeId = emp.rows[0].id as string;
+
+    const res = await api(nest)
+      .post("/internal/v1/notifications/events")
+      .set(auth(token))
+      .send(
+        body({
+          eventCode: "TASK_ASSIGNED",
+          recipient: { mode: "EmployeeIds", employeeIds: [employeeId] },
+        }),
+      );
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.createdCount).toBe(0);
+    expect(res.body.data.skippedCount).toBeGreaterThanOrEqual(1);
+  });
+
+  // ── (j) eventCode không tồn tại trong catalog → 404 (khác disabled → skip 200) ────
+  it("(j) eventCode không tồn tại trong catalog → 404 NOTI-ERR-EVENT-NOT-FOUND", async () => {
+    const token = await login(nest, A.slug, actorEmail);
+    const res = await api(nest)
+      .post("/internal/v1/notifications/events")
+      .set(auth(token))
+      .send(body({ eventCode: "NOTI_TEST_EVENT_DOES_NOT_EXIST" }));
+    expect(res.status, JSON.stringify(res.body)).toBe(404);
+    expect(res.body.error.code).toBe("NOTI-ERR-EVENT-NOT-FOUND");
   });
 });
