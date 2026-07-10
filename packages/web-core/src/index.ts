@@ -85,6 +85,8 @@ export {
   hrContractsInvalidation,
   // S3-FE-ATT-4: remote-work-request mutation → list/detail invalidation.
   remoteWorkRequestInvalidation,
+  // S4-FE-TASK-1: Project mutation → list/detail/members invalidation.
+  taskProjectInvalidation,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -104,6 +106,8 @@ export { twoFactorApi } from "./lib/two-factor-api";
 export { myNotificationApi } from "./lib/my-notification-api";
 // S4-FE-REGISTRY-1 — TASK/DASH API skeleton typed qua @mediaos/contracts (page thật = S4-FE-TASK-1/DASH-1).
 export { tasksApi } from "./lib/tasks-api";
+// S4-FE-TASK-1 — Project CRUD + member (ProjectsController, S4-TASK-BE-1 routes ĐÃ merge).
+export { taskProjectApi } from "./lib/task-project-api";
 export { dashboardApi } from "./lib/dashboard-api";
 export { hrApi } from "./lib/hr-api";
 // S2-FE-HR-6 — Org chart (GET /org/units/tree, read mở) + HR audit-logs (tái dùng /foundation/audit-logs).

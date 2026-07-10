@@ -11,6 +11,8 @@ import accountVi from "./locales/vi/account";
 // S4-FE-NOTI-1 — Badge/Dropdown/List/Detail. Deep-merge THÊM khoá vào bundle "notifications" đã có sẵn
 // ở @mediaos/web-core (title/ariaLabel/markAllRead/empty/types) — KHÔNG ghi đè (addResourceBundle deep=true).
 import notificationsVi from "./locales/vi/notifications";
+// S4-FE-TASK-1 — Project List/Detail/Form/Member (namespace mới "tasks").
+import tasksVi from "./locales/vi/tasks";
 
 registerI18nResources("vi", {
   hr: hrVi,
@@ -19,6 +21,7 @@ registerI18nResources("vi", {
   attendance: attendanceVi,
   account: accountVi,
   notifications: notificationsVi,
+  tasks: tasksVi,
 });
 
 export default i18n;
