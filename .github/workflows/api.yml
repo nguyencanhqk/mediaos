@@ -68,19 +68,9 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
-      # Object storage ephemeral cho integration test (employee-file: download → 302 signed URL).
-      # Dùng `bitnami/minio` chứ KHÔNG `minio/minio`: service container của GitHub Actions KHÔNG override được
-      # `command`, mà image chính chủ đòi đối số `server /data`. Bitnami tự chạy server + tự tạo bucket qua
-      # MINIO_DEFAULT_BUCKETS. Credential ephemeral mỗi run — KHÔNG phải secret thật.
-      # Health-check để ở step riêng (image không chắc có curl); runner thì luôn có.
-      minio:
-        image: bitnami/minio:2024
-        env:
-          MINIO_ROOT_USER: ci_minio_user
-          MINIO_ROOT_PASSWORD: ci_minio_password
-          MINIO_DEFAULT_BUCKETS: mediaos-test
-        ports:
-          - 9000:9000
+      # MinIO KHÔNG dựng ở đây — xem step "Start MinIO". Service container của GitHub Actions không override
+      # được `command`, mà `minio/minio` đòi đối số `server /data`. (`bitnami/minio` tự chạy server nhưng
+      # Bitnami đã dời image/tag ⇒ `manifest unknown`.) Dùng `docker run` ở step cho chắc.
 
     env:
       # DB ephemeral CI — KHÔNG phải secret thật. DIRECT = superuser (migrate + bootstrap role + seed test).
@@ -152,16 +142,26 @@ jobs:
           mkdir -p "$(dirname "$KMS_LOCAL_KEK_PATH")"
           node -e "require('fs').writeFileSync(process.env.KMS_LOCAL_KEK_PATH, require('crypto').randomBytes(32))"
 
-      # Service container `minio` không khai health-check (image không chắc có curl). Đợi ở runner — nếu
-      # MinIO chưa lên thì employee-file.int-spec sẽ đỏ với StorageNotConfiguredError, rất khó đọc.
-      - name: Wait for MinIO
+      # Object storage ephemeral. Chạy bằng `docker run` (KHÔNG service container) vì service container không
+      # override được `command`, mà `minio/minio` đòi `server /data`. Credential ephemeral — KHÔNG secret thật.
+      #
+      # Presign (getSignedUrl) là tính toán CỤC BỘ, không gọi mạng — nên riêng test "download → 302" chỉ cần
+      # env S3_*. Nhưng spec khác có thể gọi putObject/headObject thật, nên vẫn dựng MinIO + tạo bucket.
+      - name: Start MinIO (object storage cho integration test)
         run: |
+          docker run -d --name minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER="$S3_ACCESS_KEY" \
+            -e MINIO_ROOT_PASSWORD="$S3_SECRET_KEY" \
+            minio/minio:latest server /data
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:9000/minio/health/live; then echo "minio ready"; exit 0; fi
+            if curl -sf http://localhost:9000/minio/health/live >/dev/null; then echo "minio ready"; break; fi
+            if [ "$i" = "30" ]; then echo "MinIO không lên sau 60s" >&2; docker logs minio >&2; exit 1; fi
             sleep 2
           done
-          echo "MinIO không lên sau 60s" >&2
-          exit 1
+          docker run --rm --network host --entrypoint sh minio/mc:latest -c "\
+            mc alias set local http://localhost:9000 '$S3_ACCESS_KEY' '$S3_SECRET_KEY' && \
+            mc mb --ignore-existing local/$S3_BUCKET"
 
       # ⚠ LANE_DB BẮT BUỘC ở step này — nếu thiếu, CI XANH MÀ KHÔNG CHẠY GÌ.
       #
