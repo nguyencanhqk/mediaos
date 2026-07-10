@@ -1,0 +1,94 @@
+/**
+ * Namespace "notifications" (vi) — S4-FE-NOTI-1 (NotificationBadge/Dropdown/List/Detail, apps/app).
+ *
+ * ĐÈ THÊM (deep-merge, KHÔNG ghi đè) lên bundle "notifications" đã nhúng sẵn ở @mediaos/web-core
+ * (title/ariaLabel/markAllRead/empty/types — chuông chrome dùng chung, packages/ui/notification-bell.tsx).
+ * File này CHỈ thêm khoá MỚI (list/detail/badge/dropdown/actions/status/priority) — KHÔNG đụng khoá cũ.
+ */
+export default {
+  badge: {
+    ariaLabel: "Thông báo",
+    loadError: "Không thể tải số thông báo chưa đọc",
+  },
+  dropdown: {
+    title: "Thông báo",
+    viewAll: "Xem tất cả",
+    empty: "Bạn chưa có thông báo mới",
+    loadError: "Không thể tải thông báo. Vui lòng thử lại.",
+  },
+  list: {
+    title: "Thông báo của tôi",
+    description: "Danh sách thông báo gửi tới bạn.",
+    filters: {
+      allStatuses: "Tất cả trạng thái",
+      unreadOnly: "Chỉ chưa đọc",
+    },
+    columns: {
+      title: "Nội dung",
+      type: "Loại",
+      priority: "Mức ưu tiên",
+      status: "Trạng thái",
+      createdAt: "Thời gian",
+      actions: "Thao tác",
+    },
+    empty: {
+      title: "Không có thông báo",
+      description: "Bạn chưa có thông báo mới",
+    },
+    error: {
+      title: "Không thể tải danh sách thông báo",
+      description: "Có lỗi khi tải danh sách. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền xem thông báo",
+      description: "Bạn không có quyền truy cập màn hình này.",
+    },
+  },
+  detail: {
+    title: "Chi tiết thông báo",
+    backToList: "Quay lại danh sách",
+    fields: {
+      status: "Trạng thái",
+      priority: "Mức ưu tiên",
+      sourceModule: "Nguồn",
+      createdAt: "Thời gian tạo",
+      readAt: "Đã đọc lúc",
+    },
+    goToTarget: "Đi tới nội dung liên quan",
+    noTarget: "Thông báo này không có liên kết đi kèm.",
+    notFound: {
+      title: "Không tìm thấy thông báo",
+      description: "Thông báo có thể đã bị xoá hoặc không tồn tại.",
+    },
+    error: {
+      title: "Không thể tải chi tiết thông báo",
+      description: "Có lỗi khi tải thông báo. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền xem thông báo",
+      description: "Bạn không có quyền truy cập thông báo này.",
+    },
+  },
+  actions: {
+    markRead: "Đánh dấu đã đọc",
+    markAllRead: "Đánh dấu tất cả đã đọc",
+    markingAllRead: "Đang xử lý…",
+    delete: "Xoá",
+    deleteConfirm: "Xoá thông báo này?",
+  },
+  status: {
+    Unread: "Chưa đọc",
+    Read: "Đã đọc",
+    Hidden: "Đã ẩn",
+    Archived: "Đã lưu trữ",
+    Deleted: "Đã xoá",
+    Failed: "Lỗi gửi",
+  },
+  priority: {
+    Low: "Thấp",
+    Normal: "Bình thường",
+    High: "Cao",
+    Urgent: "Khẩn cấp",
+    Critical: "Nghiêm trọng",
+  },
+};
