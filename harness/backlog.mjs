@@ -4711,6 +4711,30 @@ export const backlog = [
     ],
   },
   {
+    id: "S4-FE-NOTI-CLEANUP-1",
+    module: "NOTI",
+    layer: "FE",
+    title:
+      "Gỡ dứt điểm NotificationBell (@mediaos/ui) + notification-api legacy (web-core) — code chết gọi route BE đã xoá ở PR #133",
+    zone: "yellow",
+    status: "todo",
+    paths: ["packages/ui/src/components/**", "packages/web-core/src/lib/**", "apps/console/src/**"],
+    skills: ["code-review"],
+    depends_on: ["S4-FE-NOTI-1"],
+    src: [
+      "PR #133 (64d4787) gỡ PATCH /notifications/:id/read + /notifications/read-all khỏi NotificationsController",
+      "PR #134 (67b12b4) gỡ <NotificationBell/> khỏi apps/console (home.tsx + root-layout.tsx)",
+      "packages/ui/src/components/notification-bell.tsx (tự đánh dấu LEGACY/BROKEN)",
+      "packages/web-core/src/lib/notification-api.ts",
+    ],
+    done_when: [
+      "BỐI CẢNH: PR #133 gỡ 2 route legacy PATCH /notifications/:id/read + /notifications/read-all (thay bằng POST /:id/mark-read + /mark-all-read ở MyNotificationsController) mà KHÔNG khai trong PR body. Consumer sống lúc đó: packages/ui NotificationBell → web-core notificationApi → apps/console. PR #134 chữa cháy bằng cách gỡ chuông khỏi console. OWNER CHỐT 2026-07-10: chấp nhận console không có chuông (SPEC-08/FRONTEND-12 chỉ định NOTI cho apps/app)",
+      "Gỡ packages/ui/src/components/notification-bell.tsx + packages/web-core/src/lib/notification-api.ts (và export trong barrel) — chúng đang ship nhưng gọi route không còn tồn tại; app nào mount sẽ 404. Xác nhận bằng grep là KHÔNG còn consumer nào trước khi xoá",
+      "Dọn comment tạm S4-FE-NOTI-CONSOLE-BELL-1 trong apps/console/src/routes/home.tsx + root-layout.tsx; slot `notifications` của AppShell để trống hợp lệ (không để lại TODO mồ côi)",
+      "packages/ui + packages/web-core dual-build xanh; apps/console + apps/app build + test xanh; check.sh (TURBO_FORCE=1) xanh; LIGHT gate",
+    ],
+  },
+  {
     id: "S4-FE-DASH-1",
     module: "DASH",
     layer: "FE",
