@@ -39,13 +39,19 @@ import { TASK_GRANT_MATRIX } from "../../src/foundation/seed/task-permissions.co
  *   • (b) EXACT grant-set task+project cho 4 role canonical == kỳ vọng (đếm không dư/không thiếu).
  *   • (c) FORBIDDEN residual {submit:task,manage:task,manage:project,assign:project} KHÔNG còn grant cho
  *         BẤT KỲ role canonical nào.
- *   • (c') EXPAND-ONLY: (comment,'comment') VẪN CÒN cho employee+company-admin — cố ý, để code cũ (còn
- *         enforce cặp legacy) không ăn 403 trong khe migrate→restart. Contract ở S4-TASK-RECON-2.
+ *   • (c') CONTRACT (cập nhật 2026-07-10, S4-TASK-RECON-2/mig 0486): (comment,'comment') ĐÃ GỠ khỏi
+ *         employee+company-admin — trạng thái transitional hậu-0480 ĐÓNG. Điều kiện tiên quyết đã verify
+ *         (docs/plans/S4-TASK-RECON-2.md §1): mọi env chạy code gate (comment,'task'), grep legacy == 0
+ *         ⇒ grant bị gỡ là grant CHẾT, không mở cửa sổ 403. (c'') khoá catalog row GIỮ NGUYÊN.
  *   • (d) Idempotent bộ-ba (role_id,permission_id,data_scope): re-INSERT ON CONFLICT KHÔNG drift scope;
  *         re-park DELETE = 0 row.
- *   • Deny-path: POST /tasks/:taskId/comments 2xx cho employee (comment:task) · 403 role KHÔNG grant;
+ *   • Deny-path: POST /tasks/:taskId/comments 2xx cho employee + company-admin (comment:task) · 403 user
+ *         KHÔNG role (deny-by-default tầng HTTP — cả 4 role canonical đều có comment:task từ 0485);
  *         engine can()=false employee {create,update,delete,close,archive}:project + hr {close,delete,
  *         archive,manage-member}:project + delete:task (deny-by-default: pair chưa granted / chưa có catalog).
+ *
+ * RED-before-GREEN (RECON-2): chạy trên DB migrate tới 0485 (TRƯỚC 0486) → ĐỎ ((c') expect 0 actual 2;
+ *   (c) comment:comment actual [employee,company-admin]). Sau apply 0486 → GREEN.
  */
 
 const runIsolatedDb = hasDb && !!process.env.LANE_DB;
@@ -82,13 +88,15 @@ const EXPECTED_TASK_PROJECT: Record<(typeof CANONICAL_ROLES)[number], string[]> 
   ) as Record<(typeof CANONICAL_ROLES)[number], string[]>;
 
 // Cặp residual TUYỆT ĐỐI KHÔNG được grant cho BẤT KỲ role canonical nào sau 0480.
-// (comment,'comment') KHÔNG nằm ở đây: 0480 là EXPAND-ONLY, cố ý GIỮ grant legacy để code cũ còn enforce
-// nó không ăn 403 trong khe migrate→restart. Contract cặp đó ở S4-TASK-RECON-2 (release sau).
+// (comment,'comment') VÀO LẠI danh sách 2026-07-10 (S4-TASK-RECON-2/mig 0486): nửa CONTRACT của
+// expand-contract — 0480 cố ý giữ grant legacy qua khe migrate→restart, 0486 gỡ nốt sau khi code gate
+// (comment,'task') chạy trên mọi env (bằng chứng docs/plans/S4-TASK-RECON-2.md §1).
 const FORBIDDEN_RESIDUAL: ReadonlyArray<{ action: string; resourceType: string }> = [
   { action: "submit", resourceType: "task" },
   { action: "manage", resourceType: "task" },
   { action: "manage", resourceType: "project" },
   { action: "assign", resourceType: "project" },
+  { action: "comment", resourceType: "comment" },
 ];
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
@@ -174,10 +182,10 @@ describe.skipIf(!runIsolatedDb)(
       });
     }
 
-    // EXPAND-ONLY: 0480 CỐ Ý giữ grant legacy (comment,'comment') song song với (comment,'task') mới.
-    // Gỡ nó ở đây sẽ mở cửa sổ 403 cho code cũ (còn enforce comment:comment) giữa migrate và restart.
-    // Contract nằm ở S4-TASK-RECON-2. Test này KHOÁ trạng thái transitional đó lại.
-    it("(c') comment:comment VẪN CÒN cho employee + company-admin (expand-only, chưa contract)", async () => {
+    // CONTRACT (S4-TASK-RECON-2/mig 0486): trạng thái transitional hậu-0480 (giữ song song 2 grant qua
+    // khe migrate→restart) đã ĐÓNG — mọi env chạy code gate (comment,'task'), grep legacy trong src == 0
+    // ⇒ 0486 gỡ grant CHẾT. Test lật từ 'VẪN CÒN = 2' (hậu-0480) sang 'đã gỡ = 0'.
+    it("(c') comment:comment ĐÃ GỠ khỏi employee + company-admin (contract RECON-2/0486)", async () => {
       const res = await direct.query<{ n: number }>(
         `SELECT COUNT(*)::int AS n
            FROM role_permissions rp
@@ -188,8 +196,18 @@ describe.skipIf(!runIsolatedDb)(
       );
       expect(
         res.rows[0].n,
-        "employee+company-admin PHẢI còn comment:comment tới khi RECON-2 contract (tránh 403 khe deploy)",
-      ).toBe(2);
+        "employee+company-admin KHÔNG được còn comment:comment sau contract 0486 (grant chết)",
+      ).toBe(0);
+    });
+
+    // Catalog row (comment,'comment') GIỮ NGUYÊN sau 0486: còn 7 system role media legacy tham chiếu
+    // (channel-manager/editor/hr-manager/project-manager/qa-reviewer/script-writer/uploader — dọn ở WO
+    // park riêng) + object_permissions 0 ref. done_when#4: còn tham chiếu ⇒ CHỈ gỡ grant, giữ catalog.
+    it("(c'') catalog row comment:comment VẪN TỒN TẠI (role media legacy còn tham chiếu)", async () => {
+      const res = await direct.query<{ n: number }>(
+        `SELECT COUNT(*)::int AS n FROM permissions WHERE action='comment' AND resource_type='comment'`,
+      );
+      expect(res.rows[0].n, "0486 KHÔNG được xoá catalog row (còn role media tham chiếu)").toBe(1);
     });
 
     // ── (d) Idempotent bộ-ba: re-apply INSERT ON CONFLICT KHÔNG drift; re-park DELETE=0 row ──
@@ -224,8 +242,8 @@ describe.skipIf(!runIsolatedDb)(
       );
 
       // Re-park residual ĐÃ gỡ (employee submit:task) → DELETE khớp 0 row (đã không còn).
-      // KHÔNG dùng comment:comment ở đây: 0480 expand-only cố ý GIỮ nó, DELETE sẽ khớp 1 row và
-      // phá trạng thái transitional mà test (c') vừa khoá.
+      // Giữ submit:task làm mẫu re-park (ổn định qua các release); comment:comment sau 0486 cũng
+      // DELETE 0 row nhưng đã được (c')/(c) khoá riêng — không lặp ở đây.
       const del = await direct.query(
         `DELETE FROM role_permissions rp
            USING roles r, permissions p
@@ -263,6 +281,8 @@ describe.skipIf(!runIsolatedDb)(
     let adminUser = "";
     let tokenEmp = "";
     let tokenMgr = "";
+    let tokenAdmin = "";
+    let tokenNoRole = "";
 
     async function canonicalRoleId(name: string): Promise<string> {
       const r = await direct.query(
@@ -313,6 +333,9 @@ describe.skipIf(!runIsolatedDb)(
       mgrUser = await seedUser(direct, A.companyId, `mgr@${A.slug}.test`, hash);
       hrUser = await seedUser(direct, A.companyId, `hr@${A.slug}.test`, hash);
       adminUser = await seedUser(direct, A.companyId, `admin@${A.slug}.test`, hash);
+      // User thứ 5 KHÔNG gán role — negative control HTTP 403 (deny-by-default). Sau 0485 cả 4 role
+      // canonical đều có comment:task nên "role không grant" phải là user không role.
+      await seedUser(direct, A.companyId, `norole@${A.slug}.test`, hash);
 
       await seedUserRole(direct, empUser, roleEmp, A.companyId);
       await seedUserRole(direct, mgrUser, roleMgr, A.companyId);
@@ -328,6 +351,8 @@ describe.skipIf(!runIsolatedDb)(
 
       tokenEmp = await login(`emp@${A.slug}.test`);
       tokenMgr = await login(`mgr@${A.slug}.test`);
+      tokenAdmin = await login(`admin@${A.slug}.test`);
+      tokenNoRole = await login(`norole@${A.slug}.test`);
     });
 
     afterAll(async () => {
@@ -349,6 +374,20 @@ describe.skipIf(!runIsolatedDb)(
     it("manager (comment:task @Team từ 0485) POST /tasks/:id/comments → 201", async () => {
       const res = await postComment(tokenMgr);
       expect(res.status, JSON.stringify(res.body)).toBe(201);
+    });
+
+    // S4-TASK-RECON-2 done_when#6: company-admin PHẢI vẫn 2xx SAU khi 0486 gỡ grant legacy
+    // comment:comment — chứng minh đường comment sống nguyên vẹn qua cặp canonical comment:task.
+    it("company-admin (comment:task @Company) POST /tasks/:id/comments → 201 SAU contract 0486", async () => {
+      const res = await postComment(tokenAdmin);
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+    });
+
+    // S4-TASK-RECON-2 done_when#6: "role không grant vẫn 403" — sau 0485 cả 4 role canonical đều có
+    // comment:task nên negative control tầng HTTP = user KHÔNG role (PermissionGuard deny-by-default).
+    it("user KHÔNG role POST /tasks/:id/comments → 403 (deny-by-default tầng HTTP)", async () => {
+      const res = await postComment(tokenNoRole);
+      expect(res.status, JSON.stringify(res.body)).toBe(403);
     });
 
     // ── (2) Positive control — 403 do THIẾU grant, KHÔNG do user/role hỏng ──────────────
