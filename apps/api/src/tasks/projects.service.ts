@@ -212,7 +212,7 @@ export class ProjectsService {
     });
   }
 
-  // ── Update (non-sensitive; KHÔNG owner-check — chỉ tồn-tại-tenant) ──────────────
+  // ── Update (field non-sensitive: tồn-tại-tenant; ĐỔI CHỦ: owner-check governance) ──
 
   async updateProject(
     user: RequestUser,
@@ -222,6 +222,17 @@ export class ProjectsService {
     return this.db.withTenant(user.companyId, async (tx) => {
       const raw = await this.repo.findRawByIdTx(tx, user.companyId, id);
       if (!raw) throw new NotFoundException(ERR.NOT_FOUND);
+
+      // BỊT BYPASS OWNER-CHECK: đổi ownerEmployeeId là hành động GOVERNANCE. Nếu chỉ tồn-tại-tenant thì
+      // manager @Team (update:project@Team, write không lọc scope) có thể tự gán mình làm chủ 1 project
+      // KHÔNG phải của mình rồi qua owner-check của close/delete/manage-member ⇒ vô hiệu hoá owner-check.
+      // Ép assertGovern("update"): scope Company/System (company-admin) bỏ qua; scope < Company (manager)
+      // PHẢI là chủ hiện tại; owner_employee_id NULL ⇒ 403 FAIL-CLOSED (không chiếm được project vô chủ).
+      const reassigningOwner =
+        dto.ownerEmployeeId !== undefined && dto.ownerEmployeeId !== raw.ownerEmployeeId;
+      if (reassigningOwner) {
+        await this.assertGovern(tx, user, raw, "update");
+      }
 
       if (
         dto.name !== undefined &&

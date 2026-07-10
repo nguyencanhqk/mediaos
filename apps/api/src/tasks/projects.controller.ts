@@ -83,8 +83,13 @@ export class ProjectsController {
     return this.projects.updateProject(req.user, id, dto);
   }
 
-  /** POST /projects/:id/close — đóng dự án (close:project, sensitive → owner-check khi manager @Team). */
+  /**
+   * POST /projects/:id/close — đóng dự án (close:project, sensitive → owner-check khi manager @Team).
+   * @HttpCode(200): action-verb POST mutate-and-return-resource (convention 15+ verb POST đã dùng 200:
+   * leave/att/profile-change approve·reject·cancel, api-keys revoke) + đối xứng @HttpCode(204) của remove.
+   */
   @Post(":id/close")
+  @HttpCode(200)
   @UseGuards(PermissionGuard)
   @RequirePermission("close", "project", { isSensitive: true })
   close(

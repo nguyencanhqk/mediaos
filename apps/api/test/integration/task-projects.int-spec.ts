@@ -569,10 +569,9 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-1 projects+member surface (DB cô lập,
     const t = await login(A.slug, `admin@${A.slug}.test`);
     const p = await createProject(t, "Proj Lifecycle");
     const closed = await authPost(t, `/projects/${p}/close`).send({ note: "done" });
-    // CLOSE_OK: controller @Post(":id/close") KHÔNG đặt @HttpCode ⇒ mặc định NestJS = 201 (đây là CONTRACT
-    // hiện tại). Ghi nhận cho lane impl: nếu muốn REST-semantics 200 (mutate + trả resource, mirror PATCH)
-    // → thêm @HttpCode(200) ở projects.controller (ngoài paths lane test này). KHÔNG chặn — state + closed_at/by đúng.
-    expect(closed.status, JSON.stringify(closed.body)).toBe(201);
+    // CLOSE contract = 200: action-verb POST mutate-and-return-resource (mirror PATCH + convention 15+ verb
+    // POST: leave/att/profile-change approve·reject·cancel, api-keys revoke) ⇒ controller @HttpCode(200).
+    expect(closed.status, JSON.stringify(closed.body)).toBe(200);
     expect(closed.body.data.status).toBe("Completed");
     expect(closed.body.data.closedAt).not.toBeNull();
     const cl = await direct.query(
@@ -625,8 +624,8 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-1 projects+member surface (DB cô lập,
     const pMgrOwned = await createProject(mgrToken, "Proj Owner Mgr");
     const detail = await authGet(mgrToken, `/projects/${pMgrOwned}`);
     expect(detail.body.data.ownerEmployeeId).toBe(mgrEmp);
-    // owner-check PASS ⇒ close thành công (201 = POST default, xem note CLOSE_OK ở test lifecycle).
-    expect((await authPost(mgrToken, `/projects/${pMgrOwned}/close`).send({})).status).toBe(201);
+    // owner-check PASS ⇒ close thành công (200 = contract @HttpCode, xem test lifecycle).
+    expect((await authPost(mgrToken, `/projects/${pMgrOwned}/close`).send({})).status).toBe(200);
   });
 
   it("owner_employee_id NULL → manager @Team 403 FAIL-CLOSED (nhánh NULL riêng)", async () => {
@@ -636,6 +635,59 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-1 projects+member surface (DB cô lập,
     const res = await authPost(mgrToken, `/projects/${projNoMember}/close`).send({});
     expect(res.status, JSON.stringify(res.body)).toBe(403);
     expect(JSON.stringify(res.body)).toContain("OWNER-REQUIRED");
+  });
+
+  // ── OWNER-REASSIGN GOVERNANCE (bịt bypass owner-check qua PATCH đổi chủ) ──────
+  it("manager @Team KHÔNG phải owner: PATCH đổi ownerEmployeeId=mình → 403 (bịt bypass), chủ KHÔNG đổi", async () => {
+    const adminToken = await login(A.slug, `admin@${A.slug}.test`);
+    const mgrToken = await login(A.slug, `mgr@${A.slug}.test`);
+    // admin-owned (owner=adminEmp). mgr có update:project@Team (write KHÔNG lọc scope) nhưng KHÔNG là chủ.
+    const pAdminOwned = await createProject(adminToken, "Proj Reassign Guard");
+    const res = await authPatch(mgrToken, `/projects/${pAdminOwned}`).send({
+      ownerEmployeeId: mgrEmp,
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(403);
+    // Chủ KHÔNG bị đổi (bypass đã bịt) — nếu lọt, mgr sẽ hijack rồi close/delete project không phải của mình.
+    const row = await direct.query("SELECT owner_employee_id FROM projects WHERE id=$1", [
+      pAdminOwned,
+    ]);
+    expect(row.rows[0].owner_employee_id).toBe(adminEmp);
+  });
+
+  it("manager @Team LÀ chủ hiện tại: PATCH đổi ownerEmployeeId → 200 (governance cho phép)", async () => {
+    const mgrToken = await login(A.slug, `mgr@${A.slug}.test`);
+    // mgr-owned (owner=mgrEmp) → mgr là chủ hiện tại → được reassign.
+    const pMgrOwned = await createProject(mgrToken, "Proj Reassign SelfOwner");
+    const res = await authPatch(mgrToken, `/projects/${pMgrOwned}`).send({
+      ownerEmployeeId: addEmp,
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const row = await direct.query("SELECT owner_employee_id FROM projects WHERE id=$1", [
+      pMgrOwned,
+    ]);
+    expect(row.rows[0].owner_employee_id).toBe(addEmp);
+  });
+
+  it("admin @Company: PATCH đổi ownerEmployeeId tự do (scope Company bỏ owner-check) → 200", async () => {
+    const adminToken = await login(A.slug, `admin@${A.slug}.test`);
+    const p = await createProject(adminToken, "Proj Reassign Admin");
+    const res = await authPatch(adminToken, `/projects/${p}`).send({ ownerEmployeeId: mgrEmp });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const row = await direct.query("SELECT owner_employee_id FROM projects WHERE id=$1", [p]);
+    expect(row.rows[0].owner_employee_id).toBe(mgrEmp);
+  });
+
+  it("owner_employee_id NULL: manager @Team PATCH đổi chủ → 403 FAIL-CLOSED (không thể chiếm project vô chủ)", async () => {
+    const mgrToken = await login(A.slug, `mgr@${A.slug}.test`);
+    // projNoMember do ghost (không employee) tạo → owner_employee_id NULL. reassign bị chặn (blocked ⇒ KHÔNG đổi).
+    const res = await authPatch(mgrToken, `/projects/${projNoMember}`).send({
+      ownerEmployeeId: mgrEmp,
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(403);
+    const row = await direct.query("SELECT owner_employee_id FROM projects WHERE id=$1", [
+      projNoMember,
+    ]);
+    expect(row.rows[0].owner_employee_id).toBeNull();
   });
 
   // ── APPEND-ONLY LEDGER + AUDIT ───────────────────────────────────────────────
