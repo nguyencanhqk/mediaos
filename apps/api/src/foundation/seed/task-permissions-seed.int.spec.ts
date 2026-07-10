@@ -174,7 +174,7 @@ describe.skipIf(!runIsolatedDb)(
         }
       }
 
-      it("đếm EXACT trên tập 23 cặp canonical: employee 9 · manager 22 · hr 18 · company-admin 23", async () => {
+      it("đếm EXACT trên tập 23 cặp canonical: employee 7 · manager 19 · hr 18 · company-admin 23", async () => {
         const res = await direct.query<{ name: string; n: number }>(
           `WITH canonical AS (
              SELECT p.id FROM permissions p
