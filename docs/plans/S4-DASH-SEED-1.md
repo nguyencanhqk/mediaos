@@ -68,7 +68,11 @@ Nguồn: IMPLEMENTATION-07 §11.3 (`:739-745`); `required_permission_code` verba
 - `dashboard_widgets.required_permission_code` **lưu chuỗi SPEC verbatim** `DASH.WIDGET.VIEW_*` (thoả DB-07 §8.5 — nó là dữ liệu catalog, không phải engine key).
 - **KHÔNG seed cặp per-widget** `*:dashboard-widget`. Gate widget = **cặp read của module nguồn**, ánh xạ tĩnh trong `DASH_WIDGET_GATE_PAIR`.
 
-> **Builder BẮT BUỘC** tra cặp thật bằng `grep -rn "INSERT INTO permissions" apps/api/migrations/` cho từng module (ATT/TASK/NOTI/LEAVE/HR). **KHÔNG suy từ tên** — ví dụ `read:attendance` có thể KHÔNG tồn tại. Đây là chỗ pair-drift đã cắn 3 lần.
+> **Builder BẮT BUỘC** tra cặp thật bằng `grep -rn "INSERT INTO permissions" apps/api/migrations/` cho từng module (ATT/TASK/NOTI/LEAVE/HR). **KHÔNG suy từ tên.** Đây là chỗ pair-drift đã cắn 3 lần.
+>
+> ⚠ **Cạm bẫy nặng hơn "tên sai":** một module có thể có **nhiều cặp cùng tồn tại**. Đã xác minh: ATT có **cả** `('read','attendance')` (`0063_g11_permissions_seed.sql`) **lẫn** `('view-own','attendance')`; LEAVE có `read:leave`, `view:leave`, `view-own:leave`. Chọn nhầm một cặp **có thật nhưng sai ngữ nghĩa** thì test E3 (§6) **vẫn xanh** vì nó chỉ assert "cặp tồn tại".
+>
+> ⇒ Chọn cặp theo `docs/permission-matrix-spec.md` (widget hiển thị dữ liệu ai: Own hay Team/Company), rồi **ghi lý do chọn ngay trong `DASH_WIDGET_GATE_PAIR`** dưới dạng comment trỏ tới migration + dòng. Người review FULL gate phải đối chiếu chỗ này bằng mắt — E3 không thay được.
 
 **8 cặp mới** (giữ nguyên `read:dashboard` từ mig 0100 — **không đụng**):
 

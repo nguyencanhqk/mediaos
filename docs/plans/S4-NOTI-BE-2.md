@@ -171,10 +171,18 @@ Bỏ `actorUserId` khỏi recipients. **Ngoại lệ:** `is_system_event = true`
 | Event không tồn tại | reject | 404 `NOTI-ERR-EVENT-NOT-FOUND` |
 | Event disabled | skip toàn bộ | audit `notification_skipped`; `skipped_count`; **không** delivery_log (FK) |
 | 0 recipient | skip | audit `reason='no_recipient'`; `skipped_count` |
-| Recipient inactive/locked | loại recipient đó | delivery_log `Skipped` (đã có notification) |
+| Recipient inactive/locked | **filter-and-drop ở resolver (bước 3)** | `skipped_count`; **không** delivery_log |
 | Template missing/inactive | **fallback** | notification + delivery_log `Sent`, `metadata.reason='template_fallback'` (loud) |
 | Dedupe hit (app hoặc DB) | skip recipient đó | `deduped_count` |
 | target_url ngoài / payload nhạy cảm | reject cả request | 422 / 400 loud |
+
+> **Chốt một hướng cho recipient inactive** (v1 tự mâu thuẫn): resolver ở bước 3 đã lọc `active / không-locked / không-deleted` **trước** khi tạo notification. Recipient bị lọc ⇒ **không có notification** ⇒ `delivery_log.notification_id` (FK NOT NULL) không thoả ⇒ **không thể** ghi `Skipped`. Vậy: filter-and-drop, đếm vào `skipped_count`, không log. Đừng để lại "path chết" ghi `Skipped` cho recipient không tồn tại notification.
+>
+> `delivery_log` trạng thái `Skipped` chỉ dành cho **channel-level** (notification đã tạo, nhưng một kênh bị tắt) — chưa dùng ở BE-2 vì chỉ có IN_APP.
+
+**WS emit phải nằm SAU COMMIT**, ngoài `withTenant` — nếu emit trong tx rồi tx rollback, client nhận thông báo cho notification không tồn tại. Giữ best-effort/no-throw (emitter đã NO-OP khi `server` null).
+
+**Audit skip mức-event** dùng `objectType='notification'` với `objectId` NULL. **Xác minh `AuditService.record` chấp nhận `objectId` undefined** (và không ép cột v2 như `module_code`) **trước** khi khoá assert ở test `(e)` — nếu nó throw thì audit-skip sẽ làm vỡ cả request.
 
 ### 6.4 Mã lỗi — route nào kích cái nào
 `/events` là **fire-and-forget**: event disabled hoặc dedupe **không** ném lỗi, mà trả `200` + `summary` (`skippedCount` / `dedupedCount`). Vì vậy:
