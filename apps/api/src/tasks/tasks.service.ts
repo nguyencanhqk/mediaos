@@ -156,6 +156,9 @@ export class TasksService {
       description?: string | null;
       stateId?: string | null;
       startDate?: string | null;
+      // S4-TASK-BE-1: cờ NỘI BỘ (KHÔNG expose qua API) — bỏ qua chặn tạo task dưới dự án đã đóng. MVP luôn
+      // false (chặn cứng). Cờ dành cho luồng WO sau cần override có kiểm soát (KHÔNG nới lỏng đường API).
+      allowClosedProject?: boolean;
     },
   ) {
     return this.db.withTenant(user.companyId, async (tx) => {
@@ -170,6 +173,24 @@ export class TasksService {
       if (data.projectId) {
         const ok = await this.repo.projectExistsTx(tx, user.companyId, data.projectId);
         if (!ok) throw new NotFoundException(`Project not found: ${data.projectId}`);
+
+        // S4-TASK-BE-1 — BLOCK-NEW-TASK: đọc CỘT MỚI project_status TitleCase (Completed/Cancelled/
+        // Archived), KHÔNG đọc cột legacy `status` lowercase. Dự án đã kết thúc ⇒ chặn cứng (MVP). Dự án
+        // đã soft-delete đã bị projectExistsTx trả 404 ở trên. Cờ allowClosedProject dành cho WO sau.
+        // GHI NHẬN (S4-TASK-BE-2): project MỚI (tạo qua ProjectsService) chưa có project_states legacy →
+        // nhánh stateId/allocateSequence bên dưới có thể fail độc lập; mối nối đó thuộc phạm vi WO sau.
+        if (!data.allowClosedProject) {
+          const blocked = await this.repo.projectBlocksNewTaskTx(
+            tx,
+            user.companyId,
+            data.projectId,
+          );
+          if (blocked) {
+            throw new BadRequestException(
+              "Dự án đã đóng/huỷ/lưu trữ — không thể tạo công việc mới trong dự án này.",
+            );
+          }
+        }
       }
 
       // PM-1: nếu có stateId tường minh → guard nó thuộc ĐÚNG project (cần project trước). stateId mà
