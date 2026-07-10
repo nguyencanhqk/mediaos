@@ -88,6 +88,9 @@ export * from "./workflow";
 export * from "./approval";
 export * from "./task";
 export * from "./notification";
+// S4-NOTI-BE-1 (additive): My-Notification API (SPEC-08 §17.1/17.2) — cột MỚI (recipient_user_id/status/
+// title/…), tách khỏi ./notification (legacy G10-2 chat/device/preference contracts, KHÔNG đụng).
+export * from "./my-notification";
 export * from "./foundation";
 export * from "./chat";
 export * from "./realtime";
