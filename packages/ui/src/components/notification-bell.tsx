@@ -10,6 +10,13 @@ import { Button } from "./ui/button";
  * (Bearer + credentials + refresh-on-401) và namespace i18n `notifications` (nhúng sẵn ở web-core core
  * resources → mọi app có, kể cả people/console không có feature chat). Mỗi app gắn nó vào slot
  * `notifications` của AppShell + header trang chủ launcher.
+ *
+ * ⚠️ LEGACY/BROKEN (S4-FE-NOTI-CONSOLE-BELL-1, 2026-07): `notificationApi` mà component này gọi trỏ
+ * route BE đã bị GỠ ở PR #133 (xem ghi chú trong `notification-api.ts`). KHÔNG còn app nào mount
+ * component này trong app tree hiện tại (apps/console đã gỡ — xem apps/console/src/routes/root-layout.tsx
+ * + home.tsx). KHÔNG dùng lại cho app mới — apps/app dùng `NotificationBadge`/`NotificationDropdown`
+ * (apps/app/src/components/notifications) tiêu thụ `myNotificationApi` thật. Giữ file để không phá
+ * `export *` ở packages/ui/src/index.ts — chờ quyết định xoá hẳn (ngoài phạm vi lane console-bell).
  */
 export function NotificationBell() {
   const { t } = useTranslation("notifications");
