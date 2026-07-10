@@ -271,23 +271,29 @@ describe("refreshAccessToken — single-flight internals", () => {
   });
 
   it("401/403/schema-sai/network → false KHÔNG ném", async () => {
-    for (const scenario of ["401", "403", "schema", "network"] as const) {
-      stubBrowser();
-      const { api } = await loadFresh();
-      if (scenario === "401") fetchMock.mockResolvedValueOnce(errRes(401));
-      else if (scenario === "403") fetchMock.mockResolvedValueOnce(errRes(403));
-      else if (scenario === "schema")
-        fetchMock.mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: async () => ({ success: true, data: { nope: 1 }, error: null }),
-          text: async () => "",
-        });
-      else fetchMock.mockRejectedValueOnce(new Error("ECONNREFUSED"));
+    // 1 loadFresh cho cả 4 kịch bản: resetModules + dynamic import mất >1s/lần trên runner CI lạnh,
+    // 4 lần vượt testTimeout 5s → flake, và timeout giữa chừng rò call fetch sang test kế tiếp.
+    // inFlight tự xoá sau mỗi chu kỳ settle nên các lần gọi tuần tự độc lập — không cần module tươi.
+    stubBrowser();
+    const { api } = await loadFresh();
 
-      await expect(api.refreshAccessToken()).resolves.toBe(false);
-    }
-  });
+    fetchMock.mockResolvedValueOnce(errRes(401));
+    await expect(api.refreshAccessToken()).resolves.toBe(false);
+
+    fetchMock.mockResolvedValueOnce(errRes(403));
+    await expect(api.refreshAccessToken()).resolves.toBe(false);
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, data: { nope: 1 }, error: null }),
+      text: async () => "",
+    });
+    await expect(api.refreshAccessToken()).resolves.toBe(false);
+
+    fetchMock.mockRejectedValueOnce(new Error("ECONNREFUSED"));
+    await expect(api.refreshAccessToken()).resolves.toBe(false);
+  }, 15_000);
 
   it("xoá inFlight sau settle → chu kỳ refresh kế chạy lại được", async () => {
     stubBrowser();
