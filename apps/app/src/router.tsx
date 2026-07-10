@@ -191,6 +191,10 @@ import { LeaveReportsPage } from "@/routes/leave/reports/LeaveReportsPage";
 import { LeaveAuditLogsPage } from "@/routes/leave/audit/LeaveAuditLogsPage";
 import { LEAVE_ENGINE_PAIRS, LEAVE_PATHS } from "@/routes/leave/constants";
 
+// Notifications — S4-FE-NOTI-1-WIRE (wire NotificationListPage/DetailPage đã build ở S4-FE-NOTI-1/a7be971)
+import { NotificationListPage } from "@/routes/notifications/NotificationListPage";
+import { NotificationDetailPage } from "@/routes/notifications/NotificationDetailPage";
+
 // System
 import { UsersPage } from "@/routes/system/UsersPage";
 import { RolesPage } from "@/routes/system/RolesPage";
@@ -984,8 +988,26 @@ const notificationsRoute = makeModuleRoute(
   "/notifications",
   "noti.list",
   "NOTI",
-  ModulePlaceholder,
+  NotificationListPage,
 );
+
+// Notification detail — /notifications/$id (NOTI-SCREEN-DETAIL), path param NOTI_PATHS.DETAIL(id).
+// Reuses noti.list meta (cùng gate NOTI.NOTIFICATION.VIEW_OWN) — mirrors hrEmployeeDetailRoute pattern:
+// no sidebar entry, path param resolved via useParams, page tự gate tinh hơn bằng useCan(NOTI_ENGINE_PAIRS.*).
+const notificationDetailMeta = getMeta("noti.list");
+const notificationDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/notifications/$id",
+  beforeLoad: authGuard,
+  component: () => {
+    const { id } = notificationDetailRoute.useParams();
+    return buildModuleRouteContent(
+      notificationDetailMeta,
+      "NOTI",
+      <NotificationDetailPage notificationId={id} />,
+    );
+  },
+});
 
 // System / Foundation — /system landing THAY ModulePlaceholder = System Overview (S2-FE-FND-1).
 const systemRoute = makeModuleRoute("/system", "system.overview", "FOUNDATION", SystemOverviewPage);
@@ -1497,6 +1519,7 @@ const routeTree = rootRoute.addChildren([
   tasksRoute,
   tasksMyTasksRoute,
   notificationsRoute,
+  notificationDetailRoute,
   systemRoute,
   systemCompanyRoute,
   systemCompanySettingsRoute,

@@ -395,6 +395,36 @@ export const notificationKeys = {
   list: (params?: Record<string, unknown>) => [...rootKeys.notifications, "list", params] as const,
   detail: (id: string) => [...rootKeys.notifications, "detail", id] as const,
   unreadCount: () => [...rootKeys.notifications, "unread-count"] as const,
+  // S4-FE-NOTI-1 — APPEND. GET /notifications/dropdown (latest N cho chuông header, TÁCH khỏi `list`
+  // vì khác endpoint/shape — invalidate riêng, không làm mới nhầm cache trang danh sách đầy đủ).
+  dropdown: (params?: Record<string, unknown>) =>
+    [...rootKeys.notifications, "dropdown", params] as const,
+};
+
+// S4-FE-NOTI-1 — mutation → invalidation cho My-Notification (mark-read/mark-all-read/delete). Prefix
+// (bỏ slot params) khớp mọi biến thể param'd (list theo filter, dropdown theo limit). markRead/remove làm
+// mới CẢ 3 (unread-count đổi, dropdown/list có thể đổi is_read hoặc biến mất khỏi mặc định "include_hidden
+// =false"); markAllRead tương tự — KHÔNG cần biết id vì server có thể đổi NHIỀU dòng cùng lúc.
+const notificationListPrefix = [...rootKeys.notifications, "list"] as const;
+const notificationDropdownPrefix = [...rootKeys.notifications, "dropdown"] as const;
+
+export const notificationInvalidation = {
+  markRead: (id: string) =>
+    [
+      notificationListPrefix,
+      notificationDropdownPrefix,
+      notificationKeys.unreadCount(),
+      notificationKeys.detail(id),
+    ] as const,
+  markAllRead: () =>
+    [notificationListPrefix, notificationDropdownPrefix, notificationKeys.unreadCount()] as const,
+  remove: (id: string) =>
+    [
+      notificationListPrefix,
+      notificationDropdownPrefix,
+      notificationKeys.unreadCount(),
+      notificationKeys.detail(id),
+    ] as const,
 };
 
 // ── Foundation keys (S2-FE-FND-1 · FND1-WC) ─────────────────────────────────────
