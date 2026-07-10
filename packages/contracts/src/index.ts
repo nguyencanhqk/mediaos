@@ -103,6 +103,9 @@ export * from "./finance";
 // S1-FND-FILE-1 File subsystem contracts (upload input / metadata / download-url / link DTOs)
 export * from "./files";
 export * from "./dashboard";
+// S4-DASH-BE-1 (additive): Dashboard resolver registry (/dashboard/me · /types · 4 route type) — tách khỏi
+// ./dashboard (legacy G14 aggregate report/mv-stats/alerts). Widget metadata, data=null tới S4-DASH-BE-2.
+export * from "./dashboard-resolver";
 export * from "./evaluation";
 export * from "./kpi";
 export * from "./payroll";

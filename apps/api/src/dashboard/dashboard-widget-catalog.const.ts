@@ -303,6 +303,73 @@ export const DASH_DEFAULT_CONFIG: readonly DashDefaultConfigEntry[] = [
   { dashboardType: "Admin", widgetCode: "NOTIFICATIONS", sortOrder: 50 },
 ] as const;
 
+// ─── S4-DASH-BE-1 (APPEND-only) — resolver route → cặp engine ────────────────────────────────────────
+//
+// KHÔNG sửa các khối trên (chúng là hợp đồng với mig 0484 đã land). Chỉ THÊM 3 hằng + 2 helper dưới đây để
+// DashboardResolverController/Service lấy cặp @RequirePermission TỪ NGUỒN DUY NHẤT, KHÔNG gõ tay string rời
+// (bài học pair-drift đã cắn 3 lần — xem doc-block đầu file).
+
+/** 4 dashboard type user-facing mà lane này mở route (API-08 §10.1). System/Project KHÔNG mở. */
+export const DASH_RESOLVER_TYPES = ["Employee", "Manager", "HR", "Admin"] as const;
+export type DashResolverType = (typeof DASH_RESOLVER_TYPES)[number];
+
+/**
+ * Cặp engine gate cho /dashboard/me và /dashboard/types = ('read','dashboard') — mig 0100, blanket-grant
+ * MỌI role (CROSS JOIN roles), is_sensitive=false. KHÔNG nằm trong DASH_PERMISSION_PAIRS (chỉ chứa các cặp
+ * view-* seed ở mig 0484). User KHÔNG có role nào ⇒ 0 grant ⇒ 403 (deny-path M1).
+ */
+export const DASH_READ_PAIR: DashPermissionPair = {
+  specCode: "DASH.DASHBOARD.READ",
+  action: "read",
+  resourceType: "dashboard",
+  isSensitive: false,
+};
+
+/**
+ * Map 4 dashboard type user-facing → cặp view-*:dashboard TƯƠNG ỨNG (đọc verbatim từ DASH_PERMISSION_PAIRS —
+ * KHÔNG tái khai action/resourceType). Dùng cho:
+ *   - @RequirePermission trên 4 route tĩnh (§3 plan).
+ *   - resolver: thứ tự ưu tiên Admin>HR>Manager>Employee gọi can() theo đúng cặp (kèm isSensitive).
+ */
+export const DASH_TYPE_PERMISSION_PAIR: Readonly<Record<DashResolverType, DashPermissionPair>> = {
+  Employee: dashPairBySpec("DASH.DASHBOARD.VIEW_EMPLOYEE"),
+  Manager: dashPairBySpec("DASH.DASHBOARD.VIEW_MANAGER"),
+  HR: dashPairBySpec("DASH.DASHBOARD.VIEW_HR"),
+  Admin: dashPairBySpec("DASH.DASHBOARD.VIEW_ADMIN"),
+} as const;
+
+/** Nhãn tiếng Việt cho /dashboard/types (hiển thị FE). */
+export const DASH_TYPE_LABEL: Readonly<Record<DashResolverType, string>> = {
+  Employee: "Nhân viên",
+  Manager: "Quản lý",
+  HR: "Nhân sự",
+  Admin: "Quản trị",
+} as const;
+
+/**
+ * Thứ tự ưu tiên resolve dashboard mặc định (BACKEND-10 §13.2/13.3) — CỐ ĐỊNH, KHÔNG đọc user_roles.name để
+ * đoán (BẤT BIẾN: không hard-code role). Admin mạnh nhất → Employee yếu nhất.
+ */
+export const DASH_TYPE_PRIORITY: readonly DashResolverType[] = [
+  "Admin",
+  "HR",
+  "Manager",
+  "Employee",
+] as const;
+
+/** Resolve 1 cặp DASH từ DASH_PERMISSION_PAIRS theo specCode — fail-fast nếu thiếu (mirror notificationPair). */
+export function dashDashboardPair(specCode: string): DashPermissionPair {
+  return dashPairBySpec(specCode);
+}
+
+function dashPairBySpec(specCode: string): DashPermissionPair {
+  const pair = DASH_PERMISSION_PAIRS.find((p) => p.specCode === specCode);
+  if (!pair) {
+    throw new Error(`DASH permission pair missing from catalog: specCode=${specCode}`);
+  }
+  return pair;
+}
+
 /** Widget CỐ Ý không seed ở sprint này (DB-07 §14.3 + §8.5) — int-spec A2 assert chúng VẮNG MẶT. */
 export const DASH_WIDGETS_NOT_SEEDED: readonly string[] = [
   "LEAVE_BALANCE",
