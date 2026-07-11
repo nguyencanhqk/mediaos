@@ -30,8 +30,9 @@ import {
   type ProfileChangeRequestListQuery,
   type ProfileChangeRequestListResponse,
   type ProfileChangeRequestDetail,
+  type HrEmployeeExportQuery,
 } from "@mediaos/contracts";
-import { apiFetch } from "./api-client";
+import { apiFetch, apiFetchBlob, type ApiBlobResult } from "./api-client";
 import { buildQueryString } from "./api-params";
 
 /**
@@ -54,6 +55,18 @@ export const hrApi = {
    */
   getEmployeeSummary: (): Promise<HrEmployeeSummary> =>
     apiFetch("/hr/employees/summary", hrEmployeeSummarySchema),
+
+  /**
+   * GET /hr/employees/export — xuất CSV danh bạ nhân sự (HR-PROFILE-UI-2, HR.EMPLOYEE.EXPORT).
+   *
+   * Cặp NHẠY CẢM `export:employee` (mig 0491, is_sensitive → fail-closed). Data-scope (Own/Team/Company)
+   * do SERVER áp TRƯỚC kết xuất — client KHÔNG forward company_id; masking PII per-row (view-sensitive)
+   * cũng là việc của server (cột thiếu quyền → ô rỗng). Server cap HR_EMPLOYEE_EXPORT_MAX_ROWS → 422 khi
+   * vượt (KHÔNG cắt im lặng). Trả nhị phân qua apiFetchBlob (refresh-on-401 replay 1 lần) — { blob, filename }.
+   * Lỗi HTTP (403/422/500) ném ApiError → caller hiện thông điệp người-đọc, KHÔNG tải file lỗi.
+   */
+  exportEmployees: (query?: HrEmployeeExportQuery): Promise<ApiBlobResult> =>
+    apiFetchBlob(`/hr/employees/export${buildQueryString(query ?? {})}`),
 
   /**
    * GET /hr/employees/:id — chi tiết hồ sơ nhân viên.
