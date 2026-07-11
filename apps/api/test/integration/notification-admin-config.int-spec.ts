@@ -2,10 +2,8 @@
  * S4-NOTI-BE-3 — Notification ADMIN config READ-ONLY (GET /notifications/events · GET
  * /notifications/templates/{id} · GET /notifications/delivery-logs) trên Nest app + Postgres THẬT.
  *
- * ⚠️ PHẠM VI: WO này KHÔNG có PATCH /events/{id} / PATCH /templates/{id} — viết company-override đòi GRANT
- * INSERT,UPDATE mới trên notification_events/notification_templates (mediaos_app hiện CHỈ SELECT, migration
- * 0479/0481/0482) ⇒ cần 1 migration nối tiếp mà lane này bị cấm tạo (xem notification-admin.controller.ts
- * header + báo cáo lane). Test dưới đây CHỈ phủ 3 route GET.
+ * ⚠️ PHẠM VI: file này CHỈ phủ 3 route GET (READ, BE-3). WRITE (PATCH /events/{id} · PATCH /templates/{id},
+ * BE-4 — GRANT INSERT,UPDATE mở ở mig 0487) được phủ RIÊNG ở notification-admin-write.int-spec.ts.
  *
  * Phủ (RED-trước → GREEN):
  *   (a) employee (role 0008, KHÔNG có view:notification-config/-template/-delivery-log) → CẢ 3 route 403.

@@ -33,6 +33,8 @@ import { NotificationDedupeService } from "./notification-dedupe.service";
 // TASK_OVERDUE (@SystemJobHandler, gom bởi SchedulerModule qua DiscoveryService — KHÔNG cần
 // SchedulerModule import module này vì NotificationsModule đã ở AppModule root, xem app.module.ts).
 import { NotificationAdminController } from "./notification-admin.controller";
+// S4-NOTI-BE-4 (additive): admin config WRITE service (PATCH events/templates → company-override + audit).
+import { NotificationAdminService } from "./notification-admin.service";
 import { TaskReminderJobHandler } from "./task-reminder.job-handler";
 
 @Module({
@@ -63,6 +65,8 @@ import { TaskReminderJobHandler } from "./task-reminder.job-handler";
     NotificationDedupeService,
     // S4-NOTI-BE-3 (additive): reminder job handler (đọc tasks + gọi engine.intake in-process).
     TaskReminderJobHandler,
+    // S4-NOTI-BE-4 (additive): admin config WRITE (company-override + audit trong 1 withTenant tx).
+    NotificationAdminService,
   ],
   // Export engine cho S4-INT-1 (outbox consumer gọi intake() in-process).
   exports: [NotificationsService, DeviceTokenService, NotificationEngineService],

@@ -2,12 +2,15 @@ import { Injectable } from "@nestjs/common";
 import { and, eq, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { notificationTemplates, type NotificationTemplate } from "../db/schema/noti";
+import { isUniqueViolation } from "../common/db-error";
 
 /**
- * NotificationTemplateRepository — đọc danh mục `notification_templates` (DB-07 §7.2, S4-NOTI-BE-2
- * L1-repos). App role CHỈ có GRANT SELECT (migration 0479) — ghi company-override thuộc S4-NOTI-BE-3.
+ * NotificationTemplateRepository — đọc danh mục `notification_templates` (DB-07 §7.2) + ghi COMPANY-OVERRIDE
+ * (sửa nội dung template theo công ty — S4-NOTI-BE-4). App role có GRANT SELECT (0479) + INSERT,UPDATE
+ * (0487) — KHÔNG DELETE. RLS policy nullable-tenant 0479 (WITH CHECK company_id=GUC) chặn CỨNG mọi ghi vào
+ * hàng global (company_id NULL): sửa template global = INSERT hàng override MỚI, KHÔNG UPDATE hàng global.
  *
- * Nhận `tx: TenantTx` từ caller — KHÔNG tự mở transaction (mirror `NotificationEventRepository`).
+ * Nhận `tx: TenantTx` từ caller — KHÔNG tự mở transaction (trừ SAVEPOINT chống đua INSERT override).
  */
 @Injectable()
 export class NotificationTemplateRepository {
@@ -69,6 +72,125 @@ export class NotificationTemplateRepository {
     return rows[0];
   }
 
+  /**
+   * BE-4 — sửa template = ghi COMPANY-OVERRIDE (KHÔNG BAO GIỜ UPDATE hàng global). Rẽ nhánh theo
+   * `sourceRow.companyId` (KHÔNG suy theo id lẻ — risk #1):
+   *   • sourceRow ĐÃ là override của company → UPDATE in-place (predicate KÉP id + company_id).
+   *   • sourceRow là global → tìm override sẵn theo (companyId, templateCode): có → UPDATE; không → INSERT
+   *     CLONE toàn bộ field từ global rồi ghi đè các field client PATCH. Đua 2 admin (23505 trên
+   *     uq_company_code_active) → SAVEPOINT + fallback UPDATE.
+   * `patch` chỉ chứa field client gửi (undefined = giữ nguyên giá trị clone/hiện tại).
+   */
+  async upsertCompanyOverride(
+    tx: TenantTx,
+    companyId: string,
+    sourceRow: NotificationTemplate,
+    patch: TemplateOverridePatch,
+    actorUserId: string,
+  ): Promise<NotificationTemplate> {
+    if (sourceRow.companyId === companyId) {
+      return this.updateOverrideById(tx, companyId, sourceRow.id, patch, actorUserId);
+    }
+
+    const existing = await this.findCompanyOverrideByCode(tx, companyId, sourceRow.templateCode);
+    if (existing) {
+      return this.updateOverrideById(tx, companyId, existing.id, patch, actorUserId);
+    }
+
+    // INSERT clone từ global + ghi đè field PATCH. SAVEPOINT: 23505 (đua) rollback nhánh này, KHÔNG poison cha.
+    try {
+      return await tx.transaction(async (sp) => {
+        const inserted = await sp
+          .insert(notificationTemplates)
+          .values({
+            companyId,
+            eventId: sourceRow.eventId,
+            templateCode: sourceRow.templateCode,
+            channel: sourceRow.channel,
+            locale: sourceRow.locale,
+            titleTemplate: patch.titleTemplate ?? sourceRow.titleTemplate,
+            bodyTemplate: patch.bodyTemplate ?? sourceRow.bodyTemplate,
+            shortBodyTemplate:
+              patch.shortBodyTemplate !== undefined
+                ? patch.shortBodyTemplate
+                : sourceRow.shortBodyTemplate,
+            actionLabelTemplate:
+              patch.actionLabelTemplate !== undefined
+                ? patch.actionLabelTemplate
+                : sourceRow.actionLabelTemplate,
+            targetUrlTemplate:
+              patch.targetUrlTemplate !== undefined
+                ? patch.targetUrlTemplate
+                : sourceRow.targetUrlTemplate,
+            variablesSchema: sourceRow.variablesSchema,
+            samplePayload: sourceRow.samplePayload,
+            version: sourceRow.version,
+            status: patch.status ?? sourceRow.status,
+            isDefault: sourceRow.isDefault,
+            effectiveFrom: sourceRow.effectiveFrom,
+            effectiveTo: sourceRow.effectiveTo,
+            metadata: sourceRow.metadata,
+            createdBy: actorUserId,
+            updatedBy: actorUserId,
+          })
+          .returning();
+        return inserted[0];
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        const raced = await this.findCompanyOverrideByCode(tx, companyId, sourceRow.templateCode);
+        if (raced) {
+          return this.updateOverrideById(tx, companyId, raced.id, patch, actorUserId);
+        }
+      }
+      throw err;
+    }
+  }
+
+  private async findCompanyOverrideByCode(
+    tx: TenantTx,
+    companyId: string,
+    templateCode: string,
+  ): Promise<NotificationTemplate | undefined> {
+    const rows = await tx
+      .select()
+      .from(notificationTemplates)
+      .where(
+        and(
+          eq(notificationTemplates.companyId, companyId),
+          eq(notificationTemplates.templateCode, templateCode),
+          isNull(notificationTemplates.deletedAt),
+        ),
+      )
+      .limit(1);
+    return rows[0];
+  }
+
+  private async updateOverrideById(
+    tx: TenantTx,
+    companyId: string,
+    id: string,
+    patch: TemplateOverridePatch,
+    actorUserId: string,
+  ): Promise<NotificationTemplate> {
+    const set: Record<string, unknown> = { updatedBy: actorUserId, updatedAt: new Date() };
+    if (patch.titleTemplate !== undefined) set.titleTemplate = patch.titleTemplate;
+    if (patch.bodyTemplate !== undefined) set.bodyTemplate = patch.bodyTemplate;
+    if (patch.shortBodyTemplate !== undefined) set.shortBodyTemplate = patch.shortBodyTemplate;
+    if (patch.actionLabelTemplate !== undefined)
+      set.actionLabelTemplate = patch.actionLabelTemplate;
+    if (patch.targetUrlTemplate !== undefined) set.targetUrlTemplate = patch.targetUrlTemplate;
+    if (patch.status !== undefined) set.status = patch.status;
+
+    const updated = await tx
+      .update(notificationTemplates)
+      .set(set)
+      // predicate KÉP id + company_id: KHÔNG bao giờ chạm hàng global (company_id NULL).
+      .where(and(eq(notificationTemplates.id, id), eq(notificationTemplates.companyId, companyId)))
+      .returning();
+    return updated[0];
+  }
+
   private async queryOne(
     tx: TenantTx,
     companyId: string,
@@ -96,4 +218,17 @@ export class NotificationTemplateRepository {
       .limit(1);
     return rows[0];
   }
+}
+
+/**
+ * BE-4 — field template được PATCH (camelCase, đã map từ DTO snake_case ở service). `undefined` = KHÔNG
+ * đổi (giữ giá trị clone/hiện tại); `null` (short/action/target) = xoá tường minh về NULL.
+ */
+export interface TemplateOverridePatch {
+  titleTemplate?: string;
+  bodyTemplate?: string;
+  shortBodyTemplate?: string | null;
+  actionLabelTemplate?: string | null;
+  targetUrlTemplate?: string | null;
+  status?: string;
 }
