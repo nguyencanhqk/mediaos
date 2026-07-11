@@ -1212,6 +1212,13 @@
       "when": 1717500855000,
       "tag": "0492_hr_profile_ui2_export_employee_sensitive",
       "breakpoints": true
+    },
+    {
+      "idx": 173,
+      "version": "7",
+      "when": 1717500860000,
+      "tag": "0493_s4_dashcatalog2_widget_catalog_9",
+      "breakpoints": true
     }
   ]
 }
