@@ -36,6 +36,13 @@ import { NotificationAdminController } from "./notification-admin.controller";
 // S4-NOTI-BE-4 (additive): admin config WRITE service (PATCH events/templates → company-override + audit).
 import { NotificationAdminService } from "./notification-admin.service";
 import { TaskReminderJobHandler } from "./task-reminder.job-handler";
+// S4-INT-1 (additive): outbox→NOTI in-process bridge (TASK/PROJECT producer §19) — generic core
+// (OutboxNotificationBridge, module-agnostic) + reader raw-SQL (TaskAudienceReader) + registrar OnModuleInit
+// (TaskNotiBridgeRegistrar, đăng ký 8 mapping TASK/PROJECT). KHÔNG import TasksModule (acyclic — mirror
+// TaskReminderJobHandler đọc thẳng bảng `tasks`).
+import { OutboxNotificationBridge } from "./outbox-notification-bridge.service";
+import { TaskAudienceReader } from "./task-audience.reader";
+import { TaskNotiBridgeRegistrar } from "./task-noti-bridge.registrar";
 
 @Module({
   imports: [DatabaseModule, EventsModule, RealtimeEmitterModule, PermissionModule],
@@ -67,6 +74,11 @@ import { TaskReminderJobHandler } from "./task-reminder.job-handler";
     TaskReminderJobHandler,
     // S4-NOTI-BE-4 (additive): admin config WRITE (company-override + audit trong 1 withTenant tx).
     NotificationAdminService,
+    // S4-INT-1 (additive): outbox→NOTI bridge — registrar OnModuleInit đăng ký 8 consumer lên EventBus
+    // (@Global EventsModule) tại boot.
+    OutboxNotificationBridge,
+    TaskAudienceReader,
+    TaskNotiBridgeRegistrar,
   ],
   // Export engine cho S4-INT-1 (outbox consumer gọi intake() in-process).
   // S4-DASH-BE-2 (additive): + MyNotificationsService cho NOTIFICATIONS widget handler (DASH inject qua DI —

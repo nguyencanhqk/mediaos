@@ -25,6 +25,7 @@ import type {
 import { TASK_PROJECT_PAGE_LIMIT_MAX } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
+import { OutboxService } from "../events/outbox.service";
 import { PermissionService } from "../permission/permission.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import type { Project } from "../db/schema/media";
@@ -79,6 +80,10 @@ const ERR = {
  * PHÂN QUYỀN: controller gate cặp seed 0485; service thêm (a) DATA-SCOPE ĐỌC (Own/Team EXISTS-join) và
  *   (c) OWNER-CHECK cho close/delete/manage-member khi scope < Company (manager @Team) — fail-closed khi
  *   owner_employee_id NULL. company-admin @Company KHÔNG qua owner-check.
+ *
+ * S4-INT-1 (additive): addMember phát `PROJECT_MEMBER_ADDED` qua outbox (SPEC-06 §19) — vá gap Producer
+ * (6/7 mã TASK đã phát từ S4-TASK-BE-3/4, mã thứ 8 CÒN THIẾU). CÙNG tx nghiệp vụ (rollback ⇒ event biến mất,
+ * ADR-0009). Payload NON-SENSITIVE (BẤT BIẾN #3): chỉ projectId/memberEmployeeId/memberUserId/actorUserId.
  */
 @Injectable()
 export class ProjectsService {
@@ -89,6 +94,7 @@ export class ProjectsService {
     private readonly activity: TaskActivityService,
     private readonly permission: PermissionService,
     private readonly dataScope: DataScopeService,
+    private readonly outbox: OutboxService,
   ) {}
 
   // ── Reads (data-scope Own/Team EXISTS; Company/System thấy toàn tenant) ─────────
@@ -429,6 +435,18 @@ export class ProjectsService {
         objectId: id,
         actorUserId: user.id,
         after: { memberId: member.id, employeeId: emp.id, projectRole: dto.projectRole },
+      });
+      // S4-INT-1 — Producer gap vá: PROJECT_MEMBER_ADDED (SPEC-06 §19). emp.userId đã fail-loud non-null
+      // ở trên (ERR.MEMBER_NO_ACCOUNT) — an toàn truyền thẳng.
+      await this.outbox.enqueue(tx, {
+        eventType: "project.member_added",
+        payload: {
+          eventCode: "PROJECT_MEMBER_ADDED",
+          projectId: id,
+          memberEmployeeId: emp.id,
+          memberUserId: emp.userId,
+          actorUserId: user.id,
+        },
       });
 
       return this.reloadMember(tx, user.companyId, id, member.id);
