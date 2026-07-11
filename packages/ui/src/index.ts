@@ -17,6 +17,12 @@ export * from "./components/ui/data-table";
 export * from "./components/ui/avatar";
 export * from "./components/ui/badge";
 export * from "./components/ui/card";
+// HR-PROFILE-UI-1 — primitives mới (khối additive, KHÔNG đổi export cũ)
+export * from "./components/ui/tabs";
+export * from "./components/ui/checkbox";
+export * from "./components/ui/popover";
+export * from "./components/ui/stat-card";
+export * from "./components/ui/donut-chart";
 
 // Layout chrome
 export * from "./components/layout/app-shell";

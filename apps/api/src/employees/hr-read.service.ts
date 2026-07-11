@@ -8,6 +8,7 @@ import type {
   HrEmployeeListItem,
   HrEmployeeListResponse,
   HrEmployeeListQuery,
+  HrEmployeeSummary,
   HrJobLevelLookup,
   HrMeProfile,
   HrPositionLookup,
@@ -81,7 +82,10 @@ export class HrReadService {
       const items: HrEmployeeListItem[] = [];
       for (const row of rows) {
         const revealSalary = await this.revealSalary(tx, user, row.id);
-        items.push(this.toListItem(row, revealSalary));
+        // HR-PROFILE-UI-1: list rows now carry PII (gender/dob/phone/contractType) — same per-row
+        // object-level gate as the detail (view-sensitive with resourceId, see revealSalary note).
+        const revealPii = await this.canViewSensitive(user, row.id);
+        items.push(this.toListItem(row, revealSalary, revealPii));
       }
 
       const totalPages = query.pageSize > 0 ? Math.ceil(total / query.pageSize) : 0;
@@ -127,6 +131,49 @@ export class HrReadService {
       const revealSalary = await this.revealSalary(tx, user, id);
       const revealPii = await this.canViewSensitive(user, id);
       return this.toDetail(row, revealSalary, revealPii);
+    });
+  }
+
+  // ── Summary (HR-PROFILE-UI-1 — overview strip) ──────────────────────────────────
+
+  async getEmployeesSummary(user: RequestUser): Promise<HrEmployeeSummary> {
+    // Same gate + scope pipeline as the list: the aggregates can never count a row the caller's
+    // list would not return (Own-scope caller aggregates exactly their own row).
+    const scope = await this.dataScope.resolveAndAssert(
+      user.id,
+      user.companyId,
+      "read",
+      "employee",
+    );
+    const ctx = await this.dataScope.resolveContext(user.id, user.companyId);
+    const scopeCond = this.dataScope.buildEmployeeScopeCondition(scope, ctx);
+
+    return this.db.withTenant(user.companyId, async (tx) => {
+      const rows = await this.repo.summaryScopedTx(tx, user.companyId, scopeCond);
+
+      const byStatus: Record<string, number> = {};
+      let total = 0;
+      for (const r of rows.byStatus) {
+        byStatus[r.status] = Number(r.count);
+        total += Number(r.count);
+      }
+      const byEmploymentType: Record<string, number> = {};
+      for (const r of rows.byEmploymentType) {
+        byEmploymentType[r.employmentType ?? "unknown"] = Number(r.count);
+      }
+
+      // Gender aggregate is PII-derived → fail-closed behind view-sensitive (type-level: the
+      // aggregate is not about one row, so no resourceId). No grant ⟹ byGender null, FE hides it.
+      let byGender: Record<string, number> | null = null;
+      const revealGender = await this.canViewSensitive(user, null);
+      if (revealGender) {
+        byGender = {};
+        for (const r of rows.byGender) {
+          byGender[r.gender ?? "unknown"] = Number(r.count);
+        }
+      }
+
+      return { total, byStatus, byEmploymentType, byGender };
     });
   }
 
@@ -228,10 +275,12 @@ export class HrReadService {
   }
 
   /**
-   * view-sensitive:employee gate for PII (phone/notes/contractType). Sensitive catalog pair → wildcard
-   * grants do NOT satisfy it. PII reveal is not separately audited (read-only, no salary-class trail).
+   * view-sensitive:employee gate for PII (phone/notes/contractType + personal-info). Sensitive catalog
+   * pair → wildcard grants do NOT satisfy it. PII reveal is not separately audited (read-only, no
+   * salary-class trail). targetId null = type-level check (used for the summary gender aggregate,
+   * which is not about one row).
    */
-  private async canViewSensitive(user: RequestUser, targetId: string): Promise<boolean> {
+  private async canViewSensitive(user: RequestUser, targetId: string | null): Promise<boolean> {
     const input: CanInput = {
       userId: user.id,
       companyId: user.companyId,
@@ -246,7 +295,11 @@ export class HrReadService {
 
   // ── Projection / masking ────────────────────────────────────────────────────────
 
-  private toListItem(row: HrListRow, revealSalary: boolean): HrEmployeeListItem {
+  private toListItem(
+    row: HrListRow,
+    revealSalary: boolean,
+    revealPii: boolean,
+  ): HrEmployeeListItem {
     return {
       id: row.id,
       userId: row.userId,
@@ -260,6 +313,14 @@ export class HrReadService {
       workType: row.workType,
       employmentType: row.employmentType,
       status: row.status,
+      // Directory-class (non-gated).
+      avatarUrl: row.avatarUrl,
+      startDate: row.startDate,
+      // PII — masked unless view-sensitive grants reveal (HR-PROFILE-UI-1).
+      gender: revealPii ? row.gender : null,
+      dateOfBirth: revealPii ? row.dateOfBirth : null,
+      phone: revealPii ? row.phone : null,
+      contractType: revealPii ? row.contractType : null,
       baseSalary: revealSalary && row.baseSalary != null ? Number(row.baseSalary) : null,
     };
   }
@@ -286,10 +347,22 @@ export class HrReadService {
       // project). Owner chốt 2026-06-26 classes it under SPEC-03 §18.8 "dữ liệu lương" → gate WITH the
       // amount behind view-salary (fail-closed). No view-salary reveal ⟹ null, same as baseSalary.
       salaryType: revealSalary ? row.salaryType : null,
+      // Directory-class (non-gated).
+      avatarUrl: row.avatarUrl,
       // PII — masked unless view-sensitive grants reveal.
       phone: revealPii ? row.phone : null,
       contractType: revealPii ? row.contractType : null,
       notes: revealPii ? row.notes : null,
+      // HR-PROFILE-UI-1: personal-info PII (mig 0451) — SAME view-sensitive gate, fail-closed.
+      // identity_* (CCCD, §14.18) is never projected here — see repository DETAIL_COLUMNS.
+      gender: revealPii ? row.gender : null,
+      dateOfBirth: revealPii ? row.dateOfBirth : null,
+      maritalStatus: revealPii ? row.maritalStatus : null,
+      personalEmail: revealPii ? row.personalEmail : null,
+      currentAddress: revealPii ? row.currentAddress : null,
+      permanentAddress: revealPii ? row.permanentAddress : null,
+      emergencyContactName: revealPii ? row.emergencyContactName : null,
+      emergencyContactPhone: revealPii ? row.emergencyContactPhone : null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };

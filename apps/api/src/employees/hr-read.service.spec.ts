@@ -55,11 +55,21 @@ function makeDetailRow(overrides: Record<string, unknown> = {}) {
     startDate: null,
     endDate: null,
     status: "active",
+    avatarUrl: "https://cdn.test/a.png",
     baseSalary: "5000.00",
     salaryType: "monthly",
     phone: "0900000000",
     contractType: "permanent",
     notes: "secret note",
+    // HR-PROFILE-UI-1: personal-info PII (mig 0451) — masked behind view-sensitive like phone.
+    gender: "Male",
+    dateOfBirth: "1997-10-02",
+    maritalStatus: "single",
+    personalEmail: "a.personal@mail.test",
+    currentAddress: "1 Đường A, Hà Nội",
+    permanentAddress: "2 Đường B, Nghệ An",
+    emergencyContactName: "Nguyen Thi B",
+    emergencyContactPhone: "0911111111",
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,
@@ -80,7 +90,32 @@ function makeListRow(overrides: Record<string, unknown> = {}) {
     workType: "offline",
     employmentType: "full_time",
     status: "active",
+    avatarUrl: "https://cdn.test/a.png",
+    startDate: "2025-02-01",
+    gender: "Male",
+    dateOfBirth: "1997-10-02",
+    phone: "0900000000",
+    contractType: "permanent",
     baseSalary: "5000.00",
+    ...overrides,
+  };
+}
+
+/** HR-PROFILE-UI-1 — raw aggregate rows the repo returns for getEmployeesSummary. */
+function makeSummaryRows(overrides: Record<string, unknown> = {}) {
+  return {
+    byStatus: [
+      { status: "active", count: 34 },
+      { status: "resigned", count: 11 },
+    ],
+    byEmploymentType: [
+      { employmentType: "full_time", count: 33 },
+      { employmentType: "probation", count: 1 },
+    ],
+    byGender: [
+      { gender: "Male", count: 20 },
+      { gender: "Female", count: 14 },
+    ],
     ...overrides,
   };
 }
@@ -98,6 +133,7 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     listScopedTx: vi.fn().mockResolvedValue({ rows: [makeListRow()], total: 1 }),
     findByIdTx: vi.fn().mockResolvedValue(makeDetailRow()),
     findByUserIdTx: vi.fn().mockResolvedValue(makeDetailRow()),
+    summaryScopedTx: vi.fn().mockResolvedValue(makeSummaryRows()),
     listDepartmentsTx: vi.fn().mockResolvedValue([]),
     listPositionsTx: vi.fn().mockResolvedValue([]),
     listJobLevelsTx: vi.fn().mockResolvedValue([]),
@@ -356,6 +392,155 @@ describe("HrReadService.getHrEmployee — 2-tenant + scope + masking", () => {
     expect(res.fullName).toBeNull();
     expect(res.email).toBeNull();
     expect(res.id).toBe(EMP_ID);
+  });
+});
+
+// ─── HR-PROFILE-UI-1: list PII masking (gender/dateOfBirth/phone/contractType) ─────
+
+describe("HrReadService.listHrEmployees — PII masking (HR-PROFILE-UI-1)", () => {
+  const query = { page: 1, pageSize: 20, sort: "fullName", order: "asc" } as never;
+
+  it("DENY view-sensitive → gender/dateOfBirth/phone/contractType null on EVERY row; directory fields pass", async () => {
+    const repo = makeRepo({
+      listScopedTx: vi
+        .fn()
+        .mockResolvedValue({ rows: [makeListRow(), makeListRow({ id: "f1" })], total: 2 }),
+    });
+    const { svc } = makeService({
+      repo,
+      perms: { "view-salary": DENY(), "view-sensitive": DENY() },
+    });
+
+    const res = await svc.listHrEmployees(actorA, query);
+
+    expect(res.items).toHaveLength(2);
+    for (const item of res.items) {
+      expect(item.gender).toBeNull();
+      expect(item.dateOfBirth).toBeNull();
+      expect(item.phone).toBeNull();
+      expect(item.contractType).toBeNull();
+      // Directory-class fields are NOT gated.
+      expect(item.avatarUrl).toBe("https://cdn.test/a.png");
+      expect(item.startDate).toBe("2025-02-01");
+    }
+  });
+
+  it("ALLOW view-sensitive → PII revealed per row (object-level resourceId check)", async () => {
+    const { svc, permission } = makeService({
+      perms: { "view-salary": DENY(), "view-sensitive": ALLOW(false) },
+    });
+
+    const res = await svc.listHrEmployees(actorA, query);
+
+    expect(res.items[0]!.gender).toBe("Male");
+    expect(res.items[0]!.dateOfBirth).toBe("1997-10-02");
+    expect(res.items[0]!.phone).toBe("0900000000");
+    expect(res.items[0]!.contractType).toBe("permanent");
+    // The check must carry the row id so OBJECT-level grants (ADR-0010) resolve per employee.
+    expect(permission.can).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "view-sensitive",
+        resourceType: "employee",
+        resourceId: EMP_ID,
+        isSensitive: true,
+      }),
+    );
+  });
+});
+
+// ─── HR-PROFILE-UI-1: detail personal-info masking ─────────────────────────────────
+
+describe("HrReadService.getHrEmployee — personal-info PII masking (HR-PROFILE-UI-1)", () => {
+  it("DENY view-sensitive → ALL personal-info fields null (fail-closed)", async () => {
+    const { svc } = makeService({
+      perms: { "view-salary": DENY(), "view-sensitive": DENY() },
+    });
+    const res = await svc.getHrEmployee(actorA, EMP_ID);
+    expect(res.gender).toBeNull();
+    expect(res.dateOfBirth).toBeNull();
+    expect(res.maritalStatus).toBeNull();
+    expect(res.personalEmail).toBeNull();
+    expect(res.currentAddress).toBeNull();
+    expect(res.permanentAddress).toBeNull();
+    expect(res.emergencyContactName).toBeNull();
+    expect(res.emergencyContactPhone).toBeNull();
+    // avatarUrl is directory-class — not gated.
+    expect(res.avatarUrl).toBe("https://cdn.test/a.png");
+  });
+
+  it("ALLOW view-sensitive → personal-info revealed (identity_* is NEVER in the DTO)", async () => {
+    const { svc } = makeService({
+      perms: { "view-salary": DENY(), "view-sensitive": ALLOW(false) },
+    });
+    const res = await svc.getHrEmployee(actorA, EMP_ID);
+    expect(res.gender).toBe("Male");
+    expect(res.dateOfBirth).toBe("1997-10-02");
+    expect(res.maritalStatus).toBe("single");
+    expect(res.personalEmail).toBe("a.personal@mail.test");
+    expect(res.currentAddress).toBe("1 Đường A, Hà Nội");
+    expect(res.emergencyContactName).toBe("Nguyen Thi B");
+    // SPEC-03 §14.18: identity (CCCD) must not leak through this read surface at all.
+    expect(res).not.toHaveProperty("identityNumber");
+    expect(res).not.toHaveProperty("identityIssueDate");
+    expect(res).not.toHaveProperty("identityIssuePlace");
+  });
+});
+
+// ─── HR-PROFILE-UI-1: summary (overview strip aggregates) ──────────────────────────
+
+describe("HrReadService.getEmployeesSummary — scope + gender aggregate gate", () => {
+  it("DENY: no read:employee grant → 403 BEFORE any repo read", async () => {
+    const repo = makeRepo();
+    const dataScope = makeDataScope({ throwOnAssert: true });
+    const { svc } = makeService({ repo, dataScope });
+
+    await expect(svc.getEmployeesSummary(actorA)).rejects.toThrow(ForbiddenException);
+    expect(repo.summaryScopedTx).not.toHaveBeenCalled();
+  });
+
+  it("aggregates run over the RESOLVED scope predicate (never company-wide for an Own caller)", async () => {
+    const repo = makeRepo();
+    const dataScope = makeDataScope({ scope: "Own", inScope: true });
+    const { svc } = makeService({
+      repo,
+      dataScope,
+      perms: { "view-sensitive": DENY() },
+    });
+
+    await svc.getEmployeesSummary(actorA);
+
+    expect(dataScope.buildEmployeeScopeCondition).toHaveBeenCalledWith(
+      "Own",
+      expect.objectContaining({ userId: ACTOR_ID, companyId: COMPANY_A }),
+    );
+    expect(repo.summaryScopedTx).toHaveBeenCalledWith(FAKE_TX, COMPANY_A, SCOPE_COND);
+  });
+
+  it("DENY view-sensitive → byGender NULL (gender aggregate is PII, fail-closed)", async () => {
+    const { svc } = makeService({ perms: { "view-sensitive": DENY() } });
+    const res = await svc.getEmployeesSummary(actorA);
+    expect(res.byGender).toBeNull();
+    // Directory-class aggregates still flow.
+    expect(res.total).toBe(45);
+    expect(res.byStatus).toEqual({ active: 34, resigned: 11 });
+    expect(res.byEmploymentType).toEqual({ full_time: 33, probation: 1 });
+  });
+
+  it("ALLOW view-sensitive → byGender aggregated; NULL gender bucketed as 'unknown'", async () => {
+    const repo = makeRepo({
+      summaryScopedTx: vi.fn().mockResolvedValue(
+        makeSummaryRows({
+          byGender: [
+            { gender: "Male", count: 20 },
+            { gender: "Female", count: 14 },
+            { gender: null, count: 3 },
+          ],
+        }),
+      ),
+    });
+    const { svc } = makeService({ repo, perms: { "view-sensitive": ALLOW(false) } });
+    const res = await svc.getEmployeesSummary(actorA);
+    expect(res.byGender).toEqual({ Male: 20, Female: 14, unknown: 3 });
   });
 });
 

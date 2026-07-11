@@ -33,6 +33,14 @@ const LIST_COLUMNS = {
   workType: employeeProfiles.workType,
   employmentType: employeeProfiles.employmentType,
   status: employeeProfiles.status,
+  // HR-PROFILE-UI-1: directory columns (non-gated).
+  avatarUrl: employeeProfiles.avatarUrl,
+  startDate: employeeProfiles.startDate,
+  // HR-PROFILE-UI-1: PII columns — raw here; the SERVICE masks them per view-sensitive grant.
+  gender: employeeProfiles.gender,
+  dateOfBirth: employeeProfiles.dateOfBirth,
+  phone: employeeProfiles.phone,
+  contractType: employeeProfiles.contractType,
   baseSalary: employeeProfiles.baseSalary,
 } as const;
 
@@ -55,11 +63,23 @@ const DETAIL_COLUMNS = {
   startDate: employeeProfiles.startDate,
   endDate: employeeProfiles.endDate,
   status: employeeProfiles.status,
+  // HR-PROFILE-UI-1: directory column (non-gated).
+  avatarUrl: employeeProfiles.avatarUrl,
   baseSalary: employeeProfiles.baseSalary,
   salaryType: employeeProfiles.salaryType,
   phone: employeeProfiles.phone,
   contractType: employeeProfiles.contractType,
   notes: employeeProfiles.notes,
+  // HR-PROFILE-UI-1: personal-info PII (mig 0451) — raw here; the SERVICE masks per view-sensitive.
+  // identity_* (CCCD, §14.18) is intentionally NOT selected — it must never reach a read DTO.
+  gender: employeeProfiles.gender,
+  dateOfBirth: employeeProfiles.dateOfBirth,
+  maritalStatus: employeeProfiles.maritalStatus,
+  personalEmail: employeeProfiles.personalEmail,
+  currentAddress: employeeProfiles.currentAddress,
+  permanentAddress: employeeProfiles.permanentAddress,
+  emergencyContactName: employeeProfiles.emergencyContactName,
+  emergencyContactPhone: employeeProfiles.emergencyContactPhone,
   createdAt: employeeProfiles.createdAt,
   updatedAt: employeeProfiles.updatedAt,
 } as const;
@@ -79,6 +99,12 @@ export interface HrListRow {
   workType: string | null;
   employmentType: string | null;
   status: string;
+  avatarUrl: string | null;
+  startDate: string | null;
+  gender: string | null;
+  dateOfBirth: string | null;
+  phone: string | null;
+  contractType: string | null;
   baseSalary: string | null;
 }
 
@@ -102,13 +128,29 @@ export interface HrDetailRow {
   startDate: string | null;
   endDate: string | null;
   status: string;
+  avatarUrl: string | null;
   baseSalary: string | null;
   salaryType: string | null;
   phone: string | null;
   contractType: string | null;
   notes: string | null;
+  gender: string | null;
+  dateOfBirth: string | null;
+  maritalStatus: string | null;
+  personalEmail: string | null;
+  currentAddress: string | null;
+  permanentAddress: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** HR-PROFILE-UI-1 — raw aggregate rows for GET /hr/employees/summary (service maps to records). */
+export interface HrSummaryRows {
+  byStatus: { status: string; count: number }[];
+  byEmploymentType: { employmentType: string | null; count: number }[];
+  byGender: { gender: string | null; count: number }[];
 }
 
 export interface HrListFilters {
@@ -229,6 +271,45 @@ export class HrReadRepository {
       )
       .limit(1);
     return row as HrDetailRow | undefined;
+  }
+
+  /**
+   * HR-PROFILE-UI-1 — aggregate headcount for the overview strip. Same predicate shape as the list
+   * (tenant + soft-delete + the caller's scope condition), so the numbers NEVER exceed what the list
+   * itself would return. LEFT JOIN users mirrors the list count query (the scope predicate may
+   * reference users columns). Raw group-by rows out; the service buckets/masks them.
+   */
+  async summaryScopedTx(tx: TenantTx, companyId: string, scopeCond: SQL): Promise<HrSummaryRows> {
+    const where = and(
+      eq(employeeProfiles.companyId, companyId),
+      isNull(employeeProfiles.deletedAt),
+      scopeCond,
+    );
+    const activeWhere = and(where, eq(employeeProfiles.status, "active"));
+    const count = sql<number>`cast(count(*) as int)`;
+
+    const byStatus = await tx
+      .select({ status: employeeProfiles.status, count })
+      .from(employeeProfiles)
+      .leftJoin(users, eq(employeeProfiles.userId, users.id))
+      .where(where)
+      .groupBy(employeeProfiles.status);
+
+    const byEmploymentType = await tx
+      .select({ employmentType: employeeProfiles.employmentType, count })
+      .from(employeeProfiles)
+      .leftJoin(users, eq(employeeProfiles.userId, users.id))
+      .where(activeWhere)
+      .groupBy(employeeProfiles.employmentType);
+
+    const byGender = await tx
+      .select({ gender: employeeProfiles.gender, count })
+      .from(employeeProfiles)
+      .leftJoin(users, eq(employeeProfiles.userId, users.id))
+      .where(activeWhere)
+      .groupBy(employeeProfiles.gender);
+
+    return { byStatus, byEmploymentType, byGender };
   }
 
   // ── Lookups (active reference data; never carry sensitive fields) ───────────────

@@ -1,5 +1,6 @@
 import {
   type ColumnDef,
+  type VisibilityState,
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
@@ -23,6 +24,10 @@ interface DataTableProps<TData, TValue> {
   emptyState?: React.ReactNode;
   /** Số dòng mỗi trang (mặc định 10). */
   pageSize?: number;
+  /** Ẩn/hiện cột (controlled) — key = column id/accessorKey. Không truyền = hiện tất cả. */
+  columnVisibility?: VisibilityState;
+  /** Click 1 dòng (vd điều hướng sang chi tiết). Có truyền → row đổi cursor-pointer. */
+  onRowClick?: (row: TData) => void;
 }
 
 /**
@@ -36,12 +41,14 @@ export function DataTable<TData, TValue>({
   globalFilter = "",
   emptyState,
   pageSize = 10,
+  columnVisibility,
+  onRowClick,
 }: DataTableProps<TData, TValue>) {
   const { t } = useTranslation("common");
   const table = useReactTable({
     data,
     columns,
-    state: { globalFilter },
+    state: { globalFilter, ...(columnVisibility ? { columnVisibility } : {}) },
     globalFilterFn: "includesString",
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -50,7 +57,8 @@ export function DataTable<TData, TValue>({
   });
 
   const rows = table.getRowModel().rows;
-  const colSpan = columns.length;
+  // colSpan theo cột ĐANG hiển thị — không dùng columns.length (sai khi có cột bị ẩn).
+  const colSpan = table.getVisibleLeafColumns().length;
   const totalRows = table.getFilteredRowModel().rows.length;
   const { pageIndex } = table.getState().pagination;
   const from = totalRows === 0 ? 0 : pageIndex * pageSize + 1;
@@ -90,9 +98,7 @@ export function DataTable<TData, TValue>({
               <tr>
                 <td colSpan={colSpan} className="p-0">
                   {emptyState ?? (
-                    <p className="py-12 text-center text-sm text-muted-foreground">
-                      {t("noData")}
-                    </p>
+                    <p className="py-12 text-center text-sm text-muted-foreground">{t("noData")}</p>
                   )}
                 </td>
               </tr>
@@ -100,7 +106,11 @@ export function DataTable<TData, TValue>({
               rows.map((row) => (
                 <tr
                   key={row.id}
-                  className="border-b border-border transition-colors last:border-0 hover:bg-muted/40"
+                  onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                  className={cn(
+                    "border-b border-border transition-colors last:border-0 hover:bg-muted/40",
+                    onRowClick && "cursor-pointer",
+                  )}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <td key={cell.id} className="px-4 py-3 align-middle">

@@ -58,6 +58,14 @@ export const hrEmployeeListItemSchema = z.object({
   workType: z.string().nullable(),
   employmentType: z.string().nullable(),
   status: z.string(),
+  // HR-PROFILE-UI-1: directory data (non-gated) — avatar + start date mirror the ungated detail fields.
+  avatarUrl: z.string().nullable(),
+  startDate: z.string().nullable(),
+  /** PII (view-sensitive) — null when unauthorized (same gate as the detail PII fields). */
+  gender: z.string().nullable(),
+  dateOfBirth: z.string().nullable(),
+  phone: z.string().nullable(),
+  contractType: z.string().nullable(),
   /** SENSITIVE (view-salary) — null when unauthorized. */
   baseSalary: z.number().nullable(),
 });
@@ -81,6 +89,8 @@ export const hrEmployeeDetailSchema = z.object({
   startDate: z.string().nullable(),
   endDate: z.string().nullable(),
   status: z.string(),
+  // HR-PROFILE-UI-1: directory data (non-gated).
+  avatarUrl: z.string().nullable(),
   /** SENSITIVE (view-salary) — both null when unauthorized; salaryType is salary-class (§18.8). */
   baseSalary: z.number().nullable(),
   salaryType: z.string().nullable(),
@@ -88,6 +98,17 @@ export const hrEmployeeDetailSchema = z.object({
   phone: z.string().nullable(),
   contractType: z.string().nullable(),
   notes: z.string().nullable(),
+  // HR-PROFILE-UI-1: personal-info PII (mig 0451 self-service columns) — SAME view-sensitive gate.
+  // identity_* (CCCD) is intentionally NOT exposed here (SPEC-03 §14.18 higher-sensitivity class —
+  // needs an owner decision on its own gate before any read surface carries it).
+  gender: z.string().nullable(),
+  dateOfBirth: z.string().nullable(),
+  maritalStatus: z.string().nullable(),
+  personalEmail: z.string().nullable(),
+  currentAddress: z.string().nullable(),
+  permanentAddress: z.string().nullable(),
+  emergencyContactName: z.string().nullable(),
+  emergencyContactPhone: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -113,3 +134,23 @@ export const hrEmployeeListResponseSchema = z.object({
   meta: hrPageMetaSchema,
 });
 export type HrEmployeeListResponse = z.infer<typeof hrEmployeeListResponseSchema>;
+
+/**
+ * GET /hr/employees/summary — HR-PROFILE-UI-1. Aggregate headcount for the overview strip, computed
+ * over the caller's RESOLVED data scope (same predicate as the list — an Own-scope caller only ever
+ * aggregates their own row). Gate: read:employee.
+ *
+ * byGender is an AGGREGATE of a PII field (gender) → fail-closed: null unless the caller holds
+ * view-sensitive:employee (type-level). byStatus/byEmploymentType are directory-class.
+ */
+export const hrEmployeeSummarySchema = z.object({
+  /** Non-deleted, in-scope headcount (every status). */
+  total: z.number().int().nonnegative(),
+  /** Count per employee status (active/inactive/resigned/terminated). Missing key = 0. */
+  byStatus: z.record(z.string(), z.number().int().nonnegative()),
+  /** Count per employment type, ACTIVE employees only. Missing key = 0. */
+  byEmploymentType: z.record(z.string(), z.number().int().nonnegative()),
+  /** ACTIVE-only gender counts (keys: Male/Female/Other/unknown) — null without view-sensitive. */
+  byGender: z.record(z.string(), z.number().int().nonnegative()).nullable(),
+});
+export type HrEmployeeSummary = z.infer<typeof hrEmployeeSummarySchema>;

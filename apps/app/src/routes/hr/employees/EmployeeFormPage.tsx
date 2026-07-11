@@ -1,11 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm, type FieldErrors, type UseFormRegister } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { UserPlus, UserCog, ArrowLeft, RefreshCw } from "lucide-react";
 import { hrApi, hrKeys, useCan, ApiError } from "@mediaos/web-core";
-import { PageHeader, EmptyState, Button, Input, Select, Card, CardContent } from "@mediaos/ui";
+import { PageHeader, EmptyState, Button, Input, Select, Card, CardContent, cn } from "@mediaos/ui";
 import { useDirtyFormGuard } from "@/hooks/use-dirty-form-guard";
 import { HR_ENGINE_PAIRS } from "../constants";
 import { useEmployeeLookups } from "./use-employee-lookups";
@@ -79,6 +79,64 @@ function Field({
         </p>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Section nav (HR-PROFILE-UI-1) — anchor trái + scrollspy IntersectionObserver
+// ---------------------------------------------------------------------------
+interface FormSection {
+  id: string;
+  label: string;
+}
+
+function SectionNav({ sections, title }: { sections: FormSection[]; title: string }) {
+  const [active, setActive] = useState(sections[0]?.id ?? "");
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting);
+        if (visible.length > 0) setActive(visible[0]!.target.id);
+      },
+      // Vùng "đang đọc" = dải 20–30% từ mép trên viewport.
+      { rootMargin: "-20% 0px -70% 0px" },
+    );
+    for (const s of sections) {
+      const el = document.getElementById(s.id);
+      if (el) observer.observe(el);
+    }
+    return () => observer.disconnect();
+  }, [sections]);
+
+  return (
+    <nav className="sticky top-20 hidden self-start lg:block">
+      <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+        {title}
+      </p>
+      <ul className="space-y-0.5 border-l border-border">
+        {sections.map((s) => (
+          <li key={s.id}>
+            <button
+              type="button"
+              onClick={() =>
+                document
+                  .getElementById(s.id)
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
+              className={cn(
+                "-ml-px block w-full border-l-2 px-3 py-1.5 text-left text-sm transition-colors",
+                active === s.id
+                  ? "border-brand font-medium text-brand"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {s.label}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 
@@ -217,7 +275,30 @@ function WorkSection({
               ))}
             </Select>
           </Field>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
+// ---------------------------------------------------------------------------
+// Schedule section (HR-PROFILE-UI-1) — hình thức làm việc & thời gian
+// ---------------------------------------------------------------------------
+function ScheduleSection({
+  register,
+  errors,
+  t,
+}: {
+  register: UseFormRegister<EmployeeFormValues>;
+  errors: FieldErrors<EmployeeFormValues>;
+  t: TF;
+}) {
+  return (
+    <Card>
+      <CardContent className="space-y-4 pt-5">
+        <h3 className="text-sm font-semibold text-foreground">{t("form.sections.schedule")}</h3>
+
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field id="workType" label={t("form.fields.workType")}>
             <Select id="workType" {...register("workType")}>
               {WORK_TYPE_VALUES.map((v) => (
@@ -418,29 +499,54 @@ export function EmployeeFormPage({ employeeId, onSuccess, onCancel }: EmployeeFo
         </p>
       )}
 
-      <form
-        onSubmit={handleSubmit((values) => mutation.mutate({ values, dirty: { ...dirtyFields } }))}
-        noValidate
-        className="space-y-6"
-      >
-        {mode === "create" && <AccountSection register={register} errors={errors} t={t} />}
-        <WorkSection register={register} errors={errors} t={t} lookups={lookups} />
+      {/* HR-PROFILE-UI-1 — layout 2 cột: anchor nav trái (scrollspy) + form section phải */}
+      <div className="lg:grid lg:grid-cols-[200px_1fr] lg:items-start lg:gap-6">
+        <SectionNav
+          title={t("form.nav.title")}
+          sections={[
+            ...(mode === "create"
+              ? [{ id: "section-account", label: t("form.sections.account") }]
+              : []),
+            { id: "section-work", label: t("form.sections.work") },
+            { id: "section-schedule", label: t("form.sections.schedule") },
+          ]}
+        />
 
-        <div className="flex items-center justify-end gap-3">
-          {onCancel && (
-            <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>
-              {t("form.cancel")}
-            </Button>
+        <form
+          onSubmit={handleSubmit((values) =>
+            mutation.mutate({ values, dirty: { ...dirtyFields } }),
           )}
-          <Button type="submit" disabled={submitDisabled}>
-            {busy
-              ? t("form.submitting")
-              : mode === "create"
-                ? t("form.submitCreate")
-                : t("form.submitSave")}
-          </Button>
-        </div>
-      </form>
+          noValidate
+          className="space-y-6"
+        >
+          {mode === "create" && (
+            <div id="section-account" className="scroll-mt-20">
+              <AccountSection register={register} errors={errors} t={t} />
+            </div>
+          )}
+          <div id="section-work" className="scroll-mt-20">
+            <WorkSection register={register} errors={errors} t={t} lookups={lookups} />
+          </div>
+          <div id="section-schedule" className="scroll-mt-20">
+            <ScheduleSection register={register} errors={errors} t={t} />
+          </div>
+
+          <div className="flex items-center justify-end gap-3">
+            {onCancel && (
+              <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>
+                {t("form.cancel")}
+              </Button>
+            )}
+            <Button type="submit" disabled={submitDisabled}>
+              {busy
+                ? t("form.submitting")
+                : mode === "create"
+                  ? t("form.submitCreate")
+                  : t("form.submitSave")}
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

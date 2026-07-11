@@ -101,6 +101,14 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   "update:notification-template",
   "view:notification-delivery-log",
   "view:notification-audit-log",
+  // HR-PROFILE-UI-1 — APPEND-only: 2 cặp NHẠY CẢM HR (is_sensitive=true, seed mig 0019/0442-band).
+  // FE Hồ sơ nhân sự dùng useCan làm CỜ HIỂN THỊ: cột PII (giới tính/ngày sinh/ĐT/loại HĐ) trong catalog
+  // Tùy chỉnh cột + nhãn "bị ẩn do phân quyền" vs "—" ở detail/panel. Thiếu allowlist ⇒ cột PII ẨN với
+  // CẢ HR/company-admin dù grant thật tồn tại (bài học CAP-2/USEROPS-1/EXPORT-1 tái diễn). Enforcement
+  // KHÔNG đổi — masking THẬT vẫn ở HrReadService per-row (canViewSensitive/revealSalary, isSensitive:true,
+  // wildcard không mở; salary reveal ⟹ audit atomic). Chỉ mở CỜ HIỂN THỊ.
+  "view-sensitive:employee",
+  "view-salary:employee",
 ]);
 
 @Injectable()
