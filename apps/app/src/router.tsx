@@ -192,6 +192,9 @@ import { NotificationListPage } from "@/routes/notifications/NotificationListPag
 import { NotificationDetailPage } from "@/routes/notifications/NotificationDetailPage";
 // S4-FE-NOTI-2 — Quản lý loại thông báo (admin catalog, UI-NOTI-SCREEN-004).
 import { NotificationEventsPage } from "@/routes/notifications/NotificationEventsPage";
+// S4-FE-NOTI-3 — Delivery logs viewer (UI-NOTI-SCREEN-006, append-only).
+import { NotificationDeliveryLogsPage } from "@/routes/notifications/NotificationDeliveryLogsPage";
+import { NOTI_ENGINE_PAIRS, NOTI_PATHS, NOTI_SCREEN } from "@/routes/notifications/constants";
 
 // System
 import { UsersPage } from "@/routes/system/UsersPage";
@@ -1073,6 +1076,29 @@ const notificationEventsRoute = makeModuleRoute(
   NotificationEventsPage,
 );
 
+// Notification delivery-logs viewer (S4-FE-NOTI-3, UI-NOTI-SCREEN-006) — /notifications/delivery-logs.
+// Local RouteMeta (KHÔNG ở ROUTE_REGISTRY web-core, cùng pattern hrAuditLogsMeta/systemFileAccessLogsMeta).
+// Gate = cặp seed THẬT mig 0481 (view:notification-delivery-log, is_sensitive=true) — literal string,
+// page tự double-gate bằng useCanExact (fail-closed, KHÔNG wildcard fallback).
+const notificationDeliveryLogsMeta: RouteMeta = {
+  routeKey: "noti.delivery-logs",
+  path: NOTI_PATHS.DELIVERY_LOGS,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "NOTI",
+  screenCode: NOTI_SCREEN.DELIVERY_LOGS,
+  titleKey: "routeTitle.notificationDeliveryLogs",
+  requiredAnyPermissions: [
+    `${NOTI_ENGINE_PAIRS.VIEW_DELIVERY_LOG.action}:${NOTI_ENGINE_PAIRS.VIEW_DELIVERY_LOG.resourceType}`,
+  ],
+};
+const notificationDeliveryLogsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: NOTI_PATHS.DELIVERY_LOGS,
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(notificationDeliveryLogsMeta, "NOTI", <NotificationDeliveryLogsPage />),
+});
+
 // System / Foundation — /system landing THAY ModulePlaceholder = System Overview (S2-FE-FND-1).
 const systemRoute = makeModuleRoute("/system", "system.overview", "FOUNDATION", SystemOverviewPage);
 
@@ -1598,6 +1624,7 @@ const routeTree = rootRoute.addChildren([
   notificationsRoute,
   notificationDetailRoute,
   notificationEventsRoute,
+  notificationDeliveryLogsRoute,
   systemRoute,
   systemCompanyRoute,
   systemCompanySettingsRoute,

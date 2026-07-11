@@ -146,4 +146,46 @@ export default {
       dismiss: "Đóng",
     },
   },
+  // S4-FE-NOTI-3 — NOTI-SCREEN-DELIVERY-LOGS (/notifications/delivery-logs, viewer append-only).
+  deliveryLogs: {
+    title: "Nhật ký gửi thông báo",
+    description:
+      "Lịch sử gửi thông báo theo kênh (IN_APP, EMAIL, PUSH, REALTIME, INTEGRATION) — chỉ đọc",
+    columns: {
+      createdAt: "Thời gian",
+      channel: "Kênh",
+      status: "Trạng thái",
+      recipient: "Người nhận",
+      attempt: "Số lần thử",
+      error: "Lỗi",
+    },
+    // Trạng thái gửi (delivery_status) — KHÔNG trùng namespace `status` (trạng thái đọc/chưa đọc của
+    // thông báo My-Notification) — tách riêng vì cùng có key "Failed" nhưng ý nghĩa khác nhau.
+    status: {
+      Pending: "Đang chờ",
+      Sent: "Đã gửi",
+      Delivered: "Đã nhận",
+      Failed: "Thất bại",
+      Skipped: "Bỏ qua",
+      Cancelled: "Đã huỷ",
+    },
+    filters: {
+      channel: "Kênh gửi",
+      status: "Trạng thái gửi",
+      recipient: "Người nhận",
+      recipientPlaceholder: "UUID người dùng",
+    },
+    empty: {
+      title: "Không có nhật ký gửi thông báo",
+      description: "Chưa có bản ghi gửi thông báo nào khớp bộ lọc.",
+    },
+    error: {
+      title: "Không thể tải nhật ký gửi thông báo",
+      description: "Có lỗi khi tải nhật ký gửi thông báo. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem nhật ký gửi thông báo.",
+    },
+  },
 };

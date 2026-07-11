@@ -114,6 +114,14 @@ export { twoFactorApi } from "./lib/two-factor-api";
 export { myNotificationApi } from "./lib/my-notification-api";
 // S4-FE-NOTI-2 — Notification ADMIN config (event catalog view + toggle, NotificationAdminController).
 export { notificationAdminApi } from "./lib/notification-admin-api";
+// S4-FE-NOTI-3 — Notification delivery-logs viewer (NotificationAdminController, S4-NOTI-BE-3).
+// APPEND-ONLY: module chỉ export `list` — KHÔNG create/update/remove (server không có route mutate).
+export {
+  notificationDeliveryLogApi,
+  type NotificationDeliveryLogListParams,
+  type NotificationDeliveryLogAdminItem,
+  type NotificationDeliveryLogAdminQuery,
+} from "./lib/notification-admin-api";
 // tasksApi legacy (skeleton S4-FE-REGISTRY-1, shape GET /tasks cũ) đã xoá hẳn — vô hiệu sau BREAKING
 // PR #145 (GET /tasks nay = list scoped + gate read:task; my-tasks → GET /tasks/my). S4-FE-TASK-CLEANUP-1.
 // S4-FE-TASK-1 — Project CRUD + member (ProjectsController, S4-TASK-BE-1 routes ĐÃ merge).
