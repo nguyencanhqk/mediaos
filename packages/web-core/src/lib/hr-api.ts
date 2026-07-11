@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   hrEmployeeListResponseSchema,
   hrEmployeeDetailSchema,
+  hrEmployeeSummarySchema,
   hrMeProfileSchema,
   hrDepartmentLookupSchema,
   hrPositionLookupSchema,
@@ -14,6 +15,7 @@ import {
   type HrEmployeeListQuery,
   type HrEmployeeListResponse,
   type HrEmployeeDetail,
+  type HrEmployeeSummary,
   type HrMeProfile,
   type HrDepartmentLookup,
   type HrPositionLookup,
@@ -45,6 +47,13 @@ export const hrApi = {
     const qs = buildQueryString(query ?? {});
     return apiFetch(`/hr/employees${qs}`, hrEmployeeListResponseSchema);
   },
+
+  /**
+   * GET /hr/employees/summary — HR-PROFILE-UI-1: headcount tổng quan (theo scope của caller).
+   * byGender null khi thiếu view-sensitive:employee — server mask, FE ẩn donut.
+   */
+  getEmployeeSummary: (): Promise<HrEmployeeSummary> =>
+    apiFetch("/hr/employees/summary", hrEmployeeSummarySchema),
 
   /**
    * GET /hr/employees/:id — chi tiết hồ sơ nhân viên.

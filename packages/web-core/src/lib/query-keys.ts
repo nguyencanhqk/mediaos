@@ -79,6 +79,8 @@ export const hrKeys = {
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.hr, "employees", "list", params] as const,
     detail: (id: string) => [...rootKeys.hr, "employees", "detail", id] as const,
+    // HR-PROFILE-UI-1 — overview strip aggregates (GET /hr/employees/summary).
+    summary: () => [...rootKeys.hr, "employees", "summary"] as const,
     me: () => [...rootKeys.hr, "employees", "me"] as const,
     // S2-FE-HR-9 — Employee Files tab (danh sách file đính kèm hồ sơ, GET /hr/employees/:id/files).
     files: (employeeId: string) => [...rootKeys.hr, "employees", "files", employeeId] as const,

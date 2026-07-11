@@ -35,7 +35,8 @@ export function Avatar({ name, src, size = "md", className, ...props }: AvatarPr
       {...props}
     >
       {src ? (
-        <img src={src} alt={name ?? ""} className="h-full w-full object-cover" />
+        // loading=lazy: bảng/danh sách dài không tải ảnh ngoài viewport (P1 perf).
+        <img src={src} alt={name ?? ""} loading="lazy" className="h-full w-full object-cover" />
       ) : (
         initialsFrom(name)
       )}

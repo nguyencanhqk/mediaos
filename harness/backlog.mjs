@@ -5671,4 +5671,123 @@ export const backlog = [
       "Int-spec RED-trước: thiếu export:attendance → 403 · export chỉ trả bản ghi trong scope (employee không xuất được team/company) · cross-tenant deny; check.sh xanh; FULL gate (export = lộ dữ liệu — security-reviewer)",
     ],
   },
+
+  // ════════════════════ HR PROFILE UI (nâng cấp màn Hồ sơ nhân sự — owner yêu cầu 2026-07-11) ════════════════════
+  {
+    id: "HR-PROFILE-UI-1",
+    module: "HR",
+    layer: "FE",
+    title:
+      "Nâng cấp màn Hồ sơ nhân sự: dải tổng quan (headcount+donut giới tính+4 thẻ) · 2 chế độ xem bảng⇄chi tiết (split) · tùy chỉnh cột · detail tabs + form anchor-nav — kèm BE mở read-DTO personal-info (PII gate view-sensitive) + GET /hr/employees/summary",
+    zone: "red", // chạm masking/PII projection — FULL gate
+    status: "todo",
+    paths: [
+      "packages/contracts/src/hr/**",
+      "packages/web-core/src/lib/**",
+      "packages/ui/src/**",
+      "apps/api/src/employees/**",
+      "apps/app/src/routes/hr/**",
+      "apps/app/src/i18n/**",
+      "apps/app/src/hooks/**",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: ["SPEC-03 §14.18/§15.1/§18.8", "DB-03 §7.2 (mig 0451 self-service cols)", "ADR-0010"],
+    done_when: [
+      "DTO đọc list/detail thêm avatarUrl+startDate (directory) và gender/dateOfBirth/phone/contractType (list) + personal-info 8 field (detail) — TẤT CẢ PII gate view-sensitive:employee per-row (resourceId, mirror revealSalary); identity_* (CCCD §14.18) TUYỆT ĐỐI không vào read DTO (chờ HR-IDENTITY-READ-1)",
+      "GET /hr/employees/summary gate read:employee, aggregate theo scope condition CHUNG với list; byGender chỉ trả khi view-sensitive (type-level) — fail-closed",
+      "FE: overview strip ẩn/hiện · toggle bảng⇄chi tiết (split list+panel tabs) · tùy chỉnh cột persist localStorage (cột PII ẩn khỏi catalog khi thiếu quyền) · detail dùng Tabs + section dùng chung · form sửa có anchor-nav; KHÔNG hard-code permission; masking là việc SERVER",
+      "Deny-path spec RED-trước (masking field mới + summary scope/gender-gate); typecheck+build+lint+test xanh; FULL gate security-reviewer PASS",
+    ],
+    // PHIÊN 2026-07-11 (interactive, Claude): code xong toàn bộ done_when trên nhánh feat/hr-profile-ui-v2.
+    // hr-read.service.spec 55/55 xanh (8 test mới RED-trước); typecheck/build/lint toàn workspace xanh;
+    // 1 int-spec đỏ pre-existing (dead-letter-alert-idempotent — FK cleanup DB chung, không liên quan).
+    // Chủ đích ĐỂ LẠI: gom-nhóm cột 1/2 cấp + export (HR-PROFILE-UI-2) · lộ identity_* (HR-IDENTITY-READ-1).
+    //
+    // PHIÊN 2026-07-11 (1b, owner chốt HYBRID): mở rộng field hồ sơ — mig 0489 = 4 cột typed
+    // (tax_code·official_date·probation_end_date·work_location, DB-03 có sẵn) + personal_extra JSONB
+    // (nơi sinh/nguyên quán/dân tộc/tôn giáo/quốc tịch — bổ sung DB-03 §7.2 cùng commit; blob = lớp PII,
+    // mask NGUYÊN KHỐI, key allowlist Zod .strict, cần lọc → thăng cấp cột). PATCH mở field cá nhân:
+    // body chạm PII đòi view-sensitive per-row (fail-closed HR-ERR-PII-WRITE-DENIED); audit CHỈ tên field
+    // trong diffSummary — before/after không chứa key PII (FORBIDDEN_AUDIT_KEYS mở rộng). Form edit thêm
+    // section Cá nhân/Liên hệ (chỉ render khi có view-sensitive). P1 perf: debounce search 300ms +
+    // keepPreviousData + avatar lazy. identity_*/bank_* vẫn ngoài mọi surface.
+  },
+  {
+    id: "HR-PROFILE-UI-2",
+    module: "HR",
+    layer: "FE",
+    title:
+      "Hồ sơ nhân sự phần 2: gom nhóm bảng 1/2 cấp (Tùy chỉnh cột) + export danh sách theo quyền export:employee + sort server-side cho cột mới (allowlist HR_EMPLOYEE_SORT_FIELDS)",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "packages/contracts/src/hr/**",
+      "packages/ui/src/**",
+      "apps/api/src/employees/**",
+      "apps/app/src/routes/hr/employees/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["HR-PROFILE-UI-1"],
+    src: ["SPEC-03", "API-10", "mẫu export theo quyền: S3-ATT-EXPORT-1 (backlog)"],
+    done_when: [
+      "Gom nhóm 1/2 cấp trong panel Tùy chỉnh cột (group theo đơn vị/trạng thái…) — TanStack grouping, KHÔNG lib bảng mới",
+      "GET /hr/employees/export gate export:employee — áp data-scope + masking per-row NHƯ list (export = lộ dữ liệu, FULL gate); cột PII chỉ vào file khi caller có view-sensitive",
+      "Mở rộng HR_EMPLOYEE_SORT_FIELDS (allowlist — startDate…) + header sort FE; deny-path: export thiếu quyền 403, export ngoài scope không có row",
+    ],
+  },
+  {
+    id: "HR-PERF-1",
+    module: "HR",
+    layer: "FE",
+    title:
+      "Tối ưu hiệu năng nền tảng: (a) code-split router theo module (bundle apps/app 1.55MB→lazy route) · (b) batch permission list HR (2 can()/row → canBatch preload company-grants + getObjectGrantsForMany, GIỮ NGUYÊN ngữ nghĩa object-DENY priority-1) · (c) pg_trgm GIN index search nhân sự khi headcount >1–2k — crown ở (b)",
+    zone: "red", // (b) chạm permission engine — plan-review TRƯỚC khi code
+    status: "todo",
+    paths: [
+      "apps/app/src/router.tsx",
+      "apps/api/src/permission/**",
+      "apps/api/src/employees/**",
+      "apps/api/migrations/**",
+      "docs/plans/HR-PERF-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["HR-PROFILE-UI-1"],
+    src: [
+      "Phát hiện 2026-07-11 (phiên HR-PROFILE-UI-1): build warning chunk 1.546MB/375KB gzip (apps/app KHÔNG code-split); hr-read list = 2 permission.can()/row (security-reviewer MEDIUM/INFO); search ILIKE '%term%' không ăn index khi dữ liệu lớn",
+      "RÀNG BUỘC (b): object_permissions có DENY priority-1 (permission.service.ts ~180) — type-level-ALLOW shortcut là SAI ngữ nghĩa; batch đúng = preload companyGrants 1 lần + object grants của cả trang trong 1 query rồi chạy CÙNG decision-merge; salary audit-on-reveal vẫn per-row",
+    ],
+    plan: "docs/plans/HR-PERF-1.md",
+    done_when: [
+      "(a) route-level lazy: mở màn HR không tải bundle TASK/LEAVE/ATT; initial JS giảm đo được (ghi số trước/sau vào PR); không đổi route path/permission gate",
+      "(b) PermissionService.canBatch (hoặc tương đương) cho hr-read list: kết quả BẰNG CHÍNH XÁC per-row can() trên bộ test có object-ALLOW lẫn object-DENY; deny-path giữ nguyên; số query permission/trang ≤ 4",
+      "(c) migration GIN pg_trgm (users.full_name/email + employee_profiles.employee_code) CHỈ khi owner bật (dữ liệu lớn) — kèm EXPLAIN trước/sau trong PR; FULL gate security-reviewer cho (b)",
+    ],
+  },
+  {
+    id: "HR-IDENTITY-READ-1",
+    module: "HR",
+    layer: "BE",
+    title:
+      "OWNER CHỐT: lộ identity_number/issue_date/issue_place (CCCD §14.18) qua read surface — cần gate RIÊNG cao hơn view-sensitive (vd view-identity:employee, seed per-pair + audit-on-reveal như salary) — hiện read DTO chủ đích KHÔNG chứa identity_*",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "packages/contracts/src/hr/**",
+      "apps/api/src/employees/**",
+      "apps/api/migrations/**",
+      "apps/api/test/integration/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["HR-PROFILE-UI-1"],
+    src: [
+      "SPEC-03 §14.18 (identity = nhóm giấy tờ nhạy cảm cao)",
+      "Mẫu gate+audit: revealSalary (hr-read.service.ts) — reveal ⟹ audit atomically",
+    ],
+    done_when: [
+      "Owner chốt: cặp quyền mới (view-identity:employee, is_sensitive) hay tái dùng view-sensitive; nếu cặp mới → migration seed per-pair + data_scope mirror ĐÚNG (bài học §13)",
+      "Reveal identity ⟹ audit trong cùng tx (mirror view-salary); deny-path RED-trước: thiếu quyền → null, wildcard không mở, cross-tenant deny",
+      "FE màn Hồ sơ render nhóm CMND/CCCD chỉ khi có quyền; FULL gate security-reviewer + database-reviewer PASS",
+    ],
+  },
 ];

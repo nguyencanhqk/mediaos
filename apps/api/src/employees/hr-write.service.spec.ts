@@ -42,6 +42,17 @@ const FORBIDDEN_AUDIT_KEYS = [
   "identity_number",
   "bankAccount",
   "personalEmail",
+  // HR-PROFILE-UI-1b — PATCH nhận PII nhưng payload audit không được chứa key PII nào (tên field
+  // chỉ được phép nằm trong diffSummary/changedFields).
+  "gender",
+  "dateOfBirth",
+  "maritalStatus",
+  "currentAddress",
+  "permanentAddress",
+  "emergencyContactName",
+  "emergencyContactPhone",
+  "taxCode",
+  "personalExtra",
 ];
 
 function makeRepo(overrides: Record<string, unknown> = {}) {
@@ -550,5 +561,95 @@ describe("HrWriteService.updateEmployee — reference validation", () => {
       } as never),
     ).rejects.toThrow(UnprocessableEntityException);
     expect(repo.updateTx).not.toHaveBeenCalled();
+  });
+});
+
+// ─── HR-PROFILE-UI-1b: PATCH personal/PII fields (gate + audit-mask) ─────────────────
+
+describe("HrWriteService.updateEmployee — personal/PII fields (HR-PROFILE-UI-1b)", () => {
+  it("DENY: PII field in body without view-sensitive:employee → 403 BEFORE any write/audit", async () => {
+    const repo = makeRepo();
+    const { svc, permissions, audit } = makeService({ repo });
+    permissions.can = vi.fn().mockResolvedValue({ allow: false, reason: "deny-sensitive" });
+
+    await expect(svc.updateEmployee(actorA, EMP_ID, { gender: "Male" } as never)).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(repo.updateTx).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+    // Gate = view-sensitive per-row (resourceId, isSensitive) — wildcard *:* không mở.
+    expect(permissions.can).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "view-sensitive",
+        resourceType: "employee",
+        resourceId: EMP_ID,
+        isSensitive: true,
+      }),
+    );
+  });
+
+  it("directory-only PATCH (officialDate/workLocation) does NOT invoke the view-sensitive gate", async () => {
+    const { svc, permissions } = makeService();
+    await svc.updateEmployee(actorA, EMP_ID, {
+      officialDate: "2026-01-01",
+      workLocation: "Hà Nội",
+    } as never);
+    expect(permissions.can).not.toHaveBeenCalled();
+  });
+
+  it("ALLOW: PII PATCH writes; changedFields carries NAMES; audit payload has NO PII key/value", async () => {
+    const repo = makeRepo({
+      findStructuralByIdTx: vi.fn().mockResolvedValue({
+        status: "active",
+        orgUnitId: null,
+        gender: null,
+        phone: "0900000000",
+        personalExtra: null,
+      }),
+    });
+    const { svc, audit } = makeService({ repo });
+
+    const res = await svc.updateEmployee(actorA, EMP_ID, {
+      gender: "Male",
+      phone: "0911222333",
+      personalExtra: { nationality: "Việt Nam" },
+    } as never);
+
+    expect(res.changedFields).toEqual(expect.arrayContaining(["gender", "phone", "personalExtra"]));
+    // Tên field chỉ nằm trong diffSummary; before/after không chứa key PII (BẤT BIẾN #3).
+    assertNoSensitiveAuditKeys(audit);
+    const entry = audit.record.mock.calls[0]![1] as { diffSummary?: string };
+    expect(entry.diffSummary).toContain("gender");
+    expect(entry.diffSummary).toContain("personalExtra");
+    // Giá trị PII không được xuất hiện Ở BẤT KỲ ĐÂU trong payload audit.
+    const serialized = JSON.stringify(audit.record.mock.calls);
+    expect(serialized).not.toContain("0911222333");
+    expect(serialized).not.toContain("Việt Nam");
+  });
+
+  it("personalExtra {} normalizes to null (full-replace clear)", async () => {
+    const repo = makeRepo({
+      findStructuralByIdTx: vi
+        .fn()
+        .mockResolvedValue({ status: "active", personalExtra: { nationality: "VN" } }),
+    });
+    const { svc } = makeService({ repo });
+    await svc.updateEmployee(actorA, EMP_ID, { personalExtra: {} } as never);
+    expect(repo.updateTx).toHaveBeenCalledWith(
+      FAKE_TX,
+      COMPANY_A,
+      EMP_ID,
+      expect.objectContaining({ personalExtra: null }),
+    );
+  });
+
+  it("no-op PII value (same as before) → empty changedFields, NO audit row", async () => {
+    const repo = makeRepo({
+      findStructuralByIdTx: vi.fn().mockResolvedValue({ status: "active", gender: "Male" }),
+    });
+    const { svc, audit } = makeService({ repo });
+    const res = await svc.updateEmployee(actorA, EMP_ID, { gender: "Male" } as never);
+    expect(res.changedFields).toEqual([]);
+    expect(audit.record).not.toHaveBeenCalled();
   });
 });

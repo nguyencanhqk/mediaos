@@ -12,6 +12,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  varchar,
 } from "drizzle-orm/pg-core";
 import { currentCompanyDefault } from "./_helpers";
 import { companies } from "./companies";
@@ -73,6 +74,15 @@ export const employeeProfiles = pgTable(
     identityNumber: text("identity_number"),
     identityIssueDate: date("identity_issue_date"),
     identityIssuePlace: text("identity_issue_place"),
+    // HR-PROFILE-UI-1b (mig 0489, hybrid owner 2026-07-11): 4 cột typed (DB-03 §7.2) + JSONB nhân khẩu
+    // hiển thị-thuần. tax_code + personal_extra = PII (mask view-sensitive, NGUYÊN KHỐI với blob);
+    // official/probation/work_location = directory-class. Key blob khóa bằng hrPersonalExtraSchema
+    // (contracts, .strict()) — cần lọc/tìm kiếm thì THĂNG CẤP thành cột, không query vào blob.
+    taxCode: varchar("tax_code", { length: 100 }),
+    officialDate: date("official_date"),
+    probationEndDate: date("probation_end_date"),
+    workLocation: varchar("work_location", { length: 255 }),
+    personalExtra: jsonb("personal_extra").$type<Record<string, string>>(),
     status: text("status").notNull().default("active"),
     // G11: ca làm được gán (FK → work_schedules ở migration 0061; không .references() để tránh
     // import vòng employees ↔ hr). NULL = dùng ca mặc định công ty (is_default).

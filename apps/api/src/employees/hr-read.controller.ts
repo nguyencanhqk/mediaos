@@ -28,6 +28,14 @@ export class HrReadController {
     return this.hr.listHrEmployees(req.user, query);
   }
 
+  // HR-PROFILE-UI-1 — overview aggregates. Static route declared BEFORE ":id" so "summary" is not
+  // captured as an employee id. Scope-filtered in the service; byGender gated by view-sensitive.
+  @Get("employees/summary")
+  @RequirePermission("read", "employee")
+  getEmployeesSummary(@Req() req: AuthenticatedRequest) {
+    return this.hr.getEmployeesSummary(req.user);
+  }
+
   // Static route declared BEFORE the param route so "me" is not captured by ":id".
   @Get("me/profile")
   @RequirePermission("read", "employee")

@@ -15,6 +15,7 @@ import type {
   UnlinkUserRequest,
   UpdateHrEmployeeRequest,
 } from "@mediaos/contracts";
+import { HR_EMPLOYEE_PII_WRITE_FIELDS } from "@mediaos/contracts";
 import { AuditService } from "../events/audit.service";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { PasswordService } from "../auth/password.service";
@@ -226,6 +227,25 @@ export class HrWriteService {
 
   async updateEmployee(user: RequestUser, id: string, dto: UpdateHrEmployeeRequest) {
     await this.assertWriteScope(user, "update");
+    // HR-PROFILE-UI-1b — PII write gate (fail-closed, TRƯỚC mọi side effect): body chạm field cá nhân
+    // ⇒ caller phải có view-sensitive:employee trên CHÍNH row này ("không thấy thì không được sửa";
+    // sensitive pair → wildcard *:* không mở). Field directory/cấu trúc không đòi thêm gì.
+    const piiTouched = HR_EMPLOYEE_PII_WRITE_FIELDS.filter((k) => dto[k] !== undefined);
+    if (piiTouched.length > 0) {
+      const decision = await this.permissions.can({
+        userId: user.id,
+        companyId: user.companyId,
+        action: "view-sensitive",
+        resourceType: "employee",
+        resourceId: id,
+        isSensitive: true,
+      });
+      if (!decision.allow) {
+        throw new ForbiddenException(
+          "HR-ERR-PII-WRITE-DENIED: updating personal fields requires the view-sensitive:employee permission",
+        );
+      }
+    }
     try {
       return await this.db.withTenant(user.companyId, async (tx) => {
         const before = await this.repo.findStructuralByIdTx(tx, user.companyId, id);
@@ -233,7 +253,11 @@ export class HrWriteService {
         const subjectUserId = (before["userId"] as string | null | undefined) ?? null;
 
         // Only the keys the client actually sent; refs validated when present (incl. manager ≠ self).
-        const patch = dto as EmployeeUpdateData;
+        // personalExtra là FULL-REPLACE: {} chuẩn hoá thành null (xóa blob).
+        const patch = { ...dto } as EmployeeUpdateData;
+        if (patch.personalExtra && Object.keys(patch.personalExtra).length === 0) {
+          patch.personalExtra = null;
+        }
         await this.assertReferencesValid(tx, user.companyId, {
           orgUnitId: dto.orgUnitId ?? undefined,
           positionId: dto.positionId ?? undefined,
@@ -259,15 +283,20 @@ export class HrWriteService {
           }
         }
 
-        const { changedFields, beforeDiff, afterDiff } = this.diffStructural(before, dto);
+        const structural = this.diffStructural(before, dto);
+        // HR-PROFILE-UI-1b: PII thay đổi chỉ được audit bằng TÊN field trong diffSummary/changedFields.
+        // before/after KHÔNG chứa key PII nào — kể cả giá trị đã mask (audit_logs append-only,
+        // BẤT BIẾN #3; suite hiện hành ép: FORBIDDEN_AUDIT_KEYS cấm key PII trong payload).
+        const piiChangedFields = this.diffPiiFieldNames(before, patch);
+        const changedFields = [...structural.changedFields, ...piiChangedFields];
         if (changedFields.length > 0) {
           await this.audit.record(tx, {
             action: "update",
             objectType: "employee",
             objectId: id,
             actorUserId: user.id,
-            before: beforeDiff,
-            after: afterDiff,
+            before: structural.beforeDiff,
+            after: structural.afterDiff,
             diffSummary: changedFields.join(","),
           });
         }
@@ -567,7 +596,7 @@ export class HrWriteService {
     }
   }
 
-  /** Build an audit-safe snapshot — STRUCTURAL keys only (never baseSalary/PII). */
+  /** Build an audit-safe snapshot — STRUCTURAL + DIRECTORY keys only (never baseSalary/PII). */
   private structuralSnapshot(values: Record<string, unknown>): Record<string, unknown> {
     const ALLOW = [
       "employeeCode",
@@ -582,6 +611,10 @@ export class HrWriteService {
       "startDate",
       "endDate",
       "status",
+      // HR-PROFILE-UI-1b — directory-class (không PII): giá trị vào audit bình thường.
+      "officialDate",
+      "probationEndDate",
+      "workLocation",
     ];
     const out: Record<string, unknown> = {};
     for (const k of ALLOW) {
@@ -614,5 +647,25 @@ export class HrWriteService {
       }
     }
     return { changedFields, beforeDiff, afterDiff };
+  }
+
+  /**
+   * HR-PROFILE-UI-1b — diff nhóm PII của PATCH: so sánh với before-values (CHỈ trong bộ nhớ request)
+   * để phát hiện thay đổi thật; trả về DANH SÁCH TÊN field — không bao giờ trả giá trị. Tên field đi
+   * vào changedFields/diffSummary; giá trị PII không được chạm audit_logs (BẤT BIẾN #3).
+   */
+  private diffPiiFieldNames(before: Record<string, unknown>, patch: EmployeeUpdateData): string[] {
+    const changedFields: string[] = [];
+    for (const key of HR_EMPLOYEE_PII_WRITE_FIELDS) {
+      const next = patch[key];
+      if (next === undefined) continue;
+      const prev = before[key] ?? null;
+      const changed =
+        key === "personalExtra"
+          ? JSON.stringify(prev ?? null) !== JSON.stringify(next ?? null)
+          : (next ?? null) !== prev;
+      if (changed) changedFields.push(key);
+    }
+    return changedFields;
   }
 }

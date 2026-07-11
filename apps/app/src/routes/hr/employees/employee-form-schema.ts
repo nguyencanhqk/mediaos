@@ -33,6 +33,9 @@ const isoDateOrEmpty = z
   .string()
   .regex(/^(\d{4}-\d{2}-\d{2})?$/, { message: "form.validation.dateInvalid" });
 
+export const GENDER_VALUES = ["", "Male", "Female", "Other"] as const;
+export const MARITAL_STATUS_VALUES = ["", "single", "married", "other"] as const;
+
 /** Structural fields shared by create & edit. All optional ("" = unset). */
 const structuralShape = {
   employeeCode: z.string().max(50, { message: "form.validation.codeTooLong" }),
@@ -45,7 +48,47 @@ const structuralShape = {
   salaryType: z.enum(SALARY_TYPE_VALUES),
   startDate: isoDateOrEmpty,
   endDate: isoDateOrEmpty,
+  // HR-PROFILE-UI-1b — directory (edit-only trên UI nhưng shape dùng chung, "" = unset).
+  officialDate: isoDateOrEmpty,
+  probationEndDate: isoDateOrEmpty,
+  workLocation: z.string().max(255),
 };
+
+/**
+ * HR-PROFILE-UI-1b — personal/PII fields (EDIT only; section chỉ render khi caller có
+ * view-sensitive:employee — server gate lần cuối, FE không tự nới).
+ */
+const personalShape = {
+  gender: z.enum(GENDER_VALUES),
+  dateOfBirth: isoDateOrEmpty,
+  maritalStatus: z.enum(MARITAL_STATUS_VALUES),
+  personalEmail: z
+    .string()
+    .max(255)
+    .refine((v) => v === "" || z.string().email().safeParse(v).success, {
+      message: "form.validation.emailInvalid",
+    }),
+  phone: z.string().max(50),
+  currentAddress: z.string().max(1000),
+  permanentAddress: z.string().max(1000),
+  emergencyContactName: z.string().max(255),
+  emergencyContactPhone: z.string().max(50),
+  taxCode: z.string().max(100),
+  placeOfBirth: z.string().max(255),
+  nativePlace: z.string().max(255),
+  ethnicity: z.string().max(100),
+  religion: z.string().max(100),
+  nationality: z.string().max(100),
+};
+
+/** Key personalExtra (blob JSONB) trong form values. */
+export const PERSONAL_EXTRA_FORM_KEYS = [
+  "placeOfBirth",
+  "nativePlace",
+  "ethnicity",
+  "religion",
+  "nationality",
+] as const;
 
 /** Account fields — only meaningful in create mode (never edited via this form). */
 const accountShape = {
@@ -64,6 +107,7 @@ const createSchema = z
   .object({
     ...accountShape,
     ...structuralShape,
+    ...personalShape,
     email: z
       .string()
       .min(1, { message: "form.validation.emailRequired" })
@@ -81,7 +125,7 @@ const createSchema = z
   .refine(endNotBeforeStart, { message: "form.validation.endBeforeStart", path: ["endDate"] });
 
 const editSchema = z
-  .object({ ...accountShape, ...structuralShape })
+  .object({ ...accountShape, ...structuralShape, ...personalShape })
   .refine(endNotBeforeStart, { message: "form.validation.endBeforeStart", path: ["endDate"] });
 
 export type EmployeeFormMode = "create" | "edit";
@@ -112,6 +156,24 @@ export const EMPTY_EMPLOYEE_FORM: EmployeeFormValues = {
   salaryType: "monthly",
   startDate: "",
   endDate: "",
+  officialDate: "",
+  probationEndDate: "",
+  workLocation: "",
+  gender: "",
+  dateOfBirth: "",
+  maritalStatus: "",
+  personalEmail: "",
+  phone: "",
+  currentAddress: "",
+  permanentAddress: "",
+  emergencyContactName: "",
+  emergencyContactPhone: "",
+  taxCode: "",
+  placeOfBirth: "",
+  nativePlace: "",
+  ethnicity: "",
+  religion: "",
+  nationality: "",
 };
 
 const WORK_TYPE_SET = new Set<string>(WORK_TYPE_VALUES);
@@ -142,6 +204,32 @@ export function detailToFormValues(d: HrEmployeeDetail): EmployeeFormValues {
         : "monthly",
     startDate: d.startDate ?? "",
     endDate: d.endDate ?? "",
+    // HR-PROFILE-UI-1b — directory + personal (server đã mask: thiếu quyền → null → "" trong form,
+    // nhưng section PII chỉ render khi có quyền nên không bao giờ ghi đè mù).
+    officialDate: d.officialDate ?? "",
+    probationEndDate: d.probationEndDate ?? "",
+    workLocation: d.workLocation ?? "",
+    gender:
+      d.gender && (GENDER_VALUES as readonly string[]).includes(d.gender)
+        ? (d.gender as EmployeeFormValues["gender"])
+        : "",
+    dateOfBirth: d.dateOfBirth ?? "",
+    maritalStatus:
+      d.maritalStatus && (MARITAL_STATUS_VALUES as readonly string[]).includes(d.maritalStatus)
+        ? (d.maritalStatus as EmployeeFormValues["maritalStatus"])
+        : "",
+    personalEmail: d.personalEmail ?? "",
+    phone: d.phone ?? "",
+    currentAddress: d.currentAddress ?? "",
+    permanentAddress: d.permanentAddress ?? "",
+    emergencyContactName: d.emergencyContactName ?? "",
+    emergencyContactPhone: d.emergencyContactPhone ?? "",
+    taxCode: d.taxCode ?? "",
+    placeOfBirth: d.personalExtra?.placeOfBirth ?? "",
+    nativePlace: d.personalExtra?.nativePlace ?? "",
+    ethnicity: d.personalExtra?.ethnicity ?? "",
+    religion: d.personalExtra?.religion ?? "",
+    nationality: d.personalExtra?.nationality ?? "",
   };
 }
 
@@ -169,19 +257,35 @@ export function toCreateDto(v: EmployeeFormValues): CreateHrEmployeeRequest {
   };
 }
 
-/** Which form keys map to nullable structural columns (PATCH "" → null clears them). */
+/** Which form keys map to nullable columns (PATCH "" → null clears them). */
 type NullableKey =
   | "orgUnitId"
   | "positionId"
   | "jobLevelId"
   | "contractTypeId"
   | "startDate"
-  | "endDate";
+  | "endDate"
+  // HR-PROFILE-UI-1b — directory + personal nullable columns.
+  | "officialDate"
+  | "probationEndDate"
+  | "workLocation"
+  | "gender"
+  | "dateOfBirth"
+  | "maritalStatus"
+  | "personalEmail"
+  | "phone"
+  | "currentAddress"
+  | "permanentAddress"
+  | "emergencyContactName"
+  | "emergencyContactPhone"
+  | "taxCode";
 type DirtyMap = Partial<Record<keyof EmployeeFormValues, boolean | undefined>>;
 
 /**
  * Map ONLY dirty values → PATCH /hr/employees/:id DTO. Sending only changed keys matches the BE
  * contract ("every present key is an intentional change") and keeps no-op writes off the audit trail.
+ * personalExtra là FULL-REPLACE: BẤT KỲ key nhân khẩu nào dirty ⇒ gửi nguyên blob dựng từ form
+ * (key rỗng bị loại; blob trống ⇒ null xóa blob).
  */
 export function toUpdateDto(v: EmployeeFormValues, dirty: DirtyMap): UpdateHrEmployeeRequest {
   const dto: Record<string, unknown> = {};
@@ -192,9 +296,26 @@ export function toUpdateDto(v: EmployeeFormValues, dirty: DirtyMap): UpdateHrEmp
     "contractTypeId",
     "startDate",
     "endDate",
+    "officialDate",
+    "probationEndDate",
+    "workLocation",
+    "gender",
+    "dateOfBirth",
+    "maritalStatus",
+    "personalEmail",
+    "phone",
+    "currentAddress",
+    "permanentAddress",
+    "emergencyContactName",
+    "emergencyContactPhone",
+    "taxCode",
   ];
   for (const key of nullableKeys) {
-    if (dirty[key]) dto[key] = v[key] === "" ? null : v[key];
+    if (dirty[key]) {
+      const raw = v[key];
+      const trimmed = typeof raw === "string" ? raw.trim() : raw;
+      dto[key] = trimmed === "" ? null : trimmed;
+    }
   }
   // employeeCode is NON-nullable on the BE (min length 1) — only send a non-empty value.
   if (dirty.employeeCode) {
@@ -204,5 +325,15 @@ export function toUpdateDto(v: EmployeeFormValues, dirty: DirtyMap): UpdateHrEmp
   if (dirty.workType) dto.workType = v.workType;
   if (dirty.employmentType) dto.employmentType = v.employmentType;
   if (dirty.salaryType) dto.salaryType = v.salaryType;
+
+  // personalExtra (blob JSONB) — full-replace khi có key nhân khẩu dirty.
+  if (PERSONAL_EXTRA_FORM_KEYS.some((k) => dirty[k])) {
+    const extra: Record<string, string> = {};
+    for (const key of PERSONAL_EXTRA_FORM_KEYS) {
+      const value = v[key].trim();
+      if (value !== "") extra[key] = value;
+    }
+    dto.personalExtra = Object.keys(extra).length > 0 ? extra : null;
+  }
   return dto as UpdateHrEmployeeRequest;
 }

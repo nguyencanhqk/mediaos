@@ -22,6 +22,55 @@ export default {
       position: "Chức vụ",
       status: "Trạng thái",
       actions: "Hành động",
+      // HR-PROFILE-UI-1 — cột mới của bảng hồ sơ
+      gender: "Giới tính",
+      dateOfBirth: "Ngày sinh",
+      phone: "ĐT di động",
+      startDate: "Ngày vào làm",
+      seniority: "Thâm niên",
+      contractType: "Loại hợp đồng",
+      workType: "Hình thức làm việc",
+      employmentType: "Loại nhân sự",
+      salary: "Lương cơ bản",
+      // HR-PROFILE-UI-1b
+      officialDate: "Ngày chính thức",
+      workLocation: "Nơi làm việc",
+    },
+    // HR-PROFILE-UI-1 — dải tổng quan + tùy chỉnh hiển thị
+    overview: {
+      hide: "Ẩn tổng quan",
+      show: "Hiện tổng quan",
+      working: "Đang làm việc",
+      genderTitle: "Phân loại theo: Giới tính",
+      cards: {
+        probation: "Thử việc",
+        official: "Chính thức",
+        partTime: "Bán thời gian",
+        other: "Khác",
+      },
+      error: "Không thể tải số liệu tổng quan.",
+    },
+    gender: {
+      Male: "Nam",
+      Female: "Nữ",
+      Other: "Khác",
+      unknown: "Chưa khai báo",
+    },
+    view: {
+      table: "Dạng bảng",
+      split: "Dạng chi tiết",
+    },
+    columnSettings: {
+      title: "Tùy chỉnh cột",
+      visible: "Cột hiển thị",
+      reset: "Mặc định",
+      done: "Xong",
+    },
+    totalRecords: "Tổng số bản ghi: {{total}}",
+    seniority: {
+      years: "{{count}} năm",
+      months: "{{count}} tháng",
+      days: "{{count}} ngày",
     },
     actions: {
       view: "Xem hồ sơ",
@@ -50,6 +99,20 @@ export default {
       work: "Công việc",
       // S2-FE-HR-9 — Tab File hồ sơ (UI-HR-SCREEN-015), chỉ hiển thị nếu có HR.EMPLOYEE.FILE_VIEW.
       files: "File hồ sơ",
+      // HR-PROFILE-UI-1 — bố cục tab mới (thay overview/personal)
+      basic: "Thông tin cơ bản",
+      contact: "Thông tin liên hệ",
+      comp: "Lương",
+    },
+    // HR-PROFILE-UI-1 — nhóm field trong từng tab
+    groups: {
+      general: "Thông tin chung",
+      personal: "Thông tin cá nhân",
+      contact: "Thông tin liên hệ",
+      address: "Địa chỉ",
+      emergency: "Liên hệ khẩn cấp",
+      job: "Thông tin công việc",
+      salary: "Thông tin lương",
     },
     fields: {
       code: "Mã nhân viên",
@@ -62,7 +125,34 @@ export default {
       endDate: "Ngày kết thúc",
       workType: "Hình thức làm việc",
       employmentType: "Loại hợp đồng",
+      // HR-PROFILE-UI-1 — field cá nhân mới (PII, server mask theo view-sensitive)
+      gender: "Giới tính",
+      dateOfBirth: "Ngày sinh",
+      maritalStatus: "Tình trạng hôn nhân",
+      personalEmail: "Email cá nhân",
+      currentAddress: "Địa chỉ hiện tại",
+      permanentAddress: "Địa chỉ thường trú",
+      emergencyContactName: "Người liên hệ khẩn cấp",
+      emergencyContactPhone: "SĐT liên hệ khẩn cấp",
+      seniority: "Thâm niên",
+      salaryType: "Hình thức lương",
+      // HR-PROFILE-UI-1b — hybrid (mig 0489)
+      placeOfBirth: "Nơi sinh",
+      nativePlace: "Nguyên quán",
+      ethnicity: "Dân tộc",
+      religion: "Tôn giáo",
+      nationality: "Quốc tịch",
+      taxCode: "MST cá nhân",
+      officialDate: "Ngày chính thức",
+      probationEndDate: "Ngày kết thúc thử việc",
+      workLocation: "Nơi làm việc",
     },
+    maritalStatus: {
+      single: "Độc thân",
+      married: "Đã kết hôn",
+      other: "Khác",
+    },
+    viewFull: "Xem hồ sơ đầy đủ",
     sensitiveFields: {
       phone: "Số điện thoại",
       contractType: "Loại hợp đồng (nhạy cảm)",
@@ -140,6 +230,14 @@ export default {
     sections: {
       account: "Tài khoản đăng nhập",
       work: "Thông tin công việc",
+      // HR-PROFILE-UI-1 — tách nhóm hình thức & thời gian khỏi work
+      schedule: "Hình thức & thời gian",
+      // HR-PROFILE-UI-1b — section cá nhân/liên hệ (chỉ hiện khi có view-sensitive)
+      personal: "Thông tin cá nhân",
+      contact: "Thông tin liên hệ",
+    },
+    nav: {
+      title: "Mục thông tin",
     },
     fields: {
       email: "Email công ty",
@@ -155,6 +253,25 @@ export default {
       salaryType: "Hình thức lương",
       startDate: "Ngày vào làm",
       endDate: "Ngày kết thúc",
+      // HR-PROFILE-UI-1b
+      officialDate: "Ngày chính thức",
+      probationEndDate: "Ngày kết thúc thử việc",
+      workLocation: "Nơi làm việc",
+      gender: "Giới tính",
+      dateOfBirth: "Ngày sinh",
+      maritalStatus: "Tình trạng hôn nhân",
+      personalEmail: "Email cá nhân",
+      phone: "Số điện thoại",
+      currentAddress: "Địa chỉ hiện tại",
+      permanentAddress: "Địa chỉ thường trú",
+      emergencyContactName: "Người liên hệ khẩn cấp",
+      emergencyContactPhone: "SĐT liên hệ khẩn cấp",
+      taxCode: "MST cá nhân",
+      placeOfBirth: "Nơi sinh",
+      nativePlace: "Nguyên quán",
+      ethnicity: "Dân tộc",
+      religion: "Tôn giáo",
+      nationality: "Quốc tịch",
     },
     hints: {
       initialPassword: "Để trống để hệ thống tự tạo / gửi lời mời.",
