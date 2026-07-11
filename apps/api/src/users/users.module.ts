@@ -35,6 +35,10 @@ import { UsersService } from "./users.service";
     AuthUsersRepository,
     SecurityEventWriter,
   ],
+  // S4-DASH-CATALOG-2 (additive): export AuthUsersService cho USER_SUMMARY widget handler (DASH inject qua DI,
+  // dùng listUsers CHỈ lấy .total — count-only). CHỈ thêm exports[], KHÔNG đổi providers/forwardRef(AuthModule)/
+  // onModuleInit SecurityEventWriter fail-fast. Handler tự gate view:user TRƯỚC (listUsers KHÔNG tự gate).
+  exports: [AuthUsersService],
 })
 export class UsersModule implements OnModuleInit {
   constructor(private readonly moduleRef: ModuleRef) {}

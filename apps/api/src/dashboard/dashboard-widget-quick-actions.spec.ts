@@ -94,9 +94,26 @@ function makeService(
 }
 
 describe("DASH_WIDGET_QUICK_ACTIONS registry (§8.4/§20)", () => {
-  it("mọi widget in-sprint có ≥1 quick action", () => {
-    for (const w of DASH_WIDGET_CATALOG) {
-      expect(quickActionDefsFor(w.widgetCode).length).toBeGreaterThan(0);
+  it("mọi widget CÓ khai quick action thì entry ≥1 def, và key trỏ widgetCode THẬT trong catalog", () => {
+    // S4-DASH-CATALOG-2: quick action là opt-in per-widget ("[] ⇒ không có" theo const). 9 widget "glance"
+    // đợt 2 (count/list) CHƯA có quick action (ngoài phạm vi WO) ⇒ KHÔNG ép mọi catalog widget có ≥1. Thay vào
+    // đó: mỗi ENTRY đã khai phải non-rỗng + trỏ widgetCode tồn tại trong catalog (chống phantom/drift).
+    const catalogCodes = new Set(DASH_WIDGET_CATALOG.map((w) => w.widgetCode));
+    for (const code of Object.keys(DASH_WIDGET_QUICK_ACTIONS)) {
+      expect(catalogCodes.has(code), `quick-action key ${code} phải là widget catalog THẬT`).toBe(
+        true,
+      );
+      expect(quickActionDefsFor(code).length, `${code} entry phải ≥1 def`).toBeGreaterThan(0);
+    }
+    // 7 widget in-sprint gốc vẫn CÓ quick action (không bị mất do append catalog).
+    for (const code of [
+      "ATTENDANCE_TODAY",
+      "MY_TASKS",
+      "TASK_ALERTS",
+      "NOTIFICATIONS",
+      "PENDING_LEAVE",
+    ]) {
+      expect(quickActionDefsFor(code).length, `${code} phải giữ quick action`).toBeGreaterThan(0);
     }
   });
 

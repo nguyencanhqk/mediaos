@@ -16,5 +16,9 @@ import { AuditQueryService } from "./audit.service";
   imports: [DatabaseModule, PermissionModule],
   controllers: [AuditController],
   providers: [AuditQueryService, AuditRepository],
+  // S4-DASH-CATALOG-2 (additive): export AuditQueryService cho SYSTEM_LOGS widget handler (DASH inject qua DI,
+  // dùng listCompany COUNT-ONLY qua meta.total — BỎ rows). CHỈ thêm exports[]; handler tự gate view:audit-log
+  // (SENSITIVE, CA-only) TRƯỚC vì listCompany KHÔNG tự check quyền (gate ở AuditController gốc).
+  exports: [AuditQueryService],
 })
 export class AuditModule {}

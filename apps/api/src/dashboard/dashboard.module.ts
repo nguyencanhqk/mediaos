@@ -23,6 +23,13 @@ import { NotificationsModule } from "../notifications/notifications.module";
 import { AttendanceModule } from "../attendance/attendance.module";
 import { LeaveModule } from "../leave/leave.module";
 import { EmployeesModule } from "../employees/employees.module";
+// S4-DASH-CATALOG-2 (additive): 3 module nguồn cho 9 widget đợt 2 — ModuleCatalogModule (MODULE_STATUS →
+// ModuleCatalogService.getAllModules) · UsersModule (USER_SUMMARY → AuthUsersService.listUsers) · AuditModule
+// (SYSTEM_LOGS → AuditQueryService.listCompany count-only). DASH là leaf (module nguồn KHÔNG import DASH),
+// UsersModule tự forwardRef(AuthModule) nội bộ ⇒ import an toàn, KHÔNG circular-dep.
+import { ModuleCatalogModule } from "../foundation/module-catalog/module-catalog.module";
+import { UsersModule } from "../users/users.module";
+import { AuditModule } from "../foundation/audit/audit.module";
 import { DashboardWidgetDataController } from "./dashboard-widget-data.controller";
 import { DashboardWidgetDataService } from "./dashboard-widget-data.service";
 import { DashboardWidgetHandlersService } from "./dashboard-widget-handlers.service";
@@ -46,6 +53,12 @@ import { DashboardConfigService } from "./dashboard-config.service";
     AttendanceModule,
     LeaveModule,
     EmployeesModule,
+    // S4-DASH-CATALOG-2 (additive): + 3 module nguồn cho 9 widget đợt 2. EmployeesModule (đã import) export
+    // HrReadService+ContractService; AttendanceModule (đã import) export AttendanceReadService; LeaveModule
+    // (đã import) nay export thêm LeaveReadService+LeaveCalendarService.
+    ModuleCatalogModule,
+    UsersModule,
+    AuditModule,
   ],
   controllers: [
     DashboardController,

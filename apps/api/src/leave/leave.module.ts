@@ -86,6 +86,9 @@ import { LeaveService } from "./leave.service";
   ],
   // S4-DASH-BE-2 (additive): + LeaveApprovalService cho PENDING_LEAVE widget handler (DASH inject qua DI —
   // KHÔNG re-provide instance thứ 2). Chỉ thêm vào exports[], KHÔNG method mới.
-  exports: [LeaveService, LeaveApprovalService],
+  // S4-DASH-CATALOG-2 (additive): + LeaveReadService (LEAVE_BALANCE widget → listMyBalances own) +
+  // LeaveCalendarService (LEAVE_CALENDAR widget → listCalendar fail-closed scope). CHỈ thêm vào exports[],
+  // KHÔNG method mới, KHÔNG re-provide (cả hai đã là provider dòng 63/66).
+  exports: [LeaveService, LeaveApprovalService, LeaveReadService, LeaveCalendarService],
 })
 export class LeaveModule {}
