@@ -53,11 +53,11 @@ export interface NotiEventCatalogEntry {
 }
 
 /**
- * UNION danh mục event (52 mã). ĐỒNG BỘ 1-1 với migration 0481 bước (1).
+ * UNION danh mục event (53 mã). ĐỒNG BỘ 1-1 với migration 0481 bước (1) ∪ 0490 (S4-NOTI-SEED-2).
  * Thứ tự nhóm theo module để dễ đối chiếu; test so SÁNH THEO TẬP (set), không theo thứ tự.
  */
 export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
-  // ===== MVP set (DB-07 §14.1) — isEnabled = true (36 mã) =====
+  // ===== MVP set (DB-07 §14.1) ∪ TASK BE-3 canonical (0490) — isEnabled = true (39 mã) =====
   { module: "AUTH", eventCode: "AUTH_USER_CREATED", type: "Account", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "AUTH", eventCode: "AUTH_USER_LOCKED", type: "Account", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "AUTH", eventCode: "AUTH_PASSWORD_RESET_REQUESTED", type: "Account", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
@@ -92,9 +92,13 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
   { module: "TASK", eventCode: "TASK_DUE_SOON", type: "Reminder", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "TASK", eventCode: "TASK_OVERDUE", type: "Warning", priority: "High", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "TASK", eventCode: "PROJECT_MEMBER_ADDED", type: "Project", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  // S4-NOTI-SEED-2 (mig 0490) — 3 mã canonical BE-3 bật thêm (task-actions.service.ts Producer §9.4).
+  { module: "TASK", eventCode: "TASK_ASSIGNEE_CHANGED", type: "Task", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "TASK", eventCode: "TASK_PRIORITY_CHANGED", type: "Task", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
+  { module: "TASK", eventCode: "TASK_DUE_DATE_CHANGED", type: "Task", priority: "Normal", isEnabled: true, isSystemEvent: false }, // prettier-ignore
   { module: "SYSTEM", eventCode: "SYSTEM_CONFIG_WARNING", type: "Warning", priority: "High", isEnabled: true, isSystemEvent: true }, // prettier-ignore
   { module: "SYSTEM", eventCode: "SYSTEM_ERROR_DETECTED", type: "Error", priority: "Critical", isEnabled: true, isSystemEvent: true }, // prettier-ignore
-  // ===== Phần dư SPEC-08 §15 (ngoài MVP) — isEnabled = false, GIỮ trong catalog (16 mã) =====
+  // ===== Phần dư SPEC-08 §15 (ngoài MVP) — isEnabled = false, GIỮ trong catalog (14 mã) =====
   { module: "AUTH", eventCode: "AUTH_PASSWORD_CHANGED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
   { module: "AUTH", eventCode: "AUTH_USER_UNLOCKED", type: "Account", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
   { module: "HR", eventCode: "HR_PROBATION_ENDING", type: "Reminder", priority: "High", isEnabled: false, isSystemEvent: false }, // prettier-ignore
@@ -103,8 +107,7 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
   { module: "ATT", eventCode: "ATT_CHECKOUT_REMINDER", type: "Reminder", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
   { module: "LEAVE", eventCode: "LEAVE_START_REMINDER", type: "Reminder", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
   { module: "TASK", eventCode: "TASK_UPDATED", type: "Task", priority: "Low", isEnabled: false, isSystemEvent: false }, // prettier-ignore
-  { module: "TASK", eventCode: "TASK_ASSIGNEE_CHANGED", type: "Task", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
-  { module: "TASK", eventCode: "TASK_DEADLINE_CHANGED", type: "Task", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
+  // TASK_ASSIGNEE_CHANGED + TASK_DEADLINE_CHANGED→TASK_DUE_DATE_CHANGED đã CHUYỂN sang khối enabled (mig 0490).
   { module: "TASK", eventCode: "PROJECT_CLOSED", type: "Project", priority: "Normal", isEnabled: false, isSystemEvent: false }, // prettier-ignore
   { module: "DASH", eventCode: "DASH_WIDGET_ERROR", type: "Error", priority: "High", isEnabled: false, isSystemEvent: true }, // prettier-ignore
   { module: "SYSTEM", eventCode: "SYSTEM_CONFIG_CHANGED", type: "System", priority: "Normal", isEnabled: false, isSystemEvent: true }, // prettier-ignore
@@ -114,14 +117,14 @@ export const NOTI_EVENT_CATALOG: readonly NotiEventCatalogEntry[] = [
 ] as const;
 
 /** Tổng số event UNION (pin để test bắt thiếu/thừa mã). */
-export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 52
+export const NOTI_EVENT_COUNT = NOTI_EVENT_CATALOG.length; // 53
 
 /** Danh mục event ENABLED (MVP set DB-07 §14.1) — mỗi mã PHẢI có đúng 1 template IN_APP/vi-VN. */
 export const NOTI_ENABLED_EVENTS: readonly NotiEventCatalogEntry[] = NOTI_EVENT_CATALOG.filter(
   (e) => e.isEnabled,
 );
 
-export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 36
+export const NOTI_ENABLED_EVENT_COUNT = NOTI_ENABLED_EVENTS.length; // 39
 
 /** template_code chuẩn hoá (mirror 0481 bước (2)): `<EVENT_CODE>__IN_APP__vi-VN`. */
 export const NOTI_TEMPLATE_CHANNEL = "IN_APP" as const;

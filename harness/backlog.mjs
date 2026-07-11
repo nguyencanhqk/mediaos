@@ -4318,7 +4318,12 @@ export const backlog = [
       "Vá catalog notification_events khớp registry §9.5 cho event TASK (BE-3): thêm TASK_PRIORITY_CHANGED · đổi TASK_DEADLINE_CHANGED→TASK_DUE_DATE_CHANGED · template + enable TASK_ASSIGNEE_CHANGED — BẮT BUỘC TRƯỚC S4-INT-1",
     zone: "red",
     status: "todo",
-    paths: ["apps/api/migrations/**", "docs/plans/S4-NOTI-SEED-2.md"],
+    paths: [
+      "apps/api/migrations/**",
+      "docs/plans/S4-NOTI-SEED-2.md",
+      "apps/api/src/foundation/seed/**",
+      "apps/api/test/integration/noti-seed-catalog-permissions.int-spec.ts",
+    ],
     skills: ["code-review"],
     depends_on: ["S4-TASK-BE-3"],
     src: [
@@ -4332,6 +4337,7 @@ export const backlog = [
       "Template IN_APP cho TASK_PRIORITY_CHANGED / TASK_DUE_DATE_CHANGED / TASK_ASSIGNEE_CHANGED mirror chuẩn 0481: locale 'vi-VN' (KHÔNG 'vi'), body_template NOT NULL, status='Active', is_default=true; enable (is_enabled=true) cho 3 mã này; các mã khác GIỮ NGUYÊN trạng thái",
       "variables_schema khớp payload THẬT BE-3 phát (đọc task-actions.service.ts: taskId/taskTitle/taskCode/actorUserId/fromStatus/toStatus/oldPriority/newPriority/oldDueAt/newDueAt) — đối chiếu code, không suy đoán",
       "Int-spec (gate hasDb && LANE_DB): catalog sau migrate có ĐỦ 5 mã canonical §9.5 của BE-3 ở trạng thái enabled + resolver template tìm được từng mã; chạy lại idempotent; FULL gate security-reviewer + database-reviewer PASS",
+      "SHIPPED (mig 0490, idx 170, when 1717500845000 — reserve gap idx 169/0489 nhánh HR): registry notification-event-catalog.const.ts đồng bộ 1-1 (52→53 event / 36→39 enabled); pin seed-1 spec 53/39; noti-seed-catalog-permissions.int-spec + noti-seed2-be3-catalog.int.spec + noti-event-intake XANH trên LANE_DB=mediaos_notiseed2; VÁ render 0481 TASK_ASSIGNED/TASK_STATUS_CHANGED snake→camelCase (STATUS dùng toStatus); Engine E2E TASK_PRIORITY_CHANGED createdCount≥1 fallback=false; append-safe (DEADLINE rename in-place, KHÔNG DELETE), RLS+FORCE nguyên vẹn",
     ],
   },
   {
