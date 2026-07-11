@@ -1198,6 +1198,13 @@
       "when": 1717500845000,
       "tag": "0490_s4_notiseed2_task_be3_event_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 171,
+      "version": "7",
+      "when": 1717500850000,
+      "tag": "0491_hr_profile_ui2_export_employee_sensitive",
+      "breakpoints": true
     }
   ]
 }
