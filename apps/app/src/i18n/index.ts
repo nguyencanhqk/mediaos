@@ -13,6 +13,8 @@ import accountVi from "./locales/vi/account";
 import notificationsVi from "./locales/vi/notifications";
 // S4-FE-TASK-1 — Project List/Detail/Form/Member (namespace mới "tasks").
 import tasksVi from "./locales/vi/tasks";
+// S4-FE-DASH-1 — DashboardMePage + WidgetCard + widget P0 (namespace mới "dashboard").
+import dashboardVi from "./locales/vi/dashboard";
 
 registerI18nResources("vi", {
   hr: hrVi,
@@ -22,6 +24,7 @@ registerI18nResources("vi", {
   account: accountVi,
   notifications: notificationsVi,
   tasks: tasksVi,
+  dashboard: dashboardVi,
 });
 
 export default i18n;
