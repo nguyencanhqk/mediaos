@@ -84,6 +84,8 @@ import { LeaveService } from "./leave.service";
     LeaveAuditService,
     AuditRepository,
   ],
-  exports: [LeaveService],
+  // S4-DASH-BE-2 (additive): + LeaveApprovalService cho PENDING_LEAVE widget handler (DASH inject qua DI —
+  // KHÔNG re-provide instance thứ 2). Chỉ thêm vào exports[], KHÔNG method mới.
+  exports: [LeaveService, LeaveApprovalService],
 })
 export class LeaveModule {}

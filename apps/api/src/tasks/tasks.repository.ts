@@ -82,6 +82,14 @@ const TASK_COLUMNS = {
   stateName: projectStates.name,
   stateGroup: projectStates.stateGroup,
   stateColor: projectStates.color,
+  // S4-DASH-BE-2-FIX-1 (root-cause BUG1): task_status HIỆN ĐẠI (mig 0478 ALTER, TitleCase Todo/In Progress/
+  // In Review/Done/Cancelled) — CỘT RIÊNG với `status` legacy lowercase (not_started/…) đã có ở trên.
+  // TaskCoreService (S4-TASK-BE-1..4) CHỈ ghi task_status, KHÔNG BAO GIỜ đụng status legacy ⇒ consumer đọc
+  // status legacy trên task tạo qua luồng hiện đại luôn thấy DEFAULT 'not_started' (bug PROJECT_PROGRESS
+  // dashboard: done/percent luôn 0). Cột này CHƯA map vào Drizzle `tasks` pgTable (workflow.ts nằm ngoài
+  // phạm vi lane FIX-1) — bare sql reference AN TOÀN: không JOIN nào khác (workflow_steps/content_items/
+  // projects/project_states) có cột trùng tên `task_status`. ADDITIVE — không method mới, không đổi schema.
+  taskStatus: sql<string | null>`tasks.task_status`,
 } as const;
 
 export interface ListTasksFilter {
