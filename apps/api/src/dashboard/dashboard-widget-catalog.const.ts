@@ -309,8 +309,9 @@ export const DASH_DEFAULT_CONFIG: readonly DashDefaultConfigEntry[] = [
 // DashboardResolverController/Service lấy cặp @RequirePermission TỪ NGUỒN DUY NHẤT, KHÔNG gõ tay string rời
 // (bài học pair-drift đã cắn 3 lần — xem doc-block đầu file).
 
-/** 4 dashboard type user-facing mà lane này mở route (API-08 §10.1). System/Project KHÔNG mở. */
-export const DASH_RESOLVER_TYPES = ["Employee", "Manager", "HR", "Admin"] as const;
+/** 4 dashboard type user-facing mà lane này mở route (API-08 §10.1). System/Project KHÔNG mở.
+ *  Value không export (chỉ nguồn sinh type — consumer duyệt theo DASH_TYPE_PRIORITY). */
+const DASH_RESOLVER_TYPES = ["Employee", "Manager", "HR", "Admin"] as const;
 export type DashResolverType = (typeof DASH_RESOLVER_TYPES)[number];
 
 /**
@@ -358,10 +359,6 @@ export const DASH_TYPE_PRIORITY: readonly DashResolverType[] = [
 ] as const;
 
 /** Resolve 1 cặp DASH từ DASH_PERMISSION_PAIRS theo specCode — fail-fast nếu thiếu (mirror notificationPair). */
-export function dashDashboardPair(specCode: string): DashPermissionPair {
-  return dashPairBySpec(specCode);
-}
-
 function dashPairBySpec(specCode: string): DashPermissionPair {
   const pair = DASH_PERMISSION_PAIRS.find((p) => p.specCode === specCode);
   if (!pair) {
