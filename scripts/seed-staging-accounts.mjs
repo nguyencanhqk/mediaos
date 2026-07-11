@@ -84,6 +84,16 @@ function parseConfig() {
   const directUrl = process.env.SEED_DIRECT_URL ?? process.env.DATABASE_DIRECT_URL;
   if (!directUrl || !directUrl.trim()) {
     errors.push("thiếu SEED_DIRECT_URL hoặc DATABASE_DIRECT_URL (kết nối direct superuser :5432).");
+  } else {
+    // GUARD defense-in-depth (security-review 2026-07-11): blocklist DB prod `mediaos` NGAY TRONG script —
+    // không dựa mỗi wrapper `m seed-staging` (PROD và UAT chung 1 cluster Postgres, chạy tay với .env
+    // ambient trỏ prod là seed nhầm prod). Mirror blocklist của migrate-verify-ephemeral.sh.
+    const dbName = directUrl.split("?")[0].split("/").pop();
+    if (dbName === "mediaos") {
+      errors.push(
+        "GUARD: DB đích 'mediaos' là PROD — từ chối seed staging. Trỏ DATABASE_DIRECT_URL/SEED_DIRECT_URL sang mediaos_dev (hoặc DB cô lập).",
+      );
+    }
   }
 
   const companySlug = (process.env.STAGING_SEED_COMPANY_SLUG ?? "demo").trim();
