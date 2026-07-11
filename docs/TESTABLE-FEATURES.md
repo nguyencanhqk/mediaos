@@ -164,7 +164,7 @@ pnpm dev                   # chạy API + 3 app FE song song
 
 | Route | Màn hình | Trạng thái | Gọi API |
 | --- | --- | --- | --- |
-| `/hr` · `/hr/employees` | Danh sách nhân viên (search · filter phòng ban/trạng thái · paginate · nút tạo/export theo quyền) | ✅ **Thật** | `GET /hr/employees`, lookups |
+| `/hr` · `/hr/employees` | Danh sách nhân viên (search · filter phòng ban/trạng thái · paginate · sort-server theo cột · gom nhóm 1–2 cấp đơn vị/trạng thái · nút tạo/xuất CSV theo quyền, `export:employee` sensitive gate + PII mask per-row) | ✅ **Thật** | `GET /hr/employees`, `GET /hr/employees/export` (CSV), lookups |
 | `/hr/employees/new` | Form tạo nhân viên (RHF + Zod) | ✅ **Thật** | `POST /hr/employees` |
 | `/hr/employees/:id` | Chi tiết (3 tab; field nhạy cảm hiển thị `***` nếu thiếu quyền) | ✅ **Thật** | `GET /hr/employees/:id` |
 | `/hr/employees/:id/edit` | Form sửa (dirty-guard) | ✅ **Thật** | `GET` + `PATCH /hr/employees/:id` |
