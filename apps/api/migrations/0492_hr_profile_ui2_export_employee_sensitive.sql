@@ -1,6 +1,7 @@
--- Migration 0491: HR-PROFILE-UI-2 / MIG-EXPORT-SENSITIVE (🔴 RED, zone=red, crown) — FLIP độ nhạy cặp
+-- Migration 0492: HR-PROFILE-UI-2 / MIG-EXPORT-SENSITIVE (🔴 RED, zone=red, crown) — FLIP độ nhạy cặp
 --   quyền ('export','employee') false→true. THUẦN DATA — 1 câu UPDATE idempotent, KHÔNG DDL, KHÔNG RLS/
---   FORCE, KHÔNG db:generate (mirror kiểu 0481/0490 seed-only). NỐI TIẾP head 0490 (idx 170) → 0491 (idx 171).
+--   FORCE, KHÔNG db:generate (mirror kiểu 0481/0490 seed-only). RENUMBER 0491→0492 sau va chạm số với
+--   0491_s4_dashbe3 (#162, merged trước). NỐI TIẾP head THẬT 0491_s4_dashbe3 (idx 171) → 0492 (idx 172).
 --   Hot-file APPEND: KHÔNG rewrite 0444 (catalog gốc), KHÔNG đụng grant/role_permissions (0444 §13 nguyên vẹn).
 --
 -- VÌ SAO WO NÀY (parity + fail-closed):
@@ -26,8 +27,8 @@
 --   #3 Idempotent: WHERE ... AND is_sensitive IS DISTINCT FROM true ⇒ chạy lại 0 hàng, KHÔNG đổi count,
 --      KHÔNG ném exception. Nếu cặp chưa tồn tại (0444 chưa áp) ⇒ 0 hàng, an toàn (drizzle chỉ áp 1 lần).
 --
--- BAND 0491 (lane MIG-EXPORT-SENSITIVE / HR-PROFILE-UI-2). Journal: idx 171, when 1717500850000
---   (> head 0490 idx 170 / 1717500845000). Nối tiếp ĐƠN ĐIỆU sau head — một head, một lane.
+-- BAND 0492 (lane MIG-EXPORT-SENSITIVE / HR-PROFILE-UI-2 — RENUMBER 0491→0492). Journal: idx 172,
+--   when 1717500855000 (> head THẬT 0491_s4_dashbe3 idx 171 / 1717500850000). Nối tiếp ĐƠN ĐIỆU sau head.
 -- ════════════════════════════════════════════════════════════════════════════════════════════════
 
 -- ────────────────────────────────────────────────────────────────────────────────────────────────
