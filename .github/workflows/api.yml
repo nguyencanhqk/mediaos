@@ -38,6 +38,10 @@ jobs:
               - 'apps/api/**'
               - 'packages/contracts/**'
               - 'pnpm-lock.yaml'
+              # S5-DEVOPS-1: đổi chính workflow này hoặc script migrate-verify cũng phải chạy lại job
+              # (nếu không, step "Migrate-from-empty verify" đổi mà không bao giờ được thực thi ở PR đó).
+              - '.github/workflows/api.yml'
+              - 'scripts/migrate-verify-ephemeral.sh'
 
   build-test:
     name: Build · Typecheck · Migrate · Test
@@ -130,6 +134,16 @@ jobs:
       # ĐỌC ĐỘNG, số .sql áp = entries.length). KHÔNG so literal idx chép tay. Chạy SAU migrate, TRƯỚC roles.
       - name: Migration check (db:check)
         run: pnpm --filter @mediaos/api db:check
+
+      # S5-DEVOPS-1 — chứng minh migrate-from-empty trên DB RIÊNG ephemeral (mediaos_migverify_<ts>_<pid>),
+      # ĐỘC LẬP với DB test `mediaos` của job (DB đó còn bị test ghi bẩn — không phải bằng chứng from-empty
+      # thuần). Superuser CI `mediaos` của service container có quyền CREATE DATABASE — ZERO secret prod.
+      # `--self-test` chạy TRƯỚC: khoá GUARD refuse-drop (blocklist mediaos/mediaos_dev, chỉ cho
+      # ^mediaos_migverify_) ngay trong CI. Script tự DROP DB ephemeral ở trap EXIT.
+      - name: Migrate-from-empty verify (dedicated ephemeral DB)
+        run: |
+          bash scripts/migrate-verify-ephemeral.sh --self-test
+          bash scripts/migrate-verify-ephemeral.sh
 
       # Gán mật khẩu mediaos_app/worker (tách secret khỏi migration) → app role nối được, RLS ép thật.
       - name: Setup DB role passwords
