@@ -76,6 +76,8 @@ describe.skipIf(!hasLaneDb)("S4-DASH-DB-1 DASH Core deny-path + constraints", ()
 
   let A: SeededTenant;
   let B: SeededTenant;
+  let widgetA: string;
+  let configA: string;
   let widgetB: string;
   let configB: string;
   let cacheB: string;
@@ -83,6 +85,17 @@ describe.skipIf(!hasLaneDb)("S4-DASH-DB-1 DASH Core deny-path + constraints", ()
   beforeAll(async () => {
     A = await seedCompany(direct, "dash-deny-a");
     B = await seedCompany(direct, "dash-deny-b");
+
+    // company A — target cho UPDATE-deny WITH CHECK (đổi tenant own row → reject).
+    widgetA = await seedWidget(direct, A.companyId);
+    configA = (
+      await direct.query(
+        `INSERT INTO dashboard_widget_configs
+           (company_id, widget_id, dashboard_type, config_scope, is_enabled, sort_order)
+         VALUES ($1, $2, 'Employee', 'Company', true, 7) RETURNING id`,
+        [A.companyId, widgetA],
+      )
+    ).rows[0].id as string;
 
     widgetB = await seedWidget(direct, B.companyId);
     configB = (
@@ -143,6 +156,39 @@ describe.skipIf(!hasLaneDb)("S4-DASH-DB-1 DASH Core deny-path + constraints", ()
         );
       }),
     ).rejects.toThrow();
+  });
+
+  // ── 1b. UPDATE cross-tenant deny (quyền UPDATE mới cấp ở mig 0491 KHÔNG rò chéo-tenant) ────────────
+  it("withTenant(A): UPDATE B's dashboard_widget_configs ⇒ 0 row (RLS USING chặn UPDATE 0491) + row B nguyên vẹn", async () => {
+    const rowCount = await asTenant(app, A.companyId, async (c) => {
+      const r = await c.query(
+        `UPDATE dashboard_widget_configs SET sort_order = 999 WHERE id = $1`,
+        [configB],
+      );
+      return r.rowCount;
+    });
+    expect(rowCount).toBe(0);
+    // direct/superuser (bypass RLS) xác nhận row B KHÔNG đổi (sort_order seed = 0).
+    const b = await direct.query(`SELECT sort_order FROM dashboard_widget_configs WHERE id = $1`, [
+      configB,
+    ]);
+    expect(b.rows[0].sort_order).toBe(0);
+  });
+
+  it("withTenant(A): UPDATE own config SET company_id=B ⇒ rejected (RLS WITH CHECK — không đổi tenant)", async () => {
+    await expect(
+      asTenant(app, A.companyId, async (c) => {
+        await c.query(`UPDATE dashboard_widget_configs SET company_id = $1 WHERE id = $2`, [
+          B.companyId,
+          configA,
+        ]);
+      }),
+    ).rejects.toThrow();
+    // configA vẫn thuộc company A (không bị tẩu tán sang B).
+    const a = await direct.query(`SELECT company_id FROM dashboard_widget_configs WHERE id = $1`, [
+      configA,
+    ]);
+    expect(a.rows[0].company_id).toBe(A.companyId);
   });
 
   // ── 2. No tenant context ⇒ 0 row (tenant-scoped, NOT skipNoContext) ────────

@@ -101,17 +101,13 @@ function makeModuleRoute(
   });
 }
 
-/** Placeholder component used for module routes not yet implemented. */
-function ModulePlaceholder() {
-  return (
-    <div className="flex min-h-96 items-center justify-center p-8 text-sm text-muted-foreground">
-      Màn hình đang xây dựng…
-    </div>
-  );
-}
+// ModulePlaceholder đã bị gỡ (S4-FE-DASH-1): dashboardRoute là consumer CUỐI CÙNG của nó — mọi module route
+// khác đã thay bằng page thật từ trước (Tasks/System/HR...). Giữ hàm chết lại sẽ đỏ noUnusedLocals.
 
-// Dashboard
-const dashboardRoute = makeModuleRoute("/dashboard", "dashboard", "DASH", ModulePlaceholder);
+// Dashboard — S4-FE-DASH-1: DashboardMePage THAY ModulePlaceholder (shell + widget P0 lazy-load).
+import { DashboardMePage } from "@/routes/dashboard/DashboardMePage";
+
+const dashboardRoute = makeModuleRoute("/dashboard", "dashboard", "DASH", DashboardMePage);
 
 // HR
 import { useNavigate } from "@tanstack/react-router";
