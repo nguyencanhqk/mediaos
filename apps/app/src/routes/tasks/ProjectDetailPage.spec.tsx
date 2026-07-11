@@ -21,6 +21,11 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       deleteProject: vi.fn(),
       updateProject: vi.fn(),
     },
+    // S4-FE-TASK-3 — tab "Kanban" mount TaskKanbanPage (mock để không gọi mạng thật).
+    taskCollabApi: {
+      getKanbanBoard: vi.fn().mockResolvedValue({ projectId: "proj-001", columns: [] }),
+      moveTask: vi.fn(),
+    },
     hrApi: {
       listDepartments: vi.fn().mockResolvedValue([]),
       listEmployees: vi.fn().mockResolvedValue({ items: [], meta: {} }),
@@ -136,6 +141,16 @@ describe("ProjectDetailPage", () => {
     await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Thành viên" }));
     await waitFor(() => expect(taskProjectApi.listMembers).toHaveBeenCalledWith("proj-001"));
+  });
+
+  // ── Tab switch: kanban (S4-FE-TASK-3) ──────────────────────────────────────
+  it("switches to kanban tab and loads the board", async () => {
+    setCapabilities({ "read:project": true, "view-kanban:task": true });
+    vi.mocked(taskProjectApi.getProject).mockResolvedValue(MOCK_PROJECT);
+    renderWithQuery(<ProjectDetailPage projectId="proj-001" onBack={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Website Revamp")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Kanban" }));
+    await waitFor(() => expect(screen.getByText(/chưa có công việc nào/i)).toBeInTheDocument());
   });
 
   // ── NOT FOUND (404) ────────────────────────────────────────────────────────

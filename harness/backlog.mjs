@@ -4671,7 +4671,7 @@ export const backlog = [
     title:
       "BE Widget data services (GET /dashboard/widgets, /widgets/:slug) cho 7 widget In-sprint + cache TTL + degraded state — data-scope + module nguồn permission",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/dashboard/**",
       "apps/api/test/integration/**",
@@ -4693,6 +4693,7 @@ export const backlog = [
       "⚠️ NGHĨA VỤ CHUYỂN TỪ DDL SANG SERVICE (mig 0482 header §29-30 ghi rõ: 'ÉP ở tầng service S4-DASH-BE §9.7 step6, KHÔNG ở DDL'): dashboard_widget_cache CHỈ được ghi dữ liệu ĐÃ MASK + TRONG-SCOPE. DB không có constraint nào chặn việc này ⇒ nếu service ghi thẳng row chưa mask thì rò dữ liệu nhạy cảm qua cache mà không test nào bắt. Int-spec BẮT BUỘC: ghi cache cho user scope Own rồi đọc lại bằng user khác ⇒ KHÔNG thấy field nhạy cảm; và cache_key khác nhau giữa 2 user khác scope.",
       "Module nguồn lỗi → widget trả Degraded/Error, KHÔNG làm sập toàn dashboard; dashboard chỉ trả quick-action metadata (action thật gọi module gốc); last_updated_at khi cache hit",
       "Int-spec RED-trước: widget data đúng scope (employee chỉ thấy task/leave của mình) · cross-tenant deny · degraded khi module nguồn fail (không 500 toàn dashboard) · cache không rò dữ liệu user khác; FULL gate security-reviewer + silent-failure-hunter PASS",
+      "SHIPPED (L2-widget-data-cache): DashboardWidgetDataController (widgets · widgets/:slug, controller thứ 3 @Controller('dashboard')) + 7 handler CHỈ gọi method đã-scope của module nguồn (TaskCoreService.getMyTasks · TasksService.listByProject sau ProjectsService.getProject authorize · MyNotificationsService.list · AttendanceReadService.listMyRecords + tz.util localDateOf · LeaveApprovalService.listPending · HrReadService.listHrEmployees) + DashboardWidgetCacheService (cache_key company+type+widget+userId per-user / company-shared khi scope=Company viewer-independent; upsert INSERT/UPDATE no-DELETE; min-refresh 10s; TTL nhóm §9.2) + runner degraded (HttpException 403/404/400 propagate fail-closed, non-Http → Degraded 200). DI-exports additive: notifications+MyNotificationsService · leave+LeaveApprovalService · tasks+TaskCoreService+ProjectsService. Test test/integration/dashboard-widget-data.int-spec.ts 13/13 xanh trên mediaos_dashbe2 (D1 deny · D2 catalog omit · D3 project-progress 400/403/404 · D4 degraded+deny-không-nuốt · D5 cache miss→hit→refresh min-interval → regen · D6 per-user key + app KHÔNG DELETE grant · D7 HR_OVERVIEW no salary/PII). Dashboard suite 102/102 (no regression). Còn nợ lane khác: S4-INT-2 cache-invalidation từ event · S4-FE-DASH-1 render · S4-QA-1.",
     ],
   },
   {
@@ -5796,6 +5797,283 @@ export const backlog = [
       "Owner chốt: cặp quyền mới (view-identity:employee, is_sensitive) hay tái dùng view-sensitive; nếu cặp mới → migration seed per-pair + data_scope mirror ĐÚNG (bài học §13)",
       "Reveal identity ⟹ audit trong cùng tx (mirror view-salary); deny-path RED-trước: thiếu quyền → null, wildcard không mở, cross-tenant deny",
       "FE màn Hồ sơ render nhóm CMND/CCCD chỉ khi có quyền; FULL gate security-reviewer + database-reviewer PASS",
+    ],
+  },
+
+  // ════════════════════ BUNG THÊM VIỆC LÀM-ĐƯỢC-NGAY (owner chốt 2026-07-11) ════════════════════
+  // Nguồn: gap-analysis 3 lát cắt (Sprint4 story · tech-debt/audit · FE screen-coverage) đối chiếu code thật.
+  // Tất cả doable-now, ĐỘC LẬP với nút cổ chai S4-DASH-BE-2 (đang in_progress).
+  // Nhóm D (INT wiring) owner chốt kiến trúc GENERIC bridge: S4-INT-1 dựng OutboxNotificationBridge chung
+  // TRƯỚC → INT-3/4/5 chỉ khai event-type + recipient-resolver ⇒ depends_on S4-INT-1 (chờ tới khi INT-1 done).
+
+  // ─── Nhóm A: NOTI admin FE (green — BE + allowlist đã sẵn 100%, không đụng permission engine) ───
+  {
+    id: "S4-FE-NOTI-2",
+    module: "NOTI",
+    layer: "FE",
+    title:
+      "FE Notification Events admin (UI-NOTI-SCREEN-004): bảng event catalog (search/filter module·status) + toggle bật/tắt event (confirm) — gate view/update:notification-config (đã allowlisted)",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/notifications/**",
+      "apps/app/src/router.tsx",
+      "apps/app/src/i18n/**",
+      "packages/web-core/src/lib/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S4-NOTI-BE-4", "S4-FE-REGISTRY-1"],
+    src: [
+      "FRONTEND-12 §19 (UI-NOTI-SCREEN-004)",
+      "API-07",
+      "S4-NOTI-BE-3/BE-4 (GET/PATCH /notifications/events)",
+      "audit FE screen-coverage 2026-07-08",
+    ],
+    done_when: [
+      "NotificationEventsPage (/notifications/events): bảng catalog (module·code·name·status) + search/filter theo module/status + toggle is_enabled có confirm — PermissionGate view:notification-config (xem) / update:notification-config (toggle, ẩn/disable khi thiếu quyền)",
+      "TÁI DÙNG GET /notifications/events + PATCH /notifications/events/:id (BE-3/BE-4) — KHÔNG BE mới; 6 cặp NOTI-config ĐÃ ở SENSITIVE_CAPABILITY_ALLOWLIST ⇒ KHÔNG đụng permission.service (crown); loading/error/empty; masking do server",
+      "web-core api getNotificationEvents/updateNotificationEvent + spec; router.tsx wire route; i18n vi đủ key; FE spec (render + gating toggle)",
+      "check.sh xanh; LIGHT gate (react-reviewer + quality-gate)",
+    ],
+  },
+  {
+    id: "S4-FE-NOTI-3",
+    module: "NOTI",
+    layer: "FE",
+    title:
+      "FE Notification Delivery Logs read-only (UI-NOTI-SCREEN-006): bảng append-only + filter channel/status/recipient/time — gate view:notification-delivery-log (đã allowlisted)",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/notifications/**",
+      "apps/app/src/router.tsx",
+      "apps/app/src/i18n/**",
+      "packages/web-core/src/lib/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S4-NOTI-BE-3", "S4-FE-REGISTRY-1"],
+    src: [
+      "FRONTEND-12 §21 (UI-NOTI-SCREEN-006)",
+      "API-07",
+      "S4-NOTI-BE-3 (GET /notifications/delivery-logs)",
+      "audit FE screen-coverage 2026-07-08",
+    ],
+    done_when: [
+      "NotificationDeliveryLogsPage (/notifications/delivery-logs): bảng read-only (channel·status·recipient·created_at·error) + filter channel/status/recipient/time + pagination — PermissionGate view:notification-delivery-log",
+      "TÁI DÙNG GET /notifications/delivery-logs (BE-3) — KHÔNG BE mới; KHÔNG nút Retry (chưa có BE retry endpoint — out-of-scope); loading/error/empty; masking do server",
+      "web-core api getNotificationDeliveryLogs + spec; router.tsx wire; i18n vi; FE spec gating",
+      "check.sh xanh; LIGHT gate (react-reviewer + quality-gate)",
+    ],
+  },
+
+  // ─── Nhóm B: tách QA doable-now (chạy QA TASK/NOTI ngay, không chờ DASH-BE-2 như S4-QA-1) ───
+  {
+    id: "S4-QA-TASK-1",
+    module: "QA",
+    layer: "QA",
+    title:
+      "QA TASK permission/data-scope + deny-path (tách khỏi S4-QA-1 để chạy ngay): CRUD/assign/status-FSM/kanban/comment/checklist — coverage ≥80%",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/api/test/integration/**", "apps/api/src/tasks/**"],
+    skills: ["code-review"],
+    depends_on: ["S4-TASK-BE-4"],
+    src: [
+      "ISSUE-BOARD-01 §18 (TASK-QA)",
+      "IMP02-STORY-106/107",
+      "SPEC-06 §14",
+      "S4-QA-1 (tách phần TASK khỏi WO gộp bị kẹt DASH)",
+    ],
+    done_when: [
+      "Int-spec deny-path RED-first cho TASK: create/update/delete/assign/change-status(FSM)/priority/deadline/kanban-move/comment/checklist — thiếu cặp quyền → 403; data-scope Own/Team/Project (employee chỉ thao tác task được phép); cross-tenant → 404 (IDOR)",
+      "FSM chuyển trạng thái sai bị chặn (SPEC-06 §14); watcher self-only; assign cảnh báo assignee-on-leave giữ nguyên; actor-exclusion nơi áp dụng",
+      "Gate hasDb && LANE_DB, DB cô lập mediaos_qatask1 (int-spec khớp test/**/*.int-spec.ts — chạy thật, không false-green); coverage ≥80% lớp TASK nhạy cảm",
+      "check.sh xanh; LIGHT gate (typescript-reviewer + quality-gate); nhánh permission chạm → security-reviewer soi deny-path",
+    ],
+  },
+  {
+    id: "S4-QA-NOTI-1",
+    module: "QA",
+    layer: "QA",
+    title:
+      "QA NOTI permission/own-scope + deny-path (tách khỏi S4-QA-1): own-scope/mark-read idempotent · intake dedupe/actor-exclusion · admin-config deny — coverage ≥80%",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/api/test/integration/**", "apps/api/src/notifications/**"],
+    skills: ["code-review"],
+    depends_on: ["S4-NOTI-BE-4"],
+    src: [
+      "ISSUE-BOARD-01 §18 (NOTI-QA)",
+      "IMP02-STORY-106/107",
+      "SPEC-08 §9",
+      "S4-QA-1 (tách phần NOTI khỏi WO gộp bị kẹt DASH)",
+    ],
+    done_when: [
+      "Int-spec RED-first NOTI: user chỉ đọc/mark-read notification CỦA MÌNH (own-scope), cross-user 404; mark-read idempotent (gọi 2 lần không lỗi, unread count đúng); intake dedupe (retry outbox không nhân đôi); actor-exclusion (người phát không tự nhận)",
+      "Admin-config deny-path: thiếu view/update:notification-config → 403 GET/PATCH events/templates; thiếu view:notification-delivery-log → 403 delivery-logs; cross-tenant deny",
+      "Gate hasDb && LANE_DB, DB cô lập mediaos_qanoti1 (chạy thật); coverage ≥80%",
+      "check.sh xanh; LIGHT gate; nhánh permission → security-reviewer soi deny-path",
+    ],
+  },
+
+  // ─── Nhóm C: harness + observability (độc lập, giá trị cao) ───
+  {
+    id: "S5-QA-GATE-LANEDB-1",
+    module: "DEVOPS",
+    layer: "QA",
+    title:
+      "Vá false-green cổng local: harness/check.sh chạy `pnpm test` KHÔNG set LANE_DB ⇒ ~70 int-spec deny-path/IDOR bị skip im lặng — làm cổng LOUD (đếm+in N spec SKIPPED, cảnh báo khi vượt ngưỡng) hoặc tự trỏ lane-DB khớp CI",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "harness/check.sh",
+      "harness/**",
+      "apps/api/test/**",
+      "docs/plans/S5-QA-GATE-LANEDB-1.md",
+    ],
+    skills: ["code-review"],
+    plan: "docs/plans/S5-QA-GATE-LANEDB-1.md",
+    depends_on: [],
+    src: [
+      "harness/check.sh:52 (step test pnpm test — KHÔNG set LANE_DB)",
+      ".github/workflows/api.yml (CI đã set LANE_DB=mediaos 2026-07-10)",
+      "memory ci-skips-most-integration-specs · turbo-cache-false-green",
+    ],
+    done_when: [
+      "check.sh KHÔNG còn báo XANH khi hàng loạt int-spec bị skip im lặng: hoặc (a) in rõ 'N int-spec SKIPPED (thiếu LANE_DB)' + cảnh báo/đỏ khi N vượt ngưỡng, hoặc (b) tự set LANE_DB (lane-db-setup) để chạy như CI — chốt cách trong plan",
+      "Đối xứng fix CI 2026-07-10: regression permission/IDOR KHÔNG lọt cổng local do test không chạy; dùng TURBO_FORCE khi cần bằng-chứng-xanh (bài học turbo-cache-false-green)",
+      "KHÔNG phá luồng check.sh hiện có (lint/typecheck/test/smoke); nếu đổi hành vi mặc định → cập nhật CLAUDE.md §9",
+      "check.sh tự chạy xanh; LIGHT gate",
+    ],
+  },
+  {
+    id: "S5-FND-JOBS-OBS-1",
+    module: "FOUNDATION",
+    layer: "BE",
+    title:
+      "System Jobs observability: GET /foundation/system-jobs đọc lịch sử system_job_runs (retention/temp-cleanup: last-run/status/duration/error) + màn FE read-only — khớp cặp seed orphan view:foundation-job (hiện 0 endpoint)",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/foundation/**",
+      "apps/api/src/scheduler/**",
+      "apps/api/test/integration/**",
+      "packages/contracts/src/**",
+      "apps/app/src/routes/system/**",
+      "apps/app/src/i18n/**",
+      "packages/web-core/src/lib/**",
+      "docs/plans/S5-FND-JOBS-OBS-1.md",
+    ],
+    skills: ["code-review"],
+    plan: "docs/plans/S5-FND-JOBS-OBS-1.md",
+    depends_on: [],
+    src: [
+      "FOUNDATION-SYSTEM-AUDIT-2026-07-02 §5.2/§6.3 (admin surface thiếu; view:foundation-job orphan seed 0435)",
+      "DB-08 §8.14 (system_job_runs)",
+      "apps/api/src/scheduler/job-run-logger.ts (ghi, chưa có đường đọc)",
+    ],
+    done_when: [
+      "GET /foundation/system-jobs (+ /:jobName/runs) đọc system_job_runs: job name·last run·status·started/finished·duration·error tóm tắt — @RequirePermission view:foundation-job (cặp đã seed 0435; PermissionGuard class-level BẮT BUỘC — guard không global); read-only, KHÔNG trigger job (POST run = red, out-of-scope)",
+      "Đọc ĐÚNG phạm vi (GLOBAL/no-tenant hay company-scoped tuỳ schema) — KHÔNG rò lịch sử job công ty khác; DTO contracts dual-build; error message scrub secret (job-error-scrubber sẵn có)",
+      "FE SystemJobsPage (/system/jobs) read-only: bảng job + trạng thái + last-run, PermissionGate view:foundation-job; loading/error/empty; i18n vi",
+      "Int-spec RED-trước: thiếu view:foundation-job → 403; đúng phạm vi tenant/global; check.sh xanh; LIGHT gate (chạm masking error → security-reviewer)",
+    ],
+  },
+
+  // ─── Nhóm D: NOTI wiring crown (generic OutboxNotificationBridge — depends_on S4-INT-1) ───
+  {
+    id: "S4-INT-3",
+    module: "INT",
+    layer: "BE",
+    title:
+      "Tích hợp LEAVE → NOTI qua OutboxNotificationBridge (INT-1): event-type leave.request.{submitted,approved,rejected,cancelled,revoked} → NOTI intake, recipient §9.4 — hiện event LEAVE rơi im lặng, requester không được báo",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/leave/**",
+      "apps/api/src/notifications/**",
+      "apps/api/src/events/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S4-INT-3.md",
+    ],
+    skills: ["code-review"],
+    plan: "docs/plans/S4-INT-3.md",
+    depends_on: ["S4-INT-1"],
+    src: [
+      "IMP02-STORY-102 (P0)",
+      "SPEC-08 §9.4/§9.5",
+      "notification-event-catalog.const.ts (LEAVE_REQUEST_*)",
+      "tiền lệ consumer attendance-leave-sync",
+      "leave-approval.service.ts (producer outbox đã phát, chưa ai tạo notification)",
+    ],
+    done_when: [
+      "Đăng ký event-type LEAVE (submitted/approved/rejected/cancelled/revoked) + recipient-resolver vào OutboxNotificationBridge (INT-1) — KHÔNG tự dựng consumer riêng (owner chốt generic bridge); map outbox eventType (dạng chấm) → NOTI eventCode (LEAVE_REQUEST_*) lấy VERBATIM từ notification-event-catalog.const.ts (bài học code-drift)",
+      "Recipient đúng §9.4: approved/rejected/cancelled/revoked → requester (payload.userId); submitted → approver theo cây duyệt; LOẠI actor; dedupe + delivery log; recipient cùng company (KHÔNG rò cross-tenant)",
+      "consumerName/registration DUY NHẤT toàn hệ; append vào bridge wiring (KHÔNG rewrite khối INT-1); serialize merge sau INT-1",
+      "Int-spec RED-trước: mỗi event → đúng số notification & recipient · actor không tự nhận · idempotent khi retry outbox · cross-tenant deny; FULL gate security-reviewer + silent-failure-hunter PASS",
+    ],
+  },
+  {
+    id: "S4-INT-4",
+    module: "INT",
+    layer: "BE",
+    title:
+      "Tích hợp ATT → NOTI: bổ sung producer outbox trong ATT (adjustment submit/approve/reject · remote-work submit/approve/reject/cancel) + đăng ký event-type + recipient-resolver vào OutboxNotificationBridge — ATT hiện CHƯA phát event nào",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/attendance/**",
+      "apps/api/src/notifications/**",
+      "apps/api/src/events/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S4-INT-4.md",
+    ],
+    skills: ["code-review"],
+    plan: "docs/plans/S4-INT-4.md",
+    depends_on: ["S4-INT-1"],
+    src: [
+      "IMP02-STORY-102 (P0)",
+      "SPEC-08 §9.4/§9.5",
+      "notification-event-catalog.const.ts (ATTENDANCE_*/ADJUSTMENT_*)",
+      "S3-ATT-BE-4/BE-5 (adjustment · remote-work đã build)",
+    ],
+    done_when: [
+      "Producer: ATT service phát event outbox cho adjustment (submitted/approved/rejected) + remote-work (submitted/approved/rejected/cancelled) — outbox.enqueue TRONG cùng tx nghiệp vụ (KHÔNG đụng attendance_logs append-only), payload gồm eventCode + recipient key (requester/approver)",
+      "Đăng ký event-type + recipient-resolver vào OutboxNotificationBridge (INT-1); map eventType→eventCode VERBATIM từ catalog; recipient §9.4 (approve/reject → requester · submit → approver); LOẠI actor; cùng company",
+      "consumerName/registration duy nhất; append wiring; serialize merge sau INT-1; dedupe + delivery log",
+      "Int-spec RED-trước: mỗi hành động ATT → đúng notification & recipient · actor loại · idempotent · cross-tenant deny; FULL gate security-reviewer + silent-failure-hunter PASS",
+    ],
+  },
+  {
+    id: "S4-INT-5",
+    module: "INT",
+    layer: "BE",
+    title:
+      "Tích hợp HR/AUTH → NOTI: HR tạo employee → activation/welcome notification (mảnh thiếu STORY-098) + AUTH password-reset-requested/account-locked → notify chủ tài khoản — producer HR/AUTH + đăng ký vào OutboxNotificationBridge",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/employees/**",
+      "apps/api/src/auth/**",
+      "apps/api/src/notifications/**",
+      "apps/api/src/events/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S4-INT-5.md",
+    ],
+    skills: ["code-review"],
+    plan: "docs/plans/S4-INT-5.md",
+    depends_on: ["S4-INT-1"],
+    src: [
+      "IMP02-STORY-098 (P0 activation notification) + 102",
+      "SPEC-08 §9.4/§9.5",
+      "notification-event-catalog.const.ts",
+      "S2-INT-1 (HR↔AUTH provision đã build — NOTI chưa tồn tại lúc đó)",
+    ],
+    done_when: [
+      "Producer: HR create employee (S2-INT-1) phát event activation/welcome; AUTH phát password-reset-requested + account-locked — outbox.enqueue trong tx; payload eventCode + recipient (chủ tài khoản/nhân sự vừa tạo)",
+      "Đăng ký event-type + recipient-resolver vào OutboxNotificationBridge (INT-1); map eventCode VERBATIM; account-locked notify KHÔNG lộ chi tiết bảo mật nhạy cảm; cùng company",
+      "consumerName duy nhất; append wiring; serialize merge; dedupe + delivery log; plan-reviewer TRƯỚC khi code (crown-AUTH)",
+      "Int-spec RED-trước: tạo employee → 1 activation notification đúng recipient · reset/lock → notify đúng chủ tài khoản · actor loại nơi áp dụng · idempotent · cross-tenant deny; FULL gate security-reviewer + silent-failure-hunter + plan-reviewer PASS",
     ],
   },
 ];

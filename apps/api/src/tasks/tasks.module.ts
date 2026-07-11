@@ -73,6 +73,9 @@ import { TaskActivityFeedRepository } from "./task-activity-feed.repository";
     TaskActivityFeedService,
     TaskActivityFeedRepository,
   ],
-  exports: [TasksService],
+  // S4-DASH-BE-2 (additive): + TaskCoreService (MY_TASKS/TASK_ALERTS) + ProjectsService (PROJECT_PROGRESS
+  // authorize getProject TRƯỚC listByProject — GAP vòng reconcile: plan cũ chỉ ghi TaskCoreService). DASH
+  // inject qua DI — KHÔNG re-provide instance thứ 2, KHÔNG method mới. Chỉ thêm vào exports[].
+  exports: [TasksService, TaskCoreService, ProjectsService],
 })
 export class TasksModule {}

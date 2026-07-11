@@ -89,6 +89,8 @@ export {
   taskProjectInvalidation,
   // S4-FE-TASK-2: Task core mutation → list/my/detail invalidation.
   taskCoreInvalidation,
+  // S4-FE-TASK-3: Kanban/comment/checklist/activity mutation → board/comments/checklists/activity invalidation.
+  taskCollabInvalidation,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -112,6 +114,8 @@ export { myNotificationApi } from "./lib/my-notification-api";
 export { taskProjectApi } from "./lib/task-project-api";
 // S4-FE-TASK-2 — Task core CRUD/my/actions (TasksController, S4-TASK-BE-2/BE-3 routes ĐÃ merge).
 export { taskCoreApi } from "./lib/task-core-api";
+// S4-FE-TASK-3 — Kanban board+move · comment/mention · checklist/items · activity feed (S4-TASK-BE-4).
+export { taskCollabApi } from "./lib/task-collab-api";
 export { dashboardApi } from "./lib/dashboard-api";
 export { hrApi } from "./lib/hr-api";
 // S2-FE-HR-6 — Org chart (GET /org/units/tree, read mở) + HR audit-logs (tái dùng /foundation/audit-logs).

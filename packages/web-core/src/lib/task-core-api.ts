@@ -3,10 +3,8 @@ import {
   taskCoreResponseSchema,
   myTaskItemSchema,
   taskActionResponseSchema,
-  commentSchema,
   type TaskCoreResponseDto,
   type MyTaskItemDto,
-  type CommentDto,
   type TaskActionResponseDto,
   type ListTaskCoreQueryRequest,
   type CreateTaskCoreRequest,
@@ -15,7 +13,6 @@ import {
   type ChangeTaskStatusRequest,
   type ChangeTaskPriorityRequest,
   type ChangeTaskDeadlineRequest,
-  type CreateCommentRequest,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -39,6 +36,11 @@ import { buildQueryString } from "./api-params";
  * chú) ⇒ client KHÔNG thể lấy watcherId để gọi removeWatcher sau khi addWatcher thành công (response chỉ
  * trả {task, warnings}, không có watcher row). TaskAssignControl vì vậy CHỈ hỗ trợ "Theo dõi" (add, idempotent
  * qua 409 DUPLICATE), KHÔNG có nút "Bỏ theo dõi" — backend gap, ghi trong PR/backlog theo dõi riêng.
+ *
+ * `listComments`/`addComment` ĐÃ GỠ khỏi client này (S4-FE-TASK-3) — route `/tasks/:id/comments` server-side
+ * đổi sang TaskCommentsService (content/mentionEmployeeIds, S4-TASK-BE-4) nên schema `commentSchema` cũ
+ * (`body`, không mention) FAIL Zod validate ở response thật. Dùng `taskCollabApi.listComments/addComment/
+ * updateComment/deleteComment` (task-collab-api.ts) — cùng URL, đúng schema mới.
  */
 export const taskCoreApi = {
   /** GET /tasks — danh sách task theo data-scope thật (read:task). Filter status/priority/assignee/project/
@@ -101,16 +103,5 @@ export const taskCoreApi = {
     apiFetch(`/tasks/${id}/watchers`, taskActionResponseSchema, {
       method: "POST",
       body: JSON.stringify({}),
-    }),
-
-  /** GET /tasks/:id/comments — thread bình luận (KHÔNG gate — user xem được task thì xem được comment). */
-  listComments: (id: string): Promise<CommentDto[]> =>
-    apiFetch(`/tasks/${id}/comments`, z.array(commentSchema)),
-
-  /** POST /tasks/:id/comments — thêm bình luận (comment:task). */
-  addComment: (id: string, body: CreateCommentRequest): Promise<CommentDto> =>
-    apiFetch(`/tasks/${id}/comments`, commentSchema, {
-      method: "POST",
-      body: JSON.stringify(body),
     }),
 };

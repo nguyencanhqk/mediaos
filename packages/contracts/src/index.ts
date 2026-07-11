@@ -113,6 +113,9 @@ export * from "./dashboard";
 // S4-DASH-BE-1 (additive): Dashboard resolver registry (/dashboard/me · /types · 4 route type) — tách khỏi
 // ./dashboard (legacy G14 aggregate report/mv-stats/alerts). Widget metadata, data=null tới S4-DASH-BE-2.
 export * from "./dashboard-resolver";
+// S4-DASH-BE-2 (additive): Widget DATA contracts (GET /dashboard/widgets · /widgets/:slug) — data thật
+// + quick action + error/cache state, tách khỏi ./dashboard-resolver (registry, data=null).
+export * from "./dashboard-widget-data";
 export * from "./evaluation";
 export * from "./kpi";
 export * from "./payroll";
