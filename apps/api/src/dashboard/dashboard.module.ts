@@ -13,6 +13,9 @@ import { DashSeedRegistrar } from "./dash-seed.registrar";
 import { DashboardResolverController } from "./dashboard-resolver.controller";
 import { DashboardResolverService } from "./dashboard-resolver.service";
 import { DashboardWidgetRegistryService } from "./dashboard-widget-registry.service";
+// S4-DASH-BE-3 (additive): config CRUD — controller THỨ TƯ (/configs + /configs/:id), không đụng khối trên.
+import { DashboardConfigController } from "./dashboard-config.controller";
+import { DashboardConfigService } from "./dashboard-config.service";
 
 /**
  * S4-DASH-SEED-1 (additive): import SeedModule (exports MasterDataSeederRegistry) → DashSeedRegistrar
@@ -21,7 +24,7 @@ import { DashboardWidgetRegistryService } from "./dashboard-widget-registry.serv
  */
 @Module({
   imports: [PermissionModule, SeedModule],
-  controllers: [DashboardController, DashboardResolverController],
+  controllers: [DashboardController, DashboardResolverController, DashboardConfigController],
   providers: [
     DashboardService,
     ReportService,
@@ -32,6 +35,7 @@ import { DashboardWidgetRegistryService } from "./dashboard-widget-registry.serv
     DashSeedRegistrar,
     DashboardResolverService,
     DashboardWidgetRegistryService,
+    DashboardConfigService,
   ],
 })
 export class DashboardModule {}
