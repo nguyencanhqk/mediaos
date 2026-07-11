@@ -22,6 +22,9 @@
 #   DATABASE_DIRECT_URL  postgres://user:pass@host:port/dbname (DIRECT, cùng cluster cần verify)
 #                         [BẮT BUỘC cho chạy thật — KHÔNG cần cho --self-test].
 #   KEEP_EPHEMERAL        =1 để GIỮ DB ephemeral sau khi chạy (debug lỗi migrate). Mặc định DROP.
+#   MIGVERIFY_PSQL        lệnh psql thay thế khi host không có psql trên PATH (Windows dev:
+#                         "docker exec -i mediaos-postgres psql" — wrapper `m migrate-verify` tự set).
+#                         CHỈ đổi cách GỌI psql, không đổi guard/URL. Mặc định: psql.
 #
 # Dùng:
 #   DATABASE_DIRECT_URL=postgres://mediaos:pw@localhost:5432/mediaos bash scripts/migrate-verify-ephemeral.sh
@@ -112,13 +115,17 @@ if [[ "${1:-}" == "--self-test" ]]; then
   exit 0
 fi
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,32p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit 0
 fi
 
 # ── Chạy thật: cần Postgres client + pnpm workspace ──
 : "${DATABASE_DIRECT_URL:?DATABASE_DIRECT_URL is required (hoặc chạy --self-test)}"
-command -v psql >/dev/null 2>&1 || fail "psql không tìm thấy (cài postgresql-client)"
+# PSQL_CMD: mảng lệnh psql — mặc định `psql`; host không có psql (Windows dev) thì override qua
+# MIGVERIFY_PSQL (vd "docker exec -i mediaos-postgres psql"). Word-split CHỦ ĐÍCH (không path có space).
+read -r -a PSQL_CMD <<< "${MIGVERIFY_PSQL:-psql}"
+command -v "${PSQL_CMD[0]}" >/dev/null 2>&1 \
+  || fail "'${PSQL_CMD[0]}' không tìm thấy (cài postgresql-client hoặc set MIGVERIFY_PSQL)"
 command -v pnpm >/dev/null 2>&1 || fail "pnpm không tìm thấy"
 
 # ── Phân giải URL nguồn → BASE_URL + admin conn 'postgres' (mượn pattern backup-restore-drill.sh) ──
@@ -147,13 +154,14 @@ cleanup() {
   local code=$?
   if [[ -n "${EPHEMERAL_DB:-}" ]]; then
     if [[ "${KEEP_EPHEMERAL:-0}" == "1" ]]; then
-      log "KEEP_EPHEMERAL=1 → GIỮ $EPHEMERAL_DB (nhớ DROP tay: psql \"$ADMIN_URL\" -c 'DROP DATABASE \"$EPHEMERAL_DB\"')"
+      # KHÔNG in ADMIN_URL (chứa credential) vào log — chỉ in tên DB + gợi ý lệnh.
+      log "KEEP_EPHEMERAL=1 → GIỮ $EPHEMERAL_DB (nhớ DROP tay qua admin conn 'postgres': DROP DATABASE \"$EPHEMERAL_DB\")"
     elif guard_drop_allowed "$EPHEMERAL_DB"; then
       log "cleanup: DROP DATABASE $EPHEMERAL_DB (qua admin conn 'postgres')"
-      psql "$ADMIN_URL" -v ON_ERROR_STOP=0 -q \
+      "${PSQL_CMD[@]}" "$ADMIN_URL" -v ON_ERROR_STOP=0 -q \
         -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='$EPHEMERAL_DB' AND pid<>pg_backend_pid();" \
         -c "DROP DATABASE IF EXISTS \"$EPHEMERAL_DB\";" >/dev/null 2>&1 \
-        || log "WARN: drop $EPHEMERAL_DB lỗi (dọn tay: psql \"$ADMIN_URL\" -c 'DROP DATABASE \"$EPHEMERAL_DB\"')"
+        || log "WARN: drop $EPHEMERAL_DB lỗi (dọn tay qua admin conn 'postgres': DROP DATABASE \"$EPHEMERAL_DB\")"
     else
       log "GUARD CHẶN drop '$EPHEMERAL_DB' — TÊN BẤT THƯỜNG (bug nghiêm trọng); KHÔNG đụng DB này — dọn tay + báo lỗi ngay"
       code=1
@@ -165,7 +173,7 @@ trap cleanup EXIT
 
 # ── 1) CREATE DATABASE ephemeral (throwaway, hoàn toàn rỗng) — qua admin conn 'postgres' ──
 log "1/3 CREATE DATABASE $EPHEMERAL_DB (throwaway, qua admin conn 'postgres')"
-psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -q -c "CREATE DATABASE \"$EPHEMERAL_DB\";" \
+"${PSQL_CMD[@]}" "$ADMIN_URL" -v ON_ERROR_STOP=1 -q -c "CREATE DATABASE \"$EPHEMERAL_DB\";" \
   || fail "không tạo được DB ephemeral $EPHEMERAL_DB"
 ok "DB ephemeral sẵn sàng (rỗng)"
 
