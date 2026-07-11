@@ -68,6 +68,15 @@ export const dashboardKeys = {
   all: rootKeys.dashboard,
   overview: () => [...rootKeys.dashboard, "overview"] as const,
   stats: (params?: Record<string, unknown>) => [...rootKeys.dashboard, "stats", params] as const,
+  // S4-FE-DASH-1 — APPEND: GET /dashboard/me (shell) + widget catalog/data (lazy-load per WidgetCard).
+  me: () => [...rootKeys.dashboard, "me"] as const,
+  widgets: {
+    all: [...rootKeys.dashboard, "widgets"] as const,
+    catalog: (params?: Record<string, unknown>) =>
+      [...rootKeys.dashboard, "widgets", "catalog", params] as const,
+    data: (widgetCode: string, params?: Record<string, unknown>) =>
+      [...rootKeys.dashboard, "widgets", "data", widgetCode, params] as const,
+  },
 };
 
 // ── HR keys ───────────────────────────────────────────────────────────────────
@@ -447,6 +456,10 @@ export const notificationKeys = {
   // vì khác endpoint/shape — invalidate riêng, không làm mới nhầm cache trang danh sách đầy đủ).
   dropdown: (params?: Record<string, unknown>) =>
     [...rootKeys.notifications, "dropdown", params] as const,
+  // S4-FE-NOTI-2 — APPEND. GET /notifications/events (admin catalog, NotificationAdminController) —
+  // TÁCH khỏi `list` (own-scope MyNotificationsController, khác endpoint/shape/permission hẳn).
+  events: (params?: Record<string, unknown>) =>
+    [...rootKeys.notifications, "admin-events", params] as const,
 };
 
 // S4-FE-NOTI-1 — mutation → invalidation cho My-Notification (mark-read/mark-all-read/delete). Prefix

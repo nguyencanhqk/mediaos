@@ -231,6 +231,24 @@ describe("dashboardKeys", () => {
   it("overview() ổn định", () => {
     expect(dashboardKeys.overview()).toEqual(dashboardKeys.overview());
   });
+
+  // S4-FE-DASH-1 — me()/widgets.catalog()/widgets.data() dùng cho DashboardMePage + WidgetCard lazy-load.
+  it("me() ổn định + chứa 'dashboard'", () => {
+    expect(dashboardKeys.me()).toEqual(dashboardKeys.me());
+    expect(dashboardKeys.me()[0]).toBe("dashboard");
+  });
+
+  it("widgets.catalog(params) ổn định theo params", () => {
+    const params = { dashboard_type: "Employee" };
+    expect(dashboardKeys.widgets.catalog(params)).toEqual(dashboardKeys.widgets.catalog(params));
+  });
+
+  it("widgets.data(widgetCode, params) khác nhau theo widgetCode", () => {
+    const a = dashboardKeys.widgets.data("MY_TASKS");
+    const b = dashboardKeys.widgets.data("TASK_ALERTS");
+    expect(a).not.toEqual(b);
+    expect(a).toContain("MY_TASKS");
+  });
 });
 
 describe("notificationKeys", () => {
