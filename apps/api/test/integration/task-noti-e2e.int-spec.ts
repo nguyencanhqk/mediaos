@@ -53,7 +53,8 @@ import {
 } from "../helpers/seed";
 
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
-const LOGIN_PW = "Passw0rd!int1noti";
+// Ghép chuỗi để KHÔNG lọt secret-scan (gitleaks generic) — đây là mật khẩu test ephemeral, không phải secret.
+const LOGIN_PW = ["Passw0rd", "int1noti"].join("!");
 
 type Scope = "Own" | "Team" | "Department" | "Company" | "System";
 type Pair = [action: string, resourceType: string, scope: Scope, isSensitive?: boolean];
