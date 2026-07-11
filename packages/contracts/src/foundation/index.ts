@@ -20,3 +20,5 @@ export * from "./file-access-log";
 // S2-FND-BE-2 — sequence-counter + seed-run status DTO (WHITELIST, KHÔNG secret/current_value). Append-only.
 export * from "./sequences";
 export * from "./seeds";
+// S5-FND-JOBS-OBS-1 — System Jobs observability DTO (READ-ONLY, WHITELIST, KHÔNG metadata). Append-only.
+export * from "./system-jobs";

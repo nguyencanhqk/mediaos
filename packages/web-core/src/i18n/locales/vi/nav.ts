@@ -82,6 +82,8 @@ export default {
     // S2-FE-FND-7 — routeTitle cho 2 màn wired sẵn (S2-FE-FND-6) còn thiếu key i18n.
     systemRetention: "Chính sách lưu trữ",
     systemFileAccessLogs: "Nhật ký truy cập tệp",
+    // S5-FND-JOBS-OBS-1 — /system/jobs (System Jobs observability, READ-ONLY).
+    systemJobs: "Nhật ký system job",
     systemFiles: "Tệp tin",
     systemModules: "Danh mục module",
     accountProfile: "Hồ sơ tài khoản",

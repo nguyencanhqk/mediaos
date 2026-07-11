@@ -7,6 +7,7 @@ import { FilesModule } from "./files/files.module";
 import { HolidaysModule } from "./holidays/holidays.module";
 import { RetentionModule } from "./retention/retention.module";
 import { SeedModule } from "./seed/seed.module";
+import { SystemJobsModule } from "./system-jobs/system-jobs.module";
 
 /**
  * S1-FND-WIRE-1 — FoundationModule: gom các module Foundation CÓ HTTP surface vào MỘT nơi để
@@ -34,6 +35,9 @@ import { SeedModule } from "./seed/seed.module";
     // S2-FND-BE-3 (L3, additive): data-retention governance HTTP surface (GET list + PATCH manage,
     // audit-in-tx). Re-export RetentionService/CleanupJob cho cron/consumer.
     RetentionModule,
+    // S5-FND-JOBS-OBS-1 (additive): System Jobs observability HTTP surface (READ-ONLY, nối
+    // system_job_runs đã ship S2-FND-JOBS-1) — khớp cặp seed orphan view:foundation-job (mig 0435).
+    SystemJobsModule,
   ],
   exports: [
     AuditModule,
@@ -44,6 +48,7 @@ import { SeedModule } from "./seed/seed.module";
     HolidaysModule,
     SeedModule,
     RetentionModule,
+    SystemJobsModule,
   ],
 })
 export class FoundationModule {}

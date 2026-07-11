@@ -25,6 +25,7 @@ import {
   SYSTEM_RETENTION_ROUTE_META,
   SYSTEM_FILE_ACCESS_LOGS_ROUTE_META,
   SYSTEM_SETTINGS_ROUTE_META,
+  SYSTEM_JOBS_ROUTE_META,
   FOUNDATION_PATH,
 } from "@/routes/system/foundation/constants";
 import {
@@ -715,6 +716,18 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     group: "report",
     order: 45,
     requiredAnyPermissions: SYSTEM_FILE_ACCESS_LOGS_ROUTE_META.requiredAnyPermissions,
+  },
+  // S5-FND-JOBS-OBS-1 — /system/jobs (System Jobs observability, READ-ONLY). Gate view:foundation-job
+  // (KHÔNG sensitive, company-admin có sẵn qua bulk-grant mig 0435).
+  {
+    sidebarKey: "system.jobs",
+    moduleCode: "FOUNDATION",
+    label: "Nhật ký system job",
+    path: FOUNDATION_PATH.SYSTEM_JOBS,
+    icon: "activity",
+    group: "report",
+    order: 46,
+    requiredAnyPermissions: SYSTEM_JOBS_ROUTE_META.requiredAnyPermissions,
   },
   // S2-FE-FND-8 — /system/settings (System Settings admin, UI-SYSTEM-SCREEN-004). Trước đây gộp vào
   // "Cấu hình công ty" (system.company-settings) chờ BE endpoint riêng — BE đã ship (S2-FND-BE-8), tách

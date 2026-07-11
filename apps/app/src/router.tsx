@@ -219,6 +219,8 @@ import { HealthPage } from "@/routes/system/foundation/HealthPage";
 // System / Foundation — Retention Policies + File Access Logs — S2-FE-FND-6
 import { RetentionPoliciesPage } from "@/routes/system/foundation/RetentionPoliciesPage";
 import { FileAccessLogsPage } from "@/routes/system/foundation/FileAccessLogsPage";
+// System / Foundation — System Jobs observability (READ-ONLY) — S5-FND-JOBS-OBS-1
+import { SystemJobsPage } from "@/routes/system/foundation/SystemJobsPage";
 import {
   FOUNDATION_PATH,
   FOUNDATION_SCREEN,
@@ -227,6 +229,7 @@ import {
   SYSTEM_RETENTION_ROUTE_META,
   SYSTEM_FILE_ACCESS_LOGS_ROUTE_META,
   SYSTEM_SETTINGS_ROUTE_META,
+  SYSTEM_JOBS_ROUTE_META,
 } from "@/routes/system/foundation/constants";
 // System / Roles + Permissions admin — S2-FE-AUTH-4 (lane FE batch C)
 import { RoleFormPage } from "@/routes/system/roles/RoleFormPage";
@@ -1171,6 +1174,16 @@ const systemFileAccessLogsRoute = createRoute({
     buildModuleRouteContent(systemFileAccessLogsMeta, "FOUNDATION", <FileAccessLogsPage />),
 });
 
+// System Jobs observability (READ-ONLY) — S5-FND-JOBS-OBS-1. Gate = cặp seed THẬT mig 0435
+// (view:foundation-job — KHÔNG sensitive). Meta ở foundation/constants (nguồn CHUNG với sidebar entry).
+const systemJobsMeta: RouteMeta = SYSTEM_JOBS_ROUTE_META;
+const systemJobsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: FOUNDATION_PATH.SYSTEM_JOBS,
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(systemJobsMeta, "FOUNDATION", <SystemJobsPage />),
+});
+
 const systemUsersRoute = makeModuleRoute("/system/users", "system.users", "FOUNDATION", UsersPage);
 const systemRolesRoute = makeModuleRoute("/system/roles", "system.roles", "FOUNDATION", RolesPage);
 
@@ -1593,6 +1606,7 @@ const routeTree = rootRoute.addChildren([
   systemHealthRoute,
   systemRetentionRoute,
   systemFileAccessLogsRoute,
+  systemJobsRoute,
   systemUsersRoute,
   systemUserCreateRoute,
   systemUserDetailRoute,

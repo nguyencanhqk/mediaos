@@ -184,6 +184,15 @@ export {
   type FileAccessLogView,
   type FileAccessActionDto,
   type FileAccessLogListParams,
+  // S5-FND-JOBS-OBS-1 — System Jobs observability (READ-ONLY)
+  systemJobsApi,
+  SYSTEM_JOB_RUN_STATUSES,
+  SYSTEM_JOB_TRIGGERED_BY,
+  type SystemJobRunView,
+  type SystemJobRunStatusDto,
+  type SystemJobTriggeredByDto,
+  type SystemJobRunsQuery,
+  type SystemJobRunsListParams,
 } from "./lib/foundation-api";
 
 // Permission

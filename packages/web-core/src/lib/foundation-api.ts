@@ -10,6 +10,12 @@ import {
   type FileAccessLogView,
   type ListFileAccessLogsQuery,
   type FileAccessActionDto,
+  systemJobSummaryListResponseSchema,
+  systemJobRunListResponseSchema,
+  type SystemJobRunView,
+  type SystemJobRunsQuery,
+  type SystemJobRunStatusDto,
+  type SystemJobTriggeredByDto,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -353,10 +359,44 @@ export const fileAccessLogApi = {
     ),
 };
 
+/** Query params gửi đi cho systemJobsApi.listRuns — page-based (khớp FileAccessLogListParams convention). */
+export type SystemJobRunsListParams = Partial<SystemJobRunsQuery>;
+
+/**
+ * systemJobsApi — S5-FND-JOBS-OBS-1. Ranh giới HTTP cho /system/jobs (observability, READ-ONLY).
+ * Permission (seed THẬT mig 0435:365): view:foundation-job (KHÔNG sensitive, company-admin có sẵn qua
+ * bulk-grant). CỐ Ý KHÔNG có method trigger/run (`run:foundation-job` is_sensitive=true CHƯA có consumer
+ * HTTP — out-of-scope, xem BE SystemJobsController). DTO tái dùng THẲNG từ @mediaos/contracts (L2) —
+ * nguồn sự thật DUY NHẤT với BE. company_id KHÔNG bao giờ trong query (server resolve từ AuthContext —
+ * BẤT BIẾN #1); errorMessage đã scrub secret ở SERVER (BẤT BIẾN #3) — client chỉ render field nhận được.
+ */
+export const systemJobsApi = {
+  /** GET /foundation/system-jobs — 1 hàng/jobCode = lần chạy MỚI NHẤT (KHÔNG phân trang, tập nhỏ). */
+  listSummary: (): Promise<SystemJobRunView[]> =>
+    apiFetch("/foundation/system-jobs", systemJobSummaryListResponseSchema),
+
+  /** GET /foundation/system-jobs/:jobName/runs — lịch sử chạy của 1 job (phân trang page-based). */
+  listRuns: (jobName: string, params?: SystemJobRunsListParams): Promise<SystemJobRunView[]> =>
+    apiFetch(
+      `/foundation/system-jobs/${encodeURIComponent(jobName)}/runs${buildQueryString(params as Record<string, unknown> | undefined)}`,
+      systemJobRunListResponseSchema,
+    ),
+};
+
 export type {
   RetentionPolicyView,
   PatchRetentionPolicyDto,
   FileAccessLogView,
   FileAccessActionDto,
+  SystemJobRunView,
+  SystemJobRunStatusDto,
+  SystemJobTriggeredByDto,
+  SystemJobRunsQuery,
 };
-export { CLEANUP_ACTIONS, cleanupActionSchema, FILE_ACCESS_ACTIONS } from "@mediaos/contracts";
+export {
+  CLEANUP_ACTIONS,
+  cleanupActionSchema,
+  FILE_ACCESS_ACTIONS,
+  SYSTEM_JOB_RUN_STATUSES,
+  SYSTEM_JOB_TRIGGERED_BY,
+} from "@mediaos/contracts";
