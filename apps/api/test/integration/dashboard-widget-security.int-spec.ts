@@ -127,6 +127,132 @@ async function cleanupDashCache(direct: Pool, companyIds: string[]): Promise<voi
   ]);
 }
 
+// ── Seed helpers cho cross-tenant sweep (direct pool, bypass RLS — chỉ dựng lưới đa-tenant) ─────────
+
+async function seedOrgUnit(direct: Pool, companyId: string, name: string): Promise<string> {
+  const r = await direct.query(
+    "INSERT INTO org_units (company_id, name, type) VALUES ($1,$2,'department') RETURNING id",
+    [companyId, name],
+  );
+  return r.rows[0].id as string;
+}
+
+async function seedEmployeeProfile(
+  direct: Pool,
+  companyId: string,
+  userId: string,
+  orgUnitId?: string,
+): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO employee_profiles (company_id, user_id, org_unit_id, status)
+     VALUES ($1,$2,$3,'active') RETURNING id`,
+    [companyId, userId, orgUnitId ?? null],
+  );
+  return r.rows[0].id as string;
+}
+
+/** tasks (task_status TitleCase, task_type='office'). creatorUserId ⇒ nguồn 'created' của /my. */
+async function seedTaskRow(
+  direct: Pool,
+  opts: {
+    companyId: string;
+    creatorUserId: string;
+    title: string;
+    taskStatus: string;
+    dueAt?: string | null;
+    projectId?: string | null;
+  },
+): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO tasks (company_id, task_type, title, task_status, creator_user_id, due_at, project_id)
+     VALUES ($1,'office',$2,$3,$4,$5,$6) RETURNING id`,
+    [
+      opts.companyId,
+      opts.title,
+      opts.taskStatus,
+      opts.creatorUserId,
+      opts.dueAt ?? null,
+      opts.projectId ?? null,
+    ],
+  );
+  return r.rows[0].id as string;
+}
+
+async function seedProject(direct: Pool, companyId: string, name: string): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO projects (company_id, name, status, project_status)
+     VALUES ($1,$2,'active','Active') RETURNING id`,
+    [companyId, name],
+  );
+  return r.rows[0].id as string;
+}
+
+async function seedNotification(
+  direct: Pool,
+  companyId: string,
+  recipientUserId: string,
+  title: string,
+): Promise<void> {
+  await direct.query(
+    `INSERT INTO notifications
+       (company_id, user_id, type, body, is_read,
+        recipient_user_id, status, priority, title, short_body, notification_type, module_code, event_code)
+     VALUES ($1,$2,'general',$3,false,
+             $2,'Unread','Normal',$4,$5,'Task','TASK','TASK_ASSIGNED')`,
+    [companyId, recipientUserId, `Nội dung ${title} đủ dài cho fallback`, title, title],
+  );
+}
+
+async function seedAttendanceToday(direct: Pool, companyId: string, userId: string): Promise<void> {
+  await direct.query(
+    `INSERT INTO attendance_records (company_id, user_id, work_date, status, attendance_status)
+     VALUES ($1,$2,(now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date,'present','Present')`,
+    [companyId, userId],
+  );
+}
+
+async function seedLeaveType(direct: Pool, companyId: string, name: string): Promise<string> {
+  const r = await direct.query(
+    `INSERT INTO leave_types (company_id, name, code) VALUES ($1,$2,$3) RETURNING id`,
+    [companyId, name, `LT-${randomUUID().slice(0, 8)}`],
+  );
+  return r.rows[0].id as string;
+}
+
+async function seedPendingLeave(
+  direct: Pool,
+  opts: { companyId: string; userId: string; employeeId: string; leaveTypeId: string },
+): Promise<void> {
+  await direct.query(
+    `INSERT INTO leave_requests
+       (company_id, user_id, employee_id, leave_type_id, leave_request_code,
+        start_date, end_date, total_days, duration_type, status, submitted_at)
+     VALUES ($1,$2,$3,$4,$5,'2027-04-02','2027-04-02',1,'FullDay','Pending', now())`,
+    [
+      opts.companyId,
+      opts.userId,
+      opts.employeeId,
+      opts.leaveTypeId,
+      `LR-${randomUUID().slice(0, 8)}`,
+    ],
+  );
+}
+
+/** 8 cặp source (Company) cho 1 role ⇒ user chạm cả 7 widget mà không bị 403 (cô lập chỉ do RLS+scope). */
+async function grantAllSources(direct: Pool, roleId: string): Promise<void> {
+  const pairs: Array<[string, string, "Own" | "Company"]> = [
+    ["read", "dashboard", "Company"],
+    ["view-employee", "dashboard", "Own"],
+    ["read", "task", "Company"],
+    ["read", "notification", "Company"],
+    ["view-own", "attendance", "Company"],
+    ["view", "leave", "Company"],
+    ["read", "project", "Company"],
+    ["read", "employee", "Company"],
+  ];
+  for (const [a, r, s] of pairs) await grant(direct, roleId, a, r, s);
+}
+
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 // S1-S4 — real engine, no mocks: scope Own · cross-tenant · cache no-leak · masking-tier
 // ════════════════════════════════════════════════════════════════════════════════════════════════
@@ -489,5 +615,154 @@ describe.skipIf(!hasLaneDb)("S4-DASH-BE-2 CROWN append-only (dashboard_widget_ca
     );
     expect(still.rows.length, "row vẫn tồn tại (soft-delete, không bị xoá vật lý)").toBe(1);
     expect(still.rows[0].deleted_at, "deleted_at đã được set").not.toBeNull();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// S7 — CROSS-TENANT SWEEP: cô lập tenant chứng minh cho ĐỦ 7 slug (không chỉ my-tasks). Seed marker MỖI
+// nguồn ở company A + warm cache viewerA; viewerB (company B, cùng bộ quyền Company) KHÔNG thấy marker A ở
+// bất kỳ widget nào (RLS + data-scope + cache-key theo company/user), project-progress A-id ⇒ 404.
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+describe.skipIf(!hasLaneDb)("S4-DASH-BE-2 CROWN cross-tenant sweep (ĐỦ 7 widget slug)", () => {
+  const direct = directPool();
+  let nest: INestApplication;
+  let A: SeededTenant;
+  let B: SeededTenant;
+  const companyIds: string[] = [];
+  const email = { aViewer: "", aOwner: "", bViewer: "" };
+  const sfx = randomUUID().slice(0, 8);
+  const MARK = {
+    task: `XT-TASK-${sfx}`,
+    notif: `XT-NOTI-${sfx}`,
+    project: `XT-PROJ-${sfx}`,
+    dept: `XT-DEPT-${sfx}`,
+    leaveType: `XT-LT-${sfx}`,
+  };
+  let aProjectId = "";
+
+  beforeAll(async () => {
+    const hash = await hashedPw();
+    A = await seedCompany(direct, "dashxtA");
+    B = await seedCompany(direct, "dashxtB");
+    companyIds.push(A.companyId, B.companyId);
+
+    const roleA = await seedRole(direct, A.companyId, "dashxt-all-a");
+    await grantAllSources(direct, roleA);
+    const roleB = await seedRole(direct, B.companyId, "dashxt-all-b");
+    await grantAllSources(direct, roleB);
+
+    email.aViewer = `aviewer@${A.slug}.test`;
+    email.aOwner = `aowner@${A.slug}.test`;
+    email.bViewer = `bviewer@${B.slug}.test`;
+    const aViewer = await seedUser(direct, A.companyId, email.aViewer, hash);
+    const aOwner = await seedUser(direct, A.companyId, email.aOwner, hash);
+    const bViewer = await seedUser(direct, B.companyId, email.bViewer, hash);
+    await seedUserRole(direct, aViewer, roleA, A.companyId);
+    await seedUserRole(direct, bViewer, roleB, B.companyId);
+
+    // A marker theo TỪNG nguồn.
+    await seedEmployeeProfile(direct, A.companyId, aViewer); // attendance join của aViewer
+    const dept = await seedOrgUnit(direct, A.companyId, MARK.dept); // HR_OVERVIEW byOrgUnit marker
+    const aOwnerEmp = await seedEmployeeProfile(direct, A.companyId, aOwner, dept);
+    await seedTaskRow(direct, {
+      companyId: A.companyId,
+      creatorUserId: aViewer,
+      title: MARK.task,
+      taskStatus: "Todo",
+      dueAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+    });
+    aProjectId = await seedProject(direct, A.companyId, MARK.project);
+    for (const st of ["Todo", "Done"]) {
+      await seedTaskRow(direct, {
+        companyId: A.companyId,
+        creatorUserId: aOwner,
+        title: `${MARK.project}-${st}`,
+        taskStatus: st,
+        projectId: aProjectId,
+      });
+    }
+    await seedNotification(direct, A.companyId, aViewer, MARK.notif);
+    await seedAttendanceToday(direct, A.companyId, aViewer);
+    const aLeaveType = await seedLeaveType(direct, A.companyId, MARK.leaveType);
+    await seedPendingLeave(direct, {
+      companyId: A.companyId,
+      userId: aOwner,
+      employeeId: aOwnerEmp,
+      leaveTypeId: aLeaveType,
+    });
+
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    nest = moduleRef.createNestApplication();
+    nest.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
+    nest.useGlobalFilters(new AllExceptionsFilter());
+    await nest.init();
+  });
+
+  afterAll(async () => {
+    await cleanupDashCache(direct, companyIds);
+    await cleanupTenants(direct, companyIds);
+    await direct.end();
+    if (nest) await nest.close();
+  });
+
+  async function get(slug: string, tenant: SeededTenant, mail: string, qs = "") {
+    return api(nest)
+      .get(`/dashboard/widgets/${slug}${qs}`)
+      .set(bearer(await login(nest, tenant.slug, mail)));
+  }
+
+  // Warm cache A + sanity: viewerA THẤY data của mình (đảm bảo marker THẬT tồn tại, cô lập không phải do rỗng).
+  it("S7a viewerA (company A) thấy data A ở 7 widget (warm cache + sanity marker tồn tại)", async () => {
+    const myTasks = await get("my-tasks", A, email.aViewer);
+    expect(myTasks.status).toBe(200);
+    expect(JSON.stringify(myTasks.body.data.data).includes(MARK.task)).toBe(true);
+
+    const alerts = await get("task-alerts", A, email.aViewer);
+    expect(alerts.status).toBe(200);
+
+    const noti = await get("notifications", A, email.aViewer);
+    expect(JSON.stringify(noti.body.data.data).includes(MARK.notif)).toBe(true);
+
+    const att = await get("attendance-today", A, email.aViewer);
+    expect(att.body.data.data.summary.total).toBeGreaterThanOrEqual(1);
+
+    const leave = await get("pending-leave", A, email.aViewer);
+    expect(JSON.stringify(leave.body.data.data).includes(MARK.leaveType)).toBe(true);
+
+    const proj = await get("project-progress", A, email.aViewer, `?project_id=${aProjectId}`);
+    expect(proj.status).toBe(200);
+    expect(proj.body.data.data.summary.done).toBeGreaterThanOrEqual(1);
+
+    const hr = await get("hr-overview", A, email.aViewer);
+    expect(JSON.stringify(hr.body.data).includes(MARK.dept)).toBe(true);
+  });
+
+  // Cô lập: viewerB (company B) KHÔNG thấy BẤT KỲ marker A nào ở 6 widget self/scoped (cache A không phục vụ B).
+  it("S7b viewerB (company B) KHÔNG thấy marker A ở 6 widget (my-tasks/task-alerts/notifications/attendance/pending-leave/hr-overview)", async () => {
+    const cases: Array<[string, string]> = [
+      ["my-tasks", MARK.task],
+      ["task-alerts", MARK.task],
+      ["notifications", MARK.notif],
+      ["attendance-today", MARK.task], // self-locked ⇒ 0 record B; marker bất kỳ đều KHÔNG được xuất hiện
+      ["pending-leave", MARK.leaveType],
+      ["hr-overview", MARK.dept],
+    ];
+    for (const [slug, marker] of cases) {
+      const rb = await get(slug, B, email.bViewer);
+      expect(rb.status, `${slug} phải 200 (B có đủ quyền — cô lập bằng data, không bằng 403)`).toBe(
+        200,
+      );
+      expect(
+        JSON.stringify(rb.body.data).includes(marker),
+        `cross-tenant leak: ${slug} lộ marker A (${marker}) sang B`,
+      ).toBe(false);
+    }
+  });
+
+  // project-progress: viewerB + projectId của A ⇒ 404 (getProject RLS/scope, không lộ tồn tại) — KHÔNG data A.
+  it("S7c viewerB + project_id của A ⇒ 404 (không lộ tiến độ dự án cross-tenant)", async () => {
+    const rb = await get("project-progress", B, email.bViewer, `?project_id=${aProjectId}`);
+    expect(rb.status).toBe(404);
+    expect(JSON.stringify(rb.body).includes(MARK.project)).toBe(false);
   });
 });
