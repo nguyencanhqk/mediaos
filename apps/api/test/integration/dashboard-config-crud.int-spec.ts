@@ -1,8 +1,8 @@
 /**
- * S4-DASH-BE-3 — Dashboard widget CONFIG CRUD (HTTP, real permission engine + real DB, mig 0490).
+ * S4-DASH-BE-3 — Dashboard widget CONFIG CRUD (HTTP, real permission engine + real DB, mig 0491).
  * Cửa: GET /dashboard/configs · PATCH /dashboard/configs/:id (API-10:310, DASH-API-201/203).
  *
- * RED-first — deny-path đi đầu (§7 plan docs/plans/S4-DASH-BE-3.md). Controller THỨ TƯ trên
+ * RED-first — deny-path đi đầu (§7 plan WO S4-DASH-BE-3). Controller THỨ TƯ trên
  * @Controller("dashboard") sau DashboardController (report/…) + DashboardResolverController (me/types/…):
  * chưa hiện thực ⇒ /configs 404 (Nest không có route). Sau GREEN: 403/200/404 đúng semantics.
  *
@@ -15,7 +15,8 @@
  *     (DASH_ADMIN_ONLY_PAIRS) ⇒ deny-path 403.
  *
  * Gate hasDb && LANE_DB (memory integration-test-lane-db-gate): .env trỏ DB dev chung (hasDb=true) → CHỈ
- * chạy trên DB cô lập lane (mediaos_dashbe3 đã áp mig 0490: GRANT UPDATE + object_type), else đỏ-giả.
+ * chạy trên DB cô lập lane (mediaos_dashbe3 đã áp mig 0491: GRANT UPDATE + object_type; nối tiếp head THẬT
+ * 0490_s4_notiseed2 sau rebase/renumber), else đỏ-giả.
  */
 
 import "reflect-metadata";

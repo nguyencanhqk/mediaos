@@ -7,7 +7,7 @@ import type {
   DashboardConfigPatchDto,
 } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
-import { AuditService } from "../events/audit.service";
+import { AuditService, type AuditEntry } from "../events/audit.service";
 import { dashboardWidgetConfigs, dashboardWidgets } from "../db/schema/dashboard";
 import { DASH_CONFIG_ERR } from "./dashboard-config.errors";
 
@@ -207,28 +207,40 @@ export class DashboardConfigService {
         widgetName: existing.widgetName,
       };
 
-      await this.audit.record(tx, {
-        action: "DashboardConfigUpdated",
-        actionGroup: "CONFIG_UPDATE",
-        objectType: "dashboard_widget_config",
-        objectId: id,
-        actorUserId: actor.id,
-        actorType: "User",
-        moduleCode: "DASH",
-        entityType: "dashboard_widget_config",
-        entityId: id,
-        before: configSnapshot(existing),
-        after: configSnapshot(after),
-        oldValues: configSnapshot(existing),
-        newValues: configSnapshot(after),
-        sensitivityLevel: "Sensitive",
-        resultStatus: "Success",
-        dataScope: "Company",
-        permissionCode: "DASH.CONFIG.UPDATE",
-      });
+      await this.audit.record(tx, this.buildAuditEntry(existing, after, actor, id));
 
       return toItemDto(after);
     });
+  }
+
+  /** Dựng AuditEntry CONFIG_UPDATE (append-only, BẤT BIẾN #2) cho PATCH config — tách khỏi patch() giữ hàm
+   * < 50 dòng. Field/giá trị GIỮ NGUYÊN (thuần refactor); snapshot config-only đã bỏ updatedAt/updatedBy.
+   * AuditService mask before/after/old/new lần nữa trước insert (BẤT BIẾN #3). */
+  private buildAuditEntry(
+    before: ConfigRow,
+    after: ConfigRow,
+    actor: { id: string },
+    id: string,
+  ): AuditEntry {
+    return {
+      action: "DashboardConfigUpdated",
+      actionGroup: "CONFIG_UPDATE",
+      objectType: "dashboard_widget_config",
+      objectId: id,
+      actorUserId: actor.id,
+      actorType: "User",
+      moduleCode: "DASH",
+      entityType: "dashboard_widget_config",
+      entityId: id,
+      before: configSnapshot(before),
+      after: configSnapshot(after),
+      oldValues: configSnapshot(before),
+      newValues: configSnapshot(after),
+      sensitivityLevel: "Sensitive",
+      resultStatus: "Success",
+      dataScope: "Company",
+      permissionCode: "DASH.CONFIG.UPDATE",
+    };
   }
 
   /** UPDATE set: CHỈ field cho phép (whitelist). Key có mặt (kể cả null tường minh) → set; vắng → giữ nguyên.
