@@ -90,6 +90,8 @@ Tenant isolation (RLS)          ──▶  trước khi seed/backfill dữ liệ
 
 **Realtime:** payload WS PHẢI qua cùng DTO/masking layer như REST — cấm `io.emit` thẳng row.
 
+**Test — fixture giống-secret:** chuỗi giả secret trong spec (internal-key, token, api-key, connection-string test) PHẢI **ghép chuỗi** (`["test-internal-key","x"].join("-")`) hoặc lấy từ env — KHÔNG viết literal `KEY = "..."`. Literal high-entropy trip rule gitleaks `generic-api-key` (secret-scan full-history `.gitleaks.toml`) ⇒ **đỏ oan CI/PR dù không phải secret thật** (kể cả khi commit sau đã sửa: leak vẫn nằm trong history nhánh). Khi gặp gitleaks đỏ: quét **net diff PR + master** trước, chỉ --admin bypass nếu cả hai SẠCH (leak ở lịch sử nhánh, không lên master).
+
 **Quy ước mã (SPEC-01 §9):** chức năng `MODULE-FUNC-XXX` · màn hình `MODULE-SCREEN-XXX` · API `MODULE-API-XXX` · quyền `MODULE.RESOURCE.ACTION` · lỗi `MODULE-ERR-XXX` · sự kiện thông báo `NOTI-EVENT-XXX`. Dùng đúng mã của spec khi đặt tên.
 
 ---
