@@ -1,9 +1,25 @@
-import { Controller, Get, Param, Query, Req, UseGuards, UsePipes } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Header,
+  Param,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+  UsePipes,
+} from "@nestjs/common";
 import { ZodValidationPipe } from "nestjs-zod";
-import type { Request } from "express";
-import { hrEmployeeListQuerySchema, type HrEmployeeListQuery } from "@mediaos/contracts";
+import type { Request, Response } from "express";
+import {
+  hrEmployeeExportQuerySchema,
+  hrEmployeeListQuerySchema,
+  type HrEmployeeExportQuery,
+  type HrEmployeeListQuery,
+} from "@mediaos/contracts";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
+import { HrExportService } from "./hr-export.service";
 import { HrReadService } from "./hr-read.service";
 
 interface AuthenticatedRequest extends Request {
@@ -19,7 +35,10 @@ interface AuthenticatedRequest extends Request {
 @Controller("hr")
 @UseGuards(PermissionGuard)
 export class HrReadController {
-  constructor(private readonly hr: HrReadService) {}
+  constructor(
+    private readonly hr: HrReadService,
+    private readonly hrExport: HrExportService,
+  ) {}
 
   @Get("employees")
   @RequirePermission("read", "employee")
@@ -41,6 +60,26 @@ export class HrReadController {
   @RequirePermission("read", "employee")
   getMyProfile(@Req() req: AuthenticatedRequest) {
     return this.hr.getMyProfile(req.user);
+  }
+
+  // HR-PROFILE-UI-2 — CSV export of the scoped employee directory. Declared BEFORE "employees/:id" so
+  // Express never resolves "export" to the :id param route (route-collision guard). @Res library-mode ⇒
+  // the response bypasses ResponseEnvelopeInterceptor (CSV bytes, not a JSON envelope). Gate
+  // export:employee (isSensitive → wildcard *:* fail-closed); the service applies the SAME data-scope
+  // filter as the list + a hard row cap (422 over-cap, no truncate) + per-row PII mask.
+  @Get("employees/export")
+  @RequirePermission("export", "employee", { isSensitive: true })
+  @Header("Content-Type", "text/csv; charset=utf-8")
+  @UsePipes(new ZodValidationPipe(hrEmployeeExportQuerySchema))
+  async exportEmployees(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: HrEmployeeExportQuery,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { csv, filename } = await this.hrExport.exportEmployeesCsv(req.user, query);
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    // Send the exact UTF-8 bytes (BOM preserved) — res.send(string) would re-encode/parse.
+    res.send(Buffer.from(csv, "utf-8"));
   }
 
   @Get("employees/:id")

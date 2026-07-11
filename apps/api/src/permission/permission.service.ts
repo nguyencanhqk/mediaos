@@ -109,6 +109,13 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   // wildcard không mở; salary reveal ⟹ audit atomic). Chỉ mở CỜ HIỂN THỊ.
   "view-sensitive:employee",
   "view-salary:employee",
+  // HR-PROFILE-UI-2 — APPEND-only: FE gate nút "Xuất CSV" màn Hồ sơ nhân sự (EmployeeListPage,
+  // useCanExact export:employee). Cặp seed THẬT is_sensitive=true (mig 0491 flip false→true), grant
+  // Company CHỈ hr + company-admin. Thiếu allowlist ⇒ getAllowlistedSensitiveCapabilities KHÔNG surface ⇒
+  // nút Export ẨN với CẢ HR/company-admin dù grant thật tồn tại (bài học CAP-2/USEROPS-1/EXPORT-1).
+  // Enforcement KHÔNG đổi — @RequirePermission('export','employee',{isSensitive:true}) per-resource +
+  // data-scope Own/Team/Company áp TRƯỚC kết xuất + row cap 422 vẫn là cổng THẬT. Chỉ mở CỜ HIỂN THỊ.
+  "export:employee",
 ]);
 
 @Injectable()

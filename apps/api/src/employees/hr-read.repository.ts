@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { and, asc, desc, eq, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import type { HrEmployeeSortField } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import {
@@ -181,12 +182,32 @@ export interface HrListFilters {
   pageSize: number;
 }
 
-/** Allowlist mapping the DTO sort key → the concrete column (blocks ORDER BY injection). */
-const SORT_COLUMNS = {
+/**
+ * HR-PROFILE-UI-2 — export filter shape (same FILTER fields as the list, but NO page/pageSize: the export
+ * is a single capped pull, not a page). sort/order are resolved to a concrete default by the service.
+ */
+export interface HrExportFilters {
+  search?: string;
+  orgUnitId?: string;
+  positionId?: string;
+  status?: string;
+  sort: HrEmployeeSortField;
+  order: "asc" | "desc";
+}
+
+/**
+ * Allowlist mapping the DTO sort key → the concrete column (blocks ORDER BY injection). Keys MUST match
+ * HR_EMPLOYEE_SORT_FIELDS 1-1 (the contract enum is the guard; this map is the concrete binding). A
+ * `Record<HrEmployeeSortField, …>` type-fails at build if a new sort field lacks a column here.
+ * HR-PROFILE-UI-2: +startDate/+officialDate (directory-class join-date columns, mig 0489).
+ */
+const SORT_COLUMNS: Record<HrEmployeeSortField, PgColumn> = {
   fullName: users.fullName,
   employeeCode: employeeProfiles.employeeCode,
   status: employeeProfiles.status,
   createdAt: employeeProfiles.createdAt,
+  startDate: employeeProfiles.startDate,
+  officialDate: employeeProfiles.officialDate,
 } as const;
 
 @Injectable()
@@ -198,12 +219,16 @@ export class HrReadRepository {
    * it is ANDed with the tenant guard + soft-delete + filters so a row outside the caller's scope is
    * never returned. Returns the page rows + the total matching count (for pagination meta).
    */
-  async listScopedTx(
-    tx: TenantTx,
+  /**
+   * Build the shared WHERE for the scoped list/export: tenant guard + soft-delete + the caller's scope
+   * predicate + the optional filters (org/position/status/search). ONE source of truth so the export
+   * returns exactly the rows the list would, minus pagination (BẤT BIẾN #1: company_id is always ANDed).
+   */
+  private buildScopedWhere(
     companyId: string,
     scopeCond: SQL,
-    filters: HrListFilters,
-  ): Promise<{ rows: HrListRow[]; total: number }> {
+    filters: { search?: string; orgUnitId?: string; positionId?: string; status?: string },
+  ): SQL {
     const conditions: SQL[] = [
       eq(employeeProfiles.companyId, companyId),
       isNull(employeeProfiles.deletedAt),
@@ -221,8 +246,16 @@ export class HrReadRepository {
       );
       if (fuzzy) conditions.push(fuzzy);
     }
+    return and(...conditions) as SQL;
+  }
 
-    const where = and(...conditions);
+  async listScopedTx(
+    tx: TenantTx,
+    companyId: string,
+    scopeCond: SQL,
+    filters: HrListFilters,
+  ): Promise<{ rows: HrListRow[]; total: number }> {
+    const where = this.buildScopedWhere(companyId, scopeCond, filters);
     const sortCol = SORT_COLUMNS[filters.sort];
     const direction = filters.order === "desc" ? desc : asc;
     const offset = (filters.page - 1) * filters.pageSize;
@@ -245,6 +278,37 @@ export class HrReadRepository {
       .where(where);
 
     return { rows: rows as HrListRow[], total: Number(count) };
+  }
+
+  /**
+   * HR-PROFILE-UI-2 — scoped rows for the CSV export. Same WHERE as the list (tenant + soft-delete +
+   * scope + filters), NO pagination — the service asks for `limit` = MAX+1 rows so it can detect over-cap
+   * without a second COUNT and reject (422) BEFORE serialize (never a truncated file). The sort is fully
+   * DETERMINISTIC: the allowlisted column then `id` as a stable tiebreaker (identical inputs → identical
+   * byte order across runs). SORT_COLUMNS is an allowlist keyed by the contract enum — no raw ORDER BY.
+   */
+  async listScopedForExportTx(
+    tx: TenantTx,
+    companyId: string,
+    scopeCond: SQL,
+    filters: HrExportFilters,
+    limit: number,
+  ): Promise<HrListRow[]> {
+    const where = this.buildScopedWhere(companyId, scopeCond, filters);
+    const sortCol = SORT_COLUMNS[filters.sort];
+    const direction = filters.order === "desc" ? desc : asc;
+
+    const rows = await tx
+      .select(LIST_COLUMNS)
+      .from(employeeProfiles)
+      .leftJoin(users, eq(employeeProfiles.userId, users.id))
+      .leftJoin(orgUnits, eq(employeeProfiles.orgUnitId, orgUnits.id))
+      .leftJoin(positions, eq(employeeProfiles.positionId, positions.id))
+      .where(where)
+      .orderBy(direction(sortCol), asc(employeeProfiles.id))
+      .limit(limit);
+
+    return rows as HrListRow[];
   }
 
   /** Single employee by profile id (tenant-scoped). companyId/directManagerUserId surfaced for in-scope. */
