@@ -50,26 +50,12 @@ export const dashboardWidgetCacheMetaSchema = z.object({
 });
 export type DashboardWidgetCacheMetaDto = z.infer<typeof dashboardWidgetCacheMetaSchema>;
 
-/**
- * Response 1 widget đã fetch data (GET /dashboard/widgets/:slug, và mỗi phần tử `data` khi
- * GET /dashboard/widgets?include_data=true). `data` là container theo-widget (summary/items/quick_actions
- * — shape khác nhau mỗi widget, xem API-08 §12.x) — KHÔNG ép 1 shape chung ở tầng contract này.
- */
-export const dashboardWidgetDataSchema = z.object({
-  widget_code: z.string(),
-  /** DB-07 CHECK dashboard_widgets.widget_type: Summary/List/Chart/Calendar/Action/Alert — để string
-   * tránh trôi khỏi DB CHECK khi catalog thêm loại mới. */
-  widget_type: z.string(),
-  status: dashboardWidgetDataStatusEnum,
-  data: z.unknown().nullable(),
-  empty_state: z.unknown().nullable(),
-  error_state: dashboardWidgetErrorStateSchema.nullable(),
-  last_updated_at: z.string().nullable(),
-  cache: dashboardWidgetCacheMetaSchema.nullable(),
-});
-export type DashboardWidgetDataDto = z.infer<typeof dashboardWidgetDataSchema>;
-
-// ─── quick action (API-08 §8.4 + §5.5 — DASH KHÔNG xử lý nghiệp vụ gốc) ────────
+// ─── quick action (API-08 §8.4 + §5.5, BACKEND-10 §20 — DASH KHÔNG xử lý nghiệp vụ gốc) ────────
+//
+// DASH CHỈ phát METADATA điều hướng: `enabled`/`disabled_reason` tính từ permission NGƯỜI XEM tại tầng
+// service (PermissionService.can — KHÔNG hard-code role), action THẬT do FE gọi module gốc qua `api_endpoint`/
+// `target_url`. Đặt TRƯỚC dashboardWidgetDataSchema/widgetCatalogItemSchema vì chúng nhúng mảng này (const
+// initializer đọc top-down — tránh temporal-dead-zone khi 2 schema response tham chiếu quickActionSchema).
 
 /** UI-08 §24 QuickActionVM.method — DASH chỉ trả metadata điều hướng, KHÔNG tự thực thi nghiệp vụ gốc. */
 export const quickActionMethodEnum = z.enum(["NAVIGATE", "API_CALL", "OPEN_DRAWER", "OPEN_MODAL"]);
@@ -87,6 +73,28 @@ export const quickActionSchema = z.object({
   disabled_reason: z.string().nullable(),
 });
 export type QuickActionDto = z.infer<typeof quickActionSchema>;
+
+/**
+ * Response 1 widget đã fetch data (GET /dashboard/widgets/:slug, và mỗi phần tử `data` khi
+ * GET /dashboard/widgets?include_data=true). `data` là container theo-widget (summary/items — shape khác nhau
+ * mỗi widget, xem API-08 §12.x) — KHÔNG ép 1 shape chung ở tầng contract này. `quick_actions` là metadata điều
+ * hướng ĐỘC LẬP với `data` (tính per-viewer, KHÔNG cache — xem BACKEND-10 §20 / §8.4).
+ */
+export const dashboardWidgetDataSchema = z.object({
+  widget_code: z.string(),
+  /** DB-07 CHECK dashboard_widgets.widget_type: Summary/List/Chart/Calendar/Action/Alert — để string
+   * tránh trôi khỏi DB CHECK khi catalog thêm loại mới. */
+  widget_type: z.string(),
+  status: dashboardWidgetDataStatusEnum,
+  data: z.unknown().nullable(),
+  empty_state: z.unknown().nullable(),
+  error_state: dashboardWidgetErrorStateSchema.nullable(),
+  last_updated_at: z.string().nullable(),
+  cache: dashboardWidgetCacheMetaSchema.nullable(),
+  /** Metadata điều hướng per-viewer (§8.4) — [] khi widget không có quick action. KHÔNG bao giờ vào cache. */
+  quick_actions: z.array(quickActionSchema),
+});
+export type DashboardWidgetDataDto = z.infer<typeof dashboardWidgetDataSchema>;
 
 // ─── query GET /dashboard/widgets · /dashboard/widgets/:slug (API-08 §9.1, §11.3, §12) ────────────
 
@@ -124,6 +132,8 @@ export const widgetCatalogItemSchema = z.object({
     order: z.number().int(),
     size: z.string().optional(),
   }),
+  /** Metadata điều hướng per-viewer (§8.4/§11.3) — [] khi widget không có quick action. */
+  quick_actions: z.array(quickActionSchema),
   /** Chỉ có khi query include_data=true (§11.3) — cùng shape GET /dashboard/widgets/:slug trừ
    * widget_code/widget_type (đã có ở top-level). */
   status: dashboardWidgetDataStatusEnum.optional(),
