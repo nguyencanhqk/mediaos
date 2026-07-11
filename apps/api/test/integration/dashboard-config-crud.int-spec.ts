@@ -201,10 +201,25 @@ describe.skipIf(!hasLaneDb)("S4-DASH-BE-3 Dashboard config CRUD (HTTP)", () => {
     expect(res.status).toBe(403);
   });
 
-  it("T1 employee THIẾU update:dashboard-config → PATCH /configs/:id = 403 (không lọt xuống service)", async () => {
+  it("T1 employee THIẾU update:dashboard-config → PATCH /configs/:id = 403 (gate TRƯỚC xử lý: KHÔNG mutate, KHÔNG audit)", async () => {
     const h = bearer(await login(nest, A.slug, email.emp));
     const res = await patch(nest, patchOkCfgId, h).send({ sort_order: 99 });
     expect(res.status).toBe(403);
+    // PermissionGuard chặn TRƯỚC service ⇒ TUYỆT ĐỐI KHÔNG side-effect (fail-closed): sort_order giữ nguyên
+    // giá trị seed (10, chưa test nào mutate patchOkCfgId trước đây), KHÔNG audit CONFIG_UPDATE nào được ghi.
+    // Không guard = 200 + mutate + audit ⇒ hai assert dưới đi RED (chứng test KHÔNG false-green).
+    const row = await direct.query(
+      "SELECT sort_order FROM dashboard_widget_configs WHERE id = $1",
+      [patchOkCfgId],
+    );
+    expect(row.rows[0].sort_order).toBe(10);
+    const aud = await direct.query(
+      `SELECT 1 FROM audit_logs
+        WHERE object_type = 'dashboard_widget_config' AND object_id = $1
+          AND action_group = 'CONFIG_UPDATE'`,
+      [patchOkCfgId],
+    );
+    expect(aud.rows).toHaveLength(0);
   });
 
   it("T1 company-admin CÓ cặp → GET /configs = 200 (list envelope items[])", async () => {
