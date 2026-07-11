@@ -87,6 +87,8 @@ export * from "./platform-accounts";
 export * from "./workflow";
 export * from "./approval";
 export * from "./task";
+// S4-TASK-BE-3 (additive): Task actions crown-FSM — assign/change-status/change-priority/change-deadline/watch.
+export * from "./task-actions";
 export * from "./notification";
 // S4-NOTI-BE-1 (additive): My-Notification API (SPEC-08 §17.1/17.2) — cột MỚI (recipient_user_id/status/
 // title/…), tách khỏi ./notification (legacy G10-2 chat/device/preference contracts, KHÔNG đụng).
