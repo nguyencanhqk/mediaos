@@ -4172,7 +4172,7 @@ export const backlog = [
     title:
       "BE Task CRUD + My-tasks + filter (GET/POST /tasks, GET/PATCH/DELETE /tasks/:id, GET /tasks/my) — data-scope theo membership/assignee, validation title/project",
     zone: "yellow",
-    status: "in_progress",
+    status: "done", // PR #145 (abc0a6a) 2026-07-11 — BREAKING GET /tasks: my-tasks → /tasks/my; nợ dọn tasksApi → S4-FE-TASK-CLEANUP-1
     paths: ["apps/api/src/tasks/**", "apps/api/test/integration/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S4-TASK-BE-1"],
@@ -4708,7 +4708,7 @@ export const backlog = [
     title:
       "FE Project screens: ProjectListPage · ProjectDetailPage · ProjectFormDrawer · ProjectMemberTable (P0/P1)",
     zone: "green",
-    status: "todo",
+    status: "done", // PR #146 (e58a4eb) 2026-07-11 — routes /tasks/projects[/:projectId]; task-summary = empty-state chờ FE-TASK-2 (không client GET /tasks)
     paths: ["apps/app/src/routes/**", "apps/app/src/i18n/**", "packages/web-core/src/lib/**"],
     skills: ["code-review"],
     depends_on: ["S4-TASK-BE-1", "S4-FE-REGISTRY-1"],
@@ -4724,6 +4724,30 @@ export const backlog = [
       "Query/mutation hooks TanStack Query + invalidation; loading/error/empty state; deep link /projects/:id; masking do server (client chỉ render field nhận được)",
       "i18n vi đủ key; FE spec render + gating (thiếu quyền → Forbidden/ẩn nút)",
       "check.sh xanh; LIGHT gate (react-reviewer + quality-gate)",
+    ],
+  },
+  {
+    // Nợ ghi nhận từ PR #145 (S4-TASK-BE-2): GET /tasks đổi nghĩa (list scoped + gate read:task, DTO taskCore*),
+    // my-tasks → GET /tasks/my. tasksApi trong web-core gọi shape cũ nhưng ĐÃ xác minh 0 app import (code chết
+    // kiểu notificationApi/PR #140) — dọn để không ai vô tình dùng lại client sai contract.
+    id: "S4-FE-TASK-CLEANUP-1",
+    module: "TASK",
+    layer: "FE",
+    title:
+      "Gỡ/chuyển tasksApi legacy (web-core tasks-api.ts) — code chết gọi GET /tasks shape cũ sau BREAKING PR #145 (my-tasks → /tasks/my)",
+    zone: "green",
+    status: "todo",
+    paths: ["packages/web-core/src/lib/**", "packages/web-core/src/index.ts"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "PR #145 (S4-TASK-BE-2 — BREAKING note)",
+      "S4-FE-NOTI-CLEANUP-1 (PR #140, quy trình gỡ api chết)",
+    ],
+    done_when: [
+      "Quét lại consumer 3 app (app/console/auth) + packages chứng minh 0 import tasksApi/tasks-api (mirror quy trình PR #140); nếu phát hiện consumer sống → DỪNG, báo người",
+      "Gỡ packages/web-core/src/lib/tasks-api.ts + tasks-api.spec.ts + export ở barrel (nếu có); HOẶC nếu S4-FE-TASK-2 đã cần client thì thay bằng taskCoreApi theo GET /tasks/my + DTO taskCore* contracts — KHÔNG giữ shape cũ",
+      "pnpm --filter @mediaos/web-core build + test xanh; typecheck 3 app xanh (chứng minh không còn tham chiếu); LIGHT gate",
     ],
   },
   {
