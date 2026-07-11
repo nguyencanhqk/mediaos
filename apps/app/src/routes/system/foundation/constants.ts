@@ -37,6 +37,11 @@ export const FOUNDATION_ENGINE_PAIRS = {
   // KHÔNG tách view/manage cho system-scope, xem docs/plans/S2-FND-SYSSET-1.md RECONCILE DECISION).
   // company-admin thường KHÔNG có (chỉ per-user cấp tường minh) — ĐÚNG thiết kế, không phải bug FE.
   SYSTEM_MANAGE_SETTING: { action: "system-manage", resourceType: "foundation-setting" },
+  // S5-FND-JOBS-OBS-1 — /system/jobs (System Jobs observability, READ-ONLY). Cặp seed THẬT mig 0435:365
+  // (view:foundation-job, KHÔNG sensitive — company-admin có sẵn qua bulk-grant). `run:foundation-job`
+  // (is_sensitive=true, mig 0435:366) tồn tại trong catalog NHƯNG KHÔNG có endpoint/nút trigger ở FE
+  // (out-of-scope WO này — BE SystemJobsController chỉ có route GET).
+  VIEW_JOB: { action: "view", resourceType: "foundation-job" },
 } as const;
 
 /** Mã màn hình (SPEC-01 §9). */
@@ -50,6 +55,8 @@ export const FOUNDATION_SCREEN = {
   // S2-FE-FND-6 — FRONTEND-13 §7.1 UI-SYSTEM-SCREEN-009/014.
   RETENTION: "SYSTEM-SCREEN-RETENTION",
   FILE_ACCESS_LOGS: "SYSTEM-SCREEN-FILE-ACCESS-LOGS",
+  // S5-FND-JOBS-OBS-1
+  SYSTEM_JOBS: "SYSTEM-SCREEN-JOBS",
 } as const;
 
 /** Đường dẫn route (thêm ADDITIVE vào router + sidebar). */
@@ -64,6 +71,8 @@ export const FOUNDATION_PATH = {
   // S2-FE-FND-6
   RETENTION: "/system/retention",
   FILE_ACCESS_LOGS: "/system/file-access-logs",
+  // S5-FND-JOBS-OBS-1
+  SYSTEM_JOBS: "/system/jobs",
 } as const;
 
 /**
@@ -123,6 +132,10 @@ export const FOUNDATION_RETENTION_VIEW_PERMISSION = foundationPairToPermission(
 export const FOUNDATION_FILE_ACCESS_LOG_VIEW_PERMISSION = foundationPairToPermission(
   FOUNDATION_ENGINE_PAIRS.VIEW_FILE_ACCESS_LOG,
 );
+// S5-FND-JOBS-OBS-1
+export const FOUNDATION_JOB_VIEW_PERMISSION = foundationPairToPermission(
+  FOUNDATION_ENGINE_PAIRS.VIEW_JOB,
+);
 
 /**
  * requiredAnyPermissions cho MỖI route/sidebar — 1 mảng DUY NHẤT dùng chung cả router + sidebar.
@@ -140,6 +153,8 @@ export const FOUNDATION_RETENTION_ROUTE_PERMISSIONS: string[] = [
 export const FOUNDATION_FILE_ACCESS_LOG_ROUTE_PERMISSIONS: string[] = [
   FOUNDATION_FILE_ACCESS_LOG_VIEW_PERMISSION,
 ];
+// S5-FND-JOBS-OBS-1
+export const FOUNDATION_JOB_ROUTE_PERMISSIONS: string[] = [FOUNDATION_JOB_VIEW_PERMISSION];
 
 /**
  * S2-FE-FND-8 — /system/settings. Dùng dot-code "FOUNDATION.SETTING.SYSTEM_MANAGE" (KHÔNG derive qua
@@ -196,6 +211,21 @@ export const SYSTEM_FILE_ACCESS_LOGS_ROUTE_META: RouteMeta = {
   screenCode: FOUNDATION_SCREEN.FILE_ACCESS_LOGS,
   titleKey: "routeTitle.systemFileAccessLogs",
   requiredAnyPermissions: FOUNDATION_FILE_ACCESS_LOG_ROUTE_PERMISSIONS,
+};
+
+/**
+ * S5-FND-JOBS-OBS-1 — /system/jobs (System Jobs observability, READ-ONLY). Gate = cặp seed THẬT mig 0435
+ * (view:foundation-job — KHÔNG sensitive). route-meta VÀ sidebar entry CÙNG dùng hằng này (chống pair-drift,
+ * cùng pattern S2-FE-FND-7).
+ */
+export const SYSTEM_JOBS_ROUTE_META: RouteMeta = {
+  routeKey: "system.jobs",
+  path: FOUNDATION_PATH.SYSTEM_JOBS,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "FOUNDATION",
+  screenCode: FOUNDATION_SCREEN.SYSTEM_JOBS,
+  titleKey: "routeTitle.systemJobs",
+  requiredAnyPermissions: FOUNDATION_JOB_ROUTE_PERMISSIONS,
 };
 
 /**

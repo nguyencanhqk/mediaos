@@ -1119,6 +1119,55 @@ export default {
     },
   },
 
+  // S5-FND-JOBS-OBS-1 — /system/jobs (System Jobs observability, READ-ONLY).
+  systemJobs: {
+    title: "Nhật ký system job",
+    description:
+      "Trạng thái và lịch sử chạy các tác vụ nền hệ thống (dọn dẹp, nhắc việc…) — chỉ đọc",
+    columns: {
+      jobCode: "Tác vụ",
+      status: "Trạng thái",
+      startedAt: "Bắt đầu",
+      finishedAt: "Kết thúc",
+      duration: "Thời lượng",
+      items: "Số dòng (OK/lỗi)",
+      error: "Lỗi",
+    },
+    status: {
+      Running: "Đang chạy",
+      Success: "Thành công",
+      Failed: "Thất bại",
+      Partial: "Một phần",
+      Skipped: "Bỏ qua",
+    },
+    actions: {
+      columnHeader: "Thao tác",
+      viewHistory: "Xem lịch sử",
+    },
+    history: {
+      title: "Lịch sử chạy — {{jobCode}}",
+      close: "Đóng",
+      prev: "Trang trước",
+      next: "Trang sau",
+      empty: {
+        title: "Chưa có lịch sử",
+        description: "Tác vụ này chưa có lần chạy nào được ghi nhận.",
+      },
+    },
+    empty: {
+      title: "Chưa có system job nào chạy",
+      description: "Chưa có lịch sử chạy tác vụ nền nào được ghi nhận.",
+    },
+    error: {
+      title: "Không thể tải danh sách system job",
+      description: "Có lỗi khi tải danh sách system job. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền xem system job.",
+    },
+  },
+
   // S2-FE-FND-2 — bộ lọc dùng cho viewer Audit log.
   auditLogFilters: {
     module: "Module",

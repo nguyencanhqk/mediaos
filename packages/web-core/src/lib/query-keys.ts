@@ -525,6 +525,14 @@ export const foundationKeys = {
       [...rootKeys.foundation, "system-settings", "list", params] as const,
     detail: (key: string) => [...rootKeys.foundation, "system-settings", "detail", key] as const,
   },
+  // S5-FND-JOBS-OBS-1 — System Jobs observability (READ-ONLY). summary = GET /system-jobs (không tham
+  // số, tập job nhỏ); runs = GET /system-jobs/:jobName/runs (phân trang page-based theo jobName).
+  systemJobs: {
+    all: [...rootKeys.foundation, "system-jobs"] as const,
+    summary: () => [...rootKeys.foundation, "system-jobs", "summary"] as const,
+    runs: (jobName: string, params?: Record<string, unknown>) =>
+      [...rootKeys.foundation, "system-jobs", "runs", jobName, params] as const,
+  },
 } as const;
 
 // ── Mutation → query-key invalidation matrix (FRONTEND-04 §17.3) ──────────────
