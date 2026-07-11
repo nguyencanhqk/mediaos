@@ -1,4 +1,10 @@
-import { BadRequestException, HttpException, HttpStatus, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 
 /**
  * S4-NOTI-BE-2 (L2-engine) — mã lỗi + guard trust-boundary cho engine intake (SPEC-08 §19 slug).
@@ -13,7 +19,16 @@ export const NOTI_ENGINE_ERR = {
   EVENT_NOT_FOUND: "NOTI-ERR-EVENT-NOT-FOUND",
   TARGET_UNAVAILABLE: "NOTI-ERR-TARGET-UNAVAILABLE",
   TEMPLATE_VARIABLE_INVALID: "NOTI-ERR-TEMPLATE-VARIABLE-INVALID",
+  /** BE-4: field template PATCH chứa biến placeholder nhạy cảm bị cấm → 422 (ngữ cảnh KHÁC payload JSON). */
+  TEMPLATE_FORBIDDEN_VARIABLE: "NOTI-ERR-TEMPLATE-FORBIDDEN-VARIABLE",
 } as const;
+
+/**
+ * Placeholder `{var_name}` — cú pháp SINGLE-BRACE seed 0481 (`{task_code}`, `{actor_name}`…). NGUỒN CHUẨN
+ * DUY NHẤT (renderer import lại) để scan biến cấm (BE-4) và interpolate (engine) KHÔNG lệch cú pháp. `g`
+ * flag phục vụ matchAll (không dùng .test/.exec để tránh lệ thuộc lastIndex chia sẻ).
+ */
+export const PLACEHOLDER_RE = /\{(\w+)\}/g;
 
 /** eventCode client gửi KHÔNG tồn tại trong catalog (khác disabled — disabled là skip 200). → 404. */
 export class EventNotFoundError extends NotFoundException {
@@ -47,6 +62,21 @@ export class TemplateVariableInvalidError extends BadRequestException {
 }
 
 /**
+ * BE-4: field template (title/body/…) admin PATCH chứa biến placeholder `{password}`/`{token}`/… nhạy cảm
+ * → 422 (API-07 §14.3 rule #6). RIÊNG BIỆT TemplateVariableInvalidError (400, ngữ cảnh payload JSON keys ở
+ * engine POST /events): ngữ cảnh ở đây là NỘI DUNG template do admin soạn — status khác (422) theo done_when.
+ * Message CHỈ echo TÊN biến (là field-name, không phải giá trị secret) — an toàn.
+ */
+export class TemplateForbiddenVariableError extends UnprocessableEntityException {
+  constructor(variableName: string) {
+    super({
+      code: NOTI_ENGINE_ERR.TEMPLATE_FORBIDDEN_VARIABLE,
+      message: `Template chứa biến nhạy cảm bị cấm: {${variableName}}`,
+    });
+  }
+}
+
+/**
  * Khóa nhạy cảm CẤM xuất hiện trong `payload` (biến template client soạn). Chặn secret/PII lọt vào body
  * notification hoặc audit before/after (BẤT BIẾN #3). So khớp lowercase để không lách bằng casing.
  */
@@ -74,6 +104,27 @@ const MAX_SCAN_DEPTH = 4;
  */
 export function assertPayloadSafe(payload: unknown): void {
   scanPayload(payload, 0);
+}
+
+/**
+ * BE-4: quét các field TEXT template đang được admin PATCH — nếu chứa BIẾN PLACEHOLDER nhạy cảm
+ * (`{password}`/`{salary}`/…, khớp lowercase với SENSITIVE_PAYLOAD_KEYS) → throw 422 (loud, KHÔNG strip âm
+ * thầm). CỐ Ý quét placeholder single-brace (PLACEHOLDER_RE) chứ KHÔNG substring thô — biến template lộ
+ * secret khi RENDER chèn giá trị nhạy cảm vào body, còn từ mô tả (không phải `{var}`) thì vô hại. null/
+ * undefined field (không PATCH) bỏ qua. Ngừng NGAY ở biến cấm ĐẦU TIÊN (fail-closed) — chưa chạm DB.
+ */
+export function assertTemplateVariablesSafe(
+  fields: ReadonlyArray<string | null | undefined>,
+): void {
+  for (const text of fields) {
+    if (!text) continue;
+    for (const match of text.matchAll(PLACEHOLDER_RE)) {
+      const varName = match[1];
+      if (SENSITIVE_PAYLOAD_KEYS.has(varName.toLowerCase())) {
+        throw new TemplateForbiddenVariableError(varName);
+      }
+    }
+  }
 }
 
 function scanPayload(value: unknown, depth: number): void {

@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { PLACEHOLDER_RE } from "./notification-engine.errors";
 
 /** Field engine cần từ event để render fallback khi thiếu template. */
 export interface RenderEvent {
@@ -22,9 +23,6 @@ export interface RenderedNotification {
   /** true = template thiếu/inactive → dùng fallback (engine ghi metadata.reason='template_fallback', loud). */
   fallback: boolean;
 }
-
-/** Placeholder `{var_name}` — khớp cú pháp seed 0481 (`{task_code}`, `{actor_name}`…). */
-const PLACEHOLDER_RE = /\{(\w+)\}/g;
 
 /**
  * S4-NOTI-BE-2 (L2-engine) — render template → title/body/target_url; thiếu/inactive template → FALLBACK
