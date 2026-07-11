@@ -1,6 +1,11 @@
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
 import {
+  addWatcherSchema,
+  assignTaskSchema,
+  changeTaskDeadlineSchema,
+  changeTaskPrioritySchema,
+  changeTaskStatusSchema,
   createAttachmentIntentSchema,
   createCommentSchema,
   createLabelSchema,
@@ -73,3 +78,20 @@ export class CreateTaskCoreDto extends createZodDto(createTaskCoreSchema) {}
 
 /** PATCH /tasks/:id — cập nhật field task core (update:task, partial ≥1 field, KHÔNG đổi status). */
 export class UpdateTaskCoreDto extends createZodDto(updateTaskCoreSchema) {}
+
+// ─── S4-TASK-BE-3 — Task actions crown-FSM (assign/change-status/priority/deadline/watch) ─────────
+
+/** POST /tasks/:id/assign — giao việc Main (assign:task). */
+export class AssignTaskDto extends createZodDto(assignTaskSchema) {}
+
+/** POST /tasks/:id/change-status — đổi trạng thái qua FSM (update-status:task). */
+export class ChangeTaskStatusDto extends createZodDto(changeTaskStatusSchema) {}
+
+/** POST /tasks/:id/change-priority — đổi ưu tiên (update-priority:task). */
+export class ChangeTaskPriorityDto extends createZodDto(changeTaskPrioritySchema) {}
+
+/** POST /tasks/:id/change-deadline — đổi hạn chót (update-deadline:task). */
+export class ChangeTaskDeadlineDto extends createZodDto(changeTaskDeadlineSchema) {}
+
+/** POST /tasks/:id/watchers — tự theo dõi (watch:task, self-only MVP; body rỗng). */
+export class AddWatcherDto extends createZodDto(addWatcherSchema) {}

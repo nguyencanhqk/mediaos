@@ -25,10 +25,21 @@ export type TaskActivityAction =
   // S4-TASK-BE-2 — task core lifecycle (SPEC-06 §7.12).
   | "TASK_CREATED"
   | "TASK_UPDATED"
-  | "TASK_DELETED";
+  | "TASK_DELETED"
+  // S4-TASK-BE-3 (additive) — task actions crown-FSM (SPEC-06 §16.3 activity feed).
+  | "TASK_ASSIGNED"
+  | "TASK_ASSIGNEE_CHANGED"
+  | "TASK_STATUS_CHANGED"
+  | "TASK_PRIORITY_CHANGED"
+  | "TASK_DUE_DATE_CHANGED"
+  | "TASK_WATCHER_ADDED"
+  | "TASK_WATCHER_REMOVED";
 
-/** target_type — tập con của CHECK 0478 (Project/Member/Task). S4-TASK-BE-2 (additive): Task. */
-export type TaskActivityTargetType = "Project" | "Member" | "Task";
+/**
+ * target_type — tập con của CHECK chk_task_activity_target_type (0478:217-219). S4-TASK-BE-2 (additive):
+ * Task. S4-TASK-BE-3 (additive): Watcher / Assignee (CHECK 0478 đã cho phép — KHÔNG cần đổi DDL).
+ */
+export type TaskActivityTargetType = "Project" | "Member" | "Task" | "Watcher" | "Assignee";
 
 export interface TaskActivityEntry {
   action: TaskActivityAction;

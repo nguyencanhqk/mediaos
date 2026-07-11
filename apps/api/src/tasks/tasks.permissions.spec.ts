@@ -56,6 +56,14 @@ const GUARDED_MUTATIONS: ReadonlyArray<{
   { handlerName: "getMyTasks", action: "read", resourceType: "task" },
   { handlerName: "getTask", action: "read", resourceType: "task" },
   { handlerName: "updateTask", action: "update", resourceType: "task" },
+  // S4-TASK-BE-3: 6 route action crown-FSM — cặp seed 0485 (mục 3). employee 403 trên assign/priority/
+  // deadline là ĐÚNG THIẾT KẾ (không seed), không phải deferred → guard PHẢI khai đúng cặp.
+  { handlerName: "assignTask", action: "assign", resourceType: "task" },
+  { handlerName: "changeTaskStatus", action: "update-status", resourceType: "task" },
+  { handlerName: "changeTaskPriority", action: "update-priority", resourceType: "task" },
+  { handlerName: "changeTaskDeadline", action: "update-deadline", resourceType: "task" },
+  { handlerName: "addWatcher", action: "watch", resourceType: "task" },
+  { handlerName: "removeWatcher", action: "watch", resourceType: "task" },
 ];
 
 /**
