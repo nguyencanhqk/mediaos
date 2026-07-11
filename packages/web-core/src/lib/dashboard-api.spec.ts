@@ -6,12 +6,16 @@
  * export trực tiếp, không z.array bọc). Masking (null field) là việc server → client chỉ render field nhận.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { z } from "zod";
 import {
   dashboardSummarySchema,
   reportResponseSchema,
   mvStatsResponseSchema,
   alertsResponseSchema,
   refreshResponseSchema,
+  dashboardViewResponseSchema,
+  dashboardTypesResponseSchema,
+  dashboardWidgetDataSchema,
 } from "@mediaos/contracts";
 import { dashboardApi } from "./dashboard-api";
 import * as apiClient from "./api-client";
@@ -70,5 +74,77 @@ describe("dashboardApi — URL + schema boundary (KHÔNG company_id)", () => {
     expect(url).toBe("/dashboard/refresh");
     expect(opts?.method).toBe("POST");
     expect(schema).toBe(refreshResponseSchema);
+  });
+});
+
+describe("dashboardApi — resolver + widget DATA (S4-FE-DASH-1)", () => {
+  it("getMyDashboard → GET /dashboard/me + dashboardViewResponseSchema", async () => {
+    await dashboardApi.getMyDashboard();
+    const [url, schema] = lastCall();
+    expect(url).toBe("/dashboard/me");
+    expect(url).not.toContain("company");
+    expect(schema).toBe(dashboardViewResponseSchema);
+  });
+
+  it("getMyDashboard(limit) → forward query string", async () => {
+    await dashboardApi.getMyDashboard({ limit: 5 });
+    const [url] = lastCall();
+    expect(url).toContain("limit=5");
+  });
+
+  it("getDashboardTypes → GET /dashboard/types + dashboardTypesResponseSchema", async () => {
+    await dashboardApi.getDashboardTypes();
+    const [url, schema] = lastCall();
+    expect(url).toBe("/dashboard/types");
+    expect(schema).toBe(dashboardTypesResponseSchema);
+  });
+
+  it("getWidgetCatalog → GET /dashboard/widgets + query include_data", async () => {
+    await dashboardApi.getWidgetCatalog({ include_data: true });
+    const [url, schema] = lastCall();
+    expect(url).toContain("/dashboard/widgets");
+    expect(url).toContain("include_data=true");
+    // z.array(widgetCatalogItemSchema) tạo instance MỚI mỗi lần gọi — chỉ assert parse thành công
+    // đúng shape catalog item (KHÔNG reference-equality như schema đơn ở trên).
+    expect(() =>
+      (schema as z.ZodTypeAny).parse([
+        {
+          widget_code: "MY_TASKS",
+          widget_name: "Task của tôi",
+          widget_type: "List",
+          permission: "read:task",
+          source_modules: ["TASK"],
+          data_scope: "Own",
+          enabled: true,
+          layout: { order: 20 },
+          quick_actions: [],
+        },
+      ]),
+    ).not.toThrow();
+  });
+
+  it("getWidgetData('MY_TASKS') → GET /dashboard/widgets/my-tasks + dashboardWidgetDataSchema", async () => {
+    await dashboardApi.getWidgetData("MY_TASKS", { refresh: true });
+    const [url, schema] = lastCall();
+    expect(url).toBe("/dashboard/widgets/my-tasks?refresh=true");
+    expect(schema).toBe(dashboardWidgetDataSchema);
+  });
+
+  it("getWidgetData('TASK_ALERTS') → slug task-alerts", async () => {
+    await dashboardApi.getWidgetData("TASK_ALERTS");
+    const [url] = lastCall();
+    expect(url).toBe("/dashboard/widgets/task-alerts");
+  });
+
+  it("getWidgetData('NOTIFICATIONS') → slug notifications", async () => {
+    await dashboardApi.getWidgetData("NOTIFICATIONS");
+    const [url] = lastCall();
+    expect(url).toBe("/dashboard/widgets/notifications");
+  });
+
+  it("getWidgetData(widget chưa map slug) → throw NGAY, KHÔNG gọi apiFetch (fail-fast)", async () => {
+    const before = vi.mocked(apiClient.apiFetch).mock.calls.length;
+    expect(() => dashboardApi.getWidgetData("HR_OVERVIEW")).toThrow(/chưa có FE slug mapping/);
+    expect(vi.mocked(apiClient.apiFetch).mock.calls.length).toBe(before);
   });
 });

@@ -1,9 +1,14 @@
+import { z } from "zod";
 import {
   dashboardSummarySchema,
   reportResponseSchema,
   mvStatsResponseSchema,
   alertsResponseSchema,
   refreshResponseSchema,
+  dashboardViewResponseSchema,
+  dashboardTypesResponseSchema,
+  widgetCatalogItemSchema,
+  dashboardWidgetDataSchema,
   type DashboardSummaryDto,
   type ReportResponseDto,
   type MvStatsResponseDto,
@@ -11,9 +16,28 @@ import {
   type RefreshResponseDto,
   type ReportQueryDto,
   type MvStatsQueryDto,
+  type DashboardViewResponseDto,
+  type DashboardTypesResponseDto,
+  type WidgetCatalogItemDto,
+  type DashboardWidgetDataDto,
+  type WidgetDataQuery,
+  type DashboardWidgetListQuery,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
+
+/**
+ * S4-FE-DASH-1 — widget_code (S4-DASH-SEED-1 catalog) → dataSourceKey (slug GET /dashboard/widgets/:slug).
+ * Mirror TẠI ĐÂY apps/api/src/dashboard/dashboard-widget-catalog.const.ts (DASH_WIDGET_CATALOG[].dataSourceKey)
+ * — web-core KHÔNG import ngược từ apps/api. Chỉ liệt kê widget ĐÃ có FE component (P0: MY_TASKS/TASK_ALERTS/
+ * NOTIFICATIONS). Thêm widget mới → thêm dòng khi component tương ứng được build (P1: ATTENDANCE_TODAY/
+ * PENDING_LEAVE/PROJECT_PROGRESS/HR_OVERVIEW — chưa map, CỐ Ý).
+ */
+export const DASH_WIDGET_SLUG: Readonly<Record<string, string>> = {
+  MY_TASKS: "my-tasks",
+  TASK_ALERTS: "task-alerts",
+  NOTIFICATIONS: "notifications",
+};
 
 /**
  * DASH API client — S4-FE-REGISTRY-1 (skeleton typed, page thật = S4-FE-DASH-1).
@@ -48,4 +72,48 @@ export const dashboardApi = {
   /** POST /dashboard/refresh — làm mới MV (concurrently). Permission: manage:dashboard. */
   refresh: (): Promise<RefreshResponseDto> =>
     apiFetch("/dashboard/refresh", refreshResponseSchema, { method: "POST" }),
+
+  // ── S4-FE-DASH-1 — resolver (S4-DASH-BE-1) + widget DATA (S4-DASH-BE-2) ─────────────────────────
+  //
+  // Tách khỏi 5 method G14 phía trên (report/mv-stats/alerts/refresh/summary — aggregate cũ). Đây là API
+  // THẬT cho DashboardMePage: /dashboard/me trả SHELL nhẹ (widget metadata, data=null — "load shell trước");
+  // mỗi WidgetCard sau đó tự lazy-load data qua getWidgetData("widget lazy"). Server OMIT hẳn widget mà
+  // caller thiếu quyền khỏi mảng — client KHÔNG tự suy/hiện field bị ẩn (BẤT BIẾN #1, masking ở server).
+
+  /** GET /dashboard/me — dashboard mặc định (widget list, data=null). Permission: read:dashboard. */
+  getMyDashboard: (query?: Partial<DashboardWidgetListQuery>): Promise<DashboardViewResponseDto> =>
+    apiFetch(`/dashboard/me${buildQueryString(query ?? {})}`, dashboardViewResponseSchema),
+
+  /** GET /dashboard/types — dashboard type user được phép xem (+ is_default). Permission: read:dashboard. */
+  getDashboardTypes: (): Promise<DashboardTypesResponseDto> =>
+    apiFetch("/dashboard/types", dashboardTypesResponseSchema),
+
+  /**
+   * GET /dashboard/widgets — catalog widget khả dụng (server đã omit widget thiếu quyền). `include_data:true`
+   * kèm data từng widget trong 1 round-trip. Permission: read:dashboard (+ per-widget gate ở service).
+   */
+  getWidgetCatalog: (query?: Partial<WidgetDataQuery>): Promise<WidgetCatalogItemDto[]> =>
+    apiFetch(
+      `/dashboard/widgets${buildQueryString(query ?? {})}`,
+      z.array(widgetCatalogItemSchema),
+    ),
+
+  /**
+   * GET /dashboard/widgets/:slug — data 1 widget (lazy-load, dùng trong từng WidgetCard). `widgetCode` = mã
+   * catalog (vd "MY_TASKS") — slug resolve qua DASH_WIDGET_SLUG (fail-fast nếu widget chưa có FE mapping,
+   * tránh gọi nhầm endpoint). `query.refresh:true` bỏ qua cache hợp lệ (nút "Làm mới" từng widget).
+   */
+  getWidgetData: (
+    widgetCode: string,
+    query?: Partial<WidgetDataQuery>,
+  ): Promise<DashboardWidgetDataDto> => {
+    const slug = DASH_WIDGET_SLUG[widgetCode];
+    if (!slug) {
+      throw new Error(`[dashboardApi] widget chưa có FE slug mapping: ${widgetCode}`);
+    }
+    return apiFetch(
+      `/dashboard/widgets/${slug}${buildQueryString(query ?? {})}`,
+      dashboardWidgetDataSchema,
+    );
+  },
 };
