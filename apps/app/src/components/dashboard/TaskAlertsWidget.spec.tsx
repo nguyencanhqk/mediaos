@@ -78,7 +78,7 @@ describe("TaskAlertsWidget — data states (có read:task)", () => {
     });
   });
 
-  it("status Active → summary overdue/dueSoon + task list", async () => {
+  it("status Active → summary overdue/dueSoon + task list + footer 'Cập nhật lúc' (cache hit)", async () => {
     mockGetWidgetData.mockResolvedValue({
       widget_code: "TASK_ALERTS",
       widget_type: "Alert",
@@ -108,5 +108,55 @@ describe("TaskAlertsWidget — data states (có read:task)", () => {
       expect(screen.getByText("Task quá hạn")).toBeInTheDocument();
     });
     expect(screen.getByText("1 quá hạn · 0 sắp đến hạn")).toBeInTheDocument();
+    expect(screen.getByText(/Cập nhật lúc/i)).toBeInTheDocument();
+  });
+
+  it("status server Degraded → error state (§16.7, KHÔNG render task list)", async () => {
+    mockGetWidgetData.mockResolvedValue({
+      widget_code: "TASK_ALERTS",
+      widget_type: "Alert",
+      status: "Degraded",
+      data: null,
+      empty_state: null,
+      error_state: {
+        code: "DASH-ERR-WIDGET-DEGRADED",
+        message: "Dữ liệu tạm thời không đầy đủ",
+        source_module: "TASK",
+        retryable: true,
+      },
+      last_updated_at: null,
+      cache: null,
+      quick_actions: [],
+    });
+    renderWidget();
+    await waitFor(() => {
+      expect(screen.getByText("Dữ liệu tạm thời không đầy đủ")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /thử lại/i })).toBeInTheDocument();
+    expect(screen.queryByText(/quá hạn ·/i)).not.toBeInTheDocument();
+  });
+
+  it("status server Error (module nguồn lỗi) → error state, KHÔNG lộ stack trace", async () => {
+    mockGetWidgetData.mockResolvedValue({
+      widget_code: "TASK_ALERTS",
+      widget_type: "Alert",
+      status: "Error",
+      data: null,
+      empty_state: null,
+      error_state: {
+        code: "DASH-ERR-WIDGET-SOURCE",
+        message: "Không thể tải dữ liệu từ module Task",
+        source_module: "TASK",
+        retryable: true,
+      },
+      last_updated_at: null,
+      cache: null,
+      quick_actions: [],
+    });
+    renderWidget();
+    await waitFor(() => {
+      expect(screen.getByText("Không thể tải dữ liệu từ module Task")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /thử lại/i })).toBeInTheDocument();
   });
 });

@@ -78,7 +78,7 @@ describe("NotificationsWidget — data states (có read:notification)", () => {
     });
   });
 
-  it("status Active → unread summary + render danh sách + deep-link target_url an toàn", async () => {
+  it("status Active → unread summary + render danh sách + deep-link target_url an toàn + footer 'Cập nhật lúc' (cache hit)", async () => {
     mockGetWidgetData.mockResolvedValue({
       widget_code: "NOTIFICATIONS",
       widget_type: "List",
@@ -101,7 +101,7 @@ describe("NotificationsWidget — data states (có read:notification)", () => {
       empty_state: null,
       error_state: null,
       last_updated_at: "2026-07-11T08:00:00.000Z",
-      cache: { hit: false, ttl_seconds: 60, expires_at: "2026-07-11T08:01:00.000Z" },
+      cache: { hit: true, ttl_seconds: 60, expires_at: "2026-07-11T08:01:00.000Z" },
       quick_actions: [],
     });
     renderWidget();
@@ -111,5 +111,55 @@ describe("NotificationsWidget — data states (có read:notification)", () => {
     expect(screen.getByText("1/1 chưa đọc")).toBeInTheDocument();
     // NotificationTargetLink render <button> khi target_url an toàn (nội bộ, bắt đầu "/").
     expect(screen.getByRole("button", { name: /task sắp đến hạn/i })).toBeInTheDocument();
+    expect(screen.getByText(/Cập nhật lúc/i)).toBeInTheDocument();
+  });
+
+  it("status server Degraded → error state (§16.7, KHÔNG render danh sách thông báo)", async () => {
+    mockGetWidgetData.mockResolvedValue({
+      widget_code: "NOTIFICATIONS",
+      widget_type: "List",
+      status: "Degraded",
+      data: null,
+      empty_state: null,
+      error_state: {
+        code: "DASH-ERR-WIDGET-DEGRADED",
+        message: "Dữ liệu tạm thời không đầy đủ",
+        source_module: "NOTI",
+        retryable: true,
+      },
+      last_updated_at: null,
+      cache: null,
+      quick_actions: [],
+    });
+    renderWidget();
+    await waitFor(() => {
+      expect(screen.getByText("Dữ liệu tạm thời không đầy đủ")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /thử lại/i })).toBeInTheDocument();
+    expect(screen.queryByText(/chưa đọc/i)).not.toBeInTheDocument();
+  });
+
+  it("status server Error (module nguồn lỗi) → error state, KHÔNG lộ stack trace", async () => {
+    mockGetWidgetData.mockResolvedValue({
+      widget_code: "NOTIFICATIONS",
+      widget_type: "List",
+      status: "Error",
+      data: null,
+      empty_state: null,
+      error_state: {
+        code: "DASH-ERR-WIDGET-SOURCE",
+        message: "Không thể tải dữ liệu từ module Thông báo",
+        source_module: "NOTI",
+        retryable: true,
+      },
+      last_updated_at: null,
+      cache: null,
+      quick_actions: [],
+    });
+    renderWidget();
+    await waitFor(() => {
+      expect(screen.getByText("Không thể tải dữ liệu từ module Thông báo")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /thử lại/i })).toBeInTheDocument();
   });
 });

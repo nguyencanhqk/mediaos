@@ -88,6 +88,23 @@ describe("WidgetCard — trạng thái", () => {
   });
 });
 
+describe("WidgetCard — footer 'Cập nhật lúc' (last_updated_at, S4-FE-DASH-1-FIX)", () => {
+  it("lastUpdatedAt có giá trị → hiện footer 'Cập nhật lúc'", () => {
+    renderCard({ lastUpdatedAt: "2026-07-11T08:00:00.000Z" });
+    expect(screen.getByText(/Cập nhật lúc/i)).toBeInTheDocument();
+  });
+
+  it("lastUpdatedAt=null → KHÔNG hiện footer 'Cập nhật lúc'", () => {
+    renderCard({ lastUpdatedAt: null });
+    expect(screen.queryByText(/Cập nhật lúc/i)).not.toBeInTheDocument();
+  });
+
+  it("lastUpdatedAt=undefined (không truyền) → KHÔNG hiện footer 'Cập nhật lúc'", () => {
+    renderCard();
+    expect(screen.queryByText(/Cập nhật lúc/i)).not.toBeInTheDocument();
+  });
+});
+
 describe("WidgetCard — quick actions (§16.4: chỉ hiển thị nếu có quyền)", () => {
   const baseAction: QuickActionDto = {
     action_code: "OPEN_MY_TASKS",

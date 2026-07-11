@@ -115,13 +115,55 @@ describe("MyTasksWidget — data states (có read:task)", () => {
     });
   });
 
-  it("status Active → render danh sách task", async () => {
-    mockGetWidgetData.mockResolvedValue(ACTIVE_DTO);
+  it("status server Degraded → error state (§16.7, KHÔNG render danh sách)", async () => {
+    mockGetWidgetData.mockResolvedValue({
+      ...ACTIVE_DTO,
+      status: "Degraded",
+      error_state: {
+        code: "DASH-ERR-WIDGET-DEGRADED",
+        message: "Dữ liệu tạm thời không đầy đủ",
+        source_module: "TASK",
+        retryable: true,
+      },
+    });
+    renderWidget();
+    await waitFor(() => {
+      expect(screen.getByText("Dữ liệu tạm thời không đầy đủ")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /thử lại/i })).toBeInTheDocument();
+    expect(screen.queryByText("Viết báo cáo tuần")).not.toBeInTheDocument();
+  });
+
+  it("status server Error → error state (module nguồn lỗi, KHÔNG lộ stack trace)", async () => {
+    mockGetWidgetData.mockResolvedValue({
+      ...ACTIVE_DTO,
+      status: "Error",
+      data: null,
+      error_state: {
+        code: "DASH-ERR-WIDGET-SOURCE",
+        message: "Không thể tải dữ liệu từ module Task",
+        source_module: "TASK",
+        retryable: true,
+      },
+    });
+    renderWidget();
+    await waitFor(() => {
+      expect(screen.getByText("Không thể tải dữ liệu từ module Task")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /thử lại/i })).toBeInTheDocument();
+  });
+
+  it("status Active → render danh sách task + footer 'Cập nhật lúc' (last_updated_at, cache hit)", async () => {
+    mockGetWidgetData.mockResolvedValue({
+      ...ACTIVE_DTO,
+      cache: { hit: true, ttl_seconds: 60, expires_at: "2026-07-11T08:01:00.000Z" },
+    });
     renderWidget();
     await waitFor(() => {
       expect(screen.getByText("Viết báo cáo tuần")).toBeInTheDocument();
     });
     expect(screen.getByText("Dự án Alpha")).toBeInTheDocument();
+    expect(screen.getByText(/Cập nhật lúc/i)).toBeInTheDocument();
   });
 
   it("nút Làm mới → gọi getWidgetData('MY_TASKS', { refresh: true, ... })", async () => {
