@@ -983,6 +983,37 @@ const tasksMyTasksRoute = makeModuleRoute(
   ModulePlaceholder,
 );
 
+// S4-FE-TASK-1 — Project List (TASK-SCREEN-001) + Detail (TASK-SCREEN-003, deep link $projectId).
+import { ProjectListPage } from "@/routes/tasks/ProjectListPage";
+import { ProjectDetailPage } from "@/routes/tasks/ProjectDetailPage";
+
+const tasksProjectsRoute = makeModuleRoute(
+  "/tasks/projects",
+  "task.projects.list",
+  "TASK",
+  ProjectListPage,
+);
+
+// Project detail — no sidebar entry; path param resolved via useParams (mirror hrEmployeeDetailRoute).
+const tasksProjectDetailMeta = getMeta("task.projects.detail");
+const tasksProjectDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tasks/projects/$projectId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { projectId } = tasksProjectDetailRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      tasksProjectDetailMeta,
+      "TASK",
+      <ProjectDetailPage
+        projectId={projectId}
+        onBack={() => void navigate({ to: "/tasks/projects" as "/" })}
+      />,
+    );
+  },
+});
+
 // Notifications
 const notificationsRoute = makeModuleRoute(
   "/notifications",
@@ -1518,6 +1549,8 @@ const routeTree = rootRoute.addChildren([
   leaveAuditLogsRoute,
   tasksRoute,
   tasksMyTasksRoute,
+  tasksProjectsRoute,
+  tasksProjectDetailRoute,
   notificationsRoute,
   notificationDetailRoute,
   systemRoute,

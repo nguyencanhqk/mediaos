@@ -6,6 +6,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   numeric,
   pgTable,
   text,
@@ -15,6 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { currentCompanyDefault } from "./_helpers";
 import { companies } from "./companies";
+import { employeeProfiles } from "./employees";
 import { orgUnits, teams } from "./org";
 import { users } from "./users";
 
@@ -69,7 +71,9 @@ export const channels = pgTable(
     language: text("language"),
     targetCountry: text("target_country"),
     niche: text("niche"),
-    channelManagerId: uuid("channel_manager_id").references(() => users.id, { onDelete: "set null" }),
+    channelManagerId: uuid("channel_manager_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     primaryTeamId: uuid("primary_team_id").references(() => teams.id, { onDelete: "set null" }),
     healthStatus: text("health_status"),
     healthScore: numeric("health_score", { precision: 5, scale: 2 }),
@@ -94,7 +98,10 @@ export const channels = pgTable(
       "channels_platform_check",
       sql`platform IN ('youtube','tiktok','facebook','instagram','podcast','website')`,
     ),
-    check("channels_status_check", sql`status IN ('active','testing','paused','stopped','archived')`),
+    check(
+      "channels_status_check",
+      sql`status IN ('active','testing','paused','stopped','archived')`,
+    ),
     check(
       "channels_health_status_check",
       sql`health_status IS NULL OR health_status IN ('healthy','watching','declining','risk','paused','stopped')`,
@@ -297,7 +304,9 @@ export const projects = pgTable(
     projectType: text("project_type"),
     description: text("description"),
     ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
-    projectManagerId: uuid("project_manager_id").references(() => users.id, { onDelete: "set null" }),
+    projectManagerId: uuid("project_manager_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     startDate: date("start_date"),
     endDate: date("end_date"),
     priority: text("priority"),
@@ -306,9 +315,33 @@ export const projects = pgTable(
     // PM-1 (apps/projects, mig 0420): mã prefix Plane (displayId {IDENT}-{seq}) + bộ đếm sequence/project.
     identifier: text("identifier"),
     lastTaskSequence: integer("last_task_sequence").notNull().default(0),
+    // ── S4-TASK-BE-1 (mig 0478 §6, DB-06 §7.1): cột TitleCase MỚI additive NULLABLE — reconcile media-era → TASK.
+    // GIỮ NGUYÊN status/priority/code/identifier lowercase legacy + CHECK/unique cũ ở trên (KHÔNG nới lỏng).
+    // projectStatus/projectPriority TitleCase ≠ status/priority lowercase cũ. KHÔNG backfill (TASK-BE cut over).
+    projectCode: text("project_code"),
+    ownerEmployeeId: uuid("owner_employee_id").references(() => employeeProfiles.id, {
+      onDelete: "set null",
+    }),
+    departmentId: uuid("department_id").references(() => orgUnits.id, { onDelete: "set null" }),
+    projectPriority: text("project_priority"),
+    projectStatus: text("project_status"),
+    visibility: text("visibility"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    closedBy: uuid("closed_by").references(() => users.id, { onDelete: "set null" }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    archivedBy: uuid("archived_by").references(() => users.id, { onDelete: "set null" }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    cancelledBy: uuid("cancelled_by").references(() => users.id, { onDelete: "set null" }),
+    cancelReason: text("cancel_reason"),
+    progressPercent: numeric("progress_percent", { precision: 5, scale: 2 }),
+    metadata: jsonb("metadata"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedBy: uuid("deleted_by").references(() => users.id, { onDelete: "set null" }),
   },
   (t) => [
     index("projects_company_id_idx").on(t.companyId),
@@ -330,7 +363,36 @@ export const projects = pgTable(
     ('content_production','channel_operation','growth_campaign','recruitment',
      'training','finance','office_internal','equipment')`,
     ),
-    check("projects_priority_check", sql`priority IS NULL OR priority IN ('low','medium','high','urgent')`),
+    check(
+      "projects_priority_check",
+      sql`priority IS NULL OR priority IN ('low','medium','high','urgent')`,
+    ),
+    // ── S4-TASK-BE-1 (mig 0478 §6): CHECK + index CỘT MỚI TitleCase (NULL hợp lệ). Legacy CHECK/unique giữ nguyên.
+    uniqueIndex("uq_projects_company_project_code_active")
+      .on(t.companyId, t.projectCode)
+      .where(sql`deleted_at IS NULL AND project_code IS NOT NULL`),
+    index("idx_projects_company_project_status")
+      .on(t.companyId, t.projectStatus, t.startDate.desc())
+      .where(sql`deleted_at IS NULL`),
+    index("idx_projects_company_owner_employee")
+      .on(t.companyId, t.ownerEmployeeId, t.projectStatus)
+      .where(sql`deleted_at IS NULL`),
+    check(
+      "chk_projects_project_priority",
+      sql`project_priority IS NULL OR project_priority IN ('Low','Medium','High','Urgent')`,
+    ),
+    check(
+      "chk_projects_project_status",
+      sql`project_status IS NULL OR project_status IN ('Planning','Active','On Hold','Completed','Cancelled','Archived')`,
+    ),
+    check(
+      "chk_projects_visibility",
+      sql`visibility IS NULL OR visibility IN ('Private','Internal','Public')`,
+    ),
+    check(
+      "chk_projects_progress_percent",
+      sql`progress_percent IS NULL OR (progress_percent >= 0 AND progress_percent <= 100)`,
+    ),
   ],
 );
 
@@ -426,18 +488,53 @@ export const projectMembers = pgTable(
     startDate: date("start_date"),
     endDate: date("end_date"),
     status: text("status").notNull().default("active"),
+    // ── S4-TASK-BE-1 (mig 0478 §7, DB-06 §7.2): cột MỚI additive NULLABLE — reconcile media-era → TASK.
+    // GIỮ NGUYÊN user_id NOT NULL + status/CHECK + project_members_active_uq(company,project,user_id) legacy
+    // ở dưới (KHÔNG nới lỏng). employeeId/memberStatus/projectRole là CỘT MỚI; user→employee cut over ở TASK-BE.
+    employeeId: uuid("employee_id").references(() => employeeProfiles.id, { onDelete: "set null" }),
+    projectRole: text("project_role"),
+    memberStatus: text("member_status"),
+    joinedAt: timestamp("joined_at", { withTimezone: true }),
+    leftAt: timestamp("left_at", { withTimezone: true }),
+    invitedBy: uuid("invited_by").references(() => users.id, { onDelete: "set null" }),
+    removedBy: uuid("removed_by").references(() => users.id, { onDelete: "set null" }),
+    removeReason: text("remove_reason"),
+    metadata: jsonb("metadata"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedBy: uuid("deleted_by").references(() => users.id, { onDelete: "set null" }),
   },
   (t) => [
     index("project_members_company_id_idx").on(t.companyId),
     index("project_members_project_id_idx").on(t.projectId),
     index("project_members_user_id_idx").on(t.userId),
+    // LEGACY LIVE (KHÔNG nới lỏng): partial-unique trên user_id — guard writer cũ (S4-TASK-BE dedupe 2 unique).
     uniqueIndex("project_members_active_uq")
       .on(t.companyId, t.projectId, t.userId)
       .where(sql`deleted_at IS NULL`),
     check("project_members_status_check", sql`status IN ('active','inactive')`),
+    // ── S4-TASK-BE-1 (mig 0478 §7): partial-unique MỚI đo bằng employee_id + member_status='Active' (guard
+    // employee_id IS NOT NULL — hàng legacy employee_id NULL chưa enforce) + CHECK cột MỚI (NULL hợp lệ).
+    uniqueIndex("uq_project_members_active_employee")
+      .on(t.companyId, t.projectId, t.employeeId)
+      .where(sql`deleted_at IS NULL AND member_status = 'Active' AND employee_id IS NOT NULL`),
+    index("idx_project_members_employee_status")
+      .on(t.companyId, t.employeeId, t.memberStatus)
+      .where(sql`deleted_at IS NULL`),
+    index("idx_project_members_project_role")
+      .on(t.companyId, t.projectId, t.projectRole, t.memberStatus)
+      .where(sql`deleted_at IS NULL`),
+    check(
+      "chk_project_members_project_role",
+      sql`project_role IS NULL OR project_role IN ('Owner','Manager','Member','Viewer')`,
+    ),
+    check(
+      "chk_project_members_member_status",
+      sql`member_status IS NULL OR member_status IN ('Active','Inactive','Removed')`,
+    ),
   ],
 );
 
@@ -500,7 +597,9 @@ export const contentItems = pgTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
-    contentTypeId: uuid("content_type_id").references(() => contentTypes.id, { onDelete: "set null" }),
+    contentTypeId: uuid("content_type_id").references(() => contentTypes.id, {
+      onDelete: "set null",
+    }),
     code: text("code"),
     description: text("description"),
     ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
@@ -538,7 +637,10 @@ export const contentItems = pgTable(
     ('idea','planning','in_production','waiting_review','revision','approved',
      'scheduled','published','analyzed','cancelled')`,
     ),
-    check("content_items_priority_check", sql`priority IS NULL OR priority IN ('low','medium','high','urgent')`),
+    check(
+      "content_items_priority_check",
+      sql`priority IS NULL OR priority IN ('low','medium','high','urgent')`,
+    ),
   ],
 );
 

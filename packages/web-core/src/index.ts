@@ -85,6 +85,8 @@ export {
   hrContractsInvalidation,
   // S3-FE-ATT-4: remote-work-request mutation → list/detail invalidation.
   remoteWorkRequestInvalidation,
+  // S4-FE-TASK-1: Project mutation → list/detail/members invalidation.
+  taskProjectInvalidation,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -102,8 +104,10 @@ export { twoFactorApi } from "./lib/two-factor-api";
 // S4-FE-NOTI-1 — My-Notification API THẬT (MyNotificationsController, S4-NOTI-BE-1).
 // `notificationApi` legacy G10-2 đã xoá hẳn (S4-FE-NOTI-CLEANUP-1 — route bị gỡ ở PR #133).
 export { myNotificationApi } from "./lib/my-notification-api";
-// S4-FE-REGISTRY-1 — TASK/DASH API skeleton typed qua @mediaos/contracts (page thật = S4-FE-TASK-1/DASH-1).
-export { tasksApi } from "./lib/tasks-api";
+// tasksApi legacy (skeleton S4-FE-REGISTRY-1, shape GET /tasks cũ) đã xoá hẳn — vô hiệu sau BREAKING
+// PR #145 (GET /tasks nay = list scoped + gate read:task; my-tasks → GET /tasks/my). S4-FE-TASK-CLEANUP-1.
+// S4-FE-TASK-1 — Project CRUD + member (ProjectsController, S4-TASK-BE-1 routes ĐÃ merge).
+export { taskProjectApi } from "./lib/task-project-api";
 export { dashboardApi } from "./lib/dashboard-api";
 export { hrApi } from "./lib/hr-api";
 // S2-FE-HR-6 — Org chart (GET /org/units/tree, read mở) + HR audit-logs (tái dùng /foundation/audit-logs).

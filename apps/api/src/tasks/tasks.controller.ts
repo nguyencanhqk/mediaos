@@ -17,12 +17,20 @@ import type { Request } from "express";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import { TasksService } from "./tasks.service";
+import { TaskCoreService } from "./task-core.service";
+import { TaskActionsService } from "./task-actions.service";
 import {
+  AddWatcherDto,
+  AssignTaskDto,
+  ChangeTaskDeadlineDto,
+  ChangeTaskPriorityDto,
+  ChangeTaskStatusDto,
   CreateCommentDto,
-  CreateTaskDto,
+  CreateTaskCoreDto,
+  ListTaskCoreQueryDto,
   ListTasksQueryDto,
   PageQueryDto,
-  UpdateTaskFieldsDto,
+  UpdateTaskCoreDto,
   UpdateTaskStatusDto,
 } from "./tasks.dto";
 
@@ -40,12 +48,36 @@ interface AuthenticatedRequest extends Request {
 @Controller("tasks")
 @UsePipes(ZodValidationPipe)
 export class TasksController {
-  constructor(private readonly tasks: TasksService) {}
+  constructor(
+    private readonly tasks: TasksService,
+    // S4-TASK-BE-2 — Task core CRUD/my/list (data-scope + gate read/create/update/delete:task seed 0485).
+    private readonly taskCore: TaskCoreService,
+    // S4-TASK-BE-3 — Task actions crown-FSM (assign/change-status/priority/deadline/watch).
+    private readonly taskActions: TaskActionsService,
+  ) {}
 
-  /** GET /tasks — danh sách task được giao cho user hiện tại */
+  /**
+   * GET /tasks — danh sách task tổng quát (S4-TASK-BE-2, TASK-API-201). Data-scope theo grant thật
+   * (employee @Own · manager @Team · hr/admin @Company) + membership project; filter status/priority/
+   * assignee/project/due-range/overdue + pagination. Gate read:task (KHÁC hành vi cũ = getMyTasks mở).
+   * ⚠️ BREAKING: FE web-core tasks-api.ts phải chuyển sang GET /tasks/my (WO FE nối tiếp — xem PR desc).
+   */
   @Get()
+  @UseGuards(PermissionGuard)
+  @RequirePermission("read", "task")
+  listTasks(@Req() req: AuthenticatedRequest, @Query() query: ListTaskCoreQueryDto) {
+    return this.taskCore.listTasks(req.user, query);
+  }
+
+  /**
+   * GET /tasks/my — task của CHÍNH user (S4-TASK-BE-2, TASK-API-210): gộp 3 nguồn assigned+created+watched,
+   * sort quá-hạn-lên-đầu. Gate read:task. PHẢI khai TRƯỚC @Get(":taskId") (route tĩnh trước route tham số).
+   */
+  @Get("my")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("read", "task")
   getMyTasks(@Req() req: AuthenticatedRequest) {
-    return this.tasks.getMyTasks(req.user.companyId, req.user.id);
+    return this.taskCore.getMyTasks(req.user);
   }
 
   /**
@@ -105,15 +137,34 @@ export class TasksController {
     return this.tasks.listByTeam(req.user.companyId, teamId, page);
   }
 
-  /** POST /tasks — giao việc tay (office task ngoài workflow, G9-2 / TASK-001) */
+  /**
+   * GET /tasks/:taskId — chi tiết 1 task core (S4-TASK-BE-2, TASK-API-203). Gate read:task, cùng data-scope
+   * với list (out-of-scope → 404 nhất quán). Đặt SAU 'board'/'by-project'/'by-team'/'my' (route tĩnh trước).
+   */
+  @Get(":taskId")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("read", "task")
+  getTask(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
+    return this.taskCore.getTask(req.user, taskId);
+  }
+
+  /**
+   * POST /tasks — tạo task core (S4-TASK-BE-2, TASK-API-202). title bắt buộc, project optional (task cá nhân
+   * MVP). Gate create:task (emp/mgr HOÃN ở TASK_DEFERRED_GRANTS 0485 ⇒ chỉ hr/company-admin @Company gọi được).
+   */
   @Post()
   @UseGuards(PermissionGuard)
   @RequirePermission("create", "task")
-  createTask(@Req() req: AuthenticatedRequest, @Body() dto: CreateTaskDto) {
-    return this.tasks.createTask({ id: req.user.id, companyId: req.user.companyId }, dto);
+  createTask(@Req() req: AuthenticatedRequest, @Body() dto: CreateTaskCoreDto) {
+    return this.taskCore.createTask(req.user, dto);
   }
 
-  /** PATCH /tasks/:taskId/status — luồng rút gọn cho task office (G9-3) */
+  /**
+   * PATCH /tasks/:taskId/status — luồng rút gọn cho task office (G9-3).
+   * @deprecated S4-TASK-BE-3: ghi cột LEGACY `status` lowercase (not_started/in_progress/completed) — KHÁC
+   * cột `task_status` TitleCase của FSM mới (POST /tasks/:id/change-status). GIỮ song song (board legacy G9-3
+   * đọc `status`); hợp nhất ở WO dọn sau. KHÔNG dùng cho luồng task core mới.
+   */
   @Patch(":taskId/status")
   @UseGuards(PermissionGuard)
   @RequirePermission("update", "task")
@@ -130,31 +181,31 @@ export class TasksController {
   }
 
   /**
-   * PATCH /tasks/:taskId — cập nhật field work item (PM-1): title/description/priority/state/assignee/
-   * due/start. Gate `update:task` (reuse). Task workflow-driven bị service từ chối (FSM giữ nguyên).
+   * PATCH /tasks/:taskId — cập nhật field task core (S4-TASK-BE-2, TASK-API-204): title/description/priority/
+   * assignee/project/department/due/start. Gate update:task + data-scope; KHÔNG đổi status (action riêng).
+   * Task workflow-driven bị service từ chối 400 (FSM giữ nguyên — regression, không phá luồng chính).
    */
   @Patch(":taskId")
   @UseGuards(PermissionGuard)
   @RequirePermission("update", "task")
-  updateTaskFields(
+  updateTask(
     @Req() req: AuthenticatedRequest,
     @Param("taskId") taskId: string,
-    @Body() dto: UpdateTaskFieldsDto,
+    @Body() dto: UpdateTaskCoreDto,
   ) {
-    return this.tasks.updateTaskFields(
-      { id: req.user.id, companyId: req.user.companyId },
-      taskId,
-      dto,
-    );
+    return this.taskCore.updateTask(req.user, taskId, dto);
   }
 
-  /** DELETE /tasks/:taskId — soft-delete task office (workflow task bị từ chối) */
+  /**
+   * DELETE /tasks/:taskId — soft-delete task core (S4-TASK-BE-2, TASK-API-205). Gate delete:task (sensitive,
+   * seed 0485) + data-scope. Workflow task bị từ chối 400. BẤT BIẾN #2: chỉ set deleted_at/by (không hard-delete).
+   */
   @Delete(":taskId")
   @HttpCode(204)
   @UseGuards(PermissionGuard)
-  @RequirePermission("delete", "task")
+  @RequirePermission("delete", "task", { isSensitive: true })
   async deleteTask(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
-    await this.tasks.deleteTask({ id: req.user.id, companyId: req.user.companyId }, taskId);
+    await this.taskCore.deleteTask(req.user, taskId);
   }
 
   /** POST /tasks/:taskId/labels/:labelId — gán nhãn cho work item (idempotent). Gate `update:task`. */
@@ -210,5 +261,89 @@ export class TasksController {
     @Body() dto: CreateCommentDto,
   ) {
     return this.tasks.addComment(req.user.companyId, taskId, req.user.id, dto.body);
+  }
+
+  // ═══════════════════ S4-TASK-BE-3 — Task actions crown-FSM (append-only) ═══════════════════
+  // 6 route `:taskId/<static>` — KHÔNG va @Get(":taskId") (khác method + path dài hơn). Verb canonical
+  // SPEC-06 §16.3 TK-4 (change-status/change-priority/change-deadline). Double-gate: PermissionGuard (cặp
+  // seed 0485) + data-scope trong service (ngoài scope → 404 nhất quán). employee 403 assign/priority/
+  // deadline là ĐÚNG THIẾT KẾ seed (không cấp). Legacy PATCH /status GIỮ NGUYÊN.
+
+  /** POST /tasks/:taskId/assign (TASK-API-206) — giao việc Main. Gate assign:task. */
+  @Post(":taskId/assign")
+  @HttpCode(200)
+  @UseGuards(PermissionGuard)
+  @RequirePermission("assign", "task")
+  assignTask(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Body() dto: AssignTaskDto,
+  ) {
+    return this.taskActions.assign(req.user, taskId, dto);
+  }
+
+  /** POST /tasks/:taskId/change-status (TASK-API-207) — FSM. Gate update-status:task. */
+  @Post(":taskId/change-status")
+  @HttpCode(200)
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update-status", "task")
+  changeTaskStatus(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Body() dto: ChangeTaskStatusDto,
+  ) {
+    return this.taskActions.changeStatus(req.user, taskId, dto);
+  }
+
+  /** POST /tasks/:taskId/change-priority (TASK-API-208). Gate update-priority:task. */
+  @Post(":taskId/change-priority")
+  @HttpCode(200)
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update-priority", "task")
+  changeTaskPriority(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Body() dto: ChangeTaskPriorityDto,
+  ) {
+    return this.taskActions.changePriority(req.user, taskId, dto);
+  }
+
+  /** POST /tasks/:taskId/change-deadline (TASK-API-209). Gate update-deadline:task. */
+  @Post(":taskId/change-deadline")
+  @HttpCode(200)
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update-deadline", "task")
+  changeTaskDeadline(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Body() dto: ChangeTaskDeadlineDto,
+  ) {
+    return this.taskActions.changeDeadline(req.user, taskId, dto);
+  }
+
+  /** POST /tasks/:taskId/watchers — tự theo dõi (self-only MVP). Gate watch:task. */
+  @Post(":taskId/watchers")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("watch", "task")
+  addWatcher(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Body() _dto: AddWatcherDto,
+  ) {
+    void _dto;
+    return this.taskActions.addWatcher(req.user, taskId);
+  }
+
+  /** DELETE /tasks/:taskId/watchers/:watcherId — bỏ theo dõi (soft-remove). Gate watch:task. */
+  @Delete(":taskId/watchers/:watcherId")
+  @HttpCode(204)
+  @UseGuards(PermissionGuard)
+  @RequirePermission("watch", "task")
+  async removeWatcher(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Param("watcherId") watcherId: string,
+  ) {
+    await this.taskActions.removeWatcher(req.user, taskId, watcherId);
   }
 }

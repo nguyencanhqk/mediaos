@@ -4140,8 +4140,15 @@ export const backlog = [
     title:
       "BE Project CRUD + close/delete mềm + quản lý member (GET/POST /projects, GET/PATCH /projects/:id, close/delete, members add/update-role/remove) — withTenant, permission guard, activity log",
     zone: "yellow",
-    status: "todo",
-    paths: ["apps/api/src/tasks/**", "apps/api/test/integration/**", "packages/contracts/src/**"],
+    status: "done", // PR #144 (plan-review 2026-07-10 nâng gate LIGHT→FULL — docs/plans/S4-TASK-BE-1.md)
+    paths: [
+      "apps/api/src/tasks/**",
+      "apps/api/test/integration/**",
+      "packages/contracts/src/**",
+      // Mở rộng chủ đích (plan L1): sync Drizzle schema theo mig 0478 đã áp DB — KHÔNG migration mới.
+      "apps/api/src/db/schema/**",
+      "docs/plans/S4-TASK-BE-1.md",
+    ],
     skills: ["code-review"],
     depends_on: ["S4-TASK-SEED-1"],
     src: [
@@ -4150,11 +4157,12 @@ export const backlog = [
       "IMP02-STORY-065/066/067",
       "IMPLEMENTATION-07 §9.2/§9.3",
     ],
+    plan: "docs/plans/S4-TASK-BE-1.md",
     done_when: [
-      "GET/POST /api/v1/projects · GET/PATCH /api/v1/projects/:id · POST /:id/close · DELETE /:id (soft) · GET/POST /:id/members · PATCH/DELETE /:id/members/:memberId — mọi query qua withTenant + lọc company_id; @RequirePermission đúng cặp seed TASK-SEED-1",
-      "Business rule P0: chỉ TASK.PROJECT.CREATE mới tạo; người tạo = Owner nếu có employee mapping; KHÔNG thêm member là employee đã nghỉ/chấm dứt; KHÔNG trùng active member; project Closed/Cancelled/Archived chặn tạo task mới (trừ override)",
-      "Ghi task_activity_logs (PROJECT_CREATED/UPDATED/MEMBER_ADDED/MEMBER_REMOVED) + audit log hành động quan trọng; list có pagination/filter; DTO Zod ở packages/contracts (dual-build), validate input tại boundary",
-      "Int-spec RED-trước: deny-path (thiếu quyền tạo/sửa → 403) · cross-tenant (project/member tenant khác → 404, không lộ) · member trùng/nghỉ-việc bị chặn; check.sh xanh + LIGHT gate (typescript-reviewer + quality-gate)",
+      "GET/POST /api/v1/projects · GET/PATCH /api/v1/projects/:id · POST /:id/close · DELETE /:id (soft) · GET/POST /:id/members · PATCH/DELETE /:id/members/:memberId — mọi query qua withTenant + lọc company_id; @RequirePermission đúng cặp seed TASK-SEED-1; GET list/detail/members lọc data-scope (employee @Own membership · manager @Team · hr/admin @Company) qua DataScopeService",
+      "Business rule P0: chỉ TASK.PROJECT.CREATE mới tạo; người tạo = Owner nếu có employee mapping (set cả user_id legacy NOT NULL lẫn employee_id); KHÔNG thêm member là employee đã nghỉ/chấm dứt; employee chưa có user account → 400 fail-loud; KHÔNG trùng active member (đo cả 2 unique legacy user_id + mới employee_id); project Completed/Cancelled/Archived (cột project_status MỚI) chặn tạo task mới — MVP chặn cứng, không expose override API",
+      "Ghi task_activity_logs (PROJECT_CREATED/UPDATED/MEMBER_ADDED/MEMBER_REMOVED) + audit log hành động quan trọng; list có pagination/filter; DTO Zod ở packages/contracts (dual-build), validate input tại boundary; owner-check manager @Team = actor.employeeId === projects.owner_employee_id, NULL → 403 fail-closed",
+      "Int-spec RED-trước: deny-path (thiếu quyền tạo/sửa → 403, gồm hr thiếu pair close/delete/manage-member) · cross-tenant (project/member tenant khác → 404, không lộ) · data-scope trong-tenant (@Own membership/@Team — KHÔNG lộ project ngoài scope) · member trùng/nghỉ-việc bị chặn · append-only qua app-role; gate describe.skipIf(!(hasDb && process.env.LANE_DB)); check.sh xanh + FULL gate (permission/audit/RLS — plan-review 2026-07-10 nâng từ LIGHT; chi tiết docs/plans/S4-TASK-BE-1.md)",
     ],
   },
   {
@@ -4164,7 +4172,7 @@ export const backlog = [
     title:
       "BE Task CRUD + My-tasks + filter (GET/POST /tasks, GET/PATCH/DELETE /tasks/:id, GET /tasks/my) — data-scope theo membership/assignee, validation title/project",
     zone: "yellow",
-    status: "todo",
+    status: "done", // PR #145 (abc0a6a) 2026-07-11 — BREAKING GET /tasks: my-tasks → /tasks/my; nợ dọn tasksApi → S4-FE-TASK-CLEANUP-1
     paths: ["apps/api/src/tasks/**", "apps/api/test/integration/**", "packages/contracts/src/**"],
     skills: ["code-review"],
     depends_on: ["S4-TASK-BE-1"],
@@ -4175,10 +4183,11 @@ export const backlog = [
       "IMPLEMENTATION-07 §9.2/§9.3",
     ],
     done_when: [
-      "GET /tasks (filter status/priority/assignee/project/due-range/overdue, pagination) · POST /tasks (bắt buộc title; project optional nếu MVP cho task cá nhân) · GET/PATCH/DELETE /tasks/:id (delete = soft) · GET /tasks/my (assigned + created + watched, sort overdue-first)",
-      "Data-scope: task list/detail lọc theo DataScopeService (Own/Team/Department/Company theo grant) + membership project; assignee phải employee active thuộc phạm vi được giao; withTenant + company_id mọi query",
-      "task_activity_logs TASK_CREATED/UPDATED + audit; DTO contracts dual-build; loading/empty/error được FE dựa vào (envelope chuẩn API-01)",
-      "Int-spec RED-trước: employee chỉ thấy task trong scope (không lộ task ngoài team) · cross-tenant 404 · my-tasks đúng 3 nguồn · deny tạo task thiếu quyền; check.sh xanh + LIGHT gate",
+      "✅ GET /tasks (filter status/priority/assignee/project/due-range/overdue, pagination) · POST /tasks (bắt buộc title; project optional task cá nhân) · GET/PATCH/DELETE /tasks/:id (delete = soft-delete deleted_at/by) · GET /tasks/my (assigned+created+watched, dedupe theo id, sort overdue-first) — TaskCoreController routes + TaskCoreService + TaskCoreRepository (raw sql cho cột 0478 chưa typed — schema/** ngoài path cho phép)",
+      "✅ Data-scope: list/detail lọc DataScopeService (Own/Team/Company) + membership project (assignee-scope OR active-member EXISTS); assignee phải employee active + có tài khoản + trong phạm vi người giao (400/403 fail-loud); withTenant + company_id mọi query (raw sql bind company_id tường minh trên RLS+FORCE 0478)",
+      "✅ task_activity_logs TASK_CREATED/UPDATED/DELETED target_type='Task' (append-only) + AuditService objectType='task'; DTO taskCore* APPEND contracts dual-build (KHÔNG rewrite export cũ); envelope API-01",
+      "✅ Int-spec 13 xanh trên LANE_DB cô lập (task-core.int-spec.ts): data-scope emp/mgr/admin · cross-tenant 404 · out-of-scope 404 · my-tasks 3 nguồn+dedupe+overdue · deny create emp/mgr (deferred 0485) · assignee resigned/terminated/inactive/deleted/no-account 400 · workflow task PATCH/DELETE 400 · append-only ledger deny; typecheck xanh; tasks.permissions.spec cập nhật (getMyTasks nay gate read:task, delete:task sensitive)",
+      "OUT-OF-SCOPE (WO nối tiếp): (a) FE web-core tasks-api.ts getMyTasks() gọi GET /tasks legacy shape → PHẢI chuyển GET /tasks/my (BREAKING — GET /tasks nay là list scoped + DTO taskCore* + gate read:task); (b) POST/DELETE watcher (watch:task seed 0485 dormant) — my-tasks CHỈ đọc watched, seed watcher qua SQL; (c) /tasks/board·by-project·by-team giữ pair-gate-only KHÔNG data-scope (gap S4-TASK-SEED-1); (d) update-status:task action riêng (S4-TASK-BE-3); (e) create/update:task cho emp/mgr vẫn HOÃN (TASK_DEFERRED_GRANTS) — 403 hôm nay ĐÚNG, scope-check đã impl fail-closed sẵn sàng khi grant mở",
     ],
   },
   {
@@ -4210,6 +4219,7 @@ export const backlog = [
       "FSM status hợp lệ: Todo→In Progress→In Review→Done/Cancelled (transition table tường minh, chặn nhảy trạng thái sai → mã lỗi SPEC-06); Done có thể đòi checklist hoàn thành nếu config bật; ghi task_activity_logs TASK_ASSIGNED/STATUS_CHANGED/PRIORITY_CHANGED/DUE_DATE_CHANGED",
       "Phát event chuẩn qua outbox theo Event code registry §9.5 (TASK_ASSIGNED/TASK_ASSIGNEE_CHANGED/TASK_STATUS_CHANGED/TASK_PRIORITY_CHANGED/TASK_DUE_DATE_CHANGED) — payload KHÔNG chứa dữ liệu nhạy cảm; wiring consumer thực ở S4-INT-1",
       "Int-spec RED-trước: transition không hợp lệ → 4xx + không đổi state · gán ngoài scope/tenant → deny · watcher trùng bị chặn · actor không tự nhận notify (chuẩn bị INT) · activity log ghi đúng; FULL gate security-reviewer + plan-reviewer PASS trước code (crown)",
+      "GHI CHÚ ACCEPTANCE (plan-review 2026-07-11 OQ#1, PR #150): route THỰC = POST /:id/change-status · /change-priority · /change-deadline (verb canonical SPEC-06 §16.3/API-06 §14 — done_when dòng 1 là shorthand); watcher SELF-ONLY (không nhận employee_id body); QA map test theo tên canonical, KHÔNG báo lệch.",
     ],
   },
   {
@@ -4294,6 +4304,34 @@ export const backlog = [
       "Int-spec: seed idempotent chạy lại; event/template khớp registry (không mã lạ); admin thấy cặp config NOTI qua /auth/me; HR + employee KHÔNG có cặp config (deny-path). POSITIVE test BẮT BUỘC: MỖI role canonical (employee/manager/hr/company-admin/super-admin) thực sự NHẬN được own-notification @Own qua getCapabilities — deny-path một mình KHÔNG bắt được lỗi grant 0 row.",
       "Bảng notification_events/templates tạo ở mig 0479 với company_id NULLABLE (NULL = global) và app role chỉ có SELECT ⇒ seed global rows PHẢI chạy qua table-owner (migration), KHÔNG qua app role.",
       "Gate int-spec = hasDb && LANE_DB (chỉ .env → hasDb=true = đỏ-giả). SỐ MIGRATION: chạy `ls apps/api/migrations/*.sql | tail -1` ngay trước khi tạo file, KHÔNG hard-code. FULL gate security-reviewer + database-reviewer PASS",
+    ],
+  },
+  {
+    // Nợ từ plan-review S4-TASK-BE-3 (PR #150, 2026-07-11): catalog 0481 LỆCH Event code registry §9.5 —
+    // thiếu TASK_PRIORITY_CHANGED; seed TASK_DEADLINE_CHANGED ≠ canonical TASK_DUE_DATE_CHANGED;
+    // TASK_ASSIGNEE_CHANGED enabled=false + không template. BE-3 phát mã CANONICAL ⇒ không vá trước INT-1
+    // = catalog lookup miss = notification priority/deadline IM LẶNG (đúng lớp bug TASK_MENTIONED).
+    id: "S4-NOTI-SEED-2",
+    module: "NOTI",
+    layer: "DB",
+    title:
+      "Vá catalog notification_events khớp registry §9.5 cho event TASK (BE-3): thêm TASK_PRIORITY_CHANGED · đổi TASK_DEADLINE_CHANGED→TASK_DUE_DATE_CHANGED · template + enable TASK_ASSIGNEE_CHANGED — BẮT BUỘC TRƯỚC S4-INT-1",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/migrations/**", "docs/plans/S4-NOTI-SEED-2.md"],
+    skills: ["code-review"],
+    depends_on: ["S4-TASK-BE-3"],
+    src: [
+      "IMPLEMENTATION-07 §9.5 (Event code registry — nguồn canonical)",
+      "mig 0481 (catalog hiện trạng, dòng 78-97)",
+      "docs/plans/S4-TASK-BE-3.md §4 + §11 ĐK-2 (đối chiếu drift đã verify)",
+      "PR #150 (payload thật BE-3 phát)",
+    ],
+    done_when: [
+      "Migration đánh số nối tiếp head THẬT (`ls apps/api/migrations/*.sql | tail -1` ngay trước khi tạo — KHÔNG hard-code): INSERT event TASK_PRIORITY_CHANGED idempotent (ON CONFLICT DO NOTHING); xử lý TASK_DEADLINE_CHANGED→TASK_DUE_DATE_CHANGED bằng UPDATE code trên row hiện có NẾU chưa có row canonical + không FK nào trỏ tới (kiểm notifications tham chiếu trước); nếu đã có cả hai → giữ canonical, disable row cũ. KHÔNG DELETE (append-safe).",
+      "Template IN_APP cho TASK_PRIORITY_CHANGED / TASK_DUE_DATE_CHANGED / TASK_ASSIGNEE_CHANGED mirror chuẩn 0481: locale 'vi-VN' (KHÔNG 'vi'), body_template NOT NULL, status='Active', is_default=true; enable (is_enabled=true) cho 3 mã này; các mã khác GIỮ NGUYÊN trạng thái",
+      "variables_schema khớp payload THẬT BE-3 phát (đọc task-actions.service.ts: taskId/taskTitle/taskCode/actorUserId/fromStatus/toStatus/oldPriority/newPriority/oldDueAt/newDueAt) — đối chiếu code, không suy đoán",
+      "Int-spec (gate hasDb && LANE_DB): catalog sau migrate có ĐỦ 5 mã canonical §9.5 của BE-3 ở trạng thái enabled + resolver template tìm được từng mã; chạy lại idempotent; FULL gate security-reviewer + database-reviewer PASS",
     ],
   },
   {
@@ -4398,6 +4436,68 @@ export const backlog = [
       "Reminder job TASK_DUE_SOON (sắp đến hạn) + TASK_OVERDUE (quá hạn) mức scheduled cơ bản qua scheduler hiện có: quét task đến hạn → phát event registry §9.5 → intake S4-NOTI-BE-2 tạo notification cho assignee (+manager nếu cấu hình overdue); idempotent, không gửi trùng trong ngày",
       "DTO contracts dual-build; job chạy lại an toàn (dedupe theo entity+ngày)",
       "Int-spec: employee không config được (403) · job phát đúng recipient · không gửi trùng; check.sh xanh + LIGHT gate",
+    ],
+    // PHIÊN 2026-07-10 (lane notibe3) — SHIP MỘT PHẦN, CÒN LẠI BLOCKED (needs_human):
+    //   Đã xong: (1) CAP-2 fix — 6 cặp NOTI config APPEND vào SENSITIVE_CAPABILITY_ALLOWLIST
+    //   (permission.service.ts) + test /auth/me (auth-me-capabilities.int.spec.ts, describe S4-NOTI-BE-3).
+    //   (2) GET /notifications/events (list, filter module_code/event_code/enabled/search) · GET
+    //   /notifications/templates/:id (chi tiết) · GET /notifications/delivery-logs (list) —
+    //   notification-admin.controller.ts, @RequirePermission đúng 3/6 cặp view (config/template/
+    //   delivery-log). (3) Reminder job TASK_DUE_SOON/TASK_OVERDUE — task-reminder.job-handler.ts
+    //   (@SystemJobHandler, quét tasks task_type='office'), dedupe idempotent qua DEFAULT_DEDUPE
+    //   'DedupeKey' (notification-dedupe.const.ts) — dedupeKey="<taskId>:<ngày UTC>". Test:
+    //   notification-admin-config.int-spec.ts + task-reminder-job.int-spec.ts (RED-trước xác nhận).
+    //
+    //   BLOCKED (KHÔNG làm được trong lane này — cấm tạo migration): PATCH /notifications/events/:id
+    //   (bật/tắt event) + PATCH /notifications/templates/:id (sửa template). Ghi company-override đòi
+    //   GRANT INSERT,UPDATE MỚI trên notification_events/notification_templates cho mediaos_app — hiện
+    //   CHỈ có GRANT SELECT (migration 0479/0481/0482, comment sẵn "write company-override →
+    //   S4-NOTI-BE-3"). Đây là DDL (GRANT), không biểu diễn được bằng code app — cần 1 migration nối
+    //   tiếp head (band kế 0486+) TRƯỚC khi 1 lane BE khác build 2 route PATCH này. update:notification-
+    //   template cũng cần validate biến cấm (password/salary/token/…) theo API-07 §14.3 business rule #6
+    //   khi implement PATCH thật.
+    //   THỨ TỰ ĐÚNG: (a) migration nhỏ GRANT INSERT,UPDATE ON notification_events, notification_templates
+    //   TO mediaos_app (KHÔNG đổi RLS — policy nullable-tenant 0479 đã cho WITH CHECK company_id=GUC) →
+    //   (b) WO PATCH kế thừa notification-admin.controller.ts (đã có scaffold GET + tuple pin) thêm 2 route
+    //   PATCH + audit (object_type 'notification' tái dùng, KHÔNG cần CHECK mới).
+  },
+  {
+    id: "S4-NOTI-BE-4",
+    module: "NOTI",
+    layer: "BE",
+    title:
+      "NOTI admin config WRITE: migration GRANT-only (INSERT,UPDATE notification_events + notification_templates cho app role) + PATCH /notifications/events/:id (bật/tắt) + PATCH /templates/:id — hoàn tất phần blocked của S4-NOTI-BE-3",
+    zone: "red",
+    status: "done",
+    // PHIÊN 2026-07-11 (lane notibe4) — SHIP: mig 0487 (GRANT INSERT,UPDATE app trên notification_events +
+    //   notification_templates; KHÔNG DDL khác, KHÔNG đổi RLS, KHÔNG DELETE). PATCH /notifications/events/:id
+    //   (bật/tắt = INSERT company-override; KHÔNG UPDATE row global) + PATCH /notifications/templates/:id (sửa
+    //   nội dung = company-override). Rẽ nhánh theo sourceRow.companyId (KHÔNG suy theo id lẻ); SAVEPOINT chống
+    //   đua 23505. assertTemplateVariablesSafe (placeholder {password}/{token}/… → 422 TRƯỚC khi chạm DB).
+    //   Audit (object_type 'notification', action notification_config_updated/notification_template_updated)
+    //   CÙNG withTenant tx với upsert. Int-spec RED-trước: notification-admin-write.int-spec.ts (7 test — migration
+    //   smoke grant/RLS · employee 403 · toggle 2 chiều · biến cấm 422 · override hợp lệ · cross-tenant B · 404).
+    //   14/14 test 2 file admin xanh trên mediaos_notibe4.
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/notifications/**",
+      "apps/api/test/integration/**",
+      "packages/contracts/src/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S4-NOTI-BE-3"],
+    src: [
+      "Ghi chú inline S4-NOTI-BE-3 (phiên 2026-07-10 — lý do blocked + thứ tự đúng, ngay phía trên)",
+      "apps/api/src/notifications/notification-admin.controller.ts (scaffold GET + tuple pin sẵn)",
+      "API-07 §14.3 (business rule #6 — biến cấm trong template)",
+      "migrations 0479/0481/0482 (comment 'write company-override → S4-NOTI-BE-3', GRANT SELECT-only)",
+    ],
+    done_when: [
+      "Migration đánh số nối tiếp head thật (đọc apps/api/migrations/meta/_journal.json lấy idx/when thật, when +5000): CHỈ `GRANT INSERT, UPDATE ON notification_events, notification_templates TO mediaos_app` — KHÔNG DDL khác, KHÔNG đổi RLS/policy (policy nullable-tenant 0479 đã WITH CHECK company_id=GUC — verify lại trước khi tin), KHÔNG grant DELETE (config là toggle/override, không xoá)",
+      "PATCH /notifications/events/:id (bật/tắt = ghi company-override row, TUYỆT ĐỐI KHÔNG UPDATE row global company_id IS NULL) + PATCH /notifications/templates/:id trên scaffold notification-admin.controller.ts; @RequirePermission update:notification-config / update:notification-template — tuple đã pin trong notification-event-catalog.const.ts và ĐÃ nằm trong SENSITIVE_CAPABILITY_ALLOWLIST từ BE-3, KHÔNG append thêm",
+      "PATCH template validate biến cấm theo API-07 §14.3 rule #6 (password/salary/token/…): payload chứa biến cấm → 422, KHÔNG ghi DB",
+      "Audit log khi đổi cấu hình (tái dùng object_type 'notification' — KHÔNG cần migration CHECK mới); withTenant mọi query; DTO contracts dual-build",
+      "Int-spec RED-trước (gate hasDb && LANE_DB): employee PATCH → 403 · admin toggle event → GET events phản ánh override còn row global KHÔNG đổi · template biến cấm → 422 · cross-tenant: override company A không rò sang company B; FULL gate security-reviewer + database-reviewer PASS",
     ],
   },
   {
@@ -4527,6 +4627,36 @@ export const backlog = [
       "DTO contracts dual-build; envelope API-01; widget list có limit",
       "Int-spec RED-trước: employee KHÔNG thấy widget Manager/HR · cross-tenant deny · dashboard/me trả đúng type theo quyền; FULL gate security-reviewer + plan-reviewer PASS trước code (crown)",
     ],
+    // PHIÊN 2026-07-10 (lane dashbe1) — CODE XONG (WIP 3c769f7, nhánh auto/S4-DASH-BE-1): 15/18 int-spec
+    // xanh gồm đủ thuộc tính crown (M10 gate tầng-2 hai chiều, M6 cross-tenant, deny-403, 404, limit).
+    // 3 spec đỏ KHÔNG phải lỗi code: role manager/hr THIẾU grant read:dashboard (gate /me + /types) —
+    // seed-drift: 0100 blanket CROSS JOIN chạy TRƯỚC khi manager/hr sinh ra ở 0444. Owner chốt 2026-07-11:
+    // backfill bằng WO S4-DASH-SEED-2 (dưới) rồi rerun 3 spec → chốt PR lane này. KHÔNG đổi gate design
+    // (phương án OR view-* bị bác — làm DASH-ERR-DASHBOARD_NOT_RESOLVED 404 không bắn được qua HTTP).
+  },
+  {
+    id: "S4-DASH-SEED-2",
+    module: "DASH",
+    layer: "DB",
+    title:
+      "Backfill grant read:dashboard cho role manager + hr (role sinh ở 0444 lỡ blanket 0100) — mở khóa GET /dashboard/me|/types cho 2/4 persona, blocker của S4-DASH-BE-1",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/migrations/**", "apps/api/test/integration/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Phát hiện bởi lane S4-DASH-BE-1 (2026-07-10): 3 int-spec đỏ — /dashboard/me|/types 403 cho manager/hr; xác minh psql: read:dashboard chỉ có ở 10 role cũ (mig 0005), manager/hr vắng",
+      "apps/api/migrations/0100_g14_dashboard_permissions_seed.sql (blanket CROSS JOIN gốc)",
+      "apps/api/migrations/0444_* (S2-AUTH-SEED-1 — nơi sinh role manager/hr)",
+      "apps/api/test/integration/task-recon-grants.int-spec.ts (mẫu int-spec assert grant per-pair)",
+    ],
+    done_when: [
+      "OWNER CHỐT 2026-07-11 (phương án 1, bác phương án đổi gate): migration đánh số nối tiếp head thật (đọc _journal.json — sau 0487 → mint 0488, when +5000): INSERT idempotent role_permissions effect='ALLOW' cho role GLOBAL manager + hr × permission (action='read', resource_type='dashboard') — resolve role_id/permission_id trong DO-block per-pair (mirror 0444/0480/0486, KHÔNG blanket CROSS JOIN mới), ON CONFLICT DO NOTHING, KHÔNG DDL. data_scope: SELECT giá trị 0100 đã set cho role cũ (employee/company-admin) rồi mirror ĐÚNG — KHÔNG bịa (bài học §13 per-pair scope)",
+      "Rà 3 blanket còn lại tiền-0444 (0063/0101/0132): liệt kê cặp manager/hr cũng lỡ vào COMMENT migration — CHỈ backfill read:dashboard ở WO này, cặp khác thuộc domain park (report/approval legacy) KHÔNG grant khi chưa có yêu cầu nghiệp vụ (fail-closed)",
+      "Int-spec RED-trước kiểu task-recon-grants (gate hasDb && LANE_DB): (a) manager + hr có grant (read,dashboard) sau migration · (b) chạy lại idempotent — grant-count không đổi · (c) snapshot role_permissions trước/sau: đúng +2 row, KHÔNG role/permission nào khác bị đụng · (d) PermissionService.can('read','dashboard') = allow cho user gắn role manager/hr",
+      "Ghi chú quy trình vào comment migration: role mới tạo sau này PHẢI backfill blanket-grant tiền nhiệm (bài học 0100↔0444); FULL gate security-reviewer + database-reviewer PASS",
+    ],
   },
   {
     id: "S4-DASH-BE-2",
@@ -4575,7 +4705,7 @@ export const backlog = [
       "docs/plans/S4-INT-1.md",
     ],
     skills: ["code-review"],
-    depends_on: ["S4-TASK-BE-3", "S4-TASK-BE-4", "S4-NOTI-BE-2"],
+    depends_on: ["S4-TASK-BE-3", "S4-TASK-BE-4", "S4-NOTI-BE-2", "S4-NOTI-SEED-2"],
     src: [
       "ISSUE-BOARD-01 §18 (INT)",
       "IMP02-STORY-102",
@@ -4646,7 +4776,7 @@ export const backlog = [
     title:
       "FE Project screens: ProjectListPage · ProjectDetailPage · ProjectFormDrawer · ProjectMemberTable (P0/P1)",
     zone: "green",
-    status: "todo",
+    status: "done", // PR #146 (e58a4eb) 2026-07-11 — routes /tasks/projects[/:projectId]; task-summary = empty-state chờ FE-TASK-2 (không client GET /tasks)
     paths: ["apps/app/src/routes/**", "apps/app/src/i18n/**", "packages/web-core/src/lib/**"],
     skills: ["code-review"],
     depends_on: ["S4-TASK-BE-1", "S4-FE-REGISTRY-1"],
@@ -4662,6 +4792,30 @@ export const backlog = [
       "Query/mutation hooks TanStack Query + invalidation; loading/error/empty state; deep link /projects/:id; masking do server (client chỉ render field nhận được)",
       "i18n vi đủ key; FE spec render + gating (thiếu quyền → Forbidden/ẩn nút)",
       "check.sh xanh; LIGHT gate (react-reviewer + quality-gate)",
+    ],
+  },
+  {
+    // Nợ ghi nhận từ PR #145 (S4-TASK-BE-2): GET /tasks đổi nghĩa (list scoped + gate read:task, DTO taskCore*),
+    // my-tasks → GET /tasks/my. tasksApi trong web-core gọi shape cũ nhưng ĐÃ xác minh 0 app import (code chết
+    // kiểu notificationApi/PR #140) — dọn để không ai vô tình dùng lại client sai contract.
+    id: "S4-FE-TASK-CLEANUP-1",
+    module: "TASK",
+    layer: "FE",
+    title:
+      "Gỡ/chuyển tasksApi legacy (web-core tasks-api.ts) — code chết gọi GET /tasks shape cũ sau BREAKING PR #145 (my-tasks → /tasks/my)",
+    zone: "green",
+    status: "todo",
+    paths: ["packages/web-core/src/lib/**", "packages/web-core/src/index.ts"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "PR #145 (S4-TASK-BE-2 — BREAKING note)",
+      "S4-FE-NOTI-CLEANUP-1 (PR #140, quy trình gỡ api chết)",
+    ],
+    done_when: [
+      "Quét lại consumer 3 app (app/console/auth) + packages chứng minh 0 import tasksApi/tasks-api (mirror quy trình PR #140); nếu phát hiện consumer sống → DỪNG, báo người",
+      "Gỡ packages/web-core/src/lib/tasks-api.ts + tasks-api.spec.ts + export ở barrel (nếu có); HOẶC nếu S4-FE-TASK-2 đã cần client thì thay bằng taskCoreApi theo GET /tasks/my + DTO taskCore* contracts — KHÔNG giữ shape cũ",
+      "pnpm --filter @mediaos/web-core build + test xanh; typecheck 3 app xanh (chứng minh không còn tham chiếu); LIGHT gate",
     ],
   },
   {

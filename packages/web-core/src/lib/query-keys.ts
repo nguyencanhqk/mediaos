@@ -384,8 +384,23 @@ export const taskKeys = {
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.tasks, "projects", "list", params] as const,
     detail: (id: string) => [...rootKeys.tasks, "projects", "detail", id] as const,
+    // S4-FE-TASK-1 — APPEND: thành viên dự án (ProjectMemberTable), tách khỏi detail vì mutate
+    // riêng (add/update-role/remove member KHÔNG đổi payload getProject).
+    members: (id: string) => [...rootKeys.tasks, "projects", "members", id] as const,
   },
   comments: (taskId: string) => [...rootKeys.tasks, "comments", taskId] as const,
+};
+
+// S4-FE-TASK-1 — invalidation cho mutation Project (create/update/close/delete + member add/update-role/
+// remove). `taskProjectListPrefix` là PREFIX 3-phần tử (bỏ slot params) — khớp MỌI biến thể filter/offset
+// (partial-match TanStack Query so từng phần tử theo vị trí; key có object params cụ thể sẽ KHÔNG khớp
+// filter khác — mirror notificationListPrefix ở dưới).
+const taskProjectListPrefix = [...taskKeys.projects.all, "list"] as const;
+
+export const taskProjectInvalidation = {
+  list: () => [taskProjectListPrefix] as const,
+  detail: (id: string) => [taskProjectListPrefix, taskKeys.projects.detail(id)] as const,
+  members: (id: string) => [taskKeys.projects.detail(id), taskKeys.projects.members(id)] as const,
 };
 
 // ── Notification keys ─────────────────────────────────────────────────────────

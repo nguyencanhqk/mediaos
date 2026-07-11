@@ -126,17 +126,19 @@ export class TasksRepository {
 
   /** Query nền dùng chung: SELECT + 4 LEFT JOIN (workflow_steps/content_items/projects/project_states). */
   private baseQuery(tx: TenantTx) {
-    return tx
-      .select(TASK_COLUMNS)
-      .from(tasks)
-      .leftJoin(workflowSteps, eq(tasks.workflowStepId, workflowSteps.id))
-      .leftJoin(contentItems, eq(tasks.contentItemId, contentItems.id))
-      .leftJoin(projects, eq(tasks.projectId, projects.id))
-      // PM-1: state tùy biến — LEFT JOIN cùng tenant (eq(company_id) defense-in-depth ngoài RLS).
-      .leftJoin(
-        projectStates,
-        and(eq(tasks.stateId, projectStates.id), eq(projectStates.companyId, tasks.companyId)),
-      );
+    return (
+      tx
+        .select(TASK_COLUMNS)
+        .from(tasks)
+        .leftJoin(workflowSteps, eq(tasks.workflowStepId, workflowSteps.id))
+        .leftJoin(contentItems, eq(tasks.contentItemId, contentItems.id))
+        .leftJoin(projects, eq(tasks.projectId, projects.id))
+        // PM-1: state tùy biến — LEFT JOIN cùng tenant (eq(company_id) defense-in-depth ngoài RLS).
+        .leftJoin(
+          projectStates,
+          and(eq(tasks.stateId, projectStates.id), eq(projectStates.companyId, tasks.companyId)),
+        )
+    );
   }
 
   // ─── Reads (TaskDto shape) ───────────────────────────────────────────────────
@@ -281,6 +283,30 @@ export class TasksRepository {
   }
 
   /**
+   * S4-TASK-BE-1 — BLOCK-NEW-TASK: dự án có đang ở trạng thái kết thúc không (đọc CỘT MỚI project_status
+   * TitleCase mig 0478, KHÔNG cột legacy `status` lowercase). true ⇒ Completed/Cancelled/Archived hoặc
+   * đã soft-delete. Gọi SAU projectExistsTx (existence + tenant đã guard) — chỉ quyết định chặn tạo task.
+   */
+  async projectBlocksNewTaskTx(
+    tx: TenantTx,
+    companyId: string,
+    projectId: string,
+  ): Promise<boolean> {
+    const [row] = await tx
+      .select({ projectStatus: projects.projectStatus, deletedAt: projects.deletedAt })
+      .from(projects)
+      .where(and(eq(projects.companyId, companyId), eq(projects.id, projectId)))
+      .limit(1);
+    if (!row) return false;
+    if (row.deletedAt !== null) return true;
+    return (
+      row.projectStatus === "Completed" ||
+      row.projectStatus === "Cancelled" ||
+      row.projectStatus === "Archived"
+    );
+  }
+
+  /**
    * team_id phải tồn tại, cùng tenant và chưa xoá mềm (G9-4 SEC-1 mirror projectExistsTx).
    * Guard bắt buộc trước khi listByTeam — DB FK toàn cục không chặn đọc chéo tenant.
    */
@@ -418,7 +444,8 @@ export class TasksRepository {
     if (fields.priority !== undefined) patch.priority = fields.priority;
     if (fields.stateId !== undefined) patch.stateId = fields.stateId;
     if (fields.assigneeUserId !== undefined) patch.assigneeUserId = fields.assigneeUserId;
-    if (fields.dueDate !== undefined) patch.dueDate = fields.dueDate ? new Date(fields.dueDate) : null;
+    if (fields.dueDate !== undefined)
+      patch.dueDate = fields.dueDate ? new Date(fields.dueDate) : null;
     if (fields.startDate !== undefined)
       patch.startDate = fields.startDate ? new Date(fields.startDate) : null;
     return tx
@@ -696,10 +723,7 @@ export class TasksRepository {
           createdAt: labels.createdAt,
         })
         .from(taskLabels)
-        .innerJoin(
-          labels,
-          and(eq(taskLabels.labelId, labels.id), isNull(labels.deletedAt)),
-        )
+        .innerJoin(labels, and(eq(taskLabels.labelId, labels.id), isNull(labels.deletedAt)))
         .where(and(eq(taskLabels.companyId, companyId), inArray(taskLabels.taskId, taskIds)))
         .orderBy(asc(labels.name)),
     );
@@ -730,7 +754,9 @@ export class TasksRepository {
     return tx
       .insert(taskLabels)
       .values({ companyId, taskId, labelId })
-      .onConflictDoNothing({ target: [taskLabels.companyId, taskLabels.taskId, taskLabels.labelId] })
+      .onConflictDoNothing({
+        target: [taskLabels.companyId, taskLabels.taskId, taskLabels.labelId],
+      })
       .returning({ id: taskLabels.id });
   }
 

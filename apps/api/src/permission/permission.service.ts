@@ -90,6 +90,17 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   "delete:task",
   "export:task",
   "view:task-audit-log",
+  // S4-NOTI-BE-3 — APPEND-only: 6 cặp NHẠY CẢM NOTI config (is_sensitive=true, seed mig 0481, catalog
+  // pin ở notification-event-catalog.const.ts NOTI_CONFIG_PAIRS), grant Company CHỈ company-admin. Thiếu
+  // allowlist ⇒ 6 cặp này ẨN với CẢ admin trên /auth/me — CAP-2 đã tái diễn (CAP-2/USEROPS-1/EXPORT-1),
+  // done_when WO này bắt buộc phải thấy đủ 6 cặp qua /auth/me. Enforcement KHÔNG đổi — @RequirePermission
+  // per-resource (notification-admin.controller.ts) vẫn là cổng thật. Chỉ mở CỜ HIỂN THỊ.
+  "view:notification-config",
+  "update:notification-config",
+  "view:notification-template",
+  "update:notification-template",
+  "view:notification-delivery-log",
+  "view:notification-audit-log",
 ]);
 
 @Injectable()

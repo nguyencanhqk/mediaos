@@ -35,27 +35,43 @@ const USER = {
 const ALLOW: PermissionDecision = { allow: true, reason: "allow", auditRequired: false };
 const DENY: PermissionDecision = { allow: false, reason: "deny-default", auditRequired: false };
 
-/** Mọi mutation PHẢI guard (handler → quyền mong đợi). */
+/** Mọi mutation/read-nhạy-cảm PHẢI guard (handler → quyền + độ nhạy cảm mong đợi). */
 const GUARDED_MUTATIONS: ReadonlyArray<{
   handlerName: keyof TasksController;
   action: string;
   resourceType: string;
+  isSensitive?: boolean;
 }> = [
   { handlerName: "createTask", action: "create", resourceType: "task" },
   { handlerName: "updateStatus", action: "update", resourceType: "task" },
-  { handlerName: "deleteTask", action: "delete", resourceType: "task" },
+  // S4-TASK-BE-2: delete:task là SENSITIVE (seed 0485 is_sensitive=true) — gate kèm isSensitive.
+  { handlerName: "deleteTask", action: "delete", resourceType: "task", isSensitive: true },
   // addComment là WRITE → gate comment:task (G9-2 H-1; recon S4-TASK-RECON canonical hoá về resource `task`).
   { handlerName: "addComment", action: "comment", resourceType: "task" },
   // getBoard (G9-3) là READ NHẠY CẢM hơn getMyTasks (xem việc của NGƯỜI KHÁC toàn tenant) →
   // PHẢI gate read:task (seed 0005, is_sensitive=false). User 0-quyền KHÔNG được đọc board.
   { handlerName: "getBoard", action: "read", resourceType: "task" },
+  // S4-TASK-BE-2: task core CRUD/my/list gate read/update:task + data-scope (KHÔNG còn mở như getMyTasks cũ).
+  { handlerName: "listTasks", action: "read", resourceType: "task" },
+  { handlerName: "getMyTasks", action: "read", resourceType: "task" },
+  { handlerName: "getTask", action: "read", resourceType: "task" },
+  { handlerName: "updateTask", action: "update", resourceType: "task" },
+  // S4-TASK-BE-3: 6 route action crown-FSM — cặp seed 0485 (mục 3). employee 403 trên assign/priority/
+  // deadline là ĐÚNG THIẾT KẾ (không seed), không phải deferred → guard PHẢI khai đúng cặp.
+  { handlerName: "assignTask", action: "assign", resourceType: "task" },
+  { handlerName: "changeTaskStatus", action: "update-status", resourceType: "task" },
+  { handlerName: "changeTaskPriority", action: "update-priority", resourceType: "task" },
+  { handlerName: "changeTaskDeadline", action: "update-deadline", resourceType: "task" },
+  { handlerName: "addWatcher", action: "watch", resourceType: "task" },
+  { handlerName: "removeWatcher", action: "watch", resourceType: "task" },
 ];
 
 /**
  * Read intentionally open cho mọi user tenant (global JWT+Company guard vẫn ép tenant).
- * CHỈ getMyTasks (việc CỦA MÌNH) + getComments (thread). Board KHÔNG ở đây — nó gate read:task.
+ * CHỈ getComments (thread bình luận). S4-TASK-BE-2: getMyTasks nay gate read:task (đã chuyển sang /tasks/my
+ * có data-scope) ⇒ KHÔNG còn mở.
  */
-const OPEN_READS: ReadonlyArray<keyof TasksController> = ["getMyTasks", "getComments"];
+const OPEN_READS: ReadonlyArray<keyof TasksController> = ["getComments"];
 
 function handlerOf(name: keyof TasksController): (...args: unknown[]) => unknown {
   return TasksController.prototype[name] as (...args: unknown[]) => unknown;
@@ -81,15 +97,15 @@ describe("TasksController — permission guard (G9-2)", () => {
 
   describe.each(GUARDED_MUTATIONS)(
     "mutation $handlerName → $action:$resourceType",
-    ({ handlerName, action, resourceType }) => {
+    ({ handlerName, action, resourceType, isSensitive }) => {
       it("declares @RequirePermission with the expected action + resource", () => {
         const meta = Reflect.getMetadata(REQUIRE_PERMISSION, handlerOf(handlerName)) as
           | RequirePermissionMeta
           | undefined;
         expect(meta).toBeDefined();
         expect(meta).toMatchObject({ action, resourceType });
-        // Giao việc tay KHÔNG nhạy cảm → không bật isSensitive/requiresReauth.
-        expect(meta?.isSensitive ?? false).toBe(false);
+        // Độ nhạy cảm khớp seed 0485 (delete:task sensitive; read/create/update/comment KHÔNG).
+        expect(meta?.isSensitive ?? false).toBe(isSensitive ?? false);
       });
 
       it("is wired with PermissionGuard via @UseGuards", () => {

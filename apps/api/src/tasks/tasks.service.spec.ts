@@ -33,13 +33,19 @@ function makeRepo() {
     listAll: vi.fn(),
     listByProject: vi.fn(),
     listByTeam: vi.fn(),
-    findByIdFull: vi.fn().mockResolvedValue([{ id: TASK_ID, taskType: "office", title: "Soạn báo cáo" }]),
+    findByIdFull: vi
+      .fn()
+      .mockResolvedValue([{ id: TASK_ID, taskType: "office", title: "Soạn báo cáo" }]),
     findRawByIdTx: vi
       .fn()
-      .mockResolvedValue([{ id: TASK_ID, taskType: "office", workflowStepId: null, status: "not_started" }]),
+      .mockResolvedValue([
+        { id: TASK_ID, taskType: "office", workflowStepId: null, status: "not_started" },
+      ]),
     // tenant-FK guards (SEC-1) — mặc định hợp lệ
     assigneeActiveTx: vi.fn().mockResolvedValue(true),
     projectExistsTx: vi.fn().mockResolvedValue(true),
+    // S4-TASK-BE-1 block-new-task guard — mặc định project KHÔNG bị chặn (Active).
+    projectBlocksNewTaskTx: vi.fn().mockResolvedValue(false),
     // PM-1 (apps/projects, mig 0420): board/list giờ đính labels[] + cấp sequence/state khi tạo task project.
     listLabelsForTaskIds: vi.fn().mockResolvedValue([]),
     allocateSequenceTx: vi.fn().mockResolvedValue(1),
@@ -70,11 +76,13 @@ function makeAudit() {
   return { record: vi.fn().mockResolvedValue(undefined) };
 }
 
-function makeService(opts: {
-  repo?: ReturnType<typeof makeRepo>;
-  db?: ReturnType<typeof makeDb>;
-  audit?: ReturnType<typeof makeAudit>;
-} = {}) {
+function makeService(
+  opts: {
+    repo?: ReturnType<typeof makeRepo>;
+    db?: ReturnType<typeof makeDb>;
+    audit?: ReturnType<typeof makeAudit>;
+  } = {},
+) {
   const repo = opts.repo ?? makeRepo();
   const db = opts.db ?? makeDb();
   const audit = opts.audit ?? makeAudit();
@@ -98,7 +106,12 @@ describe("TasksService.createTask — SEC-1 tenant-FK guard + audit", () => {
     expect(repo.createTask).toHaveBeenCalledOnce();
     expect(audit.record).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ action: "TaskCreated", objectType: "task", objectId: TASK_ID, actorUserId: ACTOR_ID }),
+      expect.objectContaining({
+        action: "TaskCreated",
+        objectType: "task",
+        objectId: TASK_ID,
+        actorUserId: ACTOR_ID,
+      }),
     );
   });
 
@@ -130,10 +143,33 @@ describe("TasksService.createTask — SEC-1 tenant-FK guard + audit", () => {
     expect(audit.record).not.toHaveBeenCalled();
   });
 
+  it("S4-TASK-BE-1: project đã đóng (project_status TitleCase) → BadRequest, KHÔNG insert/audit", async () => {
+    const repo = makeRepo();
+    repo.projectBlocksNewTaskTx.mockResolvedValueOnce(true);
+    const { service, audit } = makeService({ repo });
+
+    await expect(
+      service.createTask(USER, { ...OFFICE_TASK, projectId: PROJECT_ID }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(repo.projectExistsTx).toHaveBeenCalledWith(expect.anything(), COMPANY_ID, PROJECT_ID);
+    expect(repo.projectBlocksNewTaskTx).toHaveBeenCalledWith(
+      expect.anything(),
+      COMPANY_ID,
+      PROJECT_ID,
+    );
+    expect(repo.createTask).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
   it("assignee + project hợp lệ cùng tenant → guard pass, insert + audit", async () => {
     const { service, repo } = makeService();
 
-    await service.createTask(USER, { ...OFFICE_TASK, assigneeUserId: ASSIGNEE_ID, projectId: PROJECT_ID });
+    await service.createTask(USER, {
+      ...OFFICE_TASK,
+      assigneeUserId: ASSIGNEE_ID,
+      projectId: PROJECT_ID,
+    });
 
     expect(repo.assigneeActiveTx).toHaveBeenCalledOnce();
     expect(repo.projectExistsTx).toHaveBeenCalledOnce();
@@ -184,7 +220,12 @@ describe("TasksService.updateStatus — FSM office rút gọn (D3)", () => {
 
     await service.updateStatus(USER, TASK_ID, "in_progress");
 
-    expect(repo.updateStatus).toHaveBeenCalledWith(COMPANY_ID, TASK_ID, "in_progress", expect.anything());
+    expect(repo.updateStatus).toHaveBeenCalledWith(
+      COMPANY_ID,
+      TASK_ID,
+      "in_progress",
+      expect.anything(),
+    );
     expect(audit.record).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
@@ -292,7 +333,10 @@ describe("TasksService.listByProject — G9-4 SEC-1 guard", () => {
     const result = await service.listByProject(COMPANY_ID, PROJECT_ID, { limit: 50, offset: 0 });
 
     expect(repo.projectExistsTx).toHaveBeenCalledWith(expect.anything(), COMPANY_ID, PROJECT_ID);
-    expect(repo.listByProject).toHaveBeenCalledWith(COMPANY_ID, PROJECT_ID, { limit: 50, offset: 0 });
+    expect(repo.listByProject).toHaveBeenCalledWith(COMPANY_ID, PROJECT_ID, {
+      limit: 50,
+      offset: 0,
+    });
     // PM-1: +labels[] +displayId (attachLabels).
     expect(result).toEqual([{ id: TASK_ID, taskType: "office", labels: [], displayId: null }]);
   });
@@ -302,7 +346,9 @@ describe("TasksService.listByProject — G9-4 SEC-1 guard", () => {
     repo.projectExistsTx.mockResolvedValueOnce(false);
     const { service } = makeService({ repo });
 
-    await expect(service.listByProject(COMPANY_ID, PROJECT_ID)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.listByProject(COMPANY_ID, PROJECT_ID)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
     expect(repo.listByProject).not.toHaveBeenCalled();
   });
 });
