@@ -39,8 +39,19 @@ export const hrPersonalExtraSchema = z
   .strict();
 export type HrPersonalExtra = z.infer<typeof hrPersonalExtraSchema>;
 
-/** Sortable list columns (allowlist — repository maps to a fixed ORDER BY; blocks SQL injection). */
-export const HR_EMPLOYEE_SORT_FIELDS = ["fullName", "employeeCode", "status", "createdAt"] as const;
+/**
+ * Sortable list columns (allowlist — repository maps to a fixed ORDER BY; blocks SQL injection).
+ * HR-PROFILE-UI-2: +startDate/+officialDate (directory-class, mig 0489 columns) so the list/export
+ * header can sort on join-date fields — both are ungated (non-PII) per the list-item projection above.
+ */
+export const HR_EMPLOYEE_SORT_FIELDS = [
+  "fullName",
+  "employeeCode",
+  "status",
+  "createdAt",
+  "startDate",
+  "officialDate",
+] as const;
 export type HrEmployeeSortField = (typeof HR_EMPLOYEE_SORT_FIELDS)[number];
 
 export const HR_EMPLOYEE_PAGE_SIZE_MAX = 100;

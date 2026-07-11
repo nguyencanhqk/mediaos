@@ -16,3 +16,5 @@ export * from "./employee-code-config";
 export * from "./contracts";
 // S2-HR-EMPFILE-1 (additive): employee file (hồ sơ đính kèm) DTOs (API-03 HR-API-801..805 / DB-08 §8.7).
 export * from "./employee-file";
+// HR-PROFILE-UI-2 (additive): employee directory CSV export DTOs (export:employee, SPEC-03/API-10).
+export * from "./employee-export";
