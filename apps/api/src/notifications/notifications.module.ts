@@ -69,6 +69,13 @@ import { TaskReminderJobHandler } from "./task-reminder.job-handler";
     NotificationAdminService,
   ],
   // Export engine cho S4-INT-1 (outbox consumer gọi intake() in-process).
-  exports: [NotificationsService, DeviceTokenService, NotificationEngineService],
+  // S4-DASH-BE-2 (additive): + MyNotificationsService cho NOTIFICATIONS widget handler (DASH inject qua DI —
+  // KHÔNG re-provide instance thứ 2). Chỉ thêm vào exports[], KHÔNG method mới.
+  exports: [
+    NotificationsService,
+    DeviceTokenService,
+    NotificationEngineService,
+    MyNotificationsService,
+  ],
 })
 export class NotificationsModule {}

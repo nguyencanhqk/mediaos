@@ -4665,7 +4665,7 @@ export const backlog = [
     title:
       "BE Widget data services (GET /dashboard/widgets, /widgets/:slug) cho 7 widget In-sprint + cache TTL + degraded state — data-scope + module nguồn permission",
     zone: "red",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/dashboard/**",
       "apps/api/test/integration/**",
@@ -4687,6 +4687,7 @@ export const backlog = [
       "⚠️ NGHĨA VỤ CHUYỂN TỪ DDL SANG SERVICE (mig 0482 header §29-30 ghi rõ: 'ÉP ở tầng service S4-DASH-BE §9.7 step6, KHÔNG ở DDL'): dashboard_widget_cache CHỈ được ghi dữ liệu ĐÃ MASK + TRONG-SCOPE. DB không có constraint nào chặn việc này ⇒ nếu service ghi thẳng row chưa mask thì rò dữ liệu nhạy cảm qua cache mà không test nào bắt. Int-spec BẮT BUỘC: ghi cache cho user scope Own rồi đọc lại bằng user khác ⇒ KHÔNG thấy field nhạy cảm; và cache_key khác nhau giữa 2 user khác scope.",
       "Module nguồn lỗi → widget trả Degraded/Error, KHÔNG làm sập toàn dashboard; dashboard chỉ trả quick-action metadata (action thật gọi module gốc); last_updated_at khi cache hit",
       "Int-spec RED-trước: widget data đúng scope (employee chỉ thấy task/leave của mình) · cross-tenant deny · degraded khi module nguồn fail (không 500 toàn dashboard) · cache không rò dữ liệu user khác; FULL gate security-reviewer + silent-failure-hunter PASS",
+      "SHIPPED (L2-widget-data-cache): DashboardWidgetDataController (widgets · widgets/:slug, controller thứ 3 @Controller('dashboard')) + 7 handler CHỈ gọi method đã-scope của module nguồn (TaskCoreService.getMyTasks · TasksService.listByProject sau ProjectsService.getProject authorize · MyNotificationsService.list · AttendanceReadService.listMyRecords + tz.util localDateOf · LeaveApprovalService.listPending · HrReadService.listHrEmployees) + DashboardWidgetCacheService (cache_key company+type+widget+userId per-user / company-shared khi scope=Company viewer-independent; upsert INSERT/UPDATE no-DELETE; min-refresh 10s; TTL nhóm §9.2) + runner degraded (HttpException 403/404/400 propagate fail-closed, non-Http → Degraded 200). DI-exports additive: notifications+MyNotificationsService · leave+LeaveApprovalService · tasks+TaskCoreService+ProjectsService. Test test/integration/dashboard-widget-data.int-spec.ts 13/13 xanh trên mediaos_dashbe2 (D1 deny · D2 catalog omit · D3 project-progress 400/403/404 · D4 degraded+deny-không-nuốt · D5 cache miss→hit→refresh min-interval → regen · D6 per-user key + app KHÔNG DELETE grant · D7 HR_OVERVIEW no salary/PII). Dashboard suite 102/102 (no regression). Còn nợ lane khác: S4-INT-2 cache-invalidation từ event · S4-FE-DASH-1 render · S4-QA-1.",
     ],
   },
   {
