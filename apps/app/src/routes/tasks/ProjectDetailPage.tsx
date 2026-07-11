@@ -15,14 +15,16 @@ import type { TaskProjectResponseDto } from "@mediaos/contracts";
 import { TASK_ENGINE_PAIRS } from "./constants";
 import { ProjectFormDrawer } from "./ProjectFormDrawer";
 import { ProjectMemberTable } from "./ProjectMemberTable";
+import { TaskKanbanPage } from "./TaskKanbanPage";
 
 /**
  * ProjectDetailPage — S4-FE-TASK-1 (SPEC-06 §13.3, TASK-SCREEN-003). Deep link /tasks/projects/:projectId.
  *
- * Task/Kanban/Báo cáo/Hoạt động tab của spec lý tưởng CHƯA build ở đây — S4-TASK-BE-1 chỉ có route Project
- * (KHÔNG có GET /tasks theo project với owner-check/data-scope tương thích; S4-TASK-BE-2 định nghĩa DTO
- * song song ở lane khác). Overview tab hiển thị field THẬT từ TaskProjectResponseDto; khối "Task" render
- * empty-state chờ S4-FE-TASK-2 — KHÔNG tự chế client cho GET /tasks.
+ * Tab "Kanban" (S4-FE-TASK-3, SPEC-06 §13.8) mount `<TaskKanbanPage>` — route MỚI KHÔNG thêm vào router.tsx
+ * (ngoài paths cho phép của lane); thay vào đó tái dùng route đã có `/tasks/projects/:projectId` qua state
+ * tab nội bộ (mirror tab "members" đã có từ S4-FE-TASK-1). Báo cáo/Hoạt động (project-level) của spec lý
+ * tưởng CHƯA build ở đây — S4-TASK-BE-1 chỉ có route Project; Overview tab hiển thị field THẬT từ
+ * TaskProjectResponseDto; khối "Task" render empty-state (tổng hợp task theo dự án CHƯA có API riêng).
  */
 function ProjectStatusBadge({ status }: { status: string | null }) {
   const { t } = useTranslation("tasks");
@@ -205,7 +207,7 @@ export function ProjectDetailPage({
     TASK_ENGINE_PAIRS.READ_PROJECT.action,
     TASK_ENGINE_PAIRS.READ_PROJECT.resourceType,
   );
-  const [tab, setTab] = useState<"overview" | "members">("overview");
+  const [tab, setTab] = useState<"overview" | "members" | "kanban">("overview");
   const [editOpen, setEditOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -311,7 +313,7 @@ export function ProjectDetailPage({
       />
 
       <div className="flex gap-2 border-b border-border">
-        {(["overview", "members"] as const).map((key) => (
+        {(["overview", "members", "kanban"] as const).map((key) => (
           <button
             key={key}
             type="button"
@@ -329,8 +331,10 @@ export function ProjectDetailPage({
 
       {tab === "overview" ? (
         <OverviewTab project={project} />
-      ) : (
+      ) : tab === "members" ? (
         <ProjectMemberTable projectId={project.id} />
+      ) : (
+        <TaskKanbanPage projectId={project.id} />
       )}
 
       {editOpen && (

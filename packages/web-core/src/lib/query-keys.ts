@@ -393,6 +393,11 @@ export const taskKeys = {
     members: (id: string) => [...rootKeys.tasks, "projects", "members", id] as const,
   },
   comments: (taskId: string) => [...rootKeys.tasks, "comments", taskId] as const,
+  // S4-FE-TASK-3 — Kanban board (theo project) · checklist · activity feed (S4-TASK-BE-4).
+  kanban: (projectId: string) => [...rootKeys.tasks, "kanban", projectId] as const,
+  checklists: (taskId: string) => [...rootKeys.tasks, "checklists", taskId] as const,
+  activity: (taskId: string, params?: Record<string, unknown>) =>
+    [...rootKeys.tasks, "activity", taskId, params] as const,
 };
 
 // S4-FE-TASK-1 — invalidation cho mutation Project (create/update/close/delete + member add/update-role/
@@ -416,6 +421,19 @@ export const taskCoreInvalidation = {
   list: () => [taskListPrefix] as const,
   my: () => [taskKeys.my()] as const,
   detail: (id: string) => [taskListPrefix, taskKeys.my(), taskKeys.detail(id)] as const,
+};
+
+// S4-FE-TASK-3 — invalidation cho collab (comment CRUD/checklist CRUD/Kanban move). `taskActivityPrefix`
+// là PREFIX 3-phần tử (bỏ slot params) — mirror taskListPrefix, khớp mọi biến thể limit/offset.
+const taskActivityPrefix = [...taskKeys.all, "activity"] as const;
+
+export const taskCollabInvalidation = {
+  comments: (taskId: string) => [taskKeys.comments(taskId)] as const,
+  checklists: (taskId: string) => [taskKeys.checklists(taskId)] as const,
+  // Move (Kanban drag/drop) đổi CẢ board + task detail/list (status field dùng chung).
+  kanban: (projectId: string, taskId: string) =>
+    [taskKeys.kanban(projectId), ...taskCoreInvalidation.detail(taskId)] as const,
+  activity: (taskId: string) => [taskActivityPrefix, taskKeys.activity(taskId)] as const,
 };
 
 // ── Notification keys ─────────────────────────────────────────────────────────
