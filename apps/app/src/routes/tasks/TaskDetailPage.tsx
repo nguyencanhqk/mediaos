@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, RefreshCw, Pencil, Trash2 } from "lucide-react";
 import { taskCoreApi, taskKeys, useCan, useCanExact, ApiError } from "@mediaos/web-core";
-import { PageHeader, EmptyState, Button, Card, Input } from "@mediaos/ui";
+import { PageHeader, EmptyState, Button, Card } from "@mediaos/ui";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { TaskStatusBadge, TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
@@ -11,90 +11,21 @@ import { TaskStatusSelect } from "./TaskStatusSelect";
 import { TaskAssignControl } from "./TaskAssignControl";
 import { TaskFormDrawer } from "./TaskFormDrawer";
 import { DeleteTaskDialog } from "./DeleteTaskDialog";
+import { TaskCommentThread } from "./TaskCommentThread";
+import { TaskChecklistPanel } from "./TaskChecklistPanel";
+import { TaskActivityTimeline } from "./TaskActivityTimeline";
 
 /**
- * TaskDetailPage — S4-FE-TASK-2 (SPEC-06 §13.7, TASK-SCREEN-007). Deep link /tasks/:taskId.
+ * TaskDetailPage — S4-FE-TASK-2/3 (SPEC-06 §13.7, TASK-SCREEN-007). Deep link /tasks/:taskId.
  *
- * Thành phần: tiêu đề/trạng thái/priority/assignee/reporter/project/deadline/mô tả (spec) + bình luận
- * (comment:task đã có route thật). Checklist/File đính kèm/Lịch sử hoạt động trong spec lý tưởng CHƯA
- * build ở đây — BE không có endpoint CRUD checklist (chỉ đọc nội bộ để gate chuyển Done) / không có GET
- * activity log cho task — KHÔNG tự chế client cho API không tồn tại (ghi backlog riêng).
+ * Thành phần: tiêu đề/trạng thái/priority/assignee/reporter/project/deadline/mô tả + Checklist +
+ * Bình luận (mention) + Lịch sử hoạt động (S4-FE-TASK-3, TaskChecklistPanel/TaskCommentThread/
+ * TaskActivityTimeline — mỗi khối tự gate quyền finer bên trong). File đính kèm CHƯA build (BE có
+ * endpoint nhưng ngoài phạm vi lane này).
  *
  * Nút cập nhật trạng thái/priority/deadline = TaskStatusSelect; đổi assignee/theo dõi = TaskAssignControl
  * (cả 2 tự gate finer bên trong qua useCan). Edit/Delete gate ở page này (update:task/delete:task).
  */
-function CommentsSection({ taskId }: { taskId: string }) {
-  const { t } = useTranslation("tasks");
-  const queryClient = useQueryClient();
-  const canComment = useCan(
-    TASK_CORE_ENGINE_PAIRS.COMMENT.action,
-    TASK_CORE_ENGINE_PAIRS.COMMENT.resourceType,
-  );
-  const [draft, setDraft] = useState("");
-
-  const { data: comments, isLoading } = useQuery({
-    queryKey: taskKeys.comments(taskId),
-    queryFn: () => taskCoreApi.listComments(taskId),
-    staleTime: 30_000,
-  });
-
-  const mutation = useMutation({
-    mutationFn: () => taskCoreApi.addComment(taskId, { body: draft.trim() }),
-    onSuccess: async () => {
-      setDraft("");
-      await queryClient.invalidateQueries({ queryKey: taskKeys.comments(taskId) });
-    },
-  });
-
-  return (
-    <Card className="space-y-3 p-4">
-      <h3 className="text-sm font-semibold text-muted-foreground">
-        {t("tasks.detail.comments.title")}
-      </h3>
-      {isLoading ? (
-        <div className="h-10 animate-pulse rounded bg-muted" />
-      ) : comments && comments.length > 0 ? (
-        <ul className="space-y-2">
-          {comments.map((c) => (
-            <li key={c.id} className="rounded-md border border-border p-2 text-sm">
-              <p className="font-medium text-foreground">{c.userFullName ?? "—"}</p>
-              <p className="text-foreground">{c.body}</p>
-              <p className="text-xs text-muted-foreground">
-                {new Date(c.createdAt).toLocaleString("vi-VN")}
-              </p>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-sm text-muted-foreground">{t("tasks.detail.comments.empty")}</p>
-      )}
-      {canComment && (
-        <div className="flex items-center gap-2">
-          <Input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder={t("tasks.detail.comments.placeholder")}
-            disabled={mutation.isPending}
-          />
-          <Button
-            type="button"
-            size="sm"
-            disabled={mutation.isPending || draft.trim().length === 0}
-            onClick={() => mutation.mutate()}
-          >
-            {t("tasks.detail.comments.send")}
-          </Button>
-        </div>
-      )}
-      {mutation.isError && (
-        <p role="alert" className="text-xs text-destructive">
-          {t("tasks.form.errors.generic")}
-        </p>
-      )}
-    </Card>
-  );
-}
-
 function OverviewCard({ task }: { task: TaskCoreResponseDto }) {
   const { t } = useTranslation("tasks");
   const rows: Array<[string, ReactNode]> = [
@@ -245,7 +176,11 @@ export function TaskDetailPage({ taskId, onBack }: { taskId: string; onBack: () 
 
       <OverviewCard task={task} />
 
-      <CommentsSection taskId={task.id} />
+      <TaskChecklistPanel taskId={task.id} />
+
+      <TaskCommentThread taskId={task.id} />
+
+      <TaskActivityTimeline taskId={task.id} />
 
       {editOpen && (
         <TaskFormDrawer

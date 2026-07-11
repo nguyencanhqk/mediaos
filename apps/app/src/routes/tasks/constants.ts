@@ -33,6 +33,10 @@ export const TASK_CORE_ENGINE_PAIRS = {
   UPDATE_STATUS: { action: "update-status", resourceType: "task" },
   UPDATE_PRIORITY: { action: "update-priority", resourceType: "task" },
   UPDATE_DEADLINE: { action: "update-deadline", resourceType: "task" },
+  // S4-FE-TASK-3 — Kanban board (view-kanban:task, non-sensitive) + Activity feed
+  // (view:task-audit-log, resourceType RIÊNG "task-audit-log", is_sensitive=true — seed 0485).
+  VIEW_KANBAN: { action: "view-kanban", resourceType: "task" },
+  VIEW_ACTIVITY_LOG: { action: "view", resourceType: "task-audit-log" },
 } as const;
 
 export const TASK_CORE_STATUS_OPTIONS = [

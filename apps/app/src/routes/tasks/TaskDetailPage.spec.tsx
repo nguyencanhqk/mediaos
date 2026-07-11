@@ -22,8 +22,13 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       changeDeadline: vi.fn(),
       assign: vi.fn(),
       addWatcher: vi.fn(),
+    },
+    // S4-FE-TASK-3 — Kanban/comment/checklist/activity (mock để tránh gọi mạng thật trong test detail).
+    taskCollabApi: {
       listComments: vi.fn().mockResolvedValue([]),
       addComment: vi.fn(),
+      listChecklists: vi.fn().mockResolvedValue([]),
+      listActivity: vi.fn().mockResolvedValue([]),
     },
     taskProjectApi: { listProjects: vi.fn().mockResolvedValue([]) },
     hrApi: {
