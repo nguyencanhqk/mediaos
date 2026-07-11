@@ -9,6 +9,10 @@ import { PermissionModule } from "../permission/permission.module";
 import { SeedModule } from "../foundation/seed/seed.module";
 import { DashboardConfigSeeder } from "./dashboard-config.seeder";
 import { DashSeedRegistrar } from "./dash-seed.registrar";
+// S4-DASH-BE-1 (additive): resolver + widget registry — song song DashboardController cũ (không đụng).
+import { DashboardResolverController } from "./dashboard-resolver.controller";
+import { DashboardResolverService } from "./dashboard-resolver.service";
+import { DashboardWidgetRegistryService } from "./dashboard-widget-registry.service";
 
 /**
  * S4-DASH-SEED-1 (additive): import SeedModule (exports MasterDataSeederRegistry) → DashSeedRegistrar
@@ -17,7 +21,7 @@ import { DashSeedRegistrar } from "./dash-seed.registrar";
  */
 @Module({
   imports: [PermissionModule, SeedModule],
-  controllers: [DashboardController],
+  controllers: [DashboardController, DashboardResolverController],
   providers: [
     DashboardService,
     ReportService,
@@ -26,6 +30,8 @@ import { DashSeedRegistrar } from "./dash-seed.registrar";
     DashboardRefreshService,
     DashboardConfigSeeder,
     DashSeedRegistrar,
+    DashboardResolverService,
+    DashboardWidgetRegistryService,
   ],
 })
 export class DashboardModule {}
