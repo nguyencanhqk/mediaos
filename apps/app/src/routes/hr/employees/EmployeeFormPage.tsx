@@ -1,11 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm, type FieldErrors, type UseFormRegister } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { UserPlus, UserCog, ArrowLeft, RefreshCw } from "lucide-react";
 import { hrApi, hrKeys, useCan, ApiError } from "@mediaos/web-core";
-import { PageHeader, EmptyState, Button, Input, Select, Card, CardContent } from "@mediaos/ui";
+import { PageHeader, EmptyState, Button, Input, Select, Card, CardContent, cn } from "@mediaos/ui";
 import { useDirtyFormGuard } from "@/hooks/use-dirty-form-guard";
 import { HR_ENGINE_PAIRS } from "../constants";
 import { useEmployeeLookups } from "./use-employee-lookups";
@@ -14,6 +14,8 @@ import {
   WORK_TYPE_VALUES,
   EMPLOYMENT_TYPE_VALUES,
   SALARY_TYPE_VALUES,
+  GENDER_VALUES,
+  MARITAL_STATUS_VALUES,
   detailToFormValues,
   employeeFormSchema,
   toCreateDto,
@@ -79,6 +81,66 @@ function Field({
         </p>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Section nav (HR-PROFILE-UI-1) — anchor trái + scrollspy IntersectionObserver
+// ---------------------------------------------------------------------------
+interface FormSection {
+  id: string;
+  label: string;
+}
+
+function SectionNav({ sections, title }: { sections: FormSection[]; title: string }) {
+  const [active, setActive] = useState(sections[0]?.id ?? "");
+
+  useEffect(() => {
+    // jsdom/browser cũ không có IntersectionObserver → bỏ scrollspy, nav vẫn click-scroll được.
+    if (typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting);
+        if (visible.length > 0) setActive(visible[0]!.target.id);
+      },
+      // Vùng "đang đọc" = dải 20–30% từ mép trên viewport.
+      { rootMargin: "-20% 0px -70% 0px" },
+    );
+    for (const s of sections) {
+      const el = document.getElementById(s.id);
+      if (el) observer.observe(el);
+    }
+    return () => observer.disconnect();
+  }, [sections]);
+
+  return (
+    <nav className="sticky top-20 hidden self-start lg:block">
+      <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+        {title}
+      </p>
+      <ul className="space-y-0.5 border-l border-border">
+        {sections.map((s) => (
+          <li key={s.id}>
+            <button
+              type="button"
+              onClick={() =>
+                document
+                  .getElementById(s.id)
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
+              className={cn(
+                "-ml-px block w-full border-l-2 px-3 py-1.5 text-left text-sm transition-colors",
+                active === s.id
+                  ? "border-brand font-medium text-brand"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {s.label}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 
@@ -218,6 +280,147 @@ function WorkSection({
             </Select>
           </Field>
 
+          <Field id="workLocation" label={t("form.fields.workLocation")}>
+            <Input id="workLocation" {...register("workLocation")} />
+          </Field>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Personal + contact sections (HR-PROFILE-UI-1b) — CHỈ edit-mode + caller có view-sensitive.
+// Server vẫn là cổng cuối (PATCH chạm PII đòi view-sensitive per-row, fail-closed).
+// ---------------------------------------------------------------------------
+function PersonalSection({
+  register,
+  errors,
+  t,
+}: {
+  register: UseFormRegister<EmployeeFormValues>;
+  errors: FieldErrors<EmployeeFormValues>;
+  t: TF;
+}) {
+  return (
+    <Card>
+      <CardContent className="space-y-4 pt-5">
+        <h3 className="text-sm font-semibold text-foreground">{t("form.sections.personal")}</h3>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field id="gender" label={t("form.fields.gender")}>
+            <Select id="gender" {...register("gender")}>
+              {GENDER_VALUES.map((v) => (
+                <option key={v} value={v}>
+                  {v === "" ? t("form.placeholders.select") : t(`employees.gender.${v}`)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field
+            id="dateOfBirth"
+            label={t("form.fields.dateOfBirth")}
+            error={fieldError(errors.dateOfBirth, t)}
+          >
+            <Input id="dateOfBirth" type="date" {...register("dateOfBirth")} />
+          </Field>
+          <Field id="maritalStatus" label={t("form.fields.maritalStatus")}>
+            <Select id="maritalStatus" {...register("maritalStatus")}>
+              {MARITAL_STATUS_VALUES.map((v) => (
+                <option key={v} value={v}>
+                  {v === "" ? t("form.placeholders.select") : t(`detail.maritalStatus.${v}`)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field id="placeOfBirth" label={t("form.fields.placeOfBirth")}>
+            <Input id="placeOfBirth" {...register("placeOfBirth")} />
+          </Field>
+          <Field id="nativePlace" label={t("form.fields.nativePlace")}>
+            <Input id="nativePlace" {...register("nativePlace")} />
+          </Field>
+          <Field id="ethnicity" label={t("form.fields.ethnicity")}>
+            <Input id="ethnicity" {...register("ethnicity")} />
+          </Field>
+          <Field id="religion" label={t("form.fields.religion")}>
+            <Input id="religion" {...register("religion")} />
+          </Field>
+          <Field id="nationality" label={t("form.fields.nationality")}>
+            <Input id="nationality" {...register("nationality")} />
+          </Field>
+          <Field id="taxCode" label={t("form.fields.taxCode")}>
+            <Input id="taxCode" {...register("taxCode")} />
+          </Field>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ContactInfoSection({
+  register,
+  errors,
+  t,
+}: {
+  register: UseFormRegister<EmployeeFormValues>;
+  errors: FieldErrors<EmployeeFormValues>;
+  t: TF;
+}) {
+  return (
+    <Card>
+      <CardContent className="space-y-4 pt-5">
+        <h3 className="text-sm font-semibold text-foreground">{t("form.sections.contact")}</h3>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            id="personalEmail"
+            label={t("form.fields.personalEmail")}
+            error={fieldError(errors.personalEmail, t)}
+          >
+            <Input
+              id="personalEmail"
+              type="email"
+              autoComplete="off"
+              {...register("personalEmail")}
+            />
+          </Field>
+          <Field id="phone" label={t("form.fields.phone")}>
+            <Input id="phone" {...register("phone")} />
+          </Field>
+          <Field id="currentAddress" label={t("form.fields.currentAddress")}>
+            <Input id="currentAddress" {...register("currentAddress")} />
+          </Field>
+          <Field id="permanentAddress" label={t("form.fields.permanentAddress")}>
+            <Input id="permanentAddress" {...register("permanentAddress")} />
+          </Field>
+          <Field id="emergencyContactName" label={t("form.fields.emergencyContactName")}>
+            <Input id="emergencyContactName" {...register("emergencyContactName")} />
+          </Field>
+          <Field id="emergencyContactPhone" label={t("form.fields.emergencyContactPhone")}>
+            <Input id="emergencyContactPhone" {...register("emergencyContactPhone")} />
+          </Field>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Schedule section (HR-PROFILE-UI-1) — hình thức làm việc & thời gian
+// ---------------------------------------------------------------------------
+function ScheduleSection({
+  register,
+  errors,
+  t,
+}: {
+  register: UseFormRegister<EmployeeFormValues>;
+  errors: FieldErrors<EmployeeFormValues>;
+  t: TF;
+}) {
+  return (
+    <Card>
+      <CardContent className="space-y-4 pt-5">
+        <h3 className="text-sm font-semibold text-foreground">{t("form.sections.schedule")}</h3>
+
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field id="workType" label={t("form.fields.workType")}>
             <Select id="workType" {...register("workType")}>
               {WORK_TYPE_VALUES.map((v) => (
@@ -263,6 +466,22 @@ function WorkSection({
           >
             <Input id="endDate" type="date" {...register("endDate")} />
           </Field>
+
+          <Field
+            id="probationEndDate"
+            label={t("form.fields.probationEndDate")}
+            error={fieldError(errors.probationEndDate, t)}
+          >
+            <Input id="probationEndDate" type="date" {...register("probationEndDate")} />
+          </Field>
+
+          <Field
+            id="officialDate"
+            label={t("form.fields.officialDate")}
+            error={fieldError(errors.officialDate, t)}
+          >
+            <Input id="officialDate" type="date" {...register("officialDate")} />
+          </Field>
         </div>
       </CardContent>
     </Card>
@@ -290,6 +509,11 @@ export function EmployeeFormPage({ employeeId, onSuccess, onCancel }: EmployeeFo
   const pair =
     mode === "create" ? HR_ENGINE_PAIRS.CREATE_EMPLOYEE : HR_ENGINE_PAIRS.UPDATE_EMPLOYEE;
   const canSubmit = useCan(pair.action, pair.resourceType);
+  // HR-PROFILE-UI-1b — section Cá nhân/Liên hệ chỉ render khi caller có view-sensitive (edit mode).
+  // Server vẫn gate PATCH PII per-row; đây là UI-hint tránh render form field toàn giá trị bị mask.
+  const canEditPersonal =
+    useCan(HR_ENGINE_PAIRS.VIEW_SENSITIVE.action, HR_ENGINE_PAIRS.VIEW_SENSITIVE.resourceType) &&
+    mode === "edit";
 
   const lookups = useEmployeeLookups();
 
@@ -418,29 +642,70 @@ export function EmployeeFormPage({ employeeId, onSuccess, onCancel }: EmployeeFo
         </p>
       )}
 
-      <form
-        onSubmit={handleSubmit((values) => mutation.mutate({ values, dirty: { ...dirtyFields } }))}
-        noValidate
-        className="space-y-6"
-      >
-        {mode === "create" && <AccountSection register={register} errors={errors} t={t} />}
-        <WorkSection register={register} errors={errors} t={t} lookups={lookups} />
+      {/* HR-PROFILE-UI-1 — layout 2 cột: anchor nav trái (scrollspy) + form section phải */}
+      <div className="lg:grid lg:grid-cols-[200px_1fr] lg:items-start lg:gap-6">
+        <SectionNav
+          title={t("form.nav.title")}
+          sections={[
+            ...(mode === "create"
+              ? [{ id: "section-account", label: t("form.sections.account") }]
+              : []),
+            ...(canEditPersonal
+              ? [
+                  { id: "section-personal", label: t("form.sections.personal") },
+                  { id: "section-contact", label: t("form.sections.contact") },
+                ]
+              : []),
+            { id: "section-work", label: t("form.sections.work") },
+            { id: "section-schedule", label: t("form.sections.schedule") },
+          ]}
+        />
 
-        <div className="flex items-center justify-end gap-3">
-          {onCancel && (
-            <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>
-              {t("form.cancel")}
-            </Button>
+        <form
+          onSubmit={handleSubmit((values) =>
+            mutation.mutate({ values, dirty: { ...dirtyFields } }),
           )}
-          <Button type="submit" disabled={submitDisabled}>
-            {busy
-              ? t("form.submitting")
-              : mode === "create"
-                ? t("form.submitCreate")
-                : t("form.submitSave")}
-          </Button>
-        </div>
-      </form>
+          noValidate
+          className="space-y-6"
+        >
+          {mode === "create" && (
+            <div id="section-account" className="scroll-mt-20">
+              <AccountSection register={register} errors={errors} t={t} />
+            </div>
+          )}
+          {canEditPersonal && (
+            <>
+              <div id="section-personal" className="scroll-mt-20">
+                <PersonalSection register={register} errors={errors} t={t} />
+              </div>
+              <div id="section-contact" className="scroll-mt-20">
+                <ContactInfoSection register={register} errors={errors} t={t} />
+              </div>
+            </>
+          )}
+          <div id="section-work" className="scroll-mt-20">
+            <WorkSection register={register} errors={errors} t={t} lookups={lookups} />
+          </div>
+          <div id="section-schedule" className="scroll-mt-20">
+            <ScheduleSection register={register} errors={errors} t={t} />
+          </div>
+
+          <div className="flex items-center justify-end gap-3">
+            {onCancel && (
+              <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>
+                {t("form.cancel")}
+              </Button>
+            )}
+            <Button type="submit" disabled={submitDisabled}>
+              {busy
+                ? t("form.submitting")
+                : mode === "create"
+                  ? t("form.submitCreate")
+                  : t("form.submitSave")}
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

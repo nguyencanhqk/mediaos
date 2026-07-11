@@ -78,6 +78,20 @@ const DETAIL: HrEmployeeDetail = {
   phone: null,
   contractType: null,
   notes: null,
+  avatarUrl: null,
+  gender: null,
+  dateOfBirth: null,
+  maritalStatus: null,
+  personalEmail: null,
+  currentAddress: null,
+  permanentAddress: null,
+  emergencyContactName: null,
+  emergencyContactPhone: null,
+  officialDate: null,
+  probationEndDate: null,
+  workLocation: null,
+  taxCode: null,
+  personalExtra: null,
   createdAt: "2024-01-01T00:00:00.000Z",
   updatedAt: "2024-01-01T00:00:00.000Z",
 };
@@ -103,8 +117,9 @@ describe("EmployeeFormPage", () => {
   it("renders the create form (account + work sections) with create:employee", () => {
     setCapabilities({ "create:employee": true });
     renderWithQuery(<EmployeeFormPage />);
-    expect(screen.getByText("Tài khoản đăng nhập")).toBeInTheDocument();
-    expect(screen.getByText("Thông tin công việc")).toBeInTheDocument();
+    // HR-PROFILE-UI-1: label section xuất hiện CẢ ở anchor-nav trái lẫn heading section → getAllByText.
+    expect(screen.getAllByText("Tài khoản đăng nhập").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Thông tin công việc").length).toBeGreaterThan(0);
     expect(document.querySelector("#email")).toBeInTheDocument();
   });
 

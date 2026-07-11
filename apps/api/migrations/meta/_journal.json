@@ -1186,6 +1186,13 @@
       "breakpoints": true
     },
     {
+      "idx": 169,
+      "version": "7",
+      "when": 1717500840000,
+      "tag": "0489_hr_profile_personal_fields",
+      "breakpoints": true
+    },
+    {
       "idx": 170,
       "version": "7",
       "when": 1717500845000,

@@ -79,6 +79,8 @@ export const hrKeys = {
     list: (params?: Record<string, unknown>) =>
       [...rootKeys.hr, "employees", "list", params] as const,
     detail: (id: string) => [...rootKeys.hr, "employees", "detail", id] as const,
+    // HR-PROFILE-UI-1 — overview strip aggregates (GET /hr/employees/summary).
+    summary: () => [...rootKeys.hr, "employees", "summary"] as const,
     me: () => [...rootKeys.hr, "employees", "me"] as const,
     // S2-FE-HR-9 — Employee Files tab (danh sách file đính kèm hồ sơ, GET /hr/employees/:id/files).
     files: (employeeId: string) => [...rootKeys.hr, "employees", "files", employeeId] as const,
@@ -379,6 +381,8 @@ export const taskKeys = {
   all: rootKeys.tasks,
   list: (params?: Record<string, unknown>) => [...rootKeys.tasks, "list", params] as const,
   detail: (id: string) => [...rootKeys.tasks, "detail", id] as const,
+  // S4-FE-TASK-2 — GET /tasks/my (TASK-API-210, MyTasksPage). Không tham số (gộp 3 nguồn server-side).
+  my: () => [...rootKeys.tasks, "my"] as const,
   projects: {
     all: [...rootKeys.tasks, "projects"] as const,
     list: (params?: Record<string, unknown>) =>
@@ -401,6 +405,17 @@ export const taskProjectInvalidation = {
   list: () => [taskProjectListPrefix] as const,
   detail: (id: string) => [taskProjectListPrefix, taskKeys.projects.detail(id)] as const,
   members: (id: string) => [taskKeys.projects.detail(id), taskKeys.projects.members(id)] as const,
+};
+
+// S4-FE-TASK-2 — invalidation cho Task core (list/my/detail) sau mutate (create/update/delete/assign/
+// change-status/change-priority/change-deadline/watchers). `taskListPrefix` là PREFIX 3-phần tử (bỏ slot
+// params) — mirror taskProjectListPrefix, khớp MỌI biến thể filter/offset.
+const taskListPrefix = [...taskKeys.all, "list"] as const;
+
+export const taskCoreInvalidation = {
+  list: () => [taskListPrefix] as const,
+  my: () => [taskKeys.my()] as const,
+  detail: (id: string) => [taskListPrefix, taskKeys.my(), taskKeys.detail(id)] as const,
 };
 
 // ── Notification keys ─────────────────────────────────────────────────────────

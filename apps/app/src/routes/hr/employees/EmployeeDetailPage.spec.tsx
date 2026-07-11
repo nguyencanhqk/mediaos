@@ -56,6 +56,20 @@ const MOCK_DETAIL: HrEmployeeDetail = {
   phone: null,
   contractType: null,
   notes: null,
+  avatarUrl: null,
+  gender: null,
+  dateOfBirth: null,
+  maritalStatus: null,
+  personalEmail: null,
+  currentAddress: null,
+  permanentAddress: null,
+  emergencyContactName: null,
+  emergencyContactPhone: null,
+  officialDate: null,
+  probationEndDate: null,
+  workLocation: null,
+  taxCode: null,
+  personalExtra: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
 };
@@ -103,7 +117,8 @@ describe("EmployeeDetailPage", () => {
     // Name appears in heading + FieldRow — getAllByText is intentional
     await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
     expect(screen.getByText("EMP0001")).toBeInTheDocument();
-    expect(screen.getByText("Phòng Kỹ thuật")).toBeInTheDocument();
+    // HR-PROFILE-UI-1: header cover gộp "Chức vụ – Đơn vị" thành 1 chuỗi → match bằng regex.
+    expect(screen.getByText(/Phòng Kỹ thuật/)).toBeInTheDocument();
   });
 
   // ── SENSITIVE MASK: phone null → masked text (no view-sensitive grant) ───
@@ -126,6 +141,9 @@ describe("EmployeeDetailPage", () => {
       phone: "0901234567",
     });
     renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    // HR-PROFILE-UI-1: phone nằm ở tab "Thông tin liên hệ" — chuyển tab rồi mới thấy.
+    fireEvent.click(screen.getByRole("tab", { name: /thông tin liên hệ/i }));
     await waitFor(() => expect(screen.getByText("0901234567")).toBeInTheDocument());
   });
 
@@ -159,14 +177,16 @@ describe("EmployeeDetailPage", () => {
   });
 
   // ── TAB navigation: tabs rendered ─────────────────────────────────────────
+  // HR-PROFILE-UI-1: bộ tab mới (Thông tin cơ bản/Liên hệ/Công việc/Lương) + TabsTrigger role="tab".
   it("renders all tabs after data loads", async () => {
     setCapabilities({ "read:employee": true });
     vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
     renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
     await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
-    expect(screen.getByRole("button", { name: /tổng quan/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /thông tin cá nhân/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /công việc/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /thông tin cơ bản/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /thông tin liên hệ/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /công việc/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /lương/i })).toBeInTheDocument();
   });
 
   // ── S2-FE-HR-9 — Tab "File hồ sơ" chỉ hiển thị nếu có file-view:employee ────
@@ -175,7 +195,7 @@ describe("EmployeeDetailPage", () => {
     vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
     renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
     await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
-    expect(screen.queryByRole("button", { name: /file hồ sơ/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /file hồ sơ/i })).not.toBeInTheDocument();
   });
 
   it("shows the files tab and switches to it when user has file-view:employee", async () => {
@@ -184,7 +204,7 @@ describe("EmployeeDetailPage", () => {
     vi.mocked(employeeFilesApi.getEmployeeFiles).mockResolvedValue([]);
     renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
     await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
-    const filesTabButton = screen.getByRole("button", { name: /file hồ sơ/i });
+    const filesTabButton = screen.getByRole("tab", { name: /file hồ sơ/i });
     expect(filesTabButton).toBeInTheDocument();
     fireEvent.click(filesTabButton);
     expect(screen.getByText(/tài liệu đính kèm hồ sơ nhân viên này/i)).toBeInTheDocument();

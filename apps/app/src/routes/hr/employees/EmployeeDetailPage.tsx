@@ -1,10 +1,18 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Users, RefreshCw, ArrowLeft, Pencil, FileText } from "lucide-react";
-import type { HrEmployeeDetail } from "@mediaos/contracts";
-import { hrApi, hrKeys, useCan, formatDate, PermissionGate } from "@mediaos/web-core";
-import { PageHeader, EmptyState, Button, Card, CardContent } from "@mediaos/ui";
+import { hrApi, hrKeys, useCan, PermissionGate } from "@mediaos/web-core";
+import {
+  PageHeader,
+  EmptyState,
+  Button,
+  Avatar,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@mediaos/ui";
 import { HR_ENGINE_PAIRS } from "../constants";
 import { EmployeeStatusBadge } from "../employee-status";
 // S2-FE-HR-7 — nút điều hướng "Hợp đồng" (ẩn nếu không truyền onContracts).
@@ -13,162 +21,11 @@ import "../contracts/contracts-i18n";
 // S2-FE-HR-9 — Tab "File hồ sơ" (UI-HR-SCREEN-015), chỉ hiển thị nếu có file-view:employee.
 import { EMPLOYEE_FILE_ENGINE_PAIRS } from "./employee-file-constants";
 import { EmployeeFilesTab } from "./EmployeeFilesTab";
+// HR-PROFILE-UI-1 — section dùng chung với split view.
+import { BasicInfoSection, CompSection, ContactSection, WorkInfoSection } from "./profile-sections";
 
-// ---------------------------------------------------------------------------
-// Field row — label + value with masked fallback
-// ---------------------------------------------------------------------------
-function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[160px_1fr] gap-2 py-2 text-sm">
-      <span className="font-medium text-muted-foreground">{label}</span>
-      <span className="text-foreground">{value ?? "—"}</span>
-    </div>
-  );
-}
+type Tab = "basic" | "contact" | "work" | "comp" | "files";
 
-// ---------------------------------------------------------------------------
-// Tab types
-// ---------------------------------------------------------------------------
-type Tab = "overview" | "personal" | "work" | "files";
-
-// ---------------------------------------------------------------------------
-// Overview tab
-// ---------------------------------------------------------------------------
-function OverviewTab({
-  employee,
-  t,
-  canViewSensitive,
-  canViewSalary,
-}: {
-  employee: HrEmployeeDetail;
-  t: ReturnType<typeof useTranslation<"hr">>["t"];
-  canViewSensitive: boolean;
-  canViewSalary: boolean;
-}) {
-  const masked = t("detail.masked");
-  return (
-    <Card>
-      <CardContent className="divide-y divide-border pt-4">
-        <FieldRow label={t("detail.fields.code")} value={employee.employeeCode} />
-        <FieldRow label={t("detail.fields.name")} value={employee.fullName} />
-        <FieldRow label={t("detail.fields.email")} value={employee.email} />
-        <FieldRow label={t("detail.fields.department")} value={employee.orgUnitName} />
-        <FieldRow label={t("detail.fields.position")} value={employee.positionName} />
-        <FieldRow
-          label={t("detail.fields.status")}
-          value={<EmployeeStatusBadge status={employee.status} />}
-        />
-        <FieldRow
-          label={t("detail.fields.startDate")}
-          value={employee.startDate ? formatDate(new Date(employee.startDate)) : "—"}
-        />
-        {/* Sensitive: phone — server already masks; client renders what it receives */}
-        <FieldRow
-          label={t("detail.sensitiveFields.phone")}
-          value={
-            canViewSensitive
-              ? (employee.phone ?? "—")
-              : employee.phone !== null
-                ? employee.phone
-                : masked
-          }
-        />
-        {/* Sensitive: baseSalary */}
-        <FieldRow
-          label={t("detail.sensitiveFields.baseSalary")}
-          value={
-            canViewSalary
-              ? employee.baseSalary !== null
-                ? `${employee.baseSalary.toLocaleString("vi-VN")} ₫`
-                : "—"
-              : employee.baseSalary !== null
-                ? `${employee.baseSalary.toLocaleString("vi-VN")} ₫`
-                : masked
-          }
-        />
-      </CardContent>
-    </Card>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Personal tab
-// ---------------------------------------------------------------------------
-function PersonalTab({
-  employee,
-  t,
-  canViewSensitive,
-}: {
-  employee: HrEmployeeDetail;
-  t: ReturnType<typeof useTranslation<"hr">>["t"];
-  canViewSensitive: boolean;
-}) {
-  const masked = t("detail.masked");
-  return (
-    <Card>
-      <CardContent className="divide-y divide-border pt-4">
-        <FieldRow label={t("detail.fields.email")} value={employee.email} />
-        {/* phone — rendered exactly as server returns; null when unauthorized */}
-        <FieldRow
-          label={t("detail.sensitiveFields.phone")}
-          value={employee.phone !== null ? employee.phone : canViewSensitive ? "—" : masked}
-        />
-        {/* notes */}
-        <FieldRow
-          label={t("detail.sensitiveFields.notes")}
-          value={employee.notes !== null ? employee.notes : canViewSensitive ? "—" : masked}
-        />
-      </CardContent>
-    </Card>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Work tab
-// ---------------------------------------------------------------------------
-function WorkTab({
-  employee,
-  t,
-  canViewSensitive,
-}: {
-  employee: HrEmployeeDetail;
-  t: ReturnType<typeof useTranslation<"hr">>["t"];
-  canViewSensitive: boolean;
-}) {
-  const masked = t("detail.masked");
-  return (
-    <Card>
-      <CardContent className="divide-y divide-border pt-4">
-        <FieldRow label={t("detail.fields.department")} value={employee.orgUnitName} />
-        <FieldRow label={t("detail.fields.position")} value={employee.positionName} />
-        <FieldRow label={t("detail.fields.workType")} value={employee.workType} />
-        <FieldRow
-          label={t("detail.fields.startDate")}
-          value={employee.startDate ? formatDate(new Date(employee.startDate)) : "—"}
-        />
-        <FieldRow
-          label={t("detail.fields.endDate")}
-          value={employee.endDate ? formatDate(new Date(employee.endDate)) : "—"}
-        />
-        {/* contractType — sensitive */}
-        <FieldRow
-          label={t("detail.sensitiveFields.contractType")}
-          value={
-            employee.contractType !== null ? employee.contractType : canViewSensitive ? "—" : masked
-          }
-        />
-        <FieldRow
-          label={t("detail.fields.status")}
-          value={<EmployeeStatusBadge status={employee.status} />}
-        />
-      </CardContent>
-    </Card>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
 interface EmployeeDetailPageProps {
   employeeId: string;
   onBack?: () => void;
@@ -185,7 +42,7 @@ export function EmployeeDetailPage({
 }: EmployeeDetailPageProps) {
   const { t } = useTranslation("hr");
   const { t: tc } = useTranslation("common");
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [activeTab, setActiveTab] = useState<Tab>("basic");
 
   const canView = useCan(
     HR_ENGINE_PAIRS.READ_EMPLOYEE.action,
@@ -213,13 +70,6 @@ export function EmployeeDetailPage({
     // Retry controlled by QueryClient default (retry:false in tests, 3 in prod).
     // 403/404 are definitive — caller (QueryClient config or error boundary) should not retry them.
   });
-
-  const TABS: { key: Tab; label: string }[] = [
-    { key: "overview", label: t("detail.tabs.overview") },
-    { key: "personal", label: t("detail.tabs.personal") },
-    { key: "work", label: t("detail.tabs.work") },
-    ...(canViewFiles ? [{ key: "files" as const, label: t("detail.tabs.files") }] : []),
-  ];
 
   // ── Forbidden ──────────────────────────────────────────────────────────────
   if (!canView) {
@@ -270,15 +120,38 @@ export function EmployeeDetailPage({
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <PageHeader
-        title={data.fullName ?? "—"}
-        description={`${t("detail.fields.code")}: ${data.employeeCode ?? "—"}`}
-        icon={Users}
-        actions={
+    <div className="space-y-4 p-6">
+      {/* Cover header: avatar + tên + mã + chức vụ – đơn vị + trạng thái */}
+      <div className="overflow-hidden rounded-xl border border-border">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-slate-700 via-slate-600 to-slate-500 px-5 py-5">
+          <div className="flex items-center gap-4">
+            <Avatar
+              size="lg"
+              name={data.fullName}
+              src={data.avatarUrl}
+              className="ring-2 ring-white/70"
+            />
+            <div className="text-white">
+              <p className="text-lg leading-tight font-semibold uppercase">
+                {data.fullName ?? "—"}
+                <span className="ml-2 text-sm font-normal text-white/80">
+                  ({data.employeeCode ?? "—"})
+                </span>
+              </p>
+              <p className="text-sm text-white/80">
+                {[data.positionName, data.orgUnitName].filter(Boolean).join(" – ") || "—"}
+              </p>
+            </div>
+            <EmployeeStatusBadge status={data.status} />
+          </div>
           <div className="flex items-center gap-2">
             {onBack && (
-              <Button variant="outline" size="sm" onClick={onBack}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-white/40 bg-white/10 text-white hover:bg-white/20"
+                onClick={onBack}
+              >
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 {t("detail.backToList")}
               </Button>
@@ -288,7 +161,12 @@ export function EmployeeDetailPage({
                 action={CONTRACT_ENGINE_PAIRS.VIEW.action}
                 resourceType={CONTRACT_ENGINE_PAIRS.VIEW.resourceType}
               >
-                <Button variant="outline" size="sm" onClick={onContracts}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-white/40 bg-white/10 text-white hover:bg-white/20"
+                  onClick={onContracts}
+                >
                   <FileText className="mr-2 h-4 w-4" />
                   {t("contracts.title")}
                 </Button>
@@ -306,44 +184,36 @@ export function EmployeeDetailPage({
               </PermissionGate>
             )}
           </div>
-        }
-      />
-
-      {/* Tab navigation */}
-      <div className="flex gap-1 border-b border-border">
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveTab(tab.key)}
-            className={[
-              "px-4 py-2 text-sm font-medium transition-colors",
-              activeTab === tab.key
-                ? "border-b-2 border-brand text-brand"
-                : "text-muted-foreground hover:text-foreground",
-            ].join(" ")}
-          >
-            {tab.label}
-          </button>
-        ))}
+        </div>
       </div>
 
-      {/* Tab content */}
-      {activeTab === "overview" && (
-        <OverviewTab
-          employee={data}
-          t={t}
-          canViewSensitive={canViewSensitive}
-          canViewSalary={canViewSalary}
-        />
-      )}
-      {activeTab === "personal" && (
-        <PersonalTab employee={data} t={t} canViewSensitive={canViewSensitive} />
-      )}
-      {activeTab === "work" && (
-        <WorkTab employee={data} t={t} canViewSensitive={canViewSensitive} />
-      )}
-      {activeTab === "files" && canViewFiles && <EmployeeFilesTab employeeId={employeeId} />}
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
+        <TabsList>
+          <TabsTrigger value="basic">{t("detail.tabs.basic")}</TabsTrigger>
+          <TabsTrigger value="contact">{t("detail.tabs.contact")}</TabsTrigger>
+          <TabsTrigger value="work">{t("detail.tabs.work")}</TabsTrigger>
+          <TabsTrigger value="comp">{t("detail.tabs.comp")}</TabsTrigger>
+          {canViewFiles && <TabsTrigger value="files">{t("detail.tabs.files")}</TabsTrigger>}
+        </TabsList>
+        <TabsContent value="basic" className="pt-4">
+          <BasicInfoSection employee={data} t={t} canViewSensitive={canViewSensitive} />
+        </TabsContent>
+        <TabsContent value="contact" className="pt-4">
+          <ContactSection employee={data} t={t} canViewSensitive={canViewSensitive} />
+        </TabsContent>
+        <TabsContent value="work" className="pt-4">
+          <WorkInfoSection employee={data} t={t} canViewSensitive={canViewSensitive} />
+        </TabsContent>
+        <TabsContent value="comp" className="pt-4">
+          <CompSection employee={data} t={t} canViewSalary={canViewSalary} />
+        </TabsContent>
+        {canViewFiles && (
+          <TabsContent value="files" className="pt-4">
+            <EmployeeFilesTab employeeId={employeeId} />
+          </TabsContent>
+        )}
+      </Tabs>
     </div>
   );
 }

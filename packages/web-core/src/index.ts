@@ -87,6 +87,8 @@ export {
   remoteWorkRequestInvalidation,
   // S4-FE-TASK-1: Project mutation → list/detail/members invalidation.
   taskProjectInvalidation,
+  // S4-FE-TASK-2: Task core mutation → list/my/detail invalidation.
+  taskCoreInvalidation,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -108,6 +110,8 @@ export { myNotificationApi } from "./lib/my-notification-api";
 // PR #145 (GET /tasks nay = list scoped + gate read:task; my-tasks → GET /tasks/my). S4-FE-TASK-CLEANUP-1.
 // S4-FE-TASK-1 — Project CRUD + member (ProjectsController, S4-TASK-BE-1 routes ĐÃ merge).
 export { taskProjectApi } from "./lib/task-project-api";
+// S4-FE-TASK-2 — Task core CRUD/my/actions (TasksController, S4-TASK-BE-2/BE-3 routes ĐÃ merge).
+export { taskCoreApi } from "./lib/task-core-api";
 export { dashboardApi } from "./lib/dashboard-api";
 export { hrApi } from "./lib/hr-api";
 // S2-FE-HR-6 — Org chart (GET /org/units/tree, read mở) + HR audit-logs (tái dùng /foundation/audit-logs).

@@ -436,6 +436,10 @@ export class TasksService {
   }
 
   // ─── Comments ────────────────────────────────────────────────────────────────
+  // @deprecated S4-TASK-BE-4: TasksController KHÔNG còn gọi 2 method dưới đây (route GET/POST
+  // /tasks/:taskId/comments đã chuyển sang TaskCommentsService — gate read/comment:task + data-scope
+  // + soft-delete/PATCH mới, xem tasks.controller.ts). GIỮ NGUYÊN (KHÔNG xoá) — tránh phá
+  // tasks.service.spec.ts mock hiện có; xoá hẳn thuộc phạm vi dọn dẹp WO sau.
 
   async getComments(companyId: string, taskId: string) {
     await this.assertTaskExists(companyId, taskId);

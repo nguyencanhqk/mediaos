@@ -1,67 +1,29 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { type ColumnDef } from "@tanstack/react-table";
-import { Users, RefreshCw } from "lucide-react";
-import type { HrEmployeeListItem } from "@mediaos/contracts";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { Users, RefreshCw, Eye, EyeOff, List, LayoutPanelLeft } from "lucide-react";
 import { hrApi, hrKeys, useCan, PermissionGate } from "@mediaos/web-core";
-// PermissionGate used for create/export buttons; useCan for list-level gate
-import { PageHeader, DataTable, EmptyState, Button, Input, Select } from "@mediaos/ui";
+import { PageHeader, DataTable, EmptyState, Button, Input, Select, cn } from "@mediaos/ui";
+import { useLocalPref } from "@/hooks/use-local-pref";
 import { HR_ENGINE_PAIRS } from "../constants";
-import { EmployeeStatusBadge } from "../employee-status";
 import { useEmployeeListFilters } from "./use-employee-list-filters";
+import { EmployeeOverviewStrip } from "./employee-overview";
+import { EMPLOYEE_COLUMN_CATALOG, buildEmployeeColumns } from "./employee-table-columns";
+import { useColumnSettings } from "./use-column-settings";
+import { ColumnSettingsPopover } from "./column-settings-popover";
+import { EmployeeSplitView } from "./employee-split-view";
+
+/**
+ * HR-PROFILE-UI-1 — trang Hồ sơ nhân sự nâng cấp:
+ * dải tổng quan (ẩn/hiện) · 2 chế độ xem (bảng ⇄ chi tiết) · tìm kiếm/lọc · tùy chỉnh cột.
+ * Mọi dữ liệu đã scope + mask ở SERVER; preference hiển thị lưu localStorage.
+ */
+
+type ViewMode = "table" | "split";
 
 // ---------------------------------------------------------------------------
-// Column definitions (moved out of component to avoid recreation on render)
-// ---------------------------------------------------------------------------
-function useEmployeeColumns(
-  t: ReturnType<typeof useTranslation<"hr">>["t"],
-): ColumnDef<HrEmployeeListItem>[] {
-  return [
-    {
-      accessorKey: "employeeCode",
-      header: t("employees.columns.code"),
-      cell: ({ row }) => (
-        <span className="font-mono text-xs text-muted-foreground">
-          {row.original.employeeCode ?? "—"}
-        </span>
-      ),
-    },
-    {
-      accessorKey: "fullName",
-      header: t("employees.columns.name"),
-      cell: ({ row }) => (
-        <span className="font-medium text-foreground">{row.original.fullName}</span>
-      ),
-    },
-    {
-      accessorKey: "email",
-      header: t("employees.columns.email"),
-      cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">{row.original.email}</span>
-      ),
-    },
-    {
-      accessorKey: "orgUnitName",
-      header: t("employees.columns.department"),
-      cell: ({ row }) => <span className="text-sm">{row.original.orgUnitName ?? "—"}</span>,
-    },
-    {
-      accessorKey: "positionName",
-      header: t("employees.columns.position"),
-      cell: ({ row }) => <span className="text-sm">{row.original.positionName ?? "—"}</span>,
-    },
-    {
-      accessorKey: "status",
-      header: t("employees.columns.status"),
-      cell: ({ row }) => <EmployeeStatusBadge status={row.original.status} />,
-    },
-  ];
-}
-
-// ---------------------------------------------------------------------------
-// Department filter
+// Department filter (giữ từ bản cũ)
 // ---------------------------------------------------------------------------
 function DepartmentFilter({
   value,
@@ -90,9 +52,6 @@ function DepartmentFilter({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Status filter options
-// ---------------------------------------------------------------------------
 const STATUS_OPTIONS = [
   { value: "active", labelKey: "status.active" },
   { value: "inactive", labelKey: "status.inactive" },
@@ -105,23 +64,57 @@ const STATUS_OPTIONS = [
 // ---------------------------------------------------------------------------
 export function EmployeeListPage() {
   const { t } = useTranslation("hr");
+  const { t: tc } = useTranslation("common");
   const navigate = useNavigate();
   const { action, resourceType } = HR_ENGINE_PAIRS.READ_EMPLOYEE;
   const canView = useCan(action, resourceType);
+  const canViewSensitive = useCan(
+    HR_ENGINE_PAIRS.VIEW_SENSITIVE.action,
+    HR_ENGINE_PAIRS.VIEW_SENSITIVE.resourceType,
+  );
 
   const { search, setSearch, deptId, setDeptId, status, setStatus, queryParams } =
     useEmployeeListFilters();
-
   const [page, setPage] = useState(1);
+
+  // Preference hiển thị (per-user, localStorage)
+  const [viewMode, setViewMode] = useLocalPref<ViewMode>("mediaos.hr.employees.view.v1", "table");
+  const [overviewVisible, setOverviewVisible] = useLocalPref<boolean>(
+    "mediaos.hr.employees.overview.v1",
+    true,
+  );
+
+  // Catalog cột: bỏ cột PII khỏi cả bảng lẫn panel tùy chỉnh khi thiếu view-sensitive
+  // (server đã mask null — lọc để không phơi cột toàn "—").
+  const catalog = useMemo(
+    () => EMPLOYEE_COLUMN_CATALOG.filter((c) => !c.pii || canViewSensitive),
+    [canViewSensitive],
+  );
+  const { visibility, setVisible, reset } = useColumnSettings(catalog);
+  const tableVisibility = useMemo(() => {
+    if (canViewSensitive) return visibility;
+    const vis = { ...visibility };
+    for (const c of EMPLOYEE_COLUMN_CATALOG) {
+      if (c.pii) vis[c.id] = false;
+    }
+    return vis;
+  }, [visibility, canViewSensitive]);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: hrKeys.employees.list({ ...queryParams, page }),
     queryFn: () => hrApi.listEmployees({ ...queryParams, page }),
     enabled: canView,
     staleTime: 30_000,
+    // P1 perf: đổi trang/filter giữ dữ liệu cũ hiển thị trong lúc fetch — không nháy skeleton.
+    placeholderData: keepPreviousData,
   });
 
-  const columns = useEmployeeColumns(t);
+  const columns = useMemo(() => buildEmployeeColumns(t), [t]);
+
+  const goDetail = (employeeId: string) =>
+    void navigate({ to: "/hr/employees/$employeeId", params: { employeeId } });
+  const goEdit = (employeeId: string) =>
+    void navigate({ to: "/hr/employees/$employeeId/edit", params: { employeeId } });
 
   // ── Forbidden ──────────────────────────────────────────────────────────────
   if (!canView) {
@@ -145,7 +138,7 @@ export function EmployeeListPage() {
           action={
             <Button variant="outline" size="sm" onClick={() => void refetch()}>
               <RefreshCw className="mr-2 h-4 w-4" />
-              {t("actions.retry", { ns: "common" })}
+              {tc("actions.retry")}
             </Button>
           }
         />
@@ -158,7 +151,7 @@ export function EmployeeListPage() {
   const totalPages = meta?.totalPages ?? 1;
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-4 p-6">
       <PageHeader
         title={t("employees.title")}
         description={t("employees.description")}
@@ -180,8 +173,13 @@ export function EmployeeListPage() {
             </PermissionGate>
           </div>
         }
-      >
-        {/* Toolbar: search + filters */}
+      />
+
+      {/* Dải tổng quan (ẩn/hiện được) */}
+      {overviewVisible && <EmployeeOverviewStrip />}
+
+      {/* Toolbar: search + filter | toggle tổng quan + chế độ xem + tùy chỉnh cột */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <Input
             placeholder={t("employees.search")}
@@ -216,51 +214,117 @@ export function EmployeeListPage() {
             ))}
           </Select>
         </div>
-      </PageHeader>
 
-      {/* Table */}
-      <DataTable
-        columns={columns}
-        data={items}
-        isLoading={isLoading}
-        emptyState={
-          <EmptyState
-            title={t("employees.empty.title")}
-            description={t("employees.empty.description")}
-          />
-        }
-        pageSize={meta?.pageSize ?? 20}
-      />
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setOverviewVisible(!overviewVisible)}
+            className="text-brand"
+          >
+            {overviewVisible ? (
+              <EyeOff className="mr-2 h-4 w-4" />
+            ) : (
+              <Eye className="mr-2 h-4 w-4" />
+            )}
+            {overviewVisible ? t("employees.overview.hide") : t("employees.overview.show")}
+          </Button>
 
-      {/* Server-side pagination controls */}
-      {!isLoading && totalPages > 1 && (
-        <div className="flex items-center justify-between gap-3 px-1 text-sm text-muted-foreground">
-          <span>
-            {meta
-              ? `${(page - 1) * meta.pageSize + 1}–${Math.min(page * meta.pageSize, meta.total)} / ${meta.total}`
-              : ""}
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!meta?.hasPrev}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+          {/* Toggle bảng ⇄ chi tiết */}
+          <div className="flex items-center rounded-md border border-border">
+            <button
+              type="button"
+              onClick={() => setViewMode("table")}
+              aria-label={t("employees.view.table")}
+              title={t("employees.view.table")}
+              className={cn(
+                "flex h-8 w-9 items-center justify-center rounded-l-md transition-colors",
+                viewMode === "table"
+                  ? "bg-brand-muted text-brand"
+                  : "text-muted-foreground hover:bg-muted",
+              )}
             >
-              {t("pagination.prev", { ns: "common" })}
-            </Button>
-            <span>
-              {page} / {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!meta?.hasNext}
-              onClick={() => setPage((p) => p + 1)}
+              <List className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("split")}
+              aria-label={t("employees.view.split")}
+              title={t("employees.view.split")}
+              className={cn(
+                "flex h-8 w-9 items-center justify-center rounded-r-md transition-colors",
+                viewMode === "split"
+                  ? "bg-brand-muted text-brand"
+                  : "text-muted-foreground hover:bg-muted",
+              )}
             >
-              {t("pagination.next", { ns: "common" })}
-            </Button>
+              <LayoutPanelLeft className="h-4 w-4" />
+            </button>
           </div>
+
+          {viewMode === "table" && (
+            <ColumnSettingsPopover
+              catalog={catalog}
+              visibility={visibility}
+              onToggle={setVisible}
+              onReset={reset}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Nội dung theo chế độ xem */}
+      {viewMode === "table" ? (
+        <DataTable
+          columns={columns}
+          data={items}
+          isLoading={isLoading}
+          columnVisibility={tableVisibility}
+          onRowClick={(row) => goDetail(row.id)}
+          emptyState={
+            <EmptyState
+              title={t("employees.empty.title")}
+              description={t("employees.empty.description")}
+            />
+          }
+          pageSize={meta?.pageSize ?? 20}
+        />
+      ) : (
+        <EmployeeSplitView
+          items={items}
+          isLoading={isLoading}
+          onEdit={goEdit}
+          onOpenFull={goDetail}
+        />
+      )}
+
+      {/* Footer: tổng bản ghi + phân trang server */}
+      {!isLoading && meta && (
+        <div className="flex items-center justify-between gap-3 px-1 text-sm text-muted-foreground">
+          <span>{t("employees.totalRecords", { total: meta.total })}</span>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!meta.hasPrev}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                {tc("pagination.prev")}
+              </Button>
+              <span>
+                {page} / {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!meta.hasNext}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                {tc("pagination.next")}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>
