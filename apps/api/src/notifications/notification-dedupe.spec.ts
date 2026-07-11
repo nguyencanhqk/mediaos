@@ -48,8 +48,10 @@ describe("NotificationDedupeService.resolveStrategy", () => {
 
   it("catalog='None' + eventCode KHÔNG có fallback → giữ None/null (không dedupe)", () => {
     const svc = makeService();
+    // Event cố tình KHÔNG nằm trong DEFAULT_DEDUPE (S4-INT-1 đã map mọi mã TASK_* + PROJECT_MEMBER_ADDED
+    // sang 'DedupeKey'/'TimeWindow', nên phải dùng mã ngoài bảng để test đúng nhánh fallthrough None).
     const resolved = svc.resolveStrategy({
-      eventCode: "TASK_ASSIGNED",
+      eventCode: "UNMAPPED_EVENT_NO_DEFAULT",
       dedupeStrategy: "None",
       dedupeWindowSeconds: null,
     });

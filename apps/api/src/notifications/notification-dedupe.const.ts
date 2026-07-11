@@ -30,4 +30,18 @@ export const DEFAULT_DEDUPE: Readonly<Record<string, DedupeDefaultConfig>> = {
   // giây (TimeWindow không align đúng "trong ngày" khi window=86400 và giờ chạy job lệch múi biên ngày).
   TASK_DUE_SOON: { strategy: "DedupeKey", windowSeconds: null },
   TASK_OVERDUE: { strategy: "DedupeKey", windowSeconds: null },
+  // S4-INT-1 — OutboxNotificationBridge (task-noti-bridge.registrar.ts): mỗi mapping mặc định
+  // `dedupeKey = ctx.eventId` (outbox event id — ổn định qua mọi lần re-consume/retry của CÙNG event) ⇒
+  // strategy 'DedupeKey' (KHÔNG 'None') để NotificationDedupeService.computeKey THỰC SỰ set dedupe_key.
+  // Bảo vệ 2 TẦNG cùng OutboxWorker.processed_events (tầng 1, theo consumer_name+event_id): nếu event bị
+  // re-claim (reaper timeout) MÀ processed_events đã mất dấu (crash giữa insert↔markProcessed) thì tầng
+  // NÀY (theo company+recipient+event_code+dedupe_key, partial-unique `uq_notifications_dedupe_active`)
+  // vẫn chặn tạo notification trùng. 6 mã MỚI (TASK_STATUS_CHANGED/TASK_COMMENT_CREATED GIỮ NGUYÊN
+  // 'TimeWindow' 300s ở trên — 2 event ồn ào, chống spam trong-cửa-sổ, KHÔNG đổi strategy).
+  TASK_ASSIGNED: { strategy: "DedupeKey", windowSeconds: null },
+  TASK_ASSIGNEE_CHANGED: { strategy: "DedupeKey", windowSeconds: null },
+  TASK_PRIORITY_CHANGED: { strategy: "DedupeKey", windowSeconds: null },
+  TASK_DUE_DATE_CHANGED: { strategy: "DedupeKey", windowSeconds: null },
+  TASK_MENTIONED: { strategy: "DedupeKey", windowSeconds: null },
+  PROJECT_MEMBER_ADDED: { strategy: "DedupeKey", windowSeconds: null },
 };
