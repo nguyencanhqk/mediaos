@@ -42,7 +42,40 @@ export const NOTI_PRIORITY = {
 export const NOTI_PATHS = {
   LIST: "/notifications",
   DETAIL: (id: string) => `/notifications/${id}`,
+  EVENTS: "/notifications/events",
 } as const;
+
+/**
+ * S4-FE-NOTI-2 (UI-NOTI-SCREEN-004 / SPEC-08 §13.4 NOTI-SCREEN-005) — cặp engine ADMIN config, LITERAL
+ * (KHÔNG qua PERMISSION_CODE_TO_PAIR — tránh drift, cùng kỹ thuật NOTI_ENGINE_PAIRS/att.shifts).
+ * Nguồn sự thật: notification-admin.controller.ts (VIEW_NOTIFICATION_CONFIG/UPDATE_NOTIFICATION_CONFIG).
+ * CẢ 2 is_sensitive=true (mig 0481) — grant Company CHỈ company-admin, đã ở SENSITIVE_CAPABILITY_ALLOWLIST
+ * (permission.service.ts) nên /auth/me phơi đúng capability. Page PHẢI dùng useCanExact (KHÔNG useCan) —
+ * wildcard '*:*' KHÔNG mở cổng cặp sensitive, mirror AttendanceRulesPage/RetentionPoliciesPage.
+ */
+export const NOTI_EVENT_ENGINE_PAIRS = {
+  VIEW: { action: "view", resourceType: "notification-config" },
+  UPDATE: { action: "update", resourceType: "notification-config" },
+} as const;
+
+/**
+ * module_code hợp lệ cho filter danh mục event — khớp CHECK chk_notification_events_module_code (mig
+ * 0479) / NotiModuleCode (apps/api notification-event-catalog.const.ts). Chỉ dùng để dựng dropdown lọc
+ * UI; server tự validate độc lập (FE KHÔNG phải nguồn sự thật).
+ */
+export const NOTI_EVENT_MODULE_CODES = [
+  "AUTH",
+  "HR",
+  "ATT",
+  "LEAVE",
+  "TASK",
+  "DASH",
+  "NOTI",
+  "SYSTEM",
+] as const;
+
+/** per_page tối đa cho phép (khớp NOTI_ADMIN_PAGE_SIZE_MAX contracts) — catalog nhỏ (~53 event), 1 lần gọi đủ. */
+export const NOTI_EVENT_PAGE_SIZE_MAX = 100;
 
 /** Kích thước trang mặc định cho NotificationListPage — khớp MY_NOTIFICATION_PAGE_SIZE_DEFAULT (contracts). */
 export const NOTI_LIST_PAGE_SIZE = 20;

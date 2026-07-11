@@ -91,4 +91,59 @@ export default {
     Urgent: "Khẩn cấp",
     Critical: "Nghiêm trọng",
   },
+  // S4-FE-NOTI-2 (UI-NOTI-SCREEN-004) — Quản lý loại thông báo (admin). ĐÈ THÊM, KHÔNG đụng khoá cũ.
+  events: {
+    title: "Quản lý loại thông báo",
+    description: "Danh mục sự kiện thông báo hệ thống — bật/tắt theo công ty.",
+    filters: {
+      searchPlaceholder: "Tìm theo mã hoặc tên sự kiện…",
+      allModules: "Tất cả module",
+      allStatuses: "Tất cả trạng thái",
+      enabledOnly: "Đang bật",
+      disabledOnly: "Đang tắt",
+    },
+    columns: {
+      module: "Module",
+      eventCode: "Mã sự kiện",
+      eventName: "Tên sự kiện",
+      type: "Loại",
+      priority: "Mức ưu tiên",
+      status: "Trạng thái",
+      updatedAt: "Cập nhật gần nhất",
+      actions: "Thao tác",
+    },
+    status: {
+      enabled: "Đang bật",
+      disabled: "Đang tắt",
+    },
+    actions: {
+      enable: "Bật",
+      disable: "Tắt",
+    },
+    confirm: {
+      enableTitle: "Bật sự kiện thông báo?",
+      enableDescription: 'Sự kiện "{{name}}" sẽ được gửi tới người dùng liên quan.',
+      disableTitle: "Tắt sự kiện thông báo?",
+      disableDescription: 'Sự kiện "{{name}}" sẽ ngừng gửi cho tới khi được bật lại.',
+      cancel: "Huỷ",
+      submitting: "Đang xử lý…",
+    },
+    empty: {
+      title: "Chưa có sự kiện thông báo nào",
+      description: "Danh mục sự kiện thông báo trống hoặc không khớp bộ lọc.",
+    },
+    error: {
+      title: "Không thể tải danh mục sự kiện",
+      description: "Có lỗi khi tải danh mục. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền xem cấu hình thông báo",
+      description: "Bạn không có quyền truy cập màn hình này.",
+    },
+    feedback: {
+      updateOk: "Đã cập nhật trạng thái sự kiện.",
+      updateFailed: "Cập nhật thất bại. Vui lòng thử lại.",
+      dismiss: "Đóng",
+    },
+  },
 };
