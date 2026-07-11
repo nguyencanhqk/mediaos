@@ -1177,6 +1177,13 @@
       "when": 1717500830000,
       "tag": "0487_s4_notibe4_admin_config_grant",
       "breakpoints": true
+    },
+    {
+      "idx": 168,
+      "version": "7",
+      "when": 1717500835000,
+      "tag": "0488_s4_dashseed2_manager_hr_dashboard_grant",
+      "breakpoints": true
     }
   ]
 }
