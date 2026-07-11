@@ -4219,6 +4219,7 @@ export const backlog = [
       "FSM status hợp lệ: Todo→In Progress→In Review→Done/Cancelled (transition table tường minh, chặn nhảy trạng thái sai → mã lỗi SPEC-06); Done có thể đòi checklist hoàn thành nếu config bật; ghi task_activity_logs TASK_ASSIGNED/STATUS_CHANGED/PRIORITY_CHANGED/DUE_DATE_CHANGED",
       "Phát event chuẩn qua outbox theo Event code registry §9.5 (TASK_ASSIGNED/TASK_ASSIGNEE_CHANGED/TASK_STATUS_CHANGED/TASK_PRIORITY_CHANGED/TASK_DUE_DATE_CHANGED) — payload KHÔNG chứa dữ liệu nhạy cảm; wiring consumer thực ở S4-INT-1",
       "Int-spec RED-trước: transition không hợp lệ → 4xx + không đổi state · gán ngoài scope/tenant → deny · watcher trùng bị chặn · actor không tự nhận notify (chuẩn bị INT) · activity log ghi đúng; FULL gate security-reviewer + plan-reviewer PASS trước code (crown)",
+      "GHI CHÚ ACCEPTANCE (plan-review 2026-07-11 OQ#1, PR #150): route THỰC = POST /:id/change-status · /change-priority · /change-deadline (verb canonical SPEC-06 §16.3/API-06 §14 — done_when dòng 1 là shorthand); watcher SELF-ONLY (không nhận employee_id body); QA map test theo tên canonical, KHÔNG báo lệch.",
     ],
   },
   {
@@ -4303,6 +4304,34 @@ export const backlog = [
       "Int-spec: seed idempotent chạy lại; event/template khớp registry (không mã lạ); admin thấy cặp config NOTI qua /auth/me; HR + employee KHÔNG có cặp config (deny-path). POSITIVE test BẮT BUỘC: MỖI role canonical (employee/manager/hr/company-admin/super-admin) thực sự NHẬN được own-notification @Own qua getCapabilities — deny-path một mình KHÔNG bắt được lỗi grant 0 row.",
       "Bảng notification_events/templates tạo ở mig 0479 với company_id NULLABLE (NULL = global) và app role chỉ có SELECT ⇒ seed global rows PHẢI chạy qua table-owner (migration), KHÔNG qua app role.",
       "Gate int-spec = hasDb && LANE_DB (chỉ .env → hasDb=true = đỏ-giả). SỐ MIGRATION: chạy `ls apps/api/migrations/*.sql | tail -1` ngay trước khi tạo file, KHÔNG hard-code. FULL gate security-reviewer + database-reviewer PASS",
+    ],
+  },
+  {
+    // Nợ từ plan-review S4-TASK-BE-3 (PR #150, 2026-07-11): catalog 0481 LỆCH Event code registry §9.5 —
+    // thiếu TASK_PRIORITY_CHANGED; seed TASK_DEADLINE_CHANGED ≠ canonical TASK_DUE_DATE_CHANGED;
+    // TASK_ASSIGNEE_CHANGED enabled=false + không template. BE-3 phát mã CANONICAL ⇒ không vá trước INT-1
+    // = catalog lookup miss = notification priority/deadline IM LẶNG (đúng lớp bug TASK_MENTIONED).
+    id: "S4-NOTI-SEED-2",
+    module: "NOTI",
+    layer: "DB",
+    title:
+      "Vá catalog notification_events khớp registry §9.5 cho event TASK (BE-3): thêm TASK_PRIORITY_CHANGED · đổi TASK_DEADLINE_CHANGED→TASK_DUE_DATE_CHANGED · template + enable TASK_ASSIGNEE_CHANGED — BẮT BUỘC TRƯỚC S4-INT-1",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/migrations/**", "docs/plans/S4-NOTI-SEED-2.md"],
+    skills: ["code-review"],
+    depends_on: ["S4-TASK-BE-3"],
+    src: [
+      "IMPLEMENTATION-07 §9.5 (Event code registry — nguồn canonical)",
+      "mig 0481 (catalog hiện trạng, dòng 78-97)",
+      "docs/plans/S4-TASK-BE-3.md §4 + §11 ĐK-2 (đối chiếu drift đã verify)",
+      "PR #150 (payload thật BE-3 phát)",
+    ],
+    done_when: [
+      "Migration đánh số nối tiếp head THẬT (`ls apps/api/migrations/*.sql | tail -1` ngay trước khi tạo — KHÔNG hard-code): INSERT event TASK_PRIORITY_CHANGED idempotent (ON CONFLICT DO NOTHING); xử lý TASK_DEADLINE_CHANGED→TASK_DUE_DATE_CHANGED bằng UPDATE code trên row hiện có NẾU chưa có row canonical + không FK nào trỏ tới (kiểm notifications tham chiếu trước); nếu đã có cả hai → giữ canonical, disable row cũ. KHÔNG DELETE (append-safe).",
+      "Template IN_APP cho TASK_PRIORITY_CHANGED / TASK_DUE_DATE_CHANGED / TASK_ASSIGNEE_CHANGED mirror chuẩn 0481: locale 'vi-VN' (KHÔNG 'vi'), body_template NOT NULL, status='Active', is_default=true; enable (is_enabled=true) cho 3 mã này; các mã khác GIỮ NGUYÊN trạng thái",
+      "variables_schema khớp payload THẬT BE-3 phát (đọc task-actions.service.ts: taskId/taskTitle/taskCode/actorUserId/fromStatus/toStatus/oldPriority/newPriority/oldDueAt/newDueAt) — đối chiếu code, không suy đoán",
+      "Int-spec (gate hasDb && LANE_DB): catalog sau migrate có ĐỦ 5 mã canonical §9.5 của BE-3 ở trạng thái enabled + resolver template tìm được từng mã; chạy lại idempotent; FULL gate security-reviewer + database-reviewer PASS",
     ],
   },
   {
@@ -4646,7 +4675,7 @@ export const backlog = [
       "docs/plans/S4-INT-1.md",
     ],
     skills: ["code-review"],
-    depends_on: ["S4-TASK-BE-3", "S4-TASK-BE-4", "S4-NOTI-BE-2"],
+    depends_on: ["S4-TASK-BE-3", "S4-TASK-BE-4", "S4-NOTI-BE-2", "S4-NOTI-SEED-2"],
     src: [
       "ISSUE-BOARD-01 §18 (INT)",
       "IMP02-STORY-102",
