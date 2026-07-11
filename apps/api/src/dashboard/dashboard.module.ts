@@ -27,6 +27,9 @@ import { DashboardWidgetDataController } from "./dashboard-widget-data.controlle
 import { DashboardWidgetDataService } from "./dashboard-widget-data.service";
 import { DashboardWidgetHandlersService } from "./dashboard-widget-handlers.service";
 import { DashboardWidgetCacheService } from "./dashboard-widget-cache.service";
+// S4-DASH-BE-3 (additive): config CRUD — controller THỨ TƯ (/configs + /configs/:id), không đụng khối trên.
+import { DashboardConfigController } from "./dashboard-config.controller";
+import { DashboardConfigService } from "./dashboard-config.service";
 
 /**
  * S4-DASH-SEED-1 (additive): import SeedModule (exports MasterDataSeederRegistry) → DashSeedRegistrar
@@ -49,6 +52,8 @@ import { DashboardWidgetCacheService } from "./dashboard-widget-cache.service";
     DashboardResolverController,
     // S4-DASH-BE-2 (additive): widget DATA + catalog (widgets · widgets/:slug).
     DashboardWidgetDataController,
+    // S4-DASH-BE-3 (additive): config CRUD — controller THỨ TƯ (/configs + /configs/:id).
+    DashboardConfigController,
   ],
   providers: [
     DashboardService,
@@ -64,6 +69,8 @@ import { DashboardWidgetCacheService } from "./dashboard-widget-cache.service";
     DashboardWidgetDataService,
     DashboardWidgetHandlersService,
     DashboardWidgetCacheService,
+    // S4-DASH-BE-3 (additive): config CRUD service.
+    DashboardConfigService,
   ],
 })
 export class DashboardModule {}

@@ -95,7 +95,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451+0456+0457+0459+0460+0461+0462+0463+0464+0468+0474). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451+0456+0457+0459+0460+0461+0462+0463+0464+0468+0474+0491). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -323,5 +323,17 @@ export const AUDIT_OBJECT_TYPES = [
   // audit_logs_object_type_chk trên Postgres thật. VERIFY-ONLY: 'system_setting' (0439) + 'retention_policy'
   // (0456) ĐÃ có trong CHECK — KHÔNG thêm lại (lane be-system-settings/be-retention chạy song song, không dựa 0474).
   "module",
+  // S4-DASH-BE-3 (mig 0491): dashboard widget config CRUD governance — company-admin PATCH
+  // /dashboard/configs/:id (DashboardConfigService.patch) ghi audit action_group='CONFIG_UPDATE'
+  // object_type='dashboard_widget_config' permission_code='DASH.CONFIG.UPDATE' audit-in-tx app-tenant.
+  // before/after = snapshot cấu hình hiển thị widget (is_enabled/sort_order/layout/data_scope_override/
+  // refresh_seconds_override/config) — KHÔNG salary/PII/secret vào before/after (BẤT BIẾN #3 — masker che
+  // nếu lọt). Bật/tắt + đổi scope hiển thị widget dashboard toàn công ty/role/user = hành động quan trọng
+  // (SPEC-01 §16.3, DB-07 §8.2 rule 5). Config CRUD KHÔNG nới quyền xem widget: read-time tier-2 gate
+  // (DashboardWidgetRegistryService) vẫn authoritative. 0491 UNION ADD-only vào CHECK (clone 0474/0468/
+  // 0464/0463/0462/0461/0460/0459/0456/0446/0440), append-only #2 nguyên vẹn; INSERT audit KHÔNG vỡ
+  // audit_logs_object_type_chk trên Postgres thật. GRANT UPDATE dashboard_widget_configs cho mediaos_app
+  // (KHÔNG DELETE, KHÔNG worker) cùng migration.
+  "dashboard_widget_config",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];

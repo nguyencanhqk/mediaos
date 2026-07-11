@@ -5601,11 +5601,13 @@ export const backlog = [
     title:
       "BE Dashboard widget config CRUD (GET /dashboard/configs, PATCH /configs/:id) theo company/role/user/dashboard-type + audit — P1/P2 (IMP02-STORY-091)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: [
       "apps/api/src/dashboard/**",
       "apps/api/test/integration/**",
       "packages/contracts/src/**",
+      "apps/api/migrations/**",
+      "apps/api/src/db/schema/audit.ts",
     ],
     skills: ["code-review"],
     depends_on: ["S4-DASH-BE-1"],
@@ -5617,9 +5619,9 @@ export const backlog = [
       "SPEC-07",
     ],
     done_when: [
-      "GET /api/v1/dashboard/configs (xem config widget) · PATCH /configs/:id (sort/order/enable/size theo company/role/user/dashboard-type) — @RequirePermission config:dashboard (admin); withTenant + company_id; audit khi đổi config",
-      "Config resolve đúng precedence (company→role→user); không cho phép user thấy widget ngoài quyền qua config; DTO contracts dual-build",
-      "Int-spec RED-trước: non-admin 403 · cross-tenant deny · config không mở widget trái quyền; check.sh xanh; LIGHT gate",
+      "GET /api/v1/dashboard/configs (xem config widget) · PATCH /dashboard/configs/:id (sort_order/is_enabled/layout/data_scope_override/refresh_seconds_override/config theo company/role/user/dashboard-type) — @RequirePermission view/update:dashboard-config (DASH.CONFIG.VIEW/UPDATE, isSensitive, PermissionGuard class-level); withTenant(companyId) RLS+FORCE; cross-tenant/soft-deleted ⇒ 404 DASH-ERR-NOT_FOUND; audit_logs object_type='dashboard_widget_config' action_group='CONFIG_UPDATE' in-tx (append-only)",
+      "Config resolve đúng precedence (company→role→user); không cho phép user thấy widget ngoài quyền qua config (read-time tier-2 gate authoritative); DTO contracts dual-build; body rỗng/override sai enum ⇒ 400",
+      "Int-spec RED-trước (apps/api/test/integration/dashboard-config-crud.int-spec.ts, 18/18): non-admin 403 · cross-tenant 404 · config không mở widget trái quyền · audit-in-tx · append-only (UPDATE không DELETE) · validation; mig 0491 GRANT UPDATE dashboard_widget_configs + UNION-ADD object_type nối tiếp head THẬT 0490_s4_notiseed2 (idx 171) + sync AUDIT_OBJECT_TYPES; check.sh xanh; FULL gate PASS (security-reviewer + database-reviewer + silent-failure-hunter)",
     ],
   },
   {
