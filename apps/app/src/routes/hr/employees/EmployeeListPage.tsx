@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import type { GroupingState, OnChangeFn, SortingState } from "@tanstack/react-table";
 import { Users, RefreshCw, Eye, EyeOff, List, LayoutPanelLeft } from "lucide-react";
 import { hrApi, hrKeys, useCan, PermissionGate } from "@mediaos/web-core";
 import { PageHeader, DataTable, EmptyState, Button, Input, Select, cn } from "@mediaos/ui";
@@ -9,9 +10,14 @@ import { useLocalPref } from "@/hooks/use-local-pref";
 import { HR_ENGINE_PAIRS } from "../constants";
 import { useEmployeeListFilters } from "./use-employee-list-filters";
 import { EmployeeOverviewStrip } from "./employee-overview";
-import { EMPLOYEE_COLUMN_CATALOG, buildEmployeeColumns } from "./employee-table-columns";
+import {
+  EMPLOYEE_COLUMN_CATALOG,
+  GROUPABLE_EMPLOYEE_COLUMNS,
+  buildEmployeeColumns,
+} from "./employee-table-columns";
 import { useColumnSettings } from "./use-column-settings";
 import { ColumnSettingsPopover } from "./column-settings-popover";
+import { ExportEmployeesButton } from "./ExportEmployeesButton";
 import { EmployeeSplitView } from "./employee-split-view";
 
 /**
@@ -73,8 +79,17 @@ export function EmployeeListPage() {
     HR_ENGINE_PAIRS.VIEW_SENSITIVE.resourceType,
   );
 
-  const { search, setSearch, deptId, setDeptId, status, setStatus, queryParams } =
-    useEmployeeListFilters();
+  const {
+    search,
+    setSearch,
+    deptId,
+    setDeptId,
+    status,
+    setStatus,
+    sorting,
+    setSorting,
+    queryParams,
+  } = useEmployeeListFilters();
   const [page, setPage] = useState(1);
 
   // Preference hiển thị (per-user, localStorage)
@@ -83,6 +98,22 @@ export function EmployeeListPage() {
     "mediaos.hr.employees.overview.v1",
     true,
   );
+  // HR-PROFILE-UI-2 — gom nhóm 1–2 cấp (đơn vị/trạng thái), persist per-user.
+  const [grouping, setGrouping] = useLocalPref<GroupingState>(
+    "mediaos.hr.employees.grouping.v1",
+    [],
+  );
+
+  // Sắp xếp SERVER: header click → setSorting (queryParams đổi → refetch) + về trang 1.
+  const handleSortingChange: OnChangeFn<SortingState> = (updater) => {
+    setSorting((prev) => (typeof updater === "function" ? updater(prev) : updater));
+    setPage(1);
+  };
+  // Gom nhóm áp trên hàng ĐÃ tải — KHÔNG refetch, KHÔNG đổi trang server. Giải updater của TanStack
+  // về giá trị trước khi lưu (useLocalPref chỉ nhận value, không nhận updater fn).
+  const handleGroupingChange: OnChangeFn<GroupingState> = (updater) => {
+    setGrouping(typeof updater === "function" ? updater(grouping) : updater);
+  };
 
   // Catalog cột: bỏ cột PII khỏi cả bảng lẫn panel tùy chỉnh khi thiếu view-sensitive
   // (server đã mask null — lọc để không phơi cột toàn "—").
@@ -158,11 +189,9 @@ export function EmployeeListPage() {
         icon={Users}
         actions={
           <div className="flex items-center gap-2">
-            <PermissionGate action="export" resourceType="employee">
-              <Button variant="outline" size="sm">
-                {t("employees.exportList")}
-              </Button>
-            </PermissionGate>
+            {/* Export CSV danh bạ — cặp NHẠY CẢM export:employee (useCanExact fail-closed; server
+                áp scope + mask PII + cap 422). Query = bộ lọc/sort đang xem. */}
+            <ExportEmployeesButton query={queryParams} />
             <PermissionGate
               action={HR_ENGINE_PAIRS.CREATE_EMPLOYEE.action}
               resourceType={HR_ENGINE_PAIRS.CREATE_EMPLOYEE.resourceType}
@@ -268,6 +297,9 @@ export function EmployeeListPage() {
               visibility={visibility}
               onToggle={setVisible}
               onReset={reset}
+              groupableColumns={GROUPABLE_EMPLOYEE_COLUMNS}
+              grouping={grouping}
+              onGroupingChange={setGrouping}
             />
           )}
         </div>
@@ -281,6 +313,10 @@ export function EmployeeListPage() {
           isLoading={isLoading}
           columnVisibility={tableVisibility}
           onRowClick={(row) => goDetail(row.id)}
+          grouping={grouping}
+          onGroupingChange={handleGroupingChange}
+          sorting={sorting}
+          onSortingChange={handleSortingChange}
           emptyState={
             <EmptyState
               title={t("employees.empty.title")}

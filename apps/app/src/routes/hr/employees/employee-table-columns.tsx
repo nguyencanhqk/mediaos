@@ -1,5 +1,5 @@
 import { type ColumnDef } from "@tanstack/react-table";
-import type { HrEmployeeListItem } from "@mediaos/contracts";
+import { HR_EMPLOYEE_SORT_FIELDS, type HrEmployeeListItem } from "@mediaos/contracts";
 import { formatDate } from "@mediaos/web-core";
 import { Avatar } from "@mediaos/ui";
 import type { useTranslation } from "react-i18next";
@@ -17,12 +17,14 @@ type TF = ReturnType<typeof useTranslation<"hr">>["t"];
  * HR-PROFILE-UI-1 — catalog cột của bảng hồ sơ nhân sự.
  * pii: cột chỉ có dữ liệu khi caller có view-sensitive (server mask → null); FE lọc khỏi
  * catalog khi thiếu quyền để không phơi cột toàn "—".
+ * HR-PROFILE-UI-2 — groupable: cột được phép gom nhóm (đơn vị/trạng thái) trên panel Tùy chỉnh cột.
  */
 export interface EmployeeColumnMeta {
   id: string;
   labelKey: string;
   defaultVisible: boolean;
   pii?: boolean;
+  groupable?: boolean;
 }
 
 export const EMPLOYEE_COLUMN_CATALOG: EmployeeColumnMeta[] = [
@@ -33,7 +35,12 @@ export const EMPLOYEE_COLUMN_CATALOG: EmployeeColumnMeta[] = [
   { id: "phone", labelKey: "employees.columns.phone", defaultVisible: true, pii: true },
   { id: "email", labelKey: "employees.columns.email", defaultVisible: true },
   { id: "positionName", labelKey: "employees.columns.position", defaultVisible: true },
-  { id: "orgUnitName", labelKey: "employees.columns.department", defaultVisible: true },
+  {
+    id: "orgUnitName",
+    labelKey: "employees.columns.department",
+    defaultVisible: true,
+    groupable: true,
+  },
   { id: "startDate", labelKey: "employees.columns.startDate", defaultVisible: true },
   // HR-PROFILE-UI-1b — directory-class (mig 0489)
   { id: "officialDate", labelKey: "employees.columns.officialDate", defaultVisible: true },
@@ -46,17 +53,40 @@ export const EMPLOYEE_COLUMN_CATALOG: EmployeeColumnMeta[] = [
   },
   { id: "workType", labelKey: "employees.columns.workType", defaultVisible: false },
   { id: "employmentType", labelKey: "employees.columns.employmentType", defaultVisible: false },
-  { id: "status", labelKey: "employees.columns.status", defaultVisible: true },
+  { id: "status", labelKey: "employees.columns.status", defaultVisible: true, groupable: true },
   { id: "seniority", labelKey: "employees.columns.seniority", defaultVisible: true },
 ];
+
+/**
+ * HR-PROFILE-UI-2 — cột được phép SẮP XẾP SERVER = allowlist HR_EMPLOYEE_SORT_FIELDS (contracts) — 1-1 với
+ * ORDER BY allowlist ở repo (chống injection). Cột ngoài allowlist → enableSorting:false (không có header
+ * click). Gom nhóm chỉ mở cho đơn vị/trạng thái.
+ */
+const SORTABLE_COLUMN_IDS = new Set<string>(HR_EMPLOYEE_SORT_FIELDS);
+const GROUPABLE_COLUMN_IDS = new Set<string>(
+  EMPLOYEE_COLUMN_CATALOG.filter((c) => c.groupable).map((c) => c.id),
+);
+
+/** Cột được phép gom nhóm (đơn vị/trạng thái) — dùng cho panel Tùy chỉnh cột. */
+export const GROUPABLE_EMPLOYEE_COLUMNS = EMPLOYEE_COLUMN_CATALOG.filter((c) => c.groupable);
 
 function dash(value: string | null | undefined): string {
   return value ?? "—";
 }
 
-/** Toàn bộ ColumnDef — DataTable ẩn/hiện theo columnVisibility, KHÔNG cần build lại theo lựa chọn. */
+/** id hiệu dụng của 1 ColumnDef (id tường minh, ngược lại suy từ accessorKey). */
+function columnId(def: ColumnDef<HrEmployeeListItem>): string | undefined {
+  if (def.id) return def.id;
+  if ("accessorKey" in def && def.accessorKey) return String(def.accessorKey);
+  return undefined;
+}
+
+/**
+ * Toàn bộ ColumnDef — DataTable ẩn/hiện theo columnVisibility, KHÔNG cần build lại theo lựa chọn.
+ * HR-PROFILE-UI-2: gắn enableSorting (allowlist sort-server) + enableGrouping (đơn vị/trạng thái) theo id.
+ */
 export function buildEmployeeColumns(t: TF): ColumnDef<HrEmployeeListItem>[] {
-  return [
+  const defs: ColumnDef<HrEmployeeListItem>[] = [
     {
       accessorKey: "employeeCode",
       header: t("employees.columns.code"),
@@ -172,4 +202,14 @@ export function buildEmployeeColumns(t: TF): ColumnDef<HrEmployeeListItem>[] {
       ),
     },
   ];
+
+  // Gắn cờ theo allowlist: sort-server chỉ cho cột trong HR_EMPLOYEE_SORT_FIELDS; gom nhóm chỉ đơn vị/trạng thái.
+  return defs.map((def) => {
+    const id = columnId(def);
+    return {
+      ...def,
+      enableSorting: id ? SORTABLE_COLUMN_IDS.has(id) : false,
+      enableGrouping: id ? GROUPABLE_COLUMN_IDS.has(id) : false,
+    };
+  });
 }

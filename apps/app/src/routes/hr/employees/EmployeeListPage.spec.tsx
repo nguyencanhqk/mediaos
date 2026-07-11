@@ -1,10 +1,11 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useAuthStore } from "@mediaos/web-core";
+import { useAuthStore, ApiError } from "@mediaos/web-core";
 import { hrApi } from "@mediaos/web-core";
 import { EmployeeListPage } from "./EmployeeListPage";
+import { triggerBlobDownload } from "./download-blob";
 import type { HrEmployeeListResponse } from "@mediaos/contracts";
 
 // ---------------------------------------------------------------------------
@@ -17,9 +18,14 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     hrApi: {
       listEmployees: vi.fn(),
       listDepartments: vi.fn().mockResolvedValue([]),
+      exportEmployees: vi.fn(),
     },
   };
 });
+
+// Ranh giới I/O tải file — mock để assert gọi mà không đụng DOM download thật.
+vi.mock("./download-blob", () => ({ triggerBlobDownload: vi.fn() }));
+const mockDownload = triggerBlobDownload as ReturnType<typeof vi.fn>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -167,5 +173,60 @@ describe("EmployeeListPage", () => {
     });
     renderWithQuery(<EmployeeListPage />);
     await waitFor(() => expect(screen.getByText(/không có nhân viên/i)).toBeInTheDocument());
+  });
+
+  // ── EXPORT (HR-PROFILE-UI-2): gate useCanExact('export','employee') fail-closed ──────────
+  it("[export deny] ẩn nút Export khi thiếu cap export:employee (kể cả read:employee)", async () => {
+    setCapabilities({ "read:employee": true });
+    vi.mocked(hrApi.listEmployees).mockResolvedValue(MOCK_RESPONSE);
+    renderWithQuery(<EmployeeListPage />);
+    await waitFor(() => expect(screen.getByText("Nguyễn Văn A")).toBeInTheDocument());
+    expect(screen.queryByTestId("export-employees-button")).not.toBeInTheDocument();
+  });
+
+  it("[export deny] CHỈ `*:*` wildcard → ẩn nút Export (sensitive không kế thừa wildcard)", async () => {
+    setCapabilities({ "read:employee": true, "*:*": true });
+    vi.mocked(hrApi.listEmployees).mockResolvedValue(MOCK_RESPONSE);
+    renderWithQuery(<EmployeeListPage />);
+    await waitFor(() => expect(screen.getByText("Nguyễn Văn A")).toBeInTheDocument());
+    expect(screen.queryByTestId("export-employees-button")).not.toBeInTheDocument();
+  });
+
+  it("[export] có cap exact → click gọi exportEmployees + triggerBlobDownload", async () => {
+    setCapabilities({ "read:employee": true, "export:employee": true });
+    vi.mocked(hrApi.listEmployees).mockResolvedValue(MOCK_RESPONSE);
+    const blob = new Blob(["a,b\n1,2\n"], { type: "text/csv" });
+    vi.mocked(hrApi.exportEmployees).mockResolvedValue({ blob, filename: "nhan-su.csv" });
+
+    renderWithQuery(<EmployeeListPage />);
+    const btn = await screen.findByTestId("export-employees-button");
+    fireEvent.click(btn);
+
+    await waitFor(() => expect(mockDownload).toHaveBeenCalledTimes(1));
+    expect(hrApi.exportEmployees).toHaveBeenCalledTimes(1);
+    expect(mockDownload).toHaveBeenCalledWith(blob, "nhan-su.csv");
+  });
+
+  it("[export] 422 vượt cap → hiện lỗi inline + KHÔNG tải file", async () => {
+    setCapabilities({ "read:employee": true, "export:employee": true });
+    vi.mocked(hrApi.listEmployees).mockResolvedValue(MOCK_RESPONSE);
+    vi.mocked(hrApi.exportEmployees).mockRejectedValue(
+      new ApiError({
+        status: 422,
+        code: "HR-ERR-EXPORT-TOO-LARGE",
+        message: "Vui lòng thu hẹp bộ lọc",
+      }),
+    );
+
+    renderWithQuery(<EmployeeListPage />);
+    const btn = await screen.findByTestId("export-employees-button");
+    fireEvent.click(btn);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("export-employees-error")).toHaveTextContent(
+        "Vui lòng thu hẹp bộ lọc",
+      ),
+    );
+    expect(mockDownload).not.toHaveBeenCalled();
   });
 });

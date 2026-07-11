@@ -22,6 +22,9 @@ import { EmployeesService } from "./employees.service";
 import { HrReadController } from "./hr-read.controller";
 import { HrReadRepository } from "./hr-read.repository";
 import { HrReadService } from "./hr-read.service";
+// HR-PROFILE-UI-2 (additive): employee directory CSV export (export:employee, isSensitive). Reuses
+// HrReadRepository + DataScopeService + PermissionService + AuditService (all already in this module).
+import { HrExportService } from "./hr-export.service";
 // S2-HR-BE-2 (additive): HR write core. SequenceModule provides SequenceService (employee-code gen).
 import { HrWriteController } from "./hr-write.controller";
 import { HrWriteRepository } from "./hr-write.repository";
@@ -85,6 +88,8 @@ import { EmployeeFileResolver } from "./employee-file.resolver";
     // S2-HR-BE-1 (additive): HR read core providers.
     HrReadService,
     HrReadRepository,
+    // HR-PROFILE-UI-2 (additive): employee directory CSV export service.
+    HrExportService,
     // S2-HR-BE-2 (additive): HR write core providers.
     HrWriteService,
     HrWriteRepository,
