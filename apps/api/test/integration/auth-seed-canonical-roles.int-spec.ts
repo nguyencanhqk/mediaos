@@ -110,7 +110,8 @@ const REQUIRED_CATALOG = [
   { action: "create", resourceType: "profile-change-request", sensitive: false },
   { action: "approve", resourceType: "profile-change-request", sensitive: false },
   { action: "change-status", resourceType: "employee", sensitive: false },
-  { action: "export", resourceType: "employee", sensitive: false },
+  // mig 0492 (HR-PROFILE-UI-2): flip is_sensitive false→true — parity với export:attendance/leave (fail-closed, wildcard không thoả).
+  { action: "export", resourceType: "employee", sensitive: true },
 ];
 
 // Cặp TUYỆT ĐỐI KHÔNG được role-grant cho 4 role canonical (assert CHỈ trên role canonical).
