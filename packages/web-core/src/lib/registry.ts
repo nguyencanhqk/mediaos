@@ -996,13 +996,14 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     order: 44,
   },
 
-  // Tasks
+  // Tasks — S4-FE-TASK-2: screenCode CHUYỂN sang canonical SPEC-06 §13.5/§13.9 (TASK-SCREEN-005/009,
+  // thay placeholder OVERVIEW/MY-TASKS của S4-FE-REGISTRY-1) — TaskListPage/MyTasksPage đã build.
   {
     routeKey: "task.overview",
     path: "/tasks",
     layout: "MODULE_WORKSPACE",
     moduleCode: "TASK",
-    screenCode: "TASK-SCREEN-OVERVIEW",
+    screenCode: "TASK-SCREEN-005",
     titleKey: "routeTitle.tasks",
     requiredAnyPermissions: ["TASK.TASK.VIEW"],
     showInSidebar: true,
@@ -1013,7 +1014,7 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     path: "/tasks/my-tasks",
     layout: "MODULE_WORKSPACE",
     moduleCode: "TASK",
-    screenCode: "TASK-SCREEN-MY-TASKS",
+    screenCode: "TASK-SCREEN-009",
     titleKey: "routeTitle.taskMyTasks",
     requiredAnyPermissions: ["TASK.TASK.VIEW"],
     showInSidebar: true,
