@@ -246,6 +246,14 @@ describe.skipIf(!hasLaneDb)("S4-DASH-BE-3 Dashboard config CRUD (HTTP)", () => {
     const res = await patch(nest, configBId, h).send({ sort_order: 5 });
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe("DASH-ERR-NOT_FOUND");
+    // Bằng chứng ĐỘC LẬP (không chỉ dựa status 404): PATCH chéo-tenant KHÔNG side-effect lên row company B.
+    // direct/superuser đọc bypass RLS ⇒ thấy giá trị thật; sort_order phải GIỮ NGUYÊN giá trị seed (10),
+    // KHÔNG bị đổi thành 5. Nếu RLS/tenant-filter thủng ⇒ assert này đi RED.
+    const bRow = await direct.query(
+      "SELECT sort_order FROM dashboard_widget_configs WHERE id = $1",
+      [configBId],
+    );
+    expect(bRow.rows[0].sort_order).toBe(10);
   });
 
   it("T2 admin A GET /configs KHÔNG chứa row của company B", async () => {

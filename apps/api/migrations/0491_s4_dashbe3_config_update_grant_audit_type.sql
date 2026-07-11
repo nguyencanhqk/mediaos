@@ -61,7 +61,7 @@ BEGIN
    LIMIT 1;
 
   IF v_oid IS NULL THEN
-    RAISE NOTICE '[0490] khong tim thay CHECK object_type tren audit_logs — bo qua (idempotent)';
+    RAISE NOTICE '[0491] khong tim thay CHECK object_type tren audit_logs — bo qua (idempotent)';
     RETURN;
   END IF;
 
@@ -80,7 +80,7 @@ BEGIN
    WHERE NOT (v_cur @> ARRAY[t]);
 
   IF v_add IS NULL OR array_length(v_add, 1) = 0 THEN
-    RAISE NOTICE '[0490] dashboard_widget_config da co trong CHECK — idempotent skip';
+    RAISE NOTICE '[0491] dashboard_widget_config da co trong CHECK — idempotent skip';
     RETURN;
   END IF;
 
@@ -92,7 +92,7 @@ BEGIN
     'ALTER TABLE audit_logs ADD CONSTRAINT %I CHECK (object_type = ANY(%L::text[]))',
     v_con, v_union
   );
-  RAISE NOTICE '[0490] da them % vao CHECK object_type cua audit_logs', array_to_string(v_add, ', ');
+  RAISE NOTICE '[0491] da them % vao CHECK object_type cua audit_logs', array_to_string(v_add, ', ');
 END;
 $$;
 
