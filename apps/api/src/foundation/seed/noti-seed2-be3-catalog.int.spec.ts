@@ -97,6 +97,43 @@ function placeholders(...texts: (string | null)[]): string[] {
   return [...out];
 }
 
+/**
+ * F. Engine E2E — CẢ 3 mã BE-3 mới-bật (0490) phải intake→render bằng TEMPLATE THẬT (fallback=false).
+ * Chính là 3 mã trước 0490 bị "câm" (disabled/thiếu template). `extra` = field payload use-case (mirror
+ * task-actions.service.ts). title/bodyContains = kỳ vọng render TỪ template 0490 (KHÔNG event_name fallback).
+ */
+interface EngineE2ECase {
+  readonly code: (typeof CANONICAL_BE3_EVENTS)[number];
+  readonly taskCode: string;
+  readonly title: string;
+  readonly bodyContains: readonly string[];
+  readonly extra: Readonly<Record<string, string>>;
+}
+
+const ENGINE_E2E_CASES: readonly EngineE2ECase[] = [
+  {
+    code: "TASK_PRIORITY_CHANGED",
+    taskCode: "TASK-1001",
+    title: "Độ ưu tiên công việc đã thay đổi",
+    bodyContains: ["TASK-1001", "High"],
+    extra: { oldPriority: "Normal", newPriority: "High" },
+  },
+  {
+    code: "TASK_DUE_DATE_CHANGED",
+    taskCode: "TASK-1002",
+    title: "Hạn chót công việc đã thay đổi",
+    bodyContains: ["TASK-1002", "2026-07-20"],
+    extra: { oldDueAt: "2026-07-10T00:00:00.000Z", newDueAt: "2026-07-20T00:00:00.000Z" },
+  },
+  {
+    code: "TASK_ASSIGNEE_CHANGED",
+    taskCode: "TASK-1003",
+    title: "Người phụ trách công việc đã thay đổi",
+    bodyContains: ["TASK-1003", "Thiết kế banner"],
+    extra: { oldAssigneeEmployeeId: "emp-old", assigneeEmployeeId: "emp-new" },
+  },
+];
+
 // vitest cwd = apps/api (vitest.config root: "."). Resolve migration file from there — KHÔNG import.meta
 // (tsc typecheck của api dùng module=CommonJS, import.meta = TS1343).
 const MIGRATION_0490 = resolve(
@@ -320,50 +357,63 @@ describe.skipIf(!runDb)(
       }
     });
 
-    // ── F. Engine E2E — TASK_PRIORITY_CHANGED dùng template thật (fallback=false) ──────
-    it("F. intake TASK_PRIORITY_CHANGED (recipient ACTIVE ≠ actor) → createdCount≥1, fallback=false", async () => {
-      const payload = {
-        taskId: recipient, // UUID hợp lệ bất kỳ (chỉ là biến render, không FK)
-        taskTitle: "Thiết kế banner",
-        taskCode: "TASK-1001",
-        projectId: company.companyId,
-        actorUserId: actor,
-        actorEmployeeId: actor,
-        oldPriority: "Normal",
-        newPriority: "High",
-        assigneeUserId: recipient,
-      };
-      const summary = await engine.intake(company.companyId, {
-        eventCode: "TASK_PRIORITY_CHANGED",
-        sourceModule: "TASK",
-        actorUserId: actor,
-        recipient: { mode: "UserIds", userIds: [recipient], employeeIds: [] },
-        payload,
-      });
-      expect(summary.createdCount, "recipient active ≠ actor phải nhận 1").toBeGreaterThanOrEqual(
-        1,
-      );
+    // ── F. Engine E2E — CẢ 3 mã mới-bật intake→render template THẬT (fallback=false) ────
+    // Mỗi mã: SEED recipient ACTIVE ≠ actor (đã seed ở beforeAll) → intake → createdCount≥1 (KHÔNG 404/
+    // event_disabled/no_recipient) → notification.title = title_template, body render biến, delivery_log
+    // metadata NULL (fallback=false ⇒ dùng template thật, KHÔNG fallback event_name).
+    describe("F. Engine E2E intake render template THẬT (fallback=false)", () => {
+      for (const c of ENGINE_E2E_CASES) {
+        it(`${c.code}: recipient ACTIVE ≠ actor → createdCount≥1, title/body render, fallback=false`, async () => {
+          const payload: Record<string, string> = {
+            taskId: recipient, // UUID hợp lệ bất kỳ (chỉ là biến render, không FK)
+            taskTitle: "Thiết kế banner",
+            taskCode: c.taskCode,
+            projectId: company.companyId,
+            actorUserId: actor,
+            actorEmployeeId: actor,
+            assigneeUserId: recipient,
+            ...c.extra,
+          };
+          const summary = await engine.intake(company.companyId, {
+            eventCode: c.code,
+            sourceModule: "TASK",
+            actorUserId: actor,
+            recipient: { mode: "UserIds", userIds: [recipient], employeeIds: [] },
+            payload,
+          });
+          expect(
+            summary.createdCount,
+            `${c.code}: recipient active ≠ actor phải nhận ≥1 (không skip no_recipient/event_disabled)`,
+          ).toBeGreaterThanOrEqual(1);
 
-      const n = await direct.query<{ title: string; body: string }>(
-        `SELECT title, body FROM notifications
-        WHERE company_id=$1 AND recipient_user_id=$2 AND event_code='TASK_PRIORITY_CHANGED' AND deleted_at IS NULL`,
-        [company.companyId, recipient],
-      );
-      expect(n.rows.length).toBe(1);
-      // Template THẬT (KHÔNG fallback event_name): title = title_template, body render {taskCode}/{newPriority}.
-      expect(n.rows[0].title).toBe("Độ ưu tiên công việc đã thay đổi");
-      expect(n.rows[0].body).toContain("TASK-1001");
-      expect(n.rows[0].body).toContain("High");
+          const n = await direct.query<{ title: string; body: string }>(
+            `SELECT title, body FROM notifications
+            WHERE company_id=$1 AND recipient_user_id=$2 AND event_code=$3 AND deleted_at IS NULL`,
+            [company.companyId, recipient, c.code],
+          );
+          expect(n.rows.length, `${c.code}: đúng 1 notification cho recipient`).toBe(1);
+          // Template THẬT (KHÔNG fallback event_name): title = title_template, body render placeholder BE-3.
+          expect(n.rows[0].title).toBe(c.title);
+          for (const frag of c.bodyContains) {
+            expect(n.rows[0].body, `${c.code}: body phải render '${frag}'`).toContain(frag);
+          }
+          // Biến câm cũ (snake_case / dấu {} còn nguyên) KHÔNG được lọt vào body đã render.
+          expect(n.rows[0].body).not.toMatch(/\{[a-zA-Z_]+\}/);
 
-      // fallback=false ⇒ delivery_log metadata NULL (path fallback set reason='template_fallback').
-      const dl = await direct.query<{ metadata: Record<string, unknown> | null }>(
-        `SELECT dl.metadata FROM notification_delivery_logs dl
-         JOIN notifications n ON n.id = dl.notification_id
-        WHERE dl.company_id=$1 AND dl.recipient_user_id=$2 AND n.event_code='TASK_PRIORITY_CHANGED'`,
-        [company.companyId, recipient],
-      );
-      expect(dl.rows.length).toBe(1);
-      expect(dl.rows[0].metadata).toBeNull();
+          // fallback=false ⇒ delivery_log metadata NULL (path fallback set reason='template_fallback').
+          const dl = await direct.query<{ metadata: Record<string, unknown> | null }>(
+            `SELECT dl.metadata FROM notification_delivery_logs dl
+             JOIN notifications n ON n.id = dl.notification_id
+            WHERE dl.company_id=$1 AND dl.recipient_user_id=$2 AND n.event_code=$3`,
+            [company.companyId, recipient, c.code],
+          );
+          expect(dl.rows.length, `${c.code}: đúng 1 delivery_log`).toBe(1);
+          expect(
+            dl.rows[0].metadata,
+            `${c.code}: fallback=false ⇒ metadata NULL (KHÔNG template_fallback)`,
+          ).toBeNull();
+        });
+      }
     });
   },
 );
