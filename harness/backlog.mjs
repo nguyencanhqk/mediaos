@@ -4627,6 +4627,36 @@ export const backlog = [
       "DTO contracts dual-build; envelope API-01; widget list có limit",
       "Int-spec RED-trước: employee KHÔNG thấy widget Manager/HR · cross-tenant deny · dashboard/me trả đúng type theo quyền; FULL gate security-reviewer + plan-reviewer PASS trước code (crown)",
     ],
+    // PHIÊN 2026-07-10 (lane dashbe1) — CODE XONG (WIP 3c769f7, nhánh auto/S4-DASH-BE-1): 15/18 int-spec
+    // xanh gồm đủ thuộc tính crown (M10 gate tầng-2 hai chiều, M6 cross-tenant, deny-403, 404, limit).
+    // 3 spec đỏ KHÔNG phải lỗi code: role manager/hr THIẾU grant read:dashboard (gate /me + /types) —
+    // seed-drift: 0100 blanket CROSS JOIN chạy TRƯỚC khi manager/hr sinh ra ở 0444. Owner chốt 2026-07-11:
+    // backfill bằng WO S4-DASH-SEED-2 (dưới) rồi rerun 3 spec → chốt PR lane này. KHÔNG đổi gate design
+    // (phương án OR view-* bị bác — làm DASH-ERR-DASHBOARD_NOT_RESOLVED 404 không bắn được qua HTTP).
+  },
+  {
+    id: "S4-DASH-SEED-2",
+    module: "DASH",
+    layer: "DB",
+    title:
+      "Backfill grant read:dashboard cho role manager + hr (role sinh ở 0444 lỡ blanket 0100) — mở khóa GET /dashboard/me|/types cho 2/4 persona, blocker của S4-DASH-BE-1",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/migrations/**", "apps/api/test/integration/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Phát hiện bởi lane S4-DASH-BE-1 (2026-07-10): 3 int-spec đỏ — /dashboard/me|/types 403 cho manager/hr; xác minh psql: read:dashboard chỉ có ở 10 role cũ (mig 0005), manager/hr vắng",
+      "apps/api/migrations/0100_g14_dashboard_permissions_seed.sql (blanket CROSS JOIN gốc)",
+      "apps/api/migrations/0444_* (S2-AUTH-SEED-1 — nơi sinh role manager/hr)",
+      "apps/api/test/integration/task-recon-grants.int-spec.ts (mẫu int-spec assert grant per-pair)",
+    ],
+    done_when: [
+      "OWNER CHỐT 2026-07-11 (phương án 1, bác phương án đổi gate): migration đánh số nối tiếp head thật (đọc _journal.json — sau 0487 → mint 0488, when +5000): INSERT idempotent role_permissions effect='ALLOW' cho role GLOBAL manager + hr × permission (action='read', resource_type='dashboard') — resolve role_id/permission_id trong DO-block per-pair (mirror 0444/0480/0486, KHÔNG blanket CROSS JOIN mới), ON CONFLICT DO NOTHING, KHÔNG DDL. data_scope: SELECT giá trị 0100 đã set cho role cũ (employee/company-admin) rồi mirror ĐÚNG — KHÔNG bịa (bài học §13 per-pair scope)",
+      "Rà 3 blanket còn lại tiền-0444 (0063/0101/0132): liệt kê cặp manager/hr cũng lỡ vào COMMENT migration — CHỈ backfill read:dashboard ở WO này, cặp khác thuộc domain park (report/approval legacy) KHÔNG grant khi chưa có yêu cầu nghiệp vụ (fail-closed)",
+      "Int-spec RED-trước kiểu task-recon-grants (gate hasDb && LANE_DB): (a) manager + hr có grant (read,dashboard) sau migration · (b) chạy lại idempotent — grant-count không đổi · (c) snapshot role_permissions trước/sau: đúng +2 row, KHÔNG role/permission nào khác bị đụng · (d) PermissionService.can('read','dashboard') = allow cho user gắn role manager/hr",
+      "Ghi chú quy trình vào comment migration: role mới tạo sau này PHẢI backfill blanket-grant tiền nhiệm (bài học 0100↔0444); FULL gate security-reviewer + database-reviewer PASS",
+    ],
   },
   {
     id: "S4-DASH-BE-2",
