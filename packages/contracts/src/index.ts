@@ -149,3 +149,6 @@ export * from "./user-invite";
 export * from "./ai";
 // S2-HR-BE-1 HR read-core contracts (list/detail/me-profile + lookups; sensitive fields server-masked)
 export * from "./hr";
+// S4-DASH-BE-3 (additive): Dashboard widget CONFIG write contracts (GET/PATCH /dashboard/configs —
+// admin CRUD trên dashboard_widget_configs) — tách khỏi ./dashboard-resolver (registry đọc, BE-1).
+export * from "./dashboard-config";
