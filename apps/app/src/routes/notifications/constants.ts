@@ -15,6 +15,11 @@ export const NOTI_ENGINE_PAIRS = {
   MARK_ALL_READ: { action: "mark_all_read", resourceType: "notification" },
   HIDE: { action: "hide", resourceType: "notification" },
   DELETE: { action: "delete", resourceType: "notification" },
+  // S4-FE-NOTI-3 — Delivery logs viewer (UI-NOTI-SCREEN-006). Cặp seed THẬT mig 0481
+  // (view:notification-delivery-log, is_sensitive=TRUE, grant company-admin scope Company) —
+  // literal engine pair (KHÔNG qua PERMISSION_CODE_TO_PAIR, mirror READ/MARK_READ/…). Trang dùng
+  // useCanExact (KHÔNG wildcard fallback) vì cặp is_sensitive=true.
+  VIEW_DELIVERY_LOG: { action: "view", resourceType: "notification-delivery-log" },
 } as const;
 
 /** Trạng thái thông báo — khớp `myNotificationStatusSchema` (@mediaos/contracts). */
@@ -43,6 +48,13 @@ export const NOTI_PATHS = {
   LIST: "/notifications",
   DETAIL: (id: string) => `/notifications/${id}`,
   EVENTS: "/notifications/events",
+  // S4-FE-NOTI-3 — UI-NOTI-SCREEN-006 (docs/UI/UI-09 §12.3 + UI-04 §21 route bảng).
+  DELIVERY_LOGS: "/notifications/delivery-logs",
+} as const;
+
+/** Mã màn hình (SPEC-01 §9) — S4-FE-NOTI-3. */
+export const NOTI_SCREEN = {
+  DELIVERY_LOGS: "NOTI-SCREEN-DELIVERY-LOGS",
 } as const;
 
 /**
@@ -82,3 +94,35 @@ export const NOTI_LIST_PAGE_SIZE = 20;
 
 /** Số dòng tối đa hiển thị trong dropdown chuông — khớp MY_NOTIFICATION_DROPDOWN_LIMIT_DEFAULT (contracts). */
 export const NOTI_DROPDOWN_LIMIT = 10;
+
+/**
+ * Kích thước trang mặc định cho NotificationDeliveryLogsPage — khớp NOTI_ADMIN_PAGE_SIZE_DEFAULT
+ * (@mediaos/contracts — notification-admin.ts, KHÔNG export nên pin lại giá trị ở đây; server vẫn
+ * tự clamp [1..100] dù client gửi gì).
+ */
+export const NOTI_DELIVERY_LOG_PAGE_SIZE = 20;
+
+/**
+ * Kênh gửi — khớp CHECK `chk_notification_delivery_logs_channel` (apps/api/src/db/schema/noti.ts).
+ * KHÔNG export ở @mediaos/contracts (contract query field chỉ z.string() tự do) → pin lại tại FE cho
+ * <Select> filter, server vẫn tự validate CHECK dù client gửi giá trị khác.
+ */
+export const NOTI_DELIVERY_LOG_CHANNELS = [
+  "IN_APP",
+  "EMAIL",
+  "PUSH",
+  "REALTIME",
+  "INTEGRATION",
+] as const;
+
+/**
+ * Trạng thái gửi — khớp CHECK `chk_notification_delivery_logs_status` (apps/api/src/db/schema/noti.ts).
+ */
+export const NOTI_DELIVERY_LOG_STATUSES = [
+  "Pending",
+  "Sent",
+  "Delivered",
+  "Failed",
+  "Skipped",
+  "Cancelled",
+] as const;

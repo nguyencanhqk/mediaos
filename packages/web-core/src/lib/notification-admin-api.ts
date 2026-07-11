@@ -4,6 +4,9 @@ import {
   type NotificationEventAdminItem,
   type NotificationEventAdminQuery,
   type NotificationEventAdminPatch,
+  notificationDeliveryLogAdminItemSchema,
+  type NotificationDeliveryLogAdminItem,
+  type NotificationDeliveryLogAdminQuery,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -50,3 +53,39 @@ export const notificationAdminApi = {
       body: JSON.stringify(body),
     }),
 };
+
+/**
+ * notificationDeliveryLogApi — S4-FE-NOTI-3. Ranh giới HTTP cho /notifications/delivery-logs
+ * (NOTI-API-401, NotificationAdminController.listDeliveryLogs, S4-NOTI-BE-3) — VIEWER APPEND-ONLY.
+ *
+ * Permission (seed THẬT mig 0481): view:notification-delivery-log, is_sensitive=TRUE, grant
+ * company-admin scope Company — FE dùng useCanExact (KHÔNG wildcard fallback, mirror BE fail-closed
+ * cho cặp sensitive, cùng kỹ thuật hr.audit-logs/attendance view-team).
+ *
+ * BẤT BIẾN #2 (APPEND-ONLY): server chỉ có route GET (KHÔNG PATCH/DELETE cho delivery-logs) — module
+ * này CHỈ export `list`, KHÔNG có create/update/remove. BẤT BIẾN #3 (masking do server):
+ * notificationDeliveryLogAdminItemSchema là DTO WHITELIST của @mediaos/contracts — client CHỈ render
+ * field server đã cho phép, KHÔNG tự suy field bị ẩn.
+ *
+ * Pagination: controller trả `paginated(rows, pagination)` — interceptor HOIST `pagination` lên top-level
+ * envelope { success, data, error, pagination }, nhưng `apiFetch`/`unwrapEnvelope` CHỈ giữ field `data`
+ * (mảng) — tổng số bản ghi KHÔNG khả dụng ở client (mirror fileAccessLogApi.list/myNotificationApi.list).
+ * Trang dùng heuristic full-page ⇒ còn trang sau (AuthLogPagination).
+ */
+export type NotificationDeliveryLogListParams = Partial<
+  Omit<NotificationDeliveryLogAdminQuery, "created_from" | "created_to">
+> & {
+  created_from?: string;
+  created_to?: string;
+};
+
+export const notificationDeliveryLogApi = {
+  /** GET /notifications/delivery-logs — masked + phân trang + filter channel/status/recipient/time. */
+  list: (params?: NotificationDeliveryLogListParams): Promise<NotificationDeliveryLogAdminItem[]> =>
+    apiFetch(
+      `/notifications/delivery-logs${buildQueryString(params as Record<string, unknown>)}`,
+      z.array(notificationDeliveryLogAdminItemSchema),
+    ),
+};
+
+export type { NotificationDeliveryLogAdminItem, NotificationDeliveryLogAdminQuery };

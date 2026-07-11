@@ -460,6 +460,10 @@ export const notificationKeys = {
   // TÁCH khỏi `list` (own-scope MyNotificationsController, khác endpoint/shape/permission hẳn).
   events: (params?: Record<string, unknown>) =>
     [...rootKeys.notifications, "admin-events", params] as const,
+  // S4-FE-NOTI-3 — APPEND. GET /notifications/delivery-logs (viewer append-only, TÁCH khỏi `list`
+  // của My-Notification — khác endpoint/permission/scope, không invalidate chéo).
+  deliveryLogs: (params?: Record<string, unknown>) =>
+    [...rootKeys.notifications, "delivery-logs", params] as const,
 };
 
 // S4-FE-NOTI-1 — mutation → invalidation cho My-Notification (mark-read/mark-all-read/delete). Prefix
