@@ -1,4 +1,4 @@
--- Migration 0490: S4-DASH-BE-3 (🔴 zone=red, FULL gate — chạm GRANT + audit append-only + RLS) —
+-- Migration 0491: S4-DASH-BE-3 (🔴 zone=red, FULL gate — chạm GRANT + audit append-only + RLS) —
 --   MỞ QUYỀN UPDATE cho app role trên dashboard_widget_configs + nạp object_type audit cho PATCH config.
 --   KHÔNG DDL bảng mới, KHÔNG db:generate (GRANT + DO-block CHECK không biểu diễn được bằng Drizzle schema).
 --
@@ -30,10 +30,11 @@
 --   KHÔNG seed permission: cặp view/update:dashboard-config ĐÃ seed + grant company-admin ở 0484
 --      (DASH_PERMISSION_PAIRS/DASH_GRANT_MATRIX). WO này KHÔNG đụng permissions/role_permissions.
 --
--- BAND 0490 (lane S4-DASH-BE-3 / L0-migration-grant-audit). Journal: idx 170, when 1717500845000
---   (> head 0489 idx 169 / 1717500840000). Nối tiếp ĐƠN ĐIỆU sau 0489_hr_profile_personal_fields.
---   AUDIT_OBJECT_TYPES (schema/audit.ts) sync 'dashboard_widget_config' CÙNG commit (quy tắc 0020/0033/0474:
---   TS const + SQL CHECK đổi cùng lúc).
+-- BAND 0491 (lane S4-DASH-BE-3 / L0-migration-grant-audit — RENUMBER sau va chạm 0490 với NOTI-SEED-2 #157).
+--   Rebase wave lên master e8c5f83 rồi renumber: 0490→0491, journal idx 170→171. Nối tiếp head THẬT
+--   0490_s4_notiseed2 idx:170 → 0491 idx:171 when:1717500850000 (> 0490_s4_notiseed2 idx 170 / 1717500845000,
+--   bước ĐƠN ĐIỆU 5000ms như 0488/0489/0490). AUDIT_OBJECT_TYPES (schema/audit.ts) sync
+--   'dashboard_widget_config' CÙNG commit (quy tắc 0020/0033/0474: TS const + SQL CHECK đổi cùng lúc).
 -- ════════════════════════════════════════════════════════════════════════════════════════════════
 
 -- ─────────── (1) GRANT UPDATE app role trên dashboard_widget_configs (KHÔNG DELETE, KHÔNG worker) ───────────
