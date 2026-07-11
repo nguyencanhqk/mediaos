@@ -37,7 +37,33 @@ export interface EmployeeWriteData {
   endDate: string | null;
 }
 
-export type EmployeeUpdateData = Partial<Omit<EmployeeWriteData, "userId">>;
+/**
+ * HR-PROFILE-UI-1b — PATCH-only fields. DIRECTORY = audit giá trị bình thường; PERSONAL/PII = service
+ * gate view-sensitive per-row + audit CHỈ tên field (giá trị mask). identity_* / bank_* vẫn cấm.
+ */
+export interface EmployeeDirectoryPatch {
+  officialDate?: string | null;
+  probationEndDate?: string | null;
+  workLocation?: string | null;
+}
+
+export interface EmployeePersonalPatch {
+  gender?: string | null;
+  dateOfBirth?: string | null;
+  maritalStatus?: string | null;
+  personalEmail?: string | null;
+  phone?: string | null;
+  currentAddress?: string | null;
+  permanentAddress?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  taxCode?: string | null;
+  personalExtra?: Record<string, string> | null;
+}
+
+export type EmployeeUpdateData = Partial<Omit<EmployeeWriteData, "userId">> &
+  EmployeeDirectoryPatch &
+  EmployeePersonalPatch;
 
 /** Minimal row the service needs to gate status/link transitions (read under FOR UPDATE). */
 export interface EmployeeStateRow {
@@ -96,6 +122,23 @@ export class HrWriteRepository {
         startDate: employeeProfiles.startDate,
         endDate: employeeProfiles.endDate,
         status: employeeProfiles.status,
+        // HR-PROFILE-UI-1b: directory patch fields (giá trị vào audit bình thường).
+        officialDate: employeeProfiles.officialDate,
+        probationEndDate: employeeProfiles.probationEndDate,
+        workLocation: employeeProfiles.workLocation,
+        // HR-PROFILE-UI-1b: PII before-values — CHỈ để diff phát hiện thay đổi trong service;
+        // TUYỆT ĐỐI không vào audit (diffPii mask giá trị, structuralSnapshot không allowlist chúng).
+        gender: employeeProfiles.gender,
+        dateOfBirth: employeeProfiles.dateOfBirth,
+        maritalStatus: employeeProfiles.maritalStatus,
+        personalEmail: employeeProfiles.personalEmail,
+        phone: employeeProfiles.phone,
+        currentAddress: employeeProfiles.currentAddress,
+        permanentAddress: employeeProfiles.permanentAddress,
+        emergencyContactName: employeeProfiles.emergencyContactName,
+        emergencyContactPhone: employeeProfiles.emergencyContactPhone,
+        taxCode: employeeProfiles.taxCode,
+        personalExtra: employeeProfiles.personalExtra,
       })
       .from(employeeProfiles)
       .where(

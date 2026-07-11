@@ -42,6 +42,13 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       getEmployee: vi.fn(),
       createEmployee: vi.fn(),
       updateEmployee: vi.fn(),
+      // HR-PROFILE-UI-1 — dải tổng quan gọi summary khi list render.
+      getEmployeeSummary: vi.fn().mockResolvedValue({
+        total: 1,
+        byStatus: { active: 1 },
+        byEmploymentType: { full_time: 1 },
+        byGender: null,
+      }),
     },
   };
 });
@@ -96,6 +103,8 @@ const LIST: HrEmployeeListResponse = {
       status: "active",
       avatarUrl: null,
       startDate: null,
+      officialDate: null,
+      workLocation: null,
       gender: null,
       dateOfBirth: null,
       phone: null,
@@ -136,6 +145,11 @@ const DETAIL: HrEmployeeDetail = {
   permanentAddress: null,
   emergencyContactName: null,
   emergencyContactPhone: null,
+  officialDate: null,
+  probationEndDate: null,
+  workLocation: null,
+  taxCode: null,
+  personalExtra: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
 };

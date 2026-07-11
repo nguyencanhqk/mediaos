@@ -70,6 +70,12 @@ function makeDetailRow(overrides: Record<string, unknown> = {}) {
     permanentAddress: "2 Đường B, Nghệ An",
     emergencyContactName: "Nguyen Thi B",
     emergencyContactPhone: "0911111111",
+    // HR-PROFILE-UI-1b (mig 0489, hybrid): directory + MST/blob nhân khẩu.
+    officialDate: "2025-05-01",
+    probationEndDate: "2025-04-30",
+    workLocation: "Hà Nội",
+    taxCode: "8888888888",
+    personalExtra: { nationality: "Việt Nam", placeOfBirth: "Hải Phòng" },
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,
@@ -92,6 +98,8 @@ function makeListRow(overrides: Record<string, unknown> = {}) {
     status: "active",
     avatarUrl: "https://cdn.test/a.png",
     startDate: "2025-02-01",
+    officialDate: "2025-05-01",
+    workLocation: "Hà Nội",
     gender: "Male",
     dateOfBirth: "1997-10-02",
     phone: "0900000000",
@@ -483,6 +491,55 @@ describe("HrReadService.getHrEmployee — personal-info PII masking (HR-PROFILE-
     expect(res).not.toHaveProperty("identityNumber");
     expect(res).not.toHaveProperty("identityIssueDate");
     expect(res).not.toHaveProperty("identityIssuePlace");
+  });
+
+  // HR-PROFILE-UI-1b — hybrid (mig 0489): taxCode + personal_extra JSONB.
+  it("DENY view-sensitive → taxCode null + personalExtra null NGUYÊN KHỐI; directory fields pass", async () => {
+    const { svc } = makeService({
+      perms: { "view-salary": DENY(), "view-sensitive": DENY() },
+    });
+    const res = await svc.getHrEmployee(actorA, EMP_ID);
+    expect(res.taxCode).toBeNull();
+    expect(res.personalExtra).toBeNull();
+    // Directory-class không gate.
+    expect(res.officialDate).toBe("2025-05-01");
+    expect(res.probationEndDate).toBe("2025-04-30");
+    expect(res.workLocation).toBe("Hà Nội");
+  });
+
+  it("ALLOW view-sensitive → personalExtra revealed NHƯNG chiếu lên key allowlist (key lạ bị lọc)", async () => {
+    const repo = makeRepo({
+      findByIdTx: vi.fn().mockResolvedValue(
+        makeDetailRow({
+          personalExtra: {
+            nationality: "Việt Nam",
+            placeOfBirth: "Hải Phòng",
+            // Key lạ trong DB (legacy/tay) — KHÔNG được lọt ra DTO (client Zod .strict()).
+            secretNote: "must-not-leak",
+          },
+        }),
+      ),
+    });
+    const { svc } = makeService({
+      repo,
+      perms: { "view-salary": DENY(), "view-sensitive": ALLOW(false) },
+    });
+    const res = await svc.getHrEmployee(actorA, EMP_ID);
+    expect(res.taxCode).toBe("8888888888");
+    expect(res.personalExtra).toEqual({ nationality: "Việt Nam", placeOfBirth: "Hải Phòng" });
+    expect(JSON.stringify(res.personalExtra)).not.toContain("must-not-leak");
+  });
+
+  it("personalExtra rỗng/null → null (không trả {} vô nghĩa)", async () => {
+    const repo = makeRepo({
+      findByIdTx: vi.fn().mockResolvedValue(makeDetailRow({ personalExtra: {} })),
+    });
+    const { svc } = makeService({
+      repo,
+      perms: { "view-salary": DENY(), "view-sensitive": ALLOW(false) },
+    });
+    const res = await svc.getHrEmployee(actorA, EMP_ID);
+    expect(res.personalExtra).toBeNull();
   });
 });
 

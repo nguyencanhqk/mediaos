@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Users, RefreshCw, Eye, EyeOff, List, LayoutPanelLeft } from "lucide-react";
 import { hrApi, hrKeys, useCan, PermissionGate } from "@mediaos/web-core";
 import { PageHeader, DataTable, EmptyState, Button, Input, Select, cn } from "@mediaos/ui";
@@ -105,6 +105,8 @@ export function EmployeeListPage() {
     queryFn: () => hrApi.listEmployees({ ...queryParams, page }),
     enabled: canView,
     staleTime: 30_000,
+    // P1 perf: đổi trang/filter giữ dữ liệu cũ hiển thị trong lúc fetch — không nháy skeleton.
+    placeholderData: keepPreviousData,
   });
 
   const columns = useMemo(() => buildEmployeeColumns(t), [t]);

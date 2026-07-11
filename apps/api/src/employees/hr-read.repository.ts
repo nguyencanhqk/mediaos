@@ -36,6 +36,9 @@ const LIST_COLUMNS = {
   // HR-PROFILE-UI-1: directory columns (non-gated).
   avatarUrl: employeeProfiles.avatarUrl,
   startDate: employeeProfiles.startDate,
+  // HR-PROFILE-UI-1b (mig 0489): directory-class.
+  officialDate: employeeProfiles.officialDate,
+  workLocation: employeeProfiles.workLocation,
   // HR-PROFILE-UI-1: PII columns — raw here; the SERVICE masks them per view-sensitive grant.
   gender: employeeProfiles.gender,
   dateOfBirth: employeeProfiles.dateOfBirth,
@@ -80,6 +83,12 @@ const DETAIL_COLUMNS = {
   permanentAddress: employeeProfiles.permanentAddress,
   emergencyContactName: employeeProfiles.emergencyContactName,
   emergencyContactPhone: employeeProfiles.emergencyContactPhone,
+  // HR-PROFILE-UI-1b (mig 0489, hybrid): 3 directory + MST/blob nhân khẩu (PII — service masks).
+  officialDate: employeeProfiles.officialDate,
+  probationEndDate: employeeProfiles.probationEndDate,
+  workLocation: employeeProfiles.workLocation,
+  taxCode: employeeProfiles.taxCode,
+  personalExtra: employeeProfiles.personalExtra,
   createdAt: employeeProfiles.createdAt,
   updatedAt: employeeProfiles.updatedAt,
 } as const;
@@ -101,6 +110,8 @@ export interface HrListRow {
   status: string;
   avatarUrl: string | null;
   startDate: string | null;
+  officialDate: string | null;
+  workLocation: string | null;
   gender: string | null;
   dateOfBirth: string | null;
   phone: string | null;
@@ -142,6 +153,11 @@ export interface HrDetailRow {
   permanentAddress: string | null;
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
+  officialDate: string | null;
+  probationEndDate: string | null;
+  workLocation: string | null;
+  taxCode: string | null;
+  personalExtra: Record<string, string> | null;
   createdAt: Date;
   updatedAt: Date;
 }

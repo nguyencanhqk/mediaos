@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { DEFAULT_EMPLOYEE_CODE_NUMBER_LENGTH } from "@mediaos/contracts";
+import { DEFAULT_EMPLOYEE_CODE_NUMBER_LENGTH, HR_PERSONAL_EXTRA_KEYS } from "@mediaos/contracts";
 import type {
   HrContractTypeLookup,
   HrDepartmentLookup,
@@ -316,6 +316,8 @@ export class HrReadService {
       // Directory-class (non-gated).
       avatarUrl: row.avatarUrl,
       startDate: row.startDate,
+      officialDate: row.officialDate,
+      workLocation: row.workLocation,
       // PII — masked unless view-sensitive grants reveal (HR-PROFILE-UI-1).
       gender: revealPii ? row.gender : null,
       dateOfBirth: revealPii ? row.dateOfBirth : null,
@@ -323,6 +325,21 @@ export class HrReadService {
       contractType: revealPii ? row.contractType : null,
       baseSalary: revealSalary && row.baseSalary != null ? Number(row.baseSalary) : null,
     };
+  }
+
+  /**
+   * HR-PROFILE-UI-1b — project the personal_extra JSONB onto the CONTRACT key allowlist. The blob is
+   * PII as a WHOLE (masked upstream); this projection additionally guarantees an unknown/legacy key in
+   * the DB can never leak through (and never breaks the client's strict Zod parse). Empty ⇒ null.
+   */
+  private projectPersonalExtra(raw: Record<string, string> | null): Record<string, string> | null {
+    if (!raw) return null;
+    const out: Record<string, string> = {};
+    for (const key of HR_PERSONAL_EXTRA_KEYS) {
+      const value = raw[key];
+      if (typeof value === "string" && value.length > 0) out[key] = value;
+    }
+    return Object.keys(out).length > 0 ? out : null;
   }
 
   private toDetail(row: HrDetailRow, revealSalary: boolean, revealPii: boolean): HrEmployeeDetail {
@@ -363,6 +380,13 @@ export class HrReadService {
       permanentAddress: revealPii ? row.permanentAddress : null,
       emergencyContactName: revealPii ? row.emergencyContactName : null,
       emergencyContactPhone: revealPii ? row.emergencyContactPhone : null,
+      // HR-PROFILE-UI-1b (mig 0489, hybrid): directory-class không gate...
+      officialDate: row.officialDate,
+      probationEndDate: row.probationEndDate,
+      workLocation: row.workLocation,
+      // ...MST + blob nhân khẩu = PII, mask NGUYÊN KHỐI (blob còn được chiếu lên key allowlist).
+      taxCode: revealPii ? row.taxCode : null,
+      personalExtra: revealPii ? this.projectPersonalExtra(row.personalExtra) : null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };

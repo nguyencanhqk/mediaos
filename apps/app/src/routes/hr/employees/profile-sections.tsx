@@ -84,6 +84,31 @@ export function BasicInfoSection({ employee, t, canViewSensitive }: SectionProps
           label={t("detail.fields.maritalStatus")}
           value={pii(maritalStatusLabel(employee.maritalStatus, t), canViewSensitive, masked)}
         />
+        {/* HR-PROFILE-UI-1b — nhóm nhân khẩu (personal_extra JSONB, server mask NGUYÊN KHỐI) + MST */}
+        <FieldRow
+          label={t("detail.fields.placeOfBirth")}
+          value={pii(employee.personalExtra?.placeOfBirth ?? null, canViewSensitive, masked)}
+        />
+        <FieldRow
+          label={t("detail.fields.nativePlace")}
+          value={pii(employee.personalExtra?.nativePlace ?? null, canViewSensitive, masked)}
+        />
+        <FieldRow
+          label={t("detail.fields.ethnicity")}
+          value={pii(employee.personalExtra?.ethnicity ?? null, canViewSensitive, masked)}
+        />
+        <FieldRow
+          label={t("detail.fields.religion")}
+          value={pii(employee.personalExtra?.religion ?? null, canViewSensitive, masked)}
+        />
+        <FieldRow
+          label={t("detail.fields.nationality")}
+          value={pii(employee.personalExtra?.nationality ?? null, canViewSensitive, masked)}
+        />
+        <FieldRow
+          label={t("detail.fields.taxCode")}
+          value={pii(employee.taxCode, canViewSensitive, masked)}
+        />
       </SectionCard>
     </div>
   );
@@ -152,6 +177,16 @@ export function WorkInfoSection({ employee, t, canViewSensitive }: SectionProps)
           label={t("detail.fields.startDate")}
           value={employee.startDate ? formatDate(new Date(employee.startDate)) : "—"}
         />
+        {/* HR-PROFILE-UI-1b — mốc thử việc/chính thức + nơi làm việc (directory-class) */}
+        <FieldRow
+          label={t("detail.fields.probationEndDate")}
+          value={employee.probationEndDate ? formatDate(new Date(employee.probationEndDate)) : "—"}
+        />
+        <FieldRow
+          label={t("detail.fields.officialDate")}
+          value={employee.officialDate ? formatDate(new Date(employee.officialDate)) : "—"}
+        />
+        <FieldRow label={t("detail.fields.workLocation")} value={employee.workLocation} />
         <FieldRow
           label={t("detail.fields.endDate")}
           value={employee.endDate ? formatDate(new Date(employee.endDate)) : "—"}

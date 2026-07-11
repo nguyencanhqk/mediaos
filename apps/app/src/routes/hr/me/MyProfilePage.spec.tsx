@@ -101,6 +101,11 @@ const MOCK_PROFILE: HrMeProfile = {
   permanentAddress: null,
   emergencyContactName: null,
   emergencyContactPhone: null,
+  officialDate: null,
+  probationEndDate: null,
+  workLocation: null,
+  taxCode: null,
+  personalExtra: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
 };

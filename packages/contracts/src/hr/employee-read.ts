@@ -14,6 +14,31 @@ import { z } from "zod";
  * (fail-closed). It is NOT directory-data like workType/employmentType.
  */
 
+/**
+ * HR-PROFILE-UI-1b — personal_extra JSONB (hybrid, owner 2026-07-11): nhóm nhân khẩu HIỂN THỊ-THUẦN.
+ * `.strict()` = key allowlist (không cho nhét key lạ vào blob). QUY ƯỚC: mọi key ở đây là PII —
+ * server mask NGUYÊN KHỐI theo view-sensitive:employee; key cần lọc/tìm kiếm → thăng cấp thành cột.
+ */
+export const HR_PERSONAL_EXTRA_KEYS = [
+  "placeOfBirth",
+  "nativePlace",
+  "ethnicity",
+  "religion",
+  "nationality",
+] as const;
+export type HrPersonalExtraKey = (typeof HR_PERSONAL_EXTRA_KEYS)[number];
+
+export const hrPersonalExtraSchema = z
+  .object({
+    placeOfBirth: z.string().min(1).max(255).optional(),
+    nativePlace: z.string().min(1).max(255).optional(),
+    ethnicity: z.string().min(1).max(100).optional(),
+    religion: z.string().min(1).max(100).optional(),
+    nationality: z.string().min(1).max(100).optional(),
+  })
+  .strict();
+export type HrPersonalExtra = z.infer<typeof hrPersonalExtraSchema>;
+
 /** Sortable list columns (allowlist — repository maps to a fixed ORDER BY; blocks SQL injection). */
 export const HR_EMPLOYEE_SORT_FIELDS = ["fullName", "employeeCode", "status", "createdAt"] as const;
 export type HrEmployeeSortField = (typeof HR_EMPLOYEE_SORT_FIELDS)[number];
@@ -61,6 +86,9 @@ export const hrEmployeeListItemSchema = z.object({
   // HR-PROFILE-UI-1: directory data (non-gated) — avatar + start date mirror the ungated detail fields.
   avatarUrl: z.string().nullable(),
   startDate: z.string().nullable(),
+  // HR-PROFILE-UI-1b (mig 0489): directory-class — ngày chính thức + nơi làm việc.
+  officialDate: z.string().nullable(),
+  workLocation: z.string().nullable(),
   /** PII (view-sensitive) — null when unauthorized (same gate as the detail PII fields). */
   gender: z.string().nullable(),
   dateOfBirth: z.string().nullable(),
@@ -109,6 +137,13 @@ export const hrEmployeeDetailSchema = z.object({
   permanentAddress: z.string().nullable(),
   emergencyContactName: z.string().nullable(),
   emergencyContactPhone: z.string().nullable(),
+  // HR-PROFILE-UI-1b (mig 0489, hybrid): directory-class...
+  officialDate: z.string().nullable(),
+  probationEndDate: z.string().nullable(),
+  workLocation: z.string().nullable(),
+  // ...và PII (view-sensitive): MST + blob nhân khẩu (mask NGUYÊN KHỐI — null khi thiếu quyền).
+  taxCode: z.string().nullable(),
+  personalExtra: hrPersonalExtraSchema.nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

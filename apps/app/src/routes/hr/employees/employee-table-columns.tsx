@@ -35,6 +35,9 @@ export const EMPLOYEE_COLUMN_CATALOG: EmployeeColumnMeta[] = [
   { id: "positionName", labelKey: "employees.columns.position", defaultVisible: true },
   { id: "orgUnitName", labelKey: "employees.columns.department", defaultVisible: true },
   { id: "startDate", labelKey: "employees.columns.startDate", defaultVisible: true },
+  // HR-PROFILE-UI-1b — directory-class (mig 0489)
+  { id: "officialDate", labelKey: "employees.columns.officialDate", defaultVisible: true },
+  { id: "workLocation", labelKey: "employees.columns.workLocation", defaultVisible: false },
   {
     id: "contractType",
     labelKey: "employees.columns.contractType",
@@ -119,6 +122,20 @@ export function buildEmployeeColumns(t: TF): ColumnDef<HrEmployeeListItem>[] {
           {row.original.startDate ? formatDate(new Date(row.original.startDate)) : "—"}
         </span>
       ),
+    },
+    {
+      accessorKey: "officialDate",
+      header: t("employees.columns.officialDate"),
+      cell: ({ row }) => (
+        <span className="text-sm tabular-nums">
+          {row.original.officialDate ? formatDate(new Date(row.original.officialDate)) : "—"}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "workLocation",
+      header: t("employees.columns.workLocation"),
+      cell: ({ row }) => <span className="text-sm">{dash(row.original.workLocation)}</span>,
     },
     {
       accessorKey: "contractType",

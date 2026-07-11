@@ -548,6 +548,7 @@ Lưu hồ sơ nhân viên trung tâm của hệ thống.
 | `bank_name` | VARCHAR(255) | Không | Ngân hàng |
 | `emergency_contact_name` | VARCHAR(255) | Không | Liên hệ khẩn cấp |
 | `emergency_contact_phone` | VARCHAR(50) | Không | SĐT khẩn cấp |
+| `personal_extra` | JSONB | Không | Nhóm nhân khẩu HIỂN THỊ-THUẦN (owner chốt 2026-07-11, mig 0489 — hybrid): `{ placeOfBirth?, nativePlace?, ethnicity?, religion?, nationality? }`. QUY ƯỚC: mọi key trong blob thuộc lớp PII → mask NGUYÊN KHỐI theo `HR.EMPLOYEE.VIEW_SENSITIVE`; key allowlist khóa bằng Zod `.strict()` (contracts `hrPersonalExtraSchema`); key nào về sau cần lọc/tìm kiếm → THĂNG CẤP thành cột qua migration (một chiều). KHÔNG nhét ảnh/binary vào blob. |
 | `department_id` | UUID | Có | FK `departments.id` |
 | `position_id` | UUID | Có | FK `positions.id` |
 | `job_level_id` | UUID | Không | FK `job_levels.id` |

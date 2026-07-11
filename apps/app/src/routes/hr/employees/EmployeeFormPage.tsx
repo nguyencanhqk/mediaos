@@ -14,6 +14,8 @@ import {
   WORK_TYPE_VALUES,
   EMPLOYMENT_TYPE_VALUES,
   SALARY_TYPE_VALUES,
+  GENDER_VALUES,
+  MARITAL_STATUS_VALUES,
   detailToFormValues,
   employeeFormSchema,
   toCreateDto,
@@ -94,6 +96,8 @@ function SectionNav({ sections, title }: { sections: FormSection[]; title: strin
   const [active, setActive] = useState(sections[0]?.id ?? "");
 
   useEffect(() => {
+    // jsdom/browser cũ không có IntersectionObserver → bỏ scrollspy, nav vẫn click-scroll được.
+    if (typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver(
       (entries) => {
         const visible = entries.filter((e) => e.isIntersecting);
@@ -275,6 +279,124 @@ function WorkSection({
               ))}
             </Select>
           </Field>
+
+          <Field id="workLocation" label={t("form.fields.workLocation")}>
+            <Input id="workLocation" {...register("workLocation")} />
+          </Field>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Personal + contact sections (HR-PROFILE-UI-1b) — CHỈ edit-mode + caller có view-sensitive.
+// Server vẫn là cổng cuối (PATCH chạm PII đòi view-sensitive per-row, fail-closed).
+// ---------------------------------------------------------------------------
+function PersonalSection({
+  register,
+  errors,
+  t,
+}: {
+  register: UseFormRegister<EmployeeFormValues>;
+  errors: FieldErrors<EmployeeFormValues>;
+  t: TF;
+}) {
+  return (
+    <Card>
+      <CardContent className="space-y-4 pt-5">
+        <h3 className="text-sm font-semibold text-foreground">{t("form.sections.personal")}</h3>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field id="gender" label={t("form.fields.gender")}>
+            <Select id="gender" {...register("gender")}>
+              {GENDER_VALUES.map((v) => (
+                <option key={v} value={v}>
+                  {v === "" ? t("form.placeholders.select") : t(`employees.gender.${v}`)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field
+            id="dateOfBirth"
+            label={t("form.fields.dateOfBirth")}
+            error={fieldError(errors.dateOfBirth, t)}
+          >
+            <Input id="dateOfBirth" type="date" {...register("dateOfBirth")} />
+          </Field>
+          <Field id="maritalStatus" label={t("form.fields.maritalStatus")}>
+            <Select id="maritalStatus" {...register("maritalStatus")}>
+              {MARITAL_STATUS_VALUES.map((v) => (
+                <option key={v} value={v}>
+                  {v === "" ? t("form.placeholders.select") : t(`detail.maritalStatus.${v}`)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field id="placeOfBirth" label={t("form.fields.placeOfBirth")}>
+            <Input id="placeOfBirth" {...register("placeOfBirth")} />
+          </Field>
+          <Field id="nativePlace" label={t("form.fields.nativePlace")}>
+            <Input id="nativePlace" {...register("nativePlace")} />
+          </Field>
+          <Field id="ethnicity" label={t("form.fields.ethnicity")}>
+            <Input id="ethnicity" {...register("ethnicity")} />
+          </Field>
+          <Field id="religion" label={t("form.fields.religion")}>
+            <Input id="religion" {...register("religion")} />
+          </Field>
+          <Field id="nationality" label={t("form.fields.nationality")}>
+            <Input id="nationality" {...register("nationality")} />
+          </Field>
+          <Field id="taxCode" label={t("form.fields.taxCode")}>
+            <Input id="taxCode" {...register("taxCode")} />
+          </Field>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ContactInfoSection({
+  register,
+  errors,
+  t,
+}: {
+  register: UseFormRegister<EmployeeFormValues>;
+  errors: FieldErrors<EmployeeFormValues>;
+  t: TF;
+}) {
+  return (
+    <Card>
+      <CardContent className="space-y-4 pt-5">
+        <h3 className="text-sm font-semibold text-foreground">{t("form.sections.contact")}</h3>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            id="personalEmail"
+            label={t("form.fields.personalEmail")}
+            error={fieldError(errors.personalEmail, t)}
+          >
+            <Input
+              id="personalEmail"
+              type="email"
+              autoComplete="off"
+              {...register("personalEmail")}
+            />
+          </Field>
+          <Field id="phone" label={t("form.fields.phone")}>
+            <Input id="phone" {...register("phone")} />
+          </Field>
+          <Field id="currentAddress" label={t("form.fields.currentAddress")}>
+            <Input id="currentAddress" {...register("currentAddress")} />
+          </Field>
+          <Field id="permanentAddress" label={t("form.fields.permanentAddress")}>
+            <Input id="permanentAddress" {...register("permanentAddress")} />
+          </Field>
+          <Field id="emergencyContactName" label={t("form.fields.emergencyContactName")}>
+            <Input id="emergencyContactName" {...register("emergencyContactName")} />
+          </Field>
+          <Field id="emergencyContactPhone" label={t("form.fields.emergencyContactPhone")}>
+            <Input id="emergencyContactPhone" {...register("emergencyContactPhone")} />
+          </Field>
         </div>
       </CardContent>
     </Card>
@@ -344,6 +466,22 @@ function ScheduleSection({
           >
             <Input id="endDate" type="date" {...register("endDate")} />
           </Field>
+
+          <Field
+            id="probationEndDate"
+            label={t("form.fields.probationEndDate")}
+            error={fieldError(errors.probationEndDate, t)}
+          >
+            <Input id="probationEndDate" type="date" {...register("probationEndDate")} />
+          </Field>
+
+          <Field
+            id="officialDate"
+            label={t("form.fields.officialDate")}
+            error={fieldError(errors.officialDate, t)}
+          >
+            <Input id="officialDate" type="date" {...register("officialDate")} />
+          </Field>
         </div>
       </CardContent>
     </Card>
@@ -371,6 +509,11 @@ export function EmployeeFormPage({ employeeId, onSuccess, onCancel }: EmployeeFo
   const pair =
     mode === "create" ? HR_ENGINE_PAIRS.CREATE_EMPLOYEE : HR_ENGINE_PAIRS.UPDATE_EMPLOYEE;
   const canSubmit = useCan(pair.action, pair.resourceType);
+  // HR-PROFILE-UI-1b — section Cá nhân/Liên hệ chỉ render khi caller có view-sensitive (edit mode).
+  // Server vẫn gate PATCH PII per-row; đây là UI-hint tránh render form field toàn giá trị bị mask.
+  const canEditPersonal =
+    useCan(HR_ENGINE_PAIRS.VIEW_SENSITIVE.action, HR_ENGINE_PAIRS.VIEW_SENSITIVE.resourceType) &&
+    mode === "edit";
 
   const lookups = useEmployeeLookups();
 
@@ -507,6 +650,12 @@ export function EmployeeFormPage({ employeeId, onSuccess, onCancel }: EmployeeFo
             ...(mode === "create"
               ? [{ id: "section-account", label: t("form.sections.account") }]
               : []),
+            ...(canEditPersonal
+              ? [
+                  { id: "section-personal", label: t("form.sections.personal") },
+                  { id: "section-contact", label: t("form.sections.contact") },
+                ]
+              : []),
             { id: "section-work", label: t("form.sections.work") },
             { id: "section-schedule", label: t("form.sections.schedule") },
           ]}
@@ -523,6 +672,16 @@ export function EmployeeFormPage({ employeeId, onSuccess, onCancel }: EmployeeFo
             <div id="section-account" className="scroll-mt-20">
               <AccountSection register={register} errors={errors} t={t} />
             </div>
+          )}
+          {canEditPersonal && (
+            <>
+              <div id="section-personal" className="scroll-mt-20">
+                <PersonalSection register={register} errors={errors} t={t} />
+              </div>
+              <div id="section-contact" className="scroll-mt-20">
+                <ContactInfoSection register={register} errors={errors} t={t} />
+              </div>
+            </>
           )}
           <div id="section-work" className="scroll-mt-20">
             <WorkSection register={register} errors={errors} t={t} lookups={lookups} />

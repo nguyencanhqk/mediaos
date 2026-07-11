@@ -52,6 +52,8 @@ const MOCK_RESPONSE: HrEmployeeListResponse = {
       status: "active",
       avatarUrl: null,
       startDate: null,
+      officialDate: null,
+      workLocation: null,
       gender: null,
       dateOfBirth: null,
       phone: null,

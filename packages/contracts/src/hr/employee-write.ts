@@ -1,13 +1,19 @@
 import { z } from "zod";
+import { hrPersonalExtraSchema } from "./employee-read";
 
 /**
  * S2-HR-BE-2 — HR write-core DTOs (API-03 §11.2/§11.5/§11.6/§11.7/§11.8).
  *
- * SCOPE: STRUCTURAL employee fields only. baseSalary + identity/PII (phone, notes, identity number,
- * bank account, addresses, date-of-birth, …) are DELIBERATELY EXCLUDED — salary is a sensitive write that needs the
- * `update-salary` gate (legacy salary path), and PII must never land in the append-only audit trail
- * whose masker does NOT cover those fields (BẤT BIẾN #3). Schemas are `.strict()` so a client cannot
- * smuggle `baseSalary`/PII through the write endpoints.
+ * SCOPE gốc: STRUCTURAL fields. baseSalary + identity_number/bank vẫn DELIBERATELY EXCLUDED
+ * (salary cần gate update-salary; identity/bank chờ HR-IDENTITY-READ-1). Schemas `.strict()` chặn
+ * smuggling qua write endpoint.
+ *
+ * HR-PROFILE-UI-1b (owner 2026-07-11): PATCH mở thêm 2 nhóm:
+ *   - DIRECTORY (officialDate/probationEndDate/workLocation) — audit giá trị bình thường.
+ *   - PERSONAL/PII (gender…taxCode/personalExtra) — service GATE fail-closed: body chạm nhóm này đòi
+ *     caller có `view-sensitive:employee` per-row (không thấy thì không được sửa), và audit_logs CHỈ
+ *     ghi TÊN field — giá trị mask "[masked]" (BẤT BIẾN #3, audit append-only nên rò là vĩnh viễn).
+ *   - personalExtra = FULL-REPLACE: key hiện diện ⇒ thay nguyên blob ({}/null ⇒ xóa blob).
  *
  * Status values = the 4 DB CHECK values (active/inactive/resigned/terminated). API-03's 6-value
  * `employment_status` is not adopted (would need a DB migration + break the shipped read core).
@@ -72,10 +78,45 @@ export const updateHrEmployeeSchema = z
     salaryType: salaryTypeEnum.optional(),
     startDate: isoDate.nullable().optional(),
     endDate: isoDate.nullable().optional(),
+    // HR-PROFILE-UI-1b — DIRECTORY (audit giá trị bình thường).
+    officialDate: isoDate.nullable().optional(),
+    probationEndDate: isoDate.nullable().optional(),
+    workLocation: z.string().min(1).max(255).nullable().optional(),
+    // HR-PROFILE-UI-1b — PERSONAL/PII (service gate view-sensitive per-row; audit mask giá trị).
+    gender: z.enum(["Male", "Female", "Other"]).nullable().optional(),
+    dateOfBirth: isoDate.nullable().optional(),
+    maritalStatus: z.enum(["single", "married", "other"]).nullable().optional(),
+    personalEmail: z.string().email().max(255).nullable().optional(),
+    phone: z.string().min(1).max(50).nullable().optional(),
+    currentAddress: z.string().min(1).max(1000).nullable().optional(),
+    permanentAddress: z.string().min(1).max(1000).nullable().optional(),
+    emergencyContactName: z.string().min(1).max(255).nullable().optional(),
+    emergencyContactPhone: z.string().min(1).max(50).nullable().optional(),
+    taxCode: z.string().min(1).max(100).nullable().optional(),
+    personalExtra: hrPersonalExtraSchema.nullable().optional(),
   })
   .strict()
   .refine((v) => Object.keys(v).length > 0, { message: "No fields to update" });
 export type UpdateHrEmployeeRequest = z.infer<typeof updateHrEmployeeSchema>;
+
+/**
+ * HR-PROFILE-UI-1b — nhóm key PII của PATCH (một nguồn sự thật BE↔FE): body chạm bất kỳ key nào dưới
+ * đây ⇒ HrWriteService đòi view-sensitive:employee (fail-closed) + audit mask giá trị.
+ */
+export const HR_EMPLOYEE_PII_WRITE_FIELDS = [
+  "gender",
+  "dateOfBirth",
+  "maritalStatus",
+  "personalEmail",
+  "phone",
+  "currentAddress",
+  "permanentAddress",
+  "emergencyContactName",
+  "emergencyContactPhone",
+  "taxCode",
+  "personalExtra",
+] as const satisfies readonly (keyof UpdateHrEmployeeRequest)[];
+export type HrEmployeePiiWriteField = (typeof HR_EMPLOYEE_PII_WRITE_FIELDS)[number];
 
 // ── Write responses ────────────────────────────────────────────────────────────────
 /** POST /hr/employees response — the new id + allocated code + resolved login user. */

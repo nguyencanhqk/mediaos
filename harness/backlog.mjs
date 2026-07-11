@@ -5703,6 +5703,15 @@ export const backlog = [
     // hr-read.service.spec 55/55 xanh (8 test mới RED-trước); typecheck/build/lint toàn workspace xanh;
     // 1 int-spec đỏ pre-existing (dead-letter-alert-idempotent — FK cleanup DB chung, không liên quan).
     // Chủ đích ĐỂ LẠI: gom-nhóm cột 1/2 cấp + export (HR-PROFILE-UI-2) · lộ identity_* (HR-IDENTITY-READ-1).
+    //
+    // PHIÊN 2026-07-11 (1b, owner chốt HYBRID): mở rộng field hồ sơ — mig 0489 = 4 cột typed
+    // (tax_code·official_date·probation_end_date·work_location, DB-03 có sẵn) + personal_extra JSONB
+    // (nơi sinh/nguyên quán/dân tộc/tôn giáo/quốc tịch — bổ sung DB-03 §7.2 cùng commit; blob = lớp PII,
+    // mask NGUYÊN KHỐI, key allowlist Zod .strict, cần lọc → thăng cấp cột). PATCH mở field cá nhân:
+    // body chạm PII đòi view-sensitive per-row (fail-closed HR-ERR-PII-WRITE-DENIED); audit CHỈ tên field
+    // trong diffSummary — before/after không chứa key PII (FORBIDDEN_AUDIT_KEYS mở rộng). Form edit thêm
+    // section Cá nhân/Liên hệ (chỉ render khi có view-sensitive). P1 perf: debounce search 300ms +
+    // keepPreviousData + avatar lazy. identity_*/bank_* vẫn ngoài mọi surface.
   },
   {
     id: "HR-PROFILE-UI-2",
@@ -5725,6 +5734,34 @@ export const backlog = [
       "Gom nhóm 1/2 cấp trong panel Tùy chỉnh cột (group theo đơn vị/trạng thái…) — TanStack grouping, KHÔNG lib bảng mới",
       "GET /hr/employees/export gate export:employee — áp data-scope + masking per-row NHƯ list (export = lộ dữ liệu, FULL gate); cột PII chỉ vào file khi caller có view-sensitive",
       "Mở rộng HR_EMPLOYEE_SORT_FIELDS (allowlist — startDate…) + header sort FE; deny-path: export thiếu quyền 403, export ngoài scope không có row",
+    ],
+  },
+  {
+    id: "HR-PERF-1",
+    module: "HR",
+    layer: "FE",
+    title:
+      "Tối ưu hiệu năng nền tảng: (a) code-split router theo module (bundle apps/app 1.55MB→lazy route) · (b) batch permission list HR (2 can()/row → canBatch preload company-grants + getObjectGrantsForMany, GIỮ NGUYÊN ngữ nghĩa object-DENY priority-1) · (c) pg_trgm GIN index search nhân sự khi headcount >1–2k — crown ở (b)",
+    zone: "red", // (b) chạm permission engine — plan-review TRƯỚC khi code
+    status: "todo",
+    paths: [
+      "apps/app/src/router.tsx",
+      "apps/api/src/permission/**",
+      "apps/api/src/employees/**",
+      "apps/api/migrations/**",
+      "docs/plans/HR-PERF-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["HR-PROFILE-UI-1"],
+    src: [
+      "Phát hiện 2026-07-11 (phiên HR-PROFILE-UI-1): build warning chunk 1.546MB/375KB gzip (apps/app KHÔNG code-split); hr-read list = 2 permission.can()/row (security-reviewer MEDIUM/INFO); search ILIKE '%term%' không ăn index khi dữ liệu lớn",
+      "RÀNG BUỘC (b): object_permissions có DENY priority-1 (permission.service.ts ~180) — type-level-ALLOW shortcut là SAI ngữ nghĩa; batch đúng = preload companyGrants 1 lần + object grants của cả trang trong 1 query rồi chạy CÙNG decision-merge; salary audit-on-reveal vẫn per-row",
+    ],
+    plan: "docs/plans/HR-PERF-1.md",
+    done_when: [
+      "(a) route-level lazy: mở màn HR không tải bundle TASK/LEAVE/ATT; initial JS giảm đo được (ghi số trước/sau vào PR); không đổi route path/permission gate",
+      "(b) PermissionService.canBatch (hoặc tương đương) cho hr-read list: kết quả BẰNG CHÍNH XÁC per-row can() trên bộ test có object-ALLOW lẫn object-DENY; deny-path giữ nguyên; số query permission/trang ≤ 4",
+      "(c) migration GIN pg_trgm (users.full_name/email + employee_profiles.employee_code) CHỈ khi owner bật (dữ liệu lớn) — kèm EXPLAIN trước/sau trong PR; FULL gate security-reviewer cho (b)",
     ],
   },
   {

@@ -32,6 +32,9 @@ export default {
       workType: "Hình thức làm việc",
       employmentType: "Loại nhân sự",
       salary: "Lương cơ bản",
+      // HR-PROFILE-UI-1b
+      officialDate: "Ngày chính thức",
+      workLocation: "Nơi làm việc",
     },
     // HR-PROFILE-UI-1 — dải tổng quan + tùy chỉnh hiển thị
     overview: {
@@ -133,6 +136,16 @@ export default {
       emergencyContactPhone: "SĐT liên hệ khẩn cấp",
       seniority: "Thâm niên",
       salaryType: "Hình thức lương",
+      // HR-PROFILE-UI-1b — hybrid (mig 0489)
+      placeOfBirth: "Nơi sinh",
+      nativePlace: "Nguyên quán",
+      ethnicity: "Dân tộc",
+      religion: "Tôn giáo",
+      nationality: "Quốc tịch",
+      taxCode: "MST cá nhân",
+      officialDate: "Ngày chính thức",
+      probationEndDate: "Ngày kết thúc thử việc",
+      workLocation: "Nơi làm việc",
     },
     maritalStatus: {
       single: "Độc thân",
@@ -219,6 +232,9 @@ export default {
       work: "Thông tin công việc",
       // HR-PROFILE-UI-1 — tách nhóm hình thức & thời gian khỏi work
       schedule: "Hình thức & thời gian",
+      // HR-PROFILE-UI-1b — section cá nhân/liên hệ (chỉ hiện khi có view-sensitive)
+      personal: "Thông tin cá nhân",
+      contact: "Thông tin liên hệ",
     },
     nav: {
       title: "Mục thông tin",
@@ -237,6 +253,25 @@ export default {
       salaryType: "Hình thức lương",
       startDate: "Ngày vào làm",
       endDate: "Ngày kết thúc",
+      // HR-PROFILE-UI-1b
+      officialDate: "Ngày chính thức",
+      probationEndDate: "Ngày kết thúc thử việc",
+      workLocation: "Nơi làm việc",
+      gender: "Giới tính",
+      dateOfBirth: "Ngày sinh",
+      maritalStatus: "Tình trạng hôn nhân",
+      personalEmail: "Email cá nhân",
+      phone: "Số điện thoại",
+      currentAddress: "Địa chỉ hiện tại",
+      permanentAddress: "Địa chỉ thường trú",
+      emergencyContactName: "Người liên hệ khẩn cấp",
+      emergencyContactPhone: "SĐT liên hệ khẩn cấp",
+      taxCode: "MST cá nhân",
+      placeOfBirth: "Nơi sinh",
+      nativePlace: "Nguyên quán",
+      ethnicity: "Dân tộc",
+      religion: "Tôn giáo",
+      nationality: "Quốc tịch",
     },
     hints: {
       initialPassword: "Để trống để hệ thống tự tạo / gửi lời mời.",
