@@ -1,13 +1,13 @@
 import { z } from "zod";
 
 /**
- * S4-NOTI-BE-3 — Notification ADMIN config contracts (API-07 §14.1–14.5, SPEC-08). Read-only surface cho
- * vòng này: GET /notifications/events (list) · GET /notifications/templates/{id} (detail) ·
- * GET /notifications/delivery-logs (list). CỐ Ý KHÔNG có schema PATCH — `mediaos_app` hiện CHỈ có GRANT
- * SELECT trên `notification_events`/`notification_templates` (migration 0479/0481/0482, comment
- * "GRANT app SELECT-only (write company-override → S4-NOTI-BE-3)"). Viết company-override (PATCH
- * /events/{id}, PATCH /templates/{id}) đòi GRANT INSERT,UPDATE mới (DDL) — WO này KHÔNG được tạo migration
- * ⇒ ĐẨY sang WO kế (cần 1 migration nhỏ mở GRANT trước khi build 2 route PATCH).
+ * S4-NOTI-BE-3/BE-4 — Notification ADMIN config contracts (API-07 §14.1–14.5, SPEC-08).
+ *   • READ (BE-3): GET /notifications/events (list) · GET /notifications/templates/{id} (detail) ·
+ *     GET /notifications/delivery-logs (list).
+ *   • WRITE (BE-4): PATCH /notifications/events/{id} (bật/tắt = company-override) · PATCH
+ *     /notifications/templates/{id} (sửa nội dung = company-override). GRANT INSERT,UPDATE mở ở mig 0487;
+ *     ghi luôn tạo/hiệu-chỉnh hàng company-override (company_id=GUC) — KHÔNG UPDATE hàng global (0479 WITH
+ *     CHECK company_id=GUC chặn cứng). Biến template nhạy cảm (password/token/…) → 422 (API-07 §14.3 #6).
  *
  * Boolean query-param IDEMPOTENT dưới ZodValidationPipe KÉP (memory zod-query-param-double-pipe-idempotent),
  * mirror packages/contracts/src/my-notification.ts optionalBooleanParam.
@@ -81,6 +81,30 @@ export const notificationTemplateAdminItemSchema = z.object({
   updated_at: z.string().datetime({ offset: true }),
 });
 export type NotificationTemplateAdminItem = z.infer<typeof notificationTemplateAdminItemSchema>;
+
+// ─── NOTI-API-302 (BE-4): PATCH /notifications/events/{id} — bật/tắt event (company-override) ──────
+// CHỈ is_enabled (bật/tắt). Body ghi vào hàng company-override; hàng global KHÔNG bao giờ bị sửa.
+export const notificationEventAdminPatchSchema = z.object({
+  is_enabled: z.boolean(),
+});
+export type NotificationEventAdminPatch = z.infer<typeof notificationEventAdminPatchSchema>;
+
+// ─── NOTI-API-304 (BE-4): PATCH /notifications/templates/{id} — sửa nội dung (company-override) ────
+// MỌI field optional; .refine ≥1 field present (KHÔNG cho body rỗng). Biến template nhạy cảm chặn ở
+// tầng service (assertTemplateVariablesSafe → 422), KHÔNG ở schema (schema chỉ validate hình dạng).
+export const notificationTemplateAdminPatchSchema = z
+  .object({
+    title_template: z.string().trim().min(1).max(255).optional(),
+    body_template: z.string().trim().min(1).optional(),
+    short_body_template: z.string().max(500).nullable().optional(),
+    action_label_template: z.string().max(100).nullable().optional(),
+    target_url_template: z.string().max(500).nullable().optional(),
+    status: z.enum(["Draft", "Active", "Inactive", "Archived"]).optional(),
+  })
+  .refine((obj) => Object.keys(obj).length >= 1, {
+    message: "Phải cung cấp ít nhất một trường để cập nhật.",
+  });
+export type NotificationTemplateAdminPatch = z.infer<typeof notificationTemplateAdminPatchSchema>;
 
 // ─── NOTI-API-401: GET /notifications/delivery-logs ───────────────────────────
 

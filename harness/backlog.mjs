@@ -4439,7 +4439,16 @@ export const backlog = [
     title:
       "NOTI admin config WRITE: migration GRANT-only (INSERT,UPDATE notification_events + notification_templates cho app role) + PATCH /notifications/events/:id (bật/tắt) + PATCH /templates/:id — hoàn tất phần blocked của S4-NOTI-BE-3",
     zone: "red",
-    status: "todo",
+    status: "done",
+    // PHIÊN 2026-07-11 (lane notibe4) — SHIP: mig 0487 (GRANT INSERT,UPDATE app trên notification_events +
+    //   notification_templates; KHÔNG DDL khác, KHÔNG đổi RLS, KHÔNG DELETE). PATCH /notifications/events/:id
+    //   (bật/tắt = INSERT company-override; KHÔNG UPDATE row global) + PATCH /notifications/templates/:id (sửa
+    //   nội dung = company-override). Rẽ nhánh theo sourceRow.companyId (KHÔNG suy theo id lẻ); SAVEPOINT chống
+    //   đua 23505. assertTemplateVariablesSafe (placeholder {password}/{token}/… → 422 TRƯỚC khi chạm DB).
+    //   Audit (object_type 'notification', action notification_config_updated/notification_template_updated)
+    //   CÙNG withTenant tx với upsert. Int-spec RED-trước: notification-admin-write.int-spec.ts (7 test — migration
+    //   smoke grant/RLS · employee 403 · toggle 2 chiều · biến cấm 422 · override hợp lệ · cross-tenant B · 404).
+    //   14/14 test 2 file admin xanh trên mediaos_notibe4.
     paths: [
       "apps/api/migrations/**",
       "apps/api/src/notifications/**",
