@@ -194,6 +194,8 @@ import { LEAVE_ENGINE_PAIRS, LEAVE_PATHS } from "@/routes/leave/constants";
 // Notifications — S4-FE-NOTI-1-WIRE (wire NotificationListPage/DetailPage đã build ở S4-FE-NOTI-1/a7be971)
 import { NotificationListPage } from "@/routes/notifications/NotificationListPage";
 import { NotificationDetailPage } from "@/routes/notifications/NotificationDetailPage";
+// S4-FE-NOTI-2 — Quản lý loại thông báo (admin catalog, UI-NOTI-SCREEN-004).
+import { NotificationEventsPage } from "@/routes/notifications/NotificationEventsPage";
 
 // System
 import { UsersPage } from "@/routes/system/UsersPage";
@@ -1060,6 +1062,18 @@ const notificationDetailRoute = createRoute({
   },
 });
 
+// Notification events (admin catalog) — S4-FE-NOTI-2 (UI-NOTI-SCREEN-004). Path TĨNH 2-segment
+// "/notifications/events" — TanStack Router tự xếp hạng route tĩnh trên route param $id (mirror
+// tasksProjectRoute/tasksMyTasksRoute vs tasksTaskDetailRoute), KHÔNG cần chỉnh thứ tự mảng addChildren.
+// Gate route-level = view:notification-config (ROUTE_REGISTRY noti.events); toggle gate TINH hơn TRONG
+// page bằng useCanExact(update:notification-config).
+const notificationEventsRoute = makeModuleRoute(
+  "/notifications/events",
+  "noti.events",
+  "NOTI",
+  NotificationEventsPage,
+);
+
 // System / Foundation — /system landing THAY ModulePlaceholder = System Overview (S2-FE-FND-1).
 const systemRoute = makeModuleRoute("/system", "system.overview", "FOUNDATION", SystemOverviewPage);
 
@@ -1574,6 +1588,7 @@ const routeTree = rootRoute.addChildren([
   tasksTaskDetailRoute,
   notificationsRoute,
   notificationDetailRoute,
+  notificationEventsRoute,
   systemRoute,
   systemCompanyRoute,
   systemCompanySettingsRoute,

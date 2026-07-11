@@ -22,6 +22,9 @@ registerI18nResources("vi", {
   account: accountVi,
   notifications: notificationsVi,
   tasks: tasksVi,
+  // S4-FE-NOTI-2 — ĐÈ THÊM 1 khoá routeTitle.notiEvents vào bundle "nav" đã nhúng sẵn ở @mediaos/web-core
+  // (deep-merge, KHÔNG đụng khoá cũ) — route noti.events (ROUTE_REGISTRY) cần titleKey này.
+  nav: { routeTitle: { notiEvents: "Quản lý loại thông báo" } },
 });
 
 export default i18n;

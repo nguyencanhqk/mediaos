@@ -1058,6 +1058,21 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 60,
   },
+  // S4-FE-NOTI-2 (UI-NOTI-SCREEN-004 / SPEC-08 §13.4 NOTI-SCREEN-005) — Quản lý loại thông báo (admin).
+  // Gate = CẶP ENGINE THỰC trực tiếp (view:notification-config, seed mig 0481, is_sensitive=true, đã
+  // SENSITIVE_CAPABILITY_ALLOWLIST) — KHÔNG qua PERMISSION_CODE_TO_PAIR (tránh drift, cùng kỹ thuật
+  // att.shifts/hr.org-chart). Page tự gate tinh hơn cho toggle bằng useCanExact(update:notification-config).
+  {
+    routeKey: "noti.events",
+    path: "/notifications/events",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "NOTI",
+    screenCode: "NOTI-SCREEN-005",
+    titleKey: "routeTitle.notiEvents",
+    requiredAnyPermissions: ["view:notification-config"],
+    showInSidebar: true,
+    order: 61,
+  },
 
   // System
   {

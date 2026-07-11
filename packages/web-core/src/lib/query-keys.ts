@@ -447,6 +447,10 @@ export const notificationKeys = {
   // vì khác endpoint/shape — invalidate riêng, không làm mới nhầm cache trang danh sách đầy đủ).
   dropdown: (params?: Record<string, unknown>) =>
     [...rootKeys.notifications, "dropdown", params] as const,
+  // S4-FE-NOTI-2 — APPEND. GET /notifications/events (admin catalog, NotificationAdminController) —
+  // TÁCH khỏi `list` (own-scope MyNotificationsController, khác endpoint/shape/permission hẳn).
+  events: (params?: Record<string, unknown>) =>
+    [...rootKeys.notifications, "admin-events", params] as const,
 };
 
 // S4-FE-NOTI-1 — mutation → invalidation cho My-Notification (mark-read/mark-all-read/delete). Prefix
