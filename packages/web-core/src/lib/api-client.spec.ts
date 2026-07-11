@@ -20,6 +20,11 @@ interface ApiErrorShape {
  * vi.resetModules() + dynamic import mỗi test để reset state module-level (refreshInFlight/redirecting/epoch).
  */
 
+// loadFresh() (resetModules + dynamic import MỖI test — bắt buộc để reset state module-level, xem doc trên)
+// tốn ~1s/lần trên runner CI lạnh ⇒ trần mặc định 5s flake (đỏ giả 2 lần liên tiếp trên PR #159, cùng lớp
+// với vá PR #139). Nới trần cho RIÊNG file này — không đổi hành vi test.
+vi.setConfig({ testTimeout: 20_000 });
+
 const testSchema = z.object({ value: z.string() });
 
 function dataOk(value = "ok") {
