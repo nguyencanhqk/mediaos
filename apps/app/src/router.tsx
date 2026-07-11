@@ -974,14 +974,13 @@ const leaveAuditLogsRoute = createRoute({
   component: () => buildModuleRouteContent(leaveAuditLogsMeta, "LEAVE", <LeaveAuditLogsPage />),
 });
 
-// Tasks
-const tasksRoute = makeModuleRoute("/tasks", "task.overview", "TASK", ModulePlaceholder);
-const tasksMyTasksRoute = makeModuleRoute(
-  "/tasks/my-tasks",
-  "task.my-tasks",
-  "TASK",
-  ModulePlaceholder,
-);
+// Tasks — S4-FE-TASK-2: List (TASK-SCREEN-005) + My Tasks (TASK-SCREEN-009) THAY ModulePlaceholder.
+import { TaskListPage } from "@/routes/tasks/TaskListPage";
+import { MyTasksPage } from "@/routes/tasks/MyTasksPage";
+import { TaskDetailPage } from "@/routes/tasks/TaskDetailPage";
+
+const tasksRoute = makeModuleRoute("/tasks", "task.overview", "TASK", TaskListPage);
+const tasksMyTasksRoute = makeModuleRoute("/tasks/my-tasks", "task.my-tasks", "TASK", MyTasksPage);
 
 // S4-FE-TASK-1 — Project List (TASK-SCREEN-001) + Detail (TASK-SCREEN-003, deep link $projectId).
 import { ProjectListPage } from "@/routes/tasks/ProjectListPage";
@@ -1010,6 +1009,27 @@ const tasksProjectDetailRoute = createRoute({
         projectId={projectId}
         onBack={() => void navigate({ to: "/tasks/projects" as "/" })}
       />,
+    );
+  },
+});
+
+// Task detail — S4-FE-TASK-2 (TASK-SCREEN-007). No sidebar entry; path param resolved via useParams
+// (mirror tasksProjectDetailRoute). Reuses "task.overview" meta (route-level gate = TASK.TASK.VIEW →
+// read:task) — finer per-action gate (update/delete/assign/comment/…) applied inside TaskDetailPage via
+// useCan/useCanExact. Static "/tasks/projects" and "/tasks/my-tasks" rank ABOVE this param route
+// (TanStack Router disambiguates static segments before param — mirror hrEmployeeCreateRoute note).
+const tasksTaskDetailMeta = getMeta("task.overview");
+const tasksTaskDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tasks/$taskId",
+  beforeLoad: authGuard,
+  component: () => {
+    const { taskId } = tasksTaskDetailRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      tasksTaskDetailMeta,
+      "TASK",
+      <TaskDetailPage taskId={taskId} onBack={() => void navigate({ to: "/tasks" as "/" })} />,
     );
   },
 });
@@ -1551,6 +1571,7 @@ const routeTree = rootRoute.addChildren([
   tasksMyTasksRoute,
   tasksProjectsRoute,
   tasksProjectDetailRoute,
+  tasksTaskDetailRoute,
   notificationsRoute,
   notificationDetailRoute,
   systemRoute,

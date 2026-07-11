@@ -35,7 +35,9 @@ import i18n from "@/i18n";
 import { router } from "@/router";
 
 // Giữ store/useCan/evaluateRouteAccess/ROUTE_REGISTRY THẬT từ web-core; CHỈ stub bề mặt myNotificationApi
-// (network) — mirror pattern test/leave-flow-smoke.spec.tsx.
+// (network) — mirror pattern test/leave-flow-smoke.spec.tsx. taskCoreApi.getMyTasks CŨNG stub (network) vì
+// target_url điều hướng tới /tasks/my-tasks — route đích nay là MyTasksPage THẬT (S4-FE-TASK-2, không còn
+// ModulePlaceholder) nên tự fetch GET /tasks/my khi mount; KHÔNG mock sẽ gọi network thật trong jsdom.
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
@@ -48,6 +50,9 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       markRead: vi.fn(),
       markAllRead: vi.fn(),
       remove: vi.fn(),
+    },
+    taskCoreApi: {
+      getMyTasks: vi.fn().mockResolvedValue([]),
     },
   };
 });
@@ -207,7 +212,12 @@ describe("NOTI router-wire flow (S4-FE-NOTI-1-WIRE) — qua router THẬT + Glob
     await waitFor(() => expect(myNotificationApi.markRead).toHaveBeenCalledWith("n2"));
     await waitFor(() => expect(router.state.location.pathname).toBe("/tasks/my-tasks"));
     // Route đích (module TASK, khác NOTI) TỰ chạy beforeLoad/ProtectedRoute lại — không bypass guard.
-    await waitFor(() => expect(screen.getByText(/đang xây dựng/i)).toBeInTheDocument());
+    // KHÔNG còn placeholder "đang xây dựng" — S4-FE-TASK-2 đã wire MyTasksPage thật (getMyTasks mock ở
+    // trên). Dùng role "heading" (PageHeader <h1>) — sidebar cũng có link cùng text "Việc của tôi".
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: /việc của tôi/i })).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/đang xây dựng/i)).not.toBeInTheDocument();
 
     view.unmount();
   });
