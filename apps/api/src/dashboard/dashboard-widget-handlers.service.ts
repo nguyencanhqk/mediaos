@@ -11,7 +11,12 @@ import { AttendanceReadService } from "../attendance/attendance-read.service";
 import { LeaveApprovalService } from "../leave/leave-approval.service";
 import { HrReadService } from "../employees/hr-read.service";
 import { addDaysToLocalDate, localDateOf } from "../common/tz.util";
-import { gatePairFor, ttlSecondsFor, DASH_WIDGET_LIST_CAP } from "./dashboard-widget-data.const";
+import {
+  gatePairFor,
+  ttlSecondsFor,
+  DASH_WIDGET_LIST_CAP,
+  TASK_TERMINAL_STATUSES,
+} from "./dashboard-widget-data.const";
 import { DASH_ERR } from "./dashboard-resolver.errors";
 import type {
   WidgetCacheIdentity,
@@ -25,7 +30,6 @@ import type { EnginePair } from "./dashboard-widget-catalog.const";
 const DEFAULT_TZ = "Asia/Ho_Chi_Minh";
 /** Ngưỡng "sắp đến hạn" cho TASK_ALERTS: task chưa hoàn thành có due trong 48h tới (hoặc đã overdue). */
 const DUE_SOON_MS = 48 * 60 * 60 * 1000;
-const DONE_STATUSES = new Set(["completed", "approved", "cancelled"]);
 
 /**
  * S4-DASH-BE-2 — DashboardWidgetHandlersService: 7 handler map dataSourceKey(slug) → gate+fetch, MỖI handler
@@ -170,7 +174,9 @@ export class DashboardWidgetHandlersService {
     t: { status: string | null; isOverdue: boolean; dueAt: string | null },
     now: number,
   ): boolean {
-    if (t.status && DONE_STATUSES.has(t.status)) return false;
+    // BUG2 fix: t.status ở đây là MyTaskItemDto.status = TaskCoreService.getMyTasks → task_status HIỆN ĐẠI
+    // TitleCase ('Done'/'Cancelled'/…), KHÔNG PHẢI status legacy lowercase — set terminal PHẢI khớp TitleCase.
+    if (t.status && TASK_TERMINAL_STATUSES.has(t.status)) return false;
     if (t.isOverdue) return true;
     if (!t.dueAt) return false;
     const due = new Date(t.dueAt).getTime();
@@ -318,12 +324,15 @@ export class DashboardWidgetHandlersService {
       });
     }
     const rows = await this.tasks.listByProject(ctx.user.companyId, projectId, { limit: 200 });
+    // BUG1 fix: TaskCoreService (S4-TASK-BE-*, luồng work-item/Kanban hiện đại) CHỈ ghi task_status
+    // (TitleCase) — KHÔNG BAO GIỜ đụng `status` legacy (lowercase, giữ DEFAULT 'not_started' vĩnh viễn cho
+    // task tạo qua luồng hiện đại). byStatus/done PHẢI đọc task_status HIỆN ĐẠI, không phải status legacy.
     const byStatus: Record<string, number> = {};
     let done = 0;
     for (const r of rows) {
-      const s = r.status ?? "unknown";
+      const s = r.taskStatus ?? "Unknown";
       byStatus[s] = (byStatus[s] ?? 0) + 1;
-      if (DONE_STATUSES.has(s)) done += 1;
+      if (r.taskStatus === "Done") done += 1;
     }
     const total = rows.length;
     const percent = total > 0 ? Math.round((done / total) * 100) : 0;
