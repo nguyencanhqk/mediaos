@@ -1,8 +1,19 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-11 00:01Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-11 01:11Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
+
+### 🔴 S4-TASK-BE-3 — BE Task assignment + status workflow FSM (assign/đổi assignee, add/remove watcher, POST /:id/status transition hợp lệ, priority/deadline) — crown FSM, activity log, phát event NOTI
+- **zone**: red · **skills**: code-review
+- **sửa ở đâu (paths)**: `apps/api/src/tasks/**`, `apps/api/test/integration/**`, `packages/contracts/src/**`, `docs/plans/S4-TASK-BE-3.md`
+- **phụ thuộc**: S4-TASK-BE-2✓
+- **done_when (đích hội tụ)**:
+  - [ ] POST /tasks/:id/assign (giao/đổi assignee chính) · POST/DELETE /:id/watchers · POST /:id/status · POST /:id/priority · POST /:id/deadline — @RequirePermission đúng cặp; chỉ gán người trong scope/project; cảnh báo (không chặn cứng MVP) nếu assignee đang nghỉ phép duyệt
+  - [ ] FSM status hợp lệ: Todo→In Progress→In Review→Done/Cancelled (transition table tường minh, chặn nhảy trạng thái sai → mã lỗi SPEC-06); Done có thể đòi checklist hoàn thành nếu config bật; ghi task_activity_logs TASK_ASSIGNED/STATUS_CHANGED/PRIORITY_CHANGED/DUE_DATE_CHANGED
+  - [ ] Phát event chuẩn qua outbox theo Event code registry §9.5 (TASK_ASSIGNED/TASK_ASSIGNEE_CHANGED/TASK_STATUS_CHANGED/TASK_PRIORITY_CHANGED/TASK_DUE_DATE_CHANGED) — payload KHÔNG chứa dữ liệu nhạy cảm; wiring consumer thực ở S4-INT-1
+  - [ ] Int-spec RED-trước: transition không hợp lệ → 4xx + không đổi state · gán ngoài scope/tenant → deny · watcher trùng bị chặn · actor không tự nhận notify (chuẩn bị INT) · activity log ghi đúng; FULL gate security-reviewer + plan-reviewer PASS trước code (crown)
+  - [ ] GHI CHÚ ACCEPTANCE (plan-review 2026-07-11 OQ#1, PR #150): route THỰC = POST /:id/change-status · /change-priority · /change-deadline (verb canonical SPEC-06 §16.3/API-06 §14 — done_when dòng 1 là shorthand); watcher SELF-ONLY (không nhận employee_id body); QA map test theo tên canonical, KHÔNG báo lệch.
 
 ### 🔴 S4-DASH-BE-1 — BE Dashboard resolver (GET /dashboard/me, /types, /:type) + widget registry + permission/scope gate — crown data-scope
 - **zone**: red · **skills**: code-review
@@ -13,6 +24,14 @@
   - [ ] Widget registry service: chỉ trả widget mà user có required_permission; widget nhạy cảm kiểm CẢ permission DASH lẫn permission module nguồn; mọi query filter company_id
   - [ ] DTO contracts dual-build; envelope API-01; widget list có limit
   - [ ] Int-spec RED-trước: employee KHÔNG thấy widget Manager/HR · cross-tenant deny · dashboard/me trả đúng type theo quyền; FULL gate security-reviewer + plan-reviewer PASS trước code (crown)
+
+### 🟢 S4-FE-TASK-CLEANUP-1 — Gỡ/chuyển tasksApi legacy (web-core tasks-api.ts) — code chết gọi GET /tasks shape cũ sau BREAKING PR #145 (my-tasks → /tasks/my)
+- **zone**: green · **skills**: code-review
+- **sửa ở đâu (paths)**: `packages/web-core/src/lib/**`, `packages/web-core/src/index.ts`
+- **done_when (đích hội tụ)**:
+  - [ ] Quét lại consumer 3 app (app/console/auth) + packages chứng minh 0 import tasksApi/tasks-api (mirror quy trình PR #140); nếu phát hiện consumer sống → DỪNG, báo người
+  - [ ] Gỡ packages/web-core/src/lib/tasks-api.ts + tasks-api.spec.ts + export ở barrel (nếu có); HOẶC nếu S4-FE-TASK-2 đã cần client thì thay bằng taskCoreApi theo GET /tasks/my + DTO taskCore* contracts — KHÔNG giữ shape cũ
+  - [ ] pnpm --filter @mediaos/web-core build + test xanh; typecheck 3 app xanh (chứng minh không còn tham chiếu); LIGHT gate
 
 ### 🟡 S5-DEVOPS-1 — Staging/UAT readiness: env + deploy pipeline + migration/seed chạy từ DB trống + test account đủ role (Employee/Manager/HR/Admin/Super Admin) — đối chiếu topology PROD/DEV-ONLINE đang chạy
 - **zone**: yellow · **skills**: code-review
@@ -26,15 +45,14 @@
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
-- 🔴 `S4-TASK-BE-3` BE Task assignment + status workflow FSM (assign/đổi assignee, add/remove watcher, POST /:id/status transition hợp lệ, priority/deadline) — crown FSM, activity log, phát event NOTI
-- 🟢 `S4-FE-TASK-CLEANUP-1` Gỡ/chuyển tasksApi legacy (web-core tasks-api.ts) — code chết gọi GET /tasks shape cũ sau BREAKING PR #145 (my-tasks → /tasks/my)
 - 🟡 `S4-TASK-BE-5` BE TASK file (project/task) qua FileService + file_links + Project progress report (GET /projects/:id/report) — P1/P2 (IMP02-STORY-075/076)
 
 **CHỜ (kẹt phụ thuộc):**
 - `S4-TASK-BE-4` BE Kanban (board + move) + comment/mention + checklist + activity log (GET /projects/:id/kanban, POST /:id/move, comments CRUD, checklists/items, GET /:id/activity) — P1 ⏳ cần: S4-TASK-BE-3
+- `S4-NOTI-SEED-2` Vá catalog notification_events khớp registry §9.5 cho event TASK (BE-3): thêm TASK_PRIORITY_CHANGED · đổi TASK_DEADLINE_CHANGED→TASK_DUE_DATE_CHANGED · template + enable TASK_ASSIGNEE_CHANGED — BẮT BUỘC TRƯỚC S4-INT-1 ⏳ cần: S4-TASK-BE-3
 - `S4-DASH-CATALOG-2` Bù đủ catalog widget DASH (11 widget còn lại của DB-07 §14.3) + reconcile mâu thuẫn nội bộ DB-07 §8.5 ↔ §14.3 + cặp refresh:dashboard-cache ⏳ cần: S4-DASH-BE-2
 - `S4-DASH-BE-2` BE Widget data services (GET /dashboard/widgets, /widgets/:slug) cho 7 widget In-sprint + cache TTL + degraded state — data-scope + module nguồn permission ⏳ cần: S4-DASH-BE-1
-- `S4-INT-1` Tích hợp TASK → NOTI: wiring event producer (outbox) → consumer intake, tạo notification đúng recipient cho mọi event TASK/PROJECT — E2E task→noti — crown ⏳ cần: S4-TASK-BE-3, S4-TASK-BE-4
+- `S4-INT-1` Tích hợp TASK → NOTI: wiring event producer (outbox) → consumer intake, tạo notification đúng recipient cho mọi event TASK/PROJECT — E2E task→noti — crown ⏳ cần: S4-TASK-BE-3, S4-TASK-BE-4, S4-NOTI-SEED-2
 - `S4-INT-2` Tích hợp DASH cache invalidation từ event TASK/NOTI/ATT/LEAVE (POST /internal/v1/dashboard/cache/invalidate) — chỉ mã do producer thật phát (§11.5 reconcile) ⏳ cần: S4-DASH-BE-2, S4-INT-1
 - `S4-FE-TASK-2` FE Task screens: TaskListPage · MyTasksPage · TaskDetailPage · TaskFormDrawer · TaskAssignControl · TaskStatusSelect (P0) ⏳ cần: S4-TASK-BE-3
 - `S4-FE-TASK-3` FE Task collaboration: TaskKanbanPage (drag-drop) · TaskCommentThread (mention) · TaskChecklistPanel · TaskActivityTimeline (P1) ⏳ cần: S4-TASK-BE-4, S4-FE-TASK-2
@@ -64,8 +82,8 @@
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 2
-- **migration head**: idx 166 — `0486_s4_taskrecon2_contract_comment_legacy` (167 migration)
+- **branch**: `master` · **file đang đổi (dirty)**: 1
+- **migration head**: idx 167 — `0487_s4_notibe4_admin_config_grant` (168 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
 
@@ -73,6 +91,8 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `f90e9ba` | 2026-07-11 | feat(noti): S4-NOTI-BE-4 admin config WRITE — mig 0487 GRANT INSERT,UPDATE + PATCH events/templates (company-override) + audit (#149) |
+| `227720c` | 2026-07-11 | chore(harness): backlog S4-TASK-BE-2 + S4-FE-TASK-1 done (PR #145/#146) + mở WO S4-FE-TASK-CLEANUP-1 (gỡ tasksApi chết sau BREAKING GET /tasks) + regen STATUS (#147) |
 | `e58a4eb` | 2026-07-11 | feat(task-fe): Project screens (List/Detail/Form/Member) trong apps/app [S4-FE-TASK-1] (#146) |
 | `abc0a6a` | 2026-07-11 | feat(task): BE Task CRUD + My-tasks + filter (SPEC-06) [S4-TASK-BE-2] (#145) |
 | `a1683f7` | 2026-07-11 | chore(harness): regen STATUS sau #142-#144 (NOTI-BE-3 partial · RECON-2 · TASK-BE-1) + ledger chốt SEED-1/BE-3 |
@@ -83,8 +103,6 @@
 | `e4e326f` | 2026-07-10 | chore(fe): gỡ dứt điểm NotificationBell (@mediaos/ui) + notificationApi legacy (web-core) — code chết trỏ route BE đã xoá ở PR #133 (S4-FE-NOTI-CLEANUP-1) (#140) |
 | `fec4463` | 2026-07-10 | fix(cli): thêm MIGRATE vào menu + in rõ DB đích trước khi migrate (#132) |
 | `ad380b0` | 2026-07-10 | test(web-core): vá flake api-client.spec — 1 loadFresh cho 4 kịch bản refresh-fail (#139) |
-| `1da1da6` | 2026-07-10 | feat(s4-wave): NOTI My-Notification + engine · DASH catalog seed · FE Notification · vá lỗ CI (1588 test chưa từng chạy) (#138) |
-| `27576dd` | 2026-07-09 | feat(ready-wave4): TASK pair-drift reconcile (0480) + NOTI seed (0481) + DASH core (0482) (#131) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
