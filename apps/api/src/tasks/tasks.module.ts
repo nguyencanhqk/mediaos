@@ -24,6 +24,14 @@ import { PermissionModule } from "../permission/permission.module";
 import { StorageModule } from "../storage/storage.module";
 // S4-TASK-BE-3 — SettingService (checklist-required gate; exports từ foundation SettingsModule).
 import { SettingsModule } from "../foundation/settings/settings.module";
+// S4-TASK-BE-4 (additive) — Kanban board + move · comment/mention · checklist/items · activity feed.
+import { TaskKanbanService } from "./task-kanban.service";
+import { TaskCommentsService } from "./task-comments.service";
+import { TaskCommentsRepository } from "./task-comments.repository";
+import { TaskChecklistsService } from "./task-checklists.service";
+import { TaskChecklistsRepository } from "./task-checklists.repository";
+import { TaskActivityFeedService } from "./task-activity-feed.service";
+import { TaskActivityFeedRepository } from "./task-activity-feed.repository";
 
 @Module({
   imports: [EventsModule, PermissionModule, StorageModule, SettingsModule],
@@ -53,6 +61,17 @@ import { SettingsModule } from "../foundation/settings/settings.module";
     // S4-TASK-BE-3 — Task actions crown-FSM stack (tái dùng TaskCoreRepository/DataScope/Outbox/Setting).
     TaskActionsService,
     TaskActionsRepository,
+    // S4-TASK-BE-4 — Kanban board + move (tái dùng TaskCoreRepository/TasksRepository/TaskActionsService).
+    TaskKanbanService,
+    // S4-TASK-BE-4 — Comment/mention.
+    TaskCommentsService,
+    TaskCommentsRepository,
+    // S4-TASK-BE-4 — Checklist/items.
+    TaskChecklistsService,
+    TaskChecklistsRepository,
+    // S4-TASK-BE-4 — Activity feed (read-only task_activity_logs).
+    TaskActivityFeedService,
+    TaskActivityFeedRepository,
   ],
   exports: [TasksService],
 })

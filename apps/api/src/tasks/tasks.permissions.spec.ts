@@ -10,8 +10,8 @@ import "reflect-metadata";
  *   1. Mỗi MUTATION khai báo đúng @RequirePermission(action, 'task') + được PermissionGuard bọc.
  *   2. DENY: user thiếu quyền → ForbiddenException (403); PermissionService.can gọi đúng action/resource.
  *   3. ALLOW: user có quyền → qua guard (true).
- *   4. READ (getMyTasks/getComments) GIỮ mở — user luôn xem việc của mình + thread (tenant-scoped
- *      bởi JwtAuthGuard + CompanyGuard toàn cục) → KHÔNG guard.
+ *   4. S4-TASK-BE-4: getComments KHÔNG còn mở — GIỜ gate read:task (data-scope "chỉ người xem được task
+ *      mới comment được", SPEC-06 §14.14) → chuyển từ OPEN_READS sang GUARDED_MUTATIONS. OPEN_READS rỗng.
  *
  * Gọi thẳng PermissionGuard với metadata THẬT của controller (Reflector thật) → enforcement
  * end-to-end mà không cần boot Nest/DB.
@@ -64,14 +64,29 @@ const GUARDED_MUTATIONS: ReadonlyArray<{
   { handlerName: "changeTaskDeadline", action: "update-deadline", resourceType: "task" },
   { handlerName: "addWatcher", action: "watch", resourceType: "task" },
   { handlerName: "removeWatcher", action: "watch", resourceType: "task" },
+  // S4-TASK-BE-4 (additive) — comment/mention · checklist/items · activity feed + move (Kanban).
+  { handlerName: "moveTask", action: "update-status", resourceType: "task" },
+  { handlerName: "getComments", action: "read", resourceType: "task" },
+  { handlerName: "updateComment", action: "comment", resourceType: "task" },
+  { handlerName: "deleteComment", action: "comment", resourceType: "task" },
+  { handlerName: "listChecklists", action: "read", resourceType: "task" },
+  { handlerName: "createChecklist", action: "update", resourceType: "task" },
+  { handlerName: "updateChecklist", action: "update", resourceType: "task" },
+  { handlerName: "deleteChecklist", action: "update", resourceType: "task" },
+  { handlerName: "addChecklistItem", action: "update", resourceType: "task" },
+  { handlerName: "updateChecklistItem", action: "update", resourceType: "task" },
+  { handlerName: "deleteChecklistItem", action: "update", resourceType: "task" },
+  // view:task-audit-log là SENSITIVE (seed 0485 is_sensitive=true, CHỈ hr/company-admin @Company).
+  {
+    handlerName: "listActivity",
+    action: "view",
+    resourceType: "task-audit-log",
+    isSensitive: true,
+  },
 ];
 
-/**
- * Read intentionally open cho mọi user tenant (global JWT+Company guard vẫn ép tenant).
- * CHỈ getComments (thread bình luận). S4-TASK-BE-2: getMyTasks nay gate read:task (đã chuyển sang /tasks/my
- * có data-scope) ⇒ KHÔNG còn mở.
- */
-const OPEN_READS: ReadonlyArray<keyof TasksController> = ["getComments"];
+/** Read intentionally open cho mọi user tenant — HIỆN RỖNG (getComments đã chuyển sang gate ở trên). */
+const OPEN_READS: ReadonlyArray<keyof TasksController> = [];
 
 function handlerOf(name: keyof TasksController): (...args: unknown[]) => unknown {
   return TasksController.prototype[name] as (...args: unknown[]) => unknown;

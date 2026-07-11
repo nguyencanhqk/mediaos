@@ -17,6 +17,8 @@ import type { Request } from "express";
 import { PermissionGuard } from "../permission/guards/permission.guard";
 import { RequirePermission } from "../permission/require-permission.decorator";
 import { ProjectsService } from "./projects.service";
+// S4-TASK-BE-4 (additive) — Kanban board (GET /projects/:id/kanban, TASK-API-212).
+import { TaskKanbanService } from "./task-kanban.service";
 import {
   AddMemberDto,
   CloseTaskProjectDto,
@@ -45,7 +47,11 @@ interface AuthenticatedRequest extends Request {
 @Controller("projects")
 @UsePipes(ZodValidationPipe)
 export class ProjectsController {
-  constructor(private readonly projects: ProjectsService) {}
+  constructor(
+    private readonly projects: ProjectsService,
+    // S4-TASK-BE-4 — Kanban board.
+    private readonly kanban: TaskKanbanService,
+  ) {}
 
   /** GET /projects — danh sách (read:project). Data-scope: employee @Own · manager @Team · hr/admin @Company. */
   @Get()
@@ -149,5 +155,17 @@ export class ProjectsController {
     @Param("memberId") memberId: string,
   ) {
     await this.projects.removeMember(req.user, id, memberId);
+  }
+
+  /**
+   * GET /projects/:id/kanban (S4-TASK-BE-4, TASK-API-212) — board task theo cột `task_status` (Todo/In
+   * Progress/In Review/Done/Cancelled). Gate `view-kanban:task` (seed 0485, resource `task` — KHÔNG phải
+   * `project`, dù URL nằm dưới /projects). Kéo-thả đổi cột đi qua route riêng `POST /tasks/:id/move`.
+   */
+  @Get(":id/kanban")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("view-kanban", "task")
+  getKanban(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+    return this.kanban.getBoard(req.user, id);
   }
 }

@@ -10,12 +10,19 @@ import {
   createCommentSchema,
   createLabelSchema,
   createProjectStateSchema,
+  createTaskChecklistItemSchema,
+  createTaskChecklistSchema,
+  createTaskCommentSchema,
   createTaskCoreSchema,
   createTaskSchema,
+  listTaskActivityQuerySchema,
   listTaskCoreQuerySchema,
   listTasksQuerySchema,
   updateLabelSchema,
   updateProjectStateSchema,
+  updateTaskChecklistItemSchema,
+  updateTaskChecklistSchema,
+  updateTaskCommentSchema,
   updateTaskCoreSchema,
   updateTaskFieldsSchema,
   updateTaskStatusSchema,
@@ -95,3 +102,29 @@ export class ChangeTaskDeadlineDto extends createZodDto(changeTaskDeadlineSchema
 
 /** POST /tasks/:id/watchers — tự theo dõi (watch:task, self-only MVP; body rỗng). */
 export class AddWatcherDto extends createZodDto(addWatcherSchema) {}
+
+// ─── S4-TASK-BE-4 — Kanban + move · comment/mention · checklist/items · activity feed ──────────
+
+// POST /tasks/:id/move (Kanban drag/drop) tái dùng NGUYÊN VẸN ChangeTaskStatusDto ở trên — "move" chỉ là
+// route sugar cho CHÍNH TaskActionsService.changeStatus (không lách FSM, không schema riêng).
+
+/** POST /tasks/:id/comments (TASK-API-302, comment:task) — content + mentionEmployeeIds. */
+export class CreateTaskCommentDto extends createZodDto(createTaskCommentSchema) {}
+
+/** PATCH /tasks/:id/comments/:commentId (TASK-API-303, comment:task, self-only MVP). */
+export class UpdateTaskCommentDto extends createZodDto(updateTaskCommentSchema) {}
+
+/** POST /tasks/:id/checklists (TASK-API-502, update:task) — title + items[] khởi tạo (optional). */
+export class CreateTaskChecklistDto extends createZodDto(createTaskChecklistSchema) {}
+
+/** PATCH /tasks/:id/checklists/:checklistId (TASK-API-503, update:task). */
+export class UpdateTaskChecklistDto extends createZodDto(updateTaskChecklistSchema) {}
+
+/** POST /tasks/:id/checklists/:checklistId/items (API-06 §17.5, update:task). */
+export class CreateTaskChecklistItemDto extends createZodDto(createTaskChecklistItemSchema) {}
+
+/** PATCH /tasks/:id/checklists/:checklistId/items/:itemId — tick (API-06 §17.6, update:task). */
+export class UpdateTaskChecklistItemDto extends createZodDto(updateTaskChecklistItemSchema) {}
+
+/** GET /tasks/:id/activity (TASK-API-602, view:task-audit-log) — pagination limit/offset. */
+export class ListTaskActivityQueryDto extends createZodDto(listTaskActivityQuerySchema) {}
