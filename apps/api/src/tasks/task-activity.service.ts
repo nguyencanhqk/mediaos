@@ -33,13 +33,34 @@ export type TaskActivityAction =
   | "TASK_PRIORITY_CHANGED"
   | "TASK_DUE_DATE_CHANGED"
   | "TASK_WATCHER_ADDED"
-  | "TASK_WATCHER_REMOVED";
+  | "TASK_WATCHER_REMOVED"
+  // S4-TASK-BE-4 (additive) — comment/checklist (SPEC-06 §14.14/§14.16, done_when literal — KHÔNG tiền
+  // tố "TASK_" như API-06 §17 (TASK_CHECKLIST_*): backlog.mjs done_when chốt COMMENT_*/CHECKLIST_* trần).
+  | "COMMENT_CREATED"
+  | "COMMENT_UPDATED"
+  | "COMMENT_DELETED"
+  | "CHECKLIST_CREATED"
+  | "CHECKLIST_UPDATED"
+  | "CHECKLIST_DELETED"
+  | "CHECKLIST_ITEM_CREATED"
+  | "CHECKLIST_ITEM_UPDATED"
+  | "CHECKLIST_ITEM_DONE"
+  | "CHECKLIST_ITEM_DELETED";
 
 /**
  * target_type — tập con của CHECK chk_task_activity_target_type (0478:217-219). S4-TASK-BE-2 (additive):
- * Task. S4-TASK-BE-3 (additive): Watcher / Assignee (CHECK 0478 đã cho phép — KHÔNG cần đổi DDL).
+ * Task. S4-TASK-BE-3 (additive): Watcher / Assignee. S4-TASK-BE-4 (additive): Comment / Checklist /
+ * ChecklistItem (CHECK 0478 ĐÃ cho phép cả 3 — KHÔNG cần đổi DDL, chỉ mở khoá phía TS union).
  */
-export type TaskActivityTargetType = "Project" | "Member" | "Task" | "Watcher" | "Assignee";
+export type TaskActivityTargetType =
+  | "Project"
+  | "Member"
+  | "Task"
+  | "Watcher"
+  | "Assignee"
+  | "Comment"
+  | "Checklist"
+  | "ChecklistItem";
 
 export interface TaskActivityEntry {
   action: TaskActivityAction;

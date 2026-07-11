@@ -19,17 +19,28 @@ import { RequirePermission } from "../permission/require-permission.decorator";
 import { TasksService } from "./tasks.service";
 import { TaskCoreService } from "./task-core.service";
 import { TaskActionsService } from "./task-actions.service";
+// S4-TASK-BE-4 (additive) — comment/mention · checklist/items · activity feed (Kanban move tái dùng
+// CHÍNH TaskActionsService.changeStatus ở trên, KHÔNG service riêng).
+import { TaskCommentsService } from "./task-comments.service";
+import { TaskChecklistsService } from "./task-checklists.service";
+import { TaskActivityFeedService } from "./task-activity-feed.service";
 import {
   AddWatcherDto,
   AssignTaskDto,
   ChangeTaskDeadlineDto,
   ChangeTaskPriorityDto,
   ChangeTaskStatusDto,
-  CreateCommentDto,
+  CreateTaskChecklistDto,
+  CreateTaskChecklistItemDto,
+  CreateTaskCommentDto,
   CreateTaskCoreDto,
+  ListTaskActivityQueryDto,
   ListTaskCoreQueryDto,
   ListTasksQueryDto,
   PageQueryDto,
+  UpdateTaskChecklistDto,
+  UpdateTaskChecklistItemDto,
+  UpdateTaskCommentDto,
   UpdateTaskCoreDto,
   UpdateTaskStatusDto,
 } from "./tasks.dto";
@@ -43,7 +54,8 @@ interface AuthenticatedRequest extends Request {
  * Global JwtAuthGuard + CompanyGuard chạy trước (auth + tenant). Mutation gated bởi PermissionGuard
  * (@RequirePermission) trên resource `task` (actions có sẵn ở seed 0005, is_sensitive=false → grant
  * công ty là đủ, không cần object_permissions). Audit ghi ở service trong cùng tx withTenant.
- * Read-only (My Tasks / comments) KHÔNG gate — user luôn xem được việc của mình (mirror /tasks G4-4).
+ * Read-only (My Tasks) KHÔNG gate — user luôn xem được việc của mình (mirror /tasks G4-4). Comments
+ * (S4-TASK-BE-4) ĐỔI khỏi ungated legacy — GIỜ gate read/comment:task + data-scope (xem TaskCommentsService).
  */
 @Controller("tasks")
 @UsePipes(ZodValidationPipe)
@@ -54,6 +66,10 @@ export class TasksController {
     private readonly taskCore: TaskCoreService,
     // S4-TASK-BE-3 — Task actions crown-FSM (assign/change-status/priority/deadline/watch).
     private readonly taskActions: TaskActionsService,
+    // S4-TASK-BE-4 — comment/mention · checklist/items · activity feed.
+    private readonly taskComments: TaskCommentsService,
+    private readonly taskChecklists: TaskChecklistsService,
+    private readonly taskActivityFeed: TaskActivityFeedService,
   ) {}
 
   /**
@@ -241,16 +257,22 @@ export class TasksController {
     );
   }
 
-  /** GET /tasks/:taskId/comments — thread bình luận của task */
+  // ═══════════════════ S4-TASK-BE-4 — Comment/mention (TASK-API-301..304) ═══════════════════
+  // ĐỔI khỏi legacy ungated (TasksService.getComments/addComment, task_comments append-only cũ):
+  // GIỜ gate read/comment:task + data-scope "chỉ người xem được task" (SPEC-06 §14.14) qua
+  // TaskCommentsService — soft-delete PATCH/DELETE MỚI thêm (legacy append-only KHÔNG hỗ trợ sửa/xoá).
+
+  /** GET /tasks/:taskId/comments (TASK-API-301) — gate read:task, chỉ khi task trong scope đọc. */
   @Get(":taskId/comments")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("read", "task")
   getComments(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
-    return this.tasks.getComments(req.user.companyId, taskId);
+    return this.taskComments.list(req.user, taskId);
   }
 
   /**
-   * POST /tasks/:taskId/comments — thêm bình luận.
-   * Là WRITE → gate `comment:task` (recon S4-TASK-RECON canonical hoá về resource `task`; quyền được cấp
-   * cho role cần bình luận, gồm `employee`). KHÔNG để ngỏ như read — chặn user 0-quyền spam comment/audit (gate G9-2 H-1).
+   * POST /tasks/:taskId/comments (TASK-API-302) — gate `comment:task`. content bắt buộc không rỗng +
+   * mentionEmployeeIds validate ngoài-scope → 403 BLOCK (KHÔNG chỉ warning).
    */
   @Post(":taskId/comments")
   @UseGuards(PermissionGuard)
@@ -258,9 +280,35 @@ export class TasksController {
   addComment(
     @Req() req: AuthenticatedRequest,
     @Param("taskId") taskId: string,
-    @Body() dto: CreateCommentDto,
+    @Body() dto: CreateTaskCommentDto,
   ) {
-    return this.tasks.addComment(req.user.companyId, taskId, req.user.id, dto.body);
+    return this.taskComments.create(req.user, taskId, dto);
+  }
+
+  /** PATCH /tasks/:taskId/comments/:commentId (TASK-API-303) — self-only MVP (403 nếu không phải tác giả). */
+  @Patch(":taskId/comments/:commentId")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("comment", "task")
+  updateComment(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Param("commentId") commentId: string,
+    @Body() dto: UpdateTaskCommentDto,
+  ) {
+    return this.taskComments.update(req.user, taskId, commentId, dto);
+  }
+
+  /** DELETE /tasks/:taskId/comments/:commentId (TASK-API-304) — soft-delete (BẤT BIẾN #2). */
+  @Delete(":taskId/comments/:commentId")
+  @HttpCode(204)
+  @UseGuards(PermissionGuard)
+  @RequirePermission("comment", "task")
+  async deleteComment(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Param("commentId") commentId: string,
+  ) {
+    await this.taskComments.remove(req.user, taskId, commentId);
   }
 
   // ═══════════════════ S4-TASK-BE-3 — Task actions crown-FSM (append-only) ═══════════════════
@@ -288,6 +336,25 @@ export class TasksController {
   @UseGuards(PermissionGuard)
   @RequirePermission("update-status", "task")
   changeTaskStatus(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Body() dto: ChangeTaskStatusDto,
+  ) {
+    return this.taskActions.changeStatus(req.user, taskId, dto);
+  }
+
+  /**
+   * POST /tasks/:taskId/move (S4-TASK-BE-4, Kanban drag/drop) — route sugar cho FE Board: gọi ĐÍCH
+   * XÁC CÙNG `TaskActionsService.changeStatus` như change-status (KHÔNG lách FSM, KHÔNG service riêng,
+   * KHÔNG activity/outbox trùng — 1 lời gọi = 1 lần ghi). Gate update-status:task (mirror change-status
+   * — kéo task sang cột mà không có quyền đổi trạng thái ⇒ 403, SPEC-06 §14.13 "Người không có quyền
+   * update status chỉ xem, không kéo thả").
+   */
+  @Post(":taskId/move")
+  @HttpCode(200)
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update-status", "task")
+  moveTask(
     @Req() req: AuthenticatedRequest,
     @Param("taskId") taskId: string,
     @Body() dto: ChangeTaskStatusDto,
@@ -345,5 +412,114 @@ export class TasksController {
     @Param("watcherId") watcherId: string,
   ) {
     await this.taskActions.removeWatcher(req.user, taskId, watcherId);
+  }
+
+  // ═══════════════════ S4-TASK-BE-4 — Checklist/items (API-06 §17 · TASK-API-501..504) ═══════════════
+  // Gate `update:task` cho MỌI mutate (checklist LẪN item) — OWNER CHỐT seed 0485 "KHÔNG cặp 'checklist'
+  // riêng, gate bằng update:task" + API-06 §17 "TK-10". GET dùng `read:task`.
+
+  /** GET /tasks/:taskId/checklists (API-06 §17.1). Gate read:task. */
+  @Get(":taskId/checklists")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("read", "task")
+  listChecklists(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
+    return this.taskChecklists.list(req.user, taskId);
+  }
+
+  /** POST /tasks/:taskId/checklists (TASK-API-502) — title + items[] khởi tạo (optional). Gate update:task. */
+  @Post(":taskId/checklists")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "task")
+  createChecklist(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Body() dto: CreateTaskChecklistDto,
+  ) {
+    return this.taskChecklists.create(req.user, taskId, dto);
+  }
+
+  /** PATCH /tasks/:taskId/checklists/:checklistId (TASK-API-503). Gate update:task. */
+  @Patch(":taskId/checklists/:checklistId")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "task")
+  updateChecklist(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Param("checklistId") checklistId: string,
+    @Body() dto: UpdateTaskChecklistDto,
+  ) {
+    return this.taskChecklists.update(req.user, taskId, checklistId, dto);
+  }
+
+  /** DELETE /tasks/:taskId/checklists/:checklistId (TASK-API-504) — soft cascade xuống item. Gate update:task. */
+  @Delete(":taskId/checklists/:checklistId")
+  @HttpCode(204)
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "task")
+  async deleteChecklist(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Param("checklistId") checklistId: string,
+  ) {
+    await this.taskChecklists.remove(req.user, taskId, checklistId);
+  }
+
+  /** POST /tasks/:taskId/checklists/:checklistId/items (API-06 §17.5). Gate update:task. */
+  @Post(":taskId/checklists/:checklistId/items")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "task")
+  addChecklistItem(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Param("checklistId") checklistId: string,
+    @Body() dto: CreateTaskChecklistItemDto,
+  ) {
+    return this.taskChecklists.addItem(req.user, taskId, checklistId, dto);
+  }
+
+  /** PATCH .../items/:itemId — tick is_done (API-06 §17.6). Gate update:task. */
+  @Patch(":taskId/checklists/:checklistId/items/:itemId")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "task")
+  updateChecklistItem(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Param("checklistId") checklistId: string,
+    @Param("itemId") itemId: string,
+    @Body() dto: UpdateTaskChecklistItemDto,
+  ) {
+    return this.taskChecklists.updateItem(req.user, taskId, checklistId, itemId, dto);
+  }
+
+  /** DELETE .../items/:itemId (API-06 §17.7) — soft-delete. Gate update:task. */
+  @Delete(":taskId/checklists/:checklistId/items/:itemId")
+  @HttpCode(204)
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update", "task")
+  async deleteChecklistItem(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Param("checklistId") checklistId: string,
+    @Param("itemId") itemId: string,
+  ) {
+    await this.taskChecklists.removeItem(req.user, taskId, checklistId, itemId);
+  }
+
+  // ═══════════════════ S4-TASK-BE-4 — Activity feed (API-06 §16.7 · TASK-API-602) ═══════════════
+
+  /**
+   * GET /tasks/:taskId/activity — lịch sử hoạt động task (task_activity_logs, append-only). Gate
+   * `view:task-audit-log` (sensitive=true, seed 0485 CHỈ hr/company-admin @Company — employee/manager
+   * 403 ĐÚNG THIẾT KẾ, SPEC-06 TASK-ERR-042).
+   */
+  @Get(":taskId/activity")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("view", "task-audit-log", { isSensitive: true })
+  listActivity(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Query() query: ListTaskActivityQueryDto,
+  ) {
+    return this.taskActivityFeed.list(req.user, taskId, query);
   }
 }

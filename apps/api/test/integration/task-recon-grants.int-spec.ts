@@ -305,11 +305,13 @@ describe.skipIf(!runIsolatedDb)(
       return res.body.data.accessToken as string;
     }
 
+    // S4-TASK-BE-4: route đổi DTO body → { content, mentionEmployeeIds? } (API-06 §16.2, TaskCommentsService)
+    // — CẬP NHẬT field cho khớp, KHÔNG đổi ý nghĩa test (vẫn đo permission gate qua đường thật).
     function postComment(token: string) {
       return request(app.getHttpServer())
         .post(`/tasks/${taskId}/comments`)
         .set("Authorization", `Bearer ${token}`)
-        .send({ body: "recon deny-path comment" });
+        .send({ content: "recon deny-path comment" });
     }
 
     beforeAll(async () => {
@@ -342,10 +344,25 @@ describe.skipIf(!runIsolatedDb)(
       await seedUserRole(direct, hrUser, roleHr, A.companyId);
       await seedUserRole(direct, adminUser, roleAdmin, A.companyId);
 
+      // S4-TASK-BE-4: route comment GIỜ enforce data-scope đọc (Own/Team) — "chỉ người xem được task mới
+      // comment được" (SPEC-06 §14.14). Seed employee_profiles + gán task.main_assignee_employee_id=empEmp
+      // (report của mgrUser) để employee (@Own) VÀ manager (@Team, quản lý empEmp) đều thấy task này —
+      // TRƯỚC ĐÂY route pair-only (không lọc scope) nên fixture không cần assignee; GIỜ cần để 201 còn đúng.
+      const empProfile = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id, direct_manager_id, status)
+         VALUES ($1, $2, $3, 'active') RETURNING id`,
+        [A.companyId, empUser, mgrUser],
+      );
+      const empEmpId = empProfile.rows[0].id as string;
+      await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id, status) VALUES ($1, $2, 'active')`,
+        [A.companyId, mgrUser],
+      );
+
       const task = await direct.query(
-        `INSERT INTO tasks (company_id, task_type, title, status, origin, revision_round)
-         VALUES ($1, 'office', 'recon-task', 'not_started', 'initial', 0) RETURNING id`,
-        [A.companyId],
+        `INSERT INTO tasks (company_id, task_type, title, status, origin, revision_round, main_assignee_employee_id)
+         VALUES ($1, 'office', 'recon-task', 'not_started', 'initial', 0, $2) RETURNING id`,
+        [A.companyId, empEmpId],
       );
       taskId = task.rows[0].id as string;
 
@@ -365,7 +382,7 @@ describe.skipIf(!runIsolatedDb)(
     it("employee (comment:task ALLOW) POST /tasks/:id/comments → 201 (bình luận LIÊN TỤC qua khe recon)", async () => {
       const res = await postComment(tokenEmp);
       expect(res.status, JSON.stringify(res.body)).toBe(201);
-      expect(res.body.data?.body).toBe("recon deny-path comment");
+      expect(res.body.data?.content).toBe("recon deny-path comment");
     });
 
     // CẬP NHẬT 2026-07-10 (S4-TASK-SEED-1/0485): manager ĐƯỢC grant comment:task @Team theo ma trận
