@@ -41,8 +41,9 @@ interface AuthenticatedRequest extends Request {
  * data-scope + audit + activity ở ProjectsService (KHÔNG ở controller). DTO validate ở biên qua
  * ZodValidationPipe (@mediaos/contracts).
  *
- * OUT-OF-SCOPE (ghi nhận tường minh — KHÔNG route chết im lặng): archive:project + view-report:project
- * (đã seed 0485) → S4-TASK-BE sau. Enforcement data-scope/owner-check trên /tasks legacy → S4-TASK-BE-2.
+ * S4-TASK-BE-5 (L3, additive): HIỆN THỰC view-report:project (GET /projects/:id/report — SENSITIVE 0485).
+ * OUT-OF-SCOPE còn lại (ghi nhận tường minh — KHÔNG route chết im lặng): archive:project (đã seed 0485)
+ * → S4-TASK-BE sau. Enforcement data-scope/owner-check trên /tasks legacy → S4-TASK-BE-2.
  */
 @Controller("projects")
 @UsePipes(ZodValidationPipe)
@@ -167,5 +168,18 @@ export class ProjectsController {
   @RequirePermission("view-kanban", "task")
   getKanban(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
     return this.kanban.getBoard(req.user, id);
+  }
+
+  /**
+   * GET /projects/:id/report (S4-TASK-BE-5, SPEC-06 §16.1 · TASK-API) — báo cáo tổng hợp 1 dự án
+   * (countsByStatus / overdueCount / assigneeWorkload). Gate `view-report:project` (SENSITIVE, seed 0485):
+   * manager @Team chỉ project trong team; hr/admin @Company; employee KHÔNG grant → 403 (PermissionGuard).
+   * Project ngoài scope/cross-tenant → 404 (không lộ tồn tại — ProjectsService.getReport).
+   */
+  @Get(":id/report")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("view-report", "project", { isSensitive: true })
+  getReport(@Req() req: AuthenticatedRequest, @Param("id") id: string) {
+    return this.projects.getReport(req.user, id);
   }
 }

@@ -14,6 +14,8 @@ import type {
   ListTaskProjectsQueryRequest,
   MemberResponseDto,
   ProjectMemberStatusDto,
+  ProjectReportCountsByStatusDto,
+  ProjectReportDto,
   ProjectRoleDto,
   TaskProjectListItemDto,
   TaskProjectPriorityDto,
@@ -22,7 +24,10 @@ import type {
   UpdateMemberRoleRequest,
   UpdateTaskProjectRequest,
 } from "@mediaos/contracts";
-import { TASK_PROJECT_PAGE_LIMIT_MAX } from "@mediaos/contracts";
+import {
+  TASK_PROJECT_PAGE_LIMIT_MAX,
+  TASK_PROJECT_REPORT_WORKLOAD_LIMIT,
+} from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
@@ -140,6 +145,34 @@ export class ProjectsService {
       if (!proj) throw new NotFoundException(ERR.NOT_FOUND);
       const rows = await this.repo.listMembersTx(tx, user.companyId, id);
       return rows.map((r) => this.toMember(r));
+    });
+  }
+
+  /**
+   * S4-TASK-BE-5 — GET /projects/:id/report (SPEC-06 §16.1). Gate view-report:project SENSITIVE ở controller
+   * (PermissionGuard). Ở đây (defense-in-depth) resolve view-report SCOPE ⇒ giới hạn project-in-scope: manager
+   * @Team chỉ project team (EXISTS member trong team-tree), hr/admin @Company thấy tất. Project ngoài scope/
+   * cross-tenant/soft-deleted ⇒ findDetailByIdTx trả undefined ⇒ 404 (KHÔNG lộ tồn tại). Số liệu thô (envelope
+   * API-01 do interceptor toàn cục). BẤT BIẾN #1: aggregate đi qua withTenant + repo AND company_id.
+   */
+  async getReport(user: RequestUser, id: string): Promise<ProjectReportDto> {
+    const scopeExists = await this.resolveReportScopeExists(user);
+    return this.db.withTenant(user.companyId, async (tx) => {
+      const proj = await this.repo.findDetailByIdTx(tx, user.companyId, id, scopeExists);
+      if (!proj) throw new NotFoundException(ERR.NOT_FOUND);
+      const agg = await this.repo.aggregateReportTx(
+        tx,
+        user.companyId,
+        id,
+        TASK_PROJECT_REPORT_WORKLOAD_LIMIT,
+      );
+      return {
+        projectId: id,
+        // countsByStatus repo trả đủ 5 khóa FSM (khởi tạo 0) ⇒ khớp shape DTO cố định.
+        countsByStatus: agg.countsByStatus as ProjectReportCountsByStatusDto,
+        overdueCount: agg.overdueCount,
+        assigneeWorkload: agg.assigneeWorkload,
+      };
     });
   }
 
@@ -548,6 +581,25 @@ export class ProjectsService {
   /** DATA-SCOPE ĐỌC: Company/System ⇒ undefined (thấy toàn tenant); Own/Team ⇒ EXISTS-join predicate. */
   private async resolveReadScopeExists(user: RequestUser): Promise<SQL | undefined> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "read", "project");
+    if (scope === "Company" || scope === "System") return undefined;
+    const ctx = await this.dataScope.resolveContext(user.id, user.companyId);
+    const scopeCond = this.dataScope.buildEmployeeScopeCondition(scope, ctx);
+    return this.repo.buildScopeExists(user.companyId, scopeCond);
+  }
+
+  /**
+   * DATA-SCOPE cho REPORT: dùng SCOPE của view-report:project (SENSITIVE) — KHÔNG mượn read:project — để
+   * project-in-scope KHỚP đúng năng lực báo cáo của actor (fail-safe: người có view-report@Team chỉ báo cáo
+   * project team dù read@Company). resolveAndAssert ném 403 nếu KHÔNG có grant (trùng PermissionGuard route).
+   */
+  private async resolveReportScopeExists(user: RequestUser): Promise<SQL | undefined> {
+    const scope = await this.dataScope.resolveAndAssert(
+      user.id,
+      user.companyId,
+      "view-report",
+      "project",
+      { isSensitive: true },
+    );
     if (scope === "Company" || scope === "System") return undefined;
     const ctx = await this.dataScope.resolveContext(user.id, user.companyId);
     const scopeCond = this.dataScope.buildEmployeeScopeCondition(scope, ctx);

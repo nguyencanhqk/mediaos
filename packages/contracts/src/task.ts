@@ -663,3 +663,40 @@ export const myTaskItemSchema = taskCoreResponseSchema.extend({
   source: taskCoreSourceSchema,
 });
 export type MyTaskItemDto = z.infer<typeof myTaskItemSchema>;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// S4-TASK-BE-5 (L3) — Project report (SPEC-06 §16.1 · API-06 · GET /projects/:id/report).
+// Gate view-report:project (SENSITIVE, seed 0485). DTO thô — envelope API-01 do interceptor toàn cục.
+// Số liệu tổng hợp trên bảng `tasks` (cột 0478 task_status/main_assignee_employee_id/due_at) THEO
+// project_id, luôn AND company_id (BẤT BIẾN #1). KHÔNG lộ storage/PII — chỉ đếm + tên nhân viên phụ trách.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Trần top-N dòng assigneeWorkload (đề phòng project khổng lồ — SPEC-06 §16.1 báo cáo tóm tắt). */
+export const TASK_PROJECT_REPORT_WORKLOAD_LIMIT = 20;
+
+/** Đếm task theo 5 cột `task_status` FSM cố định (taskCoreStatusSchema). Task NULL status gộp vào Todo. */
+export const projectReportCountsByStatusSchema = z.object({
+  Todo: z.number().int().nonnegative(),
+  "In Progress": z.number().int().nonnegative(),
+  "In Review": z.number().int().nonnegative(),
+  Done: z.number().int().nonnegative(),
+  Cancelled: z.number().int().nonnegative(),
+});
+export type ProjectReportCountsByStatusDto = z.infer<typeof projectReportCountsByStatusSchema>;
+
+/** Tải công việc theo người phụ trách chính — chỉ đếm task ACTIVE (task_status ∉ Done/Cancelled). */
+export const projectReportAssigneeWorkloadSchema = z.object({
+  employeeId: z.string().uuid(),
+  employeeName: z.string().nullable(),
+  activeCount: z.number().int().nonnegative(),
+});
+export type ProjectReportAssigneeWorkloadDto = z.infer<typeof projectReportAssigneeWorkloadSchema>;
+
+/** GET /projects/:id/report — báo cáo tổng hợp 1 dự án (SPEC-06 §16.1). */
+export const projectReportSchema = z.object({
+  projectId: z.string().uuid(),
+  countsByStatus: projectReportCountsByStatusSchema,
+  overdueCount: z.number().int().nonnegative(),
+  assigneeWorkload: z.array(projectReportAssigneeWorkloadSchema),
+});
+export type ProjectReportDto = z.infer<typeof projectReportSchema>;

@@ -103,6 +103,23 @@ export interface MemberInsertValues {
   createdBy: string;
 }
 
+/** S4-TASK-BE-5 — 1 dòng workload theo người phụ trách chính (task active ∉ Done/Cancelled). */
+export interface AssigneeWorkloadRow {
+  employeeId: string;
+  employeeName: string | null;
+  activeCount: number;
+}
+
+/** S4-TASK-BE-5 — số liệu thô cho GET /projects/:id/report (đếm + workload). */
+export interface ProjectReportAggregate {
+  countsByStatus: Record<string, number>;
+  overdueCount: number;
+  assigneeWorkload: AssigneeWorkloadRow[];
+}
+
+/** 5 cột task_status FSM cố định (chk_tasks_task_status 0478) — khởi tạo counts = 0 để đủ khóa. */
+const TASK_REPORT_STATUSES = ["Todo", "In Progress", "In Review", "Done", "Cancelled"] as const;
+
 @Injectable()
 export class ProjectsRepository {
   // ── Data-scope EXISTS (mirror hr-read: filter AT THE DB, không lọc client-side) ──────────────
@@ -661,5 +678,75 @@ export class ProjectsRepository {
         ),
       );
     return row?.n ?? 0;
+  }
+
+  // ── Report aggregate (S4-TASK-BE-5, SPEC-06 §16.1) ─────────────────────────────
+
+  /**
+   * Tổng hợp số liệu 1 project trên bảng `tasks`. Cột 0478 (task_status/main_assignee_employee_id/due_at)
+   * CHƯA sync vào drizzle-typed `tasks` (chỉ cột legacy) ⇒ dùng raw `tx.execute(sql``)` tham chiếu tên cột
+   * thô (mirror TaskCoreRepository — lane BỊ CẤM chạm schema/**). BẤT BIẾN #1: MỌI câu AND company_id tường
+   * minh (defense-in-depth trên RLS+FORCE) + AND project_id + deleted_at IS NULL.
+   *
+   *   • countsByStatus: đếm theo task_status; NULL gộp 'Todo' (đồng nhất Kanban); đủ 5 khóa (0 nếu trống).
+   *   • overdueCount: due_at < now() AND status ∉ (Done,Cancelled) — KHỚP định nghĩa overdue task-core/kanban.
+   *   • assigneeWorkload: đếm task ACTIVE (status ∉ Done/Cancelled) theo main_assignee_employee_id (bỏ NULL),
+   *     join tên qua employee_profiles→users, ORDER count DESC (tie-break id ⇒ ổn định), LIMIT top-N.
+   */
+  async aggregateReportTx(
+    tx: TenantTx,
+    companyId: string,
+    projectId: string,
+    workloadLimit: number,
+  ): Promise<ProjectReportAggregate> {
+    const countsRes = await tx.execute(sql`
+      select coalesce(task_status, 'Todo') as status, count(*)::int as n
+        from tasks
+       where company_id = ${companyId}
+         and project_id = ${projectId}
+         and deleted_at is null
+       group by coalesce(task_status, 'Todo')
+    `);
+    const countsByStatus: Record<string, number> = {};
+    for (const s of TASK_REPORT_STATUSES) countsByStatus[s] = 0;
+    for (const r of countsRes.rows as unknown as { status: string; n: number }[]) {
+      if (r.status in countsByStatus) countsByStatus[r.status] = Number(r.n);
+    }
+
+    const overdueRes = await tx.execute(sql`
+      select count(*)::int as n
+        from tasks
+       where company_id = ${companyId}
+         and project_id = ${projectId}
+         and deleted_at is null
+         and due_at is not null
+         and due_at < now()
+         and (task_status is null or task_status not in ('Done','Cancelled'))
+    `);
+    const overdueCount = Number((overdueRes.rows as unknown as { n: number }[])[0]?.n ?? 0);
+
+    const workloadRes = await tx.execute(sql`
+      select tk.main_assignee_employee_id as "employeeId",
+             u.full_name                  as "employeeName",
+             count(*)::int                as "activeCount"
+        from tasks tk
+        left join employee_profiles ae on ae.id = tk.main_assignee_employee_id
+        left join users u             on u.id = ae.user_id
+       where tk.company_id = ${companyId}
+         and tk.project_id = ${projectId}
+         and tk.deleted_at is null
+         and tk.main_assignee_employee_id is not null
+         and (tk.task_status is null or tk.task_status not in ('Done','Cancelled'))
+       group by tk.main_assignee_employee_id, u.full_name
+       order by count(*) desc, tk.main_assignee_employee_id asc
+       limit ${workloadLimit}
+    `);
+    const assigneeWorkload = (workloadRes.rows as unknown as AssigneeWorkloadRow[]).map((r) => ({
+      employeeId: r.employeeId,
+      employeeName: r.employeeName,
+      activeCount: Number(r.activeCount),
+    }));
+
+    return { countsByStatus, overdueCount, assigneeWorkload };
   }
 }
