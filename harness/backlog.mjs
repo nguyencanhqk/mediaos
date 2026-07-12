@@ -5002,7 +5002,7 @@ export const backlog = [
     title:
       "QA Sprint 4 permission/data-scope + deny-path: TASK CRUD/assign/status · NOTI own-scope/mark-read · DASH widget visibility theo quyền (coverage ≥80%)",
     zone: "yellow",
-    status: "todo",
+    status: "done",
     paths: ["apps/api/test/integration/**", "apps/app/src/**", "docs/plans/S4-QA-1.md"],
     skills: ["code-review"],
     depends_on: ["S4-TASK-BE-4", "S4-NOTI-BE-2", "S4-DASH-BE-2"],
