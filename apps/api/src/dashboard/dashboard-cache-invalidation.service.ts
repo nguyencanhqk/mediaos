@@ -48,7 +48,12 @@ export class DashboardCacheInvalidationService {
     for (const widgetCode of widgetCodes) {
       try {
         const widgetId = await this.cache.resolveWidgetId(companyId, widgetCode);
-        rowsAffected += await this.cache.invalidateByWidgetId(companyId, widgetId, userIds);
+        rowsAffected += await this.cache.invalidateByWidgetId(
+          companyId,
+          widgetId,
+          widgetCode,
+          userIds,
+        );
         invalidatedWidgets.push(widgetCode);
       } catch (err) {
         // Fire-and-forget theo widget — 1 widget catalog thiếu KHÔNG chặn các widget khác của cùng event.

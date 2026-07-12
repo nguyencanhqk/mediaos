@@ -41,6 +41,10 @@ import { DashboardConfigService } from "./dashboard-config.service";
 // cache/invalidate), event TASK/NOTI/ATT/LEAVE → widget (dashboard-cache-invalidation.const.ts).
 import { InternalDashboardCacheController } from "./internal-dashboard-cache.controller";
 import { DashboardCacheInvalidationService } from "./dashboard-cache-invalidation.service";
+// S4-INT-2-FIX-1 (additive): registrar OnModuleInit đăng ký 9 consumer EventBus (outbox eventType TASK/LEAVE
+// THẬT) → DashboardCacheInvalidationService.invalidate() in-process (mirror S4-INT-1 TaskNotiBridgeRegistrar).
+// EventBus đến từ EventsModule (@Global — KHÔNG cần import module) — registrar chỉ cần khai provider.
+import { DashboardCacheInvalidationRegistrar } from "./dashboard-cache-invalidation.registrar";
 
 /**
  * S4-DASH-SEED-1 (additive): import SeedModule (exports MasterDataSeederRegistry) → DashSeedRegistrar
@@ -92,6 +96,9 @@ import { DashboardCacheInvalidationService } from "./dashboard-cache-invalidatio
     DashboardConfigService,
     // S4-INT-2 (additive): internal cache invalidation service.
     DashboardCacheInvalidationService,
+    // S4-INT-2-FIX-1 (additive): registrar OnModuleInit — wire outbox eventType TASK/LEAVE THẬT vào cache
+    // invalidation (trước lane này endpoint mồ côi, xem doc-block registrar).
+    DashboardCacheInvalidationRegistrar,
   ],
 })
 export class DashboardModule {}

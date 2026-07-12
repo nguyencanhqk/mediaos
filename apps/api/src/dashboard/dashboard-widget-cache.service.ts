@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { sql } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { DASH_WIDGET_MIN_REFRESH_MS } from "./dashboard-widget-data.const";
+import { DASH_PER_USER_ONLY_WIDGET_CODES } from "./dashboard-cache-invalidation.const";
 import type { WidgetCacheIdentity } from "./dashboard-widget-data.types";
 
 /** 1 dòng cache active (deleted_at IS NULL) đọc lại từ dashboard_widget_cache. */
@@ -189,12 +190,26 @@ export class DashboardWidgetCacheService {
    * không biết chính xác user bị ảnh hưởng). userIds có giá trị ⇒ CHỈ invalidate cache 'per-user' (user_id
    * ∈ userIds) HOẶC cache 'company-shared' (user_id IS NULL, ảnh hưởng mọi viewer nên luôn invalidate theo) —
    * KHÔNG đụng cache của user khác ngoài phạm vi event. Trả số dòng bị invalidate.
+   *
+   * S4-INT-2-FIX-1 (Đội 3 finding #4) — RAIL chống blanket-wipe: `widgetCode` ∈ `DASH_PER_USER_ONLY_WIDGET_
+   * CODES` (dashboard-cache-invalidation.const.ts — widget shareScope='user' KHÔNG ĐIỀU KIỆN, KHÔNG BAO GIỜ
+   * có hàng company-shared) MÀ `userIds` rỗng/thiếu ⇒ SKIP (log WARN + trả 0, KHÔNG UPDATE) thay vì xoá cache
+   * riêng của MỌI user trong company chỉ vì 1 caller quên truyền userIds. Widget company-shared (ngoài set
+   * trên) KHÔNG bị chặn — giữ nguyên fallback "TOÀN BỘ" ở trên (đúng ngữ nghĩa, cache đó vốn chia sẻ chung).
    */
   async invalidateByWidgetId(
     companyId: string,
     widgetId: string,
+    widgetCode: string,
     userIds?: readonly string[],
   ): Promise<number> {
+    if ((!userIds || userIds.length === 0) && DASH_PER_USER_ONLY_WIDGET_CODES.has(widgetCode)) {
+      this.logger.warn(
+        `invalidateByWidgetId SKIP widget=${widgetCode} (company=${companyId}): per-user-only NHƯNG ` +
+          `userIds rỗng/thiếu — chặn blanket-wipe cache MỌI user (Đội 3 finding #4). Trả 0, KHÔNG UPDATE.`,
+      );
+      return 0;
+    }
     return this.db.withTenant(companyId, async (tx) => {
       const res =
         userIds && userIds.length > 0
