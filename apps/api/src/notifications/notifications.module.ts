@@ -43,6 +43,10 @@ import { TaskReminderJobHandler } from "./task-reminder.job-handler";
 import { OutboxNotificationBridge } from "./outbox-notification-bridge.service";
 import { TaskAudienceReader } from "./task-audience.reader";
 import { TaskNotiBridgeRegistrar } from "./task-noti-bridge.registrar";
+// S4-INT-5 (additive): AUTH/HR → NOTI producer wiring. TÁI DÙNG OutboxNotificationBridge (INT-1) — đăng ký 3
+// mapping (auth.user_created/password_reset_requested/user_locked) qua registrar OnModuleInit. KHÔNG import
+// AuthModule/EmployeesModule (acyclic — consumer đọc payload, producer enqueue outbox ở service tương ứng).
+import { AuthHrNotiBridgeRegistrar } from "./auth-hr-noti-bridge.registrar";
 // S4-INT-4 (additive): outbox→NOTI 7 mapping ATT (đơn điều chỉnh công + đơn remote-work) qua CÙNG
 // OutboxNotificationBridge INT-1 (TÁI DÙNG core generic — KHÔNG bridge/consumer mới) — reader raw-SQL
 // (AttApprovalAudienceReader) + registrar OnModuleInit (AttNotiBridgeRegistrar, đăng ký 7 mapping ATT).
@@ -85,6 +89,9 @@ import { AttNotiBridgeRegistrar } from "./att-noti-bridge.registrar";
     OutboxNotificationBridge,
     TaskAudienceReader,
     TaskNotiBridgeRegistrar,
+    // S4-INT-5 (additive): registrar OnModuleInit đăng ký 3 consumer AUTH lên EventBus (@Global EventsModule)
+    // tại boot, tái dùng OutboxNotificationBridge — KHÔNG bridge/consumer mới.
+    AuthHrNotiBridgeRegistrar,
     // S4-INT-4 (additive): reader + registrar ATT đăng ký 7 consumer lên EventBus (@Global EventsModule)
     // tại boot qua CÙNG OutboxNotificationBridge INT-1 ở trên (KHÔNG re-provide bridge).
     AttApprovalAudienceReader,

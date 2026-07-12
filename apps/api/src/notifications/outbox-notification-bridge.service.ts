@@ -25,6 +25,17 @@ export interface NotiEventMapping {
   resolveRecipients: (ctx: EventContext) => Promise<string[]>;
   /** Mặc định `ctx.eventId` (once-ever theo outbox event, strategy 'DedupeKey' — notification-dedupe.const.ts). */
   dedupeKeyOf?: (ctx: EventContext) => string | undefined;
+  /**
+   * S4-INT-5 (additive, optional) — biến đổi payload outbox TRƯỚC khi đưa vào `NotificationEngine.intake()`.
+   * MẶC ĐỊNH = `ctx.payload` (không khai ⇒ hành vi CŨ KHÔNG đổi — backward-compat TASK/LEAVE/ATT).
+   *
+   * LÝ DO CROWN: payload durable của producer có thể mang trường nhạy cảm mà `assertPayloadSafe` KHÔNG bắt
+   * (SENSITIVE_PAYLOAD_KEYS so-khớp-CHÍNH-XÁC theo tên khóa) — vd `auth.password_reset_requested` mang
+   * `resetTokenEnc` (envelope reset token). Nếu forward NGUYÊN payload thì token-envelope lọt vào
+   * `notifications.payload` + body gửi cho recipient (vi phạm BẤT BIẾN #3). `payloadOf` cho phép mapping
+   * WHITELIST đúng các khóa an toàn (strip mọi khóa còn lại) TRƯỚC khi chạm engine.
+   */
+  payloadOf?: (ctx: EventContext) => Record<string, unknown>;
 }
 
 /**
@@ -71,6 +82,10 @@ export class OutboxNotificationBridge {
       const rawRecipients = await mapping.resolveRecipients(ctx);
       const userIds = [...new Set(rawRecipients.filter((id): id is string => Boolean(id)))];
 
+      // S4-INT-5: payload đưa vào engine = whitelist của mapping (nếu khai), else nguyên `ctx.payload`
+      // (backward-compat). Strip khóa nhạy cảm KHÔNG-set-exact (vd resetTokenEnc) NGAY TẠI ĐÂY, TRƯỚC intake.
+      const outPayload = mapping.payloadOf?.(ctx) ?? payload;
+
       const dto: InternalEventIntakeDto = {
         eventCode: mapping.eventCode,
         actorUserId,
@@ -79,7 +94,7 @@ export class OutboxNotificationBridge {
         sourceEntityId: mapping.sourceEntityIdOf(ctx),
         dedupeKey: mapping.dedupeKeyOf?.(ctx) ?? ctx.eventId,
         recipient: { mode: UserIdsMode, userIds, employeeIds: [] },
-        payload,
+        payload: outPayload,
       };
 
       await this.engine.intake(ctx.companyId, dto);

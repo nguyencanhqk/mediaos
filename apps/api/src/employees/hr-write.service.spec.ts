@@ -112,6 +112,8 @@ function makeService(opts: { repo?: ReturnType<typeof makeRepo>; sequence?: unkn
   const dataScope = { resolveAndAssert: vi.fn().mockResolvedValue("Company") };
   // S2-INT-1 create:user gate. Default allow → the provision arm passes; tests override to assert deny.
   const permissions = { can: vi.fn().mockResolvedValue({ allow: true, reason: "allow" }) };
+  // S4-INT-5 (STORY-098) — outbox producer for the activation/welcome event.
+  const outbox = { enqueue: vi.fn().mockResolvedValue("evt-id") };
   const svc = new HrWriteService(
     repo as never,
     db as never,
@@ -121,8 +123,9 @@ function makeService(opts: { repo?: ReturnType<typeof makeRepo>; sequence?: unkn
     securityPolicy as never,
     dataScope as never,
     permissions as never,
+    outbox as never,
   );
-  return { svc, repo, db, audit, sequence, dataScope, permissions };
+  return { svc, repo, db, audit, sequence, dataScope, permissions, outbox };
 }
 
 function assertNoSensitiveAuditKeys(audit: { record: ReturnType<typeof vi.fn> }) {
@@ -398,6 +401,7 @@ describe("HrWriteService.createEmployee", () => {
     const password = { hash: vi.fn() };
     const securityPolicy = { assertEmailDomainAllowedTx: vi.fn() };
     const permissions = { can: vi.fn().mockResolvedValue({ allow: true, reason: "allow" }) };
+    const outbox = { enqueue: vi.fn().mockResolvedValue("evt-id") };
     const svc = new HrWriteService(
       repo as never,
       db as never,
@@ -407,6 +411,7 @@ describe("HrWriteService.createEmployee", () => {
       securityPolicy as never,
       dataScope as never,
       permissions as never,
+      outbox as never,
     );
     await expect(svc.createEmployee(actorA, { userId: OTHER_USER } as never)).rejects.toThrow(
       ForbiddenException,
@@ -503,8 +508,8 @@ describe("HrWriteService.createEmployee — S2-INT-1 user provisioning", () => {
     }
   });
 
-  it("provision arm DENY (no create:user) → 403 with ZERO side effects (no code, no rows, no audit)", async () => {
-    const { svc, repo, audit, sequence, permissions } = makeService();
+  it("provision arm DENY (no create:user) → 403 with ZERO side effects (no code, no rows, no audit, no outbox)", async () => {
+    const { svc, repo, audit, sequence, permissions, outbox } = makeService();
     permissions.can.mockResolvedValue({ allow: false, reason: "deny-default" });
 
     await expect(svc.createEmployee(actorA, provisionDto as never)).rejects.toThrow(
@@ -515,10 +520,37 @@ describe("HrWriteService.createEmployee — S2-INT-1 user provisioning", () => {
     expect(repo.createUserTx).not.toHaveBeenCalled();
     expect(repo.createTx).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
+    // No account minted ⇒ no activation/welcome event (deny leaves the outbox untouched).
+    expect(outbox.enqueue).not.toHaveBeenCalled();
   });
 
-  it("link-existing arm: does NOT require create:user and writes NO user.created audit", async () => {
-    const { svc, repo, audit, permissions } = makeService();
+  // ── S4-INT-5 (STORY-098) — activation/welcome producer ────────────────────────────
+  it("provision arm: enqueues EXACTLY ONE 'auth.user_created' event in-tx for the NEW user (recipient=payload.userId)", async () => {
+    const { svc, outbox } = makeService();
+    await svc.createEmployee(actorA, provisionDto as never);
+
+    // Exactly one activation event, in the SAME tx as the HR/AUTH audit (both commit or both roll back).
+    const authCalls = outbox.enqueue.mock.calls.filter(
+      (c) => (c[1] as { eventType: string }).eventType === "auth.user_created",
+    );
+    expect(authCalls).toHaveLength(1);
+    const [tx, event] = authCalls[0] as [
+      unknown,
+      { eventType: string; payload: Record<string, unknown> },
+    ];
+    expect(tx).toBe(FAKE_TX);
+    // eventCode VERBATIM (SPEC-08 §15 NOTI-EVENT-001 → recipient 'User mới'); recipient = the minted user.
+    expect(event.payload).toMatchObject({
+      eventCode: "AUTH_USER_CREATED",
+      userId: OTHER_USER, // createUserTx mock returns id=OTHER_USER
+      employeeId: EMP_ID,
+    });
+    // The new user is ALWAYS ≠ the HR actor; omit actorUserId so actor-exclusion can never drop the welcome.
+    expect(event.payload).not.toHaveProperty("actorUserId");
+  });
+
+  it("link-existing arm: does NOT require create:user and writes NO user.created audit NOR activation event", async () => {
+    const { svc, repo, audit, permissions, outbox } = makeService();
     await svc.createEmployee(actorA, { userId: OTHER_USER, ...baseEnums } as never);
 
     expect(permissions.can).not.toHaveBeenCalled();
@@ -526,6 +558,11 @@ describe("HrWriteService.createEmployee — S2-INT-1 user provisioning", () => {
     const auditedActions = audit.record.mock.calls.map((c) => (c[1] as { action: string }).action);
     expect(auditedActions).toContain("create");
     expect(auditedActions).not.toContain("user.created");
+    // Linking an EXISTING account mints no user ⇒ no 'account created' welcome (STORY-098).
+    const authCalls = outbox.enqueue.mock.calls.filter(
+      (c) => (c[1] as { eventType: string }).eventType === "auth.user_created",
+    );
+    expect(authCalls).toHaveLength(0);
   });
 
   it("link-existing arm: 409 when the target user is already linked to another active employee", async () => {

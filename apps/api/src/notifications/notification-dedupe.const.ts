@@ -44,6 +44,14 @@ export const DEFAULT_DEDUPE: Readonly<Record<string, DedupeDefaultConfig>> = {
   TASK_DUE_DATE_CHANGED: { strategy: "DedupeKey", windowSeconds: null },
   TASK_MENTIONED: { strategy: "DedupeKey", windowSeconds: null },
   PROJECT_MEMBER_ADDED: { strategy: "DedupeKey", windowSeconds: null },
+  // S4-INT-5 (additive) — AuthHrNotiBridgeRegistrar: 3 event AUTH đi qua CÙNG OutboxNotificationBridge, mỗi
+  // mapping mặc định `dedupeKey = ctx.eventId` (outbox event id — ổn định qua re-consume/retry). Catalog seed
+  // 0481/0490 để 3 mã này ở dedupe_strategy='None' ⇒ cần 'DedupeKey' fallback (KHÔNG 'None') để computeKey
+  // THỰC SỰ set dedupe_key ⇒ partial-unique `uq_notifications_dedupe_active` chặn tầng-2 khi OutboxWorker
+  // .processed_events (tầng-1) mất dấu (crash giữa insert↔markProcessed). Zero-migration (const nội bộ).
+  AUTH_USER_CREATED: { strategy: "DedupeKey", windowSeconds: null },
+  AUTH_PASSWORD_RESET_REQUESTED: { strategy: "DedupeKey", windowSeconds: null },
+  AUTH_USER_LOCKED: { strategy: "DedupeKey", windowSeconds: null },
   // S4-INT-4 (additive) — AttNotiBridgeRegistrar (att-noti-bridge.registrar.ts): 7 mapping ATT (đơn điều
   // chỉnh công + đơn remote-work) qua CÙNG OutboxNotificationBridge INT-1, mỗi mapping mặc định
   // `dedupeKey = ctx.eventId` (outbox event id, ổn định qua mọi lần re-consume/retry của CÙNG event) ⇒

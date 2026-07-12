@@ -17,6 +17,7 @@ import type {
 } from "@mediaos/contracts";
 import { HR_EMPLOYEE_PII_WRITE_FIELDS } from "@mediaos/contracts";
 import { AuditService } from "../events/audit.service";
+import { OutboxService } from "../events/outbox.service";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { PasswordService } from "../auth/password.service";
 import { DataScopeService } from "../permission/data-scope.service";
@@ -80,6 +81,9 @@ export class HrWriteService {
     private readonly securityPolicy: SecurityPolicyService,
     private readonly dataScope: DataScopeService,
     private readonly permissions: PermissionService,
+    // S4-INT-5 (STORY-098) — transactional outbox for the activation/welcome producer.
+    // From the @Global EventsModule (same source as AuditService) → no employees.module.ts import change.
+    private readonly outbox: OutboxService,
   ) {}
 
   /**
@@ -186,6 +190,20 @@ export class HrWriteService {
             objectId: provisioned.id,
             actorUserId: user.id,
             after: authUserSnapshot(provisioned),
+          });
+          // S4-INT-5 (STORY-098) — activation/welcome producer. ONLY on a brand-new account (provisioned):
+          // linking an EXISTING user mints no login row, so no "account created" welcome fires. Enqueued in
+          // THIS tx (rollback ⇒ no ghost event). Recipient = the new user (payload.userId → NOTI-EVENT-001,
+          // SPEC-08 §15). actorUserId is intentionally OMITTED: the new user is always ≠ the HR actor, so
+          // actor-exclusion is a no-op — omitting it guarantees the welcome even in any edge case. Payload
+          // carries NO secret (userId/employeeId/eventCode only); the bridge maps eventType→eventCode.
+          await this.outbox.enqueue(tx, {
+            eventType: "auth.user_created",
+            payload: {
+              eventCode: "AUTH_USER_CREATED",
+              userId,
+              employeeId: created.id,
+            },
           });
         }
 

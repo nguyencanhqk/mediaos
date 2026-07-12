@@ -92,6 +92,10 @@ const SENSITIVE_PAYLOAD_KEYS: ReadonlySet<string> = new Set([
   "identity_number",
   "private_file_url",
   "signed_url",
+  // S4-INT-5 (defense-in-depth): envelope reset token (auth.password_reset_requested payload). Bridge mapping
+  // `payloadOf` đã STRIP trước intake; đây là BACKSTOP fail-loud — nếu ai đó wire mapping AUTH quên payloadOf,
+  // engine assertPayloadSafe ném 400 (bridge re-throw → OutboxWorker dead-letter) thay vì rò token vào notify.
+  "resettokenenc",
 ]);
 
 /** Chặn payload phình to (comment quá dài) → DoS / body notification rác. */

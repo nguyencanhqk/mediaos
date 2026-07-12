@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ConflictException } from "@nestjs/common";
 import { Column, SQL } from "drizzle-orm";
 import { AuthService, redactEmailFromDetail } from "./auth.service";
+import { LoginRateLimiter } from "./login-rate-limiter";
 import { TWO_FACTOR_ENFORCED } from "./two-factor.service";
+import { loadEnv } from "../config/env.schema";
 import { companies, employeeProfiles, userRoles, users } from "../db/schema";
 
 /**
@@ -424,5 +426,204 @@ describe("AuthService.isOperatorTx — lọc soft-delete user_roles (S2-AUTH-DB-
     expect(result).toBe(false); // 0 hàng (mock) ⇒ không operator
     expect(captures.userRolesWhere).toBeDefined();
     expect(whereFiltersSoftDelete(captures.userRolesWhere, userRoles)).toBe(true);
+  });
+});
+
+/**
+ * S4-INT-5 (crown-AUTH) — producer thông báo "tài khoản bị khoá tạm" (NOTI-EVENT AUTH_USER_LOCKED,
+ * SPEC-08 §15). Chỉ phát ở EDGE sạch: lần sai mật khẩu vừa đẩy bucket per-account qua ngưỡng
+ * (LOGIN_ACCOUNT_MAX_ATTEMPTS). login() đã 429 ở đầu (isLoginRateLimited) khi bucket ĐÃ khoá ⇒ mọi lần
+ * sau KHÔNG chạm nhánh phát ⇒ đúng 1 notification/lock-window.
+ *
+ * Cô lập bằng LoginRateLimiter THẬT (in-memory) để driving bucket credential-stuffing (IP KHÁC NHAU mỗi
+ * lần ⇒ bucket per-IP KHÔNG khoá sớm, chỉ bucket per-account tích luỹ). resolveCompanyId +
+ * findActiveUserByEmail spy (đường tenant-resolve/DB KHÔNG phải đối tượng test). withTenant no-op stub.
+ *
+ * Chứng minh RED-trước-GREEN: nếu login() KHÔNG có khối emitAccountLocked ở nhánh WrongPassword thì
+ * outbox.enqueue('auth.user_locked') KHÔNG bao giờ được gọi ⇒ toHaveLength(1) vỡ.
+ */
+describe("AuthService.login — account-lock notify producer (S4-INT-5)", () => {
+  const SLUG = "acme";
+  const REAL_EMAIL = "victim@acme.test";
+  const GHOST_EMAIL = "nobody@acme.test";
+  const COMPANY_ID = "00000000-0000-0000-0000-000000000001";
+  const USER_ID = "11111111-1111-1111-1111-111111111111";
+
+  // tx stub CHAINABLE + THENABLE cho insert/update trong withTenant (login/recordLoginAttempt/bump).
+  function makeTxStub() {
+    const chain: Record<string, unknown> = {};
+    Object.assign(chain, {
+      insert: vi.fn(() => chain),
+      values: vi.fn(() => chain),
+      update: vi.fn(() => chain),
+      set: vi.fn(() => chain),
+      where: vi.fn(() => chain),
+      select: vi.fn(() => chain),
+      from: vi.fn(() => chain),
+      limit: vi.fn(() => Promise.resolve([])),
+      then: (resolve: (v: unknown) => void) => resolve(undefined),
+    });
+    return chain;
+  }
+
+  function makeAuth(user: Record<string, unknown> | null) {
+    const limiter = new LoginRateLimiter();
+    const outbox = { enqueue: vi.fn().mockResolvedValue("evt-id") };
+    const audit = { record: vi.fn().mockResolvedValue(undefined) };
+    const securityEvents = { record: vi.fn().mockResolvedValue(undefined) };
+    const withTenant = vi.fn(async (_c: string, fn: (tx: unknown) => unknown) => fn(makeTxStub()));
+    const password = {
+      verify: vi.fn().mockResolvedValue(false),
+      hash: vi.fn().mockResolvedValue("argon2-hash"),
+    };
+    const auth = Object.create(AuthService.prototype) as AuthService;
+    Object.assign(auth, {
+      rateLimiter: limiter,
+      logger: { error: vi.fn(), warn: vi.fn() },
+      dbsvc: { withTenant },
+      outbox,
+      audit,
+      securityEvents,
+      password,
+    });
+    vi.spyOn(
+      auth as unknown as { resolveCompanyId: (s: string) => Promise<string | null> },
+      "resolveCompanyId",
+    ).mockResolvedValue(COMPANY_ID);
+    vi.spyOn(
+      auth as unknown as { findActiveUserByEmail: (tx: unknown, e: string) => Promise<unknown> },
+      "findActiveUserByEmail",
+    ).mockResolvedValue(user);
+    return { auth, limiter, outbox, audit, securityEvents };
+  }
+
+  async function loginWrong(auth: AuthService, email: string, ip: string) {
+    try {
+      await auth.login(
+        { companySlug: SLUG, email, password: "wrong" },
+        { ip, userAgent: "vitest" },
+      );
+    } catch {
+      // 401 ĐỒNG NHẤT trên MỌI lần sai — nuốt để assert side-effect (producer), KHÔNG phải outcome.
+    }
+  }
+
+  function lockEnqueues(outbox: { enqueue: { mock: { calls: unknown[][] } } }) {
+    return outbox.enqueue.mock.calls.filter(
+      (call) => (call[1] as { eventType: string }).eventType === "auth.user_locked",
+    );
+  }
+
+  const activeUser = {
+    id: USER_ID,
+    email: REAL_EMAIL,
+    passwordHash: "argon2-hash",
+    status: "active",
+  };
+
+  it("N lần sai từ IP KHÁC NHAU (credential-stuffing) đẩy bucket account tới ngưỡng → phát ĐÚNG 1 auth.user_locked", async () => {
+    const { auth, outbox, audit, securityEvents } = makeAuth({ ...activeUser });
+    const N = loadEnv().LOGIN_ACCOUNT_MAX_ATTEMPTS;
+
+    for (let i = 0; i < N; i++) {
+      // IP KHÁC NHAU ⇒ bucket per-IP (ngưỡng 5) KHÔNG khoá sớm (mỗi ipKey đúng 1 fail) ⇒ mọi lần đều chạm
+      // nhánh fail (không bị 429 ở đầu). Bucket per-account tích luỹ → khoá ĐÚNG lần thứ N.
+      await loginWrong(auth, REAL_EMAIL, `203.0.113.${i + 1}`);
+    }
+
+    const locks = lockEnqueues(outbox);
+    expect(locks).toHaveLength(1);
+    // Payload TỐI THIỂU: CHỈ eventCode + userId — KHÔNG IP/attempts/chi tiết bảo mật (BẤT BIẾN #3 · done_when).
+    const payload = (locks[0][1] as { payload: Record<string, unknown> }).payload;
+    expect(payload).toEqual({ eventCode: "AUTH_USER_LOCKED", userId: USER_ID });
+    // dual-write forensic (audit append-only + security timeline). audit KHÔNG set actorUserId (hệ thống khoá).
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ action: "auth.user_locked", objectId: USER_ID }),
+    );
+    expect(securityEvents.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ eventType: "USER_LOCKED", userId: USER_ID }),
+    );
+  });
+
+  it("dưới ngưỡng (N-1 lần sai) → CHƯA phát auth.user_locked (edge, không phát mỗi lần sai)", async () => {
+    const { auth, outbox } = makeAuth({ ...activeUser });
+    const N = loadEnv().LOGIN_ACCOUNT_MAX_ATTEMPTS;
+    for (let i = 0; i < N - 1; i++) {
+      await loginWrong(auth, REAL_EMAIL, `203.0.113.${i + 1}`);
+    }
+    expect(lockEnqueues(outbox)).toHaveLength(0);
+  });
+
+  it("ghost email (user KHÔNG tồn tại) vượt ngưỡng → 0 auth.user_locked (anti-enumeration: userId=null)", async () => {
+    const { auth, outbox } = makeAuth(null); // findActiveUserByEmail → null ⇒ reason=UserNotFound, userId=null
+    const N = loadEnv().LOGIN_ACCOUNT_MAX_ATTEMPTS;
+    for (let i = 0; i < N + 1; i++) {
+      await loginWrong(auth, GHOST_EMAIL, `198.51.100.${i + 1}`);
+    }
+    // Bucket account vẫn khoá (recordLoginFailure chạy), NHƯNG nhánh phát gated reason=WrongPassword+userId ⇒ 0.
+    expect(lockEnqueues(outbox)).toHaveLength(0);
+  });
+});
+
+/**
+ * S4-INT-5 — emitAccountLocked (producer, cô lập). (a) SILENT-FAILURE: lỗi tx → logger.error (KHÔNG nuốt
+ * câm) NHƯNG KHÔNG re-throw ⇒ login vẫn trả 401 ĐỒNG NHẤT (courtesy-notify, không phải security-control).
+ * (b) HAPPY: enqueue outbox + audit + security-event trong CÙNG withTenant; payload CHỈ {eventCode,userId}.
+ *
+ * RED-trước-GREEN: method emitAccountLocked chưa tồn tại → cast-call ném/undefined ⇒ assert vỡ.
+ */
+describe("AuthService.emitAccountLocked — silent-failure log-not-swallow + payload tối thiểu (S4-INT-5)", () => {
+  function bareAuth(withTenantImpl: (c: string, fn: (tx: unknown) => unknown) => Promise<unknown>) {
+    const logger = { error: vi.fn(), warn: vi.fn() };
+    const outbox = { enqueue: vi.fn().mockResolvedValue("evt") };
+    const audit = { record: vi.fn().mockResolvedValue(undefined) };
+    const securityEvents = { record: vi.fn().mockResolvedValue(undefined) };
+    const auth = Object.create(AuthService.prototype) as AuthService;
+    Object.assign(auth, {
+      logger,
+      outbox,
+      audit,
+      securityEvents,
+      dbsvc: { withTenant: vi.fn(withTenantImpl) },
+    });
+    return { auth, logger, outbox, audit, securityEvents };
+  }
+
+  const emit = (auth: AuthService) =>
+    (
+      auth as unknown as {
+        emitAccountLocked: (c: string, u: string, m: unknown) => Promise<void>;
+      }
+    ).emitAccountLocked("co-1", "user-1", { ip: "203.0.113.9", userAgent: "vitest" });
+
+  it("tx lỗi → logger.error (KHÔNG nuốt câm) + KHÔNG re-throw (login giữ 401 đồng nhất)", async () => {
+    const { auth, logger } = bareAuth(async () => {
+      throw new Error("db down");
+    });
+    await expect(emit(auth)).resolves.toBeUndefined();
+    expect(logger.error).toHaveBeenCalledTimes(1);
+  });
+
+  it("happy: outbox+audit+security cùng tx; payload CHỈ eventCode+userId (KHÔNG actorUserId/IP trong event)", async () => {
+    const { auth, outbox, audit, securityEvents } = bareAuth(async (_c, fn) => fn({}));
+    await emit(auth);
+
+    expect(outbox.enqueue).toHaveBeenCalledWith(expect.anything(), {
+      eventType: "auth.user_locked",
+      payload: { eventCode: "AUTH_USER_LOCKED", userId: "user-1" },
+    });
+    // Payload KHÔNG có field actorUserId (⇒ actor-exclusion ở bridge KHÔNG loại chủ TK) và CHỈ 2 khóa.
+    const [, ev] = outbox.enqueue.mock.calls[0] as [unknown, { payload: Record<string, unknown> }];
+    expect(Object.keys(ev.payload).sort()).toEqual(["eventCode", "userId"]);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ action: "auth.user_locked", objectId: "user-1" }),
+    );
+    expect(securityEvents.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ eventType: "USER_LOCKED", userId: "user-1" }),
+    );
   });
 });
