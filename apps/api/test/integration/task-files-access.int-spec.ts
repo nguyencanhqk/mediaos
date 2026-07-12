@@ -222,6 +222,7 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-5 task files (HTTP, real permission engi
   let empEmail = ""; // read+file-upload:task@Own (assignee of taskA) → link ok, DELETE 403
   let foundationEmail = ""; // FOUNDATION.FILE.download only → anti-escalation on task-linked file
   let empEmp = ""; // employee_profile of empUser (assignee of taskA)
+  let otherEmail = ""; // FILE_ALL@Own, assignee of taskOther ONLY — out-of-scope DELETE probe on taskA
 
   let taskA = ""; // task in A, assignee empEmp — in scope for emp
   let taskOther = ""; // task in A, assignee otherEmp (out of emp's Own scope)
@@ -232,8 +233,10 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-5 task files (HTTP, real permission engi
   let pendingFileA = ""; // Pending → download 409
   let failedFileA = ""; // Failed → download 409
   let infectedFileA = ""; // Infected → download 409
+  let notRequiredFileA = ""; // NotRequired, linked to taskA — download OK (STRICT-set includes it)
   let unlinkedCleanFileA = ""; // Clean/Uploaded, NOT linked — hr POST link happy-path
   let empUnlinkedFileA = ""; // Clean/Uploaded, NOT linked — emp POST link to taskA
+  let outOfScopeUnlinkedFileA = ""; // Clean/Uploaded, NOT linked — emp POST link to taskOther (out-of-scope)
   let cleanFileOther = ""; // Clean, linked to taskOther — cross-task IDOR / out-of-scope
   let fileB = ""; // Clean, linked to taskB — cross-tenant
 
@@ -262,8 +265,10 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-5 task files (HTTP, real permission engi
     const fndUserId = await seedUser(direct, A.companyId, foundationEmail, hash);
     await grant(direct, A.companyId, fndUserId, FOUNDATION_DL, "Company");
 
-    const otherUserId = await seedUser(direct, A.companyId, `other@${A.slug}.test`, hash);
+    otherEmail = `other@${A.slug}.test`;
+    const otherUserId = await seedUser(direct, A.companyId, otherEmail, hash);
     const otherEmp = await seedEmployee(direct, A.companyId, otherUserId);
+    await grant(direct, A.companyId, otherUserId, FILE_ALL, "Own"); // read+file-upload+file-delete@Own
 
     taskA = await seedTask(direct, A.companyId, empEmp);
     taskOther = await seedTask(direct, A.companyId, otherEmp);
@@ -277,9 +282,14 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-5 task files (HTTP, real permission engi
     await seedTaskLink(direct, A.companyId, failedFileA, taskA, hrUserId);
     infectedFileA = await seedFile(direct, A.companyId, hrUserId, { scanStatus: "Infected" });
     await seedTaskLink(direct, A.companyId, infectedFileA, taskA, hrUserId);
+    notRequiredFileA = await seedFile(direct, A.companyId, hrUserId, { scanStatus: "NotRequired" });
+    await seedTaskLink(direct, A.companyId, notRequiredFileA, taskA, hrUserId);
 
     unlinkedCleanFileA = await seedFile(direct, A.companyId, hrUserId, { scanStatus: "Clean" });
     empUnlinkedFileA = await seedFile(direct, A.companyId, empUserId, { scanStatus: "Clean" });
+    outOfScopeUnlinkedFileA = await seedFile(direct, A.companyId, empUserId, {
+      scanStatus: "Clean",
+    });
 
     cleanFileOther = await seedFile(direct, A.companyId, hrUserId, { scanStatus: "Clean" });
     await seedTaskLink(direct, A.companyId, cleanFileOther, taskOther, hrUserId);
@@ -389,6 +399,31 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-5 task files (HTTP, real permission engi
     expect(list.status, JSON.stringify(list.body)).toBe(200);
   });
 
+  it("out-of-scope: emp@Own POST link file to taskOther (not assignee/member) → 404, no link written", async () => {
+    const token = await login(nest, A.slug, empEmail);
+    const res = await api(nest)
+      .post(`/tasks/${taskOther}/files`)
+      .set(bearer(token))
+      .send({ fileId: outOfScopeUnlinkedFileA });
+    expect(res.status, JSON.stringify(res.body)).toBe(404);
+    const link = await direct.query(
+      `SELECT 1 FROM file_links WHERE file_id = $1 AND module_code = 'TASK' AND entity_id = $2`,
+      [outOfScopeUnlinkedFileA, taskOther],
+    );
+    expect(link.rows.length).toBe(0);
+  });
+
+  it("out-of-scope: otherUser@Own (file-delete grant, assignee of taskOther ONLY) DELETE taskA's file → 404, not soft-deleted", async () => {
+    // otherUser HAS file-delete:task@Own (passes the coarse PermissionGuard) but is NOT taskA's
+    // assignee/member — proves the 404 comes from the FINE data_scope/in-scope check, not a 403
+    // permission-guard short-circuit (the coarse gate alone would let this request through).
+    const token = await login(nest, A.slug, otherEmail);
+    const res = await api(nest).delete(`/tasks/${taskA}/files/${cleanFileA}`).set(bearer(token));
+    expect(res.status, JSON.stringify(res.body)).toBe(404);
+    const raw = await rawFile(direct, cleanFileA);
+    expect(raw?.deletedAt ?? null).toBeNull();
+  });
+
   // ── STRICT scan_status guard (409 unless Clean/NotRequired) ────────────────────────────────────
 
   it("scan Pending → download → 409 NOT_DOWNLOADABLE (no URL)", async () => {
@@ -428,6 +463,17 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-5 task files (HTTP, real permission engi
     expect(typeof res.headers.location).toBe("string");
     expect(res.headers.location).not.toContain("storage_path");
     expect(await countAccessLogs(direct, cleanFileA, "Download")).toBeGreaterThanOrEqual(1);
+  });
+
+  it("scan NotRequired → download → 302 + Location URL + file_access_logs Download append", async () => {
+    const token = await login(nest, A.slug, hrEmail);
+    const res = await api(nest)
+      .get(`/tasks/${taskA}/files/${notRequiredFileA}/download`)
+      .set(bearer(token));
+    expect(res.status, JSON.stringify(res.body)).toBe(302);
+    expect(typeof res.headers.location).toBe("string");
+    expect(res.headers.location).not.toContain("storage_path");
+    expect(await countAccessLogs(direct, notRequiredFileA, "Download")).toBeGreaterThanOrEqual(1);
   });
 
   // ── resolver fail-closed / NO FOUNDATION.FILE.* escalation ─────────────────────────────────────
@@ -490,6 +536,7 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-5 task files (HTTP, real permission engi
       [A.companyId],
     );
     expect(audit.rows.length).toBe(1);
+    expect(await countAccessLogs(direct, unlinkedCleanFileA, "Link")).toBeGreaterThanOrEqual(1);
 
     const list = await api(nest).get(`/tasks/${taskA}/files`).set(bearer(token));
     const ids = (list.body.data as Array<{ fileId: string }>).map((f) => f.fileId);
