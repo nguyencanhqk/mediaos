@@ -123,6 +123,101 @@ export const DASH_WIDGET_CATALOG: readonly DashWidgetEntry[] = [
     dataSourceKey: "hr-overview",
     componentKey: "HrOverviewWidget",
   },
+  // ─── S4-DASH-CATALOG-2 (APPEND-only) — 9 widget đợt 2 ─────────────────────────────────────────────
+  // Transcribe VERBATIM từ bảng LOCK (docs/plans/S4-DASH-CATALOG-2.md §LOCK) — cùng nguồn với migration 0493.
+  // MIRROR khối (1) của 0493 (INSERT dashboard_widgets 9 row GLOBAL). Owner Trim-MVP đợt 2 (2026-07-11):
+  // DEFER TEAM_TASKS_TODAY (không resolver viewer→teamId sạch) + CONFIG_WARNINGS (chưa read-service) — cả hai
+  // VẮNG catalog, còn trong DASH_WIDGETS_NOT_SEEDED. Tổng catalog = 7 (0484) + 9 = 16.
+  {
+    widgetCode: "USER_SUMMARY",
+    moduleCode: "AUTH",
+    name: "Tổng số user",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_USER_SUMMARY",
+    defaultDataScope: "Company",
+    widgetType: "Summary",
+    dataSourceKey: "user-summary",
+    componentKey: "UserSummaryWidget",
+  },
+  {
+    widgetCode: "EMPLOYEE_SUMMARY",
+    moduleCode: "HR",
+    name: "Tổng số nhân viên",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_EMPLOYEE_SUMMARY",
+    defaultDataScope: "Company",
+    widgetType: "Summary",
+    dataSourceKey: "employee-summary",
+    componentKey: "EmployeeSummaryWidget",
+  },
+  {
+    widgetCode: "MODULE_STATUS",
+    moduleCode: "SYSTEM",
+    name: "Module đang dùng",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_MODULE_STATUS",
+    defaultDataScope: "Company",
+    widgetType: "List",
+    dataSourceKey: "module-status",
+    componentKey: "ModuleStatusWidget",
+  },
+  {
+    widgetCode: "SYSTEM_LOGS",
+    moduleCode: "SYSTEM",
+    name: "Log quan trọng gần đây",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_SYSTEM_LOGS",
+    defaultDataScope: "Company",
+    widgetType: "Summary",
+    dataSourceKey: "system-logs",
+    componentKey: "SystemLogsWidget",
+  },
+  {
+    widgetCode: "LEAVE_BALANCE",
+    moduleCode: "LEAVE",
+    name: "Số ngày phép còn lại",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_LEAVE_BALANCE",
+    defaultDataScope: "Own",
+    widgetType: "Summary",
+    dataSourceKey: "leave-balance",
+    componentKey: "LeaveBalanceWidget",
+  },
+  {
+    widgetCode: "NEW_EMPLOYEES",
+    moduleCode: "HR",
+    name: "Nhân sự mới",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_NEW_EMPLOYEES",
+    defaultDataScope: "Company",
+    widgetType: "List",
+    dataSourceKey: "new-employees",
+    componentKey: "NewEmployeesWidget",
+  },
+  {
+    widgetCode: "CONTRACT_EXPIRING",
+    moduleCode: "HR",
+    name: "Hợp đồng sắp hết hạn",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_CONTRACT_EXPIRING",
+    defaultDataScope: "Company",
+    widgetType: "Alert",
+    dataSourceKey: "contract-expiring",
+    componentKey: "ContractExpiringWidget",
+  },
+  {
+    widgetCode: "LEAVE_CALENDAR",
+    moduleCode: "LEAVE",
+    name: "Lịch nghỉ team",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_LEAVE_CALENDAR",
+    defaultDataScope: "Team",
+    widgetType: "Calendar",
+    dataSourceKey: "leave-calendar",
+    componentKey: "LeaveCalendarWidget",
+  },
+  {
+    widgetCode: "ATTENDANCE_ALERTS",
+    moduleCode: "ATT",
+    name: "Bất thường chấm công",
+    requiredPermissionCode: "DASH.WIDGET.VIEW_ATTENDANCE_ALERTS",
+    defaultDataScope: "Team",
+    widgetType: "Alert",
+    dataSourceKey: "attendance-alerts",
+    componentKey: "AttendanceAlertsWidget",
+  },
 ] as const;
 
 export const DASH_WIDGET_COUNT = DASH_WIDGET_CATALOG.length;
@@ -151,6 +246,29 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<Record<string, EnginePair>> = {
   PROJECT_PROGRESS: { action: "read", resourceType: "project" },
   // ('read','employee') — 0019_g5_permissions_seed.sql.
   HR_OVERVIEW: { action: "read", resourceType: "employee" },
+  // ─── S4-DASH-CATALOG-2 (APPEND-only) — cặp gate 9 widget đợt 2 (ĐÃ VERIFY grep migration runtime) ───
+  // Mọi cặp ĐÃ TỒN TẠI + ĐÃ GRANT trước WO này; migration 0493 KHÔNG đụng permissions/role_permissions.
+  // ('view','user') — 0444:39; grant hr 0444:88 · CA 0444:89 (Company). listUsers KHÔNG tự gate ⇒ handler gate.
+  USER_SUMMARY: { action: "view", resourceType: "user" },
+  // ('read','employee') — 0019:19. getEmployeesSummary tự resolveAndAssert; handler vẫn gate lại cho nhất quán.
+  EMPLOYEE_SUMMARY: { action: "read", resourceType: "employee" },
+  // ('view','foundation-module') — 0435:338 (is_sensitive=false). getAllModules KHÔNG tự gate ⇒ handler gate.
+  MODULE_STATUS: { action: "view", resourceType: "foundation-module" },
+  // ('view','audit-log') — 0340:31 SENSITIVE; grant CA TƯỜNG MINH 0340:38-40 (CA-only). listCompany KHÔNG tự
+  // gate ⇒ handler PHẢI tự gate (crown, chống leo thang). engine tự ép effectivelySensitive ⇒ wildcard KHÔNG lọt.
+  SYSTEM_LOGS: { action: "view", resourceType: "audit-log" },
+  // ('view-own','leave-balance') — 0455:59; grant 4 role 0455:136-139 (Own). listMyBalances self-locked user_id.
+  LEAVE_BALANCE: { action: "view-own", resourceType: "leave-balance" },
+  // ('read','employee') — 0019:19 (widget "nhân sự mới" cũng dùng cặp read:employee, map non-PII).
+  NEW_EMPLOYEES: { action: "read", resourceType: "employee" },
+  // ('view','contract') — 0462:157; grant hr/CA 0462:169-170 (Company), employee Own/manager Team ở 0462/0465.
+  CONTRACT_EXPIRING: { action: "view", resourceType: "contract" },
+  // ('view-team','leave-calendar') — 0455:65. listCalendar(scope=team) tự resolveAndAssert(view-team); handler
+  // gate lại cho nhất quán ⇒ user chỉ có view-own → 403 (fail-closed, không rơi về Own âm thầm).
+  LEAVE_CALENDAR: { action: "view-team", resourceType: "leave-calendar" },
+  // ('view-team','attendance') — 0454:36 SENSITIVE. listTeamRecords tự resolveAndAssert(view-team,isSensitive);
+  // handler gate lại cho nhất quán.
+  ATTENDANCE_ALERTS: { action: "view-team", resourceType: "attendance" },
 } as const;
 
 export interface DashPermissionPair extends EnginePair {
@@ -287,7 +405,11 @@ export interface DashDefaultConfigEntry {
  * sortOrder lấy nguyên từ DB-07 §14.3.
  *
  * PROJECT_PROGRESS có trong catalog nhưng KHÔNG có default config — §14.3 không đặt nó vào dashboard nào.
- * Dashboard Admin vì thế chỉ còn NOTIFICATIONS cho tới khi seed nốt catalog (WO S4-DASH-CATALOG-2).
+ *
+ * S4-DASH-CATALOG-2 (APPEND-only): seed nốt DB-07 §14.3 cho 9 widget đợt 2. TEAM_TASKS_TODAY + CONFIG_WARNINGS
+ * DEFER ⇒ KHÔNG default-config (không có row). ATTENDANCE_ALERTS xuất hiện ở CẢ Manager lẫn HR (khác
+ * dashboard_type ⇒ khoá nghiệp vụ (company,widget,type,scope) không đụng). Dashboard Admin sau seed = 5 widget
+ * (USER_SUMMARY@10 · EMPLOYEE_SUMMARY@20 · MODULE_STATUS@30 · SYSTEM_LOGS@50 + NOTIFICATIONS@50 đã có).
  */
 export const DASH_DEFAULT_CONFIG: readonly DashDefaultConfigEntry[] = [
   { dashboardType: "Employee", widgetCode: "ATTENDANCE_TODAY", sortOrder: 10 },
@@ -301,6 +423,17 @@ export const DASH_DEFAULT_CONFIG: readonly DashDefaultConfigEntry[] = [
   { dashboardType: "HR", widgetCode: "PENDING_LEAVE", sortOrder: 40 },
   { dashboardType: "HR", widgetCode: "NOTIFICATIONS", sortOrder: 50 },
   { dashboardType: "Admin", widgetCode: "NOTIFICATIONS", sortOrder: 50 },
+  // ─── S4-DASH-CATALOG-2 (APPEND) — DB-07 §14.3 cho 9 widget đợt 2 (KHÔNG TEAM_TASKS_TODAY/CONFIG_WARNINGS) ───
+  { dashboardType: "Employee", widgetCode: "LEAVE_BALANCE", sortOrder: 40 },
+  { dashboardType: "Manager", widgetCode: "LEAVE_CALENDAR", sortOrder: 40 },
+  { dashboardType: "Manager", widgetCode: "ATTENDANCE_ALERTS", sortOrder: 50 },
+  { dashboardType: "HR", widgetCode: "NEW_EMPLOYEES", sortOrder: 20 },
+  { dashboardType: "HR", widgetCode: "CONTRACT_EXPIRING", sortOrder: 30 },
+  { dashboardType: "HR", widgetCode: "ATTENDANCE_ALERTS", sortOrder: 50 },
+  { dashboardType: "Admin", widgetCode: "USER_SUMMARY", sortOrder: 10 },
+  { dashboardType: "Admin", widgetCode: "EMPLOYEE_SUMMARY", sortOrder: 20 },
+  { dashboardType: "Admin", widgetCode: "MODULE_STATUS", sortOrder: 30 },
+  { dashboardType: "Admin", widgetCode: "SYSTEM_LOGS", sortOrder: 50 },
 ] as const;
 
 // ─── S4-DASH-BE-1 (APPEND-only) — resolver route → cặp engine ────────────────────────────────────────
@@ -367,17 +500,17 @@ function dashPairBySpec(specCode: string): DashPermissionPair {
   return pair;
 }
 
-/** Widget CỐ Ý không seed ở sprint này (DB-07 §14.3 + §8.5) — int-spec A2 assert chúng VẮNG MẶT. */
+/**
+ * Widget CỐ Ý không seed (DB-07 §14.3 DRIFT) — int-spec A2 assert chúng VẮNG MẶT trong dashboard_widgets.
+ *
+ * S4-DASH-CATALOG-2 (2026-07-11): THU HẸP từ 11 → 2. 9 widget (USER_SUMMARY/EMPLOYEE_SUMMARY/MODULE_STATUS/
+ * SYSTEM_LOGS/LEAVE_BALANCE/NEW_EMPLOYEES/CONTRACT_EXPIRING/LEAVE_CALENDAR/ATTENDANCE_ALERTS) NAY đã seed
+ * (migration 0493 + handler). Còn DEFER đúng 2 (owner Trim-MVP đợt 2):
+ *   - TEAM_TASKS_TODAY: KHÔNG có resolver viewer→teamId sạch (resolveContext trả managedUserIds+org-units,
+ *     KHÔNG teamId; TasksService.listByTeam nhận teamId tường minh + chỉ tenant-guard) ⇒ không gate scope sạch.
+ *   - CONFIG_WARNINGS: chưa có read-service warnings cấu hình hệ thống ⇒ seed sẽ luôn degraded.
+ */
 export const DASH_WIDGETS_NOT_SEEDED: readonly string[] = [
-  "LEAVE_BALANCE",
-  "LEAVE_CALENDAR",
   "TEAM_TASKS_TODAY",
-  "ATTENDANCE_ALERTS",
-  "NEW_EMPLOYEES",
-  "CONTRACT_EXPIRING",
-  "USER_SUMMARY",
-  "EMPLOYEE_SUMMARY",
-  "MODULE_STATUS",
   "CONFIG_WARNINGS",
-  "SYSTEM_LOGS",
 ] as const;

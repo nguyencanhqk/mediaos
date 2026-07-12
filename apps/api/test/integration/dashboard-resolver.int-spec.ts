@@ -227,15 +227,18 @@ describe.skipIf(!hasLaneDb)("S4-DASH-BE-1 Dashboard resolver + widget registry (
     expect((await api(nest).get("/dashboard/admin").set(h)).status).toBe(403);
   });
 
-  it("M2 employee: /dashboard/employee → 200, đúng 4 widget theo sort_order (KHÔNG HR_OVERVIEW/PENDING_LEAVE/PROJECT_PROGRESS)", async () => {
+  it("M2 employee: /dashboard/employee → 200, đúng 5 widget theo sort_order (S4-DASH-CATALOG-2: +LEAVE_BALANCE@40; KHÔNG HR_OVERVIEW/PROJECT_PROGRESS)", async () => {
     const h = bearer(await login(nest, A.slug, email.emp));
     const res = await api(nest).get("/dashboard/employee").set(h);
     expect(res.status).toBe(200);
     expect(res.body.data.dashboard_type).toBe("Employee");
+    // S4-DASH-CATALOG-2: Employee default config nay có LEAVE_BALANCE@40 (view-own:leave-balance — employee CÓ).
+    // sort_order phân biệt (10/20/30/40/50) ⇒ thứ tự xác định (không tie).
     expect(widgetCodes(res.body)).toEqual([
       "ATTENDANCE_TODAY",
       "MY_TASKS",
       "TASK_ALERTS",
+      "LEAVE_BALANCE",
       "NOTIFICATIONS",
     ]);
     expect(res.body.data.generated_at).toBeTruthy();
@@ -258,14 +261,26 @@ describe.skipIf(!hasLaneDb)("S4-DASH-BE-1 Dashboard resolver + widget registry (
   });
 
   // ── M3 manager-only ───────────────────────────────────────────────────────────────────────────────
-  it("M3 manager: /hr·/admin → 403; /manager → 200 {PENDING_LEAVE,TASK_ALERTS,NOTIFICATIONS} (KHÔNG MY_TASKS)", async () => {
+  it("M3 manager: /hr·/admin → 403; /manager → 200 {PENDING_LEAVE,TASK_ALERTS,LEAVE_CALENDAR,ATTENDANCE_ALERTS,NOTIFICATIONS} (KHÔNG MY_TASKS)", async () => {
     const h = bearer(await login(nest, A.slug, email.mgr));
     expect((await api(nest).get("/dashboard/hr").set(h)).status).toBe(403);
     expect((await api(nest).get("/dashboard/admin").set(h)).status).toBe(403);
     const res = await api(nest).get("/dashboard/manager").set(h);
     expect(res.status).toBe(200);
     const codes = widgetCodes(res.body);
-    expect(codes).toEqual(["PENDING_LEAVE", "TASK_ALERTS", "NOTIFICATIONS"]);
+    // S4-DASH-CATALOG-2: Manager default config nay + LEAVE_CALENDAR@40 (view-team:leave-calendar) +
+    // ATTENDANCE_ALERTS@50 (view-team:attendance) — manager CÓ cả hai. ATTENDANCE_ALERTS@50 & NOTIFICATIONS@50
+    // TIE sort_order ⇒ so khớp TẬP (tránh phụ thuộc thứ tự tie); 3 widget đầu (10/30/40) vẫn xác định.
+    expect([...codes].sort()).toEqual(
+      [
+        "ATTENDANCE_ALERTS",
+        "LEAVE_CALENDAR",
+        "NOTIFICATIONS",
+        "PENDING_LEAVE",
+        "TASK_ALERTS",
+      ].sort(),
+    );
+    expect(codes.slice(0, 3)).toEqual(["PENDING_LEAVE", "TASK_ALERTS", "LEAVE_CALENDAR"]);
     expect(codes).not.toContain("MY_TASKS");
   });
 
@@ -319,7 +334,13 @@ describe.skipIf(!hasLaneDb)("S4-DASH-BE-1 Dashboard resolver + widget registry (
     expect(res.status).toBe(200);
     const codes = widgetCodes(res.body);
     expect(codes).not.toContain("HR_OVERVIEW");
-    expect(codes).toEqual(["ATTENDANCE_TODAY", "MY_TASKS", "TASK_ALERTS", "NOTIFICATIONS"]);
+    expect(codes).toEqual([
+      "ATTENDANCE_TODAY",
+      "MY_TASKS",
+      "TASK_ALERTS",
+      "LEAVE_BALANCE",
+      "NOTIFICATIONS",
+    ]);
   });
 
   // ── M7 DASHBOARD_NOT_RESOLVED (uploader: read:dashboard blanket nhưng KHÔNG view-*:dashboard) ──────────
@@ -364,13 +385,19 @@ describe.skipIf(!hasLaneDb)("S4-DASH-BE-1 Dashboard resolver + widget registry (
   });
 
   // ── M10 gate tầng-2 CÙNG-TENANT HAI CHIỀU (crown) ────────────────────────────────────────────────────
-  it("M10 loại: employee /dashboard/employee KHÔNG chứa PENDING_LEAVE (thiếu view:leave), vẫn đúng 4", async () => {
+  it("M10 loại: employee /dashboard/employee KHÔNG chứa PENDING_LEAVE (thiếu view:leave), vẫn đúng 5 (+LEAVE_BALANCE)", async () => {
     const h = bearer(await login(nest, A.slug, email.emp));
     const res = await api(nest).get("/dashboard/employee").set(h);
     expect(res.status).toBe(200);
     const codes = widgetCodes(res.body);
     expect(codes).not.toContain("PENDING_LEAVE");
-    expect(codes).toEqual(["ATTENDANCE_TODAY", "MY_TASKS", "TASK_ALERTS", "NOTIFICATIONS"]);
+    expect(codes).toEqual([
+      "ATTENDANCE_TODAY",
+      "MY_TASKS",
+      "TASK_ALERTS",
+      "LEAVE_BALANCE",
+      "NOTIFICATIONS",
+    ]);
   });
 
   it("M10 nhận: hr /dashboard/employee CHỨA PENDING_LEAVE (có view:leave) — gate tầng-2 hai chiều", async () => {

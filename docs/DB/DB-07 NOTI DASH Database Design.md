@@ -1121,6 +1121,18 @@ WHERE deleted_at IS NULL;
 | `CONTRACT_EXPIRING` | HR | `DASH.WIDGET.VIEW_CONTRACT_EXPIRING` | Company | Có |
 | `ATTENDANCE_ALERTS` | ATT | `DASH.WIDGET.VIEW_ATTENDANCE_ALERTS` | Team/Company | Có |
 | `PROJECT_PROGRESS` | TASK | `DASH.WIDGET.VIEW_PROJECT_PROGRESS` | Project/Company | Có |
+| `USER_SUMMARY` | AUTH | `DASH.WIDGET.VIEW_USER_SUMMARY` | Company/System | Có |
+| `EMPLOYEE_SUMMARY` | HR | `DASH.WIDGET.VIEW_EMPLOYEE_SUMMARY` | Company/System | Có |
+| `MODULE_STATUS` | SYSTEM | `DASH.WIDGET.VIEW_MODULE_STATUS` | Company/System | Có |
+| `SYSTEM_LOGS` | SYSTEM | `DASH.WIDGET.VIEW_SYSTEM_LOGS` | Company/System | Có |
+
+> **Reconcile S4-DASH-CATALOG-2 (2026-07-11).** Bảng widget→permission MVP thực nằm ở **§8.1 mục này**
+> (KHÔNG phải §8.5 — §8.5 là bảng `dashboard_cache_invalidations`). Bốn widget Admin `USER_SUMMARY`,
+> `EMPLOYEE_SUMMARY`, `MODULE_STATUS`, `SYSTEM_LOGS` trước đây CHỈ có `required_permission_code` ở
+> `API-10 PERMISSION MATRIX` (dòng 300-305) — nay bổ sung verbatim vào §8.1 để cột NOT NULL
+> `required_permission_code` không thiếu khi seed catalog. `CONFIG_WARNINGS` (`DASH.WIDGET.VIEW_CONFIG_WARNINGS`,
+> API-10:303) và `TEAM_TASKS_TODAY` (`DASH.WIDGET.VIEW_TEAM_TASKS_TODAY`, API-10:308) **defer** (xem §14.3),
+> vì thế KHÔNG thêm vào bảng seed này.
 
 ---
 
@@ -2169,26 +2181,35 @@ Ví dụ template tiếng Việt:
 | Admin | Cảnh báo cấu hình | `CONFIG_WARNINGS` | 40 |
 | Admin | Log quan trọng gần đây | `SYSTEM_LOGS` | 50 |
 
-> **⚠ DRIFT — S4-DASH-SEED-1 (owner chốt 2026-07-10).** Migration `0484` **KHÔNG** seed đủ bảng trên. Nó seed
-> **7 widget in-sprint** (IMPLEMENTATION-07 §11.3): `ATTENDANCE_TODAY`, `MY_TASKS`, `TASK_ALERTS`,
-> `NOTIFICATIONS`, `PENDING_LEAVE`, `PROJECT_PROGRESS`, `HR_OVERVIEW`.
+> **⚠ DRIFT — cập nhật S4-DASH-CATALOG-2 (owner chốt 2026-07-11).**
 >
-> Lý do: 11 widget còn lại (`LEAVE_BALANCE`, `TEAM_TASKS_TODAY`, `LEAVE_CALENDAR`, `ATTENDANCE_ALERTS`,
-> `NEW_EMPLOYEES`, `CONTRACT_EXPIRING`, `USER_SUMMARY`, `EMPLOYEE_SUMMARY`, `MODULE_STATUS`,
-> `CONFIG_WARNINGS`, `SYSTEM_LOGS`) **chưa có data source** ở sprint này. Seed chúng vào catalog sẽ tạo widget
-> luôn ở trạng thái degraded, và default config trỏ vào widget không có service.
+> **Đợt 1 — mig `0484` (S4-DASH-SEED-1, 2026-07-10):** seed **7 widget in-sprint** (IMPLEMENTATION-07 §11.3):
+> `ATTENDANCE_TODAY`, `MY_TASKS`, `TASK_ALERTS`, `NOTIFICATIONS`, `PENDING_LEAVE`, `PROJECT_PROGRESS`,
+> `HR_OVERVIEW`.
 >
-> **Mâu thuẫn nội bộ của chính DB-07** (cần reconcile ở WO doc riêng): §8.5 chỉ liệt **12** widget có
-> `required_permission_code`. Năm widget Admin ở bảng trên (`USER_SUMMARY`, `EMPLOYEE_SUMMARY`,
-> `MODULE_STATUS`, `CONFIG_WARNINGS`, `SYSTEM_LOGS`) **không có** trong §8.5 — chúng chỉ có permission code ở
-> `API-10 PERMISSION MATRIX`.
+> **Đợt 2 — mig `0493` (S4-DASH-CATALOG-2, 2026-07-11):** bù thêm **9 widget** (mỗi widget nay đã có read-service
+> nguồn + gate-pair engine thật): `LEAVE_BALANCE`, `LEAVE_CALENDAR`, `ATTENDANCE_ALERTS`, `NEW_EMPLOYEES`,
+> `CONTRACT_EXPIRING`, `USER_SUMMARY`, `EMPLOYEE_SUMMARY`, `MODULE_STATUS`, `SYSTEM_LOGS`. Catalog global
+> (`dashboard_widgets`) tổng **16** widget. Bảng LOCK 7 cột (metadata + gate-pair verify `migration:dòng`) =
+> `docs/plans/S4-DASH-CATALOG-2.md`; nguồn chống-drift = `apps/api/src/dashboard/dashboard-widget-catalog.const.ts`.
 >
-> Default config thực tế seed = **(bảng này ∩ 7 widget đã seed) ∪ {`NOTIFICATIONS` cho mọi dashboard type}**.
-> Vế hai theo IMPLEMENTATION-07 §11.3 (cột Dashboard của `NOTIFICATIONS` = "All"). Hệ quả: dashboard **Admin
-> chỉ có 1 widget** cho tới khi seed nốt catalog. `PROJECT_PROGRESS` nằm trong catalog nhưng **không** có
-> default config nào, vì bảng trên không đặt nó vào dashboard nào.
+> **DEFER (vẫn CHƯA seed sau đợt 2)** — 2 widget, KHÔNG có row catalog / gate-pair / default-config:
+> - `TEAM_TASKS_TODAY`: KHÔNG có resolver `viewer→teamId` sạch. `dataScope.resolveContext` trả
+>   `managedUserIds`+org-units, KHÔNG `teamId`; `TasksService.listByTeam` nhận `teamId` tường minh (bảng
+>   `teams`) + chỉ tenant-guard (KHÔNG actor-scope) ⇒ Trim-MVP owner defer tới khi có đường resolve team sạch.
+> - `CONFIG_WARNINGS`: chưa có read-service warnings cấu hình hệ thống ⇒ seed sẽ luôn degraded.
 >
-> Bù đủ ở WO `S4-DASH-CATALOG-2` (chưa mở). Chi tiết: `docs/plans/S4-DASH-SEED-1.md` §2.5.
+> **Đính chính mislabel (nguồn của mâu thuẫn cũ):** bảng widget→permission MVP nằm ở **§8.1** ("Seed widget
+> MVP đề xuất"), KHÔNG phải §8.5 (§8.5 = `dashboard_cache_invalidations`). Bốn widget Admin (`USER_SUMMARY`,
+> `EMPLOYEE_SUMMARY`, `MODULE_STATUS`, `SYSTEM_LOGS`) trước chỉ có `required_permission_code` ở
+> `API-10 PERMISSION MATRIX` — nay đã bổ sung verbatim vào §8.1. `CONFIG_WARNINGS` cũng chỉ có ở API-10 và vẫn
+> defer.
+>
+> **Default config sau đợt 2** = **(bảng này ∩ 16 widget đã seed, TRỪ 2 widget defer) ∪ {`NOTIFICATIONS` cho
+> mọi dashboard type}**. Dashboard **Admin** = 5 widget (`USER_SUMMARY`@10, `EMPLOYEE_SUMMARY`@20,
+> `MODULE_STATUS`@30, `SYSTEM_LOGS`@50, `NOTIFICATIONS`@50; `CONFIG_WARNINGS`@40 vắng vì defer). Dashboard
+> **Manager** KHÔNG có `TEAM_TASKS_TODAY`. `PROJECT_PROGRESS` vẫn trong catalog nhưng KHÔNG có default config
+> (§14.3 không đặt nó vào dashboard nào). Chi tiết: `docs/plans/S4-DASH-CATALOG-2.md`.
 
 ---
 
