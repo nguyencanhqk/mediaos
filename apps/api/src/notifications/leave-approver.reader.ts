@@ -31,12 +31,16 @@ export class LeaveApproverReader {
     const eid = employeeId ?? null;
     const uid = userId ?? null;
     if (!eid && !uid) return null;
+    // Ưu tiên employeeId (cột canonical); fallback user_id CHỈ KHI employeeId thiếu. Nhánh ở TS (KHÔNG
+    // `${eid} is null` trong SQL — param không xác định kiểu ⇒ "could not determine data type") + ép `::uuid`
+    // mọi param (drizzle gửi text ⇒ `uuid = text` operator-not-exist nếu không cast).
+    const matchSubject = eid ? sql`id = ${eid}::uuid` : sql`user_id = ${uid}::uuid`;
     const res = await tx.execute(sql`
       select direct_manager_id as "directManagerUserId"
         from employee_profiles
-       where company_id = ${companyId}
+       where company_id = ${companyId}::uuid
          and deleted_at is null
-         and (id = ${eid} or (${eid} is null and user_id = ${uid}))
+         and ${matchSubject}
        limit 1
     `);
     const row = (res.rows as unknown as DirectManagerRow[])[0];
