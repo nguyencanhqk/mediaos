@@ -218,28 +218,22 @@ jobs:
       - name: Build (NestJS)
         run: pnpm --filter @mediaos/api build
 
-  # ── Release (PLACEHOLDER — bật khi đã chốt host/secret prod) ──────────────
-  # Chạy migration lên DB PROD rồi deploy API. CHỈ push master. Cần secret thật (KHÔNG commit).
+  # ── Release BE (QUYẾT ĐỊNH S5-DEVOPS-1 2026-07-12 — machine-local by design, KHÔNG placeholder nữa) ──
+  # PROD API + Postgres sống TRÊN MÁY WINDOWS của owner (NSSM service + docker Postgres localhost, chỉ lộ
+  # HTTP qua cloudflared tunnel). Hosted runner KHÔNG với tới DB/service ⇒ 2 lựa chọn đã cân nhắc:
+  #   (a) self-hosted runner trên máy prod — TỪ CHỐI: repo PUBLIC, workflow từ fork PR có thể nhắm
+  #       runs-on: self-hosted ⇒ rủi ro chạy code lạ trên máy prod (GitHub docs khuyến cáo thẳng).
+  #   (b) BE deploy = 1 lệnh tại máy (`m deploy-api` = build + cài/restart NSSM; migrate = `m migrate`
+  #       sau khi `m prod-env`) — CHỌN: đơn giản, kiểm soát, khớp topology. FE thì TỰ ĐỘNG qua Pages
+  #       (job deploy trong apps-frontend.yml).
+  # Job này giữ vai trò THÔNG BÁO sau khi build-test xanh trên master: nhắc thứ tự release BE tay.
+  # Đổi quyết định (a)↔(b) = sửa chỗ này + docs/plans/S5-DEVOPS-1.md (runbook §d).
   release:
-    name: Release (migrate + deploy)
+    name: Release notice (BE deploy = machine-local)
     needs: build-test
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      # - uses: pnpm/action-setup@v4
-      #   with: { version: 11.5.1 }
-      # - uses: actions/setup-node@v4
-      #   with: { node-version: 22, cache: pnpm }
-      # - run: pnpm install --frozen-lockfile
-      # - name: Migrate prod DB (forward-only)
-      #   run: pnpm --filter @mediaos/api db:migrate
-      #   env:
-      #     DATABASE_DIRECT_URL: ${{ secrets.PROD_DATABASE_DIRECT_URL }}   # owner/superuser direct
-      # - name: Deploy API
-      #   run: ./scripts/deploy-api.sh
-      #   env:
-      #     DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
-      - name: Release placeholder
+      - name: BE release checklist (manual, on prod host)
         run: |
-          echo "TODO(ops) run pnpm db:migrate against prod DB + deploy NestJS once host/secrets are set (runbook section 9)."
+          echo "::notice::BE release (chạy TRÊN máy prod, thứ tự): 1) git pull master  2) m prod-env  3) m migrate (forward-only, expand-contract)  4) m deploy-api (build + restart NSSM)  5) check https://api.<domain>/api/v1/health. FE đã tự deploy qua job 'Deploy → Cloudflare Pages' (apps-frontend.yml) khi DEPLOY_FE_ENABLED=true."

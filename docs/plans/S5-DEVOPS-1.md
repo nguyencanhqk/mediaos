@@ -110,8 +110,24 @@ Ghi chú: bước 2 và 3 hoán đổi được khi công ty `demo` đã tồn t
 - Test account đủ 5 role: 4 qua `scripts/seed-staging-accounts.mjs` (non-destructive idempotent) + SA qua SuperAdminBootstrapService; không secret thật trong repo.
 - Topology đối chiếu PROD/DEV-ONLINE: mục (a) — UAT = dev-online, không dựng trùng.
 
-**HOÃN (Known Blockers — cần OWNER, WO đóng partial/blocked-owner, KHÔNG auto-green):**
-1. **Pipeline deploy BE+FE tự động (done_when[0] vế sau):** job `release` trong `api.yml` vẫn PLACEHOLDER — cần owner provision GitHub Environment + secrets (`PROD_DATABASE_DIRECT_URL`, deploy token) + quyết định cơ chế deploy API lên máy Windows (NSSM pull? runner self-hosted?). Deploy hiện tại = THỦ CÔNG qua `m deploy-*` (PROD) / `m dev-online-fast` (UAT) — chấp nhận được cho UAT Sprint 5.
-2. IMPL08-READY §10.3 các mục ⚠ bảng (c): verify NOTI/DASH seed đủ P0 + storage drill + request-id trace thuộc S5-QA-E2E-1 / S5-SEC-1, không kéo vào WO này (chống scope-creep).
+**Pipeline deploy (done_when[0] vế sau) — CHỐT thiết kế 2026-07-12, thay trạng thái blocked-owner cũ:**
+
+- **FE = TỰ ĐỘNG qua Cloudflare Pages** — job `deploy` trong `.github/workflows/apps-frontend.yml` (push master, matrix app đổi, environment `production`, project `web-mediaos`/`auth-mediaos`/`console-mediaos` khớp `06-deploy-pages.ps1`). Gate bằng repo var `DEPLOY_FE_ENABLED` để CI không đỏ khi chưa nạp secret. **Owner bật 1 lần (4 lệnh, xem cuối mục):** tạo CF API token scope Pages:Edit → environment `production` + secret/var → flip `DEPLOY_FE_ENABLED=true`.
+- **BE = machine-local BY DESIGN (không phải nợ):** PROD API + Postgres sống trên máy Windows owner (NSSM + docker localhost, chỉ lộ HTTP qua tunnel) — hosted runner không với tới; self-hosted runner bị TỪ CHỐI vì repo PUBLIC (fork PR có thể nhắm `runs-on: self-hosted` = chạy code lạ trên máy prod). BE release = chuỗi lệnh tại máy theo thứ tự job `release` (api.yml) in ra: `git pull` → `m prod-env` → `m migrate` → `m deploy-api` → check health. Đổi quyết định = sửa `api.yml` release + mục này.
+
+Lệnh provision (owner chạy 1 lần — cần quyền admin repo, kèm siết fork-PR approval vì repo public):
+
+```bash
+echo '{"deployment_branch_policy":{"protected_branches":true,"custom_branch_policies":false}}' \
+  | gh api -X PUT repos/nguyencanhqk/mediaos/environments/production --input -
+gh api -X POST repos/nguyencanhqk/mediaos/environments/production/variables \
+  -f name=CLOUDFLARE_ACCOUNT_ID -f value=414fefc33c056a60c8772a9b4ab5fc15
+gh secret set CLOUDFLARE_API_TOKEN --env production --repo nguyencanhqk/mediaos   # dán token Pages:Edit
+gh variable set DEPLOY_FE_ENABLED --body true --repo nguyencanhqk/mediaos
+echo '{"approval_policy":"all_external_contributors"}' \
+  | gh api -X PUT repos/nguyencanhqk/mediaos/actions/permissions/fork-pr-contributor-approval --input -
+```
+
+**Còn HOÃN (ngoài WO):** IMPL08-READY §10.3 các mục ⚠ bảng (c): verify NOTI/DASH seed đủ P0 + storage drill + request-id trace thuộc S5-QA-E2E-1 / S5-SEC-1, không kéo vào WO này (chống scope-creep).
 
 **Rollback (IMPL08-A08):** migration forward-only (không down) ⇒ rollback UAT = deploy lại build cũ (git checkout tag + `m dev-online-fast`); DB giữ nguyên (expand-contract đã là luật ở memory `migration-expand-contract-required`). Sự cố seed: script transaction ROLLBACK toàn phần, không ghi một phần.
