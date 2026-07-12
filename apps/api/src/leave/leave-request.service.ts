@@ -348,6 +348,8 @@ export class LeaveRequestService {
             userId: request.userId,
             employeeId: request.employeeId,
             fromStatus: prevStatus,
+            // S4-INT-3: actor-exclusion — engine loại người khởi tạo khỏi recipients
+            actorUserId: actor.id,
             eventCode: "LEAVE_REQUEST_CANCELLED",
           },
         });
@@ -505,6 +507,8 @@ export class LeaveRequestService {
         employeeId,
         totalDays: calculatedDays,
         totalHours: numOrNull(request.totalHours),
+        // S4-INT-3: actor-exclusion — engine loại người khởi tạo khỏi recipients
+        actorUserId: actor.id,
         eventCode: "LEAVE_REQUEST_SUBMITTED",
       },
     });

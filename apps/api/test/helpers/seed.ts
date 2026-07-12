@@ -550,7 +550,24 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   // đây sau khi events đã sạch là an toàn.
   await direct.query("DELETE FROM dead_letter_events WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM dead_letter_alerts WHERE company_id = ANY($1::uuid[])", ids);
-  await direct.query("DELETE FROM outbox_events WHERE company_id = ANY($1::uuid[])", ids);
+  // OutboxWorker chạy nền có thể tiêu thụ event và chèn processed_events GIỮA câu DELETE processed_events
+  // ở trên và câu DELETE outbox_events → FK 23503 (đua teardown, lộ ra khi bridge NOTI phủ thêm nguồn event).
+  // Chốt bằng retry ngắn: xoá lại processed_events sát ngay trước outbox_events, lặp khi vẫn vướng FK.
+  for (let attempt = 1; ; attempt++) {
+    await direct.query(
+      `DELETE FROM processed_events WHERE event_id IN
+         (SELECT id FROM outbox_events WHERE company_id = ANY($1::uuid[]))`,
+      ids,
+    );
+    try {
+      await direct.query("DELETE FROM outbox_events WHERE company_id = ANY($1::uuid[])", ids);
+      break;
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (code !== "23503" || attempt >= 5) throw err;
+      await new Promise((r) => setTimeout(r, 200 * attempt));
+    }
+  }
   await direct.query("DELETE FROM audit_logs WHERE company_id = ANY($1::uuid[])", ids);
   // refresh_tokens tự tham chiếu (replaced_by) → gỡ liên kết trước khi xoá để tránh vướng FK.
   await direct.query(

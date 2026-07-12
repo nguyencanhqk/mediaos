@@ -225,6 +225,8 @@ export class LeaveRevokeService {
         userId: request.userId,
         employeeId: request.employeeId,
         fromStatus: "Approved",
+        // S4-INT-3: actor-exclusion — owner tự hủy Approved bị loại; HR revoke (actor∉list) không ảnh hưởng
+        actorUserId: actor.id,
         eventCode: opts.eventCode,
       },
     });
