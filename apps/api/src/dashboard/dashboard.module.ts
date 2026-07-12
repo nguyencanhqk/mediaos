@@ -37,6 +37,10 @@ import { DashboardWidgetCacheService } from "./dashboard-widget-cache.service";
 // S4-DASH-BE-3 (additive): config CRUD — controller THỨ TƯ (/configs + /configs/:id), không đụng khối trên.
 import { DashboardConfigController } from "./dashboard-config.controller";
 import { DashboardConfigService } from "./dashboard-config.service";
+// S4-INT-2 (additive): internal cache invalidation — controller THỨ NĂM (POST /internal/v1/dashboard/
+// cache/invalidate), event TASK/NOTI/ATT/LEAVE → widget (dashboard-cache-invalidation.const.ts).
+import { InternalDashboardCacheController } from "./internal-dashboard-cache.controller";
+import { DashboardCacheInvalidationService } from "./dashboard-cache-invalidation.service";
 
 /**
  * S4-DASH-SEED-1 (additive): import SeedModule (exports MasterDataSeederRegistry) → DashSeedRegistrar
@@ -67,6 +71,8 @@ import { DashboardConfigService } from "./dashboard-config.service";
     DashboardWidgetDataController,
     // S4-DASH-BE-3 (additive): config CRUD — controller THỨ TƯ (/configs + /configs/:id).
     DashboardConfigController,
+    // S4-INT-2 (additive): internal cache invalidation — controller THỨ NĂM.
+    InternalDashboardCacheController,
   ],
   providers: [
     DashboardService,
@@ -84,6 +90,8 @@ import { DashboardConfigService } from "./dashboard-config.service";
     DashboardWidgetCacheService,
     // S4-DASH-BE-3 (additive): config CRUD service.
     DashboardConfigService,
+    // S4-INT-2 (additive): internal cache invalidation service.
+    DashboardCacheInvalidationService,
   ],
 })
 export class DashboardModule {}

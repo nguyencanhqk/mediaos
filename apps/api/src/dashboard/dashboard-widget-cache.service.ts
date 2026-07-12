@@ -178,4 +178,38 @@ export class DashboardWidgetCacheService {
     this.widgetIdCache.set(widgetCode, id);
     return id;
   }
+
+  /**
+   * S4-INT-2 — Soft-delete (invalidate) cache row ACTIVE của 1 widget trong company, dùng bởi
+   * DashboardCacheInvalidationService (POST /internal/v1/dashboard/cache/invalidate). KHÔNG DELETE (BẤT
+   * BIẾN #2) — chỉ UPDATE deleted_at (mirror upsert()/getServable() — không SET deleted_by, sự kiện internal
+   * không có actor người dùng cụ thể).
+   *
+   * userIds rỗng/undefined ⇒ invalidate TOÀN BỘ cache active của widget trong company (fallback an toàn khi
+   * không biết chính xác user bị ảnh hưởng). userIds có giá trị ⇒ CHỈ invalidate cache 'per-user' (user_id
+   * ∈ userIds) HOẶC cache 'company-shared' (user_id IS NULL, ảnh hưởng mọi viewer nên luôn invalidate theo) —
+   * KHÔNG đụng cache của user khác ngoài phạm vi event. Trả số dòng bị invalidate.
+   */
+  async invalidateByWidgetId(
+    companyId: string,
+    widgetId: string,
+    userIds?: readonly string[],
+  ): Promise<number> {
+    return this.db.withTenant(companyId, async (tx) => {
+      const res =
+        userIds && userIds.length > 0
+          ? await tx.execute(sql`
+              UPDATE dashboard_widget_cache
+              SET deleted_at = now()
+              WHERE company_id = ${companyId} AND widget_id = ${widgetId} AND deleted_at IS NULL
+                AND (user_id = ANY(${sql.param(userIds)}::uuid[]) OR user_id IS NULL)
+            `)
+          : await tx.execute(sql`
+              UPDATE dashboard_widget_cache
+              SET deleted_at = now()
+              WHERE company_id = ${companyId} AND widget_id = ${widgetId} AND deleted_at IS NULL
+            `);
+      return (res as { rowCount?: number }).rowCount ?? 0;
+    });
+  }
 }
