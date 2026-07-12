@@ -45,7 +45,11 @@ export type TaskActivityAction =
   | "CHECKLIST_ITEM_CREATED"
   | "CHECKLIST_ITEM_UPDATED"
   | "CHECKLIST_ITEM_DONE"
-  | "CHECKLIST_ITEM_DELETED";
+  | "CHECKLIST_ITEM_DELETED"
+  // S4-TASK-BE-5 (additive) — task file link/unlink (SPEC-06, target_type 'File'). action là free-text
+  // (KHÔNG migration — CHECK chk_task_activity_target_type 0478 ĐÃ cho 'File'; chỉ mở union TS).
+  | "TASK_FILE_UPLOADED"
+  | "TASK_FILE_DELETED";
 
 /**
  * target_type — tập con của CHECK chk_task_activity_target_type (0478:217-219). S4-TASK-BE-2 (additive):
@@ -60,7 +64,9 @@ export type TaskActivityTargetType =
   | "Assignee"
   | "Comment"
   | "Checklist"
-  | "ChecklistItem";
+  | "ChecklistItem"
+  // S4-TASK-BE-5 (additive): file link/unlink target (CHECK chk_task_activity_target_type 0478 ĐÃ cho 'File').
+  | "File";
 
 export interface TaskActivityEntry {
   action: TaskActivityAction;

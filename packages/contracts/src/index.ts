@@ -91,6 +91,9 @@ export * from "./task";
 export * from "./task-actions";
 // S4-TASK-BE-4 (additive): Kanban board + move · comment/mention · checklist/items · activity feed.
 export * from "./task-collab";
+// S4-TASK-BE-5 (additive): Task File (đính kèm công việc) — link/list/download/soft-delete DTOs
+// (API-06 / DB-08 §8.7 file_links · pair read/file-upload/file-delete:task seed 0485). Reuse EMPFILE pattern.
+export * from "./task-file";
 export * from "./notification";
 // S4-NOTI-BE-1 (additive): My-Notification API (SPEC-08 §17.1/17.2) — cột MỚI (recipient_user_id/status/
 // title/…), tách khỏi ./notification (legacy G10-2 chat/device/preference contracts, KHÔNG đụng).
