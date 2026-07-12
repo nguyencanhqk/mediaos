@@ -375,7 +375,13 @@ export class AttendanceAdjustmentService {
         });
         await this.outbox.enqueue(tx, {
           eventType: "attendance.adjustment_rejected",
-          payload: { requestId: id, userId: request.userId, rejectedBy: actor.id },
+          // S4-INT-4: actorUserId for engine actor-exclusion (recipient resolver drops actor).
+          payload: {
+            requestId: id,
+            userId: request.userId,
+            rejectedBy: actor.id,
+            actorUserId: actor.id,
+          },
         });
         return this.loadDetailTx(actor.companyId, id, tx);
       })
