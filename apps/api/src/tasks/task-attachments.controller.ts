@@ -1,109 +1,61 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  Param,
-  Post,
-  Req,
-  UseGuards,
-  UsePipes,
-} from "@nestjs/common";
-import { ZodValidationPipe } from "nestjs-zod";
-import type { Request } from "express";
-import { PermissionGuard } from "../permission/guards/permission.guard";
-import { RequirePermission } from "../permission/require-permission.decorator";
-import { PermissionService } from "../permission/permission.service";
-import { TaskAttachmentsService } from "./task-attachments.service";
-import { CreateAttachmentIntentDto } from "./tasks.dto";
-
-interface AuthenticatedRequest extends Request {
-  user: { id: string; companyId: string };
-}
+import { Controller, Delete, Get, Post, GoneException } from "@nestjs/common";
 
 /**
- * TaskAttachmentsController — file đính kèm THẬT cho Task Hub (B4).
+ * TaskAttachmentsController — DEPRECATED-IN-PLACE (S4-TASK-BE-5 L4, CROWN/security,
+ * SUPERSEDE OWNER 2026-07-12).
  *
- * Global JwtAuthGuard + CompanyGuard (auth + tenant) đã đăng ký app-wide (mirror TasksController) →
- * KHÔNG @UseGuards lại ở đây (sẽ ép Nest dựng guard trong injector TasksModule, thiếu TokenService).
- * Gate phân tầng:
- *  - Upload: KHÔNG dùng hard PermissionGuard (nếu dùng, người được giao việc 0-quyền-global bị chặn ở
- *    guard TRƯỚC khi tới service). Thay vào đó controller resolve `create:task` qua PermissionService
- *    rồi OR với owner/assignee ở service — cả 2 nhánh đều cấp được upload.
- *  - List/Download: gate `read:task` (đọc task của tenant). RLS + key-prefix là hàng rào thật.
- *  - Delete: gate `delete:task` (mirror DELETE /tasks). Soft-delete (204).
+ * WHY 410, NOT a membership/data-scope fix: `listByTask`/`getDownloadUrl` (in the now-orphaned
+ * TaskAttachmentsService) only ever asserted the task belongs to the tenant — they never checked
+ * data-scope/membership. The `read:task` grant is handed out at Own/Team/Company scope (employee/
+ * manager/hr/admin), so ANY user holding `read:task` could list/download attachments of ANY task in
+ * the tenant (in-tenant IDOR, membership bypass). Fixing the scope check in-place was rejected in
+ * favour of killing the route because:
+ *  (a) `task_attachments` is PARKED — no new writes are wanted, so POST must die too;
+ *  (b) the canonical replacement `/tasks/:id/files` (TaskFilesController, S4-TASK-BE-5 L2) already
+ *      does the real membership/data-scope + STRICT scan-status guard this legacy path never had;
+ *  (c) the legacy table has no `scan_status` column, so the new scan-guard cannot be retrofitted here;
+ *  (d) 410 closes the IDOR with the least code and zero risk of a second buggy scope re-implementation.
+ *
+ * `task-attachments.service.ts` and the `task_attachments` table are left UNTOUCHED (park — no drop,
+ * no new writes). This controller no longer calls the service at all: every handler short-circuits to
+ * `GoneException` before touching any service/DB call. Global JwtAuthGuard + CompanyGuard (app-wide)
+ * still apply, so unauthenticated/cross-tenant requests are rejected before even reaching here; no
+ * PermissionGuard is attached because permission is no longer a relevant axis — the route is dead for
+ * everyone, regardless of grant.
  */
+const SUPERSEDED = {
+  code: "TASK_ATTACHMENTS_SUPERSEDED",
+  message:
+    "Route legacy /tasks/:taskId/attachments đã ngừng hoạt động (410). Dùng /tasks/:taskId/files.",
+};
+
+function gone(): never {
+  throw new GoneException(SUPERSEDED);
+}
+
 @Controller("tasks/:taskId/attachments")
-@UsePipes(ZodValidationPipe)
 export class TaskAttachmentsController {
-  constructor(
-    private readonly attachments: TaskAttachmentsService,
-    private readonly permissions: PermissionService,
-  ) {}
-
-  /**
-   * POST /tasks/:taskId/attachments — tạo upload-intent (presigned PUT). Gate = create:task HOẶC
-   * owner/assignee (resolve permission ở đây, OR owner-check ở service).
-   */
+  /** POST /tasks/:taskId/attachments — superseded, always 410 (no metadata row is ever written). */
   @Post()
-  async createIntent(
-    @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
-    @Body() dto: CreateAttachmentIntentDto,
-  ) {
-    const decision = await this.permissions.can({
-      userId: req.user.id,
-      companyId: req.user.companyId,
-      action: "create",
-      resourceType: "task",
-    });
-    return this.attachments.createUploadIntent(
-      { id: req.user.id, companyId: req.user.companyId },
-      taskId,
-      dto,
-      decision.allow,
-    );
+  createIntent(): never {
+    return gone();
   }
 
-  /** GET /tasks/:taskId/attachments — liệt kê attachment của task (gate read:task). */
+  /** GET /tasks/:taskId/attachments — superseded, always 410 (no listing, no scope leak). */
   @Get()
-  @UseGuards(PermissionGuard)
-  @RequirePermission("read", "task")
-  list(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
-    return this.attachments.listByTask({ id: req.user.id, companyId: req.user.companyId }, taskId);
+  list(): never {
+    return gone();
   }
 
-  /** GET /tasks/:taskId/attachments/:id/download — presigned GET (gate read:task, scope tenant). */
+  /** GET /tasks/:taskId/attachments/:attachmentId/download — superseded, always 410 (no signed URL). */
   @Get(":attachmentId/download")
-  @UseGuards(PermissionGuard)
-  @RequirePermission("read", "task")
-  download(
-    @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
-    @Param("attachmentId") attachmentId: string,
-  ) {
-    return this.attachments.getDownloadUrl(
-      { id: req.user.id, companyId: req.user.companyId },
-      taskId,
-      attachmentId,
-    );
+  download(): never {
+    return gone();
   }
 
-  /** DELETE /tasks/:taskId/attachments/:id — soft-delete (gate delete:task), 204. */
+  /** DELETE /tasks/:taskId/attachments/:attachmentId — superseded, always 410 (no soft-delete). */
   @Delete(":attachmentId")
-  @HttpCode(204)
-  @UseGuards(PermissionGuard)
-  @RequirePermission("delete", "task")
-  async remove(
-    @Req() req: AuthenticatedRequest,
-    @Param("taskId") taskId: string,
-    @Param("attachmentId") attachmentId: string,
-  ) {
-    await this.attachments.softDelete(
-      { id: req.user.id, companyId: req.user.companyId },
-      taskId,
-      attachmentId,
-    );
+  remove(): never {
+    return gone();
   }
 }
