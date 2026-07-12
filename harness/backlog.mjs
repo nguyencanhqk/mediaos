@@ -5574,11 +5574,16 @@ export const backlog = [
       "IMPLEMENTATION-07 §9.2 (P1/P2)",
       "SPEC-06",
     ],
+    // PLAN-BLOCK 2026-07-12 (run wf_b860acb0) + OWNER CHỐT cùng ngày: SUPERSEDE — bề mặt mới là
+    // canonical, KHÓA route legacy /tasks/:taskId/attachments trong CÙNG WO (đang là lỗ đọc-rộng
+    // in-tenant: chỉ gate read:task, không membership/scan-guard).
     done_when: [
-      "File project/task qua Foundation FileService + file_links (entity_type 'project'/'task' — TÁI DÙNG pattern S2-HR-EMPFILE-1, KHÔNG bảng task_files riêng nếu file_links đủ): POST /tasks/:id/files · GET list · GET :fileId/download (tôn trọng scan_status) · DELETE soft — @RequirePermission TASK.*.FILE_* theo scope/membership; withTenant + company_id",
-      "GET /projects/:id/report: summary tiến độ (đếm task theo status, overdue, assignee workload) — permission + data-scope; limit; envelope API-01",
+      "OWNER CHỐT 2026-07-12 (SUPERSEDE): /tasks/:id/files (FileService + file_links) là bề mặt CANONICAL duy nhất; TRONG CÙNG WO khóa route legacy /tasks/:taskId/attachments (TaskAttachmentsController): thêm membership/data-scope check + scan-guard (hoặc chặn hẳn 410) + regression test chứng minh route cũ KHÔNG còn là cửa đọc-rộng in-tenant né membership; bảng task_attachments PARK (không xóa, không ghi mới); FE S4-FE-TASK-4 nối bề mặt MỚI",
+      "File project/task qua Foundation FileService + file_links (entity_type 'project'/'task' — TÁI DÙNG pattern S2-HR-EMPFILE-1, KHÔNG bảng task_files riêng): POST /tasks/:id/files · GET list · GET :fileId/download · DELETE soft — @RequirePermission TASK.*.FILE_* theo scope/membership KÈM @UseGuards(PermissionGuard) TƯỜNG MINH từng route (guard opt-in per-route trong controller — thiếu là route MỞ); withTenant + company_id",
+      "STRICT scan-guard ở tầng task-file.service TRƯỚC khi gọi FileService.getDownloadUrl: chỉ {Clean, NotRequired} được download, Pending/Failed → 409 (downloadStateDenyReason của FileService KHÔNG chặn Pending/Failed — không được ỷ lại)",
+      "GET /projects/:id/report: summary tiến độ (đếm task theo status, overdue, assignee workload) — @RequirePermission + @UseGuards(PermissionGuard) tường minh + data-scope; limit; envelope API-01",
       "Seed cặp quyền file/report TASK nếu thiếu (migration nối tiếp head, ON CONFLICT DO NOTHING); ghi task_activity_logs TASK_FILE_UPLOADED/DELETED; file_access_logs append-only; audit",
-      "Int-spec RED-trước: deny thiếu quyền · cross-tenant/ngoài-membership 404 (IDOR) · download scan pending bị chặn · report đúng scope; check.sh xanh; FULL gate cho nhánh file access (security-reviewer)",
+      "Int-spec RED-trước: deny thiếu quyền · cross-tenant/ngoài-membership 404 (IDOR) · download scan pending bị chặn · route legacy hết đọc-rộng (regression) · report đúng scope; check.sh xanh; FULL gate cho nhánh file access (security-reviewer)",
     ],
   },
   {
@@ -6000,7 +6005,7 @@ export const backlog = [
     module: "INT",
     layer: "BE",
     title:
-      "Tích hợp LEAVE → NOTI qua OutboxNotificationBridge (INT-1): event-type leave.request.{submitted,approved,rejected,cancelled,revoked} → NOTI intake, recipient §9.4 — hiện event LEAVE rơi im lặng, requester không được báo",
+      "Tích hợp LEAVE → NOTI qua OutboxNotificationBridge (INT-1): event-type leave.request.{submitted,approved,rejected,cancelled,revoked} → NOTI intake, recipient theo SPEC-05 §19.1/§14.19 — hiện event LEAVE rơi im lặng, requester không được báo",
     zone: "red",
     status: "todo",
     paths: [
@@ -6015,15 +6020,20 @@ export const backlog = [
     depends_on: ["S4-INT-1"],
     src: [
       "IMP02-STORY-102 (P0)",
-      "SPEC-08 §9.4/§9.5",
+      "SPEC-05 §19.1 (bảng recipient LEAVE — NGUỒN SỰ THẬT) + §14.19 (self-cancel Pending PHẢI báo Manager/Approver)",
+      "SPEC-08 §9.5 (engine generic — KHÔNG phải nguồn recipient LEAVE)",
       "notification-event-catalog.const.ts (LEAVE_REQUEST_*)",
       "tiền lệ consumer attendance-leave-sync",
-      "leave-approval.service.ts (producer outbox đã phát, chưa ai tạo notification)",
+      "leave-request.service.ts L344 (hủy Pending) + leave-revoke.service.ts L221 (hủy/thu hồi Approved) — HAI producer cùng eventType cancelled",
     ],
+    // PLAN-BLOCK 2026-07-12 (run wf_b860acb0): plan-reviewer bắt recipient mapping sai SPEC-05 —
+    // các ràng buộc dưới đã bake. CHỈ chạy lại SAU khi #179 (INT-4) + #181 (INT-5) merge (cùng append
+    // bridge wiring — tránh conflict providers).
     done_when: [
       "Đăng ký event-type LEAVE (submitted/approved/rejected/cancelled/revoked) + recipient-resolver vào OutboxNotificationBridge (INT-1) — KHÔNG tự dựng consumer riêng (owner chốt generic bridge); map outbox eventType (dạng chấm) → NOTI eventCode (LEAVE_REQUEST_*) lấy VERBATIM từ notification-event-catalog.const.ts (bài học code-drift)",
-      "Recipient đúng §9.4: approved/rejected/cancelled/revoked → requester (payload.userId); submitted → approver theo cây duyệt; LOẠI actor; dedupe + delivery log; recipient cùng company (KHÔNG rò cross-tenant)",
-      "consumerName/registration DUY NHẤT toàn hệ; append vào bridge wiring (KHÔNG rewrite khối INT-1); serialize merge sau INT-1",
+      "Recipient theo SPEC-05 §19.1 + §14.19 (KHÔNG phải SPEC-08 §9.4 — spec THẮNG WO khi lệch): approved/rejected → requester · submitted → approver (direct_manager) · cancelled/revoked RẼ NHÁNH theo payload.fromStatus: employee tự hủy Pending → Manager/Approver (KHÔNG phải '0 notification'); owner/HR hủy/thu hồi Approved → Employee + Manager; engine actor-exclusion tự loại người khởi tạo; dedupe + delivery log; recipient cùng company",
+      "resolveRecipients cho cancelled PHẢI phân biệt 2 producer (leave-request.service L344 hủy-Pending vs leave-revoke.service L221 hủy-Approved) qua payload.fromStatus — KHÔNG mapping phẳng; tái dùng leave-approver.reader; reader chạy TRONG withTenant(tx) + bind company_id (mất bind = rò cross-tenant); int-spec 2 kịch bản cancelled tách biệt + cross-tenant trồng direct_manager thuộc company khác chứng minh recipient bị lọc",
+      "consumerName/registration DUY NHẤT toàn hệ (không trùng attendance-leave-sync); append vào bridge wiring (KHÔNG rewrite khối INT-1/INT-4/INT-5); serialize merge SAU khi #179 + #181 đã vào master",
       "Int-spec RED-trước: mỗi event → đúng số notification & recipient · actor không tự nhận · idempotent khi retry outbox · cross-tenant deny; FULL gate security-reviewer + silent-failure-hunter PASS",
     ],
   },
