@@ -1,47 +1,26 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-11 07:14Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-12 01:12Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
-### 🟡 S5-DEVOPS-1 — Staging/UAT readiness: env + deploy pipeline + migration/seed chạy từ DB trống + test account đủ role (Employee/Manager/HR/Admin/Super Admin) — đối chiếu topology PROD/DEV-ONLINE đang chạy
-- **zone**: yellow · **skills**: code-review
-- **sửa ở đâu (paths)**: `.github/workflows/**`, `docker-compose.yml`, `.env.example`, `scripts/**`, `mediaos.ps1`, `docs/plans/S5-DEVOPS-1.md`
-- **done_when (đích hội tụ)**:
-  - [ ] Staging/UAT env có URL ổn định (đối chiếu topology PROD + DEV-ONLINE đang chạy: NSSM API + cloudflared tunnel + Pages — ghi rõ cái nào là staging/UAT, không dựng trùng); pipeline deploy BE+FE chạy được
-  - [ ] Migration + seed chạy sạch từ DB trống (0000→head) trên env staging; test account đủ 5 role có sẵn (seed hoặc script), không secret thật trong repo
-  - [ ] Checklist môi trường IMPLEMENTATION-08 §10.3 đạt; Known Blockers ghi rõ nếu READY-001..008 chưa đủ
-  - [ ] check.sh xanh; LIGHT gate
-
-### 🟡 HR-PROFILE-UI-2 — Hồ sơ nhân sự phần 2: gom nhóm bảng 1/2 cấp (Tùy chỉnh cột) + export danh sách theo quyền export:employee + sort server-side cho cột mới (allowlist HR_EMPLOYEE_SORT_FIELDS)
-- **zone**: yellow · **skills**: code-review
-- **sửa ở đâu (paths)**: `packages/contracts/src/hr/**`, `packages/ui/src/**`, `apps/api/src/employees/**`, `apps/app/src/routes/hr/employees/**`
-- **phụ thuộc**: HR-PROFILE-UI-1✓
-- **done_when (đích hội tụ)**:
-  - [ ] Gom nhóm 1/2 cấp trong panel Tùy chỉnh cột (group theo đơn vị/trạng thái…) — TanStack grouping, KHÔNG lib bảng mới
-  - [ ] GET /hr/employees/export gate export:employee — áp data-scope + masking per-row NHƯ list (export = lộ dữ liệu, FULL gate); cột PII chỉ vào file khi caller có view-sensitive
-  - [ ] Mở rộng HR_EMPLOYEE_SORT_FIELDS (allowlist — startDate…) + header sort FE; deny-path: export thiếu quyền 403, export ngoài scope không có row
+_Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `status` = in_progress trong backlog.mjs.
 
 ## Hàng đợi
 
 **READY (phụ thuộc đã xong — làm được ngay):**
-- 🔴 `S4-DASH-CATALOG-2` Bù đủ catalog widget DASH (11 widget còn lại của DB-07 §14.3) + reconcile mâu thuẫn nội bộ DB-07 §8.5 ↔ §14.3 + cặp refresh:dashboard-cache
-- 🔴 `S4-INT-1` Tích hợp TASK → NOTI: wiring event producer (outbox) → consumer intake, tạo notification đúng recipient cho mọi event TASK/PROJECT — E2E task→noti — crown
-- 🟢 `S4-FE-DASH-1` FE Dashboard shell + P0 widgets: DashboardMePage · DashboardWidgetGrid · WidgetCard · MyTasksWidget · TaskAlertsWidget · NotificationsWidget (P0)
+- 🟡 `S4-INT-2` Tích hợp DASH cache invalidation từ event TASK/NOTI/ATT/LEAVE (POST /internal/v1/dashboard/cache/invalidate) — chỉ mã do producer thật phát (§11.5 reconcile)
+- 🟢 `S4-FE-DASH-2` FE Dashboard widget mở rộng: AttendanceTodayWidget · PendingLeaveWidget · ProjectProgressWidget · HrOverviewWidget + DashboardTypeSwitcher (P1)
 - 🟡 `S4-QA-1` QA Sprint 4 permission/data-scope + deny-path: TASK CRUD/assign/status · NOTI own-scope/mark-read · DASH widget visibility theo quyền (coverage ≥80%)
 - 🟡 `S4-TASK-BE-5` BE TASK file (project/task) qua FileService + file_links + Project progress report (GET /projects/:id/report) — P1/P2 (IMP02-STORY-075/076)
+- 🟢 `S4-FE-DASH-3` FE DashboardConfigPage (cấu hình widget theo role/user/dashboard-type: sort/enable/size) — P1/P2 (IMP02-STORY-091)
 - 🔴 `HR-PERF-1` Tối ưu hiệu năng nền tảng: (a) code-split router theo module (bundle apps/app 1.55MB→lazy route) · (b) batch permission list HR (2 can()/row → canBatch preload company-grants + getObjectGrantsForMany, GIỮ NGUYÊN ngữ nghĩa object-DENY priority-1) · (c) pg_trgm GIN index search nhân sự khi headcount >1–2k — crown ở (b)
 - 🔴 `HR-IDENTITY-READ-1` OWNER CHỐT: lộ identity_number/issue_date/issue_place (CCCD §14.18) qua read surface — cần gate RIÊNG cao hơn view-sensitive (vd view-identity:employee, seed per-pair + audit-on-reveal như salary) — hiện read DTO chủ đích KHÔNG chứa identity_*
-- 🟢 `S4-FE-NOTI-2` FE Notification Events admin (UI-NOTI-SCREEN-004): bảng event catalog (search/filter module·status) + toggle bật/tắt event (confirm) — gate view/update:notification-config (đã allowlisted)
-- 🟢 `S4-FE-NOTI-3` FE Notification Delivery Logs read-only (UI-NOTI-SCREEN-006): bảng append-only + filter channel/status/recipient/time — gate view:notification-delivery-log (đã allowlisted)
-- 🟡 `S4-QA-TASK-1` QA TASK permission/data-scope + deny-path (tách khỏi S4-QA-1 để chạy ngay): CRUD/assign/status-FSM/kanban/comment/checklist — coverage ≥80%
-- 🟡 `S4-QA-NOTI-1` QA NOTI permission/own-scope + deny-path (tách khỏi S4-QA-1): own-scope/mark-read idempotent · intake dedupe/actor-exclusion · admin-config deny — coverage ≥80%
-- 🟡 `S5-QA-GATE-LANEDB-1` Vá false-green cổng local: harness/check.sh chạy `pnpm test` KHÔNG set LANE_DB ⇒ ~70 int-spec deny-path/IDOR bị skip im lặng — làm cổng LOUD (đếm+in N spec SKIPPED, cảnh báo khi vượt ngưỡng) hoặc tự trỏ lane-DB khớp CI
-- 🟡 `S5-FND-JOBS-OBS-1` System Jobs observability: GET /foundation/system-jobs đọc lịch sử system_job_runs (retention/temp-cleanup: last-run/status/duration/error) + màn FE read-only — khớp cặp seed orphan view:foundation-job (hiện 0 endpoint)
+- 🔴 `S4-INT-3` Tích hợp LEAVE → NOTI qua OutboxNotificationBridge (INT-1): event-type leave.request.{submitted,approved,rejected,cancelled,revoked} → NOTI intake, recipient §9.4 — hiện event LEAVE rơi im lặng, requester không được báo
+- 🔴 `S4-INT-4` Tích hợp ATT → NOTI: bổ sung producer outbox trong ATT (adjustment submit/approve/reject · remote-work submit/approve/reject/cancel) + đăng ký event-type + recipient-resolver vào OutboxNotificationBridge — ATT hiện CHƯA phát event nào
+- 🔴 `S4-INT-5` Tích hợp HR/AUTH → NOTI: HR tạo employee → activation/welcome notification (mảnh thiếu STORY-098) + AUTH password-reset-requested/account-locked → notify chủ tài khoản — producer HR/AUTH + đăng ký vào OutboxNotificationBridge
 
 **CHỜ (kẹt phụ thuộc):**
-- `S4-INT-2` Tích hợp DASH cache invalidation từ event TASK/NOTI/ATT/LEAVE (POST /internal/v1/dashboard/cache/invalidate) — chỉ mã do producer thật phát (§11.5 reconcile) ⏳ cần: S4-INT-1
-- `S4-FE-DASH-2` FE Dashboard widget mở rộng: AttendanceTodayWidget · PendingLeaveWidget · ProjectProgressWidget · HrOverviewWidget + DashboardTypeSwitcher (P1) ⏳ cần: S4-FE-DASH-1
 - `S4-QA-2` QA Sprint 4 E2E + regression sign-off: flow task→noti→dash (§15.1) + notification deep link + dashboard degraded + regression S0–S3 ⏳ cần: S4-INT-2, S4-FE-DASH-2, S4-QA-1
 - `S5-QA-E2E-1` Integration freeze + system smoke P0 + cross-module E2E: login→Home Portal→module workspace→check-in→nghỉ phép→task→notification→dashboard (WS-B/C) ⏳ cần: S4-QA-2
 - `S5-BE-CONTRACT-1` API contract & OpenAPI/Swagger chuẩn hoá theo module + FE integration hardening (401/403/422/500 mapping, request-id, idempotency, query invalidation sau mutation) — WS-D ⏳ cần: S4-QA-2
@@ -58,20 +37,16 @@
 - `S6-REL-1` Release Candidate build + release notes + Go-live runbook + deployment/rollback rehearsal + monitoring/alerting/support readiness (WS7/WS8/WS9) — crown release ⏳ cần: S6-QA-FINAL-1, S6-SEC-1, S6-PERF-DB-1
 - `S6-GOLIVE-1` Final Sign-off · Go/No-go · Go-live execution · Handoff (admin/user/support guide · known issues · post-go-live backlog) — WS10 ⏳ cần: S6-REL-1
 - `S4-FE-TASK-4` FE TaskFilePanel (upload/list/download/delete theo quyền) + ProjectProgressCard (summary tiến độ) — P1/P2 (IMP02-STORY-075/076) ⏳ cần: S4-TASK-BE-5
-- `S4-FE-DASH-3` FE DashboardConfigPage (cấu hình widget theo role/user/dashboard-type: sort/enable/size) — P1/P2 (IMP02-STORY-091) ⏳ cần: S4-DASH-BE-3, S4-FE-DASH-1
-- `S4-INT-3` Tích hợp LEAVE → NOTI qua OutboxNotificationBridge (INT-1): event-type leave.request.{submitted,approved,rejected,cancelled,revoked} → NOTI intake, recipient §9.4 — hiện event LEAVE rơi im lặng, requester không được báo ⏳ cần: S4-INT-1
-- `S4-INT-4` Tích hợp ATT → NOTI: bổ sung producer outbox trong ATT (adjustment submit/approve/reject · remote-work submit/approve/reject/cancel) + đăng ký event-type + recipient-resolver vào OutboxNotificationBridge — ATT hiện CHƯA phát event nào ⏳ cần: S4-INT-1
-- `S4-INT-5` Tích hợp HR/AUTH → NOTI: HR tạo employee → activation/welcome notification (mảnh thiếu STORY-098) + AUTH password-reset-requested/account-locked → notify chủ tài khoản — producer HR/AUTH + đăng ký vào OutboxNotificationBridge ⏳ cần: S4-INT-1
 
 **🛑 BLOCKED:**
-- `S4-DASH-BE-3` BE Dashboard widget config CRUD (GET /dashboard/configs, PATCH /configs/:id) theo company/role/user/dashboard-type + audit — P1/P2 (IMP02-STORY-091)
+- `S4-DASH-CATALOG-2` Bù đủ catalog widget DASH (11 widget còn lại của DB-07 §14.3) + reconcile mâu thuẫn nội bộ DB-07 §8.5 ↔ §14.3 + cặp refresh:dashboard-cache
 
-**Đã xong (v2):** `S0-GOV-1`, `S0-CI-1`, `S0-CI-2`, `S0-ENV-1`, `S0-FND-DB-1`, `S0-FND-SEED-1`, `S0-AUTH-DB-1`, `S0-API-CORE-1`, `S0-FE-CORE-1`, `S0-FE-API-1`, `S0-QA-1`, `S1-FND-AUDIT-1`, `S1-FND-SETTING-1`, `S1-FND-FILE-1`, `S1-FND-SEQ-1`, `S1-FND-MODULE-1`, `S1-FND-WIRE-1`, `S1-FE-LAYOUT-1`, `S1-FE-REGISTRY-1`, `S1-FE-QUERY-WIRE-1`, `S1-QA-FND-1`, `S1-QA-DEBT-1`, `S1-INT-MOUNT-1`, `S2-AUTH-DB-1`, `S2-AUTH-DB-2`, `S2-AUTH-SEED-1`, `S2-AUTH-BE-1`, `S2-AUTH-BE-2`, `S2-AUTH-BE-3`, `S2-AUTH-BE-4`, `S2-AUTH-BE-5`, `S2-HR-DB-1`, `S2-HR-SEED-1`, `S2-HR-BE-1`, `S2-HR-BE-2`, `S2-HR-BE-3`, `S2-HR-BE-4`, `S2-FE-AUTH-1`, `S2-FE-HR-1`, `S2-FE-HR-2`, `S2-FE-HR-3`, `S2-INT-1`, `S2-INT-2`, `S2-QA-1`, `S2-QA-2`, `S2-QA-DEBT-1`, `S2-AUTH-HARDEN-1`, `S2-HR-MASK-1`, `S2-HR-EMP-LEGACY-LOCK-1`, `S2-AUTH-BRAND-1`, `S2-FE-AUTH-2`, `S2-FE-AUTH-3`, `S2-AUTH-BE-6`, `S2-FE-AUTH-4`, `S2-AUTH-BE-7`, `S2-FE-AUTH-5`, `S2-FE-FND-1`, `S2-FE-FND-2`, `S2-FND-BE-1`, `S2-FE-FND-3`, `S2-FE-FND-4`, `S2-FND-BE-2`, `S2-FE-FND-5`, `S2-FND-BE-3`, `S2-FE-FND-6`, `S2-FE-HR-4`, `S2-FE-HR-5`, `S2-FE-HR-6`, `S2-HR-BE-6`, `S2-FE-HR-7`, `S2-HR-BE-7`, `S2-FE-HR-8`, `S3-ATT-DB-1`, `S3-LEAVE-DB-1`, `S3-FND-SEEDRUN-1`, `S3-ATT-SEED-1`, `S3-LEAVE-SEED-1`, `S3-ATT-BE-1`, `S3-ATT-BE-2`, `S3-ATT-BE-3`, `S3-LEAVE-BE-1`, `S3-LEAVE-BE-2`, `S3-LEAVE-BE-3`, `S3-LEAVE-BE-4`, `S3-INT-1`, `S3-FE-REGISTRY-1`, `S3-FE-ATT-1`, `S3-FE-ATT-2`, `S3-FE-LEAVE-1`, `S3-FE-LEAVE-2`, `S3-QA-1`, `S3-QA-2`, `S3-ATT-BE-4`, `S3-ATT-BE-5`, `S3-ATT-BE-6`, `S3-FE-ATT-3`, `S3-FE-ATT-4`, `S3-FE-ATT-5`, `S3-FE-ATT-6`, `S3-LEAVE-BE-5`, `S3-LEAVE-BE-6`, `S3-FE-LEAVE-3`, `S3-FE-LEAVE-4`, `S3-FE-LEAVE-5`, `S3-FE-LEAVE-6`, `S2-AUTH-BE-8`, `S2-AUTH-BE-9`, `S2-AUTH-BE-10`, `S2-AUTH-CAP-1`, `S2-AUTH-DB-4`, `S2-AUTH-BE-11`, `S2-AUTH-BE-12`, `S2-FE-ACCT-SEC-1`, `S2-FE-SYS-SEC-1`, `S2-AUTH-DB-3`, `S2-FE-AUTH-6`, `S2-AUTH-DOC-1`, `S2-FND-BE-4`, `S2-FND-BE-5`, `S2-FND-BE-6`, `S2-FND-DB-1`, `S2-FND-SEED-2`, `S2-FND-SEED-3`, `S2-FND-SEED-4`, `S3-LEAVE-SEED-2`, `S2-FND-BE-8`, `S2-FND-JOBS-1`, `S2-FND-FILE-2`, `S2-FE-FND-7`, `S2-FND-DB-2`, `S2-FND-CONTRACT-1`, `S2-FND-DOC-1`, `S2-AUTH-ROLEMEM-1`, `S2-AUTH-PERMUX-1`, `S2-AUTH-USEROPS-1`, `S4-TASK-DB-1`, `S4-TASK-RECON-1`, `S4-TASK-RECON-2`, `S4-TASK-SEED-1`, `S4-TASK-BE-1`, `S4-TASK-BE-2`, `S4-TASK-BE-3`, `S4-TASK-BE-4`, `S4-NOTI-DB-1`, `S4-NOTI-SEED-1`, `S4-NOTI-SEED-2`, `S4-NOTI-BE-1`, `S4-NOTI-BE-2`, `S4-NOTI-BE-3`, `S4-NOTI-BE-4`, `S4-DASH-DB-1`, `S4-DASH-SEED-1`, `S4-DASH-BE-1`, `S4-DASH-SEED-2`, `S4-DASH-BE-2`, `S4-FE-REGISTRY-1`, `S4-FE-TASK-1`, `S4-FE-TASK-CLEANUP-1`, `S4-FE-TASK-2`, `S4-FE-TASK-3`, `S4-FE-NOTI-1`, `S4-FE-NOTI-CLEANUP-1`, `S3-FE-LEAVE-7`, `S2-HR-EMPFILE-1`, `S2-FE-HR-9`, `S2-FND-SYSSET-1`, `S2-FE-FND-8`, `S3-ATT-EXPORT-1`, `HR-PROFILE-UI-1`
+**Đã xong (v2):** `S0-GOV-1`, `S0-CI-1`, `S0-CI-2`, `S0-ENV-1`, `S0-FND-DB-1`, `S0-FND-SEED-1`, `S0-AUTH-DB-1`, `S0-API-CORE-1`, `S0-FE-CORE-1`, `S0-FE-API-1`, `S0-QA-1`, `S1-FND-AUDIT-1`, `S1-FND-SETTING-1`, `S1-FND-FILE-1`, `S1-FND-SEQ-1`, `S1-FND-MODULE-1`, `S1-FND-WIRE-1`, `S1-FE-LAYOUT-1`, `S1-FE-REGISTRY-1`, `S1-FE-QUERY-WIRE-1`, `S1-QA-FND-1`, `S1-QA-DEBT-1`, `S1-INT-MOUNT-1`, `S2-AUTH-DB-1`, `S2-AUTH-DB-2`, `S2-AUTH-SEED-1`, `S2-AUTH-BE-1`, `S2-AUTH-BE-2`, `S2-AUTH-BE-3`, `S2-AUTH-BE-4`, `S2-AUTH-BE-5`, `S2-HR-DB-1`, `S2-HR-SEED-1`, `S2-HR-BE-1`, `S2-HR-BE-2`, `S2-HR-BE-3`, `S2-HR-BE-4`, `S2-FE-AUTH-1`, `S2-FE-HR-1`, `S2-FE-HR-2`, `S2-FE-HR-3`, `S2-INT-1`, `S2-INT-2`, `S2-QA-1`, `S2-QA-2`, `S2-QA-DEBT-1`, `S2-AUTH-HARDEN-1`, `S2-HR-MASK-1`, `S2-HR-EMP-LEGACY-LOCK-1`, `S2-AUTH-BRAND-1`, `S2-FE-AUTH-2`, `S2-FE-AUTH-3`, `S2-AUTH-BE-6`, `S2-FE-AUTH-4`, `S2-AUTH-BE-7`, `S2-FE-AUTH-5`, `S2-FE-FND-1`, `S2-FE-FND-2`, `S2-FND-BE-1`, `S2-FE-FND-3`, `S2-FE-FND-4`, `S2-FND-BE-2`, `S2-FE-FND-5`, `S2-FND-BE-3`, `S2-FE-FND-6`, `S2-FE-HR-4`, `S2-FE-HR-5`, `S2-FE-HR-6`, `S2-HR-BE-6`, `S2-FE-HR-7`, `S2-HR-BE-7`, `S2-FE-HR-8`, `S3-ATT-DB-1`, `S3-LEAVE-DB-1`, `S3-FND-SEEDRUN-1`, `S3-ATT-SEED-1`, `S3-LEAVE-SEED-1`, `S3-ATT-BE-1`, `S3-ATT-BE-2`, `S3-ATT-BE-3`, `S3-LEAVE-BE-1`, `S3-LEAVE-BE-2`, `S3-LEAVE-BE-3`, `S3-LEAVE-BE-4`, `S3-INT-1`, `S3-FE-REGISTRY-1`, `S3-FE-ATT-1`, `S3-FE-ATT-2`, `S3-FE-LEAVE-1`, `S3-FE-LEAVE-2`, `S3-QA-1`, `S3-QA-2`, `S3-ATT-BE-4`, `S3-ATT-BE-5`, `S3-ATT-BE-6`, `S3-FE-ATT-3`, `S3-FE-ATT-4`, `S3-FE-ATT-5`, `S3-FE-ATT-6`, `S3-LEAVE-BE-5`, `S3-LEAVE-BE-6`, `S3-FE-LEAVE-3`, `S3-FE-LEAVE-4`, `S3-FE-LEAVE-5`, `S3-FE-LEAVE-6`, `S2-AUTH-BE-8`, `S2-AUTH-BE-9`, `S2-AUTH-BE-10`, `S2-AUTH-CAP-1`, `S2-AUTH-DB-4`, `S2-AUTH-BE-11`, `S2-AUTH-BE-12`, `S2-FE-ACCT-SEC-1`, `S2-FE-SYS-SEC-1`, `S2-AUTH-DB-3`, `S2-FE-AUTH-6`, `S2-AUTH-DOC-1`, `S2-FND-BE-4`, `S2-FND-BE-5`, `S2-FND-BE-6`, `S2-FND-DB-1`, `S2-FND-SEED-2`, `S2-FND-SEED-3`, `S2-FND-SEED-4`, `S3-LEAVE-SEED-2`, `S2-FND-BE-8`, `S2-FND-JOBS-1`, `S2-FND-FILE-2`, `S2-FE-FND-7`, `S2-FND-DB-2`, `S2-FND-CONTRACT-1`, `S2-FND-DOC-1`, `S2-AUTH-ROLEMEM-1`, `S2-AUTH-PERMUX-1`, `S2-AUTH-USEROPS-1`, `S4-TASK-DB-1`, `S4-TASK-RECON-1`, `S4-TASK-RECON-2`, `S4-TASK-SEED-1`, `S4-TASK-BE-1`, `S4-TASK-BE-2`, `S4-TASK-BE-3`, `S4-TASK-BE-4`, `S4-NOTI-DB-1`, `S4-NOTI-SEED-1`, `S4-NOTI-SEED-2`, `S4-NOTI-BE-1`, `S4-NOTI-BE-2`, `S4-NOTI-BE-3`, `S4-NOTI-BE-4`, `S4-DASH-DB-1`, `S4-DASH-SEED-1`, `S4-DASH-BE-1`, `S4-DASH-SEED-2`, `S4-DASH-BE-2`, `S4-INT-1`, `S4-FE-REGISTRY-1`, `S4-FE-TASK-1`, `S4-FE-TASK-CLEANUP-1`, `S4-FE-TASK-2`, `S4-FE-TASK-3`, `S4-FE-NOTI-1`, `S4-FE-NOTI-CLEANUP-1`, `S4-FE-DASH-1`, `S5-DEVOPS-1`, `S3-FE-LEAVE-7`, `S2-HR-EMPFILE-1`, `S2-FE-HR-9`, `S2-FND-SYSSET-1`, `S2-FE-FND-8`, `S4-DASH-BE-3`, `S3-ATT-EXPORT-1`, `HR-PROFILE-UI-1`, `HR-PROFILE-UI-2`, `S4-FE-NOTI-2`, `S4-FE-NOTI-3`, `S4-QA-TASK-1`, `S4-QA-NOTI-1`, `S5-QA-GATE-LANEDB-1`, `S5-FND-JOBS-OBS-1`
 
 ## Trạng thái repo
 
-- **branch**: `master` · **file đang đổi (dirty)**: 4
-- **migration head**: idx 170 — `0490_s4_notiseed2_task_be3_event_catalog` (171 migration)
+- **branch**: `feat/s5-fe-deploy-dispatch` · **file đang đổi (dirty)**: 3
+- **migration head**: idx 172 — `0492_hr_profile_ui2_export_employee_sensitive` (173 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
 
@@ -79,18 +54,18 @@
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
-| `9839e0a` | 2026-07-11 | fix(web-core): nới testTimeout 20s riêng api-client.spec — loadFresh ~1s/test trên runner CI lạnh, trần 5s đỏ giả 2 lần liên tiếp (PR #159) (#160) |
-| `c8f66df` | 2026-07-11 | wip(S4-FE-TASK-3): FE Task collaboration — Kanban drag-drop, comment mention, checklist tick, activity timeline (SPEC-06 §13.8/§14.13/§14.14/§14.16/§14.19) (#158) |
-| `9a501d5` | 2026-07-11 | feat(dash): S4-DASH-BE-2 — Widget data services (7 in-sprint) + cache TTL + degraded state 🔴 (#159) |
-| `e8c5f83` | 2026-07-11 | feat(noti): S4-NOTI-SEED-2 — vá catalog notification_events khớp registry §9.5 cho event TASK BE-3 🔴 (#157) |
-| `23e3edb` | 2026-07-11 | feat(hr): HR-PROFILE-UI-1(+1b) — nâng cấp màn Hồ sơ nhân sự + mở rộng field hybrid + PATCH cá nhân PII-gated + perf P1 (#156) |
-| `16414b6` | 2026-07-11 | wip(S4-FE-TASK-2): FE Task core screens — List/My/Detail/Form/Assign/StatusSelect (SPEC-06 §13.5-13.9/§14) (#154) |
-| `3629d02` | 2026-07-11 | wip(S4-TASK-BE-4): Kanban board+move, comment/mention, checklist/items, activity feed (#155) |
-| `e9ac4ca` | 2026-07-11 | chore(harness): regen STATUS — chốt S4-NOTI-BE-4 (#149) · S4-DASH-SEED-2 (#152) · S4-DASH-BE-1 (#153) |
-| `9eba507` | 2026-07-11 | feat(dash): S4-DASH-BE-1 — Dashboard resolver (/me · /types · 4 route type) + widget registry 2 tầng gate 🔴 (#153) |
-| `e340a12` | 2026-07-11 | feat(dash): S4-DASH-SEED-2 — mig 0488 backfill read:dashboard cho manager/hr (lỡ blanket 0100) 🔴 (#152) |
-| `083f4b4` | 2026-07-11 | chore(harness): mở WO S4-NOTI-SEED-2 (vá catalog 0481 lệch registry §9.5 — ĐK-2 plan-review BE-3) + gate S4-INT-1 theo nó + ghi chú route canonical vào done_when S4-TASK-BE-3 (PR #150) (#151) |
-| `d3d52db` | 2026-07-11 | feat(task): BE-3 task actions crown-FSM — assign/change-status/priority/deadline/watch (SPEC-06 §14) (#150) |
+| `fd6dd5d` | 2026-07-12 | feat(ci): workflow_dispatch cho Apps — Frontend CI (nghiệm pipeline FE + nút redeploy tay) |
+| `0ac11f6` | 2026-07-12 | S5-DEVOPS-1: Staging/UAT readiness — migrate-from-empty verify + seed 4 tài khoản UAT + env formalize + runbook (#174) |
+| `a868679` | 2026-07-11 | docs(claude): §5 — fixture giống-secret phải ghép chuỗi (tránh gitleaks generic-api-key false-block) + thủ tục quét net-diff/master trước khi --admin bypass (#172) |
+| `9cda20d` | 2026-07-11 | wip(S4-FE-NOTI-3): FE Notification Delivery Logs read-only viewer (UI-NOTI-SCREEN-006) (#169) |
+| `56c7641` | 2026-07-11 | wip(qagatelanedb): check.sh LOUD-detect + opt-in provision int-spec skip thieu LANE_DB (#170) |
+| `47f4b3a` | 2026-07-11 | feat(foundation): S5-FND-JOBS-OBS-1 — GET /foundation/system-jobs observability (read-only, view:foundation-job) + SystemJobsPage (#171) |
+| `a95badb` | 2026-07-11 | wip(qanoti1-permission-denypath): S4-QA-NOTI-1 — unified NOTI permission/own-scope/deny-path QA sign-off (RED-first) + gap fills (#167) |
+| `85ee393` | 2026-07-11 | feat(int): S4-INT-1 — TASK→NOTI integration (OutboxNotificationBridge generic, 8 mã, §9.4 recipient, idempotent, zero-migration) 🔴 (#168) |
+| `16b319c` | 2026-07-11 | auto/S4 FE NOTI 2 (#166) |
+| `6dbbc74` | 2026-07-11 | test(qa): S4-QA-TASK-1 — QA TASK permission/data-scope + deny-path (canonical FSM + collab) (#165) |
+| `b93b98e` | 2026-07-11 | auto/S4 FE DASH 1 (#164) |
+| `993914c` | 2026-07-11 | feat(hr): HR-PROFILE-UI-2 — HR export (export:employee gate + data-scope + PII mask) + grouping/sort server-side (mig 0492) 🔴 (#163) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._

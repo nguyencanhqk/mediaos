@@ -5778,7 +5778,7 @@ export const backlog = [
     module: "HR",
     layer: "BE",
     title:
-      "OWNER CHỐT: lộ identity_number/issue_date/issue_place (CCCD §14.18) qua read surface — cần gate RIÊNG cao hơn view-sensitive (vd view-identity:employee, seed per-pair + audit-on-reveal như salary) — hiện read DTO chủ đích KHÔNG chứa identity_*",
+      "Lộ identity_number/issue_date/issue_place (CCCD §14.18) qua read surface — OWNER ĐÃ CHỐT 2026-07-12: cặp MỚI view-identity:employee (is_sensitive) + inline detail + audit-on-reveal mirror salary, KHÔNG role-grant sẵn",
     zone: "red",
     status: "todo",
     paths: [
@@ -5792,11 +5792,13 @@ export const backlog = [
     src: [
       "SPEC-03 §14.18 (identity = nhóm giấy tờ nhạy cảm cao)",
       "Mẫu gate+audit: revealSalary (hr-read.service.ts) — reveal ⟹ audit atomically",
+      "Tiền lệ seed: 0444 — sensitive pair KHÔNG role-grant (view-salary/update-salary), admin gán per-role/per-object qua UI",
     ],
     done_when: [
-      "Owner chốt: cặp quyền mới (view-identity:employee, is_sensitive) hay tái dùng view-sensitive; nếu cặp mới → migration seed per-pair + data_scope mirror ĐÚNG (bài học §13)",
-      "Reveal identity ⟹ audit trong cùng tx (mirror view-salary); deny-path RED-trước: thiếu quyền → null, wildcard không mở, cross-tenant deny",
-      "FE màn Hồ sơ render nhóm CMND/CCCD chỉ khi có quyền; FULL gate security-reviewer + database-reviewer PASS",
+      "OWNER CHỐT 2026-07-12 (đã quyết, KHÔNG mở lại): (a) cặp MỚI view-identity:employee is_sensitive=true — KHÔNG tái dùng view-sensitive; (b) migration CHỈ seed pair vào catalog permissions, KHÔNG role-grant (mirror tiền lệ view-salary 0444 — tránh blanket-grant drift); (c) identity_* hiện INLINE trong detail DTO (không endpoint reveal riêng), fail-closed = null khi thiếu quyền",
+      "Reveal identity ⟹ audit trong cùng tx (mirror revealSalary hr-read.service.ts — per-row resourceId, isSensitive=true nên wildcard KHÔNG mở); deny-path RED-trước: thiếu quyền → null, wildcard không mở, cross-tenant deny",
+      "Nâng gate duyệt change-request cho identity fields: view-sensitive → view-identity (profile-change-request.service.ts — nhất quán với read gate mới)",
+      "FE màn Hồ sơ render nhóm CMND/CCCD chỉ khi có capability view-identity (thêm cặp vào SENSITIVE_CAPABILITY_ALLOWLIST /auth/me — bài học HR-PROFILE-UI-1); FULL gate security-reviewer + database-reviewer PASS",
     ],
   },
 
