@@ -492,19 +492,18 @@ function Invoke-DevOnlineFast {
 }
 
 # ── S5-DEVOPS-1: migrate-verify (DB ephemeral) + seed-staging (4 tài khoản UAT) ──────────
-# Cả hai lệnh CHỈ dành cho cluster dev/dev-online cục bộ. GUARD kép: (1) chặn khi .env active = prod;
-# (2) seed-staging chỉ chấp nhận DB đích mediaos_dev. KHÔNG rebuild dist mà PROD service đang chạy
-# (landmine prod-dist-shared) — chỉ gọi bash/node script có sẵn.
+# Cả hai lệnh CHỈ dành cho cluster dev/dev-online cục bộ. LƯU Ý: KHÔNG check `.env` active — trên máy
+# prod-host `.env` LUÔN là .env.prod (PROD service đọc nó) trong khi 2 lệnh này Import-DevOnlineEnv
+# override session env; check .env chỉ chặn oan luồng UAT hợp lệ. Guard THẬT: (1) seed-staging chỉ chấp
+# nhận DB đích mediaos_dev + script tự blocklist 'mediaos'; (2) migrate-verify chỉ CREATE/DROP tên
+# ^mediaos_migverify_ qua admin conn 'postgres' (blocklist mediaos/mediaos_dev trong script).
+# KHÔNG rebuild dist mà PROD service đang chạy (landmine prod-dist-shared) — chỉ gọi bash/node script có sẵn.
 
 # Chứng minh migrate-from-empty (0000→head) trên DB ephemeral mediaos_migverify_* — tự DROP ở trap EXIT,
 # KHÔNG chạm mediaos/mediaos_dev. Host Windows không có psql → fallback psql TRONG container qua
 # MIGVERIFY_PSQL (script chỉ đổi cách gọi psql, guard/URL giữ nguyên).
 function Invoke-MigrateVerify {
   Write-Step "MIGRATE-VERIFY — migrate-from-empty trên DB ephemeral (tự DROP, không chạm mediaos/mediaos_dev)"
-  if ((Get-ActiveEnv) -eq ".env.prod") {
-    Write-Err "GUARD: .env active = .env.prod — từ chối. Chuyển env dev trước ('m dev' hoặc dev-online)."
-    exit 1
-  }
   $bash = Get-Command bash -ErrorAction SilentlyContinue
   if (-not $bash) { Write-Err "Không thấy bash (cần Git Bash) — không chạy được scripts/migrate-verify-ephemeral.sh"; exit 1 }
   Import-DevOnlineEnv   # DATABASE_DIRECT_URL → cluster docker local; script CHỈ mượn host/cred để mint DB ephemeral
@@ -526,10 +525,6 @@ function Invoke-MigrateVerify {
 # không log mật khẩu). Super Admin KHÔNG seed ở đây — qua PLATFORM_SUPERADMIN_* lúc boot API.
 function Invoke-SeedStaging {
   Write-Step "SEED-STAGING — 4 tài khoản UAT (Employee/Manager/HR/company-admin) lên mediaos_dev"
-  if ((Get-ActiveEnv) -eq ".env.prod") {
-    Write-Err "GUARD: .env active = .env.prod — từ chối seed staging từ env prod."
-    exit 1
-  }
   Import-DevOnlineEnv
   $target = $env:DATABASE_DIRECT_URL
   if (-not $target) { Write-Err ".env.dev-online thiếu DATABASE_DIRECT_URL"; exit 1 }
@@ -625,7 +620,7 @@ function Show-Help {
   Write-Host "    dev-online-migrate  CHỈ migrate mediaos_dev (không tạo DB, không seed lại)"
   Write-Host "    dev-online-tunnel   tạo ingress cloudflared + DNS cho cian-dev.* (1 lần, Administrator)"
   Write-Host ""
-  Write-Host "  STAGING / UAT (S5-DEVOPS-1 — chỉ cluster dev cục bộ, chặn .env=prod)" -ForegroundColor Yellow
+  Write-Host "  STAGING / UAT (S5-DEVOPS-1 — luôn ép env dev-online; guard DB-đích, không đụng mediaos prod)" -ForegroundColor Yellow
   Write-Host "    migrate-verify      chứng minh migrate-from-empty (0000→head) trên DB ephemeral tự DROP"
   Write-Host "    seed-staging        seed 4 tài khoản UAT (Employee/Manager/HR/Admin) lên mediaos_dev — idempotent"
   Write-Host ""

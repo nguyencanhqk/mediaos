@@ -82,7 +82,9 @@ Hai stack chạy SONG SONG trên cùng 1 máy Windows + CHUNG 1 docker Postgres 
    → SuperAdminBootstrapService tự UPSERT Super Admin (idempotent) — SA KHÔNG seed bằng script.
 4. CHỜ https://cian-dev-api.funtimemediacorp.com/api/v1/health trả 200 (hoặc :3200 local)
 5. Smoke 5-role login (Employee/Manager/HR/company-admin/SA) — CHỈ SAU khi health 200.
-   Deny-path nhanh: Employee token GET /api/v1/hr/employees → 403; HR + company-admin → 200.
+   Deny-path nhanh (ĐÃ ĐO 2026-07-12 trên mediaos_dev): Employee GET /auth/roles và /auth/users → **403**
+   (hard-deny); Employee GET /hr/employees → **200 với 0 items** (role employee CÓ read:employee scope=Own
+   theo ma trận — không phải 403; không rò dữ liệu người khác), HR/company-admin cùng route → 200 đủ danh sách.
 ```
 
 Ghi chú: bước 2 và 3 hoán đổi được khi công ty `demo` đã tồn tại (seed resolve company theo slug, fail-fast nếu chưa có — lần đầu tiên phải `m dev-online-db` tạo nền rồi mới seed staging).
@@ -95,7 +97,7 @@ Ghi chú: bước 2 và 3 hoán đổi được khi công ty `demo` đã tồn t
 | Backend healthcheck pass | ✅ | `GET /api/v1/health` (bước 4 runbook) |
 | Migration không lỗi | ✅ | `m migrate-verify` (from-empty, ephemeral) + `m dev-online-migrate` (UAT thật) + CI step "Migrate-from-empty verify" |
 | Seed idempotent, không trùng | ✅ | `scripts/seed-staging-accounts.mjs` UPSERT + SELECT-then-INSERT lọc `deleted_at IS NULL`; chạy 2 lần COUNT không đổi |
-| Test account login được | ✅ | 4 role seed + SA qua env — smoke bước 5 |
+| Test account login được | ✅ ĐÃ ĐO | 5-role login 200 trên mediaos_dev 2026-07-12 (4 seed + SA bootstrap 360 perms); deny-path bước 5 |
 | Role/permission seed đúng | ✅ | 4 SYSTEM role resolve theo name + đối chiếu canonical id (0001/0008/0010/0011), KHÔNG chạm role_permissions |
 | NOTI event/template đủ P0 | ⚠ ngoài WO | catalog seed qua migration (0479/0481/0488) — verify thuộc S5-QA-E2E-1 |
 | Dashboard widget config đủ | ⚠ ngoài WO | seed 0487+ — verify thuộc S5-QA-E2E-1 |
