@@ -80,6 +80,12 @@ export const dashboardKeys = {
     data: (widgetCode: string, params?: Record<string, unknown>) =>
       [...rootKeys.dashboard, "widgets", "data", widgetCode, params] as const,
   },
+  // S4-FE-DASH-3 — widget CONFIG admin (GET/PATCH /dashboard/configs, DashboardConfigPage).
+  configs: {
+    all: [...rootKeys.dashboard, "configs"] as const,
+    list: (params?: Record<string, unknown>) =>
+      [...rootKeys.dashboard, "configs", "list", params] as const,
+  },
 };
 
 // ── HR keys ───────────────────────────────────────────────────────────────────
