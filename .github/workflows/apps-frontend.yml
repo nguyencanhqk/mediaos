@@ -18,6 +18,14 @@ on:
   push:
     branches: [master, main]
   pull_request:
+  # Kích hoạt TAY (S5-DEVOPS-1): build + deploy không cần code đổi — dùng cho lần nghiệm pipeline đầu
+  # và redeploy FE khi cần (vd Pages sự cố). Chỉ chạy trên master (deploy job vẫn gate ref + var).
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: "JSON array app cần build+deploy (mặc định cả 3)"
+        required: false
+        default: '["app","auth","console"]'
 
 concurrency:
   group: apps-frontend-${{ github.ref }}
@@ -33,11 +41,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       # `changes` = JSON array các filter khớp (vd '["web","auth"]'); rỗng → '[]'.
-      apps: ${{ steps.filter.outputs.changes }}
+      # workflow_dispatch không có diff để filter → lấy thẳng input `apps` (biểu thức && || = ternary).
+      apps: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.apps || steps.filter.outputs.changes }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
+        if: github.event_name != 'workflow_dispatch'
         with:
           # Mỗi app rebuild khi: source app đổi, HOẶC package dùng chung đổi, HOẶC lockfile đổi.
           filters: |
@@ -115,7 +125,7 @@ jobs:
       # Dist đẩy lên artifact cho job `deploy` (job riêng để gắn environment: production — secrets/branch
       # policy tách khỏi build PR). retention ngắn: chỉ là cầu build→deploy trong cùng run.
       - name: Upload dist (cho job deploy)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.app }}
@@ -134,7 +144,8 @@ jobs:
     name: Deploy ${{ matrix.app }} → Cloudflare Pages
     needs: [changes, build]
     if: >-
-      github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/master' &&
       vars.DEPLOY_FE_ENABLED == 'true' &&
       needs.changes.outputs.apps != '[]' && needs.changes.outputs.apps != ''
     runs-on: ubuntu-latest
