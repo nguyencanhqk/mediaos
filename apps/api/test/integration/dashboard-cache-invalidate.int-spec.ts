@@ -5,11 +5,13 @@
  *
  * RED-first — deny-path đi đầu:
  *   (a) trust boundary: không Bearer → 401; JWT + thiếu/sai x-internal-key → 403; INTERNAL_API_KEY unset → 403.
- *   (b) eventCode ngoài registry (mã không có producer, vd TASK_CREATED/ATTENDANCE_CHECKED_IN) → 400
+ *   (b) eventCode ngoài registry (mã không có producer, vd TASK_CREATED/ATTENDANCE_CHECKED_IN; hoặc CÓ
+ *       producer nhưng không ghi attendance_records, vd ATT_ADJUSTMENT_REJECTED) → 400
  *       DASH-ERR-UNKNOWN_INVALIDATION_EVENT, KHÔNG đụng cache nào.
  *   (c) body.company_id khác token → 400 DASH-ERR-COMPANY-MISMATCH.
  *   (d) happy-path mapping đúng §11.5 reconciled: TASK_ASSIGNED→MY_TASKS+TASK_ALERTS (KHÔNG đụng
- *       PROJECT_PROGRESS); TASK_STATUS_CHANGED→+PROJECT_PROGRESS; NOTIFICATION_CREATED/READ→NOTIFICATIONS.
+ *       PROJECT_PROGRESS); TASK_STATUS_CHANGED→+PROJECT_PROGRESS; NOTIFICATION_CREATED/READ→NOTIFICATIONS;
+ *       ATT_ADJUSTMENT_APPROVED→ATTENDANCE_TODAY (S4-INT-2-FIX-ATT).
  *   (e) userIds scoping: invalidate userIds=[u1] KHÔNG đụng cache riêng của u2 (ngoài phạm vi event) nhưng
  *       VẪN invalidate cache company-shared (user_id NULL, ảnh hưởng mọi viewer).
  *   (f) cross-tenant: company A invalidate KHÔNG đụng cache company B (company-scoped, RLS + WHERE tường minh).
@@ -21,9 +23,11 @@
  * dưới đi qua đường THẬT: HTTP → TaskActionsService (producer, outbox.enqueue TRONG tx) →
  * `OutboxWorker.processBatch()` (claim + gọi consumer `dash-cache-invalidate:<eventType>` đăng ký bởi
  * `DashboardCacheInvalidationRegistrar`, mirror `task-noti-e2e.int-spec.ts`) → `DashboardCacheInvalidation
- * Service.invalidate()` → DB THẬT. LEAVE dùng outbox_events insert TRỰC TIẾP mirror payload producer thật
- * (leave-approval.service.ts, ngoài paths sửa của lane này) — vẫn qua CÙNG OutboxWorker claim/dispatch pipeline
- * (KHÔNG gọi consumer.handle() tay, KHÔNG POST endpoint nội bộ) — xem doc-block tại chỗ khai báo.
+ * Service.invalidate()` → DB THẬT. LEAVE/ATT dùng outbox_events insert TRỰC TIẾP mirror payload producer thật
+ * (leave-approval.service.ts / attendance-adjustment.apply.ts, ngoài paths sửa của lane này) — vẫn qua CÙNG
+ * OutboxWorker claim/dispatch pipeline (KHÔNG gọi consumer.handle() tay, KHÔNG POST endpoint nội bộ) — xem
+ * doc-block tại chỗ khai báo. S4-INT-2-FIX-ATT (ATT_ADJUSTMENT_APPROVED) thêm assert cross-tenant tường minh
+ * (company khác cùng widget/userId vẫn KHÔNG bị đụng).
  *
  * Gate CỨNG hasDb && LANE_DB (memory integration-test-lane-db-gate).
  */
@@ -194,8 +198,18 @@ describe.skipIf(!runDb)(
       }
     });
 
-    // ── (b) eventCode ngoài registry (mã không có producer thật) ───────────────────
-    it.each(["TASK_CREATED", "ATTENDANCE_CHECKED_IN", "EMPLOYEE_CREATED", "NOTI_TEST_UNKNOWN"])(
+    // ── (b) eventCode ngoài registry (mã không có producer thật, HOẶC có producer nhưng KHÔNG ghi
+    //    attendance_records — xem dashboard-cache-invalidation.const.ts doc-block "S4-INT-2-FIX-ATT") ───────
+    it.each([
+      "TASK_CREATED",
+      "ATTENDANCE_CHECKED_IN",
+      "EMPLOYEE_CREATED",
+      "NOTI_TEST_UNKNOWN",
+      // ATT_ADJUSTMENT_REJECTED: CÓ trong NOTI_EVENT_CATALOG (isEnabled:true) + CÓ producer thật
+      // (attendance-adjustment.service.ts reject()) NHƯNG chỉ update status, KHÔNG ghi attendance_records
+      // ⇒ vẫn loại (khác ATT_ADJUSTMENT_APPROVED — đã map ở dưới).
+      "ATT_ADJUSTMENT_REJECTED",
+    ])(
       "(b) eventCode=%s ngoài registry → 400 DASH-ERR-UNKNOWN_INVALIDATION_EVENT",
       async (eventCode) => {
         const token = await login(nest, A.slug, actorEmail);
@@ -293,6 +307,21 @@ describe.skipIf(!runDb)(
         expect(await isActive(cNoti)).toBe(false);
       },
     );
+
+    // ── (d) S4-INT-2-FIX-ATT — ATT_ADJUSTMENT_APPROVED (real producer, ghi attendance_records) ────
+    it("(d) ATT_ADJUSTMENT_APPROVED → invalidate ATTENDANCE_TODAY", async () => {
+      const token = await login(nest, A.slug, actorEmail);
+      const attTodayId = await widgetId("ATTENDANCE_TODAY");
+      const cAttToday = await seedCache(A.companyId, attTodayId, { keySuffix: "att-adjustment" });
+
+      const res = await api(nest)
+        .post("/internal/v1/dashboard/cache/invalidate")
+        .set(auth(token))
+        .send({ eventCode: "ATT_ADJUSTMENT_APPROVED", userIds: [randomUUID()] });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.data.invalidatedWidgets).toEqual(["ATTENDANCE_TODAY"]);
+      expect(await isActive(cAttToday)).toBe(false);
+    });
 
     // ── (g) S4-INT-2-FIX-1 rail — Đội 3 finding #4: per-user-only widget + userIds rỗng ⇒ SKIP ─────
     it("(g) TASK_ASSIGNED KHÔNG truyền userIds trên widget per-user-only (MY_TASKS) → SKIP, cache VẪN active (không blanket-wipe)", async () => {
@@ -621,6 +650,66 @@ describe.skipIf(!runDb)(
 
       expect(await isRowActive(cRequester)).toBe(false);
       expect(await isRowActive(cOther)).toBe(true); // ngoài phạm vi event — KHÔNG đụng
+    });
+
+    // S4-INT-2-FIX-ATT: ATT_ADJUSTMENT_APPROVED — attendance-adjustment.apply.ts (producer, NGOÀI paths sửa
+    // của lane này) nằm sau workflow duyệt điều chỉnh công tốn setup (adjustment request + attendance record
+    // + approver chain) không thuộc phạm vi lane. Mirror ĐÚNG payload producer thật
+    // (`emitAdjustmentApproved`, attendance-adjustment.apply.ts:186-194: {requestId, recordId, userId,
+    // approvedBy}) qua outbox_events TRỰC TIẾP rồi drain qua CÙNG OutboxWorker.processBatch() — chứng minh
+    // registrar consumer 'dash-cache-invalidate:attendance.adjustment_approved' ĐÃ ĐĂNG KÝ đúng lúc boot +
+    // invalidate ĐÚNG userId + KHÔNG rò cross-tenant.
+    it("outbox event attendance.adjustment_approved (mirror payload producer thật) → OutboxWorker claim → invalidate ATTENDANCE_TODAY của ĐÚNG userId, KHÔNG cross-tenant", async () => {
+      const approvedUser = await seedUser(
+        direct,
+        W.companyId,
+        `att-req-${randomUUID().slice(0, 6)}@${W.slug}.test`,
+        "x",
+      );
+      const otherUser = await seedUser(
+        direct,
+        W.companyId,
+        `att-oth-${randomUUID().slice(0, 6)}@${W.slug}.test`,
+        "x",
+      );
+      const attTodayWidget = await widgetIdOf("ATTENDANCE_TODAY");
+      const cApproved = await seedCacheRow(attTodayWidget, approvedUser, "att-approved");
+      const cOther = await seedCacheRow(attTodayWidget, otherUser, "att-other");
+
+      // Cross-tenant: company khác, cùng widget catalog GLOBAL, cùng userId (giả lập user trùng id — thực tế
+      // không thể vì user thuộc 1 company, nhưng cache row công ty khác PHẢI không bị đụng dù trùng gì đi nữa
+      // vì DashboardCacheInvalidationService luôn withTenant(companyId thật của event)).
+      const other = await seedCompany(direct, "int2fixatt");
+      companyIds.push(other.companyId);
+      const cCrossTenant = await direct.query(
+        `INSERT INTO dashboard_widget_cache
+           (company_id, widget_id, dashboard_type, user_id, cache_scope, cache_key, data, status,
+            generated_at, expires_at)
+         VALUES ($1,$2,'Employee',$3,'Own',$4,'{}'::jsonb,'Fresh', now(), now() + interval '5 minutes')
+         RETURNING id`,
+        [other.companyId, attTodayWidget, approvedUser, `Employee:fixatt:cross-tenant`],
+      );
+      const cCrossTenantId = cCrossTenant.rows[0].id as string;
+
+      await direct.query(
+        `INSERT INTO outbox_events (company_id, event_type, payload)
+         VALUES ($1, 'attendance.adjustment_approved', $2::jsonb)`,
+        [
+          W.companyId,
+          JSON.stringify({
+            requestId: randomUUID(),
+            recordId: randomUUID(),
+            userId: approvedUser,
+            approvedBy: adminUserId,
+          }),
+        ],
+      );
+
+      await processOutbox();
+
+      expect(await isRowActive(cApproved)).toBe(false);
+      expect(await isRowActive(cOther)).toBe(true); // ngoài phạm vi event — KHÔNG đụng
+      expect(await isRowActive(cCrossTenantId)).toBe(true); // company khác — KHÔNG đụng
     });
   },
 );

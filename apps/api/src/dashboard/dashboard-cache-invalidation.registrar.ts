@@ -30,15 +30,18 @@ interface CacheInvalidationMapping {
 }
 
 /**
- * S4-INT-2-FIX-1 — 9 mapping outbox eventType → DASH cache invalidate, CHỈ gồm eventType THẬT SỰ đi qua
- * `OutboxService.enqueue` (xác nhận bằng grep từng service, xem dashboard-cache-invalidation.const.ts doc-block
- * "Đối chiếu real-producer"). LOẠI TASK_DUE_SOON/TASK_OVERDUE (task-reminder.job-handler.ts gọi
- * NotificationEngineService.intake() TRỰC TIẾP, KHÔNG qua outbox ⇒ KHÔNG có eventType nào phát lên EventBus để
- * nghe — xem doc-block const) và NOTIFICATION_CREATED/READ (mồ côi/0-producer — xem cùng doc-block).
+ * S4-INT-2-FIX-1/FIX-ATT — 10 mapping outbox eventType → DASH cache invalidate, CHỈ gồm eventType THẬT SỰ đi
+ * qua `OutboxService.enqueue` (xác nhận bằng grep từng service, xem dashboard-cache-invalidation.const.ts
+ * doc-block "Đối chiếu real-producer" + "S4-INT-2-FIX-ATT"). LOẠI TASK_DUE_SOON/TASK_OVERDUE
+ * (task-reminder.job-handler.ts gọi NotificationEngineService.intake() TRỰC TIẾP, KHÔNG qua outbox ⇒ KHÔNG có
+ * eventType nào phát lên EventBus để nghe — xem doc-block const), NOTIFICATION_CREATED/READ (mồ côi/0-producer
+ * — xem cùng doc-block), và 10/11 mã ATT_* còn lại (không ghi attendance_records, hoặc có ghi nhưng payload
+ * thiếu userId — xem doc-block "S4-INT-2-FIX-ATT" từng mã).
  *
  * userIds lấy THẲNG từ payload producer (task-actions.service.ts: `assigneeUserId`/`creatorUserId`;
- * leave-*.service.ts: `userId`) — KHÔNG cần audience-reader query lại DB như `TaskNotiBridgeRegistrar`, vì
- * payload TASK/LEAVE ở đây đã có sẵn userId cần (mirror payload thật, đối chiếu source 2026-07-12).
+ * leave-*.service.ts: `userId`; attendance-adjustment.apply.ts `emitAdjustmentApproved`: `userId`) — KHÔNG
+ * cần audience-reader query lại DB như `TaskNotiBridgeRegistrar`, vì payload TASK/LEAVE/ATT ở đây đã có sẵn
+ * userId cần (mirror payload thật, đối chiếu source 2026-07-12).
  *
  * GIỚI HẠN ĐÃ BIẾT (ghi rõ, KHÔNG che giấu): PENDING_LEAVE/LEAVE_CALENDAR cache theo VIEWER (người duyệt/xem
  * lịch team — `shareScope:'user'`, `scopeReferenceId = ctx.user.id` của người XEM, KHÔNG phải người XIN nghỉ).
@@ -95,10 +98,17 @@ const CACHE_INVALIDATION_MAPPINGS: readonly CacheInvalidationMapping[] = [
     eventCode: "LEAVE_REQUEST_REVOKED",
     userIdsOf: (p) => pickUserIds(p, "userId"),
   },
+  // ── ATT (attendance-adjustment.apply.ts emitAdjustmentApproved — xem dashboard-cache-invalidation.const.ts
+  //    doc-block "S4-INT-2-FIX-ATT" cho đối chiếu đầy đủ 11 mã ATT_* isEnabled + lý do loại từng mã khác) ───
+  {
+    eventType: "attendance.adjustment_approved",
+    eventCode: "ATT_ADJUSTMENT_APPROVED",
+    userIdsOf: (p) => pickUserIds(p, "userId"),
+  },
 ];
 
 /**
- * S4-INT-2-FIX-1 — DashboardCacheInvalidationRegistrar: đăng ký (OnModuleInit) 9 consumer lên `EventBus`
+ * S4-INT-2-FIX-1 — DashboardCacheInvalidationRegistrar: đăng ký (OnModuleInit) 10 consumer lên `EventBus`
  * (mirror `TaskNotiBridgeRegistrar`/`OutboxNotificationBridge`, S4-INT-1) để cache DASH tự invalidate khi
  * outbox event TASK/LEAVE THẬT được `OutboxWorker.processBatch()` claim — KHÔNG cần ai gọi tay
  * `POST /internal/v1/dashboard/cache/invalidate` nữa (Đội 3 finding #1/#2: trước lane này endpoint tồn tại

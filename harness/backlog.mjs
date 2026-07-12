@@ -4735,10 +4735,16 @@ export const backlog = [
       "Tích hợp DASH cache invalidation từ event TASK/NOTI/ATT/LEAVE (POST /internal/v1/dashboard/cache/invalidate) — chỉ mã do producer thật phát (§11.5 reconcile)",
     zone: "yellow",
     status: "todo",
-    paths: ["apps/api/src/dashboard/**", "apps/api/src/events/**", "apps/api/test/integration/**"],
+    paths: [
+      "apps/api/src/dashboard/**",
+      "apps/api/src/events/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S4-INT-2.md",
+    ],
     skills: ["code-review"],
     depends_on: ["S4-DASH-BE-2", "S4-INT-1"],
     src: ["ISSUE-BOARD-01 §18 (INT)", "IMP02-STORY-103", "IMPLEMENTATION-07 §11.5", "SPEC-07"],
+    plan: "docs/plans/S4-INT-2.md",
     done_when: [
       "Internal invalidate cache theo event, map event→widget đúng §11.5 NHƯNG chỉ dùng mã do producer THẬT phát (registry §9.5): TASK_ASSIGNED→MY_TASKS/TASK_ALERTS · TASK_STATUS_CHANGED→MY_TASKS/TASK_ALERTS/PROJECT_PROGRESS · TASK_DUE_DATE_CHANGED/TASK_OVERDUE→TASK_ALERTS · NOTIFICATION_CREATED/READ→NOTIFICATIONS · LEAVE_*/ATTENDANCE_* (nếu module ATT/LEAVE phát — nếu không thì loại/map lại, ghi rõ trong plan)",
       "Internal endpoint chỉ nhận trusted context; invalidate company-scoped; không invalidate cache user khác ngoài phạm vi event",
