@@ -53,6 +53,12 @@ import { AuthHrNotiBridgeRegistrar } from "./auth-hr-noti-bridge.registrar";
 // KHÔNG import AttendanceModule (acyclic — đọc thẳng bảng, mirror INT-1).
 import { AttApprovalAudienceReader } from "./att-approval-audience.reader";
 import { AttNotiBridgeRegistrar } from "./att-noti-bridge.registrar";
+// S4-INT-3 (additive): outbox→NOTI 5 mapping LEAVE (đơn nghỉ phép — submit/approve/reject/cancel/revoke)
+// qua CÙNG OutboxNotificationBridge INT-1 (TÁI DÙNG core generic — KHÔNG bridge/consumer mới) — reader
+// raw-SQL (LeaveApproverReader) + registrar OnModuleInit (LeaveNotiBridgeRegistrar, đăng ký 5 mapping).
+// KHÔNG import LeaveModule (acyclic — đọc thẳng bảng employee_profiles, mirror INT-4).
+import { LeaveApproverReader } from "./leave-approver.reader";
+import { LeaveNotiBridgeRegistrar } from "./leave-noti-bridge.registrar";
 
 @Module({
   imports: [DatabaseModule, EventsModule, RealtimeEmitterModule, PermissionModule],
@@ -96,6 +102,10 @@ import { AttNotiBridgeRegistrar } from "./att-noti-bridge.registrar";
     // tại boot qua CÙNG OutboxNotificationBridge INT-1 ở trên (KHÔNG re-provide bridge).
     AttApprovalAudienceReader,
     AttNotiBridgeRegistrar,
+    // S4-INT-3 (additive): reader + registrar LEAVE đăng ký 5 consumer lên EventBus (@Global EventsModule)
+    // tại boot qua CÙNG OutboxNotificationBridge INT-1 ở trên (KHÔNG re-provide bridge).
+    LeaveApproverReader,
+    LeaveNotiBridgeRegistrar,
   ],
   // Export engine cho S4-INT-1 (outbox consumer gọi intake() in-process).
   // S4-DASH-BE-2 (additive): + MyNotificationsService cho NOTIFICATIONS widget handler (DASH inject qua DI —
