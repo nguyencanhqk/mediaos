@@ -116,6 +116,19 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   // Enforcement KHÔNG đổi — @RequirePermission('export','employee',{isSensitive:true}) per-resource +
   // data-scope Own/Team/Company áp TRƯỚC kết xuất + row cap 422 vẫn là cổng THẬT. Chỉ mở CỜ HIỂN THỊ.
   "export:employee",
+  // S4-FE-DASH-3 — APPEND-only: 2 cặp NHẠY CẢM DASH config để FE dựng CỜ HIỂN THỊ màn
+  // DashboardConfigPage (PermissionGate → useCanExact('view'/'update','dashboard-config')). Cặp seed THẬT
+  // is_sensitive=true — catalog dashboard-widget-catalog.const.ts:314-324 (DASH.CONFIG.VIEW /
+  // DASH.CONFIG.UPDATE), seed + grant mig 0484 khối (3); grant Company CHỈ company-admin —
+  // DASH_GRANT_MATRIX:379-385 (employee/manager/hr KHÔNG có grant, least-privilege). Thiếu allowlist ⇒
+  // getCapabilities() lọc bỏ sensitive + getAllowlistedSensitiveCapabilities KHÔNG surface ⇒ 2 cặp ẨN
+  // với CẢ company-admin dù grant thật tồn tại ⇒ /auth/me KHÔNG BAO GIỜ trả → useCanExact luôn false ⇒
+  // trang LUÔN EmptyState "không có quyền" trong app thật (bài học CAP-2/EXPORT-1/NOTI-BE-3, đã lặp 5+
+  // lần). Enforcement KHÔNG đổi — @RequirePermission('view'/'update','dashboard-config',{isSensitive:true})
+  // + PermissionGuard class-level (dashboard-config.controller.ts) + RLS company_id vẫn là cổng THẬT;
+  // wildcard *:* KHÔNG thuộc allowlist ⇒ KHÔNG kế thừa. Chỉ mở CỜ HIỂN THỊ.
+  "view:dashboard-config",
+  "update:dashboard-config",
 ]);
 
 @Injectable()
