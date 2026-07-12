@@ -218,6 +218,8 @@ export class RemoteWorkRequestService {
             employeeId: request.employeeId,
             currentApproverUserId: dto.currentApproverUserId,
             watcherUserIds: dto.watcherUserIds,
+            // S4-INT-4: actor for engine actor-exclusion (recipient resolver drops actorUserId).
+            actorUserId: actor.id,
           },
         });
         return this.loadDetailTx(actor.companyId, id, tx);
@@ -360,7 +362,13 @@ export class RemoteWorkRequestService {
         });
         await this.outbox.enqueue(tx, {
           eventType: "attendance.remote_request_approved",
-          payload: { requestId: id, employeeId: request.employeeId, approvedBy: actor.id },
+          // S4-INT-4: actorUserId for engine actor-exclusion (recipient resolver drops actor).
+          payload: {
+            requestId: id,
+            employeeId: request.employeeId,
+            approvedBy: actor.id,
+            actorUserId: actor.id,
+          },
         });
         return this.loadDetailTx(actor.companyId, id, tx);
       })
@@ -452,7 +460,13 @@ export class RemoteWorkRequestService {
         });
         await this.outbox.enqueue(tx, {
           eventType: "attendance.remote_request_rejected",
-          payload: { requestId: id, employeeId: request.employeeId, rejectedBy: actor.id },
+          // S4-INT-4: actorUserId for engine actor-exclusion (recipient resolver drops actor).
+          payload: {
+            requestId: id,
+            employeeId: request.employeeId,
+            rejectedBy: actor.id,
+            actorUserId: actor.id,
+          },
         });
         return this.loadDetailTx(actor.companyId, id, tx);
       })
@@ -494,7 +508,13 @@ export class RemoteWorkRequestService {
         });
         await this.outbox.enqueue(tx, {
           eventType: "attendance.remote_request_cancelled",
-          payload: { requestId: id, employeeId: request.employeeId, cancelledBy: actor.id },
+          // S4-INT-4: actorUserId for engine actor-exclusion (recipient resolver drops actor).
+          payload: {
+            requestId: id,
+            employeeId: request.employeeId,
+            cancelledBy: actor.id,
+            actorUserId: actor.id,
+          },
         });
         return this.loadDetailTx(actor.companyId, id, tx);
       })
