@@ -55,11 +55,6 @@ export default {
         createdAt: "Ngày tạo",
         closedAt: "Ngày đóng",
       },
-      taskSummary: {
-        title: "Task",
-        emptyTitle: "Chưa có dữ liệu task",
-        emptyDescription: "Tổng hợp task theo dự án sẽ hiển thị khi module Task sẵn sàng.",
-      },
       actions: {
         edit: "Sửa dự án",
         close: "Đóng dự án",

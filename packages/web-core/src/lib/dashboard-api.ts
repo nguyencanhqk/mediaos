@@ -18,6 +18,7 @@ import {
   type MvStatsQueryDto,
   type DashboardViewResponseDto,
   type DashboardTypesResponseDto,
+  type DashboardTypeValue,
   type WidgetCatalogItemDto,
   type DashboardWidgetDataDto,
   type WidgetDataQuery,
@@ -30,13 +31,26 @@ import { buildQueryString } from "./api-params";
  * S4-FE-DASH-1 — widget_code (S4-DASH-SEED-1 catalog) → dataSourceKey (slug GET /dashboard/widgets/:slug).
  * Mirror TẠI ĐÂY apps/api/src/dashboard/dashboard-widget-catalog.const.ts (DASH_WIDGET_CATALOG[].dataSourceKey)
  * — web-core KHÔNG import ngược từ apps/api. Chỉ liệt kê widget ĐÃ có FE component (P0: MY_TASKS/TASK_ALERTS/
- * NOTIFICATIONS). Thêm widget mới → thêm dòng khi component tương ứng được build (P1: ATTENDANCE_TODAY/
- * PENDING_LEAVE/PROJECT_PROGRESS/HR_OVERVIEW — chưa map, CỐ Ý).
+ * NOTIFICATIONS · S4-FE-DASH-2 P1: ATTENDANCE_TODAY/PENDING_LEAVE/PROJECT_PROGRESS/HR_OVERVIEW). Thêm widget
+ * mới → thêm dòng khi component tương ứng được build.
  */
 export const DASH_WIDGET_SLUG: Readonly<Record<string, string>> = {
   MY_TASKS: "my-tasks",
   TASK_ALERTS: "task-alerts",
   NOTIFICATIONS: "notifications",
+  // S4-FE-DASH-2 (APPEND) — slug khớp DASH_WIDGET_CATALOG[].dataSourceKey của 4 widget P1.
+  ATTENDANCE_TODAY: "attendance-today",
+  PENDING_LEAVE: "pending-leave",
+  PROJECT_PROGRESS: "project-progress",
+  HR_OVERVIEW: "hr-overview",
+};
+
+/** 4 dashboard type user-facing → path GET /dashboard/{type} (API-08 §10.1, DashboardResolverController). */
+const DASHBOARD_TYPE_PATH: Readonly<Record<DashboardTypeValue, string>> = {
+  Employee: "employee",
+  Manager: "manager",
+  HR: "hr",
+  Admin: "admin",
 };
 
 /**
@@ -87,6 +101,19 @@ export const dashboardApi = {
   /** GET /dashboard/types — dashboard type user được phép xem (+ is_default). Permission: read:dashboard. */
   getDashboardTypes: (): Promise<DashboardTypesResponseDto> =>
     apiFetch("/dashboard/types", dashboardTypesResponseSchema),
+
+  /**
+   * GET /dashboard/{type} — widget của MỘT dashboard type cụ thể (DashboardTypeSwitcher, S4-FE-DASH-2).
+   * Permission: view-{type}:dashboard (gate ở BE — 403 nếu user không có type đó, mirror /dashboard/types).
+   */
+  getDashboardByType: (
+    type: DashboardTypeValue,
+    query?: Partial<DashboardWidgetListQuery>,
+  ): Promise<DashboardViewResponseDto> =>
+    apiFetch(
+      `/dashboard/${DASHBOARD_TYPE_PATH[type]}${buildQueryString(query ?? {})}`,
+      dashboardViewResponseSchema,
+    ),
 
   /**
    * GET /dashboard/widgets — catalog widget khả dụng (server đã omit widget thiếu quyền). `include_data:true`

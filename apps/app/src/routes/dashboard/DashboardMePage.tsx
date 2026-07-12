@@ -10,12 +10,15 @@
  * Quy tắc hiển thị (§13.1): user không có quyền `read:dashboard` → forbidden; danh sách widget rỗng (0 widget
  * ĐƯỢC PHÉP xem, vd role chưa cấu hình dashboard_widget_configs) → empty; lỗi mạng/parse → error + thử lại.
  */
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { LayoutDashboard, RefreshCw } from "lucide-react";
 import { dashboardApi, dashboardKeys, useCan } from "@mediaos/web-core";
 import { PageHeader, EmptyState, Button, Skeleton } from "@mediaos/ui";
+import type { DashboardTypeValue } from "@mediaos/contracts";
 import { DashboardWidgetGrid } from "@/components/dashboard/DashboardWidgetGrid";
+import { DashboardTypeSwitcher } from "@/components/dashboard/DashboardTypeSwitcher";
 import { DASH_READ_PAIR } from "./constants";
 
 function DashboardShellSkeleton() {
@@ -36,10 +39,14 @@ function DashboardShellSkeleton() {
 
 function DashboardMePageInner() {
   const { t } = useTranslation("dashboard");
+  // S4-FE-DASH-2 — DashboardTypeSwitcher: null = dùng default do server resolve (/dashboard/me);
+  // chọn type khác gọi thẳng route tĩnh /dashboard/{type} (đã @RequirePermission view-{type}:dashboard).
+  const [selectedType, setSelectedType] = useState<DashboardTypeValue | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: dashboardKeys.me(),
-    queryFn: () => dashboardApi.getMyDashboard(),
+    queryKey: selectedType ? dashboardKeys.byType(selectedType) : dashboardKeys.me(),
+    queryFn: () =>
+      selectedType ? dashboardApi.getDashboardByType(selectedType) : dashboardApi.getMyDashboard(),
     staleTime: 30_000,
   });
 
@@ -70,6 +77,7 @@ function DashboardMePageInner() {
         title={t("page.title")}
         description={t("page.description")}
         icon={LayoutDashboard}
+        actions={<DashboardTypeSwitcher value={selectedType} onChange={setSelectedType} />}
       />
 
       {widgets.length === 0 ? (

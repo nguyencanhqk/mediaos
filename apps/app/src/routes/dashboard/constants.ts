@@ -10,13 +10,21 @@
  * — đây là gate PHỤ (defense-in-depth, ẩn shell widget sớm hơn 1 round-trip), KHÔNG phải cổng thật.
  * Tái dùng TASK_CORE_ENGINE_PAIRS/NOTI_ENGINE_PAIRS đã có (DRY, tránh định nghĩa cặp trùng lặp).
  */
-import { TASK_CORE_ENGINE_PAIRS } from "@/routes/tasks/constants";
+import { TASK_CORE_ENGINE_PAIRS, TASK_ENGINE_PAIRS } from "@/routes/tasks/constants";
 import { NOTI_ENGINE_PAIRS } from "@/routes/notifications/constants";
+import { ATT_ENGINE_PAIRS } from "@/routes/attendance/constants";
+import { LEAVE_ENGINE_PAIRS } from "@/routes/leave/constants";
+import { HR_ENGINE_PAIRS } from "@/routes/hr/constants";
 
 export const DASH_WIDGET_CODE = {
   MY_TASKS: "MY_TASKS",
   TASK_ALERTS: "TASK_ALERTS",
   NOTIFICATIONS: "NOTIFICATIONS",
+  // S4-FE-DASH-2 (APPEND) — 4 widget P1 (IMPLEMENTATION-07 §11.3/§14.2).
+  ATTENDANCE_TODAY: "ATTENDANCE_TODAY",
+  PENDING_LEAVE: "PENDING_LEAVE",
+  PROJECT_PROGRESS: "PROJECT_PROGRESS",
+  HR_OVERVIEW: "HR_OVERVIEW",
 } as const;
 
 export type DashWidgetCode = (typeof DASH_WIDGET_CODE)[keyof typeof DASH_WIDGET_CODE];
@@ -27,6 +35,13 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<
   MY_TASKS: TASK_CORE_ENGINE_PAIRS.READ,
   TASK_ALERTS: TASK_CORE_ENGINE_PAIRS.READ,
   NOTIFICATIONS: NOTI_ENGINE_PAIRS.READ,
+  // S4-FE-DASH-2 (APPEND) — MIRROR đúng BE DASH_WIDGET_GATE_PAIR (dashboard-widget-catalog.const.ts):
+  // ATTENDANCE_TODAY→view-own:attendance · PENDING_LEAVE→view:leave · PROJECT_PROGRESS→read:project ·
+  // HR_OVERVIEW→read:employee. Tái dùng cặp module nguồn ĐÃ có (DRY, tránh định nghĩa cặp trùng lặp).
+  ATTENDANCE_TODAY: ATT_ENGINE_PAIRS.VIEW_OWN,
+  PENDING_LEAVE: LEAVE_ENGINE_PAIRS.VIEW_REQUEST,
+  PROJECT_PROGRESS: TASK_ENGINE_PAIRS.READ_PROJECT,
+  HR_OVERVIEW: HR_ENGINE_PAIRS.READ_EMPLOYEE,
 };
 
 /**

@@ -30,6 +30,20 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       listDepartments: vi.fn().mockResolvedValue([]),
       listEmployees: vi.fn().mockResolvedValue({ items: [], meta: {} }),
     },
+    // S4-FE-DASH-2 — Overview tab nhúng <ProjectProgressWidget> (mock để không gọi mạng thật).
+    dashboardApi: {
+      getWidgetData: vi.fn().mockResolvedValue({
+        widget_code: "PROJECT_PROGRESS",
+        widget_type: "Chart",
+        status: "Empty",
+        data: null,
+        empty_state: { message: "Dự án chưa có công việc" },
+        error_state: null,
+        last_updated_at: null,
+        cache: null,
+        quick_actions: [],
+      }),
+    },
   };
 });
 

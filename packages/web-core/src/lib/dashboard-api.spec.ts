@@ -144,7 +144,53 @@ describe("dashboardApi — resolver + widget DATA (S4-FE-DASH-1)", () => {
 
   it("getWidgetData(widget chưa map slug) → throw NGAY, KHÔNG gọi apiFetch (fail-fast)", async () => {
     const before = vi.mocked(apiClient.apiFetch).mock.calls.length;
-    expect(() => dashboardApi.getWidgetData("HR_OVERVIEW")).toThrow(/chưa có FE slug mapping/);
+    // LEAVE_BALANCE — catalog-only, chưa có FE component ở Sprint 4 (IMPLEMENTATION-07 §11.3).
+    expect(() => dashboardApi.getWidgetData("LEAVE_BALANCE")).toThrow(/chưa có FE slug mapping/);
     expect(vi.mocked(apiClient.apiFetch).mock.calls.length).toBe(before);
+  });
+
+  it("getWidgetData('ATTENDANCE_TODAY') → slug attendance-today", async () => {
+    await dashboardApi.getWidgetData("ATTENDANCE_TODAY");
+    const [url] = lastCall();
+    expect(url).toBe("/dashboard/widgets/attendance-today");
+  });
+
+  it("getWidgetData('PENDING_LEAVE') → slug pending-leave", async () => {
+    await dashboardApi.getWidgetData("PENDING_LEAVE");
+    const [url] = lastCall();
+    expect(url).toBe("/dashboard/widgets/pending-leave");
+  });
+
+  it("getWidgetData('PROJECT_PROGRESS', { project_id }) → slug project-progress + query project_id", async () => {
+    await dashboardApi.getWidgetData("PROJECT_PROGRESS", { project_id: "p-1" });
+    const [url] = lastCall();
+    expect(url).toBe("/dashboard/widgets/project-progress?project_id=p-1");
+  });
+
+  it("getWidgetData('HR_OVERVIEW') → slug hr-overview", async () => {
+    await dashboardApi.getWidgetData("HR_OVERVIEW");
+    const [url] = lastCall();
+    expect(url).toBe("/dashboard/widgets/hr-overview");
+  });
+});
+
+describe("dashboardApi — getDashboardByType (S4-FE-DASH-2, DashboardTypeSwitcher)", () => {
+  it("getDashboardByType('Employee') → GET /dashboard/employee + dashboardViewResponseSchema", async () => {
+    await dashboardApi.getDashboardByType("Employee");
+    const [url, schema] = lastCall();
+    expect(url).toBe("/dashboard/employee");
+    expect(schema).toBe(dashboardViewResponseSchema);
+  });
+
+  it("getDashboardByType('HR') → GET /dashboard/hr", async () => {
+    await dashboardApi.getDashboardByType("HR");
+    const [url] = lastCall();
+    expect(url).toBe("/dashboard/hr");
+  });
+
+  it("getDashboardByType('Admin') → GET /dashboard/admin", async () => {
+    await dashboardApi.getDashboardByType("Admin");
+    const [url] = lastCall();
+    expect(url).toBe("/dashboard/admin");
   });
 });
