@@ -338,6 +338,16 @@ export class AuthService {
       });
       if (result.reason === "WrongPassword" && result.userId) {
         await this.bumpFailedLoginCount(companyId, result.userId);
+        // S4-INT-5 (crown-AUTH) — producer thông báo "tài khoản bị khoá tạm". EDGE-ONLY: login() đã 429 ở
+        // ĐẦU (L199, isLoginRateLimited) khi bucket per-account ĐÃ khoá ⇒ tới được đây nghĩa là bucket CHƯA
+        // khoá lúc vào; recordLoginFailure (ngay trên) vừa bump nó. Nếu isLocked(accountKey) GIỜ = true ⇒
+        // CHÍNH lần sai NÀY vừa vượt ngưỡng → phát ĐÚNG 1 lần (mọi lần sau bị 429 ở L199, không chạm nhánh
+        // này). Chỉ WrongPassword + userId THẬT: ghost email (UserNotFound, userId=null) KHÔNG vào nhánh này
+        // ⇒ anti-enumeration (không lộ "account tồn tại" qua việc phát/không-phát notify).
+        const accountKey = LoginRateLimiter.accountKey(req.companySlug, req.email);
+        if (await this.rateLimiter.isLocked(accountKey)) {
+          await this.emitAccountLocked(companyId, result.userId, meta);
+        }
       }
       throw new UnauthorizedException(UNIFORM_LOGIN_ERROR);
     }
@@ -1575,6 +1585,65 @@ export class AuthService {
     } catch (err) {
       this.logger.warn(
         `bumpFailedLoginCount thất bại (best-effort): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /**
+   * S4-INT-5 (STORY-098 / crown-AUTH) — producer thông báo "tài khoản bị khoá tạm" (NOTI-EVENT AUTH_USER_LOCKED,
+   * SPEC-08 §15). CHỈ gọi ở edge sạch (lần sai vừa đẩy bucket per-account qua ngưỡng — xem login()).
+   *
+   * tx RIÊNG (mirror bumpFailedLoginCount) — enqueue outbox + audit + security-event CÙNG commit/rollback (không
+   * ghi nửa vời). BẤT BIẾN #1: withTenant(companyId) → RLS+FORCE cô lập tenant, company_id từ DB DEFAULT.
+   *
+   * Outbox payload CHỈ mang { eventCode, userId } — TUYỆT ĐỐI KHÔNG IP/attempts/chi tiết bảo mật: payload durable
+   * = data-at-rest và là NGUỒN DUY NHẤT của nội dung notification (bridge resolve recipient = payload.userId).
+   * KHÔNG set actorUserId ở event/mapping ⇒ actor-exclusion ở bridge KHÔNG loại chủ TK (nếu actor=owner ⇒ 0
+   * notification). audit/security-event là forensic server-side (append-only, BẤT BIẾN #2) — được phép mang
+   * ip/userAgent để điều tra; hành động do HỆ THỐNG kích hoạt (sai mật khẩu lặp) nên actorUserId = null (System).
+   *
+   * SILENT-FAILURE: lỗi tx → logger.error (KHÔNG nuốt câm) NHƯNG KHÔNG re-throw — notify là COURTESY, KHÔNG phải
+   * security-control; đường login PHẢI trả 401 ĐỒNG NHẤT bất kể notify thành/bại (không biến lỗi-notify thành
+   * oracle / không chặn phản hồi login).
+   */
+  private async emitAccountLocked(
+    companyId: string,
+    userId: string,
+    meta: RequestMeta,
+  ): Promise<void> {
+    try {
+      await this.dbsvc.withTenant(companyId, async (tx) => {
+        // Outbox → bridge (auth.user_locked → AUTH_USER_LOCKED). Payload TỐI THIỂU: eventCode (bridge map) +
+        // userId (recipient). KHÔNG IP/attempts (data-at-rest tối thiểu + không lộ chi tiết bảo mật ra notify).
+        await this.outbox.enqueue(tx, {
+          eventType: "auth.user_locked",
+          payload: { eventCode: "AUTH_USER_LOCKED", userId },
+        });
+        // audit append-only (DoD §8). objectId = chủ TK. actorUserId KHÔNG set (khoá do hệ thống kích hoạt).
+        // after CHỈ mang reason định danh — KHÔNG IP-attacker/attempts (không lộ chi tiết bảo mật).
+        await this.audit.record(tx, {
+          action: "auth.user_locked",
+          objectType: "auth",
+          objectId: userId,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+          after: { reason: "too_many_failed_logins" },
+        });
+        // timeline security (dual-write cạnh audit). USER_LOCKED = mã CANONICAL trong contracts (severity
+        // "high") cho "khoá tài khoản" — KHÔNG có mã ACCOUNT_LOCKED (writer fail-closed sẽ throw). subject =
+        // chủ TK; actorUserId null = hệ thống. payload rỗng (KHÔNG attempts/IP trong nội dung sự kiện).
+        await this.securityEvents.record(tx, {
+          eventType: "USER_LOCKED",
+          userId,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        });
+      });
+    } catch (err) {
+      // KHÔNG nuốt câm (silent-failure): log ERROR đầy đủ để quan sát. NHƯNG KHÔNG re-throw — login PHẢI trả
+      // 401 ĐỒNG NHẤT bất kể notify thành/bại (courtesy, không phải security-control).
+      this.logger.error(
+        `emitAccountLocked: phát thông báo khoá tài khoản thất bại (best-effort, KHÔNG đổi 401): ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`,
       );
     }
   }
