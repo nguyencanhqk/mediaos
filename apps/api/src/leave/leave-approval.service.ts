@@ -185,6 +185,8 @@ export class LeaveApprovalService {
             approvedBy: actor.id,
             totalDays: Number(request.totalDays),
             totalHours: numOrNull(request.totalHours),
+            // S4-INT-3: actor-exclusion — approver (actor) không tự nhận noti
+            actorUserId: actor.id,
             eventCode: "LEAVE_REQUEST_APPROVED",
           },
         });
@@ -261,6 +263,8 @@ export class LeaveApprovalService {
             userId: request.userId,
             employeeId: request.employeeId,
             rejectedBy: actor.id,
+            // S4-INT-3: actor-exclusion — approver (actor) không tự nhận noti
+            actorUserId: actor.id,
             eventCode: "LEAVE_REQUEST_REJECTED",
           },
         });
