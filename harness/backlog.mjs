@@ -5013,8 +5013,14 @@ export const backlog = [
       "SPEC-06/07/08",
     ],
     plan: "docs/plans/S4-QA-1.md",
+    // PLAN-BLOCK 2026-07-12 (run wf_f0acd8b7): plan-reviewer chặn với phát hiện THẬT — các ràng buộc
+    // dưới đây bake vào done_when để lần chạy lại không lặp. TIỀN ĐỀ: chỉ chạy lại SAU khi PR #177
+    // (FE widgets P1) + #178 (invalidation endpoint) đã merge vào master.
     done_when: [
-      "Deny-path RED cho permission/workflow: TASK (tạo/gán/đổi status trái quyền + status transition sai) · NOTI (đọc/mark notification người khác) · DASH (widget Manager/HR với employee) — chạy trên DB cô lập theo lane",
+      "SCOPE: S4-QA-TASK-1/S4-QA-NOTI-1 ĐÃ SHIP (PR #165/#167 merged) — XÁC MINH spec của 2 WO đó tồn tại + chạy xanh trên base branch TRƯỚC khi tuyên bố 'không viết trùng'; phần TASK/NOTI chỉ bù lỗ hổng, trọng tâm = DASH + 2-tenant cross-module",
+      "Deny-path RED cho permission/workflow: TASK (tạo/gán/đổi status trái quyền + transition sai) · NOTI (đọc/mark notification người khác) · DASH (widget Manager/HR với employee) — chạy trên DB cô lập theo lane; vì code ĐÃ đúng nên mỗi deny-path PHẢI chứng minh test có-thể-đỏ: assert đúng 403 + error body (KHÔNG chỉ !=200) và mutation-check (tạm gỡ guard → test lật RED, ghi bằng chứng vào plan) — chống vacuous-green (bài học reviewers-pass-real-bugs)",
+      "FE smoke CHỈ assert widget CÓ component thật render qua PermissionGate (sau #177: MY_TASKS/TASK_ALERTS/NOTIFICATIONS + ATTENDANCE_TODAY/PENDING_LEAVE/PROJECT_PROGRESS/HR_OVERVIEW); LEAVE_CALENDAR/ATTENDANCE_ALERTS CHƯA có component → KHÔNG assert render/không-render ở FE; 'employee không thấy widget Manager/HR' chứng ở TẦNG SERVER (GET /dashboard/me|/widgets omit theo quyền), không phải FE render",
+      "Assert dương finance_report theo ĐÚNG tập role seed 0101 (cfo/finance/leadership/admin — KHÔNG bó hẹp 'chỉ finance/admin'); biên deny = employee/hr/manager",
       "Data-scope 2-tenant regression: task/notification/widget không rò cross-tenant; project member scope đúng",
       "Coverage ≥80% vùng Sprint 4 (nhạy cảm cao hơn); test colocated src/**/*.spec.ts (bài học vitest-unit-specs-must-be-colocated — spec để test/ KHÔNG chạy)",
       "check.sh xanh; báo cáo coverage; FULL gate cho phần permission/workflow",
@@ -5784,7 +5790,7 @@ export const backlog = [
     module: "HR",
     layer: "BE",
     title:
-      "OWNER CHỐT: lộ identity_number/issue_date/issue_place (CCCD §14.18) qua read surface — cần gate RIÊNG cao hơn view-sensitive (vd view-identity:employee, seed per-pair + audit-on-reveal như salary) — hiện read DTO chủ đích KHÔNG chứa identity_*",
+      "Lộ identity_number/issue_date/issue_place (CCCD §14.18) qua read surface — OWNER ĐÃ CHỐT 2026-07-12: cặp MỚI view-identity:employee (is_sensitive) + inline detail + audit-on-reveal mirror salary, KHÔNG role-grant sẵn",
     zone: "red",
     status: "todo",
     paths: [
@@ -5798,11 +5804,13 @@ export const backlog = [
     src: [
       "SPEC-03 §14.18 (identity = nhóm giấy tờ nhạy cảm cao)",
       "Mẫu gate+audit: revealSalary (hr-read.service.ts) — reveal ⟹ audit atomically",
+      "Tiền lệ seed: 0444 — sensitive pair KHÔNG role-grant (view-salary/update-salary), admin gán per-role/per-object qua UI",
     ],
     done_when: [
-      "Owner chốt: cặp quyền mới (view-identity:employee, is_sensitive) hay tái dùng view-sensitive; nếu cặp mới → migration seed per-pair + data_scope mirror ĐÚNG (bài học §13)",
-      "Reveal identity ⟹ audit trong cùng tx (mirror view-salary); deny-path RED-trước: thiếu quyền → null, wildcard không mở, cross-tenant deny",
-      "FE màn Hồ sơ render nhóm CMND/CCCD chỉ khi có quyền; FULL gate security-reviewer + database-reviewer PASS",
+      "OWNER CHỐT 2026-07-12 (đã quyết, KHÔNG mở lại): (a) cặp MỚI view-identity:employee is_sensitive=true — KHÔNG tái dùng view-sensitive; (b) migration CHỈ seed pair vào catalog permissions, KHÔNG role-grant (mirror tiền lệ view-salary 0444 — tránh blanket-grant drift); (c) identity_* hiện INLINE trong detail DTO (không endpoint reveal riêng), fail-closed = null khi thiếu quyền",
+      "Reveal identity ⟹ audit trong cùng tx (mirror revealSalary hr-read.service.ts — per-row resourceId, isSensitive=true nên wildcard KHÔNG mở); deny-path RED-trước: thiếu quyền → null, wildcard không mở, cross-tenant deny",
+      "Nâng gate duyệt change-request cho identity fields: view-sensitive → view-identity (profile-change-request.service.ts — nhất quán với read gate mới)",
+      "FE màn Hồ sơ render nhóm CMND/CCCD chỉ khi có capability view-identity (thêm cặp vào SENSITIVE_CAPABILITY_ALLOWLIST /auth/me — bài học HR-PROFILE-UI-1); FULL gate security-reviewer + database-reviewer PASS",
     ],
   },
 
