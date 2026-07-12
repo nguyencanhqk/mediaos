@@ -43,6 +43,10 @@ import { TaskReminderJobHandler } from "./task-reminder.job-handler";
 import { OutboxNotificationBridge } from "./outbox-notification-bridge.service";
 import { TaskAudienceReader } from "./task-audience.reader";
 import { TaskNotiBridgeRegistrar } from "./task-noti-bridge.registrar";
+// S4-INT-5 (additive): AUTH/HR → NOTI producer wiring. TÁI DÙNG OutboxNotificationBridge (INT-1) — đăng ký 3
+// mapping (auth.user_created/password_reset_requested/user_locked) qua registrar OnModuleInit. KHÔNG import
+// AuthModule/EmployeesModule (acyclic — consumer đọc payload, producer enqueue outbox ở service tương ứng).
+import { AuthHrNotiBridgeRegistrar } from "./auth-hr-noti-bridge.registrar";
 
 @Module({
   imports: [DatabaseModule, EventsModule, RealtimeEmitterModule, PermissionModule],
@@ -79,6 +83,9 @@ import { TaskNotiBridgeRegistrar } from "./task-noti-bridge.registrar";
     OutboxNotificationBridge,
     TaskAudienceReader,
     TaskNotiBridgeRegistrar,
+    // S4-INT-5 (additive): registrar OnModuleInit đăng ký 3 consumer AUTH lên EventBus (@Global EventsModule)
+    // tại boot, tái dùng OutboxNotificationBridge — KHÔNG bridge/consumer mới.
+    AuthHrNotiBridgeRegistrar,
   ],
   // Export engine cho S4-INT-1 (outbox consumer gọi intake() in-process).
   // S4-DASH-BE-2 (additive): + MyNotificationsService cho NOTIFICATIONS widget handler (DASH inject qua DI —
