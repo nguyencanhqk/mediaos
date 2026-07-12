@@ -491,6 +491,58 @@ function Invoke-DevOnlineFast {
   Write-Warn "Chạy ẨN (không cửa sổ). Xem log: 'm dev-online-logs' · dừng: 'm dev-online-stop'."
 }
 
+# ── S5-DEVOPS-1: migrate-verify (DB ephemeral) + seed-staging (4 tài khoản UAT) ──────────
+# Cả hai lệnh CHỈ dành cho cluster dev/dev-online cục bộ. LƯU Ý: KHÔNG check `.env` active — trên máy
+# prod-host `.env` LUÔN là .env.prod (PROD service đọc nó) trong khi 2 lệnh này Import-DevOnlineEnv
+# override session env; check .env chỉ chặn oan luồng UAT hợp lệ. Guard THẬT: (1) seed-staging chỉ chấp
+# nhận DB đích mediaos_dev + script tự blocklist 'mediaos'; (2) migrate-verify chỉ CREATE/DROP tên
+# ^mediaos_migverify_ qua admin conn 'postgres' (blocklist mediaos/mediaos_dev trong script).
+# KHÔNG rebuild dist mà PROD service đang chạy (landmine prod-dist-shared) — chỉ gọi bash/node script có sẵn.
+
+# Chứng minh migrate-from-empty (0000→head) trên DB ephemeral mediaos_migverify_* — tự DROP ở trap EXIT,
+# KHÔNG chạm mediaos/mediaos_dev. Host Windows không có psql → fallback psql TRONG container qua
+# MIGVERIFY_PSQL (script chỉ đổi cách gọi psql, guard/URL giữ nguyên).
+function Invoke-MigrateVerify {
+  Write-Step "MIGRATE-VERIFY — migrate-from-empty trên DB ephemeral (tự DROP, không chạm mediaos/mediaos_dev)"
+  $bash = Get-Command bash -ErrorAction SilentlyContinue
+  if (-not $bash) { Write-Err "Không thấy bash (cần Git Bash) — không chạy được scripts/migrate-verify-ephemeral.sh"; exit 1 }
+  Import-DevOnlineEnv   # DATABASE_DIRECT_URL → cluster docker local; script CHỈ mượn host/cred để mint DB ephemeral
+  Exec { docker compose up -d } "docker compose up"
+  if (-not (Wait-Postgres)) { return }
+  if (-not (Get-Command psql -ErrorAction SilentlyContinue)) {
+    $env:MIGVERIFY_PSQL = "docker exec -i mediaos-postgres psql"
+    Write-Host "  psql không có trên PATH -> dùng psql trong container (MIGVERIFY_PSQL)" -ForegroundColor DarkGray
+  }
+  try {
+    Exec { & bash scripts/migrate-verify-ephemeral.sh --self-test } "GUARD self-test"
+    Exec { & bash scripts/migrate-verify-ephemeral.sh } "migrate-verify"
+  } finally { Remove-Item Env:MIGVERIFY_PSQL -ErrorAction SilentlyContinue }
+  Write-Ok "Migrate-from-empty PASS — DB ephemeral đã tự DROP; mediaos/mediaos_dev không bị chạm."
+}
+
+# Seed 4 tài khoản UAT (Employee/Manager/HR/company-admin) lên mediaos_dev — idempotent, non-destructive.
+# Cred đọc từ STAGING_SEED_* trong .env.dev-online (script fail-fast ≥12 ký tự TRƯỚC khi ghi DB,
+# không log mật khẩu). Super Admin KHÔNG seed ở đây — qua PLATFORM_SUPERADMIN_* lúc boot API.
+function Invoke-SeedStaging {
+  Write-Step "SEED-STAGING — 4 tài khoản UAT (Employee/Manager/HR/company-admin) lên mediaos_dev"
+  Import-DevOnlineEnv
+  $target = $env:DATABASE_DIRECT_URL
+  if (-not $target) { Write-Err ".env.dev-online thiếu DATABASE_DIRECT_URL"; exit 1 }
+  # GUARD: DB đích PHẢI là mediaos_dev — wrapper này tuyệt đối không seed prod (mediaos) hay DB khác.
+  $dbName = ($target -split '\?')[0]
+  $dbName = $dbName.Substring($dbName.LastIndexOf('/') + 1)
+  if ($dbName -ne "mediaos_dev") {
+    Write-Err "GUARD: DB đích '$dbName' khác 'mediaos_dev' — từ chối (wrapper CHỈ dành cho UAT mediaos_dev)."
+    exit 1
+  }
+  Exec { docker compose up -d } "docker compose up"
+  if (-not (Wait-Postgres)) { return }
+  Write-Host ("  DB dich        : " + ($target -replace '://([^:]+):[^@]+@', '://$1:***@'))
+  node scripts/seed-staging-accounts.mjs
+  if ($LASTEXITCODE -ne 0) { throw "seed-staging thất bại — kiểm tra STAGING_SEED_* trong .env.dev-online (fail-fast, KHÔNG ghi DB một phần)." }
+  Write-Ok "Seed staging xong (idempotent — chạy lại không nhân bản; SA qua PLATFORM_SUPERADMIN_* lúc boot API)."
+}
+
 # ── Dashboard tiến độ (báo cáo dự án, CHẠY ẨN cổng 5180) ─────────────────────
 # Server zero-dep đọc LIVE harness/backlog.mjs + git. Khởi động bằng tay qua VBS
 # (cửa sổ ẩn, chạy nền) — KHÔNG còn dịch vụ tự khởi động cùng Windows.
@@ -567,6 +619,10 @@ function Show-Help {
   Write-Host "    dev-online-db       tạo + migrate + SEED LẠI DB cô lập mediaos_dev (1 lần)"
   Write-Host "    dev-online-migrate  CHỈ migrate mediaos_dev (không tạo DB, không seed lại)"
   Write-Host "    dev-online-tunnel   tạo ingress cloudflared + DNS cho cian-dev.* (1 lần, Administrator)"
+  Write-Host ""
+  Write-Host "  STAGING / UAT (S5-DEVOPS-1 — luôn ép env dev-online; guard DB-đích, không đụng mediaos prod)" -ForegroundColor Yellow
+  Write-Host "    migrate-verify      chứng minh migrate-from-empty (0000→head) trên DB ephemeral tự DROP"
+  Write-Host "    seed-staging        seed 4 tài khoản UAT (Employee/Manager/HR/Admin) lên mediaos_dev — idempotent"
   Write-Host ""
   Write-Host "  DASHBOARD (tiến độ dự án — chạy ẩn cổng 5180)" -ForegroundColor Yellow
   Write-Host "    dashboard         bật dashboard tiến độ (cửa sổ ẩn) -> http://localhost:5180"
@@ -678,6 +734,8 @@ switch ($Command.ToLower()) {
   "dev-online-db"      { Invoke-DevOnlineDb }
   "dev-online-migrate" { Invoke-DevOnlineMigrate }
   "dev-online-tunnel"  { Invoke-DevOnlineTunnel }
+  "migrate-verify"     { Invoke-MigrateVerify }
+  "seed-staging"       { Invoke-SeedStaging }
   "dashboard"         { Invoke-Dashboard }
   "dashboard-stop"    { Invoke-DashboardStop }
   default      { Write-Err "Lệnh không hợp lệ: $Command"; Show-Help; exit 1 }

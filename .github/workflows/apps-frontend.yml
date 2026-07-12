@@ -6,10 +6,11 @@
 # QUAN HỆ với ci.yml: ci.yml = cổng tích hợp CROSS-CUTTING (RLS qua PgBouncer, build toàn workspace) chạy
 # trên MỌI thay đổi. File này = pipeline build/deploy ĐỘC LẬP theo app (path-filtered). Hai cái bổ trợ nhau.
 #
-# ⚠️ Deploy step = PLACEHOLDER (comment). Host ĐÃ chốt = Cloudflare Pages (xem deploy block cuối file + runbook §6).
-#   Bật bằng cách điền secret CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID. KHÔNG hard-code secret/domain.
+# Deploy (S5-DEVOPS-1): job `deploy` cuối file — push master → Cloudflare Pages, gate bằng repo var
+#   DEPLOY_FE_ENABLED=='true' (CI không đỏ khi chưa nạp secret) + environment `production`
+#   (secret CLOUDFLARE_API_TOKEN scope Pages:Edit — owner tạo; var CLOUDFLARE_ACCOUNT_ID đã provision).
 #   VITE_* là biến BUILD-TIME công khai (nhúng vào client bundle) → dùng GitHub Actions `vars` (KHÔNG `secrets`).
-#   Đặt repo/環境 variable `PROD_DOMAIN=funtimemediacorp.com` để nhúng đúng origin; vắng → default funtimemediacorp.com.
+#   Đặt repo/env variable `PROD_DOMAIN=funtimemediacorp.com` để nhúng đúng origin; vắng → default funtimemediacorp.com.
 
 name: Apps — Frontend CI
 
@@ -91,9 +92,17 @@ jobs:
           AUTH_URL="https://auth.${DOMAIN}"
           echo "VITE_API_URL=https://api.${DOMAIN}/api/v1" >> "$GITHUB_ENV"
           case "${{ matrix.app }}" in
+            app)
+              # vỏ nghiệp vụ ở apex; cần auth app để bounce khi mất phiên (main.tsx đọc VITE_AUTH_APP_URL).
+              # (S5-DEVOPS-1: trước đây case này THIẾU → bundle CI không bounce được — khớp lại 06-deploy-pages.ps1.)
+              echo "VITE_AUTH_APP_URL=${AUTH_URL}"          >> "$GITHUB_ENV"
+              ;;
             auth)
               # bounce về launcher (root domain) khi ?redirect vắng/không hợp lệ
               echo "VITE_DEFAULT_APP_URL=https://${DOMAIN}"  >> "$GITHUB_ENV"
+              # slug công ty CỐ ĐỊNH lúc build (form prod không có ô nhập) — PHẢI khớp company admin prod
+              # (06-deploy-pages.ps1 -CompanySlug). Đổi qua repo var PROD_COMPANY_SLUG.
+              echo "VITE_COMPANY_SLUG=${{ vars.PROD_COMPANY_SLUG || 'funtime' }}" >> "$GITHUB_ENV"
               ;;
             console)
               echo "VITE_AUTH_APP_URL=${AUTH_URL}"          >> "$GITHUB_ENV"
@@ -103,16 +112,56 @@ jobs:
       - name: Build
         run: pnpm --filter @mediaos/${{ matrix.app }} build
 
-      # ── Deploy → Cloudflare Pages (PLACEHOLDER — bật khi đã nạp secret) ────
-      # CI đã build dist kèm VITE_* đúng → chỉ publish tĩnh. Tạo trước project 1 lần:
-      #   wrangler pages project create ${{ matrix.app }}-mediaos --production-branch main
-      # rồi gắn custom domain (runbook §2).
-      # - name: Deploy ${{ matrix.app }} → Cloudflare Pages
-      #   if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-      #   run: npx wrangler@3 pages deploy "apps/${{ matrix.app }}/dist" --project-name "${{ matrix.app }}-mediaos" --branch main
-      #   env:
-      #     CLOUDFLARE_API_TOKEN:  ${{ secrets.CLOUDFLARE_API_TOKEN }}   # scope: Pages:Edit
-      #     CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      - name: Deploy placeholder
+      # Dist đẩy lên artifact cho job `deploy` (job riêng để gắn environment: production — secrets/branch
+      # policy tách khỏi build PR). retention ngắn: chỉ là cầu build→deploy trong cùng run.
+      - name: Upload dist (cho job deploy)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.app }}
+          path: apps/${{ matrix.app }}/dist
+          retention-days: 3
+
+  # ── Deploy → Cloudflare Pages (S5-DEVOPS-1) ────────────────────────────────
+  # CHỈ push master + repo var DEPLOY_FE_ENABLED == 'true' (gate bằng var để CI KHÔNG đỏ khi chưa nạp
+  # secret — owner bật sau khi tạo token). Cần (một lần, owner):
+  #   1. Cloudflare dashboard → API token scope Pages:Edit → `gh secret set CLOUDFLARE_API_TOKEN --env production`
+  #   2. `gh variable set DEPLOY_FE_ENABLED --body true`
+  # Environment `production` (branch policy: protected branches) + var CLOUDFLARE_ACCOUNT_ID đã provision sẵn.
+  # Project name: app → `web-mediaos` (project ĐANG giữ apex — deploy vào đó để domain TỰ cập nhật);
+  # auth/console → `<app>-mediaos` (khớp 06-deploy-pages.ps1 — KHÔNG đổi tên kẻo lệch domain đã gắn).
+  deploy:
+    name: Deploy ${{ matrix.app }} → Cloudflare Pages
+    needs: [changes, build]
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+      vars.DEPLOY_FE_ENABLED == 'true' &&
+      needs.changes.outputs.apps != '[]' && needs.changes.outputs.apps != ''
+    runs-on: ubuntu-latest
+    environment: production
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.changes.outputs.apps) }}
+    steps:
+      - name: Download dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ matrix.app }}
+          path: dist
+
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }} # scope: Pages:Edit (environment secret)
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }} # environment variable (không phải secret)
         run: |
-          echo "TODO(ops) wrangler pages deploy apps/${{ matrix.app }}/dist → ${{ matrix.app }}-mediaos (set CLOUDFLARE_* secrets to enable)."
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Thiếu environment secret CLOUDFLARE_API_TOKEN (Pages:Edit) — tạo ở CF dashboard rồi 'gh secret set CLOUDFLARE_API_TOKEN --env production'." >&2
+            exit 1
+          fi
+          case "${{ matrix.app }}" in
+            app) PROJECT="web-mediaos" ;;
+            *)   PROJECT="${{ matrix.app }}-mediaos" ;;
+          esac
+          echo "deploy dist → $PROJECT"
+          npx wrangler@3 pages deploy dist --project-name "$PROJECT" --branch main
