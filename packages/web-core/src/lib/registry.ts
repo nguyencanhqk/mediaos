@@ -749,6 +749,22 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 10,
   },
+  // S4-FE-DASH-3 (DASH-SCREEN-CONFIG / FRONTEND-07 §7.1) — Cấu hình widget dashboard (admin): bật/tắt ·
+  // thứ tự · kích thước theo dashboard-type. Gate route-level = CẶP ENGINE THỰC trực tiếp
+  // (view:dashboard-config, seed mig 0484, is_sensitive=true, đã SENSITIVE_CAPABILITY_ALLOWLIST) —
+  // KHÔNG qua PERMISSION_CODE_TO_PAIR (tránh pair-drift đã cắn, cùng kỹ thuật noti.events/att.shifts).
+  // Page tự gate TINH hơn cho toggle bằng useCanExact(update:dashboard-config). order sau dashboard.
+  {
+    routeKey: "dashboard.configs",
+    path: "/dashboard/configs",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "DASH",
+    screenCode: "DASH-SCREEN-CONFIG",
+    titleKey: "routeTitle.dashboardConfigs",
+    requiredAnyPermissions: ["view:dashboard-config"],
+    showInSidebar: true,
+    order: 11,
+  },
 
   // HR
   {

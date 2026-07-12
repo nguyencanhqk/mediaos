@@ -9,6 +9,8 @@ import {
   dashboardTypesResponseSchema,
   widgetCatalogItemSchema,
   dashboardWidgetDataSchema,
+  dashboardConfigListResponseSchema,
+  dashboardConfigItemSchema,
   type DashboardSummaryDto,
   type ReportResponseDto,
   type MvStatsResponseDto,
@@ -23,6 +25,10 @@ import {
   type DashboardWidgetDataDto,
   type WidgetDataQuery,
   type DashboardWidgetListQuery,
+  type DashboardConfigListQueryDto,
+  type DashboardConfigListResponseDto,
+  type DashboardConfigItemDto,
+  type DashboardConfigPatchDto,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -143,4 +149,29 @@ export const dashboardApi = {
       dashboardWidgetDataSchema,
     );
   },
+
+  // ── S4-FE-DASH-3 — Widget CONFIG admin (nối S4-DASH-BE-3: GET/PATCH /dashboard/configs) ────────────
+  //
+  // Ranh giới GHI cho dashboard_widget_configs (sort_order/is_enabled/layout size theo dashboard_type/
+  // role/user). Permission: view/update:dashboard-config (is_sensitive=true, Company-scope, company-admin
+  // hiện tại) — BE là cổng thật; FE chỉ double-gate bằng useCanExact (fail-closed).
+
+  /** GET /dashboard/configs — danh mục config widget (đã join widget_code/name). Permission: view:dashboard-config. */
+  getDashboardConfigs: (
+    query?: Partial<DashboardConfigListQueryDto>,
+  ): Promise<DashboardConfigListResponseDto> =>
+    apiFetch(
+      `/dashboard/configs${buildQueryString(query ?? {})}`,
+      dashboardConfigListResponseSchema,
+    ),
+
+  /** PATCH /dashboard/configs/:id — cập nhật is_enabled/sort_order/layout size. Permission: update:dashboard-config. */
+  updateDashboardConfig: (
+    id: string,
+    body: DashboardConfigPatchDto,
+  ): Promise<DashboardConfigItemDto> =>
+    apiFetch(`/dashboard/configs/${id}`, dashboardConfigItemSchema, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
 };

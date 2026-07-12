@@ -16,6 +16,8 @@ import {
   dashboardViewResponseSchema,
   dashboardTypesResponseSchema,
   dashboardWidgetDataSchema,
+  dashboardConfigListResponseSchema,
+  dashboardConfigItemSchema,
 } from "@mediaos/contracts";
 import { dashboardApi } from "./dashboard-api";
 import * as apiClient from "./api-client";
@@ -192,5 +194,30 @@ describe("dashboardApi — getDashboardByType (S4-FE-DASH-2, DashboardTypeSwitch
     await dashboardApi.getDashboardByType("Admin");
     const [url] = lastCall();
     expect(url).toBe("/dashboard/admin");
+  });
+});
+
+describe("dashboardApi — config admin (S4-FE-DASH-3, nối S4-DASH-BE-3)", () => {
+  it("getDashboardConfigs() → GET /dashboard/configs + dashboardConfigListResponseSchema, KHÔNG company_id", async () => {
+    await dashboardApi.getDashboardConfigs();
+    const [url, schema] = lastCall();
+    expect(url).toBe("/dashboard/configs");
+    expect(url).not.toContain("company");
+    expect(schema).toBe(dashboardConfigListResponseSchema);
+  });
+
+  it("getDashboardConfigs({ dashboard_type }) → forward query string", async () => {
+    await dashboardApi.getDashboardConfigs({ dashboard_type: "Admin" });
+    const [url] = lastCall();
+    expect(url).toBe("/dashboard/configs?dashboard_type=Admin");
+  });
+
+  it("updateDashboardConfig(id, body) → PATCH /dashboard/configs/:id + dashboardConfigItemSchema + JSON body", async () => {
+    await dashboardApi.updateDashboardConfig("cfg-1", { is_enabled: false, sort_order: 20 });
+    const [url, schema, opts] = lastCall();
+    expect(url).toBe("/dashboard/configs/cfg-1");
+    expect(schema).toBe(dashboardConfigItemSchema);
+    expect(opts?.method).toBe("PATCH");
+    expect(opts?.body).toBe(JSON.stringify({ is_enabled: false, sort_order: 20 }));
   });
 });

@@ -52,3 +52,16 @@ export const DASH_WIDGET_GATE_PAIR: Readonly<
  * dựa route).
  */
 export const DASH_READ_PAIR = { action: "read", resourceType: "dashboard" } as const;
+
+/**
+ * S4-FE-DASH-3 — cặp engine DashboardConfigPage (GET/PATCH /dashboard/configs, nối S4-DASH-BE-3). MIRROR
+ * đúng BE DASH_PERMISSION_PAIRS specCode "DASH.CONFIG.VIEW"/"DASH.CONFIG.UPDATE" (apps/api/src/dashboard/
+ * dashboard-widget-catalog.const.ts, mig 0484) — literal engine pair trực tiếp (KHÔNG qua
+ * PERMISSION_CODE_TO_PAIR, tránh pair-drift đã cắn 3 lần). CẢ 2 cặp is_sensitive=true, Company-scope
+ * company-admin (API-10:310-312) ⇒ component PHẢI dùng useCanExact (fail-closed, KHÔNG wildcard '*:*'),
+ * mirror NotificationEventsPage/AttendanceRulesPage.
+ */
+export const DASH_CONFIG_ENGINE_PAIRS = {
+  VIEW: { action: "view", resourceType: "dashboard-config" },
+  UPDATE: { action: "update", resourceType: "dashboard-config" },
+} as const;

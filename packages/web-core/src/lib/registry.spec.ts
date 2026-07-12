@@ -816,6 +816,41 @@ describe("S4 registry reconcile — TASK/NOTI/DASH sidebar (filterSidebarItems)"
   });
 });
 
+// ---------------------------------------------------------------------------
+// S4-FE-DASH-3 — dashboard.configs route (admin widget config, DASH-SCREEN-CONFIG). Gate = CẶP ENGINE
+// THỰC trực tiếp view:dashboard-config (is_sensitive=true, seed mig 0484, đã SENSITIVE_CAPABILITY_ALLOWLIST
+// nên phơi qua /auth/me) — KHÔNG qua PERMISSION_CODE_TO_PAIR (drift-guard, cùng kỹ thuật att.shifts/
+// noti.events). Đây là điểm Đội 3 fail vòng trước (route KHÔNG được đăng ký) → pin cả meta lẫn deny/allow.
+// ---------------------------------------------------------------------------
+
+describe("ROUTE_REGISTRY — dashboard.configs (S4-FE-DASH-3)", () => {
+  const dashConfigs = getRouteMeta("dashboard.configs")!;
+
+  it("route dashboard.configs TỒN TẠI trong ROUTE_REGISTRY (reachable — fix blocker vòng trước)", () => {
+    expect(dashConfigs).toBeDefined();
+    expect(dashConfigs.path).toBe("/dashboard/configs");
+    expect(dashConfigs.moduleCode).toBe("DASH");
+    expect(dashConfigs.showInSidebar).toBe(true);
+  });
+
+  it("gate = cặp engine thực view:dashboard-config trực tiếp (KHÔNG requiredScopes cổng-cứng)", () => {
+    expect(dashConfigs.requiredAnyPermissions).toEqual(["view:dashboard-config"]);
+    expect(dashConfigs.requiredScopes).toBeUndefined();
+  });
+
+  it("deny-path: thiếu view:dashboard-config → SHOW_403 (DASH active, không rơi SHOW_404 sớm)", () => {
+    const session = makeSession(TASK_NOTI_DASH_SESSION());
+    const c = createPermissionChecker(makePerms([])); // caps rỗng — sensitive cap KHÔNG tới FE mọi role
+    expect(evaluateRouteAccess(session, dashConfigs, c).action).toBe("SHOW_403");
+  });
+
+  it("allow-path: có view:dashboard-config (company-admin, allowlisted qua /auth/me) + DASH active → ALLOW", () => {
+    const session = makeSession(TASK_NOTI_DASH_SESSION());
+    const c = createPermissionChecker(makePerms(["view:dashboard-config"]));
+    expect(evaluateRouteAccess(session, dashConfigs, c).action).toBe("ALLOW");
+  });
+});
+
 describe("PERMISSION_CODE_TO_PAIR — TASK/NOTI/DASH pairs (drift-guard, S4-FE-REGISTRY-1)", () => {
   // Mirror block FOUNDATION/AUTH — pin ánh xạ tường minh để happy-path (admin có mọi cặp) KHÔNG che drift.
   it("ánh xạ tường minh khớp cặp engine THẬT non-sensitive (mig 0005 · 0100)", () => {

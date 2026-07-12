@@ -1007,3 +1007,145 @@ describe.skipIf(!runDb)(
     });
   },
 );
+
+// ────────────────────────────────────────────────────────────────────────────
+// S4-FE-DASH-3 — APPEND 2 cặp NHẠY CẢM DASH config vào SENSITIVE_CAPABILITY_ALLOWLIST:
+//   view:dashboard-config · update:dashboard-config
+// Cặp seed THẬT is_sensitive=true — catalog dashboard-widget-catalog.const.ts:314-324
+// (DASH.CONFIG.VIEW / DASH.CONFIG.UPDATE), seed + grant mig 0484 khối (3). Grant Company CHỈ
+// company-admin(0001) — DASH_GRANT_MATRIX:379-385 (employee/manager/hr KHÔNG có grant, least-privilege).
+// FE DashboardConfigPage dùng PermissionGate → useCanExact('view'/'update','dashboard-config').
+// TRƯỚC fix: getCapabilities() lọc bỏ MỌI sensitive + allowlist thiếu 2 cặp ⇒ /auth/me KHÔNG BAO GIỜ
+// trả 2 cặp cho BẤT KỲ user nào (kể cả company-admin có grant thật) ⇒ trang LUÔN EmptyState "không có
+// quyền" trong app thật (bẫy CAP-2/EXPORT-1/NOTI-BE-3 tái diễn ≥5 lần). Đây là BẰNG CHỨNG PIPELINE THẬT
+// thay cho false-green của FE spec (tự set capabilities vào store). Enforcement KHÔNG đổi —
+// @RequirePermission('view'/'update','dashboard-config',{isSensitive:true}) + PermissionGuard class-level
+// (dashboard-config.controller.ts) + RLS company_id vẫn là cổng THẬT. Chỉ mở CỜ HIỂN THỊ.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** 2 cặp DASH config (action, resourceType) — tuple tránh split(":") nhập nhằng. Seed THẬT mig 0484. */
+const DASH_CONFIG_SENSITIVE_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ["view", "dashboard-config"],
+  ["update", "dashboard-config"],
+];
+const DASH_CONFIG_SENSITIVE_KEYS = DASH_CONFIG_SENSITIVE_PAIRS.map(([a, r]) => `${a}:${r}`);
+
+describe.skipIf(!runDb)(
+  "S4-FE-DASH-3 /auth/me view:dashboard-config · update:dashboard-config (company-admin only)",
+  () => {
+    let app: INestApplication;
+    let direct: Pool;
+    let A: SeededTenant;
+    let B: SeededTenant;
+    let adminToken: string;
+    let hrToken: string;
+    let employeeToken: string;
+    let managerToken: string;
+    let wildcardToken: string;
+    let tenantBToken: string;
+    const companyIds: string[] = [];
+
+    beforeAll(async () => {
+      const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+      app = moduleRef.createNestApplication();
+      app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
+      app.useGlobalFilters(new AllExceptionsFilter());
+      await app.init();
+      direct = directPool();
+      const pw = await new PasswordService().hash(LOGIN_PW);
+
+      // ── Tenant A ────────────────────────────────────────────────────────────
+      A = await seedCompany(direct, "dashcfg");
+      companyIds.push(A.companyId);
+
+      // DASHCFG-P1: company-admin (0001) — grant Company đủ 2 cặp DASH config (seed THẬT mig 0484:105-106).
+      const adminEmail = `ca-${TAG}@dashcfg.test`;
+      const admin = await seedUser(direct, A.companyId, adminEmail, pw);
+      await seedUserRole(direct, admin, COMPANY_ADMIN_ROLE, A.companyId);
+
+      // DASHCFG-N1/N2/N3: hr(0011) + employee(0008) + manager(0010) — KHÔNG có grant 2 cặp (least-privilege).
+      const hrEmail = `hr-${TAG}@dashcfg.test`;
+      const hr = await seedUser(direct, A.companyId, hrEmail, pw);
+      await seedUserRole(direct, hr, HR_ROLE, A.companyId);
+
+      const empEmail = `emp-${TAG}@dashcfg.test`;
+      const emp = await seedUser(direct, A.companyId, empEmail, pw);
+      await seedUserRole(direct, emp, EMPLOYEE_ROLE, A.companyId);
+
+      const mgrEmail = `mgr-${TAG}@dashcfg.test`;
+      const mgr = await seedUser(direct, A.companyId, mgrEmail, pw);
+      await seedUserRole(direct, mgr, MANAGER_ROLE, A.companyId);
+
+      // DASHCFG-N4: wildcard-only '*:*' non-sensitive → KHÔNG kế thừa 2 cặp sensitive (sensitive gate).
+      const wildEmail = `wild-${TAG}@dashcfg.test`;
+      const wild = await seedUser(direct, A.companyId, wildEmail, pw);
+      const wildRole = await seedRole(direct, A.companyId, `dashcfg-wild-${TAG}`);
+      const wildPerm = await seedPermissionCatalog(direct, "*", "*", false);
+      await seedRolePermission(direct, wildRole, wildPerm, "ALLOW");
+      await seedUserRole(direct, wild, wildRole, A.companyId);
+
+      // ── Tenant B (cross-tenant, BẤT BIẾN #1) ─────────────────────────────────
+      // DASHCFG-N5: user trơn (KHÔNG role) — grant DASH config của tenant A KHÔNG rò sang tenant B.
+      B = await seedCompany(direct, "dashcfgb");
+      companyIds.push(B.companyId);
+      const bEmail = `bare-${TAG}@dashcfgb.test`;
+      await seedUser(direct, B.companyId, bEmail, pw);
+
+      adminToken = await login(app, A.slug, adminEmail);
+      hrToken = await login(app, A.slug, hrEmail);
+      employeeToken = await login(app, A.slug, empEmail);
+      managerToken = await login(app, A.slug, mgrEmail);
+      wildcardToken = await login(app, A.slug, wildEmail);
+      tenantBToken = await login(app, B.slug, bEmail);
+    });
+
+    afterAll(async () => {
+      await app?.close();
+      if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
+      await direct?.end();
+    });
+
+    it("DASHCFG-P1 — company-admin (0001) → /auth/me CÓ đủ 2 cặp DASH config === true", async () => {
+      const caps = await meCapabilities(app, adminToken);
+      for (const key of DASH_CONFIG_SENSITIVE_KEYS) {
+        expect(caps[key], `company-admin thiếu cặp allowlist ${key}`).toBe(true);
+      }
+    });
+
+    it("DASHCFG-N1 — hr (0011) → KHÔNG có cặp DASH config nào (least-privilege, chỉ company-admin)", async () => {
+      const caps = await meCapabilities(app, hrToken);
+      for (const key of DASH_CONFIG_SENSITIVE_KEYS) {
+        expect(key in caps, `hr KHÔNG được lộ cặp ${key}`).toBe(false);
+      }
+    });
+
+    it("DASHCFG-N2 — employee (0008) → KHÔNG có cặp DASH config nào (least-privilege)", async () => {
+      const caps = await meCapabilities(app, employeeToken);
+      for (const key of DASH_CONFIG_SENSITIVE_KEYS) {
+        expect(key in caps, `employee KHÔNG được lộ cặp ${key}`).toBe(false);
+      }
+    });
+
+    it("DASHCFG-N3 — manager (0010) → KHÔNG có cặp DASH config nào (least-privilege)", async () => {
+      const caps = await meCapabilities(app, managerToken);
+      for (const key of DASH_CONFIG_SENSITIVE_KEYS) {
+        expect(key in caps, `manager KHÔNG được lộ cặp ${key}`).toBe(false);
+      }
+    });
+
+    it("DASHCFG-N4 — wildcard '*:*' → KHÔNG kế thừa 2 cặp DASH config (sensitive gate); '*:*' vẫn có", async () => {
+      const caps = await meCapabilities(app, wildcardToken);
+      expect(caps[WILDCARD_CAP_KEY]).toBe(true); // non-sensitive wildcard vẫn surface
+      for (const key of DASH_CONFIG_SENSITIVE_KEYS) {
+        expect(key in caps, `cặp nhạy cảm ${key} KHÔNG kế thừa qua *:*`).toBe(false);
+      }
+    });
+
+    it("DASHCFG-N5 — cross-tenant: user tenant B trơn → KHÔNG chứa 2 cặp DASH config của tenant A", async () => {
+      const caps = await meCapabilities(app, tenantBToken);
+      for (const key of DASH_CONFIG_SENSITIVE_KEYS) {
+        expect(key in caps, `tenant B KHÔNG được thấy ${key} của tenant A`).toBe(false);
+      }
+    });
+  },
+);
