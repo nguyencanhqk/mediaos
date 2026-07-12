@@ -5007,8 +5007,14 @@ export const backlog = [
       "SPEC-06/07/08",
     ],
     plan: "docs/plans/S4-QA-1.md",
+    // PLAN-BLOCK 2026-07-12 (run wf_f0acd8b7): plan-reviewer chặn với phát hiện THẬT — các ràng buộc
+    // dưới đây bake vào done_when để lần chạy lại không lặp. TIỀN ĐỀ: chỉ chạy lại SAU khi PR #177
+    // (FE widgets P1) + #178 (invalidation endpoint) đã merge vào master.
     done_when: [
-      "Deny-path RED cho permission/workflow: TASK (tạo/gán/đổi status trái quyền + status transition sai) · NOTI (đọc/mark notification người khác) · DASH (widget Manager/HR với employee) — chạy trên DB cô lập theo lane",
+      "SCOPE: S4-QA-TASK-1/S4-QA-NOTI-1 ĐÃ SHIP (PR #165/#167 merged) — XÁC MINH spec của 2 WO đó tồn tại + chạy xanh trên base branch TRƯỚC khi tuyên bố 'không viết trùng'; phần TASK/NOTI chỉ bù lỗ hổng, trọng tâm = DASH + 2-tenant cross-module",
+      "Deny-path RED cho permission/workflow: TASK (tạo/gán/đổi status trái quyền + transition sai) · NOTI (đọc/mark notification người khác) · DASH (widget Manager/HR với employee) — chạy trên DB cô lập theo lane; vì code ĐÃ đúng nên mỗi deny-path PHẢI chứng minh test có-thể-đỏ: assert đúng 403 + error body (KHÔNG chỉ !=200) và mutation-check (tạm gỡ guard → test lật RED, ghi bằng chứng vào plan) — chống vacuous-green (bài học reviewers-pass-real-bugs)",
+      "FE smoke CHỈ assert widget CÓ component thật render qua PermissionGate (sau #177: MY_TASKS/TASK_ALERTS/NOTIFICATIONS + ATTENDANCE_TODAY/PENDING_LEAVE/PROJECT_PROGRESS/HR_OVERVIEW); LEAVE_CALENDAR/ATTENDANCE_ALERTS CHƯA có component → KHÔNG assert render/không-render ở FE; 'employee không thấy widget Manager/HR' chứng ở TẦNG SERVER (GET /dashboard/me|/widgets omit theo quyền), không phải FE render",
+      "Assert dương finance_report theo ĐÚNG tập role seed 0101 (cfo/finance/leadership/admin — KHÔNG bó hẹp 'chỉ finance/admin'); biên deny = employee/hr/manager",
       "Data-scope 2-tenant regression: task/notification/widget không rò cross-tenant; project member scope đúng",
       "Coverage ≥80% vùng Sprint 4 (nhạy cảm cao hơn); test colocated src/**/*.spec.ts (bài học vitest-unit-specs-must-be-colocated — spec để test/ KHÔNG chạy)",
       "check.sh xanh; báo cáo coverage; FULL gate cho phần permission/workflow",
