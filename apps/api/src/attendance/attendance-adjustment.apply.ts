@@ -159,6 +159,8 @@ export async function emitAdjustmentRequested(
       workDate: p.workDate,
       requestType: p.requestType,
       taskId: p.taskId,
+      // S4-INT-4: actor for engine actor-exclusion (recipient resolver drops actorUserId).
+      actorUserId: p.actorId,
     },
   });
 }
@@ -190,6 +192,8 @@ export async function emitAdjustmentApproved(
       recordId: p.recordId,
       userId: p.userId,
       approvedBy: p.actorId,
+      // S4-INT-4: actor for engine actor-exclusion (recipient resolver drops actorUserId).
+      actorUserId: p.actorId,
     },
   });
 }
