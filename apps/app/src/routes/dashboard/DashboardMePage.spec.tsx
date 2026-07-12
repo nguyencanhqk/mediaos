@@ -23,7 +23,12 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
     ...actual,
-    dashboardApi: { getMyDashboard: vi.fn() },
+    dashboardApi: {
+      getMyDashboard: vi.fn(),
+      // S4-FE-DASH-2 — DashboardTypeSwitcher (mount THẬT, không mock) tự gọi getDashboardTypes.
+      getDashboardTypes: vi.fn(),
+      getDashboardByType: vi.fn(),
+    },
   };
 });
 
@@ -43,6 +48,7 @@ vi.mock("@/components/dashboard/DashboardWidgetGrid", () => ({
 
 import { dashboardApi } from "@mediaos/web-core";
 const mockGetMyDashboard = dashboardApi.getMyDashboard as ReturnType<typeof vi.fn>;
+const mockGetDashboardTypes = dashboardApi.getDashboardTypes as ReturnType<typeof vi.fn>;
 
 function setCaps(caps: Record<string, boolean>) {
   useAuthStore.setState({
@@ -66,6 +72,16 @@ function renderPage() {
 beforeEach(() => {
   useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
   vi.clearAllMocks();
+  // Mặc định 1 type khả dụng (Employee) — DashboardTypeSwitcher tự ẩn khi ≤1 type (KHÔNG có gì để chuyển),
+  // giữ 4 test shell hiện có không phải quan tâm switcher (test riêng ở DashboardTypeSwitcher.spec.tsx).
+  mockGetDashboardTypes.mockResolvedValue([
+    {
+      dashboard_type: "Employee",
+      label: "Nhân viên",
+      is_default: true,
+      permission: "read:dashboard",
+    },
+  ]);
 });
 
 describe("DashboardMePage — gate (DASH_READ_PAIR = read:dashboard)", () => {

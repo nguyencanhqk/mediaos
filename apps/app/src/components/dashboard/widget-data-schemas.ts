@@ -68,3 +68,65 @@ export const notificationsWidgetDataSchema = z.object({
   }),
 });
 export type NotificationsWidgetData = z.infer<typeof notificationsWidgetDataSchema>;
+
+// ── S4-FE-DASH-2 — 4 widget P1 (ATTENDANCE_TODAY/PENDING_LEAVE/PROJECT_PROGRESS/HR_OVERVIEW) ──────
+
+// ATTENDANCE_TODAY — fetchAttendanceToday(): { date, items, summary: { total } }.
+export const dashWidgetAttendanceTodayItemSchema = z.object({
+  id: z.string(),
+  workDate: z.string(),
+  attendanceStatus: z.string().nullable(),
+  status: z.string().nullable(),
+  checkInAt: z.string().nullable(),
+  checkOutAt: z.string().nullable(),
+});
+export type DashWidgetAttendanceTodayItem = z.infer<typeof dashWidgetAttendanceTodayItemSchema>;
+
+export const attendanceTodayWidgetDataSchema = z.object({
+  date: z.string(),
+  items: z.array(dashWidgetAttendanceTodayItemSchema),
+  summary: z.object({ total: z.number().int().nonnegative() }),
+});
+export type AttendanceTodayWidgetData = z.infer<typeof attendanceTodayWidgetDataSchema>;
+
+// PENDING_LEAVE — fetchPendingLeave(): { items, summary: { total } }.
+export const dashWidgetPendingLeaveItemSchema = z.object({
+  id: z.string(),
+  leaveTypeName: z.string().nullable(),
+  startDate: z.string(),
+  endDate: z.string(),
+  totalDays: z.number(),
+  status: z.string(),
+  submittedAt: z.string().nullable(),
+  requester: z.object({
+    fullName: z.string().nullable(),
+    department: z.string().nullable(),
+  }),
+});
+export type DashWidgetPendingLeaveItem = z.infer<typeof dashWidgetPendingLeaveItemSchema>;
+
+export const pendingLeaveWidgetDataSchema = z.object({
+  items: z.array(dashWidgetPendingLeaveItemSchema),
+  summary: z.object({ total: z.number().int().nonnegative() }),
+});
+export type PendingLeaveWidgetData = z.infer<typeof pendingLeaveWidgetDataSchema>;
+
+// PROJECT_PROGRESS — fetchProjectProgress(): { projectId, summary: { total, done, percent }, byStatus }.
+export const projectProgressWidgetDataSchema = z.object({
+  projectId: z.string(),
+  summary: z.object({
+    total: z.number().int().nonnegative(),
+    done: z.number().int().nonnegative(),
+    percent: z.number().int().min(0).max(100),
+  }),
+  byStatus: z.record(z.string(), z.number().int().nonnegative()),
+});
+export type ProjectProgressWidgetData = z.infer<typeof projectProgressWidgetDataSchema>;
+
+// HR_OVERVIEW — fetchHrOverview(): { summary: { headcount }, byStatus, byOrgUnit }. KHÔNG salary/PII.
+export const hrOverviewWidgetDataSchema = z.object({
+  summary: z.object({ headcount: z.number().int().nonnegative() }),
+  byStatus: z.record(z.string(), z.number().int().nonnegative()),
+  byOrgUnit: z.record(z.string(), z.number().int().nonnegative()),
+});
+export type HrOverviewWidgetData = z.infer<typeof hrOverviewWidgetDataSchema>;

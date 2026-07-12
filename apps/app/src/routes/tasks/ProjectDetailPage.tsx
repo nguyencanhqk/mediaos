@@ -16,15 +16,16 @@ import { TASK_ENGINE_PAIRS } from "./constants";
 import { ProjectFormDrawer } from "./ProjectFormDrawer";
 import { ProjectMemberTable } from "./ProjectMemberTable";
 import { TaskKanbanPage } from "./TaskKanbanPage";
+import { ProjectProgressWidget } from "@/components/dashboard/ProjectProgressWidget";
 
 /**
  * ProjectDetailPage — S4-FE-TASK-1 (SPEC-06 §13.3, TASK-SCREEN-003). Deep link /tasks/projects/:projectId.
  *
  * Tab "Kanban" (S4-FE-TASK-3, SPEC-06 §13.8) mount `<TaskKanbanPage>` — route MỚI KHÔNG thêm vào router.tsx
  * (ngoài paths cho phép của lane); thay vào đó tái dùng route đã có `/tasks/projects/:projectId` qua state
- * tab nội bộ (mirror tab "members" đã có từ S4-FE-TASK-1). Báo cáo/Hoạt động (project-level) của spec lý
- * tưởng CHƯA build ở đây — S4-TASK-BE-1 chỉ có route Project; Overview tab hiển thị field THẬT từ
- * TaskProjectResponseDto; khối "Task" render empty-state (tổng hợp task theo dự án CHƯA có API riêng).
+ * tab nội bộ (mirror tab "members" đã có từ S4-FE-TASK-1). Overview tab hiển thị field THẬT từ
+ * TaskProjectResponseDto; khối "Tiến độ" (S4-FE-DASH-2) nhúng `<ProjectProgressWidget projectId>` — tổng
+ * hợp task theo dự án qua GET /dashboard/widgets/project-progress (S4-DASH-BE-2, KHÔNG raw-query TASK).
  */
 function ProjectStatusBadge({ status }: { status: string | null }) {
   const { t } = useTranslation("tasks");
@@ -182,15 +183,9 @@ function OverviewTab({ project }: { project: TaskProjectResponseDto }) {
           <div className="text-sm text-foreground">{value}</div>
         </Card>
       ))}
-      <Card className="space-y-2 p-4 md:col-span-2">
-        <h3 className="text-sm font-semibold text-muted-foreground">
-          {t("projects.detail.taskSummary.title")}
-        </h3>
-        <EmptyState
-          title={t("projects.detail.taskSummary.emptyTitle")}
-          description={t("projects.detail.taskSummary.emptyDescription")}
-        />
-      </Card>
+      <div className="md:col-span-2">
+        <ProjectProgressWidget projectId={project.id} />
+      </div>
     </div>
   );
 }

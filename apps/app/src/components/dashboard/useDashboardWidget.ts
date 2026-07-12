@@ -14,6 +14,8 @@ export interface UseDashboardWidgetDataOptions {
   /** Tắt fetch hoàn toàn (vd user thiếu quyền — gate đã ẩn cả component nhưng phòng khi hook được gọi trần). */
   enabled?: boolean;
   dashboardType?: DashboardTypeValue;
+  /** S4-FE-DASH-2 — bắt buộc cho slug=project-progress (PROJECT_PROGRESS); BE 400 nếu thiếu (§widgetDataQuerySchema). */
+  projectId?: string;
 }
 
 export interface UseDashboardWidgetDataResult {
@@ -31,19 +33,31 @@ export function useDashboardWidgetData(
 ): UseDashboardWidgetDataResult {
   const enabled = options?.enabled ?? true;
   const dashboardType = options?.dashboardType;
+  const projectId = options?.projectId;
   const queryClient = useQueryClient();
-  const queryKey = dashboardKeys.widgets.data(widgetCode, { dashboard_type: dashboardType });
+  const queryKey = dashboardKeys.widgets.data(widgetCode, {
+    dashboard_type: dashboardType,
+    project_id: projectId,
+  });
 
   const query = useQuery({
     queryKey,
-    queryFn: () => dashboardApi.getWidgetData(widgetCode, { dashboard_type: dashboardType }),
+    queryFn: () =>
+      dashboardApi.getWidgetData(widgetCode, {
+        dashboard_type: dashboardType,
+        project_id: projectId,
+      }),
     enabled,
     staleTime: 15_000,
   });
 
   const refreshMutation = useMutation({
     mutationFn: () =>
-      dashboardApi.getWidgetData(widgetCode, { dashboard_type: dashboardType, refresh: true }),
+      dashboardApi.getWidgetData(widgetCode, {
+        dashboard_type: dashboardType,
+        project_id: projectId,
+        refresh: true,
+      }),
     onSuccess: (fresh) => {
       queryClient.setQueryData(queryKey, fresh);
     },

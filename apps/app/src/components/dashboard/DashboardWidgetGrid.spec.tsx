@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
- * DashboardWidgetGrid tests (S4-FE-DASH-1). Phủ: sắp theo layout.order · bỏ qua widget_code chưa có
- * component P0 (KHÔNG render placeholder gãy) · truyền đúng dashboardType xuống từng widget con.
+ * DashboardWidgetGrid tests (S4-FE-DASH-1/2). Phủ: sắp theo layout.order · bỏ qua widget_code chưa wire vào
+ * Grid (KHÔNG render placeholder gãy) · truyền đúng dashboardType xuống từng widget con · S4-FE-DASH-2 wire
+ * 3 widget P1 (ATTENDANCE_TODAY/PENDING_LEAVE/HR_OVERVIEW — viewer-independent, KHÔNG cần projectId).
  */
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -21,6 +22,21 @@ vi.mock("./TaskAlertsWidget", () => ({
 vi.mock("./NotificationsWidget", () => ({
   NotificationsWidget: ({ dashboardType }: { dashboardType?: string }) => (
     <div data-testid="widget-NOTIFICATIONS">NOTIFICATIONS:{dashboardType}</div>
+  ),
+}));
+vi.mock("./AttendanceTodayWidget", () => ({
+  AttendanceTodayWidget: ({ dashboardType }: { dashboardType?: string }) => (
+    <div data-testid="widget-ATTENDANCE_TODAY">ATTENDANCE_TODAY:{dashboardType}</div>
+  ),
+}));
+vi.mock("./PendingLeaveWidget", () => ({
+  PendingLeaveWidget: ({ dashboardType }: { dashboardType?: string }) => (
+    <div data-testid="widget-PENDING_LEAVE">PENDING_LEAVE:{dashboardType}</div>
+  ),
+}));
+vi.mock("./HrOverviewWidget", () => ({
+  HrOverviewWidget: ({ dashboardType }: { dashboardType?: string }) => (
+    <div data-testid="widget-HR_OVERVIEW">HR_OVERVIEW:{dashboardType}</div>
   ),
 }));
 
@@ -49,15 +65,27 @@ describe("DashboardWidgetGrid", () => {
     expect(order).toEqual(["widget-MY_TASKS", "widget-TASK_ALERTS", "widget-NOTIFICATIONS"]);
   });
 
-  it("bỏ qua widget_code chưa có component P0 (vd HR_OVERVIEW) — KHÔNG render, KHÔNG crash", () => {
-    const widgets = [widget("MY_TASKS", 10), widget("HR_OVERVIEW", 5)];
+  it("bỏ qua widget_code chưa wire vào Grid (vd PROJECT_PROGRESS — cần project context) — KHÔNG render, KHÔNG crash", () => {
+    const widgets = [widget("MY_TASKS", 10), widget("PROJECT_PROGRESS", 5)];
     render(<DashboardWidgetGrid widgets={widgets} dashboardType="Employee" />);
     expect(screen.getByTestId("widget-MY_TASKS")).toBeInTheDocument();
-    expect(screen.queryByText(/HR_OVERVIEW/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/PROJECT_PROGRESS/)).not.toBeInTheDocument();
   });
 
   it("truyền đúng dashboardType xuống widget con", () => {
     render(<DashboardWidgetGrid widgets={[widget("MY_TASKS", 10)]} dashboardType="Manager" />);
     expect(screen.getByText("MY_TASKS:Manager")).toBeInTheDocument();
+  });
+
+  it("S4-FE-DASH-2 — wire đúng 3 widget P1 (ATTENDANCE_TODAY/PENDING_LEAVE/HR_OVERVIEW)", () => {
+    const widgets = [
+      widget("ATTENDANCE_TODAY", 10),
+      widget("PENDING_LEAVE", 20),
+      widget("HR_OVERVIEW", 30),
+    ];
+    render(<DashboardWidgetGrid widgets={widgets} dashboardType="HR" />);
+    expect(screen.getByTestId("widget-ATTENDANCE_TODAY")).toHaveTextContent("ATTENDANCE_TODAY:HR");
+    expect(screen.getByTestId("widget-PENDING_LEAVE")).toHaveTextContent("PENDING_LEAVE:HR");
+    expect(screen.getByTestId("widget-HR_OVERVIEW")).toHaveTextContent("HR_OVERVIEW:HR");
   });
 });

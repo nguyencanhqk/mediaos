@@ -70,6 +70,9 @@ export const dashboardKeys = {
   stats: (params?: Record<string, unknown>) => [...rootKeys.dashboard, "stats", params] as const,
   // S4-FE-DASH-1 — APPEND: GET /dashboard/me (shell) + widget catalog/data (lazy-load per WidgetCard).
   me: () => [...rootKeys.dashboard, "me"] as const,
+  // S4-FE-DASH-2 — APPEND: GET /dashboard/types (DashboardTypeSwitcher) + GET /dashboard/{type} (switch).
+  types: () => [...rootKeys.dashboard, "types"] as const,
+  byType: (type: string) => [...rootKeys.dashboard, "byType", type] as const,
   widgets: {
     all: [...rootKeys.dashboard, "widgets"] as const,
     catalog: (params?: Record<string, unknown>) =>
