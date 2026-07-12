@@ -44,4 +44,20 @@ export const DEFAULT_DEDUPE: Readonly<Record<string, DedupeDefaultConfig>> = {
   TASK_DUE_DATE_CHANGED: { strategy: "DedupeKey", windowSeconds: null },
   TASK_MENTIONED: { strategy: "DedupeKey", windowSeconds: null },
   PROJECT_MEMBER_ADDED: { strategy: "DedupeKey", windowSeconds: null },
+  // S4-INT-4 (additive) — AttNotiBridgeRegistrar (att-noti-bridge.registrar.ts): 7 mapping ATT (đơn điều
+  // chỉnh công + đơn remote-work) qua CÙNG OutboxNotificationBridge INT-1, mỗi mapping mặc định
+  // `dedupeKey = ctx.eventId` (outbox event id, ổn định qua mọi lần re-consume/retry của CÙNG event) ⇒
+  // strategy 'DedupeKey' (KHÔNG 'None') để NotificationDedupeService.computeKey THỰC SỰ set dedupe_key.
+  // Bảo vệ 2 TẦNG cùng OutboxWorker.processed_events (tầng 1, consumer_name+event_id): re-claim (reaper
+  // timeout) MÀ processed_events mất dấu (crash giữa insert↔markProcessed) thì tầng NÀY (partial-unique
+  // `uq_notifications_dedupe_active` theo company+recipient+event_code+dedupe_key=eventId) vẫn chặn tạo
+  // trùng ⇒ đúng 1 notification/recipient/event. windowSeconds:null (once-ever theo outbox event, KHÔNG
+  // cửa sổ thời gian).
+  ATT_ADJUSTMENT_SUBMITTED: { strategy: "DedupeKey", windowSeconds: null },
+  ATT_ADJUSTMENT_APPROVED: { strategy: "DedupeKey", windowSeconds: null },
+  ATT_ADJUSTMENT_REJECTED: { strategy: "DedupeKey", windowSeconds: null },
+  ATT_REMOTE_REQUEST_SUBMITTED: { strategy: "DedupeKey", windowSeconds: null },
+  ATT_REMOTE_REQUEST_APPROVED: { strategy: "DedupeKey", windowSeconds: null },
+  ATT_REMOTE_REQUEST_REJECTED: { strategy: "DedupeKey", windowSeconds: null },
+  ATT_REMOTE_REQUEST_CANCELLED: { strategy: "DedupeKey", windowSeconds: null },
 };
