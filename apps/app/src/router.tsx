@@ -106,8 +106,20 @@ function makeModuleRoute(
 
 // Dashboard — S4-FE-DASH-1: DashboardMePage THAY ModulePlaceholder (shell + widget P0 lazy-load).
 import { DashboardMePage } from "@/routes/dashboard/DashboardMePage";
+// S4-FE-DASH-3 — DashboardConfigPage (admin: cấu hình widget theo dashboard-type, nối S4-DASH-BE-3).
+import { DashboardConfigPage } from "@/routes/dashboard/DashboardConfigPage";
 
 const dashboardRoute = makeModuleRoute("/dashboard", "dashboard", "DASH", DashboardMePage);
+// Cấu hình widget dashboard — path TĨNH 2-segment "/dashboard/configs" tự xếp hạng TRÊN route param
+// (TanStack Router disambiguates static trước param — mirror notificationEventsRoute vs $id). Gate
+// route-level = view:dashboard-config (ROUTE_REGISTRY dashboard.configs); toggle gate TINH hơn TRONG
+// page bằng useCanExact(update:dashboard-config).
+const dashboardConfigsRoute = makeModuleRoute(
+  "/dashboard/configs",
+  "dashboard.configs",
+  "DASH",
+  DashboardConfigPage,
+);
 
 // HR
 import { useNavigate } from "@tanstack/react-router";
@@ -1565,6 +1577,7 @@ const routeTree = rootRoute.addChildren([
   homeRoute,
   forbiddenRoute,
   dashboardRoute,
+  dashboardConfigsRoute,
   hrRoute,
   hrEmployeesRoute,
   hrEmployeeCreateRoute,

@@ -52,6 +52,17 @@ const CONFIG: DashboardConfigItemDto = {
   updated_by: null,
 };
 
+// Cùng danh mục nhưng dashboard_type KHÁC — dùng cho test lọc client-side theo loại.
+const CONFIG_MANAGER: DashboardConfigItemDto = {
+  ...CONFIG,
+  id: "cfg-2",
+  widget_id: "w-2",
+  widget_code: "PENDING_LEAVE",
+  widget_name: "Đơn nghỉ chờ duyệt",
+  dashboard_type: "Manager",
+  sort_order: 30,
+};
+
 function setCapabilities(caps: Record<string, boolean>) {
   useAuthStore.setState({
     isAuthenticated: true,
@@ -143,6 +154,32 @@ describe("DashboardConfigPage — data states", () => {
     });
     expect(screen.getByText("Mặc định")).toBeInTheDocument();
     expect(screen.getByText("Đang bật")).toBeInTheDocument();
+  });
+
+  it("chọn dashboard_type ở Select 'Loại bảng điều khiển' → filteredItems chỉ còn đúng loại (lọc client-side)", async () => {
+    setCapabilities({ "view:dashboard-config": true });
+    mockGetConfigs.mockResolvedValue({ items: [CONFIG, CONFIG_MANAGER] });
+    renderPage();
+
+    // Mặc định (Tất cả loại): cả 2 widget hiển thị.
+    await waitFor(() => {
+      expect(screen.getByText("Task của tôi")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Đơn nghỉ chờ duyệt")).toBeInTheDocument();
+    // getDashboardConfigs gọi 1 lần — lọc là CLIENT-SIDE, KHÔNG refetch theo type.
+    expect(mockGetConfigs).toHaveBeenCalledTimes(1);
+
+    // Chọn "Manager" → chỉ còn widget của Manager, widget Employee bị lọc bỏ.
+    fireEvent.change(screen.getByLabelText("Loại bảng điều khiển"), {
+      target: { value: "Manager" },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Task của tôi")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Đơn nghỉ chờ duyệt")).toBeInTheDocument();
+    // KHÔNG có round-trip mới khi đổi filter.
+    expect(mockGetConfigs).toHaveBeenCalledTimes(1);
   });
 });
 
