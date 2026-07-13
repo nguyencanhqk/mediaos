@@ -17,10 +17,17 @@
  *
  * Masking là việc của SERVER — trang chỉ render field nhận được từ notificationEventAdminItemSchema.
  * States: forbidden · loading · error · empty · list (+ confirm dialog trước khi PATCH).
+ *
+ * S4-FE-NOTI-4 — mỗi dòng có nút "Xem template" → điều hướng /notifications/templates?event=<event_code>
+ * (SPEC-08 §13.4, deep-link đọc lại ở NotificationTemplatesPage qua window.location.search). Điều hướng
+ * QUA `navigate()` (client-side, KHÔNG window.location.href) — route đích TỰ chạy beforeLoad/ProtectedRoute
+ * lại (gate view:notification-template RIÊNG, mirror NotificationTargetLink). Nút này KHÔNG gate quyền ở
+ * đây (chỉ là link điều hướng) — route đích tự chặn nếu thiếu quyền.
  */
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Bell, RefreshCw } from "lucide-react";
 import type { NotificationEventAdminItem } from "@mediaos/contracts";
@@ -36,6 +43,7 @@ import {
   NOTI_EVENT_ENGINE_PAIRS,
   NOTI_EVENT_MODULE_CODES,
   NOTI_EVENT_PAGE_SIZE_MAX,
+  NOTI_PATHS,
 } from "./constants";
 
 type TF = ReturnType<typeof useTranslation<"notifications">>["t"];
@@ -56,6 +64,7 @@ interface ConfirmState {
 function useColumns(
   t: TF,
   onToggle: ((event: NotificationEventAdminItem) => void) | null,
+  onViewTemplate: (event: NotificationEventAdminItem) => void,
 ): ColumnDef<NotificationEventAdminItem>[] {
   const cols: ColumnDef<NotificationEventAdminItem>[] = [
     {
@@ -102,6 +111,20 @@ function useColumns(
         </span>
       ),
     },
+    {
+      id: "viewTemplate",
+      header: t("events.columns.template"),
+      cell: ({ row }) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          data-testid={`event-view-template-${row.original.id}`}
+          onClick={() => onViewTemplate(row.original)}
+        >
+          {t("events.actions.viewTemplate")}
+        </Button>
+      ),
+    },
   ];
   if (onToggle) {
     cols.push({
@@ -126,6 +149,7 @@ export function NotificationEventsPage() {
   const { t } = useTranslation("notifications");
   const { t: tc } = useTranslation("common");
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   // NHẠY CẢM: useCanExact — KHÔNG wildcard fallback (view/update:notification-config is_sensitive).
   const canView = useCanExact(
@@ -172,7 +196,14 @@ export function NotificationEventsPage() {
 
   const openToggleConfirm = (event: NotificationEventAdminItem) =>
     setConfirm({ event, nextEnabled: !event.is_enabled });
-  const columns = useColumns(t, canUpdate ? openToggleConfirm : null);
+  // Deep-link tới NotificationTemplatesPage lọc theo event_code — cast "as \"/\"" là pattern ĐÃ DÙNG
+  // khắp router.tsx cho điều hướng path/search động (vd NotificationTargetLink).
+  const goToTemplates = (event: NotificationEventAdminItem) =>
+    void navigate({
+      to: NOTI_PATHS.TEMPLATES as "/",
+      search: { event: event.event_code } as never,
+    });
+  const columns = useColumns(t, canUpdate ? openToggleConfirm : null, goToTemplates);
 
   // ── Forbidden ──────────────────────────────────────────────────────────────
   if (!canView) {

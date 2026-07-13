@@ -1089,6 +1089,36 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 61,
   },
+  // S4-FE-NOTI-4 (UI-NOTI-SCREEN-005 / SPEC-08 §13.4 NOTI-SCREEN-006) — Quản lý mẫu thông báo (admin):
+  // bảng template theo event + sửa title/body/short_body/action_label/target_url. Gate = CẶP ENGINE THỰC
+  // trực tiếp (view:notification-template, seed mig 0481, is_sensitive=true, đã SENSITIVE_CAPABILITY_ALLOWLIST)
+  // — KHÔNG qua PERMISSION_CODE_TO_PAIR (tránh drift, cùng kỹ thuật noti.events/dashboard.configs). Page tự
+  // gate tinh hơn cho sửa bằng useCanExact(update:notification-template).
+  {
+    routeKey: "noti.templates",
+    path: "/notifications/templates",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "NOTI",
+    screenCode: "NOTI-SCREEN-006",
+    titleKey: "routeTitle.notiTemplates",
+    requiredAnyPermissions: ["view:notification-template"],
+    showInSidebar: true,
+    order: 62,
+  },
+  // S4-FE-NOTI-4 — chuyển từ RouteMeta CỤC BỘ (router.tsx, S4-FE-NOTI-3) vào ROUTE_REGISTRY dùng chung
+  // (đóng nợ discoverability). Gate GIỮ NGUYÊN view:notification-delivery-log (seed THẬT mig 0481,
+  // is_sensitive=true, grant company-admin scope Company) — literal, KHÔNG qua PERMISSION_CODE_TO_PAIR.
+  {
+    routeKey: "noti.delivery-logs",
+    path: "/notifications/delivery-logs",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "NOTI",
+    screenCode: "NOTI-SCREEN-DELIVERY-LOGS",
+    titleKey: "routeTitle.notificationDeliveryLogs",
+    requiredAnyPermissions: ["view:notification-delivery-log"],
+    showInSidebar: true,
+    order: 63,
+  },
 
   // System
   {

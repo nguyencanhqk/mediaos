@@ -851,6 +851,67 @@ describe("ROUTE_REGISTRY — dashboard.configs (S4-FE-DASH-3)", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// S4-FE-NOTI-4 — noti.templates + noti.delivery-logs (mở đường vào ROUTE_REGISTRY, đóng nợ
+// discoverability FE-NOTI-3). Mirror khối dashboard.configs ở trên: pin cả meta lẫn deny/allow.
+// ---------------------------------------------------------------------------
+
+describe("ROUTE_REGISTRY — noti.templates (S4-FE-NOTI-4)", () => {
+  const notiTemplates = getRouteMeta("noti.templates")!;
+
+  it("route noti.templates TỒN TẠI trong ROUTE_REGISTRY", () => {
+    expect(notiTemplates).toBeDefined();
+    expect(notiTemplates.path).toBe("/notifications/templates");
+    expect(notiTemplates.moduleCode).toBe("NOTI");
+    expect(notiTemplates.screenCode).toBe("NOTI-SCREEN-006");
+    expect(notiTemplates.showInSidebar).toBe(true);
+  });
+
+  it("gate = cặp engine thực view:notification-template trực tiếp (KHÔNG qua PERMISSION_CODE_TO_PAIR)", () => {
+    expect(notiTemplates.requiredAnyPermissions).toEqual(["view:notification-template"]);
+    expect(notiTemplates.requiredScopes).toBeUndefined();
+  });
+
+  it("deny-path: thiếu view:notification-template → SHOW_403 (NOTI active, không rơi SHOW_404 sớm)", () => {
+    const session = makeSession(TASK_NOTI_DASH_SESSION());
+    const c = createPermissionChecker(makePerms([]));
+    expect(evaluateRouteAccess(session, notiTemplates, c).action).toBe("SHOW_403");
+  });
+
+  it("allow-path: có view:notification-template + NOTI active → ALLOW", () => {
+    const session = makeSession(TASK_NOTI_DASH_SESSION());
+    const c = createPermissionChecker(makePerms(["view:notification-template"]));
+    expect(evaluateRouteAccess(session, notiTemplates, c).action).toBe("ALLOW");
+  });
+});
+
+describe("ROUTE_REGISTRY — noti.delivery-logs (S4-FE-NOTI-4, chuyển từ RouteMeta cục bộ)", () => {
+  const notiDeliveryLogs = getRouteMeta("noti.delivery-logs")!;
+
+  it("route noti.delivery-logs TỒN TẠI trong ROUTE_REGISTRY", () => {
+    expect(notiDeliveryLogs).toBeDefined();
+    expect(notiDeliveryLogs.path).toBe("/notifications/delivery-logs");
+    expect(notiDeliveryLogs.moduleCode).toBe("NOTI");
+    expect(notiDeliveryLogs.showInSidebar).toBe(true);
+  });
+
+  it("gate GIỮ NGUYÊN view:notification-delivery-log (KHÔNG đổi khi chuyển vào registry)", () => {
+    expect(notiDeliveryLogs.requiredAnyPermissions).toEqual(["view:notification-delivery-log"]);
+  });
+
+  it("deny-path: thiếu view:notification-delivery-log → SHOW_403", () => {
+    const session = makeSession(TASK_NOTI_DASH_SESSION());
+    const c = createPermissionChecker(makePerms([]));
+    expect(evaluateRouteAccess(session, notiDeliveryLogs, c).action).toBe("SHOW_403");
+  });
+
+  it("allow-path: có view:notification-delivery-log + NOTI active → ALLOW", () => {
+    const session = makeSession(TASK_NOTI_DASH_SESSION());
+    const c = createPermissionChecker(makePerms(["view:notification-delivery-log"]));
+    expect(evaluateRouteAccess(session, notiDeliveryLogs, c).action).toBe("ALLOW");
+  });
+});
+
 describe("PERMISSION_CODE_TO_PAIR — TASK/NOTI/DASH pairs (drift-guard, S4-FE-REGISTRY-1)", () => {
   // Mirror block FOUNDATION/AUTH — pin ánh xạ tường minh để happy-path (admin có mọi cặp) KHÔNG che drift.
   it("ánh xạ tường minh khớp cặp engine THẬT non-sensitive (mig 0005 · 0100)", () => {
