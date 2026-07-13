@@ -174,7 +174,25 @@ DASH chỉ hiển thị/deep-link; **module nguồn ép data scope thật**. Quy
 
 ---
 
-## 9. Nguyên tắc dữ liệu nhạy cảm (SPEC-01 §11.3)
+## 9. ME — Trung tâm cá nhân (SPEC-09)
+
+ME chỉ **đọc-lại** dữ liệu Own của chính user (ATT/LEAVE/TASK/NOTI/profile) qua **permission NGUỒN** (ME-DEC-002 / SPEC-09 §11.2) — KHÔNG wrap quyền riêng cho nghiệp vụ nguồn. Chỉ `user_preferences` (tùy chọn cá nhân, DB-08 §8.16) là dữ liệu MỚI của ME. RLS+FORCE cô lập **tenant**; chống IDOR cross-user (đọc/ghi pref của user khác) ép ở **ME-BE** (`WHERE user_id = token-resolved`, SPEC-09 §14.4/§17.1) — KHÔNG do RLS.
+
+**Ánh xạ mã quyền ME → cặp (action, resource_type) engine** (mig 0495, is_sensitive=false — cổng nav; web-core `PERMISSION_CODE_TO_PAIR` hạ nguồn PHẢI khớp, chống pair-drift):
+
+| Mã quyền (SPEC-09) | Cặp engine `action:resource_type` | Scope | Ghi chú |
+|---|---|---|---|
+| `ME.ACCESS` | `access:me` | Own | Cổng vào /me — mọi role canonical |
+| `ME.PREFERENCE.VIEW_OWN` | `view:user-preference` | Own | Đọc tùy chọn cá nhân của mình |
+| `ME.PREFERENCE.UPDATE_OWN` | `update:user-preference` | Own | Ghi tùy chọn cá nhân của mình (upsert) |
+| `ME.AVATAR.UPDATE_OWN` | `update:avatar` | Own | Cập nhật avatar của mình |
+| `ME.NOTIFICATION_PREFERENCE.UPDATE_OWN` | `update:notification-preference` | Own | Cập nhật tùy chọn nhận thông báo của mình |
+
+Grant scope `Own` cho **cả 4 role canonical** (employee/manager/hr/company-admin) = 20 hàng `role_permissions` (per-role §13). KHÔNG seed `ME.OVERVIEW/PROFILE/ACCOUNT/SESSION/SECURITY_ACTIVITY/DATA_EXPORT` (out-of-scope MVP DB WO).
+
+---
+
+## 10. Nguyên tắc dữ liệu nhạy cảm (SPEC-01 §11.3)
 
 Dữ liệu nhạy cảm: lương · tài khoản ngân hàng · CCCD/CMND · hợp đồng · hồ sơ nhân sự · dữ liệu kỷ luật/nghỉ việc · chấm công chi tiết · log hệ thống.
 

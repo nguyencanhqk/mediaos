@@ -96,3 +96,7 @@ export * from "./dashboard";
 // (company_id NOT NULL, RLS+FORCE, app GRANT SELECT,INSERT — KHÔNG UPDATE/DELETE, KHÔNG deleted_at). projects/
 // project_members cột TitleCase MỚI additive reconcile ở ./media (ALTER-ADD 0478 §6/§7). KHÔNG db:generate.
 export * from "./task-activity";
+// S5-ME-DB-1 (DB-08 §8.16 / SPEC-09 §15.2, mig 0495): user_preferences — tùy chọn cá nhân theo user cho
+// module ME (tầng User). company_id NOT NULL, RLS+FORCE literal-GUC (mẫu 0479), app GRANT SELECT,INSERT,UPDATE
+// (upsert-config — KHÔNG DELETE, KHÔNG soft-delete). UNIQUE(company_id,user_id). Cross-user IDOR ép ở ME-BE.
+export * from "./user-preferences";
