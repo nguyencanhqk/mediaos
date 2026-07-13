@@ -523,6 +523,16 @@ export const NOTI_SIDEBAR: readonly SidebarItemMeta[] = [
   // được đọc, nên phải khai item ở đây mới thấy trên UI. Gate = cặp engine literal đồng bộ route-meta
   // (mẫu HR_ORG_CHART); cặp sensitive chỉ vào capabilities khi grant explicit → thiếu quyền item tự ẩn.
   {
+    sidebarKey: "noti.events",
+    moduleCode: "NOTI",
+    label: "Sự kiện thông báo",
+    path: "/notifications/events",
+    icon: "sliders-horizontal",
+    group: "admin",
+    order: 61,
+    requiredAnyPermissions: ["view:notification-config"],
+  },
+  {
     sidebarKey: "noti.templates",
     moduleCode: "NOTI",
     label: "Template thông báo",
