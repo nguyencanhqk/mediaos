@@ -6655,4 +6655,123 @@ export const backlog = [
       "Int-spec: response detail chứa field mới đúng join + KHÔNG lộ thêm PII/salary ngoài gate hiện có; FE spec render dòng mới + khối nghỉ việc theo status; check.sh xanh; LIGHT gate + security-reviewer soi diff DTO đọc (vùng masking)",
     ],
   },
+
+  // ═══════════════ S5-TASK-UX 2026-07-13 — owner benchmark ảnh kiểu Base-Wework + audit sidebar TASK ═══════════════
+  // Nguồn: owner gửi ~12 ảnh tool quản lý công việc thương mại làm chuẩn tham chiếu UX cho TASK (memory
+  // task-ux-reference-benchmark). Audit cùng ngày:
+  //   1) TASK_SIDEBAR chỉ khai 2 item (Tổng quan + Việc của tôi) — /tasks/projects (SCREEN-001) và mọi thứ
+  //      dưới nó (detail/Kanban/thành viên/progress) KHÔNG có menu nào dẫn tới; ROUTE_REGISTRY.showInSidebar
+  //      KHÔNG được ModuleSidebar đọc (menu dựng từ sidebar-registry.ts apps/app — cùng bug đã vá cho NOTI
+  //      templates/delivery-logs #200). → S5-FE-TASK-NAV-1.
+  //   2) Kanban card thiếu counts comment/attachment/checklist — BE debt tự ghi tại TaskKanbanPage.tsx L31,
+  //      SPEC-06 §13.8 vốn yêu cầu. → S5-TASK-BE-6 (BE) + S5-FE-TASK-5 (FE).
+  //   3) TASK-SCREEN-010 (quá hạn) + 011 (báo cáo tiến độ) chưa có trang; contracts ĐÃ có query param
+  //      `overdue` (task.ts L578) + endpoint PROJECT_PROGRESS (S4-TASK-BE-5) → 2 màn FE-only. → S5-FE-TASK-6.
+  // POST-MVP (KHÔNG làm đợt này — ghi để khỏi trôi, chi tiết memory task-ux-reference-benchmark): cột/nhóm
+  // công việc tùy biến (đổi data model — board mẫu cột = pipeline tùy chỉnh, KHÔNG phải status) · Gantt ·
+  // Lịch · custom fields · automation per-column · phê duyệt riêng · template/nhân bản dự án · import task ·
+  // Biểu mẫu · Tài liệu & Liên kết · Thùng rác UI · favorites/ghim dự án (ứng viên khi ME user_preferences ổn).
+  {
+    id: "S5-FE-TASK-NAV-1",
+    module: "TASK",
+    layer: "FE",
+    title:
+      "Sidebar TASK mở đường: thêm mục 'Dự án' (/tasks/projects) + đổi label task.overview 'Tổng quan'→'Danh sách công việc' (SCREEN-001 hiện không có menu nào dẫn tới)",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/app/src/layouts/workspace/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "apps/app/src/layouts/workspace/sidebar-registry.ts (TASK_SIDEBAR — hiện chỉ 2 item)",
+      "packages/web-core/src/lib/registry.ts (task.projects.list showInSidebar:true — flag KHÔNG được ModuleSidebar đọc; mẫu vá = entry NOTI cùng file sidebar-registry)",
+      "IMP02-STORY-067 (xem danh sách dự án theo quyền)",
+      "memory task-ux-reference-benchmark",
+    ],
+    done_when: [
+      "TASK_SIDEBAR thêm item task.projects: label 'Dự án', path /tasks/projects, group operation, requiredAnyPermissions ['TASK.PROJECT.VIEW'] (map read:project qua PERMISSION_CODE_TO_PAIR sẵn có); icon phải CÓ TRONG DynamicIcon map (thiếu thì thêm additive) — HOT-FILE append theo mẫu entry NOTI, KHÔNG rewrite mảng",
+      "Đổi label task.overview 'Tổng quan' → 'Danh sách công việc' (trang /tasks render TaskListPage = SCREEN-005); GIỮ nguyên path/gate/order/sidebarKey",
+      "User có read:project thấy menu Dự án; thiếu → ẩn (filterSidebarItems, KHÔNG hard-code role); spec sidebar-registry cập nhật nếu có; check.sh xanh; LIGHT gate quality-gate",
+    ],
+  },
+  {
+    id: "S5-TASK-BE-6",
+    module: "TASK",
+    layer: "BE",
+    title:
+      "Kanban counts (trả nợ SPEC-06 §13.8): GET /projects/:id/kanban bổ sung commentCount·attachmentCount·checklistDone/checklistTotal per-card (additive, không N+1)",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/api/src/tasks/**", "apps/api/test/integration/**", "packages/contracts/src/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "apps/app/src/routes/tasks/TaskKanbanPage.tsx L31 (BE debt tự ghi: §13.8 cần comment-count/attachment-count/checklist-progress — response TASK-API-212 chưa có)",
+      "apps/api/src/tasks/task-kanban.service.ts + task-comments/task-checklists/task-attachments repositories (nguồn đếm sẵn có)",
+      "packages/contracts/src/task-collab.ts (taskKanbanColumnSchema/taskKanbanBoardSchema)",
+      "IMP02-STORY-072 (Kanban board)",
+    ],
+    done_when: [
+      "Schema card trong taskKanbanColumnSchema bổ sung ADDITIVE: commentCount · attachmentCount · checklistDone · checklistTotal (optional/default 0 — FE cũ không gãy); contracts dual-build",
+      "task-kanban.service đếm bằng aggregate GROUP BY task_id trên tập task của board (KHÔNG N+1 per-card); CHỈ đếm bản ghi chưa soft-delete; GIỮ nguyên gate view-kanban:task + tenant/data-scope hiện có — KHÔNG đổi hành vi quyền",
+      "Int-spec: counts đúng với dữ liệu planted (comment/file/checklist done+total; card trống → 0); gate hasDb && LANE_DB",
+      "check.sh xanh; LIGHT gate typescript-reviewer + quality-gate",
+    ],
+  },
+  {
+    id: "S5-FE-TASK-5",
+    module: "TASK",
+    layer: "FE",
+    title:
+      "Kanban card giàu tín hiệu (benchmark): badge comment/attachment/checklist + avatar-initials assignee + style Done/Cancelled + lọc theo assignee/'Chưa giao' trên board",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/app/src/routes/tasks/**", "apps/app/src/i18n/**"],
+    skills: ["code-review"],
+    depends_on: ["S5-TASK-BE-6"],
+    src: [
+      "memory task-ux-reference-benchmark (ảnh owner 2026-07-13 — card: badge đếm + checklist 1/2 + hạn đỏ + header Done xanh + gạch tiêu đề)",
+      "apps/app/src/routes/tasks/TaskKanbanPage.tsx (KanbanCard hiện chỉ title/assignee/priority/due)",
+      "S5-TASK-BE-6 (counts trong response Kanban)",
+      "IMP02-STORY-072",
+    ],
+    done_when: [
+      "KanbanCard hiển thị KHI >0: badge commentCount · attachmentCount · checklistDone/checklistTotal (icon lucide) + avatar-initials assignee thay text; card Done/Cancelled style phân biệt (muted + gạch tiêu đề) — token theme packages/ui, đạt cả light+dark",
+      "Lọc assignee trên board: dải avatar thành viên suy từ tập task của board (KHÔNG gọi API member mới) + nút 'Chưa giao'; lọc client-side trong cột, kết hợp được với UI hiện có; card 0-count KHÔNG render badge",
+      "Spec cập nhật: render badge theo counts + filter assignee + 'Chưa giao'; check.sh xanh; LIGHT gate react-reviewer + quality-gate",
+    ],
+  },
+  {
+    id: "S5-FE-TASK-6",
+    module: "TASK",
+    layer: "FE",
+    title:
+      "TASK-SCREEN-010 Task quá hạn (/tasks/overdue) + TASK-SCREEN-011 Báo cáo tiến độ dự án — FE-only trên BE sẵn có (query overdue + PROJECT_PROGRESS), layout KPI tiles theo benchmark",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/tasks/**",
+      "apps/app/src/router.tsx",
+      "apps/app/src/layouts/workspace/**",
+      "apps/app/src/i18n/**",
+      "packages/web-core/src/**",
+      "docs/plans/S5-FE-TASK-6.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-FE-TASK-NAV-1"],
+    src: [
+      "SPEC-06 §13.10 (SCREEN-010) + §13.11 (SCREEN-011) + §16.1 (progress report)",
+      "packages/contracts/src/task.ts L568-578 (query param `overdue` boolean idempotent ĐÃ CÓ — SCREEN-010 không cần sửa BE)",
+      "apps/app/src/routes/tasks/ProjectProgressCard.tsx (đọc PROJECT_PROGRESS sẵn có — S4-TASK-BE-5, server pre-authorize)",
+      "memory task-ux-reference-benchmark (layout: hàng KPI tiles tổng/hoàn thành/chưa/quá hạn + bar theo người thực hiện; KHÔNG Eisenhower/phân bổ nguồn lực — ngoài spec)",
+      "IMP02-STORY-076 (báo cáo tiến độ)",
+    ],
+    plan: "docs/plans/S5-FE-TASK-6.md",
+    done_when: [
+      "/tasks/overdue (SCREEN-010): tái dùng bảng/hàng TaskListPage với filter overdue=true GHIM + sort due_at tăng dần; ROUTE_REGISTRY web-core + sidebar item 'Task quá hạn' gate TASK.TASK.VIEW; header hiện tổng số quá hạn",
+      "Trang báo cáo tiến độ dự án (SCREEN-011, route dưới /tasks/projects/:projectId — chốt path trong plan): mở rộng ProjectProgressCard thành trang — hàng KPI tiles (tổng · hoàn thành · chưa hoàn thành · quá hạn) + breakdown theo status + bar theo assignee NẾU response PROJECT_PROGRESS đã trả (thiếu field nào hiển thị phần có, ghi gap vào plan — KHÔNG thêm endpoint mới trong WO này); gate FE đúng cặp ProjectProgressCard đang dùng, server là nguồn enforce; chart theo token dataviz/theme packages/ui đạt light+dark",
+      "Vào từ ProjectDetailPage (nút 'Xem báo cáo'); route param KHÔNG vào sidebar (showInSidebar false); REBUILD web-core dist sau đổi src (bài học stale-dist trang trắng); loading/error/empty/forbidden đủ; i18n vi",
+      "FE spec: route gate + render KPI + overdue pinned filter + deny (thiếu quyền không thấy entry); check.sh xanh; LIGHT gate react-reviewer + typescript-reviewer + quality-gate",
+    ],
+  },
 ];
