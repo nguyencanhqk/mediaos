@@ -1226,6 +1226,13 @@
       "when": 1717500865000,
       "tag": "0494_hr_identity_read_view_identity_perm",
       "breakpoints": true
+    },
+    {
+      "idx": 175,
+      "version": "7",
+      "when": 1717500870000,
+      "tag": "0495_s5_medb1_user_preferences_me_module_perms",
+      "breakpoints": true
     }
   ]
 }

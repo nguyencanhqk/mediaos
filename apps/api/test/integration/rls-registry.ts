@@ -2772,4 +2772,23 @@ export const RLS_TABLES: RlsTableCase[] = [
       return r.rows[0].id as string;
     },
   },
+
+  // ── S5-ME-DB-1 (mig 0495) user_preferences — tùy chọn cá nhân module ME (DB-08 §8.16) ─────────
+  // company_id NOT NULL + RLS+FORCE literal-GUC → PHẢI ở harness (rls-guards "không bảng company_id thiếu
+  // case"). KHÔNG skipNoContext (mọi hàng tenant-scoped, không hàng global). FK user_id → users (cùng company)
+  // → seed 1 user trước. UNIQUE(company_id,user_id) ⇒ 1 hàng/user. RLS chỉ cô lập TENANT (KHÔNG cô lập user
+  // cùng tenant) — cross-user IDOR ép ở ME-BE (WHERE user_id = token-resolved), NGOÀI phạm vi harness này.
+  {
+    name: "user_preferences",
+    table: "user_preferences",
+    seedRow: async (direct, t) => {
+      const u = await seedUser(direct, t.companyId, `upref-${randomUUID().slice(0, 8)}@x.test`);
+      const r = await direct.query(
+        `INSERT INTO user_preferences (company_id, user_id, theme, density)
+         VALUES ($1, $2, 'system', 'comfortable') RETURNING id`,
+        [t.companyId, u],
+      );
+      return r.rows[0].id as string;
+    },
+  },
 ];
