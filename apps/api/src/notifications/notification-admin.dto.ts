@@ -4,6 +4,7 @@ import {
   notificationEventAdminPatchSchema,
   notificationEventAdminQuerySchema,
   notificationTemplateAdminPatchSchema,
+  notificationTemplateAdminQuerySchema,
 } from "@mediaos/contracts";
 
 /**
@@ -13,6 +14,10 @@ import {
  */
 export class NotificationEventAdminQueryDto extends createZodDto(
   notificationEventAdminQuerySchema,
+) {}
+// S4-NOTI-BE-5 (read/list): query GET /notifications/templates (event/channel/locale filter + phân trang).
+export class NotificationTemplateAdminQueryDto extends createZodDto(
+  notificationTemplateAdminQuerySchema,
 ) {}
 export class NotificationDeliveryLogAdminQueryDto extends createZodDto(
   notificationDeliveryLogAdminQuerySchema,

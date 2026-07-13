@@ -25,6 +25,7 @@ import {
   NotificationEventAdminPatchDto,
   NotificationEventAdminQueryDto,
   NotificationTemplateAdminPatchDto,
+  NotificationTemplateAdminQueryDto,
 } from "./notification-admin.dto";
 import {
   toDeliveryLogAdminItem,
@@ -133,6 +134,41 @@ export class NotificationAdminController {
       body.is_enabled,
     );
     return toEventAdminItem(override);
+  }
+
+  /**
+   * NOTI-API-303 (LIST — mở lại scope gốc, mở đường FE NOTI-SCREEN-006) — GET /notifications/templates
+   * (company override ∪ global, merge "override thắng global" theo event/template_code/channel/locale;
+   * filter event_id/event_code/channel/locale; phân trang in-memory — catalog nhỏ, mirror listEvents).
+   *
+   * PHẢI khai TRƯỚC @Get("templates/:id"): route tĩnh "templates" (1-segment dưới /notifications) khớp
+   * trước route param 2-segment — mirror cảnh báo header về thứ tự khai báo. @RequirePermission
+   * view:notification-template (is_sensitive=true, cặp seed 0481, đã ở SENSITIVE_CAPABILITY_ALLOWLIST).
+   */
+  @Get("templates")
+  @RequirePermission(VIEW_NOTIFICATION_TEMPLATE.action, VIEW_NOTIFICATION_TEMPLATE.resourceType, {
+    isSensitive: true,
+  })
+  async listTemplates(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: NotificationTemplateAdminQueryDto,
+  ) {
+    const companyId = req.user.companyId;
+    const all = await this.db.withTenant(companyId, (tx) =>
+      this.templateRepo.listForCompany(tx, companyId, {
+        eventId: query.event_id,
+        eventCode: query.event_code,
+        channel: query.channel,
+        locale: query.locale,
+      }),
+    );
+    const total = all.length;
+    const start = (query.page - 1) * query.per_page;
+    const pageRows = all.slice(start, start + query.per_page);
+    return paginated(
+      pageRows.map(toTemplateAdminItem),
+      toPagination(total, query.page, query.per_page),
+    );
   }
 
   /** NOTI-API-303 (thu hẹp) — GET /notifications/templates/{id} (chi tiết, company override ∪ global). */

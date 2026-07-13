@@ -58,7 +58,27 @@ export const notificationEventAdminItemSchema = z.object({
 });
 export type NotificationEventAdminItem = z.infer<typeof notificationEventAdminItemSchema>;
 
-// ─── NOTI-API-303 (thu hẹp): GET /notifications/templates/{id} (detail, KHÔNG list) ──────────────
+// ─── NOTI-API-303 (LIST — mở lại scope gốc): GET /notifications/templates ─────────────────────────
+// Danh mục template company override ∪ global (merge "override thắng global" theo event/template_code/
+// channel/locale ở repo). Filter theo event_id/event_code/channel/locale + phân trang in-memory (catalog
+// nhỏ, mirror notificationEventAdminQuerySchema). `channel` = z.enum (idempotent dưới ZodValidationPipe KÉP;
+// string hợp lệ đi qua nguyên trạng — mirror optionalBooleanParam, memory zod-query-param-double-pipe).
+export const notificationTemplateAdminQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  per_page: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(NOTI_ADMIN_PAGE_SIZE_MAX)
+    .default(NOTI_ADMIN_PAGE_SIZE_DEFAULT),
+  event_id: z.string().uuid().optional(),
+  event_code: z.string().trim().min(1).max(100).optional(),
+  channel: z.enum(["IN_APP", "EMAIL", "PUSH", "REALTIME", "INTEGRATION"]).optional(),
+  locale: z.string().trim().min(1).max(20).optional(),
+});
+export type NotificationTemplateAdminQuery = z.infer<typeof notificationTemplateAdminQuerySchema>;
+
+// ─── NOTI-API-303 (thu hẹp): GET /notifications/templates/{id} (detail) — tái dùng item cho LIST ────
 
 export const notificationTemplateAdminItemSchema = z.object({
   id: z.string().uuid(),
