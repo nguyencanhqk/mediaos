@@ -85,6 +85,25 @@ export default {
         title: "Không thể tải dự án",
         description: "Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.",
       },
+      // S4-FE-TASK-4 — ProjectProgressCard (SPEC-06 §16.1, GET /projects/:id/report, view-report:project
+      // SENSITIVE). KHÁC ProjectProgressWidget (S4-FE-DASH-2) — thêm overdueCount + workload theo người
+      // phụ trách, chỉ manager/hr/admin thấy.
+      report: {
+        title: "Báo cáo dự án",
+        overdueCount: "{{count}} quá hạn",
+        workloadTitle: "Tải công việc theo người phụ trách",
+        workloadEmpty: "Chưa có công việc đang hoạt động nào được giao.",
+        activeCount: "{{count}} việc đang làm",
+        unknownEmployee: "Không xác định",
+        empty: {
+          title: "Chưa có công việc nào",
+          description: "Dự án này chưa có công việc để báo cáo.",
+        },
+        error: {
+          title: "Không thể tải báo cáo dự án",
+          description: "Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.",
+        },
+      },
     },
     form: {
       createTitle: "Tạo dự án",
@@ -370,6 +389,53 @@ export default {
       error: {
         title: "Không thể tải công việc",
         description: "Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.",
+      },
+      // S4-FE-TASK-4 — TaskFilePanel (SPEC-06 §16.1/§9, GET/POST/DELETE /tasks/:taskId/files, S4-TASK-BE-5
+      // PR #184 canonical). Mirror hr/employees files.* (EmployeeFilesTab) — cùng cấu trúc key.
+      files: {
+        title: "Tệp đính kèm",
+        download: "Tải xuống",
+        downloading: "Đang tải…",
+        uploadButton: "Tải lên",
+        uploadCategoryPlaceholder: "Phân loại (tuỳ chọn)",
+        uploading: "Đang tải lên… {{percent}}%",
+        uploadError: "Tải file lên thất bại. Vui lòng thử lại.",
+        columns: {
+          name: "Tên file",
+          size: "Kích thước",
+          category: "Phân loại",
+          scanStatus: "Trạng thái quét",
+          uploadedAt: "Ngày tải lên",
+          actions: "Hành động",
+        },
+        scanStatus: {
+          Clean: "Sạch",
+          NotRequired: "Không cần quét",
+          Pending: "Đang quét",
+          Infected: "Nhiễm mã độc",
+          Failed: "Quét thất bại",
+        },
+        empty: {
+          title: "Chưa có file nào",
+          description: "Tải lên file đính kèm cho công việc này.",
+        },
+        error: {
+          description: "Không thể tải danh sách file. Vui lòng thử lại.",
+        },
+        forbidden: {
+          title: "Không có quyền truy cập",
+          description: "Bạn không có quyền xem tệp đính kèm của công việc này.",
+        },
+        delete: {
+          button: "Xóa",
+          title: "Xóa tệp đính kèm",
+          description:
+            'Tệp "{{name}}" sẽ bị xóa mềm. Thao tác này không thể hoàn tác qua giao diện.',
+          confirm: "Xác nhận xóa",
+          deleting: "Đang xóa…",
+          cancel: "Hủy",
+          error: "Xóa tệp thất bại. Vui lòng thử lại.",
+        },
       },
     },
     form: {

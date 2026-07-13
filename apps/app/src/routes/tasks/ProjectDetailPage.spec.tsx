@@ -20,6 +20,9 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       closeProject: vi.fn(),
       deleteProject: vi.fn(),
       updateProject: vi.fn(),
+      // S4-FE-TASK-4 — ProjectProgressCard (view-report:project SENSITIVE, useCanExact) — gate riêng nên
+      // KHÔNG fetch trừ khi test set cap tường minh; mock để tránh "not a function" khi có test làm vậy.
+      getReport: vi.fn(),
     },
     // S4-FE-TASK-3 — tab "Kanban" mount TaskKanbanPage (mock để không gọi mạng thật).
     taskCollabApi: {

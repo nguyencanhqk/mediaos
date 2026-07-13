@@ -3,6 +3,7 @@ import {
   taskProjectResponseSchema,
   taskProjectListItemSchema,
   memberResponseSchema,
+  projectReportSchema,
   type TaskProjectResponseDto,
   type TaskProjectListItemDto,
   type MemberResponseDto,
@@ -12,6 +13,7 @@ import {
   type ListTaskProjectsQueryRequest,
   type AddMemberRequest,
   type UpdateMemberRoleRequest,
+  type ProjectReportDto,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
 import { buildQueryString } from "./api-params";
@@ -92,4 +94,12 @@ export const taskProjectApi = {
   /** DELETE /projects/:id/members/:memberId — soft-remove (manage-member:project, sensitive, 204). */
   removeMember: (id: string, memberId: string): Promise<void> =>
     apiFetch(`/projects/${id}/members/${memberId}`, z.void(), { method: "DELETE" }),
+
+  /**
+   * GET /projects/:id/report — S4-FE-TASK-4 (nối S4-TASK-BE-5, SPEC-06 §16.1). Báo cáo tổng hợp 1 dự án
+   * (countsByStatus/overdueCount/assigneeWorkload). Cặp NHẠY CẢM (view-report:project, is_sensitive=true,
+   * seed 0485) — dùng useCanExact ở component gọi, KHÔNG useCan wildcard-aware.
+   */
+  getReport: (id: string): Promise<ProjectReportDto> =>
+    apiFetch(`/projects/${id}/report`, projectReportSchema),
 };

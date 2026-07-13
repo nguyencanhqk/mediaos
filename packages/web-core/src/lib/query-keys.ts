@@ -409,6 +409,9 @@ export const taskKeys = {
     // S4-FE-TASK-1 — APPEND: thành viên dự án (ProjectMemberTable), tách khỏi detail vì mutate
     // riêng (add/update-role/remove member KHÔNG đổi payload getProject).
     members: (id: string) => [...rootKeys.tasks, "projects", "members", id] as const,
+    // S4-FE-TASK-4 — APPEND: báo cáo tổng hợp dự án (ProjectProgressCard, GET /projects/:id/report,
+    // view-report:project SENSITIVE) — tách khỏi detail (khác endpoint/gate/shape).
+    report: (id: string) => [...rootKeys.tasks, "projects", "report", id] as const,
   },
   comments: (taskId: string) => [...rootKeys.tasks, "comments", taskId] as const,
   // S4-FE-TASK-3 — Kanban board (theo project) · checklist · activity feed (S4-TASK-BE-4).
@@ -416,6 +419,8 @@ export const taskKeys = {
   checklists: (taskId: string) => [...rootKeys.tasks, "checklists", taskId] as const,
   activity: (taskId: string, params?: Record<string, unknown>) =>
     [...rootKeys.tasks, "activity", taskId, params] as const,
+  // S4-FE-TASK-4 — APPEND: file đính kèm công việc (TaskFilePanel, GET /tasks/:taskId/files).
+  files: (taskId: string) => [...rootKeys.tasks, "files", taskId] as const,
 };
 
 // S4-FE-TASK-1 — invalidation cho mutation Project (create/update/close/delete + member add/update-role/
@@ -452,6 +457,11 @@ export const taskCollabInvalidation = {
   kanban: (projectId: string, taskId: string) =>
     [taskKeys.kanban(projectId), ...taskCoreInvalidation.detail(taskId)] as const,
   activity: (taskId: string) => [taskActivityPrefix, taskKeys.activity(taskId)] as const,
+};
+
+// S4-FE-TASK-4 — invalidation cho file đính kèm công việc (upload/xóa TaskFilePanel).
+export const taskFileInvalidation = {
+  files: (taskId: string) => [taskKeys.files(taskId)] as const,
 };
 
 // ── Notification keys ─────────────────────────────────────────────────────────

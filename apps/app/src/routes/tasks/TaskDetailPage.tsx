@@ -14,17 +14,19 @@ import { DeleteTaskDialog } from "./DeleteTaskDialog";
 import { TaskCommentThread } from "./TaskCommentThread";
 import { TaskChecklistPanel } from "./TaskChecklistPanel";
 import { TaskActivityTimeline } from "./TaskActivityTimeline";
+import { TaskFilePanel } from "./TaskFilePanel";
 
 /**
  * TaskDetailPage — S4-FE-TASK-2/3 (SPEC-06 §13.7, TASK-SCREEN-007). Deep link /tasks/:taskId.
  *
  * Thành phần: tiêu đề/trạng thái/priority/assignee/reporter/project/deadline/mô tả + Checklist +
- * Bình luận (mention) + Lịch sử hoạt động (S4-FE-TASK-3, TaskChecklistPanel/TaskCommentThread/
- * TaskActivityTimeline — mỗi khối tự gate quyền finer bên trong). File đính kèm CHƯA build (BE có
- * endpoint nhưng ngoài phạm vi lane này).
+ * Bình luận (mention) + Lịch sử hoạt động + Tệp đính kèm (S4-FE-TASK-3/4, TaskChecklistPanel/
+ * TaskCommentThread/TaskActivityTimeline/TaskFilePanel — mỗi khối tự gate quyền finer bên trong).
  *
  * Nút cập nhật trạng thái/priority/deadline = TaskStatusSelect; đổi assignee/theo dõi = TaskAssignControl
  * (cả 2 tự gate finer bên trong qua useCan). Edit/Delete gate ở page này (update:task/delete:task).
+ *
+ * TaskFilePanel (S4-FE-TASK-4) — tệp đính kèm, nối canonical /tasks/:taskId/files (S4-TASK-BE-5, PR #184).
  */
 function OverviewCard({ task }: { task: TaskCoreResponseDto }) {
   const { t } = useTranslation("tasks");
@@ -181,6 +183,8 @@ export function TaskDetailPage({ taskId, onBack }: { taskId: string; onBack: () 
       <TaskCommentThread taskId={task.id} />
 
       <TaskActivityTimeline taskId={task.id} />
+
+      <TaskFilePanel taskId={task.id} />
 
       {editOpen && (
         <TaskFormDrawer
