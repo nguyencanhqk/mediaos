@@ -14,7 +14,7 @@ export const PLATFORM_ACCOUNT_STATUS_OPTIONS: PlatformAccountStatus[] = [
 ];
 
 export const PLATFORM_ACCOUNT_STATUS_COLORS: Record<PlatformAccountStatus, string> = {
-  active: "text-green-600",
+  active: "text-success",
   inactive: "text-muted-foreground",
   suspended: "text-destructive",
 };

@@ -138,17 +138,14 @@ export function ObjectPermissionDialog({
           >
             {removeMutation.isPending ? t("common:saving") : t("actions.remove")}
           </Button>
-          <Button
-            onClick={() => validate() && setMutation.mutate()}
-            disabled={pending}
-          >
+          <Button onClick={() => validate() && setMutation.mutate()} disabled={pending}>
             {setMutation.isPending ? t("common:saving") : t("actions.set")}
           </Button>
         </>
       }
     >
-      {/* Cảnh báo nhạy cảm */}
-      <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+      {/* Cảnh báo nhạy cảm — token trạng thái warning */}
+      <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning-muted px-3 py-2.5 text-sm text-warning">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />
         <span>{t("objectDialog.warning")}</span>
       </div>
@@ -223,8 +220,8 @@ export function ObjectPermissionDialog({
                   "flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
                   form.effect === value
                     ? value === "ALLOW"
-                      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                      : "border-red-300 bg-red-50 text-red-800"
+                      ? "border-success/40 bg-success-muted text-success"
+                      : "border-danger/40 bg-danger-muted text-danger"
                     : "border-border bg-background text-muted-foreground hover:bg-muted/60",
                 ].join(" ")}
                 onClick={() => update("effect", value)}

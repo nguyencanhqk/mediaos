@@ -124,7 +124,9 @@ export function MailConfigForm({
   const isNew = initial === null;
 
   const [editing, setEditing] = useState(!isNew); // empty-state → bấm "Thiết lập" mới mở form
-  const [scope, setScope] = useState(initial?.scope ?? (scopeTab === "app" ? "app:" : DEFAULT_SCOPE));
+  const [scope, setScope] = useState(
+    initial?.scope ?? (scopeTab === "app" ? "app:" : DEFAULT_SCOPE),
+  );
   const [host, setHost] = useState(initial?.host ?? "");
   const [port, setPort] = useState(String(initial?.port ?? 587));
   const [username, setUsername] = useState(initial?.username ?? "");
@@ -134,7 +136,10 @@ export function MailConfigForm({
   const [fromEmail, setFromEmail] = useState(initial?.fromEmail ?? "");
 
   const [errors, setErrors] = useState<string[]>([]);
-  const [testResult, setTestResult] = useState<{ ok: boolean; errorMessage?: string | null } | null>(null);
+  const [testResult, setTestResult] = useState<{
+    ok: boolean;
+    errorMessage?: string | null;
+  } | null>(null);
   const [testing, setTesting] = useState(false);
 
   // Empty-state (chưa thiết lập + chưa bấm Thiết lập).
@@ -216,13 +221,23 @@ export function MailConfigForm({
 
       <label className="block space-y-1.5">
         <span className="text-sm font-medium">{t("mailConfig.hostLabel")}</span>
-        <Input value={host} onChange={(e) => setHost(e.target.value)} placeholder="smtp.example.com" />
+        <Input
+          value={host}
+          onChange={(e) => setHost(e.target.value)}
+          placeholder="smtp.example.com"
+        />
       </label>
 
       <div className="grid grid-cols-2 gap-3">
         <label className="block space-y-1.5">
           <span className="text-sm font-medium">{t("mailConfig.portLabel")}</span>
-          <Input type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} />
+          <Input
+            type="number"
+            min={1}
+            max={65535}
+            value={port}
+            onChange={(e) => setPort(e.target.value)}
+          />
         </label>
         <label className="flex items-center gap-2 pt-7 text-sm">
           <input
@@ -237,7 +252,11 @@ export function MailConfigForm({
 
       <label className="block space-y-1.5">
         <span className="text-sm font-medium">{t("mailConfig.usernameLabel")}</span>
-        <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="noreply@example.com" />
+        <Input
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="noreply@example.com"
+        />
       </label>
 
       <label className="block space-y-1.5">
@@ -257,7 +276,11 @@ export function MailConfigForm({
       <div className="grid grid-cols-2 gap-3">
         <label className="block space-y-1.5">
           <span className="text-sm font-medium">{t("mailConfig.fromNameLabel")}</span>
-          <Input value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder="Funtime Media" />
+          <Input
+            value={fromName}
+            onChange={(e) => setFromName(e.target.value)}
+            placeholder="Funtime Media"
+          />
         </label>
         <label className="block space-y-1.5">
           <span className="text-sm font-medium">{t("mailConfig.fromEmailLabel")}</span>
@@ -283,7 +306,7 @@ export function MailConfigForm({
       {testResult && (
         <p
           role="status"
-          className={`text-sm ${testResult.ok ? "text-green-600" : "text-destructive"}`}
+          className={`text-sm ${testResult.ok ? "text-success" : "text-destructive"}`}
         >
           {testResult.ok
             ? t("mailConfig.testSuccess")
@@ -299,7 +322,7 @@ export function MailConfigForm({
           {testing ? t("mailConfig.testing") : t("mailConfig.testButton")}
         </Button>
         {isSaved && (
-          <p role="status" className="text-sm text-green-600">
+          <p role="status" className="text-sm text-success">
             {t("mailConfig.saveSuccess")}
           </p>
         )}

@@ -55,7 +55,7 @@ function SidebarItem({
       title={collapsed ? item.label : undefined}
       className={cn(
         "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-        "text-slate-600 hover:bg-accent hover:text-foreground",
+        "text-muted-foreground hover:bg-accent hover:text-foreground",
         isActive && "bg-brand-muted font-medium text-brand",
         collapsed && "justify-center px-2",
       )}
@@ -64,7 +64,7 @@ function SidebarItem({
         name={item.icon ?? "circle"}
         className={cn(
           "h-4.5 w-4.5 shrink-0",
-          isActive ? "text-brand" : "text-slate-400 group-hover:text-slate-600",
+          isActive ? "text-brand" : "text-muted-foreground/70 group-hover:text-foreground",
         )}
       />
       {!collapsed && <span className="truncate">{item.label}</span>}

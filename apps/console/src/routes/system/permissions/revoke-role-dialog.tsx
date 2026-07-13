@@ -80,18 +80,14 @@ export function RevokeRoleDialog({ open, onClose, user, roles, onSuccess }: Revo
           <Button variant="outline" onClick={onClose} disabled={mutation.isPending}>
             {t("common:actions.cancel")}
           </Button>
-          <Button
-            variant="destructive"
-            onClick={onSubmit}
-            disabled={mutation.isPending || !roleId}
-          >
+          <Button variant="destructive" onClick={onSubmit} disabled={mutation.isPending || !roleId}>
             {mutation.isPending ? t("common:saving") : t("actions.revoke")}
           </Button>
         </>
       }
     >
-      {/* Cảnh báo destructive */}
-      <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800">
+      {/* Cảnh báo destructive — token trạng thái danger (đọc được cả light/dark) */}
+      <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger-muted px-3 py-2.5 text-sm text-danger">
         <ShieldOff className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />
         <span>{t("revokeDialog.warning")}</span>
       </div>
@@ -127,7 +123,7 @@ export function RevokeRoleDialog({ open, onClose, user, roles, onSuccess }: Revo
                   className={[
                     "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors",
                     roleId === role.id
-                      ? "bg-red-50 text-red-800 font-medium"
+                      ? "bg-danger-muted text-danger font-medium"
                       : "hover:bg-muted/60",
                   ].join(" ")}
                   onClick={() => setRoleId(role.id)}
@@ -139,7 +135,9 @@ export function RevokeRoleDialog({ open, onClose, user, roles, onSuccess }: Revo
                     ].join(" ")}
                   >
                     {roleId === role.id && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                      // Chấm bên trong vòng tròn destructive — dùng foreground-token (đảo màu đúng
+                      // theo theme: trắng ở light/đỏ-đậm nền, gần-đen ở dark/đỏ-sáng nền).
+                      <span className="h-1.5 w-1.5 rounded-full bg-destructive-foreground" />
                     )}
                   </span>
                   {role.name}

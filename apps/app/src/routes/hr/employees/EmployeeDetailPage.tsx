@@ -123,7 +123,8 @@ export function EmployeeDetailPage({
     <div className="space-y-4 p-6">
       {/* Cover header: avatar + tên + mã + chức vụ – đơn vị + trạng thái */}
       <div className="overflow-hidden rounded-xl border border-border">
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-slate-700 via-slate-600 to-slate-500 px-5 py-5">
+        {/* Banner luôn tối (navy chrome) theo chủ đích cả 2 theme, không đổi theo light/dark */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-[#0f1a2e] via-[#16243d] to-[#1e304f] px-5 py-5">
           <div className="flex items-center gap-4">
             <Avatar
               size="lg"

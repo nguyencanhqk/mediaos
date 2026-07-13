@@ -215,7 +215,7 @@ export function SecurityPolicyForm({
         {timeEnabled && (
           <div className="space-y-2">
             {windows.length === 0 && (
-              <p className="text-xs text-amber-600">{t("time.emptyWarning")}</p>
+              <p className="text-xs text-warning">{t("time.emptyWarning")}</p>
             )}
             {windows.map((w, idx) => (
               <div key={idx} className="flex flex-wrap items-end gap-2">
@@ -354,7 +354,7 @@ export function SecurityPolicyForm({
           {isSaving ? t("common:saving") : t("saveButton")}
         </Button>
         {isSaved && (
-          <p role="status" className="text-sm text-green-600">
+          <p role="status" className="text-sm text-success">
             {t("saveSuccess")}
           </p>
         )}

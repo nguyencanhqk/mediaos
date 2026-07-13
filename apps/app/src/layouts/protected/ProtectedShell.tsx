@@ -33,7 +33,7 @@ function ProtectedShellSkeleton() {
   return (
     <div className="flex min-h-screen flex-col">
       {/* Topbar skeleton */}
-      <div className="flex h-14 shrink-0 items-center gap-3 bg-slate-900 px-4">
+      <div className="flex h-14 shrink-0 items-center gap-3 bg-chrome px-4">
         <Skeleton className="h-6 w-16 bg-white/10" />
         <div className="flex-1" />
         <Skeleton className="h-8 w-8 rounded-full bg-white/10" />
@@ -122,9 +122,11 @@ export function ProtectedShell({ children }: ProtectedShellProps) {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    // Mô hình cuộn app-frame: shell khóa h-dvh, chrome đứng yên, phần cuộn nằm TRONG
+    // vùng nội dung (ModuleWorkspaceLayout <main> / HomePortalLayout) — không cuộn document.
+    <div className="flex h-dvh flex-col bg-background text-foreground">
       <GlobalTopbar />
-      <div className="flex flex-1 flex-col">{children}</div>
+      <div className="flex min-h-0 flex-1 flex-col">{children}</div>
       {/* Global overlays — mounted once, visible via layout store */}
       <AppSwitcher />
     </div>

@@ -6,6 +6,10 @@
 // Tiện ích class
 export * from "./lib/utils";
 
+// Theme light/dark (token ở src/styles/theme.css — bootstrap trong index.html từng app)
+export * from "./hooks/use-theme";
+export * from "./components/ui/theme-toggle";
+
 // UI primitives
 export * from "./components/ui/button";
 export * from "./components/ui/input";

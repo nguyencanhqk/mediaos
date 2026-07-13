@@ -5,6 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FUNTIME MEDIA · Ứng dụng</title>
+    <!-- Chống FOUC: đặt class theme TRƯỚC khi CSS vẽ. Mặc định dark (Control Room);
+         localStorage "mediaos-theme"="light" → chế độ sáng (ThemeToggle ghi key này). -->
+    <script>
+      try {
+        if (localStorage.getItem("mediaos-theme") !== "light")
+          document.documentElement.classList.add("dark");
+      } catch (e) {
+        document.documentElement.classList.add("dark");
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

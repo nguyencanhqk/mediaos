@@ -29,6 +29,9 @@ vi.mock("@tanstack/react-router", () => ({
     </a>
   ),
   useNavigate: () => vi.fn(),
+  // AppShell dùng pathname để reset scroll của <main> khi đổi route
+  useRouterState: ({ select }: { select: (s: { location: { pathname: string } }) => unknown }) =>
+    select({ location: { pathname: "/" } }),
 }));
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {

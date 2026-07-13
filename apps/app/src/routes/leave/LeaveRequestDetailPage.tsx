@@ -12,8 +12,8 @@ import { LEAVE_ENGINE_PAIRS, LEAVE_PATHS, LEAVE_STATUS, type LeaveStatus } from 
 
 const STATUS_ICON: Record<string, React.ReactNode> = {
   [LEAVE_STATUS.DRAFT]: <Clock className="h-4 w-4 text-muted-foreground" />,
-  [LEAVE_STATUS.PENDING]: <Clock className="h-4 w-4 text-amber-500" />,
-  [LEAVE_STATUS.APPROVED]: <CheckCircle2 className="h-4 w-4 text-green-600" />,
+  [LEAVE_STATUS.PENDING]: <Clock className="h-4 w-4 text-warning" />,
+  [LEAVE_STATUS.APPROVED]: <CheckCircle2 className="h-4 w-4 text-success" />,
   [LEAVE_STATUS.REJECTED]: <XCircle className="h-4 w-4 text-destructive" />,
   [LEAVE_STATUS.CANCELLED]: <Ban className="h-4 w-4 text-muted-foreground" />,
   [LEAVE_STATUS.REVOKED]: <RotateCcw className="h-4 w-4 text-destructive" />,

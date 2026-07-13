@@ -192,7 +192,7 @@ export function AccountSessionsPage() {
           aria-live="assertive"
           className={
             feedback.kind === "success"
-              ? "rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
+              ? "rounded-md border border-success/40 bg-success-muted px-3 py-2 text-sm text-success"
               : "rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
           }
         >

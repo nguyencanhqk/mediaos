@@ -277,11 +277,7 @@ export function CompanySettingsForm({
 
             <label className="block space-y-1.5">
               <span className="text-sm font-medium">{t("company.regDateLabel")}</span>
-              <Input
-                type="date"
-                value={regDate}
-                onChange={(e) => setRegDate(e.target.value)}
-              />
+              <Input type="date" value={regDate} onChange={(e) => setRegDate(e.target.value)} />
             </label>
 
             <label className="block space-y-1.5">
@@ -336,11 +332,7 @@ export function CompanySettingsForm({
               </label>
               <label className="block space-y-1.5">
                 <span className="text-sm font-medium">{t("company.faxLabel")}</span>
-                <Input
-                  value={fax}
-                  onChange={(e) => setFax(e.target.value)}
-                  placeholder="Số fax"
-                />
+                <Input value={fax} onChange={(e) => setFax(e.target.value)} placeholder="Số fax" />
               </label>
             </div>
 
@@ -486,7 +478,7 @@ export function CompanySettingsForm({
           {isSaving ? t("common:saving") : t("company.saveButton")}
         </Button>
         {isSaved && (
-          <p role="status" className="text-sm text-green-600">
+          <p role="status" className="text-sm text-success">
             {t("company.saveSuccess")}
           </p>
         )}

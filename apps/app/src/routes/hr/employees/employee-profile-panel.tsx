@@ -85,8 +85,8 @@ export function EmployeeProfilePanel({
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
-      {/* Cover header */}
-      <div className="relative bg-gradient-to-r from-slate-700 via-slate-600 to-slate-500 px-5 pt-5 pb-4">
+      {/* Cover header — banner luôn tối (navy chrome) theo chủ đích cả 2 theme, không đổi theo light/dark */}
+      <div className="relative bg-gradient-to-r from-[#0f1a2e] via-[#16243d] to-[#1e304f] px-5 pt-5 pb-4">
         <div className="flex items-end justify-between gap-3">
           <div className="flex items-center gap-3">
             <Avatar

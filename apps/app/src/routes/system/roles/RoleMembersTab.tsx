@@ -495,7 +495,7 @@ function AddOrgUnitDialog({ open, onClose, roleId, memberIds, onDone }: AddDialo
               <p>{t("roleMembers.addOrgUnit.preview.unlinked", { count: unlinked })}</p>
             )}
             {employees.length >= 100 && (
-              <p className="text-amber-600">{t("roleMembers.addOrgUnit.preview.pageCap")}</p>
+              <p className="text-warning">{t("roleMembers.addOrgUnit.preview.pageCap")}</p>
             )}
           </div>
         ))}
@@ -601,7 +601,7 @@ function AddPositionDialog({ open, onClose, roleId, memberIds, onDone }: AddDial
               <p>{t("roleMembers.addOrgUnit.preview.unlinked", { count: unlinked })}</p>
             )}
             {employees.length >= 100 && (
-              <p className="text-amber-600">{t("roleMembers.addOrgUnit.preview.pageCap")}</p>
+              <p className="text-warning">{t("roleMembers.addOrgUnit.preview.pageCap")}</p>
             )}
           </div>
         ))}

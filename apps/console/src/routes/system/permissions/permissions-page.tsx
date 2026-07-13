@@ -112,10 +112,7 @@ export function PermissionsPage() {
   const filteredUsers = userSearch.trim()
     ? allUsers.filter((u) => {
         const q = userSearch.toLowerCase();
-        return (
-          u.email.toLowerCase().includes(q) ||
-          (u.fullName ?? "").toLowerCase().includes(q)
-        );
+        return u.email.toLowerCase().includes(q) || (u.fullName ?? "").toLowerCase().includes(q);
       })
     : allUsers;
 
@@ -125,9 +122,7 @@ export function PermissionsPage() {
     {
       accessorKey: "name",
       header: t("roles.columns.name"),
-      cell: ({ row }) => (
-        <span className="font-medium text-sm">{row.original.name}</span>
-      ),
+      cell: ({ row }) => <span className="font-medium text-sm">{row.original.name}</span>,
     },
     {
       accessorKey: "id",
@@ -177,7 +172,9 @@ export function PermissionsPage() {
       cell: ({ row }) => {
         const status = row.original.status;
         const variant = STATUS_BADGE_VARIANT[status] ?? "outline";
-        return <Badge variant={variant}>{t(`users.status.${status}`, { defaultValue: status })}</Badge>;
+        return (
+          <Badge variant={variant}>{t(`users.status.${status}`, { defaultValue: status })}</Badge>
+        );
       },
     },
     {
@@ -219,17 +216,13 @@ export function PermissionsPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
-      <PageHeader
-        icon={ShieldCheck}
-        title={t("title")}
-        description={t("subtitle")}
-      />
+      <PageHeader icon={ShieldCheck} title={t("title")} description={t("subtitle")} />
 
       {/* Flash feedback (auto-dismiss 4s) */}
       {flash && (
         <p
           role="status"
-          className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800"
+          className="rounded-lg border border-success/30 bg-success-muted px-4 py-2.5 text-sm text-success"
         >
           {flash}
         </p>
@@ -271,10 +264,7 @@ export function PermissionsPage() {
                 data={roles}
                 isLoading={false}
                 emptyState={
-                  <EmptyState
-                    title={t("roles.empty")}
-                    description={t("roles.emptyDescription")}
-                  />
+                  <EmptyState title={t("roles.empty")} description={t("roles.emptyDescription")} />
                 }
               />
             )}

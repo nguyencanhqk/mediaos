@@ -11,7 +11,7 @@ import { Lock, AlertTriangle, Search } from "lucide-react";
 // ---------------------------------------------------------------------------
 export function WorkspaceSkeleton() {
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] animate-pulse">
+    <div className="flex min-h-0 flex-1 animate-pulse">
       {/* Sidebar skeleton */}
       <div className="hidden w-60 shrink-0 border-r border-border bg-card lg:block">
         <div className="space-y-2 px-3 py-4">
@@ -40,7 +40,7 @@ export function WorkspaceSkeleton() {
 // ---------------------------------------------------------------------------
 export function LockedModuleState({ moduleName }: { moduleName?: string }) {
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center gap-4 px-6 text-center">
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
       <span className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
         <Lock className="h-8 w-8 text-muted-foreground" />
       </span>
@@ -65,7 +65,7 @@ export function LockedModuleState({ moduleName }: { moduleName?: string }) {
 // ---------------------------------------------------------------------------
 export function ModuleMaintenanceState({ moduleName }: { moduleName?: string }) {
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center gap-4 px-6 text-center">
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
       <span className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
         <AlertTriangle className="h-8 w-8 text-amber-600" />
       </span>
@@ -90,7 +90,7 @@ export function ModuleMaintenanceState({ moduleName }: { moduleName?: string }) 
 // ---------------------------------------------------------------------------
 export function ModuleNotFoundState() {
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center gap-4 px-6 text-center">
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
       <span className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
         <Search className="h-8 w-8 text-muted-foreground" />
       </span>
