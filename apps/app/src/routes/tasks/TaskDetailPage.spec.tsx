@@ -30,6 +30,14 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       listChecklists: vi.fn().mockResolvedValue([]),
       listActivity: vi.fn().mockResolvedValue([]),
     },
+    // S4-FE-TASK-4 — TaskFilePanel (mock để tránh gọi mạng thật trong test detail; cùng gate read:task
+    // với page nên render bất kỳ khi nào page render nội dung).
+    taskFileApi: {
+      getTaskFiles: vi.fn().mockResolvedValue([]),
+      uploadTaskFile: vi.fn(),
+      deleteTaskFile: vi.fn(),
+      downloadTaskFile: vi.fn(),
+    },
     taskProjectApi: { listProjects: vi.fn().mockResolvedValue([]) },
     hrApi: {
       listDepartments: vi.fn().mockResolvedValue([]),

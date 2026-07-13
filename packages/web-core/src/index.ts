@@ -95,6 +95,8 @@ export {
   taskCoreInvalidation,
   // S4-FE-TASK-3: Kanban/comment/checklist/activity mutation → board/comments/checklists/activity invalidation.
   taskCollabInvalidation,
+  // S4-FE-TASK-4: Task file (upload/delete) mutation → files list invalidation.
+  taskFileInvalidation,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -130,6 +132,9 @@ export { taskProjectApi } from "./lib/task-project-api";
 export { taskCoreApi } from "./lib/task-core-api";
 // S4-FE-TASK-3 — Kanban board+move · comment/mention · checklist/items · activity feed (S4-TASK-BE-4).
 export { taskCollabApi } from "./lib/task-collab-api";
+// S4-FE-TASK-4 — Task File (list/upload 4-pha có tiến độ/xóa mềm/tải), nối canonical /tasks/:id/files
+// (S4-TASK-BE-5, PR #184).
+export { taskFileApi, type UploadTaskFileOptions } from "./lib/task-file-api";
 export { dashboardApi } from "./lib/dashboard-api";
 export { hrApi } from "./lib/hr-api";
 // S2-FE-HR-6 — Org chart (GET /org/units/tree, read mở) + HR audit-logs (tái dùng /foundation/audit-logs).

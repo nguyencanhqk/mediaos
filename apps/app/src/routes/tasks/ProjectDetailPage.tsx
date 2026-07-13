@@ -16,6 +16,7 @@ import { TASK_ENGINE_PAIRS } from "./constants";
 import { ProjectFormDrawer } from "./ProjectFormDrawer";
 import { ProjectMemberTable } from "./ProjectMemberTable";
 import { TaskKanbanPage } from "./TaskKanbanPage";
+import { ProjectProgressCard } from "./ProjectProgressCard";
 import { ProjectProgressWidget } from "@/components/dashboard/ProjectProgressWidget";
 
 /**
@@ -26,6 +27,10 @@ import { ProjectProgressWidget } from "@/components/dashboard/ProjectProgressWid
  * tab nội bộ (mirror tab "members" đã có từ S4-FE-TASK-1). Overview tab hiển thị field THẬT từ
  * TaskProjectResponseDto; khối "Tiến độ" (S4-FE-DASH-2) nhúng `<ProjectProgressWidget projectId>` — tổng
  * hợp task theo dự án qua GET /dashboard/widgets/project-progress (S4-DASH-BE-2, KHÔNG raw-query TASK).
+ *
+ * `<ProjectProgressCard projectId>` (S4-FE-TASK-4, SPEC-06 §16.1) — báo cáo NHẠY CẢM riêng
+ * (view-report:project, GET /projects/:id/report, S4-TASK-BE-5): countsByStatus + overdueCount +
+ * assigneeWorkload (KHÁC widget ở trên — chỉ manager/hr/admin thấy, useCanExact fail-closed).
  */
 function ProjectStatusBadge({ status }: { status: string | null }) {
   const { t } = useTranslation("tasks");
@@ -185,6 +190,9 @@ function OverviewTab({ project }: { project: TaskProjectResponseDto }) {
       ))}
       <div className="md:col-span-2">
         <ProjectProgressWidget projectId={project.id} />
+      </div>
+      <div className="md:col-span-2">
+        <ProjectProgressCard projectId={project.id} />
       </div>
     </div>
   );
