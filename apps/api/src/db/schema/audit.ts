@@ -95,7 +95,7 @@ export const auditLogs = pgTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 
-/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451+0456+0457+0459+0460+0461+0462+0463+0464+0468+0474+0491). Mở rộng = thêm ở cả hai nơi. */
+/** object_type cho phép (đồng bộ CHECK ở 0003+0011+0014+0020+0033+0060+0070+0081+0090+0084+0093+0099+0121+0132+0140+0150+0170+0190+0200+0300+0310+0320+0390+0410+0420+0437+0439+0440+0446+0451+0456+0457+0459+0460+0461+0462+0463+0464+0468+0474+0491+0496). Mở rộng = thêm ở cả hai nơi. */
 export const AUDIT_OBJECT_TYPES = [
   "company",
   "user",
@@ -335,5 +335,13 @@ export const AUDIT_OBJECT_TYPES = [
   // audit_logs_object_type_chk trên Postgres thật. GRANT UPDATE dashboard_widget_configs cho mediaos_app
   // (KHÔNG DELETE, KHÔNG worker) cùng migration.
   "dashboard_widget_config",
+  // S5-HR-IMPORT-BE-1 (mig 0496): HR bulk employee import — HrEmployeeImportService session-audit ghi 1 dòng
+  // object_type='employee_import' {fileName, ok, fail} audit-in-tx app-tenant (mỗi employee tạo qua
+  // createFromImportTx cũng ghi 'create' object_type='employee'). before/after CHỈ metadata phiên import
+  // (fileName/ok/fail/rows) — KHÔNG salary/identity/PII vào before/after (BẤT BIẾN #3 — masker che nếu lọt).
+  // Import hàng loạt danh bạ = hành động quan trọng (SPEC-01 §16.3). 0496 UNION ADD-only vào CHECK (clone
+  // 0491/0474/0468/0464/0456/0446/0440), append-only #2 nguyên vẹn; INSERT audit KHÔNG vỡ
+  // audit_logs_object_type_chk trên Postgres thật.
+  "employee_import",
 ] as const;
 export type AuditObjectType = (typeof AUDIT_OBJECT_TYPES)[number];
