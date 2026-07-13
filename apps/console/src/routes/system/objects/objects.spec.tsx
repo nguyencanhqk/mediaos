@@ -37,19 +37,21 @@ const okList = (rows: unknown[]) => ({
   error: null,
 });
 
-const makeEmployee = (overrides: Partial<{
-  id: string;
-  userId: string;
-  userFullName: string;
-  userEmail: string;
-  employeeCode: string;
-  orgUnitName: string;
-  positionName: string;
-  workType: string;
-  employmentType: string;
-  status: string;
-  baseSalary: number | null;
-}> = {}) => ({
+const makeEmployee = (
+  overrides: Partial<{
+    id: string;
+    userId: string;
+    userFullName: string;
+    userEmail: string;
+    employeeCode: string;
+    orgUnitName: string;
+    positionName: string;
+    workType: string;
+    employmentType: string;
+    status: string;
+    baseSalary: number | null;
+  }> = {},
+) => ({
   id: overrides.id ?? "00000000-0000-0000-0000-000000000001",
   userId: overrides.userId ?? "00000000-0000-0000-0000-000000000002",
   userFullName: overrides.userFullName ?? "Nguyễn Văn A",
@@ -115,9 +117,7 @@ describe("CS-4 ObjectsPage — danh sách & tab", () => {
     setCaps({ "read:employee": true });
     stubFetch({ ok: true, status: 200, body: okList([]) });
     renderPage();
-    await waitFor(() =>
-      expect(screen.getByText("Chưa có nhân viên")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("Chưa có nhân viên")).toBeInTheDocument());
   });
 
   it("có dữ liệu → tên nhân viên render", async () => {
@@ -139,18 +139,14 @@ describe("CS-4 ObjectsPage — danh sách & tab", () => {
       body: okList([makeEmployee({ status: "active" })]),
     });
     renderPage();
-    await waitFor(() =>
-      expect(screen.getByText("Đang hoạt động")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("Đang hoạt động")).toBeInTheDocument());
   });
 
   it("load lỗi → role=alert", async () => {
     setCaps({ "read:employee": true });
     stubFetch({ ok: false, status: 500, body: { success: false, data: null } });
     renderPage();
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
   });
 });
 
@@ -218,9 +214,7 @@ describe("CS-4 ObjectsPage — create dialog", () => {
     await waitFor(() => expect(screen.getByText("Thêm mới")).toBeInTheDocument());
 
     fireEvent.click(screen.getByText("Thêm mới"));
-    await waitFor(() =>
-      expect(screen.getByText("Thêm nhân viên")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("Thêm nhân viên")).toBeInTheDocument());
   });
 });
 
@@ -250,9 +244,7 @@ describe("CS-4 ObjectsPage — edit dialog", () => {
     await waitFor(() => expect(screen.getByText("Phạm Thị D")).toBeInTheDocument());
 
     fireEvent.click(screen.getByText("Chỉnh sửa"));
-    await waitFor(() =>
-      expect(screen.getByText("Chỉnh sửa nhân viên")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("Chỉnh sửa nhân viên")).toBeInTheDocument());
   });
 });
 
@@ -310,122 +302,20 @@ describe("CS-4 ObjectsPage — vô hiệu hoá (soft-delete)", () => {
   });
 });
 
-// ─── Import preview → confirm ─────────────────────────────────────────────────
+// ─── Import CSV (S5-HR-IMPORT-BE-1) ────────────────────────────────────────────
+// Legacy /employees/import + /employees/import/confirm bulk-import UI đã bị GỠ khỏi
+// ObjectsPage (route media-era gỡ ở BE — không SequenceService, audit yếu). Import
+// hàng loạt mới thuộc S5-HR-IMPORT-FE-1 ở apps/app (POST /hr/employees/import).
 
-describe("CS-4 ObjectsPage — import CSV", () => {
-  it("không có import:employee → nút Nhập CSV ẩn", async () => {
-    setCaps({ "read:employee": true });
+describe("CS-4 ObjectsPage — import CSV (đã gỡ)", () => {
+  it("nút Nhập CSV KHÔNG còn tồn tại dù có import:employee", async () => {
+    setCaps(ALL_PERMS);
     stubFetch({ ok: true, status: 200, body: okList([]) });
     renderPage();
-    await waitFor(() => expect(screen.queryByText("Nhập CSV")).not.toBeInTheDocument());
-  });
-
-  it("preview panel hiển thị sau upload thành công", async () => {
-    setCaps(ALL_PERMS);
-    const fetchMock = vi.fn();
-
-    // List employees
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => okList([]),
-      text: async () => "",
-    });
-    // Upload import (FormData fetch) → preview
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        success: true,
-        data: {
-          valid: [
-            { email: "new@co.com", fullName: "New Person", workType: "offline", employmentType: "full_time" },
-          ],
-          invalid: [],
-          sessionId: "sess-abc",
-        },
-        error: null,
-      }),
-      text: async () => "",
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    renderPage();
-    await waitFor(() => expect(screen.getByText("Nhập CSV")).toBeInTheDocument());
-
-    // Simulate file upload via hidden input
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    const file = new File(["email,fullName\nnew@co.com,New Person"], "import.csv", {
-      type: "text/csv",
-    });
-    fireEvent.change(fileInput, { target: { files: [file] } });
-
     await waitFor(() =>
-      expect(screen.getByText(/Xem trước: 1 dòng hợp lệ/)).toBeInTheDocument(),
+      expect(screen.getByPlaceholderText("Tìm theo tên, email, mã…")).toBeInTheDocument(),
     );
-    expect(screen.getByText("New Person")).toBeInTheDocument();
-  });
-
-  it("confirm import sau preview → gọi POST /employees/import/confirm", async () => {
-    setCaps(ALL_PERMS);
-    const fetchMock = vi.fn();
-
-    // List
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => okList([]),
-      text: async () => "",
-    });
-    // Upload
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        success: true,
-        data: {
-          valid: [{ email: "x@co.com", fullName: "X", workType: "offline", employmentType: "full_time" }],
-          invalid: [],
-          sessionId: "sess-xyz",
-        },
-        error: null,
-      }),
-      text: async () => "",
-    });
-    // Confirm
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ success: true, data: { inserted: 1, failed: 0 }, error: null }),
-      text: async () => "",
-    });
-    // Re-fetch list after invalidation
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => okList([]),
-      text: async () => "",
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    renderPage();
-    await waitFor(() => expect(screen.getByText("Nhập CSV")).toBeInTheDocument());
-
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    const file = new File(["email,fullName\nx@co.com,X"], "import.csv", { type: "text/csv" });
-    fireEvent.change(fileInput, { target: { files: [file] } });
-
-    await waitFor(() =>
-      expect(screen.getByText(/Xác nhận nhập 1 dòng/)).toBeInTheDocument(),
-    );
-
-    fireEvent.click(screen.getByText(/Xác nhận nhập 1 dòng/));
-
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining("/employees/import/confirm"),
-        expect.objectContaining({ method: "POST" }),
-      ),
-    );
+    expect(screen.queryByText("Nhập CSV")).not.toBeInTheDocument();
+    expect(document.querySelector('input[type="file"]')).not.toBeInTheDocument();
   });
 });

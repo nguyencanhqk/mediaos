@@ -1,26 +1,12 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Search, Upload, Users } from "lucide-react";
+import { Search, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { EmployeeListItemDto, ImportEmployeePreviewDto } from "@mediaos/contracts";
-import {
-  Avatar,
-  Badge,
-  Button,
-  DataTable,
-  Dialog,
-  EmptyState,
-  Input,
-  Select,
-} from "@mediaos/ui";
-import {
-  EMPLOYEE_STATUS_VARIANT,
-  type EmployeeStatus,
-  useCan,
-} from "@mediaos/web-core";
+import type { EmployeeListItemDto } from "@mediaos/contracts";
+import { Avatar, Badge, Button, DataTable, Dialog, EmptyState, Input, Select } from "@mediaos/ui";
+import { EMPLOYEE_STATUS_VARIANT, type EmployeeStatus, useCan } from "@mediaos/web-core";
 import { consoleEmployeesApi } from "@/lib/employees-api";
-import { ObjectsImportPanel, type ImportStep } from "./objects-import-panel";
 import { InvitesPanel } from "./invites-panel";
 
 /**
@@ -73,26 +59,17 @@ function makeEditForm(e: EmployeeListItemDto): EditForm {
 export function ObjectsPage() {
   const { t } = useTranslation("objects");
   const qc = useQueryClient();
-  const fileRef = useRef<HTMLInputElement>(null);
 
   // Permissions
   const canRead = useCan("read", "employee");
   const canCreate = useCan("create", "employee");
   const canUpdate = useCan("update", "employee");
   const canDelete = useCan("delete", "employee");
-  const canImport = useCan("import", "employee");
 
   // UI state
   const [activeTab, setActiveTab] = useState<Tab>("employees");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
-
-  // Import state
-  const [importStep, setImportStep] = useState<ImportStep>("idle");
-  const [preview, setPreview] = useState<ImportEmployeePreviewDto | null>(null);
-  const [importResult, setImportResult] = useState<{ inserted: number; failed: number } | null>(
-    null,
-  );
 
   // Create dialog state
   const [createOpen, setCreateOpen] = useState(false);
@@ -106,7 +83,11 @@ export function ObjectsPage() {
 
   // ── Data fetching ────────────────────────────────────────────────────────
 
-  const { data: employees = [], isLoading, isError } = useQuery({
+  const {
+    data: employees = [],
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ["console:employees", statusFilter],
     queryFn: () =>
       consoleEmployeesApi.listEmployees(statusFilter ? { status: statusFilter } : undefined),
@@ -133,9 +114,7 @@ export function ObjectsPage() {
       void qc.invalidateQueries({ queryKey: ["console:employees"] });
     },
     onError: (err: unknown) => {
-      setCreateError(
-        err instanceof Error ? err.message : t("createDialog.unknownError"),
-      );
+      setCreateError(err instanceof Error ? err.message : t("createDialog.unknownError"));
     },
   });
 
@@ -152,9 +131,7 @@ export function ObjectsPage() {
       void qc.invalidateQueries({ queryKey: ["console:employees"] });
     },
     onError: (err: unknown) => {
-      setEditError(
-        err instanceof Error ? err.message : t("editDialog.unknownError"),
-      );
+      setEditError(err instanceof Error ? err.message : t("editDialog.unknownError"));
     },
   });
 
@@ -163,37 +140,7 @@ export function ObjectsPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["console:employees"] }),
   });
 
-  const uploadMutation = useMutation({
-    mutationFn: (file: File) => consoleEmployeesApi.uploadImport(file),
-    onSuccess: (data) => {
-      setPreview(data);
-      setImportStep("preview");
-    },
-  });
-
-  const confirmMutation = useMutation({
-    mutationFn: (sessionId: string) => consoleEmployeesApi.confirmImport(sessionId),
-    onSuccess: (result) => {
-      setImportResult(result);
-      setImportStep("done");
-      void qc.invalidateQueries({ queryKey: ["console:employees"] });
-    },
-  });
-
   // ── Handlers ─────────────────────────────────────────────────────────────
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) uploadMutation.mutate(file);
-    e.target.value = "";
-  };
-
-  const resetImport = () => {
-    uploadMutation.reset();
-    setImportStep("idle");
-    setPreview(null);
-    setImportResult(null);
-  };
 
   const openEdit = (row: EmployeeListItemDto) => {
     setEditTarget(row);
@@ -243,18 +190,14 @@ export function ObjectsPage() {
         id: "personalEmail",
         header: t("table.personalEmail"),
         cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">
-            {row.original.userEmail ?? "—"}
-          </span>
+          <span className="text-sm text-muted-foreground">{row.original.userEmail ?? "—"}</span>
         ),
       },
       {
         id: "accountEmail",
         header: t("table.accountEmail"),
         cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">
-            {row.original.userEmail ?? "—"}
-          </span>
+          <span className="text-sm text-muted-foreground">{row.original.userEmail ?? "—"}</span>
         ),
       },
       {
@@ -289,11 +232,7 @@ export function ObjectsPage() {
         cell: ({ row }) => (
           <div className="flex items-center justify-end gap-2">
             {canUpdate && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => openEdit(row.original)}
-              >
+              <Button variant="ghost" size="sm" onClick={() => openEdit(row.original)}>
                 {t("actions.edit")}
               </Button>
             )}
@@ -375,239 +314,24 @@ export function ObjectsPage() {
         <InvitesPanel kind={activeTab === "activation" ? "activation" : "approval"} />
       ) : (
         <>
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative max-w-sm flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("filter.search")}
-            aria-label={t("filter.search")}
-            className="pl-9"
-          />
-        </div>
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative max-w-sm flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t("filter.search")}
+                aria-label={t("filter.search")}
+                className="pl-9"
+              />
+            </div>
 
-        <Select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          aria-label={t("filter.status")}
-          className="w-48"
-        >
-          <option value="">{t("filter.statusAll")}</option>
-          <option value="active">{t("statusLabels.active")}</option>
-          <option value="inactive">{t("statusLabels.inactive")}</option>
-          <option value="resigned">{t("statusLabels.resigned")}</option>
-          <option value="terminated">{t("statusLabels.terminated")}</option>
-        </Select>
-
-        <div className="ml-auto flex gap-2">
-          {canImport && (
-            <Button
-              variant="outline"
-              onClick={() => fileRef.current?.click()}
-              disabled={uploadMutation.isPending || importStep === "preview"}
-            >
-              <Upload className="h-4 w-4" />
-              {uploadMutation.isPending ? t("import.importing") : t("actions.importCsv")}
-            </Button>
-          )}
-          {canCreate && (
-            <Button onClick={() => { setCreateOpen(true); setCreateError(null); }}>
-              {t("actions.create")}
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Hidden file input for CSV */}
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".csv"
-        className="hidden"
-        onChange={handleFileChange}
-        aria-hidden="true"
-      />
-
-      {/* Import panel */}
-      <ObjectsImportPanel
-        step={importStep}
-        preview={preview}
-        result={importResult}
-        uploadError={
-          uploadMutation.isError
-            ? uploadMutation.error instanceof Error
-              ? uploadMutation.error.message
-              : t("import.uploadError", { message: "Unknown" })
-            : null
-        }
-        confirming={confirmMutation.isPending}
-        confirmError={
-          confirmMutation.isError
-            ? confirmMutation.error instanceof Error
-              ? confirmMutation.error.message
-              : null
-            : null
-        }
-        onConfirm={() => preview && confirmMutation.mutate(preview.sessionId)}
-        onReset={resetImport}
-      />
-
-      {/* Table */}
-      {isError ? (
-        <div
-          role="alert"
-          aria-live="assertive"
-          className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm text-destructive"
-        >
-          {t("error.loadFailed")}
-        </div>
-      ) : (
-        <DataTable
-          columns={columns}
-          data={filtered}
-          isLoading={isLoading}
-          emptyState={
-            <EmptyState
-              icon={Users}
-              title={hasData || isLoading ? t("empty.titleFiltered") : t("empty.title")}
-              description={
-                hasData || isLoading
-                  ? t("empty.descriptionFiltered")
-                  : t("empty.description")
-              }
-            />
-          }
-        />
-      )}
-
-      {/* Create dialog */}
-      <Dialog
-        open={createOpen}
-        onClose={() => { setCreateOpen(false); setCreateForm(EMPTY_CREATE); setCreateError(null); }}
-        title={t("createDialog.title")}
-        description={t("createDialog.description")}
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => { setCreateOpen(false); setCreateForm(EMPTY_CREATE); setCreateError(null); }}
-            >
-              {t("createDialog.cancel")}
-            </Button>
-            <Button
-              onClick={() => createMutation.mutate()}
-              disabled={createMutation.isPending || !createForm.fullName.trim() || !createForm.email.trim()}
-            >
-              {createMutation.isPending ? t("createDialog.creating") : t("createDialog.createButton")}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-foreground">
-              {t("createDialog.fieldFullName")}
-            </label>
-            <Input
-              value={createForm.fullName}
-              onChange={(e) => setCreateForm({ ...createForm, fullName: e.target.value })}
-              placeholder="Nguyễn Văn A"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-foreground">
-              {t("createDialog.fieldEmail")}
-            </label>
-            <Input
-              type="email"
-              value={createForm.email}
-              onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-              placeholder="nva@company.com"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-foreground">
-              {t("createDialog.fieldPhone")}
-            </label>
-            <Input
-              value={createForm.phone}
-              onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
-              placeholder="0901 234 567"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-foreground">
-              {t("createDialog.fieldEmployeeCode")}
-            </label>
-            <Input
-              value={createForm.employeeCode}
-              onChange={(e) => setCreateForm({ ...createForm, employeeCode: e.target.value })}
-              placeholder="NV001"
-            />
-          </div>
-          {createError && (
-            <p className="text-sm text-destructive">
-              {t("createDialog.createError")} {createError}
-            </p>
-          )}
-        </div>
-      </Dialog>
-
-      {/* Edit dialog */}
-      <Dialog
-        open={editTarget !== null}
-        onClose={() => { setEditTarget(null); setEditError(null); }}
-        title={t("editDialog.title")}
-        description={t("editDialog.description", {
-          name: editTarget?.userFullName ?? editTarget?.userEmail ?? "",
-        })}
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => { setEditTarget(null); setEditError(null); }}
-            >
-              {t("editDialog.cancel")}
-            </Button>
-            <Button
-              onClick={() => editTarget && updateMutation.mutate(editTarget.id)}
-              disabled={updateMutation.isPending}
-            >
-              {updateMutation.isPending ? t("editDialog.saving") : t("editDialog.saveButton")}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-foreground">
-              {t("editDialog.fieldPhone")}
-            </label>
-            <Input
-              value={editForm.phone}
-              onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-              placeholder="0901 234 567"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-foreground">
-              {t("editDialog.fieldEmployeeCode")}
-            </label>
-            <Input
-              value={editForm.employeeCode}
-              onChange={(e) => setEditForm({ ...editForm, employeeCode: e.target.value })}
-              placeholder="NV001"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-foreground">
-              {t("editDialog.fieldStatus")}
-            </label>
             <Select
-              value={editForm.status}
-              onChange={(e) => setEditForm({ ...editForm, status: e.target.value as StatusFilter })}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              aria-label={t("filter.status")}
+              className="w-48"
             >
               <option value="">{t("filter.statusAll")}</option>
               <option value="active">{t("statusLabels.active")}</option>
@@ -615,14 +339,210 @@ export function ObjectsPage() {
               <option value="resigned">{t("statusLabels.resigned")}</option>
               <option value="terminated">{t("statusLabels.terminated")}</option>
             </Select>
+
+            <div className="ml-auto flex gap-2">
+              {canCreate && (
+                <Button
+                  onClick={() => {
+                    setCreateOpen(true);
+                    setCreateError(null);
+                  }}
+                >
+                  {t("actions.create")}
+                </Button>
+              )}
+            </div>
           </div>
-          {editError && (
-            <p className="text-sm text-destructive">
-              {t("editDialog.saveError")} {editError}
-            </p>
+
+          {/* Table */}
+          {isError ? (
+            <div
+              role="alert"
+              aria-live="assertive"
+              className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm text-destructive"
+            >
+              {t("error.loadFailed")}
+            </div>
+          ) : (
+            <DataTable
+              columns={columns}
+              data={filtered}
+              isLoading={isLoading}
+              emptyState={
+                <EmptyState
+                  icon={Users}
+                  title={hasData || isLoading ? t("empty.titleFiltered") : t("empty.title")}
+                  description={
+                    hasData || isLoading ? t("empty.descriptionFiltered") : t("empty.description")
+                  }
+                />
+              }
+            />
           )}
-        </div>
-      </Dialog>
+
+          {/* Create dialog */}
+          <Dialog
+            open={createOpen}
+            onClose={() => {
+              setCreateOpen(false);
+              setCreateForm(EMPTY_CREATE);
+              setCreateError(null);
+            }}
+            title={t("createDialog.title")}
+            description={t("createDialog.description")}
+            footer={
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setCreateOpen(false);
+                    setCreateForm(EMPTY_CREATE);
+                    setCreateError(null);
+                  }}
+                >
+                  {t("createDialog.cancel")}
+                </Button>
+                <Button
+                  onClick={() => createMutation.mutate()}
+                  disabled={
+                    createMutation.isPending ||
+                    !createForm.fullName.trim() ||
+                    !createForm.email.trim()
+                  }
+                >
+                  {createMutation.isPending
+                    ? t("createDialog.creating")
+                    : t("createDialog.createButton")}
+                </Button>
+              </>
+            }
+          >
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-foreground">
+                  {t("createDialog.fieldFullName")}
+                </label>
+                <Input
+                  value={createForm.fullName}
+                  onChange={(e) => setCreateForm({ ...createForm, fullName: e.target.value })}
+                  placeholder="Nguyễn Văn A"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-foreground">
+                  {t("createDialog.fieldEmail")}
+                </label>
+                <Input
+                  type="email"
+                  value={createForm.email}
+                  onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                  placeholder="nva@company.com"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-foreground">
+                  {t("createDialog.fieldPhone")}
+                </label>
+                <Input
+                  value={createForm.phone}
+                  onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+                  placeholder="0901 234 567"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-foreground">
+                  {t("createDialog.fieldEmployeeCode")}
+                </label>
+                <Input
+                  value={createForm.employeeCode}
+                  onChange={(e) => setCreateForm({ ...createForm, employeeCode: e.target.value })}
+                  placeholder="NV001"
+                />
+              </div>
+              {createError && (
+                <p className="text-sm text-destructive">
+                  {t("createDialog.createError")} {createError}
+                </p>
+              )}
+            </div>
+          </Dialog>
+
+          {/* Edit dialog */}
+          <Dialog
+            open={editTarget !== null}
+            onClose={() => {
+              setEditTarget(null);
+              setEditError(null);
+            }}
+            title={t("editDialog.title")}
+            description={t("editDialog.description", {
+              name: editTarget?.userFullName ?? editTarget?.userEmail ?? "",
+            })}
+            footer={
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setEditTarget(null);
+                    setEditError(null);
+                  }}
+                >
+                  {t("editDialog.cancel")}
+                </Button>
+                <Button
+                  onClick={() => editTarget && updateMutation.mutate(editTarget.id)}
+                  disabled={updateMutation.isPending}
+                >
+                  {updateMutation.isPending ? t("editDialog.saving") : t("editDialog.saveButton")}
+                </Button>
+              </>
+            }
+          >
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-foreground">
+                  {t("editDialog.fieldPhone")}
+                </label>
+                <Input
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                  placeholder="0901 234 567"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-foreground">
+                  {t("editDialog.fieldEmployeeCode")}
+                </label>
+                <Input
+                  value={editForm.employeeCode}
+                  onChange={(e) => setEditForm({ ...editForm, employeeCode: e.target.value })}
+                  placeholder="NV001"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-foreground">
+                  {t("editDialog.fieldStatus")}
+                </label>
+                <Select
+                  value={editForm.status}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, status: e.target.value as StatusFilter })
+                  }
+                >
+                  <option value="">{t("filter.statusAll")}</option>
+                  <option value="active">{t("statusLabels.active")}</option>
+                  <option value="inactive">{t("statusLabels.inactive")}</option>
+                  <option value="resigned">{t("statusLabels.resigned")}</option>
+                  <option value="terminated">{t("statusLabels.terminated")}</option>
+                </Select>
+              </div>
+              {editError && (
+                <p className="text-sm text-destructive">
+                  {t("editDialog.saveError")} {editError}
+                </p>
+              )}
+            </div>
+          </Dialog>
         </>
       )}
     </div>
