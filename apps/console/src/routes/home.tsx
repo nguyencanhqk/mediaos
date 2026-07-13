@@ -138,7 +138,9 @@ export function HomePage() {
                 >
                   <span
                     className={cn(
-                      "flex h-14 w-14 items-center justify-center rounded-2xl shadow-sm ring-1 ring-white/5 transition-transform group-hover:-translate-y-0.5 group-hover:shadow-md group-hover:shadow-black/40",
+                      // Ring trên tile màu: hairline tối trên nền sáng, hairline sáng trên nền tối
+                      // (tile KHÔNG phải chrome nên không dùng white/* cố định).
+                      "flex h-14 w-14 items-center justify-center rounded-2xl shadow-sm ring-1 ring-black/5 dark:ring-white/5 transition-transform group-hover:-translate-y-0.5 group-hover:shadow-md group-hover:shadow-black/40",
                       item.tile,
                     )}
                   >
@@ -161,7 +163,7 @@ export function HomePage() {
               health.isLoading
                 ? "bg-muted-foreground/40"
                 : health.data
-                  ? "live-dot bg-emerald-400 shadow-[0_0_8px] shadow-emerald-400/60"
+                  ? "live-dot bg-success shadow-[0_0_8px] shadow-success/60"
                   : "bg-destructive shadow-[0_0_8px] shadow-destructive/60",
             )}
           />

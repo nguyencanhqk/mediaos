@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { ThemeToggle } from "@mediaos/ui";
 import { SignalBar } from "@/components/SignalBar";
 import { BRAND_SYSTEM_LABEL, BRAND_WORDMARK } from "@/lib/brand";
 
@@ -47,7 +48,10 @@ interface AuthShellProps {
 /** Console card bên phải + BrandPanel bên trái, dùng chung khung "control-room". */
 export function AuthShell({ heading, subtitle, children }: AuthShellProps) {
   return (
-    <div className="control-room-bg min-h-screen w-full">
+    <div className="control-room-bg relative min-h-screen w-full">
+      {/* Toggle nổi góc phải — trang auth không có topbar chrome nên override style
+          mặc định (vốn dành cho nền navy) sang token nội dung */}
+      <ThemeToggle className="absolute right-4 top-4 text-muted-foreground hover:bg-accent hover:text-foreground" />
       <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col items-center justify-center gap-12 px-6 py-12 lg:flex-row lg:items-stretch lg:gap-20 lg:py-0">
         <BrandPanel />
 

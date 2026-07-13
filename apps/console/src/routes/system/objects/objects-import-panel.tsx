@@ -74,9 +74,7 @@ export function ObjectsImportPanel({
             <li key={i} className="flex flex-wrap gap-x-4 gap-y-0.5 px-3 py-2">
               <span className="font-medium text-foreground">{row.fullName}</span>
               <span className="text-muted-foreground">{row.email}</span>
-              {row.orgUnitName && (
-                <span className="text-muted-foreground">{row.orgUnitName}</span>
-              )}
+              {row.orgUnitName && <span className="text-muted-foreground">{row.orgUnitName}</span>}
             </li>
           ))}
           {preview.valid.length > 5 && (
@@ -104,7 +102,7 @@ export function ObjectsImportPanel({
 
   if (step === "done" && result) {
     return (
-      <Card className="flex items-center justify-between gap-3 border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+      <Card className="flex items-center justify-between gap-3 border-success/30 bg-success-muted p-4 text-sm text-success">
         <span className="flex items-center gap-2">
           <CheckCircle2 className="h-4.5 w-4.5 shrink-0" />
           {t("import.done", { count: result.inserted })}

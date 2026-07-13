@@ -19,14 +19,15 @@ interface AuthLayoutProps {
 }
 
 function AuthBrandPanel() {
+  // Brand panel = chrome navy hằng số cả hai theme (gradient phổ luôn đọc được)
   return (
-    <div className="hidden lg:flex lg:flex-col lg:items-center lg:justify-center lg:bg-slate-900 lg:px-12 lg:py-16">
+    <div className="hidden lg:flex lg:flex-col lg:items-center lg:justify-center lg:bg-chrome lg:px-12 lg:py-16">
       <div className="mx-auto max-w-sm text-center">
         <div className="brand-gradient-text font-display mb-4 text-4xl font-bold tracking-tight">
           FUNTIME MEDIA
         </div>
         <div className="brand-gradient-line mx-auto mb-6 h-0.5 w-32 rounded-full opacity-80" />
-        <p className="text-sm leading-relaxed text-slate-400">
+        <p className="text-sm leading-relaxed text-chrome-foreground/70">
           Hệ thống quản lý doanh nghiệp nội bộ. Nhân sự · Chấm công · Nghỉ phép · Công việc.
         </p>
       </div>

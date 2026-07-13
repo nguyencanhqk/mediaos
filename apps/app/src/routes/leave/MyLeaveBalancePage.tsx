@@ -41,7 +41,7 @@ export function LeaveBalanceCard({ balance }: LeaveBalanceCardProps) {
             <p className="text-xs text-muted-foreground">{unit}</p>
           </div>
           <div>
-            <p className="text-2xl font-bold text-amber-600">{balance.reservedDays}</p>
+            <p className="text-2xl font-bold text-warning">{balance.reservedDays}</p>
             <p className="text-xs text-muted-foreground">{t("overview.balance.reserved")}</p>
             <p className="text-xs text-muted-foreground">{unit}</p>
           </div>

@@ -17,9 +17,9 @@ function isRevealable(grant: BreakGlassGrantDto): boolean {
 }
 
 function statusClass(status: BreakGlassGrantDto["status"]): string {
-  if (status === "active") return "text-emerald-600";
+  if (status === "active") return "text-success";
   if (status === "revoked") return "text-muted-foreground line-through";
-  return "text-amber-600";
+  return "text-warning";
 }
 
 /**
@@ -66,10 +66,7 @@ export function BreakGlassGrantTable({ grants, onRequestReveal }: BreakGlassGran
                     onRequestReveal={() => onRequestReveal(grant.platformAccountId)}
                   />
                 ) : (
-                  <span
-                    data-testid="reveal-unavailable"
-                    className="text-xs text-muted-foreground"
-                  >
+                  <span data-testid="reveal-unavailable" className="text-xs text-muted-foreground">
                     {t("table.revealUnavailable")}
                   </span>
                 )}

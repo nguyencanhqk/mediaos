@@ -4,8 +4,18 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="dark" />
     <title>FUNTIME MEDIA — Đăng nhập</title>
+    <!-- Chống FOUC: đặt class theme TRƯỚC khi CSS vẽ. Mặc định dark (Control Room);
+         localStorage "mediaos-theme"="light" → chế độ sáng (ThemeToggle ghi key này).
+         color-scheme giờ do theme.css đặt theo class (light/dark) — bỏ meta tĩnh. -->
+    <script>
+      try {
+        if (localStorage.getItem("mediaos-theme") !== "light")
+          document.documentElement.classList.add("dark");
+      } catch (e) {
+        document.documentElement.classList.add("dark");
+      }
+    </script>
     <!-- Bộ chữ "Phòng điều khiển": Space Grotesk (display) · Inter (body) · JetBrains Mono (nhãn/mã). -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

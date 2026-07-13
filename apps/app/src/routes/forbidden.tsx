@@ -30,8 +30,10 @@ export function ForbiddenPage({ reason }: ForbiddenPageProps) {
 
   const reasonText = isKnown(reason) ? t(`forbidden.reason.${reason}`) : t("forbidden.description");
 
+  // flex-1/min-h-full: trong ProtectedShell (đã khóa h-dvh) lấp đầy vùng nội dung
+  // và căn giữa; render standalone (/403 không shell) thì rơi về chiều cao nội dung + py-16.
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
+    <div className="flex min-h-full flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center">
       <span className="text-6xl font-bold text-muted-foreground/30">403</span>
       <h1 className="text-xl font-semibold text-foreground">{t("forbidden.title")}</h1>
       <p className="max-w-sm text-sm text-muted-foreground">{reasonText}</p>

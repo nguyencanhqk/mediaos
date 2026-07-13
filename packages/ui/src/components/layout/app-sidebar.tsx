@@ -10,7 +10,7 @@ interface AppSidebarProps {
 }
 
 const NAV_LINK_CLASS = cn(
-  "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-accent hover:text-foreground",
+  "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
   "[&.active]:bg-brand-muted [&.active]:font-medium [&.active]:text-brand",
 );
 
@@ -18,14 +18,14 @@ function NavLink({ item, t }: { item: NavItem; t: (key: string) => string }) {
   const Icon = item.icon;
   return (
     <Link key={item.id} to={item.to} className={NAV_LINK_CLASS}>
-      <Icon className="h-4.5 w-4.5 shrink-0 text-slate-400 group-hover:text-slate-600 group-[.active]:text-brand" />
+      <Icon className="h-4.5 w-4.5 shrink-0 text-muted-foreground/70 group-hover:text-foreground group-[.active]:text-brand" />
       <span className="truncate">{t(item.labelKey)}</span>
     </Link>
   );
 }
 
 /**
- * Sidebar điều hướng — nền trắng, nhóm theo category (NAV registry),
+ * Sidebar điều hướng — nền card (tự đổi theo theme), nhóm theo category (NAV registry),
  * mỗi mục có icon + active state xanh (viền trái + nền brand-muted).
  *
  * Hỗ trợ sidebar 2 cấp: item có `subcategory` hiển thị dưới header nhỏ bên trong category.

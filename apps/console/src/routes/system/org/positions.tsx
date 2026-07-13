@@ -101,8 +101,7 @@ export function PositionsPage() {
   const save = useMutation({
     mutationFn: () => {
       const parsedLevel = Number(form.level);
-      const level =
-        form.level.trim() && Number.isInteger(parsedLevel) ? parsedLevel : undefined;
+      const level = form.level.trim() && Number.isInteger(parsedLevel) ? parsedLevel : undefined;
       if (editing) {
         return positionsApi.updatePosition(editing.id, {
           name: form.name.trim(),
@@ -142,9 +141,7 @@ export function PositionsPage() {
           <h1 className="text-2xl font-semibold">{t("positions.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("positions.subtitle")}</p>
         </div>
-        {canCreate && (
-          <Button onClick={openCreate}>{t("positions.addButton")}</Button>
-        )}
+        {canCreate && <Button onClick={openCreate}>{t("positions.addButton")}</Button>}
       </header>
 
       <div className="flex items-center gap-2">
@@ -168,7 +165,9 @@ export function PositionsPage() {
 
       {isLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
       {isError && (
-        <p role="alert" className="text-sm text-destructive">{t("common:errors.loadFailed")}</p>
+        <p role="alert" className="text-sm text-destructive">
+          {t("common:errors.loadFailed")}
+        </p>
       )}
 
       {isEmpty ? (
@@ -204,20 +203,16 @@ export function PositionsPage() {
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {p.orgUnitName ?? "—"}
-                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">{p.orgUnitName ?? "—"}</td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {p.level != null ? p.level : "—"}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {p.defaultRoleName ?? "—"}
-                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">{p.defaultRoleName ?? "—"}</td>
                   <td className="px-4 py-3">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                         p.status === "active"
-                          ? "bg-green-100 text-green-700"
+                          ? "bg-success-muted text-success"
                           : "bg-muted text-muted-foreground"
                       }`}
                     >
@@ -262,10 +257,7 @@ export function PositionsPage() {
             <Button variant="outline" onClick={closeDialog} disabled={save.isPending}>
               {t("common:actions.cancel")}
             </Button>
-            <Button
-              onClick={() => save.mutate()}
-              disabled={!form.name.trim() || save.isPending}
-            >
+            <Button onClick={() => save.mutate()} disabled={!form.name.trim() || save.isPending}>
               {editing ? t("common:actions.save") : t("common:actions.create")}
             </Button>
           </>

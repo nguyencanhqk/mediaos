@@ -192,7 +192,9 @@ export function CreateApiKeyDialog({ open, onClose, onSuccess }: CreateApiKeyDia
                       {s.action}:{s.resourceType}
                     </code>
                     {s.isSensitive && (
-                      <span className="text-[10px] uppercase text-amber-400">sensitive</span>
+                      <span className="text-[10px] uppercase text-amber-600 dark:text-amber-400">
+                        sensitive
+                      </span>
                     )}
                   </label>
                 </li>

@@ -133,7 +133,8 @@ export function HomePortalLayout() {
 
   return (
     <>
-      <div className="min-h-[calc(100vh-3.5rem)] bg-background">
+      {/* ProtectedShell khóa h-dvh → portal tự cuộn trong vùng của nó (chrome đứng yên) */}
+      <div className="min-h-0 flex-1 overflow-y-auto bg-background [scrollbar-gutter:stable]">
         {/* Gradient hero strip */}
         <div className="control-room-bg px-6 py-8 sm:px-10">
           <p className="text-sm font-medium text-muted-foreground">Xin chào,</p>

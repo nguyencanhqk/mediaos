@@ -94,8 +94,8 @@ export function AssignRoleDialog({ open, onClose, user, roles, onSuccess }: Assi
         </>
       }
     >
-      {/* Cảnh báo nhạy cảm */}
-      <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+      {/* Cảnh báo nhạy cảm — token trạng thái warning */}
+      <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning-muted px-3 py-2.5 text-sm text-warning">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />
         <span>{t("assignDialog.warning")}</span>
       </div>
@@ -143,7 +143,8 @@ export function AssignRoleDialog({ open, onClose, user, roles, onSuccess }: Assi
                     ].join(" ")}
                   >
                     {roleId === role.id && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                      // brand-foreground = trắng cả 2 theme, nhưng dùng token để nhất quán ngữ nghĩa.
+                      <span className="h-1.5 w-1.5 rounded-full bg-brand-foreground" />
                     )}
                   </span>
                   {role.name}

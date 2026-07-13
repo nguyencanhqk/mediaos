@@ -11,18 +11,18 @@ describe("Badge", () => {
     expect(screen.getByText("Đang làm việc")).toBeInTheDocument();
   });
 
-  it("variant=success có class bg-emerald-50", () => {
+  it("variant=success dùng token trạng thái bg-success-muted", () => {
     const { container } = render(<Badge variant="success">Đã duyệt</Badge>);
-    expect(container.firstChild).toHaveClass("bg-emerald-50");
+    expect(container.firstChild).toHaveClass("bg-success-muted");
   });
 
-  it("variant=danger có class bg-red-50", () => {
+  it("variant=danger dùng token trạng thái bg-danger-muted", () => {
     const { container } = render(<Badge variant="danger">Từ chối</Badge>);
-    expect(container.firstChild).toHaveClass("bg-red-50");
+    expect(container.firstChild).toHaveClass("bg-danger-muted");
   });
 
-  it("variant=warning có class bg-amber-50", () => {
+  it("variant=warning dùng token trạng thái bg-warning-muted", () => {
     const { container } = render(<Badge variant="warning">Chờ duyệt</Badge>);
-    expect(container.firstChild).toHaveClass("bg-amber-50");
+    expect(container.firstChild).toHaveClass("bg-warning-muted");
   });
 });

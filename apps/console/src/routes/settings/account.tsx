@@ -32,7 +32,13 @@ function ProfileSection() {
       // Refetch /me để store khớp server (full_name + capabilities) thay vì sửa cục bộ.
       const me = await authApi.me();
       setUser(
-        { id: me.id, companyId: me.companyId, email: me.email, fullName: me.fullName, status: me.status },
+        {
+          id: me.id,
+          companyId: me.companyId,
+          email: me.email,
+          fullName: me.fullName,
+          status: me.status,
+        },
         me.capabilities,
       );
       setMsg({ ok: true, text: t("account.profileSaved") });
@@ -73,7 +79,7 @@ function ProfileSection() {
         />
       </div>
       {msg && (
-        <p role="status" className={`text-sm ${msg.ok ? "text-green-600" : "text-destructive"}`}>
+        <p role="status" className={`text-sm ${msg.ok ? "text-success" : "text-destructive"}`}>
           {msg.text}
         </p>
       )}

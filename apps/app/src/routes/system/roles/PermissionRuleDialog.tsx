@@ -275,7 +275,7 @@ export function PermissionRuleDialog({
           </label>
         </div>
         {includeSensitive && (
-          <p className="text-xs text-amber-600">{t("rolePermissions.rule.includeSensitiveHint")}</p>
+          <p className="text-xs text-warning">{t("rolePermissions.rule.includeSensitiveHint")}</p>
         )}
         {sensitiveBlocked && (
           <p role="alert" className="text-sm text-destructive">
@@ -305,7 +305,7 @@ export function PermissionRuleDialog({
               })}
             </p>
             {applied && preview.applied && (
-              <p role="status" className="rounded bg-emerald-50 px-2 py-1 text-sm text-emerald-700">
+              <p role="status" className="rounded bg-success-muted px-2 py-1 text-sm text-success">
                 {t("rolePermissions.rule.done", {
                   ok: preview.applied.filter((a) => a.status === "ok").length,
                   err: preview.applied.filter((a) => a.status === "error").length,
@@ -386,11 +386,11 @@ function PreviewList({
   if (items.length === 0) return null;
   const color =
     variant === "add"
-      ? "text-emerald-700"
+      ? "text-success"
       : variant === "change"
-        ? "text-blue-700"
+        ? "text-info"
         : variant === "excluded"
-          ? "text-amber-600"
+          ? "text-warning"
           : "text-muted-foreground";
   return (
     <div>

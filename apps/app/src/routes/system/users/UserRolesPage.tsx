@@ -185,7 +185,7 @@ export function UserRolesPage({ userId, onBack }: UserRolesPageProps) {
         }
       />
 
-      <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+      <p className="rounded-md border border-warning/40 bg-warning-muted px-3 py-2 text-xs text-warning">
         {t("users.roles.limitationNotice")}
       </p>
 

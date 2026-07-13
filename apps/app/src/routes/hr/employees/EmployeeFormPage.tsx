@@ -113,8 +113,10 @@ function SectionNav({ sections, title }: { sections: FormSection[]; title: strin
     return () => observer.disconnect();
   }, [sections]);
 
+  // top-6: cuộn giờ nằm TRONG <main> của workspace (topbar ngoài khung cuộn) —
+  // offset chỉ cần khớp padding trang, không cộng chiều cao topbar nữa
   return (
-    <nav className="sticky top-20 hidden self-start lg:block">
+    <nav className="sticky top-6 hidden self-start lg:block">
       <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
         {title}
       </p>

@@ -95,7 +95,7 @@ function PreviewBox({
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">{t("form.preview.requested")}</span>
-            <span className="text-amber-600">−{balance.requested_days}</span>
+            <span className="text-warning">−{balance.requested_days}</span>
           </div>
           <div className="flex justify-between border-t pt-1 font-medium">
             <span>{t("form.preview.balanceAfter")}</span>
@@ -121,9 +121,9 @@ function PreviewBox({
       {/* Warnings */}
       {warnings.length > 0 && (
         <div className="space-y-1">
-          <p className="text-xs font-medium text-amber-700">{t("form.preview.warnings")}</p>
+          <p className="text-xs font-medium text-warning">{t("form.preview.warnings")}</p>
           {warnings.map((w, i) => (
-            <p key={i} className="flex items-start gap-1 text-xs text-amber-700">
+            <p key={i} className="flex items-start gap-1 text-xs text-warning">
               <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
               {w}
             </p>

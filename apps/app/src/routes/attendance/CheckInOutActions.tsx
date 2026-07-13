@@ -28,9 +28,7 @@ function FeedbackBanner({ type, message }: FeedbackBannerProps) {
     <div
       role="alert"
       className={`flex items-center gap-2 rounded-lg p-3 text-sm ${
-        type === "success"
-          ? "bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200"
-          : "bg-destructive/10 text-destructive"
+        type === "success" ? "bg-success-muted text-success" : "bg-destructive/10 text-destructive"
       }`}
     >
       {type === "success" ? (

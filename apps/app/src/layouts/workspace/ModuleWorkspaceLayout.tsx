@@ -11,6 +11,7 @@
  * - Module workspace KHÔNG hard-code role.
  */
 import * as React from "react";
+import { useRouterState } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import {
   createPermissionChecker,
@@ -80,6 +81,16 @@ export function ModuleWorkspaceLayout({
 
   const { t } = useTranslation("nav");
 
+  // Cuộn nằm TRONG <main> (không phải document) → router không tự reset; tự đưa về đầu.
+  // typeof-guard: jsdom (test) không có Element.scrollTo.
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const mainRef = React.useRef<HTMLElement>(null);
+  React.useEffect(() => {
+    if (typeof mainRef.current?.scrollTo === "function") {
+      mainRef.current.scrollTo({ top: 0 });
+    }
+  }, [pathname]);
+
   // Build permission checker + session từ auth store (sync — đã có từ bootstrapSession)
   const permission = React.useMemo(buildPermissionCheckerFromStore, []);
   const session = React.useMemo(buildSessionFromStore, []);
@@ -106,7 +117,9 @@ export function ModuleWorkspaceLayout({
   });
 
   return (
-    <div className={cn("flex min-h-[calc(100vh-3.5rem)]", className)}>
+    // ProtectedShell đã khóa h-dvh → hàng này chỉ cần lấp đầy phần còn lại (min-h-0
+    // để flex tính đúng chiều cao); CHỈ <main> bên dưới cuộn, sidebar đứng yên.
+    <div className={cn("flex min-h-0 flex-1", className)}>
       {/* Desktop sidebar */}
       <ModuleSidebar
         moduleCode={moduleCode}
@@ -142,8 +155,12 @@ export function ModuleWorkspaceLayout({
         )}
       </button>
 
-      {/* Main content */}
-      <main className="min-w-0 flex-1 overflow-auto" aria-label={`${moduleName} — nội dung chính`}>
+      {/* Main content — vùng cuộn DUY NHẤT của workspace; đổi route → về đầu trang */}
+      <main
+        ref={mainRef}
+        className="min-w-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]"
+        aria-label={`${moduleName} — nội dung chính`}
+      >
         {children}
       </main>
     </div>

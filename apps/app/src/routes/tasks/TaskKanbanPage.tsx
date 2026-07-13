@@ -100,7 +100,10 @@ function KanbanColumn({
         </h4>
         <span className="text-xs text-muted-foreground">{tasks.length}</span>
       </div>
-      <div className="flex flex-1 flex-col gap-2">
+      {/* Cột dài tự cuộn TRONG cột (header cột đứng yên) thay vì kéo giãn cả trang;
+          drop handler ở div cột cha nên kéo-thả không đổi. calc ≈ topbar + header
+          project + tabs; min-h giữ vùng thả khi cột rỗng. */}
+      <div className="flex min-h-24 max-h-[calc(100dvh-21rem)] flex-1 flex-col gap-2 overflow-y-auto overscroll-contain">
         {tasks.length === 0 ? (
           <p className="px-1 text-xs text-muted-foreground">{t("tasks.kanban.columnEmpty")}</p>
         ) : (

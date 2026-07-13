@@ -158,7 +158,7 @@ export function CloneRoleDialog({
                 l.kind === "error"
                   ? "text-destructive"
                   : l.kind === "skipped"
-                    ? "text-amber-600"
+                    ? "text-warning"
                     : "text-muted-foreground"
               }
             >

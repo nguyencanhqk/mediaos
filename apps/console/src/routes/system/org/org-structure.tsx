@@ -23,7 +23,9 @@ function renderTree(nodes: OrgTreeNode[], level = 0): React.ReactNode {
         className={`flex items-center gap-2 py-1.5 text-sm ${level > 0 ? "pl-" + level * 4 : ""}`}
         style={{ paddingLeft: level * 16 }}
       >
-        <span className={n.status === "inactive" ? "text-muted-foreground line-through" : "font-medium"}>
+        <span
+          className={n.status === "inactive" ? "text-muted-foreground line-through" : "font-medium"}
+        >
           {n.name}
         </span>
         {n.code && (
@@ -170,7 +172,9 @@ function OrgUnitsTab() {
 
       {treeLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
       {treeError && (
-        <p role="alert" className="text-sm text-destructive">{t("common:errors.loadFailed")}</p>
+        <p role="alert" className="text-sm text-destructive">
+          {t("common:errors.loadFailed")}
+        </p>
       )}
 
       {isEmpty ? (
@@ -181,7 +185,9 @@ function OrgUnitsTab() {
         />
       ) : (
         <section>
-          <h3 className="mb-2 text-sm font-medium text-muted-foreground">{t("orgUnits.treeSection")}</h3>
+          <h3 className="mb-2 text-sm font-medium text-muted-foreground">
+            {t("orgUnits.treeSection")}
+          </h3>
           <ul className="rounded-xl border border-border p-3">{renderTree(tree)}</ul>
         </section>
       )}
@@ -209,7 +215,7 @@ function OrgUnitsTab() {
                         size="sm"
                         onClick={() => toggleStatus.mutate(u)}
                         disabled={toggleStatus.isPending}
-                        className={u.status === "active" ? "text-green-600" : "text-muted-foreground"}
+                        className={u.status === "active" ? "text-success" : "text-muted-foreground"}
                       >
                         {u.status === "active" ? t("status.active") : t("status.inactive")}
                       </Button>
@@ -245,10 +251,7 @@ function OrgUnitsTab() {
             <Button variant="outline" onClick={closeDialog} disabled={save.isPending}>
               {t("common:actions.cancel")}
             </Button>
-            <Button
-              onClick={() => save.mutate()}
-              disabled={!form.name.trim() || save.isPending}
-            >
+            <Button onClick={() => save.mutate()} disabled={!form.name.trim() || save.isPending}>
               {editing ? t("common:actions.save") : t("common:actions.create")}
             </Button>
           </>
@@ -484,7 +487,9 @@ function TeamsTab() {
 
       {isLoading && <p className="text-sm text-muted-foreground">{t("common:loading")}</p>}
       {isError && (
-        <p role="alert" className="text-sm text-destructive">{t("common:errors.loadFailed")}</p>
+        <p role="alert" className="text-sm text-destructive">
+          {t("common:errors.loadFailed")}
+        </p>
       )}
       {teams.length === 0 && !isLoading && (
         <p className="text-sm text-muted-foreground">{t("teams.empty")}</p>
@@ -515,7 +520,7 @@ function TeamsTab() {
                 )}
               </span>
               <span
-                className={`text-xs ${team.status === "active" ? "text-green-600" : "text-muted-foreground"}`}
+                className={`text-xs ${team.status === "active" ? "text-success" : "text-muted-foreground"}`}
               >
                 {team.status === "active" ? t("status.active") : t("status.inactive")}
               </span>
@@ -534,10 +539,7 @@ function TeamsTab() {
             <Button variant="outline" onClick={closeDialog} disabled={save.isPending}>
               {t("common:actions.cancel")}
             </Button>
-            <Button
-              onClick={() => save.mutate()}
-              disabled={!form.name.trim() || save.isPending}
-            >
+            <Button onClick={() => save.mutate()} disabled={!form.name.trim() || save.isPending}>
               {editing ? t("common:actions.save") : t("common:actions.create")}
             </Button>
           </>
@@ -609,7 +611,14 @@ function TeamsTab() {
           <div className="space-y-4">
             <div className="flex gap-2">
               {canUpdate && (
-                <Button variant="outline" size="sm" onClick={() => { closeDetail(); openEdit(detailTeam); }}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    closeDetail();
+                    openEdit(detailTeam);
+                  }}
+                >
                   {t("common:actions.edit")}
                 </Button>
               )}
@@ -630,7 +639,9 @@ function TeamsTab() {
                   }}
                   disabled={assignLeader.isPending}
                 >
-                  <option value="" disabled>{t("teams.detail.leaderPlaceholder")}</option>
+                  <option value="" disabled>
+                    {t("teams.detail.leaderPlaceholder")}
+                  </option>
                   {employees.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.fullName ?? u.email}
@@ -687,7 +698,9 @@ function TeamsTab() {
                   </li>
                 ))}
                 {members.length === 0 && (
-                  <li className="py-2 text-sm text-muted-foreground">{t("teams.detail.noMembers")}</li>
+                  <li className="py-2 text-sm text-muted-foreground">
+                    {t("teams.detail.noMembers")}
+                  </li>
                 )}
               </ul>
             </section>
