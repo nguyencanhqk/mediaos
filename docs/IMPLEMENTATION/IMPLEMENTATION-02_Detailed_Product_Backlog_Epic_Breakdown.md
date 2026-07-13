@@ -181,6 +181,8 @@ Một story đạt **Done** khi:
 | EPIC-11 | QA, UAT & Release Readiness | P0 | 7 | 68 | Tất cả epic P0/P1 |
 | **Tổng** | **12 epic** | — | **112** | **869** | — |
 
+> Bổ sung sau baseline: **EPIC-12 ME** (§8.13, 8 story / 44 point, 2026-07-13) và **4 story HR** thêm vào EPIC-03 (IMP02-STORY-121..124, 36 point — liên kết tài khoản UI · import Excel kéo từ PMVP-HR-006 · sơ đồ tổ chức trực quan kéo một phần PMVP-HR-007 · hoàn thiện Thông tin công việc, 2026-07-13). Tổng hiệu dụng: **124 story / 949 point** (EPIC-03 hiệu dụng: 17 story / 136 point).
+>
 > Crosswalk epic: bộ epic theo module trong IMPLEMENTATION-01 §9 (EPIC-FND/AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH) ánh xạ sang bộ epic chi tiết ở đây như sau: EPIC-FND -> EPIC-01; EPIC-AUTH -> EPIC-02; EPIC-HR -> EPIC-03; EPIC-ATT -> EPIC-04; EPIC-LEAVE -> EPIC-05; EPIC-TASK -> EPIC-06; EPIC-NOTI -> EPIC-07; EPIC-DASH -> EPIC-08. Ba epic EPIC-00 (Governance), EPIC-09 (Frontend Core), EPIC-10 (Integration) và EPIC-11 (QA/Release) là epic xuyên suốt, không thuộc một module nghiệp vụ đơn lẻ.
 
 ---
@@ -290,6 +292,12 @@ Phải hoàn tất phần guard P0 trước khi mở API nghiệp vụ cho HR/AT
 | IMP02-STORY-035 | HR/Admin | Là một HR/Admin, tôi muốn cấu hình quy tắc sinh mã nhân viên và preview mã tiếp theo. | P1 | 8 | Có prefix/padding/reset rule, lock manual edit, preview không tăng counter thật. |
 | IMP02-STORY-036 | HR | Là một HR, tôi muốn upload/quản lý file hồ sơ nhân viên. | P1 | 5 | File liên kết employee, quyền xem/tải/xóa theo HR permission, log truy cập. |
 | IMP02-STORY-037 | Manager/HR | Là một Manager/HR, tôi muốn xem org chart cơ bản. | P2 | 5 | Hiển thị cây phòng ban/quản lý trực tiếp theo scope, không lộ người ngoài quyền. |
+| IMP02-STORY-121 | HR/Admin | Là một HR/Admin, tôi muốn liên kết hoặc hủy liên kết hồ sơ nhân viên với tài khoản đăng nhập có sẵn ngay trên giao diện HR. | P1 | 5 | UI trên trang chi tiết nhân viên gọi HR-API-009/010 (BE đã ship S2-HR-BE-2), chọn user có sẵn cùng company, hủy liên kết có confirm, lỗi HR-ERR-027/028 hiển thị rõ, gate quyền update employee. |
+| IMP02-STORY-122 | HR | Là một HR, tôi muốn tạo hồ sơ nhân viên hàng loạt bằng cách upload file Excel/CSV. | P1 | 13 | Có template cột chuẩn, validate từng dòng + preview lỗi (dry-run không ghi), apply sinh mã nhân viên tự sinh qua sequence, báo cáo kết quả từng dòng, permission import riêng, audit phiên import. |
+| IMP02-STORY-123 | HR/Manager/Employee | Là một người dùng, tôi muốn xem sơ đồ tổ chức trực quan dạng biểu đồ: cây phòng ban và cây nhân sự theo quản lý trực tiếp. | P1 | 13 | Tab Phòng ban dạng node-chart (trưởng đơn vị + headcount), tab Nhân sự reporting-line theo quản lý trực tiếp chỉ field directory-class (tên, chức danh, phòng ban, avatar), lọc theo data-scope, không lộ PII/salary, orphan/cycle xử lý an toàn. |
+| IMP02-STORY-124 | HR/Manager/Employee | Là một người xem hồ sơ, tôi muốn khối Thông tin công việc đầy đủ: cấp bậc, loại hợp đồng chuẩn, quản lý trực tiếp/gián tiếp và thông tin nghỉ việc. | P1 | 5 | DTO đọc bổ sung jobLevelName/contractTypeName/tên quản lý (additive, directory-class), FE thêm dòng tương ứng + khối Thông tin nghỉ việc khi status nghỉ; field ngoài phạm vi MVP (mã chấm công, ngày nghỉ hưu, danh sách đen…) KHÔNG thêm. |
+
+> Bổ sung 2026-07-13 (owner soát Epic HR): IMP02-STORY-121 tách phần UI của HR-FUNC-011 (SPEC-03 §14.11 — BE link/unlink đã ship, chưa có màn hình); IMP02-STORY-122 kéo PMVP-HR-006 (IMPLEMENTATION-10 §11.2) từ Post-MVP vào MVP; IMP02-STORY-123 nâng sơ đồ tổ chức từ list thụt-dòng (S2-FE-HR-6) thành biểu đồ trực quan + cây nhân sự (kéo một phần PMVP-HR-007); IMP02-STORY-124 hoàn thiện khối Thông tin công việc trang chi tiết. Mã story dùng 121-124 vì dải 113-120 đã thuộc EPIC-12 ME.
 
 ### Phạm vi kỹ thuật chính
 
@@ -582,7 +590,7 @@ ME phụ thuộc module nguồn đã xong (AUTH/HR/ATT/LEAVE/TASK/NOTI — Sprin
 
 ## 9. Backlog theo Sprint đề xuất
 
-> Sprint mapping dưới đây bám đúng các IMPLEMENTATION execution plan (IMPLEMENTATION-03 -> IMPLEMENTATION-09): mô hình **7 sprint (Sprint 0 -> Sprint 6)**. Tổng MVP baseline: **112 story / 869 point** (+ EPIC-12 ME bổ sung 2026-07-13: 8 story / 44 point → **120 story / 913 point**). Khi biết velocity thực tế, Product Owner và Tech Lead cần điều chỉnh lại số story trong từng sprint (xem cảnh báo capacity ở §9.1).
+> Sprint mapping dưới đây bám đúng các IMPLEMENTATION execution plan (IMPLEMENTATION-03 -> IMPLEMENTATION-09): mô hình **7 sprint (Sprint 0 -> Sprint 6)**. Tổng MVP baseline: **112 story / 869 point** (+ EPIC-12 ME bổ sung 2026-07-13: 8 story / 44 point; + 4 story HR bổ sung EPIC-03 2026-07-13: IMP02-STORY-121..124, 36 point → **124 story / 949 point**). Khi biết velocity thực tế, Product Owner và Tech Lead cần điều chỉnh lại số story trong từng sprint (xem cảnh báo capacity ở §9.1).
 
 | Sprint | Execution plan | Mục tiêu | Story trọng tâm | Point | Deliverable demo |
 | --- | --- | --- | --- | ---: | --- |
@@ -591,7 +599,7 @@ ME phụ thuộc module nguồn đã xong (AUTH/HR/ATT/LEAVE/TASK/NOTI — Sprin
 | Sprint 2 | IMPLEMENTATION-05 | Auth & HR Core | 013-037, 098-099 | 200 | Login/logout, RBAC guard, user/role admin, employee CRUD, profile change, employee code |
 | Sprint 3 | IMPLEMENTATION-06 | Attendance & Leave Core | 038-064, 100 | 241 | Check-in/out, attendance records, shift/rule, leave balance/request/approval, ATT sync |
 | Sprint 4 | IMPLEMENTATION-07 | Task, Notification & Dashboard | 065-092, 101-103 | 231 | Project/task/Kanban, event notification, unread/dropdown, role dashboards, widget cache |
-| Sprint 5 | IMPLEMENTATION-08 | Integration, QA Hardening & UAT | 097, 104-110, 113-120 (EPIC-12 ME) | 123 | Field/export security, OpenAPI contract, test matrix, API/E2E/security/perf test, responsive P0, Trung tâm cá nhân /me (SPEC-09) |
+| Sprint 5 | IMPLEMENTATION-08 | Integration, QA Hardening & UAT | 097, 104-110, 113-120 (EPIC-12 ME), 121-124 (HR bổ sung) | 159 | Field/export security, OpenAPI contract, test matrix, API/E2E/security/perf test, responsive P0, Trung tâm cá nhân /me (SPEC-09), liên kết tài khoản UI + import Excel nhân viên + sơ đồ tổ chức trực quan + thông tin công việc đầy đủ |
 | Sprint 6 | IMPLEMENTATION-09 | Stabilization, Release Candidate & Go-live | 111-112 + bugfix | 13 | UAT sign-off, release readiness, RC build, go-live runbook |
 
 ### 9.1 Lưu ý capacity

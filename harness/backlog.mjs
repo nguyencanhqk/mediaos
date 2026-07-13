@@ -6462,4 +6462,193 @@ export const backlog = [
       "check.sh xanh; LIGHT gate; nhánh permission/IDOR → security-reviewer soi deny-path",
     ],
   },
+
+  // ═══════════════ HR BỔ SUNG 2026-07-13 — owner soát Epic HR (IMP02-STORY-121/122) ═══════════════
+  // Nguồn: owner phát hiện Epic HR thiếu 2 chức năng. Khảo sát 2026-07-13:
+  //   1) Liên kết hồ sơ ↔ tài khoản (HR-FUNC-011, SPEC-03 §14.11): BE ĐÃ ship từ S2-HR-BE-2
+  //      (POST/DELETE /hr/employees/:id/link-user, hr-write.controller.ts L75-91, unique 1 user ↔ ≤1
+  //      employee active + audit) nhưng KHÔNG có UI nào gọi — trang chi tiết chỉ hiển thị "Chưa liên kết"
+  //      read-only. Story bị gộp nhầm "nhà" vào IMP02-STORY-019 (EPIC-02 AUTH). → S5-HR-LINKUI-1 (FE-only).
+  //   2) Import nhân viên hàng loạt Excel/CSV: SPEC-03 §7 để "Phase sau" (PMVP-HR-006) — owner kéo vào
+  //      MVP 2026-07-13 → IMP02-STORY-122, tách BE (permission seed + parse/validate/dry-run/apply) và
+  //      FE (upload/preview/kết quả). Cặp permission MỚI ('import','employee') cần migration seed
+  //      → lane migration TUẦN TỰ sau S5-ME-DB-1 (cùng mint dải 0494+, tránh double-mint).
+  {
+    id: "S5-HR-LINKUI-1",
+    module: "HR",
+    layer: "FE",
+    title:
+      "FE liên kết/hủy liên kết hồ sơ nhân viên ↔ tài khoản có sẵn trên trang chi tiết (HR-FUNC-011 — BE link/unlink ĐÃ ship S2-HR-BE-2, chỉ thiếu UI)",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/src/routes/hr/**", "apps/app/src/i18n/**", "packages/web-core/src/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "SPEC-03 §14.11 (HR-FUNC-011) + §16 HR-API-009/010 + §20 HR-ERR-027/028",
+      "apps/api/src/employees/hr-write.controller.ts L75-91 (POST/DELETE /hr/employees/:id/link-user — ĐÃ ship, gate ('update','employee'))",
+      "apps/api/src/users/auth-users.controller.ts L60 (GET /auth/users — nguồn dialog chọn user, gate view:user)",
+      "IMP02-STORY-121 (IMPLEMENTATION-02 §8.4 bổ sung 2026-07-13)",
+    ],
+    done_when: [
+      "Khối 'Tài khoản đăng nhập' trên trang chi tiết nhân viên (apps/app HR detail): hiển thị trạng thái liên kết (email/username + trạng thái user); CHƯA liên kết → nút 'Liên kết tài khoản' mở dialog chọn user CÓ SẴN cùng company (search qua GET /auth/users sẵn có — KHÔNG thêm endpoint mới); ĐÃ liên kết → nút 'Hủy liên kết' có confirm dialog",
+      "Gate useCan cặp ('update','employee') cho nút link/unlink — KHÔNG hard-code role (server đã enforce, FE chỉ ẩn/hiện); dialog chọn user chỉ hiển thị khi caller có thêm cặp view:user — thiếu thì nút disabled + tooltip giải thích cần quyền xem user, KHÔNG lộ danh sách user",
+      "Lỗi server HR-ERR-027/028 (employee đã có user / user đã liên kết employee khác) hiển thị message vi RÕ theo mã lỗi; loading/error/empty đủ; invalidate query detail sau mutate; i18n vi; nếu thêm client trong web-core → REBUILD dist (bài học web-core-stale-dist)",
+      "FE spec: render trạng thái linked/unlinked + deny (useCan false → không thấy nút); check.sh xanh; LIGHT gate react-reviewer + typescript-reviewer + quality-gate",
+    ],
+  },
+  {
+    id: "S5-HR-IMPORT-BE-1",
+    module: "HR",
+    layer: "BE",
+    title:
+      "BE import nhân viên hàng loạt: seed cặp permission ('import','employee') + POST /hr/employees/import (XLSX/CSV, validate từng dòng, dry-run preview, apply tái dùng HrWriteService.create + SequenceService, audit phiên import)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/employees/**",
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "apps/api/test/integration/**",
+      "packages/contracts/src/**",
+      "docs/plans/S5-HR-IMPORT-BE-1.md",
+    ],
+    skills: ["code-review"],
+    // depends_on ME-DB-1 CHỈ để tuần tự hoá lane migration (cùng mint dải 0494+) — không phụ thuộc nghiệp vụ.
+    depends_on: ["S5-ME-DB-1"],
+    src: [
+      "SPEC-03 §7 (Import hàng loạt — Phase sau, owner kéo vào MVP 2026-07-13) + §8 (HR.EMPLOYEE.IMPORT) + §14.2 (rule tạo nhân viên)",
+      "apps/api/src/employees/hr-write.service.ts (create: employee-code tx qua SequenceService + validate duplicate + audit — TÁI DÙNG, không nhân bản)",
+      "IMPLEMENTATION-10 §11.2 PMVP-HR-006 (đã đánh dấu kéo vào MVP)",
+      "memory s2-13-permission-matrix-per-pair-scope + wo-paths-drive-gate-and-scheduler",
+      "IMP02-STORY-122 (IMPLEMENTATION-02 §8.4 bổ sung 2026-07-13)",
+    ],
+    plan: "docs/plans/S5-HR-IMPORT-BE-1.md",
+    done_when: [
+      "Migration nối tiếp head THẬT (đọc meta/_journal.json — lane migration TUẦN TỰ SAU S5-ME-DB-1, tránh double-mint dải 0494+): seed cặp permission MỚI ('import','employee') is_sensitive=true, grant per-pair data_scope Company cho role hr + company-admin (bài học §13 per-(permission,role), ON CONFLICT DO NOTHING, verify fail-LOUD mirror 0466/0476)",
+      "POST /api/v1/hr/employees/import gate PermissionGuard ('import','employee'): nhận file XLSX/CSV (giới hạn size + MIME check server-side; parser CSV tự viết hoặc lib xlsx đã VET license — KHÔNG GPL, chốt trong plan), validate TỪNG DÒNG bằng đúng Zod schema create employee (contracts) + duplicate email/mã TRONG file lẫn với DB; dryRun=true (mặc định bước preview) trả report lỗi theo dòng, KHÔNG ghi gì, KHÔNG nhảy sequence counter",
+      "Apply: tạo employee theo lô TÁI DÙNG HrWriteService.create trong transaction (mã nhân viên tự sinh qua SequenceService + audit create per-employee sẵn có); chốt trong plan partial-success (dòng lỗi skip + report) vs all-or-nothing — plan-reviewer soi; KHÔNG tạo/link user hàng loạt trong WO này (liên kết tài khoản = HR-FUNC-011 làm tay sau); audit log 1 row cho PHIÊN import (tổng ok/fail + tên file) — union-add object_type nếu cần CÙNG commit migration (mẫu 0456)",
+      "GET /api/v1/hr/employees/import/template (hoặc docs cột chuẩn trong contracts — chốt trong plan) để FE cho tải template",
+      "Int-spec RED-trước lane DB cô lập: deny-path (thiếu cặp import:employee → 403 + 0 ghi) · cross-tenant deny · dryRun không ghi + không nhảy counter · dòng lỗi xử lý đúng phương án đã chốt · duplicate trong file bị bắt; gate hasDb && LANE_DB; FULL gate security-reviewer + database-reviewer + silent-failure-hunter PASS",
+    ],
+  },
+  {
+    id: "S5-HR-IMPORT-FE-1",
+    module: "HR",
+    layer: "FE",
+    title:
+      "FE import nhân viên hàng loạt: màn upload file + tải template + preview lỗi từng dòng (dry-run) + áp dụng + màn kết quả — gate cặp ('import','employee')",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/src/routes/hr/**", "apps/app/src/i18n/**", "packages/web-core/src/**"],
+    skills: ["code-review"],
+    depends_on: ["S5-HR-IMPORT-BE-1"],
+    src: [
+      "SPEC-03 §7/§8 (import — owner kéo vào MVP 2026-07-13)",
+      "S5-HR-IMPORT-BE-1 (endpoint import + template)",
+      "memory s3-fe-wave-pair-drift-blocker (PERMISSION_CODE_TO_PAIR web-core) + hr-profile-ui1-shipped (SENSITIVE_CAPABILITY_ALLOWLIST)",
+      "IMP02-STORY-122 (IMPLEMENTATION-02 §8.4 bổ sung 2026-07-13)",
+    ],
+    done_when: [
+      "Màn import từ trang danh sách nhân viên (route/dialog dưới apps/app/src/routes/hr): bước 1 tải template + chọn file (validate client size/định dạng trước khi gửi) → bước 2 gọi dryRun hiển thị bảng preview theo dòng (ok/lỗi + thông báo lỗi vi theo dòng) → bước 3 'Áp dụng' → màn kết quả (tạo được N, lỗi M kèm lý do, link về danh sách)",
+      "PermissionGate/useCan cặp ('import','employee') — KHÔNG hard-code role; cặp seed is_sensitive=true → thêm vào SENSITIVE_CAPABILITY_ALLOWLIST web-core (bài học HR-PROFILE-UI-1) + mapping PERMISSION_CODE_TO_PAIR nếu FE gate qua code (bài học pair-drift S3)",
+      "loading/error/empty đủ (file quá lớn/sai định dạng/mạng lỗi có message vi rõ); invalidate query danh sách nhân viên sau apply; i18n vi; REBUILD web-core dist nếu đổi src",
+      "FE spec: render 3 bước + deny (useCan false → không thấy entry point); check.sh xanh; LIGHT gate react-reviewer + typescript-reviewer + quality-gate",
+    ],
+  },
+
+  // ── HR bổ sung 2026-07-13 đợt 2 (owner soát UI dev-online): sơ đồ tổ chức trực quan + thông tin công việc ──
+  // Khảo sát: /hr/org-chart (S2-FE-HR-6) = list thụt-dòng org_units (GET /org/units/tree, org.controller.ts),
+  // KHÔNG phải biểu đồ; chưa có cây nhân sự theo quản lý. Schema ĐÃ có direct_manager_id (→ users.id, KHÔNG
+  // phải employee id) + employee_manager_relations (mig 0018) + job_level_id/contract_type_id — nhưng DTO đọc
+  // HR thiếu jobLevelName/contractTypeName/tên quản lý → FE chi tiết hiển thị contractType legacy, không có
+  // dòng quản lý. Tham chiếu = ảnh HRM thương mại owner gửi — CHỈ lấy tinh thần; field ngoài scope MVP
+  // (mã chấm công, ngày học việc, nghỉ hưu dự kiến, sổ QL lao động, danh sách đen, khoảng cách) KHÔNG thêm.
+  {
+    id: "S5-HR-ORGCHART-BE-1",
+    module: "HR",
+    layer: "BE",
+    title:
+      "BE sơ đồ tổ chức: GET /hr/org-chart/employees (cây nhân sự theo quản lý trực tiếp, directory-class, theo data-scope, chống cycle/orphan) + headcount additive vào /org/units/tree",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/employees/**",
+      "apps/api/src/org/**",
+      "apps/api/test/integration/**",
+      "packages/contracts/src/**",
+      "docs/plans/S5-HR-ORGCHART-BE-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "SPEC-03 §14 (org chart theo scope, không lộ người ngoài quyền — IMP02-STORY-037) + IMPLEMENTATION-10 PMVP-HR-007 (phần trực quan kéo vào MVP)",
+      "apps/api/src/db/schema/employees.ts L53 (direct_manager_id → users.id) + employee_manager_relations (mig 0018)",
+      "apps/api/src/org/org.controller.ts (GET /org/units/tree — READ mở cho user tenant)",
+      "memory reused-method-must-be-actor-scoped + s2-auth-be2-shipped (resolveStrongestScope fail-closed)",
+      "IMP02-STORY-123 (IMPLEMENTATION-02 §8.4 bổ sung 2026-07-13)",
+    ],
+    plan: "docs/plans/S5-HR-ORGCHART-BE-1.md",
+    done_when: [
+      "GET /api/v1/hr/org-chart/employees: dựng cây nhân sự theo employee_profiles.direct_manager_id (user id) ↔ employee.user_id; node CHỈ directory-class (employeeId · tên hiển thị · positionName · orgUnitName · jobLevelName · avatarUrl · employeeCode) — KHÔNG PII/salary/identity/contact (đối chiếu strict DTO Zod contracts, bài học audit-masker S2-HR-BE-2); orphan (manager NULL / chưa link user / manager đã nghỉ) → node gốc; cycle guard (visited set) — dữ liệu vòng KHÔNG treo/500, trả cây đã cắt vòng + cờ cảnh báo",
+      "Data-scope fail-closed qua resolveStrongestScope cặp view-own/team/company:employee (KHÔNG thêm cặp mới): Company → cả công ty; Team → subtree của actor + đường quản lý lên trên chỉ tên-chức-danh; Own → nhánh chứa mình — ranh giới chính xác CHỐT TRONG PLAN, plan-reviewer + security-reviewer soi (bài học listByTeam rò trong-tenant); thiếu cặp → 403 + 0 dữ liệu",
+      "Headcount: bổ sung field employeeCount (đếm employee active) ADDITIVE vào response GET /org/units/tree — giữ nguyên shape/field cũ, FE org-chart hiện tại KHÔNG gãy; không N+1 (đếm 1 query group-by)",
+      "Int-spec RED-trước lane DB cô lập: deny-path thiếu cặp → 403 · own/team/company đúng ranh giới (planted EMR/direct-manager 2 nhánh, bài học S2-INT-2) · cross-tenant deny · cycle A↔B không treo · response KHÔNG chứa field ngoài allowlist DTO; gate hasDb && LANE_DB; FULL gate security-reviewer + silent-failure-hunter PASS",
+    ],
+  },
+  {
+    id: "S5-HR-ORGCHART-FE-1",
+    module: "HR",
+    layer: "FE",
+    title:
+      "FE sơ đồ tổ chức trực quan /hr/org-chart: tab Phòng ban (node-chart + trưởng đơn vị + headcount) + tab Nhân sự (reporting-line card avatar·tên·chức danh) + toggle giữ dạng danh sách cũ",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/app/src/routes/hr/**", "apps/app/src/i18n/**", "packages/web-core/src/**"],
+    skills: ["code-review"],
+    depends_on: ["S5-HR-ORGCHART-BE-1"],
+    src: [
+      "apps/app/src/routes/hr/org-chart/{OrgChartPage,OrgTreeBranch}.tsx (hiện trạng list thụt-dòng — S2-FE-HR-6)",
+      "S5-HR-ORGCHART-BE-1 (endpoint cây nhân sự + employeeCount)",
+      "Ảnh tham chiếu HRM owner 2026-07-13 (chỉ tinh thần trực quan)",
+      "IMP02-STORY-123 (IMPLEMENTATION-02 §8.4 bổ sung 2026-07-13)",
+    ],
+    done_when: [
+      "/hr/org-chart nâng thành 2 tab: 'Phòng ban' render node-chart cây org_units (thẻ: tên + code + trưởng đơn vị + badge headcount employeeCount; connector cha-con; expand/collapse từng nhánh) + 'Nhân sự' render reporting-line từ GET /hr/org-chart/employees (thẻ: avatar + tên + chức danh + phòng ban; expand/collapse); cả 2 chart nằm trong container overflow-auto (cuộn ngang/dọc trong khung, KHÔNG tràn body) + nút thu phóng gọn",
+      "Tự dựng chart bằng CSS/tailwind token packages/ui (theme.css — đạt cả light+dark) hoặc lib nhẹ ĐÃ VET license (KHÔNG GPL/AGPL/bẫy thương mại — bài học MUI X/AG Grid); toggle 'Biểu đồ / Danh sách' — chế độ Danh sách tái dùng OrgTreeBranch hiện có, KHÔNG xoá",
+      "Permission: tab Phòng ban gate như hiện tại (HR_ENGINE_PAIRS.ORG_CHART_VIEW = read:department); tab Nhân sự gate useCan cặp view-own/team/company:employee (ẩn tab khi thiếu cả 3) — server là nguồn enforce, FE render đúng dữ liệu trả về, KHÔNG lọc/suy diễn thêm",
+      "States loading/error/empty/forbidden đủ cho từng tab; i18n vi; cập nhật OrgChartPage.spec + spec tab nhân sự (render + deny); REBUILD web-core dist nếu đổi src; check.sh xanh; LIGHT gate react-reviewer + typescript-reviewer + quality-gate",
+    ],
+  },
+  {
+    id: "S5-HR-WORKINFO-1",
+    module: "HR",
+    layer: "INT",
+    title:
+      "Hoàn thiện khối Thông tin công việc (chi tiết nhân viên + hồ sơ của tôi): BE thêm jobLevelName·contractTypeName·tên quản lý trực tiếp/gián tiếp (additive) + FE thêm dòng tương ứng + khối Thông tin nghỉ việc",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/employees/**",
+      "apps/api/test/integration/**",
+      "packages/contracts/src/**",
+      "apps/app/src/routes/hr/**",
+      "apps/app/src/i18n/**",
+      "packages/web-core/src/**",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "apps/api/src/employees/hr-read.{repository,service}.ts (DTO thiếu jobLevelName/contractTypeName/managerName — jobLevelId/contractTypeId/directManagerId ĐÃ có schema)",
+      "apps/app/src/routes/hr/employees/profile-sections.tsx (WorkInfoSection hiện có — đã render workLocation/officialDate/probationEndDate/seniority)",
+      "memory s2-hr-mask1-shipped (masking fail-closed — KHÔNG nới gate sensitive hiện có)",
+      "IMP02-STORY-124 (IMPLEMENTATION-02 §8.4 bổ sung 2026-07-13)",
+    ],
+    done_when: [
+      "BE additive vào DTO đọc HR (detail + me/profile + list nếu rẻ): jobLevelName (join job_levels) · contractTypeName (join contract_types theo contract_type_id) · directManagerName + directManagerEmployeeId (join users/employee qua direct_manager_id) · indirectManagerName (quản lý của quản lý, 1 cấp — nếu join rẻ, không N+1; bỏ nếu đắt) — CHỈ THÊM field, KHÔNG đổi/bỏ field cũ, KHÔNG đổi hành vi masking hiện có (contractTypeName đi CÙNG gate view-sensitive như contractType legacy — muốn nới thành directory-class phải có quyết định owner riêng + security review)",
+      "FE WorkInfoSection thêm dòng: Cấp bậc (jobLevelName) · Loại hợp đồng ưu tiên contractTypeName fallback text legacy · Quản lý trực tiếp (tên; link sang /hr/employees/{id} nếu có directManagerEmployeeId — server tự enforce quyền xem) · Quản lý gián tiếp (nếu BE trả); khối 'Thông tin nghỉ việc' CHỈ hiện khi status resigned/terminated: ngày nghỉ (endDate) + lý do/ghi chú từ lịch sử trạng thái gần nhất (tái dùng data tab Lịch sử — không thêm API mới nếu detail đã đủ)",
+      "Đồng bộ cả trang Hồ sơ của tôi (/hr/me — MyProfilePage tái dùng section) hiển thị các dòng mới; i18n vi đủ nhãn; KHÔNG thêm field ngoài scope MVP (mã chấm công · ngày học việc · nghỉ hưu dự kiến · sổ QL · danh sách đen · khoảng cách)",
+      "Int-spec: response detail chứa field mới đúng join + KHÔNG lộ thêm PII/salary ngoài gate hiện có; FE spec render dòng mới + khối nghỉ việc theo status; check.sh xanh; LIGHT gate + security-reviewer soi diff DTO đọc (vùng masking)",
+    ],
+  },
 ];
