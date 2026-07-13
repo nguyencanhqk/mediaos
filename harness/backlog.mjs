@@ -5884,6 +5884,72 @@ export const backlog = [
       "check.sh xanh; LIGHT gate (react-reviewer + quality-gate)",
     ],
   },
+  // ─── Nhóm A bổ sung (gap-analysis phiên 2026-07-13): màn cài đặt NOTI còn thiếu SCREEN-006 (template).
+  // BE đã có GET/PATCH /notifications/templates/:id (BE-3/BE-4) nhưng NOTI-API-303 bị "thu hẹp" còn detail
+  // (KHÔNG list — contracts/notification-admin.ts ghi rõ) + event item không mang template_id ⇒ FE không có
+  // cách liệt kê template. Cần 1 route list nhỏ (BE-5) rồi mới build FE (FE-NOTI-4). Kèm nợ discoverability:
+  // noti.delivery-logs (FE-NOTI-3) dùng RouteMeta cục bộ, KHÔNG sidebar, KHÔNG link từ trang nào — chỉ vào
+  // được bằng gõ URL ⇒ gộp "mở đường vào" cho cả 2 màn vào FE-NOTI-4.
+  {
+    id: "S4-NOTI-BE-5",
+    module: "NOTI",
+    layer: "BE",
+    title:
+      "NOTI admin templates LIST: GET /notifications/templates (filter event/channel/locale, company override ∪ global) — mở lại scope gốc NOTI-API-303 đã 'thu hẹp', mở đường FE NOTI-SCREEN-006",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/notifications/**",
+      "packages/contracts/src/notification-admin.ts",
+      "apps/api/test/integration/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S4-NOTI-BE-4"],
+    src: [
+      "SPEC-08 §13.5 (NOTI-SCREEN-006 Quản lý template)",
+      "packages/contracts/src/notification-admin.ts (ghi chú 'NOTI-API-303 thu hẹp: detail, KHÔNG list')",
+      "apps/api/src/notifications/notification-admin.controller.ts (header BE-3/BE-4)",
+      "gap-analysis giao diện cài đặt NOTI 2026-07-13",
+    ],
+    done_when: [
+      "GET /notifications/templates: list company override ∪ global, merge 'override thắng global' theo (event, template_code, channel, locale) — mirror listCatalog của events; filter event_id/event_code/channel/locale; phân trang in-memory (catalog nhỏ, mirror NOTI_ADMIN_PAGE_SIZE_MAX) — @RequirePermission view:notification-template isSensitive:true (cặp seed 0481, ĐÃ ở SENSITIVE_CAPABILITY_ALLOWLIST)",
+      "KHÔNG migration (GRANT SELECT notification_templates đã mở 0479/0481/0482) · KHÔNG đụng permission.service/allowlist (đủ sẵn) · repo thêm listForCompany trong NotificationTemplateRepository, mọi query qua withTenant (BẤT BIẾN #1)",
+      "Route tĩnh 'templates' đặt trong NotificationAdminController (đăng ký TRƯỚC MyNotificationsController — mirror cảnh báo header: route 1-segment bị @Get(':id') nuốt nếu đăng ký sau); KHÔNG va @Get('templates/:id') (khác số segment)",
+      "contracts: query schema list (event_id/event_code/channel/locale/page/per_page, boolean/enum idempotent — bài học double-pipe) + tái dùng notificationTemplateAdminItemSchema; dual-build xanh",
+      "Int-spec deny-path RED-first: thiếu view:notification-template → 403; employee/hr → 403 (không có cặp); cross-tenant KHÔNG thấy override công ty khác (RLS); happy-path admin thấy override thắng global sau khi PATCH; gate hasDb && LANE_DB, DB cô lập",
+      "check.sh xanh; gate: typescript-reviewer + quality-gate + security-reviewer soi deny-path (route @RequirePermission mới trên dữ liệu admin)",
+    ],
+  },
+  {
+    id: "S4-FE-NOTI-4",
+    module: "NOTI",
+    layer: "FE",
+    title:
+      "FE Notification Templates admin (NOTI-SCREEN-006 / UI-NOTI-SCREEN-005): bảng template theo event + editor title/body — gate view/update:notification-template (đã allowlisted); kèm mở đường vào sidebar cho templates + delivery-logs",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/notifications/**",
+      "apps/app/src/router.tsx",
+      "apps/app/src/i18n/**",
+      "packages/web-core/src/lib/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S4-NOTI-BE-5", "S4-FE-REGISTRY-1"],
+    src: [
+      "SPEC-08 §13.5 (NOTI-SCREEN-006 Quản lý template)",
+      "UI-09 §12.6 + UI-04 (UI-NOTI-SCREEN-005, /notifications/templates)",
+      "S4-NOTI-BE-3/BE-4/BE-5 (GET list + GET/PATCH /notifications/templates/:id)",
+      "gap-analysis giao diện cài đặt NOTI 2026-07-13",
+    ],
+    done_when: [
+      "NotificationTemplatesPage (/notifications/templates): bảng template (template_code·event_code·channel·locale·status·is_default·version·updated_at + badge override/global) + filter event/channel + editor sửa title_template/body_template/short_body/action_label/target_url — PermissionGate view:notification-template (xem) / update:notification-template (sửa, ẩn khi thiếu quyền); gate bằng useCanExact (KHÔNG useCan — wildcard không mở cặp sensitive, mirror NotificationEventsPage)",
+      "TÁI DÙNG GET /notifications/templates (BE-5) + GET/PATCH /notifications/templates/:id (BE-3/BE-4) — KHÔNG BE mới; cặp template ĐÃ allowlist ⇒ KHÔNG đụng permission.service (crown); loading/error/empty; 422 biến-nhạy-cảm từ server (assertTemplateVariablesSafe) hiển thị lỗi rõ; masking do server",
+      "Mở đường vào (đóng nợ discoverability FE-NOTI-3): ROUTE_REGISTRY thêm noti.templates (showInSidebar, order 62, screenCode NOTI-SCREEN-006, gate view:notification-template — CẶP ENGINE THỰC trực tiếp, KHÔNG qua PERMISSION_CODE_TO_PAIR) + noti.delivery-logs vào sidebar (order 63, chuyển local RouteMeta → registry, giữ nguyên gate view:notification-delivery-log); hàng event ở NotificationEventsPage link 'xem template' → /notifications/templates?event=... (SPEC-08 §13.4 hành động 'Xem template liên quan')",
+      "web-core notification-admin-api mở rộng listTemplates/getTemplate/updateTemplate + spec; registry.spec pin route mới (meta + deny/allow — mirror dashboard.configs); router.tsx wire route tĩnh trên $id; i18n vi đủ key; FE spec (render + gating sửa + validate form)",
+      "check.sh xanh; LIGHT gate (react-reviewer + quality-gate)",
+    ],
+  },
 
   // ─── Nhóm B: tách QA doable-now (chạy QA TASK/NOTI ngay, không chờ DASH-BE-2 như S4-QA-1) ───
   {
