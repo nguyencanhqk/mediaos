@@ -29,6 +29,13 @@ import { HrExportService } from "./hr-export.service";
 import { HrWriteController } from "./hr-write.controller";
 import { HrWriteRepository } from "./hr-write.repository";
 import { HrWriteService } from "./hr-write.service";
+// S5-HR-IMPORT-BE-1 (additive): HR bulk employee import — parse xlsx(exceljs)/csv, per-row validate +
+// dup, dryRun preview no-write, apply per-row withTenant partial-success (UNLINKED, never-provision via
+// HrWriteService.createFromImportTx) + one 'employee_import' session audit. Gate import:employee (mig 0496).
+import { HrImportController } from "./hr-import.controller";
+import { HrEmployeeImportService } from "./hr-employee-import.service";
+import { HrEmployeeImportRepository } from "./hr-import.repository";
+import { HrImportParser } from "./hr-import.parser";
 // S2-HR-BE-4 (additive): profile change request skeleton.
 import { ProfileChangeRequestController } from "./profile-change-request.controller";
 import { ProfileChangeRequestRepository } from "./profile-change-request.repository";
@@ -79,6 +86,8 @@ import { EmployeeFileResolver } from "./employee-file.resolver";
     ContractController,
     // S2-HR-EMPFILE-1 (additive): employee file controller (/hr/employees/:id/files).
     EmployeeFileController,
+    // S5-HR-IMPORT-BE-1 (additive): bulk employee import controller (/hr/employees/import + /template).
+    HrImportController,
   ],
   // PasswordService is stateless (argon2) — provided locally to hash generated login passwords (F7).
   providers: [
@@ -93,6 +102,11 @@ import { EmployeeFileResolver } from "./employee-file.resolver";
     // S2-HR-BE-2 (additive): HR write core providers.
     HrWriteService,
     HrWriteRepository,
+    // S5-HR-IMPORT-BE-1 (additive): bulk employee import providers (reuse HrWriteService.createFromImportTx +
+    // DataScopeService/PermissionModule + AuditService@Global — no new module import needed).
+    HrEmployeeImportService,
+    HrEmployeeImportRepository,
+    HrImportParser,
     // S2-HR-BE-4 (additive): profile change request providers.
     ProfileChangeRequestService,
     ProfileChangeRequestRepository,
