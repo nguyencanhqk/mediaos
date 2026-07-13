@@ -1,7 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import { and, eq, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
-import { notificationTemplates, type NotificationTemplate } from "../db/schema/noti";
+import {
+  notificationEvents,
+  notificationTemplates,
+  type NotificationTemplate,
+} from "../db/schema/noti";
 import { isUniqueViolation } from "../common/db-error";
 
 /**
@@ -70,6 +74,57 @@ export class NotificationTemplateRepository {
       )
       .limit(1);
     return rows[0];
+  }
+
+  /**
+   * S4-NOTI-BE-5 — GET /notifications/templates (NOTI-API-303 LIST, mở lại scope gốc). Visibility = company
+   * override (company_id=GUC) ∪ global (company_id IS NULL), chưa xoá — RLS (nullable-tenant 0479) đã tự
+   * giới hạn tenant; filter companyId/isNull tường minh = defense-in-depth (BẤT BIẾN #1, KHÔNG dựa hoàn
+   * toàn RLS). Mirror listCatalog của events: merge "override thắng global" theo (event_id, template_code,
+   * channel, locale) — `company_id NULLS LAST` đưa hàng override (NOT NULL) lên TRƯỚC hàng global cùng khoá,
+   * lấy "gặp đầu tiên mỗi khoá" = company thắng.
+   *
+   * INNER JOIN `notification_events` để lấy `event_code` (template chỉ mang event_id) — cho filter
+   * `eventCode`. Event global (company_id NULL) luôn hiển thị dưới RLS nên join KHÔNG rớt template; KHÔNG
+   * fan-out (join theo id = PK). KHÔNG lọc `status` (admin cần xem CẢ Draft/Inactive/Archived).
+   * Filter + sort in-memory (catalog nhỏ, mirror listCatalog); phân trang do controller (mirror events).
+   */
+  async listForCompany(
+    tx: TenantTx,
+    companyId: string,
+    filter: NotificationTemplateCatalogFilter,
+  ): Promise<NotificationTemplate[]> {
+    const rows = await tx
+      .select({ template: notificationTemplates, eventCode: notificationEvents.eventCode })
+      .from(notificationTemplates)
+      .innerJoin(notificationEvents, eq(notificationTemplates.eventId, notificationEvents.id))
+      .where(
+        and(
+          isNull(notificationTemplates.deletedAt),
+          or(
+            eq(notificationTemplates.companyId, companyId),
+            isNull(notificationTemplates.companyId),
+          ),
+        ),
+      )
+      .orderBy(
+        notificationTemplates.templateCode,
+        sql`${notificationTemplates.companyId} NULLS LAST`,
+      );
+
+    const merged = new Map<string, { template: NotificationTemplate; eventCode: string }>();
+    for (const row of rows) {
+      const key = `${row.template.eventId}::${row.template.templateCode}::${row.template.channel}::${row.template.locale}`;
+      if (!merged.has(key)) merged.set(key, row);
+    }
+
+    let list = [...merged.values()];
+    if (filter.eventId) list = list.filter((r) => r.template.eventId === filter.eventId);
+    if (filter.eventCode) list = list.filter((r) => r.eventCode === filter.eventCode);
+    if (filter.channel) list = list.filter((r) => r.template.channel === filter.channel);
+    if (filter.locale) list = list.filter((r) => r.template.locale === filter.locale);
+    list.sort((a, b) => a.template.templateCode.localeCompare(b.template.templateCode));
+    return list.map((r) => r.template);
   }
 
   /**
@@ -218,6 +273,17 @@ export class NotificationTemplateRepository {
       .limit(1);
     return rows[0];
   }
+}
+
+/**
+ * S4-NOTI-BE-5 — bộ lọc GET /notifications/templates (NOTI-API-303 LIST) áp SAU merge in-memory (catalog
+ * nhỏ, mirror NotificationEventCatalogFilter). Tất cả optional; `eventCode` khớp qua join event.
+ */
+export interface NotificationTemplateCatalogFilter {
+  eventId?: string;
+  eventCode?: string;
+  channel?: string;
+  locale?: string;
 }
 
 /**
