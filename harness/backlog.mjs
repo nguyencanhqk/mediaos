@@ -6774,4 +6774,42 @@ export const backlog = [
       "FE spec: route gate + render KPI + overdue pinned filter + deny (thiếu quyền không thấy entry); check.sh xanh; LIGHT gate react-reviewer + typescript-reviewer + quality-gate",
     ],
   },
+
+  // ── LEAVE re-home 2026-07-13: owner muốn màn cài đặt Ngày nghỉ lễ nằm trong module Nghỉ phép ──
+  // /system/public-holidays (S2-FE-FND-4, UI-SYSTEM-SCREEN-012/016) chuyển về /leave/** — FE-only:
+  // HolidayService + cặp quyền view:foundation-public-holiday GIỮ NGUYÊN (BE/seed không đụng, server
+  // enforce như cũ); chỉ re-home route + sidebar + redirect đường cũ. depends_on NAV-1 CHỈ để tuần tự
+  // hoá hot-file sidebar-registry.ts (tránh 2 lane sửa cùng file), không phụ thuộc nghiệp vụ.
+  {
+    id: "S5-LEAVE-HOLIDAYS-MOVE-1",
+    module: "LEAVE",
+    layer: "FE",
+    title:
+      "Chuyển màn Ngày nghỉ lễ /system/public-holidays → /leave/public-holidays (re-home FE-only: route + sidebar LEAVE group admin + redirect path cũ; gate & BE giữ nguyên)",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/system/foundation/**",
+      "apps/app/src/routes/leave/**",
+      "apps/app/src/router.tsx",
+      "apps/app/src/layouts/workspace/**",
+      "apps/app/src/i18n/**",
+      "packages/web-core/src/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-FE-TASK-NAV-1"],
+    src: [
+      "Owner directive 2026-07-13: chuyển cài đặt ngày nghỉ /system/public-holidays về /leave/",
+      "apps/app/src/routes/system/foundation/constants.ts L176-184 (SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META — requiredAnyPermissions = FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS dùng CHUNG router+sidebar, chống pair-drift)",
+      "apps/app/src/layouts/workspace/sidebar-registry.ts (entry system.public-holidays SYSTEM_SIDEBAR → LEAVE_SIDEBAR group admin cạnh leave.types)",
+      "memory foundation-be6-holiday-deferrals (HolidayService BE giữ nguyên — move này FE-only)",
+      "memory review-gate-blind-to-deletions (gỡ entry/route cũ phải grep consumer trước)",
+    ],
+    done_when: [
+      "Route MỚI /leave/public-holidays render PublicHolidaysPage TÁI DÙNG component hiện có (import — KHÔNG copy-paste, KHÔNG đổi logic trang); route-meta moduleCode LEAVE + titleKey i18n vi; requiredAnyPermissions GIỮ NGUYÊN FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS (view:foundation-public-holiday) — KHÔNG đổi permission seed/BE",
+      "Sidebar: LEAVE_SIDEBAR thêm item 'Ngày nghỉ lễ' (group admin, cạnh leave.types, icon calendar-days); GỠ entry system.public-holidays khỏi SYSTEM_SIDEBAR — TRƯỚC khi gỡ grep mọi consumer FOUNDATION_PATH.PUBLIC_HOLIDAYS + path literal '/system/public-holidays' (app + web-core + docs) và xử lý từng chỗ",
+      "/system/public-holidays cũ REDIRECT về /leave/public-holidays (bookmark/deep-link KHÔNG gãy — mẫu quyết định mount-vs-redirect của S5-ME-FE-2); web-core ROUTE_REGISTRY cập nhật entry tương ứng nếu có; REBUILD web-core dist (bài học stale-dist)",
+      "FE spec: route mới render + gate; redirect path cũ; sidebar LEAVE hiện item khi có quyền, SYSTEM không còn; check.sh xanh; LIGHT gate react-reviewer + quality-gate",
+    ],
+  },
 ];
