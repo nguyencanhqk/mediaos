@@ -6166,4 +6166,288 @@ export const backlog = [
       "Int-spec RED-trước: tạo employee → 1 activation notification đúng recipient · reset/lock → notify đúng chủ tài khoản · actor loại nơi áp dụng · idempotent · cross-tenant deny; FULL gate security-reviewer + silent-failure-hunter + plan-reviewer PASS",
     ],
   },
+
+  // ════════════════════ SPRINT 5 — ME · Trung tâm cá nhân & self-service (SPEC-09) ════════════════════
+  // SPEC-09 (docs/SPEC/SPEC-09 ME.md — seed 2026-07-13, owner cấp). Personal Hub tổng hợp AUTH/HR/ATT/LEAVE/
+  // TASK/NOTI cho USER HIỆN TẠI: route /me, data-scope Own, KHÔNG sở hữu dữ liệu nguồn (§3.2), mutation gọi
+  // module nguồn (§3.3), backend resolve từ token — KHÔNG nhận user_id/employee_id từ client (§14.4).
+  // TÁI DÙNG TỐI ĐA (khảo sát code 2026-07-13): HR self-profile + profile-change-request ✓ (GET /hr/me/profile ·
+  // profile-change-request.controller · FE /hr/me + /hr/me/change-request) · đổi mật khẩu + 2FA ✓ (/account/
+  // change-password · /account/profile) · sessions list/revoke/revoke-others ✓ (GET /auth/sessions… · FE
+  // /account/sessions) · NOTI preferences BE ✓ (GET/PUT /notifications/preferences — FE CHƯA có) · avatar cột
+  // employee_profiles.avatar_url ✓ (upload-flow CHƯA có). GAP phải build: bảng user_preferences (theme hiện chỉ
+  // localStorage `mediaos-theme`) · ME aggregation BE · own-scope security-activity · FE registry + màn ME.
+  // Migration nối tiếp head THẬT (khảo sát: idx 173 / 0493 ⇒ 0494+), lane DB TUẦN TỰ như mọi sprint.
+  // Ảnh tham chiếu UI (owner kèm 2026-07-13): banner chào + stat cards + khối "Cần thực hiện / Chờ người khác
+  // duyệt" + "Tiện ích" quick-actions — CHỈ tham chiếu layout/tinh thần; sidebar + phạm vi theo SPEC-09 §8.1
+  // (KHÔNG có Tiền lương/Phúc lợi/Đồng phục/Tài sản/Đánh giá… của app tham chiếu — ngoài scope MVP).
+  {
+    id: "S5-ME-DOC-1",
+    module: "ME",
+    layer: "DOC",
+    title:
+      "Docs sync SPEC-09 ME: cập nhật SPEC-01/PRD-00/DB-01·08·09·10/README §8 + API-10 ME stub + chốt ME-DEC-001..010 theo đề xuất §21",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "docs/SPEC/**",
+      "docs/PRD/**",
+      "docs/DB/**",
+      "docs/API Design/**",
+      "docs/UI/**",
+      "docs/FRONTEND/**",
+      "docs/BACKEND/**",
+      "docs/README.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: ["SPEC-09 §21/§22", "docs/README.md §2/§8 (dòng ME đã seed 2026-07-13)"],
+    done_when: [
+      "SPEC-01: thêm ME vào danh sách module + sơ đồ phụ thuộc (§22.1); header nav 8 file SPEC cũ thêm link SPEC-09; PRD-00 thêm Personal Hub/Self-service vào phạm vi MVP bổ sung (§22.2)",
+      "DB-01 + DB-08 ghi nhận user_preferences (user-scope settings, unique company_id+user_id) + DB-09 index + DB-10 seed module ME (§22.3-9) — CHỈ docs, code thuộc S5-ME-DB-1",
+      "Tạo API-11 ME API Design stub theo SPEC-09 §14 (LƯU Ý: API-09 ĐÃ là FOUNDATION, API-10 ĐÃ là Permission Matrix/Audit — dùng số 11, sửa lại §22.10 trong SPEC-09 cho khớp)",
+      "Chốt ME-DEC-001..010 = cột Đề xuất §21 (ghi ngày chốt vào SPEC-09; flip Trạng thái Draft→Approved khi owner duyệt PR docs này); README §8 dòng ME trỏ đủ tài liệu mới tạo",
+    ],
+  },
+  {
+    id: "S5-ME-DB-1",
+    module: "ME",
+    layer: "DB",
+    title:
+      "Schema + migration user_preferences (SPEC-09 §15.2) — RLS+FORCE, unique(company_id,user_id) + seed module ME + cặp permission user-preference grant mọi role Own",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/db/schema/**",
+      "apps/api/migrations/**",
+      "apps/api/src/foundation/seed/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S5-ME-DB-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "SPEC-09 §15.2 (bảng user_preferences) + §11 (permission) + §3.4 (Own)",
+      "apps/api/migrations/0435_foundation_db5_retention_seed_modules.sql (mẫu seed modules)",
+      "apps/api/migrations/meta/_journal.json (head 2026-07-13: idx 173 / 0493)",
+      "memory s2-13-permission-matrix-per-pair-scope (data_scope per-(permission,role))",
+    ],
+    plan: "docs/plans/S5-ME-DB-1.md",
+    done_when: [
+      "Migration đánh số nối tiếp head THẬT (đọc meta/_journal.json — khảo sát 2026-07-13: idx 173/0493 ⇒ 0494+, when nối tiếp +5000): bảng user_preferences theo SPEC-09 §15.2 (id UUID gen_random_uuid() · company_id NOT NULL · user_id NOT NULL FK users · locale · timezone · theme CHECK IN (system/light/dark) · date_format · time_format · default_landing · density CHECK IN (comfortable/compact) · favorite_modules JSONB · me_layout_config JSONB · created/updated_at) + UNIQUE(company_id, user_id)",
+      "BẤT BIẾN #1: ENABLE + FORCE RLS + policy company_id TRƯỚC mọi dữ liệu; đăng ký rls-registry; drizzle schema đồng bộ additive (KHÔNG db:generate drop); schema/index.ts append",
+      "Seed module ME vào bảng modules (mirror 0435, ON CONFLICT DO NOTHING, status active — app card ME hiện với mọi user đã đăng nhập); cặp permission MỚI TỐI THIỂU ('view','user-preference') + ('update','user-preference') is_sensitive=false, grant per-pair data_scope Own cho MỌI role canonical (bài học §13 per-(permission,role); resolve theo thuộc tính + verify fail-LOUD mirror 0466/0476); KHÔNG tạo ME.ACCESS wrapper — theo tinh thần ME-DEC-002 giảm trùng lặp, permission nguồn gate dữ liệu nguồn; chốt trong plan, plan-reviewer soi",
+      "Int-spec RED-trước lane DB cô lập: cross-tenant deny user_preferences + cross-user deny trong-tenant (user A không đọc/ghi pref user B) + upsert idempotent theo unique; migration-smoke clean 0000→head xanh; gate hasDb && LANE_DB; FULL gate database-reviewer + security-reviewer + rls-tenant-isolation-tester PASS",
+    ],
+  },
+  {
+    id: "S5-ME-BE-1",
+    module: "ME",
+    layer: "BE",
+    title:
+      "BE MeModule aggregation: GET /me + /me/overview + attendance/leave/task/notification-summary — compose service nguồn own-scope, fail-soft per-section, resolve từ token",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/me/**",
+      "apps/api/src/app.module.ts",
+      "apps/api/test/integration/**",
+      "packages/contracts/src/**",
+      "docs/plans/S5-ME-BE-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-ME-DB-1"],
+    src: [
+      "SPEC-09 §10.1 (overview) + §12 (quy tắc nghiệp vụ) + §13 (UI states) + §14 (API) + §18.1-18.2 (NFR)",
+      "apps/api/src/employees/hr-read.controller.ts (GET /hr/me/profile — reader self sẵn có)",
+      "memory reused-method-must-be-actor-scoped (tái dùng reader PHẢI verify actor-data-scope)",
+    ],
+    plan: "docs/plans/S5-ME-BE-1.md",
+    done_when: [
+      "MeModule MỚI apps/api/src/me (mount app.module khối additive): GET /api/v1/me · /me/overview · /me/attendance-summary · /me/leave-summary · /me/task-summary · /me/notification-summary (SPEC-09 §14.2) — resolve user_id + company_id TỪ ACCESS TOKEN, KHÔNG nhận user_id/employee_id từ client (§14.4, chống IDOR §17.1); JwtAuthGuard bắt buộc mọi route",
+      "COMPOSE service nguồn sẵn có in-process (HR self-profile · LEAVE balance · ATT today · TASK my · NOTI unread) — BÀI HỌC reused-method-must-be-actor-scoped: mọi reader tái dùng verify actor-data-scope Own, KHÔNG mở rộng scope, KHÔNG bypass masking module nguồn (salary/PII không lộ thêm qua ME); KHÔNG tự tính lại số dư phép (§7.4)",
+      "Fail-soft per-section (§13/§18.2): response mỗi section có status ok|error|module_disabled|unlinked_employee — 1 nguồn lỗi KHÔNG làm 500 toàn response; user chưa liên kết employee vẫn nhận section account (§12.2); nhiều employee active bất thường → lỗi cấu hình + audit, KHÔNG tự chọn (§12.4); module tắt → module_disabled không dữ liệu stale (§12.3)",
+      "DTO Zod ở packages/contracts (dual-build); không query N+1 theo widget (§18.1); int-spec RED-trước: IDOR (query/body user_id lạ bị bỏ qua hoặc 400 — hành vi không đổi) · own-scope (A không thấy dữ liệu B cùng tenant) · cross-tenant deny · degraded (1 nguồn throw → section error, section khác ok, HTTP 200) · unlinked-employee; gate hasDb && LANE_DB; FULL gate security-reviewer + silent-failure-hunter PASS",
+    ],
+  },
+  {
+    id: "S5-ME-BE-2",
+    module: "ME",
+    layer: "BE",
+    title:
+      "BE preferences + avatar: GET/PATCH /me/preferences (+appearance) upsert user_preferences own-scope + POST/DELETE /me/avatar qua foundation files → employee_profiles.avatar_url",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/api/src/me/**",
+      "apps/api/src/employees/**",
+      "apps/api/src/foundation/files/**",
+      "apps/api/test/integration/**",
+      "packages/contracts/src/**",
+      "docs/plans/S5-ME-BE-2.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-ME-DB-1", "S5-ME-BE-1"],
+    src: [
+      "SPEC-09 §10.8 (giao diện) + §14.2 (preferences/avatar API) + §17 (audit) + ME-DEC-004/008 §21",
+      "apps/api/src/foundation/files/files.controller.ts (presigned upload/confirm sẵn có)",
+      "apps/api/src/db/schema/employees.ts (employee_profiles.avatar_url — cột sẵn, flow chưa)",
+    ],
+    plan: "docs/plans/S5-ME-BE-2.md",
+    done_when: [
+      "GET/PATCH /api/v1/me/preferences (+ PATCH /me/preferences/appearance) upsert user_preferences own-scope qua withTenant (unique company_id+user_id); validate Zod enum theme/locale/timezone/date_format/time_format/density; company policy khóa timezone → từ chối tường minh (ME-DEC-008); gate cặp view/update:user-preference đã seed ở S5-ME-DB-1 (PermissionGuard class-level — guard KHÔNG global); audit log đổi preference quan trọng, KHÔNG log giá trị nhạy cảm (§17)",
+      "POST /api/v1/me/avatar + DELETE: TÁI DÙNG foundation files service (presigned upload/confirm, MIME/size check sẵn có — KHÔNG dựng pipeline upload mới) → cập nhật employee_profiles.avatar_url của CHÍNH employee liên kết user hiện tại (canonical theo ME-DEC-004); user chưa liên kết employee → 400 tường minh; audit log upload/xóa avatar",
+      "Int-spec RED-trước: cross-user preference deny (A không PATCH pref của B) · cross-tenant deny · avatar khi unlinked-employee → 400 · PATCH idempotent · file MIME sai bị chặn bởi flow files; gate hasDb && LANE_DB",
+      "check.sh xanh; gate typescript-reviewer + quality-gate; nhánh avatar/file-upload + permission → security-reviewer soi",
+    ],
+  },
+  {
+    id: "S5-ME-BE-3",
+    module: "ME",
+    layer: "BE",
+    title:
+      "BE Hoạt động bảo mật own-scope: GET /me/security/activity đọc login_logs + user_security_events CỦA CHÍNH user (mask IP, không lộ nhạy cảm) — sessions TÁI DÙNG /auth/sessions sẵn có",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/auth/**",
+      "apps/api/src/me/**",
+      "apps/api/test/integration/**",
+      "packages/contracts/src/**",
+      "docs/plans/S5-ME-BE-3.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-ME-BE-1"],
+    src: [
+      "SPEC-09 ME-FUNC-016 §5.1 + §10.6 (sessions đã có) + §17 (audit/bảo mật) + §12.6 (không cache dài)",
+      "apps/api/src/auth/auth-logs-viewer.controller.ts (viewer ADMIN Company-scope S2-AUTH-BE-5 — GIỮ NGUYÊN, không đụng)",
+      "apps/api/src/db/schema/auth-logs.ts (login_logs · user_security_events — mig 0443)",
+      "apps/api/src/auth/auth.controller.ts L261-278 (GET /auth/sessions + revoke + revoke-others — TÁI DÙNG)",
+    ],
+    plan: "docs/plans/S5-ME-BE-3.md",
+    done_when: [
+      "GET /api/v1/me/security/activity: đọc login_logs + user_security_events CỦA CHÍNH user hiện tại (WHERE user_id = actor AND company_id = tenant — own-scope hard-code từ token, KHÔNG param); phân trang + giới hạn khoảng thời gian; KHÔNG cache dài (§12.6); auth-only own-scope (KHÔNG dùng cặp view:audit-log — cặp đó là viewer admin Company-scope, GIỮ NGUYÊN endpoint admin không đụng); chốt shape route trong plan",
+      "DTO tối giản (thời gian · loại sự kiện · thiết bị/UA rút gọn · IP mask theo policy §10.6) — KHÔNG trả token/secret/chi tiết bảo mật thừa (§17); sessions list/revoke KHÔNG dựng lại — ME tái dùng GET /auth/sessions + POST revoke/revoke-others sẵn có",
+      "Int-spec RED-trước: A không đọc được activity của B (cùng tenant + cross-tenant, kể cả khi truyền user_id lạ) · chưa đăng nhập 401 · response không chứa field nhạy cảm (assert shape); gate hasDb && LANE_DB",
+      "Crown AUTH: plan-reviewer PASS TRƯỚC khi code; FULL gate security-reviewer + silent-failure-hunter PASS",
+    ],
+  },
+  {
+    id: "S5-ME-FE-1",
+    module: "ME",
+    layer: "FE",
+    title:
+      "FE registry + shell + Tổng quan ME (ME-SCREEN-001): ModuleCode/APP_REGISTRY card 'Cá nhân' + ROUTE_REGISTRY /me/* + SIDEBAR_REGISTRY.ME (§8.1) + MODULE_APP_METADATA + trang /me overview",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "packages/web-core/src/**",
+      "apps/app/src/layouts/**",
+      "apps/app/src/routes/me/**",
+      "apps/app/src/router.tsx",
+      "apps/app/src/i18n/**",
+      "apps/api/src/foundation/module-catalog/**",
+      "docs/plans/S5-ME-FE-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-ME-DB-1", "S5-ME-BE-1"],
+    src: [
+      "SPEC-09 §8 (sidebar/route) + §9 ME-SCREEN-001 + §10.1 (overview/quick actions) + §13 (UI states)",
+      "packages/web-core/src/lib/registry.ts (ModuleCode L16-31 · APP_REGISTRY L501-610 · getVisibleApps L626)",
+      "apps/app/src/layouts/workspace/sidebar-registry.ts + ModuleWorkspaceLayout.tsx",
+      "apps/api/src/foundation/module-catalog/module-app-metadata.ts",
+      "Ảnh tham chiếu UI owner 2026-07-13 (banner chào + stat cards + Cần thực hiện/Chờ duyệt + Tiện ích)",
+    ],
+    plan: "docs/plans/S5-ME-FE-1.md",
+    done_when: [
+      "Đăng ký module ME xuyên suốt: thêm 'ME' vào ModuleCode + APP_REGISTRY card 'Cá nhân' (requiredAnyPermissions RỖNG — mọi user đã đăng nhập thấy card, khớp seed module active DB-1) + ROUTE_REGISTRY /me/* ở packages/web-core/src/lib/registry.ts; SIDEBAR_REGISTRY.ME theo SPEC-09 §8.1 (Tổng quan · Hồ sơ của tôi · Tài khoản & bảo mật · Công việc của tôi · Thông báo · Cài đặt cá nhân); MODULE_APP_METADATA.ME; router.tsx wire qua makeModuleRoute; i18n vi; REBUILD web-core dist sau đổi src (bài học web-core-stale-dist trang trắng)",
+      "Trang Tổng quan /me (ME-SCREEN-001) đọc GET /me/overview: banner chào theo tên + avatar; stat cards (công tháng này · phép còn lại cả năm · phép còn lại đến hiện tại · task hôm nay/quá hạn · thông báo chưa đọc); khối 'Cần thực hiện' / 'Chờ người khác duyệt'; 'Tiện ích' quick actions (§10.1: sửa hồ sơ · đổi mật khẩu · check-in/out · tạo đơn nghỉ · task của tôi · thông báo) deep-link về module gốc (§12.5) — layout THAM CHIẾU ảnh owner, token màu packages/ui theme.css, đạt cả light + dark (nền feat/ui-theme-scroll)",
+      "Render đúng trạng thái §13 per-section: ok/empty/error-retry/module_disabled/unlinked_employee (§12.2 hiện thông điệp liên hệ HR, ẩn card nghiệp vụ) — KHÔNG trắng trang khi 1 section lỗi; KHÔNG hiển thị dữ liệu team/company (§10.1)",
+      "FE spec gating route + loading/error/empty; check.sh xanh; LIGHT gate react-reviewer + quality-gate",
+    ],
+  },
+  {
+    id: "S5-ME-FE-2",
+    module: "ME",
+    layer: "FE",
+    title:
+      "FE Hồ sơ của tôi + Tài khoản & bảo mật dưới /me/*: TÁI DÙNG MyProfilePage/PCR/ChangePassword/Sessions/2FA + màn Hoạt động bảo mật mới (BE-3)",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/me/**",
+      "apps/app/src/routes/account/**",
+      "apps/app/src/routes/hr/**",
+      "apps/app/src/router.tsx",
+      "apps/app/src/i18n/**",
+      "packages/web-core/src/**",
+      "docs/plans/S5-ME-FE-2.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-ME-FE-1", "S5-ME-BE-3"],
+    src: [
+      "SPEC-09 §9 ME-SCREEN-002..008 + §10.2-10.6 + §12.2 (unlinked) + §13",
+      "apps/app/src/routes/hr/me/MyProfilePage.tsx + routes/hr/profile-change-requests/* (PCR_ME_PATH /hr/me/change-request)",
+      "apps/app/src/routes/account/{AccountProfilePage,ChangePasswordPage,AccountSessionsPage}.tsx",
+    ],
+    plan: "docs/plans/S5-ME-FE-2.md",
+    done_when: [
+      "Hồ sơ của tôi /me/profile{,/personal,/work,/contracts,/change-requests}: TÁI DÙNG component MyProfilePage + PCR pages hiện có (import chung — KHÔNG copy-paste); chốt trong plan mount-dưới-/me vs redirect; route cũ /hr/me + /hr/me/change-request GIỮ hoạt động hoặc redirect — KHÔNG gãy deep-link/bookmark",
+      "Tài khoản & bảo mật /me/account + /me/security/{password,sessions,activity}: tái dùng AccountProfilePage (2FA card) · ChangePasswordPage · AccountSessionsPage; màn Hoạt động bảo mật MỚI (ME-SCREEN-008) đọc GET /me/security/activity (BE-3): bảng read-only thời gian · sự kiện · thiết bị · IP mask + phân trang",
+      "Trạng thái §13 đầy đủ; unlinked-employee → thông điệp §12.2 + ẩn/disable tab hồ sơ công việc; masking hiển thị nguyên trạng server trả (FE KHÔNG unmask/suy diễn); hợp đồng chỉ hiện nếu BE trả (ME-DEC-006)",
+      "check.sh xanh; LIGHT gate react-reviewer + quality-gate; nhánh security-activity → security-reviewer soi read-only không lộ nhạy cảm",
+    ],
+  },
+  {
+    id: "S5-ME-FE-3",
+    module: "ME",
+    layer: "FE",
+    title:
+      "FE Công việc của tôi (ATT/LEAVE/TASK summary + deep-link) + Thông báo & Tùy chọn thông báo (FE mới trên BE sẵn) + Cài đặt cá nhân (theme sync server↔localStorage)",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/me/**",
+      "apps/app/src/i18n/**",
+      "packages/web-core/src/**",
+      "packages/ui/src/**",
+      "docs/plans/S5-ME-FE-3.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-ME-FE-1", "S5-ME-BE-2"],
+    src: [
+      "SPEC-09 §9 ME-SCREEN-009..015 + §10.7 (noti prefs) + §10.8 (giao diện) + §12.5 (deep link)",
+      "apps/api/src/notifications/notifications.controller.ts L69/L78 (GET/PUT /notifications/preferences — BE sẵn, FE chưa)",
+      "packages/ui/src/hooks/use-theme.ts (localStorage mediaos-theme) + styles/theme.css (nhánh feat/ui-theme-scroll)",
+    ],
+    plan: "docs/plans/S5-ME-FE-3.md",
+    done_when: [
+      "Công việc của tôi /me/{attendance,leave,tasks} (ME-SCREEN-009..011): summary card + bảng rút gọn từ /me/*-summary (BE-1) + deep-link về ATT/LEAVE/TASK gốc (§12.5) — KHÔNG thay thế trang nguồn (§7.5), KHÔNG gọi thẳng bảng nguồn",
+      "Thông báo /me/notifications (tái dùng list NOTI own-scope) + Tùy chọn thông báo /me/preferences/notifications MỚI (ME-SCREEN-013): đọc/ghi GET/PUT /notifications/preferences BE SẴN CÓ (thêm web-core api-client + spec); notification bảo mật bắt buộc KHÔNG tắt được — disabled + giải thích (§10.7); kênh chưa hỗ trợ hiển thị unavailable, KHÔNG giả lập đã bật",
+      "Cài đặt cá nhân /me/preferences/appearance (ME-SCREEN-014): theme System/Light/Dark sync HAI CHIỀU use-theme (localStorage mediaos-theme) ↔ user_preferences server (BE-2) — login load pref server áp theme, đổi theme ghi server, offline/lỗi server vẫn áp local (fail-soft); ngôn ngữ & múi giờ hiển thị read-only nếu policy chưa mở (ME-DEC-008, P2)",
+      "loading/error/empty đủ; REBUILD web-core dist; check.sh xanh; LIGHT gate react-reviewer + quality-gate",
+    ],
+  },
+  {
+    id: "S5-ME-QA-1",
+    module: "QA",
+    layer: "QA",
+    title:
+      "QA ME: IDOR sweep mọi endpoint /me/* + cross-user/cross-tenant + aggregation degraded + preference policy — theo SPEC-09 §20, coverage ≥80% apps/api/src/me",
+    zone: "yellow",
+    status: "todo",
+    paths: ["apps/api/test/integration/**", "apps/api/src/me/**", "docs/plans/S5-ME-QA-1.md"],
+    skills: ["code-review"],
+    depends_on: ["S5-ME-BE-2", "S5-ME-BE-3"],
+    src: [
+      "SPEC-09 §19 (nghiệm thu) + §20 (test scenario)",
+      "QA-05 (permission/data-scope testing)",
+    ],
+    done_when: [
+      "Int-spec theo SPEC-09 §20: IDOR sweep MỌI endpoint /me/* (truyền user_id/employee_id lạ qua query/body → bị bỏ qua hoặc 4xx, hành vi KHÔNG đổi theo giá trị truyền) · cross-user + cross-tenant deny (preferences/activity/summary) · thu hồi session của user khác → 403/404 (tái dùng suite /auth/sessions nếu đã phủ, chỉ bổ khuyết) · aggregation degraded (1 nguồn lỗi → section error, HTTP 200, section khác ok) · unlinked-employee · company khóa timezone · notification bắt buộc không tắt được",
+      "Field nhạy cảm: assert response /me/profile + /me/security/activity KHÔNG chứa salary/PII ngoài mask + KHÔNG token/secret (§17)",
+      "Gate hasDb && LANE_DB, DB cô lập mediaos_meqa1 (int-spec chạy thật — không false-green); coverage ≥80% cho apps/api/src/me",
+      "check.sh xanh; LIGHT gate; nhánh permission/IDOR → security-reviewer soi deny-path",
+    ],
+  },
 ];
