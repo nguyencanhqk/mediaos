@@ -4,7 +4,7 @@
 //   backlog.mjs (board/STATUS) chỉ giữ ~Work Order của SPRINT HÀNH (S0–S1) — KHÔNG phải toàn bộ
 //   112 story của MVP. Người đọc muốn thấy "từng module → từng tính năng → việc cần làm → trạng thái
 //   → đã test chưa → cách chạy thử". File này GHÉP 3 nguồn sự thật (KHÔNG nhập tay):
-//     1) docs/IMPLEMENTATION/IMPLEMENTATION-02  → 112 story / 12 epic (id·actor·priority·point·AC)
+//     1) docs/IMPLEMENTATION/IMPLEMENTATION-02  → 122 story / 13 epic (id·actor·priority·point·AC)
 //     2) harness/backlog.mjs (src[] trỏ IMP02-STORY-XXX) → map story → Work Order + done_when + paths
 //     3) harness/activity.jsonl (ledger, overlay) → trạng thái HIỆU DỤNG + bằng chứng test
 //
@@ -45,7 +45,7 @@ function sprintOfStory(n) {
   if (inR(13, 37) || inR(98, 99)) return "S2";
   if (inR(38, 64) || n === 100) return "S3";
   if (inR(65, 92) || inR(101, 103)) return "S4";
-  if (n === 97 || inR(104, 110) || inR(113, 120)) return "S5"; // 113-120 = EPIC-12 ME
+  if (n === 97 || inR(104, 110) || inR(113, 124)) return "S5"; // 113-120 = EPIC-12 ME · 121-124 = HR bổ sung 2026-07-13
   if (inR(111, 112)) return "S6";
   return "?";
 }

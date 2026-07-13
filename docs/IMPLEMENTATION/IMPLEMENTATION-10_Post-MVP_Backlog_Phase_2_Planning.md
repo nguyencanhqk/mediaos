@@ -568,8 +568,8 @@ RECRUIT là module quản lý tuyển dụng từ job opening đến candidate p
 | PMVP-HR-003 | Chuẩn hóa contract effective date cho payroll | P0 | PAYROLL |
 | PMVP-HR-004 | Convert candidate to employee API/service contract | P0 | RECRUIT |
 | PMVP-HR-005 | Onboarding basic status sau khi candidate hired | P2 | RECRUIT |
-| PMVP-HR-006 | Import Excel nhân viên | P2 | Data migration/HR ops |
-| PMVP-HR-007 | Org chart nâng cao | P3 | Phase sau |
+| PMVP-HR-006 | Import Excel nhân viên — **ĐÃ KÉO VÀO MVP 2026-07-13** (→ IMP02-STORY-122, WO S5-HR-IMPORT-BE-1/FE-1) | P2 | Data migration/HR ops |
+| PMVP-HR-007 | Org chart nâng cao — **phần biểu đồ trực quan + cây nhân sự theo quản lý ĐÃ KÉO VÀO MVP 2026-07-13** (→ IMP02-STORY-123, WO S5-HR-ORGCHART-BE-1/FE-1); phần nâng cao còn lại (drag-drop tái cơ cấu, lịch sử thay đổi cơ cấu, export ảnh) giữ Phase sau | P3 | Phase sau |
 
 ### 11.3 ATT backlog
 
