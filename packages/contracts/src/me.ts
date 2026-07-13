@@ -183,7 +183,29 @@ export const meNotificationSummarySchema = z.object({
 });
 export type MeNotificationSummary = z.infer<typeof meNotificationSummarySchema>;
 
+/**
+ * Section HR (SPEC-09 §7.2/§10.1/§10.2 — nguồn HR.EMPLOYEE gate `read:employee`): TÓM TẮT hồ sơ công việc
+ * (own). CHỈ dữ liệu directory-class (mã NV/tên/phòng ban/chức vụ/trạng thái/ngày vào) — KHÔNG salary/PII
+ * (§10.2/§17.1). ME tổng hợp từ HrReadService.getMyProfile ĐÃ MASK — projection này chỉ giữ field
+ * non-sensitive nên KHÔNG lộ thêm gì so với nguồn (BẤT BIẾN masking). Section riêng để §13 forbidden per-
+ * section áp cho HR như 4 nguồn còn lại (thiếu read:employee → status='forbidden').
+ */
+export const meHrSummarySchema = z.object({
+  employeeCode: z.string().nullable(),
+  fullName: z.string().nullable(),
+  departmentName: z.string().nullable(),
+  positionName: z.string().nullable(),
+  /** Trạng thái làm việc (active/resigned/…) — string để không trôi khỏi CHECK khi HR thêm trạng thái. */
+  status: z.string(),
+  startDate: z.string().nullable(),
+});
+export type MeHrSummary = z.infer<typeof meHrSummarySchema>;
+
 // ─── Section-envelope đã ghép data (response endpoint chuyên biệt + phần tử overview) ──────────
+
+/** Section HR trong overview — `data` = envelope (status + summary|null). KHÔNG endpoint chuyên biệt (GET /me). */
+export const meHrSectionSchema = meSectionSchema(meHrSummarySchema);
+export type MeHrSection = z.infer<typeof meHrSectionSchema>;
 
 /** GET /me/attendance-summary — `data` = envelope section (status + summary|null). */
 export const meAttendanceSectionSchema = meSectionSchema(meAttendanceSummarySchema);
@@ -210,6 +232,8 @@ export type MeNotificationSection = z.infer<typeof meNotificationSectionSchema>;
  */
 export const meOverviewSchema = z.object({
   identity: meIdentitySchema,
+  /** Section HR (read:employee) — employee-dependent (unlinked → 'unlinked_employee'). KHÔNG endpoint riêng. */
+  hr: meHrSectionSchema,
   attendance: meAttendanceSectionSchema,
   leave: meLeaveSectionSchema,
   task: meTaskSectionSchema,

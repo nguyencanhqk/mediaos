@@ -27,6 +27,7 @@ import { SecurityPolicyModule } from "./security-policy/security-policy.module";
 import { UserInvitesModule } from "./user-invites/user-invites.module";
 import { SchedulerModule } from "./scheduler/scheduler.module";
 import { RecycleBinModule } from "./recycle-bin/recycle-bin.module";
+import { MeModule } from "./me/me.module";
 import { JwtAuthGuard } from "./permission/guards/jwt-auth.guard";
 import { CompanyGuard } from "./permission/guards/company.guard";
 import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
@@ -74,6 +75,9 @@ import { TwoFactorEnforcementGuard } from "./auth/two-factor-enforcement.guard";
     SchedulerModule,
     // CS-6: Thùng rác / recycle bin + restore (soft-deleted employees).
     RecycleBinModule,
+    // S5-ME-BE-1: MeModule (Personal Hub /api/v1/me) — lớp tổng hợp đọc-own (SPEC-09 / API-11). Compose
+    // reader nguồn own-scope, re-check quyền nguồn per-section, fail-soft. KHÔNG sở hữu dữ liệu canonical.
+    MeModule,
   ],
   providers: [
     // Global guard pipeline (THỨ TỰ QUAN TRỌNG):
