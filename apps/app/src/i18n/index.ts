@@ -27,7 +27,16 @@ registerI18nResources("vi", {
   dashboard: dashboardVi,
   // S4-FE-NOTI-2 — ĐÈ THÊM 1 khoá routeTitle.notiEvents vào bundle "nav" đã nhúng sẵn ở @mediaos/web-core
   // (deep-merge, KHÔNG đụng khoá cũ) — route noti.events (ROUTE_REGISTRY) cần titleKey này.
-  nav: { routeTitle: { notiEvents: "Quản lý loại thông báo" } },
+  // S4-FE-NOTI-4 — THÊM notiTemplates (route noti.templates, MỚI) + notificationDeliveryLogs (route
+  // noti.delivery-logs, chuyển từ RouteMeta cục bộ router.tsx vào ROUTE_REGISTRY — titleKey trước đây
+  // KHÔNG có bản dịch, hiển thị nguyên key; vá kèm khi dời).
+  nav: {
+    routeTitle: {
+      notiEvents: "Quản lý loại thông báo",
+      notiTemplates: "Quản lý mẫu thông báo",
+      notificationDeliveryLogs: "Nhật ký gửi thông báo",
+    },
+  },
 });
 
 export default i18n;

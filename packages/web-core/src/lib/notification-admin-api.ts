@@ -4,6 +4,10 @@ import {
   type NotificationEventAdminItem,
   type NotificationEventAdminQuery,
   type NotificationEventAdminPatch,
+  notificationTemplateAdminItemSchema,
+  type NotificationTemplateAdminItem,
+  type NotificationTemplateAdminQuery,
+  type NotificationTemplateAdminPatch,
   notificationDeliveryLogAdminItemSchema,
   type NotificationDeliveryLogAdminItem,
   type NotificationDeliveryLogAdminQuery,
@@ -32,6 +36,10 @@ import { buildQueryString } from "./api-params";
  * của SERVER — client chỉ render field nhận được.
  */
 const eventAdminListSchema = z.array(notificationEventAdminItemSchema);
+// S4-FE-NOTI-4 (UI-NOTI-SCREEN-005/NOTI-SCREEN-006) — NOTI-API-303, S4-NOTI-BE-5 (GET /notifications/templates
+// đã merge master #194) + BE-3/BE-4 (GET/PATCH /notifications/templates/:id). Permission: view/update:
+// notification-template — CẢ 2 is_sensitive=true, đã ở SENSITIVE_CAPABILITY_ALLOWLIST (permission.service.ts).
+const templateAdminListSchema = z.array(notificationTemplateAdminItemSchema);
 
 export const notificationAdminApi = {
   /** GET /notifications/events — danh mục event (company override ∪ global). Permission: view:notification-config. */
@@ -49,6 +57,35 @@ export const notificationAdminApi = {
     body: NotificationEventAdminPatch,
   ): Promise<NotificationEventAdminItem> =>
     apiFetch(`/notifications/events/${id}`, notificationEventAdminItemSchema, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * GET /notifications/templates — danh mục template (company override ∪ global, merge "override
+   * thắng global"). Filter event_id/event_code/channel/locale + phân trang in-memory (catalog nhỏ).
+   * Permission: view:notification-template.
+   */
+  listTemplates: (
+    query?: Partial<NotificationTemplateAdminQuery>,
+  ): Promise<NotificationTemplateAdminItem[]> =>
+    apiFetch(`/notifications/templates${buildQueryString(query ?? {})}`, templateAdminListSchema),
+
+  /** GET /notifications/templates/:id — chi tiết 1 template (company override ∪ global). Permission: view:notification-template. */
+  getTemplate: (id: string): Promise<NotificationTemplateAdminItem> =>
+    apiFetch(`/notifications/templates/${id}`, notificationTemplateAdminItemSchema),
+
+  /**
+   * PATCH /notifications/templates/:id — sửa nội dung template (ghi company-override). Permission:
+   * update:notification-template. BE trả 422 (NOTI-ERR-TEMPLATE-FORBIDDEN-VARIABLE) nếu field text chứa
+   * biến placeholder nhạy cảm — message BE đã người-đọc (chỉ echo tên biến), client hiển thị nguyên văn
+   * qua ApiError.message (KHÔNG tự suy diễn thêm).
+   */
+  updateTemplate: (
+    id: string,
+    body: NotificationTemplateAdminPatch,
+  ): Promise<NotificationTemplateAdminItem> =>
+    apiFetch(`/notifications/templates/${id}`, notificationTemplateAdminItemSchema, {
       method: "PATCH",
       body: JSON.stringify(body),
     }),

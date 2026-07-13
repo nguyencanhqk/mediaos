@@ -63,6 +63,57 @@ describe("notificationAdminApi — route thật (S4-NOTI-BE-3/BE-4)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// notificationAdminApi — listTemplates/getTemplate/updateTemplate (S4-FE-NOTI-4, NOTI-API-303,
+// S4-NOTI-BE-5 GET /notifications/templates · BE-3/BE-4 GET/PATCH /notifications/templates/:id).
+// ---------------------------------------------------------------------------
+
+describe("notificationAdminApi — templates (S4-FE-NOTI-4 / S4-NOTI-BE-5)", () => {
+  it("listTemplates() → GET /notifications/templates (KHÔNG gắn query khi rỗng)", async () => {
+    await notificationAdminApi.listTemplates();
+    const [url, , init] = lastCall();
+    expect(url).toBe("/notifications/templates");
+    expect(init?.method ?? "GET").toBe("GET");
+  });
+
+  it("listTemplates(query) → gắn query-string event_id/event_code/channel/locale/per_page", async () => {
+    await notificationAdminApi.listTemplates({
+      event_id: "11111111-1111-1111-1111-111111111111",
+      event_code: "TASK_ASSIGNED",
+      channel: "EMAIL",
+      locale: "vi-VN",
+      per_page: 100,
+    });
+    const [url] = lastCall();
+    expect(url.startsWith("/notifications/templates?")).toBe(true);
+    expect(url).toContain("event_id=11111111-1111-1111-1111-111111111111");
+    expect(url).toContain("event_code=TASK_ASSIGNED");
+    expect(url).toContain("channel=EMAIL");
+    expect(url).toContain("locale=vi-VN");
+    expect(url).toContain("per_page=100");
+  });
+
+  it("getTemplate(id) → GET /notifications/templates/:id", async () => {
+    await notificationAdminApi.getTemplate("tpl-1");
+    const [url, , init] = lastCall();
+    expect(url).toBe("/notifications/templates/tpl-1");
+    expect(init?.method ?? "GET").toBe("GET");
+  });
+
+  it("updateTemplate(id, body) → PATCH /notifications/templates/:id + body JSON.stringify", async () => {
+    await notificationAdminApi.updateTemplate("tpl-1", {
+      title_template: "Tiêu đề mới",
+      body_template: "Nội dung mới {{name}}",
+    });
+    const [url, , init] = lastCall();
+    expect(url).toBe("/notifications/templates/tpl-1");
+    expect(init?.method).toBe("PATCH");
+    expect(init?.body).toBe(
+      JSON.stringify({ title_template: "Tiêu đề mới", body_template: "Nội dung mới {{name}}" }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // notificationDeliveryLogApi — S4-FE-NOTI-3 (URL + query string; append-only viewer).
 // ---------------------------------------------------------------------------
 
