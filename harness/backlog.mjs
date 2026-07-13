@@ -5809,13 +5809,17 @@ export const backlog = [
     src: [
       "SPEC-03 §14.18 (identity = nhóm giấy tờ nhạy cảm cao)",
       "Mẫu gate+audit: revealSalary (hr-read.service.ts) — reveal ⟹ audit atomically",
-      "Tiền lệ seed: 0444 — sensitive pair KHÔNG role-grant (view-salary/update-salary), admin gán per-role/per-object qua UI",
+      "Grant hiện hành view-sensitive:employee (0444): hr@Company · company-admin@Company · employee@Own — tập role mốc cho grant view-identity",
     ],
+    // OWNER CHỐT LẦN 2 — 2026-07-13 (sau plan-block wf_2363823a): phương án 'không role-grant' + 'flip
+    // gate duyệt' ghép lại làm GÃY flow duyệt hồ sơ S2-HR-BE-4 (approver 403). Owner chọn GRANT KÈM:
+    // grant tường minh cho đúng tập role đang có view-sensitive. KHÔNG CROSS JOIN. Gate flip giữ nguyên.
     done_when: [
-      "OWNER CHỐT 2026-07-12 (đã quyết, KHÔNG mở lại): (a) cặp MỚI view-identity:employee is_sensitive=true — KHÔNG tái dùng view-sensitive; (b) migration CHỈ seed pair vào catalog permissions, KHÔNG role-grant (mirror tiền lệ view-salary 0444 — tránh blanket-grant drift); (c) identity_* hiện INLINE trong detail DTO (không endpoint reveal riêng), fail-closed = null khi thiếu quyền",
+      "OWNER CHỐT 2026-07-13 (thay bản 07-12, KHÔNG mở lại): (a) cặp MỚI view-identity:employee is_sensitive=true — KHÔNG tái dùng view-sensitive; (b) migration seed pair + GRANT TƯỜNG MINH per-role: hr@Company · company-admin@Company · employee@Own (ĐÚNG tập role đang có view-sensitive:employee ở 0444) — mảng per-role explicit, TUYỆT ĐỐI KHÔNG CROSS JOIN (bài học blanket-grant drift), data_scope mirror per-(permission,role) (bài học §13); (c) identity_* INLINE trong detail DTO, fail-closed = null khi thiếu quyền",
       "Reveal identity ⟹ audit trong cùng tx (mirror revealSalary hr-read.service.ts — per-row resourceId, isSensitive=true nên wildcard KHÔNG mở); deny-path RED-trước: thiếu quyền → null, wildcard không mở, cross-tenant deny",
-      "Nâng gate duyệt change-request cho identity fields: view-sensitive → view-identity (profile-change-request.service.ts — nhất quán với read gate mới)",
-      "FE màn Hồ sơ render nhóm CMND/CCCD chỉ khi có capability view-identity (thêm cặp vào SENSITIVE_CAPABILITY_ALLOWLIST /auth/me — bài học HR-PROFILE-UI-1); FULL gate security-reviewer + database-reviewer PASS",
+      "Nâng gate duyệt change-request identity: view-sensitive → view-identity (profile-change-request.service.ts) — AN TOÀN vì grant ở (b) phủ đúng approver hiện hành; int-spec REGRESSION: hr + company-admin duyệt change-request chạm identity VẪN pass sau flip (bảo vệ flow S2-HR-BE-4)",
+      "AuditMaskerService: thêm stem 'identityissue' để identity_issue_date/identity_issue_place được mask trong audit/history như identity_number (vá lỗ pre-existing bất biến #3 — reviewer wf_2363823a chỉ ra)",
+      "FE màn Hồ sơ render nhóm CMND/CCCD chỉ khi có capability view-identity (thêm cặp vào SENSITIVE_CAPABILITY_ALLOWLIST /auth/me; FE lane paths PHẢI gồm apps/app/src/i18n/** cho label CCCD; int-spec auth-me chạy với LANE_DB thật, không skip); FULL gate security-reviewer + database-reviewer PASS",
     ],
   },
 
