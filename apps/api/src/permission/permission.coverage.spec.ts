@@ -58,6 +58,10 @@ class CatalogMockRepo implements IPermissionRepository {
   async getObjectGrants(): Promise<ObjectGrant[]> {
     return [];
   }
+  // HR-PERF-1 — interface requirement (not exercised by catalog coverage tests).
+  async getObjectGrantsBatch(): Promise<Map<string, ObjectGrant[]>> {
+    return new Map();
+  }
   async getPermissionsByIds(permissionIds: string[]): Promise<PermissionCatalogEntry[]> {
     if (this.failCatalog) throw new Error("DB connection failed (simulated)");
     return this.catalog.filter((p) => permissionIds.includes(p.id));

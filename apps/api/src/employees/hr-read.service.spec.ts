@@ -151,10 +151,40 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makePermission(perms: Record<string, Decision>) {
+/**
+ * Permission mock. `perms` = decision per action (applies to EVERY row). `permsByRow` = per-resourceId
+ * override (resourceId → action → decision) to model object-level grants that differ per employee.
+ * canBatch mirrors can() cell-for-cell (same resolver) — the service must get identical decisions
+ * whether it calls can() (detail/me) or canBatch() (list).
+ */
+function makePermission(
+  perms: Record<string, Decision>,
+  permsByRow?: Record<string, Record<string, Decision>>,
+) {
+  const decide = (action: string, resourceId?: string | null): Decision =>
+    (resourceId != null ? permsByRow?.[resourceId]?.[action] : undefined) ??
+    perms[action] ??
+    DENY("deny-default");
   return {
-    can: vi.fn((input: { action: string }) =>
-      Promise.resolve(perms[input.action] ?? DENY("deny-default")),
+    can: vi.fn((input: { action: string; resourceId?: string | null }) =>
+      Promise.resolve(decide(input.action, input.resourceId)),
+    ),
+    canBatch: vi.fn(
+      (
+        _userId: string,
+        _companyId: string,
+        _resourceType: string,
+        resourceIds: string[],
+        actions: Array<{ action: string }>,
+      ) => {
+        const out = new Map<string, Map<string, Decision>>();
+        for (const id of resourceIds) {
+          const perAction = new Map<string, Decision>();
+          for (const spec of actions) perAction.set(spec.action, decide(spec.action, id));
+          out.set(id, perAction);
+        }
+        return Promise.resolve(out);
+      },
     ),
   };
 }
@@ -189,13 +219,14 @@ function makeAudit() {
 function makeService(
   opts: {
     perms?: Record<string, Decision>;
+    permsByRow?: Record<string, Record<string, Decision>>;
     repo?: ReturnType<typeof makeRepo>;
     dataScope?: ReturnType<typeof makeDataScope>;
   } = {},
 ) {
   const repo = opts.repo ?? makeRepo();
   const db = makeDb();
-  const permission = makePermission(opts.perms ?? {});
+  const permission = makePermission(opts.perms ?? {}, opts.permsByRow);
   const dataScope = opts.dataScope ?? makeDataScope({ scope: "Company", inScope: true });
   const audit = makeAudit();
   const svc = new HrReadService(
@@ -306,6 +337,61 @@ describe("HrReadService.listHrEmployees — salary masking", () => {
     expect(res.meta.totalPages).toBe(3);
     expect(res.meta.hasNext).toBe(true);
     expect(res.meta.hasPrev).toBe(false);
+  });
+});
+
+// ─── HR-PERF-1: batched per-row salary reveal (object-ALLOW vs object-DENY on one page) ─────────────
+describe("HrReadService.listHrEmployees — per-row salary via canBatch (HR-PERF-1)", () => {
+  const query = { page: 1, pageSize: 20, sort: "fullName", order: "asc" } as never;
+
+  it("mixed page: object-ALLOW row reveals baseSalary + audits; object-DENY row null + NO audit", async () => {
+    const ROW_ALLOW = EMP_ID;
+    const ROW_DENY = "f1f1f1f1-0000-0000-0000-000000000001";
+    const repo = makeRepo({
+      listScopedTx: vi.fn().mockResolvedValue({
+        rows: [makeListRow(), makeListRow({ id: ROW_DENY })],
+        total: 2,
+      }),
+    });
+    const { svc, audit, permission } = makeService({
+      repo,
+      perms: { "view-sensitive": DENY() },
+      // Per-row salary decision (object-level): ALLOW on the first row, object-DENY on the second.
+      permsByRow: {
+        [ROW_ALLOW]: { "view-salary": ALLOW() },
+        [ROW_DENY]: { "view-salary": DENY("deny-explicit") },
+      },
+    });
+
+    const res = await svc.listHrEmployees(actorA, query);
+
+    expect(res.items).toHaveLength(2);
+    // object-ALLOW row → baseSalary revealed.
+    expect(res.items[0]!.baseSalary).toBe(5000);
+    // object-DENY row → baseSalary masked.
+    expect(res.items[1]!.baseSalary).toBeNull();
+    // Reveal ⟹ audit atomic PER ROW: exactly one view-salary audit, for the revealed row, on the tx.
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    expect(audit.record).toHaveBeenCalledWith(
+      FAKE_TX,
+      expect.objectContaining({
+        action: "view-salary",
+        objectType: "employee",
+        objectId: ROW_ALLOW,
+      }),
+    );
+    // ONE batch for the whole page (not 2N can()).
+    expect(permission.canBatch).toHaveBeenCalledTimes(1);
+    expect(permission.can).not.toHaveBeenCalled();
+  });
+
+  it("ALLOW but auditRequired=false on a list row → salary MASKED, no audit (never reveal unaudited)", async () => {
+    const { svc, audit } = makeService({
+      perms: { "view-salary": ALLOW(false), "view-sensitive": DENY() },
+    });
+    const res = await svc.listHrEmployees(actorA, query);
+    expect(res.items[0]!.baseSalary).toBeNull();
+    expect(audit.record).not.toHaveBeenCalled();
   });
 });
 
@@ -433,7 +519,7 @@ describe("HrReadService.listHrEmployees — PII masking (HR-PROFILE-UI-1)", () =
     }
   });
 
-  it("ALLOW view-sensitive → PII revealed per row (object-level resourceId check)", async () => {
+  it("ALLOW view-sensitive → PII revealed per row (object-level batch check, HR-PERF-1)", async () => {
     const { svc, permission } = makeService({
       perms: { "view-salary": DENY(), "view-sensitive": ALLOW(false) },
     });
@@ -444,15 +530,20 @@ describe("HrReadService.listHrEmployees — PII masking (HR-PROFILE-UI-1)", () =
     expect(res.items[0]!.dateOfBirth).toBe("1997-10-02");
     expect(res.items[0]!.phone).toBe("0900000000");
     expect(res.items[0]!.contractType).toBe("permanent");
-    // The check must carry the row id so OBJECT-level grants (ADR-0010) resolve per employee.
-    expect(permission.can).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "view-sensitive",
-        resourceType: "employee",
-        resourceId: EMP_ID,
-        isSensitive: true,
-      }),
+    // HR-PERF-1: the list path resolves per-row decisions via canBatch (NOT 2N can()). The batch
+    // carries the page ids + both sensitive actions so OBJECT-level grants (ADR-0010) resolve per row.
+    expect(permission.canBatch).toHaveBeenCalledWith(
+      ACTOR_ID,
+      COMPANY_A,
+      "employee",
+      [EMP_ID],
+      expect.arrayContaining([
+        expect.objectContaining({ action: "view-salary", isSensitive: true }),
+        expect.objectContaining({ action: "view-sensitive", isSensitive: true }),
+      ]),
     );
+    // The list path must NOT loop per-row can() (regression guard: 2N → batch).
+    expect(permission.can).not.toHaveBeenCalled();
   });
 });
 

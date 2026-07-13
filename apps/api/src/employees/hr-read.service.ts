@@ -74,17 +74,36 @@ export class HrReadService {
         pageSize: query.pageSize,
       });
 
-      // Per-row salary reveal — KEEP per-row, do NOT collapse to one decision/page: can('view-salary')
-      // is called with resourceId so OBJECT-level grants (ADR-0010) resolve per employee, and a single
-      // page can legitimately mix revealed + masked rows. Each revealed row audits atomically on the tx
-      // (reveal ⟹ audit, per object). Collapsing to a resourceType-level check would leak or hide salary
-      // across rows depending on object grants — a cross-record disclosure bug, not a perf win.
+      // HR-PERF-1 (beBatchPermHr) — per-row decisions are STILL per-object (OBJECT-level grants,
+      // ADR-0010, resolve per employee; a page can legitimately mix revealed + masked rows), but they
+      // are resolved in ONE batch instead of 2N can() calls: canBatch fetches company grants once +
+      // object grants once, then decides each (id × action) with the SAME decideCan() as can(). The
+      // decisions are byte-identical to the old per-row loop. Reveal ⟹ audit stays atomic per row:
+      // each revealed salary row still writes its view-salary audit on THIS tenant tx (a failed audit
+      // rolls back the read).
+      const ids = rows.map((r) => r.id);
+      const decisions = await this.permission.canBatch(user.id, user.companyId, "employee", ids, [
+        { action: "view-salary", isSensitive: true },
+        { action: "view-sensitive", isSensitive: true },
+      ]);
+
       const items: HrEmployeeListItem[] = [];
       for (const row of rows) {
-        const revealSalary = await this.revealSalary(tx, user, row.id);
-        // HR-PROFILE-UI-1: list rows now carry PII (gender/dob/phone/contractType) — same per-row
-        // object-level gate as the detail (view-sensitive with resourceId, see revealSalary note).
-        const revealPii = await this.canViewSensitive(user, row.id);
+        const cell = decisions.get(row.id);
+        // Salary: reveal ONLY when allow && auditRequired (mirror revealSalary) — and audit that reveal.
+        const salary = cell?.get("view-salary");
+        const revealSalary = Boolean(salary?.allow && salary?.auditRequired);
+        if (revealSalary) {
+          await this.audit.record(tx, {
+            action: "view-salary",
+            objectType: "employee",
+            objectId: row.id,
+            actorUserId: user.id,
+          });
+        }
+        // PII (HR-PROFILE-UI-1): view-sensitive per-row (no separate audit — read-only, mirror
+        // canViewSensitive).
+        const revealPii = Boolean(cell?.get("view-sensitive")?.allow);
         items.push(this.toListItem(row, revealSalary, revealPii));
       }
 

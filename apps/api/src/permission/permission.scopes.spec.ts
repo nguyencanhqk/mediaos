@@ -39,6 +39,10 @@ class ScopeMockRepo implements IPermissionRepository {
   async getObjectGrants(): Promise<ObjectGrant[]> {
     return [];
   }
+  // HR-PERF-1 — interface requirement (not exercised by scope tests).
+  async getObjectGrantsBatch(): Promise<Map<string, ObjectGrant[]>> {
+    return new Map();
+  }
   async getPermissionsByIds(): Promise<PermissionCatalogEntry[]> {
     return [];
   }

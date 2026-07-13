@@ -95,6 +95,33 @@ export interface ObjectGrant {
   effect: "ALLOW" | "DENY";
 }
 
+/**
+ * HR-PERF-1 (beBatchPermHr) — result of getObjectGrantsBatch: object grants keyed by resourceId.
+ * Every requested resourceId is present as a key (empty array when it has no grants) so callers can
+ * lookup deterministically without missing-key ambiguity.
+ */
+export type ObjectGrantBatch = Map<string, ObjectGrant[]>;
+
+/**
+ * HR-PERF-1 — one action to evaluate in a batched canBatch() call. Mirrors the sensitivity/reauth
+ * flags of CanInput; the (userId, companyId, resourceType, resourceId) are supplied by canBatch().
+ */
+export interface BatchActionSpec {
+  action: string;
+  /** Sensitive catalog pair — wildcard (*:*) grants do NOT satisfy (mirror CanInput.isSensitive). */
+  isSensitive?: boolean;
+  /** Requires a valid re-auth window (reveal-secret class). */
+  requiresReauth?: boolean;
+  /** Requires a per-object (Tier-3) ALLOW — company-level ALLOW is not sufficient (F2). */
+  objectGrantRequired?: boolean;
+}
+
+/**
+ * HR-PERF-1 — canBatch() result: decision per resourceId per action. Outer key = resourceId,
+ * inner key = action. Every (resourceId × action) pair is present; look up with .get(id)?.get(action).
+ */
+export type BatchDecisions = Map<string, Map<string, PermissionDecision>>;
+
 /** 1 entry permission catalog (global, no-RLS) — dùng cho AC-5 scope ⊆ grant validation. */
 export interface PermissionCatalogEntry {
   id: string;
@@ -132,6 +159,19 @@ export interface IPermissionRepository {
     resourceType: string,
     resourceId: string,
   ): Promise<ObjectGrant[]>;
+
+  /**
+   * HR-PERF-1 (beBatchPermHr) — BATCH variant of getObjectGrants for a page of resourceIds.
+   * ONE query for the user's roleIds + ONE inArray(objectId, resourceIds) query (no N fan-out).
+   * Returns a Map with an entry for EVERY requested resourceId ([] when it has no grants).
+   * Runs inside withTenant(companyId) — RLS isolates cross-tenant ids. Throws on DB error.
+   */
+  getObjectGrantsBatch(
+    userId: string,
+    companyId: string,
+    resourceType: string,
+    resourceIds: string[],
+  ): Promise<ObjectGrantBatch>;
 
   /**
    * AC-5 — trả catalog entry cho tập permission id (global catalog, no-RLS). id không tồn tại bị bỏ qua

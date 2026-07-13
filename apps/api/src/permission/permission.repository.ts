@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
 import { objectPermissions, permissions, rolePermissions, roles, userRoles } from "../db/schema";
 import type {
@@ -7,6 +7,7 @@ import type {
   CompanyRoleGrantWithScope,
   IPermissionRepository,
   ObjectGrant,
+  ObjectGrantBatch,
   PermissionCatalogEntry,
 } from "./permission.types";
 
@@ -159,6 +160,83 @@ export class PermissionRepository implements IPermissionRepository {
         isSensitive: r.isSensitive,
         effect: r.effect as "ALLOW" | "DENY",
       }));
+    });
+  }
+
+  /**
+   * HR-PERF-1 (beBatchPermHr) — BATCH object grants for a page of resourceIds (same resourceType).
+   * TWO queries total regardless of page size: (1) the user's ACTIVE roleIds, (2) object_permissions
+   * for user-subject + role-subjects filtered by inArray(objectId, resourceIds). Groups into a Map with
+   * an entry for EVERY requested id ([] when none). withTenant + companyId filter enforce RLS isolation
+   * — a resourceId belonging to another tenant simply matches no rows (never leaks a cross-tenant grant).
+   */
+  async getObjectGrantsBatch(
+    userId: string,
+    companyId: string,
+    resourceType: string,
+    resourceIds: string[],
+  ): Promise<ObjectGrantBatch> {
+    const result: ObjectGrantBatch = new Map();
+    if (resourceIds.length === 0) return result;
+    // Seed every requested id so callers get a deterministic entry (empty array = no grants).
+    for (const id of resourceIds) result.set(id, []);
+
+    return this.db.withTenant(companyId, async (tx) => {
+      // (1) ACTIVE roles the user holds (mirror getObjectGrants: soft-deleted user_role → role-subject
+      // object grants stop applying to this user).
+      const userRoleRows = await tx
+        .select({ roleId: userRoles.roleId })
+        .from(userRoles)
+        .where(
+          and(
+            eq(userRoles.userId, userId),
+            eq(userRoles.companyId, companyId),
+            isNull(userRoles.deletedAt),
+          ),
+        );
+
+      const roleIds = userRoleRows.map((r) => r.roleId);
+
+      // user-subject is ALWAYS present; role-subjects appended per active role.
+      const subjectConditions = [
+        and(eq(objectPermissions.subjectType, "user"), eq(objectPermissions.subjectId, userId)),
+        ...roleIds.map((roleId) =>
+          and(eq(objectPermissions.subjectType, "role"), eq(objectPermissions.subjectId, roleId)),
+        ),
+      ].filter(Boolean);
+
+      // (2) One inArray query across the whole page.
+      const rows = await tx
+        .select({
+          objectId: objectPermissions.objectId,
+          action: permissions.action,
+          resourceType: permissions.resourceType,
+          isSensitive: permissions.isSensitive,
+          effect: objectPermissions.effect,
+        })
+        .from(objectPermissions)
+        .innerJoin(permissions, eq(objectPermissions.permissionId, permissions.id))
+        .where(
+          and(
+            eq(objectPermissions.companyId, companyId),
+            eq(objectPermissions.objectType, resourceType),
+            inArray(objectPermissions.objectId, resourceIds),
+            or(...(subjectConditions as [ReturnType<typeof and>, ...ReturnType<typeof and>[]])),
+          ),
+        );
+
+      for (const r of rows) {
+        const grant: ObjectGrant = {
+          action: r.action,
+          resourceType: r.resourceType,
+          isSensitive: r.isSensitive,
+          effect: r.effect as "ALLOW" | "DENY",
+        };
+        const bucket = result.get(r.objectId);
+        if (bucket) bucket.push(grant);
+        else result.set(r.objectId, [grant]);
+      }
+      return result;
     });
   }
 

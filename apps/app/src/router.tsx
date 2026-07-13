@@ -1,6 +1,7 @@
 import React from "react";
 import { createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router";
 import { getAuthRedirectUrl, useAuthStore, type RouteMeta } from "@mediaos/web-core";
+import { Skeleton } from "@mediaos/ui";
 import { ForbiddenPage } from "@/routes/forbidden";
 import { ProtectedShell } from "@/layouts/protected/ProtectedShell";
 import { ProtectedRoute } from "@/layouts/protected/ProtectedRoute";
@@ -71,6 +72,21 @@ type ModuleCodeArg = Parameters<typeof ModuleWorkspaceLayout>[0]["moduleCode"];
  * render trạng thái 403/404/disabled/loading. Nhờ vậy MỌI route module (kể cả ModulePlaceholder) bị
  * chặn ở tầng route khi user thiếu quyền — không chỉ HR. Tách ra để route detail tái dùng + test wiring.
  */
+// ---------------------------------------------------------------------------
+// Route-level Suspense — mỗi trang module nạp qua dynamic import (React.lazy bên dưới) để Vite
+// TÁCH CHUNK theo module: mở /hr KHÔNG kéo bundle TASK/LEAVE/ATT. Fallback là skeleton (KHÔNG chuỗi
+// cứng, tái dùng @mediaos/ui) — bọc TRONG buildModuleRouteContent nên MỌI route module dùng chung.
+// Path/meta/gate KHÔNG đổi: chỉ đổi CÁCH nạp component (component ⇒ lazy exotic).
+// ---------------------------------------------------------------------------
+function RouteSuspenseFallback(): React.ReactElement {
+  return (
+    <div className="space-y-4 p-2" aria-busy="true" data-testid="route-loading">
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-64 w-full" />
+    </div>
+  );
+}
+
 export function buildModuleRouteContent(
   meta: RouteMeta,
   moduleCode: ModuleCodeArg,
@@ -79,8 +95,22 @@ export function buildModuleRouteContent(
   return (
     <ProtectedShell>
       <ProtectedRoute meta={meta}>
-        <ModuleWorkspaceLayout moduleCode={moduleCode}>{page}</ModuleWorkspaceLayout>
+        <ModuleWorkspaceLayout moduleCode={moduleCode}>
+          <React.Suspense fallback={<RouteSuspenseFallback />}>{page}</React.Suspense>
+        </ModuleWorkspaceLayout>
       </ProtectedRoute>
+    </ProtectedShell>
+  );
+}
+
+/**
+ * Vỏ tối giản cho trang self-service (KHÔNG ModuleWorkspaceLayout / không permission pair —
+ * mirror homeRoute wiring): vẫn bọc Suspense để lazy page có fallback trong lúc nạp chunk.
+ */
+function buildShellRouteContent(page: React.ReactNode): React.ReactElement {
+  return (
+    <ProtectedShell>
+      <React.Suspense fallback={<RouteSuspenseFallback />}>{page}</React.Suspense>
     </ProtectedShell>
   );
 }
@@ -89,7 +119,7 @@ function makeModuleRoute(
   path: string,
   metaKey: string,
   moduleCode: ModuleCodeArg,
-  PageComponent: () => React.ReactElement,
+  PageComponent: React.ComponentType,
 ) {
   const meta = getMeta(metaKey);
   return createRoute({
@@ -105,9 +135,15 @@ function makeModuleRoute(
 // khác đã thay bằng page thật từ trước (Tasks/System/HR...). Giữ hàm chết lại sẽ đỏ noUnusedLocals.
 
 // Dashboard — S4-FE-DASH-1: DashboardMePage THAY ModulePlaceholder (shell + widget P0 lazy-load).
-import { DashboardMePage } from "@/routes/dashboard/DashboardMePage";
+const DashboardMePage = React.lazy(() =>
+  import("@/routes/dashboard/DashboardMePage").then((m) => ({ default: m.DashboardMePage })),
+);
 // S4-FE-DASH-3 — DashboardConfigPage (admin: cấu hình widget theo dashboard-type, nối S4-DASH-BE-3).
-import { DashboardConfigPage } from "@/routes/dashboard/DashboardConfigPage";
+const DashboardConfigPage = React.lazy(() =>
+  import("@/routes/dashboard/DashboardConfigPage").then((m) => ({
+    default: m.DashboardConfigPage,
+  })),
+);
 
 const dashboardRoute = makeModuleRoute("/dashboard", "dashboard", "DASH", DashboardMePage);
 // Cấu hình widget dashboard — path TĨNH 2-segment "/dashboard/configs" tự xếp hạng TRÊN route param
@@ -123,23 +159,12 @@ const dashboardConfigsRoute = makeModuleRoute(
 
 // HR
 import { useNavigate } from "@tanstack/react-router";
-import { EmployeeListPage } from "@/routes/hr/employees/EmployeeListPage";
-import { EmployeeDetailPage } from "@/routes/hr/employees/EmployeeDetailPage";
-import { EmployeeFormPage } from "@/routes/hr/employees/EmployeeFormPage";
-import { MyProfilePage } from "@/routes/hr/me/MyProfilePage";
-import { OrgChartPage } from "@/routes/hr/org-chart/OrgChartPage";
-import { HrAuditLogsPage } from "@/routes/hr/audit-logs/HrAuditLogsPage";
 import { HR_ENGINE_PAIRS } from "@/routes/hr/constants";
 import { HR_AUDIT_LOG_VIEW_PERMISSION } from "@/routes/hr/audit-logs/constants";
-import { EmployeeCodeConfigPage } from "@/routes/hr/settings/EmployeeCodeConfigPage";
 import {
   EMPLOYEE_CODE_CONFIG_PATH,
   EMPLOYEE_CODE_CONFIG_ROUTE_META,
 } from "@/routes/hr/settings/constants";
-// HR — Profile change request workflow (S2-FE-HR-4)
-import { MyChangeRequestPage } from "@/routes/hr/profile-change-requests/MyChangeRequestPage";
-import { ProfileChangeRequestListPage } from "@/routes/hr/profile-change-requests/ProfileChangeRequestListPage";
-import { ProfileChangeRequestDetailPage } from "@/routes/hr/profile-change-requests/ProfileChangeRequestDetailPage";
 import {
   PCR_ME_PATH,
   PCR_LIST_PATH,
@@ -147,95 +172,257 @@ import {
   PCR_LIST_ROUTE_META,
   PCR_DETAIL_ROUTE_META,
 } from "@/routes/hr/profile-change-requests/constants";
+const EmployeeListPage = React.lazy(() =>
+  import("@/routes/hr/employees/EmployeeListPage").then((m) => ({ default: m.EmployeeListPage })),
+);
+const EmployeeDetailPage = React.lazy(() =>
+  import("@/routes/hr/employees/EmployeeDetailPage").then((m) => ({
+    default: m.EmployeeDetailPage,
+  })),
+);
+const EmployeeFormPage = React.lazy(() =>
+  import("@/routes/hr/employees/EmployeeFormPage").then((m) => ({ default: m.EmployeeFormPage })),
+);
+const MyProfilePage = React.lazy(() =>
+  import("@/routes/hr/me/MyProfilePage").then((m) => ({ default: m.MyProfilePage })),
+);
+const OrgChartPage = React.lazy(() =>
+  import("@/routes/hr/org-chart/OrgChartPage").then((m) => ({ default: m.OrgChartPage })),
+);
+const HrAuditLogsPage = React.lazy(() =>
+  import("@/routes/hr/audit-logs/HrAuditLogsPage").then((m) => ({ default: m.HrAuditLogsPage })),
+);
+const EmployeeCodeConfigPage = React.lazy(() =>
+  import("@/routes/hr/settings/EmployeeCodeConfigPage").then((m) => ({
+    default: m.EmployeeCodeConfigPage,
+  })),
+);
+// HR — Profile change request workflow (S2-FE-HR-4)
+const MyChangeRequestPage = React.lazy(() =>
+  import("@/routes/hr/profile-change-requests/MyChangeRequestPage").then((m) => ({
+    default: m.MyChangeRequestPage,
+  })),
+);
+const ProfileChangeRequestListPage = React.lazy(() =>
+  import("@/routes/hr/profile-change-requests/ProfileChangeRequestListPage").then((m) => ({
+    default: m.ProfileChangeRequestListPage,
+  })),
+);
+const ProfileChangeRequestDetailPage = React.lazy(() =>
+  import("@/routes/hr/profile-change-requests/ProfileChangeRequestDetailPage").then((m) => ({
+    default: m.ProfileChangeRequestDetailPage,
+  })),
+);
 // HR — Master-data admin screens (S2-FE-HR-5)
-import { DepartmentsPage } from "@/routes/hr/departments/DepartmentsPage";
-import { PositionsPage } from "@/routes/hr/positions/PositionsPage";
-import { JobLevelsPage } from "@/routes/hr/job-levels/JobLevelsPage";
-import { ContractTypesPage } from "@/routes/hr/contract-types/ContractTypesPage";
+const DepartmentsPage = React.lazy(() =>
+  import("@/routes/hr/departments/DepartmentsPage").then((m) => ({ default: m.DepartmentsPage })),
+);
+const PositionsPage = React.lazy(() =>
+  import("@/routes/hr/positions/PositionsPage").then((m) => ({ default: m.PositionsPage })),
+);
+const JobLevelsPage = React.lazy(() =>
+  import("@/routes/hr/job-levels/JobLevelsPage").then((m) => ({ default: m.JobLevelsPage })),
+);
+const ContractTypesPage = React.lazy(() =>
+  import("@/routes/hr/contract-types/ContractTypesPage").then((m) => ({
+    default: m.ContractTypesPage,
+  })),
+);
 // S2-FE-HR-7 — Hợp đồng lao động (company-wide + theo nhân viên)
-import { ContractsPage } from "@/routes/hr/contracts/ContractsPage";
-import { EmployeeContractsPage } from "@/routes/hr/employees/EmployeeContractsPage";
+const ContractsPage = React.lazy(() =>
+  import("@/routes/hr/contracts/ContractsPage").then((m) => ({ default: m.ContractsPage })),
+);
+const EmployeeContractsPage = React.lazy(() =>
+  import("@/routes/hr/employees/EmployeeContractsPage").then((m) => ({
+    default: m.EmployeeContractsPage,
+  })),
+);
 
 // Attendance
-import { AttendanceTodayPage } from "@/routes/attendance/AttendanceTodayPage";
-import { MyAttendanceRecordsPage } from "@/routes/attendance/MyAttendanceRecordsPage";
-import { TeamAttendanceRecordsPage } from "@/routes/attendance/TeamAttendanceRecordsPage";
-import { AttendanceCompanyRecordsPage } from "@/routes/attendance/AttendanceCompanyRecordsPage";
-import { AttendanceRecordDetailPage } from "@/routes/attendance/AttendanceRecordDetailPage";
-import { AttendanceShiftsPage } from "@/routes/attendance/AttendanceShiftsPage";
-import { AttendanceShiftAssignmentsPage } from "@/routes/attendance/AttendanceShiftAssignmentsPage";
-import { AttendanceRulesPage } from "@/routes/attendance/AttendanceRulesPage";
+const AttendanceTodayPage = React.lazy(() =>
+  import("@/routes/attendance/AttendanceTodayPage").then((m) => ({
+    default: m.AttendanceTodayPage,
+  })),
+);
+const MyAttendanceRecordsPage = React.lazy(() =>
+  import("@/routes/attendance/MyAttendanceRecordsPage").then((m) => ({
+    default: m.MyAttendanceRecordsPage,
+  })),
+);
+const TeamAttendanceRecordsPage = React.lazy(() =>
+  import("@/routes/attendance/TeamAttendanceRecordsPage").then((m) => ({
+    default: m.TeamAttendanceRecordsPage,
+  })),
+);
+const AttendanceCompanyRecordsPage = React.lazy(() =>
+  import("@/routes/attendance/AttendanceCompanyRecordsPage").then((m) => ({
+    default: m.AttendanceCompanyRecordsPage,
+  })),
+);
+const AttendanceRecordDetailPage = React.lazy(() =>
+  import("@/routes/attendance/AttendanceRecordDetailPage").then((m) => ({
+    default: m.AttendanceRecordDetailPage,
+  })),
+);
+const AttendanceShiftsPage = React.lazy(() =>
+  import("@/routes/attendance/AttendanceShiftsPage").then((m) => ({
+    default: m.AttendanceShiftsPage,
+  })),
+);
+const AttendanceShiftAssignmentsPage = React.lazy(() =>
+  import("@/routes/attendance/AttendanceShiftAssignmentsPage").then((m) => ({
+    default: m.AttendanceShiftAssignmentsPage,
+  })),
+);
+const AttendanceRulesPage = React.lazy(() =>
+  import("@/routes/attendance/AttendanceRulesPage").then((m) => ({
+    default: m.AttendanceRulesPage,
+  })),
+);
 // S3-FE-ATT-4 — Remote/onsite-work requests
-import { RemoteWorkRequestsPage } from "@/routes/attendance/remote-work/RemoteWorkRequestsPage";
-import { CreateRemoteWorkRequestPage } from "@/routes/attendance/remote-work/CreateRemoteWorkRequestPage";
-import { RemoteWorkRequestDetailPage } from "@/routes/attendance/remote-work/RemoteWorkRequestDetailPage";
+const RemoteWorkRequestsPage = React.lazy(() =>
+  import("@/routes/attendance/remote-work/RemoteWorkRequestsPage").then((m) => ({
+    default: m.RemoteWorkRequestsPage,
+  })),
+);
+const CreateRemoteWorkRequestPage = React.lazy(() =>
+  import("@/routes/attendance/remote-work/CreateRemoteWorkRequestPage").then((m) => ({
+    default: m.CreateRemoteWorkRequestPage,
+  })),
+);
+const RemoteWorkRequestDetailPage = React.lazy(() =>
+  import("@/routes/attendance/remote-work/RemoteWorkRequestDetailPage").then((m) => ({
+    default: m.RemoteWorkRequestDetailPage,
+  })),
+);
 // S3-FE-ATT-6 — Reports + audit logs
-import { AttendanceReportsPage } from "@/routes/attendance/reports/AttendanceReportsPage";
-import { AttendanceAuditLogsPage } from "@/routes/attendance/audit/AttendanceAuditLogsPage";
+const AttendanceReportsPage = React.lazy(() =>
+  import("@/routes/attendance/reports/AttendanceReportsPage").then((m) => ({
+    default: m.AttendanceReportsPage,
+  })),
+);
+const AttendanceAuditLogsPage = React.lazy(() =>
+  import("@/routes/attendance/audit/AttendanceAuditLogsPage").then((m) => ({
+    default: m.AttendanceAuditLogsPage,
+  })),
+);
 // Attendance — Đơn điều chỉnh công (S3-FE-ATT-3)
-import { CreateAdjustmentRequestPage } from "@/routes/attendance/adjustment/CreateAdjustmentRequestPage";
-import { MyAdjustmentRequestsPage } from "@/routes/attendance/adjustment/MyAdjustmentRequestsPage";
-import { AdjustmentRequestsPage } from "@/routes/attendance/adjustment/AdjustmentRequestsPage";
-import { AdjustmentRequestDetailPage } from "@/routes/attendance/adjustment/AdjustmentRequestDetailPage";
-import { DirectAdjustPage } from "@/routes/attendance/adjustment/DirectAdjustPage";
+const CreateAdjustmentRequestPage = React.lazy(() =>
+  import("@/routes/attendance/adjustment/CreateAdjustmentRequestPage").then((m) => ({
+    default: m.CreateAdjustmentRequestPage,
+  })),
+);
+const MyAdjustmentRequestsPage = React.lazy(() =>
+  import("@/routes/attendance/adjustment/MyAdjustmentRequestsPage").then((m) => ({
+    default: m.MyAdjustmentRequestsPage,
+  })),
+);
+const AdjustmentRequestsPage = React.lazy(() =>
+  import("@/routes/attendance/adjustment/AdjustmentRequestsPage").then((m) => ({
+    default: m.AdjustmentRequestsPage,
+  })),
+);
+const AdjustmentRequestDetailPage = React.lazy(() =>
+  import("@/routes/attendance/adjustment/AdjustmentRequestDetailPage").then((m) => ({
+    default: m.AdjustmentRequestDetailPage,
+  })),
+);
+const DirectAdjustPage = React.lazy(() =>
+  import("@/routes/attendance/adjustment/DirectAdjustPage").then((m) => ({
+    default: m.DirectAdjustPage,
+  })),
+);
 
 // Leave
-import { LeaveOverviewPage } from "@/routes/leave/LeaveOverviewPage";
-import { MyLeaveBalancePage } from "@/routes/leave/MyLeaveBalancePage";
-import { MyLeaveRequestsPage } from "@/routes/leave/MyLeaveRequestsPage";
-import { CreateLeaveRequestPage } from "@/routes/leave/CreateLeaveRequestPage";
-import { LeaveRequestDetailPage } from "@/routes/leave/LeaveRequestDetailPage";
-import { LeaveApprovalPage } from "@/routes/leave/LeaveApprovalPage";
-import { AllLeaveRequestsPage } from "@/routes/leave/AllLeaveRequestsPage";
-import { EditLeaveDraftPage } from "@/routes/leave/EditLeaveDraftPage";
-import { LeaveCalendarPage } from "@/routes/leave/LeaveCalendarPage";
-// S3-FE-LEAVE-5 — admin (LEAVE-SCREEN-010/011/012/013): loại nghỉ / chính sách / số dư phép + ledger.
-import { LeaveTypesPage } from "@/routes/leave/LeaveTypesPage";
-import { LeavePoliciesPage } from "@/routes/leave/LeavePoliciesPage";
-import { LeaveBalancesPage } from "@/routes/leave/LeaveBalancesPage";
-import { LeaveBalanceTransactionsPage } from "@/routes/leave/LeaveBalanceTransactionsPage";
-// S3-FE-LEAVE-6 — báo cáo tổng hợp nghỉ (LEAVE-SCREEN-013) + audit log nghỉ phép (LEAVE-SCREEN-014A).
-import { LeaveReportsPage } from "@/routes/leave/reports/LeaveReportsPage";
-import { LeaveAuditLogsPage } from "@/routes/leave/audit/LeaveAuditLogsPage";
 import { LEAVE_ENGINE_PAIRS, LEAVE_PATHS } from "@/routes/leave/constants";
+const LeaveOverviewPage = React.lazy(() =>
+  import("@/routes/leave/LeaveOverviewPage").then((m) => ({ default: m.LeaveOverviewPage })),
+);
+const MyLeaveBalancePage = React.lazy(() =>
+  import("@/routes/leave/MyLeaveBalancePage").then((m) => ({ default: m.MyLeaveBalancePage })),
+);
+const MyLeaveRequestsPage = React.lazy(() =>
+  import("@/routes/leave/MyLeaveRequestsPage").then((m) => ({ default: m.MyLeaveRequestsPage })),
+);
+const CreateLeaveRequestPage = React.lazy(() =>
+  import("@/routes/leave/CreateLeaveRequestPage").then((m) => ({
+    default: m.CreateLeaveRequestPage,
+  })),
+);
+const LeaveRequestDetailPage = React.lazy(() =>
+  import("@/routes/leave/LeaveRequestDetailPage").then((m) => ({
+    default: m.LeaveRequestDetailPage,
+  })),
+);
+const LeaveApprovalPage = React.lazy(() =>
+  import("@/routes/leave/LeaveApprovalPage").then((m) => ({ default: m.LeaveApprovalPage })),
+);
+const AllLeaveRequestsPage = React.lazy(() =>
+  import("@/routes/leave/AllLeaveRequestsPage").then((m) => ({ default: m.AllLeaveRequestsPage })),
+);
+const EditLeaveDraftPage = React.lazy(() =>
+  import("@/routes/leave/EditLeaveDraftPage").then((m) => ({ default: m.EditLeaveDraftPage })),
+);
+const LeaveCalendarPage = React.lazy(() =>
+  import("@/routes/leave/LeaveCalendarPage").then((m) => ({ default: m.LeaveCalendarPage })),
+);
+// S3-FE-LEAVE-5 — admin (LEAVE-SCREEN-010/011/012/013): loại nghỉ / chính sách / số dư phép + ledger.
+const LeaveTypesPage = React.lazy(() =>
+  import("@/routes/leave/LeaveTypesPage").then((m) => ({ default: m.LeaveTypesPage })),
+);
+const LeavePoliciesPage = React.lazy(() =>
+  import("@/routes/leave/LeavePoliciesPage").then((m) => ({ default: m.LeavePoliciesPage })),
+);
+const LeaveBalancesPage = React.lazy(() =>
+  import("@/routes/leave/LeaveBalancesPage").then((m) => ({ default: m.LeaveBalancesPage })),
+);
+const LeaveBalanceTransactionsPage = React.lazy(() =>
+  import("@/routes/leave/LeaveBalanceTransactionsPage").then((m) => ({
+    default: m.LeaveBalanceTransactionsPage,
+  })),
+);
+// S3-FE-LEAVE-6 — báo cáo tổng hợp nghỉ (LEAVE-SCREEN-013) + audit log nghỉ phép (LEAVE-SCREEN-014A).
+const LeaveReportsPage = React.lazy(() =>
+  import("@/routes/leave/reports/LeaveReportsPage").then((m) => ({ default: m.LeaveReportsPage })),
+);
+const LeaveAuditLogsPage = React.lazy(() =>
+  import("@/routes/leave/audit/LeaveAuditLogsPage").then((m) => ({
+    default: m.LeaveAuditLogsPage,
+  })),
+);
 
 // Notifications — S4-FE-NOTI-1-WIRE (wire NotificationListPage/DetailPage đã build ở S4-FE-NOTI-1/a7be971)
-import { NotificationListPage } from "@/routes/notifications/NotificationListPage";
-import { NotificationDetailPage } from "@/routes/notifications/NotificationDetailPage";
-// S4-FE-NOTI-2 — Quản lý loại thông báo (admin catalog, UI-NOTI-SCREEN-004).
-import { NotificationEventsPage } from "@/routes/notifications/NotificationEventsPage";
-// S4-FE-NOTI-3 — Delivery logs viewer (UI-NOTI-SCREEN-006, append-only).
-import { NotificationDeliveryLogsPage } from "@/routes/notifications/NotificationDeliveryLogsPage";
 import { NOTI_ENGINE_PAIRS, NOTI_PATHS, NOTI_SCREEN } from "@/routes/notifications/constants";
+const NotificationListPage = React.lazy(() =>
+  import("@/routes/notifications/NotificationListPage").then((m) => ({
+    default: m.NotificationListPage,
+  })),
+);
+const NotificationDetailPage = React.lazy(() =>
+  import("@/routes/notifications/NotificationDetailPage").then((m) => ({
+    default: m.NotificationDetailPage,
+  })),
+);
+// S4-FE-NOTI-2 — Quản lý loại thông báo (admin catalog, UI-NOTI-SCREEN-004).
+const NotificationEventsPage = React.lazy(() =>
+  import("@/routes/notifications/NotificationEventsPage").then((m) => ({
+    default: m.NotificationEventsPage,
+  })),
+);
+// S4-FE-NOTI-3 — Delivery logs viewer (UI-NOTI-SCREEN-006, append-only).
+const NotificationDeliveryLogsPage = React.lazy(() =>
+  import("@/routes/notifications/NotificationDeliveryLogsPage").then((m) => ({
+    default: m.NotificationDeliveryLogsPage,
+  })),
+);
 
 // System
-import { UsersPage } from "@/routes/system/UsersPage";
-import { RolesPage } from "@/routes/system/RolesPage";
-// System / Users CRUD — S2-FE-AUTH-3
-import { UserFormPage } from "@/routes/system/users/UserFormPage";
-import { UserDetailPage } from "@/routes/system/users/UserDetailPage";
-import { UserRolesPage } from "@/routes/system/users/UserRolesPage";
-import { LoginLogsPage } from "@/routes/system/auth-logs/LoginLogsPage";
-import { SecurityEventsPage } from "@/routes/system/auth-logs/SecurityEventsPage";
 import {
   LOGIN_LOGS_PATH,
   LOGIN_LOGS_ROUTE_META,
   SECURITY_EVENTS_PATH,
   SECURITY_EVENTS_ROUTE_META,
 } from "@/routes/system/auth-logs/constants";
-// System / Foundation — S2-FE-FND-1 (FND1-APP)
-import { SystemOverviewPage } from "@/routes/system/foundation/SystemOverviewPage";
-import { CompanyProfilePage } from "@/routes/system/foundation/CompanyProfilePage";
-import { CompanySettingsPage } from "@/routes/system/foundation/CompanySettingsPage";
-import { SystemSettingsPage } from "@/routes/system/foundation/SystemSettingsPage";
-// System / Foundation — Public Holidays + Health — S2-FE-FND-4
-import { PublicHolidaysPage } from "@/routes/system/foundation/PublicHolidaysPage";
-import { HealthPage } from "@/routes/system/foundation/HealthPage";
-// System / Foundation — Retention Policies + File Access Logs — S2-FE-FND-6
-import { RetentionPoliciesPage } from "@/routes/system/foundation/RetentionPoliciesPage";
-import { FileAccessLogsPage } from "@/routes/system/foundation/FileAccessLogsPage";
-// System / Foundation — System Jobs observability (READ-ONLY) — S5-FND-JOBS-OBS-1
-import { SystemJobsPage } from "@/routes/system/foundation/SystemJobsPage";
 import {
   FOUNDATION_PATH,
   FOUNDATION_SCREEN,
@@ -246,33 +433,140 @@ import {
   SYSTEM_SETTINGS_ROUTE_META,
   SYSTEM_JOBS_ROUTE_META,
 } from "@/routes/system/foundation/constants";
-// System / Roles + Permissions admin — S2-FE-AUTH-4 (lane FE batch C)
-import { RoleFormPage } from "@/routes/system/roles/RoleFormPage";
-import { RoleDetailPage } from "@/routes/system/roles/RoleDetailPage";
-import { RolePermissionsPage } from "@/routes/system/roles/RolePermissionsPage";
-import { PermissionsPage } from "@/routes/system/PermissionsPage";
-// System / Foundation ops admin — S2-FE-FND-5 (lane FE batch C)
-import { SequencesPage } from "@/routes/system/ops/SequencesPage";
-import { SeedsPage } from "@/routes/system/ops/SeedsPage";
-// Account self-service — S2-FE-AUTH-5 (lane FE batch C)
-import { AccountSessionsPage } from "@/routes/account/AccountSessionsPage";
-// Account self-service — S2-FE-AUTH-6: /account/setup-2fa (ép enroll, AUTH-003) + /account/profile (đọc).
-import { TwoFactorSetupPage } from "@/routes/account/TwoFactorSetupPage";
-import { AccountProfilePage } from "@/routes/account/AccountProfilePage";
 import { ACCOUNT_SETUP_2FA_PATH, ACCOUNT_PROFILE_PATH } from "@/routes/account/constants";
-// System / Foundation — Audit log viewer (S2-FE-FND-2)
-import { AuditLogsPage } from "@/routes/system/foundation/audit-logs/AuditLogsPage";
-import { AuditLogDetailPage } from "@/routes/system/foundation/audit-logs/AuditLogDetailPage";
-// System / Foundation — File metadata viewer (S2-FE-FND-2)
-import { FilesPage } from "@/routes/system/files/FilesPage";
-import { FileDetailPage } from "@/routes/system/files/FileDetailPage";
 import { FILES_PATH } from "@/routes/system/files/constants";
-// System / Foundation — Module catalog admin (S2-FE-FND-3)
-import { ModulesPage } from "@/routes/system/modules/ModulesPage";
-import { ModuleDetailPage } from "@/routes/system/modules/ModuleDetailPage";
 import { MODULES_PATH } from "@/routes/system/modules/constants";
+const UsersPage = React.lazy(() =>
+  import("@/routes/system/UsersPage").then((m) => ({ default: m.UsersPage })),
+);
+const RolesPage = React.lazy(() =>
+  import("@/routes/system/RolesPage").then((m) => ({ default: m.RolesPage })),
+);
+// System / Users CRUD — S2-FE-AUTH-3
+const UserFormPage = React.lazy(() =>
+  import("@/routes/system/users/UserFormPage").then((m) => ({ default: m.UserFormPage })),
+);
+const UserDetailPage = React.lazy(() =>
+  import("@/routes/system/users/UserDetailPage").then((m) => ({ default: m.UserDetailPage })),
+);
+const UserRolesPage = React.lazy(() =>
+  import("@/routes/system/users/UserRolesPage").then((m) => ({ default: m.UserRolesPage })),
+);
+const LoginLogsPage = React.lazy(() =>
+  import("@/routes/system/auth-logs/LoginLogsPage").then((m) => ({ default: m.LoginLogsPage })),
+);
+const SecurityEventsPage = React.lazy(() =>
+  import("@/routes/system/auth-logs/SecurityEventsPage").then((m) => ({
+    default: m.SecurityEventsPage,
+  })),
+);
+// System / Foundation — S2-FE-FND-1 (FND1-APP)
+const SystemOverviewPage = React.lazy(() =>
+  import("@/routes/system/foundation/SystemOverviewPage").then((m) => ({
+    default: m.SystemOverviewPage,
+  })),
+);
+const CompanyProfilePage = React.lazy(() =>
+  import("@/routes/system/foundation/CompanyProfilePage").then((m) => ({
+    default: m.CompanyProfilePage,
+  })),
+);
+const CompanySettingsPage = React.lazy(() =>
+  import("@/routes/system/foundation/CompanySettingsPage").then((m) => ({
+    default: m.CompanySettingsPage,
+  })),
+);
+const SystemSettingsPage = React.lazy(() =>
+  import("@/routes/system/foundation/SystemSettingsPage").then((m) => ({
+    default: m.SystemSettingsPage,
+  })),
+);
+// System / Foundation — Public Holidays + Health — S2-FE-FND-4
+const PublicHolidaysPage = React.lazy(() =>
+  import("@/routes/system/foundation/PublicHolidaysPage").then((m) => ({
+    default: m.PublicHolidaysPage,
+  })),
+);
+const HealthPage = React.lazy(() =>
+  import("@/routes/system/foundation/HealthPage").then((m) => ({ default: m.HealthPage })),
+);
+// System / Foundation — Retention Policies + File Access Logs — S2-FE-FND-6
+const RetentionPoliciesPage = React.lazy(() =>
+  import("@/routes/system/foundation/RetentionPoliciesPage").then((m) => ({
+    default: m.RetentionPoliciesPage,
+  })),
+);
+const FileAccessLogsPage = React.lazy(() =>
+  import("@/routes/system/foundation/FileAccessLogsPage").then((m) => ({
+    default: m.FileAccessLogsPage,
+  })),
+);
+// System / Foundation — System Jobs observability (READ-ONLY) — S5-FND-JOBS-OBS-1
+const SystemJobsPage = React.lazy(() =>
+  import("@/routes/system/foundation/SystemJobsPage").then((m) => ({ default: m.SystemJobsPage })),
+);
+// System / Roles + Permissions admin — S2-FE-AUTH-4 (lane FE batch C)
+const RoleFormPage = React.lazy(() =>
+  import("@/routes/system/roles/RoleFormPage").then((m) => ({ default: m.RoleFormPage })),
+);
+const RoleDetailPage = React.lazy(() =>
+  import("@/routes/system/roles/RoleDetailPage").then((m) => ({ default: m.RoleDetailPage })),
+);
+const RolePermissionsPage = React.lazy(() =>
+  import("@/routes/system/roles/RolePermissionsPage").then((m) => ({
+    default: m.RolePermissionsPage,
+  })),
+);
+const PermissionsPage = React.lazy(() =>
+  import("@/routes/system/PermissionsPage").then((m) => ({ default: m.PermissionsPage })),
+);
+// System / Foundation ops admin — S2-FE-FND-5 (lane FE batch C)
+const SequencesPage = React.lazy(() =>
+  import("@/routes/system/ops/SequencesPage").then((m) => ({ default: m.SequencesPage })),
+);
+const SeedsPage = React.lazy(() =>
+  import("@/routes/system/ops/SeedsPage").then((m) => ({ default: m.SeedsPage })),
+);
+// Account self-service — S2-FE-AUTH-5 (lane FE batch C)
+const AccountSessionsPage = React.lazy(() =>
+  import("@/routes/account/AccountSessionsPage").then((m) => ({ default: m.AccountSessionsPage })),
+);
+// Account self-service — S2-FE-AUTH-6: /account/setup-2fa (ép enroll, AUTH-003) + /account/profile (đọc).
+const TwoFactorSetupPage = React.lazy(() =>
+  import("@/routes/account/TwoFactorSetupPage").then((m) => ({ default: m.TwoFactorSetupPage })),
+);
+const AccountProfilePage = React.lazy(() =>
+  import("@/routes/account/AccountProfilePage").then((m) => ({ default: m.AccountProfilePage })),
+);
+// System / Foundation — Audit log viewer (S2-FE-FND-2)
+const AuditLogsPage = React.lazy(() =>
+  import("@/routes/system/foundation/audit-logs/AuditLogsPage").then((m) => ({
+    default: m.AuditLogsPage,
+  })),
+);
+const AuditLogDetailPage = React.lazy(() =>
+  import("@/routes/system/foundation/audit-logs/AuditLogDetailPage").then((m) => ({
+    default: m.AuditLogDetailPage,
+  })),
+);
+// System / Foundation — File metadata viewer (S2-FE-FND-2)
+const FilesPage = React.lazy(() =>
+  import("@/routes/system/files/FilesPage").then((m) => ({ default: m.FilesPage })),
+);
+const FileDetailPage = React.lazy(() =>
+  import("@/routes/system/files/FileDetailPage").then((m) => ({ default: m.FileDetailPage })),
+);
+// System / Foundation — Module catalog admin (S2-FE-FND-3)
+const ModulesPage = React.lazy(() =>
+  import("@/routes/system/modules/ModulesPage").then((m) => ({ default: m.ModulesPage })),
+);
+const ModuleDetailPage = React.lazy(() =>
+  import("@/routes/system/modules/ModuleDetailPage").then((m) => ({ default: m.ModuleDetailPage })),
+);
 // Account — self-service (S2-FE-AUTH-2)
-import { ChangePasswordPage } from "@/routes/account/ChangePasswordPage";
+const ChangePasswordPage = React.lazy(() =>
+  import("@/routes/account/ChangePasswordPage").then((m) => ({ default: m.ChangePasswordPage })),
+);
 
 const hrRoute = makeModuleRoute("/hr", "hr.overview", "HR", EmployeeListPage);
 const hrEmployeesRoute = makeModuleRoute("/hr/employees", "hr.employees", "HR", EmployeeListPage);
@@ -991,16 +1285,26 @@ const leaveAuditLogsRoute = createRoute({
 });
 
 // Tasks — S4-FE-TASK-2: List (TASK-SCREEN-005) + My Tasks (TASK-SCREEN-009) THAY ModulePlaceholder.
-import { TaskListPage } from "@/routes/tasks/TaskListPage";
-import { MyTasksPage } from "@/routes/tasks/MyTasksPage";
-import { TaskDetailPage } from "@/routes/tasks/TaskDetailPage";
+const TaskListPage = React.lazy(() =>
+  import("@/routes/tasks/TaskListPage").then((m) => ({ default: m.TaskListPage })),
+);
+const MyTasksPage = React.lazy(() =>
+  import("@/routes/tasks/MyTasksPage").then((m) => ({ default: m.MyTasksPage })),
+);
+const TaskDetailPage = React.lazy(() =>
+  import("@/routes/tasks/TaskDetailPage").then((m) => ({ default: m.TaskDetailPage })),
+);
 
 const tasksRoute = makeModuleRoute("/tasks", "task.overview", "TASK", TaskListPage);
 const tasksMyTasksRoute = makeModuleRoute("/tasks/my-tasks", "task.my-tasks", "TASK", MyTasksPage);
 
 // S4-FE-TASK-1 — Project List (TASK-SCREEN-001) + Detail (TASK-SCREEN-003, deep link $projectId).
-import { ProjectListPage } from "@/routes/tasks/ProjectListPage";
-import { ProjectDetailPage } from "@/routes/tasks/ProjectDetailPage";
+const ProjectListPage = React.lazy(() =>
+  import("@/routes/tasks/ProjectListPage").then((m) => ({ default: m.ProjectListPage })),
+);
+const ProjectDetailPage = React.lazy(() =>
+  import("@/routes/tasks/ProjectDetailPage").then((m) => ({ default: m.ProjectDetailPage })),
+);
 
 const tasksProjectsRoute = makeModuleRoute(
   "/tasks/projects",
@@ -1330,11 +1634,7 @@ const accountSessionsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/account/sessions",
   beforeLoad: authGuard,
-  component: () => (
-    <ProtectedShell>
-      <AccountSessionsPage />
-    </ProtectedShell>
-  ),
+  component: () => buildShellRouteContent(<AccountSessionsPage />),
 });
 
 // S2-FE-AUTH-6 — /account/setup-2fa. Ép enroll khi `mustSetupTwoFactor` (AUTH-003); ProtectedShell TỰ
@@ -1344,11 +1644,7 @@ const accountSetupTwoFactorRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: ACCOUNT_SETUP_2FA_PATH,
   beforeLoad: authGuard,
-  component: () => (
-    <ProtectedShell>
-      <TwoFactorSetupPage />
-    </ProtectedShell>
-  ),
+  component: () => buildShellRouteContent(<TwoFactorSetupPage />),
 });
 
 // S2-FE-AUTH-6 — /account/profile (đọc). Authenticated-only, KHÔNG permission pair (self-service, đọc
@@ -1357,11 +1653,7 @@ const accountProfileRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: ACCOUNT_PROFILE_PATH,
   beforeLoad: authGuard,
-  component: () => (
-    <ProtectedShell>
-      <AccountProfilePage />
-    </ProtectedShell>
-  ),
+  component: () => buildShellRouteContent(<AccountProfilePage />),
 });
 
 // User CRUD — S2-FE-AUTH-3. Reuses "system.users" meta (route-level gate = AUTH.USER.VIEW); finer
@@ -1543,11 +1835,7 @@ const accountChangePasswordRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/account/change-password",
   beforeLoad: authGuard,
-  component: () => (
-    <ProtectedShell>
-      <ChangePasswordPage />
-    </ProtectedShell>
-  ),
+  component: () => buildShellRouteContent(<ChangePasswordPage />),
 });
 
 // ---------------------------------------------------------------------------
