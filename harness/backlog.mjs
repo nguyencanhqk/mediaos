@@ -5795,7 +5795,7 @@ export const backlog = [
     module: "HR",
     layer: "BE",
     title:
-      "Lộ identity_number/issue_date/issue_place (CCCD §14.18) qua read surface — OWNER ĐÃ CHỐT 2026-07-12: cặp MỚI view-identity:employee (is_sensitive) + inline detail + audit-on-reveal mirror salary, KHÔNG role-grant sẵn",
+      "Lộ identity_number/issue_date/issue_place (CCCD §14.18) qua read surface — OWNER CHỐT LẦN 2 2026-07-13: cặp MỚI view-identity:employee (is_sensitive) + inline detail + audit-on-reveal mirror salary + GRANT KÈM per-role tường minh (hr/company-admin/employee mirror view-sensitive 0444, KHÔNG CROSS JOIN) + flip gate duyệt view-sensitive→view-identity",
     zone: "red",
     status: "todo",
     paths: [
@@ -5803,6 +5803,10 @@ export const backlog = [
       "apps/api/src/employees/**",
       "apps/api/migrations/**",
       "apps/api/test/integration/**",
+      // apps/app/** = căn nguyên app-typecheck lọt gate lane (FE ngoài verify-scope): FE render CCCD
+      // (EmployeeDetailPage/MyProfilePage/profile-sections/constants) + apps/app/src/i18n/** (label CCCD)
+      // + smoke/spec literal mock phải khớp contract 3 field mới. Bổ sung để guard-scope + verify phủ FE.
+      "apps/app/**",
     ],
     skills: ["code-review"],
     depends_on: ["HR-PROFILE-UI-1"],
@@ -5817,9 +5821,9 @@ export const backlog = [
     done_when: [
       "OWNER CHỐT 2026-07-13 (thay bản 07-12, KHÔNG mở lại): (a) cặp MỚI view-identity:employee is_sensitive=true — KHÔNG tái dùng view-sensitive; (b) migration seed pair + GRANT TƯỜNG MINH per-role: hr@Company · company-admin@Company · employee@Own (ĐÚNG tập role đang có view-sensitive:employee ở 0444) — mảng per-role explicit, TUYỆT ĐỐI KHÔNG CROSS JOIN (bài học blanket-grant drift), data_scope mirror per-(permission,role) (bài học §13); (c) identity_* INLINE trong detail DTO, fail-closed = null khi thiếu quyền",
       "Reveal identity ⟹ audit trong cùng tx (mirror revealSalary hr-read.service.ts — per-row resourceId, isSensitive=true nên wildcard KHÔNG mở); deny-path RED-trước: thiếu quyền → null, wildcard không mở, cross-tenant deny",
-      "Nâng gate duyệt change-request identity: view-sensitive → view-identity (profile-change-request.service.ts) — AN TOÀN vì grant ở (b) phủ đúng approver hiện hành; int-spec REGRESSION: hr + company-admin duyệt change-request chạm identity VẪN pass sau flip (bảo vệ flow S2-HR-BE-4)",
+      "Nâng gate duyệt change-request identity: view-sensitive → view-identity (profile-change-request.service.ts) — AN TOÀN vì grant ở (b) phủ đúng approver hiện hành; int-spec REGRESSION: hr + company-admin duyệt change-request chạm identity VẪN pass sau flip (bảo vệ flow S2-HR-BE-4); approver thiếu view-identity → 403 fail-closed KHÔNG apply (Pending giữ nguyên) + audit resultStatus='Denied' sensitivityLevel='Sensitive' GHI TRÊN TX RIÊNG (ngoài business withTenant tx) để SỐNG SÓT rollback — vá lỗ detective-control §16.3 (reviewer chỉ ra deny-audit trước bị business-tx rollback nuốt ⇒ count=0); KHÔNG phá bất biến #2 (app role vẫn không UPDATE/DELETE audit_logs)",
       "AuditMaskerService: thêm stem 'identityissue' để identity_issue_date/identity_issue_place được mask trong audit/history như identity_number (vá lỗ pre-existing bất biến #3 — reviewer wf_2363823a chỉ ra)",
-      "FE màn Hồ sơ render nhóm CMND/CCCD chỉ khi có capability view-identity (thêm cặp vào SENSITIVE_CAPABILITY_ALLOWLIST /auth/me; FE lane paths PHẢI gồm apps/app/src/i18n/** cho label CCCD; int-spec auth-me chạy với LANE_DB thật, không skip); FULL gate security-reviewer + database-reviewer PASS",
+      "FE màn Hồ sơ render nhóm CMND/CCCD chỉ khi có capability view-identity (thêm cặp vào SENSITIVE_CAPABILITY_ALLOWLIST /auth/me; WO paths gồm apps/app/** (kể cả apps/app/src/i18n/** cho label CCCD); int-spec auth-me chạy với LANE_DB thật, không skip); pnpm --filter @mediaos/app typecheck XANH — MỌI mock literal HrEmployeeDetail/list-item (gồm apps/app/src/test/hr-flow-smoke.spec.tsx) PHẢI có identityNumber/identityIssueDate/identityIssuePlace (required-nullable) sau khi contract thêm 3 field, nếu không TS2739 phá CI; FULL gate security-reviewer + database-reviewer PASS",
     ],
   },
 
