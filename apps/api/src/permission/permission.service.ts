@@ -1,12 +1,16 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { DATA_SCOPES, type DataScope } from "@mediaos/contracts";
 import type {
+  BatchActionSpec,
+  BatchDecisions,
   CanInput,
   CompanyRoleGrant,
   CompanyRoleGrantWithScope,
   IPermissionRepository,
+  PermissionContext,
   PermissionDecision,
 } from "./permission.types";
+import { decideCan, isGrantActive } from "./permission.decide";
 
 /** Scope strength order (BACKEND-03 §18.1): higher = wider visibility. */
 const SCOPE_STRENGTH: Record<DataScope, number> = {
@@ -154,26 +158,16 @@ export class PermissionService {
    * fail-closed: any DB/infrastructure error → DENY, logged, never false-ALLOW.
    */
   async can(input: CanInput): Promise<PermissionDecision> {
-    const {
-      userId,
-      companyId,
-      action,
-      resourceType,
-      resourceId,
-      isSensitive = false,
-      requiresReauth = false,
-      objectGrantRequired,
-      ctx,
-    } = input;
+    // NOTE: requiresReauth / objectGrantRequired are consumed inside decideCan(input) — we destructure
+    // only what the fetch + fail-closed log need here (keeps the decision logic in one place).
+    const { userId, companyId, action, resourceType, resourceId, isSensitive = false, ctx } = input;
 
     try {
       const now = new Date();
 
       // ── Company-level grants ──────────────────────────────────────────────
-      // Repository may include stale/expired rows (cache scenario).
-      // We re-check expiresAt here — expires_at safety rule from §3b.
+      // Repository may include stale/expired rows (cache scenario). decideCan re-checks expiresAt.
       const rawCompanyGrants = await this.repo.getCompanyRoleGrants(userId, companyId);
-      const companyGrants = rawCompanyGrants.filter((g) => isGrantActive(g.expiresAt, now));
 
       // ── Object-level grants ───────────────────────────────────────────────
       // Only queried when a specific resource instance is identified.
@@ -183,102 +177,10 @@ export class PermissionService {
           ? await this.repo.getObjectGrants(userId, companyId, resourceType, resourceId)
           : [];
 
-      // ── Helpers ───────────────────────────────────────────────────────────
-      // Company grants support wildcards: action='*' matches any action, resourceType='*' any type.
-      // Object grants are always specific (no wildcards).
-      const matchesCompanyGrant = (g: CompanyRoleGrant): boolean =>
-        (g.action === action || g.action === "*") &&
-        (g.resourceType === resourceType || g.resourceType === "*");
-
-      // ── Object-tier (priority 1–2) ────────────────────────────────────────
-      if (resourceId != null) {
-        const forAction = objectGrants.filter(
-          (g) => g.action === action && g.resourceType === resourceType,
-        );
-
-        // Priority 1: any object-level DENY → immediate deny
-        if (forAction.some((g) => g.effect === "DENY")) {
-          return { allow: false, reason: "deny-explicit", auditRequired: isSensitive };
-        }
-
-        // Priority 2: object-level ALLOW
-        // Object grants are inherently exact (no wildcards), so they satisfy the sensitive gate.
-        // The isSensitive wildcard guard is intentionally not applied here — exact object grants
-        // ARE the explicit grant that the sensitive gate requires.
-        if (forAction.some((g) => g.effect === "ALLOW")) {
-          if (requiresReauth && !isReauthValid(ctx?.reauthValidUntil, now)) {
-            return {
-              allow: false,
-              reason: "deny-reauth-required",
-              requiresReauth: true,
-              auditRequired: true,
-            };
-          }
-          return { allow: true, reason: "allow", auditRequired: isSensitive };
-        }
-      }
-
-      // ── Company-tier (priority 3–4) ───────────────────────────────────────
-      // Priority 3: any company-level DENY from ANY role (deny-overrides-across-roles).
-      // Wildcard (*:*) DENY also matches — it blocks all actions.
-      if (companyGrants.some((g) => matchesCompanyGrant(g) && g.effect === "DENY")) {
-        return { allow: false, reason: "deny-explicit", auditRequired: isSensitive };
-      }
-
-      // ── F2 object-grant requirement (crown-jewel, ADR-0010) ────────────────
-      // The reveal-secret class needs a per-object (Tier-3) ALLOW. Reaching here means NO object ALLOW
-      // matched (resourceId was null → object-tier skipped above, OR object grants had no ALLOW for this
-      // action). Company-level ALLOW — even an exact non-wildcard grant, even super-admin *:* — is NOT
-      // sufficient. Fail-closed DENY. Derived from (isSensitive && requiresReauth) unless caller overrides.
-      const needsObjectGrant = objectGrantRequired ?? (isSensitive && requiresReauth);
-      if (needsObjectGrant) {
-        return { allow: false, reason: "deny-object-required", auditRequired: true };
-      }
-
-      const companyAllows = companyGrants.filter(
-        (g) => matchesCompanyGrant(g) && g.effect === "ALLOW",
-      );
-
-      // Defense-in-depth: treat as sensitive if EITHER the caller flags it (from @RequirePermission
-      // decorator) OR any matching grant carries is_sensitive from the permissions catalog.
-      // This prevents a misconfigured guard from bypassing the sensitive gate.
-      const effectivelySensitive = isSensitive || companyAllows.some((g) => g.isSensitive);
-
-      if (effectivelySensitive) {
-        // Sensitive gate: wildcards (*) do NOT satisfy — require exact (non-wildcard) ALLOW.
-        // Plan §3b: "Wildcard (*:* hoặc resource:*) KHÔNG match — chỉ exact ALLOW mới được tính."
-        const explicitAllows = companyAllows.filter(
-          (g) => g.action !== "*" && g.resourceType !== "*",
-        );
-        if (explicitAllows.length === 0) {
-          return { allow: false, reason: "deny-sensitive", auditRequired: true };
-        }
-        if (requiresReauth && !isReauthValid(ctx?.reauthValidUntil, now)) {
-          return {
-            allow: false,
-            reason: "deny-reauth-required",
-            requiresReauth: true,
-            auditRequired: true,
-          };
-        }
-        return { allow: true, reason: "allow", auditRequired: true };
-      }
-
-      // Priority 4: non-sensitive ALLOW (wildcards valid here)
-      if (companyAllows.length > 0) {
-        if (requiresReauth && !isReauthValid(ctx?.reauthValidUntil, now)) {
-          return {
-            allow: false,
-            reason: "deny-reauth-required",
-            requiresReauth: true,
-            auditRequired: false,
-          };
-        }
-        return { allow: true, reason: "allow", auditRequired: false };
-      }
-
-      // ── Default deny ──────────────────────────────────────────────────────
-      return { allow: false, reason: "deny-default", auditRequired: isSensitive };
+      // ── Decide ────────────────────────────────────────────────────────────
+      // Single source of truth (permission.decide.ts) — SHARED verbatim with canBatch(); the two paths
+      // differ ONLY in the fetch above (single vs batched), never in the decision semantics.
+      return decideCan(rawCompanyGrants, objectGrants, input, now);
     } catch (error: unknown) {
       // Fail-closed: DB/cache/network error → DENY. Never false-ALLOW on exception.
       // Log with full context so infra failures are distinguishable from legitimate denies.
@@ -292,6 +194,87 @@ export class PermissionService {
         requestId: ctx?.requestId,
       });
       return { allow: false, reason: "deny-default", auditRequired: isSensitive };
+    }
+  }
+
+  /**
+   * HR-PERF-1 (beBatchPermHr) — BATCHED 4-tier check for a PAGE of resource instances (same user,
+   * company, resourceType). For a list surface (e.g. HR employees) this replaces the per-row 2N can()
+   * loop with a fixed ≤2 repository reads: getCompanyRoleGrants ONCE + getObjectGrantsBatch ONCE.
+   *
+   * Each (resourceId × action) decision is computed by the SAME decideCan() as can() — so a batched
+   * decision is BYTE-IDENTICAL to the per-row can() (object-DENY priority-1, sensitive wildcard-fail,
+   * company-DENY override, fail-closed all preserved). Returns a Map<resourceId, Map<action, decision>>
+   * with an entry for EVERY (resourceId × action).
+   *
+   * Fail-closed: ANY repository error → EVERY cell is a deny-default (allow:false), mirror of can()'s
+   * catch (auditRequired = the action's isSensitive). Never false-ALLOW on infrastructure failure.
+   */
+  async canBatch(
+    userId: string,
+    companyId: string,
+    resourceType: string,
+    resourceIds: string[],
+    actions: BatchActionSpec[],
+    ctx?: PermissionContext,
+  ): Promise<BatchDecisions> {
+    try {
+      if (resourceIds.length === 0) return new Map();
+      const now = new Date();
+
+      // ≤2 repository reads for the whole page (vs 2N with per-row can()).
+      const rawCompanyGrants = await this.repo.getCompanyRoleGrants(userId, companyId);
+      const objectBatch = await this.repo.getObjectGrantsBatch(
+        userId,
+        companyId,
+        resourceType,
+        resourceIds,
+      );
+
+      const result: BatchDecisions = new Map();
+      for (const resourceId of resourceIds) {
+        const objectGrants = objectBatch.get(resourceId) ?? [];
+        const perAction = new Map<string, PermissionDecision>();
+        for (const spec of actions) {
+          const input: CanInput = {
+            userId,
+            companyId,
+            action: spec.action,
+            resourceType,
+            resourceId,
+            isSensitive: spec.isSensitive,
+            requiresReauth: spec.requiresReauth,
+            objectGrantRequired: spec.objectGrantRequired,
+            ctx,
+          };
+          perAction.set(spec.action, decideCan(rawCompanyGrants, objectGrants, input, now));
+        }
+        result.set(resourceId, perAction);
+      }
+      return result;
+    } catch (error: unknown) {
+      // Fail-closed GLOBALLY: one infra failure denies the WHOLE page — mirror can()'s catch per cell.
+      this.logger.error("permission.canBatch() infrastructure error — fail-closed deny (page)", {
+        error: error instanceof Error ? error.message : String(error),
+        userId,
+        companyId,
+        resourceType,
+        count: resourceIds.length,
+        requestId: ctx?.requestId,
+      });
+      const denied: BatchDecisions = new Map();
+      for (const resourceId of resourceIds) {
+        const perAction = new Map<string, PermissionDecision>();
+        for (const spec of actions) {
+          perAction.set(spec.action, {
+            allow: false,
+            reason: "deny-default",
+            auditRequired: spec.isSensitive ?? false,
+          });
+        }
+        denied.set(resourceId, perAction);
+      }
+      return denied;
     }
   }
 
@@ -601,20 +584,6 @@ export class PermissionService {
       return [];
     }
   }
-}
-
-/** Returns true when the grant is active (not expired). Treats malformed dates as expired. */
-function isGrantActive(expiresAt: Date | null, now: Date): boolean {
-  if (expiresAt == null) return true;
-  if (!(expiresAt instanceof Date) || isNaN(expiresAt.getTime())) return false;
-  return expiresAt > now;
-}
-
-/** Returns true when the reauth window is still valid. */
-function isReauthValid(reauthValidUntil: Date | null | undefined, now: Date): boolean {
-  if (reauthValidUntil == null) return false;
-  if (!(reauthValidUntil instanceof Date) || isNaN(reauthValidUntil.getTime())) return false;
-  return reauthValidUntil > now;
 }
 
 /** Narrows an arbitrary string to a known DataScope, or null when it is not a recognised scope. */

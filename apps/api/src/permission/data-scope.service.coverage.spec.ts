@@ -47,6 +47,10 @@ class CoverageMockRepo implements IPermissionRepository {
   async getObjectGrants(): Promise<ObjectGrant[]> {
     return [];
   }
+  // HR-PERF-1 — interface requirement (data-scope coverage tests don't use object grants).
+  async getObjectGrantsBatch(): Promise<Map<string, ObjectGrant[]>> {
+    return new Map();
+  }
   async getPermissionsByIds(): Promise<PermissionCatalogEntry[]> {
     return [];
   }

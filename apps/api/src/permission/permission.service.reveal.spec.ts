@@ -63,6 +63,16 @@ class MinimalMockRepo implements IPermissionRepository {
     return this.objectGrants;
   }
 
+  // HR-PERF-1 — interface requirement; mirrors getObjectGrants per id (canBatch not exercised here).
+  async getObjectGrantsBatch(
+    _userId: string,
+    _companyId: string,
+    _resourceType: string,
+    resourceIds: string[],
+  ): Promise<Map<string, ObjectGrant[]>> {
+    return new Map(resourceIds.map((id) => [id, this.objectGrants]));
+  }
+
   async getPermissionsByIds(): Promise<[]> {
     return [];
   }

@@ -20,9 +20,10 @@
  * Coverage requirement: ≥90% for PermissionService.can() (G3-2 must hit this).
  */
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PermissionService } from "./permission.service";
 import type {
+  BatchActionSpec,
   CanInput,
   CompanyRoleGrant,
   CompanyRoleGrantWithScope,
@@ -40,6 +41,7 @@ class MockPermissionRepository implements IPermissionRepository {
   private failCompany = false;
   private failCompanyScope = false;
   private failObject = false;
+  private failObjectBatch = false;
 
   setCompanyGrants(userId: string, companyId: string, grants: CompanyRoleGrant[]): this {
     this.companyMap.set(`${userId}:${companyId}`, grants);
@@ -81,6 +83,11 @@ class MockPermissionRepository implements IPermissionRepository {
     return this;
   }
 
+  setFailObjectBatch(v: boolean): this {
+    this.failObjectBatch = v;
+    return this;
+  }
+
   async getCompanyRoleGrants(userId: string, companyId: string): Promise<CompanyRoleGrant[]> {
     if (this.failCompany) throw new Error("DB connection failed (simulated)");
     return this.companyMap.get(`${userId}:${companyId}`) ?? [];
@@ -102,6 +109,25 @@ class MockPermissionRepository implements IPermissionRepository {
   ): Promise<ObjectGrant[]> {
     if (this.failObject) throw new Error("DB connection failed (simulated)");
     return this.objectMap.get(`${userId}:${companyId}:${resourceType}:${resourceId}`) ?? [];
+  }
+
+  // HR-PERF-1 — batch reads the SAME objectMap as getObjectGrants (single) so canBatch and can()
+  // resolve identical object grants: the equivalence contract depends on one underlying source.
+  async getObjectGrantsBatch(
+    userId: string,
+    companyId: string,
+    resourceType: string,
+    resourceIds: string[],
+  ): Promise<Map<string, ObjectGrant[]>> {
+    if (this.failObjectBatch) throw new Error("DB connection failed (simulated)");
+    const out = new Map<string, ObjectGrant[]>();
+    for (const resourceId of resourceIds) {
+      out.set(
+        resourceId,
+        this.objectMap.get(`${userId}:${companyId}:${resourceType}:${resourceId}`) ?? [],
+      );
+    }
+    return out;
   }
 
   async getPermissionsByIds(): Promise<[]> {
@@ -766,5 +792,214 @@ describe("PermissionService.can() — G3-3 deny-path RED suite", () => {
       expect(d.allow).toBe(true);
       expect(d.auditRequired).toBe(false);
     });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HR-PERF-1 (beBatchPermHr) — canBatch() RED suite
+// Contract: canBatch(id × action) === can() for the SAME input, cell-for-cell.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const RT = "employee";
+const OBJ_ALLOW = "obj-allow-1111";
+const OBJ_DENY = "obj-deny-2222";
+const OBJ_NONE = "obj-none-3333";
+
+const SALARY: BatchActionSpec = { action: "view-salary", isSensitive: true };
+const PII: BatchActionSpec = { action: "view-sensitive", isSensitive: true };
+const READ: BatchActionSpec = { action: "read" };
+
+function specToInput(spec: BatchActionSpec, resourceId: string): CanInput {
+  return {
+    userId: U,
+    companyId: CO,
+    action: spec.action,
+    resourceType: RT,
+    resourceId,
+    isSensitive: spec.isSensitive,
+    requiresReauth: spec.requiresReauth,
+    objectGrantRequired: spec.objectGrantRequired,
+  };
+}
+
+describe("PermissionService.canBatch() — equivalence with can() (HR-PERF-1)", () => {
+  let repo: MockPermissionRepository;
+  let svc: PermissionService;
+
+  beforeEach(() => {
+    repo = new MockPermissionRepository();
+    svc = new PermissionService(repo);
+  });
+
+  /** Assert every (resourceId × action) cell of canBatch equals per-row can() (allow+reason+audit). */
+  async function assertBatchEqualsCan(
+    resourceIds: string[],
+    specs: BatchActionSpec[],
+  ): Promise<Map<string, Map<string, PermissionDecision>>> {
+    const batch = await svc.canBatch(U, CO, RT, resourceIds, specs);
+    for (const resourceId of resourceIds) {
+      const perAction = batch.get(resourceId);
+      expect(perAction, `missing batch entry for ${resourceId}`).toBeDefined();
+      for (const spec of specs) {
+        const cell = perAction!.get(spec.action);
+        const single = await svc.can(specToInput(spec, resourceId));
+        expect(cell, `${resourceId}/${spec.action}`).toEqual(single);
+      }
+    }
+    return batch;
+  }
+
+  it("mixed page: object-ALLOW / object-DENY / company-only — every cell === can()", async () => {
+    // Company grant: exact sensitive view-salary ALLOW (satisfies sensitive gate for the no-object row).
+    repo.setCompanyGrants(U, CO, [rg("view-salary", RT, "ALLOW", { isSensitive: true })]);
+    // (i) object-ALLOW row
+    repo.setObjectGrants(U, CO, RT, OBJ_ALLOW, [og("view-salary", RT, "ALLOW", true)]);
+    // (ii) object-DENY row (priority-1 must beat company-ALLOW)
+    repo.setObjectGrants(U, CO, RT, OBJ_DENY, [og("view-salary", RT, "DENY", true)]);
+    // (iii) OBJ_NONE — no object grant, falls to company ALLOW
+
+    const batch = await assertBatchEqualsCan([OBJ_ALLOW, OBJ_DENY, OBJ_NONE], [SALARY]);
+
+    // Explicit crown assertions (object-DENY priority-1, object-ALLOW, company fallback).
+    expect(batch.get(OBJ_ALLOW)!.get("view-salary")).toEqual({
+      allow: true,
+      reason: "allow",
+      auditRequired: true,
+    });
+    expect(batch.get(OBJ_DENY)!.get("view-salary")).toEqual({
+      allow: false,
+      reason: "deny-explicit",
+      auditRequired: true,
+    });
+    expect(batch.get(OBJ_NONE)!.get("view-salary")).toEqual({
+      allow: true,
+      reason: "allow",
+      auditRequired: true,
+    });
+  });
+
+  it("object-DENY beats company-ALLOW even when the company grant is exact-sensitive", async () => {
+    repo.setCompanyGrants(U, CO, [rg("view-salary", RT, "ALLOW", { isSensitive: true })]);
+    repo.setObjectGrants(U, CO, RT, OBJ_DENY, [og("view-salary", RT, "DENY", true)]);
+
+    const batch = await assertBatchEqualsCan([OBJ_DENY], [SALARY]);
+    expect(batch.get(OBJ_DENY)!.get("view-salary")!.allow).toBe(false);
+    expect(batch.get(OBJ_DENY)!.get("view-salary")!.reason).toBe("deny-explicit");
+  });
+
+  it("wildcard *:* + sensitive → deny-sensitive (wildcard does NOT open salary/PII), read → allow", async () => {
+    repo.setCompanyGrants(U, CO, [rg("*", "*", "ALLOW")]);
+
+    const batch = await assertBatchEqualsCan([OBJ_NONE], [SALARY, PII, READ]);
+    // sensitive pairs: wildcard cannot satisfy — deny-sensitive, identical to can().
+    expect(batch.get(OBJ_NONE)!.get("view-salary")!.reason).toBe("deny-sensitive");
+    expect(batch.get(OBJ_NONE)!.get("view-sensitive")!.reason).toBe("deny-sensitive");
+    // non-sensitive read: wildcard valid → allow.
+    expect(batch.get(OBJ_NONE)!.get("read")).toEqual({
+      allow: true,
+      reason: "allow",
+      auditRequired: false,
+    });
+  });
+
+  it("company-DENY override → deny-explicit for every row === can()", async () => {
+    repo.setCompanyGrants(U, CO, [
+      rg("view-salary", RT, "ALLOW", { isSensitive: true }),
+      rg("view-salary", RT, "DENY"),
+    ]);
+
+    const batch = await assertBatchEqualsCan([OBJ_NONE, OBJ_ALLOW], [SALARY]);
+    // OBJ_NONE hits company-DENY; OBJ_ALLOW has an object-ALLOW that wins at priority-2.
+    expect(batch.get(OBJ_NONE)!.get("view-salary")!.reason).toBe("deny-explicit");
+  });
+
+  it("no-grant → deny-sensitive (sensitive) / deny-default (non-sensitive) === can()", async () => {
+    repo.setCompanyGrants(U, CO, []);
+    const batch = await assertBatchEqualsCan([OBJ_NONE], [SALARY, READ]);
+    expect(batch.get(OBJ_NONE)!.get("view-salary")!.reason).toBe("deny-sensitive");
+    expect(batch.get(OBJ_NONE)!.get("read")!.reason).toBe("deny-default");
+  });
+
+  it("per-row PII: object-ALLOW view-sensitive on one row only → other rows masked === can()", async () => {
+    repo.setCompanyGrants(U, CO, []);
+    repo.setObjectGrants(U, CO, RT, OBJ_ALLOW, [og("view-sensitive", RT, "ALLOW", true)]);
+    const batch = await assertBatchEqualsCan([OBJ_ALLOW, OBJ_NONE], [PII]);
+    expect(batch.get(OBJ_ALLOW)!.get("view-sensitive")!.allow).toBe(true);
+    expect(batch.get(OBJ_NONE)!.get("view-sensitive")!.allow).toBe(false);
+  });
+});
+
+describe("PermissionService.canBatch() — query budget ≤4 (HR-PERF-1)", () => {
+  let repo: MockPermissionRepository;
+  let svc: PermissionService;
+
+  beforeEach(() => {
+    repo = new MockPermissionRepository();
+    svc = new PermissionService(repo);
+    repo.setCompanyGrants(U, CO, [rg("view-salary", RT, "ALLOW", { isSensitive: true })]);
+  });
+
+  it("N rows, 2 actions → getCompanyRoleGrants 1× + getObjectGrantsBatch 1× + NO single getObjectGrants", async () => {
+    const companySpy = vi.spyOn(repo, "getCompanyRoleGrants");
+    const batchSpy = vi.spyOn(repo, "getObjectGrantsBatch");
+    const singleSpy = vi.spyOn(repo, "getObjectGrants");
+
+    const ids = ["r1", "r2", "r3", "r4", "r5"];
+    await svc.canBatch(U, CO, RT, ids, [SALARY, PII]);
+
+    expect(companySpy).toHaveBeenCalledTimes(1);
+    expect(batchSpy).toHaveBeenCalledTimes(1);
+    expect(singleSpy).not.toHaveBeenCalled();
+    // Total permission-repo calls for the whole page ≤ 4 regardless of N.
+    const total =
+      companySpy.mock.calls.length + batchSpy.mock.calls.length + singleSpy.mock.calls.length;
+    expect(total).toBeLessThanOrEqual(4);
+  });
+
+  it("empty page → no object batch query issued", async () => {
+    const batchSpy = vi.spyOn(repo, "getObjectGrantsBatch");
+    const out = await svc.canBatch(U, CO, RT, [], [SALARY]);
+    expect(out.size).toBe(0);
+    expect(batchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("PermissionService.canBatch() — fail-closed (HR-PERF-1)", () => {
+  let repo: MockPermissionRepository;
+  let svc: PermissionService;
+
+  beforeEach(() => {
+    repo = new MockPermissionRepository();
+    svc = new PermissionService(repo);
+  });
+
+  it("company-grants read throws → every cell deny (allow:false), never false-ALLOW, logs error", async () => {
+    repo.setCompanyGrants(U, CO, [rg("view-salary", RT, "ALLOW", { isSensitive: true })]);
+    repo.setObjectGrants(U, CO, RT, OBJ_ALLOW, [og("view-salary", RT, "ALLOW", true)]);
+    repo.setFailCompany(true);
+    const errSpy = vi.spyOn(
+      (svc as unknown as { logger: { error: (...a: unknown[]) => void } }).logger,
+      "error",
+    );
+
+    const batch = await svc.canBatch(U, CO, RT, [OBJ_ALLOW, OBJ_NONE], [SALARY, READ]);
+
+    for (const id of [OBJ_ALLOW, OBJ_NONE]) {
+      for (const action of ["view-salary", "read"]) {
+        expect(batch.get(id)!.get(action)!.allow).toBe(false);
+      }
+    }
+    expect(errSpy).toHaveBeenCalled();
+  });
+
+  it("object-batch read throws → every cell deny (allow:false), never false-ALLOW", async () => {
+    repo.setCompanyGrants(U, CO, [rg("view-salary", RT, "ALLOW", { isSensitive: true })]);
+    repo.setFailObjectBatch(true);
+
+    const batch = await svc.canBatch(U, CO, RT, [OBJ_ALLOW, OBJ_NONE], [SALARY]);
+    expect(batch.get(OBJ_ALLOW)!.get("view-salary")!.allow).toBe(false);
+    expect(batch.get(OBJ_NONE)!.get("view-salary")!.allow).toBe(false);
+    // sensitive action → auditRequired mirrors can()'s catch (isSensitive).
+    expect(batch.get(OBJ_ALLOW)!.get("view-salary")!.auditRequired).toBe(true);
   });
 });

@@ -4,6 +4,7 @@ import type {
   CompanyRoleGrantWithScope,
   IPermissionRepository,
   ObjectGrant,
+  ObjectGrantBatch,
   PermissionCatalogEntry,
 } from "./permission.types";
 import { ValkeyService } from "./valkey.service";
@@ -127,6 +128,22 @@ export class CachedPermissionRepository implements IPermissionRepository {
       });
     }
     return grants;
+  }
+
+  /**
+   * HR-PERF-1 (beBatchPermHr) — PASSTHROUGH to the inner batch: ONE DB round-trip for the whole page.
+   * We deliberately do NOT fan out to N single-object cache reads (that would defeat the batch) nor
+   * mget/fill-miss (extra complexity + partial-hit fan-out risk). The batch is used by list surfaces
+   * that already gate + scope-filter first; the ≤2 repo reads keep the page within the ≤4-query budget.
+   * RLS is enforced in the inner repo (withTenant). Never throws for cache reasons — inner owns errors.
+   */
+  getObjectGrantsBatch(
+    userId: string,
+    companyId: string,
+    resourceType: string,
+    resourceIds: string[],
+  ): Promise<ObjectGrantBatch> {
+    return this.inner.getObjectGrantsBatch(userId, companyId, resourceType, resourceIds);
   }
 
   /**
