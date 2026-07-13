@@ -473,39 +473,36 @@ describe.skipIf(!runDb)("S5-ME-BE-1 MeModule Personal Hub (DB cô lập, đườ
     }
   });
 
-  // ── (j2) 🔴 KNOWN DEFECT (lane memodule, src/me) — audit anomaly bị ROLLBACK, KHÔNG persist ────────────
-  // MeCurrentPersonResolver.resolve GHI audit.record(tx) RỒI throw ConflictException TRONG CÙNG withTenant tx
-  // ⇒ drizzle ROLLBACK toàn transaction ⇒ audit_logs KHÔNG còn dòng anomaly. SPEC-09 §12.4 yêu cầu audit
-  // PERSIST để Admin/HR xử lý — audit rollback = anomaly vô hình. `it.fails` = TÀI LIỆU-THỰC-THI cho defect
-  // ĐÃ BIẾT: hiện PASS vì body ĐỎ (0 dòng); khi memodule sửa (ghi audit ở withTenant RIÊNG đã COMMIT trước
-  // khi throw, hoặc after-throw) body sẽ XANH ⇒ it.fails ĐỎ ⇒ ÉP flip sang `it` thường. KHÔNG che defect:
-  // đã liệt kê ở blockers trả về cho lane memodule + FULL gate red-zone.
-  it.fails(
-    "multi-employee AUDIT PERSIST (known-defect memodule) — audit_logs GIỮ dòng anomaly sau 409",
-    async () => {
-      const roleId = await seedRoleWithPairs(direct, A.companyId, "meit-multi-persist", [
-        PAIR.accessMe,
-        ...ALL_SOURCE,
-      ]);
-      const { token, userId } = await makeUser(A, { roleId, empCode: "E-MULTI-P" });
-      const repoSpy = spyTwoActiveEmployees();
-      try {
-        const res = await get("/me", token);
-        expect(res.status).toBe(409);
-        const rows = await direct.query(
-          `SELECT object_type, object_id FROM audit_logs
-            WHERE company_id = $1 AND action = 'MeDataInconsistent'`,
-          [A.companyId],
-        );
-        // Kỳ vọng ĐÚNG (khi defect sửa xong): anomaly persist với object_type='user' cho user token-resolved.
-        expect(rows.rowCount, "audit anomaly PHẢI persist (append-only §12.4)").toBeGreaterThan(0);
-        expect(rows.rows[0].object_type).toBe("user");
-        expect(rows.rows[0].object_id).toBe(userId);
-      } finally {
-        repoSpy.mockRestore();
-      }
-    },
-  );
+  // ── (j2) ✅ audit anomaly PERSIST sau 409 (root-cause SỬA XONG — fix-me-be1-audit-persist) ──────────────
+  // MeCurrentPersonResolver.resolve giờ ghi audit ở withTenant RIÊNG đã COMMIT TRƯỚC khi throw
+  // ConflictException ⇒ dòng audit KHÔNG bị rollback theo 409 (bất biến #2 append-only — SPEC-09 §12.4:
+  // audit anomaly PHẢI persist để Admin/HR xử lý). Trước đây audit ghi CÙNG withTenant với nhánh throw ⇒
+  // drizzle rollback toàn tx ⇒ 0 dòng (defect đã đóng bằng LANE fix-me-be1-audit-persist). Test này chứng
+  // minh THẬT trên Postgres (không mock DB): sau 409, audit_logs GIỮ dòng object_type='user' cho user
+  // token-resolved.
+  it("multi-employee AUDIT PERSIST — audit_logs GIỮ dòng anomaly sau 409 (append-only §12.4)", async () => {
+    const roleId = await seedRoleWithPairs(direct, A.companyId, "meit-multi-persist", [
+      PAIR.accessMe,
+      ...ALL_SOURCE,
+    ]);
+    const { token, userId } = await makeUser(A, { roleId, empCode: "E-MULTI-P" });
+    const repoSpy = spyTwoActiveEmployees();
+    try {
+      const res = await get("/me", token);
+      expect(res.status).toBe(409);
+      const rows = await direct.query(
+        `SELECT object_type, object_id, action FROM audit_logs
+          WHERE company_id = $1 AND action = 'MeDataInconsistent' AND object_id = $2`,
+        [A.companyId, userId],
+      );
+      // Anomaly persist với object_type='user' cho user token-resolved — độc lập với rollback của 409.
+      expect(rows.rowCount, "audit anomaly PHẢI persist (append-only §12.4)").toBeGreaterThan(0);
+      expect(rows.rows[0].object_type).toBe("user");
+      expect(rows.rows[0].object_id).toBe(userId);
+    } finally {
+      repoSpy.mockRestore();
+    }
+  });
 
   // ── (k) happy: full-grant + linked → 6 route đều 200 + section-envelope, mọi section 'ok' ──
   it("happy — full-grant + linked → 6 route đều 200 + section-envelope, mọi section 'ok'", async () => {

@@ -8,11 +8,17 @@
  * KHÔNG dùng chuỗi dotted 'ME.ACCESS' — engine thực thi theo tuple (action, resource_type) (API-11 §5).
  */
 
+import { ME_ERROR_CODES } from "@mediaos/contracts";
+
 /** Cặp quyền cổng ME (mig 0495: ('access','me'), is_sensitive=false). Guard controller dùng cặp NÀY. */
 export const ME_ACCESS_PAIR = { action: "access", resourceType: "me", isSensitive: false } as const;
 
-/** Mã lỗi business ME (§12.4) — HTTP status kèm theo. Đăng ký ở packages/contracts ME_ERROR_CODES. */
-export const ME_DATA_INCONSISTENT_CODE = "ME-ERR-DATA-INCONSISTENT";
+/**
+ * Mã lỗi business ME (§12.4) — HTTP status kèm theo. NGUỒN SỰ THẬT DUY NHẤT = packages/contracts
+ * ME_ERROR_CODES.DATA_INCONSISTENT (KHÔNG hard-code literal cục bộ — tránh 2 nguồn-sự-thật, mẫu chuẩn
+ * FOUNDATION_ERROR_CODES). Re-export tên cục bộ để giữ call-site ngắn.
+ */
+export const ME_DATA_INCONSISTENT_CODE = ME_ERROR_CODES.DATA_INCONSISTENT;
 
 /** Action audit ghi khi phát hiện >1 employee active bất thường (§12.4). object_type='user' (CHECK 0011). */
 export const ME_ANOMALY_AUDIT_ACTION = "MeDataInconsistent";
