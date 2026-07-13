@@ -61,6 +61,11 @@ export const HR_ENGINE_PAIRS = {
   READ_EMPLOYEE: { action: "read", resourceType: "employee" },
   VIEW_SENSITIVE: { action: "view-sensitive", resourceType: "employee" },
   VIEW_SALARY: { action: "view-salary", resourceType: "employee" },
+  // HR-IDENTITY-READ-1 — CCCD/CMND (SPEC-03 §14.18 "Giấy tờ"), HIGHER sensitivity than view-sensitive.
+  // Cặp seed THẬT mig 0494 (view-identity:employee, is_sensitive=true, grant employee/Own · hr/Company ·
+  // company-admin/Company — KHÔNG manager). PHẢI dùng useCanExact (không useCan) — pair nhạy cảm, tránh
+  // *:* wildcard fall-through permit trong khi BE vẫn 403 (allowlisted-cap trả literal key nên Exact khớp).
+  VIEW_IDENTITY: { action: "view-identity", resourceType: "employee" },
   CREATE_EMPLOYEE: { action: "create", resourceType: "employee" },
   UPDATE_EMPLOYEE: { action: "update", resourceType: "employee" },
   DELETE_EMPLOYEE: { action: "delete", resourceType: "employee" },

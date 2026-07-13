@@ -92,6 +92,10 @@ const DETAIL: HrEmployeeDetail = {
   workLocation: null,
   taxCode: null,
   personalExtra: null,
+  // HR-IDENTITY-READ-1 — server masks to null unless caller holds EXACT view-identity grant.
+  identityNumber: null,
+  identityIssueDate: null,
+  identityIssuePlace: null,
   createdAt: "2024-01-01T00:00:00.000Z",
   updatedAt: "2024-01-01T00:00:00.000Z",
 };

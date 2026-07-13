@@ -65,6 +65,10 @@ const MOCK_RESPONSE: HrEmployeeListResponse = {
       phone: null,
       contractType: null,
       baseSalary: null,
+      // HR-IDENTITY-READ-1 — server masks to null unless caller holds EXACT view-identity grant.
+      identityNumber: null,
+      identityIssueDate: null,
+      identityIssuePlace: null,
     },
   ],
   meta: {

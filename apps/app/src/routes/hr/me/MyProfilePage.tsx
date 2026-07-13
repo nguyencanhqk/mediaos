@@ -2,10 +2,12 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { User, RefreshCw } from "lucide-react";
-import { hrApi, hrKeys, useCan, formatDate } from "@mediaos/web-core";
+import { hrApi, hrKeys, useCan, useCanExact, formatDate } from "@mediaos/web-core";
 import { PageHeader, EmptyState, Button, Card, CardContent } from "@mediaos/ui";
 import { HR_ENGINE_PAIRS } from "../constants";
 import { EmployeeStatusBadge } from "../employee-status";
+// HR-IDENTITY-READ-1 — dùng chung section CCCD/CMND với EmployeeDetailPage (DRY).
+import { IdentitySection } from "../employees/profile-sections";
 
 // ---------------------------------------------------------------------------
 // Shared field row
@@ -34,6 +36,12 @@ export function MyProfilePage() {
   const canViewSalary = useCan(
     HR_ENGINE_PAIRS.VIEW_SALARY.action,
     HR_ENGINE_PAIRS.VIEW_SALARY.resourceType,
+  );
+  // HR-IDENTITY-READ-1 — CCCD/CMND nhạy cảm HƠN view-sensitive, cặp seed riêng. useCanExact
+  // (KHÔNG useCan) — sensitive pair, tránh *:* wildcard fall-through permit trong khi BE 403.
+  const canViewIdentity = useCanExact(
+    HR_ENGINE_PAIRS.VIEW_IDENTITY.action,
+    HR_ENGINE_PAIRS.VIEW_IDENTITY.resourceType,
   );
 
   const { data, isLoading, isError, error, refetch } = useQuery({
@@ -145,6 +153,11 @@ export function MyProfilePage() {
           />
         </CardContent>
       </Card>
+
+      {/* HR-IDENTITY-READ-1 — chỉ mount khi có EXACT view-identity:employee (fail-closed). */}
+      {canViewIdentity && (
+        <IdentitySection employee={data} t={t} canViewIdentity={canViewIdentity} />
+      )}
     </div>
   );
 }
