@@ -1,7 +1,7 @@
 # SPEC-01: TỔNG QUAN HỆ THỐNG QUẢN LÝ DOANH NGHIỆP
 
 > **📚 Bộ tài liệu SPEC — Hệ thống Quản lý Doanh nghiệp**
-> **SPEC-01 Tổng quan** · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>)
+> **SPEC-01 Tổng quan** · [SPEC-02 AUTH](<SPEC-02 AUTH.md>) · [SPEC-03 HR](<SPEC-03 HR.md>) · [SPEC-04 ATT](<SPEC-04 ATT.md>) · [SPEC-05 LEAVE](<SPEC-05 LEAVE.md>) · [SPEC-06 TASK](<SPEC-06 TASK.md>) · [SPEC-07 DASH](<SPEC-07 DASH.md>) · [SPEC-08 NOTI](<SPEC-08 NOTI.md>) · [SPEC-09 ME](<SPEC-09 ME.md>)
 >
 > **Liên quan:** [Thiết kế DB: DB-01 Tổng quan](<../DB/DB-01 DATABASE DESIGN TỔNG QUAN.md>) · [Sản phẩm: PRD-00](<../PRD/PRD-00 Enterprise Management System .md>) · [Thiết kế API: API-01 Tổng quan](<../API Design/API-01 TỔNG QUAN.md>) · [Chỉ mục tài liệu](<../README.md>)
 
@@ -144,20 +144,31 @@ Phiên bản MVP v1.0 tập trung vào các module lõi sau:
 | DASH      | Dashboard              | SPEC-07           | Cần triển khai |
 | NOTI      | Thông báo hệ thống     | SPEC-08           | Cần triển khai |
 
+**MVP bổ sung** (bổ sung sau khi chốt 7 module lõi, cùng giai đoạn MVP v1.0):
+
+| Mã module | Tên module                            | Tài liệu liên kết | Trạng thái      |
+| --------- | ------------------------------------- | ----------------- | --------------- |
+| ME        | Trung tâm cá nhân & Cài đặt tài khoản | SPEC-09           | MVP bổ sung     |
+
+> **ME** là lớp trải nghiệm self-service (Personal Hub / Employee Self-service) tổng hợp dữ liệu Own của user hiện tại từ AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH. ME không sở hữu dữ liệu nghiệp vụ gốc; chi tiết tại SPEC-09.
+
 ### 7.2 Module chưa thuộc MVP
 
 Các module sau chưa triển khai chi tiết trong MVP v1.0, nhưng hệ thống phải thiết kế để có thể mở rộng về sau:
 
 | Mã module | Tên module             | Tài liệu liên kết | Giai đoạn |
 | --------- | ---------------------- | ----------------- | --------- |
-| PAYROLL   | Tiền lương             | SPEC-09           | Phase 2   |
-| RECRUIT   | Tuyển dụng             | SPEC-10           | Phase 2   |
-| ASSET     | Quản lý tài sản        | SPEC-11           | Phase 3   |
-| ROOM      | Quản lý phòng họp      | SPEC-12           | Phase 3   |
-| CHAT      | Chat nội bộ            | SPEC-13           | Phase 4   |
-| SOCIAL    | Mạng xã hội nội bộ     | SPEC-14           | Phase 4   |
-| MOBILE    | Mobile app             | SPEC-15           | Phase 5   |
-| AI        | AI & tích hợp nâng cao | SPEC-16           | Phase 5   |
+| PAYROLL   | Tiền lương             | SPEC-10           | Phase 2   |
+| RECRUIT   | Tuyển dụng             | SPEC-11           | Phase 2   |
+| ASSET     | Quản lý tài sản        | SPEC-12           | Phase 3   |
+| ROOM      | Quản lý phòng họp      | SPEC-13           | Phase 3   |
+| CHAT      | Chat nội bộ            | SPEC-14           | Phase 4   |
+| SOCIAL    | Mạng xã hội nội bộ     | SPEC-15           | Phase 4   |
+| MOBILE    | Mobile app             | SPEC-16           | Phase 5   |
+| AI        | AI & tích hợp nâng cao | SPEC-17           | Phase 5   |
+
+> **Reconcile đánh số (13/07/2026):** SPEC-09 nay dành cho module **ME** (MVP bổ sung, khớp file `SPEC-09 ME.md` và `docs/README.md`).
+> Toàn bộ spec Phase 2–5 được dời +1: PAYROLL nhận SPEC-10, RECRUIT SPEC-11, ASSET SPEC-12, ROOM SPEC-13, CHAT SPEC-14, SOCIAL SPEC-15, MOBILE SPEC-16, AI SPEC-17. Quyết định này chờ owner chốt tại PR trước khi coi là chính thức.
 
 ---
 
@@ -175,14 +186,15 @@ Bộ tài liệu spec của dự án sẽ được tổ chức như sau:
 | SPEC-06     | Công việc & dự án                 | Spec module |
 | SPEC-07     | Dashboard                         | Spec module |
 | SPEC-08     | Thông báo hệ thống                | Spec module |
-| SPEC-09     | Tiền lương                        | Spec module |
-| SPEC-10     | Tuyển dụng                        | Spec module |
-| SPEC-11     | Quản lý tài sản                   | Spec module |
-| SPEC-12     | Quản lý phòng họp                 | Spec module |
-| SPEC-13     | Chat nội bộ                       | Spec module |
-| SPEC-14     | Mạng xã hội nội bộ                | Spec module |
-| SPEC-15     | Mobile app                        | Spec module |
-| SPEC-16     | AI & tích hợp nâng cao            | Spec module |
+| SPEC-09     | Trung tâm cá nhân & Cài đặt (ME)  | Spec module |
+| SPEC-10     | Tiền lương                        | Spec module |
+| SPEC-11     | Tuyển dụng                        | Spec module |
+| SPEC-12     | Quản lý tài sản                   | Spec module |
+| SPEC-13     | Quản lý phòng họp                 | Spec module |
+| SPEC-14     | Chat nội bộ                       | Spec module |
+| SPEC-15     | Mạng xã hội nội bộ                | Spec module |
+| SPEC-16     | Mobile app                        | Spec module |
+| SPEC-17     | AI & tích hợp nâng cao            | Spec module |
 
 ---
 
@@ -784,7 +796,7 @@ Module liên quan:
 
 ### 12.8 PAYROLL — Tiền lương
 
-Tài liệu chi tiết: SPEC-09
+Tài liệu chi tiết: SPEC-10
 
 Giai đoạn: Phase 2
 
@@ -815,7 +827,7 @@ Module liên quan:
 
 ### 12.9 RECRUIT — Tuyển dụng
 
-Tài liệu chi tiết: SPEC-10
+Tài liệu chi tiết: SPEC-11
 
 Giai đoạn: Phase 2
 
@@ -843,7 +855,7 @@ Module liên quan:
 
 ### 12.10 ASSET — Quản lý tài sản
 
-Tài liệu chi tiết: SPEC-11
+Tài liệu chi tiết: SPEC-12
 
 Giai đoạn: Phase 3
 
@@ -873,7 +885,7 @@ Module liên quan:
 
 ### 12.11 ROOM — Quản lý phòng họp
 
-Tài liệu chi tiết: SPEC-12
+Tài liệu chi tiết: SPEC-13
 
 Giai đoạn: Phase 3
 
@@ -901,7 +913,7 @@ Module liên quan:
 
 ### 12.12 CHAT — Chat nội bộ
 
-Tài liệu chi tiết: SPEC-13
+Tài liệu chi tiết: SPEC-14
 
 Giai đoạn: Phase 4
 
@@ -931,7 +943,7 @@ Module liên quan:
 
 ### 12.13 SOCIAL — Mạng xã hội nội bộ
 
-Tài liệu chi tiết: SPEC-14
+Tài liệu chi tiết: SPEC-15
 
 Giai đoạn: Phase 4
 
@@ -1956,6 +1968,16 @@ Chức năng chính:
 | LEAVE        | DASH             | Dashboard lấy dữ liệu nghỉ phép        |
 | TASK         | DASH             | Dashboard lấy dữ liệu công việc        |
 | NOTI         | DASH             | Dashboard hiển thị thông báo mới       |
+| AUTH         | ME               | ME phụ thuộc AUTH: user hiện tại, tài khoản, bảo mật, đổi mật khẩu, session (Own) |
+| HR           | ME               | ME phụ thuộc HR: hồ sơ nhân viên của tôi + yêu cầu cập nhật hồ sơ (Own) |
+| ATT          | ME               | ME đọc-lại tóm tắt chấm công của tôi (Own) |
+| LEAVE        | ME               | ME đọc-lại số dư phép & đơn nghỉ của tôi (Own) |
+| TASK         | ME               | ME đọc-lại task của tôi (Own)          |
+| NOTI         | ME               | ME đọc-lại thông báo & tùy chọn nhận thông báo của tôi (Own) |
+| DASH         | ME               | ME tái dùng một số widget cá nhân, không biến ME thành dashboard thứ hai (Own) |
+| FOUNDATION   | ME               | ME dùng file/avatar, personal preference, audit, company policy (Own) |
+
+> **ME** phụ thuộc trực tiếp **AUTH** và **HR**; đọc-lại (read-only, scope **Own**) từ **ATT/LEAVE/TASK/NOTI/DASH/FOUNDATION**. ME không sở hữu dữ liệu nghiệp vụ gốc — mọi mutation gọi service của module sở hữu. Chi tiết tại SPEC-09.
 
 ---
 

@@ -243,6 +243,16 @@ MVP Version 1.0 bao gồm các module sau:
 | DASH      | Dashboard                         | Tổng hợp dữ liệu theo vai trò                           |
 | NOTI      | Thông báo hệ thống                | Tạo và hiển thị thông báo in-app                        |
 
+#### MVP bổ sung
+
+Bổ sung sau khi chốt 7 module lõi, cùng giai đoạn MVP Version 1.0:
+
+| Mã module | Tên module                            | Vai trò trong MVP                                      |
+| --------- | ------------------------------------- | ----------------------------------------------------- |
+| ME        | Trung tâm cá nhân & Cài đặt tài khoản | Personal Hub / Employee Self-service: tổng hợp dữ liệu Own của user hiện tại (AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH), self-service hồ sơ, tài khoản, bảo mật và cài đặt cá nhân |
+
+ME là lớp trải nghiệm tổng hợp, **không sở hữu dữ liệu nghiệp vụ gốc** — mọi thao tác thay đổi vẫn gọi module sở hữu và tuân thủ quy trình phê duyệt. Chi tiết tại SPEC-09.
+
 ### 8.2 Module chưa thuộc MVP
 
 Các module sau chưa triển khai trong MVP nhưng cần thiết kế để mở rộng:

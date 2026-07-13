@@ -68,6 +68,7 @@ Database MVP cần hỗ trợ các module sau:
 | TASK   | Công việc & dự án      | Project, project member, task, comment, checklist, activity |
 | DASH   | Dashboard              | Widget, cấu hình widget, dữ liệu tổng hợp                   |
 | NOTI   | Thông báo hệ thống     | Notification, event, template, delivery log                 |
+| ME     | Trung tâm cá nhân (MVP bổ sung) | Không tạo dữ liệu mới; đọc-lại AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH ở scope Own + `user_preferences` (SPEC-09) |
 
 ## 3.2 Module chưa thuộc MVP nhưng cần chừa khả năng mở rộng
 
@@ -458,6 +459,7 @@ notification_event_code
 | file_links        | Liên kết file với bản ghi nghiệp vụ |
 | sequence_counters | Bộ đếm sinh mã tự động              |
 | public_holidays   | Ngày nghỉ lễ/ngày không làm việc    |
+| user_preferences  | Tùy chọn cá nhân theo user (locale/timezone/theme/layout ME) — scope User, SPEC-09 §15.2 |
 
 ## 7.2 Nhóm AUTH
 
@@ -582,7 +584,7 @@ Danh sách module hệ thống.
 | Cột         | Kiểu      | Ghi chú                                |
 | ----------- | --------- | -------------------------------------- |
 | id          | UUID      | PK                                     |
-| module_code | VARCHAR   | AUTH, HR, ATT, LEAVE, TASK, DASH, NOTI |
+| module_code | VARCHAR   | AUTH, HR, ATT, LEAVE, TASK, DASH, NOTI, ME |
 | name        | VARCHAR   | Tên module                             |
 | description | TEXT      | Mô tả                                  |
 | is_active   | BOOLEAN   | Bật/tắt module                         |

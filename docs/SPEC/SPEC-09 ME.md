@@ -18,7 +18,7 @@
 | Module phụ thuộc trực tiếp | AUTH, HR                                          |
 | Module liên quan           | ATT, LEAVE, TASK, NOTI, DASH, FOUNDATION          |
 | Phiên bản                  | v1.0                                              |
-| Trạng thái                 | Draft                                             |
+| Trạng thái                 | Draft (chờ owner duyệt PR S5-ME-DOC-1 → Approved) |
 | Giai đoạn                  | MVP Version 1.0 - bổ sung                         |
 | Người viết                 |                                                   |
 | Người duyệt                |                                                   |
@@ -974,9 +974,11 @@ Không ghi vào audit log:
 
 ---
 
-## 21. Quyết định nghiệp vụ cần chốt
+## 21. Quyết định nghiệp vụ đã chốt
 
-| Mã | Câu hỏi | Đề xuất |
+> **Ngày chốt: 13/07/2026 (S5-ME-DOC-1).** Toàn bộ ME-DEC-001..010 lấy theo cột **Đề xuất** làm **quyết định chính thức** (decision-of-record). Dấu Approved cuối cùng đóng khi owner duyệt PR (đồng bộ với §1 Trạng thái).
+
+| Mã | Câu hỏi | Quyết định chốt (13/07/2026) |
 | --- | --- | --- |
 | ME-DEC-001 | ME là module độc lập hay menu tài khoản? | Module độc lập nhưng có thể mở từ avatar menu |
 | ME-DEC-002 | Có tạo permission ME riêng không? | Chỉ `ME.ACCESS` + permission nguồn; preference dùng permission riêng |
@@ -1004,7 +1006,7 @@ Sau khi chốt SPEC-09, cần cập nhật:
 7. `DB-08`: xác nhận file/avatar và setting scope user.
 8. `DB-09`: thêm index cho `user_preferences(company_id, user_id)`.
 9. `DB-10`: seed module `ME` và permission liên quan.
-10. Tạo `API-09/10 ME API Design` tùy cách đánh số hiện tại.
+10. Tạo `API-11 ME API Design` (đánh số tiếp theo sau API-10; xem `docs/API Design/API-11_ME_API_Design.md`).
 11. Cập nhật UI-02, UI-04, UI-06, UI-07, UI-09 và UI-10.
 12. Cập nhật FRONTEND route registry, app registry, sidebar và query keys.
 13. Cập nhật BACKEND module aggregation/service orchestration.
