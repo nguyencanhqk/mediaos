@@ -1219,6 +1219,13 @@
       "when": 1717500860000,
       "tag": "0493_s4_dashcatalog2_widget_catalog_9",
       "breakpoints": true
+    },
+    {
+      "idx": 174,
+      "version": "7",
+      "when": 1717500865000,
+      "tag": "0494_hr_identity_read_view_identity_perm",
+      "breakpoints": true
     }
   ]
 }
