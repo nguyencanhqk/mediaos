@@ -22,9 +22,24 @@ import { hrPersonalExtraSchema } from "./employee-read";
 export const HR_EMPLOYEE_STATUSES = ["active", "inactive", "resigned", "terminated"] as const;
 export type HrEmployeeStatus = (typeof HR_EMPLOYEE_STATUSES)[number];
 
-const workTypeEnum = z.enum(["offline", "remote", "hybrid"]);
-const employmentTypeEnum = z.enum(["full_time", "part_time", "freelancer", "intern", "probation"]);
-const salaryTypeEnum = z.enum(["monthly", "hourly", "project"]);
+/**
+ * Structural enum value tuples — the SINGLE source of truth reused by the create/update DTOs here and
+ * by the bulk-import row DTO (employee-import.ts). Exporting the arrays (not just the z.enum) lets the
+ * import schema reuse the exact accepted values without re-declaring literals (drift-guarded by spec).
+ */
+export const HR_WORK_TYPES = ["offline", "remote", "hybrid"] as const;
+export const HR_EMPLOYMENT_TYPES = [
+  "full_time",
+  "part_time",
+  "freelancer",
+  "intern",
+  "probation",
+] as const;
+export const HR_SALARY_TYPES = ["monthly", "hourly", "project"] as const;
+
+const workTypeEnum = z.enum(HR_WORK_TYPES);
+const employmentTypeEnum = z.enum(HR_EMPLOYMENT_TYPES);
+const salaryTypeEnum = z.enum(HR_SALARY_TYPES);
 
 /** ISO date `YYYY-MM-DD` (matches Postgres `date` columns). */
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected date YYYY-MM-DD");
