@@ -550,9 +550,39 @@ QA cần bắt đầu viết test case ngay khi story P0 có AC, không chờ de
 
 ---
 
+## 8.13 EPIC-12: ME - Personal Hub (Trung tâm cá nhân)
+
+> **Bổ sung 2026-07-13** theo SPEC-09 ME (wave S5-ME, PR #190) — NGOÀI baseline 112 story / 869 point ban đầu. Tổng sau bổ sung: **120 story / 913 point**.
+
+**Mục tiêu:** Trung tâm cá nhân `/me` — cổng self-service hợp nhất: tổng quan cá nhân, hồ sơ & yêu cầu cập nhật, tài khoản & bảo mật, công việc của tôi (ATT/LEAVE/TASK), thông báo và cài đặt cá nhân. ME **không sao chép dữ liệu** — chỉ tổng hợp own-scope từ module nguồn (SPEC-09 §3).
+
+| Story ID | Actor | User Story / Technical Story | Priority | Point | Acceptance Criteria tóm tắt |
+| --- | --- | --- | --- | ---: | --- |
+| IMP02-STORY-113 | Employee | Là một Employee, tôi muốn mở Trung tâm cá nhân /me với tổng quan chấm công hôm nay, phép còn lại, task đang làm, thông báo mới và hành động nhanh. | P0 | 8 | Aggregation own-scope resolve từ token, fail-soft từng section, quick action deep-link module gốc (ME-FUNC-001/017, ME-SCREEN-001). |
+| IMP02-STORY-114 | Employee | Là một Employee, tôi muốn xem hồ sơ cá nhân & công việc và gửi/theo dõi yêu cầu cập nhật hồ sơ ngay trong /me. | P0 | 5 | Read-only + change-request workflow TÁI DÙNG HR PCR, own scope (ME-FUNC-002/003/004, ME-SCREEN-002/003/004). |
+| IMP02-STORY-115 | User | Là một User, tôi muốn quản lý tài khoản & bảo mật trong /me: thông tin tài khoản, đổi mật khẩu, phiên đăng nhập, 2FA. | P0 | 5 | TÁI DÙNG account/sessions/2FA sẵn có dưới route /me/* (ME-FUNC-005/006/007/008, ME-SCREEN-005/006/007). |
+| IMP02-STORY-116 | User | Là một User, tôi muốn xem hoạt động bảo mật gần đây của chính tôi. | P1 | 5 | login_logs + user_security_events CỦA CHÍNH user, mask IP, không lộ trường nhạy cảm (ME-FUNC-016, ME-SCREEN-008). |
+| IMP02-STORY-117 | Employee | Là một Employee, tôi muốn xem nhanh chấm công/nghỉ phép/công việc của tôi kèm deep-link về module gốc. | P1 | 5 | Summary own-scope ATT/LEAVE/TASK, deep-link đúng màn nguồn (ME-FUNC-009/010/011/017, ME-SCREEN-009/010/011). |
+| IMP02-STORY-118 | User | Là một User, tôi muốn xem thông báo của tôi và cấu hình tùy chọn nhận thông báo trong /me. | P1 | 3 | FE trên NOTI API sẵn có (GET/PUT /notifications/preferences) (ME-FUNC-012/013, ME-SCREEN-012/013). |
+| IMP02-STORY-119 | User | Là một User, tôi muốn cài đặt giao diện cá nhân lưu server-side và quản lý avatar. | P1 | 8 | user_preferences RLS+FORCE unique(company_id,user_id), upsert own, theme sync server↔localStorage, avatar qua foundation files (ME-FUNC-014/015, ME-SCREEN-014). |
+| IMP02-STORY-120 | QA/Security | Là một QA/Security, tôi muốn kiểm IDOR/cross-user/cross-tenant toàn bộ endpoint /me/*. | P1 | 5 | IDOR sweep mọi endpoint /me/*, aggregation degraded, preference policy, coverage ≥80% apps/api/src/me (SPEC-09 §20). |
+
+### Phạm vi kỹ thuật chính
+
+- MeModule aggregation (compose service own-scope, fail-soft)
+- Bảng `user_preferences` + seed module ME + cặp permission user-preference (Own mọi role)
+- FE registry + shell /me/* (card "Cá nhân")
+- TÁI DÙNG: HR PCR, /auth/sessions, 2FA, NOTI preferences
+
+### Ghi chú dependency
+
+ME phụ thuộc module nguồn đã xong (AUTH/HR/ATT/LEAVE/TASK/NOTI — Sprint 2-4). Docs-sync SPEC-09 (S5-ME-DOC-1) chạy trước/song song, không gắn story người dùng.
+
+---
+
 ## 9. Backlog theo Sprint đề xuất
 
-> Sprint mapping dưới đây bám đúng các IMPLEMENTATION execution plan (IMPLEMENTATION-03 -> IMPLEMENTATION-09): mô hình **7 sprint (Sprint 0 -> Sprint 6)**. Tổng MVP: **112 story / 869 point**. Khi biết velocity thực tế, Product Owner và Tech Lead cần điều chỉnh lại số story trong từng sprint (xem cảnh báo capacity ở §9.1).
+> Sprint mapping dưới đây bám đúng các IMPLEMENTATION execution plan (IMPLEMENTATION-03 -> IMPLEMENTATION-09): mô hình **7 sprint (Sprint 0 -> Sprint 6)**. Tổng MVP baseline: **112 story / 869 point** (+ EPIC-12 ME bổ sung 2026-07-13: 8 story / 44 point → **120 story / 913 point**). Khi biết velocity thực tế, Product Owner và Tech Lead cần điều chỉnh lại số story trong từng sprint (xem cảnh báo capacity ở §9.1).
 
 | Sprint | Execution plan | Mục tiêu | Story trọng tâm | Point | Deliverable demo |
 | --- | --- | --- | --- | ---: | --- |
@@ -561,7 +591,7 @@ QA cần bắt đầu viết test case ngay khi story P0 có AC, không chờ de
 | Sprint 2 | IMPLEMENTATION-05 | Auth & HR Core | 013-037, 098-099 | 200 | Login/logout, RBAC guard, user/role admin, employee CRUD, profile change, employee code |
 | Sprint 3 | IMPLEMENTATION-06 | Attendance & Leave Core | 038-064, 100 | 241 | Check-in/out, attendance records, shift/rule, leave balance/request/approval, ATT sync |
 | Sprint 4 | IMPLEMENTATION-07 | Task, Notification & Dashboard | 065-092, 101-103 | 231 | Project/task/Kanban, event notification, unread/dropdown, role dashboards, widget cache |
-| Sprint 5 | IMPLEMENTATION-08 | Integration, QA Hardening & UAT | 097, 104-110 | 79 | Field/export security, OpenAPI contract, test matrix, API/E2E/security/perf test, responsive P0 |
+| Sprint 5 | IMPLEMENTATION-08 | Integration, QA Hardening & UAT | 097, 104-110, 113-120 (EPIC-12 ME) | 123 | Field/export security, OpenAPI contract, test matrix, API/E2E/security/perf test, responsive P0, Trung tâm cá nhân /me (SPEC-09) |
 | Sprint 6 | IMPLEMENTATION-09 | Stabilization, Release Candidate & Go-live | 111-112 + bugfix | 13 | UAT sign-off, release readiness, RC build, go-live runbook |
 
 ### 9.1 Lưu ý capacity
