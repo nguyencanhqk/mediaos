@@ -17,7 +17,9 @@
  *     (object_type='employee') + EXACTLY ONE 'employee_import' session audit ({fileName, ok, fail}).
  *   - partial-success: a mixed file creates the valid rows (each in its own tx) + reports the bad rows; the
  *     session audit ok/fail is exact.
- *   - legacy media-era /employees/import stays DENY-gated (403) for a non-privileged caller → no bypass.
+ *   - legacy media-era /employees/import + /employees/import/confirm are GONE (404) even for the grant
+ *     holder (hr, granted import:employee by mig 0496) → the media-era bypass (client codes, no
+ *     SequenceService, weak audit) is fully closed; hr can create only via /hr/employees/import.
  *
  * Gate hasDb && LANE_DB (memory integration-test-LANE_DB-gate): .env points DATABASE_URL at the shared dev
  * DB (hasDb=true) → only run on an ISOLATED lane DB (LANE_DB set), else the DB assertions are false-red.
@@ -454,20 +456,45 @@ describe.skipIf(!hasLaneDb)(
       expect(sa.rows[0].after).toMatchObject({ ok: 1, fail: 2 });
     });
 
-    // ── legacy media-era route stays deny-gated (no bypass) ───────────────────────────────────────
-    it("legacy /employees/import stays DENY-gated (403) for a non-privileged caller → no bypass", async () => {
-      const token = await login(app, A.slug, noPermEmail);
+    // ── legacy media-era route is REMOVED — proven closed for the grant holder (no bypass) ────────
+    // FIX-BE-LEGACY-REMOVE: the earlier "noPermEmail → 403" assertion was security theatre — a caller
+    // WITHOUT import:employee is denied by the guard on ANY route, so it never proved the media-era path
+    // was gone. mig 0496 grants import:employee (is_sensitive) to hr; because permission.decide treats
+    // effectivelySensitive = input.isSensitive OR grant.isSensitive, hr WOULD have passed the legacy
+    // route's @RequirePermission('import','employee') guard and reached EmployeesService.parseImportPreview/
+    // confirmImport (client-supplied codes, no SequenceService, weak audit). The ONLY safe close is to
+    // delete the routes: hr (the grant HOLDER) must now hit 404, writing nothing.
+    it("legacy /employees/import + /import/confirm are GONE (404) for the grant holder → 0 writes, 0 audit", async () => {
+      const token = await login(app, A.slug, hrEmail); // GRANT HOLDER — passes the old guard if it existed
       const profilesBefore = await countProfiles(direct, A.companyId);
       const auditBefore = await countAllAudit(direct, A.companyId);
 
-      const res = await attachCsv(
+      // Phase-1 media-era preview route — removed from EmployeesController → 404 (not 403, not 201).
+      const previewRes = await attachCsv(
         api(app).post("/employees/import").set(bearer(token)),
         csv(dataRow({ workType: "offline" })),
       );
-      // The media-era import must NOT be a bypass for a caller lacking import:employee.
-      expect(res.status).toBe(403);
+      expect(previewRes.status, JSON.stringify(previewRes.body)).toBe(404);
+
+      // Phase-2 media-era confirm route — removed → 404. A valid-looking body must not resurrect it.
+      const confirmRes = await api(app)
+        .post("/employees/import/confirm")
+        .set(bearer(token))
+        .send({ sessionId: "00000000-0000-0000-0000-000000000000" });
+      expect(confirmRes.status, JSON.stringify(confirmRes.body)).toBe(404);
+
+      // No media-era side effects: not one profile, not one audit row for the grant holder.
       expect(await countProfiles(direct, A.companyId)).toBe(profilesBefore);
       expect(await countAllAudit(direct, A.companyId)).toBe(auditBefore);
+
+      // The grant holder's ONLY import path is the hardened new route (SequenceService codes + audit).
+      // dryRun (default) proves it is live + guarded without mutating state.
+      const newRouteRes = await attachCsv(
+        api(app).post("/hr/employees/import").set(bearer(token)),
+        csv(dataRow({ workType: "offline" })),
+      );
+      expect(newRouteRes.status, JSON.stringify(newRouteRes.body)).toBe(201);
+      expect(newRouteRes.body.data.dryRun).toBe(true);
     });
   },
 );
