@@ -323,10 +323,21 @@ System default
   -> Department/Employee setting ở module nghiệp vụ nếu cần
 ```
 
-DB-08 chỉ xử lý hai tầng foundation:
+DB-08 xử lý các tầng foundation:
 
 1. `system_settings`: default toàn hệ thống.
 2. `company_settings`: override theo công ty.
+3. `user_preferences`: tùy chọn cá nhân theo user (tầng **User**) — locale/timezone/theme/date_format/default_landing/density/layout ME (xem §8.16, SPEC-09 §15.2). Tầng User chỉ ghi đè các preference thuộc quyền cá nhân (`ME.PREFERENCE.UPDATE_OWN`), không ghi đè policy công ty bắt buộc (ví dụ timezone chỉ override được nếu company policy cho phép — SPEC-09 ME-DEC-008).
+
+Thứ tự precedence khi resolve preference cá nhân:
+
+```text
+System default
+  -> Company override (company_settings)
+  -> User override (user_preferences) nếu key thuộc phạm vi cá nhân
+```
+
+> **Phương án B (nếu owner chọn tái dùng):** thay vì tạo bảng `user_preferences`, có thể mở rộng hệ setting hiện có sang **scope User** (System → Company → Role → User) như SPEC-09 §15.3. Khi đó tầng User nằm trong bảng setting mở rộng thay vì bảng riêng; quyết định canonical do owner chốt ở PR (ME-DEC / S5-ME-DB-1). DB-08 mô tả phương án A (bảng riêng `user_preferences`) làm mặc định vì tách rõ tenant + unique per-user và không làm phình bảng setting key-value.
 
 Các cấu hình nghiệp vụ chuyên sâu nằm ở module riêng:
 
@@ -462,6 +473,7 @@ users
 | 13 | `seed_items` | Nên có | Theo dõi item seed |
 | 14 | `system_job_runs` | Nên có | Nhật ký mỗi lần chạy system job (cleanup/retention/retry/overdue...) |
 | 15 | `system_job_locks` | Nên có | Lock tránh nhiều instance chạy trùng một job |
+| 16 | `user_preferences` | Nên có | Tùy chọn cá nhân theo user (scope User) cho module ME — SPEC-09 §15.2 (xem §8.16) |
 
 ---
 
@@ -1690,6 +1702,79 @@ ON system_job_locks (locked_until);
 
 ---
 
+### 8.16 Bảng `user_preferences`
+
+#### Mục đích
+
+Lưu tùy chọn cá nhân theo user cho module **ME** (Trung tâm cá nhân, SPEC-09 §15.2): giao diện, locale, timezone, format ngày giờ, trang mặc định sau login, module yêu thích và cấu hình layout ME. Đây là tầng **User** trong precedence setting (§5.9): System → Company → **User**.
+
+> **BẤT BIẾN #1 (DECISIONS-02 §2):** `user_preferences` có `company_id` NOT NULL, bật **RLS ENABLE + FORCE ROW LEVEL SECURITY** với policy `tenant_isolation` (`company_id = current_setting('app.current_company_id')::uuid`). Mọi truy vấn đi qua `withTenant(companyId, fn)`; không query trần. `UNIQUE (company_id, user_id)` bảo đảm mỗi user trong một tenant chỉ có một bản ghi preference.
+
+> **Phạm vi (SPEC-09 §15.3, phương án B):** nếu owner chọn tái dùng hệ setting hiện có mở rộng sang scope User thay vì tạo bảng riêng thì bỏ bảng này và lưu tầng User trong bảng setting mở rộng; quyết định canonical chốt ở PR (ME-DEC / S5-ME-DB-1). DB-08 lấy bảng riêng làm phương án A mặc định.
+
+#### Cấu trúc cột
+
+| Cột | Kiểu | Bắt buộc | Ghi chú |
+| --- | --- | --- | --- |
+| `id` | UUID | Có | PK |
+| `company_id` | UUID | Có | FK `companies.id` — tenant (bất biến #1, RLS+FORCE) |
+| `user_id` | UUID | Có | FK `users.id` — user sở hữu preference |
+| `locale` | VARCHAR(20) | Không | Ngôn ngữ (`vi`/`en`); fallback company/system |
+| `timezone` | VARCHAR(64) | Không | Múi giờ; chỉ override nếu company policy cho phép (ME-DEC-008) |
+| `theme` | VARCHAR(20) | Không | `system`/`light`/`dark` |
+| `date_format` | VARCHAR(30) | Không | Format ngày |
+| `time_format` | VARCHAR(10) | Không | `12h`/`24h` |
+| `default_landing` | VARCHAR(120) | Không | Trang/route mặc định sau login |
+| `density` | VARCHAR(20) | Không | `comfortable`/`compact` |
+| `favorite_modules` | JSONB | Không | Danh sách module yêu thích |
+| `me_layout_config` | JSONB | Không | Cấu hình layout khu vực ME |
+| `created_at` | TIMESTAMP | Có | Thời điểm tạo |
+| `created_by` | UUID | Không | FK `users.id` |
+| `updated_at` | TIMESTAMP | Có | Thời điểm cập nhật |
+| `updated_by` | UUID | Không | FK `users.id` |
+
+#### Constraint/index đề xuất
+
+```sql
+-- Bất biến #1: bật RLS + FORCE và policy tenant trước khi ghi dữ liệu.
+ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_preferences FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON user_preferences
+USING (company_id = current_setting('app.current_company_id')::uuid)
+WITH CHECK (company_id = current_setting('app.current_company_id')::uuid);
+
+ALTER TABLE user_preferences
+ADD CONSTRAINT chk_user_preferences_theme
+CHECK (theme IS NULL OR theme IN ('system', 'light', 'dark'));
+
+ALTER TABLE user_preferences
+ADD CONSTRAINT chk_user_preferences_density
+CHECK (density IS NULL OR density IN ('comfortable', 'compact'));
+
+-- Mỗi user (trong 1 tenant) chỉ có 1 bản ghi preference (xem DB-09).
+CREATE UNIQUE INDEX idx_user_preferences_company_user
+ON user_preferences (company_id, user_id);
+```
+
+#### Quy tắc nghiệp vụ
+
+1. Endpoint ME resolve `user_id` + `company_id` từ access token, **không** nhận từ client (SPEC-09 §14.4).
+2. Upsert theo business key `company_id + user_id` (idempotent).
+3. `timezone`/`locale` chỉ được override nếu company policy cho phép; nếu không, fallback company/system setting theo precedence §5.9.
+4. Thay đổi notification preference bắt buộc/security không lưu ở đây mà ở `notification_preferences`/AUTH (SPEC-09 §16 lưu ý).
+5. Không lưu dữ liệu nhạy cảm/secret trong `favorite_modules`/`me_layout_config`.
+
+#### Precedence khi đọc preference cá nhân
+
+```text
+1. user_preferences active theo company_id + user_id
+2. company_settings theo company_id (nếu key có ở company scope)
+3. system_settings theo setting_key
+4. default hard-coded trong service
+```
+
+---
+
 ## 9. Ma trận bảng Foundation và module sử dụng
 
 | Bảng foundation | AUTH | HR | ATT | LEAVE | TASK | NOTI | DASH | Phase sau |
@@ -1707,6 +1792,7 @@ ON system_job_locks (locked_until);
 | `data_retention_policies` | Login/session | Hồ sơ/file | Log công | Đơn/file | Task/file | Notification | Cache | Tất cả |
 | `seed_batches` | Permission/role | Master data | Rule seed | Leave type | Status/widget | Event/template | Widget | Tất cả |
 | `seed_items` | Permission/role | Master data | Rule seed | Leave type | Status/widget | Event/template | Widget | Tất cả |
+| `user_preferences` | Preference tài khoản | — | — | — | — | — | Layout/landing | ME (Own) — SPEC-09 |
 
 ---
 

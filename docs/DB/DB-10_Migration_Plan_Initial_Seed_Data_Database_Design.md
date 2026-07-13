@@ -613,6 +613,9 @@ Secret phải lấy từ environment variable hoặc secret manager.
 | TASK | Công việc & Dự án | Collaboration | false | true | true | 50 |
 | DASH | Dashboard | Experience | false | true | true | 60 |
 | NOTI | Thông báo hệ thống | Experience | false | true | true | 70 |
+| ME | Trung tâm cá nhân (MVP bổ sung) | Experience | false | true | true | 80 |
+
+> **ME (SPEC-09):** module MVP bổ sung, không tạo dữ liệu nghiệp vụ mới — đọc-lại AUTH/HR/ATT/LEAVE/TASK/NOTI/DASH ở scope Own + bảng `user_preferences` (DB-08 §8.16). Seed module idempotent theo business key `module_code` (§5.5): `INSERT ... ON CONFLICT (module_code) DO NOTHING`.
 
 ### 10.2 Module phase sau inactive
 
@@ -822,6 +825,34 @@ Secret phải lấy từ environment variable hoặc secret manager.
 | `FOUNDATION.JOB.RUN` | Chạy system job thủ công (System scope) |
 | `FOUNDATION.SEED.VIEW` | Xem batch/item seed |
 | `FOUNDATION.SEED.RUN` | Chạy seed (internal/System scope) |
+
+### 12.8 ME permissions
+
+> Nguồn: SPEC-09 §11.1. ME chỉ gate truy cập khu vực cá nhân (`ME.ACCESS`) + permission cho các chức năng thực sự thuộc ME (personal preference / avatar / notification preference). Nghiệp vụ nguồn (attendance/leave/task/notification/profile) vẫn kiểm permission module nguồn (ME-DEC-002, SPEC-09 §11.2). Data scope mặc định = **Own** (SPEC-09 §11.3): không nhận `user_id`/`employee_id` từ client.
+
+| Permission code | Mô tả |
+| --- | --- |
+| `ME.ACCESS` | Truy cập khu vực Trung tâm cá nhân |
+| `ME.OVERVIEW.VIEW` | Xem tổng quan cá nhân |
+| `ME.PROFILE.VIEW` | Xem hồ sơ cá nhân |
+| `ME.PROFILE.CHANGE_REQUEST.CREATE` | Gửi yêu cầu cập nhật hồ sơ (qua HR approval flow) |
+| `ME.PROFILE.CHANGE_REQUEST.VIEW_OWN` | Xem yêu cầu cập nhật hồ sơ của mình |
+| `ME.ACCOUNT.VIEW` | Xem thông tin tài khoản |
+| `ME.PASSWORD.CHANGE` | Đổi mật khẩu cá nhân |
+| `ME.SESSION.VIEW_OWN` | Xem phiên đăng nhập của mình |
+| `ME.SESSION.REVOKE_OWN` | Thu hồi phiên của mình |
+| `ME.SECURITY_ACTIVITY.VIEW_OWN` | Xem hoạt động bảo mật của mình |
+| `ME.ATTENDANCE.VIEW_OWN` | Xem chấm công của mình |
+| `ME.LEAVE.VIEW_OWN` | Xem nghỉ phép của mình |
+| `ME.TASK.VIEW_OWN` | Xem task của mình |
+| `ME.NOTIFICATION.VIEW_OWN` | Xem thông báo của mình |
+| `ME.NOTIFICATION_PREFERENCE.UPDATE_OWN` | Cập nhật preference nhận thông báo của mình |
+| `ME.PREFERENCE.VIEW_OWN` | Xem tùy chọn cá nhân (`user_preferences`) |
+| `ME.PREFERENCE.UPDATE_OWN` | Cập nhật tùy chọn cá nhân (`user_preferences`) |
+| `ME.AVATAR.UPDATE_OWN` | Cập nhật avatar của mình |
+| `ME.DATA_EXPORT.REQUEST_OWN` | Yêu cầu xuất dữ liệu cá nhân (P1/phase sau — ME-DEC-009) |
+
+> **Idempotent (§5.5):** seed permission theo business key `permission_code`: `INSERT ... ON CONFLICT (permission_code) DO NOTHING`. Role-permission seed cho ME (kèm `data_scope = Own`) chốt ở WO S5-ME-DB-1 / seed migration nối tiếp (lane này chỉ đồng bộ docs, không viết migration).
 
 ---
 

@@ -715,6 +715,23 @@ ON system_job_locks (locked_until);
 
 > Bảng nhỏ (mỗi job 1 row); không cần partial index. Acquire lock dùng `INSERT ... ON CONFLICT (job_code)` hoặc `SELECT ... FOR UPDATE`.
 
+### 8.13 `user_preferences`
+
+#### Query chính
+
+1. Lấy preference của current user theo `company_id + user_id` (endpoint ME, resolve từ token — SPEC-09 §14.4).
+2. Upsert preference (`INSERT ... ON CONFLICT (company_id, user_id)`).
+
+#### Index đề xuất
+
+```sql
+-- Mỗi user (trong 1 tenant) chỉ có 1 bản ghi preference; index UNIQUE cũng phục vụ lookup theo (company_id, user_id).
+CREATE UNIQUE INDEX idx_user_preferences_company_user
+ON user_preferences (company_id, user_id);
+```
+
+> Bảng không có `deleted_at` (upsert 1 row/user) nên **không cần partial soft-delete index**. Cô lập tenant ép ở RLS + FORCE (DB-08 §8.16, bất biến #1). Nếu phase sau thêm soft-delete, đổi UNIQUE sang partial `WHERE deleted_at IS NULL` theo §6.3.
+
 ---
 
 ## 9. Index cho AUTH / DB-02
