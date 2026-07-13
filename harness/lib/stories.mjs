@@ -34,6 +34,7 @@ const EPIC_MODULE = {
   9: "FRONTEND",
   10: "INTEGRATION",
   11: "QA",
+  12: "ME", // EPIC-12 bổ sung 2026-07-13 theo SPEC-09 (IMP02 §8.13)
 };
 
 // Sprint của 1 story theo IMPLEMENTATION-02 §9 (story trọng tâm mỗi sprint, không chỉ theo epic).
@@ -44,7 +45,7 @@ function sprintOfStory(n) {
   if (inR(13, 37) || inR(98, 99)) return "S2";
   if (inR(38, 64) || n === 100) return "S3";
   if (inR(65, 92) || inR(101, 103)) return "S4";
-  if (n === 97 || inR(104, 110)) return "S5";
+  if (n === 97 || inR(104, 110) || inR(113, 120)) return "S5"; // 113-120 = EPIC-12 ME
   if (inR(111, 112)) return "S6";
   return "?";
 }
@@ -56,7 +57,11 @@ const STORY_WO_OVERRIDE = {
   2: ["S0-GOV-1"],
   3: ["S0-GOV-1"],
   4: ["S0-QA-1"],
-  11: ["__shipped:HolidayService đã ship (apps/api/src/foundation/holidays) — ngoài backlog hành"],
+  11: [
+    "__shipped:HolidayService đã ship (apps/api/src/foundation/holidays) — ngoài backlog hành",
+    "S2-FND-BE-6", // trả nợ audit CONFIG holiday
+    "S2-FE-FND-4", // FE /system/public-holidays
+  ],
   // ── trace-map bổ sung 2026-07-08: story ĐÃ có WO phủ nhưng src[] dùng mã ISSUE-BOARD/FRONTEND ──
   36: ["S2-HR-EMPFILE-1", "S2-FE-HR-9"], // file hồ sơ NV (gap-closer audit FE)
   46: ["S3-ATT-BE-4", "S3-FE-ATT-3"], // gửi YC điều chỉnh công
@@ -67,14 +72,63 @@ const STORY_WO_OVERRIDE = {
   59: ["S3-LEAVE-BE-2", "S3-INT-1"], // hủy/thu hồi đơn nghỉ đã duyệt + ATT sync
   60: ["S3-LEAVE-BE-5", "S3-FE-LEAVE-4"], // lịch nghỉ cá nhân/team/phòng ban/company
   80: ["S4-NOTI-BE-1", "S4-FE-NOTI-1"], // danh sách + chi tiết thông báo
-  83: ["S4-NOTI-BE-3"], // cấu hình bật/tắt event + template
-  84: ["S4-NOTI-BE-3"], // delivery log + retry
-  89: ["S4-DASH-BE-1", "S4-FE-DASH-2"], // Admin Dashboard (widget admin-specific = catalog-only defer §11.3)
+  83: ["S4-NOTI-BE-3", "S4-NOTI-BE-4", "S4-NOTI-BE-5", "S4-FE-NOTI-2", "S4-FE-NOTI-4"], // cấu hình event + template (BE write/list + FE admin)
+  84: ["S4-NOTI-BE-3", "S4-FE-NOTI-3"], // delivery log + retry (+ FE viewer)
+  89: ["S4-DASH-BE-1", "S4-FE-DASH-2", "S4-DASH-CATALOG-2"], // Admin Dashboard (+ bù catalog widget defer §11.3)
   92: ["S4-DASH-BE-2", "S4-INT-2"], // cache + invalidate dashboard widget
   93: ["S0-FE-CORE-1"],
   95: ["S0-FE-API-1", "S1-FE-QUERY-WIRE-1"],
   97: ["S5-QA-REG-1"], // responsive mobile web P0 (verify qua responsive smoke)
   101: ["S4-TASK-BE-3"], // TASK↔LEAVE cảnh báo giao việc khi assignee nghỉ phép
+  // ── trace-map bổ sung 2026-07-13: gắn WO FE/QA về đúng story (trước đây rơi vào "WO nền/hạ tầng").
+  //    LƯU Ý: override THAY THẾ auto → phải liệt kê ĐỦ cả WO BE đang auto-map qua src[].
+  5: ["S1-FND-MODULE-1", "S2-FE-FND-1"], // company/tenant + FE company info (/system/company)
+  6: ["S0-FND-SEED-1", "S1-FND-MODULE-1", "S2-FND-BE-1", "S2-FE-FND-3"], // module catalog BE+FE
+  7: ["S1-FND-SETTING-1", "S2-FND-SYSSET-1", "S2-FE-FND-1", "S2-FE-FND-8"], // settings BE+FE (/system/settings)
+  8: ["S1-FND-AUDIT-1", "S2-FE-FND-2"], // audit log + FE viewer
+  9: ["S1-FND-FILE-1", "S2-FE-FND-2"], // file + FE metadata viewer
+  10: ["S1-FND-SEQ-1", "S2-FND-BE-2", "S2-FE-FND-5"], // sequence + ops API + FE
+  21: ["S2-AUTH-BE-3", "S2-FE-AUTH-3", "S2-FE-AUTH-4", "S2-AUTH-PERMUX-1", "S2-AUTH-ROLEMEM-1"], // role & permission admin + rule builder + role members
+  25: ["S2-HR-BE-1", "S2-FE-HR-1", "HR-PROFILE-UI-1", "HR-PROFILE-UI-2"], // employee list (+ nâng cấp UI hồ sơ)
+  26: ["S2-HR-BE-1", "S2-FE-HR-1", "HR-PROFILE-UI-1"], // employee detail (split view)
+  27: ["S2-HR-BE-2", "S2-FE-HR-2"], // employee create
+  28: ["S2-HR-BE-2", "S2-FE-HR-2"], // employee update/status
+  29: ["S2-HR-BE-3", "S2-FE-HR-5"], // departments tree
+  30: ["S2-HR-BE-3", "S2-FE-HR-5"], // positions/job-levels/contract-types
+  31: ["S2-HR-BE-6", "S2-FE-HR-7"], // contracts
+  32: ["S2-HR-BE-1", "S2-FE-HR-3"], // my profile
+  33: ["S2-HR-BE-4", "S2-FE-HR-4"], // profile change-request (self)
+  34: ["S2-HR-BE-4", "S2-FE-HR-4"], // profile change-request (approve)
+  35: ["S2-HR-BE-7", "S2-FE-HR-8"], // employee-code config
+  38: ["S3-ATT-BE-1", "S3-FE-ATT-1"], // attendance today
+  39: ["S3-ATT-BE-1", "S3-FE-ATT-1"], // check-in
+  40: ["S3-ATT-BE-1", "S3-FE-ATT-1"], // check-out
+  41: ["S3-ATT-BE-2", "S3-FE-ATT-2", "S3-FE-ATT-5"], // records own/team/company
+  42: ["S3-ATT-BE-2", "S3-FE-ATT-2"], // record detail + logs
+  43: ["S3-ATT-BE-3", "S3-FE-ATT-5"], // shifts
+  44: ["S3-ATT-BE-3", "S3-FE-ATT-5"], // shift assignments
+  45: ["S3-ATT-BE-3", "S3-FE-ATT-5"], // attendance rules
+  52: ["S3-LEAVE-BE-1", "S3-FE-LEAVE-1", "S3-FE-LEAVE-7"], // leave balance own + LeaveOverviewPage
+  53: ["S3-LEAVE-BE-1", "S3-FE-LEAVE-1"], // preview days
+  54: ["S3-LEAVE-BE-2", "S3-FE-LEAVE-1", "S3-FE-LEAVE-3"], // create/draft/submit + edit draft
+  55: ["S3-LEAVE-BE-2", "S3-FE-LEAVE-1", "S3-FE-LEAVE-3"], // list/detail own + all-requests
+  56: ["S3-LEAVE-BE-2", "S3-FE-LEAVE-1"], // cancel theo rule
+  57: ["S3-LEAVE-BE-3", "S3-FE-LEAVE-2"], // pending list theo scope
+  58: ["S3-LEAVE-BE-3", "S3-FE-LEAVE-2"], // approve/reject
+  61: ["S3-LEAVE-BE-4", "S3-FE-LEAVE-5"], // leave types
+  62: ["S3-LEAVE-BE-4", "S3-FE-LEAVE-5"], // leave policies
+  63: ["S3-LEAVE-BE-4", "S3-FE-LEAVE-5"], // balances + transactions
+  85: ["S4-DASH-SEED-1", "S4-DASH-BE-1", "S4-FE-DASH-1", "S4-DASH-SEED-2"], // dashboard mặc định theo quyền (+ backfill grant manager/hr)
+  106: [
+    "S2-QA-1",
+    "S2-QA-2",
+    "S3-QA-1",
+    "S3-QA-2",
+    "S4-QA-1",
+    "S4-QA-TASK-1",
+    "S4-QA-NOTI-1",
+    "S5-QA-REG-1",
+  ], // test case matrix theo module/role — gộp QA S2/S3 (trước đây không map)
 };
 
 // Vite dev port mỗi app (apps/*/vite.config.ts) → link "chạy thử" FE.

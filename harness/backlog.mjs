@@ -6231,6 +6231,7 @@ export const backlog = [
       "apps/api/migrations/0435_foundation_db5_retention_seed_modules.sql (mẫu seed modules)",
       "apps/api/migrations/meta/_journal.json (head 2026-07-13: idx 173 / 0493)",
       "memory s2-13-permission-matrix-per-pair-scope (data_scope per-(permission,role))",
+      "IMP02-STORY-113/119 (IMPLEMENTATION-02 §8.13 EPIC-12 ME)",
     ],
     plan: "docs/plans/S5-ME-DB-1.md",
     done_when: [
@@ -6261,6 +6262,7 @@ export const backlog = [
       "SPEC-09 §10.1 (overview) + §12 (quy tắc nghiệp vụ) + §13 (UI states) + §14 (API) + §18.1-18.2 (NFR)",
       "apps/api/src/employees/hr-read.controller.ts (GET /hr/me/profile — reader self sẵn có)",
       "memory reused-method-must-be-actor-scoped (tái dùng reader PHẢI verify actor-data-scope)",
+      "IMP02-STORY-113/117 (IMPLEMENTATION-02 §8.13 EPIC-12 ME)",
     ],
     plan: "docs/plans/S5-ME-BE-1.md",
     done_when: [
@@ -6292,6 +6294,7 @@ export const backlog = [
       "SPEC-09 §10.8 (giao diện) + §14.2 (preferences/avatar API) + §17 (audit) + ME-DEC-004/008 §21",
       "apps/api/src/foundation/files/files.controller.ts (presigned upload/confirm sẵn có)",
       "apps/api/src/db/schema/employees.ts (employee_profiles.avatar_url — cột sẵn, flow chưa)",
+      "IMP02-STORY-119 (IMPLEMENTATION-02 §8.13 EPIC-12 ME)",
     ],
     plan: "docs/plans/S5-ME-BE-2.md",
     done_when: [
@@ -6323,6 +6326,7 @@ export const backlog = [
       "apps/api/src/auth/auth-logs-viewer.controller.ts (viewer ADMIN Company-scope S2-AUTH-BE-5 — GIỮ NGUYÊN, không đụng)",
       "apps/api/src/db/schema/auth-logs.ts (login_logs · user_security_events — mig 0443)",
       "apps/api/src/auth/auth.controller.ts L261-278 (GET /auth/sessions + revoke + revoke-others — TÁI DÙNG)",
+      "IMP02-STORY-116 (IMPLEMENTATION-02 §8.13 EPIC-12 ME)",
     ],
     plan: "docs/plans/S5-ME-BE-3.md",
     done_when: [
@@ -6357,6 +6361,7 @@ export const backlog = [
       "apps/app/src/layouts/workspace/sidebar-registry.ts + ModuleWorkspaceLayout.tsx",
       "apps/api/src/foundation/module-catalog/module-app-metadata.ts",
       "Ảnh tham chiếu UI owner 2026-07-13 (banner chào + stat cards + Cần thực hiện/Chờ duyệt + Tiện ích)",
+      "IMP02-STORY-113 (IMPLEMENTATION-02 §8.13 EPIC-12 ME)",
     ],
     plan: "docs/plans/S5-ME-FE-1.md",
     done_when: [
@@ -6389,6 +6394,7 @@ export const backlog = [
       "SPEC-09 §9 ME-SCREEN-002..008 + §10.2-10.6 + §12.2 (unlinked) + §13",
       "apps/app/src/routes/hr/me/MyProfilePage.tsx + routes/hr/profile-change-requests/* (PCR_ME_PATH /hr/me/change-request)",
       "apps/app/src/routes/account/{AccountProfilePage,ChangePasswordPage,AccountSessionsPage}.tsx",
+      "IMP02-STORY-114/115/116 (IMPLEMENTATION-02 §8.13 EPIC-12 ME)",
     ],
     plan: "docs/plans/S5-ME-FE-2.md",
     done_when: [
@@ -6419,6 +6425,7 @@ export const backlog = [
       "SPEC-09 §9 ME-SCREEN-009..015 + §10.7 (noti prefs) + §10.8 (giao diện) + §12.5 (deep link)",
       "apps/api/src/notifications/notifications.controller.ts L69/L78 (GET/PUT /notifications/preferences — BE sẵn, FE chưa)",
       "packages/ui/src/hooks/use-theme.ts (localStorage mediaos-theme) + styles/theme.css (nhánh feat/ui-theme-scroll)",
+      "IMP02-STORY-117/118/119 (IMPLEMENTATION-02 §8.13 EPIC-12 ME)",
     ],
     plan: "docs/plans/S5-ME-FE-3.md",
     done_when: [
@@ -6442,6 +6449,7 @@ export const backlog = [
     src: [
       "SPEC-09 §19 (nghiệm thu) + §20 (test scenario)",
       "QA-05 (permission/data-scope testing)",
+      "IMP02-STORY-120 (IMPLEMENTATION-02 §8.13 EPIC-12 ME)",
     ],
     done_when: [
       "Int-spec theo SPEC-09 §20: IDOR sweep MỌI endpoint /me/* (truyền user_id/employee_id lạ qua query/body → bị bỏ qua hoặc 4xx, hành vi KHÔNG đổi theo giá trị truyền) · cross-user + cross-tenant deny (preferences/activity/summary) · thu hồi session của user khác → 403/404 (tái dùng suite /auth/sessions nếu đã phủ, chỉ bổ khuyết) · aggregation degraded (1 nguồn lỗi → section error, HTTP 200, section khác ok) · unlinked-employee · company khóa timezone · notification bắt buộc không tắt được",
