@@ -287,7 +287,7 @@ describe("ProfileChangeRequestService — deny-path", () => {
       newValues: { identity_number: "079123456789" },
     });
     // approve:profile-change-request → ALLOW ; view-identity:employee → DENY
-    const { svc, repo, audit } = makeService(
+    const { svc, repo, audit, db } = makeService(
       { findRequestByIdTx: vi.fn().mockResolvedValue(sensitiveReq) },
       perActionDecision({ approve: ALLOW, "view-identity": DENY("no view-identity:employee") }),
     );
@@ -309,6 +309,10 @@ describe("ProfileChangeRequestService — deny-path", () => {
         sensitivityLevel: "Sensitive",
       }),
     );
+    // Deny-audit persist: bản ghi Denied đi trên MỘT withTenant RIÊNG (tx độc lập, tự commit) — NGOÀI
+    // business tx — để sống sót ForbiddenException rollback. Business tx (1) + deny-audit tx (1) = 2 lần.
+    expect(db.withTenant).toHaveBeenCalledTimes(2);
+    expect(db.withTenant).toHaveBeenNthCalledWith(2, COMPANY_A, expect.any(Function));
   });
 
   it("approve: identity_issue_date/place are also strict-approval (gated by view-identity)", async () => {

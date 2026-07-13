@@ -548,6 +548,21 @@ describe.skipIf(!(hasDb && laneDb))(
       return r.rows[0].n as number;
     }
 
+    /**
+     * Đếm audit DENY (approve bị từ chối vì thiếu view-identity) cho 1 pcr: result_status='Denied' +
+     * sensitivity_level='Sensitive'. Bản ghi này ghi trên tx RIÊNG nên PHẢI persist dù business tx rollback.
+     */
+    async function countDenyAudit(pcrId: string): Promise<number> {
+      const r = await direct.query(
+        `SELECT count(*)::int AS n FROM audit_logs
+         WHERE company_id = $1 AND action = 'approve'
+           AND object_type = 'profile_change_request' AND object_id = $2
+           AND result_status = 'Denied' AND sensitivity_level = 'Sensitive'`,
+        [C.companyId, pcrId],
+      );
+      return r.rows[0].n as number;
+    }
+
     beforeAll(async () => {
       C = await seedCompany(direct, "pcr-identity");
 
@@ -621,19 +636,19 @@ describe.skipIf(!(hasDb && laneDb))(
       expect(await identityNumber(empAdmin)).toBe(NEW_IDENTITY);
     });
 
-    it("approver CÓ approve NHƯNG THIẾU view-identity → 403; request giữ Pending; employee KHÔNG đổi", async () => {
+    it("approver CÓ approve NHƯNG THIẾU view-identity → 403; giữ Pending; employee KHÔNG đổi; deny-audit PERSIST", async () => {
+      const denyBefore = await countDenyAudit(pcrDeny);
       await expect(svc.approveRequest(actor(denyUid), pcrDeny, {})).rejects.toBeInstanceOf(
         ForbiddenException,
       );
       // fail-closed: KHÔNG áp thay đổi, request vẫn Pending, identity giữ nguyên.
       expect(await requestStatus(pcrDeny)).toBe("Pending");
       expect(await identityNumber(empDeny)).toBe(OLD_IDENTITY);
-      // GHI CHÚ (finding cho BE/security lane): service GHI audit resultStatus='Denied' TRONG cùng
-      // db.withTenant(...) rồi throw ForbiddenException ⇒ toàn bộ tx ROLLBACK ⇒ audit Denied KHÔNG tồn
-      // tại ở DB (đo được = 0). Vì vậy KHÔNG assert audit Denied persist (sẽ đỏ oan); ta chỉ chứng minh
-      // deny bằng trạng thái fail-closed (Pending + identity nguyên). Nếu §16.3 yêu cầu ghi vết mọi lần
-      // từ chối, deny-audit phải ghi ở connection/tx RIÊNG (ngoài business tx) — việc của lane BE.
-      expect(await countApproveAudit(pcrDeny)).toBe(0);
+      // Acceptance #5 (§16.3 detective-control): 403 PHẢI để lại ĐÚNG 1 audit-Denied cho pcrDeny —
+      // ghi trên tx RIÊNG ⇒ sống sót business-tx rollback. Chỉ đếm bản Denied/Sensitive (không lẫn Success).
+      expect(await countDenyAudit(pcrDeny)).toBe(denyBefore + 1);
+      // KHÔNG có bản approve nào khác (Success) cho pcrDeny: chỉ đúng 1 dòng approve tổng cộng = bản Denied.
+      expect(await countApproveAudit(pcrDeny)).toBe(denyBefore + 1);
     });
 
     it("cổng ĐÃ ĐỔI: approver chỉ có view-sensitive (PII cũ) KHÔNG có view-identity → vẫn 403 (fail-closed)", async () => {
