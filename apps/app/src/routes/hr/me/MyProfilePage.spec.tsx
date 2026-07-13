@@ -106,6 +106,10 @@ const MOCK_PROFILE: HrMeProfile = {
   workLocation: null,
   taxCode: null,
   personalExtra: null,
+  // HR-IDENTITY-READ-1 — server masks to null unless caller holds EXACT view-identity grant.
+  identityNumber: null,
+  identityIssueDate: null,
+  identityIssuePlace: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
 };
@@ -214,5 +218,37 @@ describe("MyProfilePage", () => {
     vi.mocked(hrApi.getMyProfile).mockReturnValue(new Promise(() => {}));
     renderWithQuery(<MyProfilePage />);
     expect(hrApi.getMyProfile).toHaveBeenCalledTimes(1);
+  });
+
+  // ── HR-IDENTITY-READ-1 — CCCD/CMND section gated on EXACT view-identity:employee ───────────
+  it("hides the identity section when user lacks view-identity:employee", async () => {
+    setCapabilities({ "read:employee": true });
+    vi.mocked(hrApi.getMyProfile).mockResolvedValue(MOCK_PROFILE);
+    renderWithQuery(<MyProfilePage />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    expect(screen.queryByText(/giấy tờ tùy thân/i)).not.toBeInTheDocument();
+  });
+
+  it("does NOT fall through a *:* wildcard grant for the identity section (useCanExact only)", async () => {
+    setCapabilities({ "read:employee": true, "*:*": true });
+    vi.mocked(hrApi.getMyProfile).mockResolvedValue(MOCK_PROFILE);
+    renderWithQuery(<MyProfilePage />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    expect(screen.queryByText(/giấy tờ tùy thân/i)).not.toBeInTheDocument();
+  });
+
+  it("shows identity values when user holds the EXACT view-identity:employee grant", async () => {
+    setCapabilities({ "read:employee": true, "view-identity:employee": true });
+    vi.mocked(hrApi.getMyProfile).mockResolvedValue({
+      ...MOCK_PROFILE,
+      identityNumber: "079123456789",
+      identityIssueDate: "2020-05-01",
+      identityIssuePlace: "Cục Cảnh sát QLHC về TTXH",
+    });
+    renderWithQuery(<MyProfilePage />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    expect(screen.getByText(/giấy tờ tùy thân/i)).toBeInTheDocument();
+    expect(screen.getByText("079123456789")).toBeInTheDocument();
+    expect(screen.getByText("Cục Cảnh sát QLHC về TTXH")).toBeInTheDocument();
   });
 });

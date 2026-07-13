@@ -133,6 +133,14 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   // wildcard *:* KHÔNG thuộc allowlist ⇒ KHÔNG kế thừa. Chỉ mở CỜ HIỂN THỊ.
   "view:dashboard-config",
   "update:dashboard-config",
+  // HR-IDENTITY-READ-1 — APPEND-only: cặp NHẠY CẢM CCCD (is_sensitive=true, seed mig 0494), grant Company
+  // CHỈ hr + company-admin, Own CHỈ employee (chính chủ). FE Hồ sơ nhân sự dùng useCanExact('view-identity',
+  // 'employee') làm CỜ HIỂN THỊ section "Giấy tờ (CMND/CCCD)". Thiếu allowlist ⇒
+  // getAllowlistedSensitiveCapabilities KHÔNG surface ⇒ /auth/me KHÔNG trả ⇒ section ẨN với CẢ hr/
+  // company-admin/employee dù grant thật tồn tại (bài học CAP-2/USEROPS-1/EXPORT-1). manager KHÔNG có
+  // grant ⇒ KHÔNG thấy (least-privilege). Enforcement KHÔNG đổi — HrReadService.revealIdentity per-row
+  // (isSensitive:true, wildcard *:* KHÔNG mở, reveal ⟹ audit atomic) vẫn là cổng THẬT. Chỉ mở CỜ HIỂN THỊ.
+  "view-identity:employee",
 ]);
 
 @Injectable()

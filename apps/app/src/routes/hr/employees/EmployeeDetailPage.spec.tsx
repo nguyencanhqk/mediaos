@@ -70,6 +70,10 @@ const MOCK_DETAIL: HrEmployeeDetail = {
   workLocation: null,
   taxCode: null,
   personalExtra: null,
+  // HR-IDENTITY-READ-1 — server masks to null unless caller holds EXACT view-identity grant.
+  identityNumber: null,
+  identityIssueDate: null,
+  identityIssuePlace: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
 };
@@ -208,5 +212,38 @@ describe("EmployeeDetailPage", () => {
     expect(filesTabButton).toBeInTheDocument();
     fireEvent.click(filesTabButton);
     expect(screen.getByText(/tài liệu đính kèm hồ sơ nhân viên này/i)).toBeInTheDocument();
+  });
+
+  // ── HR-IDENTITY-READ-1 — CCCD/CMND section gated on EXACT view-identity:employee ───────────
+  it("hides the identity section when user lacks view-identity:employee", async () => {
+    setCapabilities({ "read:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    // Default active tab is "basic" — identity section would live there if mounted.
+    expect(screen.queryByText(/giấy tờ tùy thân/i)).not.toBeInTheDocument();
+  });
+
+  it("does NOT fall through a *:* wildcard grant for the identity section (useCanExact only)", async () => {
+    setCapabilities({ "read:employee": true, "*:*": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    expect(screen.queryByText(/giấy tờ tùy thân/i)).not.toBeInTheDocument();
+  });
+
+  it("shows identity values when user holds the EXACT view-identity:employee grant", async () => {
+    setCapabilities({ "read:employee": true, "view-identity:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue({
+      ...MOCK_DETAIL,
+      identityNumber: "079123456789",
+      identityIssueDate: "2020-05-01",
+      identityIssuePlace: "Cục Cảnh sát QLHC về TTXH",
+    });
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    expect(screen.getByText(/giấy tờ tùy thân/i)).toBeInTheDocument();
+    expect(screen.getByText("079123456789")).toBeInTheDocument();
+    expect(screen.getByText("Cục Cảnh sát QLHC về TTXH")).toBeInTheDocument();
   });
 });

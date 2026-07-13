@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Users, RefreshCw, ArrowLeft, Pencil, FileText } from "lucide-react";
-import { hrApi, hrKeys, useCan, PermissionGate } from "@mediaos/web-core";
+import { hrApi, hrKeys, useCan, useCanExact, PermissionGate } from "@mediaos/web-core";
 import {
   PageHeader,
   EmptyState,
@@ -22,7 +22,13 @@ import "../contracts/contracts-i18n";
 import { EMPLOYEE_FILE_ENGINE_PAIRS } from "./employee-file-constants";
 import { EmployeeFilesTab } from "./EmployeeFilesTab";
 // HR-PROFILE-UI-1 — section dùng chung với split view.
-import { BasicInfoSection, CompSection, ContactSection, WorkInfoSection } from "./profile-sections";
+import {
+  BasicInfoSection,
+  CompSection,
+  ContactSection,
+  IdentitySection,
+  WorkInfoSection,
+} from "./profile-sections";
 
 type Tab = "basic" | "contact" | "work" | "comp" | "files";
 
@@ -55,6 +61,12 @@ export function EmployeeDetailPage({
   const canViewSalary = useCan(
     HR_ENGINE_PAIRS.VIEW_SALARY.action,
     HR_ENGINE_PAIRS.VIEW_SALARY.resourceType,
+  );
+  // HR-IDENTITY-READ-1 — CCCD/CMND nhạy cảm HƠN view-sensitive, cặp seed riêng. useCanExact
+  // (KHÔNG useCan) — sensitive pair, tránh *:* wildcard fall-through permit trong khi BE 403.
+  const canViewIdentity = useCanExact(
+    HR_ENGINE_PAIRS.VIEW_IDENTITY.action,
+    HR_ENGINE_PAIRS.VIEW_IDENTITY.resourceType,
   );
   // S2-FE-HR-9 — spec §18.7: tab "File hồ sơ" chỉ hiển thị nếu user có HR.EMPLOYEE.FILE_VIEW.
   const canViewFiles = useCan(
@@ -197,8 +209,12 @@ export function EmployeeDetailPage({
           <TabsTrigger value="comp">{t("detail.tabs.comp")}</TabsTrigger>
           {canViewFiles && <TabsTrigger value="files">{t("detail.tabs.files")}</TabsTrigger>}
         </TabsList>
-        <TabsContent value="basic" className="pt-4">
+        <TabsContent value="basic" className="space-y-4 pt-4">
           <BasicInfoSection employee={data} t={t} canViewSensitive={canViewSensitive} />
+          {/* HR-IDENTITY-READ-1 — chỉ mount khi có EXACT view-identity:employee (fail-closed). */}
+          {canViewIdentity && (
+            <IdentitySection employee={data} t={t} canViewIdentity={canViewIdentity} />
+          )}
         </TabsContent>
         <TabsContent value="contact" className="pt-4">
           <ContactSection employee={data} t={t} canViewSensitive={canViewSensitive} />

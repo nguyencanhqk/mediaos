@@ -129,6 +129,41 @@ describe("AuditMaskerService.mask (bất biến #3)", () => {
     expect(out["name"]).toBe("keep");
   });
 
+  // HR-IDENTITY-READ-1 — stem MỚI 'identityissue' (append-only). Che ngày/nơi cấp CCCD; số CCCD vẫn che
+  // qua stem cũ 'identitynumber'. Phủ snake_case + camelCase sau normalizeKey.
+  it("mask stem MỚI identityissue (identity_issue_date/identity_issue_place + camelCase); identity_number vẫn che", () => {
+    const out = masker.mask({
+      identity_issue_date: SAMPLE,
+      identity_issue_place: SAMPLE,
+      identityIssueDate: SAMPLE,
+      identityIssuePlace: SAMPLE,
+      identity_number: SAMPLE,
+      identityNumber: SAMPLE,
+      keep: "ok",
+    }) as Record<string, unknown>;
+    expect(out["identity_issue_date"]).toBe(MASK);
+    expect(out["identity_issue_place"]).toBe(MASK);
+    expect(out["identityIssueDate"]).toBe(MASK);
+    expect(out["identityIssuePlace"]).toBe(MASK);
+    // Regression: stem cũ 'identitynumber' VẪN che sau khi thêm stem mới (append-only).
+    expect(out["identity_number"]).toBe(MASK);
+    expect(out["identityNumber"]).toBe(MASK);
+    expect(out["keep"]).toBe("ok");
+  });
+
+  // REGRESSION — stem MỚI 'identityissue' KHÔNG kéo theo che base_salary/salaryType (không chồng lấn).
+  it("REGRESSION — identityissue stem KHÔNG mask base_salary/salaryType (audit update-salary nguyên vẹn)", () => {
+    const REAL = 7654321;
+    const out = masker.mask({
+      base_salary: REAL,
+      salaryType: "monthly",
+      identity_issue_place: SAMPLE,
+    }) as Record<string, unknown>;
+    expect(out["base_salary"]).toBe(REAL);
+    expect(out["salaryType"]).toBe("monthly");
+    expect(out["identity_issue_place"]).toBe(MASK);
+  });
+
   it("mask stem MỚI otp + biến thể ghép (otp/otp_secret/otpCode)", () => {
     const out = masker.mask({
       otp: SAMPLE,

@@ -107,6 +107,12 @@ export const hrEmployeeListItemSchema = z.object({
   contractType: z.string().nullable(),
   /** SENSITIVE (view-salary) — null when unauthorized. */
   baseSalary: z.number().nullable(),
+  // HR-IDENTITY-READ-1 (SPEC-03 §14.18 "Giấy tờ" — CCCD): SENSITIVE identity fields behind their OWN
+  // gate (view-identity:employee, is_sensitive) — separate from view-sensitive PII / view-salary. Null
+  // unless the caller holds an EXACT view-identity grant (a wildcard *:* never reveals); reveal ⟹ audit.
+  identityNumber: z.string().nullable(),
+  identityIssueDate: z.string().nullable(),
+  identityIssuePlace: z.string().nullable(),
 });
 export type HrEmployeeListItem = z.infer<typeof hrEmployeeListItemSchema>;
 
@@ -138,8 +144,6 @@ export const hrEmployeeDetailSchema = z.object({
   contractType: z.string().nullable(),
   notes: z.string().nullable(),
   // HR-PROFILE-UI-1: personal-info PII (mig 0451 self-service columns) — SAME view-sensitive gate.
-  // identity_* (CCCD) is intentionally NOT exposed here (SPEC-03 §14.18 higher-sensitivity class —
-  // needs an owner decision on its own gate before any read surface carries it).
   gender: z.string().nullable(),
   dateOfBirth: z.string().nullable(),
   maritalStatus: z.string().nullable(),
@@ -148,6 +152,14 @@ export const hrEmployeeDetailSchema = z.object({
   permanentAddress: z.string().nullable(),
   emergencyContactName: z.string().nullable(),
   emergencyContactPhone: z.string().nullable(),
+  // HR-IDENTITY-READ-1 (SPEC-03 §14.18 "Giấy tờ" — CCCD): identity fields gated behind their OWN
+  // grant (view-identity:employee, is_sensitive — mig 0494) — HIGHER sensitivity than view-sensitive
+  // PII. Null unless the caller holds an EXACT view-identity grant (wildcard *:* never reveals); a
+  // reveal ⟹ audit (action='view-identity') atomic in the tenant tx. Approving these via a
+  // profile-change-request also requires view-identity (profile-change-request.service gate).
+  identityNumber: z.string().nullable(),
+  identityIssueDate: z.string().nullable(),
+  identityIssuePlace: z.string().nullable(),
   // HR-PROFILE-UI-1b (mig 0489, hybrid): directory-class...
   officialDate: z.string().nullable(),
   probationEndDate: z.string().nullable(),

@@ -65,9 +65,12 @@ describe.skipIf(!runDb)(
 
       // view-salary:employee is a SENSITIVE catalog pair → wildcard cannot satisfy; exact ALLOW does.
       const permId = await seedPermissionCatalog(direct, "view-salary", RT, true);
+      // HR-IDENTITY-READ-1: view-identity:employee is ALSO a SENSITIVE pair (mig 0494) — same gate class.
+      const identityPermId = await seedPermissionCatalog(direct, "view-identity", RT, true);
       // Company-level exact ALLOW for actorA (satisfies the sensitive gate for rows w/o an object grant).
       roleA = await seedRole(direct, A.companyId, "hrperf-role");
       await seedRolePermission(direct, roleA, permId, "ALLOW", "Company");
+      await seedRolePermission(direct, roleA, identityPermId, "ALLOW", "Company");
       await seedUserRole(direct, actorA, roleA, A.companyId);
     });
 
@@ -148,6 +151,61 @@ describe.skipIf(!runDb)(
         const single = await svc.can(input);
         expect(decisions.get(id)!.get("view-salary")).toEqual(single);
       }
+    });
+
+    it("(d) HR-IDENTITY-READ-1: view-identity in the batch is byte-identical to per-row can()", async () => {
+      // OBJ_1: object-DENY view-identity in A → deny despite the company-level exact ALLOW.
+      await seedObjectGrant(direct, A.companyId, actorA, RT, OBJ_1, "view-identity", "DENY");
+      // OBJ_2: no object grant → company-level exact ALLOW satisfies the sensitive gate → allow + audit.
+
+      const decisions = await svc.canBatch(
+        actorA,
+        A.companyId,
+        RT,
+        [OBJ_1, OBJ_2],
+        [{ action: "view-identity", isSensitive: true }],
+      );
+
+      const d1 = decisions.get(OBJ_1)!.get("view-identity")!;
+      const d2 = decisions.get(OBJ_2)!.get("view-identity")!;
+      expect(d1.allow).toBe(false);
+      expect(d1.reason).toBe("deny-explicit");
+      expect(d2.allow).toBe(true);
+      expect(d2.reason).toBe("allow");
+      // Sensitive reveal ⟹ audit required (mirror view-salary) — the caller audits atomically.
+      expect(d2.auditRequired).toBe(true);
+
+      // Parity: each batched cell === a per-row can() over the SAME real repo (decideCan, single source).
+      for (const id of [OBJ_1, OBJ_2]) {
+        const single = await svc.can({
+          userId: actorA,
+          companyId: A.companyId,
+          action: "view-identity",
+          resourceType: RT,
+          resourceId: id,
+          isSensitive: true,
+        });
+        expect(decisions.get(id)!.get("view-identity")).toEqual(single);
+      }
+    });
+
+    it("(e) HR-IDENTITY-READ-1: wildcard *:* does NOT satisfy view-identity (isSensitive gate, exact only)", async () => {
+      // A separate actor holding ONLY a non-sensitive wildcard *:* ALLOW must NOT reveal identity.
+      const wildUser = await seedUser(direct, A.companyId, `wild-${A.slug}@t.local`);
+      const wildRole = await seedRole(direct, A.companyId, "hrperf-wild");
+      const wildcardPerm = await seedPermissionCatalog(direct, "*", "*", false);
+      await seedRolePermission(direct, wildRole, wildcardPerm, "ALLOW", "Company");
+      await seedUserRole(direct, wildUser, wildRole, A.companyId);
+
+      const decision = await svc.can({
+        userId: wildUser,
+        companyId: A.companyId,
+        action: "view-identity",
+        resourceType: RT,
+        resourceId: OBJ_2,
+        isSensitive: true,
+      });
+      expect(decision.allow).toBe(false);
     });
   },
 );

@@ -85,6 +85,9 @@ export class HrReadService {
       const decisions = await this.permission.canBatch(user.id, user.companyId, "employee", ids, [
         { action: "view-salary", isSensitive: true },
         { action: "view-sensitive", isSensitive: true },
+        // HR-IDENTITY-READ-1: CCCD (§14.18) has its OWN sensitive gate — resolved in the SAME batch so
+        // OBJECT-level view-identity grants (ADR-0010) decide per row, byte-identical to can().
+        { action: "view-identity", isSensitive: true },
       ]);
 
       const items: HrEmployeeListItem[] = [];
@@ -104,7 +107,19 @@ export class HrReadService {
         // PII (HR-PROFILE-UI-1): view-sensitive per-row (no separate audit — read-only, mirror
         // canViewSensitive).
         const revealPii = Boolean(cell?.get("view-sensitive")?.allow);
-        items.push(this.toListItem(row, revealSalary, revealPii));
+        // Identity (HR-IDENTITY-READ-1): reveal ONLY when allow && auditRequired (mirror revealIdentity)
+        // — and audit that reveal PER ROW on THIS tenant tx (a failed audit rolls back the read).
+        const identity = cell?.get("view-identity");
+        const revealIdentity = Boolean(identity?.allow && identity?.auditRequired);
+        if (revealIdentity) {
+          await this.audit.record(tx, {
+            action: "view-identity",
+            objectType: "employee",
+            objectId: row.id,
+            actorUserId: user.id,
+          });
+        }
+        items.push(this.toListItem(row, revealSalary, revealPii, revealIdentity));
       }
 
       const totalPages = query.pageSize > 0 ? Math.ceil(total / query.pageSize) : 0;
@@ -149,7 +164,8 @@ export class HrReadService {
 
       const revealSalary = await this.revealSalary(tx, user, id);
       const revealPii = await this.canViewSensitive(user, id);
-      return this.toDetail(row, revealSalary, revealPii);
+      const revealIdentity = await this.revealIdentity(tx, user, id);
+      return this.toDetail(row, revealSalary, revealPii, revealIdentity);
     });
   }
 
@@ -210,7 +226,8 @@ export class HrReadService {
       // Own data still flows through the SAME masking layer (no bypass): the caller's grants decide.
       const revealSalary = await this.revealSalary(tx, user, row.id);
       const revealPii = await this.canViewSensitive(user, row.id);
-      return this.toDetail(row, revealSalary, revealPii);
+      const revealIdentity = await this.revealIdentity(tx, user, row.id);
+      return this.toDetail(row, revealSalary, revealPii, revealIdentity);
     });
   }
 
@@ -294,6 +311,39 @@ export class HrReadService {
   }
 
   /**
+   * HR-IDENTITY-READ-1 — reveal identity_* (CCCD, SPEC-03 §14.18) AND write the view-identity audit
+   * atomically (mirrors revealSalary). isSensitive=true → a wildcard *:* grant cannot satisfy it (only
+   * an EXACT view-identity:employee ALLOW does). We reveal ONLY when allow && auditRequired, and in that
+   * case record the view inside the caller's tenant tx — a failed audit rolls back the read. Identity is
+   * a SEPARATE, higher-sensitivity gate: view-sensitive/view-salary grants do NOT reveal it.
+   */
+  private async revealIdentity(
+    tx: TenantTx,
+    user: RequestUser,
+    targetId: string,
+  ): Promise<boolean> {
+    const input: CanInput = {
+      userId: user.id,
+      companyId: user.companyId,
+      action: "view-identity",
+      resourceType: "employee",
+      resourceId: targetId,
+      isSensitive: true,
+    };
+    const decision = await this.permission.can(input);
+    const reveal = decision.allow && decision.auditRequired;
+    if (reveal) {
+      await this.audit.record(tx, {
+        action: "view-identity",
+        objectType: "employee",
+        objectId: targetId,
+        actorUserId: user.id,
+      });
+    }
+    return reveal;
+  }
+
+  /**
    * view-sensitive:employee gate for PII (phone/notes/contractType + personal-info). Sensitive catalog
    * pair → wildcard grants do NOT satisfy it. PII reveal is not separately audited (read-only, no
    * salary-class trail). targetId null = type-level check (used for the summary gender aggregate,
@@ -318,6 +368,7 @@ export class HrReadService {
     row: HrListRow,
     revealSalary: boolean,
     revealPii: boolean,
+    revealIdentity: boolean,
   ): HrEmployeeListItem {
     return {
       id: row.id,
@@ -343,6 +394,10 @@ export class HrReadService {
       phone: revealPii ? row.phone : null,
       contractType: revealPii ? row.contractType : null,
       baseSalary: revealSalary && row.baseSalary != null ? Number(row.baseSalary) : null,
+      // HR-IDENTITY-READ-1 (§14.18): CCCD — fail-closed null unless view-identity reveals (audited).
+      identityNumber: revealIdentity ? row.identityNumber : null,
+      identityIssueDate: revealIdentity ? row.identityIssueDate : null,
+      identityIssuePlace: revealIdentity ? row.identityIssuePlace : null,
     };
   }
 
@@ -361,7 +416,12 @@ export class HrReadService {
     return Object.keys(out).length > 0 ? out : null;
   }
 
-  private toDetail(row: HrDetailRow, revealSalary: boolean, revealPii: boolean): HrEmployeeDetail {
+  private toDetail(
+    row: HrDetailRow,
+    revealSalary: boolean,
+    revealPii: boolean,
+    revealIdentity: boolean,
+  ): HrEmployeeDetail {
     return {
       id: row.id,
       userId: row.userId,
@@ -390,7 +450,6 @@ export class HrReadService {
       contractType: revealPii ? row.contractType : null,
       notes: revealPii ? row.notes : null,
       // HR-PROFILE-UI-1: personal-info PII (mig 0451) — SAME view-sensitive gate, fail-closed.
-      // identity_* (CCCD, §14.18) is never projected here — see repository DETAIL_COLUMNS.
       gender: revealPii ? row.gender : null,
       dateOfBirth: revealPii ? row.dateOfBirth : null,
       maritalStatus: revealPii ? row.maritalStatus : null,
@@ -399,6 +458,11 @@ export class HrReadService {
       permanentAddress: revealPii ? row.permanentAddress : null,
       emergencyContactName: revealPii ? row.emergencyContactName : null,
       emergencyContactPhone: revealPii ? row.emergencyContactPhone : null,
+      // HR-IDENTITY-READ-1: CCCD (§14.18) — SEPARATE view-identity gate (higher-sensitivity than the
+      // view-sensitive PII above); fail-closed null unless view-identity reveals (audited atomically).
+      identityNumber: revealIdentity ? row.identityNumber : null,
+      identityIssueDate: revealIdentity ? row.identityIssueDate : null,
+      identityIssuePlace: revealIdentity ? row.identityIssuePlace : null,
       // HR-PROFILE-UI-1b (mig 0489, hybrid): directory-class không gate...
       officialDate: row.officialDate,
       probationEndDate: row.probationEndDate,

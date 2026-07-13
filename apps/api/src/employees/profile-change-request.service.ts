@@ -55,7 +55,9 @@ const SENSITIVE_FIELDS = new Set<string>(PROFILE_CHANGE_SENSITIVE_FIELDS);
  * S2-HR-BE-4 — Profile change request business logic (SPEC-03 §14.18/14.19/14.20).
  *
  * BẤT BIẾN #1: every DB write runs inside db.withTenant(companyId, fn).
- * BẤT BIẾN #2: audit INSERT shares the business tx (atomic — no partial audit).
+ * BẤT BIẾN #2: audit INSERT shares the business tx (atomic — no partial audit) for SUCCESS paths;
+ *   the sensitive-approve DENY path ghi audit trên 1 withTenant RIÊNG (tự commit) để bản ghi Denied
+ *   sống sót ForbiddenException rollback (detective-control §16.3). Cả hai đường CHỈ INSERT.
  * BẤT BIẾN #3: oldValues/newValues go through AuditService masker before audit_logs
  *   (identity_number → "***"). The employee record apply also only touches allowed columns.
  *
@@ -253,31 +255,29 @@ export class ProfileChangeRequestService {
       const touchesSensitive = fields.some((f) => SENSITIVE_FIELDS.has(f));
 
       // SENSITIVE GATE (SPEC-03 §14.18 "Giấy tờ — cần duyệt nghiêm ngặt"): an approver may hold
-      // approve:profile-change-request without view-sensitive:employee. If the request touches an
-      // identity field, require the stronger grant. Fail-closed → 403 + audit Denied/Sensitive.
+      // approve:profile-change-request without the identity grant. If the request touches an identity
+      // field, require the stronger grant. HR-IDENTITY-READ-1: this is now the SAME gate as the read
+      // surface — view-identity:employee (mig 0494, is_sensitive), NOT the broader view-sensitive PII
+      // gate — so the write (approve) and the read of identity share ONE permission. isSensitive:true →
+      // a wildcard *:* never satisfies it. Fail-closed → 403 + audit Denied/Sensitive.
       if (touchesSensitive) {
         const decision = await this.permission.can({
           userId: user.id,
           companyId: user.companyId,
-          action: "view-sensitive",
+          action: "view-identity",
           resourceType: "employee",
+          isSensitive: true,
         });
         if (!decision.allow) {
-          // BẤT BIẾN #2: audit the denial inside the same tx. BẤT BIẾN #3: masker handles PII.
-          await this.audit.record(tx, {
-            action: "approve",
-            objectType: "profile_change_request",
-            objectId: id,
-            actorUserId: user.id,
-            moduleCode: "HR",
-            actionGroup: "ProfileChangeRequest",
-            resultStatus: "Denied",
-            sensitivityLevel: "Sensitive",
-            permissionCode: "HR.EMPLOYEE.VIEW_SENSITIVE",
-            metadata: { changedFields: fields, reason: "missing view-sensitive:employee" },
-          });
+          // Deny-audit đi trên MỘT withTenant RIÊNG (transaction độc lập, tự commit) NGOÀI business tx:
+          // throw ForbiddenException ngay dưới đây sẽ rollback business tx `tx`, cuốn theo mọi ghi trong
+          // đó — nếu audit ghi trên `tx` (cách cũ) thì bản ghi Denied biến mất, thủng detective-control
+          // §16.3. Ghi ở tx riêng (mẫu recordOperatorAction — db.service.ts §AC-8/C1) để audit SỐNG SÓT
+          // rollback. Vẫn CHỈ INSERT (BẤT BIẾN #2 — app role không UPDATE/DELETE audit_logs). BẤT BIẾN #3:
+          // masker xử lý PII trong metadata.
+          await this.recordSensitiveDenyAudit(user, id, fields);
           throw new ForbiddenException(
-            "Permission denied: approving identity/document fields requires HR.EMPLOYEE.VIEW_SENSITIVE.",
+            "Permission denied: approving identity/document fields requires HR.EMPLOYEE.VIEW_IDENTITY.",
           );
         }
       }
@@ -315,6 +315,36 @@ export class ProfileChangeRequestService {
       });
 
       return { id: updated.id, status: updated.status };
+    });
+  }
+
+  /**
+   * Ghi audit-Denied cho approve chạm field "Giấy tờ" khi approver THIẾU `view-identity:employee`.
+   *
+   * Chạy trên MỘT `db.withTenant` RIÊNG (transaction độc lập, tự commit) — TÁCH khỏi business tx của
+   * approveRequest — để bản ghi Denied sống sót ForbiddenException (business tx rollback không cuốn theo).
+   * Kết nối riêng từ pool (max 20), audit_logs chỉ bị INSERT ⇒ không đụng lock của business tx (chỉ SELECT
+   * trước điểm throw). BẤT BIẾN #1: đi qua withTenant(companyId) → RLS ép company_id. BẤT BIẾN #2: INSERT-only.
+   * BẤT BIẾN #3: AuditService masker xử lý PII trong metadata.
+   */
+  private async recordSensitiveDenyAudit(
+    user: RequestUser,
+    requestId: string,
+    changedFields: string[],
+  ): Promise<void> {
+    await this.db.withTenant(user.companyId, async (auditTx) => {
+      await this.audit.record(auditTx, {
+        action: "approve",
+        objectType: "profile_change_request",
+        objectId: requestId,
+        actorUserId: user.id,
+        moduleCode: "HR",
+        actionGroup: "ProfileChangeRequest",
+        resultStatus: "Denied",
+        sensitivityLevel: "Sensitive",
+        permissionCode: "HR.EMPLOYEE.VIEW_IDENTITY",
+        metadata: { changedFields, reason: "missing view-identity:employee" },
+      });
     });
   }
 

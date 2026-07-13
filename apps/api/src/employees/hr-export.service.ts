@@ -166,6 +166,12 @@ export class HrExportService {
       contractType: revealPii ? row.contractType : null,
       // Salary-class — never an export column; forced null (owner decision, see class doc).
       baseSalary: null,
+      // HR-IDENTITY-READ-1: identity (CCCD, §14.18) is NOT an export column — its own view-identity gate
+      // is separate from this export surface (export:employee/view-sensitive). Forced null so it can
+      // never reach the CSV even though the shared list DTO now carries the fields.
+      identityNumber: null,
+      identityIssueDate: null,
+      identityIssuePlace: null,
     };
   }
 

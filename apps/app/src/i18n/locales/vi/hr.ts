@@ -113,6 +113,8 @@ export default {
       emergency: "Liên hệ khẩn cấp",
       job: "Thông tin công việc",
       salary: "Thông tin lương",
+      // HR-IDENTITY-READ-1 — nhóm CCCD/CMND (view-identity riêng, nhạy cảm hơn view-sensitive)
+      identity: "Giấy tờ tùy thân",
     },
     fields: {
       code: "Mã nhân viên",
@@ -146,6 +148,10 @@ export default {
       officialDate: "Ngày chính thức",
       probationEndDate: "Ngày kết thúc thử việc",
       workLocation: "Nơi làm việc",
+      // HR-IDENTITY-READ-1 — CCCD/CMND (view-identity riêng, nhạy cảm hơn view-sensitive)
+      identityNumber: "Số CCCD/CMND",
+      identityIssueDate: "Ngày cấp",
+      identityIssuePlace: "Nơi cấp",
     },
     maritalStatus: {
       single: "Độc thân",

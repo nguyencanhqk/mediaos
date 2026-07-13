@@ -1,7 +1,25 @@
+import "reflect-metadata";
 import type { PoolClient } from "pg";
+import type { INestApplication } from "@nestjs/common";
+import { ForbiddenException } from "@nestjs/common";
+import { Test } from "@nestjs/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { AppModule } from "../../src/app.module";
+import { ProfileChangeRequestService } from "../../src/employees/profile-change-request.service";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
-import { cleanupTenants, seedCompany, seedUser, type SeededTenant } from "../helpers/seed";
+import {
+  cleanupTenants,
+  seedCompany,
+  seedPermissionCatalog,
+  seedRole,
+  seedRolePermission,
+  seedUser,
+  seedUserRole,
+  type SeededTenant,
+} from "../helpers/seed";
+
+// JWT_SECRET phải có TRƯỚC khi các service auth đọc env khi AppModule khởi tạo (mirror spec HTTP khác).
+process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-secret-".padEnd(40, "0");
 
 /**
  * S2-HR-BE-4 (FIX-QA) — DB-layer proof for the profile-change-request flow (FULL-gate red-zone:
@@ -403,3 +421,242 @@ describe.skipIf(!(hasDb && laneDb))("S2-HR-BE-4 profile-change-request (DB-level
     });
   });
 });
+
+/**
+ * HR-IDENTITY-READ-1 — REGRESSION (bảo vệ flow S2-HR-BE-4): sau khi FLIP cổng duyệt field "Giấy tờ"
+ * (identity_*) từ view-sensitive:employee → view-identity:employee (mig 0494), người DUYỆT phải giữ
+ * quyền view-identity mới. Lái qua ProfileChangeRequestService THẬT lấy từ DI container của AppModule
+ * (app.get) → PermissionService.can() + DatabaseService.withTenant (LANE_DB, RLS thật) — KHÔNG mock
+ * engine. (Bỏ qua tầng controller: @UsePipes(ZodValidationPipe(objectSchema)) của nestjs-zod validate
+ * MỌI tham số kể cả @Param id (string) ⇒ 400 cho mọi caller — quirk controller, không liên quan cổng.)
+ *
+ * Kiểm chứng:
+ *   - hr + company-admin (grant view-identity:employee Company, mig 0494) duyệt request chạm
+ *     identity_number VẪN PASS → status Approved + employee_profiles áp giá trị mới (flip không vỡ luồng).
+ *   - approver CÓ approve:profile-change-request NHƯNG THIẾU view-identity:employee → ForbiddenException,
+ *     request GIỮ Pending, employee_profiles KHÔNG đổi (fail-closed).
+ *   - Cổng nhạy cảm dùng view-identity (KHÔNG còn view-sensitive): approver chỉ có view-sensitive
+ *     (PII cũ) mà KHÔNG có view-identity → vẫn ForbiddenException (chứng minh cổng đã đổi đúng).
+ *
+ * Gate: skipIf(!(hasDb && LANE_DB)) — cùng lý do gate DB cô lập ở suite trên.
+ */
+describe.skipIf(!(hasDb && laneDb))(
+  "HR-IDENTITY-READ-1 profile-change approve gate (service, real permission engine)",
+  () => {
+    const direct = directPool();
+    let app: INestApplication;
+    let svc: ProfileChangeRequestService;
+    let C: SeededTenant;
+
+    const OLD_IDENTITY = "070200000000";
+    const NEW_IDENTITY = "079123456789";
+
+    // Mỗi kịch bản 1 requester+profile+pcr độc lập (approve mutate profile → tránh nhiễu chéo test).
+    let empHr = "";
+    let pcrHr = "";
+    let empAdmin = "";
+    let pcrAdmin = "";
+    let empDeny = "";
+    let pcrDeny = "";
+    let empSens = "";
+    let pcrSens = "";
+
+    // Approver user ids (context {id, companyId} truyền thẳng vào service — KHÔNG login).
+    let hrUid = "";
+    let adminUid = "";
+    let denyUid = "";
+    let sensUid = "";
+
+    async function seedRequesterWithIdentity(): Promise<string> {
+      const uid = await seedUser(
+        direct,
+        C.companyId,
+        `pcr-req-${Math.random().toString(36).slice(2, 10)}@x.test`,
+      );
+      const r = await direct.query(
+        `INSERT INTO employee_profiles (company_id, user_id, status, identity_number)
+         VALUES ($1, $2, 'active', $3) RETURNING id`,
+        [C.companyId, uid, OLD_IDENTITY],
+      );
+      return r.rows[0].id as string;
+    }
+
+    async function pcrOwner(employeeId: string): Promise<string> {
+      const r = await direct.query("SELECT user_id FROM employee_profiles WHERE id = $1", [
+        employeeId,
+      ]);
+      return r.rows[0].user_id as string;
+    }
+
+    async function seedIdentityPcr(employeeId: string): Promise<string> {
+      const requestedBy = await pcrOwner(employeeId);
+      const r = await direct.query(
+        `INSERT INTO profile_change_requests
+           (company_id, employee_id, requested_by, status, old_values, new_values, changed_fields)
+         VALUES ($1, $2, $3, 'Pending', $4::jsonb, $5::jsonb, $6::jsonb) RETURNING id`,
+        [
+          C.companyId,
+          employeeId,
+          requestedBy,
+          JSON.stringify({ identity_number: OLD_IDENTITY }),
+          JSON.stringify({ identity_number: NEW_IDENTITY }),
+          JSON.stringify(["identity_number"]),
+        ],
+      );
+      return r.rows[0].id as string;
+    }
+
+    async function grant(
+      userId: string,
+      label: string,
+      grants: Array<{ action: string; resourceType: string; sensitive: boolean }>,
+    ): Promise<void> {
+      const roleId = await seedRole(
+        direct,
+        C.companyId,
+        `pcr-approve-${label}-${userId.slice(0, 8)}`,
+      );
+      for (const g of grants) {
+        const permId = await seedPermissionCatalog(direct, g.action, g.resourceType, g.sensitive);
+        await seedRolePermission(direct, roleId, permId, "ALLOW", "Company");
+      }
+      await seedUserRole(direct, userId, roleId, C.companyId);
+    }
+
+    async function requestStatus(pcrId: string): Promise<string> {
+      const r = await direct.query("SELECT status FROM profile_change_requests WHERE id = $1", [
+        pcrId,
+      ]);
+      return r.rows[0].status as string;
+    }
+
+    async function identityNumber(employeeId: string): Promise<string | null> {
+      const r = await direct.query("SELECT identity_number FROM employee_profiles WHERE id = $1", [
+        employeeId,
+      ]);
+      return r.rows[0].identity_number as string | null;
+    }
+
+    /** Đếm audit approve cho 1 pcr (append-only — chỉ tăng). */
+    async function countApproveAudit(pcrId: string): Promise<number> {
+      const r = await direct.query(
+        `SELECT count(*)::int AS n FROM audit_logs
+         WHERE company_id = $1 AND action = 'approve'
+           AND object_type = 'profile_change_request' AND object_id = $2`,
+        [C.companyId, pcrId],
+      );
+      return r.rows[0].n as number;
+    }
+
+    /**
+     * Đếm audit DENY (approve bị từ chối vì thiếu view-identity) cho 1 pcr: result_status='Denied' +
+     * sensitivity_level='Sensitive'. Bản ghi này ghi trên tx RIÊNG nên PHẢI persist dù business tx rollback.
+     */
+    async function countDenyAudit(pcrId: string): Promise<number> {
+      const r = await direct.query(
+        `SELECT count(*)::int AS n FROM audit_logs
+         WHERE company_id = $1 AND action = 'approve'
+           AND object_type = 'profile_change_request' AND object_id = $2
+           AND result_status = 'Denied' AND sensitivity_level = 'Sensitive'`,
+        [C.companyId, pcrId],
+      );
+      return r.rows[0].n as number;
+    }
+
+    beforeAll(async () => {
+      C = await seedCompany(direct, "pcr-identity");
+
+      empHr = await seedRequesterWithIdentity();
+      empAdmin = await seedRequesterWithIdentity();
+      empDeny = await seedRequesterWithIdentity();
+      empSens = await seedRequesterWithIdentity();
+      pcrHr = await seedIdentityPcr(empHr);
+      pcrAdmin = await seedIdentityPcr(empAdmin);
+      pcrDeny = await seedIdentityPcr(empDeny);
+      pcrSens = await seedIdentityPcr(empSens);
+
+      // hr: approve + view-identity (mig 0494) → duyệt identity PASS.
+      hrUid = await seedUser(direct, C.companyId, `pcr-hr@x.test`);
+      await grant(hrUid, "hr", [
+        { action: "approve", resourceType: "profile-change-request", sensitive: false },
+        { action: "view-identity", resourceType: "employee", sensitive: true },
+      ]);
+      // company-admin: approve + view-identity → PASS.
+      adminUid = await seedUser(direct, C.companyId, `pcr-admin@x.test`);
+      await grant(adminUid, "admin", [
+        { action: "approve", resourceType: "profile-change-request", sensitive: false },
+        { action: "view-identity", resourceType: "employee", sensitive: true },
+      ]);
+      // deny: approve NHƯNG KHÔNG view-identity → 403.
+      denyUid = await seedUser(direct, C.companyId, `pcr-deny@x.test`);
+      await grant(denyUid, "deny", [
+        { action: "approve", resourceType: "profile-change-request", sensitive: false },
+      ]);
+      // sens-only: approve + view-sensitive (PII cũ) NHƯNG KHÔNG view-identity → vẫn 403 (cổng đã đổi).
+      sensUid = await seedUser(direct, C.companyId, `pcr-sens@x.test`);
+      await grant(sensUid, "sens", [
+        { action: "approve", resourceType: "profile-change-request", sensitive: false },
+        { action: "view-sensitive", resourceType: "employee", sensitive: true },
+      ]);
+
+      const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+      app = moduleRef.createNestApplication();
+      await app.init();
+      // Instance THẬT do DI dựng (real PermissionService + DatabaseService trỏ LANE_DB + AuditService).
+      svc = app.get(ProfileChangeRequestService);
+    });
+
+    afterAll(async () => {
+      await direct
+        .query("DELETE FROM employee_profiles WHERE company_id = $1", [C.companyId])
+        .catch(() => undefined);
+      await cleanupTenants(direct, [C.companyId]);
+      await direct.end();
+      if (app) await app.close();
+    });
+
+    function actor(userId: string) {
+      return { id: userId, companyId: C.companyId };
+    }
+
+    it("hr (approve + view-identity) duyệt request chạm identity_number → Approved + áp giá trị mới + audit", async () => {
+      const before = await countApproveAudit(pcrHr);
+      const result = await svc.approveRequest(actor(hrUid), pcrHr, {});
+      expect(result.status).toBe("Approved");
+      expect(await requestStatus(pcrHr)).toBe("Approved");
+      expect(await identityNumber(empHr)).toBe(NEW_IDENTITY);
+      // BẤT BIẾN #2: approve thành công ghi ĐÚNG 1 audit trong cùng tx (không rollback).
+      expect(await countApproveAudit(pcrHr)).toBe(before + 1);
+    });
+
+    it("company-admin (approve + view-identity) duyệt request chạm identity_number → Approved", async () => {
+      const result = await svc.approveRequest(actor(adminUid), pcrAdmin, {});
+      expect(result.status).toBe("Approved");
+      expect(await requestStatus(pcrAdmin)).toBe("Approved");
+      expect(await identityNumber(empAdmin)).toBe(NEW_IDENTITY);
+    });
+
+    it("approver CÓ approve NHƯNG THIẾU view-identity → 403; giữ Pending; employee KHÔNG đổi; deny-audit PERSIST", async () => {
+      const denyBefore = await countDenyAudit(pcrDeny);
+      await expect(svc.approveRequest(actor(denyUid), pcrDeny, {})).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      // fail-closed: KHÔNG áp thay đổi, request vẫn Pending, identity giữ nguyên.
+      expect(await requestStatus(pcrDeny)).toBe("Pending");
+      expect(await identityNumber(empDeny)).toBe(OLD_IDENTITY);
+      // Acceptance #5 (§16.3 detective-control): 403 PHẢI để lại ĐÚNG 1 audit-Denied cho pcrDeny —
+      // ghi trên tx RIÊNG ⇒ sống sót business-tx rollback. Chỉ đếm bản Denied/Sensitive (không lẫn Success).
+      expect(await countDenyAudit(pcrDeny)).toBe(denyBefore + 1);
+      // KHÔNG có bản approve nào khác (Success) cho pcrDeny: chỉ đúng 1 dòng approve tổng cộng = bản Denied.
+      expect(await countApproveAudit(pcrDeny)).toBe(denyBefore + 1);
+    });
+
+    it("cổng ĐÃ ĐỔI: approver chỉ có view-sensitive (PII cũ) KHÔNG có view-identity → vẫn 403 (fail-closed)", async () => {
+      await expect(svc.approveRequest(actor(sensUid), pcrSens, {})).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(await requestStatus(pcrSens)).toBe("Pending");
+      expect(await identityNumber(empSens)).toBe(OLD_IDENTITY);
+    });
+  },
+);

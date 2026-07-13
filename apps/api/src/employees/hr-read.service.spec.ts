@@ -70,6 +70,10 @@ function makeDetailRow(overrides: Record<string, unknown> = {}) {
     permanentAddress: "2 Đường B, Nghệ An",
     emergencyContactName: "Nguyen Thi B",
     emergencyContactPhone: "0911111111",
+    // HR-IDENTITY-READ-1 (§14.18 CCCD) — raw here; the SERVICE reveals ONLY behind view-identity.
+    identityNumber: "079123456789",
+    identityIssueDate: "2020-01-15",
+    identityIssuePlace: "Cục CSQLHC về TTXH",
     // HR-PROFILE-UI-1b (mig 0489, hybrid): directory + MST/blob nhân khẩu.
     officialDate: "2025-05-01",
     probationEndDate: "2025-04-30",
@@ -105,6 +109,10 @@ function makeListRow(overrides: Record<string, unknown> = {}) {
     phone: "0900000000",
     contractType: "permanent",
     baseSalary: "5000.00",
+    // HR-IDENTITY-READ-1 — raw here; the SERVICE reveals per-row ONLY behind view-identity.
+    identityNumber: "079123456789",
+    identityIssueDate: "2020-01-15",
+    identityIssuePlace: "Cục CSQLHC về TTXH",
     ...overrides,
   };
 }
@@ -567,7 +575,7 @@ describe("HrReadService.getHrEmployee — personal-info PII masking (HR-PROFILE-
     expect(res.avatarUrl).toBe("https://cdn.test/a.png");
   });
 
-  it("ALLOW view-sensitive → personal-info revealed (identity_* is NEVER in the DTO)", async () => {
+  it("ALLOW view-sensitive → personal-info revealed BUT identity_* stays null (own sensitive gate)", async () => {
     const { svc } = makeService({
       perms: { "view-salary": DENY(), "view-sensitive": ALLOW(false) },
     });
@@ -578,10 +586,11 @@ describe("HrReadService.getHrEmployee — personal-info PII masking (HR-PROFILE-
     expect(res.personalEmail).toBe("a.personal@mail.test");
     expect(res.currentAddress).toBe("1 Đường A, Hà Nội");
     expect(res.emergencyContactName).toBe("Nguyen Thi B");
-    // SPEC-03 §14.18: identity (CCCD) must not leak through this read surface at all.
-    expect(res).not.toHaveProperty("identityNumber");
-    expect(res).not.toHaveProperty("identityIssueDate");
-    expect(res).not.toHaveProperty("identityIssuePlace");
+    // HR-IDENTITY-READ-1 (SPEC-03 §14.18): identity (CCCD) has its OWN gate (view-identity) — a
+    // view-sensitive grant does NOT reveal it. Field is PRESENT (nullable) but masked → null.
+    expect(res.identityNumber).toBeNull();
+    expect(res.identityIssueDate).toBeNull();
+    expect(res.identityIssuePlace).toBeNull();
   });
 
   // HR-PROFILE-UI-1b — hybrid (mig 0489): taxCode + personal_extra JSONB.
@@ -631,6 +640,164 @@ describe("HrReadService.getHrEmployee — personal-info PII masking (HR-PROFILE-
     });
     const res = await svc.getHrEmployee(actorA, EMP_ID);
     expect(res.personalExtra).toBeNull();
+  });
+});
+
+// ─── HR-IDENTITY-READ-1: identity (CCCD) reveal — own view-identity gate + audit ───
+
+describe("HrReadService.getHrEmployee — identity reveal (view-identity, §14.18)", () => {
+  it("DENY view-identity → identity_* null, NO view-identity audit (fail-closed)", async () => {
+    const { svc, audit } = makeService({
+      perms: { "view-salary": DENY(), "view-sensitive": DENY(), "view-identity": DENY() },
+    });
+    const res = await svc.getHrEmployee(actorA, EMP_ID);
+    expect(res.identityNumber).toBeNull();
+    expect(res.identityIssueDate).toBeNull();
+    expect(res.identityIssuePlace).toBeNull();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("default (no view-identity grant) → identity_* null (wildcard *:* does NOT reveal — isSensitive gate)", async () => {
+    // Only a non-sensitive wildcard-style grant present (view-sensitive ALLOW); view-identity is NOT
+    // granted → the reveal helper passes isSensitive:true, so a wildcard can never satisfy it.
+    const { svc } = makeService({ perms: { "view-sensitive": ALLOW(false) } });
+    const res = await svc.getHrEmployee(actorA, EMP_ID);
+    expect(res.identityNumber).toBeNull();
+    expect(res.identityIssueDate).toBeNull();
+    expect(res.identityIssuePlace).toBeNull();
+  });
+
+  it("ALLOW view-identity → identity_* revealed AND exactly one view-identity audit row on the tx", async () => {
+    const { svc, audit } = makeService({
+      perms: { "view-salary": DENY(), "view-identity": ALLOW() },
+    });
+    const res = await svc.getHrEmployee(actorA, EMP_ID);
+    expect(res.identityNumber).toBe("079123456789");
+    expect(res.identityIssueDate).toBe("2020-01-15");
+    expect(res.identityIssuePlace).toBe("Cục CSQLHC về TTXH");
+    // Reveal ⟹ audit atomic: exactly one view-identity audit for THIS profile, on the tenant tx.
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    expect(audit.record).toHaveBeenCalledWith(
+      FAKE_TX,
+      expect.objectContaining({
+        action: "view-identity",
+        objectType: "employee",
+        objectId: EMP_ID,
+        actorUserId: ACTOR_ID,
+      }),
+    );
+  });
+
+  it("ALLOW but auditRequired=false → identity_* MASKED, no audit (never reveal unaudited)", async () => {
+    const { svc, audit } = makeService({ perms: { "view-identity": ALLOW(false) } });
+    const res = await svc.getHrEmployee(actorA, EMP_ID);
+    expect(res.identityNumber).toBeNull();
+    expect(res.identityIssueDate).toBeNull();
+    expect(res.identityIssuePlace).toBeNull();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("view-identity revealed independently of view-salary/view-sensitive (own gate)", async () => {
+    // Identity granted, salary + PII denied → identity revealed, salary/PII masked.
+    const { svc } = makeService({
+      perms: { "view-salary": DENY(), "view-sensitive": DENY(), "view-identity": ALLOW() },
+    });
+    const res = await svc.getHrEmployee(actorA, EMP_ID);
+    expect(res.identityNumber).toBe("079123456789");
+    expect(res.baseSalary).toBeNull();
+    expect(res.phone).toBeNull();
+  });
+});
+
+describe("HrReadService.getMyProfile — identity reveal (self, view-identity)", () => {
+  it("self WITHOUT view-identity → identity_* null even on own profile (no self-bypass)", async () => {
+    const { svc, audit } = makeService({ perms: { "view-sensitive": ALLOW(false) } });
+    const res = await svc.getMyProfile(actorA);
+    expect(res.identityNumber).toBeNull();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("self WITH view-identity → identity_* revealed + one view-identity audit for own profileId", async () => {
+    const { svc, audit } = makeService({ perms: { "view-identity": ALLOW() } });
+    const res = await svc.getMyProfile(actorA);
+    expect(res.identityNumber).toBe("079123456789");
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    expect(audit.record).toHaveBeenCalledWith(
+      FAKE_TX,
+      expect.objectContaining({
+        action: "view-identity",
+        objectType: "employee",
+        objectId: EMP_ID,
+      }),
+    );
+  });
+});
+
+describe("HrReadService.listHrEmployees — identity reveal per-row (view-identity, HR-PERF-1 batch)", () => {
+  const query = { page: 1, pageSize: 20, sort: "fullName", order: "asc" } as never;
+
+  it("DENY view-identity → identity_* null on EVERY row, no audit", async () => {
+    const repo = makeRepo({
+      listScopedTx: vi
+        .fn()
+        .mockResolvedValue({ rows: [makeListRow(), makeListRow({ id: "f1" })], total: 2 }),
+    });
+    const { svc, audit } = makeService({
+      repo,
+      perms: { "view-salary": DENY(), "view-sensitive": DENY(), "view-identity": DENY() },
+    });
+    const res = await svc.listHrEmployees(actorA, query);
+    expect(res.items).toHaveLength(2);
+    for (const item of res.items) {
+      expect(item.identityNumber).toBeNull();
+      expect(item.identityIssueDate).toBeNull();
+      expect(item.identityIssuePlace).toBeNull();
+    }
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("canBatch carries {action:'view-identity',isSensitive:true}; object-ALLOW row reveals + audits per row", async () => {
+    const ROW_ALLOW = EMP_ID;
+    const ROW_DENY = "f1f1f1f1-0000-0000-0000-000000000001";
+    const repo = makeRepo({
+      listScopedTx: vi
+        .fn()
+        .mockResolvedValue({ rows: [makeListRow(), makeListRow({ id: ROW_DENY })], total: 2 }),
+    });
+    const { svc, audit, permission } = makeService({
+      repo,
+      perms: { "view-salary": DENY(), "view-sensitive": DENY() },
+      permsByRow: {
+        [ROW_ALLOW]: { "view-identity": ALLOW() },
+        [ROW_DENY]: { "view-identity": DENY("deny-explicit") },
+      },
+    });
+
+    const res = await svc.listHrEmployees(actorA, query);
+
+    expect(res.items[0]!.identityNumber).toBe("079123456789");
+    expect(res.items[1]!.identityNumber).toBeNull();
+    // Reveal ⟹ audit atomic PER ROW: exactly one view-identity audit for the revealed row.
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    expect(audit.record).toHaveBeenCalledWith(
+      FAKE_TX,
+      expect.objectContaining({
+        action: "view-identity",
+        objectType: "employee",
+        objectId: ROW_ALLOW,
+      }),
+    );
+    // The batch spec carries all three sensitive actions (view-salary + view-sensitive + view-identity).
+    expect(permission.canBatch).toHaveBeenCalledWith(
+      ACTOR_ID,
+      COMPANY_A,
+      "employee",
+      [ROW_ALLOW, ROW_DENY],
+      expect.arrayContaining([
+        expect.objectContaining({ action: "view-identity", isSensitive: true }),
+      ]),
+    );
+    expect(permission.can).not.toHaveBeenCalled();
   });
 });
 

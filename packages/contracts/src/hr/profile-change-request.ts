@@ -37,8 +37,9 @@ export type ProfileChangeAllowedField = (typeof PROFILE_CHANGE_ALLOWED_FIELDS)[n
 
 /**
  * Nhóm "Giấy tờ" (SPEC-03 §14.18) — "Có, cần duyệt nghiêm ngặt".
- * Khi yêu cầu chạm bất kỳ field nào dưới đây, người DUYỆT phải có quyền cao hơn
- * `HR.EMPLOYEE.VIEW_SENSITIVE` (engine pair `view-sensitive:employee`, seed mig 0444).
+ * Khi yêu cầu chạm bất kỳ field nào dưới đây, người DUYỆT phải có quyền
+ * `HR.EMPLOYEE.VIEW_IDENTITY` (engine pair `view-identity:employee`, seed mig 0494 — is_sensitive) —
+ * CÙNG cổng với read surface CCCD/CMND (HR-IDENTITY-READ-1); wildcard *:* KHÔNG thoả.
  * Một nguồn sự thật chia sẻ BE (gate duyệt) ↔ FE (mask/hint UI).
  */
 export const PROFILE_CHANGE_SENSITIVE_FIELDS = [

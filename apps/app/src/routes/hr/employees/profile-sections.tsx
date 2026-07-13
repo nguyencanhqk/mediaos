@@ -208,6 +208,43 @@ export function WorkInfoSection({ employee, t, canViewSensitive }: SectionProps)
   );
 }
 
+// ── Nhóm "Giấy tờ tùy thân" (HR-IDENTITY-READ-1 — CCCD/CMND, view-identity riêng) ───────────────
+// Nhạy cảm HƠN view-sensitive — CHỈ render khi caller có EXACT view-identity:employee (không
+// fall-through *:*). Giá trị null: có quyền → "—"; không có quyền (không nên xảy ra vì cả section
+// đã bị ẩn ở page) → nhãn masked (fail-closed, phòng hờ).
+
+export function IdentitySection({
+  employee,
+  t,
+  canViewIdentity,
+}: {
+  employee: HrEmployeeDetail;
+  t: TF;
+  canViewIdentity: boolean;
+}) {
+  const masked = t("detail.masked");
+  return (
+    <SectionCard title={t("detail.groups.identity")}>
+      <FieldRow
+        label={t("detail.fields.identityNumber")}
+        value={pii(employee.identityNumber, canViewIdentity, masked)}
+      />
+      <FieldRow
+        label={t("detail.fields.identityIssueDate")}
+        value={pii(
+          employee.identityIssueDate ? formatDate(new Date(employee.identityIssueDate)) : null,
+          canViewIdentity,
+          masked,
+        )}
+      />
+      <FieldRow
+        label={t("detail.fields.identityIssuePlace")}
+        value={pii(employee.identityIssuePlace, canViewIdentity, masked)}
+      />
+    </SectionCard>
+  );
+}
+
 // ── Tab "Lương" (salary-class — view-salary) ────────────────────────────────────
 
 export function CompSection({
