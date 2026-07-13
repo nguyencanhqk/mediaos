@@ -184,3 +184,58 @@ describe("PermissionService.can() — RED 14b: reveal-secret with null resourceI
     expect(typeof decision.allow).toBe("boolean");
   });
 });
+
+// ─── HR-IDENTITY-READ-1: view-identity:employee is a sensitive gate — wildcard NEVER reveals ──────
+
+const EMP_ID = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+
+function identityInput(): CanInput {
+  return {
+    userId: U,
+    companyId: CO,
+    action: "view-identity",
+    resourceType: "employee",
+    resourceId: EMP_ID,
+    isSensitive: true,
+  };
+}
+
+describe("PermissionService.can() — view-identity:employee sensitive gate (HR-IDENTITY-READ-1)", () => {
+  let repo: MinimalMockRepo;
+  let svc: PermissionService;
+
+  beforeEach(() => {
+    repo = new MinimalMockRepo();
+    svc = new PermissionService(repo);
+  });
+
+  it("wildcard *:* ALLOW (non-sensitive) does NOT satisfy view-identity → DENY (deny-sensitive)", async () => {
+    repo.withCompanyGrants([
+      { action: "*", resourceType: "*", isSensitive: false, effect: "ALLOW", expiresAt: null },
+    ]);
+    const decision = await svc.can(identityInput());
+    expect(decision.allow).toBe(false);
+    expect(decision.reason).toBe("deny-sensitive");
+  });
+
+  it("EXACT view-identity:employee ALLOW → allow + auditRequired (reveal ⟹ audit)", async () => {
+    repo.withCompanyGrants([
+      {
+        action: "view-identity",
+        resourceType: "employee",
+        isSensitive: true,
+        effect: "ALLOW",
+        expiresAt: null,
+      },
+    ]);
+    const decision = await svc.can(identityInput());
+    expect(decision.allow).toBe(true);
+    expect(decision.auditRequired).toBe(true);
+  });
+
+  it("no grant → DENY (default fail-closed)", async () => {
+    repo.withCompanyGrants([]);
+    const decision = await svc.can(identityInput());
+    expect(decision.allow).toBe(false);
+  });
+});

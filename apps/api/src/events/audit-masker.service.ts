@@ -58,6 +58,11 @@ export class AuditMaskerService {
     "salaryamount",
     "health",
     "idcard",
+    // HR-IDENTITY-READ-1 (thêm, KHÔNG bỏ stem cũ — append-only) — CCCD ngày/nơi cấp. Phủ biến thể sau
+    // normalizeKey: identity_issue_date→'identityissuedate', identity_issue_place→'identityissueplace',
+    // identityIssueDate/identityIssuePlace (camelCase) — đều chứa 'identityissue'. (Số CCCD đã có stem
+    // 'identitynumber' ở trên.) FAIL TOWARD REDACTION (BẤT BIẾN #3): identity_* nhạy cảm, KHÔNG lọt audit.
+    "identityissue",
   ];
 
   /** Chuẩn hóa tên khóa: lowercase + bỏ underscore ⇒ khớp snake_case & camelCase cùng lúc. */

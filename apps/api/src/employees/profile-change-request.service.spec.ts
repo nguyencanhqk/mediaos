@@ -278,17 +278,18 @@ describe("ProfileChangeRequestService — deny-path", () => {
   });
 
   // ── 9. SENSITIVE GATE (§14.18 "Giấy tờ" — duyệt nghiêm ngặt): approver chạm identity_* ─────────
-  //     phải có view-sensitive:employee. Có approve nhưng THIẾU view-sensitive → 403 + audit Denied.
-  it("approve: throws ForbiddenException when approving identity_number without view-sensitive:employee", async () => {
+  //     HR-IDENTITY-READ-1: phải có view-identity:employee (cùng cổng với read surface, KHÔNG còn
+  //     view-sensitive). Có approve nhưng THIẾU view-identity → 403 + audit Denied/Sensitive.
+  it("approve: throws ForbiddenException when approving identity_number without view-identity:employee", async () => {
     const sensitiveReq = makePendingRequest({
       changedFields: ["identity_number"],
       oldValues: { identity_number: "0790000" },
       newValues: { identity_number: "079123456789" },
     });
-    // approve:profile-change-request → ALLOW ; view-sensitive:employee → DENY
+    // approve:profile-change-request → ALLOW ; view-identity:employee → DENY
     const { svc, repo, audit } = makeService(
       { findRequestByIdTx: vi.fn().mockResolvedValue(sensitiveReq) },
-      perActionDecision({ approve: ALLOW, "view-sensitive": DENY("no view-sensitive:employee") }),
+      perActionDecision({ approve: ALLOW, "view-identity": DENY("no view-identity:employee") }),
     );
 
     await expect(svc.approveRequest(hrUser, REQUEST_ID, {})).rejects.toBeInstanceOf(
@@ -310,7 +311,7 @@ describe("ProfileChangeRequestService — deny-path", () => {
     );
   });
 
-  it("approve: identity_issue_date/place are also strict-approval (gated by view-sensitive)", async () => {
+  it("approve: identity_issue_date/place are also strict-approval (gated by view-identity)", async () => {
     const sensitiveReq = makePendingRequest({
       changedFields: ["identity_issue_place"],
       oldValues: { identity_issue_place: "HCM" },
@@ -318,7 +319,7 @@ describe("ProfileChangeRequestService — deny-path", () => {
     });
     const { svc, repo } = makeService(
       { findRequestByIdTx: vi.fn().mockResolvedValue(sensitiveReq) },
-      perActionDecision({ approve: ALLOW, "view-sensitive": DENY() }),
+      perActionDecision({ approve: ALLOW, "view-identity": DENY() }),
     );
 
     await expect(svc.approveRequest(hrUser, REQUEST_ID, {})).rejects.toBeInstanceOf(
@@ -398,8 +399,8 @@ describe("ProfileChangeRequestService — happy-path", () => {
     );
   });
 
-  // ── 10c. Approve sensitive field WITH view-sensitive grant → applies + history is_sensitive ──
-  it("approve: identity_number with view-sensitive grant applies + marks history sensitive", async () => {
+  // ── 10c. Approve sensitive field WITH view-identity grant → applies + history is_sensitive ──
+  it("approve: identity_number with view-identity grant applies + marks history sensitive", async () => {
     const req = makePendingRequest({
       changedFields: ["identity_number"],
       oldValues: { identity_number: "0790000" },
@@ -407,7 +408,7 @@ describe("ProfileChangeRequestService — happy-path", () => {
     });
     const { svc, repo } = makeService(
       { findRequestByIdTx: vi.fn().mockResolvedValue(req) },
-      perActionDecision({ approve: ALLOW, "view-sensitive": ALLOW }),
+      perActionDecision({ approve: ALLOW, "view-identity": ALLOW }),
     );
 
     const result = await svc.approveRequest(hrUser, REQUEST_ID, {});

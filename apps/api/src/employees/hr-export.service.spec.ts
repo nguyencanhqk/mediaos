@@ -43,6 +43,10 @@ function rowStub(over: Partial<HrListRow> = {}): HrListRow {
     phone: "0900000000",
     contractType: "permanent",
     baseSalary: "1000",
+    // HR-IDENTITY-READ-1: raw CCCD on the shared list row — the export forces these null (never a CSV column).
+    identityNumber: "079123456789",
+    identityIssueDate: "2020-01-15",
+    identityIssuePlace: "HN",
     ...over,
   };
 }

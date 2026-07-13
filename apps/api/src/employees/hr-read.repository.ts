@@ -46,6 +46,12 @@ const LIST_COLUMNS = {
   phone: employeeProfiles.phone,
   contractType: employeeProfiles.contractType,
   baseSalary: employeeProfiles.baseSalary,
+  // HR-IDENTITY-READ-1 (§14.18): CCCD raw here — the SERVICE reveals per-row ONLY behind view-identity
+  // (isSensitive gate + audit-on-reveal); a wildcard never opens it. Projected into the row so the list
+  // can carry the identity surface, masked to null unless the caller holds an EXACT view-identity grant.
+  identityNumber: employeeProfiles.identityNumber,
+  identityIssueDate: employeeProfiles.identityIssueDate,
+  identityIssuePlace: employeeProfiles.identityIssuePlace,
 } as const;
 
 const DETAIL_COLUMNS = {
@@ -75,7 +81,6 @@ const DETAIL_COLUMNS = {
   contractType: employeeProfiles.contractType,
   notes: employeeProfiles.notes,
   // HR-PROFILE-UI-1: personal-info PII (mig 0451) — raw here; the SERVICE masks per view-sensitive.
-  // identity_* (CCCD, §14.18) is intentionally NOT selected — it must never reach a read DTO.
   gender: employeeProfiles.gender,
   dateOfBirth: employeeProfiles.dateOfBirth,
   maritalStatus: employeeProfiles.maritalStatus,
@@ -84,6 +89,12 @@ const DETAIL_COLUMNS = {
   permanentAddress: employeeProfiles.permanentAddress,
   emergencyContactName: employeeProfiles.emergencyContactName,
   emergencyContactPhone: employeeProfiles.emergencyContactPhone,
+  // HR-IDENTITY-READ-1 (CCCD, §14.18): identity_* raw here — the SERVICE reveals ONLY behind
+  // view-identity:employee (isSensitive gate + audit-on-reveal). Selected so getHrEmployee/getMyProfile
+  // can carry it, masked to null unless the caller holds an EXACT view-identity grant.
+  identityNumber: employeeProfiles.identityNumber,
+  identityIssueDate: employeeProfiles.identityIssueDate,
+  identityIssuePlace: employeeProfiles.identityIssuePlace,
   // HR-PROFILE-UI-1b (mig 0489, hybrid): 3 directory + MST/blob nhân khẩu (PII — service masks).
   officialDate: employeeProfiles.officialDate,
   probationEndDate: employeeProfiles.probationEndDate,
@@ -118,6 +129,10 @@ export interface HrListRow {
   phone: string | null;
   contractType: string | null;
   baseSalary: string | null;
+  // HR-IDENTITY-READ-1: raw CCCD — service reveals per-row behind view-identity.
+  identityNumber: string | null;
+  identityIssueDate: string | null;
+  identityIssuePlace: string | null;
 }
 
 /** Raw detail row (sensitive fields still raw — the service masks them per permission). */
@@ -154,6 +169,10 @@ export interface HrDetailRow {
   permanentAddress: string | null;
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
+  // HR-IDENTITY-READ-1: raw CCCD — service reveals behind view-identity (isSensitive + audit).
+  identityNumber: string | null;
+  identityIssueDate: string | null;
+  identityIssuePlace: string | null;
   officialDate: string | null;
   probationEndDate: string | null;
   workLocation: string | null;

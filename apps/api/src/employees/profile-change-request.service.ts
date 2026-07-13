@@ -253,14 +253,18 @@ export class ProfileChangeRequestService {
       const touchesSensitive = fields.some((f) => SENSITIVE_FIELDS.has(f));
 
       // SENSITIVE GATE (SPEC-03 §14.18 "Giấy tờ — cần duyệt nghiêm ngặt"): an approver may hold
-      // approve:profile-change-request without view-sensitive:employee. If the request touches an
-      // identity field, require the stronger grant. Fail-closed → 403 + audit Denied/Sensitive.
+      // approve:profile-change-request without the identity grant. If the request touches an identity
+      // field, require the stronger grant. HR-IDENTITY-READ-1: this is now the SAME gate as the read
+      // surface — view-identity:employee (mig 0494, is_sensitive), NOT the broader view-sensitive PII
+      // gate — so the write (approve) and the read of identity share ONE permission. isSensitive:true →
+      // a wildcard *:* never satisfies it. Fail-closed → 403 + audit Denied/Sensitive.
       if (touchesSensitive) {
         const decision = await this.permission.can({
           userId: user.id,
           companyId: user.companyId,
-          action: "view-sensitive",
+          action: "view-identity",
           resourceType: "employee",
+          isSensitive: true,
         });
         if (!decision.allow) {
           // BẤT BIẾN #2: audit the denial inside the same tx. BẤT BIẾN #3: masker handles PII.
@@ -273,11 +277,11 @@ export class ProfileChangeRequestService {
             actionGroup: "ProfileChangeRequest",
             resultStatus: "Denied",
             sensitivityLevel: "Sensitive",
-            permissionCode: "HR.EMPLOYEE.VIEW_SENSITIVE",
-            metadata: { changedFields: fields, reason: "missing view-sensitive:employee" },
+            permissionCode: "HR.EMPLOYEE.VIEW_IDENTITY",
+            metadata: { changedFields: fields, reason: "missing view-identity:employee" },
           });
           throw new ForbiddenException(
-            "Permission denied: approving identity/document fields requires HR.EMPLOYEE.VIEW_SENSITIVE.",
+            "Permission denied: approving identity/document fields requires HR.EMPLOYEE.VIEW_IDENTITY.",
           );
         }
       }
