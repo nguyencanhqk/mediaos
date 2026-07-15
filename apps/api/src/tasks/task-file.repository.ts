@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { sql, type SQL } from "drizzle-orm";
 import { type TenantTx } from "../db/db.service";
 import { fileLinks, files } from "../db/schema";
@@ -105,6 +105,36 @@ export class TaskFileRepository {
       )
       .limit(1);
     return row as TaskFileRow | undefined;
+  }
+
+  /**
+   * S5-TASK-BE-6 — attachment count GROUPED by `entity_id` (taskId) for EVERY task in `taskIds` (1 query,
+   * NO N+1 — Kanban board). Filters BOTH `file_links.deletedAt` AND `files.deletedAt` (mirror
+   * listLinkedFilesByTaskTx) so a soft-deleted link or a soft-deleted file never inflates the count. Empty
+   * `taskIds` ⇒ empty Map (skip the round-trip for a project with 0 tasks).
+   */
+  async countByTaskIdsTx(
+    tx: TenantTx,
+    companyId: string,
+    taskIds: string[],
+  ): Promise<Map<string, number>> {
+    if (taskIds.length === 0) return new Map();
+    const rows = await tx
+      .select({ taskId: fileLinks.entityId, n: sql<number>`count(*)::int` })
+      .from(fileLinks)
+      .innerJoin(files, eq(fileLinks.fileId, files.id))
+      .where(
+        and(
+          eq(fileLinks.companyId, companyId),
+          eq(fileLinks.moduleCode, TASK_MODULE),
+          eq(fileLinks.entityType, TASK_ENTITY),
+          inArray(fileLinks.entityId, taskIds),
+          isNull(fileLinks.deletedAt),
+          isNull(files.deletedAt),
+        ),
+      )
+      .groupBy(fileLinks.entityId);
+    return new Map(rows.map((r) => [r.taskId, Number(r.n)]));
   }
 
   /**
