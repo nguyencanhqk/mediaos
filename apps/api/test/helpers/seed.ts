@@ -606,6 +606,10 @@ export async function cleanupTenants(direct: Pool, companyIds: string[]): Promis
   // CS-10 user_invites: company_id → companies CASCADE (created_user_id/invited_by là uuid thường, KHÔNG FK
   // tới users) → xoá tường minh TRƯỚC users cho rõ ràng (CASCADE companies cũng phủ).
   await direct.query("DELETE FROM user_invites WHERE company_id = ANY($1::uuid[])", ids);
+  // Quét LẠI audit_logs NGAY trước users: giữa lần xoá audit đầu (đầu hàm) và đây, outbox worker/consumer
+  // của app còn sống (spec này hoặc spec song song đã claim event own-tenant) có thể ghi thêm audit có
+  // actor_user_id → DELETE users vỡ FK audit_logs_actor_user_id_fkey (CI đỏ 2026-07-15, attendance-leave-sync).
+  await direct.query("DELETE FROM audit_logs WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM users WHERE company_id = ANY($1::uuid[])", ids);
   await direct.query("DELETE FROM companies WHERE id = ANY($1::uuid[])", ids);
 }

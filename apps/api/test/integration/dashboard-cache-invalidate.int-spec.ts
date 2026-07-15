@@ -43,6 +43,7 @@ import { AllExceptionsFilter } from "../../src/common/filters/all-exceptions.fil
 import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/response-envelope.interceptor";
 import { PasswordService } from "../../src/auth/password.service";
 import { OutboxWorker } from "../../src/events/outbox-worker";
+import { drainOutboxUntilSettled } from "../helpers/outbox-drain";
 import { directPool, hasDb } from "../helpers/integration-db";
 import {
   cleanupTenants,
@@ -494,14 +495,9 @@ describe.skipIf(!runDb)(
       return r.rows[0].deleted_at === null;
     }
 
-    /** Drain outbox tới cạn (mirror task-noti-e2e.int-spec.ts `processOutbox`). */
+    /** Drain tới khi event own-tenant terminal — an toàn dưới cross-suite claim (xem helpers/outbox-drain). */
     async function processOutbox(): Promise<void> {
-      const worker = nest.get(OutboxWorker);
-      let claimed = 0;
-      do {
-        const res = await worker.processBatch();
-        claimed = res.claimed;
-      } while (claimed > 0);
+      await drainOutboxUntilSettled({ worker: nest.get(OutboxWorker), direct, companyIds });
     }
 
     beforeAll(async () => {
