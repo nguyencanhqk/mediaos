@@ -89,6 +89,17 @@ int-spec ~40 file/batch) chạy trọn vẹn KHÔNG crash:
 regression chức năng. Flake đã biết trong done_when gốc (`super-admin-bootstrap` grant-count, outbox idempotency,
 storage/MinIO) — KHÔNG gặp lại lần nào trong 2 lần chạy full batch này.
 
+**QA2-INFO-002 (ghi chú vận hành, không phải known-issue chức năng):** `bash harness/check.sh` (lệnh 1-phát,
+`pnpm test` qua turbo → `apps/api` chạy `vitest run` KHÔNG batch/`--no-file-parallelism`) CRASH với
+`Channel closed` (tinypool, memory `turbo-cache-false-green`/flake hạ tầng đã biết) khi tự chạy TOÀN BỘ
+`apps/api` test suite (192 unit + 155 int-spec) trong 1 process — TÁI HIỆN giống hệt lần crash full-suite ban
+đầu của lane này (mục §4). `lint` + `typecheck` qua `check.sh` ĐỀU XANH. Đây là giới hạn hạ tầng máy cho suite
+lớn/1-process (ngoài scope sửa — `harness/check.sh`/`apps/api/package.json` không thuộc paths của WO này), KHÔNG
+phải regression code: bằng chứng THẬT (XANH 100%) đến từ chạy CHIA NHÓM ở §4 (unit riêng + 4 batch int-spec),
+đúng đề xuất "nếu crash, chạy theo nhóm" trong yêu cầu gốc của WO. Đề xuất Sprint 5: thêm cờ batch/`--pool=forks
+--poolOptions.forks.maxForks=1` (hoặc chia `vitest.config.ts` projects) cho `apps/api#test` để `check.sh` một-phát
+tự chịu được suite lớn.
+
 ## 5. Release note Sprint 4 (tóm tắt)
 
 - **TASK**: project/task CRUD, assign/status/priority/deadline, comment+mention, checklist, kanban, watcher,
