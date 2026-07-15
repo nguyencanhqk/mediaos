@@ -50,11 +50,15 @@ export const NOTI_PATHS = {
   EVENTS: "/notifications/events",
   // S4-FE-NOTI-3 — UI-NOTI-SCREEN-006 (docs/UI/UI-09 §12.3 + UI-04 §21 route bảng).
   DELIVERY_LOGS: "/notifications/delivery-logs",
+  // S4-FE-NOTI-4 — UI-NOTI-SCREEN-005 (SPEC-08 §13.4 NOTI-SCREEN-006) — quản lý mẫu thông báo.
+  TEMPLATES: "/notifications/templates",
 } as const;
 
 /** Mã màn hình (SPEC-01 §9) — S4-FE-NOTI-3. */
 export const NOTI_SCREEN = {
   DELIVERY_LOGS: "NOTI-SCREEN-DELIVERY-LOGS",
+  // S4-FE-NOTI-4 — khớp screenCode ROUTE_REGISTRY "noti.templates" (web-core registry.ts).
+  TEMPLATES: "NOTI-SCREEN-006",
 } as const;
 
 /**
@@ -126,3 +130,28 @@ export const NOTI_DELIVERY_LOG_STATUSES = [
   "Skipped",
   "Cancelled",
 ] as const;
+
+/**
+ * S4-FE-NOTI-4 (UI-NOTI-SCREEN-005 / SPEC-08 §13.4 NOTI-SCREEN-006) — cặp engine ADMIN template, LITERAL
+ * (KHÔNG qua PERMISSION_CODE_TO_PAIR — tránh drift, cùng kỹ thuật NOTI_EVENT_ENGINE_PAIRS/att.shifts).
+ * Nguồn sự thật: notification-admin.controller.ts (VIEW_NOTIFICATION_TEMPLATE/UPDATE_NOTIFICATION_TEMPLATE).
+ * CẢ 2 is_sensitive=true (mig 0481) — grant Company CHỈ company-admin, đã ở SENSITIVE_CAPABILITY_ALLOWLIST
+ * (permission.service.ts) nên /auth/me phơi đúng capability. Page PHẢI dùng useCanExact (KHÔNG useCan) —
+ * wildcard '*:*' KHÔNG mở cổng cặp sensitive, mirror NotificationEventsPage/DashboardConfigPage.
+ */
+export const NOTI_TEMPLATE_ENGINE_PAIRS = {
+  VIEW: { action: "view", resourceType: "notification-template" },
+  UPDATE: { action: "update", resourceType: "notification-template" },
+} as const;
+
+/** per_page tối đa cho phép (khớp NOTI_ADMIN_PAGE_SIZE_MAX contracts) — catalog nhỏ, 1 lần gọi đủ (mirror NOTI_EVENT_PAGE_SIZE_MAX). */
+export const NOTI_TEMPLATE_PAGE_SIZE_MAX = 100;
+
+/**
+ * Kênh gửi của template — CÙNG tập giá trị `chk_notification_templates_channel` (apps/api/src/db/schema/
+ * noti.ts) với `NOTI_DELIVERY_LOG_CHANNELS` (chk_notification_delivery_logs_channel) — tái dùng mảng đó
+ * cho <Select> filter thay vì khai lại (DRY, KHÔNG duplicate literal dễ trôi).
+ */
+
+/** Trạng thái template — khớp CHECK `chk_notification_templates_status` (apps/api/src/db/schema/noti.ts). */
+export const NOTI_TEMPLATE_STATUSES = ["Draft", "Active", "Inactive", "Archived"] as const;

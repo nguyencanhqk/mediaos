@@ -6656,4 +6656,225 @@ export const backlog = [
       "Int-spec: response detail chứa field mới đúng join + KHÔNG lộ thêm PII/salary ngoài gate hiện có; FE spec render dòng mới + khối nghỉ việc theo status; check.sh xanh; LIGHT gate + security-reviewer soi diff DTO đọc (vùng masking)",
     ],
   },
+
+  // ═══════════════ S5-TASK-UX 2026-07-13 — owner benchmark ảnh kiểu Base-Wework + audit sidebar TASK ═══════════════
+  // Nguồn: owner gửi ~12 ảnh tool quản lý công việc thương mại làm chuẩn tham chiếu UX cho TASK (memory
+  // task-ux-reference-benchmark). Audit cùng ngày:
+  //   1) TASK_SIDEBAR chỉ khai 2 item (Tổng quan + Việc của tôi) — /tasks/projects (SCREEN-001) và mọi thứ
+  //      dưới nó (detail/Kanban/thành viên/progress) KHÔNG có menu nào dẫn tới; ROUTE_REGISTRY.showInSidebar
+  //      KHÔNG được ModuleSidebar đọc (menu dựng từ sidebar-registry.ts apps/app — cùng bug đã vá cho NOTI
+  //      templates/delivery-logs #200). → S5-FE-TASK-NAV-1.
+  //   2) Kanban card thiếu counts comment/attachment/checklist — BE debt tự ghi tại TaskKanbanPage.tsx L31,
+  //      SPEC-06 §13.8 vốn yêu cầu. → S5-TASK-BE-6 (BE) + S5-FE-TASK-5 (FE).
+  //   3) TASK-SCREEN-010 (quá hạn) + 011 (báo cáo tiến độ) chưa có trang; contracts ĐÃ có query param
+  //      `overdue` (task.ts L578) + endpoint PROJECT_PROGRESS (S4-TASK-BE-5) → 2 màn FE-only. → S5-FE-TASK-6.
+  // POST-MVP (KHÔNG làm đợt này — ghi để khỏi trôi, chi tiết memory task-ux-reference-benchmark): cột/nhóm
+  // công việc tùy biến (đổi data model — board mẫu cột = pipeline tùy chỉnh, KHÔNG phải status) · Gantt ·
+  // Lịch · custom fields · automation per-column · phê duyệt riêng · template/nhân bản dự án · import task ·
+  // Biểu mẫu · Tài liệu & Liên kết · Thùng rác UI · favorites/ghim dự án (ứng viên khi ME user_preferences ổn).
+  {
+    id: "S5-FE-TASK-NAV-1",
+    module: "TASK",
+    layer: "FE",
+    title:
+      "Sidebar TASK mở đường: thêm mục 'Dự án' (/tasks/projects) + đổi label task.overview 'Tổng quan'→'Danh sách công việc' (SCREEN-001 hiện không có menu nào dẫn tới)",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/app/src/layouts/workspace/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "apps/app/src/layouts/workspace/sidebar-registry.ts (TASK_SIDEBAR — hiện chỉ 2 item)",
+      "packages/web-core/src/lib/registry.ts (task.projects.list showInSidebar:true — flag KHÔNG được ModuleSidebar đọc; mẫu vá = entry NOTI cùng file sidebar-registry)",
+      "IMP02-STORY-067 (xem danh sách dự án theo quyền)",
+      "memory task-ux-reference-benchmark",
+    ],
+    done_when: [
+      "TASK_SIDEBAR thêm item task.projects: label 'Dự án', path /tasks/projects, group operation, requiredAnyPermissions ['TASK.PROJECT.VIEW'] (map read:project qua PERMISSION_CODE_TO_PAIR sẵn có); icon phải CÓ TRONG DynamicIcon map (thiếu thì thêm additive) — HOT-FILE append theo mẫu entry NOTI, KHÔNG rewrite mảng",
+      "Đổi label task.overview 'Tổng quan' → 'Danh sách công việc' (trang /tasks render TaskListPage = SCREEN-005); GIỮ nguyên path/gate/order/sidebarKey",
+      "User có read:project thấy menu Dự án; thiếu → ẩn (filterSidebarItems, KHÔNG hard-code role); spec sidebar-registry cập nhật nếu có; check.sh xanh; LIGHT gate quality-gate",
+    ],
+  },
+  {
+    id: "S5-TASK-BE-6",
+    module: "TASK",
+    layer: "BE",
+    title:
+      "Kanban counts (trả nợ SPEC-06 §13.8): GET /projects/:id/kanban bổ sung commentCount·attachmentCount·checklistDone/checklistTotal per-card (additive, không N+1)",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/api/src/tasks/**", "apps/api/test/integration/**", "packages/contracts/src/**"],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "apps/app/src/routes/tasks/TaskKanbanPage.tsx L31 (BE debt tự ghi: §13.8 cần comment-count/attachment-count/checklist-progress — response TASK-API-212 chưa có)",
+      "apps/api/src/tasks/task-kanban.service.ts + task-comments/task-checklists/task-attachments repositories (nguồn đếm sẵn có)",
+      "packages/contracts/src/task-collab.ts (taskKanbanColumnSchema/taskKanbanBoardSchema)",
+      "IMP02-STORY-072 (Kanban board)",
+    ],
+    done_when: [
+      "Schema card trong taskKanbanColumnSchema bổ sung ADDITIVE: commentCount · attachmentCount · checklistDone · checklistTotal (optional/default 0 — FE cũ không gãy); contracts dual-build",
+      "task-kanban.service đếm bằng aggregate GROUP BY task_id trên tập task của board (KHÔNG N+1 per-card); CHỈ đếm bản ghi chưa soft-delete; GIỮ nguyên gate view-kanban:task + tenant/data-scope hiện có — KHÔNG đổi hành vi quyền",
+      "Int-spec: counts đúng với dữ liệu planted (comment/file/checklist done+total; card trống → 0); gate hasDb && LANE_DB",
+      "check.sh xanh; LIGHT gate typescript-reviewer + quality-gate",
+    ],
+  },
+  {
+    id: "S5-FE-TASK-5",
+    module: "TASK",
+    layer: "FE",
+    title:
+      "Kanban card giàu tín hiệu (benchmark): badge comment/attachment/checklist + avatar-initials assignee + style Done/Cancelled + lọc theo assignee/'Chưa giao' trên board",
+    zone: "green",
+    status: "todo",
+    paths: ["apps/app/src/routes/tasks/**", "apps/app/src/i18n/**"],
+    skills: ["code-review"],
+    depends_on: ["S5-TASK-BE-6"],
+    src: [
+      "memory task-ux-reference-benchmark (ảnh owner 2026-07-13 — card: badge đếm + checklist 1/2 + hạn đỏ + header Done xanh + gạch tiêu đề)",
+      "apps/app/src/routes/tasks/TaskKanbanPage.tsx (KanbanCard hiện chỉ title/assignee/priority/due)",
+      "S5-TASK-BE-6 (counts trong response Kanban)",
+      "IMP02-STORY-072",
+    ],
+    done_when: [
+      "KanbanCard hiển thị KHI >0: badge commentCount · attachmentCount · checklistDone/checklistTotal (icon lucide) + avatar-initials assignee thay text; card Done/Cancelled style phân biệt (muted + gạch tiêu đề) — token theme packages/ui, đạt cả light+dark",
+      "Lọc assignee trên board: dải avatar thành viên suy từ tập task của board (KHÔNG gọi API member mới) + nút 'Chưa giao'; lọc client-side trong cột, kết hợp được với UI hiện có; card 0-count KHÔNG render badge",
+      "Spec cập nhật: render badge theo counts + filter assignee + 'Chưa giao'; check.sh xanh; LIGHT gate react-reviewer + quality-gate",
+    ],
+  },
+  {
+    id: "S5-FE-TASK-6",
+    module: "TASK",
+    layer: "FE",
+    title:
+      "TASK-SCREEN-010 Task quá hạn (/tasks/overdue) + TASK-SCREEN-011 Báo cáo tiến độ dự án — FE-only trên BE sẵn có (query overdue + PROJECT_PROGRESS), layout KPI tiles theo benchmark",
+    zone: "yellow",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/tasks/**",
+      "apps/app/src/router.tsx",
+      "apps/app/src/layouts/workspace/**",
+      "apps/app/src/i18n/**",
+      "packages/web-core/src/**",
+      "docs/plans/S5-FE-TASK-6.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-FE-TASK-NAV-1"],
+    src: [
+      "SPEC-06 §13.10 (SCREEN-010) + §13.11 (SCREEN-011) + §16.1 (progress report)",
+      "packages/contracts/src/task.ts L568-578 (query param `overdue` boolean idempotent ĐÃ CÓ — SCREEN-010 không cần sửa BE)",
+      "apps/app/src/routes/tasks/ProjectProgressCard.tsx (đọc PROJECT_PROGRESS sẵn có — S4-TASK-BE-5, server pre-authorize)",
+      "memory task-ux-reference-benchmark (layout: hàng KPI tiles tổng/hoàn thành/chưa/quá hạn + bar theo người thực hiện; KHÔNG Eisenhower/phân bổ nguồn lực — ngoài spec)",
+      "IMP02-STORY-076 (báo cáo tiến độ)",
+    ],
+    plan: "docs/plans/S5-FE-TASK-6.md",
+    done_when: [
+      "/tasks/overdue (SCREEN-010): tái dùng bảng/hàng TaskListPage với filter overdue=true GHIM + sort due_at tăng dần; ROUTE_REGISTRY web-core + sidebar item 'Task quá hạn' gate TASK.TASK.VIEW; header hiện tổng số quá hạn",
+      "Trang báo cáo tiến độ dự án (SCREEN-011, route dưới /tasks/projects/:projectId — chốt path trong plan): mở rộng ProjectProgressCard thành trang — hàng KPI tiles (tổng · hoàn thành · chưa hoàn thành · quá hạn) + breakdown theo status + bar theo assignee NẾU response PROJECT_PROGRESS đã trả (thiếu field nào hiển thị phần có, ghi gap vào plan — KHÔNG thêm endpoint mới trong WO này); gate FE đúng cặp ProjectProgressCard đang dùng, server là nguồn enforce; chart theo token dataviz/theme packages/ui đạt light+dark",
+      "Vào từ ProjectDetailPage (nút 'Xem báo cáo'); route param KHÔNG vào sidebar (showInSidebar false); REBUILD web-core dist sau đổi src (bài học stale-dist trang trắng); loading/error/empty/forbidden đủ; i18n vi",
+      "FE spec: route gate + render KPI + overdue pinned filter + deny (thiếu quyền không thấy entry); check.sh xanh; LIGHT gate react-reviewer + typescript-reviewer + quality-gate",
+    ],
+  },
+
+  // ── LEAVE re-home 2026-07-13: owner muốn màn cài đặt Ngày nghỉ lễ nằm trong module Nghỉ phép ──
+  // /system/public-holidays (S2-FE-FND-4, UI-SYSTEM-SCREEN-012/016) chuyển về /leave/** — FE-only:
+  // HolidayService + cặp quyền view:foundation-public-holiday GIỮ NGUYÊN (BE/seed không đụng, server
+  // enforce như cũ); chỉ re-home route + sidebar + redirect đường cũ. depends_on NAV-1 CHỈ để tuần tự
+  // hoá hot-file sidebar-registry.ts (tránh 2 lane sửa cùng file), không phụ thuộc nghiệp vụ.
+  {
+    id: "S5-LEAVE-HOLIDAYS-MOVE-1",
+    module: "LEAVE",
+    layer: "FE",
+    title:
+      "Chuyển màn Ngày nghỉ lễ /system/public-holidays → /leave/public-holidays (re-home FE-only: route + sidebar LEAVE group admin + redirect path cũ; gate & BE giữ nguyên)",
+    zone: "green",
+    status: "todo",
+    paths: [
+      "apps/app/src/routes/system/foundation/**",
+      "apps/app/src/routes/leave/**",
+      "apps/app/src/router.tsx",
+      "apps/app/src/layouts/workspace/**",
+      "apps/app/src/i18n/**",
+      "packages/web-core/src/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-FE-TASK-NAV-1"],
+    src: [
+      "Owner directive 2026-07-13: chuyển cài đặt ngày nghỉ /system/public-holidays về /leave/",
+      "apps/app/src/routes/system/foundation/constants.ts L176-184 (SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META — requiredAnyPermissions = FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS dùng CHUNG router+sidebar, chống pair-drift)",
+      "apps/app/src/layouts/workspace/sidebar-registry.ts (entry system.public-holidays SYSTEM_SIDEBAR → LEAVE_SIDEBAR group admin cạnh leave.types)",
+      "memory foundation-be6-holiday-deferrals (HolidayService BE giữ nguyên — move này FE-only)",
+      "memory review-gate-blind-to-deletions (gỡ entry/route cũ phải grep consumer trước)",
+    ],
+    done_when: [
+      "Route MỚI /leave/public-holidays render PublicHolidaysPage TÁI DÙNG component hiện có (import — KHÔNG copy-paste, KHÔNG đổi logic trang); route-meta moduleCode LEAVE + titleKey i18n vi; requiredAnyPermissions GIỮ NGUYÊN FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS (view:foundation-public-holiday) — KHÔNG đổi permission seed/BE",
+      "Sidebar: LEAVE_SIDEBAR thêm item 'Ngày nghỉ lễ' (group admin, cạnh leave.types, icon calendar-days); GỠ entry system.public-holidays khỏi SYSTEM_SIDEBAR — TRƯỚC khi gỡ grep mọi consumer FOUNDATION_PATH.PUBLIC_HOLIDAYS + path literal '/system/public-holidays' (app + web-core + docs) và xử lý từng chỗ",
+      "/system/public-holidays cũ REDIRECT về /leave/public-holidays (bookmark/deep-link KHÔNG gãy — mẫu quyết định mount-vs-redirect của S5-ME-FE-2); web-core ROUTE_REGISTRY cập nhật entry tương ứng nếu có; REBUILD web-core dist (bài học stale-dist)",
+      "FE spec: route mới render + gate; redirect path cũ; sidebar LEAVE hiện item khi có quyền, SYSTEM không còn; check.sh xanh; LIGHT gate react-reviewer + quality-gate",
+    ],
+  },
+  // ═══════════════ S5-NOTI-FIX 2026-07-15 — 2 CRITICAL từ QA sign-off S4-QA-2 (PR #210) ═══════════════
+  // QA2-CRIT-001: target_url NULL cho MỌI notification mặc định — 0/39 template global có
+  //   target_url_template (migration 0481 seed thiếu cột) ⇒ deep-link toàn hệ thống chết trừ khi
+  //   company tự cấu hình override.
+  // QA2-CRIT-002: TASK_COMMENT_CREATED/TASK_MENTIONED/PROJECT_MEMBER_ADDED render placeholder câm
+  //   ({task_code}/{actor_name}/{project_name}) — payload producer không có field tương ứng; 5 event
+  //   khác đã vá ở migration 0490, 3 event này bị bỏ sót.
+  {
+    id: "S5-NOTI-FIX-1",
+    module: "NOTI",
+    layer: "BE",
+    title:
+      "Backfill target_url_template cho 39 template notification global (QA2-CRIT-001 — deep-link đang NULL toàn hệ thống): migration seed-update theo event type + int-spec assert mọi template global có target_url_template và target_url render đúng cho các event P0",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/notifications/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S5-NOTI-FIX-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "docs/plans/S4-QA-2.md — known-issue QA2-CRIT-001 (PR #210, kèm bằng chứng 0/39)",
+      "apps/api/migrations/0481 (seed template global gốc — thiếu target_url_template)",
+      "apps/api/migrations/0490 (mẫu migration vá template đã có — theo cùng kỹ thuật idempotent)",
+      "SPEC-08 (định dạng deep-link per event) + qa2-e2e-task-noti-dash.int-spec.ts E2 (test deep-link đang phải chấp nhận NULL)",
+    ],
+    done_when: [
+      "Migration mới (đánh số tiếp head, idempotent, KHÔNG rewrite 0481): UPDATE target_url_template cho 39 template global theo event type đúng định dạng deep-link SPEC-08; company-override đang có GIỮ NGUYÊN (chỉ đụng template global company_id IS NULL)",
+      "Int-spec: assert 0 template global còn target_url_template NULL + render target_url đúng cho tối thiểu các event P0 (task assigned/comment/mention, leave approve/reject, att adjust) — cập nhật E2 của qa2-e2e-task-noti-dash sang assert deep-link THẬT thay vì chấp nhận NULL",
+      "check.sh xanh với LANE_DB; FULL gate (migration) security-reviewer + database-reviewer PASS",
+    ],
+  },
+  {
+    id: "S5-NOTI-FIX-2",
+    module: "NOTI",
+    layer: "BE",
+    title:
+      "Vá 3 event render placeholder câm TASK_COMMENT_CREATED · TASK_MENTIONED · PROJECT_MEMBER_ADDED (QA2-CRIT-002): producer bổ sung field payload còn thiếu (task_code/actor_name/project_name…) additive — mirror cách 5 event đã vá ở 0490",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/tasks/**",
+      "apps/api/src/notifications/**",
+      "apps/api/migrations/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S5-NOTI-FIX-2.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "docs/plans/S4-QA-2.md — known-issue QA2-CRIT-002 (PR #210)",
+      "apps/api/migrations/0490 (5 event đã vá — đối chiếu template placeholder ↔ payload)",
+      "apps/api/src/tasks (producer emit outbox 3 event lỗi) + bridge INT-1 generic (memory noti-outbox-bridge-generic)",
+      "qa2-e2e-task-noti-dash.int-spec.ts (E1b đang chứng minh placeholder câm)",
+    ],
+    done_when: [
+      "Producer 3 event bổ sung đủ field mà template global tham chiếu (đối chiếu từng placeholder trong template ↔ key payload) — additive, KHÔNG đổi tên field đang có (consumer cũ không vỡ); nếu template sai chiều thì sửa template qua migration idempotent thay vì đổi payload",
+      "Int-spec: render title/body 3 event KHÔNG còn dấu {placeholder} sót; regression 5 event đã vá ở 0490 vẫn đúng",
+      "check.sh xanh với LANE_DB; gate theo diff thật (đụng migration ⇒ FULL, chỉ producer additive ⇒ LIGHT + database-reviewer nếu chạm query)",
+    ],
+  },
 ];

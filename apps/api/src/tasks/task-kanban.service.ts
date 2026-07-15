@@ -4,8 +4,11 @@ import { DatabaseService } from "../db/db.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { TaskCoreRepository } from "./task-core.repository";
 import { TasksRepository } from "./tasks.repository";
-import { toTaskCoreDto } from "./task-core.mapper";
+import { toTaskKanbanCardDto } from "./task-core.mapper";
 import { TASK_CORE_STATUSES } from "./task-fsm";
+import { TaskCommentsRepository } from "./task-comments.repository";
+import { TaskChecklistsRepository } from "./task-checklists.repository";
+import { TaskFileRepository } from "./task-file.repository";
 
 interface RequestUser {
   id: string;
@@ -37,6 +40,9 @@ export class TaskKanbanService {
     private readonly repo: TaskCoreRepository,
     private readonly tasksRepo: TasksRepository,
     private readonly dataScope: DataScopeService,
+    private readonly commentsRepo: TaskCommentsRepository,
+    private readonly checklistsRepo: TaskChecklistsRepository,
+    private readonly filesRepo: TaskFileRepository,
   ) {}
 
   async getBoard(user: RequestUser, projectId: string): Promise<TaskKanbanBoardDto> {
@@ -70,6 +76,15 @@ export class TaskKanbanService {
         scopeExists,
       );
 
+      // S5-TASK-BE-6 (SPEC-06 §13.8) — 3 aggregate GROUP-BY, KHÔNG per-card query (chống N+1). Chạy CÙNG tx
+      // (withTenant) nên vẫn qua RLS+FORCE của tenant hiện tại.
+      const taskIds = rows.map((row) => row.id);
+      const [commentCounts, attachmentCounts, checklistProgress] = await Promise.all([
+        this.commentsRepo.countByTaskIdsTx(tx, user.companyId, taskIds),
+        this.filesRepo.countByTaskIdsTx(tx, user.companyId, taskIds),
+        this.checklistsRepo.countProgressByTaskIdsTx(tx, user.companyId, taskIds),
+      ]);
+
       const columns: TaskKanbanColumnDto[] = TASK_CORE_STATUSES.map((status) => ({
         status,
         tasks: [],
@@ -78,7 +93,15 @@ export class TaskKanbanService {
       for (const row of rows) {
         const status = (row.taskStatus as (typeof TASK_CORE_STATUSES)[number] | null) ?? "Todo";
         const column = byStatus.get(status) ?? byStatus.get("Todo");
-        column?.tasks.push(toTaskCoreDto(row));
+        const progress = checklistProgress.get(row.id);
+        column?.tasks.push(
+          toTaskKanbanCardDto(row, {
+            commentCount: commentCounts.get(row.id) ?? 0,
+            attachmentCount: attachmentCounts.get(row.id) ?? 0,
+            checklistDone: progress?.done ?? 0,
+            checklistTotal: progress?.total ?? 0,
+          }),
+        );
       }
 
       return { projectId, columns };

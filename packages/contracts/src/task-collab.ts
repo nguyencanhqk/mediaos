@@ -9,9 +9,28 @@ import { taskCoreResponseSchema, taskCoreStatusSchema } from "./task";
 
 // ─── Kanban board (GET /projects/:id/kanban, TASK-API-212, view-kanban:task) ─────
 
+/**
+ * S5-TASK-BE-6 — card Kanban = `taskCoreResponseSchema` + counts per-card (SPEC-06 §13.8: comment/attachment/
+ * checklist progress hiển thị TRÊN card). ADDITIVE + `.optional()` (KHÔNG `.default()`) — client cũ (không đọc
+ * field mới) KHÔNG gãy; endpoint khác dùng `taskCoreResponseSchema`/`myTaskItemSchema` KHÔNG bị ảnh hưởng
+ * (tách schema riêng cho Kanban, không sửa base). `.optional()` thay vì `.default(0)`: field `.default()` có
+ * Output-type required NHƯNG Input-type optional ⇒ `apiFetch<T>(path, schema: z.ZodType<T>)` (web-core) suy
+ * luận T lệch giữa 2 lượt gọi generic ⇒ typecheck ĐỎ ở web-core (ngoài paths cho phép lane này) — `.optional()`
+ * giữ Input=Output nên tránh bẫy suy luận. Server LUÔN điền số thật (0 khi không có dữ liệu — xem
+ * `toTaskKanbanCardDto`), field CHỈ optional ở KIỂU cho an toàn phía client, KHÔNG optional trên wire thực tế.
+ * Counts tính bằng aggregate GROUP BY task_id ở service — KHÔNG N+1.
+ */
+export const taskKanbanCardSchema = taskCoreResponseSchema.extend({
+  commentCount: z.number().int().nonnegative().optional(),
+  attachmentCount: z.number().int().nonnegative().optional(),
+  checklistDone: z.number().int().nonnegative().optional(),
+  checklistTotal: z.number().int().nonnegative().optional(),
+});
+export type TaskKanbanCardDto = z.infer<typeof taskKanbanCardSchema>;
+
 export const taskKanbanColumnSchema = z.object({
   status: taskCoreStatusSchema,
-  tasks: z.array(taskCoreResponseSchema),
+  tasks: z.array(taskKanbanCardSchema),
 });
 export type TaskKanbanColumnDto = z.infer<typeof taskKanbanColumnSchema>;
 

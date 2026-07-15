@@ -485,7 +485,8 @@ export const TASK_SIDEBAR: readonly SidebarItemMeta[] = [
   {
     sidebarKey: "task.overview",
     moduleCode: "TASK",
-    label: "Tổng quan",
+    // S5-FE-TASK-NAV-1: /tasks render TaskListPage (TASK-SCREEN-005) — label cũ "Tổng quan" gây hiểu nhầm.
+    label: "Danh sách công việc",
     path: "/tasks",
     icon: "kanban-square",
     group: "overview",
@@ -502,6 +503,18 @@ export const TASK_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 20,
     requiredAnyPermissions: ["TASK.TASK.VIEW"],
   },
+  // S5-FE-TASK-NAV-1: route task.projects.list có trong ROUTE_REGISTRY web-core (showInSidebar) nhưng
+  // ModuleSidebar dựng menu từ registry NÀY — phải khai item ở đây mới thấy (SCREEN-001 trước đó mồ côi).
+  {
+    sidebarKey: "task.projects",
+    moduleCode: "TASK",
+    label: "Dự án",
+    path: "/tasks/projects",
+    icon: "folder-kanban",
+    group: "operation",
+    order: 30,
+    requiredAnyPermissions: ["TASK.PROJECT.VIEW"],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -517,6 +530,40 @@ export const NOTI_SIDEBAR: readonly SidebarItemMeta[] = [
     group: "overview",
     order: 10,
     requiredAnyPermissions: ["NOTI.NOTIFICATION.VIEW_OWN"],
+  },
+  // S4-FE-NOTI-4 follow-up: route đã có trong web-core ROUTE_REGISTRY (noti.templates/delivery-logs,
+  // showInSidebar) nhưng ModuleSidebar dựng menu từ sidebar-registry NÀY — showInSidebar bên kia không
+  // được đọc, nên phải khai item ở đây mới thấy trên UI. Gate = cặp engine literal đồng bộ route-meta
+  // (mẫu HR_ORG_CHART); cặp sensitive chỉ vào capabilities khi grant explicit → thiếu quyền item tự ẩn.
+  {
+    sidebarKey: "noti.events",
+    moduleCode: "NOTI",
+    label: "Sự kiện thông báo",
+    path: "/notifications/events",
+    icon: "sliders-horizontal",
+    group: "admin",
+    order: 61,
+    requiredAnyPermissions: ["view:notification-config"],
+  },
+  {
+    sidebarKey: "noti.templates",
+    moduleCode: "NOTI",
+    label: "Template thông báo",
+    path: "/notifications/templates",
+    icon: "file-text",
+    group: "admin",
+    order: 62,
+    requiredAnyPermissions: ["view:notification-template"],
+  },
+  {
+    sidebarKey: "noti.delivery-logs",
+    moduleCode: "NOTI",
+    label: "Nhật ký gửi",
+    path: "/notifications/delivery-logs",
+    icon: "file-clock",
+    group: "admin",
+    order: 63,
+    requiredAnyPermissions: ["view:notification-delivery-log"],
   },
 ];
 

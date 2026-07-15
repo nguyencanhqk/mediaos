@@ -392,7 +392,7 @@ const LeaveAuditLogsPage = React.lazy(() =>
 );
 
 // Notifications — S4-FE-NOTI-1-WIRE (wire NotificationListPage/DetailPage đã build ở S4-FE-NOTI-1/a7be971)
-import { NOTI_ENGINE_PAIRS, NOTI_PATHS, NOTI_SCREEN } from "@/routes/notifications/constants";
+import { NOTI_PATHS } from "@/routes/notifications/constants";
 const NotificationListPage = React.lazy(() =>
   import("@/routes/notifications/NotificationListPage").then((m) => ({
     default: m.NotificationListPage,
@@ -413,6 +413,12 @@ const NotificationEventsPage = React.lazy(() =>
 const NotificationDeliveryLogsPage = React.lazy(() =>
   import("@/routes/notifications/NotificationDeliveryLogsPage").then((m) => ({
     default: m.NotificationDeliveryLogsPage,
+  })),
+);
+// S4-FE-NOTI-4 — Quản lý mẫu thông báo (admin, UI-NOTI-SCREEN-005 / SPEC-08 §13.4 NOTI-SCREEN-006).
+const NotificationTemplatesPage = React.lazy(() =>
+  import("@/routes/notifications/NotificationTemplatesPage").then((m) => ({
+    default: m.NotificationTemplatesPage,
   })),
 );
 
@@ -1393,27 +1399,27 @@ const notificationEventsRoute = makeModuleRoute(
 );
 
 // Notification delivery-logs viewer (S4-FE-NOTI-3, UI-NOTI-SCREEN-006) — /notifications/delivery-logs.
-// Local RouteMeta (KHÔNG ở ROUTE_REGISTRY web-core, cùng pattern hrAuditLogsMeta/systemFileAccessLogsMeta).
-// Gate = cặp seed THẬT mig 0481 (view:notification-delivery-log, is_sensitive=true) — literal string,
-// page tự double-gate bằng useCanExact (fail-closed, KHÔNG wildcard fallback).
-const notificationDeliveryLogsMeta: RouteMeta = {
-  routeKey: "noti.delivery-logs",
-  path: NOTI_PATHS.DELIVERY_LOGS,
-  layout: "MODULE_WORKSPACE",
-  moduleCode: "NOTI",
-  screenCode: NOTI_SCREEN.DELIVERY_LOGS,
-  titleKey: "routeTitle.notificationDeliveryLogs",
-  requiredAnyPermissions: [
-    `${NOTI_ENGINE_PAIRS.VIEW_DELIVERY_LOG.action}:${NOTI_ENGINE_PAIRS.VIEW_DELIVERY_LOG.resourceType}`,
-  ],
-};
-const notificationDeliveryLogsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: NOTI_PATHS.DELIVERY_LOGS,
-  beforeLoad: authGuard,
-  component: () =>
-    buildModuleRouteContent(notificationDeliveryLogsMeta, "NOTI", <NotificationDeliveryLogsPage />),
-});
+// S4-FE-NOTI-4 — CHUYỂN từ RouteMeta cục bộ vào ROUTE_REGISTRY (web-core registry.ts, routeKey
+// "noti.delivery-logs") — đóng nợ discoverability (mirror dashboard.configs). Gate GIỮ NGUYÊN
+// view:notification-delivery-log (seed THẬT mig 0481, is_sensitive=true) — page tự double-gate bằng
+// useCanExact (fail-closed, KHÔNG wildcard fallback).
+const notificationDeliveryLogsRoute = makeModuleRoute(
+  NOTI_PATHS.DELIVERY_LOGS,
+  "noti.delivery-logs",
+  "NOTI",
+  NotificationDeliveryLogsPage,
+);
+
+// Notification templates (admin) — S4-FE-NOTI-4 (UI-NOTI-SCREEN-005 / SPEC-08 §13.4 NOTI-SCREEN-006).
+// Path TĨNH 2-segment "/notifications/templates" — TanStack Router tự xếp hạng route tĩnh trên route
+// param $id (mirror notificationEventsRoute). Gate route-level = view:notification-template
+// (ROUTE_REGISTRY noti.templates); sửa gate TINH hơn TRONG page bằng useCanExact(update:notification-template).
+const notificationTemplatesRoute = makeModuleRoute(
+  NOTI_PATHS.TEMPLATES,
+  "noti.templates",
+  "NOTI",
+  NotificationTemplatesPage,
+);
 
 // System / Foundation — /system landing THAY ModulePlaceholder = System Overview (S2-FE-FND-1).
 const systemRoute = makeModuleRoute("/system", "system.overview", "FOUNDATION", SystemOverviewPage);
@@ -1926,6 +1932,7 @@ const routeTree = rootRoute.addChildren([
   notificationDetailRoute,
   notificationEventsRoute,
   notificationDeliveryLogsRoute,
+  notificationTemplatesRoute,
   systemRoute,
   systemCompanyRoute,
   systemCompanySettingsRoute,

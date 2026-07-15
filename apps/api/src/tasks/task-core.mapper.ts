@@ -3,6 +3,7 @@ import type {
   TaskCorePriorityDto,
   TaskCoreResponseDto,
   TaskCoreStatusDto,
+  TaskKanbanCardDto,
 } from "@mediaos/contracts";
 import type { TaskCoreRow } from "./task-core.repository";
 
@@ -52,4 +53,23 @@ export function toTaskCoreDto(row: TaskCoreRow): TaskCoreResponseDto {
     createdAt,
     updatedAt,
   };
+}
+
+/** Counts per-card cho Kanban (SPEC-06 §13.8) — aggregate GROUP BY task_id ở repo, KHÔNG N+1. */
+export interface TaskKanbanCardCounts {
+  commentCount: number;
+  attachmentCount: number;
+  checklistDone: number;
+  checklistTotal: number;
+}
+
+/**
+ * S5-TASK-BE-6 — `toTaskCoreDto` + counts per-card. Tách khỏi `toTaskCoreDto` (KHÔNG sửa base) vì counts CHỈ
+ * cần cho Kanban board — list/detail/my-tasks vẫn dùng `taskCoreResponseSchema` nguyên vẹn.
+ */
+export function toTaskKanbanCardDto(
+  row: TaskCoreRow,
+  counts: TaskKanbanCardCounts,
+): TaskKanbanCardDto {
+  return { ...toTaskCoreDto(row), ...counts };
 }

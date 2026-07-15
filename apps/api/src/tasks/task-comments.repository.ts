@@ -97,6 +97,29 @@ export class TaskCommentsRepository {
     return (res.rows as unknown as { id: string }[])[0];
   }
 
+  /**
+   * S5-TASK-BE-6 — comment count GỘP theo `task_id` cho MỌI task trong `taskIds` (1 câu, KHÔNG N+1 —
+   * Kanban board gọi 1 lần cho cả board thay vì per-card). CHỈ đếm bản ghi CÒN SỐNG (deleted_at IS NULL).
+   * `taskIds` rỗng ⇒ trả Map rỗng (khỏi round-trip DB cho project 0 task).
+   */
+  async countByTaskIdsTx(
+    tx: TenantTx,
+    companyId: string,
+    taskIds: string[],
+  ): Promise<Map<string, number>> {
+    if (taskIds.length === 0) return new Map();
+    const res = await tx.execute(sql`
+      select task_id as "taskId", count(*)::int as "n"
+        from task_comments
+       where company_id = ${companyId}
+         and task_id = any(${sql.param(taskIds)}::uuid[])
+         and deleted_at is null
+       group by task_id
+    `);
+    const rows = res.rows as unknown as { taskId: string; n: number }[];
+    return new Map(rows.map((r) => [r.taskId, Number(r.n)]));
+  }
+
   /** Soft-delete (BẤT BIẾN #2) — KHÔNG hard DELETE. */
   async softDeleteTx(
     tx: TenantTx,

@@ -12,6 +12,14 @@ import { I18nextProvider } from "react-i18next";
 import type { NotificationEventAdminItem } from "@mediaos/contracts";
 import i18n from "@/i18n";
 
+// S4-FE-NOTI-4 — trang có nút "Xem template" điều hướng qua useNavigate (mirror
+// NotificationTargetLink.spec.tsx) — mock TOÀN BỘ @tanstack/react-router (page KHÔNG mount trong
+// RouterProvider ở test này) để tránh useNavigate() throw ngoài Router context.
+const mockNavigate = vi.fn();
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => mockNavigate,
+}));
+
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
@@ -170,5 +178,28 @@ describe("NotificationEventsPage — toggle + confirm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Huỷ" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(mockUpdateEvent).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S4-FE-NOTI-4 — nút "Xem template" điều hướng → /notifications/templates?event=<event_code>
+// (SPEC-08 §13.4). Nút LUÔN hiện (KHÔNG gate — chỉ là link, route đích tự chặn quyền).
+// ---------------------------------------------------------------------------
+
+describe("NotificationEventsPage — link 'xem template'", () => {
+  it("click 'Xem template' → navigate({to: '/notifications/templates', search: {event: event_code}})", async () => {
+    mockCan(true, false);
+    mockListEvents.mockResolvedValue([EVENT]);
+    renderPage();
+
+    const link = await screen.findByTestId(`event-view-template-${EVENT.id}`);
+    fireEvent.click(link);
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "/notifications/templates",
+        search: { event: EVENT.event_code },
+      }),
+    );
   });
 });

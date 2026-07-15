@@ -10,6 +10,8 @@
  *      task ngoài scope (mgr) → 404.
  *   3. Activity feed: hr/admin xem được (view:task-audit-log sensitive); employee/manager → 403
  *      (TASK-ERR-042); cross-tenant taskId → 404.
+ *   1b. S5-TASK-BE-6 (SPEC-06 §13.8) — counts per-card (commentCount/attachmentCount/checklistDone/
+ *      checklistTotal) ĐÚNG dữ liệu planted; card trống → 0; CHỈ đếm bản ghi CÒN SỐNG (soft-deleted bị loại).
  *
  * GATE CỨNG `hasDb && LANE_DB` (memory integration-test-LANE_DB-gate).
  */
@@ -115,6 +117,90 @@ describe.skipIf(!hasLaneDb)(
         ],
       );
       return r.rows[0].id as string;
+    }
+
+    // ── S5-TASK-BE-6 (SPEC-06 §13.8) — plant comment/attachment/checklist cho counts per-card ─────
+
+    async function seedComment(
+      companyId: string,
+      taskId: string,
+      userId: string,
+      body: string,
+    ): Promise<string> {
+      const r = await direct.query(
+        `INSERT INTO task_comments (company_id, task_id, user_id, body, created_by)
+       VALUES ($1,$2,$3,$4,$3) RETURNING id`,
+        [companyId, taskId, userId, body],
+      );
+      return r.rows[0].id as string;
+    }
+
+    async function softDeleteComment(commentId: string): Promise<void> {
+      await direct.query("UPDATE task_comments SET deleted_at = now() WHERE id = $1", [commentId]);
+    }
+
+    /** files + file_links (module 'TASK'/entity 'task') — mirror task-files-access.int-spec.ts seedFile/seedTaskLink. */
+    async function seedTaskAttachment(
+      companyId: string,
+      taskId: string,
+      uploadedBy: string,
+    ): Promise<{ fileId: string; linkId: string }> {
+      const fr = await direct.query(
+        `INSERT INTO files
+           (company_id, original_name, stored_name, mime_type, file_size_bytes, storage_provider,
+            storage_path, upload_status, scan_status, uploaded_by)
+         VALUES ($1,'attach.pdf','stored.pdf','application/pdf',1024,'MinIO',$2,'Uploaded','Clean',$3)
+         RETURNING id`,
+        [companyId, `${companyId}/tasks/${taskId}/attach.pdf`, uploadedBy],
+      );
+      const fileId = fr.rows[0].id as string;
+      const lr = await direct.query(
+        `INSERT INTO file_links (company_id, file_id, module_code, entity_type, entity_id, link_type, created_by)
+         VALUES ($1,$2,'TASK','task',$3,'Attachment',$4) RETURNING id`,
+        [companyId, fileId, taskId, uploadedBy],
+      );
+      return { fileId, linkId: lr.rows[0].id as string };
+    }
+
+    async function softDeleteFileLink(linkId: string): Promise<void> {
+      await direct.query("UPDATE file_links SET deleted_at = now() WHERE id = $1", [linkId]);
+    }
+
+    async function seedChecklist(
+      companyId: string,
+      taskId: string,
+      title: string,
+      createdBy: string,
+    ): Promise<string> {
+      const r = await direct.query(
+        `INSERT INTO task_checklists (company_id, task_id, title, created_by, updated_by)
+         VALUES ($1,$2,$3,$4,$4) RETURNING id`,
+        [companyId, taskId, title, createdBy],
+      );
+      return r.rows[0].id as string;
+    }
+
+    async function seedChecklistItem(
+      companyId: string,
+      taskId: string,
+      checklistId: string,
+      title: string,
+      isDone: boolean,
+      createdBy: string,
+    ): Promise<string> {
+      const r = await direct.query(
+        `INSERT INTO task_checklist_items
+           (company_id, task_id, checklist_id, title, is_done, done_at, created_by, updated_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$7) RETURNING id`,
+        [companyId, taskId, checklistId, title, isDone, isDone ? new Date() : null, createdBy],
+      );
+      return r.rows[0].id as string;
+    }
+
+    async function softDeleteChecklistItem(itemId: string): Promise<void> {
+      await direct.query("UPDATE task_checklist_items SET deleted_at = now() WHERE id = $1", [
+        itemId,
+      ]);
     }
 
     async function grant(companyId: string, userId: string, pairs: Pair[]): Promise<void> {
@@ -279,6 +365,95 @@ describe.skipIf(!hasLaneDb)(
       ).toBe(404);
       // cross-tenant: admin A gọi project của B → 404 (RLS ẩn, không lộ tồn tại).
       expect((await authGet(tok.admin, `/projects/${bProjectId}/kanban`)).status).toBe(404);
+    });
+
+    // ── 1b. Counts per-card (S5-TASK-BE-6, SPEC-06 §13.8) ───────────────────────
+
+    it("card có commentCount·attachmentCount·checklistDone/checklistTotal ĐÚNG dữ liệu planted; card trống → 0", async () => {
+      const withData = await mkTask({ projectId, taskStatus: "Todo" });
+      const empty = await mkTask({ projectId, taskStatus: "Todo" });
+
+      await seedComment(A.companyId, withData, adminUser, "c1");
+      await seedComment(A.companyId, withData, adminUser, "c2");
+
+      await seedTaskAttachment(A.companyId, withData, adminUser);
+
+      const checklistId = await seedChecklist(A.companyId, withData, "Checklist 1", adminUser);
+      await seedChecklistItem(A.companyId, withData, checklistId, "item1", true, adminUser);
+      await seedChecklistItem(A.companyId, withData, checklistId, "item2", false, adminUser);
+      await seedChecklistItem(A.companyId, withData, checklistId, "item3", false, adminUser);
+
+      const res = await authGet(tok.admin, `/projects/${projectId}/kanban`);
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      const cols = res.body.data.columns as Array<{
+        status: string;
+        tasks: Array<{
+          id: string;
+          commentCount: number;
+          attachmentCount: number;
+          checklistDone: number;
+          checklistTotal: number;
+        }>;
+      }>;
+      const todo = cols.find((c) => c.status === "Todo")?.tasks ?? [];
+
+      const card = todo.find((c) => c.id === withData);
+      expect(card, JSON.stringify(todo)).toBeDefined();
+      expect(card?.commentCount).toBe(2);
+      expect(card?.attachmentCount).toBe(1);
+      expect(card?.checklistDone).toBe(1);
+      expect(card?.checklistTotal).toBe(3);
+
+      const emptyCard = todo.find((c) => c.id === empty);
+      expect(emptyCard, JSON.stringify(todo)).toBeDefined();
+      expect(emptyCard?.commentCount).toBe(0);
+      expect(emptyCard?.attachmentCount).toBe(0);
+      expect(emptyCard?.checklistDone).toBe(0);
+      expect(emptyCard?.checklistTotal).toBe(0);
+    });
+
+    it("counts CHỈ đếm bản ghi CÒN SỐNG — comment/file/checklist-item đã soft-delete KHÔNG được tính", async () => {
+      const t = await mkTask({ projectId, taskStatus: "Todo" });
+
+      await seedComment(A.companyId, t, adminUser, "live");
+      const deletedComment = await seedComment(A.companyId, t, adminUser, "deleted");
+      await softDeleteComment(deletedComment);
+
+      await seedTaskAttachment(A.companyId, t, adminUser);
+      const deleted = await seedTaskAttachment(A.companyId, t, adminUser);
+      await softDeleteFileLink(deleted.linkId);
+
+      const checklistId = await seedChecklist(A.companyId, t, "Checklist", adminUser);
+      await seedChecklistItem(A.companyId, t, checklistId, "live-item", false, adminUser);
+      const deletedItem = await seedChecklistItem(
+        A.companyId,
+        t,
+        checklistId,
+        "deleted-item",
+        true,
+        adminUser,
+      );
+      await softDeleteChecklistItem(deletedItem);
+
+      const res = await authGet(tok.admin, `/projects/${projectId}/kanban`);
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      const cols = res.body.data.columns as Array<{
+        status: string;
+        tasks: Array<{
+          id: string;
+          commentCount: number;
+          attachmentCount: number;
+          checklistDone: number;
+          checklistTotal: number;
+        }>;
+      }>;
+      const card = (cols.find((c) => c.status === "Todo")?.tasks ?? []).find((c) => c.id === t);
+      expect(card, JSON.stringify(cols)).toBeDefined();
+      expect(card?.commentCount).toBe(1);
+      expect(card?.attachmentCount).toBe(1);
+      // checklist: 1 item sống (chưa done) + 1 item đã soft-delete (bị loại) → total=1, done=0.
+      expect(card?.checklistTotal).toBe(1);
+      expect(card?.checklistDone).toBe(0);
     });
 
     // ── 2. Move (tái dùng CHÍNH FSM) ────────────────────────────────────────────

@@ -111,6 +111,8 @@ export default {
       status: "Trạng thái",
       updatedAt: "Cập nhật gần nhất",
       actions: "Thao tác",
+      // S4-FE-NOTI-4 — cột link "Xem template" (SPEC-08 §13.4).
+      template: "Mẫu thông báo",
     },
     status: {
       enabled: "Đang bật",
@@ -119,6 +121,8 @@ export default {
     actions: {
       enable: "Bật",
       disable: "Tắt",
+      // S4-FE-NOTI-4 — điều hướng /notifications/templates?event=<event_code>.
+      viewTemplate: "Xem template",
     },
     confirm: {
       enableTitle: "Bật sự kiện thông báo?",
@@ -186,6 +190,82 @@ export default {
     forbidden: {
       title: "Không có quyền truy cập",
       description: "Bạn không có quyền xem nhật ký gửi thông báo.",
+    },
+  },
+  // S4-FE-NOTI-4 (UI-NOTI-SCREEN-005 / SPEC-08 §13.4 NOTI-SCREEN-006) — Quản lý mẫu thông báo (admin).
+  templates: {
+    title: "Quản lý mẫu thông báo",
+    description: "Danh mục mẫu thông báo theo sự kiện — sửa tiêu đề/nội dung theo công ty.",
+    filters: {
+      event: "Sự kiện",
+      eventPlaceholder: "Mã sự kiện…",
+      channel: "Kênh gửi",
+      allChannels: "Tất cả kênh",
+    },
+    columns: {
+      event: "Sự kiện",
+      templateCode: "Mã mẫu",
+      channel: "Kênh",
+      locale: "Ngôn ngữ",
+      status: "Trạng thái",
+      isDefault: "Mặc định",
+      scope: "Phạm vi",
+      version: "Phiên bản",
+      updatedAt: "Cập nhật gần nhất",
+      actions: "Thao tác",
+    },
+    status: {
+      Draft: "Nháp",
+      Active: "Đang dùng",
+      Inactive: "Ngừng dùng",
+      Archived: "Đã lưu trữ",
+    },
+    badges: {
+      default: "Mặc định",
+      override: "Riêng công ty",
+      global: "Toàn hệ thống",
+    },
+    actions: {
+      edit: "Sửa",
+    },
+    empty: {
+      title: "Chưa có mẫu thông báo nào",
+      description: "Danh mục mẫu thông báo trống hoặc không khớp bộ lọc.",
+    },
+    error: {
+      title: "Không thể tải danh mục mẫu thông báo",
+      description: "Có lỗi khi tải danh mục. Vui lòng thử lại.",
+    },
+    forbidden: {
+      title: "Không có quyền xem mẫu thông báo",
+      description: "Bạn không có quyền truy cập màn hình này.",
+    },
+    form: {
+      title: "Sửa mẫu thông báo",
+      cancel: "Huỷ",
+      save: "Lưu",
+      saving: "Đang lưu…",
+      fields: {
+        title: "Tiêu đề",
+        body: "Nội dung",
+        shortBody: "Nội dung rút gọn",
+        actionLabel: "Nhãn nút hành động",
+        targetUrl: "Đường dẫn liên kết",
+        status: "Trạng thái",
+      },
+      errors: {
+        titleRequired: "Vui lòng nhập tiêu đề.",
+        titleTooLong: "Tiêu đề tối đa 255 ký tự.",
+        bodyRequired: "Vui lòng nhập nội dung.",
+        shortBodyTooLong: "Nội dung rút gọn tối đa 500 ký tự.",
+        actionLabelTooLong: "Nhãn nút tối đa 100 ký tự.",
+        targetUrlTooLong: "Đường dẫn tối đa 500 ký tự.",
+        forbidden: "Bạn không có quyền sửa mẫu thông báo này.",
+        conflict: "Dữ liệu đã thay đổi — vui lòng tải lại và thử lại.",
+        validation: "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.",
+        server: "Có lỗi hệ thống. Vui lòng thử lại sau.",
+        generic: "Cập nhật thất bại. Vui lòng thử lại.",
+      },
     },
   },
 };

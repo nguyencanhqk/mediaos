@@ -483,6 +483,12 @@ export const notificationKeys = {
   // của My-Notification — khác endpoint/permission/scope, không invalidate chéo).
   deliveryLogs: (params?: Record<string, unknown>) =>
     [...rootKeys.notifications, "delivery-logs", params] as const,
+  // S4-FE-NOTI-4 — APPEND. GET /notifications/templates (danh mục + chi tiết, NOTI-API-303) — TÁCH
+  // khỏi `events` (khác endpoint/shape, cùng NotificationAdminController nhưng resource riêng).
+  templates: (params?: Record<string, unknown>) =>
+    [...rootKeys.notifications, "admin-templates", params] as const,
+  templateDetail: (id: string) =>
+    [...rootKeys.notifications, "admin-templates", "detail", id] as const,
 };
 
 // S4-FE-NOTI-1 — mutation → invalidation cho My-Notification (mark-read/mark-all-read/delete). Prefix
