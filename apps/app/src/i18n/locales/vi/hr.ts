@@ -176,6 +176,47 @@ export default {
       description: "Hồ sơ nhân viên không tồn tại hoặc bạn không có quyền xem.",
     },
   },
+  // S5-HR-LINKUI-1 — khối "Tài khoản đăng nhập" trên trang chi tiết (HR-FUNC-011).
+  accountLink: {
+    title: "Tài khoản đăng nhập",
+    statusLabel: "Trạng thái liên kết",
+    statusLinked: "Đã liên kết",
+    statusNotLinked: "Chưa liên kết",
+    linkedEmail: "Email/username tài khoản",
+    userStatus: "Trạng thái tài khoản",
+    linkButton: "Liên kết tài khoản",
+    unlinkButton: "Hủy liên kết",
+    needViewUserTooltip: "Cần quyền xem tài khoản (view:user) để chọn người liên kết.",
+    linkDialog: {
+      title: "Liên kết tài khoản",
+      description:
+        "Tìm và chọn một tài khoản có sẵn cùng công ty, chưa liên kết hồ sơ nhân viên nào, để gán cho nhân viên này.",
+      searchPlaceholder: "Tìm theo email hoặc họ tên…",
+      loading: "Đang tải danh sách tài khoản…",
+      error: "Không thể tải danh sách tài khoản. Vui lòng thử lại.",
+      empty: "Không tìm thấy tài khoản phù hợp.",
+      cancel: "Hủy",
+      submit: "Liên kết",
+      submitting: "Đang liên kết…",
+    },
+    unlinkDialog: {
+      title: "Hủy liên kết tài khoản",
+      description: "Bạn có chắc muốn hủy liên kết tài khoản {{email}} khỏi hồ sơ nhân viên này?",
+      cancel: "Hủy",
+      confirm: "Xác nhận hủy liên kết",
+      submitting: "Đang xử lý…",
+    },
+    errors: {
+      employeeAlreadyLinked: "Nhân viên này đã được liên kết với một tài khoản khác.",
+      userAlreadyLinked: "Tài khoản này đã được liên kết với nhân viên khác.",
+      employeeNotFound: "Không tìm thấy hồ sơ nhân viên.",
+      userNotFound: "Không tìm thấy tài khoản trong công ty.",
+      noLinkedUser: "Nhân viên này chưa liên kết tài khoản nào.",
+      cannotUnlinkSelf: "Bạn không thể tự hủy liên kết tài khoản của chính mình.",
+      forbidden: "Bạn không có quyền thực hiện thao tác này.",
+      generic: "Không thể thực hiện thao tác. Vui lòng thử lại.",
+    },
+  },
   // S2-FE-HR-9 — Tab "File hồ sơ" trong EmployeeDetailPage (UI-HR-SCREEN-015).
   files: {
     description: "Tài liệu đính kèm hồ sơ nhân viên này.",

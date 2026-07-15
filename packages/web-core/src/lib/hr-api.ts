@@ -31,9 +31,19 @@ import {
   type ProfileChangeRequestListResponse,
   type ProfileChangeRequestDetail,
   type HrEmployeeExportQuery,
+  type LinkUserRequest,
+  type UnlinkUserRequest,
 } from "@mediaos/contracts";
 import { apiFetch, apiFetchBlob, type ApiBlobResult } from "./api-client";
 import { buildQueryString } from "./api-params";
+
+// S5-HR-LINKUI-1 — response POST/DELETE /hr/employees/:id/link-user (HrWriteService.linkUser/
+// unlinkUser trả { id, userId }). KHÔNG có response schema riêng trong @mediaos/contracts (theo mẫu
+// createProfileChangeRequest ở dưới: object nhỏ khai TẠI ĐÂY thay vì mở thêm export ở contracts).
+const hrLinkUserResponseSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid().nullable(),
+});
 
 /**
  * HR API client — S2-FE-HR-1. Tất cả endpoint cần Bearer (apiFetch gắn tự động).
@@ -122,6 +132,34 @@ export const hrApi = {
   updateEmployee: (id: string, body: UpdateHrEmployeeRequest): Promise<UpdateHrEmployeeResponse> =>
     apiFetch(`/hr/employees/${id}`, updateHrEmployeeResponseSchema, {
       method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  // ── Link / unlink user (S5-HR-LINKUI-1, HR-FUNC-011 — BE ship S2-HR-BE-2) ────────
+  // Cả 2 gate `update:employee` ở SERVER (hr-write.controller.ts) — KHÔNG cặp "link-user" riêng.
+
+  /**
+   * POST /hr/employees/:id/link-user — liên kết 1 user CÓ SẴN cùng company vào hồ sơ nhân viên (chưa
+   * liên kết). Server validate: employee chưa có user (409, HR-ERR-027) + user chưa liên kết employee
+   * active khác (409, HR-ERR-028) + audit action="link-user" trong transaction (BẤT BIẾN #2).
+   */
+  linkUser: (id: string, body: LinkUserRequest): Promise<{ id: string; userId: string | null }> =>
+    apiFetch(`/hr/employees/${id}/link-user`, hrLinkUserResponseSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * DELETE /hr/employees/:id/link-user — hủy liên kết (lockUser tùy chọn khóa tài khoản vừa gỡ). Server
+   * chặn tự hủy liên kết chính mình (403) + audit action="unlink-user". DELETE có body (route BE khai
+   * @Body — KHÔNG phải REST thuần nhưng khớp `unlinkUserSchema` đã ship).
+   */
+  unlinkUser: (
+    id: string,
+    body: UnlinkUserRequest,
+  ): Promise<{ id: string; userId: string | null }> =>
+    apiFetch(`/hr/employees/${id}/link-user`, hrLinkUserResponseSchema, {
+      method: "DELETE",
       body: JSON.stringify(body),
     }),
 
