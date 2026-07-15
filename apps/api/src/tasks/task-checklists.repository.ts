@@ -112,10 +112,7 @@ export class TaskChecklistsRepository {
     patch: { title?: string; isRequiredForDone?: boolean; orderIndex?: number },
     updatedBy: string,
   ): Promise<{ id: string } | undefined> {
-    const sets: SQL[] = [
-      sql`updated_at = now()`,
-      sql`updated_by = ${updatedBy}`,
-    ];
+    const sets: SQL[] = [sql`updated_at = now()`, sql`updated_by = ${updatedBy}`];
     if (patch.title !== undefined) sets.push(sql`title = ${patch.title}`);
     if (patch.isRequiredForDone !== undefined) {
       sets.push(sql`is_required_for_done = ${patch.isRequiredForDone}`);
@@ -157,6 +154,33 @@ export class TaskChecklistsRepository {
          set deleted_at = now(), deleted_by = ${deletedBy}, updated_at = now(), updated_by = ${deletedBy}
        where company_id = ${companyId} and checklist_id = ${checklistId} and deleted_at is null
     `);
+  }
+
+  /**
+   * S5-TASK-BE-6 — checklist progress (done/total item) GỘP theo `task_id` cho MỌI task trong `taskIds` (1
+   * câu, KHÔNG N+1 — Kanban board). `task_checklist_items.task_id` denormalize sẵn (§7.10) nên GROUP BY thẳng
+   * trên item, KHÔNG cần join `task_checklists`. CHỈ đếm item CÒN SỐNG (deleted_at IS NULL) — item bị soft-
+   * delete cascade CÙNG lúc với checklist cha (softDeleteChecklistTx + softDeleteItemsByChecklistTx trong
+   * CÙNG tx) nên không lệch. `taskIds` rỗng ⇒ Map rỗng.
+   */
+  async countProgressByTaskIdsTx(
+    tx: TenantTx,
+    companyId: string,
+    taskIds: string[],
+  ): Promise<Map<string, { done: number; total: number }>> {
+    if (taskIds.length === 0) return new Map();
+    const res = await tx.execute(sql`
+      select task_id as "taskId",
+             count(*) filter (where is_done) :: int as "done",
+             count(*) :: int as "total"
+        from task_checklist_items
+       where company_id = ${companyId}
+         and task_id = any(${sql.param(taskIds)}::uuid[])
+         and deleted_at is null
+       group by task_id
+    `);
+    const rows = res.rows as unknown as { taskId: string; done: number; total: number }[];
+    return new Map(rows.map((r) => [r.taskId, { done: Number(r.done), total: Number(r.total) }]));
   }
 
   // ── Items ───────────────────────────────────────────────────────────────────
@@ -232,10 +256,7 @@ export class TaskChecklistsRepository {
     patch: { title?: string; orderIndex?: number; isDone?: boolean },
     actor: { userId: string; employeeId: string | null },
   ): Promise<{ id: string } | undefined> {
-    const sets: SQL[] = [
-      sql`updated_at = now()`,
-      sql`updated_by = ${actor.userId}`,
-    ];
+    const sets: SQL[] = [sql`updated_at = now()`, sql`updated_by = ${actor.userId}`];
     if (patch.title !== undefined) sets.push(sql`title = ${patch.title}`);
     if (patch.orderIndex !== undefined) sets.push(sql`order_index = ${patch.orderIndex}`);
     if (patch.isDone !== undefined) {
