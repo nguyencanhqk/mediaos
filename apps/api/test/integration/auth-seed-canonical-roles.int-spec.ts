@@ -71,6 +71,11 @@ const SEED_GRANTS: Grant[] = [
   // HR.EMPLOYEE.EXPORT
   { role: "hr", action: "export", resourceType: "employee", scope: "Company" },
   { role: "company-admin", action: "export", resourceType: "employee", scope: "Company" },
+  // HR.EMPLOYEE.IMPORT — import:employee (is_sensitive, mig 0496 flip false→true) parity với export:employee.
+  // Grant EXACT hr + company-admin × ALLOW × Company (per-pair). CHỐNG canonical-seed-pin regression: sau
+  // 0496 flip is_sensitive, loop A (catalog) + loop C (per-pair scope) sẽ đỏ nếu THIẾU 2 hàng này.
+  { role: "hr", action: "import", resourceType: "employee", scope: "Company" },
+  { role: "company-admin", action: "import", resourceType: "employee", scope: "Company" },
   // HR.DEPARTMENT.VIEW — read:department : employee=Company, manager=Department, hr=Company, company-admin=Company
   { role: "employee", action: "read", resourceType: "department", scope: "Company" },
   { role: "manager", action: "read", resourceType: "department", scope: "Department" },
@@ -112,6 +117,9 @@ const REQUIRED_CATALOG = [
   { action: "change-status", resourceType: "employee", sensitive: false },
   // mig 0492 (HR-PROFILE-UI-2): flip is_sensitive false→true — parity với export:attendance/leave (fail-closed, wildcard không thoả).
   { action: "export", resourceType: "employee", sensitive: true },
+  // mig 0496 (S5-HR-IMPORT-BE-1): flip is_sensitive false→true — import danh bạ = ghi PII toàn tenant,
+  // parity export:employee (fail-closed, wildcard *:* KHÔNG thoả). Loop A đỏ nếu 0496 chưa flip.
+  { action: "import", resourceType: "employee", sensitive: true },
 ];
 
 // Cặp TUYỆT ĐỐI KHÔNG được role-grant cho 4 role canonical (assert CHỈ trên role canonical).

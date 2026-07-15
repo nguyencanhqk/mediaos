@@ -38,6 +38,24 @@ import { HrWriteRepository, type EmployeeUpdateData } from "./hr-write.repositor
 
 type RequestUser = { id: string; companyId: string };
 
+/**
+ * S5-HR-IMPORT-BE-1 — resolved structural data for ONE bulk-import row. Reference names are already
+ * resolved to ids by HrEmployeeImportService (per-tenant lookups). NO userId/email/password/fullName and
+ * NO baseSalary/PII: an imported profile is UNLINKED and never provisions a login account.
+ */
+export interface ImportEmployeeCreateData {
+  employeeCode: string | null;
+  orgUnitId: string | null;
+  positionId: string | null;
+  jobLevelId: string | null;
+  contractTypeId: string | null;
+  workType: string;
+  employmentType: string;
+  salaryType: string;
+  startDate: string | null;
+  endDate: string | null;
+}
+
 /** Sequence counter key for employee codes (scopeType defaults to "Company" in the repo). */
 export const EMPLOYEE_CODE_SEQUENCE_KEY = "EMPLOYEE_CODE";
 
@@ -236,6 +254,88 @@ export class HrWriteService {
         throw new ConflictException(
           "Employee code or login email already exists, or that user is already linked to an active employee",
         );
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * S5-HR-IMPORT-BE-1 — thin create for a SINGLE bulk-import row. Reuses the create-core (code allocation
+   * via SequenceService + reference validity + STRUCTURAL-only audit) but DELIBERATELY BYPASSES
+   * resolveUserId and the provision branch: an imported profile is UNLINKED (user_id = NULL), no login
+   * account is created or linked, and NO activation/welcome outbox event is emitted (createHrEmployeeSchema
+   * + resolveUserId require userId|email — import must never mint accounts). Each call wraps its OWN
+   * withTenant tx so the import service creates one row per transaction (partial-success: a failing row does
+   * NOT roll back the others). Permission is enforced by the caller (import:employee, Company scope) BEFORE
+   * the loop — this Tx helper is not a public entrypoint.
+   */
+  async createFromImportTx(user: RequestUser, data: ImportEmployeeCreateData) {
+    const manualCode = data.employeeCode ?? null;
+    // Auto-code allocated in its OWN tx BEFORE the insert tx (gaps OK, dups impossible) — mirrors create.
+    const autoCode = manualCode ? null : await this.allocateEmployeeCode(user.companyId);
+    const code = manualCode ?? autoCode;
+    try {
+      return await this.db.withTenant(user.companyId, async (tx) => {
+        if (manualCode) {
+          const cfg = await this.repo.getActiveEmployeeCodeConfigTx(tx, user.companyId);
+          if (cfg && cfg.allowManualOverride === false) {
+            throw new ForbiddenException(
+              "Manual employee code is not allowed by the active config",
+            );
+          }
+        }
+        // UNLINKED: subjectUserId is null — no resolveUserId, no account provisioning, no outbox event.
+        await this.assertReferencesValid(tx, user.companyId, {
+          orgUnitId: data.orgUnitId ?? undefined,
+          positionId: data.positionId ?? undefined,
+          jobLevelId: data.jobLevelId ?? undefined,
+          contractTypeId: data.contractTypeId ?? undefined,
+          subjectUserId: null,
+        });
+
+        const created = await this.repo.createTx(tx, user.companyId, {
+          userId: null,
+          employeeCode: code,
+          orgUnitId: data.orgUnitId ?? null,
+          positionId: data.positionId ?? null,
+          jobLevelId: data.jobLevelId ?? null,
+          contractTypeId: data.contractTypeId ?? null,
+          directManagerId: null,
+          workType: data.workType,
+          employmentType: data.employmentType,
+          salaryType: data.salaryType,
+          startDate: data.startDate ?? null,
+          endDate: data.endDate ?? null,
+        });
+        if (!created) throw new Error("Failed to create employee profile");
+
+        await this.audit.record(tx, {
+          action: "create",
+          objectType: "employee",
+          objectId: created.id,
+          actorUserId: user.id,
+          before: null,
+          after: this.structuralSnapshot({
+            employeeCode: created.employeeCode,
+            orgUnitId: data.orgUnitId ?? null,
+            positionId: data.positionId ?? null,
+            jobLevelId: data.jobLevelId ?? null,
+            contractTypeId: data.contractTypeId ?? null,
+            directManagerId: null,
+            workType: data.workType,
+            employmentType: data.employmentType,
+            salaryType: data.salaryType,
+            startDate: data.startDate ?? null,
+            endDate: data.endDate ?? null,
+            status: "active",
+          }),
+        });
+
+        return { id: created.id, employeeCode: created.employeeCode };
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new ConflictException("Employee code already exists (duplicate import row)");
       }
       throw err;
     }

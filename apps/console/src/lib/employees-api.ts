@@ -3,20 +3,19 @@ import type {
   CreateEmployeeProfileRequest,
   UpdateEmployeeProfileRequest,
 } from "@mediaos/contracts";
-import {
-  employeeListItemSchema,
-  importEmployeePreviewSchema,
-} from "@mediaos/contracts";
-import { apiFetch, getAccessToken, getApiBaseUrl, unwrapEnvelope } from "@mediaos/web-core";
+import { employeeListItemSchema } from "@mediaos/contracts";
+import { apiFetch } from "@mediaos/web-core";
 
 /**
  * Employees API client cho apps/console (Hệ thống — tenant plane).
  *
  * Mirror cấu trúc từ apps/people/src/lib/employees-api.ts nhưng dùng trong ngữ cảnh console
- * (aud=user, tenant self). Gate quyền: read/create/update/delete/import:employee.
+ * (aud=user, tenant self). Gate quyền: read/create/update/delete:employee.
+ *
+ * Import hàng loạt (bulk CSV/XLSX) KHÔNG còn ở đây — route legacy /employees/import[/confirm]
+ * (media-era, mã do client cấp, không SequenceService, audit yếu) đã bị GỠ ở BE (S5-HR-IMPORT-BE-1).
+ * Import mới thuộc S5-HR-IMPORT-FE-1 ở apps/app, gọi POST /hr/employees/import.
  */
-
-const confirmResultSchema = z.object({ inserted: z.number(), failed: z.number() });
 
 function buildEmployeeQuery(params?: {
   orgUnitId?: string;
@@ -40,11 +39,7 @@ export const consoleEmployeesApi = {
     positionId?: string;
     status?: string;
     search?: string;
-  }) =>
-    apiFetch(
-      `/employees${buildEmployeeQuery(params)}`,
-      z.array(employeeListItemSchema),
-    ),
+  }) => apiFetch(`/employees${buildEmployeeQuery(params)}`, z.array(employeeListItemSchema)),
 
   /** Tạo nhân viên mới (create:employee). */
   createEmployee: (data: CreateEmployeeProfileRequest) =>
@@ -62,32 +57,4 @@ export const consoleEmployeesApi = {
 
   /** Vô hiệu hoá (soft-delete) nhân viên — xoá mềm DELETE trả 204 No Content. */
   deleteEmployee: (id: string) => apiFetch(`/employees/${id}`, z.unknown(), { method: "DELETE" }),
-
-  /**
-   * Upload file CSV import nhân viên → trả preview (valid + invalid rows + sessionId).
-   * Dùng raw fetch (không apiFetch) vì multipart/form-data không hợp application/json.
-   * Bearer token gắn thủ công; KHÔNG có refresh-on-401 — chấp nhận (import là thao tác hiếm,
-   * trang đã gọi GET authed trước → token vẫn còn hạn).
-   */
-  uploadImport: async (file: File) => {
-    const form = new FormData();
-    form.append("file", file);
-    const token = getAccessToken();
-    const res = await fetch(`${getApiBaseUrl()}/employees/import`, {
-      method: "POST",
-      credentials: "include",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: form,
-    });
-    if (!res.ok) throw new Error(await res.text().catch(() => "Upload failed"));
-    const json: unknown = await res.json();
-    return importEmployeePreviewSchema.parse(unwrapEnvelope(json));
-  },
-
-  /** Xác nhận import sau khi xem trước — ghi vào DB (import:employee). */
-  confirmImport: (sessionId: string) =>
-    apiFetch("/employees/import/confirm", confirmResultSchema, {
-      method: "POST",
-      body: JSON.stringify({ sessionId }),
-    }),
 };

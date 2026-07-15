@@ -74,6 +74,7 @@ PermissionService trả lời: **"Trong cùng 1 tenant, user X có được làm
 | Quản lý phòng ban / chức vụ / hợp đồng | Có | Có | Cấp | — | — |
 | Upload/Xem file hồ sơ | Có | Cấp | Có | — | — |
 | Xuất danh sách · Xem lịch sử thay đổi | Có | Cấp | Cấp | — | — |
+| **Nhập nhân viên hàng loạt (Excel/CSV)** 🔒 (`import:employee` scope Company) | Có | Cấp | Cấp | — | — |
 | Gửi/Xem/Hủy yêu cầu sửa hồ sơ của mình | Có | Có | Có | Có | Có |
 | Duyệt/Từ chối yêu cầu sửa hồ sơ | Có | Cấp | Có | — | — |
 | Cấu hình mã NV / Sửa mã thủ công | Có | Cấp | Cấp | — | — |

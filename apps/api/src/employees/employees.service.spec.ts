@@ -16,7 +16,6 @@ import {
   ConflictException,
   ForbiddenException,
   NotFoundException,
-  ServiceUnavailableException,
 } from "@nestjs/common";
 import { EmployeesService } from "./employees.service";
 
@@ -117,15 +116,6 @@ function makeAudit() {
   return { record: vi.fn().mockResolvedValue(undefined) };
 }
 
-function makeValkey(overrides: Record<string, unknown> = {}) {
-  return {
-    get: vi.fn().mockResolvedValue(null),
-    set: vi.fn().mockResolvedValue(true),
-    del: vi.fn().mockResolvedValue(true),
-    ...overrides,
-  };
-}
-
 function makePassword() {
   return { hash: vi.fn().mockResolvedValue("argon2-hash") };
 }
@@ -164,7 +154,6 @@ function makeService(
   opts: {
     perms?: Record<string, Decision>;
     repo?: ReturnType<typeof makeRepo>;
-    valkey?: ReturnType<typeof makeValkey>;
     securityPolicy?: ReturnType<typeof makeSecurityPolicy>;
     dataScope?: ReturnType<typeof makeDataScope>;
   } = {},
@@ -173,7 +162,6 @@ function makeService(
   const db = makeDb();
   const permission = makePermission(opts.perms ?? {});
   const audit = makeAudit();
-  const valkey = opts.valkey ?? makeValkey();
   const password = makePassword();
   const securityPolicy = opts.securityPolicy ?? makeSecurityPolicy();
   const dataScope = opts.dataScope ?? makeDataScope();
@@ -182,12 +170,11 @@ function makeService(
     db as never,
     permission as never,
     audit as never,
-    valkey as never,
     password as never,
     securityPolicy as never,
     dataScope as never,
   );
-  return { svc, repo, db, permission, audit, valkey, password, securityPolicy, dataScope };
+  return { svc, repo, db, permission, audit, password, securityPolicy, dataScope };
 }
 
 // ─── F1: Salary audit (crown-jewel) ─────────────────────────────────────────────
@@ -562,124 +549,11 @@ describe("EmployeesService — F5 EMR sync", () => {
   });
 });
 
-// ─── F6: Import hardening (Valkey session, content-type, single tx) ──────────────
-
-describe("EmployeesService — F6 import hardening", () => {
-  const CSV = "email,fullName\nalice@co.test,Alice\n";
-
-  describe("parseImportPreview", () => {
-    it("rejects a non-CSV content-type (no session staged)", async () => {
-      const { svc, valkey } = makeService();
-      await expect(
-        svc.parseImportPreview(COMPANY_ID, ACTOR_ID, Buffer.from(CSV), "application/json"),
-      ).rejects.toThrow(BadRequestException);
-      expect(valkey.set).not.toHaveBeenCalled();
-    });
-
-    it("accepts text/csv and stages the batch in Valkey with a 5-min TTL", async () => {
-      const { svc, valkey } = makeService();
-      const res = await svc.parseImportPreview(COMPANY_ID, ACTOR_ID, Buffer.from(CSV), "text/csv");
-      expect(res.valid).toHaveLength(1);
-      expect(res.invalid).toHaveLength(0);
-      expect(typeof res.sessionId).toBe("string");
-      expect(valkey.set).toHaveBeenCalledWith(
-        expect.stringContaining(`import:${COMPANY_ID}:${ACTOR_ID}:`),
-        expect.any(String),
-        300,
-      );
-    });
-
-    it("staging failure (Valkey SET error) → 503, not a misleading later 409", async () => {
-      const valkey = makeValkey({ set: vi.fn().mockResolvedValue(false) });
-      const { svc } = makeService({ valkey });
-      await expect(
-        svc.parseImportPreview(COMPANY_ID, ACTOR_ID, Buffer.from(CSV), "text/csv"),
-      ).rejects.toThrow(ServiceUnavailableException);
-    });
-  });
-
-  describe("confirmImport", () => {
-    const staged = JSON.stringify([{ email: "alice@co.test", fullName: "Alice" }]);
-
-    it("inserts staged rows and consumes the key (DEL before insert)", async () => {
-      const valkey = makeValkey({ get: vi.fn().mockResolvedValue(staged) });
-      const repo = makeRepo();
-      const { svc } = makeService({ valkey, repo });
-      const res = await svc.confirmImport(COMPANY_ID, ACTOR_ID, "sess-1");
-      expect(res).toEqual({ inserted: 1, failed: 0 });
-      expect(valkey.del).toHaveBeenCalledTimes(1);
-      expect(repo.bulkCreateEmployeesTx).toHaveBeenCalledTimes(1);
-    });
-
-    it("double-submit → second confirm 409 (key already consumed)", async () => {
-      let call = 0;
-      const valkey = makeValkey({
-        get: vi.fn(() => Promise.resolve(call++ === 0 ? staged : null)),
-      });
-      const { svc } = makeService({ valkey });
-      await svc.confirmImport(COMPANY_ID, ACTOR_ID, "sess-1");
-      await expect(svc.confirmImport(COMPANY_ID, ACTOR_ID, "sess-1")).rejects.toThrow(
-        ConflictException,
-      );
-    });
-
-    it("expired/missing session (TTL elapsed) → 409", async () => {
-      const valkey = makeValkey({ get: vi.fn().mockResolvedValue(null) });
-      const { svc } = makeService({ valkey });
-      await expect(svc.confirmImport(COMPANY_ID, ACTOR_ID, "sess-1")).rejects.toThrow(
-        ConflictException,
-      );
-    });
-
-    it("stale lookup (user renamed/removed since preview) → clear per-row error", async () => {
-      const valkey = makeValkey({
-        get: vi.fn().mockResolvedValue(JSON.stringify([{ email: "ghost@co.test", fullName: "G" }])),
-      });
-      const repo = makeRepo({ findUserByEmailTx: vi.fn().mockResolvedValue(undefined) });
-      const { svc } = makeService({ valkey, repo });
-      await expect(svc.confirmImport(COMPANY_ID, ACTOR_ID, "sess-1")).rejects.toThrow(
-        /Row 2: user not found/,
-      );
-      expect(repo.bulkCreateEmployeesTx).not.toHaveBeenCalled();
-    });
-
-    it("cannot consume the key (Valkey DEL error) → 503, no insert", async () => {
-      const valkey = makeValkey({
-        get: vi.fn().mockResolvedValue(staged),
-        del: vi.fn().mockResolvedValue(false),
-      });
-      const repo = makeRepo();
-      const { svc } = makeService({ valkey, repo });
-      await expect(svc.confirmImport(COMPANY_ID, ACTOR_ID, "sess-1")).rejects.toThrow(
-        ServiceUnavailableException,
-      );
-      expect(repo.bulkCreateEmployeesTx).not.toHaveBeenCalled();
-    });
-
-    it("tampered/invalid staged payload → 400 (re-validated, not trusted)", async () => {
-      const valkey = makeValkey({
-        get: vi.fn().mockResolvedValue(JSON.stringify([{ email: "not-an-email", fullName: "" }])),
-      });
-      const repo = makeRepo();
-      const { svc } = makeService({ valkey, repo });
-      await expect(svc.confirmImport(COMPANY_ID, ACTOR_ID, "sess-1")).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(repo.bulkCreateEmployeesTx).not.toHaveBeenCalled();
-    });
-
-    it("racing duplicate import (unique violation on bulk insert) → 409", async () => {
-      const valkey = makeValkey({ get: vi.fn().mockResolvedValue(staged) });
-      const repo = makeRepo({
-        bulkCreateEmployeesTx: vi.fn().mockRejectedValue({ code: "23505" }),
-      });
-      const { svc } = makeService({ valkey, repo });
-      await expect(svc.confirmImport(COMPANY_ID, ACTOR_ID, "sess-1")).rejects.toThrow(
-        ConflictException,
-      );
-    });
-  });
-});
+// ─── F6 legacy CSV import (parseImportPreview/confirmImport) REMOVED ─────────────
+// S5-HR-IMPORT-BE-1 / FIX-BE-LEGACY-REMOVE: the media-era Valkey-staged CSV import was ripped out of
+// EmployeesService (route + service + DTO). Bulk import now lives ONLY in HrEmployeeImportService via
+// POST /hr/employees/import (SequenceService codes + per-row audit + session audit). Its coverage is
+// hr-employee-import.service.spec.ts (unit) + hr-employee-import.int-spec.ts (HTTP, real engine).
 
 // ─── F7: create login account when no userId supplied ───────────────────────────
 

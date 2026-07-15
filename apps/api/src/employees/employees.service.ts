@@ -3,44 +3,29 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
-  Logger,
   NotFoundException,
-  ServiceUnavailableException,
 } from "@nestjs/common";
-import { randomBytes, randomUUID } from "crypto";
+import { randomBytes } from "crypto";
 import type {
   CreateEmployeeProfileRequest,
   EmployeeListQuery,
-  ImportEmployeeRow,
   UpdateEmployeeProfileRequest,
 } from "@mediaos/contracts";
-import { importEmployeeRowSchema } from "@mediaos/contracts";
 import { AuditService } from "../events/audit.service";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import type { User } from "../db/schema";
 import { PasswordService } from "../auth/password.service";
 import { PermissionService } from "../permission/permission.service";
 import { DataScopeService } from "../permission/data-scope.service";
-import { ValkeyService } from "../permission/valkey.service";
 import type { CanInput, PermissionDecision } from "../permission/permission.types";
 import { SecurityPolicyService } from "../security-policy/security-policy.service";
 // S2-INT-1: same pure snapshot helper the HR write core uses — guarantees the user.created audit
 // never carries password_hash/normalized_email (BẤT BIẾN #3). Pure function → no DI/module cycle.
 import { authUserSnapshot } from "../users/auth-users.repository";
-import { EmployeesRepository, type BulkEmployeeRow } from "./employees.repository";
+import { EmployeesRepository } from "./employees.repository";
 import { isUniqueViolation } from "../common/db-error";
 
-const IMPORT_SESSION_TTL_SEC = 5 * 60; // plan §7: 5 minutes
-const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 const GENERATED_PASSWORD_BYTES = 18;
-
-/** Mimetypes browsers/curl commonly attach to a `.csv` upload. */
-const CSV_MIME_TYPES = new Set(["text/csv", "application/csv", "application/vnd.ms-excel"]);
-
-function isCsvMime(contentType: string | undefined): boolean {
-  if (!contentType) return false;
-  return CSV_MIME_TYPES.has(contentType.split(";")[0].trim().toLowerCase());
-}
 
 type SalaryMaskable = { baseSalary: unknown };
 
@@ -56,22 +41,15 @@ function maskSalary<T extends SalaryMaskable>(
   return { ...item, baseSalary: salary };
 }
 
-function importSessionKey(companyId: string, userId: string, sessionId: string): string {
-  return `import:${companyId}:${userId}:${sessionId}`;
-}
-
 type RequestUser = { id: string; companyId: string };
 
 @Injectable()
 export class EmployeesService {
-  private readonly logger = new Logger(EmployeesService.name);
-
   constructor(
     private readonly repo: EmployeesRepository,
     private readonly db: DatabaseService,
     private readonly permissionService: PermissionService,
     private readonly auditService: AuditService,
-    private readonly valkey: ValkeyService,
     private readonly password: PasswordService,
     private readonly securityPolicy: SecurityPolicyService,
     // S2-HR-EMP-LEGACY-LOCK-1: same resolver the HR read core uses — added LAST (DI is by type; the
@@ -476,166 +454,6 @@ export class EmployeesService {
         throw new BadRequestException("An employee cannot be their own direct manager");
       }
       await this.repo.insertDirectManagerEmrTx(tx, companyId, employeeUserId, managerId);
-    }
-  }
-
-  // ── F6: Import CSV Phase 1 — parse + validate → stage in Valkey ─────────────────
-
-  async parseImportPreview(
-    companyId: string,
-    userId: string,
-    fileBuffer: Buffer,
-    contentType: string,
-  ) {
-    if (!isCsvMime(contentType)) {
-      throw new BadRequestException("Invalid file type — expected a CSV (text/csv)");
-    }
-    if (fileBuffer.length > MAX_IMPORT_BYTES) {
-      throw new BadRequestException("File too large (max 5MB)");
-    }
-
-    // Lazy-load csv-parse to avoid top-level import issues in test environments.
-    const { parse } = await import("csv-parse/sync");
-    let records: unknown[];
-    try {
-      records = parse(fileBuffer, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true,
-      }) as unknown[];
-    } catch (err) {
-      // Log the parser detail server-side (a malformed file and a parser bug look identical to the client).
-      this.logger.warn("CSV parse failed", {
-        error: err instanceof Error ? err.message : String(err),
-      });
-      throw new BadRequestException("Invalid CSV format");
-    }
-
-    const valid: ImportEmployeeRow[] = [];
-    const invalid: { row: number; errors: string[] }[] = [];
-
-    for (let i = 0; i < records.length; i++) {
-      const result = importEmployeeRowSchema.safeParse(records[i]);
-      if (result.success) {
-        valid.push(result.data);
-      } else {
-        invalid.push({
-          row: i + 2, // 1-based, +1 for header row
-          errors: result.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`),
-        });
-      }
-    }
-
-    const sessionId = randomUUID();
-    // Surface a staging failure instead of returning a sessionId the client can't confirm with
-    // (which would later 409 misleadingly). set() returns false only on a real Valkey error.
-    const staged = await this.valkey.set(
-      importSessionKey(companyId, userId, sessionId),
-      JSON.stringify(valid),
-      IMPORT_SESSION_TTL_SEC,
-    );
-    if (!staged) {
-      throw new ServiceUnavailableException(
-        "Import staging is temporarily unavailable — please retry",
-      );
-    }
-    return { valid, invalid, sessionId };
-  }
-
-  // ── F6: Import CSV Phase 2 — confirm + bulk insert (single tenant tx) ───────────
-
-  async confirmImport(companyId: string, userId: string, sessionId: string) {
-    const key = importSessionKey(companyId, userId, sessionId);
-
-    // Consume the staged batch BEFORE inserting → a concurrent/duplicate confirm sees a missing key
-    // and 409s (idempotent confirm). When Valkey is unreachable get() returns null (fail-closed for
-    // import) → 409 rather than inserting an unvalidated batch.
-    const raw = await this.valkey.get(key);
-    if (raw == null) {
-      throw new ConflictException("Import session not found, expired, or already consumed");
-    }
-    // NOTE: get()+del() is not a single atomic compare-and-delete; a fully atomic GETDEL belongs in
-    // ValkeyService (owned by another lane). The DB unique index (company_id, user_id) is the real
-    // backstop — a racing second confirm hits 23505 below and is rejected. Refuse if we can't consume.
-    const consumed = await this.valkey.del(key);
-    if (!consumed) {
-      throw new ServiceUnavailableException("Could not consume import session — please retry");
-    }
-
-    let rows: ImportEmployeeRow[];
-    try {
-      // Re-validate the deserialized payload — never trust the cache shape (tamper / cross-version).
-      const parsed = importEmployeeRowSchema.array().safeParse(JSON.parse(raw) as unknown);
-      if (!parsed.success) throw new Error("schema mismatch");
-      rows = parsed.data;
-    } catch (err) {
-      this.logger.error("Corrupt import session payload", {
-        key,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      throw new BadRequestException("Corrupt import session payload");
-    }
-
-    // Re-validate lookups + bulk insert inside ONE withTenant: any failed row rolls back the batch.
-    try {
-      return await this.db.withTenant(companyId, async (tx) => {
-        const insertData: BulkEmployeeRow[] = [];
-
-        for (let i = 0; i < rows.length; i++) {
-          const row = rows[i];
-          const matchedUser = await this.repo.findUserByEmailTx(tx, companyId, row.email);
-          if (!matchedUser) {
-            throw new BadRequestException(`Row ${i + 2}: user not found in company`);
-          }
-
-          let orgUnitId: string | undefined;
-          if (row.orgUnitName) {
-            const ou = await this.repo.findOrgUnitByNameTx(tx, companyId, row.orgUnitName);
-            if (!ou) {
-              throw new BadRequestException(
-                `Row ${i + 2}: org unit not found (name may have changed since preview)`,
-              );
-            }
-            orgUnitId = ou.id;
-          }
-
-          let positionId: string | undefined;
-          if (row.positionName) {
-            const pos = await this.repo.findPositionByNameTx(tx, companyId, row.positionName);
-            if (!pos) {
-              throw new BadRequestException(
-                `Row ${i + 2}: position not found (name may have changed since preview)`,
-              );
-            }
-            positionId = pos.id;
-          }
-
-          insertData.push({
-            userId: matchedUser.id,
-            employeeCode: row.employeeCode,
-            orgUnitId,
-            positionId,
-            workType: row.workType,
-            employmentType: row.employmentType,
-            startDate: row.startDate,
-          });
-        }
-
-        if (insertData.length === 0) {
-          return { inserted: 0, failed: 0 };
-        }
-
-        const inserted = await this.repo.bulkCreateEmployeesTx(tx, companyId, insertData);
-        return { inserted: inserted.length, failed: 0 };
-      });
-    } catch (err) {
-      // A racing duplicate confirm (or re-import) collides on the (company_id, user_id) unique index.
-      if (isUniqueViolation(err)) {
-        throw new ConflictException(
-          "One or more employees already have a profile (possible duplicate import)",
-        );
-      }
-      throw err;
     }
   }
 }

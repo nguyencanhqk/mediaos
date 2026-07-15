@@ -1233,6 +1233,13 @@
       "when": 1717500870000,
       "tag": "0495_s5_medb1_user_preferences_me_module_perms",
       "breakpoints": true
+    },
+    {
+      "idx": 176,
+      "version": "7",
+      "when": 1717500875000,
+      "tag": "0496_s5_hr_import_be1_import_employee_sensitive",
+      "breakpoints": true
     }
   ]
 }

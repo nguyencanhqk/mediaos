@@ -18,3 +18,7 @@ export * from "./contracts";
 export * from "./employee-file";
 // HR-PROFILE-UI-2 (additive): employee directory CSV export DTOs (export:employee, SPEC-03/API-10).
 export * from "./employee-export";
+// S5-HR-IMPORT-BE-1 (additive): bulk employee import DTOs — row schema (by-NAME, UNLINKED/never-provision,
+// no salary/PII) + IMPORT_COLUMN_ORDER (parser+template SoT) + dry-run report + apply result. NOT the
+// media-era legacy importEmployeeRowSchema in ../employees.ts. Gate import:employee (mig 0496).
+export * from "./employee-import";
