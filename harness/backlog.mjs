@@ -6812,4 +6812,68 @@ export const backlog = [
       "FE spec: route mới render + gate; redirect path cũ; sidebar LEAVE hiện item khi có quyền, SYSTEM không còn; check.sh xanh; LIGHT gate react-reviewer + quality-gate",
     ],
   },
+  // ═══════════════ S5-NOTI-FIX 2026-07-15 — 2 CRITICAL từ QA sign-off S4-QA-2 (PR #210) ═══════════════
+  // QA2-CRIT-001: target_url NULL cho MỌI notification mặc định — 0/39 template global có
+  //   target_url_template (migration 0481 seed thiếu cột) ⇒ deep-link toàn hệ thống chết trừ khi
+  //   company tự cấu hình override.
+  // QA2-CRIT-002: TASK_COMMENT_CREATED/TASK_MENTIONED/PROJECT_MEMBER_ADDED render placeholder câm
+  //   ({task_code}/{actor_name}/{project_name}) — payload producer không có field tương ứng; 5 event
+  //   khác đã vá ở migration 0490, 3 event này bị bỏ sót.
+  {
+    id: "S5-NOTI-FIX-1",
+    module: "NOTI",
+    layer: "BE",
+    title:
+      "Backfill target_url_template cho 39 template notification global (QA2-CRIT-001 — deep-link đang NULL toàn hệ thống): migration seed-update theo event type + int-spec assert mọi template global có target_url_template và target_url render đúng cho các event P0",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/notifications/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S5-NOTI-FIX-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "docs/plans/S4-QA-2.md — known-issue QA2-CRIT-001 (PR #210, kèm bằng chứng 0/39)",
+      "apps/api/migrations/0481 (seed template global gốc — thiếu target_url_template)",
+      "apps/api/migrations/0490 (mẫu migration vá template đã có — theo cùng kỹ thuật idempotent)",
+      "SPEC-08 (định dạng deep-link per event) + qa2-e2e-task-noti-dash.int-spec.ts E2 (test deep-link đang phải chấp nhận NULL)",
+    ],
+    done_when: [
+      "Migration mới (đánh số tiếp head, idempotent, KHÔNG rewrite 0481): UPDATE target_url_template cho 39 template global theo event type đúng định dạng deep-link SPEC-08; company-override đang có GIỮ NGUYÊN (chỉ đụng template global company_id IS NULL)",
+      "Int-spec: assert 0 template global còn target_url_template NULL + render target_url đúng cho tối thiểu các event P0 (task assigned/comment/mention, leave approve/reject, att adjust) — cập nhật E2 của qa2-e2e-task-noti-dash sang assert deep-link THẬT thay vì chấp nhận NULL",
+      "check.sh xanh với LANE_DB; FULL gate (migration) security-reviewer + database-reviewer PASS",
+    ],
+  },
+  {
+    id: "S5-NOTI-FIX-2",
+    module: "NOTI",
+    layer: "BE",
+    title:
+      "Vá 3 event render placeholder câm TASK_COMMENT_CREATED · TASK_MENTIONED · PROJECT_MEMBER_ADDED (QA2-CRIT-002): producer bổ sung field payload còn thiếu (task_code/actor_name/project_name…) additive — mirror cách 5 event đã vá ở 0490",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/tasks/**",
+      "apps/api/src/notifications/**",
+      "apps/api/migrations/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S5-NOTI-FIX-2.md",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "docs/plans/S4-QA-2.md — known-issue QA2-CRIT-002 (PR #210)",
+      "apps/api/migrations/0490 (5 event đã vá — đối chiếu template placeholder ↔ payload)",
+      "apps/api/src/tasks (producer emit outbox 3 event lỗi) + bridge INT-1 generic (memory noti-outbox-bridge-generic)",
+      "qa2-e2e-task-noti-dash.int-spec.ts (E1b đang chứng minh placeholder câm)",
+    ],
+    done_when: [
+      "Producer 3 event bổ sung đủ field mà template global tham chiếu (đối chiếu từng placeholder trong template ↔ key payload) — additive, KHÔNG đổi tên field đang có (consumer cũ không vỡ); nếu template sai chiều thì sửa template qua migration idempotent thay vì đổi payload",
+      "Int-spec: render title/body 3 event KHÔNG còn dấu {placeholder} sót; regression 5 event đã vá ở 0490 vẫn đúng",
+      "check.sh xanh với LANE_DB; gate theo diff thật (đụng migration ⇒ FULL, chỉ producer additive ⇒ LIGHT + database-reviewer nếu chạm query)",
+    ],
+  },
 ];
