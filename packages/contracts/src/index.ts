@@ -158,3 +158,7 @@ export * from "./hr";
 // S4-DASH-BE-3 (additive): Dashboard widget CONFIG write contracts (GET/PATCH /dashboard/configs —
 // admin CRUD trên dashboard_widget_configs) — tách khỏi ./dashboard-resolver (registry đọc, BE-1).
 export * from "./dashboard-config";
+// S5-ME-BE-1 (additive): ME Personal Hub contracts — section-status envelope (union CÓ 'forbidden',
+// SPEC-09 §13) + MeIdentity/MeOverview/*Summary + ME_ERROR_CODES (ME-ERR-DATA-INCONSISTENT §12.4).
+// TÊN export riêng (me*/Me*/ME_ERROR_CODES) KHÔNG trùng barrel hiện có → không vỡ.
+export * from "./me";
