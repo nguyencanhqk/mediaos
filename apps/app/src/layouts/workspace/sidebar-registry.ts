@@ -485,7 +485,8 @@ export const TASK_SIDEBAR: readonly SidebarItemMeta[] = [
   {
     sidebarKey: "task.overview",
     moduleCode: "TASK",
-    label: "Tổng quan",
+    // S5-FE-TASK-NAV-1: /tasks render TaskListPage (TASK-SCREEN-005) — label cũ "Tổng quan" gây hiểu nhầm.
+    label: "Danh sách công việc",
     path: "/tasks",
     icon: "kanban-square",
     group: "overview",
@@ -501,6 +502,18 @@ export const TASK_SIDEBAR: readonly SidebarItemMeta[] = [
     group: "operation",
     order: 20,
     requiredAnyPermissions: ["TASK.TASK.VIEW"],
+  },
+  // S5-FE-TASK-NAV-1: route task.projects.list có trong ROUTE_REGISTRY web-core (showInSidebar) nhưng
+  // ModuleSidebar dựng menu từ registry NÀY — phải khai item ở đây mới thấy (SCREEN-001 trước đó mồ côi).
+  {
+    sidebarKey: "task.projects",
+    moduleCode: "TASK",
+    label: "Dự án",
+    path: "/tasks/projects",
+    icon: "folder-kanban",
+    group: "operation",
+    order: 30,
+    requiredAnyPermissions: ["TASK.PROJECT.VIEW"],
   },
 ];
 

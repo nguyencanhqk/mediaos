@@ -19,6 +19,7 @@ import {
   CheckCircle,
   CheckSquare,
   KanbanSquare,
+  FolderKanban,
   Bell,
   Settings,
   Shield,
@@ -65,6 +66,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "check-circle": CheckCircle,
   "check-square": CheckSquare,
   "kanban-square": KanbanSquare,
+  // S5-FE-TASK-NAV-1.
+  "folder-kanban": FolderKanban,
   bell: Bell,
   settings: Settings,
   shield: Shield,
