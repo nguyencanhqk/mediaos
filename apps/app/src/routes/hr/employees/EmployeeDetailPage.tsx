@@ -29,6 +29,8 @@ import {
   IdentitySection,
   WorkInfoSection,
 } from "./profile-sections";
+// S5-HR-LINKUI-1 — khối "Tài khoản đăng nhập" (HR-FUNC-011): liên kết/hủy liên kết hồ sơ ↔ user.
+import { AccountLinkSection } from "./AccountLinkSection";
 
 type Tab = "basic" | "contact" | "work" | "comp" | "files";
 
@@ -210,6 +212,8 @@ export function EmployeeDetailPage({
           {canViewFiles && <TabsTrigger value="files">{t("detail.tabs.files")}</TabsTrigger>}
         </TabsList>
         <TabsContent value="basic" className="space-y-4 pt-4">
+          {/* S5-HR-LINKUI-1 — Tài khoản đăng nhập (HR-FUNC-011). */}
+          <AccountLinkSection employee={data} employeeId={employeeId} />
           <BasicInfoSection employee={data} t={t} canViewSensitive={canViewSensitive} />
           {/* HR-IDENTITY-READ-1 — chỉ mount khi có EXACT view-identity:employee (fail-closed). */}
           {canViewIdentity && (
