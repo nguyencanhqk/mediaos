@@ -24,6 +24,8 @@ import { PermissionModule } from "../permission/permission.module";
 import { StorageModule } from "../storage/storage.module";
 // S4-TASK-BE-3 — SettingService (checklist-required gate; exports từ foundation SettingsModule).
 import { SettingsModule } from "../foundation/settings/settings.module";
+// S5-NOTI-FIX-2 (additive) — SequenceService cấp task_code (QA2-CRIT-002 code-gen cut-over, counter 'task' 0498).
+import { SequenceModule } from "../foundation/sequences/sequence.module";
 // S4-TASK-BE-4 (additive) — Kanban board + move · comment/mention · checklist/items · activity feed.
 import { TaskKanbanService } from "./task-kanban.service";
 import { TaskCommentsService } from "./task-comments.service";
@@ -43,7 +45,14 @@ import { TaskFileRepository } from "./task-file.repository";
 import { TaskFileResolver } from "./task-file.resolver";
 
 @Module({
-  imports: [EventsModule, PermissionModule, StorageModule, SettingsModule, FilesModule],
+  imports: [
+    EventsModule,
+    PermissionModule,
+    StorageModule,
+    SettingsModule,
+    FilesModule,
+    SequenceModule,
+  ],
   controllers: [
     TasksController,
     TaskAttachmentsController,
