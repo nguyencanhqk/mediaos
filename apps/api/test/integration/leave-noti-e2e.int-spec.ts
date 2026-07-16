@@ -44,6 +44,7 @@ import { ResponseEnvelopeInterceptor } from "../../src/common/interceptors/respo
 import { PasswordService } from "../../src/auth/password.service";
 import { EventBus } from "../../src/events/event-bus";
 import { OutboxWorker } from "../../src/events/outbox-worker";
+import { drainOutboxUntilSettled } from "../helpers/outbox-drain";
 import type { NotificationEngineService } from "../../src/notifications/notification-engine.service";
 import { OutboxNotificationBridge } from "../../src/notifications/outbox-notification-bridge.service";
 import { appPool, directPool, hasDb } from "../helpers/integration-db";
@@ -246,14 +247,9 @@ describe.skipIf(!hasLaneDb)("S4-INT-3 outbox LEAVE (đơn nghỉ phép) → NOTI
     });
   }
 
-  /** Drain outbox tới cạn (mọi event đã enqueue). */
+  /** Drain tới khi event own-tenant terminal — an toàn dưới cross-suite claim (xem helpers/outbox-drain). */
   async function processOutbox(): Promise<void> {
-    const worker = app.get(OutboxWorker);
-    let claimed = 0;
-    do {
-      const res = await worker.processBatch();
-      claimed = res.claimed;
-    } while (claimed > 0);
+    await drainOutboxUntilSettled({ worker: app.get(OutboxWorker), direct, companyIds });
   }
 
   async function notifRowsForRequest(

@@ -46,6 +46,7 @@ import { PasswordService } from "../../src/auth/password.service";
 import { LoginRateLimiter } from "../../src/auth/login-rate-limiter";
 import { EventBus } from "../../src/events/event-bus";
 import { OutboxWorker } from "../../src/events/outbox-worker";
+import { drainOutboxUntilSettled } from "../helpers/outbox-drain";
 import type { NotificationEngineService } from "../../src/notifications/notification-engine.service";
 import { OutboxNotificationBridge } from "../../src/notifications/outbox-notification-bridge.service";
 import { AuthHrNotiBridgeRegistrar } from "../../src/notifications/auth-hr-noti-bridge.registrar";
@@ -138,14 +139,9 @@ describe.skipIf(!hasLaneDb)("S4-INT-5 AUTH/HR → NOTI bridge (DB cô lập, đ�
     return res.status;
   }
 
-  /** Drain outbox tới cạn (mọi event vừa enqueue). */
+  /** Drain tới khi event own-tenant terminal — an toàn dưới cross-suite claim (xem helpers/outbox-drain). */
   async function processOutbox(): Promise<void> {
-    const worker = app.get(OutboxWorker);
-    let claimed = 0;
-    do {
-      const res = await worker.processBatch();
-      claimed = res.claimed;
-    } while (claimed > 0);
+    await drainOutboxUntilSettled({ worker: app.get(OutboxWorker), direct, companyIds });
   }
 
   async function notifRows(
