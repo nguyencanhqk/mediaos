@@ -1,5 +1,7 @@
 import { ApiError, refreshAccessToken } from "./api-client";
 import { authApi } from "./auth-api";
+import { meApi } from "./me-api";
+import { applyTheme } from "./theme";
 import { useAuthStore } from "../stores/auth";
 
 /**
@@ -10,8 +12,23 @@ import { useAuthStore } from "../stores/auth";
  * /me thất bại SAU khi refresh thành công = lỗi tạm/không-phải-auth → xoá state cục bộ (KHÔNG gọi logout
  * endpoint, tránh phụ thuộc mạng thêm) + trả false. Dedupe cấp bootstrap (StrictMode dev double-invoke) để
  * /me cũng chỉ chạy 1 lần.
+ *
+ * S5-ME-FE-3 — sync theme SERVER→CLIENT ngay sau /me: gọi `meApi.getPreferences()` rồi `applyTheme()` nếu
+ * có giá trị. FAIL-SOFT TUYỆT ĐỐI: lỗi/không có preference (chưa liên kết, network tạm, 403…) → GIỮ
+ * NGUYÊN theme local đã lưu (localStorage qua app bootstrap script) — KHÔNG đổi giá trị trả về của
+ * `bootstrapSession` (vẫn true khi /me OK), KHÔNG chặn render app vì 1 nguồn phụ (preferences) lỗi.
  */
 let bootstrapInFlight: Promise<boolean> | null = null;
+
+/** Đồng bộ theme từ server (best-effort) — KHÔNG BAO GIỜ throw ra ngoài, KHÔNG ảnh hưởng bootstrap. */
+async function syncThemeFromServer(): Promise<void> {
+  try {
+    const prefs = await meApi.getPreferences();
+    if (prefs.theme != null) applyTheme(prefs.theme);
+  } catch {
+    // Lỗi/không có preference → giữ nguyên theme local đã áp (bootstrap script / lần đăng nhập trước).
+  }
+}
 
 async function doBootstrap(): Promise<boolean> {
   const refreshed = await refreshAccessToken();
@@ -21,6 +38,7 @@ async function doBootstrap(): Promise<boolean> {
     useAuthStore.getState().setUser(me, me.capabilities);
     // Cờ ép-enroll-2FA (AUTH-003) — set RIÊNG (setUser giữ nguyên chữ ký cho các call site khác không đổi).
     useAuthStore.getState().setMustSetupTwoFactor(me.mustSetupTwoFactor);
+    await syncThemeFromServer();
     return true;
   } catch (err) {
     // Refresh OK nhưng /me lỗi → xoá access token mồ côi (chỉ store action, không chạm mạng). Caller redirect.

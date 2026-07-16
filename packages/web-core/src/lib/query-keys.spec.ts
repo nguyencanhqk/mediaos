@@ -15,7 +15,9 @@ import {
   hrKeys,
   leaveInvalidation,
   leaveKeys,
+  meKeys,
   notificationKeys,
+  notificationPreferenceKeys,
   taskKeys,
 } from "./query-keys";
 
@@ -259,5 +261,34 @@ describe("notificationKeys", () => {
 
   it("unreadCount() ổn định", () => {
     expect(notificationKeys.unreadCount()).toEqual(notificationKeys.unreadCount());
+  });
+});
+
+// S5-ME-FE-3 — meKeys.preferences() + notificationPreferenceKeys (APPEND).
+describe("meKeys (S5-ME-FE-3 append)", () => {
+  it("attendanceSummary/leaveSummary/taskSummary/notificationSummary ổn định + khác overview()", () => {
+    expect(meKeys.attendanceSummary()).toEqual(meKeys.attendanceSummary());
+    expect(meKeys.leaveSummary()).not.toEqual(meKeys.overview());
+    expect(meKeys.taskSummary()).not.toEqual(meKeys.notificationSummary());
+  });
+
+  it("preferences() ổn định + khác overview()", () => {
+    expect(meKeys.preferences()).toEqual(meKeys.preferences());
+    expect(meKeys.preferences()).not.toEqual(meKeys.overview());
+  });
+});
+
+describe("notificationPreferenceKeys", () => {
+  it("list() nằm dưới prefix 'notifications' nhưng khác notificationKeys.list()", () => {
+    const key = notificationPreferenceKeys.list();
+    expect(key[0]).toBe("notifications");
+    expect(key).not.toEqual(notificationKeys.list({}));
+  });
+
+  it("all là prefix của list()", () => {
+    const list = notificationPreferenceKeys.list();
+    expect(list.slice(0, notificationPreferenceKeys.all.length)).toEqual([
+      ...notificationPreferenceKeys.all,
+    ]);
   });
 });

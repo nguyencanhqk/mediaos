@@ -100,8 +100,10 @@ export {
   taskCollabInvalidation,
   // S4-FE-TASK-4: Task file (upload/delete) mutation → files list invalidation.
   taskFileInvalidation,
-  // S5-ME-FE-1 — Personal Hub (ME-SCREEN-001 Tổng quan) query key factory.
+  // S5-ME-FE-1/FE-3 — Personal Hub (ME-SCREEN-001/009-014) query key factory.
   meKeys,
+  // S5-ME-FE-3 — Notification preferences (ME-SCREEN-013) query key factory.
+  notificationPreferenceKeys,
 } from "./lib/query-keys";
 
 // Query retry policy (FRONTEND-04 §16.2) — pure fn, no react-query dep
@@ -141,8 +143,22 @@ export { taskCollabApi } from "./lib/task-collab-api";
 // (S4-TASK-BE-5, PR #184).
 export { taskFileApi, type UploadTaskFileOptions } from "./lib/task-file-api";
 export { dashboardApi } from "./lib/dashboard-api";
-// S5-ME-FE-1 — ME API client (Personal Hub, GET /me/overview — ME-SCREEN-001).
+// S5-ME-FE-1/FE-3 — ME API client (Personal Hub, ME-SCREEN-001/009-014: overview + 4 summary +
+// preferences/appearance).
 export { meApi } from "./lib/me-api";
+// S5-ME-FE-3 — Notification preferences API client (opt-in/out per type, ME-SCREEN-013).
+export { notificationPreferencesApi } from "./lib/notification-preferences-api";
+// S5-ME-FE-3 — Theme preference primitive (system/light/dark), dùng bởi packages/ui `useTheme` (delegate)
+// + session bootstrap (theme-sync SAU /me). Đặt ở web-core (ui → web-core, KHÔNG chiều ngược lại).
+export {
+  THEME_STORAGE_KEY,
+  THEME_VALUES,
+  getStoredTheme,
+  resolveSystemTheme,
+  applyTheme,
+  type ThemePreference,
+  type ResolvedTheme,
+} from "./lib/theme";
 export { hrApi } from "./lib/hr-api";
 // S2-FE-HR-6 — Org chart (GET /org/units/tree, read mở) + HR audit-logs (tái dùng /foundation/audit-logs).
 export { orgApi, orgTreeNodeSchema, type OrgTreeNode } from "./lib/hr-org-api";

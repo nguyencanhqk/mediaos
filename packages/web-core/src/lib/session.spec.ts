@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MeResponse } from "@mediaos/contracts";
+import type { MeResponse, MePreferences } from "@mediaos/contracts";
 
 /**
  * FS-1b — bootstrapSession (silent-refresh khi load): refresh fail → false (no /me); refresh ok → /me → setUser;
  * /me lỗi → xoá state cục bộ (KHÔNG gọi logout endpoint); StrictMode double-invoke → ĐÚNG 1 refresh + 1 /me.
+ *
+ * S5-ME-FE-3 — theme-sync SAU /me (§ mô tả ở session.ts): sync thành công → applyTheme(server.theme);
+ * getPreferences lỗi/theme=null → KHÔNG applyTheme (giữ theme local), bootstrapSession vẫn resolve true
+ * (FAIL-SOFT — 1 nguồn phụ lỗi KHÔNG được chặn render toàn app).
  */
 
 const ME: MeResponse = {
@@ -14,6 +18,19 @@ const ME: MeResponse = {
   status: "active",
   capabilities: { "read:tasks": true },
   mustSetupTwoFactor: false,
+};
+
+const EMPTY_PREFS: MePreferences = {
+  locale: null,
+  timezone: null,
+  theme: null,
+  dateFormat: null,
+  timeFormat: null,
+  defaultLanding: null,
+  density: null,
+  favoriteModules: null,
+  meLayoutConfig: null,
+  updatedAt: null,
 };
 
 function refreshOk(accessToken = "tok") {
@@ -28,12 +45,19 @@ function stubBrowser(cookie = "mediaos_csrf=c1") {
   vi.stubGlobal("window", { location: { href: "https://web.localhost/x", assign: vi.fn() } });
 }
 
-async function loadSession(meImpl: ReturnType<typeof vi.fn>) {
+async function loadSession(
+  meImpl: ReturnType<typeof vi.fn>,
+  opts?: { getPreferences?: ReturnType<typeof vi.fn>; applyTheme?: ReturnType<typeof vi.fn> },
+) {
   vi.resetModules();
   vi.doMock("./auth-api", () => ({ authApi: { me: meImpl } }));
+  const getPreferencesMock = opts?.getPreferences ?? vi.fn().mockResolvedValue(EMPTY_PREFS);
+  vi.doMock("./me-api", () => ({ meApi: { getPreferences: getPreferencesMock } }));
+  const applyThemeMock = opts?.applyTheme ?? vi.fn();
+  vi.doMock("./theme", () => ({ applyTheme: applyThemeMock }));
   const session = await import("./session");
   const store = await import("../stores/auth");
-  return { session, store };
+  return { session, store, getPreferencesMock, applyThemeMock };
 }
 
 beforeEach(() => {
@@ -44,6 +68,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.doUnmock("./auth-api");
+  vi.doUnmock("./me-api");
+  vi.doUnmock("./theme");
   vi.restoreAllMocks();
 });
 
@@ -105,5 +131,46 @@ describe("bootstrapSession", () => {
     const refreshCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes("/auth/refresh"));
     expect(refreshCalls).toHaveLength(1);
     expect(me).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("bootstrapSession — theme-sync (S5-ME-FE-3)", () => {
+  it("/me OK + getPreferences trả theme='light' → applyTheme('light')", async () => {
+    stubBrowser();
+    fetchMock.mockResolvedValue(refreshOk());
+    const me = vi.fn().mockResolvedValue(ME);
+    const getPreferences = vi.fn().mockResolvedValue({ ...EMPTY_PREFS, theme: "light" });
+    const applyTheme = vi.fn();
+    const { session } = await loadSession(me, { getPreferences, applyTheme });
+
+    await expect(session.bootstrapSession()).resolves.toBe(true);
+    expect(getPreferences).toHaveBeenCalledTimes(1);
+    expect(applyTheme).toHaveBeenCalledWith("light");
+  });
+
+  it("getPreferences trả theme=null → KHÔNG gọi applyTheme (giữ theme local)", async () => {
+    stubBrowser();
+    fetchMock.mockResolvedValue(refreshOk());
+    const me = vi.fn().mockResolvedValue(ME);
+    const getPreferences = vi.fn().mockResolvedValue(EMPTY_PREFS);
+    const applyTheme = vi.fn();
+    const { session } = await loadSession(me, { getPreferences, applyTheme });
+
+    await expect(session.bootstrapSession()).resolves.toBe(true);
+    expect(applyTheme).not.toHaveBeenCalled();
+  });
+
+  it("getPreferences THROW (network/403) → KHÔNG applyTheme, bootstrapSession VẪN resolve true (fail-soft)", async () => {
+    stubBrowser();
+    fetchMock.mockResolvedValue(refreshOk());
+    const me = vi.fn().mockResolvedValue(ME);
+    const getPreferences = vi.fn().mockRejectedValue(new Error("boom"));
+    const applyTheme = vi.fn();
+    const { session, store } = await loadSession(me, { getPreferences, applyTheme });
+
+    await expect(session.bootstrapSession()).resolves.toBe(true);
+    expect(applyTheme).not.toHaveBeenCalled();
+    // /me vẫn thành công bình thường — theme-sync lỗi KHÔNG kéo theo đăng xuất oan.
+    expect(store.useAuthStore.getState().isAuthenticated).toBe(true);
   });
 });

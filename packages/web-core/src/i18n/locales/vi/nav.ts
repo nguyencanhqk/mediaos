@@ -94,6 +94,13 @@ export default {
     accountSessions: "Phiên đăng nhập",
     // S5-ME-FE-1 — /me (ME-SCREEN-001 Tổng quan cá nhân).
     meOverview: "Tổng quan cá nhân",
+    // S5-ME-FE-3 — 6 route "Công việc của tôi/Thông báo/Cài đặt cá nhân" (ME-SCREEN-009..014).
+    meAttendance: "Chấm công của tôi",
+    meLeave: "Nghỉ phép của tôi",
+    meTasks: "Công việc của tôi",
+    meNotifications: "Thông báo của tôi",
+    mePreferencesNotifications: "Cài đặt thông báo",
+    mePreferencesAppearance: "Giao diện & hiển thị",
     forbidden: "Không có quyền truy cập",
     notFound: "Không tìm thấy trang",
   },
