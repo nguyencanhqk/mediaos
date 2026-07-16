@@ -8,8 +8,16 @@
  */
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, Lock, Ban, UserX } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, Skeleton, EmptyState } from "@mediaos/ui";
+import { AlertTriangle, Lock, Ban, UserX, RefreshCw } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Skeleton,
+  EmptyState,
+  Button,
+} from "@mediaos/ui";
 import type { MeSectionStatus } from "@mediaos/contracts";
 
 interface MeSectionEnvelopeLike<T> {
@@ -32,6 +40,13 @@ interface MeSectionCardProps<T> {
   /** Nội dung phụ dưới card (vd link "Xem tất cả") — chỉ hiện khi status='ok'. */
   footer?: React.ReactNode;
   className?: string;
+  /**
+   * S5-ME-FE-3 — nút "Thử lại" cho status='error' (lỗi hạ tầng CÓ THỂ tự hồi phục qua refetch — khác
+   * forbidden/module_disabled/unlinked_employee vốn cần đổi quyền/cấu hình, retry vô ích). Tuỳ chọn: các
+   * trang nhiều section (Tổng quan) không truyền — hành vi CŨ giữ nguyên; trang 1-section (Chấm công/Nghỉ
+   * phép/Task/Thông báo cá nhân) truyền `refetch` của chính query đó (§13 "error(degraded, có retry)").
+   */
+  onRetry?: () => void;
 }
 
 function SectionSkeleton() {
@@ -53,6 +68,7 @@ export function MeSectionCard<T>({
   children,
   footer,
   className,
+  onRetry,
 }: MeSectionCardProps<T>) {
   const { t } = useTranslation("me");
 
@@ -67,6 +83,14 @@ export function MeSectionCard<T>({
             title={t("section.error.title")}
             description={t("section.error.description")}
             className="py-4"
+            action={
+              onRetry ? (
+                <Button variant="outline" size="sm" onClick={onRetry}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  {t("actions.retry", { ns: "common" })}
+                </Button>
+              ) : undefined
+            }
           />
         );
       case "forbidden":
