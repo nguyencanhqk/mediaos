@@ -56,6 +56,11 @@ import {
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 // Ghép chuỗi để KHÔNG lọt secret-scan (gitleaks generic) — đây là mật khẩu test ephemeral, không phải secret.
 const LOGIN_PW = ["Passw0rd", "int1noti"].join("!");
+// S5-NOTI-FIX-2 (lane noti-fix2-tests) — `seedUser()` (helpers/seed.ts) KHÔNG set `users.full_name`
+// (cột nullable, mặc định NULL) ⇒ actor_name payload (task-comments.service.ts) sẽ là null và renderer
+// GIỮ placeholder `{actor_name}` trần. Set tường minh cho adminUser (actor mọi comment/mention dưới đây)
+// để test render (task_code + actor_name điền THẬT) có giá trị xác định để so khớp.
+const ADMIN_ACTOR_NAME = "QA Actor Admin";
 
 type Scope = "Own" | "Team" | "Department" | "Company" | "System";
 type Pair = [action: string, resourceType: string, scope: Scope, isSensitive?: boolean];
@@ -115,18 +120,23 @@ describe.skipIf(!hasLaneDb)(
       assigneeUserId?: string | null;
       creatorUserId?: string | null;
       projectId?: string | null;
+      // S5-NOTI-FIX-2 (lane noti-fix2-tests) — additive: khi test cần render content (task_code điền THẬT
+      // trong body/short_body), truyền code duy nhất theo company (uq_tasks_company_task_code_active).
+      // Mặc định null (KHÔNG đổi hành vi test cũ không quan tâm content).
+      taskCode?: string | null;
     }): Promise<string> {
       const r = await direct.query(
         `INSERT INTO tasks
          (company_id, task_type, title, task_status, main_assignee_employee_id, assignee_user_id,
-          project_id, creator_user_id)
-       VALUES ($1,'office','T','Todo',$2,$3,$4,$5) RETURNING id`,
+          project_id, creator_user_id, task_code)
+       VALUES ($1,'office','T','Todo',$2,$3,$4,$5,$6) RETURNING id`,
         [
           A.companyId,
           opts.mainAssigneeEmployeeId ?? null,
           opts.assigneeUserId ?? null,
           opts.projectId ?? null,
           opts.creatorUserId === undefined ? adminUser : opts.creatorUserId,
+          opts.taskCode ?? null,
         ],
       );
       return r.rows[0].id as string;
@@ -207,6 +217,25 @@ describe.skipIf(!hasLaneDb)(
       return r.rows[0]?.delivery_status as string | undefined;
     }
 
+    /**
+     * S5-NOTI-FIX-2 (lane noti-fix2-tests) — nội dung RENDER THẬT (body/short_body sau interpolate,
+     * KHÔNG phải template chưa điền) của notification mới nhất khớp company+recipient+event_code.
+     * Đi thẳng DB (bypass HTTP) — đủ để kiểm '{' còn sót lại + giá trị điền THẬT.
+     */
+    async function notifContent(
+      companyId: string,
+      recipientUserId: string,
+      eventCode: string,
+    ): Promise<{ body: string; shortBody: string | null } | undefined> {
+      const r = await direct.query(
+        `SELECT body, short_body AS "shortBody" FROM notifications
+       WHERE company_id=$1 AND recipient_user_id=$2 AND event_code=$3 AND deleted_at IS NULL
+       ORDER BY created_at DESC LIMIT 1`,
+        [companyId, recipientUserId, eventCode],
+      );
+      return r.rows[0] as { body: string; shortBody: string | null } | undefined;
+    }
+
     beforeAll(async () => {
       const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
       app = moduleRef.createNestApplication();
@@ -223,6 +252,11 @@ describe.skipIf(!hasLaneDb)(
 
       adminUser = await seedUser(direct, A.companyId, `admin@${A.slug}.test`, hash);
       await seedEmp(A.companyId, adminUser);
+      // full_name của actor (xem ghi chú ADMIN_ACTOR_NAME ở trên) — cho render test task_code/actor_name.
+      await direct.query(`UPDATE users SET full_name=$1 WHERE id=$2`, [
+        ADMIN_ACTOR_NAME,
+        adminUser,
+      ]);
       mentionTargetUser = await seedUser(direct, A.companyId, `mention@${A.slug}.test`, hash);
       mentionTargetEmp = await seedEmp(A.companyId, mentionTargetUser);
       qaUser = await seedUser(direct, A.companyId, `qa@${A.slug}.test`, hash);
@@ -260,10 +294,10 @@ describe.skipIf(!hasLaneDb)(
 
     // ── 1-8. happy path per-event ───────────────────────────────────────────────────
 
-    it("(1) TASK_ASSIGNED → 1 notification cho assignee mới, delivery_log Sent, event_code khớp", async () => {
+    it("(1) TASK_ASSIGNED → 1 notification cho assignee mới, delivery_log Sent, event_code khớp, render sạch (0490 vá)", async () => {
       const assigneeUser = await seedUser(direct, A.companyId, `a1@${A.slug}.test`, "x");
       const assigneeEmp = await seedEmp(A.companyId, assigneeUser);
-      const taskId = await mkTask({});
+      const taskId = await mkTask({ taskCode: "TSK-INT1-01" });
 
       const res = await authPost(tok.admin, `/tasks/${taskId}/assign`).send({
         assigneeEmployeeId: assigneeEmp,
@@ -274,6 +308,11 @@ describe.skipIf(!hasLaneDb)(
       const rows = await notifRows(A.companyId, assigneeUser, "TASK_ASSIGNED");
       expect(rows).toHaveLength(1);
       expect(await deliveryStatusFor(rows[0].id)).toBe("Sent");
+
+      // Regression 0490: body_template camelCase {taskCode} khớp payload thật → điền THẬT, KHÔNG placeholder.
+      const content = await notifContent(A.companyId, assigneeUser, "TASK_ASSIGNED");
+      expect(content?.body, JSON.stringify(content)).toContain("TSK-INT1-01");
+      expect(content?.body.includes("{")).toBe(false);
     });
 
     it("(2) TASK_ASSIGNEE_CHANGED → assignee mới ∪ watcher; KHÔNG assignee cũ", async () => {
@@ -283,7 +322,11 @@ describe.skipIf(!hasLaneDb)(
       const newEmp = await seedEmp(A.companyId, newUser);
       const watcherUser = await seedUser(direct, A.companyId, `w2@${A.slug}.test`, "x");
       const watcherEmp = await seedEmp(A.companyId, watcherUser);
-      const taskId = await mkTask({ mainAssigneeEmployeeId: oldEmp, assigneeUserId: oldUser });
+      const taskId = await mkTask({
+        mainAssigneeEmployeeId: oldEmp,
+        assigneeUserId: oldUser,
+        taskCode: "TSK-INT1-02",
+      });
       await addWatcher(taskId, watcherEmp);
 
       const res = await authPost(tok.admin, `/tasks/${taskId}/assign`).send({
@@ -295,6 +338,11 @@ describe.skipIf(!hasLaneDb)(
       expect(await notifRows(A.companyId, newUser, "TASK_ASSIGNEE_CHANGED")).toHaveLength(1);
       expect(await notifRows(A.companyId, watcherUser, "TASK_ASSIGNEE_CHANGED")).toHaveLength(1);
       expect(await notifRows(A.companyId, oldUser, "TASK_ASSIGNEE_CHANGED")).toHaveLength(0);
+
+      // Regression 0490: template mới-bật camelCase {taskCode} → điền THẬT, KHÔNG placeholder.
+      const content = await notifContent(A.companyId, newUser, "TASK_ASSIGNEE_CHANGED");
+      expect(content?.body, JSON.stringify(content)).toContain("TSK-INT1-02");
+      expect(content?.body.includes("{")).toBe(false);
     });
 
     it("(3+9) TASK_STATUS_CHANGED multi-recipient: creator + 2 watcher (assignee=actor) → 3 notification, actor bị loại", async () => {
@@ -304,7 +352,11 @@ describe.skipIf(!hasLaneDb)(
       const watcher2User = await seedUser(direct, A.companyId, `w32@${A.slug}.test`, "x");
       const watcher2Emp = await seedEmp(A.companyId, watcher2User);
       // assignee = actor (adminUser) — actor phải KHÔNG nhận dù là assignee.
-      const taskId = await mkTask({ assigneeUserId: adminUser, creatorUserId: creatorUser });
+      const taskId = await mkTask({
+        assigneeUserId: adminUser,
+        creatorUserId: creatorUser,
+        taskCode: "TSK-INT1-03",
+      });
       await addWatcher(taskId, watcher1Emp);
       await addWatcher(taskId, watcher2Emp);
 
@@ -318,6 +370,11 @@ describe.skipIf(!hasLaneDb)(
       expect(await notifRows(A.companyId, watcher1User, "TASK_STATUS_CHANGED")).toHaveLength(1);
       expect(await notifRows(A.companyId, watcher2User, "TASK_STATUS_CHANGED")).toHaveLength(1);
       expect(await notifRows(A.companyId, adminUser, "TASK_STATUS_CHANGED")).toHaveLength(0);
+
+      // Regression 0490: body_template camelCase {taskCode}/{toStatus} → điền THẬT, KHÔNG placeholder.
+      const content = await notifContent(A.companyId, creatorUser, "TASK_STATUS_CHANGED");
+      expect(content?.body, JSON.stringify(content)).toContain("TSK-INT1-03");
+      expect(content?.body.includes("{")).toBe(false);
     });
 
     it("(4) TASK_PRIORITY_CHANGED → assignee ∪ watcher", async () => {
@@ -328,7 +385,12 @@ describe.skipIf(!hasLaneDb)(
       const taskId = await mkTask({
         mainAssigneeEmployeeId: assigneeEmp,
         assigneeUserId: assigneeUser,
+        taskCode: "TSK-INT1-04",
       });
+      // mkTask() KHÔNG set task_priority (nullable, mặc định NULL) — set trước 1 giá trị khởi điểm để
+      // {oldPriority} trong body_template có giá trị THẬT (khác `null`), tránh trộn 1 gap KHÔNG thuộc
+      // scope WO này (oldPriority=null khi task chưa từng có priority) vào regression check {taskCode}.
+      await direct.query(`UPDATE tasks SET task_priority='Low' WHERE id=$1`, [taskId]);
       await addWatcher(taskId, watcherEmp);
 
       const res = await authPost(tok.admin, `/tasks/${taskId}/change-priority`).send({
@@ -339,6 +401,11 @@ describe.skipIf(!hasLaneDb)(
 
       expect(await notifRows(A.companyId, assigneeUser, "TASK_PRIORITY_CHANGED")).toHaveLength(1);
       expect(await notifRows(A.companyId, watcherUser, "TASK_PRIORITY_CHANGED")).toHaveLength(1);
+
+      // Regression 0490: template seed MỚI camelCase {taskCode}/{newPriority} → điền THẬT, KHÔNG placeholder.
+      const content = await notifContent(A.companyId, assigneeUser, "TASK_PRIORITY_CHANGED");
+      expect(content?.body, JSON.stringify(content)).toContain("TSK-INT1-04");
+      expect(content?.body.includes("{")).toBe(false);
     });
 
     it("(5) TASK_DUE_DATE_CHANGED → assignee (0 watcher)", async () => {
@@ -347,6 +414,7 @@ describe.skipIf(!hasLaneDb)(
       const taskId = await mkTask({
         mainAssigneeEmployeeId: assigneeEmp,
         assigneeUserId: assigneeUser,
+        taskCode: "TSK-INT1-05",
       });
       const future = new Date(Date.now() + 7 * 86400000).toISOString();
 
@@ -357,6 +425,11 @@ describe.skipIf(!hasLaneDb)(
       await processOutbox();
 
       expect(await notifRows(A.companyId, assigneeUser, "TASK_DUE_DATE_CHANGED")).toHaveLength(1);
+
+      // Regression 0490: template seed MỚI camelCase {taskCode}/{newDueAt} → điền THẬT, KHÔNG placeholder.
+      const content = await notifContent(A.companyId, assigneeUser, "TASK_DUE_DATE_CHANGED");
+      expect(content?.body, JSON.stringify(content)).toContain("TSK-INT1-05");
+      expect(content?.body.includes("{")).toBe(false);
     });
 
     it("(6) TASK_COMMENT_CREATED → assignee ∪ reporter ∪ watcher (actor ngoài 3 vai trò)", async () => {
@@ -369,6 +442,7 @@ describe.skipIf(!hasLaneDb)(
         mainAssigneeEmployeeId: assigneeEmp,
         assigneeUserId: assigneeUser,
         creatorUserId: creatorUser,
+        taskCode: "TSK-INT1-06",
       });
       await addWatcher(taskId, watcherEmp);
 
@@ -383,10 +457,18 @@ describe.skipIf(!hasLaneDb)(
       expect(await notifRows(A.companyId, watcherUser, "TASK_COMMENT_CREATED")).toHaveLength(1);
       // (10) actor-exclusion: adminUser (actor) KHÔNG nằm trong 3 vai trò trên → 0 (double-check trực tiếp).
       expect(await notifRows(A.companyId, adminUser, "TASK_COMMENT_CREATED")).toHaveLength(0);
+
+      // S5-NOTI-FIX-2: commentPayload() thêm task_code/actor_name → body điền THẬT (khớp tasks.task_code +
+      // users.full_name của actor=adminUser), KHÔNG còn placeholder trần.
+      const content = await notifContent(A.companyId, assigneeUser, "TASK_COMMENT_CREATED");
+      expect(content?.body, JSON.stringify(content)).toContain("TSK-INT1-06");
+      expect(content?.body).toContain(ADMIN_ACTOR_NAME);
+      expect(content?.body.includes("{")).toBe(false);
+      expect(content?.shortBody?.includes("{")).toBe(false);
     });
 
-    it("(7) TASK_MENTIONED → mention hợp lệ (in-scope) → đúng mentionedUserIds", async () => {
-      const taskId = await mkTask({}); // creator=adminUser(=actor mặc định)
+    it("(7) TASK_MENTIONED → mention hợp lệ (in-scope) → đúng mentionedUserIds, render sạch task_code+actor_name", async () => {
+      const taskId = await mkTask({ taskCode: "TSK-INT1-07" }); // creator=adminUser(=actor mặc định)
       const res = await authPost(tok.admin, `/tasks/${taskId}/comments`).send({
         content: "nhờ xem giúp",
         mentionEmployeeIds: [mentionTargetEmp],
@@ -397,14 +479,27 @@ describe.skipIf(!hasLaneDb)(
       const rows = await notifRows(A.companyId, mentionTargetUser, "TASK_MENTIONED");
       expect(rows).toHaveLength(1);
       expect(await deliveryStatusFor(rows[0].id)).toBe("Sent");
+
+      // S5-NOTI-FIX-2: task.mentioned kế thừa commentPayload() qua spread → có task_code/actor_name.
+      // Cả body_template LẪN short_body_template của TASK_MENTIONED (0481) đều dùng {actor_name} — cả 2
+      // PHẢI điền THẬT, KHÔNG placeholder trần.
+      const content = await notifContent(A.companyId, mentionTargetUser, "TASK_MENTIONED");
+      expect(content?.body, JSON.stringify(content)).toContain("TSK-INT1-07");
+      expect(content?.body).toContain(ADMIN_ACTOR_NAME);
+      expect(content?.body.includes("{")).toBe(false);
+      expect(content?.shortBody).toContain(ADMIN_ACTOR_NAME);
+      expect(content?.shortBody?.includes("{")).toBe(false);
     });
 
-    it("(8) PROJECT_MEMBER_ADDED → memberUserId", async () => {
+    it("(8) PROJECT_MEMBER_ADDED → memberUserId, render sạch project_name+project_code (dự án CÓ code)", async () => {
       const created = await authPost(tok.admin, "/projects").send({
         name: `Proj-int1-${Date.now()}`,
+        code: `PRJ-INT1-08-${Date.now()}`,
       });
       expect(created.status, JSON.stringify(created.body)).toBe(201);
       const projectId = created.body.data.id as string;
+      const projectName = created.body.data.name as string;
+      const projectCode = created.body.data.code as string;
 
       const memberUser = await seedUser(direct, A.companyId, `mem8@${A.slug}.test`, "x");
       const memberEmp = await seedEmp(A.companyId, memberUser);
@@ -419,6 +514,46 @@ describe.skipIf(!hasLaneDb)(
       const rows = await notifRows(A.companyId, memberUser, "PROJECT_MEMBER_ADDED");
       expect(rows).toHaveLength(1);
       expect(await deliveryStatusFor(rows[0].id)).toBe("Sent");
+
+      // S5-NOTI-FIX-2: addMember() thêm project_name/project_code → body_template (0481)
+      // 'Bạn đã được thêm vào dự án {project_name} ({project_code}).' điền THẬT CẢ 2, KHÔNG placeholder.
+      // short_body_template CHỈ dùng {project_name} — không có {project_code}.
+      const content = await notifContent(A.companyId, memberUser, "PROJECT_MEMBER_ADDED");
+      expect(content?.body, JSON.stringify(content)).toContain(projectName);
+      expect(content?.body).toContain(projectCode);
+      expect(content?.body.includes("{")).toBe(false);
+      expect(content?.shortBody).toContain(projectName);
+      expect(content?.shortBody?.includes("{")).toBe(false);
+    });
+
+    it("(8b) PROJECT_MEMBER_ADDED edge: dự án KHÔNG có code (project_code NULL) → body KHÔNG rớt lại placeholder trần {project_code}", async () => {
+      const created = await authPost(tok.admin, "/projects").send({
+        name: `Proj-int1-nocode-${Date.now()}`,
+        // KHÔNG gửi `code` → project_code NULL trong DB.
+      });
+      expect(created.status, JSON.stringify(created.body)).toBe(201);
+      const projectId = created.body.data.id as string;
+      const projectName = created.body.data.name as string;
+      expect(created.body.data.code).toBeNull();
+
+      const memberUser = await seedUser(direct, A.companyId, `mem8b@${A.slug}.test`, "x");
+      const memberEmp = await seedEmp(A.companyId, memberUser);
+
+      const res = await authPost(tok.admin, `/projects/${projectId}/members`).send({
+        employeeId: memberEmp,
+        projectRole: "Member",
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      await processOutbox();
+
+      // Quyết định GIỮ NGUYÊN (lane noti-fix2-project, projects.service.ts): coalesce project_code = ""
+      // (KHÔNG null/undefined) ⇒ renderer thay {project_code} bằng chuỗi rỗng — body còn "()" (dấu ngoặc
+      // rỗng) nhưng KHÔNG còn ký tự '{' trần. short_body_template không dùng {project_code} nên luôn sạch.
+      const content = await notifContent(A.companyId, memberUser, "PROJECT_MEMBER_ADDED");
+      expect(content?.body, JSON.stringify(content)).toContain(projectName);
+      expect(content?.body.includes("{")).toBe(false);
+      expect(content?.shortBody).toContain(projectName);
+      expect(content?.shortBody?.includes("{")).toBe(false);
     });
 
     // ── 10. actor-exclusion (tự comment trên task của chính mình) ───────────────────

@@ -17,14 +17,17 @@
  *        THẬT `TaskActionsService.commonPayload()` — {taskCode}/{taskTitle}, KHÔNG còn snake_case của
  *        `0481`). Ghi nhận ĐÚNG ở đây để tránh nghi ngờ nhầm (bài học: đọc CẢ chuỗi migration vá, không chỉ
  *        migration seed gốc — 0481 một mình sẽ cho kết luận SAI).
- *   E1b — CRITICAL known-issue QA2-CRIT-002: TASK_COMMENT_CREATED/TASK_MENTIONED/PROJECT_MEMBER_ADDED KHÔNG
- *        được vá như TASK_ASSIGNED/TASK_STATUS_CHANGED/TASK_PRIORITY_CHANGED/TASK_DUE_DATE_CHANGED/
- *        TASK_ASSIGNEE_CHANGED (0490) — 3 template NÀY vẫn giữ placeholder `0481` gốc
- *        (`{task_code}`/`{actor_name}` cho COMMENT_CREATED/MENTIONED, `{project_name}`/`{project_code}` cho
- *        MEMBER_ADDED) trong khi payload THẬT (`TaskCommentsService.commentPayload()` /
- *        `ProjectsService` member-added) KHÔNG CÓ các field này (không chỉ sai case — thiếu HẲN, kể cả
- *        `actor_name`/`project_name` không tồn tại ở BẤT KỲ payload nào, chỉ có id). Kết quả: nội dung
- *        notification gửi cho user là chuỗi CÓ PLACEHOLDER CHƯA ĐIỀN nguyên văn.
+ *   E1b — QA2-CRIT-002 ĐÃ VÁ (S5-NOTI-FIX-2, lane noti-fix2-comment + noti-fix2-project): trước đây
+ *        TASK_COMMENT_CREATED/TASK_MENTIONED/PROJECT_MEMBER_ADDED KHÔNG được vá như TASK_ASSIGNED/
+ *        TASK_STATUS_CHANGED/TASK_PRIORITY_CHANGED/TASK_DUE_DATE_CHANGED/TASK_ASSIGNEE_CHANGED (0490) — 3
+ *        template NÀY giữ placeholder `0481` gốc (`{task_code}`/`{actor_name}` cho COMMENT_CREATED/
+ *        MENTIONED, `{project_name}`/`{project_code}` cho MEMBER_ADDED) trong khi payload THẬT KHÔNG CÓ các
+ *        field này. Nay `TaskCommentsService.commentPayload()` (+ kế thừa task.mentioned) thêm `task_code`/
+ *        `actor_name`; `ProjectsService` member-added thêm `project_name`/`project_code` (additive, khớp
+ *        CHÍNH XÁC placeholder 0481) ⇒ notification render ĐẦY ĐỦ giá trị THẬT, KHÔNG còn placeholder
+ *        trần. Test dưới đây (đã ĐẢO characterization — lane noti-fix2-tests) khoá hành vi ĐÚNG mới; xem
+ *        `task-noti-e2e.int-spec.ts` test (6)/(7)/(8)/(8b) cho phần mention + addMember + edge project
+ *        KHÔNG có code.
  *   E2 — dashboard MY_TASKS phản ánh CONTENT task mới sau event thật (S4-INT-2-FIX-1 chỉ chứng minh cache-row
  *        bị invalidate = boolean; test này đi tiếp: GET LẠI sau invalidate → data thật chứa task mới).
  *   E3 — dashboard NOTIFICATIONS: lỗ hổng wiring ĐÃ được tài liệu hoá tại chỗ khai báo
@@ -70,6 +73,11 @@ process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-secret-".padEnd(40, "0"
 const hasLaneDb = hasDb && !!process.env.LANE_DB;
 // Ghép chuỗi để KHÔNG lọt secret-scan (gitleaks generic) — mật khẩu test ephemeral, không phải secret.
 const PASSWORD = ["Passw0rd", "qa2e2e01"].join("!");
+// S5-NOTI-FIX-2 (lane noti-fix2-tests) — `seedUser()` (helpers/seed.ts) KHÔNG set `users.full_name`
+// (cột nullable, mặc định NULL) ⇒ actor_name payload commentPayload() sẽ là null nếu KHÔNG set tường
+// minh, khiến renderer GIỮ placeholder `{actor_name}` trần dù producer đã vá. Set full_name của manager
+// (actor comment/mention ở E1b) trong beforeAll để có giá trị xác định để so khớp.
+const MANAGER_FULL_NAME = "Nguyễn Văn Quản Lý";
 
 type Scope = "Own" | "Team" | "Department" | "Company" | "System";
 type Pair = [action: string, resourceType: string, scope: Scope, isSensitive?: boolean];
@@ -175,6 +183,11 @@ describe.skipIf(!hasLaneDb)(
 
       managerUser = await seedUser(direct, W.companyId, `manager@${W.slug}.test`, hash);
       await seedEmp(W.companyId, managerUser);
+      // full_name của actor (xem ghi chú MANAGER_FULL_NAME ở trên) — cho render test task_code/actor_name.
+      await direct.query(`UPDATE users SET full_name=$1 WHERE id=$2`, [
+        MANAGER_FULL_NAME,
+        managerUser,
+      ]);
       employeeUser = await seedUser(direct, W.companyId, `employee@${W.slug}.test`, hash);
       employeeEmp = await seedEmp(W.companyId, employeeUser);
 
@@ -263,8 +276,8 @@ describe.skipIf(!hasLaneDb)(
       expect(afterMark.body.data.unread_count).toBe(baseline);
     });
 
-    // ── E1b. CRITICAL known-issue QA2-CRIT-002 — TASK_COMMENT_CREATED/TASK_MENTIONED render CÂM ──────
-    it("E1b (CRITICAL known-issue QA2-CRIT-002): comment + mention → notification body giữ NGUYÊN placeholder {actor_name}/{task_code} chưa điền (payload thật KHÔNG có 2 field này)", async () => {
+    // ── E1b. QA2-CRIT-002 ĐÃ VÁ (S5-NOTI-FIX-2) — TASK_COMMENT_CREATED/TASK_MENTIONED render ĐỦ ─────
+    it("E1b (QA2-CRIT-002 FIXED by S5-NOTI-FIX-2): comment + mention → notification body điền THẬT {task_code}/{actor_name}, KHÔNG còn placeholder", async () => {
       const taskId = await mkTask("Task cho comment/mention", "TSK-QA2-E1B");
       const assignRes = await authPost(tok.manager, `/tasks/${taskId}/assign`).send({
         assigneeEmployeeId: employeeEmp,
@@ -272,8 +285,12 @@ describe.skipIf(!hasLaneDb)(
       expect(assignRes.status, JSON.stringify(assignRes.body)).toBe(200);
       await processOutbox();
 
+      // Comment CÓ mention chính employee (nhân viên trong scope — employee đã là assignee, quyền
+      // `read task Own` đủ để pass in-scope check) → tạo CẢ TASK_COMMENT_CREATED (employee=assignee) LẪN
+      // TASK_MENTIONED (employee=mentioned) trong CÙNG 1 request, phủ đủ 2/3 event QA2-CRIT-002 trong 1 flow.
       const commentRes = await authPost(tok.manager, `/tasks/${taskId}/comments`).send({
         content: "Nhờ bạn xem lại giúp",
+        mentionEmployeeIds: [employeeEmp],
       });
       expect(commentRes.status, JSON.stringify(commentRes.body)).toBe(201);
       await processOutbox();
@@ -290,22 +307,50 @@ describe.skipIf(!hasLaneDb)(
         `TASK_COMMENT_CREATED notification phải xuất hiện (employee là assignee): ${JSON.stringify(items)}`,
       ).toBeTruthy();
 
-      // short_body_template (0481) = 'Có bình luận mới trong task {task_code}.' — CHỈ có {task_code}.
-      // body_template ĐẦY ĐỦ (kiểm qua GET detail bên dưới) mới có CẢ {actor_name}.
+      // short_body_template (0481) = 'Có bình luận mới trong task {task_code}.' — task_code PHẢI điền THẬT
+      // (khớp tasks.task_code), KHÔNG còn placeholder trần.
       expect(
         notif?.short_content,
-        "QA2-CRIT-002: short_content PHẢI còn placeholder {task_code} chưa điền theo thực trạng hiện tại",
-      ).toContain("{task_code}");
+        "QA2-CRIT-002 đã vá: short_content PHẢI chứa task_code THẬT, KHÔNG còn {task_code}",
+      ).toContain("TSK-QA2-E1B");
+      expect(notif?.short_content.includes("{task_code}")).toBe(false);
+      expect(notif?.short_content.includes("{")).toBe(false);
 
-      // Characterization test — LOCK IN thực trạng (bug, KHÔNG phải hành vi mong muốn). `commentPayload()`
-      // (task-comments.service.ts) KHÔNG có field `task_code` LẪN `actor_name` (chỉ có id, không có tên) ⇒
-      // renderer.interpolate() giữ nguyên CẢ 2 placeholder trong `body_template` đầy đủ. Nếu ai vá
-      // payload/template (WO riêng, ngoài scope QA-2), test này PHẢI đỏ ⇒ cập nhật assertion theo nội dung
-      // ĐÚNG mới.
+      // Reverted characterization (S5-NOTI-FIX-2, lane noti-fix2-tests) — trước đây LOCK IN thực trạng bug
+      // (0/2 field task_code/actor_name có trong payload commentPayload()). Nay `commentPayload()` (lane
+      // noti-fix2-comment) đã thêm `task_code` (= tasks.task_code) + `actor_name` (= full_name của actor,
+      // đọc lại qua repo.findByIdTx JOIN users NGAY khi tạo comment) ⇒ body_template ĐẦY ĐỦ (GET detail)
+      // render CẢ 2 giá trị THẬT, KHÔNG còn placeholder trần. Nếu ai revert producer, test này PHẢI đỏ.
       const detail = await authGet(tok.employee, `/notifications/${notif?.notification_id}`);
       expect(detail.status, JSON.stringify(detail.body)).toBe(200);
-      expect(detail.body.data.content).toContain("{actor_name}");
-      expect(detail.body.data.content).toContain("{task_code}");
+      expect(detail.body.data.content).toContain("TSK-QA2-E1B");
+      // actor_name = users.full_name của manager — set tường minh (MANAGER_FULL_NAME) vì seedUser() KHÔNG
+      // tự set full_name (xem ghi chú đầu file).
+      expect(detail.body.data.content).toContain(MANAGER_FULL_NAME);
+      expect(detail.body.data.content.includes("{actor_name}")).toBe(false);
+      expect(detail.body.data.content.includes("{task_code}")).toBe(false);
+      expect(detail.body.data.content.includes("{")).toBe(false);
+
+      // TASK_MENTIONED (2/3 event QA2-CRIT-002) — task.mentioned kế thừa commentPayload() qua spread nên
+      // cũng có task_code/actor_name. body_template LẪN short_body_template (0481) của TASK_MENTIONED đều
+      // dùng {actor_name} — cả 2 PHẢI điền THẬT.
+      const mentionNotif = items.find((n) => n.event_code === "TASK_MENTIONED");
+      expect(
+        mentionNotif,
+        `TASK_MENTIONED notification phải xuất hiện (employee được mention): ${JSON.stringify(items)}`,
+      ).toBeTruthy();
+      expect(mentionNotif?.short_content).toContain("TSK-QA2-E1B");
+      expect(mentionNotif?.short_content).toContain(MANAGER_FULL_NAME);
+      expect(mentionNotif?.short_content.includes("{")).toBe(false);
+
+      const mentionDetail = await authGet(
+        tok.employee,
+        `/notifications/${mentionNotif?.notification_id}`,
+      );
+      expect(mentionDetail.status, JSON.stringify(mentionDetail.body)).toBe(200);
+      expect(mentionDetail.body.data.content).toContain("TSK-QA2-E1B");
+      expect(mentionDetail.body.data.content).toContain(MANAGER_FULL_NAME);
+      expect(mentionDetail.body.data.content.includes("{")).toBe(false);
     });
 
     // ── E2. Dashboard MY_TASKS: content thật phản ánh task mới sau event ────────────────────────────
