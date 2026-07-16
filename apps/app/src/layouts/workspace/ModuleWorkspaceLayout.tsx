@@ -37,6 +37,8 @@ const MODULE_NAMES: Partial<Record<ModuleCode, string>> = {
   NOTI: "Thông báo",
   FOUNDATION: "Hệ thống",
   AUTH: "Tài khoản & Phân quyền",
+  // S5-ME-FE-1 — Personal Hub.
+  ME: "Cá nhân",
 };
 
 interface ModuleWorkspaceLayoutProps {

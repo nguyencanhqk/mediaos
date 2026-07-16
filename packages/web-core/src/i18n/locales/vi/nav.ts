@@ -9,6 +9,8 @@ export default {
     tasks: "Công việc",
     notifications: "Thông báo",
     system: "Hệ thống",
+    // S5-ME-FE-1 — Personal Hub (SPEC-09).
+    me: "Cá nhân",
   },
   // App registry descriptions
   appDesc: {
@@ -19,6 +21,7 @@ export default {
     tasks: "Dự án, task, Kanban, bình luận, checklist và file.",
     notifications: "Danh sách thông báo, trạng thái đọc và cấu hình thông báo.",
     system: "Người dùng, vai trò, quyền, cấu hình, audit log và module catalog.",
+    me: "Hồ sơ, tài khoản, bảo mật, công việc và cài đặt của riêng bạn.",
   },
   // Route titles
   routeTitle: {
@@ -89,6 +92,8 @@ export default {
     accountProfile: "Hồ sơ tài khoản",
     // S2-FE-AUTH-5 (lane FE batch C).
     accountSessions: "Phiên đăng nhập",
+    // S5-ME-FE-1 — /me (ME-SCREEN-001 Tổng quan cá nhân).
+    meOverview: "Tổng quan cá nhân",
     forbidden: "Không có quyền truy cập",
     notFound: "Không tìm thấy trang",
   },

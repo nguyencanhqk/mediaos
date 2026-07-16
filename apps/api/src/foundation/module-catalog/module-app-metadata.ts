@@ -100,6 +100,17 @@ export const MODULE_APP_METADATA: Readonly<Record<string, ModuleAppMeta>> = {
     requiredAny: [{ action: "read", resourceType: "notification" }], // NOTI.NOTIFICATION.VIEW_OWN
     feCodes: ["NOTI.NOTIFICATION.VIEW_OWN"],
   },
+  // ME — Personal Hub (S5-ME-FE-1, SPEC-09 §6.1/§8.2). requiredAny RỖNG CHỦ Ý (KHÔNG như module khác):
+  // module ME luôn hiện cho MỌI user đã đăng nhập ("Tất cả người dùng đã đăng nhập hợp lệ") — module active
+  // mặc định (mig 0495 seed is_active=true). hasAnyCapability([]) === true ⇒ card luôn xuất hiện trong
+  // getMyApps() khi module chưa bị company tắt qua setting module.ME.enabled. Route THẬT (/api/v1/me/*)
+  // VẪN gate cặp access:me qua PermissionGuard (me.controller.ts) — đây chỉ là metadata HIỂN THỊ app card.
+  ME: {
+    route: "/me",
+    icon: "user-circle",
+    requiredAny: [],
+    feCodes: [],
+  },
 };
 
 /**

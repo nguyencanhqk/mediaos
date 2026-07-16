@@ -117,7 +117,7 @@ describe("createPermissionChecker", () => {
     expect(c.can("AUTH.ROLE.VIEW")).toBe(false); // không có read:role
   });
 
-  it("getVisibleApps hiện đủ 7 app cho company-admin (capabilities = cặp engine THẬT)", () => {
+  it("getVisibleApps hiện đủ 8 app cho company-admin (capabilities = cặp engine THẬT)", () => {
     // Cặp company-admin THẬT từ seed (ATT view-own/team/company:attendance đã lộ qua allowlist sensitive;
     // LEAVE view-own/view/approve:leave; AUTH view:user/view:role) — KHÔNG dùng cặp giả read:attendance/read:leave.
     const caps = makePerms([
@@ -138,11 +138,13 @@ describe("createPermissionChecker", () => {
       "view:foundation-audit-log",
     ]);
     const apps = getVisibleApps(APP_REGISTRY, makeSession(), createPermissionChecker(caps));
+    // S5-ME-FE-1 — 'me' LUÔN hiện (requiredAnyPermissions rỗng, KHÔNG phụ thuộc caps ở trên).
     expect(apps.map((a) => a.appKey).sort()).toEqual([
       "attendance",
       "dashboard",
       "hr",
       "leave",
+      "me",
       "notifications",
       "system",
       "tasks",
@@ -1173,8 +1175,12 @@ describe("APP_REGISTRY", () => {
     expect(unique.size).toBe(keys.length);
   });
 
-  it("mỗi app có requiredAnyPermissions hoặc requiredPermissions", () => {
+  it("mỗi app có requiredAnyPermissions hoặc requiredPermissions (ngoại lệ: 'me')", () => {
+    // S5-ME-FE-1 — appKey 'me' (Personal Hub) CHỦ Ý requiredAnyPermissions RỖNG: card luôn hiện cho MỌI
+    // user đã đăng nhập (SPEC-09 §6.1) — route/sidebar bên dưới vẫn gate cặp engine THẬT access:me
+    // (ROUTE_REGISTRY 'me.overview'), đây chỉ là visibility của CARD ở Home Portal.
     for (const app of APP_REGISTRY) {
+      if (app.appKey === "me") continue;
       const hasPerms =
         (app.requiredAnyPermissions?.length ?? 0) > 0 || (app.requiredPermissions?.length ?? 0) > 0;
       expect(hasPerms, `app ${app.appKey} thiếu permission requirement`).toBe(true);

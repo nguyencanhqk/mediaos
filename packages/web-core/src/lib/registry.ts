@@ -22,6 +22,8 @@ export type ModuleCode =
   | "LEAVE"
   | "TASK"
   | "NOTI"
+  // S5-ME-FE-1 — Personal Hub / self-service (SPEC-09, mig 0495 seed module ME).
+  | "ME"
   | "PAYROLL"
   | "RECRUIT"
   | "ASSET"
@@ -591,6 +593,25 @@ export const APP_REGISTRY: readonly AppRegistryItem[] = [
     status: "active",
     order: 60,
   },
+  // S5-ME-FE-1 — Personal Hub "Cá nhân" (SPEC-09 §8.2 /me, ME-SCREEN-001). requiredAnyPermissions RỖNG
+  // (KHÔNG như mọi app khác) — module ME luôn hiện cho MỌI user đã đăng nhập (SPEC-09 §6.1: "Tất cả người
+  // dùng đã đăng nhập hợp lệ"), khớp module ME active mặc định (mig 0495). Đây CHỈ là visibility của CARD ở
+  // Home Portal — route/sidebar bên dưới vẫn gate cặp engine THẬT `access:me` (route "me.overview" +
+  // SIDEBAR_REGISTRY.ME); registry.spec.ts có ngoại lệ tường minh cho appKey này.
+  {
+    appKey: "me",
+    moduleCode: "ME",
+    nameKey: "app.me",
+    descKey: "appDesc.me",
+    icon: "user-circle",
+    rootPath: "/me",
+    defaultRoute: "/me",
+    category: "core",
+    aliases: ["ca nhan", "me", "profile", "tai khoan"],
+    requiredAnyPermissions: [],
+    status: "active",
+    order: 65,
+  },
   {
     appKey: "system",
     moduleCode: "FOUNDATION",
@@ -1118,6 +1139,22 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["view:notification-delivery-log"],
     showInSidebar: true,
     order: 63,
+  },
+
+  // ME — Personal Hub (SPEC-09 §8.2/§9 ME-SCREEN-001). Gate = cặp engine THỰC trực tiếp `access:me`
+  // (mig 0495, non-sensitive, grant Own cho cả 4 role canonical) — literal pair (KHÔNG qua
+  // PERMISSION_CODE_TO_PAIR, cùng kỹ thuật att.shifts/hr.org-chart, tránh pair-drift). KHÁC APP_REGISTRY
+  // 'me' (requiredAnyPermissions rỗng — chỉ visibility CARD): route THẬT vẫn đòi user có cặp access:me.
+  {
+    routeKey: "me.overview",
+    path: "/me",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "ME-SCREEN-001",
+    titleKey: "routeTitle.meOverview",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: true,
+    order: 65,
   },
 
   // System

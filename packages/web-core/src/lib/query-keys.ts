@@ -20,6 +20,8 @@ export const rootKeys = {
   tasks: ["tasks"] as const,
   notifications: ["notifications"] as const,
   foundation: ["foundation"] as const,
+  // S5-ME-FE-1 — Personal Hub (SPEC-09).
+  me: ["me"] as const,
 } as const;
 
 // ── Auth keys ─────────────────────────────────────────────────────────────────
@@ -679,4 +681,11 @@ export const foundationInvalidation = {
   // S2-FE-FND-8 — PATCH /foundation/system-settings/:key làm mới CẢ prefix "system-settings" (list mọi
   // biến thể filter + detail đúng key vừa sửa).
   updateSystemSetting: () => [foundationKeys.systemSettings.all] as const,
+};
+
+// ── ME keys (S5-ME-FE-1) — Personal Hub, SPEC-09 ────────────────────────────────
+
+export const meKeys = {
+  all: rootKeys.me,
+  overview: () => [...rootKeys.me, "overview"] as const,
 };
