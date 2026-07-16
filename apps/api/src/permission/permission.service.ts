@@ -141,6 +141,16 @@ const SENSITIVE_CAPABILITY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
   // grant ⇒ KHÔNG thấy (least-privilege). Enforcement KHÔNG đổi — HrReadService.revealIdentity per-row
   // (isSensitive:true, wildcard *:* KHÔNG mở, reveal ⟹ audit atomic) vẫn là cổng THẬT. Chỉ mở CỜ HIỂN THỊ.
   "view-identity:employee",
+  // S5-HR-IMPORT-FE-1 — APPEND-only: cặp NHẠY CẢM 'import:employee' (is_sensitive=true, seed mig 0496 —
+  // BE lane S5-HR-IMPORT-BE-1 CHỐT DEFER việc allowlist này sang FE lane, ledger 2026-07-13). Grant Company
+  // CHỈ hr + company-admin (mig 0496 khối (b); backfill dọn stray blanket-grant role hr-manager media-era
+  // từ 0019). FE /hr/employees/import dùng useCanExact('import','employee') làm cổng route + nút "Import
+  // nhân viên" (EmployeeListPage). Thiếu allowlist ⇒ /auth/me KHÔNG BAO GIỜ trả cặp này ⇒ route/nút ẨN
+  // với CẢ hr/company-admin dù grant thật tồn tại (bài học CAP-2/USEROPS-1/EXPORT-1/DASH-3 tái diễn).
+  // Enforcement KHÔNG đổi — @RequirePermission('import','employee',{isSensitive:true})
+  // (hr-import.controller.ts) + assertImportScope (Company/System only, hr-employee-import.service.ts)
+  // vẫn là cổng THẬT. Chỉ mở CỜ HIỂN THỊ.
+  "import:employee",
 ]);
 
 @Injectable()

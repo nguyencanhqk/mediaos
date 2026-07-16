@@ -1149,3 +1149,147 @@ describe.skipIf(!runDb)(
     });
   },
 );
+
+// ────────────────────────────────────────────────────────────────────────────
+// S5-HR-IMPORT-FE-1 — APPEND 'import:employee' vào SENSITIVE_CAPABILITY_ALLOWLIST. Cặp seed THẬT
+// is_sensitive=true (mig 0496, flip false→true của 0019 dòng 23 + backfill dọn stray blanket-grant
+// role hr-manager media-era), grant Company CHỈ hr(0011)+company-admin(0001) (mig 0496 khối (b)). BE lane
+// S5-HR-IMPORT-BE-1 CHỐT DEFER việc allowlist này sang FE lane (ledger 2026-07-13) — TRƯỚC APPEND này,
+// getCapabilities() lọc bỏ MỌI sensitive ⇒ /auth/me KHÔNG BAO GIỜ trả 'import:employee' cho BẤT KỲ ai
+// (kể cả hr/company-admin có grant thật) ⇒ route /hr/employees/import + nút "Import nhân viên"
+// (EmployeeListPage, useCanExact('import','employee')) LUÔN ẨN trong app thật (bẫy CAP-2/USEROPS-1/
+// EXPORT-1/NOTI-BE-3/DASH-3 tái diễn). Đây là BẰNG CHỨNG PIPELINE THẬT thay cho false-green FE (spec tự
+// set capabilities vào store). Enforcement KHÔNG đổi — @RequirePermission('import','employee',
+// {isSensitive:true}) (hr-import.controller.ts) + assertImportScope (Company/System only,
+// hr-employee-import.service.ts) vẫn là cổng THẬT. Chỉ mở CỜ HIỂN THỊ.
+// ────────────────────────────────────────────────────────────────────────────
+
+const IMPORT_EMPLOYEE_CAP_KEY = "import:employee";
+
+describe.skipIf(!runDb)(
+  "S5-HR-IMPORT-FE-1 /auth/me import:employee (hr + company-admin only, mig 0496)",
+  () => {
+    let app: INestApplication;
+    let direct: Pool;
+    let A: SeededTenant;
+    let B: SeededTenant;
+    let adminToken: string;
+    let hrToken: string;
+    let employeeToken: string;
+    let managerToken: string;
+    let wildcardToken: string;
+    let denyOverrideToken: string;
+    let tenantBToken: string;
+    const companyIds: string[] = [];
+
+    beforeAll(async () => {
+      const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+      app = moduleRef.createNestApplication();
+      app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
+      app.useGlobalFilters(new AllExceptionsFilter());
+      await app.init();
+      direct = directPool();
+      const pw = await new PasswordService().hash(LOGIN_PW);
+
+      // ── Tenant A ────────────────────────────────────────────────────────────
+      A = await seedCompany(direct, "impcap");
+      companyIds.push(A.companyId);
+
+      // IMPORTCAP-P1/P2: company-admin (0001) + hr (0011) — CẢ HAI có grant Company import:employee (mig 0496).
+      const adminEmail = `ca-${TAG}@impcap.test`;
+      const admin = await seedUser(direct, A.companyId, adminEmail, pw);
+      await seedUserRole(direct, admin, COMPANY_ADMIN_ROLE, A.companyId);
+
+      const hrEmail = `hr-${TAG}@impcap.test`;
+      const hr = await seedUser(direct, A.companyId, hrEmail, pw);
+      await seedUserRole(direct, hr, HR_ROLE, A.companyId);
+
+      // IMPORTCAP-N1/N2: employee (0008) + manager (0010) — KHÔNG có grant import:employee (least-privilege).
+      const empEmail = `emp-${TAG}@impcap.test`;
+      const emp = await seedUser(direct, A.companyId, empEmail, pw);
+      await seedUserRole(direct, emp, EMPLOYEE_ROLE, A.companyId);
+
+      const mgrEmail = `mgr-${TAG}@impcap.test`;
+      const mgr = await seedUser(direct, A.companyId, mgrEmail, pw);
+      await seedUserRole(direct, mgr, MANAGER_ROLE, A.companyId);
+
+      // IMPORTCAP-N3: wildcard-only — role có '*:*' ALLOW non-sensitive → KHÔNG kế thừa import:employee.
+      const wildEmail = `wild-${TAG}@impcap.test`;
+      const wild = await seedUser(direct, A.companyId, wildEmail, pw);
+      const wildRole = await seedRole(direct, A.companyId, `impcap-wild-${TAG}`);
+      const wildPerm = await seedPermissionCatalog(direct, "*", "*", false);
+      await seedRolePermission(direct, wildRole, wildPerm, "ALLOW");
+      await seedUserRole(direct, wild, wildRole, A.companyId);
+
+      // IMPORTCAP-N5: deny-override — role ALLOW import:employee (Company) + DENY cùng cặp → suppress
+      // (deny-override per-pair, mirror isDenied wildcard-aware).
+      const denyEmail = `deny-${TAG}@impcap.test`;
+      const denyUser = await seedUser(direct, A.companyId, denyEmail, pw);
+      const denyRole = await seedRole(direct, A.companyId, `impcap-deny-${TAG}`);
+      const importPerm = await seedPermissionCatalog(direct, "import", "employee", true);
+      await seedRolePermission(direct, denyRole, importPerm, "ALLOW");
+      await seedRolePermission(direct, denyRole, importPerm, "DENY");
+      await seedUserRole(direct, denyUser, denyRole, A.companyId);
+
+      // ── Tenant B (cross-tenant, BẤT BIẾN #1) ─────────────────────────────────
+      // IMPORTCAP-N4: user trơn (KHÔNG role) — grant import:employee của tenant A KHÔNG rò sang tenant B.
+      B = await seedCompany(direct, "impcapb");
+      companyIds.push(B.companyId);
+      const bEmail = `bare-${TAG}@impcapb.test`;
+      await seedUser(direct, B.companyId, bEmail, pw);
+
+      adminToken = await login(app, A.slug, adminEmail);
+      hrToken = await login(app, A.slug, hrEmail);
+      employeeToken = await login(app, A.slug, empEmail);
+      managerToken = await login(app, A.slug, mgrEmail);
+      wildcardToken = await login(app, A.slug, wildEmail);
+      denyOverrideToken = await login(app, A.slug, denyEmail);
+      tenantBToken = await login(app, B.slug, bEmail);
+    });
+
+    afterAll(async () => {
+      await app?.close();
+      if (direct && companyIds.length) await cleanupTenants(direct, companyIds);
+      await direct?.end();
+    });
+
+    it("IMPORTCAP-P1 — company-admin (0001) → /auth/me.capabilities['import:employee'] === true", async () => {
+      const caps = await meCapabilities(app, adminToken);
+      expect(caps[IMPORT_EMPLOYEE_CAP_KEY]).toBe(true);
+    });
+
+    it("IMPORTCAP-P2 — hr (0011) → /auth/me.capabilities['import:employee'] === true", async () => {
+      const caps = await meCapabilities(app, hrToken);
+      expect(caps[IMPORT_EMPLOYEE_CAP_KEY]).toBe(true);
+    });
+
+    it("IMPORTCAP-N1 — employee (0008) → KHÔNG có 'import:employee' (least-privilege)", async () => {
+      const caps = await meCapabilities(app, employeeToken);
+      expect(IMPORT_EMPLOYEE_CAP_KEY in caps).toBe(false);
+    });
+
+    it("IMPORTCAP-N2 — manager (0010) → KHÔNG có 'import:employee' (least-privilege)", async () => {
+      const caps = await meCapabilities(app, managerToken);
+      expect(IMPORT_EMPLOYEE_CAP_KEY in caps).toBe(false);
+    });
+
+    it("IMPORTCAP-N3 — wildcard '*:*' → KHÔNG kế thừa 'import:employee' (sensitive gate); '*:*' vẫn có", async () => {
+      const caps = await meCapabilities(app, wildcardToken);
+      expect(caps[WILDCARD_CAP_KEY]).toBe(true);
+      expect(IMPORT_EMPLOYEE_CAP_KEY in caps).toBe(false);
+    });
+
+    it("IMPORTCAP-N4 — cross-tenant: user tenant B trơn → KHÔNG chứa 'import:employee' của tenant A", async () => {
+      const caps = await meCapabilities(app, tenantBToken);
+      expect(IMPORT_EMPLOYEE_CAP_KEY in caps).toBe(false);
+    });
+
+    it("IMPORTCAP-N5 — DENY-override: ALLOW + DENY cùng cặp → 'import:employee' bị suppress", async () => {
+      const caps = await meCapabilities(app, denyOverrideToken);
+      expect(
+        IMPORT_EMPLOYEE_CAP_KEY in caps,
+        "import:employee phải bị DENY-override suppress",
+      ).toBe(false);
+    });
+  },
+);
