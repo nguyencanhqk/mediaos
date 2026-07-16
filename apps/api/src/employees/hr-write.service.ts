@@ -480,6 +480,44 @@ export class HrWriteService {
     });
   }
 
+  // ── S5-ME-BE-2: self-service avatar (own-scope, KHÔNG cần Company/System write-scope) ──────────────
+
+  /**
+   * ME avatar self-service: ghi `employee_profiles.avatar_url` của CHÍNH employee liên kết `user` (own-scope
+   * thuần — KHÔNG gọi `assertWriteScope`/`view-sensitive` như `updateEmployee`: avatar KHÔNG phải field
+   * PII/company-wide-write, đây là mutation CHÍNH MÌNH trên CHÍNH MÌNH, gate thật ở caller là
+   * `update:avatar` Own — mig 0495). `findOwnAvatarForUpdateTx` AND `userId` ngay trong WHERE ⇒ employee
+   * KHÔNG thuộc actor (cross-user/cross-tenant) → 0 row → 404 (chống IDOR, KHÔNG oracle).
+   *
+   * Idempotent: giá trị mới === giá trị cũ → KHÔNG UPDATE, KHÔNG audit (no-op thật, tránh audit rác khi
+   * client retry). audit `objectType:'employee'` (ĐÃ có trong CHECK — KHÔNG cần migration UNION-add) action
+   * `avatar-update`/`avatar-remove`; before/after CHỈ `{avatarUrl}` (fileId reference — KHÔNG PII/secret).
+   */
+  async updateOwnAvatar(
+    user: RequestUser,
+    employeeId: string,
+    avatarUrl: string | null,
+  ): Promise<{ id: string; avatarUrl: string | null }> {
+    return this.db.withTenant(user.companyId, async (tx) => {
+      const row = await this.repo.findOwnAvatarForUpdateTx(tx, user.companyId, employeeId, user.id);
+      if (!row) throw new NotFoundException("Employee not found");
+
+      const before = row.avatarUrl;
+      if (before === avatarUrl) return { id: row.id, avatarUrl: before };
+
+      await this.repo.updateAvatarUrlTx(tx, user.companyId, employeeId, avatarUrl);
+      await this.audit.record(tx, {
+        action: avatarUrl ? "avatar-update" : "avatar-remove",
+        objectType: "employee",
+        objectId: employeeId,
+        actorUserId: user.id,
+        before: { avatarUrl: before },
+        after: { avatarUrl },
+      });
+      return { id: row.id, avatarUrl };
+    });
+  }
+
   // ── Link / unlink user ───────────────────────────────────────────────────────────
 
   async linkUser(user: RequestUser, id: string, dto: LinkUserRequest) {

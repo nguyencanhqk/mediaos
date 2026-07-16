@@ -57,6 +57,15 @@ import { TempFileCleanupRepository } from "./temp-file-cleanup.repository";
       inject: [PermissionService],
     },
   ],
-  exports: [FileService, FilePolicyService, TempFileCleanupJobHandler],
+  // S5-ME-BE-2 (additive): FileRepository/FileLinkRepository exported so a business module can read `files`
+  // rows directly (bypassing the admin-oriented FOUNDATION.FILE.* policy fallback) when it registers its
+  // OWN FileOwnerPermissionResolver — mirrors why FileService/FilePolicyService are already exported.
+  exports: [
+    FileService,
+    FilePolicyService,
+    FileRepository,
+    FileLinkRepository,
+    TempFileCleanupJobHandler,
+  ],
 })
 export class FilesModule {}

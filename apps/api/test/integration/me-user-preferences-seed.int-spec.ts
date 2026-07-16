@@ -207,8 +207,9 @@ describe.skipIf(!runIsolatedDb)("S5-ME-DB-1 — user_preferences + seed ME (DB c
       }
     });
 
-    // IDOR deny-path THỰC (GET/PATCH /me/preferences chỉ trả/ghi pref của token-user) = ME-BE WO.
-    // KHÔNG giả-xanh là đã chống cross-user ở tầng DB.
+    // IDOR deny-path THỰC (GET/PATCH /me/preferences chỉ trả/ghi pref của token-user) — ĐÓNG ở S5-ME-BE-2:
+    // xem test/integration/me-preferences-avatar.int-spec.ts ("IDOR — PATCH của A KHÔNG đụng row của B").
+    // KHÔNG rewrite file DB-seed này (giữ nguyên phạm vi WO gốc); todo giữ lại làm con trỏ lịch sử.
     it.todo("ME-BE: GET/PATCH /me/preferences chỉ đụng pref của token-resolved user (deny IDOR)");
   });
 

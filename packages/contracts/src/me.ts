@@ -34,6 +34,12 @@ export const ME_ERROR_CODES = {
    * status 'unlinked_employee' (KHÔNG ném); mã này dành cho endpoint yêu cầu employee bắt buộc (API-11 §8.4).
    */
   UNLINKED_EMPLOYEE: "ME-ERR-UNLINKED-EMPLOYEE",
+  /**
+   * S5-ME-BE-2 — 422: user cố override `timezone` cá nhân nhưng company CHƯA bật policy cho phép
+   * (ME-DEC-008 "Có NẾU company cho phép" — opt-in, default DENY). Set `timezone:null` (revert-to-inherit)
+   * hoặc bỏ field KHÔNG bị chặn — chỉ giá trị override THẬT mới cần policy.
+   */
+  TIMEZONE_OVERRIDE_DENIED: "ME-ERR-TIMEZONE-OVERRIDE-DENIED",
 } as const;
 
 export type MeErrorCode = (typeof ME_ERROR_CODES)[keyof typeof ME_ERROR_CODES];
@@ -240,3 +246,97 @@ export const meOverviewSchema = z.object({
   notification: meNotificationSectionSchema,
 });
 export type MeOverview = z.infer<typeof meOverviewSchema>;
+
+// ─── S5-ME-BE-2 — Preferences (SPEC-09 §15.2 · §10.8 · API-11 §5.1) ───────────────────────────
+//
+// Bảng canonical `user_preferences` (mig 0495): 1 bản ghi/user (UNIQUE company_id,user_id). Cột override
+// NULLABLE — NULL = kế thừa company/system default (§15.3 precedence). Enum khớp DB CHECK khi có (theme/
+// density/timeFormat); locale/dateFormat là enum ứng dụng (KHÔNG DB CHECK, giữ tập nhỏ MVP §10.8);
+// timezone KHÔNG literal-enum (IANA hàng trăm giá trị) — validate IANA thật ở SERVICE (mirror
+// settings.service.ts `assertValidTimezone`), Zod chỉ guard non-empty.
+
+export const ME_THEME_VALUES = ["system", "light", "dark"] as const;
+export const meThemeSchema = z.enum(ME_THEME_VALUES);
+export type MeTheme = z.infer<typeof meThemeSchema>;
+
+export const ME_DENSITY_VALUES = ["comfortable", "compact"] as const;
+export const meDensitySchema = z.enum(ME_DENSITY_VALUES);
+export type MeDensity = z.infer<typeof meDensitySchema>;
+
+export const ME_TIME_FORMAT_VALUES = ["12h", "24h"] as const;
+export const meTimeFormatSchema = z.enum(ME_TIME_FORMAT_VALUES);
+export type MeTimeFormat = z.infer<typeof meTimeFormatSchema>;
+
+/** Vietnamese/English — SPEC-09 §10.8 "Ngôn ngữ: Vietnamese / English nếu hệ thống hỗ trợ". */
+export const ME_LOCALE_VALUES = ["vi", "en"] as const;
+export const meLocaleSchema = z.enum(ME_LOCALE_VALUES);
+export type MeLocale = z.infer<typeof meLocaleSchema>;
+
+/** Tập format ngày phổ biến MVP (§10.8 "Format ngày giờ") — mở rộng thêm khi có yêu cầu thật. */
+export const ME_DATE_FORMAT_VALUES = ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"] as const;
+export const meDateFormatSchema = z.enum(ME_DATE_FORMAT_VALUES);
+export type MeDateFormat = z.infer<typeof meDateFormatSchema>;
+
+/** GET /api/v1/me/preferences — snapshot hiện tại (mọi field nullable = chưa override, kế thừa default). */
+export const mePreferencesSchema = z.object({
+  locale: meLocaleSchema.nullable(),
+  timezone: z.string().nullable(),
+  theme: meThemeSchema.nullable(),
+  dateFormat: meDateFormatSchema.nullable(),
+  timeFormat: meTimeFormatSchema.nullable(),
+  defaultLanding: z.string().nullable(),
+  density: meDensitySchema.nullable(),
+  favoriteModules: z.array(z.string()).nullable(),
+  meLayoutConfig: z.record(z.string(), z.unknown()).nullable(),
+  updatedAt: z.string().nullable(),
+});
+export type MePreferences = z.infer<typeof mePreferencesSchema>;
+
+/**
+ * Field giao diện dùng chung giữa PATCH tổng hợp và PATCH `/appearance` (API-11 §5.1: appearance =
+ * theme/locale/density/date-time-format; ME-DEC-008 thêm timezone). Mọi field `.nullable().optional()`:
+ * `undefined` (absent) = KHÔNG đụng cột; `null` = revert-to-inherit; giá trị thật = override.
+ */
+const mePreferencesAppearanceShape = {
+  locale: meLocaleSchema.nullable().optional(),
+  timezone: z.string().trim().min(1).max(64).nullable().optional(),
+  theme: meThemeSchema.nullable().optional(),
+  dateFormat: meDateFormatSchema.nullable().optional(),
+  timeFormat: meTimeFormatSchema.nullable().optional(),
+  density: meDensitySchema.nullable().optional(),
+};
+
+/** PATCH /api/v1/me/preferences/appearance — subset giao diện (§10.8/ME-DEC-008). */
+export const mePreferencesAppearancePatchSchema = z.object(mePreferencesAppearanceShape).strict();
+export type MePreferencesAppearancePatch = z.infer<typeof mePreferencesAppearancePatchSchema>;
+
+/** PATCH /api/v1/me/preferences — patch tổng hợp (appearance + landing/density/favorites/layout). */
+export const mePreferencesPatchSchema = z
+  .object({
+    ...mePreferencesAppearanceShape,
+    defaultLanding: z.string().trim().min(1).max(120).nullable().optional(),
+    favoriteModules: z.array(z.string().trim().min(1).max(50)).max(20).nullable().optional(),
+    meLayoutConfig: z.record(z.string(), z.unknown()).nullable().optional(),
+  })
+  .strict();
+export type MePreferencesPatch = z.infer<typeof mePreferencesPatchSchema>;
+
+// ─── S5-ME-BE-2 — Avatar (SPEC-09 §14.2/§21 ME-DEC-004 · API-11 §5.1) ─────────────────────────
+//
+// `employee_profiles.avatar_url` lưu `fileId` (UUID, tham chiếu `files` — KHÔNG phải URL bền vững: storage
+// chỉ cấp signed-URL TTL-ngắn, KHÔNG được persist — xem StorageAdapter docstring). `POST /me/avatar` trả
+// kèm `downloadUrl` TƯƠI (ký tại thời điểm response) để FE hiển thị ngay sau upload.
+
+/** POST /api/v1/me/avatar body — `fileId` của file ĐÃ upload+confirm qua flow `/foundation/files/*` chuẩn. */
+export const setMeAvatarInputSchema = z.object({
+  fileId: z.string().uuid(),
+});
+export type SetMeAvatarInput = z.infer<typeof setMeAvatarInputSchema>;
+
+/** Response POST /api/v1/me/avatar — fileId (reference bền) + downloadUrl/expiresAt (ephemeral, KHÔNG cache dài). */
+export const meAvatarSchema = z.object({
+  fileId: z.string().uuid(),
+  downloadUrl: z.string().url(),
+  expiresAt: z.string().datetime(),
+});
+export type MeAvatar = z.infer<typeof meAvatarSchema>;

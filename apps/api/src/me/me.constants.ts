@@ -20,6 +20,47 @@ export const ME_ACCESS_PAIR = { action: "access", resourceType: "me", isSensitiv
  */
 export const ME_DATA_INCONSISTENT_CODE = ME_ERROR_CODES.DATA_INCONSISTENT;
 
+/**
+ * S5-ME-BE-2 — mã lỗi user chưa liên kết employee (409, API-11 §8.4) + timezone-override bị company khoá
+ * (422, ME-DEC-008). NGUỒN SỰ THẬT DUY NHẤT = packages/contracts (mirror ME_DATA_INCONSISTENT_CODE).
+ */
+export const ME_UNLINKED_EMPLOYEE_CODE = ME_ERROR_CODES.UNLINKED_EMPLOYEE;
+export const ME_TIMEZONE_OVERRIDE_DENIED_CODE = ME_ERROR_CODES.TIMEZONE_OVERRIDE_DENIED;
+
+/**
+ * S5-ME-BE-2 — cặp quyền preferences/avatar (tuple engine — khớp NGUYÊN VĂN mig 0495 (D), Own × 4 role).
+ * KHÔNG dùng chuỗi dotted 'ME.PREFERENCE.VIEW_OWN' — engine thực thi theo tuple (API-11 §5).
+ */
+export const ME_PREFERENCE_VIEW_PAIR = {
+  action: "view",
+  resourceType: "user-preference",
+  isSensitive: false,
+} as const;
+export const ME_PREFERENCE_UPDATE_PAIR = {
+  action: "update",
+  resourceType: "user-preference",
+  isSensitive: false,
+} as const;
+export const ME_AVATAR_UPDATE_PAIR = {
+  action: "update",
+  resourceType: "avatar",
+  isSensitive: false,
+} as const;
+
+/**
+ * S5-ME-BE-2 — module/entity dùng cho `file_links` của avatar (FileOwnerPermissionResolver registry key +
+ * FileService.link/unlink input). entityId = `employee_profiles.id` của employee liên kết user hiện tại.
+ */
+export const ME_MODULE_CODE = "ME";
+export const ME_AVATAR_ENTITY_TYPE = "avatar";
+
+/**
+ * S5-ME-BE-2 (ME-DEC-008) — setting key company-policy cho phép user override timezone cá nhân. CHƯA seed
+ * default ở `foundation/settings/setting-defaults.ts` (ngoài path WO này) — `SettingService.resolveSetting`
+ * trả `found=false` khi vắng ⇒ mặc định DENY (khớp "Có NẾU company cho phép", opt-in).
+ */
+export const ME_TIMEZONE_OVERRIDE_SETTING_KEY = "me.allow_user_timezone_override";
+
 /** Action audit ghi khi phát hiện >1 employee active bất thường (§12.4). object_type='user' (CHECK 0011). */
 export const ME_ANOMALY_AUDIT_ACTION = "MeDataInconsistent";
 
