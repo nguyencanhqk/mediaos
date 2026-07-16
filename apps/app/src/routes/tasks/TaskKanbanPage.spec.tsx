@@ -299,5 +299,24 @@ describe("TaskKanbanPage", () => {
         ).toBeInTheDocument(),
       );
     });
+
+    it("keeps column header count at the original total when a filter is applied (SPEC-06 §13.8)", async () => {
+      setCapabilities({ "view-kanban:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD);
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+      await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+
+      // Cột Todo có 3 task gốc.
+      expect(screen.getByTestId("kanban-column-count-Todo")).toHaveTextContent("3");
+
+      // Lọc theo emp-002 (chỉ 1 task khớp) — số đếm header VẪN là 3 (tổng gốc, không đổi theo bộ lọc).
+      fireEvent.click(screen.getByTestId("kanban-filter-assignee-emp-002"));
+      await waitFor(() =>
+        expect(
+          within(screen.getByTestId("kanban-column-Todo")).queryByText("Chuẩn bị báo cáo tuần"),
+        ).not.toBeInTheDocument(),
+      );
+      expect(screen.getByTestId("kanban-column-count-Todo")).toHaveTextContent("3");
+    });
   });
 });

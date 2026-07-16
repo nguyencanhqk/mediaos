@@ -145,12 +145,15 @@ function KanbanCard({
 function KanbanColumn({
   status,
   tasks,
+  totalCount,
   canDrag,
   onDragStartTask,
   onDrop,
 }: {
   status: TaskCoreStatusDto;
   tasks: TaskKanbanCardDto[];
+  /** Tổng số task GỐC của cột (SPEC-06 §13.8) — header cột không đổi theo bộ lọc assignee. */
+  totalCount: number;
   canDrag: boolean;
   onDragStartTask: (taskId: string) => (e: DragEvent<HTMLDivElement>) => void;
   onDrop: (status: TaskCoreStatusDto) => (e: DragEvent<HTMLDivElement>) => void;
@@ -167,7 +170,12 @@ function KanbanColumn({
         <h4 className="text-xs font-semibold uppercase text-muted-foreground">
           {t(`tasks.status.${status}`)}
         </h4>
-        <span className="text-xs text-muted-foreground">{tasks.length}</span>
+        <span
+          className="text-xs text-muted-foreground"
+          data-testid={`kanban-column-count-${status}`}
+        >
+          {totalCount}
+        </span>
       </div>
       {/* Cột dài tự cuộn TRONG cột (header cột đứng yên) thay vì kéo giãn cả trang;
           drop handler ở div cột cha nên kéo-thả không đổi. calc ≈ topbar + header
@@ -442,6 +450,7 @@ export function TaskKanbanPage({ projectId }: { projectId: string }) {
               key={col.status}
               status={col.status}
               tasks={col.tasks.filter(matchesAssigneeFilter)}
+              totalCount={col.tasks.length}
               canDrag={canDrag}
               onDragStartTask={onDragStartTask}
               onDrop={onDrop}
