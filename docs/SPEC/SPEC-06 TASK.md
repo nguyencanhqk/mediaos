@@ -1031,12 +1031,24 @@ Hiển thị task theo cột trạng thái để dễ theo dõi tiến độ.
 | Checklist progress | Số checklist đã hoàn thành |
 | Overdue badge      | Nếu quá hạn                |
 
+* Badge Comment/Attachment/Checklist **chỉ hiển thị khi count tương ứng > 0** — card không có tín hiệu nào (0 bình luận, 0 file, 0 checklist) thì không hiện badge đó (tránh nhiễu thị giác).
+* Assignee hiển thị bằng **avatar chữ cái viết tắt (initials)** thay vì text tên thô; card không có người phụ trách hiển thị avatar rỗng/placeholder.
+* Card ở trạng thái **Done hoặc Cancelled** hiển thị phân biệt: nền/viền mờ (muted) và **tiêu đề gạch ngang** — giúp phân biệt nhanh task đã xong/đã hủy với task còn hoạt động, không cần đọc cột.
+
 #### Quy tắc kéo thả
 
 * Chỉ người có quyền cập nhật trạng thái mới kéo thả được.
 * Nếu task bị khóa hoặc dự án đã đóng, không kéo thả được.
 * Nếu workflow không cho chuyển trạng thái trực tiếp, hệ thống chặn.
 * Sau khi kéo thả thành công, ghi activity log.
+
+#### Lọc theo người phụ trách (client-side)
+
+* Board có dải chip lọc theo assignee, gồm: chip **"Tất cả"** (bỏ lọc, mặc định) + 1 chip/người phụ trách + chip **"Chưa giao"** (task có `main_assignee_employee_id = null`).
+* Danh sách người phụ trách trong dải chip **suy ra từ chính tập task đang hiển thị trên board** (duyệt qua toàn bộ cột) — **không** gọi thêm API danh sách thành viên/nhân sự nào khác; chip "Chưa giao" chỉ xuất hiện nếu board có ít nhất 1 task chưa gán.
+* Lọc chạy **hoàn toàn phía client** trong từng cột (không gọi lại API, không đổi query lên server) — chọn 1 assignee (hoặc "Chưa giao") thì mỗi cột chỉ hiển thị các card khớp điều kiện đó; số đếm ở header cột vẫn phản ánh tổng số task gốc của cột (không đổi theo bộ lọc).
+* Bộ lọc **kết hợp được** với kéo-thả hiện có: kéo thả vẫn hoạt động bình thường trên tập card đang lọc, không ảnh hưởng tới quyền (`TASK.TASK.UPDATE_STATUS`) hay dữ liệu gốc của board.
+* Lọc theo assignee **không** thay đổi quyền xem/kéo thả và **không** phát sinh lời gọi API mới — chỉ là view-state cục bộ trên dữ liệu Kanban đã tải.
 
 ---
 

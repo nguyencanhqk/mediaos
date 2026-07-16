@@ -6727,7 +6727,7 @@ export const backlog = [
       "Kanban card giàu tín hiệu (benchmark): badge comment/attachment/checklist + avatar-initials assignee + style Done/Cancelled + lọc theo assignee/'Chưa giao' trên board",
     zone: "green",
     status: "todo",
-    paths: ["apps/app/src/routes/tasks/**", "apps/app/src/i18n/**"],
+    paths: ["apps/app/src/routes/tasks/**", "apps/app/src/i18n/**", "docs/SPEC/SPEC-06 TASK.md"],
     skills: ["code-review"],
     depends_on: ["S5-TASK-BE-6"],
     src: [
