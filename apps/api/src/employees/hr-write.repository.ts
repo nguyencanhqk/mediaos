@@ -219,6 +219,46 @@ export class HrWriteRepository {
       .where(and(eq(employeeProfiles.companyId, companyId), eq(employeeProfiles.id, id)));
   }
 
+  /**
+   * S5-ME-BE-2 — self-service avatar (mirror `findForUpdateTx` nhưng AND thêm `userId` = token-resolved
+   * ngay trong WHERE, own-scope thuần chống IDOR — CHỈ employee liên kết CHÍNH user mới match). `.for("update")`
+   * khoá row để tránh race 2 request PATCH avatar song song cùng user.
+   */
+  async findOwnAvatarForUpdateTx(
+    tx: TenantTx,
+    companyId: string,
+    id: string,
+    userId: string,
+  ): Promise<{ id: string; avatarUrl: string | null } | undefined> {
+    const [row] = await tx
+      .select({ id: employeeProfiles.id, avatarUrl: employeeProfiles.avatarUrl })
+      .from(employeeProfiles)
+      .where(
+        and(
+          eq(employeeProfiles.companyId, companyId),
+          eq(employeeProfiles.id, id),
+          eq(employeeProfiles.userId, userId),
+          isNull(employeeProfiles.deletedAt),
+        ),
+      )
+      .limit(1)
+      .for("update");
+    return row;
+  }
+
+  /** S5-ME-BE-2 — ghi `avatar_url` (lưu `fileId` — xem me-avatar.service.ts docstring). Own-scope ép ở caller. */
+  async updateAvatarUrlTx(
+    tx: TenantTx,
+    companyId: string,
+    id: string,
+    avatarUrl: string | null,
+  ): Promise<void> {
+    await tx
+      .update(employeeProfiles)
+      .set({ avatarUrl, updatedAt: new Date() })
+      .where(and(eq(employeeProfiles.companyId, companyId), eq(employeeProfiles.id, id)));
+  }
+
   async setUserIdTx(tx: TenantTx, companyId: string, id: string, userId: string | null) {
     await tx
       .update(employeeProfiles)

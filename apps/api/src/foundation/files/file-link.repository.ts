@@ -53,6 +53,32 @@ export class FileLinkRepository {
   }
 
   /**
+   * S5-ME-BE-2 — liệt kê link chưa gỡ của 1 entity nghiệp vụ (chiều NGƯỢC với `listByFileTx`: "entity này
+   * đang trỏ tới file nào" thay vì "file này trỏ tới entity nào"). Dùng để tìm avatar link CŨ trước khi
+   * thay avatar mới (ME) — RLS-scoped, AND company_id tường minh (belt-and-suspenders).
+   */
+  async listActiveByEntityTx(
+    companyId: string,
+    moduleCode: string,
+    entityType: string,
+    entityId: string,
+    tx: TenantTx,
+  ): Promise<FileLink[]> {
+    return tx
+      .select()
+      .from(fileLinks)
+      .where(
+        and(
+          eq(fileLinks.companyId, companyId),
+          eq(fileLinks.moduleCode, moduleCode),
+          eq(fileLinks.entityType, entityType),
+          eq(fileLinks.entityId, entityId),
+          isNull(fileLinks.deletedAt),
+        ),
+      );
+  }
+
+  /**
    * Soft-delete (unlink, BẤT BIẾN #2): set deleted_at=now + deleted_by. CHỈ update khi link còn
    * (deleted_at IS NULL) ⇒ idempotent. Trả số row ảnh hưởng (0 = không tồn tại / cross-tenant / đã gỡ).
    */
