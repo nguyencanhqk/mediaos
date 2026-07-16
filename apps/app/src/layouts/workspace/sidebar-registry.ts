@@ -20,7 +20,9 @@ import { FOUNDATION_MODULE_VIEW_PERMISSION } from "@/routes/system/modules/const
 // S2-FE-FND-7 — 4 màn wired sẵn (S2-FE-FND-4/6): visibility trong sidebar. requiredAnyPermissions
 // dùng CHUNG route-meta (nguồn foundation/constants) → sidebar pair === route-meta pair (chống drift).
 import {
-  SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META,
+  // S5-LEAVE-HOLIDAYS-MOVE-1 — gate GIỮ NGUYÊN, dùng cho entry "leave.public-holidays" (LEAVE_SIDEBAR),
+  // KHÔNG còn entry system.public-holidays ở SYSTEM_SIDEBAR (xem khối LEAVE bên dưới).
+  FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS,
   SYSTEM_HEALTH_ROUTE_META,
   SYSTEM_RETENTION_ROUTE_META,
   SYSTEM_FILE_ACCESS_LOGS_ROUTE_META,
@@ -419,6 +421,20 @@ export const LEAVE_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 15,
     requiredAnyPermissions: ["LEAVE.CALENDAR.VIEW_OWN"],
   },
+  // S5-LEAVE-HOLIDAYS-MOVE-1 — Ngày nghỉ lễ RE-HOME từ /system/public-holidays (đã gỡ khỏi SYSTEM_SIDEBAR).
+  // Gate GIỮ NGUYÊN FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS (view:foundation-holiday, seed mig 0435) —
+  // KHÔNG đổi permission/BE, chỉ đổi chỗ hiển thị: đây là dữ liệu nền cho tính công nghỉ phép nên hợp lý
+  // hơn ở nhóm quản trị LEAVE (cạnh Loại/Chính sách nghỉ phép) thay vì Hệ thống.
+  {
+    sidebarKey: "leave.public-holidays",
+    moduleCode: "LEAVE",
+    label: "Ngày nghỉ lễ",
+    path: "/leave/public-holidays",
+    icon: "calendar-days",
+    group: "admin",
+    order: 59,
+    requiredAnyPermissions: FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS,
+  },
   // S3-FE-LEAVE-5 — admin (LEAVE-SCREEN-010/011/012). Gate = CẶP ENGINE THỰC trực tiếp (KHÔNG qua
   // PERMISSION_CODE_TO_PAIR — cùng kỹ thuật att.shifts/hr.org-chart, tránh drift). view:leave-type
   // KHÔNG sensitive (mọi role đọc được danh mục); view:leave-policy/view:leave-balance SENSITIVE
@@ -719,19 +735,12 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 36,
     requiredAnyPermissions: ["FOUNDATION.SEED.VIEW"],
   },
-  // S2-FE-FND-7 (H8/§7) — 4 màn System đã wired (S2-FE-FND-4/6) nhưng THIẾU visibility trong sidebar.
+  // S2-FE-FND-7 (H8/§7) — 3 màn System đã wired (S2-FE-FND-4/6) nhưng THIẾU visibility trong sidebar.
   // requiredAnyPermissions = CHÍNH mảng của route-meta (foundation/constants) → sidebar pair ===
   // route-meta pair, chống pair-drift. filterSidebarItems ẩn theo cặp — KHÔNG hard-code role.
-  {
-    sidebarKey: "system.public-holidays",
-    moduleCode: "FOUNDATION",
-    label: "Ngày nghỉ lễ",
-    path: FOUNDATION_PATH.PUBLIC_HOLIDAYS,
-    icon: "calendar-days",
-    group: "admin",
-    order: 17,
-    requiredAnyPermissions: SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META.requiredAnyPermissions,
-  },
+  //
+  // S5-LEAVE-HOLIDAYS-MOVE-1: entry "system.public-holidays" (Ngày nghỉ lễ) ĐÃ GỠ khỏi đây — màn RE-HOME
+  // sang LEAVE_SIDEBAR bên dưới (path /leave/public-holidays, cùng gate FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS).
   // Retention: gate view:foundation-retention (KHÔNG manage — manage sensitive, ẩn nhầm company-admin).
   {
     sidebarKey: "system.retention",

@@ -128,6 +128,9 @@ export const LEAVE_PATHS = {
   // S3-FE-LEAVE-6: báo cáo tổng hợp nghỉ (LEAVE-SCREEN-013) + audit log nghỉ phép (LEAVE-SCREEN-014A).
   REPORTS: "/leave/reports",
   AUDIT_LOGS: "/leave/audit-logs",
+  // S5-LEAVE-HOLIDAYS-MOVE-1 — Ngày nghỉ lễ RE-HOME từ /system/public-holidays (FE-only; gate + BE
+  // giữ nguyên FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS). Đường dẫn cũ redirect sang đây (router.tsx).
+  PUBLIC_HOLIDAYS: "/leave/public-holidays",
 } as const;
 
 /** Page size mặc định cho báo cáo/audit LEAVE (mirror ATT_RECORDS_PAGE_SIZE). */

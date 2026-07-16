@@ -169,20 +169,16 @@ export const FOUNDATION_SYSTEM_SETTINGS_ROUTE_PERMISSIONS: string[] = [
 ];
 
 /**
- * RouteMeta 4 màn đã wired sẵn (S2-FE-FND-4/6) — CHUYỂN về constants để router.tsx VÀ sidebar dùng
+ * RouteMeta 3 màn đã wired sẵn (S2-FE-FND-4/6) — CHUYỂN về constants để router.tsx VÀ sidebar dùng
  * chung nguồn requiredAnyPermissions (chống pair-drift). KHÔNG định nghĩa lại route (createRoute vẫn ở
  * router.tsx) — chỉ tập trung meta. Không set order/showInSidebar (giữ nguyên hành vi meta gốc).
+ *
+ * S5-LEAVE-HOLIDAYS-MOVE-1: SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META (route + sidebar "Ngày nghỉ lễ") ĐÃ DỜI
+ * khỏi đây sang nhóm quản trị của LEAVE (router.tsx `leavePublicHolidaysMeta`, path
+ * `/leave/public-holidays`). Gate GIỮ NGUYÊN FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS ở trên (KHÔNG đổi
+ * permission/BE) — chỉ đổi chỗ hiển thị FE. `/system/public-holidays` cũ REDIRECT sang route mới
+ * (router.tsx `systemPublicHolidaysRedirectRoute`) để bookmark/deep-link không gãy.
  */
-export const SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META: RouteMeta = {
-  routeKey: "system.public-holidays",
-  path: FOUNDATION_PATH.PUBLIC_HOLIDAYS,
-  layout: "MODULE_WORKSPACE",
-  moduleCode: "FOUNDATION",
-  screenCode: FOUNDATION_SCREEN.PUBLIC_HOLIDAYS,
-  titleKey: "routeTitle.systemPublicHolidays",
-  requiredAnyPermissions: FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS,
-};
-
 export const SYSTEM_HEALTH_ROUTE_META: RouteMeta = {
   routeKey: "system.health",
   path: FOUNDATION_PATH.HEALTH,

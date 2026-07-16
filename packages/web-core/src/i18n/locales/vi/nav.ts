@@ -68,6 +68,8 @@ export default {
     // S3-FE-LEAVE-6 — báo cáo tổng hợp nghỉ (LEAVE-SCREEN-013) + audit log nghỉ phép (LEAVE-SCREEN-014A).
     leaveReports: "Báo cáo tổng hợp nghỉ phép",
     leaveAuditLogs: "Audit log nghỉ phép",
+    // S5-LEAVE-HOLIDAYS-MOVE-1 — /leave/public-holidays (RE-HOME từ systemPublicHolidays, cùng nội dung).
+    leavePublicHolidays: "Ngày nghỉ lễ",
     tasks: "Công việc",
     taskMyTasks: "Việc của tôi",
     notifications: "Thông báo",

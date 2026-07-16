@@ -438,7 +438,8 @@ import {
 import {
   FOUNDATION_PATH,
   FOUNDATION_SCREEN,
-  SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META,
+  // S5-LEAVE-HOLIDAYS-MOVE-1 — gate GIỮ NGUYÊN, chỉ đổi chỗ mount (xem leavePublicHolidaysMeta bên dưới).
+  FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS,
   SYSTEM_HEALTH_ROUTE_META,
   SYSTEM_RETENTION_ROUTE_META,
   SYSTEM_FILE_ACCESS_LOGS_ROUTE_META,
@@ -493,7 +494,9 @@ const SystemSettingsPage = React.lazy(() =>
     default: m.SystemSettingsPage,
   })),
 );
-// System / Foundation — Public Holidays + Health — S2-FE-FND-4
+// System / Foundation — Public Holidays (S2-FE-FND-4) + Health. File component VẪN ở
+// system/foundation/PublicHolidaysPage (KHÔNG di chuyển file) — S5-LEAVE-HOLIDAYS-MOVE-1 chỉ dời ROUTE
+// (mount ở /leave/public-holidays, moduleCode LEAVE — xem leavePublicHolidaysRoute).
 const PublicHolidaysPage = React.lazy(() =>
   import("@/routes/system/foundation/PublicHolidaysPage").then((m) => ({
     default: m.PublicHolidaysPage,
@@ -1169,6 +1172,29 @@ const leaveDetailRoute = createRoute({
   },
 });
 
+// Ngày nghỉ lễ — S5-LEAVE-HOLIDAYS-MOVE-1: RE-HOME FE-only từ /system/public-holidays sang
+// /leave/public-holidays (nhóm quản trị LEAVE, cạnh Loại/Chính sách nghỉ phép). TÁI DÙNG
+// PublicHolidaysPage NGUYÊN VẸN (import, KHÔNG copy-paste/đổi logic trang) — chỉ đổi moduleCode
+// (FOUNDATION → LEAVE) + titleKey. Gate GIỮ NGUYÊN FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS
+// (view:foundation-holiday, seed mig 0435) — KHÔNG đổi permission/BE (endpoint /foundation/public-holidays
+// giữ nguyên). Đường dẫn cũ /system/public-holidays REDIRECT sang đây (systemPublicHolidaysRedirectRoute).
+const leavePublicHolidaysMeta: RouteMeta = {
+  routeKey: "leave.public-holidays",
+  path: LEAVE_PATHS.PUBLIC_HOLIDAYS,
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "LEAVE",
+  screenCode: FOUNDATION_SCREEN.PUBLIC_HOLIDAYS,
+  titleKey: "routeTitle.leavePublicHolidays",
+  requiredAnyPermissions: FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS,
+};
+const leavePublicHolidaysRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: LEAVE_PATHS.PUBLIC_HOLIDAYS,
+  beforeLoad: authGuard,
+  component: () =>
+    buildModuleRouteContent(leavePublicHolidaysMeta, "LEAVE", <PublicHolidaysPage />),
+});
+
 // S3-FE-LEAVE-5 — admin: Loại nghỉ phép (LEAVE-SCREEN-010). Gate = view:leave-type (KHÔNG sensitive,
 // mig 0455) — cặp ENGINE THỰC trực tiếp (KHÔNG qua PERMISSION_CODE_TO_PAIR, tránh drift đã gặp
 // S1-FND-MODULE — cùng kỹ thuật att.shifts/hr.org-chart).
@@ -1512,15 +1538,18 @@ const systemSettingsRoute = createRoute({
     buildModuleRouteContent(systemSettingsMeta, "FOUNDATION", <SystemSettingsPage />),
 });
 
-// Public Holidays (list + CRUD) — S2-FE-FND-4. Gate = cặp seed THẬT mig 0435 (view:foundation-holiday).
-// S2-FE-FND-7: meta CHUYỂN về foundation/constants (nguồn CHUNG với sidebar entry — chống pair-drift).
-const systemPublicHolidaysMeta: RouteMeta = SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META;
-const systemPublicHolidaysRoute = createRoute({
+// Public Holidays — S5-LEAVE-HOLIDAYS-MOVE-1: màn ĐÃ DỜI sang /leave/public-holidays (nhóm quản trị
+// LEAVE, xem leavePublicHolidaysRoute trong khối "Leave" bên dưới — PublicHolidaysPage vẫn TÁI DÙNG
+// nguyên component, KHÔNG copy-paste/đổi logic). Đường dẫn CŨ /system/public-holidays GIỮ LẠI dưới dạng
+// REDIRECT thuần (KHÔNG mount page) để bookmark/deep-link cũ không gãy — beforeLoad throw redirect
+// TRƯỚC khi router cố khớp component nào (mirror authGuard: throw redirect chặn render).
+const systemPublicHolidaysRedirectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: FOUNDATION_PATH.PUBLIC_HOLIDAYS,
-  beforeLoad: authGuard,
-  component: () =>
-    buildModuleRouteContent(systemPublicHolidaysMeta, "FOUNDATION", <PublicHolidaysPage />),
+  beforeLoad: () => {
+    authGuard();
+    throw redirect({ to: LEAVE_PATHS.PUBLIC_HOLIDAYS, replace: true });
+  },
 });
 
 // Health (read-only) — S2-FE-FND-4. HealthController BE @Public() (KHÔNG @RequirePermission, KHÔNG cặp
@@ -1957,6 +1986,7 @@ const routeTree = rootRoute.addChildren([
   leaveAllRequestsRoute,
   leaveEditRoute,
   leaveCalendarRoute,
+  leavePublicHolidaysRoute,
   leaveTypesRoute,
   leavePoliciesRoute,
   leaveBalancesRoute,
@@ -1978,7 +2008,7 @@ const routeTree = rootRoute.addChildren([
   systemCompanyRoute,
   systemCompanySettingsRoute,
   systemSettingsRoute,
-  systemPublicHolidaysRoute,
+  systemPublicHolidaysRedirectRoute,
   systemHealthRoute,
   systemRetentionRoute,
   systemFileAccessLogsRoute,
