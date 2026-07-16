@@ -12,6 +12,8 @@ import {
   updateHrEmployeeResponseSchema,
   profileChangeRequestListResponseSchema,
   profileChangeRequestDetailSchema,
+  hrImportReportSchema,
+  hrImportResultSchema,
   type HrEmployeeListQuery,
   type HrEmployeeListResponse,
   type HrEmployeeDetail,
@@ -33,8 +35,10 @@ import {
   type HrEmployeeExportQuery,
   type LinkUserRequest,
   type UnlinkUserRequest,
+  type HrImportReport,
+  type HrImportResult,
 } from "@mediaos/contracts";
-import { apiFetch, apiFetchBlob, type ApiBlobResult } from "./api-client";
+import { apiFetch, apiFetchBlob, apiFetchMultipart, type ApiBlobResult } from "./api-client";
 import { buildQueryString } from "./api-params";
 
 // S5-HR-LINKUI-1 — response POST/DELETE /hr/employees/:id/link-user (HrWriteService.linkUser/
@@ -244,4 +248,51 @@ export const hrApi = {
       z.object({ id: z.string().uuid(), status: z.string() }),
       { method: "POST" },
     ),
+
+  // ── Import hàng loạt (S5-HR-IMPORT-FE-1, HR.EMPLOYEE.IMPORT / SPEC-03 §7) ────────────────────────
+  // Cặp NHẠY CẢM `import:employee` (mig 0496, is_sensitive → fail-closed; grant Company CHỈ hr +
+  // company-admin). BE nối S5-HR-IMPORT-BE-1 (hr-import.controller.ts, HrEmployeeImportService).
+
+  /**
+   * POST /hr/employees/import?dryRun=true — PREVIEW: validate toàn bộ file (schema từng dòng + dup-check +
+   * resolve tên → id), KHÔNG ghi (KHÔNG insert, KHÔNG cấp sequence, KHÔNG audit). Multipart field "file"
+   * (FileInterceptor, ≤5MB — server re-check + validate MIME/extension → 400 người-đọc, KHÔNG raw 500).
+   * `hrImportReportSchema` pin `dryRun: true` — BE trả sai hình dạng (vd lỡ ghi thật) sẽ FAIL Zod-parse ở
+   * đây thay vì âm thầm hiển thị nhầm. apiFetchMultipart KHÔNG set Content-Type thủ công (browser tự set
+   * boundary) — ép tay sẽ làm multer BE không parse được.
+   */
+  previewEmployeeImport: (file: File): Promise<HrImportReport> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiFetchMultipart(
+      `/hr/employees/import${buildQueryString({ dryRun: true })}`,
+      hrImportReportSchema,
+      formData,
+    );
+  },
+
+  /**
+   * POST /hr/employees/import?dryRun=false — ÁP DỤNG THẬT: partial-success (mỗi dòng hợp lệ tạo trong tx
+   * riêng, dòng lỗi bị bỏ qua + báo cáo, KHÔNG rollback các dòng khác), rồi ghi ĐÚNG 1 audit session
+   * append-only (`employee_import`, {fileName, ok, fail} — KHÔNG PII/secret). UNLINKED: hồ sơ tạo ra
+   * user_id=NULL, KHÔNG cấp tài khoản đăng nhập (liên kết là hành động riêng, HR-FUNC-011). Caller PHẢI
+   * gọi hàm này CHỈ SAU KHI người dùng xem preview + bấm "Áp dụng" (KHÔNG tự động dryRun=false).
+   */
+  applyEmployeeImport: (file: File): Promise<HrImportResult> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiFetchMultipart(
+      `/hr/employees/import${buildQueryString({ dryRun: false })}`,
+      hrImportResultSchema,
+      formData,
+    );
+  },
+
+  /**
+   * GET /hr/employees/import/template — tải template CSV (header tiếng Việt + 1 dòng mẫu, BOM UTF-8 cho
+   * Excel). apiFetchBlob (nhị phân, refresh-on-401 replay) — { blob, filename } (filename suy từ
+   * Content-Disposition server gửi, caller fallback tên mặc định khi vắng).
+   */
+  downloadImportTemplate: (): Promise<ApiBlobResult> =>
+    apiFetchBlob("/hr/employees/import/template"),
 };

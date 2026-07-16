@@ -642,4 +642,63 @@ export default {
       },
     },
   },
+  // S5-HR-IMPORT-FE-1 — màn import nhân viên hàng loạt (SPEC-03 §7, HR.EMPLOYEE.IMPORT).
+  import: {
+    entryButton: "Import nhân viên",
+    title: "Import nhân viên hàng loạt",
+    description:
+      "Tải lên file XLSX/CSV để tạo hàng loạt hồ sơ nhân viên. Hồ sơ tạo ra chưa liên kết tài khoản đăng nhập — liên kết là thao tác riêng.",
+    backToList: "Về danh sách nhân viên",
+    forbidden: {
+      title: "Không có quyền truy cập",
+      description: "Bạn không có quyền import nhân viên hàng loạt.",
+    },
+    upload: {
+      stepLabel: "Bước 1/3 — Chọn file",
+      downloadTemplate: "Tải template mẫu",
+      downloadingTemplate: "Đang tải…",
+      downloadTemplateError: "Không thể tải template. Vui lòng thử lại.",
+      chooseFile: "Chọn file",
+      changeFile: "Chọn file khác",
+      noFileChosen: "Chưa chọn file nào.",
+      selectedFile: "Đã chọn: {{name}} ({{size}})",
+      hint: "Chấp nhận file .xlsx hoặc .csv, tối đa 5MB.",
+      invalidType: "Chỉ chấp nhận file .xlsx hoặc .csv.",
+      tooLarge: "File vượt quá dung lượng cho phép (5MB).",
+      previewButton: "Xem trước",
+      previewing: "Đang kiểm tra…",
+    },
+    preview: {
+      stepLabel: "Bước 2/3 — Xem trước",
+      description: "Kết quả kiểm tra file — CHƯA ghi vào hệ thống.",
+      countsOk: "Hợp lệ: {{count}}",
+      countsFail: "Lỗi: {{count}}",
+      columns: {
+        row: "Dòng",
+        errors: "Lỗi",
+      },
+      empty: "Không có dòng nào bị lỗi.",
+      noValidRows: "Không có dòng hợp lệ nào để áp dụng.",
+      back: "Chọn file khác",
+      apply: "Áp dụng",
+      applying: "Đang áp dụng…",
+    },
+    result: {
+      stepLabel: "Bước 3/3 — Kết quả",
+      summary: "Đã tạo {{ok}} nhân viên, {{fail}} dòng lỗi.",
+      createdTitle: "Đã tạo",
+      skippedTitle: "Bỏ qua do lỗi",
+      createdColumns: {
+        row: "Dòng",
+        employeeCode: "Mã nhân viên",
+      },
+      skippedColumns: {
+        row: "Dòng",
+        errors: "Lỗi",
+      },
+      createdEmpty: "Không có nhân viên nào được tạo.",
+      skippedEmpty: "Không có dòng lỗi nào.",
+      importAnother: "Import file khác",
+    },
+  },
 };

@@ -15,6 +15,9 @@ export {
   // KHÔNG Zod-parse; trả { blob, filename }. Lỗi HTTP vẫn ném ApiError. HR-PROFILE-UI-2: dùng cho export.
   apiFetchBlob,
   type ApiBlobResult,
+  // apiFetchMultipart (S5-HR-IMPORT-FE-1): upload multipart/form-data (import XLSX/CSV) — cùng vòng đời
+  // SSO như apiFetch nhưng KHÔNG set Content-Type mặc định (browser tự set boundary). Response vẫn Zod-parse.
+  apiFetchMultipart,
   ApiError,
   unwrapEnvelope,
   configureApiBaseUrl,

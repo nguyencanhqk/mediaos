@@ -436,6 +436,108 @@ describe("apiFetchBlob — refresh-on-401 replay + surface lỗi (KHÔNG silent)
   });
 });
 
+// ─── apiFetchMultipart (S5-HR-IMPORT-FE-1) ────────────────────────────────────
+// Upload multipart/form-data (import XLSX/CSV) — MIRROR đúng refresh-on-401 single-flight + replay của
+// apiFetch, nhưng KHÔNG set Content-Type thủ công (browser tự set boundary khi body là FormData).
+describe("apiFetchMultipart — KHÔNG Content-Type thủ công + refresh-on-401 replay", () => {
+  it("happy: gắn Bearer + credentials, KHÔNG set header Content-Type (browser tự set boundary)", async () => {
+    stubBrowser();
+    const { api, store } = await loadFresh();
+    store.useAuthStore.getState().setAccessToken("tok-1");
+    fetchMock.mockResolvedValueOnce(dataOk());
+
+    const formData = new FormData();
+    formData.append("file", new Blob(["a,b\n1,2\n"], { type: "text/csv" }), "employees.csv");
+    const res = await api.apiFetchMultipart(
+      "/hr/employees/import?dryRun=true",
+      testSchema,
+      formData,
+    );
+
+    expect(res).toEqual({ value: "ok" });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/hr/employees/import?dryRun=true");
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    expect(init.headers.Authorization).toBe("Bearer tok-1");
+    expect(init.headers["Content-Type"]).toBeUndefined();
+    expect(init.body).toBe(formData);
+  });
+
+  it("[FE RED] 401 → refreshAccessToken 1 lần → REPLAY CÙNG formData với Bearer mới", async () => {
+    stubBrowser();
+    const { api, store } = await loadFresh();
+    store.useAuthStore.getState().setAccessToken("old-tok");
+    let refreshed = false;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes("/auth/refresh")) {
+        refreshed = true;
+        return Promise.resolve(refreshOk("new-tok"));
+      }
+      return Promise.resolve(refreshed ? dataOk("applied") : errRes(401, "UNAUTHENTICATED"));
+    });
+
+    const formData = new FormData();
+    formData.append("file", new Blob(["x"]), "employees.xlsx");
+    const res = await api.apiFetchMultipart("/hr/employees/import", testSchema, formData);
+
+    expect(res).toEqual({ value: "applied" });
+    const refreshCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes("/auth/refresh"));
+    expect(refreshCalls).toHaveLength(1); // single-flight
+    const dataCalls = fetchMock.mock.calls.filter((c) => !String(c[0]).includes("/auth/refresh"));
+    expect(dataCalls.at(-1)![1].headers.Authorization).toBe("Bearer new-tok"); // replay dùng token mới
+    expect(dataCalls.at(-1)![1].body).toBe(formData); // replay giữ NGUYÊN formData (KHÔNG re-đọc file)
+  });
+
+  it("refresh fail → redirectToAuth + ném 401 (KHÔNG âm thầm coi như import 0 dòng)", async () => {
+    stubBrowser();
+    const { api, store } = await loadFresh();
+    store.useAuthStore.getState().setAccessToken("old-tok");
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(url.includes("/auth/refresh") ? errRes(401, "REUSE") : errRes(401, "UNAUTH")),
+    );
+
+    const formData = new FormData();
+    formData.append("file", new Blob(["x"]), "employees.csv");
+    await expect(
+      api.apiFetchMultipart("/hr/employees/import", testSchema, formData),
+    ).rejects.toMatchObject({ status: 401, code: "AUTH-ERR-UNAUTHENTICATED" });
+  });
+
+  it("[400 RED] MIME/size sai → ném ApiError 400 với thông điệp BE (KHÔNG file rỗng im lặng)", async () => {
+    stubBrowser();
+    const { api, store } = await loadFresh();
+    store.useAuthStore.getState().setAccessToken("tok-1");
+    fetchMock.mockResolvedValueOnce(
+      errRes(400, "HR-ERR-IMPORT-FILE-TYPE", "chỉ nhận .xlsx hoặc .csv"),
+    );
+
+    const formData = new FormData();
+    formData.append("file", new Blob(["x"]), "employees.pdf");
+    await expect(
+      api.apiFetchMultipart("/hr/employees/import", testSchema, formData),
+    ).rejects.toMatchObject({
+      status: 400,
+      code: "HR-ERR-IMPORT-FILE-TYPE",
+      message: "chỉ nhận .xlsx hoặc .csv",
+    });
+  });
+
+  it("skipAuth + 401 → KHÔNG refresh, ném 401 thẳng", async () => {
+    stubBrowser();
+    const { api } = await loadFresh();
+    fetchMock.mockResolvedValueOnce(errRes(401, "INVALID"));
+
+    const formData = new FormData();
+    formData.append("file", new Blob(["x"]), "employees.csv");
+    await expect(
+      api.apiFetchMultipart("/public/import", testSchema, formData, { skipAuth: true }),
+    ).rejects.toMatchObject({ status: 401 });
+    const refreshCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes("/auth/refresh"));
+    expect(refreshCalls).toHaveLength(0);
+  });
+});
+
 describe("redirectToAuth", () => {
   it("điều hướng ĐÚNG 1 lần dù gọi nhiều lần", async () => {
     stubBrowser();

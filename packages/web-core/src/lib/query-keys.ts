@@ -644,6 +644,9 @@ export const hrInvalidation = {
   // S2-FE-HR-9 — upload/delete file hồ sơ đều làm mới đúng danh sách file của nhân viên đó.
   uploadEmployeeFile: (employeeId: string) => [hrKeys.employees.files(employeeId)] as const,
   deleteEmployeeFile: (employeeId: string) => [hrKeys.employees.files(employeeId)] as const,
+  // S5-HR-IMPORT-FE-1 — sau apply (dryRun=false) tạo hàng loạt hồ sơ mới: làm mới cả danh sách (list,
+  // mọi biến thể param'd — prefix employees.all) lẫn dải tổng quan (summary, employees.all cũng bao phủ).
+  applyImport: () => [hrKeys.employees.all] as const,
 };
 
 // S3-FE-LEAVE-2: approver KHÔNG giữ balance key của requester (balance thuộc user gửi đơn, không nằm
