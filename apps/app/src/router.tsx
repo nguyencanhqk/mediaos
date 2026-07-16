@@ -197,6 +197,12 @@ const EmployeeCodeConfigPage = React.lazy(() =>
     default: m.EmployeeCodeConfigPage,
   })),
 );
+// S5-HR-IMPORT-FE-1 — Import nhân viên hàng loạt (SPEC-03 §7, HR.EMPLOYEE.IMPORT).
+const HrEmployeeImportPage = React.lazy(() =>
+  import("@/routes/hr/import/HrEmployeeImportPage").then((m) => ({
+    default: m.HrEmployeeImportPage,
+  })),
+);
 // HR — Profile change request workflow (S2-FE-HR-4)
 const MyChangeRequestPage = React.lazy(() =>
   import("@/routes/hr/profile-change-requests/MyChangeRequestPage").then((m) => ({
@@ -700,6 +706,32 @@ const hrEmployeeCreateRoute = createRoute({
       />,
     );
   },
+});
+
+// S5-HR-IMPORT-FE-1 — Import nhân viên hàng loạt. Static "import" segment ranks above "$employeeId"
+// (mirror hrEmployeeCreateRoute "new"). RouteMeta CỤC BỘ (KHÔNG ở ROUTE_REGISTRY web-core, cùng pattern
+// hrOrgChartMeta/hrAuditLogsMeta) — KHÔNG tái dùng hr.employees meta (HR.EMPLOYEE.VIEW là quá RỘNG cho
+// import: cặp thật là 'import:employee', is_sensitive=true, mig 0496, grant Company CHỈ hr +
+// company-admin). Entry point = nút "Import nhân viên" trên EmployeeListPage — KHÔNG có sidebar item riêng
+// (cùng kỹ thuật hrEmployeeContractsRoute: sub-flow reached via button, không phải nav top-level).
+const hrEmployeeImportMeta: RouteMeta = {
+  routeKey: "hr.employees-import",
+  path: "/hr/employees/import",
+  layout: "MODULE_WORKSPACE",
+  moduleCode: "HR",
+  screenCode: "HR-SCREEN-IMPORT",
+  titleKey: "routeTitle.hrEmployeesImport",
+  requiredAnyPermissions: [
+    `${HR_ENGINE_PAIRS.IMPORT_EMPLOYEE.action}:${HR_ENGINE_PAIRS.IMPORT_EMPLOYEE.resourceType}`,
+  ],
+  showInSidebar: false,
+  order: 21,
+};
+const hrEmployeeImportRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hr/employees/import",
+  beforeLoad: authGuard,
+  component: () => buildModuleRouteContent(hrEmployeeImportMeta, "HR", <HrEmployeeImportPage />),
 });
 
 // HR detail — no sidebar entry; path param resolved via useParams.
@@ -1875,6 +1907,7 @@ const routeTree = rootRoute.addChildren([
   hrRoute,
   hrEmployeesRoute,
   hrEmployeeCreateRoute,
+  hrEmployeeImportRoute,
   hrEmployeeDetailRoute,
   hrEmployeeEditRoute,
   hrEmployeeContractsRoute,

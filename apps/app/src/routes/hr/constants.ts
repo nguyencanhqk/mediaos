@@ -92,4 +92,8 @@ export const HR_ENGINE_PAIRS = {
   // GET :id + POST reject/cancel dùng CÙNG 2 cặp này ở tầng controller — KHÔNG có cặp "view" riêng.
   CREATE_PROFILE_CHANGE_REQUEST: { action: "create", resourceType: "profile-change-request" },
   APPROVE_PROFILE_CHANGE_REQUEST: { action: "approve", resourceType: "profile-change-request" },
+  // S5-HR-IMPORT-FE-1 — cặp seed THẬT mig 0496 (import:employee, is_sensitive=true, grant Company CHỈ
+  // hr + company-admin) + SENSITIVE_CAPABILITY_ALLOWLIST (permission.service.ts). PHẢI dùng useCanExact
+  // (không useCan) — pair nhạy cảm, tránh wildcard '*:*' fall-through permit trong khi BE vẫn 403.
+  IMPORT_EMPLOYEE: { action: "import", resourceType: "employee" },
 } as const;

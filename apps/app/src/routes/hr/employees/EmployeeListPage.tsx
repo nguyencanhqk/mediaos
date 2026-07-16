@@ -3,8 +3,8 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { GroupingState, OnChangeFn, SortingState } from "@tanstack/react-table";
-import { Users, RefreshCw, Eye, EyeOff, List, LayoutPanelLeft } from "lucide-react";
-import { hrApi, hrKeys, useCan, PermissionGate } from "@mediaos/web-core";
+import { Users, RefreshCw, Eye, EyeOff, List, LayoutPanelLeft, Upload } from "lucide-react";
+import { hrApi, hrKeys, useCan, useCanExact, PermissionGate } from "@mediaos/web-core";
 import { PageHeader, DataTable, EmptyState, Button, Input, Select, cn } from "@mediaos/ui";
 import { useLocalPref } from "@/hooks/use-local-pref";
 import { HR_ENGINE_PAIRS } from "../constants";
@@ -77,6 +77,12 @@ export function EmployeeListPage() {
   const canViewSensitive = useCan(
     HR_ENGINE_PAIRS.VIEW_SENSITIVE.action,
     HR_ENGINE_PAIRS.VIEW_SENSITIVE.resourceType,
+  );
+  // S5-HR-IMPORT-FE-1 — cặp NHẠY CẢM 'import:employee' (mig 0496) → useCanExact (fail-closed, KHÔNG
+  // wildcard '*:*' fall-through), mirror ExportEmployeesButton/EmployeeFilesTab.
+  const canImport = useCanExact(
+    HR_ENGINE_PAIRS.IMPORT_EMPLOYEE.action,
+    HR_ENGINE_PAIRS.IMPORT_EMPLOYEE.resourceType,
   );
 
   const {
@@ -192,6 +198,18 @@ export function EmployeeListPage() {
             {/* Export CSV danh bạ — cặp NHẠY CẢM export:employee (useCanExact fail-closed; server
                 áp scope + mask PII + cap 422). Query = bộ lọc/sort đang xem. */}
             <ExportEmployeesButton query={queryParams} />
+            {/* Import hàng loạt — cặp NHẠY CẢM import:employee (mig 0496, useCanExact fail-closed). */}
+            {canImport && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void navigate({ to: "/hr/employees/import" as "/" })}
+                data-testid="hr-employees-import-button"
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                {t("import.entryButton")}
+              </Button>
+            )}
             <PermissionGate
               action={HR_ENGINE_PAIRS.CREATE_EMPLOYEE.action}
               resourceType={HR_ENGINE_PAIRS.CREATE_EMPLOYEE.resourceType}

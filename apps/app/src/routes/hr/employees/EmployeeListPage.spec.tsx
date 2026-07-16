@@ -196,6 +196,31 @@ describe("EmployeeListPage", () => {
     expect(screen.queryByTestId("export-employees-button")).not.toBeInTheDocument();
   });
 
+  // ── IMPORT (S5-HR-IMPORT-FE-1): gate useCanExact('import','employee') fail-closed ────────
+  it("[import deny] ẩn nút Import khi thiếu cap import:employee (kể cả read:employee)", async () => {
+    setCapabilities({ "read:employee": true });
+    vi.mocked(hrApi.listEmployees).mockResolvedValue(MOCK_RESPONSE);
+    renderWithQuery(<EmployeeListPage />);
+    await waitFor(() => expect(screen.getByText("Nguyễn Văn A")).toBeInTheDocument());
+    expect(screen.queryByTestId("hr-employees-import-button")).not.toBeInTheDocument();
+  });
+
+  it("[import deny] CHỈ `*:*` wildcard → ẩn nút Import (sensitive không kế thừa wildcard)", async () => {
+    setCapabilities({ "read:employee": true, "*:*": true });
+    vi.mocked(hrApi.listEmployees).mockResolvedValue(MOCK_RESPONSE);
+    renderWithQuery(<EmployeeListPage />);
+    await waitFor(() => expect(screen.getByText("Nguyễn Văn A")).toBeInTheDocument());
+    expect(screen.queryByTestId("hr-employees-import-button")).not.toBeInTheDocument();
+  });
+
+  it("[import allow] hiện nút Import với cap exact import:employee", async () => {
+    setCapabilities({ "read:employee": true, "import:employee": true });
+    vi.mocked(hrApi.listEmployees).mockResolvedValue(MOCK_RESPONSE);
+    renderWithQuery(<EmployeeListPage />);
+    await waitFor(() => expect(screen.getByText("Nguyễn Văn A")).toBeInTheDocument());
+    expect(screen.getByTestId("hr-employees-import-button")).toBeInTheDocument();
+  });
+
   it("[export] có cap exact → click gọi exportEmployees + triggerBlobDownload", async () => {
     setCapabilities({ "read:employee": true, "export:employee": true });
     vi.mocked(hrApi.listEmployees).mockResolvedValue(MOCK_RESPONSE);

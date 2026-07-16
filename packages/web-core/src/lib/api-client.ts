@@ -421,6 +421,74 @@ export async function apiFetch<T>(
   return finishResponse(res, schema, path);
 }
 
+// ── apiFetchMultipart (S5-HR-IMPORT-FE-1) ─────────────────────────────────────
+//
+// Upload multipart/form-data (vd import XLSX/CSV) — DÙNG LẠI vòng đời SSO của apiFetch (Bearer +
+// credentials + refresh-on-401 single-flight + replay 1 lần) NHƯNG KHÔNG set Content-Type mặc định:
+// khi body là FormData, fetch/trình duyệt TỰ set `multipart/form-data; boundary=...`. Ép Content-Type
+// thủ công (như rawFetch làm cho JSON) sẽ làm mất boundary ⇒ multer (BE FileInterceptor) không parse
+// được file. Response vẫn là envelope JSON bình thường (chỉ REQUEST là multipart) → tái dùng
+// finishResponse (Zod-parse) y hệt apiFetch.
+
+/**
+ * Fetch multipart LUÔN POST (import hiện là ca dùng multipart DUY NHẤT — mở rộng method khi có ca dùng
+ * thứ hai). KHÔNG set Content-Type — xem ghi chú trên.
+ */
+function rawMultipartFetch(
+  path: string,
+  formData: FormData,
+  token: string | null,
+  opts?: ApiFetchOpts,
+): Promise<Response> {
+  const reqId = opts?.requestId ?? createRequestId();
+  return fetch(`${getApiBaseUrl()}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "X-Request-Id": reqId,
+      "X-Client-Type": CLIENT_TYPE,
+      "X-Client-Version": clientVersion,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(opts?.idempotencyKey ? { "Idempotency-Key": opts.idempotencyKey } : {}),
+    },
+    body: formData,
+  });
+}
+
+/**
+ * HTTP client cho multipart/form-data upload. MIRROR apiFetch: gắn Bearer (trừ skipAuth) +
+ * credentials:'include'; 401 authed → refreshAccessToken() (single-flight) rồi REPLAY ĐÚNG 1 LẦN với
+ * token mới; refresh fail → redirectToAuth() + ném 401. KHÔNG vòng lặp (replay đi thẳng finishResponse).
+ * Response Zod-parse như apiFetch — lỗi HTTP ném ApiError (thông điệp người-đọc từ BE, vd
+ * "HR-ERR-IMPORT-FILE-TYPE: chỉ nhận .xlsx hoặc .csv").
+ */
+export async function apiFetchMultipart<T>(
+  path: string,
+  schema: z.ZodType<T>,
+  formData: FormData,
+  opts?: ApiFetchOpts,
+): Promise<T> {
+  const token = opts?.skipAuth ? null : getAccessToken();
+  const res = await rawMultipartFetch(path, formData, token, opts);
+
+  if (res.status === 401 && !opts?.skipAuth) {
+    const refreshed = await refreshAccessToken();
+    if (!refreshed) {
+      redirectToAuth();
+      throw new ApiError({
+        status: 401,
+        code: "AUTH-ERR-UNAUTHENTICATED",
+        kind: "UNAUTHENTICATED",
+        message: "Phiên đã hết hạn. Vui lòng đăng nhập lại.",
+      });
+    }
+    const replay = await rawMultipartFetch(path, formData, getAccessToken(), opts);
+    return finishResponse(replay, schema, path);
+  }
+
+  return finishResponse(res, schema, path);
+}
+
 // ── apiFetchBlob (S3-ATT-EXPORT-1) ────────────────────────────────────────────
 //
 // Tải nhị phân (export CSV/file) — DÙNG LẠI đúng vòng đời SSO của apiFetch (Bearer + credentials +
