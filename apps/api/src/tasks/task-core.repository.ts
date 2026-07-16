@@ -33,6 +33,10 @@ export interface TaskCoreRow {
   title: string;
   description: string | null;
   taskType: string;
+  // S5-NOTI-FIX-2 (lane noti-fix2-comment): additive — cột `tasks.task_code` cho placeholder {task_code}
+  // (seed 0481 TASK_COMMENT_CREATED/TASK_MENTIONED). Optional (KHÔNG bắt buộc) để KHÔNG phá literal
+  // TaskCoreRow hiện có (vd task-core.mapper.spec.ts baseRow) chưa set field này — additive, không rewrite.
+  taskCode?: string | null;
   taskStatus: string | null;
   taskPriority: string | null;
   projectId: string | null;
@@ -111,6 +115,7 @@ const TASK_CORE_SELECT = sql`
   tk.title                     AS title,
   tk.description               AS description,
   tk.task_type                 AS "taskType",
+  tk.task_code                 AS "taskCode",
   tk.task_status               AS "taskStatus",
   tk.task_priority             AS "taskPriority",
   tk.project_id                AS "projectId",
