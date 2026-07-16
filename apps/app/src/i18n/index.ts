@@ -15,6 +15,8 @@ import notificationsVi from "./locales/vi/notifications";
 import tasksVi from "./locales/vi/tasks";
 // S4-FE-DASH-1 — DashboardMePage + WidgetCard + widget P0 (namespace mới "dashboard").
 import dashboardVi from "./locales/vi/dashboard";
+// S5-ME-FE-1 — MeOverviewPage (namespace mới "me", ME-SCREEN-001).
+import meVi from "./locales/vi/me";
 
 registerI18nResources("vi", {
   hr: hrVi,
@@ -25,6 +27,7 @@ registerI18nResources("vi", {
   notifications: notificationsVi,
   tasks: tasksVi,
   dashboard: dashboardVi,
+  me: meVi,
   // S4-FE-NOTI-2 — ĐÈ THÊM 1 khoá routeTitle.notiEvents vào bundle "nav" đã nhúng sẵn ở @mediaos/web-core
   // (deep-merge, KHÔNG đụng khoá cũ) — route noti.events (ROUTE_REGISTRY) cần titleKey này.
   // S4-FE-NOTI-4 — THÊM notiTemplates (route noti.templates, MỚI) + notificationDeliveryLogs (route

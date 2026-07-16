@@ -792,6 +792,27 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// ME — Trung tâm cá nhân (S5-ME-FE-1, SPEC-09 §8.1)
+// ---------------------------------------------------------------------------
+//
+// SPEC-09 §8.1 liệt kê 6 nhóm (Tổng quan/Hồ sơ của tôi/Tài khoản & bảo mật/Công việc của tôi/Thông báo/
+// Cài đặt cá nhân) — WO này CHỈ build màn Tổng quan (ME-SCREEN-001, route "/me"); 5 nhóm còn lại do
+// S5-ME-FE-2/FE-3 APPEND theo route thật của họ (tránh sidebar trỏ vào route chưa tồn tại = link chết).
+// Gate = cặp engine THẬT `access:me` trực tiếp (mirror ROUTE_REGISTRY "me.overview" — cùng cặp, không drift).
+export const ME_SIDEBAR: readonly SidebarItemMeta[] = [
+  {
+    sidebarKey: "me.overview",
+    moduleCode: "ME",
+    label: "Tổng quan",
+    path: "/me",
+    icon: "user-circle",
+    group: "overview",
+    order: 10,
+    requiredAnyPermissions: ["access:me"],
+  },
+];
+
+// ---------------------------------------------------------------------------
 // Map moduleCode → sidebar items
 // ---------------------------------------------------------------------------
 import { type ModuleCode } from "@mediaos/web-core";
@@ -804,6 +825,7 @@ export const SIDEBAR_REGISTRY: Partial<Record<ModuleCode, readonly SidebarItemMe
   TASK: TASK_SIDEBAR,
   NOTI: NOTI_SIDEBAR,
   FOUNDATION: SYSTEM_SIDEBAR,
+  ME: ME_SIDEBAR,
 };
 
 export function getSidebarItems(moduleCode: ModuleCode): readonly SidebarItemMeta[] {

@@ -1421,6 +1421,13 @@ const notificationTemplatesRoute = makeModuleRoute(
   NotificationTemplatesPage,
 );
 
+// ME — Personal Hub, ME-SCREEN-001 Tổng quan cá nhân (S5-ME-FE-1, SPEC-09 §9). Gate route-level =
+// ROUTE_REGISTRY "me.overview" (access:me); MeOverviewPage tự gate lại bằng useCan (mirror DashboardMePage).
+const MeOverviewPage = React.lazy(() =>
+  import("@/routes/me/MeOverviewPage").then((m) => ({ default: m.MeOverviewPage })),
+);
+const meOverviewRoute = makeModuleRoute("/me", "me.overview", "ME", MeOverviewPage);
+
 // System / Foundation — /system landing THAY ModulePlaceholder = System Overview (S2-FE-FND-1).
 const systemRoute = makeModuleRoute("/system", "system.overview", "FOUNDATION", SystemOverviewPage);
 
@@ -1933,6 +1940,7 @@ const routeTree = rootRoute.addChildren([
   notificationEventsRoute,
   notificationDeliveryLogsRoute,
   notificationTemplatesRoute,
+  meOverviewRoute,
   systemRoute,
   systemCompanyRoute,
   systemCompanySettingsRoute,

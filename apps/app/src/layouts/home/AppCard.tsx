@@ -37,6 +37,8 @@ const MODULE_ACCENT_BG: Partial<Record<string, string>> = {
   NOTI: "bg-pink-500/10 text-pink-600 dark:text-pink-400",
   FOUNDATION: "bg-muted text-muted-foreground",
   AUTH: "bg-muted text-muted-foreground",
+  // S5-ME-FE-1 — Personal Hub.
+  ME: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
 };
 
 interface AppCardProps {

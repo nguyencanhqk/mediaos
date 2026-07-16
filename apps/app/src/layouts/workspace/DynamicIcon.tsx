@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   Users,
   User,
+  UserCircle,
   Clock,
   Calendar,
   CalendarDays,
@@ -56,6 +57,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "layout-dashboard": LayoutDashboard,
   users: Users,
   user: User,
+  // S5-ME-FE-1 — Personal Hub app/route icon.
+  "user-circle": UserCircle,
   clock: Clock,
   calendar: Calendar,
   "calendar-days": CalendarDays,

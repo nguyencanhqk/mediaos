@@ -237,7 +237,12 @@ describe("HomePortalLayout — permission visibility", () => {
     expect(screen.getByText("Test User")).toBeInTheDocument();
   });
 
-  it("shows empty state when no visible apps (no capabilities)", async () => {
+  // S5-ME-FE-1 — APP_REGISTRY 'me' (Personal Hub) có requiredAnyPermissions RỖNG ⇒ LUÔN hiện cho mọi user
+  // đã đăng nhập (SPEC-09 §6.1). Từ đây "0 capabilities" KHÔNG còn rơi vào empty state — card 'me' luôn
+  // xuất hiện; empty state (`EmptyState "chưa được cấp quyền"`) là code phòng-thủ giữ nguyên trong component
+  // cho trường hợp registry sau này KHÔNG còn app nào rỗng-quyền, nhưng không còn tái hiện được qua flow
+  // thật hiện tại.
+  it("no capabilities → vẫn hiện app 'Cá nhân' (KHÔNG rơi vào empty state)", async () => {
     setAuthStore(true, {});
     render(
       <Wrapper>
@@ -245,8 +250,9 @@ describe("HomePortalLayout — permission visibility", () => {
       </Wrapper>,
     );
     await waitFor(() => {
-      expect(screen.getByText(/chưa được cấp quyền/i)).toBeInTheDocument();
+      expect(screen.getByText("app.me")).toBeInTheDocument();
     });
+    expect(screen.queryByText(/chưa được cấp quyền/i)).not.toBeInTheDocument();
   });
 
   it("renders Ứng dụng của tôi section heading", async () => {
