@@ -204,11 +204,15 @@ describe.skipIf(!runDb)("S4-NOTI-BE-2 event intake (HTTP trust-boundary + engine
     delete process.env.INTERNAL_API_KEY;
   });
 
+  // S5-NOTI-FIX-1: payload default PHẢI có `taskId` — sau backfill 0497, template global TASK_ASSIGNED/
+  // TASK_COMMENT_CREATED có target_url_template '/tasks/{taskId}'; renderer giữ literal `{taskId}` nếu thiếu →
+  // assertInternalTargetUrl 422 (loud). Producer THẬT (commonPayload/commentPayload) LUÔN có taskId ⇒ payload
+  // default cũ `{taskTitle}` là phi thực tế. Thêm taskId (id hợp lệ) để render ra route nội bộ hợp lệ.
   const body = (over: Record<string, unknown> = {}) => ({
     eventCode: "TASK_ASSIGNED",
     sourceModule: "TASK",
     recipient: { mode: "UserIds", userIds: [recipient] },
-    payload: { taskTitle: "Test task" },
+    payload: { taskId: randomUUID(), taskTitle: "Test task" },
     ...over,
   });
 
