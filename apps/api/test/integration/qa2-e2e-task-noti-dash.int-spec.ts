@@ -32,12 +32,11 @@
  *        NOTIFICATION_CREATED/READ qua `NotificationEngineService` (chỉ module legacy mồ côi) ⇒ cache STALE
  *        trong TTL (`DASH_WIDGET_TTL_SECONDS.NOTI=10s`), tự lành sau TTL. Test này CHỨNG MINH bằng E2E thật
  *        (trước giờ chỉ là ghi chú code, chưa có test).
- *   E4 (CRITICAL, QA2-CRIT-001) — `target_url` KHÔNG được set cho notification tạo qua bridge/engine mặc
- *        định — migration 0481 seed 39 template global nhưng 0/39 có `target_url_template` (xác nhận bằng
- *        query DB thật, xem docs/plans/S4-QA-2.md known-issues). SPEC-08 §15/§18 mẫu response
- *        `target_url:"/tasks/task-id"` KHÔNG khớp thực tế. Test LOCK IN hành vi HIỆN TẠI (không phải hành vi
- *        ĐÚNG theo spec) — nếu sau này ai fix migration/bridge, test này PHẢI đỏ và bắt buộc cập nhật (chủ
- *        đích — characterization test, KHÔNG phải che giấu bug).
+ *   E4 (QA2-CRIT-001 — ĐÃ VÁ bởi S5-NOTI-FIX-1 / migration 0497) — `target_url` render THẬT cho notification
+ *        tạo qua bridge/engine: migration 0497 backfill `target_url_template` cho 39 template global (0481 seed
+ *        sót cột). TASK_ASSIGNED template = '/tasks/{taskId}' → engine render {taskId} từ payload commonPayload
+ *        THẬT ⇒ `target.target_url === '/tasks/{taskId}'` (SPEC-08 §15/§18). (Trước 0497: 0/39 template có
+ *        target_url_template ⇒ luôn NULL — test này từng là characterization LOCK-IN cho bug, nay assert deep-link.)
  *
  * Gate CỨNG hasDb && LANE_DB (memory integration-test-lane-db-gate).
  */
@@ -394,8 +393,8 @@ describe.skipIf(!hasLaneDb)(
       expect(healed.body.data.data.summary.unread).toBeGreaterThan(baselineUnread);
     });
 
-    // ── E4. CRITICAL known-issue QA2-CRIT-001 — deep link target_url luôn NULL mặc định ──────────────
-    it("E4 (CRITICAL known-issue QA2-CRIT-001): target_url = NULL cho TASK_ASSIGNED mặc định (GET /notifications/:id VÀ dashboard NOTIFICATIONS widget) — SPEC-08 yêu cầu '/tasks/{id}' nhưng seed migration 0481 KHÔNG set target_url_template (0/39 template global)", async () => {
+    // ── E4. QA2-CRIT-001 ĐÃ VÁ (S5-NOTI-FIX-1 / migration 0497) — deep-link target_url render THẬT ──────
+    it("E4 (QA2-CRIT-001 FIXED by 0497): target_url = /tasks/{taskId} cho TASK_ASSIGNED (GET /notifications/:id VÀ dashboard NOTIFICATIONS widget) — migration 0497 backfill target_url_template '/tasks/{taskId}' cho template global", async () => {
       const taskId = await mkTask("Task cần deep-link", "TSK-QA2-E4");
       const assignRes = await authPost(tok.manager, `/tasks/${taskId}/assign`).send({
         assigneeEmployeeId: employeeEmp,
@@ -416,16 +415,17 @@ describe.skipIf(!hasLaneDb)(
 
       const detail = await authGet(tok.employee, `/notifications/${notif?.notification_id}`);
       expect(detail.status, JSON.stringify(detail.body)).toBe(200);
-      // Characterization test — LOCK IN thực trạng (KHÔNG phải hành vi mong muốn theo SPEC-08). Nếu migration/
-      // bridge được fix (WO riêng, ngoài scope QA-2), test này PHẢI đỏ ⇒ cập nhật thành
-      // `expect(detail.body.data.target.target_url).toBe(\`/tasks/${taskId}\`)`.
+      // S5-NOTI-FIX-1: deep-link đã sống — template global TASK_ASSIGNED có target_url_template '/tasks/{taskId}';
+      // engine render {taskId} từ payload commonPayload THẬT (task-actions.service.ts) ⇒ route nội bộ hợp lệ.
       expect(
         detail.body.data.target.target_url,
-        "QA2-CRIT-001: target_url PHẢI null theo thực trạng hiện tại (bug) — nếu field này khác null, migration đã được vá, cập nhật assertion.",
-      ).toBeNull();
+        "QA2-CRIT-001 đã vá (0497): target_url PHẢI = /tasks/{taskId} render thật.",
+      ).toBe(`/tasks/${taskId}`);
+      // target_module/type/id VẪN null — 0497 chỉ vá target_url_template (render), bridge KHÔNG set target_* cột
+      // riêng (QA2-CRIT-001 phần 2, ngoài scope S5-NOTI-FIX-1 — deep-link đủ dùng qua target_url).
       expect(detail.body.data.target.target_module).toBeNull();
 
-      // Cùng gap phản ánh trong dashboard NOTIFICATIONS widget item (fetchNotifications map targetUrl=n.target_url).
+      // Cùng deep-link phản ánh trong dashboard NOTIFICATIONS widget item (fetchNotifications map targetUrl=n.target_url).
       await direct.query(
         `DELETE FROM dashboard_widget_cache WHERE company_id=$1 AND cache_key LIKE '%:NOTIFICATIONS:%'`,
         [W.companyId],
@@ -438,7 +438,7 @@ describe.skipIf(!hasLaneDb)(
       }>;
       const widgetItem = widgetItems.find((i) => i.id === notif?.notification_id);
       expect(widgetItem, "notification mới phải nằm trong 5 item mới nhất của widget").toBeTruthy();
-      expect(widgetItem?.targetUrl).toBeNull();
+      expect(widgetItem?.targetUrl).toBe(`/tasks/${taskId}`);
     });
 
     // ── smoke ──────────────────────────────────────────────────────────────────────────────────────
