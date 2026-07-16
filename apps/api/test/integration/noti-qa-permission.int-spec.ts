@@ -554,7 +554,10 @@ describe.skipIf(!runDb)(
         sourceEntityType: "task",
         sourceEntityId,
         recipient: { mode: "UserIds", userIds: [recip1Id] },
-        payload: { taskTitle: "QA dedupe" },
+        // S5-NOTI-FIX-1: template global TASK_COMMENT_CREATED có target_url_template '/tasks/{taskId}' (mig 0497).
+        // Payload PHẢI có taskId (producer THẬT commentPayload luôn có) — thiếu ⇒ renderer giữ literal {taskId} →
+        // assertInternalTargetUrl 422. sourceEntityId CHÍNH là task id (sourceEntityType='task') ⇒ dùng lại.
+        payload: { taskId: sourceEntityId, taskTitle: "QA dedupe" },
       };
 
       const r1 = await api(nest)
@@ -592,7 +595,9 @@ describe.skipIf(!runDb)(
           sourceModule: "TASK",
           actorUserId: actorId,
           recipient: { mode: "UserIds", userIds: [actorId] },
-          payload: { taskTitle: "self-exclude" },
+          // S5-NOTI-FIX-1: taskId bắt buộc — template TASK_ASSIGNED '/tasks/{taskId}' (0497) render TRƯỚC vòng
+          // recipient; thiếu taskId ⇒ 422 dù recipient rỗng sau actor-exclusion. Producer THẬT luôn có taskId.
+          payload: { taskId: randomUUID(), taskTitle: "self-exclude" },
         });
       expect(res.status, JSON.stringify(res.body)).toBe(200);
       expect(res.body.data.createdCount).toBe(0);
