@@ -28,6 +28,11 @@
  *        trần. Test dưới đây (đã ĐẢO characterization — lane noti-fix2-tests) khoá hành vi ĐÚNG mới; xem
  *        `task-noti-e2e.int-spec.ts` test (6)/(7)/(8)/(8b) cho phần mention + addMember + edge project
  *        KHÔNG có code.
+ *        S5-NOTI-FIX-2 (lane notifix2-honest-tests, vòng SỬA sau Đội-3 fail): `mkTask()` TRƯỚC ĐÂY raw-SQL
+ *        INSERT `task_code` trực tiếp (bỏ qua service) ⇒ test xanh KHÔNG chứng minh codegen thật chạy (task
+ *        tạo qua POST /tasks THẬT từng có task_code=NULL, trước lane notifix2-taskcode-codegen). Nay
+ *        `mkTask()` tạo qua `POST /tasks` THẬT (create:task); `taskCodeOf()` đọc lại `tasks.task_code` THẬT
+ *        (do SequenceService cấp) để so khớp — KHÔNG còn literal `"TSK-QA2-XXX"` giả.
  *   E2 — dashboard MY_TASKS phản ánh CONTENT task mới sau event thật (S4-INT-2-FIX-1 chỉ chứng minh cache-row
  *        bị invalidate = boolean; test này đi tiếp: GET LẠI sau invalidate → data thật chứa task mới).
  *   E3 — dashboard NOTIFICATIONS: lỗ hổng wiring ĐÃ được tài liệu hoá tại chỗ khai báo
@@ -112,13 +117,29 @@ describe.skipIf(!hasLaneDb)(
       return r.rows[0].id as string;
     }
 
-    async function mkTask(title: string, code: string): Promise<string> {
-      const r = await direct.query(
-        `INSERT INTO tasks (company_id, task_type, title, task_code, task_status, creator_user_id)
-         VALUES ($1,'office',$2,$3,'Todo',$4) RETURNING id`,
-        [W.companyId, title, code, managerUser],
-      );
-      return r.rows[0].id as string;
+    /**
+     * S5-NOTI-FIX-2 (lane notifix2-honest-tests) — tạo task qua `POST /tasks` THẬT (manager, create:task) để
+     * `task_code` do SequenceService CẤP THẬT (mirror notifix2-taskcode-codegen) — KHÔNG raw-SQL inject
+     * task_code (tránh false-green QA2-CRIT-002: Team-3 finding vòng trước là inject bỏ qua đường thật).
+     */
+    async function mkTask(title: string): Promise<string> {
+      const res = await authPost(tok.manager, "/tasks").send({ title });
+      expect(res.status, `mkTask POST /tasks: ${JSON.stringify(res.body)}`).toBe(201);
+      return res.body.data.id as string;
+    }
+
+    /** task_code THẬT (đọc lại DB) — so khớp nội dung render, KHÔNG phải giá trị inject. */
+    async function taskCodeOf(taskId: string): Promise<string> {
+      const r = await direct.query(`SELECT task_code AS "taskCode" FROM tasks WHERE id=$1`, [
+        taskId,
+      ]);
+      const code = r.rows[0]?.taskCode as string | null;
+      if (!code) {
+        throw new Error(
+          `QA2-CRIT-002 regression: task ${taskId} thiếu task_code (codegen POST /tasks chưa chạy đúng).`,
+        );
+      }
+      return code;
     }
 
     async function grant(userId: string, label: string, pairs: Pair[]): Promise<void> {
@@ -196,6 +217,9 @@ describe.skipIf(!hasLaneDb)(
         ["update-status", "task", "Company"],
         ["read", "task", "Company"],
         ["comment", "task", "Company"],
+        // S5-NOTI-FIX-2 (lane notifix2-honest-tests) — mkTask() nay tạo qua POST /tasks THẬT (không còn
+        // raw-SQL inject task_code) ⇒ manager cần create:task để gọi endpoint.
+        ["create", "task", "Company"],
       ]);
       await grant(employeeUser, "employee", [
         ["read", "task", "Own"],
@@ -231,7 +255,8 @@ describe.skipIf(!hasLaneDb)(
 
     // ── E1. Flow §15.1 xuyên suốt: assign → notify → GET → mark-read → unread giảm ──────────────────
     it("E1: manager giao task cho employee → notification TASK_ASSIGNED đúng recipient → GET /notifications → mark-read → unread-count giảm", async () => {
-      const taskId = await mkTask("Viết báo cáo quý", "TSK-QA2-E1");
+      const taskId = await mkTask("Viết báo cáo quý");
+      const taskCode = await taskCodeOf(taskId);
 
       const before = await authGet(tok.employee, "/notifications/unread-count");
       expect(before.status).toBe(200);
@@ -263,7 +288,7 @@ describe.skipIf(!hasLaneDb)(
       // NỘI DUNG interpolate — XÁC NHẬN ĐÚNG (thực nghiệm, xem doc-block đầu file): 0490 đã vá template
       // TASK_ASSIGNED sang camelCase khớp payload thật ⇒ task_code/task_title được điền THẬT, KHÔNG còn
       // placeholder trần. (Đối lập trực tiếp với E1b — TASK_COMMENT_CREATED/TASK_MENTIONED CHƯA được vá.)
-      expect(notif?.short_content.includes("TSK-QA2-E1")).toBe(true);
+      expect(notif?.short_content.includes(taskCode)).toBe(true);
       expect(notif?.short_content.includes("{task_code}")).toBe(false);
       expect(notif?.short_content.includes("{task_title}")).toBe(false);
 
@@ -278,7 +303,8 @@ describe.skipIf(!hasLaneDb)(
 
     // ── E1b. QA2-CRIT-002 ĐÃ VÁ (S5-NOTI-FIX-2) — TASK_COMMENT_CREATED/TASK_MENTIONED render ĐỦ ─────
     it("E1b (QA2-CRIT-002 FIXED by S5-NOTI-FIX-2): comment + mention → notification body điền THẬT {task_code}/{actor_name}, KHÔNG còn placeholder", async () => {
-      const taskId = await mkTask("Task cho comment/mention", "TSK-QA2-E1B");
+      const taskId = await mkTask("Task cho comment/mention");
+      const taskCode = await taskCodeOf(taskId);
       const assignRes = await authPost(tok.manager, `/tasks/${taskId}/assign`).send({
         assigneeEmployeeId: employeeEmp,
       });
@@ -312,7 +338,7 @@ describe.skipIf(!hasLaneDb)(
       expect(
         notif?.short_content,
         "QA2-CRIT-002 đã vá: short_content PHẢI chứa task_code THẬT, KHÔNG còn {task_code}",
-      ).toContain("TSK-QA2-E1B");
+      ).toContain(taskCode);
       expect(notif?.short_content.includes("{task_code}")).toBe(false);
       expect(notif?.short_content.includes("{")).toBe(false);
 
@@ -323,7 +349,7 @@ describe.skipIf(!hasLaneDb)(
       // render CẢ 2 giá trị THẬT, KHÔNG còn placeholder trần. Nếu ai revert producer, test này PHẢI đỏ.
       const detail = await authGet(tok.employee, `/notifications/${notif?.notification_id}`);
       expect(detail.status, JSON.stringify(detail.body)).toBe(200);
-      expect(detail.body.data.content).toContain("TSK-QA2-E1B");
+      expect(detail.body.data.content).toContain(taskCode);
       // actor_name = users.full_name của manager — set tường minh (MANAGER_FULL_NAME) vì seedUser() KHÔNG
       // tự set full_name (xem ghi chú đầu file).
       expect(detail.body.data.content).toContain(MANAGER_FULL_NAME);
@@ -339,7 +365,7 @@ describe.skipIf(!hasLaneDb)(
         mentionNotif,
         `TASK_MENTIONED notification phải xuất hiện (employee được mention): ${JSON.stringify(items)}`,
       ).toBeTruthy();
-      expect(mentionNotif?.short_content).toContain("TSK-QA2-E1B");
+      expect(mentionNotif?.short_content).toContain(taskCode);
       expect(mentionNotif?.short_content).toContain(MANAGER_FULL_NAME);
       expect(mentionNotif?.short_content.includes("{")).toBe(false);
 
@@ -348,7 +374,7 @@ describe.skipIf(!hasLaneDb)(
         `/notifications/${mentionNotif?.notification_id}`,
       );
       expect(mentionDetail.status, JSON.stringify(mentionDetail.body)).toBe(200);
-      expect(mentionDetail.body.data.content).toContain("TSK-QA2-E1B");
+      expect(mentionDetail.body.data.content).toContain(taskCode);
       expect(mentionDetail.body.data.content).toContain(MANAGER_FULL_NAME);
       expect(mentionDetail.body.data.content.includes("{")).toBe(false);
     });
@@ -370,7 +396,7 @@ describe.skipIf(!hasLaneDb)(
       const baselineTotal = base.body.data.data.summary.total as number;
 
       const taskTitle = `Chuẩn bị KPI tháng ${Date.now()}`;
-      const taskId = await mkTask(taskTitle, "TSK-QA2-E2");
+      const taskId = await mkTask(taskTitle);
       const assignRes = await authPost(tok.manager, `/tasks/${taskId}/assign`).send({
         assigneeEmployeeId: employeeEmp,
       });
@@ -403,7 +429,7 @@ describe.skipIf(!hasLaneDb)(
       const baselineUnread = warm.body.data.data.summary.unread as number;
 
       // Notification mới THẬT qua bridge (task assign khác).
-      const taskId = await mkTask("Việc cần chú ý", "TSK-QA2-E3");
+      const taskId = await mkTask("Việc cần chú ý");
       const assignRes = await authPost(tok.manager, `/tasks/${taskId}/assign`).send({
         assigneeEmployeeId: employeeEmp,
       });
@@ -440,7 +466,7 @@ describe.skipIf(!hasLaneDb)(
 
     // ── E4. QA2-CRIT-001 ĐÃ VÁ (S5-NOTI-FIX-1 / migration 0497) — deep-link target_url render THẬT ──────
     it("E4 (QA2-CRIT-001 FIXED by 0497): target_url = /tasks/{taskId} cho TASK_ASSIGNED (GET /notifications/:id VÀ dashboard NOTIFICATIONS widget) — migration 0497 backfill target_url_template '/tasks/{taskId}' cho template global", async () => {
-      const taskId = await mkTask("Task cần deep-link", "TSK-QA2-E4");
+      const taskId = await mkTask("Task cần deep-link");
       const assignRes = await authPost(tok.manager, `/tasks/${taskId}/assign`).send({
         assigneeEmployeeId: employeeEmp,
       });
