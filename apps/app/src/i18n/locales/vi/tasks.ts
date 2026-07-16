@@ -516,6 +516,7 @@ export default {
     kanban: {
       columnEmpty: "Không có công việc.",
       readOnlyHint: "Bạn chỉ có thể xem — không có quyền kéo-thả đổi trạng thái.",
+      unassigned: "Chưa giao",
       forbidden: {
         title: "Không có quyền truy cập",
         description: "Bạn không có quyền xem Kanban board.",
@@ -534,6 +535,18 @@ export default {
         notFound: "Không tìm thấy công việc.",
         server: "Lỗi hệ thống. Vui lòng thử lại sau.",
         generic: "Đã xảy ra lỗi. Vui lòng thử lại.",
+      },
+      // S5-FE-TASK-5 — badge tín hiệu trên card (SPEC-06 §13.8) + rail lọc theo assignee/"Chưa giao"
+      // (suy từ tập task của board, không gọi API member mới).
+      badges: {
+        comments: "{{count}} bình luận",
+        attachments: "{{count}} tệp đính kèm",
+        checklist: "{{done}}/{{total}} hạng mục checklist hoàn thành",
+      },
+      filters: {
+        label: "Lọc theo người phụ trách:",
+        all: "Tất cả",
+        unassigned: "Chưa giao",
       },
     },
   },

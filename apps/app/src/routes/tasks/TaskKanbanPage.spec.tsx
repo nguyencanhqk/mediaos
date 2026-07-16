@@ -1,10 +1,10 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, within, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore, taskCollabApi, ApiError } from "@mediaos/web-core";
 import { TaskKanbanPage } from "./TaskKanbanPage";
-import type { TaskCoreResponseDto, TaskKanbanBoardDto } from "@mediaos/contracts";
+import type { TaskKanbanBoardDto, TaskKanbanCardDto } from "@mediaos/contracts";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -29,7 +29,7 @@ function renderWithQuery(ui: React.ReactElement) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
-const MOCK_TASK: TaskCoreResponseDto = {
+const BASE_TASK: TaskKanbanCardDto = {
   id: "task-001",
   companyId: "co-001",
   title: "Chuẩn bị báo cáo tuần",
@@ -54,13 +54,45 @@ const MOCK_TASK: TaskCoreResponseDto = {
   updatedAt: "2026-07-01T00:00:00.000Z",
 };
 
+// Card giàu tín hiệu (S5-FE-TASK-5) — commentCount/attachmentCount/checklistDone/checklistTotal > 0.
+const TASK_WITH_SIGNALS: TaskKanbanCardDto = {
+  ...BASE_TASK,
+  id: "task-002",
+  title: "Soạn thảo hợp đồng",
+  mainAssigneeEmployeeId: "emp-002",
+  assigneeName: "Trần Thị B",
+  commentCount: 3,
+  attachmentCount: 2,
+  checklistDone: 1,
+  checklistTotal: 4,
+};
+
+// Task chưa giao (mainAssigneeEmployeeId null) — dùng cho lọc "Chưa giao".
+const TASK_UNASSIGNED: TaskKanbanCardDto = {
+  ...BASE_TASK,
+  id: "task-003",
+  title: "Việc chưa có người nhận",
+  mainAssigneeEmployeeId: null,
+  assigneeName: null,
+};
+
+// Task Done — style muted + gạch tiêu đề.
+const TASK_DONE: TaskKanbanCardDto = {
+  ...BASE_TASK,
+  id: "task-004",
+  title: "Đã hoàn thành xong việc",
+  status: "Done",
+  mainAssigneeEmployeeId: "emp-001",
+  assigneeName: "Nguyễn Văn A",
+};
+
 const MOCK_BOARD: TaskKanbanBoardDto = {
   projectId: "proj-001",
   columns: [
-    { status: "Todo", tasks: [MOCK_TASK] },
+    { status: "Todo", tasks: [BASE_TASK, TASK_WITH_SIGNALS, TASK_UNASSIGNED] },
     { status: "In Progress", tasks: [] },
     { status: "In Review", tasks: [] },
-    { status: "Done", tasks: [] },
+    { status: "Done", tasks: [TASK_DONE] },
     { status: "Cancelled", tasks: [] },
   ],
 };
@@ -169,5 +201,103 @@ describe("TaskKanbanPage", () => {
     await waitFor(() =>
       expect(screen.getByText(/không thể tải kanban board/i)).toBeInTheDocument(),
     );
+  });
+
+  // ── S5-FE-TASK-5: badge tín hiệu (comment/attachment/checklist) ─────────────
+  describe("card signal badges", () => {
+    it("renders comment/attachment/checklist badges only when counts > 0", async () => {
+      setCapabilities({ "view-kanban:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD);
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+      await waitFor(() => expect(screen.getByText("Soạn thảo hợp đồng")).toBeInTheDocument());
+
+      const signalCard = screen.getByTestId("kanban-card-task-002");
+      expect(within(signalCard).getByTestId("kanban-card-badge-comments")).toHaveTextContent("3");
+      expect(within(signalCard).getByTestId("kanban-card-badge-attachments")).toHaveTextContent(
+        "2",
+      );
+      expect(within(signalCard).getByTestId("kanban-card-badge-checklist")).toHaveTextContent(
+        "1/4",
+      );
+
+      // Card với counts = 0/undefined KHÔNG render badge nào.
+      const zeroCard = screen.getByTestId("kanban-card-task-001");
+      expect(within(zeroCard).queryByTestId("kanban-card-badge-comments")).not.toBeInTheDocument();
+      expect(
+        within(zeroCard).queryByTestId("kanban-card-badge-attachments"),
+      ).not.toBeInTheDocument();
+      expect(within(zeroCard).queryByTestId("kanban-card-badge-checklist")).not.toBeInTheDocument();
+    });
+
+    it("shows avatar initials for assignee instead of raw name text", async () => {
+      setCapabilities({ "view-kanban:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD);
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+      await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+
+      const card = screen.getByTestId("kanban-card-task-001");
+      // initialsFrom("Nguyễn Văn A") = "NA" — thay cho hiển thị chữ tên đầy đủ trên card.
+      expect(within(card).getByText("NA")).toBeInTheDocument();
+      expect(within(card).queryByText("Nguyễn Văn A")).not.toBeInTheDocument();
+    });
+
+    it("applies muted + strikethrough style for Done/Cancelled cards", async () => {
+      setCapabilities({ "view-kanban:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD);
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+      await waitFor(() => expect(screen.getByText("Đã hoàn thành xong việc")).toBeInTheDocument());
+
+      const doneTitle = screen.getByText("Đã hoàn thành xong việc");
+      expect(doneTitle).toHaveClass("line-through");
+
+      const todoTitle = screen.getByText("Chuẩn bị báo cáo tuần");
+      expect(todoTitle).not.toHaveClass("line-through");
+    });
+  });
+
+  // ── S5-FE-TASK-5: lọc theo assignee/"Chưa giao" ──────────────────────────────
+  describe("assignee filter rail", () => {
+    it("filters cards by selected assignee and by unassigned, resettable via 'Tất cả'", async () => {
+      setCapabilities({ "view-kanban:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_BOARD);
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+      await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+
+      const todoColumn = screen.getByTestId("kanban-column-Todo");
+      // Mặc định ("Tất cả") — cả 3 task trong cột Todo đều hiển thị.
+      expect(within(todoColumn).getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument();
+      expect(within(todoColumn).getByText("Soạn thảo hợp đồng")).toBeInTheDocument();
+      expect(within(todoColumn).getByText("Việc chưa có người nhận")).toBeInTheDocument();
+
+      // Lọc theo emp-002 (Trần Thị B) — chỉ còn task-002 trong cột.
+      fireEvent.click(screen.getByTestId("kanban-filter-assignee-emp-002"));
+      await waitFor(() =>
+        expect(
+          within(screen.getByTestId("kanban-column-Todo")).queryByText("Chuẩn bị báo cáo tuần"),
+        ).not.toBeInTheDocument(),
+      );
+      expect(
+        within(screen.getByTestId("kanban-column-Todo")).getByText("Soạn thảo hợp đồng"),
+      ).toBeInTheDocument();
+
+      // Lọc "Chưa giao" — chỉ còn task-003.
+      fireEvent.click(screen.getByTestId("kanban-filter-unassigned"));
+      await waitFor(() =>
+        expect(
+          within(screen.getByTestId("kanban-column-Todo")).getByText("Việc chưa có người nhận"),
+        ).toBeInTheDocument(),
+      );
+      expect(
+        within(screen.getByTestId("kanban-column-Todo")).queryByText("Soạn thảo hợp đồng"),
+      ).not.toBeInTheDocument();
+
+      // "Tất cả" — reset về đầy đủ.
+      fireEvent.click(screen.getByTestId("kanban-filter-all"));
+      await waitFor(() =>
+        expect(
+          within(screen.getByTestId("kanban-column-Todo")).getByText("Chuẩn bị báo cáo tuần"),
+        ).toBeInTheDocument(),
+      );
+    });
   });
 });
