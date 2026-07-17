@@ -340,3 +340,60 @@ export const meAvatarSchema = z.object({
   expiresAt: z.string().datetime(),
 });
 export type MeAvatar = z.infer<typeof meAvatarSchema>;
+
+// ─── S5-ME-BE-3 — Hoạt động bảo mật own-scope (GET /api/v1/me/security/activity) ──
+//
+// SPEC-09 ME-FUNC-016 §14.2/§17 + §10.6 (IP mask). DTO TỐI GIẢN cố ý: thời gian · loại sự kiện ·
+// thiết bị rút gọn · IP đã mask — KHÔNG email/failure_reason/session_id/actor/metadata/payload/raw
+// IP/raw UA (BẤT BIẾN #3 + §17.1: server mask, client không bao giờ nhận raw).
+
+export const ME_SECURITY_ACTIVITY_PAGE_SIZE_DEFAULT = 20;
+export const ME_SECURITY_ACTIVITY_PAGE_SIZE_MAX = 50;
+/** Cửa sổ lịch sử tối đa (ngày) — service CLAMP from_date về now−90d (client không kéo vô hạn). */
+export const ME_SECURITY_ACTIVITY_MAX_DAYS = 90;
+
+/** Nguồn 1 dòng activity: login_logs ('login') hoặc user_security_events ('security_event'). */
+export const ME_SECURITY_ACTIVITY_SOURCES = ["login", "security_event"] as const;
+export const meSecurityActivitySourceSchema = z.enum(ME_SECURITY_ACTIVITY_SOURCES);
+export type MeSecurityActivitySource = z.infer<typeof meSecurityActivitySourceSchema>;
+
+/**
+ * Query GET /api/v1/me/security/activity — CHỈ phân trang + khoảng thời gian. CỐ Ý KHÔNG có
+ * user_id/employee_id (chống IDOR §14.4 — owner 100% từ token) và CỐ Ý KHÔNG `.strict()`:
+ * key lạ client gửi kèm (vd ?user_id=<B>) bị STRIP im lặng, hành vi không đổi (mirror
+ * loginLogListQuerySchema — KHÔNG copy `.strict()` từ mePreferences*).
+ */
+export const meSecurityActivityQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    per_page: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(ME_SECURITY_ACTIVITY_PAGE_SIZE_MAX)
+      .default(ME_SECURITY_ACTIVITY_PAGE_SIZE_DEFAULT),
+    from_date: z.coerce.date().optional(),
+    to_date: z.coerce.date().optional(),
+  })
+  .refine((q) => !q.from_date || !q.to_date || q.from_date.getTime() <= q.to_date.getTime(), {
+    message: "from_date phải <= to_date.",
+    path: ["from_date"],
+  });
+export type MeSecurityActivityQuery = z.infer<typeof meSecurityActivityQuerySchema>;
+
+/**
+ * 1 dòng hoạt động bảo mật của CHÍNH user. eventType: nguồn login map LOGIN_SUCCESS/LOGIN_FAILED/
+ * LOGIN_BLOCKED; nguồn security_event giữ event_type nguyên trạng (PASSWORD_CHANGED, USER_LOCKED…).
+ * device = nhãn rút gọn từ allowlist (vd "Chrome trên Windows") — KHÔNG raw UA. ipMasked = IP đã
+ * mask server-side (§10.6) — KHÔNG raw IP. severity chỉ có ở security_event (login → null).
+ */
+export const meSecurityActivityItemSchema = z.object({
+  id: z.string().uuid(),
+  source: meSecurityActivitySourceSchema,
+  eventType: z.string(),
+  severity: z.string().nullable(),
+  device: z.string().nullable(),
+  ipMasked: z.string().nullable(),
+  createdAt: z.string().datetime({ offset: true }),
+});
+export type MeSecurityActivityItem = z.infer<typeof meSecurityActivityItemSchema>;
