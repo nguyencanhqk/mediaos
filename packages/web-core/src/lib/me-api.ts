@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   meOverviewSchema,
   type MeOverview,
@@ -12,8 +13,23 @@ import {
   mePreferencesSchema,
   type MePreferences,
   type MePreferencesAppearancePatch,
+  meSecurityActivityItemSchema,
+  type MeSecurityActivityItem,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
+import { buildQueryString } from "./api-params";
+
+/**
+ * Query GET /me/security/activity — CHỈ phân trang + khoảng thời gian (whitelist tường minh). CỐ Ý
+ * KHÔNG có user_id/employee_id: owner resolve 100% từ token, client KHÔNG được chỉ định chủ sở hữu
+ * (chống IDOR, SPEC-09 §14.4). Ngày = chuỗi ISO (BE z.coerce.date() ở meSecurityActivityQuerySchema).
+ */
+export interface MeSecurityActivityQueryParams {
+  page?: number;
+  per_page?: number;
+  from_date?: string;
+  to_date?: string;
+}
 
 /**
  * S5-ME-FE-1/FE-3 — ME API client (Personal Hub, SPEC-09 §14.2/§15.2 / API-11 §5). Mirror BE `MeController`
@@ -56,4 +72,31 @@ export const meApi = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
+
+  /**
+   * GET /me/security/activity — hoạt động bảo mật CỦA CHÍNH user (login_logs + user_security_events hợp
+   * nhất, ĐÃ mask). ME-SCREEN-008 (S5-ME-BE-3). Owner resolve 100% từ token — client CHỈ gửi phân trang
+   * + khoảng thời gian, TUYỆT ĐỐI KHÔNG user_id/employee_id (chống IDOR §14.4). Whitelist tường minh 4
+   * param (KHÔNG spread query) ⇒ owner-param caller cố chèn bị LOẠI im lặng ngay tầng client.
+   *
+   * Response parse `z.array(meSecurityActivityItemSchema)` — apiFetch/unwrapEnvelope CHỈ trả field `data`
+   * (mảng), block `pagination` sibling BỊ BỎ (giới hạn đã biết, mirror myNotificationApi.list /
+   * fileAccessLogApi.list): tổng số trang KHÔNG khả dụng ở client ⇒ page dùng heuristic full-page cho
+   * has-next. Shape sai → ném ngay (không âm thầm render dữ liệu bảo mật sai).
+   */
+  getSecurityActivity: (
+    query?: MeSecurityActivityQueryParams,
+  ): Promise<MeSecurityActivityItem[]> => {
+    // WHITELIST tường minh — chỉ 4 param phân trang/thời gian. KHÔNG spread `query` (owner-param
+    // user_id/employee_id caller cố chèn bị loại — owner 100% từ token, §14.4).
+    const safeQuery: Record<string, unknown> = {};
+    if (query?.page !== undefined) safeQuery.page = query.page;
+    if (query?.per_page !== undefined) safeQuery.per_page = query.per_page;
+    if (query?.from_date !== undefined) safeQuery.from_date = query.from_date;
+    if (query?.to_date !== undefined) safeQuery.to_date = query.to_date;
+    return apiFetch(
+      `/me/security/activity${buildQueryString(safeQuery)}`,
+      z.array(meSecurityActivityItemSchema),
+    );
+  },
 };

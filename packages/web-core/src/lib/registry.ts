@@ -1226,6 +1226,77 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 71,
   },
+  // S5-ME-FE-2 — APPEND 6 route "Hồ sơ của tôi / Tài khoản & bảo mật" (SPEC-09 §8.1, ME-SCREEN-002..008).
+  // Gate GIỮ literal `access:me` (KHÔNG qua PERMISSION_CODE_TO_PAIR — cùng kỹ thuật me.overview): 5 màn
+  // TÁI DÙNG page sẵn có (MyProfilePage/MyChangeRequestPage/AccountProfilePage/ChangePasswordPage/
+  // AccountSessionsPage) mount trong ME workspace; me.security.activity là màn MỚI đọc GET /me/security/
+  // activity (BE-3) — bảng read-only đã mask, KHÔNG cần cặp module nguồn.
+  {
+    routeKey: "me.profile",
+    path: "/me/profile",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "ME-SCREEN-002",
+    titleKey: "routeTitle.meProfile",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: true,
+    order: 72,
+  },
+  {
+    routeKey: "me.profile.change-requests",
+    path: "/me/profile/change-requests",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "ME-SCREEN-003",
+    titleKey: "routeTitle.meProfileChangeRequests",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: true,
+    order: 73,
+  },
+  {
+    routeKey: "me.account",
+    path: "/me/account",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "ME-SCREEN-005",
+    titleKey: "routeTitle.meAccount",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: true,
+    order: 74,
+  },
+  {
+    routeKey: "me.security.password",
+    path: "/me/security/password",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "ME-SCREEN-006",
+    titleKey: "routeTitle.meSecurityPassword",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: true,
+    order: 75,
+  },
+  {
+    routeKey: "me.security.sessions",
+    path: "/me/security/sessions",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "ME-SCREEN-007",
+    titleKey: "routeTitle.meSecuritySessions",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: true,
+    order: 76,
+  },
+  {
+    routeKey: "me.security.activity",
+    path: "/me/security/activity",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "ME-SCREEN-008",
+    titleKey: "routeTitle.meSecurityActivity",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: true,
+    order: 77,
+  },
 
   // System
   {
