@@ -276,6 +276,17 @@ describe("meKeys (S5-ME-FE-3 append)", () => {
     expect(meKeys.preferences()).toEqual(meKeys.preferences());
     expect(meKeys.preferences()).not.toEqual(meKeys.overview());
   });
+
+  // S5-ME-FE-2 — securityActivity(query) (Hoạt động bảo mật, ME-SCREEN-008): namespace dưới root 'me',
+  // param'd theo query (page/per_page/from_date/to_date) — key khác nhau theo trang.
+  it("securityActivity(query) nằm dưới root 'me' + khác nhau theo query", () => {
+    const key = meKeys.securityActivity({ page: 1 });
+    expect(key[0]).toBe("me");
+    expect(key).toContain("security-activity");
+    expect(meKeys.securityActivity({ page: 1 })).toEqual(meKeys.securityActivity({ page: 1 }));
+    expect(meKeys.securityActivity({ page: 1 })).not.toEqual(meKeys.securityActivity({ page: 2 }));
+    expect(meKeys.securityActivity()).not.toEqual(meKeys.overview());
+  });
 });
 
 describe("notificationPreferenceKeys", () => {

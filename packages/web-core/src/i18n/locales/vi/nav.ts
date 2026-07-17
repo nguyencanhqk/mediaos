@@ -104,6 +104,13 @@ export default {
     meNotifications: "Thông báo của tôi",
     mePreferencesNotifications: "Cài đặt thông báo",
     mePreferencesAppearance: "Giao diện & hiển thị",
+    // S5-ME-FE-2 — 6 route "Hồ sơ của tôi / Tài khoản & bảo mật" (ME-SCREEN-002..008).
+    meProfile: "Hồ sơ của tôi",
+    meProfileChangeRequests: "Yêu cầu thay đổi hồ sơ",
+    meAccount: "Tài khoản",
+    meSecurityPassword: "Đổi mật khẩu",
+    meSecuritySessions: "Phiên đăng nhập",
+    meSecurityActivity: "Hoạt động bảo mật",
     forbidden: "Không có quyền truy cập",
     notFound: "Không tìm thấy trang",
   },

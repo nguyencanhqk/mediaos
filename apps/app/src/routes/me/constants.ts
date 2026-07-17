@@ -11,8 +11,11 @@
 export const ME_ACCESS_PAIR = { action: "access", resourceType: "me" } as const;
 
 export const ME_QUICK_ACTION_PATHS = {
-  EDIT_PROFILE: "/hr/me",
-  CHANGE_PASSWORD: "/account/change-password",
+  // S5-ME-FE-2 — trỏ vào route ME workspace (/me/profile · /me/security/password) nay đã build (TÁI DÙNG
+  // MyProfilePage/ChangePasswordPage); route cũ /hr/me và /account/change-password GIỮ hoạt động song song
+  // (KHÔNG gãy bookmark/deep-link — đây chỉ đổi đích deep-link của "Tiện ích" ở Tổng quan ME).
+  EDIT_PROFILE: "/me/profile",
+  CHANGE_PASSWORD: "/me/security/password",
   CHECK_IN_OUT: "/attendance/today",
   // S5-ME-FE-3 — deep-link ME-SCREEN-009 (Chấm công của tôi) tới bảng công đầy đủ (route thật đã build).
   MY_ATTENDANCE_RECORDS: "/attendance/my-records",

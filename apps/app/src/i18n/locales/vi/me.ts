@@ -190,4 +190,26 @@ export default {
     inherited: "Theo mặc định hệ thống",
     readOnlyNote: "Chưa thể tuỳ chỉnh ở giai đoạn này — tính năng sẽ mở khi công ty cho phép.",
   },
+  // ─── S5-ME-FE-2 — ME-SCREEN-008 "Hoạt động bảo mật" (route "/me/security/activity") ────────────────
+  // Đọc GET /me/security/activity (meApi.getSecurityActivity, S5-ME-BE-3): bảng READ-ONLY thời gian/loại
+  // sự kiện/thiết bị/IP đã mask, phân trang server page/per_page. BẤT BIẾN #3: KHÔNG có khoá nào cho
+  // raw IP/UA/metadata/payload/email — component chỉ render field server đã mask (ipMasked/device).
+  securityActivity: {
+    title: "Hoạt động bảo mật",
+    description: "Lịch sử đăng nhập và sự kiện bảo mật của tài khoản bạn — chỉ đọc.",
+    columns: {
+      time: "Thời gian",
+      eventType: "Loại sự kiện",
+      device: "Thiết bị",
+      ip: "Địa chỉ IP",
+    },
+    empty: {
+      title: "Chưa có hoạt động bảo mật",
+      description: "Không có bản ghi nào trong khoảng thời gian này.",
+    },
+    error: {
+      title: "Không thể tải hoạt động bảo mật",
+      description: "Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.",
+    },
+  },
 };
