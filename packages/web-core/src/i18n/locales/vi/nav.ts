@@ -82,7 +82,8 @@ export default {
     // S2-FE-FND-5 (lane FE batch C).
     systemSequences: "Bộ đếm mã",
     systemSeeds: "Trạng thái Seed",
-    systemPublicHolidays: "Ngày nghỉ lễ",
+    // S5-LEAVE-HOLIDAYS-MOVE-1: systemPublicHolidays ĐÃ GỠ — màn re-home sang leavePublicHolidays
+    // (route cũ /system/public-holidays chỉ còn redirect thuần, không mount page/title).
     systemHealth: "Tình trạng hệ thống",
     // S2-FE-FND-7 — routeTitle cho 2 màn wired sẵn (S2-FE-FND-6) còn thiếu key i18n.
     systemRetention: "Chính sách lưu trữ",
