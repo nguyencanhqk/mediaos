@@ -61,6 +61,9 @@ export const orgTreeNodeSchema: z.ZodType<OrgTreeNode> = z.lazy(() =>
     code: z.string().nullable().optional(),
     status: orgUnitStatusEnum,
     headUserName: z.string().nullable().optional(),
+    // S5-HR-ORGCHART-BE-1 (additive): headcount employee ACTIVE trực tiếp trong đơn vị (không rollup subtree).
+    // OPTIONAL để additive thật sự (không phá literal `OrgTreeNode` cũ ở consumer); BE luôn populate (?? 0).
+    employeeCount: z.number().int().nonnegative().optional(),
     children: z.array(orgTreeNodeSchema),
   }),
 );
@@ -71,6 +74,7 @@ export type OrgTreeNode = {
   code?: string | null;
   status: "active" | "inactive";
   headUserName?: string | null;
+  employeeCount?: number;
   children: OrgTreeNode[];
 };
 
