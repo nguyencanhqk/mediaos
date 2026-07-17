@@ -1542,6 +1542,44 @@ const meAppearanceRoute = makeModuleRoute(
   MeAppearancePage,
 );
 
+// S5-ME-FE-2 — APPEND 6 route "Hồ sơ của tôi/Tài khoản & bảo mật" (ME-SCREEN-002..008, SPEC-09 §8.1).
+// 5 route ĐẦU TÁI DÙNG import-only page ĐÃ khai báo ở trên (MyProfilePage/MyChangeRequestPage/
+// AccountProfilePage/ChangePasswordPage/AccountSessionsPage — CÙNG hằng số lazy component với route
+// cũ /hr/me·/hr/me/change-request·/account/*, KHÔNG import lại/copy-paste) — chỉ mount lại trong ME
+// workspace qua makeModuleRoute (gate ROUTE_REGISTRY literal access:me). Route cũ GIỮ NGUYÊN hoạt động
+// (KHÔNG gãy bookmark/deep-link). me.security.activity là màn MỚI (MeSecurityActivityPage).
+const meProfileRoute = makeModuleRoute("/me/profile", "me.profile", "ME", MyProfilePage);
+const meProfileChangeRequestsRoute = makeModuleRoute(
+  "/me/profile/change-requests",
+  "me.profile.change-requests",
+  "ME",
+  MyChangeRequestPage,
+);
+const meAccountRoute = makeModuleRoute("/me/account", "me.account", "ME", AccountProfilePage);
+const meSecurityPasswordRoute = makeModuleRoute(
+  "/me/security/password",
+  "me.security.password",
+  "ME",
+  ChangePasswordPage,
+);
+const meSecuritySessionsRoute = makeModuleRoute(
+  "/me/security/sessions",
+  "me.security.sessions",
+  "ME",
+  AccountSessionsPage,
+);
+const MeSecurityActivityPage = React.lazy(() =>
+  import("@/routes/me/MeSecurityActivityPage").then((m) => ({
+    default: m.MeSecurityActivityPage,
+  })),
+);
+const meSecurityActivityRoute = makeModuleRoute(
+  "/me/security/activity",
+  "me.security.activity",
+  "ME",
+  MeSecurityActivityPage,
+);
+
 // System / Foundation — /system landing THAY ModulePlaceholder = System Overview (S2-FE-FND-1).
 const systemRoute = makeModuleRoute("/system", "system.overview", "FOUNDATION", SystemOverviewPage);
 
@@ -2066,6 +2104,12 @@ const routeTree = rootRoute.addChildren([
   meNotificationsRoute,
   meNotificationPreferencesRoute,
   meAppearanceRoute,
+  meProfileRoute,
+  meProfileChangeRequestsRoute,
+  meAccountRoute,
+  meSecurityPasswordRoute,
+  meSecuritySessionsRoute,
+  meSecurityActivityRoute,
   systemRoute,
   systemCompanyRoute,
   systemCompanySettingsRoute,

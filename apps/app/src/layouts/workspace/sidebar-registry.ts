@@ -888,6 +888,71 @@ export const ME_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 40,
     requiredAnyPermissions: ["access:me"],
   },
+  // S5-ME-FE-2 — APPEND 2 nhóm "Hồ sơ của tôi"/"Tài khoản & bảo mật" (§8.1, ME-SCREEN-002..008). 5 màn
+  // TÁI DÙNG page sẵn có (MyProfilePage/MyChangeRequestPage/AccountProfilePage/ChangePasswordPage/
+  // AccountSessionsPage) mount trong ME workspace qua ROUTE_REGISTRY "me.profile"/…; icon CHỌN TRONG
+  // DynamicIcon.ICON_MAP đã có sẵn (tránh fallback Circle, cùng ghi chú "Giao diện" ở trên) — KHÔNG
+  // "file-edit" (dùng ở HR_SIDEBAR/ATT_SIDEBAR nhưng KHÔNG map trong ICON_MAP, ngoài phạm vi lane này).
+  {
+    sidebarKey: "me.profile",
+    moduleCode: "ME",
+    label: "Hồ sơ của tôi",
+    path: "/me/profile",
+    icon: "user",
+    group: "Hồ sơ của tôi",
+    order: 45,
+    requiredAnyPermissions: ["access:me"],
+  },
+  {
+    sidebarKey: "me.profile.change-requests",
+    moduleCode: "ME",
+    label: "Yêu cầu cập nhật hồ sơ",
+    path: "/me/profile/change-requests",
+    icon: "clipboard-list",
+    group: "Hồ sơ của tôi",
+    order: 46,
+    requiredAnyPermissions: ["access:me"],
+  },
+  {
+    sidebarKey: "me.account",
+    moduleCode: "ME",
+    label: "Tài khoản",
+    path: "/me/account",
+    icon: "user-circle",
+    group: "Tài khoản & bảo mật",
+    order: 47,
+    requiredAnyPermissions: ["access:me"],
+  },
+  {
+    sidebarKey: "me.security.password",
+    moduleCode: "ME",
+    label: "Đổi mật khẩu",
+    path: "/me/security/password",
+    icon: "key-round",
+    group: "Tài khoản & bảo mật",
+    order: 48,
+    requiredAnyPermissions: ["access:me"],
+  },
+  {
+    sidebarKey: "me.security.sessions",
+    moduleCode: "ME",
+    label: "Phiên đăng nhập",
+    path: "/me/security/sessions",
+    icon: "log-in",
+    group: "Tài khoản & bảo mật",
+    order: 49,
+    requiredAnyPermissions: ["access:me"],
+  },
+  {
+    sidebarKey: "me.security.activity",
+    moduleCode: "ME",
+    label: "Hoạt động bảo mật",
+    path: "/me/security/activity",
+    icon: "shield-alert",
+    group: "Tài khoản & bảo mật",
+    order: 50,
+    requiredAnyPermissions: ["access:me"],
+  },
 ];
 
 // ---------------------------------------------------------------------------
