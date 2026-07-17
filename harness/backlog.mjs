@@ -6877,4 +6877,36 @@ export const backlog = [
       "check.sh xanh với LANE_DB; gate theo diff thật (đụng migration ⇒ FULL, chỉ producer additive ⇒ LIGHT + database-reviewer nếu chạm query)",
     ],
   },
+  {
+    id: "S5-TASK-HRCODE-1",
+    module: "TASK",
+    layer: "BE",
+    title:
+      "Cấp task_code cho task HR (createApprovalTaskTx ← leave/attendance-adjustment) — gỡ nốt đường NULL cuối sau cut-over 0498; kèm residual FULL-gate S5-NOTI-FIX-2: map SequenceInactiveError → 4xx TASK-ERR + cap độ dài users.fullName ở contracts (chống dead-letter payload quá dài)",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/tasks/**",
+      "apps/api/src/leave/**",
+      "apps/api/src/attendance/**",
+      "apps/api/src/foundation/sequences/**",
+      "packages/contracts/src/**",
+      "apps/api/test/integration/**",
+      "docs/plans/S5-TASK-HRCODE-1.md",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-NOTI-FIX-2"],
+    src: [
+      "FULL-gate S5-NOTI-FIX-2 (security-reviewer MEDIUM / silent-failure-hunter HIGH-1 / database-reviewer HIGH-1): hr-tasks.service.createApprovalTaskTx KHÔNG ghi task_code — caller sống leave.service + attendance-adjustment.service ⇒ task HR sau 0498 vẫn NULL",
+      "Tạm thời commentPayload() coalesce task_code→title (task-comments.service.ts) — vá triệu chứng ở emit-site; WO này vá GỐC (cấp mã) rồi CÂN NHẮC giữ coalesce làm defense-in-depth",
+      "LƯU Ý thiết kế: createApprovalTaskTx nhận TenantTx của tx đơn (cùng commit/rollback) — cấp mã kiểu tx-riêng-trước (mirror createTask) cần thread từ caller TRƯỚC khi mở tx đơn, KHÔNG nextCode bên trong tx đơn (giữ lock counter suốt tx dài)",
+      "Residual LOW db-review: ensureCounterTx recovery 23505 re-select trên tx aborted (25P02) — xem sequence.repository.ts:119; sửa cùng lượt nếu tiện",
+    ],
+    done_when: [
+      "Task HR tạo từ đơn nghỉ + điều chỉnh công có task_code THẬT (SequenceService, counter 'task' 0498) — mã cấp TRƯỚC tx đơn từ caller, gap-OK khi tx rollback; int-spec: submit đơn nghỉ → task HR có mã, comment lên task đó render mã thật (không cần fallback)",
+      "SequenceInactiveError (counter bị PATCH Inactive) map 4xx mã TASK-ERR thay vì 500 raw ở POST /tasks + đường tạo đơn",
+      "contracts users/employees fullName có .max() hợp lý (chống payload actor_name không giới hạn → dead-letter)",
+      "check.sh xanh LANE_DB; crown (chạm FSM đơn nghỉ/điều chỉnh công) ⇒ FULL gate",
+    ],
+  },
 ];

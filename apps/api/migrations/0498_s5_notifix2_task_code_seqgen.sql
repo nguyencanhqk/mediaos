@@ -67,6 +67,9 @@ BEGIN
   -- ── (2) BACKFILL task_code cho task NULL-còn-sống, theo TỪNG company ORDER BY created_at (rồi id ổn định). ──
   --     start_base per company = GREATEST(counter hiện tại, MAX số của mã 'TASK-<n>' đã có) ⇒ tránh đè/trùng
   --     uq_tasks_company_task_code_active + gap OK. Mã = prefix + lpad(base+rn, padding) — KHỚP buildCode.
+  --     LƯU Ý (FULL-gate fix): lpad Postgres CẮT chuỗi khi số dài hơn padding (lpad('12345',4)='1234') —
+  --     khác padStart của SequenceService (không bao giờ cắt) ⇒ pad-width = GREATEST(padding, length(n))
+  --     để n ≥ 10^padding không bị cắt thành mã trùng (nổ unique index oan).
   WITH base AS (
     SELECT c.id AS company_id,
            GREATEST(
@@ -94,7 +97,11 @@ BEGIN
        AND t.task_code IS NULL
   )
   UPDATE tasks tk
-     SET task_code  = v_prefix || lpad((b.start_base + tf.rn)::text, v_padding, '0'),
+     SET task_code  = v_prefix || lpad(
+                        (b.start_base + tf.rn)::text,
+                        GREATEST(v_padding, length((b.start_base + tf.rn)::text)),
+                        '0'
+                      ),
          updated_at = now()
     FROM to_fill tf
     JOIN base b ON b.company_id = tf.company_id
@@ -114,7 +121,11 @@ BEGIN
   )
   UPDATE sequence_counters sc
      SET current_value       = GREATEST(sc.current_value, u.max_num),
-         last_generated_code = v_prefix || lpad(GREATEST(sc.current_value, u.max_num)::text, v_padding, '0'),
+         last_generated_code = v_prefix || lpad(
+                                 GREATEST(sc.current_value, u.max_num)::text,
+                                 GREATEST(v_padding, length(GREATEST(sc.current_value, u.max_num)::text)),
+                                 '0'
+                               ),
          updated_at          = now()
     FROM used u
    WHERE sc.company_id  = u.company_id

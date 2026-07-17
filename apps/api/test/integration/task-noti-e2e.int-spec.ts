@@ -595,6 +595,70 @@ describe.skipIf(!hasLaneDb)(
       expect(content?.shortBody?.includes("{")).toBe(false);
     });
 
+    // ── 8c/8d. FULL-gate fix (S5-NOTI-FIX-2 vòng review): đường NULL còn SỐNG không được rớt placeholder ──
+
+    it("(8c) task HR task_code NULL (createApprovalTaskTx CHƯA cut-over code-gen) → comment: body fallback title, KHÔNG '{task_code}' trần", async () => {
+      // Mimic CHÍNH XÁC insert của hr-tasks.service.createApprovalTaskTx (task_type='hr', KHÔNG task_code,
+      // KHÔNG creator_user_id — gọi sống từ leave.service + attendance-adjustment.service): sau 0498,
+      // đường này VẪN đẻ task_code=NULL cho tới follow-up WO S5-TASK-HRCODE-1. commentPayload PHẢI
+      // coalesce task_code → title để notification người duyệt không câm '{task_code}' (FULL-gate HIGH-1).
+      const approverUser = await seedUser(direct, A.companyId, `apr8c@${A.slug}.test`, "x");
+      const title = "Duyệt đơn nghỉ phép NF2-8c";
+      const r = await direct.query(
+        `INSERT INTO tasks (company_id, task_type, title, assignee_user_id, status, origin)
+         VALUES ($1,'hr',$2,$3,'not_started','initial') RETURNING id`,
+        [A.companyId, title, approverUser],
+      );
+      const hrTaskId = r.rows[0].id as string;
+
+      const res = await authPost(tok.admin, `/tasks/${hrTaskId}/comments`).send({
+        content: "cần bổ sung minh chứng",
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      await processOutbox();
+
+      const content = await notifContent(A.companyId, approverUser, "TASK_COMMENT_CREATED");
+      expect(content?.body, JSON.stringify(content)).toContain(title);
+      expect(content?.body).toContain(ADMIN_ACTOR_NAME);
+      expect(content?.body.includes("{")).toBe(false);
+      expect(content?.shortBody?.includes("{")).toBe(false);
+    });
+
+    it("(8d) actor KHÔNG có full_name → actor_name fallback email (NOT NULL), KHÔNG '{actor_name}' trần", async () => {
+      // seedUser KHÔNG set users.full_name (nullable — hr-write provision cho phép bỏ trống fullName).
+      // commentPayload PHẢI coalesce actor_name → email (FULL-gate HIGH-2) — nếu không, MỌI comment/mention
+      // của user chưa có tên hiển thị sẽ câm '{actor_name}' (cả body LẪN short_body TASK_MENTIONED 0481).
+      const hash = await new PasswordService().hash(LOGIN_PW);
+      const noNameEmail = `noname8d@${A.slug}.test`;
+      const noNameUser = await seedUser(direct, A.companyId, noNameEmail, hash);
+      await seedEmp(A.companyId, noNameUser);
+      await grant(A.companyId, noNameUser, "noname8d", [
+        ["read", "task", "Company"],
+        ["comment", "task", "Company"],
+      ]);
+      const tokNoName = await login(A.slug, noNameEmail);
+
+      const assigneeUser = await seedUser(direct, A.companyId, `a8d@${A.slug}.test`, "x");
+      const assigneeEmp = await seedEmp(A.companyId, assigneeUser);
+      const taskId = await mkTask({
+        mainAssigneeEmployeeId: assigneeEmp,
+        assigneeUserId: assigneeUser,
+      });
+      const taskCode = await taskCodeOf(taskId);
+
+      const res = await authPost(tokNoName, `/tasks/${taskId}/comments`).send({
+        content: "góp ý nhỏ",
+      });
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      await processOutbox();
+
+      const content = await notifContent(A.companyId, assigneeUser, "TASK_COMMENT_CREATED");
+      expect(content?.body, JSON.stringify(content)).toContain(taskCode);
+      expect(content?.body).toContain(noNameEmail);
+      expect(content?.body.includes("{")).toBe(false);
+      expect(content?.shortBody?.includes("{")).toBe(false);
+    });
+
     // ── 10. actor-exclusion (tự comment trên task của chính mình) ───────────────────
 
     it("(10) actor tự comment trên task CHÍNH MÌNH tạo (0 assignee/watcher khác) → 0 notification (createdCount không đếm actor)", async () => {
