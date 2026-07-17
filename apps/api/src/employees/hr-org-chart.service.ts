@@ -70,21 +70,33 @@ function compareNodes(a: OrgChartEmployeeNode, b: OrgChartEmployeeNode): number 
 }
 
 /**
- * Pure tree builder — no DB, no I/O. Guarantees (crown-jewel, "no hang/500"):
- *   - node set = exactly `rows` (already scope-filtered by the caller) — no row is added or fetched here;
+ * Pure tree builder — no DB, no I/O. Guarantees (crown-jewel, "no hang/500" for ANY input, incl. adversarial):
+ *   - node set = exactly the DISTINCT-by-employeeId `rows` (already scope-filtered by the caller) — no row
+ *     is added or fetched here; a duplicate employeeId is dropped first-wins (never collapsed to a double ref);
  *   - each employee appears EXACTLY once;
  *   - a manager outside the set / null / unlinked → the node is a root (orphan);
  *   - cyclic data (self-manage or A→B→A) never loops forever: the object graph is cut acyclic and
  *     `warnings.cyclesDetected` is set. The returned graph is always JSON-serialisable (a strict forest).
+ *   - walks are ITERATIVE (explicit heap stacks) — a pathologically DEEP manager chain (thousands of rows in
+ *     a linear line) can never blow the call stack / 500 (silent-failure-hunter MEDIUM).
+ *
+ * Runtime field-allowlist enforcement lives HERE (the explicit projection below only ever sets the 8
+ * directory-class fields + children) + the repo SELECT — NOT in a Zod parse (the DTO `.strict()` is the
+ * compile-time contract; a recursive runtime parse would re-introduce the deep-recursion 500 this avoids).
  *
  * Exported standalone so it is unit-testable without the Nest DI container.
  */
 export function buildOrgChartTree(rows: OrgChartRow[]): OrgChartEmployeeTree {
-  // ONE node object per row (roots + children + edge-cut all reference the SAME object).
+  // ONE node object per DISTINCT employeeId (roots + children + edge-cut all reference the SAME object).
   const nodeById = new Map<string, OrgChartEmployeeNode>();
   // userId → employeeId: only a linked row (userId != null) can be a manager/parent (direct_manager_id → users.id).
   const employeeIdByUser = new Map<string, string>();
+  // First-wins de-dup: honor the "exactly once" contract for ANY caller. The repo guarantees a unique
+  // employeeId (PK) so this never fires there, but a duplicate row must be dropped, not double-referenced.
+  const uniqueRows: OrgChartRow[] = [];
   for (const r of rows) {
+    if (nodeById.has(r.employeeId)) continue; // duplicate employeeId → skip (first-wins)
+    uniqueRows.push(r);
     nodeById.set(r.employeeId, {
       employeeId: r.employeeId,
       userId: r.userId,
@@ -96,7 +108,9 @@ export function buildOrgChartTree(rows: OrgChartRow[]): OrgChartEmployeeTree {
       employeeCode: r.employeeCode,
       children: [],
     });
-    if (r.userId != null) employeeIdByUser.set(r.userId, r.employeeId);
+    if (r.userId != null && !employeeIdByUser.has(r.userId)) {
+      employeeIdByUser.set(r.userId, r.employeeId); // first-wins (unique index makes dup unreachable here)
+    }
   }
 
   let cyclesDetected = false;
@@ -104,7 +118,7 @@ export function buildOrgChartTree(rows: OrgChartRow[]): OrgChartEmployeeTree {
   // childEmployeeId → parentEmployeeId, so a cut edge can be removed from the exact parent later.
   const parentOf = new Map<string, string>();
 
-  for (const r of rows) {
+  for (const r of uniqueRows) {
     const node = nodeById.get(r.employeeId)!;
     const dm = r.directManagerId;
     // Self-manage (direct_manager_id === own user id) = degenerate cycle → root + flag.
@@ -119,16 +133,20 @@ export function buildOrgChartTree(rows: OrgChartRow[]): OrgChartEmployeeTree {
     }
   }
 
-  // Cut multi-level cycles: DFS from roots; any node still unvisited sits in a pure cycle with no acyclic
-  // entry → cut its incoming edge (functional graph: one parent → breaks the loop), promote to root, DFS on.
+  // Cut multi-level cycles: iterative DFS from roots; any node still unvisited sits in a pure cycle with no
+  // acyclic entry → cut its incoming edge (functional graph: one parent → breaks the loop), promote to root.
   const visited = new Set<string>();
-  const dfs = (node: OrgChartEmployeeNode): void => {
-    if (visited.has(node.employeeId)) return;
-    visited.add(node.employeeId);
-    for (const c of node.children) dfs(c);
+  const visit = (start: OrgChartEmployeeNode): void => {
+    const stack: OrgChartEmployeeNode[] = [start];
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+      if (visited.has(node.employeeId)) continue;
+      visited.add(node.employeeId);
+      for (const c of node.children) stack.push(c);
+    }
   };
-  for (const r of roots) dfs(r);
-  for (const r of rows) {
+  for (const r of roots) visit(r);
+  for (const r of uniqueRows) {
     if (visited.has(r.employeeId)) continue;
     cyclesDetected = true;
     const node = nodeById.get(r.employeeId)!;
@@ -139,25 +157,25 @@ export function buildOrgChartTree(rows: OrgChartRow[]): OrgChartEmployeeTree {
       if (idx >= 0) parent.children.splice(idx, 1);
     }
     roots.push(node);
-    dfs(node);
+    visit(node);
   }
 
-  // Deterministic ordering + a final defensive acyclic guarantee (should be a strict forest by now; the
+  // Deterministic ordering (iterative) + a final defensive acyclic guarantee (a strict forest by now; the
   // sortSeen guard cuts any residual back-edge so the returned object can NEVER be circular).
   const sortSeen = new Set<string>();
-  const sortNodes = (arr: OrgChartEmployeeNode[]): void => {
-    arr.sort(compareNodes);
-    for (const n of arr) {
-      if (sortSeen.has(n.employeeId)) {
-        cyclesDetected = true;
-        n.children = [];
-        continue;
-      }
-      sortSeen.add(n.employeeId);
-      sortNodes(n.children);
+  roots.sort(compareNodes);
+  const sortStack: OrgChartEmployeeNode[] = [...roots];
+  while (sortStack.length > 0) {
+    const node = sortStack.pop()!;
+    if (sortSeen.has(node.employeeId)) {
+      cyclesDetected = true;
+      node.children = [];
+      continue;
     }
-  };
-  sortNodes(roots);
+    sortSeen.add(node.employeeId);
+    node.children.sort(compareNodes);
+    for (const c of node.children) sortStack.push(c);
+  }
 
   return { roots, warnings: { cyclesDetected } };
 }

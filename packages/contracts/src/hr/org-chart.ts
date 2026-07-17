@@ -5,8 +5,10 @@ import { z } from "zod";
  * (một `users.id`) ↔ `employee.user_id`, lọc theo data-scope của actor (Option A: chỉ subtree trong
  * quyền — KHÔNG đường quản lý lên trên).
  *
- * BẤT BIẾN #3 — node CHỈ directory-class (không PII/salary/identity/contact). DTO `.strict()` là chốt
- * cuối: một field ngoài allowlist dưới đây KHÔNG parse được ⇒ không thể rò qua đường org-chart.
+ * BẤT BIẾN #3 — node CHỈ directory-class (không PII/salary/identity/contact). Enforcement RUNTIME nằm ở
+ * repo SELECT (chỉ cột allowlist) + projection tường minh trong buildOrgChartTree (chỉ set 8 field dưới +
+ * children); `.strict()` ở đây là HỢP ĐỒNG compile-time + được int-spec/unit-spec assert key-set lúc chạy.
+ * KHÔNG parse response qua schema này ở đường HTTP (parse đệ quy sẽ tái tạo đường 500 do đệ-quy-sâu).
  */
 
 /** Một node nhân viên trong cây — CHỈ field directory (đối chiếu strict với repo SELECT). */

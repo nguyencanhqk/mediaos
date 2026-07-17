@@ -163,4 +163,48 @@ describe("buildOrgChartTree", () => {
     const { roots } = buildOrgChartTree(rows);
     expect(roots.map((r) => r.employeeId)).toEqual(["a", "z", "n"]);
   });
+
+  it("chuỗi quản lý SÂU (20k node tuyến tính) không tràn stack — walk iterative", () => {
+    const N = 20000;
+    const rows: OrgChartRow[] = [];
+    for (let i = 0; i < N; i++) {
+      rows.push(
+        row({
+          employeeId: `e${i}`,
+          userId: `e${i}`,
+          directManagerId: i === 0 ? null : `e${i - 1}`,
+        }),
+      );
+    }
+    let out: ReturnType<typeof buildOrgChartTree> | undefined;
+    expect(() => {
+      out = buildOrgChartTree(rows);
+    }).not.toThrow();
+    expect(out!.roots).toHaveLength(1);
+    // đếm iterative (tránh test tự tràn stack) — phải đủ N node, đúng 1 lần mỗi node.
+    let count = 0;
+    let cur: OrgChartEmployeeNode | undefined = out!.roots[0];
+    while (cur) {
+      count++;
+      cur = cur.children[0];
+    }
+    expect(count).toBe(N);
+    expect(out!.warnings.cyclesDetected).toBe(false);
+  });
+
+  it("duplicate employeeId → first-wins, mỗi node đúng 1 lần, con KHÔNG bị mất, không cờ giả", () => {
+    const rows: OrgChartRow[] = [
+      row({ employeeId: "E", userId: "u1", directManagerId: null }),
+      row({ employeeId: "E", userId: "u2", directManagerId: null }), // dup employeeId → bị bỏ (u2 không đăng ký)
+      row({ employeeId: "F", userId: "uf", directManagerId: "u2" }), // manager = userId của row bị bỏ
+    ];
+    const { roots, warnings } = buildOrgChartTree(rows);
+    const all = flatten(roots);
+    expect(all.filter((n) => n.employeeId === "E")).toHaveLength(1); // E đúng 1 lần
+    // F KHÔNG bị mất: u2 chưa từng đăng ký (first-wins) → F là root, không rơi khỏi cây.
+    expect(all.map((n) => n.employeeId).sort()).toEqual(["E", "F"]);
+    expect(all).toHaveLength(2);
+    expect(warnings.cyclesDetected).toBe(false); // dữ liệu không có vòng → không báo giả
+    expect(() => JSON.stringify(roots)).not.toThrow();
+  });
 });
