@@ -22,10 +22,20 @@ const OTHER_ID = "22222222-2222-2222-2222-222222222222";
 const REQ_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd";
 const TYPE_ID = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
 const TASK_ID = "tttttttt-tttt-tttt-tttt-tttttttttttt";
+// S5-TASK-HRCODE-1: mã task THẬT cấp qua tx riêng TRƯỚC tx đơn (mirror createTask). Đơn nghỉ nay ghi
+// task_code vào row tasks (không NULL câm) — comment/mention render mã thật thay '{task_code}'.
+const TASK_CODE = "TASK-0007";
 const actor = { id: ACTOR_ID, companyId: COMPANY_ID };
 
 function makeType(overrides: Record<string, unknown> = {}) {
-  return { id: TYPE_ID, name: "Phép năm", code: "annual", paid: true, status: "active", ...overrides };
+  return {
+    id: TYPE_ID,
+    name: "Phép năm",
+    code: "annual",
+    paid: true,
+    status: "active",
+    ...overrides,
+  };
 }
 
 function makeRequest(overrides: Record<string, unknown> = {}) {
@@ -82,14 +92,21 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
 
 function makeDb(repo: ReturnType<typeof makeRepo>) {
   return {
-    withTenant: vi.fn().mockImplementation((_c: string, fn: (tx: unknown) => Promise<unknown>) => fn(repo)),
+    withTenant: vi
+      .fn()
+      .mockImplementation((_c: string, fn: (tx: unknown) => Promise<unknown>) => fn(repo)),
   };
 }
 
 const makePermission = (allow: boolean) => ({
-  can: vi.fn().mockResolvedValue({ allow, reason: allow ? "allow" : "deny-default", auditRequired: false }),
+  can: vi
+    .fn()
+    .mockResolvedValue({ allow, reason: allow ? "allow" : "deny-default", auditRequired: false }),
 });
 const makeHrTasks = () => ({
+  // Cấp mã Ở TX RIÊNG TRƯỚC tx đơn (mirror createTask). Default trả mã thật để happy-path xác nhận
+  // truyền xuống createApprovalTaskTx; override mockRejectedValue để mô phỏng counter Inactive → 4xx.
+  allocateTaskCodeBeforeTx: vi.fn().mockResolvedValue(TASK_CODE),
   createApprovalTaskTx: vi.fn().mockResolvedValue({ id: TASK_ID }),
   closeTaskTx: vi.fn().mockResolvedValue(undefined),
   cancelTaskTx: vi.fn().mockResolvedValue(undefined),
@@ -101,15 +118,16 @@ function build(repo: ReturnType<typeof makeRepo>, permissionAllow = true) {
   const audit = makeAudit();
   const outbox = makeOutbox();
   const hrTasks = makeHrTasks();
+  const db = makeDb(repo);
   const service = new LeaveService(
-    makeDb(repo) as never,
+    db as never,
     repo as never,
     makePermission(permissionAllow) as never,
     hrTasks as never,
     audit as never,
     outbox as never,
   );
-  return { service, audit, outbox, hrTasks };
+  return { service, audit, outbox, hrTasks, db };
 }
 
 describe("LeaveService — create request", () => {
@@ -132,20 +150,71 @@ describe("LeaveService — create request", () => {
     expect(out).toMatchObject({ status: "pending" }); // a freshly created request is pending until approved
   });
 
+  it("allocates the task code in its own tx BEFORE the request tx and writes it onto the HR task", async () => {
+    const repo = makeRepo();
+    const { service, hrTasks, db } = build(repo);
+    await service.createRequest(actor, {
+      leaveTypeId: TYPE_ID,
+      startDate: "2024-06-03",
+      endDate: "2024-06-09",
+    });
+    // Mã cấp qua tx RIÊNG cho đúng company (mirror createTask) — KHÔNG nextCode bên trong tx đơn dài.
+    expect(hrTasks.allocateTaskCodeBeforeTx).toHaveBeenCalledWith(COMPANY_ID);
+    // Invocation-order: allocate PHẢI chạy TRƯỚC khi mở db.withTenant (không giữ lock counter suốt tx đơn).
+    const allocOrder = hrTasks.allocateTaskCodeBeforeTx.mock.invocationCallOrder[0];
+    const tenantOrder = db.withTenant.mock.invocationCallOrder[0];
+    expect(allocOrder).toBeLessThan(tenantOrder);
+    // Mã thật được truyền xuống row tasks (task_code non-null) để comment/mention render mã THẬT.
+    expect(hrTasks.createApprovalTaskTx).toHaveBeenCalledWith(
+      repo,
+      COMPANY_ID,
+      expect.objectContaining({ taskCode: TASK_CODE, assigneeUserId: null }),
+    );
+  });
+
+  it("surfaces 4xx (not 500) when the 'task' counter is inactive — allocate fails before the request tx opens", async () => {
+    const repo = makeRepo();
+    const { service, hrTasks, db } = build(repo);
+    // allocateTaskCode() maps SequenceInactiveError → ConflictException (TASK-ERR-CODE-COUNTER-INACTIVE).
+    hrTasks.allocateTaskCodeBeforeTx.mockRejectedValueOnce(
+      new ConflictException("TASK-ERR-CODE-COUNTER-INACTIVE"),
+    );
+    await expect(
+      service.createRequest(actor, {
+        leaveTypeId: TYPE_ID,
+        startDate: "2024-06-03",
+        endDate: "2024-06-07",
+      }),
+    ).rejects.toThrow(ConflictException);
+    // Fail-loud TRƯỚC tx đơn: không mở business tx, không tạo task/đơn khi không cấp được mã.
+    expect(db.withTenant).not.toHaveBeenCalled();
+    expect(hrTasks.createApprovalTaskTx).not.toHaveBeenCalled();
+  });
+
   it("rejects a request for an unknown leave type", async () => {
     const repo = makeRepo({ findTypeByIdTx: vi.fn().mockResolvedValue([]) });
     const { service, hrTasks } = build(repo);
     await expect(
-      service.createRequest(actor, { leaveTypeId: TYPE_ID, startDate: "2024-06-03", endDate: "2024-06-07" }),
+      service.createRequest(actor, {
+        leaveTypeId: TYPE_ID,
+        startDate: "2024-06-03",
+        endDate: "2024-06-07",
+      }),
     ).rejects.toThrow(NotFoundException);
     expect(hrTasks.createApprovalTaskTx).not.toHaveBeenCalled();
   });
 
   it("rejects a request for an inactive leave type", async () => {
-    const repo = makeRepo({ findTypeByIdTx: vi.fn().mockResolvedValue([makeType({ status: "inactive" })]) });
+    const repo = makeRepo({
+      findTypeByIdTx: vi.fn().mockResolvedValue([makeType({ status: "inactive" })]),
+    });
     const { service } = build(repo);
     await expect(
-      service.createRequest(actor, { leaveTypeId: TYPE_ID, startDate: "2024-06-03", endDate: "2024-06-07" }),
+      service.createRequest(actor, {
+        leaveTypeId: TYPE_ID,
+        startDate: "2024-06-03",
+        endDate: "2024-06-07",
+      }),
     ).rejects.toThrow(ConflictException);
   });
 
@@ -153,7 +222,11 @@ describe("LeaveService — create request", () => {
     const repo = makeRepo();
     const { service, hrTasks } = build(repo);
     await expect(
-      service.createRequest(actor, { leaveTypeId: TYPE_ID, startDate: "2024-06-08", endDate: "2024-06-09" }),
+      service.createRequest(actor, {
+        leaveTypeId: TYPE_ID,
+        startDate: "2024-06-08",
+        endDate: "2024-06-09",
+      }),
     ).rejects.toThrow(ConflictException);
     expect(hrTasks.createApprovalTaskTx).not.toHaveBeenCalled();
   });
@@ -210,7 +283,9 @@ describe("LeaveService — reject / cancel", () => {
   });
 
   it("closes the task as completed on reject (no quota touched)", async () => {
-    const repo = makeRepo({ updateRequestTx: vi.fn().mockResolvedValue([makeRequest({ status: "rejected" })]) });
+    const repo = makeRepo({
+      updateRequestTx: vi.fn().mockResolvedValue([makeRequest({ status: "rejected" })]),
+    });
     const { service, hrTasks } = build(repo);
     await service.rejectRequest(actor, REQ_ID, "thiếu chứng từ");
     expect(hrTasks.closeTaskTx).toHaveBeenCalledWith(repo, COMPANY_ID, TASK_ID, "completed");
@@ -218,19 +293,25 @@ describe("LeaveService — reject / cancel", () => {
   });
 
   it("blocks cancelling someone else's request", async () => {
-    const repo = makeRepo({ findRequestByIdTx: vi.fn().mockResolvedValue([makeRequest({ userId: OTHER_ID })]) });
+    const repo = makeRepo({
+      findRequestByIdTx: vi.fn().mockResolvedValue([makeRequest({ userId: OTHER_ID })]),
+    });
     const { service } = build(repo);
     await expect(service.cancelRequest(actor, REQ_ID)).rejects.toThrow(ForbiddenException);
   });
 
   it("blocks cancelling a request that is not pending", async () => {
-    const repo = makeRepo({ findRequestByIdTx: vi.fn().mockResolvedValue([makeRequest({ status: "approved" })]) });
+    const repo = makeRepo({
+      findRequestByIdTx: vi.fn().mockResolvedValue([makeRequest({ status: "approved" })]),
+    });
     const { service } = build(repo);
     await expect(service.cancelRequest(actor, REQ_ID)).rejects.toThrow(ConflictException);
   });
 
   it("soft-deletes the Task Hub task on owner cancel", async () => {
-    const repo = makeRepo({ updateRequestTx: vi.fn().mockResolvedValue([makeRequest({ status: "cancelled" })]) });
+    const repo = makeRepo({
+      updateRequestTx: vi.fn().mockResolvedValue([makeRequest({ status: "cancelled" })]),
+    });
     const { service, hrTasks } = build(repo);
     await service.cancelRequest(actor, REQ_ID);
     expect(hrTasks.cancelTaskTx).toHaveBeenCalledWith(repo, COMPANY_ID, TASK_ID);
@@ -241,13 +322,17 @@ describe("LeaveService — scope + permission", () => {
   it("blocks listing all requests (scope=all) without approve permission", async () => {
     const repo = makeRepo();
     const { service } = build(repo, /* permissionAllow */ false);
-    await expect(service.listRequests(actor, { scope: "all", limit: 50, offset: 0 })).rejects.toThrow(ForbiddenException);
+    await expect(
+      service.listRequests(actor, { scope: "all", limit: 50, offset: 0 }),
+    ).rejects.toThrow(ForbiddenException);
   });
 
   it("allows listing my own requests (scope=me) without elevated permission", async () => {
     const repo = makeRepo();
     const { service } = build(repo, false);
-    await expect(service.listRequests(actor, { scope: "me", limit: 50, offset: 0 })).resolves.toEqual([]);
+    await expect(
+      service.listRequests(actor, { scope: "me", limit: 50, offset: 0 }),
+    ).resolves.toEqual([]);
     expect(repo.findRequests).toHaveBeenCalledWith(COMPANY_ID, {
       userId: ACTOR_ID,
       status: undefined,
@@ -267,6 +352,9 @@ describe("LeaveService — scope + permission", () => {
     const repo = makeRepo();
     const { service } = build(repo, false);
     await expect(service.listBalances(actor, { scope: "me" })).resolves.toEqual([]);
-    expect(repo.findBalances).toHaveBeenCalledWith(COMPANY_ID, { userId: ACTOR_ID, year: undefined });
+    expect(repo.findBalances).toHaveBeenCalledWith(COMPANY_ID, {
+      userId: ACTOR_ID,
+      year: undefined,
+    });
   });
 });

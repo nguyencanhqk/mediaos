@@ -173,6 +173,11 @@ export class LeaveService {
   // ─── leave_requests (create own; approve:leave to decide) ────────────────────
 
   async createRequest(actor: Actor, dto: CreateLeaveRequest) {
+    // S5-TASK-HRCODE-1: cấp task_code Ở TX RIÊNG TRƯỚC business tx (mirror TaskCoreService.createTask) —
+    // counter FOR UPDATE serialize (0 dup) rồi COMMIT ngay, KHÔNG giữ lock counter suốt tx đơn dài. Rollback
+    // business tx / validate fail ⇒ mã bị "đốt" (gap OK). allocateTaskCodeBeforeTx map Inactive→409
+    // (TASK-ERR-CODE-COUNTER-INACTIVE) fail-loud TRƯỚC khi mở tx ⇒ KHÔNG tạo task task_code=NULL câm, KHÔNG 500.
+    const taskCode = await this.hrTasks.allocateTaskCodeBeforeTx(actor.companyId);
     return this.db
       .withTenant(actor.companyId, async (tx) => {
         const [type] = await this.repo.findTypeByIdTx(actor.companyId, dto.leaveTypeId, tx);
@@ -194,6 +199,7 @@ export class LeaveService {
         const task = await this.hrTasks.createApprovalTaskTx(tx, actor.companyId, {
           title: `Duyệt đơn nghỉ ${dto.startDate} → ${dto.endDate}`,
           assigneeUserId: null,
+          taskCode,
         });
         const [row] = await this.repo.insertRequestTx(
           actor.companyId,

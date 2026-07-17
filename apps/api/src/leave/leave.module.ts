@@ -4,6 +4,7 @@ import { DatabaseModule } from "../db/db.module";
 import { AuditRepository } from "../foundation/audit/audit.repository";
 import { HolidaysModule } from "../foundation/holidays/holidays.module";
 import { SeedModule } from "../foundation/seed/seed.module";
+import { SequenceModule } from "../foundation/sequences/sequence.module";
 import { PermissionModule } from "../permission/permission.module";
 import { HrTasksService } from "../tasks/hr-tasks.service";
 import { LeaveController } from "./leave.controller";
@@ -47,7 +48,17 @@ import { LeaveService } from "./leave.service";
   // exclusion in calculate preview. + LeaveReadService/LeaveReadRepository (read/preview surface).
   // S3-INT-1: + AttendanceModule (exports AttendanceLeaveSyncService — no cycle: AttendanceModule loads
   // BEFORE LeaveModule in app.module.ts and never imports LeaveModule).
-  imports: [DatabaseModule, PermissionModule, SeedModule, HolidaysModule, AttendanceModule],
+  // S5-TASK-HRCODE-1 (additive): + SequenceModule (exports SequenceService) → HrTasksService (provided
+  // locally below) resolves SequenceService để cấp task_code THẬT cho task HR sinh từ đơn nghỉ. Optional-DI
+  // ở HrTasksService trở thành no-op vô hại khi module này đã import SequenceModule (fail-loud nếu chưa).
+  imports: [
+    DatabaseModule,
+    PermissionModule,
+    SeedModule,
+    HolidaysModule,
+    AttendanceModule,
+    SequenceModule,
+  ],
   controllers: [LeaveController, LeaveReportController, LeaveAuditController],
   providers: [
     LeaveService,
