@@ -23,6 +23,11 @@ import { MeAvatarController } from "./me-avatar.controller";
 import { MeAvatarService } from "./me-avatar.service";
 import { MeAvatarRepository } from "./me-avatar.repository";
 import { MeAvatarFileResolver } from "./me-avatar-file.resolver";
+// S5-ME-BE-3 (additive): Hoạt động bảo mật own-scope (GET /me/security/activity — login_logs +
+// user_security_events của CHÍNH user, mask IP/UA server-side; sessions TÁI DÙNG /auth/sessions).
+import { MeSecurityActivityController } from "./me-security-activity.controller";
+import { MeSecurityActivityService } from "./me-security-activity.service";
+import { MeSecurityActivityRepository } from "./me-security-activity.repository";
 
 /**
  * S5-ME-BE-1 — MeModule (Personal Hub, SPEC-09 / API-11). Lớp TỔNG HỢP đọc-own: KHÔNG sở hữu dữ liệu nguồn.
@@ -56,7 +61,12 @@ import { MeAvatarFileResolver } from "./me-avatar-file.resolver";
     NotificationsModule,
     FilesModule,
   ],
-  controllers: [MeController, MePreferencesController, MeAvatarController],
+  controllers: [
+    MeController,
+    MePreferencesController,
+    MeAvatarController,
+    MeSecurityActivityController,
+  ],
   providers: [
     MeRepository,
     MeCurrentPersonResolver,
@@ -66,6 +76,8 @@ import { MeAvatarFileResolver } from "./me-avatar-file.resolver";
     MeAvatarRepository,
     MeAvatarService,
     MeAvatarFileResolver,
+    MeSecurityActivityRepository,
+    MeSecurityActivityService,
   ],
 })
 export class MeModule implements OnModuleInit {
