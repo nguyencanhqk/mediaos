@@ -2,6 +2,10 @@
  * ThemeToggle — nút chuyển sáng/tối, mặc định style cho nền chrome navy
  * (topbar là hằng số navy ở cả hai chế độ nên overlay white/10 là chrome-relative).
  * Đặt ở topbar của app/console và góc màn hình auth.
+ *
+ * Dùng `resolvedTheme` (light/dark thực áp lên UI) để chọn icon/label — KHÔNG dùng `theme` raw
+ * (có thể là 'system'), vì nút này chỉ đảo 2 chiều light<->dark (back-compat), độc lập lựa chọn
+ * 'system' ở màn Appearance (ME-SCREEN-014).
  */
 import * as React from "react";
 import { Moon, Sun } from "lucide-react";
@@ -13,8 +17,8 @@ interface ThemeToggleProps {
 }
 
 export function ThemeToggle({ className }: ThemeToggleProps) {
-  const { theme, toggleTheme } = useTheme();
-  const label = theme === "dark" ? "Chuyển giao diện sáng" : "Chuyển giao diện tối";
+  const { resolvedTheme, toggleTheme } = useTheme();
+  const label = resolvedTheme === "dark" ? "Chuyển giao diện sáng" : "Chuyển giao diện tối";
 
   return (
     <button
@@ -27,7 +31,11 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
         className,
       )}
     >
-      {theme === "dark" ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
+      {resolvedTheme === "dark" ? (
+        <Sun className="h-4.5 w-4.5" />
+      ) : (
+        <Moon className="h-4.5 w-4.5" />
+      )}
     </button>
   );
 }

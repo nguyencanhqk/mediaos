@@ -1486,6 +1486,62 @@ const MeOverviewPage = React.lazy(() =>
 );
 const meOverviewRoute = makeModuleRoute("/me", "me.overview", "ME", MeOverviewPage);
 
+// S5-ME-FE-3 — 6 route "Công việc của tôi/Thông báo/Cài đặt cá nhân" (ME-SCREEN-009..014, SPEC-09 §8.1/
+// §8.2). Gate route-level GIỮ literal `access:me` (ROUTE_REGISTRY "me.attendance"/…, KHÔNG cặp module
+// nguồn — mỗi trang chỉ đọc meApi.*Summary/getPreferences ĐÃ mask, §7.5); mỗi page tự gate lại bằng
+// useCan (mirror meOverviewRoute).
+const MeAttendancePage = React.lazy(() =>
+  import("@/routes/me/MeAttendancePage").then((m) => ({ default: m.MeAttendancePage })),
+);
+const meAttendanceRoute = makeModuleRoute(
+  "/me/attendance",
+  "me.attendance",
+  "ME",
+  MeAttendancePage,
+);
+
+const MeLeavePage = React.lazy(() =>
+  import("@/routes/me/MeLeavePage").then((m) => ({ default: m.MeLeavePage })),
+);
+const meLeaveRoute = makeModuleRoute("/me/leave", "me.leave", "ME", MeLeavePage);
+
+const MeTasksPage = React.lazy(() =>
+  import("@/routes/me/MeTasksPage").then((m) => ({ default: m.MeTasksPage })),
+);
+const meTasksRoute = makeModuleRoute("/me/tasks", "me.tasks", "ME", MeTasksPage);
+
+const MeNotificationsPage = React.lazy(() =>
+  import("@/routes/me/MeNotificationsPage").then((m) => ({ default: m.MeNotificationsPage })),
+);
+const meNotificationsRoute = makeModuleRoute(
+  "/me/notifications",
+  "me.notifications",
+  "ME",
+  MeNotificationsPage,
+);
+
+const MeNotificationPreferencesPage = React.lazy(() =>
+  import("@/routes/me/MeNotificationPreferencesPage").then((m) => ({
+    default: m.MeNotificationPreferencesPage,
+  })),
+);
+const meNotificationPreferencesRoute = makeModuleRoute(
+  "/me/preferences/notifications",
+  "me.preferences.notifications",
+  "ME",
+  MeNotificationPreferencesPage,
+);
+
+const MeAppearancePage = React.lazy(() =>
+  import("@/routes/me/MeAppearancePage").then((m) => ({ default: m.MeAppearancePage })),
+);
+const meAppearanceRoute = makeModuleRoute(
+  "/me/preferences/appearance",
+  "me.preferences.appearance",
+  "ME",
+  MeAppearancePage,
+);
+
 // System / Foundation — /system landing THAY ModulePlaceholder = System Overview (S2-FE-FND-1).
 const systemRoute = makeModuleRoute("/system", "system.overview", "FOUNDATION", SystemOverviewPage);
 
@@ -2004,6 +2060,12 @@ const routeTree = rootRoute.addChildren([
   notificationDeliveryLogsRoute,
   notificationTemplatesRoute,
   meOverviewRoute,
+  meAttendanceRoute,
+  meLeaveRoute,
+  meTasksRoute,
+  meNotificationsRoute,
+  meNotificationPreferencesRoute,
+  meAppearanceRoute,
   systemRoute,
   systemCompanyRoute,
   systemCompanySettingsRoute,

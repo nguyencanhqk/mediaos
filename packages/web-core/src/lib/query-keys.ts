@@ -686,9 +686,24 @@ export const foundationInvalidation = {
   updateSystemSetting: () => [foundationKeys.systemSettings.all] as const,
 };
 
-// ── ME keys (S5-ME-FE-1) — Personal Hub, SPEC-09 ────────────────────────────────
+// ── ME keys (S5-ME-FE-1/FE-3) — Personal Hub, SPEC-09 ───────────────────────────
 
 export const meKeys = {
   all: rootKeys.me,
   overview: () => [...rootKeys.me, "overview"] as const,
+  // S5-ME-FE-3 — APPEND: section riêng (ME-SCREEN-009..012, tách khỏi overview() vì khác endpoint/shape).
+  attendanceSummary: () => [...rootKeys.me, "attendance-summary"] as const,
+  leaveSummary: () => [...rootKeys.me, "leave-summary"] as const,
+  taskSummary: () => [...rootKeys.me, "task-summary"] as const,
+  notificationSummary: () => [...rootKeys.me, "notification-summary"] as const,
+  // S5-ME-FE-3 — Preferences (GET/PATCH /me/preferences, ME-SCREEN-014 Appearance).
+  preferences: () => [...rootKeys.me, "preferences"] as const,
+};
+
+// S5-ME-FE-3 — Notification preferences (GET/PUT /notifications/preferences, ME-SCREEN-013). Namespace
+// RIÊNG khỏi `notificationKeys` (own preference config, khác endpoint/shape/scope so với admin catalog
+// `notificationKeys.events`/`templates`) — invalidate không lẫn cache admin.
+export const notificationPreferenceKeys = {
+  all: [...rootKeys.notifications, "preferences"] as const,
+  list: () => [...rootKeys.notifications, "preferences", "list"] as const,
 };

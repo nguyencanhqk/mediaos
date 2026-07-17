@@ -808,6 +808,13 @@ export const SYSTEM_SIDEBAR: readonly SidebarItemMeta[] = [
 // Cài đặt cá nhân) — WO này CHỈ build màn Tổng quan (ME-SCREEN-001, route "/me"); 5 nhóm còn lại do
 // S5-ME-FE-2/FE-3 APPEND theo route thật của họ (tránh sidebar trỏ vào route chưa tồn tại = link chết).
 // Gate = cặp engine THẬT `access:me` trực tiếp (mirror ROUTE_REGISTRY "me.overview" — cùng cặp, không drift).
+//
+// S5-ME-FE-3 — APPEND 3 nhóm "Công việc của tôi"/"Thông báo"/"Cài đặt cá nhân" (§8.1, ME-SCREEN-009..014).
+// `group` dùng NGUYÊN VĂN nhãn tiếng Việt (KHÔNG phải key enum như overview/operation/…): ModuleSidebar.tsx
+// (NGOÀI phạm vi lane này — chỉ sửa file registry) render `GROUP_LABELS[group] ?? group`; group lạ (không
+// có trong GROUP_LABELS) fallback IN NGUYÊN chuỗi — đặt group = nhãn hiển thị THẬT nên hiện đúng chữ mà
+// KHÔNG cần đụng ModuleSidebar.tsx. Thứ tự nhóm hiển thị theo thứ tự XUẤT HIỆN LẦN ĐẦU trong mảng này
+// (Object.keys giữ thứ tự chèn ở ModuleSidebar.grouped).
 export const ME_SIDEBAR: readonly SidebarItemMeta[] = [
   {
     sidebarKey: "me.overview",
@@ -817,6 +824,68 @@ export const ME_SIDEBAR: readonly SidebarItemMeta[] = [
     icon: "user-circle",
     group: "overview",
     order: 10,
+    requiredAnyPermissions: ["access:me"],
+  },
+  {
+    sidebarKey: "me.attendance",
+    moduleCode: "ME",
+    label: "Chấm công",
+    path: "/me/attendance",
+    icon: "clock",
+    group: "Công việc của tôi",
+    order: 20,
+    requiredAnyPermissions: ["access:me"],
+  },
+  {
+    sidebarKey: "me.leave",
+    moduleCode: "ME",
+    label: "Nghỉ phép",
+    path: "/me/leave",
+    icon: "calendar-days",
+    group: "Công việc của tôi",
+    order: 21,
+    requiredAnyPermissions: ["access:me"],
+  },
+  {
+    sidebarKey: "me.tasks",
+    moduleCode: "ME",
+    label: "Task của tôi",
+    path: "/me/tasks",
+    icon: "kanban-square",
+    group: "Công việc của tôi",
+    order: 22,
+    requiredAnyPermissions: ["access:me"],
+  },
+  {
+    sidebarKey: "me.notifications",
+    moduleCode: "ME",
+    label: "Thông báo của tôi",
+    path: "/me/notifications",
+    icon: "bell",
+    group: "Thông báo",
+    order: 30,
+    requiredAnyPermissions: ["access:me"],
+  },
+  {
+    sidebarKey: "me.preferences.notifications",
+    moduleCode: "ME",
+    label: "Tuỳ chọn thông báo",
+    path: "/me/preferences/notifications",
+    icon: "sliders-horizontal",
+    group: "Thông báo",
+    order: 31,
+    requiredAnyPermissions: ["access:me"],
+  },
+  {
+    sidebarKey: "me.preferences.appearance",
+    moduleCode: "ME",
+    label: "Giao diện",
+    path: "/me/preferences/appearance",
+    // "palette" KHÔNG có trong DynamicIcon.ICON_MAP (file NGOÀI phạm vi lane này) — dùng "settings" (đã
+    // map sẵn) để tránh fallback Circle vô nghĩa.
+    icon: "settings",
+    group: "Cài đặt cá nhân",
+    order: 40,
     requiredAnyPermissions: ["access:me"],
   },
 ];

@@ -914,6 +914,68 @@ describe("ROUTE_REGISTRY — noti.delivery-logs (S4-FE-NOTI-4, chuyển từ Rou
   });
 });
 
+// ---------------------------------------------------------------------------
+// S5-ME-FE-3 — 6 route mới "Công việc của tôi/Thông báo/Cài đặt cá nhân" (ME-SCREEN-009..014). Gate GIỮ
+// literal `access:me` (mirror me.overview) — mọi trang chỉ tổng hợp qua meApi.*Summary/getPreferences.
+// ---------------------------------------------------------------------------
+
+const ME_SESSION = () => ({
+  modules: [{ moduleCode: "ME" as const, status: "active" as const }],
+});
+
+const ME_NEW_ROUTE_KEYS = [
+  { routeKey: "me.attendance", path: "/me/attendance", screenCode: "ME-SCREEN-009" },
+  { routeKey: "me.leave", path: "/me/leave", screenCode: "ME-SCREEN-010" },
+  { routeKey: "me.tasks", path: "/me/tasks", screenCode: "ME-SCREEN-011" },
+  { routeKey: "me.notifications", path: "/me/notifications", screenCode: "ME-SCREEN-012" },
+  {
+    routeKey: "me.preferences.notifications",
+    path: "/me/preferences/notifications",
+    screenCode: "ME-SCREEN-013",
+  },
+  {
+    routeKey: "me.preferences.appearance",
+    path: "/me/preferences/appearance",
+    screenCode: "ME-SCREEN-014",
+  },
+] as const;
+
+describe("ROUTE_REGISTRY — 6 route ME mới (S5-ME-FE-3, ME-SCREEN-009..014)", () => {
+  it.each(ME_NEW_ROUTE_KEYS)(
+    "$routeKey TỒN TẠI, path=$path, moduleCode=ME, screenCode=$screenCode, showInSidebar, gate literal access:me",
+    ({ routeKey, path, screenCode }) => {
+      const meta = getRouteMeta(routeKey)!;
+      expect(meta).toBeDefined();
+      expect(meta.path).toBe(path);
+      expect(meta.moduleCode).toBe("ME");
+      expect(meta.screenCode).toBe(screenCode);
+      expect(meta.showInSidebar).toBe(true);
+      expect(meta.requiredAnyPermissions).toEqual(["access:me"]);
+      expect(meta.requiredScopes).toBeUndefined();
+    },
+  );
+
+  it.each(ME_NEW_ROUTE_KEYS)(
+    "deny-path $routeKey: thiếu access:me → SHOW_403 (module ME active, không rơi SHOW_404 sớm)",
+    ({ routeKey }) => {
+      const meta = getRouteMeta(routeKey)!;
+      const session = makeSession(ME_SESSION());
+      const c = createPermissionChecker(makePerms([]));
+      expect(evaluateRouteAccess(session, meta, c).action).toBe("SHOW_403");
+    },
+  );
+
+  it.each(ME_NEW_ROUTE_KEYS)(
+    "allow-path $routeKey: có access:me + ME active → ALLOW",
+    ({ routeKey }) => {
+      const meta = getRouteMeta(routeKey)!;
+      const session = makeSession(ME_SESSION());
+      const c = createPermissionChecker(makePerms(["access:me"]));
+      expect(evaluateRouteAccess(session, meta, c).action).toBe("ALLOW");
+    },
+  );
+});
+
 describe("PERMISSION_CODE_TO_PAIR — TASK/NOTI/DASH pairs (drift-guard, S4-FE-REGISTRY-1)", () => {
   // Mirror block FOUNDATION/AUTH — pin ánh xạ tường minh để happy-path (admin có mọi cặp) KHÔNG che drift.
   it("ánh xạ tường minh khớp cặp engine THẬT non-sensitive (mig 0005 · 0100)", () => {
