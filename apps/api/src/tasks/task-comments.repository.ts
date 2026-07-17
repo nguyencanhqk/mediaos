@@ -18,6 +18,11 @@ export interface TaskCommentRow {
   taskId: string;
   userId: string;
   userName: string | null;
+  // S5-NOTI-FIX-2 (FULL-gate fix HIGH-2): fallback hiển thị cho actor_name khi users.full_name NULL
+  // (cột nullable — hr-write.service provision account cho phép bỏ trống fullName). email NOT NULL
+  // (định danh đăng nhập) ⇒ actor_name payload không bao giờ null → renderer không giữ '{actor_name}' trần.
+  // Optional để KHÔNG phá literal TaskCommentRow sẵn có trong spec (additive, mirror TaskCoreRow.taskCode).
+  userEmail?: string | null;
   body: string;
   createdAt: string | Date;
   deletedAt: string | Date | null;
@@ -31,6 +36,7 @@ const COMMENT_SELECT = sql`
   c.task_id     AS "taskId",
   c.user_id     AS "userId",
   u.full_name   AS "userName",
+  u.email       AS "userEmail",
   c.body        AS body,
   c.created_at  AS "createdAt",
   c.deleted_at  AS "deletedAt"`;

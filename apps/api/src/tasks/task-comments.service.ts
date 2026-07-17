@@ -99,6 +99,14 @@ export class TaskCommentsService {
         body: dto.content,
       });
       const actorEmp = await this.coreRepo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
+      // Đọc lại row NGAY (thay vì cuối hàm) để lấy `userName` (users.full_name của actor = tác giả
+      // comment) dùng cho payload outbox actor_name — additive, KHÔNG cần repo/query mới.
+      const row = await this.repo.findByIdTx(tx, user.companyId, taskId, created.id);
+      if (!row) throw new InternalServerErrorException("Không tải lại được bình luận vừa tạo.");
+      // FULL-gate fix HIGH-2 (S5-NOTI-FIX-2): full_name nullable ⇒ coalesce sang email (NOT NULL, định danh
+      // đăng nhập, KHÔNG thuộc SENSITIVE_PAYLOAD_KEYS) — actor_name không bao giờ null, renderer không còn
+      // đường giữ '{actor_name}' trần (silent failure cùng lớp với bug QA2-CRIT-002 đang vá).
+      const actorDisplayName = row.userName ?? row.userEmail ?? null;
 
       await this.activity.record(tx, {
         action: "COMMENT_CREATED",
@@ -125,21 +133,27 @@ export class TaskCommentsService {
           user,
           actorEmp?.id ?? null,
           created.id,
+          actorDisplayName,
         ),
       });
       if (mentions.length > 0) {
         await this.outbox.enqueue(tx, {
           eventType: "task.mentioned",
           payload: {
-            ...this.commentPayload("TASK_MENTIONED", task, user, actorEmp?.id ?? null, created.id),
+            ...this.commentPayload(
+              "TASK_MENTIONED",
+              task,
+              user,
+              actorEmp?.id ?? null,
+              created.id,
+              actorDisplayName,
+            ),
             mentionedEmployeeIds: mentions.map((m) => m.employeeId),
             mentionedUserIds: mentions.map((m) => m.userId),
           },
         });
       }
 
-      const row = await this.repo.findByIdTx(tx, user.companyId, taskId, created.id);
-      if (!row) throw new InternalServerErrorException("Không tải lại được bình luận vừa tạo.");
       return this.toDto(row, mentions);
     });
   }
@@ -305,12 +319,26 @@ export class TaskCommentsService {
     return !!row;
   }
 
+  /**
+   * S5-NOTI-FIX-2 (lane noti-fix2-comment) — additive: `task_code`/`actor_name` (snake_case) thêm
+   * KHỚP CHÍNH XÁC placeholder template global 0481 (`{task_code}`/`{actor_name}` — seed
+   * TASK_COMMENT_CREATED/TASK_MENTIONED). 8 key camelCase cũ GIỮ NGUYÊN tên (consumer cũ không vỡ).
+   * Non-sensitive: task_code (mã công khai) + actor_name (tên người bình luận) — không thuộc
+   * SENSITIVE_PAYLOAD_KEYS (BẤT BIẾN #3, notification-engine.errors.ts assertPayloadSafe).
+   *
+   * FULL-gate fix HIGH-1: `task_code` coalesce sang `title` khi NULL — task duyệt HR
+   * (hr-tasks.service.createApprovalTaskTx, gọi từ leave/attendance-adjustment) CHƯA cut-over code-gen
+   * (counter giữ lock suốt tx đơn — cần thiết kế riêng, follow-up WO S5-TASK-HRCODE-1) nên vẫn đẻ
+   * task_code=NULL sau 0498; comment/mention lên task đó KHÔNG được rớt lại '{task_code}' trần
+   * (đúng lời hứa QA2-CRIT-002). Body khi fallback: "… trong task <title>." — đọc tự nhiên.
+   */
   private commentPayload(
     eventCode: string,
     task: TaskCoreRow,
     user: RequestUser,
     actorEmployeeId: string | null,
     commentId: string,
+    actorName: string | null,
   ): Record<string, unknown> {
     return {
       eventCode,
@@ -322,6 +350,8 @@ export class TaskCommentsService {
       actorEmployeeId,
       assigneeEmployeeId: task.mainAssigneeEmployeeId,
       creatorUserId: task.creatorUserId,
+      task_code: task.taskCode ?? task.title,
+      actor_name: actorName,
     };
   }
 

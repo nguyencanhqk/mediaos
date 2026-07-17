@@ -33,6 +33,10 @@ export interface TaskCoreRow {
   title: string;
   description: string | null;
   taskType: string;
+  // S5-NOTI-FIX-2 (lane noti-fix2-comment): additive — cột `tasks.task_code` cho placeholder {task_code}
+  // (seed 0481 TASK_COMMENT_CREATED/TASK_MENTIONED). Optional (KHÔNG bắt buộc) để KHÔNG phá literal
+  // TaskCoreRow hiện có (vd task-core.mapper.spec.ts baseRow) chưa set field này — additive, không rewrite.
+  taskCode?: string | null;
   taskStatus: string | null;
   taskPriority: string | null;
   projectId: string | null;
@@ -90,6 +94,10 @@ export interface TaskCoreInsertValues {
   startAt: string | null;
   creatorUserId: string;
   createdBy: string;
+  // S5-NOTI-FIX-2 (lane notifix2-taskcode-codegen) — mã hiển thị công khai (TASK-0001…) đã cấp qua
+  // SequenceService.nextCode Ở TX RIÊNG TRƯỚC insert (0 dup, gaps OK). REQUIRED: createTask luôn cấp trước
+  // (KHÔNG để NULL — cột 0478 + counter 'task' 0498) ⇒ commentPayload()/mention emit mã THẬT, KHÔNG '{task_code}'.
+  taskCode: string;
 }
 
 export interface TaskCorePatchValues {
@@ -111,6 +119,7 @@ const TASK_CORE_SELECT = sql`
   tk.title                     AS title,
   tk.description               AS description,
   tk.task_type                 AS "taskType",
+  tk.task_code                 AS "taskCode",
   tk.task_status               AS "taskStatus",
   tk.task_priority             AS "taskPriority",
   tk.project_id                AS "projectId",
@@ -348,6 +357,10 @@ export class TaskCoreRepository {
    * Insert task core (task_type='office' cố định, task_status='Todo'). Ghi CẢ creator_user_id (domain, nguồn
    * 'created' cho /my) LẪN created_by (audit generic) = actor để tránh lệch. assignee_user_id (legacy) ghi
    * ĐỒNG THỜI với main_assignee_employee_id để board cũ vẫn thấy. Cột legacy status/priority giữ DEFAULT DB.
+   *
+   * S5-NOTI-FIX-2 (lane notifix2-taskcode-codegen): ghi `task_code` = mã đã cấp qua SequenceService.nextCode
+   * (tx RIÊNG TRƯỚC insert — service layer). uq_tasks_company_task_code_active (0478) chặn trùng còn-sống;
+   * counter FOR UPDATE (0498) đã serialize ⇒ không trùng ở đường bình thường (gaps OK khi tx này rollback).
    */
   async insertTaskCoreTx(
     tx: TenantTx,
@@ -358,11 +371,11 @@ export class TaskCoreRepository {
       insert into tasks (
         company_id, task_type, title, description, task_status, task_priority,
         project_id, department_id, main_assignee_employee_id, assignee_user_id,
-        creator_user_id, reporter_employee_id, due_at, start_at, created_by, updated_by
+        creator_user_id, reporter_employee_id, due_at, start_at, created_by, updated_by, task_code
       ) values (
         ${companyId}, 'office', ${v.title}, ${v.description}, 'Todo', ${v.taskPriority},
         ${v.projectId}, ${v.departmentId}, ${v.mainAssigneeEmployeeId}, ${v.assigneeUserId},
-        ${v.creatorUserId}, ${v.reporterEmployeeId}, ${v.dueAt}, ${v.startAt}, ${v.createdBy}, ${v.createdBy}
+        ${v.creatorUserId}, ${v.reporterEmployeeId}, ${v.dueAt}, ${v.startAt}, ${v.createdBy}, ${v.createdBy}, ${v.taskCode}
       )
       returning id
     `);

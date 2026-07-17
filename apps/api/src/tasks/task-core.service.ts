@@ -21,6 +21,8 @@ import { TASK_CORE_PAGE_LIMIT_MAX } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { DataScopeService } from "../permission/data-scope.service";
+import { SequenceService } from "../foundation/sequences/sequence.service";
+import { SequenceNotFoundError } from "../foundation/sequences/sequence.types";
 import { TasksRepository } from "./tasks.repository";
 import {
   TaskCoreRepository,
@@ -42,6 +44,22 @@ interface RequestUser {
 const WORKFLOW_TASK_TYPES = new Set<string>(["workflow_step", "production", "review", "revision"]);
 
 const DEFAULT_LIST_LIMIT = 50;
+
+/**
+ * S5-NOTI-FIX-2 (lane notifix2-taskcode-codegen) — cấu hình counter mã task. `TASK_CODE_SEQUENCE_KEY`
+ * khớp seed migration 0498 (sequence_key='task', scope_type='Company' — mặc định repo). Không có bảng config
+ * riêng cho task (khác employee_code_configs) ⇒ format là HẰNG hệ thống, đặt 1 CHỖ ở đây và PHẢI khớp 0498
+ * (prefix 'TASK-' + zero-pad 4 = TASK-0001). Dùng cho ensure-on-miss (company tạo sau 0498 chưa có counter —
+ * seeder test/onboarding tương lai): tạo counter đúng format rồi retry, KHÔNG hard-code mã ở nơi khác.
+ */
+const TASK_CODE_SEQUENCE_KEY = "task";
+const TASK_CODE_COUNTER_DEFAULTS = {
+  moduleCode: "TASK",
+  prefix: "TASK-",
+  paddingLength: 4,
+  resetPolicy: "Never" as const,
+  status: "Active" as const,
+};
 
 /** Mã lỗi TASK (SPEC-01 §9 MODULE-ERR-XXX) — fail-loud, KHÔNG nuốt nhánh lỗi (silent-failure). */
 const ERR = {
@@ -80,6 +98,8 @@ export class TaskCoreService {
     private readonly dataScope: DataScopeService,
     private readonly audit: AuditService,
     private readonly activity: TaskActivityService,
+    // S5-NOTI-FIX-2 (additive) — cấp task_code (SequenceModule wired vào TasksModule).
+    private readonly sequence: SequenceService,
   ) {}
 
   // ── Reads ────────────────────────────────────────────────────────────────────
@@ -141,6 +161,10 @@ export class TaskCoreService {
       "create",
       "task",
     );
+    // S5-NOTI-FIX-2: cấp task_code Ở TX RIÊNG TRƯỚC business tx (mirror allocateEmployeeCode) — counter
+    // FOR UPDATE serialize (0 dup) rồi COMMIT ngay, KHÔNG giữ lock suốt tx insert dài. Rollback business tx
+    // ⇒ mã bị "đốt" (gap OK). Ném TRƯỚC insert nếu không cấp được ⇒ KHÔNG tạo task task_code=NULL câm.
+    const taskCode = await this.allocateTaskCode(user.companyId);
     return this.db.withTenant(user.companyId, async (tx) => {
       const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
 
@@ -164,6 +188,7 @@ export class TaskCoreService {
         startAt: dto.startAt ?? null,
         creatorUserId: user.id,
         createdBy: user.id,
+        taskCode,
       });
 
       await this.activity.record(tx, {
@@ -319,6 +344,47 @@ export class TaskCoreService {
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
+
+  /**
+   * S5-NOTI-FIX-2 — cấp mã task kế tiếp qua SequenceService (tx RIÊNG, FOR UPDATE 0-dup). Counter 'task'
+   * đã seed cho mọi company ở migration 0498 ⇒ đường bình thường (N=1) chỉ 1 lượt nextCode. Ensure-on-miss
+   * (mirror allocateEmployeeCode) cho company tạo SAU 0498 chưa có counter (test/onboarding): tạo counter
+   * đúng format canonical (TASK_CODE_COUNTER_DEFAULTS = khớp 0498) rồi retry ĐÚNG 1 lần — KHÔNG loop. Lỗi
+   * khác (Inactive/…) propagate fail-loud (KHÔNG tạo task câm task_code=NULL).
+   */
+  private async allocateTaskCode(companyId: string): Promise<string> {
+    try {
+      return await this.nextTaskCode(companyId);
+    } catch (err) {
+      if (err instanceof SequenceNotFoundError) {
+        await this.ensureTaskCounter(companyId);
+        return this.nextTaskCode(companyId); // retry ĐÚNG 1 lần; lỗi lần 2 ⇒ propagate (fail-loud)
+      }
+      throw err;
+    }
+  }
+
+  private async nextTaskCode(companyId: string): Promise<string> {
+    const { code } = await this.sequence.nextCode(companyId, {
+      sequenceKey: TASK_CODE_SEQUENCE_KEY,
+    });
+    return code;
+  }
+
+  /**
+   * Ensure-on-miss: tạo counter 'task' đúng format canonical (KHÔNG hard-code mã — chỉ format hệ thống, khớp
+   * 0498) TRONG withTenant riêng (RLS+FORCE). ensureCounterTx idempotent (race 2 create đầu ⇒ SELECT lại).
+   */
+  private async ensureTaskCounter(companyId: string): Promise<void> {
+    await this.db.withTenant(companyId, async (tx) => {
+      await this.sequence.ensureCounterTx(
+        tx,
+        companyId,
+        { sequenceKey: TASK_CODE_SEQUENCE_KEY },
+        { sequenceKey: TASK_CODE_SEQUENCE_KEY, ...TASK_CODE_COUNTER_DEFAULTS },
+      );
+    });
+  }
 
   /** DATA-SCOPE ĐỌC: Company/System ⇒ undefined (toàn tenant); Own/Team/Department ⇒ EXISTS predicate. */
   private async resolveReadScopeExists(tx: TenantTx, user: RequestUser): Promise<SQL | undefined> {

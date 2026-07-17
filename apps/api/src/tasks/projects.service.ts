@@ -471,6 +471,13 @@ export class ProjectsService {
       });
       // S4-INT-1 — Producer gap vá: PROJECT_MEMBER_ADDED (SPEC-06 §19). emp.userId đã fail-loud non-null
       // ở trên (ERR.MEMBER_NO_ACCOUNT) — an toàn truyền thẳng.
+      // S5-NOTI-FIX-2 (lane noti-fix2-project) — additive: `project_name`/`project_code` (snake_case) khớp
+      // CHÍNH XÁC placeholder template global 0481 (`{project_name}`/`{project_code}` seed
+      // PROJECT_MEMBER_ADDED__IN_APP__vi-VN). `raw` (Project, đã load ở đầu hàm qua findRawByIdTx) có sẵn
+      // name/projectCode — KHÔNG cần query thêm. `projectCode` NULLABLE (schema `text("project_code")` không
+      // NOT NULL) ⇒ coalesce `?? ""` để renderer (interpolate: value===null/undefined mới giữ placeholder)
+      // KHÔNG rớt lại `{project_code}` trần trong body khi dự án chưa có mã — short_body_template (0481) CHỈ
+      // dùng `{project_name}` nên luôn sạch bất kể quyết định coalesce này. Key camelCase cũ GIỮ NGUYÊN tên.
       await this.outbox.enqueue(tx, {
         eventType: "project.member_added",
         payload: {
@@ -479,6 +486,8 @@ export class ProjectsService {
           memberEmployeeId: emp.id,
           memberUserId: emp.userId,
           actorUserId: user.id,
+          project_name: raw.name,
+          project_code: raw.projectCode ?? "",
         },
       });
 
