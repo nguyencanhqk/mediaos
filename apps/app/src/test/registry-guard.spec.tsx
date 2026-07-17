@@ -32,7 +32,7 @@ import {
 } from "@mediaos/web-core";
 import { ATT_SIDEBAR, LEAVE_SIDEBAR, SYSTEM_SIDEBAR } from "@/layouts/workspace/sidebar-registry";
 import {
-  SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META,
+  FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS,
   SYSTEM_HEALTH_ROUTE_META,
   SYSTEM_RETENTION_ROUTE_META,
   SYSTEM_FILE_ACCESS_LOGS_ROUTE_META,
@@ -424,20 +424,22 @@ describe("getVisibleApps — company-admin thấy attendance + leave", () => {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// S2-FE-FND-7 (H8/§7) — 4 màn System (public-holidays/health/retention/file-access-logs) visibility
-// trong SYSTEM_SIDEBAR THẬT. Kiểm: (1) sidebar pair === route-meta pair (chống drift); (2) deny-path
-// PER-ENTRY — persona thiếu ĐÚNG cặp của entry đó (nhưng có các cặp entry khác) → entry ẨN; có cặp → hiện.
-// admin-full-quyền KHÔNG đủ để chứng minh (phải per-entry mới bắt được pair-drift).
+// S2-FE-FND-7 (H8/§7) — 3 màn System (health/retention/file-access-logs) visibility trong SYSTEM_SIDEBAR
+// THẬT. Kiểm: (1) sidebar pair === route-meta pair (chống drift); (2) deny-path PER-ENTRY — persona thiếu
+// ĐÚNG cặp của entry đó (nhưng có các cặp entry khác) → entry ẨN; có cặp → hiện. admin-full-quyền KHÔNG
+// đủ để chứng minh (phải per-entry mới bắt được pair-drift).
+//
+// S5-LEAVE-HOLIDAYS-MOVE-1: entry "system.public-holidays" ĐÃ GỠ khỏi danh sách này — màn RE-HOME sang
+// LEAVE_SIDEBAR (sidebarKey "leave.public-holidays"), xem describe riêng bên dưới.
 // ---------------------------------------------------------------------------
 
-describe("S2-FE-FND-7 — 4 System sidebar entries (registry thật)", () => {
+describe("S2-FE-FND-7 — 3 System sidebar entries (registry thật)", () => {
   const foundationActive = makeSession({
     modules: [{ moduleCode: "FOUNDATION", status: "active" }],
   });
 
   // sidebarKey → { meta, allPairs của entry }.
   const NEW_ENTRIES = [
-    { key: "system.public-holidays", meta: SYSTEM_PUBLIC_HOLIDAYS_ROUTE_META },
     { key: "system.health", meta: SYSTEM_HEALTH_ROUTE_META },
     { key: "system.retention", meta: SYSTEM_RETENTION_ROUTE_META },
     { key: "system.file-access-logs", meta: SYSTEM_FILE_ACCESS_LOGS_ROUTE_META },
@@ -496,6 +498,48 @@ describe("S2-FE-FND-7 — 4 System sidebar entries (registry thật)", () => {
       expect(filtered.find((i) => i.sidebarKey === key)).toBeUndefined();
     });
   }
+
+  it("SYSTEM_SIDEBAR KHÔNG còn entry system.public-holidays (RE-HOME sang LEAVE)", () => {
+    expect(SYSTEM_SIDEBAR.find((i) => i.sidebarKey === "system.public-holidays")).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S5-LEAVE-HOLIDAYS-MOVE-1 — "Ngày nghỉ lễ" RE-HOME từ SYSTEM_SIDEBAR sang LEAVE_SIDEBAR
+// (sidebarKey "leave.public-holidays", moduleCode LEAVE). Gate GIỮ NGUYÊN
+// FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS (view:foundation-holiday) — deny-path per-entry giống pattern
+// S2-FE-FND-7 ở trên (persona thiếu ĐÚNG cặp → ẨN; có cặp → hiện).
+// ---------------------------------------------------------------------------
+
+describe("S5-LEAVE-HOLIDAYS-MOVE-1 — leave.public-holidays sidebar entry (registry thật)", () => {
+  const leaveActive = makeSession({ modules: [{ moduleCode: "LEAVE", status: "active" }] });
+  const requiredPairs = FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS;
+
+  it("entry tồn tại trong LEAVE_SIDEBAR, group admin, gate === FOUNDATION_HOLIDAY_ROUTE_PERMISSIONS", () => {
+    const entry = LEAVE_SIDEBAR.find((i) => i.sidebarKey === "leave.public-holidays");
+    expect(entry, "sidebar entry leave.public-holidays phải tồn tại").toBeDefined();
+    expect(entry?.path).toBe("/leave/public-holidays");
+    expect(entry?.group).toBe("admin");
+    expect(entry?.requiredAnyPermissions).toEqual(requiredPairs);
+  });
+
+  it("persona CÓ view:foundation-holiday → hiện entry", () => {
+    const c = createPermissionChecker(makePerms([requiredPairs[0]]));
+    const filtered = filterSidebarItems(LEAVE_SIDEBAR, c, leaveActive);
+    expect(filtered.find((i) => i.sidebarKey === "leave.public-holidays")).toBeDefined();
+  });
+
+  it("persona THIẾU view:foundation-holiday (chỉ có cặp LEAVE khác) → ẨN entry (per-entry deny)", () => {
+    const c = createPermissionChecker(makePerms(["view:leave-type"]));
+    const filtered = filterSidebarItems(LEAVE_SIDEBAR, c, leaveActive);
+    expect(filtered.find((i) => i.sidebarKey === "leave.public-holidays")).toBeUndefined();
+  });
+
+  it("persona rỗng quyền → ẨN entry", () => {
+    const c = createPermissionChecker(makePerms([]));
+    const filtered = filterSidebarItems(LEAVE_SIDEBAR, c, leaveActive);
+    expect(filtered.find((i) => i.sidebarKey === "leave.public-holidays")).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -68,6 +68,8 @@ export default {
     // S3-FE-LEAVE-6 — báo cáo tổng hợp nghỉ (LEAVE-SCREEN-013) + audit log nghỉ phép (LEAVE-SCREEN-014A).
     leaveReports: "Báo cáo tổng hợp nghỉ phép",
     leaveAuditLogs: "Audit log nghỉ phép",
+    // S5-LEAVE-HOLIDAYS-MOVE-1 — /leave/public-holidays (RE-HOME từ systemPublicHolidays, cùng nội dung).
+    leavePublicHolidays: "Ngày nghỉ lễ",
     tasks: "Công việc",
     taskMyTasks: "Việc của tôi",
     notifications: "Thông báo",
@@ -80,7 +82,8 @@ export default {
     // S2-FE-FND-5 (lane FE batch C).
     systemSequences: "Bộ đếm mã",
     systemSeeds: "Trạng thái Seed",
-    systemPublicHolidays: "Ngày nghỉ lễ",
+    // S5-LEAVE-HOLIDAYS-MOVE-1: systemPublicHolidays ĐÃ GỠ — màn re-home sang leavePublicHolidays
+    // (route cũ /system/public-holidays chỉ còn redirect thuần, không mount page/title).
     systemHealth: "Tình trạng hệ thống",
     // S2-FE-FND-7 — routeTitle cho 2 màn wired sẵn (S2-FE-FND-6) còn thiếu key i18n.
     systemRetention: "Chính sách lưu trữ",

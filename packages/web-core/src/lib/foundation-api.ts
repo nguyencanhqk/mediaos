@@ -277,7 +277,8 @@ export const foundationApi = {
 };
 
 /**
- * holidayApi — S2-FE-FND-4. Ranh giới HTTP cho /system/public-holidays.
+ * holidayApi — S2-FE-FND-4. Ranh giới HTTP cho màn Ngày nghỉ lễ (S5-LEAVE-HOLIDAYS-MOVE-1: FE re-home
+ * /system/public-holidays → /leave/public-holidays; endpoint BE `/foundation/public-holidays` GIỮ NGUYÊN).
  * Permission (seed THẬT mig 0435): view:foundation-holiday (list) / manage:foundation-holiday (CUD).
  * company_id KHÔNG bao giờ trong body/query (server resolve từ AuthContext — BẤT BIẾN #1).
  */

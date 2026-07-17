@@ -27,6 +27,9 @@ import { foundationApi, foundationKeys, getHealth, rootKeys, useCan } from "@med
 import { PageHeader, EmptyState, Card, CardContent, Badge, Button } from "@mediaos/ui";
 import { SYSTEM_ENGINE_PAIRS } from "../constants";
 import { FOUNDATION_ENGINE_PAIRS, FOUNDATION_PATH } from "./constants";
+// S5-LEAVE-HOLIDAYS-MOVE-1 — màn Ngày nghỉ lễ dời sang /leave/public-holidays; link Quick-access ở đây
+// trỏ THẲNG path mới (tránh 1 hop redirect qua /system/public-holidays cũ).
+import { LEAVE_PATHS } from "@/routes/leave/constants";
 // S2-FE-FND-7 (RC2) — cặp ENGINE THẬT view:audit-log (seed mig 0340, AuditController enforce). Dùng CHUNG
 // nguồn với AuditLogsPage + route system.audit-logs (KHÔNG re-derive orphan view:foundation-audit-log).
 import { AUDIT_LOG_VIEW, AUDIT_LOGS_PATH } from "./audit-logs/constants";
@@ -258,7 +261,7 @@ export function SystemOverviewPage() {
             icon={CalendarDays}
             title={t("overview.cards.holidays.title")}
             description={t("overview.cards.holidays.description")}
-            to={FOUNDATION_PATH.PUBLIC_HOLIDAYS}
+            to={LEAVE_PATHS.PUBLIC_HOLIDAYS}
             actionLabel={t("overview.cards.holidays.manage")}
           />
         )}
