@@ -4,6 +4,7 @@ import { EventsModule } from "../events/events.module";
 import { EventBus, type EventContext } from "../events/event-bus";
 import { AuditRepository } from "../foundation/audit/audit.repository";
 import { SeedModule } from "../foundation/seed/seed.module";
+import { SequenceModule } from "../foundation/sequences/sequence.module";
 import { PermissionModule } from "../permission/permission.module";
 import { HrTasksService } from "../tasks/hr-tasks.service";
 import { AttMasterDataSeeder } from "./att-master-data.seeder";
@@ -84,7 +85,10 @@ class LeaveApprovedSyncRegistrar implements OnModuleInit {
  * DEFAULT_OFFICE_RULE. Inversion of dependency: SeedModule/foundation KHÔNG import ATT.
  */
 @Module({
-  imports: [DatabaseModule, EventsModule, PermissionModule, SeedModule],
+  // S5-TASK-HRCODE-1 (additive): + SequenceModule (exports SequenceService) → HrTasksService (provided
+  // locally below) resolves SequenceService để cấp task_code THẬT cho task HR sinh từ đơn điều chỉnh công.
+  // Optional-DI ở HrTasksService trở thành no-op vô hại khi module này đã import SequenceModule.
+  imports: [DatabaseModule, EventsModule, PermissionModule, SeedModule, SequenceModule],
   controllers: [
     AttendanceController,
     AttendanceAdjustmentController,
