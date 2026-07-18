@@ -125,7 +125,14 @@ export class AttendanceAdjustmentService {
     // allocateTaskCodeBeforeTx map Inactive→409 (TASK-ERR-CODE-COUNTER-INACTIVE) fail-loud TRƯỚC khi mở tx
     // ⇒ KHÔNG tạo task task_code=NULL câm, KHÔNG 500 raw. Ném ngoài chuỗi .catch(mapConflict) nên
     // HttpException giữ nguyên 4xx.
-    const taskCode = await this.hrTasks.allocateTaskCodeBeforeTx(actor.companyId);
+    // Nằm NGOÀI .catch(mapConflict) bên dưới ⇒ tự log để lỗi non-HttpException (SequenceNotFound sau retry,
+    // lỗi pg) không mất ngữ cảnh companyId/op và rơi thẳng ra AllExceptionsFilter thành 500 trần.
+    let taskCode: string;
+    try {
+      taskCode = await this.hrTasks.allocateTaskCodeBeforeTx(actor.companyId);
+    } catch (err: unknown) {
+      throw this.mapError(err, "createRequest.allocateTaskCode", { companyId: actor.companyId });
+    }
     return this.db
       .withTenant(actor.companyId, async (tx) => {
         const target = await this.resolveCreateTarget(actor, dto, tx);

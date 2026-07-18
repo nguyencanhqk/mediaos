@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException, Optional } from "@nestjs/common";
+import { Injectable, InternalServerErrorException } from "@nestjs/common";
 import { and, eq, isNull } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { tasks } from "../db/schema";
@@ -17,17 +17,20 @@ import { allocateTaskCode } from "./task-code.util";
  * TaskCoreService.createTask): caller gọi `allocateTaskCodeBeforeTx(companyId)` Ở TX RIÊNG TRƯỚC tx đơn
  * (KHÔNG giữ lock counter suốt tx dài) rồi truyền `taskCode` vào `createApprovalTaskTx` để GHI vào row.
  *
- * DI (TRANSITIONAL — lane hrcode-tasks land TRƯỚC hrcode-leave/hrcode-att): SequenceService khai `@Optional()`
- * để LeaveModule/AttendanceModule (CHƯA `imports: [SequenceModule]` cho tới các lane sau) vẫn BOOT được —
- * KHÔNG kẹt cả app ở trạng thái nửa-chừng. `allocateTaskCodeBeforeTx` FAIL-LOUD (ném) nếu SequenceService
- * chưa được wire ⇒ tuyệt đối KHÔNG cấp mã câm/silent-null. Khi 2 lane sau `imports: [SequenceModule]`,
- * SequenceService resolve bình thường (Optional trở thành no-op vô hại). DatabaseService = @Global (luôn có).
+ * DI — SequenceService là BẮT BUỘC (KHÔNG `@Optional()`): mọi module provide HrTasksService PHẢI
+ * `imports: [SequenceModule]`. Hiện có đúng 2: AttendanceModule (dùng thật — cấp task_code cho đơn điều
+ * chỉnh công) và LeaveModule (chỉ để DI resolve; LEAVE không dùng task_code — khối gọi service này là code
+ * chết, xem WO S5-LEAVE-DEADCODE-1). Bắt buộc thay vì Optional để thiếu wiring FAIL-FAST LÚC BOOT, thay vì
+ * boot xanh rồi 500 ở request đầu tiên — module thứ 3 quên import sẽ lộ ngay khi khởi động.
+ * Guard runtime trong `allocateTaskCodeBeforeTx` GIỮ làm defense-in-depth (bắt trường hợp khởi tạo tay/test
+ * truyền thiếu) — ném TASK-ERR-CODE-SEQ-UNWIRED, tuyệt đối KHÔNG cấp mã câm/silent-null.
+ * DatabaseService = @Global (luôn có).
  */
 @Injectable()
 export class HrTasksService {
   constructor(
     private readonly db: DatabaseService,
-    @Optional() private readonly sequence?: SequenceService,
+    private readonly sequence: SequenceService,
   ) {}
 
   /**

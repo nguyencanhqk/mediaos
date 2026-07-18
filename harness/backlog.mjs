@@ -6940,6 +6940,37 @@ export const backlog = [
       "Gỡ HrTasksService khỏi LeaveModule providers nếu không còn ai dùng trong module (closeTaskTx/cancelTaskTx cũng chỉ dùng ở khối chết) — xác nhận bằng grep trước khi gỡ",
       "Quyết định tường minh + ghi vào docs: leave_requests.task_id giữ (cột lịch sử) hay drop qua migration expand-contract; nếu drop thì TÁCH release riêng (memory migration-expand-contract-required)",
       "FULL gate (xoá ở vùng đơn nghỉ = crown) + check.sh --lane-db xanh",
+      "Sau khi khối chết biến mất: đổi createApprovalTaskTx taskCode thành BẮT BUỘC (taskCode: string) — TypeScript biến 'quên truyền' thành lỗi build thay vì NULL câm runtime; cập nhật hr-tasks.service.spec bỏ case backward-compat",
+    ],
+  },
+  {
+    id: "S5-SEQ-HARDEN-1",
+    module: "FND",
+    layer: "BE",
+    title:
+      "Gia cố cấp mã tuần tự: SAVEPOINT cho recovery 23505 (ensure-on-miss race hiện trả 500 do 25P02), allocate sau authz tầng-service (chống đốt counter), phân biệt constraint khi map unique-violation",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/foundation/sequences/**",
+      "apps/api/src/attendance/**",
+      "apps/api/src/tasks/**",
+      "apps/api/test/integration/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-TASK-HRCODE-1"],
+    src: [
+      "FULL gate S5-TASK-HRCODE-1 (security-reviewer MEDIUM-4 + silent-failure F5): sequence.repository.ts:119-125 re-SELECT trên CÙNG tx sau lỗi 23505 — Postgres đã abort tx ⇒ lệnh sau ném 25P02 'current transaction is aborted', KHÔNG trả row raced. Recovery graceful KHÔNG hoạt động. Có sẵn từ trước nhưng PR HRCODE-1 nâng số caller từ 1 lên 3 (blast radius rộng hơn). Sửa: SAVEPOINT quanh INSERT, hoặc ON CONFLICT DO NOTHING + re-select, hoặc re-select ở tx MỚI",
+      "security-reviewer MEDIUM-1: attendance-adjustment.service.createRequest allocate mã TRƯỚC authz tầng-service (resolveCreateTarget 403 / assertPeriodOpenForDate 409) — actor qua PermissionGuard nhưng fail ở service vẫn đốt counter mỗi lần thử (counter inflation, DoS-lite). So sánh task-core.service.ts:145 assert permission RỒI mới allocate. Cân nhắc: chuyển allocate xuống sau khi resolve target/period thành công (giữ nguyên nguyên tắc allocate NGOÀI tx), hoặc chấp nhận + ghi rõ trong doc thiết kế",
+      "security-reviewer LOW: attendance-adjustment mapConflict dùng isUniqueViolation không phân biệt constraint — task HR nay ghi task_code non-null nên vi phạm uq_tasks_company_task_code_active (0478:370) sẽ hiện sai thành 'Đã có đơn điều chỉnh đang chờ duyệt cho ngày X'. Khả năng chạm thấp (không có route DELETE counter) nhưng thông báo sai lệch. Sửa: check constraint name trước khi map",
+      "security-reviewer LOW: task-code.util.allocateTaskCode ràng buộc 'gọi NGOÀI tx' chỉ nằm ở comment — caller tương lai gọi trong withTenant sẽ mở connection thứ 2 (nguy cơ cạn pool/deadlock dưới tải). Sửa: đổi tên allocateTaskCodeOutsideTx hoặc assert runtime",
+      "silent-failure F7: bảo vệ int-spec phụ thuộc ĐÚNG 1 dòng LANE_DB trong .github/workflows/api.yml:196-199 — ai gỡ dòng đó thì hr-task-code.int-spec âm thầm quay về SKIP. Cân nhắc thêm canary step tường minh cho spec này",
+    ],
+    done_when: [
+      "Race ensure-on-miss (2 request đồng thời cho company CHƯA có counter) trả mã hợp lệ cho cả hai — KHÔNG 500/25P02; int-spec LANE_DB chạy song song chứng minh",
+      "Quyết định tường minh về thứ tự allocate-vs-authz (sửa hoặc chấp nhận có văn bản); nếu sửa thì deny-path test chứng minh 403/409 KHÔNG đốt counter",
+      "Vi phạm uq_tasks_company_task_code_active map ra thông báo ĐÚNG nguyên nhân, có log",
+      "FULL gate + check.sh --lane-db xanh",
     ],
   },
 ];
