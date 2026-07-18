@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { DatabaseService } from "../db/db.service";
-import { orgUnits, teams, teamMembers, users, roles } from "../db/schema";
+import { employeeProfiles, orgUnits, teams, teamMembers, users, roles } from "../db/schema";
 import { notOperatorRole } from "../permission/operator-roles";
 
 @Injectable()
@@ -44,8 +44,8 @@ export class OrgRepository {
 
   /** Lấy tất cả node cho buildTree — không filter status vì cần full tree. */
   async getOrgTree(companyId: string) {
-    const rows = await this.db.withTenant(companyId, (tx) =>
-      tx
+    return this.db.withTenant(companyId, async (tx) => {
+      const rows = await tx
         .select({
           id: orgUnits.id,
           parentId: orgUnits.parentId,
@@ -58,9 +58,32 @@ export class OrgRepository {
         .from(orgUnits)
         .leftJoin(users, eq(orgUnits.headUserId, users.id))
         .where(and(eq(orgUnits.companyId, companyId), isNull(orgUnits.deletedAt)))
-        .orderBy(orgUnits.name),
-    );
-    return buildTree(rows, null);
+        .orderBy(orgUnits.name);
+
+      // S5-HR-ORGCHART-BE-1 (additive): headcount = ACTIVE employees directly in each unit (no rollup),
+      // ONE group-by (no N+1), inside this tenant tx (RLS + belt-and-suspenders company_id).
+      const counts = await tx
+        .select({
+          orgUnitId: employeeProfiles.orgUnitId,
+          count: sql<number>`cast(count(*) as int)`,
+        })
+        .from(employeeProfiles)
+        .where(
+          and(
+            eq(employeeProfiles.companyId, companyId),
+            isNull(employeeProfiles.deletedAt),
+            eq(employeeProfiles.status, "active"),
+          ),
+        )
+        .groupBy(employeeProfiles.orgUnitId);
+
+      const countByUnit = new Map<string, number>();
+      for (const c of counts) {
+        if (c.orgUnitId != null) countByUnit.set(c.orgUnitId, Number(c.count));
+      }
+      const withCount = rows.map((r) => ({ ...r, employeeCount: countByUnit.get(r.id) ?? 0 }));
+      return buildTree(withCount, null);
+    });
   }
 
   createOrgUnit(
@@ -125,7 +148,6 @@ export class OrgRepository {
         .returning(),
     );
   }
-
 
   // ── Teams ────────────────────────────────────────────────────────────────────
 
@@ -348,6 +370,8 @@ type FlatNode = {
   code: string | null | undefined;
   status: string;
   headUserName: string | null | undefined;
+  // S5-HR-ORGCHART-BE-1 (additive): active headcount for this unit (populated in getOrgTree).
+  employeeCount: number;
 };
 
 type TreeNode = FlatNode & { children: TreeNode[] };

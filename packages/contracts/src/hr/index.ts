@@ -22,3 +22,6 @@ export * from "./employee-export";
 // no salary/PII) + IMPORT_COLUMN_ORDER (parser+template SoT) + dry-run report + apply result. NOT the
 // media-era legacy importEmployeeRowSchema in ../employees.ts. Gate import:employee (mig 0496).
 export * from "./employee-import";
+// S5-HR-ORGCHART-BE-1 (additive): org-chart cây nhân sự theo direct_manager_id, node directory-class,
+// scoped (Option A). Response { roots, warnings.cyclesDetected }.
+export * from "./org-chart";
