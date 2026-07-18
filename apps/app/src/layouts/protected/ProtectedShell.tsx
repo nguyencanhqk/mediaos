@@ -24,7 +24,7 @@ import { GlobalTopbar } from "../topbar/GlobalTopbar";
 import { AppSwitcher } from "../home/AppSwitcher";
 import { useLayoutStore } from "@/stores/layout.store";
 import { useCurrentRouteMeta } from "@/hooks/use-current-route-meta";
-import { ACCOUNT_SETUP_2FA_PATH } from "@/routes/account/constants";
+import { ACCOUNT_SETUP_2FA_PATH, SETUP_2FA_PATHS } from "@/routes/account/constants";
 
 // ---------------------------------------------------------------------------
 // Shell loading skeleton
@@ -96,9 +96,10 @@ export function ProtectedShell({ children }: ProtectedShellProps) {
   }, [isAuthenticated]);
 
   // AUTH-003 — role/company ép 2FA (BE TwoFactorEnforcementGuard) nhưng user CHƯA enroll: buộc điều
-  // hướng màn /account/setup-2fa TRƯỚC khi vào bất kỳ route nào khác (kể cả /home). Loại trừ CHÍNH
-  // route enroll để tránh vòng lặp redirect — cổng quyền THẬT vẫn ở server, đây chỉ là UX.
-  const forcedToSetupTwoFactor = mustSetupTwoFactor && pathname !== ACCOUNT_SETUP_2FA_PATH;
+  // hướng màn enroll TRƯỚC khi vào bất kỳ route nào khác (kể cả /home). Loại trừ MỌI mount của chính
+  // trang enroll (shell /account/setup-2fa + ME /me/security/2fa) để tránh vòng lặp redirect — cổng
+  // quyền THẬT vẫn ở server, đây chỉ là UX.
+  const forcedToSetupTwoFactor = mustSetupTwoFactor && !SETUP_2FA_PATHS.includes(pathname);
   useEffect(() => {
     if (forcedToSetupTwoFactor) {
       void navigate({ to: ACCOUNT_SETUP_2FA_PATH as "/" });

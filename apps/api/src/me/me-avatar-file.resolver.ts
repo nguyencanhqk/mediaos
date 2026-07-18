@@ -39,8 +39,26 @@ export class MeAvatarFileResolver implements FileOwnerPermissionResolver {
     return this.ownsAvatarEntity(input);
   }
 
+  /**
+   * S5-ME-BE-5 (security) — gắn file làm ME/avatar đòi CHỦ SỞ HỮU CẢ entity (employee của mình) LẪN file
+   * (owner_user_id === caller). Owner-check ENTITY-only cũ để lọt vector: holder `link:foundation-file`
+   * (seed = company-admin) dùng POST /foundation/files/:id/links gắn file NGƯỜI KHÁC (vd ảnh CCCD) làm avatar
+   * của employee mình → ký/tải qua directory (avatar-presign) hoặc download own-scope. Thêm owner-check file
+   * (mirror MeAvatarService.setAvatar:owner-check) đóng tại NGUỒN. fileId vắng (pre-link) → deny (fail-closed).
+   */
   canLinkFile(input: FilePermissionInput): Promise<boolean> {
-    return this.ownsAvatarEntity(input);
+    if (!input.fileId) return Promise.resolve(false);
+    const fileId = input.fileId;
+    return this.db.withTenant(input.companyId, async (tx) => {
+      const ownsEntity = await this.repo.isOwnEmployeeTx(
+        tx,
+        input.companyId,
+        input.entityId,
+        input.userId,
+      );
+      if (!ownsEntity) return false;
+      return this.repo.isFileOwnedByTx(tx, input.companyId, fileId, input.userId);
+    });
   }
 
   canUnlinkFile(input: FilePermissionInput): Promise<boolean> {

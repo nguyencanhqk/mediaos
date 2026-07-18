@@ -69,16 +69,9 @@ export const HR_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 10,
     requiredAnyPermissions: ["HR.EMPLOYEE.VIEW"],
   },
-  {
-    sidebarKey: "hr.me",
-    moduleCode: "HR",
-    label: "Hồ sơ của tôi",
-    path: "/hr/me",
-    icon: "user",
-    group: "operation",
-    order: 20,
-    requiredAnyPermissions: ["HR.EMPLOYEE.VIEW"],
-  },
+  // "Hồ sơ của tôi" (/hr/me) GỠ khỏi sidebar HR — trùng với ME "Hồ sơ của tôi" (/me/profile,
+  // sidebarKey me.profile) sau S5-ME-FE-2. Route /hr/me GIỮ đăng ký trong router.tsx để link/bookmark
+  // cũ không gãy; chỉ ẩn lối vào ở menu.
   {
     sidebarKey: "hr.employees",
     moduleCode: "HR",
@@ -519,6 +512,18 @@ export const TASK_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 20,
     requiredAnyPermissions: ["TASK.TASK.VIEW"],
   },
+  // S5-FE-TASK-6 — Task quá hạn (TASK-SCREEN-010). Gate TASK.TASK.VIEW (như danh sách). icon
+  // "alert-triangle" CÓ trong DynamicIcon.ICON_MAP (tránh fallback Circle).
+  {
+    sidebarKey: "task.overdue",
+    moduleCode: "TASK",
+    label: "Task quá hạn",
+    path: "/tasks/overdue",
+    icon: "alert-triangle",
+    group: "operation",
+    order: 25,
+    requiredAnyPermissions: ["TASK.TASK.VIEW"],
+  },
   // S5-FE-TASK-NAV-1: route task.projects.list có trong ROUTE_REGISTRY web-core (showInSidebar) nhưng
   // ModuleSidebar dựng menu từ registry NÀY — phải khai item ở đây mới thấy (SCREEN-001 trước đó mồ côi).
   {
@@ -886,6 +891,71 @@ export const ME_SIDEBAR: readonly SidebarItemMeta[] = [
     icon: "settings",
     group: "Cài đặt cá nhân",
     order: 40,
+    requiredAnyPermissions: ["access:me"],
+  },
+  // S5-ME-FE-2 — APPEND 2 nhóm "Hồ sơ của tôi"/"Tài khoản & bảo mật" (§8.1, ME-SCREEN-002..008). 5 màn
+  // TÁI DÙNG page sẵn có (MyProfilePage/MyChangeRequestPage/AccountProfilePage/ChangePasswordPage/
+  // AccountSessionsPage) mount trong ME workspace qua ROUTE_REGISTRY "me.profile"/…; icon CHỌN TRONG
+  // DynamicIcon.ICON_MAP đã có sẵn (tránh fallback Circle, cùng ghi chú "Giao diện" ở trên) — KHÔNG
+  // "file-edit" (dùng ở HR_SIDEBAR/ATT_SIDEBAR nhưng KHÔNG map trong ICON_MAP, ngoài phạm vi lane này).
+  {
+    sidebarKey: "me.profile",
+    moduleCode: "ME",
+    label: "Hồ sơ của tôi",
+    path: "/me/profile",
+    icon: "user",
+    group: "Hồ sơ của tôi",
+    order: 45,
+    requiredAnyPermissions: ["access:me"],
+  },
+  {
+    sidebarKey: "me.profile.change-requests",
+    moduleCode: "ME",
+    label: "Yêu cầu cập nhật hồ sơ",
+    path: "/me/profile/change-requests",
+    icon: "clipboard-list",
+    group: "Hồ sơ của tôi",
+    order: 46,
+    requiredAnyPermissions: ["access:me"],
+  },
+  {
+    sidebarKey: "me.account",
+    moduleCode: "ME",
+    label: "Tài khoản",
+    path: "/me/account",
+    icon: "user-circle",
+    group: "Tài khoản & bảo mật",
+    order: 47,
+    requiredAnyPermissions: ["access:me"],
+  },
+  {
+    sidebarKey: "me.security.password",
+    moduleCode: "ME",
+    label: "Đổi mật khẩu",
+    path: "/me/security/password",
+    icon: "key-round",
+    group: "Tài khoản & bảo mật",
+    order: 48,
+    requiredAnyPermissions: ["access:me"],
+  },
+  {
+    sidebarKey: "me.security.sessions",
+    moduleCode: "ME",
+    label: "Phiên đăng nhập",
+    path: "/me/security/sessions",
+    icon: "log-in",
+    group: "Tài khoản & bảo mật",
+    order: 49,
+    requiredAnyPermissions: ["access:me"],
+  },
+  {
+    sidebarKey: "me.security.activity",
+    moduleCode: "ME",
+    label: "Hoạt động bảo mật",
+    path: "/me/security/activity",
+    icon: "shield-alert",
+    group: "Tài khoản & bảo mật",
+    order: 50,
     requiredAnyPermissions: ["access:me"],
   },
 ];

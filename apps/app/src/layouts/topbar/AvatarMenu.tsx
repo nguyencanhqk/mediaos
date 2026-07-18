@@ -5,11 +5,24 @@
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { KeyRound, LogOut, User } from "lucide-react";
-import { useAuthStore, logoutSession, getAuthRedirectUrl } from "@mediaos/web-core";
+import { useQuery } from "@tanstack/react-query";
+import { KeyRound, LogOut, User, UserCircle } from "lucide-react";
+import { useAuthStore, logoutSession, getAuthRedirectUrl, meApi, meKeys } from "@mediaos/web-core";
 import { Avatar, cn } from "@mediaos/ui";
 import { useLayoutStore } from "@/stores/layout.store";
 import { DirtyFormConfirmDialog } from "../shared/DirtyFormConfirmDialog";
+
+/**
+ * Đích điều hướng của menu avatar — TRỎ VÀO ME workspace (SPEC-09, S5-ME-FE-2) thay cho route cũ
+ * /account/*. Cùng page được mount ở cả hai nơi; ME là lối vào chính thức nên topbar phải nhất quán
+ * với ME_SIDEBAR (me.overview · me.account · me.security.password). Route /account/* GIỮ hoạt động
+ * (không gãy bookmark) nhưng không còn được link tới từ đây.
+ */
+const AVATAR_MENU_PATHS = {
+  ME_HUB: "/me",
+  ACCOUNT: "/me/account",
+  CHANGE_PASSWORD: "/me/security/password",
+} as const;
 
 export function AvatarMenu() {
   const { t } = useTranslation(["common", "nav", "auth"]);
@@ -21,6 +34,15 @@ export function AvatarMenu() {
   const email = useAuthStore((s) => s.user?.email ?? "");
   const dirtyFormState = useLayoutStore((s) => s.dirtyFormState);
   const navigate = useNavigate();
+
+  // S5-ME-FE-4 — avatar own-scope (GET /me/avatar, fail-soft → null → initials). CÙNG query key
+  // meKeys.avatar() với AvatarUploadCard/MeBannerAvatar ⇒ upload/gỡ ảnh tự cập nhật topbar (invalidate chung).
+  const avatarQuery = useQuery({
+    queryKey: meKeys.avatar(),
+    queryFn: () => meApi.getAvatar(),
+    staleTime: 60_000,
+  });
+  const avatarUrl = avatarQuery.data?.downloadUrl ?? null;
 
   // Close on click outside
   React.useEffect(() => {
@@ -58,16 +80,19 @@ export function AvatarMenu() {
     }
   };
 
+  const handleMeHubClick = () => {
+    setOpen(false);
+    void navigate({ to: AVATAR_MENU_PATHS.ME_HUB as "/" });
+  };
+
   const handleProfileClick = () => {
     setOpen(false);
-    // S2-FE-AUTH-6: "Tài khoản của tôi" trỏ /account/profile (đọc user+employee+roles từ /auth/me) —
-    // TRƯỚC ĐÂY trỏ nhầm /home (Home Portal, không phải trang tài khoản).
-    void navigate({ to: "/account/profile" as "/" });
+    void navigate({ to: AVATAR_MENU_PATHS.ACCOUNT as "/" });
   };
 
   const handleChangePasswordClick = () => {
     setOpen(false);
-    void navigate({ to: "/account/change-password" as "/" });
+    void navigate({ to: AVATAR_MENU_PATHS.CHANGE_PASSWORD as "/" });
   };
 
   return (
@@ -80,7 +105,7 @@ export function AvatarMenu() {
           aria-haspopup="menu"
           className="flex items-center gap-2 rounded-lg px-1 py-1 text-chrome-foreground/90 transition-colors hover:bg-white/10"
         >
-          <Avatar name={username} size="sm" className="bg-white/15 text-white" />
+          <Avatar name={username} src={avatarUrl} size="sm" className="bg-white/15 text-white" />
           <span className="hidden max-w-[8rem] truncate text-sm lg:block">{username}</span>
         </button>
 
@@ -93,6 +118,18 @@ export function AvatarMenu() {
               <p className="text-sm font-medium text-foreground">{username}</p>
               <p className="truncate text-xs text-muted-foreground">{email}</p>
             </div>
+
+            <button
+              role="menuitem"
+              onClick={handleMeHubClick}
+              className={cn(
+                "flex w-full items-center gap-2 px-3 py-2 text-sm",
+                "text-foreground hover:bg-accent",
+              )}
+            >
+              <UserCircle className="h-4 w-4 text-muted-foreground" />
+              {t("nav:app.me")}
+            </button>
 
             <button
               role="menuitem"

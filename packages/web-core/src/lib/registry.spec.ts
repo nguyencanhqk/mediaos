@@ -13,6 +13,7 @@ import {
   type SidebarItemMeta,
   type UserPermission,
 } from "./registry";
+import viNav from "../i18n/locales/vi/nav";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -773,6 +774,37 @@ describe("S4 registry reconcile — TASK/NOTI/DASH route access (deny/allow)", (
   });
 });
 
+// S5-FE-TASK-6 — 2 route mới: Task quá hạn (SCREEN-010) + Báo cáo tiến độ dự án (SCREEN-011).
+describe("S5-FE-TASK-6 — task.overdue + task.projects.report route meta", () => {
+  const taskOverdue = getRouteMeta("task.overdue")!;
+  const taskProjectReport = getRouteMeta("task.projects.report")!;
+
+  it("task.overdue: path/screenCode/gate/showInSidebar đúng (SCREEN-010, read:task)", () => {
+    expect(taskOverdue.path).toBe("/tasks/overdue");
+    expect(taskOverdue.screenCode).toBe("TASK-SCREEN-010");
+    expect(taskOverdue.requiredAnyPermissions).toEqual(["TASK.TASK.VIEW"]);
+    expect(taskOverdue.showInSidebar).toBe(true);
+  });
+
+  it("task.projects.report: param path, gate read:project, KHÔNG vào sidebar (SCREEN-011)", () => {
+    expect(taskProjectReport.path).toBe("/tasks/projects/:projectId/report");
+    expect(taskProjectReport.screenCode).toBe("TASK-SCREEN-011");
+    expect(taskProjectReport.requiredAnyPermissions).toEqual(["TASK.PROJECT.VIEW"]);
+    expect(taskProjectReport.showInSidebar).toBe(false);
+  });
+
+  it("deny/allow: overdue theo read:task, report theo read:project", () => {
+    const session = makeSession(TASK_NOTI_DASH_SESSION());
+    const deny = createPermissionChecker(makePerms([]));
+    expect(evaluateRouteAccess(session, taskOverdue, deny).action).toBe("SHOW_403");
+    expect(evaluateRouteAccess(session, taskProjectReport, deny).action).toBe("SHOW_403");
+
+    const allow = createPermissionChecker(TASK_NOTI_DASH_CAPS());
+    expect(evaluateRouteAccess(session, taskOverdue, allow).action).toBe("ALLOW");
+    expect(evaluateRouteAccess(session, taskProjectReport, allow).action).toBe("ALLOW");
+  });
+});
+
 describe("S4 registry reconcile — TASK/NOTI/DASH app visibility (getVisibleApps)", () => {
   it("deny-path: KHÔNG có cặp → ẩn tasks/notifications/dashboard trong App Switcher", () => {
     const session = makeSession(TASK_NOTI_DASH_SESSION());
@@ -974,6 +1006,94 @@ describe("ROUTE_REGISTRY — 6 route ME mới (S5-ME-FE-3, ME-SCREEN-009..014)",
       expect(evaluateRouteAccess(session, meta, c).action).toBe("ALLOW");
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// S5-ME-FE-2 — 6 route mới "Hồ sơ của tôi / Tài khoản & bảo mật" (ME-SCREEN-002..008). Gate GIỮ literal
+// `access:me` (mirror me.overview — KHÔNG qua PERMISSION_CODE_TO_PAIR). 5 màn TÁI DÙNG page sẵn có
+// (MyProfilePage/MyChangeRequestPage/AccountProfilePage/ChangePasswordPage/AccountSessionsPage) mount
+// trong ME workspace; me.security.activity là màn MỚI đọc GET /me/security/activity (BE-3).
+// ---------------------------------------------------------------------------
+
+const ME_FE2_ROUTE_KEYS = [
+  {
+    routeKey: "me.profile",
+    path: "/me/profile",
+    screenCode: "ME-SCREEN-002",
+    titleKey: "meProfile",
+  },
+  {
+    routeKey: "me.profile.change-requests",
+    path: "/me/profile/change-requests",
+    screenCode: "ME-SCREEN-003",
+    titleKey: "meProfileChangeRequests",
+  },
+  {
+    routeKey: "me.account",
+    path: "/me/account",
+    screenCode: "ME-SCREEN-005",
+    titleKey: "meAccount",
+  },
+  {
+    routeKey: "me.security.password",
+    path: "/me/security/password",
+    screenCode: "ME-SCREEN-006",
+    titleKey: "meSecurityPassword",
+  },
+  {
+    routeKey: "me.security.sessions",
+    path: "/me/security/sessions",
+    screenCode: "ME-SCREEN-007",
+    titleKey: "meSecuritySessions",
+  },
+  {
+    routeKey: "me.security.activity",
+    path: "/me/security/activity",
+    screenCode: "ME-SCREEN-008",
+    titleKey: "meSecurityActivity",
+  },
+] as const;
+
+describe("ROUTE_REGISTRY — 6 route ME mới (S5-ME-FE-2, ME-SCREEN-002..008)", () => {
+  it.each(ME_FE2_ROUTE_KEYS)(
+    "$routeKey TỒN TẠI, path=$path, moduleCode=ME, screenCode=$screenCode, showInSidebar, gate literal access:me",
+    ({ routeKey, path, screenCode }) => {
+      const meta = getRouteMeta(routeKey)!;
+      expect(meta).toBeDefined();
+      expect(meta.path).toBe(path);
+      expect(meta.moduleCode).toBe("ME");
+      expect(meta.screenCode).toBe(screenCode);
+      expect(meta.showInSidebar).toBe(true);
+      expect(meta.requiredAnyPermissions).toEqual(["access:me"]);
+      expect(meta.requiredScopes).toBeUndefined();
+    },
+  );
+
+  it.each(ME_FE2_ROUTE_KEYS)(
+    "deny-path $routeKey: thiếu access:me → SHOW_403 (module ME active, không rơi SHOW_404 sớm)",
+    ({ routeKey }) => {
+      const meta = getRouteMeta(routeKey)!;
+      const session = makeSession(ME_SESSION());
+      const c = createPermissionChecker(makePerms([]));
+      expect(evaluateRouteAccess(session, meta, c).action).toBe("SHOW_403");
+    },
+  );
+
+  it.each(ME_FE2_ROUTE_KEYS)(
+    "allow-path $routeKey: có access:me + ME active → ALLOW",
+    ({ routeKey }) => {
+      const meta = getRouteMeta(routeKey)!;
+      const session = makeSession(ME_SESSION());
+      const c = createPermissionChecker(makePerms(["access:me"]));
+      expect(evaluateRouteAccess(session, meta, c).action).toBe("ALLOW");
+    },
+  );
+
+  // i18n vi routeTitle.me* — 6 khoá tồn tại (KHÔNG dead-title trong sidebar/breadcrumb).
+  it.each(ME_FE2_ROUTE_KEYS)("i18n routeTitle.$titleKey tồn tại (nav vi)", ({ titleKey }) => {
+    const routeTitle = viNav.routeTitle as Record<string, string>;
+    expect(routeTitle[titleKey]).toBeTruthy();
+  });
 });
 
 describe("PERMISSION_CODE_TO_PAIR — TASK/NOTI/DASH pairs (drift-guard, S4-FE-REGISTRY-1)", () => {

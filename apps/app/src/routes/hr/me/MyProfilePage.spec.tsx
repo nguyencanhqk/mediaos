@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore } from "@mediaos/web-core";
 import { hrApi } from "@mediaos/web-core";
@@ -10,6 +10,11 @@ import type { HrMeProfile } from "@mediaos/contracts";
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
+const { navigateMock } = vi.hoisted(() => ({ navigateMock: vi.fn() }));
+
+// Trang giờ dùng useNavigate (nút "Yêu cầu cập nhật hồ sơ" trên banner) — không có router trong test.
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigateMock }));
+
 vi.mock("@mediaos/web-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mediaos/web-core")>();
   return {
@@ -17,6 +22,8 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     hrApi: {
       getMyProfile: vi.fn(),
     },
+    // MeBannerAvatar (own-scope /me/avatar) mount trong banner — fail-soft null như production.
+    meApi: { ...actual.meApi, getAvatar: vi.fn(() => Promise.resolve(null)) },
   };
 });
 
@@ -82,6 +89,12 @@ const MOCK_PROFILE: HrMeProfile = {
   positionId: "pos-001",
   positionName: "Developer",
   directManagerId: null,
+  jobLevelName: null,
+  contractTypeName: null,
+  directManagerName: null,
+  directManagerEmployeeId: null,
+  indirectManagerName: null,
+  resignationReason: null,
   workType: "Full-time",
   employmentType: "Official",
   startDate: "2026-01-01",
@@ -132,6 +145,15 @@ function clearCapabilities() {
   useAuthStore.setState({ isAuthenticated: false, capabilities: {}, user: null });
 }
 
+/**
+ * Bố cục giờ giống màn chi tiết nhân viên: nội dung chia 4 tab và `TabsContent` KHÔNG render khi tab
+ * không active (primitive tabs trả null) — nên field ở tab khác KHÔNG có trong DOM cho tới khi bấm.
+ * Các assert về masking phải mở đúng tab, nếu không sẽ "xanh" nhờ nhãn masked của tab đang mở.
+ */
+function switchTab(name: RegExp) {
+  fireEvent.click(screen.getByRole("tab", { name }));
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -146,11 +168,52 @@ describe("MyProfilePage", () => {
     setCapabilities({ "read:employee": true });
     vi.mocked(hrApi.getMyProfile).mockResolvedValue(MOCK_PROFILE);
     renderWithQuery(<MyProfilePage />);
-    // fullName appears in both PageHeader description and FieldRow — use getAllByText
+    // fullName xuất hiện ở banner + FieldRow tab "Cơ bản" — dùng getAllByText
     await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
     expect(screen.getByText("EMP0001")).toBeInTheDocument();
+    // Banner ghép "chức vụ – đơn vị" thành MỘT dòng (giống /hr/employees/:id)
+    expect(screen.getByText("Developer – Phòng Kỹ thuật")).toBeInTheDocument();
+    // Phòng ban đầy đủ nằm ở tab "Công việc"
+    switchTab(/công việc/i);
     expect(screen.getByText("Phòng Kỹ thuật")).toBeInTheDocument();
-    expect(screen.getByText("Developer")).toBeInTheDocument();
+  });
+
+  // ── Bố cục dùng chung với /hr/employees/:id: banner + 4 tab ────────────────
+  it("hiển thị banner cover + đủ 4 tab như màn chi tiết nhân viên", async () => {
+    setCapabilities({ "read:employee": true });
+    vi.mocked(hrApi.getMyProfile).mockResolvedValue(MOCK_PROFILE);
+    renderWithQuery(<MyProfilePage />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+
+    expect(screen.getByRole("tab", { name: /thông tin cơ bản/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /thông tin liên hệ/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /công việc/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /lương/i })).toBeInTheDocument();
+  });
+
+  // Nhân viên KHÔNG tự sửa hồ sơ — chỉ có lối "đề nghị thay đổi", và phải có cặp quyền mới hiện.
+  it("ẩn nút đề nghị cập nhật khi thiếu create:profile-change-request", async () => {
+    setCapabilities({ "read:employee": true });
+    vi.mocked(hrApi.getMyProfile).mockResolvedValue(MOCK_PROFILE);
+    renderWithQuery(<MyProfilePage />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+
+    expect(
+      screen.queryByRole("button", { name: /đề nghị cập nhật hồ sơ/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  // Nút dẫn tới màn SỬA (giao diện như /hr/employees/:id/edit), KHÔNG dẫn thẳng tới danh sách yêu cầu
+  // — danh sách chỉ là đích SAU KHI gửi thành công (nút OK ở màn sửa).
+  it("có quyền → nút đề nghị cập nhật điều hướng màn sửa /me/profile/edit", async () => {
+    setCapabilities({ "read:employee": true, "create:profile-change-request": true });
+    vi.mocked(hrApi.getMyProfile).mockResolvedValue(MOCK_PROFILE);
+    renderWithQuery(<MyProfilePage />);
+    const button = await screen.findByRole("button", { name: /đề nghị cập nhật hồ sơ/i });
+
+    fireEvent.click(button);
+    expect(navigateMock).toHaveBeenCalledWith({ to: "/me/profile/edit" });
+    expect(navigateMock).not.toHaveBeenCalledWith({ to: "/me/profile/change-requests" });
   });
 
   // ── LOADING state ─────────────────────────────────────────────────────────
@@ -190,6 +253,8 @@ describe("MyProfilePage", () => {
     renderWithQuery(<MyProfilePage />);
     // fullName appears in multiple elements — use getAllByText
     await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    // Điện thoại nằm ở tab "Liên hệ" — mở đúng tab, KHÔNG dựa vào nhãn masked của tab đang mở.
+    switchTab(/thông tin liên hệ/i);
     const maskedEls = screen.getAllByText(/bị ẩn do phân quyền/i);
     expect(maskedEls.length).toBeGreaterThan(0);
   });
@@ -199,7 +264,9 @@ describe("MyProfilePage", () => {
     setCapabilities({ "read:employee": true, "view-sensitive:employee": true });
     vi.mocked(hrApi.getMyProfile).mockResolvedValue({ ...MOCK_PROFILE, phone: "0901234567" });
     renderWithQuery(<MyProfilePage />);
-    await waitFor(() => expect(screen.getByText("0901234567")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    switchTab(/thông tin liên hệ/i);
+    expect(screen.getByText("0901234567")).toBeInTheDocument();
   });
 
   // ── SALARY MASK: baseSalary null → masked (no view-salary grant) ──────────
@@ -208,6 +275,8 @@ describe("MyProfilePage", () => {
     vi.mocked(hrApi.getMyProfile).mockResolvedValue({ ...MOCK_PROFILE, baseSalary: null });
     renderWithQuery(<MyProfilePage />);
     await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    // Lương nằm ở tab riêng (view-salary) — mở tab "Lương" rồi mới assert.
+    switchTab(/^lương$/i);
     const maskedEls = screen.getAllByText(/bị ẩn do phân quyền/i);
     expect(maskedEls.length).toBeGreaterThan(0);
   });

@@ -5,18 +5,19 @@
  * bootstrap, KHÔNG gọi API mới). Server quyết định field nào lộ ra (masking — BẤT BIẾN #2); client CHỈ
  * render những gì response trả, không tự suy luận/hiển thị thêm.
  *
- * Link điều hướng:
- *  - "Đề nghị thay đổi hồ sơ" → /hr/me/change-request (gate hiển thị bằng useCan create:profile-change-
- *    request — cặp seed thật mig 0444, KHÔNG hard-code quyền).
- *  - "Đổi mật khẩu" → /account/change-password.
- *  - "Phiên đăng nhập" → /account/sessions.
+ * Link điều hướng (RE-POINT sang ME — xem ME_SELF_SERVICE_PATHS bên dưới):
+ *  - "Đề nghị thay đổi hồ sơ" → /me/profile/change-requests (gate hiển thị bằng PermissionGate
+ *    create:profile-change-request — cặp seed thật mig 0444, KHÔNG hard-code quyền).
+ *  - "Đổi mật khẩu" → /me/security/password.
+ *  - "Phiên đăng nhập" → /me/security/sessions.
  *
  * States: loading · error (retry) · success (không có "empty" — /auth/me luôn trả user khi đã đăng nhập).
  *
  * Card "Bảo mật" (S2-FE-ACCT-SEC-1) — đọc twoFactorApi.status() ({enabled, required}, GET /auth/2fa/
  * status — reuse-only, KHÔNG API mới) qua query RIÊNG (queryKey cục bộ `TWO_FACTOR_STATUS_KEY`) để lỗi ở
- * card này KHÔNG làm vỡ phần /auth/me: enabled=false → nút "Bật 2FA" điều hướng ACCOUNT_SETUP_2FA_PATH
- * (reuse TwoFactorSetupPage đã tồn tại). required=true → ẨN nút tắt + hiện nhãn "bắt buộc theo chính
+ * card này KHÔNG làm vỡ phần /auth/me: enabled=false → nút "Bật 2FA" điều hướng ME_SETUP_2FA_PATH
+ * (/me/security/2fa — CÙNG TwoFactorSetupPage, mount trong ME workspace; route shell /account/setup-2fa
+ * vẫn sống cho guard ép enroll AUTH-003). required=true → ẨN nút tắt + hiện nhãn "bắt buộc theo chính
  * sách" (server ép theo role/company, KHÔNG hard-code). enabled=true & !required → Dialog nhập mật khẩu
  * → twoFactorApi.disable(password); 409 (TWO_FACTOR_ENFORCED) → message rõ, KHÔNG đổi trạng thái.
  *
@@ -39,11 +40,26 @@ import {
   Dialog,
   Input,
 } from "@mediaos/ui";
-import { PCR_ME_PATH, PCR_CREATE_PERMISSION } from "@/routes/hr/profile-change-requests/constants";
-import { ACCOUNT_SETUP_2FA_PATH } from "./constants";
+import { PCR_CREATE_PERMISSION } from "@/routes/hr/profile-change-requests/constants";
+import { ME_SETUP_2FA_PATH } from "./constants";
 
 // Query key CỤC BỘ (không thêm vào authKeys dùng chung của web-core — reuse-only theo phạm vi WO này).
 const TWO_FACTOR_STATUS_KEY = ["auth", "2fa", "status"] as const;
+
+/**
+ * Đích của 3 nút self-service — TRỎ VÀO ME workspace (S5-ME-FE-2 mount lại CÙNG page ở /me/*) thay cho
+ * route cũ /hr/me/change-request · /account/change-password · /account/sessions. Page này được mount ở
+ * CẢ /account/profile lẫn /me/account, nên link phải dẫn về ME để user không bị rơi ra khỏi ME
+ * workspace giữa chừng (mirror AvatarMenu). Route cũ vẫn sống — chỉ không còn là đích của nút.
+ *
+ * "Bật 2FA" CỐ Ý không nằm ở đây: /account/setup-2fa là route SHELL và là đích của guard ép enroll
+ * AUTH-003 trong ProtectedShell — đổi nó phải đổi cả guard (xem ACCOUNT_SETUP_2FA_PATH).
+ */
+const ME_SELF_SERVICE_PATHS = {
+  CHANGE_REQUEST: "/me/profile/change-requests",
+  CHANGE_PASSWORD: "/me/security/password",
+  SESSIONS: "/me/security/sessions",
+} as const;
 
 function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -253,7 +269,7 @@ export function AccountProfilePage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => void navigate({ to: ACCOUNT_SETUP_2FA_PATH as "/" })}
+                  onClick={() => void navigate({ to: ME_SETUP_2FA_PATH as "/" })}
                 >
                   <ShieldCheck className="mr-2 h-4 w-4" />
                   {t("profile.security.enableButton")}
@@ -279,7 +295,7 @@ export function AccountProfilePage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => void navigate({ to: PCR_ME_PATH as "/" })}
+              onClick={() => void navigate({ to: ME_SELF_SERVICE_PATHS.CHANGE_REQUEST as "/" })}
             >
               <ListChecks className="mr-2 h-4 w-4" />
               {t("profile.links.changeRequest")}
@@ -288,7 +304,7 @@ export function AccountProfilePage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => void navigate({ to: "/account/change-password" as "/" })}
+            onClick={() => void navigate({ to: ME_SELF_SERVICE_PATHS.CHANGE_PASSWORD as "/" })}
           >
             <KeyRound className="mr-2 h-4 w-4" />
             {t("profile.links.changePassword")}
@@ -296,7 +312,7 @@ export function AccountProfilePage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => void navigate({ to: "/account/sessions" as "/" })}
+            onClick={() => void navigate({ to: ME_SELF_SERVICE_PATHS.SESSIONS as "/" })}
           >
             <User className="mr-2 h-4 w-4" />
             {t("profile.links.sessions")}

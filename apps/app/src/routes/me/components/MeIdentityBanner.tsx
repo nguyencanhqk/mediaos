@@ -4,8 +4,9 @@
  * hệ HR (§12.2) thay vì phòng ban/chức vụ.
  */
 import { useTranslation } from "react-i18next";
-import { Avatar, Badge } from "@mediaos/ui";
+import { Badge } from "@mediaos/ui";
 import type { MeIdentity } from "@mediaos/contracts";
+import { MeBannerAvatar } from "./MeBannerAvatar";
 
 interface MeIdentityBannerProps {
   identity: MeIdentity;
@@ -18,7 +19,7 @@ export function MeIdentityBanner({ identity }: MeIdentityBannerProps) {
 
   return (
     <div className="control-room-bg flex flex-wrap items-center gap-4 rounded-xl px-6 py-6">
-      <Avatar name={displayName} size="lg" />
+      <MeBannerAvatar name={displayName} />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-muted-foreground">{t("banner.greeting")}</p>
         <h1 className="brand-gradient-text font-display truncate text-xl font-bold tracking-tight sm:text-2xl">

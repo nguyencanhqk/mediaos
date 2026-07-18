@@ -50,6 +50,12 @@ function makeDetailRow(overrides: Record<string, unknown> = {}) {
     positionName: null,
     directManagerId: null,
     directManagerUserId: null,
+    // S5-HR-WORKINFO-1: directory-class names + reporting-line (contractTypeName masked in service).
+    jobLevelName: "Senior",
+    contractTypeName: "Chính thức",
+    directManagerName: "Nguyen Van Manager",
+    directManagerEmployeeId: "emp-manager-001",
+    indirectManagerName: "Nguyen Van Director",
     workType: "offline",
     employmentType: "full_time",
     startDate: null,
@@ -149,6 +155,8 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     listScopedTx: vi.fn().mockResolvedValue({ rows: [makeListRow()], total: 1 }),
     findByIdTx: vi.fn().mockResolvedValue(makeDetailRow()),
     findByUserIdTx: vi.fn().mockResolvedValue(makeDetailRow()),
+    // S5-HR-WORKINFO-1: latest resignation reason (append-only status history) — null unless overridden.
+    findLatestResignationReasonTx: vi.fn().mockResolvedValue(null),
     summaryScopedTx: vi.fn().mockResolvedValue(makeSummaryRows()),
     listDepartmentsTx: vi.fn().mockResolvedValue([]),
     listPositionsTx: vi.fn().mockResolvedValue([]),
@@ -224,12 +232,29 @@ function makeAudit() {
   return { record: vi.fn().mockResolvedValue(undefined) };
 }
 
+// S5-ME-BE-5 — AvatarPresignService mock: mô phỏng đúng hành vi http-passthrough (test dùng cdn URL) — fileId
+// (UUID) → không map (initials) vì verify link/image test THẬT ở avatar-presign.service.spec.ts + int-spec.
+function makeAvatarPresign() {
+  return {
+    resolveEmployeeAvatars: vi.fn(
+      async (_companyId: string, subjects: { employeeId: string; avatarUrl: string | null }[]) => {
+        const m = new Map<string, string>();
+        for (const s of subjects) {
+          if (s.avatarUrl && /^https?:\/\//.test(s.avatarUrl)) m.set(s.employeeId, s.avatarUrl);
+        }
+        return m;
+      },
+    ),
+  };
+}
+
 function makeService(
   opts: {
     perms?: Record<string, Decision>;
     permsByRow?: Record<string, Record<string, Decision>>;
     repo?: ReturnType<typeof makeRepo>;
     dataScope?: ReturnType<typeof makeDataScope>;
+    avatarPresign?: ReturnType<typeof makeAvatarPresign>;
   } = {},
 ) {
   const repo = opts.repo ?? makeRepo();
@@ -237,14 +262,16 @@ function makeService(
   const permission = makePermission(opts.perms ?? {}, opts.permsByRow);
   const dataScope = opts.dataScope ?? makeDataScope({ scope: "Company", inScope: true });
   const audit = makeAudit();
+  const avatarPresign = opts.avatarPresign ?? makeAvatarPresign();
   const svc = new HrReadService(
     repo as never,
     db as never,
     permission as never,
     dataScope as never,
     audit as never,
+    avatarPresign as never,
   );
-  return { svc, repo, db, permission, dataScope, audit };
+  return { svc, repo, db, permission, dataScope, audit, avatarPresign };
 }
 
 // ─── PERMISSION deny ─────────────────────────────────────────────────────────────
@@ -640,6 +667,74 @@ describe("HrReadService.getHrEmployee — personal-info PII masking (HR-PROFILE-
     });
     const res = await svc.getHrEmployee(actorA, EMP_ID);
     expect(res.personalExtra).toBeNull();
+  });
+});
+
+// ─── S5-HR-WORKINFO-1: khối "Thông tin công việc" bổ sung (jobLevel/contractType/manager/nghỉ việc) ───
+
+describe("HrReadService.getHrEmployee — S5-HR-WORKINFO-1 work-info additive fields", () => {
+  it("directory-class (jobLevelName + reporting-line) passes REGARDLESS of view-sensitive (không gate)", async () => {
+    const { svc } = makeService({
+      perms: { "view-salary": DENY(), "view-sensitive": DENY(), "view-identity": DENY() },
+    });
+    const res = await svc.getHrEmployee(actorA, EMP_ID);
+    expect(res.jobLevelName).toBe("Senior");
+    expect(res.directManagerName).toBe("Nguyen Van Manager");
+    expect(res.directManagerEmployeeId).toBe("emp-manager-001");
+    expect(res.indirectManagerName).toBe("Nguyen Van Director");
+  });
+
+  it("contractTypeName rides the view-sensitive gate: DENY → null (không lộ), ALLOW → tên chuẩn hoá", async () => {
+    const denied = await makeService({
+      perms: { "view-salary": DENY(), "view-sensitive": DENY() },
+    }).svc.getHrEmployee(actorA, EMP_ID);
+    expect(denied.contractTypeName).toBeNull();
+    // Legacy contractType đi cùng gate → cũng null (KHÔNG đổi hành vi cũ).
+    expect(denied.contractType).toBeNull();
+
+    const allowed = await makeService({
+      perms: { "view-salary": DENY(), "view-sensitive": ALLOW(false) },
+    }).svc.getHrEmployee(actorA, EMP_ID);
+    expect(allowed.contractTypeName).toBe("Chính thức");
+    expect(allowed.contractType).toBe("permanent");
+  });
+
+  it("resignationReason: status active → KHÔNG query lịch sử trạng thái + null (không tốn query)", async () => {
+    const repo = makeRepo();
+    const { svc } = makeService({ repo, perms: { "view-sensitive": ALLOW(false) } });
+    const res = await svc.getHrEmployee(actorA, EMP_ID);
+    expect(res.resignationReason).toBeNull();
+    expect(repo.findLatestResignationReasonTx).not.toHaveBeenCalled();
+  });
+
+  it("resignationReason: resigned + view-sensitive → reason từ lịch sử trạng thái gần nhất", async () => {
+    const repo = makeRepo({
+      findByIdTx: vi.fn().mockResolvedValue(makeDetailRow({ status: "resigned" })),
+      findLatestResignationReasonTx: vi.fn().mockResolvedValue("Chuyển công tác"),
+    });
+    const { svc } = makeService({ repo, perms: { "view-sensitive": ALLOW(false) } });
+    const res = await svc.getHrEmployee(actorA, EMP_ID);
+    expect(res.resignationReason).toBe("Chuyển công tác");
+    expect(repo.findLatestResignationReasonTx).toHaveBeenCalledWith(FAKE_TX, COMPANY_A, EMP_ID);
+  });
+
+  it("resignationReason: terminated NHƯNG thiếu view-sensitive → null + KHÔNG query (fail-closed, không rò lý do)", async () => {
+    const repo = makeRepo({
+      findByIdTx: vi.fn().mockResolvedValue(makeDetailRow({ status: "terminated" })),
+      findLatestResignationReasonTx: vi.fn().mockResolvedValue("Vi phạm kỷ luật"),
+    });
+    const { svc } = makeService({ repo, perms: { "view-sensitive": DENY() } });
+    const res = await svc.getHrEmployee(actorA, EMP_ID);
+    expect(res.resignationReason).toBeNull();
+    expect(repo.findLatestResignationReasonTx).not.toHaveBeenCalled();
+  });
+
+  it("getMyProfile carries the same additive work-info fields (shared toDetail)", async () => {
+    const { svc } = makeService({ perms: { "view-sensitive": ALLOW(false) } });
+    const res = await svc.getMyProfile(actorA);
+    expect(res.jobLevelName).toBe("Senior");
+    expect(res.contractTypeName).toBe("Chính thức");
+    expect(res.directManagerEmployeeId).toBe("emp-manager-001");
   });
 });
 

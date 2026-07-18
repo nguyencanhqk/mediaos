@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   meOverviewSchema,
   type MeOverview,
@@ -12,8 +13,55 @@ import {
   mePreferencesSchema,
   type MePreferences,
   type MePreferencesAppearancePatch,
+  meSecurityActivityItemSchema,
+  type MeSecurityActivityItem,
+  meAvatarSchema,
+  type MeAvatar,
+  meAvatarUploadUrlResponseSchema,
+  meCurrentAvatarSchema,
+  type MeCurrentAvatar,
+  confirmUploadResponseSchema,
 } from "@mediaos/contracts";
 import { apiFetch } from "./api-client";
+import { buildQueryString } from "./api-params";
+
+const DEFAULT_UPLOAD_MIME = "application/octet-stream";
+
+/**
+ * S5-ME-FE-4 — PUT bytes trực tiếp lên presigned URL của storage (S3/MinIO), KHÔNG qua apiFetch (đích là
+ * storage, KHÔNG phải API của ta — không gắn Bearer/cookie). Content-Type PHẢI khớp `declaredMimeType` đã
+ * khai báo lúc upload-url (server ký PutObject kèm ContentType — lệch ⇒ 403 SignatureDoesNotMatch). Lỗi
+ * mạng/HTTP → ném ngay (KHÔNG nuốt — silent-failure; caller dừng flow, KHÔNG confirm/set file rỗng).
+ */
+async function putBytesToStorage(url: string, file: File, contentType: string): Promise<void> {
+  let res: Response;
+  try {
+    // credentials:'omit' TƯỜNG MINH — KHÔNG gửi cookie/Bearer tới host storage (đích là S3/MinIO, không phải
+    // API của ta). Default 'same-origin' đã chặn cross-origin, 'omit' làm bất biến này đúng kể cả nếu tương lai
+    // storage được proxy same-origin.
+    res = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body: file,
+      credentials: "omit",
+    });
+  } catch {
+    throw new Error("Tải ảnh lên storage thất bại do lỗi mạng.");
+  }
+  if (!res.ok) throw new Error(`Tải ảnh lên storage thất bại (HTTP ${res.status}).`);
+}
+
+/**
+ * Query GET /me/security/activity — CHỈ phân trang + khoảng thời gian (whitelist tường minh). CỐ Ý
+ * KHÔNG có user_id/employee_id: owner resolve 100% từ token, client KHÔNG được chỉ định chủ sở hữu
+ * (chống IDOR, SPEC-09 §14.4). Ngày = chuỗi ISO (BE z.coerce.date() ở meSecurityActivityQuerySchema).
+ */
+export interface MeSecurityActivityQueryParams {
+  page?: number;
+  per_page?: number;
+  from_date?: string;
+  to_date?: string;
+}
 
 /**
  * S5-ME-FE-1/FE-3 — ME API client (Personal Hub, SPEC-09 §14.2/§15.2 / API-11 §5). Mirror BE `MeController`
@@ -56,4 +104,67 @@ export const meApi = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
+
+  /**
+   * GET /me/security/activity — hoạt động bảo mật CỦA CHÍNH user (login_logs + user_security_events hợp
+   * nhất, ĐÃ mask). ME-SCREEN-008 (S5-ME-BE-3). Owner resolve 100% từ token — client CHỈ gửi phân trang
+   * + khoảng thời gian, TUYỆT ĐỐI KHÔNG user_id/employee_id (chống IDOR §14.4). Whitelist tường minh 4
+   * param (KHÔNG spread query) ⇒ owner-param caller cố chèn bị LOẠI im lặng ngay tầng client.
+   *
+   * Response parse `z.array(meSecurityActivityItemSchema)` — apiFetch/unwrapEnvelope CHỈ trả field `data`
+   * (mảng), block `pagination` sibling BỊ BỎ (giới hạn đã biết, mirror myNotificationApi.list /
+   * fileAccessLogApi.list): tổng số trang KHÔNG khả dụng ở client ⇒ page dùng heuristic full-page cho
+   * has-next. Shape sai → ném ngay (không âm thầm render dữ liệu bảo mật sai).
+   */
+  getSecurityActivity: (
+    query?: MeSecurityActivityQueryParams,
+  ): Promise<MeSecurityActivityItem[]> => {
+    // WHITELIST tường minh — chỉ 4 param phân trang/thời gian. KHÔNG spread `query` (owner-param
+    // user_id/employee_id caller cố chèn bị loại — owner 100% từ token, §14.4).
+    const safeQuery: Record<string, unknown> = {};
+    if (query?.page !== undefined) safeQuery.page = query.page;
+    if (query?.per_page !== undefined) safeQuery.per_page = query.per_page;
+    if (query?.from_date !== undefined) safeQuery.from_date = query.from_date;
+    if (query?.to_date !== undefined) safeQuery.to_date = query.to_date;
+    return apiFetch(
+      `/me/security/activity${buildQueryString(safeQuery)}`,
+      z.array(meSecurityActivityItemSchema),
+    );
+  },
+
+  // ── S5-ME-FE-4 — Avatar own-scope (S5-ME-BE-4) ──────────────────────────────────────────────
+  //
+  // Đường ME own-scope: KHÔNG cần *:foundation-file (đóng "Nợ để lại" S5-ME-BE-2). Owner resolve 100% từ
+  // token — client KHÔNG gửi user_id/employee_id (chống IDOR §14.4).
+
+  /** GET /me/avatar — avatar hiện tại đã ký (TTL-ngắn) hoặc null (fail-soft: chưa có / không tải được). */
+  getAvatar: (): Promise<MeCurrentAvatar> => apiFetch("/me/avatar", meCurrentAvatarSchema),
+
+  /** DELETE /me/avatar — gỡ avatar hiện có (204, idempotent). */
+  removeAvatar: (): Promise<void> => apiFetch("/me/avatar", z.void(), { method: "DELETE" }),
+
+  /**
+   * Upload + gắn avatar own-scope — 4 pha (S5-ME-BE-4). Bất kỳ pha nào lỗi → ném NGAY, KHÔNG âm thầm bỏ pha
+   * sau (silent-failure):
+   *   (1) POST /me/avatar/upload-url — đăng ký file ảnh Private owned-by-token + presigned-PUT.
+   *   (2) PUT bytes trực tiếp lên storage (Content-Type khớp declaredMimeType).
+   *   (3) POST /me/avatar/confirm — verify size/tồn tại + checksum server-side (flip Pending→Uploaded).
+   *   (4) POST /me/avatar — gắn avatar (thay avatar cũ nếu có) → trả downloadUrl TƯƠI để hiển thị ngay.
+   */
+  uploadAvatar: async (file: File): Promise<MeAvatar> => {
+    const declaredMimeType = file.type || DEFAULT_UPLOAD_MIME;
+    const reg = await apiFetch("/me/avatar/upload-url", meAvatarUploadUrlResponseSchema, {
+      method: "POST",
+      body: JSON.stringify({ originalName: file.name, declaredMimeType, sizeBytes: file.size }),
+    });
+    await putBytesToStorage(reg.uploadUrl, file, declaredMimeType);
+    await apiFetch("/me/avatar/confirm", confirmUploadResponseSchema, {
+      method: "POST",
+      body: JSON.stringify({ fileId: reg.fileId }),
+    });
+    return apiFetch("/me/avatar", meAvatarSchema, {
+      method: "POST",
+      body: JSON.stringify({ fileId: reg.fileId }),
+    });
+  },
 };

@@ -1,0 +1,112 @@
+/**
+ * Sơ đồ tổ chức top-down (hộp + đường nối) — S5-HR-ORGCHART-FE-1.
+ *
+ * Kỹ thuật cây thuần CSS (không thư viện): mỗi <li> tự vẽ đoạn nối LÊN cha bằng
+ * ::before/::after; nhóm con (<ul>) vẽ đoạn dọc RƠI xuống từ cha (ul ul::before).
+ * Màu đường nối = token --border ⇒ tự hợp light/dark (không cần media query).
+ * Node box style bằng Tailwind trong JSX (đồng bộ phần còn lại của app), file này
+ * CHỈ lo cấu trúc cây + connector.
+ */
+
+.org-chart {
+  overflow-x: auto;
+  text-align: center;
+  padding: 4px 0 20px;
+}
+
+/* Mỗi cấp = 1 hàng ngang các node, căn giữa dưới cha */
+.org-chart ul {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 22px;
+  position: relative;
+  list-style: none;
+  margin: 0;
+}
+
+/* Hàng gốc: co theo nội dung để text-align:center canh giữa; tràn thì cuộn ngang */
+.org-chart > ul {
+  display: inline-flex;
+  padding-top: 0;
+}
+
+.org-chart li {
+  list-style: none;
+  position: relative;
+  padding: 22px 14px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Connector NGANG nối tới cha: nửa trái (::before) + nửa phải (::after) mỗi li */
+.org-chart li::before,
+.org-chart li::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 50%;
+  width: 50%;
+  height: 22px;
+  border-top: 2px solid var(--border);
+}
+.org-chart li::after {
+  right: auto;
+  left: 50%;
+  border-left: 2px solid var(--border);
+}
+.org-chart li::before {
+  border-right: 2px solid var(--border);
+}
+
+/* Con duy nhất → chỉ 1 đường thẳng dọc, bỏ nhánh ngang */
+.org-chart li:only-child::before,
+.org-chart li:only-child::after {
+  display: none;
+}
+.org-chart li:only-child {
+  padding-top: 22px;
+}
+
+/* Bỏ nửa connector thừa ở ngoài cùng + bo góc mềm 2 đầu thanh ngang */
+.org-chart li:first-child::before,
+.org-chart li:last-child::after {
+  border: 0 none;
+}
+.org-chart li:last-child::before {
+  border-right: 2px solid var(--border);
+  border-radius: 0 6px 0 0;
+}
+.org-chart li:first-child::after {
+  border-radius: 6px 0 0 0;
+}
+
+/* Đoạn DỌC rơi từ cha xuống nhóm con */
+.org-chart ul ul::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: 22px;
+  border-left: 2px solid var(--border);
+}
+
+/* Hàng gốc: mỗi gốc độc lập, không nối lên/ngang (kể cả khi dữ liệu còn phẳng) */
+.org-chart > ul > li::before,
+.org-chart > ul > li::after {
+  display: none;
+}
+.org-chart > ul > li,
+.org-chart > ul > li:only-child {
+  padding-top: 0;
+}
+
+/* Tôn trọng người dùng tắt hiệu ứng — chart tĩnh nên không có animation cần tắt,
+   giữ khối này để chuẩn hoá nếu sau thêm hover-transition. */
+@media (prefers-reduced-motion: reduce) {
+  .org-chart * {
+    transition: none !important;
+  }
+}

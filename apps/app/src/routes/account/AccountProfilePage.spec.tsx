@@ -150,25 +150,31 @@ describe("AccountProfilePage", () => {
     expect(screen.getByRole("button", { name: "Phiên đăng nhập" })).toBeInTheDocument();
   });
 
-  it("điều hướng đúng route khi bấm các link self-service", async () => {
+  // RE-POINT sang ME workspace: page này mount ở CẢ /account/profile lẫn /me/account, nên 3 nút
+  // self-service phải dẫn về /me/* (không rơi ra khỏi ME giữa chừng). Assert negative khoá route cũ
+  // để lần revert vô ý sẽ đỏ.
+  it("điều hướng đúng route ME khi bấm các link self-service", async () => {
     vi.mocked(authApi.me).mockResolvedValue(ME_WITH_EMPLOYEE);
     setAuthenticated({ "create:profile-change-request": true });
     renderWithQuery(<AccountProfilePage />);
     await waitFor(() => expect(screen.getByText("a@demo.local")).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "Đề nghị thay đổi hồ sơ" }));
-    expect(navigateMock).toHaveBeenCalledWith({ to: "/hr/me/change-request" });
+    expect(navigateMock).toHaveBeenCalledWith({ to: "/me/profile/change-requests" });
+    expect(navigateMock).not.toHaveBeenCalledWith({ to: "/hr/me/change-request" });
 
     fireEvent.click(screen.getByRole("button", { name: "Đổi mật khẩu" }));
-    expect(navigateMock).toHaveBeenCalledWith({ to: "/account/change-password" });
+    expect(navigateMock).toHaveBeenCalledWith({ to: "/me/security/password" });
+    expect(navigateMock).not.toHaveBeenCalledWith({ to: "/account/change-password" });
 
     fireEvent.click(screen.getByRole("button", { name: "Phiên đăng nhập" }));
-    expect(navigateMock).toHaveBeenCalledWith({ to: "/account/sessions" });
+    expect(navigateMock).toHaveBeenCalledWith({ to: "/me/security/sessions" });
+    expect(navigateMock).not.toHaveBeenCalledWith({ to: "/account/sessions" });
   });
 
   // ── Card "Bảo mật" (S2-FE-ACCT-SEC-1) ─────────────────────────────────────────
   // Đọc twoFactorApi.status() (query riêng, KHÔNG API mới ngoài /auth/2fa/status). enabled=false → nút
-  // "Bật 2FA" điều hướng /account/setup-2fa (reuse TwoFactorSetupPage). required=true → ẨN nút tắt +
+  // "Bật 2FA" điều hướng /me/security/2fa (CÙNG TwoFactorSetupPage, mount trong ME). required=true → ẨN nút tắt +
   // hiện nhãn "bắt buộc theo chính sách". enabled=true & !required → Dialog nhập mật khẩu → disable().
   describe("card Bảo mật (2FA)", () => {
     it("required=true → ẨN nút 'Tắt 2FA' + hiện nhãn 'bắt buộc theo chính sách'", async () => {
@@ -180,14 +186,15 @@ describe("AccountProfilePage", () => {
       expect(screen.queryByRole("button", { name: "Tắt 2FA" })).not.toBeInTheDocument();
     });
 
-    it("enabled=false → hiện nút 'Bật 2FA', bấm điều hướng /account/setup-2fa", async () => {
+    it("enabled=false → hiện nút 'Bật 2FA', bấm điều hướng /me/security/2fa (KHÔNG ra khỏi ME)", async () => {
       vi.mocked(authApi.me).mockResolvedValue(ME_WITH_EMPLOYEE);
       vi.mocked(twoFactorApi.status).mockResolvedValue(TWO_FACTOR_DISABLED);
       renderWithQuery(<AccountProfilePage />);
 
       const enableButton = await screen.findByRole("button", { name: "Bật 2FA" });
       fireEvent.click(enableButton);
-      expect(navigateMock).toHaveBeenCalledWith({ to: "/account/setup-2fa" });
+      expect(navigateMock).toHaveBeenCalledWith({ to: "/me/security/2fa" });
+      expect(navigateMock).not.toHaveBeenCalledWith({ to: "/account/setup-2fa" });
     });
 
     it("disable trả 409 (TWO_FACTOR_ENFORCED) → hiện message enforced, 2FA vẫn bật, không crash", async () => {

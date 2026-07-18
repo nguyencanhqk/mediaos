@@ -246,6 +246,33 @@ export class HrWriteRepository {
     return row;
   }
 
+  /**
+   * S5-HR-AVATAR-1 — HR-managed avatar (mirror `findOwnAvatarForUpdateTx` NHƯNG KHÔNG AND `userId`: HR đổi
+   * avatar của NV BẤT KỲ trong tenant — authorize ĐÃ ép ở `HrEmployeeAvatarService.assertWriteScope`
+   * (Company/System fail-closed, mirror HrWriteService) TRƯỚC khi gọi). `.for("update")` khoá row — chống
+   * race employee tự đổi ‖ HR đổi đồng thời (plan-review #1/#2: NGUYÊN TỬ 1 tx). company + isNull(deletedAt)
+   * guard tenant + soft-delete (BẤT BIẾN #1/#2). undefined → 404 (employee không tồn tại/cross-tenant/xoá).
+   */
+  async findForAvatarUpdateTx(
+    tx: TenantTx,
+    companyId: string,
+    id: string,
+  ): Promise<{ id: string; avatarUrl: string | null } | undefined> {
+    const [row] = await tx
+      .select({ id: employeeProfiles.id, avatarUrl: employeeProfiles.avatarUrl })
+      .from(employeeProfiles)
+      .where(
+        and(
+          eq(employeeProfiles.companyId, companyId),
+          eq(employeeProfiles.id, id),
+          isNull(employeeProfiles.deletedAt),
+        ),
+      )
+      .limit(1)
+      .for("update");
+    return row;
+  }
+
   /** S5-ME-BE-2 — ghi `avatar_url` (lưu `fileId` — xem me-avatar.service.ts docstring). Own-scope ép ở caller. */
   async updateAvatarUrlTx(
     tx: TenantTx,

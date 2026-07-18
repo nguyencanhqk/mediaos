@@ -446,7 +446,11 @@ import {
   SYSTEM_SETTINGS_ROUTE_META,
   SYSTEM_JOBS_ROUTE_META,
 } from "@/routes/system/foundation/constants";
-import { ACCOUNT_SETUP_2FA_PATH, ACCOUNT_PROFILE_PATH } from "@/routes/account/constants";
+import {
+  ACCOUNT_SETUP_2FA_PATH,
+  ACCOUNT_PROFILE_PATH,
+  ME_SETUP_2FA_PATH,
+} from "@/routes/account/constants";
 import { FILES_PATH } from "@/routes/system/files/constants";
 import { MODULES_PATH } from "@/routes/system/modules/constants";
 const UsersPage = React.lazy(() =>
@@ -759,6 +763,9 @@ const hrEmployeeDetailRoute = createRoute({
         }
         onContracts={() =>
           void navigate({ to: "/hr/employees/$employeeId/contracts", params: { employeeId } })
+        }
+        onNavigateEmployee={(id) =>
+          void navigate({ to: "/hr/employees/$employeeId", params: { employeeId: id } })
         }
       />,
     );
@@ -1362,6 +1369,18 @@ const TaskDetailPage = React.lazy(() =>
 const tasksRoute = makeModuleRoute("/tasks", "task.overview", "TASK", TaskListPage);
 const tasksMyTasksRoute = makeModuleRoute("/tasks/my-tasks", "task.my-tasks", "TASK", MyTasksPage);
 
+// S5-FE-TASK-6 — Task quá hạn (TASK-SCREEN-010). Route TĨNH 2-segment "/tasks/overdue" xếp hạng TRÊN
+// route param "/tasks/$taskId" (mirror tasksMyTasksRoute) → không bị detail nuốt.
+const OverdueTasksPage = React.lazy(() =>
+  import("@/routes/tasks/OverdueTasksPage").then((m) => ({ default: m.OverdueTasksPage })),
+);
+const tasksOverdueRoute = makeModuleRoute(
+  "/tasks/overdue",
+  "task.overdue",
+  "TASK",
+  OverdueTasksPage,
+);
+
 // S4-FE-TASK-1 — Project List (TASK-SCREEN-001) + Detail (TASK-SCREEN-003, deep link $projectId).
 const ProjectListPage = React.lazy(() =>
   import("@/routes/tasks/ProjectListPage").then((m) => ({ default: m.ProjectListPage })),
@@ -1392,6 +1411,37 @@ const tasksProjectDetailRoute = createRoute({
       <ProjectDetailPage
         projectId={projectId}
         onBack={() => void navigate({ to: "/tasks/projects" as "/" })}
+      />,
+    );
+  },
+});
+
+// S5-FE-TASK-6 — Báo cáo tiến độ dự án (TASK-SCREEN-011). Route DƯỚI project detail (path param 3-segment
+// "/tasks/projects/$projectId/report"). No sidebar entry; param resolve qua useParams (mirror
+// tasksProjectDetailRoute). Route gate = TASK.PROJECT.VIEW (meta task.projects.report); cổng nhạy cảm
+// thật (view-report:project) do ProjectReportPage tự gate (useCanExact) + server.
+const ProjectReportPage = React.lazy(() =>
+  import("@/routes/tasks/ProjectReportPage").then((m) => ({ default: m.ProjectReportPage })),
+);
+const tasksProjectReportMeta = getMeta("task.projects.report");
+const tasksProjectReportRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tasks/projects/$projectId/report",
+  beforeLoad: authGuard,
+  component: () => {
+    const { projectId } = tasksProjectReportRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      tasksProjectReportMeta,
+      "TASK",
+      <ProjectReportPage
+        projectId={projectId}
+        onBack={() =>
+          void navigate({
+            to: "/tasks/projects/$projectId" as "/",
+            params: { projectId } as never,
+          })
+        }
       />,
     );
   },
@@ -1540,6 +1590,67 @@ const meAppearanceRoute = makeModuleRoute(
   "me.preferences.appearance",
   "ME",
   MeAppearancePage,
+);
+
+// S5-ME-FE-2 — APPEND 6 route "Hồ sơ của tôi/Tài khoản & bảo mật" (ME-SCREEN-002..008, SPEC-09 §8.1).
+// 5 route ĐẦU TÁI DÙNG import-only page ĐÃ khai báo ở trên (MyProfilePage/MyChangeRequestPage/
+// AccountProfilePage/ChangePasswordPage/AccountSessionsPage — CÙNG hằng số lazy component với route
+// cũ /hr/me·/hr/me/change-request·/account/*, KHÔNG import lại/copy-paste) — chỉ mount lại trong ME
+// workspace qua makeModuleRoute (gate ROUTE_REGISTRY literal access:me). Route cũ GIỮ NGUYÊN hoạt động
+// (KHÔNG gãy bookmark/deep-link). me.security.activity là màn MỚI (MeSecurityActivityPage).
+const meProfileRoute = makeModuleRoute("/me/profile", "me.profile", "ME", MyProfilePage);
+const meProfileChangeRequestsRoute = makeModuleRoute(
+  "/me/profile/change-requests",
+  "me.profile.change-requests",
+  "ME",
+  MyChangeRequestPage,
+);
+// Sửa hồ sơ own-scope → tạo profile-change-request cho HR duyệt (KHÔNG PATCH thẳng).
+const MyProfileEditPage = React.lazy(() =>
+  import("@/routes/hr/profile-change-requests/MyProfileEditPage").then((m) => ({
+    default: m.MyProfileEditPage,
+  })),
+);
+const meProfileEditRoute = makeModuleRoute(
+  "/me/profile/edit",
+  "me.profile.edit",
+  "ME",
+  MyProfileEditPage,
+);
+const meAccountRoute = makeModuleRoute("/me/account", "me.account", "ME", AccountProfilePage);
+const meSecurityPasswordRoute = makeModuleRoute(
+  "/me/security/password",
+  "me.security.password",
+  "ME",
+  ChangePasswordPage,
+);
+const meSecuritySessionsRoute = makeModuleRoute(
+  "/me/security/sessions",
+  "me.security.sessions",
+  "ME",
+  AccountSessionsPage,
+);
+const MeSecurityActivityPage = React.lazy(() =>
+  import("@/routes/me/MeSecurityActivityPage").then((m) => ({
+    default: m.MeSecurityActivityPage,
+  })),
+);
+const meSecurityActivityRoute = makeModuleRoute(
+  "/me/security/activity",
+  "me.security.activity",
+  "ME",
+  MeSecurityActivityPage,
+);
+
+// Bật 2FA trong ME workspace — TÁI DÙNG CÙNG hằng lazy TwoFactorSetupPage với accountSetupTwoFactorRoute
+// (KHÔNG import lại), mirror cách 5 màn account/hr được re-mount ở S5-ME-FE-2. Route SHELL cũ
+// /account/setup-2fa GIỮ NGUYÊN vì nó là đích của guard ép enroll AUTH-003; ProtectedShell nay chấp
+// nhận CẢ HAI path để user bị ép enroll đứng ở route ME không bị đá ngược (xem ME_SETUP_2FA_PATH).
+const meSecurityTwoFactorRoute = makeModuleRoute(
+  ME_SETUP_2FA_PATH,
+  "me.security.2fa",
+  "ME",
+  TwoFactorSetupPage,
 );
 
 // System / Foundation — /system landing THAY ModulePlaceholder = System Overview (S2-FE-FND-1).
@@ -2051,8 +2162,10 @@ const routeTree = rootRoute.addChildren([
   leaveAuditLogsRoute,
   tasksRoute,
   tasksMyTasksRoute,
+  tasksOverdueRoute,
   tasksProjectsRoute,
   tasksProjectDetailRoute,
+  tasksProjectReportRoute,
   tasksTaskDetailRoute,
   notificationsRoute,
   notificationDetailRoute,
@@ -2066,6 +2179,14 @@ const routeTree = rootRoute.addChildren([
   meNotificationsRoute,
   meNotificationPreferencesRoute,
   meAppearanceRoute,
+  meProfileRoute,
+  meProfileChangeRequestsRoute,
+  meProfileEditRoute,
+  meAccountRoute,
+  meSecurityPasswordRoute,
+  meSecuritySessionsRoute,
+  meSecurityActivityRoute,
+  meSecurityTwoFactorRoute,
   systemRoute,
   systemCompanyRoute,
   systemCompanySettingsRoute,

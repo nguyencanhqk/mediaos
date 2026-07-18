@@ -23,6 +23,10 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     ...actual,
     meApi: {
       getOverview: vi.fn(),
+      // S5-ME-FE-4 — banner MeBannerAvatar đọc GET /me/avatar (fail-soft). Mặc định null (chưa có avatar).
+      getAvatar: vi.fn(() => Promise.resolve(null)),
+      uploadAvatar: vi.fn(),
+      removeAvatar: vi.fn(),
     },
   };
 });

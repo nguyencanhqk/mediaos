@@ -1,32 +1,60 @@
-import React from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { User, RefreshCw } from "lucide-react";
-import { hrApi, hrKeys, useCan, useCanExact, formatDate } from "@mediaos/web-core";
-import { PageHeader, EmptyState, Button, Card, CardContent } from "@mediaos/ui";
+import { useNavigate } from "@tanstack/react-router";
+import { User, RefreshCw, ListChecks } from "lucide-react";
+import { hrApi, hrKeys, useCan, useCanExact, PermissionGate } from "@mediaos/web-core";
+import {
+  PageHeader,
+  EmptyState,
+  Button,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@mediaos/ui";
 import { HR_ENGINE_PAIRS } from "../constants";
-import { EmployeeStatusBadge } from "../employee-status";
-// HR-IDENTITY-READ-1 — dùng chung section CCCD/CMND với EmployeeDetailPage (DRY).
-import { IdentitySection } from "../employees/profile-sections";
+// Section dùng chung với màn chi tiết nhân viên (/hr/employees/:id) — CÙNG shape dữ liệu:
+// contracts khai `hrMeProfileSchema = hrEmployeeDetailSchema`, nên mọi section tái dùng nguyên vẹn.
+import {
+  BasicInfoSection,
+  CompSection,
+  ContactSection,
+  IdentitySection,
+  WorkInfoSection,
+} from "../employees/profile-sections";
+import { ProfileCoverHeader, COVER_ACTION_BUTTON_CLASS } from "../employees/profile-cover-header";
+// S5-ME-FE-4 — avatar own-scope (GET/upload/remove /me/avatar). KHÁC màn chi tiết HR (đổi ảnh người
+// khác qua update:employee): ở đây owner resolve 100% từ token ở BE, client KHÔNG gửi id.
+import { MeBannerAvatar } from "../../me/components/MeBannerAvatar";
+import { PCR_CREATE_PERMISSION } from "../profile-change-requests/constants";
 
-// ---------------------------------------------------------------------------
-// Shared field row
-// ---------------------------------------------------------------------------
-function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[160px_1fr] gap-2 py-2 text-sm">
-      <span className="font-medium text-muted-foreground">{label}</span>
-      <span className="text-foreground">{value ?? "—"}</span>
-    </div>
-  );
-}
+/**
+ * Đề nghị sửa hồ sơ = luồng change-request (nhân viên KHÔNG tự PATCH hồ sơ mình). Nút dẫn tới màn SỬA
+ * TRỰC TIẾP (bố cục như /hr/employees/:id/edit) chứ không phải danh sách yêu cầu — gửi xong màn đó
+ * mới đưa về /me/profile/change-requests.
+ */
+const ME_PROFILE_EDIT_PATH = "/me/profile/edit";
 
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
+type Tab = "basic" | "contact" | "work" | "comp";
+
+/**
+ * "Hồ sơ của tôi" — /me/profile (và route cũ /hr/me).
+ *
+ * Bố cục DÙNG CHUNG với màn chi tiết nhân viên /hr/employees/:id: banner cover (ProfileCoverHeader) +
+ * 4 tab Cơ bản/Liên hệ/Công việc/Lương dựng từ CÙNG bộ section (profile-sections). Khác biệt duy nhất
+ * là scope: dữ liệu lấy từ GET /hr/me/profile (own-scope do server chốt) và avatar dùng own-scope
+ * /me/avatar thay vì update:employee.
+ *
+ * Masking là việc SERVER: field thiếu quyền trả null → section hiện nhãn "bị ẩn do phân quyền".
+ * Client KHÔNG tự suy luận/hiển thị thêm.
+ */
 export function MyProfilePage() {
   const { t } = useTranslation("hr");
   const { t: tc } = useTranslation("common");
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<Tab>("basic");
+  const [pcrAction, pcrResourceType] = PCR_CREATE_PERMISSION.split(":");
 
   // /hr/me/profile — own scope enforced server-side; all authenticated users may call it
   const canViewSensitive = useCan(
@@ -59,8 +87,6 @@ export function MyProfilePage() {
   });
 
   const notLinked = isError && (error as { status?: number })?.status === 404;
-
-  const masked = t("detail.masked");
 
   // ── Loading ────────────────────────────────────────────────────────────────
   if (isLoading) {
@@ -106,58 +132,56 @@ export function MyProfilePage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <PageHeader title={t("me.title")} description={data.fullName ?? undefined} icon={User} />
+    <div className="space-y-4 p-6">
+      <ProfileCoverHeader
+        fullName={data.fullName}
+        employeeCode={data.employeeCode}
+        positionName={data.positionName}
+        orgUnitName={data.orgUnitName}
+        status={data.status}
+        avatar={<MeBannerAvatar name={data.fullName} />}
+        actions={
+          // Không có nút "Sửa" như màn HR: nhân viên sửa hồ sơ mình qua luồng ĐỀ NGHỊ (change-request).
+          <PermissionGate action={pcrAction} resourceType={pcrResourceType}>
+            <Button
+              variant="outline"
+              size="sm"
+              className={COVER_ACTION_BUTTON_CLASS}
+              onClick={() => void navigate({ to: ME_PROFILE_EDIT_PATH as "/" })}
+            >
+              <ListChecks className="mr-2 h-4 w-4" />
+              {t("changeRequest.edit.title")}
+            </Button>
+          </PermissionGate>
+        }
+      />
 
-      {/* Basic info */}
-      <Card>
-        <CardContent className="divide-y divide-border pt-4">
-          <FieldRow label={t("detail.fields.code")} value={data.employeeCode} />
-          <FieldRow label={t("detail.fields.name")} value={data.fullName} />
-          <FieldRow label={t("detail.fields.email")} value={data.email} />
-          <FieldRow label={t("detail.fields.department")} value={data.orgUnitName} />
-          <FieldRow label={t("detail.fields.position")} value={data.positionName} />
-          <FieldRow
-            label={t("detail.fields.status")}
-            value={<EmployeeStatusBadge status={data.status} />}
-          />
-          <FieldRow
-            label={t("detail.fields.startDate")}
-            value={data.startDate ? formatDate(new Date(data.startDate)) : "—"}
-          />
-          <FieldRow label={t("detail.fields.workType")} value={data.workType} />
-        </CardContent>
-      </Card>
-
-      {/* Sensitive section: server masks fields to null when unauthorized.
-          Client only shows what server returned; never reveals hidden data. */}
-      <Card>
-        <CardContent className="divide-y divide-border pt-4">
-          <FieldRow
-            label={t("detail.sensitiveFields.phone")}
-            value={data.phone !== null ? data.phone : canViewSensitive ? "—" : masked}
-          />
-          <FieldRow
-            label={t("detail.sensitiveFields.notes")}
-            value={data.notes !== null ? data.notes : canViewSensitive ? "—" : masked}
-          />
-          <FieldRow
-            label={t("detail.sensitiveFields.baseSalary")}
-            value={
-              data.baseSalary !== null
-                ? `${data.baseSalary.toLocaleString("vi-VN")} ₫`
-                : canViewSalary
-                  ? "—"
-                  : masked
-            }
-          />
-        </CardContent>
-      </Card>
-
-      {/* HR-IDENTITY-READ-1 — chỉ mount khi có EXACT view-identity:employee (fail-closed). */}
-      {canViewIdentity && (
-        <IdentitySection employee={data} t={t} canViewIdentity={canViewIdentity} />
-      )}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
+        <TabsList>
+          <TabsTrigger value="basic">{t("detail.tabs.basic")}</TabsTrigger>
+          <TabsTrigger value="contact">{t("detail.tabs.contact")}</TabsTrigger>
+          <TabsTrigger value="work">{t("detail.tabs.work")}</TabsTrigger>
+          <TabsTrigger value="comp">{t("detail.tabs.comp")}</TabsTrigger>
+        </TabsList>
+        <TabsContent value="basic" className="space-y-4 pt-4">
+          <BasicInfoSection employee={data} t={t} canViewSensitive={canViewSensitive} />
+          {/* HR-IDENTITY-READ-1 — chỉ mount khi có EXACT view-identity:employee (fail-closed). */}
+          {canViewIdentity && (
+            <IdentitySection employee={data} t={t} canViewIdentity={canViewIdentity} />
+          )}
+        </TabsContent>
+        <TabsContent value="contact" className="pt-4">
+          <ContactSection employee={data} t={t} canViewSensitive={canViewSensitive} />
+        </TabsContent>
+        <TabsContent value="work" className="pt-4">
+          {/* KHÔNG truyền onNavigateEmployee → tên quản lý hiện dạng text (không điều hướng sang hồ sơ
+              người khác từ màn own-scope). */}
+          <WorkInfoSection employee={data} t={t} canViewSensitive={canViewSensitive} />
+        </TabsContent>
+        <TabsContent value="comp" className="pt-4">
+          <CompSection employee={data} t={t} canViewSalary={canViewSalary} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

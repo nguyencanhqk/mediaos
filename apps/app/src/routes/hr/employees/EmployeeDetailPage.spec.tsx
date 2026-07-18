@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore } from "@mediaos/web-core";
-import { hrApi, employeeFilesApi } from "@mediaos/web-core";
+import { hrApi, employeeFilesApi, employeeAvatarApi } from "@mediaos/web-core";
 import { EmployeeDetailPage } from "./EmployeeDetailPage";
 import type { HrEmployeeDetail } from "@mediaos/contracts";
 
@@ -20,6 +20,11 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     // S2-FE-HR-9 — Tab "File hồ sơ" gọi employeeFilesApi.getEmployeeFiles khi có file-view:employee.
     employeeFilesApi: {
       getEmployeeFiles: vi.fn(),
+    },
+    // S5-HR-AVATAR-1 — HR/admin đổi/gỡ avatar NHÂN VIÊN KHÁC (gate update:employee).
+    employeeAvatarApi: {
+      uploadEmployeeAvatar: vi.fn(),
+      removeEmployeeAvatar: vi.fn(),
     },
   };
 });
@@ -46,6 +51,12 @@ const MOCK_DETAIL: HrEmployeeDetail = {
   positionId: "pos-001",
   positionName: "Developer",
   directManagerId: null,
+  jobLevelName: null,
+  contractTypeName: null,
+  directManagerName: null,
+  directManagerEmployeeId: null,
+  indirectManagerName: null,
+  resignationReason: null,
   workType: "Full-time",
   employmentType: "Official",
   startDate: "2026-01-01",
@@ -245,5 +256,131 @@ describe("EmployeeDetailPage", () => {
     expect(screen.getByText(/giấy tờ tùy thân/i)).toBeInTheDocument();
     expect(screen.getByText("079123456789")).toBeInTheDocument();
     expect(screen.getByText("Cục Cảnh sát QLHC về TTXH")).toBeInTheDocument();
+  });
+
+  // ── S5-HR-WORKINFO-1 — khối Thông tin công việc bổ sung (tab "Công việc") ─────────
+  it("work tab shows Cấp bậc + Quản lý trực tiếp/gián tiếp (directory-class) khi server trả", async () => {
+    setCapabilities({ "read:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue({
+      ...MOCK_DETAIL,
+      jobLevelName: "Senior",
+      directManagerName: "Trần Văn B",
+      directManagerEmployeeId: "emp-mgr-1",
+      indirectManagerName: "Lê Văn C",
+    });
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("tab", { name: /công việc/i }));
+    expect(screen.getByText("Senior")).toBeInTheDocument();
+    expect(screen.getByText("Trần Văn B")).toBeInTheDocument();
+    expect(screen.getByText("Lê Văn C")).toBeInTheDocument();
+  });
+
+  it("direct-manager link điều hướng sang hồ sơ quản lý (server enforce quyền)", async () => {
+    setCapabilities({ "read:employee": true });
+    const onNavigate = vi.fn();
+    vi.mocked(hrApi.getEmployee).mockResolvedValue({
+      ...MOCK_DETAIL,
+      directManagerName: "Trần Văn B",
+      directManagerEmployeeId: "emp-mgr-1",
+    });
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" onNavigateEmployee={onNavigate} />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("tab", { name: /công việc/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Trần Văn B" }));
+    expect(onNavigate).toHaveBeenCalledWith("emp-mgr-1");
+  });
+
+  it("khối 'Thông tin nghỉ việc' ẩn khi active, hiện khi resigned (+ lý do server trả)", async () => {
+    setCapabilities({ "read:employee": true, "view-sensitive:employee": true });
+    // active → không có khối nghỉ việc
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
+    const { unmount } = renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("tab", { name: /công việc/i }));
+    expect(screen.queryByText(/thông tin nghỉ việc/i)).not.toBeInTheDocument();
+    unmount();
+
+    // resigned → khối hiện + lý do
+    vi.mocked(hrApi.getEmployee).mockResolvedValue({
+      ...MOCK_DETAIL,
+      status: "resigned",
+      endDate: "2026-06-30",
+      resignationReason: "Chuyển công tác",
+    });
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("tab", { name: /công việc/i }));
+    expect(screen.getByText(/thông tin nghỉ việc/i)).toBeInTheDocument();
+    expect(screen.getByText("Chuyển công tác")).toBeInTheDocument();
+  });
+
+  // ── S5-HR-AVATAR-1 — HR/admin đổi/gỡ avatar NHÂN VIÊN KHÁC (gate update:employee) ──────────
+  const pngFile = () => new File([new Uint8Array([1, 2, 3])], "a.png", { type: "image/png" });
+  const txtFile = () => new File([new Uint8Array([1, 2, 3])], "a.txt", { type: "text/plain" });
+
+  it("hiện nút 'Đổi ảnh' khi có update:employee", async () => {
+    setCapabilities({ "read:employee": true, "update:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    expect(screen.getByRole("button", { name: /Đổi ảnh/ })).toBeInTheDocument();
+  });
+
+  it("ẨN nút quản lý avatar khi THIẾU update:employee (server vẫn là chốt)", async () => {
+    setCapabilities({ "read:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    expect(screen.queryByRole("button", { name: /Đổi ảnh/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Gỡ ảnh/ })).not.toBeInTheDocument();
+  });
+
+  it("chưa có avatar → KHÔNG hiện nút 'Gỡ ảnh'", async () => {
+    setCapabilities({ "read:employee": true, "update:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL); // avatarUrl: null
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    expect(screen.queryByRole("button", { name: /Gỡ ảnh/ })).not.toBeInTheDocument();
+  });
+
+  it("đã có avatar → hiện nút 'Gỡ ảnh', click gọi employeeAvatarApi.removeEmployeeAvatar", async () => {
+    setCapabilities({ "read:employee": true, "update:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue({
+      ...MOCK_DETAIL,
+      avatarUrl: "https://s3/get.png",
+    });
+    vi.mocked(employeeAvatarApi.removeEmployeeAvatar).mockResolvedValue(undefined);
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("button", { name: /Gỡ ảnh/ }));
+    await waitFor(() =>
+      expect(employeeAvatarApi.removeEmployeeAvatar).toHaveBeenCalledWith("emp-001"),
+    );
+  });
+
+  it("chọn ảnh hợp lệ → gọi employeeAvatarApi.uploadEmployeeAvatar(employeeId, file)", async () => {
+    setCapabilities({ "read:employee": true, "update:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
+    vi.mocked(employeeAvatarApi.uploadEmployeeAvatar).mockResolvedValue({ fileId: "f1" });
+    const { container } = renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = pngFile();
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() =>
+      expect(employeeAvatarApi.uploadEmployeeAvatar).toHaveBeenCalledWith("emp-001", file),
+    );
+  });
+
+  it("file SAI loại → hiện lỗi + KHÔNG gọi uploadEmployeeAvatar", async () => {
+    setCapabilities({ "read:employee": true, "update:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
+    const { container } = renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [txtFile()] } });
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Chỉ chấp nhận ảnh/);
+    expect(employeeAvatarApi.uploadEmployeeAvatar).not.toHaveBeenCalled();
   });
 });

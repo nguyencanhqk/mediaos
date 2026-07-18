@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { Users, RefreshCw, ArrowLeft, Pencil, FileText } from "lucide-react";
+import { Users, RefreshCw, ArrowLeft, Pencil, FileText, Camera, Trash2 } from "lucide-react";
 import { hrApi, hrKeys, useCan, useCanExact, PermissionGate } from "@mediaos/web-core";
 import {
   PageHeader,
@@ -14,7 +14,8 @@ import {
   TabsTrigger,
 } from "@mediaos/ui";
 import { HR_ENGINE_PAIRS } from "../constants";
-import { EmployeeStatusBadge } from "../employee-status";
+// Banner cover dùng CHUNG với /me/profile (MyProfilePage) — tránh 2 màn trôi khỏi nhau về hiển thị.
+import { ProfileCoverHeader, COVER_ACTION_BUTTON_CLASS } from "./profile-cover-header";
 // S2-FE-HR-7 — nút điều hướng "Hợp đồng" (ẩn nếu không truyền onContracts).
 import { CONTRACT_ENGINE_PAIRS } from "../contracts/constants";
 import "../contracts/contracts-i18n";
@@ -31,6 +32,9 @@ import {
 } from "./profile-sections";
 // S5-HR-LINKUI-1 — khối "Tài khoản đăng nhập" (HR-FUNC-011): liên kết/hủy liên kết hồ sơ ↔ user.
 import { AccountLinkSection } from "./AccountLinkSection";
+// S5-HR-AVATAR-1 — HR/admin đổi/gỡ avatar của NHÂN VIÊN KHÁC (gate update:employee).
+import { useEmployeeAvatar } from "./use-employee-avatar";
+import { AVATAR_ACCEPT_ATTR } from "../../me/use-me-avatar";
 
 type Tab = "basic" | "contact" | "work" | "comp" | "files";
 
@@ -40,6 +44,8 @@ interface EmployeeDetailPageProps {
   onEdit?: () => void;
   /** S2-FE-HR-7 — điều hướng tới /hr/employees/:id/contracts (ẩn nếu không truyền). */
   onContracts?: () => void;
+  /** S5-HR-WORKINFO-1 — điều hướng tới hồ sơ quản lý trực tiếp (WorkInfoSection); server enforce quyền xem. */
+  onNavigateEmployee?: (employeeId: string) => void;
 }
 
 export function EmployeeDetailPage({
@@ -47,6 +53,7 @@ export function EmployeeDetailPage({
   onBack,
   onEdit,
   onContracts,
+  onNavigateEmployee,
 }: EmployeeDetailPageProps) {
   const { t } = useTranslation("hr");
   const { t: tc } = useTranslation("common");
@@ -75,6 +82,16 @@ export function EmployeeDetailPage({
     EMPLOYEE_FILE_ENGINE_PAIRS.VIEW.action,
     EMPLOYEE_FILE_ENGINE_PAIRS.VIEW.resourceType,
   );
+  // S5-HR-AVATAR-1 — đổi/gỡ avatar NHÂN VIÊN KHÁC (gate update:employee, server chốt cuối).
+  const {
+    canManage: canManageAvatar,
+    upload: avatarUpload,
+    remove: avatarRemove,
+    inputRef: avatarInputRef,
+    openPicker: openAvatarPicker,
+    onFileSelected: onAvatarFileSelected,
+    validationError: avatarValidationError,
+  } = useEmployeeAvatar(employeeId);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: hrKeys.employees.detail(employeeId),
@@ -133,38 +150,82 @@ export function EmployeeDetailPage({
     );
   }
 
+  // S5-HR-AVATAR-1 — thông điệp lỗi validate/upload/remove avatar (KHÔNG nuốt — silent-failure).
+  const avatarErrorMessage = avatarValidationError
+    ? t(`detail.avatar.error.${avatarValidationError}`)
+    : avatarUpload.isError
+      ? t("detail.avatar.error.upload")
+      : avatarRemove.isError
+        ? t("detail.avatar.error.remove")
+        : null;
+
   return (
     <div className="space-y-4 p-6">
-      {/* Cover header: avatar + tên + mã + chức vụ – đơn vị + trạng thái */}
-      <div className="overflow-hidden rounded-xl border border-border">
-        {/* Banner luôn tối (navy chrome) theo chủ đích cả 2 theme, không đổi theo light/dark */}
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-[#0f1a2e] via-[#16243d] to-[#1e304f] px-5 py-5">
-          <div className="flex items-center gap-4">
+      {/* Cover header: avatar + tên + mã + chức vụ – đơn vị + trạng thái. Banner dùng CHUNG với
+          /me/profile (ProfileCoverHeader) — avatar truyền qua slot vì scope quyền khác nhau: ở đây là
+          đổi ảnh NHÂN VIÊN KHÁC (update:employee), còn /me/profile là own-scope qua /me/avatar. */}
+      <ProfileCoverHeader
+        fullName={data.fullName}
+        employeeCode={data.employeeCode}
+        positionName={data.positionName}
+        orgUnitName={data.orgUnitName}
+        status={data.status}
+        avatar={
+          <div className="flex flex-col items-center gap-1.5">
             <Avatar
               size="lg"
               name={data.fullName}
               src={data.avatarUrl}
               className="ring-2 ring-white/70"
             />
-            <div className="text-white">
-              <p className="text-lg leading-tight font-semibold uppercase">
-                {data.fullName ?? "—"}
-                <span className="ml-2 text-sm font-normal text-white/80">
-                  ({data.employeeCode ?? "—"})
-                </span>
-              </p>
-              <p className="text-sm text-white/80">
-                {[data.positionName, data.orgUnitName].filter(Boolean).join(" – ") || "—"}
-              </p>
-            </div>
-            <EmployeeStatusBadge status={data.status} />
+            {canManageAvatar && (
+              <>
+                <div className="flex flex-wrap justify-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={`h-7 px-2 text-xs ${COVER_ACTION_BUTTON_CLASS}`}
+                    onClick={openAvatarPicker}
+                    disabled={avatarUpload.isPending || avatarRemove.isPending}
+                  >
+                    <Camera className="mr-1 h-3 w-3" />
+                    {avatarUpload.isPending
+                      ? t("detail.avatar.uploading")
+                      : t("detail.avatar.change")}
+                  </Button>
+                  {data.avatarUrl && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-white hover:bg-white/20"
+                      onClick={() => avatarRemove.mutate()}
+                      disabled={avatarUpload.isPending || avatarRemove.isPending}
+                    >
+                      <Trash2 className="mr-1 h-3 w-3" />
+                      {avatarRemove.isPending
+                        ? t("detail.avatar.removing")
+                        : t("detail.avatar.remove")}
+                    </Button>
+                  )}
+                </div>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept={AVATAR_ACCEPT_ATTR}
+                  className="hidden"
+                  onChange={onAvatarFileSelected}
+                />
+              </>
+            )}
           </div>
-          <div className="flex items-center gap-2">
+        }
+        actions={
+          <>
             {onBack && (
               <Button
                 variant="outline"
                 size="sm"
-                className="border-white/40 bg-white/10 text-white hover:bg-white/20"
+                className={COVER_ACTION_BUTTON_CLASS}
                 onClick={onBack}
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />
@@ -179,7 +240,7 @@ export function EmployeeDetailPage({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="border-white/40 bg-white/10 text-white hover:bg-white/20"
+                  className={COVER_ACTION_BUTTON_CLASS}
                   onClick={onContracts}
                 >
                   <FileText className="mr-2 h-4 w-4" />
@@ -198,9 +259,16 @@ export function EmployeeDetailPage({
                 </Button>
               </PermissionGate>
             )}
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
+
+      {/* S5-HR-AVATAR-1 — lỗi validate/upload/remove avatar (KHÔNG nuốt — silent-failure). */}
+      {canManageAvatar && avatarErrorMessage && (
+        <p role="alert" className="text-sm text-destructive">
+          {avatarErrorMessage}
+        </p>
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
@@ -224,7 +292,12 @@ export function EmployeeDetailPage({
           <ContactSection employee={data} t={t} canViewSensitive={canViewSensitive} />
         </TabsContent>
         <TabsContent value="work" className="pt-4">
-          <WorkInfoSection employee={data} t={t} canViewSensitive={canViewSensitive} />
+          <WorkInfoSection
+            employee={data}
+            t={t}
+            canViewSensitive={canViewSensitive}
+            onNavigateEmployee={onNavigateEmployee}
+          />
         </TabsContent>
         <TabsContent value="comp" className="pt-4">
           <CompSection employee={data} t={t} canViewSalary={canViewSalary} />

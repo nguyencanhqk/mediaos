@@ -93,6 +93,19 @@ export default {
   detail: {
     title: "Hồ sơ nhân viên",
     backToList: "Quay lại danh sách",
+    // S5-HR-AVATAR-1 — HR/admin đổi/gỡ avatar của NHÂN VIÊN KHÁC trên cover header (gate update:employee).
+    avatar: {
+      change: "Đổi ảnh",
+      remove: "Gỡ ảnh",
+      uploading: "Đang tải lên…",
+      removing: "Đang gỡ…",
+      error: {
+        type: "Chỉ chấp nhận ảnh PNG, JPG hoặc WEBP.",
+        size: "Ảnh vượt quá dung lượng cho phép (tối đa 5MB).",
+        upload: "Tải ảnh lên thất bại. Vui lòng thử lại.",
+        remove: "Gỡ ảnh thất bại. Vui lòng thử lại.",
+      },
+    },
     tabs: {
       overview: "Tổng quan",
       personal: "Thông tin cá nhân",
@@ -115,6 +128,8 @@ export default {
       salary: "Thông tin lương",
       // HR-IDENTITY-READ-1 — nhóm CCCD/CMND (view-identity riêng, nhạy cảm hơn view-sensitive)
       identity: "Giấy tờ tùy thân",
+      // S5-HR-WORKINFO-1 — khối chỉ hiện khi nhân viên đã nghỉ/chấm dứt
+      resignation: "Thông tin nghỉ việc",
     },
     fields: {
       code: "Mã nhân viên",
@@ -127,6 +142,12 @@ export default {
       endDate: "Ngày kết thúc",
       workType: "Hình thức làm việc",
       employmentType: "Loại hợp đồng",
+      // S5-HR-WORKINFO-1 — khối Thông tin công việc bổ sung
+      jobLevel: "Cấp bậc",
+      directManager: "Quản lý trực tiếp",
+      indirectManager: "Quản lý gián tiếp",
+      resignationDate: "Ngày nghỉ việc",
+      resignationReason: "Lý do nghỉ việc",
       // HR-PROFILE-UI-1 — field cá nhân mới (PII, server mask theo view-sensitive)
       gender: "Giới tính",
       dateOfBirth: "Ngày sinh",
@@ -395,8 +416,73 @@ export default {
     title: "Sơ đồ tổ chức",
     description: "Cơ cấu phòng ban của công ty (chỉ đọc)",
     headLabel: "Trưởng đơn vị",
+    membersLabel: "Thành viên ({{count}})",
+    unnamedMember: "(chưa liên kết tài khoản)",
     expand: "Mở rộng",
     collapse: "Thu gọn",
+    // S5-HR-ORGCHART-FE-2 — nút hành động quản trị trên sơ đồ.
+    actions: {
+      addDepartment: "Thêm phòng ban",
+      addEmployee: "Thêm nhân viên",
+      assignManager: "Đổi quản lý trực tiếp",
+      moveDept: "Chuyển phòng ban",
+      addToDept: "Thêm người vào phòng",
+    },
+    // S5-HR-ORGCHART-FE-3 — khu nhân viên chưa thuộc phòng ban nào.
+    unassigned: {
+      title: "Chưa phân phòng ban ({{count}})",
+      desc: "Nhân viên chưa thuộc phòng ban nào — chọn 'Phân vào phòng ban' để thêm họ vào một phòng.",
+      assign: "Phân vào phòng ban",
+    },
+    dialogs: {
+      cancel: "Hủy",
+      create: "Tạo",
+      save: "Lưu",
+      saving: "Đang lưu…",
+      genericError: "Không thể lưu. Vui lòng thử lại.",
+      // Thêm người có sẵn vào phòng
+      addToDeptDesc: "Chọn một nhân viên (kể cả người chưa có phòng ban) để thêm vào {{dept}}.",
+      employeeLabel: "Nhân viên",
+      pickEmployee: "Vui lòng chọn một nhân viên.",
+      unassignedTag: "Chưa phân phòng",
+      noCandidates: "Không còn nhân viên nào để thêm vào phòng này.",
+      // Thêm phòng ban
+      addDepartmentDesc: "Tạo phòng ban mới trong cơ cấu tổ chức.",
+      deptName: "Tên phòng ban",
+      deptNamePlaceholder: "vd: Phòng Kinh Doanh",
+      deptCode: "Mã phòng ban",
+      deptCodePlaceholder: "vd: kinh-doanh (tùy chọn)",
+      parentDept: "Phòng ban cha",
+      noParent: "— Không có (phòng cấp cao nhất) —",
+      nameRequired: "Vui lòng nhập tên phòng ban.",
+      // Đổi quản lý trực tiếp
+      assignManagerDesc: "Chọn quản lý trực tiếp cho {{name}}.",
+      directManager: "Quản lý trực tiếp",
+      pickManager: "Vui lòng chọn một quản lý.",
+      pickPlaceholder: "— Chọn —",
+      noManager: "— Không có quản lý —",
+      // Chuyển phòng ban
+      moveDeptDesc: "Chuyển {{name}} sang phòng ban khác.",
+      targetDept: "Phòng ban đích",
+      pickDept: "Vui lòng chọn phòng ban.",
+      sameDept: "Nhân viên đã ở phòng ban này.",
+    },
+    // Nhãn loại đơn vị (org_unit.type) — thiếu key thì component fallback về giá trị thô.
+    unitType: {
+      company: "Công ty",
+      division: "Khối",
+      department: "Phòng ban",
+      team: "Nhóm",
+      branch: "Chi nhánh",
+      center: "Trung tâm",
+    },
+    // Nhãn trạng thái đơn vị (org_unit.status) — fallback về giá trị thô nếu thiếu.
+    status: {
+      active: "Đang hoạt động",
+      Active: "Đang hoạt động",
+      inactive: "Ngừng hoạt động",
+      Inactive: "Ngừng hoạt động",
+    },
     forbidden: {
       title: "Không có quyền truy cập",
       description: "Bạn không có quyền xem sơ đồ tổ chức.",
@@ -429,7 +515,8 @@ export default {
       dateTo: "Đến ngày",
     },
     pagination: {
-      summary: "{{from}}–{{to}} trên {{total}}",
+      // Không có `total` — API trả mảng trần, block pagination bị apiFetch bỏ (xem hr-audit-api.ts).
+      summary: "Đang xem {{from}}–{{to}}",
     },
     forbidden: {
       title: "Không có quyền truy cập",
@@ -543,6 +630,25 @@ export default {
         badRequest: "Không có thay đổi hợp lệ hoặc trường không được phép sửa.",
         forbidden: "Bạn không có quyền gửi yêu cầu này.",
         generic: "Không thể gửi yêu cầu. Vui lòng thử lại.",
+      },
+    },
+    // Màn "sửa trực tiếp rồi gửi duyệt" (/me/profile/edit) — bố cục giống màn sửa nhân viên, khác form
+    // tick-chọn-trường ở HR-SCREEN-017. Cùng API createProfileChangeRequest.
+    edit: {
+      title: "Đề nghị cập nhật hồ sơ",
+      description: "Sửa trực tiếp thông tin bạn muốn thay đổi, sau đó gửi cho HR duyệt.",
+      maskedHint:
+        "Giá trị hiện tại của nhóm này đang bị ẩn do phân quyền. Bạn vẫn có thể nhập giá trị mới để đề nghị thay đổi.",
+      reviewNotice:
+        "Thay đổi KHÔNG áp dụng ngay: yêu cầu sẽ được gửi tới HR hoặc Quản trị viên để duyệt.",
+      noChanges: "Bạn chưa thay đổi thông tin nào.",
+      clearedNotAllowed:
+        "Không thể xoá trắng thông tin đã có. Vui lòng nhập giá trị mới hoặc khôi phục giá trị cũ.",
+      success: {
+        title: "Đã gửi yêu cầu cập nhật hồ sơ",
+        description:
+          "Yêu cầu của bạn đang chờ HR hoặc Quản trị viên duyệt. Bạn sẽ nhận được thông báo khi có kết quả.",
+        ok: "OK",
       },
     },
     fields: {

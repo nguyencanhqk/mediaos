@@ -341,6 +341,45 @@ export const meAvatarSchema = z.object({
 });
 export type MeAvatar = z.infer<typeof meAvatarSchema>;
 
+// ─── S5-ME-BE-4 — Avatar own-scope self-upload (presign wrapper) + GET current ───────────────────
+//
+// Đóng "Nợ để lại" S5-ME-BE-2: employee/manager/hr THIẾU *:foundation-file nên KHÔNG tự upload+confirm file
+// để gắn avatar, và KHÔNG có cách own-scope lấy downloadUrl avatar hiện tại lúc tải trang. ME bọc presign
+// wrapper own-scope (POST /me/avatar/upload-url + /confirm + GET /me/avatar), TÁI DÙNG FileService nội bộ.
+// Flow FE: upload-url → PUT bytes (presigned) → confirm → POST /me/avatar (link) → GET /me/avatar (hiển thị).
+
+/**
+ * POST /api/v1/me/avatar/upload-url body — đăng ký 1 file ẢNH Private để chuẩn bị gắn avatar (own-scope,
+ * gate update:avatar). `originalName` PHẢI mang đuôi ảnh hợp lệ (vd `avatar.png`) — nếu không FileService
+ * reject FOUNDATION-FILE-ERR-EXTENSION. `declaredMimeType` phải image/* (server re-validate allowlist +
+ * re-check size/checksum ở bước confirm — KHÔNG tin mù client).
+ */
+export const meAvatarUploadUrlInputSchema = z.object({
+  originalName: z.string().trim().min(1).max(500),
+  declaredMimeType: z.string().min(1).max(255),
+  sizeBytes: z.number().int().nonnegative(),
+});
+export type MeAvatarUploadUrlInput = z.infer<typeof meAvatarUploadUrlInputSchema>;
+
+/**
+ * Response POST /me/avatar/upload-url — presigned-PUT ephemeral TTL-ngắn (client PUT bytes trực tiếp lên
+ * storage, KHÔNG persist ngoài phiên upload; rồi gọi /me/avatar/confirm). KHÔNG lộ storage_path.
+ */
+export const meAvatarUploadUrlResponseSchema = z.object({
+  fileId: z.string().uuid(),
+  uploadUrl: z.string().url(),
+  expiresAt: z.string().datetime(),
+});
+export type MeAvatarUploadUrlResponse = z.infer<typeof meAvatarUploadUrlResponseSchema>;
+
+/**
+ * Response GET /api/v1/me/avatar — avatar hiện tại đã ký (TTL-ngắn) hoặc `null` khi chưa có avatar HOẶC không
+ * hiển-thị-được (fail-soft read: unlinked / file bị gỡ / không quyền tải → null, KHÔNG ném lỗi cứng làm vỡ
+ * trang — mirror SPEC-09 §12.2 fail-soft). Client render `<Avatar src>` khi có, initials khi null.
+ */
+export const meCurrentAvatarSchema = meAvatarSchema.nullable();
+export type MeCurrentAvatar = z.infer<typeof meCurrentAvatarSchema>;
+
 // ─── S5-ME-BE-3 — Hoạt động bảo mật own-scope (GET /api/v1/me/security/activity) ──
 //
 // SPEC-09 ME-FUNC-016 §14.2/§17 + §10.6 (IP mask). DTO TỐI GIẢN cố ý: thời gian · loại sự kiện ·

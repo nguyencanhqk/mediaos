@@ -59,6 +59,11 @@ import { AttNotiBridgeRegistrar } from "./att-noti-bridge.registrar";
 // KHÔNG import LeaveModule (acyclic — đọc thẳng bảng employee_profiles, mirror INT-4).
 import { LeaveApproverReader } from "./leave-approver.reader";
 import { LeaveNotiBridgeRegistrar } from "./leave-noti-bridge.registrar";
+// (additive): outbox→NOTI 3 mapping HR "yêu cầu cập nhật hồ sơ" (submit/approve/reject, SPEC-08 §15) qua
+// CÙNG OutboxNotificationBridge INT-1. Catalog + template IN_APP đã seed từ trước nhưng THIẾU producer và
+// THIẾU mapping ⇒ trước đó duyệt xong không ai nhận được thông báo. KHÔNG import EmployeesModule (acyclic).
+import { PcrApproverAudienceReader } from "./pcr-approver-audience.reader";
+import { HrPcrNotiBridgeRegistrar } from "./hr-pcr-noti-bridge.registrar";
 
 @Module({
   imports: [DatabaseModule, EventsModule, RealtimeEmitterModule, PermissionModule],
@@ -106,6 +111,10 @@ import { LeaveNotiBridgeRegistrar } from "./leave-noti-bridge.registrar";
     // tại boot qua CÙNG OutboxNotificationBridge INT-1 ở trên (KHÔNG re-provide bridge).
     LeaveApproverReader,
     LeaveNotiBridgeRegistrar,
+    // (additive): reader + registrar HR profile-change đăng ký 3 consumer lên EventBus (@Global
+    // EventsModule) tại boot qua CÙNG OutboxNotificationBridge INT-1 ở trên (KHÔNG re-provide bridge).
+    PcrApproverAudienceReader,
+    HrPcrNotiBridgeRegistrar,
   ],
   // Export engine cho S4-INT-1 (outbox consumer gọi intake() in-process).
   // S4-DASH-BE-2 (additive): + MyNotificationsService cho NOTIFICATIONS widget handler (DASH inject qua DI —

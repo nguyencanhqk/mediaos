@@ -57,6 +57,16 @@ import { EmployeeFileController } from "./employee-file.controller";
 import { EmployeeFileRepository } from "./employee-file.repository";
 import { EmployeeFileService } from "./employee-file.service";
 import { EmployeeFileResolver } from "./employee-file.resolver";
+// S5-HR-ORGCHART-BE-1 (additive): org-chart cây nhân sự (GET /hr/org-chart/employees). Reuses
+// DataScopeService (PermissionModule) + DatabaseService — no new module import needed.
+import { HrOrgChartController } from "./hr-org-chart.controller";
+import { HrOrgChartService } from "./hr-org-chart.service";
+import { HrOrgChartRepository } from "./hr-org-chart.repository";
+// S5-HR-AVATAR-1 (additive): HR-managed employee avatar (set/remove avatar của NV KHÁC). Reuses FilesModule
+// (FileService/FileRepository/FileLinkRepository/FileAccessLogService, imported above) + DataScopeService
+// (PermissionModule) + AuditService (@Global EventsModule) — no new module import needed.
+import { HrEmployeeAvatarController } from "./hr-employee-avatar.controller";
+import { HrEmployeeAvatarService } from "./hr-employee-avatar.service";
 
 @Module({
   imports: [
@@ -88,6 +98,10 @@ import { EmployeeFileResolver } from "./employee-file.resolver";
     EmployeeFileController,
     // S5-HR-IMPORT-BE-1 (additive): bulk employee import controller (/hr/employees/import + /template).
     HrImportController,
+    // S5-HR-ORGCHART-BE-1 (additive): org-chart controller (/hr/org-chart/employees).
+    HrOrgChartController,
+    // S5-HR-AVATAR-1 (additive): HR-managed employee avatar controller (/hr/employees/:id/avatar).
+    HrEmployeeAvatarController,
   ],
   // PasswordService is stateless (argon2) — provided locally to hash generated login passwords (F7).
   providers: [
@@ -125,6 +139,11 @@ import { EmployeeFileResolver } from "./employee-file.resolver";
     // S2-FND-SEED-2 (additive): HR master-data seeder + self-registering registrar (mirror ATT/LEAVE).
     HrMasterDataSeeder,
     HrSeedRegistrar,
+    // S5-HR-ORGCHART-BE-1 (additive): org-chart service + repo.
+    HrOrgChartService,
+    HrOrgChartRepository,
+    // S5-HR-AVATAR-1 (additive): HR-managed employee avatar service.
+    HrEmployeeAvatarService,
   ],
   exports: [
     EmployeesService,

@@ -1057,6 +1057,21 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 51,
   },
+  // S5-FE-TASK-6 — Task quá hạn (TASK-SCREEN-010, SPEC-06 §13.10). FE-only trên `GET /tasks?overdue=true`
+  // (không endpoint mới). Route TĨNH 2-segment "/tasks/overdue" xếp hạng TRÊN "/tasks/$taskId" (mirror
+  // task.my-tasks). Sidebar item khai riêng ở sidebar-registry.ts (TASK_SIDEBAR) — showInSidebar ở đây
+  // KHÔNG được ModuleSidebar đọc.
+  {
+    routeKey: "task.overdue",
+    path: "/tasks/overdue",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "TASK",
+    screenCode: "TASK-SCREEN-010",
+    titleKey: "routeTitle.taskOverdue",
+    requiredAnyPermissions: ["TASK.TASK.VIEW"],
+    showInSidebar: true,
+    order: 51.5,
+  },
   // S4-FE-TASK-1 — Project List/Detail (SPEC-06 §13.1/§13.3, TASK-SCREEN-001/003). Cổng route =
   // TASK.PROJECT.VIEW (read:project); nút Create/Edit/Close/Delete/Member gate finer bên trong page qua
   // useCan/PermissionGate (TASK.PROJECT.CREATE/UPDATE/CLOSE/DELETE/MANAGE_MEMBER).
@@ -1081,6 +1096,21 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["TASK.PROJECT.VIEW"],
     showInSidebar: false,
     order: 53,
+  },
+  // S5-FE-TASK-6 — Báo cáo tiến độ dự án (TASK-SCREEN-011, SPEC-06 §13.11/§16.1). Route DƯỚI project
+  // detail (path param, showInSidebar false — vào từ nút "Xem báo cáo" ProjectDetailPage). Route gate =
+  // TASK.PROJECT.VIEW (giống detail — người đến từ detail đã có read:project); cổng NHẠY CẢM thật của báo
+  // cáo là useCanExact(view-report:project) TRONG page + server enforce (GET /projects/:id/report).
+  {
+    routeKey: "task.projects.report",
+    path: "/tasks/projects/:projectId/report",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "TASK",
+    screenCode: "TASK-SCREEN-011",
+    titleKey: "routeTitle.taskProjectReport",
+    requiredAnyPermissions: ["TASK.PROJECT.VIEW"],
+    showInSidebar: false,
+    order: 53.5,
   },
 
   // Notifications
@@ -1225,6 +1255,108 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["access:me"],
     showInSidebar: true,
     order: 71,
+  },
+  // S5-ME-FE-2 — APPEND 6 route "Hồ sơ của tôi / Tài khoản & bảo mật" (SPEC-09 §8.1, ME-SCREEN-002..008).
+  // Gate GIỮ literal `access:me` (KHÔNG qua PERMISSION_CODE_TO_PAIR — cùng kỹ thuật me.overview): 5 màn
+  // TÁI DÙNG page sẵn có (MyProfilePage/MyChangeRequestPage/AccountProfilePage/ChangePasswordPage/
+  // AccountSessionsPage) mount trong ME workspace; me.security.activity là màn MỚI đọc GET /me/security/
+  // activity (BE-3) — bảng read-only đã mask, KHÔNG cần cặp module nguồn.
+  {
+    routeKey: "me.profile",
+    path: "/me/profile",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "ME-SCREEN-002",
+    titleKey: "routeTitle.meProfile",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: true,
+    order: 72,
+  },
+  {
+    routeKey: "me.profile.change-requests",
+    path: "/me/profile/change-requests",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "ME-SCREEN-003",
+    titleKey: "routeTitle.meProfileChangeRequests",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: true,
+    order: 73,
+  },
+  // Sửa hồ sơ dạng trực tiếp rồi GỬI DUYỆT (không PATCH thẳng) — vào từ nút ở ME-SCREEN-002.
+  // showInSidebar=false: màn thao-tác, không phải mục điều hướng thường trực.
+  {
+    routeKey: "me.profile.edit",
+    path: "/me/profile/edit",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "HR-SCREEN-017",
+    titleKey: "routeTitle.meProfileEdit",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: false,
+    order: 73.5,
+  },
+  {
+    routeKey: "me.account",
+    path: "/me/account",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "ME-SCREEN-005",
+    titleKey: "routeTitle.meAccount",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: true,
+    order: 74,
+  },
+  {
+    routeKey: "me.security.password",
+    path: "/me/security/password",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "ME-SCREEN-006",
+    titleKey: "routeTitle.meSecurityPassword",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: true,
+    order: 75,
+  },
+  {
+    routeKey: "me.security.sessions",
+    path: "/me/security/sessions",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "ME-SCREEN-007",
+    titleKey: "routeTitle.meSecuritySessions",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: true,
+    order: 76,
+  },
+  {
+    routeKey: "me.security.activity",
+    path: "/me/security/activity",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "ME-SCREEN-008",
+    titleKey: "routeTitle.meSecurityActivity",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: true,
+    order: 78,
+  },
+  // Bật 2FA trong ME workspace — TÁI DÙNG TwoFactorSetupPage (ACCOUNT-SCREEN-SETUP-2FA), cùng kỹ thuật
+  // 5 màn re-mount của S5-ME-FE-2. KHÔNG có mã ME-SCREEN riêng: SPEC-09 §9 không liệt kê màn 2FA (nguồn
+  // là AUTH), nên giữ screenCode gốc của AUTH thay vì bịa mã ME mới.
+  // showInSidebar=false — CHỦ Ý: đây là màn thao-tác-một-lần, vào từ nút "Bật 2FA" ở ME-SCREEN-005
+  // (Tài khoản), không phải mục điều hướng thường trực.
+  // Route SHELL cũ /account/setup-2fa GIỮ NGUYÊN — nó là đích của guard ép enroll AUTH-003
+  // (ProtectedShell) và của redirect sau login; route ME này chỉ là lối vào TỰ NGUYỆN.
+  {
+    routeKey: "me.security.2fa",
+    path: "/me/security/2fa",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "ACCOUNT-SCREEN-SETUP-2FA",
+    titleKey: "routeTitle.meSecurityTwoFactor",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: false,
+    order: 77,
   },
 
   // System

@@ -54,7 +54,7 @@ vi.mock("@mediaos/ui", async (importOriginal) => {
 });
 
 import { useCanExact, hrAuditApi } from "@mediaos/web-core";
-import type { AuditLogDto, AuditLogListResponse } from "@mediaos/contracts";
+import type { AuditLogDto } from "@mediaos/contracts";
 import { HrAuditLogsPage } from "./HrAuditLogsPage";
 
 const mockUseCanExact = useCanExact as ReturnType<typeof vi.fn>;
@@ -100,8 +100,13 @@ function makeLog(overrides: Partial<AuditLogDto> = {}): AuditLogDto {
   };
 }
 
-function makeResponse(data: AuditLogDto[], total = data.length): AuditLogListResponse {
-  return { data, meta: { total, limit: 25, offset: 0 } };
+/**
+ * hrAuditApi.listHrAuditLogs resolve MẢNG TRẦN (apiFetch/unwrapEnvelope bỏ block pagination) — KHÔNG
+ * phải {data, meta}. Mock cũ dùng hình {data, meta} là xanh giả: nó che đúng bug làm trang luôn hiện
+ * "Không thể tải lịch sử". Xem packages/web-core/src/lib/hr-audit-api.ts.
+ */
+function makeResponse(data: AuditLogDto[]): AuditLogDto[] {
+  return data;
 }
 
 function buildQC() {

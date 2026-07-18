@@ -9,8 +9,11 @@
  * BẤT BIẾN #3 (masking do server): before/after/oldValues/newValues trong AuditLogDto ĐÃ redact ở
  * server cho object_type nhạy cảm — client CHỈ render field DTO trả về, KHÔNG tự suy field bị ẩn.
  *
- * States: loading · error · empty · forbidden. Phân trang server-side offset/limit (dùng total từ
- * meta — khác login-logs/file-access-logs vốn không có total).
+ * States: loading · error · empty · forbidden. Phân trang server-side offset/limit theo HEURISTIC
+ * `items.length === PAGE_SIZE ⇒ còn trang sau` — KHÔNG có `total`: BE trả `paginated(...)` và
+ * interceptor hoist `pagination` lên top-level envelope, nhưng `apiFetch`/`unwrapEnvelope` chỉ trích
+ * `.data` (mảng trần) nên block pagination bị bỏ (hạn chế đã biết, giống login-logs/file-access-logs/
+ * hợp đồng lao động). Chi tiết: packages/web-core/src/lib/hr-audit-api.ts.
  */
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -135,10 +138,11 @@ export function HrAuditLogsPage() {
     );
   }
 
-  const items = data?.data ?? [];
-  const total = data?.meta.total ?? 0;
-  const from = total === 0 ? 0 : offset + 1;
+  const items = data ?? [];
+  const from = items.length === 0 ? 0 : offset + 1;
   const to = offset + items.length;
+  // Không có `total` → trang sau tồn tại KHI trang này đầy (xem ghi chú đầu file).
+  const hasNext = items.length === HR_AUDIT_LOG_PAGE_SIZE;
 
   function applyFilter() {
     setOffset(0);
@@ -221,9 +225,9 @@ export function HrAuditLogsPage() {
         pageSize={HR_AUDIT_LOG_PAGE_SIZE}
       />
 
-      {total > 0 && (
+      {(items.length > 0 || offset > 0) && (
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>{t("auditLogs.pagination.summary", { from, to, total })}</span>
+          <span>{t("auditLogs.pagination.summary", { from, to })}</span>
           <div className="flex gap-2">
             <Button
               size="sm"
@@ -236,7 +240,7 @@ export function HrAuditLogsPage() {
             <Button
               size="sm"
               variant="outline"
-              disabled={to >= total}
+              disabled={!hasNext}
               onClick={() => setOffset(offset + HR_AUDIT_LOG_PAGE_SIZE)}
             >
               {tc("pagination.next")}

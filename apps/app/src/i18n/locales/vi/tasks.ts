@@ -59,6 +59,7 @@ export default {
         edit: "Sửa dự án",
         close: "Đóng dự án",
         delete: "Xóa dự án",
+        viewReport: "Xem báo cáo",
       },
       closeDialog: {
         title: "Đóng dự án",
@@ -102,6 +103,27 @@ export default {
         error: {
           title: "Không thể tải báo cáo dự án",
           description: "Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.",
+        },
+      },
+    },
+    // S5-FE-TASK-6 — ProjectReportPage (TASK-SCREEN-011), TRANG mở rộng từ ProjectProgressCard. Dùng lại
+    // các key `projects.detail.report.*` (error/empty/workload/activeCount/unknownEmployee); phần riêng
+    // của trang (KPI tiles + tiêu đề + forbidden) đặt ở đây.
+    report: {
+      page: {
+        backToDetail: "Quay lại dự án",
+        fallbackTitle: "Báo cáo tiến độ dự án",
+        subtitle: "Tổng hợp tiến độ, khối lượng công việc và số quá hạn của dự án.",
+        breakdownTitle: "Phân bổ theo trạng thái",
+        kpi: {
+          total: "Tổng công việc",
+          done: "Hoàn thành",
+          notDone: "Chưa hoàn thành",
+          overdue: "Quá hạn",
+        },
+        forbidden: {
+          title: "Không có quyền truy cập",
+          description: "Bạn không có quyền xem báo cáo tiến độ của dự án này.",
         },
       },
     },
@@ -239,6 +261,20 @@ export default {
       empty: {
         title: "Chưa có công việc nào",
         description: "Tạo công việc đầu tiên để bắt đầu quản lý công việc.",
+      },
+    },
+    // S5-FE-TASK-6 — OverdueTasksPage (TASK-SCREEN-010). Tái dùng cột đọc + forbidden của `list`.
+    overdue: {
+      title: "Task quá hạn",
+      description: "Danh sách công việc đã quá hạn, sắp xếp theo hạn gần nhất.",
+      count: "{{display}} công việc quá hạn",
+      error: {
+        title: "Không thể tải danh sách task quá hạn",
+        description: "Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.",
+      },
+      empty: {
+        title: "Không có công việc quá hạn",
+        description: "Tất cả công việc trong phạm vi của bạn đều đang đúng hạn.",
       },
     },
     my: {

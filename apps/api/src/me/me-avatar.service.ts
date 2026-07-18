@@ -2,15 +2,24 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   UnsupportedMediaTypeException,
 } from "@nestjs/common";
-import { FOUNDATION_FILE_ERROR_CODES, type MeAvatar } from "@mediaos/contracts";
+import {
+  FOUNDATION_FILE_ERROR_CODES,
+  type ConfirmUploadResponse,
+  type MeAvatar,
+  type MeAvatarUploadUrlInput,
+  type MeAvatarUploadUrlResponse,
+  type MeCurrentAvatar,
+} from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { FileLinkRepository } from "../foundation/files/file-link.repository";
 import { FileRepository } from "../foundation/files/file.repository";
 import { FileService } from "../foundation/files/files.service";
 import { HrWriteService } from "../employees/hr-write.service";
+import { MeAvatarRepository } from "./me-avatar.repository";
 import { MeCurrentPersonResolver } from "./me-current-person.resolver";
 import { ME_AVATAR_ENTITY_TYPE, ME_MODULE_CODE, ME_UNLINKED_EMPLOYEE_CODE } from "./me.constants";
 
@@ -37,6 +46,8 @@ interface Actor {
  */
 @Injectable()
 export class MeAvatarService {
+  private readonly logger = new Logger(MeAvatarService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly currentPerson: MeCurrentPersonResolver,
@@ -44,7 +55,105 @@ export class MeAvatarService {
     private readonly linkRepo: FileLinkRepository,
     private readonly files: FileService,
     private readonly hrWrite: HrWriteService,
+    private readonly repo: MeAvatarRepository,
   ) {}
+
+  /**
+   * S5-ME-BE-4 — POST /me/avatar/upload-url. Đăng ký 1 file ẢNH Private owned-by-actor để chuẩn bị gắn avatar
+   * (own-scope), TÁI DÙNG `FileService.upload` nội bộ (gate foundation-file nằm ở FilesController ⇒ service
+   * KHÔNG gate; controller gate `update:avatar` Own). Đóng "Nợ để lại" S5-ME-BE-2: employee/manager/hr KHÔNG có
+   * `upload:foundation-file` vẫn tự tạo được presigned-PUT qua đường ME này.
+   *
+   * KHÔNG kèm module/entity metadata khi register — link ME/avatar CHỈ tạo ở POST /me/avatar (sau confirm),
+   * tránh dispatch policy sớm khi file chưa Uploaded. resolveOwnEmployeeIdOrThrow TRƯỚC (unlinked → 409, mutation).
+   */
+  async createUploadUrl(
+    actor: Actor,
+    input: MeAvatarUploadUrlInput,
+  ): Promise<MeAvatarUploadUrlResponse> {
+    await this.resolveOwnEmployeeIdOrThrow(actor);
+    // Ràng buộc avatar-là-ảnh ở tầng ME (defense-in-depth; FileService re-validate allowlist + size ở register,
+    // re-check checksum/size ở confirm). Chặn sớm để KHÔNG register file rác không phải ảnh.
+    if (!input.declaredMimeType.startsWith("image/")) {
+      throw new UnsupportedMediaTypeException({
+        code: FOUNDATION_FILE_ERROR_CODES.MIME,
+        message: `${FOUNDATION_FILE_ERROR_CODES.MIME}: avatar phải là ảnh (mime khai báo: ${input.declaredMimeType}).`,
+      });
+    }
+    const reg = await this.files.upload(
+      { id: actor.id, companyId: actor.companyId },
+      {
+        originalName: input.originalName,
+        declaredMimeType: input.declaredMimeType,
+        sizeBytes: input.sizeBytes,
+        visibility: "Private",
+      },
+    );
+    return { fileId: reg.fileId, uploadUrl: reg.uploadUrl, expiresAt: reg.expiresAt };
+  }
+
+  /**
+   * S5-ME-BE-4 — POST /me/avatar/confirm. Own-scope wrapper của `FileService.confirmUpload` (flip Pending→Uploaded
+   * sau khi client PUT bytes) — cho phép role không có `upload:foundation-file` hoàn tất bước confirm của flow.
+   *
+   * Owner-check (`ownerUserId === actor.id`) chạy TRƯỚC confirm (mirror setAvatar) — chống IDOR: KHÔNG confirm
+   * file DO NGƯỜI KHÁC upload. findByIdTx → !file → 404 TRƯỚC owner-check (oracle 404-vs-403 chấp nhận: fileId
+   * là UUID không đoán + đồng nhất setAvatar). confirmUpload idempotent (file đã Uploaded → 200).
+   */
+  async confirmOwnUpload(actor: Actor, fileId: string): Promise<ConfirmUploadResponse> {
+    const file = await this.db.withTenant(actor.companyId, (tx) =>
+      this.fileRepo.findByIdTx(actor.companyId, fileId, tx),
+    );
+    if (!file) throw new NotFoundException("RESOURCE-ERR-NOT-FOUND: file not found");
+    if (file.ownerUserId !== actor.id) {
+      throw new ForbiddenException("AUTH-ERR-FORBIDDEN: file does not belong to the caller");
+    }
+    return this.files.confirmUpload({ id: actor.id, companyId: actor.companyId }, fileId, {});
+  }
+
+  /**
+   * S5-ME-BE-4 — GET /me/avatar. Trả avatar hiện tại đã ký (TTL-ngắn) hoặc `null`. FAIL-SOFT (read tải-trang
+   * KHÔNG được ném lỗi cứng làm vỡ trang — mirror SPEC-09 §12.2): unlinked → null; chưa set avatar → null;
+   * `getDownloadUrl` ném Forbidden/NotFound/Conflict (link ME/avatar bị gỡ/khuyết, file Infected/not-downloadable,
+   * hoặc avatar set qua đường admin với link khác) → CATCH HẸP theo kiểu → null. Lỗi hạ tầng/DB KHÁC propagate
+   * (KHÔNG bare catch — tránh silent-failure). Own-scope: employeeId resolve từ token (KHÔNG nhận từ client) +
+   * `getDownloadUrl` re-check qua MeAvatarFileResolver.
+   */
+  async getCurrentAvatar(actor: Actor): Promise<MeCurrentAvatar> {
+    const person = await this.currentPerson.resolve(actor);
+    if (person.linkStatus === "unlinked") return null;
+    const employeeId = person.employee.employeeId;
+
+    const fileId = await this.db.withTenant(actor.companyId, (tx) =>
+      this.repo.getAvatarFileIdTx(tx, actor.companyId, employeeId, actor.id),
+    );
+    if (!fileId) return null;
+
+    try {
+      const { url, expiresAt } = await this.files.getDownloadUrl(
+        { id: actor.id, companyId: actor.companyId },
+        fileId,
+      );
+      return { fileId, downloadUrl: url, expiresAt };
+    } catch (err) {
+      // Catch HẸP theo 3 loại getDownloadUrl có thể ném (files.service.ts): NotFoundException (row mất/RLS
+      // 0-row) · ForbiddenException (resolver own-scope deny) · ConflictException (NOT-DOWNLOADABLE/infected).
+      // Bất kỳ loại KHÁC (StorageNotConfigured/QueryFailed/Internal…) PHẢI propagate — KHÔNG nuốt (silent-failure).
+      if (
+        err instanceof ForbiddenException ||
+        err instanceof NotFoundException ||
+        err instanceof ConflictException
+      ) {
+        // WARN (không debug): nhánh này CHỈ tới được khi avatar_url ĐÃ set nhưng file KHÔNG tải được ⇒ LUÔN là
+        // dữ liệu không nhất quán (con trỏ avatar treo / avatar set qua đường admin với link khác) — cần thấy.
+        this.logger.warn(
+          `getCurrentAvatar degrade→null cho employee ${employeeId} (file ${fileId}): ${err.constructor.name} — avatar_url treo?`,
+        );
+        return null;
+      }
+      throw err;
+    }
+  }
 
   async setAvatar(actor: Actor, fileId: string): Promise<MeAvatar> {
     const employeeId = await this.resolveOwnEmployeeIdOrThrow(actor);
