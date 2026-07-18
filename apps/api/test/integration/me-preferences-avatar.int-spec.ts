@@ -53,6 +53,8 @@ const PAIR = {
   prefView: ["view", "user-preference"] as const,
   prefUpdate: ["update", "user-preference"] as const,
   avatarUpdate: ["update", "avatar"] as const,
+  // S5-ME-BE-4 — GET /me/avatar gate access:me (READ, mig 0495). MUTATION upload-url/confirm giữ update:avatar.
+  meAccess: ["access", "me"] as const,
   // Bổ trợ RIÊNG cho test avatar E2E (register/confirm qua /foundation/files/* — seed CHỈ company-admin có
   // theo mặc định thật, mirror files-e2e-confirm.int-spec.ts seed 1 role custom đủ 3 cặp cho test).
   fileUpload: ["upload", "foundation-file"] as const,
@@ -476,6 +478,124 @@ describe.skipIf(!runDb)("S5-ME-BE-2 ME preferences + avatar (DB cô lập, đư�
       expect(linkAfter.rows[0].deleted_at).not.toBeNull();
     });
 
+    // ═══════════ S5-ME-BE-4 — upload-url / confirm / GET own-scope wrapper (DB-only) ═══════════
+
+    describe("S5-ME-BE-4 upload-url / confirm / GET (own-scope wrapper)", () => {
+      it("upload-url — thiếu update:avatar → 403", async () => {
+        const { token } = await makeUser(A, []);
+        const res = await api(app)
+          .post("/me/avatar/upload-url")
+          .set(...bearer(token))
+          .send({ originalName: "a.png", declaredMimeType: "image/png", sizeBytes: 10 });
+        expect(res.status).toBe(403);
+      });
+
+      it("upload-url — unlinked-employee → 409 ME-ERR-UNLINKED-EMPLOYEE (chặn TRƯỚC register)", async () => {
+        const { token } = await makeUser(A, [PAIR.avatarUpdate], { withEmployee: false });
+        const res = await api(app)
+          .post("/me/avatar/upload-url")
+          .set(...bearer(token))
+          .send({ originalName: "a.png", declaredMimeType: "image/png", sizeBytes: 10 });
+        expect(res.status, JSON.stringify(res.body)).toBe(409);
+        expect(res.body.error.code).toBe("ME-ERR-UNLINKED-EMPLOYEE");
+      });
+
+      it("upload-url — declaredMimeType KHÔNG phải ảnh → 415 (KHÔNG chạm storage)", async () => {
+        const { token } = await makeUser(A, [PAIR.avatarUpdate]);
+        const res = await api(app)
+          .post("/me/avatar/upload-url")
+          .set(...bearer(token))
+          .send({ originalName: "note.txt", declaredMimeType: "text/plain", sizeBytes: 4 });
+        expect(res.status, JSON.stringify(res.body)).toBe(415);
+        expect(res.body.error.code).toBe("FOUNDATION-FILE-ERR-MIME");
+      });
+
+      it("confirm — thiếu update:avatar → 403", async () => {
+        const { token } = await makeUser(A, []);
+        const res = await api(app)
+          .post("/me/avatar/confirm")
+          .set(...bearer(token))
+          .send({ fileId: randomUUID() });
+        expect(res.status).toBe(403);
+      });
+
+      it("confirm — file không tồn tại → 404", async () => {
+        const { token } = await makeUser(A, [PAIR.avatarUpdate]);
+        const res = await api(app)
+          .post("/me/avatar/confirm")
+          .set(...bearer(token))
+          .send({ fileId: randomUUID() });
+        expect(res.status, JSON.stringify(res.body)).toBe(404);
+      });
+
+      it("confirm — IDOR file DO NGƯỜI KHÁC upload → 403 TRƯỚC khi chạm storage (owner-check trước)", async () => {
+        const owner = await makeUser(A, [PAIR.avatarUpdate]);
+        const attacker = await makeUser(A, [PAIR.avatarUpdate]);
+        const fileId = randomUUID();
+        // File Pending (chưa PUT bytes) owned by `owner`. Owner-check đứng trước confirm ⇒ 403 KHÔNG cần storage.
+        await direct.query(
+          `INSERT INTO files (id, company_id, original_name, stored_name, mime_type, file_size_bytes,
+             storage_provider, storage_path, visibility, upload_status, scan_status, owner_user_id, uploaded_by)
+           VALUES ($1,$2,'avatar.png',$3,'image/png',10,'MinIO',$4,'Private','Pending','NotRequired',$5,$5)`,
+          [
+            fileId,
+            A.companyId,
+            `${fileId}-avatar.png`,
+            `${A.companyId}/files/${fileId}`,
+            owner.userId,
+          ],
+        );
+        const res = await api(app)
+          .post("/me/avatar/confirm")
+          .set(...bearer(attacker.token))
+          .send({ fileId });
+        expect(res.status, JSON.stringify(res.body)).toBe(403);
+      });
+
+      it("GET /me/avatar — thiếu access:me → 403", async () => {
+        const { token } = await makeUser(A, [PAIR.avatarUpdate]); // có update:avatar nhưng KHÔNG access:me
+        const res = await api(app)
+          .get("/me/avatar")
+          .set(...bearer(token));
+        expect(res.status).toBe(403);
+      });
+
+      it("GET /me/avatar — chưa có avatar → 200 data=null (fail-soft)", async () => {
+        const { token } = await makeUser(A, [PAIR.meAccess]);
+        const res = await api(app)
+          .get("/me/avatar")
+          .set(...bearer(token));
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        expect(res.body.data).toBeNull();
+      });
+
+      it("GET /me/avatar — unlinked → 200 data=null (KHÔNG 409 trên read)", async () => {
+        const { token } = await makeUser(A, [PAIR.meAccess], { withEmployee: false });
+        const res = await api(app)
+          .get("/me/avatar")
+          .set(...bearer(token));
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        expect(res.body.data).toBeNull();
+      });
+
+      it("GET /me/avatar — cross-tenant: token A KHÔNG thấy avatar user tenant B", async () => {
+        const a = await makeUser(A, [PAIR.meAccess]);
+        // Plant avatar_url ở employee của 1 user tenant B — A không được thấy (A đọc employee của CHÍNH mình).
+        const uB = await makeUser(B, [PAIR.meAccess], {
+          empCode: `xt-${randomUUID().slice(0, 6)}`,
+        });
+        await direct.query(`UPDATE employee_profiles SET avatar_url = $1 WHERE id = $2`, [
+          randomUUID(),
+          uB.employeeId,
+        ]);
+        const res = await api(app)
+          .get("/me/avatar")
+          .set(...bearer(a.token));
+        expect(res.status).toBe(200);
+        expect(res.body.data).toBeNull(); // A chưa có avatar — KHÔNG lộ của B.
+      });
+    });
+
     // ── E2E thật qua MinIO (skip nếu storage chưa sẵn sàng — mirror files-e2e-confirm.int-spec.ts) ──
     describe("E2E qua MinIO (storageReady probe)", () => {
       let storageReady = false;
@@ -561,6 +681,72 @@ describe.skipIf(!runDb)("S5-ME-BE-2 ME preferences + avatar (DB cô lập, đư�
           u.employeeId,
         ]);
         expect(row.rows[0].avatar_url).toBe(fileId);
+      });
+
+      it("S5-ME-BE-4 GAP-CLOSED — user CHỈ update:avatar + access:me (0 foundation-file): upload-url→PUT→confirm→POST→GET trọn vẹn", async (ctx) => {
+        if (!storageReady) return ctx.skip();
+
+        // KHÔNG seed foundation-file — chứng minh đóng "Nợ để lại" S5-ME-BE-2: role thường tự upload+confirm+
+        // hiển-thị avatar HOÀN TOÀN qua đường ME own-scope, KHÔNG cần *:foundation-file.
+        const u = await makeUser(A, [PAIR.avatarUpdate, PAIR.meAccess]);
+        const bytes = Buffer.from("me-be4-gap-closed", "utf8");
+
+        const reg = await api(app)
+          .post("/me/avatar/upload-url")
+          .set(...bearer(u.token))
+          .send({
+            originalName: "avatar.png",
+            declaredMimeType: "image/png",
+            sizeBytes: bytes.length,
+          });
+        expect(reg.status, JSON.stringify(reg.body)).toBe(201);
+        const fileId = reg.body.data.fileId as string;
+        expect(reg.body.data.uploadUrl).toMatch(/^https?:\/\//);
+
+        const put = await fetch(reg.body.data.uploadUrl as string, {
+          method: "PUT",
+          headers: { "Content-Type": "image/png" },
+          body: bytes,
+        });
+        expect(put.ok, `presigned PUT failed: ${put.status}`).toBe(true);
+
+        const confirm = await api(app)
+          .post("/me/avatar/confirm")
+          .set(...bearer(u.token))
+          .send({ fileId });
+        expect(confirm.status, JSON.stringify(confirm.body)).toBe(200);
+
+        const set = await api(app)
+          .post("/me/avatar")
+          .set(...bearer(u.token))
+          .send({ fileId });
+        expect(set.status, JSON.stringify(set.body)).toBe(201);
+        expect(set.body.data.fileId).toBe(fileId);
+
+        const get = await api(app)
+          .get("/me/avatar")
+          .set(...bearer(u.token));
+        expect(get.status, JSON.stringify(get.body)).toBe(200);
+        expect(get.body.data.fileId).toBe(fileId);
+        expect(get.body.data.downloadUrl).toMatch(/^https?:\/\//);
+      });
+
+      it("S5-ME-BE-4 confirm — bytes CHƯA PUT → 422 CONFIRM-ABSENT (surface, không nuốt)", async (ctx) => {
+        if (!storageReady) return ctx.skip();
+        const u = await makeUser(A, [PAIR.avatarUpdate]);
+        const reg = await api(app)
+          .post("/me/avatar/upload-url")
+          .set(...bearer(u.token))
+          .send({ originalName: "avatar.png", declaredMimeType: "image/png", sizeBytes: 12 });
+        expect(reg.status, JSON.stringify(reg.body)).toBe(201);
+        const fileId = reg.body.data.fileId as string;
+        // KHÔNG PUT bytes → confirm phải thất bại CONFIRM-ABSENT (object không tồn tại trong storage).
+        const confirm = await api(app)
+          .post("/me/avatar/confirm")
+          .set(...bearer(u.token))
+          .send({ fileId });
+        expect(confirm.status, JSON.stringify(confirm.body)).toBe(422);
+        expect(confirm.body.error.code).toBe("FOUNDATION-FILE-ERR-CONFIRM-ABSENT");
       });
     });
   });
