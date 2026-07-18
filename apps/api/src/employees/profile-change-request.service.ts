@@ -17,6 +17,7 @@ import {
 } from "@mediaos/contracts";
 import { AuditService } from "../events/audit.service";
 import { AuditMaskerService } from "../events/audit-masker.service";
+import { OutboxService } from "../events/outbox.service";
 import { DatabaseService } from "../db/db.service";
 import { PermissionService } from "../permission/permission.service";
 import {
@@ -30,6 +31,17 @@ import {
 } from "./profile-change-request.repository";
 
 type RequestUser = { id: string; companyId: string };
+
+/**
+ * eventType outbox cho 3 sự kiện yêu cầu sửa hồ sơ (SPEC-08 §15). Hằng hoá ở ĐÂY và import từ registrar
+ * bên `notifications/**` để producer ↔ consumer dùng CHUNG một chuỗi — gõ lệch 1 ký tự thì event rơi vào
+ * hư không mà không ai báo lỗi (bridge chỉ đơn giản là không khớp mapping nào).
+ */
+export const PCR_EVENT_TYPE = {
+  SUBMITTED: "hr.profile_change.submitted",
+  APPROVED: "hr.profile_change.approved",
+  REJECTED: "hr.profile_change.rejected",
+} as const;
 
 /** Fields the employee is NOT allowed to request changes to (SPEC-03 §13.4). */
 const FORBIDDEN_FIELDS = new Set([
@@ -78,11 +90,17 @@ export class ProfileChangeRequestService {
     private readonly permission: PermissionService,
     private readonly audit: AuditService,
     masker?: AuditMaskerService,
+    outbox?: OutboxService,
   ) {
     // masker optional ở chữ ký để KHÔNG vỡ call-site `new ProfileChangeRequestService(...)` trong unit
     // test. Nest DI luôn truyền AuditMaskerService thật (EventsModule @Global); thiếu → default cùng hàm.
     this.masker = masker ?? new AuditMaskerService();
+    // outbox cũng optional VÌ CÙNG LÝ DO (unit test dựng service bằng `new`). OutboxService không có state
+    // nên default an toàn; Nest DI luôn truyền instance thật (EventsModule @Global).
+    this.outbox = outbox ?? new OutboxService();
   }
+
+  private readonly outbox: OutboxService;
 
   // ── Employee: create request ───────────────────────────────────────────────────
 
@@ -154,6 +172,20 @@ export class ProfileChangeRequestService {
         resultStatus: "Success",
         // BẤT BIẾN #3: masker handles identity_number → "***"
         newValues: sanitizedNew,
+      });
+
+      // NOTI (SPEC-08 §15) — báo HR/Admin có yêu cầu cần duyệt. Enqueue TRONG CÙNG tx: yêu cầu rollback
+      // thì event cũng biến mất (không có thông báo ma). Payload CHỈ id + actor — KHÔNG kèm newValues
+      // (có thể chứa PII/CCCD; BẤT BIẾN #3), người nhận tự mở màn duyệt để xem.
+      await this.outbox.enqueue(tx, {
+        eventType: PCR_EVENT_TYPE.SUBMITTED,
+        payload: {
+          requestId: req.id,
+          employeeId: emp.id,
+          // actorUserId: engine loại chính người gửi khỏi danh sách nhận (họ không tự báo mình).
+          actorUserId: user.id,
+          eventCode: "HR_PROFILE_CHANGE_SUBMITTED",
+        },
       });
 
       return { id: req.id, status: req.status };
@@ -314,6 +346,18 @@ export class ProfileChangeRequestService {
         newValues: req.newValues,
       });
 
+      // NOTI — báo NHÂN VIÊN yêu cầu đã được duyệt. Cùng tx với việc áp dữ liệu + audit: nếu duyệt
+      // rollback thì không có thông báo "đã duyệt" sai sự thật. Payload KHÔNG kèm giá trị đã đổi (PII).
+      await this.outbox.enqueue(tx, {
+        eventType: PCR_EVENT_TYPE.APPROVED,
+        payload: {
+          requestId: id,
+          employeeId: req.employeeId,
+          actorUserId: user.id,
+          eventCode: "HR_PROFILE_CHANGE_APPROVED",
+        },
+      });
+
       return { id: updated.id, status: updated.status };
     });
   }
@@ -416,6 +460,18 @@ export class ProfileChangeRequestService {
         actionGroup: "ProfileChangeRequest",
         resultStatus: "Denied",
         metadata: { rejectionReason: dto.rejectionReason },
+      });
+
+      // NOTI — báo NHÂN VIÊN yêu cầu bị từ chối. KHÔNG đưa `rejectionReason` vào payload: lý do là văn
+      // bản tự do người duyệt gõ, có thể lộ thông tin; người nhận mở màn chi tiết (đã gate quyền) để đọc.
+      await this.outbox.enqueue(tx, {
+        eventType: PCR_EVENT_TYPE.REJECTED,
+        payload: {
+          requestId: id,
+          employeeId: req.employeeId,
+          actorUserId: user.id,
+          eventCode: "HR_PROFILE_CHANGE_REJECTED",
+        },
       });
 
       return { id: updated.id, status: updated.status };
