@@ -1283,6 +1283,19 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 73,
   },
+  // Sửa hồ sơ dạng trực tiếp rồi GỬI DUYỆT (không PATCH thẳng) — vào từ nút ở ME-SCREEN-002.
+  // showInSidebar=false: màn thao-tác, không phải mục điều hướng thường trực.
+  {
+    routeKey: "me.profile.edit",
+    path: "/me/profile/edit",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "HR-SCREEN-017",
+    titleKey: "routeTitle.meProfileEdit",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: false,
+    order: 73.5,
+  },
   {
     routeKey: "me.account",
     path: "/me/account",
@@ -1325,6 +1338,24 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     titleKey: "routeTitle.meSecurityActivity",
     requiredAnyPermissions: ["access:me"],
     showInSidebar: true,
+    order: 78,
+  },
+  // Bật 2FA trong ME workspace — TÁI DÙNG TwoFactorSetupPage (ACCOUNT-SCREEN-SETUP-2FA), cùng kỹ thuật
+  // 5 màn re-mount của S5-ME-FE-2. KHÔNG có mã ME-SCREEN riêng: SPEC-09 §9 không liệt kê màn 2FA (nguồn
+  // là AUTH), nên giữ screenCode gốc của AUTH thay vì bịa mã ME mới.
+  // showInSidebar=false — CHỦ Ý: đây là màn thao-tác-một-lần, vào từ nút "Bật 2FA" ở ME-SCREEN-005
+  // (Tài khoản), không phải mục điều hướng thường trực.
+  // Route SHELL cũ /account/setup-2fa GIỮ NGUYÊN — nó là đích của guard ép enroll AUTH-003
+  // (ProtectedShell) và của redirect sau login; route ME này chỉ là lối vào TỰ NGUYỆN.
+  {
+    routeKey: "me.security.2fa",
+    path: "/me/security/2fa",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "ME",
+    screenCode: "ACCOUNT-SCREEN-SETUP-2FA",
+    titleKey: "routeTitle.meSecurityTwoFactor",
+    requiredAnyPermissions: ["access:me"],
+    showInSidebar: false,
     order: 77,
   },
 

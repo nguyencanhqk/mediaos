@@ -446,7 +446,11 @@ import {
   SYSTEM_SETTINGS_ROUTE_META,
   SYSTEM_JOBS_ROUTE_META,
 } from "@/routes/system/foundation/constants";
-import { ACCOUNT_SETUP_2FA_PATH, ACCOUNT_PROFILE_PATH } from "@/routes/account/constants";
+import {
+  ACCOUNT_SETUP_2FA_PATH,
+  ACCOUNT_PROFILE_PATH,
+  ME_SETUP_2FA_PATH,
+} from "@/routes/account/constants";
 import { FILES_PATH } from "@/routes/system/files/constants";
 import { MODULES_PATH } from "@/routes/system/modules/constants";
 const UsersPage = React.lazy(() =>
@@ -1601,6 +1605,18 @@ const meProfileChangeRequestsRoute = makeModuleRoute(
   "ME",
   MyChangeRequestPage,
 );
+// Sửa hồ sơ own-scope → tạo profile-change-request cho HR duyệt (KHÔNG PATCH thẳng).
+const MyProfileEditPage = React.lazy(() =>
+  import("@/routes/hr/profile-change-requests/MyProfileEditPage").then((m) => ({
+    default: m.MyProfileEditPage,
+  })),
+);
+const meProfileEditRoute = makeModuleRoute(
+  "/me/profile/edit",
+  "me.profile.edit",
+  "ME",
+  MyProfileEditPage,
+);
 const meAccountRoute = makeModuleRoute("/me/account", "me.account", "ME", AccountProfilePage);
 const meSecurityPasswordRoute = makeModuleRoute(
   "/me/security/password",
@@ -1624,6 +1640,17 @@ const meSecurityActivityRoute = makeModuleRoute(
   "me.security.activity",
   "ME",
   MeSecurityActivityPage,
+);
+
+// Bật 2FA trong ME workspace — TÁI DÙNG CÙNG hằng lazy TwoFactorSetupPage với accountSetupTwoFactorRoute
+// (KHÔNG import lại), mirror cách 5 màn account/hr được re-mount ở S5-ME-FE-2. Route SHELL cũ
+// /account/setup-2fa GIỮ NGUYÊN vì nó là đích của guard ép enroll AUTH-003; ProtectedShell nay chấp
+// nhận CẢ HAI path để user bị ép enroll đứng ở route ME không bị đá ngược (xem ME_SETUP_2FA_PATH).
+const meSecurityTwoFactorRoute = makeModuleRoute(
+  ME_SETUP_2FA_PATH,
+  "me.security.2fa",
+  "ME",
+  TwoFactorSetupPage,
 );
 
 // System / Foundation — /system landing THAY ModulePlaceholder = System Overview (S2-FE-FND-1).
@@ -2154,10 +2181,12 @@ const routeTree = rootRoute.addChildren([
   meAppearanceRoute,
   meProfileRoute,
   meProfileChangeRequestsRoute,
+  meProfileEditRoute,
   meAccountRoute,
   meSecurityPasswordRoute,
   meSecuritySessionsRoute,
   meSecurityActivityRoute,
+  meSecurityTwoFactorRoute,
   systemRoute,
   systemCompanyRoute,
   systemCompanySettingsRoute,

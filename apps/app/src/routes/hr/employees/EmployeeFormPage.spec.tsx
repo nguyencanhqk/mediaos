@@ -225,4 +225,31 @@ describe("EmployeeFormPage", () => {
     );
     expect(screen.getByRole("button", { name: /lưu thay đổi/i })).toBeDisabled();
   });
+
+  // ── UI: Lưu/Hủy ở ĐẦU trang và dính khi cuộn ───────────────────────────────
+  // Form dài 5 section; trước đây nút nằm cuối nên phải cuộn hết mới thao tác được. Test khoá 2 điều
+  // KHÔNG suy ra được từ các test submit ở trên: (1) nút nằm trong thanh dính đầu trang, (2) nút Lưu
+  // vẫn thuộc <form> nên type="submit" bắn được (nếu ai đó tách thanh ra ngoài form, submit sẽ chết
+  // âm thầm mà các test kia vẫn xanh vì chúng click nút chứ không kiểm tra liên kết form).
+  it("đặt Lưu/Hủy trong thanh dính đầu trang và nút Lưu vẫn nằm trong form", async () => {
+    setCapabilities({ "update:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(DETAIL);
+    renderWithQuery(<EmployeeFormPage employeeId={DETAIL.id} onCancel={vi.fn()} />);
+
+    await waitFor(() =>
+      expect((document.querySelector("#employeeCode") as HTMLInputElement)?.value).toBe("EMP0001"),
+    );
+
+    const save = screen.getByRole("button", { name: /lưu thay đổi/i });
+    const cancel = screen.getByRole("button", { name: /hủy/i });
+
+    const bar = save.closest("div.sticky");
+    expect(bar).not.toBeNull();
+    expect(bar!.className).toMatch(/top-0/);
+    expect(bar!.contains(cancel)).toBe(true);
+
+    // Nút submit phải được form sở hữu — closest("form") là liên kết thật mà trình duyệt dùng.
+    expect(save.getAttribute("type")).toBe("submit");
+    expect(save.closest("form")).not.toBeNull();
+  });
 });

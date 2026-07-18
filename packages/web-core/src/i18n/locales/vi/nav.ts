@@ -107,10 +107,13 @@ export default {
     // S5-ME-FE-2 — 6 route "Hồ sơ của tôi / Tài khoản & bảo mật" (ME-SCREEN-002..008).
     meProfile: "Hồ sơ của tôi",
     meProfileChangeRequests: "Yêu cầu thay đổi hồ sơ",
+    meProfileEdit: "Đề nghị cập nhật hồ sơ",
     meAccount: "Tài khoản",
     meSecurityPassword: "Đổi mật khẩu",
     meSecuritySessions: "Phiên đăng nhập",
     meSecurityActivity: "Hoạt động bảo mật",
+    // Bật 2FA mount trong ME workspace (reuse TwoFactorSetupPage) — route SHELL /account/setup-2fa giữ nguyên.
+    meSecurityTwoFactor: "Xác thực 2 lớp",
     forbidden: "Không có quyền truy cập",
     notFound: "Không tìm thấy trang",
   },
