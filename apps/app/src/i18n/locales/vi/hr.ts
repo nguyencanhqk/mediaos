@@ -403,8 +403,73 @@ export default {
     title: "Sơ đồ tổ chức",
     description: "Cơ cấu phòng ban của công ty (chỉ đọc)",
     headLabel: "Trưởng đơn vị",
+    membersLabel: "Thành viên ({{count}})",
+    unnamedMember: "(chưa liên kết tài khoản)",
     expand: "Mở rộng",
     collapse: "Thu gọn",
+    // S5-HR-ORGCHART-FE-2 — nút hành động quản trị trên sơ đồ.
+    actions: {
+      addDepartment: "Thêm phòng ban",
+      addEmployee: "Thêm nhân viên",
+      assignManager: "Đổi quản lý trực tiếp",
+      moveDept: "Chuyển phòng ban",
+      addToDept: "Thêm người vào phòng",
+    },
+    // S5-HR-ORGCHART-FE-3 — khu nhân viên chưa thuộc phòng ban nào.
+    unassigned: {
+      title: "Chưa phân phòng ban ({{count}})",
+      desc: "Nhân viên chưa thuộc phòng ban nào — chọn 'Phân vào phòng ban' để thêm họ vào một phòng.",
+      assign: "Phân vào phòng ban",
+    },
+    dialogs: {
+      cancel: "Hủy",
+      create: "Tạo",
+      save: "Lưu",
+      saving: "Đang lưu…",
+      genericError: "Không thể lưu. Vui lòng thử lại.",
+      // Thêm người có sẵn vào phòng
+      addToDeptDesc: "Chọn một nhân viên (kể cả người chưa có phòng ban) để thêm vào {{dept}}.",
+      employeeLabel: "Nhân viên",
+      pickEmployee: "Vui lòng chọn một nhân viên.",
+      unassignedTag: "Chưa phân phòng",
+      noCandidates: "Không còn nhân viên nào để thêm vào phòng này.",
+      // Thêm phòng ban
+      addDepartmentDesc: "Tạo phòng ban mới trong cơ cấu tổ chức.",
+      deptName: "Tên phòng ban",
+      deptNamePlaceholder: "vd: Phòng Kinh Doanh",
+      deptCode: "Mã phòng ban",
+      deptCodePlaceholder: "vd: kinh-doanh (tùy chọn)",
+      parentDept: "Phòng ban cha",
+      noParent: "— Không có (phòng cấp cao nhất) —",
+      nameRequired: "Vui lòng nhập tên phòng ban.",
+      // Đổi quản lý trực tiếp
+      assignManagerDesc: "Chọn quản lý trực tiếp cho {{name}}.",
+      directManager: "Quản lý trực tiếp",
+      pickManager: "Vui lòng chọn một quản lý.",
+      pickPlaceholder: "— Chọn —",
+      noManager: "— Không có quản lý —",
+      // Chuyển phòng ban
+      moveDeptDesc: "Chuyển {{name}} sang phòng ban khác.",
+      targetDept: "Phòng ban đích",
+      pickDept: "Vui lòng chọn phòng ban.",
+      sameDept: "Nhân viên đã ở phòng ban này.",
+    },
+    // Nhãn loại đơn vị (org_unit.type) — thiếu key thì component fallback về giá trị thô.
+    unitType: {
+      company: "Công ty",
+      division: "Khối",
+      department: "Phòng ban",
+      team: "Nhóm",
+      branch: "Chi nhánh",
+      center: "Trung tâm",
+    },
+    // Nhãn trạng thái đơn vị (org_unit.status) — fallback về giá trị thô nếu thiếu.
+    status: {
+      active: "Đang hoạt động",
+      Active: "Đang hoạt động",
+      inactive: "Ngừng hoạt động",
+      Inactive: "Ngừng hoạt động",
+    },
     forbidden: {
       title: "Không có quyền truy cập",
       description: "Bạn không có quyền xem sơ đồ tổ chức.",
