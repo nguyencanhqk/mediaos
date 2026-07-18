@@ -40,6 +40,8 @@ interface EmployeeDetailPageProps {
   onEdit?: () => void;
   /** S2-FE-HR-7 — điều hướng tới /hr/employees/:id/contracts (ẩn nếu không truyền). */
   onContracts?: () => void;
+  /** S5-HR-WORKINFO-1 — điều hướng tới hồ sơ quản lý trực tiếp (WorkInfoSection); server enforce quyền xem. */
+  onNavigateEmployee?: (employeeId: string) => void;
 }
 
 export function EmployeeDetailPage({
@@ -47,6 +49,7 @@ export function EmployeeDetailPage({
   onBack,
   onEdit,
   onContracts,
+  onNavigateEmployee,
 }: EmployeeDetailPageProps) {
   const { t } = useTranslation("hr");
   const { t: tc } = useTranslation("common");
@@ -224,7 +227,12 @@ export function EmployeeDetailPage({
           <ContactSection employee={data} t={t} canViewSensitive={canViewSensitive} />
         </TabsContent>
         <TabsContent value="work" className="pt-4">
-          <WorkInfoSection employee={data} t={t} canViewSensitive={canViewSensitive} />
+          <WorkInfoSection
+            employee={data}
+            t={t}
+            canViewSensitive={canViewSensitive}
+            onNavigateEmployee={onNavigateEmployee}
+          />
         </TabsContent>
         <TabsContent value="comp" className="pt-4">
           <CompSection employee={data} t={t} canViewSalary={canViewSalary} />

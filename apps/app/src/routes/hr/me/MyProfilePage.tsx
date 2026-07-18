@@ -2,12 +2,12 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { User, RefreshCw } from "lucide-react";
-import { hrApi, hrKeys, useCan, useCanExact, formatDate } from "@mediaos/web-core";
+import { hrApi, hrKeys, useCan, useCanExact } from "@mediaos/web-core";
 import { PageHeader, EmptyState, Button, Card, CardContent } from "@mediaos/ui";
 import { HR_ENGINE_PAIRS } from "../constants";
-import { EmployeeStatusBadge } from "../employee-status";
-// HR-IDENTITY-READ-1 — dùng chung section CCCD/CMND với EmployeeDetailPage (DRY).
-import { IdentitySection } from "../employees/profile-sections";
+// HR-IDENTITY-READ-1 dùng chung section CCCD/CMND; S5-HR-WORKINFO-1 tái dùng WorkInfoSection để đồng bộ khối
+// "Thông tin công việc" (Cấp bậc · loại HĐ · quản lý trực tiếp/gián tiếp · khối nghỉ việc) với màn chi tiết.
+import { IdentitySection, WorkInfoSection } from "../employees/profile-sections";
 
 // ---------------------------------------------------------------------------
 // Shared field row
@@ -109,25 +109,19 @@ export function MyProfilePage() {
     <div className="space-y-6 p-6">
       <PageHeader title={t("me.title")} description={data.fullName ?? undefined} icon={User} />
 
-      {/* Basic info */}
+      {/* Thông tin cơ bản: mã · họ tên · email (phần định danh) */}
       <Card>
         <CardContent className="divide-y divide-border pt-4">
           <FieldRow label={t("detail.fields.code")} value={data.employeeCode} />
           <FieldRow label={t("detail.fields.name")} value={data.fullName} />
           <FieldRow label={t("detail.fields.email")} value={data.email} />
-          <FieldRow label={t("detail.fields.department")} value={data.orgUnitName} />
-          <FieldRow label={t("detail.fields.position")} value={data.positionName} />
-          <FieldRow
-            label={t("detail.fields.status")}
-            value={<EmployeeStatusBadge status={data.status} />}
-          />
-          <FieldRow
-            label={t("detail.fields.startDate")}
-            value={data.startDate ? formatDate(new Date(data.startDate)) : "—"}
-          />
-          <FieldRow label={t("detail.fields.workType")} value={data.workType} />
         </CardContent>
       </Card>
+
+      {/* S5-HR-WORKINFO-1 — khối "Thông tin công việc" dùng chung với màn chi tiết (phòng ban · chức vụ ·
+          cấp bậc · loại HĐ · quản lý trực tiếp/gián tiếp · mốc thời gian · khối nghỉ việc). MyProfile KHÔNG
+          truyền onNavigateEmployee → tên quản lý hiện dạng text (không điều hướng sang hồ sơ người khác). */}
+      <WorkInfoSection employee={data} t={t} canViewSensitive={canViewSensitive} />
 
       {/* Sensitive section: server masks fields to null when unauthorized.
           Client only shows what server returned; never reveals hidden data. */}

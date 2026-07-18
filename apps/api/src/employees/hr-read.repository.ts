@@ -1,17 +1,30 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
-import type { PgColumn } from "drizzle-orm/pg-core";
+import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import { alias, type PgColumn } from "drizzle-orm/pg-core";
 import type { HrEmployeeSortField } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import {
   contractTypes,
   employeeCodeConfigs,
   employeeProfiles,
+  employeeStatusHistories,
   jobLevels,
   orgUnits,
   positions,
   users,
 } from "../db/schema";
+
+/**
+ * S5-HR-WORKINFO-1 — aliases cho reporting-line join (đều LEFT JOIN, directory-class):
+ *   directManagerUsers   = users theo employee_profiles.direct_manager_id → directManagerName
+ *   directManagerProfiles = employee_profiles của quản lý trực tiếp (user_id = direct_manager_id) →
+ *                           directManagerEmployeeId (unique active/user ⇒ ≤1 hàng khớp)
+ *   indirectManagerUsers = users của quản-lý-của-quản-lý (directManagerProfiles.direct_manager_id) →
+ *                          indirectManagerName (1 cấp, KHÔNG N+1)
+ */
+const directManagerUsers = alias(users, "direct_manager_users");
+const directManagerProfiles = alias(employeeProfiles, "direct_manager_profiles");
+const indirectManagerUsers = alias(users, "indirect_manager_users");
 
 /**
  * S2-HR-BE-1 — read-only repository for the HR read core. Every method runs inside the caller's
@@ -68,6 +81,12 @@ const DETAIL_COLUMNS = {
   directManagerId: employeeProfiles.directManagerId,
   // directManagerId references users.id → this IS the manager's user id (for Team in-scope check).
   directManagerUserId: employeeProfiles.directManagerId,
+  // S5-HR-WORKINFO-1: reference NAMES + reporting-line (directory-class; contractTypeName masked in service).
+  jobLevelName: jobLevels.name,
+  contractTypeName: contractTypes.name,
+  directManagerName: directManagerUsers.fullName,
+  directManagerEmployeeId: directManagerProfiles.id,
+  indirectManagerName: indirectManagerUsers.fullName,
   workType: employeeProfiles.workType,
   employmentType: employeeProfiles.employmentType,
   startDate: employeeProfiles.startDate,
@@ -150,6 +169,12 @@ export interface HrDetailRow {
   positionName: string | null;
   directManagerId: string | null;
   directManagerUserId: string | null;
+  // S5-HR-WORKINFO-1: directory-class names + reporting-line (contractTypeName masked in service per view-sensitive).
+  jobLevelName: string | null;
+  contractTypeName: string | null;
+  directManagerName: string | null;
+  directManagerEmployeeId: string | null;
+  indirectManagerName: string | null;
   workType: string | null;
   employmentType: string | null;
   startDate: string | null;
@@ -330,14 +355,40 @@ export class HrReadRepository {
     return rows as HrListRow[];
   }
 
-  /** Single employee by profile id (tenant-scoped). companyId/directManagerUserId surfaced for in-scope. */
-  async findByIdTx(tx: TenantTx, companyId: string, id: string): Promise<HrDetailRow | undefined> {
-    const [row] = await tx
+  /**
+   * S5-HR-WORKINFO-1 — the shared reporting-line + reference-name LEFT JOINs for the detail/me query.
+   * ALL additive + LEFT (never drops a row): job_levels/contract_types by their FK, the direct manager's
+   * user + profile (unique active/user ⇒ ≤1 profile match), and the indirect manager's user (1 level up).
+   * Runs inside withTenant (RLS+FORCE) so joined employee_profiles/users rows are already tenant-scoped;
+   * the direct-manager profile additionally ANDs company_id + soft-delete (belt-and-suspenders, BẤT BIẾN #1).
+   */
+  private detailQueryBase(tx: TenantTx) {
+    return tx
       .select(DETAIL_COLUMNS)
       .from(employeeProfiles)
       .leftJoin(users, eq(employeeProfiles.userId, users.id))
       .leftJoin(orgUnits, eq(employeeProfiles.orgUnitId, orgUnits.id))
       .leftJoin(positions, eq(employeeProfiles.positionId, positions.id))
+      .leftJoin(jobLevels, eq(employeeProfiles.jobLevelId, jobLevels.id))
+      .leftJoin(contractTypes, eq(employeeProfiles.contractTypeId, contractTypes.id))
+      .leftJoin(directManagerUsers, eq(employeeProfiles.directManagerId, directManagerUsers.id))
+      .leftJoin(
+        directManagerProfiles,
+        and(
+          eq(directManagerProfiles.userId, employeeProfiles.directManagerId),
+          eq(directManagerProfiles.companyId, employeeProfiles.companyId),
+          isNull(directManagerProfiles.deletedAt),
+        ),
+      )
+      .leftJoin(
+        indirectManagerUsers,
+        eq(directManagerProfiles.directManagerId, indirectManagerUsers.id),
+      );
+  }
+
+  /** Single employee by profile id (tenant-scoped). companyId/directManagerUserId surfaced for in-scope. */
+  async findByIdTx(tx: TenantTx, companyId: string, id: string): Promise<HrDetailRow | undefined> {
+    const [row] = await this.detailQueryBase(tx)
       .where(
         and(
           eq(employeeProfiles.companyId, companyId),
@@ -355,12 +406,7 @@ export class HrReadRepository {
     companyId: string,
     userId: string,
   ): Promise<HrDetailRow | undefined> {
-    const [row] = await tx
-      .select(DETAIL_COLUMNS)
-      .from(employeeProfiles)
-      .leftJoin(users, eq(employeeProfiles.userId, users.id))
-      .leftJoin(orgUnits, eq(employeeProfiles.orgUnitId, orgUnits.id))
-      .leftJoin(positions, eq(employeeProfiles.positionId, positions.id))
+    const [row] = await this.detailQueryBase(tx)
       .where(
         and(
           eq(employeeProfiles.companyId, companyId),
@@ -370,6 +416,32 @@ export class HrReadRepository {
       )
       .limit(1);
     return row as HrDetailRow | undefined;
+  }
+
+  /**
+   * S5-HR-WORKINFO-1 — reason of the MOST RECENT status change into a leaving state (resigned/terminated)
+   * for one employee. Fuels the detail's `resignationReason` (masked view-sensitive in the service, and
+   * only fetched when status ∈ {resigned,terminated}). employee_status_histories is append-only → SELECT
+   * only; scalar single-row (ORDER BY changed_at DESC LIMIT 1) so no N+1 on the single-row detail read.
+   */
+  async findLatestResignationReasonTx(
+    tx: TenantTx,
+    companyId: string,
+    employeeId: string,
+  ): Promise<string | null> {
+    const [row] = await tx
+      .select({ reason: employeeStatusHistories.reason })
+      .from(employeeStatusHistories)
+      .where(
+        and(
+          eq(employeeStatusHistories.companyId, companyId),
+          eq(employeeStatusHistories.employeeId, employeeId),
+          inArray(employeeStatusHistories.newStatus, ["resigned", "terminated"]),
+        ),
+      )
+      .orderBy(desc(employeeStatusHistories.changedAt))
+      .limit(1);
+    return row?.reason ?? null;
   }
 
   /**

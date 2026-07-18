@@ -115,6 +115,8 @@ export default {
       salary: "Thông tin lương",
       // HR-IDENTITY-READ-1 — nhóm CCCD/CMND (view-identity riêng, nhạy cảm hơn view-sensitive)
       identity: "Giấy tờ tùy thân",
+      // S5-HR-WORKINFO-1 — khối chỉ hiện khi nhân viên đã nghỉ/chấm dứt
+      resignation: "Thông tin nghỉ việc",
     },
     fields: {
       code: "Mã nhân viên",
@@ -127,6 +129,12 @@ export default {
       endDate: "Ngày kết thúc",
       workType: "Hình thức làm việc",
       employmentType: "Loại hợp đồng",
+      // S5-HR-WORKINFO-1 — khối Thông tin công việc bổ sung
+      jobLevel: "Cấp bậc",
+      directManager: "Quản lý trực tiếp",
+      indirectManager: "Quản lý gián tiếp",
+      resignationDate: "Ngày nghỉ việc",
+      resignationReason: "Lý do nghỉ việc",
       // HR-PROFILE-UI-1 — field cá nhân mới (PII, server mask theo view-sensitive)
       gender: "Giới tính",
       dateOfBirth: "Ngày sinh",

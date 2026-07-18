@@ -760,6 +760,9 @@ const hrEmployeeDetailRoute = createRoute({
         onContracts={() =>
           void navigate({ to: "/hr/employees/$employeeId/contracts", params: { employeeId } })
         }
+        onNavigateEmployee={(id) =>
+          void navigate({ to: "/hr/employees/$employeeId", params: { employeeId: id } })
+        }
       />,
     );
   },
