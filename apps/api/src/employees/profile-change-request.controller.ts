@@ -88,28 +88,34 @@ export class ProfileChangeRequestController {
 
   // ── HR: approve ───────────────────────────────────────────────────────────────
 
+  // Pipe gắn TRỰC TIẾP vào @Body — KHÔNG dùng @UsePipes ở method. `new ZodValidationPipe(schema)` bỏ
+  // qua metadata.type và validate MỌI tham số nó được áp; @UsePipes áp cho cả handler nên `@Param("id")`
+  // (một string) cũng bị đem so với schema object ⇒ 400 "Expected object, received string" TRƯỚC khi
+  // vào service. Handler nào vừa có @UsePipes(schema) vừa có @Param đều chết theo cách này — chỉ những
+  // handler chỉ-có-@Req/@Query mới thoát (object nên lọt schema), đó là lý do tạo/liệt kê vẫn chạy.
   @Post(":id/approve")
   @HttpCode(200)
   @RequirePermission("approve", "profile-change-request")
-  @UsePipes(new ZodValidationPipe(approveProfileChangeRequestSchema))
   approveRequest(
     @Req() req: AuthenticatedRequest,
     @Param("id") id: string,
-    @Body() dto: ApproveProfileChangeRequest,
+    @Body(new ZodValidationPipe(approveProfileChangeRequestSchema))
+    dto: ApproveProfileChangeRequest,
   ) {
     return this.svc.approveRequest(req.user, id, dto);
   }
 
   // ── HR: reject ────────────────────────────────────────────────────────────────
 
+  // Cùng lỗi @UsePipes+@Param như approve ở trên (chưa ai báo vì nút Từ chối ít dùng hơn).
   @Post(":id/reject")
   @HttpCode(200)
   @RequirePermission("approve", "profile-change-request")
-  @UsePipes(new ZodValidationPipe(rejectProfileChangeRequestSchema))
   rejectRequest(
     @Req() req: AuthenticatedRequest,
     @Param("id") id: string,
-    @Body() dto: RejectProfileChangeRequest,
+    @Body(new ZodValidationPipe(rejectProfileChangeRequestSchema))
+    dto: RejectProfileChangeRequest,
   ) {
     return this.svc.rejectRequest(req.user, id, dto);
   }
