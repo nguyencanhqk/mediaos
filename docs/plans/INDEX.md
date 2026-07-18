@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**188 WO** · có micro-plan: **65/188** · ⬜ 39 chờ · 🔵 1 đang làm · ✅ 147 xong · 🔴 1 chặn
+**238 WO** · có micro-plan: **107/238** · ⬜ 20 chờ · 🔵 0 đang làm · ✅ 218 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -173,49 +173,95 @@
 | --- | --- | --- | --- | --- | --- |
 | `S4-TASK-DB-1` | 🔴 | ✅ xong | [📄](S4-TASK-DB-1.md) | — | Schema + migration TASK core (projects·project_members·tasks·task_assi |
 | `S4-TASK-RECON-1` | 🔴 | ✅ xong | [📄](S4-TASK-RECON-1.md) | ✅S4-TASK-DB-1 | Đối soát pair-drift + grant tồn dư TASK: ánh xạ cặp legacy đang enforc |
-| `S4-TASK-RECON-2` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S4-TASK-RECON-1 | CONTRACT pair-drift TASK: gỡ grant legacy ('comment','comment') khỏi e |
-| `S4-TASK-SEED-1` | 🔴 | 🔴 chặn | [📄](S4-TASK-SEED-1.md) | ✅S4-TASK-DB-1 ✅S4-TASK-RECON-1 | Seed permission TASK (23 mã canonical DB-06 §12.1) + role-permission m |
-| `S4-TASK-BE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-SEED-1 | BE Project CRUD + close/delete mềm + quản lý member (GET/POST /project |
-| `S4-TASK-BE-2` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-1 | BE Task CRUD + My-tasks + filter (GET/POST /tasks, GET/PATCH/DELETE /t |
-| `S4-TASK-BE-3` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-2 | BE Task assignment + status workflow FSM (assign/đổi assignee, add/rem |
-| `S4-TASK-BE-4` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-3 | BE Kanban (board + move) + comment/mention + checklist + activity log  |
+| `S4-TASK-RECON-2` | 🔴 | ✅ xong | [📄](S4-TASK-RECON-2.md) | ✅S4-TASK-RECON-1 | CONTRACT pair-drift TASK: gỡ grant legacy ('comment','comment') khỏi e |
+| `S4-TASK-SEED-1` | 🔴 | ✅ xong | [📄](S4-TASK-SEED-1.md) | ✅S4-TASK-DB-1 ✅S4-TASK-RECON-1 | Seed permission TASK (23 mã canonical DB-06 §12.1) + role-permission m |
+| `S4-TASK-BE-1` | 🟡 | ✅ xong | [📄](S4-TASK-BE-1.md) | ✅S4-TASK-SEED-1 | BE Project CRUD + close/delete mềm + quản lý member (GET/POST /project |
+| `S4-TASK-BE-2` | 🟡 | ✅ xong | — *(chưa)* | ✅S4-TASK-BE-1 | BE Task CRUD + My-tasks + filter (GET/POST /tasks, GET/PATCH/DELETE /t |
+| `S4-TASK-BE-3` | 🔴 | ✅ xong | [📄](S4-TASK-BE-3.md) | ✅S4-TASK-BE-2 | BE Task assignment + status workflow FSM (assign/đổi assignee, add/rem |
+| `S4-TASK-BE-4` | 🟡 | ✅ xong | — *(chưa)* | ✅S4-TASK-BE-3 | BE Kanban (board + move) + comment/mention + checklist + activity log  |
 | `S4-NOTI-DB-1` | 🔴 | ✅ xong | [📄](S4-NOTI-DB-1.md) | ✅S4-TASK-DB-1 | Schema + migration NOTI (notification_events·notification_templates·no |
 | `S4-NOTI-SEED-1` | 🔴 | ✅ xong | [📄](S4-NOTI-SEED-1.md) | ✅S4-NOTI-DB-1 | Seed notification event catalog (Event code registry §9.5 canonical) + |
-| `S4-NOTI-BE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S4-NOTI-SEED-1 | BE My-notification APIs (GET /notifications, /dropdown, /unread-count, |
-| `S4-NOTI-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S4-NOTI-SEED-1 | BE Event intake + notification engine (POST /internal/v1/notifications |
-| `S4-NOTI-BE-3` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-NOTI-BE-2 | BE Notification admin config (GET events/templates/delivery-logs, PATC |
+| `S4-NOTI-SEED-2` | 🔴 | ✅ xong | [📄](S4-NOTI-SEED-2.md) | ✅S4-TASK-BE-3 | Vá catalog notification_events khớp registry §9.5 cho event TASK (BE-3 |
+| `S4-NOTI-BE-1` | 🔴 | ✅ xong | — *(chưa)* | ✅S4-NOTI-SEED-1 | BE My-notification APIs (GET /notifications, /dropdown, /unread-count, |
+| `S4-NOTI-BE-2` | 🔴 | ✅ xong | [📄](S4-NOTI-BE-2.md) | ✅S4-NOTI-SEED-1 ✅S4-NOTI-BE-1 | BE Event intake + notification engine (POST /internal/v1/notifications |
+| `S4-NOTI-BE-3` | 🟡 | ✅ xong | — *(chưa)* | ✅S4-NOTI-BE-2 | BE Notification admin config (GET events/templates/delivery-logs, PATC |
+| `S4-NOTI-BE-4` | 🔴 | ✅ xong | — *(chưa)* | ✅S4-NOTI-BE-3 | NOTI admin config WRITE: migration GRANT-only (INSERT,UPDATE notificat |
 | `S4-DASH-DB-1` | 🔴 | ✅ xong | [📄](S4-DASH-DB-1.md) | ✅S4-NOTI-DB-1 | Schema + migration DASH (dashboard_widgets·dashboard_widget_configs·da |
-| `S4-DASH-SEED-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S4-DASH-DB-1 | Seed widget catalog 7 In-sprint (§11.3) + permission DASH + default co |
-| `S4-DASH-BE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S4-DASH-SEED-1 | BE Dashboard resolver (GET /dashboard/me, /types, /:type) + widget reg |
-| `S4-DASH-BE-2` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S4-DASH-BE-1 ⏳S4-TASK-BE-2 ⏳S4-NOTI-BE-1 | BE Widget data services (GET /dashboard/widgets, /widgets/:slug) cho 7 |
-| `S4-INT-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-3 ⏳S4-TASK-BE-4 ⏳S4-NOTI-BE-2 | Tích hợp TASK → NOTI: wiring event producer (outbox) → consumer intake |
-| `S4-INT-2` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-DASH-BE-2 ⏳S4-INT-1 | Tích hợp DASH cache invalidation từ event TASK/NOTI/ATT/LEAVE (POST /i |
+| `S4-DASH-SEED-1` | 🔴 | ✅ xong | [📄](S4-DASH-SEED-1.md) | ✅S4-DASH-DB-1 ✅S4-NOTI-BE-1 | Seed widget catalog 7 In-sprint (§11.3) + permission DASH + default co |
+| `S4-DASH-CATALOG-2` | 🔴 | ✅ xong | [📄](S4-DASH-CATALOG-2.md) | ✅S4-DASH-SEED-1 ✅S4-DASH-BE-2 | Bù đủ catalog widget DASH (11 widget còn lại của DB-07 §14.3) + reconc |
+| `S4-DASH-BE-1` | 🔴 | ✅ xong | [📄](S4-DASH-BE-1.md) | ✅S4-DASH-SEED-1 | BE Dashboard resolver (GET /dashboard/me, /types, /:type) + widget reg |
+| `S4-DASH-SEED-2` | 🔴 | ✅ xong | — *(chưa)* | — | Backfill grant read:dashboard cho role manager + hr (role sinh ở 0444  |
+| `S4-DASH-BE-2` | 🔴 | ✅ xong | [📄](S4-DASH-BE-2.md) | ✅S4-DASH-BE-1 ✅S4-TASK-BE-2 ✅S4-NOTI-BE-1 | BE Widget data services (GET /dashboard/widgets, /widgets/:slug) cho 7 |
+| `S4-INT-1` | 🔴 | ✅ xong | [📄](S4-INT-1.md) | ✅S4-TASK-BE-3 ✅S4-TASK-BE-4 ✅S4-NOTI-BE-2 ✅S4-NOTI-SEED-2 | Tích hợp TASK → NOTI: wiring event producer (outbox) → consumer intake |
+| `S4-INT-2` | 🟡 | ✅ xong | [📄](S4-INT-2.md) | ✅S4-DASH-BE-2 ✅S4-INT-1 | Tích hợp DASH cache invalidation từ event TASK/NOTI/ATT/LEAVE (POST /i |
 | `S4-FE-REGISTRY-1` | 🟢 | ✅ xong | [📄](S4-FE-REGISTRY-1.md) | — | FE đăng ký module TASK·NOTI·DASH vào route/sidebar/action registry + q |
-| `S4-FE-TASK-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-1 ✅S4-FE-REGISTRY-1 | FE Project screens: ProjectListPage · ProjectDetailPage · ProjectFormD |
-| `S4-FE-TASK-2` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-3 ✅S4-FE-REGISTRY-1 | FE Task screens: TaskListPage · MyTasksPage · TaskDetailPage · TaskFor |
-| `S4-FE-TASK-3` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-4 ⏳S4-FE-TASK-2 | FE Task collaboration: TaskKanbanPage (drag-drop) · TaskCommentThread  |
-| `S4-FE-NOTI-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S4-NOTI-BE-1 ✅S4-FE-REGISTRY-1 | FE Notification: NotificationBadge · NotificationDropdown · Notificati |
-| `S4-FE-DASH-1` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S4-DASH-BE-2 ✅S4-FE-REGISTRY-1 | FE Dashboard shell + P0 widgets: DashboardMePage · DashboardWidgetGrid |
-| `S4-FE-DASH-2` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S4-DASH-BE-2 ⏳S4-FE-DASH-1 | FE Dashboard widget mở rộng: AttendanceTodayWidget · PendingLeaveWidge |
-| `S4-QA-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-4 ⏳S4-NOTI-BE-2 ⏳S4-DASH-BE-2 | QA Sprint 4 permission/data-scope + deny-path: TASK CRUD/assign/status |
-| `S4-QA-2` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-INT-2 ⏳S4-FE-DASH-2 ⏳S4-QA-1 | QA Sprint 4 E2E + regression sign-off: flow task→noti→dash (§15.1) + n |
-| `S4-TASK-BE-5` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-2 | BE TASK file (project/task) qua FileService + file_links + Project pro |
-| `S4-FE-TASK-4` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S4-TASK-BE-5 ⏳S4-FE-TASK-2 | FE TaskFilePanel (upload/list/download/delete theo quyền) + ProjectPro |
-| `S4-DASH-BE-3` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-DASH-BE-1 | BE Dashboard widget config CRUD (GET /dashboard/configs, PATCH /config |
-| `S4-FE-DASH-3` | 🟢 | ⬜ chờ | — *(chưa)* | ⏳S4-DASH-BE-3 ⏳S4-FE-DASH-1 | FE DashboardConfigPage (cấu hình widget theo role/user/dashboard-type: |
+| `S4-FE-TASK-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S4-TASK-BE-1 ✅S4-FE-REGISTRY-1 | FE Project screens: ProjectListPage · ProjectDetailPage · ProjectFormD |
+| `S4-FE-TASK-CLEANUP-1` | 🟢 | ✅ xong | — *(chưa)* | — | Gỡ/chuyển tasksApi legacy (web-core tasks-api.ts) — code chết gọi GET  |
+| `S4-FE-TASK-2` | 🟢 | ✅ xong | — *(chưa)* | ✅S4-TASK-BE-3 ✅S4-FE-REGISTRY-1 | FE Task screens: TaskListPage · MyTasksPage · TaskDetailPage · TaskFor |
+| `S4-FE-TASK-3` | 🟢 | ✅ xong | — *(chưa)* | ✅S4-TASK-BE-4 ✅S4-FE-TASK-2 | FE Task collaboration: TaskKanbanPage (drag-drop) · TaskCommentThread  |
+| `S4-FE-NOTI-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S4-NOTI-BE-1 ✅S4-FE-REGISTRY-1 | FE Notification: NotificationBadge · NotificationDropdown · Notificati |
+| `S4-FE-NOTI-CLEANUP-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S4-FE-NOTI-1 | Gỡ dứt điểm NotificationBell (@mediaos/ui) + notification-api legacy ( |
+| `S4-FE-DASH-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S4-DASH-BE-2 ✅S4-FE-REGISTRY-1 | FE Dashboard shell + P0 widgets: DashboardMePage · DashboardWidgetGrid |
+| `S4-FE-DASH-2` | 🟢 | ✅ xong | — *(chưa)* | ✅S4-DASH-BE-2 ✅S4-FE-DASH-1 | FE Dashboard widget mở rộng: AttendanceTodayWidget · PendingLeaveWidge |
+| `S4-QA-1` | 🟡 | ✅ xong | [📄](S4-QA-1.md) | ✅S4-TASK-BE-4 ✅S4-NOTI-BE-2 ✅S4-DASH-BE-2 | QA Sprint 4 permission/data-scope + deny-path: TASK CRUD/assign/status |
+| `S4-QA-2` | 🟡 | ✅ xong | [📄](S4-QA-2.md) | ✅S4-INT-2 ✅S4-FE-DASH-2 ✅S4-QA-1 | QA Sprint 4 E2E + regression sign-off: flow task→noti→dash (§15.1) + n |
+| `S4-TASK-BE-5` | 🟡 | ✅ xong | [📄](S4-TASK-BE-5.md) | ✅S4-TASK-BE-2 | BE TASK file (project/task) qua FileService + file_links + Project pro |
+| `S4-FE-TASK-4` | 🟢 | ✅ xong | — *(chưa)* | ✅S4-TASK-BE-5 ✅S4-FE-TASK-2 | FE TaskFilePanel (upload/list/download/delete theo quyền) + ProjectPro |
+| `S4-DASH-BE-3` | 🟡 | ✅ xong | [📄](S4-DASH-BE-3.md) | ✅S4-DASH-BE-1 | BE Dashboard widget config CRUD (GET /dashboard/configs, PATCH /config |
+| `S4-FE-DASH-3` | 🟢 | ✅ xong | — *(chưa)* | ✅S4-DASH-BE-3 ✅S4-FE-DASH-1 | FE DashboardConfigPage (cấu hình widget theo role/user/dashboard-type: |
+| `S4-FE-NOTI-2` | 🟢 | ✅ xong | — *(chưa)* | ✅S4-NOTI-BE-4 ✅S4-FE-REGISTRY-1 | FE Notification Events admin (UI-NOTI-SCREEN-004): bảng event catalog  |
+| `S4-FE-NOTI-3` | 🟢 | ✅ xong | — *(chưa)* | ✅S4-NOTI-BE-3 ✅S4-FE-REGISTRY-1 | FE Notification Delivery Logs read-only (UI-NOTI-SCREEN-006): bảng app |
+| `S4-NOTI-BE-5` | 🟡 | ✅ xong | — *(chưa)* | ✅S4-NOTI-BE-4 | NOTI admin templates LIST: GET /notifications/templates (filter event/ |
+| `S4-FE-NOTI-4` | 🟢 | ✅ xong | — *(chưa)* | ✅S4-NOTI-BE-5 ✅S4-FE-REGISTRY-1 | FE Notification Templates admin (NOTI-SCREEN-006 / UI-NOTI-SCREEN-005) |
+| `S4-QA-TASK-1` | 🟡 | ✅ xong | [📄](S4-QA-TASK-1.md) | ✅S4-TASK-BE-4 | QA TASK permission/data-scope + deny-path (tách khỏi S4-QA-1 để chạy n |
+| `S4-QA-NOTI-1` | 🟡 | ✅ xong | [📄](S4-QA-NOTI-1.md) | ✅S4-NOTI-BE-4 | QA NOTI permission/own-scope + deny-path (tách khỏi S4-QA-1): own-scop |
+| `S4-INT-3` | 🔴 | ✅ xong | [📄](S4-INT-3.md) | ✅S4-INT-1 | Tích hợp LEAVE → NOTI qua OutboxNotificationBridge (INT-1): event-type |
+| `S4-INT-4` | 🔴 | ✅ xong | [📄](S4-INT-4.md) | ✅S4-INT-1 | Tích hợp ATT → NOTI: bổ sung producer outbox trong ATT (adjustment sub |
+| `S4-INT-5` | 🔴 | ✅ xong | [📄](S4-INT-5.md) | ✅S4-INT-1 | Tích hợp HR/AUTH → NOTI: HR tạo employee → activation/welcome notifica |
 
 ## Sprint 5
 
 | WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
 | --- | --- | --- | --- | --- | --- |
-| `S5-DEVOPS-1` | 🟡 | 🔵 đang làm | — *(chưa)* | — | Staging/UAT readiness: env + deploy pipeline + migration/seed chạy từ  |
-| `S5-QA-E2E-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-QA-2 | Integration freeze + system smoke P0 + cross-module E2E: login→Home Po |
-| `S5-BE-CONTRACT-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-QA-2 | API contract & OpenAPI/Swagger chuẩn hoá theo module + FE integration  |
-| `S5-SEC-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S4-QA-2 | Permission & data-scope hardening + field-level/export permission + se |
-| `S5-QA-REG-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-QA-2 | QA regression suite MVP (test-case matrix theo module × role) + UI sta |
-| `S5-QA-DASHNOTI-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-QA-2 ⏳S4-INT-2 | Dashboard & Notification hardening: widget degraded/cache đúng, unread |
-| `S5-PERF-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S4-QA-2 | Performance/reliability smoke + observability baseline: SLA danh sách  |
+| `S5-DEVOPS-1` | 🟡 | ✅ xong | [📄](S5-DEVOPS-1.md) | — | Staging/UAT readiness: env + deploy pipeline + migration/seed chạy từ  |
+| `S5-QA-E2E-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S4-QA-2 | Integration freeze + system smoke P0 + cross-module E2E: login→Home Po |
+| `S5-BE-CONTRACT-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S4-QA-2 | API contract & OpenAPI/Swagger chuẩn hoá theo module + FE integration  |
+| `S5-SEC-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S4-QA-2 | Permission & data-scope hardening + field-level/export permission + se |
+| `S5-QA-REG-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S4-QA-2 | QA regression suite MVP (test-case matrix theo module × role) + UI sta |
+| `S5-QA-DASHNOTI-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S4-QA-2 ✅S4-INT-2 | Dashboard & Notification hardening: widget degraded/cache đúng, unread |
+| `S5-PERF-1` | 🟡 | ⬜ chờ | — *(chưa)* | ✅S4-QA-2 | Performance/reliability smoke + observability baseline: SLA danh sách  |
 | `S5-UAT-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S5-QA-E2E-1 ⏳S5-QA-REG-1 ⏳S5-SEC-1 | UAT prep + run (script theo role · test data · sign-off) + release rea |
+| `S5-QA-GATE-LANEDB-1` | 🟡 | ✅ xong | [📄](S5-QA-GATE-LANEDB-1.md) | — | Vá false-green cổng local: harness/check.sh chạy `pnpm test` KHÔNG set |
+| `S5-FND-JOBS-OBS-1` | 🟡 | ✅ xong | — *(chưa)* | — | System Jobs observability: GET /foundation/system-jobs đọc lịch sử sys |
+| `S5-ME-DOC-1` | 🟢 | ✅ xong | [📄](S5-ME-DOC-1.md) | — | Docs sync SPEC-09 ME: cập nhật SPEC-01/PRD-00/DB-01·08·09·10/README §8 |
+| `S5-ME-DB-1` | 🔴 | ✅ xong | [📄](S5-ME-DB-1.md) | — | Schema + migration user_preferences (SPEC-09 §15.2) — RLS+FORCE, uniqu |
+| `S5-ME-BE-1` | 🔴 | ✅ xong | [📄](S5-ME-BE-1.md) | ✅S5-ME-DB-1 | BE MeModule aggregation: GET /me + /me/overview + attendance/leave/tas |
+| `S5-ME-BE-2` | 🟡 | ✅ xong | [📄](S5-ME-BE-2.md) | ✅S5-ME-DB-1 ✅S5-ME-BE-1 | BE preferences + avatar: GET/PATCH /me/preferences (+appearance) upser |
+| `S5-ME-BE-3` | 🔴 | ✅ xong | [📄](S5-ME-BE-3.md) | ✅S5-ME-BE-1 | BE Hoạt động bảo mật own-scope: GET /me/security/activity đọc login_lo |
+| `S5-ME-FE-1` | 🟡 | ✅ xong | [📄](S5-ME-FE-1.md) | ✅S5-ME-DB-1 ✅S5-ME-BE-1 | FE registry + shell + Tổng quan ME (ME-SCREEN-001): ModuleCode/APP_REG |
+| `S5-ME-FE-2` | 🟡 | ✅ xong | [📄](S5-ME-FE-2.md) | ✅S5-ME-FE-1 ✅S5-ME-BE-3 | FE Hồ sơ của tôi + Tài khoản & bảo mật dưới /me/*: TÁI DÙNG MyProfileP |
+| `S5-ME-FE-3` | 🟢 | ✅ xong | [📄](S5-ME-FE-3.md) | ✅S5-ME-FE-1 ✅S5-ME-BE-2 | FE Công việc của tôi (ATT/LEAVE/TASK summary + deep-link) + Thông báo  |
+| `S5-ME-QA-1` | 🟡 | ✅ xong | [📄](S5-ME-QA-1.md) | ✅S5-ME-BE-2 ✅S5-ME-BE-3 | QA ME: IDOR sweep mọi endpoint /me/* + cross-user/cross-tenant + aggre |
+| `S5-HR-LINKUI-1` | 🟡 | ✅ xong | — *(chưa)* | — | FE liên kết/hủy liên kết hồ sơ nhân viên ↔ tài khoản có sẵn trên trang |
+| `S5-HR-IMPORT-BE-1` | 🔴 | ✅ xong | [📄](S5-HR-IMPORT-BE-1.md) | ✅S5-ME-DB-1 | BE import nhân viên hàng loạt: seed cặp permission ('import','employee |
+| `S5-HR-IMPORT-FE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-HR-IMPORT-BE-1 | FE import nhân viên hàng loạt: màn upload file + tải template + previe |
+| `S5-HR-ORGCHART-BE-1` | 🔴 | ✅ xong | [📄](S5-HR-ORGCHART-BE-1.md) | — | BE sơ đồ tổ chức: GET /hr/org-chart/employees (cây nhân sự theo quản l |
+| `S5-HR-ORGCHART-FE-1` | 🟡 | ✅ xong | — *(chưa)* | ✅S5-HR-ORGCHART-BE-1 | FE sơ đồ tổ chức trực quan /hr/org-chart: tab Phòng ban (node-chart +  |
+| `S5-HR-WORKINFO-1` | 🟡 | ✅ xong | [📄](S5-HR-WORKINFO-1.md) | — | Hoàn thiện khối Thông tin công việc (chi tiết nhân viên + hồ sơ của tô |
+| `S5-FE-TASK-NAV-1` | 🟢 | ✅ xong | — *(chưa)* | — | Sidebar TASK mở đường: thêm mục 'Dự án' (/tasks/projects) + đổi label  |
+| `S5-TASK-BE-6` | 🟢 | ✅ xong | — *(chưa)* | — | Kanban counts (trả nợ SPEC-06 §13.8): GET /projects/:id/kanban bổ sung |
+| `S5-FE-TASK-5` | 🟢 | ✅ xong | — *(chưa)* | ✅S5-TASK-BE-6 | Kanban card giàu tín hiệu (benchmark): badge comment/attachment/checkl |
+| `S5-FE-TASK-6` | 🟡 | ✅ xong | [📄](S5-FE-TASK-6.md) | ✅S5-FE-TASK-NAV-1 | TASK-SCREEN-010 Task quá hạn (/tasks/overdue) + TASK-SCREEN-011 Báo cá |
+| `S5-LEAVE-HOLIDAYS-MOVE-1` | 🟢 | ✅ xong | — *(chưa)* | ✅S5-FE-TASK-NAV-1 | Chuyển màn Ngày nghỉ lễ /system/public-holidays → /leave/public-holida |
+| `S5-NOTI-FIX-1` | 🔴 | ✅ xong | [📄](S5-NOTI-FIX-1.md) | — | Backfill target_url_template cho 39 template notification global (QA2- |
+| `S5-NOTI-FIX-2` | 🔴 | ✅ xong | [📄](S5-NOTI-FIX-2.md) | — | Vá 3 event render placeholder câm TASK_COMMENT_CREATED · TASK_MENTIONE |
+| `S5-TASK-HRCODE-1` | 🔴 | ✅ xong | [📄](S5-TASK-HRCODE-1.md) | ✅S5-NOTI-FIX-2 | Cấp task_code cho task HR (createApprovalTaskTx ← leave/attendance-adj |
+| `S5-LEAVE-DEADCODE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S5-TASK-HRCODE-1 | Dọn khối LeaveService chết (createRequest/approveRequest/rejectRequest |
+| `S5-SEQ-HARDEN-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S5-TASK-HRCODE-1 | Gia cố cấp mã tuần tự: SAVEPOINT cho recovery 23505 (ensure-on-miss ra |
+| `S5-TASK-PIPELINE-1` | 🔴 | ⬜ chờ | [📄](S5-TASK-PIPELINE-1.md) | ✅S5-TASK-HRCODE-1 | Đợt A — Kanban cột pipeline tuỳ biến theo dự án (project_states) thay  |
+| `S5-TASK-NAV-TREE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S5-TASK-PIPELINE-1 | Đợt B — Sidebar cây phòng ban: dự án lồng dưới phòng ban + menu ⋯ mỗi  |
+| `S5-TASK-WORKSPACE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S5-TASK-PIPELINE-1 | Đợt D1 — Vỏ workspace dự án: tab bar (Bảng·Danh sách·Báo cáo·Hoạt động |
+| `S5-TASK-DETAIL-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S5-TASK-PIPELINE-1 | Màn chi tiết task — vá 4 gap TRONG SPEC chưa làm: timeline hiện dữ liệ |
 
 ## Sprint 6
 
@@ -228,6 +274,15 @@
 | `S6-PERF-DB-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S6-STAB-1 | Performance/Query/Cache hardening + DB Migration/Seed/Backup/Rollback  |
 | `S6-REL-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S6-QA-FINAL-1 ⏳S6-SEC-1 ⏳S6-PERF-DB-1 | Release Candidate build + release notes + Go-live runbook + deployment |
 | `S6-GOLIVE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S6-REL-1 | Final Sign-off · Go/No-go · Go-live execution · Handoff (admin/user/su |
+
+## Khác
+
+| WO | Zone | Trạng thái | Micro-plan | Phụ thuộc | Mô tả |
+| --- | --- | --- | --- | --- | --- |
+| `HR-PROFILE-UI-1` | 🔴 | ✅ xong | — *(chưa)* | — | Nâng cấp màn Hồ sơ nhân sự: dải tổng quan (headcount+donut giới tính+4 |
+| `HR-PROFILE-UI-2` | 🟡 | ✅ xong | [📄](HR-PROFILE-UI-2.md) | ✅HR-PROFILE-UI-1 | Hồ sơ nhân sự phần 2: gom nhóm bảng 1/2 cấp (Tùy chỉnh cột) + export d |
+| `HR-PERF-1` | 🔴 | ✅ xong | [📄](HR-PERF-1.md) | ✅HR-PROFILE-UI-1 | Tối ưu hiệu năng nền tảng: (a) code-split router theo module (bundle a |
+| `HR-IDENTITY-READ-1` | 🔴 | ✅ xong | [📄](HR-IDENTITY-READ-1.md) | ✅HR-PROFILE-UI-1 | Lộ identity_number/issue_date/issue_place (CCCD §14.18) qua read surfa |
 
 ---
 
