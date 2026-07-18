@@ -515,7 +515,8 @@ export default {
       dateTo: "Đến ngày",
     },
     pagination: {
-      summary: "{{from}}–{{to}} trên {{total}}",
+      // Không có `total` — API trả mảng trần, block pagination bị apiFetch bỏ (xem hr-audit-api.ts).
+      summary: "Đang xem {{from}}–{{to}}",
     },
     forbidden: {
       title: "Không có quyền truy cập",
