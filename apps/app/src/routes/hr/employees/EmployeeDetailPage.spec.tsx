@@ -46,6 +46,12 @@ const MOCK_DETAIL: HrEmployeeDetail = {
   positionId: "pos-001",
   positionName: "Developer",
   directManagerId: null,
+  jobLevelName: null,
+  contractTypeName: null,
+  directManagerName: null,
+  directManagerEmployeeId: null,
+  indirectManagerName: null,
+  resignationReason: null,
   workType: "Full-time",
   employmentType: "Official",
   startDate: "2026-01-01",
@@ -245,5 +251,62 @@ describe("EmployeeDetailPage", () => {
     expect(screen.getByText(/giấy tờ tùy thân/i)).toBeInTheDocument();
     expect(screen.getByText("079123456789")).toBeInTheDocument();
     expect(screen.getByText("Cục Cảnh sát QLHC về TTXH")).toBeInTheDocument();
+  });
+
+  // ── S5-HR-WORKINFO-1 — khối Thông tin công việc bổ sung (tab "Công việc") ─────────
+  it("work tab shows Cấp bậc + Quản lý trực tiếp/gián tiếp (directory-class) khi server trả", async () => {
+    setCapabilities({ "read:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue({
+      ...MOCK_DETAIL,
+      jobLevelName: "Senior",
+      directManagerName: "Trần Văn B",
+      directManagerEmployeeId: "emp-mgr-1",
+      indirectManagerName: "Lê Văn C",
+    });
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("tab", { name: /công việc/i }));
+    expect(screen.getByText("Senior")).toBeInTheDocument();
+    expect(screen.getByText("Trần Văn B")).toBeInTheDocument();
+    expect(screen.getByText("Lê Văn C")).toBeInTheDocument();
+  });
+
+  it("direct-manager link điều hướng sang hồ sơ quản lý (server enforce quyền)", async () => {
+    setCapabilities({ "read:employee": true });
+    const onNavigate = vi.fn();
+    vi.mocked(hrApi.getEmployee).mockResolvedValue({
+      ...MOCK_DETAIL,
+      directManagerName: "Trần Văn B",
+      directManagerEmployeeId: "emp-mgr-1",
+    });
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" onNavigateEmployee={onNavigate} />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("tab", { name: /công việc/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Trần Văn B" }));
+    expect(onNavigate).toHaveBeenCalledWith("emp-mgr-1");
+  });
+
+  it("khối 'Thông tin nghỉ việc' ẩn khi active, hiện khi resigned (+ lý do server trả)", async () => {
+    setCapabilities({ "read:employee": true, "view-sensitive:employee": true });
+    // active → không có khối nghỉ việc
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
+    const { unmount } = renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("tab", { name: /công việc/i }));
+    expect(screen.queryByText(/thông tin nghỉ việc/i)).not.toBeInTheDocument();
+    unmount();
+
+    // resigned → khối hiện + lý do
+    vi.mocked(hrApi.getEmployee).mockResolvedValue({
+      ...MOCK_DETAIL,
+      status: "resigned",
+      endDate: "2026-06-30",
+      resignationReason: "Chuyển công tác",
+    });
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("tab", { name: /công việc/i }));
+    expect(screen.getByText(/thông tin nghỉ việc/i)).toBeInTheDocument();
+    expect(screen.getByText("Chuyển công tác")).toBeInTheDocument();
   });
 });

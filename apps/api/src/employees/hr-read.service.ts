@@ -165,7 +165,13 @@ export class HrReadService {
       const revealSalary = await this.revealSalary(tx, user, id);
       const revealPii = await this.canViewSensitive(user, id);
       const revealIdentity = await this.revealIdentity(tx, user, id);
-      return this.toDetail(row, revealSalary, revealPii, revealIdentity);
+      const resignationReason = await this.resolveResignationReason(
+        tx,
+        user.companyId,
+        row,
+        revealPii,
+      );
+      return this.toDetail(row, revealSalary, revealPii, revealIdentity, resignationReason);
     });
   }
 
@@ -227,7 +233,13 @@ export class HrReadService {
       const revealSalary = await this.revealSalary(tx, user, row.id);
       const revealPii = await this.canViewSensitive(user, row.id);
       const revealIdentity = await this.revealIdentity(tx, user, row.id);
-      return this.toDetail(row, revealSalary, revealPii, revealIdentity);
+      const resignationReason = await this.resolveResignationReason(
+        tx,
+        user.companyId,
+        row,
+        revealPii,
+      );
+      return this.toDetail(row, revealSalary, revealPii, revealIdentity, resignationReason);
     });
   }
 
@@ -344,6 +356,23 @@ export class HrReadService {
   }
 
   /**
+   * S5-HR-WORKINFO-1 — resolve the "Thông tin nghỉ việc" reason for the detail. Only queries the
+   * append-only status history when the employee is actually leaving (status ∈ {resigned,terminated})
+   * AND the caller may see PII (revealPii): the reason is free-text HR data, so it fails CLOSED behind
+   * view-sensitive (mirror `notes`). Any other case ⟹ null, and NO extra query is issued.
+   */
+  private async resolveResignationReason(
+    tx: TenantTx,
+    companyId: string,
+    row: HrDetailRow,
+    revealPii: boolean,
+  ): Promise<string | null> {
+    const isLeaving = row.status === "resigned" || row.status === "terminated";
+    if (!isLeaving || !revealPii) return null;
+    return this.repo.findLatestResignationReasonTx(tx, companyId, row.id);
+  }
+
+  /**
    * view-sensitive:employee gate for PII (phone/notes/contractType + personal-info). Sensitive catalog
    * pair → wildcard grants do NOT satisfy it. PII reveal is not separately audited (read-only, no
    * salary-class trail). targetId null = type-level check (used for the summary gender aggregate,
@@ -421,6 +450,7 @@ export class HrReadService {
     revealSalary: boolean,
     revealPii: boolean,
     revealIdentity: boolean,
+    resignationReason: string | null,
   ): HrEmployeeDetail {
     return {
       id: row.id,
@@ -433,6 +463,11 @@ export class HrReadService {
       positionId: row.positionId,
       positionName: row.positionName,
       directManagerId: row.directManagerId,
+      // S5-HR-WORKINFO-1: directory-class reporting-line + jobLevelName (NOT gated — mirror org-chart node).
+      jobLevelName: row.jobLevelName,
+      directManagerName: row.directManagerName,
+      directManagerEmployeeId: row.directManagerEmployeeId,
+      indirectManagerName: row.indirectManagerName,
       workType: row.workType,
       employmentType: row.employmentType,
       startDate: row.startDate,
@@ -448,7 +483,12 @@ export class HrReadService {
       // PII — masked unless view-sensitive grants reveal.
       phone: revealPii ? row.phone : null,
       contractType: revealPii ? row.contractType : null,
+      // S5-HR-WORKINFO-1: contractTypeName rides the SAME view-sensitive gate as contractType legacy.
+      contractTypeName: revealPii ? row.contractTypeName : null,
       notes: revealPii ? row.notes : null,
+      // S5-HR-WORKINFO-1: resignationReason already fail-closed at resolveResignationReason (only set when
+      // status ∈ {resigned,terminated} AND revealPii) — a null here means active/unauthorized/no-history.
+      resignationReason,
       // HR-PROFILE-UI-1: personal-info PII (mig 0451) — SAME view-sensitive gate, fail-closed.
       gender: revealPii ? row.gender : null,
       dateOfBirth: revealPii ? row.dateOfBirth : null,

@@ -136,13 +136,30 @@ export const hrEmployeeDetailSchema = z.object({
   status: z.string(),
   // HR-PROFILE-UI-1: directory data (non-gated).
   avatarUrl: z.string().nullable(),
+  // S5-HR-WORKINFO-1: "Thông tin công việc" bổ sung (additive). DIRECTORY-CLASS (không gate) — tên tra
+  // cứu + reporting-line, cùng lớp với org-chart directory node (KHÔNG lộ PII/salary):
+  //   jobLevelName          = job_levels.name theo job_level_id
+  //   directManagerName     = users.fullName theo direct_manager_id
+  //   directManagerEmployeeId = employee_profiles.id của quản lý trực tiếp (FE link /hr/employees/{id})
+  //   indirectManagerName   = quản lý của quản lý (1 cấp)
+  jobLevelName: z.string().nullable(),
+  directManagerName: z.string().nullable(),
+  directManagerEmployeeId: z.string().uuid().nullable(),
+  indirectManagerName: z.string().nullable(),
   /** SENSITIVE (view-salary) — both null when unauthorized; salaryType is salary-class (§18.8). */
   baseSalary: z.number().nullable(),
   salaryType: z.string().nullable(),
   /** PII (view-sensitive) — null when unauthorized. */
   phone: z.string().nullable(),
   contractType: z.string().nullable(),
+  // S5-HR-WORKINFO-1: contract_types.name theo contract_type_id. PII — đi CÙNG gate view-sensitive như
+  // `contractType` legacy (WO chốt: muốn nới directory-class phải có quyết định owner riêng + security review).
+  contractTypeName: z.string().nullable(),
   notes: z.string().nullable(),
+  // S5-HR-WORKINFO-1: lý do nghỉ việc = reason của hàng employee_status_histories gần nhất (new_status ∈
+  // resigned/terminated). Chỉ set khi status ∈ {resigned,terminated}; PII free-text → fail-closed dưới
+  // view-sensitive (mirror `notes`). null khi active/không quyền/không có lịch sử.
+  resignationReason: z.string().nullable(),
   // HR-PROFILE-UI-1: personal-info PII (mig 0451 self-service columns) — SAME view-sensitive gate.
   gender: z.string().nullable(),
   dateOfBirth: z.string().nullable(),

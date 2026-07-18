@@ -161,18 +161,80 @@ export function ContactSection({ employee, t, canViewSensitive }: SectionProps) 
 
 // ── Tab "Công việc" ─────────────────────────────────────────────────────────────
 
-export function WorkInfoSection({ employee, t, canViewSensitive }: SectionProps) {
+/**
+ * S5-HR-WORKINFO-1 — giá trị "Quản lý trực tiếp". Server đã trả tên (directory-class) + id hồ sơ; FE chỉ
+ * render đúng cái server trả. Có `onNavigateEmployee` + `directManagerEmployeeId` → link sang hồ sơ quản lý
+ * (server tự enforce quyền xem khi mở). Không có id/handler → chỉ hiện tên (text). Không tên → "—".
+ */
+function ManagerValue({
+  name,
+  employeeId,
+  onNavigate,
+}: {
+  name: string | null;
+  employeeId: string | null;
+  onNavigate?: (employeeId: string) => void;
+}): React.ReactNode {
+  if (!name) return "—";
+  if (onNavigate && employeeId) {
+    return (
+      <button
+        type="button"
+        onClick={() => onNavigate(employeeId)}
+        className="text-primary underline-offset-2 hover:underline"
+      >
+        {name}
+      </button>
+    );
+  }
+  return name;
+}
+
+export function WorkInfoSection({
+  employee,
+  t,
+  canViewSensitive,
+  onNavigateEmployee,
+}: SectionProps & { onNavigateEmployee?: (employeeId: string) => void }) {
   const masked = t("detail.masked");
+  // "Thông tin nghỉ việc" chỉ có nghĩa khi nhân viên đã nghỉ/chấm dứt (SPEC-01 §17 trạng thái).
+  const isLeaving = employee.status === "resigned" || employee.status === "terminated";
+  // Loại hợp đồng: ưu tiên tên chuẩn hoá (contract_types) fallback text legacy — CÙNG gate view-sensitive
+  // (cả hai server mask null khi thiếu quyền → pii() hiện nhãn masked).
+  const contractLabel = employee.contractTypeName ?? employee.contractType;
   return (
     <div className="space-y-4">
       <SectionCard title={t("detail.groups.job")}>
         <FieldRow label={t("detail.fields.department")} value={employee.orgUnitName} />
         <FieldRow label={t("detail.fields.position")} value={employee.positionName} />
+        {/* S5-HR-WORKINFO-1 — Cấp bậc (jobLevelName, directory-class) */}
+        <FieldRow label={t("detail.fields.jobLevel")} value={employee.jobLevelName} />
         <FieldRow label={t("detail.fields.workType")} value={workTypeLabel(employee.workType, t)} />
         <FieldRow
           label={t("detail.fields.employmentType")}
           value={employmentTypeLabel(employee.employmentType, t)}
         />
+        <FieldRow
+          label={t("detail.sensitiveFields.contractType")}
+          value={pii(contractLabel, canViewSensitive, masked)}
+        />
+        {/* S5-HR-WORKINFO-1 — reporting-line (directory-class). Quản lý trực tiếp link sang hồ sơ nếu có. */}
+        <FieldRow
+          label={t("detail.fields.directManager")}
+          value={
+            <ManagerValue
+              name={employee.directManagerName}
+              employeeId={employee.directManagerEmployeeId}
+              onNavigate={onNavigateEmployee}
+            />
+          }
+        />
+        {employee.indirectManagerName && (
+          <FieldRow
+            label={t("detail.fields.indirectManager")}
+            value={employee.indirectManagerName}
+          />
+        )}
         <FieldRow
           label={t("detail.fields.startDate")}
           value={employee.startDate ? formatDate(new Date(employee.startDate)) : "—"}
@@ -196,14 +258,25 @@ export function WorkInfoSection({ employee, t, canViewSensitive }: SectionProps)
           value={formatSeniority(employee.startDate, t)}
         />
         <FieldRow
-          label={t("detail.sensitiveFields.contractType")}
-          value={pii(employee.contractType, canViewSensitive, masked)}
-        />
-        <FieldRow
           label={t("detail.fields.status")}
           value={<EmployeeStatusBadge status={employee.status} />}
         />
       </SectionCard>
+
+      {/* S5-HR-WORKINFO-1 — "Thông tin nghỉ việc": CHỈ khi resigned/terminated. Ngày nghỉ = endDate
+          (directory); Lý do = resignationReason (server mask view-sensitive, reuse lịch sử trạng thái). */}
+      {isLeaving && (
+        <SectionCard title={t("detail.groups.resignation")}>
+          <FieldRow
+            label={t("detail.fields.resignationDate")}
+            value={employee.endDate ? formatDate(new Date(employee.endDate)) : "—"}
+          />
+          <FieldRow
+            label={t("detail.fields.resignationReason")}
+            value={pii(employee.resignationReason, canViewSensitive, masked)}
+          />
+        </SectionCard>
+      )}
     </div>
   );
 }
