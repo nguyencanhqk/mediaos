@@ -1057,6 +1057,21 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     showInSidebar: true,
     order: 51,
   },
+  // S5-FE-TASK-6 — Task quá hạn (TASK-SCREEN-010, SPEC-06 §13.10). FE-only trên `GET /tasks?overdue=true`
+  // (không endpoint mới). Route TĨNH 2-segment "/tasks/overdue" xếp hạng TRÊN "/tasks/$taskId" (mirror
+  // task.my-tasks). Sidebar item khai riêng ở sidebar-registry.ts (TASK_SIDEBAR) — showInSidebar ở đây
+  // KHÔNG được ModuleSidebar đọc.
+  {
+    routeKey: "task.overdue",
+    path: "/tasks/overdue",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "TASK",
+    screenCode: "TASK-SCREEN-010",
+    titleKey: "routeTitle.taskOverdue",
+    requiredAnyPermissions: ["TASK.TASK.VIEW"],
+    showInSidebar: true,
+    order: 51.5,
+  },
   // S4-FE-TASK-1 — Project List/Detail (SPEC-06 §13.1/§13.3, TASK-SCREEN-001/003). Cổng route =
   // TASK.PROJECT.VIEW (read:project); nút Create/Edit/Close/Delete/Member gate finer bên trong page qua
   // useCan/PermissionGate (TASK.PROJECT.CREATE/UPDATE/CLOSE/DELETE/MANAGE_MEMBER).
@@ -1081,6 +1096,21 @@ export const ROUTE_REGISTRY: readonly RouteMeta[] = [
     requiredAnyPermissions: ["TASK.PROJECT.VIEW"],
     showInSidebar: false,
     order: 53,
+  },
+  // S5-FE-TASK-6 — Báo cáo tiến độ dự án (TASK-SCREEN-011, SPEC-06 §13.11/§16.1). Route DƯỚI project
+  // detail (path param, showInSidebar false — vào từ nút "Xem báo cáo" ProjectDetailPage). Route gate =
+  // TASK.PROJECT.VIEW (giống detail — người đến từ detail đã có read:project); cổng NHẠY CẢM thật của báo
+  // cáo là useCanExact(view-report:project) TRONG page + server enforce (GET /projects/:id/report).
+  {
+    routeKey: "task.projects.report",
+    path: "/tasks/projects/:projectId/report",
+    layout: "MODULE_WORKSPACE",
+    moduleCode: "TASK",
+    screenCode: "TASK-SCREEN-011",
+    titleKey: "routeTitle.taskProjectReport",
+    requiredAnyPermissions: ["TASK.PROJECT.VIEW"],
+    showInSidebar: false,
+    order: 53.5,
   },
 
   // Notifications

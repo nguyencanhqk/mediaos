@@ -1365,6 +1365,18 @@ const TaskDetailPage = React.lazy(() =>
 const tasksRoute = makeModuleRoute("/tasks", "task.overview", "TASK", TaskListPage);
 const tasksMyTasksRoute = makeModuleRoute("/tasks/my-tasks", "task.my-tasks", "TASK", MyTasksPage);
 
+// S5-FE-TASK-6 — Task quá hạn (TASK-SCREEN-010). Route TĨNH 2-segment "/tasks/overdue" xếp hạng TRÊN
+// route param "/tasks/$taskId" (mirror tasksMyTasksRoute) → không bị detail nuốt.
+const OverdueTasksPage = React.lazy(() =>
+  import("@/routes/tasks/OverdueTasksPage").then((m) => ({ default: m.OverdueTasksPage })),
+);
+const tasksOverdueRoute = makeModuleRoute(
+  "/tasks/overdue",
+  "task.overdue",
+  "TASK",
+  OverdueTasksPage,
+);
+
 // S4-FE-TASK-1 — Project List (TASK-SCREEN-001) + Detail (TASK-SCREEN-003, deep link $projectId).
 const ProjectListPage = React.lazy(() =>
   import("@/routes/tasks/ProjectListPage").then((m) => ({ default: m.ProjectListPage })),
@@ -1395,6 +1407,37 @@ const tasksProjectDetailRoute = createRoute({
       <ProjectDetailPage
         projectId={projectId}
         onBack={() => void navigate({ to: "/tasks/projects" as "/" })}
+      />,
+    );
+  },
+});
+
+// S5-FE-TASK-6 — Báo cáo tiến độ dự án (TASK-SCREEN-011). Route DƯỚI project detail (path param 3-segment
+// "/tasks/projects/$projectId/report"). No sidebar entry; param resolve qua useParams (mirror
+// tasksProjectDetailRoute). Route gate = TASK.PROJECT.VIEW (meta task.projects.report); cổng nhạy cảm
+// thật (view-report:project) do ProjectReportPage tự gate (useCanExact) + server.
+const ProjectReportPage = React.lazy(() =>
+  import("@/routes/tasks/ProjectReportPage").then((m) => ({ default: m.ProjectReportPage })),
+);
+const tasksProjectReportMeta = getMeta("task.projects.report");
+const tasksProjectReportRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tasks/projects/$projectId/report",
+  beforeLoad: authGuard,
+  component: () => {
+    const { projectId } = tasksProjectReportRoute.useParams();
+    const navigate = useNavigate();
+    return buildModuleRouteContent(
+      tasksProjectReportMeta,
+      "TASK",
+      <ProjectReportPage
+        projectId={projectId}
+        onBack={() =>
+          void navigate({
+            to: "/tasks/projects/$projectId" as "/",
+            params: { projectId } as never,
+          })
+        }
       />,
     );
   },
@@ -2092,8 +2135,10 @@ const routeTree = rootRoute.addChildren([
   leaveAuditLogsRoute,
   tasksRoute,
   tasksMyTasksRoute,
+  tasksOverdueRoute,
   tasksProjectsRoute,
   tasksProjectDetailRoute,
+  tasksProjectReportRoute,
   tasksTaskDetailRoute,
   notificationsRoute,
   notificationDetailRoute,
