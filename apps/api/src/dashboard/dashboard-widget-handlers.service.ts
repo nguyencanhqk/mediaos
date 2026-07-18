@@ -446,12 +446,12 @@ export class DashboardWidgetHandlersService {
   private async fetchHrOverview(ctx: WidgetHandlerContext): Promise<WidgetFetchResult> {
     // listHrEmployees ÁP scope filter + salary mask; ta CHỈ đếm (headcount/status/org-unit) — KHÔNG chạm
     // baseSalary/salaryType/PII ⇒ response + cache row KHÔNG chứa field mask-theo-người-xem (an toàn share).
-    const res = await this.hrRead.listHrEmployees(ctx.user, {
-      page: 1,
-      pageSize: 100,
-      sort: "fullName",
-      order: "asc",
-    });
+    const res = await this.hrRead.listHrEmployees(
+      ctx.user,
+      { page: 1, pageSize: 100, sort: "fullName", order: "asc" },
+      // S5-ME-BE-5: chỉ đếm headcount/status/org-unit — KHÔNG dùng avatar ⇒ bỏ presign (khỏi tốn hot-path).
+      { resolveAvatars: false },
+    );
     const byStatus: Record<string, number> = {};
     const byOrgUnit: Record<string, number> = {};
     for (const e of res.items) {
@@ -575,12 +575,12 @@ export class DashboardWidgetHandlersService {
 
   // ── NEW_EMPLOYEES (HrReadService.listHrEmployees sort=startDate desc; gate read:employee) — map non-PII ──
   private async fetchNewEmployees(ctx: WidgetHandlerContext): Promise<WidgetFetchResult> {
-    const res = await this.hrRead.listHrEmployees(ctx.user, {
-      page: 1,
-      pageSize: DASH_WIDGET_LIST_CAP,
-      sort: "startDate",
-      order: "desc",
-    });
+    const res = await this.hrRead.listHrEmployees(
+      ctx.user,
+      { page: 1, pageSize: DASH_WIDGET_LIST_CAP, sort: "startDate", order: "desc" },
+      // S5-ME-BE-5: widget map KHÔNG lấy avatarUrl ⇒ bỏ presign (khỏi tốn hot-path dashboard).
+      { resolveAvatars: false },
+    );
     // CHỈ directory-class — KHÔNG baseSalary/salaryType/gender/dateOfBirth/phone/contractType (dù list item có
     // thể mang chúng khi viewer đủ quyền, widget KHÔNG bao giờ phơi PII/lương).
     const items = res.items.map((e) => ({

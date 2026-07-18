@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore } from "@mediaos/web-core";
 import { AvatarMenu } from "./AvatarMenu";
 
@@ -19,8 +20,20 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     ...actual,
     logoutSession: vi.fn(),
     getAuthRedirectUrl: () => "http://auth.localhost/login",
+    // S5-ME-FE-4 — AvatarMenu đọc GET /me/avatar (fail-soft). Mặc định null (chưa có avatar → initials).
+    meApi: { ...actual.meApi, getAvatar: vi.fn(() => Promise.resolve(null)) },
   };
 });
+
+/** AvatarMenu giờ dùng useQuery (meApi.getAvatar) → cần QueryClientProvider. */
+function renderMenu() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <AvatarMenu />
+    </QueryClientProvider>,
+  );
+}
 
 function setAuthenticated() {
   useAuthStore.setState({
@@ -40,7 +53,7 @@ describe("AvatarMenu", () => {
   });
 
   it("'Tài khoản của tôi' điều hướng /account/profile (KHÔNG còn /home)", () => {
-    render(<AvatarMenu />);
+    renderMenu();
     fireEvent.click(screen.getByLabelText("Menu tài khoản"));
     fireEvent.click(screen.getByRole("menuitem", { name: /tài khoản của tôi/i }));
 
@@ -49,7 +62,7 @@ describe("AvatarMenu", () => {
   });
 
   it("'Đổi mật khẩu' vẫn điều hướng /account/change-password", () => {
-    render(<AvatarMenu />);
+    renderMenu();
     fireEvent.click(screen.getByLabelText("Menu tài khoản"));
     fireEvent.click(screen.getByRole("menuitem", { name: /đổi mật khẩu/i }));
 

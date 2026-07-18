@@ -232,12 +232,29 @@ function makeAudit() {
   return { record: vi.fn().mockResolvedValue(undefined) };
 }
 
+// S5-ME-BE-5 — AvatarPresignService mock: mô phỏng đúng hành vi http-passthrough (test dùng cdn URL) — fileId
+// (UUID) → không map (initials) vì verify link/image test THẬT ở avatar-presign.service.spec.ts + int-spec.
+function makeAvatarPresign() {
+  return {
+    resolveEmployeeAvatars: vi.fn(
+      async (_companyId: string, subjects: { employeeId: string; avatarUrl: string | null }[]) => {
+        const m = new Map<string, string>();
+        for (const s of subjects) {
+          if (s.avatarUrl && /^https?:\/\//.test(s.avatarUrl)) m.set(s.employeeId, s.avatarUrl);
+        }
+        return m;
+      },
+    ),
+  };
+}
+
 function makeService(
   opts: {
     perms?: Record<string, Decision>;
     permsByRow?: Record<string, Record<string, Decision>>;
     repo?: ReturnType<typeof makeRepo>;
     dataScope?: ReturnType<typeof makeDataScope>;
+    avatarPresign?: ReturnType<typeof makeAvatarPresign>;
   } = {},
 ) {
   const repo = opts.repo ?? makeRepo();
@@ -245,14 +262,16 @@ function makeService(
   const permission = makePermission(opts.perms ?? {}, opts.permsByRow);
   const dataScope = opts.dataScope ?? makeDataScope({ scope: "Company", inScope: true });
   const audit = makeAudit();
+  const avatarPresign = opts.avatarPresign ?? makeAvatarPresign();
   const svc = new HrReadService(
     repo as never,
     db as never,
     permission as never,
     dataScope as never,
     audit as never,
+    avatarPresign as never,
   );
-  return { svc, repo, db, permission, dataScope, audit };
+  return { svc, repo, db, permission, dataScope, audit, avatarPresign };
 }
 
 // ─── PERMISSION deny ─────────────────────────────────────────────────────────────

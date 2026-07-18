@@ -13,6 +13,8 @@ import { FilePolicyService } from "./file-policy.service";
 import { FileRepository } from "./file.repository";
 import { FilesController } from "./files.controller";
 import { FileService } from "./files.service";
+// S5-ME-BE-5 (additive): ký URL avatar directory-class (HR read/org-chart hiển thị ảnh nhân viên).
+import { AvatarPresignService } from "./avatar-presign.service";
 import { TempFileCleanupJobHandler } from "./temp-file-cleanup.job-handler";
 import { TempFileCleanupRepository } from "./temp-file-cleanup.repository";
 
@@ -50,6 +52,8 @@ import { TempFileCleanupRepository } from "./temp-file-cleanup.repository";
     // S2-FND-JOBS-1 (jobs_tempfile) — ADDITIVE. Handler tự đăng ký qua @SystemJobHandler metadata.
     TempFileCleanupRepository,
     TempFileCleanupJobHandler,
+    // S5-ME-BE-5 (additive): ký URL avatar directory-class (dùng FileRepository + STORAGE_ADAPTER sẵn có).
+    AvatarPresignService,
     {
       provide: FilePolicyService,
       useFactory: (permission: PermissionService): FilePolicyService =>
@@ -66,6 +70,8 @@ import { TempFileCleanupRepository } from "./temp-file-cleanup.repository";
     FileRepository,
     FileLinkRepository,
     TempFileCleanupJobHandler,
+    // S5-ME-BE-5 (additive): HR read/org-chart inject để resolve avatar fileId→URL directory-class.
+    AvatarPresignService,
   ],
 })
 export class FilesModule {}
