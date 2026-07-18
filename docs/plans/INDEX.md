@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**236 WO** · có micro-plan: **107/236** · ⬜ 18 chờ · 🔵 0 đang làm · ✅ 218 xong · 🔴 0 chặn
+**238 WO** · có micro-plan: **107/238** · ⬜ 20 chờ · 🔵 0 đang làm · ✅ 218 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -256,6 +256,8 @@
 | `S5-NOTI-FIX-1` | 🔴 | ✅ xong | [📄](S5-NOTI-FIX-1.md) | — | Backfill target_url_template cho 39 template notification global (QA2- |
 | `S5-NOTI-FIX-2` | 🔴 | ✅ xong | [📄](S5-NOTI-FIX-2.md) | — | Vá 3 event render placeholder câm TASK_COMMENT_CREATED · TASK_MENTIONE |
 | `S5-TASK-HRCODE-1` | 🔴 | ✅ xong | [📄](S5-TASK-HRCODE-1.md) | ✅S5-NOTI-FIX-2 | Cấp task_code cho task HR (createApprovalTaskTx ← leave/attendance-adj |
+| `S5-LEAVE-DEADCODE-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S5-TASK-HRCODE-1 | Dọn khối LeaveService chết (createRequest/approveRequest/rejectRequest |
+| `S5-SEQ-HARDEN-1` | 🔴 | ⬜ chờ | — *(chưa)* | ✅S5-TASK-HRCODE-1 | Gia cố cấp mã tuần tự: SAVEPOINT cho recovery 23505 (ensure-on-miss ra |
 | `S5-TASK-PIPELINE-1` | 🔴 | ⬜ chờ | [📄](S5-TASK-PIPELINE-1.md) | ✅S5-TASK-HRCODE-1 | Đợt A — Kanban cột pipeline tuỳ biến theo dự án (project_states) thay  |
 | `S5-TASK-NAV-TREE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S5-TASK-PIPELINE-1 | Đợt B — Sidebar cây phòng ban: dự án lồng dưới phòng ban + menu ⋯ mỗi  |
 | `S5-TASK-WORKSPACE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S5-TASK-PIPELINE-1 | Đợt D1 — Vỏ workspace dự án: tab bar (Bảng·Danh sách·Báo cáo·Hoạt động |

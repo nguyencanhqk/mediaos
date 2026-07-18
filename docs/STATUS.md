@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-18 15:48Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-18 16:20Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -15,6 +15,8 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 - 🟡 `S5-QA-REG-1` QA regression suite MVP (test-case matrix theo module × role) + UI state hardening + responsive/accessibility smoke — WS-F
 - 🟡 `S5-QA-DASHNOTI-1` Dashboard & Notification hardening: widget degraded/cache đúng, unread count chính xác, deep link an toàn, invalidation theo event — WS-G
 - 🟡 `S5-PERF-1` Performance/reliability smoke + observability baseline: SLA danh sách nhân viên·bảng công·task·notification·dashboard + logging/monitoring/alerting — WS-H
+- 🔴 `S5-LEAVE-DEADCODE-1` Dọn khối LeaveService chết (createRequest/approveRequest/rejectRequest/cancelRequest + CreateLeaveRequestDto/createLeaveRequestSchema) — di sản G11 còn sót sau rebuild SPEC-05 Sprint 3, không route HTTP nào tới được
+- 🔴 `S5-SEQ-HARDEN-1` Gia cố cấp mã tuần tự: SAVEPOINT cho recovery 23505 (ensure-on-miss race hiện trả 500 do 25P02), allocate sau authz tầng-service (chống đốt counter), phân biệt constraint khi map unique-violation
 - 🔴 `S5-TASK-PIPELINE-1` Đợt A — Kanban cột pipeline tuỳ biến theo dự án (project_states) thay 5 cột FSM cố định; nới FSM cho phép mở lại + auto-map state_group→status qua changeStatus; backfill state_id từ task_status
 
 **CHỜ (kẹt phụ thuộc):**
@@ -34,7 +36,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `docs/s5-task-ux2-plan` · **file đang đổi (dirty)**: 6
+- **branch**: `docs/s5-task-ux2-plan` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 178 — `0498_s5_notifix2_task_code_seqgen` (179 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -43,6 +45,9 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `bd80884c` | 2026-07-18 | Merge remote-tracking branch 'origin/master' into docs/s5-task-ux2-plan |
+| `a6a900cd` | 2026-07-18 | fix(task,att): task HR từ đơn điều chỉnh công mang task_code THẬT + counter Inactive → 409 (S5-TASK-HRCODE-1) (#231) |
+| `8977cd16` | 2026-07-18 | docs(task): kế hoạch đợt A pipeline + seed 4 WO redesign TASK (benchmark MISA AMIS) |
 | `f00167db` | 2026-07-18 | fix(hr): /hr/audit-logs luôn "Không thể tải lịch sử" (schema client lệch hình dạng response) (#230) |
 | `b02292b8` | 2026-07-18 | feat(me,hr,noti): gom self-service về ME + sửa lỗi duyệt yêu cầu hồ sơ + thông báo phê duyệt (#229) |
 | `f49a1ce3` | 2026-07-18 | feat(me,hr): avatar own-scope + hiển thị khắp nơi + HR-managed (S5-ME-BE-4/FE-4 · BE-5 · HR-AVATAR-1) (#228) |
@@ -52,9 +57,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `0397bebe` | 2026-07-18 | feat(hr): S5-HR-ORGCHART-BE-1 — GET /hr/org-chart/employees (cây nhân sự scoped, directory-class) + employeeCount /org/units/tree 🔴 (#224) |
 | `f3d8fa9a` | 2026-07-17 | test(me-qa): S5-ME-QA-1 — IDOR sweep /me/* + cross-user/tenant deny + aggregation degraded + preference policy (SPEC-09 §20) (#223) |
 | `7a41e79b` | 2026-07-17 | feat(me-fe): S5-ME-FE-2 — Hồ sơ của tôi + Tài khoản & bảo mật dưới /me/* + màn Hoạt động bảo mật (ME-SCREEN-002..008) (#222) |
-| `d5fc9e14` | 2026-07-17 | S5-FE-TASK-5: Kanban card giàu tín hiệu + lọc theo assignee (SPEC-06 §13.8) — FIX-2 LIGHT gate (#218) |
-| `2df70c39` | 2026-07-17 | feat(me-fe): S5-ME-FE-3 — Công việc của tôi + Thông báo & tùy chọn + Cài đặt cá nhân (ME-SCREEN-009..014) (#217) |
-| `3564d1eb` | 2026-07-17 | feat(leave-fe): S5-LEAVE-HOLIDAYS-MOVE-1 — re-home màn Ngày nghỉ lễ /system/public-holidays → /leave/public-holidays (FE-only, gate + BE giữ nguyên) (#221) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
