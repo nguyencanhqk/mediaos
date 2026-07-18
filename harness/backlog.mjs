@@ -6887,7 +6887,9 @@ export const backlog = [
     status: "todo",
     paths: [
       "apps/api/src/tasks/**",
-      "apps/api/src/leave/**",
+      // apps/api/src/leave/** GỠ khỏi paths 2026-07-18: LeaveService.createRequest/approve/reject/cancel
+      // là CODE CHẾT (không route HTTP nào tới được — POST /leave/requests đi LeaveRequestService.createDraft).
+      // Wiring task_code vào đó đã revert. Dọn khối chết = WO riêng S5-LEAVE-DEADCODE-1.
       "apps/api/src/attendance/**",
       "apps/api/src/foundation/sequences/**",
       "packages/contracts/src/**",
@@ -6903,10 +6905,72 @@ export const backlog = [
       "Residual LOW db-review: ensureCounterTx recovery 23505 re-select trên tx aborted (25P02) — xem sequence.repository.ts:119; sửa cùng lượt nếu tiện",
     ],
     done_when: [
-      "Task HR tạo từ đơn nghỉ + điều chỉnh công có task_code THẬT (SequenceService, counter 'task' 0498) — mã cấp TRƯỚC tx đơn từ caller, gap-OK khi tx rollback; int-spec: submit đơn nghỉ → task HR có mã, comment lên task đó render mã thật (không cần fallback)",
-      "SequenceInactiveError (counter bị PATCH Inactive) map 4xx mã TASK-ERR thay vì 500 raw ở POST /tasks + đường tạo đơn",
+      // PHẠM VI THU HẸP 2026-07-18 (owner chốt): 'đơn nghỉ' GỠ khỏi acceptance — đường đó là code chết,
+      // và SPEC-05 LEAVE KHÔNG yêu cầu Task Hub (grep 0 kết quả); SPEC-06 chỉ nhắc nghỉ phép ở §11.1
+      // 'cảnh báo khi giao task cho người đang nghỉ'. Bản rebuild Sprint 3 (#56) bỏ liên kết Task Hub
+      // thời G11 là ĐÚNG SPEC — không phải bug bỏ sót.
+      "Task HR tạo từ đơn ĐIỀU CHỈNH CÔNG có task_code THẬT (SequenceService, counter 'task' 0498) — mã cấp TRƯỚC tx đơn từ caller, gap-OK khi tx rollback; int-spec HTTP thật: POST /attendance/adjustment-requests → task HR có mã, comment lên task đó render mã thật (không cần fallback)",
+      "SequenceInactiveError (counter bị PATCH Inactive) map 4xx mã TASK-ERR thay vì 500 raw ở POST /tasks + đường tạo đơn điều chỉnh công",
       "contracts users/employees fullName có .max() hợp lý (chống payload actor_name không giới hạn → dead-letter)",
-      "check.sh xanh LANE_DB; crown (chạm FSM đơn nghỉ/điều chỉnh công) ⇒ FULL gate",
+      "check.sh xanh LANE_DB; crown (chạm FSM điều chỉnh công + sequence) ⇒ FULL gate",
+    ],
+  },
+  // ═══ 2026-07-18 — phái sinh từ FULL gate S5-TASK-HRCODE-1 (phát hiện khi viết int-spec) ═══
+  {
+    id: "S5-LEAVE-DEADCODE-1",
+    module: "LEAVE",
+    layer: "BE",
+    title:
+      "Dọn khối LeaveService chết (createRequest/approveRequest/rejectRequest/cancelRequest + CreateLeaveRequestDto/createLeaveRequestSchema) — di sản G11 còn sót sau rebuild SPEC-05 Sprint 3, không route HTTP nào tới được",
+    zone: "red",
+    status: "todo",
+    paths: ["apps/api/src/leave/**", "packages/contracts/src/**"],
+    skills: ["code-review"],
+    depends_on: ["S5-TASK-HRCODE-1"],
+    src: [
+      "Phát hiện 2026-07-18 khi viết int-spec HRCODE-1: POST /leave/requests (leave.controller.ts:254) gọi LeaveRequestService.createDraft — KHÔNG phải LeaveService.createRequest; approve/reject/cancel thật đi LeaveApprovalService/LeaveRevokeService; cả hai KHÔNG import HrTasksService",
+      "CreateLeaveRequestDto/createLeaveRequestSchema không được import ở BẤT KỲ controller nào (grep toàn apps/api/src)",
+      "leave_requests.task_id chỉ được SELECT (leave.repository.ts:286), KHÔNG bao giờ được ghi bởi đường sống ⇒ luôn NULL dưới traffic thật",
+      "ĐÚNG SPEC: SPEC-05 LEAVE không nhắc Task Hub (0 kết quả grep); SPEC-06 chỉ nhắc nghỉ phép ở §11.1 (cảnh báo giao task cho người đang nghỉ). Rebuild Sprint 3 #56 bỏ liên kết G11 là hợp lệ — WO này chỉ DỌN, KHÔNG khôi phục liên kết",
+      "Bẫy: memory review-gate-blind-to-deletions — reviewer chỉ soi code THÊM, PR gỡ route mà consumer còn sống vẫn PASS ⇒ phải grep consumer THẬT trước khi xoá",
+    ],
+    done_when: [
+      "Xoá LeaveService.createRequest/approveRequest/rejectRequest/cancelRequest + phần leave.service.spec tương ứng; app boot xanh, POST /leave/requests + approve/reject/cancel HOẠT ĐỘNG NGUYÊN VẸN (int-spec leave-request.int.spec.ts giữ xanh dưới LANE_DB)",
+      "Xoá CreateLeaveRequestDto + createLeaveRequestSchema nếu grep xác nhận 0 consumer; nếu còn consumer thì GIỮ và ghi rõ lý do",
+      "Gỡ HrTasksService khỏi LeaveModule providers nếu không còn ai dùng trong module (closeTaskTx/cancelTaskTx cũng chỉ dùng ở khối chết) — xác nhận bằng grep trước khi gỡ",
+      "Quyết định tường minh + ghi vào docs: leave_requests.task_id giữ (cột lịch sử) hay drop qua migration expand-contract; nếu drop thì TÁCH release riêng (memory migration-expand-contract-required)",
+      "FULL gate (xoá ở vùng đơn nghỉ = crown) + check.sh --lane-db xanh",
+      "Sau khi khối chết biến mất: đổi createApprovalTaskTx taskCode thành BẮT BUỘC (taskCode: string) — TypeScript biến 'quên truyền' thành lỗi build thay vì NULL câm runtime; cập nhật hr-tasks.service.spec bỏ case backward-compat",
+    ],
+  },
+  {
+    id: "S5-SEQ-HARDEN-1",
+    module: "FND",
+    layer: "BE",
+    title:
+      "Gia cố cấp mã tuần tự: SAVEPOINT cho recovery 23505 (ensure-on-miss race hiện trả 500 do 25P02), allocate sau authz tầng-service (chống đốt counter), phân biệt constraint khi map unique-violation",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/foundation/sequences/**",
+      "apps/api/src/attendance/**",
+      "apps/api/src/tasks/**",
+      "apps/api/test/integration/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-TASK-HRCODE-1"],
+    src: [
+      "FULL gate S5-TASK-HRCODE-1 (security-reviewer MEDIUM-4 + silent-failure F5): sequence.repository.ts:119-125 re-SELECT trên CÙNG tx sau lỗi 23505 — Postgres đã abort tx ⇒ lệnh sau ném 25P02 'current transaction is aborted', KHÔNG trả row raced. Recovery graceful KHÔNG hoạt động. Có sẵn từ trước nhưng PR HRCODE-1 nâng số caller từ 1 lên 3 (blast radius rộng hơn). Sửa: SAVEPOINT quanh INSERT, hoặc ON CONFLICT DO NOTHING + re-select, hoặc re-select ở tx MỚI",
+      "security-reviewer MEDIUM-1: attendance-adjustment.service.createRequest allocate mã TRƯỚC authz tầng-service (resolveCreateTarget 403 / assertPeriodOpenForDate 409) — actor qua PermissionGuard nhưng fail ở service vẫn đốt counter mỗi lần thử (counter inflation, DoS-lite). So sánh task-core.service.ts:145 assert permission RỒI mới allocate. Cân nhắc: chuyển allocate xuống sau khi resolve target/period thành công (giữ nguyên nguyên tắc allocate NGOÀI tx), hoặc chấp nhận + ghi rõ trong doc thiết kế",
+      "security-reviewer LOW: attendance-adjustment mapConflict dùng isUniqueViolation không phân biệt constraint — task HR nay ghi task_code non-null nên vi phạm uq_tasks_company_task_code_active (0478:370) sẽ hiện sai thành 'Đã có đơn điều chỉnh đang chờ duyệt cho ngày X'. Khả năng chạm thấp (không có route DELETE counter) nhưng thông báo sai lệch. Sửa: check constraint name trước khi map",
+      "security-reviewer LOW: task-code.util.allocateTaskCode ràng buộc 'gọi NGOÀI tx' chỉ nằm ở comment — caller tương lai gọi trong withTenant sẽ mở connection thứ 2 (nguy cơ cạn pool/deadlock dưới tải). Sửa: đổi tên allocateTaskCodeOutsideTx hoặc assert runtime",
+      "silent-failure F7: bảo vệ int-spec phụ thuộc ĐÚNG 1 dòng LANE_DB trong .github/workflows/api.yml:196-199 — ai gỡ dòng đó thì hr-task-code.int-spec âm thầm quay về SKIP. Cân nhắc thêm canary step tường minh cho spec này",
+    ],
+    done_when: [
+      "Race ensure-on-miss (2 request đồng thời cho company CHƯA có counter) trả mã hợp lệ cho cả hai — KHÔNG 500/25P02; int-spec LANE_DB chạy song song chứng minh",
+      "Quyết định tường minh về thứ tự allocate-vs-authz (sửa hoặc chấp nhận có văn bản); nếu sửa thì deny-path test chứng minh 403/409 KHÔNG đốt counter",
+      "Vi phạm uq_tasks_company_task_code_active map ra thông báo ĐÚNG nguyên nhân, có log",
+      "FULL gate + check.sh --lane-db xanh",
     ],
   },
 ];
