@@ -18,6 +18,9 @@ const ACTOR = "11111111-1111-1111-1111-111111111111";
 const OWN_EMP = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
 const OTHER_EMP = "ffffffff-ffff-ffff-ffff-ffffffffffff";
 const REQ = "dddddddd-dddd-dddd-dddd-dddddddddddd";
+// S5-TASK-HRCODE-1: mã task THẬT cấp qua tx riêng TRƯỚC tx đơn (mirror TaskCoreService.createTask).
+// Đơn điều chỉnh công nay ghi task_code vào row tasks (không NULL câm) — comment/mention render mã thật.
+const TASK_CODE = "TASK-0042";
 const actor = { id: ACTOR, companyId: COMPANY };
 
 function empScope(id: string, over: Record<string, unknown> = {}) {
@@ -93,6 +96,10 @@ function build(
     resolveStrongestScope: vi.fn().mockResolvedValue(opts.strongestScope ?? "Company"),
   };
   const hrTasks = {
+    // S5-TASK-HRCODE-1: cấp mã Ở TX RIÊNG TRƯỚC tx đơn (mirror createTask). Default trả mã thật để
+    // happy-path xác nhận truyền xuống createApprovalTaskTx; override mockRejectedValue để mô phỏng
+    // counter Inactive → 4xx nổi lên NGUYÊN VẸN (không bị mapConflict nuốt thành 500).
+    allocateTaskCodeBeforeTx: vi.fn().mockResolvedValue(TASK_CODE),
     createApprovalTaskTx: vi.fn().mockResolvedValue({ id: "task-1" }),
     closeTaskTx: vi.fn().mockResolvedValue(undefined),
   };
@@ -113,7 +120,7 @@ function build(
     audit as never,
     outbox as never,
   );
-  return { service, repo, attendanceRepo, dataScope, permission, hrTasks, audit, outbox };
+  return { service, repo, attendanceRepo, dataScope, permission, hrTasks, audit, outbox, db };
 }
 
 const CREATE_DTO = {
@@ -152,6 +159,45 @@ describe("AttendanceAdjustmentService — create deny-paths", () => {
       repo: { insertRequestTx: vi.fn().mockRejectedValue({ code: "23505" }) },
     });
     await expect(service.createRequest(actor, CREATE_DTO)).rejects.toThrow(ConflictException);
+  });
+});
+
+/**
+ * S5-TASK-HRCODE-1 — task HR sinh từ đơn điều chỉnh công phải mang task_code THẬT (không NULL câm sau
+ * cut-over 0498), và mã phải cấp Ở TX RIÊNG TRƯỚC tx đơn để không giữ lock counter suốt tx dài.
+ */
+describe("AttendanceAdjustmentService — task_code cho task HR", () => {
+  it("cấp mã ở tx RIÊNG TRƯỚC tx đơn rồi ghi vào task HR", async () => {
+    const { service, hrTasks, db } = build();
+    await service.createRequest(actor, CREATE_DTO);
+
+    // Mã cấp cho đúng company (mirror TaskCoreService.createTask).
+    expect(hrTasks.allocateTaskCodeBeforeTx).toHaveBeenCalledWith(COMPANY);
+    // Invocation-order: allocate PHẢI chạy TRƯỚC khi mở db.withTenant — counter FOR UPDATE commit ngay,
+    // KHÔNG bị giữ suốt tx đơn dài (tránh nghẽn khi nhiều người gửi đơn cùng lúc).
+    expect(hrTasks.allocateTaskCodeBeforeTx.mock.invocationCallOrder[0]).toBeLessThan(
+      db.withTenant.mock.invocationCallOrder[0],
+    );
+    // Mã thật ghi xuống row tasks ⇒ comment/mention render mã THẬT thay '{task_code}'.
+    expect(hrTasks.createApprovalTaskTx).toHaveBeenCalledWith(
+      expect.anything(),
+      COMPANY,
+      expect.objectContaining({ taskCode: TASK_CODE }),
+    );
+  });
+
+  it("để lỗi counter Inactive nổi lên NGUYÊN VẸN 4xx, không nuốt thành 500 và không mở tx đơn", async () => {
+    const { service, hrTasks, db, repo } = build();
+    // Util map SequenceInactiveError → 409 TASK-ERR-CODE-COUNTER-INACTIVE (fail-loud, 1 điểm map chung).
+    hrTasks.allocateTaskCodeBeforeTx.mockRejectedValue(
+      new ConflictException("TASK-ERR-CODE-COUNTER-INACTIVE"),
+    );
+
+    await expect(service.createRequest(actor, CREATE_DTO)).rejects.toThrow(ConflictException);
+    // Ném TRƯỚC tx ⇒ không mở transaction, không tạo task task_code=NULL câm, không ghi đơn dở dang.
+    expect(db.withTenant).not.toHaveBeenCalled();
+    expect(hrTasks.createApprovalTaskTx).not.toHaveBeenCalled();
+    expect(repo.insertRequestTx).not.toHaveBeenCalled();
   });
 });
 

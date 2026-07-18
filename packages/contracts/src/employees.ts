@@ -59,7 +59,7 @@ export type EmployeeListItemDto = z.infer<typeof employeeListItemSchema>;
 export const createEmployeeProfileSchema = z.object({
   userId: z.string().uuid().optional(),
   email: z.string().email().optional(),
-  fullName: z.string().min(1).optional(),
+  fullName: z.string().min(1).max(200).optional(),
   password: z.string().min(8).optional(),
   employeeCode: z.string().optional(),
   orgUnitId: z.string().uuid().optional(),
@@ -103,7 +103,7 @@ export type UpdateEmployeeProfileRequest = z.infer<typeof updateEmployeeProfileS
  */
 export const importEmployeeRowSchema = z.object({
   email: z.string().email(),
-  fullName: z.string().min(1),
+  fullName: z.string().min(1).max(200),
   employeeCode: z.string().optional(),
   orgUnitName: z.string().optional(),
   positionName: z.string().optional(),

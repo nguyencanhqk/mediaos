@@ -420,6 +420,11 @@ export const tasks = pgTable(
     }),
     sequence: integer("sequence"),
     startDate: timestamp("start_date", { withTimezone: true }),
+    // S5-NOTI-FIX-2 (mig 0478 cột + 0498 seed/backfill) — mã hiển thị công khai TASK-0001… Nullable: task
+    // cũ trước cut-over đã backfill (0498); task mới cấp qua SequenceService TRƯỚC insert. Map để HR task
+    // (hr-tasks.service, drizzle insert) GHI type-safe qua .values({ taskCode }) — S5-TASK-HRCODE-1.
+    // uq_tasks_company_task_code_active (0478) chặn trùng còn-sống. KHÔNG migration mới (cột đã tồn tại).
+    taskCode: text("task_code"),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

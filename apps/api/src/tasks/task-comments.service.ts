@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import type {
@@ -58,6 +59,8 @@ const ERR = {
  */
 @Injectable()
 export class TaskCommentsService {
+  private readonly logger = new Logger(TaskCommentsService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly repo: TaskCommentsRepository,
@@ -326,11 +329,15 @@ export class TaskCommentsService {
    * Non-sensitive: task_code (mã công khai) + actor_name (tên người bình luận) — không thuộc
    * SENSITIVE_PAYLOAD_KEYS (BẤT BIẾN #3, notification-engine.errors.ts assertPayloadSafe).
    *
-   * FULL-gate fix HIGH-1: `task_code` coalesce sang `title` khi NULL — task duyệt HR
-   * (hr-tasks.service.createApprovalTaskTx, gọi từ leave/attendance-adjustment) CHƯA cut-over code-gen
-   * (counter giữ lock suốt tx đơn — cần thiết kế riêng, follow-up WO S5-TASK-HRCODE-1) nên vẫn đẻ
-   * task_code=NULL sau 0498; comment/mention lên task đó KHÔNG được rớt lại '{task_code}' trần
-   * (đúng lời hứa QA2-CRIT-002). Body khi fallback: "… trong task <title>." — đọc tự nhiên.
+   * FULL-gate fix HIGH-1: `task_code` coalesce sang `title` khi NULL — comment/mention lên task
+   * KHÔNG được rớt lại '{task_code}' trần (đúng lời hứa QA2-CRIT-002). Body khi fallback:
+   * "… trong task <title>." — đọc tự nhiên.
+   *
+   * S5-TASK-HRCODE-1: đường HR (attendance-adjustment) ĐÃ cut-over ⇒ task_code thật, không còn chạm
+   * fallback. Nhưng nguồn NULL vẫn CÒN SỐNG: workflow.repository.createTask (task_type='workflow_step',
+   * WorkflowModule đăng ký ở app.module) không cấp mã. Vì fallback trông y hệt thành công, blind spot này
+   * sẽ KHÔNG BAO GIỜ tự lộ ⇒ log WARN khi rơi nhánh fallback để nó phát hiện được (không đổi hành vi,
+   * không ném — comment vẫn gửi bình thường).
    */
   private commentPayload(
     eventCode: string,
@@ -340,6 +347,13 @@ export class TaskCommentsService {
     commentId: string,
     actorName: string | null,
   ): Record<string, unknown> {
+    if (!task.taskCode) {
+      // Không ném: comment vẫn phải gửi. Chỉ làm blind spot NHÌN THẤY ĐƯỢC — task_code=NULL nghĩa là
+      // còn nguồn tạo task chưa cut-over code-gen (workflow_step), người dùng sẽ thấy tiêu đề thay vì mã.
+      this.logger.warn(
+        `task_code NULL → fallback sang title cho task ${task.id} (event ${eventCode}). Nguồn tạo task này chưa cut-over code-gen counter 'task'.`,
+      );
+    }
     return {
       eventCode,
       taskId: task.id,
