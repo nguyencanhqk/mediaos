@@ -72,6 +72,10 @@ import { TempFileCleanupRepository } from "./temp-file-cleanup.repository";
     TempFileCleanupJobHandler,
     // S5-ME-BE-5 (additive): HR read/org-chart inject để resolve avatar fileId→URL directory-class.
     AvatarPresignService,
+    // S5-HR-AVATAR-1 (additive): HrEmployeeAvatarService ghi file_access_logs khi TỰ quản lý link (bypass
+    // FileService.link/unlink own-scope) — cần inject trực tiếp (mirror why FileRepository/FileLinkRepository
+    // are already exported for the same reason).
+    FileAccessLogService,
   ],
 })
 export class FilesModule {}

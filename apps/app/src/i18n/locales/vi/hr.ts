@@ -93,6 +93,19 @@ export default {
   detail: {
     title: "Hồ sơ nhân viên",
     backToList: "Quay lại danh sách",
+    // S5-HR-AVATAR-1 — HR/admin đổi/gỡ avatar của NHÂN VIÊN KHÁC trên cover header (gate update:employee).
+    avatar: {
+      change: "Đổi ảnh",
+      remove: "Gỡ ảnh",
+      uploading: "Đang tải lên…",
+      removing: "Đang gỡ…",
+      error: {
+        type: "Chỉ chấp nhận ảnh PNG, JPG hoặc WEBP.",
+        size: "Ảnh vượt quá dung lượng cho phép (tối đa 5MB).",
+        upload: "Tải ảnh lên thất bại. Vui lòng thử lại.",
+        remove: "Gỡ ảnh thất bại. Vui lòng thử lại.",
+      },
+    },
     tabs: {
       overview: "Tổng quan",
       personal: "Thông tin cá nhân",

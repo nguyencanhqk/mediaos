@@ -1,13 +1,13 @@
 import { Injectable } from "@nestjs/common";
 import { and, desc, eq, inArray, isNull, like, ne, sql } from "drizzle-orm";
 import type { TenantTx } from "../../db/db.service";
-import { employeeProfiles } from "../../db/schema/employees";
 import { fileLinks, files, type FileRecord, type NewFileRecord } from "../../db/schema/files";
 
 /**
  * Taxonomy link avatar — KHỚP me.constants (ME_MODULE_CODE / ME_AVATAR_ENTITY_TYPE) + fileLinkTypeSchema.
  * Hardcode literal Ở ĐÂY vì foundation/files KHÔNG phụ thuộc module `me` (chiều phụ thuộc: me → foundation).
- * NGUỒN tạo link DUY NHẤT = MeAvatarService.setAvatar (đã validate ownerUserId + Uploaded + image/*).
+ * NGUỒN tạo link giờ có 2: MeAvatarService.setAvatar (self-service) VÀ HrEmployeeAvatarService.setEmployeeAvatar
+ * (S5-HR-AVATAR-1, HR-managed — xem hr-employee-avatar.service.ts AVATAR_LINK_* mirror).
  */
 const AVATAR_LINK_MODULE = "ME";
 const AVATAR_LINK_ENTITY = "avatar";
@@ -48,11 +48,19 @@ export class FileRepository {
   }
 
   /**
-   * S5-ME-BE-5 — batch tra AVATAR ĐÃ XÁC MINH theo fileIds (cho AvatarPresignService ký thumbnail directory-
-   * class). SELF-DEFENDING (crown — KHÔNG tin cột `avatar_url` đa-người-ghi): CHỈ trả file mà
-   *   (a) có 1 file_links ME/avatar/Avatar SỐNG (nguồn tạo DUY NHẤT = MeAvatarService.setAvatar, đã validate
-   *       ownerUserId + Uploaded + image/*) ⇒ chống `avatar_url` bị đầu độc trỏ file bất kỳ trong tenant, VÀ
+   * S5-ME-BE-5 (RECONCILE S5-HR-AVATAR-1) — batch tra AVATAR ĐÃ XÁC MINH theo fileIds (cho
+   * AvatarPresignService ký thumbnail directory-class). SELF-DEFENDING (crown — KHÔNG tin cột `avatar_url`
+   * đa-người-ghi): CHỈ trả file mà
+   *   (a) có 1 file_links ME/avatar/Avatar SỐNG, VÀ
    *   (b) file image/* + Uploaded + non-Infected + chưa xoá (guard lại lần 2, phòng link cũ trỏ file đã đổi).
+   *
+   * Owner-check (defense-in-depth): `files.owner_user_id = file_links.created_by` — NGƯỜI TẠO LINK phải sở
+   * hữu file (RECONCILE 2026-07-18, thay `= employee_profiles.user_id`). Bất biến ĐÚNG: "người TẠO link
+   * avatar phải sở hữu file". Self-service (MeAvatarService.setAvatar): created_by=employee, owner=employee
+   * ✓. HR-managed (HrEmployeeAvatarService.setEmployeeAvatar): created_by=HR, owner=HR ✓ (mở đường HR upload
+   * hộ NV — owner cũ `=employee.user_id` sẽ CHẶN nhầm case này). Forge (ai đó gắn file NGƯỜI KHÁC làm avatar
+   * mình): owner(victim) ≠ created_by(kẻ gắn) ⇒ loại — VẪN CHẶN. Bỏ JOIN employee_profiles (không còn cần).
+   *
    * Trả kèm `employeeId` (= link.entity_id) để caller khớp ĐÚNG (employee, file) — B mượn fileId avatar của A
    * (đầu độc chéo) KHÔNG khớp (entity_id=A ≠ B) ⇒ KHÔNG ký cho B. Company-scoped + RLS. ids rỗng → [].
    */
@@ -62,38 +70,30 @@ export class FileRepository {
     tx: TenantTx,
   ): Promise<VerifiedAvatarMeta[]> {
     if (fileIds.length === 0) return [];
-    return (
-      tx
-        .select({
-          employeeId: fileLinks.entityId,
-          fileId: files.id,
-          storagePath: files.storagePath,
-        })
-        .from(fileLinks)
-        .innerJoin(files, eq(files.id, fileLinks.fileId))
-        // Defense-in-depth (security-review S5-ME-BE-5): file PHẢI do CHÍNH user của employee (link.entity_id)
-        // sở hữu ⇒ dù có FORGE link ME/avatar (gắn file người khác làm avatar mình), owner_user_id ≠ employee.user_id
-        // ⇒ KHÔNG ký. Khớp bất biến MeAvatarService.setAvatar (file own-uploaded).
-        .innerJoin(employeeProfiles, eq(employeeProfiles.id, fileLinks.entityId))
-        .where(
-          and(
-            eq(fileLinks.companyId, companyId),
-            eq(fileLinks.moduleCode, AVATAR_LINK_MODULE),
-            eq(fileLinks.entityType, AVATAR_LINK_ENTITY),
-            eq(fileLinks.linkType, AVATAR_LINK_TYPE),
-            isNull(fileLinks.deletedAt),
-            eq(files.companyId, companyId),
-            inArray(files.id, fileIds),
-            isNull(files.deletedAt),
-            eq(files.uploadStatus, "Uploaded"),
-            ne(files.scanStatus, "Infected"),
-            like(files.mimeType, "image/%"),
-            eq(employeeProfiles.companyId, companyId),
-            isNull(employeeProfiles.deletedAt),
-            eq(files.ownerUserId, employeeProfiles.userId),
-          ),
-        )
-    );
+    return tx
+      .select({
+        employeeId: fileLinks.entityId,
+        fileId: files.id,
+        storagePath: files.storagePath,
+      })
+      .from(fileLinks)
+      .innerJoin(files, eq(files.id, fileLinks.fileId))
+      .where(
+        and(
+          eq(fileLinks.companyId, companyId),
+          eq(fileLinks.moduleCode, AVATAR_LINK_MODULE),
+          eq(fileLinks.entityType, AVATAR_LINK_ENTITY),
+          eq(fileLinks.linkType, AVATAR_LINK_TYPE),
+          isNull(fileLinks.deletedAt),
+          eq(files.companyId, companyId),
+          inArray(files.id, fileIds),
+          isNull(files.deletedAt),
+          eq(files.uploadStatus, "Uploaded"),
+          ne(files.scanStatus, "Infected"),
+          like(files.mimeType, "image/%"),
+          eq(files.ownerUserId, fileLinks.createdBy),
+        ),
+      );
   }
 
   /**

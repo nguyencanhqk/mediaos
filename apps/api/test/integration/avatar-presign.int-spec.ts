@@ -1,11 +1,18 @@
 /**
- * S5-ME-BE-5 (security-review deny-path, RED-first) — FileRepository.findVerifiedAvatarsTx trên Postgres THẬT
- * (DB CÔ LẬP). Chốt cổng SELF-DEFENDING của resolve avatar directory-class: CHỈ trả file mà
- *   (a) có 1 file_links ME/avatar/Avatar SỐNG (nguồn tạo DUY NHẤT = MeAvatarService.setAvatar), VÀ
+ * S5-ME-BE-5 (security-review deny-path, RED-first) + RECONCILE S5-HR-AVATAR-1 —
+ * FileRepository.findVerifiedAvatarsTx trên Postgres THẬT (DB CÔ LẬP). Chốt cổng SELF-DEFENDING của resolve
+ * avatar directory-class: CHỈ trả file mà
+ *   (a) có 1 file_links ME/avatar/Avatar SỐNG (nguồn tạo có 2: MeAvatarService.setAvatar self-service VÀ
+ *       HrEmployeeAvatarService.setEmployeeAvatar HR-managed, S5-HR-AVATAR-1), VÀ
  *   (b) image/* + Uploaded + non-Infected + chưa xoá,
  * kèm employeeId=link.entity_id để caller khớp ĐÚNG cặp (chống đầu độc `avatar_url` đa-người-ghi qua
  * profile-change-request `avatar_file_id`). Mọi ca ĐỎ (non-image / no-link / Pending / Infected / link đã
  * xoá / cross-tenant / wrong linkType) → KHÔNG trả ⇒ resolve KHÔNG ký ⇒ initials (không rò file nội-tenant).
+ *
+ * RECONCILE 2026-07-18: owner-check đổi từ `files.owner_user_id = employee_profiles.user_id` sang
+ * `files.owner_user_id = file_links.created_by` (NGƯỜI TẠO LINK phải sở hữu file) — mở đường HR-managed
+ * (owner=HR=created_by) mà VẪN chặn forge (owner victim ≠ created_by kẻ gắn). Xem file.repository.ts
+ * findVerifiedAvatarsTx docstring.
  *
  * Gate `hasDb && LANE_DB` (memory integration-test-lane-db-gate). KHÔNG cần MinIO (chỉ test tầng repo/SQL —
  * ca deny không chạm storage; ca allow chỉ assert repo TRẢ ĐÚNG, việc ký ở unit).
@@ -191,8 +198,8 @@ describe.skipIf(!runDb)("S5-ME-BE-5 findVerifiedAvatarsTx (self-defending avatar
     expect(await verify(A.companyId, [fileId])).toHaveLength(0);
   });
 
-  it("DENY — FORGE link: file NGƯỜI KHÁC upload gắn làm avatar của mình → loại (owner_user_id ≠ employee.user)", async () => {
-    // Vector admin: gắn file của victim (owner=victim) làm avatar employee của mình (entity=empA, user=userA).
+  it("DENY — FORGE link: file NGƯỜI KHÁC upload gắn làm avatar của mình → loại (owner_user_id ≠ created_by)", async () => {
+    // Vector admin: gắn file của victim (owner=victim) làm avatar employee của mình (entity=empA, created_by=userA).
     const pA = await person(A);
     const victim = await seedUser(
       direct,
@@ -201,8 +208,28 @@ describe.skipIf(!runDb)("S5-ME-BE-5 findVerifiedAvatarsTx (self-defending avatar
       pwHash,
     );
     const victimFile = await insertFile(direct, A.companyId, victim); // image, Uploaded, owner=victim
-    await insertAvatarLink(direct, A.companyId, victimFile, pA.employeeId, pA.userId); // FORGE: entity=empA
-    // Link + image + Uploaded ĐỦ, NHƯNG owner_user_id(victim) ≠ employeeProfiles.user_id(userA) ⇒ loại.
+    await insertAvatarLink(direct, A.companyId, victimFile, pA.employeeId, pA.userId); // FORGE: created_by=userA
+    // Link + image + Uploaded ĐỦ, NHƯNG owner_user_id(victim) ≠ file_links.created_by(userA) ⇒ loại
+    // (RECONCILE: cổng mới `owner = created_by` VẪN chặn forge — kẻ gắn link ≠ chủ sở hữu file).
     expect(await verify(A.companyId, [victimFile])).toHaveLength(0);
+  });
+
+  it("ALLOW (RECONCILE S5-HR-AVATAR-1) — HR-managed: file owner=HR, link created_by=HR, entity=employee KHÁC (HR≠employee.user) → VẪN ký", async () => {
+    // Cổng CŨ (owner = employee_profiles.user_id) sẽ CHẶN case này (owner=HR ≠ employeeE.user) — chứng minh
+    // reconcile mở đúng cho HR-managed avatar (HrEmployeeAvatarService.setEmployeeAvatar) mà KHÔNG mở forge.
+    const hrUser = await seedUser(
+      direct,
+      A.companyId,
+      `hr-${randomUUID().slice(0, 6)}@x.test`,
+      pwHash,
+    );
+    const employeeE = await person(A); // NV được HR đặt avatar hộ — HR ≠ employeeE.user
+    const fileId = await insertFile(direct, A.companyId, hrUser); // owner=HR
+    await insertAvatarLink(direct, A.companyId, fileId, employeeE.employeeId, hrUser); // created_by=HR
+
+    const rows = await verify(A.companyId, [fileId]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].employeeId).toBe(employeeE.employeeId);
+    expect(rows[0].fileId).toBe(fileId);
   });
 });
