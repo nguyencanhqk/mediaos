@@ -6,11 +6,23 @@ import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { KeyRound, LogOut, User } from "lucide-react";
+import { KeyRound, LogOut, User, UserCircle } from "lucide-react";
 import { useAuthStore, logoutSession, getAuthRedirectUrl, meApi, meKeys } from "@mediaos/web-core";
 import { Avatar, cn } from "@mediaos/ui";
 import { useLayoutStore } from "@/stores/layout.store";
 import { DirtyFormConfirmDialog } from "../shared/DirtyFormConfirmDialog";
+
+/**
+ * Đích điều hướng của menu avatar — TRỎ VÀO ME workspace (SPEC-09, S5-ME-FE-2) thay cho route cũ
+ * /account/*. Cùng page được mount ở cả hai nơi; ME là lối vào chính thức nên topbar phải nhất quán
+ * với ME_SIDEBAR (me.overview · me.account · me.security.password). Route /account/* GIỮ hoạt động
+ * (không gãy bookmark) nhưng không còn được link tới từ đây.
+ */
+const AVATAR_MENU_PATHS = {
+  ME_HUB: "/me",
+  ACCOUNT: "/me/account",
+  CHANGE_PASSWORD: "/me/security/password",
+} as const;
 
 export function AvatarMenu() {
   const { t } = useTranslation(["common", "nav", "auth"]);
@@ -68,16 +80,19 @@ export function AvatarMenu() {
     }
   };
 
+  const handleMeHubClick = () => {
+    setOpen(false);
+    void navigate({ to: AVATAR_MENU_PATHS.ME_HUB as "/" });
+  };
+
   const handleProfileClick = () => {
     setOpen(false);
-    // S2-FE-AUTH-6: "Tài khoản của tôi" trỏ /account/profile (đọc user+employee+roles từ /auth/me) —
-    // TRƯỚC ĐÂY trỏ nhầm /home (Home Portal, không phải trang tài khoản).
-    void navigate({ to: "/account/profile" as "/" });
+    void navigate({ to: AVATAR_MENU_PATHS.ACCOUNT as "/" });
   };
 
   const handleChangePasswordClick = () => {
     setOpen(false);
-    void navigate({ to: "/account/change-password" as "/" });
+    void navigate({ to: AVATAR_MENU_PATHS.CHANGE_PASSWORD as "/" });
   };
 
   return (
@@ -103,6 +118,18 @@ export function AvatarMenu() {
               <p className="text-sm font-medium text-foreground">{username}</p>
               <p className="truncate text-xs text-muted-foreground">{email}</p>
             </div>
+
+            <button
+              role="menuitem"
+              onClick={handleMeHubClick}
+              className={cn(
+                "flex w-full items-center gap-2 px-3 py-2 text-sm",
+                "text-foreground hover:bg-accent",
+              )}
+            >
+              <UserCircle className="h-4 w-4 text-muted-foreground" />
+              {t("nav:app.me")}
+            </button>
 
             <button
               role="menuitem"

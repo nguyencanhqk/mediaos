@@ -114,6 +114,15 @@ function makeAudit() {
   return { record: vi.fn().mockResolvedValue(undefined) };
 }
 
+/**
+ * Outbox giả — service phát event NOTI (SPEC-08 §15) trong CÙNG tx với audit. tx ở đây là `{}` giả nên
+ * OutboxService thật sẽ nổ `tx.insert is not a function`; stub để unit test tập trung vào business logic,
+ * còn hợp đồng event (eventType/eventCode/người nhận) khoá riêng ở hr-pcr-noti-bridge.registrar.spec.ts.
+ */
+function makeOutbox() {
+  return { enqueue: vi.fn().mockResolvedValue("evt-1") };
+}
+
 function makeDb(repo: ReturnType<typeof makeRepo>) {
   return {
     withTenant: vi
@@ -134,13 +143,16 @@ function makeService(
   const permission = makePermission(canDecision);
   const audit = makeAudit();
   const db = makeDb(repo);
+  const outbox = makeOutbox();
   const svc = new ProfileChangeRequestService(
     repo as never,
     db as never,
     permission as never,
     audit as never,
+    undefined /* masker — default thật */,
+    outbox as never,
   );
-  return { svc, repo, permission, audit, db };
+  return { svc, repo, permission, audit, db, outbox };
 }
 
 // ─── Deny-path tests (RED) ─────────────────────────────────────────────────────
@@ -451,6 +463,56 @@ describe("ProfileChangeRequestService — happy-path", () => {
         objectId: REQUEST_ID,
       }),
     );
+  });
+
+  // ── NOTI producer (SPEC-08 §15) ──────────────────────────────────────────────
+  // Trước đây service KHÔNG phát event nào ⇒ catalog/template có seed nhưng nhân viên không bao giờ nhận
+  // được thông báo duyệt/từ chối, và không có gì đỏ để phát hiện. 3 test dưới khoá phía PHÁT; phía NHẬN
+  // (map eventType→eventCode + người nhận) khoá ở hr-pcr-noti-bridge.registrar.spec.ts.
+  describe("phát event NOTI trong cùng tx", () => {
+    it("approve → enqueue hr.profile_change.approved", async () => {
+      const { svc, outbox } = makeService();
+
+      await svc.approveRequest(hrUser, REQUEST_ID, {});
+
+      expect(outbox.enqueue).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          eventType: "hr.profile_change.approved",
+          payload: expect.objectContaining({
+            requestId: REQUEST_ID,
+            // actorUserId để engine loại người duyệt khỏi danh sách nhận (không tự báo mình).
+            actorUserId: hrUser.id,
+            eventCode: "HR_PROFILE_CHANGE_APPROVED",
+          }),
+        }),
+      );
+    });
+
+    it("reject → enqueue hr.profile_change.rejected, KHÔNG kèm lý do từ chối trong payload", async () => {
+      const { svc, outbox } = makeService();
+
+      await svc.rejectRequest(hrUser, REQUEST_ID, { rejectionReason: "Thiếu giấy tờ" });
+
+      const call = outbox.enqueue.mock.calls.at(-1)?.[1] as {
+        eventType: string;
+        payload: Record<string, unknown>;
+      };
+      expect(call.eventType).toBe("hr.profile_change.rejected");
+      expect(call.payload.eventCode).toBe("HR_PROFILE_CHANGE_REJECTED");
+      // Lý do là văn bản tự do người duyệt gõ — không đẩy vào payload event (đọc ở màn chi tiết đã gate).
+      expect(JSON.stringify(call.payload)).not.toContain("Thiếu giấy tờ");
+    });
+
+    it("payload event KHÔNG chứa giá trị hồ sơ đã đổi (BẤT BIẾN #3 — tránh rò PII qua thông báo)", async () => {
+      const { svc, outbox } = makeService();
+
+      await svc.approveRequest(hrUser, REQUEST_ID, {});
+
+      const payload = outbox.enqueue.mock.calls.at(-1)?.[1] as { payload: Record<string, unknown> };
+      expect(payload.payload).not.toHaveProperty("newValues");
+      expect(payload.payload).not.toHaveProperty("oldValues");
+    });
   });
 
   // ── 12. Cancel own request ────────────────────────────────────────────────────

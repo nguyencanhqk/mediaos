@@ -1,5 +1,10 @@
 /**
- * AvatarMenu — S2-FE-AUTH-6: "Tài khoản của tôi" phải trỏ /account/profile (TRƯỚC ĐÂY trỏ nhầm /home).
+ * AvatarMenu — đích điều hướng của menu avatar.
+ *
+ * Lịch sử: S2-FE-AUTH-6 ép "Tài khoản của tôi" trỏ /account/profile (TRƯỚC ĐÂY trỏ nhầm /home). Sau
+ * S5-ME-FE-2 (ME workspace mount lại các màn account/security), menu RE-POINT sang ME:
+ *   "Cá nhân" → /me · "Tài khoản của tôi" → /me/account · "Đổi mật khẩu" → /me/security/password.
+ * Route /account/* vẫn sống (bookmark cũ) nhưng KHÔNG còn là đích của topbar — spec khoá điều đó.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
@@ -52,20 +57,30 @@ describe("AvatarMenu", () => {
     useAuthStore.setState({ isAuthenticated: false, user: null, capabilities: {} });
   });
 
-  it("'Tài khoản của tôi' điều hướng /account/profile (KHÔNG còn /home)", () => {
+  it("'Cá nhân' điều hướng /me (lối vào ME Personal Hub)", () => {
+    renderMenu();
+    fireEvent.click(screen.getByLabelText("Menu tài khoản"));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^cá nhân$/i }));
+
+    expect(navigateMock).toHaveBeenCalledWith({ to: "/me" });
+  });
+
+  it("'Tài khoản của tôi' điều hướng /me/account (KHÔNG còn /account/profile, KHÔNG còn /home)", () => {
     renderMenu();
     fireEvent.click(screen.getByLabelText("Menu tài khoản"));
     fireEvent.click(screen.getByRole("menuitem", { name: /tài khoản của tôi/i }));
 
-    expect(navigateMock).toHaveBeenCalledWith({ to: "/account/profile" });
+    expect(navigateMock).toHaveBeenCalledWith({ to: "/me/account" });
+    expect(navigateMock).not.toHaveBeenCalledWith({ to: "/account/profile" });
     expect(navigateMock).not.toHaveBeenCalledWith({ to: "/home" });
   });
 
-  it("'Đổi mật khẩu' vẫn điều hướng /account/change-password", () => {
+  it("'Đổi mật khẩu' điều hướng /me/security/password (KHÔNG còn /account/change-password)", () => {
     renderMenu();
     fireEvent.click(screen.getByLabelText("Menu tài khoản"));
     fireEvent.click(screen.getByRole("menuitem", { name: /đổi mật khẩu/i }));
 
-    expect(navigateMock).toHaveBeenCalledWith({ to: "/account/change-password" });
+    expect(navigateMock).toHaveBeenCalledWith({ to: "/me/security/password" });
+    expect(navigateMock).not.toHaveBeenCalledWith({ to: "/account/change-password" });
   });
 });

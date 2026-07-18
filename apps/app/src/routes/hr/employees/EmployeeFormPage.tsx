@@ -116,7 +116,7 @@ function SectionNav({ sections, title }: { sections: FormSection[]; title: strin
   // top-6: cuộn giờ nằm TRONG <main> của workspace (topbar ngoài khung cuộn) —
   // offset chỉ cần khớp padding trang, không cộng chiều cao topbar nữa
   return (
-    <nav className="sticky top-6 hidden self-start lg:block">
+    <nav className="sticky top-24 hidden self-start lg:block">
       <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
         {title}
       </p>
@@ -619,33 +619,64 @@ export function EmployeeFormPage({ employeeId, onSuccess, onCancel }: EmployeeFo
   const submitDisabled = busy || (mode === "edit" && !isDirty);
 
   return (
-    <div className="space-y-6 p-6">
-      <PageHeader
-        title={mode === "create" ? t("form.createTitle") : t("form.editTitle")}
-        description={mode === "create" ? t("form.createDescription") : t("form.editDescription")}
-        icon={mode === "create" ? UserPlus : UserCog}
-        actions={
-          onCancel && (
-            <Button variant="outline" size="sm" onClick={onCancel}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              {t("form.cancel")}
-            </Button>
-          )
-        }
-      />
+    // <form> BỌC CẢ TRANG (kể cả thanh hành động dính đầu) — nhờ vậy nút Lưu vẫn là type="submit"
+    // NẰM TRONG form, không phải dùng thuộc tính form="id" để nối từ ngoài vào.
+    <form
+      onSubmit={handleSubmit((values) => mutation.mutate({ values, dirty: { ...dirtyFields } }))}
+      noValidate
+      className="space-y-6 p-6"
+    >
+      {/* Thanh hành động DÍNH ĐẦU TRANG: form này dài (5 section), trước đây nút Lưu/Hủy nằm tận cuối
+          nên phải cuộn hết trang mới thao tác được. Khung cuộn là <main> của ModuleWorkspaceLayout
+          (KHÔNG phải document) ⇒ sticky top-0 dính vào mép trên vùng nội dung. -mx-6/-mt-6 để nền
+          thanh tràn hết chiều ngang, che nội dung cuộn phía dưới (nền đục, không trong suốt). */}
+      <div className="sticky top-0 z-20 -mx-6 -mt-6 space-y-3 border-b border-border bg-background px-6 py-4">
+        <PageHeader
+          title={mode === "create" ? t("form.createTitle") : t("form.editTitle")}
+          description={mode === "create" ? t("form.createDescription") : t("form.editDescription")}
+          icon={mode === "create" ? UserPlus : UserCog}
+          actions={
+            <>
+              {onCancel && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onCancel}
+                  disabled={busy}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  {t("form.cancel")}
+                </Button>
+              )}
+              <Button type="submit" size="sm" disabled={submitDisabled}>
+                {busy
+                  ? t("form.submitting")
+                  : mode === "create"
+                    ? t("form.submitCreate")
+                    : t("form.submitSave")}
+              </Button>
+            </>
+          }
+        />
 
-      {mutation.isError && (
-        <p
-          role="alert"
-          aria-live="assertive"
-          className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {submitErrorMessage(mutation.error, t)}
-        </p>
-      )}
+        {/* Lỗi submit nằm TRONG thanh dính: nút Lưu giờ ở đầu trang nên người dùng có thể bấm khi đang
+            cuộn ở cuối — nếu để lỗi ở luồng thường (đầu trang) thì submit hỏng sẽ KHÔNG ai thấy. */}
+        {mutation.isError && (
+          <p
+            role="alert"
+            aria-live="assertive"
+            className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          >
+            {submitErrorMessage(mutation.error, t)}
+          </p>
+        )}
+      </div>
 
       {/* HR-PROFILE-UI-1 — layout 2 cột: anchor nav trái (scrollspy) + form section phải */}
       <div className="lg:grid lg:grid-cols-[200px_1fr] lg:items-start lg:gap-6">
+        {/* top-24 (không phải top-6 như trước): chừa chỗ cho thanh hành động dính ở trên, nếu không
+            các mục nav sẽ chui xuống dưới thanh đó. scroll-mt của từng section cũng tăng tương ứng. */}
         <SectionNav
           title={t("form.nav.title")}
           sections={[
@@ -663,51 +694,30 @@ export function EmployeeFormPage({ employeeId, onSuccess, onCancel }: EmployeeFo
           ]}
         />
 
-        <form
-          onSubmit={handleSubmit((values) =>
-            mutation.mutate({ values, dirty: { ...dirtyFields } }),
-          )}
-          noValidate
-          className="space-y-6"
-        >
+        <div className="space-y-6">
           {mode === "create" && (
-            <div id="section-account" className="scroll-mt-20">
+            <div id="section-account" className="scroll-mt-28">
               <AccountSection register={register} errors={errors} t={t} />
             </div>
           )}
           {canEditPersonal && (
             <>
-              <div id="section-personal" className="scroll-mt-20">
+              <div id="section-personal" className="scroll-mt-28">
                 <PersonalSection register={register} errors={errors} t={t} />
               </div>
-              <div id="section-contact" className="scroll-mt-20">
+              <div id="section-contact" className="scroll-mt-28">
                 <ContactInfoSection register={register} errors={errors} t={t} />
               </div>
             </>
           )}
-          <div id="section-work" className="scroll-mt-20">
+          <div id="section-work" className="scroll-mt-28">
             <WorkSection register={register} errors={errors} t={t} lookups={lookups} />
           </div>
-          <div id="section-schedule" className="scroll-mt-20">
+          <div id="section-schedule" className="scroll-mt-28">
             <ScheduleSection register={register} errors={errors} t={t} />
           </div>
-
-          <div className="flex items-center justify-end gap-3">
-            {onCancel && (
-              <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>
-                {t("form.cancel")}
-              </Button>
-            )}
-            <Button type="submit" disabled={submitDisabled}>
-              {busy
-                ? t("form.submitting")
-                : mode === "create"
-                  ? t("form.submitCreate")
-                  : t("form.submitSave")}
-            </Button>
-          </div>
-        </form>
+        </div>
       </div>
-    </div>
+    </form>
   );
 }

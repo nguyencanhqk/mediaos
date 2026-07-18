@@ -69,16 +69,9 @@ export const HR_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 10,
     requiredAnyPermissions: ["HR.EMPLOYEE.VIEW"],
   },
-  {
-    sidebarKey: "hr.me",
-    moduleCode: "HR",
-    label: "Hồ sơ của tôi",
-    path: "/hr/me",
-    icon: "user",
-    group: "operation",
-    order: 20,
-    requiredAnyPermissions: ["HR.EMPLOYEE.VIEW"],
-  },
+  // "Hồ sơ của tôi" (/hr/me) GỠ khỏi sidebar HR — trùng với ME "Hồ sơ của tôi" (/me/profile,
+  // sidebarKey me.profile) sau S5-ME-FE-2. Route /hr/me GIỮ đăng ký trong router.tsx để link/bookmark
+  // cũ không gãy; chỉ ẩn lối vào ở menu.
   {
     sidebarKey: "hr.employees",
     moduleCode: "HR",

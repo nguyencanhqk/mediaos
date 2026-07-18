@@ -631,6 +631,25 @@ export default {
         generic: "Không thể gửi yêu cầu. Vui lòng thử lại.",
       },
     },
+    // Màn "sửa trực tiếp rồi gửi duyệt" (/me/profile/edit) — bố cục giống màn sửa nhân viên, khác form
+    // tick-chọn-trường ở HR-SCREEN-017. Cùng API createProfileChangeRequest.
+    edit: {
+      title: "Đề nghị cập nhật hồ sơ",
+      description: "Sửa trực tiếp thông tin bạn muốn thay đổi, sau đó gửi cho HR duyệt.",
+      maskedHint:
+        "Giá trị hiện tại của nhóm này đang bị ẩn do phân quyền. Bạn vẫn có thể nhập giá trị mới để đề nghị thay đổi.",
+      reviewNotice:
+        "Thay đổi KHÔNG áp dụng ngay: yêu cầu sẽ được gửi tới HR hoặc Quản trị viên để duyệt.",
+      noChanges: "Bạn chưa thay đổi thông tin nào.",
+      clearedNotAllowed:
+        "Không thể xoá trắng thông tin đã có. Vui lòng nhập giá trị mới hoặc khôi phục giá trị cũ.",
+      success: {
+        title: "Đã gửi yêu cầu cập nhật hồ sơ",
+        description:
+          "Yêu cầu của bạn đang chờ HR hoặc Quản trị viên duyệt. Bạn sẽ nhận được thông báo khi có kết quả.",
+        ok: "OK",
+      },
+    },
     fields: {
       avatar_file_id: "Ảnh đại diện",
       date_of_birth: "Ngày sinh",
