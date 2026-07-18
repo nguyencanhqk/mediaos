@@ -160,6 +160,9 @@ export {
   type ResolvedTheme,
 } from "./lib/theme";
 export { hrApi } from "./lib/hr-api";
+// S5-HR-AVATAR-1 — HR/admin đặt/gỡ avatar cho NHÂN VIÊN KHÁC (gate update:employee), theo
+// /hr/employees/:id/avatar*. MIRROR meApi avatar own-scope nhưng owner = :id (server authorize).
+export { employeeAvatarApi, type UploadEmployeeAvatarResult } from "./lib/employee-avatar-api";
 // S2-FE-HR-6 — Org chart (GET /org/units/tree, read mở) + HR audit-logs (tái dùng /foundation/audit-logs).
 export { orgApi, orgTreeNodeSchema, type OrgTreeNode } from "./lib/hr-org-api";
 export { hrAuditApi, type HrAuditLogQuery } from "./lib/hr-audit-api";

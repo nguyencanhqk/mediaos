@@ -18,6 +18,8 @@ import { DatabaseService, type TenantTx } from "../db/db.service";
 import { PermissionService } from "../permission/permission.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import type { CanInput } from "../permission/permission.types";
+// S5-ME-BE-5 (additive): resolve avatar_url (fileId) → signed URL directory-class cho list/detail/me.
+import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
 import { HrReadRepository, type HrDetailRow, type HrListRow } from "./hr-read.repository";
 
 type RequestUser = { id: string; companyId: string };
@@ -43,13 +45,49 @@ export class HrReadService {
     private readonly permission: PermissionService,
     private readonly dataScope: DataScopeService,
     private readonly audit: AuditService,
+    private readonly avatarPresign: AvatarPresignService,
   ) {}
+
+  // ── Avatar directory-class resolve (S5-ME-BE-5) ───────────────────────────────────
+  //
+  // avatar_url lưu fileId (UUID) — KHÔNG hiển thị được trực tiếp. Resolve → signed URL SAU khi read chính đã
+  // đóng (withTenant RIÊNG trong AvatarPresignService — tránh nested tx). Truyền ĐÚNG (employeeId, avatarUrl):
+  // AvatarPresignService CHỈ ký khi cặp khớp 1 avatar ĐÃ XÁC MINH (link ME/avatar + image) ⇒ cột avatar_url
+  // bị đầu độc KHÔNG bao giờ ký. Fail-soft: không ký được → null → initials.
+
+  /** Resolve avatar cho 1 trang list items (1 batch, khớp theo employeeId=item.id). */
+  private async resolveListAvatars<T extends { id: string; avatarUrl: string | null }>(
+    companyId: string,
+    items: T[],
+  ): Promise<T[]> {
+    const subjects = items
+      .filter((i) => i.avatarUrl !== null)
+      .map((i) => ({ employeeId: i.id, avatarUrl: i.avatarUrl }));
+    if (subjects.length === 0) return items;
+    const urlByEmployee = await this.avatarPresign.resolveEmployeeAvatars(companyId, subjects);
+    return items.map((i) => ({ ...i, avatarUrl: urlByEmployee.get(i.id) ?? null }));
+  }
+
+  /** Resolve avatar cho 1 DTO đơn (detail / me profile). */
+  private async resolveOneAvatar<T extends { id: string; avatarUrl: string | null }>(
+    companyId: string,
+    dto: T,
+  ): Promise<T> {
+    if (!dto.avatarUrl) return dto;
+    const urlByEmployee = await this.avatarPresign.resolveEmployeeAvatars(companyId, [
+      { employeeId: dto.id, avatarUrl: dto.avatarUrl },
+    ]);
+    return { ...dto, avatarUrl: urlByEmployee.get(dto.id) ?? null };
+  }
 
   // ── List ────────────────────────────────────────────────────────────────────────
 
   async listHrEmployees(
     user: RequestUser,
     query: HrEmployeeListQuery,
+    // S5-ME-BE-5: `resolveAvatars=false` để CONSUMER chỉ đếm/tổng hợp (dashboard HR_OVERVIEW/NEW_EMPLOYEES bỏ
+    // avatarUrl) KHÔNG tốn N presign vô ích trên hot-path. Endpoint HTTP list (cần ảnh) dùng mặc định true.
+    opts?: { resolveAvatars?: boolean },
   ): Promise<HrEmployeeListResponse> {
     // GATE first (403 if no read:employee grant) — runs BEFORE any repo/DB read.
     const scope = await this.dataScope.resolveAndAssert(
@@ -62,7 +100,7 @@ export class HrReadService {
     // SCOPE = filter: translate the resolved scope into a query predicate (Own/Team/Department/…).
     const scopeCond = this.dataScope.buildEmployeeScopeCondition(scope, ctx);
 
-    return this.db.withTenant(user.companyId, async (tx) => {
+    const result = await this.db.withTenant(user.companyId, async (tx) => {
       const { rows, total } = await this.repo.listScopedTx(tx, user.companyId, scopeCond, {
         search: query.search,
         orgUnitId: query.orgUnitId,
@@ -135,6 +173,11 @@ export class HrReadService {
         },
       };
     });
+
+    // S5-ME-BE-5: resolve avatar fileId→signed URL SAU khi tx đọc chính đóng (batch 1 lần cho cả trang).
+    // Consumer đếm/tổng hợp (resolveAvatars=false) bỏ qua để KHÔNG tốn N presign vô ích.
+    if (opts?.resolveAvatars === false) return result;
+    return { ...result, items: await this.resolveListAvatars(user.companyId, result.items) };
   }
 
   // ── Detail ────────────────────────────────────────────────────────────────────────
@@ -148,7 +191,7 @@ export class HrReadService {
     );
     const ctx = await this.dataScope.resolveContext(user.id, user.companyId);
 
-    return this.db.withTenant(user.companyId, async (tx) => {
+    const detail = await this.db.withTenant(user.companyId, async (tx) => {
       const row = await this.repo.findByIdTx(tx, user.companyId, id);
       if (!row) throw new NotFoundException("Employee not found");
 
@@ -173,6 +216,8 @@ export class HrReadService {
       );
       return this.toDetail(row, revealSalary, revealPii, revealIdentity, resignationReason);
     });
+    // S5-ME-BE-5: resolve avatar fileId→signed URL (directory-class) SAU khi tx đọc chính đóng.
+    return this.resolveOneAvatar(user.companyId, detail);
   }
 
   // ── Summary (HR-PROFILE-UI-1 — overview strip) ──────────────────────────────────
@@ -225,7 +270,7 @@ export class HrReadService {
     // self-by-userId lookup is the fine gate — it pins the row to the caller, so the route returns the
     // caller's OWN profile only. Self-only: locked to caller.id within the tenant — NOT a scope query
     // (a Company-scope read must not let /me/profile return someone else's row).
-    return this.db.withTenant(user.companyId, async (tx) => {
+    const profile = await this.db.withTenant(user.companyId, async (tx) => {
       const row = await this.repo.findByUserIdTx(tx, user.companyId, user.id);
       if (!row) throw new NotFoundException("No employee profile linked to your account");
 
@@ -241,6 +286,8 @@ export class HrReadService {
       );
       return this.toDetail(row, revealSalary, revealPii, revealIdentity, resignationReason);
     });
+    // S5-ME-BE-5: resolve avatar fileId→signed URL (directory-class) SAU khi tx đọc chính đóng.
+    return this.resolveOneAvatar(user.companyId, profile);
   }
 
   // ── Lookups ───────────────────────────────────────────────────────────────────────

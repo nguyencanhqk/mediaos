@@ -698,6 +698,8 @@ export const meKeys = {
   notificationSummary: () => [...rootKeys.me, "notification-summary"] as const,
   // S5-ME-FE-3 — Preferences (GET/PATCH /me/preferences, ME-SCREEN-014 Appearance).
   preferences: () => [...rootKeys.me, "preferences"] as const,
+  // S5-ME-FE-4 — Avatar own-scope (GET /me/avatar, ephemeral downloadUrl). Invalidate sau upload/remove.
+  avatar: () => [...rootKeys.me, "avatar"] as const,
   // S5-ME-FE-2 — Hoạt động bảo mật own-scope (GET /me/security/activity, ME-SCREEN-008). Param'd theo
   // query (page/per_page/from_date/to_date) — plain, JSON-serialisable; key khác nhau theo trang/filter.
   securityActivity: (params?: Record<string, unknown>) =>

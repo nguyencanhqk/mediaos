@@ -212,4 +212,21 @@ export default {
       description: "Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.",
     },
   },
+  // ─── S5-ME-FE-4 — Ảnh đại diện own-scope (S5-ME-BE-4): GET/upload/remove /me/avatar ──────────────
+  avatar: {
+    title: "Ảnh đại diện",
+    description: "Ảnh hiển thị trên hồ sơ và thanh điều hướng.",
+    change: "Đổi ảnh",
+    remove: "Gỡ ảnh",
+    uploading: "Đang tải lên…",
+    removing: "Đang gỡ…",
+    hint: "PNG, JPG hoặc WEBP · tối đa 5MB.",
+    alt: "Ảnh đại diện",
+    error: {
+      type: "Chỉ chấp nhận ảnh PNG, JPG hoặc WEBP.",
+      size: "Ảnh vượt quá dung lượng cho phép (tối đa 5MB).",
+      upload: "Tải ảnh lên thất bại. Vui lòng thử lại.",
+      remove: "Gỡ ảnh thất bại. Vui lòng thử lại.",
+    },
+  },
 };

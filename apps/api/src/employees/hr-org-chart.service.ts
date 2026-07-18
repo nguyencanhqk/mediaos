@@ -2,6 +2,8 @@ import { Injectable } from "@nestjs/common";
 import type { OrgChartEmployeeNode, OrgChartEmployeeTree } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { DataScopeService } from "../permission/data-scope.service";
+// S5-ME-BE-5 (additive): resolve avatar_url (fileId) → signed URL directory-class cho node org-chart.
+import { AvatarPresignService } from "../foundation/files/avatar-presign.service";
 import { HrOrgChartRepository } from "./hr-org-chart.repository";
 
 type RequestUser = { id: string; companyId: string };
@@ -37,6 +39,7 @@ export class HrOrgChartService {
     private readonly repo: HrOrgChartRepository,
     private readonly db: DatabaseService,
     private readonly dataScope: DataScopeService,
+    private readonly avatarPresign: AvatarPresignService,
   ) {}
 
   async getEmployeeOrgChart(user: RequestUser): Promise<OrgChartEmployeeTree> {
@@ -54,7 +57,18 @@ export class HrOrgChartService {
     const rows = await this.db.withTenant(user.companyId, (tx) =>
       this.repo.listScopedActiveTx(tx, user.companyId, scopeCond),
     );
-    return buildOrgChartTree(rows);
+
+    // S5-ME-BE-5: resolve avatar fileId→signed URL (directory-class) cho toàn bộ node — batch 1 lần SAU tx
+    // đọc chính, khớp ĐÚNG (employeeId, fileId) (chống đầu độc avatar_url). Fail-soft (ký lỗi → null → initials).
+    const subjects = rows
+      .filter((r) => r.avatarUrl !== null)
+      .map((r) => ({ employeeId: r.employeeId, avatarUrl: r.avatarUrl }));
+    const urlByEmployee = await this.avatarPresign.resolveEmployeeAvatars(user.companyId, subjects);
+    const resolvedRows = rows.map((r) => ({
+      ...r,
+      avatarUrl: urlByEmployee.get(r.employeeId) ?? null,
+    }));
+    return buildOrgChartTree(resolvedRows);
   }
 }
 

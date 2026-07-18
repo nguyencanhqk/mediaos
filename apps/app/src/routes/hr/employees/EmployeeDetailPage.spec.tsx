@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore } from "@mediaos/web-core";
-import { hrApi, employeeFilesApi } from "@mediaos/web-core";
+import { hrApi, employeeFilesApi, employeeAvatarApi } from "@mediaos/web-core";
 import { EmployeeDetailPage } from "./EmployeeDetailPage";
 import type { HrEmployeeDetail } from "@mediaos/contracts";
 
@@ -20,6 +20,11 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     // S2-FE-HR-9 — Tab "File hồ sơ" gọi employeeFilesApi.getEmployeeFiles khi có file-view:employee.
     employeeFilesApi: {
       getEmployeeFiles: vi.fn(),
+    },
+    // S5-HR-AVATAR-1 — HR/admin đổi/gỡ avatar NHÂN VIÊN KHÁC (gate update:employee).
+    employeeAvatarApi: {
+      uploadEmployeeAvatar: vi.fn(),
+      removeEmployeeAvatar: vi.fn(),
     },
   };
 });
@@ -308,5 +313,74 @@ describe("EmployeeDetailPage", () => {
     fireEvent.click(screen.getByRole("tab", { name: /công việc/i }));
     expect(screen.getByText(/thông tin nghỉ việc/i)).toBeInTheDocument();
     expect(screen.getByText("Chuyển công tác")).toBeInTheDocument();
+  });
+
+  // ── S5-HR-AVATAR-1 — HR/admin đổi/gỡ avatar NHÂN VIÊN KHÁC (gate update:employee) ──────────
+  const pngFile = () => new File([new Uint8Array([1, 2, 3])], "a.png", { type: "image/png" });
+  const txtFile = () => new File([new Uint8Array([1, 2, 3])], "a.txt", { type: "text/plain" });
+
+  it("hiện nút 'Đổi ảnh' khi có update:employee", async () => {
+    setCapabilities({ "read:employee": true, "update:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    expect(screen.getByRole("button", { name: /Đổi ảnh/ })).toBeInTheDocument();
+  });
+
+  it("ẨN nút quản lý avatar khi THIẾU update:employee (server vẫn là chốt)", async () => {
+    setCapabilities({ "read:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    expect(screen.queryByRole("button", { name: /Đổi ảnh/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Gỡ ảnh/ })).not.toBeInTheDocument();
+  });
+
+  it("chưa có avatar → KHÔNG hiện nút 'Gỡ ảnh'", async () => {
+    setCapabilities({ "read:employee": true, "update:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL); // avatarUrl: null
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    expect(screen.queryByRole("button", { name: /Gỡ ảnh/ })).not.toBeInTheDocument();
+  });
+
+  it("đã có avatar → hiện nút 'Gỡ ảnh', click gọi employeeAvatarApi.removeEmployeeAvatar", async () => {
+    setCapabilities({ "read:employee": true, "update:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue({
+      ...MOCK_DETAIL,
+      avatarUrl: "https://s3/get.png",
+    });
+    vi.mocked(employeeAvatarApi.removeEmployeeAvatar).mockResolvedValue(undefined);
+    renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("button", { name: /Gỡ ảnh/ }));
+    await waitFor(() =>
+      expect(employeeAvatarApi.removeEmployeeAvatar).toHaveBeenCalledWith("emp-001"),
+    );
+  });
+
+  it("chọn ảnh hợp lệ → gọi employeeAvatarApi.uploadEmployeeAvatar(employeeId, file)", async () => {
+    setCapabilities({ "read:employee": true, "update:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
+    vi.mocked(employeeAvatarApi.uploadEmployeeAvatar).mockResolvedValue({ fileId: "f1" });
+    const { container } = renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = pngFile();
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() =>
+      expect(employeeAvatarApi.uploadEmployeeAvatar).toHaveBeenCalledWith("emp-001", file),
+    );
+  });
+
+  it("file SAI loại → hiện lỗi + KHÔNG gọi uploadEmployeeAvatar", async () => {
+    setCapabilities({ "read:employee": true, "update:employee": true });
+    vi.mocked(hrApi.getEmployee).mockResolvedValue(MOCK_DETAIL);
+    const { container } = renderWithQuery(<EmployeeDetailPage employeeId="emp-001" />);
+    await waitFor(() => expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0));
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [txtFile()] } });
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Chỉ chấp nhận ảnh/);
+    expect(employeeAvatarApi.uploadEmployeeAvatar).not.toHaveBeenCalled();
   });
 });

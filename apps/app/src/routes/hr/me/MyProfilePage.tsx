@@ -8,6 +8,8 @@ import { HR_ENGINE_PAIRS } from "../constants";
 // HR-IDENTITY-READ-1 dùng chung section CCCD/CMND; S5-HR-WORKINFO-1 tái dùng WorkInfoSection để đồng bộ khối
 // "Thông tin công việc" (Cấp bậc · loại HĐ · quản lý trực tiếp/gián tiếp · khối nghỉ việc) với màn chi tiết.
 import { IdentitySection, WorkInfoSection } from "../employees/profile-sections";
+// S5-ME-FE-4 — card đổi ảnh đại diện own-scope (GET/upload/remove /me/avatar, S5-ME-BE-4).
+import { AvatarUploadCard } from "../../me/components/AvatarUploadCard";
 
 // ---------------------------------------------------------------------------
 // Shared field row
@@ -108,6 +110,9 @@ export function MyProfilePage() {
   return (
     <div className="space-y-6 p-6">
       <PageHeader title={t("me.title")} description={data.fullName ?? undefined} icon={User} />
+
+      {/* S5-ME-FE-4 — Ảnh đại diện own-scope (upload/gỡ qua /me/avatar). Nút gate update:avatar (server chốt). */}
+      <AvatarUploadCard name={data.fullName} />
 
       {/* Thông tin cơ bản: mã · họ tên · email (phần định danh) */}
       <Card>

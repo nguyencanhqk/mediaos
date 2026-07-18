@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { Users, RefreshCw, ArrowLeft, Pencil, FileText } from "lucide-react";
+import { Users, RefreshCw, ArrowLeft, Pencil, FileText, Camera, Trash2 } from "lucide-react";
 import { hrApi, hrKeys, useCan, useCanExact, PermissionGate } from "@mediaos/web-core";
 import {
   PageHeader,
@@ -31,6 +31,9 @@ import {
 } from "./profile-sections";
 // S5-HR-LINKUI-1 — khối "Tài khoản đăng nhập" (HR-FUNC-011): liên kết/hủy liên kết hồ sơ ↔ user.
 import { AccountLinkSection } from "./AccountLinkSection";
+// S5-HR-AVATAR-1 — HR/admin đổi/gỡ avatar của NHÂN VIÊN KHÁC (gate update:employee).
+import { useEmployeeAvatar } from "./use-employee-avatar";
+import { AVATAR_ACCEPT_ATTR } from "../../me/use-me-avatar";
 
 type Tab = "basic" | "contact" | "work" | "comp" | "files";
 
@@ -78,6 +81,16 @@ export function EmployeeDetailPage({
     EMPLOYEE_FILE_ENGINE_PAIRS.VIEW.action,
     EMPLOYEE_FILE_ENGINE_PAIRS.VIEW.resourceType,
   );
+  // S5-HR-AVATAR-1 — đổi/gỡ avatar NHÂN VIÊN KHÁC (gate update:employee, server chốt cuối).
+  const {
+    canManage: canManageAvatar,
+    upload: avatarUpload,
+    remove: avatarRemove,
+    inputRef: avatarInputRef,
+    openPicker: openAvatarPicker,
+    onFileSelected: onAvatarFileSelected,
+    validationError: avatarValidationError,
+  } = useEmployeeAvatar(employeeId);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: hrKeys.employees.detail(employeeId),
@@ -136,6 +149,15 @@ export function EmployeeDetailPage({
     );
   }
 
+  // S5-HR-AVATAR-1 — thông điệp lỗi validate/upload/remove avatar (KHÔNG nuốt — silent-failure).
+  const avatarErrorMessage = avatarValidationError
+    ? t(`detail.avatar.error.${avatarValidationError}`)
+    : avatarUpload.isError
+      ? t("detail.avatar.error.upload")
+      : avatarRemove.isError
+        ? t("detail.avatar.error.remove")
+        : null;
+
   return (
     <div className="space-y-4 p-6">
       {/* Cover header: avatar + tên + mã + chức vụ – đơn vị + trạng thái */}
@@ -143,12 +165,53 @@ export function EmployeeDetailPage({
         {/* Banner luôn tối (navy chrome) theo chủ đích cả 2 theme, không đổi theo light/dark */}
         <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-[#0f1a2e] via-[#16243d] to-[#1e304f] px-5 py-5">
           <div className="flex items-center gap-4">
-            <Avatar
-              size="lg"
-              name={data.fullName}
-              src={data.avatarUrl}
-              className="ring-2 ring-white/70"
-            />
+            <div className="flex flex-col items-center gap-1.5">
+              <Avatar
+                size="lg"
+                name={data.fullName}
+                src={data.avatarUrl}
+                className="ring-2 ring-white/70"
+              />
+              {canManageAvatar && (
+                <>
+                  <div className="flex flex-wrap justify-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 border-white/40 bg-white/10 px-2 text-xs text-white hover:bg-white/20"
+                      onClick={openAvatarPicker}
+                      disabled={avatarUpload.isPending || avatarRemove.isPending}
+                    >
+                      <Camera className="mr-1 h-3 w-3" />
+                      {avatarUpload.isPending
+                        ? t("detail.avatar.uploading")
+                        : t("detail.avatar.change")}
+                    </Button>
+                    {data.avatarUrl && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs text-white hover:bg-white/20"
+                        onClick={() => avatarRemove.mutate()}
+                        disabled={avatarUpload.isPending || avatarRemove.isPending}
+                      >
+                        <Trash2 className="mr-1 h-3 w-3" />
+                        {avatarRemove.isPending
+                          ? t("detail.avatar.removing")
+                          : t("detail.avatar.remove")}
+                      </Button>
+                    )}
+                  </div>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept={AVATAR_ACCEPT_ATTR}
+                    className="hidden"
+                    onChange={onAvatarFileSelected}
+                  />
+                </>
+              )}
+            </div>
             <div className="text-white">
               <p className="text-lg leading-tight font-semibold uppercase">
                 {data.fullName ?? "—"}
@@ -204,6 +267,13 @@ export function EmployeeDetailPage({
           </div>
         </div>
       </div>
+
+      {/* S5-HR-AVATAR-1 — lỗi validate/upload/remove avatar (KHÔNG nuốt — silent-failure). */}
+      {canManageAvatar && avatarErrorMessage && (
+        <p role="alert" className="text-sm text-destructive">
+          {avatarErrorMessage}
+        </p>
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
