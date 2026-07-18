@@ -38,6 +38,9 @@ registerI18nResources("vi", {
       notiEvents: "Quản lý loại thông báo",
       notiTemplates: "Quản lý mẫu thông báo",
       notificationDeliveryLogs: "Nhật ký gửi thông báo",
+      // S5-FE-TASK-6 — titleKey cho 2 route mới (task.overdue / task.projects.report, ROUTE_REGISTRY).
+      taskOverdue: "Task quá hạn",
+      taskProjectReport: "Báo cáo tiến độ dự án",
     },
   },
 });

@@ -519,6 +519,18 @@ export const TASK_SIDEBAR: readonly SidebarItemMeta[] = [
     order: 20,
     requiredAnyPermissions: ["TASK.TASK.VIEW"],
   },
+  // S5-FE-TASK-6 — Task quá hạn (TASK-SCREEN-010). Gate TASK.TASK.VIEW (như danh sách). icon
+  // "alert-triangle" CÓ trong DynamicIcon.ICON_MAP (tránh fallback Circle).
+  {
+    sidebarKey: "task.overdue",
+    moduleCode: "TASK",
+    label: "Task quá hạn",
+    path: "/tasks/overdue",
+    icon: "alert-triangle",
+    group: "operation",
+    order: 25,
+    requiredAnyPermissions: ["TASK.TASK.VIEW"],
+  },
   // S5-FE-TASK-NAV-1: route task.projects.list có trong ROUTE_REGISTRY web-core (showInSidebar) nhưng
   // ModuleSidebar dựng menu từ registry NÀY — phải khai item ở đây mới thấy (SCREEN-001 trước đó mồ côi).
   {

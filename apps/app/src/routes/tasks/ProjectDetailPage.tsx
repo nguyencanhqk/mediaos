@@ -1,18 +1,21 @@
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, RefreshCw, Pencil, Lock, Trash2 } from "lucide-react";
+import { ArrowLeft, RefreshCw, Pencil, Lock, Trash2, BarChart3 } from "lucide-react";
 import {
   taskProjectApi,
   taskKeys,
   taskProjectInvalidation,
   useCan,
+  useCanExact,
   PermissionGate,
   ApiError,
 } from "@mediaos/web-core";
 import { PageHeader, EmptyState, Button, Card, Badge, Dialog } from "@mediaos/ui";
 import type { TaskProjectResponseDto } from "@mediaos/contracts";
 import { TASK_ENGINE_PAIRS } from "./constants";
+import { PROJECT_REPORT_PAIR } from "./task-file-constants";
 import { ProjectFormDrawer } from "./ProjectFormDrawer";
 import { ProjectMemberTable } from "./ProjectMemberTable";
 import { TaskKanbanPage } from "./TaskKanbanPage";
@@ -206,10 +209,14 @@ export function ProjectDetailPage({
   onBack: () => void;
 }) {
   const { t } = useTranslation("tasks");
+  const navigate = useNavigate();
   const canView = useCan(
     TASK_ENGINE_PAIRS.READ_PROJECT.action,
     TASK_ENGINE_PAIRS.READ_PROJECT.resourceType,
   );
+  // Báo cáo tiến độ (TASK-SCREEN-011) NHẠY CẢM — gate EXACT view-report:project (fail-closed, mirror
+  // ProjectProgressCard). Thiếu quyền → KHÔNG hiện nút "Xem báo cáo".
+  const canViewReport = useCanExact(PROJECT_REPORT_PAIR.action, PROJECT_REPORT_PAIR.resourceType);
   const [tab, setTab] = useState<"overview" | "members" | "kanban">("overview");
   const [editOpen, setEditOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
@@ -282,6 +289,21 @@ export function ProjectDetailPage({
         description={project.code ?? undefined}
         actions={
           <div className="flex items-center gap-2">
+            {canViewReport && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  void navigate({
+                    to: "/tasks/projects/$projectId/report" as "/",
+                    params: { projectId: project.id } as never,
+                  })
+                }
+              >
+                <BarChart3 className="mr-2 h-4 w-4" />
+                {t("projects.detail.actions.viewReport")}
+              </Button>
+            )}
             <PermissionGate
               action={TASK_ENGINE_PAIRS.UPDATE_PROJECT.action}
               resourceType={TASK_ENGINE_PAIRS.UPDATE_PROJECT.resourceType}

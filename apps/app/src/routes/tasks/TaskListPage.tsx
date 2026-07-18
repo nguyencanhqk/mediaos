@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { ListChecks, RefreshCw, Trash2, Pencil, Plus } from "lucide-react";
@@ -26,7 +25,7 @@ import {
   TASK_CORE_STATUS_OPTIONS,
   TASK_CORE_PRIORITY_OPTIONS,
 } from "./constants";
-import { TaskStatusBadge, TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
+import { useTaskReadColumns } from "./task-columns";
 import { TaskFormDrawer } from "./TaskFormDrawer";
 import { DeleteTaskDialog } from "./DeleteTaskDialog";
 
@@ -45,7 +44,6 @@ const PAGE_SIZE = 20;
 
 export function TaskListPage() {
   const { t } = useTranslation("tasks");
-  const navigate = useNavigate();
   const canView = useCan(
     TASK_CORE_ENGINE_PAIRS.READ.action,
     TASK_CORE_ENGINE_PAIRS.READ.resourceType,
@@ -114,59 +112,9 @@ export function TaskListPage() {
       setPage(1);
     };
 
+  const readColumns = useTaskReadColumns();
   const columns: ColumnDef<TaskCoreResponseDto>[] = [
-    {
-      accessorKey: "title",
-      header: t("tasks.list.columns.title"),
-      cell: ({ row }) => (
-        <button
-          type="button"
-          className="font-medium text-foreground underline-offset-2 hover:underline"
-          onClick={() =>
-            void navigate({ to: "/tasks/$taskId", params: { taskId: row.original.id } })
-          }
-        >
-          {row.original.title}
-        </button>
-      ),
-    },
-    {
-      accessorKey: "projectName",
-      header: t("tasks.list.columns.project"),
-      cell: ({ row }) => <span className="text-sm">{row.original.projectName ?? "—"}</span>,
-    },
-    {
-      accessorKey: "assigneeName",
-      header: t("tasks.list.columns.assignee"),
-      cell: ({ row }) => <span className="text-sm">{row.original.assigneeName ?? "—"}</span>,
-    },
-    {
-      accessorKey: "priority",
-      header: t("tasks.list.columns.priority"),
-      cell: ({ row }) => <TaskPriorityBadge priority={row.original.priority} />,
-    },
-    {
-      accessorKey: "status",
-      header: t("tasks.list.columns.status"),
-      cell: ({ row }) => <TaskStatusBadge status={row.original.status} />,
-    },
-    {
-      accessorKey: "dueAt",
-      header: t("tasks.list.columns.dueAt"),
-      cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          <span className="text-sm">
-            {row.original.dueAt ? new Date(row.original.dueAt).toLocaleString("vi-VN") : "—"}
-          </span>
-          <TaskOverdueBadge isOverdue={row.original.isOverdue} />
-        </div>
-      ),
-    },
-    {
-      accessorKey: "creatorName",
-      header: t("tasks.list.columns.creator"),
-      cell: ({ row }) => <span className="text-sm">{row.original.creatorName ?? "—"}</span>,
-    },
+    ...readColumns,
     {
       id: "actions",
       header: () => <span className="sr-only">{t("tasks.list.columns.actions")}</span>,

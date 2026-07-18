@@ -774,6 +774,37 @@ describe("S4 registry reconcile — TASK/NOTI/DASH route access (deny/allow)", (
   });
 });
 
+// S5-FE-TASK-6 — 2 route mới: Task quá hạn (SCREEN-010) + Báo cáo tiến độ dự án (SCREEN-011).
+describe("S5-FE-TASK-6 — task.overdue + task.projects.report route meta", () => {
+  const taskOverdue = getRouteMeta("task.overdue")!;
+  const taskProjectReport = getRouteMeta("task.projects.report")!;
+
+  it("task.overdue: path/screenCode/gate/showInSidebar đúng (SCREEN-010, read:task)", () => {
+    expect(taskOverdue.path).toBe("/tasks/overdue");
+    expect(taskOverdue.screenCode).toBe("TASK-SCREEN-010");
+    expect(taskOverdue.requiredAnyPermissions).toEqual(["TASK.TASK.VIEW"]);
+    expect(taskOverdue.showInSidebar).toBe(true);
+  });
+
+  it("task.projects.report: param path, gate read:project, KHÔNG vào sidebar (SCREEN-011)", () => {
+    expect(taskProjectReport.path).toBe("/tasks/projects/:projectId/report");
+    expect(taskProjectReport.screenCode).toBe("TASK-SCREEN-011");
+    expect(taskProjectReport.requiredAnyPermissions).toEqual(["TASK.PROJECT.VIEW"]);
+    expect(taskProjectReport.showInSidebar).toBe(false);
+  });
+
+  it("deny/allow: overdue theo read:task, report theo read:project", () => {
+    const session = makeSession(TASK_NOTI_DASH_SESSION());
+    const deny = createPermissionChecker(makePerms([]));
+    expect(evaluateRouteAccess(session, taskOverdue, deny).action).toBe("SHOW_403");
+    expect(evaluateRouteAccess(session, taskProjectReport, deny).action).toBe("SHOW_403");
+
+    const allow = createPermissionChecker(TASK_NOTI_DASH_CAPS());
+    expect(evaluateRouteAccess(session, taskOverdue, allow).action).toBe("ALLOW");
+    expect(evaluateRouteAccess(session, taskProjectReport, allow).action).toBe("ALLOW");
+  });
+});
+
 describe("S4 registry reconcile — TASK/NOTI/DASH app visibility (getVisibleApps)", () => {
   it("deny-path: KHÔNG có cặp → ẩn tasks/notifications/dashboard trong App Switcher", () => {
     const session = makeSession(TASK_NOTI_DASH_SESSION());
