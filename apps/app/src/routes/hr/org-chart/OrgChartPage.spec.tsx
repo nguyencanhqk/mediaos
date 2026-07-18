@@ -7,6 +7,7 @@
  *  - THIẾU quyền → forbidden EmptyState, KHÔNG gọi orgApi.getTree.
  *  - Có quyền → cây org_unit render đệ quy; loading/error/empty states.
  */
+import type { ReactNode } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -15,15 +16,35 @@ import i18n from "@/i18n";
 
 vi.mock("@mediaos/web-core", () => ({
   useCan: vi.fn(() => false),
+  // PermissionGate mock: render children luôn (test không assert nút hành động).
+  PermissionGate: ({ children }: { children: ReactNode }) => <>{children}</>,
+  ApiError: class ApiError extends Error {},
   orgApi: {
     getTree: vi.fn(),
   },
+  // S5-HR-ORGCHART-FE-2 — client mutation dùng bởi các dialog hành động (import ở module-load).
+  hrApi: { updateEmployee: vi.fn() },
+  hrMasterDataApi: { createDepartment: vi.fn() },
   hrKeys: {
     orgChart: {
       all: ["hr", "org-chart"],
       tree: () => ["hr", "org-chart", "tree"],
     },
+    employees: { all: ["hr", "employees"] },
   },
+}));
+
+// S5-HR-ORGCHART-FE-2 — điều hướng "Thêm nhân viên" (useNavigate ngoài router context sẽ ném → mock).
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => vi.fn(),
+}));
+
+// S5-HR-ORGCHART-FE-1 — client cây nhân sự cục bộ (trưởng phòng + thành viên); mock rỗng để test cây phòng ban.
+vi.mock("./employee-chart-api", () => ({
+  fetchEmployeeChart: vi.fn(() =>
+    Promise.resolve({ roots: [], warnings: { cyclesDetected: false } }),
+  ),
+  orgChartEmployeesQueryKey: ["hr", "org-chart", "employees"],
 }));
 
 vi.mock("@mediaos/ui", async (importOriginal) => {
