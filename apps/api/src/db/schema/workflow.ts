@@ -483,8 +483,9 @@ export type NewTask = typeof tasks.$inferInsert;
 // `task`=work item, `project`=project. Mở rộng ADDITIVE domain tasks/projects — KHÔNG bảng issue riêng.
 
 /**
- * project_states — trạng thái tùy biến theo project (5 nhóm Plane: backlog/unstarted/started/completed/
- * cancelled). Thay thế DẦN tasks.status (giữ song song để FSM studio tiếp tục dùng status legacy).
+ * project_states — trạng thái tùy biến theo project (6 nhóm: backlog/unstarted/started/review/
+ * completed/cancelled — 'review' thêm 0499, SPEC-06 §6.8). Thay thế DẦN tasks.status (giữ song song
+ * để FSM studio tiếp tục dùng status legacy).
  * Soft-delete + reorder (sort_order) + recolor. App role SELECT/INSERT/UPDATE (không hard-DELETE).
  */
 export const projectStates = pgTable(
@@ -515,7 +516,9 @@ export const projectStates = pgTable(
       .where(sql`deleted_at IS NULL`),
     check(
       "project_states_group_check",
-      sql`state_group IN ('backlog', 'unstarted', 'started', 'completed', 'cancelled')`,
+      // 'review' thêm ở 0499 (S5-TASK-PIPELINE-1 — owner chốt 18/07/2026): cột duyệt của quy trình
+      // sản xuất quy về In Review thay vì gộp vào started. APPEND giá trị — không bớt (hot-file UNION).
+      sql`state_group IN ('backlog', 'unstarted', 'started', 'review', 'completed', 'cancelled')`,
     ),
   ],
 );

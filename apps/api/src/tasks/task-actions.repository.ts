@@ -88,7 +88,11 @@ export class TaskActionsRepository {
 
   // ── D-21 — đồng bộ ngược status → state_id (S5-TASK-PIPELINE-1 lane fsm) ────────
 
-  /** state hiện tại của task (đọc SAU khi ghi status, cùng tx — D-21.3c). State soft-deleted ⇒ group NULL. */
+  /**
+   * state hiện tại của task (đọc SAU khi ghi status, cùng tx — D-21.3c). State soft-deleted HOẶC
+   * thuộc PROJECT KHÁC (dữ liệu hỏng) ⇒ group NULL để guard D-21.2 không nhận nhầm "đúng nhóm"
+   * và sync kéo thẻ về cột của đúng project (mirror điều kiện heal của migration 0500).
+   */
   async findStateSyncRowTx(
     tx: TenantTx,
     companyId: string,
@@ -98,7 +102,8 @@ export class TaskActionsRepository {
       select t.state_id as "stateId", ps.state_group as "stateGroup"
         from tasks t
         left join project_states ps
-          on ps.id = t.state_id and ps.company_id = t.company_id and ps.deleted_at is null
+          on ps.id = t.state_id and ps.company_id = t.company_id
+         and ps.project_id = t.project_id and ps.deleted_at is null
        where t.id = ${taskId} and t.company_id = ${companyId} and t.deleted_at is null
        limit 1
     `);

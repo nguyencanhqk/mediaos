@@ -1,5 +1,6 @@
 /**
- * S4-TASK-SEED-1 — TASK permission catalog (23 cặp DB-06 §12.1) + role→data_scope grants (mig 0485).
+ * S4-TASK-SEED-1 → S5-TASK-PIPELINE-1 — TASK permission catalog (24 cặp DB-06 §12.1: 23 ở mig 0485
+ * + update-state:task ở mig 0499) + role→data_scope grants.
  *
  * Colocated trong src/foundation/seed → vitest gom qua `src/**\/*.spec.ts`. Gate cứng
  * `hasDb && LANE_DB` (bài học integration-test-lane-db-gate: chỉ .env → hasDb=true = đỏ-giả).
@@ -13,8 +14,8 @@
  *   (B) grant per-(role,pair) scope EXACT 67 hàng — đặc biệt employee read:task === 'Own'
  *       (chứng minh re-scope DELETE+INSERT: DB thật đang @Company);
  *   (C) DENY holes theo CẶP CỤ THỂ (done_when #5 — không chỉ đếm scope-class) + 5 grant HOÃN
- *       (TASK_DEFERRED_GRANTS — BE-2 lật khi enforce scope) + đếm EXACT trên tập 23 cặp canonical
- *       per role (7/19/18/23, miễn nhiễm legacy submit/manage/comment:comment);
+ *       (TASK_DEFERRED_GRANTS — BE-2 lật khi enforce scope) + đếm EXACT trên tập 24 cặp canonical
+ *       per role (8/20/19/24 sau 0499, miễn nhiễm legacy submit/manage/comment:comment);
  *   (D) idempotent: chạy lại TOÀN BỘ SQL 0485 lần 2 → snapshot không đổi; ON CONFLICT wrong-scope
  *       không drift bộ-ba;
  *   (E) catalog legacy không nhân đôi/không bị đụng (submit:task…, delete-project:project giữ nguyên).
@@ -113,11 +114,11 @@ describe.skipIf(!runIsolatedDb)(
       return res.rows.length > 0 ? res.rows[0].data_scope : null;
     }
 
-    // ── A. Catalog: đủ 23 cặp với is_sensitive đúng owner chốt 2026-07-09 ────────
-    describe("A. Catalog 23 cặp canonical (action, resource_type)", () => {
-      it("pin: TASK_PERMISSIONS có đúng 23 cặp (8 sensitive)", () => {
-        expect(TASK_PERMISSION_COUNT).toBe(23);
-        expect(TASK_PERMISSIONS.length).toBe(23);
+    // ── A. Catalog: đủ 24 cặp (23 owner-chốt 2026-07-09 + update-state:task 0499) ──
+    describe("A. Catalog 24 cặp canonical (action, resource_type)", () => {
+      it("pin: TASK_PERMISSIONS có đúng 24 cặp (8 sensitive — update-state non-sensitive)", () => {
+        expect(TASK_PERMISSION_COUNT).toBe(24);
+        expect(TASK_PERMISSIONS.length).toBe(24);
         expect(TASK_PERMISSIONS.filter((p) => p.sensitive).length).toBe(8);
       });
 
@@ -174,7 +175,7 @@ describe.skipIf(!runIsolatedDb)(
         }
       }
 
-      it("đếm EXACT trên tập 23 cặp canonical: employee 7 · manager 19 · hr 18 · company-admin 23", async () => {
+      it("đếm EXACT trên tập 24 cặp canonical: employee 8 · manager 20 · hr 19 · company-admin 24", async () => {
         const res = await direct.query<{ name: string; n: number }>(
           `WITH canonical AS (
              SELECT p.id FROM permissions p

@@ -312,6 +312,10 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-3 task actions crown-FSM (DB cô lập, 
   });
 
   afterAll(async () => {
+    // Đóng app TRƯỚC cleanup: outbox worker còn sống sẽ ghi audit_logs GIỮA câu DELETE audit_logs
+    // và DELETE users ⇒ FK audit_logs_actor_user_id_fkey vỡ chập chờn dưới tải full-suite
+    // (lớp lỗi outbox-drain PR #212 — race chỉ lộ khi suite song song, run cô lập luôn xanh).
+    await app?.close();
     if (direct && companyIds.length) {
       for (const tbl of [
         "task_activity_logs",
@@ -334,7 +338,6 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-3 task actions crown-FSM (DB cô lập, 
     }
     await appConn?.end();
     await direct?.end();
-    await app?.close();
   });
 
   // ── 1. FSM §6.10.1 (nới D-18): nhảy cấp hợp lệ; ca 409 CÒN LẠI = Cancelled → In Review/Done ──

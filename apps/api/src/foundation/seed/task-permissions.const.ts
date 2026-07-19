@@ -1,12 +1,13 @@
 /**
- * S4-TASK-SEED-1 — Catalog 23 cặp permission TASK canonical (DB-06 §12.1) + ma trận grant
- * per-(role, pair) 67 hàng seed ở 0485 (+5 hàng hoãn — SPEC-06 §9, truy nguyên từng hàng ở
- * docs/plans/S4-TASK-SEED-1.md §3).
+ * S4-TASK-SEED-1 → S5-TASK-PIPELINE-1 — Catalog 24 cặp permission TASK canonical (DB-06 §12.1:
+ * 23 cặp seed 0485 + update-state:task seed 0499) + ma trận grant per-(role, pair) 71 hàng
+ * (67 ở 0485 + 4 ở 0499; +5 hàng hoãn — SPEC-06 §9, truy nguyên docs/plans/S4-TASK-SEED-1.md §3).
  *
- * Nguồn cho task-permissions-seed.int.spec.ts (đối chiếu DB thật sau mig 0485) — mirror
- * attendance-permissions.const (mig 0454). OWNER CHỐT 2026-07-09: ĐÚNG 23 mã, KHÔNG hơn —
- * không cặp `checklist` (gate bằng update:task), không TASK.PROJECT.FILE_UPLOAD/DELETE
- * (SPEC-06 §8.2 TK-1 liệt kê nhưng DB-06 §12.1 không có → cần owner quyết ở WO khác).
+ * Nguồn cho task-permissions-seed.int.spec.ts (đối chiếu DB thật sau mig 0485+0499) — mirror
+ * attendance-permissions.const (mig 0454). OWNER CHỐT 2026-07-09: 23 mã gốc, KHÔNG cặp
+ * `checklist` (gate bằng update:task), không TASK.PROJECT.FILE_UPLOAD/DELETE (SPEC-06 §8.2 TK-1
+ * liệt kê nhưng DB-06 §12.1 không có → cần owner quyết ở WO khác). OWNER CHỐT 2026-07-18
+ * (DECISIONS-03 D-17): +update-state:task — cổng kéo-thả đổi cột board, mirror update-status.
  *
  * is_sensitive=true (8 cặp): delete/close/archive/manage-member/view-report:project +
  * delete/export:task + view:task-audit-log. read:project/read:task PHẢI false (cổng nav FE —
@@ -40,6 +41,9 @@ export const TASK_PERMISSIONS: readonly TaskPermissionEntry[] = [
   { action: "export", resourceType: "task", sensitive: true },
   { action: "view-kanban", resourceType: "task", sensitive: false },
   { action: "update-status", resourceType: "task", sensitive: false },
+  // update-state (0499 — S5-TASK-PIPELINE-1): cổng đổi CỘT pipeline (state_id), tách khỏi
+  // update-status (DECISIONS-03 D-17/D-21). Non-sensitive — cùng lớp update-status.
+  { action: "update-state", resourceType: "task", sensitive: false },
   { action: "update-priority", resourceType: "task", sensitive: false },
   { action: "update-deadline", resourceType: "task", sensitive: false },
   { action: "file-upload", resourceType: "task", sensitive: false },
@@ -48,7 +52,7 @@ export const TASK_PERMISSIONS: readonly TaskPermissionEntry[] = [
   { action: "view", resourceType: "task-audit-log", sensitive: true },
 ] as const;
 
-export const TASK_PERMISSION_COUNT = 23;
+export const TASK_PERMISSION_COUNT = 24;
 
 /** 8 cặp sensitive — dùng cho assert allowlist + UPDATE-nâng trong 0485. */
 export const TASK_SENSITIVE_PAIRS: readonly string[] = TASK_PERMISSIONS.filter(
@@ -102,6 +106,15 @@ export const TASK_GRANT_MATRIX: readonly TaskMatrixRow[] = [
     hr: "Company",
     ca: "Company",
   },
+  // update-state MIRROR ĐÚNG update-status (0499 — lệch nhau là auto-map kéo thẻ hỏng quyền, plan 4b)
+  {
+    action: "update-state",
+    resource: "task",
+    emp: "Own",
+    mgr: "Team",
+    hr: "Company",
+    ca: "Company",
+  },
   { action: "comment", resource: "task", emp: "Own", mgr: "Team", hr: "Company", ca: "Company" },
   {
     action: "file-upload",
@@ -143,10 +156,10 @@ export const TASK_DEFERRED_GRANTS: readonly TaskMatrixRow[] = [
   { action: "delete", resource: "task", mgr: "Team" },
 ] as const;
 
-/** Số grant kỳ vọng per role TRÊN TẬP 23 cặp canonical SAU 0485 (verify exact — chống over-grant). */
+/** Số grant kỳ vọng per role TRÊN TẬP 24 cặp canonical SAU 0499 (verify exact — chống over-grant). */
 export const TASK_EXPECTED_GRANT_COUNTS = {
-  employee: 7,
-  manager: 19,
-  hr: 18,
-  "company-admin": 23,
+  employee: 8,
+  manager: 20,
+  hr: 19,
+  "company-admin": 24,
 } as const;
