@@ -18,6 +18,7 @@ import {
   listTaskActivityQuerySchema,
   listTaskCoreQuerySchema,
   listTasksQuerySchema,
+  moveTaskStateRequestSchema,
   updateLabelSchema,
   updateProjectStateSchema,
   updateTaskChecklistItemSchema,
@@ -93,6 +94,9 @@ export class AssignTaskDto extends createZodDto(assignTaskSchema) {}
 
 /** POST /tasks/:id/change-status — đổi trạng thái qua FSM (update-status:task). */
 export class ChangeTaskStatusDto extends createZodDto(changeTaskStatusSchema) {}
+
+/** POST /tasks/:id/move-state (TASK-API-213, S5-TASK-PIPELINE-1) — kéo thẻ sang cột pipeline. */
+export class MoveTaskStateDto extends createZodDto(moveTaskStateRequestSchema) {}
 
 /** POST /tasks/:id/change-priority — đổi ưu tiên (update-priority:task). */
 export class ChangeTaskPriorityDto extends createZodDto(changeTaskPrioritySchema) {}

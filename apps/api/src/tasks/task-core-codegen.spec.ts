@@ -72,6 +72,9 @@ function makeService(opts: { sequence?: ReturnType<typeof makeSequence> } = {}) 
       .mockResolvedValue({ id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee" }),
     insertTaskCoreTx: vi.fn().mockResolvedValue({ id: NEW_TASK_ID }),
     findScopedByIdTx: vi.fn().mockResolvedValue(reloadRow()),
+    // S5-TASK-PIPELINE-1 — createTask tra cột mặc định khi có projectId (undefined = project 0 state).
+    findDefaultStateTx: vi.fn().mockResolvedValue(undefined),
+    findStateForWriteTx: vi.fn().mockResolvedValue(undefined),
   };
   const db = {
     withTenant: vi.fn((_c: string, fn: (tx: unknown) => Promise<unknown>) => fn(FAKE_TX)),
@@ -82,6 +85,10 @@ function makeService(opts: { sequence?: ReturnType<typeof makeSequence> } = {}) 
   const audit = { record: vi.fn().mockResolvedValue(undefined) };
   const activity = { record: vi.fn().mockResolvedValue(undefined) };
   const sequence = opts.sequence ?? makeSequence();
+  // S5-TASK-PIPELINE-1 — 2 dependency mới của đường ghi state (dto test KHÔNG gửi stateId ⇒
+  // createTask chỉ gọi findDefaultStateTx khi có projectId; mock trả undefined = project 0 state).
+  const taskActions = { isChecklistGateEnabled: vi.fn().mockResolvedValue(false) };
+  const permission = { resolveStrongestScope: vi.fn().mockResolvedValue("Company") };
   const svc = new TaskCoreService(
     db as never,
     repo as never,
@@ -90,6 +97,8 @@ function makeService(opts: { sequence?: ReturnType<typeof makeSequence> } = {}) 
     audit as never,
     activity as never,
     sequence as never,
+    taskActions as never,
+    permission as never,
   );
   return { svc, repo, db, sequence };
 }

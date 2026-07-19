@@ -186,3 +186,5 @@ Hệ quả cho đợt A: thẻ kanban hiện có `checklistDone/checklistTotal` 
 ## Ngoài phạm vi
 
 Tab Gantt/Lịch/Tài liệu/Biểu mẫu (đợt D2–D5) · sidebar cây phòng ban (đợt B) · quyền per-project (đợt C) · template pipeline lúc tạo dự án (owner hỏi mở — WO riêng) · automation per-column · WIP limit · swimlane · dọn `updateTaskFields` chết.
+
+**Follow-up seed từ gate lane be-write (finding F1 MEDIUM silent-failure — KHÔNG block lane):** PATCH `/tasks/:id` đổi/xoá `projectId` mà KHÔNG gửi stateId để lại `state_id` mồ côi trỏ cột project CŨ — vi phạm API-06 §26.2#12-13 trên write-path (hành vi có TRƯỚC lane, nay phổ biến hơn vì mọi task đều có state_id; 0500 chỉ heal tồn kho 1 lần). Fix đề xuất: updateTask khi `dto.projectId !== undefined && dto.stateId === undefined` ⇒ state_id = default state của project mới (hoặc NULL khi projectId null) CÙNG tx + TASK_STATE_CHANGED. Gộp vào WO dọn `updateTaskFields` chết hoặc WO con riêng.

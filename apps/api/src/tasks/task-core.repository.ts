@@ -70,6 +70,18 @@ export interface TaskRawRow {
   projectId: string | null;
   mainAssigneeEmployeeId: string | null;
   taskStatus: string | null;
+  // S5-TASK-PIPELINE-1 (lane be-write) — cột pipeline hiện tại (stateName NULL khi state soft-deleted
+  // hoặc trỏ project khác — dữ liệu hỏng, coi như chưa có cột, mirror findStateSyncRowTx).
+  stateId: string | null;
+  stateName: string | null;
+}
+
+/** Cột pipeline đích cho đường ghi state_id (move-state / PATCH / POST — plan 3b/3c). */
+export interface StateForWriteRow {
+  id: string;
+  projectId: string;
+  name: string;
+  stateGroup: string;
 }
 
 export interface EmployeeForScope {
@@ -98,6 +110,10 @@ export interface TaskCoreInsertValues {
   // SequenceService.nextCode Ở TX RIÊNG TRƯỚC insert (0 dup, gaps OK). REQUIRED: createTask luôn cấp trước
   // (KHÔNG để NULL — cột 0478 + counter 'task' 0498) ⇒ commentPayload()/mention emit mã THẬT, KHÔNG '{task_code}'.
   taskCode: string;
+  // S5-TASK-PIPELINE-1 (lane be-write) — cột pipeline + status khởi tạo (SERVICE quyết định: có stateId
+  // tường minh ⇒ status suy từ nhóm, chống desync-lúc-sinh 3c; không ⇒ is_default + 'Todo').
+  stateId: string | null;
+  taskStatus: string;
 }
 
 export interface TaskCorePatchValues {
@@ -251,14 +267,72 @@ export class TaskCoreRepository {
     id: string,
   ): Promise<TaskRawRow | undefined> {
     const res = await tx.execute(sql`
-      select id, task_type as "taskType", workflow_step_id as "workflowStepId",
-             project_id as "projectId", main_assignee_employee_id as "mainAssigneeEmployeeId",
-             task_status as "taskStatus"
-        from tasks
-       where id = ${id} and company_id = ${companyId} and deleted_at is null
+      select t.id, t.task_type as "taskType", t.workflow_step_id as "workflowStepId",
+             t.project_id as "projectId", t.main_assignee_employee_id as "mainAssigneeEmployeeId",
+             t.task_status as "taskStatus", t.state_id as "stateId", ps.name as "stateName"
+        from tasks t
+        left join project_states ps
+          on ps.id = t.state_id and ps.company_id = t.company_id
+         and ps.project_id = t.project_id and ps.deleted_at is null
+       where t.id = ${id} and t.company_id = ${companyId} and t.deleted_at is null
        limit 1
     `);
     return (res.rows as unknown as TaskRawRow[])[0];
+  }
+
+  // ── S5-TASK-PIPELINE-1 (lane be-write) — đường ghi state_id DUY NHẤT qua TaskCoreService ─────
+
+  /** Cột đích theo id (active, cùng tenant — cross-tenant bị RLS + company_id chặn ⇒ undefined = 404). */
+  async findStateForWriteTx(
+    tx: TenantTx,
+    companyId: string,
+    stateId: string,
+  ): Promise<StateForWriteRow | undefined> {
+    const res = await tx.execute(sql`
+      select id, project_id as "projectId", name, state_group as "stateGroup"
+        from project_states
+       where id = ${stateId} and company_id = ${companyId} and deleted_at is null
+       limit 1
+    `);
+    return (res.rows as unknown as StateForWriteRow[])[0];
+  }
+
+  /**
+   * Cột mặc định cho task MỚI của project (plan mục 1): is_default → sort_order nhỏ nhất; tie-break
+   * XÁC ĐỊNH (sort_order, created_at, id — is_default không unique tầng DB). Project 0 state ⇒ undefined.
+   */
+  async findDefaultStateTx(
+    tx: TenantTx,
+    companyId: string,
+    projectId: string,
+  ): Promise<StateForWriteRow | undefined> {
+    const res = await tx.execute(sql`
+      select id, project_id as "projectId", name, state_group as "stateGroup"
+        from project_states
+       where company_id = ${companyId} and project_id = ${projectId} and deleted_at is null
+       order by is_default desc, sort_order, created_at, id
+       limit 1
+    `);
+    return (res.rows as unknown as StateForWriteRow[])[0];
+  }
+
+  /**
+   * Ghi state_id (đường move-state/PATCH — plan 3b). CHỈ được gọi từ TaskCoreService.applyStateChangeTx
+   * (đã qua cổng resolveAndAssert update-state:task) — KHÔNG nối route mới vào writer này (R9).
+   */
+  async setTaskStateTx(
+    tx: TenantTx,
+    companyId: string,
+    taskId: string,
+    stateId: string,
+    actorUserId: string,
+  ): Promise<{ id: string } | undefined> {
+    const res = await tx.execute(sql`
+      update tasks set state_id = ${stateId}, updated_at = now(), updated_by = ${actorUserId}
+       where id = ${taskId} and company_id = ${companyId} and deleted_at is null
+       returning id
+    `);
+    return (res.rows as unknown as { id: string }[])[0];
   }
 
   /**
@@ -371,11 +445,13 @@ export class TaskCoreRepository {
       insert into tasks (
         company_id, task_type, title, description, task_status, task_priority,
         project_id, department_id, main_assignee_employee_id, assignee_user_id,
-        creator_user_id, reporter_employee_id, due_at, start_at, created_by, updated_by, task_code
+        creator_user_id, reporter_employee_id, due_at, start_at, created_by, updated_by, task_code,
+        state_id
       ) values (
-        ${companyId}, 'office', ${v.title}, ${v.description}, 'Todo', ${v.taskPriority},
+        ${companyId}, 'office', ${v.title}, ${v.description}, ${v.taskStatus}, ${v.taskPriority},
         ${v.projectId}, ${v.departmentId}, ${v.mainAssigneeEmployeeId}, ${v.assigneeUserId},
-        ${v.creatorUserId}, ${v.reporterEmployeeId}, ${v.dueAt}, ${v.startAt}, ${v.createdBy}, ${v.createdBy}, ${v.taskCode}
+        ${v.creatorUserId}, ${v.reporterEmployeeId}, ${v.dueAt}, ${v.startAt}, ${v.createdBy}, ${v.createdBy}, ${v.taskCode},
+        ${v.stateId}
       )
       returning id
     `);
