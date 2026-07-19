@@ -657,6 +657,37 @@ describe.skipIf(!hasLaneDb)(
         expect(card?.stateGroup).toBe("started");
       });
 
+      it("KHÔNG cột is_default ⇒ thẻ state NULL rơi vào CỘT ĐẦU (bậc cuối D-20); list /tasks VẪN trả task con (parentOnly chỉ ở board)", async () => {
+        const p = await seedProject(A.companyId, "P-board-nodefault");
+        const cFirst = await seedState(A.companyId, p, "Đầu", "started", 0); // KHÔNG is_default
+        await seedState(A.companyId, p, "Sau", "completed", 1);
+        const tNull = await mkTask({ projectId: p, taskStatus: "In Progress", stateId: null });
+        const child = await mkTask({
+          projectId: p,
+          taskStatus: "Todo",
+          stateId: cFirst,
+          parentTaskId: tNull,
+          title: "con-trong-list",
+        });
+
+        const res = await authGet(tok.admin, `/projects/${p}/kanban`);
+        expect(res.status, JSON.stringify(res.body)).toBe(200);
+        const cols = res.body.data.columns as StateCol[];
+        expect(cols[0].tasks.map((tk) => tk.id)).toContain(tNull); // cột đầu, không default
+
+        // Bộ lọc con CHỈ ở board: GET /tasks (list) vẫn thấy con — subtask tương lai không mất khỏi
+        // list. Fixture admin của spec này không có read:task ⇒ dựng reader ad-hoc.
+        const readerEmail = `listreader@${A.slug}.test`;
+        const reader = await seedUser(direct, A.companyId, readerEmail, pwHash);
+        await seedEmp(A.companyId, reader, null, null);
+        await grant(A.companyId, reader, [["read", "task", "Company"]]);
+        const readerTok = await login(A.slug, readerEmail);
+        const list = await authGet(readerTok, `/tasks?projectId=${p}`);
+        expect(list.status, JSON.stringify(list.body)).toBe(200);
+        const listIds = (list.body.data as Array<{ id: string }>).map((tk) => tk.id);
+        expect(listIds).toContain(child);
+      });
+
       it("dự án 0 state GIỮ columnMode:'status' 5 cột FSM (fallback y hệt hành vi cũ)", async () => {
         const p = await seedProject(A.companyId, "P-board-nostates");
         await mkTask({ projectId: p, taskStatus: "In Progress" });

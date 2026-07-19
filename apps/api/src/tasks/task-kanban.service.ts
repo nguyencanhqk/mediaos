@@ -118,7 +118,11 @@ export class TaskKanbanService {
           tasks: [],
         }));
         const byStateId = new Map(columns.map((c) => [c.stateId, c]));
-        const fallback = columns[states.findIndex((s) => s.isDefault)] ?? columns[0];
+        // isDefault qua raw tx.execute có thể là boolean HOẶC 't'/'true' (mirror toBool của mapper) —
+        // truthiness trần sẽ coi 'f' là true ⇒ fallback sai câm (finding LIGHT gate).
+        const isDefaultTrue = (v: boolean | string): boolean =>
+          v === true || v === "true" || v === "t";
+        const fallback = columns[states.findIndex((s) => isDefaultTrue(s.isDefault))] ?? columns[0];
         for (const row of rows) {
           const column = (row.stateId ? byStateId.get(row.stateId) : undefined) ?? fallback;
           column.tasks.push(toCard(row));
