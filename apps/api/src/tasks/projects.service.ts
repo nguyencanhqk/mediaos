@@ -36,10 +36,12 @@ import { DataScopeService } from "../permission/data-scope.service";
 import type { Project } from "../db/schema/media";
 import {
   ProjectsRepository,
+  type ProjectActorRef,
   type ProjectDetailRow,
   type ProjectMemberRow,
 } from "./projects.repository";
 import { TaskActivityService } from "./task-activity.service";
+import { ProjectAccessService } from "./project-access.service";
 
 interface RequestUser {
   id: string;
@@ -100,6 +102,8 @@ export class ProjectsService {
     private readonly permission: PermissionService,
     private readonly dataScope: DataScopeService,
     private readonly outbox: OutboxService,
+    // S5-TASK-PROJROLE-1 (D-25) - governance re-anchor doc project_role qua tang doc duy nhat.
+    private readonly projectAccess: ProjectAccessService,
   ) {}
 
   // ── Reads (data-scope Own/Team EXISTS; Company/System thấy toàn tenant) ─────────
@@ -111,8 +115,9 @@ export class ProjectsService {
     const scopeExists = await this.resolveReadScopeExists(user);
     const limit = this.clampLimit(query.limit);
     const offset = query.offset && query.offset > 0 ? query.offset : 0;
-    const rows = await this.db.withTenant(user.companyId, (tx) =>
-      this.repo.listTx(
+    const rows = await this.db.withTenant(user.companyId, async (tx) => {
+      const actor = await this.actorRef(tx, user);
+      return this.repo.listTx(
         tx,
         user.companyId,
         {
@@ -124,15 +129,22 @@ export class ProjectsService {
           offset,
         },
         scopeExists,
-      ),
-    );
+        actor,
+      );
+    });
     return rows.map((r) => this.toListItem(r));
   }
 
   async getProject(user: RequestUser, id: string): Promise<TaskProjectResponseDto> {
     const scopeExists = await this.resolveReadScopeExists(user);
-    const row = await this.db.withTenant(user.companyId, (tx) =>
-      this.repo.findDetailByIdTx(tx, user.companyId, id, scopeExists),
+    const row = await this.db.withTenant(user.companyId, async (tx) =>
+      this.repo.findDetailByIdTx(
+        tx,
+        user.companyId,
+        id,
+        scopeExists,
+        await this.actorRef(tx, user),
+      ),
     );
     if (!row) throw new NotFoundException(ERR.NOT_FOUND);
     return this.toDetail(row);
@@ -252,11 +264,14 @@ export class ProjectsService {
         },
       });
 
-      return this.reloadDetail(tx, user.companyId, project.id);
+      return this.reloadDetail(tx, user.companyId, project.id, {
+        employeeId: actorEmp?.id ?? null,
+        userId: user.id,
+      });
     });
   }
 
-  // ── Update (field non-sensitive: tồn-tại-tenant; ĐỔI CHỦ: owner-check governance) ──
+  // ── Update (field thường: tầng role Owner/Manager D-24; ĐỔI CHỦ: governance Owner D-25) ──
 
   async updateProject(
     user: RequestUser,
@@ -270,12 +285,15 @@ export class ProjectsService {
       // BỊT BYPASS OWNER-CHECK: đổi ownerEmployeeId là hành động GOVERNANCE. Nếu chỉ tồn-tại-tenant thì
       // manager @Team (update:project@Team, write không lọc scope) có thể tự gán mình làm chủ 1 project
       // KHÔNG phải của mình rồi qua owner-check của close/delete/manage-member ⇒ vô hiệu hoá owner-check.
-      // Ép assertGovern("update"): scope Company/System (company-admin) bỏ qua; scope < Company (manager)
-      // PHẢI là chủ hiện tại; owner_employee_id NULL ⇒ 403 FAIL-CLOSED (không chiếm được project vô chủ).
+      // D-25: assertGovern nay neo theo member role Owner (không còn so owner_employee_id 1-người).
+      // Field thường (không đổi chủ): tầng D-24 "Sửa thông tin dự án" — scope<Company đòi member
+      // Owner/Manager (đóng lỗ mgr@Team sửa được MỌI project trong công ty — đổi hành vi chủ đích).
       const reassigningOwner =
         dto.ownerEmployeeId !== undefined && dto.ownerEmployeeId !== raw.ownerEmployeeId;
       if (reassigningOwner) {
         await this.assertGovern(tx, user, raw, "update");
+      } else {
+        await this.assertUpdateLayer(tx, user, raw);
       }
 
       if (
@@ -298,6 +316,7 @@ export class ProjectsService {
       ) {
         throw new BadRequestException(ERR.DEPT_INVALID);
       }
+      let newOwner: { employeeId: string; userId: string } | null = null;
       if (dto.ownerEmployeeId !== undefined && dto.ownerEmployeeId !== null) {
         const emp = await this.repo.findEmployeeForMemberTx(
           tx,
@@ -307,6 +326,11 @@ export class ProjectsService {
         if (!emp || emp.deletedAt !== null || emp.status !== "active") {
           throw new BadRequestException(ERR.OWNER_EMPLOYEE_INVALID);
         }
+        // D-25: chủ mới PHẢI upsert được thành Owner-member (user_id NOT NULL trên project_members)
+        // ⇒ đòi account như đường create (resolveOwner) — trước đây reassign KHÔNG kiểm (behavior
+        // change chủ đích, ghi PR).
+        if (!emp.userId) throw new BadRequestException(ERR.OWNER_NO_ACCOUNT);
+        newOwner = { employeeId: emp.id, userId: emp.userId };
       }
 
       const updated = await this.repo.updateProjectTx(
@@ -328,6 +352,13 @@ export class ProjectsService {
       if (!updated) throw new NotFoundException(ERR.NOT_FOUND);
 
       const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
+
+      // D-25: đổi chủ ⇒ chủ mới thành Active member Owner TRONG CÙNG tx (đã member ⇒ nâng role;
+      // chưa ⇒ insert). KHÔNG tự hạ role chủ cũ — nhiều Owner hợp lệ.
+      if (reassigningOwner && newOwner) {
+        await this.syncOwnerMemberTx(tx, user, id, newOwner, actorEmp?.id ?? null);
+      }
+
       await this.activity.record(tx, {
         action: "PROJECT_UPDATED",
         targetType: "Project",
@@ -347,11 +378,14 @@ export class ProjectsService {
         after: dto,
       });
 
-      return this.reloadDetail(tx, user.companyId, id);
+      return this.reloadDetail(tx, user.companyId, id, {
+        employeeId: actorEmp?.id ?? null,
+        userId: user.id,
+      });
     });
   }
 
-  // ── Lifecycle: close / delete (sensitive → owner-check khi scope < Company) ─────
+  // ── Lifecycle: close / delete (sensitive → governance Owner-member khi scope < Company) ─────
 
   async closeProject(
     user: RequestUser,
@@ -389,7 +423,10 @@ export class ProjectsService {
         after: { status: "Completed", note: dto.note ?? null },
       });
 
-      return this.reloadDetail(tx, user.companyId, id);
+      return this.reloadDetail(tx, user.companyId, id, {
+        employeeId: actorEmpId,
+        userId: user.id,
+      });
     });
   }
 
@@ -621,9 +658,12 @@ export class ProjectsService {
   }
 
   /**
-   * OWNER-CHECK cho hành động sensitive (close/delete/manage-member). Trả actorEmployeeId (cho activity).
-   * scope Company/System (company-admin) ⇒ KHÔNG owner-check. scope < Company (manager @Team) ⇒ actor PHẢI
-   * là owner (employeeId === owner_employee_id); owner_employee_id NULL ⇒ 403 FAIL-CLOSED.
+   * GOVERNANCE (close/delete/manage-member/đổi-chủ) — S5-TASK-PROJROLE-1 D-25 RE-ANCHOR: scope <
+   * Company ⇒ actor PHẢI là Active member `project_role='Owner'` (nhiều Owner hợp lệ — SPEC-06 §14.6
+   * "Owner = toàn quyền"), KHÔNG còn so `owner_employee_id` 1-người ( cột đó giữ làm "chủ nhiệm chính"
+   * hiển thị/notification). Slug phân biệt: project 0 Owner-member ⇒ OWNER_REQUIRED (fail-closed);
+   * có Owner nhưng actor không phải ⇒ NOT_OWNER. Company/System bypass (SPEC-06 §18.6.8).
+   * Trả actorEmployeeId (cho activity).
    */
   private async assertGovern(
     tx: TenantTx,
@@ -642,12 +682,132 @@ export class ProjectsService {
     const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
     const actorEmpId = actorEmp?.id ?? null;
     if (scope !== "Company" && scope !== "System") {
-      if (!project.ownerEmployeeId) throw new ForbiddenException(ERR.OWNER_REQUIRED);
-      if (!actorEmpId || actorEmpId !== project.ownerEmployeeId) {
+      const membership = await this.projectAccess.getMembershipTx(
+        tx,
+        user.companyId,
+        project.id,
+        actorEmpId,
+        user.id,
+      );
+      if (!membership || membership.role !== "Owner") {
+        if (!(await this.projectAccess.hasActiveOwnerTx(tx, user.companyId, project.id))) {
+          throw new ForbiddenException(ERR.OWNER_REQUIRED);
+        }
         throw new ForbiddenException(ERR.NOT_OWNER);
       }
     }
     return actorEmpId;
+  }
+
+  /**
+   * Tầng D-24 hàng "Sửa thông tin dự án" (field thường, KHÔNG đổi chủ): scope<Company ⇒ actor phải là
+   * Active member Owner/Manager ⇒ else 403 FORBIDDEN (generic — không phải NOT_OWNER, Manager cũng qua).
+   */
+  private async assertUpdateLayer(
+    tx: TenantTx,
+    user: RequestUser,
+    project: Project,
+  ): Promise<void> {
+    const scope = await this.permission.resolveStrongestScope(
+      user.id,
+      user.companyId,
+      "update",
+      "project",
+    );
+    if (scope === null) throw new ForbiddenException(ERR.FORBIDDEN);
+    if (scope !== "Company" && scope !== "System") {
+      const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
+      await this.projectAccess.assertProjectRoleTx(
+        tx,
+        user,
+        project.id,
+        actorEmp?.id ?? null,
+        ["Owner", "Manager"],
+        ERR.FORBIDDEN,
+      );
+    }
+  }
+
+  /**
+   * D-25 — đồng bộ chủ mới thành Active Owner-member TRONG CÙNG tx đổi chủ: đã có hàng Active ⇒ nâng
+   * role (không nhân đôi — unique uq_project_members_active_employee); chưa ⇒ insert. Ghi activity +
+   * audit mirror addMember/updateMemberRole (mã có sẵn — không object_type mới).
+   */
+  private async syncOwnerMemberTx(
+    tx: TenantTx,
+    user: RequestUser,
+    projectId: string,
+    owner: { employeeId: string; userId: string },
+    actorEmpId: string | null,
+  ): Promise<void> {
+    const existing = await this.repo.findActiveMemberByEmployeeTx(
+      tx,
+      user.companyId,
+      projectId,
+      owner.employeeId,
+    );
+    if (existing) {
+      if (existing.projectRole === "Owner") return;
+      const updated = await this.repo.updateMemberRoleTx(
+        tx,
+        user.companyId,
+        existing.id,
+        "Owner",
+        user.id,
+      );
+      if (!updated) throw new InternalServerErrorException("Không nâng được vai trò chủ dự án mới.");
+      await this.activity.record(tx, {
+        action: "MEMBER_ROLE_CHANGED",
+        targetType: "Member",
+        targetId: existing.id,
+        projectId,
+        actorUserId: user.id,
+        actorEmployeeId: actorEmpId,
+        oldValues: { projectRole: existing.projectRole },
+        newValues: { projectRole: "Owner" },
+        message: "Đổi chủ dự án — nâng vai trò thành viên lên Owner",
+      });
+      await this.audit.record(tx, {
+        action: "ProjectMemberRoleChanged",
+        objectType: "project",
+        objectId: projectId,
+        actorUserId: user.id,
+        before: { memberId: existing.id, projectRole: existing.projectRole },
+        after: { memberId: existing.id, projectRole: "Owner" },
+      });
+      return;
+    }
+    const member = await this.repo.insertMemberTx(tx, user.companyId, {
+      projectId,
+      userId: owner.userId,
+      employeeId: owner.employeeId,
+      projectRole: "Owner",
+      invitedBy: user.id,
+      createdBy: user.id,
+    });
+    await this.activity.record(tx, {
+      action: "MEMBER_ADDED",
+      targetType: "Member",
+      targetId: member.id,
+      projectId,
+      actorUserId: user.id,
+      actorEmployeeId: actorEmpId,
+      newValues: { employeeId: owner.employeeId, projectRole: "Owner" },
+      message: "Đổi chủ dự án — thêm chủ mới làm thành viên Owner",
+    });
+    await this.audit.record(tx, {
+      action: "ProjectMemberAdded",
+      objectType: "project",
+      objectId: projectId,
+      actorUserId: user.id,
+      after: { memberId: member.id, employeeId: owner.employeeId, projectRole: "Owner" },
+    });
+  }
+
+  /** Danh tính actor cho myProjectRole (S5-TASK-PROJROLE-1). */
+  private async actorRef(tx: TenantTx, user: RequestUser): Promise<ProjectActorRef> {
+    const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
+    return { employeeId: actorEmp?.id ?? null, userId: user.id };
   }
 
   /** Chọn owner: dto.ownerEmployeeId (được chỉ định) ⇒ validate active + có account; else actor mapping. */
@@ -686,8 +846,9 @@ export class ProjectsService {
     tx: TenantTx,
     companyId: string,
     id: string,
+    actor?: ProjectActorRef,
   ): Promise<TaskProjectResponseDto> {
-    const row = await this.repo.findDetailByIdTx(tx, companyId, id);
+    const row = await this.repo.findDetailByIdTx(tx, companyId, id, undefined, actor);
     if (!row) throw new InternalServerErrorException("Không tải lại được dự án vừa ghi.");
     return this.toDetail(row);
   }
@@ -722,6 +883,7 @@ export class ProjectsService {
       startDate: row.startDate,
       endDate: row.endDate,
       memberCount: row.memberCount,
+      myProjectRole: (row.myProjectRole as ProjectRoleDto | null) ?? null,
       createdBy: row.createdBy,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),

@@ -27,7 +27,7 @@ import { DatabaseService } from "../db/db.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import type { FilePermissionInput } from "../foundation/files/file-policy.types";
 import type { FileOwnerPermissionResolver } from "../foundation/files/resolvers/file-owner-permission-resolver";
-import { TaskCoreRepository } from "./task-core.repository";
+import { TaskCoreRepository, type TaskScopeMode } from "./task-core.repository";
 import { TASK_ENTITY, TASK_MODULE, TaskFileRepository } from "./task-file.repository";
 
 /** resourceType + actions for every task-file data_scope resolution (matches seed mig 0485). */
@@ -87,6 +87,9 @@ export class TaskFileResolver implements FileOwnerPermissionResolver {
       action,
       TASK_RESOURCE,
     );
+    // S5-TASK-PROJROLE-1 (D-24): view/download → 'read' (mọi member); link/delete/unlink → 'collab'
+    // (role ≥ Member — Viewer chỉ đọc). Mode theo action vì helper phục vụ cả 5 quyết định resolver.
+    const mode: TaskScopeMode = action === ACTION_READ ? "read" : "collab";
     return this.db.withTenant(input.companyId, async (tx) => {
       let scopeExists: SQL | undefined;
       if (scope !== "Company" && scope !== "System") {
@@ -102,6 +105,7 @@ export class TaskFileResolver implements FileOwnerPermissionResolver {
           scopeCond,
           actorEmp?.id ?? null,
           input.userId,
+          mode,
         );
       }
       // entityId IS the tasks.id (FilePolicyService dispatches each link on its own entityId).

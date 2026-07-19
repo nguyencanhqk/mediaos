@@ -45,11 +45,18 @@ export interface ProjectDetailRow {
   startDate: string | null;
   endDate: string | null;
   memberCount: number;
+  myProjectRole: string | null;
   createdBy: string | null;
   createdAt: Date;
   updatedAt: Date;
   closedAt: Date | null;
   closedBy: string | null;
+}
+
+/** Danh tinh actor cho myProjectRole (S5-TASK-PROJROLE-1) - undefined = khong tinh (tra null). */
+export interface ProjectActorRef {
+  employeeId: string | null;
+  userId: string;
 }
 
 export interface ProjectMemberRow {
@@ -152,6 +159,35 @@ export class ProjectsRepository {
     )`;
   }
 
+  /**
+   * S5-TASK-PROJROLE-1 (D-24/D-25) - role cua CHINH actor trong project, correlated SCALAR-SUBQUERY
+   * role-MANH-NHAT (Owner>Manager>Member>Viewer; NULL coalesce 'Member' theo D-24). KHONG LEFT JOIN:
+   * actor co the khop CA hang legacy user_id-only LAN hang employee_id => join nhan ban row + vo
+   * limit/offset (BLOCKING #2 plan-reviewer). Mirror idiom memberCountSql ben duoi.
+   */
+  private myProjectRoleSql(companyId: string, actor?: ProjectActorRef): SQL<string | null> {
+    if (!actor) return sql<string | null>`null`;
+    const identity = actor.employeeId
+      ? sql`(${projectMembers.employeeId} = ${actor.employeeId} or ${projectMembers.userId} = ${actor.userId})`
+      : sql`${projectMembers.userId} = ${actor.userId}`;
+    return sql<string | null>`(
+      select coalesce(${projectMembers.projectRole}, 'Member')
+        from project_members
+       where ${projectMembers.companyId} = ${companyId}
+         and ${projectMembers.projectId} = ${projects.id}
+         and ${projectMembers.memberStatus} = ${"Active"}
+         and ${projectMembers.deletedAt} is null
+         and ${identity}
+       order by case coalesce(${projectMembers.projectRole}, 'Member')
+                  when 'Owner' then 0
+                  when 'Manager' then 1
+                  when 'Member' then 2
+                  else 3
+                end
+       limit 1
+    )`;
+  }
+
   private memberCountSql(companyId: string): SQL<number> {
     return sql<number>`(
       select count(*)::int
@@ -171,6 +207,7 @@ export class ProjectsRepository {
     companyId: string,
     ownerNameExpr: SQL<string | null>,
     deptNameExpr: SQL<string | null>,
+    actor?: ProjectActorRef,
   ) {
     return {
       id: projects.id,
@@ -187,6 +224,7 @@ export class ProjectsRepository {
       startDate: projects.startDate,
       endDate: projects.endDate,
       memberCount: this.memberCountSql(companyId),
+      myProjectRole: this.myProjectRoleSql(companyId, actor),
       createdBy: projects.createdBy,
       createdAt: projects.createdAt,
       updatedAt: projects.updatedAt,
@@ -202,6 +240,7 @@ export class ProjectsRepository {
     companyId: string,
     filter: ProjectListFilter,
     scopeExists?: SQL,
+    actor?: ProjectActorRef,
   ): Promise<ProjectDetailRow[]> {
     const ownerEmp = alias(employeeProfiles, "owner_emp");
     const ownerUser = alias(users, "owner_user");
@@ -227,6 +266,7 @@ export class ProjectsRepository {
           companyId,
           sql<string | null>`${ownerUser.fullName}`,
           sql<string | null>`${dept.name}`,
+          actor,
         ),
       )
       .from(projects)
@@ -245,6 +285,7 @@ export class ProjectsRepository {
     companyId: string,
     id: string,
     scopeExists?: SQL,
+    actor?: ProjectActorRef,
   ): Promise<ProjectDetailRow | undefined> {
     const ownerEmp = alias(employeeProfiles, "owner_emp");
     const ownerUser = alias(users, "owner_user");
@@ -263,6 +304,7 @@ export class ProjectsRepository {
           companyId,
           sql<string | null>`${ownerUser.fullName}`,
           sql<string | null>`${dept.name}`,
+          actor,
         ),
       )
       .from(projects)
@@ -618,6 +660,29 @@ export class ProjectsRepository {
       })
       .returning();
     if (!row) throw new Error("insertMemberTx: insert returned no row");
+    return row;
+  }
+
+  /** Hang member ACTIVE theo employee (S5-TASK-PROJROLE-1 D-25 - upsert chu moi khi reassign owner). */
+  async findActiveMemberByEmployeeTx(
+    tx: TenantTx,
+    companyId: string,
+    projectId: string,
+    employeeId: string,
+  ): Promise<ProjectMember | undefined> {
+    const [row] = await tx
+      .select()
+      .from(projectMembers)
+      .where(
+        and(
+          eq(projectMembers.companyId, companyId),
+          eq(projectMembers.projectId, projectId),
+          eq(projectMembers.employeeId, employeeId),
+          eq(projectMembers.memberStatus, "Active"),
+          isNull(projectMembers.deletedAt),
+        ),
+      )
+      .limit(1);
     return row;
   }
 

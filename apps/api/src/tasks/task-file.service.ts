@@ -9,7 +9,7 @@ import type { SQL } from "drizzle-orm";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { FileService } from "../foundation/files/files.service";
-import { TaskCoreRepository } from "./task-core.repository";
+import { TaskCoreRepository, type TaskScopeMode } from "./task-core.repository";
 import {
   TASK_ENTITY,
   TASK_MODULE,
@@ -178,6 +178,10 @@ export class TaskFileService {
       action,
       TASK_RESOURCE,
     );
+    // S5-TASK-PROJROLE-1 (D-24): mode suy từ action — XEM/tải ('read', mọi member kể cả Viewer);
+    // upload/xoá file ('collab', role ≥ Member — Viewer chỉ đọc). Helper phục vụ cả 2 lớp nên mode
+    // theo operation, không gán cứng (BLOCKING #1 plan-reviewer).
+    const mode: TaskScopeMode = action === ACTION_READ ? "read" : "collab";
     const inScope = await this.db.withTenant(user.companyId, async (tx) => {
       let scopeExists: SQL | undefined;
       if (scope !== "Company" && scope !== "System") {
@@ -193,6 +197,7 @@ export class TaskFileService {
           scopeCond,
           actorEmp?.id ?? null,
           user.id,
+          mode,
         );
       }
       return this.repo.isTaskInScopeTx(tx, user.companyId, taskId, scopeExists);

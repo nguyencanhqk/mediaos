@@ -43,6 +43,7 @@ import { TaskFilesController } from "./task-files.controller";
 import { TaskFileService } from "./task-file.service";
 import { TaskFileRepository } from "./task-file.repository";
 import { TaskFileResolver } from "./task-file.resolver";
+import { ProjectAccessService } from "./project-access.service";
 
 @Module({
   imports: [
@@ -96,6 +97,9 @@ import { TaskFileResolver } from "./task-file.resolver";
     TaskFileService,
     TaskFileRepository,
     TaskFileResolver,
+    // S5-TASK-PROJROLE-1 (đợt C, DECISIONS-04) — tầng đọc project_role duy nhất (D-23/D-24) +
+    // DRY assertTaskInScopeTx (mode read/collab/write thread per-operation).
+    ProjectAccessService,
   ],
   // S4-DASH-BE-2 (additive): + TaskCoreService (MY_TASKS/TASK_ALERTS) + ProjectsService (PROJECT_PROGRESS
   // authorize getProject TRƯỚC listByProject — GAP vòng reconcile: plan cũ chỉ ghi TaskCoreService). DASH

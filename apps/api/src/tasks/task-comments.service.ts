@@ -18,7 +18,7 @@ import { AuditService } from "../events/audit.service";
 import { OutboxService } from "../events/outbox.service";
 import { PermissionService } from "../permission/permission.service";
 import { DataScopeService } from "../permission/data-scope.service";
-import { TaskCoreRepository, type TaskCoreRow } from "./task-core.repository";
+import { TaskCoreRepository, type TaskCoreRow, type TaskScopeMode } from "./task-core.repository";
 import { TaskCommentsRepository, type TaskCommentRow } from "./task-comments.repository";
 import { TaskActivityService } from "./task-activity.service";
 
@@ -75,7 +75,7 @@ export class TaskCommentsService {
   async list(user: RequestUser, taskId: string): Promise<TaskCommentResponseDto[]> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "read", "task");
     return this.db.withTenant(user.companyId, async (tx) => {
-      await this.assertTaskVisible(tx, user, taskId, scope);
+      await this.assertTaskVisible(tx, user, taskId, scope, "read");
       const rows = await this.repo.listByTaskTx(tx, user.companyId, taskId);
       return rows.map((r) => this.toDto(r, []));
     });
@@ -88,7 +88,7 @@ export class TaskCommentsService {
   ): Promise<TaskCommentResponseDto> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "comment", "task");
     return this.db.withTenant(user.companyId, async (tx) => {
-      const task = await this.assertTaskVisible(tx, user, taskId, scope);
+      const task = await this.assertTaskVisible(tx, user, taskId, scope, "collab");
       const mentions = await this.resolveMentions(
         tx,
         user.companyId,
@@ -169,7 +169,7 @@ export class TaskCommentsService {
   ): Promise<TaskCommentResponseDto> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "comment", "task");
     return this.db.withTenant(user.companyId, async (tx) => {
-      const task = await this.assertTaskVisible(tx, user, taskId, scope);
+      const task = await this.assertTaskVisible(tx, user, taskId, scope, "collab");
       const existing = await this.repo.findByIdTx(tx, user.companyId, taskId, commentId);
       if (!existing || existing.deletedAt !== null)
         throw new NotFoundException(ERR.COMMENT_NOT_FOUND);
@@ -213,7 +213,7 @@ export class TaskCommentsService {
   async remove(user: RequestUser, taskId: string, commentId: string): Promise<void> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "comment", "task");
     await this.db.withTenant(user.companyId, async (tx) => {
-      const task = await this.assertTaskVisible(tx, user, taskId, scope);
+      const task = await this.assertTaskVisible(tx, user, taskId, scope, "collab");
       const existing = await this.repo.findByIdTx(tx, user.companyId, taskId, commentId);
       if (!existing || existing.deletedAt !== null)
         throw new NotFoundException(ERR.COMMENT_NOT_FOUND);
@@ -249,25 +249,43 @@ export class TaskCommentsService {
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
-  /** Task PHẢI tồn tại + nằm trong scope đọc của actor (else 404 — không lộ tồn tại/cross-tenant). */
+  /**
+   * Task PHẢI tồn tại + nằm trong scope của actor theo `mode` (else 404 — không lộ tồn tại/cross-tenant).
+   * S5-TASK-PROJROLE-1 (BLOCKING #1 plan-reviewer): helper này phục vụ CẢ list (đọc) LẪN create/update/
+   * remove (viết) ⇒ mode PHẢI thread từ caller — list → 'read' (Viewer đọc được comment), mutate →
+   * 'collab' (D-24: viết comment đòi role ≥ Member; Viewer bị chặn). KHÔNG gán cứng một mode.
+   */
   private async assertTaskVisible(
     tx: TenantTx,
     user: RequestUser,
     taskId: string,
     scope: DataScope,
+    mode: TaskScopeMode,
   ): Promise<TaskCoreRow> {
-    const scopeExists = await this.scopeExistsFor(tx, user.id, user.companyId, scope);
+    const scopeExists = await this.scopeExistsFor(tx, user.id, user.companyId, scope, mode);
     const row = await this.coreRepo.findScopedByIdTx(tx, user.companyId, taskId, scopeExists);
     if (!row) throw new NotFoundException(ERR.TASK_NOT_FOUND);
     return row;
   }
 
-  private async scopeExistsFor(tx: TenantTx, userId: string, companyId: string, scope: DataScope) {
+  private async scopeExistsFor(
+    tx: TenantTx,
+    userId: string,
+    companyId: string,
+    scope: DataScope,
+    mode: TaskScopeMode,
+  ) {
     if (scope === "Company" || scope === "System") return undefined;
     const ctx = await this.dataScope.resolveContext(userId, companyId);
     const scopeCond = this.dataScope.buildEmployeeScopeCondition(scope, ctx);
     const actorEmp = await this.coreRepo.findActiveEmployeeByUserTx(tx, companyId, userId);
-    return this.coreRepo.buildReadScopeExists(companyId, scopeCond, actorEmp?.id ?? null, userId);
+    return this.coreRepo.buildReadScopeExists(
+      companyId,
+      scopeCond,
+      actorEmp?.id ?? null,
+      userId,
+      mode,
+    );
   }
 
   /**
