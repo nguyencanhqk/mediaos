@@ -489,6 +489,9 @@ export const TASK_PROJECT_PAGE_LIMIT_MAX = 200;
 export const listTaskProjectsQuerySchema = z.object({
   status: taskProjectStatusSchema.optional(),
   ownerEmployeeId: z.string().uuid().optional(),
+  // S5-TASK-NAV-TREE-1 (đợt B) — lọc theo phòng ban (sidebar cây phòng ban → "Xem báo cáo" deep-link
+  // /tasks/projects?departmentId=X). Server AND thêm eq(projects.departmentId) — KHÔNG thay data-scope.
+  departmentId: z.string().uuid().optional(),
   search: z.string().trim().min(1).max(200).optional(),
   limit: z.coerce.number().int().min(1).max(TASK_PROJECT_PAGE_LIMIT_MAX).optional(),
   offset: z.coerce.number().int().min(0).optional(),

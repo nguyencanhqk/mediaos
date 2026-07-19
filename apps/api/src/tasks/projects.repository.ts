@@ -24,6 +24,7 @@ import { users } from "../db/schema/users";
 export interface ProjectListFilter {
   status?: string;
   ownerEmployeeId?: string;
+  departmentId?: string;
   search?: string;
   limit: number;
   offset: number;
@@ -209,6 +210,7 @@ export class ProjectsRepository {
     const conds: SQL[] = [eq(projects.companyId, companyId), isNull(projects.deletedAt)];
     if (filter.status) conds.push(eq(projects.projectStatus, filter.status));
     if (filter.ownerEmployeeId) conds.push(eq(projects.ownerEmployeeId, filter.ownerEmployeeId));
+    if (filter.departmentId) conds.push(eq(projects.departmentId, filter.departmentId));
     if (filter.search) {
       const term = `%${filter.search}%`;
       const searchCond = or(

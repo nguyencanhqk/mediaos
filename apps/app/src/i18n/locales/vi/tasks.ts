@@ -2,6 +2,27 @@
  * i18n (vi) — namespace "tasks", module TASK (Project) — S4-FE-TASK-1 (SPEC-06 §13.1/§13.2/§13.3/§13.4).
  */
 export default {
+  // S5-TASK-NAV-TREE-1 (đợt B) — cây phòng ban + dự án trong sidebar TASK (TaskSidebarTree.tsx)
+  sidebarTree: {
+    title: "Dự án theo phòng ban",
+    loading: "Đang tải cây phòng ban",
+    error: "Không tải được cây phòng ban.",
+    empty: "Chưa có phòng ban hay dự án nào.",
+    unassigned: "Chưa phân phòng ban",
+    truncated: "Chỉ hiển thị {{count}} dự án đầu — mở Dự án để xem đầy đủ.",
+    menuLabel: "Thao tác phòng ban {{name}}",
+    collapse: "Thu gọn {{name}}",
+    expand: "Mở rộng {{name}}",
+    menu: {
+      report: "Xem báo cáo",
+      addProject: "Thêm dự án",
+      sort: "Sắp xếp dự án",
+    },
+    sort: {
+      newest: "Mới nhất trước",
+      nameAsc: "Tên A→Z",
+    },
+  },
   projects: {
     list: {
       title: "Dự án",
@@ -9,6 +30,9 @@ export default {
       addButton: "Tạo dự án",
       searchPlaceholder: "Tìm theo mã hoặc tên dự án",
       allStatuses: "Tất cả trạng thái",
+      // S5-TASK-NAV-TREE-1 — filter phòng ban (?departmentId, deep-link từ cây sidebar)
+      departmentFilterLabel: "Lọc theo phòng ban",
+      allDepartments: "Tất cả phòng ban",
       columns: {
         code: "Mã dự án",
         name: "Tên dự án",

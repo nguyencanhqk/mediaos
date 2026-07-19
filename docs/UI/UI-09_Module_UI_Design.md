@@ -1070,25 +1070,12 @@ Nguyên tắc TASK UI:
 5. Comment/mention cần rõ người được mention và phát notification.
 6. Project detail cần phân biệt thông tin dự án, thành viên, task và tiến độ.
 
-### 11.2 TASK sidebar đề xuất
+### 11.2 TASK sidebar
 
-```text
-Tổng quan
-- Tổng quan công việc
-
-Công việc
-- Việc của tôi
-- Danh sách task
-- Kanban
-
-Dự án
-- Dự án
-- Thành viên dự án
-
-Báo cáo
-- Báo cáo tiến độ
-- Activity log
-```
+> **Bản chuẩn sidebar TASK = FRONTEND-11 §8.1** (hợp nhất S5-TASK-NAV-TREE-1, đợt B): 4 item tĩnh
+> (Danh sách công việc · Việc của tôi · Task quá hạn · Dự án) + section động **cây phòng ban → dự
+> án** (menu ⋯ mỗi phòng ban: xem báo cáo · thêm dự án · sắp xếp). Đề xuất cũ ở đây đã GỘP vào bản
+> chuẩn — không duy trì bố cục riêng trong doc này để tránh drift.
 
 ### 11.3 Screen list TASK
 

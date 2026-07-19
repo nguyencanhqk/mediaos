@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { KanbanSquare, RefreshCw, Trash2, Plus } from "lucide-react";
@@ -8,6 +8,8 @@ import {
   taskProjectApi,
   taskKeys,
   taskProjectInvalidation,
+  hrApi,
+  hrKeys,
   useCan,
   PermissionGate,
 } from "@mediaos/web-core";
@@ -37,6 +39,17 @@ import { ProjectFormDrawer } from "./ProjectFormDrawer";
  * dùng offset "tải thêm" (heuristic: còn trang kế khi số dòng trả về == PAGE_SIZE).
  */
 const PAGE_SIZE = 20;
+
+/**
+ * S5-TASK-NAV-TREE-1 — filter phòng ban là URL-driven (?departmentId=<uuid>): deep-link từ menu ⋯
+ * "Xem báo cáo" của cây sidebar. Chỉ nhận uuid hợp lệ — giá trị rác trên URL bị bỏ qua (không 400 oan).
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function readDepartmentId(search: unknown): string | undefined {
+  const raw = (search as Record<string, unknown> | undefined)?.departmentId;
+  return typeof raw === "string" && UUID_RE.test(raw) ? raw : undefined;
+}
 
 const STATUS_OPTIONS: readonly TaskProjectStatusDto[] = [
   "Planning",
@@ -125,9 +138,27 @@ export function ProjectListPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteItem, setDeleteItem] = useState<TaskProjectListItemDto | null>(null);
 
+  // URL-driven (S5-TASK-NAV-TREE-1): đổi filter = đổi URL (share/back được); state không nhân đôi.
+  // history.replace với URL chuỗi — route chưa có validateSearch nên navigate({search}) không type được.
+  const router = useRouter();
+  const locationSearch = useRouterState({ select: (s) => s.location.search });
+  const departmentId = readDepartmentId(locationSearch);
+  const setDepartmentId = (next: string) => {
+    setPage(1);
+    router.history.replace(next ? `/tasks/projects?departmentId=${next}` : "/tasks/projects");
+  };
+
+  const { data: departments } = useQuery({
+    queryKey: hrKeys.departments.list(),
+    queryFn: () => hrApi.listDepartments(),
+    enabled: canView,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const queryParams = {
     search: search || undefined,
     status: status || undefined,
+    departmentId,
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
   };
@@ -295,6 +326,19 @@ export function ProjectListPage() {
             {STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
                 {t(`projects.status.${s}`)}
+              </option>
+            ))}
+          </Select>
+          <Select
+            aria-label={t("projects.list.departmentFilterLabel")}
+            value={departmentId ?? ""}
+            onChange={(e) => setDepartmentId(e.target.value)}
+            className="w-48"
+          >
+            <option value="">{t("projects.list.allDepartments")}</option>
+            {(departments ?? []).map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
               </option>
             ))}
           </Select>

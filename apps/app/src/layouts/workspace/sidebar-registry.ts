@@ -489,6 +489,12 @@ export const LEAVE_SIDEBAR: readonly SidebarItemMeta[] = [
 
 // ---------------------------------------------------------------------------
 // TASK — Công việc
+//
+// Doc CHUẨN sidebar TASK = FRONTEND-11 §8.1 (bản hợp nhất S5-TASK-NAV-TREE-1 — UI-09 §11.2 và
+// UI-02 §9.8 trỏ về đó, KHÔNG tự khai bố cục riêng). 4 item tĩnh dưới đây + section ĐỘNG "Dự án
+// theo phòng ban" (TaskSidebarTree, đăng ký ở sidebar-extensions.ts — cần React Query nên không
+// khai được ở registry data thuần). ROUTE_REGISTRY (web-core) đồng bộ 4 routeKey cùng tên;
+// showInSidebar ở đó là metadata chết — ModuleSidebar CHỈ đọc registry này.
 // ---------------------------------------------------------------------------
 export const TASK_SIDEBAR: readonly SidebarItemMeta[] = [
   {

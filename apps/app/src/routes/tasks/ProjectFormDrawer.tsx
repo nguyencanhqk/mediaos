@@ -33,6 +33,8 @@ import {
 interface ProjectFormDrawerProps {
   mode: "create" | "edit";
   project?: TaskProjectResponseDto;
+  /** S5-TASK-NAV-TREE-1 — prefill phòng ban khi tạo từ menu ⋯ của cây sidebar (chỉ mode "create"). */
+  initialDepartmentId?: string;
   onClose: () => void;
   onSuccess: (project: TaskProjectResponseDto) => void;
 }
@@ -51,7 +53,13 @@ function isCodeConflict(err: unknown): boolean {
   return err instanceof ApiError && err.status === 409 && /CODE-TAKEN/.test(err.message);
 }
 
-export function ProjectFormDrawer({ mode, project, onClose, onSuccess }: ProjectFormDrawerProps) {
+export function ProjectFormDrawer({
+  mode,
+  project,
+  initialDepartmentId,
+  onClose,
+  onSuccess,
+}: ProjectFormDrawerProps) {
   const { t } = useTranslation("tasks");
   const queryClient = useQueryClient();
   const isEdit = mode === "edit";
@@ -60,7 +68,13 @@ export function ProjectFormDrawer({ mode, project, onClose, onSuccess }: Project
   const form = useForm<ProjectFormValues>({
     resolver: zodResolver(projectFormSchema),
     mode: "onSubmit",
-    defaultValues: isEdit && project ? projectToFormValues(project) : EMPTY_PROJECT_FORM,
+    defaultValues:
+      isEdit && project
+        ? projectToFormValues(project)
+        : {
+            ...EMPTY_PROJECT_FORM,
+            departmentId: initialDepartmentId ?? EMPTY_PROJECT_FORM.departmentId,
+          },
   });
 
   const {

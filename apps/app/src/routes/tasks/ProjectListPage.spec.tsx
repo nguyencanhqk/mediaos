@@ -12,7 +12,18 @@ import type { TaskProjectListItemDto } from "@mediaos/contracts";
 // ---------------------------------------------------------------------------
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
-  return { ...actual, useNavigate: () => vi.fn() };
+  return {
+    ...actual,
+    useNavigate: () => vi.fn(),
+    // S5-TASK-NAV-TREE-1 — page đọc ?departmentId qua useRouterState + đổi URL qua router.history:
+    // test không dựng RouterProvider nên mock cả hai (search rỗng = không filter phòng ban).
+    useRouter: () => ({ history: { push: vi.fn(), replace: vi.fn() } }),
+    useRouterState: ({
+      select,
+    }: {
+      select: (s: { location: { pathname: string; search: Record<string, unknown> } }) => unknown;
+    }) => select({ location: { pathname: "/tasks/projects", search: {} } }),
+  };
 });
 
 vi.mock("@mediaos/web-core", async (importOriginal) => {
