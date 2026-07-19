@@ -89,11 +89,15 @@ const TASK_DONE: TaskKanbanCardDto = {
 const MOCK_BOARD: TaskKanbanBoardDto = {
   projectId: "proj-001",
   columns: [
-    { status: "Todo", tasks: [BASE_TASK, TASK_WITH_SIGNALS, TASK_UNASSIGNED] },
-    { status: "In Progress", tasks: [] },
-    { status: "In Review", tasks: [] },
-    { status: "Done", tasks: [TASK_DONE] },
-    { status: "Cancelled", tasks: [] },
+    {
+      columnMode: "status",
+      status: "Todo",
+      tasks: [BASE_TASK, TASK_WITH_SIGNALS, TASK_UNASSIGNED],
+    },
+    { columnMode: "status", status: "In Progress", tasks: [] },
+    { columnMode: "status", status: "In Review", tasks: [] },
+    { columnMode: "status", status: "Done", tasks: [TASK_DONE] },
+    { columnMode: "status", status: "Cancelled", tasks: [] },
   ],
 };
 

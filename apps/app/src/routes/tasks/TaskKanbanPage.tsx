@@ -11,7 +11,12 @@ import {
   ApiError,
 } from "@mediaos/web-core";
 import { Card, Button, EmptyState, Avatar, Badge, cn } from "@mediaos/ui";
-import type { TaskCoreStatusDto, TaskKanbanBoardDto, TaskKanbanCardDto } from "@mediaos/contracts";
+import type {
+  TaskCoreStatusDto,
+  TaskKanbanBoardDto,
+  TaskKanbanCardDto,
+  TaskKanbanStatusColumnDto,
+} from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
 import { TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
 
@@ -335,8 +340,12 @@ export function TaskKanbanPage({ projectId }: { projectId: string }) {
         });
         if (moved) {
           const patched = { ...moved, status };
+          // Narrow theo columnMode (union S5-TASK-PIPELINE-1) — optimistic chỉ áp cột status;
+          // board state-mode (kéo theo CỘT pipeline qua move-state) thuộc lane pipeline-fe.
           const nextColumns = withoutMoved.map((col) =>
-            col.status === status ? { ...col, tasks: [patched, ...col.tasks] } : col,
+            col.columnMode === "status" && col.status === status
+              ? { ...col, tasks: [patched, ...col.tasks] }
+              : col,
           );
           queryClient.setQueryData<TaskKanbanBoardDto>(queryKey, {
             ...previous,
@@ -409,7 +418,9 @@ export function TaskKanbanPage({ projectId }: { projectId: string }) {
     );
   }
 
-  const columns = data?.columns ?? [];
+  const columns = (data?.columns ?? []).filter(
+    (col): col is TaskKanbanStatusColumnDto => col.columnMode === "status",
+  );
   const totalTasks = columns.reduce((sum, col) => sum + col.tasks.length, 0);
 
   if (totalTasks === 0) {

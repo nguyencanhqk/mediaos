@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { taskKanbanBoardSchema, taskKanbanCardSchema } from "./task-collab";
+import {
+  moveTaskStateRequestSchema,
+  taskKanbanBoardSchema,
+  taskKanbanCardSchema,
+} from "./task-collab";
 
 /**
  * S5-TASK-BE-6 (SPEC-06 §13.8) — khoá hợp đồng ADDITIVE của counts per-card Kanban: field mới
@@ -68,6 +72,7 @@ describe("taskKanbanBoardSchema — board KHÔNG gãy khi 1 số card cũ thiế
       projectId: "33333333-3333-3333-3333-333333333333",
       columns: [
         {
+          columnMode: "status",
           status: "Todo",
           tasks: [
             { ...BASE_CARD_FIELDS, id: "44444444-4444-4444-4444-444444444444" },
@@ -84,5 +89,63 @@ describe("taskKanbanBoardSchema — board KHÔNG gãy khi 1 số card cũ thiế
       ],
     });
     expect(board.columns[0]?.tasks).toHaveLength(2);
+  });
+});
+
+// ─── S5-TASK-PIPELINE-1 (lane contracts) — union cột board + move-state + nhóm review ───
+
+describe("taskKanbanColumnSchema — discriminated union theo columnMode (DECISIONS-03 D-17)", () => {
+  const stateColumn = {
+    columnMode: "state",
+    stateId: "66666666-6666-6666-6666-666666666666",
+    name: "Hậu Kỳ",
+    color: "#3b82f6",
+    stateGroup: "started",
+    sortOrder: 3,
+    taskCount: 1,
+    tasks: [BASE_CARD_FIELDS],
+  };
+
+  it("parse cột 'state' (pipeline tuỳ biến) đủ field; nhóm 'review' hợp lệ (mig 0499)", () => {
+    const board = taskKanbanBoardSchema.parse({
+      projectId: "33333333-3333-3333-3333-333333333333",
+      columns: [stateColumn, { ...stateColumn, name: "Chờ duyệt", stateGroup: "review" }],
+    });
+    expect(board.columns).toHaveLength(2);
+    const col = board.columns[0];
+    expect(col?.columnMode).toBe("state");
+    if (col?.columnMode === "state") expect(col.stateGroup).toBe("started");
+  });
+
+  it("cột thiếu columnMode (shape CŨ trước đợt A) phải fail — đổi shape là đổi thật, không nửa vời", () => {
+    expect(() =>
+      taskKanbanBoardSchema.parse({
+        projectId: "33333333-3333-3333-3333-333333333333",
+        columns: [{ status: "Todo", tasks: [] }],
+      }),
+    ).toThrow();
+  });
+
+  it("cột 'status' fallback (dự án 0 state) vẫn parse", () => {
+    const board = taskKanbanBoardSchema.parse({
+      projectId: "33333333-3333-3333-3333-333333333333",
+      columns: [{ columnMode: "status", status: "In Review", tasks: [] }],
+    });
+    expect(board.columns[0]?.columnMode).toBe("status");
+  });
+});
+
+describe("moveTaskStateRequestSchema — POST /tasks/:id/move-state (gate update-state:task)", () => {
+  it("nhận đúng {stateId uuid}; strict chặn field lạ (không nhét status lách auto-map)", () => {
+    expect(
+      moveTaskStateRequestSchema.parse({ stateId: "77777777-7777-7777-7777-777777777777" }).stateId,
+    ).toBe("77777777-7777-7777-7777-777777777777");
+    expect(() =>
+      moveTaskStateRequestSchema.parse({
+        stateId: "77777777-7777-7777-7777-777777777777",
+        status: "Done",
+      }),
+    ).toThrow();
+    expect(() => moveTaskStateRequestSchema.parse({ stateId: "khong-phai-uuid" })).toThrow();
   });
 });
