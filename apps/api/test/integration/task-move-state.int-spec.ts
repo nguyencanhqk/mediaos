@@ -402,6 +402,10 @@ describe.skipIf(!hasLaneDb)(
       const afterOk = await taskRow(t);
       expect(afterOk.state_id).toBe(col["Hậu Kỳ"]);
       expect(afterOk.task_status).toBe("In Progress");
+      // Pin nhật ký ca cùng-nhóm (F6): ĐÚNG 1 bản ghi đổi cột, 0 event status (không rác).
+      expect(await activityCount(t, "TASK_STATE_CHANGED")).toBe(1);
+      expect(await activityCount(t, "TASK_STATUS_CHANGED")).toBe(0);
+      expect(await outboxStatusCount(t)).toBe(0);
     });
 
     it("SCOPE CONFUSION: update-state@Company + update-status@Own kéo thẻ NGƯỜI KHÁC khác nhóm → PIN 404 (không phải 403) + state không đổi", async () => {
@@ -557,6 +561,12 @@ describe.skipIf(!hasLaneDb)(
         stateId: col["Đang làm"],
       });
       expect(res.status, JSON.stringify(res.body)).toBe(403);
+      // Pin (F6): 403 pre-tx ⇒ KHÔNG có row nào được tạo (không đốt task, không rác).
+      const cnt = await direct.query(
+        `SELECT count(*)::int n FROM tasks WHERE company_id=$1 AND title='Không có update-state'`,
+        [A.companyId],
+      );
+      expect(cnt.rows[0].n).toBe(0);
     });
 
     it("POST /tasks KHÔNG truyền stateId trong project có pipeline → state_id = is_default VÀ status 'Todo'; project 0 state → state NULL", async () => {
@@ -578,6 +588,45 @@ describe.skipIf(!hasLaneDb)(
     });
 
     // ── 12. PATCH cửa thứ hai ──────────────────────────────────────────────────
+
+    it("CỬA THỨ HAI (scope): update:task@Company + update-state@Own PATCH cột task NGƯỜI KHÁC (CÙNG nhóm) → 404 + state không đổi — bound theo scope update-state, không mượn update:task", async () => {
+      const email = `patchown@${A.slug}.test`;
+      const hash = await new PasswordService().hash(LOGIN_PW);
+      const u = await seedUser(direct, A.companyId, email, hash);
+      const uEmp = await seedEmp(A.companyId, u);
+      await grant(A.companyId, u, [
+        ["read", "task", "Company"],
+        ["update", "task", "Company"],
+        ["update-state", "task", "Own"],
+      ]);
+      const tokPatchOwn = await login(A.slug, email);
+
+      // Task của NGƯỜI KHÁC — cùng nhóm started (Đang làm → Hậu Kỳ): không đổi status ⇒ ca này
+      // chỉ chặn được bằng data-scope của CHÍNH pair update-state (finding HIGH security-reviewer).
+      const t = await mkTask({
+        taskStatus: "In Progress",
+        stateName: "Đang làm",
+        mainAssigneeEmployeeId: otherEmp,
+      });
+      const denied = await authPatch(tokPatchOwn, `/tasks/${t}`).send({
+        stateId: col["Hậu Kỳ"],
+      });
+      expect(denied.status, JSON.stringify(denied.body)).toBe(404);
+      expect((await taskRow(t)).state_id).toBe(col["Đang làm"]);
+      expect(await activityCount(t, "TASK_STATE_CHANGED")).toBe(0);
+
+      // Đối chứng: CHÍNH actor đó trên task CỦA MÌNH (Own) ⇒ 200 (bound đúng, không chặn oan).
+      const own = await mkTask({
+        taskStatus: "In Progress",
+        stateName: "Đang làm",
+        mainAssigneeEmployeeId: uEmp,
+      });
+      const ok = await authPatch(tokPatchOwn, `/tasks/${own}`).send({
+        stateId: col["Hậu Kỳ"],
+      });
+      expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+      expect((await taskRow(own)).state_id).toBe(col["Hậu Kỳ"]);
+    });
 
     it("CỬA THỨ HAI: PATCH {stateId} bởi actor CÓ update:task THIẾU update-state → 403 + state không đổi", async () => {
       const t = await mkTask({ taskStatus: "In Progress", stateName: "Đang làm" });
