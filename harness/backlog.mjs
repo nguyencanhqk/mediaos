@@ -7113,7 +7113,7 @@ export const backlog = [
       "GAP 2: timeline gate useCanExact('view','task-audit-log') — pair SENSITIVE ⇒ người thực hiện thường KHÔNG thấy lịch sử task của chính mình (TaskActivityTimeline.tsx:46-49,60 trả null). MISA cho mọi người liên quan xem. Cân nhắc tách: lịch sử NGHIỆP VỤ (đổi cột/trạng thái/assignee) cho người liên quan, còn audit-log ĐẦY ĐỦ giữ gate sensitive",
       "GAP 3: 3 vai đã có ở DB + DTO (reporter_employee_id / creator_user_id / main_assignee_employee_id — mig 0478:329-331, contracts task.ts:645-649) nhưng FE chỉ hiện assignee + creator (TaskDetailPage.tsx:35-36), thiếu 'người giao việc'",
       "GAP 4: watchers có bảng + POST/DELETE (tasks.controller.ts:392,405) nhưng THIẾU GET /tasks/:id/watchers ⇒ FE chỉ có nút 'Theo dõi' self-only, không list được người liên quan, không bỏ theo dõi hộ (gap ghi sẵn ở TaskAssignControl.tsx:29-31)",
-      "GAP 5: parent_task_id ĐÃ CÓ cột (mig 0478:327) nhưng 0 tham chiếu trong apps/api/src, contracts, FE — và CHƯA typed trong drizzle workflow.ts ⇒ subtask thật làm được KHÔNG CẦN migration, chỉ cần typed + CRUD + FE. SPEC §15.3 có nhắc 'parent_task_id — Task cha nếu có'",
+      "GAP 5 (ĐÃ TÁCH sang S5-TASK-SUBTASK-1 2026-07-18): subtask thật qua parent_task_id — owner chốt việc con = subtask THẬT, ẩn khỏi board. Chạm truy vấn board + tiến độ thẻ nên KHÔNG thuộc WO màn-chi-tiết này",
       "KHÔNG thuộc WO này (ngoài spec, cần owner duyệt riêng): checklist item có assignee/due riêng · preview ảnh + paste Ctrl+V · labels lên màn chi tiết · task dependencies · reminder · recurring · approval trên task · read receipt",
     ],
     done_when: [
@@ -7121,8 +7121,48 @@ export const backlog = [
       "Người liên quan (assignee/creator/reporter/watcher) xem được lịch sử nghiệp vụ của task; audit-log đầy đủ vẫn gate sensitive — quyết định tách gate ghi rõ trong doc",
       "Màn chi tiết hiện đủ 3 vai: người giao việc · người thực hiện · người tạo",
       "GET /tasks/:id/watchers + FE list người liên quan, thêm/bỏ theo dõi (gate watch:task); int-spec cross-tenant",
-      "Subtask thật qua parent_task_id: typed drizzle + CRUD + FE cây 1 cấp; chống vòng lặp cha-con; xoá cha xử lý con tường minh (không mồ côi)",
+      // Subtask ĐÃ TÁCH sang WO riêng S5-TASK-SUBTASK-1 (2026-07-18) — owner chốt việc con = subtask
+      // THẬT và ẩn khỏi board; nó chạm truy vấn board + tiến độ thẻ nên không thể nằm trong WO màn-chi-tiết.
       "LIGHT gate + typecheck/lint xanh; nếu chạm CHECK/migration thì FULL",
+    ],
+  },
+  {
+    id: "S5-TASK-SUBTASK-1",
+    module: "TASK",
+    layer: "FULL",
+    title:
+      "Công việc con = subtask THẬT (parent_task_id): CRUD + người thực hiện/hạn riêng + ẩn khỏi board + tiến độ thẻ cha = tỉ lệ con hoàn thành",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/src/tasks/**",
+      "apps/api/src/db/schema/workflow.ts",
+      "apps/api/migrations/**",
+      "packages/contracts/src/task.ts",
+      "packages/contracts/src/task-collab.ts",
+      "apps/app/src/routes/tasks/**",
+      "packages/web-core/src/lib/**",
+      "apps/app/src/i18n/**",
+    ],
+    skills: ["code-review"],
+    depends_on: ["S5-TASK-PIPELINE-1"],
+    src: [
+      "Owner chỉ ra 2026-07-18 khi xem ảnh MISA: 'trong công việc to có thể có nhiều công việc con'. Owner chốt 2 quyết định: (1) việc con = SUBTASK THẬT qua parent_task_id (không phải mở rộng checklist) — vì ảnh cho thấy mỗi dòng con có NGƯỜI THỰC HIỆN riêng + HẠN riêng, checklist hiện tại chỉ có title/isDone/doneBy/doneAt/orderIndex; (2) task con ẨN KHỎI BOARD, chỉ hiện trong task cha + trong 'Việc của tôi' của người được giao",
+      "PHÁT HIỆN then chốt: % tiến độ trên thẻ kanban CHÍNH LÀ tỉ lệ việc con hoàn thành — kiểm chứng số học khớp tuyệt đối trên ảnh: 4/5=80 · 1/3=33 · 1/4=25 · 5/6=83 · 7/8=88 · 6/7=86. Và TÊN việc con TRÙNG tên cột pipeline (Ý Tưởng-Kịch bản · Thiết Kế · Cắt file · Quay · Hậu Kỳ · Thumbnail · Duyệt Ok) ⇒ cha đi qua cột, con là hạng mục từng chặng có chủ riêng",
+      "parent_task_id ĐÃ CÓ cột (mig 0478:327) nhưng 0 tham chiếu trong apps/api/src + contracts + FE, và CHƯA typed trong drizzle workflow.ts ⇒ KHÔNG cần migration cho cột; chỉ cần typed + CRUD + FE",
+      "Đợt A (S5-TASK-PIPELINE-1) ĐÃ chèn sẵn bộ lọc `parent_task_id IS NULL` vào truy vấn board để board không phình khi WO này land — KHÔNG được gỡ bộ lọc đó",
+      "Tiến độ: đợt A CỐ Ý không thêm % từ checklist (tránh đổi ngữ nghĩa cùng một con số trước mắt người dùng). WO này thêm % = tỉ lệ subtask; task KHÔNG có subtask ⇒ KHÔNG hiện % (một nguồn duy nhất, không fallback hai nguồn cùng hình thức)",
+      "BẪY đã biết: checklistDone/checklistTotal (ship PR #207) VẪN GIỮ như badge riêng — KHÔNG gộp, KHÔNG thay bằng subtask; hai khái niệm khác nhau",
+    ],
+    done_when: [
+      "QUYẾT ĐỊNH TRONG ADR trước khi code (owner chốt, KHÔNG để implementer tự chọn): (a) báo cáo countsByStatus + mv_dashboard_task_status đếm CHA, CON, hay chỉ lá — hiện đếm cả hai là ĐẾM TRÙNG; (b) task con có state_id không (đã ẩn khỏi board thì cột của nó có nghĩa gì) — đề xuất ép NULL; (c) xoá/huỷ cha thì con đi đâu (soft-delete lan hay chặn xoá khi còn con sống); (d) con có bắt buộc cùng project với cha không (đề xuất: bắt buộc); (e) 'Việc quá hạn' + rail avatar có tính con không",
+      "parent_task_id typed trong drizzle + CRUD subtask (tạo/sửa/xoá/đổi thứ tự) qua TaskCoreService — KHÔNG tạo đường ghi thứ hai (bài học B3/B4 của đợt A: gate + auto-map phải nằm ở method dùng chung)",
+      "Mỗi subtask có người thực hiện riêng + hạn riêng + trạng thái riêng; hiện trong 'Việc của tôi' của người được giao",
+      "Chống vòng lặp cha-con: A không thể là con của chính nó hoặc của hậu duệ; độ sâu giới hạn tường minh (đề xuất 1 cấp — ảnh tham chiếu chỉ có 1 cấp) và ép ở BE, không chỉ FE",
+      "Board CHỈ hiện cha: int-spec chứng minh tạo subtask qua API xong board KHÔNG đổi số đếm cột",
+      "Tiến độ thẻ cha = tỉ lệ subtask hoàn thành (aggregate GROUP BY parent_task_id, KHÔNG N+1); task 0 subtask không hiện %",
+      "Quyền: dùng lại cặp hiện có của task (create/update/delete:task) — KHÔNG thêm pair mới trừ khi ADR chỉ ra nhu cầu thật; nếu thêm thì cập nhật TASK_PERMISSION_COUNT + TASK_GRANT_MATRIX + TASK_EXPECTED_GRANT_COUNTS cùng commit (bẫy canonical-seed-pin-regression)",
+      "FULL gate (chạm truy vấn board + đường ghi task + có thể chạm báo cáo) + check.sh --lane-db xanh",
     ],
   },
 ];
