@@ -118,6 +118,7 @@ export class ProjectsService {
         {
           status: query.status,
           ownerEmployeeId: query.ownerEmployeeId,
+          departmentId: query.departmentId,
           search: query.search,
           limit,
           offset,

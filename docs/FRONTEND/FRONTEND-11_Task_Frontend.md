@@ -240,36 +240,65 @@ export const taskRoutes = [
 
 ## 8. Sidebar TASK
 
-### 8.1 Sidebar groups
+### 8.1 Sidebar TASK — BẢN CHUẨN (hợp nhất S5-TASK-NAV-TREE-1, đợt B)
+
+> **Đây là bản chuẩn DUY NHẤT của sidebar TASK.** UI-09 §11.2 và UI-02 §9.8 trỏ về đây — không doc
+> nào tự khai bố cục riêng nữa (trước đợt B có 3 đề xuất xung đột và không cái nào khớp code chạy).
+> Code: item tĩnh ở `apps/app/src/layouts/workspace/sidebar-registry.ts` (TASK_SIDEBAR) — nguồn duy
+> nhất ModuleSidebar đọc (`showInSidebar` trong ROUTE_REGISTRY web-core là metadata chết); section
+> động ở `TaskSidebarTree.tsx` (đăng ký qua `sidebar-extensions.ts`).
 
 ```text
-TASK Workspace
-  Tổng quan
-    - Việc của tôi
-    - Kanban
-  Công việc
-    - Danh sách task
-    - Tạo task
-  Dự án
-    - Danh sách dự án
-    - Báo cáo dự án
-  Quản lý
-    - Hoạt động gần đây
-    - Cấu hình task nếu phase sau
+TỔNG QUAN
+  - Danh sách công việc        /tasks              TASK.TASK.VIEW | TASK.PROJECT.VIEW
+NGHIỆP VỤ
+  - Việc của tôi               /tasks/my-tasks     TASK.TASK.VIEW
+  - Task quá hạn               /tasks/overdue      TASK.TASK.VIEW
+  - Dự án                      /tasks/projects     TASK.PROJECT.VIEW
+DỰ ÁN THEO PHÒNG BAN (section ĐỘNG — TaskSidebarTree)
+  - <Phòng ban A>  [n] [⋯]                         cây từ GET /org/units/tree (read-mở)
+      - <Dự án 1>              /tasks/projects/:id  dự án lồng theo projects.department_id
+      - <Phòng ban con A1> [⋯]                      đệ quy không giới hạn cấp
+  - Chưa phân phòng ban                             dự án departmentId null / ngoài cây
 ```
+
+Hành vi section động:
+
+- **Gate hiển thị** = `TASK.PROJECT.VIEW` (cùng cặp item "Dự án"); danh sách dự án đã bị server cắt
+  theo data-scope của actor — cây không lộ dự án ngoài phạm vi. Phòng ban **0 dự án vẫn hiện**
+  (điểm neo "Thêm dự án" theo phòng ban). Cây CHỈ hiện org_unit **type `department`** — node loại
+  khác (team…) bị bỏ nhưng con department được kéo lên thế chỗ; dự án trỏ node bị bỏ rơi vào
+  "Chưa phân phòng ban" (đồng bộ với lookup `/hr/lookups/departments` mà form dự án dùng).
+- **Gập/mở giữ trạng thái** (localStorage, lưu tập đang gập — mặc định mở). Sidebar icon-mode
+  (collapsed) KHÔNG render section động.
+- **Menu ⋯ mỗi phòng ban** — từng mục gate quyền riêng, thiếu quyền thì ẨN mục (UI-02 §5.3):
+
+  | Mục | Quyền | Hành vi |
+  | --- | --- | --- |
+  | Xem báo cáo | `TASK.PROJECT.VIEW` | Deep-link `/tasks/projects?departmentId=X` (danh sách + tiến độ dự án phòng ban). Báo cáo TỔNG HỢP phòng ban thuộc đợt D — không vẽ giả. |
+  | Thêm dự án | `TASK.PROJECT.CREATE` | Mở ProjectFormDrawer prefill `departmentId` |
+  | Sắp xếp dự án | — (client-only) | Mới nhất trước \| Tên A→Z — áp RIÊNG từng phòng ban, lưu localStorage (1 map key) |
+
+- **Filter BE**: `GET /projects?departmentId=<uuid>` (S5-TASK-NAV-TREE-1) — server AND thêm điều
+  kiện, KHÔNG thay data-scope; int-spec cross-tenant ở
+  `apps/api/src/tasks/projects-department-filter.int.spec.ts`.
 
 ### 8.2 Sidebar item visibility
 
-| Sidebar item | Permission | Hiển thị khi |
+| Sidebar item | Permission (requiredAnyPermissions) | Ghi chú |
 | --- | --- | --- |
-| Việc của tôi | `TASK.TASK.VIEW` | User có employee mapping hoặc có task relation |
-| Danh sách task | `TASK.TASK.VIEW` | Có scope Own trở lên |
-| Kanban | `TASK.TASK.VIEW_KANBAN` | Có quyền xem Kanban |
-| Tạo task | `TASK.TASK.CREATE` | Có quyền tạo task |
-| Dự án | `TASK.PROJECT.VIEW` | Có quyền xem project |
-| Tạo dự án | `TASK.PROJECT.CREATE` | Có quyền tạo project |
-| Báo cáo | `TASK.PROJECT.VIEW_REPORT` | Có quyền xem report |
-| Hoạt động | `TASK.AUDIT_LOG.VIEW` | Có quyền xem activity/audit |
+| Danh sách công việc | `TASK.TASK.VIEW` \| `TASK.PROJECT.VIEW` | TaskListPage (TASK-SCREEN-005) |
+| Việc của tôi | `TASK.TASK.VIEW` | MyTasksPage |
+| Task quá hạn | `TASK.TASK.VIEW` | OverdueTasksPage (TASK-SCREEN-010) |
+| Dự án | `TASK.PROJECT.VIEW` | ProjectListPage (TASK-SCREEN-001) |
+| Cây phòng ban + dự án | `TASK.PROJECT.VIEW` | Section động (TaskSidebarTree) |
+
+Mục **không còn trong sidebar** (đề xuất cũ đã gộp/loại): "Kanban" (là tab trong Project Detail,
+không route riêng — xem §13.8 SPEC-06), "Tạo task/Tạo dự án" (nút trên page, không phải mục nav),
+"Báo cáo dự án" (nút "Xem báo cáo" tại Project Detail, gate thật `view-report:project` useCanExact
+trong page), "Hoạt động" (tab Hoạt động thuộc đợt D1 — S5-TASK-WORKSPACE-1). "Cài đặt quyền cho dự
+án" trong menu ⋯ thuộc đợt C (data-scope Project chưa có trong engine — hiển thị khi chưa có là hứa
+suông).
 
 Frontend không hard-code theo role. Sidebar phải dùng permission/data scope từ auth context hoặc module registry.
 

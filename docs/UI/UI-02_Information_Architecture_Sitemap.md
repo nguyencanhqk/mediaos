@@ -576,6 +576,11 @@ Khuyến nghị MVP dùng `requiredAnyPermissions` cho menu cha và `requiredPer
 
 ### 9.8 TASK routes
 
+> **Sidebar TASK chuẩn = FRONTEND-11 §8.1** (hợp nhất S5-TASK-NAV-TREE-1) — bảng route dưới đây là
+> IA đề xuất gốc, KHÔNG phản ánh bố cục sidebar; một số route (`/tasks/kanban`, `/tasks/list`,
+> `/tasks/reports`…) chưa build hoặc đã gộp thành tab trong Project Detail. Route đang chạy thật =
+> `ROUTE_REGISTRY` (packages/web-core) + `apps/app/src/router.tsx`.
+
 | Route | Màn hình | Permission đề xuất | Data scope |
 | --- | --- | --- | --- |
 | `/tasks` | Task Overview | `TASK.TASK.VIEW` | Own/Team/Project/Company |
