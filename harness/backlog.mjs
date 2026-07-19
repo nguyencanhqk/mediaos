@@ -7203,7 +7203,7 @@ export const backlog = [
     title:
       "Đợt C — Quyền per-project THẬT: projectRole (Owner/Manager/Member/Viewer) thành nguồn quyền membership-based ở service layer (D-22, KHÔNG thêm bậc data_scope engine) + governance chuyển từ owner_employee_id sang role Owner + un-defer create/update:task + màn 'Thành viên & quyền'",
     zone: "red",
-    status: "in_review",
+    status: "done",
     paths: [
       "docs/DECISIONS/**",
       "docs/SPEC/SPEC-06 TASK.md",
