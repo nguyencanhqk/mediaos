@@ -28,6 +28,13 @@ export interface OutputStat {
  *
  * SECURITY: PostgreSQL MV does NOT enforce RLS. Every query MUST include WHERE company_id = companyId.
  * withTenant sets app.current_company_id but MV ignores it — explicit eq(companyId) is mandatory.
+ *
+ * S5-DASH-TASKSTATUS-FIX-1 (DECISIONS-03 D-30, mig 0502): mv_dashboard_task_status đếm theo trạng thái
+ * CANONICAL = COALESCE(task_status, map(status legacy)) — tập giá trị TitleCase hiện đại (Todo ·
+ * In Progress · In Review · Done · Cancelled; giá trị legacy lạ giữ raw, fail-visible).
+ * ⚠️ HAI TAXONOMY TRONG MỘT RESPONSE mv-stats: taskStatus[] = canonical TitleCase, NHƯNG output[]
+ * (mv_dashboard_output — media-era PARKED, 0 consumer) VẪN lowercase legacy — FE tương lai đừng
+ * render lẫn hai bộ giá trị; hợp nhất thuộc WO dọn de-media-fy.
  */
 @Injectable()
 export class MvDashboardService {
@@ -68,18 +75,12 @@ export class MvDashboardService {
     return this.db.withTenant(companyId, async (tx) => {
       // All filter values are passed as Drizzle sql template parameters — NEVER interpolated as
       // raw strings. MV has no RLS, so parameterized company_id is the sole tenant boundary.
-      const channelFilter = filter.channelId
-        ? sql` AND channel_id = ${filter.channelId}`
-        : sql``;
-      const projectFilter = filter.projectId
-        ? sql` AND project_id = ${filter.projectId}`
-        : sql``;
+      const channelFilter = filter.channelId ? sql` AND channel_id = ${filter.channelId}` : sql``;
+      const projectFilter = filter.projectId ? sql` AND project_id = ${filter.projectId}` : sql``;
       const departmentFilter = filter.departmentId
         ? sql` AND department_id = ${filter.departmentId}`
         : sql``;
-      const monthFilter = filter.month
-        ? sql` AND month = ${filter.month + "-01"}::date`
-        : sql``;
+      const monthFilter = filter.month ? sql` AND month = ${filter.month + "-01"}::date` : sql``;
 
       const rows = await tx.execute(
         sql`

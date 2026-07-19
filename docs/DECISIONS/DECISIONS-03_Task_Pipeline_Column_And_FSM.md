@@ -169,6 +169,23 @@ Tài liệu này chốt các quyết định làm thay đổi ngữ nghĩa đã 
 - **Ảnh hưởng nếu đổi sau:** Để lệch pha tồn tại một thời gian rồi mới sửa thì phải quét toàn bộ task đoán lại cột đúng từ trạng thái — mà ánh xạ ngược không đơn trị, nên chỉ đoán được gần đúng.
 - **Người quyết định / Trạng thái:** **Đã chốt** — Cian (PO), 18/07/2026
 
+### D-30 — Dashboard đếm task theo trạng thái nào? (S5-DASH-TASKSTATUS-FIX-1)
+
+- **Câu hỏi:** `mv_dashboard_task_status` (mig 0102, G14) `GROUP BY status` — cột **legacy** mà luồng task core hiện đại KHÔNG bao giờ ghi (chỉ ghi `task_status` TitleCase, mig 0478) ⇒ mọi task văn phòng hiện `not_started` vĩnh viễn trên dashboard. Đếm theo gì cho đúng?
+- **Số liệu thật (đo 20/07/2026, read-only):**
+  - `mediaos_dev` (demo): 22 task office hiện đại (`Todo 11 · In Progress 6 · In Review 2 · Done 2 · Cancelled 1`) — **toàn bộ** mang `status='not_started'` ⇒ MV báo 23 not_started, mọi trạng thái thật biến mất. MV còn **chưa từng populate** trên dev-online (`mv-stats` trả rỗng — WITH NO DATA 0102, refresh worker chưa chạy ở đó).
+  - `mediaos` (prod): 114 task đều họ legacy (`hr 6 · meeting_action 4 · office-cũ 56 · workflow_step 48`), `task_status` NULL 100% ⇒ MV "đúng tình cờ" hôm nay, sai ngay khi task core được dùng.
+  - Hai họ task dùng hai cột là drift GỐC de-media-fy: task core ghi `task_status`; HR (`hr-tasks.service`: not_started→approved/completed) + workflow studio (FSM cũ) ghi `status` legacy (CHECK: not_started/in_progress/waiting_review/revision/approved/completed).
+- **Phương án cân nhắc:** (a) MV đếm theo **trạng thái CANONICAL** = `COALESCE(task_status, map(status legacy))`; (b) hợp nhất 2 cột (backfill `task_status` + đổi MỌI write-path legacy) — phẫu thuật lớn, HR/workflow vẫn đang ghi legacy nên hàng mới lại NULL; (c) tách widget theo họ task — 2 biểu đồ cho 1 câu hỏi "công việc theo trạng thái", đẩy độ phức tạp sang người dùng.
+- **Quyết định: (a)** — MV tính cột canonical, tập giá trị đầu ra = **taxonomy hiện đại TitleCase** (Todo · In Progress · In Review · Done · Cancelled), map legacy:
+  `not_started→Todo · in_progress→In Progress · waiting_review→In Review · revision→In Progress` (bị trả về làm lại = đang xử lý, không phải chờ duyệt) `· approved→Done · completed→Done`; giá trị legacy NGOÀI bảng map (nếu xuất hiện) → giữ nguyên raw (fail-visible, không gộp câm). Tiền lệ: widget hiện đại S4-DASH-BE-2-FIX-1 (BUG1/BUG2) đã đọc `task_status` — D-30 đưa MV G14 về CÙNG ngữ nghĩa.
+- **Hệ quả chấp nhận:**
+  1. Tập giá trị `taskStatus[].status` của `GET /dashboard/mv-stats` đổi lowercase→TitleCase. Contract `taskStatusStatSchema.status = z.string()` không vỡ; **0 consumer FE** (chỉ web-core client chưa ai gọi) — đổi bây giờ là rẻ nhất.
+  2. `mv_dashboard_output` (sản lượng theo channel — media-era, PARKED de-media-fy) **GIỮ NGUYÊN** đếm theo `status` legacy: cùng lớp sai nhưng 0 consumer + thuộc phạm vi WO dọn de-media-fy, không sửa ở đây (tránh scope creep vào bảng park).
+  3. Đếm-lá cho subtask (owner chốt 18/07) KHÔNG thuộc WO này — S5-TASK-SUBTASK-1 sẽ thêm điều kiện lá lên ĐÚNG công thức canonical này (lý do WO này phải đi TRƯỚC).
+- **Rollback:** migration DROP+CREATE lại định nghĩa 0102 (MV là dữ liệu dẫn xuất — không mất dữ liệu gốc).
+- **Người quyết định / Trạng thái:** Đề xuất bởi phiên S5-DASH-TASKSTATUS-FIX-1 — **owner chốt khi merge PR (vùng đỏ, người chốt)**.
+
 ---
 
 ## 4. Ràng buộc kỹ thuật bắt buộc (không phải quyết định — là hệ quả)
