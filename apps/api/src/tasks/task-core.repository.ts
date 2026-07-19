@@ -23,6 +23,13 @@ export interface TaskCoreListFilter {
   dueFrom?: string;
   dueTo?: string;
   overdue?: boolean;
+  /**
+   * S5-TASK-PIPELINE-1 (lane be-read, plan mục 0) — board CHỈ hiện task cha (owner chốt 18/07:
+   * việc con ẩn khỏi board, hiện trong task cha). Cột parent_task_id có từ 0478, CRUD subtask thuộc
+   * S5-TASK-SUBTASK-1 — bộ lọc chốt TRƯỚC để ngày subtask lên board không phình + không sửa lại
+   * truy vấn đã qua review. CHỈ truy vấn board bật; list/my giữ nguyên.
+   */
+  parentOnly?: boolean;
   limit: number;
   offset: number;
 }
@@ -56,6 +63,13 @@ export interface TaskCoreRow {
   createdBy: string | null;
   createdAt: string | Date;
   updatedAt: string | Date;
+  // S5-TASK-PIPELINE-1 (lane be-read): cột pipeline resolved (LEFT JOIN project_states ràng
+  // company+project+active — state hỏng/cross-project ⇒ NULL). Optional additive (mirror taskCode)
+  // để KHÔNG phá literal TaskCoreRow hiện có trong unit spec.
+  stateId?: string | null;
+  stateName?: string | null;
+  stateColor?: string | null;
+  stateGroup?: string | null;
 }
 
 export interface MyTaskRow extends TaskCoreRow {
@@ -153,14 +167,20 @@ const TASK_CORE_SELECT = sql`
      AND (tk.task_status IS NULL OR tk.task_status NOT IN ('Done','Cancelled'))) AS "isOverdue",
   tk.created_by                AS "createdBy",
   tk.created_at                AS "createdAt",
-  tk.updated_at                AS "updatedAt"`;
+  tk.updated_at                AS "updatedAt",
+  tk.state_id                  AS "stateId",
+  ps.name                      AS "stateName",
+  ps.color                     AS "stateColor",
+  ps.state_group               AS "stateGroup"`;
 
 const TASK_CORE_JOINS = sql`
   from tasks tk
   left join projects pr          on pr.id = tk.project_id
   left join employee_profiles ae on ae.id = tk.main_assignee_employee_id
   left join users au             on au.id = ae.user_id
-  left join users cu             on cu.id = tk.creator_user_id`;
+  left join users cu             on cu.id = tk.creator_user_id
+  left join project_states ps    on ps.id = tk.state_id and ps.company_id = tk.company_id
+                                and ps.project_id = tk.project_id and ps.deleted_at is null`;
 
 @Injectable()
 export class TaskCoreRepository {
@@ -225,6 +245,7 @@ export class TaskCoreRepository {
         sql`tk.due_at is not null and tk.due_at < now() and (tk.task_status is null or tk.task_status not in ('Done','Cancelled'))`,
       );
     }
+    if (filter.parentOnly) conds.push(sql`tk.parent_task_id is null`);
     if (scopeExists) conds.push(scopeExists);
 
     const where = sql.join(conds, sql` and `);
@@ -295,6 +316,35 @@ export class TaskCoreRepository {
        limit 1
     `);
     return (res.rows as unknown as StateForWriteRow[])[0];
+  }
+
+  /**
+   * Cột pipeline active của project cho BOARD (lane be-read) — đủ field dựng cột state-mode, sort
+   * XÁC ĐỊNH (sort_order, created_at, id). Nhận tx của caller — KHÔNG tự mở withTenant (bẫy 5b:
+   * listStatesByProject legacy tự mở connection riêng, gọi trong tx là lồng pool).
+   */
+  async listBoardStatesTx(
+    tx: TenantTx,
+    companyId: string,
+    projectId: string,
+  ): Promise<
+    { id: string; name: string; color: string; stateGroup: string; isDefault: boolean; sortOrder: number }[]
+  > {
+    const res = await tx.execute(sql`
+      select id, name, color, state_group as "stateGroup", is_default as "isDefault",
+             sort_order as "sortOrder"
+        from project_states
+       where company_id = ${companyId} and project_id = ${projectId} and deleted_at is null
+       order by sort_order, created_at, id
+    `);
+    return res.rows as unknown as {
+      id: string;
+      name: string;
+      color: string;
+      stateGroup: string;
+      isDefault: boolean;
+      sortOrder: number;
+    }[];
   }
 
   /**
