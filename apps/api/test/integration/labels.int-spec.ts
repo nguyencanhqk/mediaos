@@ -44,7 +44,13 @@ describe.skipIf(!hasDb)("PM-1 LabelsService (RLS app role)", () => {
     const repo = new TasksRepository(db);
     const audit = new AuditService();
     labels = new LabelsService(db, repo, audit);
-    tasks = new TasksService(db, repo, audit);
+    tasks = new TasksService(
+      db,
+      repo,
+      audit,
+    { resolveAndAssert: async () => "Company" } as never,
+    { assertTaskInScopeTx: async () => undefined } as never,
+    );
   });
 
   afterAll(async () => {

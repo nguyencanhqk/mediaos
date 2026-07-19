@@ -86,7 +86,13 @@ function makeService(
   const repo = opts.repo ?? makeRepo();
   const db = opts.db ?? makeDb();
   const audit = opts.audit ?? makeAudit();
-  const service = new TasksService(db as never, repo as never, audit as never);
+  const service = new TasksService(
+    db as never,
+    repo as never,
+    audit as never,
+    { resolveAndAssert: async () => "Company" } as never,
+    { assertTaskInScopeTx: async () => undefined } as never,
+  );
   return { service, repo, db, audit };
 }
 

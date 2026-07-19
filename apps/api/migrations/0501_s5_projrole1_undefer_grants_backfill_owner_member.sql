@@ -17,12 +17,17 @@
 -- PHẦN B — BACKFILL Owner-member (D-25, BLOCKING #3 plan-reviewer): governance re-anchor từ
 --   owner_employee_id (1 người) sang member role Owner ⇒ project có chủ chưa-là-member (reassign trước
 --   đợt C không sync) sẽ bị LOCKOUT nếu không backfill. Quy tắc 2 nhánh: (i) chủ ĐÃ có hàng member
---   Active role khác ⇒ UPDATE nâng role='Owner'; (ii) CHƯA có hàng Active ⇒ INSERT (user_id NOT NULL
---   ⇒ GUARD emp.user_id IS NOT NULL — chủ account-less SKIP + RAISE NOTICE, họ không đăng nhập được
---   nên không phải actor, không lockout thêm). Idempotent: chạy lại = 0 hàng đổi.
---   RLS: bảng project_members RLS+FORCE (0023) — drizzle migrator chạy qua DATABASE_DIRECT_URL (role
---   sở hữu schema, có BYPASSRLS trên direct pool như mọi migration backfill trước: 0420/0500). VERIFY
---   fail-loud đầu Phần B: đếm được project cross-company ⇒ policy không lọc câm (silent 0-row).
+--   Active role khác ⇒ UPDATE nâng role='Owner'; (ii) CHƯA có hàng Active NÀO (đo trên CẢ HAI unique:
+--   employee_id MỚI + user_id LEGACY — bẫy database-reviewer MEDIUM-2: chủ có hàng legacy user_id-only
+--   employee_id NULL sẽ trượt SELECT-theo-employee ⇒ INSERT đâm project_members_active_uq) ⇒ INSERT.
+--   Nếu có hàng Active legacy user-only ⇒ nâng chính hàng đó (không INSERT hàng hai). GUARD
+--   emp.user_id IS NOT NULL — chủ account-less SKIP + RAISE NOTICE (không đăng nhập được = không phải
+--   actor, không lockout thêm). Idempotent: chạy lại = 0 hàng đổi.
+--   RLS: bảng project_members RLS+FORCE (0023). Migrator dev/CI = superuser `mediaos` (rolsuper/
+--   rolbypassrls). VERIFY fail-loud đầu Phần B: nếu current_user KHÔNG super/bypassrls thì policy
+--   tenant-iso LỌC CÂM 0 hàng (và Phần A ghi role canonical company_id NULL cũng abort) ⇒ assert
+--   RAISE EXCEPTION thay vì backfill rỗng. PROD chuyển migrator sang NOBYPASSRLS `mediaos_owner`
+--   (0001) phải set app.current_company_id per-company; assert bên dưới bắt được tình huống đó.
 --
 -- BAND 0501 (S5-TASK-PROJROLE-1). Journal: idx 181, when 1717500900000 (> head 0500 idx 180 /
 --   1717500895000). Nối tiếp ĐƠN ĐIỆU sau 0500_s5_pipeline1_backfill_states_and_state_id.
@@ -131,21 +136,21 @@ $$;
 -- ────────────────────────────────────────────────────────────────────────────────────────────────
 DO $$
 DECLARE
-  v_visible    int;
-  v_companies  int;
+  v_super      boolean;
   v_promoted   int := 0;
   v_inserted   int := 0;
   v_skipped    int := 0;
   r            record;
   v_member_id  uuid;
 BEGIN
-  -- VERIFY RLS không lọc câm: migration phải thấy dữ liệu MỌI company (FORCE RLS + role không
-  -- BYPASSRLS ⇒ 0 row ⇒ backfill "thành công" rỗng — chính failure-mode cảnh báo của plan-reviewer).
-  SELECT count(*), count(DISTINCT company_id) INTO v_visible, v_companies FROM projects;
-  IF v_visible > 0 AND v_companies = 0 THEN
-    RAISE EXCEPTION '[0501] RLS đang lọc migration role — backfill sẽ câm 0 hàng, dừng fail-loud';
+  -- VERIFY current_user super/bypassrls (MEDIUM-1 — guard THẬT, không phải nhánh chết): dưới FORCE RLS,
+  -- role không super/bypassrls ⇒ policy tenant-iso lọc câm 0 hàng ⇒ backfill "thành công" rỗng.
+  SELECT rolsuper OR rolbypassrls INTO v_super FROM pg_roles WHERE rolname = current_user;
+  IF NOT COALESCE(v_super, false) THEN
+    RAISE EXCEPTION
+      '[0501] migrator (%) không super/bypassrls — RLS sẽ lọc câm backfill; set app.current_company_id per-company hoặc dùng role bypass',
+      current_user;
   END IF;
-  RAISE NOTICE '[0501] backfill nhìn thấy % project / % company', v_visible, v_companies;
 
   FOR r IN
     SELECT p.id AS project_id, p.company_id, p.owner_employee_id, ep.user_id AS owner_user_id
@@ -164,15 +169,20 @@ BEGIN
                 AND pm.deleted_at IS NULL
            )
   LOOP
-    -- Nhánh (i): chủ đã có hàng member Active (role khác/NULL) ⇒ UPDATE nâng role (không nhân đôi —
-    -- unique uq_project_members_active_employee).
+    -- Nhánh (i): chủ đã có hàng member Active ⇒ UPDATE nâng role. Đo trên CẢ HAI unique để không đâm
+    -- constraint khi INSERT (MEDIUM-2): (a) hàng employee_id = owner_employee_id, HOẶC (b) hàng LEGACY
+    -- user_id-only (employee_id NULL) khớp user_id của chủ. Ưu tiên hàng (a) nếu có.
     SELECT pm.id INTO v_member_id
       FROM project_members pm
      WHERE pm.company_id = r.company_id
        AND pm.project_id = r.project_id
-       AND pm.employee_id = r.owner_employee_id
        AND pm.member_status = 'Active'
        AND pm.deleted_at IS NULL
+       AND (
+             pm.employee_id = r.owner_employee_id
+             OR (pm.employee_id IS NULL AND r.owner_user_id IS NOT NULL AND pm.user_id = r.owner_user_id)
+           )
+     ORDER BY (pm.employee_id = r.owner_employee_id) DESC NULLS LAST
      LIMIT 1;
 
     IF v_member_id IS NOT NULL THEN

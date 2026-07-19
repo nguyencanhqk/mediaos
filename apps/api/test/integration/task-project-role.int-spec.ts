@@ -437,6 +437,47 @@ describe.skipIf(!hasLaneDb)("S5-TASK-PROJROLE-1 per-project role (DB cô lập, 
     });
   });
 
+  // ── G2b. Route legacy gate update:task PHẢI cap D-24 sau 0501 (finding HIGH 2 reviewer) ─────────
+  describe("G2b. legacy update:task routes (PATCH /:id/status · /labels/*) cap 'write' như /tasks/:id", () => {
+    let labelId = "";
+    beforeAll(async () => {
+      const r = await direct.query(
+        `INSERT INTO labels (company_id, project_id, name, color)
+         VALUES ($1,$2,$3,'#22c55e') RETURNING id`,
+        [A.companyId, P1, `lbl-${randomUUID().slice(0, 6)}`],
+      );
+      labelId = r.rows[0].id as string;
+    });
+
+    it("Viewer PATCH /tasks/:id/status task người khác ⇒ 404 (route khai tử vẫn phải gác scope)", async () => {
+      const res = await authPatch(tV, `/tasks/${TX}/status`).send({ status: "in_progress" });
+      expect(res.status, JSON.stringify(res.body)).toBe(404);
+    });
+
+    it("Member PATCH /tasks/:id/status task người khác ⇒ 404; task của mình ⇒ 200", async () => {
+      expect(
+        (await authPatch(tM, `/tasks/${TX}/status`).send({ status: "in_progress" })).status,
+      ).toBe(404);
+      expect(
+        (await authPatch(tM, `/tasks/${TM}/status`).send({ status: "in_progress" })).status,
+      ).toBe(200);
+    });
+
+    it("Viewer POST /tasks/:id/labels task người khác ⇒ 404 (không ghi metadata task toàn tenant)", async () => {
+      const res = await authPost(tV, `/tasks/${TX}/labels/${labelId}`).send({});
+      expect(res.status, JSON.stringify(res.body)).toBe(404);
+    });
+
+    it("Manager-member POST rồi DELETE /tasks/:id/labels ⇒ 2xx (membership 'write' mở đúng)", async () => {
+      const rAdd = await authPost(tG, `/tasks/${TX}/labels/${labelId}`).send({});
+      expect(rAdd.status, JSON.stringify(rAdd.body)).toBe(201);
+      const rDel = await request(app.getHttpServer())
+        .delete(`/tasks/${TX}/labels/${labelId}`)
+        .set("Authorization", `Bearer ${tG}`);
+      expect(rDel.status, JSON.stringify(rDel.body)).toBe(204);
+    });
+  });
+
   // ── G3. Collab-cap per-OPERATION (Viewer đọc được nhưng không ghi được) ─────────
   describe("G3. collab-cap: cùng task — Viewer read OK, write 404; Member write OK", () => {
     it("Viewer GET comments ⇒ 200", async () => {
@@ -759,6 +800,33 @@ describe.skipIf(!hasLaneDb)("S5-TASK-PROJROLE-1 per-project role (DB cô lập, 
         [A.companyId, PBf1, eEmp],
       );
       expect(again.rows[0].n).toBe(1);
+    });
+
+    it("owner có hàng member LEGACY user_id-only (employee_id NULL) ⇒ nâng chính hàng đó, KHÔNG INSERT đâm unique (MEDIUM-2)", async () => {
+      const f = await direct.query(
+        `INSERT INTO projects (company_id, name, status, owner_employee_id)
+         VALUES ($1,'PJR BF Legacy','active',$2) RETURNING id`,
+        [A.companyId, eEmp],
+      );
+      const PBfL = f.rows[0].id as string;
+      // Hàng member media-era: user_id của chủ, employee_id NULL, role NULL, Active — trượt SELECT
+      // theo employee_id ⇒ nhánh cũ sẽ INSERT ⇒ đâm project_members_active_uq (company,project,user_id).
+      await direct.query(
+        `INSERT INTO project_members (company_id, project_id, user_id, member_status)
+         VALUES ($1,$2,$3,'Active')`,
+        [A.companyId, PBfL, eUser],
+      );
+
+      await runMigration0501(); // KHÔNG được throw
+
+      const rows = await direct.query(
+        `SELECT id, project_role, employee_id FROM project_members
+          WHERE company_id=$1 AND project_id=$2 AND member_status='Active' AND deleted_at IS NULL`,
+        [A.companyId, PBfL],
+      );
+      expect(rows.rows, "chỉ 1 hàng Active — nâng legacy, không INSERT hàng hai").toHaveLength(1);
+      expect(rows.rows[0].project_role).toBe("Owner");
+      expect(rows.rows[0].employee_id).toBeNull(); // vẫn là hàng legacy (được nâng role tại chỗ)
     });
   });
 

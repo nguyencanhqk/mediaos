@@ -49,7 +49,13 @@ describe.skipIf(!hasDb)("PM-1 ProjectStatesService (RLS app role)", () => {
     const permStub = { resolveStrongestScope: async () => "Company" as const };
     const accessStub = { assertProjectRoleTx: async () => ({ role: "Owner", memberId: "" }) };
     states = new ProjectStatesService(db, repo, audit, permStub as never, accessStub as never);
-    tasks = new TasksService(db, repo, audit);
+    tasks = new TasksService(
+      db,
+      repo,
+      audit,
+    { resolveAndAssert: async () => "Company" } as never,
+    { assertTaskInScopeTx: async () => undefined } as never,
+    );
   });
 
   afterAll(async () => {

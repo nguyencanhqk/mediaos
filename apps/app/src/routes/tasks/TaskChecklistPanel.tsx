@@ -18,9 +18,10 @@ import { TASK_CORE_ENGINE_PAIRS } from "./constants";
  * TASK-API-501..504 + item §17.5-17.7).
  *
  * Gate DUY NHẤT `update:task` cho MỌI mutate (checklist LẪN item, kể cả TICK) — mirror BE OWNER CHỐT
- * (task-checklists.controller "KHÔNG cặp checklist riêng, gate bằng update:task"). employee/manager hôm
- * nay CHƯA có update:task (TASK_DEFERRED_GRANTS, seed 0485) ⇒ panel render READ-ONLY (chỉ xem + progress,
- * KHÔNG tick/thêm/xoá được) cho tới khi grant nới — KHÔNG hard-code role, chỉ theo useCan.
+ * (task-checklists.controller "KHÔNG cặp checklist riêng, gate bằng update:task"). Từ 0501
+ * (S5-TASK-PROJROLE-1) employee@Own + manager@Team ĐÃ có update:task ⇒ panel render tương tác được khi
+ * useCan true; BE còn cap thêm theo project_role (D-24, mode 'collab' cho checklist). KHÔNG hard-code
+ * role — chỉ theo useCan, BE là người quyết cuối.
  */
 function checklistErrorKey(err: unknown): string {
   if (err instanceof ApiError) {

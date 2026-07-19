@@ -80,7 +80,7 @@ describe("TaskChecklistPanel", () => {
     vi.mocked(taskCollabApi.listChecklists).mockResolvedValue([MOCK_CHECKLIST]);
   });
 
-  // ── DENY-PATH: read-only khi thiếu update:task (mirror TASK_DEFERRED_GRANTS) ──
+  // ── DENY-PATH: read-only khi useCan(update:task)=false (BE quyết cuối; grant emp/mgr đã nới 0501) ──
   it("renders read-only (no add/tick/delete controls) without update:task", async () => {
     setCapabilities({});
     renderWithQuery(<TaskChecklistPanel taskId="task-001" />);
