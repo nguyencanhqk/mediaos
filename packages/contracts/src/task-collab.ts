@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { taskCoreResponseSchema, taskCoreStatusSchema } from "./task";
+import { projectStateGroupSchema, taskCoreResponseSchema, taskCoreStatusSchema } from "./task";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // S4-TASK-BE-4 — Kanban board + move · comment/mention · checklist/items · activity feed
@@ -28,10 +28,36 @@ export const taskKanbanCardSchema = taskCoreResponseSchema.extend({
 });
 export type TaskKanbanCardDto = z.infer<typeof taskKanbanCardSchema>;
 
-export const taskKanbanColumnSchema = z.object({
+/**
+ * S5-TASK-PIPELINE-1 — cột board là DISCRIMINATED UNION theo `columnMode` (DECISIONS-03 D-17):
+ *   - 'state'  : cột PIPELINE tuỳ biến theo dự án (project_states) — board chính sau đợt A.
+ *   - 'status' : fallback 5 cột FSM cho dự án 0 state (chỉ dự án tạo trước khi seed đủ) — GIỮ NHÁNH,
+ *                KHÔNG tuyên bố "tương thích FE cũ" (đổi shape là đổi thật; FE narrow theo columnMode).
+ * BE quyết định mode per-project ở lane be-read (getBoard); trước đó server luôn trả 'status'.
+ */
+export const taskKanbanStateColumnSchema = z.object({
+  columnMode: z.literal("state"),
+  stateId: z.string().uuid(),
+  name: z.string(),
+  color: z.string(),
+  stateGroup: projectStateGroupSchema,
+  sortOrder: z.number().int(),
+  taskCount: z.number().int().nonnegative(),
+  tasks: z.array(taskKanbanCardSchema),
+});
+export type TaskKanbanStateColumnDto = z.infer<typeof taskKanbanStateColumnSchema>;
+
+export const taskKanbanStatusColumnSchema = z.object({
+  columnMode: z.literal("status"),
   status: taskCoreStatusSchema,
   tasks: z.array(taskKanbanCardSchema),
 });
+export type TaskKanbanStatusColumnDto = z.infer<typeof taskKanbanStatusColumnSchema>;
+
+export const taskKanbanColumnSchema = z.discriminatedUnion("columnMode", [
+  taskKanbanStateColumnSchema,
+  taskKanbanStatusColumnSchema,
+]);
 export type TaskKanbanColumnDto = z.infer<typeof taskKanbanColumnSchema>;
 
 export const taskKanbanBoardSchema = z.object({
@@ -40,9 +66,18 @@ export const taskKanbanBoardSchema = z.object({
 });
 export type TaskKanbanBoardDto = z.infer<typeof taskKanbanBoardSchema>;
 
-// Move (POST /tasks/:id/move) KHÔNG có schema riêng — controller tái dùng nguyên vẹn
-// `changeTaskStatusSchema` (task-actions.ts): "move" chỉ là route sugar cho Kanban drag/drop, PHẢI
-// đi qua CHÍNH `TaskActionsService.changeStatus` (không lách FSM — SPEC-06 API-06 §15.2).
+/**
+ * POST /tasks/:id/move-state (S5-TASK-PIPELINE-1, gate update-state:task — lane be-write) — kéo thẻ
+ * sang CỘT pipeline. Server: double-gate + auto-map state_group→status qua changeStatusTx CÙNG tx.
+ * Route cũ POST /tasks/:id/move (đổi THEO STATUS, gate update-status) đã đánh dấu KHAI TỬ
+ * (DECISIONS-03 D-21.4 — expand-contract đợt 1/2); FE chuyển sang move-state ở lane fe.
+ */
+export const moveTaskStateRequestSchema = z
+  .object({
+    stateId: z.string().uuid(),
+  })
+  .strict();
+export type MoveTaskStateRequest = z.infer<typeof moveTaskStateRequestSchema>;
 
 // ─── Comments (GET/POST/PATCH/DELETE /tasks/:id/comments, TASK-API-301..304) ─────
 

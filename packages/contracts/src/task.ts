@@ -54,11 +54,16 @@ export type OfficeTaskStatusDto = z.infer<typeof officeTaskStatusSchema>;
 export const prioritySchema = z.enum(["urgent", "high", "medium", "low", "none"]);
 export type PriorityDto = z.infer<typeof prioritySchema>;
 
-/** 5 nhóm trạng thái Plane (project_states.state_group). */
+/**
+ * 6 nhóm trạng thái (project_states.state_group) — 'review' thêm ở mig 0499 (S5-TASK-PIPELINE-1,
+ * SPEC-06 §6.8): cột duyệt của quy trình sản xuất quy về In Review thay vì gộp vào started.
+ * Đồng bộ với CHECK project_states_group_check (schema workflow.ts).
+ */
 export const projectStateGroupSchema = z.enum([
   "backlog",
   "unstarted",
   "started",
+  "review",
   "completed",
   "cancelled",
 ]);
@@ -596,6 +601,12 @@ export const createTaskCoreSchema = z
     priority: taskCorePrioritySchema.optional(),
     dueAt: z.string().datetime({ offset: true }).optional(),
     startAt: z.string().datetime({ offset: true }).optional(),
+    /**
+     * S5-TASK-PIPELINE-1 — tạo thẳng vào CỘT pipeline (nút "+ Thêm công việc" đáy cột board).
+     * Server: đòi update-state:task + suy task_status khởi tạo từ STATE_GROUP_TO_STATUS (KHÔNG
+     * hardcode 'Todo' khi có stateId — chống desync-lúc-sinh, plan 3c). Bỏ trống = is_default.
+     */
+    stateId: z.string().uuid().optional(),
   })
   .strict()
   .refine((v) => !v.startAt || !v.dueAt || v.dueAt >= v.startAt, {
@@ -618,6 +629,13 @@ export const updateTaskCoreSchema = z
     priority: taskCorePrioritySchema.nullable(),
     dueAt: z.string().datetime({ offset: true }).nullable(),
     startAt: z.string().datetime({ offset: true }).nullable(),
+    /**
+     * S5-TASK-PIPELINE-1 — đổi CỘT pipeline qua PATCH (đường ghi thứ hai, plan 3b): gate + auto-map
+     * nằm Ở METHOD DÙNG CHUNG của TaskCoreService (hễ stateId KHÁC hiện tại ⇒ resolveAndAssert
+     * update-state:task + auto-map status), KHÔNG ở route — PATCH không được thành cửa vòng qua.
+     * KHÔNG nullable: spec không có thao tác "gỡ thẻ khỏi board".
+     */
+    stateId: z.string().uuid(),
   })
   .partial()
   .strict()
@@ -631,6 +649,10 @@ export type UpdateTaskCoreRequest = z.infer<typeof updateTaskCoreSchema>;
 /**
  * Chi tiết/dòng task core (GET /tasks, GET /tasks/:id) — DTO server-side, join tên project/assignee/creator.
  * `status`/`priority` là cột TitleCase MỚI (nullable — hàng legacy/FSM chưa set). `isOverdue` tính ở server.
+ *
+ * KHÔNG hợp nhất với `taskSchema`/`boardTaskSchema` phía trên dù chúng CŨNG có stateId/stateName:
+ * đó là họ DTO PM-1 legacy (route /tasks/board G9-3, cột `status` lowercase) — FE nghiệp vụ hiện
+ * không dùng, sẽ dọn ở WO dead-code. Trộn hai họ = ép cả hai vòng đời đổi cùng lúc (drift 2 chiều).
  */
 export const taskCoreResponseSchema = z.object({
   id: z.string().uuid(),
@@ -655,6 +677,15 @@ export const taskCoreResponseSchema = z.object({
   createdBy: z.string().uuid().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
+  // ── S5-TASK-PIPELINE-1 — cột pipeline (resolved từ project_states, READ-ONLY qua DTO này;
+  // ghi đi đường stateId của create/update + move-state). `.optional()` chứ KHÔNG bắt buộc:
+  // BE mapper điền ở lane be-read — client parse response CŨ (chưa có field) không được gãy,
+  // và `.optional()` (không `.default()`) giữ Input=Output cho apiFetch<T> (bẫy suy luận generic
+  // đã ghi ở task-collab.ts). stateId NULL = task chưa lên board (legacy/ngoài dự án).
+  stateId: z.string().uuid().nullable().optional(),
+  stateName: z.string().nullable().optional(),
+  stateColor: z.string().nullable().optional(),
+  stateGroup: projectStateGroupSchema.nullable().optional(),
 });
 export type TaskCoreResponseDto = z.infer<typeof taskCoreResponseSchema>;
 

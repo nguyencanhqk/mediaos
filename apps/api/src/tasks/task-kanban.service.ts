@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import type { TaskKanbanBoardDto, TaskKanbanColumnDto } from "@mediaos/contracts";
+import type { TaskKanbanBoardDto, TaskKanbanStatusColumnDto } from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { TaskCoreRepository } from "./task-core.repository";
@@ -85,7 +85,11 @@ export class TaskKanbanService {
         this.checklistsRepo.countProgressByTaskIdsTx(tx, user.companyId, taskIds),
       ]);
 
-      const columns: TaskKanbanColumnDto[] = TASK_CORE_STATUSES.map((status) => ({
+      // S5-TASK-PIPELINE-1 (lane contracts): cột board giờ là discriminated union theo columnMode —
+      // service này còn phát nhánh 'status' (5 cột FSM); nhánh 'state' (cột pipeline per-project)
+      // thuộc lane be-read (columnMode:'state' khi project có state active).
+      const columns: TaskKanbanStatusColumnDto[] = TASK_CORE_STATUSES.map((status) => ({
+        columnMode: "status" as const,
         status,
         tasks: [],
       }));
