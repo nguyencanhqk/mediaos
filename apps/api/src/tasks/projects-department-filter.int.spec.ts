@@ -121,9 +121,11 @@ describe.skipIf(!runDb)(
       await plantProject(B.companyId, "PB1", deptZ);
     });
 
+    // app.close() TRƯỚC cleanupTenants — outbox worker còn sống có thể ghi audit_logs giữa các câu
+    // DELETE của cleanup ⇒ FK 23503 flake (bẫy đã fix ở task-actions/lane-6 đợt A, không lặp lại).
     afterAll(async () => {
-      if (direct) await cleanupTenants(direct, companyIds);
       if (app) await app.close();
+      if (direct) await cleanupTenants(direct, companyIds);
     });
 
     it("F1 — không filter: thấy đủ 3 project công ty A, KHÔNG thấy project công ty B", async () => {
