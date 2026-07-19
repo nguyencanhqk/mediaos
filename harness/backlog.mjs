@@ -7155,7 +7155,8 @@ export const backlog = [
       "BẪY đã biết: checklistDone/checklistTotal (ship PR #207) VẪN GIỮ như badge riêng — KHÔNG gộp, KHÔNG thay bằng subtask; hai khái niệm khác nhau",
     ],
     done_when: [
-      "QUYẾT ĐỊNH TRONG ADR trước khi code (owner chốt, KHÔNG để implementer tự chọn): (a) báo cáo countsByStatus + mv_dashboard_task_status đếm CHA, CON, hay chỉ lá — hiện đếm cả hai là ĐẾM TRÙNG; (b) task con có state_id không (đã ẩn khỏi board thì cột của nó có nghĩa gì) — đề xuất ép NULL; (c) xoá/huỷ cha thì con đi đâu (soft-delete lan hay chặn xoá khi còn con sống); (d) con có bắt buộc cùng project với cha không (đề xuất: bắt buộc); (e) 'Việc quá hạn' + rail avatar có tính con không",
+      "OWNER ĐÃ CHỐT 2026-07-18 (4 quyết định — KHÔNG hỏi lại): (a) ĐẾM LÁ — task có con thì chỉ đếm con, task không con thì đếm chính nó; áp cho countsByStatus + dashboard. Hệ quả đã biết và CHẤP NHẬN: tổng nhảy không đều (thêm con ĐẦU TIÊN vào task chưa có con ⇒ tổng KHÔNG đổi vì cha rời tập đếm, con thứ hai mới +1) và board (chỉ cha) ≠ báo cáo (chỉ lá) ⇒ PHẢI ghi chú trong UI/doc, đừng để người sau sửa như bug. (b) Xoá cha ⇒ xoá lan xuống con, nhưng KIỂM TRA QUYỀN TỪNG CON: duyệt hết con gọi assertInScopeForWrite; có con ngoài phạm vi ⇒ 403 kèm danh sách con bị chặn và KHÔNG xoá gì cả (tất-cả-hoặc-không). Soft-delete (BẤT BIẾN #2), CÙNG 1 tx. (c) Việc quá hạn CÓ tính con. (d) Task con ẩn khỏi board (quyết định gốc).",
+      "CÒN MỞ, cần chốt khi viết ADR: task con có state_id không (đề xuất ép NULL — đã ẩn khỏi board thì cột không mang nghĩa) · con có bắt buộc cùng project với cha không (đề xuất: bắt buộc, chặn ở BE) · rail avatar lọc theo người có tính con không (đề xuất: CÓ, nhất quán với quyết định quá hạn) · màn 'Việc quá hạn' hiện cả cha lẫn con khi cả hai quá hạn, hay chỉ lá (đề xuất: hiện CẢ HAI vì là danh sách việc phải xử lý, khác với CON SỐ trong báo cáo dùng quy tắc đếm-lá — nhưng phải ghi rõ để người dùng không thấy dashboard 12 mà danh sách 15 rồi mất niềm tin)",
       "parent_task_id typed trong drizzle + CRUD subtask (tạo/sửa/xoá/đổi thứ tự) qua TaskCoreService — KHÔNG tạo đường ghi thứ hai (bài học B3/B4 của đợt A: gate + auto-map phải nằm ở method dùng chung)",
       "Mỗi subtask có người thực hiện riêng + hạn riêng + trạng thái riêng; hiện trong 'Việc của tôi' của người được giao",
       "Chống vòng lặp cha-con: A không thể là con của chính nó hoặc của hậu duệ; độ sâu giới hạn tường minh (đề xuất 1 cấp — ảnh tham chiếu chỉ có 1 cấp) và ép ở BE, không chỉ FE",
@@ -7163,6 +7164,37 @@ export const backlog = [
       "Tiến độ thẻ cha = tỉ lệ subtask hoàn thành (aggregate GROUP BY parent_task_id, KHÔNG N+1); task 0 subtask không hiện %",
       "Quyền: dùng lại cặp hiện có của task (create/update/delete:task) — KHÔNG thêm pair mới trừ khi ADR chỉ ra nhu cầu thật; nếu thêm thì cập nhật TASK_PERMISSION_COUNT + TASK_GRANT_MATRIX + TASK_EXPECTED_GRANT_COUNTS cùng commit (bẫy canonical-seed-pin-regression)",
       "FULL gate (chạm truy vấn board + đường ghi task + có thể chạm báo cáo) + check.sh --lane-db xanh",
+    ],
+  },
+  {
+    id: "S5-DASH-TASKSTATUS-FIX-1",
+    module: "DASH",
+    layer: "BE",
+    title:
+      "Dashboard đếm SAI cột trạng thái: mv_dashboard_task_status GROUP BY `status` legacy mà task core không bao giờ ghi ⇒ mọi task văn phòng hiện là 'not_started' vĩnh viễn",
+    zone: "red",
+    status: "todo",
+    paths: [
+      "apps/api/migrations/**",
+      "apps/api/src/dashboard/**",
+      "apps/api/test/integration/**",
+    ],
+    skills: ["code-review"],
+    depends_on: [],
+    src: [
+      "Phát hiện 2026-07-18 khi khảo sát hệ quả của quyết định đếm-lá cho subtask. LỖI CÓ SẴN, không do WO nào gây ra",
+      "Chuỗi bằng chứng: (1) mv_dashboard_task_status định nghĩa ở mig 0102 = SELECT company_id, status, COUNT(*) FROM tasks WHERE deleted_at IS NULL GROUP BY company_id, status — dùng cột `status` LEGACY (MV tạo TRƯỚC mig 0478 sinh ra task_status); (2) insertTaskCoreTx (task-core.repository.ts) ghi task_status, KHÔNG ghi status ⇒ status giữ DEFAULT 'not_started'; (3) updateStatusTx (task-actions.repository.ts) chỉ `set task_status = ...`, KHÔNG đụng status; (4) MvDashboardService (dashboard/mv-dashboard.service.ts) ĐỌC THẬT MV này ra dashboard, DashboardRefreshService refresh nó",
+      "⇒ Mọi task tạo qua POST /tasks (task_type='office' — đường sống của module TASK) đếm là 'not_started' MÃI MÃI trên dashboard bất kể trạng thái thật. Task HR (hr-tasks.service ghi status + closeTaskTx set 'approved'/'completed') và task workflow thì ĐÚNG ⇒ dashboard đúng một phần, sai một phần: khó phát hiện hơn là sai hoàn toàn",
+      "LIÊN QUAN S5-TASK-SUBTASK-1: owner chốt đếm-lá cho báo cáo + dashboard. Nếu áp đếm-lá lên MV này trước khi vá cột thì thành 'sửa đúng công thức trên dữ liệu sai' ⇒ WO này nên chạy TRƯỚC hoặc CÙNG lượt",
+      "Cân nhắc phạm vi: sửa MV sang task_status có làm lệch task HR/workflow (vốn dùng cột legacy) không — hai họ task dùng hai cột khác nhau là drift GỐC từ de-media-fy; cần quyết định hợp nhất hay tách widget theo họ task",
+    ],
+    done_when: [
+      "Xác định phạm vi sai bằng SỐ LIỆU THẬT trước khi sửa: query đếm task theo (task_type, status legacy, task_status) trên DB thật ⇒ biết bao nhiêu row lệch, họ task nào ảnh hưởng",
+      "Quyết định tường minh trong ADR: MV đếm theo task_status (và task HR/workflow map thế nào), HAY hợp nhất 2 cột, HAY tách widget theo họ task — KHÔNG tự chọn im lặng",
+      "MV định nghĩa lại qua migration (DROP + CREATE hoặc CREATE OR REPLACE tuỳ Postgres) + giữ UNIQUE INDEX cho REFRESH CONCURRENTLY; refresh lại sau migrate",
+      "Int-spec LANE_DB: tạo task qua POST /tasks → đổi trạng thái sang Done → refresh MV → dashboard đếm ĐÚNG 1 Done (hiện tại sẽ đếm nhầm là not_started) — RED trước khi vá",
+      "Regression: task HR (đơn nghỉ/điều chỉnh công) + task workflow vẫn đếm đúng sau khi đổi MV",
+      "FULL gate (chạm migration + số liệu báo cáo) + check.sh --lane-db xanh",
     ],
   },
 ];

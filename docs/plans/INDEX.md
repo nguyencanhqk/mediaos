@@ -4,7 +4,7 @@
 > Nguồn: `harness/backlog.mjs` (WO) + `activity.jsonl` (trạng thái) + `docs/plans/<id>.md` (micro-plan).
 > Roadmap đầy đủ 112 story / 7 sprint: **IMPLEMENTATION-02 §7** (KHÔNG nhân bản ở đây — pull-sprint).
 
-**239 WO** · có micro-plan: **107/239** · ⬜ 21 chờ · 🔵 0 đang làm · ✅ 218 xong · 🔴 0 chặn
+**240 WO** · có micro-plan: **107/240** · ⬜ 22 chờ · 🔵 0 đang làm · ✅ 218 xong · 🔴 0 chặn
 
 ## Sprint 0
 
@@ -263,6 +263,7 @@
 | `S5-TASK-WORKSPACE-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S5-TASK-PIPELINE-1 | Đợt D1 — Vỏ workspace dự án: tab bar (Bảng·Danh sách·Báo cáo·Hoạt động |
 | `S5-TASK-DETAIL-1` | 🟡 | ⬜ chờ | — *(chưa)* | ⏳S5-TASK-PIPELINE-1 | Màn chi tiết task — vá 4 gap TRONG SPEC chưa làm: timeline hiện dữ liệ |
 | `S5-TASK-SUBTASK-1` | 🔴 | ⬜ chờ | — *(chưa)* | ⏳S5-TASK-PIPELINE-1 | Công việc con = subtask THẬT (parent_task_id): CRUD + người thực hiện/ |
+| `S5-DASH-TASKSTATUS-FIX-1` | 🔴 | ⬜ chờ | — *(chưa)* | — | Dashboard đếm SAI cột trạng thái: mv_dashboard_task_status GROUP BY `s |
 
 ## Sprint 6
 

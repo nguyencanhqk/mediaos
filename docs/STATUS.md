@@ -1,6 +1,6 @@
 # STATUS — MediaOS (TỰ SINH — KHÔNG sửa tay)
 
-> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-19 01:13Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
+> Sinh bởi `harness/gen-status.mjs` lúc **2026-07-19 01:24Z**. Status TỰ ĐỘNG từ ledger (start-on-touch · finish-on-commit); đóng dấu tay: `node harness/ledger.mjs start|done <WO>`. Cơ cấu WO (title/zone/paths/deps) sửa ở `harness/backlog.mjs`.
 
 ## Tiêu điểm phiên (đang làm)
 
@@ -18,6 +18,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 - 🔴 `S5-LEAVE-DEADCODE-1` Dọn khối LeaveService chết (createRequest/approveRequest/rejectRequest/cancelRequest + CreateLeaveRequestDto/createLeaveRequestSchema) — di sản G11 còn sót sau rebuild SPEC-05 Sprint 3, không route HTTP nào tới được
 - 🔴 `S5-SEQ-HARDEN-1` Gia cố cấp mã tuần tự: SAVEPOINT cho recovery 23505 (ensure-on-miss race hiện trả 500 do 25P02), allocate sau authz tầng-service (chống đốt counter), phân biệt constraint khi map unique-violation
 - 🔴 `S5-TASK-PIPELINE-1` Đợt A — Kanban cột pipeline tuỳ biến theo dự án (project_states) thay 5 cột FSM cố định; nới FSM cho phép mở lại + auto-map state_group→status qua changeStatus; backfill state_id từ task_status
+- 🔴 `S5-DASH-TASKSTATUS-FIX-1` Dashboard đếm SAI cột trạng thái: mv_dashboard_task_status GROUP BY `status` legacy mà task core không bao giờ ghi ⇒ mọi task văn phòng hiện là 'not_started' vĩnh viễn
 
 **CHỜ (kẹt phụ thuộc):**
 - `S5-UAT-1` UAT prep + run (script theo role · test data · sign-off) + release readiness checklist + known issues/release notes nội bộ — gate vào Sprint 6 ⏳ cần: S5-QA-E2E-1, S5-QA-REG-1, S5-SEC-1
@@ -37,7 +38,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 ## Trạng thái repo
 
-- **branch**: `docs/s5-task-subtask-model` · **file đang đổi (dirty)**: 3
+- **branch**: `docs/s5-task-subtask-model` · **file đang đổi (dirty)**: 1
 - **migration head**: idx 178 — `0498_s5_notifix2_task_code_seqgen` (179 migration)
 - **nền**: Hạ tầng backend đã land master (RLS·permission·audit·outbox) + một phần Foundation service (audit/holidays/files/sequences/retention/seed). Migration head idx 121 / 0438. RECONCILE-FIRST: đối chiếu với DB-08/BACKEND spec, giữ phần khớp, chỉ build phần thiếu/lệch. De-media-fy: media·finance·SaaS·workflow-DAG·payroll·mobile OUT-OF-SCOPE.
 - **hướng v2**: Rebuild theo bộ docs gold-standard. Triển khai theo dependency (IMPLEMENTATION-01 §4): Foundation → AUTH/RBAC → HR → ATT+LEAVE → TASK → NOTI → DASH → integration → QA/UAT → release. Backend guard là lớp kiểm soát quyền cuối. Mỗi sprint phải tạo increment chạy được + test được. Reconcile-first với code đã build. FE: auth·console·app.
@@ -46,6 +47,7 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 
 | sha | ngày | mô tả |
 | --- | --- | --- |
+| `7984777b` | 2026-07-19 | docs(task): việc con = subtask THẬT (parent_task_id) — tách WO riêng + chèn bộ lọc board vào đợt A |
 | `731072e6` | 2026-07-18 | docs(task): kế hoạch đợt A pipeline + seed 4 WO redesign TASK (benchmark MISA AMIS) (#232) |
 | `a6a900cd` | 2026-07-18 | fix(task,att): task HR từ đơn điều chỉnh công mang task_code THẬT + counter Inactive → 409 (S5-TASK-HRCODE-1) (#231) |
 | `f00167db` | 2026-07-18 | fix(hr): /hr/audit-logs luôn "Không thể tải lịch sử" (schema client lệch hình dạng response) (#230) |
@@ -57,7 +59,6 @@ _Không có item in_progress._ Chọn 1 item READY bên dưới → đặt `stat
 | `0397bebe` | 2026-07-18 | feat(hr): S5-HR-ORGCHART-BE-1 — GET /hr/org-chart/employees (cây nhân sự scoped, directory-class) + employeeCount /org/units/tree 🔴 (#224) |
 | `f3d8fa9a` | 2026-07-17 | test(me-qa): S5-ME-QA-1 — IDOR sweep /me/* + cross-user/tenant deny + aggregation degraded + preference policy (SPEC-09 §20) (#223) |
 | `7a41e79b` | 2026-07-17 | feat(me-fe): S5-ME-FE-2 — Hồ sơ của tôi + Tài khoản & bảo mật dưới /me/* + màn Hoạt động bảo mật (ME-SCREEN-002..008) (#222) |
-| `d5fc9e14` | 2026-07-17 | S5-FE-TASK-5: Kanban card giàu tín hiệu + lọc theo assignee (SPEC-06 §13.8) — FIX-2 LIGHT gate (#218) |
 
 ---
 _Vòng phiên: `bash harness/init.sh` (mở) → làm 1 Work Order → `bash harness/check.sh` (verify) → `bash harness/finish.sh` (đóng + bàn giao)._
