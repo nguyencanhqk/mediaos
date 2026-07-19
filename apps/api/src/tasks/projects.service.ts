@@ -224,6 +224,10 @@ export class ProjectsService {
         });
       }
 
+      // S5-TASK-PIPELINE-1 (lane be-seed) — dự án mới có pipeline mặc định 6 cột (DB-06 §7.4),
+      // TRONG CÙNG tx tạo project: rollback (trùng tên/lỗi giữa chừng) ⇒ 0 state mồ côi.
+      await this.repo.seedDefaultStatesTx(tx, user.companyId, project.id);
+
       await this.activity.record(tx, {
         action: "PROJECT_CREATED",
         targetType: "Project",

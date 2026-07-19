@@ -753,4 +753,48 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-1 projects+member surface (DB cô lập,
     expect(s.status).toBe(200);
     expect((s.body.data as Array<{ id: string }>).map((p) => p.id)).toContain(projAdmin);
   });
+
+  // ── S5-TASK-PIPELINE-1 (lane be-seed) — dự án mới có pipeline mặc định ──────────
+
+  it("POST /projects seed ĐỦ 6 cột pipeline tiếng Việt TRONG CÙNG tx tạo dự án (DB-06 §7.4 — khớp từng name/group/màu/sort/is_default)", async () => {
+    const t = await login(A.slug, `admin@${A.slug}.test`);
+    const pid = await createProject(t, "Proj Seed States");
+    const states = await direct.query(
+      `SELECT name, state_group, color, is_default, sort_order
+         FROM project_states
+        WHERE company_id=$1 AND project_id=$2 AND deleted_at IS NULL
+        ORDER BY sort_order`,
+      [A.companyId, pid],
+    );
+    expect(states.rows).toEqual([
+      { name: "Backlog", state_group: "backlog", color: "#94a3b8", is_default: false, sort_order: 0 },
+      { name: "Cần làm", state_group: "unstarted", color: "#64748b", is_default: true, sort_order: 1 },
+      { name: "Đang làm", state_group: "started", color: "#3b82f6", is_default: false, sort_order: 2 },
+      { name: "Chờ duyệt", state_group: "review", color: "#f59e0b", is_default: false, sort_order: 3 },
+      {
+        name: "Hoàn thành",
+        state_group: "completed",
+        color: "#22c55e",
+        is_default: false,
+        sort_order: 4,
+      },
+      { name: "Đã huỷ", state_group: "cancelled", color: "#ef4444", is_default: false, sort_order: 5 },
+    ]);
+  });
+
+  it("POST /projects trùng tên → 409 VÀ KHÔNG để lại state mồ côi (seed cùng tx — rollback sạch)", async () => {
+    const t = await login(A.slug, `admin@${A.slug}.test`);
+    await createProject(t, "Proj Seed Dup");
+    const before = await direct.query(
+      `SELECT count(*)::int n FROM project_states WHERE company_id=$1 AND deleted_at IS NULL`,
+      [A.companyId],
+    );
+    const dup = await authPost(t, "/projects").send({ name: "Proj Seed Dup" });
+    expect(dup.status).toBe(409);
+    const after = await direct.query(
+      `SELECT count(*)::int n FROM project_states WHERE company_id=$1 AND deleted_at IS NULL`,
+      [A.companyId],
+    );
+    expect(after.rows[0].n, "409 KHÔNG được sinh thêm state nào").toBe(before.rows[0].n);
+  });
 });
