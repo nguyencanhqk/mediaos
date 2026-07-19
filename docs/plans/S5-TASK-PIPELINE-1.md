@@ -25,7 +25,7 @@ lanes:
     builder: backend-builder
     paths: ["apps/api/src/tasks/**"]  # mở rộng: 4 int-spec mới (bypass quyền, scope-confusion, cửa thứ hai PATCH, atomic Cancelled) phải colocated trong src/**
   - id: pipeline-be-read
-    task: "Kanban đọc theo project_states. (1) getBoard: project có state active ⇒ columnMode:'state', dựng cột theo sortOrder, nhóm task theo state_id, task state_id NULL rơi vào cột is_default (KHÔNG biến mất khỏi board); project 0 state (chỉ dự án tạo SAU 0420 — xem §Sửa sai) ⇒ columnMode:'status' y hệt hành vi cũ. (2) TASK_CORE_SELECT/mapper: LEFT JOIN project_states trả stateName/stateColor/stateGroup. (3) Giữ nguyên buildReadScopeExists + KANBAN_TASK_LIMIT + pair view-kanban:task."
+    task: "Kanban đọc theo project_states. (0) LỌC TASK CON: board CHỈ hiện task cha ⇒ thêm điều kiện `parent_task_id IS NULL` vào truy vấn board NGAY ĐỢT NÀY, dù subtask chưa được build (cột parent_task_id đã có từ mig 0478, hiện 0 code dùng ⇒ mệnh đề này vô hại lúc này). Owner chốt 2026-07-18: việc con ẩn khỏi board, chỉ hiện trong task cha (khớp ảnh tham chiếu — KB 14 là 1 thẻ chứa 8 việc con). KHÔNG thêm bây giờ = ngày subtask lên thì board phình gấp nhiều lần và phải sửa lại truy vấn đã qua review. (1) getBoard: project có state active ⇒ columnMode:'state', dựng cột theo sortOrder, nhóm task theo state_id, task state_id NULL rơi vào cột is_default (KHÔNG biến mất khỏi board); project 0 state (chỉ dự án tạo SAU 0420 — xem §Sửa sai) ⇒ columnMode:'status' y hệt hành vi cũ. (2) TASK_CORE_SELECT/mapper: LEFT JOIN project_states trả stateName/stateColor/stateGroup. (3) Giữ nguyên buildReadScopeExists + KANBAN_TASK_LIMIT + pair view-kanban:task."
     builder: backend-builder
     paths: ["apps/api/src/tasks/task-kanban.service.ts", "apps/api/src/tasks/task-core.mapper.ts"]
   - id: pipeline-be-seed
@@ -52,6 +52,7 @@ acceptanceChecks:
   - "Permission pair update-state:task seed đúng per-(role,pair) theo ma trận employee=Own · manager=Team · hr=Company · company-admin=Company (mirror update-status:task); TASK_PERMISSION_COUNT=24 + TASK_GRANT_MATRIX + TASK_EXPECTED_GRANT_COUNTS (employee 8 · manager 20 · hr 19 · company-admin 24) cập nhật CÙNG COMMIT; task-permissions-seed.int.spec xanh; grant verify theo từng role bằng query DB THẬT (không grep)."
   - "Auto-map KHÔNG bypass quyền: kéo thẻ làm đổi status vẫn đòi update-status:task, và chạy ở ĐÚNG scope của pair đó (không mượn scope của update-state)."
   - "Dự án chỉ còn ĐÚNG 1 state: board render bình thường (1 cột), không crash, không mất thẻ."
+  - "Board CHỈ hiện task cha: truy vấn có `parent_task_id IS NULL`. Test dựng task con thủ công (INSERT trực tiếp, vì CRUD subtask chưa có ở đợt này) ⇒ con KHÔNG lên board, đếm cột KHÔNG tính con."
   - "Lịch sử 'Chuyển đến cột' dựng được từ task_activity_logs: mỗi lần kéo ghi 1 dòng có actor + thời điểm + old/new mang CẢ stateId VÀ stateName; đổi tên cột sau đó KHÔNG làm sai lịch sử cũ."
   - "CHECK chk_task_activity_target_type đã ALTER kiểu UNION trước khi move-state chạy (thiếu ⇒ mọi lần kéo thẻ 500 dù logic đúng)."
   - "check.sh --lane-db XANH; coverage ≥80% cho task-fsm.ts + task-core.service.ts — LƯU Ý: script `test:cov:sensitive` KHÔNG tồn tại (apps/api/package.json:12 chỉ có test:cov hardcode src/workflow) ⇒ WO này phải THÊM script hoặc chạy vitest --coverage.include tường minh; không viết acceptance dựa vào script không có."
@@ -75,6 +76,7 @@ testTasks:
   - "Int: PATCH /tasks/:taskId đổi stateId sang cột KHÁC nhóm ⇒ task_status auto-map Y HỆT move-state (cùng method dùng chung, không có đường vòng bỏ qua auto-map)."
   - "RED desync-lúc-sinh (int): POST /tasks {stateId} của cột nhóm 'started' ⇒ task_status khởi tạo = 'In Progress' (KHÔNG phải 'Todo' hardcode); actor thiếu update-state:task ⇒ 403. Đây là đường tạo CHÍNH trên board (nút '+ Thêm công việc' đáy cột), không phải ca hiếm."
   - "Int: POST /tasks KHÔNG truyền stateId ⇒ state_id = is_default VÀ task_status = 'Todo' (nhất quán, giữ hành vi cũ)."
+  - "Int LỌC CON: INSERT trực tiếp 1 task có parent_task_id trỏ task cha trong cùng project ⇒ GET /projects/:id/kanban KHÔNG trả task con, taskCount của cột KHÔNG tính con. (CRUD subtask thuộc WO S5-TASK-SUBTASK-1; test này chỉ chốt bộ lọc để board không phình khi WO đó land.)"
   - "LƯU Ý dựng role cho 2 deny-path bypass/scope-confusion: 4 role canonical đều có update-status VÀ update-state cùng scope (ma trận mirror nhau) ⇒ phải dựng ROLE TUỲ BIẾN trong test, không dùng role chuẩn."
   - "Int ATOMIC: task đang Cancelled kéo thẳng sang cột nhóm completed ⇒ FSM từ chối (Cancelled → {Todo, In Progress}) ⇒ state_id KHÔNG đổi. Dùng kịch bản THẬT, KHÔNG mock FSM trong int test."
   - "Int: tạo task trong dự án có pipeline ⇒ state_id = is_default; trong dự án 0 state ⇒ NULL, board vẫn hiện thẻ ở cột status."
@@ -165,6 +167,13 @@ Vá bản 4: move-state resolve **hai scope riêng biệt**, chỉ đòi `update
 **R8 — FSM sau khi nới gần như no-op.** Nhánh `409 TASK-ERR-WORKFLOW-INVALID` trở nên gần-không-với-tới (ca từ chối thật duy nhất còn lại: task đang `Cancelled` kéo sang đích ngoài `{Todo, In Progress}`). ADR phải ghi rõ điều này, và mọi spec cũ đang assert 409 phải **viết lại theo ca Cancelled** — KHÔNG xoá assert (mất luôn lưới an toàn). Hệ quả quản trị: kỷ luật quy trình giờ nằm ở **thứ tự cột + quyền cấu hình cột**, nếu sau này cần ép duyệt cứng cho một loại việc thì phải làm bằng cơ chế khác (ví dụ khoá cột theo quyền), không quay lại dựa vào FSM.
 
 **R7 — Cột `Backlog` sẽ luôn rỗng sau backfill.** 0420 tạo state tên `Backlog` nhưng `task_status` không có giá trị tương ứng. Không mất dữ liệu, nhưng phải nói rõ trong ADR/ghi chú phát hành, nếu không người dùng tưởng board hỏng.
+
+**R10 — Nguồn phần trăm tiến độ trên thẻ (owner chốt mô hình việc con 2026-07-18).** Ảnh tham chiếu cho thấy `%` trên thẻ CHÍNH LÀ tỉ lệ việc con hoàn thành — kiểm chứng số học khớp tuyệt đối: `4/5=80` · `1/3=33` · `1/4=25` · `5/6=83` · `7/8=88` · `6/7=86`. Owner chốt việc con = **subtask thật** (`parent_task_id`), ẩn khỏi board.
+
+Hệ quả cho đợt A: thẻ kanban hiện có `checklistDone/checklistTotal` (ship PR #207) — **KHÔNG** phải nguồn tiến độ theo mô hình mới. Nhưng CRUD subtask chưa build, nên:
+- **Đợt A GIỮ NGUYÊN** badge checklist như hiện tại, **KHÔNG** thêm `%` từ checklist (nếu thêm rồi sau đổi sang subtask thì đổi ngữ nghĩa cùng một con số trước mắt người dùng — tệ hơn là chưa có).
+- `%` tiến độ = tỉ lệ **subtask** hoàn thành, thuộc WO `S5-TASK-SUBTASK-1`. Task không có subtask ⇒ **không hiện `%`** (một nguồn duy nhất, không fallback hai nguồn cùng hình thức — fallback là bẫy mơ hồ).
+- Đợt A **chỉ** phải làm 1 việc cho tương lai: bộ lọc `parent_task_id IS NULL` ở truy vấn board (lane be-read mục 0).
 
 **R9 — Hai writer `state_id` ungated còn sót trong cây (không chặn, nhưng ADR phải ghi).** `tasks.repository.ts:393` (`createTask(data.stateId)`, chỉ đến từ `TasksService.createHubTask`) và `tasks.repository.ts:453` (`updateTaskFieldsTx(fields.stateId)`, chỉ đến từ `updateTaskFields` — không route nào tới, xem R3). Cả hai **không gate, không auto-map**. Hôm nay vô hại vì không route nào set `stateId` qua đó (`POST /tasks` đi `taskCore.createTask`; `createMeetingActionTask` truyền `projectId: null`). ADR phải ghi một dòng: *"đây là 2 writer `state_id` ungated cuối cùng — KHÔNG được nối route vào nếu chưa áp quy tắc 3b/3c"*, và gắn cảnh báo này vào WO dọn code chết.
 
