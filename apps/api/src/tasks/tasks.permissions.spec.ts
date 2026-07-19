@@ -76,13 +76,12 @@ const GUARDED_MUTATIONS: ReadonlyArray<{
   { handlerName: "addChecklistItem", action: "update", resourceType: "task" },
   { handlerName: "updateChecklistItem", action: "update", resourceType: "task" },
   { handlerName: "deleteChecklistItem", action: "update", resourceType: "task" },
-  // view:task-audit-log là SENSITIVE (seed 0485 is_sensitive=true, CHỈ hr/company-admin @Company).
-  {
-    handlerName: "listActivity",
-    action: "view",
-    resourceType: "task-audit-log",
-    isSensitive: true,
-  },
+  // S5-TASK-DETAIL-1 (DECISIONS-04 D-29): guard listActivity đổi sang read:task (base) — pair audit
+  // view:task-audit-log giờ là OVERRIDE ở service (kèm involvement-check người liên quan); deny-path
+  // service phủ ở task-detail-activity-watchers.int.spec.ts (V5/V7).
+  { handlerName: "listActivity", action: "read", resourceType: "task" },
+  // S5-TASK-DETAIL-1 (GAP 4): GET watchers — cùng cặp watch:task với add/remove.
+  { handlerName: "listWatchers", action: "watch", resourceType: "task" },
 ];
 
 /** Read intentionally open cho mọi user tenant — HIỆN RỖNG (getComments đã chuyển sang gate ở trên). */

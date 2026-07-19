@@ -427,6 +427,8 @@ export const taskKeys = {
     [...rootKeys.tasks, "activity", taskId, params] as const,
   // S4-FE-TASK-4 — APPEND: file đính kèm công việc (TaskFilePanel, GET /tasks/:taskId/files).
   files: (taskId: string) => [...rootKeys.tasks, "files", taskId] as const,
+  // S5-TASK-DETAIL-1 — APPEND: danh sách người theo dõi (TaskAssignControl, GET /tasks/:taskId/watchers).
+  watchers: (taskId: string) => [...rootKeys.tasks, "watchers", taskId] as const,
   // S5-TASK-PIPELINE-1 (lane fe) — APPEND: cột pipeline theo dự án (TaskStateColumnsDialog).
   states: (projectId: string) => [...rootKeys.tasks, "states", projectId] as const,
 };

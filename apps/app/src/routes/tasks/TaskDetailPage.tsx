@@ -33,6 +33,8 @@ function OverviewCard({ task }: { task: TaskCoreResponseDto }) {
   const rows: Array<[string, ReactNode]> = [
     [t("tasks.detail.fields.project"), task.projectName ?? "—"],
     [t("tasks.detail.fields.assignee"), task.assigneeName ?? "—"],
+    // S5-TASK-DETAIL-1 (GAP 3): đủ 3 vai — người giao việc (reporter) · người thực hiện · người tạo.
+    [t("tasks.detail.fields.reporter"), task.reporterName ?? "—"],
     [t("tasks.detail.fields.creator"), task.creatorName ?? "—"],
     [t("tasks.detail.fields.priority"), <TaskPriorityBadge key="p" priority={task.priority} />],
     [t("tasks.detail.fields.status"), <TaskStatusBadge key="s" status={task.status} />],

@@ -678,6 +678,10 @@ export const taskCoreResponseSchema = z.object({
   creatorUserId: z.string().uuid().nullable(),
   creatorName: z.string().nullable(),
   reporterEmployeeId: z.string().uuid().nullable(),
+  // S5-TASK-DETAIL-1 (GAP 3) — tên NGƯỜI GIAO VIỆC (join employee_profiles→users như assigneeName).
+  // `.optional()` additive (KHÔNG `.default()`): FE Pages và API deploy lệch pha được — client mới
+  // parse response API cũ (chưa có field) không gãy; server mới LUÔN điền (null khi không có reporter).
+  reporterName: z.string().nullable().optional(),
   departmentId: z.string().uuid().nullable(),
   dueAt: z.string().datetime().nullable(),
   startAt: z.string().datetime().nullable(),

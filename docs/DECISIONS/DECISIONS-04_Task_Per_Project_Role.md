@@ -108,6 +108,17 @@ Ràng buộc nền đã chốt trước đó — **D-22** (DECISIONS-01, 02/07/2
 - **Quyết định:** scope<Company của pair `project_state` ⇒ actor phải là **Owner/Manager member của ĐÚNG project** chứa state; `Company/System` bypass như cũ. GET list giữ membership read.
 - **Ghi rõ:** với seed hiện tại mọi grant `project_state` đều ở Company ⇒ tầng này **DORMANT** cho role thật (defense-in-depth); chỉ kích hoạt khi tương lai có grant scope hẹp. Reviewer không nên hiểu nhầm nó gate user thật hôm nay.
 
+### D-29 — Tách gate lịch sử nghiệp vụ task: người liên quan xem được (S5-TASK-DETAIL-1)
+
+- **Bối cảnh:** `GET /tasks/:id/activity` (TASK-API-602) gate `view:task-audit-log` — pair SENSITIVE seed 0485 CHỈ hr/company-admin @Company ⇒ người thực hiện KHÔNG thấy lịch sử task của chính mình (trái chuẩn tham chiếu MISA + SPEC-06 §13.12 màn chi tiết có mục Lịch sử). Backlog S5-TASK-DETAIL-1 GAP 2 yêu cầu tách: *lịch sử NGHIỆP VỤ cho người liên quan · audit-log ĐẦY ĐỦ giữ gate sensitive.*
+- **Quyết định:** tách theo **NGỮ NGHĨA UỶ QUYỀN**, không lọc nội dung:
+  1. Route task-level đổi guard `view:task-audit-log` → **`read:task`** (base — phải đọc được task mới bàn tới lịch sử). Service cho qua khi actor **(a)** giữ `view:task-audit-log` (mọi scope; override đầy đủ — hr/company-admin như cũ, kể cả task soft-deleted) **HOẶC (b)** là **NGƯỜI LIÊN QUAN** của đúng task đó: main-assignee · creator (`creator_user_id`/`created_by`/`assignee_user_id`) · reporter (`reporter_employee_id`) · watcher Active/Muted. Không thuộc cả hai → **403 `TASK-ERR-042`** (giữ mã lỗi cũ); task không tồn tại/cross-tenant → **404** (kiểm tra TRƯỚC involvement).
+  2. **KHÔNG lọc bớt loại sự kiện** cho người liên quan: mọi dòng `task_activity_logs` của task đều là sự kiện nghiệp vụ trên chính task mà họ đã đọc được (comment/checklist/file họ vốn xem được qua route riêng gate `read:task`). Khác biệt giữa 2 cổng là **PHẠM VI TASK** (mình liên quan vs mọi task), không phải loại dữ liệu.
+  3. **Giữ nguyên sensitive:** feed DỰ ÁN `GET /projects/:id/activity` (TASK-API-601 — nhìn chéo mọi task trong dự án) + audit viewer foundation (`audit_logs`). Tab "Hoạt động" workspace dự án vẫn ẩn theo `useCanExact`.
+  4. **Hệ quả chấp nhận:** actor giữ `view:task-audit-log` mà THIẾU `read:task` sẽ 403 ở guard — seed 0485 luôn cấp cả hai cho hr/company-admin nên không có user thật rơi vào; int-spec tự chế grant lẻ phải cấp kèm `read:task`. Manager @Team KHÔNG liên quan task → vẫn 403 như cũ (backlog chỉ mở cho người liên quan; mở @Team là câu hỏi mở cho owner).
+- **Kéo theo:** deny-matrix `task-qa1-permission-matrix` GỠ pair `view:task-audit-log` khỏi LIVE_PAIRS (route không còn là "403 CHỈ từ PermissionGuard" — employee được 200 trên task được giao dù không có pair); phủ lại bằng int-spec chuyên biệt involvement (S5-TASK-DETAIL-1).
+- **Rollback:** revert controller + service (không đụng schema/data/seed).
+
 ---
 
 ## 4. Rollback

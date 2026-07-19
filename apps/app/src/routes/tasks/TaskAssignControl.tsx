@@ -1,7 +1,15 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
-import { taskCoreApi, hrApi, hrKeys, useCan, ApiError } from "@mediaos/web-core";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  taskCoreApi,
+  taskKeys,
+  hrApi,
+  hrKeys,
+  useAuthStore,
+  useCan,
+  ApiError,
+} from "@mediaos/web-core";
 import { Select, Button } from "@mediaos/ui";
 import type { TaskCoreResponseDto } from "@mediaos/contracts";
 import { TASK_CORE_ENGINE_PAIRS } from "./constants";
@@ -26,9 +34,10 @@ function assignErrorKey(err: unknown): string {
  * "chỉ hiện người trong phạm vi" là do SERVER quyết định, client không tự lọc thêm — mirror nguyên tắc
  * masking/scope là việc của server (CLAUDE.md §5). Optimistic update CÓ rollback qua useTaskActionMutation.
  *
- * Watcher: SELF-ONLY MVP (BE-3) — CHỈ có nút "Theo dõi" (POST /watchers, idempotent qua 409 DUPLICATE).
- * BE-3 KHÔNG có endpoint GET liệt kê watchers ⇒ client không có watcherId để gọi DELETE .../watchers/:id
- * ⇒ CHƯA có nút "Bỏ theo dõi" ở đây — backend gap, cần WO nối tiếp bổ sung GET watchers trước khi làm tiếp.
+ * Watcher (S5-TASK-DETAIL-1 GAP 4): GET /tasks/:id/watchers (gate watch:task) → list NGƯỜI LIÊN QUAN
+ * đang theo dõi + nhận diện "watcher của mình" qua userId (useAuthStore) ⇒ nút Theo dõi/Bỏ theo dõi
+ * (DELETE .../watchers/:id — server vẫn self-only, gỡ hộ người khác → 404). Trạng thái "đang theo dõi"
+ * lấy từ SERVER (list), optimistic flag chỉ bắc cầu giữa add thành công ↔ list refetch.
  */
 export function TaskAssignControl({ task }: { task: TaskCoreResponseDto }) {
   const { t } = useTranslation("tasks");
@@ -41,9 +50,12 @@ export function TaskAssignControl({ task }: { task: TaskCoreResponseDto }) {
     TASK_CORE_ENGINE_PAIRS.WATCH.resourceType,
   );
   const canReadEmployees = useCan("read", "employee");
+  const myUserId = useAuthStore((s) => s.user?.id);
+  const queryClient = useQueryClient();
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(task.mainAssigneeEmployeeId ?? "");
-  const [watchState, setWatchState] = useState<"idle" | "watching">("idle");
+  // Bắc cầu giữa add thành công ↔ watchers refetch — nguồn sự thật là danh sách server (myWatcher).
+  const [optimisticWatching, setOptimisticWatching] = useState(false);
 
   const { data: employeesPage } = useQuery({
     queryKey: hrKeys.employees.list({ pageSize: 100, status: "active" }),
@@ -62,20 +74,50 @@ export function TaskAssignControl({ task }: { task: TaskCoreResponseDto }) {
     }),
   });
 
+  // S5-TASK-DETAIL-1 (GAP 4) — danh sách người theo dõi (server lọc Active/Muted, kèm tên + userId).
+  const watchersQuery = useQuery({
+    queryKey: taskKeys.watchers(task.id),
+    queryFn: () => taskCoreApi.listWatchers(task.id),
+    enabled: canWatch,
+    staleTime: 30_000,
+  });
+  const watchers = watchersQuery.data ?? [];
+  const myWatcher = myUserId ? watchers.find((w) => w.userId === myUserId) : undefined;
+  const isWatching = myWatcher !== undefined || optimisticWatching;
+
+  const invalidateWatchers = () =>
+    void queryClient.invalidateQueries({ queryKey: taskKeys.watchers(task.id) });
+
   const watchMutation = useTaskActionMutation<void>({
     taskId: task.id,
     mutationFn: () => taskCoreApi.addWatcher(task.id),
     toPatch: () => ({}),
   });
 
+  const unwatchMutation = useMutation({
+    mutationFn: (watcherId: string) => taskCoreApi.removeWatcher(task.id, watcherId),
+    onSuccess: () => setOptimisticWatching(false),
+    onSettled: invalidateWatchers,
+  });
+
   const handleWatch = () => {
     watchMutation.mutate(undefined, {
-      onSuccess: () => setWatchState("watching"),
+      onSuccess: () => {
+        setOptimisticWatching(true);
+        invalidateWatchers();
+      },
       onError: (err) => {
         // 409 = đã theo dõi trước đó (idempotent theo UX — hiển thị như đã theo dõi, KHÔNG coi là lỗi).
-        if (err instanceof ApiError && err.status === 409) setWatchState("watching");
+        if (err instanceof ApiError && err.status === 409) {
+          setOptimisticWatching(true);
+          invalidateWatchers();
+        }
       },
     });
+  };
+
+  const handleUnwatch = () => {
+    if (myWatcher) unwatchMutation.mutate(myWatcher.id);
   };
 
   return (
@@ -129,21 +171,65 @@ export function TaskAssignControl({ task }: { task: TaskCoreResponseDto }) {
 
       {canWatch && (
         <div className="space-y-1.5">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={watchState === "watching" || watchMutation.isPending}
-            onClick={handleWatch}
-          >
-            {watchState === "watching" ? t("tasks.assign.watching") : t("tasks.assign.watchButton")}
-          </Button>
+          {isWatching ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={unwatchMutation.isPending || (!myWatcher && optimisticWatching)}
+              onClick={handleUnwatch}
+            >
+              {t("tasks.assign.unwatchButton")}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={watchMutation.isPending}
+              onClick={handleWatch}
+            >
+              {t("tasks.assign.watchButton")}
+            </Button>
+          )}
           <p className="text-xs text-muted-foreground">{t("tasks.assign.watchHint")}</p>
-          {watchMutation.isError && watchState !== "watching" && (
+          {watchMutation.isError && !isWatching && (
             <p role="alert" className="text-xs text-destructive">
               {t(assignErrorKey(watchMutation.error))}
             </p>
           )}
+          {unwatchMutation.isError && (
+            <p role="alert" className="text-xs text-destructive">
+              {t(assignErrorKey(unwatchMutation.error))}
+            </p>
+          )}
+
+          <div className="space-y-1 pt-1">
+            <p className="text-xs font-medium text-muted-foreground">
+              {t("tasks.assign.watchersTitle", { count: watchers.length })}
+            </p>
+            {watchersQuery.isLoading ? (
+              <div className="h-4 w-40 animate-pulse rounded bg-muted" />
+            ) : watchersQuery.isError ? (
+              <p className="text-xs text-destructive">{t("tasks.assign.watchersError")}</p>
+            ) : watchers.length > 0 ? (
+              <ul className="flex flex-wrap gap-x-3 gap-y-1">
+                {watchers.map((w) => (
+                  <li key={w.id} className="text-sm text-foreground">
+                    {w.employeeName ?? "—"}
+                    {myUserId !== undefined && w.userId === myUserId && (
+                      <span className="text-xs text-muted-foreground">
+                        {" "}
+                        {t("tasks.assign.watcherSelfSuffix")}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted-foreground">{t("tasks.assign.watchersEmpty")}</p>
+            )}
+          </div>
         </div>
       )}
     </div>

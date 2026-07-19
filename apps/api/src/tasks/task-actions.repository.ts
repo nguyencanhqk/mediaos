@@ -13,6 +13,18 @@ import type { TenantTx } from "../db/db.service";
  */
 
 /** Hàng THÔ đầy đủ cho action (guard workflow/tenant + FSM + side-effect + leave/warning). */
+/** S5-TASK-DETAIL-1 (GAP 4) — hàng watcher cho GET /tasks/:id/watchers (raw tx.execute: createdAt string|Date). */
+export interface WatcherListRow {
+  id: string;
+  taskId: string;
+  employeeId: string;
+  employeeName: string | null;
+  userId: string | null;
+  watcherType: string;
+  status: string;
+  createdAt: string | Date;
+}
+
 export interface ActionTaskRaw {
   id: string;
   taskType: string;
@@ -252,6 +264,29 @@ export class TaskActionsRepository {
       returning id
     `);
     return (res.rows as unknown as { id: string }[])[0];
+  }
+
+  /**
+   * S5-TASK-DETAIL-1 (GAP 4) — danh sách watcher Active/Muted của task + tên (JOIN employee_profiles
+   * → users, cùng kỹ thuật assigneeName). Soft-removed KHÔNG trả. userId để client nhận diện self.
+   */
+  async listActiveWatchersTx(
+    tx: TenantTx,
+    companyId: string,
+    taskId: string,
+  ): Promise<WatcherListRow[]> {
+    const res = await tx.execute(sql`
+      select w.id, w.task_id as "taskId", w.employee_id as "employeeId",
+             u.full_name as "employeeName", ep.user_id as "userId",
+             w.watcher_type as "watcherType", w.status, w.created_at as "createdAt"
+        from task_watchers w
+        left join employee_profiles ep on ep.id = w.employee_id
+        left join users u on u.id = ep.user_id
+       where w.company_id = ${companyId} and w.task_id = ${taskId}
+         and w.status in ('Active','Muted') and w.deleted_at is null
+       order by w.created_at asc
+    `);
+    return res.rows as unknown as WatcherListRow[];
   }
 
   /** Watcher theo id + task (guard tenant/task). Bất kỳ status/soft-delete để phân biệt 404 vs đã gỡ. */

@@ -415,6 +415,17 @@ export class TasksController {
     return this.taskActions.changeDeadline(req.user, taskId, dto);
   }
 
+  /**
+   * GET /tasks/:taskId/watchers (S5-TASK-DETAIL-1 GAP 4) — danh sách người theo dõi Active/Muted.
+   * Gate watch:task (backlog done_when) + data-scope mode 'read' ở service (ngoài scope → 404).
+   */
+  @Get(":taskId/watchers")
+  @UseGuards(PermissionGuard)
+  @RequirePermission("watch", "task")
+  listWatchers(@Req() req: AuthenticatedRequest, @Param("taskId") taskId: string) {
+    return this.taskActions.listWatchers(req.user, taskId);
+  }
+
   /** POST /tasks/:taskId/watchers — tự theo dõi (self-only MVP). Gate watch:task. */
   @Post(":taskId/watchers")
   @UseGuards(PermissionGuard)
@@ -535,13 +546,15 @@ export class TasksController {
   // ═══════════════════ S4-TASK-BE-4 — Activity feed (API-06 §16.7 · TASK-API-602) ═══════════════
 
   /**
-   * GET /tasks/:taskId/activity — lịch sử hoạt động task (task_activity_logs, append-only). Gate
-   * `view:task-audit-log` (sensitive=true, seed 0485 CHỈ hr/company-admin @Company — employee/manager
-   * 403 ĐÚNG THIẾT KẾ, SPEC-06 TASK-ERR-042).
+   * GET /tasks/:taskId/activity — lịch sử hoạt động task (task_activity_logs, append-only).
+   * S5-TASK-DETAIL-1 (GAP 2, DECISIONS-04 D-29): guard đổi `view:task-audit-log` → `read:task` (base);
+   * service cho qua khi actor giữ `view:task-audit-log` (override đầy đủ — hr/company-admin như cũ)
+   * HOẶC là NGƯỜI LIÊN QUAN của task (assignee/creator/reporter/watcher). Không thuộc cả hai → 403
+   * TASK-ERR-042. Feed DỰ ÁN (/projects/:id/activity) GIỮ gate sensitive — xem D-29.
    */
   @Get(":taskId/activity")
   @UseGuards(PermissionGuard)
-  @RequirePermission("view", "task-audit-log", { isSensitive: true })
+  @RequirePermission("read", "task")
   listActivity(
     @Req() req: AuthenticatedRequest,
     @Param("taskId") taskId: string,

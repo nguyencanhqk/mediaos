@@ -613,10 +613,16 @@ describe.skipIf(!hasLaneDb)(
         expect(patch.status).toBe(403);
       });
 
-      it("view:task-audit-log: employee/manager thiếu quyền → 403 (TASK-ERR-042); hr/company-admin có → 200", async () => {
+      // S5-TASK-DETAIL-1 (DECISIONS-04 D-29): activity task-level đổi luật — guard read:task; NGƯỜI
+      // LIÊN QUAN (assignee/creator/reporter/watcher) xem được lịch sử task của mình; pair audit
+      // view:task-audit-log vẫn là override đầy đủ. mkEmpTask GIAO CHO employee ⇒ emp giờ 200 (liên
+      // quan); mgr @Team KHÔNG liên quan → 403 TASK-ERR-042 (từ service, không phải guard).
+      it("activity D-29: employee-assignee → 200 (liên quan); manager không liên quan → 403 (TASK-ERR-042); hr/company-admin (pair audit) → 200", async () => {
         const t = await mkEmpTask({});
-        expect((await authGet(tok.emp, `/tasks/${t}/activity`)).status).toBe(403);
-        expect((await authGet(tok.mgr, `/tasks/${t}/activity`)).status).toBe(403);
+        expect((await authGet(tok.emp, `/tasks/${t}/activity`)).status).toBe(200);
+        const mgrRes = await authGet(tok.mgr, `/tasks/${t}/activity`);
+        expect(mgrRes.status).toBe(403);
+        expect(JSON.stringify(mgrRes.body)).toContain("TASK-ERR-042");
         expect((await authGet(tok.hr, `/tasks/${t}/activity`)).status).toBe(200);
         expect((await authGet(tok.ca, `/tasks/${t}/activity`)).status).toBe(200);
       });

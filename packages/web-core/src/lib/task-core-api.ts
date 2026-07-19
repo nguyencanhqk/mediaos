@@ -3,9 +3,11 @@ import {
   taskCoreResponseSchema,
   myTaskItemSchema,
   taskActionResponseSchema,
+  taskWatcherResponseSchema,
   type TaskCoreResponseDto,
   type MyTaskItemDto,
   type TaskActionResponseDto,
+  type TaskWatcherResponseDto,
   type ListTaskCoreQueryRequest,
   type CreateTaskCoreRequest,
   type UpdateTaskCoreRequest,
@@ -32,10 +34,9 @@ import { buildQueryString } from "./api-params";
  * crown-FSM S4-TASK-BE-3 — verb canonical SPEC-06 §16.3 TK-4 (KHÔNG PUT .../status). Response chung
  * `{task, warnings}` (taskActionResponseSchema) — warnings[] KHÔNG chặn hành động, chỉ hiển thị cảnh báo.
  *
- * KHÔNG có endpoint GET liệt kê watchers (BE-3 tự nhận self-only MVP — xem task-actions.controller ghi
- * chú) ⇒ client KHÔNG thể lấy watcherId để gọi removeWatcher sau khi addWatcher thành công (response chỉ
- * trả {task, warnings}, không có watcher row). TaskAssignControl vì vậy CHỈ hỗ trợ "Theo dõi" (add, idempotent
- * qua 409 DUPLICATE), KHÔNG có nút "Bỏ theo dõi" — backend gap, ghi trong PR/backlog theo dõi riêng.
+ * Watchers (S5-TASK-DETAIL-1 GAP 4): GET /tasks/:id/watchers trả danh sách Active/Muted kèm tên +
+ * userId ⇒ client nhận diện "watcher của mình" để lấy watcherId gọi removeWatcher (DELETE vẫn
+ * self-only server-side — gỡ watcher người khác → 404). Cả 3 route gate watch:task.
  *
  * `listComments`/`addComment` ĐÃ GỠ khỏi client này (S4-FE-TASK-3) — route `/tasks/:id/comments` server-side
  * đổi sang TaskCommentsService (content/mentionEmployeeIds, S4-TASK-BE-4) nên schema `commentSchema` cũ
@@ -104,4 +105,12 @@ export const taskCoreApi = {
       method: "POST",
       body: JSON.stringify({}),
     }),
+
+  /** GET /tasks/:id/watchers (S5-TASK-DETAIL-1) — danh sách người theo dõi Active/Muted (watch:task). */
+  listWatchers: (id: string): Promise<TaskWatcherResponseDto[]> =>
+    apiFetch(`/tasks/${id}/watchers`, z.array(taskWatcherResponseSchema)),
+
+  /** DELETE /tasks/:id/watchers/:watcherId — bỏ theo dõi self-only (watch:task, 204; của người khác → 404). */
+  removeWatcher: (id: string, watcherId: string): Promise<void> =>
+    apiFetch(`/tasks/${id}/watchers/${watcherId}`, z.void(), { method: "DELETE" }),
 };
