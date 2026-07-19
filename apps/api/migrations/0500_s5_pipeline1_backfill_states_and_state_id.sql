@@ -17,9 +17,12 @@
 -- BẤT BIẾN DỮ LIỆU (bẫy M2 — mất-dữ-liệu-thị-giác):
 --   • task_status IS NULL ⇒ GIỮ NGUYÊN state_id (task trước 0478 được 0420 set state_id đúng từ
 --     status legacy; gán is_default sẽ ĐẨY task đã hoàn thành về cột Todo).
---   • Thẻ ĐÃ ở cột đúng nhóm ⇒ GIỮ NGUYÊN (Todo khớp CẢ unstarted LẪN backlog — không kéo thẻ
---     Backlog về Cần làm). WHERE tường minh, idempotent: chạy lại = 0 hàng.
---   • Project 0 state active (biên: state bị soft-delete hết) ⇒ KHÔNG đụng task (EXISTS-live guard).
+--   • Thẻ ĐÃ ở cột đúng nhóm CỦA ĐÚNG PROJECT ⇒ GIỮ NGUYÊN (Todo khớp CẢ unstarted LẪN backlog —
+--     không kéo thẻ Backlog về Cần làm); trỏ cột project KHÁC (dữ liệu hỏng) ⇒ heal về project mình.
+--     WHERE tường minh, idempotent: chạy lại = 0 hàng.
+--   • Project mà MỌI state bị soft-delete ⇒ (a) coi là 0-state và RE-SEED (NOT EXISTS chỉ đếm state
+--     sống; partial unique không chặn tên trùng hàng dead) ⇒ task của project đó ĐƯỢC map ở (b).
+--     EXISTS-live guard ở (b) thực tế chỉ còn chặn ca project soft-deleted mà task còn sống.
 --   • RLS+FORCE của project_states/tasks đã có từ 0420 — KHÔNG tạo lại. Migrator chạy role
 --     privileged qua DATABASE_DIRECT_URL; company_id tường minh mọi câu.
 --
@@ -168,7 +171,9 @@ BEGIN
       t.state_id IS NULL
       OR NOT EXISTS (
         SELECT 1 FROM project_states cur
-         WHERE cur.id = t.state_id AND cur.company_id = t.company_id AND cur.deleted_at IS NULL
+         WHERE cur.id = t.state_id AND cur.company_id = t.company_id
+           AND cur.project_id = t.project_id -- cột đúng nhóm nhưng của PROJECT KHÁC vẫn phải heal
+           AND cur.deleted_at IS NULL
            AND cur.state_group = ANY (CASE t.task_status
                  WHEN 'Todo'        THEN ARRAY['unstarted', 'backlog']
                  WHEN 'In Progress' THEN ARRAY['started']
@@ -211,24 +216,24 @@ BEGIN
     FROM tasks t
     JOIN project_states ps ON ps.id = t.state_id AND ps.company_id = t.company_id
    WHERE t.deleted_at IS NULL AND t.task_status = 'Done' AND ps.deleted_at IS NULL
-     AND ps.state_group <> 'completed'
+     AND (ps.state_group <> 'completed' OR ps.project_id <> t.project_id)
      AND EXISTS (SELECT 1 FROM project_states c
                   WHERE c.company_id = t.company_id AND c.project_id = t.project_id
                     AND c.deleted_at IS NULL AND c.state_group = 'completed');
   IF v_done_bad > 0 THEN
-    RAISE EXCEPTION '[0500] verify FAIL: % task Done không trỏ nhóm completed (dù project có cột completed)', v_done_bad;
+    RAISE EXCEPTION '[0500] verify FAIL: % task Done không trỏ nhóm completed CỦA ĐÚNG project (dù project có cột completed)', v_done_bad;
   END IF;
 
   SELECT COUNT(*) INTO v_rev_bad
     FROM tasks t
     JOIN project_states ps ON ps.id = t.state_id AND ps.company_id = t.company_id
    WHERE t.deleted_at IS NULL AND t.task_status = 'In Review' AND ps.deleted_at IS NULL
-     AND ps.state_group <> 'review'
+     AND (ps.state_group <> 'review' OR ps.project_id <> t.project_id)
      AND EXISTS (SELECT 1 FROM project_states c
                   WHERE c.company_id = t.company_id AND c.project_id = t.project_id
                     AND c.deleted_at IS NULL AND c.state_group = 'review');
   IF v_rev_bad > 0 THEN
-    RAISE EXCEPTION '[0500] verify FAIL: % task In Review không trỏ nhóm review (dù project có cột review)', v_rev_bad;
+    RAISE EXCEPTION '[0500] verify FAIL: % task In Review không trỏ nhóm review CỦA ĐÚNG project (dù project có cột review)', v_rev_bad;
   END IF;
 
   RAISE NOTICE '[0500] verify OK: 0 NULL · Done→completed · In Review→review';
