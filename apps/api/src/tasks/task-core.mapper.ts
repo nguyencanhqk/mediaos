@@ -45,6 +45,8 @@ export function toTaskCoreDto(row: TaskCoreRow): TaskCoreResponseDto {
     creatorUserId: row.creatorUserId,
     creatorName: row.creatorName,
     reporterEmployeeId: row.reporterEmployeeId,
+    // S5-TASK-DETAIL-1 (GAP 3) — hàng từ đường chưa join reporter vẫn parse: điền null tường minh.
+    reporterName: row.reporterName ?? null,
     departmentId: row.departmentId,
     dueAt: toIso(row.dueAt),
     startAt: toIso(row.startAt),

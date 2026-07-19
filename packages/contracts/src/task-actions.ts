@@ -67,6 +67,25 @@ export const addWatcherSchema = z.object({}).strict();
 export type AddWatcherRequest = z.infer<typeof addWatcherSchema>;
 
 /**
+ * GET /tasks/:taskId/watchers (S5-TASK-DETAIL-1 GAP 4, watch:task) — danh sách người theo dõi
+ * Active/Muted (soft-removed KHÔNG trả). `employeeName`/`userId` join server-side
+ * (employee_profiles.user_id → users.full_name, cùng kỹ thuật assigneeName) — client cần `userId`
+ * để nhận diện "watcher là chính mình" (nút Bỏ theo dõi self-only DELETE /watchers/:id; server vẫn
+ * là người quyết — watcher người khác → 404).
+ */
+export const taskWatcherResponseSchema = z.object({
+  id: z.string().uuid(),
+  taskId: z.string().uuid(),
+  employeeId: z.string().uuid(),
+  employeeName: z.string().nullable(),
+  userId: z.string().uuid().nullable(),
+  watcherType: z.string(),
+  status: z.string(),
+  createdAt: z.string().datetime(),
+});
+export type TaskWatcherResponseDto = z.infer<typeof taskWatcherResponseSchema>;
+
+/**
  * Mã cảnh báo (KHÔNG chặn) trả trong `warnings[]` — SPEC-06:1412 / API-06:1327.
  *   • ASSIGNEE-ON-LEAVE: assignee có leave_requests Approved trùm mốc due/deadline (MVP không chặn).
  *   • ASSIGNEE-NOT-MEMBER: assignee không là project member (CHỈ phát khi task có project_id — open q #5).

@@ -759,6 +759,7 @@ export class TaskCoreService {
       creatorUserId: row.creatorUserId,
       creatorName: row.creatorName,
       reporterEmployeeId: row.reporterEmployeeId,
+      reporterName: row.reporterName ?? null,
       departmentId: row.departmentId,
       dueAt: this.toIso(row.dueAt),
       startAt: this.toIso(row.startAt),

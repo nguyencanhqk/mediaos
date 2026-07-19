@@ -408,6 +408,7 @@ export class TaskActionsService {
   }
 
   // ══════════════════════ WATCHERS (self-only) ══════════════════════
+  // GET list (S5-TASK-DETAIL-1 GAP 4) TÁCH sang TaskWatchersService — file này chạm trần 800 dòng.
 
   async addWatcher(user: RequestUser, taskId: string): Promise<TaskActionResponseDto> {
     const scope = await this.dataScope.resolveAndAssert(user.id, user.companyId, "watch", "task");
@@ -756,6 +757,7 @@ export class TaskActionsService {
       creatorUserId: row.creatorUserId,
       creatorName: row.creatorName,
       reporterEmployeeId: row.reporterEmployeeId,
+      reporterName: row.reporterName ?? null,
       departmentId: row.departmentId,
       dueAt: this.toIso(row.dueAt),
       startAt: this.toIso(row.startAt),

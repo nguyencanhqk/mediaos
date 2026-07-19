@@ -286,6 +286,9 @@ describe.skipIf(!hasLaneDb)(
         ["view-kanban", "task", "Company"],
         ["update-status", "task", "Company"],
         ["view", "task-audit-log", "Company", true],
+        // S5-TASK-DETAIL-1 (D-29): route activity đổi guard sang read:task — pair audit vẫn là
+        // override đầy đủ ở service nhưng PHẢI qua guard read:task trước (seed thật hr/admin có cả hai).
+        ["read", "task", "Company"],
       ]);
       await grant(A.companyId, mgrUser, [
         ["view-kanban", "task", "Team"],
@@ -544,7 +547,9 @@ describe.skipIf(!hasLaneDb)(
 
     // ── 3. Activity feed ─────────────────────────────────────────────────────────
 
-    it("hr/admin xem được activity (view:task-audit-log sensitive); employee/manager → 403", async () => {
+    // D-29 (S5-TASK-DETAIL-1): emp/mgr ở spec này KHÔNG có read:task ⇒ vẫn 403 (giờ từ guard read:task);
+    // task creator = adminUser nên emp/mgr cũng không phải người liên quan. Admin 200 qua pair audit.
+    it("hr/admin xem được activity (pair audit override D-29); employee/manager → 403", async () => {
       const t = await mkTask({ taskStatus: "Todo" });
       await authPost(tok.admin, `/tasks/${t}/move`).send({ status: "In Progress" });
 

@@ -53,6 +53,9 @@ export interface TaskCoreRow {
   creatorUserId: string | null;
   creatorName: string | null;
   reporterEmployeeId: string | null;
+  // S5-TASK-DETAIL-1 (GAP 3): tên người giao việc (JOIN rep/ru). Optional additive (mirror taskCode)
+  // — KHÔNG phá literal TaskCoreRow hiện có trong unit spec.
+  reporterName?: string | null;
   departmentId: string | null;
   // Raw tx.execute KHÔNG type-parse (drizzle không biết OID) ⇒ timestamptz về dạng string, boolean về
   // 't'/'f'|'true'|'false'. Service normalize (toIso/toBool) — KHÔNG giả định Date/boolean sẵn.
@@ -159,6 +162,7 @@ const TASK_CORE_SELECT = sql`
   tk.creator_user_id           AS "creatorUserId",
   cu.full_name                 AS "creatorName",
   tk.reporter_employee_id      AS "reporterEmployeeId",
+  ru.full_name                 AS "reporterName",
   tk.department_id             AS "departmentId",
   tk.due_at                    AS "dueAt",
   tk.start_at                  AS "startAt",
@@ -179,6 +183,8 @@ const TASK_CORE_JOINS = sql`
   left join employee_profiles ae on ae.id = tk.main_assignee_employee_id
   left join users au             on au.id = ae.user_id
   left join users cu             on cu.id = tk.creator_user_id
+  left join employee_profiles rep on rep.id = tk.reporter_employee_id
+  left join users ru             on ru.id = rep.user_id
   left join project_states ps    on ps.id = tk.state_id and ps.company_id = tk.company_id
                                 and ps.project_id = tk.project_id and ps.deleted_at is null`;
 

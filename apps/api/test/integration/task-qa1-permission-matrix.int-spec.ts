@@ -308,13 +308,11 @@ describe.skipIf(!hasLaneDb)(
         success: [200],
         call: (t, id) => authPost(t, `/tasks/${id}/change-deadline`).send({ dueAt: FUTURE }),
       },
-      {
-        action: "view",
-        resource: "task-audit-log",
-        label: "GET /tasks/:id/activity",
-        success: [200],
-        call: (t, id) => authGet(t, `/tasks/${id}/activity`),
-      },
+      // (view, task-audit-log) ĐÃ GỠ khỏi deny-matrix (S5-TASK-DETAIL-1, DECISIONS-04 D-29): route
+      // GET /tasks/:id/activity không còn là "403 CHỈ từ PermissionGuard" — guard đổi sang read:task
+      // + service cho NGƯỜI LIÊN QUAN qua (mkScopedTask GIAO CHO employee ⇒ employee 200 dù không có
+      // pair audit — premise ma trận vỡ). Phủ thay bằng task-detail-activity-watchers.int.spec.ts
+      // (involvement V1-V10). IDOR cross-tenant của route này VẪN ở mục 3 dưới.
     ];
 
     beforeAll(async () => {
@@ -657,7 +655,8 @@ describe.skipIf(!hasLaneDb)(
           run: (t, id) => authPost(t, `/tasks/${id}/checklists`).send({ title: "cl" }),
         },
         {
-          label: "GET /tasks/:id/activity (view:task-audit-log)",
+          // D-29: guard read:task + service (pair audit override) — cross-tenant vẫn PHẢI 404.
+          label: "GET /tasks/:id/activity (read:task + D-29)",
           run: (t, id) => authGet(t, `/tasks/${id}/activity`),
         },
       ];

@@ -22,6 +22,9 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
       changeDeadline: vi.fn(),
       assign: vi.fn(),
       addWatcher: vi.fn(),
+      // S5-TASK-DETAIL-1 (GAP 4) — watchers list (chỉ gọi khi có watch:task; mock sẵn cho an toàn).
+      listWatchers: vi.fn().mockResolvedValue([]),
+      removeWatcher: vi.fn(),
     },
     // S4-FE-TASK-3 — Kanban/comment/checklist/activity (mock để tránh gọi mạng thật trong test detail).
     taskCollabApi: {
@@ -69,7 +72,9 @@ const MOCK_TASK: TaskCoreResponseDto = {
   assigneeName: "Nguyễn Văn A",
   creatorUserId: "u1",
   creatorName: "Test User",
-  reporterEmployeeId: null,
+  // S5-TASK-DETAIL-1 (GAP 3) — 3 vai trên màn chi tiết.
+  reporterEmployeeId: "emp-002",
+  reporterName: "Trần Giao Việc",
   departmentId: null,
   dueAt: null,
   startAt: null,
@@ -120,6 +125,9 @@ describe("TaskDetailPage", () => {
     await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
     expect(screen.getByText("Mô tả chi tiết")).toBeInTheDocument();
     expect(screen.getAllByText("Nguyễn Văn A").length).toBeGreaterThan(0);
+    // S5-TASK-DETAIL-1 (GAP 3): đủ 3 vai — người giao việc hiện cạnh người thực hiện/người tạo.
+    expect(screen.getByText("Người giao việc")).toBeInTheDocument();
+    expect(screen.getByText("Trần Giao Việc")).toBeInTheDocument();
   });
 
   // ── DENY-PATH: edit/delete hidden without matching permission ────────────

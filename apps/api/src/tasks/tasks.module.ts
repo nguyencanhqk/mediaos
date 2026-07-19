@@ -33,6 +33,7 @@ import { TaskCommentsRepository } from "./task-comments.repository";
 import { TaskChecklistsService } from "./task-checklists.service";
 import { TaskChecklistsRepository } from "./task-checklists.repository";
 import { TaskActivityFeedService } from "./task-activity-feed.service";
+import { TaskWatchersService } from "./task-watchers.service";
 import { TaskActivityFeedRepository } from "./task-activity-feed.repository";
 // S4-TASK-BE-5 (additive) — Task File (đính kèm công việc): controller/service/repo + resolver
 // (module='TASK', entity='task') registered into the shared FilePolicyService in onModuleInit.
@@ -92,6 +93,7 @@ import { ProjectAccessService } from "./project-access.service";
     TaskChecklistsRepository,
     // S4-TASK-BE-4 — Activity feed (read-only task_activity_logs).
     TaskActivityFeedService,
+    TaskWatchersService,
     TaskActivityFeedRepository,
     // S4-TASK-BE-5 — Task File stack + resolver (registered in onModuleInit below).
     TaskFileService,

@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, type SQL } from "drizzle-orm";
+import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import type { TenantTx } from "../db/db.service";
 import { taskActivityLogs } from "../db/schema/task-activity";
 import { projects } from "../db/schema/media";
@@ -55,6 +55,67 @@ export class TaskActivityFeedRepository {
       .where(and(eq(projects.companyId, companyId), eq(projects.id, projectId)))
       .limit(1);
     return rows.length > 0;
+  }
+
+  /**
+   * S5-TASK-DETAIL-1 (GAP 2, D-29) — actor có phải NGƯỜI LIÊN QUAN của task: main-assignee · creator
+   * (creator_user_id/created_by/assignee_user_id) · reporter · watcher Active/Muted. KHÔNG lọc
+   * tasks.deleted_at (đồng bộ taskExistsTx — người liên quan vẫn xem lịch sử task đã soft-delete).
+   * Raw sql: task_watchers/employee_profiles chưa typed trong repo này (mirror task-actions.repository).
+   */
+  async isUserInvolvedTx(
+    tx: TenantTx,
+    companyId: string,
+    taskId: string,
+    userId: string,
+  ): Promise<boolean> {
+    const res = await tx.execute(sql`
+      select 1 as ok
+        from tasks t
+       where t.id = ${taskId} and t.company_id = ${companyId}
+         and (
+           t.creator_user_id = ${userId} or t.created_by = ${userId} or t.assignee_user_id = ${userId}
+           or exists (
+             select 1 from employee_profiles ep
+              where ep.user_id = ${userId} and ep.company_id = t.company_id and ep.deleted_at is null
+                and (ep.id = t.main_assignee_employee_id or ep.id = t.reporter_employee_id)
+           )
+           or exists (
+             select 1 from task_watchers w
+             join employee_profiles ew on ew.id = w.employee_id
+                                      and ew.company_id = t.company_id
+              where w.task_id = t.id and w.company_id = t.company_id
+                and w.status in ('Active','Muted') and w.deleted_at is null
+                and ew.user_id = ${userId} and ew.deleted_at is null
+           )
+         )
+       limit 1
+    `);
+    return res.rows.length > 0;
+  }
+
+  /**
+   * S5-TASK-DETAIL-1 (GAP 1) — batch tên nhân viên cho enrich assigneeName vào old/new values
+   * (1 query IN cho cả trang, KHÔNG N+1). Trả map id → full_name (null khi employee không gắn user).
+   */
+  async findEmployeeNamesTx(
+    tx: TenantTx,
+    companyId: string,
+    employeeIds: string[],
+  ): Promise<Map<string, string | null>> {
+    if (employeeIds.length === 0) return new Map();
+    const idList = sql.join(
+      employeeIds.map((id) => sql`${id}`),
+      sql`, `,
+    );
+    const res = await tx.execute(sql`
+      select ep.id, u.full_name as "fullName"
+        from employee_profiles ep
+        left join users u on u.id = ep.user_id
+       where ep.company_id = ${companyId} and ep.id in (${idList})
+    `);
+    const rows = res.rows as unknown as { id: string; fullName: string | null }[];
+    return new Map(rows.map((r) => [r.id, r.fullName]));
   }
 
   async listByTaskTx(
