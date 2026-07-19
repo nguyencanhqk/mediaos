@@ -1,7 +1,7 @@
 import { useMemo, useState, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageSquare, Paperclip, ListChecks } from "lucide-react";
+import { MessageSquare, Paperclip, ListChecks, Settings2 } from "lucide-react";
 import {
   taskCollabApi,
   taskKeys,
@@ -15,10 +15,12 @@ import type {
   TaskCoreStatusDto,
   TaskKanbanBoardDto,
   TaskKanbanCardDto,
+  TaskKanbanStateColumnDto,
   TaskKanbanStatusColumnDto,
 } from "@mediaos/contracts";
-import { TASK_CORE_ENGINE_PAIRS } from "./constants";
-import { TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
+import { PROJECT_STATE_PAIRS, TASK_CORE_ENGINE_PAIRS } from "./constants";
+import { TaskStatusBadge, TaskPriorityBadge, TaskOverdueBadge } from "./TaskStatusBadge";
+import { TaskStateColumnsDialog } from "./TaskStateColumnsDialog";
 
 /**
  * TaskKanbanPage — board task theo cột trạng thái, kéo-thả đổi status (S4-FE-TASK-3, SPEC-06 §13.8/§14.13,
@@ -44,6 +46,9 @@ function moveErrorKey(err: unknown): string {
     if (err.status === 409) return "tasks.kanban.errors.conflict";
     if (err.status === 403) return "tasks.kanban.errors.forbidden";
     if (err.status === 404) return "tasks.kanban.errors.notFound";
+    // S5-TASK-PIPELINE-1 — kéo sang cột nhóm completed khi checklist bắt buộc chưa xong (400) /
+    // cột không hợp lệ: server từ chối atomic, thẻ bật về chỗ cũ.
+    if (err.status === 400) return "tasks.kanban.errors.badRequest";
     if (err.status >= 500) return "tasks.kanban.errors.server";
   }
   return "tasks.kanban.errors.generic";
@@ -101,10 +106,13 @@ function KanbanCard({
   task,
   draggable,
   onDragStart,
+  showStatus = false,
 }: {
   task: TaskKanbanCardDto;
   draggable: boolean;
   onDragStart: (e: DragEvent<HTMLDivElement>) => void;
+  /** Board state-mode: hiện badge task_status trên thẻ — người dùng THẤY auto-map nhóm→status đã chạy. */
+  showStatus?: boolean;
 }) {
   const { t } = useTranslation("tasks");
   const isCompleted = task.status != null && COMPLETED_STATUSES.has(task.status);
@@ -134,7 +142,10 @@ function KanbanCard({
           name={task.assigneeName}
           title={task.assigneeName ?? t("tasks.kanban.unassigned")}
         />
-        <TaskPriorityBadge priority={task.priority} />
+        <div className="flex items-center gap-1.5">
+          {showStatus && <TaskStatusBadge status={task.status} />}
+          <TaskPriorityBadge priority={task.priority} />
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">
@@ -195,6 +206,67 @@ function KanbanColumn({
               task={task}
               draggable={canDrag}
               onDragStart={onDragStartTask(task.id)}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * S5-TASK-PIPELINE-1 (lane fe) — cột PIPELINE tuỳ biến (columnMode:'state'): tên/màu/đếm từ chính
+ * cột; kéo-thả gọi move-state (đổi CỘT — server auto-map status). Card hiện badge status để người
+ * dùng thấy auto-map (plan fe mục 4).
+ */
+function StateKanbanColumn({
+  column,
+  tasks,
+  canDrag,
+  onDragStartTask,
+  onDrop,
+}: {
+  column: TaskKanbanStateColumnDto;
+  tasks: TaskKanbanCardDto[];
+  canDrag: boolean;
+  onDragStartTask: (taskId: string) => (e: DragEvent<HTMLDivElement>) => void;
+  onDrop: (stateId: string) => (e: DragEvent<HTMLDivElement>) => void;
+}) {
+  const { t } = useTranslation("tasks");
+  return (
+    <div
+      className="flex w-72 shrink-0 flex-col gap-2 rounded-lg bg-muted/40 p-2"
+      onDragOver={(e) => canDrag && e.preventDefault()}
+      onDrop={onDrop(column.stateId)}
+      data-testid={`kanban-state-column-${column.stateId}`}
+    >
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-1.5">
+          <span
+            aria-hidden="true"
+            className="h-2.5 w-2.5 shrink-0 rounded-full"
+            style={{ backgroundColor: column.color }}
+          />
+          <h4 className="text-xs font-semibold uppercase text-muted-foreground">{column.name}</h4>
+        </div>
+        <span
+          className="text-xs text-muted-foreground"
+          data-testid={`kanban-state-column-count-${column.stateId}`}
+        >
+          {column.taskCount}
+        </span>
+      </div>
+      <div className="flex min-h-24 max-h-[calc(100dvh-21rem)] flex-1 flex-col gap-2 overflow-y-auto overscroll-contain">
+        {tasks.length === 0 ? (
+          <p className="px-1 text-xs text-muted-foreground">{t("tasks.kanban.columnEmpty")}</p>
+        ) : (
+          tasks.map((task) => (
+            <KanbanCard
+              key={task.id}
+              task={task}
+              draggable={canDrag}
+              onDragStart={onDragStartTask(task.id)}
+              showStatus
             />
           ))
         )}
@@ -312,6 +384,28 @@ export function TaskKanbanPage({ projectId }: { projectId: string }) {
     TASK_CORE_ENGINE_PAIRS.UPDATE_STATUS.action,
     TASK_CORE_ENGINE_PAIRS.UPDATE_STATUS.resourceType,
   );
+  // S5-TASK-PIPELINE-1 — kéo thẻ board pipeline = đổi CỘT (update-state:task, seed 0499); đổi
+  // NHÓM cột server đòi thêm update-status (auto-map) — FE cứ gửi, 403 thì rollback + báo.
+  const canDragState = useCan(
+    TASK_CORE_ENGINE_PAIRS.UPDATE_STATE.action,
+    TASK_CORE_ENGINE_PAIRS.UPDATE_STATE.resourceType,
+  );
+  // Gọi ĐỦ 3 hook vô điều kiện rồi mới OR (|| short-circuit trong biểu thức hook = đổi thứ tự hook
+  // giữa các render — vi phạm rules-of-hooks).
+  const canCreateState = useCan(
+    PROJECT_STATE_PAIRS.CREATE.action,
+    PROJECT_STATE_PAIRS.CREATE.resourceType,
+  );
+  const canUpdateState = useCan(
+    PROJECT_STATE_PAIRS.UPDATE.action,
+    PROJECT_STATE_PAIRS.UPDATE.resourceType,
+  );
+  const canDeleteState = useCan(
+    PROJECT_STATE_PAIRS.DELETE.action,
+    PROJECT_STATE_PAIRS.DELETE.resourceType,
+  );
+  const canManageColumns = canCreateState || canUpdateState || canDeleteState;
+  const [manageOpen, setManageOpen] = useState(false);
   const [dragErrorKey, setDragErrorKey] = useState<string | null>(null);
   const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null);
   const queryKey = taskKeys.kanban(projectId);
@@ -370,9 +464,67 @@ export function TaskKanbanPage({ projectId }: { projectId: string }) {
     },
   });
 
+  // S5-TASK-PIPELINE-1 — kéo thẻ board pipeline: đổi CỘT qua move-state, optimistic + rollback 4xx.
+  const moveStateMutation = useMutation({
+    mutationFn: ({ taskId, stateId }: { taskId: string; stateId: string }) =>
+      taskCollabApi.moveTaskState(taskId, { stateId }),
+    onMutate: async ({ taskId, stateId }) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<TaskKanbanBoardDto>(queryKey);
+      if (previous) {
+        let moved: TaskKanbanCardDto | undefined;
+        const withoutMoved = previous.columns.map((col) => {
+          const found = col.tasks.find((tk) => tk.id === taskId);
+          if (found) moved = found;
+          if (!found) return col;
+          const nextTasks = col.tasks.filter((tk) => tk.id !== taskId);
+          return col.columnMode === "state"
+            ? { ...col, tasks: nextTasks, taskCount: Math.max(0, col.taskCount - 1) }
+            : { ...col, tasks: nextTasks };
+        });
+        if (moved) {
+          const patched = { ...moved, stateId };
+          const nextColumns = withoutMoved.map((col) =>
+            col.columnMode === "state" && col.stateId === stateId
+              ? { ...col, tasks: [patched, ...col.tasks], taskCount: col.taskCount + 1 }
+              : col,
+          );
+          queryClient.setQueryData<TaskKanbanBoardDto>(queryKey, {
+            ...previous,
+            columns: nextColumns,
+          });
+        }
+      }
+      setDragErrorKey(null);
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(queryKey, context.previous);
+      setDragErrorKey(moveErrorKey(err));
+    },
+    onSettled: (_data, _error, variables) => {
+      for (const key of taskCollabInvalidation.kanban(projectId, variables.taskId))
+        void queryClient.invalidateQueries({ queryKey: key });
+      for (const key of taskCoreInvalidation.list())
+        void queryClient.invalidateQueries({ queryKey: key });
+      for (const key of taskCoreInvalidation.my())
+        void queryClient.invalidateQueries({ queryKey: key });
+    },
+  });
+
   const onDragStartTask = (taskId: string) => (e: DragEvent<HTMLDivElement>) => {
     e.dataTransfer.setData("text/plain", taskId);
     e.dataTransfer.effectAllowed = "move";
+  };
+
+  const onDropState = (stateId: string) => (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (!canDragState) return;
+    const taskId = e.dataTransfer.getData("text/plain");
+    if (!taskId) return;
+    const current = data?.columns.flatMap((c) => c.tasks).find((tk) => tk.id === taskId);
+    if (!current || current.stateId === stateId) return; // cùng cột = no-op, không gọi API
+    moveStateMutation.mutate({ taskId, stateId });
   };
 
   const onDrop = (status: TaskCoreStatusDto) => (e: DragEvent<HTMLDivElement>) => {
@@ -418,12 +570,20 @@ export function TaskKanbanPage({ projectId }: { projectId: string }) {
     );
   }
 
-  const columns = (data?.columns ?? []).filter(
+  // S5-TASK-PIPELINE-1 — 2 chế độ LOẠI TRỪ NHAU theo columnMode (API-06 §15.1: client rẽ nhánh theo
+  // discriminant, không đoán theo sự có mặt của trường). Server trả đồng nhất 1 mode per-project.
+  const stateColumns = (data?.columns ?? []).filter(
+    (col): col is TaskKanbanStateColumnDto => col.columnMode === "state",
+  );
+  const statusColumns = (data?.columns ?? []).filter(
     (col): col is TaskKanbanStatusColumnDto => col.columnMode === "status",
   );
-  const totalTasks = columns.reduce((sum, col) => sum + col.tasks.length, 0);
+  const isStateMode = stateColumns.length > 0;
+  const totalTasks = (data?.columns ?? []).reduce((sum, col) => sum + col.tasks.length, 0);
 
-  if (totalTasks === 0) {
+  // Status-mode giữ hành vi cũ: 0 task ⇒ EmptyState. State-mode LUÔN hiện cột (kể cả rỗng) —
+  // board là nơi tạo việc, giấu cột đi thì không thấy pipeline.
+  if (!isStateMode && totalTasks === 0) {
     return (
       <EmptyState
         title={t("tasks.kanban.empty.title")}
@@ -438,11 +598,28 @@ export function TaskKanbanPage({ projectId }: { projectId: string }) {
     return task.mainAssigneeEmployeeId === assigneeFilter;
   };
 
+  const canDragBoard = isStateMode ? canDragState : canDrag;
+
   return (
     <div className="space-y-3">
-      {!canDrag && (
-        <p className="text-xs text-muted-foreground">{t("tasks.kanban.readOnlyHint")}</p>
-      )}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {!canDragBoard ? (
+          <p className="text-xs text-muted-foreground">{t("tasks.kanban.readOnlyHint")}</p>
+        ) : (
+          <span />
+        )}
+        {canManageColumns && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setManageOpen(true)}
+            data-testid="kanban-manage-columns"
+          >
+            <Settings2 className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("tasks.kanban.manage.button")}
+          </Button>
+        )}
+      </div>
       <AssigneeFilterRail
         employees={assigneeOptions}
         hasUnassigned={hasUnassigned}
@@ -456,19 +633,37 @@ export function TaskKanbanPage({ projectId }: { projectId: string }) {
       )}
       <Card className="overflow-x-auto p-3">
         <div className="flex gap-3">
-          {columns.map((col) => (
-            <KanbanColumn
-              key={col.status}
-              status={col.status}
-              tasks={col.tasks.filter(matchesAssigneeFilter)}
-              totalCount={col.tasks.length}
-              canDrag={canDrag}
-              onDragStartTask={onDragStartTask}
-              onDrop={onDrop}
-            />
-          ))}
+          {isStateMode
+            ? stateColumns.map((col) => (
+                <StateKanbanColumn
+                  key={col.stateId}
+                  column={col}
+                  tasks={col.tasks.filter(matchesAssigneeFilter)}
+                  canDrag={canDragState}
+                  onDragStartTask={onDragStartTask}
+                  onDrop={onDropState}
+                />
+              ))
+            : statusColumns.map((col) => (
+                <KanbanColumn
+                  key={col.status}
+                  status={col.status}
+                  tasks={col.tasks.filter(matchesAssigneeFilter)}
+                  totalCount={col.tasks.length}
+                  canDrag={canDrag}
+                  onDragStartTask={onDragStartTask}
+                  onDrop={onDrop}
+                />
+              ))}
         </div>
       </Card>
+      {canManageColumns && (
+        <TaskStateColumnsDialog
+          projectId={projectId}
+          open={manageOpen}
+          onClose={() => setManageOpen(false)}
+        />
+      )}
     </div>
   );
 }

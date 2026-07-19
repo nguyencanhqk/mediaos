@@ -16,6 +16,14 @@ vi.mock("@mediaos/web-core", async (importOriginal) => {
     taskCollabApi: {
       getKanbanBoard: vi.fn(),
       moveTask: vi.fn(),
+      // S5-TASK-PIPELINE-1 — kéo thẻ board pipeline (đổi CỘT).
+      moveTaskState: vi.fn(),
+    },
+    taskStatesApi: {
+      listStates: vi.fn().mockResolvedValue([]),
+      createState: vi.fn(),
+      updateState: vi.fn(),
+      deleteState: vi.fn(),
     },
   };
 });
@@ -321,6 +329,106 @@ describe("TaskKanbanPage", () => {
         ).not.toBeInTheDocument(),
       );
       expect(screen.getByTestId("kanban-column-count-Todo")).toHaveTextContent("3");
+    });
+  });
+
+  // ── S5-TASK-PIPELINE-1 (lane fe) — board state-mode (cột pipeline tuỳ biến) ────
+  describe("board columnMode:'state'", () => {
+    const MOCK_STATE_BOARD: TaskKanbanBoardDto = {
+      projectId: "proj-001",
+      columns: [
+        {
+          columnMode: "state",
+          stateId: "st-1",
+          name: "Ý Tưởng",
+          color: "#64748b",
+          stateGroup: "unstarted",
+          sortOrder: 1,
+          taskCount: 1,
+          tasks: [{ ...BASE_TASK, stateId: "st-1" }],
+        },
+        {
+          columnMode: "state",
+          stateId: "st-2",
+          name: "Hậu Kỳ",
+          color: "#3b82f6",
+          stateGroup: "started",
+          sortOrder: 2,
+          taskCount: 0,
+          tasks: [],
+        },
+      ],
+    };
+
+    it("render cột theo tên/màu/đếm từ CHÍNH cột + badge task_status trên thẻ (thấy được auto-map)", async () => {
+      setCapabilities({ "view-kanban:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_STATE_BOARD);
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+      await waitFor(() => expect(screen.getByText("Ý Tưởng")).toBeInTheDocument());
+
+      expect(screen.getByText("Hậu Kỳ")).toBeInTheDocument();
+      expect(screen.getByTestId("kanban-state-column-count-st-1")).toHaveTextContent("1");
+      expect(screen.getByTestId("kanban-state-column-count-st-2")).toHaveTextContent("0");
+      // Badge status ("Cần làm" = Todo) hiển thị TRÊN THẺ — tên cột fixture cố ý KHÁC nhãn status.
+      const card = screen.getByTestId("kanban-card-task-001");
+      expect(within(card).getByText("Cần làm")).toBeInTheDocument();
+      // Thiếu update-state:task ⇒ thẻ KHÔNG draggable (dù có update-status hay không).
+      expect(card.closest("div[draggable]") ?? card).toHaveAttribute("draggable", "false");
+    });
+
+    it("kéo thẻ gọi move-state {stateId} (KHÔNG phải move status) — optimistic rồi ROLLBACK khi 4xx", async () => {
+      setCapabilities({
+        "view-kanban:task": true,
+        "update-state:task": true,
+        "update-status:task": true,
+      });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_STATE_BOARD);
+      let rejectMove!: (err: unknown) => void;
+      vi.mocked(taskCollabApi.moveTaskState).mockImplementation(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectMove = reject;
+          }),
+      );
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+      await waitFor(() => expect(screen.getByText("Chuẩn bị báo cáo tuần")).toBeInTheDocument());
+
+      const sourceCol = screen.getByTestId("kanban-state-column-st-1");
+      const targetCol = screen.getByTestId("kanban-state-column-st-2");
+      fireEvent.drop(targetCol, { dataTransfer: makeDataTransfer("task-001") });
+
+      // Optimistic: thẻ dời sang cột đích NGAY + đếm cột cập nhật.
+      await waitFor(() =>
+        expect(targetCol.textContent?.includes("Chuẩn bị báo cáo tuần")).toBe(true),
+      );
+      expect(vi.mocked(taskCollabApi.moveTaskState)).toHaveBeenCalledWith("task-001", {
+        stateId: "st-2",
+      });
+      expect(vi.mocked(taskCollabApi.moveTask)).not.toHaveBeenCalled();
+
+      rejectMove(new ApiError({ status: 403, code: "FORBIDDEN", message: "missing update-status" }));
+
+      // Rollback: thẻ về cột cũ + alert lỗi.
+      await waitFor(() =>
+        expect(sourceCol.textContent?.includes("Chuẩn bị báo cáo tuần")).toBe(true),
+      );
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+    });
+
+    it("nút Quản lý cột CHỈ hiện khi có quyền *:project_state", async () => {
+      setCapabilities({ "view-kanban:task": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_STATE_BOARD);
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+      await waitFor(() => expect(screen.getByText("Ý Tưởng")).toBeInTheDocument());
+      expect(screen.queryByTestId("kanban-manage-columns")).not.toBeInTheDocument();
+
+      clearCapabilities();
+      setCapabilities({ "view-kanban:task": true, "update:project_state": true });
+      vi.mocked(taskCollabApi.getKanbanBoard).mockResolvedValue(MOCK_STATE_BOARD);
+      renderWithQuery(<TaskKanbanPage projectId="proj-001" />);
+      await waitFor(() =>
+        expect(screen.getAllByTestId("kanban-manage-columns").length).toBeGreaterThan(0),
+      );
     });
   });
 });

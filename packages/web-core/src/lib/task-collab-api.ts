@@ -6,6 +6,9 @@ import {
   taskActivityLogResponseSchema,
   taskKanbanBoardSchema,
   taskActionResponseSchema,
+  taskCoreResponseSchema,
+  type MoveTaskStateRequest,
+  type TaskCoreResponseDto,
   type TaskCommentResponseDto,
   type CreateTaskCommentRequest,
   type UpdateTaskCommentRequest,
@@ -52,9 +55,24 @@ export const taskCollabApi = {
   getKanbanBoard: (projectId: string): Promise<TaskKanbanBoardDto> =>
     apiFetch(`/projects/${projectId}/kanban`, taskKanbanBoardSchema),
 
-  /** POST /tasks/:id/move — kéo-thả đổi cột (update-status:task). Sai bảng FSM → 409 (mirror changeStatus). */
+  /**
+   * POST /tasks/:id/move — kéo-thả đổi THEO STATUS (update-status:task).
+   * @deprecated KHAI TỬ (DECISIONS-03 D-21.4, expand-contract đợt 1/2): board pipeline kéo theo CỘT
+   * qua moveTaskState bên dưới; route này chỉ còn cho board status-mode (dự án 0 state) tới đợt gỡ.
+   */
   moveTask: (taskId: string, body: ChangeTaskStatusRequest): Promise<TaskActionResponseDto> =>
     apiFetch(`/tasks/${taskId}/move`, taskActionResponseSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * POST /tasks/:id/move-state (TASK-API-213, S5-TASK-PIPELINE-1) — kéo thẻ sang CỘT pipeline.
+   * Gate update-state:task; kéo đổi NHÓM cột đòi thêm update-status:task (server auto-map
+   * nhóm→status trong CÙNG tx — atomic, từ chối là cột không đổi). Trả task detail sau move.
+   */
+  moveTaskState: (taskId: string, body: MoveTaskStateRequest): Promise<TaskCoreResponseDto> =>
+    apiFetch(`/tasks/${taskId}/move-state`, taskCoreResponseSchema, {
       method: "POST",
       body: JSON.stringify(body),
     }),

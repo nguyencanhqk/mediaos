@@ -139,6 +139,8 @@ export { taskProjectApi } from "./lib/task-project-api";
 export { taskCoreApi } from "./lib/task-core-api";
 // S4-FE-TASK-3 — Kanban board+move · comment/mention · checklist/items · activity feed (S4-TASK-BE-4).
 export { taskCollabApi } from "./lib/task-collab-api";
+// S5-TASK-PIPELINE-1 (lane fe) — client cột pipeline theo dự án.
+export { taskStatesApi } from "./lib/task-states-api";
 // S4-FE-TASK-4 — Task File (list/upload 4-pha có tiến độ/xóa mềm/tải), nối canonical /tasks/:id/files
 // (S4-TASK-BE-5, PR #184).
 export { taskFileApi, type UploadTaskFileOptions } from "./lib/task-file-api";
