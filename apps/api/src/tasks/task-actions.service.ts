@@ -31,7 +31,8 @@ import {
 } from "./task-core.repository";
 import { TaskActionsRepository, type ActionTaskRaw } from "./task-actions.repository";
 import { TaskActivityService } from "./task-activity.service";
-import { coalesceTaskStatus, evaluateTransition } from "./task-fsm";
+import { coalesceTaskStatus, deriveStatusTimestamps, evaluateTransition } from "./task-fsm";
+import { isStateInGroupForStatus, pickTargetState } from "./task-state-sync";
 
 interface RequestUser {
   id: string;
@@ -162,6 +163,11 @@ export class TaskActionsService {
 
   // ══════════════════════ CHANGE STATUS ══════════════════════
 
+  /**
+   * Wrapper MỎNG: resolve scope + đọc setting checklist TRƯỚC khi mở tx (SettingService.resolveSetting
+   * tự mở withTenant — gọi bên trong tx nghiệp vụ = connection THỨ HAI, cạn pool dưới tải; plan 5b),
+   * rồi mở tx và uỷ quyền cho changeStatusTx. Khuôn HrTasksService — lõi nhận TenantTx.
+   */
   async changeStatus(
     user: RequestUser,
     taskId: string,
@@ -173,67 +179,98 @@ export class TaskActionsService {
       "update-status",
       "task",
     );
-    return this.db.withTenant(user.companyId, async (tx) => {
-      const raw = await this.loadMutable(tx, user, taskId, scope);
+    const checklistGateEnabled =
+      dto.status === "Done" ? await this.isChecklistGateEnabled(user.companyId) : false;
+    return this.db.withTenant(user.companyId, (tx) =>
+      this.changeStatusTx(tx, user, taskId, dto, scope, checklistGateEnabled),
+    );
+  }
 
-      const t = evaluateTransition(raw.taskStatus, dto.status);
-      if (!t.ok) {
-        if (t.httpStatus === 422) {
-          throw new UnprocessableEntityException(this.msg("TASK-ERR-TASK-CLOSED", t.code));
-        }
-        throw new ConflictException(this.msg("TASK-ERR-WORKFLOW-INVALID", t.code));
-      }
-      if (t.noop) return this.respond(tx, user.companyId, taskId, []);
+  /**
+   * LÕI đổi status — chạy TRONG tx caller đưa vào (KHÔNG tự mở tx: gọi wrapper changeStatus trong tx
+   * sẵn có = 2 connection tranh cùng row lock ⇒ TỰ DEADLOCK, bẫy M1). Đường move-state (lane be-write)
+   * gọi THẲNG method này trong cùng tx với thao tác đổi cột ⇒ atomic thật.
+   *
+   * TIỀN ĐIỀU KIỆN CỦA CALLER NGOÀI changeStatus (ép bằng review — không ép được bằng type):
+   * (1) PHẢI tự resolveAndAssert đúng pair `update-status:task` và truyền scope ĐÓ vào — không mượn
+   *     scope của pair khác (scope confusion, B1).
+   * (2) PHẢI gọi `isChecklistGateEnabled(companyId)` TRƯỚC khi mở tx và truyền kết quả vào
+   *     `checklistGateEnabled` khi đích là Done — TUYỆT ĐỐI không truyền false mù (bypass câm cổng
+   *     checklist ĐK-3) và không đọc setting bên trong tx (bẫy 5b cạn pool).
+   */
+  async changeStatusTx(
+    tx: TenantTx,
+    user: RequestUser,
+    taskId: string,
+    dto: ChangeTaskStatusRequest,
+    scope: DataScope,
+    checklistGateEnabled: boolean,
+  ): Promise<TaskActionResponseDto> {
+    // allowCancelled: FSM §6.10.1 quyết định (Cancelled khôi phục được) — 3 action kia vẫn chặn 422.
+    const raw = await this.loadMutable(tx, user, taskId, scope, { allowCancelled: true });
 
-      // Done + setting bật + còn item bắt buộc chưa xong (ĐK-3) → 400.
-      if (dto.status === "Done" && (await this.checklistBlocksDone(user.companyId, tx, taskId))) {
+    const t = evaluateTransition(raw.taskStatus, dto.status);
+    if (!t.ok) {
+      // Sau nới §6.10.1 FSM chỉ từ chối bằng 409 (thực tế: Cancelled → In Review/Done);
+      // 422 TASK-CLOSED sống ở loadMutable cho 3 action ngoài changeStatus.
+      throw new ConflictException(this.msg("TASK-ERR-WORKFLOW-INVALID", t.code));
+    }
+    if (t.noop) return this.respond(tx, user.companyId, taskId, []);
+
+    // Done + setting bật + còn item bắt buộc chưa xong (ĐK-3) → 400. Setting đã đọc TRƯỚC tx.
+    if (dto.status === "Done" && checklistGateEnabled) {
+      const pending = await this.repo.countRequiredPendingItemsTx(tx, user.companyId, taskId);
+      if (pending > 0) {
         throw new BadRequestException(
           this.msg("TASK-ERR-CHECKLIST-REQUIRED", ERR.CHECKLIST_REQUIRED),
         );
       }
+    }
 
-      const updated = await this.repo.updateStatusTx(tx, user.companyId, taskId, {
-        status: dto.status,
-        completedAt: dto.status === "Done" ? "now" : "keep",
-        cancelledAt: dto.status === "Cancelled" ? "now" : "keep",
-        actorUserId: user.id,
-      });
-      if (!updated) throw new NotFoundException(ERR.NOT_FOUND);
-
-      const actorEmp = await this.coreRepo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
-      await this.activity.record(tx, {
-        action: "TASK_STATUS_CHANGED",
-        targetType: "Task",
-        targetId: taskId,
-        taskId,
-        projectId: raw.projectId,
-        actorUserId: user.id,
-        actorEmployeeId: actorEmp?.id ?? null,
-        oldValues: { status: t.from },
-        newValues: { status: t.to },
-        message: dto.reason ?? null,
-      });
-      await this.audit.record(tx, {
-        action: "TaskStatusChanged",
-        objectType: "task",
-        objectId: taskId,
-        actorUserId: user.id,
-        before: { status: t.from },
-        after: { status: t.to },
-      });
-      await this.outbox.enqueue(tx, {
-        eventType: "task.status_changed",
-        payload: {
-          ...this.commonPayload("TASK_STATUS_CHANGED", raw, user, actorEmp?.id ?? null),
-          fromStatus: t.from,
-          toStatus: t.to,
-          assigneeUserId: raw.assigneeUserId,
-          creatorUserId: raw.creatorUserId,
-        },
-      });
-
-      return this.respond(tx, user.companyId, taskId, []);
+    const updated = await this.repo.updateStatusTx(tx, user.companyId, taskId, {
+      status: dto.status,
+      // D-19: vào Done/Cancelled set mốc; RỜI Done/Cancelled clear mốc + *_by (lead-time đúng).
+      ...deriveStatusTimestamps(t.from, t.to),
+      actorUserId: user.id,
     });
+    if (!updated) throw new NotFoundException(ERR.NOT_FOUND);
+
+    // D-21: status đổi ngoài board ⇒ thẻ PHẢI theo cột nhóm tương ứng, CÙNG tx (không lệch pha ngược).
+    await this.syncStateWithStatusTx(tx, user, taskId, raw.projectId, t.to);
+
+    const actorEmp = await this.coreRepo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
+    await this.activity.record(tx, {
+      action: "TASK_STATUS_CHANGED",
+      targetType: "Task",
+      targetId: taskId,
+      taskId,
+      projectId: raw.projectId,
+      actorUserId: user.id,
+      actorEmployeeId: actorEmp?.id ?? null,
+      oldValues: { status: t.from },
+      newValues: { status: t.to },
+      message: dto.reason ?? null,
+    });
+    await this.audit.record(tx, {
+      action: "TaskStatusChanged",
+      objectType: "task",
+      objectId: taskId,
+      actorUserId: user.id,
+      before: { status: t.from },
+      after: { status: t.to },
+    });
+    await this.outbox.enqueue(tx, {
+      eventType: "task.status_changed",
+      payload: {
+        ...this.commonPayload("TASK_STATUS_CHANGED", raw, user, actorEmp?.id ?? null),
+        fromStatus: t.from,
+        toStatus: t.to,
+        assigneeUserId: raw.assigneeUserId,
+        creatorUserId: raw.creatorUserId,
+      },
+    });
+
+    return this.respond(tx, user.companyId, taskId, []);
   }
 
   // ══════════════════════ CHANGE PRIORITY ══════════════════════
@@ -449,17 +486,25 @@ export class TaskActionsService {
 
   // ══════════════════════ Guards / helpers ══════════════════════
 
-  /** load (404) → guard workflow (400) → guard Cancelled (422) → data-scope write (404). Cho 4 action mutate. */
+  /**
+   * load (404) → guard workflow (400) → guard Cancelled (422) → data-scope write (404). Cho 4 action mutate.
+   * allowCancelled: CHỈ đường changeStatus (khôi phục qua FSM §6.10.1) — assign/change-priority/
+   * change-deadline giữ nguyên 422, KHÔNG mở quyền sửa task đã huỷ (SPEC-06 §6.10.1, bẫy M4).
+   */
   private async loadMutable(
     tx: TenantTx,
     user: RequestUser,
     taskId: string,
     scope: DataScope,
+    opts: { allowCancelled?: boolean } = {},
   ): Promise<ActionTaskRaw> {
     const raw = await this.loadWorkflowChecked(tx, user, taskId);
-    if (coalesceTaskStatus(raw.taskStatus) === "Cancelled") {
+    if (!opts.allowCancelled && coalesceTaskStatus(raw.taskStatus) === "Cancelled") {
       throw new UnprocessableEntityException(
-        this.msg("TASK-ERR-TASK-CLOSED", "task đã huỷ (terminal)."),
+        this.msg(
+          "TASK-ERR-TASK-CLOSED",
+          "task đã huỷ — chỉ đường đổi trạng thái được mở để khôi phục.",
+        ),
       );
     }
     await this.assertInScopeForWrite(tx, user, taskId, scope);
@@ -604,16 +649,44 @@ export class TaskActionsService {
     };
   }
 
-  /** Setting checklist bật + còn item BẮT BUỘC (is_required_for_done=true) chưa xong (ĐK-3). */
-  private async checklistBlocksDone(
-    companyId: string,
-    tx: TenantTx,
-    taskId: string,
-  ): Promise<boolean> {
+  /**
+   * Setting checklist (ĐK-3) — GỌI TRƯỚC KHI MỞ TX: SettingService.resolveSetting tự mở withTenant
+   * riêng; gọi trong tx nghiệp vụ là connection thứ hai — không deadlock (khác bảng) nhưng cạn pool
+   * dưới tải thì inner chờ mãi trong khi outer không nhả (plan 5b — sửa theo cấu trúc, test 1 request
+   * trên pool rảnh KHÔNG bắt được).
+   * PUBLIC cho caller của changeStatusTx ở service khác (lane be-write: move-state) dùng CHUNG —
+   * không tự chế đường đọc setting thứ hai, không truyền false mù.
+   */
+  async isChecklistGateEnabled(companyId: string): Promise<boolean> {
     const resolved = await this.setting.resolveSetting(companyId, CHECKLIST_SETTING_KEY);
-    if (!resolved.found || !this.isTruthy(resolved.value)) return false;
-    const pending = await this.repo.countRequiredPendingItemsTx(tx, companyId, taskId);
-    return pending > 0;
+    return resolved.found && this.isTruthy(resolved.value);
+  }
+
+  /**
+   * D-21 (DECISIONS-03) — đồng bộ NGƯỢC status → cột pipeline, trong CÙNG tx với updateStatusTx:
+   * (2) thẻ ĐÃ ở cột đúng nhóm ⇒ KHÔNG chuyển (phanh bảo đảm dừng D-21.3b — không giật cột);
+   * (3) chọn cột đích theo bậc thang D-20 (nhóm đích → is_default → sort_order nhỏ nhất, tie-break
+   *     ORDER BY sort_order, created_at, id);
+   * (3c) đọc state hiện tại SAU khi ghi status, cùng tx — không dùng bản chụp trước lúc ghi.
+   * Task ngoài dự án / dự án 0 state ⇒ giữ nguyên (state_id NULL hợp lệ). KHÔNG activity/audit riêng
+   * ở đây: đây là hệ quả cơ học của TaskStatusChanged (đã audit); lịch sử "Chuyển đến cột" của đường
+   * kéo-thả thuộc lane be-write (TASK_STATE_CHANGED).
+   */
+  private async syncStateWithStatusTx(
+    tx: TenantTx,
+    user: RequestUser,
+    taskId: string,
+    projectId: string | null,
+    toStatus: ChangeTaskStatusRequest["status"],
+  ): Promise<void> {
+    if (!projectId) return;
+    const current = await this.repo.findStateSyncRowTx(tx, user.companyId, taskId);
+    if (!current) return; // task biến mất giữa tx (không thể sau updateStatusTx thành công) — fail-safe
+    if (isStateInGroupForStatus(current.stateGroup, toStatus)) return;
+    const states = await this.repo.listActiveStatesOrderedTx(tx, user.companyId, projectId);
+    const target = pickTargetState(states, toStatus);
+    if (!target || target.id === current.stateId) return;
+    await this.repo.updateStateIdTx(tx, user.companyId, taskId, target.id, user.id);
   }
 
   private isTruthy(v: unknown): boolean {

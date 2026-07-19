@@ -482,12 +482,23 @@ describe.skipIf(!hasLaneDb)(
       expect(moveEvt.rows[0].n).toBe(0);
     });
 
-    it("move sai FSM (Todo→Done) → 409, state giữ nguyên", async () => {
-      const t = await mkTask({ taskStatus: "Todo" });
+    it("move sai FSM (Cancelled→Done — ca từ chối còn lại sau nới §6.10.1) → 409, state giữ nguyên", async () => {
+      const t = await mkTask({ taskStatus: "Cancelled" });
       const res = await authPost(tok.admin, `/tasks/${t}/move`).send({ status: "Done" });
       expect(res.status).toBe(409);
       const row = await direct.query("SELECT task_status FROM tasks WHERE id=$1", [t]);
-      expect(row.rows[0].task_status).toBe("Todo");
+      expect(row.rows[0].task_status).toBe("Cancelled");
+    });
+
+    it("move nhảy cấp Todo→Done → 200 (luật nới 18/07 — trước là 409) + completed_at set", async () => {
+      const t = await mkTask({ taskStatus: "Todo" });
+      const res = await authPost(tok.admin, `/tasks/${t}/move`).send({ status: "Done" });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      const row = await direct.query("SELECT task_status, completed_at FROM tasks WHERE id=$1", [
+        t,
+      ]);
+      expect(row.rows[0].task_status).toBe("Done");
+      expect(row.rows[0].completed_at).not.toBeNull();
     });
 
     it("move thiếu update-status:task → 403 (view-only Kanban, không kéo thả được — SPEC-06 §14.13)", async () => {

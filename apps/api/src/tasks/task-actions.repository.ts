@@ -86,6 +86,57 @@ export class TaskActionsRepository {
     return (res.rows as unknown as { id: string }[])[0];
   }
 
+  // ── D-21 — đồng bộ ngược status → state_id (S5-TASK-PIPELINE-1 lane fsm) ────────
+
+  /** state hiện tại của task (đọc SAU khi ghi status, cùng tx — D-21.3c). State soft-deleted ⇒ group NULL. */
+  async findStateSyncRowTx(
+    tx: TenantTx,
+    companyId: string,
+    taskId: string,
+  ): Promise<{ stateId: string | null; stateGroup: string | null } | undefined> {
+    const res = await tx.execute(sql`
+      select t.state_id as "stateId", ps.state_group as "stateGroup"
+        from tasks t
+        left join project_states ps
+          on ps.id = t.state_id and ps.company_id = t.company_id and ps.deleted_at is null
+       where t.id = ${taskId} and t.company_id = ${companyId} and t.deleted_at is null
+       limit 1
+    `);
+    return (res.rows as unknown as { stateId: string | null; stateGroup: string | null }[])[0];
+  }
+
+  /** Cột pipeline active của project, sort XÁC ĐỊNH cho bậc thang D-20 (sort_order trùng 0 là thường). */
+  async listActiveStatesOrderedTx(
+    tx: TenantTx,
+    companyId: string,
+    projectId: string,
+  ): Promise<{ id: string; stateGroup: string; isDefault: boolean }[]> {
+    const res = await tx.execute(sql`
+      select id, state_group as "stateGroup", is_default as "isDefault"
+        from project_states
+       where company_id = ${companyId} and project_id = ${projectId} and deleted_at is null
+       order by sort_order, created_at, id
+    `);
+    return res.rows as unknown as { id: string; stateGroup: string; isDefault: boolean }[];
+  }
+
+  /**
+   * Ghi state_id theo đồng bộ ngược D-21. CHỈ được gọi từ changeStatusTx (đã qua cổng
+   * resolveAndAssert update-status:task) — KHÔNG nối route mới vào writer này (R9).
+   */
+  async updateStateIdTx(
+    tx: TenantTx,
+    companyId: string,
+    taskId: string,
+    stateId: string,
+    actorUserId: string,
+  ): Promise<void> {
+    await tx.execute(sql`
+      update tasks set state_id = ${stateId}, updated_at = now(), updated_by = ${actorUserId}
+       where id = ${taskId} and company_id = ${companyId} and deleted_at is null
+    `);
+  }
+
   async updatePriorityTx(
     tx: TenantTx,
     companyId: string,

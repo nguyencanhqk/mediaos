@@ -3,9 +3,11 @@
  *
  * Đường THẬT: JwtAuthGuard → CompanyGuard → PermissionGuard → TasksController → TaskActionsService →
  * DataScopeService + FSM + SettingService + RLS withTenant. KHÔNG mock permission. Phủ mục 5 của plan:
- *   1. FSM sai → 409 WORKFLOW-INVALID, state không đổi, 0 outbox/activity.
+ *   1. FSM §6.10.1 (nới 18/07/2026 — DECISIONS-03 D-18): nhảy cấp/kéo ngược hợp lệ; ca 409 còn lại =
+ *      Cancelled → In Review/Done; reopen Done ⇒ clear completed_at/by (D-19); khôi phục Cancelled → 200.
  *   2. FSM hợp lệ chuỗi Todo→In Progress→In Review→Done + completed_at/by + activity + outbox.
- *   3. Cancelled terminal → 422 TASK-CLOSED cho mọi action.
+ *   3. Task Cancelled: assign/change-priority/change-deadline VẪN 422 TASK-CLOSED (chỉ nới đường changeStatus).
+ *   3b. D-21: đổi status ngoài board đồng bộ NGƯỢC state_id (bậc thang D-20), KHÔNG giật cột cùng nhóm.
  *   4. Checklist config (is_required_for_done=true) → Done 400 CHECKLIST-REQUIRED; tick hết → 200;
  *      checklist KHÔNG-bắt-buộc pending → Done vẫn 200 (ĐK-3).
  *   5. Assign deny: employee 403 (không seed assign); mgr @Team assign ngoài team → 403; ngoài scope → 404;
@@ -335,32 +337,49 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-3 task actions crown-FSM (DB cô lập, 
     await app?.close();
   });
 
-  // ── 1. FSM sai → 409 + state không đổi + 0 event/activity ─────────────────────
-  it("FSM sai (Todo→Done / Todo→In Review / In Progress→Todo) → 409 WORKFLOW-INVALID, state giữ nguyên", async () => {
+  // ── 1. FSM §6.10.1 (nới D-18): nhảy cấp hợp lệ; ca 409 CÒN LẠI = Cancelled → In Review/Done ──
+  it("nhảy cấp Todo→Done (thao tác hằng ngày trên board) → 200 + completed_at/by set — trước 18/07 là 409", async () => {
     const t = await mkTask({ taskStatus: "Todo" });
+    const r = await authPost(tok.admin, `/tasks/${t}/change-status`).send({ status: "Done" });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(await taskStatus(t)).toBe("Done");
+    const row = await direct.query("SELECT completed_at, completed_by FROM tasks WHERE id=$1", [t]);
+    expect(row.rows[0].completed_at).not.toBeNull();
+    expect(row.rows[0].completed_by).toBe(adminUser);
+    expect(await outboxCount(t, "task.status_changed")).toBe(1);
+    expect(await activityCount(t, "TASK_STATUS_CHANGED")).toBe(1);
+  });
+
+  it("Cancelled → Done/In Review → 409 WORKFLOW-INVALID (tra BẢNG — ca từ chối còn lại duy nhất), state giữ + 0 event", async () => {
+    const t = await mkTask({ taskStatus: "Cancelled" });
     const bad = await authPost(tok.admin, `/tasks/${t}/change-status`).send({ status: "Done" });
     expect(bad.status).toBe(409);
     expect(JSON.stringify(bad.body)).toContain("TASK-ERR-WORKFLOW-INVALID");
-    expect(await taskStatus(t)).toBe("Todo");
-    expect(await outboxCount(t, "task.status_changed")).toBe(0);
-    expect(await activityCount(t, "TASK_STATUS_CHANGED")).toBe(0);
-
     expect(
       (await authPost(tok.admin, `/tasks/${t}/change-status`).send({ status: "In Review" })).status,
     ).toBe(409);
-    const t2 = await mkTask({ taskStatus: "In Progress" });
-    expect(
-      (await authPost(tok.admin, `/tasks/${t2}/change-status`).send({ status: "Todo" })).status,
-    ).toBe(409);
+    expect(await taskStatus(t)).toBe("Cancelled");
+    expect(await outboxCount(t, "task.status_changed")).toBe(0);
+    expect(await activityCount(t, "TASK_STATUS_CHANGED")).toBe(0);
   });
 
-  it("reopen Done→In Progress mặc định TẮT → 409 (hard-off)", async () => {
-    const t = await mkTask({ taskStatus: "Done" });
+  it("reopen Done→In Progress → 200 (D-18); completed_at VÀ completed_by RESET VỀ NULL (D-19 nhánh 'clear')", async () => {
+    const t = await mkTask({ taskStatus: "Todo" });
+    // Đi qua đường THẬT để completed_at/by có giá trị trước khi reopen (không tự set fixture).
+    await authPost(tok.admin, `/tasks/${t}/change-status`).send({ status: "Done" });
+    const before = await direct.query("SELECT completed_at FROM tasks WHERE id=$1", [t]);
+    expect(before.rows[0].completed_at).not.toBeNull();
+
     const r = await authPost(tok.admin, `/tasks/${t}/change-status`).send({
       status: "In Progress",
     });
-    expect(r.status).toBe(409);
-    expect(await taskStatus(t)).toBe("Done");
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(await taskStatus(t)).toBe("In Progress");
+    const after = await direct.query("SELECT completed_at, completed_by FROM tasks WHERE id=$1", [
+      t,
+    ]);
+    expect(after.rows[0].completed_at).toBeNull();
+    expect(after.rows[0].completed_by).toBeNull();
   });
 
   // ── 2. FSM hợp lệ chuỗi + completed_at/by + activity + outbox ──────────────────
@@ -395,17 +414,12 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-3 task actions crown-FSM (DB cô lập, 
     expect(row.rows[0].cancelled_by).toBe(adminUser);
   });
 
-  // ── 3. Cancelled terminal → 422 cho mọi action ───────────────────────────────
-  it("task Cancelled → change-status/assign/change-priority/change-deadline đều 422 TASK-CLOSED, state giữ", async () => {
+  // ── 3. Task Cancelled: 3 action kia VẪN khoá 422 — CHỈ đường changeStatus được nới (D-18) ──
+  it("task Cancelled → assign/change-priority/change-deadline VẪN 422 TASK-CLOSED (không mở quyền sửa task đã huỷ)", async () => {
     const t = await mkTask({ taskStatus: "Cancelled" });
-    const s = await authPost(tok.admin, `/tasks/${t}/change-status`).send({
-      status: "In Progress",
-    });
-    expect(s.status).toBe(422);
-    expect(JSON.stringify(s.body)).toContain("TASK-ERR-TASK-CLOSED");
-    expect(
-      (await authPost(tok.admin, `/tasks/${t}/assign`).send({ assigneeEmployeeId: mgrEmp })).status,
-    ).toBe(422);
+    const a = await authPost(tok.admin, `/tasks/${t}/assign`).send({ assigneeEmployeeId: mgrEmp });
+    expect(a.status).toBe(422);
+    expect(JSON.stringify(a.body)).toContain("TASK-ERR-TASK-CLOSED");
     expect(
       (await authPost(tok.admin, `/tasks/${t}/change-priority`).send({ priority: "High" })).status,
     ).toBe(422);
@@ -413,6 +427,115 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-3 task actions crown-FSM (DB cô lập, 
       (await authPost(tok.admin, `/tasks/${t}/change-deadline`).send({ dueAt: FUTURE })).status,
     ).toBe(422);
     expect(await taskStatus(t)).toBe("Cancelled");
+  });
+
+  it("khôi phục Cancelled→Todo qua change-status → 200 (D-18); cancelled_at/by RESET VỀ NULL (D-19) + audit ghi", async () => {
+    const t = await mkTask({ taskStatus: "Todo" });
+    // Huỷ qua đường THẬT để cancelled_at/by có giá trị (không tự set fixture).
+    await authPost(tok.admin, `/tasks/${t}/change-status`).send({ status: "Cancelled" });
+    const before = await direct.query("SELECT cancelled_at FROM tasks WHERE id=$1", [t]);
+    expect(before.rows[0].cancelled_at).not.toBeNull();
+
+    const r = await authPost(tok.admin, `/tasks/${t}/change-status`).send({ status: "Todo" });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(await taskStatus(t)).toBe("Todo");
+    const after = await direct.query("SELECT cancelled_at, cancelled_by FROM tasks WHERE id=$1", [
+      t,
+    ]);
+    expect(after.rows[0].cancelled_at).toBeNull();
+    expect(after.rows[0].cancelled_by).toBeNull();
+    expect(await activityCount(t, "TASK_STATUS_CHANGED")).toBe(2); // huỷ + khôi phục, audit đầy đủ
+  });
+
+  // ── 3b. D-21 — đồng bộ NGƯỢC status → cột pipeline (cùng tx, bậc thang D-20) ──
+  async function seedState(
+    projectId: string,
+    name: string,
+    group: string,
+    opts: { isDefault?: boolean; sortOrder?: number } = {},
+  ): Promise<string> {
+    const r = await direct.query(
+      `INSERT INTO project_states (company_id, project_id, name, state_group, is_default, sort_order)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+      [A.companyId, projectId, name, group, opts.isDefault ?? false, opts.sortOrder ?? 0],
+    );
+    return r.rows[0].id as string;
+  }
+  const stateOf = async (taskId: string): Promise<string | null> => {
+    const r = await direct.query("SELECT state_id FROM tasks WHERE id=$1", [taskId]);
+    return r.rows[0].state_id as string | null;
+  };
+
+  it("D-21: đổi status ngoài board ⇒ state_id nhảy sang cột nhóm đích (cột ĐẦU theo sort_order khi nhiều cột cùng nhóm)", async () => {
+    const p = await seedProject(A.companyId, `P-sync-${Date.now()}`);
+    const todoCol = await seedState(p, "Cần làm", "unstarted", { isDefault: true, sortOrder: 1 });
+    const doingCol = await seedState(p, "Đang làm", "started", { sortOrder: 2 });
+    await seedState(p, "Hậu Kỳ", "started", { sortOrder: 3 }); // cột thứ 2 cùng nhóm — KHÔNG được chọn
+    const doneCol = await seedState(p, "Hoàn thành", "completed", { sortOrder: 4 });
+
+    const t = await mkTask({ taskStatus: "Todo", projectId: p });
+    await direct.query("UPDATE tasks SET state_id=$1 WHERE id=$2", [todoCol, t]);
+
+    let r = await authPost(tok.admin, `/tasks/${t}/change-status`).send({ status: "In Progress" });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(await stateOf(t)).toBe(doingCol);
+
+    r = await authPost(tok.admin, `/tasks/${t}/change-status`).send({ status: "Done" });
+    expect(r.status).toBe(200);
+    expect(await stateOf(t)).toBe(doneCol);
+
+    // Sync cơ học KHÔNG ghi activity/outbox riêng: 2 lần đổi status = ĐÚNG 2 bản ghi, không rác
+    // (nếu ai đó thêm log vào syncStateWithStatusTx thì đếm này đỏ — giữ acceptance "1 kéo = 1+(0|1)").
+    expect(await activityCount(t, "TASK_STATUS_CHANGED")).toBe(2);
+    expect(await outboxCount(t, "task.status_changed")).toBe(2);
+  });
+
+  it("D-21.2 KHÔNG giật cột: thẻ ở cột Hậu Kỳ (started) + đổi status In Progress từ ngoài ⇒ thẻ ĐỨNG YÊN (TASK-TC-026h)", async () => {
+    const p = await seedProject(A.companyId, `P-guard-${Date.now()}`);
+    await seedState(p, "Quay", "started", { sortOrder: 1 });
+    const hauKy = await seedState(p, "Hậu Kỳ", "started", { sortOrder: 2 });
+    const t = await mkTask({ taskStatus: "In Review", projectId: p });
+    await direct.query("UPDATE tasks SET state_id=$1 WHERE id=$2", [hauKy, t]);
+
+    const r = await authPost(tok.admin, `/tasks/${t}/change-status`).send({
+      status: "In Progress",
+    });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(await stateOf(t)).toBe(hauKy); // cùng nhóm started ⇒ KHÔNG chuẩn hoá về cột Quay
+  });
+
+  it("D-20 bậc thang: thiếu nhóm đích ⇒ rơi xuống cột is_default; task ngoài dự án / dự án 0 state ⇒ state_id giữ NULL", async () => {
+    // Dự án THIẾU nhóm cancelled ⇒ huỷ task rơi về cột is_default.
+    const p = await seedProject(A.companyId, `P-ladder-${Date.now()}`);
+    const defCol = await seedState(p, "Cần làm", "unstarted", { isDefault: true, sortOrder: 1 });
+    await seedState(p, "Đang làm", "started", { sortOrder: 2 });
+    const t = await mkTask({ taskStatus: "Todo", projectId: p });
+    await direct.query("UPDATE tasks SET state_id=$1 WHERE id=$2", [defCol, t]);
+    const r = await authPost(tok.admin, `/tasks/${t}/change-status`).send({ status: "Cancelled" });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(await stateOf(t)).toBe(defCol);
+
+    // Task KHÔNG thuộc dự án ⇒ sync no-op, state_id NULL.
+    const t2 = await mkTask({ taskStatus: "Todo" });
+    expect(
+      (await authPost(tok.admin, `/tasks/${t2}/change-status`).send({ status: "Done" })).status,
+    ).toBe(200);
+    expect(await stateOf(t2)).toBeNull();
+
+    // Dự án 0 state ⇒ sync no-op, không ném lỗi — KỂ CẢ khi tenant B có state nhóm completed
+    // (cross-tenant âm: bậc thang chỉ nhìn project của task trong ĐÚNG company, không rò sang B).
+    const pB = await seedProject(B.companyId, `PB-decoy-${Date.now()}`);
+    await direct.query(
+      `INSERT INTO project_states (company_id, project_id, name, state_group, is_default, sort_order)
+       VALUES ($1,$2,'B-Done','completed',true,0)`,
+      [B.companyId, pB],
+    );
+    const p0 = await seedProject(A.companyId, `P-empty-${Date.now()}`);
+    const t3 = await mkTask({ taskStatus: "Todo", projectId: p0 });
+    expect(
+      (await authPost(tok.admin, `/tasks/${t3}/change-status`).send({ status: "Done" })).status,
+    ).toBe(200);
+    expect(await stateOf(t3)).toBeNull();
   });
 
   // ── 4. Checklist config (ĐK-3) ────────────────────────────────────────────────

@@ -6,11 +6,13 @@
  * (TASK_GRANT_MATRIX ∪ TASK_DEFERRED_GRANTS) — KHÔNG hardcode lệch seed 0485/0486.
  *
  * Phủ (done_when S4-QA-TASK-1):
- *   1. FSM: transition ngoài bảng SPEC-06 §14.11 → 409 TASK-ERR-WORKFLOW-INVALID + task_status KHÔNG đổi +
- *      0 outbox/0 activity; from=Cancelled (terminal) → 422 TASK-ERR-TASK-CLOSED; Done khi checklist
- *      is_required_for_done chưa tick → 400 TASK-ERR-CHECKLIST-REQUIRED (tick hết → 200); from===to → 200 no-op.
- *   2. Kanban move (POST /tasks/:id/move) MIRROR change-status: thiếu update-status:task → 403; move ĐI QUA
- *      CÙNG FSM (transition sai → 409, không lách).
+ *   1. FSM SPEC-06 §6.10.1 (nới 18/07/2026 — DECISIONS-03 D-18): nhảy cấp hợp lệ; ca 409 còn lại =
+ *      Cancelled → In Review/Done (+ task_status KHÔNG đổi + 0 outbox/0 activity); Cancelled khôi phục
+ *      qua change-status (cancelled_at clear D-19) nhưng assign VẪN 422 TASK-ERR-TASK-CLOSED; Done khi
+ *      checklist is_required_for_done chưa tick → 400 TASK-ERR-CHECKLIST-REQUIRED (tick hết → 200);
+ *      from===to → 200 no-op.
+ *   2. Kanban move (POST /tasks/:id/move — deprecated D-21.4) MIRROR change-status: thiếu
+ *      update-status:task → 403; move ĐI QUA CÙNG FSM (Cancelled→Done → 409, không lách).
  *   3. Watcher self-only: add self → Active; body non-empty → 400 (strict, không add hộ ai); duplicate →
  *      409 TASK-ERR-DUPLICATE-WATCHER; gỡ watcher NGƯỜI KHÁC → 404 (self-only); actor không employee → 400
  *      TASK-ERR-WATCHER-NO-EMPLOYEE.
@@ -385,40 +387,44 @@ describe.skipIf(!hasLaneDb)(
       await app?.close();
     });
 
-    // ════════════════════ 1. FSM (SPEC-06 §14.11) ════════════════════
+    // ════════════════ 1. FSM (SPEC-06 §6.10.1 — nới 18/07/2026, DECISIONS-03 D-18) ════════════════
     describe("FSM change-status (crown)", () => {
-      it("transition ngoài bảng (Todo→Done · Todo→In Review · In Progress→Todo) → 409 WORKFLOW-INVALID, state giữ, 0 event/activity", async () => {
+      it("nhảy cấp Todo→Done → 200 (luật nới); ca 409 CÒN LẠI: Cancelled → Done/In Review, state giữ, 0 event/activity", async () => {
         const t = await mkTask({ taskStatus: "Todo" });
-        const bad = await authPost(tok.ca, `/tasks/${t}/change-status`).send({ status: "Done" });
+        const ok = await authPost(tok.ca, `/tasks/${t}/change-status`).send({ status: "Done" });
+        expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+        expect(await taskStatus(t)).toBe("Done");
+
+        const tc = await mkTask({ taskStatus: "Cancelled" });
+        const bad = await authPost(tok.ca, `/tasks/${tc}/change-status`).send({ status: "Done" });
         expect(bad.status).toBe(409);
         expect(JSON.stringify(bad.body)).toContain("TASK-ERR-WORKFLOW-INVALID");
-        expect(await taskStatus(t)).toBe("Todo");
-        expect(await outboxCount(t)).toBe(0);
-        expect(await activityCount(t)).toBe(0);
-
         expect(
-          (await authPost(tok.ca, `/tasks/${t}/change-status`).send({ status: "In Review" }))
+          (await authPost(tok.ca, `/tasks/${tc}/change-status`).send({ status: "In Review" }))
             .status,
         ).toBe(409);
-        const t2 = await mkTask({ taskStatus: "In Progress" });
-        expect(
-          (await authPost(tok.ca, `/tasks/${t2}/change-status`).send({ status: "Todo" })).status,
-        ).toBe(409);
-        expect(await taskStatus(t2)).toBe("In Progress");
+        expect(await taskStatus(tc)).toBe("Cancelled");
+        expect(await outboxCount(tc)).toBe(0);
+        expect(await activityCount(tc)).toBe(0);
       });
 
-      it("from=Cancelled (terminal) → change-status/assign → 422 TASK-CLOSED, state giữ Cancelled", async () => {
-        const t = await mkTask({ taskStatus: "Cancelled" });
-        const s = await authPost(tok.ca, `/tasks/${t}/change-status`).send({
-          status: "In Progress",
-        });
-        expect(s.status).toBe(422);
-        expect(JSON.stringify(s.body)).toContain("TASK-ERR-TASK-CLOSED");
+      it("task Cancelled: change-status khôi phục → 200 + cancelled_at clear (D-18/D-19); assign VẪN 422 TASK-CLOSED", async () => {
+        const t = await mkTask({ taskStatus: "Todo" });
+        await authPost(tok.ca, `/tasks/${t}/change-status`).send({ status: "Cancelled" });
         expect(
           (await authPost(tok.ca, `/tasks/${t}/assign`).send({ assigneeEmployeeId: mgrEmp }))
             .status,
         ).toBe(422);
-        expect(await taskStatus(t)).toBe("Cancelled");
+        const s = await authPost(tok.ca, `/tasks/${t}/change-status`).send({
+          status: "In Progress",
+        });
+        expect(s.status, JSON.stringify(s.body)).toBe(200);
+        expect(await taskStatus(t)).toBe("In Progress");
+        const row = await direct.query("SELECT cancelled_at, cancelled_by FROM tasks WHERE id=$1", [
+          t,
+        ]);
+        expect(row.rows[0].cancelled_at).toBeNull();
+        expect(row.rows[0].cancelled_by).toBeNull();
       });
 
       it("Done khi checklist is_required_for_done chưa tick → 400 CHECKLIST-REQUIRED (state giữ); tick hết → 200", async () => {
@@ -462,7 +468,7 @@ describe.skipIf(!hasLaneDb)(
 
     // ════════════════════ 2. Kanban move MIRROR change-status ════════════════════
     describe("kanban move (POST /tasks/:id/move)", () => {
-      it("thiếu update-status:task (reader) → 403; move dùng CÙNG FSM (transition sai → 409, hợp lệ → 200 + state đổi)", async () => {
+      it("thiếu update-status:task (reader) → 403; move dùng CÙNG FSM (Cancelled→Done → 409, hợp lệ → 200 + state đổi)", async () => {
         const t = await mkEmpTask({ taskStatus: "Todo" });
         // reader chỉ read:task ⇒ PermissionGuard chặn move (yêu cầu update-status:task) → 403.
         const denied = await authPost(tok.reader, `/tasks/${t}/move`).send({
@@ -470,11 +476,12 @@ describe.skipIf(!hasLaneDb)(
         });
         expect(denied.status).toBe(403);
         expect(await taskStatus(t)).toBe("Todo");
-        // move ĐI QUA CÙNG FSM: transition sai → 409 (không lách).
-        expect((await authPost(tok.ca, `/tasks/${t}/move`).send({ status: "Done" })).status).toBe(
+        // move ĐI QUA CÙNG FSM: ca từ chối còn lại sau nới §6.10.1 (Cancelled→Done) → 409, không lách.
+        const tc = await mkEmpTask({ taskStatus: "Cancelled" });
+        expect((await authPost(tok.ca, `/tasks/${tc}/move`).send({ status: "Done" })).status).toBe(
           409,
         );
-        expect(await taskStatus(t)).toBe("Todo");
+        expect(await taskStatus(tc)).toBe("Cancelled");
         // move hợp lệ → 200 + state đổi thật.
         const ok = await authPost(tok.ca, `/tasks/${t}/move`).send({ status: "In Progress" });
         expect(ok.status, JSON.stringify(ok.body)).toBe(200);
