@@ -37,6 +37,7 @@ import {
   ListTaskActivityQueryDto,
   ListTaskCoreQueryDto,
   ListTasksQueryDto,
+  MoveTaskStateDto,
   PageQueryDto,
   UpdateTaskChecklistDto,
   UpdateTaskChecklistItemDto,
@@ -366,6 +367,26 @@ export class TasksController {
     @Body() dto: ChangeTaskStatusDto,
   ) {
     return this.taskActions.changeStatus(req.user, taskId, dto);
+  }
+
+  /**
+   * POST /tasks/:taskId/move-state (TASK-API-213, S5-TASK-PIPELINE-1) — kéo thẻ sang CỘT PIPELINE
+   * (API-06 §15.2, DECISIONS-03 D-17). Gate update-state:task; đổi cột KHÁC nhóm đòi THÊM
+   * update-status:task Ở ĐÚNG SCOPE của pair đó (service — không mượn scope update-state). Auto-map
+   * nhóm→status qua changeStatusTx CÙNG tx (atomic — FSM/quyền/checklist từ chối ⇒ cột không đổi).
+   * Route sugar: gọi THẲNG TaskCoreService.moveState — method dùng chung với PATCH stateId, KHÔNG
+   * guard thứ hai ở route.
+   */
+  @Post(":taskId/move-state")
+  @HttpCode(200)
+  @UseGuards(PermissionGuard)
+  @RequirePermission("update-state", "task")
+  moveTaskState(
+    @Req() req: AuthenticatedRequest,
+    @Param("taskId") taskId: string,
+    @Body() dto: MoveTaskStateDto,
+  ) {
+    return this.taskCore.moveState(req.user, taskId, dto);
   }
 
   /** POST /tasks/:taskId/change-priority (TASK-API-208). Gate update-priority:task. */

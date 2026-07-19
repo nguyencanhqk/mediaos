@@ -30,6 +30,9 @@ export type TaskActivityAction =
   | "TASK_ASSIGNED"
   | "TASK_ASSIGNEE_CHANGED"
   | "TASK_STATUS_CHANGED"
+  // S5-TASK-PIPELINE-1 (lane be-write) — đổi CỘT pipeline, tách khỏi TASK_STATUS_CHANGED
+  // (DB-06 §4.10 #22: action='TASK_STATE_CHANGED', target_type='Task' — cột action KHÔNG có CHECK DB).
+  | "TASK_STATE_CHANGED"
   | "TASK_PRIORITY_CHANGED"
   | "TASK_DUE_DATE_CHANGED"
   | "TASK_WATCHER_ADDED"

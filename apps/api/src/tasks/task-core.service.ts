@@ -10,6 +10,7 @@ import type {
   CreateTaskCoreRequest,
   DataScope,
   ListTaskCoreQueryRequest,
+  MoveTaskStateRequest,
   MyTaskItemDto,
   TaskCorePriorityDto,
   TaskCoreResponseDto,
@@ -21,6 +22,7 @@ import { TASK_CORE_PAGE_LIMIT_MAX } from "@mediaos/contracts";
 import { DatabaseService, type TenantTx } from "../db/db.service";
 import { AuditService } from "../events/audit.service";
 import { DataScopeService } from "../permission/data-scope.service";
+import { PermissionService } from "../permission/permission.service";
 import { SequenceService } from "../foundation/sequences/sequence.service";
 import { allocateTaskCode } from "./task-code.util";
 import { TasksRepository } from "./tasks.repository";
@@ -29,8 +31,12 @@ import {
   type EmployeeForScope,
   type MyTaskRow,
   type TaskCoreRow,
+  type TaskRawRow,
 } from "./task-core.repository";
 import { TaskActivityService } from "./task-activity.service";
+import { TaskActionsService } from "./task-actions.service";
+import { coalesceTaskStatus, type TaskCoreStatus } from "./task-fsm";
+import { STATE_GROUP_TO_STATUS, type ProjectStateGroup } from "./task-state-sync";
 
 interface RequestUser {
   id: string;
@@ -61,6 +67,9 @@ const ERR = {
     "TASK-ERR-TASK-ASSIGNEE-NO-ACCOUNT: nhân viên nhận việc chưa có tài khoản người dùng.",
   ASSIGNEE_OUT_OF_SCOPE:
     "TASK-ERR-TASK-ASSIGNEE-OUT-OF-SCOPE: nhân viên nhận việc ngoài phạm vi giao việc của bạn.",
+  // S5-TASK-PIPELINE-1 (API-06 §15.2/§26.2#12-13) — đường ghi state_id.
+  STATE_NOT_FOUND: "TASK-ERR-STATE-NOT-FOUND: không tìm thấy cột.",
+  STATE_INVALID: "TASK-ERR-STATE-INVALID: cột không thuộc dự án của công việc.",
 } as const;
 
 /**
@@ -84,6 +93,12 @@ export class TaskCoreService {
     private readonly activity: TaskActivityService,
     // S5-NOTI-FIX-2 (additive) — cấp task_code (SequenceModule wired vào TasksModule).
     private readonly sequence: SequenceService,
+    // S5-TASK-PIPELINE-1 (lane be-write) — auto-map qua changeStatusTx (lõi nhận tx, KHÔNG wrapper —
+    // bẫy M1 deadlock) + isChecklistGateEnabled (hợp đồng đọc setting TRƯỚC tx).
+    private readonly taskActions: TaskActionsService,
+    // resolveStrongestScope KHÔNG-NÉM cho pair update-status: chỉ 403 khi auto-map THẬT SỰ đổi status
+    // (plan 4b — kéo cùng nhóm không đòi update-status); null = thiếu pair, quyết trong tx (race-safe).
+    private readonly permission: PermissionService,
   ) {}
 
   // ── Reads ────────────────────────────────────────────────────────────────────
@@ -145,6 +160,12 @@ export class TaskCoreService {
       "create",
       "task",
     );
+    // 3c — tạo THẲNG vào cột (nút "+ Thêm công việc" đáy cột board): stateId tường minh đòi THÊM
+    // update-state:task (403 TRƯỚC khi tạo — không tạo task rồi mới chặn). Cột phải thuộc project.
+    if (dto.stateId !== undefined) {
+      await this.dataScope.resolveAndAssert(user.id, user.companyId, "update-state", "task");
+      if (!dto.projectId) throw new BadRequestException(ERR.STATE_INVALID);
+    }
     // S5-NOTI-FIX-2 / S5-TASK-HRCODE-1: cấp task_code Ở TX RIÊNG TRƯỚC business tx (mirror
     // allocateEmployeeCode) — counter FOR UPDATE serialize (0 dup) rồi COMMIT ngay, KHÔNG giữ lock suốt tx
     // insert dài. Rollback business tx ⇒ mã bị "đốt" (gap OK). Ném TRƯỚC insert nếu không cấp được ⇒ KHÔNG
@@ -161,6 +182,23 @@ export class TaskCoreService {
         ? await this.resolveAssignee(tx, user, createScope, dto.assigneeEmployeeId)
         : null;
 
+      // S5-TASK-PIPELINE-1 — cột + status khởi tạo (plan 1/3c, API-06 §26.2#15):
+      //   stateId tường minh ⇒ validate thuộc ĐÚNG project (404/400) + status suy từ nhóm (KHÔNG
+      //   hardcode 'Todo' — chống desync-lúc-sinh); không ⇒ is_default của project + 'Todo'
+      //   (nhất quán by-construction — seed 0420/0500 default là nhóm unstarted).
+      let stateId: string | null = null;
+      let initialStatus: TaskCoreStatus = "Todo";
+      if (dto.stateId !== undefined && dto.projectId) {
+        const state = await this.repo.findStateForWriteTx(tx, user.companyId, dto.stateId);
+        if (!state) throw new NotFoundException(ERR.STATE_NOT_FOUND);
+        if (state.projectId !== dto.projectId) throw new BadRequestException(ERR.STATE_INVALID);
+        stateId = state.id;
+        initialStatus = STATE_GROUP_TO_STATUS[state.stateGroup as ProjectStateGroup] ?? "Todo";
+      } else if (dto.projectId) {
+        const fallback = await this.repo.findDefaultStateTx(tx, user.companyId, dto.projectId);
+        stateId = fallback?.id ?? null; // project 0 state ⇒ NULL (hợp lệ)
+      }
+
       const created = await this.repo.insertTaskCoreTx(tx, user.companyId, {
         title: dto.title,
         description: dto.description ?? null,
@@ -175,6 +213,8 @@ export class TaskCoreService {
         creatorUserId: user.id,
         createdBy: user.id,
         taskCode,
+        stateId,
+        taskStatus: initialStatus,
       });
 
       await this.activity.record(tx, {
@@ -187,7 +227,8 @@ export class TaskCoreService {
         actorEmployeeId: actorEmp?.id ?? null,
         newValues: {
           title: dto.title,
-          status: "Todo",
+          status: initialStatus,
+          stateId,
           assigneeEmployeeId: assignee?.employeeId ?? null,
           projectId: dto.projectId ?? null,
         },
@@ -200,7 +241,8 @@ export class TaskCoreService {
         actorUserId: user.id,
         after: {
           title: dto.title,
-          status: "Todo",
+          status: initialStatus,
+          stateId,
           assigneeEmployeeId: assignee?.employeeId ?? null,
           projectId: dto.projectId ?? null,
         },
@@ -223,6 +265,9 @@ export class TaskCoreService {
       "update",
       "task",
     );
+    // 3b — GATE + AUTO-MAP Ở METHOD DÙNG CHUNG, KHÔNG ở route: payload có stateId ⇒ PATCH không được
+    // thành CỬA THỨ HAI đổi cột (403 TRƯỚC mọi ghi khi thiếu update-state:task).
+    const stateCtx = dto.stateId !== undefined ? await this.prepareStateWrite(user) : null;
     return this.db.withTenant(user.companyId, async (tx) => {
       const raw = await this.repo.findRawByIdTx(tx, user.companyId, id);
       if (!raw) throw new NotFoundException(ERR.NOT_FOUND);
@@ -263,29 +308,174 @@ export class TaskCoreService {
       const updated = await this.repo.updateTaskCoreTx(tx, user.companyId, id, patch, user.id);
       if (!updated) throw new NotFoundException(ERR.NOT_FOUND);
 
-      const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
-      await this.activity.record(tx, {
-        action: "TASK_UPDATED",
-        targetType: "Task",
-        targetId: id,
-        taskId: id,
-        projectId: raw.projectId,
-        actorUserId: user.id,
-        actorEmployeeId: actorEmp?.id ?? null,
-        newValues: this.changedFields(dto),
-        message: "Cập nhật công việc",
-      });
-      await this.audit.record(tx, {
-        action: "TaskUpdated",
-        objectType: "task",
-        objectId: id,
-        actorUserId: user.id,
-        before: { changed: Object.keys(dto) },
-        after: this.changedFields(dto),
-      });
+      // 3b — đổi cột qua PATCH đi CÙNG method dùng chung với move-state (gate update-state đã resolve
+      // pre-tx ở prepareStateWrite). Chạy SAU patch để dùng projectId hiệu lực (PATCH có thể đổi project).
+      if (dto.stateId !== undefined && stateCtx) {
+        const effectiveProjectId = dto.projectId !== undefined ? dto.projectId : raw.projectId;
+        await this.applyStateChangeTx(tx, user, id, raw, effectiveProjectId, dto.stateId, stateCtx);
+      }
+
+      // Audit KHÔNG NÓI DỐI (finding gate lane contracts): stateId có bản ghi TASK_STATE_CHANGED
+      // RIÊNG (trong applyStateChangeTx) ⇒ loại khỏi TASK_UPDATED; PATCH chỉ-có-stateId ⇒ bỏ hẳn
+      // TASK_UPDATED (không ghi bản ghi rỗng).
+      const auditedDto = { ...dto };
+      delete (auditedDto as Record<string, unknown>).stateId;
+      const auditedChanges = this.changedFields(auditedDto);
+      if (Object.keys(auditedChanges).length > 0) {
+        const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
+        await this.activity.record(tx, {
+          action: "TASK_UPDATED",
+          targetType: "Task",
+          targetId: id,
+          taskId: id,
+          projectId: raw.projectId,
+          actorUserId: user.id,
+          actorEmployeeId: actorEmp?.id ?? null,
+          newValues: auditedChanges,
+          message: "Cập nhật công việc",
+        });
+        await this.audit.record(tx, {
+          action: "TaskUpdated",
+          objectType: "task",
+          objectId: id,
+          actorUserId: user.id,
+          before: { changed: Object.keys(auditedChanges) },
+          after: auditedChanges,
+        });
+      }
 
       return this.reload(tx, user.companyId, id);
     });
+  }
+
+  // ── S5-TASK-PIPELINE-1 (lane be-write) — move-state + method dùng chung đổi cột ──
+
+  /**
+   * POST /tasks/:id/move-state (TASK-API-213, API-06 §15.2) — kéo thẻ sang CỘT pipeline.
+   * Double-gate: PermissionGuard(update-state:task) ở controller + resolveAndAssert + data-scope
+   * write (ngoài scope ⇒ 404) + workflow guard (⇒ 400). Auto-map nhóm→status qua changeStatusTx
+   * TRONG CÙNG TX (atomic — FSM/quyền/checklist từ chối ⇒ cột KHÔNG đổi).
+   */
+  async moveState(
+    user: RequestUser,
+    taskId: string,
+    dto: MoveTaskStateRequest,
+  ): Promise<TaskCoreResponseDto> {
+    const stateCtx = await this.prepareStateWrite(user);
+    return this.db.withTenant(user.companyId, async (tx) => {
+      const raw = await this.repo.findRawByIdTx(tx, user.companyId, taskId);
+      if (!raw) throw new NotFoundException(ERR.NOT_FOUND);
+      if (raw.workflowStepId !== null || WORKFLOW_TASK_TYPES.has(raw.taskType)) {
+        throw new BadRequestException(ERR.WORKFLOW_LOCKED);
+      }
+      await this.assertInScopeForWrite(tx, user, taskId, stateCtx.scopeState);
+      await this.applyStateChangeTx(tx, user, taskId, raw, raw.projectId, dto.stateId, stateCtx);
+      return this.reload(tx, user.companyId, taskId);
+    });
+  }
+
+  /**
+   * Ngữ cảnh pre-tx cho MỌI đường ghi state_id (plan 4b + hợp đồng changeStatusTx):
+   *   - scopeState: cổng 403 của pair update-state:task (resolve NGOÀI tx — B1).
+   *   - scopeStatus: resolve KHÔNG-NÉM pair update-status:task — null = thiếu; CHỈ 403 khi auto-map
+   *     thật sự đổi status (kéo cùng nhóm không đòi). TUYỆT ĐỐI không truyền scopeState vào đường
+   *     status (scope confusion).
+   *   - checklistGateEnabled: đọc TRƯỚC tx, VÔ ĐIỀU KIỆN — state_group mutable qua PATCH /states/:id
+   *     nên "chỉ đọc khi đích là completed" theo snapshot pre-tx là race bypass câm cổng ĐK-3.
+   */
+  private async prepareStateWrite(user: RequestUser): Promise<{
+    scopeState: DataScope;
+    scopeStatus: DataScope | null;
+    checklistGateEnabled: boolean;
+  }> {
+    const scopeState = await this.dataScope.resolveAndAssert(
+      user.id,
+      user.companyId,
+      "update-state",
+      "task",
+    );
+    const scopeStatus = await this.permission.resolveStrongestScope(
+      user.id,
+      user.companyId,
+      "update-status",
+      "task",
+    );
+    const checklistGateEnabled = await this.taskActions.isChecklistGateEnabled(user.companyId);
+    return { scopeState, scopeStatus, checklistGateEnabled };
+  }
+
+  /**
+   * MỘT đường ghi state_id (plan 3b — mọi lời gọi PATCH/move-state hội tụ tại đây; POST đi nhánh
+   * insert riêng nhưng CÙNG luật). Trong tx caller:
+   *   1. validate cột: không tồn tại/soft-deleted/cross-tenant ⇒ 404 STATE-NOT-FOUND (không lộ,
+   *      API-06 §15.2); thuộc project khác ⇒ 400 STATE-INVALID; task không project ⇒ 400. KHÔNG ghi gì.
+   *   2. same-column ⇒ no-op im lặng (0 activity/0 event — chống rác).
+   *   3. auto-map: nhóm cột đích ≠ status hiện tại ⇒ ĐÒI update-status (403 TRƯỚC khi ghi cột —
+   *      atomic §15.2#5) rồi ghi cột + changeStatusTx(scopeStatus THẬT) CÙNG tx; FSM/checklist từ
+   *      chối ⇒ throw ⇒ rollback cả cột. Cùng nhóm ⇒ chỉ ghi cột.
+   *   4. nhật ký: 1 TASK_STATE_CHANGED (old/new mang CẢ stateId VÀ stateName — cột đổi tên sau không
+   *      sai lịch sử) + audit TaskStateChanged; KHÔNG outbox (registry §9.5 không có TASK_STATE_*).
+   */
+  private async applyStateChangeTx(
+    tx: TenantTx,
+    user: RequestUser,
+    taskId: string,
+    raw: TaskRawRow,
+    projectId: string | null,
+    stateId: string,
+    ctx: { scopeState: DataScope; scopeStatus: DataScope | null; checklistGateEnabled: boolean },
+  ): Promise<void> {
+    if (!projectId) throw new BadRequestException(ERR.STATE_INVALID);
+    const state = await this.repo.findStateForWriteTx(tx, user.companyId, stateId);
+    if (!state) throw new NotFoundException(ERR.STATE_NOT_FOUND);
+    if (state.projectId !== projectId) throw new BadRequestException(ERR.STATE_INVALID);
+    if (raw.stateId === state.id) return; // no-op — không event/log rác
+
+    // Quyết auto-map TRƯỚC khi ghi: thiếu update-status mà kéo đổi nhóm ⇒ 403 VÀ cột KHÔNG đổi.
+    const newStatus = STATE_GROUP_TO_STATUS[state.stateGroup as ProjectStateGroup];
+    const statusChanges = newStatus !== undefined && newStatus !== coalesceTaskStatus(raw.taskStatus);
+    if (statusChanges && ctx.scopeStatus === null) {
+      throw new ForbiddenException("AUTH-ERR-FORBIDDEN: out of permission scope");
+    }
+
+    const moved = await this.repo.setTaskStateTx(tx, user.companyId, taskId, state.id, user.id);
+    if (!moved) throw new NotFoundException(ERR.NOT_FOUND);
+
+    const actorEmp = await this.repo.findActiveEmployeeByUserTx(tx, user.companyId, user.id);
+    await this.activity.record(tx, {
+      action: "TASK_STATE_CHANGED",
+      targetType: "Task",
+      targetId: taskId,
+      taskId,
+      projectId,
+      actorUserId: user.id,
+      actorEmployeeId: actorEmp?.id ?? null,
+      oldValues: { stateId: raw.stateId, stateName: raw.stateName },
+      newValues: { stateId: state.id, stateName: state.name },
+      message: null,
+    });
+    await this.audit.record(tx, {
+      action: "TaskStateChanged",
+      objectType: "task",
+      objectId: taskId,
+      actorUserId: user.id,
+      before: { stateId: raw.stateId, stateName: raw.stateName },
+      after: { stateId: state.id, stateName: state.name },
+    });
+
+    if (statusChanges) {
+      // scopeStatus = scope THẬT của pair update-status (4b — không mượn scopeState). changeStatusTx
+      // tự loadMutable (404 ngoài scope status — PIN scope-confusion) + FSM + checklist + D-21 guard
+      // (cột vừa ghi ĐÚNG nhóm ⇒ sync nội bộ skip, không giật). Throw ⇒ rollback cả cột (atomic).
+      await this.taskActions.changeStatusTx(
+        tx,
+        user,
+        taskId,
+        { status: newStatus },
+        ctx.scopeStatus as DataScope,
+        ctx.checklistGateEnabled,
+      );
+    }
   }
 
   // ── Delete (soft) ────────────────────────────────────────────────────────────
