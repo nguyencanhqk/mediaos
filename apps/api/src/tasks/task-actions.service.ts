@@ -191,8 +191,12 @@ export class TaskActionsService {
    * sẵn có = 2 connection tranh cùng row lock ⇒ TỰ DEADLOCK, bẫy M1). Đường move-state (lane be-write)
    * gọi THẲNG method này trong cùng tx với thao tác đổi cột ⇒ atomic thật.
    *
-   * TIỀN ĐIỀU KIỆN CỦA CALLER NGOÀI changeStatus: caller PHẢI tự resolveAndAssert đúng pair
-   * `update-status:task` và truyền scope ĐÓ vào — không mượn scope của pair khác (scope confusion, B1).
+   * TIỀN ĐIỀU KIỆN CỦA CALLER NGOÀI changeStatus (ép bằng review — không ép được bằng type):
+   * (1) PHẢI tự resolveAndAssert đúng pair `update-status:task` và truyền scope ĐÓ vào — không mượn
+   *     scope của pair khác (scope confusion, B1).
+   * (2) PHẢI gọi `isChecklistGateEnabled(companyId)` TRƯỚC khi mở tx và truyền kết quả vào
+   *     `checklistGateEnabled` khi đích là Done — TUYỆT ĐỐI không truyền false mù (bypass câm cổng
+   *     checklist ĐK-3) và không đọc setting bên trong tx (bẫy 5b cạn pool).
    */
   async changeStatusTx(
     tx: TenantTx,
@@ -207,9 +211,8 @@ export class TaskActionsService {
 
     const t = evaluateTransition(raw.taskStatus, dto.status);
     if (!t.ok) {
-      if (t.httpStatus === 422) {
-        throw new UnprocessableEntityException(this.msg("TASK-ERR-TASK-CLOSED", t.code));
-      }
+      // Sau nới §6.10.1 FSM chỉ từ chối bằng 409 (thực tế: Cancelled → In Review/Done);
+      // 422 TASK-CLOSED sống ở loadMutable cho 3 action ngoài changeStatus.
       throw new ConflictException(this.msg("TASK-ERR-WORKFLOW-INVALID", t.code));
     }
     if (t.noop) return this.respond(tx, user.companyId, taskId, []);
@@ -498,7 +501,10 @@ export class TaskActionsService {
     const raw = await this.loadWorkflowChecked(tx, user, taskId);
     if (!opts.allowCancelled && coalesceTaskStatus(raw.taskStatus) === "Cancelled") {
       throw new UnprocessableEntityException(
-        this.msg("TASK-ERR-TASK-CLOSED", "task đã huỷ — chỉ đường đổi trạng thái được mở để khôi phục."),
+        this.msg(
+          "TASK-ERR-TASK-CLOSED",
+          "task đã huỷ — chỉ đường đổi trạng thái được mở để khôi phục.",
+        ),
       );
     }
     await this.assertInScopeForWrite(tx, user, taskId, scope);
@@ -648,8 +654,10 @@ export class TaskActionsService {
    * riêng; gọi trong tx nghiệp vụ là connection thứ hai — không deadlock (khác bảng) nhưng cạn pool
    * dưới tải thì inner chờ mãi trong khi outer không nhả (plan 5b — sửa theo cấu trúc, test 1 request
    * trên pool rảnh KHÔNG bắt được).
+   * PUBLIC cho caller của changeStatusTx ở service khác (lane be-write: move-state) dùng CHUNG —
+   * không tự chế đường đọc setting thứ hai, không truyền false mù.
    */
-  private async isChecklistGateEnabled(companyId: string): Promise<boolean> {
+  async isChecklistGateEnabled(companyId: string): Promise<boolean> {
     const resolved = await this.setting.resolveSetting(companyId, CHECKLIST_SETTING_KEY);
     return resolved.found && this.isTruthy(resolved.value);
   }

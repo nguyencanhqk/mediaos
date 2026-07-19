@@ -483,6 +483,11 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-3 task actions crown-FSM (DB cô lập, 
     r = await authPost(tok.admin, `/tasks/${t}/change-status`).send({ status: "Done" });
     expect(r.status).toBe(200);
     expect(await stateOf(t)).toBe(doneCol);
+
+    // Sync cơ học KHÔNG ghi activity/outbox riêng: 2 lần đổi status = ĐÚNG 2 bản ghi, không rác
+    // (nếu ai đó thêm log vào syncStateWithStatusTx thì đếm này đỏ — giữ acceptance "1 kéo = 1+(0|1)").
+    expect(await activityCount(t, "TASK_STATUS_CHANGED")).toBe(2);
+    expect(await outboxCount(t, "task.status_changed")).toBe(2);
   });
 
   it("D-21.2 KHÔNG giật cột: thẻ ở cột Hậu Kỳ (started) + đổi status In Progress từ ngoài ⇒ thẻ ĐỨNG YÊN (TASK-TC-026h)", async () => {
@@ -517,7 +522,14 @@ describe.skipIf(!hasLaneDb)("S4-TASK-BE-3 task actions crown-FSM (DB cô lập, 
     ).toBe(200);
     expect(await stateOf(t2)).toBeNull();
 
-    // Dự án 0 state ⇒ sync no-op, không ném lỗi.
+    // Dự án 0 state ⇒ sync no-op, không ném lỗi — KỂ CẢ khi tenant B có state nhóm completed
+    // (cross-tenant âm: bậc thang chỉ nhìn project của task trong ĐÚNG company, không rò sang B).
+    const pB = await seedProject(B.companyId, `PB-decoy-${Date.now()}`);
+    await direct.query(
+      `INSERT INTO project_states (company_id, project_id, name, state_group, is_default, sort_order)
+       VALUES ($1,$2,'B-Done','completed',true,0)`,
+      [B.companyId, pB],
+    );
     const p0 = await seedProject(A.companyId, `P-empty-${Date.now()}`);
     const t3 = await mkTask({ taskStatus: "Todo", projectId: p0 });
     expect(

@@ -31,7 +31,11 @@ const TRANSITIONS: Record<TaskCoreStatus, ReadonlySet<TaskCoreStatus>> = {
   Cancelled: new Set(["Todo", "In Progress"]), // khôi phục (D-18) — KHÔNG cho đi thẳng In Review/Done
 };
 
-export type TaskTransitionErrorCode = "TASK-ERR-WORKFLOW-INVALID" | "TASK-ERR-TASK-CLOSED";
+/**
+ * Sau nới §6.10.1 FSM chỉ còn từ chối bằng 409 WORKFLOW-INVALID; 422 TASK-ERR-TASK-CLOSED KHÔNG còn
+ * sinh từ bảng — nó sống ở guard loadMutable (assign/priority/deadline trên task đã huỷ).
+ */
+export type TaskTransitionErrorCode = "TASK-ERR-WORKFLOW-INVALID";
 
 export interface TransitionOk {
   ok: true;
@@ -45,7 +49,7 @@ export interface TransitionErr {
   from: TaskCoreStatus;
   to: TaskCoreStatus;
   code: TaskTransitionErrorCode;
-  httpStatus: 409 | 422;
+  httpStatus: 409;
 }
 export type TransitionResult = TransitionOk | TransitionErr;
 
