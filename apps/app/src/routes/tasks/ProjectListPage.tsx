@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,7 +23,11 @@ import {
   Badge,
   Dialog,
 } from "@mediaos/ui";
-import type { TaskProjectListItemDto, TaskProjectStatusDto } from "@mediaos/contracts";
+import {
+  listTaskProjectsQuerySchema,
+  type TaskProjectListItemDto,
+  type TaskProjectStatusDto,
+} from "@mediaos/contracts";
 import { TASK_ENGINE_PAIRS } from "./constants";
 import { ProjectFormDrawer } from "./ProjectFormDrawer";
 
@@ -42,13 +46,15 @@ const PAGE_SIZE = 20;
 
 /**
  * S5-TASK-NAV-TREE-1 — filter phòng ban là URL-driven (?departmentId=<uuid>): deep-link từ menu ⋯
- * "Xem báo cáo" của cây sidebar. Chỉ nhận uuid hợp lệ — giá trị rác trên URL bị bỏ qua (không 400 oan).
+ * "Xem báo cáo" của cây sidebar. Validate bằng CHÍNH schema contracts (không chép regex uuid riêng —
+ * client/server không thể drift); giá trị rác trên URL bị bỏ qua (không 400 oan).
  */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const departmentIdParamSchema = listTaskProjectsQuerySchema.shape.departmentId;
 
 function readDepartmentId(search: unknown): string | undefined {
   const raw = (search as Record<string, unknown> | undefined)?.departmentId;
-  return typeof raw === "string" && UUID_RE.test(raw) ? raw : undefined;
+  const parsed = departmentIdParamSchema.safeParse(raw);
+  return parsed.success ? parsed.data : undefined;
 }
 
 const STATUS_OPTIONS: readonly TaskProjectStatusDto[] = [
@@ -138,20 +144,38 @@ export function ProjectListPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteItem, setDeleteItem] = useState<TaskProjectListItemDto | null>(null);
 
-  // URL-driven (S5-TASK-NAV-TREE-1): đổi filter = đổi URL (share/back được); state không nhân đôi.
-  // history.replace với URL chuỗi — route chưa có validateSearch nên navigate({search}) không type được.
+  // URL-driven (S5-TASK-NAV-TREE-1): đổi filter = đổi URL (share được, deep-link từ sidebar);
+  // state không nhân đôi. history.replace với URL chuỗi — route chưa có validateSearch nên
+  // navigate({search}) không type được (validateSearch thuộc S5-TASK-WORKSPACE-1, WO sở hữu router.tsx).
+  // GIỮ các search param khác khi đổi filter — không xoá trắng query string.
   const router = useRouter();
   const locationSearch = useRouterState({ select: (s) => s.location.search });
   const departmentId = readDepartmentId(locationSearch);
   const setDepartmentId = (next: string) => {
-    setPage(1);
-    router.history.replace(next ? `/tasks/projects?departmentId=${next}` : "/tasks/projects");
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries((locationSearch as Record<string, unknown>) ?? {})) {
+      if (key === "departmentId" || value == null) continue;
+      qs.set(key, String(value));
+    }
+    if (next) qs.set("departmentId", next);
+    const query = qs.toString();
+    router.history.replace(`/tasks/projects${query ? `?${query}` : ""}`);
   };
 
+  // Deep-link/back-forward đổi departmentId NGOÀI Select (sidebar ⋯ "Xem báo cáo") → vẫn phải về
+  // trang 1, nếu không offset cũ dính sang filter mới ⇒ trang rỗng giả (finding gate đợt B).
+  useEffect(() => {
+    setPage(1);
+  }, [departmentId]);
+
+  // Lookup phòng ban đòi read:department (hr-read.controller) — KHÁC cặp read:project của trang.
+  // Thiếu quyền thì không bắn request 403 vô ích; Select vẫn render khi đang có filter (option
+  // fallback bên dưới) để người dùng THẤY và GỠ được filter đang áp.
+  const canReadDepartments = useCan("read", "department");
   const { data: departments } = useQuery({
     queryKey: hrKeys.departments.list(),
     queryFn: () => hrApi.listDepartments(),
-    enabled: canView,
+    enabled: canView && canReadDepartments,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -329,19 +353,26 @@ export function ProjectListPage() {
               </option>
             ))}
           </Select>
-          <Select
-            aria-label={t("projects.list.departmentFilterLabel")}
-            value={departmentId ?? ""}
-            onChange={(e) => setDepartmentId(e.target.value)}
-            className="w-48"
-          >
-            <option value="">{t("projects.list.allDepartments")}</option>
-            {(departments ?? []).map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </Select>
+          {(canReadDepartments || departmentId) && (
+            <Select
+              aria-label={t("projects.list.departmentFilterLabel")}
+              value={departmentId ?? ""}
+              onChange={(e) => setDepartmentId(e.target.value)}
+              className="w-48"
+            >
+              <option value="">{t("projects.list.allDepartments")}</option>
+              {/* Filter đang áp nhưng không có trong lookup (đang tải · thiếu read:department ·
+                  uuid cũ) → option fallback để Select KHÔNG hiển thị sai "Tất cả phòng ban". */}
+              {departmentId && !(departments ?? []).some((d) => d.id === departmentId) && (
+                <option value={departmentId}>{t("projects.list.filteredDepartment")}</option>
+              )}
+              {(departments ?? []).map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </Select>
+          )}
         </div>
       </PageHeader>
 

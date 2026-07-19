@@ -16,7 +16,6 @@
  * - Khe cắm extension theo module (sidebar-extensions.ts): section động cần data runtime (cây phòng
  *   ban + dự án của TASK) sống ở component riêng — registry tĩnh không ôm React Query.
  */
-import { useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import {
@@ -29,6 +28,7 @@ import {
 import { cn } from "@mediaos/ui";
 import { getSidebarItems } from "./sidebar-registry";
 import { getSidebarExtension } from "./sidebar-extensions";
+import { usePersistedSet } from "./use-persisted-set";
 import { DynamicIcon } from "./DynamicIcon";
 
 interface ModuleSidebarProps {
@@ -49,40 +49,11 @@ const GROUP_LABELS: Record<string, string> = {
   admin: "Quản trị",
 };
 
-function isPathActive(pathname: string, path: string | undefined): boolean {
+/** Active-match dùng CHUNG cho item tĩnh + lá dự án của TaskSidebarTree — 1 định nghĩa duy nhất. */
+export function isPathActive(pathname: string, path: string | undefined): boolean {
   if (!path) return false;
   if (path === "/") return pathname === "/";
   return pathname === path || pathname.startsWith(path + "/");
-}
-
-/** Trạng thái gập/mở cây — lưu tập sidebarKey ĐANG GẬP (mặc định mở) theo module. */
-function useCollapsedBranches(moduleCode: string) {
-  const storageKey = `mediaos.sidebar.collapsed:${moduleCode}`;
-  const [collapsedKeys, setCollapsedKeys] = useState<ReadonlySet<string>>(() => {
-    try {
-      const raw = window.localStorage.getItem(storageKey);
-      if (raw) return new Set(JSON.parse(raw) as string[]);
-    } catch {
-      // localStorage không khả dụng (test/private mode) → mặc định mở hết
-    }
-    return new Set<string>();
-  });
-
-  const toggleBranch = (key: string) => {
-    setCollapsedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      try {
-        window.localStorage.setItem(storageKey, JSON.stringify([...next]));
-      } catch {
-        // bỏ qua — trạng thái chỉ sống trong phiên
-      }
-      return next;
-    });
-  };
-
-  return { collapsedKeys, toggleBranch };
 }
 
 function SidebarLeaf({
@@ -127,14 +98,14 @@ function SidebarNode({
   collapsed,
   pathname,
   depth,
-  collapsedKeys,
+  isBranchCollapsed,
   onToggleBranch,
 }: {
   item: SidebarItemMeta;
   collapsed: boolean;
   pathname: string;
   depth: number;
-  collapsedKeys: ReadonlySet<string>;
+  isBranchCollapsed: (key: string) => boolean;
   onToggleBranch: (key: string) => void;
 }) {
   const children = item.children ?? [];
@@ -142,8 +113,9 @@ function SidebarNode({
   const isActive = isPathActive(pathname, item.path);
 
   // Icon-mode: chỉ cấp 1 dạng icon — không render nhánh con (không có chỗ cho label/cây).
+  // Node cha KHÔNG có path cũng bỏ (không render <Link to={undefined}> chết — không gập/mở được ở icon-mode).
   if (collapsed) {
-    if (depth > 0) return null;
+    if (depth > 0 || !item.path) return null;
     return <SidebarLeaf item={item} collapsed isActive={isActive} depth={depth} />;
   }
 
@@ -151,7 +123,7 @@ function SidebarNode({
     return <SidebarLeaf item={item} collapsed={false} isActive={isActive} depth={depth} />;
   }
 
-  const isOpen = !collapsedKeys.has(item.sidebarKey);
+  const isOpen = !isBranchCollapsed(item.sidebarKey);
   const rowLabel = (
     <>
       <DynamicIcon
@@ -205,7 +177,7 @@ function SidebarNode({
               collapsed={false}
               pathname={pathname}
               depth={depth + 1}
-              collapsedKeys={collapsedKeys}
+              isBranchCollapsed={isBranchCollapsed}
               onToggleBranch={onToggleBranch}
             />
           ))}
@@ -220,14 +192,14 @@ function GroupSection({
   items,
   collapsed,
   pathname,
-  collapsedKeys,
+  isBranchCollapsed,
   onToggleBranch,
 }: {
   group: string;
   items: SidebarItemMeta[];
   collapsed: boolean;
   pathname: string;
-  collapsedKeys: ReadonlySet<string>;
+  isBranchCollapsed: (key: string) => boolean;
   onToggleBranch: (key: string) => void;
 }) {
   return (
@@ -245,7 +217,7 @@ function GroupSection({
             collapsed={collapsed}
             pathname={pathname}
             depth={0}
-            collapsedKeys={collapsedKeys}
+            isBranchCollapsed={isBranchCollapsed}
             onToggleBranch={onToggleBranch}
           />
         ))}
@@ -264,7 +236,9 @@ export function ModuleSidebar({
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const rawItems = getSidebarItems(moduleCode);
   const visibleItems = filterSidebarItems(rawItems, permission, session);
-  const { collapsedKeys, toggleBranch } = useCollapsedBranches(moduleCode);
+  const { has: isBranchCollapsed, toggle: toggleBranch } = usePersistedSet(
+    `mediaos.sidebar.collapsed:${moduleCode}`,
+  );
   const Extension = getSidebarExtension(moduleCode);
 
   // Nhóm item theo group
@@ -298,7 +272,9 @@ export function ModuleSidebar({
       )}
     >
       <nav className="flex-1 overflow-y-auto px-2 py-4" aria-label="Module navigation">
-        {visibleItems.length === 0 && !Extension ? (
+        {/* Empty-state GIỮ NGUYÊN dù có extension — extension có thể tự ẨN (thiếu quyền) nên không
+            được coi "có extension = có nội dung" (finding gate đợt B). */}
+        {visibleItems.length === 0 ? (
           <p className="px-3 py-2 text-xs text-muted-foreground">
             {collapsed ? "" : "Không có menu."}
           </p>
@@ -310,7 +286,7 @@ export function ModuleSidebar({
               items={grouped[group]}
               collapsed={collapsed}
               pathname={pathname}
-              collapsedKeys={collapsedKeys}
+              isBranchCollapsed={isBranchCollapsed}
               onToggleBranch={toggleBranch}
             />
           ))

@@ -266,7 +266,9 @@ Hành vi section động:
 
 - **Gate hiển thị** = `TASK.PROJECT.VIEW` (cùng cặp item "Dự án"); danh sách dự án đã bị server cắt
   theo data-scope của actor — cây không lộ dự án ngoài phạm vi. Phòng ban **0 dự án vẫn hiện**
-  (điểm neo "Thêm dự án" theo phòng ban).
+  (điểm neo "Thêm dự án" theo phòng ban). Cây CHỈ hiện org_unit **type `department`** — node loại
+  khác (team…) bị bỏ nhưng con department được kéo lên thế chỗ; dự án trỏ node bị bỏ rơi vào
+  "Chưa phân phòng ban" (đồng bộ với lookup `/hr/lookups/departments` mà form dự án dùng).
 - **Gập/mở giữ trạng thái** (localStorage, lưu tập đang gập — mặc định mở). Sidebar icon-mode
   (collapsed) KHÔNG render section động.
 - **Menu ⋯ mỗi phòng ban** — từng mục gate quyền riêng, thiếu quyền thì ẨN mục (UI-02 §5.3):
@@ -275,7 +277,7 @@ Hành vi section động:
   | --- | --- | --- |
   | Xem báo cáo | `TASK.PROJECT.VIEW` | Deep-link `/tasks/projects?departmentId=X` (danh sách + tiến độ dự án phòng ban). Báo cáo TỔNG HỢP phòng ban thuộc đợt D — không vẽ giả. |
   | Thêm dự án | `TASK.PROJECT.CREATE` | Mở ProjectFormDrawer prefill `departmentId` |
-  | Sắp xếp dự án | — (client-only) | Mới nhất trước \| Tên A→Z — áp cho TOÀN cây, lưu localStorage |
+  | Sắp xếp dự án | — (client-only) | Mới nhất trước \| Tên A→Z — áp RIÊNG từng phòng ban, lưu localStorage (1 map key) |
 
 - **Filter BE**: `GET /projects?departmentId=<uuid>` (S5-TASK-NAV-TREE-1) — server AND thêm điều
   kiện, KHÔNG thay data-scope; int-spec cross-tenant ở

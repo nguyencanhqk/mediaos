@@ -85,12 +85,17 @@ vi.mock("@/routes/tasks/ProjectFormDrawer", () => ({
 // Fixtures
 // ---------------------------------------------------------------------------
 
-function unit(id: string, name: string, children: OrgTreeNode[] = []): OrgTreeNode {
+function unit(
+  id: string,
+  name: string,
+  children: OrgTreeNode[] = [],
+  type = "department",
+): OrgTreeNode {
   return {
     id,
     parentId: null,
     name,
-    type: "department",
+    type,
     code: null,
     status: "active",
     headUserName: null,
@@ -248,5 +253,24 @@ describe("TaskSidebarTree", () => {
     expect(container.textContent).toBe("");
     expect(getTreeMock).not.toHaveBeenCalled();
     expect(listProjectsMock).not.toHaveBeenCalled();
+  });
+
+  it("node KHÔNG phải department (team) bị bỏ, con department được kéo lên; dự án của team vào 'Chưa phân'", async () => {
+    getTreeMock.mockResolvedValue([
+      unit("t-1", "Team Video", [unit("d-in-team", "Phòng trong team")], "team"),
+      unit("d-b", "Phòng B"),
+    ]);
+    listProjectsMock.mockResolvedValue([
+      project("p-team", "Dự án của team", "t-1", "2026-07-01T00:00:00.000Z"),
+      project("p-promoted", "Dự án phòng trong team", "d-in-team", "2026-07-02T00:00:00.000Z"),
+    ]);
+    renderTree();
+    // Team không render; department con được kéo lên cấp gốc
+    expect(await screen.findByText("Phòng trong team")).toBeInTheDocument();
+    expect(screen.queryByText("Team Video")).not.toBeInTheDocument();
+    // Dự án của department kéo-lên vẫn lồng đúng; dự án trỏ team rơi vào nhóm chưa phân
+    expect(screen.getByText("Dự án phòng trong team")).toBeInTheDocument();
+    expect(screen.getByText("sidebarTree.unassigned")).toBeInTheDocument();
+    expect(screen.getByText("Dự án của team")).toBeInTheDocument();
   });
 });

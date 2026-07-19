@@ -33,6 +33,7 @@ export default {
       // S5-TASK-NAV-TREE-1 — filter phòng ban (?departmentId, deep-link từ cây sidebar)
       departmentFilterLabel: "Lọc theo phòng ban",
       allDepartments: "Tất cả phòng ban",
+      filteredDepartment: "Phòng ban đang lọc",
       columns: {
         code: "Mã dự án",
         name: "Tên dự án",

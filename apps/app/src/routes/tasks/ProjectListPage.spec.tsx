@@ -10,19 +10,25 @@ import type { TaskProjectListItemDto } from "@mediaos/contracts";
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
+// S5-TASK-NAV-TREE-1 — search mutable qua vi.hoisted để test deep-link ?departmentId từ sidebar.
+const { searchRef, historyReplaceMock } = vi.hoisted(() => ({
+  searchRef: { current: {} as Record<string, unknown> },
+  historyReplaceMock: vi.fn(),
+}));
+
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
   return {
     ...actual,
     useNavigate: () => vi.fn(),
-    // S5-TASK-NAV-TREE-1 — page đọc ?departmentId qua useRouterState + đổi URL qua router.history:
-    // test không dựng RouterProvider nên mock cả hai (search rỗng = không filter phòng ban).
-    useRouter: () => ({ history: { push: vi.fn(), replace: vi.fn() } }),
+    // Page đọc ?departmentId qua useRouterState + đổi URL qua router.history — test không dựng
+    // RouterProvider nên mock cả hai.
+    useRouter: () => ({ history: { push: vi.fn(), replace: historyReplaceMock } }),
     useRouterState: ({
       select,
     }: {
       select: (s: { location: { pathname: string; search: Record<string, unknown> } }) => unknown;
-    }) => select({ location: { pathname: "/tasks/projects", search: {} } }),
+    }) => select({ location: { pathname: "/tasks/projects", search: searchRef.current } }),
   };
 });
 
@@ -100,7 +106,34 @@ function clearCapabilities() {
 describe("ProjectListPage", () => {
   beforeEach(() => {
     clearCapabilities();
+    searchRef.current = {};
     vi.clearAllMocks();
+  });
+
+  // ── S5-TASK-NAV-TREE-1: deep-link ?departmentId từ cây sidebar ────────────
+  it("đọc ?departmentId (uuid hợp lệ) từ URL và truyền vào query listProjects", async () => {
+    const DEPT = "11111111-2222-3333-4444-555555555555";
+    searchRef.current = { departmentId: DEPT };
+    setCapabilities({ "read:project": true });
+    vi.mocked(taskProjectApi.listProjects).mockResolvedValue(MOCK_ITEMS);
+    renderWithQuery(<ProjectListPage />);
+    await waitFor(() =>
+      expect(taskProjectApi.listProjects).toHaveBeenCalledWith(
+        expect.objectContaining({ departmentId: DEPT, offset: 0 }),
+      ),
+    );
+  });
+
+  it("bỏ qua ?departmentId rác (không phải uuid) — không truyền vào query", async () => {
+    searchRef.current = { departmentId: "not-a-uuid" };
+    setCapabilities({ "read:project": true });
+    vi.mocked(taskProjectApi.listProjects).mockResolvedValue(MOCK_ITEMS);
+    renderWithQuery(<ProjectListPage />);
+    await waitFor(() =>
+      expect(taskProjectApi.listProjects).toHaveBeenCalledWith(
+        expect.objectContaining({ departmentId: undefined }),
+      ),
+    );
   });
 
   // ── DENY-PATH: no read:project ────────────────────────────────────────────
