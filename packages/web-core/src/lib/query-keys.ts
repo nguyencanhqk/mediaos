@@ -423,6 +423,8 @@ export const taskKeys = {
     [...rootKeys.tasks, "activity", taskId, params] as const,
   // S4-FE-TASK-4 — APPEND: file đính kèm công việc (TaskFilePanel, GET /tasks/:taskId/files).
   files: (taskId: string) => [...rootKeys.tasks, "files", taskId] as const,
+  // S5-TASK-PIPELINE-1 (lane fe) — APPEND: cột pipeline theo dự án (TaskStateColumnsDialog).
+  states: (projectId: string) => [...rootKeys.tasks, "states", projectId] as const,
 };
 
 // S4-FE-TASK-1 — invalidation cho mutation Project (create/update/close/delete + member add/update-role/

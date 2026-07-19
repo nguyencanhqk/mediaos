@@ -37,6 +37,15 @@ export const TASK_CORE_ENGINE_PAIRS = {
   // (view:task-audit-log, resourceType RIÊNG "task-audit-log", is_sensitive=true — seed 0485).
   VIEW_KANBAN: { action: "view-kanban", resourceType: "task" },
   VIEW_ACTIVITY_LOG: { action: "view", resourceType: "task-audit-log" },
+  // S5-TASK-PIPELINE-1 (lane fe) — kéo thẻ đổi CỘT pipeline (seed 0499, mirror update-status).
+  UPDATE_STATE: { action: "update-state", resourceType: "task" },
+} as const;
+
+/** S5-TASK-PIPELINE-1 — quản lý cột pipeline (PM-1 routes /projects/:id/states, seed 0420). */
+export const PROJECT_STATE_PAIRS = {
+  CREATE: { action: "create", resourceType: "project_state" },
+  UPDATE: { action: "update", resourceType: "project_state" },
+  DELETE: { action: "delete", resourceType: "project_state" },
 } as const;
 
 export const TASK_CORE_STATUS_OPTIONS = [

@@ -571,6 +571,36 @@ export default {
         notFound: "Không tìm thấy công việc.",
         server: "Lỗi hệ thống. Vui lòng thử lại sau.",
         generic: "Đã xảy ra lỗi. Vui lòng thử lại.",
+        // S5-TASK-PIPELINE-1 — kéo sang cột Hoàn thành khi checklist bắt buộc chưa xong (400) /
+        // cột không hợp lệ: server từ chối, thẻ bật về chỗ cũ.
+        badRequest: "Không thể chuyển cột — kiểm tra checklist bắt buộc hoặc cột đích.",
+      },
+      // S5-TASK-PIPELINE-1 (lane fe) — quản lý cột pipeline (SPEC-06 §6.8; gate *:project_state).
+      manage: {
+        button: "Quản lý cột",
+        title: "Quản lý cột pipeline",
+        name: "Tên cột",
+        namePlaceholder: "Tên cột mới…",
+        color: "Màu cột",
+        sortOrder: "Thứ tự",
+        group: "Nhóm trạng thái",
+        default: "Mặc định",
+        add: "Thêm cột",
+        save: "Lưu",
+        delete: "Xoá",
+        empty: "Dự án chưa có cột pipeline.",
+        groups: {
+          backlog: "Backlog",
+          unstarted: "Chưa bắt đầu",
+          started: "Đang làm",
+          review: "Chờ duyệt",
+          completed: "Hoàn thành",
+          cancelled: "Đã huỷ",
+        },
+        errors: {
+          blocked: "Không thể thao tác — cột còn công việc hoặc dữ liệu không hợp lệ.",
+          duplicate: "Tên cột đã tồn tại trong dự án.",
+        },
       },
       // S5-FE-TASK-5 — badge tín hiệu trên card (SPEC-06 §13.8) + rail lọc theo assignee/"Chưa giao"
       // (suy từ tập task của board, không gọi API member mới).
