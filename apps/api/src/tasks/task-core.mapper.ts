@@ -1,5 +1,6 @@
 import { InternalServerErrorException } from "@nestjs/common";
 import type {
+  ProjectStateGroupDto,
   TaskCorePriorityDto,
   TaskCoreResponseDto,
   TaskCoreStatusDto,
@@ -52,6 +53,12 @@ export function toTaskCoreDto(row: TaskCoreRow): TaskCoreResponseDto {
     createdBy: row.createdBy,
     createdAt,
     updatedAt,
+    // S5-TASK-PIPELINE-1 (lane be-read) — cột pipeline resolved (schema optional: hàng từ đường
+    // chưa join state vẫn parse; server điền null tường minh thay vì bỏ key).
+    stateId: row.stateId ?? null,
+    stateName: row.stateName ?? null,
+    stateColor: row.stateColor ?? null,
+    stateGroup: (row.stateGroup as ProjectStateGroupDto | null | undefined) ?? null,
   };
 }
 

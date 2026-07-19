@@ -1,5 +1,10 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import type { TaskKanbanBoardDto, TaskKanbanStatusColumnDto } from "@mediaos/contracts";
+import type {
+  ProjectStateGroupDto,
+  TaskKanbanBoardDto,
+  TaskKanbanStateColumnDto,
+  TaskKanbanStatusColumnDto,
+} from "@mediaos/contracts";
 import { DatabaseService } from "../db/db.service";
 import { DataScopeService } from "../permission/data-scope.service";
 import { TaskCoreRepository } from "./task-core.repository";
@@ -69,10 +74,14 @@ export class TaskKanbanService {
         );
       }
 
+      // S5-TASK-PIPELINE-1 (lane be-read): board CHỈ hiện task cha (plan mục 0 — parent_task_id IS
+      // NULL; subtask ẩn khỏi board, CRUD thuộc S5-TASK-SUBTASK-1). Cột theo pipeline khi project có
+      // state active; 0 state ⇒ fallback 5 cột FSM y hệt hành vi cũ.
+      const states = await this.repo.listBoardStatesTx(tx, user.companyId, projectId);
       const rows = await this.repo.listTx(
         tx,
         user.companyId,
-        { projectId, limit: KANBAN_TASK_LIMIT, offset: 0 },
+        { projectId, parentOnly: true, limit: KANBAN_TASK_LIMIT, offset: 0 },
         scopeExists,
       );
 
@@ -84,10 +93,44 @@ export class TaskKanbanService {
         this.filesRepo.countByTaskIdsTx(tx, user.companyId, taskIds),
         this.checklistsRepo.countProgressByTaskIdsTx(tx, user.companyId, taskIds),
       ]);
+      const toCard = (row: (typeof rows)[number]) => {
+        const progress = checklistProgress.get(row.id);
+        return toTaskKanbanCardDto(row, {
+          commentCount: commentCounts.get(row.id) ?? 0,
+          attachmentCount: attachmentCounts.get(row.id) ?? 0,
+          checklistDone: progress?.done ?? 0,
+          checklistTotal: progress?.total ?? 0,
+        });
+      };
 
-      // S5-TASK-PIPELINE-1 (lane contracts): cột board giờ là discriminated union theo columnMode —
-      // service này còn phát nhánh 'status' (5 cột FSM); nhánh 'state' (cột pipeline per-project)
-      // thuộc lane be-read (columnMode:'state' khi project có state active).
+      if (states.length > 0) {
+        // columnMode:'state' — cột dựng theo sortOrder (repo đã sort xác định); nhóm thẻ theo
+        // state_id; thẻ state NULL/hỏng KHÔNG biến mất — rơi vào cột is_default (không có default
+        // ⇒ cột đầu, mirror bậc thang D-20).
+        const columns: TaskKanbanStateColumnDto[] = states.map((s) => ({
+          columnMode: "state" as const,
+          stateId: s.id,
+          name: s.name,
+          color: s.color,
+          stateGroup: s.stateGroup as ProjectStateGroupDto,
+          sortOrder: s.sortOrder,
+          taskCount: 0,
+          tasks: [],
+        }));
+        const byStateId = new Map(columns.map((c) => [c.stateId, c]));
+        // isDefault qua raw tx.execute có thể là boolean HOẶC 't'/'true' (mirror toBool của mapper) —
+        // truthiness trần sẽ coi 'f' là true ⇒ fallback sai câm (finding LIGHT gate).
+        const isDefaultTrue = (v: boolean | string): boolean =>
+          v === true || v === "true" || v === "t";
+        const fallback = columns[states.findIndex((s) => isDefaultTrue(s.isDefault))] ?? columns[0];
+        for (const row of rows) {
+          const column = (row.stateId ? byStateId.get(row.stateId) : undefined) ?? fallback;
+          column.tasks.push(toCard(row));
+        }
+        for (const column of columns) column.taskCount = column.tasks.length;
+        return { projectId, columns };
+      }
+
       const columns: TaskKanbanStatusColumnDto[] = TASK_CORE_STATUSES.map((status) => ({
         columnMode: "status" as const,
         status,
@@ -97,15 +140,7 @@ export class TaskKanbanService {
       for (const row of rows) {
         const status = (row.taskStatus as (typeof TASK_CORE_STATUSES)[number] | null) ?? "Todo";
         const column = byStatus.get(status) ?? byStatus.get("Todo");
-        const progress = checklistProgress.get(row.id);
-        column?.tasks.push(
-          toTaskKanbanCardDto(row, {
-            commentCount: commentCounts.get(row.id) ?? 0,
-            attachmentCount: attachmentCounts.get(row.id) ?? 0,
-            checklistDone: progress?.done ?? 0,
-            checklistTotal: progress?.total ?? 0,
-          }),
-        );
+        column?.tasks.push(toCard(row));
       }
 
       return { projectId, columns };
